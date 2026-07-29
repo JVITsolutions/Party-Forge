@@ -1,26 +1,11 @@
 [gd_resource type="Resource" script_class="ClassDefinition" format=3]
 
-[ext_resource type="Script" path="res://scripts/data/attack_definition.gd" id="1_ym5c5"]
-[ext_resource type="Script" path="res://scripts/data/class_definition.gd" id="2_5x6ee"]
-
-[sub_resource type="Resource" id="Resource_wyf0b"]
-script = ExtResource("1_ym5c5")
-id = &"cleric_bolt"
-kind = 1
-power = 8.0
-range = 10.0
-projectile_speed = 13.0
-
-[sub_resource type="Resource" id="Resource_e674p"]
-script = ExtResource("1_ym5c5")
-id = &"cleric_heal"
-kind = 3
-power = 18.0
-cooldown = 3.0
-range = 9.0
+[ext_resource type="Resource" path="res://data/attacks/cleric_bolt.tres" id="1_5x6ee"]
+[ext_resource type="Script" path="res://scripts/data/class_definition.gd" id="2_wyf0b"]
+[ext_resource type="Resource" path="res://data/attacks/cleric_heal.tres" id="3_e674p"]
 
 [resource]
-script = ExtResource("2_5x6ee")
+script = ExtResource("2_wyf0b")
 id = &"cleric"
 display_name = "Cleric"
 role = 3
@@ -30,5 +15,5 @@ max_health = 95.0
 armor = 2.0
 preferred_distance = 4.0
 engagement_distance = 10.0
-primary_attack = SubResource("Resource_wyf0b")
-support_action = SubResource("Resource_e674p")
+primary_attack = ExtResource("1_5x6ee")
+support_action = ExtResource("3_e674p")

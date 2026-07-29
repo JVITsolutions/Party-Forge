@@ -1,16 +1,7 @@
 [gd_resource type="Resource" script_class="ClassDefinition" format=3]
 
-[ext_resource type="Script" path="res://scripts/data/attack_definition.gd" id="1_r3klh"]
+[ext_resource type="Resource" path="res://data/attacks/ranger_shot.tres" id="1_r3klh"]
 [ext_resource type="Script" path="res://scripts/data/class_definition.gd" id="2_qwrjd"]
-
-[sub_resource type="Resource" id="Resource_xwxbc"]
-script = ExtResource("1_r3klh")
-id = &"ranger_shot"
-kind = 1
-power = 11.0
-cooldown = 0.55
-range = 11.0
-projectile_speed = 16.0
 
 [resource]
 script = ExtResource("2_qwrjd")
@@ -25,4 +16,4 @@ move_speed = 6.6
 preferred_distance = 5.0
 engagement_distance = 11.0
 tether_distance = 11.0
-primary_attack = SubResource("Resource_xwxbc")
+primary_attack = ExtResource("1_r3klh")
