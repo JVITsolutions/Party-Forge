@@ -32,7 +32,7 @@ Every `Node3D` transform is relative to something:
 
 In Party Forge, `Main/Actors`, `Main/Enemies`, and `Main/Effects` are `Node3D` containers. A companion's local `position` belongs to the coordinate space of `Actors`. `PartyActorSpawner._leader_position()` in `scripts/party/party_actor_spawner.gd` converts the leader's `global_position` into the actor container's local space with `actor_container.to_local(...)` when necessary.
 
-If you reparent a `Node3D`, the same local position can produce a different world position because the parent changed. Check both local and global transform fields in the Inspector before “fixing” a misplaced actor.
+If you reparent a `Node3D`, the same local position can produce a different world position because the parent changed. In the standard Godot 4.7 Inspector, **Transform** shows the selected node's local values; it does not expose a `global_transform` field. To investigate placement without adding debug code, select the node and each `Node3D` ancestor in turn, read their local **Transform** values, and observe the resulting placement in the 3D viewport or running Game view before “fixing” a misplaced actor.
 
 There is also responsibility ownership:
 
@@ -123,7 +123,7 @@ This exercise changes no authored files. The combat sandbox is the fastest route
    - `HealthComponent`
    - `AttackController`
    - `HealthBar3D`, which itself contains `Label3D`
-7. Select the companion and inspect its local **Transform > Position**. Compare it with the global transform shown by the Inspector; do not edit either.
+7. Select the companion and inspect its local **Transform > Position** without editing it. Then select its `Actors` parent and inspect that node's local **Transform > Position**. Return to the 3D viewport or Game view and observe where the companion appears relative to the leader. The normal Inspector will not show a separate global-transform value.
 8. Press `F8`. Confirm the Scene dock returns to the saved Local tree, where the runtime companion is absent.
 9. Run `git status --short` again and compare it with step 1.
 
@@ -181,7 +181,7 @@ For a clean verification:
 - **“I cannot find the companion in Local.”** It is created by code at runtime. Switch to Remote while the run is active.
 - **“Remote is empty or unavailable.”** Start F5 or F6 first and make sure the running process has not stopped on an error.
 - **“I changed a Remote property and it vanished after F8.”** Remote edits affect the live instance and are not the same as editing and saving the source scene.
-- **“The visual is offset from the actor.”** Inspect the visual child's local transform, then the actor's global transform. Do not move the root merely to compensate for a model pivot.
+- **“The visual is offset from the actor.”** Inspect the visual child's local transform, then inspect the local transforms of its `Node3D` ancestors and observe the result in the 3D viewport. Do not move the root merely to compensate for a model pivot, and do not expect a global-transform field in the standard Inspector.
 - **“The health bar disappeared after reorganizing children.”** Confirm `HealthComponent` kept its exact name and remains a child accessible to the spawner; confirm the runtime `HealthBar3D` was added.
 - **“Renaming looked harmless but the run now errors.”** Copy the first Debugger error and search the repository for the old node path with `rg`.
 - **“The sandbox party size stayed at 1 / 4.”** Check the Output and Debugger panels for catalog or script errors, then confirm you clicked a class button while the sandbox run was active.
