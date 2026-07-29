@@ -16,6 +16,8 @@
 
 A value is safe to tune only after you know where it is defined and where it is consumed. Start from the visible behavior, find its owner in this table, and open that file in the Godot FileSystem dock. Selecting an external `.tres` file exposes its exported properties in the Inspector.
 
+> **Party Forge convention:** Tune data-owned values in their external definition Resources. Treat script-owned constants as behavior changes that require source review and the relevant script tests.
+
 | Editable value | Owning file or type | Observable effect |
 | --- | --- | --- |
 | Class health, armor, speed, rank power step, revive settings, formation distances, attacks | `ClassDefinition` Resources in `data/classes/` | Companion durability, movement, class-rank damage/healing scaling, revival, formation, and actions |

@@ -19,6 +19,10 @@ Party Forge's actor and system scripts already know how to execute four attack k
 
 Registration is separate from creation. `GameCatalog` loads explicit arrays of known class and trait paths. It does not scan `data/` automatically. A valid file can therefore load in isolation while remaining unavailable during a normal run.
 
+> **Party Forge convention:** Create content as custom `.tres` Resources, validate it in isolation, and then register it explicitly in `GameCatalog`. A file's presence under `data/` does not make it playable.
+
+> **Current limitation:** Party Forge has no automatic content discovery. Every production class and trait path, plus the catalog test expectations that describe them, must be maintained by hand.
+
 > **Godot rule:** A custom class that extends `Resource`, has a global `class_name`, and exports properties can be created and edited in the Inspector. Saving it as `.tres` stores those exported values and Resource references.
 
 ## Training example specification
@@ -174,6 +178,19 @@ const TRAIT_PATHS: PackedStringArray = [
 
 These are the complete arrays after the additions. Preserve all existing entries. There is no attack-path array to edit because the class owns the primary-attack reference.
 
+Update the required test contracts at the same time as the arrays. In `tests/unit/test_game_catalog.gd`, replace the two hard-coded size expectations with:
+
+```gdscript
+TestAssertions.equal(catalog.classes.size(), 5, "five classes", failures)
+TestAssertions.equal(catalog.traits.size(), 8, "eight traits", failures)
+```
+
+The enemy count remains `3`. Then complete the catalog fixture:
+
+- Add `[&"training_warden", &"primary_attack", "res://data/training/training_warden_bolt.tres"]` to `attack_links`.
+- Add the exact Training Warden Bolt values to `attack_rows`, the exact Training Warden values to `class_rows`, and the exact Training Focus values to `trait_rows` in `_assert_generated_values()`.
+- In `tests/unit/test_progression.gd`, add focused coverage that a generated recruit can target the registered `training_warden` while party space remains and that recruiting a second Training Warden makes `PartyManager.active_tier(&"training_focus")` equal `2`.
+
 Run the catalog and progression tests, then start an ordinary run with an existing leader. While the party has fewer than four members, `LevelUpChoiceService` can offer one randomly selected registered class as a recruit choice. The Training Warden may not appear on the first level because recruitment is randomized. Choose it when offered.
 
 The service allows a registered class to be recruited more than once. Recruit a second Training Warden and inspect the trait display or party state: two copies contribute two `training_focus` traits, activating its `2` threshold and the 10% attack-speed bonus. With a different leader occupying one of the four party slots, a recruit-only Training Warden can normally reach three copies, not the four-copy tier; the optional leader integration below makes four copies possible in a standard run.
@@ -189,9 +206,8 @@ A selectable leader requires UI and wiring work in addition to catalog registrat
 3. Do not rely on `String(class_id).capitalize()` for this ID: it produces a label with a space, while the node is named `TrainingWarden`. Prefer an explicit ID-to-node-path dictionary or wire this button explicitly.
 4. Extend `tests/unit/test_main_wiring.gd::_test_hud_contract` to require the new button.
 5. Extend `_test_class_selection_starts_run_and_applies_choices`, or add an equally focused wiring test, to press the Training Warden button and verify that `select_leader_class(&"training_warden")` starts the run with that leader.
-6. Update `tests/unit/test_game_catalog.gd` assertions for the new class and trait counts, IDs, paths, and links. Add or update progression coverage for recruitment and the two-copy trait threshold.
 
-The relevant files are therefore `scenes/ui/hud.tscn`, `scripts/game/main.gd`, `tests/unit/test_main_wiring.gd`, `tests/unit/test_game_catalog.gd`, and the appropriate progression/party test. UI presence without signal wiring is not a complete leader option.
+The leader-specific files are therefore `scenes/ui/hud.tscn`, `scripts/game/main.gd`, and `tests/unit/test_main_wiring.gd`. UI presence without signal wiring is not a complete leader option.
 
 ## When a class requires new behavior
 
@@ -239,9 +255,9 @@ For the Training Warden, confirm that the bolt is single-target, the support act
 
 Remove references before removing their targets:
 
-1. Delete the Training Warden entry from `GameCatalog.CLASS_PATHS` and the Training Focus entry from `GameCatalog.TRAIT_PATHS`.
-2. If leader support was added, remove its signal wiring and button plus the associated test expectations.
-3. Run a headless project parse and the catalog tests. This proves no startup code still tries to load the training paths.
+1. Delete the Training Warden entry from `GameCatalog.CLASS_PATHS` and the Training Focus entry from `GameCatalog.TRAIT_PATHS`. In the same change, restore the catalog expectations to four classes and seven traits, remove the three training rows and attack link from `tests/unit/test_game_catalog.gd`, and remove the Training Warden recruitment/tier expectations from `tests/unit/test_progression.gd`.
+2. If leader support was added, remove its signal wiring and button plus the associated `tests/unit/test_main_wiring.gd` expectations.
+3. Run a headless project parse plus the catalog and progression tests. This proves no startup or required test code still tries to load the training paths.
 4. Delete `training_warden.tres`, `training_focus.tres`, and `training_warden_bolt.tres` from `data/training/`. Remove the directory if it is empty.
 5. Run the relevant suites again, inspect the diff, and confirm no generated UID remains for deleted disposable files.
 
