@@ -66,7 +66,7 @@ In the script editor, hold **Ctrl** and click a recognized engine symbol to open
 No single check proves every kind of change. Move through these layers from narrow to broad:
 
 1. **Definition validation:** `ClassDefinition`, `AttackDefinition`, `TraitDefinition`, `EnemyDefinition`, and `UpgradeTuning` expose `validate()` for their supported structural rules.
-2. **Catalog validation:** `GameCatalog.validate()` loads the explicitly registered class, trait, and enemy Resources, rejects failed loads and duplicate IDs, and prefixes definition failures.
+2. **Catalog loading and validation:** `GameCatalog.load_defaults()` loads the explicitly registered class, trait, and enemy paths into the catalog arrays. `GameCatalog.validate()` checks those already-populated arrays for failed loads, duplicate IDs, and definition failures, prefixing each reported failure.
 3. **Unit suites:** `tests/test_runner.gd` discovers every `tests/unit/test_*.gd` script and runs its `run()` method. Suites cover definitions, party state, progression, combat, spawning, wiring, UI layout, and run states.
 4. **Parser/import initialization:** a headless editor start parses scripts and scenes, refreshes class information, and initializes imports. This catches failures that a narrow unit may not load.
 5. **Combat sandbox:** `scenes/dev/combat_sandbox.tscn` exposes controlled party, enemy, boss, damage, reward, and cleanup observations.
@@ -89,7 +89,7 @@ At the verified architecture, success requires both:
 
 On failure, the runner prints `TEST_FAILURE: <suite path> :: <assertion>` and exits `1`. Start with the first failure and run or inspect that focused suite before changing production code. A timeout, closed terminal, partial suite list, or absence of a failure message is not a pass.
 
-The runner discovers suites by filename. A new test must live in `tests/unit/`, begin with `test_`, end with `.gd`, and implement `func run() -> Array[String]`.
+The runner discovers suites by filename. A new suite must declare `extends RefCounted`, live in `tests/unit/`, begin with `test_`, end with `.gd`, and implement `func run() -> Array[String]`. The base type matters because the runner assigns `suite_script.new()` to a `RefCounted` variable before calling `run()`.
 
 ## Parser and import validation
 
@@ -150,10 +150,11 @@ Short status uses two columns before the path:
 
 This exercise creates a disposable enemy definition and validator. It does not register or alter production content.
 
-1. Record `git status --short`. Confirm the following disposable paths do not already contain someone else's work.
-2. Duplicate `res://data/enemies/swarmer.tres` as `res://data/training/debug_enemy.tres` in the FileSystem dock.
-3. Set its ID to `debug_enemy`, save, and leave its other valid values unchanged.
-4. Create `res://scripts/dev/debug_resource_validation.gd`:
+1. Record `git status --short`. Confirm that the two disposable paths `res://data/training/debug_enemy.tres` and `res://scripts/dev/debug_resource_validation.gd` do not already contain someone else's work. Also check for possible sidecars at `res://data/training/debug_enemy.tres.uid` and `res://scripts/dev/debug_resource_validation.gd.uid`; preserve any path that already exists.
+2. In the FileSystem dock, right-click `res://data/`, choose **New > Folder**, and create the missing `training` folder. Record that you created it so you can remove it only after it is empty.
+3. Duplicate `res://data/enemies/swarmer.tres` as `res://data/training/debug_enemy.tres` in the FileSystem dock.
+4. Set its ID to `debug_enemy`, save, and leave its other valid values unchanged.
+5. Create `res://scripts/dev/debug_resource_validation.gd`:
 
 ```gdscript
 extends SceneTree
@@ -176,18 +177,19 @@ func _init() -> void:
         quit(1)
 ```
 
-5. Run it from the repository root:
+6. Run it from the repository root:
 
 ```powershell
 & 'F:\Projects(root)\Game dev\godot\Godot_v4.7.1-stable_mono_win64\Godot_v4.7.1-stable_mono_win64_console.exe' --headless --path 'F:\Projects(root)\Game dev\Projects\party-forge' --script res://scripts/dev/debug_resource_validation.gd
 ```
 
-6. Confirm exit code `0` and `PARTY_FORGE_RESOURCE_VALID`.
-7. In the Inspector, set the disposable Resource's ID to an empty value and save. Run the same command again.
-8. Confirm exit code `1` and copy the grep-friendly error: `PARTY_FORGE_RESOURCE_ERROR path=res://data/training/debug_enemy.tres reason=enemy id is empty`.
-9. Restore the ID to `debug_enemy`, save, and rerun. Confirm exit code `0`, the valid marker returns, and the error is absent.
-10. Delete exactly the two disposable files through Godot, plus only their newly generated UID files. Remove `data/training/` only if it is empty and you created it.
-11. Compare `git status --short` with the initial record. Search for `debug_enemy`; no exercise reference should remain.
+7. Confirm exit code `0` and `PARTY_FORGE_RESOURCE_VALID`.
+8. In the Inspector, set the disposable Resource's ID to an empty value and save. Run the same command again.
+9. Confirm exit code `1` and copy the grep-friendly error: `PARTY_FORGE_RESOURCE_ERROR path=res://data/training/debug_enemy.tres reason=enemy id is empty`.
+10. Restore the ID to `debug_enemy`, save, and rerun. Confirm exit code `0`, the valid marker returns, and the error is absent.
+11. Delete exactly `res://data/training/debug_enemy.tres` and `res://scripts/dev/debug_resource_validation.gd` through Godot. Delete a corresponding `.uid` sidecar only if it was newly generated and its absence was recorded in step 1.
+12. Remove `res://data/training/` only if it is empty and you created it in step 2.
+13. Compare `git status --short` with the initial record. Search for `debug_enemy`; no exercise reference should remain.
 
 > **Checkpoint:** You proved the failure was caused by one field, restored that field, and returned the repository to its starting state.
 

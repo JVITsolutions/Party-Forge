@@ -177,7 +177,7 @@ The Forge Guardian is boss-only. `PartyForgeMain` instances it in response to th
 
 | Change category | Definition/catalog validation | Focused automated test | Sandbox/visual check | Parser/import | Ordinary run |
 | --- | --- | --- | --- | --- | --- |
-| Existing numeric data | Required | Owner/consumer suite | Required for observable effect | Required before commit | Required if pacing/progression changes |
+| Existing numeric data | Required when definition/catalog-backed; otherwise inspect the owning constant and its consumer | Owner/consumer suite | Required for observable effect | Required before commit | Required if pacing/progression changes |
 | New class/attack/trait using supported behavior | Required in isolation and after registration | Catalog, party, progression, combat | Required | Required | Required for recruitment/leader flow |
 | New attack kind or trait effect | Required | New behavior plus regression suites | Required | Required | Required |
 | Existing-behavior enemy | Required | Catalog, spawn, schedule, enemy, sandbox contract | Required | Required | Required for wave pacing |
