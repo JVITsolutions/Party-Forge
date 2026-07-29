@@ -49,7 +49,7 @@ func _assert_generated_values(failures: Array[String]) -> void:
     var enemy_rows: Array[Dictionary] = [
         {"path": "res://data/enemies/swarmer.tres", "values": {"id": &"swarmer", "behavior": EnemyDefinition.Behavior.SWARMER, "max_health": 12.0, "move_speed": 4.8, "contact_damage": 8.0, "experience": 2}},
         {"path": "res://data/enemies/spitter.tres", "values": {"id": &"spitter", "behavior": EnemyDefinition.Behavior.SPITTER, "max_health": 18.0, "move_speed": 2.8, "contact_damage": 10.0, "experience": 4}},
-        {"path": "res://data/enemies/forge_guardian.tres", "values": {"id": &"forge_guardian", "behavior": EnemyDefinition.Behavior.FORGE_GUARDIAN, "max_health": 1500.0, "move_speed": 3.3, "contact_damage": 22.0, "experience": 100}},
+        {"path": "res://data/enemies/forge_guardian.tres", "values": {"id": &"forge_guardian", "behavior": EnemyDefinition.Behavior.FORGE_GUARDIAN, "max_health": 3000.0, "move_speed": 3.3, "contact_damage": 22.0, "experience": 100}},
     ]
     _assert_resource_table("attack", attack_rows, failures)
     _assert_resource_table("class", class_rows, failures)

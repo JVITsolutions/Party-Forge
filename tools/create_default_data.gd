@@ -45,7 +45,7 @@ func _initialize() -> void:
 
     if not _save_enemy(&"swarmer", EnemyDefinition.Behavior.SWARMER, 12.0, 4.8, 8.0, 2): failures += 1
     if not _save_enemy(&"spitter", EnemyDefinition.Behavior.SPITTER, 18.0, 2.8, 10.0, 4): failures += 1
-    if not _save_enemy(&"forge_guardian", EnemyDefinition.Behavior.FORGE_GUARDIAN, 1500.0, 3.3, 22.0, 100): failures += 1
+    if not _save_enemy(&"forge_guardian", EnemyDefinition.Behavior.FORGE_GUARDIAN, 3000.0, 3.3, 22.0, 100): failures += 1
     if failures > 0:
         _finish_failed(failures)
         return
