@@ -1,0 +1,29 @@
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://scripts/enemies/spitter.gd" id="1_spitter"]
+[ext_resource type="Resource" path="res://data/enemies/spitter.tres" id="2_definition"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_spitter"]
+albedo_color = Color(0.55, 0.15, 0.72, 1)
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_spitter"]
+material = SubResource("StandardMaterial3D_spitter")
+top_radius = 0.32
+bottom_radius = 0.5
+height = 1.0
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_spitter"]
+radius = 0.45
+height = 1.0
+
+[node name="Spitter" type="CharacterBody3D" groups=["hostile_actors"]]
+collision_layer = 4
+collision_mask = 1
+script = ExtResource("1_spitter")
+definition = ExtResource("2_definition")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="."]
+mesh = SubResource("CylinderMesh_spitter")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+shape = SubResource("CapsuleShape3D_spitter")
