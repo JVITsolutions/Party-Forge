@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="EnemyDefinition" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/enemy_definition.gd" id="1_kwx2x"]
+
+[resource]
+script = ExtResource("1_kwx2x")
+id = &"spitter"
+behavior = 1
+max_health = 42.0
+move_speed = 2.8
+contact_damage = 10.0
+experience = 4

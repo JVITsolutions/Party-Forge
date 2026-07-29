@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="AttackDefinition" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/attack_definition.gd" id="1_mkacg"]
+
+[resource]
+script = ExtResource("1_mkacg")
+id = &"mage_burst"
+kind = 2
+power = 24.0
+cooldown = 1.5
+range = 12.0
+projectile_speed = 11.0
+area_radius = 2.5

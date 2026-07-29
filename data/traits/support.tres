@@ -1,0 +1,9 @@
+[gd_resource type="Resource" script_class="TraitDefinition" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/trait_definition.gd" id="1_tqvsm"]
+
+[resource]
+script = ExtResource("1_tqvsm")
+id = &"support"
+display_name = "Support"
+stat_id = &"support_power"

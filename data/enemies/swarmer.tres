@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="EnemyDefinition" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/enemy_definition.gd" id="1_l50bk"]
+
+[resource]
+script = ExtResource("1_l50bk")
+id = &"swarmer"
+max_health = 24.0
+move_speed = 4.8
+contact_damage = 8.0
+experience = 2

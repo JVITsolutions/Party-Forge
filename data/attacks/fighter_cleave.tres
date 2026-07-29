@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="AttackDefinition" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/attack_definition.gd" id="1_45iis"]
+
+[resource]
+script = ExtResource("1_45iis")
+id = &"fighter_cleave"
+power = 18.0
+cooldown = 0.8
+range = 2.2
+area_radius = 1.6

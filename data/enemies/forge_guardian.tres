@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="EnemyDefinition" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/enemy_definition.gd" id="1_ur4iy"]
+
+[resource]
+script = ExtResource("1_ur4iy")
+id = &"forge_guardian"
+behavior = 2
+max_health = 1500.0
+move_speed = 3.3
+contact_damage = 22.0
+experience = 100

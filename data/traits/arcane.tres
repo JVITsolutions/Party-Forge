@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="TraitDefinition" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/trait_definition.gd" id="1_fguq3"]
+
+[resource]
+script = ExtResource("1_fguq3")
+id = &"arcane"
+display_name = "Arcane"
+stat_id = &"area_size"
+tiers = {
+2: 0.18,
+4: 0.4
+}

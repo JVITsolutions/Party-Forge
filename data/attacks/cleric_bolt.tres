@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="AttackDefinition" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/attack_definition.gd" id="1_4f3tb"]
+
+[resource]
+script = ExtResource("1_4f3tb")
+id = &"cleric_bolt"
+kind = 1
+power = 8.0
+range = 10.0
+projectile_speed = 13.0

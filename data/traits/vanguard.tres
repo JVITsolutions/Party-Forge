@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="TraitDefinition" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/trait_definition.gd" id="1_5ux51"]
+
+[resource]
+script = ExtResource("1_5ux51")
+id = &"vanguard"
+display_name = "Vanguard"
+stat_id = &"nearby_damage_reduction"
+tiers = {
+2: 0.12,
+4: 0.28
+}

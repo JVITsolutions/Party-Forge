@@ -1,0 +1,27 @@
+[gd_resource type="Resource" script_class="ClassDefinition" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/attack_definition.gd" id="1_getu1"]
+[ext_resource type="Script" path="res://scripts/data/class_definition.gd" id="2_t0fo8"]
+
+[sub_resource type="Resource" id="Resource_gf0sj"]
+script = ExtResource("1_getu1")
+id = &"mage_burst"
+kind = 2
+power = 24.0
+cooldown = 1.5
+range = 12.0
+projectile_speed = 11.0
+area_radius = 2.5
+
+[resource]
+script = ExtResource("2_t0fo8")
+id = &"mage"
+display_name = "Mage"
+role = 2
+color = Color(0.58431375, 0.40392157, 0.9098039, 1)
+traits = Array[StringName]([&"arcane", &"ranged", &"caster"])
+max_health = 75.0
+preferred_distance = 6.5
+engagement_distance = 12.0
+tether_distance = 12.0
+primary_attack = SubResource("Resource_gf0sj")

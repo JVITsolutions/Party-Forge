@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="TraitDefinition" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/trait_definition.gd" id="1_sy6sf"]
+
+[resource]
+script = ExtResource("1_sy6sf")
+id = &"divine"
+display_name = "Divine"
+stat_id = &"healing_and_revive"
+tiers = {
+2: 0.18,
+4: 0.4
+}
