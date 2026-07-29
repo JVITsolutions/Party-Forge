@@ -62,6 +62,11 @@ func advance_combat(delta: float, candidates: Array[CombatTarget]) -> void:
     if health != null and (health.is_downed or health.is_dead):
         return
     _ensure_combat_runtime()
+    var combatants: Array[Node3D] = []
+    for candidate: CombatTarget in candidates:
+        if candidate != null and candidate.actor != null and is_instance_valid(candidate.actor):
+            combatants.append(candidate.actor)
+    attack_executor.call("configure", self, party_manager, combat_effects_parent, combatants)
     var modifiers: RefCounted = CombatModifiersScript.resolve(member_state, party_manager)
     var cooldown_delta: float = maxf(delta, 0.0) * float(modifiers.get("cooldown_rate_multiplier"))
     var primary := _attack_controller()
@@ -74,14 +79,14 @@ func advance_combat(delta: float, candidates: Array[CombatTarget]) -> void:
     if support_controller != null and support_controller.definition != null and support_controller.cooldown_remaining <= 0.0:
         var allies: Array[CombatTarget] = []
         for candidate: CombatTarget in candidates:
-            if candidate.team_id == team_id:
+            if candidate != null and candidate.team_id == team_id:
                 allies.append(candidate)
         var heal_range: float = support_controller.definition.range * float(modifiers.get("range_multiplier"))
         var heal_target: CombatTarget = HealingSelectorScript.most_injured(allies, heal_range, combat_origin)
         if heal_target != null:
             support_controller.cooldown_remaining = support_controller.definition.cooldown
             support_controller.attack_ready.emit(support_controller.definition, heal_target)
-    _try_primary_attack(primary, candidates, float(modifiers.get("range_multiplier")))
+    _try_primary_attack(primary, candidates, float(modifiers.get("range_multiplier")), float(modifiers.get("area_multiplier")))
 
 func receive_damage(amount: float) -> float:
     var health: HealthComponent = _health_component()
@@ -145,11 +150,14 @@ func _collect_combat_targets() -> Array[CombatTarget]:
                 targets.append(target)
     return targets
 
-func _try_primary_attack(controller: AttackController, candidates: Array[CombatTarget], range_multiplier: float) -> void:
+func _try_primary_attack(controller: AttackController, candidates: Array[CombatTarget], range_multiplier: float, area_multiplier: float) -> void:
     if controller == null or controller.definition == null or controller.cooldown_remaining > 0.0:
         return
     var origin: Vector3 = global_position if is_inside_tree() else position
-    var target: CombatTarget = TargetSelector.nearest(origin, candidates, controller.definition.range * range_multiplier, team_id)
+    var effective_range: float = controller.definition.range * range_multiplier
+    if controller.definition.kind == AttackDefinition.Kind.MELEE_CLEAVE:
+        effective_range = controller.definition.area_radius * area_multiplier
+    var target: CombatTarget = TargetSelector.nearest(origin, candidates, effective_range, team_id)
     if target == null:
         return
     controller.cooldown_remaining = controller.definition.cooldown

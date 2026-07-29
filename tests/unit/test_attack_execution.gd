@@ -24,7 +24,9 @@ func run() -> Array[String]:
 
     _test_healing_selector(failures)
     _test_melee_execution(failures)
+    _test_automatic_melee_effective_range(failures)
     _test_projectile_contract(failures)
+    _test_projectile_range_boundary(failures)
     _test_area_impact(failures)
     _test_combat_modifiers(failures)
     _test_cleric_primary_fallback(failures)
@@ -101,6 +103,42 @@ func _test_melee_execution(failures: Array[String]) -> void:
         TestAssertions.near(_health(friendly).current_health, 100.0, 0.001, "melee excludes friendly", failures)
     test_root.free()
 
+func _test_automatic_melee_effective_range(failures: Array[String]) -> void:
+    var test_root := _new_test_root("AutomaticMeleeRangeTest")
+    var catalog := GameCatalog.load_defaults()
+    var cleave_class := ClassDefinition.new()
+    cleave_class.id = &"arcane_cleave_tester"
+    cleave_class.display_name = "Arcane Cleave Tester"
+    cleave_class.traits = [&"arcane"]
+    cleave_class.primary_attack = catalog.class_by_id(&"fighter").primary_attack
+    var party := PartyManager.new()
+    party.initialize(cleave_class, catalog.traits)
+    party.recruit(cleave_class)
+
+    var owner := _create_actor(test_root, cleave_class, 1, Vector3.ZERO, true)
+    owner.configure(party.members[0])
+    owner.configure_combat(party, test_root)
+    var whiff_target := _create_actor(test_root, catalog.class_by_id(&"fighter"), 2, Vector3(2.0, 0.0, 0.0))
+    var valid_target := _create_actor(test_root, catalog.class_by_id(&"fighter"), 2, Vector3(1.8, 0.0, 0.0))
+    _set_health(whiff_target, 100.0, 100.0)
+    _set_health(valid_target, 100.0, 100.0)
+    var combatants: Array[Node3D] = [owner, whiff_target, valid_target]
+    owner.attack_executor.call("configure", owner, party, test_root, combatants)
+    var controller := owner.get_node("AttackController") as AttackController
+
+    var outside_candidates: Array[CombatTarget] = [owner.get_combat_target(), whiff_target.get_combat_target()]
+    owner.advance_combat(0.1, outside_candidates)
+    TestAssertions.near(controller.cooldown_remaining, 0.0, 0.001, "melee target outside modified cleave does not consume cooldown", failures)
+    TestAssertions.near(_health(whiff_target).current_health, 100.0, 0.001, "melee target outside modified cleave is not hit", failures)
+
+    var inside_candidates: Array[CombatTarget] = [owner.get_combat_target(), whiff_target.get_combat_target(), valid_target.get_combat_target()]
+    owner.advance_combat(0.1, inside_candidates)
+    TestAssertions.truthy(controller.cooldown_remaining > 0.0, "melee target inside modified cleave consumes cooldown", failures)
+    TestAssertions.near(_health(valid_target).current_health, 82.0, 0.001, "automatic melee hits once inside modified cleave", failures)
+    TestAssertions.near(_health(whiff_target).current_health, 100.0, 0.001, "automatic melee excludes actor beyond modified cleave", failures)
+    test_root.free()
+    party.free()
+
 func _test_projectile_contract(failures: Array[String]) -> void:
     var test_root := _new_test_root("ProjectileContractTest")
     var catalog := GameCatalog.load_defaults()
@@ -117,6 +155,30 @@ func _test_projectile_contract(failures: Array[String]) -> void:
         TestAssertions.near(float(projectile.get("speed")), 10.0, 0.001, "projectile carries speed", failures)
         TestAssertions.near(float(projectile.get("maximum_range")), 8.0, 0.001, "projectile range is finite", failures)
         TestAssertions.truthy(is_finite(float(projectile.get("lifetime"))) and float(projectile.get("lifetime")) > 0.0, "projectile lifetime is finite", failures)
+    test_root.free()
+
+func _test_projectile_range_boundary(failures: Array[String]) -> void:
+    var test_root := _new_test_root("ProjectileRangeBoundaryTest")
+    var projectile_scene: PackedScene = load("res://scenes/combat/projectile.tscn") as PackedScene
+
+    var limit_effects := Node3D.new()
+    test_root.add_child(limit_effects)
+    var at_limit := projectile_scene.instantiate() as Node3D
+    limit_effects.add_child(at_limit)
+    var limit_target := CombatTarget.new(null, Vector3(1.0, 0.0, 0.0), 2)
+    at_limit.call("configure", 1, 10.0, 10.0, 1.0, 1.0, 1.0, limit_target, limit_effects)
+    at_limit.call("_process", 0.1)
+    TestAssertions.equal(_count_children_named(limit_effects, &"AreaBurst"), 1, "projectile impacts exactly at maximum range", failures)
+
+    var beyond_effects := Node3D.new()
+    test_root.add_child(beyond_effects)
+    var beyond_limit := projectile_scene.instantiate() as Node3D
+    beyond_effects.add_child(beyond_limit)
+    var beyond_target := CombatTarget.new(null, Vector3(1.01, 0.0, 0.0), 2)
+    beyond_limit.call("configure", 1, 10.0, 10.0, 1.0, 1.0, 1.0, beyond_target, beyond_effects)
+    beyond_limit.call("_process", 0.1)
+    TestAssertions.equal(_count_children_named(beyond_effects, &"AreaBurst"), 0, "projectile cannot impact beyond maximum range", failures)
+    TestAssertions.near(float(beyond_limit.get("distance_travelled")), 1.0, 0.001, "projectile accounts for full maximum travel", failures)
     test_root.free()
 
 func _test_area_impact(failures: Array[String]) -> void:
@@ -183,7 +245,7 @@ func _test_cleric_primary_fallback(failures: Array[String]) -> void:
     _set_health(cleric, 100.0, 100.0)
     _set_health(hostile, 100.0, 100.0)
 
-    var candidates: Array[CombatTarget] = [cleric.get_combat_target(), hostile.get_combat_target()]
+    var candidates: Array[CombatTarget] = [null, cleric.get_combat_target(), hostile.get_combat_target()]
     cleric.call("advance_combat", 0.1, candidates)
     var primary: AttackController = cleric.get_node("AttackController") as AttackController
     var support: AttackController = cleric.get_node_or_null("SupportController") as AttackController
@@ -216,3 +278,10 @@ func _set_health(actor: PartyActor, maximum: float, current: float, downed: bool
 
 func _health(actor: PartyActor) -> HealthComponent:
     return actor.get_node("HealthComponent") as HealthComponent
+
+func _count_children_named(parent: Node, child_name: StringName) -> int:
+    var count := 0
+    for child: Node in parent.get_children():
+        if child.name == child_name:
+            count += 1
+    return count

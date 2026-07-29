@@ -34,8 +34,11 @@ func _process(delta: float) -> void:
     if elapsed >= lifetime or distance_travelled >= maximum_range:
         queue_free()
         return
-    if target != null and target.actor != null and is_instance_valid(target.actor):
-        target.position = target.actor.global_position
+    if target != null and target.actor != null:
+        if not is_instance_valid(target.actor):
+            queue_free()
+            return
+        target.position = target.actor.global_position if target.actor.is_inside_tree() else target.actor.position
         if target.actor.has_method("get_combat_target"):
             var refreshed: CombatTarget = target.actor.call("get_combat_target") as CombatTarget
             if refreshed == null or not refreshed.is_available or refreshed.team_id == team_id:
@@ -44,11 +47,14 @@ func _process(delta: float) -> void:
             target = refreshed
     _refresh_direction()
     var step: float = minf(speed * step_delta, maximum_range - distance_travelled)
-    if target != null and global_position.distance_to(target.position) <= step + 0.25:
-        global_position = target.position
+    var current_position := _current_position()
+    var target_distance: float = current_position.distance_to(target.position) if target != null else INF
+    if target != null and target_distance <= step:
+        distance_travelled += target_distance
+        _set_current_position(target.position)
         _impact()
         return
-    global_position += direction * step
+    _set_current_position(current_position + direction * step)
     distance_travelled += step
     if distance_travelled >= maximum_range:
         queue_free()
@@ -56,7 +62,7 @@ func _process(delta: float) -> void:
 func _refresh_direction() -> void:
     if target == null:
         return
-    var current_position: Vector3 = global_position if is_inside_tree() else position
+    var current_position := _current_position()
     var next_direction: Vector3 = (target.position - current_position).normalized()
     if not next_direction.is_zero_approx():
         direction = next_direction
@@ -67,7 +73,10 @@ func _impact() -> void:
         var parent := _effect_parent()
         if parent != null:
             parent.add_child(burst)
-            burst.global_position = global_position
+            if is_inside_tree() and burst.is_inside_tree():
+                burst.global_position = global_position
+            else:
+                burst.position = position
             burst.call("configure", team_id, damage, area_radius, 0.25)
     elif target != null and target.team_id != team_id and target.is_available and target.actor != null and target.actor.has_method("receive_damage"):
         target.actor.call("receive_damage", damage)
@@ -77,3 +86,12 @@ func _effect_parent() -> Node:
     if effects_parent != null and is_instance_valid(effects_parent):
         return effects_parent
     return get_parent()
+
+func _current_position() -> Vector3:
+    return global_position if is_inside_tree() else position
+
+func _set_current_position(value: Vector3) -> void:
+    if is_inside_tree():
+        global_position = value
+    else:
+        position = value
