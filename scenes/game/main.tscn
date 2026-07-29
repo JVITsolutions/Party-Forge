@@ -1,6 +1,17 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=5 format=3]
 
 [ext_resource type="Script" path="res://scripts/game/main.gd" id="1"]
+[ext_resource type="PackedScene" path="res://scenes/arena/arena.tscn" id="2_arena"]
+[ext_resource type="PackedScene" path="res://scenes/characters/leader.tscn" id="3_leader"]
+[ext_resource type="PackedScene" path="res://scenes/camera/leader_camera.tscn" id="4_camera"]
 
 [node name="Main" type="Node"]
 script = ExtResource("1")
+
+[node name="Arena" parent="." instance=ExtResource("2_arena")]
+
+[node name="Leader" parent="." instance=ExtResource("3_leader")]
+position = Vector3(0, 0.75, 0)
+
+[node name="LeaderCamera" parent="." instance=ExtResource("4_camera")]
+target_path = NodePath("../Leader")

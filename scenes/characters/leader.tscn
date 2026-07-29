@@ -1,0 +1,36 @@
+[gd_scene load_steps=7 format=3]
+
+[ext_resource type="Script" path="res://scripts/characters/leader.gd" id="1_leader"]
+[ext_resource type="Script" path="res://scripts/combat/health_component.gd" id="2_health"]
+[ext_resource type="Script" path="res://scripts/combat/attack_controller.gd" id="3_attack"]
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_leader"]
+radius = 0.45
+height = 1.5
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_leader"]
+albedo_color = Color(0.85098, 0.309804, 0.309804, 1)
+roughness = 0.7
+
+[sub_resource type="CapsuleMesh" id="CapsuleMesh_leader"]
+material = SubResource("StandardMaterial3D_leader")
+radius = 0.45
+height = 1.5
+
+[node name="Leader" type="CharacterBody3D" groups=["party_actors"]]
+collision_layer = 2
+collision_mask = 1
+script = ExtResource("1_leader")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+shape = SubResource("CapsuleShape3D_leader")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="."]
+material_override = SubResource("StandardMaterial3D_leader")
+mesh = SubResource("CapsuleMesh_leader")
+
+[node name="HealthComponent" type="Node" parent="."]
+script = ExtResource("2_health")
+
+[node name="AttackController" type="Node" parent="."]
+script = ExtResource("3_attack")

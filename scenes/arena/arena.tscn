@@ -1,0 +1,83 @@
+[gd_scene load_steps=5 format=3]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_floor"]
+albedo_color = Color(0.2, 0.235, 0.27, 1)
+roughness = 0.9
+
+[sub_resource type="BoxMesh" id="BoxMesh_floor"]
+material = SubResource("StandardMaterial3D_floor")
+size = Vector3(40, 0.5, 30)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_floor"]
+size = Vector3(40, 0.5, 30)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_north_south"]
+size = Vector3(42, 2, 1)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_east_west"]
+size = Vector3(1, 2, 32)
+
+[node name="Arena" type="Node3D"]
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
+rotation = Vector3(-1.047198, -0.523599, 0)
+light_energy = 1.2
+shadow_enabled = true
+
+[node name="Floor" type="StaticBody3D" parent="."]
+position = Vector3(0, -0.25, 0)
+collision_layer = 1
+collision_mask = 2
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Floor"]
+mesh = SubResource("BoxMesh_floor")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Floor"]
+shape = SubResource("BoxShape3D_floor")
+
+[node name="BoundaryNorth" type="StaticBody3D" parent="."]
+position = Vector3(0, 1, -15.5)
+collision_layer = 1
+collision_mask = 2
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="BoundaryNorth"]
+shape = SubResource("BoxShape3D_north_south")
+
+[node name="BoundarySouth" type="StaticBody3D" parent="."]
+position = Vector3(0, 1, 15.5)
+collision_layer = 1
+collision_mask = 2
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="BoundarySouth"]
+shape = SubResource("BoxShape3D_north_south")
+
+[node name="BoundaryWest" type="StaticBody3D" parent="."]
+position = Vector3(-20.5, 1, 0)
+collision_layer = 1
+collision_mask = 2
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="BoundaryWest"]
+shape = SubResource("BoxShape3D_east_west")
+
+[node name="BoundaryEast" type="StaticBody3D" parent="."]
+position = Vector3(20.5, 1, 0)
+collision_layer = 1
+collision_mask = 2
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="BoundaryEast"]
+shape = SubResource("BoxShape3D_east_west")
+
+[node name="PlayerSpawn" type="Marker3D" parent="."]
+position = Vector3(0, 0.75, 0)
+
+[node name="EnemySpawnMarker1" type="Marker3D" parent="." groups=["enemy_spawn_markers"]]
+position = Vector3(-17, 0.75, -12)
+
+[node name="EnemySpawnMarker2" type="Marker3D" parent="." groups=["enemy_spawn_markers"]]
+position = Vector3(17, 0.75, -12)
+
+[node name="EnemySpawnMarker3" type="Marker3D" parent="." groups=["enemy_spawn_markers"]]
+position = Vector3(-17, 0.75, 12)
+
+[node name="EnemySpawnMarker4" type="Marker3D" parent="." groups=["enemy_spawn_markers"]]
+position = Vector3(17, 0.75, 12)
