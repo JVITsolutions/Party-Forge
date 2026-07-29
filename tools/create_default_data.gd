@@ -30,7 +30,7 @@ func _initialize() -> void:
         _finish_failed(failures)
         return
 
-    if not _save_class(&"fighter", "Fighter", ClassDefinition.Role.FRONTLINE, Color("d94f4f"), [&"martial", &"vanguard"], 140.0, 6.0, 6.2, 2.0, 5.0, 9.0, saved_attacks[&"fighter_cleave"], null): failures += 1
+    if not _save_class(&"fighter", "Fighter", ClassDefinition.Role.FRONTLINE, Color("d94f4f"), [&"martial", &"vanguard"], 260.0, 10.0, 6.2, 2.0, 5.0, 9.0, saved_attacks[&"fighter_cleave"], null): failures += 1
     if not _save_class(&"ranger", "Ranger", ClassDefinition.Role.MIDLINE, Color("5fbd72"), [&"martial", &"ranged"], 90.0, 1.0, 6.6, 5.0, 11.0, 11.0, saved_attacks[&"ranger_shot"], null): failures += 1
     if not _save_class(&"mage", "Mage", ClassDefinition.Role.BACKLINE, Color("9567e8"), [&"arcane", &"ranged", &"caster"], 75.0, 0.0, 6.0, 6.5, 12.0, 12.0, saved_attacks[&"mage_burst"], null): failures += 1
     if not _save_class(&"cleric", "Cleric", ClassDefinition.Role.SUPPORT, Color("f0d15b"), [&"divine", &"support", &"caster"], 95.0, 2.0, 6.0, 4.0, 10.0, 10.0, saved_attacks[&"cleric_bolt"], saved_attacks[&"cleric_heal"]): failures += 1
@@ -43,8 +43,8 @@ func _initialize() -> void:
     if not _save_trait(&"divine", "Divine", &"healing_and_revive", {2: 0.18, 4: 0.40}): failures += 1
     if not _save_trait(&"support", "Support", &"support_power", {2: 0.15, 4: 0.35}): failures += 1
 
-    if not _save_enemy(&"swarmer", EnemyDefinition.Behavior.SWARMER, 24.0, 4.8, 8.0, 2): failures += 1
-    if not _save_enemy(&"spitter", EnemyDefinition.Behavior.SPITTER, 42.0, 2.8, 10.0, 4): failures += 1
+    if not _save_enemy(&"swarmer", EnemyDefinition.Behavior.SWARMER, 12.0, 4.8, 8.0, 2): failures += 1
+    if not _save_enemy(&"spitter", EnemyDefinition.Behavior.SPITTER, 18.0, 2.8, 10.0, 4): failures += 1
     if not _save_enemy(&"forge_guardian", EnemyDefinition.Behavior.FORGE_GUARDIAN, 1500.0, 3.3, 22.0, 100): failures += 1
     if failures > 0:
         _finish_failed(failures)

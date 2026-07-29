@@ -1,0 +1,121 @@
+[gd_scene load_steps=9 format=3]
+
+[ext_resource type="Script" path="res://scripts/dev/combat_sandbox.gd" id="1_sandbox"]
+[ext_resource type="Script" path="res://scripts/party/party_manager.gd" id="2_party"]
+[ext_resource type="Script" path="res://scripts/party/party_actor_spawner.gd" id="3_spawner"]
+[ext_resource type="Script" path="res://scripts/game/spawn_director.gd" id="4_director"]
+[ext_resource type="PackedScene" path="res://scenes/arena/arena.tscn" id="5_arena"]
+[ext_resource type="PackedScene" path="res://scenes/characters/leader.tscn" id="6_leader"]
+[ext_resource type="PackedScene" path="res://scenes/camera/leader_camera.tscn" id="7_camera"]
+
+[node name="CombatSandbox" type="Node3D"]
+script = ExtResource("1_sandbox")
+
+[node name="PartyManager" type="Node" parent="."]
+script = ExtResource("2_party")
+
+[node name="PartyActorSpawner" type="Node" parent="."]
+script = ExtResource("3_spawner")
+
+[node name="SpawnDirector" type="Node" parent="."]
+process_mode = 4
+script = ExtResource("4_director")
+
+[node name="Arena" parent="." instance=ExtResource("5_arena")]
+
+[node name="Actors" type="Node3D" parent="."]
+
+[node name="Leader" parent="Actors" instance=ExtResource("6_leader")]
+
+[node name="Enemies" type="Node3D" parent="."]
+
+[node name="Effects" type="Node3D" parent="."]
+
+[node name="LeaderCamera" parent="." instance=ExtResource("7_camera")]
+
+[node name="HUD" type="CanvasLayer" parent="."]
+
+[node name="Panel" type="PanelContainer" parent="HUD"]
+offset_left = 16.0
+offset_top = 16.0
+offset_right = 456.0
+offset_bottom = 560.0
+
+[node name="Content" type="VBoxContainer" parent="HUD/Panel"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="Title" type="Label" parent="HUD/Panel/Content"]
+layout_mode = 2
+text = "Party Forge Combat Sandbox"
+
+[node name="Instructions" type="Label" parent="HUD/Panel/Content"]
+layout_mode = 2
+text = "Production scenes and public interfaces only"
+
+[node name="PartySize" type="Label" parent="HUD/Panel/Content"]
+layout_mode = 2
+text = "Party Size: 0 / 4"
+
+[node name="ClassRanks" type="Label" parent="HUD/Panel/Content"]
+layout_mode = 2
+text = "Class Ranks: None"
+autowrap_mode = 2
+
+[node name="TraitCounts" type="Label" parent="HUD/Panel/Content"]
+layout_mode = 2
+text = "Trait Counts: None"
+autowrap_mode = 2
+
+[node name="ActiveTiers" type="Label" parent="HUD/Panel/Content"]
+layout_mode = 2
+text = "Active Tiers: None"
+autowrap_mode = 2
+
+[node name="SelectedLabel" type="Label" parent="HUD/Panel/Content"]
+layout_mode = 2
+text = "Selected companion"
+
+[node name="SelectedCompanion" type="OptionButton" parent="HUD/Panel/Content"]
+layout_mode = 2
+disabled = true
+
+[node name="Buttons" type="GridContainer" parent="HUD/Panel/Content"]
+layout_mode = 2
+columns = 2
+
+[node name="Fighter" type="Button" parent="HUD/Panel/Content/Buttons"]
+layout_mode = 2
+text = "Fighter"
+
+[node name="Ranger" type="Button" parent="HUD/Panel/Content/Buttons"]
+layout_mode = 2
+text = "Ranger"
+
+[node name="Mage" type="Button" parent="HUD/Panel/Content/Buttons"]
+layout_mode = 2
+text = "Mage"
+
+[node name="Cleric" type="Button" parent="HUD/Panel/Content/Buttons"]
+layout_mode = 2
+text = "Cleric"
+
+[node name="Swarmer" type="Button" parent="HUD/Panel/Content/Buttons"]
+layout_mode = 2
+text = "Swarmer"
+
+[node name="Spitter" type="Button" parent="HUD/Panel/Content/Buttons"]
+layout_mode = 2
+text = "Spitter"
+
+[node name="ForgeGuardian" type="Button" parent="HUD/Panel/Content/Buttons"]
+layout_mode = 2
+text = "Forge Guardian"
+
+[node name="DownSelectedCompanion" type="Button" parent="HUD/Panel/Content/Buttons"]
+layout_mode = 2
+text = "Down Selected Companion"
+
+[node name="ClearHostiles" type="Button" parent="HUD/Panel/Content/Buttons"]
+layout_mode = 2
+text = "Clear Hostiles"

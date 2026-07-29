@@ -5,7 +5,7 @@
 [resource]
 script = ExtResource("1_l50bk")
 id = &"swarmer"
-max_health = 24.0
+max_health = 12.0
 move_speed = 4.8
 contact_damage = 8.0
 experience = 2

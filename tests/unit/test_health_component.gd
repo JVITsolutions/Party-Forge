@@ -16,6 +16,15 @@ func run() -> Array[String]:
     TestAssertions.near(companion.current_health, 50.0, 0.001, "revive health fraction", failures)
     companion.free()
 
+    var runtime_companion: HealthComponent = HealthScript.new()
+    runtime_companion.configure(100.0, 0.0, false, 8.0, 0.5)
+    runtime_companion.take_damage(100.0)
+    TestAssertions.truthy(runtime_companion.has_method("_process"), "runtime health component owns revive clock", failures)
+    if runtime_companion.has_method("_process"):
+        runtime_companion.call("_process", 8.0)
+        TestAssertions.truthy(not runtime_companion.is_downed, "runtime process revives companion", failures)
+    runtime_companion.free()
+
     var leader: HealthComponent = HealthScript.new()
     leader.configure(80.0, 0.0, true, 8.0, 0.5)
     leader.take_damage(80.0)

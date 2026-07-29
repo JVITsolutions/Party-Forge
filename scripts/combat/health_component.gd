@@ -16,6 +16,9 @@ var revive_delay: float = 8.0
 var revive_health_fraction: float = 0.5
 var revive_remaining: float = 0.0
 
+func _process(delta: float) -> void:
+    advance_time(delta)
+
 func configure(maximum: float, armor_value: float, leader: bool, revive_seconds: float, revive_fraction: float) -> void:
     max_health = maxf(maximum, 1.0)
     current_health = max_health
