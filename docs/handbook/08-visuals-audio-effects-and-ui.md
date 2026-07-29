@@ -68,22 +68,27 @@ Use these replacement steps:
 
 Mesh and material Resources can be shared by many instances. Changing a shared material at runtime can recolor every actor using it.
 
-Duplicate before a per-instance mutation:
+For the current Party Forge actor contract, duplicate a `StandardMaterial3D` and assign it as the `MeshInstance3D` node-wide override before changing its color:
 
 ```gdscript
-var source_material := mesh_instance.get_active_material(0)
+var source_material := mesh_instance.material_override as StandardMaterial3D
 if source_material == null:
-    push_warning("Assign a material to surface 0 before making an instance override.")
+    source_material = mesh_instance.get_active_material(0) as StandardMaterial3D
+if source_material == null:
+    push_warning("Assign a StandardMaterial3D before making an instance override.")
     return
-var unique_material := source_material.duplicate() as Material
+var unique_material := source_material.duplicate() as StandardMaterial3D
 if unique_material == null:
     return
-mesh_instance.set_surface_override_material(0, unique_material)
+unique_material.albedo_color = Color(0.25, 0.70, 0.95)
+mesh_instance.material_override = unique_material
 ```
 
-First ensure surface `0` has an assigned material. The guard keeps an empty surface from producing a null-method error; after the duplicate is assigned as an override, change properties on `unique_material`. Party Forge's damage-flash path follows the same safety idea by checking for an override or mesh material and returning when neither exists before it duplicates and changes color.
+The casts and null guard reject a missing material or a different material type before `duplicate()` is called. `get_active_material(0)` is only the fallback source; the unique copy is assigned to `material_override`, which applies to the whole node.
 
-Use a shared material when all instances should change together. Use a duplicated material or per-instance override when color, emission, transparency, or hit feedback belongs to one actor. Verify with two simultaneous instances: changing one must not change the other.
+This node-wide assignment matches the current party and enemy damage-flash scripts: both read `material_override` first and assign a duplicated `StandardMaterial3D` back to that property. `EnemyActor.configure()` records the current node-wide albedo as its base color, so a Training Swarmer can flash white and then restore the selected color. Party actors deliberately restore their `ClassDefinition.color`; coordinate a party-actor color change with that definition contract.
+
+Use a shared material when all instances should change together. Use a duplicated node-wide override when color, emission, transparency, or hit feedback belongs to one Party Forge actor. Verify with two simultaneous instances: changing one must not change the other.
 
 > **Godot rule:** Resources are reference-counted data and may be shared. Editing one shared material affects every user of that Resource.
 
@@ -146,9 +151,12 @@ This exercise changes only a disposable training copy.
 2. Duplicate the combat sandbox as `scenes/dev/training_visual_sandbox.tscn`, then instance the training Swarmer under `Enemies`. Connect its reward signal to `SpawnDirector` as described in Chapter 7.
 3. Before changing art, record the enemy definition path, root script, groups, collision layer and mask, collision shape and dimensions, starting position, movement speed, contact cadence, damage, health, and reward.
 4. Replace only the existing `MeshInstance3D` Mesh Resource with a training mesh. If importing a source model, keep it inside a disposable assets folder and use its imported Mesh Resource.
-5. Duplicate its material, assign the duplicate as a surface override, and change the color. Put two instances in the sandbox and confirm only the edited instance changes.
+5. Duplicate its `StandardMaterial3D`, assign the copy to the edited `MeshInstance3D.material_override`, and change the copy's `albedo_color`. Put two instances in the sandbox and confirm only the edited instance changes.
 6. Run the sandbox before and after. Compare target choice, path, contact distance, hit cadence, damage, health, reward, and collision debug view. The visible silhouette may change; those combat observations must not.
-7. Confirm damage flash still affects the direct `MeshInstance3D`, one runtime `HealthBar3D` appears where applicable, and **Clear Hostiles** removes enemies and hostile transient effects.
+7. Damage the edited Training Swarmer without defeating it. Confirm its node-wide material flashes white and returns to the selected color, one runtime `HealthBar3D` appears where applicable, and **Clear Hostiles** removes enemies and hostile transient effects.
+
+> **Checkpoint:** Before cleanup, preserve a before/after visual comparison; confirm combat, collision, health, and reward behavior are unchanged; confirm the second instance keeps its own material and color when the edited instance changes; and confirm the edited instance restores its selected material color after damage flash. Do not continue if any observation fails.
+
 8. Stop the run and remove the disposable scenes, training source asset, `.import` metadata that belongs to it, and generated UID files. Do not delete shared imported files.
 
 The exercise is successful when the screenshots look different but the recorded combat observations match.
@@ -160,8 +168,8 @@ The exercise is successful when the screenshots look different but the recorded 
 - A game-owned wrapper preserves the scripted root, components, groups, collision, and node-name contracts.
 - Actor scale and orientation are normalized below the gameplay root.
 - Collision remains simple, fair, and independent from render detail.
-- Per-instance material changes use a duplicate or override and are tested with two instances.
-- Damage flash and other presentation feedback still reach the intended mesh nodes.
+- Party Forge actor color changes use a duplicated `StandardMaterial3D` assigned to the node-wide `MeshInstance3D.material_override` and are tested with two instances.
+- Damage flash reaches the intended mesh node and restores the expected base color afterward.
 - Transients spawn under `Effects`, own their lifetime, and hostile ones join `hostile_transient_effects`.
 - 3D sounds are tested from near, far, left, and right of the active listener.
 - UI and music sounds use non-positional playback and only verified project buses.
@@ -174,7 +182,7 @@ Verify presentation independently from gameplay:
 
 1. Reimport the source asset and reopen the wrapper. Confirm no missing dependencies, reset transforms, or lost overrides.
 2. Run the disposable scene with visible collision shapes enabled. Compare its recorded collision and behavior before and after.
-3. Place two instances together and trigger color feedback on only one to detect shared-material mutation.
+3. Place two instances together and trigger damage flash on only the edited actor. Confirm the other actor never changes and the edited actor returns to its selected color when the flash ends.
 4. Inspect the Remote tree for the scripted root, components, one expected health bar, `Effects` ownership, groups, and cleanup.
 5. Exercise hostile cleanup during an active projectile or telegraph, not only after effects finish naturally.
 6. Test positional audio from multiple camera/listener positions and non-positional audio during camera movement.
@@ -191,6 +199,7 @@ Automated tests can prove node contracts and cleanup. They cannot replace listen
 - Scaling the gameplay root to compensate for a badly scaled visual child.
 - Generating detailed collision from render geometry for a moving character.
 - Mutating a shared material and recoloring every instance.
+- Using only a per-surface override on a current Party Forge actor, then losing that appearance when damage flash assigns its node-wide override.
 - Spawning effects under arbitrary owners with no timeout or completion cleanup.
 - Forgetting `hostile_transient_effects` on a hostile projectile or telegraph.
 - Using `AudioStreamPlayer3D` for UI or music, or positional sound without testing the active listener.
