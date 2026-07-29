@@ -1,0 +1,23 @@
+{
+  "automated_ordinary_speed": true,
+  "choices": [
+    "Recruit Ranger"
+  ],
+  "debug_time_scale": 1.0,
+  "defeat_game_seconds": 75.401761999997,
+  "defeat_wall_seconds": 75.296,
+  "direct_damage_injection": false,
+  "failures": [],
+  "leader_class": "mage",
+  "leader_health_at_defeat": 0.0,
+  "leader_is_dead": true,
+  "paused": true,
+  "post_defeat_lock_probe": "GameRun.boss_defeated() called only after natural DEFEAT",
+  "result_title": "DEFEAT",
+  "run_kind": "automated ordinary-speed natural-enemy-defeat acceptance",
+  "screenshot": "res://docs/validation/screenshots/leader-defeat.png",
+  "source_commit": "89b40f72714195403b97077e72ffc876bed6e7ce",
+  "status": "PASS",
+  "terminal_state_after_lock_probe": 5,
+  "terminal_state_before_lock_probe": 5
+}

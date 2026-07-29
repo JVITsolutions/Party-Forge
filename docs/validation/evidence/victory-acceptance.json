@@ -1,0 +1,172 @@
+{
+  "active_traits": "ranged:2, vanguard:2, martial:2",
+  "automated_ordinary_speed": true,
+  "automatic_revive_events": [
+    {
+      "class_id": "ranger",
+      "game_seconds": 300.0,
+      "health": 45.0,
+      "member_id": 2,
+      "wall_seconds": 340.897
+    }
+  ],
+  "boss_shockwaves_observed": 6,
+  "boss_trigger_game_time": 300.0,
+  "boss_trigger_wall_time": 299.898,
+  "choices": [
+    "Recruit Ranger",
+    "Recruit Fighter",
+    "Recruit Mage",
+    "Train Ranger",
+    "Train Mage",
+    "Train Fighter",
+    "Train Fighter",
+    "Train Fighter"
+  ],
+  "class_counts": {
+    "fighter": 2,
+    "mage": 1,
+    "ranger": 1
+  },
+  "companion_damage_events": [
+    {
+      "class_id": "fighter",
+      "from_health": 260.0,
+      "game_seconds": 170.014374333332,
+      "member_id": 3,
+      "to_health": 259.0,
+      "wall_seconds": 169.912
+    },
+    {
+      "class_id": "fighter",
+      "from_health": 259.0,
+      "game_seconds": 242.111490333274,
+      "member_id": 3,
+      "to_health": 258.0,
+      "wall_seconds": 242.012
+    },
+    {
+      "class_id": "fighter",
+      "from_health": 258.0,
+      "game_seconds": 262.052690999927,
+      "member_id": 3,
+      "to_health": 257.0,
+      "wall_seconds": 261.945
+    },
+    {
+      "class_id": "ranger",
+      "from_health": 90.0,
+      "game_seconds": 300.0,
+      "member_id": 2,
+      "to_health": 69.0,
+      "wall_seconds": 302.896
+    },
+    {
+      "class_id": "fighter",
+      "from_health": 257.0,
+      "game_seconds": 300.0,
+      "member_id": 3,
+      "to_health": 245.0,
+      "wall_seconds": 302.896
+    },
+    {
+      "class_id": "ranger",
+      "from_health": 69.0,
+      "game_seconds": 300.0,
+      "member_id": 2,
+      "to_health": 48.0,
+      "wall_seconds": 310.397
+    },
+    {
+      "class_id": "fighter",
+      "from_health": 245.0,
+      "game_seconds": 300.0,
+      "member_id": 3,
+      "to_health": 233.0,
+      "wall_seconds": 310.397
+    },
+    {
+      "class_id": "ranger",
+      "from_health": 48.0,
+      "game_seconds": 300.0,
+      "member_id": 2,
+      "to_health": 27.0,
+      "wall_seconds": 317.896
+    },
+    {
+      "class_id": "fighter",
+      "from_health": 233.0,
+      "game_seconds": 300.0,
+      "member_id": 3,
+      "to_health": 221.0,
+      "wall_seconds": 317.896
+    },
+    {
+      "class_id": "ranger",
+      "from_health": 27.0,
+      "game_seconds": 300.0,
+      "member_id": 2,
+      "to_health": 6.0,
+      "wall_seconds": 325.396
+    },
+    {
+      "class_id": "fighter",
+      "from_health": 221.0,
+      "game_seconds": 300.0,
+      "member_id": 3,
+      "to_health": 209.0,
+      "wall_seconds": 325.396
+    },
+    {
+      "class_id": "mage",
+      "from_health": 75.0,
+      "game_seconds": 300.0,
+      "member_id": 4,
+      "to_health": 53.0,
+      "wall_seconds": 325.396
+    },
+    {
+      "class_id": "ranger",
+      "from_health": 6.0,
+      "game_seconds": 300.0,
+      "member_id": 2,
+      "to_health": 0.0,
+      "wall_seconds": 332.896
+    },
+    {
+      "class_id": "fighter",
+      "from_health": 209.0,
+      "game_seconds": 300.0,
+      "member_id": 3,
+      "to_health": 197.0,
+      "wall_seconds": 332.898
+    }
+  ],
+  "debug_time_scale": 1.0,
+  "direct_damage_injection": false,
+  "failures": [],
+  "game_seconds": 300.0,
+  "input_strategy": "UI choices plus square mapped movement to game 300; mapped boss hover, shockwave approach, and post-shock retreat; flee after natural down; square movement after automatic revive",
+  "matching_natural_revival_observed": true,
+  "natural_down_events": [
+    {
+      "class_id": "ranger",
+      "game_seconds": 300.0,
+      "health": 0.0,
+      "member_id": 2,
+      "wall_seconds": 332.896
+    }
+  ],
+  "party_composition": "Fighter + Ranger + Fighter + Mage",
+  "result_title": "VICTORY",
+  "run_kind": "automated ordinary-speed public-input acceptance",
+  "screenshot": "res://docs/validation/screenshots/boss-victory.png",
+  "source_commit": "89b40f72714195403b97077e72ffc876bed6e7ce",
+  "spitter_projectile_seen": true,
+  "spitter_seen": true,
+  "status": "PASS",
+  "swarmer_pursuit_seen": true,
+  "swarmer_seen": true,
+  "terminal_state": 4,
+  "wall_seconds": 344.003
+}

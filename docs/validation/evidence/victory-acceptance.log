@@ -1,0 +1,19 @@
+﻿Godot Engine v4.7.1.stable.mono.official.a13da4feb - https://godotengine.org
+D3D12 12_0 - Forward+ - Using Device #0: NVIDIA - NVIDIA GeForce RTX 4070 Ti SUPER
+
+PARTY_FORGE_BOOT_OK
+PARTY_FORGE_CLASS_SELECTION_READY
+TASK_13_VICTORY_PROGRESS game=30.0 wall=29.9 party=2 state=1 leader_health=257.0 companion_health=2:ranger:90.0 hostiles=2 downs=0 revives=0
+TASK_13_VICTORY_PROGRESS game=60.0 wall=59.9 party=2 state=1 leader_health=257.0 companion_health=2:ranger:90.0 hostiles=1 downs=0 revives=0
+TASK_13_VICTORY_PROGRESS game=90.0 wall=89.9 party=3 state=1 leader_health=253.0 companion_health=2:ranger:90.0|3:fighter:260.0 hostiles=3 downs=0 revives=0
+TASK_13_VICTORY_PROGRESS game=120.0 wall=119.9 party=4 state=1 leader_health=250.0 companion_health=2:ranger:90.0|3:fighter:260.0|4:mage:75.0 hostiles=2 downs=0 revives=0
+TASK_13_VICTORY_PROGRESS game=150.0 wall=149.9 party=4 state=1 leader_health=248.0 companion_health=2:ranger:90.0|3:fighter:260.0|4:mage:75.0 hostiles=1 downs=0 revives=0
+TASK_13_VICTORY_PROGRESS game=180.0 wall=179.9 party=4 state=1 leader_health=236.0 companion_health=2:ranger:90.0|3:fighter:259.0|4:mage:75.0 hostiles=4 downs=0 revives=0
+TASK_13_VICTORY_PROGRESS game=210.0 wall=209.9 party=4 state=1 leader_health=223.0 companion_health=2:ranger:90.0|3:fighter:259.0|4:mage:75.0 hostiles=3 downs=0 revives=0
+TASK_13_VICTORY_PROGRESS game=240.0 wall=239.9 party=4 state=1 leader_health=210.0 companion_health=2:ranger:90.0|3:fighter:259.0|4:mage:75.0 hostiles=4 downs=0 revives=0
+TASK_13_VICTORY_PROGRESS game=270.0 wall=269.9 party=4 state=1 leader_health=182.0 companion_health=2:ranger:90.0|3:fighter:257.0|4:mage:75.0 hostiles=5 downs=0 revives=0
+TASK_13_VICTORY_PROGRESS game=300.0 wall=299.9 party=4 state=3 leader_health=135.0 companion_health=2:ranger:90.0|3:fighter:257.0|4:mage:75.0 hostiles=8 downs=0 revives=0
+TASK_13_BOSS_TRIGGER game=300.000 wall=299.898
+TASK_13_NATURAL_COMPANION_DOWN member=2 class=ranger wall=332.896 game=300.000
+TASK_13_AUTOMATIC_COMPANION_REVIVE member=2 class=ranger wall=340.897 game=300.000 health=45.0
+TASK_13_VICTORY_ACCEPTANCE: PASS wall=344.003 game=300.000 party=Fighter + Ranger + Fighter + Mage tiers=ranged:2, vanguard:2, martial:2
