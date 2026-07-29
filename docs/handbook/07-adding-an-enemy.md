@@ -1,6 +1,6 @@
 # 7. Adding an Enemy
 
-> **Handbook version:** Party Forge architecture verified at `53a3f72`<br>
+> **Handbook version:** Party Forge architecture verified at `a293f62`<br>
 > **Godot version:** `4.7.1`<br>
 > **Last checked:** `2026-07-29`
 
@@ -37,7 +37,7 @@ A conforming enemy must:
 
 ## Current enemy data and behavior split
 
-An `EnemyDefinition` contains identity and tuning data such as health, movement speed, contact damage, experience, color, and a behavior enum. It does not execute that behavior.
+An `EnemyDefinition` contains identity and tuning data: ID, behavior enum, maximum health, movement speed, contact damage, and experience. It does not execute that behavior.
 
 The current scenes make the split visible:
 
@@ -64,7 +64,7 @@ Use this exact disposable definition throughout the chapter:
 | `contact_damage` | `12.0` |
 | `experience` | `5` |
 
-Choose any clearly temporary color. The path is repository-relative; Godot displays it as `res://data/training/training_brute.tres`.
+The path is repository-relative; Godot displays it as `res://data/training/training_brute.tres`.
 
 ## Track A: sandbox an enemy using Swarmer behavior
 
@@ -137,7 +137,7 @@ The Spitter is a useful reference for a ranged loop and `scenes/enemies/enemy_pr
 ## Health, teams, targeting, rewards, and transient effects
 
 - **Health:** Configure the named `HealthComponent` from the enemy definition. Damage enters through `receive_damage()` and terminal health reaches `defeat()`.
-- **Teams:** Enemies use hostile team ID `2`; party actors are filtered out as friendly targets.
+- **Teams:** Enemies use hostile team ID `2`. `living_party_actors()` searches the `party_actors` group, rejects unavailable combat targets and any target that also reports hostile team ID `2`, and leaves eligible non-hostile party actors for enemy selection.
 - **Targeting:** `living_party_actors()` queries the `party_actors` group and excludes unavailable targets. A behavior script chooses among that valid set.
 - **Rewards:** The enemy emits one `reward_dropped` signal. `SpawnDirector` owns converting that event into an experience orb under the scene's `Effects` container.
 - **Cleanup:** The enemy owns its defeat cleanup. Each projectile or telegraph owns its normal lifetime; the game additionally clears the `hostile_transient_effects` group when combat ends.

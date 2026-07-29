@@ -1,6 +1,6 @@
 # 8. Visuals, Audio, Effects, and UI
 
-> **Handbook version:** Party Forge architecture verified at `53a3f72`<br>
+> **Handbook version:** Party Forge architecture verified at `a293f62`<br>
 > **Godot version:** `4.7.1`<br>
 > **Last checked:** `2026-07-29`
 
@@ -71,11 +71,17 @@ Mesh and material Resources can be shared by many instances. Changing a shared m
 Duplicate before a per-instance mutation:
 
 ```gdscript
-var unique_material := mesh_instance.get_active_material(0).duplicate() as Material
+var source_material := mesh_instance.get_active_material(0)
+if source_material == null:
+    push_warning("Assign a material to surface 0 before making an instance override.")
+    return
+var unique_material := source_material.duplicate() as Material
+if unique_material == null:
+    return
 mesh_instance.set_surface_override_material(0, unique_material)
 ```
 
-Then change properties on `unique_material`. Party Forge's damage-flash path follows the same safety idea by duplicating the active material before changing color.
+First ensure surface `0` has an assigned material. The guard keeps an empty surface from producing a null-method error; after the duplicate is assigned as an override, change properties on `unique_material`. Party Forge's damage-flash path follows the same safety idea by checking for an override or mesh material and returning when neither exists before it duplicates and changes color.
 
 Use a shared material when all instances should change together. Use a duplicated material or per-instance override when color, emission, transparency, or hit feedback belongs to one actor. Verify with two simultaneous instances: changing one must not change the other.
 
@@ -128,7 +134,7 @@ Read the focused [Responsive UI tutorial](../development/RESPONSIVE_UI_TUTORIAL.
 
 Party Forge uses a `1920 × 1080` logical viewport, `canvas_items` stretch mode, and `keep` aspect behavior. Anchors express a Control node's relationship to its parent. Containers own the layout of their child Controls and may override manual offsets, so resize through container settings, size flags, separation, and minimum sizes rather than fighting the container.
 
-Keep world-space presentation under gameplay nodes and screen-space UI under the HUD's Control hierarchy. Test the tutorial's target window sizes and aspect ratios, not only the editor preview. Preserve readable safe areas and ensure modal panels, buttons, labels, and status information remain reachable.
+Keep world-space presentation under gameplay nodes and screen-space UI under the HUD's Control hierarchy. Test the tutorial's three target window sizes—`1280 × 720`, `1920 × 1080`, and fullscreen 4K—not only the editor preview; all three targets are 16:9. Also make a separate non-16:9 check: stretch aspect `keep` preserves the logical aspect ratio and leaves unused space as letterboxing or pillarboxing, so confirm the framed UI remains readable and reachable rather than expecting it to fill that window.
 
 > **Party Forge convention:** The responsive UI tutorial is the single detailed procedure. Link to it and update it when the project-wide responsive contract changes instead of duplicating competing instructions in actor or content chapters.
 
