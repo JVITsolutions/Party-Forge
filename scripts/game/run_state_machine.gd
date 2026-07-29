@@ -14,6 +14,7 @@ var state: State = State.SETUP
 var elapsed := 0.0
 var terminal_locked := false
 var boss_emitted := false
+var resume_state: State = State.RUNNING
 
 func start() -> void:
     if state == State.SETUP and not terminal_locked:
@@ -31,12 +32,13 @@ func advance_run_time(delta: float) -> void:
         boss_requested.emit()
 
 func begin_level_up() -> void:
-    if state == State.RUNNING:
+    if state == State.RUNNING or state == State.BOSS:
+        resume_state = state
         _set_state(State.LEVEL_UP)
 
 func resume_run() -> void:
     if state == State.LEVEL_UP:
-        _set_state(State.RUNNING)
+        _set_state(resume_state)
 
 func leader_defeated() -> void:
     if terminal_locked:

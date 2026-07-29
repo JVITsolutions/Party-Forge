@@ -14,6 +14,7 @@ func run() -> Array[String]:
     _test_clock_and_boss_boundary(failures)
     _test_level_up_pauses_clock(failures)
     _test_terminal_states_lock(failures)
+    _test_boss_level_up_resume_state(failures)
     _test_game_run_pause_adapter_and_debug_gate(failures)
     return failures
 
@@ -93,6 +94,15 @@ func _test_game_run_pause_adapter_and_debug_gate(failures: Array[String]) -> voi
     TestAssertions.near(float(script.call("debug_scale_from_arguments", PackedStringArray(["--party-forge-debug-acceleration=60"]), false)), 1.0, 0.001, "release build ignores debug acceleration", failures)
     TestAssertions.near(float(script.call("debug_scale_from_arguments", PackedStringArray(["--party-forge-debug-acceleration=60"]), true)), 60.0, 0.001, "debug command-line flag enables acceleration", failures)
     run.free()
+
+func _test_boss_level_up_resume_state(failures: Array[String]) -> void:
+    var machine := _new_machine()
+    machine.call("start")
+    machine.call("advance_run_time", 300.0)
+    machine.call("begin_level_up")
+    TestAssertions.equal(int(machine.get("state")), 2, "BOSS can enter LEVEL_UP", failures)
+    machine.call("resume_run")
+    TestAssertions.equal(int(machine.get("state")), 3, "boss level-up resumes remembered BOSS state", failures)
 
 func _new_machine() -> RefCounted:
     return (load("res://scripts/game/run_state_machine.gd") as Script).new() as RefCounted

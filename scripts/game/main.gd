@@ -24,6 +24,8 @@ var leader: PartyActor
 var boss: Node3D
 var run_started := false
 var initialized := false
+var catalog_valid := false
+var level_refresh_scheduled := false
 
 func _ready() -> void:
     if initialized:
@@ -31,7 +33,8 @@ func _ready() -> void:
     initialized = true
     _cache_nodes()
     catalog = GameCatalog.load_defaults()
-    if not _validate_catalog(catalog):
+    catalog_valid = _validate_catalog(catalog)
+    if not catalog_valid:
         return
     _wire_static_ui()
     print("PARTY_FORGE_BOOT_OK")
@@ -40,7 +43,10 @@ func _ready() -> void:
 func select_leader_class(class_id: StringName) -> bool:
     if not initialized:
         _ready()
-    if run_started or catalog == null:
+    if run_started or catalog == null or not catalog_valid:
+        return false
+    catalog_valid = _validate_catalog(catalog, false)
+    if not catalog_valid:
         return false
     var definition := catalog.class_by_id(class_id)
     if definition == null:
@@ -72,8 +78,10 @@ func select_leader_class(class_id: StringName) -> bool:
     game_run.start_run()
     return true
 
-func _apply_choice(choice: UpgradeChoice) -> bool:
-    if choice == null:
+func _apply_choice(choice: UpgradeChoice, report_error: bool = true) -> bool:
+    if not _choice_is_valid(choice):
+        if report_error and choice != null:
+            push_error("PARTY_FORGE_INVALID_CHOICE kind=%d target=%s" % [choice.kind, choice.target_id])
         return false
     var applied := false
     match choice.kind:
@@ -86,16 +94,22 @@ func _apply_choice(choice: UpgradeChoice) -> bool:
                 trait_upgrade_ranks[choice.target_id] = int(trait_upgrade_ranks.get(choice.target_id, 0)) + 1
                 applied = true
         UpgradeChoice.Kind.PARTY_STAT:
-            if party_stats.has(choice.target_id):
-                party_stats[choice.target_id] = mini(int(party_stats[choice.target_id]) + 1, 20)
+            if party_stats.has(choice.target_id) and int(party_stats[choice.target_id]) < 20:
+                party_stats[choice.target_id] = int(party_stats[choice.target_id]) + 1
                 applied = true
                 if choice.target_id == &"pickup_radius":
                     spawn_director.set_pickup_radius_multiplier(_pickup_multiplier())
     if not applied:
-        push_error("PARTY_FORGE_INVALID_CHOICE kind=%d target=%s" % [choice.kind, choice.target_id])
+        if report_error:
+            push_error("PARTY_FORGE_INVALID_CHOICE kind=%d target=%s" % [choice.kind, choice.target_id])
         return false
     experience_system.consume_pending_level()
-    game_run.resume_run()
+    if experience_system.pending_levels > 0:
+        level_refresh_scheduled = true
+        call_deferred("_present_pending_level")
+    else:
+        level_refresh_scheduled = false
+        game_run.resume_run()
     return true
 
 static func format_resource_error(path: String, reason: String) -> String:
@@ -109,10 +123,11 @@ func _cache_nodes() -> void:
     party_actor_spawner = get_node("PartyActorSpawner") as PartyActorSpawner
     hud = get_node("HUD") as CanvasLayer
 
-func _validate_catalog(target_catalog: GameCatalog) -> bool:
+func _validate_catalog(target_catalog: GameCatalog, report_errors: bool = true) -> bool:
     var errors := target_catalog.validate()
-    for reason: String in errors:
-        push_error(format_resource_error("res://data", reason))
+    if report_errors:
+        for reason: String in errors:
+            push_error(format_resource_error("res://data", reason))
     return errors.is_empty()
 
 func _wire_static_ui() -> void:
@@ -134,9 +149,55 @@ func _on_level_ready(_level: int) -> void:
     if not run_started:
         return
     game_run.begin_level_up()
+    if game_run.current_state() != RunStateMachine.State.LEVEL_UP:
+        return
+    var panel := get_node("HUD/LevelUpPanel") as Control
+    if panel.visible or level_refresh_scheduled:
+        return
+    _present_pending_level()
+
+func _present_pending_level() -> void:
+    level_refresh_scheduled = false
+    if experience_system.pending_levels <= 0:
+        game_run.resume_run()
+        return
+    if game_run.current_state() != RunStateMachine.State.LEVEL_UP:
+        game_run.begin_level_up()
+    if game_run.current_state() != RunStateMachine.State.LEVEL_UP:
+        return
     var seed := experience_system.level * 1009 + party_manager.members.size()
-    var choices := LevelUpChoiceService.generate(party_manager, catalog, seed)
-    get_node("HUD/LevelUpPanel").call("show_choices", choices, party_manager)
+    var choices := _generate_valid_choices(seed)
+    get_node("HUD/LevelUpPanel").call("show_choices", choices, party_manager, _invalid_choice_keys(choices))
+
+func _choice_is_valid(choice: UpgradeChoice) -> bool:
+    if choice == null or party_manager == null or not choice.is_valid_for(party_manager):
+        return false
+    match choice.kind:
+        UpgradeChoice.Kind.RECRUIT:
+            return catalog != null and catalog.class_by_id(choice.target_id) != null
+        UpgradeChoice.Kind.PARTY_STAT:
+            return party_stats.has(choice.target_id) and int(party_stats[choice.target_id]) < 20
+        _:
+            return true
+
+func _invalid_choice_keys(choices: Array[UpgradeChoice]) -> Dictionary:
+    var invalid: Dictionary = {}
+    for choice: UpgradeChoice in choices:
+        if not _choice_is_valid(choice):
+            invalid[choice.key()] = true
+    return invalid
+
+func _generate_valid_choices(seed: int) -> Array[UpgradeChoice]:
+    var valid: Array[UpgradeChoice] = []
+    var seen: Dictionary = {}
+    for offset: int in range(32):
+        for choice: UpgradeChoice in LevelUpChoiceService.generate(party_manager, catalog, seed + offset):
+            if _choice_is_valid(choice) and not seen.has(choice.key()):
+                valid.append(choice)
+                seen[choice.key()] = true
+                if valid.size() == 3:
+                    return valid
+    return valid
 
 func _spawn_boss() -> void:
     if boss != null and is_instance_valid(boss):

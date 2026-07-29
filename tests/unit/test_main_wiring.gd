@@ -39,6 +39,11 @@ func run() -> Array[String]:
     _test_hud_contract(failures)
     _test_exact_choice_panel(failures)
     _test_class_selection_starts_run_and_applies_choices(failures)
+    _test_capped_stat_is_disabled_without_hiding(failures)
+    _test_stacked_levels_stay_paused(failures)
+    _test_boss_level_up_resumes_boss(failures)
+    _test_catalog_gate_blocks_public_start(failures)
+    _test_result_panel_requests_once(failures)
     _test_visual_language(failures)
     _test_catalog_error_format(failures)
     return failures
@@ -110,8 +115,8 @@ func _test_class_selection_starts_run_and_applies_choices(failures: Array[String
     experience.pending_levels = 1
     game_run.call("begin_level_up")
     var stat_choice := UpgradeChoice.new(UpgradeChoice.Kind.PARTY_STAT, &"pickup_radius", "Pickup Radius")
-    for index: int in range(25):
-        main.call("_apply_choice", stat_choice)
+    (main.get("party_stats") as Dictionary)[&"pickup_radius"] = 19
+    main.call("_apply_choice", stat_choice)
     TestAssertions.equal(int((main.get("party_stats") as Dictionary)[&"pickup_radius"]), 20, "party stat upgrades cap at 20", failures)
     experience.pending_levels = 1
     game_run.call("begin_level_up")
@@ -124,6 +129,127 @@ func _test_class_selection_starts_run_and_applies_choices(failures: Array[String
         TestAssertions.truthy((actors[1] as PartyActor).get_node_or_null("HealthBar3D") != null, "recruited companion receives billboard health bar", failures)
     main.free()
     (Engine.get_main_loop() as SceneTree).paused = false
+
+func _test_capped_stat_is_disabled_without_hiding(failures: Array[String]) -> void:
+    var panel := (load("res://scenes/ui/level_up_panel.tscn") as PackedScene).instantiate() as Control
+    var method_arg_count := 0
+    for method: Dictionary in panel.get_method_list():
+        if method["name"] == &"show_choices":
+            method_arg_count = (method["args"] as Array).size()
+            break
+    TestAssertions.equal(method_arg_count, 3, "choice panel accepts explicit invalid-choice keys", failures)
+    if method_arg_count != 3:
+        panel.free()
+        return
+    var party := PartyManager.new()
+    var catalog := GameCatalog.load_defaults()
+    party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
+    var capped := UpgradeChoice.new(UpgradeChoice.Kind.PARTY_STAT, &"damage", "Capped Damage")
+    var choices: Array[UpgradeChoice] = [
+        capped,
+        UpgradeChoice.new(UpgradeChoice.Kind.RECRUIT, &"ranger", "Recruit Ranger"),
+        UpgradeChoice.new(UpgradeChoice.Kind.PARTY_STAT, &"move_speed", "Move Speed"),
+    ]
+    panel.call("show_choices", choices, party, {capped.key(): true})
+    var capped_button := panel.get_node("Choices/Choice1") as Button
+    var emitted: Array[UpgradeChoice] = []
+    panel.connect("choice_selected", func(choice: UpgradeChoice) -> void: emitted.append(choice))
+    TestAssertions.truthy(capped_button.disabled, "rank-20 party stat is invalid before selection", failures)
+    capped_button.pressed.emit()
+    TestAssertions.truthy(panel.visible, "invalid capped button cannot hide and strand level-up panel", failures)
+    TestAssertions.equal(emitted.size(), 0, "invalid capped button cannot emit success", failures)
+    var main := _started_main()
+    (main.get("party_stats") as Dictionary)[&"damage"] = 20
+    var experience := main.get_node("ExperienceSystem") as ExperienceSystem
+    experience.pending_levels = 1
+    var game_run: Node = main.get_node("GameRun")
+    game_run.call("begin_level_up")
+    var apply_arg_count := 0
+    for method: Dictionary in main.get_method_list():
+        if method["name"] == &"_apply_choice":
+            apply_arg_count = (method["args"] as Array).size()
+            break
+    TestAssertions.equal(apply_arg_count, 2, "central apply supports quiet validity regression checks", failures)
+    if apply_arg_count == 2:
+        TestAssertions.truthy(not main.call("_apply_choice", capped, false), "central apply reports capped stat failure", failures)
+        TestAssertions.equal(experience.pending_levels, 1, "capped stat failure consumes no pending level", failures)
+        TestAssertions.equal(game_run.call("current_state"), 2, "capped stat failure remains in LEVEL_UP", failures)
+    var generated: Array = main.call("_generate_valid_choices", 77) as Array
+    TestAssertions.equal(generated.size(), 3, "capped stat is replaced to preserve exact-three choices", failures)
+    TestAssertions.truthy(generated.all(func(choice: UpgradeChoice) -> bool: return choice.key() != capped.key()), "generated choices exclude capped stat", failures)
+    (Engine.get_main_loop() as SceneTree).paused = false
+    main.free()
+    panel.free(); party.free()
+
+func _test_stacked_levels_stay_paused(failures: Array[String]) -> void:
+    var main := _started_main()
+    var game_run: Node = main.get_node("GameRun")
+    var experience := main.get_node("ExperienceSystem") as ExperienceSystem
+    experience.pending_levels = 2
+    game_run.call("begin_level_up")
+    var choice := UpgradeChoice.new(UpgradeChoice.Kind.PARTY_STAT, &"damage", "Damage")
+    TestAssertions.truthy(main.call("_apply_choice", choice), "first stacked choice applies", failures)
+    TestAssertions.equal(experience.pending_levels, 1, "first stacked choice consumes one pending level", failures)
+    TestAssertions.equal(game_run.call("current_state"), 2, "remaining pending level keeps LEVEL_UP paused", failures)
+    TestAssertions.truthy((Engine.get_main_loop() as SceneTree).paused, "remaining pending level keeps tree paused", failures)
+    var has_refresh_state := main.has_method("_present_pending_level")
+    TestAssertions.truthy(has_refresh_state, "main exposes deferred pending-level presenter", failures)
+    if has_refresh_state:
+        TestAssertions.truthy(bool(main.get("level_refresh_scheduled")), "fresh panel is deferred after synchronous selection signal", failures)
+        main.call("_present_pending_level")
+        var panel := main.get_node("HUD/LevelUpPanel") as Control
+        TestAssertions.truthy(panel.visible and panel.get_node("Choices").get_child_count() == 3, "remaining level shows fresh exact-three panel", failures)
+    main.call("_apply_choice", UpgradeChoice.new(UpgradeChoice.Kind.PARTY_STAT, &"move_speed", "Move Speed"))
+    TestAssertions.equal(experience.pending_levels, 0, "final stacked choice consumes last pending level", failures)
+    TestAssertions.equal(game_run.call("current_state"), 1, "final stacked choice resumes prior RUNNING state", failures)
+    (Engine.get_main_loop() as SceneTree).paused = false
+    main.free()
+
+func _test_boss_level_up_resumes_boss(failures: Array[String]) -> void:
+    var main := _started_main()
+    var game_run: Node = main.get_node("GameRun")
+    var spawn_boss_callback := Callable(main, "_spawn_boss")
+    if game_run.is_connected("boss_requested", spawn_boss_callback):
+        game_run.disconnect("boss_requested", spawn_boss_callback)
+    game_run.call("advance_run_time", 300.0)
+    var experience := main.get_node("ExperienceSystem") as ExperienceSystem
+    experience.pending_levels = 1
+    main.call("_on_level_ready", experience.level + 1)
+    TestAssertions.equal(game_run.call("current_state"), 2, "boss-phase level-up enters LEVEL_UP", failures)
+    TestAssertions.truthy((Engine.get_main_loop() as SceneTree).paused, "boss-phase level-up pauses gameplay", failures)
+    main.call("_apply_choice", UpgradeChoice.new(UpgradeChoice.Kind.PARTY_STAT, &"attack_speed", "Attack Speed"))
+    TestAssertions.equal(game_run.call("current_state"), 3, "boss-phase level-up resumes BOSS", failures)
+    TestAssertions.truthy(not (Engine.get_main_loop() as SceneTree).paused, "boss resume unpauses gameplay", failures)
+    main.free()
+
+func _test_catalog_gate_blocks_public_start(failures: Array[String]) -> void:
+    var main := (load("res://scenes/game/main.tscn") as PackedScene).instantiate()
+    main.call("_ready")
+    var has_gate := false
+    for property: Dictionary in main.get_property_list():
+        if property["name"] == &"catalog_valid":
+            has_gate = true
+            break
+    TestAssertions.truthy(has_gate, "main persists catalog validation gate", failures)
+    if has_gate:
+        main.set("catalog_valid", false)
+        TestAssertions.truthy(not main.call("select_leader_class", &"fighter"), "public class selection cannot bypass failed catalog gate", failures)
+        TestAssertions.equal(main.get("run_started"), false, "failed catalog gate leaves timer stopped", failures)
+        TestAssertions.equal(main.get("leader"), null, "failed catalog gate creates no leader", failures)
+    main.free()
+
+func _test_result_panel_requests_once(failures: Array[String]) -> void:
+    var panel := (load("res://scenes/ui/run_result_panel.tscn") as PackedScene).instantiate() as Control
+    panel.call("_ready")
+    var restart_count: Array[int] = [0]
+    var quit_count: Array[int] = [0]
+    panel.connect("restart_requested", func() -> void: restart_count[0] += 1)
+    panel.connect("quit_requested", func() -> void: quit_count[0] += 1)
+    (panel.get_node("Panel/Content/Restart") as Button).pressed.emit()
+    (panel.get_node("Panel/Content/Quit") as Button).pressed.emit()
+    TestAssertions.equal(restart_count[0], 1, "restart routes once", failures)
+    TestAssertions.equal(quit_count[0], 1, "quit routes once", failures)
+    panel.free()
 
 func _test_visual_language(failures: Array[String]) -> void:
     var swarmer := (load("res://scenes/enemies/swarmer.tscn") as PackedScene).instantiate() as Node3D
@@ -166,3 +292,9 @@ func _mesh_color(node: Node3D) -> Color:
     if material == null and mesh_instance.mesh != null:
         material = mesh_instance.mesh.material as StandardMaterial3D
     return material.albedo_color if material != null else Color.TRANSPARENT
+
+func _started_main() -> Node:
+    var main := (load("res://scenes/game/main.tscn") as PackedScene).instantiate()
+    main.call("_ready")
+    main.call("select_leader_class", &"fighter")
+    return main

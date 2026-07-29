@@ -10,7 +10,7 @@ func _ready() -> void:
     process_mode = Node.PROCESS_MODE_ALWAYS
     _connect_buttons()
 
-func show_choices(exact_choices: Array[UpgradeChoice], party: PartyManager) -> void:
+func show_choices(exact_choices: Array[UpgradeChoice], party: PartyManager, invalid_choice_keys: Dictionary = {}) -> void:
     process_mode = Node.PROCESS_MODE_ALWAYS
     _connect_buttons()
     choices = exact_choices.duplicate()
@@ -21,7 +21,7 @@ func show_choices(exact_choices: Array[UpgradeChoice], party: PartyManager) -> v
         var button := buttons[index] as Button
         var choice: UpgradeChoice = choices[index] if index < choices.size() else null
         button.text = choice.label if choice != null else "Unavailable"
-        button.disabled = choice == null or party == null or not choice.is_valid_for(party)
+        button.disabled = choice == null or party == null or not choice.is_valid_for(party) or invalid_choice_keys.has(choice.key())
 
 func _connect_buttons() -> void:
     var buttons := get_node("Choices").get_children()
