@@ -4,8 +4,8 @@
     "Recruit Ranger"
   ],
   "debug_time_scale": 1.0,
-  "defeat_game_seconds": 75.401761999997,
-  "defeat_wall_seconds": 75.296,
+  "defeat_game_seconds": 75.0636123333348,
+  "defeat_wall_seconds": 74.948,
   "direct_damage_injection": false,
   "failures": [],
   "leader_class": "mage",
@@ -16,7 +16,7 @@
   "result_title": "DEFEAT",
   "run_kind": "automated ordinary-speed natural-enemy-defeat acceptance",
   "screenshot": "res://docs/validation/screenshots/leader-defeat.png",
-  "source_commit": "89b40f72714195403b97077e72ffc876bed6e7ce",
+  "source_commit": "66fd17aeaedb782ec491607035e07ce5ae974c14",
   "status": "PASS",
   "terminal_state_after_lock_probe": 5,
   "terminal_state_before_lock_probe": 5

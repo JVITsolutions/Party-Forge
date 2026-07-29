@@ -1,6 +1,6 @@
 extends SceneTree
 
-const SOURCE_COMMIT := "89b40f72714195403b97077e72ffc876bed6e7ce"
+const SOURCE_COMMIT := "66fd17aeaedb782ec491607035e07ce5ae974c14"
 const SCREENSHOT_PATH := "res://docs/validation/screenshots/boss-victory.png"
 const EVIDENCE_PATH := "res://docs/validation/evidence/victory-acceptance.json"
 const MAX_WALL_SECONDS := 450.0
@@ -90,16 +90,37 @@ func _handle_level_panel(main: Node) -> void:
         if choice != null and choice.kind == UpgradeChoice.Kind.RECRUIT and _desired_recruit_needed(main, choice.target_id) and not (buttons[index] as Button).disabled:
             selected = index
             break
-    if selected < 0 and (main.get_node("PartyManager") as PartyManager).members.size() < PartyManager.MAX_PARTY_SIZE:
+    if selected < 0:
+        for preferred_stat: StringName in [&"pickup_radius", &"move_speed", &"max_health"]:
+            for index: int in range(choices.size()):
+                var choice := choices[index] as UpgradeChoice
+                if choice != null and choice.kind == UpgradeChoice.Kind.PARTY_STAT and choice.target_id == preferred_stat and not (buttons[index] as Button).disabled:
+                    selected = index
+                    break
+            if selected >= 0:
+                break
+    if selected < 0:
         for index: int in range(choices.size()):
             var choice := choices[index] as UpgradeChoice
-            if choice != null and choice.kind == UpgradeChoice.Kind.RECRUIT and not (buttons[index] as Button).disabled:
+            if choice != null and choice.kind == UpgradeChoice.Kind.TRAIT and choice.target_id == &"ranged" and not (buttons[index] as Button).disabled:
                 selected = index
                 break
     if selected < 0:
         for index: int in range(choices.size()):
             var choice := choices[index] as UpgradeChoice
-            if choice != null and choice.kind == UpgradeChoice.Kind.CLASS_RANK and not (buttons[index] as Button).disabled:
+            if choice != null and choice.kind == UpgradeChoice.Kind.CLASS_RANK and choice.target_id == &"fighter" and not (buttons[index] as Button).disabled:
+                selected = index
+                break
+    if selected < 0:
+        for index: int in range(choices.size()):
+            var choice := choices[index] as UpgradeChoice
+            if choice != null and choice.kind == UpgradeChoice.Kind.TRAIT and choice.target_id == &"martial" and not (buttons[index] as Button).disabled:
+                selected = index
+                break
+    if selected < 0:
+        for index: int in range(choices.size()):
+            var choice := choices[index] as UpgradeChoice
+            if choice != null and choice.kind == UpgradeChoice.Kind.PARTY_STAT and not (buttons[index] as Button).disabled:
                 selected = index
                 break
     if selected < 0:
@@ -119,7 +140,7 @@ func _handle_level_panel(main: Node) -> void:
         (buttons[selected] as Button).pressed.emit()
 
 func _desired_recruit_needed(main: Node, class_id: StringName) -> bool:
-    var desired: Dictionary = {&"fighter": 2, &"ranger": 2}
+    var desired: Dictionary = {&"ranger": 2, &"mage": 1}
     if not desired.has(class_id):
         return false
     var counts := _class_counts(main.get_node("PartyManager") as PartyManager)
@@ -221,6 +242,10 @@ func _drive_leader_input(main: Node, state: int) -> void:
         return
     var boss_offset := boss.global_position - leader.global_position
     var active_action := int(boss.get("active_action"))
+    var schedule := boss.get("schedule") as RefCounted
+    var approaching_shockwave := active_action == BossActionSchedule.Action.SHOCKWAVE
+    if schedule != null:
+        approaching_shockwave = approaching_shockwave or (active_action < 0 and int(schedule.get("index")) == 1 and float(schedule.get("remaining")) <= 0.8)
     if active_action == BossActionSchedule.Action.SHOCKWAVE and last_boss_action != BossActionSchedule.Action.SHOCKWAVE:
         boss_shockwaves_observed += 1
     if last_boss_action == BossActionSchedule.Action.SHOCKWAVE and active_action != BossActionSchedule.Action.SHOCKWAVE:
@@ -229,46 +254,19 @@ func _drive_leader_input(main: Node, state: int) -> void:
     if not down_events.is_empty():
         _press_cardinal(-boss_offset)
         return
-    if active_action == BossActionSchedule.Action.SHOCKWAVE:
+    if active_action == BossActionSchedule.Action.CHARGE:
+        _release_input()
+        return
+    if approaching_shockwave:
         _press_cardinal(boss_offset)
     elif _wall_seconds() < boss_retreat_until:
         _press_cardinal(-boss_offset)
-    elif boss_offset.length() < 9.0:
+    elif boss_offset.length() < 17.0:
         _press_cardinal(-boss_offset)
-    elif boss_offset.length() > 11.0:
+    elif boss_offset.length() > 18.5:
         _press_cardinal(boss_offset)
     else:
         _release_input()
-
-func _vulnerable_living_companion(main: Node) -> PartyActor:
-    var selected: PartyActor
-    var selected_max_health := INF
-    for child: Node in main.get_node("Actors").get_children():
-        var actor := child as PartyActor
-        if actor == null or actor == main.get("leader"):
-            continue
-        var health := actor.get_node("HealthComponent") as HealthComponent
-        if health.is_dead or health.is_downed:
-            continue
-        if health.max_health < selected_max_health:
-            selected = actor
-            selected_max_health = health.max_health
-    return selected
-
-func _nearest_hostile_to(actor: Node3D) -> Node3D:
-    if actor == null:
-        return null
-    var selected: Node3D
-    var selected_distance := INF
-    for node: Node in get_nodes_in_group("hostile_actors"):
-        var hostile := node as Node3D
-        if hostile == null:
-            continue
-        var distance := actor.global_position.distance_squared_to(hostile.global_position)
-        if distance < selected_distance:
-            selected = hostile
-            selected_distance = distance
-    return selected
 
 func _press_cardinal(direction: Vector3) -> void:
     if absf(direction.x) >= absf(direction.z):

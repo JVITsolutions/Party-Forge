@@ -1,6 +1,6 @@
 extends SceneTree
 
-const SOURCE_COMMIT := "89b40f72714195403b97077e72ffc876bed6e7ce"
+const SOURCE_COMMIT := "66fd17aeaedb782ec491607035e07ce5ae974c14"
 const SCREENSHOT_PATH := "res://docs/validation/screenshots/leader-defeat.png"
 const EVIDENCE_PATH := "res://docs/validation/evidence/defeat-acceptance.json"
 const MAX_WALL_SECONDS := 300.0
