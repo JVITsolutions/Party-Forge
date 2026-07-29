@@ -5,6 +5,7 @@ signal boss_defeated
 
 const BossActionScheduleScript := preload("res://scripts/enemies/boss_action_schedule.gd")
 const DANGER_RING_SCENE := preload("res://scenes/effects/danger_ring.tscn")
+const CHARGE_TELEGRAPH_SCENE := preload("res://scenes/effects/charge_telegraph.tscn")
 
 const CHARGE_TELEGRAPH := 0.8
 const CHARGE_DURATION := 0.65
@@ -25,6 +26,7 @@ var action_remaining := 0.0
 var charge_target := Vector3.ZERO
 var charge_direction := Vector3.ZERO
 var pending_hit_areas: Array[Node] = []
+var pending_charge_telegraphs: Array[Node] = []
 var boss_defeat_emitted := false
 
 func configure_boss(target_leader: Node3D, director: Node = null, effect_container: Node = null) -> void:
@@ -64,9 +66,9 @@ func advance_behavior(delta: float) -> void:
             break
 
 func defeat() -> void:
-    if is_dead:
+    if defeat_handled:
         return
-    _disable_pending_hit_areas()
+    cancel_pending_effects()
     active_action = -1
     action_phase = Phase.NONE
     action_remaining = 0.0
@@ -86,6 +88,7 @@ func _begin_action(action: int) -> void:
             charge_direction.y = 0.0
             charge_direction = charge_direction.normalized()
             action_remaining = CHARGE_TELEGRAPH
+            _create_charge_telegraph()
         BossActionScheduleScript.Action.SHOCKWAVE:
             action_remaining = SHOCKWAVE_TELEGRAPH
             _create_danger_ring()
@@ -95,6 +98,7 @@ func _begin_action(action: int) -> void:
 
 func _complete_phase() -> void:
     if active_action == BossActionScheduleScript.Action.CHARGE and action_phase == Phase.TELEGRAPH:
+        _disable_pending_charge_telegraphs()
         action_phase = Phase.EXECUTE
         action_remaining = CHARGE_DURATION
         return
@@ -155,6 +159,39 @@ func _disable_pending_hit_areas() -> void:
             hit_area.monitorable = false
         area.queue_free()
     pending_hit_areas.clear()
+
+func _create_charge_telegraph() -> void:
+    var parent := effects_parent if effects_parent != null and is_instance_valid(effects_parent) else get_parent()
+    if parent == null:
+        return
+    var marker := CHARGE_TELEGRAPH_SCENE.instantiate() as Node3D
+    parent.add_child(marker)
+    if marker.is_inside_tree():
+        marker.global_position = charge_target
+    else:
+        marker.position = charge_target
+    pending_charge_telegraphs.append(marker)
+
+func _disable_pending_charge_telegraphs() -> void:
+    for marker: Node in pending_charge_telegraphs:
+        if marker == null or not is_instance_valid(marker):
+            continue
+        marker.process_mode = Node.PROCESS_MODE_DISABLED
+        if marker is Node3D:
+            (marker as Node3D).visible = false
+        marker.queue_free()
+    pending_charge_telegraphs.clear()
+
+func cancel_pending_effects() -> void:
+    _disable_pending_hit_areas()
+    _disable_pending_charge_telegraphs()
+    active_action = -1
+    action_phase = Phase.NONE
+    action_remaining = 0.0
+    velocity = Vector3.ZERO
+
+func _exit_tree() -> void:
+    cancel_pending_effects()
 
 func _party_targets() -> Array[Node3D]:
     var targets: Array[Node3D] = []

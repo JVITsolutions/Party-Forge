@@ -89,6 +89,15 @@ func down_selected_companion() -> bool:
 func clear_hostiles() -> void:
     for child: Node in enemies.get_children():
         child.queue_free()
+    var transient_effects: Array[Node] = []
+    if is_inside_tree():
+        transient_effects.assign(get_tree().get_nodes_in_group(&"hostile_transient_effects"))
+    else:
+        for candidate: Node in find_children("*", "", true, false):
+            if candidate.is_in_group(&"hostile_transient_effects"):
+                transient_effects.append(candidate)
+    for effect: Node in transient_effects:
+        effect.queue_free()
     boss = null
     refresh_status()
 

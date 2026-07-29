@@ -1,8 +1,6 @@
 class_name CombatModifiers
 extends RefCounted
 
-const CLASS_RANK_POWER_STEP := 0.2
-
 class Snapshot extends RefCounted:
     var power_multiplier := 1.0
     var cooldown_rate_multiplier := 1.0
@@ -20,7 +18,8 @@ static func resolve(member_state: PartyMemberState, party_manager: PartyManager)
         return result
 
     var class_rank: int = maxi(party_manager.get_class_rank(definition.id), 1)
-    result.power_multiplier = 1.0 + float(class_rank - 1) * CLASS_RANK_POWER_STEP
+    result.power_multiplier = (1.0 + float(class_rank - 1) * definition.class_rank_power_step) * party_manager.party_stat_multiplier(&"damage")
+    result.cooldown_rate_multiplier *= party_manager.party_stat_multiplier(&"attack_speed")
     for trait_id: StringName in definition.traits:
         var active_threshold: int = party_manager.active_tier(trait_id)
         if active_threshold <= 0:
@@ -28,7 +27,7 @@ static func resolve(member_state: PartyMemberState, party_manager: PartyManager)
         var trait_definition := _trait_definition(party_manager, trait_id)
         if trait_definition == null:
             continue
-        var active_value: float = float(trait_definition.tiers.get(active_threshold, 0.0))
+        var active_value: float = party_manager.effective_trait_value(trait_id)
         match trait_definition.stat_id:
             &"attack_speed":
                 result.cooldown_rate_multiplier *= 1.0 + active_value
@@ -44,7 +43,4 @@ static func resolve(member_state: PartyMemberState, party_manager: PartyManager)
     return result
 
 static func _trait_definition(party_manager: PartyManager, trait_id: StringName) -> TraitDefinition:
-    for definition: TraitDefinition in party_manager.trait_definitions:
-        if definition.id == trait_id:
-            return definition
-    return null
+    return party_manager.trait_definition(trait_id)

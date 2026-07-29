@@ -71,6 +71,9 @@ func sample_enemy_id(sample_time: float = -1.0) -> StringName:
 func spawn_enemy(enemy_id: StringName) -> Node3D:
     if enemy_id.is_empty():
         return null
+    if enemy_id != &"swarmer" and enemy_id != &"spitter":
+        print(format_unknown_enemy_id(enemy_id))
+        return null
     var marker := _choose_spawn_marker()
     if marker == null:
         return null
@@ -91,6 +94,9 @@ func spawn_enemy(enemy_id: StringName) -> Node3D:
     enemy.connect("reward_dropped", _on_reward_dropped)
     enemy_spawned.emit(enemy_id, enemy)
     return enemy
+
+static func format_unknown_enemy_id(enemy_id: StringName) -> String:
+    return "PARTY_FORGE_UNKNOWN_ENEMY_ID id=%s" % enemy_id
 
 func set_pickup_radius_multiplier(multiplier: float) -> void:
     pickup_radius_multiplier = maxf(multiplier, 0.0)

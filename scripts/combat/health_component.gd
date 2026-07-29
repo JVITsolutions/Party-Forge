@@ -15,15 +15,17 @@ var is_dead: bool = false
 var revive_delay: float = 8.0
 var revive_health_fraction: float = 0.5
 var revive_remaining: float = 0.0
+var death_is_terminal: bool = false
 
 func _process(delta: float) -> void:
     advance_time(delta)
 
-func configure(maximum: float, armor_value: float, leader: bool, revive_seconds: float, revive_fraction: float) -> void:
+func configure(maximum: float, armor_value: float, leader: bool, revive_seconds: float, revive_fraction: float, terminal_death: bool = false) -> void:
     max_health = maxf(maximum, 1.0)
     current_health = max_health
     armor = maxf(armor_value, 0.0)
     is_leader = leader
+    death_is_terminal = terminal_death
     revive_delay = maxf(revive_seconds, 0.1)
     revive_health_fraction = clampf(revive_fraction, 0.01, 1.0)
     is_downed = false
@@ -36,7 +38,7 @@ func take_damage(raw_damage: float) -> float:
     current_health = maxf(0.0, current_health - applied)
     health_changed.emit(current_health, max_health)
     if current_health <= 0.0:
-        if is_leader:
+        if is_leader or death_is_terminal:
             is_dead = true
             died.emit()
         else:
@@ -44,6 +46,22 @@ func take_damage(raw_damage: float) -> float:
             revive_remaining = revive_delay
             downed.emit()
     return applied
+
+func set_max_health(maximum: float, preserve_fraction: bool = true) -> void:
+    var previous_maximum := maxf(max_health, 1.0)
+    var previous_fraction := current_health / previous_maximum
+    max_health = maxf(maximum, 1.0)
+    current_health = max_health * previous_fraction if preserve_fraction else minf(current_health, max_health)
+    health_changed.emit(current_health, max_health)
+
+func kill() -> void:
+    if is_dead:
+        return
+    current_health = 0.0
+    is_downed = false
+    is_dead = true
+    health_changed.emit(current_health, max_health)
+    died.emit()
 
 func heal(amount: float) -> float:
     if is_dead or is_downed or amount <= 0.0:

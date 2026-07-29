@@ -7,11 +7,19 @@ const HOSTILE_TEAM_ID := 2
 
 @export var definition: EnemyDefinition
 
-var current_health := 1.0
-var is_dead := false
+var current_health: float:
+    get:
+        var health := _health_component()
+        return health.current_health if health != null else 0.0
+var is_dead: bool:
+    get:
+        var health := _health_component()
+        return health.is_dead if health != null else true
 var reward_was_dropped := false
+var defeat_handled := false
 var base_visual_color := Color(0.05, 0.03, 0.02)
 var damage_flash_remaining := 0.0
+var last_visual_health := 0.0
 
 func _ready() -> void:
     add_to_group("hostile_actors")
@@ -22,27 +30,33 @@ func configure(enemy_definition: EnemyDefinition) -> void:
     definition = enemy_definition
     if definition == null:
         return
-    current_health = maxf(definition.max_health, 1.0)
-    is_dead = false
+    var health := _health_component()
+    if health == null:
+        push_error("PARTY_FORGE_ENEMY_HEALTH_MISSING id=%s" % definition.id)
+        return
+    health.configure(definition.max_health, 0.0, false, 1.0, 1.0, true)
+    if not health.health_changed.is_connected(_on_health_changed): health.health_changed.connect(_on_health_changed)
+    if not health.died.is_connected(defeat): health.died.connect(defeat)
     reward_was_dropped = false
+    defeat_handled = false
+    damage_flash_remaining = 0.0
+    last_visual_health = health.current_health
     base_visual_color = _current_visual_color()
 
 func receive_damage(amount: float) -> float:
-    if is_dead or amount <= 0.0:
+    var health := _health_component()
+    if health == null:
         return 0.0
-    var applied := minf(amount, current_health)
-    current_health = maxf(current_health - amount, 0.0)
-    damage_flash_remaining = 0.1
-    _set_visual_color(Color.WHITE)
-    if current_health <= 0.0:
-        defeat()
-    return applied
+    return health.take_damage(amount)
 
 func defeat() -> void:
-    if is_dead:
+    if defeat_handled:
         return
-    is_dead = true
+    defeat_handled = true
     velocity = Vector3.ZERO
+    var health := _health_component()
+    if health != null and not health.is_dead:
+        health.kill()
     _drop_reward_once()
     queue_free()
 
@@ -88,6 +102,15 @@ func _drop_reward_once() -> void:
     var reward := definition.experience if definition != null else 0
     var drop_position := global_position if is_inside_tree() else position
     reward_dropped.emit(reward, drop_position)
+
+func _health_component() -> HealthComponent:
+    return get_node_or_null("HealthComponent") as HealthComponent
+
+func _on_health_changed(current: float, _maximum: float) -> void:
+    if current < last_visual_health:
+        damage_flash_remaining = 0.1
+        _set_visual_color(Color.WHITE)
+    last_visual_health = current
 
 func _move_for_delta(delta: float) -> void:
     if is_inside_tree():

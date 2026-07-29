@@ -36,7 +36,7 @@ func _initialize() -> void:
     if not _save_class(&"cleric", "Cleric", ClassDefinition.Role.SUPPORT, Color("f0d15b"), [&"divine", &"support", &"caster"], 95.0, 2.0, 6.0, 4.0, 10.0, 10.0, saved_attacks[&"cleric_bolt"], saved_attacks[&"cleric_heal"]): failures += 1
 
     if not _save_trait(&"martial", "Martial", &"attack_speed", {2: 0.15, 4: 0.35}): failures += 1
-    if not _save_trait(&"vanguard", "Vanguard", &"nearby_damage_reduction", {2: 0.12, 4: 0.28}): failures += 1
+    if not _save_trait(&"vanguard", "Vanguard", &"nearby_damage_reduction", {2: 0.12, 4: 0.28}, 6.0): failures += 1
     if not _save_trait(&"ranged", "Ranged", &"projectile_speed_and_range", {2: 0.15, 4: 0.35}): failures += 1
     if not _save_trait(&"arcane", "Arcane", &"area_size", {2: 0.18, 4: 0.40}): failures += 1
     if not _save_trait(&"caster", "Caster", &"cooldown_reduction", {2: 0.12, 4: 0.28}): failures += 1
@@ -62,13 +62,15 @@ func _save_class(id: StringName, name_value: String, role: ClassDefinition.Role,
     var value := ClassDefinition.new()
     value.id = id; value.display_name = name_value; value.role = role; value.color = color; value.traits = traits
     value.max_health = health; value.armor = armor; value.move_speed = speed
+    value.class_rank_power_step = 0.2; value.revive_delay = 8.0; value.revive_health_fraction = 0.5
     value.preferred_distance = preferred; value.engagement_distance = engagement; value.tether_distance = tether
     value.primary_attack = primary; value.support_action = support
     return _save_resource(value, "res://data/classes/%s.tres" % id)
 
-func _save_trait(id: StringName, name_value: String, stat: StringName, tiers: Dictionary) -> bool:
+func _save_trait(id: StringName, name_value: String, stat: StringName, tiers: Dictionary, effect_radius: float = 0.0) -> bool:
     var value := TraitDefinition.new()
     value.id = id; value.display_name = name_value; value.stat_id = stat; value.tiers = tiers
+    value.effect_radius = effect_radius
     return _save_resource(value, "res://data/traits/%s.tres" % id)
 
 func _save_enemy(id: StringName, behavior: EnemyDefinition.Behavior, health: float, speed: float, damage: float, experience: int) -> bool:

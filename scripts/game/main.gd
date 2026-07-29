@@ -8,10 +8,7 @@ const HUDScript := preload("res://scripts/ui/hud.gd")
 const LevelUpPanelScript := preload("res://scripts/ui/level_up_panel.gd")
 const RunResultPanelScript := preload("res://scripts/ui/run_result_panel.gd")
 
-var party_stats: Dictionary = {
-    &"max_health": 0, &"damage": 0, &"move_speed": 0,
-    &"attack_speed": 0, &"pickup_radius": 0,
-}
+var party_stats: Dictionary = {}
 var trait_upgrade_ranks: Dictionary = {}
 var catalog: GameCatalog
 var party_manager: PartyManager
@@ -90,15 +87,11 @@ func _apply_choice(choice: UpgradeChoice, report_error: bool = true) -> bool:
         UpgradeChoice.Kind.CLASS_RANK:
             applied = party_manager.rank_up(choice.target_id)
         UpgradeChoice.Kind.TRAIT:
-            if party_manager.active_tier(choice.target_id) > 0:
-                trait_upgrade_ranks[choice.target_id] = int(trait_upgrade_ranks.get(choice.target_id, 0)) + 1
-                applied = true
+            applied = party_manager.upgrade_trait(choice.target_id)
         UpgradeChoice.Kind.PARTY_STAT:
-            if party_stats.has(choice.target_id) and int(party_stats[choice.target_id]) < 20:
-                party_stats[choice.target_id] = int(party_stats[choice.target_id]) + 1
-                applied = true
-                if choice.target_id == &"pickup_radius":
-                    spawn_director.set_pickup_radius_multiplier(_pickup_multiplier())
+            applied = party_manager.upgrade_party_stat(choice.target_id)
+            if applied and choice.target_id == &"pickup_radius":
+                _sync_pickup_radius()
     if not applied:
         if report_error:
             push_error("PARTY_FORGE_INVALID_CHOICE kind=%d target=%s" % [choice.kind, choice.target_id])
@@ -117,6 +110,8 @@ static func format_resource_error(path: String, reason: String) -> String:
 
 func _cache_nodes() -> void:
     party_manager = get_node("PartyManager") as PartyManager
+    party_stats = party_manager.party_stat_ranks
+    trait_upgrade_ranks = party_manager.trait_upgrade_ranks
     experience_system = get_node("ExperienceSystem") as ExperienceSystem
     game_run = get_node("GameRun") as GameRun
     spawn_director = get_node("SpawnDirector") as SpawnDirector
@@ -176,7 +171,7 @@ func _choice_is_valid(choice: UpgradeChoice) -> bool:
         UpgradeChoice.Kind.RECRUIT:
             return catalog != null and catalog.class_by_id(choice.target_id) != null
         UpgradeChoice.Kind.PARTY_STAT:
-            return party_stats.has(choice.target_id) and int(party_stats[choice.target_id]) < 20
+            return choice.target_id in PartyManager.PARTY_STAT_IDS and party_manager.party_stat_rank(choice.target_id) < party_manager.upgrade_tuning.party_stat_max_rank
         _:
             return true
 
@@ -205,8 +200,9 @@ func _spawn_boss() -> void:
     boss = BOSS_SCENE.instantiate() as Node3D
     get_node("Enemies").add_child(boss)
     var markers := _spawn_markers()
-    boss.position = markers[0].global_position if not markers.is_empty() else Vector3(12.0, 0.75, 0.0)
+    boss.position = markers[0].position if not markers.is_empty() else Vector3(12.0, 0.75, 0.0)
     boss.call("configure_boss", leader, spawn_director, get_node("Effects"))
+    _attach_health_bar(boss)
     boss.connect("boss_defeated", game_run.boss_defeated)
     hud.call("set_boss", boss)
     hud.call("show_boss_banner")
@@ -232,13 +228,26 @@ func _spawn_markers() -> Array[Node3D]:
     return markers
 
 func _pickup_multiplier() -> float:
-    return 1.0 + float(party_stats[&"pickup_radius"]) * 0.2
+    return party_manager.party_stat_multiplier(&"pickup_radius") if party_manager != null else 1.0
+
+func _sync_pickup_radius() -> void:
+    if spawn_director != null:
+        spawn_director.set_pickup_radius_multiplier(_pickup_multiplier())
 
 func _show_victory() -> void:
+    _cancel_hostile_effects()
     get_node("HUD/RunResultPanel").call("show_result", true)
 
 func _show_defeat() -> void:
+    _cancel_hostile_effects()
     get_node("HUD/RunResultPanel").call("show_result", false)
+
+func _cancel_hostile_effects() -> void:
+    if boss != null and is_instance_valid(boss) and boss.has_method("cancel_pending_effects"):
+        boss.call("cancel_pending_effects")
+    if is_inside_tree():
+        for effect: Node in get_tree().get_nodes_in_group(&"hostile_transient_effects"):
+            effect.queue_free()
 
 func _restart() -> void:
     get_tree().paused = false

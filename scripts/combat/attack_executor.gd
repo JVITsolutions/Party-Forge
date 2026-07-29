@@ -74,7 +74,10 @@ func _execute_heal(definition: AttackDefinition, target: CombatTarget, modifiers
         return
     var effect := HEAL_EFFECT_SCENE.instantiate() as Node3D
     parent.add_child(effect)
-    effect.global_position = target.position
+    if effect.is_inside_tree():
+        effect.global_position = target.position
+    else:
+        effect.position = target.position
     effect.call("configure", 0.4)
 
 func _effect_parent() -> Node:

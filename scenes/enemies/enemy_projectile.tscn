@@ -13,7 +13,7 @@ material = SubResource("StandardMaterial3D_projectile")
 radius = 0.2
 height = 0.4
 
-[node name="EnemyProjectile" type="Node3D"]
+[node name="EnemyProjectile" type="Node3D" groups=["hostile_transient_effects"]]
 script = ExtResource("1_projectile")
 
 [node name="MeshInstance3D" type="MeshInstance3D" parent="."]

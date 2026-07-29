@@ -18,7 +18,7 @@ ring_segments = 12
 radius = 6.0
 height = 0.2
 
-[node name="DangerRing" type="Node3D"]
+[node name="DangerRing" type="Node3D" groups=["hostile_transient_effects"]]
 
 [node name="MeshInstance3D" type="MeshInstance3D" parent="."]
 mesh = SubResource("TorusMesh_ring")

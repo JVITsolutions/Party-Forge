@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="UpgradeTuning" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/upgrade_tuning.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+party_stat_max_rank = 20
+max_health_per_rank = 0.05
+damage_per_rank = 0.05
+move_speed_per_rank = 0.03
+attack_speed_per_rank = 0.04
+pickup_radius_per_rank = 0.2
+trait_upgrade_value_step = 0.25

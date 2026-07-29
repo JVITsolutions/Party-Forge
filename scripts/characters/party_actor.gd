@@ -6,9 +6,6 @@ const HealingSelectorScript := preload("res://scripts/combat/healing_selector.gd
 const CombatModifiersScript := preload("res://scripts/combat/combat_modifiers.gd")
 
 const PARTY_TEAM_ID := 1
-const REVIVE_DELAY := 8.0
-const REVIVE_HEALTH_FRACTION := 0.5
-
 @export var team_id: int = PARTY_TEAM_ID
 @export var move_speed: float = 6.0
 
@@ -33,7 +30,7 @@ func configure(member_state: PartyMemberState) -> void:
     move_speed = definition.move_speed
     var health: HealthComponent = _health_component()
     if health != null:
-        health.configure(definition.max_health, definition.armor, member_state.is_leader, REVIVE_DELAY, REVIVE_HEALTH_FRACTION)
+        health.configure(definition.max_health, definition.armor, member_state.is_leader, definition.revive_delay, definition.revive_health_fraction)
         last_visual_health = health.current_health
         if not health.health_changed.is_connected(_on_visual_health_changed): health.health_changed.connect(_on_visual_health_changed)
         if not health.downed.is_connected(_on_visual_downed): health.downed.connect(_on_visual_downed)
@@ -48,8 +45,16 @@ func configure(member_state: PartyMemberState) -> void:
     _ensure_combat_runtime()
 
 func configure_combat(manager: PartyManager, effect_container: Node = null) -> void:
+    if party_manager != null and party_manager.upgrades_changed.is_connected(_refresh_runtime_stats):
+        party_manager.upgrades_changed.disconnect(_refresh_runtime_stats)
+    if party_manager != null and party_manager.active_traits_changed.is_connected(_on_active_traits_changed):
+        party_manager.active_traits_changed.disconnect(_on_active_traits_changed)
     party_manager = manager
     combat_effects_parent = effect_container
+    if party_manager != null:
+        if not party_manager.upgrades_changed.is_connected(_refresh_runtime_stats): party_manager.upgrades_changed.connect(_refresh_runtime_stats)
+        if not party_manager.active_traits_changed.is_connected(_on_active_traits_changed): party_manager.active_traits_changed.connect(_on_active_traits_changed)
+    _refresh_runtime_stats()
     _ensure_combat_runtime()
 
 func _process(delta: float) -> void:
@@ -95,7 +100,10 @@ func receive_damage(amount: float) -> float:
     var health: HealthComponent = _health_component()
     if health == null:
         return 0.0
-    return health.take_damage(amount)
+    var adjusted_amount := amount
+    if party_manager != null:
+        adjusted_amount *= party_manager.incoming_damage_multiplier(self)
+    return health.take_damage(adjusted_amount)
 
 func get_combat_target() -> CombatTarget:
     var target_position: Vector3 = global_position if is_inside_tree() else position
@@ -206,3 +214,18 @@ func _set_visual_color(color: Color) -> void:
     material = material.duplicate() as StandardMaterial3D
     material.albedo_color = color
     mesh.material_override = material
+
+func _on_active_traits_changed(_tiers: Dictionary) -> void:
+    _refresh_runtime_stats()
+
+func _refresh_runtime_stats() -> void:
+    if member_state == null or member_state.class_definition == null:
+        return
+    var definition := member_state.class_definition
+    var health := _health_component()
+    var health_multiplier := party_manager.party_stat_multiplier(&"max_health") if party_manager != null else 1.0
+    move_speed = definition.move_speed * (party_manager.party_stat_multiplier(&"move_speed") if party_manager != null else 1.0)
+    if health != null:
+        health.set_max_health(definition.max_health * health_multiplier, true)
+        health.revive_delay = definition.revive_delay * (party_manager.revive_delay_multiplier() if party_manager != null else 1.0)
+        health.revive_health_fraction = definition.revive_health_fraction

@@ -1,0 +1,22 @@
+[gd_scene load_steps=3 format=3]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_charge"]
+transparency = 1
+shading_mode = 0
+albedo_color = Color(1, 0.08, 0.02, 0.62)
+emission_enabled = true
+emission = Color(1, 0.04, 0.01, 1)
+emission_energy_multiplier = 3.0
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_charge"]
+material = SubResource("StandardMaterial3D_charge")
+top_radius = 1.1
+bottom_radius = 1.1
+height = 0.06
+radial_segments = 48
+
+[node name="ChargeTelegraph" type="Node3D" groups=["hostile_transient_effects"]]
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="."]
+position = Vector3(0, 0.04, 0)
+mesh = SubResource("CylinderMesh_charge")

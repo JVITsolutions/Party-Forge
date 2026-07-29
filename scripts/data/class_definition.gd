@@ -11,6 +11,9 @@ enum Role { FRONTLINE, MIDLINE, BACKLINE, SUPPORT }
 @export var max_health: float = 100.0
 @export var armor: float = 0.0
 @export var move_speed: float = 6.0
+@export var class_rank_power_step: float = 0.2
+@export var revive_delay: float = 8.0
+@export var revive_health_fraction: float = 0.5
 @export var preferred_distance: float = 2.0
 @export var engagement_distance: float = 8.0
 @export var tether_distance: float = 10.0
@@ -23,6 +26,9 @@ func validate() -> PackedStringArray:
     if display_name.is_empty(): errors.append("class %s display name is empty" % id)
     if traits.is_empty(): errors.append("class %s has no traits" % id)
     if max_health <= 0.0: errors.append("class %s health must be positive" % id)
+    if class_rank_power_step < 0.0: errors.append("class %s rank power step cannot be negative" % id)
+    if revive_delay <= 0.0: errors.append("class %s revive delay must be positive" % id)
+    if revive_health_fraction <= 0.0 or revive_health_fraction > 1.0: errors.append("class %s revive health fraction must be between zero and one" % id)
     if primary_attack == null: errors.append("class %s primary attack is missing" % id)
     if primary_attack != null:
         for reason: String in primary_attack.validate(): errors.append("class %s primary %s" % [id, reason])

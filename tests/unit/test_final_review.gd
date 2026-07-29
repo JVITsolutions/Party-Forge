@@ -1,0 +1,348 @@
+extends RefCounted
+
+const PARTY_STAT_IDS: Array[StringName] = [&"max_health", &"damage", &"move_speed", &"attack_speed", &"pickup_radius"]
+
+func run() -> Array[String]:
+    var failures: Array[String] = []
+    print("FINAL_REVIEW_TEST resource")
+    _test_resource_tunables_and_trait_validation(failures)
+    print("FINAL_REVIEW_TEST party_stats")
+    _test_party_stat_runtime_effects(failures)
+    print("FINAL_REVIEW_TEST trait_upgrade")
+    _test_trait_upgrade_runtime_effects(failures)
+    print("FINAL_REVIEW_TEST vanguard")
+    _test_vanguard_available_origin(failures)
+    print("FINAL_REVIEW_TEST divine")
+    _test_divine_healing_and_actual_revive(failures)
+    print("FINAL_REVIEW_TEST enemy_health")
+    _test_enemy_health_component_and_bars(failures)
+    print("FINAL_REVIEW_TEST charge")
+    _test_charge_telegraph_lifecycle(failures)
+    print("FINAL_REVIEW_TEST unknown")
+    _test_unknown_enemy_id(failures)
+    print("FINAL_REVIEW_TEST sandbox")
+    _test_sandbox_hostile_effect_cleanup(failures)
+    print("FINAL_REVIEW_TEST done")
+    return failures
+
+func _test_resource_tunables_and_trait_validation(failures: Array[String]) -> void:
+    var catalog := GameCatalog.load_defaults()
+    for definition: ClassDefinition in catalog.classes:
+        for property_name: StringName in [&"class_rank_power_step", &"revive_delay", &"revive_health_fraction"]:
+            TestAssertions.truthy(_has_property(definition, property_name), "%s exposes %s tuning" % [definition.id, property_name], failures)
+        if _has_property(definition, &"class_rank_power_step"):
+            TestAssertions.near(float(definition.get("class_rank_power_step")), 0.2, 0.001, "%s rank power step remains exact" % definition.id, failures)
+        if _has_property(definition, &"revive_delay"):
+            TestAssertions.near(float(definition.get("revive_delay")), 8.0, 0.001, "%s revive delay remains exact" % definition.id, failures)
+        if _has_property(definition, &"revive_health_fraction"):
+            TestAssertions.near(float(definition.get("revive_health_fraction")), 0.5, 0.001, "%s revive fraction remains exact" % definition.id, failures)
+
+    var malformed := TraitDefinition.new()
+    malformed.id = &"malformed"
+    malformed.display_name = "Malformed"
+    malformed.stat_id = &"unsupported_optional_effect"
+    malformed.tiers = {2: 0.1}
+    var reasons := malformed.validate()
+    TestAssertions.truthy(reasons.has("trait malformed unsupported stat id unsupported_optional_effect"), "unsupported trait effect validation is grep-friendly", failures)
+    var malformed_catalog := GameCatalog.new()
+    malformed_catalog.traits.append(malformed)
+    var catalog_errors := malformed_catalog.validate()
+    TestAssertions.truthy(catalog_errors.has("PARTY_FORGE_RESOURCE_ERROR id=malformed reason=trait malformed unsupported stat id unsupported_optional_effect"), "catalog excludes malformed optional trait effect", failures)
+
+func _test_party_stat_runtime_effects(failures: Array[String]) -> void:
+    var main := _started_main(&"fighter")
+    var party := main.get_node("PartyManager") as PartyManager
+    var leader := main.get("leader") as PartyActor
+    var health := leader.get_node("HealthComponent") as HealthComponent
+    var required_methods: PackedStringArray = ["upgrade_party_stat", "party_stat_rank", "party_stat_multiplier"]
+    var has_all_methods := true
+    for method_name: String in required_methods:
+        TestAssertions.truthy(party.has_method(method_name), "PartyManager owns %s" % method_name, failures)
+        has_all_methods = has_all_methods and party.has_method(method_name)
+    if not has_all_methods:
+        _free_main(main)
+        return
+
+    TestAssertions.truthy(party.call("upgrade_party_stat", &"max_health"), "max-health upgrade applies", failures)
+    TestAssertions.near(float(party.call("party_stat_multiplier", &"max_health")), 1.05, 0.001, "max-health upgrade multiplier", failures)
+    TestAssertions.near(health.max_health, 273.0, 0.001, "max-health upgrade immediately updates existing leader", failures)
+    TestAssertions.near(health.current_health, 273.0, 0.001, "max-health upgrade preserves full-health fraction", failures)
+
+    TestAssertions.truthy(party.call("upgrade_party_stat", &"damage"), "damage upgrade applies", failures)
+    var damage_modifiers := CombatModifiers.resolve(party.members[0], party)
+    TestAssertions.near(float(damage_modifiers.get("power_multiplier")), 1.05, 0.001, "damage upgrade changes attack power", failures)
+
+    TestAssertions.truthy(party.call("upgrade_party_stat", &"move_speed"), "move-speed upgrade applies", failures)
+    TestAssertions.near(leader.move_speed, 6.2 * 1.03, 0.001, "move-speed upgrade immediately updates existing leader", failures)
+
+    TestAssertions.truthy(party.call("upgrade_party_stat", &"attack_speed"), "attack-speed upgrade applies", failures)
+    var attack_modifiers := CombatModifiers.resolve(party.members[0], party)
+    TestAssertions.near(float(attack_modifiers.get("cooldown_rate_multiplier")), 1.04, 0.001, "attack-speed upgrade changes cooldown rate", failures)
+
+    var effects := main.get_node("Effects") as Node3D
+    var orb := (load("res://scenes/progression/experience_orb.tscn") as PackedScene).instantiate() as Node3D
+    effects.add_child(orb)
+    orb.call("configure", 1, leader, main.get_node("ExperienceSystem"), 1.0)
+    TestAssertions.truthy(party.call("upgrade_party_stat", &"pickup_radius"), "pickup-radius upgrade applies", failures)
+    main.call("_sync_pickup_radius")
+    TestAssertions.near(float(party.call("party_stat_multiplier", &"pickup_radius")), 1.2, 0.001, "pickup-radius upgrade multiplier", failures)
+    TestAssertions.near(float(orb.get("pickup_radius_multiplier")), 1.2, 0.001, "pickup-radius upgrade immediately updates existing orb", failures)
+
+    TestAssertions.truthy(party.recruit(main.get("catalog").class_by_id(&"ranger")), "future-member setup recruit succeeds", failures)
+    var actors := main.get_node("Actors").get_children()
+    var ranger := actors[actors.size() - 1] as PartyActor
+    var ranger_health := ranger.get_node("HealthComponent") as HealthComponent
+    TestAssertions.near(ranger.move_speed, 6.6 * 1.03, 0.001, "future recruit receives move-speed upgrade", failures)
+    TestAssertions.near(ranger_health.max_health, 90.0 * 1.05, 0.001, "future recruit receives max-health upgrade", failures)
+
+    for stat_id: StringName in PARTY_STAT_IDS:
+        while int(party.call("party_stat_rank", stat_id)) < 20:
+            party.call("upgrade_party_stat", stat_id)
+        TestAssertions.truthy(not party.call("upgrade_party_stat", stat_id), "%s rank 20 remains capped" % stat_id, failures)
+    TestAssertions.truthy(not main.call("_choice_is_valid", UpgradeChoice.new(UpgradeChoice.Kind.PARTY_STAT, &"damage", "Damage")), "capped PartyManager stat is invalid choice", failures)
+    _free_main(main)
+
+func _test_trait_upgrade_runtime_effects(failures: Array[String]) -> void:
+    var catalog := GameCatalog.load_defaults()
+    var party := PartyManager.new()
+    party.initialize(catalog.class_by_id(&"mage"), catalog.traits)
+    party.recruit(catalog.class_by_id(&"mage"))
+    for method_name: String in ["upgrade_trait", "trait_upgrade_rank", "effective_trait_value"]:
+        TestAssertions.truthy(party.has_method(method_name), "PartyManager owns %s" % method_name, failures)
+    if not party.has_method("upgrade_trait") or not party.has_method("effective_trait_value"):
+        party.free()
+        return
+    var before := CombatModifiers.resolve(party.members[0], party)
+    TestAssertions.near(float(before.get("area_multiplier")), 1.18, 0.001, "base active Arcane effect", failures)
+    TestAssertions.truthy(party.call("upgrade_trait", &"arcane"), "active Arcane upgrade applies", failures)
+    TestAssertions.equal(int(party.call("trait_upgrade_rank", &"arcane")), 1, "trait upgrade rank centralized", failures)
+    TestAssertions.near(float(party.call("effective_trait_value", &"arcane")), 0.225, 0.001, "trait upgrade scales selected active value", failures)
+    var after := CombatModifiers.resolve(party.members[0], party)
+    TestAssertions.near(float(after.get("area_multiplier")), 1.225, 0.001, "trait selection changes runtime area result", failures)
+    TestAssertions.truthy(not party.call("upgrade_trait", &"divine"), "inactive trait cannot upgrade", failures)
+    party.free()
+
+func _test_vanguard_available_origin(failures: Array[String]) -> void:
+    var catalog := GameCatalog.load_defaults()
+    var party := PartyManager.new()
+    var root := _new_root("VanguardReviewTest")
+    root.add_child(party)
+    party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
+    party.recruit(catalog.class_by_id(&"fighter"))
+    party.recruit(catalog.class_by_id(&"ranger"))
+    TestAssertions.truthy(party.has_method("incoming_damage_multiplier"), "PartyManager owns nearby Vanguard query", failures)
+    if not party.has_method("incoming_damage_multiplier"):
+        root.free()
+        return
+    var vanguard := _actor_for_member(root, party, party.members[1], Vector3.ZERO)
+    var ally := _actor_for_member(root, party, party.members[2], Vector3(3.0, 0.0, 0.0))
+    var ally_health := ally.get_node("HealthComponent") as HealthComponent
+    ally_health.armor = 0.0
+    TestAssertions.near(float(party.call("incoming_damage_multiplier", ally)), 0.88, 0.001, "near available Vanguard protects ally", failures)
+    ally.receive_damage(20.0)
+    TestAssertions.near(ally_health.current_health, 72.4, 0.001, "near Vanguard reduces actual incoming damage", failures)
+    ally.position = Vector3(7.0, 0.0, 0.0)
+    TestAssertions.near(float(party.call("incoming_damage_multiplier", ally)), 1.0, 0.001, "far Vanguard gives no protection", failures)
+    ally.position = Vector3(3.0, 0.0, 0.0)
+    var vanguard_health := vanguard.get_node("HealthComponent") as HealthComponent
+    vanguard_health.take_damage(9999.0)
+    TestAssertions.equal(party.trait_count(&"vanguard"), 2, "downed Vanguard still counts toward active trait", failures)
+    TestAssertions.near(float(party.call("incoming_damage_multiplier", ally)), 1.0, 0.001, "downed Vanguard cannot originate protection", failures)
+    root.free()
+
+func _test_divine_healing_and_actual_revive(failures: Array[String]) -> void:
+    var catalog := GameCatalog.load_defaults()
+    var party := PartyManager.new()
+    var root := _new_root("DivineReviewTest")
+    root.add_child(party)
+    party.initialize(catalog.class_by_id(&"cleric"), catalog.traits)
+    party.recruit(catalog.class_by_id(&"cleric"))
+    party.recruit(catalog.class_by_id(&"ranger"))
+    TestAssertions.truthy(party.has_method("upgrade_trait"), "Divine upgrade uses centralized PartyManager ownership", failures)
+    if not party.has_method("upgrade_trait"):
+        root.free()
+        return
+    var cleric := _actor_for_member(root, party, party.members[0], Vector3.ZERO)
+    var ranger := _actor_for_member(root, party, party.members[2], Vector3(2.0, 0.0, 0.0))
+    var ranger_health := ranger.get_node("HealthComponent") as HealthComponent
+    ranger_health.current_health = 40.0
+    var executor := cleric.get_node("AttackExecutor") as Node
+    var heal := catalog.class_by_id(&"cleric").support_action
+    var combatants: Array[Node3D] = [cleric, ranger]
+    executor.call("configure", cleric, party, root, combatants)
+    executor.call("execute", heal, ranger.get_combat_target())
+    TestAssertions.near(ranger_health.current_health, 40.0 + 18.0 * 1.18 * 1.15, 0.001, "active Divine and Support strengthen actual healing", failures)
+    party.call("upgrade_trait", &"divine")
+    ranger_health.current_health = 40.0
+    executor.call("execute", heal, ranger.get_combat_target())
+    TestAssertions.near(ranger_health.current_health, 40.0 + 18.0 * 1.225 * 1.15, 0.001, "Divine upgrade further strengthens actual healing", failures)
+
+    ranger_health.current_health = ranger_health.max_health
+    ranger.receive_damage(9999.0)
+    TestAssertions.truthy(ranger_health.is_downed, "companion naturally enters downed lifecycle", failures)
+    TestAssertions.near(ranger_health.revive_remaining, 6.2, 0.001, "upgraded Divine shortens configured revive delay", failures)
+    ranger_health.advance_time(6.19)
+    TestAssertions.truthy(ranger_health.is_downed, "companion remains downed before Divine-adjusted delay", failures)
+    ranger_health.advance_time(0.01)
+    TestAssertions.truthy(not ranger_health.is_downed, "companion revives at Divine-adjusted delay", failures)
+    TestAssertions.near(ranger_health.current_health, ranger_health.max_health * 0.5, 0.001, "resource revive fraction controls actual revive health", failures)
+    root.free()
+
+func _test_enemy_health_component_and_bars(failures: Array[String]) -> void:
+    for scene_path: String in ["res://scenes/enemies/swarmer.tscn", "res://scenes/enemies/spitter.tscn", "res://scenes/enemies/forge_guardian.tscn"]:
+        var enemy := (load(scene_path) as PackedScene).instantiate() as Node3D
+        var health := enemy.get_node_or_null("HealthComponent") as HealthComponent
+        TestAssertions.truthy(health != null, "%s scene owns HealthComponent" % scene_path, failures)
+        if health != null:
+            enemy.call("configure", enemy.get("definition"))
+            var before := health.current_health
+            enemy.call("receive_damage", 1.0)
+            TestAssertions.near(health.current_health, before - 1.0, 0.001, "%s delegates damage to HealthComponent" % scene_path, failures)
+            TestAssertions.near(float(enemy.get("current_health")), health.current_health, 0.001, "%s public health mirrors component" % scene_path, failures)
+        enemy.free()
+
+    var root := _new_root("EnemyRewardReviewTest")
+    var swarmer := (load("res://scenes/enemies/swarmer.tscn") as PackedScene).instantiate() as Node3D
+    root.add_child(swarmer)
+    var rewards: Array[int] = []
+    swarmer.connect("reward_dropped", func(value: int, _position: Vector3) -> void: rewards.append(value))
+    swarmer.call("receive_damage", 9999.0)
+    swarmer.call("receive_damage", 9999.0)
+    swarmer.call("defeat")
+    TestAssertions.equal(rewards.size(), 1, "shared enemy death drops reward exactly once", failures)
+
+    var main := _started_main(&"fighter")
+    var regular := (load("res://scenes/enemies/swarmer.tscn") as PackedScene).instantiate() as Node3D
+    main.get_node("Enemies").add_child(regular)
+    main.call("_on_enemy_spawned", &"swarmer", regular)
+    var regular_bar := regular.get_node_or_null("HealthBar3D") as Node3D
+    TestAssertions.truthy(regular_bar != null, "regular enemy receives shared health bar", failures)
+    if regular_bar != null:
+        var before_text := (regular_bar.get_node("Label3D") as Label3D).text
+        regular.call("receive_damage", 6.0)
+        TestAssertions.truthy((regular_bar.get_node("Label3D") as Label3D).text != before_text, "regular enemy bar updates from shared health flow", failures)
+    main.call("_spawn_boss")
+    var boss := main.get("boss") as Node3D
+    var boss_bar := boss.get_node_or_null("HealthBar3D") as Node3D
+    TestAssertions.truthy(boss_bar != null, "boss receives shared billboard health bar", failures)
+    if boss_bar != null:
+        var boss_before := (boss_bar.get_node("Label3D") as Label3D).text
+        boss.call("receive_damage", 750.0)
+        TestAssertions.truthy((boss_bar.get_node("Label3D") as Label3D).text != boss_before, "boss bar updates from shared health flow", failures)
+    _free_main(main)
+    root.free()
+
+func _test_charge_telegraph_lifecycle(failures: Array[String]) -> void:
+    var path := "res://scenes/effects/charge_telegraph.tscn"
+    TestAssertions.truthy(ResourceLoader.exists(path), "camera-readable charge telegraph scene exists", failures)
+    if not ResourceLoader.exists(path):
+        return
+    var root := _new_root("ChargeTelegraphReviewTest")
+    var leader := _standalone_leader(root, Vector3(7.0, 0.0, 2.0))
+    var effects := Node3D.new()
+    root.add_child(effects)
+    var boss := (load("res://scenes/enemies/forge_guardian.tscn") as PackedScene).instantiate() as Node3D
+    root.add_child(boss)
+    boss.call("configure_boss", leader, null, effects)
+    boss.call("advance_behavior", 0.0)
+    var pending: Array = boss.get("pending_charge_telegraphs") as Array
+    TestAssertions.equal(pending.size(), 1, "charge creates one visible telegraph", failures)
+    var marker := pending[0] as Node3D if not pending.is_empty() else null
+    if marker != null:
+        TestAssertions.equal(marker.position, Vector3(7.0, 0.0, 2.0), "charge marker samples leader position", failures)
+        leader.position = Vector3(-4.0, 0.0, -3.0)
+        boss.call("advance_behavior", 0.79)
+        TestAssertions.truthy(not marker.is_queued_for_deletion(), "charge marker remains for first 0.79 seconds", failures)
+        TestAssertions.equal(marker.position, Vector3(7.0, 0.0, 2.0), "charge marker sample is immutable", failures)
+        boss.call("advance_behavior", 0.01)
+        TestAssertions.truthy(marker.is_queued_for_deletion(), "charge marker clears at full 0.8-second telegraph", failures)
+    boss.call("defeat")
+    TestAssertions.equal((boss.get("pending_charge_telegraphs") as Array).size(), 0, "boss death cancels charge markers", failures)
+    root.free()
+
+func _test_unknown_enemy_id(failures: Array[String]) -> void:
+    var root := _new_root("UnknownEnemyReviewTest")
+    var marker := Marker3D.new()
+    marker.position = Vector3(2.0, 0.0, 0.0)
+    root.add_child(marker)
+    var director := SpawnDirector.new()
+    root.add_child(director)
+    var markers: Array[Node3D] = [marker]
+    director.configure(1, null, null, markers, null, root, root)
+    var before := root.get_child_count()
+    var result := director.spawn_enemy(&"bogus")
+    TestAssertions.equal(result, null, "unknown enemy id returns null", failures)
+    TestAssertions.equal(root.get_child_count(), before, "unknown enemy id never falls through to Spitter", failures)
+    TestAssertions.truthy(director.has_method("format_unknown_enemy_id"), "unknown enemy diagnostic formatter exists", failures)
+    if director.has_method("format_unknown_enemy_id"):
+        TestAssertions.equal(director.call("format_unknown_enemy_id", &"bogus"), "PARTY_FORGE_UNKNOWN_ENEMY_ID id=bogus", "unknown enemy diagnostic is grep-friendly", failures)
+    root.free()
+
+func _test_sandbox_hostile_effect_cleanup(failures: Array[String]) -> void:
+    var sandbox := (load("res://scenes/dev/combat_sandbox.tscn") as PackedScene).instantiate()
+    var tree := Engine.get_main_loop() as SceneTree
+    tree.root.add_child(sandbox)
+    sandbox.call("_ready")
+    var effects := sandbox.get_node("Effects") as Node3D
+    var friendly := Node3D.new()
+    friendly.name = "FriendlyEffect"
+    effects.add_child(friendly)
+    var hostile_projectile := (load("res://scenes/enemies/enemy_projectile.tscn") as PackedScene).instantiate() as Node3D
+    effects.add_child(hostile_projectile)
+    var danger := (load("res://scenes/effects/danger_ring.tscn") as PackedScene).instantiate() as Node3D
+    effects.add_child(danger)
+    var charge_path := "res://scenes/effects/charge_telegraph.tscn"
+    var charge: Node3D
+    if ResourceLoader.exists(charge_path):
+        charge = (load(charge_path) as PackedScene).instantiate() as Node3D
+        effects.add_child(charge)
+    sandbox.call("spawn_enemy", &"swarmer")
+    sandbox.call("clear_hostiles")
+    TestAssertions.truthy(friendly != null and not friendly.is_queued_for_deletion(), "sandbox cleanup preserves friendly effects", failures)
+    TestAssertions.truthy(hostile_projectile.is_in_group("hostile_transient_effects") and hostile_projectile.is_queued_for_deletion(), "sandbox cleanup clears hostile projectile by explicit group", failures)
+    TestAssertions.truthy(danger.is_in_group("hostile_transient_effects") and danger.is_queued_for_deletion(), "sandbox cleanup clears danger effect by explicit group", failures)
+    if charge != null:
+        TestAssertions.truthy(charge.is_in_group("hostile_transient_effects") and charge.is_queued_for_deletion(), "sandbox cleanup clears charge effect by explicit group", failures)
+    sandbox.free()
+    tree.paused = false
+
+func _started_main(class_id: StringName) -> Node:
+    (Engine.get_main_loop() as SceneTree).paused = false
+    var main := (load("res://scenes/game/main.tscn") as PackedScene).instantiate()
+    (Engine.get_main_loop() as SceneTree).root.add_child(main)
+    main.call("_ready")
+    main.call("select_leader_class", class_id)
+    return main
+
+func _free_main(main: Node) -> void:
+    (Engine.get_main_loop() as SceneTree).paused = false
+    main.free()
+
+func _new_root(root_name: String) -> Node3D:
+    var root := Node3D.new()
+    root.name = root_name
+    (Engine.get_main_loop() as SceneTree).root.add_child(root)
+    return root
+
+func _actor_for_member(parent: Node, party: PartyManager, member: PartyMemberState, actor_position: Vector3) -> PartyActor:
+    var scene_path := "res://scenes/characters/leader.tscn" if member.is_leader else "res://scenes/characters/companion.tscn"
+    var actor := (load(scene_path) as PackedScene).instantiate() as PartyActor
+    parent.add_child(actor)
+    actor.position = actor_position
+    actor.configure(member)
+    actor.configure_combat(party)
+    return actor
+
+func _standalone_leader(parent: Node, actor_position: Vector3) -> PartyActor:
+    var catalog := GameCatalog.load_defaults()
+    var actor := (load("res://scenes/characters/leader.tscn") as PackedScene).instantiate() as PartyActor
+    parent.add_child(actor)
+    actor.position = actor_position
+    actor.configure(PartyMemberState.new(1, catalog.class_by_id(&"fighter"), true))
+    return actor
+
+func _has_property(object: Object, property_name: StringName) -> bool:
+    for property: Dictionary in object.get_property_list():
+        if property["name"] == property_name:
+            return true
+    return false

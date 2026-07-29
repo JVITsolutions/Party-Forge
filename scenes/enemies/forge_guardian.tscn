@@ -2,6 +2,7 @@
 
 [ext_resource type="Script" path="res://scripts/enemies/forge_guardian.gd" id="1_guardian"]
 [ext_resource type="Resource" path="res://data/enemies/forge_guardian.tres" id="2_definition"]
+[ext_resource type="Script" path="res://scripts/combat/health_component.gd" id="3_health"]
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_guardian"]
 albedo_color = Color(0.22, 0.13, 0.1, 1)
@@ -20,6 +21,9 @@ collision_layer = 4
 collision_mask = 1
 script = ExtResource("1_guardian")
 definition = ExtResource("2_definition")
+
+[node name="HealthComponent" type="Node" parent="."]
+script = ExtResource("3_health")
 
 [node name="MeshInstance3D" type="MeshInstance3D" parent="."]
 mesh = SubResource("BoxMesh_guardian")
