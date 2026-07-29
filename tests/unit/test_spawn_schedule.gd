@@ -31,6 +31,7 @@ func run() -> Array[String]:
     _test_experience_orb_collection(failures)
     _test_seeded_director_and_stop(failures)
     _test_director_pause(failures)
+    _test_pickup_upgrade_reaches_existing_orbs(failures)
     return failures
 
 func _test_schedule_boundaries(failures: Array[String]) -> void:
@@ -167,6 +168,22 @@ func _test_director_pause(failures: Array[String]) -> void:
     director.call("advance_time", 10.0)
     tree.paused = false
     TestAssertions.near(float(director.get("elapsed_seconds")), 0.0, 0.001, "director elapsed clock pauses with level-up tree pause", failures)
+    root.free()
+
+func _test_pickup_upgrade_reaches_existing_orbs(failures: Array[String]) -> void:
+    var root := _new_root("ExistingOrbPickupUpgradeTest")
+    var leader := _party_actor(root, Vector3.ZERO)
+    var experience := ExperienceSystem.new()
+    root.add_child(experience)
+    var director := (load("res://scripts/game/spawn_director.gd") as Script).new() as Node
+    root.add_child(director)
+    var markers: Array[Node3D] = []
+    director.call("configure", 9, leader, experience, markers, null, root, root)
+    var orb := (load("res://scenes/progression/experience_orb.tscn") as PackedScene).instantiate() as Node3D
+    root.add_child(orb)
+    orb.call("configure", 1, leader, experience, 1.0)
+    director.call("set_pickup_radius_multiplier", 2.5)
+    TestAssertions.near(float(orb.get("pickup_radius_multiplier")), 2.5, 0.001, "pickup upgrade propagates to existing XP orbs", failures)
     root.free()
 
 func _assert_band(band: Variant, interval: float, swarmer: int, spitter: int, label: String, failures: Array[String]) -> void:

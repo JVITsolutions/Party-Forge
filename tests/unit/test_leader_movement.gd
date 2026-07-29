@@ -95,12 +95,9 @@ func _test_scene_contracts(failures: Array[String]) -> void:
 
     var main_scene: PackedScene = load("res://scenes/game/main.tscn") as PackedScene
     var main: Node = main_scene.instantiate()
-    var main_leader: Node3D = main.get_node("Leader") as Node3D
     var main_camera: Node3D = main.get_node("LeaderCamera") as Node3D
-    main_camera.call("_resolve_target")
     TestAssertions.truthy(main.get_node_or_null("Arena") != null, "main instances arena", failures)
-    TestAssertions.truthy(main_leader != null, "main instances leader", failures)
+    TestAssertions.equal(main.get_node_or_null("Leader"), null, "main waits for class choice before leader", failures)
     TestAssertions.truthy(main_camera != null, "main instances camera", failures)
-    TestAssertions.equal(main_leader.position, Vector3(0.0, 0.75, 0.0), "main leader uses player spawn", failures)
-    TestAssertions.equal(main_camera.get("target"), main_leader, "camera targets leader", failures)
+    TestAssertions.truthy(main.get_node_or_null("HUD/ClassSelection") != null, "main exposes initial class selection", failures)
     main.free()

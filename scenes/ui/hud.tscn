@@ -1,0 +1,102 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://scripts/ui/hud.gd" id="1"]
+[ext_resource type="PackedScene" path="res://scenes/ui/level_up_panel.tscn" id="2"]
+[ext_resource type="PackedScene" path="res://scenes/ui/run_result_panel.tscn" id="3"]
+
+[node name="HUD" type="CanvasLayer"]
+process_mode = 3
+script = ExtResource("1")
+
+[node name="Margin" type="MarginContainer" parent="."]
+offset_left = 16.0
+offset_top = 16.0
+offset_right = 330.0
+offset_bottom = 500.0
+
+[node name="Status" type="VBoxContainer" parent="Margin"]
+layout_mode = 2
+
+[node name="LeaderHealth" type="ProgressBar" parent="Margin/Status"]
+custom_minimum_size = Vector2(300, 24)
+layout_mode = 2
+show_percentage = false
+
+[node name="Experience" type="ProgressBar" parent="Margin/Status"]
+custom_minimum_size = Vector2(300, 18)
+layout_mode = 2
+show_percentage = false
+
+[node name="RunTime" type="Label" parent="Margin/Status"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 28
+text = "00:00"
+
+[node name="PartyEntries" type="VBoxContainer" parent="Margin/Status"]
+layout_mode = 2
+
+[node name="Party1" type="Label" parent="Margin/Status/PartyEntries"]
+layout_mode = 2
+text = "—"
+[node name="Party2" type="Label" parent="Margin/Status/PartyEntries"]
+layout_mode = 2
+text = "—"
+[node name="Party3" type="Label" parent="Margin/Status/PartyEntries"]
+layout_mode = 2
+text = "—"
+[node name="Party4" type="Label" parent="Margin/Status/PartyEntries"]
+layout_mode = 2
+text = "—"
+
+[node name="ActiveTraits" type="Label" parent="Margin/Status"]
+layout_mode = 2
+text = "Traits: None"
+autowrap_mode = 2
+
+[node name="BossHealth" type="ProgressBar" parent="Margin/Status"]
+visible = false
+custom_minimum_size = Vector2(300, 28)
+layout_mode = 2
+show_percentage = false
+
+[node name="BossBanner" type="Label" parent="."]
+visible = false
+offset_left = 350.0
+offset_top = 80.0
+offset_right = 850.0
+offset_bottom = 150.0
+theme_override_colors/font_color = Color(1, 0.25, 0.05, 1)
+theme_override_font_sizes/font_size = 44
+text = "THE FORGE GUARDIAN ARRIVES"
+horizontal_alignment = 1
+
+[node name="ClassSelection" type="PanelContainer" parent="."]
+offset_left = 330.0
+offset_top = 180.0
+offset_right = 870.0
+offset_bottom = 500.0
+
+[node name="Content" type="VBoxContainer" parent="ClassSelection"]
+layout_mode = 2
+
+[node name="Title" type="Label" parent="ClassSelection/Content"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 34
+text = "Choose Your Leader"
+horizontal_alignment = 1
+
+[node name="Fighter" type="Button" parent="ClassSelection/Content"]
+layout_mode = 2
+text = "Fighter"
+[node name="Ranger" type="Button" parent="ClassSelection/Content"]
+layout_mode = 2
+text = "Ranger"
+[node name="Mage" type="Button" parent="ClassSelection/Content"]
+layout_mode = 2
+text = "Mage"
+[node name="Cleric" type="Button" parent="ClassSelection/Content"]
+layout_mode = 2
+text = "Cleric"
+
+[node name="LevelUpPanel" parent="." instance=ExtResource("2")]
+[node name="RunResultPanel" parent="." instance=ExtResource("3")]

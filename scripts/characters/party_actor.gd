@@ -17,6 +17,9 @@ var party_manager: PartyManager
 var combat_effects_parent: Node
 var attack_executor: Node
 var support_controller: AttackController
+var base_visual_color := Color.WHITE
+var damage_flash_remaining := 0.0
+var last_visual_health := 0.0
 
 func _ready() -> void:
     _refresh_team_group()
@@ -31,17 +34,16 @@ func configure(member_state: PartyMemberState) -> void:
     var health: HealthComponent = _health_component()
     if health != null:
         health.configure(definition.max_health, definition.armor, member_state.is_leader, REVIVE_DELAY, REVIVE_HEALTH_FRACTION)
+        last_visual_health = health.current_health
+        if not health.health_changed.is_connected(_on_visual_health_changed): health.health_changed.connect(_on_visual_health_changed)
+        if not health.downed.is_connected(_on_visual_downed): health.downed.connect(_on_visual_downed)
+        if not health.revived.is_connected(_on_visual_revived): health.revived.connect(_on_visual_revived)
     var attack: AttackController = _attack_controller()
     if attack != null:
         attack.configure(definition.primary_attack, team_id)
     _configure_support_controller(definition.support_action)
-    var mesh: MeshInstance3D = get_node_or_null("MeshInstance3D") as MeshInstance3D
-    if mesh != null:
-        var material: StandardMaterial3D = mesh.material_override as StandardMaterial3D
-        if material != null:
-            material = material.duplicate() as StandardMaterial3D
-            material.albedo_color = definition.color
-            mesh.material_override = material
+    base_visual_color = definition.color
+    _set_visual_color(base_visual_color)
     _refresh_team_group()
     _ensure_combat_runtime()
 
@@ -51,6 +53,7 @@ func configure_combat(manager: PartyManager, effect_container: Node = null) -> v
     _ensure_combat_runtime()
 
 func _process(delta: float) -> void:
+    _advance_visual_feedback(delta)
     if member_state == null or member_state.class_definition == null or not is_inside_tree() or get_tree().paused:
         return
     advance_combat(delta, _collect_combat_targets())
@@ -167,3 +170,39 @@ func _refresh_team_group() -> void:
     remove_from_group("party_actors")
     remove_from_group("hostile_actors")
     add_to_group("party_actors" if team_id == PARTY_TEAM_ID else "hostile_actors")
+
+func _on_visual_health_changed(current: float, _maximum: float) -> void:
+    if current < last_visual_health:
+        damage_flash_remaining = 0.1
+        _set_visual_color(Color.WHITE)
+    last_visual_health = current
+
+func _on_visual_downed() -> void:
+    damage_flash_remaining = 0.0
+    _set_visual_color(Color(0.45, 0.45, 0.45))
+
+func _on_visual_revived() -> void:
+    damage_flash_remaining = 0.0
+    _set_visual_color(base_visual_color)
+
+func _advance_visual_feedback(delta: float) -> void:
+    if damage_flash_remaining <= 0.0:
+        return
+    damage_flash_remaining = maxf(0.0, damage_flash_remaining - maxf(delta, 0.0))
+    if damage_flash_remaining <= 0.0:
+        var health := _health_component()
+        if health == null or not health.is_downed:
+            _set_visual_color(base_visual_color)
+
+func _set_visual_color(color: Color) -> void:
+    var mesh := get_node_or_null("MeshInstance3D") as MeshInstance3D
+    if mesh == null:
+        return
+    var material := mesh.material_override as StandardMaterial3D
+    if material == null and mesh.mesh != null:
+        material = mesh.mesh.material as StandardMaterial3D
+    if material == null:
+        return
+    material = material.duplicate() as StandardMaterial3D
+    material.albedo_color = color
+    mesh.material_override = material

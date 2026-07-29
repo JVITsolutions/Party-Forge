@@ -1,0 +1,31 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/ui/level_up_panel.gd" id="1"]
+
+[node name="LevelUpPanel" type="PanelContainer"]
+process_mode = 3
+visible = false
+offset_left = 250.0
+offset_top = 220.0
+offset_right = 950.0
+offset_bottom = 410.0
+script = ExtResource("1")
+
+[node name="Choices" type="HBoxContainer" parent="."]
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="Choice1" type="Button" parent="Choices"]
+custom_minimum_size = Vector2(210, 120)
+layout_mode = 2
+text = "Choice 1"
+
+[node name="Choice2" type="Button" parent="Choices"]
+custom_minimum_size = Vector2(210, 120)
+layout_mode = 2
+text = "Choice 2"
+
+[node name="Choice3" type="Button" parent="Choices"]
+custom_minimum_size = Vector2(210, 120)
+layout_mode = 2
+text = "Choice 3"

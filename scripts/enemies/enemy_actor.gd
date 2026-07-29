@@ -10,6 +10,8 @@ const HOSTILE_TEAM_ID := 2
 var current_health := 1.0
 var is_dead := false
 var reward_was_dropped := false
+var base_visual_color := Color(0.05, 0.03, 0.02)
+var damage_flash_remaining := 0.0
 
 func _ready() -> void:
     add_to_group("hostile_actors")
@@ -23,12 +25,15 @@ func configure(enemy_definition: EnemyDefinition) -> void:
     current_health = maxf(definition.max_health, 1.0)
     is_dead = false
     reward_was_dropped = false
+    base_visual_color = _current_visual_color()
 
 func receive_damage(amount: float) -> float:
     if is_dead or amount <= 0.0:
         return 0.0
     var applied := minf(amount, current_health)
     current_health = maxf(current_health - amount, 0.0)
+    damage_flash_remaining = 0.1
+    _set_visual_color(Color.WHITE)
     if current_health <= 0.0:
         defeat()
     return applied
@@ -89,3 +94,32 @@ func _move_for_delta(delta: float) -> void:
         move_and_slide()
     else:
         position += velocity * maxf(delta, 0.0)
+
+func _process(delta: float) -> void:
+    if damage_flash_remaining <= 0.0 or is_dead:
+        return
+    damage_flash_remaining = maxf(0.0, damage_flash_remaining - maxf(delta, 0.0))
+    if damage_flash_remaining <= 0.0:
+        _set_visual_color(base_visual_color)
+
+func _current_visual_color() -> Color:
+    var mesh := get_node_or_null("MeshInstance3D") as MeshInstance3D
+    if mesh == null:
+        return base_visual_color
+    var material := mesh.material_override as StandardMaterial3D
+    if material == null and mesh.mesh != null:
+        material = mesh.mesh.material as StandardMaterial3D
+    return material.albedo_color if material != null else base_visual_color
+
+func _set_visual_color(color: Color) -> void:
+    var mesh := get_node_or_null("MeshInstance3D") as MeshInstance3D
+    if mesh == null:
+        return
+    var material := mesh.material_override as StandardMaterial3D
+    if material == null and mesh.mesh != null:
+        material = mesh.mesh.material as StandardMaterial3D
+    if material == null:
+        return
+    material = material.duplicate() as StandardMaterial3D
+    material.albedo_color = color
+    mesh.material_override = material

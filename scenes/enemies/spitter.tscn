@@ -4,7 +4,10 @@
 [ext_resource type="Resource" path="res://data/enemies/spitter.tres" id="2_definition"]
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_spitter"]
-albedo_color = Color(0.55, 0.15, 0.72, 1)
+albedo_color = Color(1, 0.32, 0.035, 1)
+emission_enabled = true
+emission = Color(0.75, 0.12, 0.01, 1)
+emission_energy_multiplier = 0.8
 
 [sub_resource type="CylinderMesh" id="CylinderMesh_spitter"]
 material = SubResource("StandardMaterial3D_spitter")

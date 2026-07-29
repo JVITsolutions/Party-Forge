@@ -1,0 +1,14 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/ui/health_bar_3d.gd" id="1"]
+
+[node name="HealthBar3D" type="Node3D"]
+position = Vector3(0, 1.35, 0)
+script = ExtResource("1")
+
+[node name="Label3D" type="Label3D" parent="."]
+text = "[||||||||||]"
+font_size = 24
+outline_size = 6
+billboard = 1
+no_depth_test = true

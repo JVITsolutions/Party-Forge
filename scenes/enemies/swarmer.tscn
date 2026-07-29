@@ -4,7 +4,7 @@
 [ext_resource type="Resource" path="res://data/enemies/swarmer.tres" id="2_definition"]
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_swarmer"]
-albedo_color = Color(0.8, 0.18, 0.14, 1)
+albedo_color = Color(0.035, 0.025, 0.02, 1)
 
 [sub_resource type="SphereMesh" id="SphereMesh_swarmer"]
 material = SubResource("StandardMaterial3D_swarmer")

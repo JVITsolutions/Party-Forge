@@ -16,7 +16,8 @@ var terminal_locked := false
 var boss_emitted := false
 
 func start() -> void:
-    _set_state(State.RUNNING)
+    if state == State.SETUP and not terminal_locked:
+        _set_state(State.RUNNING)
 
 func advance_run_time(delta: float) -> void:
     if state != State.RUNNING or delta <= 0.0:

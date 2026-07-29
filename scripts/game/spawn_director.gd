@@ -94,6 +94,11 @@ func spawn_enemy(enemy_id: StringName) -> Node3D:
 
 func set_pickup_radius_multiplier(multiplier: float) -> void:
     pickup_radius_multiplier = maxf(multiplier, 0.0)
+    if effects_parent == null or not is_instance_valid(effects_parent):
+        return
+    for child: Node in effects_parent.get_children():
+        if child != self and child.has_method("set_pickup_radius_multiplier"):
+            child.call("set_pickup_radius_multiplier", pickup_radius_multiplier)
 
 func _choose_spawn_marker() -> Node3D:
     var eligible: Array[Node3D] = []
