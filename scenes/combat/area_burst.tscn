@@ -1,0 +1,19 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/combat/area_burst.gd" id="1_area"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_area"]
+transparency = 1
+albedo_color = Color(1, 0.2, 0.1, 0.28)
+shading_mode = 0
+
+[sub_resource type="SphereMesh" id="SphereMesh_area"]
+material = SubResource("StandardMaterial3D_area")
+radius = 0.5
+height = 1.0
+
+[node name="AreaBurst" type="Node3D"]
+script = ExtResource("1_area")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="."]
+mesh = SubResource("SphereMesh_area")
