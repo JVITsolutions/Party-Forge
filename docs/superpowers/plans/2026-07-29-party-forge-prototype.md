@@ -1457,7 +1457,7 @@ git commit -m "test: record Party Forge prototype validation"
 
 ```powershell
 git status --short --branch
-git log --oneline --decorate -14
+git log --oneline --decorate -15
 ```
 
 Expected: a clean `main` worktree with the design commit followed by one focused commit per implementation task.
