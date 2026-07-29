@@ -49,12 +49,16 @@ Practice in `scenes/dev/` or another explicitly disposable sandbox before changi
 9. [Debugging, Testing, Saving, and Git](09-debugging-testing-saving-and-git.md)
 10. [Party Forge Architecture Reference](10-party-forge-architecture-reference.md)
 
-Chapters 3–10 are linked now so this page remains the stable table of contents while the handbook is built in batches.
+The numbered learning path is complete. Follow it in order on a first pass, then use the task-oriented links below.
 
 ## Reference path
 
-- Use [Party Forge Architecture Reference](10-party-forge-architecture-reference.md) when you already know the concept and need the owning file, registry, or data flow.
-- Use [Debugging, Testing, Saving, and Git](09-debugging-testing-saving-and-git.md) when behavior differs from a checkpoint.
+- Use [Modifying Existing Party Forge Content Safely](05-modifying-existing-content.md) to tune an existing class, attack, trait, enemy, upgrade, or spawn value.
+- Use [Adding a Class, Attack, and Trait](06-adding-a-class-attack-and-trait.md) for the Training Warden exercise and production registration steps.
+- Use [Adding an Enemy](07-adding-an-enemy.md) to reuse existing enemy behavior or plan a new behavior script.
+- Use [Visuals, Audio, Effects, and UI](08-visuals-audio-effects-and-ui.md) for imports, wrapper scenes, materials, collision, effects, and audio.
+- Use [Debugging, Testing, Saving, and Git](09-debugging-testing-saving-and-git.md) when behavior differs from a checkpoint or repository state is unclear.
+- Use [Party Forge Architecture Reference](10-party-forge-architecture-reference.md) when you need an owner, registry, runtime flow, verification checklist, or glossary term.
 - Use the existing [Party Forge Responsive UI Tutorial](../development/RESPONSIVE_UI_TUTORIAL.md) for anchors, offsets, resizing centered panels, and responsive-layout verification. This handbook links to that focused tutorial instead of repeating it.
 
 ## Callout labels
