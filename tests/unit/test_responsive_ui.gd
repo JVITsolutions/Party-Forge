@@ -43,6 +43,25 @@ func _test_project_display_contract(failures: Array[String]) -> void:
 		"UI preserves the 16:9 aspect ratio",
 		failures,
 	)
+	var project_config := ConfigFile.new()
+	TestAssertions.equal(
+		project_config.load("res://project.godot"),
+		OK,
+		"project.godot loads as serialized configuration",
+		failures,
+	)
+	TestAssertions.equal(
+		project_config.has_section_key("display", "window/stretch/aspect"),
+		true,
+		"project.godot explicitly serializes the stretch aspect",
+		failures,
+	)
+	TestAssertions.equal(
+		str(project_config.get_value("display", "window/stretch/aspect")),
+		"keep",
+		"project.godot serializes keep as the stretch aspect",
+		failures,
+	)
 
 func _test_responsive_hud_layout(failures: Array[String]) -> void:
 	var hud := (load("res://scenes/ui/hud.tscn") as PackedScene).instantiate() as CanvasLayer
@@ -56,6 +75,12 @@ func _test_responsive_hud_layout(failures: Array[String]) -> void:
 	_assert_center_anchors(class_selection, "class selection", failures)
 	_assert_center_anchors(level_up, "level-up panel", failures)
 	_assert_center_anchors(result_panel, "run result panel", failures)
+	TestAssertions.equal(
+		Vector4(boss_banner.anchor_left, boss_banner.anchor_top, boss_banner.anchor_right, boss_banner.anchor_bottom),
+		Vector4(0.5, 0.0, 0.5, 0.0),
+		"boss banner uses exact center-top anchors",
+		failures,
+	)
 	_assert_size(boss_banner, Vector2(500.0, 70.0), "boss banner", failures)
 
 	for viewport_size: Vector2 in VIEWPORT_SIZES:
