@@ -41,7 +41,7 @@ func _copy_source(source: StatModifierSource) -> StatModifierSource:
         if modifier == null:
             modifiers.append(null)
             continue
-        modifiers.append(StatModifier.create(
+        var copied_modifier := StatModifier.create(
             modifier.stat_id,
             modifier.operation,
             modifier.value,
@@ -49,5 +49,10 @@ func _copy_source(source: StatModifierSource) -> StatModifierSource:
             modifier.source_label,
             modifier.required_tags,
             modifier.excluded_tags,
-        ))
+        )
+        copied_modifier.required_capability_tags = modifier.required_capability_tags.duplicate()
+        copied_modifier.excluded_capability_tags = modifier.excluded_capability_tags.duplicate()
+        copied_modifier.required_action_tags = modifier.required_action_tags.duplicate()
+        copied_modifier.excluded_action_tags = modifier.excluded_action_tags.duplicate()
+        modifiers.append(copied_modifier)
     return StatModifierSource.create(source.id, source.source_type, source.label, source.owner_member_id, modifiers)

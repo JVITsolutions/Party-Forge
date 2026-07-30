@@ -44,6 +44,27 @@ func run() -> Array[String]:
 	TestAssertions.equal(capability_snapshot.capabilities, [&"ranged"], "snapshot capabilities return defensive copies", failures)
 	TestAssertions.equal(tag_source.modifiers.size(), 1, "resolution preserves source modifiers", failures)
 
+	var action_only_modifier := StatModifier.create(&"damage", StatModifier.Operation.INCREASED, 0.25, &"action_only", "Action Only")
+	action_only_modifier.required_action_tags = [&"projectile"]
+	var action_only_source := StatModifierSource.create(&"action_only", &"character", "Action Only", 7, [action_only_modifier])
+	var projectile_capabilities: Array[StringName] = [&"projectile"]
+	var capability_only := StatResolver.resolve(7, CATALOG, {&"damage": 100.0}, projectile_capabilities, [action_only_source], [], 8)
+	var projectile_action := StatResolver.resolve(7, CATALOG, {&"damage": 100.0}, projectile_capabilities, [action_only_source], [&"projectile"], 9)
+	TestAssertions.near(capability_only.value(&"damage"), 100.0, 0.001, "action-only tag ignores matching member capability", failures)
+	TestAssertions.near(projectile_action.value(&"damage"), 125.0, 0.001, "action-only tag accepts matching action", failures)
+	var split_modifier := StatModifier.create(&"damage", StatModifier.Operation.INCREASED, 0.50, &"split_tags", "Split Tags")
+	split_modifier.required_capability_tags = [&"projectile"]
+	split_modifier.excluded_capability_tags = [&"caster"]
+	split_modifier.required_action_tags = [&"projectile"]
+	split_modifier.excluded_action_tags = [&"melee"]
+	var split_source := StatModifierSource.create(&"split_tags", &"character", "Split Tags", 7, [split_modifier])
+	var split_matching := StatResolver.resolve(7, CATALOG, {&"damage": 100.0}, projectile_capabilities, [split_source], [&"projectile"], 10)
+	var split_excluded_capability := StatResolver.resolve(7, CATALOG, {&"damage": 100.0}, [&"projectile", &"caster"], [split_source], [&"projectile"], 11)
+	var split_excluded_action := StatResolver.resolve(7, CATALOG, {&"damage": 100.0}, projectile_capabilities, [split_source], [&"projectile", &"melee"], 12)
+	TestAssertions.near(split_matching.value(&"damage"), 150.0, 0.001, "split capability and action constraints both match", failures)
+	TestAssertions.near(split_excluded_capability.value(&"damage"), 100.0, 0.001, "excluded capability rejects modifier", failures)
+	TestAssertions.near(split_excluded_action.value(&"damage"), 100.0, 0.001, "excluded action rejects modifier", failures)
+
 	var global_source := StatModifierSource.create(&"global", &"party", "Global", 0, [
 		StatModifier.create(&"damage", StatModifier.Operation.FLAT, 10.0, &"global", "Global"),
 	])

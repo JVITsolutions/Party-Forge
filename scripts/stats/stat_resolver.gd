@@ -19,10 +19,6 @@ static func resolve(member_id: int, catalog: StatCatalog, base_values: Dictionar
 	var snapshot := ResolvedStatSnapshot.new()
 	snapshot.revision = revision
 	snapshot.capabilities = capabilities.duplicate()
-	var tags := capabilities.duplicate()
-	for tag: StringName in action_tags:
-		if tag not in tags:
-			tags.append(tag)
 	for definition: StatDefinition in catalog.all():
 		var base := float(base_values.get(definition.id, definition.default_value))
 		var flat := 0.0
@@ -35,7 +31,7 @@ static func resolve(member_id: int, catalog: StatCatalog, base_values: Dictionar
 			if source == null or (source.owner_member_id != 0 and source.owner_member_id != member_id):
 				continue
 			for modifier: StatModifier in source.modifiers:
-				if modifier == null or modifier.stat_id != definition.id or not modifier.applies_to(tags):
+				if modifier == null or modifier.stat_id != definition.id or not modifier.applies_to(capabilities, action_tags):
 					continue
 				match modifier.operation:
 					StatModifier.Operation.FLAT:
