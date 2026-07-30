@@ -1,0 +1,31 @@
+[gd_resource type="Resource" script_class="UpgradeDefinition" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/upgrade_effect_definition.gd" id="1_trxvj"]
+[ext_resource type="Script" path="res://scripts/data/stat_upgrade_effect.gd" id="2_my2sg"]
+[ext_resource type="Script" path="res://scripts/data/upgrade_definition.gd" id="3_xsrbt"]
+
+[sub_resource type="Resource" id="Resource_1e88r"]
+script = ExtResource("2_my2sg")
+stat_id = &"area_size"
+operation = 1
+value_per_rank = 0.1
+source_label = "Expanding Power"
+
+[sub_resource type="Resource" id="Resource_lbyyu"]
+script = ExtResource("2_my2sg")
+stat_id = &"damage"
+operation = 1
+value_per_rank = 0.08
+required_action_tags = Array[StringName]([&"area"])
+source_label = "Expanding Power"
+
+[resource]
+script = ExtResource("3_xsrbt")
+id = &"expanding_power"
+display_name = "Expanding Power"
+summary = "Enlarge area effects and their damage."
+description = "Enlarge area effects and their damage."
+tooltip_keyword_ids = Array[StringName]([&"area", &"area_size", &"damage", &"increased"])
+required_all_tags = Array[StringName]([&"area"])
+max_rank = 3
+effects = Array[ExtResource("1_trxvj")]([SubResource("Resource_1e88r"), SubResource("Resource_lbyyu")])

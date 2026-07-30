@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="UpgradeDefinition" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/upgrade_effect_definition.gd" id="1_4fblf"]
+[ext_resource type="Script" path="res://scripts/data/stat_upgrade_effect.gd" id="2_0e3tf"]
+[ext_resource type="Script" path="res://scripts/data/upgrade_definition.gd" id="3_swgdv"]
+
+[sub_resource type="Resource" id="Resource_bp6gu"]
+script = ExtResource("2_0e3tf")
+stat_id = &"move_speed"
+operation = 1
+value_per_rank = 0.05
+source_label = "Fleetfoot"
+
+[resource]
+script = ExtResource("3_swgdv")
+id = &"fleetfoot"
+display_name = "Fleetfoot"
+summary = "Move more quickly."
+description = "Move more quickly."
+tooltip_keyword_ids = Array[StringName]([&"move_speed", &"increased"])
+max_rank = 5
+effects = Array[ExtResource("1_4fblf")]([SubResource("Resource_bp6gu")])

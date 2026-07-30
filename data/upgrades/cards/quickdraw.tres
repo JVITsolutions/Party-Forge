@@ -1,0 +1,30 @@
+[gd_resource type="Resource" script_class="UpgradeDefinition" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/upgrade_effect_definition.gd" id="1_kcyb0"]
+[ext_resource type="Script" path="res://scripts/data/stat_upgrade_effect.gd" id="2_2ba5v"]
+[ext_resource type="Script" path="res://scripts/data/upgrade_definition.gd" id="3_45nnl"]
+
+[sub_resource type="Resource" id="Resource_2kor3"]
+script = ExtResource("2_2ba5v")
+stat_id = &"attack_speed"
+operation = 1
+value_per_rank = 0.2
+source_label = "Quickdraw"
+
+[sub_resource type="Resource" id="Resource_tivaj"]
+script = ExtResource("2_2ba5v")
+stat_id = &"projectile_speed"
+operation = 1
+value_per_rank = 0.25
+source_label = "Quickdraw"
+
+[resource]
+script = ExtResource("3_45nnl")
+id = &"quickdraw"
+display_name = "Quickdraw"
+summary = "Loose faster arrows with greater projectile velocity."
+description = "Loose faster arrows with greater projectile velocity."
+tooltip_keyword_ids = Array[StringName]([&"projectile_speed", &"attack_speed", &"increased"])
+scope = 1
+allowed_class_ids = Array[StringName]([&"ranger"])
+effects = Array[ExtResource("1_kcyb0")]([SubResource("Resource_2kor3"), SubResource("Resource_tivaj")])

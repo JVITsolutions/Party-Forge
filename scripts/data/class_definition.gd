@@ -9,6 +9,7 @@ enum Role { FRONTLINE, MIDLINE, BACKLINE, SUPPORT }
 @export var color: Color = Color.WHITE
 @export var traits: Array[StringName] = []
 @export var capability_tags: Array[StringName] = []
+@export var name_pool: CharacterNamePool
 @export var base_stat_overrides: Dictionary = {}
 @export var max_health: float = 100.0
 @export var armor: float = 0.0
@@ -28,6 +29,14 @@ func stat_base_values() -> Dictionary:
 	values[&"armor"] = float(values.get(&"armor", armor))
 	values[&"move_speed"] = float(values.get(&"move_speed", move_speed))
 	return values
+
+func normalized_eligibility_tags() -> Array[StringName]:
+	var result: Array[StringName] = []
+	for tag: StringName in traits + capability_tags:
+		if not tag.is_empty() and tag not in result:
+			result.append(tag)
+	result.sort()
+	return result
 
 func validate(types: DamageTypeCatalog = null) -> PackedStringArray:
 	var errors: PackedStringArray = []

@@ -1,0 +1,31 @@
+[gd_resource type="Resource" script_class="UpgradeDefinition" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/upgrade_effect_definition.gd" id="1_clwh3"]
+[ext_resource type="Script" path="res://scripts/data/stat_upgrade_effect.gd" id="2_gqg3t"]
+[ext_resource type="Script" path="res://scripts/data/upgrade_definition.gd" id="3_hf366"]
+
+[sub_resource type="Resource" id="Resource_8isqn"]
+script = ExtResource("2_gqg3t")
+stat_id = &"projectile_speed"
+operation = 1
+value_per_rank = 0.12
+source_label = "Projectile Mastery"
+
+[sub_resource type="Resource" id="Resource_4i3nm"]
+script = ExtResource("2_gqg3t")
+stat_id = &"damage"
+operation = 1
+value_per_rank = 0.08
+required_action_tags = Array[StringName]([&"projectile"])
+source_label = "Projectile Mastery"
+
+[resource]
+script = ExtResource("3_hf366")
+id = &"projectile_mastery"
+display_name = "Projectile Mastery"
+summary = "Empower projectiles and the attacks that launch them."
+description = "Empower projectiles and the attacks that launch them."
+tooltip_keyword_ids = Array[StringName]([&"damage", &"projectile_speed", &"projectile", &"increased"])
+required_all_tags = Array[StringName]([&"projectile"])
+max_rank = 3
+effects = Array[ExtResource("1_clwh3")]([SubResource("Resource_8isqn"), SubResource("Resource_4i3nm")])

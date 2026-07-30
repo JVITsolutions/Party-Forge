@@ -1,0 +1,28 @@
+[gd_resource type="Resource" script_class="UpgradeDefinition" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/upgrade_effect_definition.gd" id="1_i167x"]
+[ext_resource type="Script" path="res://scripts/data/stat_upgrade_effect.gd" id="2_41fl2"]
+[ext_resource type="Script" path="res://scripts/data/upgrade_definition.gd" id="3_v6sh8"]
+
+[sub_resource type="Resource" id="Resource_7upiu"]
+script = ExtResource("2_41fl2")
+stat_id = &"block_chance"
+value_per_rank = 0.1
+source_label = "Consecrated Bulwark"
+
+[sub_resource type="Resource" id="Resource_ybuwg"]
+script = ExtResource("2_41fl2")
+stat_id = &"health_regeneration"
+value_per_rank = 1.5
+source_label = "Consecrated Bulwark"
+
+[resource]
+script = ExtResource("3_v6sh8")
+id = &"consecrated_bulwark"
+display_name = "Consecrated Bulwark"
+summary = "Block more attacks and recover health steadily."
+description = "Block more attacks and recover health steadily."
+tooltip_keyword_ids = Array[StringName]([&"health_regeneration", &"block_chance"])
+scope = 1
+allowed_class_ids = Array[StringName]([&"paladin"])
+effects = Array[ExtResource("1_i167x")]([SubResource("Resource_7upiu"), SubResource("Resource_ybuwg")])

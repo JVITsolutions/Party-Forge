@@ -1,6 +1,7 @@
 extends SceneTree
 
 const ExpansionRows := preload("res://tools/class_expansion_rows.gd")
+const CharacterUpgradeData := preload("res://tools/create_character_upgrade_data.gd")
 
 const BASE_ATTACK_ROWS: Array[Dictionary] = [
     {"id":&"fighter_cleave", "kind":AttackDefinition.Kind.MELEE_CLEAVE, "type":&"physical", "amount":18.0, "power":0.0, "cooldown":0.8, "range":2.2, "speed":0.0, "area":1.6, "tags":[&"melee", &"area"], "crit":true},
@@ -67,6 +68,10 @@ func _initialize() -> void:
     if not _save_enemy(&"swarmer", EnemyDefinition.Behavior.SWARMER, 12.0, 4.8, 2, ["res://data/attacks/swarmer_contact.tres"]): failures += 1
     if not _save_enemy(&"spitter", EnemyDefinition.Behavior.SPITTER, 18.0, 2.8, 4, ["res://data/attacks/spitter_projectile.tres"]): failures += 1
     if not _save_enemy(&"forge_guardian", EnemyDefinition.Behavior.FORGE_GUARDIAN, 3000.0, 3.3, 100, ["res://data/attacks/guardian_charge.tres", "res://data/attacks/guardian_shockwave.tres"]): failures += 1
+    var character_upgrade_errors := CharacterUpgradeData.generate()
+    for reason: String in character_upgrade_errors:
+        push_error(reason)
+        failures += 1
     if failures > 0:
         _finish_failed(failures)
         return

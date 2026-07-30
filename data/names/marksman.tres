@@ -1,0 +1,8 @@
+[gd_resource type="Resource" script_class="CharacterNamePool" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/character_name_pool.gd" id="1_l1m25"]
+
+[resource]
+script = ExtResource("1_l1m25")
+id = &"marksman"
+names = PackedStringArray("Arlen", "Blythe", "Cora", "Fletcher", "Hawke", "Ivo", "Petra", "Quinn")

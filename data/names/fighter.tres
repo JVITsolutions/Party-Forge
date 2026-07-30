@@ -1,0 +1,8 @@
+[gd_resource type="Resource" script_class="CharacterNamePool" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/character_name_pool.gd" id="1_8ha0t"]
+
+[resource]
+script = ExtResource("1_8ha0t")
+id = &"fighter"
+names = PackedStringArray("Aldric", "Branna", "Cedric", "Dagna", "Garrick", "Hilda", "Rowan", "Thane")

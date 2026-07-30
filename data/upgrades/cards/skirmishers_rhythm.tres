@@ -1,0 +1,29 @@
+[gd_resource type="Resource" script_class="UpgradeDefinition" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/upgrade_effect_definition.gd" id="1_p6sti"]
+[ext_resource type="Script" path="res://scripts/data/stat_upgrade_effect.gd" id="2_701nh"]
+[ext_resource type="Script" path="res://scripts/data/upgrade_definition.gd" id="3_im2y6"]
+
+[sub_resource type="Resource" id="Resource_tegpm"]
+script = ExtResource("2_701nh")
+stat_id = &"dodge_chance"
+value_per_rank = 0.04
+source_label = "Skirmisher's Rhythm"
+
+[sub_resource type="Resource" id="Resource_pajxh"]
+script = ExtResource("2_701nh")
+stat_id = &"move_speed"
+operation = 1
+value_per_rank = 0.05
+source_label = "Skirmisher's Rhythm"
+
+[resource]
+script = ExtResource("3_im2y6")
+id = &"skirmishers_rhythm"
+display_name = "Skirmisher's Rhythm"
+summary = "Evade attacks while moving more quickly."
+description = "Evade attacks while moving more quickly."
+tooltip_keyword_ids = Array[StringName]([&"move_speed", &"dodge_chance", &"skirmisher", &"increased"])
+required_all_tags = Array[StringName]([&"skirmisher"])
+max_rank = 3
+effects = Array[ExtResource("1_p6sti")]([SubResource("Resource_tegpm"), SubResource("Resource_pajxh")])

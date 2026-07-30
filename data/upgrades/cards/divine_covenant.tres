@@ -1,0 +1,29 @@
+[gd_resource type="Resource" script_class="UpgradeDefinition" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/upgrade_effect_definition.gd" id="1_snjwj"]
+[ext_resource type="Script" path="res://scripts/data/stat_upgrade_effect.gd" id="2_03lgj"]
+[ext_resource type="Script" path="res://scripts/data/upgrade_definition.gd" id="3_qaq4c"]
+
+[sub_resource type="Resource" id="Resource_atgdm"]
+script = ExtResource("2_03lgj")
+stat_id = &"healing_power"
+operation = 1
+value_per_rank = 0.15
+source_label = "Divine Covenant"
+
+[sub_resource type="Resource" id="Resource_5d5v4"]
+script = ExtResource("2_03lgj")
+stat_id = &"health_regeneration"
+value_per_rank = 1.0
+source_label = "Divine Covenant"
+
+[resource]
+script = ExtResource("3_qaq4c")
+id = &"divine_covenant"
+display_name = "Divine Covenant"
+summary = "Improve healing and regeneration for every Divine member, including later recruits."
+description = "Improve healing and regeneration for every Divine member, including later recruits."
+tooltip_keyword_ids = Array[StringName]([&"divine", &"health_regeneration", &"healing_power", &"increased"])
+scope = 3
+required_all_tags = Array[StringName]([&"divine"])
+effects = Array[ExtResource("1_snjwj")]([SubResource("Resource_atgdm"), SubResource("Resource_5d5v4")])

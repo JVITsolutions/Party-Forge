@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="UpgradeDefinition" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/upgrade_effect_definition.gd" id="1_q8man"]
+[ext_resource type="Script" path="res://scripts/data/stat_upgrade_effect.gd" id="2_ghbsw"]
+[ext_resource type="Script" path="res://scripts/data/upgrade_definition.gd" id="3_ixi24"]
+
+[sub_resource type="Resource" id="Resource_fw8fq"]
+script = ExtResource("2_ghbsw")
+stat_id = &"max_health"
+operation = 1
+value_per_rank = 0.08
+source_label = "Vitality"
+
+[resource]
+script = ExtResource("3_ixi24")
+id = &"vitality"
+display_name = "Vitality"
+summary = "Build greater maximum health."
+description = "Build greater maximum health."
+tooltip_keyword_ids = Array[StringName]([&"max_health", &"increased"])
+max_rank = 5
+effects = Array[ExtResource("1_q8man")]([SubResource("Resource_fw8fq")])

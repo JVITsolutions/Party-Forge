@@ -1,0 +1,355 @@
+[gd_resource type="Resource" script_class="KeywordCatalog" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/keyword_definition.gd" id="1_plt8n"]
+[ext_resource type="Script" path="res://scripts/data/keyword_catalog.gd" id="2_457uq"]
+
+[sub_resource type="Resource" id="Resource_gqqx3"]
+script = ExtResource("1_plt8n")
+id = &"max_health"
+display_name = "Maximum Health"
+explanation = "The total damage a character can take before being downed."
+
+[sub_resource type="Resource" id="Resource_qmoyr"]
+script = ExtResource("1_plt8n")
+id = &"armor"
+display_name = "Armor"
+explanation = "Reduces incoming physical damage."
+
+[sub_resource type="Resource" id="Resource_2uuwi"]
+script = ExtResource("1_plt8n")
+id = &"move_speed"
+display_name = "Move Speed"
+explanation = "Controls how quickly a character moves."
+
+[sub_resource type="Resource" id="Resource_j72g7"]
+script = ExtResource("1_plt8n")
+id = &"damage"
+display_name = "Damage"
+explanation = "Modifies all damage dealt by the character."
+
+[sub_resource type="Resource" id="Resource_wavwi"]
+script = ExtResource("1_plt8n")
+id = &"attack_speed"
+display_name = "Attack Speed"
+explanation = "Controls how quickly attacks can be used."
+
+[sub_resource type="Resource" id="Resource_wsag4"]
+script = ExtResource("1_plt8n")
+id = &"crit_chance"
+display_name = "Critical Strike Chance"
+explanation = "The chance for an eligible attack to critically strike."
+
+[sub_resource type="Resource" id="Resource_bdgur"]
+script = ExtResource("1_plt8n")
+id = &"crit_multiplier"
+display_name = "Critical Strike Multiplier"
+explanation = "The damage multiplier applied by a critical strike."
+
+[sub_resource type="Resource" id="Resource_jpw6j"]
+script = ExtResource("1_plt8n")
+id = &"attack_range"
+display_name = "Attack Range"
+explanation = "The maximum distance at which an attack can target."
+
+[sub_resource type="Resource" id="Resource_vbvf6"]
+script = ExtResource("1_plt8n")
+id = &"projectile_speed"
+display_name = "Projectile Speed"
+explanation = "Controls how quickly projectiles travel."
+
+[sub_resource type="Resource" id="Resource_nchm6"]
+script = ExtResource("1_plt8n")
+id = &"area_size"
+display_name = "Area Size"
+explanation = "Scales the radius of area effects."
+
+[sub_resource type="Resource" id="Resource_i51ed"]
+script = ExtResource("1_plt8n")
+id = &"cooldown_rate"
+display_name = "Cooldown Rate"
+explanation = "Controls how quickly ability cooldowns recover."
+
+[sub_resource type="Resource" id="Resource_wfxcw"]
+script = ExtResource("1_plt8n")
+id = &"healing_power"
+display_name = "Healing Power"
+explanation = "Modifies healing performed by the character."
+
+[sub_resource type="Resource" id="Resource_3s5yq"]
+script = ExtResource("1_plt8n")
+id = &"dodge_chance"
+display_name = "Dodge Chance"
+explanation = "The chance to avoid an incoming attack."
+
+[sub_resource type="Resource" id="Resource_58p53"]
+script = ExtResource("1_plt8n")
+id = &"block_chance"
+display_name = "Block Chance"
+explanation = "The chance to block an incoming hit."
+
+[sub_resource type="Resource" id="Resource_oe05s"]
+script = ExtResource("1_plt8n")
+id = &"block_effectiveness"
+display_name = "Block Effectiveness"
+explanation = "Controls how much damage a successful block prevents."
+
+[sub_resource type="Resource" id="Resource_70vpw"]
+script = ExtResource("1_plt8n")
+id = &"health_regeneration"
+display_name = "Health Regeneration"
+explanation = "Restores health steadily over time."
+
+[sub_resource type="Resource" id="Resource_2cvye"]
+script = ExtResource("1_plt8n")
+id = &"life_steal"
+display_name = "Life Steal"
+explanation = "Restores health from damage dealt."
+
+[sub_resource type="Resource" id="Resource_ah527"]
+script = ExtResource("1_plt8n")
+id = &"pickup_radius"
+display_name = "Pickup Radius"
+explanation = "Controls how far away experience pickups can be collected."
+
+[sub_resource type="Resource" id="Resource_ivq6n"]
+script = ExtResource("1_plt8n")
+id = &"physical_damage"
+display_name = "Physical Damage"
+explanation = "Physical damage is mitigated by armor."
+
+[sub_resource type="Resource" id="Resource_bfmjh"]
+script = ExtResource("1_plt8n")
+id = &"fire_damage"
+display_name = "Fire Damage"
+explanation = "Modifies fire damage dealt by the character."
+
+[sub_resource type="Resource" id="Resource_qo46h"]
+script = ExtResource("1_plt8n")
+id = &"cold_damage"
+display_name = "Cold Damage"
+explanation = "Modifies cold damage dealt by the character."
+
+[sub_resource type="Resource" id="Resource_rw8sv"]
+script = ExtResource("1_plt8n")
+id = &"lightning_damage"
+display_name = "Lightning Damage"
+explanation = "Modifies lightning damage dealt by the character."
+
+[sub_resource type="Resource" id="Resource_xfgc3"]
+script = ExtResource("1_plt8n")
+id = &"chaos_damage"
+display_name = "Chaos Damage"
+explanation = "Modifies chaos damage dealt by the character."
+
+[sub_resource type="Resource" id="Resource_exo8j"]
+script = ExtResource("1_plt8n")
+id = &"fire_resistance"
+display_name = "Fire Resistance"
+explanation = "Reduces incoming fire damage."
+
+[sub_resource type="Resource" id="Resource_iqcui"]
+script = ExtResource("1_plt8n")
+id = &"cold_resistance"
+display_name = "Cold Resistance"
+explanation = "Reduces incoming cold damage."
+
+[sub_resource type="Resource" id="Resource_uydlp"]
+script = ExtResource("1_plt8n")
+id = &"lightning_resistance"
+display_name = "Lightning Resistance"
+explanation = "Reduces incoming lightning damage."
+
+[sub_resource type="Resource" id="Resource_f4kyr"]
+script = ExtResource("1_plt8n")
+id = &"chaos_resistance"
+display_name = "Chaos Resistance"
+explanation = "Reduces incoming chaos damage."
+
+[sub_resource type="Resource" id="Resource_rrusv"]
+script = ExtResource("1_plt8n")
+id = &"physical"
+display_name = "Physical"
+explanation = "Describes attacks and characters that deal physical damage."
+is_capability_tag = true
+
+[sub_resource type="Resource" id="Resource_vvurm"]
+script = ExtResource("1_plt8n")
+id = &"fire"
+display_name = "Fire"
+explanation = "Describes attacks, characters, and traits aligned with fire."
+is_capability_tag = true
+
+[sub_resource type="Resource" id="Resource_3tya2"]
+script = ExtResource("1_plt8n")
+id = &"cold"
+display_name = "Cold"
+explanation = "Describes attacks, characters, and traits aligned with cold."
+is_capability_tag = true
+
+[sub_resource type="Resource" id="Resource_pnaii"]
+script = ExtResource("1_plt8n")
+id = &"lightning"
+display_name = "Lightning"
+explanation = "Describes attacks and characters aligned with lightning."
+is_capability_tag = true
+
+[sub_resource type="Resource" id="Resource_5wfo4"]
+script = ExtResource("1_plt8n")
+id = &"chaos"
+display_name = "Chaos"
+explanation = "Describes attacks, characters, and traits aligned with chaos."
+is_capability_tag = true
+
+[sub_resource type="Resource" id="Resource_ej47h"]
+script = ExtResource("1_plt8n")
+id = &"area"
+display_name = "Area"
+explanation = "Describes effects that cover an area."
+is_capability_tag = true
+
+[sub_resource type="Resource" id="Resource_gd2vi"]
+script = ExtResource("1_plt8n")
+id = &"melee"
+display_name = "Melee"
+explanation = "Describes attacks made at close range."
+is_capability_tag = true
+
+[sub_resource type="Resource" id="Resource_677xj"]
+script = ExtResource("1_plt8n")
+id = &"projectile"
+display_name = "Projectile"
+explanation = "Describes attacks that launch a traveling projectile."
+is_capability_tag = true
+
+[sub_resource type="Resource" id="Resource_cnt6g"]
+script = ExtResource("1_plt8n")
+id = &"ranged"
+display_name = "Ranged"
+explanation = "Describes characters and attacks built for distance."
+is_capability_tag = true
+
+[sub_resource type="Resource" id="Resource_ls5cs"]
+script = ExtResource("1_plt8n")
+id = &"healing"
+display_name = "Healing"
+explanation = "Describes actions that restore health."
+is_capability_tag = true
+
+[sub_resource type="Resource" id="Resource_0jkje"]
+script = ExtResource("1_plt8n")
+id = &"block"
+display_name = "Block"
+explanation = "Describes characters capable of blocking attacks."
+is_capability_tag = true
+
+[sub_resource type="Resource" id="Resource_svdfn"]
+script = ExtResource("1_plt8n")
+id = &"regeneration"
+display_name = "Regeneration"
+explanation = "Describes characters capable of restoring health over time."
+is_capability_tag = true
+
+[sub_resource type="Resource" id="Resource_r80ah"]
+script = ExtResource("1_plt8n")
+id = &"crit"
+display_name = "Critical"
+explanation = "Describes characters specialized in critical strikes."
+is_capability_tag = true
+
+[sub_resource type="Resource" id="Resource_j1n4n"]
+script = ExtResource("1_plt8n")
+id = &"dodge"
+display_name = "Dodge"
+explanation = "Describes characters capable of avoiding attacks."
+is_capability_tag = true
+
+[sub_resource type="Resource" id="Resource_ulpjg"]
+script = ExtResource("1_plt8n")
+id = &"martial"
+display_name = "Martial"
+explanation = "A trait shared by weapon-trained characters."
+is_capability_tag = true
+
+[sub_resource type="Resource" id="Resource_mqyou"]
+script = ExtResource("1_plt8n")
+id = &"vanguard"
+display_name = "Vanguard"
+explanation = "A trait shared by durable frontline characters."
+is_capability_tag = true
+
+[sub_resource type="Resource" id="Resource_ajgcb"]
+script = ExtResource("1_plt8n")
+id = &"arcane"
+display_name = "Arcane"
+explanation = "A trait shared by characters trained in area magic."
+is_capability_tag = true
+
+[sub_resource type="Resource" id="Resource_cy2jx"]
+script = ExtResource("1_plt8n")
+id = &"caster"
+display_name = "Caster"
+explanation = "A trait shared by characters who rely on spells."
+is_capability_tag = true
+
+[sub_resource type="Resource" id="Resource_uundj"]
+script = ExtResource("1_plt8n")
+id = &"divine"
+display_name = "Divine"
+explanation = "A trait shared by characters empowered by sacred magic."
+is_capability_tag = true
+
+[sub_resource type="Resource" id="Resource_8iljj"]
+script = ExtResource("1_plt8n")
+id = &"support"
+display_name = "Support"
+explanation = "A trait shared by characters who aid allies."
+is_capability_tag = true
+
+[sub_resource type="Resource" id="Resource_05m0a"]
+script = ExtResource("1_plt8n")
+id = &"skirmisher"
+display_name = "Skirmisher"
+explanation = "A trait shared by mobile evasive characters."
+is_capability_tag = true
+
+[sub_resource type="Resource" id="Resource_7osf6"]
+script = ExtResource("1_plt8n")
+id = &"occult"
+display_name = "Occult"
+explanation = "A trait shared by characters who wield forbidden power."
+is_capability_tag = true
+
+[sub_resource type="Resource" id="Resource_swg7m"]
+script = ExtResource("1_plt8n")
+id = &"bow"
+display_name = "Bow"
+explanation = "A trait shared by specialized bow users."
+is_capability_tag = true
+
+[sub_resource type="Resource" id="Resource_3odbh"]
+script = ExtResource("1_plt8n")
+id = &"increased"
+display_name = "Increased"
+explanation = "An additive modifier combined with other increased and reduced values."
+
+[sub_resource type="Resource" id="Resource_4mm4v"]
+script = ExtResource("1_plt8n")
+id = &"reduced"
+display_name = "Reduced"
+explanation = "An additive penalty combined with increased and reduced values."
+
+[sub_resource type="Resource" id="Resource_pveks"]
+script = ExtResource("1_plt8n")
+id = &"more"
+display_name = "More"
+explanation = "A multiplicative modifier applied after increased and reduced values."
+
+[sub_resource type="Resource" id="Resource_0g7pm"]
+script = ExtResource("1_plt8n")
+id = &"less"
+display_name = "Less"
+explanation = "A multiplicative penalty applied after increased and reduced values."
+
+[resource]
+script = ExtResource("2_457uq")
+definitions = Array[ExtResource("1_plt8n")]([SubResource("Resource_gqqx3"), SubResource("Resource_qmoyr"), SubResource("Resource_2uuwi"), SubResource("Resource_j72g7"), SubResource("Resource_wavwi"), SubResource("Resource_wsag4"), SubResource("Resource_bdgur"), SubResource("Resource_jpw6j"), SubResource("Resource_vbvf6"), SubResource("Resource_nchm6"), SubResource("Resource_i51ed"), SubResource("Resource_wfxcw"), SubResource("Resource_3s5yq"), SubResource("Resource_58p53"), SubResource("Resource_oe05s"), SubResource("Resource_70vpw"), SubResource("Resource_2cvye"), SubResource("Resource_ah527"), SubResource("Resource_ivq6n"), SubResource("Resource_bfmjh"), SubResource("Resource_qo46h"), SubResource("Resource_rw8sv"), SubResource("Resource_xfgc3"), SubResource("Resource_exo8j"), SubResource("Resource_iqcui"), SubResource("Resource_uydlp"), SubResource("Resource_f4kyr"), SubResource("Resource_rrusv"), SubResource("Resource_vvurm"), SubResource("Resource_3tya2"), SubResource("Resource_pnaii"), SubResource("Resource_5wfo4"), SubResource("Resource_ej47h"), SubResource("Resource_gd2vi"), SubResource("Resource_677xj"), SubResource("Resource_cnt6g"), SubResource("Resource_ls5cs"), SubResource("Resource_0jkje"), SubResource("Resource_svdfn"), SubResource("Resource_r80ah"), SubResource("Resource_j1n4n"), SubResource("Resource_ulpjg"), SubResource("Resource_mqyou"), SubResource("Resource_ajgcb"), SubResource("Resource_cy2jx"), SubResource("Resource_uundj"), SubResource("Resource_8iljj"), SubResource("Resource_05m0a"), SubResource("Resource_7osf6"), SubResource("Resource_swg7m"), SubResource("Resource_3odbh"), SubResource("Resource_4mm4v"), SubResource("Resource_pveks"), SubResource("Resource_0g7pm")])

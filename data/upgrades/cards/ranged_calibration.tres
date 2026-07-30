@@ -1,0 +1,30 @@
+[gd_resource type="Resource" script_class="UpgradeDefinition" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/upgrade_effect_definition.gd" id="1_kc4dp"]
+[ext_resource type="Script" path="res://scripts/data/stat_upgrade_effect.gd" id="2_241ge"]
+[ext_resource type="Script" path="res://scripts/data/upgrade_definition.gd" id="3_0cjde"]
+
+[sub_resource type="Resource" id="Resource_j5kf2"]
+script = ExtResource("2_241ge")
+stat_id = &"attack_range"
+operation = 1
+value_per_rank = 0.1
+source_label = "Ranged Calibration"
+
+[sub_resource type="Resource" id="Resource_6e8gp"]
+script = ExtResource("2_241ge")
+stat_id = &"projectile_speed"
+operation = 1
+value_per_rank = 0.1
+source_label = "Ranged Calibration"
+
+[resource]
+script = ExtResource("3_0cjde")
+id = &"ranged_calibration"
+display_name = "Ranged Calibration"
+summary = "Extend range and accelerate projectiles."
+description = "Extend range and accelerate projectiles."
+tooltip_keyword_ids = Array[StringName]([&"attack_range", &"projectile_speed", &"ranged", &"increased"])
+required_all_tags = Array[StringName]([&"ranged"])
+max_rank = 3
+effects = Array[ExtResource("1_kc4dp")]([SubResource("Resource_j5kf2"), SubResource("Resource_6e8gp")])

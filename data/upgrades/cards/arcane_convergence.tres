@@ -1,0 +1,55 @@
+[gd_resource type="Resource" script_class="UpgradeDefinition" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/upgrade_effect_definition.gd" id="1_mf1cj"]
+[ext_resource type="Script" path="res://scripts/data/stat_upgrade_effect.gd" id="2_vehd6"]
+[ext_resource type="Script" path="res://scripts/data/upgrade_definition.gd" id="3_w5g7t"]
+
+[sub_resource type="Resource" id="Resource_wsoj5"]
+script = ExtResource("2_vehd6")
+stat_id = &"area_size"
+operation = 1
+value_per_rank = 0.12
+source_label = "Arcane Convergence"
+
+[sub_resource type="Resource" id="Resource_tx27r"]
+script = ExtResource("2_vehd6")
+stat_id = &"fire_damage"
+operation = 1
+value_per_rank = 0.1
+required_capability_tags = Array[StringName]([&"fire"])
+source_label = "Arcane Convergence"
+
+[sub_resource type="Resource" id="Resource_5tkcj"]
+script = ExtResource("2_vehd6")
+stat_id = &"cold_damage"
+operation = 1
+value_per_rank = 0.1
+required_capability_tags = Array[StringName]([&"cold"])
+source_label = "Arcane Convergence"
+
+[sub_resource type="Resource" id="Resource_834qw"]
+script = ExtResource("2_vehd6")
+stat_id = &"lightning_damage"
+operation = 1
+value_per_rank = 0.1
+required_capability_tags = Array[StringName]([&"lightning"])
+source_label = "Arcane Convergence"
+
+[sub_resource type="Resource" id="Resource_xdb4s"]
+script = ExtResource("2_vehd6")
+stat_id = &"chaos_damage"
+operation = 1
+value_per_rank = 0.1
+required_capability_tags = Array[StringName]([&"chaos"])
+source_label = "Arcane Convergence"
+
+[resource]
+script = ExtResource("3_w5g7t")
+id = &"arcane_convergence"
+display_name = "Arcane Convergence"
+summary = "Expand and empower every Arcane member's elements, including later recruits."
+description = "Expand and empower every Arcane member's elements, including later recruits."
+tooltip_keyword_ids = Array[StringName]([&"area_size", &"arcane", &"chaos_damage", &"cold_damage", &"lightning_damage", &"fire_damage", &"chaos", &"cold", &"lightning", &"fire", &"increased"])
+scope = 3
+required_all_tags = Array[StringName]([&"arcane"])
+effects = Array[ExtResource("1_mf1cj")]([SubResource("Resource_wsoj5"), SubResource("Resource_tx27r"), SubResource("Resource_5tkcj"), SubResource("Resource_834qw"), SubResource("Resource_xdb4s")])

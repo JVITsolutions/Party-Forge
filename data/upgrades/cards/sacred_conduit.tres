@@ -1,0 +1,30 @@
+[gd_resource type="Resource" script_class="UpgradeDefinition" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/upgrade_effect_definition.gd" id="1_adx3b"]
+[ext_resource type="Script" path="res://scripts/data/stat_upgrade_effect.gd" id="2_4wpj8"]
+[ext_resource type="Script" path="res://scripts/data/upgrade_definition.gd" id="3_erauu"]
+
+[sub_resource type="Resource" id="Resource_l8466"]
+script = ExtResource("2_4wpj8")
+stat_id = &"healing_power"
+operation = 1
+value_per_rank = 0.25
+source_label = "Sacred Conduit"
+
+[sub_resource type="Resource" id="Resource_td7ia"]
+script = ExtResource("2_4wpj8")
+stat_id = &"lightning_damage"
+operation = 1
+value_per_rank = 0.25
+source_label = "Sacred Conduit"
+
+[resource]
+script = ExtResource("3_erauu")
+id = &"sacred_conduit"
+display_name = "Sacred Conduit"
+summary = "Channel stronger healing and lightning."
+description = "Channel stronger healing and lightning."
+tooltip_keyword_ids = Array[StringName]([&"lightning_damage", &"healing_power", &"increased"])
+scope = 1
+allowed_class_ids = Array[StringName]([&"cleric"])
+effects = Array[ExtResource("1_adx3b")]([SubResource("Resource_l8466"), SubResource("Resource_td7ia")])

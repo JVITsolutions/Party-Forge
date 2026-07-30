@@ -1,0 +1,36 @@
+[gd_resource type="Resource" script_class="UpgradeDefinition" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/upgrade_effect_definition.gd" id="1_il8ss"]
+[ext_resource type="Script" path="res://scripts/data/stat_upgrade_effect.gd" id="2_4p0xe"]
+[ext_resource type="Script" path="res://scripts/data/upgrade_definition.gd" id="3_qv67q"]
+
+[sub_resource type="Resource" id="Resource_n7r7m"]
+script = ExtResource("2_4p0xe")
+stat_id = &"chaos_damage"
+operation = 1
+value_per_rank = 0.3
+source_label = "Blood Covenant"
+
+[sub_resource type="Resource" id="Resource_ti3sl"]
+script = ExtResource("2_4p0xe")
+stat_id = &"life_steal"
+value_per_rank = 0.08
+source_label = "Blood Covenant"
+
+[sub_resource type="Resource" id="Resource_dky44"]
+script = ExtResource("2_4p0xe")
+stat_id = &"max_health"
+operation = 2
+value_per_rank = 0.15
+source_label = "Blood Covenant"
+
+[resource]
+script = ExtResource("3_qv67q")
+id = &"blood_covenant"
+display_name = "Blood Covenant"
+summary = "Trade vitality for chaos power and life steal."
+description = "Trade vitality for chaos power and life steal."
+tooltip_keyword_ids = Array[StringName]([&"chaos_damage", &"max_health", &"life_steal", &"reduced", &"increased"])
+scope = 1
+allowed_class_ids = Array[StringName]([&"warlock"])
+effects = Array[ExtResource("1_il8ss")]([SubResource("Resource_n7r7m"), SubResource("Resource_ti3sl"), SubResource("Resource_dky44")])

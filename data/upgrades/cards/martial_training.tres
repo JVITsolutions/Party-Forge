@@ -1,0 +1,29 @@
+[gd_resource type="Resource" script_class="UpgradeDefinition" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/upgrade_effect_definition.gd" id="1_or8ou"]
+[ext_resource type="Script" path="res://scripts/data/stat_upgrade_effect.gd" id="2_7m0i7"]
+[ext_resource type="Script" path="res://scripts/data/upgrade_definition.gd" id="3_ub1q6"]
+
+[sub_resource type="Resource" id="Resource_0a82a"]
+script = ExtResource("2_7m0i7")
+stat_id = &"physical_damage"
+operation = 1
+value_per_rank = 0.08
+source_label = "Martial Training"
+
+[sub_resource type="Resource" id="Resource_c1a1u"]
+script = ExtResource("2_7m0i7")
+stat_id = &"armor"
+value_per_rank = 1.0
+source_label = "Martial Training"
+
+[resource]
+script = ExtResource("3_ub1q6")
+id = &"martial_training"
+display_name = "Martial Training"
+summary = "Reinforce martial offense and armor."
+description = "Reinforce martial offense and armor."
+tooltip_keyword_ids = Array[StringName]([&"martial", &"physical_damage", &"armor", &"increased"])
+required_all_tags = Array[StringName]([&"martial"])
+max_rank = 3
+effects = Array[ExtResource("1_or8ou")]([SubResource("Resource_0a82a"), SubResource("Resource_c1a1u")])

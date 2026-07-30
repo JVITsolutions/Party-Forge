@@ -17,6 +17,7 @@ func run() -> Array[String]:
     TestAssertions.equal(catalog.validate().size(), 0, "catalog validates", failures)
     TestAssertions.equal(catalog.class_by_id(&"fighter").traits, [&"martial", &"vanguard"], "fighter traits", failures)
     TestAssertions.equal(catalog.class_by_id(&"cleric").support_action.id, &"cleric_heal", "cleric heal", failures)
+    _assert_class_names_and_eligibility(catalog, failures)
     var attack_links: Array[Array] = [
         [&"fighter", &"primary_attack", "res://data/attacks/fighter_cleave.tres"],
         [&"ranger", &"primary_attack", "res://data/attacks/ranger_shot.tres"],
@@ -36,6 +37,43 @@ func run() -> Array[String]:
     _assert_generated_values(failures)
     _assert_persisted_attack_damage_path(failures)
     return failures
+
+func _assert_class_names_and_eligibility(catalog: GameCatalog, failures: Array[String]) -> void:
+    var expected_names := {
+        &"fighter": PackedStringArray(["Aldric", "Branna", "Cedric", "Dagna", "Garrick", "Hilda", "Rowan", "Thane"]),
+        &"ranger": PackedStringArray(["Ash", "Briar", "Elowen", "Fen", "Linden", "Robin", "Sylvi", "Wren"]),
+        &"mage": PackedStringArray(["Alaric", "Circe", "Elara", "Isolde", "Lucan", "Mira", "Orin", "Selene"]),
+        &"cleric": PackedStringArray(["Ansel", "Beatrix", "Clement", "Faith", "Mercy", "Sabine", "Tobias", "Verity"]),
+        &"paladin": PackedStringArray(["Aegis", "Armand", "Galahad", "Helena", "Roland", "Seraphine", "Tristan", "Valora"]),
+        &"rogue": PackedStringArray(["Corvin", "Flick", "Jax", "Nyx", "Rook", "Shade", "Talia", "Vesper"]),
+        &"frost_mage": PackedStringArray(["Boreas", "Eira", "Iskra", "Lumi", "Neve", "Rime", "Skadi", "Ylva"]),
+        &"warlock": PackedStringArray(["Azrael", "Belladonna", "Dorian", "Hex", "Lilith", "Malachar", "Morwen", "Sable"]),
+        &"marksman": PackedStringArray(["Arlen", "Blythe", "Cora", "Fletcher", "Hawke", "Ivo", "Petra", "Quinn"]),
+    }
+    var expected_capabilities := {
+        &"fighter": [&"area", &"melee", &"physical"],
+        &"ranger": [&"physical", &"projectile", &"ranged"],
+        &"mage": [&"area", &"fire", &"projectile"],
+        &"cleric": [&"healing", &"lightning", &"projectile"],
+    }
+    for definition: ClassDefinition in catalog.classes:
+        TestAssertions.truthy(definition.name_pool != null, "%s has name pool" % definition.id, failures)
+        if definition.name_pool != null:
+            TestAssertions.equal(definition.name_pool.id, definition.id, "%s name pool id" % definition.id, failures)
+            TestAssertions.equal(definition.name_pool.names, expected_names[definition.id], "%s exact names" % definition.id, failures)
+            TestAssertions.equal(definition.name_pool.resource_path, "res://data/names/%s.tres" % definition.id, "%s external name pool" % definition.id, failures)
+        TestAssertions.equal(definition.name_pool.validate(8), PackedStringArray(), "%s name pool validates" % definition.id, failures)
+        if expected_capabilities.has(definition.id):
+            TestAssertions.equal(definition.capability_tags, expected_capabilities[definition.id], "%s explicit capabilities" % definition.id, failures)
+        var expected_union: Array[StringName] = []
+        expected_union.append_array(definition.traits)
+        expected_union.append_array(definition.capability_tags)
+        expected_union.sort()
+        var deduped: Array[StringName] = []
+        for tag: StringName in expected_union:
+            if tag not in deduped:
+                deduped.append(tag)
+        TestAssertions.equal(definition.normalized_eligibility_tags(), deduped, "%s eligibility tags are deduped and sorted" % definition.id, failures)
 
 func _assert_persisted_attack_damage_path(failures: Array[String]) -> void:
     var path := "user://typed_combat_malformed_attack.tres"

@@ -1,5 +1,6 @@
 [gd_resource type="Resource" script_class="ClassDefinition" format=3]
 
+[ext_resource type="Resource" path="res://data/names/marksman.tres" id="1_8o6lm"]
 [ext_resource type="Resource" path="res://data/attacks/marksman_heavy_shot.tres" id="1_md42u"]
 [ext_resource type="Script" path="res://scripts/data/class_definition.gd" id="1_rlqk6"]
 
@@ -11,6 +12,7 @@ role = 1
 color = Color(0.27579924, 0.36415747, 0.056183092, 1)
 traits = Array[StringName]([&"martial", &"ranged", &"bow"])
 capability_tags = Array[StringName]([&"bow", &"crit", &"physical", &"projectile", &"ranged"])
+name_pool = ExtResource("1_8o6lm")
 base_stat_overrides = {
 &"crit_chance": 0.1,
 &"crit_multiplier": 2.0

@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="UpgradeDefinition" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/upgrade_effect_definition.gd" id="1_5kguf"]
+[ext_resource type="Script" path="res://scripts/data/stat_upgrade_effect.gd" id="2_vshcd"]
+[ext_resource type="Script" path="res://scripts/data/upgrade_definition.gd" id="3_yyvxt"]
+
+[sub_resource type="Resource" id="Resource_31d5c"]
+script = ExtResource("2_vshcd")
+stat_id = &"crit_chance"
+value_per_rank = 0.03
+source_label = "Precision"
+
+[resource]
+script = ExtResource("3_yyvxt")
+id = &"precision"
+display_name = "Precision"
+summary = "Gain critical strike chance."
+description = "Gain critical strike chance."
+tooltip_keyword_ids = Array[StringName]([&"crit_chance"])
+max_rank = 5
+effects = Array[ExtResource("1_5kguf")]([SubResource("Resource_31d5c")])

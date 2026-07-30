@@ -1,0 +1,30 @@
+[gd_resource type="Resource" script_class="UpgradeDefinition" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/upgrade_effect_definition.gd" id="1_3fay4"]
+[ext_resource type="Script" path="res://scripts/data/stat_upgrade_effect.gd" id="2_qsurp"]
+[ext_resource type="Script" path="res://scripts/data/upgrade_definition.gd" id="3_ki0ao"]
+
+[sub_resource type="Resource" id="Resource_1oi1i"]
+script = ExtResource("2_qsurp")
+stat_id = &"fire_damage"
+operation = 1
+value_per_rank = 0.25
+source_label = "Living Flame"
+
+[sub_resource type="Resource" id="Resource_7mjte"]
+script = ExtResource("2_qsurp")
+stat_id = &"area_size"
+operation = 1
+value_per_rank = 0.2
+source_label = "Living Flame"
+
+[resource]
+script = ExtResource("3_ki0ao")
+id = &"living_flame"
+display_name = "Living Flame"
+summary = "Intensify fire magic and expanding blasts."
+description = "Intensify fire magic and expanding blasts."
+tooltip_keyword_ids = Array[StringName]([&"area_size", &"fire_damage", &"increased"])
+scope = 1
+allowed_class_ids = Array[StringName]([&"mage"])
+effects = Array[ExtResource("1_3fay4")]([SubResource("Resource_1oi1i"), SubResource("Resource_7mjte")])

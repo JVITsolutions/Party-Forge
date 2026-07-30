@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="UpgradeDefinition" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/upgrade_effect_definition.gd" id="1_ixx6d"]
+[ext_resource type="Script" path="res://scripts/data/stat_upgrade_effect.gd" id="2_h7t6h"]
+[ext_resource type="Script" path="res://scripts/data/upgrade_definition.gd" id="3_0elqx"]
+
+[sub_resource type="Resource" id="Resource_hlm22"]
+script = ExtResource("2_h7t6h")
+stat_id = &"armor"
+value_per_rank = 2.0
+source_label = "Tempered Armor"
+
+[resource]
+script = ExtResource("3_0elqx")
+id = &"tempered_armor"
+display_name = "Tempered Armor"
+summary = "Add reliable armor."
+description = "Add reliable armor."
+tooltip_keyword_ids = Array[StringName]([&"armor"])
+max_rank = 5
+effects = Array[ExtResource("1_ixx6d")]([SubResource("Resource_hlm22")])

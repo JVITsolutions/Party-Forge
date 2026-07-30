@@ -1,6 +1,7 @@
 [gd_resource type="Resource" script_class="ClassDefinition" format=3]
 
 [ext_resource type="Resource" path="res://data/attacks/mage_burst.tres" id="1_getu1"]
+[ext_resource type="Resource" path="res://data/names/mage.tres" id="1_t0fo8"]
 [ext_resource type="Script" path="res://scripts/data/class_definition.gd" id="2_t0fo8"]
 
 [resource]
@@ -10,10 +11,9 @@ display_name = "Mage"
 role = 2
 color = Color(0.58431375, 0.40392157, 0.9098039, 1)
 traits = Array[StringName]([&"arcane", &"caster", &"fire"])
+capability_tags = Array[StringName]([&"area", &"fire", &"projectile"])
+name_pool = ExtResource("1_t0fo8")
 max_health = 75.0
-class_rank_power_step = 0.2
-revive_delay = 8.0
-revive_health_fraction = 0.5
 preferred_distance = 6.5
 engagement_distance = 12.0
 tether_distance = 12.0

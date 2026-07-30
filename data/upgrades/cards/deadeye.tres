@@ -1,0 +1,43 @@
+[gd_resource type="Resource" script_class="UpgradeDefinition" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/upgrade_effect_definition.gd" id="1_afm74"]
+[ext_resource type="Script" path="res://scripts/data/stat_upgrade_effect.gd" id="2_vk0h0"]
+[ext_resource type="Script" path="res://scripts/data/upgrade_definition.gd" id="3_ai7kk"]
+
+[sub_resource type="Resource" id="Resource_b8tu4"]
+script = ExtResource("2_vk0h0")
+stat_id = &"physical_damage"
+operation = 3
+value_per_rank = 0.3
+source_label = "Deadeye"
+
+[sub_resource type="Resource" id="Resource_hwg52"]
+script = ExtResource("2_vk0h0")
+stat_id = &"attack_range"
+operation = 1
+value_per_rank = 0.2
+source_label = "Deadeye"
+
+[sub_resource type="Resource" id="Resource_rroww"]
+script = ExtResource("2_vk0h0")
+stat_id = &"crit_multiplier"
+value_per_rank = 0.25
+source_label = "Deadeye"
+
+[sub_resource type="Resource" id="Resource_mb5bf"]
+script = ExtResource("2_vk0h0")
+stat_id = &"attack_speed"
+operation = 4
+value_per_rank = 0.15
+source_label = "Deadeye"
+
+[resource]
+script = ExtResource("3_ai7kk")
+id = &"deadeye"
+display_name = "Deadeye"
+summary = "Trade attack speed for devastating long-range physical shots."
+description = "Trade attack speed for devastating long-range physical shots."
+tooltip_keyword_ids = Array[StringName]([&"less", &"attack_range", &"physical_damage", &"crit_multiplier", &"attack_speed", &"more", &"increased"])
+scope = 1
+allowed_class_ids = Array[StringName]([&"marksman"])
+effects = Array[ExtResource("1_afm74")]([SubResource("Resource_b8tu4"), SubResource("Resource_hwg52"), SubResource("Resource_rroww"), SubResource("Resource_mb5bf")])

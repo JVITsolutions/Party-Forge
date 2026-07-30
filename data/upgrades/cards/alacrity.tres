@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="UpgradeDefinition" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/upgrade_effect_definition.gd" id="1_stl5f"]
+[ext_resource type="Script" path="res://scripts/data/stat_upgrade_effect.gd" id="2_vjl6f"]
+[ext_resource type="Script" path="res://scripts/data/upgrade_definition.gd" id="3_kw6xc"]
+
+[sub_resource type="Resource" id="Resource_xsfb6"]
+script = ExtResource("2_vjl6f")
+stat_id = &"attack_speed"
+operation = 1
+value_per_rank = 0.06
+source_label = "Alacrity"
+
+[resource]
+script = ExtResource("3_kw6xc")
+id = &"alacrity"
+display_name = "Alacrity"
+summary = "Attack more quickly."
+description = "Attack more quickly."
+tooltip_keyword_ids = Array[StringName]([&"attack_speed", &"increased"])
+max_rank = 5
+effects = Array[ExtResource("1_stl5f")]([SubResource("Resource_xsfb6")])

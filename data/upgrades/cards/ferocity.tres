@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="UpgradeDefinition" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/upgrade_effect_definition.gd" id="1_aqev8"]
+[ext_resource type="Script" path="res://scripts/data/stat_upgrade_effect.gd" id="2_foq15"]
+[ext_resource type="Script" path="res://scripts/data/upgrade_definition.gd" id="3_amfvg"]
+
+[sub_resource type="Resource" id="Resource_t6f6t"]
+script = ExtResource("2_foq15")
+stat_id = &"damage"
+operation = 1
+value_per_rank = 0.08
+source_label = "Ferocity"
+
+[resource]
+script = ExtResource("3_amfvg")
+id = &"ferocity"
+display_name = "Ferocity"
+summary = "Deal greater damage."
+description = "Deal greater damage."
+tooltip_keyword_ids = Array[StringName]([&"damage", &"increased"])
+max_rank = 5
+effects = Array[ExtResource("1_aqev8")]([SubResource("Resource_t6f6t")])

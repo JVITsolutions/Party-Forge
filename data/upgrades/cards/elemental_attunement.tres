@@ -1,0 +1,48 @@
+[gd_resource type="Resource" script_class="UpgradeDefinition" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/upgrade_effect_definition.gd" id="1_4feej"]
+[ext_resource type="Script" path="res://scripts/data/stat_upgrade_effect.gd" id="2_xveiq"]
+[ext_resource type="Script" path="res://scripts/data/upgrade_definition.gd" id="3_ga2tm"]
+
+[sub_resource type="Resource" id="Resource_2ka7e"]
+script = ExtResource("2_xveiq")
+stat_id = &"fire_damage"
+operation = 1
+value_per_rank = 0.12
+required_capability_tags = Array[StringName]([&"fire"])
+source_label = "Elemental Attunement"
+
+[sub_resource type="Resource" id="Resource_ghytx"]
+script = ExtResource("2_xveiq")
+stat_id = &"cold_damage"
+operation = 1
+value_per_rank = 0.12
+required_capability_tags = Array[StringName]([&"cold"])
+source_label = "Elemental Attunement"
+
+[sub_resource type="Resource" id="Resource_6jrba"]
+script = ExtResource("2_xveiq")
+stat_id = &"lightning_damage"
+operation = 1
+value_per_rank = 0.12
+required_capability_tags = Array[StringName]([&"lightning"])
+source_label = "Elemental Attunement"
+
+[sub_resource type="Resource" id="Resource_xtvy8"]
+script = ExtResource("2_xveiq")
+stat_id = &"chaos_damage"
+operation = 1
+value_per_rank = 0.12
+required_capability_tags = Array[StringName]([&"chaos"])
+source_label = "Elemental Attunement"
+
+[resource]
+script = ExtResource("3_ga2tm")
+id = &"elemental_attunement"
+display_name = "Elemental Attunement"
+summary = "Strengthen every element the character can wield."
+description = "Strengthen every element the character can wield."
+tooltip_keyword_ids = Array[StringName]([&"chaos_damage", &"cold_damage", &"lightning_damage", &"fire_damage", &"chaos", &"cold", &"lightning", &"fire", &"increased"])
+required_any_tags = Array[StringName]([&"fire", &"cold", &"lightning", &"chaos"])
+max_rank = 3
+effects = Array[ExtResource("1_4feej")]([SubResource("Resource_2ka7e"), SubResource("Resource_ghytx"), SubResource("Resource_6jrba"), SubResource("Resource_xtvy8")])
