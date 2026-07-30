@@ -17,6 +17,12 @@ var trait_definitions: Array[TraitDefinition] = []
 var active_tiers: Dictionary = {}
 var party_stat_ranks: Dictionary = {}
 var trait_upgrade_ranks: Dictionary = {}
+var _party_upgrade_ranks: Dictionary = {}
+var _party_upgrade_definitions: Dictionary = {}
+var _party_upgrade_sources: Dictionary = {}
+var party_upgrade_ranks: Dictionary:
+    get:
+        return _party_upgrade_ranks.duplicate()
 var upgrade_tuning: UpgradeTuning = DEFAULT_UPGRADE_TUNING
 var combat_rng: CombatRng
 var damage_types: DamageTypeCatalog
@@ -31,7 +37,7 @@ func _init() -> void:
         party_stat_ranks[stat_id] = 0
 
 func initialize(leader_class: ClassDefinition, traits: Array[TraitDefinition], tuning: UpgradeTuning = null) -> void:
-    members.clear(); class_ranks.clear(); active_tiers.clear(); trait_upgrade_ranks.clear(); trait_definitions = traits
+    members.clear(); class_ranks.clear(); active_tiers.clear(); trait_upgrade_ranks.clear(); _party_upgrade_ranks.clear(); _party_upgrade_definitions.clear(); _party_upgrade_sources.clear(); trait_definitions = traits
     upgrade_tuning = tuning if tuning != null else DEFAULT_UPGRADE_TUNING
     for stat_id: StringName in PARTY_STAT_IDS:
         party_stat_ranks[stat_id] = 0
@@ -93,6 +99,32 @@ func add_member_source(member_id: int, source: StatModifierSource) -> bool:
         return false
     member._add_modifier_source(source)
     _invalidate_member(member_id)
+    return true
+
+func upgrade_rank(upgrade_id: StringName, member_id: int = 0) -> int:
+    if member_id > 0:
+        var member := member_by_id(member_id)
+        return member.upgrade_rank(upgrade_id) if member != null else 0
+    return int(_party_upgrade_ranks.get(upgrade_id, 0))
+
+func _commit_personal_upgrade(definition: UpgradeDefinition, member_id: int, rank: int, source: StatModifierSource) -> bool:
+    var member := member_by_id(member_id)
+    if member == null or definition == null or source == null:
+        return false
+    member._replace_modifier_source(source)
+    member._set_upgrade_rank(definition.id, rank)
+    _invalidate_member(member_id)
+    upgrades_changed.emit()
+    return true
+
+func _commit_party_upgrade(definition: UpgradeDefinition, rank: int, source: StatModifierSource) -> bool:
+    if definition == null or source == null:
+        return false
+    _party_upgrade_ranks[definition.id] = rank
+    _party_upgrade_definitions[definition.id] = definition
+    _party_upgrade_sources[definition.id] = source
+    _invalidate_all_members()
+    upgrades_changed.emit()
     return true
 
 func _invalidate_member(member_id: int) -> void:
@@ -223,6 +255,11 @@ func _sources_for(member: PartyMemberState) -> Array[StatModifierSource]:
     ))
     for source: StatModifierSource in member._owned_modifier_sources():
         sources.append(source)
+
+    for upgrade_id: StringName in _party_upgrade_definitions:
+        var upgrade := _party_upgrade_definitions[upgrade_id] as UpgradeDefinition
+        if upgrade != null and upgrade.is_member_eligible(member):
+            sources.append(_party_upgrade_sources[upgrade_id] as StatModifierSource)
 
     var party_modifiers: Array[StatModifier] = []
     for stat_id: StringName in PARTY_STAT_IDS:

@@ -6,7 +6,11 @@ var character_name: String
 var class_definition: ClassDefinition
 var is_leader: bool
 var capability_tags: Array[StringName] = []
+var _upgrade_ranks: Dictionary = {}
 var _modifier_sources: Array[StatModifierSource] = []
+var upgrade_ranks: Dictionary:
+    get:
+        return _upgrade_ranks.duplicate()
 var modifier_sources: Array[StatModifierSource]:
     get:
         return _copy_sources(_modifier_sources)
@@ -24,6 +28,21 @@ func _init(id_value: int, definition: ClassDefinition, leader: bool, generated_n
 func _add_modifier_source(source: StatModifierSource) -> void:
     var owned := _copy_source(source)
     owned.owner_member_id = member_id
+    _modifier_sources.append(owned)
+
+func upgrade_rank(upgrade_id: StringName) -> int:
+    return int(_upgrade_ranks.get(upgrade_id, 0))
+
+func _set_upgrade_rank(upgrade_id: StringName, rank: int) -> void:
+    _upgrade_ranks[upgrade_id] = rank
+
+func _replace_modifier_source(source: StatModifierSource) -> void:
+    var owned := _copy_source(source)
+    owned.owner_member_id = member_id
+    for index: int in _modifier_sources.size():
+        if _modifier_sources[index].id == owned.id:
+            _modifier_sources[index] = owned
+            return
     _modifier_sources.append(owned)
 
 func _owned_modifier_sources() -> Array[StatModifierSource]:

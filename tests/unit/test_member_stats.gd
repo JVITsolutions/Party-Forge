@@ -10,6 +10,7 @@ func run() -> Array[String]:
 	_test_capabilities_and_base_projection(failures)
 	_test_source_breakdown_order(catalog, failures)
 	_test_action_snapshot_cache(catalog, failures)
+	_test_authored_upgrade_operation_order(failures)
 	return failures
 
 func _test_action_snapshot_cache(catalog: GameCatalog, failures: Array[String]) -> void:
@@ -238,3 +239,40 @@ func _source_ids(snapshot: ResolvedStatSnapshot, stat_id: StringName) -> Array[S
 	for row: Dictionary in snapshot.breakdown(stat_id):
 		ids.append(row["source_id"] as StringName)
 	return ids
+
+func _test_authored_upgrade_operation_order(failures: Array[String]) -> void:
+	var definition := ClassDefinition.new()
+	definition.id = &"operation_fixture"
+	definition.base_stat_overrides = {&"damage": 100.0}
+	var party := PartyManager.new()
+	var no_traits: Array[TraitDefinition] = []
+	party.initialize(definition, no_traits)
+	var card := UpgradeDefinition.new()
+	card.id = &"operation_matrix"
+	card.display_name = "Operation Matrix"
+	card.summary = "Fixture"
+	card.description = "Fixture"
+	card.tooltip_keyword_ids = [&"damage"]
+	card.effects = [
+		_upgrade_effect(&"damage", StatModifier.Operation.FLAT, 20.0),
+		_upgrade_effect(&"damage", StatModifier.Operation.INCREASED, 0.50),
+		_upgrade_effect(&"damage", StatModifier.Operation.REDUCED, 0.10),
+		_upgrade_effect(&"damage", StatModifier.Operation.MORE, 0.20),
+		_upgrade_effect(&"damage", StatModifier.Operation.LESS, 0.25),
+	]
+	var catalog := GameCatalog.load_defaults()
+	catalog.upgrades.append(card)
+	TestAssertions.truthy(UpgradeApplicationService.apply(card.id, catalog, party, 1), "all-operation authored upgrade applies", failures)
+	var snapshot := party.stats_for(1)
+	TestAssertions.near(snapshot.value(&"damage"), 151.2, 0.001, "flat increased reduced more less preserve resolver order", failures)
+	var rows := snapshot.breakdown(&"damage").filter(func(row: Dictionary) -> bool: return row.get("source_id", &"") == &"upgrade:operation_matrix:member:1")
+	TestAssertions.equal(rows.size(), 5, "all authored operations retain stable source id", failures)
+	TestAssertions.truthy(rows.all(func(row: Dictionary) -> bool: return row.get("source_label", "") == "Operation Matrix Rank 1"), "all authored operations retain card-rank label", failures)
+	party.free()
+
+func _upgrade_effect(stat_id: StringName, operation: int, value: float) -> StatUpgradeEffect:
+	var effect := StatUpgradeEffect.new()
+	effect.stat_id = stat_id
+	effect.operation = operation
+	effect.value_per_rank = value
+	return effect
