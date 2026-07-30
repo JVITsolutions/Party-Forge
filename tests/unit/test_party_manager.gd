@@ -10,11 +10,11 @@ func run() -> Array[String]:
     TestAssertions.equal(party.trait_count(&"martial"), 2, "duplicate counts for martial", failures)
     TestAssertions.equal(party.active_tier(&"vanguard"), 2, "vanguard tier two", failures)
     party.recruit(catalog.class_by_id(&"ranger"))
-    party.recruit(catalog.class_by_id(&"mage"))
+    party.recruit(catalog.class_by_id(&"ranger"))
     TestAssertions.truthy(not party.recruit(catalog.class_by_id(&"cleric")), "fifth member rejected", failures)
     party.rank_up(&"fighter")
     TestAssertions.equal(party.get_class_rank(&"fighter"), 2, "shared fighter rank", failures)
-    TestAssertions.equal(party.active_tier(&"ranged"), 2, "ranger and mage overlap", failures)
+    TestAssertions.equal(party.active_tier(&"ranged"), 2, "duplicate rangers overlap", failures)
     party.free()
 
     var five_stack_trait := TraitDefinition.new()

@@ -12,7 +12,7 @@ func run() -> Array[String]:
     var failures: Array[String] = []
     var catalog: GameCatalog = GameCatalog.load_defaults()
     TestAssertions.equal(catalog.classes.size(), 4, "four classes", failures)
-    TestAssertions.equal(catalog.traits.size(), 7, "seven traits", failures)
+    TestAssertions.equal(catalog.traits.size(), 13, "thirteen traits", failures)
     TestAssertions.equal(catalog.enemies.size(), 3, "two enemies plus boss", failures)
     TestAssertions.equal(catalog.validate().size(), 0, "catalog validates", failures)
     TestAssertions.equal(catalog.class_by_id(&"fighter").traits, [&"martial", &"vanguard"], "fighter traits", failures)
@@ -63,7 +63,7 @@ func _assert_generated_values(failures: Array[String]) -> void:
     var class_rows: Array[Dictionary] = [
         {"path": "res://data/classes/fighter.tres", "values": {"id": &"fighter", "display_name": "Fighter", "role": ClassDefinition.Role.FRONTLINE, "color": Color("d94f4f"), "traits": [&"martial", &"vanguard"], "max_health": 260.0, "armor": 10.0, "move_speed": 6.2, "preferred_distance": 2.0, "engagement_distance": 5.0, "tether_distance": 9.0, "support_action": null}},
         {"path": "res://data/classes/ranger.tres", "values": {"id": &"ranger", "display_name": "Ranger", "role": ClassDefinition.Role.MIDLINE, "color": Color("5fbd72"), "traits": [&"martial", &"ranged"], "max_health": 90.0, "armor": 1.0, "move_speed": 6.6, "preferred_distance": 5.0, "engagement_distance": 11.0, "tether_distance": 11.0, "support_action": null}},
-        {"path": "res://data/classes/mage.tres", "values": {"id": &"mage", "display_name": "Mage", "role": ClassDefinition.Role.BACKLINE, "color": Color("9567e8"), "traits": [&"arcane", &"ranged", &"caster"], "max_health": 75.0, "armor": 0.0, "move_speed": 6.0, "preferred_distance": 6.5, "engagement_distance": 12.0, "tether_distance": 12.0, "support_action": null}},
+        {"path": "res://data/classes/mage.tres", "values": {"id": &"mage", "display_name": "Mage", "role": ClassDefinition.Role.BACKLINE, "color": Color("9567e8"), "traits": [&"arcane", &"caster", &"fire"], "max_health": 75.0, "armor": 0.0, "move_speed": 6.0, "preferred_distance": 6.5, "engagement_distance": 12.0, "tether_distance": 12.0, "support_action": null}},
         {"path": "res://data/classes/cleric.tres", "values": {"id": &"cleric", "display_name": "Cleric", "role": ClassDefinition.Role.SUPPORT, "color": Color("f0d15b"), "traits": [&"divine", &"support", &"caster"], "max_health": 95.0, "armor": 2.0, "move_speed": 6.0, "preferred_distance": 4.0, "engagement_distance": 10.0, "tether_distance": 10.0}},
     ]
     var trait_rows: Array[Dictionary] = [

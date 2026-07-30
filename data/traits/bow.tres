@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="TraitDefinition" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/trait_definition.gd" id="1_trait"]
+
+[resource]
+script = ExtResource("1_trait")
+id = &"bow"
+display_name = "Bow"
+stat_id = &"attack_range"
+tiers = {
+2: 0.12,
+4: 0.28
+}

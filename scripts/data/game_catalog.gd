@@ -9,7 +9,10 @@ const TRAIT_PATHS: PackedStringArray = [
     "res://data/traits/martial.tres", "res://data/traits/vanguard.tres",
     "res://data/traits/ranged.tres", "res://data/traits/arcane.tres",
     "res://data/traits/caster.tres", "res://data/traits/divine.tres",
-    "res://data/traits/support.tres"
+    "res://data/traits/support.tres", "res://data/traits/fire.tres",
+    "res://data/traits/cold.tres", "res://data/traits/skirmisher.tres",
+    "res://data/traits/occult.tres", "res://data/traits/chaos.tres",
+    "res://data/traits/bow.tres"
 ]
 const ENEMY_PATHS: PackedStringArray = [
     "res://data/enemies/swarmer.tres", "res://data/enemies/spitter.tres",

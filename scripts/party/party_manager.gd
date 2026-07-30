@@ -243,6 +243,22 @@ func _sources_for(member: PartyMemberState) -> Array[StatModifierSource]:
                 trait_modifiers.append(StatModifier.create(&"area_size", StatModifier.Operation.INCREASED, active_value, trait_id, label))
             &"support_power", &"healing_and_revive":
                 trait_modifiers.append(StatModifier.create(&"healing_power", StatModifier.Operation.INCREASED, active_value, trait_id, label))
+            &"fire_damage", &"cold_damage", &"chaos_damage", &"attack_range":
+                trait_modifiers.append(StatModifier.create(
+                    trait_data.stat_id,
+                    StatModifier.Operation.INCREASED,
+                    active_value,
+                    trait_id,
+                    label,
+                ))
+            &"dodge_chance", &"life_steal":
+                trait_modifiers.append(StatModifier.create(
+                    trait_data.stat_id,
+                    StatModifier.Operation.FLAT,
+                    active_value,
+                    trait_id,
+                    label,
+                ))
     sources.append(StatModifierSource.create(&"active_traits", &"trait", "Active Traits", 0, trait_modifiers))
     return sources
 

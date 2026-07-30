@@ -397,7 +397,7 @@ func _test_combat_modifiers(failures: Array[String]) -> void:
     mage_party.recruit(catalog.class_by_id(&"mage"))
     var mage_modifiers: RefCounted = modifier_script.call("resolve", mage_party.members[0], mage_party) as RefCounted
     TestAssertions.near(float(mage_modifiers.get("area_multiplier")), 1.18, 0.001, "active Arcane tier scales area", failures)
-    TestAssertions.near(float(mage_modifiers.get("projectile_multiplier")), 1.15, 0.001, "active Ranged tier scales projectile", failures)
+    TestAssertions.near(float(mage_modifiers.get("projectile_multiplier")), 1.0, 0.001, "Mage no longer gains Ranged projectile bonus", failures)
     TestAssertions.near(float(mage_modifiers.get("cooldown_rate_multiplier")), 1.14, 0.001, "active Caster tier resolves rounded attack rate", failures)
     mage_party.free()
 

@@ -3,7 +3,9 @@ extends Resource
 
 const SUPPORTED_STAT_IDS: Array[StringName] = [
     &"attack_speed", &"nearby_damage_reduction", &"projectile_speed_and_range",
-    &"area_size", &"cooldown_reduction", &"healing_and_revive", &"support_power"
+    &"area_size", &"cooldown_reduction", &"healing_and_revive", &"support_power",
+    &"fire_damage", &"cold_damage", &"chaos_damage",
+    &"dodge_chance", &"life_steal", &"attack_range",
 ]
 
 @export var id: StringName

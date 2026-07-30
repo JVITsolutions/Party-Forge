@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="TraitDefinition" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/trait_definition.gd" id="1_trait"]
+
+[resource]
+script = ExtResource("1_trait")
+id = &"occult"
+display_name = "Occult"
+stat_id = &"life_steal"
+tiers = {
+2: 0.04,
+4: 0.10
+}
