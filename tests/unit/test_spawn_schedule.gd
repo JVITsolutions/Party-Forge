@@ -65,6 +65,7 @@ func _test_swarmer_targeting_and_contact_cooldown(failures: Array[String]) -> vo
     var root := _new_root("SwarmerBehaviorTest")
     var swarmer: Node3D = (load("res://scenes/enemies/swarmer.tscn") as PackedScene).instantiate() as Node3D
     root.add_child(swarmer)
+    swarmer.call("configure_combat", 1, CombatRng.new(101), GameCatalog.load_defaults().damage_types)
     swarmer.position = Vector3.ZERO
     var downed := _party_actor(root, Vector3(0.25, 0.0, 0.0))
     var living := _party_actor(root, Vector3(2.0, 0.0, 0.0))
@@ -89,6 +90,7 @@ func _test_spitter_spacing_and_projectile_cadence(failures: Array[String]) -> vo
     var leader := _party_actor(root, Vector3.ZERO)
     var spitter: Node3D = (load("res://scenes/enemies/spitter.tscn") as PackedScene).instantiate() as Node3D
     root.add_child(spitter)
+    spitter.call("configure_combat", 1, CombatRng.new(102), GameCatalog.load_defaults().damage_types)
     spitter.call("configure_target", leader, root)
     spitter.position = Vector3(4.0, 0.0, 0.0)
     spitter.call("advance_behavior", 0.1)
@@ -138,8 +140,9 @@ func _test_seeded_director_and_stop(failures: Array[String]) -> void:
     var second: Node = director_script.new() as Node
     root.add_child(first)
     root.add_child(second)
-    first.call("configure", 4242, leader, experience, markers, null, root, root)
-    second.call("configure", 4242, leader, experience, markers, null, root, root)
+    var types := GameCatalog.load_defaults().damage_types
+    first.call("configure", 4242, leader, experience, markers, null, root, root, 1.0, CombatRng.new(4242), types)
+    second.call("configure", 4242, leader, experience, markers, null, root, root, 1.0, CombatRng.new(4242), types)
     var first_ids: Array[StringName] = []
     var second_ids: Array[StringName] = []
     for index: int in range(40):
@@ -161,7 +164,7 @@ func _test_director_pause(failures: Array[String]) -> void:
     var markers: Array[Node3D] = []
     var director := (load("res://scripts/game/spawn_director.gd") as Script).new() as Node
     root.add_child(director)
-    director.call("configure", 7, leader, experience, markers, null, root, root)
+    director.call("configure", 7, leader, experience, markers, null, root, root, 1.0, CombatRng.new(7), GameCatalog.load_defaults().damage_types)
     var tree := Engine.get_main_loop() as SceneTree
     tree.paused = true
     director.call("advance_time", 10.0)
@@ -177,7 +180,7 @@ func _test_pickup_upgrade_reaches_existing_orbs(failures: Array[String]) -> void
     var director := (load("res://scripts/game/spawn_director.gd") as Script).new() as Node
     root.add_child(director)
     var markers: Array[Node3D] = []
-    director.call("configure", 9, leader, experience, markers, null, root, root)
+    director.call("configure", 9, leader, experience, markers, null, root, root, 1.0, CombatRng.new(9), GameCatalog.load_defaults().damage_types)
     var orb := (load("res://scenes/progression/experience_orb.tscn") as PackedScene).instantiate() as Node3D
     root.add_child(orb)
     orb.call("configure", 1, leader, experience, 1.0)

@@ -11,7 +11,6 @@ const CHARGE_TELEGRAPH := 0.8
 const CHARGE_DURATION := 0.65
 const CHARGE_SPEED := 15.0
 const SHOCKWAVE_TELEGRAPH := 1.0
-const SHOCKWAVE_RADIUS := 6.0
 const SUMMON_COUNT := 6
 
 enum Phase { NONE, TELEGRAPH, EXECUTE }
@@ -28,6 +27,8 @@ var charge_direction := Vector3.ZERO
 var pending_hit_areas: Array[Node] = []
 var pending_charge_telegraphs: Array[Node] = []
 var boss_defeat_emitted := false
+var charge_packet: DamagePacket
+var charge_hit_ids: Dictionary = {}
 
 func configure_boss(target_leader: Node3D, director: Node = null, effect_container: Node = null) -> void:
     leader = target_leader
@@ -101,6 +102,8 @@ func _complete_phase() -> void:
         _disable_pending_charge_telegraphs()
         action_phase = Phase.EXECUTE
         action_remaining = CHARGE_DURATION
+        charge_packet = prepare_attack(&"guardian_charge")
+        charge_hit_ids.clear()
         return
     if active_action == BossActionScheduleScript.Action.SHOCKWAVE:
         _apply_shockwave()
@@ -111,6 +114,8 @@ func _finish_action() -> void:
     action_phase = Phase.NONE
     action_remaining = 0.0
     velocity = Vector3.ZERO
+    charge_packet = null
+    charge_hit_ids.clear()
 
 func _move_charge(delta: float) -> void:
     velocity = charge_direction * CHARGE_SPEED
@@ -119,6 +124,19 @@ func _move_charge(delta: float) -> void:
         global_position = next_position
     else:
         position = next_position
+    if charge_packet == null or not charge_packet.valid:
+        return
+    var attack := definition.attack_by_id(&"guardian_charge") if definition != null else null
+    if attack == null:
+        return
+    var center := global_position if is_inside_tree() else position
+    for adapter: CombatantAdapter in _party_adapters(charge_packet.action_tags):
+        if charge_hit_ids.has(adapter.combatant_id) or adapter.actor == null:
+            continue
+        var target_position := adapter.actor.global_position if adapter.actor.is_inside_tree() else adapter.actor.position
+        if center.distance_squared_to(target_position) <= attack.range * attack.range:
+            resolve_attack(charge_packet, adapter)
+            charge_hit_ids[adapter.combatant_id] = true
 
 func _create_danger_ring() -> void:
     var parent := effects_parent if effects_parent != null and is_instance_valid(effects_parent) else get_parent()
@@ -134,10 +152,15 @@ func _create_danger_ring() -> void:
 
 func _apply_shockwave() -> void:
     var center := global_position if is_inside_tree() else position
-    for actor: Node3D in _party_targets():
-        var target_position := actor.global_position if actor.is_inside_tree() else actor.position
-        if center.distance_squared_to(target_position) <= SHOCKWAVE_RADIUS * SHOCKWAVE_RADIUS and actor.has_method("receive_damage"):
-            actor.call("receive_damage", definition.contact_damage)
+    var packet := prepare_attack(&"guardian_shockwave")
+    var attack := definition.attack_by_id(&"guardian_shockwave") if definition != null else null
+    if packet != null and packet.valid and attack != null:
+        for adapter: CombatantAdapter in _party_adapters(packet.action_tags):
+            if adapter.actor == null:
+                continue
+            var target_position := adapter.actor.global_position if adapter.actor.is_inside_tree() else adapter.actor.position
+            if center.distance_squared_to(target_position) <= attack.area_radius * attack.area_radius:
+                resolve_attack(packet, adapter)
     _disable_pending_hit_areas()
 
 func _summon_swarmers() -> void:
@@ -189,6 +212,8 @@ func cancel_pending_effects() -> void:
     action_phase = Phase.NONE
     action_remaining = 0.0
     velocity = Vector3.ZERO
+    charge_packet = null
+    charge_hit_ids.clear()
 
 func _exit_tree() -> void:
     cancel_pending_effects()
@@ -211,6 +236,20 @@ func _party_targets() -> Array[Node3D]:
             targets.append(actor)
             seen[actor.get_instance_id()] = true
     return targets
+
+func _party_adapters(tags: Array[StringName]) -> Array[CombatantAdapter]:
+    var adapters: Array[CombatantAdapter] = []
+    var seen: Dictionary = {}
+    for actor: Node3D in _party_targets():
+        if not actor.has_method("get_combat_adapter"):
+            continue
+        var adapter := actor.call("get_combat_adapter", tags) as CombatantAdapter
+        if adapter == null or adapter.combatant_id.is_empty() or seen.has(adapter.combatant_id):
+            continue
+        seen[adapter.combatant_id] = true
+        adapters.append(adapter)
+    adapters.sort_custom(func(left: CombatantAdapter, right: CombatantAdapter) -> bool: return String(left.combatant_id) < String(right.combatant_id))
+    return adapters
 
 func _leader_position() -> Vector3:
     if leader == null or not is_instance_valid(leader):

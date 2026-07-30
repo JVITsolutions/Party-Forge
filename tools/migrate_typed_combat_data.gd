@@ -12,6 +12,12 @@ const ROWS: Array[Dictionary] = [
 	{"path":"res://data/attacks/guardian_shockwave.tres", "id":&"guardian_shockwave", "kind":AttackDefinition.Kind.AREA, "type":&"physical", "amount":22.0, "power":0.0, "cooldown":1.0, "range":6.0, "speed":0.0, "area":6.0, "tags":[&"area", &"shockwave"], "crit":false},
 ]
 
+const ENEMY_ROWS: Array[Dictionary] = [
+	{"path":"res://data/enemies/swarmer.tres", "attacks":["res://data/attacks/swarmer_contact.tres"]},
+	{"path":"res://data/enemies/spitter.tres", "attacks":["res://data/attacks/spitter_projectile.tres"]},
+	{"path":"res://data/enemies/forge_guardian.tres", "attacks":["res://data/attacks/guardian_charge.tres", "res://data/attacks/guardian_shockwave.tres"]},
+]
+
 func _initialize() -> void:
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path("res://data/attacks"))
 	for row: Dictionary in ROWS:
@@ -38,6 +44,20 @@ func _initialize() -> void:
 		var error := ResourceSaver.save(attack, row["path"])
 		if error != OK:
 			push_error("PARTY_FORGE_DAMAGE_ERROR path=%s reason=save failed code=%d" % [row["path"], error])
+			quit(1)
+			return
+	for row: Dictionary in ENEMY_ROWS:
+		var enemy := load(row["path"]) as EnemyDefinition
+		if enemy == null:
+			push_error("PARTY_FORGE_DAMAGE_ERROR path=%s reason=enemy failed to load" % row["path"])
+			quit(1)
+			return
+		enemy.attacks.clear()
+		for attack_path: String in row["attacks"]:
+			enemy.attacks.append(load(attack_path) as AttackDefinition)
+		var enemy_error := ResourceSaver.save(enemy, row["path"])
+		if enemy_error != OK:
+			push_error("PARTY_FORGE_DAMAGE_ERROR path=%s reason=save failed code=%d" % [row["path"], enemy_error])
 			quit(1)
 			return
 	print("PARTY_FORGE_TYPED_ATTACK_DATA_SAVED count=%d" % ROWS.size())

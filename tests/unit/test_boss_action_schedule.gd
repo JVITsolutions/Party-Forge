@@ -77,7 +77,7 @@ func _test_summon_requests_six_swarmers(failures: Array[String]) -> void:
     var markers: Array[Node3D] = [marker]
     var director := (load("res://scripts/game/spawn_director.gd") as Script).new() as Node
     root.add_child(director)
-    director.call("configure", 11, leader, experience, markers, null, root, root)
+    director.call("configure", 11, leader, experience, markers, null, root, root, 1.0, CombatRng.new(11), GameCatalog.load_defaults().damage_types)
     var spawned_ids: Array[StringName] = []
     director.connect("enemy_spawned", func(enemy_id: StringName, _enemy: Node3D) -> void: spawned_ids.append(enemy_id))
     var boss := _boss(root, leader, director)
@@ -117,6 +117,7 @@ func _test_boss_death_once_and_cancels_hit_areas(failures: Array[String]) -> voi
 func _boss(parent: Node, leader: Node3D, director: Node = null) -> Node3D:
     var boss := (load("res://scenes/enemies/forge_guardian.tscn") as PackedScene).instantiate() as Node3D
     parent.add_child(boss)
+    boss.call("configure_combat", &"boss", CombatRng.new(1337), GameCatalog.load_defaults().damage_types)
     boss.call("configure_boss", leader, director, parent)
     return boss
 

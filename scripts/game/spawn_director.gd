@@ -18,8 +18,11 @@ var camera: Camera3D
 var enemies_parent: Node
 var effects_parent: Node
 var pickup_radius_multiplier := 1.0
+var combat_rng: CombatRng
+var damage_types: DamageTypeCatalog
+var _enemy_sequence := 0
 
-func configure(seed_value: int, target_leader: Node3D, target_experience: ExperienceSystem, markers: Array[Node3D], view_camera: Camera3D = null, enemy_container: Node = null, effect_container: Node = null, radius_multiplier: float = 1.0) -> void:
+func configure(seed_value: int, target_leader: Node3D, target_experience: ExperienceSystem, markers: Array[Node3D], view_camera: Camera3D, enemy_container: Node, effect_container: Node, radius_multiplier: float, shared_combat_rng: CombatRng, shared_damage_types: DamageTypeCatalog) -> void:
     rng.seed = seed_value
     leader = target_leader
     experience_system = target_experience
@@ -28,6 +31,9 @@ func configure(seed_value: int, target_leader: Node3D, target_experience: Experi
     enemies_parent = enemy_container
     effects_parent = effect_container
     pickup_radius_multiplier = maxf(radius_multiplier, 0.0)
+    combat_rng = shared_combat_rng
+    damage_types = shared_damage_types
+    _enemy_sequence = 0
     elapsed_seconds = 0.0
     spawn_cooldown = 0.0
 
@@ -85,6 +91,8 @@ func spawn_enemy(enemy_id: StringName) -> Node3D:
         enemy.free()
         return null
     parent.add_child(enemy)
+    _enemy_sequence += 1
+    enemy.call("configure_combat", _enemy_sequence, combat_rng, damage_types)
     if enemy.is_inside_tree():
         enemy.global_position = spawn_position
     else:

@@ -41,13 +41,17 @@ func advance_behavior(delta: float) -> void:
     fire_cooldown -= maxf(delta, 0.0)
     if fire_cooldown <= 0.0:
         _fire_projectile()
-        fire_cooldown += FIRE_INTERVAL
+        var attack := definition.attack_by_id(&"spitter_projectile")
+        fire_cooldown += attack.cooldown if attack != null else FIRE_INTERVAL
 
 func _fire_projectile() -> void:
     if leader == null or not is_instance_valid(leader):
         return
     var parent := projectile_parent if projectile_parent != null and is_instance_valid(projectile_parent) else get_parent()
     if parent == null:
+        return
+    var packet := prepare_attack(&"spitter_projectile")
+    if packet == null or not packet.valid:
         return
     var projectile := ENEMY_PROJECTILE_SCENE.instantiate() as Node3D
     parent.add_child(projectile)
@@ -56,7 +60,7 @@ func _fire_projectile() -> void:
         projectile.global_position = global_position
     else:
         projectile.position = position
-    projectile.call("configure", leader, definition.contact_damage)
+    projectile.call("configure", leader, packet, combat_rng, damage_types)
 
 func _leader_is_living() -> bool:
     if leader == null or not is_instance_valid(leader):

@@ -76,9 +76,9 @@ func _assert_generated_values(failures: Array[String]) -> void:
         {"path": "res://data/traits/support.tres", "values": {"id": &"support", "display_name": "Support", "stat_id": &"support_power", "tiers": {2: 0.15, 4: 0.35}}},
     ]
     var enemy_rows: Array[Dictionary] = [
-        {"path": "res://data/enemies/swarmer.tres", "values": {"id": &"swarmer", "behavior": EnemyDefinition.Behavior.SWARMER, "max_health": 12.0, "move_speed": 4.8, "contact_damage": 8.0, "experience": 2}},
-        {"path": "res://data/enemies/spitter.tres", "values": {"id": &"spitter", "behavior": EnemyDefinition.Behavior.SPITTER, "max_health": 18.0, "move_speed": 2.8, "contact_damage": 10.0, "experience": 4}},
-        {"path": "res://data/enemies/forge_guardian.tres", "values": {"id": &"forge_guardian", "behavior": EnemyDefinition.Behavior.FORGE_GUARDIAN, "max_health": 3000.0, "move_speed": 3.3, "contact_damage": 22.0, "experience": 100}},
+        {"path": "res://data/enemies/swarmer.tres", "values": {"id": &"swarmer", "behavior": EnemyDefinition.Behavior.SWARMER, "max_health": 12.0, "move_speed": 4.8, "stat_overrides": {}, "experience": 2}, "attacks": [&"swarmer_contact"]},
+        {"path": "res://data/enemies/spitter.tres", "values": {"id": &"spitter", "behavior": EnemyDefinition.Behavior.SPITTER, "max_health": 18.0, "move_speed": 2.8, "stat_overrides": {}, "experience": 4}, "attacks": [&"spitter_projectile"]},
+        {"path": "res://data/enemies/forge_guardian.tres", "values": {"id": &"forge_guardian", "behavior": EnemyDefinition.Behavior.FORGE_GUARDIAN, "max_health": 3000.0, "move_speed": 3.3, "stat_overrides": {}, "experience": 100}, "attacks": [&"guardian_charge", &"guardian_shockwave"]},
     ]
     _assert_resource_table("attack", attack_rows, failures)
     _assert_resource_table("class", class_rows, failures)
@@ -106,3 +106,9 @@ func _assert_resource_table(kind: String, rows: Array[Dictionary], failures: Arr
             if attack.damage_components.size() == 1:
                 TestAssertions.equal(attack.damage_components[0].damage_type_id, row["damage_type"], "attack %s damage type" % attack.id, failures)
                 TestAssertions.near(attack.damage_components[0].base_amount, row["damage_amount"], 0.001, "attack %s damage amount" % attack.id, failures)
+        if kind == "enemy" and row.has("attacks"):
+            var enemy := resource as EnemyDefinition
+            var ids: Array[StringName] = []
+            for attack: AttackDefinition in enemy.attacks:
+                ids.append(attack.id)
+            TestAssertions.equal(ids, row["attacks"], "enemy %s exact attack links" % enemy.id, failures)

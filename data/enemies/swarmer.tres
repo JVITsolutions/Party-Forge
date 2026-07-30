@@ -1,11 +1,13 @@
 [gd_resource type="Resource" script_class="EnemyDefinition" format=3]
 
+[ext_resource type="Script" path="res://scripts/data/attack_definition.gd" id="1_2ljwm"]
 [ext_resource type="Script" path="res://scripts/data/enemy_definition.gd" id="1_l50bk"]
+[ext_resource type="Resource" path="res://data/attacks/swarmer_contact.tres" id="2_contact"]
 
 [resource]
 script = ExtResource("1_l50bk")
 id = &"swarmer"
 max_health = 12.0
 move_speed = 4.8
-contact_damage = 8.0
+attacks = Array[ExtResource("1_2ljwm")]([ExtResource("2_contact")])
 experience = 2

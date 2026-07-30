@@ -1,6 +1,9 @@
 [gd_resource type="Resource" script_class="EnemyDefinition" format=3]
 
+[ext_resource type="Script" path="res://scripts/data/attack_definition.gd" id="1_ij6if"]
 [ext_resource type="Script" path="res://scripts/data/enemy_definition.gd" id="1_ur4iy"]
+[ext_resource type="Resource" path="res://data/attacks/guardian_charge.tres" id="2_charge"]
+[ext_resource type="Resource" path="res://data/attacks/guardian_shockwave.tres" id="3_shockwave"]
 
 [resource]
 script = ExtResource("1_ur4iy")
@@ -8,5 +11,5 @@ id = &"forge_guardian"
 behavior = 2
 max_health = 3000.0
 move_speed = 3.3
-contact_damage = 22.0
+attacks = Array[ExtResource("1_ij6if")]([ExtResource("2_charge"), ExtResource("3_shockwave")])
 experience = 100

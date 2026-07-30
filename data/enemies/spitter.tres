@@ -1,6 +1,8 @@
 [gd_resource type="Resource" script_class="EnemyDefinition" format=3]
 
 [ext_resource type="Script" path="res://scripts/data/enemy_definition.gd" id="1_kwx2x"]
+[ext_resource type="Script" path="res://scripts/data/attack_definition.gd" id="1_p8k33"]
+[ext_resource type="Resource" path="res://data/attacks/spitter_projectile.tres" id="2_projectile"]
 
 [resource]
 script = ExtResource("1_kwx2x")
@@ -8,5 +10,5 @@ id = &"spitter"
 behavior = 1
 max_health = 18.0
 move_speed = 2.8
-contact_damage = 10.0
+attacks = Array[ExtResource("1_p8k33")]([ExtResource("2_projectile")])
 experience = 4

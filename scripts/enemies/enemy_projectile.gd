@@ -6,12 +6,16 @@ const HIT_RANGE := 0.45
 const MAX_LIFETIME := 3.0
 
 var target: Node3D
-var damage := 0.0
+var packet: DamagePacket
+var combat_rng: CombatRng
+var damage_types: DamageTypeCatalog
 var elapsed := 0.0
 
-func configure(target_actor: Node3D, damage_amount: float) -> void:
+func configure(target_actor: Node3D, prepared_packet: DamagePacket, shared_combat_rng: CombatRng, shared_damage_types: DamageTypeCatalog) -> void:
 	target = target_actor
-	damage = maxf(damage_amount, 0.0)
+	packet = prepared_packet
+	combat_rng = shared_combat_rng
+	damage_types = shared_damage_types
 	elapsed = 0.0
 
 func _process(delta: float) -> void:
@@ -30,8 +34,9 @@ func advance_projectile(delta: float) -> void:
 	var offset := target_position - origin
 	var step := SPEED * maxf(delta, 0.0)
 	if offset.length() <= maxf(step, HIT_RANGE):
-		if target.has_method("receive_damage"):
-			target.call("receive_damage", damage)
+		if target.has_method("get_combat_adapter") and packet != null:
+			var adapter := target.call("get_combat_adapter", packet.action_tags) as CombatantAdapter
+			DamageResolver.resolve(packet, adapter, combat_rng, damage_types)
 		queue_free()
 		return
 	var next_position := origin + offset.normalized() * step

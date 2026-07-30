@@ -1,9 +1,6 @@
 class_name Swarmer
 extends "res://scripts/enemies/enemy_actor.gd"
 
-const CONTACT_RANGE := 0.9
-const CONTACT_COOLDOWN := 0.8
-
 var contact_cooldowns: Dictionary = {}
 
 func _physics_process(delta: float) -> void:
@@ -23,17 +20,25 @@ func advance_behavior(delta: float, candidates: Array[Node3D] = []) -> void:
     var offset := target_position - origin
     offset.y = 0.0
     velocity = offset.normalized() * definition.move_speed if not offset.is_zero_approx() else Vector3.ZERO
-    if offset.length() <= CONTACT_RANGE:
-        _try_contact_damage(target)
+    var attack := definition.attack_by_id(&"swarmer_contact")
+    if attack != null and offset.length() <= attack.range:
+        _try_contact_attack(target)
     _move_for_delta(delta)
 
-func _try_contact_damage(target: Node3D) -> void:
+func _try_contact_attack(target: Node3D) -> void:
     var target_id := target.get_instance_id()
     if float(contact_cooldowns.get(target_id, 0.0)) > 0.0:
         return
-    if target.has_method("receive_damage"):
-        target.call("receive_damage", definition.contact_damage)
-        contact_cooldowns[target_id] = CONTACT_COOLDOWN
+    if not target.has_method("get_combat_adapter"):
+        return
+    var packet := prepare_attack(&"swarmer_contact")
+    if packet == null or not packet.valid:
+        return
+    var target_adapter := target.call("get_combat_adapter", packet.action_tags) as CombatantAdapter
+    var result := resolve_attack(packet, target_adapter)
+    if result != null and result.valid:
+        var attack := definition.attack_by_id(&"swarmer_contact")
+        contact_cooldowns[target_id] = attack.cooldown if attack != null else 0.0
 
 func _advance_contact_cooldowns(delta: float) -> void:
     for target_id: Variant in contact_cooldowns.keys():

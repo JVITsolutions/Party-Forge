@@ -20,6 +20,10 @@ var defeat_handled := false
 var base_visual_color := Color(0.05, 0.03, 0.02)
 var damage_flash_remaining := 0.0
 var last_visual_health := 0.0
+var combatant_id: StringName
+var combat_rng: CombatRng
+var damage_types: DamageTypeCatalog
+var recovery_controller: RecoveryController
 
 func _ready() -> void:
     add_to_group("hostile_actors")
@@ -42,6 +46,31 @@ func configure(enemy_definition: EnemyDefinition) -> void:
     damage_flash_remaining = 0.0
     last_visual_health = health.current_health
     base_visual_color = _current_visual_color()
+    _configure_recovery()
+
+func configure_combat(sequence_id: Variant, rng: CombatRng, types: DamageTypeCatalog) -> void:
+    combatant_id = StringName("enemy:%s" % sequence_id)
+    combat_rng = rng
+    damage_types = types
+    _configure_recovery()
+
+func get_combat_adapter(tags: Array[StringName]) -> CombatantAdapter:
+    var base_values: Dictionary = definition.stat_overrides.duplicate(true) if definition != null else {}
+    if definition != null:
+        base_values[&"max_health"] = definition.max_health
+        base_values[&"move_speed"] = definition.move_speed
+    var capabilities: Array[StringName] = []
+    var sources: Array[StatModifierSource] = []
+    var stats := StatResolver.resolve(0, PartyManager.STAT_CATALOG, base_values, capabilities, sources, tags, 0)
+    var health := _health_component()
+    return CombatantAdapter.new(self, combatant_id, HOSTILE_TEAM_ID, health, stats, health != null and not health.is_dead, Callable(self, "_incoming_damage_multiplier"))
+
+func prepare_attack(attack_id: StringName) -> DamagePacket:
+    var attack := definition.attack_by_id(attack_id) if definition != null else null
+    return DamageResolver.prepare(attack, get_combat_adapter(DamageResolver.action_tags_for(attack)), combat_rng, damage_types)
+
+func resolve_attack(packet: DamagePacket, target: CombatantAdapter) -> DamageResult:
+    return DamageResolver.resolve(packet, target, combat_rng, damage_types)
 
 func receive_damage(amount: float) -> float:
     var health := _health_component()
@@ -119,11 +148,29 @@ func _move_for_delta(delta: float) -> void:
         position += velocity * maxf(delta, 0.0)
 
 func _process(delta: float) -> void:
+    if recovery_controller != null:
+        recovery_controller.advance(delta)
     if damage_flash_remaining <= 0.0 or is_dead:
         return
     damage_flash_remaining = maxf(0.0, damage_flash_remaining - maxf(delta, 0.0))
     if damage_flash_remaining <= 0.0:
         _set_visual_color(base_visual_color)
+
+func _configure_recovery() -> void:
+    if recovery_controller == null:
+        recovery_controller = get_node_or_null("RecoveryController") as RecoveryController
+    if recovery_controller == null:
+        recovery_controller = RecoveryController.new()
+        recovery_controller.name = "RecoveryController"
+        add_child(recovery_controller)
+    recovery_controller.configure(_health_component(), Callable(self, "_health_regeneration_rate"))
+
+func _health_regeneration_rate() -> float:
+    var adapter := get_combat_adapter([])
+    return adapter.stat_value(&"health_regeneration", 0.0)
+
+func _incoming_damage_multiplier(_packet: DamagePacket) -> float:
+    return 1.0
 
 func _current_visual_color() -> Color:
     var mesh := get_node_or_null("MeshInstance3D") as MeshInstance3D

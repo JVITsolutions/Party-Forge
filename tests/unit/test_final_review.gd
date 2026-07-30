@@ -249,6 +249,7 @@ func _test_enemy_health_component_and_bars(failures: Array[String]) -> void:
         TestAssertions.truthy((regular_bar.get_node("Label3D") as Label3D).text != before_text, "regular enemy bar updates from shared health flow", failures)
     main.call("_spawn_boss")
     var boss := main.get("boss") as Node3D
+    TestAssertions.equal(boss.get("combatant_id"), &"enemy:boss", "boss receives stable combat id", failures)
     var boss_bar := boss.get_node_or_null("HealthBar3D") as Node3D
     TestAssertions.truthy(boss_bar != null, "boss receives shared billboard health bar", failures)
     if boss_bar != null:
@@ -269,6 +270,7 @@ func _test_charge_telegraph_lifecycle(failures: Array[String]) -> void:
     root.add_child(effects)
     var boss := (load("res://scenes/enemies/forge_guardian.tscn") as PackedScene).instantiate() as Node3D
     root.add_child(boss)
+    boss.call("configure_combat", &"boss", CombatRng.new(1337), GameCatalog.load_defaults().damage_types)
     boss.call("configure_boss", leader, null, effects)
     boss.call("advance_behavior", 0.0)
     var pending: Array = boss.get("pending_charge_telegraphs") as Array
@@ -294,7 +296,7 @@ func _test_unknown_enemy_id(failures: Array[String]) -> void:
     var director := SpawnDirector.new()
     root.add_child(director)
     var markers: Array[Node3D] = [marker]
-    director.configure(1, null, null, markers, null, root, root)
+    director.configure(1, null, null, markers, null, root, root, 1.0, CombatRng.new(1), GameCatalog.load_defaults().damage_types)
     var before := root.get_child_count()
     var result := director.spawn_enemy(&"bogus")
     TestAssertions.equal(result, null, "unknown enemy id returns null", failures)

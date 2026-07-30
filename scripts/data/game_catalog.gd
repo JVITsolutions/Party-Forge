@@ -61,7 +61,11 @@ func validate() -> PackedStringArray:
         var id: StringName = definition.get("id")
         if seen.has(id): errors.append("PARTY_FORGE_RESOURCE_ERROR reason=duplicate id %s" % id)
         seen[id] = true
-        var validation: PackedStringArray = definition.call("validate")
+        var validation: PackedStringArray
+        if definition is EnemyDefinition:
+            validation = (definition as EnemyDefinition).validate(damage_types, PartyManager.STAT_CATALOG)
+        else:
+            validation = definition.call("validate")
         for reason: String in validation:
             var damage_reason := _structured_damage_reason(reason)
             if not damage_reason.is_empty():

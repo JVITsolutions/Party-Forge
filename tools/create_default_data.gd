@@ -43,9 +43,9 @@ func _initialize() -> void:
     if not _save_trait(&"divine", "Divine", &"healing_and_revive", {2: 0.18, 4: 0.40}): failures += 1
     if not _save_trait(&"support", "Support", &"support_power", {2: 0.15, 4: 0.35}): failures += 1
 
-    if not _save_enemy(&"swarmer", EnemyDefinition.Behavior.SWARMER, 12.0, 4.8, 8.0, 2): failures += 1
-    if not _save_enemy(&"spitter", EnemyDefinition.Behavior.SPITTER, 18.0, 2.8, 10.0, 4): failures += 1
-    if not _save_enemy(&"forge_guardian", EnemyDefinition.Behavior.FORGE_GUARDIAN, 3000.0, 3.3, 22.0, 100): failures += 1
+    if not _save_enemy(&"swarmer", EnemyDefinition.Behavior.SWARMER, 12.0, 4.8, 2, ["res://data/attacks/swarmer_contact.tres"]): failures += 1
+    if not _save_enemy(&"spitter", EnemyDefinition.Behavior.SPITTER, 18.0, 2.8, 4, ["res://data/attacks/spitter_projectile.tres"]): failures += 1
+    if not _save_enemy(&"forge_guardian", EnemyDefinition.Behavior.FORGE_GUARDIAN, 3000.0, 3.3, 100, ["res://data/attacks/guardian_charge.tres", "res://data/attacks/guardian_shockwave.tres"]): failures += 1
     if failures > 0:
         _finish_failed(failures)
         return
@@ -73,10 +73,12 @@ func _save_trait(id: StringName, name_value: String, stat: StringName, tiers: Di
     value.effect_radius = effect_radius
     return _save_resource(value, "res://data/traits/%s.tres" % id)
 
-func _save_enemy(id: StringName, behavior: EnemyDefinition.Behavior, health: float, speed: float, damage: float, experience: int) -> bool:
+func _save_enemy(id: StringName, behavior: EnemyDefinition.Behavior, health: float, speed: float, experience: int, attack_paths: Array[String]) -> bool:
     var value := EnemyDefinition.new()
     value.id = id; value.behavior = behavior; value.max_health = health; value.move_speed = speed
-    value.contact_damage = damage; value.experience = experience
+    value.experience = experience
+    for attack_path: String in attack_paths:
+        value.attacks.append(load(attack_path) as AttackDefinition)
     return _save_resource(value, "res://data/enemies/%s.tres" % id)
 
 func _save_resource(value: Resource, path: String) -> bool:

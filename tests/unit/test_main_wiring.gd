@@ -109,6 +109,11 @@ func _test_class_selection_starts_run_and_applies_choices(failures: Array[String
     TestAssertions.equal(main.get("run_started"), true, "run marked started after class selection", failures)
     var game_run: Node = main.get_node("GameRun")
     TestAssertions.equal(game_run.call("current_state"), 1, "class selection starts RUNNING timer state", failures)
+    var party_manager := main.get_node("PartyManager") as PartyManager
+    var spawn_director := main.get_node("SpawnDirector") as SpawnDirector
+    TestAssertions.equal(game_run.get("combat_rng"), party_manager.combat_rng, "party shares the run combat RNG", failures)
+    TestAssertions.equal(game_run.get("combat_rng"), spawn_director.combat_rng, "enemies share the run combat RNG", failures)
+    TestAssertions.equal(spawn_director.damage_types, GameCatalog.load_defaults().damage_types, "spawn director uses the catalog damage types", failures)
     TestAssertions.truthy(main.get("leader") != null, "class selection creates configured leader", failures)
 
     var experience := main.get_node("ExperienceSystem") as ExperienceSystem
