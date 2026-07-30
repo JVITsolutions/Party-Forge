@@ -27,6 +27,10 @@ window/stretch/aspect="keep"
 
 project/assembly_name="Party Forge"
 
+[editor_plugins]
+
+enabled=PackedStringArray("res://addons/godot_ai/plugin.cfg")
+
 [input]
 
 move_left={
