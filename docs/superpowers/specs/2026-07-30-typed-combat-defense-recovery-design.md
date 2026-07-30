@@ -1,7 +1,7 @@
 # Party Forge Typed Combat, Defenses, and Recovery Design
 
 **Date:** 2026-07-30
-**Status:** Design sections approved in conversation; awaiting written-spec review
+**Status:** Approved by Jacob on 2026-07-30
 **Parent design:** `docs/superpowers/specs/2026-07-29-character-stats-classes-design.md`
 
 ## Purpose
