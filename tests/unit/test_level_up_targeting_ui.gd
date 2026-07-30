@@ -5,6 +5,7 @@ func run() -> Array[String]:
 	_test_exact_offer_target_cancel_and_confirmation(failures)
 	_test_duplicate_class_recipients_keep_identity(failures)
 	_test_non_personal_confirmation_uses_zero(failures)
+	_test_production_card_tooltip_composition(failures)
 	return failures
 
 func _test_exact_offer_target_cancel_and_confirmation(failures: Array[String]) -> void:
@@ -143,6 +144,83 @@ func _test_non_personal_confirmation_uses_zero(failures: Array[String]) -> void:
 	if not requests.is_empty():
 		TestAssertions.equal(requests[0].choice, party_choice, "non-personal confirmation keeps exact choice", failures)
 		TestAssertions.equal(requests[0].member_id, 0, "non-personal confirmation uses member id zero", failures)
+	_free_panel(panel)
+	party.free()
+
+func _test_production_card_tooltip_composition(failures: Array[String]) -> void:
+	var catalog := GameCatalog.load_defaults()
+	var party := PartyManager.new()
+	party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
+	var vitality := catalog.upgrade_by_id(&"vitality")
+	TestAssertions.truthy(
+		UpgradeApplicationService.apply(vitality.id, catalog, party, party.members[0].member_id),
+		"tooltip fixture applies personal rank one",
+		failures,
+	)
+	var panel := _attached_panel()
+	panel.configure(catalog, UpgradeApplicationService.new(), func(_member_id: int) -> Vector2: return Vector2(100.0, 100.0))
+	var personal_choices: Array[UpgradeChoice] = [
+		UpgradeChoice.authored(vitality),
+		UpgradeChoice.authored(catalog.upgrade_by_id(&"tempered_armor")),
+		UpgradeChoice.authored(catalog.upgrade_by_id(&"precision")),
+	]
+	panel.show_choices(personal_choices, party)
+	var tooltip := panel.get_node_or_null("TooltipPanel") as UpgradeTooltipPanel
+	TestAssertions.truthy(tooltip != null, "level-up scene composes one production tooltip panel", failures)
+	if tooltip == null:
+		_free_panel(panel)
+		party.free()
+		return
+	var personal_card := panel.get_node("ContentPanel/OfferView/Content/Cards/Card1") as UpgradeCard
+	personal_card.mouse_entered.emit()
+	TestAssertions.truthy(tooltip.visible, "visible card hover reveals composed tooltip", failures)
+	TestAssertions.equal((tooltip.get_node("Content/Title") as Label).text, "Vitality", "composed tooltip renders authored title", failures)
+	TestAssertions.equal((tooltip.get_node("Content/Rank") as Label).text, "Offered rank 2 / 5", "personal tooltip uses member next rank", failures)
+	TestAssertions.equal((tooltip.get_node("Content/Effects") as Label).text, "8% increased Maximum Health.", "composed tooltip renders exact effect content", failures)
+	TestAssertions.equal(
+		(tooltip.get_node("Content/Keywords") as Label).text,
+		"Maximum Health: The total damage a character can take before being downed.\nIncreased: An additive modifier combined with other increased and reduced values.",
+		"composed tooltip renders exact keyword content",
+		failures,
+	)
+	personal_card.mouse_exited.emit()
+	TestAssertions.truthy(not tooltip.visible, "hover dismissal hides composed tooltip", failures)
+	party.recruit(catalog.class_by_id(&"fighter"))
+	panel.show_choices(personal_choices, party)
+	personal_card = panel.get_node("ContentPanel/OfferView/Content/Cards/Card1") as UpgradeCard
+	personal_card.focus_entered.emit()
+	TestAssertions.equal((tooltip.get_node("Content/Rank") as Label).text, "Offered rank varies / 5", "mixed personal ranks remain explicit", failures)
+	personal_card.focus_exited.emit()
+	personal_card.mouse_entered.emit()
+
+	var shared := vitality.duplicate(true) as UpgradeDefinition
+	shared.id = &"shared_tooltip_fixture"
+	shared.display_name = "Shared Tooltip Fixture"
+	shared.scope = UpgradeDefinition.Scope.PARTY
+	shared.max_rank = 5
+	catalog.upgrades.append(shared)
+	TestAssertions.truthy(UpgradeApplicationService.apply(shared.id, catalog, party), "tooltip fixture applies shared rank one", failures)
+	var shared_choice := UpgradeChoice.authored(shared)
+	var shared_choices: Array[UpgradeChoice] = [
+		UpgradeChoice.authored(catalog.upgrade_by_id(&"precision")),
+		shared_choice,
+		UpgradeChoice.authored(catalog.upgrade_by_id(&"tempered_armor")),
+	]
+	panel.show_choices(shared_choices, party)
+	TestAssertions.truthy(not tooltip.visible, "new offer hides stale tooltip", failures)
+	var shared_card := panel.get_node("ContentPanel/OfferView/Content/Cards/Card2") as UpgradeCard
+	shared_card.focus_entered.emit()
+	TestAssertions.truthy(tooltip.visible, "visible card focus reveals same composed tooltip", failures)
+	TestAssertions.equal((tooltip.get_node("Content/Rank") as Label).text, "Offered rank 2 / 5", "shared tooltip uses party next rank", failures)
+	shared_card.focus_exited.emit()
+	TestAssertions.truthy(not tooltip.visible, "focus dismissal hides composed tooltip", failures)
+	shared_card.focus_entered.emit()
+	panel.cancel_subflow()
+	TestAssertions.truthy(not tooltip.visible, "subflow cancellation hides stale tooltip", failures)
+	shared_card.focus_exited.emit()
+	shared_card.focus_entered.emit()
+	panel.complete_selection()
+	TestAssertions.truthy(not tooltip.visible, "selection completion hides stale tooltip", failures)
 	_free_panel(panel)
 	party.free()
 

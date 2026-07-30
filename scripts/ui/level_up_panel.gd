@@ -16,6 +16,7 @@ var _pending_choice: UpgradeChoice
 var _pending_member_id := 0
 var _awaiting_application := false
 var _initial_focus_card: UpgradeCard
+var _tooltip_choice: UpgradeChoice
 
 
 func _ready() -> void:
@@ -57,6 +58,7 @@ func show_choices(
 	_pending_member_id = 0
 	_awaiting_application = false
 	selected_once = false
+	_hide_tooltip()
 	visible = true
 	_populate_offer_cards()
 	_populate_legacy_buttons()
@@ -65,6 +67,7 @@ func show_choices(
 
 
 func complete_selection() -> void:
+	_hide_tooltip()
 	_awaiting_application = false
 	_pending_choice = null
 	_pending_member_id = 0
@@ -89,6 +92,7 @@ func reject_selection(reason: String) -> void:
 func cancel_subflow() -> void:
 	if _awaiting_application:
 		return
+	_hide_tooltip()
 	_pending_choice = null
 	_pending_member_id = 0
 	_show_view(&"offer")
@@ -152,8 +156,14 @@ func _connect_cards() -> void:
 		return
 	for card_node: Node in cards_node.get_children():
 		var card := card_node as UpgradeCard
-		if card != null and not card.activated.is_connected(_on_card_activated):
+		if card == null:
+			continue
+		if not card.activated.is_connected(_on_card_activated):
 			card.activated.connect(_on_card_activated)
+		if not card.detail_requested.is_connected(_on_card_detail_requested):
+			card.detail_requested.connect(_on_card_detail_requested)
+		if not card.detail_dismissed.is_connected(_on_card_detail_dismissed):
+			card.detail_dismissed.connect(_on_card_detail_dismissed)
 
 
 func _connect_recipient_picker() -> void:
@@ -178,6 +188,7 @@ func _connect_confirmation() -> void:
 func _on_card_activated(choice: UpgradeChoice) -> void:
 	if _awaiting_application or choice == null:
 		return
+	_hide_tooltip()
 	if choice.requires_recipient():
 		var rows := UpgradePresentationService.recipient_rows(
 			choice.definition,
@@ -232,6 +243,8 @@ func _on_confirm_pressed() -> void:
 
 
 func _show_view(view: StringName) -> void:
+	if view != &"offer":
+		_hide_tooltip()
 	(get_node("ContentPanel/OfferView") as Control).visible = view == &"offer"
 	(get_node("ContentPanel/RecipientView") as Control).visible = view == &"recipient"
 	(get_node("ContentPanel/ConfirmationView") as Control).visible = view == &"confirmation"
@@ -255,6 +268,76 @@ func _focus_first_enabled_recipient() -> void:
 			if row.is_inside_tree():
 				row.grab_focus()
 			return
+
+
+func _on_card_detail_requested(choice: UpgradeChoice, anchor: Control) -> void:
+	if (
+		not visible
+		or not (get_node("ContentPanel/OfferView") as Control).visible
+		or choice == null
+		or choice.kind != UpgradeChoice.Kind.AUTHORED
+		or _catalog == null
+		or _catalog.keywords == null
+		or _party == null
+	):
+		_hide_tooltip()
+		return
+	var definition := _catalog.upgrade_by_id(choice.target_id)
+	if definition == null:
+		_hide_tooltip()
+		return
+	var rank_state := _offered_rank_state(definition)
+	var content := UpgradePresentationService.tooltip(
+		definition,
+		int(rank_state.rank),
+		PartyManager.STAT_CATALOG,
+		_catalog.keywords
+	)
+	if bool(rank_state.varies):
+		content["rank_text"] = "Offered rank varies / %d" % definition.max_rank
+	_tooltip_choice = choice
+	(get_node("TooltipPanel") as UpgradeTooltipPanel).show_content(content, anchor)
+
+
+func _on_card_detail_dismissed(choice: UpgradeChoice) -> void:
+	if choice == _tooltip_choice:
+		_hide_tooltip()
+
+
+func _offered_rank_state(definition: UpgradeDefinition) -> Dictionary:
+	if _party == null or definition == null:
+		return {"rank": 1, "varies": false}
+	var current_rank := _party.upgrade_rank(definition.id)
+	if not definition.is_single_recipient():
+		return {
+			"rank": clampi(current_rank + 1, 1, definition.max_rank),
+			"varies": false,
+		}
+	var usable_ranks: Array[int] = []
+	for member: PartyMemberState in _party.members:
+		if not definition.is_member_eligible(member):
+			continue
+		var personal_rank := _party.upgrade_rank(definition.id, member.member_id)
+		if personal_rank < definition.max_rank:
+			usable_ranks.append(personal_rank)
+	if usable_ranks.is_empty():
+		return {"rank": definition.max_rank, "varies": false}
+	current_rank = usable_ranks[0]
+	var varies := false
+	for personal_rank: int in usable_ranks:
+		current_rank = mini(current_rank, personal_rank)
+		varies = varies or personal_rank != usable_ranks[0]
+	return {
+		"rank": clampi(current_rank + 1, 1, definition.max_rank),
+		"varies": varies,
+	}
+
+
+func _hide_tooltip() -> void:
+	_tooltip_choice = null
+	var tooltip := get_node_or_null("TooltipPanel") as UpgradeTooltipPanel
+	if tooltip != null:
+		tooltip.hide_content()
 
 
 # Temporary compatibility for Main's pre-Task-8 choice_selected wiring. These

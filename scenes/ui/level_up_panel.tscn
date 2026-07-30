@@ -1,8 +1,9 @@
-[gd_scene load_steps=4 format=3 uid="uid://c3wcr4a0c428h"]
+[gd_scene load_steps=5 format=3 uid="uid://c3wcr4a0c428h"]
 
 [ext_resource type="Script" path="res://scripts/ui/level_up_panel.gd" id="1_panel"]
 [ext_resource type="PackedScene" path="res://scenes/ui/upgrade_card.tscn" id="2_card"]
 [ext_resource type="PackedScene" path="res://scenes/ui/upgrade_recipient_picker.tscn" id="3_picker"]
+[ext_resource type="PackedScene" path="res://scenes/ui/upgrade_tooltip_panel.tscn" id="4_tooltip"]
 
 [node name="LevelUpPanel" type="Control"]
 process_mode = 3
@@ -131,6 +132,10 @@ text = "Back to Offers"
 custom_minimum_size = Vector2(180, 52)
 layout_mode = 2
 text = "Confirm"
+
+[node name="TooltipPanel" parent="." instance=ExtResource("4_tooltip")]
+visible = false
+z_index = 100
 
 [node name="Choices" type="HBoxContainer" parent="."]
 visible = false
