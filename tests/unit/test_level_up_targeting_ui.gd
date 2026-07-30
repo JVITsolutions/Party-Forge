@@ -176,9 +176,9 @@ func _test_production_card_tooltip_composition(failures: Array[String]) -> void:
 	TestAssertions.truthy(tooltip.visible, "visible card hover reveals composed tooltip", failures)
 	TestAssertions.equal((tooltip.get_node("Content/Title") as Label).text, "Vitality", "composed tooltip renders authored title", failures)
 	TestAssertions.equal((tooltip.get_node("Content/Rank") as Label).text, "Offered rank 2 / 5", "personal tooltip uses member next rank", failures)
-	TestAssertions.equal((tooltip.get_node("Content/Effects") as Label).text, "8% increased Maximum Health.", "composed tooltip renders exact effect content", failures)
+	TestAssertions.equal((tooltip.get_node("Content/BodyScroll/Body/Effects") as Label).text, "8% increased Maximum Health.", "composed tooltip renders exact effect content", failures)
 	TestAssertions.equal(
-		(tooltip.get_node("Content/Keywords") as Label).text,
+		(tooltip.get_node("Content/BodyScroll/Body/Keywords") as Label).text,
 		"Maximum Health: The total damage a character can take before being downed.\nIncreased: An additive modifier combined with other increased and reduced values.",
 		"composed tooltip renders exact keyword content",
 		failures,

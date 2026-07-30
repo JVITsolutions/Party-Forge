@@ -2,6 +2,8 @@ class_name UpgradeTooltipPanel
 extends PanelContainer
 
 const EDGE_MARGIN := 16.0
+const MAXIMUM_POPUP_HEIGHT := 680.0
+const CONTENT_PADDING_ALLOWANCE := 32.0
 
 
 func _ready() -> void:
@@ -11,22 +13,39 @@ func _ready() -> void:
 func show_content(content: Dictionary, anchor: Control) -> void:
 	_set_text("Content/Title", content.get("title", ""))
 	_set_text("Content/Rank", content.get("rank_text", ""))
-	_set_text("Content/Description", content.get("description", ""))
-	_set_lines("Content/Effects", content.get("effect_lines", []))
-	_set_text("Content/Eligibility", content.get("eligibility_text", ""))
-	_set_text("Content/Inheritance", content.get("inheritance_text", ""))
-	_set_lines("Content/Keywords", content.get("keyword_lines", []))
+	_set_text("Content/BodyScroll/Body/Description", content.get("description", ""))
+	_set_lines("Content/BodyScroll/Body/Effects", content.get("effect_lines", []))
+	_set_text("Content/BodyScroll/Body/Eligibility", content.get("eligibility_text", ""))
+	_set_text("Content/BodyScroll/Body/Inheritance", content.get("inheritance_text", ""))
+	_set_lines("Content/BodyScroll/Body/Keywords", content.get("keyword_lines", []))
 	visible = true
-	reset_size()
-	if not is_inside_tree() or not anchor.is_inside_tree():
+	if is_inside_tree():
+		reset_size()
+	var viewport_size := _viewport_size()
+	if viewport_size.x <= 0.0 or viewport_size.y <= 0.0:
+		size = custom_minimum_size
 		return
-	var popup_size := size
-	if popup_size.x <= 0.0 or popup_size.y <= 0.0:
-		popup_size = custom_minimum_size
+	var available_height := maxf(0.0, viewport_size.y - EDGE_MARGIN * 2.0)
+	var maximum_height := minf(MAXIMUM_POPUP_HEIGHT, available_height)
+	var minimum_height := minf(custom_minimum_size.y, maximum_height)
+	var body := get_node("Content/BodyScroll/Body") as Control
+	var title := get_node("Content/Title") as Control
+	var rank := get_node("Content/Rank") as Control
+	var preferred_height := (
+		body.get_combined_minimum_size().y
+		+ title.get_combined_minimum_size().y
+		+ rank.get_combined_minimum_size().y
+		+ CONTENT_PADDING_ALLOWANCE
+	)
+	var popup_size := Vector2(
+		custom_minimum_size.x,
+		clampf(preferred_height, minimum_height, maximum_height)
+	)
+	size = popup_size
 	global_position = clamped_position(
 		anchor.get_global_rect(),
 		popup_size,
-		get_viewport_rect().size
+		viewport_size
 	)
 
 
@@ -67,3 +86,10 @@ func _set_lines(path: NodePath, values: Variant) -> void:
 	for value: Variant in values:
 		lines.append(str(value))
 	_set_text(path, "\n".join(lines))
+
+
+func _viewport_size() -> Vector2:
+	if is_inside_tree():
+		return get_viewport_rect().size
+	var parent_control := get_parent() as Control
+	return parent_control.size if parent_control != null else Vector2.ZERO

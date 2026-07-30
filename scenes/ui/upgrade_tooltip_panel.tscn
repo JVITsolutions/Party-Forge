@@ -19,27 +19,38 @@ mouse_filter = 2
 layout_mode = 2
 mouse_filter = 2
 
-[node name="Description" type="Label" parent="Content"]
+[node name="BodyScroll" type="ScrollContainer" parent="Content"]
+layout_mode = 2
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+vertical_scroll_mode = 1
+
+[node name="Body" type="VBoxContainer" parent="Content/BodyScroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 8
+
+[node name="Description" type="Label" parent="Content/BodyScroll/Body"]
 layout_mode = 2
 mouse_filter = 2
 autowrap_mode = 2
 
-[node name="Effects" type="Label" parent="Content"]
+[node name="Effects" type="Label" parent="Content/BodyScroll/Body"]
 layout_mode = 2
 mouse_filter = 2
 autowrap_mode = 2
 
-[node name="Eligibility" type="Label" parent="Content"]
+[node name="Eligibility" type="Label" parent="Content/BodyScroll/Body"]
 layout_mode = 2
 mouse_filter = 2
 autowrap_mode = 2
 
-[node name="Inheritance" type="Label" parent="Content"]
+[node name="Inheritance" type="Label" parent="Content/BodyScroll/Body"]
 layout_mode = 2
 mouse_filter = 2
 autowrap_mode = 2
 
-[node name="Keywords" type="Label" parent="Content"]
+[node name="Keywords" type="Label" parent="Content/BodyScroll/Body"]
 layout_mode = 2
 mouse_filter = 2
 autowrap_mode = 2
