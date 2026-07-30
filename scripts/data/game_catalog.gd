@@ -63,11 +63,25 @@ func validate() -> PackedStringArray:
         seen[id] = true
         var validation: PackedStringArray = definition.call("validate")
         for reason: String in validation:
-            if reason.begins_with("PARTY_FORGE_DAMAGE_ERROR"):
-                errors.append(_damage_error_with_path(reason, definition.resource_path))
+            var damage_reason := _structured_damage_reason(reason)
+            if not damage_reason.is_empty():
+                errors.append(_damage_error_with_path(damage_reason, _damage_error_resource_path(definition, reason)))
             else:
                 errors.append("PARTY_FORGE_RESOURCE_ERROR id=%s reason=%s" % [id, reason])
     return errors
+
+func _structured_damage_reason(reason: String) -> String:
+    var marker := reason.find("PARTY_FORGE_DAMAGE_ERROR")
+    return reason.substr(marker) if marker >= 0 else ""
+
+func _damage_error_resource_path(definition: Resource, reason: String) -> String:
+    if definition is ClassDefinition:
+        var class_definition := definition as ClassDefinition
+        if reason.begins_with("class %s primary " % class_definition.id) and class_definition.primary_attack != null:
+            return class_definition.primary_attack.resource_path
+        if reason.begins_with("class %s support " % class_definition.id) and class_definition.support_action != null:
+            return class_definition.support_action.resource_path
+    return definition.resource_path
 
 func _damage_error_with_path(reason: String, path: String) -> String:
     if path.is_empty() or not reason.begins_with("PARTY_FORGE_DAMAGE_ERROR"):

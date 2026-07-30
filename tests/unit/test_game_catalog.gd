@@ -1,5 +1,13 @@
 extends RefCounted
 
+class TypedAttackErrorClass:
+    extends ClassDefinition
+
+    func validate() -> PackedStringArray:
+        return PackedStringArray([
+            "class %s primary PARTY_FORGE_DAMAGE_ERROR attack=%s type=void reason=unknown component type" % [id, primary_attack.id],
+        ])
+
 func run() -> Array[String]:
     var failures: Array[String] = []
     var catalog: GameCatalog = GameCatalog.load_defaults()
@@ -21,7 +29,28 @@ func run() -> Array[String]:
         var attack: AttackDefinition = definition.get(link[1]) as AttackDefinition
         TestAssertions.equal(attack.resource_path, link[2], "%s %s uses external attack" % [link[0], link[1]], failures)
     _assert_generated_values(failures)
+    _assert_persisted_attack_damage_path(failures)
     return failures
+
+func _assert_persisted_attack_damage_path(failures: Array[String]) -> void:
+    var path := "user://typed_combat_malformed_attack.tres"
+    var attack := AttackDefinition.new()
+    attack.id = &"malformed_persisted"
+    TestAssertions.equal(ResourceSaver.save(attack, path), OK, "malformed attack fixture saves", failures)
+    var persisted_attack := load(path) as AttackDefinition
+    TestAssertions.truthy(persisted_attack != null, "malformed attack fixture loads", failures)
+    if persisted_attack == null:
+        DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+        return
+    var definition := TypedAttackErrorClass.new()
+    definition.id = &"typed_error_fixture"
+    definition.primary_attack = persisted_attack
+    var catalog := GameCatalog.new()
+    catalog.classes.append(definition)
+    TestAssertions.equal(catalog.validate(), PackedStringArray([
+        "PARTY_FORGE_DAMAGE_ERROR path=%s attack=malformed_persisted type=void reason=unknown component type" % path,
+    ]), "persisted attack retains damage prefix and attack path", failures)
+    DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
 
 func _assert_generated_values(failures: Array[String]) -> void:
     var attack_rows: Array[Dictionary] = [
