@@ -40,7 +40,7 @@ func _test_no_raw_damage_bypasses(failures: Array[String]) -> void:
 			TestAssertions.truthy(not source.contains(marker), "%s removes forbidden marker %s" % [path, marker], failures)
 
 func _test_baseline_catalogs(catalog: GameCatalog, failures: Array[String]) -> void:
-	TestAssertions.equal(catalog.classes.size(), 4, "typed combat audit loads four classes", failures)
+	TestAssertions.equal(catalog.classes.size(), 9, "typed combat audit loads nine classes", failures)
 	TestAssertions.equal(catalog.enemies.size(), 3, "typed combat audit loads three enemy definitions", failures)
 	TestAssertions.equal(PartyManager.STAT_CATALOG.validate(), PackedStringArray(), "baseline stat catalog validates", failures)
 	TestAssertions.equal(catalog.damage_types.validate(PartyManager.STAT_CATALOG), PackedStringArray(), "baseline damage type catalog validates", failures)

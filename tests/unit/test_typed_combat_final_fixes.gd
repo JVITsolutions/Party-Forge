@@ -75,6 +75,12 @@ func _test_classes_use_active_types_and_supported_kinds(failures: Array[String])
 	var game := GameCatalog.new()
 	game.damage_types = active_types
 	game.classes.append(definition)
+	var review_trait := TraitDefinition.new()
+	review_trait.id = &"review"
+	review_trait.display_name = "Review"
+	review_trait.stat_id = &"attack_speed"
+	review_trait.tiers = {2: 0.15, 4: 0.35}
+	game.traits.append(review_trait)
 	TestAssertions.equal(game.validate(), PackedStringArray(), "game catalog passes active types into class validation", failures)
 
 	for unsupported_kind: int in [AttackDefinition.Kind.DIRECT, AttackDefinition.Kind.AREA]:

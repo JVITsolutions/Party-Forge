@@ -1,5 +1,10 @@
 extends RefCounted
 
+const CLASS_IDS: Array[StringName] = [
+    &"fighter", &"ranger", &"mage", &"cleric", &"paladin",
+    &"rogue", &"frost_mage", &"warlock", &"marksman",
+]
+
 func run() -> Array[String]:
     var failures: Array[String] = []
     var experience := ExperienceSystem.new()
@@ -16,6 +21,9 @@ func run() -> Array[String]:
     var catalog := GameCatalog.load_defaults()
     var party := PartyManager.new()
     party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
+    for class_id: StringName in CLASS_IDS:
+        var recruit_choice := UpgradeChoice.new(UpgradeChoice.Kind.RECRUIT, class_id, "Recruit")
+        TestAssertions.truthy(recruit_choice.is_valid_for(party), "%s recruit choice is valid with space" % class_id, failures)
     var early: Array[UpgradeChoice] = LevelUpChoiceService.generate(party, catalog, 7)
     var early_repeat: Array[UpgradeChoice] = LevelUpChoiceService.generate(party, catalog, 7)
     TestAssertions.equal(early.size(), 3, "three early choices", failures)

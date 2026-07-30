@@ -2,8 +2,15 @@ class_name GameCatalog
 extends RefCounted
 
 const CLASS_PATHS: PackedStringArray = [
-    "res://data/classes/fighter.tres", "res://data/classes/ranger.tres",
-    "res://data/classes/mage.tres", "res://data/classes/cleric.tres"
+	"res://data/classes/fighter.tres",
+	"res://data/classes/ranger.tres",
+	"res://data/classes/mage.tres",
+	"res://data/classes/cleric.tres",
+	"res://data/classes/paladin.tres",
+	"res://data/classes/rogue.tres",
+	"res://data/classes/frost_mage.tres",
+	"res://data/classes/warlock.tres",
+	"res://data/classes/marksman.tres",
 ]
 const TRAIT_PATHS: PackedStringArray = [
     "res://data/traits/martial.tres", "res://data/traits/vanguard.tres",
@@ -77,6 +84,15 @@ func validate() -> PackedStringArray:
                 errors.append(_damage_error_with_path(damage_reason, _damage_error_resource_path(definition, reason)))
             else:
                 errors.append("PARTY_FORGE_RESOURCE_ERROR id=%s reason=%s" % [id, reason])
+    for class_definition: ClassDefinition in classes:
+        if class_definition == null:
+            continue
+        for trait_id: StringName in class_definition.traits:
+            if trait_by_id(trait_id) == null:
+                errors.append(
+                    "PARTY_FORGE_RESOURCE_ERROR path=%s class=%s trait=%s reason=unknown trait reference"
+                    % [class_definition.resource_path, class_definition.id, trait_id]
+                )
     return errors
 
 func _structured_damage_reason(reason: String) -> String:
