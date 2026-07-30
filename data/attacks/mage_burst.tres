@@ -1,13 +1,21 @@
 [gd_resource type="Resource" script_class="AttackDefinition" format=3]
 
+[ext_resource type="Script" path="res://scripts/data/attack_damage_component.gd" id="1_fbuys"]
 [ext_resource type="Script" path="res://scripts/data/attack_definition.gd" id="1_mkacg"]
+
+[sub_resource type="Resource" id="Resource_fbuys"]
+script = ExtResource("1_fbuys")
+damage_type_id = &"fire"
+base_amount = 24.0
 
 [resource]
 script = ExtResource("1_mkacg")
 id = &"mage_burst"
 kind = 2
-power = 24.0
 cooldown = 1.5
 range = 12.0
 projectile_speed = 11.0
 area_radius = 2.5
+damage_components = Array[ExtResource("1_fbuys")]([SubResource("Resource_fbuys")])
+action_tags = Array[StringName]([&"projectile", &"area", &"fire"])
+can_crit = true

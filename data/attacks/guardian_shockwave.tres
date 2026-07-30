@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="AttackDefinition" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/attack_damage_component.gd" id="1_agtsv"]
+[ext_resource type="Script" path="res://scripts/data/attack_definition.gd" id="2_5mxvy"]
+
+[sub_resource type="Resource" id="Resource_agtsv"]
+script = ExtResource("1_agtsv")
+damage_type_id = &"physical"
+base_amount = 22.0
+
+[resource]
+script = ExtResource("2_5mxvy")
+id = &"guardian_shockwave"
+kind = 5
+range = 6.0
+area_radius = 6.0
+damage_components = Array[ExtResource("1_agtsv")]([SubResource("Resource_agtsv")])
+action_tags = Array[StringName]([&"area", &"shockwave"])

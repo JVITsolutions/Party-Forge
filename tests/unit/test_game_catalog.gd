@@ -54,10 +54,10 @@ func _assert_persisted_attack_damage_path(failures: Array[String]) -> void:
 
 func _assert_generated_values(failures: Array[String]) -> void:
     var attack_rows: Array[Dictionary] = [
-        {"path": "res://data/attacks/fighter_cleave.tres", "values": {"id": &"fighter_cleave", "kind": AttackDefinition.Kind.MELEE_CLEAVE, "power": 18.0, "cooldown": 0.8, "range": 2.2, "projectile_speed": 0.0, "area_radius": 1.6}},
-        {"path": "res://data/attacks/ranger_shot.tres", "values": {"id": &"ranger_shot", "kind": AttackDefinition.Kind.PROJECTILE, "power": 11.0, "cooldown": 0.55, "range": 11.0, "projectile_speed": 16.0, "area_radius": 0.0}},
-        {"path": "res://data/attacks/mage_burst.tres", "values": {"id": &"mage_burst", "kind": AttackDefinition.Kind.AREA_PROJECTILE, "power": 24.0, "cooldown": 1.5, "range": 12.0, "projectile_speed": 11.0, "area_radius": 2.5}},
-        {"path": "res://data/attacks/cleric_bolt.tres", "values": {"id": &"cleric_bolt", "kind": AttackDefinition.Kind.PROJECTILE, "power": 8.0, "cooldown": 1.0, "range": 10.0, "projectile_speed": 13.0, "area_radius": 0.0}},
+        {"path": "res://data/attacks/fighter_cleave.tres", "values": {"id": &"fighter_cleave", "kind": AttackDefinition.Kind.MELEE_CLEAVE, "cooldown": 0.8, "range": 2.2, "projectile_speed": 0.0, "area_radius": 1.6}, "damage_type": &"physical", "damage_amount": 18.0},
+        {"path": "res://data/attacks/ranger_shot.tres", "values": {"id": &"ranger_shot", "kind": AttackDefinition.Kind.PROJECTILE, "cooldown": 0.55, "range": 11.0, "projectile_speed": 16.0, "area_radius": 0.0}, "damage_type": &"physical", "damage_amount": 11.0},
+        {"path": "res://data/attacks/mage_burst.tres", "values": {"id": &"mage_burst", "kind": AttackDefinition.Kind.AREA_PROJECTILE, "cooldown": 1.5, "range": 12.0, "projectile_speed": 11.0, "area_radius": 2.5}, "damage_type": &"fire", "damage_amount": 24.0},
+        {"path": "res://data/attacks/cleric_bolt.tres", "values": {"id": &"cleric_bolt", "kind": AttackDefinition.Kind.PROJECTILE, "cooldown": 1.0, "range": 10.0, "projectile_speed": 13.0, "area_radius": 0.0}, "damage_type": &"lightning", "damage_amount": 8.0},
         {"path": "res://data/attacks/cleric_heal.tres", "values": {"id": &"cleric_heal", "kind": AttackDefinition.Kind.HEAL, "power": 18.0, "cooldown": 3.0, "range": 9.0, "projectile_speed": 0.0, "area_radius": 0.0}},
     ]
     var class_rows: Array[Dictionary] = [
@@ -100,3 +100,9 @@ func _assert_resource_table(kind: String, rows: Array[Dictionary], failures: Arr
                 TestAssertions.near(float(resource.get(property)), float(expected), 0.001, label, failures)
             else:
                 TestAssertions.equal(resource.get(property), expected, label, failures)
+        if kind == "attack" and row.has("damage_type"):
+            var attack := resource as AttackDefinition
+            TestAssertions.equal(attack.damage_components.size(), 1, "attack %s one damage component" % attack.id, failures)
+            if attack.damage_components.size() == 1:
+                TestAssertions.equal(attack.damage_components[0].damage_type_id, row["damage_type"], "attack %s damage type" % attack.id, failures)
+                TestAssertions.near(attack.damage_components[0].base_amount, row["damage_amount"], 0.001, "attack %s damage amount" % attack.id, failures)

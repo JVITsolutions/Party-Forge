@@ -1,12 +1,20 @@
 [gd_resource type="Resource" script_class="AttackDefinition" format=3]
 
 [ext_resource type="Script" path="res://scripts/data/attack_definition.gd" id="1_1y1ro"]
+[ext_resource type="Script" path="res://scripts/data/attack_damage_component.gd" id="1_s7iwk"]
+
+[sub_resource type="Resource" id="Resource_s7iwk"]
+script = ExtResource("1_s7iwk")
+damage_type_id = &"physical"
+base_amount = 11.0
 
 [resource]
 script = ExtResource("1_1y1ro")
 id = &"ranger_shot"
 kind = 1
-power = 11.0
 cooldown = 0.55
 range = 11.0
 projectile_speed = 16.0
+damage_components = Array[ExtResource("1_s7iwk")]([SubResource("Resource_s7iwk")])
+action_tags = Array[StringName]([&"projectile", &"ranged"])
+can_crit = true

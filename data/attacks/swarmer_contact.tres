@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="AttackDefinition" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/attack_damage_component.gd" id="1_8cnbq"]
+[ext_resource type="Script" path="res://scripts/data/attack_definition.gd" id="2_6bwtw"]
+
+[sub_resource type="Resource" id="Resource_8cnbq"]
+script = ExtResource("1_8cnbq")
+damage_type_id = &"physical"
+base_amount = 8.0
+
+[resource]
+script = ExtResource("2_6bwtw")
+id = &"swarmer_contact"
+kind = 4
+cooldown = 0.8
+range = 0.9
+damage_components = Array[ExtResource("1_8cnbq")]([SubResource("Resource_8cnbq")])
+action_tags = Array[StringName]([&"melee", &"contact"])

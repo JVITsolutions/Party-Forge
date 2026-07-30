@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="AttackDefinition" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/attack_damage_component.gd" id="1_esv2p"]
+[ext_resource type="Script" path="res://scripts/data/attack_definition.gd" id="2_qq657"]
+
+[sub_resource type="Resource" id="Resource_esv2p"]
+script = ExtResource("1_esv2p")
+damage_type_id = &"physical"
+base_amount = 10.0
+
+[resource]
+script = ExtResource("2_qq657")
+id = &"spitter_projectile"
+kind = 1
+cooldown = 2.2
+range = 18.0
+projectile_speed = 6.0
+damage_components = Array[ExtResource("1_esv2p")]([SubResource("Resource_esv2p")])
+action_tags = Array[StringName]([&"projectile", &"ranged"])

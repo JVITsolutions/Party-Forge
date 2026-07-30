@@ -1,5 +1,6 @@
 [gd_resource type="Resource" script_class="AttackDefinition" format=3]
 
+[ext_resource type="Script" path="res://scripts/data/attack_damage_component.gd" id="1_71w86"]
 [ext_resource type="Script" path="res://scripts/data/attack_definition.gd" id="1_rp8ew"]
 
 [resource]
@@ -9,3 +10,4 @@ kind = 3
 power = 18.0
 cooldown = 3.0
 range = 9.0
+action_tags = Array[StringName]([&"healing"])

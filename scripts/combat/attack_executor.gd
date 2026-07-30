@@ -25,7 +25,7 @@ func execute(definition: AttackDefinition, target: CombatTarget) -> void:
     var modifiers: RefCounted = CombatModifiersScript.resolve(owner_actor.member_state, party_manager)
     match definition.kind:
         AttackDefinition.Kind.MELEE_CLEAVE:
-            _execute_melee(definition.power * float(modifiers.get("power_multiplier")), definition.area_radius * float(modifiers.get("area_multiplier")))
+            _execute_melee(_legacy_damage_amount(definition) * float(modifiers.get("power_multiplier")), definition.area_radius * float(modifiers.get("area_multiplier")))
         AttackDefinition.Kind.PROJECTILE, AttackDefinition.Kind.AREA_PROJECTILE:
             _spawn_projectile(definition, target, modifiers)
         AttackDefinition.Kind.HEAL:
@@ -60,7 +60,7 @@ func _spawn_projectile(definition: AttackDefinition, target: CombatTarget, modif
     var maximum_range: float = definition.range * float(modifiers.get("range_multiplier"))
     var area_radius: float = definition.area_radius * float(modifiers.get("area_multiplier"))
     var lifetime: float = clampf(maximum_range / maxf(projectile_speed, 0.01) + 0.5, 0.1, 10.0)
-    projectile.call("configure", owner_actor.team_id, definition.power * float(modifiers.get("power_multiplier")), projectile_speed, area_radius, maximum_range, lifetime, target, parent)
+    projectile.call("configure", owner_actor.team_id, _legacy_damage_amount(definition) * float(modifiers.get("power_multiplier")), projectile_speed, area_radius, maximum_range, lifetime, target, parent)
 
 func _execute_heal(definition: AttackDefinition, target: CombatTarget, modifiers: RefCounted) -> void:
     if target.team_id != owner_actor.team_id or not target.is_available or target.actor == null:
@@ -79,6 +79,15 @@ func _execute_heal(definition: AttackDefinition, target: CombatTarget, modifiers
     else:
         effect.position = target.position
     effect.call("configure", 0.4)
+
+func _legacy_damage_amount(definition: AttackDefinition) -> float:
+    if definition.damage_components.is_empty():
+        return definition.power
+    var total := 0.0
+    for component: AttackDamageComponent in definition.damage_components:
+        if component != null and is_finite(component.base_amount) and component.base_amount > 0.0:
+            total += component.base_amount
+    return total
 
 func _effect_parent() -> Node:
     if effects_parent != null and is_instance_valid(effects_parent):

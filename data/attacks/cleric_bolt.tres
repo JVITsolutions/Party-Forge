@@ -1,11 +1,19 @@
 [gd_resource type="Resource" script_class="AttackDefinition" format=3]
 
 [ext_resource type="Script" path="res://scripts/data/attack_definition.gd" id="1_4f3tb"]
+[ext_resource type="Script" path="res://scripts/data/attack_damage_component.gd" id="1_jsdac"]
+
+[sub_resource type="Resource" id="Resource_jsdac"]
+script = ExtResource("1_jsdac")
+damage_type_id = &"lightning"
+base_amount = 8.0
 
 [resource]
 script = ExtResource("1_4f3tb")
 id = &"cleric_bolt"
 kind = 1
-power = 8.0
 range = 10.0
 projectile_speed = 13.0
+damage_components = Array[ExtResource("1_jsdac")]([SubResource("Resource_jsdac")])
+action_tags = Array[StringName]([&"projectile", &"lightning"])
+can_crit = true
