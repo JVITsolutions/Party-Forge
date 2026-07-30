@@ -35,6 +35,7 @@ func run() -> Array[String]:
 			TestAssertions.near(attack.power, row["power"], 0.001, "%s heal power" % path, failures)
 		else:
 			TestAssertions.truthy(not attack.is_healing(), "%s is damaging" % path, failures)
+			TestAssertions.near(attack.power, 0.0, 0.001, "%s legacy power is zero" % path, failures)
 			TestAssertions.equal(attack.damage_components.size(), 1, "%s one damage component" % path, failures)
 			if attack.damage_components.size() == 1:
 				TestAssertions.equal(attack.damage_components[0].damage_type_id, row["type"], "%s damage type" % path, failures)
