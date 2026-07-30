@@ -42,6 +42,7 @@ The milestone also adds a per-character Stat UI. A compact party roster remains 
 - Passive-tree persistence, currency, or tree UI.
 - Functional Ignite, Chill, Freeze, Shock, Poison, or other ailments.
 - A broad content pass for upgrades beyond the cases needed to validate the foundation.
+- Steam API initialization, achievements, statistics, cloud saves, lobbies, or other Steamworks features.
 - Final character art, animation, audio, or balance.
 
 ## Architectural Approach
@@ -237,9 +238,9 @@ All nine classes are valid leaders and recruits. Duplicate classes remain allowe
 - **Rogue:** fast Physical skirmisher with crit, dodge, modest life steal, and low durability; traits `Martial` and `Skirmisher`.
 - **Frost Mage:** Cold area projectiles and a future control identity; traits `Arcane`, `Caster`, and `Cold`.
 - **Warlock:** heavy Chaos projectiles and life steal; traits `Occult`, `Caster`, and `Chaos`.
-- **Marksman:** heavy Physical bow attacks with low attack speed, very high hit damage, and greater range than Ranger; traits `Martial`, `Ranged`, and `Bow`.
+- **Marksman:** heavy Physical bow attacks with low attack speed, very high hit damage, and greater range than Ranger; traits `Martial`, `Ranged`, and `Bow`. The existing `res://data/classes/marksman.tres` becomes the authoritative class definition and references a dedicated heavy-bow attack Resource.
 
-The current in-development Marksman Resource will be completed rather than replaced with an unrelated class concept.
+The current in-development Marksman Resource will be completed rather than replaced with an unrelated class concept. It is not considered complete until its ID, display data, role, traits, base stats, formation distances, attack reference, validation, catalog entry, leader selection, recruitment eligibility, and focused tests all agree.
 
 All values remain balance data. This milestone must establish distinct and testable identities without treating initial numbers as final balance.
 
@@ -370,6 +371,8 @@ Existing scalar combat and class fields should migrate behind compatibility-frie
 
 Preserve all unrelated user-authored and Godot-serialized work. In particular, this feature must not overwrite the user's projectile speed/lifetime tuning, formatting-only script changes, add-ons, or unrelated generated files. The in-development Marksman Resource is in scope and should be incorporated carefully.
 
+The existing GodotSteam GDExtension add-on must remain loadable while this milestone is developed. The character/stat implementation does not initialize Steam or add Steam gameplay dependencies; Steamworks behavior receives its own later design and validation pass.
+
 ## Implementation Staging
 
 Planning should divide work into independently verifiable stages:
@@ -389,6 +392,7 @@ Items, affixes, passive-tree UI, and functional ailments begin only after this m
 The milestone is complete when:
 
 - Nine classes are catalog-loaded and usable as leaders and recruits.
+- `res://data/classes/marksman.tres` validates, references its dedicated attack Resource, is catalog-loaded, and is available through leader selection and recruitment.
 - Marksman demonstrably attacks slower, hits harder, and reaches farther than Ranger.
 - Every party member has independently resolved and displayed stats.
 - Individual upgrades affect only their chosen member.
