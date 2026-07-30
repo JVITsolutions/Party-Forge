@@ -63,8 +63,7 @@ func add_member_source(member_id: int, source: StatModifierSource) -> bool:
         for error: String in validation_errors:
             push_error(error)
         return false
-    source.owner_member_id = member_id
-    member.modifier_sources.append(source)
+    member._add_modifier_source(source)
     _invalidate_member(member_id)
     return true
 
@@ -189,7 +188,7 @@ func _sources_for(member: PartyMemberState) -> Array[StatModifierSource]:
         0,
         [StatModifier.create(&"damage", StatModifier.Operation.INCREASED, rank_bonus, class_rank_id, "%s Rank" % definition.display_name)],
     ))
-    for source: StatModifierSource in member.modifier_sources:
+    for source: StatModifierSource in member._owned_modifier_sources():
         sources.append(source)
 
     var party_modifiers: Array[StatModifier] = []
