@@ -15,7 +15,7 @@
 
 ## What can reuse current behavior
 
-Party Forge's actor and system scripts already know how to execute four attack kinds: `MELEE_CLEAVE`, `PROJECTILE`, `AREA_PROJECTILE`, and `HEAL`. They also know the supported trait stat IDs listed in Chapter 5. A new class can reuse that behavior by linking valid definitions; it does not need a new companion script merely because its numbers, color, or trait combination are new.
+Party Forge's party actor and executor already know how to execute four party-authored attack kinds: `MELEE_CLEAVE`, `PROJECTILE`, `AREA_PROJECTILE`, and `HEAL`. The full `AttackDefinition.Kind` enum also contains enemy-authored `DIRECT` and `AREA`; current party class execution does not support those two kinds. Party systems also know the supported trait stat IDs listed in Chapter 5. A new class can reuse supported party behavior by linking valid definitions; it does not need a new companion script merely because its numbers, color, or trait combination are new.
 
 Registration is separate from creation. `GameCatalog` loads explicit arrays of known class and trait paths. It does not scan `data/` automatically. A valid file can therefore load in isolation while remaining unavailable during a normal run.
 

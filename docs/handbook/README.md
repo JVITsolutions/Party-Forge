@@ -1,8 +1,8 @@
 # Party Forge Godot Handbook
 
-> **Verified architecture commit:** `a293f62`<br>
 > **Godot version:** `4.7.1`<br>
-> **Initial check date:** `2026-07-29`
+> **Initial architecture review:** Chapters 1–3 and 8–9, `2026-07-29`<br>
+> **Typed-combat review:** Chapters 4–7 and 10, `2026-07-30`
 
 ## Who this is for
 
@@ -20,7 +20,7 @@ Read the explanation, inspect the exact Party Forge paths, perform the exercise,
 
 Practice in `scenes/dev/` or another explicitly disposable sandbox before changing a production scene or data file. Apply a sandbox lesson to production only when the intended game design is approved and you can name the files that should change.
 
-> **Current limitation:** The handbook is verified against architecture commit `a293f62` and Godot `4.7.1`. Recheck file paths and behavior when either changes.
+> **Current limitation:** Review provenance is scoped by chapter rather than claimed for the handbook as a single snapshot. Use each chapter's **Handbook version** and **Last checked** banner, and recheck file paths and behavior when the project architecture or Godot version changes.
 
 ## Before every exercise
 
@@ -67,7 +67,7 @@ The numbered learning path is complete. Follow it in order on a first pass, then
 
 > **Party Forge convention:** A repository-specific choice, accompanied by a file path or symbol you can inspect.
 
-> **Current limitation:** A restriction in the implementation verified at `a293f62`; it may change later.
+> **Current limitation:** A restriction in the implementation as of that chapter's **Last checked** date; it may change later.
 
 > **Checkpoint:** An observable result you must verify before continuing.
 

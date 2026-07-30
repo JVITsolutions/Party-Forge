@@ -45,9 +45,10 @@ The current scenes make the split visible:
 | Scene | Attached script | Result |
 | --- | --- | --- |
 | `scenes/enemies/swarmer.tscn` | `scripts/enemies/swarmer.gd` | Chases the nearest living party actor and resolves its linked `swarmer_contact` attack. |
-| `scenes/enemies/spitter.tscn` | `scripts/enemies/spitter.gd` | Maintains range and fires hostile projectiles. |
+| `scenes/enemies/spitter.tscn` | `scripts/enemies/spitter.gd` | Maintains range, prepares its linked `spitter_projectile` attack when firing, and delivers that packet through a hostile projectile. |
+| `scenes/enemies/forge_guardian.tscn` | `scripts/enemies/forge_guardian.gd` | Uses linked `guardian_charge` for a swept charge that hits each crossed target at most once, and linked `guardian_shockwave` for an independently resolved area pulse. |
 
-Both scripts extend `EnemyActor`. Both scenes also assign their matching definition, health component, visible mesh, and collision shape.
+All three scripts extend `EnemyActor`. All three scenes also assign their matching definition, health component, visible mesh, and collision shape. The Forge Guardian is boss-only; `SpawnDirector` still spawns only Swarmers and Spitters during regular waves.
 
 > **Important:** Setting `behavior = SWARMER` does not choose `swarmer.gd`. The script attached to the instantiated scene determines what runs. The enum is validated data and descriptive metadata in the current architecture.
 

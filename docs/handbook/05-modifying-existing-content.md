@@ -20,7 +20,7 @@ A value is safe to tune only after you know where it is defined and where it is 
 
 | Editable value | Owning file or type | Observable effect |
 | --- | --- | --- |
-| Class health, armor, speed, rank power step, revive settings, formation distances, attacks | `ClassDefinition` Resources in `data/classes/` | Companion durability, movement, class-rank damage/healing scaling, revival, formation, and actions |
+| Class health, armor, speed, rank damage step, revive settings, formation distances, attacks | `ClassDefinition` Resources in `data/classes/` | Companion durability, movement, class-rank typed-damage scaling, revival, formation, and actions |
 | Attack kind, typed damage components or healing power, action tags, crit permission, cooldown, range, projectile speed, area radius | `AttackDefinition` Resources in `data/attacks/` | Which executor runs, typed impact strength, modifier context, attack frequency, reach, projectile travel, and effect size |
 | Trait stat, thresholds, bonuses, radius | `TraitDefinition` Resources in `data/traits/` | Party bonuses activated by duplicate trait counts |
 | Enemy health, speed, linked attacks, stat overrides, experience | `EnemyDefinition` Resources in `data/enemies/` | Enemy durability, movement, typed offense/defense, and experience drops |
@@ -37,7 +37,7 @@ A value is safe to tune only after you know where it is defined and where it is 
 Each file in `data/classes/` is a `ClassDefinition`. Its exported values include:
 
 - `max_health`, `armor`, and `move_speed` for base survivability and movement.
-- `class_rank_power_step` for the power gained from each class rank above one.
+- `class_rank_power_step` for the typed attack damage gained from each class rank above one. It does not scale healing.
 - `revive_delay` and `revive_health_fraction` for revival timing and returned health.
 - `role`, `preferred_distance`, `engagement_distance`, and `tether_distance` for formation intent.
 - `primary_attack` and the optional `support_action`, which reference `AttackDefinition` Resources.
@@ -50,12 +50,14 @@ The role chooses the companion's formation lane. `preferred_distance` and `tethe
 
 ## Attack values
 
-An `AttackDefinition` chooses one of four supported kinds:
+A party-authored `AttackDefinition` executed by `AttackExecutor` chooses one of four supported party kinds:
 
 - `MELEE_CLEAVE` applies a close area hit.
 - `PROJECTILE` launches a projectile at a target.
 - `AREA_PROJECTILE` launches a projectile that bursts in an area.
 - `HEAL` restores health instead of damaging an enemy.
+
+The full `AttackDefinition.Kind` enum also includes `DIRECT` and `AREA`. Those kinds are used by linked enemy attacks whose behavior scripts own delivery; they are not additional party execution kinds.
 
 The common fields are `cooldown`, `range`, `action_tags`, and `can_crit`. Projectile kinds also use `projectile_speed`; area-capable execution uses `area_radius`. Damaging actions own one or more `AttackDamageComponent` entries, each with a `damage_type_id` and positive `base_amount`. A `HEAL` owns positive `power` instead and must have no damage components.
 
@@ -83,13 +85,20 @@ The Vanguard trait uses `nearby_damage_reduction`. Its `effect_radius` is requir
 
 ## Enemy values and script constants
 
-An `EnemyDefinition` exports `max_health`, `move_speed`, typed `stat_overrides`, linked `attacks`, and `experience`. The behavior enum determines which exact attack IDs must be present: `swarmer_contact`, `spitter_projectile`, or both Guardian attacks. Validation checks attack links against the damage-type catalog and stat overrides against the stat catalog; it still cannot prove that the resulting balance feels good.
+An `EnemyDefinition` exports `max_health`, `move_speed`, typed `stat_overrides`, linked `attacks`, and `experience`. The behavior enum determines which exact attack IDs must be present:
+
+- `SWARMER` requires `swarmer_contact`, a close direct contact hit.
+- `SPITTER` requires `spitter_projectile`, whose packet is prepared when the Spitter fires and delivered by the hostile projectile.
+- `FORGE_GUARDIAN` requires both `guardian_charge`, prepared once per charge and resolved at most once for each crossed target, and `guardian_shockwave`, an area attack resolved independently against each target in its radius.
+
+Validation checks these attack links against the damage-type catalog and stat overrides against the stat catalog; it still cannot prove that the resulting balance feels good.
 
 Some enemy behavior remains in scripts:
 
 - `scripts/enemies/spitter.gd` owns `PREFERRED_DISTANCE = 8.0`, `RETREAT_DISTANCE = 5.0`, and the initial/fallback `FIRE_INTERVAL = 2.2`; its authored attack owns the normal cooldown.
 - `scripts/enemies/enemy_projectile.gd` owns delivery `SPEED = 6.0` and `MAX_LIFETIME = 3.0`.
 - `data/attacks/swarmer_contact.tres` owns Swarmer contact reach, cooldown, tags, and Physical damage.
+- `data/attacks/guardian_charge.tres` and `data/attacks/guardian_shockwave.tres` own the Forge Guardian's typed charge and radial damage respectively; Guardian movement, per-charge deduplication, and target collection remain behavior-script responsibilities.
 
 These delivery and spacing constants are not fields on `EnemyDefinition`. Change attack damage, range, and cooldown in the linked `AttackDefinition`; change movement spacing or projectile flight only in the owning behavior script and its tests.
 
