@@ -5,6 +5,7 @@ func run() -> Array[String]:
 	_test_card_renders_dictionary_and_emits(failures)
 	_test_hover_focus_share_detail_state(failures)
 	_test_tooltip_renders_dictionary(failures)
+	_test_tooltip_surface_is_opaque_and_readable(failures)
 	_test_clamped_placement(failures)
 	_test_long_content_scene_stays_inside_viewports(failures)
 	return failures
@@ -87,6 +88,53 @@ func _test_tooltip_renders_dictionary(failures: Array[String]) -> void:
 	TestAssertions.truthy(not tooltip.visible, "hide content conceals tooltip", failures)
 	anchor.free()
 	tooltip.free()
+
+func _test_tooltip_surface_is_opaque_and_readable(failures: Array[String]) -> void:
+	var tooltip_scene := load("res://scenes/ui/upgrade_tooltip_panel.tscn") as PackedScene
+	var tooltip := tooltip_scene.instantiate() as UpgradeTooltipPanel
+	TestAssertions.truthy(
+		tooltip.has_theme_stylebox_override("panel"),
+		"tooltip owns its panel surface instead of inheriting the HUD theme",
+		failures,
+	)
+	var surface := tooltip.get_theme_stylebox("panel") as StyleBoxFlat
+	TestAssertions.truthy(surface != null, "tooltip resolves a flat panel surface", failures)
+	if surface != null:
+		TestAssertions.truthy(surface.bg_color.a >= 0.95, "tooltip surface is effectively opaque", failures)
+		var title := tooltip.get_node("Content/Title") as Label
+		var contrast_ratio := _contrast_ratio(surface.bg_color, title.get_theme_color("font_color"))
+		TestAssertions.truthy(contrast_ratio >= 4.5, "tooltip text has accessible surface contrast", failures)
+		TestAssertions.truthy(
+			min(
+				min(surface.border_width_left, surface.border_width_top),
+				min(surface.border_width_right, surface.border_width_bottom),
+			) >= 2,
+			"tooltip surface has a readable border",
+			failures,
+		)
+		TestAssertions.truthy(surface.border_color.a >= 0.95, "tooltip border is effectively opaque", failures)
+		TestAssertions.truthy(
+			minf(
+				minf(surface.content_margin_left, surface.content_margin_top),
+				minf(surface.content_margin_right, surface.content_margin_bottom),
+			) >= 16.0,
+			"tooltip surface pads text away from its border",
+			failures,
+		)
+	TestAssertions.equal(tooltip.mouse_filter, Control.MOUSE_FILTER_IGNORE, "tooltip surface remains mouse-ignore", failures)
+	tooltip.free()
+
+	var level_up_scene := load("res://scenes/ui/level_up_panel.tscn") as PackedScene
+	var level_up_panel := level_up_scene.instantiate() as LevelUpPanel
+	var composed_tooltip := level_up_panel.get_node("TooltipPanel") as UpgradeTooltipPanel
+	TestAssertions.equal(composed_tooltip.z_index, 100, "composed tooltip remains above level-up content", failures)
+	TestAssertions.equal(composed_tooltip.mouse_filter, Control.MOUSE_FILTER_IGNORE, "composed tooltip remains mouse-ignore", failures)
+	level_up_panel.free()
+
+func _contrast_ratio(first: Color, second: Color) -> float:
+	var lighter := maxf(first.get_luminance(), second.get_luminance())
+	var darker := minf(first.get_luminance(), second.get_luminance())
+	return (lighter + 0.05) / (darker + 0.05)
 
 func _test_clamped_placement(failures: Array[String]) -> void:
 	var viewport := Vector2(1920.0, 1080.0)
