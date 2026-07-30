@@ -11,6 +11,8 @@ const DEBUG_ACCELERATION_PREFIX := "--party-forge-debug-acceleration="
 
 var state_machine: RefCounted
 var debug_time_scale := 1.0
+var run_seed := 1337
+var combat_rng := CombatRng.new(run_seed)
 
 func _init() -> void:
     process_mode = Node.PROCESS_MODE_ALWAYS
@@ -23,6 +25,10 @@ func _init() -> void:
 func _ready() -> void:
     process_mode = Node.PROCESS_MODE_ALWAYS
     debug_time_scale = debug_scale_from_arguments(OS.get_cmdline_user_args(), OS.is_debug_build())
+
+func configure_seed(seed_value: int) -> void:
+    run_seed = seed_value
+    combat_rng.reseed(run_seed)
 
 func _process(delta: float) -> void:
     advance_run_time(delta)
