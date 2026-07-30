@@ -8,7 +8,6 @@ signal died
 
 var max_health: float = 1.0
 var current_health: float = 1.0
-var armor: float = 0.0
 var is_leader: bool = false
 var is_downed: bool = false
 var is_dead: bool = false
@@ -20,10 +19,9 @@ var death_is_terminal: bool = false
 func _process(delta: float) -> void:
     advance_time(delta)
 
-func configure(maximum: float, armor_value: float, leader: bool, revive_seconds: float, revive_fraction: float, terminal_death: bool = false) -> void:
+func configure(maximum: float, leader: bool, revive_seconds: float, revive_fraction: float, terminal_death: bool = false) -> void:
     max_health = maxf(maximum, 1.0)
     current_health = max_health
-    armor = maxf(armor_value, 0.0)
     is_leader = leader
     death_is_terminal = terminal_death
     revive_delay = maxf(revive_seconds, 0.1)
@@ -31,11 +29,11 @@ func configure(maximum: float, armor_value: float, leader: bool, revive_seconds:
     is_downed = false
     is_dead = false
 
-func take_damage(raw_damage: float) -> float:
-    if is_dead or is_downed or raw_damage <= 0.0:
+func apply_damage(final_damage: float) -> float:
+    if is_dead or is_downed or not is_finite(final_damage) or final_damage <= 0.0:
         return 0.0
-    var applied: float = maxf(1.0, raw_damage - armor)
-    current_health = maxf(0.0, current_health - applied)
+    var previous := current_health
+    current_health = maxf(0.0, current_health - final_damage)
     health_changed.emit(current_health, max_health)
     if current_health <= 0.0:
         if is_leader or death_is_terminal:
@@ -45,7 +43,10 @@ func take_damage(raw_damage: float) -> float:
             is_downed = true
             revive_remaining = revive_delay
             downed.emit()
-    return applied
+    return previous - current_health
+
+func take_damage(final_damage: float) -> float:
+    return apply_damage(final_damage)
 
 func set_max_health(maximum: float, preserve_fraction: bool = true) -> void:
     var previous_maximum := maxf(max_health, 1.0)

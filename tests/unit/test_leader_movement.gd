@@ -30,7 +30,7 @@ func _test_party_actor_interface(failures: Array[String]) -> void:
     TestAssertions.near(actor.move_speed, definition.move_speed, 0.001, "actor uses class move speed", failures)
     var health: HealthComponent = actor.get_node("HealthComponent") as HealthComponent
     TestAssertions.near(health.max_health, definition.max_health, 0.001, "actor configures class health", failures)
-    TestAssertions.near(actor.receive_damage(10.0), maxf(1.0, 10.0 - definition.armor), 0.001, "actor forwards damage", failures)
+    TestAssertions.near(actor.receive_damage(10.0), 10.0, 0.001, "actor forwards final damage", failures)
     actor.free()
 
 func _test_scene_contracts(failures: Array[String]) -> void:

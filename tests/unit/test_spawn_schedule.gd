@@ -71,7 +71,6 @@ func _test_swarmer_targeting_and_contact_cooldown(failures: Array[String]) -> vo
     var downed_health := downed.get_node("HealthComponent") as HealthComponent
     downed_health.is_downed = true
     var living_health := living.get_node("HealthComponent") as HealthComponent
-    living_health.armor = 0.0
     var before := living_health.current_health
     var initial_candidates: Array[Node3D] = [downed, living]
     swarmer.call("advance_behavior", 0.1, initial_candidates)

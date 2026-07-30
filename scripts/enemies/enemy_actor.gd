@@ -34,7 +34,7 @@ func configure(enemy_definition: EnemyDefinition) -> void:
     if health == null:
         push_error("PARTY_FORGE_ENEMY_HEALTH_MISSING id=%s" % definition.id)
         return
-    health.configure(definition.max_health, 0.0, false, 1.0, 1.0, true)
+    health.configure(definition.max_health, false, 1.0, 1.0, true)
     if not health.health_changed.is_connected(_on_health_changed): health.health_changed.connect(_on_health_changed)
     if not health.died.is_connected(defeat): health.died.connect(defeat)
     reward_was_dropped = false

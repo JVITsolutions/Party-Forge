@@ -30,7 +30,7 @@ func configure(member_state: PartyMemberState) -> void:
     move_speed = definition.move_speed
     var health: HealthComponent = _health_component()
     if health != null:
-        health.configure(definition.max_health, definition.armor, member_state.is_leader, definition.revive_delay, definition.revive_health_fraction)
+        health.configure(definition.max_health, member_state.is_leader, definition.revive_delay, definition.revive_health_fraction)
         last_visual_health = health.current_health
         if not health.health_changed.is_connected(_on_visual_health_changed): health.health_changed.connect(_on_visual_health_changed)
         if not health.downed.is_connected(_on_visual_downed): health.downed.connect(_on_visual_downed)

@@ -280,7 +280,7 @@ func _create_actor(parent: Node, definition: ClassDefinition, team: int, actor_p
 
 func _set_health(actor: PartyActor, maximum: float, current: float, downed: bool = false, dead: bool = false) -> void:
     var health := _health(actor)
-    health.configure(maximum, 0.0, dead, 8.0, 0.5)
+    health.configure(maximum, dead, 8.0, 0.5)
     health.current_health = current
     health.is_downed = downed
     health.is_dead = dead

@@ -54,7 +54,6 @@ func _test_shockwave_telegraphs_before_damage(failures: Array[String]) -> void:
     var root := _new_root("BossShockwaveTest")
     var leader := _party_actor(root, Vector3(5.0, 0.0, 0.0))
     var health := leader.get_node("HealthComponent") as HealthComponent
-    health.armor = 0.0
     var boss := _boss(root, leader)
     boss.call("advance_behavior", 0.0)
     boss.call("advance_behavior", 1.45)
@@ -95,7 +94,6 @@ func _test_boss_death_once_and_cancels_hit_areas(failures: Array[String]) -> voi
     var root := _new_root("BossDeathTest")
     var leader := _party_actor(root, Vector3(4.0, 0.0, 0.0))
     var health := leader.get_node("HealthComponent") as HealthComponent
-    health.armor = 0.0
     var boss := _boss(root, leader)
     boss.call("advance_behavior", 0.0)
     boss.call("advance_behavior", 1.45)

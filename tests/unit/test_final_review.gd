@@ -137,7 +137,6 @@ func _test_vanguard_available_origin(failures: Array[String]) -> void:
     var vanguard := _actor_for_member(root, party, party.members[1], Vector3.ZERO)
     var ally := _actor_for_member(root, party, party.members[2], Vector3(3.0, 0.0, 0.0))
     var ally_health := ally.get_node("HealthComponent") as HealthComponent
-    ally_health.armor = 0.0
     TestAssertions.near(float(party.call("incoming_damage_multiplier", ally)), 0.88, 0.001, "near available Vanguard protects ally", failures)
     ally.receive_damage(20.0)
     TestAssertions.near(ally_health.current_health, 72.4, 0.001, "near Vanguard reduces actual incoming damage", failures)
@@ -145,7 +144,7 @@ func _test_vanguard_available_origin(failures: Array[String]) -> void:
     TestAssertions.near(float(party.call("incoming_damage_multiplier", ally)), 1.0, 0.001, "far Vanguard gives no protection", failures)
     ally.position = Vector3(3.0, 0.0, 0.0)
     var vanguard_health := vanguard.get_node("HealthComponent") as HealthComponent
-    vanguard_health.take_damage(9999.0)
+    vanguard_health.apply_damage(9999.0)
     TestAssertions.equal(party.trait_count(&"vanguard"), 2, "downed Vanguard still counts toward active trait", failures)
     TestAssertions.near(float(party.call("incoming_damage_multiplier", ally)), 1.0, 0.001, "downed Vanguard cannot originate protection", failures)
     root.free()
