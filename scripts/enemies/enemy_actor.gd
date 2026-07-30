@@ -72,12 +72,6 @@ func prepare_attack(attack_id: StringName) -> DamagePacket:
 func resolve_attack(packet: DamagePacket, target: CombatantAdapter) -> DamageResult:
     return DamageResolver.resolve(packet, target, combat_rng, damage_types)
 
-func receive_damage(amount: float) -> float:
-    var health := _health_component()
-    if health == null:
-        return 0.0
-    return health.take_damage(amount)
-
 func defeat() -> void:
     if defeat_handled:
         return

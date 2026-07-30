@@ -103,12 +103,6 @@ func advance_combat(delta: float, candidates: Array[CombatTarget]) -> void:
             support_controller.attack_ready.emit(support_controller.definition, heal_target)
     _try_primary_attack(primary, candidates, float(modifiers.get("range_multiplier")), float(modifiers.get("area_multiplier")))
 
-func receive_damage(amount: float) -> float:
-    var health: HealthComponent = _health_component()
-    if health == null:
-        return 0.0
-    return health.take_damage(amount)
-
 func get_combat_adapter(tags: Array[StringName]) -> CombatantAdapter:
     var health := _health_component()
     var identity := StringName("party:%d" % member_state.member_id) if member_state != null else &""

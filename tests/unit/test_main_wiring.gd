@@ -273,16 +273,17 @@ func _test_visual_language(failures: Array[String]) -> void:
     TestAssertions.truthy(heal_color.g > heal_color.r * 2.0, "healing burst is green", failures)
     TestAssertions.truthy(danger_color.r > danger_color.g * 4.0, "danger ring is red", failures)
     swarmer.call("configure", swarmer.get("definition"))
-    swarmer.call("receive_damage", 1.0)
+    (swarmer.get_node("HealthComponent") as HealthComponent).apply_damage(1.0)
     TestAssertions.equal(_mesh_color(swarmer), Color.WHITE, "enemy damage flash is white", failures)
     var health_bar := (load("res://scenes/ui/health_bar_3d.tscn") as PackedScene).instantiate() as Node3D
     TestAssertions.truthy((health_bar.get_node("Label3D") as Label3D).billboard != BaseMaterial3D.BILLBOARD_DISABLED, "3D health bar billboards", failures)
     TestAssertions.equal(health_bar.get("downed_color"), Color(0.45, 0.45, 0.45), "downed visual is gray", failures)
     var actor := (load("res://scenes/characters/companion.tscn") as PackedScene).instantiate() as PartyActor
     actor.configure(PartyMemberState.new(99, GameCatalog.load_defaults().class_by_id(&"ranger"), false))
-    actor.receive_damage(10.0)
+    var actor_health := actor.get_node("HealthComponent") as HealthComponent
+    actor_health.apply_damage(10.0)
     TestAssertions.equal(_mesh_color(actor), Color.WHITE, "party damage flash is white", failures)
-    actor.receive_damage(9999.0)
+    actor_health.apply_damage(9999.0)
     TestAssertions.equal(_mesh_color(actor), Color(0.45, 0.45, 0.45), "downed actor material is gray", failures)
     swarmer.free(); spitter.free(); orb.free(); heal.free(); danger.free(); health_bar.free()
     actor.free()

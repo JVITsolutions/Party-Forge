@@ -1,8 +1,8 @@
 # 6. Adding a Class, Attack, and Trait
 
-> **Handbook version:** Party Forge architecture verified at `a293f62`<br>
+> **Handbook version:** Party Forge Typed Combat Task 8 architecture<br>
 > **Godot version:** `4.7.1`<br>
-> **Last checked:** `2026-07-29`
+> **Last checked:** `2026-07-30`
 
 ## What you will learn
 
@@ -33,7 +33,10 @@ The disposable example is a recruit-only **Training Warden**. Create these exact
 | --- | --- | --- |
 | `data/training/training_warden_bolt.tres` | `id` | `training_warden_bolt` |
 |  | `kind` | `PROJECTILE` |
-|  | `power` | `10.0` |
+|  | `damage_components[0].damage_type_id` | `physical` |
+|  | `damage_components[0].base_amount` | `10.0` |
+|  | `action_tags` | `[projectile, ranged]` |
+|  | `can_crit` | `true` |
 |  | `cooldown` | `1.0` |
 |  | `range` | `10.0` |
 |  | `projectile_speed` | `14.0` |
@@ -67,10 +70,12 @@ The paths shown in the table are repository-relative. In Godot they appear with 
 1. In the FileSystem dock, right-click `res://data/`, choose **New Folder**, and create `training` if it does not exist.
 2. Right-click `res://data/training/`, choose **Create New > Resource**, select `AttackDefinition`, and choose **Create**.
 3. Save it as `training_warden_bolt.tres` in that folder.
-4. Enter the attack values from the specification table. Select `PROJECTILE` from the `Kind` list; do not type a numeric enum value.
-5. Save with **Ctrl+S** and confirm the Inspector header shows `res://data/training/training_warden_bolt.tres`.
+4. Enter the scalar attack values from the specification table. Select `PROJECTILE` from the `Kind` list; do not type a numeric enum value.
+5. Expand `Damage Components`, set the array size to one, and create a new `AttackDamageComponent` in element `0`. Set its type ID to `physical` and base amount to `10.0`.
+6. Expand `Action Tags`, set its size to two, and enter `projectile` and `ranged` once each. Enable `Can Crit`.
+7. Save with **Ctrl+S** and confirm the Inspector header shows `res://data/training/training_warden_bolt.tres`.
 
-This definition validates because its ID is non-empty, power, cooldown, and range are positive, and a projectile has a positive projectile speed. A zero area radius is intentional for this single-target projectile.
+This definition validates because its ID is non-empty, cooldown/range/projectile speed are finite and positive, its tags are nonempty and unique, and its one Physical component has a positive amount recognized by the baseline damage-type catalog. A zero area radius is intentional for this single-target projectile. Leave healing `power` at zero because damaging actions derive authored amounts only from components.
 
 ## Step 2: create the training trait
 

@@ -1,14 +1,14 @@
 # 10. Party Forge Architecture Reference
 
-> **Handbook version:** Party Forge architecture verified at `a293f62`<br>
+> **Handbook version:** Party Forge Typed Combat Task 8 architecture<br>
 > **Godot version:** `4.7.1`<br>
-> **Last checked:** `2026-07-29`
+> **Last checked:** `2026-07-30`
 
 ## How to use this reference
 
 Use this chapter after you understand the concepts in Chapters 1–9. Start with the change-owner decision table, follow its path to the owning data, scene, or script, then use the matching verification checklist.
 
-This is a map of the architecture verified at `a293f62`, not a promise that every folder is automatically discovered or every exported field is consumed. Confirm the live source before extending it.
+This is a map of the architecture after Typed Combat Task 8, not a promise that every folder is automatically discovered or every exported field is consumed. Confirm the live source before extending it.
 
 > **Party Forge convention:** Data definitions describe content, scenes compose runtime nodes, focused scripts own behavior, and `PartyForgeMain` wires the main run.
 
@@ -52,14 +52,16 @@ After leader selection, `PartyForgeMain` instances `Leader` under `Actors`, conf
 | `PartyForgeMain` | `scripts/game/main.gd` | Catalog gate, leader selection, service wiring, level-up application, boss creation, runtime health bars, result UI, hostile-effect cancellation | Definition values or low-level combat math |
 | `GameRun` | `scripts/game/game_run.gd` | Run-state facade, pause policy, elapsed-time forwarding, debug time scale, victory/defeat signals | Enemy weights or UI layout |
 | `RunStateMachine` | `scripts/game/run_state_machine.gd` | `SETUP`, `RUNNING`, `LEVEL_UP`, `BOSS`, `VICTORY`, `DEFEAT`; five-minute boss transition; terminal lock | Scene instancing |
-| `PartyManager` | `scripts/party/party_manager.gd` | Members, class ranks, trait counts/tiers, party-stat ranks, per-trait upgrades, four-member cap | Actor node movement or rendering |
+| `PartyManager` | `scripts/party/party_manager.gd` | Members, class ranks, trait counts/tiers, party-stat ranks, per-trait upgrades, action-aware stat snapshots, shared party combat dependencies, four-member cap | Actor node movement or rendering |
 | `ExperienceSystem` | `scripts/progression/experience_system.gd` | Experience totals, increasing thresholds, pending levels, `level_ready` | Choice generation or applying upgrades |
 | `SpawnDirector` | `scripts/game/spawn_director.gd` | Regular spawn timing, weighted ID sampling, two regular scene preloads, spawn markers, reward-orb creation | Catalog discovery or boss behavior |
 | `PartyActorSpawner` | `scripts/party/party_actor_spawner.gd` | Companion instancing, initial placement, combat configuration, companion health bars | Leader creation or party membership decisions |
 | `PartyActor` | `scripts/characters/party_actor.gd` | Definition-driven health/combat setup, target collection, attacks, visual health feedback, team identity, and combat-target record | Formation movement policy for companions |
 | `AttackController` | `scripts/combat/attack_controller.gd` | Attack definition, cooldown advancement, in-range target selection, `attack_ready` signal | Damage/projectile/heal execution |
-| `AttackExecutor` | `scripts/combat/attack_executor.gd` | Melee, projectile, area-projectile, and heal execution; effect spawning; resolved modifiers | Choosing new unsupported attack kinds |
-| `HealthComponent` | `scripts/combat/health_component.gd` | Health, armor reduction, down/death state, healing, revive timing, health signals | Actor movement, targeting, or rewards |
+| `AttackExecutor` | `scripts/combat/attack_executor.gd` | Party packet preparation/delivery, melee/projectile/area execution, separate healing, effect spawning | Defense formulas or choosing new unsupported attack kinds |
+| `DamageResolver` | `scripts/combat/damage_resolver.gd` | Typed packet preparation; crit, dodge, mitigation, incoming multiplier, block, final health application, and overkill-safe life steal order | Target selection, movement, or visual effects |
+| `RecoveryController` | `scripts/combat/recovery_controller.gd` | Frame-rate-independent regeneration from current resolved stats | Damage mitigation or revive timing |
+| `HealthComponent` | `scripts/combat/health_component.gd` | Final health application, down/death state, healing, revive timing, and health signals | Armor/resistance/dodge/block formulas, actor movement, targeting, or rewards |
 | `HUD` | `scripts/ui/hud.gd` and `scenes/ui/hud.tscn` | Status text, party/trait display, boss status and banner, composition of panels | Applying an upgrade choice |
 | `LevelUpPanel` | `scripts/ui/level_up_panel.gd` and `scenes/ui/level_up_panel.tscn` | Three choice buttons, validity display, one `choice_selected` signal | Generating choices or mutating party state |
 | `RunResultPanel` | `scripts/ui/run_result_panel.gd` and `scenes/ui/run_result_panel.tscn` | Victory/defeat display and restart/quit requests | Deciding the run result |
@@ -69,12 +71,13 @@ After leader selection, `PartyForgeMain` instances `Leader` under `Actors`, conf
 | Type | Schema | External instances | Describes |
 | --- | --- | --- | --- |
 | `ClassDefinition` | `scripts/data/class_definition.gd` | `data/classes/*.tres` | Identity, role, color, trait IDs, base stats, revive settings, formation distances, primary attack, optional support action |
-| `AttackDefinition` | `scripts/data/attack_definition.gd` | `data/attacks/*.tres` | Attack kind, power, cooldown, range, projectile speed, and area radius |
+| `AttackDefinition` | `scripts/data/attack_definition.gd` | `data/attacks/*.tres` | Attack kind, typed damage components or heal power, action tags, crit permission, cooldown, range, projectile speed, and area radius |
+| `DamageTypeDefinition` | `scripts/data/damage_type_definition.gd` | `data/damage_types/core_damage_types.tres` | Damage-type identity, offense/defense stat mappings, mitigation rule, and resistance bounds |
 | `TraitDefinition` | `scripts/data/trait_definition.gd` | `data/traits/*.tres` | Trait identity, supported stat ID, count thresholds, bonus values, and optional effect radius |
-| `EnemyDefinition` | `scripts/data/enemy_definition.gd` | `data/enemies/*.tres` | Enemy identity, descriptive behavior enum, health, speed, contact damage, and experience |
+| `EnemyDefinition` | `scripts/data/enemy_definition.gd` | `data/enemies/*.tres` | Enemy identity, behavior enum, health, speed, typed stat overrides, linked attacks, and experience |
 | `UpgradeTuning` | `scripts/data/upgrade_tuning.gd` | `data/upgrades/default_upgrades.tres` | Party-stat maximum rank and per-rank party/trait upgrade steps |
 
-Definitions are Resources, not running actors. `GameCatalog` explicitly loads class, trait, and enemy definitions. Attack definitions are reached through class Resource references rather than an attack registry.
+Definitions are Resources, not running actors. `GameCatalog` explicitly loads class, trait, enemy, stat, and damage-type definitions. Party attacks are reached through class references; enemy definitions link their behavior-required attacks explicitly.
 
 ## Main run data flow
 
@@ -97,31 +100,32 @@ Definitions are Resources, not running actors. `GameCatalog` explicitly loads cl
 4. A recruit choice calls `PartyManager.recruit()` while fewer than four members exist.
 5. `member_added` reaches `PartyActorSpawner`, which instances and configures a companion plus health bar.
 6. Trait counts are recalculated from every member's class trait IDs; the highest achieved threshold becomes active.
-7. Class-rank, party-stat, and per-trait upgrades change manager state; `CombatModifiers` reads that state when an action executes.
+7. Class-rank, party-stat, and per-trait upgrades invalidate manager snapshots; action-aware stats feed `DamageResolver`, while `CombatModifiers` retains movement/timing values.
 8. Companion movement uses role, preferred distance, tether distance, leader position, hostile position, and party separation.
 
-`class_rank_power_step` scales power for ranks above one. Recruiting a duplicate class contributes another member and its traits but does not itself increment the class rank.
+`class_rank_power_step` scales typed attack damage for ranks above one. Recruiting a duplicate class contributes another member and its traits but does not itself increment the class rank.
 
 ## Combat flow
 
 1. `PartyActor` advances its `AttackController` cooldown and collects live `CombatTarget` records from `party_actors` and `hostile_actors`.
 2. Primary target selection rejects unavailable and same-team targets and applies range; support healing separately chooses an injured, available same-team target in range.
 3. A ready controller emits `attack_ready(definition, target)`.
-4. `AttackExecutor` resolves class-rank, party-stat, and active-trait modifiers at execution time.
-5. The attack kind chooses melee cleave, projectile/area projectile, or heal execution.
-6. Damage reaches an actor's `receive_damage()`, which delegates to `HealthComponent`; healing calls the target health component.
-7. Projectiles and timed effects are parented under `Effects` when that container was supplied and clean themselves up after impact or lifetime.
-8. Health signals drive damage flash, downed/revived presentation, health bars, leader defeat, and enemy defeat.
+4. `AttackExecutor` gets the source combat adapter with normalized action tags. Healing reads `healing_power` directly and creates no damage packet.
+5. A damaging execution prepares one immutable `DamagePacket`; a shared crit result belongs to that execution.
+6. Melee, projectile, and area delivery obtain current target adapters, deduplicate and sort multi-target IDs, then call `DamageResolver.resolve()` independently per defender.
+7. The resolver performs target dodge, typed mitigation/resistance, incoming modifiers such as Vanguard, block, final `HealthComponent.apply_damage()`, and actual-health-based life steal in that order.
+8. Party and enemy projectiles carry packets plus the shared RNG/type dependencies; timed effects clean themselves up after impact or lifetime.
+9. `RecoveryController` advances continuous regeneration before attacks, while health signals drive flash, down/revive presentation, bars, leader defeat, and enemy defeat.
 
-The current common power multiplier includes Party Damage and is also used by healing. Damage and healing are not separated upgrade paths at this architecture.
+Damage and healing are separate: Party Damage scales damaging packets, while heals use action-aware `healing_power` without entering `DamageResolver`.
 
 ## Enemy and reward flow
 
 1. `SpawnSchedule.sample(elapsed)` returns the current interval plus Swarmer and Spitter weights for times from zero to under 300 seconds.
 2. `SpawnDirector.sample_enemy_id()` selects `swarmer` or `spitter` from those weights.
-3. `SpawnDirector.spawn_enemy()` accepts only those two regular IDs, chooses an off-camera marker, instances the matching preloaded scene, configures target/effects support, and connects `reward_dropped`.
+3. `SpawnDirector.spawn_enemy()` accepts only those two regular IDs, chooses an off-camera marker, instances the matching preloaded scene, assigns a deterministic `enemy:<sequence>` combat identity plus shared RNG/type dependencies, configures target/effects support, and connects `reward_dropped`.
 4. The scene's attached script—not `EnemyDefinition.behavior`—runs Swarmer or Spitter behavior.
-5. `EnemyActor.configure()` applies definition health and connects terminal health to guarded defeat.
+5. `EnemyActor.configure()` applies definition health and connects terminal health to guarded defeat; behavior scripts prepare exact linked attack IDs and resolve them through adapters.
 6. On defeat, `EnemyActor` emits one reward with the definition's experience and queues itself for deletion.
 7. `SpawnDirector._on_reward_dropped()` instances an experience orb under `Effects`.
 8. The orb follows the leader within pickup radius; collection adds experience to `ExperienceSystem` and frees the orb.
@@ -145,7 +149,7 @@ The Forge Guardian is boss-only. `PartyForgeMain` instances it in response to th
 | --- | --- | --- |
 | Catalog | `GameCatalog.CLASS_PATHS`, `TRAIT_PATHS`, and `ENEMY_PATHS` are explicit arrays | New files under `data/` are not discovered automatically |
 | Leader selection | Four buttons and callback IDs: `fighter`, `ranger`, `mage`, `cleric` in `PartyForgeMain._wire_static_ui()` | A registered recruit does not automatically become a selectable leader |
-| Attack kinds | `MELEE_CLEAVE`, `PROJECTILE`, `AREA_PROJECTILE`, `HEAL` | A new kind needs validation, executor behavior, scene/effect support, and tests |
+| Attack kinds | Party: `MELEE_CLEAVE`, `PROJECTILE`, `AREA_PROJECTILE`, `HEAL`; enemy behaviors additionally use `DIRECT` and `AREA` | A new kind needs validation, owning behavior/delivery support, and tests |
 | Trait effects | `attack_speed`, `nearby_damage_reduction`, `projectile_speed_and_range`, `area_size`, `cooldown_reduction`, `healing_and_revive`, `support_power` | A new stat ID needs modifier/party behavior and tests |
 | Regular enemy scenes | `SWARMER_SCENE` and `SPITTER_SCENE`; accepted IDs `swarmer` and `spitter` | Catalog registration alone cannot make a regular enemy spawn |
 | Spawn weights | `SpawnBand` has only `swarmer_weight` and `spitter_weight` | A third weighted enemy changes schedule and sampling architecture |

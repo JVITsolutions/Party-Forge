@@ -57,9 +57,9 @@ func _test_typed_party_delivery_source_contract(failures: Array[String]) -> void
     var modifiers_source := FileAccess.get_file_as_string("res://scripts/combat/combat_modifiers.gd")
     var party_actor_source := FileAccess.get_file_as_string("res://scripts/characters/party_actor.gd")
     TestAssertions.truthy(not executor_source.contains("_legacy_damage_amount"), "typed executor removes temporary legacy damage bridge", failures)
-    TestAssertions.truthy(not executor_source.contains("receive_damage"), "typed executor carries no scalar receive_damage delivery", failures)
-    TestAssertions.truthy(not projectile_source.contains("var damage :=") and not projectile_source.contains("receive_damage"), "party projectile stores packet instead of scalar damage", failures)
-    TestAssertions.truthy(not area_source.contains("var damage :=") and not area_source.contains("receive_damage"), "area burst stores packet instead of scalar damage", failures)
+    TestAssertions.truthy(executor_source.contains("DamageResolver.resolve"), "typed executor resolves packets", failures)
+    TestAssertions.truthy(not projectile_source.contains("var damage :="), "party projectile stores packet instead of scalar damage", failures)
+    TestAssertions.truthy(not area_source.contains("var damage :="), "area burst stores packet instead of scalar damage", failures)
     TestAssertions.truthy(not modifiers_source.contains("power_multiplier"), "combat movement facade carries no damaging power", failures)
     var recovery_index := party_actor_source.find("recovery_controller.advance(delta)")
     var attack_index := party_actor_source.find("advance_combat(delta, _collect_combat_targets())")
@@ -164,8 +164,15 @@ func _test_vanguard_available_origin(failures: Array[String]) -> void:
         var adapter := ally.call("get_combat_adapter", physical_tags) as CombatantAdapter
         TestAssertions.equal(adapter.combatant_id, &"party:3", "party adapter uses stable member identity", failures)
         TestAssertions.near(adapter.incoming_damage_multiplier(null), 0.88, 0.001, "Vanguard multiplier exists on combat adapter", failures)
-    ally.receive_damage(20.0)
-    TestAssertions.near(ally_health.current_health, 70.0, 0.001, "legacy actor damage path no longer applies Vanguard", failures)
+    var swarmer := (load("res://scenes/enemies/swarmer.tscn") as PackedScene).instantiate() as EnemyActor
+    swarmer.configure(swarmer.definition)
+    swarmer.configure_combat(&"vanguard_audit", party.combat_rng, catalog.damage_types)
+    var contact_packet := swarmer.prepare_attack(&"swarmer_contact")
+    var contact_result := swarmer.resolve_attack(contact_packet, ally.get_combat_adapter(contact_packet.action_tags))
+    TestAssertions.truthy(contact_result.valid, "authored contact attack resolves through typed combat", failures)
+    TestAssertions.near(contact_result.incoming_multiplier, 0.88, 0.001, "typed damage applies nearby Vanguard", failures)
+    TestAssertions.near(ally_health.current_health, 90.0 - 8.0 * 100.0 / 101.0 * 0.88, 0.001, "typed contact applies armor and Vanguard in resolver order", failures)
+    swarmer.free()
     ally.position = Vector3(7.0, 0.0, 0.0)
     TestAssertions.near(float(party.call("incoming_damage_multiplier", ally)), 1.0, 0.001, "far Vanguard gives no protection", failures)
     ally.position = Vector3(3.0, 0.0, 0.0)
@@ -204,7 +211,7 @@ func _test_divine_healing_and_actual_revive(failures: Array[String]) -> void:
     TestAssertions.near(ranger_health.current_health, 40.0 + 18.0 * 1.38, 0.001, "Divine upgrade further strengthens resolved healing", failures)
 
     ranger_health.current_health = ranger_health.max_health
-    ranger.receive_damage(9999.0)
+    ranger_health.apply_damage(9999.0)
     TestAssertions.truthy(ranger_health.is_downed, "companion naturally enters downed lifecycle", failures)
     TestAssertions.near(ranger_health.revive_remaining, 6.2, 0.001, "upgraded Divine shortens configured revive delay", failures)
     ranger_health.advance_time(6.19)
@@ -222,8 +229,8 @@ func _test_enemy_health_component_and_bars(failures: Array[String]) -> void:
         if health != null:
             enemy.call("configure", enemy.get("definition"))
             var before := health.current_health
-            enemy.call("receive_damage", 1.0)
-            TestAssertions.near(health.current_health, before - 1.0, 0.001, "%s delegates damage to HealthComponent" % scene_path, failures)
+            health.apply_damage(1.0)
+            TestAssertions.near(health.current_health, before - 1.0, 0.001, "%s shares HealthComponent state" % scene_path, failures)
             TestAssertions.near(float(enemy.get("current_health")), health.current_health, 0.001, "%s public health mirrors component" % scene_path, failures)
         enemy.free()
 
@@ -232,8 +239,9 @@ func _test_enemy_health_component_and_bars(failures: Array[String]) -> void:
     root.add_child(swarmer)
     var rewards: Array[int] = []
     swarmer.connect("reward_dropped", func(value: int, _position: Vector3) -> void: rewards.append(value))
-    swarmer.call("receive_damage", 9999.0)
-    swarmer.call("receive_damage", 9999.0)
+    var swarmer_health := swarmer.get_node("HealthComponent") as HealthComponent
+    swarmer_health.apply_damage(9999.0)
+    swarmer_health.apply_damage(9999.0)
     swarmer.call("defeat")
     TestAssertions.equal(rewards.size(), 1, "shared enemy death drops reward exactly once", failures)
 
@@ -245,7 +253,7 @@ func _test_enemy_health_component_and_bars(failures: Array[String]) -> void:
     TestAssertions.truthy(regular_bar != null, "regular enemy receives shared health bar", failures)
     if regular_bar != null:
         var before_text := (regular_bar.get_node("Label3D") as Label3D).text
-        regular.call("receive_damage", 6.0)
+        (regular.get_node("HealthComponent") as HealthComponent).apply_damage(6.0)
         TestAssertions.truthy((regular_bar.get_node("Label3D") as Label3D).text != before_text, "regular enemy bar updates from shared health flow", failures)
     main.call("_spawn_boss")
     var boss := main.get("boss") as Node3D
@@ -254,7 +262,7 @@ func _test_enemy_health_component_and_bars(failures: Array[String]) -> void:
     TestAssertions.truthy(boss_bar != null, "boss receives shared billboard health bar", failures)
     if boss_bar != null:
         var boss_before := (boss_bar.get_node("Label3D") as Label3D).text
-        boss.call("receive_damage", 750.0)
+        (boss.get_node("HealthComponent") as HealthComponent).apply_damage(750.0)
         TestAssertions.truthy((boss_bar.get_node("Label3D") as Label3D).text != boss_before, "boss bar updates from shared health flow", failures)
     _free_main(main)
     root.free()

@@ -104,8 +104,9 @@ func _test_boss_death_once_and_cancels_hit_areas(failures: Array[String]) -> voi
     var defeated: Array[int] = [0]
     boss.connect("boss_defeated", func() -> void: defeated[0] += 1)
     var before := health.current_health
-    boss.call("receive_damage", 99999.0)
-    boss.call("receive_damage", 99999.0)
+    var boss_health := boss.get_node("HealthComponent") as HealthComponent
+    boss_health.apply_damage(99999.0)
+    boss_health.apply_damage(99999.0)
     boss.call("defeat")
     boss.call("advance_behavior", 2.0)
     TestAssertions.equal(defeated[0], 1, "boss death emits exactly once", failures)

@@ -86,7 +86,8 @@ func down_selected_companion() -> bool:
     if companions.is_empty() or selector.selected < 0 or selector.selected >= companions.size():
         return false
     var companion := companions[selector.selected] as PartyActor
-    companion.receive_damage(1000000.0)
+    var health := companion.get_node("HealthComponent") as HealthComponent
+    health.apply_damage(health.current_health)
     refresh_status()
     return true
 

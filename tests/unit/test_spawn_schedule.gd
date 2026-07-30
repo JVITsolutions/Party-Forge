@@ -53,8 +53,9 @@ func _test_enemy_reward_exactly_once(failures: Array[String]) -> void:
     root.add_child(enemy)
     var rewards: Array = []
     enemy.connect("reward_dropped", func(value: int, drop_position: Vector3) -> void: rewards.append([value, drop_position]))
-    enemy.call("receive_damage", 9999.0)
-    enemy.call("receive_damage", 9999.0)
+    var health := enemy.get_node("HealthComponent") as HealthComponent
+    health.apply_damage(9999.0)
+    health.apply_damage(9999.0)
     enemy.call("defeat")
     TestAssertions.equal(rewards.size(), 1, "enemy emits one reward after repeated lethal calls", failures)
     if rewards.size() == 1:

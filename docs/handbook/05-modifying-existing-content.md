@@ -1,8 +1,8 @@
 # 5. Modifying Existing Party Forge Content Safely
 
-> **Handbook version:** Party Forge architecture verified at `a293f62`<br>
+> **Handbook version:** Party Forge Typed Combat Task 8 architecture<br>
 > **Godot version:** `4.7.1`<br>
-> **Last checked:** `2026-07-29`
+> **Last checked:** `2026-07-30`
 
 ## What you will learn
 
@@ -21,11 +21,11 @@ A value is safe to tune only after you know where it is defined and where it is 
 | Editable value | Owning file or type | Observable effect |
 | --- | --- | --- |
 | Class health, armor, speed, rank power step, revive settings, formation distances, attacks | `ClassDefinition` Resources in `data/classes/` | Companion durability, movement, class-rank damage/healing scaling, revival, formation, and actions |
-| Attack kind, power, cooldown, range, projectile speed, area radius | `AttackDefinition` Resources in `data/attacks/` | Which executor runs, impact strength, attack frequency, reach, projectile travel, and effect size |
+| Attack kind, typed damage components or healing power, action tags, crit permission, cooldown, range, projectile speed, area radius | `AttackDefinition` Resources in `data/attacks/` | Which executor runs, typed impact strength, modifier context, attack frequency, reach, projectile travel, and effect size |
 | Trait stat, thresholds, bonuses, radius | `TraitDefinition` Resources in `data/traits/` | Party bonuses activated by duplicate trait counts |
-| Enemy health, speed, contact damage, experience | `EnemyDefinition` Resources in `data/enemies/` | Enemy durability, movement, damage, and experience drops |
+| Enemy health, speed, linked attacks, stat overrides, experience | `EnemyDefinition` Resources in `data/enemies/` | Enemy durability, movement, typed offense/defense, and experience drops |
 | Spitter spacing and firing cadence | `scripts/enemies/spitter.gd` constants | Retreat distance, preferred distance, and time between shots |
-| Swarmer contact reach and cadence | `scripts/enemies/swarmer.gd` constants | Contact-hit range and time between hits |
+| Swarmer contact reach, cadence, tags, and damage | `data/attacks/swarmer_contact.tres` | Contact-hit eligibility, cooldown, modifier context, and Physical amount |
 | Spawn interval and enemy mix over five minutes | `scripts/game/spawn_schedule.gd` time bands | Encounter density and the Swarmer/Spitter ratio as a run advances |
 | Party upgrade limits and per-rank steps | `UpgradeTuning` Resource | The party-stat maximum rank and the per-rank steps for party stats and trait upgrades |
 | Current party upgrade ranks | `PartyManager` | Health, Damage, Move Speed, Attack Speed, and Pickup Range levels, plus separate ranks for each active trait |
@@ -57,9 +57,9 @@ An `AttackDefinition` chooses one of four supported kinds:
 - `AREA_PROJECTILE` launches a projectile that bursts in an area.
 - `HEAL` restores health instead of damaging an enemy.
 
-The common fields are `power`, `cooldown`, and `range`. Projectile kinds also use `projectile_speed`; area-capable execution uses `area_radius`.
+The common fields are `cooldown`, `range`, `action_tags`, and `can_crit`. Projectile kinds also use `projectile_speed`; area-capable execution uses `area_radius`. Damaging actions own one or more `AttackDamageComponent` entries, each with a `damage_type_id` and positive `base_amount`. A `HEAL` owns positive `power` instead and must have no damage components.
 
-Validation requires a non-empty ID and positive power, cooldown, and range. `PROJECTILE` and `AREA_PROJECTILE` also require a positive projectile speed. The validator does not require a positive area radius, so validation alone cannot catch an `AREA_PROJECTILE` configured with a useless zero-radius burst. Likewise, a melee cleave normally needs a practical positive area radius even though the validator permits zero. A plain `PROJECTILE` may intentionally use `area_radius = 0.0` for a single-target impact.
+Validation requires a non-empty ID, finite positive cooldown and range, normalized nonempty action tags, and valid kind-specific fields. Damaging actions require at least one unique typed component; heals require positive power, cannot crit, and reject damage components. `PROJECTILE` and `AREA_PROJECTILE` require positive projectile speed. Area radius must be finite and nonnegative, so a plain projectile may intentionally use `0.0`; a useful cleave or area burst still needs a practical positive radius.
 
 > **Godot rule:** The Inspector restricts an exported enum to known choices, but the runtime behavior still has to support the selected kind. Adding a new enum entry is behavior work, not a data-only balance edit.
 
@@ -83,14 +83,15 @@ The Vanguard trait uses `nearby_damage_reduction`. Its `effect_radius` is requir
 
 ## Enemy values and script constants
 
-An `EnemyDefinition` exports `max_health`, `move_speed`, `contact_damage`, and `experience`. These determine how long an enemy survives, how quickly it moves, the damage it deals, and the experience reward it drops. Validation currently checks that health and speed are positive; it does not prove that damage and experience are well balanced.
+An `EnemyDefinition` exports `max_health`, `move_speed`, typed `stat_overrides`, linked `attacks`, and `experience`. The behavior enum determines which exact attack IDs must be present: `swarmer_contact`, `spitter_projectile`, or both Guardian attacks. Validation checks attack links against the damage-type catalog and stat overrides against the stat catalog; it still cannot prove that the resulting balance feels good.
 
 Some enemy behavior remains in scripts:
 
-- `scripts/enemies/spitter.gd` owns `PREFERRED_DISTANCE = 8.0`, `RETREAT_DISTANCE = 5.0`, and `FIRE_INTERVAL = 2.2`.
-- `scripts/enemies/swarmer.gd` owns `CONTACT_RANGE = 0.9` and `CONTACT_COOLDOWN = 0.8`.
+- `scripts/enemies/spitter.gd` owns `PREFERRED_DISTANCE = 8.0`, `RETREAT_DISTANCE = 5.0`, and the initial/fallback `FIRE_INTERVAL = 2.2`; its authored attack owns the normal cooldown.
+- `scripts/enemies/enemy_projectile.gd` owns delivery `SPEED = 6.0` and `MAX_LIFETIME = 3.0`.
+- `data/attacks/swarmer_contact.tres` owns Swarmer contact reach, cooldown, tags, and Physical damage.
 
-These constants are not fields on `EnemyDefinition`. Changing the Spitter Resource cannot alter its preferred spacing, and changing the Swarmer Resource cannot alter its contact cadence.
+These delivery and spacing constants are not fields on `EnemyDefinition`. Change attack damage, range, and cooldown in the linked `AttackDefinition`; change movement spacing or projectile flight only in the owning behavior script and its tests.
 
 The five-minute spawn curve is also script-owned in `SpawnSchedule`:
 
@@ -107,19 +108,19 @@ Times before zero or at least 300 seconds have no schedule band. Editing these b
 
 `UpgradeTuning` owns the maximum rank and per-rank step for upgrades. `PartyManager` tracks five party-stat ranks: Health, Damage, Move Speed, Attack Speed, and Pickup Range. It also keeps a separate upgrade rank for each active trait. Most party-stat multipliers use `1.0 + rank * step`; a trait's own upgrade rank scales that trait's active tier value.
 
-There is an important coupling in the current implementation: the Party Damage multiplier contributes to the common power multiplier, and healing actions use that power multiplier too. Party Damage therefore increases both attack damage and healing. Do not document, balance, or test them as separated stats until the implementation actually separates them.
+Damage and healing now have separate resolver paths. Party Damage scales typed damage components during packet preparation; healing reads `healing_power` and creates no damage packet. Balance and test them independently.
 
 Spawn timing is independent of these party ranks. It is selected from the five script-owned time bands above.
 
 ## Exercise: make one reversible balance change
 
-This exercise changes the Spitter from a one-hit target for the Fighter's 18-power cleave into a two-hit target, then restores the original value.
+This exercise changes the Spitter from a one-hit target for the Fighter's 18-Physical cleave into a two-hit target, then restores the original value.
 
 1. Before editing, run `git status --short` and note the current output. Do not continue if `data/enemies/spitter.tres` already has an unrelated change.
 2. In the FileSystem dock, select `res://data/enemies/spitter.tres`.
 3. In the Inspector, confirm that `Max Health` is `18.0`. Change it to `20.0`, then save the Resource with **Ctrl+S**.
 4. Double-click `res://scenes/dev/combat_sandbox.tscn` to open it, then run the current scene with **F6**.
-5. Spawn a Spitter and move the Fighter close enough to cleave it. Observe that the first 18-power hit leaves a small amount of health and the second hit defeats it.
+5. Spawn a Spitter and move the Fighter close enough to cleave it. Observe that the first 18-Physical hit leaves a small amount of health and the second hit defeats it.
 6. Stop the sandbox. Set `Max Health` back to `18.0` in the Inspector and save.
 7. Run the same sandbox action again. Observe the restored one-hit result.
 8. In a terminal at the repository root, run `git diff -- data/enemies/spitter.tres`. It should print nothing. Run `git status --short` and compare it with the output from step 1.
@@ -155,7 +156,7 @@ A passing validator does not prove game feel. A good-looking sandbox moment does
 - Setting an area attack's radius to zero because the validator permits it.
 - Renaming `vanguard` or `divine` without updating their ID-based behavior and tests.
 - Looking for Spitter cadence, Swarmer contact timing, or spawn bands in enemy `.tres` files.
-- Assuming Party Damage and healing are independent upgrade paths.
+- Editing healing power and expecting it to change damaging packets, or editing Party Damage and expecting it to strengthen healing.
 - Changing several values before observing any one of them.
 - Treating a parse or validation pass as proof that the balance result feels correct.
 - Forgetting to restore a disposable exercise and confirm that its diff is empty.

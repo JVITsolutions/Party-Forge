@@ -1,8 +1,8 @@
 # 4. Resources and Party Forge Content Data
 
-> **Handbook version:** Party Forge architecture verified at `a293f62`<br>
+> **Handbook version:** Party Forge Typed Combat Task 8 architecture<br>
 > **Godot version:** `4.7.1`<br>
-> **Last checked:** `2026-07-29`
+> **Last checked:** `2026-07-30`
 
 ## What you will learn
 
@@ -22,8 +22,8 @@ Party Forge separates the two:
 
 - `PartyActor` is a node that moves and attacks.
 - `ClassDefinition` is a Resource that describes its health, movement, traits, color, and attacks.
-- `EnemyActor` is a node that chases, takes damage, and drops a reward.
-- `EnemyDefinition` is a Resource that describes an enemy ID, behavior kind, health, speed, damage, and experience.
+- `EnemyActor` is a node that moves, exposes a typed combat adapter, executes linked attacks, and drops a reward.
+- `EnemyDefinition` is a Resource that describes an enemy ID, behavior kind, health, speed, stat overrides, linked attacks, and experience.
 
 The node reads a definition and performs work. The definition does not search for targets or advance time.
 
@@ -56,16 +56,19 @@ Choose external data when multiple owners should deliberately reference one name
 class_name AttackDefinition
 extends Resource
 
-enum Kind { MELEE_CLEAVE, PROJECTILE, AREA_PROJECTILE, HEAL }
+enum Kind { MELEE_CLEAVE, PROJECTILE, AREA_PROJECTILE, HEAL, DIRECT, AREA }
 
 @export var id: StringName
 @export var kind: Kind
-@export var power: float = 1.0
+@export var power: float = 0.0
 @export var cooldown: float = 1.0
 @export var range: float = 1.0
+@export var damage_components: Array[AttackDamageComponent] = []
+@export var action_tags: Array[StringName] = []
+@export var can_crit := false
 ```
 
-Because the script has `class_name AttackDefinition` and `extends Resource`, `AttackDefinition` is available as a custom Resource type in the editor. Its exported fields appear with appropriate controls: an enum list for `kind`, numeric editors for the floats, and a text field for the ID.
+Because the script has `class_name AttackDefinition` and `extends Resource`, `AttackDefinition` is available as a custom Resource type in the editor. Its exported fields appear with appropriate controls: an enum list for `kind`, numeric editors, typed arrays for components/tags, a checkbox for crit permission, and a text field for the ID.
 
 To edit an external definition:
 
@@ -87,10 +90,11 @@ The Resource scripts define schemas under `res://scripts/data/`; instances live 
 
 | Definition type | Schema path | Current instance paths | Describes |
 |---|---|---|---|
-| `AttackDefinition` | `res://scripts/data/attack_definition.gd` | `res://data/attacks/*.tres` | Attack kind, power, cooldown, range, projectile speed, and area radius. |
+| `AttackDefinition` | `res://scripts/data/attack_definition.gd` | `res://data/attacks/*.tres` | Attack kind, typed damage components or heal power, action tags, crit permission, cooldown, range, projectile speed, and area radius. |
+| `DamageTypeDefinition` | `res://scripts/data/damage_type_definition.gd` | `res://data/damage_types/core_damage_types.tres` | Type identity, offense/defense stat mappings, mitigation rule, and resistance bounds. |
 | `ClassDefinition` | `res://scripts/data/class_definition.gd` | `res://data/classes/*.tres` | Class identity, role, traits, health, movement, spacing, and referenced primary/support attacks. |
 | `TraitDefinition` | `res://scripts/data/trait_definition.gd` | `res://data/traits/*.tres` | Trait identity, supported stat ID, activation tiers, values, and optional effect radius. |
-| `EnemyDefinition` | `res://scripts/data/enemy_definition.gd` | `res://data/enemies/*.tres` | Enemy identity, behavior enum, health, speed, contact damage, and experience reward. |
+| `EnemyDefinition` | `res://scripts/data/enemy_definition.gd` | `res://data/enemies/*.tres` | Enemy identity, behavior enum, health, speed, typed stat overrides, linked attacks, and experience reward. |
 | `UpgradeTuning` | `res://scripts/data/upgrade_tuning.gd` | `res://data/upgrades/default_upgrades.tres` | Party-stat maximum rank and per-rank tuning steps. |
 
 `ClassDefinition` demonstrates nested Resource data:
@@ -132,7 +136,7 @@ If a system truly needs private runtime data, duplicate deliberately and keep th
 
 ```gdscript
 var private_attack := (load("res://data/attacks/ranger_shot.tres") as AttackDefinition).duplicate(true) as AttackDefinition
-private_attack.power = 999.0
+private_attack.damage_components[0].base_amount = 999.0
 ```
 
 `duplicate(true)` also duplicates nested Resources where supported. It does not save a new file. Do not duplicate by reflex; shared read-only definitions are the intended normal case.
@@ -164,7 +168,7 @@ const ENEMY_PATHS: PackedStringArray = [
 
 `GameCatalog.load_defaults()` loops over those constants and loads the corresponding typed Resources. Adding a class, trait, or enemy `.tres` file to a folder does **not** register it. Add its exact `res://` path to the matching constant when the new content is meant for production.
 
-Attack definitions have no separate `ATTACK_PATHS` registry at this architecture version. They become reachable through `ClassDefinition.primary_attack` and `support_action` references. `UpgradeTuning` is loaded separately by `PartyManager.DEFAULT_UPGRADE_TUNING`.
+Attack definitions have no separate `ATTACK_PATHS` registry. They become reachable through `ClassDefinition.primary_attack`/`support_action` or `EnemyDefinition.attacks`. The damage-type catalog is loaded explicitly by `GameCatalog`; `UpgradeTuning` is loaded separately by `PartyManager.DEFAULT_UPGRADE_TUNING`.
 
 > **Party Forge convention:** Content registration is explicit and code-reviewed; folders are not scanned automatically.
 
@@ -197,7 +201,7 @@ Examples of the current format are:
 ```text
 PARTY_FORGE_RESOURCE_ERROR reason=resource failed to load
 PARTY_FORGE_RESOURCE_ERROR reason=duplicate id ranger
-PARTY_FORGE_RESOURCE_ERROR id=ranger reason=class ranger primary attack ranger_shot power must be positive
+PARTY_FORGE_DAMAGE_ERROR path=res://data/attacks/ranger_shot.tres attack=ranger_shot type=physical reason=amount must be finite and positive
 PARTY_FORGE_RESOURCE_ERROR path=res://data reason=...
 ```
 
@@ -221,7 +225,7 @@ Create a disposable training Resource, validate it directly, and remove every ex
 2. In the FileSystem dock, right-click `res://data/attacks/ranger_shot.tres` and choose **Duplicate**.
 3. Name the copy `training_ranger_shot_disposable.tres` in `res://data/attacks/`. This label makes its temporary purpose unmistakable.
 4. Open the copy in the Inspector. Confirm its type is `AttackDefinition`, then set **Id** to the unique value `training_ranger_shot_disposable`.
-5. Inspect **Kind**, **Power**, **Cooldown**, **Range**, **Projectile Speed**, and **Area Radius**. Do not change the production `ranger_shot.tres`.
+5. Inspect **Kind**, **Damage Components**, **Action Tags**, **Can Crit**, **Cooldown**, **Range**, **Projectile Speed**, and **Area Radius**. Do not change the production `ranger_shot.tres`.
 6. Create a disposable script at `res://scripts/dev/training_attack_validation.gd` with:
 
    ```gdscript
@@ -248,7 +252,7 @@ Create a disposable training Resource, validate it directly, and remove every ex
    ```
 
    Expected output includes `PARTY_FORGE_TRAINING_ATTACK_VALID` and the process exits `0`.
-8. As a learning check, temporarily set **Power** to `0.0`, save, and run the validator again. Expected: a `PARTY_FORGE_RESOURCE_ERROR` mentioning positive power and a nonzero exit. Restore a positive value and confirm the validator returns to exit `0`.
+8. As a learning check, expand the first damage component and temporarily set **Base Amount** to `0.0`, save, and run the validator again. Expected: a structured `PARTY_FORGE_DAMAGE_ERROR` mentioning a finite positive amount and a nonzero exit. Restore `11.0` and confirm the validator returns to exit `0`.
 9. Press `F8`, then remove these exact disposable files through the FileSystem dock or filesystem:
    - `data/attacks/training_ranger_shot_disposable.tres`
    - `scripts/dev/training_attack_validation.gd`
@@ -298,7 +302,7 @@ For this chapter, verify the live architecture:
 - Search `PARTY_FORGE_RESOURCE_ERROR` and identify both catalog-level and path-level formatting.
 - After cleanup, confirm the before-and-after `git status --short` outputs match.
 
-Do not continue if the Resource type is wrong, the Inspector is editing the production file instead of the copy, validation unexpectedly passes with zero power, or cleanup leaves an unexplained `.tres`, `.gd`, or `.uid` file.
+Do not continue if the Resource type is wrong, the Inspector is editing the production file instead of the copy, validation unexpectedly passes with a zero component amount, or cleanup leaves an unexplained `.tres`, `.gd`, or `.uid` file.
 
 ## Common mistakes
 

@@ -45,9 +45,6 @@ func apply_damage(final_damage: float) -> float:
             downed.emit()
     return previous - current_health
 
-func take_damage(final_damage: float) -> float:
-    return apply_damage(final_damage)
-
 func set_max_health(maximum: float, preserve_fraction: bool = true) -> void:
     var previous_maximum := maxf(max_health, 1.0)
     var previous_fraction := current_health / previous_maximum
