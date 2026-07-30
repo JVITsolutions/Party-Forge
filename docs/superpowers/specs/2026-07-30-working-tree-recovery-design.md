@@ -15,6 +15,8 @@ The dirty checkout reproduces five automated failures and a runtime error at `ma
 
 ## Recovery Boundary
 
+The branch and commit history are immutable recovery inputs. Do not reset, revert, detach, or move `HEAD`. In particular, preserve the committed stat backend, typed combat and recovery systems, nine-class expansion, catalog-driven selection, handbook work, and the approved character-targeted-upgrades design. Recovery operates only on the uncommitted working-tree delta relative to the current `HEAD`.
+
 1. Record a complete patch, status listing, and hashes for untracked material before changing the checkout.
 2. Stop and close the Godot editor so stale in-memory resources cannot rewrite repaired files.
 3. Restore all tracked formatting, UID churn, default-value elision, and the stale HUD/settings regression to `HEAD 14ecc9d`.
@@ -34,6 +36,8 @@ The dirty checkout reproduces five automated failures and a runtime error at `ma
 
 No untracked file is deleted, moved, or overwritten by this recovery.
 
+The backup must be sufficient to reconstruct every pre-recovery tracked modification and identify every untracked path. Restoration commands must name the audited dirty paths explicitly; broad branch resets and recursive cleanup commands are prohibited.
+
 ## Verification
 
 Recovery is complete only when:
@@ -50,4 +54,3 @@ Recovery is complete only when:
 ## Future Prevention
 
 After external scene or project-setting changes, reload the affected resources or restart Godot before using Save All. Before every feature execution, capture Git status and verify that the open editor scene matches the saved file. This prevents a long-lived editor from serializing stale in-memory state over newer repository content.
-
