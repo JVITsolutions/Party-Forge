@@ -1,8 +1,8 @@
 # 3. Typed GDScript, Signals, and Party Forge Data Flow
 
-> **Architecture baseline:** `a293f6208bd3a62246043c1b3e7c0a49ad5fef73`<br>
+> **Runtime architecture:** Party Forge nine-class selector at `b0be05a03bbd3ea5aae04d3e38ffdc0769a211ba`<br>
 > **Godot version:** `4.7.1`<br>
-> **Last checked:** `2026-07-29`
+> **Last checked:** `2026-07-30`
 
 ## What you will learn
 
@@ -88,7 +88,7 @@ An `Array` is an ordered sequence. `Array[StringName]` accepts `StringName` elem
 
 ```gdscript
 @export var traits: Array[StringName] = []
-var class_ids: Array[StringName] = [&"fighter", &"ranger", &"mage", &"cleric"]
+var classes: Array[ClassDefinition] = catalog.classes
 ```
 
 A `Dictionary` maps keys to values. `PartyManager.class_ranks` maps a class ID to its current rank. Some current dictionaries are deliberately untyped because their values come from Resource data or contain more than one practical value shape:
@@ -158,23 +158,30 @@ The important Party Forge signals are:
 
 | Signal | Owner and declaration | Meaning |
 |---|---|---|
+| `ClassSelectionPanel.class_selected` | `signal class_selected(class_id: StringName)` | A catalog-created leader button was pressed. `PartyForgeMain` validates the emitted ID through `GameCatalog` before starting a run. |
 | `PartyManager.member_added` | `signal member_added(member: PartyMemberState)` | A member is now part of the authoritative party. `PartyActorSpawner` listens and creates a companion for non-leaders. |
 | `EnemyActor.reward_dropped` | `signal reward_dropped(experience: int, drop_position: Vector3)` | An enemy completed its one-time reward drop. `SpawnDirector` listens and creates an experience orb. |
 | `ExperienceSystem.level_ready` | `signal level_ready(level: int)` | Collected experience crossed a threshold and a pending level now exists. `PartyForgeMain` listens and presents choices. |
 | `GameRun.victory` / `GameRun.defeat` | Signals with no arguments | The authoritative run state reached an outcome. `PartyForgeMain` listens and shows the result panel. |
 
-Connect a signal once, usually during setup:
+The class selector is configured and connected once during setup. No class-specific node path is derived from a display name:
 
 ```gdscript
-if not experience_system.level_ready.is_connected(_on_level_ready):
-    experience_system.level_ready.connect(_on_level_ready)
+var selector := get_node("HUD/ClassSelection") as ClassSelectionPanel
+selector.configure(catalog.classes)
+if not selector.class_selected.is_connected(select_leader_class):
+    selector.class_selected.connect(select_leader_class)
 ```
 
-The receiver's argument types should match the values the emitter sends:
+`ClassSelectionPanel.configure()` creates one runtime button for every ordered `ClassDefinition`. Each button emits the definition's exact `StringName` ID. The receiver's argument type matches that signal:
 
 ```gdscript
-func _on_level_ready(_level: int) -> void:
-    game_run.begin_level_up()
+func select_leader_class(class_id: StringName) -> bool:
+    var definition := catalog.class_by_id(class_id)
+    if definition == null:
+        return false
+    # Initialize the party and leader from the validated definition.
+    return true
 ```
 
 > **Godot rule:** A custom signal may declare arguments, be connected to one or more callables, and be emitted with `.emit(...)`. The emitter is still responsible for supplying the intended arguments.
@@ -185,7 +192,7 @@ func _on_level_ready(_level: int) -> void:
 
 Follow this chain through the current source:
 
-1. **Class selection:** A class button calls `PartyForgeMain.select_leader_class(class_id)` in `scripts/game/main.gd`.
+1. **Class selection:** `ClassSelectionPanel.configure(catalog.classes)` creates all nine buttons. Pressing one emits `class_selected(class_id)`, which is connected to `PartyForgeMain.select_leader_class(class_id)` in `scripts/game/main.gd`.
 2. **Catalog lookup:** `GameCatalog.class_by_id(class_id)` returns the matching `ClassDefinition`. An unknown ID is rejected with a `PARTY_FORGE_RESOURCE_ERROR`.
 3. **Party initialization:** `PartyManager.initialize(definition, catalog.traits)` creates the leader's `PartyMemberState`. `member_added` is emitted, although `PartyActorSpawner` is connected after this initial leader step and ignores leader members in any case.
 4. **Leader instance:** `leader.tscn` is instantiated under `Main/Actors`, then configured from the leader member and its `ClassDefinition`.

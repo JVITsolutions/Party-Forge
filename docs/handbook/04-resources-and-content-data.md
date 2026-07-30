@@ -1,6 +1,6 @@
 # 4. Resources and Party Forge Content Data
 
-> **Runtime architecture:** Party Forge Typed Combat Task 8 at `97f05b5fa77d8447830bb2a42209b83140384e6b`<br>
+> **Runtime architecture:** Party Forge nine-class selector at `b0be05a03bbd3ea5aae04d3e38ffdc0769a211ba`<br>
 > **Godot version:** `4.7.1`<br>
 > **Last checked:** `2026-07-30`
 
@@ -92,20 +92,31 @@ The Resource scripts define schemas under `res://scripts/data/`; instances live 
 |---|---|---|---|
 | `AttackDefinition` | `res://scripts/data/attack_definition.gd` | `res://data/attacks/*.tres` | Attack kind, typed damage components or heal power, action tags, crit permission, cooldown, range, projectile speed, and area radius. |
 | `DamageTypeDefinition` | `res://scripts/data/damage_type_definition.gd` | `res://data/damage_types/core_damage_types.tres` | Type identity, offense/defense stat mappings, mitigation rule, and resistance bounds. |
-| `ClassDefinition` | `res://scripts/data/class_definition.gd` | `res://data/classes/*.tres` | Class identity, role, traits, health, movement, spacing, and referenced primary/support attacks. |
+| `ClassDefinition` | `res://scripts/data/class_definition.gd` | `res://data/classes/*.tres` | Class identity, role, trait IDs, capability tags, base-stat overrides, health, movement, spacing, and referenced primary/support attacks. |
 | `TraitDefinition` | `res://scripts/data/trait_definition.gd` | `res://data/traits/*.tres` | Trait identity, supported stat ID, activation tiers, values, and optional effect radius. |
 | `EnemyDefinition` | `res://scripts/data/enemy_definition.gd` | `res://data/enemies/*.tres` | Enemy identity, behavior enum, health, speed, typed stat overrides, linked attacks, and experience reward. |
 | `UpgradeTuning` | `res://scripts/data/upgrade_tuning.gd` | `res://data/upgrades/default_upgrades.tres` | Party-stat maximum rank and per-rank tuning steps. |
+| `StatCatalog` / `StatDefinition` | `res://scripts/stats/stat_catalog.gd`, `res://scripts/stats/stat_definition.gd` | `res://data/stats/core_stats.tres` | Stat defaults, limits, precision, formatting, visibility, capability requirements, and keyword identity. |
 
 `ClassDefinition` demonstrates nested Resource data:
 
 ```gdscript
 @export var traits: Array[StringName] = []
+@export var capability_tags: Array[StringName] = []
+@export var base_stat_overrides: Dictionary = {}
 @export var primary_attack: AttackDefinition
 @export var support_action: AttackDefinition
 ```
 
-The Ranger class file references `ranger_shot.tres` instead of copying all attack values into the class. The attack remains separately inspectable and reusable.
+Ownership is layered rather than duplicated:
+
+- `AttackDefinition` owns authored attack delivery values and typed damage components or healing power. A class references the attack Resource.
+- `TraitDefinition` owns count thresholds and the stat bonus. A class stores trait IDs so `PartyManager` can count them across members.
+- `StatDefinition` owns the global default, limits, precision, visibility rule, and capability requirements for a stat.
+- `ClassDefinition.capability_tags` declares what a class can expose, such as `bow`, `block`, or `life_steal`.
+- `ClassDefinition.base_stat_overrides` supplies class-specific starting values keyed by registered stat ID. The legacy `max_health`, `armor`, and `move_speed` fields remain authoritative fallbacks through `stat_base_values()`.
+
+The Ranger class file references `ranger_shot.tres` instead of copying all attack values into the class. The Marksman class uses capability tags and base overrides for its authored critical identity while the stat catalog still owns how those stat values are finalized and formatted.
 
 > **Party Forge convention:** Definition IDs use lowercase `snake_case` `StringName` values such as `&"ranger_shot"`; display names are separate `String` fields when players need formatted text.
 
@@ -152,12 +163,15 @@ private_attack.damage_components[0].base_amount = 999.0
 ```gdscript
 const CLASS_PATHS: PackedStringArray = [
     "res://data/classes/fighter.tres", "res://data/classes/ranger.tres",
-    "res://data/classes/mage.tres", "res://data/classes/cleric.tres"
+    "res://data/classes/mage.tres", "res://data/classes/cleric.tres",
+    "res://data/classes/paladin.tres", "res://data/classes/rogue.tres",
+    "res://data/classes/frost_mage.tres", "res://data/classes/warlock.tres",
+    "res://data/classes/marksman.tres"
 ]
 
 const TRAIT_PATHS: PackedStringArray = [
     "res://data/traits/martial.tres", "res://data/traits/vanguard.tres",
-    # Other current trait paths follow.
+    # Eleven other current trait paths follow, for thirteen total.
 ]
 
 const ENEMY_PATHS: PackedStringArray = [
@@ -166,7 +180,7 @@ const ENEMY_PATHS: PackedStringArray = [
 ]
 ```
 
-`GameCatalog.load_defaults()` loops over those constants and loads the corresponding typed Resources. Adding a class, trait, or enemy `.tres` file to a folder does **not** register it. Add its exact `res://` path to the matching constant when the new content is meant for production.
+`GameCatalog.load_defaults()` loops over those constants and loads the corresponding typed Resources. The current catalog contains nine ordered classes, thirteen traits, and three enemies. Adding a class, trait, or enemy `.tres` file to a folder does **not** register it. Add its exact `res://` path to the matching constant when the new content is meant for production.
 
 Attack definitions have no separate `ATTACK_PATHS` registry. They become reachable through `ClassDefinition.primary_attack`/`support_action` or `EnemyDefinition.attacks`. The damage-type catalog is loaded explicitly by `GameCatalog`; `UpgradeTuning` is loaded separately by `PartyManager.DEFAULT_UPGRADE_TUNING`.
 

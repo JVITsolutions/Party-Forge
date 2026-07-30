@@ -1,8 +1,9 @@
 # Party Forge Godot Handbook
 
-> **Initial architecture baseline:** Chapters 1–3 and 8–9 at `a293f6208bd3a62246043c1b3e7c0a49ad5fef73`<br>
-> **Typed-combat runtime architecture:** Chapters 4–7 and 10 at `97f05b5fa77d8447830bb2a42209b83140384e6b`<br>
-> **Handbook wording alignment:** README and Chapters 5–7 at `9f1b9bbb5cdc04374b3288ada07eb8081032a188`<br>
+> **Initial architecture baseline:** Chapters 1–2 and 8–9 at `a293f6208bd3a62246043c1b3e7c0a49ad5fef73`<br>
+> **Nine-class runtime architecture:** Chapters 3–6 and 10 at `b0be05a03bbd3ea5aae04d3e38ffdc0769a211ba`<br>
+> **Typed-combat enemy tutorial architecture:** Chapter 7 at `97f05b5fa77d8447830bb2a42209b83140384e6b`<br>
+> **Handbook wording alignment:** Chapter 7 at `9f1b9bbb5cdc04374b3288ada07eb8081032a188`<br>
 > **Godot version:** `4.7.1`
 
 ## Who this is for

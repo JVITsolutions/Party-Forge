@@ -1,6 +1,6 @@
 # 10. Party Forge Architecture Reference
 
-> **Runtime architecture:** Party Forge Typed Combat Task 8 at `97f05b5fa77d8447830bb2a42209b83140384e6b`<br>
+> **Runtime architecture:** Party Forge nine-class selector at `b0be05a03bbd3ea5aae04d3e38ffdc0769a211ba`<br>
 > **Godot version:** `4.7.1`<br>
 > **Last checked:** `2026-07-30`
 
@@ -8,7 +8,7 @@
 
 Use this chapter after you understand the concepts in Chapters 1–9. Start with the change-owner decision table, follow its path to the owning data, scene, or script, then use the matching verification checklist.
 
-This is a map of the architecture after Typed Combat Task 8, not a promise that every folder is automatically discovered or every exported field is consumed. Confirm the live source before extending it.
+This is a map of the architecture at the immutable nine-class runtime commit above, not a promise that every folder is automatically discovered or every exported field is consumed. Confirm the live source before extending it.
 
 > **Party Forge convention:** Data definitions describe content, scenes compose runtime nodes, focused scripts own behavior, and `PartyForgeMain` wires the main run.
 
@@ -41,7 +41,7 @@ The saved main tree begins as:
 9. `Main/Enemies` — runtime regular enemies and boss.
 10. `Main/Effects` — projectiles, area bursts, heal visuals, experience orbs, and boss telegraphs.
 11. `Main/LeaderCamera` — follows the selected leader.
-12. `Main/HUD` — status, class selection, level-up panel, run-result panel, and boss banner.
+12. `Main/HUD` — status, catalog-driven `ClassSelectionPanel`, level-up panel, run-result panel, and boss banner.
 
 After leader selection, `PartyForgeMain` instances `Leader` under `Actors`, configures it from a `ClassDefinition`, attaches one `HealthBar3D`, configures the camera and spawn director, hides class selection, and starts the run. Recruits create `Companion` instances under `Actors`; enemies and effects appear only at runtime. Use the Remote tree to see them.
 
@@ -63,6 +63,7 @@ After leader selection, `PartyForgeMain` instances `Leader` under `Actors`, conf
 | `RecoveryController` | `scripts/combat/recovery_controller.gd` | Frame-rate-independent regeneration from current resolved stats | Damage mitigation or revive timing |
 | `HealthComponent` | `scripts/combat/health_component.gd` | Final health application, down/death state, healing, revive timing, and health signals | Armor/resistance/dodge/block formulas, actor movement, targeting, or rewards |
 | `HUD` | `scripts/ui/hud.gd` and `scenes/ui/hud.tscn` | Status text, party/trait display, boss status and banner, composition of panels | Applying an upgrade choice |
+| `ClassSelectionPanel` | `scripts/ui/class_selection_panel.gd` and `scenes/ui/hud.tscn` | Ordered runtime buttons from `Array[ClassDefinition]`, scroll-grid presentation, stable `Class_<id>` node names, and `class_selected(class_id)` | Catalog registration, ID validation, or starting the run |
 | `LevelUpPanel` | `scripts/ui/level_up_panel.gd` and `scenes/ui/level_up_panel.tscn` | Three choice buttons, validity display, one `choice_selected` signal | Generating choices or mutating party state |
 | `RunResultPanel` | `scripts/ui/run_result_panel.gd` and `scenes/ui/run_result_panel.tscn` | Victory/defeat display and restart/quit requests | Deciding the run result |
 
@@ -70,21 +71,22 @@ After leader selection, `PartyForgeMain` instances `Leader` under `Actors`, conf
 
 | Type | Schema | External instances | Describes |
 | --- | --- | --- | --- |
-| `ClassDefinition` | `scripts/data/class_definition.gd` | `data/classes/*.tres` | Identity, role, color, trait IDs, base stats, revive settings, formation distances, primary attack, optional support action |
+| `ClassDefinition` | `scripts/data/class_definition.gd` | `data/classes/*.tres` | Identity, role, color, trait IDs, capability tags, base-stat overrides, health/movement fallbacks, revive settings, formation distances, primary attack, optional support action |
 | `AttackDefinition` | `scripts/data/attack_definition.gd` | `data/attacks/*.tres` | Attack kind, typed damage components or heal power, action tags, crit permission, cooldown, range, projectile speed, and area radius |
 | `DamageTypeDefinition` | `scripts/data/damage_type_definition.gd` | `data/damage_types/core_damage_types.tres` | Damage-type identity, offense/defense stat mappings, mitigation rule, and resistance bounds |
 | `TraitDefinition` | `scripts/data/trait_definition.gd` | `data/traits/*.tres` | Trait identity, supported stat ID, count thresholds, bonus values, and optional effect radius |
 | `EnemyDefinition` | `scripts/data/enemy_definition.gd` | `data/enemies/*.tres` | Enemy identity, behavior enum, health, speed, typed stat overrides, linked attacks, and experience |
 | `UpgradeTuning` | `scripts/data/upgrade_tuning.gd` | `data/upgrades/default_upgrades.tres` | Party-stat maximum rank and per-rank party/trait upgrade steps |
+| `StatCatalog` / `StatDefinition` | `scripts/stats/stat_catalog.gd`, `scripts/stats/stat_definition.gd` | `data/stats/core_stats.tres` | Registered stat defaults, limits, precision, formatting, visibility, capability tags, and keyword IDs |
 
-Definitions are Resources, not running actors. `GameCatalog` explicitly loads class, trait, enemy, stat, and damage-type definitions. Party attacks are reached through class references; enemy definitions link their behavior-required attacks explicitly.
+Definitions are Resources, not running actors. `GameCatalog` explicitly loads class, trait, enemy, and damage-type definitions; `PartyManager.STAT_CATALOG` loads the stat catalog. Party attacks are reached through class references; enemy definitions link their behavior-required attacks explicitly.
 
 ## Main run data flow
 
 1. Godot instances `scenes/game/main.tscn` from `project.godot`.
 2. `PartyForgeMain._ready()` caches the main service nodes and calls `GameCatalog.load_defaults()`.
-3. Catalog validation must pass before class buttons are wired.
-4. A class-selection button calls `select_leader_class(class_id)`.
+3. Catalog validation must pass before `ClassSelectionPanel.configure(catalog.classes)` creates the ordered scroll-grid buttons.
+4. A runtime `Class_<id>` button emits `class_selected(class_id)`, connected once to `select_leader_class(class_id)`.
 5. The selected definition initializes `PartyManager`; the leader, health bar, camera, HUD, `PartyActorSpawner`, and `SpawnDirector` are configured.
 6. `GameRun.start_run()` moves the state machine from `SETUP` to `RUNNING`.
 7. `GameRun` advances elapsed time while `SpawnDirector` advances its regular spawn schedule.
@@ -94,7 +96,7 @@ Definitions are Resources, not running actors. `GameCatalog` explicitly loads cl
 
 ## Class and party flow
 
-1. `GameCatalog` loads a `ClassDefinition` with trait IDs and linked attacks.
+1. `GameCatalog` loads nine ordered `ClassDefinition` Resources with trait IDs, capabilities, base-stat overrides, and linked attacks.
 2. `PartyManager.initialize()` creates the leader's `PartyMemberState`, records class rank one, and recalculates trait counts.
 3. `PartyForgeMain` configures the leader `PartyActor` from that member state.
 4. A recruit choice calls `PartyManager.recruit()` while fewer than four members exist.
@@ -148,9 +150,9 @@ The Forge Guardian is boss-only. `PartyForgeMain` instances it in response to th
 | Boundary | Verified implementation | Consequence |
 | --- | --- | --- |
 | Catalog | `GameCatalog.CLASS_PATHS`, `TRAIT_PATHS`, and `ENEMY_PATHS` are explicit arrays | New files under `data/` are not discovered automatically |
-| Leader selection | Four buttons and callback IDs: `fighter`, `ranger`, `mage`, `cleric` in `PartyForgeMain._wire_static_ui()` | A registered recruit does not automatically become a selectable leader |
+| Leader selection | `ClassSelectionPanel.configure(catalog.classes)` creates all runtime buttons and emits exact IDs | A valid registered party-supported class enters leader selection without a class-specific HUD path |
 | Attack kinds | Party: `MELEE_CLEAVE`, `PROJECTILE`, `AREA_PROJECTILE`, `HEAL`; enemy behaviors additionally use `DIRECT` and `AREA` | A new kind needs validation, owning behavior/delivery support, and tests |
-| Trait effects | `attack_speed`, `nearby_damage_reduction`, `projectile_speed_and_range`, `area_size`, `cooldown_reduction`, `healing_and_revive`, `support_power` | A new stat ID needs modifier/party behavior and tests |
+| Trait effects | Thirteen registered traits cover attack speed, Vanguard reduction, ranged speed/range, area, cooldown, healing/revive, support, Fire, Cold, dodge, life steal, Chaos, and Bow range | A new stat ID still needs a registered stat definition, modifier/party behavior, and tests |
 | Regular enemy scenes | `SWARMER_SCENE` and `SPITTER_SCENE`; accepted IDs `swarmer` and `spitter` | Catalog registration alone cannot make a regular enemy spawn |
 | Spawn weights | `SpawnBand` has only `swarmer_weight` and `spitter_weight` | A third weighted enemy changes schedule and sampling architecture |
 | Enemy behavior enum | Stored on `EnemyDefinition`, but no runtime factory selects scripts from it | The instantiated scene's attached script supplies behavior |
@@ -166,8 +168,7 @@ The Forge Guardian is boss-only. `PartyForgeMain` instances it in response to th
 | --- | --- | --- |
 | Tune an existing number | Owning `.tres` definition, `UpgradeTuning`, or documented script constant | Relevant unit suite and controlled observation |
 | Add an existing-kind attack | New `AttackDefinition` in `data/attacks/`; link from class | Definition/catalog-link tests and combat sandbox |
-| Add a recruit-only class | Class/attack/trait Resources plus `GameCatalog` class/trait arrays | Catalog fixtures, progression recruitment/tier tests, ordinary run |
-| Make a class leader-selectable | `scenes/ui/hud.tscn` and `PartyForgeMain._wire_static_ui()` | Main-wiring tests and explicit button path |
+| Add a party-supported class | Class/attack/trait Resources plus `GameCatalog` class/trait arrays | Catalog, selector, leader, progression recruitment/tier, and ordinary-run checks |
 | Add a supported trait | `TraitDefinition` plus class trait IDs and `GameCatalog.TRAIT_PATHS` | Catalog, party-manager, modifier tests |
 | Add a new trait effect | `TraitDefinition.SUPPORTED_STAT_IDS` plus consuming modifier/party behavior | Focused behavior tests and sandbox observation |
 | Add an existing-behavior enemy | Enemy definition plus copied compatible enemy scene | Catalog, SpawnDirector ID/preload/selection, schedule, sandbox action, tests |

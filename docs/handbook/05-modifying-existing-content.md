@@ -1,6 +1,6 @@
 # 5. Modifying Existing Party Forge Content Safely
 
-> **Runtime architecture:** Party Forge Typed Combat Task 8 at `97f05b5fa77d8447830bb2a42209b83140384e6b`<br>
+> **Runtime architecture:** Party Forge nine-class selector at `b0be05a03bbd3ea5aae04d3e38ffdc0769a211ba`<br>
 > **Handbook wording alignment:** `9f1b9bbb5cdc04374b3288ada07eb8081032a188`<br>
 > **Godot version:** `4.7.1`<br>
 > **Last checked:** `2026-07-30`
@@ -49,6 +49,36 @@ The role chooses the companion's formation lane. `preferred_distance` and `tethe
 
 `ClassDefinition.validate()` requires a non-empty ID and display name, at least one trait, positive health and revive delay, a non-negative rank step, a revive fraction greater than zero and no greater than one, and a valid primary attack. A support action is optional, but it must validate when assigned.
 
+### Current nine-class identity values
+
+The following numbers are **balance data**, not engine rules. They are the initial authored identity at the runtime commit named in this chapter banner and may be tuned by later balance work.
+
+| Class | Role | Traits | Health | Armor | Move speed | Preferred / engagement / tether |
+| --- | --- | --- | ---: | ---: | ---: | --- |
+| Fighter | Frontline | Martial, Vanguard | `260` | `10` | `6.2` | `2.0 / 5.0 / 9.0` |
+| Ranger | Midline | Martial, Ranged | `90` | `1` | `6.6` | `5.0 / 11.0 / 11.0` |
+| Mage | Backline | Arcane, Caster, Fire | `75` | `0` | `6.0` | `6.5 / 12.0 / 12.0` |
+| Cleric | Support | Divine, Support, Caster | `95` | `2` | `6.0` | `4.0 / 10.0 / 10.0` |
+| Paladin | Frontline | Divine, Vanguard, Martial | `220` | `18` | `5.6` | `2.0 / 4.5 / 8.5` |
+| Rogue | Midline | Martial, Skirmisher | `72` | `0` | `7.4` | `1.4 / 3.0 / 8.0` |
+| Frost Mage | Backline | Arcane, Caster, Cold | `78` | `0` | `6.0` | `6.5 / 12.5 / 12.5` |
+| Warlock | Backline | Occult, Caster, Chaos | `82` | `1` | `5.8` | `6.0 / 12.5 / 12.5` |
+| Marksman | Midline | Martial, Ranged, Bow | `80` | `2` | `5.8` | `8.0 / 16.0 / 16.0` |
+
+| Class | Primary attack | Base amount | Cooldown | Range | Authored identity note |
+| --- | --- | ---: | ---: | ---: | --- |
+| Fighter | Fighter Cleave | `18` Physical | `0.8` | `2.2` | Melee cleave, area `1.6` |
+| Ranger | Ranger Shot | `11` Physical | `0.55` | `11.0` | Projectile speed `16` |
+| Mage | Mage Burst | `24` Fire | `1.5` | `12.0` | Area projectile, radius `2.5` |
+| Cleric | Cleric Bolt | `8` Lightning | `1.0` | `10.0` | Also owns Cleric Heal: power `18`, cooldown `3.0`, range `9.0` |
+| Paladin | Paladin Smite | `16` Physical | `1.05` | `2.1` | Melee cleave, area `1.4` |
+| Rogue | Rogue Flurry | `8` Physical | `0.32` | `1.6` | Fast melee cleave, area `0.9` |
+| Frost Mage | Frost Shard | `20` Cold | `1.35` | `12.5` | Area projectile, radius `3.0` |
+| Warlock | Warlock Bolt | `30` Chaos | `1.75` | `12.5` | Projectile speed `9` |
+| Marksman | Marksman Heavy Shot | `42` Physical | `2.2` | `16.0` | Slower, harder-hitting, and longer-range than Ranger |
+
+Paladin begins with block and regeneration overrides; Rogue begins with crit, dodge, and life-steal overrides; Warlock begins with Chaos-damage and life-steal overrides; Marksman begins with crit-chance and `2.0` crit-multiplier overrides. Mage's registered identity is Arcane/Caster/Fire. These override values are class data finalized through the shared stat catalog, not separate one-off combat formulas.
+
 ## Attack values
 
 A party-authored `AttackDefinition` executed by `AttackExecutor` chooses one of four supported party kinds:
@@ -77,6 +107,12 @@ A `TraitDefinition` has an ID, display name, `stat_id`, tier dictionary, and `ef
 - `cooldown_reduction`
 - `healing_and_revive`
 - `support_power`
+- `fire_damage`
+- `cold_damage`
+- `dodge_chance`
+- `life_steal`
+- `chaos_damage`
+- `attack_range`
 
 The tier dictionary maps a required trait count to a bonus, such as `{ 2: 0.15, 4: 0.35 }`. Party members can share traits, so duplicate recruits may activate a threshold. Thresholds must be at least two.
 
