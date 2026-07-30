@@ -8,6 +8,8 @@ enum Role { FRONTLINE, MIDLINE, BACKLINE, SUPPORT }
 @export var role: Role
 @export var color: Color = Color.WHITE
 @export var traits: Array[StringName] = []
+@export var capability_tags: Array[StringName] = []
+@export var base_stat_overrides: Dictionary = {}
 @export var max_health: float = 100.0
 @export var armor: float = 0.0
 @export var move_speed: float = 6.0
@@ -19,6 +21,13 @@ enum Role { FRONTLINE, MIDLINE, BACKLINE, SUPPORT }
 @export var tether_distance: float = 10.0
 @export var primary_attack: AttackDefinition
 @export var support_action: AttackDefinition
+
+func stat_base_values() -> Dictionary:
+	var values := base_stat_overrides.duplicate(true)
+	values[&"max_health"] = float(values.get(&"max_health", max_health))
+	values[&"armor"] = float(values.get(&"armor", armor))
+	values[&"move_speed"] = float(values.get(&"move_speed", move_speed))
+	return values
 
 func validate() -> PackedStringArray:
     var errors: PackedStringArray = []
