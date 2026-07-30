@@ -1,7 +1,7 @@
 # Party Forge Character Stats and Expanded Classes Design
 
 **Date:** 2026-07-29
-**Status:** Approved in conversation; pending written-spec review
+**Status:** Approved by Jacob on 2026-07-29
 
 ## Purpose
 
