@@ -1,20 +1,23 @@
 class_name AreaBurst
 extends Node3D
 
-var team_id := 0
-var damage := 0.0
+var packet: DamagePacket
+var combat_rng: CombatRng
+var damage_types: DamageTypeCatalog
 var radius := 0.0
 var lifetime := 0.25
 var elapsed := 0.0
 var applied := false
 var combatants: Array[Node3D] = []
 
-func configure(own_team: int, damage_amount: float, area_radius: float, duration: float, actor_candidates: Array[Node3D] = []) -> void:
-    team_id = own_team
-    damage = maxf(damage_amount, 0.0)
+func configure(damage_packet: DamagePacket, rng: CombatRng, types: DamageTypeCatalog, area_radius: float, duration: float, actor_candidates: Array[Node3D] = []) -> void:
+    packet = damage_packet
+    combat_rng = rng
+    damage_types = types
     radius = maxf(area_radius, 0.0)
     lifetime = clampf(duration, 0.01, 10.0)
     elapsed = 0.0
+    applied = false
     combatants = actor_candidates
     scale = Vector3.ONE * maxf(radius * 2.0, 0.01)
     _apply_damage_once()
@@ -30,18 +33,23 @@ func _apply_damage_once() -> void:
     applied = true
     var candidates := _combatants()
     var seen: Dictionary = {}
+    var targets: Array[CombatantAdapter] = []
     var center: Vector3 = global_position if is_inside_tree() else position
     for actor: Node3D in candidates:
-        if actor == null or seen.has(actor.get_instance_id()) or not actor.has_method("get_combat_target"):
+        if actor == null or seen.has(actor.get_instance_id()) or not actor.has_method("get_combat_target") or not actor.has_method("get_combat_adapter"):
             continue
         seen[actor.get_instance_id()] = true
         var target: CombatTarget = actor.call("get_combat_target") as CombatTarget
-        if target == null or not target.is_available or target.team_id == team_id:
+        if target == null or not target.is_available or packet == null or target.team_id == packet.source_team_id:
             continue
         if center.distance_squared_to(target.position) > radius * radius:
             continue
-        if actor.has_method("receive_damage"):
-            actor.call("receive_damage", damage)
+        var adapter := actor.call("get_combat_adapter", packet.action_tags) as CombatantAdapter
+        if adapter != null and adapter.available:
+            targets.append(adapter)
+    targets.sort_custom(func(left: CombatantAdapter, right: CombatantAdapter) -> bool: return String(left.combatant_id) < String(right.combatant_id))
+    for adapter: CombatantAdapter in targets:
+        DamageResolver.resolve(packet, adapter, combat_rng, damage_types)
 
 func _combatants() -> Array[Node3D]:
     if not combatants.is_empty():

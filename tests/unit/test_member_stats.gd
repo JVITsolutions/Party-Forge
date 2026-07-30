@@ -9,7 +9,37 @@ func run() -> Array[String]:
 	_test_invalid_source_is_atomic(catalog, failures)
 	_test_capabilities_and_base_projection(failures)
 	_test_source_breakdown_order(catalog, failures)
+	_test_action_snapshot_cache(catalog, failures)
 	return failures
+
+func _test_action_snapshot_cache(catalog: GameCatalog, failures: Array[String]) -> void:
+	var party := PartyManager.new()
+	party.initialize(catalog.class_by_id(&"ranger"), catalog.traits)
+	var member_id := party.members[0].member_id
+	var bow_training := StatModifierSource.create(&"bow_training", &"character", "Bow Training", member_id, [
+		StatModifier.create(&"damage", StatModifier.Operation.INCREASED, 0.50, &"bow_damage", "Bow Training", [&"projectile", &"bow"]),
+	])
+	TestAssertions.truthy(party.add_member_source(member_id, bow_training), "tag-required bow source registers", failures)
+	TestAssertions.truthy(party.has_method("stats_for_action"), "PartyManager exposes action snapshots", failures)
+	if not party.has_method("stats_for_action"):
+		party.free()
+		return
+	var context_free := party.stats_for(member_id)
+	var action_tags: Array[StringName] = [&"projectile", &"bow"]
+	var reordered_tags: Array[StringName] = [&"bow", &"projectile", &"bow"]
+	var action := party.call("stats_for_action", member_id, action_tags) as ResolvedStatSnapshot
+	var reordered := party.call("stats_for_action", member_id, reordered_tags) as ResolvedStatSnapshot
+	TestAssertions.near(context_free.value(&"damage"), 1.0, 0.001, "tag-required modifier stays out of context-free stats", failures)
+	TestAssertions.near(action.value(&"damage"), 1.5, 0.001, "action tags apply required modifier", failures)
+	TestAssertions.truthy(action != context_free, "action snapshot differs from context-free snapshot", failures)
+	TestAssertions.equal(reordered, action, "duplicate reordered tags share normalized cache entry", failures)
+	TestAssertions.truthy(party.upgrade_party_stat(&"damage"), "action-cache invalidation trigger succeeds", failures)
+	var refreshed_context := party.stats_for(member_id)
+	var refreshed_action := party.call("stats_for_action", member_id, action_tags) as ResolvedStatSnapshot
+	TestAssertions.truthy(refreshed_context != context_free, "context-free cache invalidates", failures)
+	TestAssertions.truthy(refreshed_action != action, "action cache invalidates with context-free cache", failures)
+	TestAssertions.near(refreshed_action.value(&"damage"), 1.55, 0.001, "refreshed action snapshot includes party and tag modifiers", failures)
+	party.free()
 
 func _test_isolated_source_ownership(catalog: GameCatalog, failures: Array[String]) -> void:
 	var ranger := catalog.class_by_id(&"ranger")

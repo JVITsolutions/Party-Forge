@@ -6,6 +6,7 @@ func run() -> Array[String]:
     var failures: Array[String] = []
     print("FINAL_REVIEW_TEST resource")
     _test_resource_tunables_and_trait_validation(failures)
+    _test_typed_party_delivery_source_contract(failures)
     print("FINAL_REVIEW_TEST party_stats")
     _test_party_stat_runtime_effects(failures)
     print("FINAL_REVIEW_TEST trait_upgrade")
@@ -49,6 +50,21 @@ func _test_resource_tunables_and_trait_validation(failures: Array[String]) -> vo
     var catalog_errors := malformed_catalog.validate()
     TestAssertions.truthy(catalog_errors.has("PARTY_FORGE_RESOURCE_ERROR id=malformed reason=trait malformed unsupported stat id unsupported_optional_effect"), "catalog excludes malformed optional trait effect", failures)
 
+func _test_typed_party_delivery_source_contract(failures: Array[String]) -> void:
+    var executor_source := FileAccess.get_file_as_string("res://scripts/combat/attack_executor.gd")
+    var projectile_source := FileAccess.get_file_as_string("res://scripts/combat/projectile.gd")
+    var area_source := FileAccess.get_file_as_string("res://scripts/combat/area_burst.gd")
+    var modifiers_source := FileAccess.get_file_as_string("res://scripts/combat/combat_modifiers.gd")
+    var party_actor_source := FileAccess.get_file_as_string("res://scripts/characters/party_actor.gd")
+    TestAssertions.truthy(not executor_source.contains("_legacy_damage_amount"), "typed executor removes temporary legacy damage bridge", failures)
+    TestAssertions.truthy(not executor_source.contains("receive_damage"), "typed executor carries no scalar receive_damage delivery", failures)
+    TestAssertions.truthy(not projectile_source.contains("var damage :=") and not projectile_source.contains("receive_damage"), "party projectile stores packet instead of scalar damage", failures)
+    TestAssertions.truthy(not area_source.contains("var damage :=") and not area_source.contains("receive_damage"), "area burst stores packet instead of scalar damage", failures)
+    TestAssertions.truthy(not modifiers_source.contains("power_multiplier"), "combat movement facade carries no damaging power", failures)
+    var recovery_index := party_actor_source.find("recovery_controller.advance(delta)")
+    var attack_index := party_actor_source.find("advance_combat(delta, _collect_combat_targets())")
+    TestAssertions.truthy(recovery_index >= 0 and attack_index > recovery_index, "party actor advances recovery before attacks", failures)
+
 func _test_party_stat_runtime_effects(failures: Array[String]) -> void:
     var main := _started_main(&"fighter")
     var party := main.get_node("PartyManager") as PartyManager
@@ -69,8 +85,11 @@ func _test_party_stat_runtime_effects(failures: Array[String]) -> void:
     TestAssertions.near(health.current_health, 273.0, 0.001, "max-health upgrade preserves full-health fraction", failures)
 
     TestAssertions.truthy(party.call("upgrade_party_stat", &"damage"), "damage upgrade applies", failures)
-    var damage_modifiers := CombatModifiers.resolve(party.members[0], party)
-    TestAssertions.near(float(damage_modifiers.get("power_multiplier")), 1.05, 0.001, "damage upgrade changes attack power", failures)
+    TestAssertions.truthy(party.has_method("stats_for_action"), "damage upgrade exposes action-aware stats", failures)
+    if party.has_method("stats_for_action"):
+        var damage_tags: Array[StringName] = [&"melee", &"physical"]
+        var damage_stats := party.call("stats_for_action", party.members[0].member_id, damage_tags) as ResolvedStatSnapshot
+        TestAssertions.near(damage_stats.value(&"damage"), 1.05, 0.001, "damage upgrade changes resolver source stats", failures)
 
     TestAssertions.truthy(party.call("upgrade_party_stat", &"move_speed"), "move-speed upgrade applies", failures)
     TestAssertions.near(leader.move_speed, 6.39, 0.001, "resolved move-speed upgrade immediately updates existing leader", failures)
@@ -130,6 +149,7 @@ func _test_vanguard_available_origin(failures: Array[String]) -> void:
     party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
     party.recruit(catalog.class_by_id(&"fighter"))
     party.recruit(catalog.class_by_id(&"ranger"))
+    party.call("configure_combat", CombatRng.new(201), catalog.damage_types)
     TestAssertions.truthy(party.has_method("incoming_damage_multiplier"), "PartyManager owns nearby Vanguard query", failures)
     if not party.has_method("incoming_damage_multiplier"):
         root.free()
@@ -138,8 +158,14 @@ func _test_vanguard_available_origin(failures: Array[String]) -> void:
     var ally := _actor_for_member(root, party, party.members[2], Vector3(3.0, 0.0, 0.0))
     var ally_health := ally.get_node("HealthComponent") as HealthComponent
     TestAssertions.near(float(party.call("incoming_damage_multiplier", ally)), 0.88, 0.001, "near available Vanguard protects ally", failures)
+    TestAssertions.truthy(ally.has_method("get_combat_adapter"), "party actor exposes combat adapter", failures)
+    if ally.has_method("get_combat_adapter"):
+        var physical_tags: Array[StringName] = [&"physical"]
+        var adapter := ally.call("get_combat_adapter", physical_tags) as CombatantAdapter
+        TestAssertions.equal(adapter.combatant_id, &"party:3", "party adapter uses stable member identity", failures)
+        TestAssertions.near(adapter.incoming_damage_multiplier(null), 0.88, 0.001, "Vanguard multiplier exists on combat adapter", failures)
     ally.receive_damage(20.0)
-    TestAssertions.near(ally_health.current_health, 72.4, 0.001, "near Vanguard reduces actual incoming damage", failures)
+    TestAssertions.near(ally_health.current_health, 70.0, 0.001, "legacy actor damage path no longer applies Vanguard", failures)
     ally.position = Vector3(7.0, 0.0, 0.0)
     TestAssertions.near(float(party.call("incoming_damage_multiplier", ally)), 1.0, 0.001, "far Vanguard gives no protection", failures)
     ally.position = Vector3(3.0, 0.0, 0.0)
@@ -157,6 +183,7 @@ func _test_divine_healing_and_actual_revive(failures: Array[String]) -> void:
     party.initialize(catalog.class_by_id(&"cleric"), catalog.traits)
     party.recruit(catalog.class_by_id(&"cleric"))
     party.recruit(catalog.class_by_id(&"ranger"))
+    party.call("configure_combat", CombatRng.new(202), catalog.damage_types)
     TestAssertions.truthy(party.has_method("upgrade_trait"), "Divine upgrade uses centralized PartyManager ownership", failures)
     if not party.has_method("upgrade_trait"):
         root.free()

@@ -18,8 +18,11 @@ var active_tiers: Dictionary = {}
 var party_stat_ranks: Dictionary = {}
 var trait_upgrade_ranks: Dictionary = {}
 var upgrade_tuning: UpgradeTuning = DEFAULT_UPGRADE_TUNING
+var combat_rng: CombatRng
+var damage_types: DamageTypeCatalog
 var _stat_revision := 0
 var _stat_cache: Dictionary = {}
+var _action_stat_cache: Dictionary = {}
 
 func _init() -> void:
     for stat_id: StringName in PARTY_STAT_IDS:
@@ -54,6 +57,25 @@ func stats_for(member_id: int) -> ResolvedStatSnapshot:
     _stat_cache[member_id] = snapshot
     return snapshot
 
+func configure_combat(rng: CombatRng, types: DamageTypeCatalog) -> void:
+    combat_rng = rng
+    damage_types = types
+
+func stats_for_action(member_id: int, action_tags: Array[StringName]) -> ResolvedStatSnapshot:
+    var member := member_by_id(member_id)
+    if member == null:
+        return null
+    var normalized := _normalized_tags(action_tags)
+    var parts := PackedStringArray()
+    for tag: StringName in normalized:
+        parts.append(String(tag))
+    var key := "%d|%s" % [member_id, ",".join(parts)]
+    if _action_stat_cache.has(key):
+        return _action_stat_cache[key] as ResolvedStatSnapshot
+    var snapshot := StatResolver.resolve(member_id, STAT_CATALOG, member.class_definition.stat_base_values(), member.capability_tags, _sources_for(member), normalized, _stat_revision)
+    _action_stat_cache[key] = snapshot
+    return snapshot
+
 func add_member_source(member_id: int, source: StatModifierSource) -> bool:
     var member := member_by_id(member_id)
     if member == null or source == null:
@@ -70,11 +92,16 @@ func add_member_source(member_id: int, source: StatModifierSource) -> bool:
 func _invalidate_member(member_id: int) -> void:
     _stat_revision += 1
     _stat_cache.erase(member_id)
+    var prefix := "%d|" % member_id
+    for key: Variant in _action_stat_cache.keys():
+        if String(key).begins_with(prefix):
+            _action_stat_cache.erase(key)
     stats_changed.emit(member_id)
 
 func _invalidate_all_members() -> void:
     _stat_revision += 1
     _stat_cache.clear()
+    _action_stat_cache.clear()
     for member: PartyMemberState in members:
         stats_changed.emit(member.member_id)
 
@@ -227,6 +254,14 @@ func _party_stat_step(stat_id: StringName) -> float:
         &"attack_speed": return upgrade_tuning.attack_speed_per_rank
         &"pickup_radius": return upgrade_tuning.pickup_radius_per_rank
         _: return 0.0
+
+func _normalized_tags(tags: Array[StringName]) -> Array[StringName]:
+    var normalized: Array[StringName] = []
+    for tag: StringName in tags:
+        if not tag.is_empty() and tag not in normalized:
+            normalized.append(tag)
+    normalized.sort_custom(func(left: StringName, right: StringName) -> bool: return String(left) < String(right))
+    return normalized
 
 func _append_member(definition: ClassDefinition, leader: bool) -> void:
     var member := PartyMemberState.new(members.size() + 1, definition, leader)

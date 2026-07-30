@@ -3,8 +3,9 @@ extends Node3D
 
 const AREA_BURST_SCENE := preload("res://scenes/combat/area_burst.tscn")
 
-var team_id := 0
-var damage := 0.0
+var packet: DamagePacket
+var combat_rng: CombatRng
+var damage_types: DamageTypeCatalog
 var speed := 0.0
 var area_radius := 0.0
 var maximum_range := 0.0
@@ -13,17 +14,20 @@ var elapsed := 0.0
 var distance_travelled := 0.0
 var target: CombatTarget
 var effects_parent: Node
+var combatants: Array[Node3D] = []
 var direction := Vector3.FORWARD
 
-func configure(own_team: int, damage_amount: float, projectile_speed: float, impact_radius: float, range_limit: float, duration: float, combat_target: CombatTarget, effect_container: Node) -> void:
-    team_id = own_team
-    damage = maxf(damage_amount, 0.0)
+func configure(damage_packet: DamagePacket, rng: CombatRng, types: DamageTypeCatalog, projectile_speed: float, impact_radius: float, range_limit: float, duration: float, combat_target: CombatTarget, effect_container: Node, actor_candidates: Array[Node3D] = []) -> void:
+    packet = damage_packet
+    combat_rng = rng
+    damage_types = types
     speed = maxf(projectile_speed, 0.01)
     area_radius = maxf(impact_radius, 0.0)
     maximum_range = maxf(range_limit, 0.01)
     lifetime = clampf(duration, 0.01, 10.0)
     target = combat_target
     effects_parent = effect_container
+    combatants = actor_candidates
     elapsed = 0.0
     distance_travelled = 0.0
     _refresh_direction()
@@ -41,7 +45,7 @@ func _process(delta: float) -> void:
         target.position = target.actor.global_position if target.actor.is_inside_tree() else target.actor.position
         if target.actor.has_method("get_combat_target"):
             var refreshed: CombatTarget = target.actor.call("get_combat_target") as CombatTarget
-            if refreshed == null or not refreshed.is_available or refreshed.team_id == team_id:
+            if refreshed == null or not refreshed.is_available or packet == null or refreshed.team_id == packet.source_team_id:
                 queue_free()
                 return
             target = refreshed
@@ -77,9 +81,11 @@ func _impact() -> void:
                 burst.global_position = global_position
             else:
                 burst.position = position
-            burst.call("configure", team_id, damage, area_radius, 0.25)
-    elif target != null and target.team_id != team_id and target.is_available and target.actor != null and target.actor.has_method("receive_damage"):
-        target.actor.call("receive_damage", damage)
+            burst.call("configure", packet, combat_rng, damage_types, area_radius, 0.25, combatants)
+    elif packet != null and target != null and target.team_id != packet.source_team_id and target.is_available and target.actor != null and target.actor.has_method("get_combat_adapter"):
+        var adapter := target.actor.call("get_combat_adapter", packet.action_tags) as CombatantAdapter
+        if adapter != null:
+            DamageResolver.resolve(packet, adapter, combat_rng, damage_types)
     queue_free()
 
 func _effect_parent() -> Node:

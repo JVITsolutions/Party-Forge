@@ -13,6 +13,7 @@ var member_state: PartyMemberState
 var party_manager: PartyManager
 var combat_effects_parent: Node
 var attack_executor: Node
+var recovery_controller: RecoveryController
 var support_controller: AttackController
 var base_visual_color := Color.WHITE
 var damage_flash_remaining := 0.0
@@ -58,12 +59,15 @@ func configure_combat(manager: PartyManager, effect_container: Node = null) -> v
         if not party_manager.active_traits_changed.is_connected(_on_active_traits_changed): party_manager.active_traits_changed.connect(_on_active_traits_changed)
         if not party_manager.stats_changed.is_connected(_on_stats_changed): party_manager.stats_changed.connect(_on_stats_changed)
     _refresh_runtime_stats()
+    _configure_recovery()
     _ensure_combat_runtime()
 
 func _process(delta: float) -> void:
     _advance_visual_feedback(delta)
     if member_state == null or member_state.class_definition == null or not is_inside_tree() or get_tree().paused:
         return
+    if recovery_controller != null:
+        recovery_controller.advance(delta)
     advance_combat(delta, _collect_combat_targets())
 
 func advance_combat(delta: float, candidates: Array[CombatTarget]) -> void:
@@ -103,10 +107,14 @@ func receive_damage(amount: float) -> float:
     var health: HealthComponent = _health_component()
     if health == null:
         return 0.0
-    var adjusted_amount := amount
-    if party_manager != null:
-        adjusted_amount *= party_manager.incoming_damage_multiplier(self)
-    return health.take_damage(adjusted_amount)
+    return health.take_damage(amount)
+
+func get_combat_adapter(tags: Array[StringName]) -> CombatantAdapter:
+    var health := _health_component()
+    var identity := StringName("party:%d" % member_state.member_id) if member_state != null else &""
+    var stats := party_manager.stats_for_action(member_state.member_id, tags) if party_manager != null and member_state != null else null
+    var available := member_state != null and health != null and not health.is_downed and not health.is_dead
+    return CombatantAdapter.new(self, identity, team_id, health, stats, available, Callable(self, "_incoming_damage_multiplier"))
 
 func get_combat_target() -> CombatTarget:
     var target_position: Vector3 = global_position if is_inside_tree() else position
@@ -133,6 +141,24 @@ func _configure_support_controller(definition: AttackDefinition) -> void:
         support_controller.name = "SupportController"
         add_child(support_controller)
     support_controller.configure(definition, team_id)
+
+func _configure_recovery() -> void:
+    if recovery_controller == null:
+        recovery_controller = get_node_or_null("RecoveryController") as RecoveryController
+    if recovery_controller == null:
+        recovery_controller = RecoveryController.new()
+        recovery_controller.name = "RecoveryController"
+        add_child(recovery_controller)
+    recovery_controller.configure(_health_component(), Callable(self, "_health_regeneration_rate"))
+
+func _health_regeneration_rate() -> float:
+    if party_manager == null or member_state == null:
+        return 0.0
+    var stats := party_manager.stats_for(member_state.member_id)
+    return stats.value(&"health_regeneration", 0.0) if stats != null else 0.0
+
+func _incoming_damage_multiplier(_packet: DamagePacket) -> float:
+    return party_manager.incoming_damage_multiplier(self) if party_manager != null else 1.0
 
 func _ensure_combat_runtime() -> void:
     if attack_executor == null:
