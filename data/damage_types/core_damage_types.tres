@@ -1,0 +1,58 @@
+[gd_resource type="Resource" script_class="DamageTypeCatalog" load_steps=8 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/damage_type_definition.gd" id="1_definition"]
+[ext_resource type="Script" path="res://scripts/data/damage_type_catalog.gd" id="2_catalog"]
+
+[sub_resource type="Resource" id="DamageType_physical"]
+script = ExtResource("1_definition")
+id = &"physical"
+display_name = "Physical"
+keyword_id = &"physical"
+presentation_color = Color(0.847059, 0.823529, 0.768627, 1)
+offense_stat_id = &"physical_damage"
+defense_stat_id = &"armor"
+mitigation_rule = 0
+
+[sub_resource type="Resource" id="DamageType_fire"]
+script = ExtResource("1_definition")
+id = &"fire"
+display_name = "Fire"
+keyword_id = &"fire"
+presentation_color = Color(1, 0.419608, 0.239216, 1)
+offense_stat_id = &"fire_damage"
+defense_stat_id = &"fire_resistance"
+mitigation_rule = 1
+
+[sub_resource type="Resource" id="DamageType_cold"]
+script = ExtResource("1_definition")
+id = &"cold"
+display_name = "Cold"
+keyword_id = &"cold"
+presentation_color = Color(0.439216, 0.784314, 1, 1)
+offense_stat_id = &"cold_damage"
+defense_stat_id = &"cold_resistance"
+mitigation_rule = 1
+
+[sub_resource type="Resource" id="DamageType_lightning"]
+script = ExtResource("1_definition")
+id = &"lightning"
+display_name = "Lightning"
+keyword_id = &"lightning"
+presentation_color = Color(1, 0.890196, 0.419608, 1)
+offense_stat_id = &"lightning_damage"
+defense_stat_id = &"lightning_resistance"
+mitigation_rule = 1
+
+[sub_resource type="Resource" id="DamageType_chaos"]
+script = ExtResource("1_definition")
+id = &"chaos"
+display_name = "Chaos"
+keyword_id = &"chaos"
+presentation_color = Color(0.709804, 0.423529, 1, 1)
+offense_stat_id = &"chaos_damage"
+defense_stat_id = &"chaos_resistance"
+mitigation_rule = 1
+
+[resource]
+script = ExtResource("2_catalog")
+definitions = Array[ExtResource("1_definition")]([SubResource("DamageType_physical"), SubResource("DamageType_fire"), SubResource("DamageType_cold"), SubResource("DamageType_lightning"), SubResource("DamageType_chaos")])

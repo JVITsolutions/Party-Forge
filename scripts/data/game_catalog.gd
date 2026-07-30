@@ -15,7 +15,9 @@ const ENEMY_PATHS: PackedStringArray = [
     "res://data/enemies/swarmer.tres", "res://data/enemies/spitter.tres",
     "res://data/enemies/forge_guardian.tres"
 ]
+const DAMAGE_TYPES: DamageTypeCatalog = preload("res://data/damage_types/core_damage_types.tres")
 
+var damage_types: DamageTypeCatalog = DAMAGE_TYPES
 var classes: Array[ClassDefinition] = []
 var traits: Array[TraitDefinition] = []
 var enemies: Array[EnemyDefinition] = []
@@ -42,6 +44,11 @@ func trait_by_id(id: StringName) -> TraitDefinition:
 
 func validate() -> PackedStringArray:
     var errors: PackedStringArray = []
+    if damage_types == null:
+        errors.append("PARTY_FORGE_DAMAGE_ERROR path=<missing> type=<catalog> reason=resource failed to load")
+    else:
+        for reason: String in damage_types.validate(PartyManager.STAT_CATALOG):
+            errors.append(_damage_error_with_path(reason, damage_types.resource_path))
     var seen: Dictionary = {}
     var resources: Array[Resource] = []
     for definition: ClassDefinition in classes: resources.append(definition)
@@ -56,5 +63,13 @@ func validate() -> PackedStringArray:
         seen[id] = true
         var validation: PackedStringArray = definition.call("validate")
         for reason: String in validation:
-            errors.append("PARTY_FORGE_RESOURCE_ERROR id=%s reason=%s" % [id, reason])
+            if reason.begins_with("PARTY_FORGE_DAMAGE_ERROR"):
+                errors.append(_damage_error_with_path(reason, definition.resource_path))
+            else:
+                errors.append("PARTY_FORGE_RESOURCE_ERROR id=%s reason=%s" % [id, reason])
     return errors
+
+func _damage_error_with_path(reason: String, path: String) -> String:
+    if path.is_empty() or not reason.begins_with("PARTY_FORGE_DAMAGE_ERROR"):
+        return reason
+    return "PARTY_FORGE_DAMAGE_ERROR path=%s %s" % [path, reason.trim_prefix("PARTY_FORGE_DAMAGE_ERROR ")]
