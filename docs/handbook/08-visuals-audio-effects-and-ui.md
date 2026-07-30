@@ -143,6 +143,14 @@ Keep world-space presentation under gameplay nodes and screen-space UI under the
 
 > **Party Forge convention:** The responsive UI tutorial is the single detailed procedure. Link to it and update it when the project-wide responsive contract changes instead of duplicating competing instructions in actor or content chapters.
 
+### Upgrade cards, tooltips, and recipients
+
+`LevelUpPanel` presents authored offers as three `UpgradeCard` controls. Hover and keyboard/controller focus both request the same dictionary from `UpgradePresentationService.tooltip()`, so the tooltip title, summary, resolved effect lines, and keyword explanations have one formatter instead of separate mouse and focus text paths. `UpgradeTooltipPanel` only renders that dictionary.
+
+Selecting a single-recipient card opens `UpgradeRecipientPicker`. Its rows show each stable member ID, stored character name, class, live current/maximum health from the corresponding direct `PartyActor`, projected stat changes, and a disabled reason when the member is ineligible or capped. Party- and trait-scoped cards proceed without a character target. The confirmation view emits `confirmation_requested(choice, member_id)` once; `PartyForgeMain` revalidates and applies it centrally before telling the panel to complete. A stale or invalid target keeps the level pending and leaves the confirmation visible with an error.
+
+The implemented upgrade UI is selection-time presentation, not an inventory or passive-tree screen. Rarity styling/scaling, save/load UI, and player-facing character-renaming controls remain deferred.
+
 ## Exercise: replace presentation without changing combat
 
 This exercise changes only a disposable training copy.
@@ -174,6 +182,7 @@ The exercise is successful when the screenshots look different but the recorded 
 - 3D sounds are tested from near, far, left, and right of the active listener.
 - UI and music sounds use non-positional playback and only verified project buses.
 - HUD changes follow the responsive UI tutorial and pass its resolution matrix.
+- Upgrade-card mouse hover and keyboard/controller focus show the same formatted tooltip; recipient health is read live and an invalid confirmation does not dismiss the pending level.
 - The full automated suite and a before/after sandbox comparison pass before commit.
 
 ## Verification

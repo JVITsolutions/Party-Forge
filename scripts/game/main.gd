@@ -80,9 +80,12 @@ func select_leader_class(class_id: StringName) -> bool:
 	return true
 
 func _apply_choice(choice: UpgradeChoice, report_error: bool = true) -> bool:
+	return _apply_choice_for_member(choice, 0, report_error)
+
+func _apply_choice_for_member(choice: UpgradeChoice, recipient_member_id: int, report_error: bool = true) -> bool:
 	if not _choice_is_valid(choice):
 		if report_error and choice != null:
-			push_error("PARTY_FORGE_INVALID_CHOICE kind=%d target=%s" % [choice.kind, choice.target_id])
+			push_error("PARTY_FORGE_INVALID_CHOICE kind=%d target=%s member=%d" % [choice.kind, choice.target_id, recipient_member_id])
 		return false
 	var applied := false
 	match choice.kind:
@@ -96,9 +99,21 @@ func _apply_choice(choice: UpgradeChoice, report_error: bool = true) -> bool:
 			applied = party_manager.upgrade_party_stat(choice.target_id)
 			if applied and choice.target_id == &"pickup_radius":
 				_sync_pickup_radius()
+		UpgradeChoice.Kind.AUTHORED:
+			var definition := catalog.upgrade_by_id(choice.target_id) if catalog != null else null
+			if definition == null or choice.definition != definition:
+				if report_error:
+					push_error("PARTY_FORGE_INVALID_CHOICE kind=%d target=%s member=%d" % [choice.kind, choice.target_id, recipient_member_id])
+				return false
+			var owner_member_id := recipient_member_id if definition.is_single_recipient() else 0
+			if not UpgradeApplicationService.validate_application(definition, party_manager, owner_member_id).is_empty():
+				if report_error:
+					push_error("PARTY_FORGE_INVALID_CHOICE kind=%d target=%s member=%d" % [choice.kind, choice.target_id, recipient_member_id])
+				return false
+			applied = UpgradeApplicationService.apply(definition.id, catalog, party_manager, owner_member_id)
 	if not applied:
 		if report_error:
-			push_error("PARTY_FORGE_INVALID_CHOICE kind=%d target=%s" % [choice.kind, choice.target_id])
+			push_error("PARTY_FORGE_INVALID_CHOICE kind=%d target=%s member=%d" % [choice.kind, choice.target_id, recipient_member_id])
 		return false
 	experience_system.consume_pending_level()
 	if experience_system.pending_levels > 0:
@@ -108,6 +123,33 @@ func _apply_choice(choice: UpgradeChoice, report_error: bool = true) -> bool:
 		level_refresh_scheduled = false
 		game_run.resume_run()
 	return true
+
+func _on_choice_confirmation_requested(choice: UpgradeChoice, recipient_member_id: int) -> void:
+	var panel := get_node("HUD/LevelUpPanel") as LevelUpPanel
+	if _apply_choice_for_member(choice, recipient_member_id, false):
+		panel.complete_selection()
+	else:
+		panel.reject_selection("Selection is no longer available.")
+
+func _health_for_member(member_id: int) -> Vector2:
+	var actors := get_node_or_null("Actors")
+	if actors == null:
+		return Vector2.ZERO
+	var inspected := 0
+	for child: Node in actors.get_children():
+		var actor := child as PartyActor
+		if actor == null or not is_instance_valid(actor) or actor.is_queued_for_deletion():
+			continue
+		if inspected >= PartyManager.MAX_PARTY_SIZE:
+			break
+		inspected += 1
+		if actor.member_state == null or actor.member_state.member_id != member_id:
+			continue
+		var health := actor.get_node_or_null("HealthComponent") as HealthComponent
+		if health != null:
+			return Vector2(health.current_health, health.max_health)
+		return Vector2.ZERO
+	return Vector2.ZERO
 
 static func format_resource_error(path: String, reason: String) -> String:
 	return "PARTY_FORGE_RESOURCE_ERROR path=%s reason=%s" % [path, reason]
@@ -134,8 +176,14 @@ func _wire_static_ui() -> void:
 	selector.configure(catalog.classes)
 	if not selector.class_selected.is_connected(select_leader_class):
 		selector.class_selected.connect(select_leader_class)
-	var level_panel := get_node("HUD/LevelUpPanel") as Control
-	if not level_panel.is_connected("choice_selected", _apply_choice): level_panel.connect("choice_selected", _apply_choice)
+	var level_panel := get_node("HUD/LevelUpPanel") as LevelUpPanel
+	level_panel.configure(catalog, UpgradeApplicationService.new(), Callable(self, "_health_for_member"))
+	var legacy_apply := Callable(self, "_apply_choice")
+	if level_panel.is_connected("choice_selected", legacy_apply):
+		level_panel.disconnect("choice_selected", legacy_apply)
+	var confirmation_handler := Callable(self, "_on_choice_confirmation_requested")
+	if not level_panel.is_connected("confirmation_requested", confirmation_handler):
+		level_panel.connect("confirmation_requested", confirmation_handler)
 	var result := get_node("HUD/RunResultPanel") as Control
 	if not result.is_connected("restart_requested", _restart): result.connect("restart_requested", _restart)
 	if not result.is_connected("quit_requested", _quit): result.connect("quit_requested", _quit)
@@ -175,6 +223,8 @@ func _choice_is_valid(choice: UpgradeChoice) -> bool:
 			return catalog != null and catalog.class_by_id(choice.target_id) != null
 		UpgradeChoice.Kind.PARTY_STAT:
 			return choice.target_id in PartyManager.PARTY_STAT_IDS and party_manager.party_stat_rank(choice.target_id) < party_manager.upgrade_tuning.party_stat_max_rank
+		UpgradeChoice.Kind.AUTHORED:
+			return catalog != null and catalog.upgrade_by_id(choice.target_id) == choice.definition
 		_:
 			return true
 

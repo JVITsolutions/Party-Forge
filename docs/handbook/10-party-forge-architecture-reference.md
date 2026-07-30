@@ -49,7 +49,7 @@ After leader selection, `PartyForgeMain` instances `Leader` under `Actors`, conf
 
 | Owner | File | Owns | Does not own |
 | --- | --- | --- | --- |
-| `PartyForgeMain` | `scripts/game/main.gd` | Catalog gate, leader selection, service wiring, level-up application, boss creation, runtime health bars, result UI, hostile-effect cancellation | Definition values or low-level combat math |
+| `PartyForgeMain` | `scripts/game/main.gd` | Catalog gate, leader selection, service wiring, central upgrade revalidation/application, live member-health lookup, boss creation, runtime health bars, result UI, hostile-effect cancellation | Definition values or low-level combat math |
 | `GameRun` | `scripts/game/game_run.gd` | Run-state facade, pause policy, elapsed-time forwarding, debug time scale, victory/defeat signals | Enemy weights or UI layout |
 | `RunStateMachine` | `scripts/game/run_state_machine.gd` | `SETUP`, `RUNNING`, `LEVEL_UP`, `BOSS`, `VICTORY`, `DEFEAT`; five-minute boss transition; terminal lock | Scene instancing |
 | `PartyManager` | `scripts/party/party_manager.gd` | Members, class ranks, trait counts/tiers, party-stat ranks, per-trait upgrades, action-aware stat snapshots, shared party combat dependencies, four-member cap | Actor node movement or rendering |
@@ -64,7 +64,7 @@ After leader selection, `PartyForgeMain` instances `Leader` under `Actors`, conf
 | `HealthComponent` | `scripts/combat/health_component.gd` | Final health application, down/death state, healing, revive timing, and health signals | Armor/resistance/dodge/block formulas, actor movement, targeting, or rewards |
 | `HUD` | `scripts/ui/hud.gd` and `scenes/ui/hud.tscn` | Status text, party/trait display, boss status and banner, composition of panels | Applying an upgrade choice |
 | `ClassSelectionPanel` | `scripts/ui/class_selection_panel.gd` and `scenes/ui/hud.tscn` | Ordered runtime buttons from `Array[ClassDefinition]`, scroll-grid presentation, stable `Class_<id>` node names, and `class_selected(class_id)` | Catalog registration, ID validation, or starting the run |
-| `LevelUpPanel` | `scripts/ui/level_up_panel.gd` and `scenes/ui/level_up_panel.tscn` | Three choice buttons, validity display, one `choice_selected` signal | Generating choices or mutating party state |
+| `LevelUpPanel` | `scripts/ui/level_up_panel.gd` and `scenes/ui/level_up_panel.tscn` | Three authored cards, shared hover/focus tooltip presentation, recipient selection, confirmation/rejection state, guarded `confirmation_requested` signal | Final revalidation or mutating party state |
 | `RunResultPanel` | `scripts/ui/run_result_panel.gd` and `scenes/ui/run_result_panel.tscn` | Victory/defeat display and restart/quit requests | Deciding the run result |
 
 ## Content definition table
@@ -77,9 +77,11 @@ After leader selection, `PartyForgeMain` instances `Leader` under `Actors`, conf
 | `TraitDefinition` | `scripts/data/trait_definition.gd` | `data/traits/*.tres` | Trait identity, supported stat ID, count thresholds, bonus values, and optional effect radius |
 | `EnemyDefinition` | `scripts/data/enemy_definition.gd` | `data/enemies/*.tres` | Enemy identity, behavior enum, health, speed, typed stat overrides, linked attacks, and experience |
 | `UpgradeTuning` | `scripts/data/upgrade_tuning.gd` | `data/upgrades/default_upgrades.tres` | Party-stat maximum rank and per-rank party/trait upgrade steps |
+| `UpgradeDefinition` / `StatUpgradeEffect` | `scripts/data/upgrade_definition.gd`, `scripts/data/stat_upgrade_effect.gd` | `data/upgrades/cards/*.tres` | Card identity, scope, eligibility, rank/weight metadata, tooltip keywords, and stat effects |
+| `ExperienceTuning` | `scripts/data/experience_tuning.gd` | `data/progression/default_experience.tres` | Base, linear, and accelerating next-level experience costs |
 | `StatCatalog` / `StatDefinition` | `scripts/stats/stat_catalog.gd`, `scripts/stats/stat_definition.gd` | `data/stats/core_stats.tres` | Registered stat defaults, limits, precision, formatting, visibility, capability tags, and keyword IDs |
 
-Definitions are Resources, not running actors. `GameCatalog` explicitly loads class, trait, enemy, and damage-type definitions; `PartyManager.STAT_CATALOG` loads the stat catalog. Party attacks are reached through class references; enemy definitions link their behavior-required attacks explicitly.
+Definitions are Resources, not running actors. `GameCatalog` explicitly loads class, trait, enemy, damage-type, keyword, and required upgrade definitions; `PartyManager.STAT_CATALOG` loads the stat catalog. Party attacks are reached through class references; enemy definitions link their behavior-required attacks explicitly. Card source rows live in `tools/character_upgrade_content_rows.gd`; `tools/create_character_upgrade_data.gd` generates their `.tres` files, whose exact paths must also be added to `GameCatalog.REQUIRED_UPGRADE_PATHS`.
 
 ## Main run data flow
 
@@ -137,19 +139,23 @@ The Forge Guardian is boss-only. `PartyForgeMain` instances it in response to th
 ## Level-up flow
 
 1. An experience orb calls `ExperienceSystem.add_experience()` when collected.
-2. Crossing one or more thresholds increments the level, records pending levels, and emits `level_ready` for each threshold.
+2. `ExperienceSystem` gets each requirement from `data/progression/default_experience.tres`; crossing one or more thresholds increments the level, records every pending level, and emits `level_ready` for each threshold without discarding excess experience.
 3. `PartyForgeMain` asks `GameRun` to enter `LEVEL_UP`, which pauses the SceneTree.
-4. `LevelUpChoiceService.generate()` builds registered recruit choices, owned-class rank choices, active-trait upgrades, and five party-stat choices.
-5. While party space remains, one randomized recruit is included; remaining candidates are shuffled deterministically from the supplied seed.
-6. `LevelUpPanel` displays three usable choices and emits the selected `UpgradeChoice` once.
-7. `PartyForgeMain._apply_choice()` revalidates and applies recruit, class-rank, trait, or party-stat ownership through `PartyManager`.
-8. One pending level is consumed. Another pending choice is presented, or the run resumes its prior state.
+4. `LevelUpChoiceService.generate()` builds eligible authored cards from the explicit upgrade catalog and preserves the legacy recruit/class-rank/trait/party-stat candidates needed by existing runs.
+5. Authored `CHARACTER` and `CLASS_SPECIFIC` cards require one eligible member; `PARTY` and `TRAIT` cards use party ownership. Personal ranks are keyed by stable member ID, while party-owned matching sources also affect eligible future recruits.
+6. `LevelUpPanel` displays three offers. Cards and tooltips use `UpgradePresentationService`; hover and focus share the same tooltip formatter. A personal card goes through the recipient picker, whose health values are read from at most four live direct `PartyActor` children.
+7. The confirmation view emits guarded `confirmation_requested(choice, member_id)`. `PartyForgeMain._apply_choice_for_member()` rechecks the catalog definition, member eligibility, and rank cap, then calls `UpgradeApplicationService`.
+8. Success completes the panel and consumes exactly one pending level. A queued level receives its own next offer while the run stays paused; otherwise the run resumes its previous `RUNNING` or `BOSS` state. Rejection consumes nothing and leaves the confirmation visible with an error.
 
 ## Explicit registries and current limitations
 
 | Boundary | Verified implementation | Consequence |
 | --- | --- | --- |
 | Catalog | `GameCatalog.CLASS_PATHS`, `TRAIT_PATHS`, and `ENEMY_PATHS` are explicit arrays | New files under `data/` are not discovered automatically |
+| Upgrade cards | `GameCatalog.REQUIRED_UPGRADE_PATHS` explicitly lists cards generated from `tools/character_upgrade_content_rows.gd`; scope and eligibility live on each `UpgradeDefinition` | Add a row, run the generator, register the exact path, then test application and presentation |
+| Upgrade ownership | Character/class-specific ranks use stable member IDs; party/trait cards use owner ID zero and matching modifier sources | Same-class members can diverge, and eligible later recruits inherit already-owned party synergies |
+| Upgrade presentation | `UpgradePresentationService` supplies card, tooltip, recipient, and confirmation dictionaries | Hover and focus remain consistent; UI controls do not own combat math |
+| Progression tuning | `ExperienceSystem` preloads `data/progression/default_experience.tres` | Change the Resource for supported curve tuning and validate queued-level behavior |
 | Leader selection | `ClassSelectionPanel.configure(catalog.classes)` creates all runtime buttons and emits exact IDs | A valid registered party-supported class enters leader selection without a class-specific HUD path |
 | Attack kinds | Party: `MELEE_CLEAVE`, `PROJECTILE`, `AREA_PROJECTILE`, `HEAL`; enemy behaviors additionally use `DIRECT` and `AREA` | A new kind needs validation, owning behavior/delivery support, and tests |
 | Trait effects | Thirteen registered traits cover attack speed, Vanguard reduction, ranged speed/range, area, cooldown, healing/revive, support, Fire, Cold, dodge, life steal, Chaos, and Bow range | A new stat ID still needs a registered stat definition, modifier/party behavior, and tests |
@@ -159,6 +165,7 @@ The Forge Guardian is boss-only. `PartyForgeMain` instances it in response to th
 | Formation data | `engagement_distance` is exported but not consumed by verified runtime movement/targeting | Editing it alone has no gameplay effect |
 | Presentation | Damage flash expects a direct `MeshInstance3D` | Nested imported hierarchies need an adapter or recursive handling |
 | Audio | No reviewed custom bus layout or established audio integration | Verify actual buses; do not assume Music/SFX/UI names |
+| Deferred progression UI | Rarity scaling/styling, inventory, passive trees, save/load persistence, and player-facing renaming controls are not implemented | Do not document schema fields or stored names as complete versions of those systems |
 
 > **Current limitation:** These are implementation facts, not Godot restrictions. Change them deliberately with source, tests, and updated handbook guidance.
 
@@ -167,6 +174,8 @@ The Forge Guardian is boss-only. `PartyForgeMain` instances it in response to th
 | Desired change | Primary owner | Additional integration |
 | --- | --- | --- |
 | Tune an existing number | Owning `.tres` definition, `UpgradeTuning`, or documented script constant | Relevant unit suite and controlled observation |
+| Add an authored upgrade card | Row in `tools/character_upgrade_content_rows.gd`, then `tools/create_character_upgrade_data.gd` | Generated `.tres`/registry review, catalog validation, choice/application/presentation tests |
+| Tune the experience curve | `data/progression/default_experience.tres` | Requirement boundaries, excess-XP and queued-level tests, ordinary progression run |
 | Add an existing-kind attack | New `AttackDefinition` in `data/attacks/`; link from class | Definition/catalog-link tests and combat sandbox |
 | Add a party-supported class | Class/attack/trait Resources plus `GameCatalog` class/trait arrays | Catalog, selector, leader, progression recruitment/tier, and ordinary-run checks |
 | Add a supported trait | `TraitDefinition` plus class trait IDs and `GameCatalog.TRAIT_PATHS` | Catalog, party-manager, modifier tests |

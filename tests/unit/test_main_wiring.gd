@@ -40,6 +40,9 @@ func run() -> Array[String]:
     _test_hud_contract(failures)
     _test_exact_choice_panel(failures)
     _test_class_selection_starts_run_and_applies_choices(failures)
+    _test_targeted_confirmation_routes_through_main(failures)
+    _test_stale_target_rejects_without_consuming(failures)
+    _test_live_member_health_provider_is_bounded(failures)
     _test_capped_stat_is_disabled_without_hiding(failures)
     _test_stacked_levels_stay_paused(failures)
     _test_boss_level_up_resumes_boss(failures)
@@ -154,6 +157,84 @@ func _test_class_selection_starts_run_and_applies_choices(failures: Array[String
             TestAssertions.equal(class_party.members[0].class_definition.id, class_id, "%s direct selection uses exact leader" % class_id, failures)
         class_main.free()
         (Engine.get_main_loop() as SceneTree).paused = false
+
+func _test_targeted_confirmation_routes_through_main(failures: Array[String]) -> void:
+    var main := _started_main()
+    var panel := main.get_node("HUD/LevelUpPanel") as LevelUpPanel
+    var handler := Callable(main, "_on_choice_confirmation_requested")
+    TestAssertions.truthy(main.has_method("_apply_choice_for_member"), "main exposes member-targeted central apply", failures)
+    TestAssertions.truthy(main.has_method("_on_choice_confirmation_requested"), "main exposes confirmation request handler", failures)
+    TestAssertions.truthy(panel.is_connected("confirmation_requested", handler), "confirmation request connects to central main handler", failures)
+    TestAssertions.truthy(not panel.is_connected("choice_selected", Callable(main, "_apply_choice")), "legacy choice signal is not a second main application path", failures)
+    var health_provider: Callable = panel.get("_health_provider")
+    TestAssertions.truthy(health_provider.is_valid(), "main configures live recipient health provider", failures)
+
+    var party := main.get_node("PartyManager") as PartyManager
+    var experience := main.get_node("ExperienceSystem") as ExperienceSystem
+    var game_run := main.get_node("GameRun") as GameRun
+    experience.pending_levels = 1
+    game_run.begin_level_up()
+    var choice := UpgradeChoice.authored((main.get("catalog") as GameCatalog).upgrade_by_id(&"vitality"))
+    var choices: Array[UpgradeChoice] = [
+        choice,
+        UpgradeChoice.new(UpgradeChoice.Kind.PARTY_STAT, &"damage", "Damage"),
+        UpgradeChoice.new(UpgradeChoice.Kind.PARTY_STAT, &"move_speed", "Move Speed"),
+    ]
+    panel.show_choices(choices, party)
+    panel.call("_on_recipient_selected", choice, party.members[0].member_id)
+    var confirm := panel.get_node("ContentPanel/ConfirmationView/Content/Actions/Confirm") as Button
+    confirm.pressed.emit()
+    confirm.pressed.emit()
+    TestAssertions.equal(party.upgrade_rank(&"vitality", party.members[0].member_id), 1, "confirmation applies authored card to exact member once", failures)
+    TestAssertions.equal(experience.pending_levels, 0, "successful confirmation consumes exactly one pending level", failures)
+    TestAssertions.truthy(not panel.visible, "successful confirmation completes and hides selection", failures)
+    TestAssertions.equal(game_run.current_state(), RunStateMachine.State.RUNNING, "successful final confirmation resumes running state", failures)
+    _cleanup_main(main)
+
+func _test_stale_target_rejects_without_consuming(failures: Array[String]) -> void:
+    var main := _started_main()
+    var panel := main.get_node("HUD/LevelUpPanel") as LevelUpPanel
+    var party := main.get_node("PartyManager") as PartyManager
+    var experience := main.get_node("ExperienceSystem") as ExperienceSystem
+    var game_run := main.get_node("GameRun") as GameRun
+    experience.pending_levels = 1
+    game_run.begin_level_up()
+    var choice := UpgradeChoice.authored((main.get("catalog") as GameCatalog).upgrade_by_id(&"vitality"))
+    panel.show_choices([
+        choice,
+        UpgradeChoice.new(UpgradeChoice.Kind.PARTY_STAT, &"damage", "Damage"),
+        UpgradeChoice.new(UpgradeChoice.Kind.PARTY_STAT, &"move_speed", "Move Speed"),
+    ], party)
+    panel.call("_on_recipient_selected", choice, 999)
+    (panel.get_node("ContentPanel/ConfirmationView/Content/Actions/Confirm") as Button).pressed.emit()
+    TestAssertions.equal(party.upgrade_rank(&"vitality", party.members[0].member_id), 0, "stale target applies no authored rank", failures)
+    TestAssertions.equal(experience.pending_levels, 1, "stale target consumes no pending level", failures)
+    TestAssertions.equal(game_run.current_state(), RunStateMachine.State.LEVEL_UP, "stale target keeps level-up paused", failures)
+    TestAssertions.truthy(panel.visible, "stale target keeps selection visible", failures)
+    TestAssertions.truthy((panel.get_node("ContentPanel/ConfirmationView") as Control).visible, "stale target remains on confirmation view", failures)
+    TestAssertions.truthy(not (panel.get_node("ContentPanel/ConfirmationView/Content/Error") as Label).text.is_empty(), "stale target displays rejection reason", failures)
+    _cleanup_main(main)
+
+func _test_live_member_health_provider_is_bounded(failures: Array[String]) -> void:
+    var main := _started_main()
+    TestAssertions.truthy(main.has_method("_health_for_member"), "main exposes live member health provider", failures)
+    if not main.has_method("_health_for_member"):
+        _cleanup_main(main)
+        return
+    var leader := main.get("leader") as PartyActor
+    var leader_health := leader.get_node("HealthComponent") as HealthComponent
+    leader_health.apply_damage(17.0)
+    TestAssertions.equal(main.call("_health_for_member", 1), Vector2(leader_health.current_health, leader_health.max_health), "health provider reads live leader component", failures)
+
+    var actors := main.get_node("Actors") as Node3D
+    var catalog := main.get("catalog") as GameCatalog
+    for member_id: int in [2, 3, 4, 99]:
+        var actor := (load("res://scenes/characters/companion.tscn") as PackedScene).instantiate() as PartyActor
+        actor.configure(PartyMemberState.new(member_id, catalog.class_by_id(&"ranger"), false, "Test %d" % member_id))
+        actors.add_child(actor)
+    TestAssertions.equal(main.call("_health_for_member", 99), Vector2.ZERO, "health provider inspects at most four live party actors", failures)
+    TestAssertions.equal(main.call("_health_for_member", 404), Vector2.ZERO, "health provider returns zero for unknown member", failures)
+    _cleanup_main(main)
 
 func _test_capped_stat_is_disabled_without_hiding(failures: Array[String]) -> void:
     var panel := (load("res://scenes/ui/level_up_panel.tscn") as PackedScene).instantiate() as Control
@@ -324,3 +405,7 @@ func _started_main() -> Node:
     main.call("_ready")
     main.call("select_leader_class", &"fighter")
     return main
+
+func _cleanup_main(main: Node) -> void:
+    (Engine.get_main_loop() as SceneTree).paused = false
+    main.free()

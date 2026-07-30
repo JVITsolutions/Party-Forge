@@ -96,6 +96,8 @@ The Resource scripts define schemas under `res://scripts/data/`; instances live 
 | `TraitDefinition` | `res://scripts/data/trait_definition.gd` | `res://data/traits/*.tres` | Trait identity, supported stat ID, activation tiers, values, and optional effect radius. |
 | `EnemyDefinition` | `res://scripts/data/enemy_definition.gd` | `res://data/enemies/*.tres` | Enemy identity, behavior enum, health, speed, typed stat overrides, linked attacks, and experience reward. |
 | `UpgradeTuning` | `res://scripts/data/upgrade_tuning.gd` | `res://data/upgrades/default_upgrades.tres` | Party-stat maximum rank and per-rank tuning steps. |
+| `UpgradeDefinition` / `StatUpgradeEffect` | `res://scripts/data/upgrade_definition.gd`, `res://scripts/data/stat_upgrade_effect.gd` | `res://data/upgrades/cards/*.tres` | Authored card identity, scope, eligibility, maximum rank, selection weight, tooltip keywords, and stat-modifier effects. |
+| `ExperienceTuning` | `res://scripts/data/experience_tuning.gd` | `res://data/progression/default_experience.tres` | Base, linear, and accelerating terms for each next-level experience requirement. |
 | `StatCatalog` / `StatDefinition` | `res://scripts/stats/stat_catalog.gd`, `res://scripts/stats/stat_definition.gd` | `res://data/stats/core_stats.tres` | Stat defaults, limits, precision, formatting, visibility, capability requirements, and keyword identity. |
 
 `ClassDefinition` demonstrates nested Resource data:
@@ -184,9 +186,15 @@ const ENEMY_PATHS: PackedStringArray = [
 
 Attack definitions have no separate `ATTACK_PATHS` registry. They become reachable through `ClassDefinition.primary_attack`/`support_action` or `EnemyDefinition.attacks`. The damage-type catalog is loaded explicitly by `GameCatalog`; `UpgradeTuning` is loaded separately by `PartyManager.DEFAULT_UPGRADE_TUNING`.
 
+Authored upgrade cards use another explicit registry: `GameCatalog.REQUIRED_UPGRADE_PATHS` (with an empty optional list at this checkpoint). Add a production card by adding one row to `tools/character_upgrade_content_rows.gd`, run `tools/create_character_upgrade_data.gd`, and add the exact generated `data/upgrades/cards/<id>.tres` path to the required registry; review both diffs. The row supplies the card's scope, class/tag eligibility, rank cap, and effects. `CHARACTER` and `CLASS_SPECIFIC` cards target one eligible member; `PARTY` and `TRAIT` cards use party ownership, with trait/tag eligibility deciding which current and future members receive their modifier source.
+
+Personal ranks are keyed by the stable `PartyMemberState.member_id`, not by class ID or actor node. That lets two members of the same class own different cards and ranks without storing scene references in runtime state. Party-owned matching sources are recomputed against each member, so an eligible recruit added later receives the already-owned synergy.
+
+`ExperienceSystem` preloads `data/progression/default_experience.tres`. Its `ExperienceTuning` computes the next requirement from `base_cost + linear_growth * n + acceleration * n * n`, clamps the result to at least one, and falls back to safe nonnegative terms when loaded values are invalid.
+
 > **Party Forge convention:** Content registration is explicit and code-reviewed; folders are not scanned automatically.
 
-> **Current limitation:** `GameCatalog` directly registers only classes, traits, and enemies. A new attack or tuning Resource requires an owning reference or explicit loading path appropriate to that type.
+> **Current limitation:** Upgrade rarity is stored but does not scale selection or effects. Inventory, passive trees, save/load persistence, and player-facing renaming controls are deferred; do not infer them from the card schema or stored character names.
 
 ## Validation and grep-friendly errors
 
