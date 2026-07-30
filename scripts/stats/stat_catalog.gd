@@ -5,8 +5,7 @@ extends Resource
 var _by_id: Dictionary = {}
 
 func definition(id: StringName) -> StatDefinition:
-	if _by_id.size() != definitions.size():
-		_rebuild_index()
+	_rebuild_index()
 	return _by_id.get(id) as StatDefinition
 
 func all() -> Array[StatDefinition]:

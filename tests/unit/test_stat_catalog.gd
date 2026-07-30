@@ -20,4 +20,11 @@ func run() -> Array[String]:
 		"duplicate stat IDs are grep-friendly",
 		failures,
 	)
+
+	var mutable := StatCatalog.new()
+	mutable.definitions = [catalog.definition(&"armor")]
+	mutable.definition(&"armor")
+	mutable.definitions[0] = catalog.definition(&"max_health")
+	TestAssertions.truthy(mutable.definition(&"armor") == null, "replaced stat ID leaves the index", failures)
+	TestAssertions.equal(mutable.definition(&"max_health"), catalog.definition(&"max_health"), "replacement stat enters the index", failures)
 	return failures
