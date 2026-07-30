@@ -186,16 +186,7 @@ func _invalid_choice_keys(choices: Array[UpgradeChoice]) -> Dictionary:
 	return invalid
 
 func _generate_valid_choices(seed: int) -> Array[UpgradeChoice]:
-	var valid: Array[UpgradeChoice] = []
-	var seen: Dictionary = {}
-	for offset: int in range(32):
-		for choice: UpgradeChoice in LevelUpChoiceService.generate(party_manager, catalog, seed + offset):
-			if _choice_is_valid(choice) and not seen.has(choice.key()):
-				valid.append(choice)
-				seen[choice.key()] = true
-				if valid.size() == 3:
-					return valid
-	return valid
+	return LevelUpChoiceService.generate(party_manager, catalog, seed)
 
 func _spawn_boss() -> void:
 	if boss != null and is_instance_valid(boss):

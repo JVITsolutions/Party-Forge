@@ -34,7 +34,8 @@ func run() -> Array[String]:
     TestAssertions.equal(early.size(), 3, "three early choices", failures)
     TestAssertions.equal(_choice_keys(early), _choice_keys(early_repeat), "seed seven is deterministic early", failures)
     TestAssertions.equal(_unique_choice_count(early), 3, "early choices unique", failures)
-    TestAssertions.truthy(early.any(func(choice: UpgradeChoice) -> bool: return choice.kind == UpgradeChoice.Kind.RECRUIT), "open party guarantees recruit", failures)
+    TestAssertions.equal(early.filter(func(choice: UpgradeChoice) -> bool: return choice.kind == UpgradeChoice.Kind.RECRUIT).size(), 1, "open party guarantees exactly one recruit", failures)
+    TestAssertions.equal(early.filter(func(choice: UpgradeChoice) -> bool: return choice.kind == UpgradeChoice.Kind.AUTHORED).size(), 2, "authored upgrades fill open-party non-recruit slots", failures)
     TestAssertions.truthy(early.all(func(choice: UpgradeChoice) -> bool: return choice.is_valid_for(party)), "all early choices usable", failures)
     TestAssertions.truthy(early.all(func(choice: UpgradeChoice) -> bool: return choice.kind != UpgradeChoice.Kind.CLASS_RANK or choice.target_id == &"fighter"), "unowned class ranks excluded", failures)
     TestAssertions.truthy(early.all(func(choice: UpgradeChoice) -> bool: return choice.kind != UpgradeChoice.Kind.TRAIT), "inactive traits excluded", failures)
@@ -45,6 +46,7 @@ func run() -> Array[String]:
     TestAssertions.equal(_choice_keys(full), _choice_keys(full_repeat), "seed seven is deterministic full", failures)
     TestAssertions.equal(_unique_choice_count(full), 3, "full choices unique", failures)
     TestAssertions.truthy(full.all(func(choice: UpgradeChoice) -> bool: return choice.kind != UpgradeChoice.Kind.RECRUIT), "full party excludes recruits", failures)
+    TestAssertions.truthy(full.all(func(choice: UpgradeChoice) -> bool: return choice.kind == UpgradeChoice.Kind.AUTHORED), "full party receives authored upgrades first", failures)
     TestAssertions.truthy(full.all(func(choice: UpgradeChoice) -> bool: return choice.is_valid_for(party)), "all full choices usable", failures)
     party.free()
 
