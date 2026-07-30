@@ -29,18 +29,25 @@ func stat_base_values() -> Dictionary:
 	values[&"move_speed"] = float(values.get(&"move_speed", move_speed))
 	return values
 
-func validate() -> PackedStringArray:
-    var errors: PackedStringArray = []
-    if id.is_empty(): errors.append("class id is empty")
-    if display_name.is_empty(): errors.append("class %s display name is empty" % id)
-    if traits.is_empty(): errors.append("class %s has no traits" % id)
-    if max_health <= 0.0: errors.append("class %s health must be positive" % id)
-    if class_rank_power_step < 0.0: errors.append("class %s rank power step cannot be negative" % id)
-    if revive_delay <= 0.0: errors.append("class %s revive delay must be positive" % id)
-    if revive_health_fraction <= 0.0 or revive_health_fraction > 1.0: errors.append("class %s revive health fraction must be between zero and one" % id)
-    if primary_attack == null: errors.append("class %s primary attack is missing" % id)
-    if primary_attack != null:
-        for reason: String in primary_attack.validate(): errors.append("class %s primary %s" % [id, reason])
-    if support_action != null:
-        for reason: String in support_action.validate(): errors.append("class %s support %s" % [id, reason])
-    return errors
+func validate(types: DamageTypeCatalog = null) -> PackedStringArray:
+	var errors: PackedStringArray = []
+	if id.is_empty(): errors.append("class id is empty")
+	if display_name.is_empty(): errors.append("class %s display name is empty" % id)
+	if traits.is_empty(): errors.append("class %s has no traits" % id)
+	if max_health <= 0.0: errors.append("class %s health must be positive" % id)
+	if class_rank_power_step < 0.0: errors.append("class %s rank power step cannot be negative" % id)
+	if revive_delay <= 0.0: errors.append("class %s revive delay must be positive" % id)
+	if revive_health_fraction <= 0.0 or revive_health_fraction > 1.0: errors.append("class %s revive health fraction must be between zero and one" % id)
+	if primary_attack == null: errors.append("class %s primary attack is missing" % id)
+	if primary_attack != null:
+		_validate_party_attack(primary_attack, "primary", types, errors)
+	if support_action != null:
+		_validate_party_attack(support_action, "support", types, errors)
+	return errors
+
+func _validate_party_attack(attack: AttackDefinition, slot: String, types: DamageTypeCatalog, errors: PackedStringArray) -> void:
+	for reason: String in attack.validate(types):
+		errors.append("class %s %s %s" % [id, slot, reason])
+	var kind_value := int(attack.kind)
+	if kind_value >= 0 and kind_value < AttackDefinition.Kind.size() and kind_value not in [AttackDefinition.Kind.MELEE_CLEAVE, AttackDefinition.Kind.PROJECTILE, AttackDefinition.Kind.AREA_PROJECTILE, AttackDefinition.Kind.HEAL]:
+		errors.append("class %s %s PARTY_FORGE_DAMAGE_ERROR attack=%s kind=%d reason=unsupported party attack kind" % [id, slot, attack.id, kind_value])

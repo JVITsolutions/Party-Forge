@@ -38,6 +38,8 @@ func execute(definition: AttackDefinition, target: CombatTarget) -> void:
             _execute_melee(packet, definition.area_radius * float(modifiers.get("area_multiplier")))
         AttackDefinition.Kind.PROJECTILE, AttackDefinition.Kind.AREA_PROJECTILE:
             _spawn_projectile(definition, target, modifiers, packet)
+        _:
+            push_error("PARTY_FORGE_DAMAGE_ERROR attack=%s kind=%d reason=unsupported party runtime kind" % [definition.id, definition.kind])
 
 func _execute_melee(packet: DamagePacket, radius: float) -> void:
     var seen: Dictionary = {}

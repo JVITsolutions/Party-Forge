@@ -3,7 +3,7 @@ extends RefCounted
 class TypedAttackErrorClass:
     extends ClassDefinition
 
-    func validate() -> PackedStringArray:
+    func validate(_types: DamageTypeCatalog = null) -> PackedStringArray:
         return PackedStringArray([
             "class %s primary PARTY_FORGE_DAMAGE_ERROR attack=%s type=void reason=unknown component type" % [id, primary_attack.id],
         ])

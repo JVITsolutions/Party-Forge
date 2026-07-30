@@ -16,6 +16,8 @@ func validate(stats: StatCatalog) -> PackedStringArray:
 	if id.is_empty(): errors.append("PARTY_FORGE_DAMAGE_ERROR type=<empty> reason=missing id")
 	if display_name.is_empty(): errors.append("PARTY_FORGE_DAMAGE_ERROR type=%s reason=missing display name" % id)
 	if keyword_id.is_empty(): errors.append("PARTY_FORGE_DAMAGE_ERROR type=%s reason=missing keyword id" % id)
+	if mitigation_rule not in [MitigationRule.ARMOR, MitigationRule.RESISTANCE]:
+		errors.append("PARTY_FORGE_DAMAGE_ERROR type=%s rule=%d reason=unsupported mitigation rule" % [id, mitigation_rule])
 	var offense := stats.definition(offense_stat_id) if stats != null else null
 	var defense := stats.definition(defense_stat_id) if stats != null else null
 	if offense == null:

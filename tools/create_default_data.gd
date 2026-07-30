@@ -1,14 +1,20 @@
 extends SceneTree
 
+const ATTACK_ROWS: Array[Dictionary] = [
+    {"id":&"fighter_cleave", "kind":AttackDefinition.Kind.MELEE_CLEAVE, "type":&"physical", "amount":18.0, "power":0.0, "cooldown":0.8, "range":2.2, "speed":0.0, "area":1.6, "tags":[&"melee", &"area"], "crit":true},
+    {"id":&"ranger_shot", "kind":AttackDefinition.Kind.PROJECTILE, "type":&"physical", "amount":11.0, "power":0.0, "cooldown":0.55, "range":11.0, "speed":16.0, "area":0.0, "tags":[&"projectile", &"ranged"], "crit":true},
+    {"id":&"mage_burst", "kind":AttackDefinition.Kind.AREA_PROJECTILE, "type":&"fire", "amount":24.0, "power":0.0, "cooldown":1.5, "range":12.0, "speed":11.0, "area":2.5, "tags":[&"projectile", &"area", &"fire"], "crit":true},
+    {"id":&"cleric_bolt", "kind":AttackDefinition.Kind.PROJECTILE, "type":&"lightning", "amount":8.0, "power":0.0, "cooldown":1.0, "range":10.0, "speed":13.0, "area":0.0, "tags":[&"projectile", &"lightning"], "crit":true},
+    {"id":&"cleric_heal", "kind":AttackDefinition.Kind.HEAL, "type":&"", "amount":0.0, "power":18.0, "cooldown":3.0, "range":9.0, "speed":0.0, "area":0.0, "tags":[&"healing"], "crit":false},
+]
+
 func _initialize() -> void:
     for path: String in ["res://data/attacks", "res://data/classes", "res://data/traits", "res://data/enemies"]:
         DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(path))
     var attacks: Dictionary = {}
-    attacks[&"fighter_cleave"] = _attack(&"fighter_cleave", AttackDefinition.Kind.MELEE_CLEAVE, 18.0, 0.8, 2.2, 0.0, 1.6)
-    attacks[&"ranger_shot"] = _attack(&"ranger_shot", AttackDefinition.Kind.PROJECTILE, 11.0, 0.55, 11.0, 16.0, 0.0)
-    attacks[&"mage_burst"] = _attack(&"mage_burst", AttackDefinition.Kind.AREA_PROJECTILE, 24.0, 1.5, 12.0, 11.0, 2.5)
-    attacks[&"cleric_bolt"] = _attack(&"cleric_bolt", AttackDefinition.Kind.PROJECTILE, 8.0, 1.0, 10.0, 13.0, 0.0)
-    attacks[&"cleric_heal"] = _attack(&"cleric_heal", AttackDefinition.Kind.HEAL, 18.0, 3.0, 9.0, 0.0, 0.0)
+    for row: Dictionary in ATTACK_ROWS:
+        var attack := _attack(row)
+        attacks[attack.id] = attack
     var failures: int = 0
     for id: StringName in attacks:
         if not _save_resource(attacks[id], "res://data/attacks/%s.tres" % id):
@@ -52,10 +58,22 @@ func _initialize() -> void:
     print("DATA_GENERATION_OK")
     quit(0)
 
-func _attack(id: StringName, kind: AttackDefinition.Kind, power: float, cooldown: float, range_value: float, speed: float, radius: float) -> AttackDefinition:
+func _attack(row: Dictionary) -> AttackDefinition:
     var value := AttackDefinition.new()
-    value.id = id; value.kind = kind; value.power = power; value.cooldown = cooldown
-    value.range = range_value; value.projectile_speed = speed; value.area_radius = radius
+    value.id = row["id"]
+    value.kind = row["kind"]
+    value.power = row["power"]
+    value.cooldown = row["cooldown"]
+    value.range = row["range"]
+    value.projectile_speed = row["speed"]
+    value.area_radius = row["area"]
+    value.action_tags.assign(row["tags"])
+    value.can_crit = row["crit"]
+    if not StringName(row["type"]).is_empty():
+        var component := AttackDamageComponent.new()
+        component.damage_type_id = row["type"]
+        component.base_amount = row["amount"]
+        value.damage_components.append(component)
     return value
 
 func _save_class(id: StringName, name_value: String, role: ClassDefinition.Role, color: Color, traits: Array[StringName], health: float, armor: float, speed: float, preferred: float, engagement: float, tether: float, primary: AttackDefinition, support: AttackDefinition) -> bool:

@@ -64,6 +64,8 @@ func validate() -> PackedStringArray:
         var validation: PackedStringArray
         if definition is EnemyDefinition:
             validation = (definition as EnemyDefinition).validate(damage_types, PartyManager.STAT_CATALOG)
+        elif definition is ClassDefinition:
+            validation = (definition as ClassDefinition).validate(damage_types)
         else:
             validation = definition.call("validate")
         for reason: String in validation:

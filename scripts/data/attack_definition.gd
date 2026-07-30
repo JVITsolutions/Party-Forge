@@ -31,6 +31,8 @@ func validate(types: DamageTypeCatalog = null) -> PackedStringArray:
 	var errors := PackedStringArray()
 	if id.is_empty():
 		errors.append("PARTY_FORGE_DAMAGE_ERROR attack=<empty> reason=missing id")
+	if int(kind) < 0 or int(kind) >= Kind.size():
+		errors.append("PARTY_FORGE_DAMAGE_ERROR attack=%s kind=%d reason=invalid attack kind" % [id, kind])
 	if not is_finite(cooldown) or cooldown <= 0.0:
 		errors.append("PARTY_FORGE_DAMAGE_ERROR attack=%s reason=cooldown must be finite and positive" % id)
 	if not is_finite(range) or range <= 0.0:
@@ -42,8 +44,8 @@ func validate(types: DamageTypeCatalog = null) -> PackedStringArray:
 	if normalized_action_tags().size() != action_tags.size():
 		errors.append("PARTY_FORGE_DAMAGE_ERROR attack=%s reason=empty or duplicate action tag" % id)
 	if is_healing():
-		if power <= 0.0:
-			errors.append("PARTY_FORGE_DAMAGE_ERROR attack=%s reason=heal power must be positive" % id)
+		if not is_finite(power) or power <= 0.0:
+			errors.append("PARTY_FORGE_DAMAGE_ERROR attack=%s reason=heal power must be finite and positive" % id)
 		if not damage_components.is_empty():
 			errors.append("PARTY_FORGE_DAMAGE_ERROR attack=%s reason=heal has damage components" % id)
 		if can_crit:

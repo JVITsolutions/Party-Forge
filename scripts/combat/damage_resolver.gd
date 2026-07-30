@@ -53,7 +53,17 @@ static func resolve(packet: DamagePacket, target: CombatantAdapter, rng: CombatR
 	for prepared: PreparedDamageComponent in packet.components:
 		var definition := types.definition(prepared.damage_type_id)
 		var defense := target.stat_value(definition.defense_stat_id, 0.0)
-		var mitigated := prepared.post_crit * 100.0 / (100.0 + maxf(0.0, defense)) if definition.mitigation_rule == DamageTypeDefinition.MitigationRule.ARMOR else prepared.post_crit * (1.0 - defense)
+		var mitigated := prepared.post_crit
+		match definition.mitigation_rule:
+			DamageTypeDefinition.MitigationRule.ARMOR:
+				mitigated = prepared.post_crit * 100.0 / (100.0 + maxf(0.0, defense))
+			DamageTypeDefinition.MitigationRule.RESISTANCE:
+				mitigated = prepared.post_crit * (1.0 - defense)
+			_:
+				result.valid = false
+				result.error_reason = _unsupported_mitigation_rule_error(packet, target, prepared.damage_type_id, definition.mitigation_rule)
+				push_error(result.error_reason)
+				return result
 		mitigated = maxf(0.0, mitigated)
 		result.total_post_mitigation += mitigated
 		result.component_breakdowns.append({
@@ -106,9 +116,14 @@ static func _resolution_error(packet: DamagePacket, target: CombatantAdapter, rn
 	if rng == null: return "PARTY_FORGE_DAMAGE_ERROR attack=%s source=%s target=%s reason=missing combat RNG" % [packet.attack_id, packet.source_id, target.combatant_id]
 	if types == null: return "PARTY_FORGE_DAMAGE_ERROR attack=%s source=%s target=%s reason=missing damage catalog" % [packet.attack_id, packet.source_id, target.combatant_id]
 	for component: PreparedDamageComponent in packet.components:
-		if types.definition(component.damage_type_id) == null: return "PARTY_FORGE_DAMAGE_ERROR attack=%s source=%s target=%s type=%s reason=unknown runtime type" % [packet.attack_id, packet.source_id, target.combatant_id, component.damage_type_id]
+		var definition := types.definition(component.damage_type_id)
+		if definition == null: return "PARTY_FORGE_DAMAGE_ERROR attack=%s source=%s target=%s type=%s reason=unknown runtime type" % [packet.attack_id, packet.source_id, target.combatant_id, component.damage_type_id]
+		if definition.mitigation_rule not in [DamageTypeDefinition.MitigationRule.ARMOR, DamageTypeDefinition.MitigationRule.RESISTANCE]: return _unsupported_mitigation_rule_error(packet, target, component.damage_type_id, definition.mitigation_rule)
 		if not is_finite(component.post_crit) or component.post_crit < 0.0: return "PARTY_FORGE_DAMAGE_ERROR attack=%s source=%s target=%s type=%s reason=invalid runtime amount" % [packet.attack_id, packet.source_id, target.combatant_id, component.damage_type_id]
 	return ""
+
+static func _unsupported_mitigation_rule_error(packet: DamagePacket, target: CombatantAdapter, type_id: StringName, rule: int) -> String:
+	return "PARTY_FORGE_DAMAGE_ERROR attack=%s source=%s target=%s type=%s rule=%d reason=unsupported mitigation rule" % [packet.attack_id, packet.source_id, target.combatant_id, type_id, rule]
 
 static func _invalid_packet(reason: String, source: CombatantAdapter = null, attack_id: StringName = &"") -> DamagePacket:
 	var message := "PARTY_FORGE_DAMAGE_ERROR %s" % reason

@@ -62,7 +62,7 @@ func kill() -> void:
     died.emit()
 
 func heal(amount: float) -> float:
-    if is_dead or is_downed or amount <= 0.0:
+    if is_dead or is_downed or not is_finite(amount) or amount <= 0.0:
         return 0.0
     var previous: float = current_health
     current_health = minf(max_health, current_health + amount)
