@@ -247,7 +247,7 @@ A typical signature tooltip communicates both its numbers and its terminology:
 ```text
 Deadeye — Marksman Signature
 
-The selected Marksman deals 20% more Physical Damage and gains Attack
+The selected Marksman deals 30% more Physical Damage and gains Attack
 Range and Critical Strike Multiplier, but has less Attack Speed.
 
 More: A multiplicative modifier applied after increased and reduced values.
