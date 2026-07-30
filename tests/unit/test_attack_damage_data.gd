@@ -3,23 +3,40 @@ extends RefCounted
 func run() -> Array[String]:
 	var failures: Array[String] = []
 	var types := GameCatalog.load_defaults().damage_types
-	var expected := {
-		"res://data/attacks/fighter_cleave.tres": [&"physical", 18.0, [&"area", &"melee"]],
-		"res://data/attacks/ranger_shot.tres": [&"physical", 11.0, [&"projectile", &"ranged"]],
-		"res://data/attacks/mage_burst.tres": [&"fire", 24.0, [&"area", &"fire", &"projectile"]],
-		"res://data/attacks/cleric_bolt.tres": [&"lightning", 8.0, [&"lightning", &"projectile"]],
-	}
-	for path: String in expected:
+	var rows: Array[Dictionary] = [
+		{"path":"res://data/attacks/fighter_cleave.tres", "id":&"fighter_cleave", "kind":AttackDefinition.Kind.MELEE_CLEAVE, "type":&"physical", "amount":18.0, "cooldown":0.8, "range":2.2, "speed":0.0, "area":1.6, "tags":[&"area", &"melee"], "crit":true},
+		{"path":"res://data/attacks/ranger_shot.tres", "id":&"ranger_shot", "kind":AttackDefinition.Kind.PROJECTILE, "type":&"physical", "amount":11.0, "cooldown":0.55, "range":11.0, "speed":16.0, "area":0.0, "tags":[&"projectile", &"ranged"], "crit":true},
+		{"path":"res://data/attacks/mage_burst.tres", "id":&"mage_burst", "kind":AttackDefinition.Kind.AREA_PROJECTILE, "type":&"fire", "amount":24.0, "cooldown":1.5, "range":12.0, "speed":11.0, "area":2.5, "tags":[&"area", &"fire", &"projectile"], "crit":true},
+		{"path":"res://data/attacks/cleric_bolt.tres", "id":&"cleric_bolt", "kind":AttackDefinition.Kind.PROJECTILE, "type":&"lightning", "amount":8.0, "cooldown":1.0, "range":10.0, "speed":13.0, "area":0.0, "tags":[&"lightning", &"projectile"], "crit":true},
+		{"path":"res://data/attacks/cleric_heal.tres", "id":&"cleric_heal", "kind":AttackDefinition.Kind.HEAL, "type":&"", "power":18.0, "cooldown":3.0, "range":9.0, "speed":0.0, "area":0.0, "tags":[&"healing"], "crit":false},
+		{"path":"res://data/attacks/swarmer_contact.tres", "id":&"swarmer_contact", "kind":AttackDefinition.Kind.DIRECT, "type":&"physical", "amount":8.0, "cooldown":0.8, "range":0.9, "speed":0.0, "area":0.0, "tags":[&"contact", &"melee"], "crit":false},
+		{"path":"res://data/attacks/spitter_projectile.tres", "id":&"spitter_projectile", "kind":AttackDefinition.Kind.PROJECTILE, "type":&"physical", "amount":10.0, "cooldown":2.2, "range":18.0, "speed":6.0, "area":0.0, "tags":[&"projectile", &"ranged"], "crit":false},
+		{"path":"res://data/attacks/guardian_charge.tres", "id":&"guardian_charge", "kind":AttackDefinition.Kind.DIRECT, "type":&"physical", "amount":22.0, "cooldown":1.0, "range":2.4, "speed":0.0, "area":0.0, "tags":[&"charge", &"melee"], "crit":false},
+		{"path":"res://data/attacks/guardian_shockwave.tres", "id":&"guardian_shockwave", "kind":AttackDefinition.Kind.AREA, "type":&"physical", "amount":22.0, "cooldown":1.0, "range":6.0, "speed":0.0, "area":6.0, "tags":[&"area", &"shockwave"], "crit":false},
+	]
+	for row: Dictionary in rows:
+		var path: String = row["path"]
 		var attack := load(path) as AttackDefinition
+		TestAssertions.truthy(attack != null, "%s loads" % path, failures)
+		if attack == null:
+			continue
 		TestAssertions.equal(attack.validate(types), PackedStringArray(), "%s validates" % path, failures)
-		TestAssertions.equal(attack.damage_components.size(), 1, "%s one component" % path, failures)
-		TestAssertions.equal(attack.damage_components[0].damage_type_id, expected[path][0], "%s type" % path, failures)
-		TestAssertions.near(attack.damage_components[0].base_amount, expected[path][1], 0.001, "%s amount" % path, failures)
-		TestAssertions.equal(attack.normalized_action_tags(), expected[path][2], "%s tags" % path, failures)
-		TestAssertions.truthy(attack.can_crit, "%s can crit" % path, failures)
-	var heal := load("res://data/attacks/cleric_heal.tres") as AttackDefinition
-	TestAssertions.truthy(heal.is_healing() and heal.damage_components.is_empty() and not heal.can_crit, "heal stays positive-only", failures)
-	TestAssertions.near(heal.power, 18.0, 0.001, "heal power preserved", failures)
-	for path: String in ["res://data/attacks/swarmer_contact.tres", "res://data/attacks/spitter_projectile.tres", "res://data/attacks/guardian_charge.tres", "res://data/attacks/guardian_shockwave.tres"]:
-		TestAssertions.equal((load(path) as AttackDefinition).validate(types), PackedStringArray(), "%s validates" % path, failures)
+		TestAssertions.equal(attack.id, row["id"], "%s id" % path, failures)
+		TestAssertions.equal(attack.kind, row["kind"], "%s kind" % path, failures)
+		TestAssertions.near(attack.cooldown, row["cooldown"], 0.001, "%s cooldown" % path, failures)
+		TestAssertions.near(attack.range, row["range"], 0.001, "%s range" % path, failures)
+		TestAssertions.near(attack.projectile_speed, row["speed"], 0.001, "%s projectile speed" % path, failures)
+		TestAssertions.near(attack.area_radius, row["area"], 0.001, "%s area radius" % path, failures)
+		TestAssertions.equal(attack.normalized_action_tags(), row["tags"], "%s normalized tags" % path, failures)
+		TestAssertions.equal(attack.can_crit, row["crit"], "%s can crit" % path, failures)
+		if StringName(row["type"]).is_empty():
+			TestAssertions.truthy(attack.is_healing(), "%s is healing" % path, failures)
+			TestAssertions.equal(attack.damage_components.size(), 0, "%s has no damage components" % path, failures)
+			TestAssertions.near(attack.power, row["power"], 0.001, "%s heal power" % path, failures)
+		else:
+			TestAssertions.truthy(not attack.is_healing(), "%s is damaging" % path, failures)
+			TestAssertions.equal(attack.damage_components.size(), 1, "%s one damage component" % path, failures)
+			if attack.damage_components.size() == 1:
+				TestAssertions.equal(attack.damage_components[0].damage_type_id, row["type"], "%s damage type" % path, failures)
+				TestAssertions.near(attack.damage_components[0].base_amount, row["amount"], 0.001, "%s damage amount" % path, failures)
 	return failures
