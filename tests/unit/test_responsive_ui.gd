@@ -49,6 +49,7 @@ func _test_responsive_hud_layout(failures: Array[String]) -> void:
 	var status_margin := hud.get_node("Margin") as Control
 	var boss_banner := hud.get_node("BossBanner") as Control
 	var class_selection := hud.get_node("ClassSelection") as Control
+	TestAssertions.truthy(class_selection.get_node_or_null("Content/Scroll/Grid") != null, "class selection exposes scroll grid", failures)
 	var level_up := hud.get_node("LevelUpPanel") as Control
 	var result_root := hud.get_node("RunResultPanel") as Control
 	var result_panel := hud.get_node("RunResultPanel/Panel") as Control
@@ -68,7 +69,7 @@ func _test_responsive_hud_layout(failures: Array[String]) -> void:
 		_assert_centered(class_selection, viewport_size, "class selection", failures)
 		_assert_centered(level_up, viewport_size, "level-up panel", failures)
 		_assert_centered(result_panel, viewport_size, "run result panel", failures)
-		_assert_size(class_selection, Vector2(540.0, 320.0), "class selection", failures)
+		_assert_size(class_selection, Vector2(760.0, 440.0), "class selection", failures)
 		_assert_size(level_up, Vector2(700.0, 190.0), "level-up panel", failures)
 		_assert_size(result_panel, Vector2(400.0, 260.0), "run result panel", failures)
 		TestAssertions.near(

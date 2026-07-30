@@ -129,11 +129,10 @@ func _validate_catalog(target_catalog: GameCatalog, report_errors: bool = true) 
 	return errors.is_empty()
 
 func _wire_static_ui() -> void:
-	var class_ids: Array[StringName] = [&"fighter", &"ranger", &"mage", &"cleric"]
-	for class_id: StringName in class_ids:
-		var button := get_node("HUD/ClassSelection/Content/%s" % String(class_id).capitalize()) as Button
-		var callback := select_leader_class.bind(class_id)
-		if not button.pressed.is_connected(callback): button.pressed.connect(callback)
+	var selector := get_node("HUD/ClassSelection") as ClassSelectionPanel
+	selector.configure(catalog.classes)
+	if not selector.class_selected.is_connected(select_leader_class):
+		selector.class_selected.connect(select_leader_class)
 	var level_panel := get_node("HUD/LevelUpPanel") as Control
 	if not level_panel.is_connected("choice_selected", _apply_choice): level_panel.connect("choice_selected", _apply_choice)
 	var result := get_node("HUD/RunResultPanel") as Control

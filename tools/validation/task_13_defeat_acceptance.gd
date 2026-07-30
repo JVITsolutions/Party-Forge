@@ -26,7 +26,7 @@ func _run() -> void:
     var game_run := main.get_node("GameRun") as GameRun
     _check(is_equal_approx(game_run.debug_time_scale, 1.0), "production clock scale is exactly 1.0")
     started_ticks = Time.get_ticks_msec()
-    (main.get_node("HUD/ClassSelection/Content/Mage") as Button).pressed.emit()
+    (main.get_node("HUD/ClassSelection/Content/Scroll/Grid/Class_mage") as Button).pressed.emit()
     var leader := main.get("leader") as PartyActor
     var health := leader.get_node("HealthComponent") as HealthComponent
 

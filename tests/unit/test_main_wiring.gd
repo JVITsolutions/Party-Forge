@@ -2,6 +2,7 @@ extends RefCounted
 
 const REQUIRED_PATHS: PackedStringArray = [
     "res://scripts/ui/hud.gd",
+    "res://scripts/ui/class_selection_panel.gd",
     "res://scripts/ui/level_up_panel.gd",
     "res://scripts/ui/run_result_panel.gd",
     "res://scripts/ui/health_bar_3d.gd",
@@ -105,11 +106,18 @@ func _test_class_selection_starts_run_and_applies_choices(failures: Array[String
     var main := (load("res://scenes/game/main.tscn") as PackedScene).instantiate()
     main.call("_ready")
     TestAssertions.equal(main.get("run_started"), false, "run timer waits at class selection", failures)
-    TestAssertions.truthy(main.call("select_leader_class", &"fighter"), "valid class selection starts run", failures)
+    var selector := main.get_node("HUD/ClassSelection")
+    selector.call("configure", GameCatalog.load_defaults().classes)
+    var marksman_button := selector.get_node_or_null("Content/Scroll/Grid/Class_marksman") as Button
+    TestAssertions.truthy(marksman_button != null, "catalog selector exposes Marksman button", failures)
+    if marksman_button != null:
+        marksman_button.pressed.emit()
     TestAssertions.equal(main.get("run_started"), true, "run marked started after class selection", failures)
     var game_run: Node = main.get_node("GameRun")
     TestAssertions.equal(game_run.call("current_state"), 1, "class selection starts RUNNING timer state", failures)
     var party_manager := main.get_node("PartyManager") as PartyManager
+    if not party_manager.members.is_empty():
+        TestAssertions.equal(party_manager.members[0].class_definition.id, &"marksman", "Marksman button starts with Marksman leader", failures)
     var spawn_director := main.get_node("SpawnDirector") as SpawnDirector
     TestAssertions.equal(game_run.get("combat_rng"), party_manager.combat_rng, "party shares the run combat RNG", failures)
     TestAssertions.equal(game_run.get("combat_rng"), spawn_director.combat_rng, "enemies share the run combat RNG", failures)
@@ -134,6 +142,18 @@ func _test_class_selection_starts_run_and_applies_choices(failures: Array[String
         TestAssertions.truthy((actors[1] as PartyActor).get_node_or_null("HealthBar3D") != null, "recruited companion receives billboard health bar", failures)
     main.free()
     (Engine.get_main_loop() as SceneTree).paused = false
+    for class_id: StringName in [
+        &"fighter", &"ranger", &"mage", &"cleric", &"paladin",
+        &"rogue", &"frost_mage", &"warlock", &"marksman",
+    ]:
+        var class_main := (load("res://scenes/game/main.tscn") as PackedScene).instantiate()
+        class_main.call("_ready")
+        TestAssertions.truthy(class_main.call("select_leader_class", class_id), "%s direct selection succeeds" % class_id, failures)
+        var class_party := class_main.get_node("PartyManager") as PartyManager
+        if not class_party.members.is_empty():
+            TestAssertions.equal(class_party.members[0].class_definition.id, class_id, "%s direct selection uses exact leader" % class_id, failures)
+        class_main.free()
+        (Engine.get_main_loop() as SceneTree).paused = false
 
 func _test_capped_stat_is_disabled_without_hiding(failures: Array[String]) -> void:
     var panel := (load("res://scenes/ui/level_up_panel.tscn") as PackedScene).instantiate() as Control

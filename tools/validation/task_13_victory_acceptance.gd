@@ -41,7 +41,7 @@ func _run() -> void:
     var game_run := main.get_node("GameRun") as GameRun
     _check(is_equal_approx(game_run.debug_time_scale, 1.0), "production clock scale is exactly 1.0")
     started_ticks = Time.get_ticks_msec()
-    (main.get_node("HUD/ClassSelection/Content/Fighter") as Button).pressed.emit()
+    (main.get_node("HUD/ClassSelection/Content/Scroll/Grid/Class_fighter") as Button).pressed.emit()
 
     while _wall_seconds() <= MAX_WALL_SECONDS:
         await process_frame
