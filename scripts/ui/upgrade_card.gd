@@ -44,6 +44,10 @@ func bind_choice(
 	disabled = not disabled_reason.is_empty()
 
 
+func bound_choice() -> UpgradeChoice:
+	return _choice
+
+
 func _set_text(path: NodePath, value: Variant) -> void:
 	var label := get_node_or_null(path) as Label
 	if label != null:

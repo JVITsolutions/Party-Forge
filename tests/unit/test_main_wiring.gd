@@ -44,7 +44,7 @@ func run() -> Array[String]:
     _test_stale_target_rejects_without_consuming(failures)
     _test_live_member_health_provider_is_bounded(failures)
     _test_capped_stat_is_disabled_without_hiding(failures)
-    _test_stacked_levels_stay_paused(failures)
+    _test_queued_levels_show_fresh_production_offers(failures)
     _test_boss_level_up_resumes_boss(failures)
     _test_catalog_gate_blocks_public_start(failures)
     _test_result_panel_requests_once(failures)
@@ -287,29 +287,73 @@ func _test_capped_stat_is_disabled_without_hiding(failures: Array[String]) -> vo
     main.free()
     panel.free(); party.free()
 
-func _test_stacked_levels_stay_paused(failures: Array[String]) -> void:
+func _test_queued_levels_show_fresh_production_offers(failures: Array[String]) -> void:
     var main := _started_main()
     var game_run: Node = main.get_node("GameRun")
     var experience := main.get_node("ExperienceSystem") as ExperienceSystem
-    experience.pending_levels = 2
-    game_run.call("begin_level_up")
-    var choice := UpgradeChoice.new(UpgradeChoice.Kind.PARTY_STAT, &"damage", "Damage")
-    TestAssertions.truthy(main.call("_apply_choice", choice), "first stacked choice applies", failures)
-    TestAssertions.equal(experience.pending_levels, 1, "first stacked choice consumes one pending level", failures)
-    TestAssertions.equal(game_run.call("current_state"), 2, "remaining pending level keeps LEVEL_UP paused", failures)
-    TestAssertions.truthy((Engine.get_main_loop() as SceneTree).paused, "remaining pending level keeps tree paused", failures)
-    var has_refresh_state := main.has_method("_present_pending_level")
-    TestAssertions.truthy(has_refresh_state, "main exposes deferred pending-level presenter", failures)
-    if has_refresh_state:
-        TestAssertions.truthy(bool(main.get("level_refresh_scheduled")), "fresh panel is deferred after synchronous selection signal", failures)
-        main.call("_present_pending_level")
-        var panel := main.get_node("HUD/LevelUpPanel") as Control
-        TestAssertions.truthy(panel.visible and panel.get_node("Choices").get_child_count() == 3, "remaining level shows fresh exact-three panel", failures)
-    main.call("_apply_choice", UpgradeChoice.new(UpgradeChoice.Kind.PARTY_STAT, &"move_speed", "Move Speed"))
-    TestAssertions.equal(experience.pending_levels, 0, "final stacked choice consumes last pending level", failures)
-    TestAssertions.equal(game_run.call("current_state"), 1, "final stacked choice resumes prior RUNNING state", failures)
-    (Engine.get_main_loop() as SceneTree).paused = false
-    main.free()
+    var panel := main.get_node("HUD/LevelUpPanel") as LevelUpPanel
+    var cards := panel.get_node("ContentPanel/OfferView/Content/Cards").get_children()
+    TestAssertions.equal(cards.size(), 3, "production offer view owns exactly three upgrade cards", failures)
+    var card_api_available := cards.size() == 3 and cards.all(
+        func(card: Node) -> bool: return card is UpgradeCard and card.has_method("bound_choice")
+    )
+    TestAssertions.truthy(card_api_available, "production cards expose their current binding read-only", failures)
+    if not card_api_available:
+        _cleanup_main(main)
+        return
+
+    var first_requirement := experience.tuning.requirement_for_level(1)
+    var second_requirement := experience.tuning.requirement_for_level(2)
+    var remainder := 7
+    experience.add_experience(first_requirement + second_requirement + remainder)
+    TestAssertions.equal(experience.level, 3, "earned experience crosses exactly two queued levels", failures)
+    TestAssertions.equal(experience.pending_levels, 2, "earned levels begin with two pending selections", failures)
+    TestAssertions.equal(experience.pending_level_numbers, [2, 3], "earned-level queue preserves exact order", failures)
+    TestAssertions.equal(experience.experience, remainder, "queued offers preserve excess experience", failures)
+    TestAssertions.equal(game_run.call("current_state"), RunStateMachine.State.LEVEL_UP, "first earned offer pauses in LEVEL_UP", failures)
+    TestAssertions.truthy((Engine.get_main_loop() as SceneTree).paused, "first earned offer pauses the tree", failures)
+
+    var party := main.get_node("PartyManager") as PartyManager
+    var first_seed := 2 * 1009 + party.members.size()
+    var expected_first_keys := _choice_keys(main.call("_generate_valid_choices", first_seed) as Array)
+    var first_choices := _bound_production_choices(cards)
+    var first_keys := _choice_keys(first_choices)
+    var first_instance_ids := _choice_instance_ids(first_choices)
+    TestAssertions.equal(first_keys, expected_first_keys, "first visible production offer uses queued level 2 seed", failures)
+    TestAssertions.equal(first_keys.size(), 3, "first visible production offer records exact ordered three keys", failures)
+
+    var first_card := cards[0] as UpgradeCard
+    TestAssertions.truthy(not first_choices[0].requires_recipient(), "first queued offer exposes a direct-confirm production choice", failures)
+    first_card.activated.emit(first_choices[0])
+    (panel.get_node("ContentPanel/ConfirmationView/Content/Actions/Confirm") as Button).pressed.emit()
+    TestAssertions.equal(experience.pending_levels, 1, "first production confirmation consumes pending 2 to 1 exactly", failures)
+    TestAssertions.equal(experience.pending_level_numbers, [3], "first production confirmation leaves only earned level 3 queued", failures)
+    TestAssertions.equal(experience.experience, remainder, "first production confirmation loses no excess experience", failures)
+    TestAssertions.equal(game_run.call("current_state"), RunStateMachine.State.LEVEL_UP, "first production confirmation remains paused", failures)
+    TestAssertions.truthy((Engine.get_main_loop() as SceneTree).paused, "tree remains paused between production confirmations", failures)
+    TestAssertions.truthy(bool(main.get("level_refresh_scheduled")), "second queued production offer is scheduled separately", failures)
+
+    var second_seed := 3 * 1009 + party.members.size()
+    var expected_second_keys := _choice_keys(main.call("_generate_valid_choices", second_seed) as Array)
+    main.call("_present_pending_level")
+    var second_choices := _bound_production_choices(cards)
+    var second_keys := _choice_keys(second_choices)
+    var second_instance_ids := _choice_instance_ids(second_choices)
+    TestAssertions.truthy(panel.visible, "second queued production offer is visible before confirmation", failures)
+    TestAssertions.equal(second_keys, expected_second_keys, "second visible production offer uses queued level 3 seed and updated party", failures)
+    TestAssertions.equal(second_keys.size(), 3, "second visible production offer records exact ordered three keys", failures)
+    TestAssertions.truthy(second_instance_ids.all(func(id: int) -> bool: return id not in first_instance_ids), "second production offer binds freshly generated choice objects", failures)
+
+    var second_card := cards[0] as UpgradeCard
+    TestAssertions.truthy(not second_choices[0].requires_recipient(), "second queued offer exposes a direct-confirm production choice", failures)
+    second_card.activated.emit(second_choices[0])
+    (panel.get_node("ContentPanel/ConfirmationView/Content/Actions/Confirm") as Button).pressed.emit()
+    TestAssertions.equal(experience.pending_levels, 0, "second production confirmation consumes pending 1 to 0 exactly", failures)
+    TestAssertions.equal(experience.pending_level_numbers, [], "second production confirmation empties the earned-level queue", failures)
+    TestAssertions.equal(experience.experience, remainder, "both production confirmations lose no excess experience", failures)
+    TestAssertions.equal(game_run.call("current_state"), RunStateMachine.State.RUNNING, "run resumes only after second production confirmation", failures)
+    TestAssertions.truthy(not (Engine.get_main_loop() as SceneTree).paused, "tree resumes only after final queued confirmation", failures)
+    _cleanup_main(main)
 
 func _test_boss_level_up_resumes_boss(failures: Array[String]) -> void:
     var main := _started_main()
@@ -409,3 +453,22 @@ func _started_main() -> Node:
 func _cleanup_main(main: Node) -> void:
     (Engine.get_main_loop() as SceneTree).paused = false
     main.free()
+
+func _bound_production_choices(cards: Array[Node]) -> Array[UpgradeChoice]:
+    var result: Array[UpgradeChoice] = []
+    for card_node: Node in cards:
+        var card := card_node as UpgradeCard
+        result.append(card.call("bound_choice") as UpgradeChoice)
+    return result
+
+func _choice_keys(source_choices: Array) -> Array[String]:
+    var result: Array[String] = []
+    for choice: UpgradeChoice in source_choices:
+        result.append(choice.key())
+    return result
+
+func _choice_instance_ids(source_choices: Array[UpgradeChoice]) -> Array[int]:
+    var result: Array[int] = []
+    for choice: UpgradeChoice in source_choices:
+        result.append(choice.get_instance_id())
+    return result
