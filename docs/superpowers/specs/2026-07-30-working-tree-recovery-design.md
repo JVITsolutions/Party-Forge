@@ -25,7 +25,7 @@ The branch and commit history are immutable recovery inputs. Do not reset, rever
 6. Preserve `addons/godotsteam/` and `Party-Forge-Godot-Handbook-6977ae6.zip` in place, but add them to `.git/info/exclude` so they remain local and do not enter repository history during this recovery.
 7. Commit the intentional Godot AI autoload and responsive-test UID as one bounded recovery commit.
 8. Reimport, run the complete suite, launch the game, and inspect editor/game logs.
-9. Reopen Godot on `res://scenes/game/main.tscn`, save no stale scene state, and leave the project stopped and ready after verification.
+9. Reopen Godot on `res://scenes/game/main.tscn`, confirm the freshly loaded scene has no unsaved changes, and leave the project stopped and ready after verification. Do not invoke Save All during recovery verification.
 
 ## Preserved Local Material
 
@@ -49,8 +49,10 @@ Recovery is complete only when:
 - The custom test runner exits zero with `TEST_SUMMARY: PASS (32 suites)` and no `SCRIPT ERROR` or unexpected `TEST_FAILURE`.
 - The live project reaches `PARTY_FORGE_BOOT_OK` and `PARTY_FORGE_CLASS_SELECTION_READY` without the `main.gd:133` error.
 - The nine-class selector is visible and the project can start a run.
-- Godot is reopened on `main.tscn`, stopped, saved, and ready.
+- Godot is reopened on the clean saved `main.tscn`, stopped, unmodified, and ready.
 
 ## Future Prevention
 
 After external scene or project-setting changes, reload the affected resources or restart Godot before using Save All. Before every feature execution, capture Git status and verify that the open editor scene matches the saved file. This prevents a long-lived editor from serializing stale in-memory state over newer repository content.
+
+Future feature implementation occurs in an isolated Git worktree. The live root remains the stable integration and Godot AI verification copy. Verified feature commits are integrated into `main`, after which the live editor is restarted or explicitly reloaded before any scene save.
