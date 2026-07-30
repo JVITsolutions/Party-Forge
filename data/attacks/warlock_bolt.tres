@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="AttackDefinition" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/attack_damage_component.gd" id="1_c6mh6"]
+[ext_resource type="Script" path="res://scripts/data/attack_definition.gd" id="2_qm4wf"]
+
+[sub_resource type="Resource" id="Resource_c6mh6"]
+script = ExtResource("1_c6mh6")
+damage_type_id = &"chaos"
+base_amount = 30.0
+
+[resource]
+script = ExtResource("2_qm4wf")
+id = &"warlock_bolt"
+kind = 1
+cooldown = 1.75
+range = 12.5
+projectile_speed = 9.0
+damage_components = Array[ExtResource("1_c6mh6")]([SubResource("Resource_c6mh6")])
+action_tags = Array[StringName]([&"chaos", &"projectile", &"ranged"])
+can_crit = true

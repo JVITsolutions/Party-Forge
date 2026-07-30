@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="AttackDefinition" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/attack_damage_component.gd" id="1_w0rqm"]
+[ext_resource type="Script" path="res://scripts/data/attack_definition.gd" id="2_mmjkb"]
+
+[sub_resource type="Resource" id="Resource_w0rqm"]
+script = ExtResource("1_w0rqm")
+damage_type_id = &"cold"
+base_amount = 20.0
+
+[resource]
+script = ExtResource("2_mmjkb")
+id = &"frost_shard"
+kind = 2
+cooldown = 1.35
+range = 12.5
+projectile_speed = 10.0
+area_radius = 3.0
+damage_components = Array[ExtResource("1_w0rqm")]([SubResource("Resource_w0rqm")])
+action_tags = Array[StringName]([&"area", &"cold", &"projectile"])
+can_crit = true

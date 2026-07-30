@@ -1,0 +1,25 @@
+[gd_resource type="Resource" script_class="ClassDefinition" format=3]
+
+[ext_resource type="Resource" path="res://data/attacks/rogue_flurry.tres" id="1_qgxf2"]
+[ext_resource type="Script" path="res://scripts/data/class_definition.gd" id="2_51p68"]
+
+[resource]
+script = ExtResource("2_51p68")
+id = &"rogue"
+display_name = "Rogue"
+role = 1
+color = Color(0.6627451, 0.35686275, 0.9098039, 1)
+traits = Array[StringName]([&"martial", &"skirmisher"])
+capability_tags = Array[StringName]([&"area", &"crit", &"dodge", &"life_steal", &"melee", &"physical"])
+base_stat_overrides = {
+&"crit_chance": 0.2,
+&"crit_multiplier": 1.75,
+&"dodge_chance": 0.18,
+&"life_steal": 0.05
+}
+max_health = 72.0
+move_speed = 7.4
+preferred_distance = 1.4
+engagement_distance = 3.0
+tether_distance = 8.0
+primary_attack = ExtResource("1_qgxf2")

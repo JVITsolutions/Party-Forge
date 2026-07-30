@@ -1,0 +1,25 @@
+[gd_resource type="Resource" script_class="ClassDefinition" format=3]
+
+[ext_resource type="Resource" path="res://data/attacks/marksman_heavy_shot.tres" id="1_md42u"]
+[ext_resource type="Script" path="res://scripts/data/class_definition.gd" id="1_rlqk6"]
+
+[resource]
+script = ExtResource("1_rlqk6")
+id = &"marksman"
+display_name = "Marksman"
+role = 1
+color = Color(0.27579924, 0.36415747, 0.056183092, 1)
+traits = Array[StringName]([&"martial", &"ranged", &"bow"])
+capability_tags = Array[StringName]([&"bow", &"crit", &"physical", &"projectile", &"ranged"])
+base_stat_overrides = {
+&"crit_chance": 0.1,
+&"crit_multiplier": 2.0
+}
+max_health = 80.0
+armor = 2.0
+move_speed = 5.8
+preferred_distance = 8.0
+engagement_distance = 16.0
+tether_distance = 16.0
+primary_attack = ExtResource("1_md42u")
+metadata/_custom_type_script = "uid://bg7wmynvpw0r8"

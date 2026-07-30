@@ -1,0 +1,24 @@
+[gd_resource type="Resource" script_class="ClassDefinition" format=3]
+
+[ext_resource type="Resource" path="res://data/attacks/warlock_bolt.tres" id="1_nil6l"]
+[ext_resource type="Script" path="res://scripts/data/class_definition.gd" id="2_8b5fo"]
+
+[resource]
+script = ExtResource("2_8b5fo")
+id = &"warlock"
+display_name = "Warlock"
+role = 2
+color = Color(0.49411765, 0.29411766, 0.76862746, 1)
+traits = Array[StringName]([&"occult", &"caster", &"chaos"])
+capability_tags = Array[StringName]([&"chaos", &"life_steal", &"projectile", &"ranged"])
+base_stat_overrides = {
+&"chaos_damage": 1.1,
+&"life_steal": 0.12
+}
+max_health = 82.0
+armor = 1.0
+move_speed = 5.8
+preferred_distance = 6.0
+engagement_distance = 12.5
+tether_distance = 12.5
+primary_attack = ExtResource("1_nil6l")

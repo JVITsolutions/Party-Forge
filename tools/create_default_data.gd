@@ -1,12 +1,15 @@
 extends SceneTree
 
-const ATTACK_ROWS: Array[Dictionary] = [
+const ExpansionRows := preload("res://tools/class_expansion_rows.gd")
+
+const BASE_ATTACK_ROWS: Array[Dictionary] = [
     {"id":&"fighter_cleave", "kind":AttackDefinition.Kind.MELEE_CLEAVE, "type":&"physical", "amount":18.0, "power":0.0, "cooldown":0.8, "range":2.2, "speed":0.0, "area":1.6, "tags":[&"melee", &"area"], "crit":true},
     {"id":&"ranger_shot", "kind":AttackDefinition.Kind.PROJECTILE, "type":&"physical", "amount":11.0, "power":0.0, "cooldown":0.55, "range":11.0, "speed":16.0, "area":0.0, "tags":[&"projectile", &"ranged"], "crit":true},
     {"id":&"mage_burst", "kind":AttackDefinition.Kind.AREA_PROJECTILE, "type":&"fire", "amount":24.0, "power":0.0, "cooldown":1.5, "range":12.0, "speed":11.0, "area":2.5, "tags":[&"projectile", &"area", &"fire"], "crit":true},
     {"id":&"cleric_bolt", "kind":AttackDefinition.Kind.PROJECTILE, "type":&"lightning", "amount":8.0, "power":0.0, "cooldown":1.0, "range":10.0, "speed":13.0, "area":0.0, "tags":[&"projectile", &"lightning"], "crit":true},
     {"id":&"cleric_heal", "kind":AttackDefinition.Kind.HEAL, "type":&"", "amount":0.0, "power":18.0, "cooldown":3.0, "range":9.0, "speed":0.0, "area":0.0, "tags":[&"healing"], "crit":false},
 ]
+const ATTACK_ROWS: Array[Dictionary] = BASE_ATTACK_ROWS + ExpansionRows.ATTACK_ROWS
 
 func _initialize() -> void:
     for path: String in ["res://data/attacks", "res://data/classes", "res://data/traits", "res://data/enemies"]:
@@ -36,10 +39,12 @@ func _initialize() -> void:
         _finish_failed(failures)
         return
 
-    if not _save_class(&"fighter", "Fighter", ClassDefinition.Role.FRONTLINE, Color("d94f4f"), [&"martial", &"vanguard"], 260.0, 10.0, 6.2, 2.0, 5.0, 9.0, saved_attacks[&"fighter_cleave"], null): failures += 1
-    if not _save_class(&"ranger", "Ranger", ClassDefinition.Role.MIDLINE, Color("5fbd72"), [&"martial", &"ranged"], 90.0, 1.0, 6.6, 5.0, 11.0, 11.0, saved_attacks[&"ranger_shot"], null): failures += 1
-    if not _save_class(&"mage", "Mage", ClassDefinition.Role.BACKLINE, Color("9567e8"), [&"arcane", &"ranged", &"caster"], 75.0, 0.0, 6.0, 6.5, 12.0, 12.0, saved_attacks[&"mage_burst"], null): failures += 1
-    if not _save_class(&"cleric", "Cleric", ClassDefinition.Role.SUPPORT, Color("f0d15b"), [&"divine", &"support", &"caster"], 95.0, 2.0, 6.0, 4.0, 10.0, 10.0, saved_attacks[&"cleric_bolt"], saved_attacks[&"cleric_heal"]): failures += 1
+    if not _save_class(&"fighter", "Fighter", ClassDefinition.Role.FRONTLINE, Color("d94f4f"), [&"martial", &"vanguard"], [], {}, 260.0, 10.0, 6.2, 2.0, 5.0, 9.0, saved_attacks[&"fighter_cleave"], null): failures += 1
+    if not _save_class(&"ranger", "Ranger", ClassDefinition.Role.MIDLINE, Color("5fbd72"), [&"martial", &"ranged"], [], {}, 90.0, 1.0, 6.6, 5.0, 11.0, 11.0, saved_attacks[&"ranger_shot"], null): failures += 1
+    if not _save_class(&"mage", "Mage", ClassDefinition.Role.BACKLINE, Color("9567e8"), [&"arcane", &"caster", &"fire"], [], {}, 75.0, 0.0, 6.0, 6.5, 12.0, 12.0, saved_attacks[&"mage_burst"], null): failures += 1
+    if not _save_class(&"cleric", "Cleric", ClassDefinition.Role.SUPPORT, Color("f0d15b"), [&"divine", &"support", &"caster"], [], {}, 95.0, 2.0, 6.0, 4.0, 10.0, 10.0, saved_attacks[&"cleric_bolt"], saved_attacks[&"cleric_heal"]): failures += 1
+    for row: Dictionary in ExpansionRows.CLASS_ROWS:
+        if not _save_class(row["id"], row["name"], row["role"], row["color"], row["traits"], row["tags"], row["overrides"], row["health"], row["armor"], row["speed"], row["preferred"], row["engagement"], row["tether"], saved_attacks[row["attack"]], null): failures += 1
 
     if not _save_trait(&"martial", "Martial", &"attack_speed", {2: 0.15, 4: 0.35}): failures += 1
     if not _save_trait(&"vanguard", "Vanguard", &"nearby_damage_reduction", {2: 0.12, 4: 0.28}, 6.0): failures += 1
@@ -48,6 +53,12 @@ func _initialize() -> void:
     if not _save_trait(&"caster", "Caster", &"cooldown_reduction", {2: 0.12, 4: 0.28}): failures += 1
     if not _save_trait(&"divine", "Divine", &"healing_and_revive", {2: 0.18, 4: 0.40}): failures += 1
     if not _save_trait(&"support", "Support", &"support_power", {2: 0.15, 4: 0.35}): failures += 1
+    if not _save_trait(&"fire", "Fire", &"fire_damage", {2: 0.15, 4: 0.35}): failures += 1
+    if not _save_trait(&"cold", "Cold", &"cold_damage", {2: 0.15, 4: 0.35}): failures += 1
+    if not _save_trait(&"skirmisher", "Skirmisher", &"dodge_chance", {2: 0.08, 4: 0.18}): failures += 1
+    if not _save_trait(&"occult", "Occult", &"life_steal", {2: 0.04, 4: 0.10}): failures += 1
+    if not _save_trait(&"chaos", "Chaos", &"chaos_damage", {2: 0.15, 4: 0.35}): failures += 1
+    if not _save_trait(&"bow", "Bow", &"attack_range", {2: 0.12, 4: 0.28}): failures += 1
 
     if not _save_enemy(&"swarmer", EnemyDefinition.Behavior.SWARMER, 12.0, 4.8, 2, ["res://data/attacks/swarmer_contact.tres"]): failures += 1
     if not _save_enemy(&"spitter", EnemyDefinition.Behavior.SPITTER, 18.0, 2.8, 4, ["res://data/attacks/spitter_projectile.tres"]): failures += 1
@@ -76,9 +87,10 @@ func _attack(row: Dictionary) -> AttackDefinition:
         value.damage_components.append(component)
     return value
 
-func _save_class(id: StringName, name_value: String, role: ClassDefinition.Role, color: Color, traits: Array[StringName], health: float, armor: float, speed: float, preferred: float, engagement: float, tether: float, primary: AttackDefinition, support: AttackDefinition) -> bool:
+func _save_class(id: StringName, name_value: String, role: ClassDefinition.Role, color: Color, traits: Array[StringName], capability_tags: Array[StringName], base_overrides: Dictionary, health: float, armor: float, speed: float, preferred: float, engagement: float, tether: float, primary: AttackDefinition, support: AttackDefinition) -> bool:
     var value := ClassDefinition.new()
     value.id = id; value.display_name = name_value; value.role = role; value.color = color; value.traits = traits
+    value.capability_tags = capability_tags; value.base_stat_overrides = base_overrides.duplicate(true)
     value.max_health = health; value.armor = armor; value.move_speed = speed
     value.class_rank_power_step = 0.2; value.revive_delay = 8.0; value.revive_health_fraction = 0.5
     value.preferred_distance = preferred; value.engagement_distance = engagement; value.tether_distance = tether

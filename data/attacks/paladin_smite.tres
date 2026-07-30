@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="AttackDefinition" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/attack_damage_component.gd" id="1_cahva"]
+[ext_resource type="Script" path="res://scripts/data/attack_definition.gd" id="2_guxk5"]
+
+[sub_resource type="Resource" id="Resource_cahva"]
+script = ExtResource("1_cahva")
+damage_type_id = &"physical"
+base_amount = 16.0
+
+[resource]
+script = ExtResource("2_guxk5")
+id = &"paladin_smite"
+cooldown = 1.05
+range = 2.1
+area_radius = 1.4
+damage_components = Array[ExtResource("1_cahva")]([SubResource("Resource_cahva")])
+action_tags = Array[StringName]([&"area", &"melee", &"physical"])
+can_crit = true
