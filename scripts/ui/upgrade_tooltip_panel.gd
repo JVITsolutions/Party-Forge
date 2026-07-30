@@ -50,6 +50,7 @@ static func clamped_position(
 		x = left_x
 	else:
 		x = clampf(right_x, margin, maximum_x)
+	x = clampf(x, margin, maximum_x)
 	var maximum_y := maxf(margin, viewport_size.y - popup_size.y - margin)
 	var y := clampf(anchor_rect.position.y, margin, maximum_y)
 	return Vector2(x, y)

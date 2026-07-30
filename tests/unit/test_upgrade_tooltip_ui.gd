@@ -114,3 +114,15 @@ func _test_clamped_placement(failures: Array[String]) -> void:
 		"bottom-right placement clamps both axes",
 		failures,
 	)
+	TestAssertions.equal(
+		UpgradeTooltipPanel.clamped_position(Rect2(-500.0, 100.0, 100.0, 100.0), popup, viewport),
+		Vector2(16.0, 100.0),
+		"anchor wholly left of viewport clamps to left margin",
+		failures,
+	)
+	TestAssertions.equal(
+		UpgradeTooltipPanel.clamped_position(Rect2(2100.0, 100.0, 100.0, 100.0), popup, viewport),
+		Vector2(1484.0, 100.0),
+		"anchor wholly right of viewport clamps to right margin",
+		failures,
+	)

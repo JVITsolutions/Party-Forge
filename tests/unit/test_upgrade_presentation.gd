@@ -4,6 +4,7 @@ func run() -> Array[String]:
 	var failures: Array[String] = []
 	_test_exact_effect_and_keyword_text(failures)
 	_test_card_rank_and_inheritance_text(failures)
+	_test_capability_and_exclusion_eligibility_text(failures)
 	_test_recipient_rows(failures)
 	_test_matching_recipient_rows_use_party_rank(failures)
 	_test_role_names(failures)
@@ -55,6 +56,53 @@ func _test_card_rank_and_inheritance_text(failures: Array[String]) -> void:
 		wall_card.get("inheritance_text", ""),
 		"Affects every matching current and future party member, including later recruits.",
 		"matching-party card promises later recruits",
+		failures,
+	)
+	party.free()
+
+func _test_capability_and_exclusion_eligibility_text(failures: Array[String]) -> void:
+	var catalog := GameCatalog.load_defaults()
+	var party := PartyManager.new()
+	party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
+	var projectile_card := UpgradePresentationService.card(
+		catalog.upgrade_by_id(&"projectile_mastery"),
+		party,
+	)
+	TestAssertions.equal(
+		projectile_card.get("eligibility_text", ""),
+		"Requires all traits or capabilities: Projectile",
+		"capability-gated card uses neutral eligibility wording",
+		failures,
+	)
+
+	var exclusion_only := catalog.upgrade_by_id(&"vitality").duplicate(true) as UpgradeDefinition
+	exclusion_only.id = &"exclusion_only"
+	exclusion_only.scope = UpgradeDefinition.Scope.PARTY
+	exclusion_only.allowed_class_ids = []
+	exclusion_only.required_all_tags = []
+	exclusion_only.required_any_tags = []
+	exclusion_only.excluded_tags = [&"projectile"]
+	catalog.upgrades.append(exclusion_only)
+	var exclusion_errors: Array[String] = []
+	for error: String in catalog.validate():
+		if "PARTY_FORGE_UPGRADE_ERROR id=exclusion_only" in error:
+			exclusion_errors.append(error)
+	TestAssertions.truthy(
+		exclusion_errors.is_empty(),
+		"exclusion-only presentation fixture is catalog-valid",
+		failures,
+	)
+	var exclusion_card := UpgradePresentationService.card(exclusion_only, party)
+	TestAssertions.equal(
+		exclusion_card.get("eligibility_text", ""),
+		"Excludes traits or capabilities: Projectile",
+		"exclusion-only card discloses its matching restriction",
+		failures,
+	)
+	TestAssertions.equal(
+		exclusion_card.get("inheritance_text", ""),
+		"Affects every matching current and future party member, including later recruits.",
+		"exclusion-only party card discloses later-recruit matching",
 		failures,
 	)
 	party.free()

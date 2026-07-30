@@ -160,9 +160,11 @@ static func _eligibility_text(definition: UpgradeDefinition) -> String:
 	if not definition.allowed_class_ids.is_empty():
 		requirements.append("Eligible classes: %s" % _joined_ids(definition.allowed_class_ids))
 	if not definition.required_all_tags.is_empty():
-		requirements.append("Requires all traits: %s" % _joined_ids(definition.required_all_tags))
+		requirements.append("Requires all traits or capabilities: %s" % _joined_ids(definition.required_all_tags))
 	if not definition.required_any_tags.is_empty():
-		requirements.append("Requires any trait: %s" % _joined_ids(definition.required_any_tags))
+		requirements.append("Requires any trait or capability: %s" % _joined_ids(definition.required_any_tags))
+	if not definition.excluded_tags.is_empty():
+		requirements.append("Excludes traits or capabilities: %s" % _joined_ids(definition.excluded_tags))
 	if requirements.is_empty():
 		return "All party members are eligible."
 	return " ".join(requirements)
@@ -171,6 +173,8 @@ static func _eligibility_text(definition: UpgradeDefinition) -> String:
 static func _recipient_text(definition: UpgradeDefinition) -> String:
 	if definition.is_single_recipient():
 		return "Choose one eligible party member."
+	if _has_matching_criteria(definition):
+		return "Applies to every matching party member."
 	if definition.scope == UpgradeDefinition.Scope.PARTY:
 		return "Applies to the whole party."
 	return "Applies to every matching party member."
@@ -179,14 +183,19 @@ static func _recipient_text(definition: UpgradeDefinition) -> String:
 static func _inheritance_text(definition: UpgradeDefinition) -> String:
 	if definition.is_single_recipient():
 		return ""
-	if (
+	if _has_matching_criteria(definition):
+		return MATCHING_INHERITANCE_TEXT
+	return ""
+
+
+static func _has_matching_criteria(definition: UpgradeDefinition) -> bool:
+	return (
 		definition.scope == UpgradeDefinition.Scope.TRAIT
 		or not definition.allowed_class_ids.is_empty()
 		or not definition.required_all_tags.is_empty()
 		or not definition.required_any_tags.is_empty()
-	):
-		return MATCHING_INHERITANCE_TEXT
-	return ""
+		or not definition.excluded_tags.is_empty()
+	)
 
 
 static func _effect_line(
