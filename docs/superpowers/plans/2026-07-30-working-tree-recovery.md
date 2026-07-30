@@ -16,7 +16,7 @@
 - Back up every dirty tracked byte and every untracked artifact before restoring any path.
 - Preserve `addons/godotsteam/` and `Party-Forge-Godot-Handbook-6977ae6.zip` in place; exclude them only through `.git/info/exclude`.
 - Preserve the tracked `addons/godot_ai/` plugin and commit its required `_mcp_game_helper` autoload.
-- Restore `window/stretch/aspect="keep"` and the catalog-driven 760x440 class selector with `Content/Scroll/Grid`.
+- Restore the effective `display/window/stretch/aspect="keep"` behavior and the catalog-driven 760x440 class selector with `Content/Scroll/Grid`. Godot 4.7 may canonicalize the `keep` default by omitting its explicit source line when the editor opens.
 - Track `tests/unit/test_responsive_ui.gd.uid`.
 - Expected automated baseline after repair: `TEST_SUMMARY: PASS (32 suites)` with no `SCRIPT ERROR` or unexpected `TEST_FAILURE`.
 - Leave Godot open on the clean saved `res://scenes/game/main.tscn`, stopped, unmodified, and ready; do not use Save All during recovery verification.
@@ -214,12 +214,12 @@ Expected: import exits `0`; tests exit `0`; summary is `TEST_SUMMARY: PASS (32 s
 - [ ] **Step 2: Verify the recovered source contracts directly**
 
 ```powershell
-rg -n 'window/stretch/aspect="keep"|_mcp_game_helper' "$project\project.godot"
+rg -n '_mcp_game_helper' "$project\project.godot"
 rg -n 'class_selection_panel.gd|Content/Scroll/Grid|offset_left = -380.0|offset_right = 380.0' "$project\scenes\ui\hud.tscn"
 rg -n 'name="(Fighter|Ranger|Mage|Cleric)" type="Button" parent="ClassSelection/Content"' "$project\scenes\ui\hud.tscn"
 ```
 
-Expected: the first two searches find all required settings/nodes. The hard-coded-button search returns no matches.
+Expected: the first two searches find the autoload and required selector nodes. The hard-coded-button search returns no matches. After the editor reconnects, require `project_manage(op="settings_get", key="display/window/stretch/aspect")` to return `keep`; accept Godot's clean source canonicalization if the explicit default line is omitted.
 
 - [ ] **Step 3: Reopen Godot visibly on the repaired project**
 

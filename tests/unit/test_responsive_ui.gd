@@ -34,7 +34,7 @@ func _test_project_display_contract(failures: Array[String]) -> void:
 	TestAssertions.equal(
 		ProjectSettings.has_setting("display/window/stretch/aspect"),
 		true,
-		"UI stretch aspect is explicitly configured",
+		"UI stretch aspect is available in ProjectSettings",
 		failures,
 	)
 	TestAssertions.equal(

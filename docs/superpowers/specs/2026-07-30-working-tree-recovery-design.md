@@ -19,8 +19,8 @@ The branch and commit history are immutable recovery inputs. Do not reset, rever
 
 1. Record a complete patch, status listing, and hashes for untracked material before changing the checkout.
 2. Stop and close the Godot editor so stale in-memory resources cannot rewrite repaired files.
-3. Restore all tracked formatting, UID churn, default-value elision, and the stale HUD/settings regression to `HEAD 14ecc9d`.
-4. Reapply only the intentional `_mcp_game_helper` autoload while retaining the committed `window/stretch/aspect="keep"` setting.
+3. Restore all tracked formatting, UID churn, default-value elision, and the stale HUD/settings regression to the current recovery `HEAD` (`b9901d5` at execution time).
+4. Reapply only the intentional `_mcp_game_helper` autoload and require the effective `display/window/stretch/aspect` ProjectSettings value to remain `keep`. Godot 4.7 may canonicalize that default by omitting the explicit line when the editor opens.
 5. Track `tests/unit/test_responsive_ui.gd.uid`, consistent with the repository's tracked Godot UID sidecars.
 6. Preserve `addons/godotsteam/` and `Party-Forge-Godot-Handbook-6977ae6.zip` in place, but add them to `.git/info/exclude` so they remain local and do not enter repository history during this recovery.
 7. Commit the intentional Godot AI autoload and responsive-test UID as one bounded recovery commit.
@@ -43,7 +43,7 @@ The backup must be sufficient to reconstruct every pre-recovery tracked modifica
 Recovery is complete only when:
 
 - `git status --short` is empty.
-- `project.godot` contains both the Godot AI autoload and `window/stretch/aspect="keep"`.
+- `project.godot` contains the Godot AI autoload, and the connected editor reports `display/window/stretch/aspect="keep"` even if Godot canonicalizes the default by omitting its explicit source line.
 - `scenes/ui/hud.tscn` uses `class_selection_panel.gd`, `Content/Scroll/Grid`, and the 760x440 centered selector.
 - Headless import exits zero.
 - The custom test runner exits zero with `TEST_SUMMARY: PASS (32 suites)` and no `SCRIPT ERROR` or unexpected `TEST_FAILURE`.
