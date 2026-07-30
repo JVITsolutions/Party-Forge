@@ -73,7 +73,7 @@ func _test_party_stat_runtime_effects(failures: Array[String]) -> void:
     TestAssertions.near(float(damage_modifiers.get("power_multiplier")), 1.05, 0.001, "damage upgrade changes attack power", failures)
 
     TestAssertions.truthy(party.call("upgrade_party_stat", &"move_speed"), "move-speed upgrade applies", failures)
-    TestAssertions.near(leader.move_speed, 6.2 * 1.03, 0.001, "move-speed upgrade immediately updates existing leader", failures)
+    TestAssertions.near(leader.move_speed, 6.39, 0.001, "resolved move-speed upgrade immediately updates existing leader", failures)
 
     TestAssertions.truthy(party.call("upgrade_party_stat", &"attack_speed"), "attack-speed upgrade applies", failures)
     var attack_modifiers := CombatModifiers.resolve(party.members[0], party)
@@ -92,8 +92,8 @@ func _test_party_stat_runtime_effects(failures: Array[String]) -> void:
     var actors := main.get_node("Actors").get_children()
     var ranger := actors[actors.size() - 1] as PartyActor
     var ranger_health := ranger.get_node("HealthComponent") as HealthComponent
-    TestAssertions.near(ranger.move_speed, 6.6 * 1.03, 0.001, "future recruit receives move-speed upgrade", failures)
-    TestAssertions.near(ranger_health.max_health, 90.0 * 1.05, 0.001, "future recruit receives max-health upgrade", failures)
+    TestAssertions.near(ranger.move_speed, 6.80, 0.001, "future recruit receives resolved move-speed upgrade", failures)
+    TestAssertions.near(ranger_health.max_health, 95.0, 0.001, "future recruit receives resolved max-health upgrade", failures)
 
     for stat_id: StringName in PARTY_STAT_IDS:
         while int(party.call("party_stat_rank", stat_id)) < 20:
@@ -118,7 +118,7 @@ func _test_trait_upgrade_runtime_effects(failures: Array[String]) -> void:
     TestAssertions.equal(int(party.call("trait_upgrade_rank", &"arcane")), 1, "trait upgrade rank centralized", failures)
     TestAssertions.near(float(party.call("effective_trait_value", &"arcane")), 0.225, 0.001, "trait upgrade scales selected active value", failures)
     var after := CombatModifiers.resolve(party.members[0], party)
-    TestAssertions.near(float(after.get("area_multiplier")), 1.225, 0.001, "trait selection changes runtime area result", failures)
+    TestAssertions.near(float(after.get("area_multiplier")), 1.23, 0.001, "trait selection changes resolved rounded area result", failures)
     TestAssertions.truthy(not party.call("upgrade_trait", &"divine"), "inactive trait cannot upgrade", failures)
     party.free()
 
@@ -171,11 +171,11 @@ func _test_divine_healing_and_actual_revive(failures: Array[String]) -> void:
     var combatants: Array[Node3D] = [cleric, ranger]
     executor.call("configure", cleric, party, root, combatants)
     executor.call("execute", heal, ranger.get_combat_target())
-    TestAssertions.near(ranger_health.current_health, 40.0 + 18.0 * 1.18 * 1.15, 0.001, "active Divine and Support strengthen actual healing", failures)
+    TestAssertions.near(ranger_health.current_health, 40.0 + 18.0 * 1.33, 0.001, "active Divine and Support add into resolved healing", failures)
     party.call("upgrade_trait", &"divine")
     ranger_health.current_health = 40.0
     executor.call("execute", heal, ranger.get_combat_target())
-    TestAssertions.near(ranger_health.current_health, 40.0 + 18.0 * 1.225 * 1.15, 0.001, "Divine upgrade further strengthens actual healing", failures)
+    TestAssertions.near(ranger_health.current_health, 40.0 + 18.0 * 1.38, 0.001, "Divine upgrade further strengthens resolved healing", failures)
 
     ranger_health.current_health = ranger_health.max_health
     ranger.receive_damage(9999.0)

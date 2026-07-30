@@ -30,4 +30,47 @@ func run() -> Array[String]:
     TestAssertions.equal(extended_party.trait_count(&"martial"), 5, "trait count iterates beyond ordinary cap", failures)
     TestAssertions.equal(extended_party.active_tier(&"martial"), 5, "trait tier supports threshold above four", failures)
     extended_party.free()
+
+    _test_resolved_party_stats(failures)
+    _test_party_actor_stats_signal_lifecycle(failures)
     return failures
+
+func _test_resolved_party_stats(failures: Array[String]) -> void:
+    var catalog := GameCatalog.load_defaults()
+    var fighter := catalog.class_by_id(&"fighter")
+    var party := PartyManager.new()
+    party.initialize(fighter, catalog.traits)
+    var leader_id := party.members[0].member_id
+    TestAssertions.truthy(party.upgrade_party_stat(&"max_health"), "health stat upgrade succeeds", failures)
+    TestAssertions.truthy(party.upgrade_party_stat(&"move_speed"), "movement stat upgrade succeeds", failures)
+    var leader_stats := party.stats_for(leader_id)
+    TestAssertions.near(leader_stats.value(&"max_health"), 273.0, 0.001, "health upgrade resolves from class base", failures)
+    TestAssertions.near(leader_stats.value(&"move_speed"), 6.39, 0.001, "movement upgrade resolves and rounds from class base", failures)
+    TestAssertions.truthy(party.recruit(catalog.class_by_id(&"ranger")), "recruit succeeds after snapshot", failures)
+    TestAssertions.equal(party.members[0].member_id, leader_id, "recruitment preserves leader identity", failures)
+    TestAssertions.equal(party.stats_for(leader_id).value(&"max_health"), 273.0, "recruitment preserves leader snapshot value", failures)
+    party.free()
+
+func _test_party_actor_stats_signal_lifecycle(failures: Array[String]) -> void:
+    var catalog := GameCatalog.load_defaults()
+    var fighter := catalog.class_by_id(&"fighter")
+    var first_party := PartyManager.new()
+    first_party.initialize(fighter, catalog.traits)
+    var second_party := PartyManager.new()
+    second_party.initialize(fighter, catalog.traits)
+    var actor_scene := load("res://scenes/characters/leader.tscn") as PackedScene
+    var actor := actor_scene.instantiate() as PartyActor
+    actor.configure(first_party.members[0])
+    var stats_callback := Callable(actor, "_on_stats_changed")
+
+    actor.configure_combat(first_party)
+    TestAssertions.truthy(first_party.stats_changed.is_connected(stats_callback), "actor connects stats signal", failures)
+    actor.configure_combat(first_party)
+    TestAssertions.equal(first_party.stats_changed.get_connections().size(), 1, "actor does not duplicate stats signal", failures)
+    actor.configure_combat(second_party)
+    TestAssertions.truthy(not first_party.stats_changed.is_connected(stats_callback), "actor disconnects old stats signal", failures)
+    TestAssertions.truthy(second_party.stats_changed.is_connected(stats_callback), "actor connects replacement stats signal", failures)
+
+    actor.free()
+    first_party.free()
+    second_party.free()

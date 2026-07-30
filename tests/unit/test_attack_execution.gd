@@ -219,6 +219,15 @@ func _test_combat_modifiers(failures: Array[String]) -> void:
     var fighter_modifiers: RefCounted = modifier_script.call("resolve", fighter_party.members[0], fighter_party) as RefCounted
     TestAssertions.near(float(fighter_modifiers.get("power_multiplier")), 1.2, 0.001, "class rank scales attack power", failures)
     TestAssertions.near(float(fighter_modifiers.get("cooldown_rate_multiplier")), 1.15, 0.001, "active Martial tier scales attack rate", failures)
+    var personal := StatModifierSource.create(&"fighter_personal_damage", &"character", "Personal Training", fighter_party.members[0].member_id, [
+        StatModifier.create(&"damage", StatModifier.Operation.INCREASED, 0.25, &"fighter_personal_damage", "Personal Training"),
+    ])
+    TestAssertions.truthy(fighter_party.add_member_source(fighter_party.members[0].member_id, personal), "combat test member source added", failures)
+    var personalized: RefCounted = modifier_script.call("resolve", fighter_party.members[0], fighter_party) as RefCounted
+    var resolved := fighter_party.stats_for(fighter_party.members[0].member_id)
+    TestAssertions.near(float(personalized.get("power_multiplier")), 1.45, 0.001, "combat facade includes member-owned damage", failures)
+    TestAssertions.near(float(personalized.get("power_multiplier")), resolved.value(&"damage"), 0.001, "combat power equals resolved damage", failures)
+    TestAssertions.near(float(personalized.get("cooldown_rate_multiplier")), resolved.value(&"attack_speed"), 0.001, "combat rate equals resolved attack speed", failures)
     fighter_party.free()
 
     var mage_party := PartyManager.new()
@@ -227,7 +236,7 @@ func _test_combat_modifiers(failures: Array[String]) -> void:
     var mage_modifiers: RefCounted = modifier_script.call("resolve", mage_party.members[0], mage_party) as RefCounted
     TestAssertions.near(float(mage_modifiers.get("area_multiplier")), 1.18, 0.001, "active Arcane tier scales area", failures)
     TestAssertions.near(float(mage_modifiers.get("projectile_multiplier")), 1.15, 0.001, "active Ranged tier scales projectile", failures)
-    TestAssertions.near(float(mage_modifiers.get("cooldown_rate_multiplier")), 1.0 / 0.88, 0.001, "active Caster tier reduces cooldown by trait value", failures)
+    TestAssertions.near(float(mage_modifiers.get("cooldown_rate_multiplier")), 1.14, 0.001, "active Caster tier resolves rounded attack rate", failures)
     mage_party.free()
 
 func _test_cleric_primary_fallback(failures: Array[String]) -> void:

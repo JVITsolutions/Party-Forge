@@ -45,15 +45,18 @@ func configure(member_state: PartyMemberState) -> void:
     _ensure_combat_runtime()
 
 func configure_combat(manager: PartyManager, effect_container: Node = null) -> void:
-    if party_manager != null and party_manager.upgrades_changed.is_connected(_refresh_runtime_stats):
+    if is_instance_valid(party_manager) and party_manager.upgrades_changed.is_connected(_refresh_runtime_stats):
         party_manager.upgrades_changed.disconnect(_refresh_runtime_stats)
-    if party_manager != null and party_manager.active_traits_changed.is_connected(_on_active_traits_changed):
+    if is_instance_valid(party_manager) and party_manager.active_traits_changed.is_connected(_on_active_traits_changed):
         party_manager.active_traits_changed.disconnect(_on_active_traits_changed)
+    if is_instance_valid(party_manager) and party_manager.stats_changed.is_connected(_on_stats_changed):
+        party_manager.stats_changed.disconnect(_on_stats_changed)
     party_manager = manager
     combat_effects_parent = effect_container
-    if party_manager != null:
+    if is_instance_valid(party_manager):
         if not party_manager.upgrades_changed.is_connected(_refresh_runtime_stats): party_manager.upgrades_changed.connect(_refresh_runtime_stats)
         if not party_manager.active_traits_changed.is_connected(_on_active_traits_changed): party_manager.active_traits_changed.connect(_on_active_traits_changed)
+        if not party_manager.stats_changed.is_connected(_on_stats_changed): party_manager.stats_changed.connect(_on_stats_changed)
     _refresh_runtime_stats()
     _ensure_combat_runtime()
 
@@ -218,14 +221,18 @@ func _set_visual_color(color: Color) -> void:
 func _on_active_traits_changed(_tiers: Dictionary) -> void:
     _refresh_runtime_stats()
 
+func _on_stats_changed(member_id: int) -> void:
+    if member_state != null and member_state.member_id == member_id:
+        _refresh_runtime_stats()
+
 func _refresh_runtime_stats() -> void:
     if member_state == null or member_state.class_definition == null:
         return
     var definition := member_state.class_definition
+    var stats := party_manager.stats_for(member_state.member_id) if party_manager != null else null
+    move_speed = stats.value(&"move_speed", definition.move_speed) if stats != null else definition.move_speed
     var health := _health_component()
-    var health_multiplier := party_manager.party_stat_multiplier(&"max_health") if party_manager != null else 1.0
-    move_speed = definition.move_speed * (party_manager.party_stat_multiplier(&"move_speed") if party_manager != null else 1.0)
     if health != null:
-        health.set_max_health(definition.max_health * health_multiplier, true)
+        health.set_max_health(stats.value(&"max_health", definition.max_health) if stats != null else definition.max_health, true)
         health.revive_delay = definition.revive_delay * (party_manager.revive_delay_multiplier() if party_manager != null else 1.0)
         health.revive_health_fraction = definition.revive_health_fraction
