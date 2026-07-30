@@ -1,6 +1,6 @@
 # 2. Nodes, Scenes, and Instances
 
-> **Handbook version:** Party Forge architecture verified at `a293f62`<br>
+> **Architecture baseline:** `a293f6208bd3a62246043c1b3e7c0a49ad5fef73`<br>
 > **Godot version:** `4.7.1`<br>
 > **Last checked:** `2026-07-29`
 
@@ -92,7 +92,7 @@ Changing a source scene changes the defaults seen by its instances. An override 
 
 A node path describes a route through node names. From `Main`, `HUD/LevelUpPanel` means “find child `HUD`, then its child `LevelUpPanel`.” The code call `get_node("HUD/LevelUpPanel")` depends on both names and that hierarchy.
 
-Paths are not labels for humans; they are runtime contracts. At architecture commit `a293f62`, examples include:
+Paths are not labels for humans; they are runtime contracts. At architecture commit `a293f6208bd3a62246043c1b3e7c0a49ad5fef73`, examples include:
 
 - `Actors`
 - `Arena/PlayerSpawn`

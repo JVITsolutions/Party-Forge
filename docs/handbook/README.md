@@ -1,8 +1,9 @@
 # Party Forge Godot Handbook
 
-> **Godot version:** `4.7.1`<br>
-> **Initial architecture review:** Chapters 1–3 and 8–9, `2026-07-29`<br>
-> **Typed-combat review:** Chapters 4–7 and 10, `2026-07-30`
+> **Initial architecture baseline:** Chapters 1–3 and 8–9 at `a293f6208bd3a62246043c1b3e7c0a49ad5fef73`<br>
+> **Typed-combat runtime architecture:** Chapters 4–7 and 10 at `97f05b5fa77d8447830bb2a42209b83140384e6b`<br>
+> **Handbook wording alignment:** README and Chapters 5–7 at `9f1b9bbb5cdc04374b3288ada07eb8081032a188`<br>
+> **Godot version:** `4.7.1`
 
 ## Who this is for
 
@@ -20,7 +21,7 @@ Read the explanation, inspect the exact Party Forge paths, perform the exercise,
 
 Practice in `scenes/dev/` or another explicitly disposable sandbox before changing a production scene or data file. Apply a sandbox lesson to production only when the intended game design is approved and you can name the files that should change.
 
-> **Current limitation:** Review provenance is scoped by chapter rather than claimed for the handbook as a single snapshot. Use each chapter's **Handbook version** and **Last checked** banner, and recheck file paths and behavior when the project architecture or Godot version changes.
+> **Current limitation:** Review provenance is scoped by chapter rather than claimed for the handbook as a single snapshot. The commit named in each chapter banner is the immutable architecture source; **Last checked** is maintenance context, not proof of a source snapshot. Recheck file paths and behavior when the project architecture or Godot version changes.
 
 ## Before every exercise
 
@@ -67,7 +68,7 @@ The numbered learning path is complete. Follow it in order on a first pass, then
 
 > **Party Forge convention:** A repository-specific choice, accompanied by a file path or symbol you can inspect.
 
-> **Current limitation:** A restriction in the implementation as of that chapter's **Last checked** date; it may change later.
+> **Current limitation:** A restriction in the implementation at that chapter's named architecture commit; it may change later. The **Last checked** date records when the guidance was reviewed, not which code it describes.
 
 > **Checkpoint:** An observable result you must verify before continuing.
 

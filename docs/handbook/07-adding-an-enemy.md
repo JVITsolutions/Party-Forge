@@ -1,6 +1,7 @@
 # 7. Adding an Enemy
 
-> **Handbook version:** Party Forge Typed Combat Task 8 architecture<br>
+> **Runtime architecture:** Party Forge Typed Combat Task 8 at `97f05b5fa77d8447830bb2a42209b83140384e6b`<br>
+> **Handbook wording alignment:** `9f1b9bbb5cdc04374b3288ada07eb8081032a188`<br>
 > **Godot version:** `4.7.1`<br>
 > **Last checked:** `2026-07-30`
 

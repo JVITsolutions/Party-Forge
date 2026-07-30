@@ -1,6 +1,6 @@
 # 1. The Godot Editor and Party Forge Project Files
 
-> **Handbook version:** Party Forge architecture verified at `a293f62`<br>
+> **Architecture baseline:** `a293f6208bd3a62246043c1b3e7c0a49ad5fef73`<br>
 > **Godot version:** `4.7.1`<br>
 > **Last checked:** `2026-07-29`
 

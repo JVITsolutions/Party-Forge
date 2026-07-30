@@ -1,6 +1,6 @@
 # 10. Party Forge Architecture Reference
 
-> **Handbook version:** Party Forge Typed Combat Task 8 architecture<br>
+> **Runtime architecture:** Party Forge Typed Combat Task 8 at `97f05b5fa77d8447830bb2a42209b83140384e6b`<br>
 > **Godot version:** `4.7.1`<br>
 > **Last checked:** `2026-07-30`
 
