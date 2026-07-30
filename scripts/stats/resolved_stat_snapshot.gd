@@ -2,7 +2,12 @@ class_name ResolvedStatSnapshot
 extends RefCounted
 
 var revision := 0
-var capabilities: Array[StringName] = []
+var _capabilities: Array[StringName] = []
+var capabilities: Array[StringName]:
+	get:
+		return _capabilities.duplicate()
+	set(value):
+		_capabilities = value.duplicate()
 var _values: Dictionary = {}
 var _breakdowns: Dictionary = {}
 

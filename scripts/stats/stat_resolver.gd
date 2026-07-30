@@ -1,6 +1,20 @@
 class_name StatResolver
 extends RefCounted
 
+static func validate_sources(catalog: StatCatalog, sources: Array[StatModifierSource]) -> PackedStringArray:
+	var errors := PackedStringArray()
+	for source: StatModifierSource in sources:
+		if source == null:
+			errors.append("PARTY_FORGE_STAT_ERROR source=<null> stat=<unknown> reason=null source")
+			continue
+		for modifier: StatModifier in source.modifiers:
+			if modifier == null:
+				errors.append("PARTY_FORGE_STAT_ERROR source=%s stat=<null> reason=null modifier" % source.id)
+				continue
+			if catalog.definition(modifier.stat_id) == null:
+				errors.append("PARTY_FORGE_STAT_ERROR source=%s stat=%s reason=unknown stat id" % [source.id, modifier.stat_id])
+	return errors
+
 static func resolve(member_id: int, catalog: StatCatalog, base_values: Dictionary, capabilities: Array[StringName], sources: Array[StatModifierSource], action_tags: Array[StringName], revision: int) -> ResolvedStatSnapshot:
 	var snapshot := ResolvedStatSnapshot.new()
 	snapshot.revision = revision
