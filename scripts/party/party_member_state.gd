@@ -2,6 +2,7 @@ class_name PartyMemberState
 extends RefCounted
 
 var member_id: int
+var character_name: String
 var class_definition: ClassDefinition
 var is_leader: bool
 var capability_tags: Array[StringName] = []
@@ -10,8 +11,9 @@ var modifier_sources: Array[StatModifierSource]:
     get:
         return _copy_sources(_modifier_sources)
 
-func _init(id_value: int, definition: ClassDefinition, leader: bool) -> void:
+func _init(id_value: int, definition: ClassDefinition, leader: bool, generated_name: String = "") -> void:
     member_id = id_value
+    character_name = generated_name
     class_definition = definition
     is_leader = leader
     capability_tags = definition.capability_tags.duplicate()

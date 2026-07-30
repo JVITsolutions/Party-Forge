@@ -20,6 +20,8 @@ var trait_upgrade_ranks: Dictionary = {}
 var upgrade_tuning: UpgradeTuning = DEFAULT_UPGRADE_TUNING
 var combat_rng: CombatRng
 var damage_types: DamageTypeCatalog
+var _identity_seed := 0
+var _fallback_names: CharacterNamePool
 var _stat_revision := 0
 var _stat_cache: Dictionary = {}
 var _action_stat_cache: Dictionary = {}
@@ -34,6 +36,10 @@ func initialize(leader_class: ClassDefinition, traits: Array[TraitDefinition], t
     for stat_id: StringName in PARTY_STAT_IDS:
         party_stat_ranks[stat_id] = 0
     _append_member(leader_class, true)
+
+func configure_identity(run_seed: int, fallback_names: CharacterNamePool) -> void:
+    _identity_seed = run_seed
+    _fallback_names = fallback_names
 
 func recruit(definition: ClassDefinition) -> bool:
     if definition == null or members.size() >= MAX_PARTY_SIZE:
@@ -280,7 +286,15 @@ func _normalized_tags(tags: Array[StringName]) -> Array[StringName]:
     return normalized
 
 func _append_member(definition: ClassDefinition, leader: bool) -> void:
-    var member := PartyMemberState.new(members.size() + 1, definition, leader)
+    var member_id := members.size() + 1
+    var used_names := PackedStringArray()
+    for existing_member: PartyMemberState in members:
+        if not existing_member.character_name.is_empty():
+            used_names.append(existing_member.character_name)
+    var generated_name := ""
+    if definition.name_pool != null or _fallback_names != null:
+        generated_name = CharacterNameService.choose_name(definition.name_pool, _fallback_names, _identity_seed, member_id, used_names)
+    var member := PartyMemberState.new(member_id, definition, leader, generated_name)
     members.append(member)
     if not class_ranks.has(definition.id): class_ranks[definition.id] = 1
     if not _recalculate_traits():

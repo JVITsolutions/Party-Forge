@@ -50,8 +50,9 @@ func select_leader_class(class_id: StringName) -> bool:
 	if definition == null:
 		push_error(format_resource_error("res://data/classes", "unknown leader class %s" % class_id))
 		return false
-	party_manager.initialize(definition, catalog.traits)
 	game_run.configure_seed(RUN_SEED)
+	party_manager.configure_identity(game_run.run_seed, catalog.generic_name_pool)
+	party_manager.initialize(definition, catalog.traits)
 	party_manager.configure_combat(game_run.combat_rng, catalog.damage_types)
 	leader = LEADER_SCENE.instantiate() as PartyActor
 	get_node("Actors").add_child(leader)
@@ -162,7 +163,7 @@ func _present_pending_level() -> void:
 		game_run.begin_level_up()
 	if game_run.current_state() != RunStateMachine.State.LEVEL_UP:
 		return
-	var seed := experience_system.level * 1009 + party_manager.members.size()
+	var seed := experience_system.current_pending_level() * 1009 + party_manager.members.size()
 	var choices := _generate_valid_choices(seed)
 	get_node("HUD/LevelUpPanel").call("show_choices", choices, party_manager, _invalid_choice_keys(choices))
 

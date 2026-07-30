@@ -4,9 +4,19 @@ func run() -> Array[String]:
     var failures: Array[String] = []
     var catalog := GameCatalog.load_defaults()
     var party := PartyManager.new()
+    party.configure_identity(1337, catalog.generic_name_pool)
     party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
     TestAssertions.equal(party.members.size(), 1, "leader occupies one slot", failures)
     TestAssertions.truthy(party.recruit(catalog.class_by_id(&"fighter")), "duplicate fighter recruits", failures)
+    TestAssertions.truthy(not party.members[0].character_name.is_empty(), "leader receives a stored name", failures)
+    TestAssertions.truthy(party.members[1].character_name != party.members[0].character_name, "duplicate class recruit avoids the used name", failures)
+    var repeated_party := PartyManager.new()
+    repeated_party.configure_identity(1337, catalog.generic_name_pool)
+    repeated_party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
+    repeated_party.recruit(catalog.class_by_id(&"fighter"))
+    TestAssertions.equal(repeated_party.members[0].character_name, party.members[0].character_name, "leader identity is deterministic", failures)
+    TestAssertions.equal(repeated_party.members[1].character_name, party.members[1].character_name, "recruit identity is deterministic", failures)
+    repeated_party.free()
     TestAssertions.equal(party.trait_count(&"martial"), 2, "duplicate counts for martial", failures)
     TestAssertions.equal(party.active_tier(&"vanguard"), 2, "vanguard tier two", failures)
     party.recruit(catalog.class_by_id(&"ranger"))
@@ -16,6 +26,14 @@ func run() -> Array[String]:
     TestAssertions.equal(party.get_class_rank(&"fighter"), 2, "shared fighter rank", failures)
     TestAssertions.equal(party.active_tier(&"ranged"), 2, "duplicate rangers overlap", failures)
     party.free()
+
+    var legacy_definition := ClassDefinition.new()
+    legacy_definition.id = &"legacy_fixture"
+    var legacy_party := PartyManager.new()
+    var no_traits: Array[TraitDefinition] = []
+    legacy_party.initialize(legacy_definition, no_traits)
+    TestAssertions.equal(legacy_party.members[0].character_name, "", "unconfigured legacy party with no pools stays unnamed", failures)
+    legacy_party.free()
 
     var five_stack_trait := TraitDefinition.new()
     five_stack_trait.id = &"martial"
