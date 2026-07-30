@@ -44,7 +44,11 @@ func _initialize() -> void:
     if not _save_class(&"mage", "Mage", ClassDefinition.Role.BACKLINE, Color("9567e8"), [&"arcane", &"caster", &"fire"], [], {}, 75.0, 0.0, 6.0, 6.5, 12.0, 12.0, saved_attacks[&"mage_burst"], null): failures += 1
     if not _save_class(&"cleric", "Cleric", ClassDefinition.Role.SUPPORT, Color("f0d15b"), [&"divine", &"support", &"caster"], [], {}, 95.0, 2.0, 6.0, 4.0, 10.0, 10.0, saved_attacks[&"cleric_bolt"], saved_attacks[&"cleric_heal"]): failures += 1
     for row: Dictionary in ExpansionRows.CLASS_ROWS:
-        if not _save_class(row["id"], row["name"], row["role"], row["color"], row["traits"], row["tags"], row["overrides"], row["health"], row["armor"], row["speed"], row["preferred"], row["engagement"], row["tether"], saved_attacks[row["attack"]], null): failures += 1
+        var traits: Array[StringName] = []
+        traits.assign(row["traits"])
+        var capability_tags: Array[StringName] = []
+        capability_tags.assign(row["tags"])
+        if not _save_class(row["id"], row["name"], row["role"], row["color"], traits, capability_tags, row["overrides"], row["health"], row["armor"], row["speed"], row["preferred"], row["engagement"], row["tether"], saved_attacks[row["attack"]], null): failures += 1
 
     if not _save_trait(&"martial", "Martial", &"attack_speed", {2: 0.15, 4: 0.35}): failures += 1
     if not _save_trait(&"vanguard", "Vanguard", &"nearby_damage_reduction", {2: 0.12, 4: 0.28}, 6.0): failures += 1

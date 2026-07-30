@@ -4,6 +4,7 @@ func run() -> Array[String]:
 	var failures: Array[String] = []
 	_test_invalid_mitigation_rule_is_rejected(failures)
 	_test_default_generator_authors_exact_typed_party_attacks(failures)
+	_test_default_generator_types_expansion_class_arrays(failures)
 	_test_classes_use_active_types_and_supported_kinds(failures)
 	_test_non_finite_healing_is_rejected(failures)
 	_test_packet_scalar_evidence_is_immutable(failures)
@@ -49,6 +50,16 @@ func _test_default_generator_authors_exact_typed_party_attacks(failures: Array[S
 	]
 	for fragment: String in required_fragments:
 		TestAssertions.truthy(fragment in source, "default generator typed fragment: %s" % fragment, failures)
+
+func _test_default_generator_types_expansion_class_arrays(failures: Array[String]) -> void:
+	var source := FileAccess.get_file_as_string("res://tools/create_default_data.gd")
+	for fragment: String in [
+		"var traits: Array[StringName] = []",
+		"traits.assign(row[\"traits\"])",
+		"var capability_tags: Array[StringName] = []",
+		"capability_tags.assign(row[\"tags\"])",
+	]:
+		TestAssertions.truthy(fragment in source, "default generator expansion array contract: %s" % fragment, failures)
 
 func _test_classes_use_active_types_and_supported_kinds(failures: Array[String]) -> void:
 	var invalid_kind := _valid_attack(&"invalid_kind", AttackDefinition.Kind.PROJECTILE, &"physical")
