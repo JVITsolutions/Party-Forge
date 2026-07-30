@@ -15,7 +15,7 @@ static func generate(party: PartyManager, catalog: GameCatalog, seed: int) -> Ar
 	if party.members.size() < PartyManager.MAX_PARTY_SIZE and not recruits.is_empty():
 		_append_choice(recruits[rng.randi_range(0, recruits.size() - 1)], party, chosen, keys)
 
-	var preferred: Array[UpgradeChoice] = []
+	var normal: Array[UpgradeChoice] = []
 	var universal: Array[UpgradeChoice] = []
 	if catalog != null:
 		for definition: UpgradeDefinition in catalog.upgrades:
@@ -27,10 +27,11 @@ static func generate(party: PartyManager, catalog: GameCatalog, seed: int) -> Ar
 			if _is_universal(definition):
 				universal.append(choice)
 			else:
-				preferred.append(choice)
-	_sort_by_target_id(preferred)
+				normal.append(choice)
+	_append_foundational_candidates(party, catalog, normal)
+	_sort_by_target_id(normal)
 	_sort_by_target_id(universal)
-	_append_weighted_without_replacement(preferred, rng, party, chosen, keys)
+	_append_weighted_without_replacement(normal, rng, party, chosen, keys)
 	_append_weighted_without_replacement(universal, rng, party, chosen, keys)
 
 	for stat: StringName in PARTY_STATS:
@@ -59,6 +60,35 @@ static func _append_recruit(definition: ClassDefinition, recruits: Array[Upgrade
 		recruits.append(choice)
 		keys[choice.key()] = true
 
+static func _append_foundational_candidates(party: PartyManager, catalog: GameCatalog, candidates: Array[UpgradeChoice]) -> void:
+	var keys: Dictionary = {}
+	if catalog != null:
+		for definition: ClassDefinition in catalog.classes:
+			_append_class_rank(definition, party, candidates, keys)
+	for member: PartyMemberState in party.members:
+		_append_class_rank(member.class_definition, party, candidates, keys)
+	if catalog != null:
+		for definition: TraitDefinition in catalog.traits:
+			_append_trait(definition, party, candidates, keys)
+	for definition: TraitDefinition in party.trait_definitions:
+		_append_trait(definition, party, candidates, keys)
+
+static func _append_class_rank(definition: ClassDefinition, party: PartyManager, candidates: Array[UpgradeChoice], keys: Dictionary) -> void:
+	if definition == null or party.get_class_rank(definition.id) <= 0:
+		return
+	var choice := UpgradeChoice.new(UpgradeChoice.Kind.CLASS_RANK, definition.id, "Train %s" % definition.display_name)
+	if not keys.has(choice.key()):
+		candidates.append(choice)
+		keys[choice.key()] = true
+
+static func _append_trait(definition: TraitDefinition, party: PartyManager, candidates: Array[UpgradeChoice], keys: Dictionary) -> void:
+	if definition == null or party.active_tier(definition.id) <= 0:
+		return
+	var choice := UpgradeChoice.new(UpgradeChoice.Kind.TRAIT, definition.id, "Strengthen %s" % definition.display_name)
+	if not keys.has(choice.key()):
+		candidates.append(choice)
+		keys[choice.key()] = true
+
 static func _is_universal(definition: UpgradeDefinition) -> bool:
 	return definition.scope == UpgradeDefinition.Scope.CHARACTER \
 		and definition.allowed_class_ids.is_empty() \
@@ -67,15 +97,25 @@ static func _is_universal(definition: UpgradeDefinition) -> bool:
 		and definition.excluded_tags.is_empty()
 
 static func _sort_by_target_id(candidates: Array[UpgradeChoice]) -> void:
-	candidates.sort_custom(func(left: UpgradeChoice, right: UpgradeChoice) -> bool: return String(left.target_id) < String(right.target_id))
+	candidates.sort_custom(func(left: UpgradeChoice, right: UpgradeChoice) -> bool:
+		if left.target_id == right.target_id:
+			return left.kind < right.kind
+		return String(left.target_id) < String(right.target_id)
+	)
+
+static func _selection_weight(choice: UpgradeChoice) -> float:
+	if choice.kind != UpgradeChoice.Kind.AUTHORED:
+		return 1.0
+	if choice.definition == null or not is_finite(choice.definition.selection_weight) or choice.definition.selection_weight <= 0.0:
+		return 0.0
+	return choice.definition.selection_weight
 
 static func _append_weighted_without_replacement(candidates: Array[UpgradeChoice], rng: RandomNumberGenerator, party: PartyManager, chosen: Array[UpgradeChoice], keys: Dictionary) -> void:
 	var remaining: Array[UpgradeChoice] = candidates.duplicate()
 	while chosen.size() < 3 and not remaining.is_empty():
 		var total_weight := 0.0
 		for candidate: UpgradeChoice in remaining:
-			if candidate.definition != null and is_finite(candidate.definition.selection_weight) and candidate.definition.selection_weight > 0.0:
-				total_weight += candidate.definition.selection_weight
+			total_weight += _selection_weight(candidate)
 		if total_weight <= 0.0:
 			return
 		var roll := rng.randf() * total_weight
@@ -83,9 +123,10 @@ static func _append_weighted_without_replacement(candidates: Array[UpgradeChoice
 		var cumulative := 0.0
 		for index: int in remaining.size():
 			var candidate := remaining[index]
-			if candidate.definition == null or not is_finite(candidate.definition.selection_weight) or candidate.definition.selection_weight <= 0.0:
+			var weight := _selection_weight(candidate)
+			if weight <= 0.0:
 				continue
-			cumulative += candidate.definition.selection_weight
+			cumulative += weight
 			if roll < cumulative:
 				selected_index = index
 				break

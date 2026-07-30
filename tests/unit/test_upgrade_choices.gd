@@ -6,6 +6,7 @@ func run() -> Array[String]:
 	_test_offer_shape_and_determinism(failures)
 	_test_catalog_order_and_rarity_are_inert(failures)
 	_test_capped_and_unusable_cards_are_excluded(failures)
+	_test_foundational_choices_complete_a_short_offer(failures)
 	_test_recipient_independent_key(failures)
 	_test_universal_before_legacy_stat_fallback(failures)
 	return failures
@@ -69,7 +70,8 @@ func _test_catalog_order_and_rarity_are_inert(failures: Array[String]) -> void:
 func _test_capped_and_unusable_cards_are_excluded(failures: Array[String]) -> void:
 	var defaults := GameCatalog.load_defaults()
 	var party := PartyManager.new()
-	party.initialize(defaults.class_by_id(&"fighter"), defaults.traits)
+	var no_traits: Array[TraitDefinition] = []
+	party.initialize(defaults.class_by_id(&"fighter"), no_traits)
 	party.recruit(defaults.class_by_id(&"fighter"))
 	party.recruit(defaults.class_by_id(&"fighter"))
 	party.recruit(defaults.class_by_id(&"fighter"))
@@ -91,10 +93,31 @@ func _test_capped_and_unusable_cards_are_excluded(failures: Array[String]) -> vo
 	TestAssertions.truthy(not _has_target(offer, &"deadeye"), "card with no eligible recipient is excluded", failures)
 	party.free()
 
-func _test_recipient_independent_key(failures: Array[String]) -> void:
+func _test_foundational_choices_complete_a_short_offer(failures: Array[String]) -> void:
 	var defaults := GameCatalog.load_defaults()
 	var party := PartyManager.new()
 	party.initialize(defaults.class_by_id(&"fighter"), defaults.traits)
+	party.recruit(defaults.class_by_id(&"fighter"))
+	party.recruit(defaults.class_by_id(&"fighter"))
+	party.recruit(defaults.class_by_id(&"fighter"))
+	for stat_id: StringName in PartyManager.PARTY_STAT_IDS:
+		for rank_index: int in range(party.upgrade_tuning.party_stat_max_rank):
+			party.upgrade_party_stat(stat_id)
+	var no_authored_cards := _catalog_with_upgrades(defaults, [])
+	var offer := LevelUpChoiceService.generate(party, no_authored_cards, 5150)
+	TestAssertions.equal(offer.size(), 3, "foundational choices complete an authored-and-stat shortage", failures)
+	TestAssertions.truthy(offer.all(func(choice: UpgradeChoice) -> bool: return choice.kind in [UpgradeChoice.Kind.CLASS_RANK, UpgradeChoice.Kind.TRAIT]), "shortage offer contains only valid foundational kinds", failures)
+	TestAssertions.truthy(_kind_count(offer, UpgradeChoice.Kind.CLASS_RANK) > 0, "owned class rank is directly offered during shortage", failures)
+	TestAssertions.truthy(_kind_count(offer, UpgradeChoice.Kind.TRAIT) > 0, "active trait is directly offered during shortage", failures)
+	TestAssertions.truthy(offer.all(func(choice: UpgradeChoice) -> bool: return choice.is_valid_for(party)), "every foundational shortage choice is usable", failures)
+	TestAssertions.equal(_unique_count(offer), 3, "foundational shortage choices keep unique keys", failures)
+	party.free()
+
+func _test_recipient_independent_key(failures: Array[String]) -> void:
+	var defaults := GameCatalog.load_defaults()
+	var party := PartyManager.new()
+	var no_traits: Array[TraitDefinition] = []
+	party.initialize(defaults.class_by_id(&"fighter"), no_traits)
 	party.recruit(defaults.class_by_id(&"fighter"))
 	var catalog := _catalog_with_upgrades(defaults, [defaults.upgrade_by_id(&"vitality")])
 	var offer := LevelUpChoiceService.generate(party, catalog, 18)
@@ -105,7 +128,8 @@ func _test_recipient_independent_key(failures: Array[String]) -> void:
 func _test_universal_before_legacy_stat_fallback(failures: Array[String]) -> void:
 	var defaults := GameCatalog.load_defaults()
 	var party := PartyManager.new()
-	party.initialize(defaults.class_by_id(&"fighter"), defaults.traits)
+	var no_traits: Array[TraitDefinition] = []
+	party.initialize(defaults.class_by_id(&"fighter"), no_traits)
 	party.recruit(defaults.class_by_id(&"fighter"))
 	party.recruit(defaults.class_by_id(&"fighter"))
 	party.recruit(defaults.class_by_id(&"fighter"))
@@ -114,9 +138,10 @@ func _test_universal_before_legacy_stat_fallback(failures: Array[String]) -> voi
 	var catalog := _catalog_with_upgrades(defaults, [defaults.upgrade_by_id(&"vitality")])
 	var offer := LevelUpChoiceService.generate(party, catalog, 99)
 	TestAssertions.equal(offer.size(), 3, "universal fallback plus legacy stats completes the offer", failures)
-	TestAssertions.equal(offer[0].kind, UpgradeChoice.Kind.AUTHORED, "universal authored fallback precedes legacy party stats", failures)
-	TestAssertions.equal(offer[0].target_id, &"vitality", "universal authored fallback is retained", failures)
-	TestAssertions.equal(_kind_count(offer, UpgradeChoice.Kind.PARTY_STAT), 2, "legacy party stats only fill remaining slots", failures)
+	TestAssertions.equal(offer[0].kind, UpgradeChoice.Kind.CLASS_RANK, "foundational normal pool is exhausted before fallbacks", failures)
+	TestAssertions.equal(offer[1].kind, UpgradeChoice.Kind.AUTHORED, "universal authored fallback precedes legacy party stats", failures)
+	TestAssertions.equal(offer[1].target_id, &"vitality", "universal authored fallback is retained", failures)
+	TestAssertions.equal(_kind_count(offer, UpgradeChoice.Kind.PARTY_STAT), 1, "legacy party stats only fill the final remaining slot", failures)
 	TestAssertions.truthy(not _has_target(offer, &"max_health"), "capped legacy party stat is excluded", failures)
 	party.free()
 
