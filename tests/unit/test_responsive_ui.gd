@@ -51,12 +51,19 @@ func _test_responsive_hud_layout(failures: Array[String]) -> void:
 	var class_selection := hud.get_node("ClassSelection") as Control
 	TestAssertions.truthy(class_selection.get_node_or_null("Content/Scroll/Grid") != null, "class selection exposes scroll grid", failures)
 	var level_up := hud.get_node("LevelUpPanel") as Control
+	var level_content := hud.get_node("LevelUpPanel/ContentPanel") as Control
 	var result_root := hud.get_node("RunResultPanel") as Control
 	var result_panel := hud.get_node("RunResultPanel/Panel") as Control
 	_assert_full_rect(result_root, "run result overlay", failures)
+	_assert_full_rect(level_up, "level-up modal root", failures)
+	TestAssertions.equal(level_up.process_mode, Node.PROCESS_MODE_ALWAYS, "level-up modal always processes while paused", failures)
+	TestAssertions.equal(level_up.mouse_filter, Control.MOUSE_FILTER_STOP, "level-up modal blocks pointer input behind it", failures)
 	_assert_center_anchors(class_selection, "class selection", failures)
-	_assert_center_anchors(level_up, "level-up panel", failures)
+	_assert_center_anchors(level_content, "level-up content panel", failures)
 	_assert_center_anchors(result_panel, "run result panel", failures)
+	TestAssertions.truthy(level_up.get_node_or_null("ContentPanel/OfferView") is ScrollContainer, "offer content is scrollable", failures)
+	TestAssertions.truthy(level_up.get_node_or_null("ContentPanel/RecipientView/Content/RecipientsScroll") is ScrollContainer, "recipient content is scrollable", failures)
+	TestAssertions.truthy(level_up.get_node_or_null("ContentPanel/ConfirmationView") is ScrollContainer, "confirmation content is scrollable", failures)
 	TestAssertions.equal(
 		Vector4(boss_banner.anchor_left, boss_banner.anchor_top, boss_banner.anchor_right, boss_banner.anchor_bottom),
 		Vector4(0.5, 0.0, 0.5, 0.0),
@@ -67,10 +74,10 @@ func _test_responsive_hud_layout(failures: Array[String]) -> void:
 
 	for viewport_size: Vector2 in VIEWPORT_SIZES:
 		_assert_centered(class_selection, viewport_size, "class selection", failures)
-		_assert_centered(level_up, viewport_size, "level-up panel", failures)
+		_assert_centered(level_content, viewport_size, "level-up content panel", failures)
 		_assert_centered(result_panel, viewport_size, "run result panel", failures)
 		_assert_size(class_selection, Vector2(760.0, 440.0), "class selection", failures)
-		_assert_size(level_up, Vector2(700.0, 190.0), "level-up panel", failures)
+		_assert_size(level_content, Vector2(1120.0, 680.0), "level-up content panel", failures)
 		_assert_size(result_panel, Vector2(400.0, 260.0), "run result panel", failures)
 		TestAssertions.near(
 			_rect_center(boss_banner, viewport_size).x,
