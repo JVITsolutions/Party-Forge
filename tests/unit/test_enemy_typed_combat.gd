@@ -7,6 +7,7 @@ func run() -> Array[String]:
 	_test_enemy_definition_validation(catalog, failures)
 	_test_spawned_enemy_identities(catalog, failures)
 	_test_enemy_physical_resolution(catalog, failures)
+	_test_guardian_charge_sweeps_full_movement_segment(catalog, failures)
 	return failures
 
 func _test_exact_enemy_attack_links(catalog: GameCatalog, failures: Array[String]) -> void:
@@ -120,6 +121,35 @@ func _test_enemy_physical_resolution(catalog: GameCatalog, failures: Array[Strin
 		TestAssertions.near(result.actual_health_removed, 2.0, 0.001, "resolved enemy damage reaches health", failures)
 	health.free()
 	root.free()
+
+func _test_guardian_charge_sweeps_full_movement_segment(catalog: GameCatalog, failures: Array[String]) -> void:
+	var large_step_removed := _guardian_charge_removed(catalog, [0.65])
+	var sliced_step_removed := _guardian_charge_removed(catalog, [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.05])
+	TestAssertions.near(large_step_removed, sliced_step_removed, 0.001, "guardian charge damage is frame-slice invariant", failures)
+	TestAssertions.near(sliced_step_removed, 22.0, 0.001, "guardian charge hits once across repeated intersecting slices", failures)
+
+func _guardian_charge_removed(catalog: GameCatalog, steps: Array[float]) -> float:
+	var root := Node3D.new()
+	(Engine.get_main_loop() as SceneTree).root.add_child(root)
+	var leader := (load("res://scenes/characters/leader.tscn") as PackedScene).instantiate() as PartyActor
+	root.add_child(leader)
+	leader.position = Vector3(4.5, 0.0, 0.0)
+	leader.configure(PartyMemberState.new(7001, catalog.class_by_id(&"fighter"), true))
+	var health := leader.get_node("HealthComponent") as HealthComponent
+	var before := health.current_health
+	var boss := (load("res://scenes/enemies/forge_guardian.tscn") as PackedScene).instantiate() as Node3D
+	root.add_child(boss)
+	boss.position = Vector3.ZERO
+	boss.call("configure_combat", &"boss", CombatRng.new(901), catalog.damage_types)
+	boss.call("configure_boss", leader, null, root)
+	boss.set("charge_direction", Vector3.RIGHT)
+	boss.set("charge_packet", boss.call("prepare_attack", &"guardian_charge"))
+	(boss.get("charge_hit_ids") as Dictionary).clear()
+	for step: float in steps:
+		boss.call("_move_charge", step)
+	var removed := before - health.current_health
+	root.free()
+	return removed
 
 func _enemy(catalog: GameCatalog, enemy_id: StringName) -> EnemyDefinition:
 	for definition: EnemyDefinition in catalog.enemies:

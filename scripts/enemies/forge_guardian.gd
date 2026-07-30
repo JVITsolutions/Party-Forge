@@ -119,7 +119,8 @@ func _finish_action() -> void:
 
 func _move_charge(delta: float) -> void:
     velocity = charge_direction * CHARGE_SPEED
-    var next_position := (global_position if is_inside_tree() else position) + velocity * delta
+    var start_position := global_position if is_inside_tree() else position
+    var next_position := start_position + velocity * delta
     if is_inside_tree():
         global_position = next_position
     else:
@@ -129,14 +130,22 @@ func _move_charge(delta: float) -> void:
     var attack := definition.attack_by_id(&"guardian_charge") if definition != null else null
     if attack == null:
         return
-    var center := global_position if is_inside_tree() else position
     for adapter: CombatantAdapter in _party_adapters(charge_packet.action_tags):
         if charge_hit_ids.has(adapter.combatant_id) or adapter.actor == null:
             continue
         var target_position := adapter.actor.global_position if adapter.actor.is_inside_tree() else adapter.actor.position
-        if center.distance_squared_to(target_position) <= attack.range * attack.range:
+        if _distance_squared_to_segment(target_position, start_position, next_position) <= attack.range * attack.range:
             resolve_attack(charge_packet, adapter)
             charge_hit_ids[adapter.combatant_id] = true
+
+func _distance_squared_to_segment(point: Vector3, start: Vector3, finish: Vector3) -> float:
+    var segment := finish - start
+    var length_squared := segment.length_squared()
+    if is_zero_approx(length_squared):
+        return point.distance_squared_to(start)
+    var offset := point - start
+    var interpolation := clampf(offset.dot(segment) / length_squared, 0.0, 1.0)
+    return point.distance_squared_to(start + segment * interpolation)
 
 func _create_danger_ring() -> void:
     var parent := effects_parent if effects_parent != null and is_instance_valid(effects_parent) else get_parent()
