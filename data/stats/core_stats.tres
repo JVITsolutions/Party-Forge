@@ -1,0 +1,351 @@
+[gd_resource type="Resource" script_class="StatCatalog" format=3]
+
+[ext_resource type="Script" path="res://scripts/stats/stat_definition.gd" id="1_w76bv"]
+[ext_resource type="Script" path="res://scripts/stats/stat_catalog.gd" id="2_e1y7i"]
+
+[sub_resource type="Resource" id="Resource_qjanc"]
+script = ExtResource("1_w76bv")
+id = &"max_health"
+display_name = "Maximum Health"
+ui_group = &"overview"
+value_format = 1
+precision = 0
+default_value = 100.0
+has_minimum = true
+minimum = 1.0
+visibility = 0
+keyword_id = &"max_health"
+
+[sub_resource type="Resource" id="Resource_jx3mg"]
+script = ExtResource("1_w76bv")
+id = &"armor"
+display_name = "Armor"
+ui_group = &"defense"
+has_minimum = true
+visibility = 0
+keyword_id = &"armor"
+
+[sub_resource type="Resource" id="Resource_shobl"]
+script = ExtResource("1_w76bv")
+id = &"move_speed"
+display_name = "Movement Speed"
+ui_group = &"utility"
+precision = 2
+default_value = 6.0
+has_minimum = true
+minimum = 0.1
+visibility = 0
+keyword_id = &"move_speed"
+
+[sub_resource type="Resource" id="Resource_33hiy"]
+script = ExtResource("1_w76bv")
+id = &"damage"
+display_name = "Damage"
+ui_group = &"offense"
+value_format = 3
+precision = 2
+default_value = 1.0
+has_minimum = true
+visibility = 0
+keyword_id = &"damage"
+
+[sub_resource type="Resource" id="Resource_tgtbh"]
+script = ExtResource("1_w76bv")
+id = &"attack_speed"
+display_name = "Attack Speed"
+ui_group = &"offense"
+value_format = 3
+precision = 2
+default_value = 1.0
+has_minimum = true
+minimum = 0.05
+visibility = 0
+keyword_id = &"attack_speed"
+
+[sub_resource type="Resource" id="Resource_v1otm"]
+script = ExtResource("1_w76bv")
+id = &"crit_chance"
+display_name = "Critical Strike Chance"
+ui_group = &"offense"
+value_format = 2
+has_minimum = true
+has_maximum = true
+maximum = 0.75
+visibility = 0
+keyword_id = &"crit_chance"
+
+[sub_resource type="Resource" id="Resource_u5fvm"]
+script = ExtResource("1_w76bv")
+id = &"crit_multiplier"
+display_name = "Critical Strike Multiplier"
+ui_group = &"offense"
+value_format = 2
+precision = 0
+default_value = 1.5
+has_minimum = true
+minimum = 1.0
+visibility = 0
+keyword_id = &"crit_multiplier"
+
+[sub_resource type="Resource" id="Resource_rjyfy"]
+script = ExtResource("1_w76bv")
+id = &"attack_range"
+display_name = "Attack Range"
+ui_group = &"offense"
+value_format = 3
+precision = 2
+default_value = 1.0
+has_minimum = true
+minimum = 0.05
+visibility = 0
+keyword_id = &"attack_range"
+
+[sub_resource type="Resource" id="Resource_uayb7"]
+script = ExtResource("1_w76bv")
+id = &"projectile_speed"
+display_name = "Projectile Speed"
+ui_group = &"offense"
+value_format = 3
+precision = 2
+default_value = 1.0
+has_minimum = true
+minimum = 0.05
+visibility = 1
+capability_tags = Array[StringName]([&"projectile"])
+keyword_id = &"projectile_speed"
+
+[sub_resource type="Resource" id="Resource_g57sx"]
+script = ExtResource("1_w76bv")
+id = &"area_size"
+display_name = "Area Size"
+ui_group = &"offense"
+value_format = 3
+precision = 2
+default_value = 1.0
+has_minimum = true
+minimum = 0.05
+visibility = 1
+capability_tags = Array[StringName]([&"area"])
+keyword_id = &"area_size"
+
+[sub_resource type="Resource" id="Resource_fvbyb"]
+script = ExtResource("1_w76bv")
+id = &"cooldown_rate"
+display_name = "Cooldown Rate"
+ui_group = &"offense"
+value_format = 3
+precision = 2
+default_value = 1.0
+has_minimum = true
+minimum = 0.05
+visibility = 1
+capability_tags = Array[StringName]([&"cooldown"])
+keyword_id = &"cooldown_rate"
+
+[sub_resource type="Resource" id="Resource_nlvwj"]
+script = ExtResource("1_w76bv")
+id = &"healing_power"
+display_name = "Healing Power"
+ui_group = &"offense"
+value_format = 3
+precision = 2
+default_value = 1.0
+has_minimum = true
+visibility = 1
+capability_tags = Array[StringName]([&"healing"])
+keyword_id = &"healing_power"
+
+[sub_resource type="Resource" id="Resource_l7acj"]
+script = ExtResource("1_w76bv")
+id = &"dodge_chance"
+display_name = "Dodge Chance"
+ui_group = &"defense"
+value_format = 2
+has_minimum = true
+has_maximum = true
+maximum = 0.75
+keyword_id = &"dodge_chance"
+
+[sub_resource type="Resource" id="Resource_xbx42"]
+script = ExtResource("1_w76bv")
+id = &"block_chance"
+display_name = "Block Chance"
+ui_group = &"defense"
+value_format = 2
+has_minimum = true
+has_maximum = true
+maximum = 0.75
+keyword_id = &"block_chance"
+
+[sub_resource type="Resource" id="Resource_54wba"]
+script = ExtResource("1_w76bv")
+id = &"block_effectiveness"
+display_name = "Block Effectiveness"
+ui_group = &"defense"
+value_format = 2
+default_value = 0.5
+has_minimum = true
+has_maximum = true
+maximum = 1.0
+visibility = 1
+capability_tags = Array[StringName]([&"block"])
+keyword_id = &"block_effectiveness"
+
+[sub_resource type="Resource" id="Resource_svrb2"]
+script = ExtResource("1_w76bv")
+id = &"health_regeneration"
+display_name = "Health Regeneration"
+ui_group = &"defense"
+value_format = 4
+precision = 2
+has_minimum = true
+keyword_id = &"health_regeneration"
+
+[sub_resource type="Resource" id="Resource_qdbv7"]
+script = ExtResource("1_w76bv")
+id = &"life_steal"
+display_name = "Life Steal"
+ui_group = &"defense"
+value_format = 2
+has_minimum = true
+has_maximum = true
+maximum = 1.0
+keyword_id = &"life_steal"
+
+[sub_resource type="Resource" id="Resource_mpru1"]
+script = ExtResource("1_w76bv")
+id = &"pickup_radius"
+display_name = "Pickup Radius"
+ui_group = &"utility"
+value_format = 3
+precision = 2
+default_value = 1.0
+has_minimum = true
+minimum = 0.1
+visibility = 0
+keyword_id = &"pickup_radius"
+
+[sub_resource type="Resource" id="Resource_tfru6"]
+script = ExtResource("1_w76bv")
+id = &"physical_damage"
+display_name = "Physical Damage"
+ui_group = &"offense"
+value_format = 3
+precision = 2
+default_value = 1.0
+has_minimum = true
+visibility = 1
+capability_tags = Array[StringName]([&"physical"])
+keyword_id = &"physical_damage"
+
+[sub_resource type="Resource" id="Resource_c127o"]
+script = ExtResource("1_w76bv")
+id = &"fire_damage"
+display_name = "Fire Damage"
+ui_group = &"offense"
+value_format = 3
+precision = 2
+default_value = 1.0
+has_minimum = true
+visibility = 1
+capability_tags = Array[StringName]([&"fire"])
+keyword_id = &"fire_damage"
+
+[sub_resource type="Resource" id="Resource_q1ios"]
+script = ExtResource("1_w76bv")
+id = &"cold_damage"
+display_name = "Cold Damage"
+ui_group = &"offense"
+value_format = 3
+precision = 2
+default_value = 1.0
+has_minimum = true
+visibility = 1
+capability_tags = Array[StringName]([&"cold"])
+keyword_id = &"cold_damage"
+
+[sub_resource type="Resource" id="Resource_jinps"]
+script = ExtResource("1_w76bv")
+id = &"lightning_damage"
+display_name = "Lightning Damage"
+ui_group = &"offense"
+value_format = 3
+precision = 2
+default_value = 1.0
+has_minimum = true
+visibility = 1
+capability_tags = Array[StringName]([&"lightning"])
+keyword_id = &"lightning_damage"
+
+[sub_resource type="Resource" id="Resource_g3u3i"]
+script = ExtResource("1_w76bv")
+id = &"chaos_damage"
+display_name = "Chaos Damage"
+ui_group = &"offense"
+value_format = 3
+precision = 2
+default_value = 1.0
+has_minimum = true
+visibility = 1
+capability_tags = Array[StringName]([&"chaos"])
+keyword_id = &"chaos_damage"
+
+[sub_resource type="Resource" id="Resource_cdcd2"]
+script = ExtResource("1_w76bv")
+id = &"fire_resistance"
+display_name = "Fire Resistance"
+ui_group = &"defense"
+value_format = 2
+has_minimum = true
+minimum = -1.0
+has_maximum = true
+maximum = 0.75
+visibility = 1
+capability_tags = Array[StringName]([&"fire"])
+keyword_id = &"fire_resistance"
+
+[sub_resource type="Resource" id="Resource_p683c"]
+script = ExtResource("1_w76bv")
+id = &"cold_resistance"
+display_name = "Cold Resistance"
+ui_group = &"defense"
+value_format = 2
+has_minimum = true
+minimum = -1.0
+has_maximum = true
+maximum = 0.75
+visibility = 1
+capability_tags = Array[StringName]([&"cold"])
+keyword_id = &"cold_resistance"
+
+[sub_resource type="Resource" id="Resource_lfd5q"]
+script = ExtResource("1_w76bv")
+id = &"lightning_resistance"
+display_name = "Lightning Resistance"
+ui_group = &"defense"
+value_format = 2
+has_minimum = true
+minimum = -1.0
+has_maximum = true
+maximum = 0.75
+visibility = 1
+capability_tags = Array[StringName]([&"lightning"])
+keyword_id = &"lightning_resistance"
+
+[sub_resource type="Resource" id="Resource_xo1vt"]
+script = ExtResource("1_w76bv")
+id = &"chaos_resistance"
+display_name = "Chaos Resistance"
+ui_group = &"defense"
+value_format = 2
+has_minimum = true
+minimum = -1.0
+has_maximum = true
+maximum = 0.75
+visibility = 1
+capability_tags = Array[StringName]([&"chaos"])
+keyword_id = &"chaos_resistance"
+
+[resource]
+script = ExtResource("2_e1y7i")
+definitions = Array[ExtResource("1_w76bv")]([SubResource("Resource_qjanc"), SubResource("Resource_jx3mg"), SubResource("Resource_shobl"), SubResource("Resource_33hiy"), SubResource("Resource_tgtbh"), SubResource("Resource_v1otm"), SubResource("Resource_u5fvm"), SubResource("Resource_rjyfy"), SubResource("Resource_uayb7"), SubResource("Resource_g57sx"), SubResource("Resource_fvbyb"), SubResource("Resource_nlvwj"), SubResource("Resource_l7acj"), SubResource("Resource_xbx42"), SubResource("Resource_54wba"), SubResource("Resource_svrb2"), SubResource("Resource_qdbv7"), SubResource("Resource_mpru1"), SubResource("Resource_tfru6"), SubResource("Resource_c127o"), SubResource("Resource_q1ios"), SubResource("Resource_jinps"), SubResource("Resource_g3u3i"), SubResource("Resource_cdcd2"), SubResource("Resource_p683c"), SubResource("Resource_lfd5q"), SubResource("Resource_xo1vt")])
