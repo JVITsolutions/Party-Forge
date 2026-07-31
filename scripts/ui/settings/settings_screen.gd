@@ -27,6 +27,7 @@ func open(return_focus: Control = null) -> void:
 	_draft = _current_settings.copy()
 	_additional_page().bind(_draft)
 	_status().text = ""
+	_status().tooltip_text = ""
 	visible = true
 	_focus_active_page()
 
@@ -51,7 +52,11 @@ func _apply_and_return() -> void:
 	_draft.normalize()
 	var error := _store.save_settings(_draft) if _store != null else "PARTY_FORGE_SETTINGS_SAVE_ERROR reason=store is missing"
 	if not error.is_empty():
-		_status().text = error
+		push_error(error)
+		_status().text = "Settings could not be saved. Check that the settings folder is writable, then try again."
+		_status().tooltip_text = error
+		if _status().is_inside_tree() and _status().is_visible_in_tree():
+			_status().grab_focus()
 		return
 	_current_settings = _draft.copy()
 	settings_applied.emit(_current_settings.copy())
@@ -94,12 +99,21 @@ func _focus_active_page() -> void:
 	var tabs := _tabs()
 	if not is_inside_tree() or tabs.get_tab_count() == 0:
 		return
-	var page := tabs.get_tab_control(tabs.current_tab)
-	var state := page.get_node_or_null("Content/State") as Control if page != null else null
-	if state != null and state.is_visible_in_tree():
-		state.grab_focus()
+	var target := _focus_target_for_active_page()
+	if target != null and target.focus_mode != Control.FOCUS_NONE and target.is_visible_in_tree():
+		target.grab_focus()
 	else:
 		tabs.get_tab_bar().grab_focus()
+
+
+func _focus_target_for_active_page() -> Control:
+	var tabs := _tabs()
+	if tabs.get_tab_count() == 0:
+		return null
+	var page := tabs.get_tab_control(tabs.current_tab)
+	if page != null and page.has_method(&"initial_focus"):
+		return page.call(&"initial_focus") as Control
+	return page.get_node_or_null("Content/State") as Control if page != null else null
 
 
 func _mark_input_handled() -> void:

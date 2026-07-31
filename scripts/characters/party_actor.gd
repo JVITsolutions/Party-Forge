@@ -47,15 +47,42 @@ func configure(member_state: PartyMemberState) -> void:
     _set_visual_color(base_visual_color)
     _refresh_team_group()
     _ensure_combat_runtime()
+    _apply_combat_policy()
 
 func configure_combat_policy(policy: CombatTestPolicy) -> void:
     combat_policy = policy if policy != null else DEFAULT_COMBAT_POLICY.new(false, 100, false, false, 4)
+    _apply_combat_policy()
+
+func _apply_combat_policy() -> void:
     var health := _health_component()
     if health == null:
         return
-    health.configure_damage_floor(combat_policy.minimum_party_health())
+    health.configure_damage_floor(0.0)
     if not health.damage_received.is_connected(_on_visual_damage_received):
         health.damage_received.connect(_on_visual_damage_received)
+    var minimum_health := combat_policy.minimum_party_health()
+    if minimum_health <= 0.0:
+        return
+    var ownership_error := _party_ownership_error()
+    if not ownership_error.is_empty():
+        var member_id := member_state.member_id if member_state != null else -1
+        push_error("PARTY_FORGE_GOD_MODE_OWNERSHIP_ERROR team=%d member=%d reason=%s" % [team_id, member_id, ownership_error])
+        return
+    health.configure_damage_floor(minimum_health)
+
+func _party_ownership_error() -> String:
+    if team_id != PARTY_TEAM_ID:
+        return "actor team is not party-owned"
+    if member_state == null:
+        return "member state is missing"
+    if party_manager == null:
+        return "party manager is missing"
+    var managed_member := party_manager.member_by_id(member_state.member_id)
+    if managed_member == null:
+        return "member is not registered with party manager"
+    if not is_same(managed_member, member_state):
+        return "member state does not match party manager"
+    return ""
 
 func configure_combat(manager: PartyManager, effect_container: Node = null) -> void:
     if is_instance_valid(party_manager) and party_manager.upgrades_changed.is_connected(_refresh_runtime_stats):
@@ -73,6 +100,7 @@ func configure_combat(manager: PartyManager, effect_container: Node = null) -> v
     _refresh_runtime_stats()
     _configure_recovery()
     _ensure_combat_runtime()
+    _apply_combat_policy()
 
 func _process(delta: float) -> void:
     _advance_visual_feedback(delta)

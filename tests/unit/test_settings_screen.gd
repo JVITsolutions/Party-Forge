@@ -29,7 +29,7 @@ func run() -> Array[String]:
 		actual.append(tabs.get_tab_title(index))
 	TestAssertions.equal(actual, expected, "Settings tabs use approved order", failures)
 	TestAssertions.equal(screen.get_node("Overlay/Frame/Layout/Tabs/Game Settings/Content/State").text, "Coming Soon", "Game Settings is honest about availability", failures)
-	TestAssertions.equal(screen.get_node("Overlay/Frame/Layout/Tabs/Controls/Content/State").text, "Controls load from InputMap in Task 4", "Controls identifies its next task boundary", failures)
+	TestAssertions.equal(screen.get_node_or_null("Overlay/Frame/Layout/Tabs/Controls/Content/State"), null, "Controls has no legacy hidden Task 4 state seam", failures)
 	TestAssertions.equal(screen.get_node("Overlay/Frame/Layout/Tabs/Graphics/Content/State").text, "Coming Soon", "Graphics is honest about availability", failures)
 	TestAssertions.equal(screen.get_node("Overlay/Frame/Layout/Tabs/Audio/Content/State").text, "Coming Soon", "Audio is honest about availability", failures)
 	TestAssertions.truthy(screen.get_node_or_null("Overlay/Frame/Layout/Tabs/Additional Settings/Layout/Mode") != null, "Additional Settings tab contains functional controls", failures)
@@ -47,6 +47,7 @@ func run() -> Array[String]:
 	TestAssertions.equal(draft.party_capacity_override, 12, "Settings drafts a copy of supplied values", failures)
 	draft.party_capacity_override = 3
 	TestAssertions.equal((screen.call("current_settings") as PartyForgeSettings).party_capacity_override, 12, "Current settings returns an isolated copy", failures)
+	_test_active_page_focus(screen, tabs, failures)
 
 	screen.call("open", return_focus)
 	TestAssertions.truthy(bool(screen.call("is_open")), "Settings opens modally", failures)
@@ -77,6 +78,7 @@ func _test_additional_settings_page(failures: Array[String]) -> void:
 	var god_mode := page.get_node("Layout/GodMode") as CheckButton
 	var party_capacity := page.get_node("Layout/PartyCapacity/Value") as HSlider
 	var enemy_density := page.get_node("Layout/EnemyDensity/Value") as HSlider
+	var inactive_status := page.get_node_or_null("Layout/InactiveStatus") as Label
 	TestAssertions.equal(mode.item_count, 2, "Mode exposes exactly two choices", failures)
 	TestAssertions.equal(mode.get_item_text(0), "Player Simulation", "Mode starts with Player Simulation", failures)
 	TestAssertions.equal(mode.get_item_text(1), "Developer Mode", "Mode includes Developer Mode", failures)
@@ -92,12 +94,25 @@ func _test_additional_settings_page(failures: Array[String]) -> void:
 	page.call("bind", saved)
 	TestAssertions.truthy(unlock_all.disabled, "Player Simulation disables Unlock All", failures)
 	TestAssertions.truthy(god_mode.disabled and party_capacity.editable == false and enemy_density.editable == false, "Player Simulation disables every developer override", failures)
+	TestAssertions.truthy(inactive_status != null and inactive_status.visible, "Player Simulation shows a non-color inactive explanation", failures)
+	if inactive_status != null:
+		TestAssertions.truthy(inactive_status.text.contains("retained") and inactive_status.text.contains("Developer Mode"), "inactive explanation states values are retained until Developer Mode", failures)
+		TestAssertions.truthy(inactive_status.focus_mode != Control.FOCUS_NONE, "inactive explanation is controller and keyboard focusable", failures)
+		TestAssertions.equal(mode.focus_next, mode.get_path_to(inactive_status), "Player Simulation focus reaches the inactive explanation after Mode", failures)
+		TestAssertions.equal(inactive_status.focus_next, inactive_status.get_path_to(page.get_node("Layout/ResetDeveloperOptions")), "Player Simulation focus continues from the explanation to actions", failures)
+	for control: Control in [unlock_all, god_mode, party_capacity, enemy_density]:
+		TestAssertions.truthy(control.tooltip_text.contains("retained") and control.tooltip_text.contains("Developer Mode"), "%s exposes the inactive reason in its tooltip" % control.name, failures)
 	TestAssertions.equal(int(party_capacity.value), 17, "inactive party cap stays visible", failures)
 	TestAssertions.equal(int(enemy_density.value), 650, "inactive density stays visible", failures)
 	mode.selected = PartyForgeSettings.Mode.DEVELOPER_MODE
 	page.call("_on_mode_changed", PartyForgeSettings.Mode.DEVELOPER_MODE)
 	TestAssertions.truthy(not unlock_all.disabled, "Developer Mode enables overrides", failures)
 	TestAssertions.truthy(not god_mode.disabled and party_capacity.editable and enemy_density.editable, "Developer Mode enables every override", failures)
+	TestAssertions.truthy(inactive_status != null and not inactive_status.visible, "Developer Mode hides the inactive explanation", failures)
+	TestAssertions.truthy(page.has_method(&"initial_focus"), "Additional Settings exposes the Settings page focus contract", failures)
+	if page.has_method(&"initial_focus"):
+		TestAssertions.equal(page.call(&"initial_focus"), mode, "Additional Settings initially focuses Mode", failures)
+	_test_additional_focus_traversal(page, failures)
 	party_capacity.value = 9
 	enemy_density.value = 230
 	page.call("_on_party_capacity_changed", party_capacity.value)
@@ -165,8 +180,10 @@ func _test_settings_apply_cancel_and_save_error(failures: Array[String]) -> void
 	(failing_page.get_node("Layout/PartyCapacity/Value") as HSlider).value = 8
 	(failing_page.get_node("Layout/ApplyAndReturn") as Button).pressed.emit()
 	var expected_error := "PARTY_FORGE_SETTINGS_SAVE_ERROR path=%s code=%d stage=promote" % [PartyForgeSettingsStore.DEFAULT_PATH, ERR_CANT_CREATE]
+	var status := failing_screen.get_node("Overlay/Frame/Layout/Status") as Label
 	TestAssertions.truthy(bool(failing_screen.call("is_open")), "failed Apply keeps Settings open", failures)
-	TestAssertions.equal((failing_screen.get_node("Overlay/Frame/Layout/Status") as Label).text, expected_error, "failed Apply displays the exact store error", failures)
+	TestAssertions.equal(status.text, "Settings could not be saved. Check that the settings folder is writable, then try again.", "failed Apply shows friendly actionable primary text", failures)
+	TestAssertions.equal(status.tooltip_text, expected_error, "failed Apply preserves the raw diagnostic in the status tooltip", failures)
 	TestAssertions.equal((failing_screen.call("current_settings") as PartyForgeSettings).party_capacity_override, 12, "failed Apply leaves current settings unchanged", failures)
 	failing_screen.free()
 	_cleanup_default_settings_artifacts()
@@ -198,3 +215,43 @@ func _action_event(action: StringName) -> InputEventAction:
 	event.action = action
 	event.pressed = true
 	return event
+
+
+func _test_active_page_focus(screen: CanvasLayer, tabs: TabContainer, failures: Array[String]) -> void:
+	screen.call("open")
+	TestAssertions.truthy(screen.has_method(&"_focus_target_for_active_page"), "Settings exposes a deterministic active-page focus resolver", failures)
+	if screen.has_method(&"_focus_target_for_active_page"):
+		TestAssertions.equal(screen.call(&"_focus_target_for_active_page"), screen.get_node("Overlay/Frame/Layout/Tabs/Game Settings/Content/State"), "opening Settings resolves the active page's meaningful target", failures)
+	var next_tab := InputEventJoypadButton.new()
+	next_tab.button_index = JOY_BUTTON_RIGHT_SHOULDER
+	next_tab.pressed = true
+	TestAssertions.truthy(next_tab.is_action_pressed(&"settings_next_tab"), "right shoulder is the controller Settings-tab action", failures)
+
+
+func _test_additional_focus_traversal(page: Control, failures: Array[String]) -> void:
+	var ordered: Array[Control] = [
+		page.get_node("Layout/Mode") as Control,
+		page.get_node("Layout/UnlockAll") as Control,
+		page.get_node("Layout/GodMode") as Control,
+		page.get_node("Layout/PartyCapacity/Value") as Control,
+		page.get_node("Layout/EnemyDensity/Value") as Control,
+		page.get_node("Layout/ResetDeveloperOptions") as Control,
+		page.get_node("Layout/ApplyAndReturn") as Control,
+		page.get_node("Layout/Cancel") as Control,
+	]
+	for index: int in range(ordered.size()):
+		var current := ordered[index]
+		var next := ordered[(index + 1) % ordered.size()]
+		var previous := ordered[posmod(index - 1, ordered.size())]
+		TestAssertions.equal(current.focus_next, current.get_path_to(next), "%s has stable forward focus traversal" % current.name, failures)
+		TestAssertions.equal(current.focus_previous, current.get_path_to(previous), "%s has stable backward focus traversal" % current.name, failures)
+		TestAssertions.equal(current.focus_neighbor_bottom, current.get_path_to(next), "%s has stable controller-down focus traversal" % current.name, failures)
+		TestAssertions.equal(current.focus_neighbor_top, current.get_path_to(previous), "%s has stable controller-up focus traversal" % current.name, failures)
+	var tab := InputEventKey.new()
+	tab.keycode = KEY_TAB
+	tab.pressed = true
+	TestAssertions.truthy(tab.is_action_pressed(&"ui_focus_next"), "Tab is the keyboard forward-focus action", failures)
+	var dpad_down := InputEventJoypadButton.new()
+	dpad_down.button_index = JOY_BUTTON_DPAD_DOWN
+	dpad_down.pressed = true
+	TestAssertions.truthy(dpad_down.is_action_pressed(&"ui_down"), "D-pad Down is the controller focus action", failures)

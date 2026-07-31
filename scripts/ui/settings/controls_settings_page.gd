@@ -50,6 +50,10 @@ func row_for(action_id: StringName) -> Dictionary:
 	return row.duplicate(true)
 
 
+func initial_focus() -> Control:
+	return get_node("Layout/Footer") as Control
+
+
 func _build_group(parent: VBoxContainer, group_data: Dictionary) -> void:
 	var group := VBoxContainer.new()
 	group.name = StringName("Group_%s" % String(group_data.name).to_snake_case())

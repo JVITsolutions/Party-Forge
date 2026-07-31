@@ -16,6 +16,7 @@ func run() -> Array[String]:
 
 	_test_developer_run_wires_party_only(failures)
 	_test_missing_policy_resets_party_floor(failures)
+	_test_invalid_party_actor_ownership_fails_closed(failures)
 	_test_guardian_adds_ignore_density(failures)
 	return failures
 
@@ -70,7 +71,10 @@ func _test_developer_run_wires_party_only(failures: Array[String]) -> void:
 func _test_missing_policy_resets_party_floor(failures: Array[String]) -> void:
 	var actor := LEADER_SCENE.instantiate() as PartyActor
 	var catalog := GameCatalog.load_defaults()
-	actor.configure(PartyMemberState.new(1, catalog.class_by_id(&"fighter"), true, "Reset Test"))
+	var party := PartyManager.new()
+	party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
+	actor.configure(party.members[0])
+	actor.configure_combat(party)
 	actor.call(&"configure_combat_policy", CombatTestPolicy.new(true, 100, true, false, 4))
 	var health := actor.get_node("HealthComponent") as HealthComponent
 	health.apply_damage(health.max_health * 2.0)
@@ -80,6 +84,34 @@ func _test_missing_policy_resets_party_floor(failures: Array[String]) -> void:
 	health.apply_damage(health.max_health * 2.0)
 	TestAssertions.truthy(health.is_dead and health.current_health == 0.0, "missing combat policy explicitly restores the zero floor", failures)
 	actor.free()
+	party.free()
+
+func _test_invalid_party_actor_ownership_fails_closed(failures: Array[String]) -> void:
+	var catalog := GameCatalog.load_defaults()
+	var party := PartyManager.new()
+	party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
+	var god_mode := CombatTestPolicy.new(true, 100, true, false, 4)
+
+	var hostile := COMPANION_SCENE.instantiate() as PartyActor
+	hostile.team_id = PartyActor.PARTY_TEAM_ID + 1
+	hostile.configure(party.members[0])
+	hostile.configure_combat(party)
+	hostile.configure_combat_policy(god_mode)
+	var hostile_health := hostile.get_node("HealthComponent") as HealthComponent
+	hostile_health.apply_damage(hostile_health.max_health * 2.0)
+	TestAssertions.truthy(hostile_health.is_dead and hostile_health.current_health == 0.0, "hostile PartyActor cannot receive the God Mode floor", failures)
+	hostile.free()
+
+	var forged := COMPANION_SCENE.instantiate() as PartyActor
+	var forged_member := PartyMemberState.new(party.members[0].member_id, catalog.class_by_id(&"ranger"), false, "Forged")
+	forged.configure(forged_member)
+	forged.configure_combat(party)
+	forged.configure_combat_policy(god_mode)
+	var forged_health := forged.get_node("HealthComponent") as HealthComponent
+	forged_health.apply_damage(forged_health.max_health * 2.0)
+	TestAssertions.truthy((forged_health.is_dead or forged_health.is_downed) and forged_health.current_health == 0.0, "unmanaged PartyActor member identity cannot receive the God Mode floor", failures)
+	forged.free()
+	party.free()
 
 func _test_guardian_adds_ignore_density(failures: Array[String]) -> void:
 	var guardian_source := FileAccess.get_file_as_string("res://scripts/enemies/forge_guardian.gd")

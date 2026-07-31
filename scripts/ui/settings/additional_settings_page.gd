@@ -1,6 +1,8 @@
 class_name AdditionalSettingsPage
 extends MarginContainer
 
+const INACTIVE_EXPLANATION := "Developer options are retained but inactive in Player Simulation. Select Developer Mode to use them in the next run."
+
 
 func _ready() -> void:
 	var mode := _mode()
@@ -15,6 +17,10 @@ func _ready() -> void:
 		_enemy_density().value_changed.connect(_on_enemy_density_changed)
 	_refresh_value_labels()
 	_refresh_enabled_state()
+
+
+func initial_focus() -> Control:
+	return _mode()
 
 
 func bind(settings: PartyForgeSettings) -> void:
@@ -64,6 +70,10 @@ func _refresh_enabled_state() -> void:
 	_god_mode().disabled = not enabled
 	_party_capacity().editable = enabled
 	_enemy_density().editable = enabled
+	_inactive_status().visible = not enabled
+	for control: Control in [_unlock_all(), _god_mode(), _party_capacity(), _enemy_density()]:
+		control.tooltip_text = "" if enabled else INACTIVE_EXPLANATION
+	_configure_focus_order(enabled)
 
 
 func _refresh_value_labels() -> void:
@@ -97,3 +107,29 @@ func _enemy_density() -> HSlider:
 
 func _enemy_density_label() -> Label:
 	return get_node("Layout/EnemyDensity/Label") as Label
+
+
+func _inactive_status() -> Label:
+	return get_node("Layout/InactiveStatus") as Label
+
+
+func _configure_focus_order(developer_mode_enabled: bool) -> void:
+	var order: Array[Control] = [_mode()]
+	if developer_mode_enabled:
+		order.append_array([_unlock_all(), _god_mode(), _party_capacity(), _enemy_density()])
+	else:
+		order.append(_inactive_status())
+	order.append_array([
+		get_node("Layout/ResetDeveloperOptions") as Control,
+		get_node("Layout/ApplyAndReturn") as Control,
+		get_node("Layout/Cancel") as Control,
+	])
+	for index: int in range(order.size()):
+		var control := order[index]
+		var next := order[(index + 1) % order.size()]
+		var previous := order[posmod(index - 1, order.size())]
+		control.focus_mode = Control.FOCUS_ALL
+		control.focus_next = control.get_path_to(next)
+		control.focus_previous = control.get_path_to(previous)
+		control.focus_neighbor_bottom = control.get_path_to(next)
+		control.focus_neighbor_top = control.get_path_to(previous)

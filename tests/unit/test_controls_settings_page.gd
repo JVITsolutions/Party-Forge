@@ -55,6 +55,10 @@ func _test_controls_page(failures: Array[String]) -> void:
 	if page == null:
 		return
 	page.refresh_bindings()
+	TestAssertions.truthy(page.has_method(&"initial_focus"), "Controls exposes the Settings page focus contract", failures)
+	if page.has_method(&"initial_focus"):
+		TestAssertions.equal(page.call(&"initial_focus"), page.get_node("Layout/Footer"), "Controls initially focuses its meaningful read-only footer", failures)
+	TestAssertions.equal(page.get_node_or_null("Content/State"), null, "Controls removes the obsolete hidden Task 4 state", failures)
 
 	TestAssertions.truthy(page.get_node_or_null("Layout/Scroll/Groups") is VBoxContainer, "Controls page is scrollable", failures)
 	for section: String in ["Gameplay", "Menus", "Character Ledger"]:

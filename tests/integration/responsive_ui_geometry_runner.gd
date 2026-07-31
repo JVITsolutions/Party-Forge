@@ -37,6 +37,7 @@ func _run() -> void:
 	developer_settings.enemy_density_percent = 500
 	badge.configure(RunRulesSnapshot.from_settings(developer_settings))
 	await _wait_for_layout()
+	await _assert_settings_focus_input(settings, viewport, developer_settings)
 
 	var overlay := settings.get_node("Overlay") as Control
 	var frame := settings.get_node("Overlay/Frame") as Control
@@ -94,6 +95,51 @@ func _run() -> void:
 func _wait_for_layout() -> void:
 	await process_frame
 	await process_frame
+
+
+func _assert_settings_focus_input(settings: SettingsScreen, viewport: SubViewport, developer_settings: PartyForgeSettings) -> void:
+	settings.configure(PartyForgeSettingsStore.new(), developer_settings)
+	var tabs := settings.get_node("Overlay/Frame/Layout/Tabs") as TabContainer
+	tabs.current_tab = 1
+	settings.open()
+	await process_frame
+	_assert_focus(viewport, settings.get_node("Overlay/Frame/Layout/Tabs/Controls/Layout/Footer") as Control, "Controls initial focus")
+
+	var bumper := InputEventJoypadButton.new()
+	bumper.button_index = JOY_BUTTON_RIGHT_SHOULDER
+	bumper.pressed = true
+	viewport.push_input(bumper)
+	await process_frame
+	if tabs.current_tab != 2:
+		_failures.append("controller bumper did not advance Controls to Graphics")
+	_assert_focus(viewport, settings.get_node("Overlay/Frame/Layout/Tabs/Graphics/Content/State") as Control, "Graphics controller focus")
+
+	tabs.current_tab = 4
+	settings.call(&"_focus_active_page")
+	await process_frame
+	var page := settings.get_node("Overlay/Frame/Layout/Tabs/Additional Settings") as AdditionalSettingsPage
+	var mode := page.get_node("Layout/Mode") as Control
+	var unlock_all := page.get_node("Layout/UnlockAll") as Control
+	_assert_focus(viewport, mode, "Additional Settings initial focus")
+	var tab := InputEventKey.new()
+	tab.keycode = KEY_TAB
+	tab.pressed = true
+	viewport.push_input(tab)
+	await process_frame
+	_assert_focus(viewport, unlock_all, "keyboard Tab focus")
+	mode.grab_focus()
+	var dpad_down := InputEventJoypadButton.new()
+	dpad_down.button_index = JOY_BUTTON_DPAD_DOWN
+	dpad_down.pressed = true
+	viewport.push_input(dpad_down)
+	await process_frame
+	_assert_focus(viewport, unlock_all, "controller D-pad focus")
+
+
+func _assert_focus(viewport: SubViewport, expected: Control, label: String) -> void:
+	var actual := viewport.gui_get_focus_owner()
+	if actual != expected:
+		_failures.append("%s mismatch: expected=%s actual=%s" % [label, expected.get_path(), actual.get_path() if actual != null else NodePath()])
 
 
 func _assert_visible_contained(control: Control, outer: Rect2, label: String, viewport_size: Vector2i) -> void:

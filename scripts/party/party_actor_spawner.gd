@@ -31,8 +31,8 @@ func _on_member_added(member: PartyMemberState) -> void:
     companion.set("leader", leader)
     companion.position = _leader_position() + _spawn_offset(_companion_count())
     companion.configure(member)
-    companion.configure_combat_policy(combat_policy)
     companion.configure_combat(party_manager, combat_effects_parent)
+    companion.configure_combat_policy(combat_policy)
     var health_bar := HEALTH_BAR_SCENE.instantiate() as Node3D
     companion.add_child(health_bar)
     health_bar.call("configure", companion.get_node("HealthComponent"))

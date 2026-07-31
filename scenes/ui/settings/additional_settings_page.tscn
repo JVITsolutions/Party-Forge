@@ -24,6 +24,12 @@ text = "Mode"
 [node name="Mode" type="OptionButton" parent="Layout"]
 layout_mode = 2
 
+[node name="InactiveStatus" type="Label" parent="Layout"]
+layout_mode = 2
+focus_mode = 2
+text = "Developer options are retained but inactive in Player Simulation. Select Developer Mode to use them in the next run."
+autowrap_mode = 2
+
 [node name="UnlockAll" type="CheckButton" parent="Layout"]
 layout_mode = 2
 text = "Unlock all implemented content"
