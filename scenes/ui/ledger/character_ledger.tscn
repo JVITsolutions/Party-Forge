@@ -1,0 +1,75 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/ui/ledger/character_ledger.gd" id="1_ledger"]
+
+[node name="CharacterLedger" type="CanvasLayer"]
+process_mode = 3
+visible = false
+script = ExtResource("1_ledger")
+
+[node name="Overlay" type="Control" parent="."]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 0
+
+[node name="Dimmer" type="ColorRect" parent="Overlay"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0.01, 0.015, 0.025, 0.9)
+
+[node name="Frame" type="PanelContainer" parent="Overlay"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 48.0
+offset_top = 36.0
+offset_right = -48.0
+offset_bottom = -36.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Layout" type="VBoxContainer" parent="Overlay/Frame"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="Tabs" type="HBoxContainer" parent="Overlay/Frame/Layout"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="Body" type="HSplitContainer" parent="Overlay/Frame/Layout"]
+layout_mode = 2
+size_flags_vertical = 3
+split_offset = 280
+
+[node name="PartyScroll" type="ScrollContainer" parent="Overlay/Frame/Layout/Body"]
+custom_minimum_size = Vector2(260, 0)
+layout_mode = 2
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+
+[node name="PartyEntries" type="GridContainer" parent="Overlay/Frame/Layout/Body/PartyScroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+columns = 1
+
+[node name="PageHost" type="Control" parent="Overlay/Frame/Layout/Body"]
+custom_minimum_size = Vector2(600, 420)
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="Status" type="Label" parent="Overlay/Frame/Layout"]
+custom_minimum_size = Vector2(0, 36)
+layout_mode = 2
+focus_mode = 2
+autowrap_mode = 2

@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="LedgerPageCatalog" load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://scripts/ui/ledger/ledger_page_catalog.gd" id="1_catalog"]
+[ext_resource type="Resource" path="res://data/ui/ledger_pages/stats.tres" id="2_stats"]
+[ext_resource type="Resource" path="res://data/ui/ledger_pages/current_upgrades.tres" id="3_upgrades"]
+[ext_resource type="Resource" path="res://data/ui/ledger_pages/equipment_inventory.tres" id="4_equipment"]
+[ext_resource type="Script" path="res://scripts/ui/ledger/ledger_page_definition.gd" id="5_definition"]
+
+[resource]
+script = ExtResource("1_catalog")
+pages = Array[ExtResource("5_definition")]([ExtResource("2_stats"), ExtResource("3_upgrades"), ExtResource("4_equipment")])

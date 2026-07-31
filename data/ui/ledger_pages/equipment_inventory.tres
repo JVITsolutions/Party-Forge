@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="LedgerPageDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/ui/ledger/ledger_page_definition.gd" id="1_definition"]
+
+[resource]
+script = ExtResource("1_definition")
+id = &"equipment_inventory"
+label = "Equipment & Inventory"
+display_order = 30
+unavailable_text = "Coming Soon"
+development_state = 1
