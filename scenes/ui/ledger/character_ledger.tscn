@@ -27,6 +27,7 @@ mouse_filter = 2
 color = Color(0.01, 0.015, 0.025, 0.9)
 
 [node name="Frame" type="PanelContainer" parent="Overlay"]
+clip_contents = true
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -46,7 +47,7 @@ theme_override_constants/separation = 12
 layout_mode = 2
 theme_override_constants/separation = 8
 
-[node name="Body" type="HSplitContainer" parent="Overlay/Frame/Layout"]
+[node name="Body" type="SplitContainer" parent="Overlay/Frame/Layout"]
 layout_mode = 2
 size_flags_vertical = 3
 split_offset = 280
@@ -63,6 +64,7 @@ size_flags_horizontal = 3
 columns = 1
 
 [node name="PageHost" type="Control" parent="Overlay/Frame/Layout/Body"]
+clip_contents = true
 custom_minimum_size = Vector2(600, 420)
 layout_mode = 2
 size_flags_horizontal = 3

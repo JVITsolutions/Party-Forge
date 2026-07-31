@@ -3,6 +3,7 @@ extends CanvasLayer
 
 const DEFAULT_PAGE_CATALOG: LedgerPageCatalog = preload("res://data/ui/ledger_pages/default_ledger_pages.tres")
 const REQUIRED_PAGE_IDS: Array[StringName] = [&"stats", &"current_upgrades", &"equipment_inventory"]
+const RESPONSIVE_LAYOUT := preload("res://scripts/ui/ledger/ledger_responsive_layout.gd")
 
 var run: GameRun
 var party: PartyManager
@@ -17,14 +18,28 @@ var _available_page_ids: Array[StringName] = []
 var _member_buttons: Dictionary = {}
 var _active_page_id: StringName
 var _pause_lease := RunPauseLease.new()
+var _responsive_mode := RESPONSIVE_LAYOUT.Mode.DESKTOP
+var _viewport_size := Vector2(1920.0, 1080.0)
+var _observed_viewport: Viewport
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	visible = false
+	_observed_viewport = get_viewport()
+	if _observed_viewport != null and not _observed_viewport.size_changed.is_connected(_on_viewport_size_changed):
+		_observed_viewport.size_changed.connect(_on_viewport_size_changed)
+	_on_viewport_size_changed()
 
 func _notification(what: int) -> void:
 	if what != NOTIFICATION_PREDELETE:
 		return
+	if (
+		_observed_viewport != null
+		and is_instance_valid(_observed_viewport)
+		and _observed_viewport.size_changed.is_connected(_on_viewport_size_changed)
+	):
+		_observed_viewport.size_changed.disconnect(_on_viewport_size_changed)
+	_observed_viewport = null
 	if _pause_lease != null and _pause_lease.is_active():
 		_pause_lease.release(Engine.get_main_loop() as SceneTree)
 	_disconnect_provider()
@@ -59,6 +74,7 @@ func configure(
 	provider.data_changed.connect(_on_provider_data_changed)
 	provider.party_changed.connect(_on_provider_party_changed)
 	_build_pages()
+	apply_viewport_size(_viewport_size)
 
 func open_for_player(local_player_id: int = 0) -> bool:
 	if run == null or not is_instance_valid(run) or party == null or not is_instance_valid(party):
@@ -91,8 +107,10 @@ func open_for_player(local_player_id: int = 0) -> bool:
 func close() -> void:
 	if not is_open():
 		return
-	_store_focus()
 	var active_page := _pages.get(_active_page_id) as CharacterLedgerPage
+	if active_page != null:
+		active_page.dismiss_pinned_detail()
+	_store_focus()
 	if active_page != null:
 		active_page.deactivate()
 	_active_page_id = &""
@@ -113,16 +131,30 @@ func refresh() -> void:
 		active_page.configure(provider, context)
 		active_page.refresh()
 
+func apply_viewport_size(size: Vector2) -> void:
+	_viewport_size = size
+	_responsive_mode = RESPONSIVE_LAYOUT.mode_for_size(size)
+	var compact := _responsive_mode == RESPONSIVE_LAYOUT.Mode.COMPACT
+	_body().vertical = compact
+	_party_entries().columns = 3 if compact else 1
+	_party_scroll().custom_minimum_size = Vector2(0.0, 112.0) if compact else Vector2(260.0, 0.0)
+	_page_host().custom_minimum_size = Vector2(0.0, 220.0) if compact else Vector2(600.0, 420.0)
+	_body().split_offset = 132 if compact else 280
+	var frame := _frame()
+	frame.offset_left = 16.0 if compact else 48.0
+	frame.offset_top = 12.0 if compact else 36.0
+	frame.offset_right = -16.0 if compact else -48.0
+	frame.offset_bottom = -12.0 if compact else -36.0
+	for page_value: Variant in _pages.values():
+		(page_value as CharacterLedgerPage).apply_compact(compact)
+
 func activate_page(page_id: StringName) -> bool:
 	var definition := _definitions.get(page_id) as LedgerPageDefinition
 	if definition == null:
 		_status().text = "Page unavailable: %s" % page_id
 		return false
 	if definition.development_state == LedgerPageDefinition.State.COMING_SOON:
-		var explanation := definition.unavailable_text if not definition.unavailable_text.is_empty() else "Coming Soon"
-		_status().text = "%s: %s" % [definition.label, explanation]
-		if _status().is_inside_tree():
-			_status().grab_focus()
+		_show_unavailable(definition, true)
 		return false
 	var next_page := _pages.get(page_id) as CharacterLedgerPage
 	if next_page == null:
@@ -161,9 +193,18 @@ func _unhandled_input(event: InputEvent) -> void:
 	if not is_open():
 		return
 	if event.is_action_pressed(&"ui_cancel"):
+		var active_page := _active_page()
+		if active_page != null and active_page.dismiss_pinned_detail():
+			_mark_input_handled()
+			return
 		close()
 		_mark_input_handled()
 		return
+	if event.is_action_pressed(&"ui_accept"):
+		var active_page := _active_page()
+		if active_page != null and active_page.pin_active_detail():
+			_mark_input_handled()
+			return
 	if event.is_action_pressed(&"ledger_previous_page"):
 		_cycle_page(-1)
 		_mark_input_handled()
@@ -200,6 +241,7 @@ func _build_pages() -> void:
 			push_error("PARTY_FORGE_LEDGER_ERROR page=%s reason=page scene has invalid root" % definition.id)
 			continue
 		page.configure(provider, context)
+		page.apply_compact(_responsive_mode == RESPONSIVE_LAYOUT.Mode.COMPACT)
 		page.deactivate()
 		_page_host().add_child(page)
 		_pages[definition.id] = page
@@ -215,6 +257,7 @@ func _add_tab(definition: LedgerPageDefinition) -> void:
 	button.focus_mode = Control.FOCUS_ALL
 	button.set_meta("page_id", definition.id)
 	button.pressed.connect(_on_tab_pressed.bind(definition.id))
+	button.focus_entered.connect(_on_tab_focused.bind(definition.id))
 	_tabs().add_child(button)
 
 func _clear_dynamic_ui() -> void:
@@ -271,6 +314,7 @@ func _refresh_member_button(member_id: int) -> void:
 	for row: Dictionary in provider.member_rows():
 		if int(row.member_id) == member_id:
 			_bind_member_button(button, row)
+			_sync_member_selection()
 			return
 
 func _bind_member_button(button: Button, row: Dictionary) -> void:
@@ -283,6 +327,7 @@ func _bind_member_button(button: Button, row: Dictionary) -> void:
 		float(row.health_current),
 		float(row.health_maximum),
 	]
+	button.set_meta("base_text", button.text)
 	button.tooltip_text = "%s, %s, rank %d" % [character_name, String(row.role_name), int(row.class_rank)]
 
 func _sync_member_selection() -> void:
@@ -290,10 +335,18 @@ func _sync_member_selection() -> void:
 		return
 	for member_id: Variant in _member_buttons:
 		var button := _member_buttons[member_id] as Button
-		button.button_pressed = int(member_id) == context.selected_member_id
+		var selected := int(member_id) == context.selected_member_id
+		button.button_pressed = selected
+		var base_text := String(button.get_meta("base_text", button.text))
+		button.text = "[Selected] %s" % base_text if selected else base_text
 
 func _on_tab_pressed(page_id: StringName) -> void:
 	activate_page(page_id)
+
+func _on_tab_focused(page_id: StringName) -> void:
+	var definition := _definitions.get(page_id) as LedgerPageDefinition
+	if definition != null and definition.development_state == LedgerPageDefinition.State.COMING_SOON:
+		_show_unavailable(definition, false)
 
 func _on_member_pressed(member_id: int) -> void:
 	select_member(member_id)
@@ -328,6 +381,17 @@ func _next_available_page_id(direction: int) -> StringName:
 		current_index = posmod(current_index + direction, _available_page_ids.size())
 	return _available_page_ids[current_index]
 
+func _show_unavailable(definition: LedgerPageDefinition, focus_status: bool) -> void:
+	var explanation := definition.unavailable_text if not definition.unavailable_text.is_empty() else "Coming Soon"
+	_status().text = "%s: %s" % [definition.label, explanation]
+	if focus_status and _status().is_inside_tree():
+		_status().grab_focus()
+
+func _on_viewport_size_changed() -> void:
+	if _observed_viewport == null:
+		return
+	apply_viewport_size(_observed_viewport.get_visible_rect().size)
+
 func _store_focus() -> void:
 	if context == null or not is_inside_tree():
 		return
@@ -344,7 +408,7 @@ func _focus_remembered_or_default() -> void:
 	_focus_page_or_member()
 
 func _focus_page_or_member() -> void:
-	var active_page := _pages.get(_active_page_id) as CharacterLedgerPage
+	var active_page := _active_page()
 	var target := active_page.initial_focus() if active_page != null else null
 	if target != null and target.is_inside_tree() and target.is_visible_in_tree():
 		target.grab_focus()
@@ -360,11 +424,23 @@ func _mark_input_handled() -> void:
 func _tabs() -> HBoxContainer:
 	return get_node("Overlay/Frame/Layout/Tabs") as HBoxContainer
 
+func _frame() -> PanelContainer:
+	return get_node("Overlay/Frame") as PanelContainer
+
+func _body() -> SplitContainer:
+	return get_node("Overlay/Frame/Layout/Body") as SplitContainer
+
+func _party_scroll() -> ScrollContainer:
+	return get_node("Overlay/Frame/Layout/Body/PartyScroll") as ScrollContainer
+
 func _party_entries() -> GridContainer:
 	return get_node("Overlay/Frame/Layout/Body/PartyScroll/PartyEntries") as GridContainer
 
 func _page_host() -> Control:
 	return get_node("Overlay/Frame/Layout/Body/PageHost") as Control
+
+func _active_page() -> CharacterLedgerPage:
+	return _pages.get(_active_page_id) as CharacterLedgerPage
 
 func _status() -> Label:
 	return get_node("Overlay/Frame/Layout/Status") as Label

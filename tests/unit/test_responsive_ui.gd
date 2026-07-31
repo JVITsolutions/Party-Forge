@@ -10,6 +10,7 @@ func run() -> Array[String]:
 	var failures: Array[String] = []
 	_test_project_display_contract(failures)
 	_test_responsive_hud_layout(failures)
+	_test_integrated_overlay_containment(failures)
 	return failures
 
 func _test_project_display_contract(failures: Array[String]) -> void:
@@ -99,6 +100,29 @@ func _test_responsive_hud_layout(failures: Array[String]) -> void:
 
 	hud.free()
 
+func _test_integrated_overlay_containment(failures: Array[String]) -> void:
+	var ledger := (load("res://scenes/ui/ledger/character_ledger.tscn") as PackedScene).instantiate() as CharacterLedger
+	var pause_menu := (load("res://scenes/ui/run_pause_menu.tscn") as PackedScene).instantiate() as CanvasLayer
+	var ledger_overlay := ledger.get_node("Overlay") as Control
+	var ledger_frame := ledger.get_node("Overlay/Frame") as Control
+	var pause_overlay := pause_menu.get_node("Overlay") as Control
+	var pause_panel := pause_menu.get_node("Overlay/Panel") as Control
+	var confirmation_panel := pause_menu.get_node("Overlay/QuitConfirmation/Panel") as Control
+	_assert_full_rect(ledger_overlay, "ledger overlay root", failures)
+	_assert_full_rect(pause_overlay, "pause overlay root", failures)
+	TestAssertions.truthy(ledger.has_method("apply_viewport_size"), "ledger overlay exposes responsive containment policy", failures)
+	if not ledger.has_method("apply_viewport_size"):
+		ledger.free()
+		pause_menu.free()
+		return
+	for viewport_size: Vector2 in VIEWPORT_SIZES:
+		ledger.call("apply_viewport_size", viewport_size)
+		_assert_contained(ledger_frame, viewport_size, "ledger frame", failures)
+		_assert_contained(pause_panel, viewport_size, "pause panel", failures)
+		_assert_contained(confirmation_panel, viewport_size, "pause confirmation panel", failures)
+	ledger.free()
+	pause_menu.free()
+
 func _assert_centered(control: Control, viewport_size: Vector2, label: String, failures: Array[String]) -> void:
 	var center := _rect_center(control, viewport_size)
 	TestAssertions.near(center.x, viewport_size.x * 0.5, 0.01, "%s center x at %s" % [label, viewport_size], failures)
@@ -127,6 +151,23 @@ func _assert_full_rect(control: Control, label: String, failures: Array[String])
 		Vector4(control.offset_left, control.offset_top, control.offset_right, control.offset_bottom),
 		Vector4.ZERO,
 		"%s has no edge offsets" % label,
+		failures,
+	)
+
+func _assert_contained(control: Control, viewport_size: Vector2, label: String, failures: Array[String]) -> void:
+	var top_left := _rect_top_left(control, viewport_size)
+	var bottom_right := Vector2(
+		viewport_size.x * control.anchor_right + control.offset_right,
+		viewport_size.y * control.anchor_bottom + control.offset_bottom,
+	)
+	TestAssertions.truthy(
+		top_left.x >= 0.0 and top_left.y >= 0.0,
+		"%s top-left remains contained at %s" % [label, viewport_size],
+		failures,
+	)
+	TestAssertions.truthy(
+		bottom_right.x <= viewport_size.x and bottom_right.y <= viewport_size.y,
+		"%s bottom-right remains contained at %s" % [label, viewport_size],
 		failures,
 	)
 

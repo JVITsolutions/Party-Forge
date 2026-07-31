@@ -26,7 +26,7 @@ focus_mode = 2
 text = "Current Upgrades"
 horizontal_alignment = 1
 
-[node name="Content" type="HSplitContainer" parent="Layout"]
+[node name="Content" type="SplitContainer" parent="Layout"]
 layout_mode = 2
 size_flags_vertical = 3
 split_offset = 360
@@ -52,18 +52,21 @@ layout_mode = 2
 size_flags_horizontal = 3
 theme_override_constants/separation = 6
 
-[node name="DetailPanel" type="PanelContainer" parent="Layout/Content"]
+[node name="DetailPanel" type="ScrollContainer" parent="Layout/Content"]
 custom_minimum_size = Vector2(380, 0)
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 3
+horizontal_scroll_mode = 0
 
 [node name="Detail" type="VBoxContainer" parent="Layout/Content/DetailPanel"]
 layout_mode = 2
+size_flags_horizontal = 3
 theme_override_constants/separation = 8
 
 [node name="Title" type="Label" parent="Layout/Content/DetailPanel/Detail"]
 layout_mode = 2
+focus_mode = 2
 autowrap_mode = 2
 
 [node name="Rank" type="Label" parent="Layout/Content/DetailPanel/Detail"]

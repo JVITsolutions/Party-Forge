@@ -20,3 +20,12 @@ func refresh() -> void:
 
 func initial_focus() -> Control:
 	return null
+
+func apply_compact(_compact: bool) -> void:
+	pass
+
+func pin_active_detail() -> bool:
+	return false
+
+func dismiss_pinned_detail() -> bool:
+	return false

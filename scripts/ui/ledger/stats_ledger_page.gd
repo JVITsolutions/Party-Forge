@@ -6,6 +6,9 @@ var selected_stat_id: StringName
 var _show_all := false
 var _stat_buttons: Dictionary = {}
 var _first_stat_button: Button
+var _compact := false
+var _detail_pinned := false
+var _pinned_origin: Button
 
 func _ready() -> void:
 	_connect_show_all()
@@ -19,7 +22,10 @@ func refresh() -> void:
 	if member.is_empty():
 		_identity().text = "No party member selected."
 		_traits_and_capabilities().text = ""
+		_detail_pinned = false
+		_pinned_origin = null
 		_clear_detail()
+		_sync_detail_visibility()
 		return
 	_render_header(member)
 	var rows := provider.stat_rows(context.selected_member_id, _show_all)
@@ -41,7 +47,11 @@ func refresh() -> void:
 		select_stat(_first_stat_button.get_meta("stat_id") as StringName)
 	else:
 		selected_stat_id = &""
+		_detail_pinned = false
+		_pinned_origin = null
 		_clear_detail()
+	_sync_pinned_origin()
+	_sync_detail_visibility()
 
 func set_show_all(enabled: bool) -> void:
 	_show_all = enabled
@@ -59,6 +69,8 @@ func select_stat(stat_id: StringName) -> bool:
 	selected_stat_id = stat_id
 	for button_id: Variant in _stat_buttons:
 		(_stat_buttons[button_id] as Button).button_pressed = button_id == stat_id
+	if _detail_pinned:
+		_pinned_origin = _stat_buttons.get(stat_id) as Button
 	_detail_title().text = String(detail.get("title", "Missing definition: %s" % stat_id))
 	_detail_value().text = String(detail.get("value_text", ""))
 	_detail_description().text = String(detail.get("description", ""))
@@ -74,6 +86,36 @@ func has_stat(stat_id: StringName) -> bool:
 
 func initial_focus() -> Control:
 	return _first_stat_button
+
+func apply_compact(compact: bool) -> void:
+	_compact = compact
+	_content_split().vertical = compact
+	_content_split().split_offset = 112 if compact else 460
+	_stat_side().custom_minimum_size = Vector2(0.0, 96.0) if compact else Vector2(420.0, 0.0)
+	_detail_panel().custom_minimum_size = Vector2(0.0, 112.0) if compact else Vector2(360.0, 0.0)
+	if not compact:
+		_detail_pinned = false
+		_pinned_origin = null
+	_sync_detail_visibility()
+
+func pin_active_detail() -> bool:
+	var origin := _stat_buttons.get(selected_stat_id) as Button
+	if origin == null:
+		return false
+	_detail_pinned = true
+	_pinned_origin = origin
+	_detail_panel().visible = true
+	_focus_control(_detail_title())
+	return true
+
+func dismiss_pinned_detail() -> bool:
+	if not _compact or not _detail_pinned:
+		return false
+	_detail_pinned = false
+	_detail_panel().visible = false
+	_focus_control(_pinned_origin)
+	_pinned_origin = null
+	return true
 
 func _connect_show_all() -> void:
 	var toggle := _show_all_toggle()
@@ -135,9 +177,26 @@ func _create_stat_button(row: Dictionary) -> Button:
 	button.set_meta("stat_id", stat_id)
 	var detail := provider.stat_detail(context.selected_member_id, stat_id)
 	button.tooltip_text = String(detail.get("description", ""))
-	button.pressed.connect(select_stat.bind(stat_id))
+	button.pressed.connect(_on_stat_pressed.bind(stat_id))
 	button.focus_entered.connect(select_stat.bind(stat_id))
 	return button
+
+func _on_stat_pressed(stat_id: StringName) -> void:
+	if select_stat(stat_id):
+		pin_active_detail()
+
+func _sync_pinned_origin() -> void:
+	if _detail_pinned:
+		_pinned_origin = _stat_buttons.get(selected_stat_id) as Button
+		if _pinned_origin == null:
+			_detail_pinned = false
+
+func _sync_detail_visibility() -> void:
+	_detail_panel().visible = not _compact or _detail_pinned
+
+func _focus_control(control: Control) -> void:
+	if control != null and control.is_inside_tree() and control.is_visible_in_tree():
+		control.grab_focus()
 
 func _clear_generated_groups() -> void:
 	for child: Node in _groups().get_children():
@@ -196,6 +255,15 @@ func _show_all_toggle() -> CheckButton:
 
 func _groups() -> VBoxContainer:
 	return get_node("Layout/Content/StatSide/StatScroll/Groups") as VBoxContainer
+
+func _content_split() -> SplitContainer:
+	return get_node("Layout/Content") as SplitContainer
+
+func _stat_side() -> VBoxContainer:
+	return get_node("Layout/Content/StatSide") as VBoxContainer
+
+func _detail_panel() -> ScrollContainer:
+	return get_node("Layout/Content/DetailPanel") as ScrollContainer
 
 func _detail_title() -> Label:
 	return get_node("Layout/Content/DetailPanel/Detail/Title") as Label
