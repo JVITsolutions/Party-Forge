@@ -53,6 +53,17 @@ static func tooltip(
 	}
 
 
+static func owned_tooltip(
+	definition: UpgradeDefinition,
+	rank: int,
+	stats: StatCatalog,
+	keywords: KeywordCatalog
+) -> Dictionary:
+	var content := tooltip(definition, rank, stats, keywords)
+	content["rank_text"] = "Rank %d / %d" % [rank, definition.max_rank]
+	return content
+
+
 static func recipient_rows(
 	definition: UpgradeDefinition,
 	party: PartyManager,
