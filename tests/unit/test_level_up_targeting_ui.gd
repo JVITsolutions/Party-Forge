@@ -185,13 +185,41 @@ func _test_production_card_tooltip_composition(failures: Array[String]) -> void:
 	)
 	personal_card.mouse_exited.emit()
 	TestAssertions.truthy(not tooltip.visible, "hover dismissal hides composed tooltip", failures)
+	personal_card.mouse_entered.emit()
+	tooltip.set_hold_active(true)
+	personal_card.mouse_exited.emit()
+	TestAssertions.truthy(tooltip.visible, "Alt keeps tooltip alive after card exit", failures)
+	var pinned_title := (tooltip.get_node("Content/Header/Title") as Label).text
+	var pin := tooltip.get_node("Content/Header/Pin") as Button
+	pin.pressed.emit()
+	tooltip.set_hold_active(false)
+	TestAssertions.truthy(tooltip.visible and tooltip.is_pinned(), "mouse pin survives Alt release", failures)
+
+	var second_card := panel.get_node("ContentPanel/OfferView/Content/Cards/Card2") as UpgradeCard
+	second_card.mouse_entered.emit()
+	TestAssertions.equal((tooltip.get_node("Content/Header/Title") as Label).text, pinned_title, "pinned content rejects another card hover", failures)
+	second_card.mouse_exited.emit()
+	pin.pressed.emit()
+	TestAssertions.truthy(not tooltip.visible, "unpinning inactive source dismisses", failures)
+
+	personal_card.mouse_entered.emit()
+	var controller_pin := InputEventJoypadButton.new()
+	controller_pin.button_index = JOY_BUTTON_Y
+	controller_pin.pressed = true
+	tooltip.call("_unhandled_input", controller_pin)
+	TestAssertions.truthy(tooltip.is_pinned(), "Y/Triangle pins visible tooltip", failures)
+	tooltip.call("_unhandled_input", controller_pin)
+	TestAssertions.truthy(not tooltip.is_pinned(), "Y/Triangle unpins visible tooltip", failures)
+	personal_card.mouse_exited.emit()
 	party.recruit(catalog.class_by_id(&"fighter"))
 	panel.show_choices(personal_choices, party)
+	TestAssertions.truthy(not tooltip.visible and not tooltip.is_pinned(), "new personal offer clears tooltip state", failures)
 	personal_card = panel.get_node("ContentPanel/OfferView/Content/Cards/Card1") as UpgradeCard
 	personal_card.focus_entered.emit()
 	TestAssertions.equal((tooltip.get_node("Content/Rank") as Label).text, "Offered rank varies / 5", "mixed personal ranks remain explicit", failures)
 	personal_card.focus_exited.emit()
 	personal_card.mouse_entered.emit()
+	pin.pressed.emit()
 
 	var shared := vitality.duplicate(true) as UpgradeDefinition
 	shared.id = &"shared_tooltip_fixture"
@@ -207,7 +235,7 @@ func _test_production_card_tooltip_composition(failures: Array[String]) -> void:
 		UpgradeChoice.authored(catalog.upgrade_by_id(&"tempered_armor")),
 	]
 	panel.show_choices(shared_choices, party)
-	TestAssertions.truthy(not tooltip.visible, "new offer hides stale tooltip", failures)
+	TestAssertions.truthy(not tooltip.visible and not tooltip.is_pinned(), "new offer clears stale tooltip state", failures)
 	var shared_card := panel.get_node("ContentPanel/OfferView/Content/Cards/Card2") as UpgradeCard
 	shared_card.focus_entered.emit()
 	TestAssertions.truthy(tooltip.visible, "visible card focus reveals same composed tooltip", failures)
@@ -215,12 +243,19 @@ func _test_production_card_tooltip_composition(failures: Array[String]) -> void:
 	shared_card.focus_exited.emit()
 	TestAssertions.truthy(not tooltip.visible, "focus dismissal hides composed tooltip", failures)
 	shared_card.focus_entered.emit()
+	pin.pressed.emit()
+	shared_card.pressed.emit()
+	TestAssertions.truthy(not tooltip.visible and not tooltip.is_pinned(), "non-offer view clears tooltip state", failures)
 	panel.cancel_subflow()
-	TestAssertions.truthy(not tooltip.visible, "subflow cancellation hides stale tooltip", failures)
+	shared_card.focus_entered.emit()
+	pin.pressed.emit()
+	panel.cancel_subflow()
+	TestAssertions.truthy(not tooltip.visible and not tooltip.is_pinned(), "subflow cancellation clears stale tooltip state", failures)
 	shared_card.focus_exited.emit()
 	shared_card.focus_entered.emit()
+	pin.pressed.emit()
 	panel.complete_selection()
-	TestAssertions.truthy(not tooltip.visible, "selection completion hides stale tooltip", failures)
+	TestAssertions.truthy(not tooltip.visible and not tooltip.is_pinned(), "selection completion clears stale tooltip state", failures)
 	_free_panel(panel)
 	party.free()
 
@@ -235,6 +270,7 @@ func _attached_panel() -> LevelUpPanel:
 	for card: Node in panel.get_node("ContentPanel/OfferView/Content/Cards").get_children():
 		card.call("_ready")
 	panel.get_node("ContentPanel/RecipientView").call("_ready")
+	panel.get_node("TooltipPanel").call("_ready")
 	panel.call("_ready")
 	return panel
 

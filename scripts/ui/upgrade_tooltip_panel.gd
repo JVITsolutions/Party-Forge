@@ -6,9 +6,7 @@ const MAXIMUM_POPUP_HEIGHT := 680.0
 const CONTENT_PADDING_ALLOWANCE := 32.0
 
 
-func show_content(content: Dictionary, anchor: Control, source_id: StringName = &"") -> bool:
-	if source_id.is_empty():
-		source_id = StringName(str(anchor.get_instance_id()))
+func show_content(content: Dictionary, anchor: Control, source_id: StringName) -> bool:
 	var content_changed := not is_current_source(source_id)
 	if not present_source(source_id):
 		return false

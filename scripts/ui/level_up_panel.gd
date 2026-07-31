@@ -25,6 +25,9 @@ func _ready() -> void:
 	_connect_recipient_picker()
 	_connect_confirmation()
 	_connect_legacy_buttons()
+	var tooltip := _tooltip()
+	if tooltip != null and not tooltip.dismissed.is_connected(_on_tooltip_dismissed):
+		tooltip.dismissed.connect(_on_tooltip_dismissed)
 
 
 func configure(
@@ -295,13 +298,19 @@ func _on_card_detail_requested(choice: UpgradeChoice, anchor: Control) -> void:
 	)
 	if bool(rank_state.varies):
 		content["rank_text"] = "Offered rank varies / %d" % definition.max_rank
-	_tooltip_choice = choice
-	(get_node("TooltipPanel") as UpgradeTooltipPanel).show_content(content, anchor)
+	var source_id := StringName(choice.key())
+	if _tooltip().show_content(content, anchor, source_id):
+		_tooltip_choice = choice
 
 
 func _on_card_detail_dismissed(choice: UpgradeChoice) -> void:
-	if choice == _tooltip_choice:
-		_hide_tooltip()
+	if choice == null:
+		return
+	_tooltip().release_source(StringName(choice.key()))
+
+
+func _on_tooltip_dismissed() -> void:
+	_tooltip_choice = null
 
 
 func _offered_rank_state(definition: UpgradeDefinition) -> Dictionary:
@@ -335,9 +344,13 @@ func _offered_rank_state(definition: UpgradeDefinition) -> Dictionary:
 
 func _hide_tooltip() -> void:
 	_tooltip_choice = null
-	var tooltip := get_node_or_null("TooltipPanel") as UpgradeTooltipPanel
+	var tooltip := _tooltip()
 	if tooltip != null:
-		tooltip.hide_content()
+		tooltip.force_dismiss()
+
+
+func _tooltip() -> UpgradeTooltipPanel:
+	return get_node_or_null("TooltipPanel") as UpgradeTooltipPanel
 
 
 # Temporary compatibility for Main's pre-Task-8 choice_selected wiring. These
