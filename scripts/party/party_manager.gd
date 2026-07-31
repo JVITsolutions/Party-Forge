@@ -26,6 +26,7 @@ var party_upgrade_ranks: Dictionary:
 var upgrade_tuning: UpgradeTuning = DEFAULT_UPGRADE_TUNING
 var combat_rng: CombatRng
 var damage_types: DamageTypeCatalog
+var _capacity_policy := PartyCapacityPolicy.new(MAX_PARTY_SIZE)
 var _identity_seed := 0
 var _fallback_names: CharacterNamePool
 var _stat_revision := 0
@@ -47,8 +48,17 @@ func configure_identity(run_seed: int, fallback_names: CharacterNamePool) -> voi
     _identity_seed = run_seed
     _fallback_names = fallback_names
 
+func configure_capacity(policy: PartyCapacityPolicy) -> void:
+    _capacity_policy = policy if policy != null else PartyCapacityPolicy.new(MAX_PARTY_SIZE)
+
+func capacity() -> int:
+    return _capacity_policy.capacity()
+
+func can_recruit(additional_members: int = 1) -> bool:
+    return _capacity_policy.can_add(members.size(), additional_members)
+
 func recruit(definition: ClassDefinition) -> bool:
-    if definition == null or members.size() >= MAX_PARTY_SIZE:
+    if definition == null or not can_recruit():
         return false
     _append_member(definition, false)
     return true

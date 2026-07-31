@@ -134,17 +134,15 @@ func _on_choice_confirmation_requested(choice: UpgradeChoice, recipient_member_i
 		panel.reject_selection("Selection is no longer available.")
 
 func _health_for_member(member_id: int) -> Vector2:
+	if party_manager == null or party_manager.member_by_id(member_id) == null:
+		return Vector2.ZERO
 	var actors := get_node_or_null("Actors")
 	if actors == null:
 		return Vector2.ZERO
-	var inspected := 0
 	for child: Node in actors.get_children():
 		var actor := child as PartyActor
 		if actor == null or not is_instance_valid(actor) or actor.is_queued_for_deletion():
 			continue
-		if inspected >= PartyManager.MAX_PARTY_SIZE:
-			break
-		inspected += 1
 		if actor.member_state == null or actor.member_state.member_id != member_id:
 			continue
 		var health := actor.get_node_or_null("HealthComponent") as HealthComponent

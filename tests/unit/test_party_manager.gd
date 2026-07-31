@@ -2,6 +2,8 @@ extends RefCounted
 
 func run() -> Array[String]:
     var failures: Array[String] = []
+    _test_effective_capacity(failures)
+    _test_hud_summary_at_developer_capacity(failures)
     var catalog := GameCatalog.load_defaults()
     var party := PartyManager.new()
     party.configure_identity(1337, catalog.generic_name_pool)
@@ -52,6 +54,55 @@ func run() -> Array[String]:
     _test_resolved_party_stats(failures)
     _test_party_actor_stats_signal_lifecycle(failures)
     return failures
+
+func _test_effective_capacity(failures: Array[String]) -> void:
+    var catalog := GameCatalog.load_defaults()
+    var party := PartyManager.new()
+    for method_name: StringName in [&"configure_capacity", &"capacity", &"can_recruit"]:
+        TestAssertions.truthy(party.has_method(method_name), "party manager exposes %s" % method_name, failures)
+    if not party.has_method(&"configure_capacity") or not party.has_method(&"capacity") or not party.has_method(&"can_recruit"):
+        party.free()
+        return
+
+    TestAssertions.equal(int(party.call("capacity")), PartyManager.MAX_PARTY_SIZE, "unconfigured party uses production capacity", failures)
+    party.call("configure_capacity", PartyCapacityPolicy.new(1))
+    party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
+    TestAssertions.equal(int(party.call("capacity")), 1, "capacity policy can reserve only the leader slot", failures)
+    TestAssertions.truthy(not bool(party.call("can_recruit")), "capacity-one party cannot recruit", failures)
+    TestAssertions.truthy(not party.recruit(catalog.class_by_id(&"fighter")), "capacity-one party rejects member two", failures)
+    party.call("configure_capacity", null)
+    TestAssertions.equal(int(party.call("capacity")), PartyManager.MAX_PARTY_SIZE, "null capacity policy restores production default", failures)
+    party.free()
+
+    var developer_party := PartyManager.new()
+    developer_party.call("configure_capacity", PartyCapacityPolicy.new(24))
+    developer_party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
+    TestAssertions.truthy(bool(developer_party.call("can_recruit", 23)), "developer capacity reserves all remaining slots", failures)
+    for index: int in range(23):
+        TestAssertions.truthy(developer_party.recruit(catalog.class_by_id(&"fighter")), "developer capacity accepts member %d" % (index + 2), failures)
+    TestAssertions.equal(developer_party.members.size(), 24, "party reaches developer ceiling", failures)
+    TestAssertions.truthy(not bool(developer_party.call("can_recruit")), "full developer party reports no recruit slot", failures)
+    TestAssertions.truthy(not developer_party.recruit(catalog.class_by_id(&"fighter")), "member 25 is rejected", failures)
+    developer_party.free()
+
+func _test_hud_summary_at_developer_capacity(failures: Array[String]) -> void:
+    var catalog := GameCatalog.load_defaults()
+    var party := PartyManager.new()
+    if not party.has_method(&"configure_capacity"):
+        party.free()
+        return
+    party.call("configure_capacity", PartyCapacityPolicy.new(24))
+    party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
+    for index: int in range(23):
+        party.recruit(catalog.class_by_id(&"fighter"))
+    var hud := (load("res://scenes/ui/hud.tscn") as PackedScene).instantiate() as CanvasLayer
+    hud.call("configure", null, party, null)
+    hud.call("_refresh_party")
+    var entries := hud.get_node("Margin/Status/PartyEntries") as VBoxContainer
+    TestAssertions.equal(entries.get_child_count(), 4, "developer party keeps the existing four-entry HUD summary", failures)
+    TestAssertions.truthy(not (entries.get_node("Party4") as Label).text.is_empty(), "fourth HUD summary entry remains readable", failures)
+    hud.free()
+    party.free()
 
 func _test_resolved_party_stats(failures: Array[String]) -> void:
     var catalog := GameCatalog.load_defaults()

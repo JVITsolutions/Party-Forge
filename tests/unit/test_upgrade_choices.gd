@@ -9,7 +9,32 @@ func run() -> Array[String]:
 	_test_foundational_choices_complete_a_short_offer(failures)
 	_test_recipient_independent_key(failures)
 	_test_universal_before_legacy_stat_fallback(failures)
+	_test_effective_capacity_recruit_choices(failures)
 	return failures
+
+func _test_effective_capacity_recruit_choices(failures: Array[String]) -> void:
+	var catalog := GameCatalog.load_defaults()
+	var recruit := UpgradeChoice.new(UpgradeChoice.Kind.RECRUIT, &"fighter", "Recruit Fighter")
+	var one_slot_party := PartyManager.new()
+	if not one_slot_party.has_method(&"configure_capacity") or not one_slot_party.has_method(&"can_recruit"):
+		TestAssertions.truthy(false, "capacity-aware recruit choices require PartyManager capacity APIs", failures)
+		one_slot_party.free()
+		return
+	one_slot_party.call("configure_capacity", PartyCapacityPolicy.new(1))
+	one_slot_party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
+	TestAssertions.truthy(not recruit.is_valid_for(one_slot_party), "recruit choice is invalid at effective capacity one", failures)
+	TestAssertions.equal(_kind_count(LevelUpChoiceService.generate(one_slot_party, catalog, 771), UpgradeChoice.Kind.RECRUIT), 0, "capacity-one offers contain no recruit", failures)
+	one_slot_party.free()
+
+	var developer_party := PartyManager.new()
+	developer_party.call("configure_capacity", PartyCapacityPolicy.new(24))
+	developer_party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
+	for index: int in range(3):
+		developer_party.recruit(catalog.class_by_id(&"fighter"))
+	TestAssertions.equal(developer_party.members.size(), PartyManager.MAX_PARTY_SIZE, "developer choice fixture crosses the production boundary", failures)
+	TestAssertions.truthy(recruit.is_valid_for(developer_party), "recruit choice remains valid above production boundary", failures)
+	TestAssertions.equal(_kind_count(LevelUpChoiceService.generate(developer_party, catalog, 771), UpgradeChoice.Kind.RECRUIT), 1, "developer-capacity offer includes a recruit above production boundary", failures)
+	developer_party.free()
 
 func _test_authored_choice_contract(failures: Array[String]) -> void:
 	var catalog := GameCatalog.load_defaults()

@@ -52,5 +52,11 @@ func run() -> Array[String]:
         TestAssertions.equal(manager.members.size(), PartyManager.MAX_PARTY_SIZE, "ordinary sandbox enforces production party cap", failures)
         sandbox.call("refresh_status")
         TestAssertions.truthy((sandbox.get_node("HUD/Panel/Content/PartySize") as Label).text.contains("4 / 4"), "party size label is live", failures)
+        if manager.has_method(&"configure_capacity"):
+            manager.call("configure_capacity", PartyCapacityPolicy.new(24))
+            sandbox.call("refresh_status")
+            TestAssertions.truthy((sandbox.get_node("HUD/Panel/Content/PartySize") as Label).text.contains("4 / 24"), "party size label uses effective capacity", failures)
+        else:
+            TestAssertions.truthy(false, "sandbox capacity label requires PartyManager.configure_capacity", failures)
     sandbox.free()
     return failures

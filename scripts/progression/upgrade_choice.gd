@@ -25,7 +25,7 @@ func is_valid_for(party: PartyManager) -> bool:
     if party == null:
         return false
     match kind:
-        Kind.RECRUIT: return party.members.size() < PartyManager.MAX_PARTY_SIZE
+        Kind.RECRUIT: return party.can_recruit()
         Kind.CLASS_RANK: return party.get_class_rank(target_id) > 0
         Kind.TRAIT: return party.active_tier(target_id) > 0
         Kind.PARTY_STAT: return target_id in PartyManager.PARTY_STAT_IDS and party.party_stat_rank(target_id) < party.upgrade_tuning.party_stat_max_rank

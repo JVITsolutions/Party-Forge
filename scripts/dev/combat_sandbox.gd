@@ -30,6 +30,9 @@ func _ready() -> void:
     if not catalog.validate().is_empty():
         push_error("PARTY_FORGE_SANDBOX_CATALOG_INVALID")
         return
+    var editor_launch := OS.has_feature("editor") and DisplayServer.get_name() != "headless"
+    if cap_override_allowed(editor_launch, scene_file_path):
+        party_manager.configure_capacity(PartyCapacityPolicy.new(24))
     party_manager.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
     combat_rng = CombatRng.new(1337)
     party_manager.configure_combat(combat_rng, catalog.damage_types)
@@ -109,7 +112,7 @@ func clear_hostiles() -> void:
 func refresh_status() -> void:
     if party_manager == null:
         return
-    (get_node("HUD/Panel/Content/PartySize") as Label).text = "Party Size: %d / %d" % [party_manager.members.size(), PartyManager.MAX_PARTY_SIZE]
+    (get_node("HUD/Panel/Content/PartySize") as Label).text = "Party Size: %d / %d" % [party_manager.members.size(), party_manager.capacity()]
     (get_node("HUD/Panel/Content/ClassRanks") as Label).text = "Class Ranks: %s" % _class_rank_text()
     (get_node("HUD/Panel/Content/TraitCounts") as Label).text = "Trait Counts: %s" % _trait_count_text()
     (get_node("HUD/Panel/Content/ActiveTiers") as Label).text = "Active Tiers: %s" % _active_tier_text()

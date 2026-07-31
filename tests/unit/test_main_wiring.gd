@@ -48,7 +48,7 @@ func run() -> Array[String]:
     _test_class_selection_starts_run_and_applies_choices(failures)
     _test_targeted_confirmation_routes_through_main(failures)
     _test_stale_target_rejects_without_consuming(failures)
-    _test_live_member_health_provider_is_bounded(failures)
+    _test_live_member_health_provider_uses_party_membership(failures)
     _test_ledger_health_provider_is_unbounded_and_complete(failures)
     _test_capped_stat_is_disabled_without_hiding(failures)
     _test_queued_levels_show_fresh_production_offers(failures)
@@ -252,7 +252,7 @@ func _test_stale_target_rejects_without_consuming(failures: Array[String]) -> vo
     TestAssertions.truthy(not (panel.get_node("ContentPanel/ConfirmationView/Content/Error") as Label).text.is_empty(), "stale target displays rejection reason", failures)
     _cleanup_main(main)
 
-func _test_live_member_health_provider_is_bounded(failures: Array[String]) -> void:
+func _test_live_member_health_provider_uses_party_membership(failures: Array[String]) -> void:
     var main := _started_main()
     TestAssertions.truthy(main.has_method("_health_for_member"), "main exposes live member health provider", failures)
     if not main.has_method("_health_for_member"):
@@ -263,13 +263,36 @@ func _test_live_member_health_provider_is_bounded(failures: Array[String]) -> vo
     leader_health.apply_damage(17.0)
     TestAssertions.equal(main.call("_health_for_member", 1), Vector2(leader_health.current_health, leader_health.max_health), "health provider reads live leader component", failures)
 
+    var party := main.get("party_manager") as PartyManager
+    TestAssertions.truthy(party.has_method(&"configure_capacity"), "main health provider can exercise effective party capacity", failures)
+    if not party.has_method(&"configure_capacity"):
+        _cleanup_main(main)
+        return
+    party.call("configure_capacity", PartyCapacityPolicy.new(24))
+    for index: int in range(4):
+        party.recruit((main.get("catalog") as GameCatalog).class_by_id(&"ranger"))
+
     var actors := main.get_node("Actors") as Node3D
     var catalog := main.get("catalog") as GameCatalog
-    for member_id: int in [2, 3, 4, 99]:
-        var actor := (load("res://scenes/characters/companion.tscn") as PackedScene).instantiate() as PartyActor
-        actor.configure(PartyMemberState.new(member_id, catalog.class_by_id(&"ranger"), false, "Test %d" % member_id))
-        actors.add_child(actor)
-    TestAssertions.equal(main.call("_health_for_member", 99), Vector2.ZERO, "health provider inspects at most four live party actors", failures)
+    var fifth_actor: PartyActor
+    for child: Node in actors.get_children():
+        var actor := child as PartyActor
+        if actor != null and actor.member_state != null and actor.member_state.member_id == 5:
+            fifth_actor = actor
+            break
+    TestAssertions.truthy(fifth_actor != null, "effective-capacity fixture spawns member five", failures)
+    if fifth_actor == null:
+        _cleanup_main(main)
+        return
+    var fifth_health := fifth_actor.get_node("HealthComponent") as HealthComponent
+    fifth_health.apply_damage(23.0)
+    TestAssertions.equal(main.call("_health_for_member", 5), Vector2(fifth_health.current_health, fifth_health.max_health), "health provider finds a real member beyond four actors", failures)
+
+    var stray_actor := (load("res://scenes/characters/companion.tscn") as PackedScene).instantiate() as PartyActor
+    stray_actor.configure(PartyMemberState.new(99, catalog.class_by_id(&"ranger"), false, "Stray"))
+    actors.add_child(stray_actor)
+    actors.move_child(stray_actor, 0)
+    TestAssertions.equal(main.call("_health_for_member", 99), Vector2.ZERO, "health provider rejects an actor without a PartyManager member", failures)
     TestAssertions.equal(main.call("_health_for_member", 404), Vector2.ZERO, "health provider returns zero for unknown member", failures)
     _cleanup_main(main)
 

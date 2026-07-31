@@ -13,7 +13,7 @@ static func generate(party: PartyManager, catalog: GameCatalog, seed: int) -> Ar
 	var keys: Dictionary = {}
 
 	var recruits := _recruit_candidates(party, catalog)
-	if party.members.size() < PartyManager.MAX_PARTY_SIZE and not recruits.is_empty():
+	if party.can_recruit() and not recruits.is_empty():
 		_append_choice(recruits[rng.randi_range(0, recruits.size() - 1)], party, chosen, keys)
 
 	var normal: Array[UpgradeChoice] = []
