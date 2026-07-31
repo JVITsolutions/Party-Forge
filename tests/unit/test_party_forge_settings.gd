@@ -6,6 +6,7 @@ func run() -> Array[String]:
 	_test_round_trip_and_inactive_retention(failures)
 	_test_missing_unknown_and_malformed_fields(failures)
 	_test_failed_save_preserves_previous_file(failures)
+	_test_failed_restore_retains_backup(failures)
 	return failures
 
 func _test_defaults_and_normalization(failures: Array[String]) -> void:
@@ -72,3 +73,28 @@ func _test_failed_save_preserves_previous_file(failures: Array[String]) -> void:
 	TestAssertions.truthy(not failing_store.save_settings(changed, path).is_empty(), "failed promotion reports failure", failures)
 	TestAssertions.equal(store.load_settings(path).party_capacity_override, 8, "previous valid file is unchanged", failures)
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+
+func _test_failed_restore_retains_backup(failures: Array[String]) -> void:
+	var path := "user://party_forge_settings_restore_failure_test.cfg"
+	var backup := "%s.bak" % path
+	var temporary := "%s.tmp" % path
+	_cleanup_restore_failure_artifacts(path, backup, temporary)
+	var store := PartyForgeSettingsStore.new()
+	var original := PartyForgeSettings.new()
+	original.party_capacity_override = 8
+	TestAssertions.equal(store.save_settings(original, path), "", "restore-failure baseline save succeeds", failures)
+	var failing_store := PartyForgeSettingsStore.new(func(_temporary: String, target: String) -> Error:
+		var make_directory_error := DirAccess.make_dir_absolute(ProjectSettings.globalize_path(target))
+		return ERR_CANT_CREATE if make_directory_error == OK else make_directory_error
+	)
+	var save_error := failing_store.save_settings(original.copy(), path)
+	TestAssertions.truthy(save_error.contains("stage=restore"), "restore failure is reported distinctly: %s" % save_error, failures)
+	TestAssertions.truthy(not FileAccess.file_exists(path), "failed restore leaves the canonical file absent", failures)
+	TestAssertions.truthy(FileAccess.file_exists(backup), "failed restore retains the backup artifact", failures)
+	TestAssertions.equal(store.load_settings(backup).party_capacity_override, 8, "retained backup remains recoverable", failures)
+	_cleanup_restore_failure_artifacts(path, backup, temporary)
+
+func _cleanup_restore_failure_artifacts(path: String, backup: String, temporary: String) -> void:
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(backup))
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(temporary))

@@ -64,9 +64,12 @@ func save_settings(settings: PartyForgeSettings, path: String = DEFAULT_PATH) ->
 			return "PARTY_FORGE_SETTINGS_SAVE_ERROR path=%s code=%d stage=backup" % [path, backup_error]
 	var promote_error: Error = _promote_file.call(temporary, path) if _promote_file.is_valid() else _promote(temporary, path)
 	if promote_error != OK:
+		var restore_error: Error = OK
 		if had_previous:
-			DirAccess.rename_absolute(absolute_backup, absolute_target)
+			restore_error = DirAccess.rename_absolute(absolute_backup, absolute_target)
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(temporary))
+		if restore_error != OK:
+			return "PARTY_FORGE_SETTINGS_SAVE_ERROR path=%s code=%d stage=restore promote_code=%d backup=%s" % [path, restore_error, promote_error, backup]
 		return "PARTY_FORGE_SETTINGS_SAVE_ERROR path=%s code=%d stage=promote" % [path, promote_error]
 	if had_previous:
 		DirAccess.remove_absolute(absolute_backup)
