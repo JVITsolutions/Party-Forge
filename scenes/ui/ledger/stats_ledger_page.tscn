@@ -11,19 +11,80 @@ grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("1_stats")
 
-[node name="Content" type="VBoxContainer" parent="."]
+[node name="Layout" type="VBoxContainer" parent="."]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
+theme_override_constants/separation = 12
 
-[node name="Title" type="Label" parent="Content"]
+[node name="Header" type="VBoxContainer" parent="Layout"]
+layout_mode = 2
+
+[node name="Identity" type="Label" parent="Layout/Header"]
 layout_mode = 2
 focus_mode = 2
-text = "Character Stats"
+text = "No party member selected."
+autowrap_mode = 2
 
-[node name="EmptyState" type="Label" parent="Content"]
+[node name="TraitsAndCapabilities" type="Label" parent="Layout/Header"]
 layout_mode = 2
-text = "Select a party member."
+autowrap_mode = 2
+
+[node name="Content" type="HSplitContainer" parent="Layout"]
+layout_mode = 2
+size_flags_vertical = 3
+split_offset = 460
+
+[node name="StatSide" type="VBoxContainer" parent="Layout/Content"]
+custom_minimum_size = Vector2(420, 0)
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="ShowAll" type="CheckButton" parent="Layout/Content/StatSide"]
+layout_mode = 2
+focus_mode = 2
+text = "Show All Stats"
+
+[node name="StatScroll" type="ScrollContainer" parent="Layout/Content/StatSide"]
+layout_mode = 2
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+
+[node name="Groups" type="VBoxContainer" parent="Layout/Content/StatSide/StatScroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 10
+
+[node name="DetailPanel" type="PanelContainer" parent="Layout/Content"]
+custom_minimum_size = Vector2(360, 0)
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="Detail" type="VBoxContainer" parent="Layout/Content/DetailPanel"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="Title" type="Label" parent="Layout/Content/DetailPanel/Detail"]
+layout_mode = 2
+focus_mode = 2
+text = "Select a stat"
+autowrap_mode = 2
+
+[node name="Value" type="Label" parent="Layout/Content/DetailPanel/Detail"]
+layout_mode = 2
+
+[node name="Description" type="Label" parent="Layout/Content/DetailPanel/Detail"]
+layout_mode = 2
+autowrap_mode = 2
+
+[node name="Cap" type="Label" parent="Layout/Content/DetailPanel/Detail"]
+layout_mode = 2
+autowrap_mode = 2
+
+[node name="Sources" type="Label" parent="Layout/Content/DetailPanel/Detail"]
+layout_mode = 2
+size_flags_vertical = 3
+autowrap_mode = 2
