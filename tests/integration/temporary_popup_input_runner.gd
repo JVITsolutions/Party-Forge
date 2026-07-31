@@ -52,10 +52,14 @@ func _run() -> void:
 	wheel.button_index = MOUSE_BUTTON_WHEEL_DOWN
 	wheel.pressed = true
 	viewport.push_input(wheel)
+	var wheel_release := wheel.duplicate() as InputEventMouseButton
+	wheel_release.pressed = false
+	viewport.push_input(wheel_release)
 	await _wait_for_layout()
 	_assert(scroll.scroll_vertical > 0, "mouse wheel scrolls Alt-held popup")
 
-	pin.pressed.emit()
+	await _push_mouse_click(viewport, pin)
+	_assert(tooltip.is_pinned(), "real mouse click pins popup")
 	var alt_release := alt.duplicate() as InputEventKey
 	alt_release.pressed = false
 	viewport.push_input(alt_release)
@@ -64,18 +68,20 @@ func _run() -> void:
 	var pinned_title := (tooltip.get_node("Content/Header/Title") as Label).text
 	_assert(not tooltip.show_content({"title": "Replacement"}, anchor, &"second"), "pinned popup rejects replacement")
 	_assert((tooltip.get_node("Content/Header/Title") as Label).text == pinned_title, "rejected content stays unchanged")
+	await _push_mouse_click(viewport, pin)
+	_assert(not tooltip.visible and not tooltip.is_pinned(), "real mouse click unpins and dismisses inactive source")
 
 	var controller_pin := InputEventJoypadButton.new()
 	controller_pin.button_index = JOY_BUTTON_Y
 	controller_pin.pressed = true
-	viewport.push_input(controller_pin)
-	await process_frame
-	_assert(not tooltip.visible, "Y/Triangle unpins and dismisses inactive source")
-
-	tooltip.show_content(content, anchor, &"controller")
+	_assert(tooltip.show_content(content, anchor, &"controller"), "controller source is accepted")
 	viewport.push_input(controller_pin)
 	await process_frame
 	_assert(tooltip.is_pinned(), "Y/Triangle pins active controller popup")
+	var controller_release := controller_pin.duplicate() as InputEventJoypadButton
+	controller_release.pressed = false
+	viewport.push_input(controller_release)
+	await process_frame
 	scroll.scroll_vertical = 0
 	var stick := InputEventJoypadMotion.new()
 	stick.axis = JOY_AXIS_RIGHT_Y
@@ -86,6 +92,16 @@ func _run() -> void:
 	_assert(scroll.scroll_vertical > 0, "right stick scrolls visible popup")
 	stick.axis_value = 0.0
 	viewport.push_input(stick)
+	var stopped_scroll := scroll.scroll_vertical
+	for _frame: int in 4:
+		await process_frame
+	_assert(scroll.scroll_vertical == stopped_scroll, "neutral right stick stops popup scrolling")
+	tooltip.release_source(&"controller")
+	viewport.push_input(controller_pin)
+	await process_frame
+	_assert(not tooltip.visible and not tooltip.is_pinned(), "Y/Triangle unpins and dismisses inactive source")
+	viewport.push_input(controller_release)
+	await process_frame
 
 	for viewport_size: Vector2i in VIEWPORT_SIZES:
 		var before := _failures.size()
@@ -93,14 +109,23 @@ func _run() -> void:
 		host.size = viewport_size
 		anchor.position = Vector2(float(viewport_size.x) * 0.5 - 160.0, 80.0)
 		tooltip.force_dismiss()
-		tooltip.show_content(content, anchor, &"size_%d" % viewport_size.x)
+		await process_frame
+		_assert(not tooltip.visible, "cleanup hides popup before %s" % viewport_size)
+		_assert(not tooltip.is_pinned(), "cleanup unpins popup before %s" % viewport_size)
+		_assert(tooltip.get("_source_id") == &"", "cleanup clears exact source before %s" % viewport_size)
+		_assert(tooltip.show_content(content, anchor, &"size_%d" % viewport_size.x), "size source is accepted at %s" % viewport_size)
 		await _wait_for_layout()
 		var rect := tooltip.get_global_rect()
 		var pin_rect := pin.get_global_rect()
+		var scrollbar := scroll.get_v_scroll_bar()
+		var scrollbar_rect := scrollbar.get_global_rect()
+		var viewport_rect := Rect2(Vector2.ZERO, Vector2(viewport_size))
 		_assert(rect.position.x >= 16.0 and rect.position.y >= 16.0, "popup starts inside %s" % viewport_size)
 		_assert(rect.end.x <= viewport_size.x - 16.0 and rect.end.y <= viewport_size.y - 16.0, "popup ends inside %s" % viewport_size)
 		_assert(rect.encloses(pin_rect), "pin remains inside popup at %s" % viewport_size)
-		_assert(scroll.get_v_scroll_bar().visible, "long content scrolls at %s" % viewport_size)
+		_assert(scrollbar.visible, "long content scrolls at %s" % viewport_size)
+		_assert(rect.encloses(scrollbar_rect), "scrollbar remains inside popup at %s" % viewport_size)
+		_assert(viewport_rect.encloses(scrollbar_rect), "scrollbar remains inside viewport at %s" % viewport_size)
 		if _failures.size() == before:
 			print("TEMPORARY_POPUP_INPUT_SIZE_PASS size=%dx%d" % [viewport_size.x, viewport_size.y])
 
@@ -116,6 +141,27 @@ func _run() -> void:
 
 
 func _wait_for_layout() -> void:
+	await process_frame
+	await process_frame
+
+
+func _push_mouse_click(viewport: SubViewport, target: Button) -> void:
+	var position := target.get_global_rect().get_center()
+	var motion := InputEventMouseMotion.new()
+	motion.position = position
+	motion.relative = position - viewport.get_mouse_position()
+	viewport.push_input(motion)
+	await process_frame
+	var press := InputEventMouseButton.new()
+	press.position = position
+	press.button_index = MOUSE_BUTTON_LEFT
+	press.button_mask = MOUSE_BUTTON_MASK_LEFT
+	press.pressed = true
+	viewport.push_input(press)
+	var release := press.duplicate() as InputEventMouseButton
+	release.button_mask = 0
+	release.pressed = false
+	viewport.push_input(release)
 	await process_frame
 	await process_frame
 
