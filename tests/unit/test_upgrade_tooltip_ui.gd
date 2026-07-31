@@ -6,6 +6,7 @@ func run() -> Array[String]:
 	_test_hover_focus_share_detail_state(failures)
 	_test_tooltip_renders_dictionary(failures)
 	_test_interactive_pin_shell_and_inputs(failures)
+	_test_input_configurator_preserves_existing_action(failures)
 	_test_tooltip_surface_is_opaque_and_readable(failures)
 	_test_clamped_placement(failures)
 	_test_long_content_scene_stays_inside_viewports(failures)
@@ -115,6 +116,32 @@ func _test_interactive_pin_shell_and_inputs(failures: Array[String]) -> void:
 	TestAssertions.truthy(up_events.any(func(event: InputEvent) -> bool: return event is InputEventJoypadMotion and event.axis == JOY_AXIS_RIGHT_Y and event.axis_value < 0.0), "right stick up maps to popup scroll up", failures)
 	TestAssertions.truthy(down_events.any(func(event: InputEvent) -> bool: return event is InputEventJoypadMotion and event.axis == JOY_AXIS_RIGHT_Y and event.axis_value > 0.0), "right stick down maps to popup scroll down", failures)
 	tooltip.free()
+
+func _test_input_configurator_preserves_existing_action(failures: Array[String]) -> void:
+	var setting_path := "input/tooltip_hold"
+	var original_setting: Variant = ProjectSettings.get_setting(setting_path)
+	var additional_event := InputEventKey.new()
+	additional_event.keycode = KEY_SHIFT
+	var seeded_events: Array[InputEvent] = [additional_event]
+	ProjectSettings.set_setting(
+		setting_path,
+		{"deadzone": 0.73, "events": seeded_events},
+	)
+	var configurator_script := load("res://tools/configure_tooltip_inputs.gd") as GDScript
+	var configurator: SceneTree = configurator_script.new()
+	configurator.call("_set_key_action", &"tooltip_hold", KEY_ALT)
+	configurator.call("_set_key_action", &"tooltip_hold", KEY_ALT)
+	var configured := ProjectSettings.get_setting(setting_path) as Dictionary
+	var configured_events := configured.get("events", []) as Array
+	var alt_count := 0
+	for event: InputEvent in configured_events:
+		if event is InputEventKey and event.keycode == KEY_ALT:
+			alt_count += 1
+	TestAssertions.equal(configured.get("deadzone"), 0.73, "tooltip input merge preserves custom deadzone", failures)
+	TestAssertions.truthy(configured_events.has(additional_event), "tooltip input merge preserves unrelated event", failures)
+	TestAssertions.equal(alt_count, 1, "tooltip input merge adds required event exactly once", failures)
+	configurator.free()
+	ProjectSettings.set_setting(setting_path, original_setting)
 
 func _test_tooltip_surface_is_opaque_and_readable(failures: Array[String]) -> void:
 	var tooltip_scene := load("res://scenes/ui/upgrade_tooltip_panel.tscn") as PackedScene

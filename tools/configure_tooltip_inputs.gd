@@ -33,4 +33,26 @@ func _set_axis_action(action: StringName, axis: JoyAxis, value: float) -> void:
 
 
 func _set_action(action: StringName, events: Array[InputEvent]) -> void:
-	ProjectSettings.set_setting("input/%s" % action, {"deadzone": 0.2, "events": events})
+	var setting_path := "input/%s" % action
+	var existing_value: Variant = ProjectSettings.get_setting(setting_path, {})
+	var setting: Dictionary = {}
+	if existing_value is Dictionary:
+		setting = existing_value.duplicate()
+	var merged_events: Array[InputEvent] = []
+	for existing_event: Variant in setting.get("events", []):
+		if existing_event is InputEvent:
+			merged_events.append(existing_event)
+	for required_event: InputEvent in events:
+		if not _has_matching_event(merged_events, required_event):
+			merged_events.append(required_event)
+	if not setting.has("deadzone"):
+		setting["deadzone"] = 0.2
+	setting["events"] = merged_events
+	ProjectSettings.set_setting(setting_path, setting)
+
+
+func _has_matching_event(events: Array[InputEvent], required_event: InputEvent) -> bool:
+	for existing_event: InputEvent in events:
+		if existing_event.is_match(required_event, true):
+			return true
+	return false
