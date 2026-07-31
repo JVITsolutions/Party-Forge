@@ -8,6 +8,7 @@ const DEFAULT_TYPES: DamageTypeCatalog = preload("res://data/damage_types/core_d
 @export var kind: Kind
 @export var power := 0.0
 @export var cooldown: float = 1.0
+@warning_ignore("shadowed_global_identifier")
 @export var range: float = 1.0
 @export var projectile_speed: float = 0.0
 @export var area_radius: float = 0.0

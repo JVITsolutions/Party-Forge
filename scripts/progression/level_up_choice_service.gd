@@ -3,6 +3,7 @@ extends RefCounted
 
 const PARTY_STATS: Array[StringName] = [&"max_health", &"damage", &"move_speed", &"attack_speed", &"pickup_radius"]
 
+@warning_ignore("shadowed_global_identifier")
 static func generate(party: PartyManager, catalog: GameCatalog, seed: int) -> Array[UpgradeChoice]:
 	var chosen: Array[UpgradeChoice] = []
 	if party == null:

@@ -23,6 +23,7 @@ func _ready() -> void:
     _refresh_team_group()
     _ensure_combat_runtime()
 
+@warning_ignore("shadowed_variable")
 func configure(member_state: PartyMemberState) -> void:
     self.member_state = member_state
     if member_state == null or member_state.class_definition == null:

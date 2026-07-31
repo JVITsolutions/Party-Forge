@@ -78,4 +78,5 @@ func _refresh_boss() -> void:
 
 func _format_time(seconds: float) -> String:
     var total := maxi(floori(seconds), 0)
-    return "%02d:%02d" % [total / 60, total % 60]
+    var minutes := floori(total / 60.0)
+    return "%02d:%02d" % [minutes, total % 60]

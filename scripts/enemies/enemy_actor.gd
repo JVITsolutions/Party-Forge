@@ -107,7 +107,7 @@ func living_party_actors(candidates: Array[Node3D] = []) -> Array[Node3D]:
     return living
 
 func nearest_living_party_actor(candidates: Array[Node3D] = []) -> Node3D:
-    var selected: Node3D
+    var selected: Node3D = null
     var best_distance := INF
     var origin := global_position if is_inside_tree() else position
     for actor: Node3D in living_party_actors(candidates):

@@ -1,10 +1,11 @@
 class_name HealingSelector
 extends RefCounted
 
+@warning_ignore("shadowed_global_identifier")
 static func most_injured(living_party: Array[CombatTarget], range: float, origin: Vector3) -> CombatTarget:
     if range < 0.0:
         return null
-    var selected: CombatTarget
+    var selected: CombatTarget = null
     var greatest_missing_fraction := 0.0
     var best_distance_squared := INF
     var maximum_range_squared: float = range * range

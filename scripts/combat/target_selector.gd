@@ -4,7 +4,7 @@ extends RefCounted
 static func nearest(origin: Vector3, candidates: Array[CombatTarget], maximum_range: float, own_team: int) -> CombatTarget:
     if maximum_range < 0.0:
         return null
-    var selected: CombatTarget
+    var selected: CombatTarget = null
     var best_distance_squared := INF
     var maximum_range_squared: float = maximum_range * maximum_range
     for candidate: CombatTarget in candidates:

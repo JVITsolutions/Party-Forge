@@ -211,8 +211,8 @@ func _present_pending_level() -> void:
 		game_run.begin_level_up()
 	if game_run.current_state() != RunStateMachine.State.LEVEL_UP:
 		return
-	var seed := experience_system.current_pending_level() * 1009 + party_manager.members.size()
-	var choices := _generate_valid_choices(seed)
+	var offer_seed := experience_system.current_pending_level() * 1009 + party_manager.members.size()
+	var choices := _generate_valid_choices(offer_seed)
 	get_node("HUD/LevelUpPanel").call("show_choices", choices, party_manager, _invalid_choice_keys(choices))
 
 func _choice_is_valid(choice: UpgradeChoice) -> bool:
@@ -235,6 +235,7 @@ func _invalid_choice_keys(choices: Array[UpgradeChoice]) -> Dictionary:
 			invalid[choice.key()] = true
 	return invalid
 
+@warning_ignore("shadowed_global_identifier")
 func _generate_valid_choices(seed: int) -> Array[UpgradeChoice]:
 	return LevelUpChoiceService.generate(party_manager, catalog, seed)
 
