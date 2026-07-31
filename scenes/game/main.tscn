@@ -1,4 +1,4 @@
-[gd_scene load_steps=11 format=3]
+[gd_scene load_steps=13 format=3]
 
 [ext_resource type="Script" path="res://scripts/game/main.gd" id="1_main"]
 [ext_resource type="PackedScene" path="res://scenes/arena/arena.tscn" id="2_arena"]
@@ -9,6 +9,8 @@
 [ext_resource type="Script" path="res://scripts/game/spawn_director.gd" id="7_spawn"]
 [ext_resource type="Script" path="res://scripts/party/party_actor_spawner.gd" id="8_actor_spawn"]
 [ext_resource type="PackedScene" path="res://scenes/ui/hud.tscn" id="9_hud"]
+[ext_resource type="PackedScene" path="res://scenes/ui/ledger/character_ledger.tscn" id="10_ledger"]
+[ext_resource type="PackedScene" path="res://scenes/ui/run_pause_menu.tscn" id="11_pause"]
 
 [node name="Main" type="Node"]
 script = ExtResource("1_main")
@@ -39,3 +41,8 @@ script = ExtResource("8_actor_spawn")
 [node name="LeaderCamera" parent="." instance=ExtResource("3_camera")]
 
 [node name="HUD" parent="." instance=ExtResource("9_hud")]
+
+[node name="CharacterLedger" parent="." instance=ExtResource("10_ledger")]
+layer = 20
+
+[node name="RunPauseMenu" parent="." instance=ExtResource("11_pause")]

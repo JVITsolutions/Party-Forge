@@ -18,6 +18,8 @@ var game_run: GameRun
 var spawn_director: SpawnDirector
 var party_actor_spawner: PartyActorSpawner
 var hud: CanvasLayer
+var character_ledger: CharacterLedger
+var run_pause_menu: RunPauseMenu
 var leader: PartyActor
 var boss: Node3D
 var run_started := false
@@ -151,6 +153,28 @@ func _health_for_member(member_id: int) -> Vector2:
 		return Vector2.ZERO
 	return Vector2.ZERO
 
+func _ledger_health_for_member(member_id: int) -> Dictionary:
+	var actors := get_node_or_null("Actors")
+	if actors == null:
+		return {}
+	for child: Node in actors.get_children():
+		var actor := child as PartyActor
+		if actor == null or not is_instance_valid(actor) or actor.is_queued_for_deletion():
+			continue
+		if actor.member_state == null or actor.member_state.member_id != member_id:
+			continue
+		var health := actor.get_node_or_null("HealthComponent") as HealthComponent
+		if health == null:
+			return {}
+		return {
+			"current": health.current_health,
+			"maximum": health.max_health,
+			"is_downed": health.is_downed,
+			"is_dead": health.is_dead,
+			"component": health,
+		}
+	return {}
+
 static func format_resource_error(path: String, reason: String) -> String:
 	return "PARTY_FORGE_RESOURCE_ERROR path=%s reason=%s" % [path, reason]
 
@@ -163,6 +187,8 @@ func _cache_nodes() -> void:
 	spawn_director = get_node("SpawnDirector") as SpawnDirector
 	party_actor_spawner = get_node("PartyActorSpawner") as PartyActorSpawner
 	hud = get_node("HUD") as CanvasLayer
+	character_ledger = get_node("CharacterLedger") as CharacterLedger
+	run_pause_menu = get_node("RunPauseMenu") as RunPauseMenu
 
 func _validate_catalog(target_catalog: GameCatalog, report_errors: bool = true) -> bool:
 	var errors := target_catalog.validate()
@@ -187,6 +213,10 @@ func _wire_static_ui() -> void:
 	var result := get_node("HUD/RunResultPanel") as Control
 	if not result.is_connected("restart_requested", _restart): result.connect("restart_requested", _restart)
 	if not result.is_connected("quit_requested", _quit): result.connect("quit_requested", _quit)
+	character_ledger.configure(game_run, party_manager, catalog, Callable(self, "_ledger_health_for_member"))
+	run_pause_menu.configure(game_run, Callable(character_ledger, "is_open"))
+	if not run_pause_menu.quit_run_confirmed.is_connected(_return_to_front_end):
+		run_pause_menu.quit_run_confirmed.connect(_return_to_front_end)
 	if not game_run.boss_requested.is_connected(_spawn_boss): game_run.boss_requested.connect(_spawn_boss)
 	if not game_run.victory.is_connected(_show_victory): game_run.victory.connect(_show_victory)
 	if not game_run.defeat.is_connected(_show_defeat): game_run.defeat.connect(_show_defeat)
@@ -296,6 +326,10 @@ func _cancel_hostile_effects() -> void:
 			effect.queue_free()
 
 func _restart() -> void:
+	get_tree().paused = false
+	get_tree().reload_current_scene()
+
+func _return_to_front_end() -> void:
 	get_tree().paused = false
 	get_tree().reload_current_scene()
 

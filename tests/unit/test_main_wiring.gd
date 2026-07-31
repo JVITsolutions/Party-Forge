@@ -6,10 +6,14 @@ const REQUIRED_PATHS: PackedStringArray = [
     "res://scripts/ui/level_up_panel.gd",
     "res://scripts/ui/run_result_panel.gd",
     "res://scripts/ui/health_bar_3d.gd",
+    "res://scripts/ui/ledger/character_ledger.gd",
+    "res://scripts/ui/run_pause_menu.gd",
     "res://scenes/ui/hud.tscn",
     "res://scenes/ui/level_up_panel.tscn",
     "res://scenes/ui/run_result_panel.tscn",
     "res://scenes/ui/health_bar_3d.tscn",
+    "res://scenes/ui/ledger/character_ledger.tscn",
+    "res://scenes/ui/run_pause_menu.tscn",
     "res://scenes/game/main.tscn",
     "res://scenes/arena/arena.tscn",
     "res://scenes/characters/leader.tscn",
@@ -25,6 +29,7 @@ const REQUIRED_PATHS: PackedStringArray = [
 const REQUIRED_MAIN_NODES: PackedStringArray = [
     "GameRun", "PartyManager", "ExperienceSystem", "SpawnDirector",
     "PartyActorSpawner", "Arena", "Actors", "Enemies", "Effects", "HUD",
+    "CharacterLedger", "RunPauseMenu",
 ]
 
 func run() -> Array[String]:
@@ -37,12 +42,14 @@ func run() -> Array[String]:
     if not all_exist:
         return failures
     _test_main_scene_graph(failures)
+    _test_integrated_overlay_input_and_front_end_seam(failures)
     _test_hud_contract(failures)
     _test_exact_choice_panel(failures)
     _test_class_selection_starts_run_and_applies_choices(failures)
     _test_targeted_confirmation_routes_through_main(failures)
     _test_stale_target_rejects_without_consuming(failures)
     _test_live_member_health_provider_is_bounded(failures)
+    _test_ledger_health_provider_is_unbounded_and_complete(failures)
     _test_capped_stat_is_disabled_without_hiding(failures)
     _test_queued_levels_show_fresh_production_offers(failures)
     _test_boss_level_up_resumes_boss(failures)
@@ -59,6 +66,36 @@ func _test_main_scene_graph(failures: Array[String]) -> void:
     TestAssertions.equal(main.get_node_or_null("Leader"), null, "main waits for initial class selection before creating leader", failures)
     var class_selection := main.get_node_or_null("HUD/ClassSelection") as Control
     TestAssertions.truthy(class_selection != null and class_selection.visible, "initial class selection is visible", failures)
+    var ledger := main.get_node_or_null("CharacterLedger") as CanvasLayer
+    var pause_menu := main.get_node_or_null("RunPauseMenu") as CanvasLayer
+    TestAssertions.truthy(ledger != null and not ledger.visible, "integrated CharacterLedger starts hidden", failures)
+    TestAssertions.truthy(pause_menu != null and not pause_menu.visible, "integrated RunPauseMenu starts hidden", failures)
+    if ledger != null and pause_menu != null:
+        TestAssertions.truthy(main.get_node("HUD").get_index() < ledger.get_index(), "CharacterLedger is layered after HUD", failures)
+        TestAssertions.truthy(ledger.get_index() < pause_menu.get_index(), "RunPauseMenu is layered after CharacterLedger", failures)
+    main.free()
+
+func _test_integrated_overlay_input_and_front_end_seam(failures: Array[String]) -> void:
+    var tree := Engine.get_main_loop() as SceneTree
+    tree.paused = false
+    var main := (load("res://scenes/game/main.tscn") as PackedScene).instantiate()
+    tree.root.add_child(main)
+    TestAssertions.truthy(main.call("select_leader_class", &"fighter"), "integration fixture starts an active run", failures)
+    var ledger := main.get_node("CharacterLedger") as CharacterLedger
+    var pause_menu := main.get_node("RunPauseMenu")
+    TestAssertions.truthy(ledger.open_for_player(), "integrated ledger opens for the active run", failures)
+    var escape := _escape_key_event()
+    pause_menu.call("_unhandled_input", escape)
+    ledger.call("_unhandled_input", escape)
+    TestAssertions.truthy(not ledger.is_open(), "Escape closes the ledger through modal input ordering", failures)
+    TestAssertions.truthy(not bool(pause_menu.visible), "same Escape does not open RunPauseMenu behind the ledger", failures)
+    TestAssertions.truthy(not tree.paused, "ledger close restores the running tree exactly", failures)
+    var front_end_callable := Callable(main, "_return_to_front_end")
+    TestAssertions.truthy(main.has_method("_return_to_front_end"), "main exposes the front-end routing seam", failures)
+    TestAssertions.truthy(pause_menu.is_connected("quit_run_confirmed", front_end_callable), "confirmed Quit Run routes to the front-end seam", failures)
+    var result := main.get_node("HUD/RunResultPanel")
+    TestAssertions.truthy(result.is_connected("quit_requested", Callable(main, "_quit")), "desktop result-panel Quit keeps its protected route", failures)
+    tree.paused = false
     main.free()
 
 func _test_hud_contract(failures: Array[String]) -> void:
@@ -234,6 +271,33 @@ func _test_live_member_health_provider_is_bounded(failures: Array[String]) -> vo
         actors.add_child(actor)
     TestAssertions.equal(main.call("_health_for_member", 99), Vector2.ZERO, "health provider inspects at most four live party actors", failures)
     TestAssertions.equal(main.call("_health_for_member", 404), Vector2.ZERO, "health provider returns zero for unknown member", failures)
+    _cleanup_main(main)
+
+func _test_ledger_health_provider_is_unbounded_and_complete(failures: Array[String]) -> void:
+    var main := _started_main()
+    TestAssertions.truthy(main.has_method("_ledger_health_for_member"), "main exposes ledger-specific health provider", failures)
+    if not main.has_method("_ledger_health_for_member"):
+        _cleanup_main(main)
+        return
+    var actors := main.get_node("Actors") as Node3D
+    var catalog := main.get("catalog") as GameCatalog
+    var exceptional_actor: PartyActor
+    for member_id: int in [2, 3, 4, 99]:
+        var actor := (load("res://scenes/characters/companion.tscn") as PackedScene).instantiate() as PartyActor
+        actor.configure(PartyMemberState.new(member_id, catalog.class_by_id(&"ranger"), false, "Ledger %d" % member_id))
+        actors.add_child(actor)
+        if member_id == 99:
+            exceptional_actor = actor
+    var health := exceptional_actor.get_node("HealthComponent") as HealthComponent
+    health.current_health = 0.0
+    health.is_downed = true
+    health.is_dead = true
+    var row := main.call("_ledger_health_for_member", 99) as Dictionary
+    TestAssertions.equal(row.get("current"), 0.0, "ledger health includes current health", failures)
+    TestAssertions.equal(row.get("maximum"), health.max_health, "ledger health includes maximum health", failures)
+    TestAssertions.truthy(bool(row.get("is_downed")) and bool(row.get("is_dead")), "ledger health includes downed and dead state", failures)
+    TestAssertions.equal(row.get("component"), health, "ledger health includes the live component", failures)
+    TestAssertions.equal(main.call("_ledger_health_for_member", 404), {}, "ledger health returns empty data for an unknown member", failures)
     _cleanup_main(main)
 
 func _test_capped_stat_is_disabled_without_hiding(failures: Array[String]) -> void:
@@ -453,6 +517,13 @@ func _started_main() -> Node:
 func _cleanup_main(main: Node) -> void:
     (Engine.get_main_loop() as SceneTree).paused = false
     main.free()
+
+func _escape_key_event() -> InputEventKey:
+    var event := InputEventKey.new()
+    event.keycode = KEY_ESCAPE
+    event.physical_keycode = KEY_ESCAPE
+    event.pressed = true
+    return event
 
 func _bound_production_choices(cards: Array[Node]) -> Array[UpgradeChoice]:
     var result: Array[UpgradeChoice] = []
