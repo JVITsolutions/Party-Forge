@@ -6,6 +6,7 @@
 [resource]
 script = ExtResource("1_definition")
 id = &"current_upgrades"
+feature_id = &"current_upgrades"
 label = "Current Upgrades"
 page_scene = ExtResource("2_scene")
 display_order = 20

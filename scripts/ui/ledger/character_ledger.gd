@@ -10,6 +10,7 @@ var party: PartyManager
 var catalog: GameCatalog
 var provider: LedgerDataProvider
 var context: LedgerPlayerContext
+var _feature_policy: FeatureAccessPolicy
 
 var _contexts: Dictionary = {}
 var _definitions: Dictionary = {}
@@ -49,7 +50,8 @@ func configure(
 	manager: PartyManager,
 	game_catalog: GameCatalog,
 	health_provider: Callable,
-	initial_contexts: Array[LedgerPlayerContext] = []
+	initial_contexts: Array[LedgerPlayerContext] = [],
+	feature_policy: FeatureAccessPolicy = null
 ) -> void:
 	if is_open():
 		close()
@@ -58,6 +60,7 @@ func configure(
 	run = game_run
 	party = manager
 	catalog = game_catalog
+	_feature_policy = feature_policy if feature_policy != null else _player_simulation_policy()
 	_contexts.clear()
 	for supplied_context: LedgerPlayerContext in initial_contexts:
 		if supplied_context == null:
@@ -214,7 +217,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		_mark_input_handled()
 
 func _build_pages() -> void:
-	var gate := LedgerFeatureGate.new(false)
+	var gate := LedgerFeatureGate.new(_feature_policy, _catalog_feature_ids(), _catalog_unlock_ids())
 	var seen: Dictionary = {}
 	for error: String in DEFAULT_PAGE_CATALOG.validate():
 		push_error(error)
@@ -249,6 +252,23 @@ func _build_pages() -> void:
 	for required_id: StringName in REQUIRED_PAGE_IDS:
 		if not _definitions.has(required_id):
 			push_error("PARTY_FORGE_LEDGER_ERROR page=%s reason=required page is missing" % required_id)
+
+func _player_simulation_policy() -> FeatureAccessPolicy:
+	return RunRulesSnapshot.from_settings(PartyForgeSettings.new()).feature_policy(_catalog_feature_ids(), _catalog_unlock_ids())
+
+func _catalog_feature_ids() -> Array[StringName]:
+	var result: Array[StringName] = []
+	for definition: LedgerPageDefinition in DEFAULT_PAGE_CATALOG.pages:
+		if definition != null and not definition.feature_id.is_empty() and definition.feature_id not in result:
+			result.append(definition.feature_id)
+	return result
+
+func _catalog_unlock_ids() -> Array[StringName]:
+	var result: Array[StringName] = []
+	for definition: LedgerPageDefinition in DEFAULT_PAGE_CATALOG.pages:
+		if definition != null and not definition.unlock_id.is_empty() and definition.unlock_id not in result:
+			result.append(definition.unlock_id)
+	return result
 
 func _add_tab(definition: LedgerPageDefinition) -> void:
 	var button := Button.new()

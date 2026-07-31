@@ -5,6 +5,7 @@
 [resource]
 script = ExtResource("1_definition")
 id = &"equipment_inventory"
+feature_id = &"equipment_inventory"
 label = "Equipment & Inventory"
 display_order = 30
 unavailable_text = "Coming Soon"

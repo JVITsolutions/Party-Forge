@@ -10,21 +10,24 @@ func run() -> Array[String]:
 	return failures
 
 func _test_page_validation_and_order(failures: Array[String]) -> void:
+	var policy := RunRulesSnapshot.from_settings(PartyForgeSettings.new()).feature_policy([&"stats", &"upgrades"])
 	var stats := LedgerPageDefinition.new()
 	stats.id = &"stats"
+	stats.feature_id = stats.id
 	stats.label = "Stats"
 	stats.display_order = 20
 	stats.development_state = LedgerPageDefinition.State.AVAILABLE
 	stats.page_scene = PackedScene.new()
 	var upgrades := LedgerPageDefinition.new()
 	upgrades.id = &"upgrades"
+	upgrades.feature_id = upgrades.id
 	upgrades.label = "Current Upgrades"
 	upgrades.display_order = 10
 	upgrades.development_state = LedgerPageDefinition.State.AVAILABLE
 	upgrades.page_scene = PackedScene.new()
 	var catalog := LedgerPageCatalog.new()
 	catalog.pages = [stats, upgrades]
-	var ordered := catalog.valid_pages(LedgerFeatureGate.new())
+	var ordered := catalog.valid_pages(LedgerFeatureGate.new(policy, [&"stats", &"upgrades"]))
 	TestAssertions.equal(ordered.map(func(page: LedgerPageDefinition) -> StringName: return page.id), [&"upgrades", &"stats"], "ledger pages sort deterministically", failures)
 	catalog.pages.append(stats)
 	TestAssertions.truthy(Array(catalog.validate()).any(func(message: String) -> bool: return "duplicate page id stats" in message), "duplicate page IDs are grep-friendly", failures)
@@ -32,19 +35,27 @@ func _test_page_validation_and_order(failures: Array[String]) -> void:
 func _test_gate_states(failures: Array[String]) -> void:
 	var definition := LedgerPageDefinition.new()
 	definition.id = &"equipment_inventory"
+	definition.feature_id = definition.id
 	definition.label = "Equipment & Inventory"
 	definition.development_state = LedgerPageDefinition.State.DEVELOPER_PREVIEW
-	var player_gate := LedgerFeatureGate.new(false)
-	var developer_gate := LedgerFeatureGate.new(true)
+	var known_features: Array[StringName] = [&"equipment_inventory"]
+	var player_policy := RunRulesSnapshot.from_settings(PartyForgeSettings.new()).feature_policy(known_features)
+	var developer_settings := PartyForgeSettings.new()
+	developer_settings.mode = PartyForgeSettings.Mode.DEVELOPER_MODE
+	var developer_policy := RunRulesSnapshot.from_settings(developer_settings).feature_policy(known_features)
+	var player_gate := LedgerFeatureGate.new(player_policy, known_features)
+	var developer_gate := LedgerFeatureGate.new(developer_policy, known_features)
 	TestAssertions.equal(player_gate.resolve(definition), LedgerPageDefinition.State.HIDDEN, "player gate hides developer preview", failures)
 	TestAssertions.equal(developer_gate.resolve(definition), LedgerPageDefinition.State.AVAILABLE, "developer gate exposes implemented preview", failures)
 	definition.feature_id = &"equipment"
-	TestAssertions.equal(LedgerFeatureGate.new(true, [&"equipment"]).resolve(definition), LedgerPageDefinition.State.AVAILABLE, "known feature preserves developer preview", failures)
-	TestAssertions.equal(LedgerFeatureGate.new(true).resolve(definition), LedgerPageDefinition.State.HIDDEN, "unknown feature hides page conservatively", failures)
+	var equipment_policy := RunRulesSnapshot.from_settings(developer_settings).feature_policy([&"equipment"])
+	TestAssertions.equal(LedgerFeatureGate.new(equipment_policy, [&"equipment"]).resolve(definition), LedgerPageDefinition.State.AVAILABLE, "known feature preserves developer preview", failures)
+	TestAssertions.equal(LedgerFeatureGate.new(equipment_policy).resolve(definition), LedgerPageDefinition.State.HIDDEN, "unknown feature hides page conservatively", failures)
 	definition.feature_id = &""
 	definition.unlock_id = &"equipment_mastery"
-	TestAssertions.equal(LedgerFeatureGate.new(true).resolve(definition), LedgerPageDefinition.State.HIDDEN, "unknown unlock hides page conservatively", failures)
+	TestAssertions.equal(LedgerFeatureGate.new(developer_policy, known_features).resolve(definition), LedgerPageDefinition.State.HIDDEN, "unknown feature and unlock hide page conservatively", failures)
 	definition.unlock_id = &""
+	definition.feature_id = &"equipment_inventory"
 	for state: int in [LedgerPageDefinition.State.HIDDEN, LedgerPageDefinition.State.COMING_SOON, LedgerPageDefinition.State.AVAILABLE]:
 		definition.development_state = state
 		TestAssertions.equal(player_gate.resolve(definition), state, "ordinary page state %d remains stable" % state, failures)

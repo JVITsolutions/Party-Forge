@@ -6,6 +6,7 @@
 [resource]
 script = ExtResource("1_definition")
 id = &"stats"
+feature_id = &"stats"
 label = "Stats"
 page_scene = ExtResource("2_scene")
 display_order = 10

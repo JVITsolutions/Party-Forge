@@ -9,6 +9,7 @@ const LevelUpPanelScript := preload("res://scripts/ui/level_up_panel.gd")
 const RunResultPanelScript := preload("res://scripts/ui/run_result_panel.gd")
 const RUN_SEED := 1337
 const CURRENT_STARTING_PARTY_SIZE := 1
+const LEDGER_FEATURE_IDS: Array[StringName] = [&"stats", &"current_upgrades", &"equipment_inventory"]
 
 var party_stats: Dictionary = {}
 var trait_upgrade_ranks: Dictionary = {}
@@ -90,6 +91,7 @@ func select_leader_class(class_id: StringName) -> bool:
 	if not spawn_director.enemy_spawned.is_connected(_on_enemy_spawned): spawn_director.enemy_spawned.connect(_on_enemy_spawned)
 	(get_node("HUD/ClassSelection") as Control).visible = false
 	run_started = true
+	character_ledger.configure(game_run, party_manager, catalog, Callable(self, "_ledger_health_for_member"), [], active_run_rules.feature_policy(LEDGER_FEATURE_IDS))
 	game_run.start_run()
 	return true
 
@@ -228,7 +230,8 @@ func _wire_static_ui() -> void:
 	var result := get_node("HUD/RunResultPanel") as Control
 	if not result.is_connected("restart_requested", _restart): result.connect("restart_requested", _restart)
 	if not result.is_connected("quit_requested", _quit): result.connect("quit_requested", _quit)
-	character_ledger.configure(game_run, party_manager, catalog, Callable(self, "_ledger_health_for_member"))
+	var neutral_ledger_policy := RunRulesSnapshot.from_settings(PartyForgeSettings.new()).feature_policy(LEDGER_FEATURE_IDS)
+	character_ledger.configure(game_run, party_manager, catalog, Callable(self, "_ledger_health_for_member"), [], neutral_ledger_policy)
 	run_pause_menu.configure(game_run, Callable(character_ledger, "is_open"))
 	if not run_pause_menu.quit_run_confirmed.is_connected(_return_to_front_end):
 		run_pause_menu.quit_run_confirmed.connect(_return_to_front_end)
