@@ -43,6 +43,15 @@ func run() -> Array[String]:
         TestAssertions.truthy(not sandbox.call("cap_override_allowed", false, SANDBOX_SCENE), "ordinary sandbox launch keeps party cap", failures)
         TestAssertions.truthy(not sandbox.call("cap_override_allowed", true, "res://scenes/game/main.tscn"), "editor main scene keeps party cap", failures)
         TestAssertions.truthy(sandbox.call("cap_override_allowed", true, SANDBOX_SCENE), "direct editor sandbox launch permits cap override", failures)
+    TestAssertions.truthy(sandbox.has_method(&"cap_override_allowed_for_current_scene"), "sandbox exposes a current-scene launch boundary", failures)
+    if sandbox.has_method(&"cap_override_allowed_for_current_scene"):
+        TestAssertions.truthy(sandbox.call("cap_override_allowed_for_current_scene", true, sandbox), "direct current sandbox scene permits cap override", failures)
+        var main_scene := (load("res://scenes/game/main.tscn") as PackedScene).instantiate()
+        var embedded_sandbox := packed.instantiate()
+        main_scene.add_child(embedded_sandbox)
+        TestAssertions.equal(embedded_sandbox.scene_file_path, SANDBOX_SCENE, "embedded sandbox retains its packed-scene origin", failures)
+        TestAssertions.truthy(not embedded_sandbox.call("cap_override_allowed_for_current_scene", true, main_scene), "sandbox embedded under another current scene keeps production cap", failures)
+        main_scene.free()
 
     if sandbox.has_method("spawn_class"):
         sandbox.call("_ready")

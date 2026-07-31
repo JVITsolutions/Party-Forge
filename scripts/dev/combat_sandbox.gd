@@ -31,7 +31,8 @@ func _ready() -> void:
         push_error("PARTY_FORGE_SANDBOX_CATALOG_INVALID")
         return
     var editor_launch := OS.has_feature("editor") and DisplayServer.get_name() != "headless"
-    if cap_override_allowed(editor_launch, scene_file_path):
+    var current_scene := get_tree().current_scene if is_inside_tree() else null
+    if cap_override_allowed_for_current_scene(editor_launch, current_scene):
         party_manager.configure_capacity(PartyCapacityPolicy.new(24))
     party_manager.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
     combat_rng = CombatRng.new(1337)
@@ -120,6 +121,9 @@ func refresh_status() -> void:
 
 func cap_override_allowed(editor_hint: bool, source_scene_path: String) -> bool:
     return editor_hint and source_scene_path == SANDBOX_SCENE_PATH
+
+func cap_override_allowed_for_current_scene(editor_hint: bool, current_scene: Node) -> bool:
+    return current_scene == self and cap_override_allowed(editor_hint, current_scene.scene_file_path)
 
 func _wire_buttons() -> void:
     var base := "HUD/Panel/Content/Buttons/"
