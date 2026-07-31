@@ -11,19 +11,82 @@ grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("1_upgrades")
 
-[node name="Content" type="VBoxContainer" parent="."]
+[node name="Layout" type="VBoxContainer" parent="."]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
+theme_override_constants/separation = 10
 
-[node name="Title" type="Label" parent="Content"]
+[node name="Header" type="Label" parent="Layout"]
 layout_mode = 2
 focus_mode = 2
 text = "Current Upgrades"
+horizontal_alignment = 1
 
-[node name="EmptyState" type="Label" parent="Content"]
+[node name="Content" type="HSplitContainer" parent="Layout"]
+layout_mode = 2
+size_flags_vertical = 3
+split_offset = 360
+
+[node name="UpgradeSide" type="VBoxContainer" parent="Layout/Content"]
+custom_minimum_size = Vector2(340, 0)
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="EmptyState" type="Label" parent="Layout/Content/UpgradeSide"]
 layout_mode = 2
 text = "No upgrades acquired yet."
+horizontal_alignment = 1
+autowrap_mode = 2
+
+[node name="UpgradeScroll" type="ScrollContainer" parent="Layout/Content/UpgradeSide"]
+layout_mode = 2
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+
+[node name="UpgradeRows" type="VBoxContainer" parent="Layout/Content/UpgradeSide/UpgradeScroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 6
+
+[node name="DetailPanel" type="PanelContainer" parent="Layout/Content"]
+custom_minimum_size = Vector2(380, 0)
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="Detail" type="VBoxContainer" parent="Layout/Content/DetailPanel"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="Title" type="Label" parent="Layout/Content/DetailPanel/Detail"]
+layout_mode = 2
+autowrap_mode = 2
+
+[node name="Rank" type="Label" parent="Layout/Content/DetailPanel/Detail"]
+layout_mode = 2
+autowrap_mode = 2
+
+[node name="Ownership" type="Label" parent="Layout/Content/DetailPanel/Detail"]
+layout_mode = 2
+autowrap_mode = 2
+
+[node name="Description" type="Label" parent="Layout/Content/DetailPanel/Detail"]
+layout_mode = 2
+autowrap_mode = 2
+
+[node name="Effects" type="Label" parent="Layout/Content/DetailPanel/Detail"]
+layout_mode = 2
+autowrap_mode = 2
+
+[node name="Applicability" type="Label" parent="Layout/Content/DetailPanel/Detail"]
+layout_mode = 2
+autowrap_mode = 2
+
+[node name="Keywords" type="Label" parent="Layout/Content/DetailPanel/Detail"]
+layout_mode = 2
+size_flags_vertical = 3
+autowrap_mode = 2

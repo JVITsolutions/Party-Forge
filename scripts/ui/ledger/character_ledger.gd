@@ -313,14 +313,20 @@ func _on_provider_party_changed() -> void:
 		refresh()
 
 func _cycle_page(direction: int) -> void:
-	if _available_page_ids.is_empty():
+	var next_page_id := _next_available_page_id(direction)
+	if next_page_id.is_empty():
 		return
+	activate_page(next_page_id)
+
+func _next_available_page_id(direction: int) -> StringName:
+	if _available_page_ids.is_empty() or direction == 0:
+		return &""
 	var current_index := _available_page_ids.find(_active_page_id)
 	if current_index < 0:
 		current_index = 0
 	else:
 		current_index = posmod(current_index + direction, _available_page_ids.size())
-	activate_page(_available_page_ids[current_index])
+	return _available_page_ids[current_index]
 
 func _store_focus() -> void:
 	if context == null or not is_inside_tree():
