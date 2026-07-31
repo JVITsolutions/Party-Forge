@@ -122,3 +122,16 @@ layout_mode = 2
 focus_mode = 2
 horizontal_alignment = 1
 autowrap_mode = 2
+
+[node name="ShowTechnicalDetails" type="Button" parent="Overlay/Frame/Layout"]
+visible = false
+layout_mode = 2
+focus_mode = 2
+text = "Show technical details"
+
+[node name="TechnicalDetails" type="LineEdit" parent="Overlay/Frame/Layout"]
+visible = false
+layout_mode = 2
+focus_mode = 2
+editable = false
+select_all_on_focus = true

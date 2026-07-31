@@ -14,6 +14,9 @@ func _ready() -> void:
 	visible = false
 	_notice().text = "Run-affecting changes apply when the next run starts."
 	_connect_additional_actions()
+	if not _technical_toggle().pressed.is_connected(_toggle_technical_details):
+		_technical_toggle().pressed.connect(_toggle_technical_details)
+	_clear_save_error_disclosure()
 
 
 func configure(store: PartyForgeSettingsStore, settings: PartyForgeSettings) -> void:
@@ -28,6 +31,7 @@ func open(return_focus: Control = null) -> void:
 	_additional_page().bind(_draft)
 	_status().text = ""
 	_status().tooltip_text = ""
+	_clear_save_error_disclosure()
 	visible = true
 	_focus_active_page()
 
@@ -55,10 +59,13 @@ func _apply_and_return() -> void:
 		push_error(error)
 		_status().text = "Settings could not be saved. Check that the settings folder is writable, then try again."
 		_status().tooltip_text = error
-		if _status().is_inside_tree() and _status().is_visible_in_tree():
-			_status().grab_focus()
+		_technical_details().text = error
+		_technical_toggle().visible = true
+		if _technical_toggle().is_inside_tree() and _technical_toggle().is_visible_in_tree():
+			_technical_toggle().grab_focus()
 		return
 	_current_settings = _draft.copy()
+	_clear_save_error_disclosure()
 	settings_applied.emit(_current_settings.copy())
 	close()
 
@@ -69,6 +76,25 @@ func _cancel() -> void:
 
 func _reset_developer_options() -> void:
 	_additional_page().reset_developer_options()
+
+
+func _toggle_technical_details() -> void:
+	var details := _technical_details()
+	details.visible = not details.visible
+	_technical_toggle().text = "Hide technical details" if details.visible else "Show technical details"
+	if not is_inside_tree():
+		return
+	if details.visible:
+		details.grab_focus()
+	else:
+		_technical_toggle().grab_focus()
+
+
+func _clear_save_error_disclosure() -> void:
+	_technical_toggle().visible = false
+	_technical_toggle().text = "Show technical details"
+	_technical_details().visible = false
+	_technical_details().text = ""
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -144,6 +170,14 @@ func _notice() -> Label:
 
 func _status() -> Label:
 	return get_node("Overlay/Frame/Layout/Status") as Label
+
+
+func _technical_toggle() -> Button:
+	return get_node("Overlay/Frame/Layout/ShowTechnicalDetails") as Button
+
+
+func _technical_details() -> LineEdit:
+	return get_node("Overlay/Frame/Layout/TechnicalDetails") as LineEdit
 
 
 func _additional_page() -> AdditionalSettingsPage:

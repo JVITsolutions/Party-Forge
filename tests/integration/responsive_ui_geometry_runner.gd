@@ -56,14 +56,13 @@ func _run() -> void:
 	for viewport_size: Vector2i in VIEWPORT_SIZES:
 		var failure_count_before := _failures.size()
 		viewport.size = viewport_size
+		tabs.current_tab = 1
 		await _wait_for_layout()
 		var viewport_rect := Rect2(Vector2.ZERO, Vector2(viewport_size))
 		_assert_rect_near(overlay.get_global_rect(), viewport_rect, "Settings overlay", viewport_size)
 		var expected_frame := Rect2(Vector2(48.0, 36.0), Vector2(viewport_size) - Vector2(96.0, 72.0))
 		_assert_rect_near(frame.get_global_rect(), expected_frame, "Settings frame", viewport_size)
 
-		tabs.current_tab = 1
-		await _wait_for_layout()
 		_assert_visible_contained(tabs.get_tab_bar(), expected_frame, "Settings tab row", viewport_size)
 		_assert_visible_contained(controls_scroll, expected_frame, "Controls scroll", viewport_size)
 
@@ -135,11 +134,56 @@ func _assert_settings_focus_input(settings: SettingsScreen, viewport: SubViewpor
 	await process_frame
 	_assert_focus(viewport, unlock_all, "controller D-pad focus")
 
+	var failing_store := PartyForgeSettingsStore.new(func(_temporary: String, _target: String) -> Error: return ERR_CANT_CREATE)
+	settings.configure(failing_store, developer_settings)
+	settings.open()
+	var apply := page.get_node("Layout/ApplyAndReturn") as Button
+	var technical_toggle := settings.get_node("Overlay/Frame/Layout/ShowTechnicalDetails") as Button
+	var technical_details := settings.get_node("Overlay/Frame/Layout/TechnicalDetails") as LineEdit
+	apply.pressed.emit()
+	if not technical_toggle.visible:
+		_failures.append("save failure did not expose the technical-details action")
+	_assert_focus(viewport, technical_toggle, "save failure technical-details focus")
+	var keyboard_accept := InputEventKey.new()
+	keyboard_accept.keycode = KEY_ENTER
+	keyboard_accept.pressed = true
+	viewport.push_input(keyboard_accept)
+	var keyboard_accept_release := keyboard_accept.duplicate() as InputEventKey
+	keyboard_accept_release.pressed = false
+	viewport.push_input(keyboard_accept_release)
+	await process_frame
+	_assert_disclosed_diagnostic(viewport, technical_details, "keyboard activation")
+
+	settings.open()
+	apply.pressed.emit()
+	_assert_focus(viewport, technical_toggle, "second save failure technical-details focus")
+	var controller_accept := InputEventJoypadButton.new()
+	controller_accept.device = 0
+	controller_accept.button_index = JOY_BUTTON_A
+	controller_accept.pressed = true
+	if not controller_accept.is_action_pressed(&"ui_accept"):
+		_failures.append("controller A is not mapped to ui_accept")
+	viewport.push_input(controller_accept)
+	var controller_accept_release := controller_accept.duplicate() as InputEventJoypadButton
+	controller_accept_release.pressed = false
+	viewport.push_input(controller_accept_release)
+	await process_frame
+	_assert_disclosed_diagnostic(viewport, technical_details, "controller activation")
+	settings.open()
+
 
 func _assert_focus(viewport: SubViewport, expected: Control, label: String) -> void:
 	var actual := viewport.gui_get_focus_owner()
 	if actual != expected:
 		_failures.append("%s mismatch: expected=%s actual=%s" % [label, expected.get_path(), actual.get_path() if actual != null else NodePath()])
+
+
+func _assert_disclosed_diagnostic(viewport: SubViewport, details: LineEdit, label: String) -> void:
+	if not details.visible:
+		_failures.append("%s did not reveal technical details" % label)
+	if not details.text.begins_with("PARTY_FORGE_SETTINGS_SAVE_ERROR"):
+		_failures.append("%s did not preserve the raw save diagnostic: %s" % [label, details.text])
+	_assert_focus(viewport, details, "%s technical-details focus" % label)
 
 
 func _assert_visible_contained(control: Control, outer: Rect2, label: String, viewport_size: Vector2i) -> void:

@@ -181,9 +181,26 @@ func _test_settings_apply_cancel_and_save_error(failures: Array[String]) -> void
 	(failing_page.get_node("Layout/ApplyAndReturn") as Button).pressed.emit()
 	var expected_error := "PARTY_FORGE_SETTINGS_SAVE_ERROR path=%s code=%d stage=promote" % [PartyForgeSettingsStore.DEFAULT_PATH, ERR_CANT_CREATE]
 	var status := failing_screen.get_node("Overlay/Frame/Layout/Status") as Label
+	var technical_toggle := failing_screen.get_node_or_null("Overlay/Frame/Layout/ShowTechnicalDetails") as Button
+	var technical_details := failing_screen.get_node_or_null("Overlay/Frame/Layout/TechnicalDetails") as LineEdit
 	TestAssertions.truthy(bool(failing_screen.call("is_open")), "failed Apply keeps Settings open", failures)
 	TestAssertions.equal(status.text, "Settings could not be saved. Check that the settings folder is writable, then try again.", "failed Apply shows friendly actionable primary text", failures)
 	TestAssertions.equal(status.tooltip_text, expected_error, "failed Apply preserves the raw diagnostic in the status tooltip", failures)
+	TestAssertions.truthy(technical_toggle != null and technical_toggle.visible and technical_toggle.focus_mode != Control.FOCUS_NONE, "failed Apply exposes a focusable technical-details action", failures)
+	TestAssertions.truthy(technical_details != null and not technical_details.visible, "raw technical details stay hidden until requested", failures)
+	if technical_toggle != null and technical_details != null:
+		technical_toggle.pressed.emit()
+		TestAssertions.truthy(technical_details.visible, "keyboard or controller activation reveals technical details", failures)
+		TestAssertions.equal(technical_details.text, expected_error, "revealed details preserve the raw store diagnostic", failures)
+		TestAssertions.truthy(not technical_details.editable and technical_details.focus_mode != Control.FOCUS_NONE, "revealed details are read-only, selectable, and focusable", failures)
+		failing_screen.call("open")
+		TestAssertions.truthy(not technical_toggle.visible and not technical_details.visible and technical_details.text.is_empty(), "opening Settings resets technical disclosure state", failures)
+		(failing_page.get_node("Layout/ApplyAndReturn") as Button).pressed.emit()
+		technical_toggle.pressed.emit()
+		TestAssertions.truthy(technical_details.visible, "second save failure can disclose details again", failures)
+		failing_screen.call("configure", PartyForgeSettingsStore.new(), saved)
+		(failing_page.get_node("Layout/ApplyAndReturn") as Button).pressed.emit()
+		TestAssertions.truthy(not technical_toggle.visible and not technical_details.visible and technical_details.text.is_empty(), "successful Apply resets technical disclosure state", failures)
 	TestAssertions.equal((failing_screen.call("current_settings") as PartyForgeSettings).party_capacity_override, 12, "failed Apply leaves current settings unchanged", failures)
 	failing_screen.free()
 	_cleanup_default_settings_artifacts()
@@ -226,6 +243,16 @@ func _test_active_page_focus(screen: CanvasLayer, tabs: TabContainer, failures: 
 	next_tab.button_index = JOY_BUTTON_RIGHT_SHOULDER
 	next_tab.pressed = true
 	TestAssertions.truthy(next_tab.is_action_pressed(&"settings_next_tab"), "right shoulder is the controller Settings-tab action", failures)
+	var controller_accept := InputEventJoypadButton.new()
+	controller_accept.device = 0
+	controller_accept.button_index = JOY_BUTTON_A
+	controller_accept.pressed = true
+	TestAssertions.truthy(controller_accept.is_action_pressed(&"ui_accept"), "controller A maps to the standard UI accept action", failures)
+	var accept_events := InputMap.action_get_events(&"ui_accept")
+	for keycode: Key in [KEY_ENTER, KEY_KP_ENTER, KEY_SPACE]:
+		TestAssertions.truthy(accept_events.any(func(event: InputEvent) -> bool:
+			return event is InputEventKey and event.keycode == keycode
+		), "ui_accept preserves keyboard binding %s" % keycode, failures)
 
 
 func _test_additional_focus_traversal(page: Control, failures: Array[String]) -> void:
