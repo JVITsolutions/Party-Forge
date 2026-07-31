@@ -1,5 +1,6 @@
 extends RefCounted
 
+const ResponsiveGeometry := preload("res://tests/support/responsive_geometry.gd")
 const VIEWPORT_SIZES := [
 	Vector2(1280.0, 720.0),
 	Vector2(1920.0, 1080.0),
@@ -127,31 +128,62 @@ func _test_integrated_overlay_containment(failures: Array[String]) -> void:
 
 func _test_settings_and_badge_containment(failures: Array[String]) -> void:
 	var settings := (load("res://scenes/ui/settings/settings_screen.tscn") as PackedScene).instantiate() as SettingsScreen
+	var overlay := settings.get_node("Overlay") as Control
 	var frame := settings.get_node("Overlay/Frame") as Control
+	var layout := settings.get_node("Overlay/Frame/Layout") as VBoxContainer
 	var tabs := settings.get_node("Overlay/Frame/Layout/Tabs") as TabContainer
+	var controls_page := settings.get_node("Overlay/Frame/Layout/Tabs/Controls") as Control
+	var controls_layout := settings.get_node("Overlay/Frame/Layout/Tabs/Controls/Layout") as VBoxContainer
 	var controls_scroll := settings.get_node("Overlay/Frame/Layout/Tabs/Controls/Layout/Scroll") as ScrollContainer
 	var additional := settings.get_node("Overlay/Frame/Layout/Tabs/Additional Settings") as Control
+	var additional_layout := additional.get_node("Layout") as VBoxContainer
 	var reset := additional.get_node("Layout/ResetDeveloperOptions") as Button
 	var apply := additional.get_node("Layout/ApplyAndReturn") as Button
 	var cancel := additional.get_node("Layout/Cancel") as Button
 	var notice := settings.get_node("Overlay/Frame/Layout/NextRunNotice") as Label
 	var status := settings.get_node("Overlay/Frame/Layout/Status") as Label
-	_assert_full_rect(settings.get_node("Overlay") as Control, "Settings overlay root", failures)
+	_assert_full_rect(overlay, "Settings overlay root", failures)
+	TestAssertions.equal(frame.get_parent(), overlay, "Settings frame is anchored by the full-rect overlay", failures)
+	TestAssertions.equal(layout.get_parent(), frame, "Settings VBox owns frame content layout", failures)
+	TestAssertions.equal(tabs.get_parent(), layout, "Settings VBox directly owns the tab container", failures)
+	TestAssertions.equal(tabs.layout_mode, 2, "Settings tabs use container layout", failures)
+	_assert_expand_fill(tabs, true, true, "Settings tabs", failures)
+	TestAssertions.truthy(tabs.is_ancestor_of(tabs.get_tab_bar()), "Settings TabContainer owns its tab row", failures)
+	TestAssertions.equal(controls_page.get_parent(), tabs, "Controls is a direct tab page", failures)
+	TestAssertions.equal(controls_layout.get_parent(), controls_page, "Controls page owns its VBox layout", failures)
+	TestAssertions.equal(controls_scroll.get_parent(), controls_layout, "Controls VBox directly owns its scroll region", failures)
+	TestAssertions.equal(controls_scroll.layout_mode, 2, "Controls scroll uses container layout", failures)
+	_assert_expand_fill(controls_scroll, true, true, "Controls scroll", failures)
 	TestAssertions.equal(controls_scroll.horizontal_scroll_mode, ScrollContainer.SCROLL_MODE_DISABLED, "Controls disables horizontal scrolling", failures)
-	TestAssertions.truthy(controls_scroll.size_flags_vertical & Control.SIZE_EXPAND != 0, "Controls scroll expands vertically", failures)
-	TestAssertions.truthy(tabs.size_flags_horizontal & Control.SIZE_EXPAND != 0 and tabs.size_flags_vertical & Control.SIZE_EXPAND != 0, "Settings tabs expand inside the frame", failures)
-	TestAssertions.truthy(additional.size_flags_horizontal & Control.SIZE_EXPAND != 0 and additional.size_flags_vertical & Control.SIZE_EXPAND != 0, "Additional Settings expands inside the tab body", failures)
+	TestAssertions.equal(controls_scroll.vertical_scroll_mode, ScrollContainer.SCROLL_MODE_AUTO, "Controls enables vertical overflow scrolling", failures)
+	TestAssertions.truthy(controls_scroll.clip_contents, "Controls clips overflowing rows to its scroll viewport", failures)
+	TestAssertions.equal(additional.get_parent(), tabs, "Additional Settings is a direct tab page", failures)
+	TestAssertions.equal(additional_layout.get_parent(), additional, "Additional Settings page owns its VBox layout", failures)
+	TestAssertions.equal(additional.layout_mode, 2, "Additional Settings uses container layout", failures)
+	_assert_expand_fill(additional, true, true, "Additional Settings", failures)
+	for action: Button in [reset, apply, cancel]:
+		TestAssertions.equal(action.get_parent(), additional_layout, "%s is owned by the Additional Settings VBox" % action.name, failures)
+		TestAssertions.equal(action.layout_mode, 2, "%s uses container layout" % action.name, failures)
+		TestAssertions.truthy(action.get_combined_minimum_size().x > 0.0 and action.get_combined_minimum_size().y > 0.0, "%s has a measurable minimum size" % action.name, failures)
+	TestAssertions.equal(notice.get_parent(), layout, "next-run notice is owned by the Settings VBox", failures)
+	TestAssertions.equal(status.get_parent(), layout, "Settings status is owned by the Settings VBox", failures)
+	TestAssertions.equal(notice.layout_mode, 2, "next-run notice uses container layout", failures)
+	TestAssertions.equal(status.layout_mode, 2, "Settings status uses container layout", failures)
 	TestAssertions.truthy(notice.autowrap_mode != TextServer.AUTOWRAP_OFF, "next-run notice wraps inside Settings", failures)
 	TestAssertions.truthy(status.autowrap_mode != TextServer.AUTOWRAP_OFF, "Settings status wraps long errors", failures)
+	TestAssertions.truthy(status.custom_minimum_size.y >= 36.0, "Settings reserves a visible status region", failures)
 	for viewport_size: Vector2 in VIEWPORT_SIZES:
-		_assert_contained(frame, viewport_size, "Settings frame", failures)
-		_assert_descendant(tabs.get_tab_bar(), frame, "Settings tab row at %s" % viewport_size, failures)
-		_assert_descendant(controls_scroll, frame, "Controls scroll at %s" % viewport_size, failures)
-		_assert_descendant(reset, frame, "Reset Developer Options action at %s" % viewport_size, failures)
-		_assert_descendant(apply, frame, "Apply and Return action at %s" % viewport_size, failures)
-		_assert_descendant(cancel, frame, "Cancel action at %s" % viewport_size, failures)
-		_assert_descendant(notice, frame, "Settings tooltip/notice region at %s" % viewport_size, failures)
-		_assert_descendant(status, frame, "Settings status region at %s" % viewport_size, failures)
+		var viewport_rect := Rect2(Vector2.ZERO, viewport_size)
+		var overlay_rect := ResponsiveGeometry.control_rect(overlay, viewport_rect)
+		var frame_rect := ResponsiveGeometry.control_rect(frame, overlay_rect)
+		TestAssertions.equal(overlay_rect, viewport_rect, "Settings overlay covers %s" % viewport_size, failures)
+		TestAssertions.truthy(ResponsiveGeometry.contains(overlay_rect, frame_rect), "Settings frame is geometrically contained at %s" % viewport_size, failures)
+		TestAssertions.equal(frame_rect.position, Vector2(48.0, 36.0), "Settings frame preserves top-left margins at %s" % viewport_size, failures)
+		TestAssertions.equal(frame_rect.end, viewport_size - Vector2(48.0, 36.0), "Settings frame preserves bottom-right margins at %s" % viewport_size, failures)
+		var minimum := frame.get_combined_minimum_size()
+		TestAssertions.truthy(frame_rect.size.x >= minimum.x and frame_rect.size.y >= minimum.y, "Settings frame fits its combined minimum at %s (frame=%s minimum=%s)" % [viewport_size, frame_rect.size, minimum], failures)
+		for action: Button in [reset, apply, cancel]:
+			TestAssertions.truthy(action.get_combined_minimum_size().x <= frame_rect.size.x, "%s minimum width fits Settings at %s" % [action.name, viewport_size], failures)
 	settings.free()
 
 	const badge_path := "res://scenes/ui/developer_mode_badge.tscn"
@@ -170,15 +202,51 @@ func _test_settings_and_badge_containment(failures: Array[String]) -> void:
 	var badge_margin := badge.find_child("Margin", true, false) as Control
 	var badge_label := badge.find_child("Label", true, false) as Label
 	_assert_full_rect(badge_anchor, "Developer Mode badge anchor", failures)
+	TestAssertions.equal(badge_margin.get_parent(), badge_anchor, "badge anchor directly owns the top-right margin", failures)
+	TestAssertions.equal(
+		Vector4(badge_margin.anchor_left, badge_margin.anchor_top, badge_margin.anchor_right, badge_margin.anchor_bottom),
+		Vector4(1.0, 0.0, 1.0, 0.0),
+		"badge margin uses exact top-right anchors",
+		failures,
+	)
+	TestAssertions.equal(
+		Vector4(badge_margin.offset_left, badge_margin.offset_top, badge_margin.offset_right, badge_margin.offset_bottom),
+		Vector4(-720.0, 16.0, -16.0, 72.0),
+		"badge margin uses approved top-right offsets",
+		failures,
+	)
+	TestAssertions.equal(badge_margin.grow_horizontal, Control.GROW_DIRECTION_BEGIN, "badge grows inward from the right edge", failures)
+	TestAssertions.equal(Vector4(
+		badge_margin.get_theme_constant(&"margin_left"),
+		badge_margin.get_theme_constant(&"margin_top"),
+		badge_margin.get_theme_constant(&"margin_right"),
+		badge_margin.get_theme_constant(&"margin_bottom"),
+	), Vector4(12.0, 8.0, 12.0, 8.0), "badge content margins use the approved inset", failures)
+	TestAssertions.equal(badge_label.get_parent(), badge_margin, "badge margin directly owns its label", failures)
+	TestAssertions.equal(badge_label.layout_mode, 2, "badge label uses container layout", failures)
+	TestAssertions.equal(badge_label.horizontal_alignment, HORIZONTAL_ALIGNMENT_RIGHT, "badge label aligns to the right edge", failures)
+	TestAssertions.equal(badge_label.vertical_alignment, VERTICAL_ALIGNMENT_CENTER, "badge label centers vertically", failures)
 	TestAssertions.truthy(badge.visible, "responsive badge fixture is visible", failures)
 	TestAssertions.truthy(badge_label.autowrap_mode != TextServer.AUTOWRAP_OFF, "badge summary wraps within its margin", failures)
 	for viewport_size: Vector2 in VIEWPORT_SIZES:
-		_assert_contained(badge_margin, viewport_size, "Developer Mode badge", failures)
-		_assert_descendant(badge_label, badge_margin, "Developer Mode badge label at %s" % viewport_size, failures)
+		var viewport_rect := Rect2(Vector2.ZERO, viewport_size)
+		var anchor_rect := ResponsiveGeometry.control_rect(badge_anchor, viewport_rect)
+		var margin_rect := ResponsiveGeometry.control_rect(badge_margin, anchor_rect)
+		TestAssertions.equal(anchor_rect, viewport_rect, "badge anchor covers %s" % viewport_size, failures)
+		TestAssertions.truthy(ResponsiveGeometry.contains(anchor_rect, margin_rect), "badge margin is contained at %s" % viewport_size, failures)
+		TestAssertions.equal(margin_rect.position, Vector2(viewport_size.x - 720.0, 16.0), "badge starts at the approved top-right position at %s" % viewport_size, failures)
+		TestAssertions.equal(margin_rect.end, Vector2(viewport_size.x - 16.0, 72.0), "badge keeps exact right and top/bottom offsets at %s" % viewport_size, failures)
+		TestAssertions.equal(margin_rect.size, Vector2(704.0, 56.0), "badge keeps a stable wrapping area at %s" % viewport_size, failures)
+		var content_size := margin_rect.size - Vector2(24.0, 16.0)
+		var label_minimum := badge_label.get_combined_minimum_size()
+		TestAssertions.truthy(label_minimum.x <= content_size.x and label_minimum.y <= content_size.y, "badge label minimum fits its inset area at %s" % viewport_size, failures)
 	badge.free()
 
-func _assert_descendant(control: Control, container: Control, label: String, failures: Array[String]) -> void:
-	TestAssertions.truthy(container.is_ancestor_of(control), "%s remains contained by %s" % [label, container.name], failures)
+func _assert_expand_fill(control: Control, horizontal: bool, vertical: bool, label: String, failures: Array[String]) -> void:
+	if horizontal:
+		TestAssertions.equal(control.size_flags_horizontal & Control.SIZE_EXPAND_FILL, Control.SIZE_EXPAND_FILL, "%s expands and fills horizontally" % label, failures)
+	if vertical:
+		TestAssertions.equal(control.size_flags_vertical & Control.SIZE_EXPAND_FILL, Control.SIZE_EXPAND_FILL, "%s expands and fills vertically" % label, failures)
 
 func _assert_centered(control: Control, viewport_size: Vector2, label: String, failures: Array[String]) -> void:
 	var center := _rect_center(control, viewport_size)
