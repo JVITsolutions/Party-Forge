@@ -186,6 +186,7 @@ func _test_production_card_tooltip_composition(failures: Array[String]) -> void:
 	)
 	personal_card.mouse_exited.emit()
 	TestAssertions.truthy(not tooltip.visible, "hover dismissal hides composed tooltip", failures)
+	TestAssertions.equal(panel.get("_tooltip_choice"), null, "actual tooltip dismissal clears LevelUpPanel tracking", failures)
 	personal_card.mouse_entered.emit()
 	tooltip.set_hold_active(true)
 	personal_card.mouse_exited.emit()
@@ -289,7 +290,7 @@ func _test_tooltip_forced_lifecycle_cleanup(failures: Array[String]) -> void:
 	_dirty_tooltip(tooltip, personal_source, 19, failures, "recipient selection")
 	personal_card.pressed.emit()
 	TestAssertions.truthy((panel.get_node("ContentPanel/RecipientView") as Control).visible, "recipient selection opens recipient view", failures)
-	_assert_forced_tooltip_cleanup(tooltip, personal_source, "recipient selection", failures)
+	_assert_forced_tooltip_cleanup(panel, tooltip, personal_source, "recipient selection", failures)
 	personal_card.mouse_exited.emit()
 
 	var rows := panel.get_node("ContentPanel/RecipientView/Content/RecipientsScroll/Rows").get_children()
@@ -305,14 +306,14 @@ func _test_tooltip_forced_lifecycle_cleanup(failures: Array[String]) -> void:
 		_dirty_tooltip(tooltip, confirmation_source, 23, failures, "confirmation transition")
 		marksman_row.pressed.emit()
 		TestAssertions.truthy((panel.get_node("ContentPanel/ConfirmationView") as Control).visible, "recipient choice opens confirmation view", failures)
-		_assert_forced_tooltip_cleanup(tooltip, confirmation_source, "confirmation transition", failures)
+		_assert_forced_tooltip_cleanup(panel, tooltip, confirmation_source, "confirmation transition", failures)
 
 	panel.cancel_subflow()
 	personal_card.mouse_entered.emit()
 	_dirty_tooltip(tooltip, personal_source, 31, failures, "level-up exit")
 	panel.complete_selection()
 	TestAssertions.truthy(not panel.visible, "level-up exit hides panel", failures)
-	_assert_forced_tooltip_cleanup(tooltip, personal_source, "level-up exit", failures)
+	_assert_forced_tooltip_cleanup(panel, tooltip, personal_source, "level-up exit", failures)
 
 	var probe_source := &"post_level_up_exit_probe"
 	TestAssertions.truthy(
@@ -351,6 +352,7 @@ func _dirty_tooltip(
 
 
 func _assert_forced_tooltip_cleanup(
+	panel: LevelUpPanel,
 	tooltip: UpgradeTooltipPanel,
 	former_source: StringName,
 	context: String,
@@ -359,7 +361,9 @@ func _assert_forced_tooltip_cleanup(
 	TestAssertions.truthy(not tooltip.visible, "%s force-hides tooltip" % context, failures)
 	TestAssertions.truthy(not tooltip.is_pinned(), "%s clears pin" % context, failures)
 	TestAssertions.truthy(not tooltip.is_current_source(former_source), "%s clears source" % context, failures)
+	TestAssertions.equal(tooltip.get("_source_id"), StringName(), "%s clears exact popup source identity" % context, failures)
 	TestAssertions.equal((tooltip.get_node("Content/BodyScroll") as ScrollContainer).scroll_vertical, 0, "%s resets scroll" % context, failures)
+	TestAssertions.equal(panel.get("_tooltip_choice"), null, "%s clears LevelUpPanel tracking" % context, failures)
 
 
 func _lifecycle_tooltip_content(title: String) -> Dictionary:
