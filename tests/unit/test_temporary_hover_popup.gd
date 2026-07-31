@@ -4,6 +4,7 @@ extends RefCounted
 func run() -> Array[String]:
 	var failures: Array[String] = []
 	_test_transient_and_hold_lifetime(failures)
+	_test_preheld_hold_lifetime(failures)
 	_test_pin_lock_and_replacement(failures)
 	_test_forced_reset(failures)
 	return failures
@@ -23,6 +24,26 @@ func _test_transient_and_hold_lifetime(failures: Array[String]) -> void:
 	TestAssertions.truthy(popup.visible, "Alt hold retains inactive source", failures)
 	popup.set_hold_active(false)
 	TestAssertions.truthy(not popup.visible, "Alt release dismisses inactive unpinned source", failures)
+	popup.free()
+
+
+func _test_preheld_hold_lifetime(failures: Array[String]) -> void:
+	var popup := TemporaryHoverPopup.new()
+	popup.call("_ready")
+	popup.set_hold_active(true)
+	TestAssertions.truthy(not popup.visible, "hidden Alt does not reveal popup", failures)
+	TestAssertions.truthy(not popup.is_pinned(), "hidden Alt does not pin popup", failures)
+	popup.present_source(&"preheld")
+	popup.release_source(&"preheld")
+	TestAssertions.truthy(popup.visible, "Alt held before presentation retains inactive source", failures)
+	popup.set_hold_active(false)
+	TestAssertions.truthy(not popup.visible, "preheld Alt release dismisses inactive unpinned source", failures)
+
+	popup.set_hold_active(true)
+	popup.force_dismiss()
+	popup.present_source(&"post_reset")
+	popup.release_source(&"post_reset")
+	TestAssertions.truthy(not popup.visible, "forced reset clears a hidden preheld Alt state", failures)
 	popup.free()
 
 
@@ -46,8 +67,9 @@ func _test_pin_lock_and_replacement(failures: Array[String]) -> void:
 func _test_forced_reset(failures: Array[String]) -> void:
 	var popup := TemporaryHoverPopup.new()
 	popup.call("_ready")
-	var dismiss_events: Array[bool] = []
-	popup.dismissed.connect(func() -> void: dismiss_events.append(true))
+	var events: Array[String] = []
+	popup.pin_changed.connect(func(pinned: bool) -> void: events.append("pin:%s" % pinned))
+	popup.dismissed.connect(func() -> void: events.append("dismissed"))
 	popup.present_source(&"first")
 	popup.set_hold_active(true)
 	popup.toggle_pin()
@@ -55,7 +77,10 @@ func _test_forced_reset(failures: Array[String]) -> void:
 	TestAssertions.truthy(not popup.visible, "forced reset hides popup", failures)
 	TestAssertions.truthy(not popup.is_pinned(), "forced reset clears pin", failures)
 	TestAssertions.truthy(not popup.is_current_source(&"first"), "forced reset clears source", failures)
-	TestAssertions.equal(dismiss_events.size(), 1, "forced reset emits one actual dismissal", failures)
+	TestAssertions.equal(events, ["pin:true", "pin:false", "dismissed"], "forced reset emits one unpin before dismissal", failures)
 	popup.force_dismiss()
-	TestAssertions.equal(dismiss_events.size(), 1, "hidden reset does not duplicate dismissal", failures)
+	TestAssertions.equal(events, ["pin:true", "pin:false", "dismissed"], "hidden reset does not duplicate unpin or dismissal", failures)
+	popup.present_source(&"unpinned")
+	popup.force_dismiss()
+	TestAssertions.equal(events, ["pin:true", "pin:false", "dismissed", "dismissed"], "unpinned forced reset does not emit pin change", failures)
 	popup.free()

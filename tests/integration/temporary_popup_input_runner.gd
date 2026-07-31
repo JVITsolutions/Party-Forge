@@ -32,6 +32,21 @@ func _run() -> void:
 	await _wait_for_layout()
 
 	var content := _long_content()
+	var preheld_alt := InputEventKey.new()
+	preheld_alt.keycode = KEY_ALT
+	preheld_alt.pressed = true
+	viewport.push_input(preheld_alt)
+	_assert(not tooltip.visible, "Alt pressed while hidden does not reveal popup")
+	_assert(not viewport.is_input_handled(), "Alt pressed while hidden remains unhandled")
+	_assert(tooltip.show_content(content, anchor, &"preheld"), "preheld Alt source is accepted")
+	tooltip.release_source(&"preheld")
+	_assert(tooltip.visible, "Alt pressed before presentation retains popup after source exit")
+	var preheld_alt_release := preheld_alt.duplicate() as InputEventKey
+	preheld_alt_release.pressed = false
+	viewport.push_input(preheld_alt_release)
+	await process_frame
+	_assert(not tooltip.visible and not tooltip.is_pinned(), "preheld Alt release dismisses inactive unpinned popup")
+
 	tooltip.show_content(content, anchor, &"first")
 	await _wait_for_layout()
 	var scroll := tooltip.get_node("Content/BodyScroll") as ScrollContainer

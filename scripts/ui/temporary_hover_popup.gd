@@ -51,7 +51,7 @@ func release_source(source_id: StringName) -> void:
 
 
 func set_hold_active(active: bool) -> void:
-	_hold_active = active and visible
+	_hold_active = active
 	if not _hold_active:
 		_dismiss_if_unretained()
 
@@ -68,6 +68,7 @@ func toggle_pin() -> void:
 
 func force_dismiss() -> void:
 	var was_visible := visible
+	var was_pinned := _pinned
 	_source_id = &""
 	_source_active = false
 	_hold_active = false
@@ -76,6 +77,8 @@ func force_dismiss() -> void:
 	visible = false
 	scroll_to_top()
 	_sync_pin_button()
+	if was_pinned:
+		pin_changed.emit(false)
 	if was_visible:
 		dismissed.emit()
 
@@ -95,17 +98,21 @@ func scroll_to_top() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if not visible:
-		return
 	if InputMap.has_action(&"tooltip_hold"):
 		if event.is_action_pressed(&"tooltip_hold"):
+			var visible_before_press := visible
 			set_hold_active(true)
-			_mark_input_handled()
+			if visible_before_press:
+				_mark_input_handled()
 			return
 		if event.is_action_released(&"tooltip_hold"):
+			var visible_before_release := visible
 			set_hold_active(false)
-			_mark_input_handled()
+			if visible_before_release:
+				_mark_input_handled()
 			return
+	if not visible:
+		return
 	if InputMap.has_action(&"tooltip_pin") and event.is_action_pressed(&"tooltip_pin"):
 		toggle_pin()
 		_mark_input_handled()
