@@ -6,6 +6,7 @@ func run() -> Array[String]:
 	_test_duplicate_class_recipients_keep_identity(failures)
 	_test_non_personal_confirmation_uses_zero(failures)
 	_test_production_card_tooltip_composition(failures)
+	_test_tooltip_forced_lifecycle_cleanup(failures)
 	return failures
 
 func _test_exact_offer_target_cancel_and_confirmation(failures: Array[String]) -> void:
@@ -194,11 +195,18 @@ func _test_production_card_tooltip_composition(failures: Array[String]) -> void:
 	pin.pressed.emit()
 	tooltip.set_hold_active(false)
 	TestAssertions.truthy(tooltip.visible and tooltip.is_pinned(), "mouse pin survives Alt release", failures)
+	var accepted_source := StringName(personal_choices[0].key())
+	var body_scroll := tooltip.get_node("Content/BodyScroll") as ScrollContainer
+	body_scroll.scroll_vertical = 37
+	TestAssertions.truthy(tooltip.is_current_source(accepted_source), "pinned tooltip retains accepted LevelUpPanel source", failures)
 
 	var second_card := panel.get_node("ContentPanel/OfferView/Content/Cards/Card2") as UpgradeCard
 	second_card.mouse_entered.emit()
 	TestAssertions.equal((tooltip.get_node("Content/Header/Title") as Label).text, pinned_title, "pinned content rejects another card hover", failures)
+	TestAssertions.truthy(tooltip.is_current_source(accepted_source), "rejected card cannot replace accepted source identity", failures)
+	TestAssertions.equal(body_scroll.scroll_vertical, 37, "rejected card cannot reset accepted source scroll", failures)
 	second_card.mouse_exited.emit()
+	TestAssertions.truthy(tooltip.visible and tooltip.is_current_source(accepted_source), "rejected card dismissal cannot release accepted source", failures)
 	pin.pressed.emit()
 	TestAssertions.truthy(not tooltip.visible, "unpinning inactive source dismisses", failures)
 
@@ -258,6 +266,112 @@ func _test_production_card_tooltip_composition(failures: Array[String]) -> void:
 	TestAssertions.truthy(not tooltip.visible and not tooltip.is_pinned(), "selection completion clears stale tooltip state", failures)
 	_free_panel(panel)
 	party.free()
+
+
+func _test_tooltip_forced_lifecycle_cleanup(failures: Array[String]) -> void:
+	var catalog := GameCatalog.load_defaults()
+	var party := PartyManager.new()
+	party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
+	party.recruit(catalog.class_by_id(&"marksman"))
+	var personal_choice := UpgradeChoice.authored(catalog.upgrade_by_id(&"deadeye"))
+	var choices: Array[UpgradeChoice] = [
+		personal_choice,
+		UpgradeChoice.authored(catalog.upgrade_by_id(&"vanguard_wall")),
+		UpgradeChoice.authored(catalog.upgrade_by_id(&"vitality")),
+	]
+	var panel := _attached_panel()
+	panel.configure(catalog, UpgradeApplicationService.new(), func(_member_id: int) -> Vector2: return Vector2(100.0, 100.0))
+	panel.show_choices(choices, party)
+	var tooltip := panel.get_node("TooltipPanel") as UpgradeTooltipPanel
+	var personal_card := panel.get_node("ContentPanel/OfferView/Content/Cards/Card1") as UpgradeCard
+	var personal_source := StringName(personal_choice.key())
+	personal_card.mouse_entered.emit()
+	_dirty_tooltip(tooltip, personal_source, 19, failures, "recipient selection")
+	personal_card.pressed.emit()
+	TestAssertions.truthy((panel.get_node("ContentPanel/RecipientView") as Control).visible, "recipient selection opens recipient view", failures)
+	_assert_forced_tooltip_cleanup(tooltip, personal_source, "recipient selection", failures)
+	personal_card.mouse_exited.emit()
+
+	var rows := panel.get_node("ContentPanel/RecipientView/Content/RecipientsScroll/Rows").get_children()
+	var marksman_row := _row_for_member(rows, 2)
+	var confirmation_source := &"recipient_confirmation_transition"
+	TestAssertions.truthy(marksman_row != null, "confirmation transition has eligible recipient", failures)
+	if marksman_row != null:
+		TestAssertions.truthy(
+			tooltip.show_content(_lifecycle_tooltip_content("Recipient transition"), marksman_row, confirmation_source),
+			"confirmation transition accepts dirty source",
+			failures,
+		)
+		_dirty_tooltip(tooltip, confirmation_source, 23, failures, "confirmation transition")
+		marksman_row.pressed.emit()
+		TestAssertions.truthy((panel.get_node("ContentPanel/ConfirmationView") as Control).visible, "recipient choice opens confirmation view", failures)
+		_assert_forced_tooltip_cleanup(tooltip, confirmation_source, "confirmation transition", failures)
+
+	panel.cancel_subflow()
+	personal_card.mouse_entered.emit()
+	_dirty_tooltip(tooltip, personal_source, 31, failures, "level-up exit")
+	panel.complete_selection()
+	TestAssertions.truthy(not panel.visible, "level-up exit hides panel", failures)
+	_assert_forced_tooltip_cleanup(tooltip, personal_source, "level-up exit", failures)
+
+	var probe_source := &"post_level_up_exit_probe"
+	TestAssertions.truthy(
+		tooltip.show_content(_lifecycle_tooltip_content("Post-exit probe"), personal_card, probe_source),
+		"post-exit probe is accepted",
+		failures,
+	)
+	personal_card.detail_dismissed.emit(personal_choice)
+	TestAssertions.truthy(
+		tooltip.visible and tooltip.is_current_source(probe_source),
+		"stale LevelUpPanel tracking cannot dismiss a fresh source",
+		failures,
+	)
+	tooltip.release_source(probe_source)
+	TestAssertions.truthy(not tooltip.visible, "level-up exit clears Alt hold retention", failures)
+	_free_panel(panel)
+	party.free()
+
+
+func _dirty_tooltip(
+	tooltip: UpgradeTooltipPanel,
+	source_id: StringName,
+	scroll_position: int,
+	failures: Array[String],
+	context: String
+) -> void:
+	var body_scroll := tooltip.get_node("Content/BodyScroll") as ScrollContainer
+	body_scroll.scroll_vertical = scroll_position
+	tooltip.set_hold_active(true)
+	if not tooltip.is_pinned():
+		(tooltip.get_node("Content/Header/Pin") as Button).pressed.emit()
+	TestAssertions.truthy(tooltip.visible, "%s begins with visible tooltip" % context, failures)
+	TestAssertions.truthy(tooltip.is_pinned(), "%s begins with pinned tooltip" % context, failures)
+	TestAssertions.truthy(tooltip.is_current_source(source_id), "%s begins with current source" % context, failures)
+	TestAssertions.equal(body_scroll.scroll_vertical, scroll_position, "%s begins with non-top scroll" % context, failures)
+
+
+func _assert_forced_tooltip_cleanup(
+	tooltip: UpgradeTooltipPanel,
+	former_source: StringName,
+	context: String,
+	failures: Array[String]
+) -> void:
+	TestAssertions.truthy(not tooltip.visible, "%s force-hides tooltip" % context, failures)
+	TestAssertions.truthy(not tooltip.is_pinned(), "%s clears pin" % context, failures)
+	TestAssertions.truthy(not tooltip.is_current_source(former_source), "%s clears source" % context, failures)
+	TestAssertions.equal((tooltip.get_node("Content/BodyScroll") as ScrollContainer).scroll_vertical, 0, "%s resets scroll" % context, failures)
+
+
+func _lifecycle_tooltip_content(title: String) -> Dictionary:
+	return {
+		"title": title,
+		"rank_text": "Fixture rank",
+		"description": "Lifecycle fixture content.",
+		"effect_lines": ["Fixture effect."],
+		"eligibility_text": "Fixture eligible.",
+		"inheritance_text": "",
+		"keyword_lines": ["Fixture: Lifecycle detail."],
+	}
 
 func _row_for_member(rows: Array[Node], member_id: int) -> Button:
 	for row: Node in rows:
