@@ -30,6 +30,7 @@ func configure(maximum: float, leader: bool, revive_seconds: float, revive_fract
     revive_health_fraction = clampf(revive_fraction, 0.01, 1.0)
     is_downed = false
     is_dead = false
+    _reclamp_damage_floor_and_health()
 
 func configure_damage_floor(minimum_health: float) -> void:
     _damage_floor = clampf(minimum_health, 0.0, max_health)
@@ -38,9 +39,10 @@ func apply_damage(final_damage: float) -> float:
     if is_dead or is_downed or not is_finite(final_damage) or final_damage <= 0.0:
         return 0.0
     var previous := current_health
-    current_health = maxf(_damage_floor, current_health - final_damage)
+    current_health = minf(previous, maxf(_damage_floor, previous - final_damage))
+    var health_removed := maxf(0.0, previous - current_health)
     health_changed.emit(current_health, max_health)
-    damage_received.emit(final_damage, previous - current_health)
+    damage_received.emit(final_damage, health_removed)
     if current_health <= 0.0:
         if is_leader or death_is_terminal:
             is_dead = true
@@ -49,14 +51,21 @@ func apply_damage(final_damage: float) -> float:
             is_downed = true
             revive_remaining = revive_delay
             downed.emit()
-    return previous - current_health
+    return health_removed
 
 func set_max_health(maximum: float, preserve_fraction: bool = true) -> void:
     var previous_maximum := maxf(max_health, 1.0)
     var previous_fraction := current_health / previous_maximum
     max_health = maxf(maximum, 1.0)
     current_health = max_health * previous_fraction if preserve_fraction else minf(current_health, max_health)
+    _reclamp_damage_floor_and_health()
     health_changed.emit(current_health, max_health)
+
+func _reclamp_damage_floor_and_health() -> void:
+    _damage_floor = clampf(_damage_floor, 0.0, max_health)
+    current_health = minf(current_health, max_health)
+    if not is_dead and not is_downed:
+        current_health = maxf(_damage_floor, current_health)
 
 func kill() -> void:
     if is_dead:
