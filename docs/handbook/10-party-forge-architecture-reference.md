@@ -1,8 +1,8 @@
 # 10. Party Forge Architecture Reference
 
-> **Runtime architecture:** Party Forge nine-class selector at `b0be05a03bbd3ea5aae04d3e38ffdc0769a211ba`<br>
+> **Runtime architecture:** Party Forge Character Ledger milestone through `7886a9c5ef03442352b398992d3bf707ffaa4aa0`<br>
 > **Godot version:** `4.7.1`<br>
-> **Last checked:** `2026-07-30`
+> **Last checked:** `2026-07-31`
 
 ## How to use this reference
 
@@ -43,6 +43,9 @@ The saved main tree begins as:
 11. `Main/LeaderCamera` — follows the selected leader.
 12. `Main/HUD` — status, catalog-driven `ClassSelectionPanel`, level-up panel, run-result panel, and boss banner.
 
+13. `Main/CharacterLedger` — full-screen paused character inspection, instanced from `scenes/ui/ledger/character_ledger.tscn`.
+14. `Main/RunPauseMenu` — separate Resume, Settings Coming Soon, and confirmed Quit Run overlay, instanced from `scenes/ui/run_pause_menu.tscn`.
+
 After leader selection, `PartyForgeMain` instances `Leader` under `Actors`, configures it from a `ClassDefinition`, attaches one `HealthBar3D`, configures the camera and spawn director, hides class selection, and starts the run. Recruits create `Companion` instances under `Actors`; enemies and effects appear only at runtime. Use the Remote tree to see them.
 
 ## System ownership table
@@ -66,6 +69,9 @@ After leader selection, `PartyForgeMain` instances `Leader` under `Actors`, conf
 | `ClassSelectionPanel` | `scripts/ui/class_selection_panel.gd` and `scenes/ui/hud.tscn` | Ordered runtime buttons from `Array[ClassDefinition]`, scroll-grid presentation, stable `Class_<id>` node names, and `class_selected(class_id)` | Catalog registration, ID validation, or starting the run |
 | `LevelUpPanel` | `scripts/ui/level_up_panel.gd` and `scenes/ui/level_up_panel.tscn` | Three upgrade cards, shared hover/focus tooltip presentation, recipient selection, confirmation/rejection state, guarded `confirmation_requested` signal | Final revalidation or mutating party state |
 | `RunResultPanel` | `scripts/ui/run_result_panel.gd` and `scenes/ui/run_result_panel.tscn` | Victory/defeat display and restart/quit requests | Deciding the run result |
+| `CharacterLedger` | `scripts/ui/ledger/character_ledger.gd` and `scenes/ui/ledger/character_ledger.tscn` | Open/close and pause lease, page registry, selected member/page context, tab and party-rail focus, responsive mode, page instancing | Stat formulas, upgrade eligibility/application, profile unlocks, multiplayer input assignment |
+| `LedgerDataProvider` | `scripts/ui/ledger/ledger_data_provider.gd` | Page-facing member, stat, stat-detail, applicable-upgrade, and upgrade-detail records over current domain state | Combat recalculation, gameplay mutation, direct UI composition |
+| `RunPauseMenu` | `scripts/ui/run_pause_menu.gd` and `scenes/ui/run_pause_menu.tscn` | Separate pause action, Resume, disabled Settings explanation, Quit Run confirmation, pause lease | Front-end destination, save behavior, ledger state |
 
 ## Content definition table
 
@@ -95,6 +101,59 @@ Definitions are Resources, not running actors. `GameCatalog` explicitly loads cl
 8. Level-ready signals pause the run in `LEVEL_UP`; selecting a valid choice resumes the prior running or boss state.
 9. At 300 seconds, `RunStateMachine` enters `BOSS` and emits `boss_requested`; `PartyForgeMain` instances the Forge Guardian.
 10. Leader terminal death locks `DEFEAT`; boss defeat during `BOSS` locks `VICTORY`. The result panel appears and hostile transient effects are cancelled.
+
+## Character Ledger and run-pause flow
+
+`CharacterLedger` is the full-screen shell at `scripts/ui/ledger/character_ledger.gd`, composed by `scenes/ui/ledger/character_ledger.tscn` and instanced as `Main/CharacterLedger` in `scenes/game/main.tscn`. It owns opening and closing, its `RunPauseLease`, page registration/instancing, the party-member rail, selected member and page state, focus routing, and the desktop/compact policy in `scripts/ui/ledger/ledger_responsive_layout.gd`. Page-specific rendering remains in independent scenes behind `scripts/ui/ledger/character_ledger_page.gd`:
+
+- Stats: `scripts/ui/ledger/stats_ledger_page.gd` and `scenes/ui/ledger/stats_ledger_page.tscn`.
+- Current Upgrades: `scripts/ui/ledger/upgrades_ledger_page.gd` and `scenes/ui/ledger/upgrades_ledger_page.tscn`.
+
+### Page descriptors and availability
+
+`scripts/ui/ledger/ledger_page_definition.gd` defines stable IDs, labels, display order, optional page scenes, feature/unlock IDs, unavailable text, and four development states: `HIDDEN`, `COMING_SOON`, `DEVELOPER_PREVIEW`, and `AVAILABLE`. `scripts/ui/ledger/ledger_page_catalog.gd` validates, deduplicates, and orders those descriptors. The current catalog is `data/ui/ledger_pages/default_ledger_pages.tres`:
+
+| Descriptor | Current state | Runtime result |
+| --- | --- | --- |
+| `data/ui/ledger_pages/stats.tres` | `AVAILABLE` | Instantiates the Stats page |
+| `data/ui/ledger_pages/current_upgrades.tres` | `AVAILABLE` | Instantiates the Current Upgrades page |
+| `data/ui/ledger_pages/equipment_inventory.tres` | `COMING_SOON` | Focusable explanation; no page scene and no activation or cycle target |
+
+`scripts/ui/ledger/ledger_feature_gate.gd` resolves descriptor state conservatively. The shell currently constructs it with Developer Preview disabled. Feature and unlock IDs are reserved integration points; there is no profile, unlock, or Developer Mode provider in this milestone.
+
+### Only page-facing domain adapter
+
+`scripts/ui/ledger/ledger_data_provider.gd` is the only domain adapter consumed by ledger pages. `PartyForgeMain` configures the shell in `scripts/game/main.gd` with `GameRun`, `PartyManager`, `GameCatalog`, and the `_ledger_health_for_member()` callback. The provider converts those sources into page-ready `member_rows()`, `stat_rows()`, `stat_detail()`, `upgrade_rows()`, and `upgrade_detail()` records. Pages do not search the SceneTree, read private party dictionaries, mutate gameplay, or implement combat formulas.
+
+The Stats flow is:
+
+1. The shell activates a member through `scripts/ui/ledger/ledger_player_context.gd`.
+2. `StatsLedgerPage` requests provider rows for that member and the Show All state.
+3. The provider reads `PartyManager.stats_for(member_id)`, `StatCatalog`/`StatDefinition`, and `ResolvedStatSnapshot`.
+4. Detail records use `ResolvedStatSnapshot.breakdown()` and canonical stat/keyword metadata; `StatDefinition.format_value()` supplies display formatting.
+5. The page renders grouped rows and named source lines. It does not calculate armor estimates or any second version of a combat value.
+
+The Current Upgrades flow is:
+
+1. `LedgerDataProvider.upgrade_rows()` combines the registered upgrade definitions with the selected member's current class, personal, party, and applicable trait state.
+2. Repeated ownership records collapse deterministically by upgrade ID/rank and exclude records that do not affect the member.
+3. `LedgerDataProvider.upgrade_detail()` delegates canonical copy and resolved effects to `scripts/progression/upgrade_presentation_service.gd`.
+4. `UpgradesLedgerPage` renders the provider record or the deliberate `No upgrades acquired yet` state; it never reads private upgrade-rank/source collections.
+
+### Input, pause ownership, and front-end return
+
+Character inspection and ordinary pausing are separate:
+
+- `character_ledger` (`Tab`, `I`, or controller View/Back) toggles the ledger during `RUNNING`, `BOSS`, or `LEVEL_UP`; `ui_cancel` closes it. Its lease records whether another system had already paused the tree, so closing a ledger opened over level-up preserves that pause.
+- `pause_menu` (`Escape` or controller Menu/Start) opens `scripts/ui/run_pause_menu.gd` only during `RUNNING` or `BOSS`. It refuses to open while the ledger is visible. Its own lease prevents Resume from clearing a pause it did not add, and Quit confirmation handles Cancel before the surrounding menu.
+
+`scripts/game/main.gd` connects `RunPauseMenu.quit_run_confirmed` to `_return_to_front_end()`. The current route unpauses and reloads `scenes/game/main.tscn`, returning to class selection/start. It is not save-and-quit, a persistent profile route, or the desktop `_quit()` path.
+
+### Current single-player boundary
+
+`scripts/ui/ledger/ledger_player_context.gd` stores a local-player ID, selected member, active page, last focus path, and opener state. The shell accepts a context collection, but this milestone creates and uses only local player `0`, with the current leader as the initial controlled member. The responsive policy supports one desktop layout and a compact boundary below `1100x650`; it does not create per-player viewports.
+
+The following remain explicitly deferred: functional Equipment and Inventory; Developer Mode and production unlock evaluation; persistent profiles, saving, and run history; local multiplayer, controller assignment, and close arbitration; multiple ledger panes; and split, merged, or dynamic gameplay cameras.
 
 ## Class and party flow
 
