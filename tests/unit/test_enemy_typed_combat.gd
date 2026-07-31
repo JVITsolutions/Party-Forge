@@ -169,5 +169,7 @@ func _has_property(object: Object, property_name: StringName) -> bool:
 func _method_accepts(object: Object, method_name: StringName, argument_count: int) -> bool:
 	for row: Dictionary in object.get_method_list():
 		if StringName(row.get("name", "")) == method_name:
-			return (row.get("args", []) as Array).size() == argument_count
+			var total_arguments := (row.get("args", []) as Array).size()
+			var default_arguments := (row.get("default_args", []) as Array).size()
+			return argument_count >= total_arguments - default_arguments and argument_count <= total_arguments
 	return false

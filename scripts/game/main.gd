@@ -83,7 +83,7 @@ func select_leader_class(class_id: StringName) -> bool:
 	camera_rig.target = leader
 	var markers := _spawn_markers()
 	var camera := camera_rig.get_node("Camera3D") as Camera3D
-	spawn_director.configure(RUN_SEED, leader, experience_system, markers, camera, get_node("Enemies"), get_node("Effects"), _pickup_multiplier(), game_run.combat_rng, catalog.damage_types)
+	spawn_director.configure(RUN_SEED, leader, experience_system, markers, camera, get_node("Enemies"), get_node("Effects"), _pickup_multiplier(), game_run.combat_rng, catalog.damage_types, active_run_rules.enemy_density_percent())
 	spawn_director.process_mode = Node.PROCESS_MODE_INHERIT
 	hud.call("configure", game_run, party_manager, experience_system)
 	hud.call("set_leader", leader)

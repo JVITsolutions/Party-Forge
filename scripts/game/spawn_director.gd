@@ -7,6 +7,7 @@ const SpawnScheduleScript := preload("res://scripts/game/spawn_schedule.gd")
 const SWARMER_SCENE := preload("res://scenes/enemies/swarmer.tscn")
 const SPITTER_SCENE := preload("res://scenes/enemies/spitter.tscn")
 const EXPERIENCE_ORB_SCENE := preload("res://scenes/progression/experience_orb.tscn")
+const MAX_SCHEDULED_SPAWNS_PER_UPDATE := 64
 
 var elapsed_seconds := 0.0
 var spawn_cooldown := 0.0
@@ -21,8 +22,9 @@ var pickup_radius_multiplier := 1.0
 var combat_rng: CombatRng
 var damage_types: DamageTypeCatalog
 var _enemy_sequence := 0
+var _enemy_density_percent := 100
 
-func configure(seed_value: int, target_leader: Node3D, target_experience: ExperienceSystem, markers: Array[Node3D], view_camera: Camera3D, enemy_container: Node, effect_container: Node, radius_multiplier: float, shared_combat_rng: CombatRng, shared_damage_types: DamageTypeCatalog) -> void:
+func configure(seed_value: int, target_leader: Node3D, target_experience: ExperienceSystem, markers: Array[Node3D], view_camera: Camera3D, enemy_container: Node, effect_container: Node, radius_multiplier: float, shared_combat_rng: CombatRng, shared_damage_types: DamageTypeCatalog, density_percent: int = 100) -> void:
     rng.seed = seed_value
     leader = target_leader
     experience_system = target_experience
@@ -33,6 +35,7 @@ func configure(seed_value: int, target_leader: Node3D, target_experience: Experi
     pickup_radius_multiplier = maxf(radius_multiplier, 0.0)
     combat_rng = shared_combat_rng
     damage_types = shared_damage_types
+    _enemy_density_percent = clampi(density_percent, 0, 1000)
     _enemy_sequence = 0
     elapsed_seconds = 0.0
     spawn_cooldown = 0.0
@@ -40,9 +43,13 @@ func configure(seed_value: int, target_leader: Node3D, target_experience: Experi
 func _process(delta: float) -> void:
     advance_time(delta)
 
-func advance_time(delta: float) -> void:
+func advance_time(delta: float) -> int:
     if delta <= 0.0 or _tree_is_paused():
-        return
+        return 0
+    if _enemy_density_percent == 0:
+        elapsed_seconds += delta
+        return 0
+    var scheduled_attempts := 0
     var remaining := delta
     while remaining > 0.0 and elapsed_seconds < 300.0:
         var band: RefCounted = active_band()
@@ -50,7 +57,11 @@ func advance_time(delta: float) -> void:
             break
         if spawn_cooldown <= 0.0:
             spawn_enemy(sample_enemy_id(elapsed_seconds))
-            spawn_cooldown = float(band.get("interval"))
+            scheduled_attempts += 1
+            spawn_cooldown = _effective_interval(float(band.get("interval")))
+            if scheduled_attempts >= MAX_SCHEDULED_SPAWNS_PER_UPDATE:
+                elapsed_seconds += remaining
+                return scheduled_attempts
         var step := minf(minf(remaining, spawn_cooldown), 300.0 - elapsed_seconds)
         elapsed_seconds += step
         remaining -= step
@@ -59,6 +70,10 @@ func advance_time(delta: float) -> void:
             break
     if remaining > 0.0:
         elapsed_seconds += remaining
+    return scheduled_attempts
+
+func _effective_interval(base_interval: float) -> float:
+    return base_interval * 100.0 / float(_enemy_density_percent)
 
 func active_band() -> RefCounted:
     return SpawnScheduleScript.sample(elapsed_seconds)

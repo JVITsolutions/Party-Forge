@@ -30,6 +30,7 @@ func run() -> Array[String]:
     _test_spitter_spacing_and_projectile_cadence(failures)
     _test_experience_orb_collection(failures)
     _test_seeded_director_and_stop(failures)
+    _test_density_adjusted_schedule(failures)
     _test_director_pause(failures)
     _test_pickup_upgrade_reaches_existing_orbs(failures)
     return failures
@@ -171,6 +172,49 @@ func _test_director_pause(failures: Array[String]) -> void:
     director.call("advance_time", 10.0)
     tree.paused = false
     TestAssertions.near(float(director.get("elapsed_seconds")), 0.0, 0.001, "director elapsed clock pauses with level-up tree pause", failures)
+    root.free()
+
+func _test_density_adjusted_schedule(failures: Array[String]) -> void:
+    var root := _new_root("SpawnDensityTest")
+    var leader := _party_actor(root, Vector3.ZERO)
+    var experience := ExperienceSystem.new()
+    root.add_child(experience)
+    var markers: Array[Node3D] = []
+    for position: Vector3 in [Vector3(-17.0, 0.0, -12.0), Vector3(17.0, 0.0, 12.0)]:
+        var marker := Marker3D.new()
+        marker.position = position
+        root.add_child(marker)
+        markers.append(marker)
+    var director_script := load("res://scripts/game/spawn_director.gd") as Script
+    var types := GameCatalog.load_defaults().damage_types
+    var supports_density := false
+    for method: Dictionary in director_script.get_script_method_list():
+        if method.get("name", "") == "configure":
+            supports_density = (method.get("args", []) as Array).size() == 11
+            break
+    TestAssertions.truthy(supports_density, "spawn director accepts a final density argument", failures)
+    if not supports_density:
+        root.free()
+        return
+
+    var zero: Node = director_script.new() as Node
+    root.add_child(zero)
+    zero.call("configure", 10, leader, experience, markers, null, root, root, 1.0, CombatRng.new(10), types, 0)
+    TestAssertions.equal(zero.call("advance_time", 10.0), 0, "zero density disables scheduled normal spawns", failures)
+    TestAssertions.near(float(zero.get("elapsed_seconds")), 10.0, 0.001, "zero density still advances schedule time", failures)
+    TestAssertions.truthy(zero.call("spawn_enemy", &"swarmer") != null, "zero density preserves direct enemy spawning", failures)
+
+    var normal: Node = director_script.new() as Node
+    root.add_child(normal)
+    normal.call("configure", 11, leader, experience, markers, null, root, root, 1.0, CombatRng.new(11), types, 100)
+    TestAssertions.equal(normal.call("advance_time", 1.26), 2, "100 percent preserves baseline schedule including initial spawn", failures)
+
+    var extreme: Node = director_script.new() as Node
+    root.add_child(extreme)
+    extreme.call("configure", 12, leader, experience, markers, null, root, root, 1.0, CombatRng.new(12), types, 1000)
+    TestAssertions.equal(extreme.call("advance_time", 30.0), director_script.get("MAX_SCHEDULED_SPAWNS_PER_UPDATE"), "1000 percent is bounded per update", failures)
+    TestAssertions.truthy(float(extreme.get("spawn_cooldown")) > 0.0, "overflow debt resets to one effective interval", failures)
+    TestAssertions.near(float(extreme.get("elapsed_seconds")), 30.0, 0.001, "overflow handling advances the remaining clock", failures)
     root.free()
 
 func _test_pickup_upgrade_reaches_existing_orbs(failures: Array[String]) -> void:

@@ -16,6 +16,7 @@ func run() -> Array[String]:
 
 	_test_developer_run_wires_party_only(failures)
 	_test_missing_policy_resets_party_floor(failures)
+	_test_guardian_adds_ignore_density(failures)
 	return failures
 
 func _test_developer_run_wires_party_only(failures: Array[String]) -> void:
@@ -24,7 +25,11 @@ func _test_developer_run_wires_party_only(failures: Array[String]) -> void:
 	var settings := main.get("saved_settings") as PartyForgeSettings
 	settings.mode = PartyForgeSettings.Mode.DEVELOPER_MODE
 	settings.god_mode = true
+	settings.enemy_density_percent = 0
 	TestAssertions.truthy(main.call(&"select_leader_class", &"fighter"), "God Mode fixture starts", failures)
+	var director := main.get("spawn_director") as SpawnDirector
+	TestAssertions.equal(director.call(&"advance_time", 10.0), 0, "active run density reaches scheduled spawning", failures)
+	TestAssertions.near(director.elapsed_seconds, 10.0, 0.001, "zero-density active run still advances schedule time", failures)
 
 	var leader := main.get("leader") as PartyActor
 	var leader_health := leader.get_node("HealthComponent") as HealthComponent
@@ -75,3 +80,8 @@ func _test_missing_policy_resets_party_floor(failures: Array[String]) -> void:
 	health.apply_damage(health.max_health * 2.0)
 	TestAssertions.truthy(health.is_dead and health.current_health == 0.0, "missing combat policy explicitly restores the zero floor", failures)
 	actor.free()
+
+func _test_guardian_adds_ignore_density(failures: Array[String]) -> void:
+	var guardian_source := FileAccess.get_file_as_string("res://scripts/enemies/forge_guardian.gd")
+	TestAssertions.truthy("spawn_enemy" in guardian_source, "Forge Guardian adds use direct enemy spawning", failures)
+	TestAssertions.truthy("enemy_density" not in guardian_source, "Forge Guardian add spawning does not consult density", failures)
