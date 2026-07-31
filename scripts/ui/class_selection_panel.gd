@@ -2,12 +2,14 @@ class_name ClassSelectionPanel
 extends PanelContainer
 
 signal class_selected(class_id: StringName)
+signal settings_requested
 
 var grid: GridContainer
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	_grid()
+	_ensure_settings_wired()
 
 func configure(definitions: Array[ClassDefinition]) -> void:
 	var target_grid := _grid()
@@ -33,6 +35,15 @@ func _grid() -> GridContainer:
 
 func _emit_selection(class_id: StringName) -> void:
 	class_selected.emit(class_id)
+
+func _emit_settings_requested() -> void:
+	settings_requested.emit()
+
+func _ensure_settings_wired() -> void:
+	var settings := get_node_or_null("Content/Actions/Settings") as Button
+	if settings == null or settings.pressed.is_connected(_emit_settings_requested):
+		return
+	settings.pressed.connect(_emit_settings_requested)
 
 func _role_label(role: ClassDefinition.Role) -> String:
 	match role:

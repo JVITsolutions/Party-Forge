@@ -10,6 +10,7 @@ func run() -> Array[String]:
 	var panel_script := panel.get_script() as Script
 	TestAssertions.equal(panel_script.resource_path if panel_script != null else "", SELECTOR_SCRIPT_PATH, "selector uses reusable script", failures)
 	if panel_script != null and panel_script.resource_path == SELECTOR_SCRIPT_PATH:
+		panel.call("_ready")
 		var catalog := GameCatalog.load_defaults()
 		panel.call("configure", catalog.classes)
 		var grid := panel.get_node("Content/Scroll/Grid") as GridContainer
@@ -25,5 +26,10 @@ func run() -> Array[String]:
 			button.pressed.emit()
 			TestAssertions.equal(selected[-1], definition.id, "%s emits exact id" % definition.id, failures)
 		TestAssertions.equal(selected.size(), 9, "each button emits once", failures)
+		var settings_requested: Array[int] = [0]
+		panel.connect("settings_requested", func() -> void: settings_requested[0] += 1)
+		var settings := panel.get_node("Content/Actions/Settings") as Button
+		settings.pressed.emit()
+		TestAssertions.equal(settings_requested[0], 1, "Settings emits one request", failures)
 	hud.free()
 	return failures

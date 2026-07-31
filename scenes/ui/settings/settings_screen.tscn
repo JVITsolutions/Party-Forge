@@ -1,0 +1,146 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/ui/settings/settings_screen.gd" id="1_settings"]
+
+[node name="SettingsScreen" type="CanvasLayer"]
+process_mode = 3
+layer = 10
+visible = false
+script = ExtResource("1_settings")
+
+[node name="Overlay" type="ColorRect" parent="."]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 0
+color = Color(0.01, 0.015, 0.025, 0.94)
+
+[node name="Frame" type="PanelContainer" parent="Overlay"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 48.0
+offset_top = 36.0
+offset_right = -48.0
+offset_bottom = -36.0
+grow_horizontal = 2
+grow_vertical = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="Layout" type="VBoxContainer" parent="Overlay/Frame"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="Title" type="Label" parent="Overlay/Frame/Layout"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 34
+text = "Settings"
+horizontal_alignment = 1
+
+[node name="Tabs" type="TabContainer" parent="Overlay/Frame/Layout"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="Game Settings" type="MarginContainer" parent="Overlay/Frame/Layout/Tabs"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="Content" type="VBoxContainer" parent="Overlay/Frame/Layout/Tabs/Game Settings"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="State" type="Label" parent="Overlay/Frame/Layout/Tabs/Game Settings/Content"]
+layout_mode = 2
+focus_mode = 2
+text = "Coming Soon"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="Controls" type="MarginContainer" parent="Overlay/Frame/Layout/Tabs"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="Content" type="VBoxContainer" parent="Overlay/Frame/Layout/Tabs/Controls"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="State" type="Label" parent="Overlay/Frame/Layout/Tabs/Controls/Content"]
+layout_mode = 2
+focus_mode = 2
+text = "Controls load from InputMap in Task 4"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="Graphics" type="MarginContainer" parent="Overlay/Frame/Layout/Tabs"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="Content" type="VBoxContainer" parent="Overlay/Frame/Layout/Tabs/Graphics"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="State" type="Label" parent="Overlay/Frame/Layout/Tabs/Graphics/Content"]
+layout_mode = 2
+focus_mode = 2
+text = "Coming Soon"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="Audio" type="MarginContainer" parent="Overlay/Frame/Layout/Tabs"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="Content" type="VBoxContainer" parent="Overlay/Frame/Layout/Tabs/Audio"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="State" type="Label" parent="Overlay/Frame/Layout/Tabs/Audio/Content"]
+layout_mode = 2
+focus_mode = 2
+text = "Coming Soon"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="Additional Settings" type="MarginContainer" parent="Overlay/Frame/Layout/Tabs"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="Content" type="VBoxContainer" parent="Overlay/Frame/Layout/Tabs/Additional Settings"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="State" type="Label" parent="Overlay/Frame/Layout/Tabs/Additional Settings/Content"]
+layout_mode = 2
+focus_mode = 2
+text = "Developer controls are prepared in Task 5"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="NextRunNotice" type="Label" parent="Overlay/Frame/Layout"]
+layout_mode = 2
+text = "Run-affecting changes apply when the next run starts."
+horizontal_alignment = 1
+autowrap_mode = 2
+
+[node name="Status" type="Label" parent="Overlay/Frame/Layout"]
+custom_minimum_size = Vector2(0, 36)
+layout_mode = 2
+focus_mode = 2
+horizontal_alignment = 1
+autowrap_mode = 2

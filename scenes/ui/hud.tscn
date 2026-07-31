@@ -108,5 +108,15 @@ layout_mode = 2
 size_flags_horizontal = 3
 columns = 3
 
+[node name="Actions" type="HBoxContainer" parent="ClassSelection/Content"]
+layout_mode = 2
+alignment = 1
+
+[node name="Settings" type="Button" parent="ClassSelection/Content/Actions"]
+custom_minimum_size = Vector2(220, 56)
+layout_mode = 2
+focus_mode = 2
+text = "Settings"
+
 [node name="LevelUpPanel" parent="." instance=ExtResource("2")]
 [node name="RunResultPanel" parent="." instance=ExtResource("3")]
