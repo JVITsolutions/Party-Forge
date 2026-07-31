@@ -106,7 +106,7 @@ func run() -> Array[String]:
 
 func _test_transient_and_hold_lifetime(failures: Array[String]) -> void:
 	var popup := TemporaryHoverPopup.new()
-	popup.force_dismiss()
+	popup.call("_ready")
 	TestAssertions.truthy(popup.present_source(&"first"), "first source is accepted", failures)
 	TestAssertions.truthy(popup.visible, "accepted source reveals popup", failures)
 	popup.release_source(&"first")
@@ -123,9 +123,9 @@ func _test_transient_and_hold_lifetime(failures: Array[String]) -> void:
 
 func _test_pin_lock_and_replacement(failures: Array[String]) -> void:
 	var popup := TemporaryHoverPopup.new()
+	popup.call("_ready")
 	var pin_events: Array[bool] = []
 	popup.pin_changed.connect(func(pinned: bool) -> void: pin_events.append(pinned))
-	popup.force_dismiss()
 	popup.present_source(&"first")
 	popup.toggle_pin()
 	popup.release_source(&"first")
@@ -140,9 +140,9 @@ func _test_pin_lock_and_replacement(failures: Array[String]) -> void:
 
 func _test_forced_reset(failures: Array[String]) -> void:
 	var popup := TemporaryHoverPopup.new()
+	popup.call("_ready")
 	var dismiss_events: Array[bool] = []
 	popup.dismissed.connect(func() -> void: dismiss_events.append(true))
-	popup.force_dismiss()
 	popup.present_source(&"first")
 	popup.set_hold_active(true)
 	popup.toggle_pin()
