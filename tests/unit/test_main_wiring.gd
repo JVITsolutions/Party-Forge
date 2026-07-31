@@ -8,12 +8,14 @@ const REQUIRED_PATHS: PackedStringArray = [
     "res://scripts/ui/health_bar_3d.gd",
     "res://scripts/ui/ledger/character_ledger.gd",
     "res://scripts/ui/run_pause_menu.gd",
+    "res://scripts/ui/developer_mode_badge.gd",
     "res://scenes/ui/hud.tscn",
     "res://scenes/ui/level_up_panel.tscn",
     "res://scenes/ui/run_result_panel.tscn",
     "res://scenes/ui/health_bar_3d.tscn",
     "res://scenes/ui/ledger/character_ledger.tscn",
     "res://scenes/ui/run_pause_menu.tscn",
+    "res://scenes/ui/developer_mode_badge.tscn",
     "res://scenes/game/main.tscn",
     "res://scenes/arena/arena.tscn",
     "res://scenes/characters/leader.tscn",
@@ -29,7 +31,7 @@ const REQUIRED_PATHS: PackedStringArray = [
 const REQUIRED_MAIN_NODES: PackedStringArray = [
     "GameRun", "PartyManager", "ExperienceSystem", "SpawnDirector",
     "PartyActorSpawner", "Arena", "Actors", "Enemies", "Effects", "HUD",
-    "CharacterLedger", "RunPauseMenu",
+    "DeveloperModeBadge", "CharacterLedger", "RunPauseMenu",
 ]
 
 func run() -> Array[String]:
@@ -74,6 +76,10 @@ func _test_settings_and_next_run_snapshot_wiring(failures: Array[String]) -> voi
     var settings_screen := player_main.get_node("SettingsScreen") as SettingsScreen
     selector.settings_requested.emit()
     TestAssertions.truthy(settings_screen.is_open(), "front-end Settings request opens Settings", failures)
+    var previous_events := InputMap.action_get_events(&"settings_previous_tab")
+    var next_events := InputMap.action_get_events(&"settings_next_tab")
+    TestAssertions.truthy(previous_events.any(func(event: InputEvent) -> bool: return event is InputEventJoypadButton and event.button_index == JOY_BUTTON_LEFT_SHOULDER), "controller left bumper maps to previous Settings tab", failures)
+    TestAssertions.truthy(next_events.any(func(event: InputEvent) -> bool: return event is InputEventJoypadButton and event.button_index == JOY_BUTTON_RIGHT_SHOULDER), "controller right bumper maps to next Settings tab", failures)
     settings_screen.close()
     TestAssertions.truthy(player_main.call("select_leader_class", &"fighter"), "Player Simulation fixture starts", failures)
     var player_rules := player_main.get("active_run_rules") as RunRulesSnapshot
@@ -112,10 +118,17 @@ func _test_main_scene_graph(failures: Array[String]) -> void:
     TestAssertions.truthy(class_selection != null and class_selection.visible, "initial class selection is visible", failures)
     var ledger := main.get_node_or_null("CharacterLedger") as CanvasLayer
     var pause_menu := main.get_node_or_null("RunPauseMenu") as CanvasLayer
+    var developer_badge := main.get_node_or_null("DeveloperModeBadge") as CanvasLayer
     TestAssertions.truthy(ledger != null and not ledger.visible, "integrated CharacterLedger starts hidden", failures)
     TestAssertions.truthy(pause_menu != null and not pause_menu.visible, "integrated RunPauseMenu starts hidden", failures)
-    if ledger != null and pause_menu != null:
-        TestAssertions.truthy(main.get_node("HUD").get_index() < ledger.get_index(), "CharacterLedger is layered after HUD", failures)
+    TestAssertions.truthy(developer_badge != null and not developer_badge.visible, "integrated Developer Mode badge starts hidden", failures)
+    if developer_badge != null and ledger != null and pause_menu != null:
+        TestAssertions.truthy(developer_badge.layer > (main.get_node("HUD") as CanvasLayer).layer, "Developer Mode badge renders above HUD", failures)
+        TestAssertions.truthy(developer_badge.layer < (main.get_node("SettingsScreen") as CanvasLayer).layer, "Developer Mode badge renders below Settings", failures)
+        TestAssertions.truthy(developer_badge.layer < ledger.layer and developer_badge.layer < pause_menu.layer, "Developer Mode badge renders below run modals", failures)
+        TestAssertions.truthy(main.get_node("HUD").get_index() < developer_badge.get_index(), "Developer Mode badge is layered after HUD", failures)
+        TestAssertions.truthy(developer_badge.get_index() < main.get_node("SettingsScreen").get_index(), "Developer Mode badge is below Settings", failures)
+        TestAssertions.truthy(developer_badge.get_index() < ledger.get_index(), "Developer Mode badge is below CharacterLedger", failures)
         TestAssertions.truthy(ledger.get_index() < pause_menu.get_index(), "RunPauseMenu is layered after CharacterLedger", failures)
     main.free()
 

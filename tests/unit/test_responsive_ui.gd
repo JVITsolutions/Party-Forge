@@ -3,6 +3,7 @@ extends RefCounted
 const VIEWPORT_SIZES := [
 	Vector2(1280.0, 720.0),
 	Vector2(1920.0, 1080.0),
+	Vector2(2560.0, 1440.0),
 	Vector2(3840.0, 2160.0),
 ]
 
@@ -11,6 +12,7 @@ func run() -> Array[String]:
 	_test_project_display_contract(failures)
 	_test_responsive_hud_layout(failures)
 	_test_integrated_overlay_containment(failures)
+	_test_settings_and_badge_containment(failures)
 	return failures
 
 func _test_project_display_contract(failures: Array[String]) -> void:
@@ -122,6 +124,61 @@ func _test_integrated_overlay_containment(failures: Array[String]) -> void:
 		_assert_contained(confirmation_panel, viewport_size, "pause confirmation panel", failures)
 	ledger.free()
 	pause_menu.free()
+
+func _test_settings_and_badge_containment(failures: Array[String]) -> void:
+	var settings := (load("res://scenes/ui/settings/settings_screen.tscn") as PackedScene).instantiate() as SettingsScreen
+	var frame := settings.get_node("Overlay/Frame") as Control
+	var tabs := settings.get_node("Overlay/Frame/Layout/Tabs") as TabContainer
+	var controls_scroll := settings.get_node("Overlay/Frame/Layout/Tabs/Controls/Layout/Scroll") as ScrollContainer
+	var additional := settings.get_node("Overlay/Frame/Layout/Tabs/Additional Settings") as Control
+	var reset := additional.get_node("Layout/ResetDeveloperOptions") as Button
+	var apply := additional.get_node("Layout/ApplyAndReturn") as Button
+	var cancel := additional.get_node("Layout/Cancel") as Button
+	var notice := settings.get_node("Overlay/Frame/Layout/NextRunNotice") as Label
+	var status := settings.get_node("Overlay/Frame/Layout/Status") as Label
+	_assert_full_rect(settings.get_node("Overlay") as Control, "Settings overlay root", failures)
+	TestAssertions.equal(controls_scroll.horizontal_scroll_mode, ScrollContainer.SCROLL_MODE_DISABLED, "Controls disables horizontal scrolling", failures)
+	TestAssertions.truthy(controls_scroll.size_flags_vertical & Control.SIZE_EXPAND != 0, "Controls scroll expands vertically", failures)
+	TestAssertions.truthy(tabs.size_flags_horizontal & Control.SIZE_EXPAND != 0 and tabs.size_flags_vertical & Control.SIZE_EXPAND != 0, "Settings tabs expand inside the frame", failures)
+	TestAssertions.truthy(additional.size_flags_horizontal & Control.SIZE_EXPAND != 0 and additional.size_flags_vertical & Control.SIZE_EXPAND != 0, "Additional Settings expands inside the tab body", failures)
+	TestAssertions.truthy(notice.autowrap_mode != TextServer.AUTOWRAP_OFF, "next-run notice wraps inside Settings", failures)
+	TestAssertions.truthy(status.autowrap_mode != TextServer.AUTOWRAP_OFF, "Settings status wraps long errors", failures)
+	for viewport_size: Vector2 in VIEWPORT_SIZES:
+		_assert_contained(frame, viewport_size, "Settings frame", failures)
+		_assert_descendant(tabs.get_tab_bar(), frame, "Settings tab row at %s" % viewport_size, failures)
+		_assert_descendant(controls_scroll, frame, "Controls scroll at %s" % viewport_size, failures)
+		_assert_descendant(reset, frame, "Reset Developer Options action at %s" % viewport_size, failures)
+		_assert_descendant(apply, frame, "Apply and Return action at %s" % viewport_size, failures)
+		_assert_descendant(cancel, frame, "Cancel action at %s" % viewport_size, failures)
+		_assert_descendant(notice, frame, "Settings tooltip/notice region at %s" % viewport_size, failures)
+		_assert_descendant(status, frame, "Settings status region at %s" % viewport_size, failures)
+	settings.free()
+
+	const badge_path := "res://scenes/ui/developer_mode_badge.tscn"
+	TestAssertions.truthy(ResourceLoader.exists(badge_path), "Developer Mode badge scene exists for responsive acceptance", failures)
+	if not ResourceLoader.exists(badge_path):
+		return
+	var badge := (load(badge_path) as PackedScene).instantiate()
+	var developer_settings := PartyForgeSettings.new()
+	developer_settings.mode = PartyForgeSettings.Mode.DEVELOPER_MODE
+	developer_settings.unlock_all_implemented_content = true
+	developer_settings.god_mode = true
+	developer_settings.party_capacity_override = 12
+	developer_settings.enemy_density_percent = 500
+	badge.call(&"configure", RunRulesSnapshot.from_settings(developer_settings))
+	var badge_anchor := badge.get_node("Anchor") as Control
+	var badge_margin := badge.find_child("Margin", true, false) as Control
+	var badge_label := badge.find_child("Label", true, false) as Label
+	_assert_full_rect(badge_anchor, "Developer Mode badge anchor", failures)
+	TestAssertions.truthy(badge.visible, "responsive badge fixture is visible", failures)
+	TestAssertions.truthy(badge_label.autowrap_mode != TextServer.AUTOWRAP_OFF, "badge summary wraps within its margin", failures)
+	for viewport_size: Vector2 in VIEWPORT_SIZES:
+		_assert_contained(badge_margin, viewport_size, "Developer Mode badge", failures)
+		_assert_descendant(badge_label, badge_margin, "Developer Mode badge label at %s" % viewport_size, failures)
+	badge.free()
+
+func _assert_descendant(control: Control, container: Control, label: String, failures: Array[String]) -> void:
+	TestAssertions.truthy(container.is_ancestor_of(control), "%s remains contained by %s" % [label, container.name], failures)
 
 func _assert_centered(control: Control, viewport_size: Vector2, label: String, failures: Array[String]) -> void:
 	var center := _rect_center(control, viewport_size)

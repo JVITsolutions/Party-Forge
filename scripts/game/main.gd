@@ -20,6 +20,7 @@ var game_run: GameRun
 var spawn_director: SpawnDirector
 var party_actor_spawner: PartyActorSpawner
 var hud: CanvasLayer
+var developer_mode_badge: DeveloperModeBadge
 var character_ledger: CharacterLedger
 var run_pause_menu: RunPauseMenu
 var leader: PartyActor
@@ -61,6 +62,7 @@ func select_leader_class(class_id: StringName) -> bool:
 		push_error(format_resource_error("res://data/classes", "unknown leader class %s" % class_id))
 		return false
 	active_run_rules = RunRulesSnapshot.from_settings(saved_settings)
+	developer_mode_badge.configure(active_run_rules)
 	party_manager.configure_capacity(active_run_rules.capacity_policy())
 	if CURRENT_STARTING_PARTY_SIZE > active_run_rules.party_capacity():
 		push_error("PARTY_FORGE_STARTING_PARTY_CAPACITY_ERROR selected=%d capacity=%d" % [CURRENT_STARTING_PARTY_SIZE, active_run_rules.party_capacity()])
@@ -201,6 +203,7 @@ func _cache_nodes() -> void:
 	spawn_director = get_node("SpawnDirector") as SpawnDirector
 	party_actor_spawner = get_node("PartyActorSpawner") as PartyActorSpawner
 	hud = get_node("HUD") as CanvasLayer
+	developer_mode_badge = get_node("DeveloperModeBadge") as DeveloperModeBadge
 	character_ledger = get_node("CharacterLedger") as CharacterLedger
 	run_pause_menu = get_node("RunPauseMenu") as RunPauseMenu
 
