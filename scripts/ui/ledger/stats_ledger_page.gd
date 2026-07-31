@@ -30,7 +30,7 @@ func refresh() -> void:
 	_render_header(member)
 	var rows := provider.stat_rows(context.selected_member_id, _show_all)
 	var current_group_id: StringName
-	var current_group: VBoxContainer
+	var current_group: VBoxContainer = null
 	for row: Dictionary in rows:
 		var group_id := row.group_id as StringName
 		if current_group == null or group_id != current_group_id:
