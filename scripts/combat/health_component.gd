@@ -2,6 +2,7 @@ class_name HealthComponent
 extends Node
 
 signal health_changed(current: float, maximum: float)
+signal damage_received(attempted_damage: float, health_removed: float)
 signal downed
 signal revived
 signal died
@@ -15,6 +16,7 @@ var revive_delay: float = 8.0
 var revive_health_fraction: float = 0.5
 var revive_remaining: float = 0.0
 var death_is_terminal: bool = false
+var _damage_floor := 0.0
 
 func _process(delta: float) -> void:
     advance_time(delta)
@@ -29,12 +31,16 @@ func configure(maximum: float, leader: bool, revive_seconds: float, revive_fract
     is_downed = false
     is_dead = false
 
+func configure_damage_floor(minimum_health: float) -> void:
+    _damage_floor = clampf(minimum_health, 0.0, max_health)
+
 func apply_damage(final_damage: float) -> float:
     if is_dead or is_downed or not is_finite(final_damage) or final_damage <= 0.0:
         return 0.0
     var previous := current_health
-    current_health = maxf(0.0, current_health - final_damage)
+    current_health = maxf(_damage_floor, current_health - final_damage)
     health_changed.emit(current_health, max_health)
+    damage_received.emit(final_damage, previous - current_health)
     if current_health <= 0.0:
         if is_leader or death_is_terminal:
             is_dead = true

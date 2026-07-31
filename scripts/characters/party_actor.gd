@@ -6,6 +6,7 @@ const HealingSelectorScript := preload("res://scripts/combat/healing_selector.gd
 const CombatModifiersScript := preload("res://scripts/combat/combat_modifiers.gd")
 
 const PARTY_TEAM_ID := 1
+const DEFAULT_COMBAT_POLICY := preload("res://scripts/game/combat_test_policy.gd")
 @export var team_id: int = PARTY_TEAM_ID
 @export var move_speed: float = 6.0
 
@@ -18,6 +19,7 @@ var support_controller: AttackController
 var base_visual_color := Color.WHITE
 var damage_flash_remaining := 0.0
 var last_visual_health := 0.0
+var combat_policy: CombatTestPolicy = DEFAULT_COMBAT_POLICY.new(false, 100, false, false, 4)
 
 func _ready() -> void:
     _refresh_team_group()
@@ -45,6 +47,15 @@ func configure(member_state: PartyMemberState) -> void:
     _set_visual_color(base_visual_color)
     _refresh_team_group()
     _ensure_combat_runtime()
+
+func configure_combat_policy(policy: CombatTestPolicy) -> void:
+    combat_policy = policy if policy != null else DEFAULT_COMBAT_POLICY.new(false, 100, false, false, 4)
+    var health := _health_component()
+    if health == null:
+        return
+    health.configure_damage_floor(combat_policy.minimum_party_health())
+    if not health.damage_received.is_connected(_on_visual_damage_received):
+        health.damage_received.connect(_on_visual_damage_received)
 
 func configure_combat(manager: PartyManager, effect_container: Node = null) -> void:
     if is_instance_valid(party_manager) and party_manager.upgrades_changed.is_connected(_refresh_runtime_stats):
@@ -208,6 +219,10 @@ func _on_visual_health_changed(current: float, _maximum: float) -> void:
         damage_flash_remaining = 0.1
         _set_visual_color(Color.WHITE)
     last_visual_health = current
+
+func _on_visual_damage_received(_attempted_damage: float, _health_removed: float) -> void:
+    damage_flash_remaining = 0.1
+    _set_visual_color(Color.WHITE)
 
 func _on_visual_downed() -> void:
     damage_flash_remaining = 0.0

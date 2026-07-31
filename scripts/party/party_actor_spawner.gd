@@ -11,14 +11,16 @@ var party_manager: PartyManager
 var actor_container: Node3D
 var leader: PartyActor
 var combat_effects_parent: Node
+var combat_policy: CombatTestPolicy
 
-func initialize(manager: PartyManager, container: Node3D, leader_actor: PartyActor, effect_container: Node = null) -> void:
+func initialize(manager: PartyManager, container: Node3D, leader_actor: PartyActor, effect_container: Node = null, policy: CombatTestPolicy = null) -> void:
     if party_manager != null and party_manager.member_added.is_connected(_on_member_added):
         party_manager.member_added.disconnect(_on_member_added)
     party_manager = manager
     actor_container = container
     leader = leader_actor
     combat_effects_parent = effect_container
+    combat_policy = policy
     if party_manager != null and not party_manager.member_added.is_connected(_on_member_added):
         party_manager.member_added.connect(_on_member_added)
 
@@ -29,6 +31,7 @@ func _on_member_added(member: PartyMemberState) -> void:
     companion.set("leader", leader)
     companion.position = _leader_position() + _spawn_offset(_companion_count())
     companion.configure(member)
+    companion.configure_combat_policy(combat_policy)
     companion.configure_combat(party_manager, combat_effects_parent)
     var health_bar := HEALTH_BAR_SCENE.instantiate() as Node3D
     companion.add_child(health_bar)

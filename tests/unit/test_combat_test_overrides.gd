@@ -1,0 +1,77 @@
+extends RefCounted
+
+const LEADER_SCENE := preload("res://scenes/characters/leader.tscn")
+const COMPANION_SCENE := preload("res://scenes/characters/companion.tscn")
+const MAIN_SCENE := preload("res://scenes/game/main.tscn")
+const SWARMER_SCENE := preload("res://scenes/enemies/swarmer.tscn")
+
+func run() -> Array[String]:
+	var failures: Array[String] = []
+	var probe := COMPANION_SCENE.instantiate() as PartyActor
+	var has_policy_api := probe.has_method(&"configure_combat_policy")
+	TestAssertions.truthy(has_policy_api, "party actors expose combat policy injection", failures)
+	probe.free()
+	if not has_policy_api:
+		return failures
+
+	_test_developer_run_wires_party_only(failures)
+	_test_missing_policy_resets_party_floor(failures)
+	return failures
+
+func _test_developer_run_wires_party_only(failures: Array[String]) -> void:
+	var main := MAIN_SCENE.instantiate()
+	main.call(&"_ready")
+	var settings := main.get("saved_settings") as PartyForgeSettings
+	settings.mode = PartyForgeSettings.Mode.DEVELOPER_MODE
+	settings.god_mode = true
+	TestAssertions.truthy(main.call(&"select_leader_class", &"fighter"), "God Mode fixture starts", failures)
+
+	var leader := main.get("leader") as PartyActor
+	var leader_health := leader.get_node("HealthComponent") as HealthComponent
+	leader_health.apply_damage(leader_health.max_health * 2.0)
+	TestAssertions.equal(leader_health.current_health, 1.0, "God Mode protects the configured leader", failures)
+	TestAssertions.truthy(not leader_health.is_dead and not leader_health.is_downed, "God Mode leader remains combat-available", failures)
+	leader.damage_flash_remaining = 0.0
+	leader_health.apply_damage(10.0)
+	TestAssertions.truthy(leader.damage_flash_remaining > 0.0, "damage at the floor still flashes the party actor", failures)
+
+	var party := main.get_node("PartyManager") as PartyManager
+	var catalog := main.get("catalog") as GameCatalog
+	TestAssertions.truthy(party.recruit(catalog.class_by_id(&"ranger")), "God Mode fixture recruits a normal party member", failures)
+	var companion: PartyActor
+	for child: Node in main.get_node("Actors").get_children():
+		var actor := child as PartyActor
+		if actor != null and actor.member_state != null and not actor.member_state.is_leader:
+			companion = actor
+			break
+	TestAssertions.truthy(companion != null, "recruit spawner creates the normal party member", failures)
+	if companion != null:
+		var companion_health := companion.get_node("HealthComponent") as HealthComponent
+		companion_health.apply_damage(companion_health.max_health * 2.0)
+		TestAssertions.equal(companion_health.current_health, 1.0, "God Mode protects a recruited party member", failures)
+		TestAssertions.truthy(not companion_health.is_dead and not companion_health.is_downed, "God Mode recruit remains combat-available", failures)
+
+	var enemy := SWARMER_SCENE.instantiate() as EnemyActor
+	enemy.configure(load("res://data/enemies/swarmer.tres") as EnemyDefinition)
+	var enemy_health := enemy.get_node("HealthComponent") as HealthComponent
+	enemy_health.apply_damage(enemy_health.max_health * 2.0)
+	TestAssertions.equal(enemy_health.current_health, 0.0, "God Mode does not add a floor to enemies", failures)
+	TestAssertions.truthy(enemy_health.is_dead, "enemy lethal damage remains authoritative", failures)
+	enemy.free()
+
+	(Engine.get_main_loop() as SceneTree).paused = false
+	main.free()
+
+func _test_missing_policy_resets_party_floor(failures: Array[String]) -> void:
+	var actor := LEADER_SCENE.instantiate() as PartyActor
+	var catalog := GameCatalog.load_defaults()
+	actor.configure(PartyMemberState.new(1, catalog.class_by_id(&"fighter"), true, "Reset Test"))
+	actor.call(&"configure_combat_policy", CombatTestPolicy.new(true, 100, true, false, 4))
+	var health := actor.get_node("HealthComponent") as HealthComponent
+	health.apply_damage(health.max_health * 2.0)
+	TestAssertions.equal(health.current_health, 1.0, "explicit God Mode policy adds the party floor", failures)
+	health.heal(health.max_health)
+	actor.call(&"configure_combat_policy", null)
+	health.apply_damage(health.max_health * 2.0)
+	TestAssertions.truthy(health.is_dead and health.current_health == 0.0, "missing combat policy explicitly restores the zero floor", failures)
+	actor.free()

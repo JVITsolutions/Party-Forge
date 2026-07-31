@@ -32,4 +32,51 @@ func run() -> Array[String]:
     leader.apply_damage(10.0)
     TestAssertions.near(leader.current_health, 0.0, 0.001, "terminal damage is idempotent", failures)
     leader.free()
+
+    _test_damage_floor(failures)
+    _test_damage_floor_clamping(failures)
     return failures
+
+func _test_damage_floor(failures: Array[String]) -> void:
+    var health: HealthComponent = HealthScript.new()
+    var has_floor_api := health.has_method(&"configure_damage_floor")
+    var has_feedback_signal := health.has_signal(&"damage_received")
+    TestAssertions.truthy(has_floor_api, "health exposes an injected damage floor", failures)
+    TestAssertions.truthy(has_feedback_signal, "health exposes valid damage-attempt feedback", failures)
+    if not has_floor_api or not has_feedback_signal:
+        health.free()
+        return
+
+    health.configure(100.0, true, 8.0, 0.5)
+    health.call(&"configure_damage_floor", 1.0)
+    var changes := [0]
+    var received: Array[Vector2] = []
+    health.health_changed.connect(func(_current: float, _maximum: float) -> void: changes[0] += 1)
+    health.connect(&"damage_received", func(attempted: float, removed: float) -> void: received.append(Vector2(attempted, removed)))
+
+    TestAssertions.equal(health.apply_damage(500.0), 99.0, "God Mode reports actual health removed", failures)
+    TestAssertions.equal(health.current_health, 1.0, "God Mode stops damage at one", failures)
+    TestAssertions.truthy(not health.is_dead and not health.is_downed, "God Mode avoids death and downing", failures)
+    TestAssertions.equal(changes[0], 1, "God Mode still emits health-change feedback", failures)
+    TestAssertions.equal(received, [Vector2(500.0, 99.0)], "God Mode reports attempted and removed damage", failures)
+
+    health.apply_damage(20.0)
+    TestAssertions.equal(received, [Vector2(500.0, 99.0), Vector2(20.0, 0.0)], "repeated damage at one health still emits feedback", failures)
+    TestAssertions.equal(health.heal(20.0), 20.0, "healing remains functional", failures)
+    health.kill()
+    TestAssertions.truthy(health.is_dead and health.current_health == 0.0, "explicit kill remains authoritative", failures)
+    health.free()
+
+func _test_damage_floor_clamping(failures: Array[String]) -> void:
+    var health: HealthComponent = HealthScript.new()
+    if not health.has_method(&"configure_damage_floor"):
+        health.free()
+        return
+    health.configure(10.0, true, 8.0, 0.5)
+    health.call(&"configure_damage_floor", 50.0)
+    TestAssertions.equal(health.apply_damage(5.0), 0.0, "damage floor clamps to maximum health", failures)
+    TestAssertions.equal(health.current_health, 10.0, "oversized damage floor cannot exceed maximum health", failures)
+    health.call(&"configure_damage_floor", -5.0)
+    TestAssertions.equal(health.apply_damage(50.0), 10.0, "negative damage floor resets to zero", failures)
+    TestAssertions.truthy(health.is_dead, "zero damage floor preserves leader death", failures)
+    health.free()

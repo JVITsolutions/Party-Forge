@@ -74,9 +74,11 @@ func select_leader_class(class_id: StringName) -> bool:
 	var spawn := get_node("Arena/PlayerSpawn") as Marker3D
 	leader.position = spawn.position
 	leader.configure(party_manager.members[0])
+	var combat_policy := active_run_rules.combat_policy()
+	leader.configure_combat_policy(combat_policy)
 	leader.configure_combat(party_manager, get_node("Effects"))
 	_attach_health_bar(leader)
-	party_actor_spawner.initialize(party_manager, get_node("Actors") as Node3D, leader, get_node("Effects"))
+	party_actor_spawner.initialize(party_manager, get_node("Actors") as Node3D, leader, get_node("Effects"), combat_policy)
 	var camera_rig := get_node("LeaderCamera") as LeaderCamera
 	camera_rig.target = leader
 	var markers := _spawn_markers()
