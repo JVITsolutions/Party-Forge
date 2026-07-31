@@ -5,6 +5,7 @@ func run() -> Array[String]:
 	_test_card_renders_dictionary_and_emits(failures)
 	_test_hover_focus_share_detail_state(failures)
 	_test_tooltip_renders_dictionary(failures)
+	_test_interactive_pin_shell_and_inputs(failures)
 	_test_tooltip_surface_is_opaque_and_readable(failures)
 	_test_clamped_placement(failures)
 	_test_long_content_scene_stays_inside_viewports(failures)
@@ -79,14 +80,40 @@ func _test_tooltip_renders_dictionary(failures: Array[String]) -> void:
 		"inheritance_text": "",
 		"keyword_lines": ["More: Multiplicative power."],
 	}
-	tooltip.show_content(content, anchor)
-	TestAssertions.equal((tooltip.get_node("Content/Title") as Label).text, "Deadeye", "tooltip renders dictionary title", failures)
+	TestAssertions.truthy(tooltip.show_content(content, anchor, &"fixture"), "first tooltip source is accepted", failures)
+	TestAssertions.equal((tooltip.get_node("Content/Header/Title") as Label).text, "Deadeye", "tooltip renders dictionary title", failures)
 	TestAssertions.equal((tooltip.get_node("Content/BodyScroll/Body/Effects") as Label).text, "30% more Physical Damage.\n15% less Attack Speed.", "tooltip renders dictionary effect lines", failures)
 	TestAssertions.equal((tooltip.get_node("Content/BodyScroll/Body/Keywords") as Label).text, "More: Multiplicative power.", "tooltip renders dictionary keyword lines", failures)
 	TestAssertions.truthy(tooltip.visible, "show content reveals tooltip", failures)
 	tooltip.hide_content()
 	TestAssertions.truthy(not tooltip.visible, "hide content conceals tooltip", failures)
 	anchor.free()
+	tooltip.free()
+
+func _test_interactive_pin_shell_and_inputs(failures: Array[String]) -> void:
+	var tooltip := (load("res://scenes/ui/upgrade_tooltip_panel.tscn") as PackedScene).instantiate() as UpgradeTooltipPanel
+	tooltip.call("_ready")
+	TestAssertions.truthy(tooltip is TemporaryHoverPopup, "upgrade tooltip uses reusable temporary popup", failures)
+	TestAssertions.equal(tooltip.mouse_filter, Control.MOUSE_FILTER_STOP, "tooltip accepts pointer input", failures)
+	var pin := tooltip.get_node_or_null("Content/Header/Pin") as Button
+	TestAssertions.truthy(pin != null, "tooltip header owns top-right pin button", failures)
+	if pin != null:
+		TestAssertions.truthy(pin.toggle_mode, "pin exposes pressed and unpressed structure", failures)
+		TestAssertions.truthy(pin.icon != null, "pin uses project vector icon", failures)
+		TestAssertions.equal(pin.tooltip_text, "Pin details", "unpinned action is explained", failures)
+	TestAssertions.equal(tooltip.scroll_target_path, ^"Content/BodyScroll", "tooltip exports controller scroll target", failures)
+	TestAssertions.equal(tooltip.pin_button_path, ^"Content/Header/Pin", "tooltip exports pin target", failures)
+
+	for action: StringName in [&"tooltip_hold", &"tooltip_pin", &"tooltip_scroll_up", &"tooltip_scroll_down"]:
+		TestAssertions.truthy(InputMap.has_action(action), "InputMap exposes %s" % action, failures)
+	var hold_events := InputMap.action_get_events(&"tooltip_hold")
+	TestAssertions.truthy(hold_events.any(func(event: InputEvent) -> bool: return event is InputEventKey and event.keycode == KEY_ALT), "either Alt maps to tooltip hold", failures)
+	var pin_events := InputMap.action_get_events(&"tooltip_pin")
+	TestAssertions.truthy(pin_events.any(func(event: InputEvent) -> bool: return event is InputEventJoypadButton and event.button_index == JOY_BUTTON_Y), "Y/Triangle maps to tooltip pin", failures)
+	var up_events := InputMap.action_get_events(&"tooltip_scroll_up")
+	var down_events := InputMap.action_get_events(&"tooltip_scroll_down")
+	TestAssertions.truthy(up_events.any(func(event: InputEvent) -> bool: return event is InputEventJoypadMotion and event.axis == JOY_AXIS_RIGHT_Y and event.axis_value < 0.0), "right stick up maps to popup scroll up", failures)
+	TestAssertions.truthy(down_events.any(func(event: InputEvent) -> bool: return event is InputEventJoypadMotion and event.axis == JOY_AXIS_RIGHT_Y and event.axis_value > 0.0), "right stick down maps to popup scroll down", failures)
 	tooltip.free()
 
 func _test_tooltip_surface_is_opaque_and_readable(failures: Array[String]) -> void:
@@ -101,7 +128,7 @@ func _test_tooltip_surface_is_opaque_and_readable(failures: Array[String]) -> vo
 	TestAssertions.truthy(surface != null, "tooltip resolves a flat panel surface", failures)
 	if surface != null:
 		TestAssertions.truthy(surface.bg_color.a >= 0.95, "tooltip surface is effectively opaque", failures)
-		var title := tooltip.get_node("Content/Title") as Label
+		var title := tooltip.get_node("Content/Header/Title") as Label
 		var contrast_ratio := _contrast_ratio(surface.bg_color, title.get_theme_color("font_color"))
 		TestAssertions.truthy(contrast_ratio >= 4.5, "tooltip text has accessible surface contrast", failures)
 		TestAssertions.truthy(
@@ -121,14 +148,14 @@ func _test_tooltip_surface_is_opaque_and_readable(failures: Array[String]) -> vo
 			"tooltip surface pads text away from its border",
 			failures,
 		)
-	TestAssertions.equal(tooltip.mouse_filter, Control.MOUSE_FILTER_IGNORE, "tooltip surface remains mouse-ignore", failures)
+	TestAssertions.equal(tooltip.mouse_filter, Control.MOUSE_FILTER_STOP, "tooltip surface accepts pointer input", failures)
 	tooltip.free()
 
 	var level_up_scene := load("res://scenes/ui/level_up_panel.tscn") as PackedScene
 	var level_up_panel := level_up_scene.instantiate() as LevelUpPanel
 	var composed_tooltip := level_up_panel.get_node("TooltipPanel") as UpgradeTooltipPanel
 	TestAssertions.equal(composed_tooltip.z_index, 100, "composed tooltip remains above level-up content", failures)
-	TestAssertions.equal(composed_tooltip.mouse_filter, Control.MOUSE_FILTER_IGNORE, "composed tooltip remains mouse-ignore", failures)
+	TestAssertions.equal(composed_tooltip.mouse_filter, Control.MOUSE_FILTER_STOP, "composed tooltip accepts pointer input", failures)
 	level_up_panel.free()
 
 func _contrast_ratio(first: Color, second: Color) -> float:
@@ -202,7 +229,7 @@ func _test_long_content_scene_stays_inside_viewports(failures: Array[String]) ->
 		var tooltip := (load("res://scenes/ui/upgrade_tooltip_panel.tscn") as PackedScene).instantiate() as UpgradeTooltipPanel
 		host.add_child(tooltip)
 		tooltip.call("_ready")
-		tooltip.show_content(content, anchor)
+		TestAssertions.truthy(tooltip.show_content(content, anchor, &"fixture"), "long tooltip source is accepted at %s" % viewport_size, failures)
 		var scroll := tooltip.get_node_or_null("Content/BodyScroll") as ScrollContainer
 		TestAssertions.truthy(scroll != null, "long tooltip exposes vertical scroll body at %s" % viewport_size, failures)
 		if scroll != null:

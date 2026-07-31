@@ -1,26 +1,36 @@
 class_name UpgradeTooltipPanel
-extends PanelContainer
+extends TemporaryHoverPopup
 
 const EDGE_MARGIN := 16.0
 const MAXIMUM_POPUP_HEIGHT := 680.0
 const CONTENT_PADDING_ALLOWANCE := 32.0
 
 
-func _ready() -> void:
-	visible = false
+func show_content(content: Dictionary, anchor: Control, source_id: StringName = &"") -> bool:
+	if source_id.is_empty():
+		source_id = StringName(str(anchor.get_instance_id()))
+	var content_changed := not is_current_source(source_id)
+	if not present_source(source_id):
+		return false
+	if content_changed:
+		_set_text("Content/Header/Title", content.get("title", ""))
+		_set_text("Content/Rank", content.get("rank_text", ""))
+		_set_text("Content/BodyScroll/Body/Description", content.get("description", ""))
+		_set_lines("Content/BodyScroll/Body/Effects", content.get("effect_lines", []))
+		_set_text("Content/BodyScroll/Body/Eligibility", content.get("eligibility_text", ""))
+		_set_text("Content/BodyScroll/Body/Inheritance", content.get("inheritance_text", ""))
+		_set_lines("Content/BodyScroll/Body/Keywords", content.get("keyword_lines", []))
+		if is_inside_tree():
+			reset_size()
+	_size_and_position(anchor)
+	return true
 
 
-func show_content(content: Dictionary, anchor: Control) -> void:
-	_set_text("Content/Title", content.get("title", ""))
-	_set_text("Content/Rank", content.get("rank_text", ""))
-	_set_text("Content/BodyScroll/Body/Description", content.get("description", ""))
-	_set_lines("Content/BodyScroll/Body/Effects", content.get("effect_lines", []))
-	_set_text("Content/BodyScroll/Body/Eligibility", content.get("eligibility_text", ""))
-	_set_text("Content/BodyScroll/Body/Inheritance", content.get("inheritance_text", ""))
-	_set_lines("Content/BodyScroll/Body/Keywords", content.get("keyword_lines", []))
-	visible = true
-	if is_inside_tree():
-		reset_size()
+func hide_content() -> void:
+	force_dismiss()
+
+
+func _size_and_position(anchor: Control) -> void:
 	var viewport_size := _viewport_size()
 	if viewport_size.x <= 0.0 or viewport_size.y <= 0.0:
 		size = custom_minimum_size
@@ -29,7 +39,7 @@ func show_content(content: Dictionary, anchor: Control) -> void:
 	var maximum_height := minf(MAXIMUM_POPUP_HEIGHT, available_height)
 	var minimum_height := minf(custom_minimum_size.y, maximum_height)
 	var body := get_node("Content/BodyScroll/Body") as Control
-	var title := get_node("Content/Title") as Control
+	var title := get_node("Content/Header/Title") as Control
 	var rank := get_node("Content/Rank") as Control
 	var preferred_height := (
 		body.get_combined_minimum_size().y
@@ -47,12 +57,6 @@ func show_content(content: Dictionary, anchor: Control) -> void:
 		popup_size,
 		viewport_size
 	)
-
-
-func hide_content() -> void:
-	visible = false
-
-
 static func clamped_position(
 	anchor_rect: Rect2,
 	popup_size: Vector2,

@@ -1,6 +1,8 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene load_steps=5 format=3]
 
 [ext_resource type="Script" path="res://scripts/ui/upgrade_tooltip_panel.gd" id="1_tooltip"]
+[ext_resource type="Texture2D" path="res://assets/ui/pin_outline.svg" id="2_pin_outline"]
+[ext_resource type="Texture2D" path="res://assets/ui/pin_filled.svg" id="3_pin_filled"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_tooltip_surface"]
 content_margin_left = 18.0
@@ -20,17 +22,31 @@ corner_radius_bottom_left = 8
 
 [node name="UpgradeTooltipPanel" type="PanelContainer"]
 custom_minimum_size = Vector2(420, 360)
-mouse_filter = 2
+mouse_filter = 0
 theme_override_styles/panel = SubResource("StyleBoxFlat_tooltip_surface")
 script = ExtResource("1_tooltip")
+scroll_target_path = NodePath("Content/BodyScroll")
+pin_button_path = NodePath("Content/Header/Pin")
+unpinned_icon = ExtResource("2_pin_outline")
+pinned_icon = ExtResource("3_pin_filled")
 
 [node name="Content" type="VBoxContainer" parent="."]
 layout_mode = 2
 theme_override_constants/separation = 8
 
-[node name="Title" type="Label" parent="Content"]
+[node name="Header" type="HBoxContainer" parent="Content"]
 layout_mode = 2
+
+[node name="Title" type="Label" parent="Content/Header"]
+layout_mode = 2
+size_flags_horizontal = 3
 mouse_filter = 2
+
+[node name="Pin" type="Button" parent="Content/Header"]
+custom_minimum_size = Vector2(44, 44)
+layout_mode = 2
+toggle_mode = true
+icon = ExtResource("2_pin_outline")
 
 [node name="Rank" type="Label" parent="Content"]
 layout_mode = 2
@@ -39,6 +55,7 @@ mouse_filter = 2
 [node name="BodyScroll" type="ScrollContainer" parent="Content"]
 layout_mode = 2
 size_flags_vertical = 3
+mouse_filter = 0
 horizontal_scroll_mode = 0
 vertical_scroll_mode = 1
 
