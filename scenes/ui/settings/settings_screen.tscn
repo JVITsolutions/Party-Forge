@@ -1,7 +1,8 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene load_steps=4 format=3]
 
 [ext_resource type="Script" path="res://scripts/ui/settings/settings_screen.gd" id="1_settings"]
 [ext_resource type="PackedScene" path="res://scenes/ui/settings/controls_settings_page.tscn" id="2_controls"]
+[ext_resource type="PackedScene" path="res://scenes/ui/settings/additional_settings_page.tscn" id="3_additional"]
 
 [node name="SettingsScreen" type="CanvasLayer"]
 process_mode = 3
@@ -104,22 +105,10 @@ text = "Coming Soon"
 horizontal_alignment = 1
 vertical_alignment = 1
 
-[node name="Additional Settings" type="MarginContainer" parent="Overlay/Frame/Layout/Tabs"]
+[node name="Additional Settings" parent="Overlay/Frame/Layout/Tabs" instance=ExtResource("3_additional")]
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 3
-
-[node name="Content" type="VBoxContainer" parent="Overlay/Frame/Layout/Tabs/Additional Settings"]
-layout_mode = 2
-size_flags_horizontal = 3
-size_flags_vertical = 3
-
-[node name="State" type="Label" parent="Overlay/Frame/Layout/Tabs/Additional Settings/Content"]
-layout_mode = 2
-focus_mode = 2
-text = "Developer controls are prepared in Task 5"
-horizontal_alignment = 1
-vertical_alignment = 1
 
 [node name="NextRunNotice" type="Label" parent="Overlay/Frame/Layout"]
 layout_mode = 2

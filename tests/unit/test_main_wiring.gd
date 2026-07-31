@@ -42,6 +42,7 @@ func run() -> Array[String]:
     if not all_exist:
         return failures
     _test_main_scene_graph(failures)
+    _test_settings_and_next_run_snapshot_wiring(failures)
     _test_integrated_overlay_input_and_front_end_seam(failures)
     _test_hud_contract(failures)
     _test_exact_choice_panel(failures)
@@ -58,6 +59,49 @@ func run() -> Array[String]:
     _test_visual_language(failures)
     _test_catalog_error_format(failures)
     return failures
+
+func _test_settings_and_next_run_snapshot_wiring(failures: Array[String]) -> void:
+    var original_files := _backup_default_settings_artifacts()
+    _cleanup_default_settings_artifacts()
+    var store := PartyForgeSettingsStore.new()
+    var player_settings := PartyForgeSettings.new()
+    player_settings.mode = PartyForgeSettings.Mode.PLAYER_SIMULATION
+    player_settings.god_mode = true
+    TestAssertions.equal(store.save_settings(player_settings), "", "Player Simulation fixture saves", failures)
+    var player_main := (load("res://scenes/game/main.tscn") as PackedScene).instantiate()
+    player_main.call("_ready")
+    var selector := player_main.get_node("HUD/ClassSelection") as ClassSelectionPanel
+    var settings_screen := player_main.get_node("SettingsScreen") as SettingsScreen
+    selector.settings_requested.emit()
+    TestAssertions.truthy(settings_screen.is_open(), "front-end Settings request opens Settings", failures)
+    settings_screen.close()
+    TestAssertions.truthy(player_main.call("select_leader_class", &"fighter"), "Player Simulation fixture starts", failures)
+    var player_rules := player_main.get("active_run_rules") as RunRulesSnapshot
+    TestAssertions.truthy(player_rules != null, "main owns an active run snapshot", failures)
+    if player_rules != null:
+        TestAssertions.truthy(not player_rules.god_mode(), "Player Simulation cannot activate retained God Mode", failures)
+        TestAssertions.equal(player_rules.party_capacity(), 4, "Player Simulation retains production capacity", failures)
+    _cleanup_main(player_main)
+
+    var developer_settings := PartyForgeSettings.new()
+    developer_settings.mode = PartyForgeSettings.Mode.DEVELOPER_MODE
+    developer_settings.party_capacity_override = 9
+    TestAssertions.equal(store.save_settings(developer_settings), "", "Developer Mode fixture saves", failures)
+    var developer_main := (load("res://scenes/game/main.tscn") as PackedScene).instantiate()
+    developer_main.call("_ready")
+    TestAssertions.truthy(developer_main.call("select_leader_class", &"fighter"), "Developer Mode fixture starts", failures)
+    var active_rules := developer_main.get("active_run_rules") as RunRulesSnapshot
+    var saved_settings := developer_main.get("saved_settings") as PartyForgeSettings
+    TestAssertions.truthy(active_rules != null and saved_settings != null, "main owns saved settings and active rules separately", failures)
+    if active_rules != null and saved_settings != null:
+        TestAssertions.equal(active_rules.party_capacity(), 9, "run snapshot captures Developer Mode capacity", failures)
+        TestAssertions.equal((developer_main.get_node("PartyManager") as PartyManager).capacity(), 9, "run start configures PartyManager capacity", failures)
+        saved_settings.party_capacity_override = 2
+        TestAssertions.equal(active_rules.party_capacity(), 9, "active run snapshot ignores later saved-settings mutation", failures)
+        TestAssertions.equal((developer_main.get_node("PartyManager") as PartyManager).capacity(), 9, "configured manager ignores later saved-settings mutation", failures)
+    _cleanup_main(developer_main)
+    _cleanup_default_settings_artifacts()
+    _restore_default_settings_artifacts(original_files)
 
 func _test_main_scene_graph(failures: Array[String]) -> void:
     var main := (load("res://scenes/game/main.tscn") as PackedScene).instantiate()
@@ -540,6 +584,23 @@ func _started_main() -> Node:
 func _cleanup_main(main: Node) -> void:
     (Engine.get_main_loop() as SceneTree).paused = false
     main.free()
+
+func _cleanup_default_settings_artifacts() -> void:
+    for path: String in [PartyForgeSettingsStore.DEFAULT_PATH, "%s.tmp" % PartyForgeSettingsStore.DEFAULT_PATH, "%s.bak" % PartyForgeSettingsStore.DEFAULT_PATH]:
+        DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+
+func _backup_default_settings_artifacts() -> Dictionary:
+    var result: Dictionary = {}
+    for path: String in [PartyForgeSettingsStore.DEFAULT_PATH, "%s.tmp" % PartyForgeSettingsStore.DEFAULT_PATH, "%s.bak" % PartyForgeSettingsStore.DEFAULT_PATH]:
+        if FileAccess.file_exists(path):
+            result[path] = FileAccess.get_file_as_bytes(path)
+    return result
+
+func _restore_default_settings_artifacts(files: Dictionary) -> void:
+    for path: String in files:
+        var file := FileAccess.open(path, FileAccess.WRITE)
+        if file != null:
+            file.store_buffer(files[path] as PackedByteArray)
 
 func _escape_key_event() -> InputEventKey:
     var event := InputEventKey.new()

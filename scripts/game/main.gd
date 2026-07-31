@@ -8,6 +8,7 @@ const HUDScript := preload("res://scripts/ui/hud.gd")
 const LevelUpPanelScript := preload("res://scripts/ui/level_up_panel.gd")
 const RunResultPanelScript := preload("res://scripts/ui/run_result_panel.gd")
 const RUN_SEED := 1337
+const CURRENT_STARTING_PARTY_SIZE := 1
 
 var party_stats: Dictionary = {}
 var trait_upgrade_ranks: Dictionary = {}
@@ -26,12 +27,18 @@ var run_started := false
 var initialized := false
 var catalog_valid := false
 var level_refresh_scheduled := false
+var saved_settings: PartyForgeSettings
+var settings_store: PartyForgeSettingsStore
+var active_run_rules: RunRulesSnapshot
 
 func _ready() -> void:
 	if initialized:
 		return
 	initialized = true
 	_cache_nodes()
+	settings_store = PartyForgeSettingsStore.new()
+	saved_settings = settings_store.load_settings()
+	(get_node("SettingsScreen") as SettingsScreen).configure(settings_store, saved_settings)
 	catalog = GameCatalog.load_defaults()
 	catalog_valid = _validate_catalog(catalog)
 	if not catalog_valid:
@@ -51,6 +58,11 @@ func select_leader_class(class_id: StringName) -> bool:
 	var definition := catalog.class_by_id(class_id)
 	if definition == null:
 		push_error(format_resource_error("res://data/classes", "unknown leader class %s" % class_id))
+		return false
+	active_run_rules = RunRulesSnapshot.from_settings(saved_settings)
+	party_manager.configure_capacity(active_run_rules.capacity_policy())
+	if CURRENT_STARTING_PARTY_SIZE > active_run_rules.party_capacity():
+		push_error("PARTY_FORGE_STARTING_PARTY_CAPACITY_ERROR selected=%d capacity=%d" % [CURRENT_STARTING_PARTY_SIZE, active_run_rules.party_capacity()])
 		return false
 	game_run.configure_seed(RUN_SEED)
 	party_manager.configure_identity(game_run.run_seed, catalog.generic_name_pool)
@@ -200,6 +212,11 @@ func _wire_static_ui() -> void:
 	selector.configure(catalog.classes)
 	if not selector.class_selected.is_connected(select_leader_class):
 		selector.class_selected.connect(select_leader_class)
+	if not selector.settings_requested.is_connected(_open_settings):
+		selector.settings_requested.connect(_open_settings)
+	var settings_screen := get_node("SettingsScreen") as SettingsScreen
+	if not settings_screen.settings_applied.is_connected(_on_settings_applied):
+		settings_screen.settings_applied.connect(_on_settings_applied)
 	var level_panel := get_node("HUD/LevelUpPanel") as LevelUpPanel
 	level_panel.configure(catalog, UpgradeApplicationService.new(), Callable(self, "_health_for_member"))
 	var legacy_apply := Callable(self, "_apply_choice")
@@ -218,6 +235,13 @@ func _wire_static_ui() -> void:
 	if not game_run.boss_requested.is_connected(_spawn_boss): game_run.boss_requested.connect(_spawn_boss)
 	if not game_run.victory.is_connected(_show_victory): game_run.victory.connect(_show_victory)
 	if not game_run.defeat.is_connected(_show_defeat): game_run.defeat.connect(_show_defeat)
+
+func _open_settings() -> void:
+	var return_focus := get_node("HUD/ClassSelection/Content/Actions/Settings") as Control
+	(get_node("SettingsScreen") as SettingsScreen).open(return_focus)
+
+func _on_settings_applied(settings: PartyForgeSettings) -> void:
+	saved_settings = settings.copy()
 
 func _on_level_ready(_level: int) -> void:
 	if not run_started:

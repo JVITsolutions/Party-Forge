@@ -1,0 +1,88 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/ui/settings/additional_settings_page.gd" id="1_additional"]
+
+[node name="Additional Settings" type="MarginContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+script = ExtResource("1_additional")
+
+[node name="Layout" type="VBoxContainer" parent="."]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="Heading" type="Label" parent="Layout"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 24
+text = "Additional Settings"
+
+[node name="ModeLabel" type="Label" parent="Layout"]
+layout_mode = 2
+text = "Mode"
+
+[node name="Mode" type="OptionButton" parent="Layout"]
+layout_mode = 2
+
+[node name="UnlockAll" type="CheckButton" parent="Layout"]
+layout_mode = 2
+text = "Unlock all implemented content"
+
+[node name="GodMode" type="CheckButton" parent="Layout"]
+layout_mode = 2
+text = "God Mode"
+
+[node name="PartyCapacity" type="HBoxContainer" parent="Layout"]
+layout_mode = 2
+
+[node name="Title" type="Label" parent="Layout/PartyCapacity"]
+custom_minimum_size = Vector2(180, 0)
+layout_mode = 2
+text = "Party capacity"
+
+[node name="Value" type="HSlider" parent="Layout/PartyCapacity"]
+layout_mode = 2
+size_flags_horizontal = 3
+min_value = 1.0
+max_value = 24.0
+step = 1.0
+value = 4.0
+
+[node name="Label" type="Label" parent="Layout/PartyCapacity"]
+custom_minimum_size = Vector2(48, 0)
+layout_mode = 2
+text = "4"
+horizontal_alignment = 2
+
+[node name="EnemyDensity" type="HBoxContainer" parent="Layout"]
+layout_mode = 2
+
+[node name="Title" type="Label" parent="Layout/EnemyDensity"]
+custom_minimum_size = Vector2(180, 0)
+layout_mode = 2
+text = "Enemy density"
+
+[node name="Value" type="HSlider" parent="Layout/EnemyDensity"]
+layout_mode = 2
+size_flags_horizontal = 3
+max_value = 1000.0
+step = 10.0
+value = 100.0
+
+[node name="Label" type="Label" parent="Layout/EnemyDensity"]
+custom_minimum_size = Vector2(64, 0)
+layout_mode = 2
+text = "100%"
+horizontal_alignment = 2
+
+[node name="ResetDeveloperOptions" type="Button" parent="Layout"]
+layout_mode = 2
+text = "Reset Developer Options"
+
+[node name="ApplyAndReturn" type="Button" parent="Layout"]
+layout_mode = 2
+text = "Apply and Return"
+
+[node name="Cancel" type="Button" parent="Layout"]
+layout_mode = 2
+text = "Cancel"

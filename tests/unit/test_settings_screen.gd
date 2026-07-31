@@ -1,10 +1,13 @@
 extends RefCounted
 
 const SETTINGS_SCENE_PATH := "res://scenes/ui/settings/settings_screen.tscn"
+const ADDITIONAL_SETTINGS_SCENE_PATH := "res://scenes/ui/settings/additional_settings_page.tscn"
 
 
 func run() -> Array[String]:
 	var failures: Array[String] = []
+	_test_additional_settings_page(failures)
+	_test_settings_apply_cancel_and_save_error(failures)
 	TestAssertions.truthy(ResourceLoader.exists(SETTINGS_SCENE_PATH), "Settings scene exists", failures)
 	if not ResourceLoader.exists(SETTINGS_SCENE_PATH):
 		return failures
@@ -14,6 +17,8 @@ func run() -> Array[String]:
 		return failures
 	var screen := packed.instantiate()
 	(Engine.get_main_loop() as SceneTree).root.add_child(screen)
+	(screen.get_node("Overlay/Frame/Layout/Tabs/Additional Settings") as AdditionalSettingsPage)._ready()
+	screen.call("_ready")
 	var return_focus := Button.new()
 	return_focus.name = "SettingsReturnFocus"
 
@@ -27,7 +32,7 @@ func run() -> Array[String]:
 	TestAssertions.equal(screen.get_node("Overlay/Frame/Layout/Tabs/Controls/Content/State").text, "Controls load from InputMap in Task 4", "Controls identifies its next task boundary", failures)
 	TestAssertions.equal(screen.get_node("Overlay/Frame/Layout/Tabs/Graphics/Content/State").text, "Coming Soon", "Graphics is honest about availability", failures)
 	TestAssertions.equal(screen.get_node("Overlay/Frame/Layout/Tabs/Audio/Content/State").text, "Coming Soon", "Audio is honest about availability", failures)
-	TestAssertions.equal(screen.get_node("Overlay/Frame/Layout/Tabs/Additional Settings/Content/State").text, "Developer controls are prepared in Task 5", "Additional Settings identifies its next task boundary", failures)
+	TestAssertions.truthy(screen.get_node_or_null("Overlay/Frame/Layout/Tabs/Additional Settings/Layout/Mode") != null, "Additional Settings tab contains functional controls", failures)
 	TestAssertions.equal(screen.get_node("Overlay/Frame/Layout/NextRunNotice").text, "Run-affecting changes apply when the next run starts.", "Settings shows the next-run notice", failures)
 	TestAssertions.equal(screen.process_mode, Node.PROCESS_MODE_ALWAYS, "Settings processes while gameplay is paused", failures)
 	TestAssertions.truthy(not bool(screen.call("is_open")), "Settings starts hidden", failures)
@@ -53,6 +58,139 @@ func run() -> Array[String]:
 	screen.free()
 	return_focus.free()
 	return failures
+
+
+func _test_additional_settings_page(failures: Array[String]) -> void:
+	TestAssertions.truthy(ResourceLoader.exists(ADDITIONAL_SETTINGS_SCENE_PATH), "Additional Settings page scene exists", failures)
+	if not ResourceLoader.exists(ADDITIONAL_SETTINGS_SCENE_PATH):
+		return
+	var packed := load(ADDITIONAL_SETTINGS_SCENE_PATH) as PackedScene
+	TestAssertions.truthy(packed != null, "Additional Settings page scene loads", failures)
+	if packed == null:
+		return
+	var page := packed.instantiate()
+	var tree := Engine.get_main_loop() as SceneTree
+	tree.root.add_child(page)
+	page.call("_ready")
+	var mode := page.get_node("Layout/Mode") as OptionButton
+	var unlock_all := page.get_node("Layout/UnlockAll") as CheckButton
+	var god_mode := page.get_node("Layout/GodMode") as CheckButton
+	var party_capacity := page.get_node("Layout/PartyCapacity/Value") as HSlider
+	var enemy_density := page.get_node("Layout/EnemyDensity/Value") as HSlider
+	TestAssertions.equal(mode.item_count, 2, "Mode exposes exactly two choices", failures)
+	TestAssertions.equal(mode.get_item_text(0), "Player Simulation", "Mode starts with Player Simulation", failures)
+	TestAssertions.equal(mode.get_item_text(1), "Developer Mode", "Mode includes Developer Mode", failures)
+	TestAssertions.equal(Vector3(party_capacity.min_value, party_capacity.max_value, party_capacity.step), Vector3(1.0, 24.0, 1.0), "party capacity uses approved range and step", failures)
+	TestAssertions.equal(Vector3(enemy_density.min_value, enemy_density.max_value, enemy_density.step), Vector3(0.0, 1000.0, 10.0), "enemy density uses approved range and step", failures)
+
+	var saved := PartyForgeSettings.new()
+	saved.mode = PartyForgeSettings.Mode.PLAYER_SIMULATION
+	saved.unlock_all_implemented_content = true
+	saved.god_mode = true
+	saved.party_capacity_override = 17
+	saved.enemy_density_percent = 650
+	page.call("bind", saved)
+	TestAssertions.truthy(unlock_all.disabled, "Player Simulation disables Unlock All", failures)
+	TestAssertions.truthy(god_mode.disabled and party_capacity.editable == false and enemy_density.editable == false, "Player Simulation disables every developer override", failures)
+	TestAssertions.equal(int(party_capacity.value), 17, "inactive party cap stays visible", failures)
+	TestAssertions.equal(int(enemy_density.value), 650, "inactive density stays visible", failures)
+	mode.selected = PartyForgeSettings.Mode.DEVELOPER_MODE
+	page.call("_on_mode_changed", PartyForgeSettings.Mode.DEVELOPER_MODE)
+	TestAssertions.truthy(not unlock_all.disabled, "Developer Mode enables overrides", failures)
+	TestAssertions.truthy(not god_mode.disabled and party_capacity.editable and enemy_density.editable, "Developer Mode enables every override", failures)
+	party_capacity.value = 9
+	enemy_density.value = 230
+	page.call("_on_party_capacity_changed", party_capacity.value)
+	page.call("_on_enemy_density_changed", enemy_density.value)
+	TestAssertions.equal((page.get_node("Layout/PartyCapacity/Label") as Label).text, "9", "party capacity label tracks the slider", failures)
+	TestAssertions.equal((page.get_node("Layout/EnemyDensity/Label") as Label).text, "230%", "enemy density label tracks the slider", failures)
+	page.call("reset_developer_options")
+	TestAssertions.truthy(not unlock_all.button_pressed and not god_mode.button_pressed, "reset clears developer toggles", failures)
+	TestAssertions.equal(int(party_capacity.value), 4, "reset restores party capacity", failures)
+	TestAssertions.equal(int(enemy_density.value), 100, "reset restores enemy density", failures)
+	var written := PartyForgeSettings.new()
+	page.call("write_to", written)
+	TestAssertions.equal(written.mode, PartyForgeSettings.Mode.DEVELOPER_MODE, "page writes selected mode", failures)
+	TestAssertions.equal(written.party_capacity_override, 4, "page writes reset capacity", failures)
+	page.free()
+
+
+func _test_settings_apply_cancel_and_save_error(failures: Array[String]) -> void:
+	if not ResourceLoader.exists(SETTINGS_SCENE_PATH) or not ResourceLoader.exists(ADDITIONAL_SETTINGS_SCENE_PATH):
+		return
+	var original_files := _backup_default_settings_artifacts()
+	_cleanup_default_settings_artifacts()
+	var tree := Engine.get_main_loop() as SceneTree
+	var screen := (load(SETTINGS_SCENE_PATH) as PackedScene).instantiate()
+	tree.root.add_child(screen)
+	(screen.get_node("Overlay/Frame/Layout/Tabs/Additional Settings") as AdditionalSettingsPage)._ready()
+	screen.call("_ready")
+	var saved := PartyForgeSettings.new()
+	saved.mode = PartyForgeSettings.Mode.DEVELOPER_MODE
+	saved.party_capacity_override = 12
+	screen.call("configure", PartyForgeSettingsStore.new(), saved)
+	screen.call("open")
+	var page := screen.get_node("Overlay/Frame/Layout/Tabs/Additional Settings")
+	(page.get_node("Layout/PartyCapacity/Value") as HSlider).value = 3
+	(page.get_node("Layout/Cancel") as Button).pressed.emit()
+	TestAssertions.truthy(not bool(screen.call("is_open")), "Cancel button closes Settings", failures)
+	TestAssertions.equal((screen.call("current_settings") as PartyForgeSettings).party_capacity_override, 12, "Cancel leaves current settings unchanged", failures)
+	screen.call("open")
+	TestAssertions.equal(int((page.get_node("Layout/PartyCapacity/Value") as HSlider).value), 12, "open creates a fresh draft from current settings", failures)
+	(page.get_node("Layout/PartyCapacity/Value") as HSlider).value = 9
+	(page.get_node("Layout/ResetDeveloperOptions") as Button).pressed.emit()
+	TestAssertions.equal((screen.call("current_settings") as PartyForgeSettings).party_capacity_override, 12, "Reset changes draft controls without changing current settings", failures)
+	(page.get_node("Layout/PartyCapacity/Value") as HSlider).value = 9
+	var applied: Array[PartyForgeSettings] = []
+	screen.connect("settings_applied", func(settings: PartyForgeSettings) -> void: applied.append(settings))
+	(page.get_node("Layout/ApplyAndReturn") as Button).pressed.emit()
+	TestAssertions.truthy(not bool(screen.call("is_open")), "successful Apply closes Settings", failures)
+	TestAssertions.equal(applied.size(), 1, "successful Apply emits once", failures)
+	TestAssertions.equal((screen.call("current_settings") as PartyForgeSettings).party_capacity_override, 9, "successful Apply replaces current settings", failures)
+	TestAssertions.equal(PartyForgeSettingsStore.new().load_settings().party_capacity_override, 9, "successful Apply persists through the store", failures)
+	if not applied.is_empty():
+		applied[0].party_capacity_override = 2
+	TestAssertions.equal((screen.call("current_settings") as PartyForgeSettings).party_capacity_override, 9, "applied signal receives an isolated copy", failures)
+	screen.free()
+	_cleanup_default_settings_artifacts()
+
+	var failing_screen := (load(SETTINGS_SCENE_PATH) as PackedScene).instantiate()
+	tree.root.add_child(failing_screen)
+	(failing_screen.get_node("Overlay/Frame/Layout/Tabs/Additional Settings") as AdditionalSettingsPage)._ready()
+	failing_screen.call("_ready")
+	var failing_store := PartyForgeSettingsStore.new(func(_temporary: String, _target: String) -> Error: return ERR_CANT_CREATE)
+	failing_screen.call("configure", failing_store, saved)
+	failing_screen.call("open")
+	var failing_page := failing_screen.get_node("Overlay/Frame/Layout/Tabs/Additional Settings")
+	(failing_page.get_node("Layout/PartyCapacity/Value") as HSlider).value = 8
+	(failing_page.get_node("Layout/ApplyAndReturn") as Button).pressed.emit()
+	var expected_error := "PARTY_FORGE_SETTINGS_SAVE_ERROR path=%s code=%d stage=promote" % [PartyForgeSettingsStore.DEFAULT_PATH, ERR_CANT_CREATE]
+	TestAssertions.truthy(bool(failing_screen.call("is_open")), "failed Apply keeps Settings open", failures)
+	TestAssertions.equal((failing_screen.get_node("Overlay/Frame/Layout/Status") as Label).text, expected_error, "failed Apply displays the exact store error", failures)
+	TestAssertions.equal((failing_screen.call("current_settings") as PartyForgeSettings).party_capacity_override, 12, "failed Apply leaves current settings unchanged", failures)
+	failing_screen.free()
+	_cleanup_default_settings_artifacts()
+	_restore_default_settings_artifacts(original_files)
+
+
+func _cleanup_default_settings_artifacts() -> void:
+	for path: String in [PartyForgeSettingsStore.DEFAULT_PATH, "%s.tmp" % PartyForgeSettingsStore.DEFAULT_PATH, "%s.bak" % PartyForgeSettingsStore.DEFAULT_PATH]:
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+
+
+func _backup_default_settings_artifacts() -> Dictionary:
+	var result: Dictionary = {}
+	for path: String in [PartyForgeSettingsStore.DEFAULT_PATH, "%s.tmp" % PartyForgeSettingsStore.DEFAULT_PATH, "%s.bak" % PartyForgeSettingsStore.DEFAULT_PATH]:
+		if FileAccess.file_exists(path):
+			result[path] = FileAccess.get_file_as_bytes(path)
+	return result
+
+
+func _restore_default_settings_artifacts(files: Dictionary) -> void:
+	for path: String in files:
+		var file := FileAccess.open(path, FileAccess.WRITE)
+		if file != null:
+			file.store_buffer(files[path] as PackedByteArray)
 
 
 func _action_event(action: StringName) -> InputEventAction:
