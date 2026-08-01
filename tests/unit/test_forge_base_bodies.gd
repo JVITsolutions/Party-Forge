@@ -10,6 +10,7 @@ const BASES := {
 		&"profile": "res://data/presentation/profiles/forge_base_feminine.tres",
 	},
 }
+const NEUTRAL_BODY_COLOR := Color(0.76, 0.57, 0.44, 1.0)
 const PIVOT_PATHS := [
 	"HitPivot",
 	"HitPivot/BodyPivot",
@@ -22,6 +23,7 @@ const ANIMATION_IDS: Array[StringName] = [&"idle", &"attack_slash", &"attack_com
 
 func run() -> Array[String]:
 	var failures: Array[String] = []
+	_assert_equipped_source_material_contract(failures)
 	for preset_id: StringName in BASES:
 		_assert_base_body(preset_id, BASES[preset_id] as Dictionary, failures)
 	return failures
@@ -55,6 +57,7 @@ func _assert_base_body(preset_id: StringName, paths: Dictionary, failures: Array
 		if mesh.visible and mesh.get_parent() is Node3D and (mesh.get_parent() as Node3D).has_meta(&"body_preset"):
 			visible_body_meshes += 1
 	TestAssertions.truthy(visible_body_meshes >= 11, "%s base scene retains covered mannequin geometry" % preset_id, failures)
+	_assert_neutral_body_materials(model, preset_id, failures)
 	var bounds: AABB = model.call(&"visual_bounds") as AABB
 	TestAssertions.truthy(bounds.size.y >= 1.6 and bounds.size.y <= 1.85, "%s base body preserves actor scale" % preset_id, failures)
 	TestAssertions.near(bounds.position.y, 0.0, 0.05, "%s base body remains floor aligned" % preset_id, failures)
@@ -62,6 +65,27 @@ func _assert_base_body(preset_id: StringName, paths: Dictionary, failures: Array
 	for animation_id: StringName in ANIMATION_IDS:
 		TestAssertions.truthy(player != null and player.has_animation(animation_id), "%s base body preserves %s" % [preset_id, animation_id], failures)
 	model.free()
+
+func _assert_neutral_body_materials(model: Node3D, preset_id: StringName, failures: Array[String]) -> void:
+	var neutral_meshes := 0
+	for mesh: MeshInstance3D in _meshes(model):
+		if not mesh.visible or _body_preset_for(mesh) != preset_id:
+			continue
+		var material := mesh.material_override as StandardMaterial3D
+		TestAssertions.truthy(material != null, "%s base body mesh has an explicit mannequin material: %s" % [preset_id, mesh.name], failures)
+		if material == null:
+			continue
+		neutral_meshes += 1
+		TestAssertions.near(material.metallic, 0.0, 0.001, "%s base body material is non-metallic: %s" % [preset_id, mesh.name], failures)
+		TestAssertions.truthy(material.roughness >= 0.8, "%s base body material is matte: %s" % [preset_id, mesh.name], failures)
+		TestAssertions.truthy(not material.emission_enabled, "%s base body material has no equipment-like emission: %s" % [preset_id, mesh.name], failures)
+		TestAssertions.truthy(material.albedo_color.is_equal_approx(NEUTRAL_BODY_COLOR), "%s base body material uses the neutral mannequin palette: %s" % [preset_id, mesh.name], failures)
+	TestAssertions.truthy(neutral_meshes >= 11, "%s base body neutralizes every visible body mesh" % preset_id, failures)
+
+func _assert_equipped_source_material_contract(failures: Array[String]) -> void:
+	var source_text := FileAccess.get_file_as_string("res://scenes/characters/presentation/forge_vanguard_model.tscn")
+	TestAssertions.truthy(source_text.contains("[sub_resource type=\"StandardMaterial3D\" id=\"StandardMaterial3D_kedvv\"]\nalbedo_color = Color(0.1882353, 0.22745098, 0.2784314, 1)\nmetallic = 0.7"), "base generation leaves equipped Forge Vanguard torso metal unchanged", failures)
+	TestAssertions.truthy(source_text.contains("[sub_resource type=\"StandardMaterial3D\" id=\"StandardMaterial3D_xrbkh\"]\nalbedo_color = Color(0.2901961, 0.20392157, 0.14901961, 1)"), "base generation leaves equipped Forge Vanguard leather unchanged", failures)
 
 func _equipment_root(model: Node3D, slot_id: StringName) -> Node3D:
 	for node: Node in model.find_children("*", "Node3D", true, false):
@@ -81,3 +105,11 @@ func _meshes(model: Node3D) -> Array[MeshInstance3D]:
 	for node: Node in model.find_children("*", "MeshInstance3D", true, false):
 		meshes.append(node as MeshInstance3D)
 	return meshes
+
+func _body_preset_for(node: Node) -> StringName:
+	var cursor: Node = node
+	while cursor != null:
+		if cursor.has_meta(&"body_preset"):
+			return StringName(cursor.get_meta(&"body_preset"))
+		cursor = cursor.get_parent()
+	return &""

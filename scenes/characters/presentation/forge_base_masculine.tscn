@@ -2,9 +2,10 @@
 
 [ext_resource type="Script" path="res://scripts/presentation/forge_vanguard_model.gd" id="1_wvj1c"]
 
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_2ftrq"]
-albedo_color = Color(0.84705883, 0.6431373, 0.49803922, 1)
-roughness = 0.78
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_h282n"]
+albedo_color = Color(0.76, 0.57, 0.44, 1)
+roughness = 0.82
+emission_energy_multiplier = 0.0
 
 [sub_resource type="BoxMesh" id="BoxMesh_83h1v"]
 size = Vector3(0.28, 0.33, 0.28)
@@ -50,10 +51,10 @@ emission_energy_multiplier = 0.7
 [sub_resource type="BoxMesh" id="BoxMesh_lxcpe"]
 size = Vector3(0.07, 0.07, 0.07)
 
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_hcyt5"]
-albedo_color = Color(0.1882353, 0.22745098, 0.2784314, 1)
-metallic = 0.7
-roughness = 0.78
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_a1tsr"]
+albedo_color = Color(0.76, 0.57, 0.44, 1)
+roughness = 0.82
+emission_energy_multiplier = 0.0
 
 [sub_resource type="BoxMesh" id="BoxMesh_lwwmr"]
 size = Vector3(0.15, 0.24, 0.15)
@@ -66,10 +67,10 @@ roughness = 0.78
 [sub_resource type="BoxMesh" id="BoxMesh_sbygq"]
 size = Vector3(0.15, 0.24, 0.15)
 
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_xwkdd"]
-albedo_color = Color(0.1882353, 0.22745098, 0.2784314, 1)
-metallic = 0.7
-roughness = 0.78
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_aeyeg"]
+albedo_color = Color(0.76, 0.57, 0.44, 1)
+roughness = 0.82
+emission_energy_multiplier = 0.0
 
 [sub_resource type="BoxMesh" id="BoxMesh_csxpu"]
 size = Vector3(0.16, 0.3, 0.16)
@@ -108,10 +109,10 @@ emission_energy_multiplier = 0.7
 [sub_resource type="BoxMesh" id="BoxMesh_52pwe"]
 size = Vector3(0.07, 0.07, 0.07)
 
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_gll0o"]
-albedo_color = Color(0.1882353, 0.22745098, 0.2784314, 1)
-metallic = 0.7
-roughness = 0.78
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_14mr6"]
+albedo_color = Color(0.76, 0.57, 0.44, 1)
+roughness = 0.82
+emission_energy_multiplier = 0.0
 
 [sub_resource type="BoxMesh" id="BoxMesh_odglj"]
 size = Vector3(0.15, 0.24, 0.15)
@@ -124,10 +125,10 @@ roughness = 0.78
 [sub_resource type="BoxMesh" id="BoxMesh_qc2j0"]
 size = Vector3(0.15, 0.24, 0.15)
 
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_p0gfh"]
-albedo_color = Color(0.1882353, 0.22745098, 0.2784314, 1)
-metallic = 0.7
-roughness = 0.78
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_eb1ip"]
+albedo_color = Color(0.76, 0.57, 0.44, 1)
+roughness = 0.82
+emission_energy_multiplier = 0.0
 
 [sub_resource type="BoxMesh" id="BoxMesh_3s7do"]
 size = Vector3(0.16, 0.3, 0.16)
@@ -140,10 +141,10 @@ roughness = 0.78
 [sub_resource type="BoxMesh" id="BoxMesh_xg1fn"]
 size = Vector3(0.16, 0.3, 0.16)
 
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_kedvv"]
-albedo_color = Color(0.1882353, 0.22745098, 0.2784314, 1)
-metallic = 0.7
-roughness = 0.78
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_iuxow"]
+albedo_color = Color(0.76, 0.57, 0.44, 1)
+roughness = 0.82
+emission_energy_multiplier = 0.0
 
 [sub_resource type="BoxMesh" id="BoxMesh_ojosj"]
 size = Vector3(0.5904, 0.58, 0.3)
@@ -190,9 +191,10 @@ emission_energy_multiplier = 0.7
 [sub_resource type="BoxMesh" id="BoxMesh_3174k"]
 size = Vector3(0.1, 0.1, 0.04)
 
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_7wag4"]
-albedo_color = Color(0.2901961, 0.20392157, 0.14901961, 1)
-roughness = 0.78
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_0pb1l"]
+albedo_color = Color(0.76, 0.57, 0.44, 1)
+roughness = 0.82
+emission_energy_multiplier = 0.0
 
 [sub_resource type="BoxMesh" id="BoxMesh_1p4j8"]
 size = Vector3(0.18, 0.14, 0.28)
@@ -211,9 +213,10 @@ roughness = 0.78
 [sub_resource type="BoxMesh" id="BoxMesh_qb2mv"]
 size = Vector3(0.23, 0.18, 0.34)
 
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_wpyy2"]
-albedo_color = Color(0.2901961, 0.20392157, 0.14901961, 1)
-roughness = 0.78
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_2pwvy"]
+albedo_color = Color(0.76, 0.57, 0.44, 1)
+roughness = 0.82
+emission_energy_multiplier = 0.0
 
 [sub_resource type="BoxMesh" id="BoxMesh_3mbtp"]
 size = Vector3(0.19, 0.38, 0.19)
@@ -225,9 +228,10 @@ roughness = 0.78
 [sub_resource type="BoxMesh" id="BoxMesh_tn326"]
 size = Vector3(0.19, 0.38, 0.19)
 
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_xrbkh"]
-albedo_color = Color(0.2901961, 0.20392157, 0.14901961, 1)
-roughness = 0.78
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_wlm8c"]
+albedo_color = Color(0.76, 0.57, 0.44, 1)
+roughness = 0.82
+emission_energy_multiplier = 0.0
 
 [sub_resource type="BoxMesh" id="BoxMesh_cb34d"]
 size = Vector3(0.2, 0.4, 0.2)
@@ -239,9 +243,10 @@ roughness = 0.78
 [sub_resource type="BoxMesh" id="BoxMesh_ed0ar"]
 size = Vector3(0.2, 0.4, 0.2)
 
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_jnr2p"]
-albedo_color = Color(0.2901961, 0.20392157, 0.14901961, 1)
-roughness = 0.78
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_bntva"]
+albedo_color = Color(0.76, 0.57, 0.44, 1)
+roughness = 0.82
+emission_energy_multiplier = 0.0
 
 [sub_resource type="BoxMesh" id="BoxMesh_o5l0a"]
 size = Vector3(0.18, 0.14, 0.28)
@@ -260,9 +265,10 @@ roughness = 0.78
 [sub_resource type="BoxMesh" id="BoxMesh_esfg4"]
 size = Vector3(0.23, 0.18, 0.34)
 
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_myw4f"]
-albedo_color = Color(0.2901961, 0.20392157, 0.14901961, 1)
-roughness = 0.78
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_vmt38"]
+albedo_color = Color(0.76, 0.57, 0.44, 1)
+roughness = 0.82
+emission_energy_multiplier = 0.0
 
 [sub_resource type="BoxMesh" id="BoxMesh_wyuch"]
 size = Vector3(0.19, 0.38, 0.19)
@@ -274,9 +280,10 @@ roughness = 0.78
 [sub_resource type="BoxMesh" id="BoxMesh_jen5x"]
 size = Vector3(0.19, 0.38, 0.19)
 
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_xvqel"]
-albedo_color = Color(0.2901961, 0.20392157, 0.14901961, 1)
-roughness = 0.78
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_75emn"]
+albedo_color = Color(0.76, 0.57, 0.44, 1)
+roughness = 0.82
+emission_energy_multiplier = 0.0
 
 [sub_resource type="BoxMesh" id="BoxMesh_gdvsm"]
 size = Vector3(0.2, 0.4, 0.2)
@@ -728,7 +735,7 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.48, 0)
 metadata/body_preset = &"masculine"
 
 [node name="ReadableChannel" type="MeshInstance3D" parent="HitPivot/BodyPivot/HipsPivot/TorsoPivot/HeadPivot/MasculineHead"]
-material_override = SubResource("StandardMaterial3D_2ftrq")
+material_override = SubResource("StandardMaterial3D_h282n")
 mesh = SubResource("BoxMesh_83h1v")
 metadata/palette_region = &"skin"
 
@@ -798,7 +805,7 @@ metadata/body_preset = &"masculine"
 
 [node name="ReadableChannel" type="MeshInstance3D" parent="HitPivot/BodyPivot/HipsPivot/TorsoPivot/LeftShoulderPivot/LeftElbowPivot/MasculineForearm"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.015, -0.11, 0)
-material_override = SubResource("StandardMaterial3D_hcyt5")
+material_override = SubResource("StandardMaterial3D_a1tsr")
 mesh = SubResource("BoxMesh_lwwmr")
 metadata/palette_region = &"metal"
 
@@ -817,7 +824,7 @@ metadata/body_preset = &"masculine"
 
 [node name="ReadableChannel" type="MeshInstance3D" parent="HitPivot/BodyPivot/HipsPivot/TorsoPivot/LeftShoulderPivot/MasculineUpperArm"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.04, -0.14, 0)
-material_override = SubResource("StandardMaterial3D_xwkdd")
+material_override = SubResource("StandardMaterial3D_aeyeg")
 mesh = SubResource("BoxMesh_csxpu")
 metadata/palette_region = &"metal"
 
@@ -878,7 +885,7 @@ metadata/body_preset = &"masculine"
 
 [node name="ReadableChannel" type="MeshInstance3D" parent="HitPivot/BodyPivot/HipsPivot/TorsoPivot/RightShoulderPivot/RightElbowPivot/MasculineForearm"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.015, -0.11, 0)
-material_override = SubResource("StandardMaterial3D_gll0o")
+material_override = SubResource("StandardMaterial3D_14mr6")
 mesh = SubResource("BoxMesh_odglj")
 metadata/palette_region = &"metal"
 
@@ -897,7 +904,7 @@ metadata/body_preset = &"masculine"
 
 [node name="ReadableChannel" type="MeshInstance3D" parent="HitPivot/BodyPivot/HipsPivot/TorsoPivot/RightShoulderPivot/MasculineUpperArm"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.04, -0.14, 0)
-material_override = SubResource("StandardMaterial3D_p0gfh")
+material_override = SubResource("StandardMaterial3D_eb1ip")
 mesh = SubResource("BoxMesh_3s7do")
 metadata/palette_region = &"metal"
 
@@ -916,7 +923,7 @@ metadata/body_preset = &"masculine"
 
 [node name="ReadableChannel" type="MeshInstance3D" parent="HitPivot/BodyPivot/HipsPivot/TorsoPivot/MasculineTorso"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.07, 0)
-material_override = SubResource("StandardMaterial3D_kedvv")
+material_override = SubResource("StandardMaterial3D_iuxow")
 mesh = SubResource("BoxMesh_ojosj")
 metadata/palette_region = &"metal"
 
@@ -978,7 +985,7 @@ metadata/body_preset = &"masculine"
 
 [node name="ReadableChannel" type="MeshInstance3D" parent="HitPivot/BodyPivot/HipsPivot/LeftHipPivot/LeftKneePivot/LeftFootPivot/MasculineFoot"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.05, 0)
-material_override = SubResource("StandardMaterial3D_7wag4")
+material_override = SubResource("StandardMaterial3D_0pb1l")
 mesh = SubResource("BoxMesh_1p4j8")
 metadata/palette_region = &"leather"
 
@@ -1008,7 +1015,7 @@ metadata/body_preset = &"masculine"
 
 [node name="ReadableChannel" type="MeshInstance3D" parent="HitPivot/BodyPivot/HipsPivot/LeftHipPivot/LeftKneePivot/MasculineShin"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.18, 0)
-material_override = SubResource("StandardMaterial3D_wpyy2")
+material_override = SubResource("StandardMaterial3D_2pwvy")
 mesh = SubResource("BoxMesh_3mbtp")
 metadata/palette_region = &"leather"
 
@@ -1027,7 +1034,7 @@ metadata/body_preset = &"masculine"
 
 [node name="ReadableChannel" type="MeshInstance3D" parent="HitPivot/BodyPivot/HipsPivot/LeftHipPivot/MasculineThigh"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.19, 0)
-material_override = SubResource("StandardMaterial3D_xrbkh")
+material_override = SubResource("StandardMaterial3D_wlm8c")
 mesh = SubResource("BoxMesh_cb34d")
 metadata/palette_region = &"leather"
 
@@ -1055,7 +1062,7 @@ metadata/body_preset = &"masculine"
 
 [node name="ReadableChannel" type="MeshInstance3D" parent="HitPivot/BodyPivot/HipsPivot/RightHipPivot/RightKneePivot/RightFootPivot/MasculineFoot"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.05, 0)
-material_override = SubResource("StandardMaterial3D_jnr2p")
+material_override = SubResource("StandardMaterial3D_bntva")
 mesh = SubResource("BoxMesh_o5l0a")
 metadata/palette_region = &"leather"
 
@@ -1085,7 +1092,7 @@ metadata/body_preset = &"masculine"
 
 [node name="ReadableChannel" type="MeshInstance3D" parent="HitPivot/BodyPivot/HipsPivot/RightHipPivot/RightKneePivot/MasculineShin"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.18, 0)
-material_override = SubResource("StandardMaterial3D_myw4f")
+material_override = SubResource("StandardMaterial3D_vmt38")
 mesh = SubResource("BoxMesh_wyuch")
 metadata/palette_region = &"leather"
 
@@ -1104,7 +1111,7 @@ metadata/body_preset = &"masculine"
 
 [node name="ReadableChannel" type="MeshInstance3D" parent="HitPivot/BodyPivot/HipsPivot/RightHipPivot/MasculineThigh"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.19, 0)
-material_override = SubResource("StandardMaterial3D_xvqel")
+material_override = SubResource("StandardMaterial3D_75emn")
 mesh = SubResource("BoxMesh_gdvsm")
 metadata/palette_region = &"leather"
 
