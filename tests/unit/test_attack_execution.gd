@@ -25,7 +25,8 @@ func run() -> Array[String]:
     _test_healing_selector(failures)
     _test_melee_execution(failures)
     _test_defender_resolution_order(failures)
-    _test_automatic_melee_effective_range(failures)
+    _test_rogue_range_and_target_centered_cleave(failures)
+    _test_zero_area_melee_hits_primary_only(failures)
     _test_projectile_contract(failures)
     _test_projectile_range_boundary(failures)
     _test_area_impact(failures)
@@ -96,8 +97,8 @@ func _test_melee_execution(failures: Array[String]) -> void:
     party.call("configure_combat", combat_rng, catalog.damage_types)
     var owner := _create_member_actor(test_root, party, party.members[0], 1, Vector3.ZERO)
     var inside_one := _create_actor(test_root, fighter, 2, Vector3(0.8, 0.0, 0.0))
-    var inside_two := _create_actor(test_root, fighter, 2, Vector3(-1.2, 0.0, 0.0))
-    var outside := _create_actor(test_root, fighter, 2, Vector3(2.0, 0.0, 0.0))
+    var inside_two := _create_actor(test_root, fighter, 2, Vector3(1.4, 0.0, 0.0))
+    var outside := _create_actor(test_root, fighter, 2, Vector3(2.5, 0.0, 0.0))
     var friendly := _create_actor(test_root, fighter, 1, Vector3(0.5, 0.0, 0.0))
     for actor: PartyActor in [inside_one, inside_two, outside, friendly]:
         _set_health(actor, 100.0, 100.0)
@@ -136,7 +137,7 @@ func _test_defender_resolution_order(failures: Array[String]) -> void:
     party.call("configure_combat", combat_rng, catalog.damage_types)
     var owner := _create_member_actor(test_root, party, party.members[0], 1, Vector3.ZERO)
     var first := _create_member_actor(test_root, party, party.members[1], 2, Vector3(0.8, 0.0, 0.0))
-    var second := _create_member_actor(test_root, party, party.members[2], 2, Vector3(-0.8, 0.0, 0.0))
+    var second := _create_member_actor(test_root, party, party.members[2], 2, Vector3(1.4, 0.0, 0.0))
     _set_health(first, 100.0, 100.0)
     _set_health(second, 100.0, 100.0)
     var reversed_targets: Array[Node3D] = [second, first]
@@ -147,42 +148,59 @@ func _test_defender_resolution_order(failures: Array[String]) -> void:
     TestAssertions.equal(combat_rng.draw_count, 3, "independent defender draws follow stable combatant order", failures)
     test_root.free()
 
-func _test_automatic_melee_effective_range(failures: Array[String]) -> void:
-    var test_root := _new_test_root("AutomaticMeleeRangeTest")
+func _test_rogue_range_and_target_centered_cleave(failures: Array[String]) -> void:
+    var test_root := _new_test_root("RogueRangeAndTargetCenteredCleaveTest")
     var catalog := GameCatalog.load_defaults()
-    var cleave_class := ClassDefinition.new()
-    cleave_class.id = &"arcane_cleave_tester"
-    cleave_class.display_name = "Arcane Cleave Tester"
-    cleave_class.traits = [&"arcane"]
-    cleave_class.primary_attack = catalog.class_by_id(&"fighter").primary_attack
+    var rogue_definition: ClassDefinition = catalog.class_by_id(&"rogue")
     var party := PartyManager.new()
-    party.initialize(cleave_class, catalog.traits)
-    party.recruit(cleave_class)
+    test_root.add_child(party)
+    party.initialize(rogue_definition, catalog.traits)
     party.call("configure_combat", CombatRng.new(103), catalog.damage_types)
 
-    var owner := _create_actor(test_root, cleave_class, 1, Vector3.ZERO, true)
-    owner.configure(party.members[0])
-    owner.configure_combat(party, test_root)
-    var whiff_target := _create_actor(test_root, catalog.class_by_id(&"fighter"), 2, Vector3(2.0, 0.0, 0.0))
-    var valid_target := _create_actor(test_root, catalog.class_by_id(&"fighter"), 2, Vector3(1.8, 0.0, 0.0))
-    _set_health(whiff_target, 100.0, 100.0)
-    _set_health(valid_target, 100.0, 100.0)
-    var combatants: Array[Node3D] = [owner, whiff_target, valid_target]
-    owner.attack_executor.call("configure", owner, party, test_root, combatants)
-    var controller := owner.get_node("AttackController") as AttackController
+    var rogue := _create_member_actor(test_root, party, party.members[0], 1, Vector3.ZERO)
+    var primary := _create_actor(test_root, _target_definition(&"rogue_primary"), 2, Vector3(1.9, 0.0, 0.0))
+    var near_primary := _create_actor(test_root, _target_definition(&"near_primary"), 2, Vector3(2.7, 0.0, 0.0))
+    var behind_rogue := _create_actor(test_root, _target_definition(&"behind_rogue"), 2, Vector3(-0.4, 0.0, 0.0))
+    for actor: PartyActor in [primary, near_primary, behind_rogue]:
+        _set_health(actor, 100.0, 100.0)
 
-    var outside_candidates: Array[CombatTarget] = [owner.get_combat_target(), whiff_target.get_combat_target()]
-    owner.advance_combat(0.1, outside_candidates)
-    TestAssertions.near(controller.cooldown_remaining, 0.0, 0.001, "melee target outside modified cleave does not consume cooldown", failures)
-    TestAssertions.near(_health(whiff_target).current_health, 100.0, 0.001, "melee target outside modified cleave is not hit", failures)
+    var acquisition_candidates: Array[CombatTarget] = [primary.get_combat_target()]
+    rogue.call("advance_combat", 0.1, acquisition_candidates)
+    TestAssertions.truthy(_health(primary).current_health < 100.0, "Rogue range 2.0 acquires primary", failures)
 
-    var inside_candidates: Array[CombatTarget] = [owner.get_combat_target(), whiff_target.get_combat_target(), valid_target.get_combat_target()]
-    owner.advance_combat(0.1, inside_candidates)
-    TestAssertions.truthy(controller.cooldown_remaining > 0.0, "melee target inside modified cleave consumes cooldown", failures)
-    TestAssertions.near(_health(valid_target).current_health, 82.0, 0.001, "automatic melee hits once inside modified cleave", failures)
-    TestAssertions.near(_health(whiff_target).current_health, 100.0, 0.001, "automatic melee excludes actor beyond modified cleave", failures)
+    var combatants: Array[Node3D] = [rogue, primary, near_primary, behind_rogue]
+    rogue.attack_executor.call("configure", rogue, party, test_root, combatants)
+    rogue.attack_executor.call("execute", rogue_definition.primary_attack, primary.get_combat_target())
+    TestAssertions.truthy(_health(near_primary).current_health < 100.0, "cleave uses 0.9 around impact", failures)
+    TestAssertions.near(_health(behind_rogue).current_health, 100.0, 0.001, "cleave is not centered on attacker", failures)
     test_root.free()
-    party.free()
+
+func _test_zero_area_melee_hits_primary_only(failures: Array[String]) -> void:
+    var test_root := _new_test_root("ZeroAreaMeleePrimaryTest")
+    var catalog := GameCatalog.load_defaults()
+    var attack := catalog.class_by_id(&"rogue").primary_attack.duplicate(true) as AttackDefinition
+    attack.id = &"zero_area_melee"
+    attack.area_radius = 0.0
+    var attacker_definition := ClassDefinition.new()
+    attacker_definition.id = &"zero_area_attacker"
+    attacker_definition.display_name = "Zero Area Attacker"
+    attacker_definition.primary_attack = attack
+    var party := PartyManager.new()
+    test_root.add_child(party)
+    party.initialize(attacker_definition, catalog.traits)
+    party.call("configure_combat", CombatRng.new(112), catalog.damage_types)
+
+    var owner := _create_member_actor(test_root, party, party.members[0], 1, Vector3.ZERO)
+    var primary := _create_actor(test_root, _target_definition(&"zero_area_primary"), 2, Vector3(1.0, 0.0, 0.0))
+    var colocated_secondary := _create_actor(test_root, _target_definition(&"zero_area_secondary"), 2, Vector3(1.0, 0.0, 0.0))
+    _set_health(primary, 100.0, 100.0)
+    _set_health(colocated_secondary, 100.0, 100.0)
+    var combatants: Array[Node3D] = [owner, primary, colocated_secondary]
+    owner.attack_executor.call("configure", owner, party, test_root, combatants)
+    owner.attack_executor.call("execute", attack, primary.get_combat_target())
+    TestAssertions.truthy(_health(primary).current_health < 100.0, "zero-area melee always hits primary", failures)
+    TestAssertions.near(_health(colocated_secondary).current_health, 100.0, 0.001, "zero-area melee excludes colocated secondary", failures)
+    test_root.free()
 
 func _test_projectile_contract(failures: Array[String]) -> void:
     var test_root := _new_test_root("ProjectileContractTest")

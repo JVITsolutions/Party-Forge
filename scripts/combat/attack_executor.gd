@@ -33,18 +33,24 @@ func execute(definition: AttackDefinition, target: CombatTarget) -> void:
     var packet := DamageResolver.prepare(definition, source_adapter, rng, types)
     if not packet.valid:
         return
+    var geometry := ResolvedAttackGeometry.from_attack(
+        definition,
+        float(modifiers.get("range_multiplier")),
+        float(modifiers.get("area_multiplier"))
+    )
     match definition.kind:
         AttackDefinition.Kind.MELEE_CLEAVE:
-            _execute_melee(packet, definition.area_radius * float(modifiers.get("area_multiplier")))
+            _execute_melee(packet, target, geometry.area_radius)
         AttackDefinition.Kind.PROJECTILE, AttackDefinition.Kind.AREA_PROJECTILE:
-            _spawn_projectile(definition, target, modifiers, packet)
+            _spawn_projectile(definition, target, modifiers, packet, geometry)
         _:
             push_error("PARTY_FORGE_DAMAGE_ERROR attack=%s kind=%d reason=unsupported party runtime kind" % [definition.id, definition.kind])
 
-func _execute_melee(packet: DamagePacket, radius: float) -> void:
+func _execute_melee(packet: DamagePacket, primary_target: CombatTarget, radius: float) -> void:
+    if primary_target == null or not primary_target.is_available or primary_target.team_id == owner_actor.team_id:
+        return
     var seen: Dictionary = {}
     var targets: Array[CombatantAdapter] = []
-    var origin: Vector3 = owner_actor.global_position if owner_actor.is_inside_tree() else owner_actor.position
     for actor: Node3D in _combatants():
         if actor == null or seen.has(actor.get_instance_id()) or not actor.has_method("get_combat_target") or not actor.has_method("get_combat_adapter"):
             continue
@@ -52,7 +58,8 @@ func _execute_melee(packet: DamagePacket, radius: float) -> void:
         var candidate: CombatTarget = actor.call("get_combat_target") as CombatTarget
         if candidate == null or not candidate.is_available or candidate.team_id == owner_actor.team_id:
             continue
-        if origin.distance_squared_to(candidate.position) > radius * radius:
+        var is_primary := candidate.actor == primary_target.actor
+        if not is_primary and (radius <= 0.0 or primary_target.position.distance_squared_to(candidate.position) > radius * radius):
             continue
         var adapter := actor.call("get_combat_adapter", packet.action_tags) as CombatantAdapter
         if adapter != null and adapter.available and adapter.team_id != packet.source_team_id:
@@ -61,7 +68,7 @@ func _execute_melee(packet: DamagePacket, radius: float) -> void:
     for adapter: CombatantAdapter in targets:
         DamageResolver.resolve(packet, adapter, party_manager.combat_rng, party_manager.damage_types)
 
-func _spawn_projectile(definition: AttackDefinition, target: CombatTarget, modifiers: RefCounted, packet: DamagePacket) -> void:
+func _spawn_projectile(definition: AttackDefinition, target: CombatTarget, modifiers: RefCounted, packet: DamagePacket, geometry: ResolvedAttackGeometry) -> void:
     var parent := _effect_parent()
     if parent == null:
         return
@@ -72,8 +79,8 @@ func _spawn_projectile(definition: AttackDefinition, target: CombatTarget, modif
     else:
         projectile.position = owner_actor.position
     var projectile_speed: float = definition.projectile_speed * float(modifiers.get("projectile_multiplier"))
-    var maximum_range: float = definition.range * float(modifiers.get("range_multiplier"))
-    var area_radius: float = definition.area_radius * float(modifiers.get("area_multiplier"))
+    var maximum_range: float = geometry.range
+    var area_radius: float = geometry.area_radius
     var lifetime: float = clampf(maximum_range / maxf(projectile_speed, 0.01) + 0.5, 0.1, 10.0)
     projectile.call("configure", packet, party_manager.combat_rng, party_manager.damage_types, projectile_speed, area_radius, maximum_range, lifetime, target, parent, _combatants())
 
