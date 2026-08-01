@@ -752,20 +752,36 @@ git -C $worktree commit -m 'feat: integrate Fighter character presentation'
 ### Task 6: Add the Presentation Review Sandbox
 
 **Files:**
+- Create: `tools/build_forge_base_body_scenes.gd`
+- Generate: `scenes/characters/presentation/forge_base_masculine.tscn`
+- Generate: `scenes/characters/presentation/forge_base_feminine.tscn`
+- Create: `data/presentation/profiles/forge_base_masculine.tres`
+- Create: `data/presentation/profiles/forge_base_feminine.tres`
+- Create: `tests/unit/test_forge_base_bodies.gd`
 - Create: `scripts/dev/character_presentation_sandbox.gd`
 - Create: `scenes/dev/character_presentation_sandbox.tscn`
 - Create: `tests/unit/test_character_presentation_sandbox.gd`
 - Create: `tests/integration/character_presentation_sandbox_runner.gd`
 
 **Interfaces:**
+- Produces: separately openable masculine and feminine unequipped base-body scenes using the exact Forge Vanguard pivot contract
+- Produces: valid base-body profiles with empty default equipment and all ten visuals available for later class-specific layering
 - Produces: `set_body(preset_id)`, `set_palette(palette_id)`, `toggle_slot(slot_id, enabled)`, `play_clip(animation_id)`, and `trigger_hit()` review controls
 - Produces: success marker `PARTY_FORGE_PRESENTATION_SMOKE_OK`
 
-- [ ] **Step 1: Write failing sandbox scene and API tests**
+- [ ] **Step 1: Package the two reusable unequipped base bodies test-first**
+
+Write a failing test for `forge_base_masculine.tscn`, `forge_base_feminine.tscn`, and their matching profiles. Each scene must load directly in Godot, retain the same named shared pivots and public model API as `forge_vanguard_model.tscn`, select only its named body preset, show no equipment root by default, remain floor-aligned at the established actor scale, and preserve neutral stylized mannequin coverage without explicit anatomy. Each profile must validate with an empty `default_equipment_visuals`, expose all ten `available_equipment_visuals`, and select the matching preset.
+
+Implement `tools/build_forge_base_body_scenes.gd` by instantiating the deterministic Forge Vanguard model, selecting the requested body preset, hiding every equipment root, packing the result, and applying the same stable-output normalization used by the main builder. These are reusable Godot model files, not screenshots or sandbox-only fixtures: another class task must be able to open either scene/profile and layer Ranger, Mage, Gunslinger, or other class equipment onto the unchanged pivot contract.
+
+Run the base-body generator twice and require identical hashes for both output scenes before proceeding.
+
+- [ ] **Step 2: Write failing sandbox scene and API tests**
 
 The unit test requires a scene root scripted as `CharacterPresentationSandbox`, nodes `Models/Masculine`, `Models/Feminine`, `FallbackCapsule`, `CameraRig/Camera3D`, `DirectionalLight3D`, `Floor`, and `UI/Instructions`. It calls each review method and confirms two models maintain different palette IDs.
 
-- [ ] **Step 2: Run the suite and verify the sandbox is absent**
+- [ ] **Step 3: Run the suite and verify the sandbox is absent**
 
 ```powershell
 & $godot --headless --path $worktree --script res://tests/test_runner.gd --quit-after 120
@@ -773,9 +789,9 @@ The unit test requires a scene root scripted as `CharacterPresentationSandbox`, 
 
 Expected: FAIL because the sandbox scene and script do not exist.
 
-- [ ] **Step 3: Build the review scene**
+- [ ] **Step 4: Build the review scene**
 
-Use a `Node3D` root, a neutral floor, directional light, and the production high-angle framing (`Camera3D` position near `Vector3(0, 6.5, 6.0)`, rotation near `Vector3(-0.87, 0, 0)`, FOV `52`). Place masculine/red and feminine/blue Forge Vanguards side by side, with one capsule behind them for silhouette comparison.
+Use a `Node3D` root, a neutral floor, directional light, and the production high-angle framing (`Camera3D` position near `Vector3(0, 6.5, 6.0)`, rotation near `Vector3(-0.87, 0, 0)`, FOV `52`). Place masculine/red and feminine/blue Forge Vanguards side by side, with one capsule behind them for silhouette comparison. The sandbox must also be able to switch each side between its unequipped base profile and equipped Forge Vanguard profile so the base files can be visually reviewed without changing production state.
 
 The UI instructions must list:
 
@@ -786,7 +802,7 @@ Q/E Cycle Slot   Space Toggle Selected Slot
 
 Input handling calls the public review methods; it does not alter input-map settings or production run state.
 
-- [ ] **Step 4: Add the headless smoke runner**
+- [ ] **Step 5: Add the headless smoke runner**
 
 The runner loads the scene, calls `_ready`, exercises both bodies, all three palettes, all ten slot toggles, all four clips, hit feedback, downed, and revival, then prints exactly:
 
@@ -797,9 +813,10 @@ quit(0)
 
 Any missing scene, rejected operation, or invalid state must call `push_error("PARTY_FORGE_PRESENTATION_SMOKE_ERROR ...")` and `quit(1)`.
 
-- [ ] **Step 5: Run unit and integration verification**
+- [ ] **Step 6: Run unit and integration verification**
 
 ```powershell
+& $godot --headless --path $worktree --script res://tools/build_forge_base_body_scenes.gd
 & $godot --headless --path $worktree --editor --quit-after 2
 & $godot --headless --path $worktree --script res://tests/test_runner.gd --quit-after 120
 & $godot --headless --path $worktree --script res://tests/integration/character_presentation_sandbox_runner.gd --quit-after 30
@@ -807,10 +824,10 @@ Any missing scene, rejected operation, or invalid state must call `push_error("P
 
 Expected: full unit PASS and the exact smoke success marker.
 
-- [ ] **Step 6: Commit Task 6**
+- [ ] **Step 7: Commit Task 6**
 
 ```powershell
-git -C $worktree add -- scripts/dev/character_presentation_sandbox.gd scenes/dev/character_presentation_sandbox.tscn tests/unit/test_character_presentation_sandbox.gd tests/integration/character_presentation_sandbox_runner.gd
+git -C $worktree add -- tools/build_forge_base_body_scenes.gd scenes/characters/presentation/forge_base_masculine.tscn scenes/characters/presentation/forge_base_feminine.tscn data/presentation/profiles/forge_base_masculine.tres data/presentation/profiles/forge_base_feminine.tres tests/unit/test_forge_base_bodies.gd scripts/dev/character_presentation_sandbox.gd scenes/dev/character_presentation_sandbox.tscn tests/unit/test_character_presentation_sandbox.gd tests/integration/character_presentation_sandbox_runner.gd
 git -C $worktree diff --cached --check
 git -C $worktree commit -m 'feat: add character presentation sandbox'
 ```
@@ -828,7 +845,7 @@ git -C $worktree commit -m 'feat: add character presentation sandbox'
 
 - [ ] **Step 1: Update the handbook from the implemented truth**
 
-Replace the current limitation about direct `MeshInstance3D`-only presentation with the implemented adapter flow. Document exact resource paths, the ten slots, the rule that every equipped item changes at least one visual channel, material duplication, the sandbox launch path, and the later Blender/glTF socket/animation contract. Record that the first draft is generated in-project and has no external art-license dependency. Keep the original warnings about gameplay wrapper ownership and collision separation.
+Replace the current limitation about direct `MeshInstance3D`-only presentation with the implemented adapter flow. Document exact resource paths, including the separate masculine and feminine unequipped base-body scenes/profiles, the ten slots, the rule that every equipped item changes at least one visual channel, material duplication, the sandbox launch path, and the later Blender/glTF socket/animation contract. Record that the first draft is generated in-project and has no external art-license dependency. Keep the original warnings about gameplay wrapper ownership and collision separation.
 
 Name the deferred Blender paths exactly `assets/models/characters/source/party_forge_humanoid.blend` and `assets/models/characters/party_forge_humanoid.glb`. Reiterate one metre per Godot unit, Y-up, feet at source origin, normalized forward orientation below the gameplay root, shared humanoid armature, semantic sockets, and exact animation-name preservation.
 
@@ -880,6 +897,7 @@ Expected: scan returns no unfinished markers, changed paths remain within this p
 Do not report completion until all of these are simultaneously true:
 
 - Both body presets and all three palettes are visible and verified.
+- Separate masculine and feminine unequipped base-body scenes and profiles are directly reusable and verified with no visible equipment.
 - All ten equipment slots produce a declared readability channel.
 - `idle`, `attack_slash`, `attack_combo`, and `hit_flinch` exist with the specified in-place durations.
 - Fighter uses the Forge Vanguard profile; classes without profiles still render the fallback capsule.
