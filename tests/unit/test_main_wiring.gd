@@ -188,6 +188,8 @@ func _test_exact_choice_panel(failures: Array[String]) -> void:
         UpgradeChoice.new(UpgradeChoice.Kind.RECRUIT, &"ranger", "Recruit Ranger"),
     ]
     panel.call("show_choices", choices, party)
+    var pending_label := panel.get_node_or_null("ContentPanel/OfferView/Content/PendingLevels") as Label
+    TestAssertions.truthy(pending_label != null, "level-up panel scene exposes the pending-level indicator", failures)
     var buttons := panel.get_node("Choices").get_children()
     TestAssertions.equal(buttons.size(), 3, "level-up panel owns exactly three choice buttons", failures)
     TestAssertions.equal((buttons[0] as Button).text, choices[0].label, "first button uses exact first choice", failures)
@@ -407,7 +409,7 @@ func _test_capped_stat_is_disabled_without_hiding(failures: Array[String]) -> vo
     ]
     if method_arg_count == 4:
         panel.call("show_choices", choices, party, {capped.key(): true}, 6)
-        TestAssertions.equal(panel.get("_pending_count"), 6, "choice panel stores pending-level count without presenting it yet", failures)
+        TestAssertions.equal(panel.get("_pending_level_count"), 6, "choice panel stores the pending-level count for presentation", failures)
     else:
         panel.call("show_choices", choices, party, {capped.key(): true})
     var capped_button := panel.get_node("Choices/Choice1") as Button
@@ -470,7 +472,7 @@ func _test_run_offer_seed_and_snapshot_wiring(failures: Array[String]) -> void:
     var first_panel := first_main.get_node("HUD/LevelUpPanel") as LevelUpPanel
     var first_keys := _choice_keys(first_panel.choices)
     TestAssertions.equal(first_panel.choices.size(), 5, "Player Simulation snapshots five level-up choices", failures)
-    TestAssertions.equal(first_panel.get("_pending_count"), 3, "main forwards the pending-level count to the panel", failures)
+    TestAssertions.equal(first_panel.get("_pending_level_count"), 3, "main forwards the pending-level count to the panel", failures)
     TestAssertions.equal(first_state.offer_sequence, 5, "main increments offer sequence after generation", failures)
 
     var repeat_main := _started_main_with_settings(player_settings)

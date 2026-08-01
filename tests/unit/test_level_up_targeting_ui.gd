@@ -7,7 +7,43 @@ func run() -> Array[String]:
 	_test_non_personal_confirmation_uses_zero(failures)
 	_test_production_card_tooltip_composition(failures)
 	_test_tooltip_forced_lifecycle_cleanup(failures)
+	_test_pending_level_indicator(failures)
 	return failures
+
+func _test_pending_level_indicator(failures: Array[String]) -> void:
+	var catalog := GameCatalog.load_defaults()
+	var party := PartyManager.new()
+	party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
+	var choices: Array[UpgradeChoice] = [
+		UpgradeChoice.authored(catalog.upgrade_by_id(&"vanguard_wall")),
+		UpgradeChoice.authored(catalog.upgrade_by_id(&"vitality")),
+		UpgradeChoice.authored(catalog.upgrade_by_id(&"precision")),
+	]
+	var panel := _attached_panel()
+	panel.show_choices(choices, party, {}, 3)
+	var pending_label := panel.get_node_or_null("ContentPanel/OfferView/Content/PendingLevels") as Label
+	TestAssertions.truthy(pending_label != null, "offer owns a pending-level indicator", failures)
+	if pending_label == null:
+		panel.free()
+		party.free()
+		return
+	TestAssertions.truthy(pending_label.visible, "pending-level indicator is visible with queued upgrades", failures)
+	TestAssertions.equal(pending_label.text, "3 upgrades ready", "pending-level indicator pluralizes queued upgrades", failures)
+	TestAssertions.equal(pending_label.horizontal_alignment, HORIZONTAL_ALIGNMENT_CENTER, "pending-level indicator is centered", failures)
+	TestAssertions.equal(pending_label.get_theme_color("font_color"), Color(1.0, 0.78, 0.18, 1.0), "pending-level indicator uses the gold accent", failures)
+	TestAssertions.equal(pending_label.get_theme_font_size("font_size"), 22, "pending-level indicator uses responsive readable type", failures)
+	var title := panel.get_node("ContentPanel/OfferView/Content/Title") as Label
+	TestAssertions.equal(pending_label.get_index() + 1, title.get_index(), "pending-level indicator sits directly above the title", failures)
+
+	panel.show_choices(choices, party, {}, 1)
+	TestAssertions.equal(pending_label.text, "1 upgrade ready", "pending-level indicator uses singular upgrade text", failures)
+
+	panel.complete_selection()
+	panel.show_choices(choices, party, {}, 2)
+	TestAssertions.equal(pending_label.text, "2 upgrades ready", "next queued offer updates the indicator immediately", failures)
+	TestAssertions.equal(panel.find_children("PendingLevels", "Label", true, false).size(), 1, "queued offers reuse one pending-level indicator", failures)
+	panel.free()
+	party.free()
 
 func _test_exact_offer_target_cancel_and_confirmation(failures: Array[String]) -> void:
 	var catalog := GameCatalog.load_defaults()

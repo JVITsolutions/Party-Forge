@@ -12,7 +12,7 @@ var _upgrade_service: UpgradeApplicationService
 var _health_provider := Callable()
 var _party: PartyManager
 var _invalid_choice_keys: Dictionary = {}
-var _pending_count := 1
+var _pending_level_count := 1
 var _pending_choice: UpgradeChoice
 var _pending_member_id := 0
 var _awaiting_application := false
@@ -59,7 +59,13 @@ func show_choices(
 	choices = exact_choices.duplicate()
 	_party = party
 	_invalid_choice_keys = invalid_choice_keys.duplicate()
-	_pending_count = pending_count
+	_pending_level_count = maxi(pending_count, 1)
+	var pending_label := get_node("ContentPanel/OfferView/Content/PendingLevels") as Label
+	pending_label.text = "%d %s ready" % [
+		_pending_level_count,
+		"upgrade" if _pending_level_count == 1 else "upgrades",
+	]
+	pending_label.visible = _pending_level_count > 0
 	_pending_choice = null
 	_pending_member_id = 0
 	_awaiting_application = false
