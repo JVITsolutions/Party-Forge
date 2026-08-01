@@ -65,12 +65,22 @@ func visual_bounds() -> AABB:
 	var bounds := AABB()
 	var has_bounds := false
 	for mesh: MeshInstance3D in _all_meshes():
-		if not mesh.visible or mesh.mesh == null:
+		if not _is_effectively_visible(mesh) or mesh.mesh == null:
 			continue
 		var transformed := _transform_from_model(mesh) * mesh.get_aabb()
 		bounds = transformed if not has_bounds else bounds.merge(transformed)
 		has_bounds = true
 	return bounds
+
+func _is_effectively_visible(node: Node3D) -> bool:
+	var cursor: Node = node
+	while cursor != null:
+		if cursor is Node3D and not (cursor as Node3D).visible:
+			return false
+		if cursor == self:
+			return true
+		cursor = cursor.get_parent()
+	return true
 
 func play_action(animation_id: StringName) -> bool:
 	_ensure_cache()

@@ -66,7 +66,7 @@ func _assert_base_body(preset_id: StringName, paths: Dictionary, failures: Array
 	TestAssertions.truthy(visible_body_meshes >= 11, "%s base scene retains covered mannequin geometry" % preset_id, failures)
 	_assert_neutral_body_materials(model, preset_id, failures)
 	var bounds: AABB = model.call(&"visual_bounds") as AABB
-	TestAssertions.truthy(bounds.size.y >= 1.6 and bounds.size.y <= 1.9, "%s base body preserves actor scale" % preset_id, failures)
+	TestAssertions.truthy(bounds.size.y >= 1.6 and bounds.size.y <= 1.85, "%s base body preserves actor scale" % preset_id, failures)
 	TestAssertions.near(bounds.position.y, 0.0, 0.05, "%s base body remains floor aligned" % preset_id, failures)
 	var player := model.get_node_or_null("AnimationPlayer") as AnimationPlayer
 	for animation_id: StringName in ANIMATION_IDS:
