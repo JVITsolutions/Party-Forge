@@ -8,6 +8,7 @@ const PROFILES_SETTINGS_SCENE_PATH := "res://scenes/ui/settings/profiles_setting
 
 func run() -> Array[String]:
 	var failures: Array[String] = []
+	_test_pre_tree_profile_navigation_state(failures)
 	_test_game_settings_page(failures)
 	_test_additional_settings_page(failures)
 	_test_settings_apply_cancel_and_save_error(failures)
@@ -82,6 +83,46 @@ func run() -> Array[String]:
 	profiles_return_focus.free()
 	ProfileTestSupport.remove_tree(profile_root)
 	return failures
+
+
+func _test_pre_tree_profile_navigation_state(failures: Array[String]) -> void:
+	var packed := load(SETTINGS_SCENE_PATH) as PackedScene
+	if packed == null:
+		return
+	var requested := packed.instantiate() as SettingsScreen
+	var return_focus := Button.new()
+	requested.open_profiles(return_focus)
+	TestAssertions.truthy(_has_property(requested, &"_pending_open"), "Settings exposes bounded pending-open state", failures)
+	TestAssertions.truthy(_has_property(requested, &"_pending_profiles_tab"), "Settings exposes bounded pending-Profiles state", failures)
+	if _has_property(requested, &"_pending_open"):
+		TestAssertions.truthy(bool(requested.get("_pending_open")), "pre-tree open_profiles records a pending open", failures)
+	if _has_property(requested, &"_pending_profiles_tab"):
+		TestAssertions.truthy(bool(requested.get("_pending_profiles_tab")), "pre-tree open_profiles records the Profiles tab", failures)
+	TestAssertions.equal(requested.get("_return_focus"), return_focus, "pre-tree open_profiles preserves return focus", failures)
+	requested.close()
+	if _has_property(requested, &"_pending_open"):
+		TestAssertions.truthy(not bool(requested.get("_pending_open")), "pre-tree close cancels pending open", failures)
+	if _has_property(requested, &"_pending_profiles_tab"):
+		TestAssertions.truthy(not bool(requested.get("_pending_profiles_tab")), "pre-tree close cancels pending Profiles tab", failures)
+	TestAssertions.equal(requested.get("_return_focus"), null, "pre-tree close clears pending return focus", failures)
+	requested.free()
+	return_focus.free()
+
+	var startup := packed.instantiate() as SettingsScreen
+	startup.call("_ready")
+	TestAssertions.truthy(not startup.is_open(), "Settings without a pending request starts hidden", failures)
+	if _has_property(startup, &"_pending_open"):
+		TestAssertions.truthy(not bool(startup.get("_pending_open")), "normal startup has no pending open", failures)
+	if _has_property(startup, &"_pending_profiles_tab"):
+		TestAssertions.truthy(not bool(startup.get("_pending_profiles_tab")), "normal startup has no pending Profiles tab", failures)
+	startup.free()
+
+
+func _has_property(object: Object, property_name: StringName) -> bool:
+	for property: Dictionary in object.get_property_list():
+		if StringName(property.get("name", "")) == property_name:
+			return true
+	return false
 
 
 func _test_game_settings_page(failures: Array[String]) -> void:

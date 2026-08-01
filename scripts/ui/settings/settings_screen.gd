@@ -8,16 +8,26 @@ var _current_settings: PartyForgeSettings = PartyForgeSettings.new()
 var _draft: PartyForgeSettings = PartyForgeSettings.new()
 var _profile_manager: ProfileManager
 var _return_focus: Control
+var _pending_open := false
+var _pending_profiles_tab := false
 
 
 func _ready() -> void:
+	var should_open := _pending_open
+	var should_open_profiles := _pending_profiles_tab
 	process_mode = Node.PROCESS_MODE_ALWAYS
-	visible = false
+	visible = should_open
 	_notice().text = "Run-affecting changes apply when the next run starts."
 	_connect_additional_actions()
 	if not _technical_toggle().pressed.is_connected(_toggle_technical_details):
 		_technical_toggle().pressed.connect(_toggle_technical_details)
 	_clear_save_error_disclosure()
+	_pending_open = false
+	_pending_profiles_tab = false
+	if should_open:
+		if should_open_profiles:
+			_select_tab_control(_profiles_page())
+		call_deferred(&"_focus_active_page")
 
 
 func configure(store: PartyForgeSettingsStore, settings: PartyForgeSettings, profile_manager: ProfileManager = null) -> void:
@@ -37,15 +47,21 @@ func open(return_focus: Control = null) -> void:
 	_status().tooltip_text = ""
 	_clear_save_error_disclosure()
 	visible = true
+	if not is_inside_tree():
+		_pending_open = true
+		_pending_profiles_tab = false
+		return
+	_pending_open = false
 	_focus_active_page()
 
 
 func open_profiles(return_focus: Control = null) -> void:
 	open(return_focus)
-	var tabs := _tabs()
-	var profile_tab := _tab_index_for_control(_profiles_page())
-	if profile_tab >= 0:
-		tabs.current_tab = profile_tab
+	if not is_inside_tree():
+		_pending_profiles_tab = true
+		return
+	_pending_profiles_tab = false
+	_select_tab_control(_profiles_page())
 	_focus_active_page()
 
 
@@ -57,9 +73,17 @@ func _tab_index_for_control(control: Control) -> int:
 	return -1
 
 
+func _select_tab_control(control: Control) -> void:
+	var index := _tab_index_for_control(control)
+	if index >= 0:
+		_tabs().current_tab = index
+
+
 func close() -> void:
 	visible = false
-	if _return_focus != null and is_instance_valid(_return_focus) and _return_focus.is_inside_tree() and _return_focus.is_visible_in_tree():
+	_pending_open = false
+	_pending_profiles_tab = false
+	if is_inside_tree() and _return_focus != null and is_instance_valid(_return_focus) and _return_focus.is_inside_tree() and _return_focus.is_visible_in_tree():
 		_return_focus.grab_focus()
 	_return_focus = null
 
