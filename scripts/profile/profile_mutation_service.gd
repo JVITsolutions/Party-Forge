@@ -30,6 +30,11 @@ func apply(profile_id: String, transaction_id: String, mutate: Callable, root: S
 		result.duplicate = true
 		return result
 	var working := loaded.profile.copy()
+	var protected_schema_version := working.schema_version
+	var protected_profile_id := working.profile_id
+	var protected_created_at_unix := working.created_at_unix
+	var protected_updated_at_unix := working.updated_at_unix
+	var protected_applied_transactions := working.applied_transactions.duplicate(true)
 	var mutation_result: Variant = mutate.call(working)
 	if typeof(mutation_result) != TYPE_STRING:
 		result.error = "PROFILE_MUTATION_ERROR profile=%s transaction=%s reason=mutation must return String" % [profile_id, transaction_id]
@@ -38,14 +43,29 @@ func apply(profile_id: String, transaction_id: String, mutate: Callable, root: S
 	if not mutation_error.is_empty():
 		result.error = mutation_error
 		return result
+	var protected_field := ""
+	if working.schema_version != protected_schema_version:
+		protected_field = "schema_version"
+	elif working.profile_id != protected_profile_id:
+		protected_field = "profile_id"
+	elif working.created_at_unix != protected_created_at_unix:
+		protected_field = "created_at_unix"
+	elif working.updated_at_unix != protected_updated_at_unix:
+		protected_field = "updated_at_unix"
+	elif working.applied_transactions != protected_applied_transactions:
+		protected_field = "applied_transactions"
+	if not protected_field.is_empty():
+		result.error = "PROFILE_MUTATION_ERROR profile=%s transaction=%s reason=protected field changed field=%s" % [profile_id, transaction_id, protected_field]
+		return result
 	working.normalize()
 	var validation := ProfileCodec.validate_profile(working)
 	if not validation.is_empty():
 		result.error = validation
 		return result
-	var timestamp := now_unix if now_unix >= 0 else int(Time.get_unix_time_from_system())
-	working.applied_transactions[transaction_id] = timestamp
-	working.updated_at_unix = maxi(working.created_at_unix, timestamp)
+	var requested_timestamp := now_unix if now_unix >= 0 else int(Time.get_unix_time_from_system())
+	var committed_timestamp := maxi(loaded.profile.updated_at_unix, maxi(working.created_at_unix, requested_timestamp))
+	working.applied_transactions[transaction_id] = committed_timestamp
+	working.updated_at_unix = committed_timestamp
 	var save_error := _store.save_profile(working, root)
 	if not save_error.is_empty():
 		result.error = save_error

@@ -11,6 +11,13 @@ func run() -> Array[String]:
 	ProfileTestSupport.remove_tree(_root)
 	_test_duplicate_transactions_do_not_reapply(failures)
 	_reset_profile(failures)
+	_test_commit_timestamp_is_monotonic(failures)
+	_test_protected_metadata_changes_are_rejected(failures)
+	_reset_profile(failures)
+	_test_validation_failure_leaves_state_unchanged(failures)
+	_reset_profile(failures)
+	_test_duplicate_recovered_from_backup_does_not_rewrite(failures)
+	_reset_profile(failures)
 	_test_grant_helpers_and_amount_boundaries(failures)
 	_reset_profile(failures)
 	_test_prologue_completion_semantics(failures)
@@ -48,6 +55,110 @@ func _test_duplicate_transactions_do_not_reapply(failures: Array[String]) -> voi
 	var isolated := store.load_profile(ID, _root).profile
 	TestAssertions.equal((isolated.tree_allocations["party-forge-city-v1"] as Array).size(), 1, "successful result is a deep copy", failures)
 	TestAssertions.equal(isolated.gold, 25, "duplicate result is isolated from persisted state", failures)
+
+func _test_commit_timestamp_is_monotonic(failures: Array[String]) -> void:
+	var store := ProfileStore.new()
+	var newer := store.load_profile(ID, _root).profile
+	newer.updated_at_unix = 5000
+	TestAssertions.equal(store.save_profile(newer, _root), "", "monotonic timestamp fixture saves", failures)
+	var committed := ProfileMutationService.new(store).apply(ID, "older-clock", func(profile: ProfileState) -> String:
+		profile.gold += 1
+		return ""
+	, _root, 2000)
+	TestAssertions.truthy(committed.ok(), "mutation with older caller clock commits", failures)
+	var saved := store.load_profile(ID, _root).profile
+	TestAssertions.equal(saved.gold, 1, "older caller clock still commits value", failures)
+	TestAssertions.equal(saved.updated_at_unix, 5000, "committed update time never regresses", failures)
+	TestAssertions.equal(saved.applied_transactions.get("older-clock"), saved.updated_at_unix, "transaction records the committed monotonic timestamp", failures)
+
+func _test_protected_metadata_changes_are_rejected(failures: Array[String]) -> void:
+	_assert_protected_rejection("protect-schema", "schema_version", func(profile: ProfileState) -> String:
+		profile.schema_version += 1
+		return ""
+	, "", failures)
+	_assert_protected_rejection("protect-id", "profile_id", func(profile: ProfileState) -> String:
+		profile.profile_id = "profile-redirect1"
+		return ""
+	, "profile-redirect1", failures)
+	_assert_protected_rejection("protect-created", "created_at_unix", func(profile: ProfileState) -> String:
+		profile.created_at_unix = 999
+		return ""
+	, "", failures)
+	_assert_protected_rejection("protect-updated", "updated_at_unix", func(profile: ProfileState) -> String:
+		profile.updated_at_unix = 9999
+		return ""
+	, "", failures)
+	_assert_protected_rejection("protect-transactions-clear", "applied_transactions", func(profile: ProfileState) -> String:
+		profile.applied_transactions.clear()
+		return ""
+	, "", failures)
+	_assert_protected_rejection("protect-transactions-rewrite", "applied_transactions", func(profile: ProfileState) -> String:
+		profile.applied_transactions["seed-transaction"] = 9999
+		return ""
+	, "", failures)
+	_assert_protected_rejection("protect-transactions-inject", "applied_transactions", func(profile: ProfileState) -> String:
+		profile.applied_transactions["injected"] = {"nested": 1}
+		return ""
+	, "", failures)
+
+func _test_validation_failure_leaves_state_unchanged(failures: Array[String]) -> void:
+	var store := ProfileStore.new()
+	var before := store.load_profile(ID, _root).profile.to_dictionary()
+	var failed := ProfileMutationService.new(store).apply(ID, "invalid-display-name", func(profile: ProfileState) -> String:
+		profile.display_name = ""
+		return ""
+	, _root, 6000)
+	TestAssertions.truthy(not failed.ok() and failed.error.contains("PROFILE_VALIDATION_ERROR"), "normal-field validation failure is surfaced", failures)
+	var after := store.load_profile(ID, _root).profile
+	TestAssertions.equal(after.to_dictionary(), before, "validation failure leaves persisted dictionary unchanged", failures)
+	TestAssertions.truthy(not after.applied_transactions.has("invalid-display-name"), "validation failure records no transaction", failures)
+
+func _test_duplicate_recovered_from_backup_does_not_rewrite(failures: Array[String]) -> void:
+	var store := ProfileStore.new()
+	var backup_generation := store.load_profile(ID, _root).profile
+	backup_generation.gold = 10
+	backup_generation.updated_at_unix = 2000
+	backup_generation.applied_transactions["backup-transaction"] = 2000
+	TestAssertions.equal(store.save_profile(backup_generation, _root), "", "backup duplicate fixture saves prior transaction", failures)
+	var newer := backup_generation.copy()
+	newer.gold = 20
+	newer.updated_at_unix = 3000
+	TestAssertions.equal(store.save_profile(newer, _root), "", "backup duplicate fixture creates newer primary", failures)
+	var primary_path := store.profile_path(ID, _root)
+	var corrupt_bytes := "corrupt newer primary"
+	var corrupt := FileAccess.open(primary_path, FileAccess.WRITE)
+	if corrupt != null:
+		corrupt.store_string(corrupt_bytes)
+		corrupt.close()
+	var invocations := [0]
+	var duplicate := ProfileMutationService.new(store).apply(ID, "backup-transaction", func(profile: ProfileState) -> String:
+		invocations[0] += 1
+		profile.gold += 100
+		return ""
+	, _root, 9000)
+	TestAssertions.truthy(duplicate.ok() and duplicate.duplicate, "backup-recovered prior transaction reports duplicate", failures)
+	TestAssertions.equal(invocations[0], 0, "backup-recovered duplicate does not invoke callback", failures)
+	TestAssertions.equal(FileAccess.get_file_as_string(primary_path), corrupt_bytes, "backup-recovered duplicate does not rewrite corrupt primary", failures)
+	duplicate.profile.gold = 999
+	var recovered := store.load_profile(ID, _root)
+	TestAssertions.truthy(recovered.ok() and recovered.recovered_from_backup, "duplicate leaves backup recovery path intact", failures)
+	TestAssertions.equal(recovered.profile.gold, 10, "backup-recovered duplicate result is isolated", failures)
+
+func _assert_protected_rejection(transaction_id: String, field: String, mutate: Callable, redirected_id: String, failures: Array[String]) -> void:
+	ProfileTestSupport.remove_tree(_root)
+	var store := ProfileStore.new()
+	var fixture := ProfileState.new_profile(ID, "Jacob", 1000)
+	fixture.updated_at_unix = 1500
+	fixture.applied_transactions["seed-transaction"] = 1500
+	TestAssertions.equal(store.save_profile(fixture, _root), "", "protected field fixture saves for %s" % field, failures)
+	var before := store.load_profile(ID, _root).profile.to_dictionary()
+	var rejected := ProfileMutationService.new(store).apply(ID, transaction_id, mutate, _root, 2000)
+	TestAssertions.equal(rejected.error, "PROFILE_MUTATION_ERROR profile=%s transaction=%s reason=protected field changed field=%s" % [ID, transaction_id, field], "protected field change is rejected for %s" % field, failures)
+	var after := store.load_profile(ID, _root).profile
+	TestAssertions.equal(after.to_dictionary(), before, "protected field rejection preserves original dictionary for %s" % field, failures)
+	TestAssertions.truthy(not after.applied_transactions.has(transaction_id), "protected field rejection records no transaction for %s" % field, failures)
+	if not redirected_id.is_empty():
+		TestAssertions.truthy(not FileAccess.file_exists(store.profile_path(redirected_id, _root)), "profile id rejection creates no redirected file", failures)
 
 func _test_grant_helpers_and_amount_boundaries(failures: Array[String]) -> void:
 	var store := ProfileStore.new()
