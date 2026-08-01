@@ -33,6 +33,10 @@ func load_settings(path: String = DEFAULT_PATH) -> PartyForgeSettings:
 	result.party_capacity_override = int(capacity_value) if typeof(capacity_value) == TYPE_INT else 4
 	var density_value: Variant = config.get_value(SECTION, "enemy_density_percent", 100)
 	result.enemy_density_percent = int(density_value) if typeof(density_value) == TYPE_INT else 100
+	var xp_value: Variant = config.get_value(SECTION, "experience_multiplier_percent", 100)
+	result.experience_multiplier_percent = int(xp_value) if typeof(xp_value) == TYPE_INT else 100
+	var cards_value: Variant = config.get_value(SECTION, "level_up_card_count", 5)
+	result.level_up_card_count = int(cards_value) if typeof(cards_value) == TYPE_INT else 5
 	result.normalize()
 	return result
 
@@ -48,6 +52,8 @@ func save_settings(settings: PartyForgeSettings, path: String = DEFAULT_PATH) ->
 	config.set_value(SECTION, "god_mode", normalized.god_mode)
 	config.set_value(SECTION, "party_capacity_override", normalized.party_capacity_override)
 	config.set_value(SECTION, "enemy_density_percent", normalized.enemy_density_percent)
+	config.set_value(SECTION, "experience_multiplier_percent", normalized.experience_multiplier_percent)
+	config.set_value(SECTION, "level_up_card_count", normalized.level_up_card_count)
 	var temporary := "%s.tmp" % path
 	var backup := "%s.bak" % path
 	var save_error := config.save(temporary)
