@@ -1,0 +1,255 @@
+﻿Godot Engine v4.7.1.stable.mono.official.a13da4feb - https://godotengine.org
+
+Godot_v4.7.1-stable_mono_win64_console.exe : ERROR: PARTY_FORGE_LEDGER_ERROR page=equipment_inventory reason=unknown
+feature equipment
+At line:2 char:120
++ ... nsole.exe'; & $godot --headless --path . --script res://tests/test_ru ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (ERROR: PARTY_FO...ature equipment:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+
+   at: push_error (core/variant/variant_utility.cpp:1023)
+   GDScript backtrace (most recent call first):
+       [0] resolve (res://scripts/ui/ledger/ledger_feature_gate.gd:21)
+       [1] _test_gate_states (res://tests/unit/test_character_ledger_foundation.gd:53)
+       [2] run (res://tests/unit/test_character_ledger_foundation.gd:6)
+       [3] _initialize (res://tests/test_runner.gd:9)
+ERROR: PARTY_FORGE_LEDGER_ERROR page=equipment_inventory reason=unknown unlock equipment_mastery
+   at: push_error (core/variant/variant_utility.cpp:1023)
+   GDScript backtrace (most recent call first):
+       [0] resolve (res://scripts/ui/ledger/ledger_feature_gate.gd:24)
+       [1] _test_gate_states (res://tests/unit/test_character_ledger_foundation.gd:56)
+       [2] run (res://tests/unit/test_character_ledger_foundation.gd:6)
+       [3] _initialize (res://tests/test_runner.gd:9)
+PARTY_FORGE_BOOT_OK
+PARTY_FORGE_CLASS_SELECTION_READY
+ERROR: PARTY_FORGE_GOD_MODE_OWNERSHIP_ERROR team=2 member=1 reason=actor team is not party-owned
+   at: push_error (core/variant/variant_utility.cpp:1023)
+   GDScript backtrace (most recent call first):
+       [0] _apply_combat_policy (res://scripts/characters/party_actor.gd:69)
+       [1] configure_combat_policy (res://scripts/characters/party_actor.gd:54)
+       [2] _test_invalid_party_actor_ownership_fails_closed (res://tests/unit/test_combat_test_overrides.gd:101)
+       [3] run (res://tests/unit/test_combat_test_overrides.gd:19)
+       [4] _initialize (res://tests/test_runner.gd:9)
+ERROR: PARTY_FORGE_GOD_MODE_OWNERSHIP_ERROR team=1 member=1 reason=member state does not match party manager
+   at: push_error (core/variant/variant_utility.cpp:1023)
+   GDScript backtrace (most recent call first):
+       [0] _apply_combat_policy (res://scripts/characters/party_actor.gd:69)
+       [1] configure_combat_policy (res://scripts/characters/party_actor.gd:54)
+       [2] _test_invalid_party_actor_ownership_fails_closed (res://tests/unit/test_combat_test_overrides.gd:111)
+       [3] run (res://tests/unit/test_combat_test_overrides.gd:19)
+       [4] _initialize (res://tests/test_runner.gd:9)
+ERROR: PARTY_FORGE_DAMAGE_ERROR attack=test_hit source=party:1 target=enemy:invalid type=void reason=unknown runtime
+type
+   at: push_error (core/variant/variant_utility.cpp:1023)
+   GDScript backtrace (most recent call first):
+       [0] resolve (res://scripts/combat/damage_resolver.gd:44)
+       [1] _test_invalid_resolution_boundaries (res://tests/unit/test_damage_resolver.gd:133)
+       [2] run (res://tests/unit/test_damage_resolver.gd:13)
+       [3] _initialize (res://tests/test_runner.gd:9)
+ERROR: PARTY_FORGE_DAMAGE_ERROR attack=test_hit source=party:1 target=enemy:unavailable reason=target unavailable
+   at: push_error (core/variant/variant_utility.cpp:1023)
+   GDScript backtrace (most recent call first):
+       [0] resolve (res://scripts/combat/damage_resolver.gd:44)
+       [1] _test_invalid_resolution_boundaries (res://tests/unit/test_damage_resolver.gd:138)
+       [2] run (res://tests/unit/test_damage_resolver.gd:13)
+       [3] _initialize (res://tests/test_runner.gd:9)
+ERROR: PARTY_FORGE_DAMAGE_ERROR attack=test_hit source=party:1 target=party:ally reason=team-invalid target
+   at: push_error (core/variant/variant_utility.cpp:1023)
+   GDScript backtrace (most recent call first):
+       [0] resolve (res://scripts/combat/damage_resolver.gd:44)
+       [1] _test_invalid_resolution_boundaries (res://tests/unit/test_damage_resolver.gd:143)
+       [2] run (res://tests/unit/test_damage_resolver.gd:13)
+       [3] _initialize (res://tests/test_runner.gd:9)
+ERROR: PARTY_FORGE_DAMAGE_ERROR attack=test_hit source=party:1 target=enemy:invalid type=physical reason=invalid
+runtime amount
+   at: push_error (core/variant/variant_utility.cpp:1023)
+   GDScript backtrace (most recent call first):
+       [0] resolve (res://scripts/combat/damage_resolver.gd:44)
+       [1] _test_invalid_resolution_boundaries (res://tests/unit/test_damage_resolver.gd:146)
+       [2] run (res://tests/unit/test_damage_resolver.gd:13)
+       [3] _initialize (res://tests/test_runner.gd:9)
+PARTY_FORGE_BOOT_OK
+PARTY_FORGE_CLASS_SELECTION_READY
+PARTY_FORGE_BOOT_OK
+PARTY_FORGE_CLASS_SELECTION_READY
+PARTY_FORGE_BOOT_OK
+PARTY_FORGE_CLASS_SELECTION_READY
+FINAL_REVIEW_TEST resource
+FINAL_REVIEW_TEST party_stats
+PARTY_FORGE_BOOT_OK
+PARTY_FORGE_CLASS_SELECTION_READY
+FINAL_REVIEW_TEST trait_upgrade
+FINAL_REVIEW_TEST vanguard
+FINAL_REVIEW_TEST divine
+FINAL_REVIEW_TEST enemy_health
+PARTY_FORGE_BOOT_OK
+PARTY_FORGE_CLASS_SELECTION_READY
+FINAL_REVIEW_TEST charge
+FINAL_REVIEW_TEST unknown
+PARTY_FORGE_UNKNOWN_ENEMY_ID id=bogus
+FINAL_REVIEW_TEST sandbox
+FINAL_REVIEW_TEST done
+PARTY_FORGE_BOOT_OK
+PARTY_FORGE_CLASS_SELECTION_READY
+PARTY_FORGE_BOOT_OK
+PARTY_FORGE_CLASS_SELECTION_READY
+PARTY_FORGE_BOOT_OK
+PARTY_FORGE_CLASS_SELECTION_READY
+PARTY_FORGE_BOOT_OK
+PARTY_FORGE_CLASS_SELECTION_READY
+PARTY_FORGE_BOOT_OK
+PARTY_FORGE_CLASS_SELECTION_READY
+PARTY_FORGE_BOOT_OK
+PARTY_FORGE_CLASS_SELECTION_READY
+PARTY_FORGE_BOOT_OK
+PARTY_FORGE_CLASS_SELECTION_READY
+PARTY_FORGE_BOOT_OK
+PARTY_FORGE_CLASS_SELECTION_READY
+PARTY_FORGE_BOOT_OK
+PARTY_FORGE_CLASS_SELECTION_READY
+PARTY_FORGE_BOOT_OK
+PARTY_FORGE_CLASS_SELECTION_READY
+PARTY_FORGE_BOOT_OK
+PARTY_FORGE_CLASS_SELECTION_READY
+PARTY_FORGE_BOOT_OK
+PARTY_FORGE_CLASS_SELECTION_READY
+PARTY_FORGE_BOOT_OK
+PARTY_FORGE_CLASS_SELECTION_READY
+PARTY_FORGE_BOOT_OK
+PARTY_FORGE_CLASS_SELECTION_READY
+PARTY_FORGE_BOOT_OK
+PARTY_FORGE_CLASS_SELECTION_READY
+PARTY_FORGE_BOOT_OK
+PARTY_FORGE_CLASS_SELECTION_READY
+PARTY_FORGE_BOOT_OK
+PARTY_FORGE_CLASS_SELECTION_READY
+PARTY_FORGE_BOOT_OK
+PARTY_FORGE_CLASS_SELECTION_READY
+PARTY_FORGE_BOOT_OK
+PARTY_FORGE_CLASS_SELECTION_READY
+PARTY_FORGE_BOOT_OK
+PARTY_FORGE_CLASS_SELECTION_READY
+PARTY_FORGE_BOOT_OK
+PARTY_FORGE_CLASS_SELECTION_READY
+PARTY_FORGE_BOOT_OK
+PARTY_FORGE_CLASS_SELECTION_READY
+PARTY_FORGE_BOOT_OK
+PARTY_FORGE_CLASS_SELECTION_READY
+PARTY_FORGE_BOOT_OK
+PARTY_FORGE_CLASS_SELECTION_READY
+PARTY_FORGE_BOOT_OK
+PARTY_FORGE_CLASS_SELECTION_READY
+PARTY_FORGE_BOOT_OK
+PARTY_FORGE_CLASS_SELECTION_READY
+PARTY_FORGE_BOOT_OK
+PARTY_FORGE_CLASS_SELECTION_READY
+PARTY_FORGE_BOOT_OK
+PARTY_FORGE_CLASS_SELECTION_READY
+ERROR: PARTY_FORGE_STAT_ERROR source=invalid stat=missing_stat reason=unknown stat id
+   at: push_error (core/variant/variant_utility.cpp:1023)
+   GDScript backtrace (most recent call first):
+       [0] add_member_source (res://scripts/party/party_manager.gd:108)
+       [1] _test_invalid_source_is_atomic (res://tests/unit/test_member_stats.gd:186)
+       [2] run (res://tests/unit/test_member_stats.gd:9)
+       [3] _initialize (res://tests/test_runner.gd:9)
+ERROR: PARTY_FORGE_SETTINGS_VERSION_ERROR path=user://party_forge_settings_future_test.cfg version=999 supported=1
+   at: push_error (core/variant/variant_utility.cpp:1023)
+   GDScript backtrace (most recent call first):
+       [0] load_settings (res://scripts/settings/party_forge_settings_store.gd:23)
+       [1] _test_missing_unknown_and_malformed_fields (res://tests/unit/test_party_forge_settings.gd:115)
+       [2] run (res://tests/unit/test_party_forge_settings.gd:8)
+       [3] _initialize (res://tests/test_runner.gd:9)
+ERROR: PARTY_FORGE_RUN_RULES_ERROR reason=settings snapshot source is missing
+   at: push_error (core/variant/variant_utility.cpp:1023)
+   GDScript backtrace (most recent call first):
+       [0] from_settings (res://scripts/game/run_rules_snapshot.gd:18)
+       [1] run (res://tests/unit/test_run_rules_policies.gd:19)
+       [2] _initialize (res://tests/test_runner.gd:9)
+ERROR: PARTY_FORGE_FEATURE_ACCESS_ERROR feature=unknown reason=unknown feature
+   at: push_error (core/variant/variant_utility.cpp:1023)
+   GDScript backtrace (most recent call first):
+       [0] resolve (res://scripts/game/feature_access_policy.gd:21)
+       [1] run (res://tests/unit/test_run_rules_policies.gd:36)
+       [2] _initialize (res://tests/test_runner.gd:9)
+ERROR: PARTY_FORGE_SETTINGS_SAVE_ERROR path=user://party_forge_settings.cfg code=20 stage=promote
+   at: push_error (core/variant/variant_utility.cpp:1023)
+   GDScript backtrace (most recent call first):
+       [0] _apply_and_return (res://scripts/ui/settings/settings_screen.gd:61)
+       [1] _test_settings_apply_cancel_and_save_error (res://tests/unit/test_settings_screen.gd:250)
+       [2] run (res://tests/unit/test_settings_screen.gd:12)
+       [3] _initialize (res://tests/test_runner.gd:9)
+ERROR: PARTY_FORGE_SETTINGS_SAVE_ERROR path=user://party_forge_settings.cfg code=20 stage=promote
+   at: push_error (core/variant/variant_utility.cpp:1023)
+   GDScript backtrace (most recent call first):
+       [0] _apply_and_return (res://scripts/ui/settings/settings_screen.gd:61)
+       [1] _test_settings_apply_cancel_and_save_error (res://tests/unit/test_settings_screen.gd:267)
+       [2] run (res://tests/unit/test_settings_screen.gd:12)
+       [3] _initialize (res://tests/test_runner.gd:9)
+ERROR: PARTY_FORGE_DAMAGE_ERROR attack=invalid_rule_hit source=party:rule_source target=enemy:rule_target
+type=unstable rule=99 reason=unsupported mitigation rule
+   at: push_error (core/variant/variant_utility.cpp:1023)
+   GDScript backtrace (most recent call first):
+       [0] resolve (res://scripts/combat/damage_resolver.gd:44)
+       [1] _test_invalid_mitigation_rule_is_rejected (res://tests/unit/test_typed_combat_final_fixes.gd:32)
+       [2] run (res://tests/unit/test_typed_combat_final_fixes.gd:5)
+       [3] _initialize (res://tests/test_runner.gd:9)
+ERROR: PARTY_FORGE_UPGRADE_APPLICATION_ERROR id=vitality member=1 reason=maximum rank reached
+   at: push_error (core/variant/variant_utility.cpp:1023)
+   GDScript backtrace (most recent call first):
+       [0] apply (res://scripts/progression/upgrade_application_service.gd:78)
+       [1] _test_personal_ranks_sources_and_preview (res://tests/unit/test_upgrade_application.gd:42)
+       [2] run (res://tests/unit/test_upgrade_application.gd:5)
+       [3] _initialize (res://tests/test_runner.gd:9)
+ERROR: PARTY_FORGE_UPGRADE_APPLICATION_ERROR id=deadeye member=1 reason=class is not eligible
+   at: push_error (core/variant/variant_utility.cpp:1023)
+   GDScript backtrace (most recent call first):
+       [0] apply (res://scripts/progression/upgrade_application_service.gd:78)
+       [1] _test_eligibility_and_clean_rejection (res://tests/unit/test_upgrade_application.gd:56)
+       [2] run (res://tests/unit/test_upgrade_application.gd:6)
+       [3] _initialize (res://tests/test_runner.gd:9)
+ERROR: PARTY_FORGE_UPGRADE_APPLICATION_ERROR id=missing_upgrade member=2 reason=unknown upgrade id
+   at: push_error (core/variant/variant_utility.cpp:1023)
+   GDScript backtrace (most recent call first):
+       [0] apply (res://scripts/progression/upgrade_application_service.gd:73)
+       [1] _test_eligibility_and_clean_rejection (res://tests/unit/test_upgrade_application.gd:61)
+       [2] run (res://tests/unit/test_upgrade_application.gd:6)
+       [3] _initialize (res://tests/test_runner.gd:9)
+ERROR: PARTY_FORGE_UPGRADE_APPLICATION_ERROR id=vitality member=999 reason=member is no longer available
+   at: push_error (core/variant/variant_utility.cpp:1023)
+   GDScript backtrace (most recent call first):
+       [0] apply (res://scripts/progression/upgrade_application_service.gd:78)
+       [1] _test_eligibility_and_clean_rejection (res://tests/unit/test_upgrade_application.gd:62)
+       [2] run (res://tests/unit/test_upgrade_application.gd:6)
+       [3] _initialize (res://tests/test_runner.gd:9)
+ERROR: PARTY_FORGE_UPGRADE_APPLICATION_ERROR id=vanguard_wall member=0 reason=maximum rank reached
+   at: push_error (core/variant/variant_utility.cpp:1023)
+   GDScript backtrace (most recent call first):
+       [0] apply (res://scripts/progression/upgrade_application_service.gd:78)
+       [1] _test_matching_party_current_and_future (res://tests/unit/test_upgrade_application.gd:81)
+       [2] run (res://tests/unit/test_upgrade_application.gd:7)
+       [3] _initialize (res://tests/test_runner.gd:9)
+ERROR: PARTY_FORGE_UPGRADE_APPLICATION_ERROR id=invalid_multi member=1 reason=PARTY_FORGE_STAT_ERROR
+source=upgrade:invalid_multi:member:1 stat=missing_stat reason=unknown stat id
+   at: push_error (core/variant/variant_utility.cpp:1023)
+   GDScript backtrace (most recent call first):
+       [0] apply (res://scripts/progression/upgrade_application_service.gd:78)
+       [1] _test_atomic_invalid_multi_effect (res://tests/unit/test_upgrade_application.gd:118)
+       [2] run (res://tests/unit/test_upgrade_application.gd:9)
+       [3] _initialize (res://tests/test_runner.gd:9)
+TEST_SUMMARY: PASS (65 suites)
+[godot_ai game_helper] registered mcp capture (debugger active=false, logger=true)
+WARNING: 18 ObjectDB instances were leaked at exit (run with `--verbose` for details).
+   at: cleanup (core/object/object.cpp:2536)
+ERROR: 5 resources still in use at exit (run with --verbose for details).
+   at: clear (core/io/resource.cpp:822)
+
+AUTOMATED LEVEL-UP UI ACCEPTANCE RESULTS
+- Full suite: PASS (65 suites), process exit 0.
+- Full-suite diagnostics: expected negative-path push_error output was present; shutdown also reported 18 leaked ObjectDB instances and 5 resources still in use.
+- Five-card integration: PASS (4 sizes), process exit 0. Each target resolution covered five-card forward/reverse focus, full production tooltip fields, reveal skip, and direct reduced-motion resolution.
+- Temporary-popup integration: PASS (4 sizes), process exit 0. Each target resolution covered full long-content rendering, Alt-held mouse-wheel scrolling, mouse pin/unpin, controller Y/Triangle pin/unpin, right-stick scrolling, and neutral-stick stop.
+- Godot editor/parser import: process exit 0. The bounded --quit-after 2 run reported missing .uid files recreated from cache and "Scan thread aborted"; generated untracked .uid sidecars were removed after validation.
+- git diff --check: PASS, exit 0.
+
+MANUAL LEVEL-UP UI ACCEPTANCE: PENDING USER/CONNECTED ACCEPTANCE
