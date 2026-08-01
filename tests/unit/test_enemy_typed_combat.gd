@@ -13,6 +13,7 @@ func run() -> Array[String]:
 	_test_guardian_uses_resolved_charge_width(catalog, failures)
 	_test_guardian_charge_sweeps_full_movement_segment(catalog, failures)
 	_test_enemy_projectile_sweeps_and_resolves_area_once(catalog, failures)
+	_test_enemy_projectile_near_equal_contact_is_order_independent(catalog, failures)
 	return failures
 
 func _test_exact_enemy_attack_links(catalog: GameCatalog, failures: Array[String]) -> void:
@@ -265,6 +266,50 @@ func _test_enemy_projectile_sweeps_and_resolves_area_once(catalog: GameCatalog, 
 	TestAssertions.near(farther_health.current_health, farther_before, 0.001, "enemy projectile resolves the nearer swept hit before a farther actor registered first", failures)
 	TestAssertions.truthy(projectile.is_queued_for_deletion(), "enemy projectile is consumed by segment impact", failures)
 	root.free()
+
+func _test_enemy_projectile_near_equal_contact_is_order_independent(catalog: GameCatalog, failures: Array[String]) -> void:
+	var nearer_first := _near_equal_projectile_removals(catalog, true)
+	var farther_first := _near_equal_projectile_removals(catalog, false)
+	TestAssertions.equal(nearer_first, farther_first, "near-equal projectile contact winner is independent of party registration order", failures)
+	TestAssertions.near(nearer_first[0], 0.0, 0.001, "near-equal projectile tie defers to deterministic combatant identity", failures)
+	TestAssertions.near(nearer_first[1], 10.0, 0.001, "near-equal projectile tie selects the lower combatant identity", failures)
+
+func _near_equal_projectile_removals(catalog: GameCatalog, nearer_first: bool) -> Array[float]:
+	var root := Node3D.new()
+	(Engine.get_main_loop() as SceneTree).root.add_child(root)
+	var source := (load("res://scenes/enemies/spitter.tscn") as PackedScene).instantiate() as Spitter
+	root.add_child(source)
+	source.configure_combat(&"near_equal_source", CombatRng.new(906), catalog.damage_types)
+	var packet := source.prepare_attack(&"spitter_projectile")
+	var nearer: PartyActor
+	var farther: PartyActor
+	if nearer_first:
+		nearer = _party_actor(root, catalog, 7302, Vector3(5.0, 0.0, 0.0))
+		farther = _party_actor(root, catalog, 7301, Vector3(5.00001, 0.0, 0.0))
+	else:
+		farther = _party_actor(root, catalog, 7301, Vector3(5.00001, 0.0, 0.0))
+		nearer = _party_actor(root, catalog, 7302, Vector3(5.0, 0.0, 0.0))
+	var target := _party_actor(root, catalog, 7303, Vector3(20.0, 0.0, 0.0))
+	var nearer_health := nearer.get_node("HealthComponent") as HealthComponent
+	var farther_health := farther.get_node("HealthComponent") as HealthComponent
+	var nearer_before := nearer_health.current_health
+	var farther_before := farther_health.current_health
+	var attack := (load("res://data/attacks/spitter_projectile.tres") as AttackDefinition).duplicate(true) as AttackDefinition
+	attack.projectile_speed = 20.0
+	attack.range = 10.0
+	attack.area_radius = 0.0
+	var profile := EnemyProjectileProfile.new()
+	profile.movement = EnemyProjectileProfile.Movement.LINEAR
+	profile.hit_radius = 0.2
+	profile.max_lifetime = 10.0
+	var projectile := (load("res://scenes/enemies/enemy_projectile.tscn") as PackedScene).instantiate() as EnemyProjectile
+	root.add_child(projectile)
+	projectile.position = Vector3.ZERO
+	projectile.configure(target, packet, source.combat_rng, catalog.damage_types, attack, profile, target.position)
+	projectile.advance_projectile(0.5)
+	var removed: Array[float] = [nearer_before - nearer_health.current_health, farther_before - farther_health.current_health]
+	root.free()
+	return removed
 
 func _guardian_charge_removed(catalog: GameCatalog, steps: Array[float]) -> float:
 	var root := Node3D.new()

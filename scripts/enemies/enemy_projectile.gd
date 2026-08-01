@@ -90,7 +90,10 @@ func _first_living_party_actor_on_segment(start_position: Vector3, next_position
 			continue
 		var progression := _segment_hit_progression(actor_position, start_position, next_position)
 		var tie_break := _actor_tie_break(actor)
-		if selected == null or progression < selected_progression or (is_equal_approx(progression, selected_progression) and tie_break < selected_tie_break):
+		var should_select := selected == null
+		if selected != null:
+			should_select = tie_break < selected_tie_break if is_equal_approx(progression, selected_progression) else progression < selected_progression
+		if should_select:
 			selected = actor
 			selected_progression = progression
 			selected_tie_break = tie_break
