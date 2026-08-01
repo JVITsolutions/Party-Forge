@@ -1,0 +1,97 @@
+extends RefCounted
+
+const PROFILE_PATH := "res://data/presentation/profiles/forge_vanguard.tres"
+const EXPECTED_LENGTHS := {
+	&"idle": 1.6,
+	&"attack_slash": 0.55,
+	&"attack_combo": 0.9,
+	&"hit_flinch": 0.25,
+}
+const ROOT_TRANSFORM_PROPERTIES := [&"position", &"rotation", &"transform", &"global_transform"]
+
+func run() -> Array[String]:
+	var failures: Array[String] = []
+	var profile := load(PROFILE_PATH) as CharacterVisualProfile
+	TestAssertions.truthy(profile != null and profile.presentation_scene != null, "Forge Vanguard animation scene loads", failures)
+	if profile == null or profile.presentation_scene == null:
+		return failures
+	var model := profile.presentation_scene.instantiate() as ForgeVanguardModel
+	TestAssertions.truthy(model != null, "Forge Vanguard model instantiates for animation contract", failures)
+	if model == null:
+		return failures
+	(Engine.get_main_loop() as SceneTree).root.add_child(model)
+	var player := model.get_node_or_null("AnimationPlayer") as AnimationPlayer
+	TestAssertions.truthy(player != null, "AnimationPlayer exists", failures)
+	if player != null:
+		_assert_animation_metadata(player, failures)
+		_assert_model_root_is_not_animated(player, failures)
+		_assert_playback_contract(model, player, failures)
+	_assert_feedback_contract(model, failures)
+	_assert_fighter_cleave_mapping(profile, failures)
+	model.free()
+	return failures
+
+func _assert_animation_metadata(player: AnimationPlayer, failures: Array[String]) -> void:
+	for animation_id: StringName in EXPECTED_LENGTHS:
+		TestAssertions.truthy(player.has_animation(animation_id), "animation exists: %s" % animation_id, failures)
+		if player.has_animation(animation_id):
+			var animation := player.get_animation(animation_id)
+			TestAssertions.near(animation.length, EXPECTED_LENGTHS[animation_id], 0.02, "%s duration" % animation_id, failures)
+			TestAssertions.equal(animation.loop_mode == Animation.LOOP_LINEAR, animation_id == &"idle", "%s loop contract" % animation_id, failures)
+
+func _assert_model_root_is_not_animated(player: AnimationPlayer, failures: Array[String]) -> void:
+	for animation_id: StringName in EXPECTED_LENGTHS:
+		if not player.has_animation(animation_id):
+			continue
+		var animation := player.get_animation(animation_id)
+		for track_index: int in animation.get_track_count():
+			var path_text := String(animation.track_get_path(track_index))
+			var target_and_property := path_text.split(":", true, 1)
+			if target_and_property.size() != 2:
+				continue
+			var targets_root := target_and_property[0] in ["", "."]
+			var property := StringName(target_and_property[1])
+			TestAssertions.truthy(not (targets_root and property in ROOT_TRANSFORM_PROPERTIES), "%s does not animate the model root %s" % [animation_id, property], failures)
+
+func _assert_playback_contract(model: ForgeVanguardModel, player: AnimationPlayer, failures: Array[String]) -> void:
+	TestAssertions.truthy(not model.play_action(&"unknown_action"), "unknown action is rejected", failures)
+	for animation_id: StringName in [&"idle", &"attack_slash", &"attack_combo", &"hit_flinch"]:
+		TestAssertions.truthy(model.play_action(animation_id), "%s action starts" % animation_id, failures)
+		TestAssertions.equal(player.current_animation, animation_id, "%s becomes current animation" % animation_id, failures)
+		if animation_id != &"idle":
+			TestAssertions.truthy(&"idle" in player.get_queue(), "%s queues idle recovery" % animation_id, failures)
+
+func _assert_feedback_contract(model: ForgeVanguardModel, failures: Array[String]) -> void:
+	model.set_palette(&"red", Color("d94f4f"))
+	var primary := _first_primary_mesh(model)
+	TestAssertions.truthy(primary != null, "primary palette mesh exists for hit feedback", failures)
+	if primary == null:
+		return
+	var resting_material := primary.material_override as StandardMaterial3D
+	TestAssertions.truthy(resting_material != null, "primary palette material exists", failures)
+	if resting_material == null:
+		return
+	var root_transform := model.transform
+	var resting_color := resting_material.albedo_color
+	model.set_hit_weight(1.0)
+	var hit_material := primary.material_override as StandardMaterial3D
+	TestAssertions.equal(model.transform, root_transform, "hit feedback preserves model transform", failures)
+	TestAssertions.truthy(hit_material != null and hit_material.albedo_color != resting_color, "hit feedback tints the primary material", failures)
+	TestAssertions.truthy(hit_material != null and hit_material.emission_enabled, "hit feedback enables material emission", failures)
+	model.set_hit_weight(0.0)
+	model.set_downed(true)
+	var downed_material := primary.material_override as StandardMaterial3D
+	TestAssertions.truthy(downed_material != null and is_equal_approx(downed_material.albedo_color.r, downed_material.albedo_color.g) and is_equal_approx(downed_material.albedo_color.g, downed_material.albedo_color.b), "downed feedback remains grayscale", failures)
+	model.set_downed(false)
+	var restored_material := primary.material_override as StandardMaterial3D
+	TestAssertions.truthy(restored_material != null and restored_material.albedo_color.is_equal_approx(resting_color), "revival restores palette color", failures)
+
+func _assert_fighter_cleave_mapping(profile: CharacterVisualProfile, failures: Array[String]) -> void:
+	TestAssertions.equal(profile.attack_animation_by_id.get(&"fighter_cleave"), &"attack_slash", "fighter cleave maps only to slash", failures)
+	TestAssertions.truthy(not profile.attack_animation_by_id.values().has(&"attack_combo"), "fighter cleave does not map to combo", failures)
+
+func _first_primary_mesh(model: ForgeVanguardModel) -> MeshInstance3D:
+	for node: Node in model.find_children("*", "MeshInstance3D", true, false):
+		if StringName(node.get_meta(&"palette_region", &"")) == &"primary":
+			return node as MeshInstance3D
+	return null

@@ -7,7 +7,7 @@ const PALETTE_IDS: Array[StringName] = [&"red", &"blue", &"green"]
 var body_nodes: Dictionary = {}
 var palette_meshes: Dictionary = {}
 var equipment_nodes: Dictionary = {}
-var base_material_colors: Dictionary = {}
+var base_materials: Dictionary = {}
 var _cache_ready := false
 var _hit_weight := 0.0
 var _is_downed := false
@@ -59,7 +59,14 @@ func visual_bounds() -> AABB:
 
 func play_action(animation_id: StringName) -> bool:
 	_ensure_cache()
-	return animation_id in [&"idle", &"attack_slash", &"attack_combo", &"hit_flinch"]
+	var player := get_node_or_null("AnimationPlayer") as AnimationPlayer
+	if player == null or not player.has_animation(animation_id):
+		return false
+	player.clear_queue()
+	player.play(animation_id)
+	if animation_id != &"idle":
+		player.queue(&"idle")
+	return true
 
 func set_hit_weight(weight: float) -> void:
 	_ensure_cache()
@@ -77,7 +84,7 @@ func _ensure_cache() -> void:
 	body_nodes.clear()
 	palette_meshes.clear()
 	equipment_nodes.clear()
-	base_material_colors.clear()
+	base_materials.clear()
 	for node: Node in find_children("*", "", true, false):
 		if node is Node3D and node.has_meta(&"body_preset"):
 			var preset_id := StringName(node.get_meta(&"body_preset"))
@@ -97,7 +104,7 @@ func _ensure_cache() -> void:
 				(palette_meshes[region] as Array).append(node)
 				var material := node.material_override as StandardMaterial3D
 				if material != null:
-					base_material_colors[node] = material.albedo_color
+					base_materials[node] = material.duplicate() as StandardMaterial3D
 	_cache_ready = true
 
 func _all_meshes() -> Array[MeshInstance3D]:
@@ -113,19 +120,25 @@ func _assign_unique_color(mesh: MeshInstance3D, color: Color) -> void:
 	var unique_material := material.duplicate() as StandardMaterial3D
 	unique_material.albedo_color = color
 	mesh.material_override = unique_material
-	base_material_colors[mesh] = color
+	base_materials[mesh] = unique_material.duplicate() as StandardMaterial3D
 
 func _apply_feedback_colors() -> void:
 	for mesh: MeshInstance3D in _all_meshes():
-		var material := mesh.material_override as StandardMaterial3D
-		if material == null or not base_material_colors.has(mesh):
+		if not base_materials.has(mesh):
 			continue
-		var base: Color = base_material_colors[mesh]
+		var base_material := base_materials[mesh] as StandardMaterial3D
+		if base_material == null:
+			continue
+		var base := base_material.albedo_color
 		var color := base.lerp(Color.WHITE, _hit_weight * 0.7)
 		if _is_downed:
 			color = Color(color.get_luminance(), color.get_luminance(), color.get_luminance(), color.a)
-		var unique_material := material.duplicate() as StandardMaterial3D
+		var unique_material := base_material.duplicate() as StandardMaterial3D
 		unique_material.albedo_color = color
+		if _hit_weight > 0.0:
+			unique_material.emission_enabled = true
+			unique_material.emission = base.lerp(Color.WHITE, 0.85)
+			unique_material.emission_energy_multiplier = maxf(unique_material.emission_energy_multiplier, _hit_weight * 0.8)
 		mesh.material_override = unique_material
 
 func _transform_from_model(node: Node3D) -> Transform3D:
