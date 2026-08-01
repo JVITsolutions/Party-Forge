@@ -1,7 +1,7 @@
-[gd_resource type="Resource" script_class="AttackDefinition" format=3]
+[gd_resource type="Resource" script_class="AttackDefinition" format=3 uid="uid://ba7tar1q4u13w"]
 
-[ext_resource type="Script" path="res://scripts/data/attack_damage_component.gd" id="1_0bnb6"]
-[ext_resource type="Script" path="res://scripts/data/attack_definition.gd" id="2_xe2ri"]
+[ext_resource type="Script" uid="uid://bdwp2d6usmle4" path="res://scripts/data/attack_damage_component.gd" id="1_0bnb6"]
+[ext_resource type="Script" uid="uid://lkpggixni8q8" path="res://scripts/data/attack_definition.gd" id="2_xe2ri"]
 
 [sub_resource type="Resource" id="Resource_0bnb6"]
 script = ExtResource("1_0bnb6")
@@ -12,7 +12,7 @@ base_amount = 8.0
 script = ExtResource("2_xe2ri")
 id = &"rogue_flurry"
 cooldown = 0.32
-range = 1.6
+range = 2.0
 area_radius = 0.9
 damage_components = Array[ExtResource("1_0bnb6")]([SubResource("Resource_0bnb6")])
 action_tags = Array[StringName]([&"area", &"melee", &"physical", &"skirmisher"])

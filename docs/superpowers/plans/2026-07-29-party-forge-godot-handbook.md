@@ -92,8 +92,8 @@ Run:
 ```powershell
 git status --short
 $taskFiles = @(
-    'docs/handbook/README.md',
-    'docs/handbook/01-editor-and-project-files.md',
+	'docs/handbook/README.md',
+	'docs/handbook/01-editor-and-project-files.md',
     'docs/handbook/02-nodes-scenes-and-instances.md'
 )
 $taskFiles | ForEach-Object { "$_ exists=$(Test-Path $_)" }
@@ -204,28 +204,28 @@ Run:
 
 ```powershell
 $taskFiles = @(
-    'docs/handbook/README.md',
-    'docs/handbook/01-editor-and-project-files.md',
+	'docs/handbook/README.md',
+	'docs/handbook/01-editor-and-project-files.md',
     'docs/handbook/02-nodes-scenes-and-instances.md'
 )
 $taskFiles | ForEach-Object {
-    if (-not (Test-Path $_)) { throw "Missing handbook file: $_" }
+	if (-not (Test-Path $_)) { throw "Missing handbook file: $_" }
 }
 $requiredRepoPaths = @(
-    'project.godot',
-    'scenes/game/main.tscn',
-    'scenes/characters/companion.tscn',
-    'data/classes/fighter.tres',
-    'scripts/game/main.gd',
-    'scripts/party/party_actor_spawner.gd',
+	'project.godot',
+	'scenes/game/main.tscn',
+	'scenes/characters/companion.tscn',
+	'data/classes/fighter.tres',
+	'scripts/game/main.gd',
+	'scripts/party/party_actor_spawner.gd',
     'docs/development/RESPONSIVE_UI_TUTORIAL.md'
 )
 $requiredRepoPaths | ForEach-Object {
-    if (-not (Test-Path $_)) { throw "Broken Party Forge path: $_" }
+	if (-not (Test-Path $_)) { throw "Broken Party Forge path: $_" }
 }
 $taskFiles | ForEach-Object {
-    if (-not (Select-String -Path $_ -Pattern 'Godot version' -Quiet)) { throw "Missing version metadata: $_" }
-    if (Select-String -Path $_ -Pattern 'TBD|TODO|fill in|implement later' -Quiet) { throw "Placeholder text: $_" }
+	if (-not (Select-String -Path $_ -Pattern 'Godot version' -Quiet)) { throw "Missing version metadata: $_" }
+	if (Select-String -Path $_ -Pattern 'TBD|TODO|fill in|implement later' -Quiet) { throw "Placeholder text: $_" }
 }
 git diff --check -- $taskFiles
 ```
@@ -332,18 +332,18 @@ Run:
 
 ```powershell
 $taskFiles = @(
-    'docs/handbook/03-typed-gdscript-signals-and-data-flow.md',
-    'docs/handbook/04-resources-and-content-data.md'
+	'docs/handbook/03-typed-gdscript-signals-and-data-flow.md',
+	'docs/handbook/04-resources-and-content-data.md'
 )
 $requiredSymbols = @(
-    'class_name ClassDefinition',
-    'signal member_added',
-    'signal reward_dropped',
-    'signal level_ready',
-    'const CLASS_PATHS',
-    'const TRAIT_PATHS',
-    'const ENEMY_PATHS',
-    'PARTY_FORGE_RESOURCE_ERROR'
+	'class_name ClassDefinition',
+	'signal member_added',
+	'signal reward_dropped',
+	'signal level_ready',
+	'const CLASS_PATHS',
+	'const TRAIT_PATHS',
+	'const ENEMY_PATHS',
+	'PARTY_FORGE_RESOURCE_ERROR'
 )
 $symbolFiles = Get-ChildItem scripts -Recurse -Filter *.gd
 $requiredSymbols | ForEach-Object {
@@ -351,8 +351,8 @@ $requiredSymbols | ForEach-Object {
 }
 $taskFiles | ForEach-Object {
     if (-not (Test-Path $_)) { throw "Missing handbook file: $_" }
-    if (-not (Select-String -Path $_ -Pattern '> \*\*(Godot rule|Party Forge convention|Current limitation)' -Quiet)) { throw "Missing source classification callout: $_" }
-    if (Select-String -Path $_ -Pattern 'TBD|TODO|fill in|implement later' -Quiet) { throw "Placeholder text: $_" }
+	if (-not (Select-String -Path $_ -Pattern '> \*\*(Godot rule|Party Forge convention|Current limitation)' -Quiet)) { throw "Missing source classification callout: $_" }
+	if (Select-String -Path $_ -Pattern 'TBD|TODO|fill in|implement later' -Quiet) { throw "Placeholder text: $_" }
 }
 git diff --check -- $taskFiles
 ```
@@ -499,24 +499,24 @@ Run:
 
 ```powershell
 $taskFiles = @(
-    'docs/handbook/05-modifying-existing-content.md',
+	'docs/handbook/05-modifying-existing-content.md',
     'docs/handbook/06-adding-a-class-attack-and-trait.md'
 )
 $sourceChecks = @{
-    'scripts/data/class_definition.gd' = @('max_health', 'armor', 'preferred_distance', 'engagement_distance', 'tether_distance', 'primary_attack', 'support_action')
-    'scripts/data/attack_definition.gd' = @('MELEE_CLEAVE', 'PROJECTILE', 'AREA_PROJECTILE', 'HEAL', 'projectile_speed', 'area_radius')
-    'scripts/data/trait_definition.gd' = @('attack_speed', 'nearby_damage_reduction', 'projectile_speed_and_range', 'area_size', 'cooldown_reduction', 'healing_and_revive', 'support_power')
-    'scripts/data/enemy_definition.gd' = @('max_health', 'move_speed', 'contact_damage', 'experience')
+	'scripts/data/class_definition.gd' = @('max_health', 'armor', 'preferred_distance', 'engagement_distance', 'tether_distance', 'primary_attack', 'support_action')
+	'scripts/data/attack_definition.gd' = @('MELEE_CLEAVE', 'PROJECTILE', 'AREA_PROJECTILE', 'HEAL', 'projectile_speed', 'area_radius')
+	'scripts/data/trait_definition.gd' = @('attack_speed', 'nearby_damage_reduction', 'projectile_speed_and_range', 'area_size', 'cooldown_reduction', 'healing_and_revive', 'support_power')
+	'scripts/data/enemy_definition.gd' = @('max_health', 'move_speed', 'contact_damage', 'experience')
 }
 foreach ($file in $sourceChecks.Keys) {
-    $text = Get-Content -Raw $file
-    foreach ($needle in $sourceChecks[$file]) {
-        if (-not $text.Contains($needle)) { throw "Documented field missing from $file: $needle" }
-    }
+	$text = Get-Content -Raw $file
+	foreach ($needle in $sourceChecks[$file]) {
+		if (-not $text.Contains($needle)) { throw "Documented field missing from $file: $needle" }
+	}
 }
 $taskFiles | ForEach-Object {
-    if (-not (Test-Path $_)) { throw "Missing handbook file: $_" }
-    if (Select-String -Path $_ -Pattern 'TBD|TODO|fill in|implement later' -Quiet) { throw "Placeholder text: $_" }
+	if (-not (Test-Path $_)) { throw "Missing handbook file: $_" }
+	if (Select-String -Path $_ -Pattern 'TBD|TODO|fill in|implement later' -Quiet) { throw "Placeholder text: $_" }
 }
 git diff --check -- $taskFiles
 ```
@@ -635,19 +635,19 @@ Run:
 
 ```powershell
 $taskFiles = @(
-    'docs/handbook/07-adding-an-enemy.md',
-    'docs/handbook/08-visuals-audio-effects-and-ui.md'
+	'docs/handbook/07-adding-an-enemy.md',
+	'docs/handbook/08-visuals-audio-effects-and-ui.md'
 )
 $requiredPaths = @(
-    'scripts/enemies/enemy_actor.gd',
-    'scripts/enemies/swarmer.gd',
-    'scripts/enemies/spitter.gd',
-    'scripts/game/spawn_director.gd',
-    'scripts/game/spawn_schedule.gd',
-    'scenes/enemies/swarmer.tscn',
-    'scenes/enemies/spitter.tscn',
-    'scenes/dev/combat_sandbox.tscn',
-    'docs/development/RESPONSIVE_UI_TUTORIAL.md'
+	'scripts/enemies/enemy_actor.gd',
+	'scripts/enemies/swarmer.gd',
+	'scripts/enemies/spitter.gd',
+	'scripts/game/spawn_director.gd',
+	'scripts/game/spawn_schedule.gd',
+	'scenes/enemies/swarmer.tscn',
+	'scenes/enemies/spitter.tscn',
+	'scenes/dev/combat_sandbox.tscn',
+	'docs/development/RESPONSIVE_UI_TUTORIAL.md'
 )
 $requiredPaths | ForEach-Object {
     if (-not (Test-Path $_)) { throw "Broken documented path: $_" }
@@ -658,7 +658,7 @@ foreach ($needle in @('swarmer', 'spitter', 'SWARMER_SCENE', 'SPITTER_SCENE')) {
 }
 $taskFiles | ForEach-Object {
     if (-not (Test-Path $_)) { throw "Missing handbook file: $_" }
-    if (Select-String -Path $_ -Pattern 'TBD|TODO|fill in|implement later' -Quiet) { throw "Placeholder text: $_" }
+	if (Select-String -Path $_ -Pattern 'TBD|TODO|fill in|implement later' -Quiet) { throw "Placeholder text: $_" }
 }
 git diff --check -- $taskFiles
 ```
@@ -789,26 +789,26 @@ Run:
 
 ```powershell
 $handbookFiles = @(
-    'docs/handbook/README.md',
-    'docs/handbook/01-editor-and-project-files.md',
-    'docs/handbook/02-nodes-scenes-and-instances.md',
-    'docs/handbook/03-typed-gdscript-signals-and-data-flow.md',
-    'docs/handbook/04-resources-and-content-data.md',
-    'docs/handbook/05-modifying-existing-content.md',
-    'docs/handbook/06-adding-a-class-attack-and-trait.md',
-    'docs/handbook/07-adding-an-enemy.md',
-    'docs/handbook/08-visuals-audio-effects-and-ui.md',
-    'docs/handbook/09-debugging-testing-saving-and-git.md',
-    'docs/handbook/10-party-forge-architecture-reference.md'
+	'docs/handbook/README.md',
+	'docs/handbook/01-editor-and-project-files.md',
+	'docs/handbook/02-nodes-scenes-and-instances.md',
+	'docs/handbook/03-typed-gdscript-signals-and-data-flow.md',
+	'docs/handbook/04-resources-and-content-data.md',
+	'docs/handbook/05-modifying-existing-content.md',
+	'docs/handbook/06-adding-a-class-attack-and-trait.md',
+	'docs/handbook/07-adding-an-enemy.md',
+	'docs/handbook/08-visuals-audio-effects-and-ui.md',
+	'docs/handbook/09-debugging-testing-saving-and-git.md',
+	'docs/handbook/10-party-forge-architecture-reference.md'
 )
 $handbookFiles | ForEach-Object {
     if (-not (Test-Path $_)) { throw "Missing handbook file: $_" }
     if ((Get-Content $_).Count -lt 40) { throw "Suspiciously short handbook file: $_" }
-    if (Select-String -Path $_ -Pattern 'TBD|TODO|fill in|implement later|replace this text' -Quiet) { throw "Placeholder text: $_" }
+	if (Select-String -Path $_ -Pattern 'TBD|TODO|fill in|implement later|replace this text' -Quiet) { throw "Placeholder text: $_" }
 }
 $relativeLinks = Get-ChildItem docs/handbook -Filter *.md | ForEach-Object {
     $source = $_
-    Select-String -Path $_.FullName -Pattern '\]\((?!https?://|#)([^)]+\.md)(#[^)]+)?\)' -AllMatches | ForEach-Object {
+	Select-String -Path $_.FullName -Pattern '\]\((?!https?://|#)([^)]+\.md)(#[^)]+)?\)' -AllMatches | ForEach-Object {
         foreach ($match in $_.Matches) {
             [pscustomobject]@{ Source = $source.FullName; Target = $match.Groups[1].Value }
         }
@@ -829,7 +829,7 @@ Run:
 
 ```powershell
 $officialLinks = Get-ChildItem docs/handbook -Filter *.md | ForEach-Object {
-    Select-String -Path $_.FullName -Pattern 'https://docs\.godotengine\.org/[^)\s]+' -AllMatches | ForEach-Object {
+	Select-String -Path $_.FullName -Pattern 'https://docs\.godotengine\.org/[^)\s]+' -AllMatches | ForEach-Object {
         $_.Matches.Value
     }
 } | Sort-Object -Unique

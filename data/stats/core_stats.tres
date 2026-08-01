@@ -1,7 +1,7 @@
-[gd_resource type="Resource" script_class="StatCatalog" format=3]
+[gd_resource type="Resource" script_class="StatCatalog" format=3 uid="uid://g4wbuodxevdo"]
 
-[ext_resource type="Script" path="res://scripts/stats/stat_definition.gd" id="1_w76bv"]
-[ext_resource type="Script" path="res://scripts/stats/stat_catalog.gd" id="2_e1y7i"]
+[ext_resource type="Script" uid="uid://bnfioioil7wob" path="res://scripts/stats/stat_definition.gd" id="1_w76bv"]
+[ext_resource type="Script" uid="uid://c23iq3ybp740g" path="res://scripts/stats/stat_catalog.gd" id="2_e1y7i"]
 
 [sub_resource type="Resource" id="Resource_qjanc"]
 script = ExtResource("1_w76bv")
