@@ -1,7 +1,7 @@
 class_name EnemyDefinition
 extends Resource
 
-enum Behavior { SWARMER, SPITTER, FORGE_GUARDIAN }
+enum Behavior { SWARMER, SPITTER, FORGE_GUARDIAN, BOLTCASTER }
 
 @export var id: StringName
 @export var behavior: Behavior
@@ -9,6 +9,7 @@ enum Behavior { SWARMER, SPITTER, FORGE_GUARDIAN }
 @export var move_speed: float = 3.0
 @export var stat_overrides: Dictionary[StringName, float] = {}
 @export var attacks: Array[AttackDefinition] = []
+@export var projectile_profile: EnemyProjectileProfile
 @export var experience: int = 1
 
 func attack_by_id(attack_id: StringName) -> AttackDefinition:
@@ -38,6 +39,12 @@ func validate(types: DamageTypeCatalog = null, stats: StatCatalog = null) -> Pac
         Behavior.SWARMER: required = [&"swarmer_contact"]
         Behavior.SPITTER: required = [&"spitter_projectile"]
         Behavior.FORGE_GUARDIAN: required = [&"guardian_charge", &"guardian_shockwave"]
+        Behavior.BOLTCASTER: required = [&"boltcaster_bolt"]
     for required_id: StringName in required:
         if attack_by_id(required_id) == null: errors.append("PARTY_FORGE_DAMAGE_ERROR enemy=%s attack=%s reason=required behavior attack missing" % [id, required_id])
+    if behavior in [Behavior.SPITTER, Behavior.BOLTCASTER]:
+        if projectile_profile == null:
+            errors.append("PARTY_FORGE_PROJECTILE_ERROR enemy=%s reason=projectile profile missing" % id)
+        else:
+            errors.append_array(projectile_profile.validate(id))
     return errors
