@@ -48,7 +48,7 @@ func set_palette(palette_id: StringName, primary_color: Color) -> bool:
 	return true
 
 func apply_equipment_visual(slot_id: StringName, definition: EquipmentVisualDefinition) -> bool:
-	if active_model == null or definition == null or definition.slot_id != slot_id:
+	if active_model == null or definition == null or not EquipmentSlotCatalog.is_valid(slot_id) or definition.slot_id != slot_id:
 		return false
 	return _call_bool(&"apply_equipment_visual", [slot_id, definition])
 

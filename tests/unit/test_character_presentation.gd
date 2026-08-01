@@ -9,6 +9,7 @@ func run() -> Array[String]:
 	if not ResourceLoader.exists(ADAPTER_SCENE_PATH):
 		return failures
 	_test_profile_application_and_feedback(failures)
+	_test_invalid_equipment_slot_is_not_forwarded(failures)
 	_test_invalid_profile_keeps_fallback_visible(failures)
 	_test_instances_keep_model_state_independent(failures)
 	return failures
@@ -34,6 +35,21 @@ func _test_profile_application_and_feedback(failures: Array[String]) -> void:
 		TestAssertions.near(model.hit_weight, 0.0, 0.001, "feedback restores hit weight after duration", failures)
 		presentation.set_downed(true)
 		TestAssertions.truthy(model.downed, "downed state forwards to model", failures)
+	root.free()
+
+func _test_invalid_equipment_slot_is_not_forwarded(failures: Array[String]) -> void:
+	var root := _new_root("CharacterPresentationInvalidSlotTest")
+	var presentation := _new_presentation(root)
+	TestAssertions.truthy(presentation.apply_profile(_valid_profile(), Color.WHITE), "profile applies before equipment customization", failures)
+	var model := presentation.active_model as FakeCharacterModel
+	var charm := EquipmentVisualDefinition.new()
+	charm.id = &"test_charm"
+	charm.slot_id = &"charm"
+	charm.geometry_key = &"test_charm"
+	charm.visual_channels = [&"geometry"]
+	TestAssertions.truthy(not presentation.apply_equipment_visual(&"charm", charm), "invalid equipment slot is rejected", failures)
+	if model != null:
+		TestAssertions.truthy(not model.equipped.has(&"charm"), "invalid equipment slot is not forwarded to model", failures)
 	root.free()
 
 func _test_invalid_profile_keeps_fallback_visible(failures: Array[String]) -> void:
