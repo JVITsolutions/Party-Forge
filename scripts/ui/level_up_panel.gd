@@ -12,6 +12,7 @@ var _upgrade_service: UpgradeApplicationService
 var _health_provider := Callable()
 var _party: PartyManager
 var _invalid_choice_keys: Dictionary = {}
+var _pending_count := 1
 var _pending_choice: UpgradeChoice
 var _pending_member_id := 0
 var _awaiting_application := false
@@ -43,7 +44,8 @@ func configure(
 func show_choices(
 	exact_choices: Array[UpgradeChoice],
 	party: PartyManager,
-	invalid_choice_keys: Dictionary = {}
+	invalid_choice_keys: Dictionary = {},
+	pending_count: int = 1
 ) -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	_connect_cards()
@@ -57,6 +59,7 @@ func show_choices(
 	choices = exact_choices.duplicate()
 	_party = party
 	_invalid_choice_keys = invalid_choice_keys.duplicate()
+	_pending_count = pending_count
 	_pending_choice = null
 	_pending_member_id = 0
 	_awaiting_application = false

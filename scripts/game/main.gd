@@ -32,6 +32,7 @@ var level_refresh_scheduled := false
 var saved_settings: PartyForgeSettings
 var settings_store: PartyForgeSettingsStore
 var active_run_rules: RunRulesSnapshot
+var _level_up_offer_state := LevelUpOfferState.new()
 
 func _ready() -> void:
 	if initialized:
@@ -62,6 +63,7 @@ func select_leader_class(class_id: StringName) -> bool:
 		push_error(format_resource_error("res://data/classes", "unknown leader class %s" % class_id))
 		return false
 	active_run_rules = RunRulesSnapshot.from_settings(saved_settings)
+	_level_up_offer_state = LevelUpOfferState.new()
 	experience_system.configure_multiplier(active_run_rules.experience_multiplier_percent())
 	developer_mode_badge.configure(active_run_rules)
 	party_manager.configure_capacity(active_run_rules.capacity_policy())
@@ -272,9 +274,26 @@ func _present_pending_level() -> void:
 		game_run.begin_level_up()
 	if game_run.current_state() != RunStateMachine.State.LEVEL_UP:
 		return
-	var offer_seed := experience_system.current_pending_level() * 1009 + party_manager.members.size()
-	var choices := _generate_valid_choices(offer_seed)
-	get_node("HUD/LevelUpPanel").call("show_choices", choices, party_manager, _invalid_choice_keys(choices))
+	var offer_seed := _level_up_offer_state.seed_for(
+		game_run.run_seed,
+		experience_system.current_pending_level(),
+		party_manager.members.size()
+	)
+	var choices := LevelUpChoiceService.generate(
+		party_manager,
+		catalog,
+		offer_seed,
+		active_run_rules.level_up_card_count(),
+		_level_up_offer_state
+	)
+	_level_up_offer_state.offer_sequence += 1
+	get_node("HUD/LevelUpPanel").call(
+		"show_choices",
+		choices,
+		party_manager,
+		_invalid_choice_keys(choices),
+		experience_system.pending_levels
+	)
 
 func _choice_is_valid(choice: UpgradeChoice) -> bool:
 	if choice == null or party_manager == null or not choice.is_valid_for(party_manager):
