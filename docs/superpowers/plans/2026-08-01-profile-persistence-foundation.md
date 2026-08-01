@@ -838,7 +838,8 @@ func load_index(root: String = ProfileStore.DEFAULT_ROOT) -> ProfileIndexLoadRes
 	return result
 
 func _validate_document(document: Dictionary) -> String:
-	if typeof(document.get("schema_version")) != TYPE_INT or int(document["schema_version"]) != ProfileIndex.SCHEMA_VERSION:
+	var schema_value: Variant = document.get("schema_version")
+	if not _is_json_int(schema_value) or int(schema_value) != ProfileIndex.SCHEMA_VERSION:
 		return "PROFILE_INDEX_ERROR reason=unsupported schema"
 	if typeof(document.get("active_profile_id", "")) != TYPE_STRING:
 		return "PROFILE_INDEX_ERROR reason=active profile id must be a string"
@@ -848,9 +849,15 @@ func _validate_document(document: Dictionary) -> String:
 		if not entry is Dictionary:
 			return "PROFILE_INDEX_ERROR reason=entry must be a dictionary"
 		var item := entry as Dictionary
-		if typeof(item.get("profile_id")) != TYPE_STRING or typeof(item.get("display_name")) != TYPE_STRING or typeof(item.get("updated_at_unix")) != TYPE_INT:
+		if typeof(item.get("profile_id")) != TYPE_STRING or typeof(item.get("display_name")) != TYPE_STRING or not _is_json_int(item.get("updated_at_unix")):
 			return "PROFILE_INDEX_ERROR reason=entry fields have invalid types"
 	return ""
+
+func _is_json_int(value: Variant) -> bool:
+	if typeof(value) not in [TYPE_INT, TYPE_FLOAT]:
+		return false
+	var number := float(value)
+	return is_finite(number) and number == floor(number)
 ```
 
 - [ ] **Step 4: Implement the operation result and manager**
