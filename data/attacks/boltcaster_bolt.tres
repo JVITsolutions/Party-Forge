@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="AttackDefinition" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/attack_damage_component.gd" id="1_damage"]
+[ext_resource type="Script" path="res://scripts/data/attack_definition.gd" id="2_attack"]
+
+[sub_resource type="Resource" id="Resource_damage"]
+script = ExtResource("1_damage")
+damage_type_id = &"physical"
+base_amount = 9.0
+
+[resource]
+script = ExtResource("2_attack")
+id = &"boltcaster_bolt"
+kind = 1
+cooldown = 2.4
+range = 16.0
+projectile_speed = 8.0
+area_radius = 0.0
+damage_components = Array[ExtResource("1_damage")]([SubResource("Resource_damage")])
+action_tags = Array[StringName]([&"projectile", &"ranged"])

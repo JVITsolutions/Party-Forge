@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="EnemyDefinition" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/enemy_definition.gd" id="1_enemy"]
+[ext_resource type="Script" path="res://scripts/data/attack_definition.gd" id="2_attack_script"]
+[ext_resource type="Resource" path="res://data/attacks/boltcaster_bolt.tres" id="3_attack"]
+[ext_resource type="Resource" path="res://data/projectiles/boltcaster_bolt.tres" id="4_profile"]
+
+[resource]
+script = ExtResource("1_enemy")
+id = &"boltcaster"
+behavior = 3
+max_health = 15.0
+move_speed = 3.1
+attacks = Array[ExtResource("2_attack_script")]([ExtResource("3_attack")])
+projectile_profile = ExtResource("4_profile")
+experience = 3

@@ -11,6 +11,7 @@ func run() -> Array[String]:
 	TestAssertions.equal(catalog.classes.size(), 9, "nine playable classes", failures)
 	TestAssertions.equal(catalog.traits.size(), 13, "thirteen overlapping traits", failures)
 	TestAssertions.equal(catalog.validate(), PackedStringArray(), "expanded catalog validates", failures)
+	_assert_ranged_enemy_profiles(catalog, failures)
 	var actual_ids: Array[StringName] = []
 	for definition: ClassDefinition in catalog.classes:
 		actual_ids.append(definition.id)
@@ -41,6 +42,27 @@ func run() -> Array[String]:
 		TestAssertions.truthy(marksman.range > ranger.range, "Marksman reaches farther than Ranger", failures)
 	_test_missing_trait_reference(catalog, failures)
 	return failures
+
+func _assert_ranged_enemy_profiles(catalog: GameCatalog, failures: Array[String]) -> void:
+	var boltcaster := catalog.enemies.filter(func(definition: EnemyDefinition) -> bool: return definition != null and definition.id == &"boltcaster")
+	TestAssertions.equal(boltcaster.size(), 1, "default catalog loads Boltcaster", failures)
+	if boltcaster.size() == 1:
+		var definition := boltcaster[0] as EnemyDefinition
+		TestAssertions.equal(definition.behavior, EnemyDefinition.Behavior.BOLTCASTER, "Boltcaster uses appended behavior", failures)
+		TestAssertions.truthy(definition.attack_by_id(&"boltcaster_bolt") != null, "Boltcaster attack resolves", failures)
+		TestAssertions.truthy(definition.projectile_profile != null, "Boltcaster profile resolves", failures)
+		if definition.projectile_profile != null:
+			TestAssertions.equal(definition.projectile_profile.movement, EnemyProjectileProfile.Movement.LINEAR, "Boltcaster projectile is linear", failures)
+			TestAssertions.equal(definition.projectile_profile.color, Color(1.0, 0.08, 0.05, 1.0), "Boltcaster projectile is red", failures)
+			TestAssertions.near(definition.projectile_profile.tell_duration, 0.35, 0.001, "Boltcaster tell lasts 0.35 seconds", failures)
+	var spitter := catalog.enemies.filter(func(definition: EnemyDefinition) -> bool: return definition != null and definition.id == &"spitter")
+	TestAssertions.equal(spitter.size(), 1, "default catalog loads Spitter", failures)
+	if spitter.size() == 1:
+		var definition := spitter[0] as EnemyDefinition
+		TestAssertions.truthy(definition.projectile_profile != null, "Spitter profile resolves", failures)
+		if definition.projectile_profile != null:
+			TestAssertions.equal(definition.projectile_profile.movement, EnemyProjectileProfile.Movement.HOMING, "Spitter projectile is homing", failures)
+			TestAssertions.equal(definition.projectile_profile.color, Color(0.75, 0.15, 1.0, 1.0), "Spitter projectile is purple", failures)
 
 func _test_missing_trait_reference(catalog: GameCatalog, failures: Array[String]) -> void:
 	var broken := ClassDefinition.new()

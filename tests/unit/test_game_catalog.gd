@@ -13,7 +13,7 @@ func run() -> Array[String]:
     var catalog: GameCatalog = GameCatalog.load_defaults()
     TestAssertions.equal(catalog.classes.size(), 9, "nine classes", failures)
     TestAssertions.equal(catalog.traits.size(), 13, "thirteen traits", failures)
-    TestAssertions.equal(catalog.enemies.size(), 3, "two enemies plus boss", failures)
+    TestAssertions.equal(catalog.enemies.size(), 4, "three enemies plus boss", failures)
     TestAssertions.equal(catalog.validate().size(), 0, "catalog validates", failures)
     TestAssertions.equal(catalog.class_by_id(&"fighter").traits, [&"martial", &"vanguard"], "fighter traits", failures)
     TestAssertions.equal(catalog.class_by_id(&"cleric").support_action.id, &"cleric_heal", "cleric heal", failures)
@@ -107,6 +107,7 @@ func _assert_generated_values(failures: Array[String]) -> void:
         {"path": "res://data/attacks/frost_shard.tres", "values": {"id": &"frost_shard", "kind": AttackDefinition.Kind.AREA_PROJECTILE, "power": 0.0, "cooldown": 1.35, "range": 12.5, "projectile_speed": 10.0, "area_radius": 3.0, "action_tags": [&"area", &"cold", &"projectile"], "can_crit": true}, "damage_type": &"cold", "damage_amount": 20.0},
         {"path": "res://data/attacks/warlock_bolt.tres", "values": {"id": &"warlock_bolt", "kind": AttackDefinition.Kind.PROJECTILE, "power": 0.0, "cooldown": 1.75, "range": 12.5, "projectile_speed": 9.0, "area_radius": 0.0, "action_tags": [&"chaos", &"projectile", &"ranged"], "can_crit": true}, "damage_type": &"chaos", "damage_amount": 30.0},
         {"path": "res://data/attacks/marksman_heavy_shot.tres", "values": {"id": &"marksman_heavy_shot", "kind": AttackDefinition.Kind.PROJECTILE, "power": 0.0, "cooldown": 2.2, "range": 16.0, "projectile_speed": 22.0, "area_radius": 0.0, "action_tags": [&"bow", &"physical", &"projectile", &"ranged"], "can_crit": true}, "damage_type": &"physical", "damage_amount": 42.0},
+        {"path": "res://data/attacks/boltcaster_bolt.tres", "values": {"id": &"boltcaster_bolt", "kind": AttackDefinition.Kind.PROJECTILE, "cooldown": 2.4, "range": 16.0, "projectile_speed": 8.0, "area_radius": 0.0, "action_tags": [&"projectile", &"ranged"]}, "damage_type": &"physical", "damage_amount": 9.0},
     ]
     var class_rows: Array[Dictionary] = [
         {"path": "res://data/classes/fighter.tres", "values": {"id": &"fighter", "display_name": "Fighter", "role": ClassDefinition.Role.FRONTLINE, "color": Color("d94f4f"), "traits": [&"martial", &"vanguard"], "max_health": 260.0, "armor": 10.0, "move_speed": 6.2, "preferred_distance": 2.0, "engagement_distance": 5.0, "tether_distance": 9.0, "support_action": null}},
@@ -131,6 +132,7 @@ func _assert_generated_values(failures: Array[String]) -> void:
     var enemy_rows: Array[Dictionary] = [
         {"path": "res://data/enemies/swarmer.tres", "values": {"id": &"swarmer", "behavior": EnemyDefinition.Behavior.SWARMER, "max_health": 12.0, "move_speed": 4.8, "stat_overrides": {}, "experience": 2}, "attacks": [&"swarmer_contact"]},
         {"path": "res://data/enemies/spitter.tres", "values": {"id": &"spitter", "behavior": EnemyDefinition.Behavior.SPITTER, "max_health": 18.0, "move_speed": 2.8, "stat_overrides": {}, "experience": 4}, "attacks": [&"spitter_projectile"]},
+        {"path": "res://data/enemies/boltcaster.tres", "values": {"id": &"boltcaster", "behavior": EnemyDefinition.Behavior.BOLTCASTER, "max_health": 15.0, "move_speed": 3.1, "stat_overrides": {}, "experience": 3}, "attacks": [&"boltcaster_bolt"]},
         {"path": "res://data/enemies/forge_guardian.tres", "values": {"id": &"forge_guardian", "behavior": EnemyDefinition.Behavior.FORGE_GUARDIAN, "max_health": 3000.0, "move_speed": 3.3, "stat_overrides": {}, "experience": 100}, "attacks": [&"guardian_charge", &"guardian_shockwave"]},
     ]
     _assert_resource_table("attack", attack_rows, failures)

@@ -8,6 +8,7 @@ const DELIVERY_SCENES: PackedStringArray = [
 
 const ENEMY_SCENES := {
 	&"swarmer": "res://scenes/enemies/swarmer.tscn",
+	&"boltcaster": "res://scenes/enemies/boltcaster.tscn",
 	&"spitter": "res://scenes/enemies/spitter.tscn",
 	&"forge_guardian": "res://scenes/enemies/forge_guardian.tscn",
 }
@@ -41,7 +42,7 @@ func _test_no_raw_damage_bypasses(failures: Array[String]) -> void:
 
 func _test_baseline_catalogs(catalog: GameCatalog, failures: Array[String]) -> void:
 	TestAssertions.equal(catalog.classes.size(), 9, "typed combat audit loads nine classes", failures)
-	TestAssertions.equal(catalog.enemies.size(), 3, "typed combat audit loads three enemy definitions", failures)
+	TestAssertions.equal(catalog.enemies.size(), 4, "typed combat audit loads four enemy definitions", failures)
 	TestAssertions.equal(PartyManager.STAT_CATALOG.validate(), PackedStringArray(), "baseline stat catalog validates", failures)
 	TestAssertions.equal(catalog.damage_types.validate(PartyManager.STAT_CATALOG), PackedStringArray(), "baseline damage type catalog validates", failures)
 	TestAssertions.equal(catalog.validate(), PackedStringArray(), "complete baseline game catalog validates", failures)

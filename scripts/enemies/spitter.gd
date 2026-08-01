@@ -39,7 +39,7 @@ func advance_behavior(delta: float) -> void:
         velocity = Vector3.ZERO
     _move_for_delta(delta)
     fire_cooldown -= maxf(delta, 0.0)
-    if fire_cooldown <= 0.0:
+    if fire_cooldown <= 0.0 and distance <= attack_geometry(&"spitter_projectile").range:
         _fire_projectile()
         var attack := definition.attack_by_id(&"spitter_projectile")
         fire_cooldown += attack.cooldown if attack != null else FIRE_INTERVAL
@@ -51,7 +51,8 @@ func _fire_projectile() -> void:
     if parent == null:
         return
     var packet := prepare_attack(&"spitter_projectile")
-    if packet == null or not packet.valid:
+    var attack := definition.attack_by_id(&"spitter_projectile")
+    if attack == null or definition.projectile_profile == null or packet == null or not packet.valid:
         return
     var projectile := ENEMY_PROJECTILE_SCENE.instantiate() as Node3D
     parent.add_child(projectile)
@@ -60,7 +61,8 @@ func _fire_projectile() -> void:
         projectile.global_position = global_position
     else:
         projectile.position = position
-    projectile.call("configure", leader, packet, combat_rng, damage_types)
+    var target_position := leader.global_position if leader.is_inside_tree() else leader.position
+    projectile.call("configure", leader, packet, combat_rng, damage_types, attack, definition.projectile_profile, target_position)
 
 func _leader_is_living() -> bool:
     if leader == null or not is_instance_valid(leader):

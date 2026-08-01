@@ -4,12 +4,14 @@ const REQUIRED_PATHS: PackedStringArray = [
     "res://scripts/enemies/enemy_actor.gd",
     "res://scripts/enemies/swarmer.gd",
     "res://scripts/enemies/spitter.gd",
+    "res://scripts/enemies/boltcaster.gd",
     "res://scripts/enemies/enemy_projectile.gd",
     "res://scripts/progression/experience_orb.gd",
     "res://scripts/game/spawn_schedule.gd",
     "res://scripts/game/spawn_director.gd",
     "res://scenes/enemies/swarmer.tscn",
     "res://scenes/enemies/spitter.tscn",
+    "res://scenes/enemies/boltcaster.tscn",
     "res://scenes/enemies/enemy_projectile.tscn",
     "res://scenes/progression/experience_orb.tscn",
 ]
@@ -28,6 +30,8 @@ func run() -> Array[String]:
     _test_enemy_reward_exactly_once(failures)
     _test_swarmer_targeting_and_contact_cooldown(failures)
     _test_spitter_spacing_and_projectile_cadence(failures)
+    _test_ranged_enemies_only_fire_in_resolved_range(failures)
+    _test_boltcaster_telegraph_preserves_sampled_aim(failures)
     _test_linear_projectile_preserves_sampled_aim(failures)
     _test_homing_projectile_tracks_live_target(failures)
     _test_experience_orb_collection(failures)
@@ -105,6 +109,52 @@ func _test_spitter_spacing_and_projectile_cadence(failures: Array[String]) -> vo
     var before := _count_named(root, &"EnemyProjectile")
     spitter.call("advance_behavior", 2.2)
     TestAssertions.equal(_count_named(root, &"EnemyProjectile"), before + 1, "spitter fires at 2.2 second cadence", failures)
+    root.free()
+
+func _test_ranged_enemies_only_fire_in_resolved_range(failures: Array[String]) -> void:
+    var root := _new_root("RangedEnemyRangeTest")
+    var leader := _party_actor(root, Vector3.ZERO)
+    var spitter: Node3D = (load("res://scenes/enemies/spitter.tscn") as PackedScene).instantiate() as Node3D
+    root.add_child(spitter)
+    spitter.call("configure_combat", 1, CombatRng.new(105), GameCatalog.load_defaults().damage_types)
+    spitter.call("configure_target", leader, root)
+    spitter.position = Vector3(19.0, 0.0, 0.0)
+    spitter.set("fire_cooldown", 0.0)
+    spitter.call("advance_behavior", 0.1)
+    TestAssertions.equal(_count_named(root, &"EnemyProjectile"), 0, "Spitter does not fire outside resolved attack range", failures)
+    TestAssertions.truthy((spitter.get("velocity") as Vector3).x < 0.0, "Spitter advances while outside attack range", failures)
+
+    var boltcaster: Node3D = (load("res://scenes/enemies/boltcaster.tscn") as PackedScene).instantiate() as Node3D
+    root.add_child(boltcaster)
+    boltcaster.call("configure_combat", 2, CombatRng.new(106), GameCatalog.load_defaults().damage_types)
+    boltcaster.call("configure_target", leader, root)
+    boltcaster.position = Vector3(17.0, 0.0, 0.0)
+    boltcaster.set("fire_cooldown", 0.0)
+    boltcaster.call("advance_behavior", 0.1)
+    TestAssertions.near(float(boltcaster.get("tell_remaining")), 0.0, 0.001, "Boltcaster does not tell outside resolved attack range", failures)
+    TestAssertions.truthy((boltcaster.get("velocity") as Vector3).x < 0.0, "Boltcaster advances while outside attack range", failures)
+    root.free()
+
+func _test_boltcaster_telegraph_preserves_sampled_aim(failures: Array[String]) -> void:
+    var root := _new_root("BoltcasterBehaviorTest")
+    var leader := _party_actor(root, Vector3.ZERO)
+    var boltcaster: Node3D = (load("res://scenes/enemies/boltcaster.tscn") as PackedScene).instantiate() as Node3D
+    root.add_child(boltcaster)
+    boltcaster.call("configure_combat", 1, CombatRng.new(107), GameCatalog.load_defaults().damage_types)
+    boltcaster.call("configure_target", leader, root)
+    boltcaster.position = Vector3(9.0, 0.0, 0.0)
+    boltcaster.set("fire_cooldown", 0.0)
+    boltcaster.call("advance_behavior", 0.0)
+    TestAssertions.near(float(boltcaster.get("tell_remaining")), 0.35, 0.001, "Boltcaster begins its configured tell in range", failures)
+    TestAssertions.equal(boltcaster.get("sampled_aim_position"), Vector3.ZERO, "Boltcaster samples aim when tell begins", failures)
+    leader.position = Vector3(0.0, 0.0, 9.0)
+    boltcaster.call("advance_behavior", 0.35)
+    var projectile := root.get_node_or_null("EnemyProjectile") as Node3D
+    TestAssertions.truthy(projectile != null, "Boltcaster fires when tell ends", failures)
+    if projectile != null:
+        var direction := projectile.get("direction") as Vector3
+        TestAssertions.near(direction.x, -1.0, 0.001, "Boltcaster projectile aims at sampled position", failures)
+        TestAssertions.near(direction.z, 0.0, 0.001, "Boltcaster projectile ignores leader movement during tell", failures)
     root.free()
 
 func _test_linear_projectile_preserves_sampled_aim(failures: Array[String]) -> void:
