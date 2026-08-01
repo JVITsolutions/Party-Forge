@@ -31,6 +31,8 @@ func _test_layout_controller_and_pause_edges(failures: Array[String]) -> void:
 	var catalog := GameCatalog.load_defaults()
 	var party := PartyManager.new()
 	party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
+	for member_id: int in range(2, 25):
+		party.members.append(PartyMemberState.new(member_id, catalog.class_by_id(&"fighter"), false, "Extra %d" % member_id))
 	TestAssertions.truthy(UpgradeApplicationService.apply(&"vitality", catalog, party, 1), "responsive fixture owns one upgrade", failures)
 	var run := GameRun.new()
 	run.start_run()
@@ -49,11 +51,14 @@ func _test_layout_controller_and_pause_edges(failures: Array[String]) -> void:
 		return
 
 	var body := ledger.get_node("Overlay/Frame/Layout/Body") as SplitContainer
+	var party_scroll := ledger.get_node("Overlay/Frame/Layout/Body/PartyScroll") as ScrollContainer
 	var entries := ledger.get_node("Overlay/Frame/Layout/Body/PartyScroll/PartyEntries") as GridContainer
 	var stats_content := stats_page.get_node("Layout/Content") as SplitContainer
 	var upgrades_content := upgrades_page.get_node("Layout/Content") as SplitContainer
 	var status := ledger.get_node("Overlay/Frame/Layout/Status") as Label
 	var status_font_size := status.get_theme_font_size(&"font_size")
+	TestAssertions.truthy(party_scroll.follow_focus, "party scroll follows keyboard and controller focus", failures)
+	TestAssertions.equal(party_scroll.horizontal_scroll_mode, ScrollContainer.SCROLL_MODE_DISABLED, "party scroll disables horizontal scrolling", failures)
 	ledger.call("apply_viewport_size", Vector2(1920.0, 1080.0))
 	TestAssertions.truthy(not body.vertical, "desktop outer split is horizontal", failures)
 	TestAssertions.equal(entries.columns, 1, "desktop party rail uses one column", failures)
@@ -68,11 +73,68 @@ func _test_layout_controller_and_pause_edges(failures: Array[String]) -> void:
 
 	TestAssertions.truthy(ledger.open_for_player(), "responsive ledger opens", failures)
 	var selected_member := ledger.get_node("Overlay/Frame/Layout/Body/PartyScroll/PartyEntries/Member_1") as Button
+	var member_3 := ledger.get_node("Overlay/Frame/Layout/Body/PartyScroll/PartyEntries/Member_3") as Button
+	var member_4 := ledger.get_node("Overlay/Frame/Layout/Body/PartyScroll/PartyEntries/Member_4") as Button
+	var member_21 := ledger.get_node("Overlay/Frame/Layout/Body/PartyScroll/PartyEntries/Member_21") as Button
+	var member_24 := ledger.get_node("Overlay/Frame/Layout/Body/PartyScroll/PartyEntries/Member_24") as Button
+	var stats_focus := stats_page.initial_focus()
+	TestAssertions.equal(member_4.focus_neighbor_top, member_4.get_path_to(selected_member), "compact member 4 moves up to member 1", failures)
+	TestAssertions.equal(member_4.focus_neighbor_left, member_4.get_path_to(member_3), "compact member 4 moves left to member 3", failures)
+	TestAssertions.equal(member_24.focus_neighbor_top, member_24.get_path_to(member_21), "compact member 24 moves up to member 21", failures)
+	TestAssertions.equal(selected_member.focus_neighbor_bottom, selected_member.get_path_to(member_4), "compact bridge preserves member 1 internal down route", failures)
+	TestAssertions.equal(selected_member.focus_neighbor_right, selected_member.get_path_to(stats_focus), "compact selected member moves right to active page", failures)
+	TestAssertions.equal(stats_focus.focus_neighbor_left, stats_focus.get_path_to(selected_member), "compact active page moves left to selected member", failures)
+	TestAssertions.truthy(ledger.select_member(24), "compact fixture selects last roster member", failures)
+	stats_focus = stats_page.initial_focus()
+	TestAssertions.equal(member_24.focus_neighbor_bottom, member_24.get_path_to(stats_focus), "compact last-row member moves down to active page", failures)
+	TestAssertions.equal(stats_focus.focus_neighbor_top, stats_focus.get_path_to(member_24), "compact active page moves up to last-row member", failures)
+	ledger.apply_viewport_size(Vector2(1920.0, 1080.0))
+	TestAssertions.equal(member_24.focus_neighbor_top, member_24.get_path_to(ledger.get_node("Overlay/Frame/Layout/Body/PartyScroll/PartyEntries/Member_23")), "desktop member 24 moves up to member 23", failures)
+	TestAssertions.equal(selected_member.focus_neighbor_bottom, selected_member.get_path_to(ledger.get_node("Overlay/Frame/Layout/Body/PartyScroll/PartyEntries/Member_2")), "desktop member 1 moves down to member 2", failures)
+	TestAssertions.equal(member_24.focus_neighbor_right, member_24.get_path_to(stats_focus), "desktop selected member moves right to active page", failures)
+	TestAssertions.equal(stats_focus.focus_neighbor_left, stats_focus.get_path_to(member_24), "desktop active page moves left to selected member", failures)
+	ledger.apply_viewport_size(Vector2(960.0, 540.0))
+	ledger.select_member(1)
 	TestAssertions.truthy(selected_member.text.begins_with("[Selected] "), "member selection has a non-color text cue", failures)
 	ledger.refresh()
 	selected_member = ledger.get_node("Overlay/Frame/Layout/Body/PartyScroll/PartyEntries/Member_1") as Button
 	TestAssertions.equal(selected_member.text.count("[Selected] "), 1, "selection marker does not accumulate on refresh", failures)
-	TestAssertions.truthy(stats_page.initial_focus() is Button, "Stats supplies an explicit first focus row", failures)
+	stats_focus = stats_page.initial_focus()
+	TestAssertions.truthy(stats_focus is Button, "Stats supplies an explicit first focus row", failures)
+	TestAssertions.equal(stats_focus.focus_neighbor_left, stats_focus.get_path_to(selected_member), "refresh restores the active page route to the selected member", failures)
+	member_24 = ledger.get_node("Overlay/Frame/Layout/Body/PartyScroll/PartyEntries/Member_24") as Button
+	if member_24.is_inside_tree():
+		member_24.grab_focus()
+	ledger.context.last_focus_path = ledger.get_path_to(member_24)
+	ledger.close()
+	TestAssertions.truthy(ledger.open_for_player(), "ledger reopens with remembered roster focus", failures)
+	member_24 = ledger.get_node("Overlay/Frame/Layout/Body/PartyScroll/PartyEntries/Member_24") as Button
+	TestAssertions.equal(ledger.get_node(ledger.context.last_focus_path), member_24, "reopen retains remembered member 24 focus target", failures)
+	if ledger.is_inside_tree():
+		TestAssertions.equal(ledger.get_viewport().gui_get_focus_owner(), member_24, "reopen restores member 24 as the actual focus owner", failures)
+	TestAssertions.equal(ledger.context.selected_member_id, 1, "remembered focus does not change selected member", failures)
+	TestAssertions.truthy(ledger.has_method("_apply_member_visibility_request"), "ledger exposes revision-keyed visibility delivery", failures)
+	var reopen_revision := 0
+	if ledger.has_method("_apply_member_visibility_request"):
+		reopen_revision = int(ledger.get("_member_visibility_request_revision"))
+		TestAssertions.equal(int(ledger.get("_member_visibility_request_target_id")), 24, "reopen visibility request captures member 24", failures)
+	var member_23 := ledger.get_node("Overlay/Frame/Layout/Body/PartyScroll/PartyEntries/Member_23") as Button
+	ledger.context.last_focus_path = ledger.get_path_to(member_23)
+	TestAssertions.truthy(ledger.select_member(24), "refresh-removal fixture selects member 24", failures)
+	if member_24.is_inside_tree():
+		member_24.grab_focus()
+	party.members.remove_at(23)
+	ledger.refresh()
+	TestAssertions.equal(ledger.context.selected_member_id, 1, "removed member 24 falls back to member 1", failures)
+	if ledger.has_method("_apply_member_visibility_request"):
+		var refresh_revision := int(ledger.get("_member_visibility_request_revision"))
+		TestAssertions.truthy(refresh_revision > reopen_revision, "refresh visibility request supersedes reopen request", failures)
+		TestAssertions.equal(int(ledger.get("_member_visibility_request_target_id")), 1, "in-session refresh captures fallback member 1", failures)
+		TestAssertions.truthy(not bool(ledger.call("_apply_member_visibility_request", 24, reopen_revision)), "older reopen callback is a no-op after refresh request", failures)
+		TestAssertions.truthy(bool(ledger.call("_apply_member_visibility_request", 1, refresh_revision)), "current refresh callback applies fallback member 1", failures)
+		ledger.close()
+		TestAssertions.truthy(not bool(ledger.call("_apply_member_visibility_request", 1, refresh_revision)), "close invalidates outstanding visibility callbacks", failures)
+		TestAssertions.truthy(ledger.open_for_player(), "ledger reopens after visibility invalidation check", failures)
 
 	ledger.call("_unhandled_input", _action_event(&"ledger_next_page"))
 	TestAssertions.truthy(upgrades_page.visible and not stats_page.visible, "next bumper moves Stats to Current Upgrades", failures)
@@ -117,8 +179,49 @@ func _test_layout_controller_and_pause_edges(failures: Array[String]) -> void:
 	TestAssertions.truthy(ledger.open_for_player(), "ledger opens during BOSS", failures)
 	ledger.close()
 	TestAssertions.truthy(not tree.paused, "ledger close restores unpaused BOSS", failures)
+	_test_provider_refresh_focus_lifecycle(ledger, party, catalog, failures)
 
 	_cleanup(ledger, run, party)
+
+
+func _test_provider_refresh_focus_lifecycle(ledger: CharacterLedger, party: PartyManager, catalog: GameCatalog, failures: Array[String]) -> void:
+	if not ledger.is_inside_tree():
+		return
+	for index: int in range(party.members.size() - 1, -1, -1):
+		if party.members[index].member_id not in [1, 24]:
+			party.members.remove_at(index)
+	if party.member_by_id(24) == null:
+		party.members.append(PartyMemberState.new(24, catalog.class_by_id(&"fighter"), false, "Twenty Four"))
+	ledger.context.selected_member_id = 1
+	ledger.context.active_page_id = &"stats"
+	TestAssertions.truthy(ledger.open_for_player(), "refresh-focus ledger opens", failures)
+
+	var entries := ledger.get_node("Overlay/Frame/Layout/Body/PartyScroll/PartyEntries") as GridContainer
+	var member_24 := entries.get_node("Member_24") as Button
+	member_24.grab_focus()
+	TestAssertions.equal(ledger.get_viewport().gui_get_focus_owner(), member_24, "refresh fixture starts with actual member 24 focus", failures)
+	TestAssertions.truthy(party.recruit(catalog.class_by_id(&"fighter")), "recruit triggers provider party refresh", failures)
+	var rebuilt_member_24 := entries.get_node("Member_24") as Button
+	TestAssertions.truthy(rebuilt_member_24 != member_24, "provider refresh rebuilds member 24", failures)
+	TestAssertions.equal(ledger.get_viewport().gui_get_focus_owner(), rebuilt_member_24, "provider refresh restores actual member 24 focus", failures)
+	TestAssertions.truthy(rebuilt_member_24.is_visible_in_tree(), "provider refresh keeps focused member 24 visible", failures)
+	TestAssertions.equal(int(ledger.get("_member_visibility_request_target_id")), 24, "provider refresh requests focused member 24 visibility", failures)
+
+	var show_all := ledger.get_node("Overlay/Frame/Layout/Body/PageHost/StatsLedgerPage/Layout/Content/StatSide/ShowAll") as CheckButton
+	show_all.grab_focus()
+	ledger.refresh()
+	TestAssertions.equal(ledger.get_viewport().gui_get_focus_owner(), show_all, "roster refresh does not steal active-page focus", failures)
+
+	TestAssertions.truthy(ledger.select_member(24), "removal fixture selects member 24", failures)
+	rebuilt_member_24 = entries.get_node("Member_24") as Button
+	rebuilt_member_24.grab_focus()
+	party.members.erase(party.member_by_id(24))
+	ledger.refresh()
+	var fallback_member := entries.get_node("Member_1") as Button
+	TestAssertions.equal(ledger.context.selected_member_id, 1, "removed focused selection falls back to member 1", failures)
+	TestAssertions.equal(ledger.get_viewport().gui_get_focus_owner(), fallback_member, "removed focused selection restores actual fallback member 1 focus", failures)
+	TestAssertions.truthy(fallback_member.is_visible_in_tree(), "removed focused selection keeps fallback member 1 visible", failures)
+	TestAssertions.equal(int(ledger.get("_member_visibility_request_target_id")), 1, "removed focused selection requests fallback member 1 visibility", failures)
 
 
 func _tab_for(ledger: CharacterLedger, page_id: StringName) -> Button:

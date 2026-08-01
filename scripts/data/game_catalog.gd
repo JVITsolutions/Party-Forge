@@ -23,7 +23,7 @@ const TRAIT_PATHS: PackedStringArray = [
 ]
 const ENEMY_PATHS: PackedStringArray = [
 	"res://data/enemies/swarmer.tres", "res://data/enemies/spitter.tres",
-	"res://data/enemies/forge_guardian.tres",
+	"res://data/enemies/forge_guardian.tres", "res://data/enemies/boltcaster.tres",
 ]
 const REQUIRED_UPGRADE_PATHS: PackedStringArray = [
 	"res://data/upgrades/cards/hold_the_line.tres",

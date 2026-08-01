@@ -3,7 +3,7 @@
 [ext_resource type="Script" uid="uid://c5xmbsowae1m1" path="res://scripts/ui/upgrade_card.gd" id="1_card"]
 
 [node name="UpgradeCard" type="Button" unique_id=316099655]
-custom_minimum_size = Vector2(320, 240)
+custom_minimum_size = Vector2(168, 300)
 script = ExtResource("1_card")
 
 [node name="Content" type="VBoxContainer" parent="." unique_id=1829703514]
@@ -11,9 +11,9 @@ layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
-offset_left = 16.0
+offset_left = 10.0
 offset_top = 16.0
-offset_right = -16.0
+offset_right = -10.0
 offset_bottom = -16.0
 grow_horizontal = 2
 grow_vertical = 2

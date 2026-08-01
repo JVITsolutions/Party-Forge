@@ -9,6 +9,7 @@ const DETAIL_PATH := "Layout/Content/DetailPanel/Detail/"
 func run() -> Array[String]:
 	var failures: Array[String] = []
 	_test_current_upgrades_page(failures)
+	_test_member_24_context_across_pages(failures)
 	_test_coming_soon_navigation(failures)
 	return failures
 
@@ -116,6 +117,63 @@ func _test_current_upgrades_page(failures: Array[String]) -> void:
 	provider.configure(null, null, Callable())
 	page.free()
 	fresh_party.free()
+	party.free()
+
+
+func _test_member_24_context_across_pages(failures: Array[String]) -> void:
+	var tree := Engine.get_main_loop() as SceneTree
+	tree.paused = false
+	var ledger_scene := load(LEDGER_SCENE_PATH) as PackedScene
+	if ledger_scene == null:
+		TestAssertions.truthy(false, "ledger scene loads for member 24 page switching", failures)
+		return
+	var catalog := GameCatalog.load_defaults()
+	var party := PartyManager.new()
+	party.configure_capacity(PartyCapacityPolicy.new(24))
+	party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
+	for _index: int in 23:
+		TestAssertions.truthy(party.recruit(catalog.class_by_id(&"fighter")), "24-member Upgrades fixture recruits every Fighter", failures)
+	var member_24 := party.member_by_id(24)
+	TestAssertions.truthy(member_24 != null, "24-member Upgrades fixture includes member 24", failures)
+	if member_24 == null:
+		party.free()
+		return
+	member_24.character_name = "Twenty Four"
+	TestAssertions.truthy(UpgradeApplicationService.apply(&"vitality", catalog, party, 24), "member 24 receives the unique personal Vitality source", failures)
+
+	var run := GameRun.new()
+	run.start_run()
+	var context := LedgerPlayerContext.new(0)
+	context.selected_member_id = 24
+	context.active_page_id = &"stats"
+	var ledger := ledger_scene.instantiate() as CharacterLedger
+	tree.root.add_child(ledger)
+	ledger.configure(run, party, catalog, Callable(), [context])
+	var member_1_upgrade_ids := ledger.provider.upgrade_rows(1).map(func(row: Dictionary) -> StringName: return row.id)
+	TestAssertions.truthy(&"vitality" not in member_1_upgrade_ids, "member 1 Current Upgrades data excludes member 24's unique Vitality source", failures)
+	TestAssertions.truthy(ledger.open_for_player(), "ledger opens on Stats for member 24", failures)
+
+	var page_host := ledger.get_node("Overlay/Frame/Layout/Body/PageHost") as Control
+	var stats_page := page_host.get_node("StatsLedgerPage") as StatsLedgerPage
+	var stats_identity := (stats_page.get_node("Layout/Header/Identity") as Label).text
+	TestAssertions.truthy("Twenty Four" in stats_identity, "Stats page identifies selected member 24 before switching", failures)
+	TestAssertions.equal(context.selected_member_id, 24, "member 24 context is active before switching pages", failures)
+
+	TestAssertions.truthy(ledger.activate_page(&"current_upgrades"), "Current Upgrades activates for member 24", failures)
+	var upgrades_page := page_host.get_node("UpgradesLedgerPage") as UpgradesLedgerPage
+	var member_24_rows := upgrades_page.get_node(ROWS_PATH) as VBoxContainer
+	TestAssertions.truthy(member_24_rows.get_node_or_null("Upgrade_vitality") != null, "Current Upgrades shows member 24's unique Vitality row", failures)
+	TestAssertions.equal(context.selected_member_id, 24, "member 24 context persists on Current Upgrades", failures)
+
+	TestAssertions.truthy(ledger.activate_page(&"stats"), "Stats reactivates after Current Upgrades", failures)
+	stats_identity = (stats_page.get_node("Layout/Header/Identity") as Label).text
+	TestAssertions.equal(context.selected_member_id, 24, "member 24 context persists after switching back to Stats", failures)
+	TestAssertions.truthy("Twenty Four" in stats_identity, "Stats identity still renders member 24 after page switches", failures)
+
+	ledger.close()
+	tree.paused = false
+	ledger.free()
+	run.free()
 	party.free()
 
 

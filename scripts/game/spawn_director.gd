@@ -5,9 +5,15 @@ signal enemy_spawned(enemy_id: StringName, enemy: Node3D)
 
 const SpawnScheduleScript := preload("res://scripts/game/spawn_schedule.gd")
 const SWARMER_SCENE := preload("res://scenes/enemies/swarmer.tscn")
+const BOLTCASTER_SCENE := preload("res://scenes/enemies/boltcaster.tscn")
 const SPITTER_SCENE := preload("res://scenes/enemies/spitter.tscn")
 const EXPERIENCE_ORB_SCENE := preload("res://scenes/progression/experience_orb.tscn")
 const MAX_SCHEDULED_SPAWNS_PER_UPDATE := 64
+const ENEMY_SCENES := {
+    &"swarmer": SWARMER_SCENE,
+    &"boltcaster": BOLTCASTER_SCENE,
+    &"spitter": SPITTER_SCENE,
+}
 
 var elapsed_seconds := 0.0
 var spawn_cooldown := 0.0
@@ -83,23 +89,32 @@ func sample_enemy_id(sample_time: float = -1.0) -> StringName:
     var band: RefCounted = SpawnScheduleScript.sample(at_time)
     if band == null:
         return &""
+    return _sample_enemy_id_from_band(band)
+
+func _sample_enemy_id_from_band(band: RefCounted) -> StringName:
     var swarmer_weight := int(band.get("swarmer_weight"))
-    var total := swarmer_weight + int(band.get("spitter_weight"))
+    var boltcaster_weight := int(band.get("boltcaster_weight"))
+    var total := swarmer_weight + boltcaster_weight + int(band.get("spitter_weight"))
     if total <= 0:
         return &""
-    return &"swarmer" if rng.randi_range(1, total) <= swarmer_weight else &"spitter"
+    var roll := rng.randi_range(1, total)
+    if roll <= swarmer_weight:
+        return &"swarmer"
+    if roll <= swarmer_weight + boltcaster_weight:
+        return &"boltcaster"
+    return &"spitter"
 
 func spawn_enemy(enemy_id: StringName) -> Node3D:
     if enemy_id.is_empty():
         return null
-    if enemy_id != &"swarmer" and enemy_id != &"spitter":
+    if not ENEMY_SCENES.has(enemy_id):
         print(format_unknown_enemy_id(enemy_id))
         return null
     var marker := _choose_spawn_marker()
     if marker == null:
         return null
     var spawn_position := marker.global_position if marker.is_inside_tree() else marker.position
-    var scene: PackedScene = SWARMER_SCENE if enemy_id == &"swarmer" else SPITTER_SCENE
+    var scene := ENEMY_SCENES[enemy_id] as PackedScene
     var enemy := scene.instantiate() as Node3D
     var parent := enemies_parent if enemies_parent != null and is_instance_valid(enemies_parent) else get_parent()
     if parent == null:

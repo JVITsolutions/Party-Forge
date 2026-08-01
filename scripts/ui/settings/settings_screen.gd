@@ -28,6 +28,7 @@ func configure(store: PartyForgeSettingsStore, settings: PartyForgeSettings) -> 
 func open(return_focus: Control = null) -> void:
 	_return_focus = return_focus
 	_draft = _current_settings.copy()
+	_game_page().call(&"bind", _draft)
 	_additional_page().bind(_draft)
 	_status().text = ""
 	_status().tooltip_text = ""
@@ -52,6 +53,7 @@ func current_settings() -> PartyForgeSettings:
 
 
 func _apply_and_return() -> void:
+	_game_page().call(&"write_to", _draft)
 	_additional_page().write_to(_draft)
 	_draft.normalize()
 	var error := _store.save_settings(_draft) if _store != null else "PARTY_FORGE_SETTINGS_SAVE_ERROR reason=store is missing"
@@ -182,3 +184,7 @@ func _technical_details() -> LineEdit:
 
 func _additional_page() -> AdditionalSettingsPage:
 	return get_node("Overlay/Frame/Layout/Tabs/Additional Settings") as AdditionalSettingsPage
+
+
+func _game_page() -> Node:
+	return get_node("Overlay/Frame/Layout/Tabs/Game Settings")

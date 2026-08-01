@@ -86,7 +86,30 @@ func _test_pause_lease(failures: Array[String]) -> void:
 	lease.acquire(tree)
 	lease.release(tree)
 	TestAssertions.truthy(tree.paused, "lease preserves an existing pause", failures)
+	_test_overlapping_pause_leases(tree, false, false, "first acquired releases first", failures)
+	_test_overlapping_pause_leases(tree, false, true, "second acquired releases first", failures)
+	_test_overlapping_pause_leases(tree, true, false, "overlap preserves a pre-existing pause", failures)
 	tree.paused = false
+
+func _test_overlapping_pause_leases(
+	tree: SceneTree,
+	initially_paused: bool,
+	release_second_first: bool,
+	label: String,
+	failures: Array[String]
+) -> void:
+	tree.paused = initially_paused
+	var first := RunPauseLease.new()
+	var second := RunPauseLease.new()
+	first.acquire(tree)
+	second.acquire(tree)
+	var first_release := second if release_second_first else first
+	var final_release := first if release_second_first else second
+	first_release.release(tree)
+	TestAssertions.truthy(tree.paused, "%s keeps simulation paused until final release" % label, failures)
+	TestAssertions.truthy(final_release.is_active(), "%s leaves the remaining lease active" % label, failures)
+	final_release.release(tree)
+	TestAssertions.equal(tree.paused, initially_paused, "%s restores the original pause state" % label, failures)
 
 func _test_input_actions(failures: Array[String]) -> void:
 	for action: StringName in [&"character_ledger", &"pause_menu", &"ledger_previous_page", &"ledger_next_page"]:

@@ -48,11 +48,23 @@ func run() -> Array[String]:
 	TestAssertions.truthy(coming_tab != null and not coming_tab.disabled and coming_tab.focus_mode != Control.FOCUS_NONE, "Coming Soon tab stays focusable", failures)
 	TestAssertions.truthy(upgrades_page.visible, "rejected page preserves the active page", failures)
 
-	for member_id: int in range(3, 8):
+	for member_id: int in range(3, 25):
 		party.members.append(PartyMemberState.new(member_id, catalog.class_by_id(&"fighter"), false, "Extra %d" % member_id))
 	ledger.refresh()
-	TestAssertions.equal(party_entries.get_child_count(), 7, "scrolling rail supports exceptional party sizes above six", failures)
+	TestAssertions.equal(party_entries.get_child_count(), 24, "rail contains all developer members", failures)
 	TestAssertions.equal(ledger.get("context").selected_member_id, 2, "rail rebuild preserves a valid selection", failures)
+	var member_24 := party_entries.get_node("Member_24") as Button
+	TestAssertions.truthy(member_24.focus_mode == Control.FOCUS_ALL, "member 24 is focusable", failures)
+	TestAssertions.truthy(not member_24.focus_neighbor_top.is_empty(), "member 24 has an upward route", failures)
+	TestAssertions.truthy(ledger.select_member(24), "member 24 can be selected", failures)
+	TestAssertions.equal(ledger.context.selected_member_id, 24, "member 24 becomes ledger context", failures)
+	ledger.activate_page(&"current_upgrades")
+	TestAssertions.equal(ledger.context.selected_member_id, 24, "page change preserves member 24", failures)
+	party.members.remove_at(23)
+	ledger.refresh()
+	TestAssertions.equal(ledger.context.selected_member_id, 1, "removed selection falls back to the controlled member", failures)
+	var fallback_member := party_entries.get_node("Member_1") as Button
+	TestAssertions.truthy(fallback_member.button_pressed, "fallback member remains visibly selected", failures)
 
 	ledger.close()
 	TestAssertions.truthy(not tree.paused, "closing restores gameplay", failures)

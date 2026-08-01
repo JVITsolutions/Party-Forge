@@ -4,6 +4,7 @@ func run() -> Array[String]:
 	var failures: Array[String] = []
 	_test_card_renders_dictionary_and_emits(failures)
 	_test_hover_focus_share_detail_state(failures)
+	_test_disabled_card_conceals_detail(failures)
 	_test_tooltip_renders_dictionary(failures)
 	_test_interactive_pin_shell_and_inputs(failures)
 	_test_input_configurator_preserves_existing_action(failures)
@@ -60,6 +61,21 @@ func _test_hover_focus_share_detail_state(failures: Array[String]) -> void:
 	card.focus_exited.emit()
 	TestAssertions.equal(requested, [choice, choice], "keyboard focus requests identical bound choice", failures)
 	TestAssertions.equal(dismissed, [choice, choice], "keyboard focus dismissal matches hover behavior", failures)
+	card.free()
+
+func _test_disabled_card_conceals_detail(failures: Array[String]) -> void:
+	var card := (load("res://scenes/ui/upgrade_card.tscn") as PackedScene).instantiate() as UpgradeCard
+	card.call("_ready")
+	var choice := UpgradeChoice.authored(GameCatalog.load_defaults().upgrade_by_id(&"vitality"))
+	card.bind_choice(choice, {"name": "Vitality"}, "Revealing.")
+	var requested: Array[UpgradeChoice] = []
+	card.detail_requested.connect(func(emitted: UpgradeChoice, _anchor: Control) -> void: requested.append(emitted))
+	card.mouse_entered.emit()
+	TestAssertions.equal(requested, [], "disabled card hover conceals its bound final detail", failures)
+	card.mouse_exited.emit()
+	card.bind_choice(choice, {"name": "Vitality"})
+	card.mouse_entered.emit()
+	TestAssertions.equal(requested, [choice], "enabled card hover restores bound final detail", failures)
 	card.free()
 
 func _test_tooltip_renders_dictionary(failures: Array[String]) -> void:

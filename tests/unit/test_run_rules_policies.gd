@@ -7,17 +7,25 @@ func run() -> Array[String]:
 	saved.god_mode = true
 	saved.party_capacity_override = 24
 	saved.enemy_density_percent = 1000
+	saved.experience_multiplier_percent = 750
+	saved.level_up_card_count = 8
 	var player := RunRulesSnapshot.from_settings(saved)
 	TestAssertions.truthy(not player.developer_mode_active(), "Player Simulation remains production mode", failures)
 	TestAssertions.truthy(not player.god_mode(), "Player Simulation neutralizes God Mode", failures)
 	TestAssertions.equal(player.party_capacity(), 4, "Player Simulation uses production cap", failures)
 	TestAssertions.equal(player.enemy_density_percent(), 100, "Player Simulation uses normal density", failures)
+	TestAssertions.equal(player.experience_multiplier_percent(), 100, "Player Simulation uses production experience multiplier", failures)
+	TestAssertions.equal(player.level_up_card_count(), 5, "Player Simulation uses production level-up card count", failures)
 	var missing := RunRulesSnapshot.from_settings(null)
 	TestAssertions.truthy(not missing.developer_mode_active(), "missing settings fail safely to Player Simulation", failures)
 	saved.mode = PartyForgeSettings.Mode.DEVELOPER_MODE
 	var developer := RunRulesSnapshot.from_settings(saved)
 	saved.party_capacity_override = 1
+	saved.experience_multiplier_percent = 100
+	saved.level_up_card_count = 1
 	TestAssertions.equal(developer.party_capacity(), 24, "snapshot is unaffected by later settings mutation", failures)
+	TestAssertions.equal(developer.experience_multiplier_percent(), 750, "snapshot retains Developer Mode experience multiplier", failures)
+	TestAssertions.equal(developer.level_up_card_count(), 8, "snapshot retains Developer Mode level-up card count", failures)
 	TestAssertions.equal(developer.combat_policy().minimum_party_health(), 1.0, "God Mode exposes one-health floor", failures)
 	TestAssertions.truthy(developer.capacity_policy().can_add(23), "capacity allows slot 24", failures)
 	TestAssertions.truthy(not developer.capacity_policy().can_add(24), "capacity rejects slot 25", failures)

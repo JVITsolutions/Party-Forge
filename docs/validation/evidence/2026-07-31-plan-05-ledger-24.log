@@ -1,0 +1,87 @@
+PARTY FORGE PLAN 05 TASK 3 - LEDGER 24-MEMBER ACCEPTANCE EVIDENCE
+Evidence recorded: 2026-08-01 America/New_York
+Worktree: F:\Projects(root)\Game dev\Projects\party-forge\.worktrees\playtest-corrections
+Branch: feature/playtest-corrections
+Clean-start HEAD: 01f4324a4cde1d5b1eefcb7242f0e7b93d2f6535 test: prove member 24 ledger access
+Clean-start status: CLEAN (git status --porcelain=v1 -uall produced no output)
+Godot: 4.7.1.stable.mono.official.a13da4feb
+
+AUTOMATED GATE 1 - FULL HEADLESS SUITE
+Command:
+& 'F:\Projects(root)\Game dev\godot\Godot_v4.7.1-stable_mono_win64\Godot_v4.7.1-stable_mono_win64_console.exe' --headless --path 'F:\Projects(root)\Game dev\Projects\party-forge\.worktrees\playtest-corrections' --script res://tests/test_runner.gd
+Exit code: 0
+Exact summary: TEST_SUMMARY: PASS (65 suites)
+Additional normal output included repeated PARTY_FORGE_BOOT_OK and PARTY_FORGE_CLASS_SELECTION_READY markers.
+Known intentional negative-path diagnostics emitted by passing tests:
+- ERROR: PARTY_FORGE_LEDGER_ERROR page=equipment_inventory reason=unknown feature equipment
+- ERROR: PARTY_FORGE_LEDGER_ERROR page=equipment_inventory reason=unknown unlock equipment_mastery
+- ERROR: PARTY_FORGE_GOD_MODE_OWNERSHIP_ERROR team=2 member=1 reason=actor team is not party-owned
+- ERROR: PARTY_FORGE_GOD_MODE_OWNERSHIP_ERROR team=1 member=1 reason=member state does not match party manager
+- ERROR: PARTY_FORGE_DAMAGE_ERROR attack=test_hit source=party:1 target=enemy:invalid type=void reason=unknown runtime type
+- ERROR: PARTY_FORGE_DAMAGE_ERROR attack=test_hit source=party:1 target=enemy:unavailable reason=target unavailable
+- ERROR: PARTY_FORGE_DAMAGE_ERROR attack=test_hit source=party:1 target=party:ally reason=team-invalid target
+- ERROR: PARTY_FORGE_DAMAGE_ERROR attack=test_hit source=party:1 target=enemy:invalid type=physical reason=invalid runtime amount
+- PARTY_FORGE_UNKNOWN_ENEMY_ID id=bogus
+- ERROR: PARTY_FORGE_STAT_ERROR source=invalid stat=missing_stat reason=unknown stat id
+- ERROR: PARTY_FORGE_SETTINGS_VERSION_ERROR path=user://party_forge_settings_future_test.cfg version=999 supported=1
+- ERROR: PARTY_FORGE_RUN_RULES_ERROR reason=settings snapshot source is missing
+- ERROR: PARTY_FORGE_FEATURE_ACCESS_ERROR feature=unknown reason=unknown feature
+- ERROR: PARTY_FORGE_SETTINGS_SAVE_ERROR path=user://party_forge_settings.cfg code=20 stage=promote (emitted twice)
+- ERROR: PARTY_FORGE_DAMAGE_ERROR attack=invalid_rule_hit source=party:rule_source target=enemy:rule_target type=unstable rule=99 reason=unsupported mitigation rule
+- ERROR: PARTY_FORGE_UPGRADE_APPLICATION_ERROR id=vitality member=1 reason=maximum rank reached
+- ERROR: PARTY_FORGE_UPGRADE_APPLICATION_ERROR id=deadeye member=1 reason=class is not eligible
+- ERROR: PARTY_FORGE_UPGRADE_APPLICATION_ERROR id=missing_upgrade member=2 reason=unknown upgrade id
+- ERROR: PARTY_FORGE_UPGRADE_APPLICATION_ERROR id=vitality member=999 reason=member is no longer available
+- ERROR: PARTY_FORGE_UPGRADE_APPLICATION_ERROR id=vanguard_wall member=0 reason=maximum rank reached
+- ERROR: PARTY_FORGE_UPGRADE_APPLICATION_ERROR id=invalid_multi member=1 reason=PARTY_FORGE_STAT_ERROR source=upgrade:invalid_multi:member:1 stat=missing_stat reason=unknown stat id
+Known exit diagnostics:
+- WARNING: 18 ObjectDB instances were leaked at exit (run with `--verbose` for details).
+- ERROR: 5 resources still in use at exit (run with --verbose for details).
+Gate result: PASS because the fresh command exited 0 and printed the exact 65-suite PASS summary; diagnostics above are preserved rather than suppressed.
+
+AUTOMATED GATE 2 - LEDGER 24-MEMBER INTEGRATION
+Command:
+& 'F:\Projects(root)\Game dev\godot\Godot_v4.7.1-stable_mono_win64\Godot_v4.7.1-stable_mono_win64_console.exe' --headless --path 'F:\Projects(root)\Game dev\Projects\party-forge\.worktrees\playtest-corrections' --script res://tests/integration/ledger_24_member_runner.gd
+Exit code: 0
+Exact summary: LEDGER_24_MEMBER_SUMMARY: PASS (2 viewports)
+Gate result: PASS
+
+AUTOMATED GATE 3 - EDITOR/PARSER SCAN
+Command:
+& 'F:\Projects(root)\Game dev\godot\Godot_v4.7.1-stable_mono_win64\Godot_v4.7.1-stable_mono_win64_console.exe' --headless --path 'F:\Projects(root)\Game dev\Projects\party-forge\.worktrees\playtest-corrections' --editor --quit-after 2
+Exit code: 0
+Exact completion marker: [ DONE ] first_scan_filesystem
+Known warnings:
+- WARNING: Missing .uid file for path "res://scripts/combat/resolved_attack_geometry.gd". The file was re-created from cache.
+- WARNING: Missing .uid file for path "res://scripts/data/enemy_projectile_profile.gd". The file was re-created from cache.
+- WARNING: Missing .uid file for path "res://scripts/progression/level_up_offer_state.gd". The file was re-created from cache.
+- WARNING: Missing .uid file for path "res://scripts/progression/recruit_offer_policy.gd". The file was re-created from cache.
+- WARNING: Missing .uid file for path "res://tests/unit/test_enemy_projectile_profile.gd". The file was re-created from cache.
+- WARNING: Missing .uid file for path "res://tests/unit/test_game_run_pause_clock.gd". The file was re-created from cache.
+- WARNING: Missing .uid file for path "res://tests/unit/test_recruit_offer_policy.gd". The file was re-created from cache.
+- WARNING: Missing .uid file for path "res://tests/unit/test_resolved_attack_geometry.gd". The file was re-created from cache.
+- WARNING: Scan thread aborted...
+Cleanup: all 16 generated untracked .uid sidecars visible after the automated runs were removed. No tracked UID sidecar was removed.
+Gate result: PASS because the bounded editor/parser command exited 0 and completed first_scan_filesystem.
+
+AUTOMATED GATE 4 - DIFF AND SCOPE HYGIENE
+Command: git diff --check
+Exit code: 0
+Output: SILENT
+Command: git diff --cached --check
+Exit code: 0
+Output: SILENT
+Authorized tracked scope: docs/validation/evidence/2026-07-31-plan-05-ledger-24.log only
+
+MANUAL LEDGER 24 ACCEPTANCE: PENDING USER/CONNECTED ACCEPTANCE
+1. Mouse wheel reaches member 24 and clicking it updates Stats: PENDING USER/CONNECTED ACCEPTANCE
+2. Scrollbar dragging reaches member 24: PENDING USER/CONNECTED ACCEPTANCE
+3. Keyboard directional navigation reaches and selects member 24: PENDING USER/CONNECTED ACCEPTANCE
+4. Controller directional navigation reaches and selects member 24: PENDING USER/CONNECTED ACCEPTANCE
+5. Shoulder buttons change Stats/Current Upgrades without losing member 24: PENDING USER/CONNECTED ACCEPTANCE
+6. Recruiting/refreshing while member 24 remains valid preserves selection and visibility: PENDING USER/CONNECTED ACCEPTANCE
+7. Removing the selected fixture member falls back to the controlled/first member and reveals it: PENDING USER/CONNECTED ACCEPTANCE
+8. Equipment & Inventory still reports Coming Soon without changing selection: PENDING USER/CONNECTED ACCEPTANCE
+
+AUTOMATED EVIDENCE GATE: PASS
+OVERALL TASK 3 ACCEPTANCE: PENDING USER/CONNECTED ACCEPTANCE

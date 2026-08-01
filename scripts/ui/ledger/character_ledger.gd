@@ -22,6 +22,8 @@ var _pause_lease := RunPauseLease.new()
 var _responsive_mode := RESPONSIVE_LAYOUT.Mode.DESKTOP
 var _viewport_size := Vector2(1920.0, 1080.0)
 var _observed_viewport: Viewport
+var _member_visibility_request_revision := 0
+var _member_visibility_request_target_id := 0
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -53,6 +55,7 @@ func configure(
 	initial_contexts: Array[LedgerPlayerContext] = [],
 	feature_policy: FeatureAccessPolicy = null
 ) -> void:
+	_invalidate_member_visibility_requests()
 	if is_open():
 		close()
 	_disconnect_provider()
@@ -117,6 +120,7 @@ func close() -> void:
 	if active_page != null:
 		active_page.deactivate()
 	_active_page_id = &""
+	_invalidate_member_visibility_requests()
 	_pause_lease.release(Engine.get_main_loop() as SceneTree)
 	visible = false
 	_status().text = ""
@@ -127,12 +131,16 @@ func is_open() -> bool:
 func refresh() -> void:
 	if provider == null or context == null:
 		return
+	var focused_member_id := _member_id_for_control(get_viewport().gui_get_focus_owner()) if is_inside_tree() else 0
 	context.ensure_valid_member(party)
 	_rebuild_member_rail()
 	var active_page := _pages.get(_active_page_id) as CharacterLedgerPage
 	if active_page != null:
 		active_page.configure(provider, context)
 		active_page.refresh()
+		_wire_roster_page_focus_bridge()
+	if focused_member_id > 0:
+		_restore_member_focus_after_refresh(focused_member_id)
 
 func apply_viewport_size(size: Vector2) -> void:
 	_viewport_size = size
@@ -150,6 +158,8 @@ func apply_viewport_size(size: Vector2) -> void:
 	frame.offset_bottom = -12.0 if compact else -36.0
 	for page_value: Variant in _pages.values():
 		(page_value as CharacterLedgerPage).apply_compact(compact)
+	_configure_member_focus_neighbors()
+	_wire_roster_page_focus_bridge()
 
 func activate_page(page_id: StringName) -> bool:
 	var definition := _definitions.get(page_id) as LedgerPageDefinition
@@ -171,6 +181,8 @@ func activate_page(page_id: StringName) -> bool:
 	_status().text = ""
 	next_page.configure(provider, context)
 	next_page.activate()
+	_configure_member_focus_neighbors()
+	_wire_roster_page_focus_bridge()
 	if is_open():
 		_focus_page_or_member()
 	return true
@@ -183,6 +195,10 @@ func select_member(member_id: int) -> bool:
 	var active_page := _pages.get(_active_page_id) as CharacterLedgerPage
 	if active_page != null:
 		active_page.refresh()
+	_configure_member_focus_neighbors()
+	_wire_roster_page_focus_bridge()
+	_request_member_visibility(member_id)
+	_ensure_member_visible(member_id)
 	return true
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -322,10 +338,101 @@ func _rebuild_member_rail() -> void:
 		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		button.set_meta("member_id", int(row.member_id))
 		button.pressed.connect(_on_member_pressed.bind(int(row.member_id)))
+		button.focus_entered.connect(_on_member_focused.bind(int(row.member_id)))
 		entries.add_child(button)
 		_member_buttons[int(row.member_id)] = button
 		_bind_member_button(button, row)
 	_sync_member_selection()
+	_configure_member_focus_neighbors()
+	_wire_roster_page_focus_bridge()
+	_request_member_visibility(context.selected_member_id)
+
+func _configure_member_focus_neighbors() -> void:
+	var buttons: Array[Button] = []
+	for child: Node in _party_entries().get_children():
+		var button := child as Button
+		if button != null and button.visible:
+			buttons.append(button)
+	var columns := maxi(_party_entries().columns, 1)
+	for index: int in buttons.size():
+		var button := buttons[index]
+		var row := index / columns
+		var column := index % columns
+		_set_neighbor(button, &"focus_neighbor_left", buttons[index - 1] if columns > 1 and index > 0 else null)
+		_set_neighbor(button, &"focus_neighbor_right", buttons[index + 1] if column + 1 < columns and index + 1 < buttons.size() else null)
+		_set_neighbor(button, &"focus_neighbor_top", buttons[index - columns] if row > 0 else null)
+		_set_neighbor(button, &"focus_neighbor_bottom", buttons[index + columns] if index + columns < buttons.size() else null)
+
+func _set_neighbor(control: Control, property_name: StringName, target: Control) -> void:
+	control.set(property_name, control.get_path_to(target) if target != null else NodePath())
+
+func _ensure_member_visible(member_id: int) -> void:
+	var button := _member_buttons.get(member_id) as Button
+	if button == null or not button.is_inside_tree() or not button.is_visible_in_tree():
+		return
+	_party_scroll().ensure_control_visible(button)
+
+func _request_member_visibility(member_id: int) -> int:
+	_member_visibility_request_revision += 1
+	_member_visibility_request_target_id = member_id
+	var request_revision := _member_visibility_request_revision
+	call_deferred("_apply_member_visibility_request", member_id, request_revision)
+	return request_revision
+
+func _apply_member_visibility_request(member_id: int, request_revision: int) -> bool:
+	if request_revision != _member_visibility_request_revision:
+		return false
+	_ensure_member_visible(member_id)
+	return true
+
+func _invalidate_member_visibility_requests() -> void:
+	_member_visibility_request_revision += 1
+	_member_visibility_request_target_id = 0
+
+func _member_id_for_control(control: Control) -> int:
+	if control == null or not control.has_meta("member_id"):
+		return 0
+	var member_id := int(control.get_meta("member_id", 0))
+	return member_id if _member_buttons.get(member_id) == control else 0
+
+func _restore_member_focus_after_refresh(previous_member_id: int) -> void:
+	var member_id := previous_member_id if _member_buttons.has(previous_member_id) else context.selected_member_id
+	var button := _member_buttons.get(member_id) as Button
+	if button == null or not button.is_inside_tree() or not button.is_visible_in_tree():
+		return
+	button.grab_focus()
+	_request_member_visibility(member_id)
+	_ensure_member_visible(member_id)
+
+func _wire_roster_page_focus_bridge() -> void:
+	if context == null:
+		return
+	var member_button := _member_buttons.get(context.selected_member_id) as Button
+	var active_page := _active_page()
+	var page_target := active_page.initial_focus() if active_page != null else null
+	if (
+		member_button == null
+		or page_target == null
+	):
+		return
+	_set_neighbor(member_button, &"focus_neighbor_right", page_target)
+	_set_neighbor(page_target, &"focus_neighbor_left", member_button)
+	_set_neighbor(page_target, &"focus_neighbor_top", null)
+	if _responsive_mode != RESPONSIVE_LAYOUT.Mode.COMPACT:
+		return
+	var visible_buttons: Array[Button] = []
+	for child: Node in _party_entries().get_children():
+		var button := child as Button
+		if button != null and button.visible:
+			visible_buttons.append(button)
+	var member_index := visible_buttons.find(member_button)
+	if member_index < 0:
+		return
+	var columns := maxi(_party_entries().columns, 1)
+	var last_row := (visible_buttons.size() - 1) / columns
+	if member_index / columns == last_row:
+		_set_neighbor(member_button, &"focus_neighbor_bottom", page_target)
+		_set_neighbor(page_target, &"focus_neighbor_top", member_button)
 
 func _refresh_member_button(member_id: int) -> void:
 	var button := _member_buttons.get(member_id) as Button
@@ -370,6 +477,10 @@ func _on_tab_focused(page_id: StringName) -> void:
 
 func _on_member_pressed(member_id: int) -> void:
 	select_member(member_id)
+
+func _on_member_focused(member_id: int) -> void:
+	_request_member_visibility(member_id)
+	_ensure_member_visible(member_id)
 
 func _on_provider_data_changed(member_id: int) -> void:
 	if not is_open() or context == null:
@@ -419,13 +530,23 @@ func _store_focus() -> void:
 	if focused != null and is_ancestor_of(focused):
 		context.last_focus_path = get_path_to(focused)
 
-func _focus_remembered_or_default() -> void:
+func _focus_remembered_or_default() -> Control:
 	if context != null and not context.last_focus_path.is_empty():
 		var remembered := get_node_or_null(context.last_focus_path) as Control
-		if remembered != null and remembered.is_visible_in_tree():
-			remembered.grab_focus()
-			return
+		if remembered != null and remembered.visible:
+			if remembered.is_inside_tree() and remembered.is_visible_in_tree():
+				remembered.grab_focus()
+			var remembered_member_id := _member_id_for_control(remembered)
+			if remembered_member_id > 0:
+				_request_member_visibility(remembered_member_id)
+				_ensure_member_visible(remembered_member_id)
+			elif context != null:
+				_ensure_member_visible(context.selected_member_id)
+			return remembered
 	_focus_page_or_member()
+	if context != null:
+		_ensure_member_visible(context.selected_member_id)
+	return get_viewport().gui_get_focus_owner() if is_inside_tree() else null
 
 func _focus_page_or_member() -> void:
 	var active_page := _active_page()

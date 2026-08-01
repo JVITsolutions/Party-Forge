@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="EnemyProjectileProfile" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/enemy_projectile_profile.gd" id="1_profile"]
+
+[resource]
+script = ExtResource("1_profile")
+movement = 1
+color = Color(0.75, 0.15, 1, 1)
+hit_radius = 0.45
+max_lifetime = 3.0
+tell_duration = 0.2

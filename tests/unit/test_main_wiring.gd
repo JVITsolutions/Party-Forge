@@ -54,6 +54,7 @@ func run() -> Array[String]:
     _test_live_member_health_provider_uses_party_membership(failures)
     _test_ledger_health_provider_is_unbounded_and_complete(failures)
     _test_capped_stat_is_disabled_without_hiding(failures)
+    _test_run_offer_seed_and_snapshot_wiring(failures)
     _test_queued_levels_show_fresh_production_offers(failures)
     _test_boss_level_up_resumes_boss(failures)
     _test_catalog_gate_blocks_public_start(failures)
@@ -92,19 +93,26 @@ func _test_settings_and_next_run_snapshot_wiring(failures: Array[String]) -> voi
     var developer_settings := PartyForgeSettings.new()
     developer_settings.mode = PartyForgeSettings.Mode.DEVELOPER_MODE
     developer_settings.party_capacity_override = 9
+    developer_settings.experience_multiplier_percent = 150
     TestAssertions.equal(store.save_settings(developer_settings), "", "Developer Mode fixture saves", failures)
     var developer_main := (load("res://scenes/game/main.tscn") as PackedScene).instantiate()
     developer_main.call("_ready")
     TestAssertions.truthy(developer_main.call("select_leader_class", &"fighter"), "Developer Mode fixture starts", failures)
     var active_rules := developer_main.get("active_run_rules") as RunRulesSnapshot
     var saved_settings := developer_main.get("saved_settings") as PartyForgeSettings
+    var experience_system := developer_main.get_node("ExperienceSystem") as ExperienceSystem
     TestAssertions.truthy(active_rules != null and saved_settings != null, "main owns saved settings and active rules separately", failures)
     if active_rules != null and saved_settings != null:
         TestAssertions.equal(active_rules.party_capacity(), 9, "run snapshot captures Developer Mode capacity", failures)
         TestAssertions.equal((developer_main.get_node("PartyManager") as PartyManager).capacity(), 9, "run start configures PartyManager capacity", failures)
+        TestAssertions.equal(active_rules.experience_multiplier_percent(), 150, "run snapshot captures XP multiplier", failures)
+        TestAssertions.near(experience_system.experience_multiplier, 1.5, 0.001, "run start configures ExperienceSystem from snapshot", failures)
         saved_settings.party_capacity_override = 2
+        saved_settings.experience_multiplier_percent = 300
         TestAssertions.equal(active_rules.party_capacity(), 9, "active run snapshot ignores later saved-settings mutation", failures)
         TestAssertions.equal((developer_main.get_node("PartyManager") as PartyManager).capacity(), 9, "configured manager ignores later saved-settings mutation", failures)
+        TestAssertions.equal(active_rules.experience_multiplier_percent(), 150, "active run XP snapshot ignores later saved-settings mutation", failures)
+        TestAssertions.near(experience_system.experience_multiplier, 1.5, 0.001, "configured ExperienceSystem ignores later saved-settings mutation", failures)
     _cleanup_main(developer_main)
     _cleanup_default_settings_artifacts()
     _restore_default_settings_artifacts(original_files)
@@ -180,6 +188,8 @@ func _test_exact_choice_panel(failures: Array[String]) -> void:
         UpgradeChoice.new(UpgradeChoice.Kind.RECRUIT, &"ranger", "Recruit Ranger"),
     ]
     panel.call("show_choices", choices, party)
+    var pending_label := panel.get_node_or_null("ContentPanel/OfferView/Content/PendingLevels") as Label
+    TestAssertions.truthy(pending_label != null, "level-up panel scene exposes the pending-level indicator", failures)
     var buttons := panel.get_node("Choices").get_children()
     TestAssertions.equal(buttons.size(), 3, "level-up panel owns exactly three choice buttons", failures)
     TestAssertions.equal((buttons[0] as Button).text, choices[0].label, "first button uses exact first choice", failures)
@@ -387,10 +397,7 @@ func _test_capped_stat_is_disabled_without_hiding(failures: Array[String]) -> vo
         if method["name"] == &"show_choices":
             method_arg_count = (method["args"] as Array).size()
             break
-    TestAssertions.equal(method_arg_count, 3, "choice panel accepts explicit invalid-choice keys", failures)
-    if method_arg_count != 3:
-        panel.free()
-        return
+    TestAssertions.equal(method_arg_count, 4, "choice panel accepts optional pending-level count", failures)
     var party := PartyManager.new()
     var catalog := GameCatalog.load_defaults()
     party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
@@ -400,7 +407,11 @@ func _test_capped_stat_is_disabled_without_hiding(failures: Array[String]) -> vo
         UpgradeChoice.new(UpgradeChoice.Kind.RECRUIT, &"ranger", "Recruit Ranger"),
         UpgradeChoice.new(UpgradeChoice.Kind.PARTY_STAT, &"move_speed", "Move Speed"),
     ]
-    panel.call("show_choices", choices, party, {capped.key(): true})
+    if method_arg_count == 4:
+        panel.call("show_choices", choices, party, {capped.key(): true}, 6)
+        TestAssertions.equal(panel.get("_pending_level_count"), 6, "choice panel stores the pending-level count for presentation", failures)
+    else:
+        panel.call("show_choices", choices, party, {capped.key(): true})
     var capped_button := panel.get_node("Choices/Choice1") as Button
     var emitted: Array[UpgradeChoice] = []
     panel.connect("choice_selected", func(choice: UpgradeChoice) -> void: emitted.append(choice))
@@ -425,11 +436,75 @@ func _test_capped_stat_is_disabled_without_hiding(failures: Array[String]) -> vo
         TestAssertions.equal(experience.pending_levels, 1, "capped stat failure consumes no pending level", failures)
         TestAssertions.equal(game_run.call("current_state"), 2, "capped stat failure remains in LEVEL_UP", failures)
     var generated: Array = main.call("_generate_valid_choices", 77) as Array
-    TestAssertions.equal(generated.size(), 3, "capped stat is replaced to preserve exact-three choices", failures)
+    TestAssertions.equal(generated.size(), 5, "capped stat is replaced to preserve the production five-choice offer", failures)
     TestAssertions.truthy(generated.all(func(choice: UpgradeChoice) -> bool: return choice.key() != capped.key()), "generated choices exclude capped stat", failures)
     (Engine.get_main_loop() as SceneTree).paused = false
     main.free()
     panel.free(); party.free()
+
+func _test_run_offer_seed_and_snapshot_wiring(failures: Array[String]) -> void:
+    var reset_main := (load("res://scenes/game/main.tscn") as PackedScene).instantiate()
+    reset_main.call("_ready")
+    var has_offer_state := reset_main.get_property_list().any(
+        func(property: Dictionary) -> bool: return property["name"] == &"_level_up_offer_state"
+    )
+    TestAssertions.truthy(has_offer_state, "main owns run-local level-up offer state", failures)
+    if has_offer_state:
+        var prestart_state := reset_main.get("_level_up_offer_state") as LevelUpOfferState
+        prestart_state.offer_sequence = 9
+        prestart_state.consecutive_eligible_without_recruit = 3
+        TestAssertions.truthy(reset_main.call("select_leader_class", &"fighter"), "offer-state reset fixture starts", failures)
+        var run_state := reset_main.get("_level_up_offer_state") as LevelUpOfferState
+        TestAssertions.truthy(run_state != prestart_state, "new run replaces pre-run offer state", failures)
+        TestAssertions.equal(run_state.offer_sequence, 0, "new run resets offer sequence", failures)
+        TestAssertions.equal(run_state.consecutive_eligible_without_recruit, 0, "new run resets recruit drought", failures)
+    _cleanup_main(reset_main)
+
+    var player_settings := PartyForgeSettings.new()
+    player_settings.mode = PartyForgeSettings.Mode.PLAYER_SIMULATION
+    player_settings.level_up_card_count = 7
+    var first_main := _started_main_with_settings(player_settings)
+    var first_state := LevelUpOfferState.new()
+    first_state.offer_sequence = 4
+    first_state.consecutive_eligible_without_recruit = 1
+    first_main.set("_level_up_offer_state", first_state)
+    _present_test_offer(first_main, 1771, 3)
+    var first_panel := first_main.get_node("HUD/LevelUpPanel") as LevelUpPanel
+    var first_keys := _choice_keys(first_panel.choices)
+    TestAssertions.equal(first_panel.choices.size(), 5, "Player Simulation snapshots five level-up choices", failures)
+    TestAssertions.equal(first_panel.get("_pending_level_count"), 3, "main forwards the pending-level count to the panel", failures)
+    TestAssertions.equal(first_state.offer_sequence, 5, "main increments offer sequence after generation", failures)
+
+    var repeat_main := _started_main_with_settings(player_settings)
+    var repeat_state := LevelUpOfferState.new()
+    repeat_state.offer_sequence = 4
+    repeat_state.consecutive_eligible_without_recruit = 1
+    repeat_main.set("_level_up_offer_state", repeat_state)
+    _present_test_offer(repeat_main, 1771, 3)
+    var repeat_keys := _choice_keys((repeat_main.get_node("HUD/LevelUpPanel") as LevelUpPanel).choices)
+    TestAssertions.equal(repeat_keys, first_keys, "equivalent explicit run offer state reproduces ordered keys", failures)
+
+    var other_seed_main := _started_main_with_settings(player_settings)
+    var other_seed_state := LevelUpOfferState.new()
+    other_seed_state.offer_sequence = 4
+    other_seed_state.consecutive_eligible_without_recruit = 1
+    other_seed_main.set("_level_up_offer_state", other_seed_state)
+    _present_test_offer(other_seed_main, 7711, 3)
+    var other_seed_keys := _choice_keys((other_seed_main.get_node("HUD/LevelUpPanel") as LevelUpPanel).choices)
+    TestAssertions.truthy(other_seed_keys != first_keys, "different run seeds produce different ordered offer keys", failures)
+
+    var developer_settings := PartyForgeSettings.new()
+    developer_settings.mode = PartyForgeSettings.Mode.DEVELOPER_MODE
+    developer_settings.level_up_card_count = 7
+    var developer_main := _started_main_with_settings(developer_settings)
+    _present_test_offer(developer_main, 1771)
+    var developer_panel := developer_main.get_node("HUD/LevelUpPanel") as LevelUpPanel
+    TestAssertions.equal(developer_panel.choices.size(), 7, "Developer Mode snapshots its seven-choice override", failures)
+
+    _cleanup_main(first_main)
+    _cleanup_main(repeat_main)
+    _cleanup_main(other_seed_main)
+    _cleanup_main(developer_main)
 
 func _test_queued_levels_show_fresh_production_offers(failures: Array[String]) -> void:
     var main := _started_main()
@@ -437,8 +512,8 @@ func _test_queued_levels_show_fresh_production_offers(failures: Array[String]) -
     var experience := main.get_node("ExperienceSystem") as ExperienceSystem
     var panel := main.get_node("HUD/LevelUpPanel") as LevelUpPanel
     var cards := panel.get_node("ContentPanel/OfferView/Content/Cards").get_children()
-    TestAssertions.equal(cards.size(), 3, "production offer view owns exactly three upgrade cards", failures)
-    var card_api_available := cards.size() == 3 and cards.all(
+    TestAssertions.equal(cards.size(), 5, "production offer view owns exactly five upgrade cards", failures)
+    var card_api_available := cards.size() == 5 and cards.all(
         func(card: Node) -> bool: return card is UpgradeCard and card.has_method("bound_choice")
     )
     TestAssertions.truthy(card_api_available, "production cards expose their current binding read-only", failures)
@@ -458,17 +533,18 @@ func _test_queued_levels_show_fresh_production_offers(failures: Array[String]) -
     TestAssertions.truthy((Engine.get_main_loop() as SceneTree).paused, "first earned offer pauses the tree", failures)
 
     var party := main.get_node("PartyManager") as PartyManager
-    var first_seed := 2 * 1009 + party.members.size()
-    var expected_first_keys := _choice_keys(main.call("_generate_valid_choices", first_seed) as Array)
+    var first_offer_choices := panel.choices
+    var first_offer_keys := _choice_keys(first_offer_choices)
     var first_choices := _bound_production_choices(cards)
     var first_keys := _choice_keys(first_choices)
     var first_instance_ids := _choice_instance_ids(first_choices)
-    TestAssertions.equal(first_keys, expected_first_keys, "first visible production offer uses queued level 2 seed", failures)
-    TestAssertions.equal(first_keys.size(), 3, "first visible production offer records exact ordered three keys", failures)
+    TestAssertions.equal(first_offer_keys.size(), 5, "first production offer stores the snapshotted five choices", failures)
+    TestAssertions.equal(first_keys, first_offer_keys.slice(0, cards.size()), "first visible cards bind the presentation subset in order", failures)
 
     var first_card := cards[0] as UpgradeCard
-    TestAssertions.truthy(not first_choices[0].requires_recipient(), "first queued offer exposes a direct-confirm production choice", failures)
     first_card.activated.emit(first_choices[0])
+    if first_choices[0].requires_recipient():
+        panel.call("_on_recipient_selected", first_choices[0], party.members[0].member_id)
     (panel.get_node("ContentPanel/ConfirmationView/Content/Actions/Confirm") as Button).pressed.emit()
     TestAssertions.equal(experience.pending_levels, 1, "first production confirmation consumes pending 2 to 1 exactly", failures)
     TestAssertions.equal(experience.pending_level_numbers, [3], "first production confirmation leaves only earned level 3 queued", failures)
@@ -477,20 +553,22 @@ func _test_queued_levels_show_fresh_production_offers(failures: Array[String]) -
     TestAssertions.truthy((Engine.get_main_loop() as SceneTree).paused, "tree remains paused between production confirmations", failures)
     TestAssertions.truthy(bool(main.get("level_refresh_scheduled")), "second queued production offer is scheduled separately", failures)
 
-    var second_seed := 3 * 1009 + party.members.size()
-    var expected_second_keys := _choice_keys(main.call("_generate_valid_choices", second_seed) as Array)
     main.call("_present_pending_level")
+    var second_offer_choices := panel.choices
+    var second_offer_keys := _choice_keys(second_offer_choices)
     var second_choices := _bound_production_choices(cards)
     var second_keys := _choice_keys(second_choices)
     var second_instance_ids := _choice_instance_ids(second_choices)
     TestAssertions.truthy(panel.visible, "second queued production offer is visible before confirmation", failures)
-    TestAssertions.equal(second_keys, expected_second_keys, "second visible production offer uses queued level 3 seed and updated party", failures)
-    TestAssertions.equal(second_keys.size(), 3, "second visible production offer records exact ordered three keys", failures)
+    TestAssertions.equal(second_offer_keys.size(), 5, "second production offer stores the snapshotted five choices", failures)
+    TestAssertions.equal(second_keys, second_offer_keys.slice(0, cards.size()), "second visible cards bind the presentation subset in order", failures)
+    TestAssertions.truthy(second_offer_keys != first_offer_keys, "run offer sequence produces a fresh second ordered offer", failures)
     TestAssertions.truthy(second_instance_ids.all(func(id: int) -> bool: return id not in first_instance_ids), "second production offer binds freshly generated choice objects", failures)
 
     var second_card := cards[0] as UpgradeCard
-    TestAssertions.truthy(not second_choices[0].requires_recipient(), "second queued offer exposes a direct-confirm production choice", failures)
     second_card.activated.emit(second_choices[0])
+    if second_choices[0].requires_recipient():
+        panel.call("_on_recipient_selected", second_choices[0], party.members[0].member_id)
     (panel.get_node("ContentPanel/ConfirmationView/Content/Actions/Confirm") as Button).pressed.emit()
     TestAssertions.equal(experience.pending_levels, 0, "second production confirmation consumes pending 1 to 0 exactly", failures)
     TestAssertions.equal(experience.pending_level_numbers, [], "second production confirmation empties the earned-level queue", failures)
@@ -593,6 +671,25 @@ func _started_main() -> Node:
     main.call("_ready")
     main.call("select_leader_class", &"fighter")
     return main
+
+func _started_main_with_settings(settings: PartyForgeSettings) -> Node:
+    var main := (load("res://scenes/game/main.tscn") as PackedScene).instantiate()
+    main.call("_ready")
+    main.set("saved_settings", settings.copy())
+    main.call("select_leader_class", &"fighter")
+    return main
+
+func _present_test_offer(main: Node, run_seed: int, pending_count: int = 1) -> void:
+    var game_run := main.get_node("GameRun") as GameRun
+    var experience := main.get_node("ExperienceSystem") as ExperienceSystem
+    game_run.configure_seed(run_seed)
+    experience.level = 1 + pending_count
+    experience.pending_levels = pending_count
+    experience.pending_level_numbers = []
+    for pending_level: int in range(2, pending_count + 2):
+        experience.pending_level_numbers.append(pending_level)
+    game_run.begin_level_up()
+    main.call("_present_pending_level")
 
 func _cleanup_main(main: Node) -> void:
     (Engine.get_main_loop() as SceneTree).paused = false

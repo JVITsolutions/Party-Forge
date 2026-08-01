@@ -69,6 +69,15 @@ func prepare_attack(attack_id: StringName) -> DamagePacket:
     var attack := definition.attack_by_id(attack_id) if definition != null else null
     return DamageResolver.prepare(attack, get_combat_adapter(DamageResolver.action_tags_for(attack)), combat_rng, damage_types)
 
+func attack_geometry(attack_id: StringName) -> ResolvedAttackGeometry:
+    var attack := definition.attack_by_id(attack_id) if definition != null else null
+    if attack == null:
+        return ResolvedAttackGeometry.new(0.0, 0.0)
+    var adapter := get_combat_adapter(DamageResolver.action_tags_for(attack))
+    var range_multiplier := adapter.stat_value(&"attack_range", 1.0) if adapter != null else 1.0
+    var area_multiplier := adapter.stat_value(&"area_size", 1.0) if adapter != null else 1.0
+    return ResolvedAttackGeometry.from_attack(attack, range_multiplier, area_multiplier)
+
 func resolve_attack(packet: DamagePacket, target: CombatantAdapter) -> DamageResult:
     return DamageResolver.resolve(packet, target, combat_rng, damage_types)
 

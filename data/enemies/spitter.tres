@@ -3,6 +3,7 @@
 [ext_resource type="Script" path="res://scripts/data/enemy_definition.gd" id="1_kwx2x"]
 [ext_resource type="Script" path="res://scripts/data/attack_definition.gd" id="1_p8k33"]
 [ext_resource type="Resource" path="res://data/attacks/spitter_projectile.tres" id="2_projectile"]
+[ext_resource type="Resource" path="res://data/projectiles/spitter_orb.tres" id="3_profile"]
 
 [resource]
 script = ExtResource("1_kwx2x")
@@ -11,4 +12,5 @@ behavior = 1
 max_health = 18.0
 move_speed = 2.8
 attacks = Array[ExtResource("1_p8k33")]([ExtResource("2_projectile")])
+projectile_profile = ExtResource("3_profile")
 experience = 4

@@ -32,117 +32,11 @@ func _run() -> void:
 	await _wait_for_layout()
 
 	var content := _long_content()
-	var preheld_alt := InputEventKey.new()
-	preheld_alt.keycode = KEY_ALT
-	preheld_alt.pressed = true
-	viewport.push_input(preheld_alt)
-	_assert(not tooltip.visible, "Alt pressed while hidden does not reveal popup")
-	_assert(not viewport.is_input_handled(), "Alt pressed while hidden remains unhandled")
-	_assert(tooltip.show_content(content, anchor, &"preheld"), "preheld Alt source is accepted")
-	tooltip.release_source(&"preheld")
-	_assert(tooltip.visible, "Alt pressed before presentation retains popup after source exit")
-	var preheld_alt_release := preheld_alt.duplicate() as InputEventKey
-	preheld_alt_release.pressed = false
-	viewport.push_input(preheld_alt_release)
-	await process_frame
-	_assert(not tooltip.visible and not tooltip.is_pinned(), "preheld Alt release dismisses inactive unpinned popup")
-
-	tooltip.show_content(content, anchor, &"first")
-	await _wait_for_layout()
-	var scroll := tooltip.get_node("Content/BodyScroll") as ScrollContainer
-	var pin := tooltip.get_node("Content/Header/Pin") as Button
-
-	var alt := InputEventKey.new()
-	alt.keycode = KEY_ALT
-	alt.pressed = true
-	viewport.push_input(alt)
-	tooltip.release_source(&"first")
-	_assert(tooltip.visible, "Alt transfer keeps popup visible")
-
-	var motion := InputEventMouseMotion.new()
-	motion.position = scroll.get_global_rect().get_center()
-	viewport.push_input(motion)
-	var wheel := InputEventMouseButton.new()
-	wheel.position = motion.position
-	wheel.button_index = MOUSE_BUTTON_WHEEL_DOWN
-	wheel.pressed = true
-	viewport.push_input(wheel)
-	var wheel_release := wheel.duplicate() as InputEventMouseButton
-	wheel_release.pressed = false
-	viewport.push_input(wheel_release)
-	await _wait_for_layout()
-	_assert(scroll.scroll_vertical > 0, "mouse wheel scrolls Alt-held popup")
-
-	await _push_mouse_click(viewport, pin)
-	_assert(tooltip.is_pinned(), "real mouse click pins popup")
-	var alt_release := alt.duplicate() as InputEventKey
-	alt_release.pressed = false
-	viewport.push_input(alt_release)
-	await process_frame
-	_assert(tooltip.visible and tooltip.is_pinned(), "mouse pin survives Alt release")
-	var pinned_title := (tooltip.get_node("Content/Header/Title") as Label).text
-	_assert(not tooltip.show_content({"title": "Replacement"}, anchor, &"second"), "pinned popup rejects replacement")
-	_assert((tooltip.get_node("Content/Header/Title") as Label).text == pinned_title, "rejected content stays unchanged")
-	await _push_mouse_click(viewport, pin)
-	_assert(not tooltip.visible and not tooltip.is_pinned(), "real mouse click unpins and dismisses inactive source")
-
-	var controller_pin := InputEventJoypadButton.new()
-	controller_pin.button_index = JOY_BUTTON_Y
-	controller_pin.pressed = true
-	_assert(tooltip.show_content(content, anchor, &"controller"), "controller source is accepted")
-	viewport.push_input(controller_pin)
-	await process_frame
-	_assert(tooltip.is_pinned(), "Y/Triangle pins active controller popup")
-	var controller_release := controller_pin.duplicate() as InputEventJoypadButton
-	controller_release.pressed = false
-	viewport.push_input(controller_release)
-	await process_frame
-	scroll.scroll_vertical = 0
-	var stick := InputEventJoypadMotion.new()
-	stick.axis = JOY_AXIS_RIGHT_Y
-	stick.axis_value = 1.0
-	viewport.push_input(stick)
-	await process_frame
-	await process_frame
-	_assert(scroll.scroll_vertical > 0, "right stick scrolls visible popup")
-	stick.axis_value = 0.0
-	viewport.push_input(stick)
-	var stopped_scroll := scroll.scroll_vertical
-	for _frame: int in 4:
-		await process_frame
-	_assert(scroll.scroll_vertical == stopped_scroll, "neutral right stick stops popup scrolling")
-	tooltip.release_source(&"controller")
-	viewport.push_input(controller_pin)
-	await process_frame
-	_assert(not tooltip.visible and not tooltip.is_pinned(), "Y/Triangle unpins and dismisses inactive source")
-	viewport.push_input(controller_release)
-	await process_frame
-
 	for viewport_size: Vector2i in VIEWPORT_SIZES:
 		var before := _failures.size()
-		viewport.size = viewport_size
-		host.size = viewport_size
-		anchor.position = Vector2(float(viewport_size.x) * 0.5 - 160.0, 80.0)
-		tooltip.force_dismiss()
-		await process_frame
-		_assert(not tooltip.visible, "cleanup hides popup before %s" % viewport_size)
-		_assert(not tooltip.is_pinned(), "cleanup unpins popup before %s" % viewport_size)
-		_assert(tooltip.get("_source_id") == &"", "cleanup clears exact source before %s" % viewport_size)
-		_assert(tooltip.show_content(content, anchor, &"size_%d" % viewport_size.x), "size source is accepted at %s" % viewport_size)
-		await _wait_for_layout()
-		var rect := tooltip.get_global_rect()
-		var pin_rect := pin.get_global_rect()
-		var scrollbar := scroll.get_v_scroll_bar()
-		var scrollbar_rect := scrollbar.get_global_rect()
-		var viewport_rect := Rect2(Vector2.ZERO, Vector2(viewport_size))
-		_assert(rect.position.x >= 16.0 and rect.position.y >= 16.0, "popup starts inside %s" % viewport_size)
-		_assert(rect.end.x <= viewport_size.x - 16.0 and rect.end.y <= viewport_size.y - 16.0, "popup ends inside %s" % viewport_size)
-		_assert(rect.encloses(pin_rect), "pin remains inside popup at %s" % viewport_size)
-		_assert(scrollbar.visible, "long content scrolls at %s" % viewport_size)
-		_assert(rect.encloses(scrollbar_rect), "scrollbar remains inside popup at %s" % viewport_size)
-		_assert(viewport_rect.encloses(scrollbar_rect), "scrollbar remains inside viewport at %s" % viewport_size)
+		await _exercise_resolution(viewport, host, anchor, tooltip, content, viewport_size)
 		if _failures.size() == before:
-			print("TEMPORARY_POPUP_INPUT_SIZE_PASS size=%dx%d" % [viewport_size.x, viewport_size.y])
+			print("TEMPORARY_POPUP_INPUT_ACCEPTANCE_SIZE_PASS size=%dx%d" % [viewport_size.x, viewport_size.y])
 
 	viewport.free()
 	if _failures.is_empty():
@@ -158,6 +52,138 @@ func _run() -> void:
 func _wait_for_layout() -> void:
 	await process_frame
 	await process_frame
+
+
+func _exercise_resolution(
+	viewport: SubViewport,
+	host: Control,
+	anchor: Button,
+	tooltip: UpgradeTooltipPanel,
+	content: Dictionary,
+	viewport_size: Vector2i
+) -> void:
+	var context := "at %dx%d" % [viewport_size.x, viewport_size.y]
+	viewport.size = viewport_size
+	host.size = viewport_size
+	anchor.position = Vector2(float(viewport_size.x) * 0.5 - 160.0, 80.0)
+	tooltip.force_dismiss()
+	await process_frame
+	_assert(not tooltip.visible, "cleanup hides popup %s" % context)
+	_assert(not tooltip.is_pinned(), "cleanup unpins popup %s" % context)
+	_assert(tooltip.get("_source_id") == &"", "cleanup clears exact source %s" % context)
+
+	var preheld_alt := InputEventKey.new()
+	preheld_alt.keycode = KEY_ALT
+	preheld_alt.pressed = true
+	viewport.push_input(preheld_alt)
+	_assert(not tooltip.visible, "Alt pressed while hidden does not reveal popup %s" % context)
+	_assert(not viewport.is_input_handled(), "Alt pressed while hidden remains unhandled %s" % context)
+	var preheld_source := StringName("preheld_%d" % viewport_size.x)
+	_assert(tooltip.show_content(content, anchor, preheld_source), "preheld Alt source is accepted %s" % context)
+	tooltip.release_source(preheld_source)
+	_assert(tooltip.visible, "Alt pressed before presentation retains popup after source exit %s" % context)
+	var preheld_alt_release := preheld_alt.duplicate() as InputEventKey
+	preheld_alt_release.pressed = false
+	viewport.push_input(preheld_alt_release)
+	await process_frame
+	_assert(not tooltip.visible and not tooltip.is_pinned(), "preheld Alt release dismisses inactive unpinned popup %s" % context)
+
+	var source := StringName("mouse_%d" % viewport_size.x)
+	_assert(tooltip.show_content(content, anchor, source), "full tooltip source is accepted %s" % context)
+	await _wait_for_layout()
+	var scroll := tooltip.get_node("Content/BodyScroll") as ScrollContainer
+	var pin := tooltip.get_node("Content/Header/Pin") as Button
+	_assert_full_content(tooltip, content, context)
+	var rect := tooltip.get_global_rect()
+	var pin_rect := pin.get_global_rect()
+	var scrollbar := scroll.get_v_scroll_bar()
+	var scrollbar_rect := scrollbar.get_global_rect()
+	var viewport_rect := Rect2(Vector2.ZERO, Vector2(viewport_size))
+	_assert(rect.position.x >= 16.0 and rect.position.y >= 16.0, "popup starts inside viewport %s" % context)
+	_assert(rect.end.x <= viewport_size.x - 16.0 and rect.end.y <= viewport_size.y - 16.0, "popup ends inside viewport %s" % context)
+	_assert(rect.encloses(pin_rect), "pin remains inside popup %s" % context)
+	_assert(scrollbar.visible, "long content scrolls %s" % context)
+	_assert(rect.encloses(scrollbar_rect), "scrollbar remains inside popup %s" % context)
+	_assert(viewport_rect.encloses(scrollbar_rect), "scrollbar remains inside viewport %s" % context)
+
+	var alt := InputEventKey.new()
+	alt.keycode = KEY_ALT
+	alt.pressed = true
+	viewport.push_input(alt)
+	tooltip.release_source(source)
+	_assert(tooltip.visible, "Alt transfer keeps popup visible %s" % context)
+	var motion := InputEventMouseMotion.new()
+	motion.position = scroll.get_global_rect().get_center()
+	viewport.push_input(motion)
+	var wheel := InputEventMouseButton.new()
+	wheel.position = motion.position
+	wheel.button_index = MOUSE_BUTTON_WHEEL_DOWN
+	wheel.pressed = true
+	viewport.push_input(wheel)
+	var wheel_release := wheel.duplicate() as InputEventMouseButton
+	wheel_release.pressed = false
+	viewport.push_input(wheel_release)
+	await _wait_for_layout()
+	_assert(scroll.scroll_vertical > 0, "mouse wheel scrolls Alt-held popup %s" % context)
+
+	await _push_mouse_click(viewport, pin)
+	_assert(tooltip.is_pinned(), "real mouse click pins popup %s" % context)
+	var alt_release := alt.duplicate() as InputEventKey
+	alt_release.pressed = false
+	viewport.push_input(alt_release)
+	await process_frame
+	_assert(tooltip.visible and tooltip.is_pinned(), "mouse pin survives Alt release %s" % context)
+	var pinned_title := (tooltip.get_node("Content/Header/Title") as Label).text
+	_assert(not tooltip.show_content({"title": "Replacement"}, anchor, &"replacement"), "pinned popup rejects replacement %s" % context)
+	_assert((tooltip.get_node("Content/Header/Title") as Label).text == pinned_title, "rejected content stays unchanged %s" % context)
+	await _push_mouse_click(viewport, pin)
+	_assert(not tooltip.visible and not tooltip.is_pinned(), "real mouse click unpins and dismisses inactive source %s" % context)
+
+	var controller_source := StringName("controller_%d" % viewport_size.x)
+	var controller_pin := InputEventJoypadButton.new()
+	controller_pin.button_index = JOY_BUTTON_Y
+	controller_pin.pressed = true
+	_assert(tooltip.show_content(content, anchor, controller_source), "controller source is accepted %s" % context)
+	viewport.push_input(controller_pin)
+	await process_frame
+	_assert(tooltip.is_pinned(), "Y/Triangle pins active controller popup %s" % context)
+	var controller_release := controller_pin.duplicate() as InputEventJoypadButton
+	controller_release.pressed = false
+	viewport.push_input(controller_release)
+	await process_frame
+	scroll.scroll_vertical = 0
+	var stick := InputEventJoypadMotion.new()
+	stick.axis = JOY_AXIS_RIGHT_Y
+	stick.axis_value = 1.0
+	viewport.push_input(stick)
+	await process_frame
+	await process_frame
+	_assert(scroll.scroll_vertical > 0, "right stick scrolls visible popup %s" % context)
+	stick.axis_value = 0.0
+	viewport.push_input(stick)
+	var stopped_scroll := scroll.scroll_vertical
+	for _frame: int in 4:
+		await process_frame
+	_assert(scroll.scroll_vertical == stopped_scroll, "neutral right stick stops popup scrolling %s" % context)
+	tooltip.release_source(controller_source)
+	viewport.push_input(controller_pin)
+	await process_frame
+	_assert(not tooltip.visible and not tooltip.is_pinned(), "Y/Triangle unpins and dismisses inactive source %s" % context)
+	viewport.push_input(controller_release)
+	await process_frame
+
+
+func _assert_full_content(tooltip: UpgradeTooltipPanel, content: Dictionary, context: String) -> void:
+	_assert(tooltip.visible, "full tooltip opens %s" % context)
+	_assert((tooltip.get_node("Content/Header/Title") as Label).text == content.title, "full tooltip renders title %s" % context)
+	_assert((tooltip.get_node("Content/Rank") as Label).text == content.rank_text, "full tooltip renders rank %s" % context)
+	_assert((tooltip.get_node("Content/BodyScroll/Body/Description") as Label).text == content.description, "full tooltip renders description %s" % context)
+	var effects_text := (tooltip.get_node("Content/BodyScroll/Body/Effects") as Label).text
+	_assert(String(content.effect_lines[0]) in effects_text and String(content.effect_lines[-1]) in effects_text, "full tooltip renders all effects %s" % context)
+	_assert((tooltip.get_node("Content/BodyScroll/Body/Eligibility") as Label).text == content.eligibility_text, "full tooltip renders eligibility %s" % context)
+	_assert((tooltip.get_node("Content/BodyScroll/Body/Inheritance") as Label).text == content.inheritance_text, "full tooltip renders inheritance %s" % context)
+	var keywords_text := (tooltip.get_node("Content/BodyScroll/Body/Keywords") as Label).text
+	_assert(String(content.keyword_lines[0]) in keywords_text and String(content.keyword_lines[-1]) in keywords_text, "full tooltip renders all keywords %s" % context)
 
 
 func _push_mouse_click(viewport: SubViewport, target: Button) -> void:
@@ -199,6 +225,6 @@ func _long_content() -> Dictionary:
 		"description": "A long authored upgrade used for real popup interaction acceptance.",
 		"effect_lines": effects,
 		"eligibility_text": "Requires all traits or capabilities: Area",
-		"inheritance_text": "",
+		"inheritance_text": "All current and future eligible party members inherit this upgrade.",
 		"keyword_lines": keywords,
 	}

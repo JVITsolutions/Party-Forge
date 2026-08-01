@@ -136,8 +136,12 @@ func advance_combat(delta: float, candidates: Array[CombatTarget]) -> void:
         for candidate: CombatTarget in candidates:
             if candidate != null and candidate.team_id == team_id:
                 allies.append(candidate)
-        var heal_range: float = support_controller.definition.range * float(modifiers.get("range_multiplier"))
-        var heal_target: CombatTarget = HealingSelectorScript.most_injured(allies, heal_range, combat_origin)
+        var support_geometry := ResolvedAttackGeometry.from_attack(
+            support_controller.definition,
+            float(modifiers.get("range_multiplier")),
+            float(modifiers.get("area_multiplier"))
+        )
+        var heal_target: CombatTarget = HealingSelectorScript.most_injured(allies, support_geometry.range, combat_origin)
         if heal_target != null:
             support_controller.cooldown_remaining = support_controller.definition.cooldown
             support_controller.attack_ready.emit(support_controller.definition, heal_target)
@@ -228,10 +232,8 @@ func _try_primary_attack(controller: AttackController, candidates: Array[CombatT
     if controller == null or controller.definition == null or controller.cooldown_remaining > 0.0:
         return
     var origin: Vector3 = global_position if is_inside_tree() else position
-    var effective_range: float = controller.definition.range * range_multiplier
-    if controller.definition.kind == AttackDefinition.Kind.MELEE_CLEAVE:
-        effective_range = controller.definition.area_radius * area_multiplier
-    var target: CombatTarget = TargetSelector.nearest(origin, candidates, effective_range, team_id)
+    var geometry := ResolvedAttackGeometry.from_attack(controller.definition, range_multiplier, area_multiplier)
+    var target: CombatTarget = TargetSelector.nearest(origin, candidates, geometry.range, team_id)
     if target == null:
         return
     controller.cooldown_remaining = controller.definition.cooldown

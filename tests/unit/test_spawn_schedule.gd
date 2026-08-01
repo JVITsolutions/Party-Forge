@@ -4,12 +4,14 @@ const REQUIRED_PATHS: PackedStringArray = [
     "res://scripts/enemies/enemy_actor.gd",
     "res://scripts/enemies/swarmer.gd",
     "res://scripts/enemies/spitter.gd",
+    "res://scripts/enemies/boltcaster.gd",
     "res://scripts/enemies/enemy_projectile.gd",
     "res://scripts/progression/experience_orb.gd",
     "res://scripts/game/spawn_schedule.gd",
     "res://scripts/game/spawn_director.gd",
     "res://scenes/enemies/swarmer.tscn",
     "res://scenes/enemies/spitter.tscn",
+    "res://scenes/enemies/boltcaster.tscn",
     "res://scenes/enemies/enemy_projectile.tscn",
     "res://scenes/progression/experience_orb.tscn",
 ]
@@ -28,6 +30,10 @@ func run() -> Array[String]:
     _test_enemy_reward_exactly_once(failures)
     _test_swarmer_targeting_and_contact_cooldown(failures)
     _test_spitter_spacing_and_projectile_cadence(failures)
+    _test_ranged_enemies_only_fire_in_resolved_range(failures)
+    _test_boltcaster_telegraph_preserves_sampled_aim(failures)
+    _test_linear_projectile_preserves_sampled_aim(failures)
+    _test_homing_projectile_tracks_live_target(failures)
     _test_experience_orb_collection(failures)
     _test_seeded_director_and_stop(failures)
     _test_density_adjusted_schedule(failures)
@@ -37,14 +43,14 @@ func run() -> Array[String]:
 
 func _test_schedule_boundaries(failures: Array[String]) -> void:
     var schedule: Script = load("res://scripts/game/spawn_schedule.gd") as Script
-    _assert_band(schedule.call("sample", 0.0), 1.25, 100, 0, "zero", failures)
-    _assert_band(schedule.call("sample", 59.999), 1.25, 100, 0, "before 60", failures)
-    _assert_band(schedule.call("sample", 60.0), 0.9, 80, 20, "at 60", failures)
-    _assert_band(schedule.call("sample", 149.999), 0.9, 80, 20, "before 150", failures)
-    _assert_band(schedule.call("sample", 150.0), 0.65, 65, 35, "at 150", failures)
-    _assert_band(schedule.call("sample", 239.999), 0.65, 65, 35, "before 240", failures)
-    _assert_band(schedule.call("sample", 240.0), 0.45, 55, 45, "at 240", failures)
-    _assert_band(schedule.call("sample", 299.999), 0.45, 55, 45, "before 300", failures)
+    _assert_band(schedule.call("sample", 0.0), 0.56, 100, 0, 0, "zero", failures)
+    _assert_band(schedule.call("sample", 59.999), 0.56, 100, 0, 0, "before 60", failures)
+    _assert_band(schedule.call("sample", 60.0), 0.40, 75, 25, 0, "at 60", failures)
+    _assert_band(schedule.call("sample", 149.999), 0.40, 75, 25, 0, "before 150", failures)
+    _assert_band(schedule.call("sample", 150.0), 0.29, 60, 32, 8, "at 150", failures)
+    _assert_band(schedule.call("sample", 239.999), 0.29, 60, 32, 8, "before 240", failures)
+    _assert_band(schedule.call("sample", 240.0), 0.20, 50, 35, 15, "at 240", failures)
+    _assert_band(schedule.call("sample", 299.999), 0.20, 50, 35, 15, "before 300", failures)
     TestAssertions.equal(schedule.call("sample", -0.001), null, "negative time has no ordinary band", failures)
     TestAssertions.equal(schedule.call("sample", 300.0), null, "300 seconds has no ordinary band", failures)
 
@@ -105,6 +111,113 @@ func _test_spitter_spacing_and_projectile_cadence(failures: Array[String]) -> vo
     TestAssertions.equal(_count_named(root, &"EnemyProjectile"), before + 1, "spitter fires at 2.2 second cadence", failures)
     root.free()
 
+func _test_ranged_enemies_only_fire_in_resolved_range(failures: Array[String]) -> void:
+    var root := _new_root("RangedEnemyRangeTest")
+    var leader := _party_actor(root, Vector3.ZERO)
+    var spitter: Node3D = (load("res://scenes/enemies/spitter.tscn") as PackedScene).instantiate() as Node3D
+    root.add_child(spitter)
+    spitter.call("configure_combat", 1, CombatRng.new(105), GameCatalog.load_defaults().damage_types)
+    spitter.call("configure_target", leader, root)
+    spitter.position = Vector3(19.0, 0.0, 0.0)
+    spitter.set("fire_cooldown", 0.0)
+    spitter.call("advance_behavior", 0.1)
+    TestAssertions.equal(_count_named(root, &"EnemyProjectile"), 0, "Spitter does not fire outside resolved attack range", failures)
+    TestAssertions.truthy((spitter.get("velocity") as Vector3).x < 0.0, "Spitter advances while outside attack range", failures)
+
+    var boltcaster: Node3D = (load("res://scenes/enemies/boltcaster.tscn") as PackedScene).instantiate() as Node3D
+    root.add_child(boltcaster)
+    boltcaster.call("configure_combat", 2, CombatRng.new(106), GameCatalog.load_defaults().damage_types)
+    boltcaster.call("configure_target", leader, root)
+    boltcaster.position = Vector3(17.0, 0.0, 0.0)
+    boltcaster.set("fire_cooldown", 0.0)
+    boltcaster.call("advance_behavior", 0.1)
+    TestAssertions.near(float(boltcaster.get("tell_remaining")), 0.0, 0.001, "Boltcaster does not tell outside resolved attack range", failures)
+    TestAssertions.truthy((boltcaster.get("velocity") as Vector3).x < 0.0, "Boltcaster advances while outside attack range", failures)
+    root.free()
+
+func _test_boltcaster_telegraph_preserves_sampled_aim(failures: Array[String]) -> void:
+    var root := _new_root("BoltcasterBehaviorTest")
+    var leader := _party_actor(root, Vector3.ZERO)
+    var boltcaster: Node3D = (load("res://scenes/enemies/boltcaster.tscn") as PackedScene).instantiate() as Node3D
+    root.add_child(boltcaster)
+    boltcaster.call("configure_combat", 1, CombatRng.new(107), GameCatalog.load_defaults().damage_types)
+    boltcaster.call("configure_target", leader, root)
+    boltcaster.position = Vector3(9.0, 0.0, 0.0)
+    boltcaster.set("fire_cooldown", 0.0)
+    boltcaster.call("advance_behavior", 0.0)
+    TestAssertions.near(float(boltcaster.get("tell_remaining")), 0.35, 0.001, "Boltcaster begins its configured tell in range", failures)
+    TestAssertions.equal(boltcaster.get("sampled_aim_position"), Vector3.ZERO, "Boltcaster samples aim when tell begins", failures)
+    leader.position = Vector3(0.0, 0.0, 9.0)
+    boltcaster.call("advance_behavior", 0.35)
+    var projectile := root.get_node_or_null("EnemyProjectile") as Node3D
+    TestAssertions.truthy(projectile != null, "Boltcaster fires when tell ends", failures)
+    if projectile != null:
+        var direction := projectile.get("direction") as Vector3
+        TestAssertions.near(direction.x, -1.0, 0.001, "Boltcaster projectile aims at sampled position", failures)
+        TestAssertions.near(direction.z, 0.0, 0.001, "Boltcaster projectile ignores leader movement during tell", failures)
+    root.free()
+
+func _test_linear_projectile_preserves_sampled_aim(failures: Array[String]) -> void:
+    var root := _new_root("LinearEnemyProjectileTest")
+    var target := _party_actor(root, Vector3(10.0, 0.0, 0.0))
+    var projectile := (load("res://scenes/enemies/enemy_projectile.tscn") as PackedScene).instantiate() as Node3D
+    root.add_child(projectile)
+    projectile.position = Vector3.ZERO
+    TestAssertions.truthy(_method_accepts(projectile, &"configure", 7), "enemy projectile accepts data-driven configuration", failures)
+    if not _method_accepts(projectile, &"configure", 7):
+        root.free()
+        return
+    var attack := AttackDefinition.new()
+    attack.projectile_speed = 10.0
+    attack.range = 6.0
+    attack.area_radius = 1.25
+    var profile := EnemyProjectileProfile.new()
+    profile.movement = EnemyProjectileProfile.Movement.LINEAR
+    profile.color = Color(1.0, 0.08, 0.05, 1.0)
+    profile.hit_radius = 0.2
+    profile.max_lifetime = 10.0
+    projectile.call("configure", target, null, CombatRng.new(103), GameCatalog.load_defaults().damage_types, attack, profile, target.position)
+    target.position = Vector3(0.0, 0.0, 10.0)
+    projectile.call("advance_projectile", 0.5)
+    TestAssertions.equal(projectile.get("movement"), EnemyProjectileProfile.Movement.LINEAR, "linear projectile exposes configured movement", failures)
+    TestAssertions.near(float(projectile.get("speed")), 10.0, 0.001, "linear projectile uses attack speed", failures)
+    TestAssertions.near(float(projectile.get("maximum_range")), 6.0, 0.001, "linear projectile uses attack range", failures)
+    TestAssertions.near(float(projectile.get("area_radius")), 1.25, 0.001, "linear projectile uses attack area radius", failures)
+    TestAssertions.near((projectile.get("direction") as Vector3).z, 0.0, 0.001, "linear projectile preserves sampled aim after target moves", failures)
+    TestAssertions.near(projectile.position.x, 5.0, 0.001, "linear projectile advances at configured speed", failures)
+    var material := (projectile.get_node("MeshInstance3D") as MeshInstance3D).get_active_material(0) as StandardMaterial3D
+    TestAssertions.equal(material.albedo_color if material != null else Color.TRANSPARENT, profile.color, "linear projectile uses profile color", failures)
+    projectile.call("advance_projectile", 0.5)
+    TestAssertions.near(float(projectile.get("distance_travelled")), 6.0, 0.001, "linear projectile stops at attack range", failures)
+    TestAssertions.truthy(projectile.is_queued_for_deletion(), "linear projectile expires at attack range", failures)
+    root.free()
+
+func _test_homing_projectile_tracks_live_target(failures: Array[String]) -> void:
+    var root := _new_root("HomingEnemyProjectileTest")
+    var target := _party_actor(root, Vector3(10.0, 0.0, 0.0))
+    var projectile := (load("res://scenes/enemies/enemy_projectile.tscn") as PackedScene).instantiate() as Node3D
+    root.add_child(projectile)
+    projectile.position = Vector3.ZERO
+    var attack := AttackDefinition.new()
+    attack.projectile_speed = 10.0
+    attack.range = 6.0
+    var profile := EnemyProjectileProfile.new()
+    profile.movement = EnemyProjectileProfile.Movement.HOMING
+    profile.color = Color(0.75, 0.15, 1.0, 1.0)
+    profile.hit_radius = 0.2
+    profile.max_lifetime = 10.0
+    projectile.call("configure", target, null, CombatRng.new(104), GameCatalog.load_defaults().damage_types, attack, profile, target.position)
+    target.position = Vector3(0.0, 0.0, 10.0)
+    projectile.call("advance_projectile", 0.5)
+    TestAssertions.equal(projectile.get("movement"), EnemyProjectileProfile.Movement.HOMING, "homing projectile exposes configured movement", failures)
+    TestAssertions.truthy((projectile.get("direction") as Vector3).z > 0.0, "homing projectile follows live target after it moves", failures)
+    var material := (projectile.get_node("MeshInstance3D") as MeshInstance3D).get_active_material(0) as StandardMaterial3D
+    TestAssertions.equal(material.albedo_color if material != null else Color.TRANSPARENT, profile.color, "homing projectile uses profile color", failures)
+    projectile.call("advance_projectile", 0.5)
+    TestAssertions.near(float(projectile.get("distance_travelled")), 6.0, 0.001, "homing projectile stops at attack range", failures)
+    TestAssertions.truthy(projectile.is_queued_for_deletion(), "homing projectile expires at attack range", failures)
+    root.free()
+
 func _test_experience_orb_collection(failures: Array[String]) -> void:
     var root := _new_root("ExperienceOrbTest")
     var leader := _party_actor(root, Vector3.ZERO)
@@ -147,11 +260,19 @@ func _test_seeded_director_and_stop(failures: Array[String]) -> void:
     second.call("configure", 4242, leader, experience, markers, null, root, root, 1.0, CombatRng.new(4242), types)
     var first_ids: Array[StringName] = []
     var second_ids: Array[StringName] = []
-    for index: int in range(40):
-        first_ids.append(first.call("sample_enemy_id", 75.0))
-        second_ids.append(second.call("sample_enemy_id", 75.0))
+    for index: int in range(2000):
+        first_ids.append(first.call("sample_enemy_id", 150.0))
+        second_ids.append(second.call("sample_enemy_id", 150.0))
     TestAssertions.equal(first_ids, second_ids, "spawn selection is repeatable for a local seed", failures)
-    TestAssertions.truthy(&"swarmer" in first_ids and &"spitter" in first_ids, "60-second band can produce both enemy types", failures)
+    TestAssertions.truthy(&"swarmer" in first_ids and &"boltcaster" in first_ids and &"spitter" in first_ids, "150-second band can produce all three enemy types", failures)
+    var swarmer_ratio := float(first_ids.count(&"swarmer")) / float(first_ids.size())
+    var boltcaster_ratio := float(first_ids.count(&"boltcaster")) / float(first_ids.size())
+    var spitter_ratio := float(first_ids.count(&"spitter")) / float(first_ids.size())
+    TestAssertions.near(swarmer_ratio, 0.60, 0.04, "seeded samples follow the Swarmer weight", failures)
+    TestAssertions.near(boltcaster_ratio, 0.32, 0.04, "seeded samples follow the Boltcaster weight", failures)
+    TestAssertions.near(spitter_ratio, 0.08, 0.025, "seeded samples follow the Spitter weight", failures)
+    var invalid_band := SpawnSchedule.SpawnBand.new(1.0, 0, 0, 0)
+    TestAssertions.equal(first.call("_sample_enemy_id_from_band", invalid_band), &"", "non-positive total weight selects no enemy", failures)
     first.set("elapsed_seconds", 299.9)
     first.call("advance_time", 0.2)
     TestAssertions.near(float(first.get("elapsed_seconds")), 300.1, 0.001, "director clock can cross ordinary spawn stop", failures)
@@ -207,7 +328,7 @@ func _test_density_adjusted_schedule(failures: Array[String]) -> void:
     var normal: Node = director_script.new() as Node
     root.add_child(normal)
     normal.call("configure", 11, leader, experience, markers, null, root, root, 1.0, CombatRng.new(11), types, 100)
-    TestAssertions.equal(normal.call("advance_time", 1.26), 2, "100 percent preserves baseline schedule including initial spawn", failures)
+    TestAssertions.equal(normal.call("advance_time", 1.26), 3, "100 percent preserves retuned baseline schedule including initial spawn", failures)
 
     var extreme: Node = director_script.new() as Node
     root.add_child(extreme)
@@ -233,12 +354,13 @@ func _test_pickup_upgrade_reaches_existing_orbs(failures: Array[String]) -> void
     TestAssertions.near(float(orb.get("pickup_radius_multiplier")), 2.5, 0.001, "pickup upgrade propagates to existing XP orbs", failures)
     root.free()
 
-func _assert_band(band: Variant, interval: float, swarmer: int, spitter: int, label: String, failures: Array[String]) -> void:
+func _assert_band(band: Variant, interval: float, swarmer: int, boltcaster: int, spitter: int, label: String, failures: Array[String]) -> void:
     TestAssertions.truthy(band != null, "%s returns a band" % label, failures)
     if band == null:
         return
     TestAssertions.near(float(band.get("interval")), interval, 0.001, "%s interval" % label, failures)
     TestAssertions.equal(int(band.get("swarmer_weight")), swarmer, "%s Swarmer weight" % label, failures)
+    TestAssertions.equal(int(band.get("boltcaster_weight")), boltcaster, "%s Boltcaster weight" % label, failures)
     TestAssertions.equal(int(band.get("spitter_weight")), spitter, "%s Spitter weight" % label, failures)
 
 func _new_root(root_name: String) -> Node3D:
@@ -261,3 +383,11 @@ func _count_named(parent: Node, node_name: StringName) -> int:
         if child.name == node_name:
             count += 1
     return count
+
+func _method_accepts(object: Object, method_name: StringName, argument_count: int) -> bool:
+    for row: Dictionary in object.get_method_list():
+        if StringName(row.get("name", "")) == method_name:
+            var total_arguments := (row.get("args", []) as Array).size()
+            var default_arguments := (row.get("default_args", []) as Array).size()
+            return argument_count >= total_arguments - default_arguments and argument_count <= total_arguments
+    return false

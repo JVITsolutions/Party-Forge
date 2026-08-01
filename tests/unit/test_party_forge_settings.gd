@@ -3,22 +3,69 @@ extends RefCounted
 func run() -> Array[String]:
 	var failures: Array[String] = []
 	_test_defaults_and_normalization(failures)
+	_test_reduced_motion_setting(failures)
 	_test_round_trip_and_inactive_retention(failures)
 	_test_missing_unknown_and_malformed_fields(failures)
 	_test_failed_save_preserves_previous_file(failures)
 	_test_failed_restore_retains_backup(failures)
 	return failures
 
+func _test_reduced_motion_setting(failures: Array[String]) -> void:
+	var settings := PartyForgeSettings.new()
+	var has_reduced_motion := settings.get_property_list().any(func(property: Dictionary) -> bool:
+		return property.get("name", "") == "reduced_motion"
+	)
+	TestAssertions.truthy(has_reduced_motion, "settings expose reduced motion", failures)
+	if not has_reduced_motion:
+		return
+	TestAssertions.equal(settings.get("reduced_motion"), false, "reduced motion defaults off", failures)
+	settings.set("reduced_motion", true)
+	var copied := settings.copy()
+	settings.set("reduced_motion", false)
+	TestAssertions.equal(copied.get("reduced_motion"), true, "settings copy isolates reduced motion", failures)
+
+	var path := "user://party_forge_settings_reduced_motion_test.cfg"
+	var store := PartyForgeSettingsStore.new()
+	TestAssertions.equal(store.save_settings(copied, path), "", "reduced motion saves", failures)
+	TestAssertions.equal(store.load_settings(path).get("reduced_motion"), true, "reduced motion round trips", failures)
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+
+	for mode: PartyForgeSettings.Mode in [PartyForgeSettings.Mode.PLAYER_SIMULATION, PartyForgeSettings.Mode.DEVELOPER_MODE]:
+		var snapshot_source := PartyForgeSettings.new()
+		snapshot_source.mode = mode
+		snapshot_source.set("reduced_motion", true)
+		var snapshot := RunRulesSnapshot.from_settings(snapshot_source)
+		var has_snapshot_value := snapshot.has_method(&"reduced_motion")
+		TestAssertions.truthy(has_snapshot_value, "run snapshot exposes reduced motion in mode %d" % mode, failures)
+		if has_snapshot_value:
+			TestAssertions.equal(snapshot.call(&"reduced_motion"), true, "run snapshot captures reduced motion in mode %d" % mode, failures)
+
 func _test_defaults_and_normalization(failures: Array[String]) -> void:
 	var settings := PartyForgeSettings.new()
 	TestAssertions.equal(settings.mode, PartyForgeSettings.Mode.PLAYER_SIMULATION, "settings default to Player Simulation", failures)
 	TestAssertions.equal(settings.party_capacity_override, 4, "developer party cap defaults to four", failures)
 	TestAssertions.equal(settings.enemy_density_percent, 100, "enemy density defaults to 100 percent", failures)
+	TestAssertions.equal(settings.experience_multiplier_percent, 100, "experience multiplier defaults to 100 percent", failures)
+	TestAssertions.equal(settings.level_up_card_count, 5, "level-up card count defaults to five", failures)
 	settings.party_capacity_override = -50
 	settings.enemy_density_percent = 5000
+	settings.experience_multiplier_percent = -50
+	settings.level_up_card_count = -10
 	settings.normalize()
 	TestAssertions.equal(settings.party_capacity_override, 1, "party cap clamps to one", failures)
 	TestAssertions.equal(settings.enemy_density_percent, 1000, "density clamps to 1000", failures)
+	TestAssertions.equal(settings.experience_multiplier_percent, 100, "experience multiplier clamps to 100", failures)
+	TestAssertions.equal(settings.level_up_card_count, 1, "level-up card count clamps to one", failures)
+	settings.experience_multiplier_percent = 5000
+	settings.level_up_card_count = 50
+	settings.normalize()
+	TestAssertions.equal(settings.experience_multiplier_percent, 1000, "experience multiplier clamps to 1000", failures)
+	TestAssertions.equal(settings.level_up_card_count, 8, "level-up card count clamps to eight", failures)
+	var copied := settings.copy()
+	settings.experience_multiplier_percent = 100
+	settings.level_up_card_count = 1
+	TestAssertions.equal(copied.experience_multiplier_percent, 1000, "settings copy isolates experience multiplier", failures)
+	TestAssertions.equal(copied.level_up_card_count, 8, "settings copy isolates level-up card count", failures)
 
 func _test_round_trip_and_inactive_retention(failures: Array[String]) -> void:
 	var path := "user://party_forge_settings_test.cfg"
@@ -29,12 +76,16 @@ func _test_round_trip_and_inactive_retention(failures: Array[String]) -> void:
 	settings.god_mode = true
 	settings.party_capacity_override = 17
 	settings.enemy_density_percent = 650
+	settings.experience_multiplier_percent = 725
+	settings.level_up_card_count = 7
 	TestAssertions.equal(store.save_settings(settings, path), "", "valid settings save", failures)
 	var loaded := store.load_settings(path)
 	TestAssertions.equal(loaded.mode, PartyForgeSettings.Mode.PLAYER_SIMULATION, "mode round trips", failures)
 	TestAssertions.truthy(loaded.god_mode and loaded.unlock_all_implemented_content, "inactive developer values remain stored", failures)
 	TestAssertions.equal(loaded.party_capacity_override, 17, "party cap round trips", failures)
 	TestAssertions.equal(loaded.enemy_density_percent, 650, "density round trips", failures)
+	TestAssertions.equal(loaded.experience_multiplier_percent, 725, "experience multiplier round trips", failures)
+	TestAssertions.equal(loaded.level_up_card_count, 7, "level-up card count round trips", failures)
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
 
 func _test_missing_unknown_and_malformed_fields(failures: Array[String]) -> void:
@@ -46,6 +97,9 @@ func _test_missing_unknown_and_malformed_fields(failures: Array[String]) -> void
 	TestAssertions.equal(loaded.mode, PartyForgeSettings.Mode.PLAYER_SIMULATION, "unknown mode fails closed", failures)
 	TestAssertions.equal(loaded.party_capacity_override, 1, "loaded cap clamps", failures)
 	TestAssertions.equal(loaded.enemy_density_percent, 100, "missing density uses default", failures)
+	TestAssertions.equal(loaded.experience_multiplier_percent, 100, "missing experience multiplier uses default", failures)
+	TestAssertions.equal(loaded.level_up_card_count, 5, "missing level-up card count uses default", failures)
+	TestAssertions.equal(loaded.get("reduced_motion"), false, "schema v1 files without reduced motion use the false fallback", failures)
 	file = FileAccess.open(path, FileAccess.WRITE)
 	file.store_string("[settings]\nmode=\"1\"\ngod_mode=\"true\"\n")
 	file.close()

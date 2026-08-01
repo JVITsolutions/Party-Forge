@@ -1,6 +1,8 @@
 class_name LevelUpPanel
 extends Control
 
+const UPGRADE_CARD_SCENE := preload("res://scenes/ui/upgrade_card.tscn")
+
 signal choice_selected(choice: UpgradeChoice)
 signal confirmation_requested(choice: UpgradeChoice, recipient_member_id: int)
 
@@ -12,22 +14,48 @@ var _upgrade_service: UpgradeApplicationService
 var _health_provider := Callable()
 var _party: PartyManager
 var _invalid_choice_keys: Dictionary = {}
+var _pending_level_count := 1
 var _pending_choice: UpgradeChoice
 var _pending_member_id := 0
 var _awaiting_application := false
 var _initial_focus_card: UpgradeCard
 var _tooltip_choice: UpgradeChoice
+var _reveal_controller: LevelUpRevealController
+var _final_bindings: Array[Dictionary] = []
+var _reduced_motion := true
 
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	_reveal_controller = get_node_or_null("RevealController") as LevelUpRevealController
+	if _reveal_controller != null and not _reveal_controller.resolved.is_connected(_on_reveal_resolved):
+		_reveal_controller.resolved.connect(_on_reveal_resolved)
 	_connect_cards()
+	_configure_card_focus_neighbors()
 	_connect_recipient_picker()
 	_connect_confirmation()
 	_connect_legacy_buttons()
 	var tooltip := _tooltip()
 	if tooltip != null and not tooltip.dismissed.is_connected(_on_tooltip_dismissed):
 		tooltip.dismissed.connect(_on_tooltip_dismissed)
+	var viewport := get_viewport()
+	if viewport != null and not viewport.size_changed.is_connected(_on_viewport_size_changed):
+		viewport.size_changed.connect(_on_viewport_size_changed)
+	_apply_card_face_density(_current_viewport_width())
+
+
+func _process(delta: float) -> void:
+	if _reveal_controller == null:
+		return
+	_reveal_controller.advance(delta)
+	var pending_label := get_node_or_null("ContentPanel/OfferView/Content/PendingLevels") as Label
+	if pending_label == null:
+		return
+	if _reduced_motion or _reveal_controller.is_revealing():
+		pending_label.modulate.a = 1.0
+		return
+	var pulse := (sin(_reveal_controller.elapsed_phase() * TAU) + 1.0) * 0.5
+	pending_label.modulate.a = lerpf(0.75, 1.0, pulse)
 
 
 func configure(
@@ -40,13 +68,20 @@ func configure(
 	_health_provider = health_provider
 
 
+func configure_reduced_motion(reduced_motion: bool) -> void:
+	_reduced_motion = reduced_motion
+	var pending_label := get_node_or_null("ContentPanel/OfferView/Content/PendingLevels") as Label
+	if pending_label != null and _reduced_motion:
+		pending_label.modulate.a = 1.0
+
+
 func show_choices(
 	exact_choices: Array[UpgradeChoice],
 	party: PartyManager,
-	invalid_choice_keys: Dictionary = {}
+	invalid_choice_keys: Dictionary = {},
+	pending_count: int = 1
 ) -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
-	_connect_cards()
 	_connect_recipient_picker()
 	_connect_confirmation()
 	_connect_legacy_buttons()
@@ -55,26 +90,51 @@ func show_choices(
 	if _upgrade_service == null:
 		_upgrade_service = UpgradeApplicationService.new()
 	choices = exact_choices.duplicate()
+	_ensure_card_count(choices.size())
+	_apply_card_face_density(_current_viewport_width())
 	_party = party
 	_invalid_choice_keys = invalid_choice_keys.duplicate()
+	_pending_level_count = maxi(pending_count, 1)
+	var pending_label := get_node("ContentPanel/OfferView/Content/PendingLevels") as Label
+	pending_label.text = "%d %s ready" % [
+		_pending_level_count,
+		"upgrade" if _pending_level_count == 1 else "upgrades",
+	]
+	pending_label.visible = _pending_level_count > 0
 	_pending_choice = null
 	_pending_member_id = 0
 	_awaiting_application = false
+	_initial_focus_card = null
 	selected_once = false
 	_hide_tooltip()
 	visible = true
 	_populate_offer_cards()
 	_populate_legacy_buttons()
 	_show_view(&"offer")
-	_focus_first_enabled_card()
+	if _reveal_controller != null:
+		var reveal_cards: Array[UpgradeCard] = []
+		for card_node: Node in get_node("ContentPanel/OfferView/Content/Cards").get_children():
+			if card_node is UpgradeCard and card_node.visible:
+				reveal_cards.append(card_node as UpgradeCard)
+		var preview_presentations: Array[Dictionary] = []
+		for binding: Dictionary in _final_bindings:
+			preview_presentations.append((binding.get("presentation", {}) as Dictionary).duplicate(true))
+		_reveal_controller.play(reveal_cards, _final_bindings, preview_presentations, _reduced_motion)
+	else:
+		_focus_first_enabled_card()
 
 
 func complete_selection() -> void:
 	_hide_tooltip()
+	if _reveal_controller != null:
+		_reveal_controller.reset()
 	_awaiting_application = false
 	_pending_choice = null
 	_pending_member_id = 0
 	visible = false
+	var pending_label := get_node_or_null("ContentPanel/OfferView/Content/PendingLevels") as Label
+	if pending_label != null:
+		pending_label.modulate.a = 1.0
 
 
 func reject_selection(reason: String) -> void:
@@ -103,11 +163,22 @@ func cancel_subflow() -> void:
 
 
 func _populate_offer_cards() -> void:
+	_final_bindings.clear()
 	var cards := get_node("ContentPanel/OfferView/Content/Cards").get_children()
-	for index: int in 3:
+	for index: int in cards.size():
 		var card := cards[index] as UpgradeCard
 		var choice: UpgradeChoice = choices[index] if index < choices.size() else null
-		card.bind_choice(choice, _presentation_for(choice), _disabled_reason(choice))
+		if not card.visible:
+			continue
+		var presentation := _presentation_for(choice)
+		var disabled_reason := _disabled_reason(choice)
+		var final_binding := {
+			"choice": choice,
+			"presentation": presentation,
+			"disabled_reason": disabled_reason,
+		}
+		_final_bindings.append(final_binding)
+		card.bind_choice(choice, presentation, disabled_reason)
 
 
 func _presentation_for(choice: UpgradeChoice) -> Dictionary:
@@ -115,29 +186,7 @@ func _presentation_for(choice: UpgradeChoice) -> Dictionary:
 		return {"name": "Unavailable", "scope_badge": "", "rank_text": "", "summary": ""}
 	if choice.kind == UpgradeChoice.Kind.AUTHORED and choice.definition != null:
 		return UpgradePresentationService.card(choice.definition, _party)
-	return {
-		"name": choice.label,
-		"scope_badge": _legacy_scope_name(choice.kind),
-		"rank_text": "",
-		"summary": "A foundational party progression choice.",
-		"eligibility_text": "Available to the current party.",
-		"recipient_text": "Applies without a character target.",
-		"inheritance_text": "",
-	}
-
-
-func _legacy_scope_name(kind: UpgradeChoice.Kind) -> String:
-	match kind:
-		UpgradeChoice.Kind.RECRUIT:
-			return "Recruit"
-		UpgradeChoice.Kind.CLASS_RANK:
-			return "Class Rank"
-		UpgradeChoice.Kind.TRAIT:
-			return "Trait Rank"
-		UpgradeChoice.Kind.PARTY_STAT:
-			return "Party"
-		_:
-			return "Upgrade"
+	return FoundationalUpgradePresentationService.card(choice, _party, _catalog)
 
 
 func _disabled_reason(choice: UpgradeChoice) -> String:
@@ -169,6 +218,59 @@ func _connect_cards() -> void:
 			card.detail_dismissed.connect(_on_card_detail_dismissed)
 
 
+func _ensure_card_count(count: int) -> void:
+	var cards := get_node("ContentPanel/OfferView/Content/Cards") as HBoxContainer
+	var needed := clampi(count, 1, 8)
+	while cards.get_child_count() < needed:
+		var card := UPGRADE_CARD_SCENE.instantiate() as UpgradeCard
+		card.name = "Card%d" % (cards.get_child_count() + 1)
+		card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		card.size_flags_stretch_ratio = 1.0
+		cards.add_child(card)
+	for index: int in cards.get_child_count():
+		(cards.get_child(index) as Control).visible = index < needed
+	_connect_cards()
+	_configure_card_focus_neighbors()
+
+
+func _configure_card_focus_neighbors() -> void:
+	var cards := get_node_or_null("ContentPanel/OfferView/Content/Cards") as HBoxContainer
+	if cards == null:
+		return
+	var visible_cards: Array[Control] = []
+	for child: Node in cards.get_children():
+		if child is Control and child.visible:
+			visible_cards.append(child as Control)
+	for index: int in visible_cards.size():
+		var card := visible_cards[index]
+		card.focus_neighbor_left = card.get_path_to(visible_cards[index - 1]) if index > 0 else NodePath()
+		card.focus_neighbor_right = card.get_path_to(visible_cards[index + 1]) if index + 1 < visible_cards.size() else NodePath()
+
+
+func _on_viewport_size_changed() -> void:
+	_apply_card_face_density(_current_viewport_width())
+
+
+func _current_viewport_width() -> float:
+	if is_inside_tree():
+		return get_viewport_rect().size.x
+	return float(ProjectSettings.get_setting("display/window/size/viewport_width", 1920))
+
+
+func _apply_card_face_density(viewport_width: float) -> void:
+	var cards := get_node_or_null("ContentPanel/OfferView/Content/Cards") as HBoxContainer
+	if cards == null:
+		return
+	var show_extended_summary := viewport_width >= 1400.0
+	for child: Node in cards.get_children():
+		if not (child is UpgradeCard) or not child.visible:
+			continue
+		for label_name: String in ["Eligibility", "Recipient", "Inheritance"]:
+			var label := child.get_node_or_null("Content/%s" % label_name) as Label
+			if label != null:
+				label.visible = show_extended_summary
+
+
 func _connect_recipient_picker() -> void:
 	var picker := get_node_or_null("ContentPanel/RecipientView") as UpgradeRecipientPicker
 	if picker == null:
@@ -189,7 +291,7 @@ func _connect_confirmation() -> void:
 
 
 func _on_card_activated(choice: UpgradeChoice) -> void:
-	if _awaiting_application or choice == null:
+	if (_reveal_controller != null and _reveal_controller.is_revealing()) or _awaiting_application or choice == null:
 		return
 	_hide_tooltip()
 	if choice.requires_recipient():
@@ -253,6 +355,23 @@ func _show_view(view: StringName) -> void:
 	(get_node("ContentPanel/ConfirmationView") as Control).visible = view == &"confirmation"
 
 
+func _unhandled_input(event: InputEvent) -> void:
+	if visible and _reveal_controller != null and _reveal_controller.is_revealing() and (
+		event.is_action_pressed(&"ui_accept")
+		or event.is_action_pressed(&"ui_cancel")
+	):
+		_reveal_controller.skip()
+		var viewport := get_viewport()
+		if viewport != null:
+			viewport.set_input_as_handled()
+		return
+
+
+func _on_reveal_resolved() -> void:
+	if visible and (get_node("ContentPanel/OfferView") as Control).visible:
+		_focus_first_enabled_card()
+
+
 func _focus_first_enabled_card() -> void:
 	_initial_focus_card = null
 	for card_node: Node in get_node("ContentPanel/OfferView/Content/Cards").get_children():
@@ -277,27 +396,31 @@ func _on_card_detail_requested(choice: UpgradeChoice, anchor: Control) -> void:
 	if (
 		not visible
 		or not (get_node("ContentPanel/OfferView") as Control).visible
+		or (_reveal_controller != null and _reveal_controller.is_revealing())
 		or choice == null
-		or choice.kind != UpgradeChoice.Kind.AUTHORED
 		or _catalog == null
 		or _catalog.keywords == null
 		or _party == null
 	):
 		_hide_tooltip()
 		return
-	var definition := _catalog.upgrade_by_id(choice.target_id)
-	if definition == null:
-		_hide_tooltip()
-		return
-	var rank_state := _offered_rank_state(definition)
-	var content := UpgradePresentationService.tooltip(
-		definition,
-		int(rank_state.rank),
-		PartyManager.STAT_CATALOG,
-		_catalog.keywords
-	)
-	if bool(rank_state.varies):
-		content["rank_text"] = "Offered rank varies / %d" % definition.max_rank
+	var content: Dictionary
+	if choice.kind == UpgradeChoice.Kind.AUTHORED:
+		var definition := _catalog.upgrade_by_id(choice.target_id)
+		if definition == null:
+			_hide_tooltip()
+			return
+		var rank_state := _offered_rank_state(definition)
+		content = UpgradePresentationService.tooltip(
+			definition,
+			int(rank_state.rank),
+			PartyManager.STAT_CATALOG,
+			_catalog.keywords
+		)
+		if bool(rank_state.varies):
+			content["rank_text"] = "Offered rank varies / %d" % definition.max_rank
+	else:
+		content = FoundationalUpgradePresentationService.tooltip(choice, _party, _catalog)
 	var source_id := StringName(choice.key())
 	if _tooltip().show_content(content, anchor, source_id):
 		_tooltip_choice = choice
@@ -376,7 +499,7 @@ func _populate_legacy_buttons() -> void:
 
 
 func _legacy_select(index: int) -> void:
-	if selected_once or index < 0 or index >= choices.size():
+	if (_reveal_controller != null and _reveal_controller.is_revealing()) or selected_once or index < 0 or index >= choices.size():
 		return
 	var button := get_node("Choices").get_child(index) as Button
 	if button.disabled:

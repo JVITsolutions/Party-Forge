@@ -44,6 +44,13 @@ func bind_choice(
 	disabled = not disabled_reason.is_empty()
 
 
+func bind_preview(presentation: Dictionary) -> void:
+	_set_text("Content/Name", presentation.get("name", ""))
+	_set_text("Content/Scope", presentation.get("scope_badge", ""))
+	_set_text("Content/Rank", presentation.get("rank_text", ""))
+	_set_text("Content/Summary", presentation.get("summary", ""))
+
+
 func bound_choice() -> UpgradeChoice:
 	return _choice
 
@@ -80,7 +87,7 @@ func _on_focus_exited() -> void:
 
 
 func _update_detail_state() -> void:
-	var should_show := (_mouse_inside or _focus_inside) and _choice != null
+	var should_show := (_mouse_inside or _focus_inside) and _choice != null and not disabled
 	if should_show == _detail_visible:
 		return
 	_detail_visible = should_show

@@ -127,14 +127,14 @@ func _move_charge(delta: float) -> void:
         position = next_position
     if charge_packet == null or not charge_packet.valid:
         return
-    var attack := definition.attack_by_id(&"guardian_charge") if definition != null else null
-    if attack == null:
+    var charge_width := attack_geometry(&"guardian_charge").range
+    if charge_width <= 0.0:
         return
     for adapter: CombatantAdapter in _party_adapters(charge_packet.action_tags):
         if charge_hit_ids.has(adapter.combatant_id) or adapter.actor == null:
             continue
         var target_position := adapter.actor.global_position if adapter.actor.is_inside_tree() else adapter.actor.position
-        if _distance_squared_to_segment(target_position, start_position, next_position) <= attack.range * attack.range:
+        if _distance_squared_to_segment(target_position, start_position, next_position) <= charge_width * charge_width:
             resolve_attack(charge_packet, adapter)
             charge_hit_ids[adapter.combatant_id] = true
 
@@ -162,13 +162,13 @@ func _create_danger_ring() -> void:
 func _apply_shockwave() -> void:
     var center := global_position if is_inside_tree() else position
     var packet := prepare_attack(&"guardian_shockwave")
-    var attack := definition.attack_by_id(&"guardian_shockwave") if definition != null else null
-    if packet != null and packet.valid and attack != null:
+    var shockwave_radius := attack_geometry(&"guardian_shockwave").area_radius
+    if packet != null and packet.valid and shockwave_radius > 0.0:
         for adapter: CombatantAdapter in _party_adapters(packet.action_tags):
             if adapter.actor == null:
                 continue
             var target_position := adapter.actor.global_position if adapter.actor.is_inside_tree() else adapter.actor.position
-            if center.distance_squared_to(target_position) <= attack.area_radius * attack.area_radius:
+            if center.distance_squared_to(target_position) <= shockwave_radius * shockwave_radius:
                 resolve_attack(packet, adapter)
     _disable_pending_hit_areas()
 
