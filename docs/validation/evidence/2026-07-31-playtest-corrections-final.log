@@ -1,0 +1,124 @@
+PARTY FORGE PLAN 05 TASK 4 - PLAYTEST CORRECTIONS FINAL EVIDENCE
+Evidence recorded: 2026-08-01 America/New_York
+Worktree: F:\Projects(root)\Game dev\Projects\party-forge\.worktrees\playtest-corrections
+Branch: feature/playtest-corrections
+Clean-start HEAD: c2dfadf7382a79588a5746ea1487b8902a2c5b59 test: record full ledger roster acceptance
+Clean-start status: CLEAN (git status --short --branch printed only "## feature/playtest-corrections")
+Godot: 4.7.1.stable.mono.official.a13da4feb
+
+AUTOMATED GATE 1 - FULL HEADLESS SUITE
+Command:
+& 'F:\Projects(root)\Game dev\godot\Godot_v4.7.1-stable_mono_win64\Godot_v4.7.1-stable_mono_win64_console.exe' --headless --path 'F:\Projects(root)\Game dev\Projects\party-forge\.worktrees\playtest-corrections' --script res://tests/test_runner.gd
+Exit code: 0
+Exact PASS marker: TEST_SUMMARY: PASS (65 suites)
+Known intentional negative-path diagnostics emitted by passing tests:
+- ERROR: PARTY_FORGE_LEDGER_ERROR page=equipment_inventory reason=unknown feature equipment
+- ERROR: PARTY_FORGE_LEDGER_ERROR page=equipment_inventory reason=unknown unlock equipment_mastery
+- ERROR: PARTY_FORGE_GOD_MODE_OWNERSHIP_ERROR team=2 member=1 reason=actor team is not party-owned
+- ERROR: PARTY_FORGE_GOD_MODE_OWNERSHIP_ERROR team=1 member=1 reason=member state does not match party manager
+- ERROR: PARTY_FORGE_DAMAGE_ERROR attack=test_hit source=party:1 target=enemy:invalid type=void reason=unknown runtime type
+- ERROR: PARTY_FORGE_DAMAGE_ERROR attack=test_hit source=party:1 target=enemy:unavailable reason=target unavailable
+- ERROR: PARTY_FORGE_DAMAGE_ERROR attack=test_hit source=party:1 target=party:ally reason=team-invalid target
+- ERROR: PARTY_FORGE_DAMAGE_ERROR attack=test_hit source=party:1 target=enemy:invalid type=physical reason=invalid runtime amount
+- PARTY_FORGE_UNKNOWN_ENEMY_ID id=bogus
+- ERROR: PARTY_FORGE_STAT_ERROR source=invalid stat=missing_stat reason=unknown stat id
+- ERROR: PARTY_FORGE_SETTINGS_VERSION_ERROR path=user://party_forge_settings_future_test.cfg version=999 supported=1
+- ERROR: PARTY_FORGE_RUN_RULES_ERROR reason=settings snapshot source is missing
+- ERROR: PARTY_FORGE_FEATURE_ACCESS_ERROR feature=unknown reason=unknown feature
+- ERROR: PARTY_FORGE_SETTINGS_SAVE_ERROR path=user://party_forge_settings.cfg code=20 stage=promote (emitted twice)
+- ERROR: PARTY_FORGE_DAMAGE_ERROR attack=invalid_rule_hit source=party:rule_source target=enemy:rule_target type=unstable rule=99 reason=unsupported mitigation rule
+- ERROR: PARTY_FORGE_UPGRADE_APPLICATION_ERROR id=vitality member=1 reason=maximum rank reached
+- ERROR: PARTY_FORGE_UPGRADE_APPLICATION_ERROR id=deadeye member=1 reason=class is not eligible
+- ERROR: PARTY_FORGE_UPGRADE_APPLICATION_ERROR id=missing_upgrade member=2 reason=unknown upgrade id
+- ERROR: PARTY_FORGE_UPGRADE_APPLICATION_ERROR id=vitality member=999 reason=member is no longer available
+- ERROR: PARTY_FORGE_UPGRADE_APPLICATION_ERROR id=vanguard_wall member=0 reason=maximum rank reached
+- ERROR: PARTY_FORGE_UPGRADE_APPLICATION_ERROR id=invalid_multi member=1 reason=PARTY_FORGE_STAT_ERROR source=upgrade:invalid_multi:member:1 stat=missing_stat reason=unknown stat id
+Known exit diagnostics:
+- WARNING: 18 ObjectDB instances were leaked at exit (run with `--verbose` for details).
+- ERROR: 5 resources still in use at exit (run with --verbose for details).
+Gate result: PASS because the fresh command exited 0 and printed the exact 65-suite PASS marker; diagnostics are preserved rather than suppressed.
+
+AUTOMATED GATE 2 - TEMPORARY POPUP INPUT INTEGRATION
+Command:
+& 'F:\Projects(root)\Game dev\godot\Godot_v4.7.1-stable_mono_win64\Godot_v4.7.1-stable_mono_win64_console.exe' --headless --path 'F:\Projects(root)\Game dev\Projects\party-forge\.worktrees\playtest-corrections' --script res://tests/integration/temporary_popup_input_runner.gd
+Exit code: 0
+Exact PASS markers:
+- TEMPORARY_POPUP_INPUT_ACCEPTANCE_SIZE_PASS size=1280x720
+- TEMPORARY_POPUP_INPUT_ACCEPTANCE_SIZE_PASS size=1920x1080
+- TEMPORARY_POPUP_INPUT_ACCEPTANCE_SIZE_PASS size=2560x1440
+- TEMPORARY_POPUP_INPUT_ACCEPTANCE_SIZE_PASS size=3840x2160
+- TEMPORARY_POPUP_INPUT_SUMMARY: PASS (4 sizes)
+Warnings/errors: none emitted.
+Gate result: PASS
+
+AUTOMATED GATE 3 - FIVE-CARD GEOMETRY INTEGRATION
+Command:
+& 'F:\Projects(root)\Game dev\godot\Godot_v4.7.1-stable_mono_win64\Godot_v4.7.1-stable_mono_win64_console.exe' --headless --path 'F:\Projects(root)\Game dev\Projects\party-forge\.worktrees\playtest-corrections' --script res://tests/integration/level_up_five_card_geometry_runner.gd
+Exit code: 0
+Exact PASS markers:
+- LEVEL_UP_FIVE_CARD_ACCEPTANCE_SIZE_PASS size=1280x720
+- LEVEL_UP_FIVE_CARD_ACCEPTANCE_SIZE_PASS size=1920x1080
+- LEVEL_UP_FIVE_CARD_ACCEPTANCE_SIZE_PASS size=2560x1440
+- LEVEL_UP_FIVE_CARD_ACCEPTANCE_SIZE_PASS size=3840x2160
+- LEVEL_UP_FIVE_CARD_SUMMARY: PASS (4 sizes)
+Warnings/errors: none emitted.
+Gate result: PASS
+
+AUTOMATED GATE 4 - LEDGER 24-MEMBER INTEGRATION
+Command:
+& 'F:\Projects(root)\Game dev\godot\Godot_v4.7.1-stable_mono_win64\Godot_v4.7.1-stable_mono_win64_console.exe' --headless --path 'F:\Projects(root)\Game dev\Projects\party-forge\.worktrees\playtest-corrections' --script res://tests/integration/ledger_24_member_runner.gd
+Exit code: 0
+Exact PASS marker: LEDGER_24_MEMBER_SUMMARY: PASS (2 viewports)
+Warnings/errors: none emitted.
+Gate result: PASS
+
+AUTOMATED GATE 5 - EDITOR/PARSER SCAN
+Command:
+& 'F:\Projects(root)\Game dev\godot\Godot_v4.7.1-stable_mono_win64\Godot_v4.7.1-stable_mono_win64_console.exe' --headless --path 'F:\Projects(root)\Game dev\Projects\party-forge\.worktrees\playtest-corrections' --editor --quit-after 2
+Exit code: 0
+Exact completion marker: [ DONE ] first_scan_filesystem
+Warnings:
+- WARNING: Missing .uid file for path "res://scripts/combat/resolved_attack_geometry.gd". The file was re-created from cache.
+- WARNING: Missing .uid file for path "res://scripts/data/enemy_projectile_profile.gd". The file was re-created from cache.
+- WARNING: Missing .uid file for path "res://scripts/progression/level_up_offer_state.gd". The file was re-created from cache.
+- WARNING: Missing .uid file for path "res://scripts/progression/recruit_offer_policy.gd". The file was re-created from cache.
+- WARNING: Missing .uid file for path "res://tests/unit/test_enemy_projectile_profile.gd". The file was re-created from cache.
+- WARNING: Missing .uid file for path "res://tests/unit/test_game_run_pause_clock.gd". The file was re-created from cache.
+- WARNING: Missing .uid file for path "res://tests/unit/test_recruit_offer_policy.gd". The file was re-created from cache.
+- WARNING: Missing .uid file for path "res://tests/unit/test_resolved_attack_geometry.gd". The file was re-created from cache.
+- WARNING: Scan thread aborted...
+Cleanup: all 16 generated untracked .uid sidecars visible after the automated runs were removed; no tracked UID sidecar was removed.
+Gate result: PASS because the bounded editor/parser command exited 0 and completed first_scan_filesystem.
+
+AUTOMATED GATE 6 - DIFF, ENCODING, AND SCOPE HYGIENE
+Command: git diff --check
+Exit code: 0
+Output: SILENT
+Command: git diff --cached --check
+Exit code: 0
+Output: SILENT
+Command: git status --short --branch
+Exit code: 0
+Exact output before staging:
+## feature/playtest-corrections
+?? docs/development/PLAYTEST_CORRECTIONS_TUNING_GUIDE.md
+?? docs/validation/evidence/2026-07-31-playtest-corrections-final.log
+UTF-8 check: both authorized files decoded with strict UTF-8, with no BOM.
+Generated UID check: `git ls-files --others --exclude-standard -- '*.uid'` count was 0 after cleanup.
+Authorized tracked scope: exactly these two new UTF-8 files:
+- docs/development/PLAYTEST_CORRECTIONS_TUNING_GUIDE.md
+- docs/validation/evidence/2026-07-31-playtest-corrections-final.log
+
+MANUAL LAUNCH SMOKE: PENDING USER/CONNECTED ACCEPTANCE
+1. Class selection: PENDING USER/CONNECTED ACCEPTANCE
+2. Run start: PENDING USER/CONNECTED ACCEPTANCE
+3. Combat: PENDING USER/CONNECTED ACCEPTANCE
+4. Level-up reveal/skip: PENDING USER/CONNECTED ACCEPTANCE
+5. Tooltip pin and scroll: PENDING USER/CONNECTED ACCEPTANCE
+6. Pause ledger: PENDING USER/CONNECTED ACCEPTANCE
+7. Boltcaster and Spitter behavior/readability: PENDING USER/CONNECTED ACCEPTANCE
+8. Quit flow: PENDING USER/CONNECTED ACCEPTANCE
+Debugger errors from connected manual run: PENDING USER/CONNECTED ACCEPTANCE; no manual run was performed and no PASS was fabricated.
+
+AUTOMATED VERIFICATION GATE: PASS
+OVERALL PLAYTEST CORRECTIONS ACCEPTANCE: PENDING USER/CONNECTED ACCEPTANCE
