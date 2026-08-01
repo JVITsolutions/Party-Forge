@@ -2,7 +2,7 @@
 
 > **Architecture baseline:** `a293f6208bd3a62246043c1b3e7c0a49ad5fef73`<br>
 > **Godot version:** `4.7.1`<br>
-> **Last checked:** `2026-07-29`
+> **Last checked:** `2026-08-01`
 
 ## What you will learn
 
@@ -38,7 +38,34 @@ The visual child may use an imported mesh or instantiate an imported scene. The 
 
 > **Party Forge convention:** Gameplay owns the actor wrapper; imported art lives below its presentation boundary. Reimporting art must not replace the gameplay root.
 
-> **Current limitation:** Party Forge's checked-in actors use simple placeholder meshes and do not provide a general presentation-adapter component for arbitrary imported hierarchies.
+## Implemented character-presentation adapter (Forge Vanguard)
+
+Party Forge now has a game-owned `CharacterPresentation` adapter at `res://scenes/characters/presentation/character_presentation.tscn` (script: `res://scripts/presentation/character_presentation.gd`). Party actors retain their direct `MeshInstance3D` as the conservative fallback boundary; the adapter receives a `CharacterVisualProfile`, instantiates its `presentation_scene` below `Presentation`, and hides the fallback only after that profile has validated and applied. If a profile is absent, invalid, or cannot instantiate, the adapter keeps the capsule fallback visible and logs a `PARTY_FORGE_PRESENTATION_ERROR` once for the failed operation. Classes without an assigned profile therefore remain playable as capsules.
+
+The Fighter is assigned the equipped `res://data/presentation/profiles/forge_vanguard.tres`, which instantiates `res://scenes/characters/presentation/forge_vanguard_model.tscn`. It defaults to the masculine body, red palette, and the seven visible Forge Vanguard starter items (sword, shield, helmet, body armour, gloves, boots, and belt). The generated in-project first draft has no external art-license dependency.
+
+The neutral covered block-mannequin bodies are independently reusable with no equipment enabled by default:
+
+- Masculine scene/profile: `res://scenes/characters/presentation/forge_base_masculine.tscn` and `res://data/presentation/profiles/forge_base_masculine.tres`.
+- Feminine scene/profile: `res://scenes/characters/presentation/forge_base_feminine.tscn` and `res://data/presentation/profiles/forge_base_feminine.tres`.
+
+Both base profiles expose the same public model API, the red/blue/green palettes, and all available equipment definitions while deliberately keeping `default_equipment_visuals` empty. This makes an unequipped base body a reusable presentation profile rather than a hidden variant of the equipped fighter.
+
+### Equipment and feedback contract
+
+The exact PoE1-style visual slots are `main_hand`, `off_hand`, `helmet`, `body_armour`, `gloves`, `boots`, `belt`, `amulet`, `ring_left`, and `ring_right`. Every equipped definition declares at least one readability channel: sword and shield use geometry; helmet uses geometry and silhouette; body armour uses geometry, silhouette, and palette; gloves, boots, and belt use geometry and palette; amulet uses emission and emblem; and each ring uses emission. Definitions live under `res://data/presentation/equipment/forge_vanguard_*.tres`, and `EquipmentSlotCatalog` is the authoritative ten-slot list.
+
+The model duplicates `StandardMaterial3D` resources for an instance before applying its palette or feedback. Palette, white hit flash, downed grayscale, and restored base color are therefore instance-local: one red actor and one blue actor can coexist without recoloring one another. The adapter maps Fighter `fighter_cleave` only to `attack_slash`; its model also supplies `idle`, `attack_combo`, and `hit_flinch`. The current in-place clip durations are idle 1.6 seconds, slash 0.55 seconds, combo 0.9 seconds, and flinch 0.25 seconds. Presentation does not alter combat damage timing.
+
+### Sandbox and visual review
+
+Launch `res://scenes/dev/character_presentation_sandbox.tscn` to review two simultaneous adapters, named Masculine and Feminine, with the fallback capsule comparison. Its controls are: `1`/`2` body, `R`/`B`/`G` palette, `I` idle, `A` slash, `C` combo, `H` hit, `Q`/`E` cycle the selected slot, `Space` toggle that slot, and `M` toggle the selected side between equipped and its separate unequipped base profile. The hermetic smoke entry point is `res://tests/integration/character_presentation_sandbox_runner.gd`.
+
+For live review, verify the high-angle red masculine / blue feminine / capsule composition, then inspect sword, shield, helmet, body armour, gloves, boots, belt, and jewelry readability at close range. Exercise the four clips, hit flash restoration, downed gray, and revival color with both models visible. Valid sandbox interactions must not add parser, import, runtime, or `PARTY_FORGE_PRESENTATION_ERROR` entries to the editor/game logs.
+
+### Deferred Blender/glTF replacement contract
+
+No Blender installation or Blender-authored asset is part of the current implementation. The reserved source and exchange paths are exactly `assets/models/characters/source/party_forge_humanoid.blend` and `assets/models/characters/party_forge_humanoid.glb`. A later replacement must use one metre per Godot unit, Y-up, feet at the source origin, normalized forward orientation below the gameplay root, a shared humanoid armature, semantic sockets, and exact animation-name preservation (`idle`, `attack_slash`, `attack_combo`, and `hit_flinch`). Import the GLB below the adapter boundary; do not make the imported hierarchy the gameplay root or replace the actor's collision, components, groups, health-bar ownership, or attack contracts.
 
 ## Replacing a placeholder model safely
 
@@ -60,7 +87,7 @@ Use these replacement steps:
 
 1. Duplicate the actor scene into `scenes/dev/` and open the duplicate.
 2. Record its root script, groups, collision layers and masks, component paths, collision dimensions, and starting transform.
-3. Assign an imported Mesh Resource to the existing direct `MeshInstance3D`, or add an imported scene below a `Presentation` child while retaining the current flash target until code supports the new hierarchy.
+3. Keep the direct `MeshInstance3D` as the fallback boundary, then assign a validated `CharacterVisualProfile` through the `Presentation` adapter. An imported scene belongs in that profile's `presentation_scene`, never in place of the gameplay root.
 4. Reset or deliberately normalize the visual child's transform. Imported scale and forward direction must not leak into the actor root.
 5. Run only the duplicate in a sandbox and inspect the Remote tree before changing a production scene.
 
@@ -68,7 +95,7 @@ Use these replacement steps:
 
 Mesh and material Resources can be shared by many instances. Changing a shared material at runtime can recolor every actor using it.
 
-For the current Party Forge actor contract, duplicate a `StandardMaterial3D` and assign it as the `MeshInstance3D` node-wide override before changing its color:
+For a direct fallback mesh or a presentation-model mesh, duplicate a `StandardMaterial3D` and assign it as the `MeshInstance3D` node-wide override before changing its color:
 
 ```gdscript
 var source_material := mesh_instance.material_override as StandardMaterial3D
@@ -86,7 +113,7 @@ mesh_instance.material_override = unique_material
 
 The casts and null guard reject a missing material or a different material type before `duplicate()` is called. `get_active_material(0)` is only the fallback source; the unique copy is assigned to `material_override`, which applies to the whole node.
 
-This node-wide assignment matches the current party and enemy damage-flash scripts: both read `material_override` first and assign a duplicated `StandardMaterial3D` back to that property. `EnemyActor.configure()` records the current node-wide albedo as its base color, so a Training Swarmer can flash white and then restore the selected color. Party actors deliberately restore their `ClassDefinition.color`; coordinate a party-actor color change with that definition contract.
+This node-wide assignment remains appropriate for fallback meshes. The Forge Vanguard model uses the same duplication rule internally, but tracks its own base materials so its palette, white hit flash, downed gray, and restoration remain local to that adapter instance. `EnemyActor.configure()` records the current node-wide albedo as its base color, so a Training Swarmer can flash white and then restore the selected color.
 
 Use a shared material when all instances should change together. Use a duplicated node-wide override when color, emission, transparency, or hit feedback belongs to one Party Forge actor. Verify with two simultaneous instances: changing one must not change the other.
 
