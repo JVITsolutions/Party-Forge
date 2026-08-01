@@ -22,8 +22,8 @@ var _pause_lease := RunPauseLease.new()
 var _responsive_mode := RESPONSIVE_LAYOUT.Mode.DESKTOP
 var _viewport_size := Vector2(1920.0, 1080.0)
 var _observed_viewport: Viewport
-var _restoring_open_focus := false
-var _pending_member_visibility_id := 0
+var _member_visibility_request_revision := 0
+var _member_visibility_request_target_id := 0
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -55,6 +55,7 @@ func configure(
 	initial_contexts: Array[LedgerPlayerContext] = [],
 	feature_policy: FeatureAccessPolicy = null
 ) -> void:
+	_invalidate_member_visibility_requests()
 	if is_open():
 		close()
 	_disconnect_provider()
@@ -101,16 +102,12 @@ func open_for_player(local_player_id: int = 0) -> bool:
 	context.ensure_valid_member(party)
 	_pause_lease.acquire(Engine.get_main_loop() as SceneTree)
 	visible = true
-	_restoring_open_focus = true
-	_pending_member_visibility_id = 0
 	refresh()
 	if not activate_page(context.active_page_id):
 		if _available_page_ids.is_empty() or not activate_page(_available_page_ids[0]):
-			_restoring_open_focus = false
 			close()
 			return false
 	_focus_remembered_or_default()
-	_restoring_open_focus = false
 	return true
 
 func close() -> void:
@@ -123,8 +120,7 @@ func close() -> void:
 	if active_page != null:
 		active_page.deactivate()
 	_active_page_id = &""
-	_restoring_open_focus = false
-	_pending_member_visibility_id = 0
+	_invalidate_member_visibility_requests()
 	_pause_lease.release(Engine.get_main_loop() as SceneTree)
 	visible = false
 	_status().text = ""
@@ -135,8 +131,6 @@ func is_open() -> bool:
 func refresh() -> void:
 	if provider == null or context == null:
 		return
-	if not _restoring_open_focus:
-		_pending_member_visibility_id = 0
 	context.ensure_valid_member(party)
 	_rebuild_member_rail()
 	var active_page := _pages.get(_active_page_id) as CharacterLedgerPage
@@ -200,6 +194,7 @@ func select_member(member_id: int) -> bool:
 		active_page.refresh()
 	_configure_member_focus_neighbors()
 	_wire_roster_page_focus_bridge()
+	_request_member_visibility(member_id)
 	_ensure_member_visible(member_id)
 	return true
 
@@ -347,7 +342,7 @@ func _rebuild_member_rail() -> void:
 	_sync_member_selection()
 	_configure_member_focus_neighbors()
 	_wire_roster_page_focus_bridge()
-	call_deferred("_ensure_focus_target_visible")
+	_request_member_visibility(context.selected_member_id)
 
 func _configure_member_focus_neighbors() -> void:
 	var buttons: Array[Button] = []
@@ -374,17 +369,22 @@ func _ensure_member_visible(member_id: int) -> void:
 		return
 	_party_scroll().ensure_control_visible(button)
 
-func _ensure_focus_target_visible() -> void:
-	var member_id := _member_visibility_target_id()
-	if member_id > 0:
-		_ensure_member_visible(member_id)
+func _request_member_visibility(member_id: int) -> int:
+	_member_visibility_request_revision += 1
+	_member_visibility_request_target_id = member_id
+	var request_revision := _member_visibility_request_revision
+	call_deferred("_apply_member_visibility_request", member_id, request_revision)
+	return request_revision
 
-func _member_visibility_target_id() -> int:
-	var pending_member_id := _pending_member_visibility_id
-	_pending_member_visibility_id = 0
-	if pending_member_id > 0 and _member_buttons.has(pending_member_id):
-		return pending_member_id
-	return context.selected_member_id if context != null else 0
+func _apply_member_visibility_request(member_id: int, request_revision: int) -> bool:
+	if request_revision != _member_visibility_request_revision:
+		return false
+	_ensure_member_visible(member_id)
+	return true
+
+func _invalidate_member_visibility_requests() -> void:
+	_member_visibility_request_revision += 1
+	_member_visibility_request_target_id = 0
 
 func _member_id_for_control(control: Control) -> int:
 	if control == null or not control.has_meta("member_id"):
@@ -467,6 +467,7 @@ func _on_member_pressed(member_id: int) -> void:
 	select_member(member_id)
 
 func _on_member_focused(member_id: int) -> void:
+	_request_member_visibility(member_id)
 	_ensure_member_visible(member_id)
 
 func _on_provider_data_changed(member_id: int) -> void:
@@ -525,7 +526,7 @@ func _focus_remembered_or_default() -> Control:
 				remembered.grab_focus()
 			var remembered_member_id := _member_id_for_control(remembered)
 			if remembered_member_id > 0:
-				_pending_member_visibility_id = remembered_member_id
+				_request_member_visibility(remembered_member_id)
 				_ensure_member_visible(remembered_member_id)
 			elif context != null:
 				_ensure_member_visible(context.selected_member_id)

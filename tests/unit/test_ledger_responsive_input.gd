@@ -103,23 +103,38 @@ func _test_layout_controller_and_pause_edges(failures: Array[String]) -> void:
 	TestAssertions.truthy(stats_focus is Button, "Stats supplies an explicit first focus row", failures)
 	TestAssertions.equal(stats_focus.focus_neighbor_left, stats_focus.get_path_to(selected_member), "refresh restores the active page route to the selected member", failures)
 	member_24 = ledger.get_node("Overlay/Frame/Layout/Body/PartyScroll/PartyEntries/Member_24") as Button
+	if member_24.is_inside_tree():
+		member_24.grab_focus()
 	ledger.context.last_focus_path = ledger.get_path_to(member_24)
 	ledger.close()
 	TestAssertions.truthy(ledger.open_for_player(), "ledger reopens with remembered roster focus", failures)
 	member_24 = ledger.get_node("Overlay/Frame/Layout/Body/PartyScroll/PartyEntries/Member_24") as Button
 	TestAssertions.equal(ledger.get_node(ledger.context.last_focus_path), member_24, "reopen retains remembered member 24 focus target", failures)
+	if ledger.is_inside_tree():
+		TestAssertions.equal(ledger.get_viewport().gui_get_focus_owner(), member_24, "reopen restores member 24 as the actual focus owner", failures)
 	TestAssertions.equal(ledger.context.selected_member_id, 1, "remembered focus does not change selected member", failures)
-	TestAssertions.truthy(ledger.has_method("_member_visibility_target_id"), "ledger exposes its deferred member visibility target policy", failures)
-	if ledger.has_method("_member_visibility_target_id"):
-		TestAssertions.equal(int(ledger.call("_member_visibility_target_id")), 24, "reopen visibility keeps remembered member 24 on screen", failures)
+	TestAssertions.truthy(ledger.has_method("_apply_member_visibility_request"), "ledger exposes revision-keyed visibility delivery", failures)
+	var reopen_revision := 0
+	if ledger.has_method("_apply_member_visibility_request"):
+		reopen_revision = int(ledger.get("_member_visibility_request_revision"))
+		TestAssertions.equal(int(ledger.get("_member_visibility_request_target_id")), 24, "reopen visibility request captures member 24", failures)
 	var member_23 := ledger.get_node("Overlay/Frame/Layout/Body/PartyScroll/PartyEntries/Member_23") as Button
 	ledger.context.last_focus_path = ledger.get_path_to(member_23)
 	TestAssertions.truthy(ledger.select_member(24), "refresh-removal fixture selects member 24", failures)
+	if member_24.is_inside_tree():
+		member_24.grab_focus()
 	party.members.remove_at(23)
 	ledger.refresh()
 	TestAssertions.equal(ledger.context.selected_member_id, 1, "removed member 24 falls back to member 1", failures)
-	if ledger.has_method("_member_visibility_target_id"):
-		TestAssertions.equal(int(ledger.call("_member_visibility_target_id")), 1, "in-session refresh visibility ignores stale remembered member 23", failures)
+	if ledger.has_method("_apply_member_visibility_request"):
+		var refresh_revision := int(ledger.get("_member_visibility_request_revision"))
+		TestAssertions.truthy(refresh_revision > reopen_revision, "refresh visibility request supersedes reopen request", failures)
+		TestAssertions.equal(int(ledger.get("_member_visibility_request_target_id")), 1, "in-session refresh captures fallback member 1", failures)
+		TestAssertions.truthy(not bool(ledger.call("_apply_member_visibility_request", 24, reopen_revision)), "older reopen callback is a no-op after refresh request", failures)
+		TestAssertions.truthy(bool(ledger.call("_apply_member_visibility_request", 1, refresh_revision)), "current refresh callback applies fallback member 1", failures)
+		ledger.close()
+		TestAssertions.truthy(not bool(ledger.call("_apply_member_visibility_request", 1, refresh_revision)), "close invalidates outstanding visibility callbacks", failures)
+		TestAssertions.truthy(ledger.open_for_player(), "ledger reopens after visibility invalidation check", failures)
 
 	ledger.call("_unhandled_input", _action_event(&"ledger_next_page"))
 	TestAssertions.truthy(upgrades_page.visible and not stats_page.visible, "next bumper moves Stats to Current Upgrades", failures)
