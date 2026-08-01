@@ -1,6 +1,8 @@
 class_name LevelUpPanel
 extends Control
 
+const UPGRADE_CARD_SCENE := preload("res://scenes/ui/upgrade_card.tscn")
+
 signal choice_selected(choice: UpgradeChoice)
 signal confirmation_requested(choice: UpgradeChoice, recipient_member_id: int)
 
@@ -23,12 +25,17 @@ var _tooltip_choice: UpgradeChoice
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	_connect_cards()
+	_configure_card_focus_neighbors()
 	_connect_recipient_picker()
 	_connect_confirmation()
 	_connect_legacy_buttons()
 	var tooltip := _tooltip()
 	if tooltip != null and not tooltip.dismissed.is_connected(_on_tooltip_dismissed):
 		tooltip.dismissed.connect(_on_tooltip_dismissed)
+	var viewport := get_viewport()
+	if viewport != null and not viewport.size_changed.is_connected(_on_viewport_size_changed):
+		viewport.size_changed.connect(_on_viewport_size_changed)
+	_apply_card_face_density(_current_viewport_width())
 
 
 func configure(
@@ -48,7 +55,6 @@ func show_choices(
 	pending_count: int = 1
 ) -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
-	_connect_cards()
 	_connect_recipient_picker()
 	_connect_confirmation()
 	_connect_legacy_buttons()
@@ -57,6 +63,8 @@ func show_choices(
 	if _upgrade_service == null:
 		_upgrade_service = UpgradeApplicationService.new()
 	choices = exact_choices.duplicate()
+	_ensure_card_count(choices.size())
+	_apply_card_face_density(_current_viewport_width())
 	_party = party
 	_invalid_choice_keys = invalid_choice_keys.duplicate()
 	_pending_level_count = maxi(pending_count, 1)
@@ -113,7 +121,7 @@ func cancel_subflow() -> void:
 
 func _populate_offer_cards() -> void:
 	var cards := get_node("ContentPanel/OfferView/Content/Cards").get_children()
-	for index: int in 3:
+	for index: int in cards.size():
 		var card := cards[index] as UpgradeCard
 		var choice: UpgradeChoice = choices[index] if index < choices.size() else null
 		card.bind_choice(choice, _presentation_for(choice), _disabled_reason(choice))
@@ -154,6 +162,59 @@ func _connect_cards() -> void:
 			card.detail_requested.connect(_on_card_detail_requested)
 		if not card.detail_dismissed.is_connected(_on_card_detail_dismissed):
 			card.detail_dismissed.connect(_on_card_detail_dismissed)
+
+
+func _ensure_card_count(count: int) -> void:
+	var cards := get_node("ContentPanel/OfferView/Content/Cards") as HBoxContainer
+	var needed := clampi(count, 1, 8)
+	while cards.get_child_count() < needed:
+		var card := UPGRADE_CARD_SCENE.instantiate() as UpgradeCard
+		card.name = "Card%d" % (cards.get_child_count() + 1)
+		card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		card.size_flags_stretch_ratio = 1.0
+		cards.add_child(card)
+	for index: int in cards.get_child_count():
+		(cards.get_child(index) as Control).visible = index < needed
+	_connect_cards()
+	_configure_card_focus_neighbors()
+
+
+func _configure_card_focus_neighbors() -> void:
+	var cards := get_node_or_null("ContentPanel/OfferView/Content/Cards") as HBoxContainer
+	if cards == null:
+		return
+	var visible_cards: Array[Control] = []
+	for child: Node in cards.get_children():
+		if child is Control and child.visible:
+			visible_cards.append(child as Control)
+	for index: int in visible_cards.size():
+		var card := visible_cards[index]
+		card.focus_neighbor_left = card.get_path_to(visible_cards[index - 1]) if index > 0 else NodePath()
+		card.focus_neighbor_right = card.get_path_to(visible_cards[index + 1]) if index + 1 < visible_cards.size() else NodePath()
+
+
+func _on_viewport_size_changed() -> void:
+	_apply_card_face_density(_current_viewport_width())
+
+
+func _current_viewport_width() -> float:
+	if is_inside_tree():
+		return get_viewport_rect().size.x
+	return float(ProjectSettings.get_setting("display/window/size/viewport_width", 1920))
+
+
+func _apply_card_face_density(viewport_width: float) -> void:
+	var cards := get_node_or_null("ContentPanel/OfferView/Content/Cards") as HBoxContainer
+	if cards == null:
+		return
+	var show_extended_summary := viewport_width >= 1400.0
+	for child: Node in cards.get_children():
+		if not (child is UpgradeCard) or not child.visible:
+			continue
+		for label_name: String in ["Eligibility", "Recipient", "Inheritance"]:
+			var label := child.get_node_or_null("Content/%s" % label_name) as Label
+			if label != null:
+				label.visible = show_extended_summary
 
 
 func _connect_recipient_picker() -> void:

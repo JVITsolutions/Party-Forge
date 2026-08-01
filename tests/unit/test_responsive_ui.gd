@@ -12,6 +12,7 @@ func run() -> Array[String]:
 	var failures: Array[String] = []
 	_test_project_display_contract(failures)
 	_test_responsive_hud_layout(failures)
+	_test_level_up_card_layout_contract(failures)
 	_test_integrated_overlay_containment(failures)
 	_test_settings_and_badge_containment(failures)
 	return failures
@@ -63,7 +64,18 @@ func _test_responsive_hud_layout(failures: Array[String]) -> void:
 	TestAssertions.equal(level_up.process_mode, Node.PROCESS_MODE_ALWAYS, "level-up modal always processes while paused", failures)
 	TestAssertions.equal(level_up.mouse_filter, Control.MOUSE_FILTER_STOP, "level-up modal blocks pointer input behind it", failures)
 	_assert_center_anchors(class_selection, "class selection", failures)
-	_assert_center_anchors(level_content, "level-up content panel", failures)
+	TestAssertions.equal(
+		Vector4(level_content.anchor_left, level_content.anchor_top, level_content.anchor_right, level_content.anchor_bottom),
+		Vector4(0.02, 0.06, 0.98, 0.94),
+		"level-up content panel uses approved responsive edge anchors",
+		failures,
+	)
+	TestAssertions.equal(
+		Vector4(level_content.offset_left, level_content.offset_top, level_content.offset_right, level_content.offset_bottom),
+		Vector4.ZERO,
+		"level-up content panel uses no fixed offsets",
+		failures,
+	)
 	_assert_center_anchors(result_panel, "run result panel", failures)
 	TestAssertions.truthy(level_up.get_node_or_null("ContentPanel/OfferView") is ScrollContainer, "offer content is scrollable", failures)
 	TestAssertions.truthy(level_up.get_node_or_null("ContentPanel/RecipientView/Content/RecipientsScroll") is ScrollContainer, "recipient content is scrollable", failures)
@@ -81,7 +93,11 @@ func _test_responsive_hud_layout(failures: Array[String]) -> void:
 		_assert_centered(level_content, viewport_size, "level-up content panel", failures)
 		_assert_centered(result_panel, viewport_size, "run result panel", failures)
 		_assert_size(class_selection, Vector2(760.0, 440.0), "class selection", failures)
-		_assert_size(level_content, Vector2(1120.0, 680.0), "level-up content panel", failures)
+		var level_rect := ResponsiveGeometry.control_rect(level_content, Rect2(Vector2.ZERO, viewport_size))
+		var expected_level_size := viewport_size * Vector2(0.96, 0.88)
+		TestAssertions.near(level_rect.size.x, expected_level_size.x, 0.01, "level-up content panel width scales at %s" % viewport_size, failures)
+		TestAssertions.near(level_rect.size.y, expected_level_size.y, 0.01, "level-up content panel height scales at %s" % viewport_size, failures)
+		TestAssertions.truthy(ResponsiveGeometry.contains(Rect2(Vector2.ZERO, viewport_size), level_rect), "level-up content panel remains contained at %s" % viewport_size, failures)
 		_assert_size(result_panel, Vector2(400.0, 260.0), "run result panel", failures)
 		TestAssertions.near(
 			_rect_center(boss_banner, viewport_size).x,
@@ -102,6 +118,24 @@ func _test_responsive_hud_layout(failures: Array[String]) -> void:
 		TestAssertions.near(status_position.y, 16.0, 0.01, "status HUD retains top margin at %s" % viewport_size, failures)
 
 	hud.free()
+
+func _test_level_up_card_layout_contract(failures: Array[String]) -> void:
+	var panel := (load("res://scenes/ui/level_up_panel.tscn") as PackedScene).instantiate() as LevelUpPanel
+	var content_panel := panel.get_node("ContentPanel") as Control
+	var offer_view := panel.get_node("ContentPanel/OfferView") as ScrollContainer
+	var cards := panel.get_node("ContentPanel/OfferView/Content/Cards") as HBoxContainer
+	TestAssertions.equal(content_panel.custom_minimum_size, Vector2(0.0, 560.0), "responsive level-up panel keeps only a vertical minimum", failures)
+	TestAssertions.equal(offer_view.horizontal_scroll_mode, ScrollContainer.SCROLL_MODE_AUTO, "developer card counts scroll horizontally without truncation", failures)
+	TestAssertions.truthy(cards.get_node_or_null("Card4") is UpgradeCard, "production scene exposes stable Card4 path", failures)
+	TestAssertions.truthy(cards.get_node_or_null("Card5") is UpgradeCard, "production scene exposes stable Card5 path", failures)
+	for index: int in mini(cards.get_child_count(), 5):
+		var card := cards.get_child(index) as UpgradeCard
+		TestAssertions.equal(card.custom_minimum_size, Vector2(168.0, 300.0), "card %d uses approved responsive minimum" % (index + 1), failures)
+		TestAssertions.equal(card.size_flags_horizontal & Control.SIZE_EXPAND_FILL, Control.SIZE_EXPAND_FILL, "card %d expands and fills the row" % (index + 1), failures)
+		TestAssertions.near(card.size_flags_stretch_ratio, 1.0, 0.001, "card %d uses equal stretch" % (index + 1), failures)
+		var content := card.get_node("Content") as Control
+		TestAssertions.equal(Vector4(content.offset_left, content.offset_top, content.offset_right, content.offset_bottom), Vector4(10.0, 16.0, -10.0, -16.0), "card %d uses reduced horizontal padding" % (index + 1), failures)
+	panel.free()
 
 func _test_integrated_overlay_containment(failures: Array[String]) -> void:
 	var ledger := (load("res://scenes/ui/ledger/character_ledger.tscn") as PackedScene).instantiate() as CharacterLedger

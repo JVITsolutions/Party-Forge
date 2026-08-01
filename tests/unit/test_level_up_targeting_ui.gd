@@ -3,6 +3,7 @@ extends RefCounted
 func run() -> Array[String]:
 	var failures: Array[String] = []
 	_test_exact_offer_target_cancel_and_confirmation(failures)
+	_test_dynamic_card_count_and_focus(failures)
 	_test_duplicate_class_recipients_keep_identity(failures)
 	_test_non_personal_confirmation_uses_zero(failures)
 	_test_production_card_tooltip_composition(failures)
@@ -56,6 +57,8 @@ func _test_exact_offer_target_cancel_and_confirmation(failures: Array[String]) -
 		UpgradeChoice.authored(catalog.upgrade_by_id(&"deadeye")),
 		UpgradeChoice.authored(catalog.upgrade_by_id(&"vanguard_wall")),
 		UpgradeChoice.authored(catalog.upgrade_by_id(&"vitality")),
+		UpgradeChoice.authored(catalog.upgrade_by_id(&"precision")),
+		UpgradeChoice.authored(catalog.upgrade_by_id(&"tempered_armor")),
 	]
 	var original_keys := choices.map(func(choice: UpgradeChoice) -> String: return choice.key())
 	var panel := _attached_panel()
@@ -71,10 +74,11 @@ func _test_exact_offer_target_cancel_and_confirmation(failures: Array[String]) -
 	TestAssertions.equal(panel.get("_initial_focus_card"), cards[1], "focus skips to first enabled card", failures)
 	panel.show_choices(choices, party)
 	cards = panel.get_node("ContentPanel/OfferView/Content/Cards").get_children()
-	TestAssertions.equal(cards.size(), 3, "offer renders exactly three reusable cards", failures)
-	for index: int in 3:
+	TestAssertions.equal(cards.size(), 5, "production offer renders exactly five reusable cards", failures)
+	for index: int in mini(cards.size(), choices.size()):
 		TestAssertions.truthy(cards[index] is UpgradeCard, "offer card %d uses UpgradeCard" % index, failures)
 		TestAssertions.equal(cards[index].get("_choice"), choices[index], "offer card %d keeps exact choice instance" % index, failures)
+		TestAssertions.truthy(not (cards[index] as UpgradeCard).disabled, "offer card %d is enabled" % index, failures)
 	TestAssertions.equal(
 		panel.get("_initial_focus_card"),
 		cards[0],
@@ -131,6 +135,46 @@ func _test_exact_offer_target_cancel_and_confirmation(failures: Array[String]) -
 	TestAssertions.truthy(not panel.visible, "successful completion hides modal", failures)
 	_free_panel(panel)
 	party.free()
+
+func _test_dynamic_card_count_and_focus(failures: Array[String]) -> void:
+	var panel := _attached_panel()
+	var cards := panel.get_node("ContentPanel/OfferView/Content/Cards") as HBoxContainer
+	TestAssertions.truthy(panel.has_method("_ensure_card_count"), "level-up panel exposes dynamic card count support", failures)
+	if not panel.has_method("_ensure_card_count"):
+		_free_panel(panel)
+		return
+	for requested: int in range(1, 9):
+		panel.call("_ensure_card_count", requested)
+		var visible_cards: Array[Control] = []
+		for child: Node in cards.get_children():
+			if child is Control and child.visible:
+				visible_cards.append(child as Control)
+		TestAssertions.equal(visible_cards.size(), requested, "developer count %d exposes exactly that many cards" % requested, failures)
+		for index: int in visible_cards.size():
+			var card := visible_cards[index]
+			if index > 0:
+				TestAssertions.equal(card.get_node(card.focus_neighbor_left), visible_cards[index - 1], "card %d left focus reaches its adjacent card at count %d" % [index + 1, requested], failures)
+			if index + 1 < visible_cards.size():
+				TestAssertions.equal(card.get_node(card.focus_neighbor_right), visible_cards[index + 1], "card %d right focus reaches its adjacent card at count %d" % [index + 1, requested], failures)
+	panel.call("_ensure_card_count", 0)
+	TestAssertions.equal(_visible_card_count(cards), 1, "developer card count clamps to one", failures)
+	panel.call("_ensure_card_count", 99)
+	TestAssertions.equal(_visible_card_count(cards), 8, "developer card count clamps to eight", failures)
+	TestAssertions.truthy(panel.has_method("_apply_card_face_density"), "level-up panel exposes responsive card-face density", failures)
+	if panel.has_method("_apply_card_face_density"):
+		panel.call("_apply_card_face_density", 1280.0)
+		for card_node: Node in cards.get_children():
+			if card_node is UpgradeCard and card_node.visible:
+				for label_name: String in ["Eligibility", "Recipient", "Inheritance"]:
+					TestAssertions.truthy(not card_node.get_node("Content/%s" % label_name).visible, "%s hides on a narrow card face" % label_name, failures)
+				for label_name: String in ["Name", "Scope", "Rank", "Summary"]:
+					TestAssertions.truthy(card_node.get_node("Content/%s" % label_name).visible, "%s remains on a narrow card face" % label_name, failures)
+		panel.call("_apply_card_face_density", 1400.0)
+		for card_node: Node in cards.get_children():
+			if card_node is UpgradeCard and card_node.visible:
+				for label_name: String in ["Eligibility", "Recipient", "Inheritance"]:
+					TestAssertions.truthy(card_node.get_node("Content/%s" % label_name).visible, "%s returns at the wide threshold" % label_name, failures)
+	_free_panel(panel)
 
 func _test_duplicate_class_recipients_keep_identity(failures: Array[String]) -> void:
 	var catalog := GameCatalog.load_defaults()
@@ -418,6 +462,13 @@ func _row_for_member(rows: Array[Node], member_id: int) -> Button:
 		if int(row.get_meta("member_id", 0)) == member_id:
 			return row as Button
 	return null
+
+func _visible_card_count(cards: HBoxContainer) -> int:
+	var count := 0
+	for card: Node in cards.get_children():
+		if card is UpgradeCard and card.visible:
+			count += 1
+	return count
 
 func _attached_panel() -> LevelUpPanel:
 	var panel := (load("res://scenes/ui/level_up_panel.tscn") as PackedScene).instantiate() as LevelUpPanel

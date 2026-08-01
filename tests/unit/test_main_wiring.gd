@@ -512,8 +512,8 @@ func _test_queued_levels_show_fresh_production_offers(failures: Array[String]) -
     var experience := main.get_node("ExperienceSystem") as ExperienceSystem
     var panel := main.get_node("HUD/LevelUpPanel") as LevelUpPanel
     var cards := panel.get_node("ContentPanel/OfferView/Content/Cards").get_children()
-    TestAssertions.equal(cards.size(), 3, "production offer view owns exactly three upgrade cards", failures)
-    var card_api_available := cards.size() == 3 and cards.all(
+    TestAssertions.equal(cards.size(), 5, "production offer view owns exactly five upgrade cards", failures)
+    var card_api_available := cards.size() == 5 and cards.all(
         func(card: Node) -> bool: return card is UpgradeCard and card.has_method("bound_choice")
     )
     TestAssertions.truthy(card_api_available, "production cards expose their current binding read-only", failures)
