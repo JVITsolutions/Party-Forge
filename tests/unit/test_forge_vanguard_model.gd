@@ -56,8 +56,31 @@ func run() -> Array[String]:
 				TestAssertions.truthy(model.call(&"apply_equipment_visual", slot_id, definition), "%s equipment visual applies" % slot_id, failures)
 				var equipment_root := _equipment_root(model, slot_id)
 				TestAssertions.truthy(equipment_root != null and equipment_root.visible, "%s equipment root becomes visible when applied" % slot_id, failures)
+	_assert_invalid_geometry_keys_do_not_change_slot(model, failures)
 	model.free()
 	return failures
+
+func _assert_invalid_geometry_keys_do_not_change_slot(model: Node3D, failures: Array[String]) -> void:
+	var slot_id := &"main_hand"
+	var equipment_root := _equipment_root(model, slot_id)
+	var valid_definition := load(EQUIPMENT_PATHS[slot_id]) as EquipmentVisualDefinition
+	TestAssertions.truthy(equipment_root != null and valid_definition != null, "main-hand fixture exists for geometry rejection", failures)
+	if equipment_root == null or valid_definition == null:
+		return
+	TestAssertions.truthy(model.call(&"apply_equipment_visual", slot_id, valid_definition), "known main-hand geometry applies before rejection checks", failures)
+	var empty_key := EquipmentVisualDefinition.new()
+	empty_key.id = &"empty_main_hand"
+	empty_key.slot_id = slot_id
+	empty_key.visual_channels = [&"geometry"]
+	TestAssertions.truthy(not model.call(&"apply_equipment_visual", slot_id, empty_key), "empty geometry key is rejected by model", failures)
+	TestAssertions.truthy(equipment_root.visible, "empty geometry key leaves current main-hand state unchanged", failures)
+	var unmatched_key := EquipmentVisualDefinition.new()
+	unmatched_key.id = &"unknown_main_hand"
+	unmatched_key.slot_id = slot_id
+	unmatched_key.geometry_key = &"missing_geometry"
+	unmatched_key.visual_channels = [&"geometry"]
+	TestAssertions.truthy(not model.call(&"apply_equipment_visual", slot_id, unmatched_key), "unmatched geometry key is rejected by model", failures)
+	TestAssertions.truthy(equipment_root.visible, "unmatched geometry key leaves current main-hand state unchanged", failures)
 
 func _default_equips_slot(profile: CharacterVisualProfile, slot_id: StringName) -> bool:
 	for definition: EquipmentVisualDefinition in profile.default_equipment_visuals:

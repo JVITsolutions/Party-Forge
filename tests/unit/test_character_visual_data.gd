@@ -23,6 +23,7 @@ func run() -> Array[String]:
 	invalid.id = &"invalid_charm"
 	invalid.slot_id = &"charm"
 	TestAssertions.truthy(invalid.validate().size() >= 2, "invalid slot and empty channels are rejected", failures)
+	TestAssertions.truthy(_errors_contain(invalid.validate(), "geometry key is empty"), "empty equipment geometry key is rejected", failures)
 
 	var profile := CharacterVisualProfile.new()
 	profile.id = &"forge_vanguard"

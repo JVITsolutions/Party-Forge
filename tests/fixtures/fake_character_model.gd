@@ -12,6 +12,7 @@ var hit_weight := 0.0
 func set_body_preset(value: StringName) -> bool: body_preset = value; return value in [&"masculine", &"feminine"]
 func set_palette(value: StringName, color: Color) -> bool: palette_id = value; primary_color = color; return true
 func apply_equipment_visual(slot_id: StringName, definition: EquipmentVisualDefinition) -> bool: equipped[slot_id] = definition.id; return true
+func clear_equipment_visual(slot_id: StringName) -> bool: equipped.erase(slot_id); return true
 func play_action(animation_id: StringName) -> bool: played.append(animation_id); return true
 func set_hit_weight(value: float) -> void: hit_weight = value
 func set_downed(value: bool) -> void: downed = value

@@ -3,6 +3,22 @@ extends RefCounted
 const ADAPTER_SCENE_PATH := "res://scenes/characters/presentation/character_presentation.tscn"
 const FIXTURE_SCENE_PATH := "res://tests/fixtures/fake_character_model.tscn"
 
+class MissingHitWeightModel extends Node3D:
+	func set_body_preset(_value: StringName) -> bool: return true
+	func set_palette(_value: StringName, _color: Color) -> bool: return true
+	func apply_equipment_visual(_slot_id: StringName, _definition: EquipmentVisualDefinition) -> bool: return true
+	func clear_equipment_visual(_slot_id: StringName) -> bool: return true
+	func play_action(_animation_id: StringName) -> bool: return true
+	func set_downed(_value: bool) -> void: pass
+
+class MissingDownedModel extends Node3D:
+	func set_body_preset(_value: StringName) -> bool: return true
+	func set_palette(_value: StringName, _color: Color) -> bool: return true
+	func apply_equipment_visual(_slot_id: StringName, _definition: EquipmentVisualDefinition) -> bool: return true
+	func clear_equipment_visual(_slot_id: StringName) -> bool: return true
+	func play_action(_animation_id: StringName) -> bool: return true
+	func set_hit_weight(_value: float) -> void: pass
+
 func run() -> Array[String]:
 	var failures: Array[String] = []
 	TestAssertions.truthy(ResourceLoader.exists(ADAPTER_SCENE_PATH), "character presentation scene exists", failures)
@@ -11,6 +27,7 @@ func run() -> Array[String]:
 	_test_profile_application_and_feedback(failures)
 	_test_invalid_equipment_slot_is_not_forwarded(failures)
 	_test_invalid_profile_keeps_fallback_visible(failures)
+	_test_incomplete_feedback_api_keeps_fallback_visible(failures)
 	_test_instances_keep_model_state_independent(failures)
 	return failures
 
@@ -62,6 +79,26 @@ func _test_invalid_profile_keeps_fallback_visible(failures: Array[String]) -> vo
 	TestAssertions.truthy(fallback.visible, "invalid profile leaves fallback visible", failures)
 	root.free()
 
+func _test_incomplete_feedback_api_keeps_fallback_visible(failures: Array[String]) -> void:
+	var fixture_cases := [
+		{&"name": "MissingHitWeight", &"model": MissingHitWeightModel.new(), &"method": &"set_hit_weight"},
+		{&"name": "MissingDowned", &"model": MissingDownedModel.new(), &"method": &"set_downed"},
+	]
+	for fixture: Dictionary in fixture_cases:
+		var root := _new_root("CharacterPresentation%sTest" % fixture[&"name"])
+		var presentation := _new_presentation(root)
+		var packed_scene := PackedScene.new()
+		var model := fixture[&"model"] as Node3D
+		TestAssertions.equal(packed_scene.pack(model), OK, "%s fixture packs" % fixture[&"name"], failures)
+		model.free()
+		var profile := _profile_for_scene(packed_scene, StringName("test_%s" % String(fixture[&"name"]).to_snake_case()))
+		TestAssertions.truthy(not presentation.apply_profile(profile, Color.WHITE), "%s model is rejected during activation" % fixture[&"name"], failures)
+		var fallback := root.get_node("Fallback") as MeshInstance3D
+		TestAssertions.truthy(fallback.visible, "%s model keeps fallback visible" % fixture[&"name"], failures)
+		TestAssertions.equal(presentation.active_model, null, "%s model is cleared after rejected activation" % fixture[&"name"], failures)
+		TestAssertions.truthy(presentation.logged_errors.has(StringName("missing_%s" % fixture[&"method"])), "%s failure uses bounded presentation diagnostic" % fixture[&"name"], failures)
+		root.free()
+
 func _test_instances_keep_model_state_independent(failures: Array[String]) -> void:
 	var root := _new_root("CharacterPresentationIsolationTest")
 	var first := _new_presentation(root)
@@ -91,6 +128,16 @@ func _valid_profile() -> CharacterVisualProfile:
 	profile.default_equipment_visuals = [sword]
 	profile.required_animation_names = [&"idle", &"attack_slash", &"hit_flinch"]
 	profile.attack_animation_by_id = {&"fighter_cleave": &"attack_slash"}
+	return profile
+
+func _profile_for_scene(scene: PackedScene, profile_id: StringName) -> CharacterVisualProfile:
+	var profile := CharacterVisualProfile.new()
+	profile.id = profile_id
+	profile.presentation_scene = scene
+	profile.default_body_preset = &"masculine"
+	profile.default_palette_id = &"red"
+	profile.palette_colors = {&"red": Color.WHITE}
+	profile.required_animation_names = [&"idle"]
 	return profile
 
 func _fighter_cleave() -> AttackDefinition:

@@ -2,6 +2,15 @@ class_name CharacterPresentation
 extends Node3D
 
 const HIT_DURATION := 0.1
+const REQUIRED_MODEL_METHODS: Array[StringName] = [
+	&"set_body_preset",
+	&"set_palette",
+	&"apply_equipment_visual",
+	&"clear_equipment_visual",
+	&"play_action",
+	&"set_hit_weight",
+	&"set_downed",
+]
 
 @export var fallback_mesh_path: NodePath
 var active_profile: CharacterVisualProfile
@@ -26,6 +35,8 @@ func apply_profile(profile: CharacterVisualProfile, primary_color: Color) -> boo
 		return false
 	add_child(active_model)
 	active_profile = profile
+	if not _validate_active_model_api():
+		return _fail_active(&"model_api", "required model API is incomplete")
 	if not _call_bool(&"set_body_preset", [profile.default_body_preset]):
 		return _fail_active(&"body", "body preset rejected")
 	active_palette_id = profile.default_palette_id
@@ -90,6 +101,14 @@ func _call_bool(method: StringName, arguments: Array) -> bool:
 		_log_once(StringName("missing_%s" % method), "profile=%s operation=%s reason=model method is missing" % [_profile_id(), method])
 		return false
 	return bool(active_model.callv(method, arguments))
+
+func _validate_active_model_api() -> bool:
+	var is_complete := true
+	for method: StringName in REQUIRED_MODEL_METHODS:
+		if not active_model.has_method(method):
+			is_complete = false
+			_log_once(StringName("missing_%s" % method), "profile=%s operation=%s reason=model method is missing" % [_profile_id(), method])
+	return is_complete
 
 func _clear_model() -> void:
 	if active_model != null:

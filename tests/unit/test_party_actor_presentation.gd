@@ -57,6 +57,10 @@ func _test_primary_attack_keeps_executor_and_uses_slash(failures: Array[String])
 	root.add_child(fighter)
 	fighter.configure(party.members[0])
 	fighter.configure_combat(party, root)
+	var hostile := COMPANION_SCENE.instantiate() as PartyActor
+	hostile.team_id = 2
+	root.add_child(hostile)
+	hostile.configure(PartyMemberState.new(99, definition, false))
 	var controller := fighter.get_node_or_null("AttackController") as AttackController
 	var presentation := fighter.get_node_or_null("Presentation") as CharacterPresentation
 	TestAssertions.truthy(controller != null and fighter.attack_executor != null and controller.attack_ready.is_connected(Callable(fighter.attack_executor, "execute")), "fighter attack controller still forwards attacks to executor", failures)
@@ -65,7 +69,12 @@ func _test_primary_attack_keeps_executor_and_uses_slash(failures: Array[String])
 		if player != null:
 			player.animation_started.connect(_on_animation_started)
 			slash_requests = 0
-			controller.attack_ready.emit(definition.primary_attack, CombatTarget.new(fighter, fighter.position, fighter.team_id))
+			var hostile_health := hostile.get_node("HealthComponent") as HealthComponent
+			var health_before := hostile_health.current_health
+			var combatants: Array[Node3D] = [hostile]
+			fighter.attack_executor.call(&"configure", fighter, party, root, combatants)
+			controller.attack_ready.emit(definition.primary_attack, hostile.get_combat_target())
+			TestAssertions.truthy(hostile_health.current_health < health_before, "emitted fighter cleave is processed by AttackExecutor", failures)
 			TestAssertions.equal(slash_requests, 1, "fighter cleave requests attack slash once", failures)
 			TestAssertions.equal(player.current_animation, &"attack_slash", "fighter cleave selects attack slash", failures)
 			TestAssertions.truthy(player.current_animation != &"attack_combo", "fighter cleave does not request preview-only attack combo", failures)

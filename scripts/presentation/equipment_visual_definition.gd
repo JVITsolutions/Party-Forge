@@ -10,6 +10,7 @@ func validate() -> PackedStringArray:
 	var errors := PackedStringArray()
 	if id.is_empty(): errors.append("equipment visual id is empty")
 	if not EquipmentSlotCatalog.is_valid(slot_id): errors.append("equipment visual %s slot %s is invalid" % [id, slot_id])
+	if geometry_key.is_empty(): errors.append("equipment visual %s geometry key is empty" % id)
 	if visual_channels.is_empty(): errors.append("equipment visual %s has no visual channels" % id)
 	var seen: Dictionary = {}
 	for channel: StringName in visual_channels:

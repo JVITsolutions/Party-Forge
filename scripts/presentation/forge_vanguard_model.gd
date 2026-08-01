@@ -35,11 +35,18 @@ func set_palette(palette_id: StringName, primary_color: Color) -> bool:
 
 func apply_equipment_visual(slot_id: StringName, definition: EquipmentVisualDefinition) -> bool:
 	_ensure_cache()
-	if definition == null or not EquipmentSlotCatalog.is_valid(slot_id) or definition.slot_id != slot_id:
+	if definition == null or definition.geometry_key.is_empty() or not EquipmentSlotCatalog.is_valid(slot_id) or definition.slot_id != slot_id or not equipment_nodes.has(slot_id):
 		return false
-	for node: Node3D in equipment_nodes.get(slot_id, []):
+	var matching_visual_found := false
+	for node: Node3D in equipment_nodes[slot_id]:
+		if StringName(node.get_meta(&"equipment_visual_id", &"")) == definition.geometry_key:
+			matching_visual_found = true
+			break
+	if not matching_visual_found:
+		return false
+	for node: Node3D in equipment_nodes[slot_id]:
 		node.visible = StringName(node.get_meta(&"equipment_visual_id", &"")) == definition.geometry_key
-	return equipment_nodes.has(slot_id)
+	return true
 
 func clear_equipment_visual(slot_id: StringName) -> bool:
 	_ensure_cache()
