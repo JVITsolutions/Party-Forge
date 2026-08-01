@@ -10,6 +10,7 @@ var _party_capacity := PRODUCTION_PARTY_CAPACITY
 var _enemy_density_percent := 100
 var _experience_multiplier_percent := 100
 var _level_up_card_count := 5
+var _reduced_motion := false
 
 static func from_settings(settings: PartyForgeSettings) -> RunRulesSnapshot:
 	var result := RunRulesSnapshot.new()
@@ -18,6 +19,7 @@ static func from_settings(settings: PartyForgeSettings) -> RunRulesSnapshot:
 	var normalized := settings.copy() if settings != null else PartyForgeSettings.new()
 	normalized.normalize()
 	result._developer_mode_active = normalized.mode == PartyForgeSettings.Mode.DEVELOPER_MODE
+	result._reduced_motion = normalized.reduced_motion
 	if result._developer_mode_active:
 		result._unlock_all = normalized.unlock_all_implemented_content
 		result._god_mode = normalized.god_mode
@@ -34,6 +36,7 @@ func party_capacity() -> int: return _party_capacity
 func enemy_density_percent() -> int: return _enemy_density_percent
 func experience_multiplier_percent() -> int: return _experience_multiplier_percent
 func level_up_card_count() -> int: return _level_up_card_count
+func reduced_motion() -> bool: return _reduced_motion
 func feature_policy(known_features: Array[StringName] = [], known_unlocks: Array[StringName] = [], unlocked: Array[StringName] = []) -> FeatureAccessPolicy:
 	return FeatureAccessPolicy.new(_developer_mode_active, _unlock_all, known_features, known_unlocks, unlocked)
 func capacity_policy() -> PartyCapacityPolicy: return PartyCapacityPolicy.new(_party_capacity)

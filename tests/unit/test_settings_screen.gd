@@ -1,11 +1,13 @@
 extends RefCounted
 
 const SETTINGS_SCENE_PATH := "res://scenes/ui/settings/settings_screen.tscn"
+const GAME_SETTINGS_SCENE_PATH := "res://scenes/ui/settings/game_settings_page.tscn"
 const ADDITIONAL_SETTINGS_SCENE_PATH := "res://scenes/ui/settings/additional_settings_page.tscn"
 
 
 func run() -> Array[String]:
 	var failures: Array[String] = []
+	_test_game_settings_page(failures)
 	_test_additional_settings_page(failures)
 	_test_settings_apply_cancel_and_save_error(failures)
 	TestAssertions.truthy(ResourceLoader.exists(SETTINGS_SCENE_PATH), "Settings scene exists", failures)
@@ -28,7 +30,9 @@ func run() -> Array[String]:
 	for index: int in range(tabs.get_tab_count()):
 		actual.append(tabs.get_tab_title(index))
 	TestAssertions.equal(actual, expected, "Settings tabs use approved order", failures)
-	TestAssertions.equal(screen.get_node("Overlay/Frame/Layout/Tabs/Game Settings/Content/State").text, "Coming Soon", "Game Settings is honest about availability", failures)
+	var game_settings := screen.get_node("Overlay/Frame/Layout/Tabs/Game Settings")
+	TestAssertions.equal(game_settings.get_node_or_null("Content/State"), null, "Game Settings no longer shows Coming Soon", failures)
+	TestAssertions.truthy(game_settings.get_node_or_null("Layout/ReducedMotion") is CheckButton, "Game Settings contains the reduced-motion control", failures)
 	TestAssertions.equal(screen.get_node_or_null("Overlay/Frame/Layout/Tabs/Controls/Content/State"), null, "Controls has no legacy hidden Task 4 state seam", failures)
 	TestAssertions.equal(screen.get_node("Overlay/Frame/Layout/Tabs/Graphics/Content/State").text, "Coming Soon", "Graphics is honest about availability", failures)
 	TestAssertions.equal(screen.get_node("Overlay/Frame/Layout/Tabs/Audio/Content/State").text, "Coming Soon", "Audio is honest about availability", failures)
@@ -59,6 +63,34 @@ func run() -> Array[String]:
 	screen.free()
 	return_focus.free()
 	return failures
+
+
+func _test_game_settings_page(failures: Array[String]) -> void:
+	TestAssertions.truthy(ResourceLoader.exists(GAME_SETTINGS_SCENE_PATH), "Game Settings page scene exists", failures)
+	if not ResourceLoader.exists(GAME_SETTINGS_SCENE_PATH):
+		return
+	var packed := load(GAME_SETTINGS_SCENE_PATH) as PackedScene
+	TestAssertions.truthy(packed != null, "Game Settings page scene loads", failures)
+	if packed == null:
+		return
+	var page := packed.instantiate()
+	(Engine.get_main_loop() as SceneTree).root.add_child(page)
+	var reduced_motion := page.get_node_or_null("Layout/ReducedMotion") as CheckButton
+	TestAssertions.truthy(reduced_motion != null, "Game Settings exposes Layout/ReducedMotion", failures)
+	if reduced_motion != null:
+		TestAssertions.equal(reduced_motion.text, "Reduce motion in interface animations", "reduced-motion control uses approved copy", failures)
+		TestAssertions.truthy(reduced_motion.focus_mode != Control.FOCUS_NONE, "reduced-motion control is keyboard and controller focusable", failures)
+		TestAssertions.truthy(page.has_method(&"initial_focus"), "Game Settings exposes the Settings page focus contract", failures)
+		if page.has_method(&"initial_focus"):
+			TestAssertions.equal(page.call(&"initial_focus"), reduced_motion, "Game Settings initially focuses reduced motion", failures)
+		var saved := PartyForgeSettings.new()
+		saved.set("reduced_motion", true)
+		page.call("bind", saved)
+		TestAssertions.truthy(reduced_motion.button_pressed, "Game Settings binds saved reduced motion", failures)
+		reduced_motion.button_pressed = false
+		page.call("write_to", saved)
+		TestAssertions.equal(saved.get("reduced_motion"), false, "Game Settings writes reduced motion", failures)
+	page.free()
 
 
 func _test_additional_settings_page(failures: Array[String]) -> void:
@@ -165,19 +197,32 @@ func _test_settings_apply_cancel_and_save_error(failures: Array[String]) -> void
 	var saved := PartyForgeSettings.new()
 	saved.mode = PartyForgeSettings.Mode.DEVELOPER_MODE
 	saved.party_capacity_override = 12
+	saved.set("reduced_motion", false)
 	screen.call("configure", PartyForgeSettingsStore.new(), saved)
 	screen.call("open")
 	var page := screen.get_node("Overlay/Frame/Layout/Tabs/Additional Settings")
+	var game_page := screen.get_node("Overlay/Frame/Layout/Tabs/Game Settings")
+	var reduced_motion := game_page.get_node_or_null("Layout/ReducedMotion") as CheckButton
+	TestAssertions.truthy(reduced_motion != null, "Settings flow exposes reduced motion", failures)
+	if reduced_motion == null:
+		screen.free()
+		_cleanup_default_settings_artifacts()
+		_restore_default_settings_artifacts(original_files)
+		return
 	(page.get_node("Layout/PartyCapacity/Value") as HSlider).value = 3
+	reduced_motion.button_pressed = true
 	(page.get_node("Layout/Cancel") as Button).pressed.emit()
 	TestAssertions.truthy(not bool(screen.call("is_open")), "Cancel button closes Settings", failures)
 	TestAssertions.equal((screen.call("current_settings") as PartyForgeSettings).party_capacity_override, 12, "Cancel leaves current settings unchanged", failures)
+	TestAssertions.equal((screen.call("current_settings") as PartyForgeSettings).get("reduced_motion"), false, "Cancel preserves the prior reduced-motion value", failures)
 	screen.call("open")
 	TestAssertions.equal(int((page.get_node("Layout/PartyCapacity/Value") as HSlider).value), 12, "open creates a fresh draft from current settings", failures)
+	TestAssertions.equal(reduced_motion.button_pressed, false, "open restores reduced motion from current settings", failures)
 	(page.get_node("Layout/PartyCapacity/Value") as HSlider).value = 9
 	(page.get_node("Layout/ResetDeveloperOptions") as Button).pressed.emit()
 	TestAssertions.equal((screen.call("current_settings") as PartyForgeSettings).party_capacity_override, 12, "Reset changes draft controls without changing current settings", failures)
 	(page.get_node("Layout/PartyCapacity/Value") as HSlider).value = 9
+	reduced_motion.button_pressed = true
 	var applied: Array[PartyForgeSettings] = []
 	screen.connect("settings_applied", func(settings: PartyForgeSettings) -> void: applied.append(settings))
 	(page.get_node("Layout/ApplyAndReturn") as Button).pressed.emit()
@@ -185,6 +230,8 @@ func _test_settings_apply_cancel_and_save_error(failures: Array[String]) -> void
 	TestAssertions.equal(applied.size(), 1, "successful Apply emits once", failures)
 	TestAssertions.equal((screen.call("current_settings") as PartyForgeSettings).party_capacity_override, 9, "successful Apply replaces current settings", failures)
 	TestAssertions.equal(PartyForgeSettingsStore.new().load_settings().party_capacity_override, 9, "successful Apply persists through the store", failures)
+	TestAssertions.equal((screen.call("current_settings") as PartyForgeSettings).get("reduced_motion"), true, "successful Apply writes reduced motion", failures)
+	TestAssertions.equal(PartyForgeSettingsStore.new().load_settings().get("reduced_motion"), true, "successful Apply persists reduced motion", failures)
 	if not applied.is_empty():
 		applied[0].party_capacity_override = 2
 	TestAssertions.equal((screen.call("current_settings") as PartyForgeSettings).party_capacity_override, 9, "applied signal receives an isolated copy", failures)
@@ -260,7 +307,7 @@ func _test_active_page_focus(screen: CanvasLayer, tabs: TabContainer, failures: 
 	screen.call("open")
 	TestAssertions.truthy(screen.has_method(&"_focus_target_for_active_page"), "Settings exposes a deterministic active-page focus resolver", failures)
 	if screen.has_method(&"_focus_target_for_active_page"):
-		TestAssertions.equal(screen.call(&"_focus_target_for_active_page"), screen.get_node("Overlay/Frame/Layout/Tabs/Game Settings/Content/State"), "opening Settings resolves the active page's meaningful target", failures)
+		TestAssertions.equal(screen.call(&"_focus_target_for_active_page"), screen.get_node_or_null("Overlay/Frame/Layout/Tabs/Game Settings/Layout/ReducedMotion"), "opening Settings resolves the active page's meaningful target", failures)
 	var next_tab := InputEventJoypadButton.new()
 	next_tab.button_index = JOY_BUTTON_RIGHT_SHOULDER
 	next_tab.pressed = true

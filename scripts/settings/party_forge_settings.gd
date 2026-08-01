@@ -21,6 +21,7 @@ var party_capacity_override := 4
 var enemy_density_percent := 100
 var experience_multiplier_percent := 100
 var level_up_card_count := 5
+var reduced_motion := false
 
 func normalize() -> void:
 	if mode not in [Mode.PLAYER_SIMULATION, Mode.DEVELOPER_MODE]:
@@ -40,4 +41,5 @@ func copy() -> PartyForgeSettings:
 	result.enemy_density_percent = enemy_density_percent
 	result.experience_multiplier_percent = experience_multiplier_percent
 	result.level_up_card_count = level_up_card_count
+	result.reduced_motion = reduced_motion
 	return result
