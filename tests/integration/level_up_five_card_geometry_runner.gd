@@ -38,10 +38,6 @@ func _run() -> void:
 		var panel := panel_scene.instantiate() as LevelUpPanel
 		viewport.add_child(panel)
 		panel.configure(catalog, UpgradeApplicationService.new(), func(_member_id: int) -> Vector2: return Vector2(100.0, 100.0))
-		# Give the hidden modal one layout pass so the reveal controller captures
-		# the same settled card positions it receives after normal HUD layout.
-		panel.visible = true
-		await _wait_for_layout()
 		var content_panel := panel.get_node("ContentPanel") as Control
 		var cards_row := panel.get_node("ContentPanel/OfferView/Content/Cards") as HBoxContainer
 		var reveal := panel.get_node("RevealController") as LevelUpRevealController

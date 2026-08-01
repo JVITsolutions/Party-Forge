@@ -23,6 +23,8 @@ var _tooltip_choice: UpgradeChoice
 var _reveal_controller: LevelUpRevealController
 var _final_bindings: Array[Dictionary] = []
 var _reduced_motion := true
+var _reveal_request_id := 0
+var _reveal_pending := false
 
 
 func _ready() -> void:
@@ -82,6 +84,7 @@ func show_choices(
 	pending_count: int = 1
 ) -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	_invalidate_reveal()
 	_connect_recipient_picker()
 	_connect_confirmation()
 	_connect_legacy_buttons()
@@ -113,21 +116,43 @@ func show_choices(
 	_show_view(&"offer")
 	if _reveal_controller != null:
 		var reveal_cards: Array[UpgradeCard] = []
-		for card_node: Node in get_node("ContentPanel/OfferView/Content/Cards").get_children():
+		var cards_row := get_node("ContentPanel/OfferView/Content/Cards") as HBoxContainer
+		for card_node: Node in cards_row.get_children():
 			if card_node is UpgradeCard and card_node.visible:
-				reveal_cards.append(card_node as UpgradeCard)
+				var reveal_card := card_node as UpgradeCard
+				reveal_card.disabled = true
+				reveal_cards.append(reveal_card)
 		var preview_presentations: Array[Dictionary] = []
 		for binding: Dictionary in _final_bindings:
 			preview_presentations.append((binding.get("presentation", {}) as Dictionary).duplicate(true))
-		_reveal_controller.play(reveal_cards, _final_bindings, preview_presentations, _reduced_motion)
+		if not cards_row.is_inside_tree():
+			# Lightweight unit fixtures exercise the controller without a viewport.
+			_reveal_controller.play(reveal_cards, _final_bindings, preview_presentations, _reduced_motion)
+		else:
+			_reveal_pending = true
+			var request_id := _reveal_request_id
+			cards_row.sort_children.connect(
+				_start_reveal_after_layout.bind(
+					request_id,
+					reveal_cards,
+					_final_bindings.duplicate(true),
+					preview_presentations,
+					_reduced_motion
+				),
+				CONNECT_ONE_SHOT
+			)
+			cards_row.queue_sort()
+			# The panel starts hidden, so its HBox has not received its first sort when
+			# show_choices() is called. Resolve that queued layout now so the reveal
+			# controller records the real per-card positions instead of five (0, 0)s.
+			cards_row.notification(Container.NOTIFICATION_SORT_CHILDREN)
 	else:
 		_focus_first_enabled_card()
 
 
 func complete_selection() -> void:
 	_hide_tooltip()
-	if _reveal_controller != null:
-		_reveal_controller.reset()
+	_invalidate_reveal()
 	_awaiting_application = false
 	_pending_choice = null
 	_pending_member_id = 0
@@ -291,7 +316,7 @@ func _connect_confirmation() -> void:
 
 
 func _on_card_activated(choice: UpgradeChoice) -> void:
-	if (_reveal_controller != null and _reveal_controller.is_revealing()) or _awaiting_application or choice == null:
+	if _reveal_pending or (_reveal_controller != null and _reveal_controller.is_revealing()) or _awaiting_application or choice == null:
 		return
 	_hide_tooltip()
 	if choice.requires_recipient():
@@ -356,11 +381,12 @@ func _show_view(view: StringName) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if visible and _reveal_controller != null and _reveal_controller.is_revealing() and (
+	if visible and (_reveal_pending or (_reveal_controller != null and _reveal_controller.is_revealing())) and (
 		event.is_action_pressed(&"ui_accept")
 		or event.is_action_pressed(&"ui_cancel")
 	):
-		_reveal_controller.skip()
+		if _reveal_controller != null and _reveal_controller.is_revealing():
+			_reveal_controller.skip()
 		var viewport := get_viewport()
 		if viewport != null:
 			viewport.set_input_as_handled()
@@ -370,6 +396,26 @@ func _unhandled_input(event: InputEvent) -> void:
 func _on_reveal_resolved() -> void:
 	if visible and (get_node("ContentPanel/OfferView") as Control).visible:
 		_focus_first_enabled_card()
+
+
+func _start_reveal_after_layout(
+	request_id: int,
+	reveal_cards: Array[UpgradeCard],
+	final_bindings: Array[Dictionary],
+	preview_presentations: Array[Dictionary],
+	reduced_motion: bool
+) -> void:
+	if request_id != _reveal_request_id or not visible or _reveal_controller == null:
+		return
+	_reveal_pending = false
+	_reveal_controller.play(reveal_cards, final_bindings, preview_presentations, reduced_motion)
+
+
+func _invalidate_reveal() -> void:
+	_reveal_request_id += 1
+	_reveal_pending = false
+	if _reveal_controller != null:
+		_reveal_controller.reset()
 
 
 func _focus_first_enabled_card() -> void:
@@ -396,6 +442,7 @@ func _on_card_detail_requested(choice: UpgradeChoice, anchor: Control) -> void:
 	if (
 		not visible
 		or not (get_node("ContentPanel/OfferView") as Control).visible
+		or _reveal_pending
 		or (_reveal_controller != null and _reveal_controller.is_revealing())
 		or choice == null
 		or _catalog == null
@@ -499,7 +546,7 @@ func _populate_legacy_buttons() -> void:
 
 
 func _legacy_select(index: int) -> void:
-	if (_reveal_controller != null and _reveal_controller.is_revealing()) or selected_once or index < 0 or index >= choices.size():
+	if _reveal_pending or (_reveal_controller != null and _reveal_controller.is_revealing()) or selected_once or index < 0 or index >= choices.size():
 		return
 	var button := get_node("Choices").get_child(index) as Button
 	if button.disabled:
