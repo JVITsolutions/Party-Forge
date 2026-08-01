@@ -10,6 +10,7 @@ enum Role { FRONTLINE, MIDLINE, BACKLINE, SUPPORT }
 @export var traits: Array[StringName] = []
 @export var capability_tags: Array[StringName] = []
 @export var name_pool: CharacterNamePool
+@export var visual_profile: CharacterVisualProfile
 @export var base_stat_overrides: Dictionary = {}
 @export var max_health: float = 100.0
 @export var armor: float = 0.0
@@ -52,6 +53,9 @@ func validate(types: DamageTypeCatalog = null) -> PackedStringArray:
 		_validate_party_attack(primary_attack, "primary", types, errors)
 	if support_action != null:
 		_validate_party_attack(support_action, "support", types, errors)
+	if visual_profile != null:
+		for reason: String in visual_profile.validate():
+			errors.append("class %s visual profile %s" % [id, reason])
 	return errors
 
 func _validate_party_attack(attack: AttackDefinition, slot: String, types: DamageTypeCatalog, errors: PackedStringArray) -> void:
