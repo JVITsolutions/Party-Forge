@@ -31,6 +31,8 @@ func _test_layout_controller_and_pause_edges(failures: Array[String]) -> void:
 	var catalog := GameCatalog.load_defaults()
 	var party := PartyManager.new()
 	party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
+	for member_id: int in range(2, 25):
+		party.members.append(PartyMemberState.new(member_id, catalog.class_by_id(&"fighter"), false, "Extra %d" % member_id))
 	TestAssertions.truthy(UpgradeApplicationService.apply(&"vitality", catalog, party, 1), "responsive fixture owns one upgrade", failures)
 	var run := GameRun.new()
 	run.start_run()
@@ -49,11 +51,14 @@ func _test_layout_controller_and_pause_edges(failures: Array[String]) -> void:
 		return
 
 	var body := ledger.get_node("Overlay/Frame/Layout/Body") as SplitContainer
+	var party_scroll := ledger.get_node("Overlay/Frame/Layout/Body/PartyScroll") as ScrollContainer
 	var entries := ledger.get_node("Overlay/Frame/Layout/Body/PartyScroll/PartyEntries") as GridContainer
 	var stats_content := stats_page.get_node("Layout/Content") as SplitContainer
 	var upgrades_content := upgrades_page.get_node("Layout/Content") as SplitContainer
 	var status := ledger.get_node("Overlay/Frame/Layout/Status") as Label
 	var status_font_size := status.get_theme_font_size(&"font_size")
+	TestAssertions.truthy(party_scroll.follow_focus, "party scroll follows keyboard and controller focus", failures)
+	TestAssertions.equal(party_scroll.horizontal_scroll_mode, ScrollContainer.SCROLL_MODE_DISABLED, "party scroll disables horizontal scrolling", failures)
 	ledger.call("apply_viewport_size", Vector2(1920.0, 1080.0))
 	TestAssertions.truthy(not body.vertical, "desktop outer split is horizontal", failures)
 	TestAssertions.equal(entries.columns, 1, "desktop party rail uses one column", failures)
@@ -68,11 +73,35 @@ func _test_layout_controller_and_pause_edges(failures: Array[String]) -> void:
 
 	TestAssertions.truthy(ledger.open_for_player(), "responsive ledger opens", failures)
 	var selected_member := ledger.get_node("Overlay/Frame/Layout/Body/PartyScroll/PartyEntries/Member_1") as Button
+	var member_3 := ledger.get_node("Overlay/Frame/Layout/Body/PartyScroll/PartyEntries/Member_3") as Button
+	var member_4 := ledger.get_node("Overlay/Frame/Layout/Body/PartyScroll/PartyEntries/Member_4") as Button
+	var member_21 := ledger.get_node("Overlay/Frame/Layout/Body/PartyScroll/PartyEntries/Member_21") as Button
+	var member_24 := ledger.get_node("Overlay/Frame/Layout/Body/PartyScroll/PartyEntries/Member_24") as Button
+	var stats_focus := stats_page.initial_focus()
+	TestAssertions.equal(member_4.focus_neighbor_top, member_4.get_path_to(selected_member), "compact member 4 moves up to member 1", failures)
+	TestAssertions.equal(member_4.focus_neighbor_left, member_4.get_path_to(member_3), "compact member 4 moves left to member 3", failures)
+	TestAssertions.equal(member_24.focus_neighbor_top, member_24.get_path_to(member_21), "compact member 24 moves up to member 21", failures)
+	TestAssertions.equal(selected_member.focus_neighbor_bottom, selected_member.get_path_to(member_4), "compact bridge preserves member 1 internal down route", failures)
+	TestAssertions.equal(selected_member.focus_neighbor_right, selected_member.get_path_to(stats_focus), "compact selected member moves right to active page", failures)
+	TestAssertions.equal(stats_focus.focus_neighbor_left, stats_focus.get_path_to(selected_member), "compact active page moves left to selected member", failures)
+	TestAssertions.truthy(ledger.select_member(24), "compact fixture selects last roster member", failures)
+	stats_focus = stats_page.initial_focus()
+	TestAssertions.equal(member_24.focus_neighbor_bottom, member_24.get_path_to(stats_focus), "compact last-row member moves down to active page", failures)
+	TestAssertions.equal(stats_focus.focus_neighbor_top, stats_focus.get_path_to(member_24), "compact active page moves up to last-row member", failures)
+	ledger.apply_viewport_size(Vector2(1920.0, 1080.0))
+	TestAssertions.equal(member_24.focus_neighbor_top, member_24.get_path_to(ledger.get_node("Overlay/Frame/Layout/Body/PartyScroll/PartyEntries/Member_23")), "desktop member 24 moves up to member 23", failures)
+	TestAssertions.equal(selected_member.focus_neighbor_bottom, selected_member.get_path_to(ledger.get_node("Overlay/Frame/Layout/Body/PartyScroll/PartyEntries/Member_2")), "desktop member 1 moves down to member 2", failures)
+	TestAssertions.equal(member_24.focus_neighbor_right, member_24.get_path_to(stats_focus), "desktop selected member moves right to active page", failures)
+	TestAssertions.equal(stats_focus.focus_neighbor_left, stats_focus.get_path_to(member_24), "desktop active page moves left to selected member", failures)
+	ledger.apply_viewport_size(Vector2(960.0, 540.0))
+	ledger.select_member(1)
 	TestAssertions.truthy(selected_member.text.begins_with("[Selected] "), "member selection has a non-color text cue", failures)
 	ledger.refresh()
 	selected_member = ledger.get_node("Overlay/Frame/Layout/Body/PartyScroll/PartyEntries/Member_1") as Button
 	TestAssertions.equal(selected_member.text.count("[Selected] "), 1, "selection marker does not accumulate on refresh", failures)
-	TestAssertions.truthy(stats_page.initial_focus() is Button, "Stats supplies an explicit first focus row", failures)
+	stats_focus = stats_page.initial_focus()
+	TestAssertions.truthy(stats_focus is Button, "Stats supplies an explicit first focus row", failures)
+	TestAssertions.equal(stats_focus.focus_neighbor_left, stats_focus.get_path_to(selected_member), "refresh restores the active page route to the selected member", failures)
 
 	ledger.call("_unhandled_input", _action_event(&"ledger_next_page"))
 	TestAssertions.truthy(upgrades_page.visible and not stats_page.visible, "next bumper moves Stats to Current Upgrades", failures)
