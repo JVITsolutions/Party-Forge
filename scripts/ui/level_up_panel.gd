@@ -396,6 +396,7 @@ func _on_card_detail_requested(choice: UpgradeChoice, anchor: Control) -> void:
 	if (
 		not visible
 		or not (get_node("ContentPanel/OfferView") as Control).visible
+		or (_reveal_controller != null and _reveal_controller.is_revealing())
 		or choice == null
 		or _catalog == null
 		or _catalog.keywords == null

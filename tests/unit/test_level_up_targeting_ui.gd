@@ -10,6 +10,7 @@ func run() -> Array[String]:
 	_test_tooltip_forced_lifecycle_cleanup(failures)
 	_test_pending_level_indicator(failures)
 	_test_reveal_gating_skip_focus_and_lifecycle(failures)
+	_test_reveal_conceals_tooltip_detail(failures)
 	_test_pending_label_motion_policy(failures)
 	_test_run_snapshots_reduced_motion_for_reveals(failures)
 	return failures
@@ -100,6 +101,50 @@ func _test_reveal_gating_skip_focus_and_lifecycle(failures: Array[String]) -> vo
 	TestAssertions.truthy(not controller.call(&"is_revealing"), "selection completion resets reveal lifecycle", failures)
 	controller.call(&"advance", 2.0)
 	TestAssertions.truthy(not panel.visible, "stale controller advance cannot reopen completed panel", failures)
+	_free_panel(panel)
+	party.free()
+
+func _test_reveal_conceals_tooltip_detail(failures: Array[String]) -> void:
+	var catalog := GameCatalog.load_defaults()
+	var party := PartyManager.new()
+	party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
+	var choices: Array[UpgradeChoice] = [
+		UpgradeChoice.authored(catalog.upgrade_by_id(&"vitality")),
+		UpgradeChoice.authored(catalog.upgrade_by_id(&"precision")),
+		UpgradeChoice.authored(catalog.upgrade_by_id(&"tempered_armor")),
+	]
+	var panel := _attached_panel()
+	panel.configure(catalog, UpgradeApplicationService.new(), Callable())
+	panel.configure_reduced_motion(false)
+	panel.show_choices(choices, party)
+	var reveal := panel.get_node("RevealController") as LevelUpRevealController
+	var tooltip := panel.get_node("TooltipPanel") as UpgradeTooltipPanel
+	var card := panel.get_node("ContentPanel/OfferView/Content/Cards/Card1") as UpgradeCard
+	var requested: Array[UpgradeChoice] = []
+	card.detail_requested.connect(func(choice: UpgradeChoice, _anchor: Control) -> void: requested.append(choice))
+
+	TestAssertions.truthy(reveal.is_revealing() and card.disabled, "tooltip concealment fixture starts during disabled reveal", failures)
+	card.mouse_entered.emit()
+	TestAssertions.equal(requested, [], "disabled reveal card hover emits no detail request", failures)
+	TestAssertions.truthy(not tooltip.visible and not tooltip.is_pinned(), "disabled reveal hover keeps tooltip hidden and unpinned", failures)
+	panel.call("_hide_tooltip")
+	panel.call("_on_card_detail_requested", choices[0], card)
+	TestAssertions.truthy(not tooltip.visible and panel.get("_tooltip_choice") == null, "panel rejects direct detail requests while reveal is active", failures)
+
+	card.mouse_exited.emit()
+	reveal.skip()
+	TestAssertions.truthy(not reveal.is_revealing() and not card.disabled, "skip resolves and enables final card", failures)
+	card.mouse_entered.emit()
+	TestAssertions.equal(requested, [choices[0]], "resolved card hover emits its exact final choice", failures)
+	TestAssertions.truthy(tooltip.visible, "resolved card hover reveals tooltip normally", failures)
+	TestAssertions.equal((tooltip.get_node("Content/Header/Title") as Label).text, "Vitality", "resolved hover renders correct final tooltip content", failures)
+	(tooltip.get_node("Content/Header/Pin") as Button).pressed.emit()
+	card.mouse_exited.emit()
+	TestAssertions.truthy(tooltip.visible and tooltip.is_pinned(), "resolved tooltip retains normal pin behavior", failures)
+
+	panel.show_choices(choices, party)
+	TestAssertions.truthy(reveal.is_revealing(), "next offer starts another reveal", failures)
+	TestAssertions.truthy(not tooltip.visible and not tooltip.is_pinned() and panel.get("_tooltip_choice") == null, "reveal start dismisses stale pinned tooltip state", failures)
 	_free_panel(panel)
 	party.free()
 
