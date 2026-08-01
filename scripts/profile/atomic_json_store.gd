@@ -27,12 +27,12 @@ func save_document(path: String, document: Dictionary, validator: Callable) -> S
 	var write_error := file.get_error()
 	file.close()
 	if write_error != OK:
-		_remove(temporary)
-		return "JSON_STORE_SAVE_ERROR path=%s stage=write code=%d" % [path, write_error]
+		var cleanup_error := _remove_if_exists(temporary)
+		return "JSON_STORE_SAVE_ERROR path=%s stage=write code=%d cleanup_stage=remove-temporary cleanup_code=%d" % [path, write_error, cleanup_error]
 	var temporary_result := _load_one(temporary, validator)
 	if not temporary_result.ok():
-		_remove(temporary)
-		return "JSON_STORE_SAVE_ERROR path=%s stage=verify-temporary reason=%s" % [path, temporary_result.error]
+		var cleanup_error := _remove_if_exists(temporary)
+		return "JSON_STORE_SAVE_ERROR path=%s stage=verify-temporary cleanup_stage=remove-temporary cleanup_code=%d reason=%s" % [path, cleanup_error, temporary_result.error]
 	var had_previous := FileAccess.file_exists(path)
 	var previous_was_valid := false
 	var displaced_old_backup := false
@@ -43,40 +43,40 @@ func save_document(path: String, document: Dictionary, validator: Callable) -> S
 			if FileAccess.file_exists(displaced_backup):
 				var remove_displaced_error := _remove(displaced_backup)
 				if remove_displaced_error != OK:
-					_remove(temporary)
-					return "JSON_STORE_SAVE_ERROR path=%s stage=remove-stale-backup code=%d" % [path, remove_displaced_error]
+					var cleanup_error := _remove_if_exists(temporary)
+					return "JSON_STORE_SAVE_ERROR path=%s stage=remove-stale-backup code=%d cleanup_stage=remove-temporary cleanup_code=%d" % [path, remove_displaced_error, cleanup_error]
 			if FileAccess.file_exists(backup):
 				var displace_error := _rename(backup, displaced_backup)
 				if displace_error != OK:
-					_remove(temporary)
-					return "JSON_STORE_SAVE_ERROR path=%s stage=stage-old-backup code=%d" % [path, displace_error]
+					var cleanup_error := _remove_if_exists(temporary)
+					return "JSON_STORE_SAVE_ERROR path=%s stage=stage-old-backup code=%d cleanup_stage=remove-temporary cleanup_code=%d" % [path, displace_error, cleanup_error]
 				displaced_old_backup = true
 			var backup_error := _rename(path, backup)
 			if backup_error != OK:
 				var restore_displaced_error := _restore_displaced_backup(backup, displaced_backup, displaced_old_backup)
-				_remove(temporary)
-				return "JSON_STORE_SAVE_ERROR path=%s stage=backup code=%d restore_code=%d" % [path, backup_error, restore_displaced_error]
+				var cleanup_error := _remove_if_exists(temporary)
+				return "JSON_STORE_SAVE_ERROR path=%s stage=backup code=%d restore_code=%d cleanup_stage=remove-temporary cleanup_code=%d" % [path, backup_error, restore_displaced_error, cleanup_error]
 		else:
 			var verified_backup := _load_one(backup, validator)
 			if not verified_backup.ok():
-				_remove(temporary)
-				return "JSON_STORE_SAVE_ERROR path=%s stage=validate-existing primary=%s backup=%s" % [path, previous.error, verified_backup.error]
+				var cleanup_error := _remove_if_exists(temporary)
+				return "JSON_STORE_SAVE_ERROR path=%s stage=validate-existing cleanup_stage=remove-temporary cleanup_code=%d primary=%s backup=%s" % [path, cleanup_error, previous.error, verified_backup.error]
 			var preserved_corrupt := _corrupt_artifact_path(path)
 			var preserve_error := _rename(path, preserved_corrupt)
 			if preserve_error != OK:
-				_remove(temporary)
-				return "JSON_STORE_SAVE_ERROR path=%s stage=preserve-corrupt code=%d" % [path, preserve_error]
+				var cleanup_error := _remove_if_exists(temporary)
+				return "JSON_STORE_SAVE_ERROR path=%s stage=preserve-corrupt code=%d cleanup_stage=remove-temporary cleanup_code=%d" % [path, preserve_error, cleanup_error]
 			push_warning("JSON_STORE_CORRUPT_PRIMARY_PRESERVED path=%s artifact=%s" % [path, preserved_corrupt])
 	var promote_error: Error = _promote_file.call(temporary, path) if _promote_file.is_valid() else _promote(temporary, path)
 	if promote_error != OK:
 		var restore_after_promote := _restore_previous(path, backup, displaced_backup, had_previous, previous_was_valid, displaced_old_backup)
-		_remove(temporary)
-		return "JSON_STORE_SAVE_ERROR path=%s stage=promote code=%d restore_code=%d" % [path, promote_error, restore_after_promote]
+		var cleanup_error := _remove_if_exists(temporary)
+		return "JSON_STORE_SAVE_ERROR path=%s stage=promote code=%d restore_code=%d cleanup_stage=remove-temporary cleanup_code=%d" % [path, promote_error, restore_after_promote, cleanup_error]
 	var promoted := _load_one(path, validator)
 	if not promoted.ok():
-		_remove(path)
+		var target_remove_error := _remove_if_exists(path)
 		var restore_after_verify := _restore_previous(path, backup, displaced_backup, had_previous, previous_was_valid, displaced_old_backup)
-		return "JSON_STORE_SAVE_ERROR path=%s stage=verify-promoted restore_code=%d reason=%s" % [path, restore_after_verify, promoted.error]
+		return "JSON_STORE_SAVE_ERROR path=%s stage=verify-promoted target_remove_code=%d restore_code=%d reason=%s" % [path, target_remove_error, restore_after_verify, promoted.error]
 	if displaced_old_backup:
 		var cleanup_error := _remove(displaced_backup)
 		if cleanup_error != OK:
@@ -172,3 +172,8 @@ func _rename(source: String, target: String) -> Error:
 
 func _remove(path: String) -> Error:
 	return DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+
+func _remove_if_exists(path: String) -> Error:
+	if not FileAccess.file_exists(path):
+		return OK
+	return _remove(path)
