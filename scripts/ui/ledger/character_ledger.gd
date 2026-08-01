@@ -337,7 +337,7 @@ func _rebuild_member_rail() -> void:
 	_sync_member_selection()
 	_configure_member_focus_neighbors()
 	_wire_roster_page_focus_bridge()
-	call_deferred("_ensure_member_visible", context.selected_member_id)
+	call_deferred("_ensure_focus_target_visible")
 
 func _configure_member_focus_neighbors() -> void:
 	var buttons: Array[Button] = []
@@ -363,6 +363,31 @@ func _ensure_member_visible(member_id: int) -> void:
 	if button == null or not button.is_inside_tree() or not button.is_visible_in_tree():
 		return
 	_party_scroll().ensure_control_visible(button)
+
+func _ensure_focus_target_visible(focus_target: Control = null) -> void:
+	var member_id := _member_visibility_target_id(focus_target)
+	if member_id > 0:
+		_ensure_member_visible(member_id)
+
+func _member_visibility_target_id(focus_target: Control = null) -> int:
+	var target := focus_target
+	if target == null and is_inside_tree():
+		target = get_viewport().gui_get_focus_owner()
+	var focused_member_id := _member_id_for_control(target)
+	if focused_member_id > 0:
+		return focused_member_id
+	if target == null and context != null and not context.last_focus_path.is_empty():
+		target = get_node_or_null(context.last_focus_path) as Control
+		focused_member_id = _member_id_for_control(target)
+		if focused_member_id > 0:
+			return focused_member_id
+	return context.selected_member_id if context != null else 0
+
+func _member_id_for_control(control: Control) -> int:
+	if control == null or not control.has_meta("member_id"):
+		return 0
+	var member_id := int(control.get_meta("member_id", 0))
+	return member_id if _member_buttons.get(member_id) == control else 0
 
 func _wire_roster_page_focus_bridge() -> void:
 	if context == null:
@@ -489,16 +514,17 @@ func _store_focus() -> void:
 	if focused != null and is_ancestor_of(focused):
 		context.last_focus_path = get_path_to(focused)
 
-func _focus_remembered_or_default() -> void:
+func _focus_remembered_or_default() -> Control:
 	if context != null and not context.last_focus_path.is_empty():
 		var remembered := get_node_or_null(context.last_focus_path) as Control
-		if remembered != null and remembered.is_visible_in_tree():
-			remembered.grab_focus()
-			_ensure_member_visible(context.selected_member_id)
-			return
+		if remembered != null and remembered.visible:
+			if remembered.is_inside_tree() and remembered.is_visible_in_tree():
+				remembered.grab_focus()
+			_ensure_focus_target_visible(remembered)
+			return remembered
 	_focus_page_or_member()
-	if context != null:
-		_ensure_member_visible(context.selected_member_id)
+	_ensure_focus_target_visible()
+	return get_viewport().gui_get_focus_owner() if is_inside_tree() else null
 
 func _focus_page_or_member() -> void:
 	var active_page := _active_page()

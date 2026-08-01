@@ -102,6 +102,14 @@ func _test_layout_controller_and_pause_edges(failures: Array[String]) -> void:
 	stats_focus = stats_page.initial_focus()
 	TestAssertions.truthy(stats_focus is Button, "Stats supplies an explicit first focus row", failures)
 	TestAssertions.equal(stats_focus.focus_neighbor_left, stats_focus.get_path_to(selected_member), "refresh restores the active page route to the selected member", failures)
+	member_24 = ledger.get_node("Overlay/Frame/Layout/Body/PartyScroll/PartyEntries/Member_24") as Button
+	ledger.context.last_focus_path = ledger.get_path_to(member_24)
+	var restored_focus := ledger.call("_focus_remembered_or_default") as Control
+	TestAssertions.equal(restored_focus, member_24, "reopen restores remembered member 24 focus while member 1 stays selected", failures)
+	TestAssertions.equal(ledger.context.selected_member_id, 1, "remembered focus does not change selected member", failures)
+	TestAssertions.truthy(ledger.has_method("_member_visibility_target_id"), "ledger exposes its deferred member visibility target policy", failures)
+	if ledger.has_method("_member_visibility_target_id"):
+		TestAssertions.equal(int(ledger.call("_member_visibility_target_id")), 24, "deferred visibility keeps remembered member 24 on screen", failures)
 
 	ledger.call("_unhandled_input", _action_event(&"ledger_next_page"))
 	TestAssertions.truthy(upgrades_page.visible and not stats_page.visible, "next bumper moves Stats to Current Upgrades", failures)
