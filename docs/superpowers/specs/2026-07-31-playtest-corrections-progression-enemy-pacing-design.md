@@ -1,7 +1,7 @@
 # Party Forge Playtest Corrections, Progression, and Enemy Pacing Design
 
 **Date:** 2026-07-31
-**Status:** Draft for user review
+**Status:** Approved
 **Scope:** Focused, data-driven correction pass based on the 2026-07-31 five-minute-run playtest notes
 
 ## Purpose
