@@ -5,6 +5,8 @@ func run() -> Array[String]:
 	var failures: Array[String] = []
 	_test_class_rank_uses_definition_step(failures)
 	_test_other_foundational_choices_are_specific(failures)
+	_test_fractional_trait_percentages(failures)
+	_test_production_trait_keyword_mappings(failures)
 	_test_level_up_panel_routes_foundational_and_authored_tooltips(failures)
 	return failures
 
@@ -96,6 +98,63 @@ func _test_other_foundational_choices_are_specific(failures: Array[String]) -> v
 	party.free()
 
 
+func _test_fractional_trait_percentages(failures: Array[String]) -> void:
+	var catalog := GameCatalog.load_defaults()
+	var party := PartyManager.new()
+	party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
+	for fixture: Array in [
+		[&"arcane", "Arcane: 18% -> 22.5% Area Size."],
+		[&"chaos", "Chaos: 15% -> 18.75% Chaos Damage."],
+	]:
+		var trait_id: StringName = fixture[0]
+		var definition := catalog.trait_by_id(trait_id)
+		party.active_tiers[trait_id] = _lowest_tier(definition)
+		var choice := UpgradeChoice.new(UpgradeChoice.Kind.TRAIT, trait_id, "Strengthen %s" % definition.display_name)
+		var card := FoundationalUpgradePresentationService.card(choice, party, catalog)
+		var tooltip := FoundationalUpgradePresentationService.tooltip(choice, party, catalog)
+		TestAssertions.equal(card.summary, fixture[1], "%s card preserves fractional percent" % trait_id, failures)
+		TestAssertions.equal(tooltip.effect_lines, [fixture[1]], "%s tooltip preserves fractional percent" % trait_id, failures)
+	party.free()
+
+
+func _test_production_trait_keyword_mappings(failures: Array[String]) -> void:
+	var catalog := GameCatalog.load_defaults()
+	var party := PartyManager.new()
+	party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
+	var compound_prefixes := {
+		&"cooldown_reduction": ["Cooldown Rate:"],
+		&"healing_and_revive": ["Healing Power:", "Healing:"],
+		&"nearby_damage_reduction": ["Reduced:"],
+		&"projectile_speed_and_range": ["Projectile Speed:", "Attack Range:"],
+		&"support_power": ["Healing Power:"],
+	}
+	for definition: TraitDefinition in catalog.traits:
+		party.active_tiers[definition.id] = _lowest_tier(definition)
+		var choice := UpgradeChoice.new(UpgradeChoice.Kind.TRAIT, definition.id, "Strengthen %s" % definition.display_name)
+		var tooltip := FoundationalUpgradePresentationService.tooltip(choice, party, catalog)
+		var keyword_lines: Array = tooltip.keyword_lines
+		TestAssertions.truthy(
+			not keyword_lines.any(func(line: String) -> bool: return line.begins_with("Missing definition:")),
+			"%s production tooltip has no missing keyword diagnostics" % definition.id,
+			failures,
+		)
+		TestAssertions.truthy(
+			keyword_lines.any(func(line: String) -> bool: return line.begins_with("%s:" % definition.display_name)),
+			"%s tooltip includes its trait keyword" % definition.id,
+			failures,
+		)
+		var expected_prefixes: Array = compound_prefixes.get(definition.stat_id, [])
+		if expected_prefixes.is_empty() and catalog.keywords.definition(definition.stat_id) != null:
+			expected_prefixes = ["%s:" % catalog.keywords.definition(definition.stat_id).display_name]
+		for prefix: String in expected_prefixes:
+			TestAssertions.truthy(
+				keyword_lines.any(func(line: String) -> bool: return line.begins_with(prefix)),
+				"%s tooltip includes mapped %s meaning" % [definition.id, prefix.trim_suffix(":")],
+				failures,
+			)
+	party.free()
+
+
 func _test_level_up_panel_routes_foundational_and_authored_tooltips(failures: Array[String]) -> void:
 	var catalog := GameCatalog.load_defaults()
 	var party := PartyManager.new()
@@ -122,3 +181,11 @@ func _test_level_up_panel_routes_foundational_and_authored_tooltips(failures: Ar
 	TestAssertions.equal((tooltip.get_node("Content/Header/Title") as Label).text, "Vitality", "authored tooltip routing remains intact", failures)
 	panel.free()
 	party.free()
+
+
+func _lowest_tier(definition: TraitDefinition) -> int:
+	var result := 0
+	for threshold: Variant in definition.tiers.keys():
+		if result == 0 or int(threshold) < result:
+			result = int(threshold)
+	return result

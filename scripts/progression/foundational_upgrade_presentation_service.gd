@@ -1,6 +1,14 @@
 class_name FoundationalUpgradePresentationService
 extends RefCounted
 
+const TRAIT_STAT_KEYWORD_IDS := {
+	&"cooldown_reduction": [&"cooldown_rate"],
+	&"healing_and_revive": [&"healing_power", &"healing"],
+	&"nearby_damage_reduction": [&"reduced"],
+	&"projectile_speed_and_range": [&"projectile_speed", &"attack_range"],
+	&"support_power": [&"healing_power"],
+}
+
 
 static func card(choice: UpgradeChoice, party: PartyManager, catalog: GameCatalog) -> Dictionary:
 	if choice == null or party == null or catalog == null:
@@ -38,7 +46,7 @@ static func tooltip(choice: UpgradeChoice, party: PartyManager, catalog: GameCat
 				description = "Strengthen the active %s party-composition synergy." % trait_definition.display_name
 			var trait_keywords: Array[StringName] = [choice.target_id]
 			if trait_definition != null:
-				trait_keywords.append(trait_definition.stat_id)
+				trait_keywords.append_array(_trait_stat_keyword_ids(trait_definition, catalog))
 			return _tooltip_from_card(card_content, description, [card_content.get("summary", "")], _keyword_lines(trait_keywords, catalog))
 		UpgradeChoice.Kind.PARTY_STAT:
 			var stat_definition := PartyManager.STAT_CATALOG.definition(choice.target_id)
@@ -111,14 +119,14 @@ static func _trait_card(choice: UpgradeChoice, party: PartyManager, catalog: Gam
 	var next_rank := current_rank + 1
 	var base_value := float(definition.tiers.get(tier, 0.0))
 	var step := party.upgrade_tuning.trait_upgrade_value_step
-	var current_percent := roundi(base_value * (1.0 + float(current_rank) * step) * 100.0)
-	var next_percent := roundi(base_value * (1.0 + float(next_rank) * step) * 100.0)
+	var current_percent := base_value * (1.0 + float(current_rank) * step) * 100.0
+	var next_percent := base_value * (1.0 + float(next_rank) * step) * 100.0
 	var effect_name := _keyword_display_name(definition.stat_id, catalog)
 	return {
 		"name": "Strengthen %s" % definition.display_name,
 		"scope_badge": "Trait Rank",
 		"rank_text": "Mastery %d -> %d" % [current_rank, next_rank],
-		"summary": "%s: %d%% -> %d%% %s." % [definition.display_name, current_percent, next_percent, effect_name],
+		"summary": "%s: %s -> %s %s." % [definition.display_name, _percent_text(current_percent), _percent_text(next_percent), effect_name],
 		"eligibility_text": "Requires the %s trait to be active." % definition.display_name,
 		"recipient_text": "Applies to all current members with the %s trait." % definition.display_name,
 		"inheritance_text": "All current and future members with the %s trait inherit this mastery." % definition.display_name,
@@ -159,6 +167,19 @@ static func _party_stat_step(stat_id: StringName, tuning: UpgradeTuning) -> floa
 			return tuning.pickup_radius_per_rank
 		_:
 			return 0.0
+
+
+static func _trait_stat_keyword_ids(definition: TraitDefinition, catalog: GameCatalog) -> Array[StringName]:
+	var keyword_ids: Array[StringName] = []
+	if TRAIT_STAT_KEYWORD_IDS.has(definition.stat_id):
+		keyword_ids.assign(TRAIT_STAT_KEYWORD_IDS[definition.stat_id])
+	elif catalog.keywords != null and catalog.keywords.has_definition(definition.stat_id):
+		keyword_ids.append(definition.stat_id)
+	return keyword_ids
+
+
+static func _percent_text(value: float) -> String:
+	return "%s%%" % ("%.4f" % value).rstrip("0").rstrip(".")
 
 
 static func _tooltip_from_card(card_content: Dictionary, description: String, effect_lines: Array, keyword_lines: Array) -> Dictionary:
