@@ -55,11 +55,15 @@ Both base profiles expose the same public model API, the red/blue/green palettes
 
 The exact PoE1-style visual slots are `main_hand`, `off_hand`, `helmet`, `body_armour`, `gloves`, `boots`, `belt`, `amulet`, `ring_left`, and `ring_right`. Every equipped definition declares at least one readability channel: sword and shield use geometry; helmet uses geometry and silhouette; body armour uses geometry, silhouette, and palette; gloves, boots, and belt use geometry and palette; amulet uses emission and emblem; and each ring uses emission. Definitions live under `res://data/presentation/equipment/forge_vanguard_*.tres`, and `EquipmentSlotCatalog` is the authoritative ten-slot list.
 
+`main_hand` currently exposes two visual definitions: `forge_vanguard_sword` and `forge_vanguard_hammer`. The Fighter equips sword first by default; the preserved hammer remains selectable without altering its original box geometry. Available profile equipment may contain multiple definitions for one slot, while default equipment remains one item per slot. Consumers should use equipment-ID lookup for an exact item or slot-variant lookup for cycling.
+
 The model duplicates `StandardMaterial3D` resources for an instance before applying its palette or feedback. Palette, white hit flash, downed grayscale, and restored base color are therefore instance-local: one red actor and one blue actor can coexist without recoloring one another. The adapter maps Fighter `fighter_cleave` only to `attack_slash`; its model also supplies `idle`, `attack_combo`, and `hit_flinch`. The current in-place clip durations are idle 1.6 seconds, slash 0.55 seconds, combo 0.9 seconds, and flinch 0.25 seconds. Presentation does not alter combat damage timing.
 
 ### Sandbox and visual review
 
 Launch `res://scenes/dev/character_presentation_sandbox.tscn` to review two simultaneous adapters, named Masculine and Feminine, with the fallback capsule comparison. Its controls are: `1`/`2` body, `R`/`B`/`G` palette, `I` idle, `A` slash, `C` combo, `H` hit, `Q`/`E` cycle the selected slot, `Space` toggle that slot, and `M` toggle the selected side between equipped and its separate unequipped base profile. The hermetic smoke entry point is `res://tests/integration/character_presentation_sandbox_runner.gd`.
+
+The sandbox `V` control cycles the selected slot's available variants through `CharacterPresentation.apply_equipment_visual`; it does not toggle model nodes directly. The Fighter idle is a combat-ready guard with shield raised and the main-hand item carried forward/down. Slash, combo, and flinch retain their original durations and recover to the same guard without model-root motion or gameplay timing changes.
 
 For live review, verify the high-angle red masculine / blue feminine / capsule composition, then inspect sword, shield, helmet, body armour, gloves, boots, belt, and jewelry readability at close range. Exercise the four clips, hit flash restoration, downed gray, and revival color with both models visible. Valid sandbox interactions must not add parser, import, runtime, or `PARTY_FORGE_PRESENTATION_ERROR` entries to the editor/game logs.
 
