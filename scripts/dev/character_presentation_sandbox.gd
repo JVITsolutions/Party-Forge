@@ -21,6 +21,13 @@ var _initialized := false
 func _ready() -> void:
 	_initialize_profiles()
 
+func _process(delta: float) -> void:
+	_initialize_profiles()
+	for side_id: StringName in SIDE_IDS:
+		var presentation := _presentation(side_id)
+		if presentation != null:
+			presentation.advance_feedback(delta)
+
 func _initialize_profiles() -> void:
 	if _initialized:
 		return
