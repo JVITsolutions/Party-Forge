@@ -2,6 +2,12 @@ extends SceneTree
 
 const SCENE_PATH := "res://scenes/characters/presentation/forge_vanguard_model.tscn"
 const MODEL_SCRIPT := preload("res://scripts/presentation/forge_vanguard_model.gd")
+const GUARD_ROTATIONS := {
+	&"left_shoulder": Vector3(-0.28, -0.05, -0.55),
+	&"left_elbow": Vector3(0.10, 0.0, -0.65),
+	&"right_shoulder": Vector3(-0.18, -0.16, 0.34),
+	&"right_elbow": Vector3(0.10, 0.0, 0.38),
+}
 
 func _initialize() -> void:
 	var model := MODEL_SCRIPT.new() as Node3D
@@ -37,33 +43,33 @@ func _add_animations(model: Node3D) -> void:
 	model.add_child(player)
 	var library := AnimationLibrary.new()
 	_add_animation(library, &"idle", 1.6, true, [
-		_pose(0.00),
-		_pose(0.40, {&"body": Vector3(0, 0.018, 0), &"torso": Vector3(0, 0.238, 0)}, {&"torso": Vector3(0.025, 0, 0), &"left_shoulder": Vector3(0, 0, -0.035), &"right_shoulder": Vector3(0, 0, 0.035)}),
-		_pose(0.80, {&"body": Vector3(-0.025, 0.008, 0), &"torso": Vector3(0, 0.226, 0)}, {&"torso": Vector3(0, 0, -0.035), &"left_shoulder": Vector3(0, 0, -0.06), &"right_elbow": Vector3(0, 0, 0.05)}),
-		_pose(1.20, {&"body": Vector3(0, -0.010, 0), &"torso": Vector3(0, 0.210, 0)}, {&"torso": Vector3(-0.018, 0, 0), &"left_elbow": Vector3(0, 0, -0.035), &"right_shoulder": Vector3(0, 0, 0.025)}),
-		_pose(1.60),
+		_guard_pose(0.00),
+		_guard_pose(0.40, {&"body": Vector3(0, 0.018, 0), &"torso": Vector3(0, 0.238, 0)}, {&"left_shoulder": Vector3(0, 0, -0.025), &"right_shoulder": Vector3(0, 0, 0.025)}),
+		_guard_pose(0.80, {&"body": Vector3(-0.025, 0.008, 0), &"torso": Vector3(0, 0.226, 0)}, {&"left_shoulder": Vector3(0, 0, -0.04), &"right_elbow": Vector3(0, 0, 0.04)}),
+		_guard_pose(1.20, {&"body": Vector3(0, -0.010, 0), &"torso": Vector3(0, 0.210, 0)}, {&"left_elbow": Vector3(0, 0, -0.03), &"right_shoulder": Vector3(0, 0, 0.02)}),
+		_guard_pose(1.60),
 	])
 	_add_animation(library, &"attack_slash", 0.55, false, [
-		_pose(0.00),
+		_guard_pose(0.00),
 		_pose(0.12, {&"body": Vector3(-0.025, 0, 0.025), &"torso": Vector3(0, 0.220, 0.025)}, {&"torso": Vector3(0.08, -0.16, -0.10), &"right_shoulder": Vector3(-0.08, -0.24, -1.05), &"right_elbow": Vector3(0.10, 0, -0.45), &"left_shoulder": Vector3(0, 0, -0.10)}),
 		_pose(0.28, {&"body": Vector3(0.025, 0, -0.015), &"torso": Vector3(0, 0.220, -0.012)}, {&"torso": Vector3(-0.06, 0.24, 0.12), &"right_shoulder": Vector3(0.12, 0.36, 1.18), &"right_elbow": Vector3(-0.08, 0, 0.78), &"left_elbow": Vector3(0, 0, -0.10)}),
 		_pose(0.42, {&"body": Vector3(0.010, 0, 0), &"torso": Vector3(0, 0.220, 0)}, {&"torso": Vector3(0, 0.08, 0), &"right_shoulder": Vector3(0, 0.10, 0.28), &"right_elbow": Vector3(0, 0, 0.18)}),
-		_pose(0.55),
+		_guard_pose(0.55),
 	])
 	_add_animation(library, &"attack_combo", 0.9, false, [
-		_pose(0.00),
+		_guard_pose(0.00),
 		_pose(0.14, {&"body": Vector3(-0.020, 0, 0.020)}, {&"torso": Vector3(0.06, -0.12, -0.08), &"right_shoulder": Vector3(-0.06, -0.22, -0.92), &"right_elbow": Vector3(0.08, 0, -0.42)}),
 		_pose(0.30, {&"body": Vector3(0.022, 0, -0.012)}, {&"torso": Vector3(-0.05, 0.20, 0.10), &"right_shoulder": Vector3(0.10, 0.30, 1.05), &"right_elbow": Vector3(-0.06, 0, 0.72)}),
 		_pose(0.48, {&"body": Vector3(0.008, 0, 0)}, {&"torso": Vector3(0, 0.05, 0), &"right_shoulder": Vector3(0, 0.06, 0.18), &"right_elbow": Vector3(0, 0, 0.10)}),
 		_pose(0.62, {&"body": Vector3(0.018, 0, 0.012)}, {&"torso": Vector3(-0.04, -0.14, 0.08), &"left_shoulder": Vector3(-0.18, 0, 0.78), &"left_elbow": Vector3(0.10, 0, 0.42)}),
 		_pose(0.74, {&"body": Vector3(-0.018, 0, -0.060), &"torso": Vector3(0, 0.220, -0.050)}, {&"torso": Vector3(0.12, 0.10, -0.08), &"left_shoulder": Vector3(0.34, 0, -0.34), &"left_elbow": Vector3(-0.18, 0, -0.28)}),
-		_pose(0.90),
+		_guard_pose(0.90),
 	])
 	_add_animation(library, &"hit_flinch", 0.25, false, [
-		_pose(0.00),
+		_guard_pose(0.00),
 		_pose(0.07, {&"hit": Vector3(0, 0, 0.090), &"body": Vector3(0, 0, 0.035), &"torso": Vector3(0, 0.220, 0.025)}, {&"torso": Vector3(-0.16, 0, 0), &"right_shoulder": Vector3(-0.08, 0, 0.12), &"left_shoulder": Vector3(-0.12, 0, -0.22)}),
 		_pose(0.15, {&"hit": Vector3(0, 0, 0.045), &"body": Vector3(0.012, 0, 0.018)}, {&"torso": Vector3(-0.08, 0, 0.06), &"right_shoulder": Vector3(-0.04, 0, 0.18), &"right_elbow": Vector3(0, 0, 0.12), &"left_shoulder": Vector3(-0.10, 0, -0.42), &"left_elbow": Vector3(0, 0, -0.24)}),
-		_pose(0.25),
+		_guard_pose(0.25),
 	])
 	player.add_animation_library(&"", library)
 
@@ -92,6 +98,12 @@ func _pose(time: float, position_overrides: Dictionary = {}, rotation_overrides:
 	for pivot_id: Variant in rotation_overrides:
 		rotations[pivot_id] = rotation_overrides[pivot_id]
 	return {&"time": time, &"positions": positions, &"rotations": rotations}
+
+func _guard_pose(time: float, position_overrides: Dictionary = {}, rotation_offsets: Dictionary = {}) -> Dictionary:
+	var rotations := GUARD_ROTATIONS.duplicate()
+	for pivot_id: Variant in rotation_offsets:
+		rotations[pivot_id] = (rotations.get(pivot_id, Vector3.ZERO) as Vector3) + (rotation_offsets[pivot_id] as Vector3)
+	return _pose(time, position_overrides, rotations)
 
 func _animated_pivot_ids() -> Array[StringName]:
 	return [&"hit", &"body", &"torso", &"left_shoulder", &"left_elbow", &"right_shoulder", &"right_elbow"]
