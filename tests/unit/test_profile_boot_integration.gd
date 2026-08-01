@@ -54,12 +54,15 @@ func _test_bootstrap_error_routes_to_profiles(root: String, failures: Array[Stri
 		return
 	file.store_string("not a profile directory")
 	file.close()
+	var expected_error := "PROFILE_BOOTSTRAP_ERROR root=%s stage=validate-root reason=path is not a directory" % root
+	TestAssertions.equal(ProfileManager.new().bootstrap(root), expected_error, "bootstrap error source includes the exact injected root", failures)
 	var main := (load("res://scenes/game/main.tscn") as PackedScene).instantiate() as PartyForgeMain
 	main.set("profile_root", root)
 	(Engine.get_main_loop() as SceneTree).root.add_child(main)
 	main.call("_ready")
 	var settings := main.get_node("SettingsScreen") as SettingsScreen
 	TestAssertions.equal(main.call("active_profile"), null, "bootstrap error exposes no active profile", failures)
+	TestAssertions.equal(settings.get("_profile_manager"), main.get("profile_manager"), "bootstrap error routes the main manager to Profiles Settings", failures)
 	TestAssertions.truthy(settings.is_open(), "bootstrap error opens Settings", failures)
 	TestAssertions.truthy(not main.call("select_leader_class", &"fighter"), "bootstrap error cannot launch a run", failures)
 	TestAssertions.equal(main.get("run_started"), false, "bootstrap error leaves gameplay unstarted", failures)
