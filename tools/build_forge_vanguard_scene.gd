@@ -15,7 +15,7 @@ func _initialize() -> void:
 	_add_body(torso, head, limb_pivots, hips, &"masculine", 0.82)
 	_add_body(torso, head, limb_pivots, hips, &"feminine", 0.72)
 	_add_equipment(limb_pivots[&"right_hand"], &"main_hand", &"forge_vanguard_sword", Vector3(0.03, 0.11, 0), Vector3(0.09, 0.92, 0.07), &"metal")
-	_add_equipment(limb_pivots[&"left_hand"], &"off_hand", &"forge_vanguard_shield", Vector3(-0.04, 0.21, 0.02), Vector3(0.14, 0.68, 0.68), &"metal")
+	_add_equipment(limb_pivots[&"left_hand"], &"off_hand", &"forge_vanguard_shield", Vector3(-0.04, 0.21, 0.02), Vector3(0.68, 0.68, 0.14), &"metal")
 	_add_equipment(head, &"helmet", &"forge_vanguard_helmet", Vector3.ZERO, Vector3(0.38, 0.34, 0.34), &"metal")
 	_add_equipment(torso, &"body_armour", &"forge_vanguard_armour", Vector3(0, 0.06, 0), Vector3(0.76, 0.56, 0.36), &"primary")
 	_add_equipment(limb_pivots[&"left_hand"], &"gloves", &"forge_vanguard_gauntlets", Vector3(-0.02, -0.20, 0), Vector3(0.16, 0.17, 0.16), &"primary")

@@ -39,6 +39,7 @@ func run() -> Array[String]:
 	for slot_id: StringName in EquipmentSlotCatalog.SLOT_IDS:
 		TestAssertions.truthy(model.call(&"has_equipment_slot", slot_id), "model exposes %s" % slot_id, failures)
 	_assert_functional_pivot_contract(model, failures)
+	_assert_shield_front_readability(model, failures)
 	_assert_jewelry_emission(model, failures)
 	_assert_unequipped_jewelry_visibility(model, profile, failures)
 	var bounds: AABB = model.call(&"visual_bounds") as AABB
@@ -101,6 +102,16 @@ func _assert_jewelry_emission(model: Node3D, failures: Array[String]) -> void:
 		if mesh != null:
 			var material := mesh.material_override as StandardMaterial3D
 			TestAssertions.truthy(material != null and material.emission_enabled, "jewelry emission is enabled: %s" % mesh_path, failures)
+
+func _assert_shield_front_readability(model: Node3D, failures: Array[String]) -> void:
+	var shield := model.get_node_or_null("HitPivot/BodyPivot/HipsPivot/TorsoPivot/LeftShoulderPivot/LeftElbowPivot/LeftHandSocket/OffHandVisual/ReadableChannel") as MeshInstance3D
+	TestAssertions.truthy(shield != null, "shield readable mesh exists", failures)
+	if shield == null or shield.mesh == null:
+		return
+	var shield_bounds := shield.mesh.get_aabb()
+	TestAssertions.near(shield_bounds.size.x, 0.68, 0.01, "shield front projected width is 0.68 m", failures)
+	TestAssertions.near(shield_bounds.size.y, 0.68, 0.01, "shield front projected height is 0.68 m", failures)
+	TestAssertions.near(shield_bounds.size.z, 0.14, 0.01, "shield depth remains thin", failures)
 
 func _assert_unequipped_jewelry_visibility(model: Node3D, profile: CharacterVisualProfile, failures: Array[String]) -> void:
 	for slot_id: StringName in [&"main_hand", &"off_hand", &"helmet", &"body_armour", &"gloves", &"boots", &"belt"]:
