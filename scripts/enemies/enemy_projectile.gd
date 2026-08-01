@@ -79,12 +79,40 @@ func _actor_position(actor: Node3D) -> Vector3:
 	return actor.global_position if actor.is_inside_tree() else actor.position
 
 func _first_living_party_actor_on_segment(start_position: Vector3, next_position: Vector3) -> Node3D:
+	var selected: Node3D = null
+	var selected_progression := INF
+	var selected_tie_break := ""
 	for actor: Node3D in _party_actors():
 		if not _actor_is_available(actor):
 			continue
-		if _distance_squared_to_segment(_actor_position(actor), start_position, next_position) <= hit_radius * hit_radius:
-			return actor
-	return null
+		var actor_position := _actor_position(actor)
+		if _distance_squared_to_segment(actor_position, start_position, next_position) > hit_radius * hit_radius:
+			continue
+		var progression := _segment_hit_progression(actor_position, start_position, next_position)
+		var tie_break := _actor_tie_break(actor)
+		if selected == null or progression < selected_progression or (is_equal_approx(progression, selected_progression) and tie_break < selected_tie_break):
+			selected = actor
+			selected_progression = progression
+			selected_tie_break = tie_break
+	return selected
+
+func _segment_hit_progression(point: Vector3, start: Vector3, finish: Vector3) -> float:
+	var segment := finish - start
+	var segment_length := segment.length()
+	if is_zero_approx(segment_length) or point.distance_squared_to(start) <= hit_radius * hit_radius:
+		return 0.0
+	var segment_direction := segment / segment_length
+	var offset := point - start
+	var projected_distance := offset.dot(segment_direction)
+	var perpendicular_squared := maxf(0.0, offset.length_squared() - projected_distance * projected_distance)
+	var entry_offset := sqrt(maxf(0.0, hit_radius * hit_radius - perpendicular_squared))
+	return clampf(projected_distance - entry_offset, 0.0, segment_length)
+
+func _actor_tie_break(actor: Node3D) -> String:
+	var adapter := _adapter_for(actor)
+	if adapter != null and not adapter.combatant_id.is_empty():
+		return String(adapter.combatant_id)
+	return "%020d" % actor.get_instance_id()
 
 func _actor_is_available(actor: Node3D) -> bool:
 	if actor == null or not is_instance_valid(actor) or not actor.has_method("get_combat_target"):
