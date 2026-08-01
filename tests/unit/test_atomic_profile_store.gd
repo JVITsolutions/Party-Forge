@@ -12,7 +12,7 @@ class CleanupFailingAtomicJsonStore extends AtomicJsonStore:
 
 func run() -> Array[String]:
 	var failures: Array[String] = []
-	_root = "user://tests/profile_store-%d-%d" % [OS.get_process_id(), Time.get_ticks_usec()]
+	_root = "user://tests/profile_store_%d_%d" % [OS.get_process_id(), Time.get_ticks_usec()]
 	_cleanup()
 	_test_round_trip_and_backup_recovery(failures)
 	_test_backup_only_is_discoverable(failures)
@@ -199,15 +199,4 @@ func _write_text(path: String, text: String) -> void:
 		file.close()
 
 func _cleanup() -> void:
-	var absolute := ProjectSettings.globalize_path(_root)
-	if DirAccess.dir_exists_absolute(absolute):
-		_remove_tree(absolute)
-
-func _remove_tree(path: String) -> void:
-	var directory := DirAccess.open(path)
-	if directory != null:
-		for name: String in directory.get_files():
-			DirAccess.remove_absolute(path.path_join(name))
-		for name: String in directory.get_directories():
-			_remove_tree(path.path_join(name))
-	DirAccess.remove_absolute(path)
+	ProfileTestSupport.remove_tree(_root)
