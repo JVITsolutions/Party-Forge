@@ -92,19 +92,26 @@ func _test_settings_and_next_run_snapshot_wiring(failures: Array[String]) -> voi
     var developer_settings := PartyForgeSettings.new()
     developer_settings.mode = PartyForgeSettings.Mode.DEVELOPER_MODE
     developer_settings.party_capacity_override = 9
+    developer_settings.experience_multiplier_percent = 150
     TestAssertions.equal(store.save_settings(developer_settings), "", "Developer Mode fixture saves", failures)
     var developer_main := (load("res://scenes/game/main.tscn") as PackedScene).instantiate()
     developer_main.call("_ready")
     TestAssertions.truthy(developer_main.call("select_leader_class", &"fighter"), "Developer Mode fixture starts", failures)
     var active_rules := developer_main.get("active_run_rules") as RunRulesSnapshot
     var saved_settings := developer_main.get("saved_settings") as PartyForgeSettings
+    var experience_system := developer_main.get_node("ExperienceSystem") as ExperienceSystem
     TestAssertions.truthy(active_rules != null and saved_settings != null, "main owns saved settings and active rules separately", failures)
     if active_rules != null and saved_settings != null:
         TestAssertions.equal(active_rules.party_capacity(), 9, "run snapshot captures Developer Mode capacity", failures)
         TestAssertions.equal((developer_main.get_node("PartyManager") as PartyManager).capacity(), 9, "run start configures PartyManager capacity", failures)
+        TestAssertions.equal(active_rules.experience_multiplier_percent(), 150, "run snapshot captures XP multiplier", failures)
+        TestAssertions.near(experience_system.experience_multiplier, 1.5, 0.001, "run start configures ExperienceSystem from snapshot", failures)
         saved_settings.party_capacity_override = 2
+        saved_settings.experience_multiplier_percent = 300
         TestAssertions.equal(active_rules.party_capacity(), 9, "active run snapshot ignores later saved-settings mutation", failures)
         TestAssertions.equal((developer_main.get_node("PartyManager") as PartyManager).capacity(), 9, "configured manager ignores later saved-settings mutation", failures)
+        TestAssertions.equal(active_rules.experience_multiplier_percent(), 150, "active run XP snapshot ignores later saved-settings mutation", failures)
+        TestAssertions.near(experience_system.experience_multiplier, 1.5, 0.001, "configured ExperienceSystem ignores later saved-settings mutation", failures)
     _cleanup_main(developer_main)
     _cleanup_default_settings_artifacts()
     _restore_default_settings_artifacts(original_files)

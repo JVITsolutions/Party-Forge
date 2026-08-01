@@ -62,6 +62,7 @@ func select_leader_class(class_id: StringName) -> bool:
 		push_error(format_resource_error("res://data/classes", "unknown leader class %s" % class_id))
 		return false
 	active_run_rules = RunRulesSnapshot.from_settings(saved_settings)
+	experience_system.configure_multiplier(active_run_rules.experience_multiplier_percent())
 	developer_mode_badge.configure(active_run_rules)
 	party_manager.configure_capacity(active_run_rules.capacity_policy())
 	if CURRENT_STARTING_PARTY_SIZE > active_run_rules.party_capacity():

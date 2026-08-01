@@ -8,12 +8,21 @@ var experience: int = 0
 var pending_levels: int = 0
 var pending_level_numbers: Array[int] = []
 var tuning: ExperienceTuning = DEFAULT_TUNING
+var experience_multiplier := 1.0
+var fractional_experience := 0.0
+
+func configure_multiplier(percent: int) -> void:
+    experience_multiplier = float(clampi(percent, 100, 1000)) / 100.0
+    fractional_experience = 0.0
 
 func experience_for_next_level() -> int:
     return tuning.requirement_for_level(level)
 
 func add_experience(amount: int) -> void:
-    experience += maxi(amount, 0)
+    var scaled := float(maxi(amount, 0)) * experience_multiplier + fractional_experience
+    var whole_experience := floori(scaled)
+    fractional_experience = scaled - float(whole_experience)
+    experience += whole_experience
     while experience >= experience_for_next_level():
         experience -= experience_for_next_level()
         level += 1

@@ -23,6 +23,16 @@ func run() -> Array[String]:
     TestAssertions.equal(experience.current_pending_level(), 3, "next earned level drives the next offer", failures)
     experience.free()
 
+    var boosted := ExperienceSystem.new()
+    boosted.configure_multiplier(150)
+    boosted.add_experience(1)
+    TestAssertions.equal(boosted.experience, 1, "first 150 percent award grants whole XP", failures)
+    TestAssertions.near(boosted.fractional_experience, 0.5, 0.001, "first award carries half XP", failures)
+    boosted.add_experience(1)
+    TestAssertions.equal(boosted.experience, 3, "second award consumes carried fraction", failures)
+    TestAssertions.near(boosted.fractional_experience, 0.0, 0.001, "carry resets after whole conversion", failures)
+    boosted.free()
+
     var catalog := GameCatalog.load_defaults()
     var party := PartyManager.new()
     party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
