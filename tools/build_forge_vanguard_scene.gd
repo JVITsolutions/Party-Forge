@@ -23,9 +23,9 @@ func _initialize() -> void:
 	_add_equipment(limb_pivots[&"left_foot"], &"boots", &"forge_vanguard_boots", Vector3(-0.01, 0.05, 0), Vector3(0.23, 0.18, 0.34), &"primary")
 	_add_equipment(limb_pivots[&"right_foot"], &"boots", &"forge_vanguard_boots", Vector3(0.01, 0.05, 0), Vector3(0.23, 0.18, 0.34), &"primary")
 	_add_equipment(hips, &"belt", &"forge_vanguard_belt", Vector3(0, -0.04, 0), Vector3(0.58, 0.11, 0.32), &"leather")
-	_add_equipment(torso, &"amulet", &"forge_vanguard_amulet", Vector3(0, 0.20, -0.2), Vector3(0.10, 0.10, 0.04), &"brass", true)
-	_add_equipment(limb_pivots[&"left_hand"], &"ring_left", &"forge_vanguard_ring_left", Vector3(-0.03, -0.24, 0), Vector3(0.07, 0.07, 0.07), &"brass", true)
-	_add_equipment(limb_pivots[&"right_hand"], &"ring_right", &"forge_vanguard_ring_right", Vector3(0.03, -0.24, 0), Vector3(0.07, 0.07, 0.07), &"brass", true)
+	_add_equipment(torso, &"amulet", &"forge_vanguard_amulet", Vector3(0, 0.20, -0.2), Vector3(0.10, 0.10, 0.04), &"brass", true, false)
+	_add_equipment(limb_pivots[&"left_hand"], &"ring_left", &"forge_vanguard_ring_left", Vector3(-0.03, -0.24, 0), Vector3(0.07, 0.07, 0.07), &"brass", true, false)
+	_add_equipment(limb_pivots[&"right_hand"], &"ring_right", &"forge_vanguard_ring_right", Vector3(0.03, -0.24, 0), Vector3(0.07, 0.07, 0.07), &"brass", true, false)
 	_save_scene(model)
 
 func _build_limb_pivots(hips: Node3D, torso: Node3D) -> Dictionary:
@@ -65,10 +65,11 @@ func _body_mesh(parent: Node3D, preset_id: StringName, part_name: StringName, po
 	parent.add_child(alternative)
 	_mesh(alternative, &"ReadableChannel", position, size, region)
 
-func _add_equipment(parent: Node3D, slot_id: StringName, visual_id: StringName, position: Vector3, size: Vector3, region: StringName, emits: bool = false) -> void:
+func _add_equipment(parent: Node3D, slot_id: StringName, visual_id: StringName, position: Vector3, size: Vector3, region: StringName, emits: bool = false, starts_visible: bool = true) -> void:
 	var equipment := Node3D.new()
 	equipment.name = _equipment_node_name(slot_id)
 	equipment.position = position
+	equipment.visible = starts_visible
 	equipment.set_meta(&"equipment_slot", slot_id)
 	equipment.set_meta(&"equipment_visual_id", visual_id)
 	parent.add_child(equipment)

@@ -40,6 +40,7 @@ func run() -> Array[String]:
 		TestAssertions.truthy(model.call(&"has_equipment_slot", slot_id), "model exposes %s" % slot_id, failures)
 	_assert_functional_pivot_contract(model, failures)
 	_assert_jewelry_emission(model, failures)
+	_assert_unequipped_jewelry_visibility(model, profile, failures)
 	var bounds: AABB = model.call(&"visual_bounds") as AABB
 	TestAssertions.truthy(bounds.size.y >= 1.6 and bounds.size.y <= 1.85, "humanoid height fits actor scale", failures)
 	TestAssertions.near(bounds.position.y, 0.0, 0.05, "model feet begin at local floor", failures)
@@ -50,6 +51,10 @@ func run() -> Array[String]:
 			TestAssertions.equal(definition.slot_id, slot_id, "%s equipment resource slot" % slot_id, failures)
 			TestAssertions.truthy(not definition.visual_channels.is_empty(), "%s equipment resource has visual channel" % slot_id, failures)
 			TestAssertions.equal(definition.validate(), PackedStringArray(), "%s equipment resource validates" % slot_id, failures)
+			if slot_id in [&"amulet", &"ring_left", &"ring_right"]:
+				TestAssertions.truthy(model.call(&"apply_equipment_visual", slot_id, definition), "%s equipment visual applies" % slot_id, failures)
+				var equipment_root := _equipment_root(model, slot_id)
+				TestAssertions.truthy(equipment_root != null and equipment_root.visible, "%s equipment root becomes visible when applied" % slot_id, failures)
 	model.free()
 	return failures
 
@@ -79,7 +84,7 @@ func _assert_functional_pivot_contract(model: Node3D, failures: Array[String]) -
 	TestAssertions.truthy(_is_descendant(arm, torso_pivot), "arm geometry follows torso and shoulder pivots", failures)
 	TestAssertions.truthy(_is_descendant(torso, body_pivot), "body geometry follows BodyPivot", failures)
 	for mesh: MeshInstance3D in _mesh_descendants(model):
-		TestAssertions.truthy(_is_descendant(mesh, hit_pivot), "HitPivot carries visual mesh %s" % mesh.get_path(), failures)
+		TestAssertions.truthy(_is_descendant(mesh, hit_pivot), "HitPivot carries visual mesh %s" % mesh.name, failures)
 	_assert_pivot_moves_geometry(right_hand, sword, "right hand moves sword", failures)
 	_assert_pivot_moves_geometry(left_hand, shield, "left hand moves shield", failures)
 	_assert_pivot_moves_geometry(torso_pivot, arm, "shoulder chain moves arm", failures)
@@ -96,6 +101,21 @@ func _assert_jewelry_emission(model: Node3D, failures: Array[String]) -> void:
 		if mesh != null:
 			var material := mesh.material_override as StandardMaterial3D
 			TestAssertions.truthy(material != null and material.emission_enabled, "jewelry emission is enabled: %s" % mesh_path, failures)
+
+func _assert_unequipped_jewelry_visibility(model: Node3D, profile: CharacterVisualProfile, failures: Array[String]) -> void:
+	for slot_id: StringName in [&"main_hand", &"off_hand", &"helmet", &"body_armour", &"gloves", &"boots", &"belt"]:
+		var default_root := _equipment_root(model, slot_id)
+		TestAssertions.truthy(default_root != null and default_root.visible, "%s default equipment root starts visible" % slot_id, failures)
+	for slot_id: StringName in [&"amulet", &"ring_left", &"ring_right"]:
+		var jewelry_root := _equipment_root(model, slot_id)
+		TestAssertions.truthy(jewelry_root != null and not jewelry_root.visible, "%s unequipped jewelry root starts hidden" % slot_id, failures)
+		TestAssertions.truthy(profile.get_available_equipment_visual(slot_id) != null, "%s jewelry visual remains available" % slot_id, failures)
+
+func _equipment_root(model: Node3D, slot_id: StringName) -> Node3D:
+	for node: Node in model.find_children("*", "Node3D", true, false):
+		if StringName(node.get_meta(&"equipment_slot", &"")) == slot_id:
+			return node as Node3D
+	return null
 
 func _assert_pivot_moves_geometry(pivot: Node3D, mesh: MeshInstance3D, description: String, failures: Array[String]) -> void:
 	var before := _model_transform(mesh).origin

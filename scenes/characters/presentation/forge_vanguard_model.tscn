@@ -367,6 +367,7 @@ metadata/palette_region = &"primary"
 
 [node name="RingLeftVisual" type="Node3D" parent="HitPivot/BodyPivot/HipsPivot/TorsoPivot/LeftShoulderPivot/LeftElbowPivot/LeftHandSocket"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.03, -0.24, 0)
+visible = false
 metadata/equipment_slot = &"ring_left"
 metadata/equipment_visual_id = &"forge_vanguard_ring_left"
 
@@ -442,6 +443,7 @@ metadata/palette_region = &"primary"
 
 [node name="RingRightVisual" type="Node3D" parent="HitPivot/BodyPivot/HipsPivot/TorsoPivot/RightShoulderPivot/RightElbowPivot/RightHandSocket"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.03, -0.24, 0)
+visible = false
 metadata/equipment_slot = &"ring_right"
 metadata/equipment_visual_id = &"forge_vanguard_ring_right"
 
@@ -528,6 +530,7 @@ metadata/palette_region = &"metal"
 
 [node name="AmuletVisual" type="Node3D" parent="HitPivot/BodyPivot/HipsPivot/TorsoPivot"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.2, -0.2)
+visible = false
 metadata/equipment_slot = &"amulet"
 metadata/equipment_visual_id = &"forge_vanguard_amulet"
 
