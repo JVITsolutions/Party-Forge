@@ -64,6 +64,7 @@ func select_leader_class(class_id: StringName) -> bool:
 		return false
 	active_run_rules = RunRulesSnapshot.from_settings(saved_settings)
 	_level_up_offer_state = LevelUpOfferState.new()
+	(get_node("HUD/LevelUpPanel") as LevelUpPanel).configure_reduced_motion(active_run_rules.reduced_motion())
 	experience_system.configure_multiplier(active_run_rules.experience_multiplier_percent())
 	developer_mode_badge.configure(active_run_rules)
 	party_manager.configure_capacity(active_run_rules.capacity_policy())

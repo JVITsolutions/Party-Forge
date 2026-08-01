@@ -1,9 +1,10 @@
-[gd_scene load_steps=5 format=3 uid="uid://c3wcr4a0c428h"]
+[gd_scene load_steps=6 format=3 uid="uid://c3wcr4a0c428h"]
 
 [ext_resource type="Script" path="res://scripts/ui/level_up_panel.gd" id="1_panel"]
 [ext_resource type="PackedScene" path="res://scenes/ui/upgrade_card.tscn" id="2_card"]
 [ext_resource type="PackedScene" path="res://scenes/ui/upgrade_recipient_picker.tscn" id="3_picker"]
 [ext_resource type="PackedScene" path="res://scenes/ui/upgrade_tooltip_panel.tscn" id="4_tooltip"]
+[ext_resource type="Script" path="res://scripts/ui/level_up_reveal_controller.gd" id="5_reveal"]
 
 [node name="LevelUpPanel" type="Control"]
 process_mode = 3
@@ -16,6 +17,9 @@ grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 0
 script = ExtResource("1_panel")
+
+[node name="RevealController" type="Node" parent="."]
+script = ExtResource("5_reveal")
 
 [node name="Backdrop" type="ColorRect" parent="."]
 layout_mode = 1

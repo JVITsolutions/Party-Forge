@@ -44,6 +44,13 @@ func bind_choice(
 	disabled = not disabled_reason.is_empty()
 
 
+func bind_preview(presentation: Dictionary) -> void:
+	_set_text("Content/Name", presentation.get("name", ""))
+	_set_text("Content/Scope", presentation.get("scope_badge", ""))
+	_set_text("Content/Rank", presentation.get("rank_text", ""))
+	_set_text("Content/Summary", presentation.get("summary", ""))
+
+
 func bound_choice() -> UpgradeChoice:
 	return _choice
 

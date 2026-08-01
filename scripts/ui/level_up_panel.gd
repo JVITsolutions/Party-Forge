@@ -20,10 +20,16 @@ var _pending_member_id := 0
 var _awaiting_application := false
 var _initial_focus_card: UpgradeCard
 var _tooltip_choice: UpgradeChoice
+var _reveal_controller: LevelUpRevealController
+var _final_bindings: Array[Dictionary] = []
+var _reduced_motion := true
 
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	_reveal_controller = get_node_or_null("RevealController") as LevelUpRevealController
+	if _reveal_controller != null and not _reveal_controller.resolved.is_connected(_on_reveal_resolved):
+		_reveal_controller.resolved.connect(_on_reveal_resolved)
 	_connect_cards()
 	_configure_card_focus_neighbors()
 	_connect_recipient_picker()
@@ -38,6 +44,20 @@ func _ready() -> void:
 	_apply_card_face_density(_current_viewport_width())
 
 
+func _process(delta: float) -> void:
+	if _reveal_controller == null:
+		return
+	_reveal_controller.advance(delta)
+	var pending_label := get_node_or_null("ContentPanel/OfferView/Content/PendingLevels") as Label
+	if pending_label == null:
+		return
+	if _reduced_motion or _reveal_controller.is_revealing():
+		pending_label.modulate.a = 1.0
+		return
+	var pulse := (sin(_reveal_controller.elapsed_phase() * TAU) + 1.0) * 0.5
+	pending_label.modulate.a = lerpf(0.75, 1.0, pulse)
+
+
 func configure(
 	catalog: GameCatalog,
 	upgrade_service: UpgradeApplicationService,
@@ -46,6 +66,13 @@ func configure(
 	_catalog = catalog
 	_upgrade_service = upgrade_service
 	_health_provider = health_provider
+
+
+func configure_reduced_motion(reduced_motion: bool) -> void:
+	_reduced_motion = reduced_motion
+	var pending_label := get_node_or_null("ContentPanel/OfferView/Content/PendingLevels") as Label
+	if pending_label != null and _reduced_motion:
+		pending_label.modulate.a = 1.0
 
 
 func show_choices(
@@ -77,21 +104,37 @@ func show_choices(
 	_pending_choice = null
 	_pending_member_id = 0
 	_awaiting_application = false
+	_initial_focus_card = null
 	selected_once = false
 	_hide_tooltip()
 	visible = true
 	_populate_offer_cards()
 	_populate_legacy_buttons()
 	_show_view(&"offer")
-	_focus_first_enabled_card()
+	if _reveal_controller != null:
+		var reveal_cards: Array[UpgradeCard] = []
+		for card_node: Node in get_node("ContentPanel/OfferView/Content/Cards").get_children():
+			if card_node is UpgradeCard and card_node.visible:
+				reveal_cards.append(card_node as UpgradeCard)
+		var preview_presentations: Array[Dictionary] = []
+		for binding: Dictionary in _final_bindings:
+			preview_presentations.append((binding.get("presentation", {}) as Dictionary).duplicate(true))
+		_reveal_controller.play(reveal_cards, _final_bindings, preview_presentations, _reduced_motion)
+	else:
+		_focus_first_enabled_card()
 
 
 func complete_selection() -> void:
 	_hide_tooltip()
+	if _reveal_controller != null:
+		_reveal_controller.reset()
 	_awaiting_application = false
 	_pending_choice = null
 	_pending_member_id = 0
 	visible = false
+	var pending_label := get_node_or_null("ContentPanel/OfferView/Content/PendingLevels") as Label
+	if pending_label != null:
+		pending_label.modulate.a = 1.0
 
 
 func reject_selection(reason: String) -> void:
@@ -120,11 +163,22 @@ func cancel_subflow() -> void:
 
 
 func _populate_offer_cards() -> void:
+	_final_bindings.clear()
 	var cards := get_node("ContentPanel/OfferView/Content/Cards").get_children()
 	for index: int in cards.size():
 		var card := cards[index] as UpgradeCard
 		var choice: UpgradeChoice = choices[index] if index < choices.size() else null
-		card.bind_choice(choice, _presentation_for(choice), _disabled_reason(choice))
+		if not card.visible:
+			continue
+		var presentation := _presentation_for(choice)
+		var disabled_reason := _disabled_reason(choice)
+		var final_binding := {
+			"choice": choice,
+			"presentation": presentation,
+			"disabled_reason": disabled_reason,
+		}
+		_final_bindings.append(final_binding)
+		card.bind_choice(choice, presentation, disabled_reason)
 
 
 func _presentation_for(choice: UpgradeChoice) -> Dictionary:
@@ -237,7 +291,7 @@ func _connect_confirmation() -> void:
 
 
 func _on_card_activated(choice: UpgradeChoice) -> void:
-	if _awaiting_application or choice == null:
+	if (_reveal_controller != null and _reveal_controller.is_revealing()) or _awaiting_application or choice == null:
 		return
 	_hide_tooltip()
 	if choice.requires_recipient():
@@ -299,6 +353,23 @@ func _show_view(view: StringName) -> void:
 	(get_node("ContentPanel/OfferView") as Control).visible = view == &"offer"
 	(get_node("ContentPanel/RecipientView") as Control).visible = view == &"recipient"
 	(get_node("ContentPanel/ConfirmationView") as Control).visible = view == &"confirmation"
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	if visible and _reveal_controller != null and _reveal_controller.is_revealing() and (
+		event.is_action_pressed(&"ui_accept")
+		or event.is_action_pressed(&"ui_cancel")
+	):
+		_reveal_controller.skip()
+		var viewport := get_viewport()
+		if viewport != null:
+			viewport.set_input_as_handled()
+		return
+
+
+func _on_reveal_resolved() -> void:
+	if visible and (get_node("ContentPanel/OfferView") as Control).visible:
+		_focus_first_enabled_card()
 
 
 func _focus_first_enabled_card() -> void:
@@ -427,7 +498,7 @@ func _populate_legacy_buttons() -> void:
 
 
 func _legacy_select(index: int) -> void:
-	if selected_once or index < 0 or index >= choices.size():
+	if (_reveal_controller != null and _reveal_controller.is_revealing()) or selected_once or index < 0 or index >= choices.size():
 		return
 	var button := get_node("Choices").get_child(index) as Button
 	if button.disabled:

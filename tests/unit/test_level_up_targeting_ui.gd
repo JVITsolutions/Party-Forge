@@ -9,6 +9,9 @@ func run() -> Array[String]:
 	_test_production_card_tooltip_composition(failures)
 	_test_tooltip_forced_lifecycle_cleanup(failures)
 	_test_pending_level_indicator(failures)
+	_test_reveal_gating_skip_focus_and_lifecycle(failures)
+	_test_pending_label_motion_policy(failures)
+	_test_run_snapshots_reduced_motion_for_reveals(failures)
 	return failures
 
 func _test_pending_level_indicator(failures: Array[String]) -> void:
@@ -45,6 +48,108 @@ func _test_pending_level_indicator(failures: Array[String]) -> void:
 	TestAssertions.equal(panel.find_children("PendingLevels", "Label", true, false).size(), 1, "queued offers reuse one pending-level indicator", failures)
 	panel.free()
 	party.free()
+
+func _test_reveal_gating_skip_focus_and_lifecycle(failures: Array[String]) -> void:
+	var catalog := GameCatalog.load_defaults()
+	var party := PartyManager.new()
+	party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
+	var choices: Array[UpgradeChoice] = [
+		UpgradeChoice.authored(catalog.upgrade_by_id(&"vanguard_wall")),
+		UpgradeChoice.authored(catalog.upgrade_by_id(&"vitality")),
+		UpgradeChoice.authored(catalog.upgrade_by_id(&"precision")),
+		UpgradeChoice.authored(catalog.upgrade_by_id(&"tempered_armor")),
+		UpgradeChoice.authored(catalog.upgrade_by_id(&"deadeye")),
+	]
+	var panel := _attached_panel()
+	TestAssertions.truthy(panel.has_method(&"configure_reduced_motion"), "panel accepts snapshotted reduced-motion policy", failures)
+	if not panel.has_method(&"configure_reduced_motion"):
+		_free_panel(panel)
+		party.free()
+		return
+	panel.call(&"configure_reduced_motion", false)
+	panel.show_choices(choices, party, {choices[0].key(): "At maximum rank."})
+	var controller := panel.get_node_or_null("RevealController")
+	TestAssertions.truthy(controller != null, "level-up scene composes reveal controller", failures)
+	if controller == null:
+		_free_panel(panel)
+		party.free()
+		return
+	var cards := panel.get_node("ContentPanel/OfferView/Content/Cards").get_children()
+	TestAssertions.truthy(controller.call(&"is_revealing"), "panel starts animated reveal", failures)
+	TestAssertions.equal(panel.get("_initial_focus_card"), null, "panel defers focus during reveal", failures)
+	for index: int in choices.size():
+		TestAssertions.truthy((cards[index] as UpgradeCard).disabled, "panel gates card %d during reveal" % index, failures)
+	panel.call(&"_on_card_activated", choices[1])
+	TestAssertions.equal(panel.get("_pending_choice"), null, "direct activation is gated during reveal", failures)
+
+	panel.call(&"_unhandled_input", _action_event(&"ui_accept"))
+	TestAssertions.truthy(not controller.call(&"is_revealing"), "ui_accept skips reveal", failures)
+	TestAssertions.equal(panel.get("_pending_choice"), null, "skip event cannot also activate a card", failures)
+	TestAssertions.equal(panel.get("_initial_focus_card"), cards[1], "resolve focuses first finally enabled card", failures)
+	TestAssertions.truthy((cards[0] as UpgradeCard).disabled, "resolve restores supplied disabled reason", failures)
+	TestAssertions.truthy(not (cards[1] as UpgradeCard).disabled, "resolve enables eligible card", failures)
+
+	panel.show_choices(choices, party)
+	TestAssertions.truthy(controller.call(&"is_revealing"), "next offer starts a fresh reveal", failures)
+	panel.call(&"_unhandled_input", _action_event(&"ui_cancel"))
+	TestAssertions.truthy(not controller.call(&"is_revealing"), "ui_cancel also skips reveal", failures)
+	TestAssertions.equal(panel.get("_pending_choice"), null, "cancel skip does not enter another view", failures)
+
+	panel.show_choices(choices, party)
+	panel.complete_selection()
+	TestAssertions.truthy(not controller.call(&"is_revealing"), "selection completion resets reveal lifecycle", failures)
+	controller.call(&"advance", 2.0)
+	TestAssertions.truthy(not panel.visible, "stale controller advance cannot reopen completed panel", failures)
+	_free_panel(panel)
+	party.free()
+
+func _test_pending_label_motion_policy(failures: Array[String]) -> void:
+	var catalog := GameCatalog.load_defaults()
+	var party := PartyManager.new()
+	party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
+	var choices: Array[UpgradeChoice] = [
+		UpgradeChoice.authored(catalog.upgrade_by_id(&"vanguard_wall")),
+		UpgradeChoice.authored(catalog.upgrade_by_id(&"vitality")),
+		UpgradeChoice.authored(catalog.upgrade_by_id(&"precision")),
+		UpgradeChoice.authored(catalog.upgrade_by_id(&"tempered_armor")),
+		UpgradeChoice.authored(catalog.upgrade_by_id(&"deadeye")),
+	]
+	var panel := _attached_panel()
+	if not panel.has_method(&"configure_reduced_motion"):
+		TestAssertions.truthy(false, "pending pulse panel supports reduced motion", failures)
+		_free_panel(panel)
+		party.free()
+		return
+	var label := panel.get_node("ContentPanel/OfferView/Content/PendingLevels") as Label
+	panel.call(&"configure_reduced_motion", false)
+	panel.show_choices(choices, party, {}, 2)
+	(panel.get_node("RevealController") as Node).call(&"skip")
+	panel.call(&"_process", 0.2)
+	var first_alpha := label.modulate.a
+	panel.call(&"_process", 0.2)
+	var second_alpha := label.modulate.a
+	TestAssertions.truthy(first_alpha >= 0.75 and first_alpha <= 1.0, "pending pulse stays within approved alpha range", failures)
+	TestAssertions.truthy(second_alpha >= 0.75 and second_alpha <= 1.0 and not is_equal_approx(first_alpha, second_alpha), "pending pulse oscillates after resolve", failures)
+
+	panel.call(&"configure_reduced_motion", true)
+	panel.show_choices(choices, party, {}, 2)
+	panel.call(&"_process", 0.4)
+	TestAssertions.near(label.modulate.a, 1.0, 0.001, "reduced motion keeps pending label fully opaque", failures)
+	_free_panel(panel)
+	party.free()
+
+func _test_run_snapshots_reduced_motion_for_reveals(failures: Array[String]) -> void:
+	var main := (load("res://scenes/game/main.tscn") as PackedScene).instantiate()
+	main.call(&"_ready")
+	var settings := PartyForgeSettings.new()
+	settings.reduced_motion = false
+	main.set("saved_settings", settings)
+	TestAssertions.truthy(main.call(&"select_leader_class", &"fighter"), "reduced-motion run fixture starts", failures)
+	var panel := main.get_node("HUD/LevelUpPanel") as LevelUpPanel
+	TestAssertions.equal(panel.get("_reduced_motion"), false, "run start configures reveal motion from snapshot", failures)
+	settings.reduced_motion = true
+	TestAssertions.equal(panel.get("_reduced_motion"), false, "reveal motion ignores later settings mutation", failures)
+	main.free()
 
 func _test_exact_offer_target_cancel_and_confirmation(failures: Array[String]) -> void:
 	var catalog := GameCatalog.load_defaults()
@@ -481,3 +586,9 @@ func _attached_panel() -> LevelUpPanel:
 
 func _free_panel(panel: LevelUpPanel) -> void:
 	panel.free()
+
+func _action_event(action: StringName) -> InputEventAction:
+	var event := InputEventAction.new()
+	event.action = action
+	event.pressed = true
+	return event
