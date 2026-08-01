@@ -5,6 +5,13 @@ const COMPANION_SCENE := preload("res://scenes/characters/companion.tscn")
 
 var slash_requests := 0
 
+class PresentationProbe extends CharacterPresentation:
+	var flash_hit_requests := 0
+
+	func flash_hit() -> void:
+		flash_hit_requests += 1
+		super.flash_hit()
+
 func run() -> Array[String]:
 	var failures: Array[String] = []
 	_test_scene_hosts_and_collision_contracts(failures)
@@ -68,14 +75,23 @@ func _test_primary_attack_keeps_executor_and_uses_slash(failures: Array[String])
 
 func _test_damage_downed_and_revival_feedback(failures: Array[String]) -> void:
 	var root := _new_root("PartyActorFeedbackPresentationTest")
-	var fighter := _new_actor(root, COMPANION_SCENE, _definition(&"fighter"), false)
+	var fighter := COMPANION_SCENE.instantiate() as PartyActor
+	var scene_presentation := fighter.get_node("Presentation") as CharacterPresentation
+	var presentation := PresentationProbe.new()
+	presentation.name = scene_presentation.name
+	presentation.fallback_mesh_path = scene_presentation.fallback_mesh_path
+	fighter.remove_child(scene_presentation)
+	scene_presentation.free()
+	fighter.add_child(presentation)
+	root.add_child(fighter)
+	fighter.configure(PartyMemberState.new(1, _definition(&"fighter"), false))
 	var health := fighter.get_node("HealthComponent") as HealthComponent
-	var presentation := fighter.get_node_or_null("Presentation") as CharacterPresentation
-	var model := presentation.active_model if presentation != null else null
+	var model := presentation.active_model
 	var primary_mesh := _first_primary_mesh(model)
 	var original_color := (primary_mesh.material_override as StandardMaterial3D).albedo_color if primary_mesh != null else Color.TRANSPARENT
 	health.apply_damage(1.0)
 	TestAssertions.truthy(fighter.damage_flash_remaining > 0.0, "damage starts actor damage flash timer", failures)
+	TestAssertions.equal(presentation.flash_hit_requests, 1, "one damage event requests hit flinch once", failures)
 	TestAssertions.near(float(model.get("_hit_weight")) if model != null else 0.0, 1.0, 0.001, "damage requests hit flinch feedback", failures)
 	fighter.call("_advance_visual_feedback", 0.11)
 	if primary_mesh != null:

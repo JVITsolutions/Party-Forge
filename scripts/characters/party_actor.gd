@@ -261,9 +261,7 @@ func _on_visual_health_changed(current: float, _maximum: float) -> void:
     if current < last_visual_health:
         damage_flash_remaining = 0.1
         var presentation := _presentation()
-        if presentation != null and presentation.active_profile != null:
-            presentation.flash_hit()
-        else:
+        if presentation == null or presentation.active_profile == null:
             _set_visual_color(Color.WHITE)
     last_visual_health = current
 
