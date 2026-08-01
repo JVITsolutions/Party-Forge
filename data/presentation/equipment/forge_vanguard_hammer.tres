@@ -1,0 +1,10 @@
+[gd_resource type="Resource" script_class="EquipmentVisualDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/presentation/equipment_visual_definition.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"forge_vanguard_hammer"
+slot_id = &"main_hand"
+geometry_key = &"forge_vanguard_hammer"
+visual_channels = [&"geometry"]

@@ -38,7 +38,7 @@ func _assert_base_body(preset_id: StringName, paths: Dictionary, failures: Array
 	TestAssertions.equal(profile.validate(), PackedStringArray(), "%s base profile validates" % preset_id, failures)
 	TestAssertions.equal(profile.default_body_preset, preset_id, "%s base profile selects its body" % preset_id, failures)
 	TestAssertions.truthy(profile.default_equipment_visuals.is_empty(), "%s base profile has no default equipment" % preset_id, failures)
-	TestAssertions.equal(profile.available_equipment_visuals.size(), EquipmentSlotCatalog.SLOT_IDS.size(), "%s base profile exposes all slot visuals" % preset_id, failures)
+	TestAssertions.equal(profile.available_equipment_visuals.size(), EquipmentSlotCatalog.SLOT_IDS.size() + 1, "%s base profile exposes all slot visuals" % preset_id, failures)
 	var model := scene.instantiate() as Node3D
 	TestAssertions.truthy(model != null and model.has_method(&"set_body_preset") and model.has_method(&"set_palette") and model.has_method(&"apply_equipment_visual") and model.has_method(&"clear_equipment_visual") and model.has_method(&"play_action"), "%s base scene retains public model API" % preset_id, failures)
 	if model == null:
@@ -46,8 +46,15 @@ func _assert_base_body(preset_id: StringName, paths: Dictionary, failures: Array
 	for pivot_path: String in PIVOT_PATHS:
 		TestAssertions.truthy(model.get_node_or_null(pivot_path) != null, "%s retains pivot %s" % [preset_id, pivot_path], failures)
 	for slot_id: StringName in EquipmentSlotCatalog.SLOT_IDS:
-		var equipment_root := _equipment_root(model, slot_id)
-		TestAssertions.truthy(equipment_root != null and not equipment_root.visible, "%s base scene hides %s by default" % [preset_id, slot_id], failures)
+		var equipment_roots := _equipment_roots(model, slot_id)
+		var expected_count := 2 if slot_id == &"main_hand" else 1
+		var visual_ids: Array[StringName] = []
+		for equipment_root: Node3D in equipment_roots:
+			var visual_id := StringName(equipment_root.get_meta(&"equipment_visual_id", &""))
+			if not visual_ids.has(visual_id):
+				visual_ids.append(visual_id)
+			TestAssertions.truthy(not equipment_root.visible, "%s base scene hides %s variant %s" % [preset_id, slot_id, equipment_root.name], failures)
+		TestAssertions.equal(visual_ids.size(), expected_count, "%s base scene retains %s variants" % [preset_id, slot_id], failures)
 		TestAssertions.truthy(profile.get_available_equipment_visual(slot_id) != null, "%s base profile exposes %s" % [preset_id, slot_id], failures)
 	for body_id: StringName in CharacterVisualProfile.BODY_PRESETS:
 		for body_node: Node3D in _body_nodes(model, body_id):
@@ -59,7 +66,7 @@ func _assert_base_body(preset_id: StringName, paths: Dictionary, failures: Array
 	TestAssertions.truthy(visible_body_meshes >= 11, "%s base scene retains covered mannequin geometry" % preset_id, failures)
 	_assert_neutral_body_materials(model, preset_id, failures)
 	var bounds: AABB = model.call(&"visual_bounds") as AABB
-	TestAssertions.truthy(bounds.size.y >= 1.6 and bounds.size.y <= 1.85, "%s base body preserves actor scale" % preset_id, failures)
+	TestAssertions.truthy(bounds.size.y >= 1.6 and bounds.size.y <= 1.9, "%s base body preserves actor scale" % preset_id, failures)
 	TestAssertions.near(bounds.position.y, 0.0, 0.05, "%s base body remains floor aligned" % preset_id, failures)
 	var player := model.get_node_or_null("AnimationPlayer") as AnimationPlayer
 	for animation_id: StringName in ANIMATION_IDS:
@@ -83,15 +90,25 @@ func _assert_neutral_body_materials(model: Node3D, preset_id: StringName, failur
 	TestAssertions.truthy(neutral_meshes >= 11, "%s base body neutralizes every visible body mesh" % preset_id, failures)
 
 func _assert_equipped_source_material_contract(failures: Array[String]) -> void:
-	var source_text := FileAccess.get_file_as_string("res://scenes/characters/presentation/forge_vanguard_model.tscn")
-	TestAssertions.truthy(source_text.contains("[sub_resource type=\"StandardMaterial3D\" id=\"StandardMaterial3D_kedvv\"]\nalbedo_color = Color(0.1882353, 0.22745098, 0.2784314, 1)\nmetallic = 0.7"), "base generation leaves equipped Forge Vanguard torso metal unchanged", failures)
-	TestAssertions.truthy(source_text.contains("[sub_resource type=\"StandardMaterial3D\" id=\"StandardMaterial3D_xrbkh\"]\nalbedo_color = Color(0.2901961, 0.20392157, 0.14901961, 1)"), "base generation leaves equipped Forge Vanguard leather unchanged", failures)
+	var source_scene := load("res://scenes/characters/presentation/forge_vanguard_model.tscn") as PackedScene
+	var source_model := source_scene.instantiate() as Node3D if source_scene != null else null
+	TestAssertions.truthy(source_model != null, "equipped Forge Vanguard source scene remains loadable", failures)
+	if source_model == null:
+		return
+	var torso := source_model.get_node_or_null("HitPivot/BodyPivot/HipsPivot/TorsoPivot/MasculineTorso/ReadableChannel") as MeshInstance3D
+	var foot := source_model.get_node_or_null("HitPivot/BodyPivot/HipsPivot/LeftHipPivot/LeftKneePivot/LeftFootPivot/MasculineFoot/ReadableChannel") as MeshInstance3D
+	var torso_material := torso.material_override as StandardMaterial3D if torso != null else null
+	var foot_material := foot.material_override as StandardMaterial3D if foot != null else null
+	TestAssertions.truthy(torso_material != null and torso_material.albedo_color.is_equal_approx(Color(0.1882353, 0.22745098, 0.2784314, 1)) and is_equal_approx(torso_material.metallic, 0.7), "base generation leaves equipped Forge Vanguard torso metal unchanged", failures)
+	TestAssertions.truthy(foot_material != null and foot_material.albedo_color.is_equal_approx(Color(0.2901961, 0.20392157, 0.14901961, 1)), "base generation leaves equipped Forge Vanguard leather unchanged", failures)
+	source_model.free()
 
-func _equipment_root(model: Node3D, slot_id: StringName) -> Node3D:
+func _equipment_roots(model: Node3D, slot_id: StringName) -> Array[Node3D]:
+	var roots: Array[Node3D] = []
 	for node: Node in model.find_children("*", "Node3D", true, false):
 		if StringName(node.get_meta(&"equipment_slot", &"")) == slot_id:
-			return node as Node3D
-	return null
+			roots.append(node as Node3D)
+	return roots
 
 func _body_nodes(model: Node3D, body_id: StringName) -> Array[Node3D]:
 	var nodes: Array[Node3D] = []

@@ -14,7 +14,8 @@ func _initialize() -> void:
 	var limb_pivots := _build_limb_pivots(hips, torso)
 	_add_body(torso, head, limb_pivots, hips, &"masculine", 0.82)
 	_add_body(torso, head, limb_pivots, hips, &"feminine", 0.72)
-	_add_equipment(limb_pivots[&"right_hand"], &"main_hand", &"forge_vanguard_sword", Vector3(0.03, 0.11, 0), Vector3(0.09, 0.92, 0.07), &"metal")
+	_add_hammer(limb_pivots[&"right_hand"])
+	_add_sword(limb_pivots[&"right_hand"])
 	_add_equipment(limb_pivots[&"left_hand"], &"off_hand", &"forge_vanguard_shield", Vector3(-0.04, 0.21, 0.02), Vector3(0.68, 0.68, 0.14), &"metal")
 	_add_equipment(head, &"helmet", &"forge_vanguard_helmet", Vector3.ZERO, Vector3(0.38, 0.34, 0.34), &"metal")
 	_add_equipment(torso, &"body_armour", &"forge_vanguard_armour", Vector3(0, 0.06, 0), Vector3(0.76, 0.56, 0.36), &"primary")
@@ -161,17 +162,47 @@ func _body_mesh(parent: Node3D, preset_id: StringName, part_name: StringName, po
 	_mesh(alternative, &"ReadableChannel", position, size, region)
 
 func _add_equipment(parent: Node3D, slot_id: StringName, visual_id: StringName, position: Vector3, size: Vector3, region: StringName, emits: bool = false, starts_visible: bool = true) -> void:
+	var equipment := _equipment_root(parent, _equipment_node_name(slot_id), slot_id, visual_id, position, starts_visible)
+	_mesh(equipment, &"ReadableChannel", Vector3.ZERO, size, region, emits)
+	if slot_id == &"body_armour":
+		_mesh(equipment, &"LeftShoulderPlate", Vector3(-0.42, 0.24, 0), Vector3(0.12, 0.20, 0.38), &"metal")
+		_mesh(equipment, &"RightShoulderPlate", Vector3(0.42, 0.24, 0), Vector3(0.12, 0.20, 0.38), &"metal")
+
+func _equipment_root(parent: Node3D, node_name: StringName, slot_id: StringName, visual_id: StringName, position: Vector3, starts_visible: bool) -> Node3D:
 	var equipment := Node3D.new()
-	equipment.name = _equipment_node_name(slot_id)
+	equipment.name = node_name
 	equipment.position = position
 	equipment.visible = starts_visible
 	equipment.set_meta(&"equipment_slot", slot_id)
 	equipment.set_meta(&"equipment_visual_id", visual_id)
 	parent.add_child(equipment)
-	_mesh(equipment, &"ReadableChannel", Vector3.ZERO, size, region, emits)
-	if slot_id == &"body_armour":
-		_mesh(equipment, &"LeftShoulderPlate", Vector3(-0.42, 0.24, 0), Vector3(0.12, 0.20, 0.38), &"metal")
-		_mesh(equipment, &"RightShoulderPlate", Vector3(0.42, 0.24, 0), Vector3(0.12, 0.20, 0.38), &"metal")
+	return equipment
+
+func _add_hammer(parent: Node3D) -> void:
+	var hammer := _equipment_root(parent, &"HammerVisual", &"main_hand", &"forge_vanguard_hammer", Vector3(0.03, 0.11, 0), false)
+	_mesh(hammer, &"ReadableChannel", Vector3.ZERO, Vector3(0.09, 0.92, 0.07), &"metal")
+
+func _add_sword(parent: Node3D) -> void:
+	var sword := _equipment_root(parent, &"SwordVisual", &"main_hand", &"forge_vanguard_sword", Vector3(0.03, 0.09, 0), true)
+	_mesh(sword, &"Blade", Vector3(0, 0.38, 0), Vector3(0.10, 0.68, 0.035), &"metal")
+	_sword_tip(sword, Vector3(0, 0.80, 0))
+	_mesh(sword, &"Crossguard", Vector3(0, 0.02, 0), Vector3(0.30, 0.055, 0.08), &"metal")
+	_mesh(sword, &"Grip", Vector3(0, -0.11, 0), Vector3(0.065, 0.22, 0.065), &"leather")
+	_mesh(sword, &"Pommel", Vector3(0, -0.25, 0), Vector3(0.09, 0.08, 0.08), &"metal")
+
+func _sword_tip(parent: Node3D, position: Vector3) -> void:
+	var mesh_instance := MeshInstance3D.new()
+	mesh_instance.name = &"Tip"
+	mesh_instance.position = position
+	var tip := CylinderMesh.new()
+	tip.top_radius = 0.0
+	tip.bottom_radius = 0.065
+	tip.height = 0.16
+	tip.radial_segments = 4
+	mesh_instance.mesh = tip
+	mesh_instance.material_override = _material(&"metal")
+	mesh_instance.set_meta(&"palette_region", &"metal")
+	parent.add_child(mesh_instance)
 
 func _equipment_node_name(slot_id: StringName) -> StringName:
 	match slot_id:
