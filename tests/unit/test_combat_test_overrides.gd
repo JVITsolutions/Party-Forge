@@ -31,6 +31,8 @@ func _test_developer_run_wires_party_only(failures: Array[String]) -> void:
 	var director := main.get("spawn_director") as SpawnDirector
 	TestAssertions.equal(director.call(&"advance_time", 10.0), 0, "active run density reaches scheduled spawning", failures)
 	TestAssertions.near(director.elapsed_seconds, 10.0, 0.001, "zero-density active run still advances schedule time", failures)
+	var direct_boltcaster := director.spawn_enemy(&"boltcaster")
+	TestAssertions.truthy(direct_boltcaster is Boltcaster, "zero density preserves direct Boltcaster spawning", failures)
 
 	var leader := main.get("leader") as PartyActor
 	var leader_health := leader.get_node("HealthComponent") as HealthComponent

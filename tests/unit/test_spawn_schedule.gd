@@ -43,14 +43,14 @@ func run() -> Array[String]:
 
 func _test_schedule_boundaries(failures: Array[String]) -> void:
     var schedule: Script = load("res://scripts/game/spawn_schedule.gd") as Script
-    _assert_band(schedule.call("sample", 0.0), 1.25, 100, 0, "zero", failures)
-    _assert_band(schedule.call("sample", 59.999), 1.25, 100, 0, "before 60", failures)
-    _assert_band(schedule.call("sample", 60.0), 0.9, 80, 20, "at 60", failures)
-    _assert_band(schedule.call("sample", 149.999), 0.9, 80, 20, "before 150", failures)
-    _assert_band(schedule.call("sample", 150.0), 0.65, 65, 35, "at 150", failures)
-    _assert_band(schedule.call("sample", 239.999), 0.65, 65, 35, "before 240", failures)
-    _assert_band(schedule.call("sample", 240.0), 0.45, 55, 45, "at 240", failures)
-    _assert_band(schedule.call("sample", 299.999), 0.45, 55, 45, "before 300", failures)
+    _assert_band(schedule.call("sample", 0.0), 0.56, 100, 0, 0, "zero", failures)
+    _assert_band(schedule.call("sample", 59.999), 0.56, 100, 0, 0, "before 60", failures)
+    _assert_band(schedule.call("sample", 60.0), 0.40, 75, 25, 0, "at 60", failures)
+    _assert_band(schedule.call("sample", 149.999), 0.40, 75, 25, 0, "before 150", failures)
+    _assert_band(schedule.call("sample", 150.0), 0.29, 60, 32, 8, "at 150", failures)
+    _assert_band(schedule.call("sample", 239.999), 0.29, 60, 32, 8, "before 240", failures)
+    _assert_band(schedule.call("sample", 240.0), 0.20, 50, 35, 15, "at 240", failures)
+    _assert_band(schedule.call("sample", 299.999), 0.20, 50, 35, 15, "before 300", failures)
     TestAssertions.equal(schedule.call("sample", -0.001), null, "negative time has no ordinary band", failures)
     TestAssertions.equal(schedule.call("sample", 300.0), null, "300 seconds has no ordinary band", failures)
 
@@ -260,11 +260,19 @@ func _test_seeded_director_and_stop(failures: Array[String]) -> void:
     second.call("configure", 4242, leader, experience, markers, null, root, root, 1.0, CombatRng.new(4242), types)
     var first_ids: Array[StringName] = []
     var second_ids: Array[StringName] = []
-    for index: int in range(40):
-        first_ids.append(first.call("sample_enemy_id", 75.0))
-        second_ids.append(second.call("sample_enemy_id", 75.0))
+    for index: int in range(2000):
+        first_ids.append(first.call("sample_enemy_id", 150.0))
+        second_ids.append(second.call("sample_enemy_id", 150.0))
     TestAssertions.equal(first_ids, second_ids, "spawn selection is repeatable for a local seed", failures)
-    TestAssertions.truthy(&"swarmer" in first_ids and &"spitter" in first_ids, "60-second band can produce both enemy types", failures)
+    TestAssertions.truthy(&"swarmer" in first_ids and &"boltcaster" in first_ids and &"spitter" in first_ids, "150-second band can produce all three enemy types", failures)
+    var swarmer_ratio := float(first_ids.count(&"swarmer")) / float(first_ids.size())
+    var boltcaster_ratio := float(first_ids.count(&"boltcaster")) / float(first_ids.size())
+    var spitter_ratio := float(first_ids.count(&"spitter")) / float(first_ids.size())
+    TestAssertions.near(swarmer_ratio, 0.60, 0.04, "seeded samples follow the Swarmer weight", failures)
+    TestAssertions.near(boltcaster_ratio, 0.32, 0.04, "seeded samples follow the Boltcaster weight", failures)
+    TestAssertions.near(spitter_ratio, 0.08, 0.025, "seeded samples follow the Spitter weight", failures)
+    var invalid_band := SpawnSchedule.SpawnBand.new(1.0, 0, 0, 0)
+    TestAssertions.equal(first.call("_sample_enemy_id_from_band", invalid_band), &"", "non-positive total weight selects no enemy", failures)
     first.set("elapsed_seconds", 299.9)
     first.call("advance_time", 0.2)
     TestAssertions.near(float(first.get("elapsed_seconds")), 300.1, 0.001, "director clock can cross ordinary spawn stop", failures)
@@ -320,7 +328,7 @@ func _test_density_adjusted_schedule(failures: Array[String]) -> void:
     var normal: Node = director_script.new() as Node
     root.add_child(normal)
     normal.call("configure", 11, leader, experience, markers, null, root, root, 1.0, CombatRng.new(11), types, 100)
-    TestAssertions.equal(normal.call("advance_time", 1.26), 2, "100 percent preserves baseline schedule including initial spawn", failures)
+    TestAssertions.equal(normal.call("advance_time", 1.26), 3, "100 percent preserves retuned baseline schedule including initial spawn", failures)
 
     var extreme: Node = director_script.new() as Node
     root.add_child(extreme)
@@ -346,12 +354,13 @@ func _test_pickup_upgrade_reaches_existing_orbs(failures: Array[String]) -> void
     TestAssertions.near(float(orb.get("pickup_radius_multiplier")), 2.5, 0.001, "pickup upgrade propagates to existing XP orbs", failures)
     root.free()
 
-func _assert_band(band: Variant, interval: float, swarmer: int, spitter: int, label: String, failures: Array[String]) -> void:
+func _assert_band(band: Variant, interval: float, swarmer: int, boltcaster: int, spitter: int, label: String, failures: Array[String]) -> void:
     TestAssertions.truthy(band != null, "%s returns a band" % label, failures)
     if band == null:
         return
     TestAssertions.near(float(band.get("interval")), interval, 0.001, "%s interval" % label, failures)
     TestAssertions.equal(int(band.get("swarmer_weight")), swarmer, "%s Swarmer weight" % label, failures)
+    TestAssertions.equal(int(band.get("boltcaster_weight")), boltcaster, "%s Boltcaster weight" % label, failures)
     TestAssertions.equal(int(band.get("spitter_weight")), spitter, "%s Spitter weight" % label, failures)
 
 func _new_root(root_name: String) -> Node3D:
