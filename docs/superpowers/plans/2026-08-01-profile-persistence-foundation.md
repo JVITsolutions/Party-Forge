@@ -377,6 +377,8 @@ func run() -> Array[String]:
 	var failures: Array[String] = []
 	_cleanup()
 	_test_round_trip_and_backup_recovery(failures)
+	_test_backup_only_is_discoverable(failures)
+	_test_corrupt_primary_is_preserved_before_resave(failures)
 	_test_failed_promotion_preserves_primary(failures)
 	_test_missing_profile_is_distinct(failures)
 	_cleanup()
@@ -408,6 +410,36 @@ func _test_failed_promotion_preserves_primary(failures: Array[String]) -> void:
 	changed.display_name = "Changed"
 	TestAssertions.truthy(not failing.save_profile(changed, ROOT).is_empty(), "failed promotion reports error", failures)
 	TestAssertions.equal(good.load_profile(original.profile_id, ROOT).profile.display_name, "Original", "failed promotion preserves primary", failures)
+
+func _test_backup_only_is_discoverable(failures: Array[String]) -> void:
+	var store := ProfileStore.new()
+	var profile := ProfileState.new_profile("profile-backup01", "Backup", 3000)
+	TestAssertions.equal(store.save_profile(profile, ROOT), "", "backup-only fixture first save succeeds", failures)
+	profile.gold = 2
+	profile.updated_at_unix = 3001
+	TestAssertions.equal(store.save_profile(profile, ROOT), "", "backup-only fixture creates backup", failures)
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(store.profile_path(profile.profile_id, ROOT)))
+	TestAssertions.truthy(profile.profile_id in store.profile_ids(ROOT), "backup-only profile remains discoverable", failures)
+
+func _test_corrupt_primary_is_preserved_before_resave(failures: Array[String]) -> void:
+	var store := ProfileStore.new()
+	var profile := ProfileState.new_profile("profile-corrupt1", "Corrupt", 4000)
+	TestAssertions.equal(store.save_profile(profile, ROOT), "", "corrupt fixture first save succeeds", failures)
+	profile.gold = 2
+	profile.updated_at_unix = 4001
+	TestAssertions.equal(store.save_profile(profile, ROOT), "", "corrupt fixture creates verified backup", failures)
+	var primary_path := store.profile_path(profile.profile_id, ROOT)
+	var corrupt := FileAccess.open(primary_path, FileAccess.WRITE)
+	corrupt.store_string("corrupt original bytes")
+	corrupt.close()
+	var recovered := store.load_profile(profile.profile_id, ROOT)
+	TestAssertions.truthy(recovered.ok() and recovered.recovered_from_backup, "fixture recovers backup", failures)
+	recovered.profile.gold = 3
+	recovered.profile.updated_at_unix = 4002
+	TestAssertions.equal(store.save_profile(recovered.profile, ROOT), "", "recovered profile resaves", failures)
+	var artifacts := DirAccess.get_files_at(ROOT)
+	TestAssertions.truthy(artifacts.any(func(name: String) -> bool: return name.begins_with("profile-corrupt1.json.corrupt-")), "corrupt primary is preserved for diagnosis", failures)
+	TestAssertions.equal(store.load_profile(profile.profile_id, ROOT).profile.gold, 3, "resaved primary is current", failures)
 
 func _test_missing_profile_is_distinct(failures: Array[String]) -> void:
 	var missing := ProfileStore.new().load_profile("profile-missing1", ROOT)
@@ -483,25 +515,41 @@ func save_document(path: String, document: Dictionary, validator: Callable) -> S
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(temporary))
 		return "JSON_STORE_SAVE_ERROR path=%s stage=verify-temporary reason=%s" % [path, temporary_result.error]
 	var had_previous := FileAccess.file_exists(path)
-	if FileAccess.file_exists(backup):
-		var remove_backup_error := DirAccess.remove_absolute(ProjectSettings.globalize_path(backup))
-		if remove_backup_error != OK:
-			DirAccess.remove_absolute(ProjectSettings.globalize_path(temporary))
-			return "JSON_STORE_SAVE_ERROR path=%s stage=remove-old-backup code=%d" % [path, remove_backup_error]
+	var previous_was_valid := false
+	var preserved_corrupt := ""
 	if had_previous:
-		var backup_error := DirAccess.rename_absolute(absolute_target, ProjectSettings.globalize_path(backup))
-		if backup_error != OK:
-			DirAccess.remove_absolute(ProjectSettings.globalize_path(temporary))
-			return "JSON_STORE_SAVE_ERROR path=%s stage=backup code=%d" % [path, backup_error]
+		var previous := _load_one(path, validator)
+		previous_was_valid = previous.ok()
+		if previous_was_valid:
+			if FileAccess.file_exists(backup):
+				var remove_backup_error := DirAccess.remove_absolute(ProjectSettings.globalize_path(backup))
+				if remove_backup_error != OK:
+					DirAccess.remove_absolute(ProjectSettings.globalize_path(temporary))
+					return "JSON_STORE_SAVE_ERROR path=%s stage=remove-old-backup code=%d" % [path, remove_backup_error]
+			var backup_error := DirAccess.rename_absolute(absolute_target, ProjectSettings.globalize_path(backup))
+			if backup_error != OK:
+				DirAccess.remove_absolute(ProjectSettings.globalize_path(temporary))
+				return "JSON_STORE_SAVE_ERROR path=%s stage=backup code=%d" % [path, backup_error]
+		else:
+			var verified_backup := _load_one(backup, validator)
+			if not verified_backup.ok():
+				DirAccess.remove_absolute(ProjectSettings.globalize_path(temporary))
+				return "JSON_STORE_SAVE_ERROR path=%s stage=validate-existing primary=%s backup=%s" % [path, previous.error, verified_backup.error]
+			preserved_corrupt = "%s.corrupt-%d" % [path, int(Time.get_unix_time_from_system())]
+			var preserve_error := DirAccess.rename_absolute(absolute_target, ProjectSettings.globalize_path(preserved_corrupt))
+			if preserve_error != OK:
+				DirAccess.remove_absolute(ProjectSettings.globalize_path(temporary))
+				return "JSON_STORE_SAVE_ERROR path=%s stage=preserve-corrupt code=%d" % [path, preserve_error]
+			push_warning("JSON_STORE_CORRUPT_PRIMARY_PRESERVED path=%s artifact=%s" % [path, preserved_corrupt])
 	var promote_error: Error = _promote_file.call(temporary, path) if _promote_file.is_valid() else _promote(temporary, path)
 	if promote_error != OK:
-		var restore_after_promote := _restore_backup(path, backup, had_previous)
+		var restore_after_promote := _restore_backup(path, backup, had_previous, previous_was_valid)
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(temporary))
 		return "JSON_STORE_SAVE_ERROR path=%s stage=promote code=%d restore_code=%d" % [path, promote_error, restore_after_promote]
 	var promoted := _load_one(path, validator)
 	if not promoted.ok():
 		DirAccess.remove_absolute(absolute_target)
-		var restore_after_verify := _restore_backup(path, backup, had_previous)
+		var restore_after_verify := _restore_backup(path, backup, had_previous, previous_was_valid)
 		return "JSON_STORE_SAVE_ERROR path=%s stage=verify-promoted restore_code=%d reason=%s" % [path, restore_after_verify, promoted.error]
 	return ""
 
@@ -549,10 +597,18 @@ func _load_one(path: String, validator: Callable) -> JsonDocumentResult:
 	result.document = document
 	return result
 
-func _restore_backup(path: String, backup: String, had_previous: bool) -> Error:
+func _restore_backup(path: String, backup: String, had_previous: bool, previous_was_valid: bool) -> Error:
 	if not had_previous:
 		return OK
-	return DirAccess.rename_absolute(ProjectSettings.globalize_path(backup), ProjectSettings.globalize_path(path))
+	if previous_was_valid:
+		return DirAccess.rename_absolute(ProjectSettings.globalize_path(backup), ProjectSettings.globalize_path(path))
+	var bytes := FileAccess.get_file_as_bytes(backup)
+	var restored := FileAccess.open(path, FileAccess.WRITE)
+	if restored == null:
+		return FileAccess.get_open_error()
+	restored.store_buffer(bytes)
+	restored.close()
+	return OK
 
 func _promote(temporary: String, target: String) -> Error:
 	return DirAccess.rename_absolute(ProjectSettings.globalize_path(temporary), ProjectSettings.globalize_path(target))
@@ -606,8 +662,13 @@ func profile_ids(root: String = DEFAULT_ROOT) -> PackedStringArray:
 	if directory == null:
 		return result
 	for name: String in directory.get_files():
+		var profile_id := ""
 		if name.ends_with(".json") and name != "profile_index.json":
-			result.append(name.trim_suffix(".json"))
+			profile_id = name.trim_suffix(".json")
+		elif name.ends_with(".json.bak") and name != "profile_index.json.bak":
+			profile_id = name.trim_suffix(".json.bak")
+		if not profile_id.is_empty() and profile_id not in result:
+			result.append(profile_id)
 	result.sort()
 	return result
 ```
