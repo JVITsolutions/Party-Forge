@@ -99,8 +99,8 @@ func _run() -> void:
 				)
 		panel.configure_reduced_motion(true)
 		panel.show_choices(choices, party)
-		await _wait_for_layout()
 		_assert(not reveal.is_revealing(), "reduced motion resolves directly at %dx%d" % [viewport_size.x, viewport_size.y])
+		await _wait_for_layout()
 		if visible_cards.size() == 5:
 			_assert(viewport.gui_get_focus_owner() == visible_cards[0], "reduced motion focuses Card1 at %dx%d" % [viewport_size.x, viewport_size.y])
 			for index: int in visible_cards.size():
