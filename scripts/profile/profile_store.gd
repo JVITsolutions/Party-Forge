@@ -31,11 +31,11 @@ func load_profile(profile_id: String, root: String = DEFAULT_ROOT) -> ProfileLoa
 
 func profile_ids(root: String = DEFAULT_ROOT) -> PackedStringArray:
 	var result := PackedStringArray()
+	if not DirAccess.dir_exists_absolute(ProjectSettings.globalize_path(root)):
+		return result
 	var directory := DirAccess.open(root)
 	if directory == null:
-		var open_error := DirAccess.get_open_error()
-		if open_error not in [ERR_FILE_NOT_FOUND, ERR_DOES_NOT_EXIST]:
-			push_error("PROFILE_STORE_LIST_ERROR root=%s code=%d" % [root, open_error])
+		push_error("PROFILE_STORE_LIST_ERROR root=%s code=%d" % [root, DirAccess.get_open_error()])
 		return result
 	for name: String in directory.get_files():
 		var profile_id := ""

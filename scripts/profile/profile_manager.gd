@@ -20,8 +20,11 @@ func bootstrap(root: String = ProfileStore.DEFAULT_ROOT) -> String:
 	_root = root
 	_profiles.clear()
 	_index = ProfileIndex.new()
-	var mkdir_error := DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(_root))
-	if mkdir_error not in [OK, ERR_ALREADY_EXISTS]:
+	var globalized_root := ProjectSettings.globalize_path(_root)
+	var mkdir_error := DirAccess.make_dir_recursive_absolute(globalized_root)
+	if not DirAccess.dir_exists_absolute(globalized_root):
+		if FileAccess.file_exists(_root) or mkdir_error in [OK, ERR_ALREADY_EXISTS]:
+			return "PROFILE_BOOTSTRAP_ERROR root=%s stage=validate-root reason=path is not a directory" % _root
 		return "PROFILE_BOOTSTRAP_ERROR root=%s stage=mkdir code=%d" % [_root, mkdir_error]
 	var diagnostics: Array[String] = []
 	for profile_id: String in _profile_store.profile_ids(_root):
@@ -68,11 +71,15 @@ func create_profile(display_name: String, now_unix: int = -1) -> ProfileOperatio
 			result.error = "PROFILE_CREATE_ERROR reason=name already exists"
 			return result
 	var profile_id := _next_profile_id()
-	if _profiles.has(profile_id):
-		result.error = "PROFILE_CREATE_ERROR profile=%s reason=id collision" % profile_id
-		return result
 	var timestamp := now_unix if now_unix >= 0 else int(Time.get_unix_time_from_system())
 	var profile := ProfileState.new_profile(profile_id, clean_name, timestamp)
+	var validation_error := ProfileCodec.validate_profile(profile)
+	if not validation_error.is_empty():
+		result.error = validation_error
+		return result
+	if _profiles.has(profile_id) or _profile_artifact_exists(profile_id):
+		result.error = "PROFILE_CREATE_ERROR profile=%s reason=id collision" % profile_id
+		return result
 	var save_error := _profile_store.save_profile(profile, _root)
 	if not save_error.is_empty():
 		result.error = save_error
@@ -83,10 +90,11 @@ func create_profile(display_name: String, now_unix: int = -1) -> ProfileOperatio
 	_rebuild_index()
 	var index_error := _index_store.save_index(_index, _root)
 	if not index_error.is_empty():
+		var rollback_remove_error := _remove_created_profile_primary(profile_id)
 		_profiles.erase(profile_id)
 		_index.active_profile_id = previous_active
 		_rebuild_index()
-		result.error = index_error
+		result.error = "%s rollback_remove_code=%d" % [index_error, rollback_remove_error]
 		return result
 	result.profile = profile.copy()
 	profiles_changed.emit()
@@ -110,12 +118,19 @@ func refresh_profile(profile_id: String) -> String:
 	if not loaded.ok():
 		var reason := loaded.error if not loaded.error.is_empty() else "unknown profile"
 		return "PROFILE_REFRESH_ERROR profile=%s error=%s" % [profile_id, reason]
+	var previous := _profiles.get(profile_id) as ProfileState
 	_profiles[profile_id] = loaded.profile
 	_rebuild_index()
 	var save_error := _index_store.save_index(_index, _root)
-	if save_error.is_empty():
-		profiles_changed.emit()
-	return save_error
+	if not save_error.is_empty():
+		if previous != null:
+			_profiles[profile_id] = previous
+		else:
+			_profiles.erase(profile_id)
+		_rebuild_index()
+		return save_error
+	profiles_changed.emit()
+	return ""
 
 func _rebuild_index() -> void:
 	_index.rebuild(profiles())
@@ -128,3 +143,13 @@ func _next_profile_id() -> String:
 	if _id_factory.is_valid():
 		return str(_id_factory.call())
 	return "profile-%s" % Crypto.new().generate_random_bytes(16).hex_encode()
+
+func _profile_artifact_exists(profile_id: String) -> bool:
+	var primary := _profile_store.profile_path(profile_id, _root)
+	return FileAccess.file_exists(primary) or FileAccess.file_exists("%s.bak" % primary)
+
+func _remove_created_profile_primary(profile_id: String) -> Error:
+	var primary := _profile_store.profile_path(profile_id, _root)
+	if not FileAccess.file_exists(primary):
+		return OK
+	return DirAccess.remove_absolute(ProjectSettings.globalize_path(primary))

@@ -23,6 +23,7 @@ func run() -> Array[String]:
 	_test_promoted_verification_failure_restores_generations(failures)
 	_test_cleanup_failure_is_surfaced(failures)
 	_test_missing_profile_is_distinct(failures)
+	_test_absent_profile_root_lists_cleanly(failures)
 	_cleanup()
 	return failures
 
@@ -182,6 +183,13 @@ func _test_cleanup_failure_is_surfaced(failures: Array[String]) -> void:
 func _test_missing_profile_is_distinct(failures: Array[String]) -> void:
 	var missing := ProfileStore.new().load_profile("profile-missing1", _root)
 	TestAssertions.truthy(missing.missing and not missing.ok(), "missing profile is not treated as corruption", failures)
+
+func _test_absent_profile_root_lists_cleanly(failures: Array[String]) -> void:
+	var absent_root := _root.path_join("absent_%d" % Time.get_ticks_usec())
+	ProfileTestSupport.remove_tree(absent_root)
+	TestAssertions.truthy(not DirAccess.dir_exists_absolute(ProjectSettings.globalize_path(absent_root)), "absent profile root fixture starts missing", failures)
+	TestAssertions.truthy(ProfileStore.new().profile_ids(absent_root).is_empty(), "absent profile root lists as empty", failures)
+	TestAssertions.truthy(not DirAccess.dir_exists_absolute(ProjectSettings.globalize_path(absent_root)), "listing absent profile root has no filesystem side effect", failures)
 
 func _corrupt_artifact_path(profile_id: String, names: PackedStringArray) -> String:
 	for name: String in names:
