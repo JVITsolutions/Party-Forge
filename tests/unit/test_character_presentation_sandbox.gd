@@ -26,6 +26,12 @@ func run() -> Array[String]:
 	var instructions := sandbox.get_node_or_null("UI/Instructions") as Label
 	TestAssertions.truthy(instructions != null and "1/2 Body" in instructions.text and "Space Toggle Selected Slot" in instructions.text, "presentation sandbox lists controls", failures)
 	(Engine.get_main_loop() as SceneTree).root.add_child(sandbox)
+	TestAssertions.equal(sandbox.call(&"get_palette_id", &"Masculine"), &"red", "sandbox initializes masculine with red palette", failures)
+	TestAssertions.equal(sandbox.call(&"get_palette_id", &"Feminine"), &"blue", "sandbox initializes feminine with blue palette", failures)
+	TestAssertions.truthy(bool(sandbox.call(&"set_base_profile", true, &"Feminine")), "sandbox selects feminine base profile", failures)
+	TestAssertions.equal(sandbox.call(&"get_palette_id", &"Feminine"), &"blue", "feminine base profile retains blue palette", failures)
+	TestAssertions.truthy(bool(sandbox.call(&"set_base_profile", false, &"Feminine")), "sandbox restores feminine equipped profile", failures)
+	TestAssertions.equal(sandbox.call(&"get_palette_id", &"Feminine"), &"blue", "feminine equipped profile retains blue palette", failures)
 	TestAssertions.truthy(bool(sandbox.call(&"set_body", &"masculine", &"Masculine")), "sandbox selects masculine body", failures)
 	TestAssertions.truthy(bool(sandbox.call(&"set_body", &"feminine", &"Feminine")), "sandbox selects feminine body", failures)
 	TestAssertions.truthy(bool(sandbox.call(&"set_palette", &"red", &"Masculine")), "sandbox selects red palette", failures)

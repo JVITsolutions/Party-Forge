@@ -7,6 +7,7 @@ const BASE_PROFILE_PATHS := {
 	&"Feminine": "res://data/presentation/profiles/forge_base_feminine.tres",
 }
 const SIDE_IDS: Array[StringName] = [&"Masculine", &"Feminine"]
+const REVIEW_PALETTE_BY_SIDE := {&"Masculine": &"red", &"Feminine": &"blue"}
 
 var selected_side_id: StringName = &"Masculine"
 var selected_slot_index := 0
@@ -119,8 +120,11 @@ func _apply_profile_mode(side_id: StringName, use_base_profile: bool) -> bool:
 	var profile := _base_profile_by_side.get(side_id) as CharacterVisualProfile if use_base_profile else _equipped_profile
 	if presentation == null or profile == null:
 		return false
-	var color: Variant = profile.palette_colors.get(profile.default_palette_id)
+	var palette_id := REVIEW_PALETTE_BY_SIDE.get(side_id, profile.default_palette_id) as StringName
+	var color: Variant = profile.palette_colors.get(palette_id)
 	if typeof(color) != TYPE_COLOR or not presentation.apply_profile(profile, color as Color):
+		return false
+	if not presentation.set_palette(palette_id, color as Color):
 		return false
 	_is_base_profile_by_side[side_id] = use_base_profile
 	for slot_id: StringName in EquipmentSlotCatalog.SLOT_IDS:
