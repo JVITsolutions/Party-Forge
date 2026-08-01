@@ -52,6 +52,11 @@ func apply_equipment_visual(slot_id: StringName, definition: EquipmentVisualDefi
 		return false
 	return _call_bool(&"apply_equipment_visual", [slot_id, definition])
 
+func clear_equipment_visual(slot_id: StringName) -> bool:
+	if active_model == null or not EquipmentSlotCatalog.is_valid(slot_id):
+		return false
+	return _call_bool(&"clear_equipment_visual", [slot_id])
+
 func play_attack(definition: AttackDefinition, target: CombatTarget = null) -> void:
 	if active_profile == null or definition == null:
 		play_action(&"idle")

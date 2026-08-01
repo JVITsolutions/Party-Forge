@@ -41,6 +41,14 @@ func apply_equipment_visual(slot_id: StringName, definition: EquipmentVisualDefi
 		node.visible = StringName(node.get_meta(&"equipment_visual_id", &"")) == definition.geometry_key
 	return equipment_nodes.has(slot_id)
 
+func clear_equipment_visual(slot_id: StringName) -> bool:
+	_ensure_cache()
+	if not EquipmentSlotCatalog.is_valid(slot_id) or not equipment_nodes.has(slot_id):
+		return false
+	for node: Node3D in equipment_nodes[slot_id]:
+		node.visible = false
+	return true
+
 func has_equipment_slot(slot_id: StringName) -> bool:
 	_ensure_cache()
 	return equipment_nodes.has(slot_id)
