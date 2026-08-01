@@ -15,6 +15,10 @@ func _ready() -> void:
 		_party_capacity().value_changed.connect(_on_party_capacity_changed)
 	if not _enemy_density().value_changed.is_connected(_on_enemy_density_changed):
 		_enemy_density().value_changed.connect(_on_enemy_density_changed)
+	if not _experience_multiplier().value_changed.is_connected(_on_experience_multiplier_changed):
+		_experience_multiplier().value_changed.connect(_on_experience_multiplier_changed)
+	if not _level_up_card_count().value_changed.is_connected(_on_level_up_card_count_changed):
+		_level_up_card_count().value_changed.connect(_on_level_up_card_count_changed)
 	_refresh_value_labels()
 	_refresh_enabled_state()
 
@@ -30,6 +34,8 @@ func bind(settings: PartyForgeSettings) -> void:
 	_god_mode().button_pressed = source.god_mode
 	_party_capacity().value = source.party_capacity_override
 	_enemy_density().value = source.enemy_density_percent
+	_experience_multiplier().value = source.experience_multiplier_percent
+	_level_up_card_count().value = source.level_up_card_count
 	_refresh_value_labels()
 	_refresh_enabled_state()
 
@@ -42,6 +48,8 @@ func write_to(settings: PartyForgeSettings) -> void:
 	settings.god_mode = _god_mode().button_pressed
 	settings.party_capacity_override = int(_party_capacity().value)
 	settings.enemy_density_percent = int(_enemy_density().value)
+	settings.experience_multiplier_percent = int(_experience_multiplier().value)
+	settings.level_up_card_count = int(_level_up_card_count().value)
 
 
 func reset_developer_options() -> void:
@@ -49,6 +57,8 @@ func reset_developer_options() -> void:
 	_god_mode().button_pressed = false
 	_party_capacity().value = 4
 	_enemy_density().value = 100
+	_experience_multiplier().value = 100
+	_level_up_card_count().value = 5
 	_refresh_value_labels()
 
 
@@ -64,14 +74,24 @@ func _on_enemy_density_changed(value: float) -> void:
 	_enemy_density_label().text = "%d%%" % int(value)
 
 
+func _on_experience_multiplier_changed(value: float) -> void:
+	_experience_multiplier_label().text = "%d%%" % int(value)
+
+
+func _on_level_up_card_count_changed(value: float) -> void:
+	_level_up_card_count_label().text = "%d" % int(value)
+
+
 func _refresh_enabled_state() -> void:
 	var enabled := _mode().selected == PartyForgeSettings.Mode.DEVELOPER_MODE
 	_unlock_all().disabled = not enabled
 	_god_mode().disabled = not enabled
 	_party_capacity().editable = enabled
 	_enemy_density().editable = enabled
+	_experience_multiplier().editable = enabled
+	_level_up_card_count().editable = enabled
 	_inactive_status().visible = not enabled
-	for control: Control in [_unlock_all(), _god_mode(), _party_capacity(), _enemy_density()]:
+	for control: Control in [_unlock_all(), _god_mode(), _party_capacity(), _enemy_density(), _experience_multiplier(), _level_up_card_count()]:
 		control.tooltip_text = "" if enabled else INACTIVE_EXPLANATION
 	_configure_focus_order(enabled)
 
@@ -79,6 +99,8 @@ func _refresh_enabled_state() -> void:
 func _refresh_value_labels() -> void:
 	_on_party_capacity_changed(_party_capacity().value)
 	_on_enemy_density_changed(_enemy_density().value)
+	_on_experience_multiplier_changed(_experience_multiplier().value)
+	_on_level_up_card_count_changed(_level_up_card_count().value)
 
 
 func _mode() -> OptionButton:
@@ -109,6 +131,22 @@ func _enemy_density_label() -> Label:
 	return get_node("Layout/EnemyDensity/Label") as Label
 
 
+func _experience_multiplier() -> HSlider:
+	return get_node("Layout/ExperienceMultiplier/Value") as HSlider
+
+
+func _experience_multiplier_label() -> Label:
+	return get_node("Layout/ExperienceMultiplier/Label") as Label
+
+
+func _level_up_card_count() -> HSlider:
+	return get_node("Layout/LevelUpCardCount/Value") as HSlider
+
+
+func _level_up_card_count_label() -> Label:
+	return get_node("Layout/LevelUpCardCount/Label") as Label
+
+
 func _inactive_status() -> Label:
 	return get_node("Layout/InactiveStatus") as Label
 
@@ -116,7 +154,7 @@ func _inactive_status() -> Label:
 func _configure_focus_order(developer_mode_enabled: bool) -> void:
 	var order: Array[Control] = [_mode()]
 	if developer_mode_enabled:
-		order.append_array([_unlock_all(), _god_mode(), _party_capacity(), _enemy_density()])
+		order.append_array([_unlock_all(), _god_mode(), _party_capacity(), _enemy_density(), _experience_multiplier(), _level_up_card_count()])
 	else:
 		order.append(_inactive_status())
 	order.append_array([

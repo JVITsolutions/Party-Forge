@@ -65,6 +65,17 @@ func _test_badge_summary_uses_immutable_snapshot(failures: Array[String]) -> voi
 		"later saved-settings mutation cannot change the configured badge",
 		failures,
 	)
+
+	var progression_settings := PartyForgeSettings.new()
+	progression_settings.mode = PartyForgeSettings.Mode.DEVELOPER_MODE
+	progression_settings.experience_multiplier_percent = 500
+	progression_settings.level_up_card_count = 7
+	badge.call(&"configure", RunRulesSnapshot.from_settings(progression_settings))
+	TestAssertions.equal(badge.call(&"summary_text"), "DEV MODE | XP 500% | CARDS 7", "badge appends non-default progression overrides in stable order", failures)
+	var default_settings := PartyForgeSettings.new()
+	default_settings.mode = PartyForgeSettings.Mode.DEVELOPER_MODE
+	badge.call(&"configure", RunRulesSnapshot.from_settings(default_settings))
+	TestAssertions.equal(badge.call(&"summary_text"), "DEV MODE", "badge omits default progression values", failures)
 	badge.free()
 
 

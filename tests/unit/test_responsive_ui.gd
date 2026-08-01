@@ -137,6 +137,10 @@ func _test_settings_and_badge_containment(failures: Array[String]) -> void:
 	var controls_scroll := settings.get_node("Overlay/Frame/Layout/Tabs/Controls/Layout/Scroll") as ScrollContainer
 	var additional := settings.get_node("Overlay/Frame/Layout/Tabs/Additional Settings") as Control
 	var additional_layout := additional.get_node("Layout") as VBoxContainer
+	var experience_row := additional.get_node("Layout/ExperienceMultiplier") as HBoxContainer
+	var experience_value := additional.get_node("Layout/ExperienceMultiplier/Value") as HSlider
+	var cards_row := additional.get_node("Layout/LevelUpCardCount") as HBoxContainer
+	var cards_value := additional.get_node("Layout/LevelUpCardCount/Value") as HSlider
 	var reset := additional.get_node("Layout/ResetDeveloperOptions") as Button
 	var apply := additional.get_node("Layout/ApplyAndReturn") as Button
 	var cancel := additional.get_node("Layout/Cancel") as Button
@@ -161,6 +165,11 @@ func _test_settings_and_badge_containment(failures: Array[String]) -> void:
 	TestAssertions.equal(additional_layout.get_parent(), additional, "Additional Settings page owns its VBox layout", failures)
 	TestAssertions.equal(additional.layout_mode, 2, "Additional Settings uses container layout", failures)
 	_assert_expand_fill(additional, true, true, "Additional Settings", failures)
+	for row: HBoxContainer in [experience_row, cards_row]:
+		TestAssertions.equal(row.get_parent(), additional_layout, "%s is owned by the Additional Settings VBox" % row.name, failures)
+		TestAssertions.equal(row.layout_mode, 2, "%s uses container layout" % row.name, failures)
+	for slider: HSlider in [experience_value, cards_value]:
+		_assert_expand_fill(slider, true, false, slider.name, failures)
 	for action: Button in [reset, apply, cancel]:
 		TestAssertions.equal(action.get_parent(), additional_layout, "%s is owned by the Additional Settings VBox" % action.name, failures)
 		TestAssertions.equal(action.layout_mode, 2, "%s uses container layout" % action.name, failures)

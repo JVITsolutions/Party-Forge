@@ -78,12 +78,16 @@ func _test_additional_settings_page(failures: Array[String]) -> void:
 	var god_mode := page.get_node("Layout/GodMode") as CheckButton
 	var party_capacity := page.get_node("Layout/PartyCapacity/Value") as HSlider
 	var enemy_density := page.get_node("Layout/EnemyDensity/Value") as HSlider
+	var experience_multiplier := page.get_node("Layout/ExperienceMultiplier/Value") as HSlider
+	var level_up_card_count := page.get_node("Layout/LevelUpCardCount/Value") as HSlider
 	var inactive_status := page.get_node_or_null("Layout/InactiveStatus") as Label
 	TestAssertions.equal(mode.item_count, 2, "Mode exposes exactly two choices", failures)
 	TestAssertions.equal(mode.get_item_text(0), "Player Simulation", "Mode starts with Player Simulation", failures)
 	TestAssertions.equal(mode.get_item_text(1), "Developer Mode", "Mode includes Developer Mode", failures)
 	TestAssertions.equal(Vector3(party_capacity.min_value, party_capacity.max_value, party_capacity.step), Vector3(1.0, 24.0, 1.0), "party capacity uses approved range and step", failures)
 	TestAssertions.equal(Vector3(enemy_density.min_value, enemy_density.max_value, enemy_density.step), Vector3(0.0, 1000.0, 10.0), "enemy density uses approved range and step", failures)
+	TestAssertions.equal(Vector3(experience_multiplier.min_value, experience_multiplier.max_value, experience_multiplier.step), Vector3(100.0, 1000.0, 10.0), "experience multiplier uses approved range and step", failures)
+	TestAssertions.equal(Vector3(level_up_card_count.min_value, level_up_card_count.max_value, level_up_card_count.step), Vector3(1.0, 8.0, 1.0), "level-up card count uses approved range and step", failures)
 
 	var saved := PartyForgeSettings.new()
 	saved.mode = PartyForgeSettings.Mode.PLAYER_SIMULATION
@@ -91,23 +95,27 @@ func _test_additional_settings_page(failures: Array[String]) -> void:
 	saved.god_mode = true
 	saved.party_capacity_override = 17
 	saved.enemy_density_percent = 650
+	saved.experience_multiplier_percent = 500
+	saved.level_up_card_count = 7
 	page.call("bind", saved)
 	TestAssertions.truthy(unlock_all.disabled, "Player Simulation disables Unlock All", failures)
-	TestAssertions.truthy(god_mode.disabled and party_capacity.editable == false and enemy_density.editable == false, "Player Simulation disables every developer override", failures)
+	TestAssertions.truthy(god_mode.disabled and party_capacity.editable == false and enemy_density.editable == false and experience_multiplier.editable == false and level_up_card_count.editable == false, "Player Simulation disables every developer override", failures)
 	TestAssertions.truthy(inactive_status != null and inactive_status.visible, "Player Simulation shows a non-color inactive explanation", failures)
 	if inactive_status != null:
 		TestAssertions.truthy(inactive_status.text.contains("retained") and inactive_status.text.contains("Developer Mode"), "inactive explanation states values are retained until Developer Mode", failures)
 		TestAssertions.truthy(inactive_status.focus_mode != Control.FOCUS_NONE, "inactive explanation is controller and keyboard focusable", failures)
 		TestAssertions.equal(mode.focus_next, mode.get_path_to(inactive_status), "Player Simulation focus reaches the inactive explanation after Mode", failures)
 		TestAssertions.equal(inactive_status.focus_next, inactive_status.get_path_to(page.get_node("Layout/ResetDeveloperOptions")), "Player Simulation focus continues from the explanation to actions", failures)
-	for control: Control in [unlock_all, god_mode, party_capacity, enemy_density]:
+	for control: Control in [unlock_all, god_mode, party_capacity, enemy_density, experience_multiplier, level_up_card_count]:
 		TestAssertions.truthy(control.tooltip_text.contains("retained") and control.tooltip_text.contains("Developer Mode"), "%s exposes the inactive reason in its tooltip" % control.name, failures)
 	TestAssertions.equal(int(party_capacity.value), 17, "inactive party cap stays visible", failures)
 	TestAssertions.equal(int(enemy_density.value), 650, "inactive density stays visible", failures)
+	TestAssertions.equal(int(experience_multiplier.value), 500, "inactive experience multiplier stays visible", failures)
+	TestAssertions.equal(int(level_up_card_count.value), 7, "inactive level-up card count stays visible", failures)
 	mode.selected = PartyForgeSettings.Mode.DEVELOPER_MODE
 	page.call("_on_mode_changed", PartyForgeSettings.Mode.DEVELOPER_MODE)
 	TestAssertions.truthy(not unlock_all.disabled, "Developer Mode enables overrides", failures)
-	TestAssertions.truthy(not god_mode.disabled and party_capacity.editable and enemy_density.editable, "Developer Mode enables every override", failures)
+	TestAssertions.truthy(not god_mode.disabled and party_capacity.editable and enemy_density.editable and experience_multiplier.editable and level_up_card_count.editable, "Developer Mode enables every override", failures)
 	TestAssertions.truthy(inactive_status != null and not inactive_status.visible, "Developer Mode hides the inactive explanation", failures)
 	TestAssertions.truthy(page.has_method(&"initial_focus"), "Additional Settings exposes the Settings page focus contract", failures)
 	if page.has_method(&"initial_focus"):
@@ -115,18 +123,32 @@ func _test_additional_settings_page(failures: Array[String]) -> void:
 	_test_additional_focus_traversal(page, failures)
 	party_capacity.value = 9
 	enemy_density.value = 230
+	experience_multiplier.value = 440
+	level_up_card_count.value = 8
 	page.call("_on_party_capacity_changed", party_capacity.value)
 	page.call("_on_enemy_density_changed", enemy_density.value)
+	page.call("_on_experience_multiplier_changed", experience_multiplier.value)
+	page.call("_on_level_up_card_count_changed", level_up_card_count.value)
 	TestAssertions.equal((page.get_node("Layout/PartyCapacity/Label") as Label).text, "9", "party capacity label tracks the slider", failures)
 	TestAssertions.equal((page.get_node("Layout/EnemyDensity/Label") as Label).text, "230%", "enemy density label tracks the slider", failures)
+	TestAssertions.equal((page.get_node("Layout/ExperienceMultiplier/Label") as Label).text, "440%", "experience multiplier label tracks the slider", failures)
+	TestAssertions.equal((page.get_node("Layout/LevelUpCardCount/Label") as Label).text, "8", "level-up card count label tracks the slider", failures)
+	var written_override := PartyForgeSettings.new()
+	page.call("write_to", written_override)
+	TestAssertions.equal(written_override.experience_multiplier_percent, 440, "page writes experience multiplier", failures)
+	TestAssertions.equal(written_override.level_up_card_count, 8, "page writes level-up card count", failures)
 	page.call("reset_developer_options")
 	TestAssertions.truthy(not unlock_all.button_pressed and not god_mode.button_pressed, "reset clears developer toggles", failures)
 	TestAssertions.equal(int(party_capacity.value), 4, "reset restores party capacity", failures)
 	TestAssertions.equal(int(enemy_density.value), 100, "reset restores enemy density", failures)
+	TestAssertions.equal(int(experience_multiplier.value), 100, "reset restores experience multiplier", failures)
+	TestAssertions.equal(int(level_up_card_count.value), 5, "reset restores level-up card count", failures)
 	var written := PartyForgeSettings.new()
 	page.call("write_to", written)
 	TestAssertions.equal(written.mode, PartyForgeSettings.Mode.DEVELOPER_MODE, "page writes selected mode", failures)
 	TestAssertions.equal(written.party_capacity_override, 4, "page writes reset capacity", failures)
+	TestAssertions.equal(written.experience_multiplier_percent, 100, "page writes reset experience multiplier", failures)
+	TestAssertions.equal(written.level_up_card_count, 5, "page writes reset level-up card count", failures)
 	page.free()
 
 
@@ -262,6 +284,8 @@ func _test_additional_focus_traversal(page: Control, failures: Array[String]) ->
 		page.get_node("Layout/GodMode") as Control,
 		page.get_node("Layout/PartyCapacity/Value") as Control,
 		page.get_node("Layout/EnemyDensity/Value") as Control,
+		page.get_node("Layout/ExperienceMultiplier/Value") as Control,
+		page.get_node("Layout/LevelUpCardCount/Value") as Control,
 		page.get_node("Layout/ResetDeveloperOptions") as Control,
 		page.get_node("Layout/ApplyAndReturn") as Control,
 		page.get_node("Layout/Cancel") as Control,

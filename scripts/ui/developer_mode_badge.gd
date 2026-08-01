@@ -17,6 +17,10 @@ func configure(snapshot: RunRulesSnapshot) -> void:
 		return
 	var parts := PackedStringArray(["DEV MODE"])
 	parts.append_array(snapshot.combat_policy().summary_parts())
+	if snapshot.experience_multiplier_percent() != 100:
+		parts.append("XP %d%%" % snapshot.experience_multiplier_percent())
+	if snapshot.level_up_card_count() != 5:
+		parts.append("CARDS %d" % snapshot.level_up_card_count())
 	_summary = " | ".join(parts)
 	visible = true
 	_sync_label()
