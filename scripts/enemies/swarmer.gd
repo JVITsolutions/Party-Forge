@@ -20,8 +20,8 @@ func advance_behavior(delta: float, candidates: Array[Node3D] = []) -> void:
     var offset := target_position - origin
     offset.y = 0.0
     velocity = offset.normalized() * definition.move_speed if not offset.is_zero_approx() else Vector3.ZERO
-    var attack := definition.attack_by_id(&"swarmer_contact")
-    if attack != null and offset.length() <= attack.range:
+    var contact_range := attack_geometry(&"swarmer_contact").range
+    if contact_range > 0.0 and offset.length() <= contact_range:
         _try_contact_attack(target)
     _move_for_delta(delta)
 

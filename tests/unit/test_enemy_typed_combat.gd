@@ -7,6 +7,10 @@ func run() -> Array[String]:
 	_test_enemy_definition_validation(catalog, failures)
 	_test_spawned_enemy_identities(catalog, failures)
 	_test_enemy_physical_resolution(catalog, failures)
+	_test_enemy_attack_geometry(failures)
+	_test_swarmer_uses_resolved_contact_range(catalog, failures)
+	_test_guardian_uses_resolved_shockwave_area(catalog, failures)
+	_test_guardian_uses_resolved_charge_width(catalog, failures)
 	_test_guardian_charge_sweeps_full_movement_segment(catalog, failures)
 	return failures
 
@@ -120,6 +124,98 @@ func _test_enemy_physical_resolution(catalog: GameCatalog, failures: Array[Strin
 		TestAssertions.near(result.final_damage, 2.0, 0.001, "block reduction matches party path", failures)
 		TestAssertions.near(result.actual_health_removed, 2.0, 0.001, "resolved enemy damage reaches health", failures)
 	health.free()
+	root.free()
+
+func _test_enemy_attack_geometry(failures: Array[String]) -> void:
+	var attack := AttackDefinition.new()
+	attack.id = &"test_attack"
+	attack.range = 2.0
+	attack.area_radius = 1.0
+	var definition := EnemyDefinition.new()
+	var attacks: Array[AttackDefinition] = [attack]
+	definition.attacks = attacks
+	var overrides: Dictionary[StringName, float] = {&"attack_range": 1.5, &"area_size": 2.0}
+	definition.stat_overrides = overrides
+	var enemy := EnemyActor.new()
+	enemy.definition = definition
+	TestAssertions.truthy(enemy.has_method("attack_geometry"), "enemy exposes resolved attack geometry", failures)
+	if enemy.has_method("attack_geometry"):
+		var geometry := enemy.call("attack_geometry", &"test_attack") as ResolvedAttackGeometry
+		TestAssertions.near(geometry.range, 3.0, 0.001, "enemy attack_range scales range", failures)
+		TestAssertions.near(geometry.area_radius, 2.0, 0.001, "enemy area_size scales area", failures)
+		definition.stat_overrides = {}
+		var defaults := enemy.call("attack_geometry", &"test_attack") as ResolvedAttackGeometry
+		TestAssertions.near(defaults.range, 2.0, 0.001, "enemy geometry defaults attack range multiplier", failures)
+		TestAssertions.near(defaults.area_radius, 1.0, 0.001, "enemy geometry defaults area multiplier", failures)
+		var missing := enemy.call("attack_geometry", &"missing_attack") as ResolvedAttackGeometry
+		TestAssertions.near(missing.range, 0.0, 0.001, "missing enemy attack has zero range", failures)
+		TestAssertions.near(missing.area_radius, 0.0, 0.001, "missing enemy attack has zero area", failures)
+	enemy.free()
+
+func _test_swarmer_uses_resolved_contact_range(catalog: GameCatalog, failures: Array[String]) -> void:
+	var root := Node3D.new()
+	(Engine.get_main_loop() as SceneTree).root.add_child(root)
+	var leader := (load("res://scenes/characters/leader.tscn") as PackedScene).instantiate() as PartyActor
+	root.add_child(leader)
+	leader.position = Vector3(1.2, 0.0, 0.0)
+	leader.configure(PartyMemberState.new(7101, catalog.class_by_id(&"fighter"), true))
+	var enemy := (load("res://scenes/enemies/swarmer.tscn") as PackedScene).instantiate() as Swarmer
+	root.add_child(enemy)
+	var definition := _enemy(catalog, &"swarmer").duplicate(true) as EnemyDefinition
+	var overrides: Dictionary[StringName, float] = {&"attack_range": 1.5}
+	definition.stat_overrides = overrides
+	enemy.configure(definition)
+	enemy.configure_combat(2, CombatRng.new(902), catalog.damage_types)
+	var health := leader.get_node("HealthComponent") as HealthComponent
+	var before := health.current_health
+	var candidates: Array[Node3D] = [leader]
+	enemy.advance_behavior(0.0, candidates)
+	TestAssertions.truthy(health.current_health < before, "swarmer contact uses resolved attack range", failures)
+	root.free()
+
+func _test_guardian_uses_resolved_shockwave_area(catalog: GameCatalog, failures: Array[String]) -> void:
+	var root := Node3D.new()
+	(Engine.get_main_loop() as SceneTree).root.add_child(root)
+	var leader := (load("res://scenes/characters/leader.tscn") as PackedScene).instantiate() as PartyActor
+	root.add_child(leader)
+	leader.position = Vector3(9.0, 0.0, 0.0)
+	leader.configure(PartyMemberState.new(7102, catalog.class_by_id(&"fighter"), true))
+	var boss := (load("res://scenes/enemies/forge_guardian.tscn") as PackedScene).instantiate() as ForgeGuardian
+	root.add_child(boss)
+	var definition := _enemy(catalog, &"forge_guardian").duplicate(true) as EnemyDefinition
+	var overrides: Dictionary[StringName, float] = {&"area_size": 2.0}
+	definition.stat_overrides = overrides
+	boss.configure(definition)
+	boss.configure_combat(&"shockwave", CombatRng.new(903), catalog.damage_types)
+	boss.configure_boss(leader, null, root)
+	var health := leader.get_node("HealthComponent") as HealthComponent
+	var before := health.current_health
+	boss.call("_apply_shockwave")
+	TestAssertions.truthy(health.current_health < before, "guardian shockwave uses resolved area radius", failures)
+	root.free()
+
+func _test_guardian_uses_resolved_charge_width(catalog: GameCatalog, failures: Array[String]) -> void:
+	var root := Node3D.new()
+	(Engine.get_main_loop() as SceneTree).root.add_child(root)
+	var leader := (load("res://scenes/characters/leader.tscn") as PackedScene).instantiate() as PartyActor
+	root.add_child(leader)
+	leader.position = Vector3(4.5, 0.0, 3.0)
+	leader.configure(PartyMemberState.new(7103, catalog.class_by_id(&"fighter"), true))
+	var boss := (load("res://scenes/enemies/forge_guardian.tscn") as PackedScene).instantiate() as ForgeGuardian
+	root.add_child(boss)
+	var definition := _enemy(catalog, &"forge_guardian").duplicate(true) as EnemyDefinition
+	var overrides: Dictionary[StringName, float] = {&"attack_range": 1.5}
+	definition.stat_overrides = overrides
+	boss.configure(definition)
+	boss.configure_combat(&"charge_width", CombatRng.new(904), catalog.damage_types)
+	boss.configure_boss(leader, null, root)
+	boss.set("charge_direction", Vector3.RIGHT)
+	boss.set("charge_packet", boss.prepare_attack(&"guardian_charge"))
+	(boss.get("charge_hit_ids") as Dictionary).clear()
+	var health := leader.get_node("HealthComponent") as HealthComponent
+	var before := health.current_health
+	boss.call("_move_charge", 0.65)
+	TestAssertions.truthy(health.current_health < before, "guardian charge uses resolved swept width", failures)
 	root.free()
 
 func _test_guardian_charge_sweeps_full_movement_segment(catalog: GameCatalog, failures: Array[String]) -> void:
