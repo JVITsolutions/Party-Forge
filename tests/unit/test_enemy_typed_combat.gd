@@ -14,6 +14,7 @@ func run() -> Array[String]:
 	_test_guardian_charge_sweeps_full_movement_segment(catalog, failures)
 	_test_enemy_projectile_sweeps_and_resolves_area_once(catalog, failures)
 	_test_enemy_projectile_near_equal_contact_is_order_independent(catalog, failures)
+	_test_enemy_projectile_distinct_contact_prefers_nearer_geometry(catalog, failures)
 	return failures
 
 func _test_exact_enemy_attack_links(catalog: GameCatalog, failures: Array[String]) -> void:
@@ -268,28 +269,35 @@ func _test_enemy_projectile_sweeps_and_resolves_area_once(catalog: GameCatalog, 
 	root.free()
 
 func _test_enemy_projectile_near_equal_contact_is_order_independent(catalog: GameCatalog, failures: Array[String]) -> void:
-	var nearer_first := _near_equal_projectile_removals(catalog, true)
-	var farther_first := _near_equal_projectile_removals(catalog, false)
+	var nearer_first := _ordered_projectile_contact_removals(catalog, true, 5.00001, 7302, 7301, 906)
+	var farther_first := _ordered_projectile_contact_removals(catalog, false, 5.00001, 7302, 7301, 906)
 	TestAssertions.equal(nearer_first, farther_first, "near-equal projectile contact winner is independent of party registration order", failures)
 	TestAssertions.near(nearer_first[0], 0.0, 0.001, "near-equal projectile tie defers to deterministic combatant identity", failures)
 	TestAssertions.near(nearer_first[1], 10.0, 0.001, "near-equal projectile tie selects the lower combatant identity", failures)
 
-func _near_equal_projectile_removals(catalog: GameCatalog, nearer_first: bool) -> Array[float]:
+func _test_enemy_projectile_distinct_contact_prefers_nearer_geometry(catalog: GameCatalog, failures: Array[String]) -> void:
+	var nearer_first := _ordered_projectile_contact_removals(catalog, true, 5.001, 7402, 7401, 907)
+	var farther_first := _ordered_projectile_contact_removals(catalog, false, 5.001, 7402, 7401, 907)
+	TestAssertions.equal(nearer_first, farther_first, "distinct projectile contact winner is independent of party registration order", failures)
+	TestAssertions.near(nearer_first[0], 10.0, 0.001, "distinct projectile contacts select smaller geometric progression", failures)
+	TestAssertions.near(nearer_first[1], 0.0, 0.001, "lower identity cannot override a geometrically nearer non-tie", failures)
+
+func _ordered_projectile_contact_removals(catalog: GameCatalog, nearer_first: bool, farther_x: float, nearer_id: int, farther_id: int, rng_seed: int) -> Array[float]:
 	var root := Node3D.new()
 	(Engine.get_main_loop() as SceneTree).root.add_child(root)
 	var source := (load("res://scenes/enemies/spitter.tscn") as PackedScene).instantiate() as Spitter
 	root.add_child(source)
-	source.configure_combat(&"near_equal_source", CombatRng.new(906), catalog.damage_types)
+	source.configure_combat(&"ordered_contact_source", CombatRng.new(rng_seed), catalog.damage_types)
 	var packet := source.prepare_attack(&"spitter_projectile")
 	var nearer: PartyActor
 	var farther: PartyActor
 	if nearer_first:
-		nearer = _party_actor(root, catalog, 7302, Vector3(5.0, 0.0, 0.0))
-		farther = _party_actor(root, catalog, 7301, Vector3(5.00001, 0.0, 0.0))
+		nearer = _party_actor(root, catalog, nearer_id, Vector3(5.0, 0.0, 0.0))
+		farther = _party_actor(root, catalog, farther_id, Vector3(farther_x, 0.0, 0.0))
 	else:
-		farther = _party_actor(root, catalog, 7301, Vector3(5.00001, 0.0, 0.0))
-		nearer = _party_actor(root, catalog, 7302, Vector3(5.0, 0.0, 0.0))
-	var target := _party_actor(root, catalog, 7303, Vector3(20.0, 0.0, 0.0))
+		farther = _party_actor(root, catalog, farther_id, Vector3(farther_x, 0.0, 0.0))
+		nearer = _party_actor(root, catalog, nearer_id, Vector3(5.0, 0.0, 0.0))
+	var target := _party_actor(root, catalog, maxi(nearer_id, farther_id) + 1, Vector3(20.0, 0.0, 0.0))
 	var nearer_health := nearer.get_node("HealthComponent") as HealthComponent
 	var farther_health := farther.get_node("HealthComponent") as HealthComponent
 	var nearer_before := nearer_health.current_health
