@@ -57,7 +57,7 @@ func clear_equipment_visual(slot_id: StringName) -> bool:
 		return false
 	return _call_bool(&"clear_equipment_visual", [slot_id])
 
-func play_attack(definition: AttackDefinition, target: CombatTarget = null) -> void:
+func play_attack(definition: AttackDefinition, _target: CombatTarget = null) -> void:
 	if active_profile == null or definition == null:
 		play_action(&"idle")
 		return
@@ -105,10 +105,10 @@ func _fail_active(key: StringName, reason: String) -> bool:
 	_set_fallback_visible(true)
 	return false
 
-func _set_fallback_visible(is_visible: bool) -> void:
+func _set_fallback_visible(should_be_visible: bool) -> void:
 	var fallback := get_node_or_null(fallback_mesh_path) as VisualInstance3D
 	if fallback != null:
-		fallback.visible = is_visible
+		fallback.visible = should_be_visible
 
 func _log_once(key: StringName, detail: String) -> void:
 	if logged_errors.has(key):
