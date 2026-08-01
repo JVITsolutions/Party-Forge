@@ -31,7 +31,17 @@ func configure_seed(seed_value: int) -> void:
 	combat_rng.reseed(run_seed)
 
 func _process(delta: float) -> void:
-	advance_run_time(delta)
+	if can_advance_automatically():
+		advance_run_time(delta)
+
+func can_advance_automatically(tree: SceneTree = null) -> bool:
+	var active_tree := tree if tree != null else Engine.get_main_loop() as SceneTree
+	if active_tree != null and active_tree.paused:
+		return false
+	return current_state() in [
+		RunStateMachineScript.State.RUNNING,
+		RunStateMachineScript.State.BOSS,
+	]
 
 func start_run() -> void:
 	state_machine.call("start")
