@@ -9,7 +9,6 @@ emission = Color(0.65, 0.1, 0.85, 1)
 emission_energy_multiplier = 2.0
 
 [sub_resource type="SphereMesh" id="SphereMesh_projectile"]
-material = SubResource("StandardMaterial3D_projectile")
 radius = 0.2
 height = 0.4
 
@@ -17,4 +16,5 @@ height = 0.4
 script = ExtResource("1_projectile")
 
 [node name="MeshInstance3D" type="MeshInstance3D" parent="."]
+material_override = SubResource("StandardMaterial3D_projectile")
 mesh = SubResource("SphereMesh_projectile")

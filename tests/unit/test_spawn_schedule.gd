@@ -28,6 +28,8 @@ func run() -> Array[String]:
     _test_enemy_reward_exactly_once(failures)
     _test_swarmer_targeting_and_contact_cooldown(failures)
     _test_spitter_spacing_and_projectile_cadence(failures)
+    _test_linear_projectile_preserves_sampled_aim(failures)
+    _test_homing_projectile_tracks_live_target(failures)
     _test_experience_orb_collection(failures)
     _test_seeded_director_and_stop(failures)
     _test_density_adjusted_schedule(failures)
@@ -103,6 +105,67 @@ func _test_spitter_spacing_and_projectile_cadence(failures: Array[String]) -> vo
     var before := _count_named(root, &"EnemyProjectile")
     spitter.call("advance_behavior", 2.2)
     TestAssertions.equal(_count_named(root, &"EnemyProjectile"), before + 1, "spitter fires at 2.2 second cadence", failures)
+    root.free()
+
+func _test_linear_projectile_preserves_sampled_aim(failures: Array[String]) -> void:
+    var root := _new_root("LinearEnemyProjectileTest")
+    var target := _party_actor(root, Vector3(10.0, 0.0, 0.0))
+    var projectile := (load("res://scenes/enemies/enemy_projectile.tscn") as PackedScene).instantiate() as Node3D
+    root.add_child(projectile)
+    projectile.position = Vector3.ZERO
+    TestAssertions.truthy(_method_accepts(projectile, &"configure", 7), "enemy projectile accepts data-driven configuration", failures)
+    if not _method_accepts(projectile, &"configure", 7):
+        root.free()
+        return
+    var attack := AttackDefinition.new()
+    attack.projectile_speed = 10.0
+    attack.range = 6.0
+    attack.area_radius = 1.25
+    var profile := EnemyProjectileProfile.new()
+    profile.movement = EnemyProjectileProfile.Movement.LINEAR
+    profile.color = Color(1.0, 0.08, 0.05, 1.0)
+    profile.hit_radius = 0.2
+    profile.max_lifetime = 10.0
+    projectile.call("configure", target, null, CombatRng.new(103), GameCatalog.load_defaults().damage_types, attack, profile, target.position)
+    target.position = Vector3(0.0, 0.0, 10.0)
+    projectile.call("advance_projectile", 0.5)
+    TestAssertions.equal(projectile.get("movement"), EnemyProjectileProfile.Movement.LINEAR, "linear projectile exposes configured movement", failures)
+    TestAssertions.near(float(projectile.get("speed")), 10.0, 0.001, "linear projectile uses attack speed", failures)
+    TestAssertions.near(float(projectile.get("maximum_range")), 6.0, 0.001, "linear projectile uses attack range", failures)
+    TestAssertions.near(float(projectile.get("area_radius")), 1.25, 0.001, "linear projectile uses attack area radius", failures)
+    TestAssertions.near((projectile.get("direction") as Vector3).z, 0.0, 0.001, "linear projectile preserves sampled aim after target moves", failures)
+    TestAssertions.near(projectile.position.x, 5.0, 0.001, "linear projectile advances at configured speed", failures)
+    var material := (projectile.get_node("MeshInstance3D") as MeshInstance3D).get_active_material(0) as StandardMaterial3D
+    TestAssertions.equal(material.albedo_color if material != null else Color.TRANSPARENT, profile.color, "linear projectile uses profile color", failures)
+    projectile.call("advance_projectile", 0.5)
+    TestAssertions.near(float(projectile.get("distance_travelled")), 6.0, 0.001, "linear projectile stops at attack range", failures)
+    TestAssertions.truthy(projectile.is_queued_for_deletion(), "linear projectile expires at attack range", failures)
+    root.free()
+
+func _test_homing_projectile_tracks_live_target(failures: Array[String]) -> void:
+    var root := _new_root("HomingEnemyProjectileTest")
+    var target := _party_actor(root, Vector3(10.0, 0.0, 0.0))
+    var projectile := (load("res://scenes/enemies/enemy_projectile.tscn") as PackedScene).instantiate() as Node3D
+    root.add_child(projectile)
+    projectile.position = Vector3.ZERO
+    var attack := AttackDefinition.new()
+    attack.projectile_speed = 10.0
+    attack.range = 6.0
+    var profile := EnemyProjectileProfile.new()
+    profile.movement = EnemyProjectileProfile.Movement.HOMING
+    profile.color = Color(0.75, 0.15, 1.0, 1.0)
+    profile.hit_radius = 0.2
+    profile.max_lifetime = 10.0
+    projectile.call("configure", target, null, CombatRng.new(104), GameCatalog.load_defaults().damage_types, attack, profile, target.position)
+    target.position = Vector3(0.0, 0.0, 10.0)
+    projectile.call("advance_projectile", 0.5)
+    TestAssertions.equal(projectile.get("movement"), EnemyProjectileProfile.Movement.HOMING, "homing projectile exposes configured movement", failures)
+    TestAssertions.truthy((projectile.get("direction") as Vector3).z > 0.0, "homing projectile follows live target after it moves", failures)
+    var material := (projectile.get_node("MeshInstance3D") as MeshInstance3D).get_active_material(0) as StandardMaterial3D
+    TestAssertions.equal(material.albedo_color if material != null else Color.TRANSPARENT, profile.color, "homing projectile uses profile color", failures)
+    projectile.call("advance_projectile", 0.5)
+    TestAssertions.near(float(projectile.get("distance_travelled")), 6.0, 0.001, "homing projectile stops at attack range", failures)
+    TestAssertions.truthy(projectile.is_queued_for_deletion(), "homing projectile expires at attack range", failures)
     root.free()
 
 func _test_experience_orb_collection(failures: Array[String]) -> void:
@@ -261,3 +324,11 @@ func _count_named(parent: Node, node_name: StringName) -> int:
         if child.name == node_name:
             count += 1
     return count
+
+func _method_accepts(object: Object, method_name: StringName, argument_count: int) -> bool:
+    for row: Dictionary in object.get_method_list():
+        if StringName(row.get("name", "")) == method_name:
+            var total_arguments := (row.get("args", []) as Array).size()
+            var default_arguments := (row.get("default_args", []) as Array).size()
+            return argument_count >= total_arguments - default_arguments and argument_count <= total_arguments
+    return false

@@ -12,6 +12,7 @@ func run() -> Array[String]:
 	_test_guardian_uses_resolved_shockwave_area(catalog, failures)
 	_test_guardian_uses_resolved_charge_width(catalog, failures)
 	_test_guardian_charge_sweeps_full_movement_segment(catalog, failures)
+	_test_enemy_projectile_sweeps_and_resolves_area_once(catalog, failures)
 	return failures
 
 func _test_exact_enemy_attack_links(catalog: GameCatalog, failures: Array[String]) -> void:
@@ -224,6 +225,47 @@ func _test_guardian_charge_sweeps_full_movement_segment(catalog: GameCatalog, fa
 	TestAssertions.near(large_step_removed, sliced_step_removed, 0.001, "guardian charge damage is frame-slice invariant", failures)
 	TestAssertions.near(sliced_step_removed, 22.0, 0.001, "guardian charge hits once across repeated intersecting slices", failures)
 
+func _test_enemy_projectile_sweeps_and_resolves_area_once(catalog: GameCatalog, failures: Array[String]) -> void:
+	var root := Node3D.new()
+	(Engine.get_main_loop() as SceneTree).root.add_child(root)
+	var source := (load("res://scenes/enemies/spitter.tscn") as PackedScene).instantiate() as Spitter
+	root.add_child(source)
+	source.configure_combat(&"projectile_source", CombatRng.new(905), catalog.damage_types)
+	var packet := source.prepare_attack(&"spitter_projectile")
+	var downed := _party_actor(root, catalog, 7201, Vector3(2.0, 0.0, 0.0))
+	var impact := _party_actor(root, catalog, 7202, Vector3(5.0, 0.0, 0.0))
+	var splash := _party_actor(root, catalog, 7203, Vector3(6.0, 0.0, 0.0))
+	var outside := _party_actor(root, catalog, 7204, Vector3(7.0, 0.0, 0.0))
+	var target := _party_actor(root, catalog, 7205, Vector3(20.0, 0.0, 0.0))
+	var downed_health := downed.get_node("HealthComponent") as HealthComponent
+	downed_health.is_downed = true
+	var impact_health := impact.get_node("HealthComponent") as HealthComponent
+	var splash_health := splash.get_node("HealthComponent") as HealthComponent
+	var outside_health := outside.get_node("HealthComponent") as HealthComponent
+	var downed_before := downed_health.current_health
+	var impact_before := impact_health.current_health
+	var splash_before := splash_health.current_health
+	var outside_before := outside_health.current_health
+	var attack := (load("res://data/attacks/spitter_projectile.tres") as AttackDefinition).duplicate(true) as AttackDefinition
+	attack.projectile_speed = 20.0
+	attack.range = 10.0
+	attack.area_radius = 1.5
+	var profile := EnemyProjectileProfile.new()
+	profile.movement = EnemyProjectileProfile.Movement.LINEAR
+	profile.hit_radius = 0.2
+	profile.max_lifetime = 10.0
+	var projectile := (load("res://scenes/enemies/enemy_projectile.tscn") as PackedScene).instantiate() as EnemyProjectile
+	root.add_child(projectile)
+	projectile.position = Vector3.ZERO
+	projectile.configure(target, packet, source.combat_rng, catalog.damage_types, attack, profile, target.position)
+	projectile.advance_projectile(0.5)
+	TestAssertions.near(downed_health.current_health, downed_before, 0.001, "enemy projectile skips downed party actors", failures)
+	TestAssertions.near(impact_health.current_health, impact_before - 10.0, 0.001, "enemy projectile hits first living actor across a movement segment", failures)
+	TestAssertions.near(splash_health.current_health, splash_before - 10.0, 0.001, "enemy projectile area resolves each nearby available actor once", failures)
+	TestAssertions.near(outside_health.current_health, outside_before, 0.001, "enemy projectile area excludes actors outside configured radius", failures)
+	TestAssertions.truthy(projectile.is_queued_for_deletion(), "enemy projectile is consumed by segment impact", failures)
+	root.free()
+
 func _guardian_charge_removed(catalog: GameCatalog, steps: Array[float]) -> float:
 	var root := Node3D.new()
 	(Engine.get_main_loop() as SceneTree).root.add_child(root)
@@ -252,6 +294,13 @@ func _enemy(catalog: GameCatalog, enemy_id: StringName) -> EnemyDefinition:
 		if definition != null and definition.id == enemy_id:
 			return definition
 	return null
+
+func _party_actor(parent: Node, catalog: GameCatalog, member_id: int, actor_position: Vector3) -> PartyActor:
+	var actor := (load("res://scenes/characters/leader.tscn") as PackedScene).instantiate() as PartyActor
+	actor.position = actor_position
+	parent.add_child(actor)
+	actor.configure(PartyMemberState.new(member_id, catalog.class_by_id(&"fighter"), true))
+	return actor
 
 func _assert_error(errors: PackedStringArray, expected: String, label: String, failures: Array[String]) -> void:
 	TestAssertions.truthy(expected in errors, label, failures)
