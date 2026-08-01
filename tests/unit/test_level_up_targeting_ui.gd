@@ -184,8 +184,13 @@ func _test_pending_label_motion_policy(failures: Array[String]) -> void:
 	party.free()
 
 func _test_run_snapshots_reduced_motion_for_reveals(failures: Array[String]) -> void:
+	var profile_root := "user://tests/level_up_targeting_ui-profiles_%d_%d" % [OS.get_process_id(), Time.get_ticks_usec()]
+	ProfileTestSupport.remove_tree(profile_root)
 	var main := (load("res://scenes/game/main.tscn") as PackedScene).instantiate()
+	main.set("profile_root", profile_root)
 	main.call(&"_ready")
+	(main.get("profile_manager") as ProfileManager).create_profile("Test Profile")
+	(main.get_node("SettingsScreen") as SettingsScreen).close()
 	var settings := PartyForgeSettings.new()
 	settings.reduced_motion = false
 	main.set("saved_settings", settings)
@@ -195,6 +200,7 @@ func _test_run_snapshots_reduced_motion_for_reveals(failures: Array[String]) -> 
 	settings.reduced_motion = true
 	TestAssertions.equal(panel.get("_reduced_motion"), false, "reveal motion ignores later settings mutation", failures)
 	main.free()
+	ProfileTestSupport.remove_tree(profile_root)
 
 func _test_exact_offer_target_cancel_and_confirmation(failures: Array[String]) -> void:
 	var catalog := GameCatalog.load_defaults()

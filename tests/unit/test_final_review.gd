@@ -2,8 +2,12 @@ extends RefCounted
 
 const PARTY_STAT_IDS: Array[StringName] = [&"max_health", &"damage", &"move_speed", &"attack_speed", &"pickup_radius"]
 
+var _profile_root := ""
+
 func run() -> Array[String]:
     var failures: Array[String] = []
+    _profile_root = "user://tests/final_review-profiles_%d_%d" % [OS.get_process_id(), Time.get_ticks_usec()]
+    ProfileTestSupport.remove_tree(_profile_root)
     print("FINAL_REVIEW_TEST resource")
     _test_resource_tunables_and_trait_validation(failures)
     _test_typed_party_delivery_source_contract(failures)
@@ -24,6 +28,7 @@ func run() -> Array[String]:
     print("FINAL_REVIEW_TEST sandbox")
     _test_sandbox_hostile_effect_cleanup(failures)
     print("FINAL_REVIEW_TEST done")
+    ProfileTestSupport.remove_tree(_profile_root)
     return failures
 
 func _test_resource_tunables_and_trait_validation(failures: Array[String]) -> void:
@@ -345,8 +350,13 @@ func _test_sandbox_hostile_effect_cleanup(failures: Array[String]) -> void:
 func _started_main(class_id: StringName) -> Node:
     (Engine.get_main_loop() as SceneTree).paused = false
     var main := (load("res://scenes/game/main.tscn") as PackedScene).instantiate()
+    main.set("profile_root", _profile_root)
     (Engine.get_main_loop() as SceneTree).root.add_child(main)
     main.call("_ready")
+    var manager := main.get("profile_manager") as ProfileManager
+    if manager.active_profile() == null:
+        manager.create_profile("Test Profile")
+    (main.get_node("SettingsScreen") as SettingsScreen).close()
     main.call("select_leader_class", class_id)
     return main
 
