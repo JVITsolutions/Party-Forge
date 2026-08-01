@@ -48,7 +48,7 @@ Edit `data/attacks/boltcaster_bolt.tres`.
 
 Do not tune `id`, `kind`, `damage_type_id`, or `action_tags` as balance knobs. `scripts/enemies/boltcaster.gd` uses the resource `cooldown` after a shot and resolved `range` before beginning the tell; its `PREFERRED_DISTANCE = 9.0` and `RETREAT_DISTANCE = 5.5` are separate movement behavior constants.
 
-Focused coverage: `tests/unit/test_spawn_schedule.gd` ranged-range, Boltcaster tell, sampled aim, and linear-projectile assertions; `tests/unit/test_resolved_attack_geometry.gd`; then the full unit command. A hands-on dodge/readability pass is still required after numerical changes.
+Focused coverage: `tests/unit/test_game_catalog.gd` for the exact production Boltcaster attack values; `tests/unit/test_spawn_schedule.gd` for ranged-range, Boltcaster tell, sampled aim, and linear-projectile behavior; and `tests/unit/test_resolved_attack_geometry.gd`; then the full unit command. A hands-on dodge/readability pass is still required after numerical changes.
 
 ## Spitter attack
 
@@ -64,7 +64,7 @@ Edit `data/attacks/spitter_projectile.tres`.
 
 `scripts/enemies/spitter.gd` uses the resource `cooldown` and resolved `range`; its `PREFERRED_DISTANCE = 8.0` and `RETREAT_DISTANCE = 5.0` independently control spacing.
 
-Focused coverage: `tests/unit/test_spawn_schedule.gd` Spitter spacing/cadence, ranged-range, and homing-projectile assertions; `tests/unit/test_resolved_attack_geometry.gd`; then the full unit command and a hands-on pressure/readability pass.
+Focused coverage: `tests/unit/test_attack_damage_data.gd` for the exact production Spitter attack values; `tests/unit/test_spawn_schedule.gd` for Spitter spacing/cadence, ranged-range, and homing-projectile behavior; and `tests/unit/test_resolved_attack_geometry.gd`; then the full unit command and a hands-on pressure/readability pass.
 
 > **Range and area warning:** `range` and `area_radius` are normalized through `ResolvedAttackGeometry` but remain distinct semantics. Range controls target/travel reach; area radius controls the impact/cleave footprint. Range multipliers scale only range, area multipliers scale only area, invalid multipliers fall back or clamp independently, and changing one is not a substitute for changing the other.
 
@@ -78,11 +78,11 @@ The two current profile resources are `data/projectiles/boltcaster_bolt.tres` an
 | `color` | `Color(1, 0.08, 0.05, 1)` | `Color(0.75, 0.15, 1, 1)` | readability; keep alpha `1`, keep bolt warm/red and orb purple, and preserve strong contrast from arena/background and each other |
 | `hit_radius` | `0.4` m | `0.45` m | collision forgiveness/pressure; Bolt `0.30-0.50`, Spitter `0.35-0.55` |
 | `max_lifetime` | `3.0` s | `3.0` s | hard travel lifetime; trial `2.5-4.0` and `3.0-4.0` respectively |
-| `tell_duration` | `0.35` s | `0.2` s | pre-fire readability; Bolt `0.25-0.50`, Spitter `0.15-0.35` |
+| `tell_duration` | `0.35` s | `0.2` s (stored, currently unused) | Boltcaster pre-fire readability; trial Bolt `0.25-0.50`. Spitter fires immediately once its cooldown/range gate passes and `scripts/enemies/spitter.gd` does not consume profile `tell_duration`; changing `0.2` has no runtime effect until production wiring exists, so it has no active tuning range. |
 
 `scripts/enemies/enemy_projectile.gd` resolves actual lifetime as the smaller of `max_lifetime` and `range / projectile_speed + 0.5`; avoid setting `max_lifetime` below `range / projectile_speed` unless early expiry is intentional. Colors are applied directly to the projectile material.
 
-Focused coverage: `tests/unit/test_enemy_projectile_profile.gd` and the linear/homing tests in `tests/unit/test_spawn_schedule.gd`, then the full unit command. Color contrast, tell clarity, and dodgeability need connected visual acceptance.
+Focused coverage: `tests/unit/test_expanded_catalog.gd` for production profile loading, Boltcaster movement/color/tell, and Spitter movement/color; `tests/unit/test_enemy_projectile_profile.gd` for profile validation; and the linear/homing behavior in `tests/unit/test_spawn_schedule.gd`, then the full unit command. Color contrast, Boltcaster tell clarity, and dodgeability need connected visual acceptance.
 
 ## Recruit probability and drought
 
@@ -119,6 +119,8 @@ Edit `scripts/settings/party_forge_settings.gd` only when changing the settings 
 | `level_up_card_count` | `5` | `1-8` | offer/card count; the dedicated geometry runner specifically proves five cards |
 | `reduced_motion` | `false` | boolean | resolves the level-up reveal immediately |
 
+`reduced_motion` is a normal accessibility setting on the Game Settings page, not a developer override. `RunRulesSnapshot.from_settings()` copies it regardless of Player Simulation or Developer Mode. The fields gated by Developer Mode are exactly `unlock_all_implemented_content`, `god_mode`, `party_capacity_override`, `enemy_density_percent`, `experience_multiplier_percent`, and `level_up_card_count`; in Player Simulation the run snapshot retains their production values.
+
 Keep the player-simulation defaults (`4`, `100`, `100`, `5`, toggles false) as the production baseline. High density and 24-member/8-card modes are stress settings, not claims of balanced play.
 
 Focused coverage: `tests/unit/test_settings_screen.gd`, `tests/unit/test_run_rules_policies.gd`, and `tests/unit/test_main_wiring.gd`; then use the five-card and ledger integrations when changing the related extrema.
@@ -135,7 +137,7 @@ Reveal timing is in `scripts/ui/level_up_reveal_controller.gd`: `TOTAL_DURATION 
 
 Tooltip size/layout is in `scenes/ui/upgrade_tooltip_panel.tscn`: minimum `420 x 360`, pin target `44 x 44`, body vertical scrolling enabled. `scripts/ui/upgrade_tooltip_panel.gd` sets `EDGE_MARGIN = 16`, `MAXIMUM_POPUP_HEIGHT = 680`, and `CONTENT_PADDING_ALLOWANCE = 32`; safe first-pass windows are width `380-480`, minimum height `320-420`, edge margin `12-24`, and maximum height `600-720`. Keep the pin target at least `44 x 44`. `scripts/ui/temporary_hover_popup.gd` owns hold/pin/source retention and controller scrolling (`CONTROLLER_SCROLL_SPEED = 560`, `INPUT_DEADZONE = 0.15`); trial `420-700` px/s and deadzone `0.12-0.22` only with controller acceptance.
 
-Focused coverage: `tests/unit/test_level_up_reveal_controller.gd`, `tests/unit/test_level_up_targeting_ui.gd`, and `tests/unit/test_foundational_upgrade_presentation.gd`, followed by both `level_up_five_card_geometry_runner.gd` and `temporary_popup_input_runner.gd` at all four viewports.
+Focused coverage: `tests/unit/test_responsive_ui.gd` for exact production panel/card dimensions; `tests/unit/test_upgrade_tooltip_ui.gd` for tooltip width, responsive height cap, and viewport margins; `tests/unit/test_level_up_reveal_controller.gd`, `tests/unit/test_level_up_targeting_ui.gd`, and `tests/unit/test_foundational_upgrade_presentation.gd` for behavior/presentation; followed by both `level_up_five_card_geometry_runner.gd` and `temporary_popup_input_runner.gd` at all four viewports.
 
 ## Ledger roster and layout through 24 members
 
