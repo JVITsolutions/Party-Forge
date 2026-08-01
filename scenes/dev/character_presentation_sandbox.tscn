@@ -63,4 +63,4 @@ offset_right = 760.0
 offset_bottom = 118.0
 theme_override_colors/font_color = Color(0.93, 0.95, 0.98, 1)
 theme_override_font_sizes/font_size = 20
-text = "1/2 Body   R/B/G Palette   I Idle   A Slash   C Combo   H Hit\nQ/E Cycle Slot   Space Toggle Selected Slot\nM Toggle Base/Equipped Profile"
+text = "1/2 Body   R/B/G Palette   I Idle   A Slash   C Combo   H Hit\nQ/E Cycle Slot   Space Toggle Selected Slot   V Cycle Variant\nM Toggle Base/Equipped Profile"

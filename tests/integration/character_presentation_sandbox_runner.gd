@@ -24,6 +24,15 @@ func _initialize() -> void:
 		if not sandbox.set_base_profile(false, side_id) or sandbox.is_base_profile(side_id):
 			_fail("equipped profile rejected side=%s" % side_id)
 			return
+		if sandbox.get_equipped_visual_id(&"main_hand", side_id) != &"forge_vanguard_sword":
+			_fail("default sword missing side=%s" % side_id)
+			return
+		if not sandbox.cycle_slot_variant(&"main_hand", 1, side_id) or sandbox.get_equipped_visual_id(&"main_hand", side_id) != &"forge_vanguard_hammer":
+			_fail("hammer cycle rejected side=%s" % side_id)
+			return
+		if not sandbox.cycle_slot_variant(&"main_hand", 1, side_id) or sandbox.get_equipped_visual_id(&"main_hand", side_id) != &"forge_vanguard_sword":
+			_fail("sword cycle rejected side=%s" % side_id)
+			return
 		for body_id: StringName in BODY_IDS:
 			if not sandbox.set_body(body_id, side_id):
 				_fail("body rejected side=%s body=%s" % [side_id, body_id])
