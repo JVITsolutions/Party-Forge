@@ -118,29 +118,7 @@ func _presentation_for(choice: UpgradeChoice) -> Dictionary:
 		return {"name": "Unavailable", "scope_badge": "", "rank_text": "", "summary": ""}
 	if choice.kind == UpgradeChoice.Kind.AUTHORED and choice.definition != null:
 		return UpgradePresentationService.card(choice.definition, _party)
-	return {
-		"name": choice.label,
-		"scope_badge": _legacy_scope_name(choice.kind),
-		"rank_text": "",
-		"summary": "A foundational party progression choice.",
-		"eligibility_text": "Available to the current party.",
-		"recipient_text": "Applies without a character target.",
-		"inheritance_text": "",
-	}
-
-
-func _legacy_scope_name(kind: UpgradeChoice.Kind) -> String:
-	match kind:
-		UpgradeChoice.Kind.RECRUIT:
-			return "Recruit"
-		UpgradeChoice.Kind.CLASS_RANK:
-			return "Class Rank"
-		UpgradeChoice.Kind.TRAIT:
-			return "Trait Rank"
-		UpgradeChoice.Kind.PARTY_STAT:
-			return "Party"
-		_:
-			return "Upgrade"
+	return FoundationalUpgradePresentationService.card(choice, _party, _catalog)
 
 
 func _disabled_reason(choice: UpgradeChoice) -> String:
@@ -281,26 +259,29 @@ func _on_card_detail_requested(choice: UpgradeChoice, anchor: Control) -> void:
 		not visible
 		or not (get_node("ContentPanel/OfferView") as Control).visible
 		or choice == null
-		or choice.kind != UpgradeChoice.Kind.AUTHORED
 		or _catalog == null
 		or _catalog.keywords == null
 		or _party == null
 	):
 		_hide_tooltip()
 		return
-	var definition := _catalog.upgrade_by_id(choice.target_id)
-	if definition == null:
-		_hide_tooltip()
-		return
-	var rank_state := _offered_rank_state(definition)
-	var content := UpgradePresentationService.tooltip(
-		definition,
-		int(rank_state.rank),
-		PartyManager.STAT_CATALOG,
-		_catalog.keywords
-	)
-	if bool(rank_state.varies):
-		content["rank_text"] = "Offered rank varies / %d" % definition.max_rank
+	var content: Dictionary
+	if choice.kind == UpgradeChoice.Kind.AUTHORED:
+		var definition := _catalog.upgrade_by_id(choice.target_id)
+		if definition == null:
+			_hide_tooltip()
+			return
+		var rank_state := _offered_rank_state(definition)
+		content = UpgradePresentationService.tooltip(
+			definition,
+			int(rank_state.rank),
+			PartyManager.STAT_CATALOG,
+			_catalog.keywords
+		)
+		if bool(rank_state.varies):
+			content["rank_text"] = "Offered rank varies / %d" % definition.max_rank
+	else:
+		content = FoundationalUpgradePresentationService.tooltip(choice, _party, _catalog)
 	var source_id := StringName(choice.key())
 	if _tooltip().show_content(content, anchor, source_id):
 		_tooltip_choice = choice
