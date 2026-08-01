@@ -2,6 +2,7 @@ extends RefCounted
 
 func run() -> Array[String]:
 	var failures: Array[String] = []
+	_test_member_24_identity(failures)
 	var tree := Engine.get_main_loop() as SceneTree
 	var page_scene := load("res://scenes/ui/ledger/stats_ledger_page.tscn") as PackedScene
 	TestAssertions.truthy(page_scene != null, "stats page scene loads", failures)
@@ -98,3 +99,40 @@ func run() -> Array[String]:
 	page.free()
 	party.free()
 	return failures
+
+
+func _test_member_24_identity(failures: Array[String]) -> void:
+	var tree := Engine.get_main_loop() as SceneTree
+	var page_scene := load("res://scenes/ui/ledger/stats_ledger_page.tscn") as PackedScene
+	if page_scene == null:
+		TestAssertions.truthy(false, "stats page scene loads for member 24", failures)
+		return
+	var catalog := GameCatalog.load_defaults()
+	var party := PartyManager.new()
+	party.configure_capacity(PartyCapacityPolicy.new(24))
+	party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
+	for _index: int in 23:
+		TestAssertions.truthy(party.recruit(catalog.class_by_id(&"fighter")), "24-member Stats fixture recruits every Fighter", failures)
+	var member_24 := party.member_by_id(24)
+	TestAssertions.truthy(member_24 != null, "24-member Stats fixture includes member 24", failures)
+	if member_24 == null:
+		party.free()
+		return
+	member_24.character_name = "Twenty Four"
+
+	var page := page_scene.instantiate() as StatsLedgerPage
+	tree.root.add_child(page)
+	var provider := LedgerDataProvider.new()
+	provider.configure(party, catalog, Callable())
+	var context := LedgerPlayerContext.new(0)
+	context.selected_member_id = 24
+	page.configure(provider, context)
+	page.refresh()
+
+	var identity := (page.get_node("Layout/Header/Identity") as Label).text
+	TestAssertions.truthy("Twenty Four" in identity, "Stats identity renders selected member 24's unique name", failures)
+	TestAssertions.equal(context.selected_member_id, 24, "Stats refresh preserves selected member 24 context", failures)
+
+	provider.configure(null, null, Callable())
+	page.free()
+	party.free()
