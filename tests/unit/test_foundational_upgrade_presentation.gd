@@ -121,10 +121,11 @@ func _test_production_trait_keyword_mappings(failures: Array[String]) -> void:
 	var catalog := GameCatalog.load_defaults()
 	var party := PartyManager.new()
 	party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
+	TestAssertions.truthy(catalog.keywords.definition(&"less") != null, "Less keyword exists for multiplicative Vanguard reduction", failures)
 	var compound_prefixes := {
 		&"cooldown_reduction": ["Cooldown Rate:"],
 		&"healing_and_revive": ["Healing Power:", "Healing:"],
-		&"nearby_damage_reduction": ["Reduced:"],
+		&"nearby_damage_reduction": ["Less:"],
 		&"projectile_speed_and_range": ["Projectile Speed:", "Attack Range:"],
 		&"support_power": ["Healing Power:"],
 	}

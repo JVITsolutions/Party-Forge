@@ -4,7 +4,7 @@ extends RefCounted
 const TRAIT_STAT_KEYWORD_IDS := {
 	&"cooldown_reduction": [&"cooldown_rate"],
 	&"healing_and_revive": [&"healing_power", &"healing"],
-	&"nearby_damage_reduction": [&"reduced"],
+	&"nearby_damage_reduction": [&"less"],
 	&"projectile_speed_and_range": [&"projectile_speed", &"attack_range"],
 	&"support_power": [&"healing_power"],
 }
