@@ -48,12 +48,57 @@ func run() -> Array[String]:
 			has_visual_profile_error = true
 	TestAssertions.truthy(has_visual_profile_error, "class forwards profile validation", failures)
 
-	var duplicate_available := CharacterVisualProfile.new()
-	duplicate_available.id = &"duplicate_available"
-	duplicate_available.default_palette_id = &"red"
-	duplicate_available.palette_colors = {&"red": Color.WHITE}
-	duplicate_available.available_equipment_visuals = [sword, sword]
-	TestAssertions.truthy(_errors_contain(duplicate_available.validate(), "duplicate available equipment slot"), "duplicate available equipment slots are rejected", failures)
+	var hammer := EquipmentVisualDefinition.new()
+	hammer.id = &"forge_vanguard_hammer"
+	hammer.slot_id = &"main_hand"
+	hammer.geometry_key = &"forge_vanguard_hammer"
+	hammer.visual_channels = [&"geometry"]
+	profile.available_equipment_visuals = [sword, hammer]
+	TestAssertions.truthy(not _errors_contain(profile.validate(), "duplicate available equipment slot"), "multiple available main-hand variants are accepted", failures)
+	TestAssertions.truthy(profile.has_method(&"get_available_equipment_visual_by_id"), "equipment ID lookup exists", failures)
+	TestAssertions.truthy(profile.has_method(&"get_available_equipment_visuals_for_slot"), "slot variant lookup exists", failures)
+	if profile.has_method(&"get_available_equipment_visual_by_id"):
+		TestAssertions.equal(profile.call(&"get_available_equipment_visual_by_id", &"forge_vanguard_hammer"), hammer, "hammer resolves by equipment ID", failures)
+		TestAssertions.equal(profile.call(&"get_available_equipment_visual_by_id", &"missing_item"), null, "unknown equipment ID returns null", failures)
+	if profile.has_method(&"get_available_equipment_visuals_for_slot"):
+		var main_hand_variants: Array = profile.call(&"get_available_equipment_visuals_for_slot", &"main_hand")
+		TestAssertions.equal(main_hand_variants.size(), 2, "main hand exposes sword and hammer", failures)
+		if main_hand_variants.size() >= 2:
+			TestAssertions.equal(main_hand_variants[0], sword, "legacy first main-hand variant remains sword", failures)
+			TestAssertions.equal(main_hand_variants[1], hammer, "second main-hand variant is hammer", failures)
+		var charm_variants: Array = profile.call(&"get_available_equipment_visuals_for_slot", &"charm")
+		TestAssertions.truthy(charm_variants.is_empty(), "unknown slot returns an empty variant array", failures)
+
+	var duplicate_default := CharacterVisualProfile.new()
+	duplicate_default.id = &"duplicate_default"
+	duplicate_default.default_palette_id = &"red"
+	duplicate_default.palette_colors = {&"red": Color.WHITE}
+	duplicate_default.default_equipment_visuals = [sword, hammer]
+	TestAssertions.truthy(_errors_contain(duplicate_default.validate(), "duplicate default equipment slot main_hand"), "default equipment still rejects two main-hand items", failures)
+
+	var duplicate_id := CharacterVisualProfile.new()
+	duplicate_id.id = &"duplicate_id"
+	duplicate_id.default_palette_id = &"red"
+	duplicate_id.palette_colors = {&"red": Color.WHITE}
+	var duplicate_id_hammer := EquipmentVisualDefinition.new()
+	duplicate_id_hammer.id = sword.id
+	duplicate_id_hammer.slot_id = &"main_hand"
+	duplicate_id_hammer.geometry_key = hammer.geometry_key
+	duplicate_id_hammer.visual_channels = [&"geometry"]
+	duplicate_id.available_equipment_visuals = [sword, duplicate_id_hammer]
+	TestAssertions.truthy(_errors_contain(duplicate_id.validate(), "duplicate available equipment id forge_vanguard_sword"), "available equipment rejects duplicate IDs", failures)
+
+	var duplicate_geometry := CharacterVisualProfile.new()
+	duplicate_geometry.id = &"duplicate_geometry"
+	duplicate_geometry.default_palette_id = &"red"
+	duplicate_geometry.palette_colors = {&"red": Color.WHITE}
+	var duplicate_geometry_hammer := EquipmentVisualDefinition.new()
+	duplicate_geometry_hammer.id = hammer.id
+	duplicate_geometry_hammer.slot_id = &"main_hand"
+	duplicate_geometry_hammer.geometry_key = sword.geometry_key
+	duplicate_geometry_hammer.visual_channels = [&"geometry"]
+	duplicate_geometry.available_equipment_visuals = [sword, duplicate_geometry_hammer]
+	TestAssertions.truthy(_errors_contain(duplicate_geometry.validate(), "duplicate available geometry key forge_vanguard_sword"), "available equipment rejects duplicate geometry keys", failures)
 
 	var empty_available := CharacterVisualProfile.new()
 	empty_available.id = &"empty_available"

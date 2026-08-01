@@ -7,6 +7,18 @@ const EXPECTED_LENGTHS := {
 	&"attack_combo": 0.9,
 	&"hit_flinch": 0.25,
 }
+const EXPECTED_GUARD_ROTATIONS := {
+	&"left_shoulder": Vector3(-0.28, -0.05, -0.55),
+	&"left_elbow": Vector3(0.10, 0.0, -0.65),
+	&"right_shoulder": Vector3(-0.18, -0.16, 0.34),
+	&"right_elbow": Vector3(0.10, 0.0, 0.38),
+}
+const PIVOT_PATHS := {
+	&"left_shoulder": "HitPivot/BodyPivot/HipsPivot/TorsoPivot/LeftShoulderPivot",
+	&"left_elbow": "HitPivot/BodyPivot/HipsPivot/TorsoPivot/LeftShoulderPivot/LeftElbowPivot",
+	&"right_shoulder": "HitPivot/BodyPivot/HipsPivot/TorsoPivot/RightShoulderPivot",
+	&"right_elbow": "HitPivot/BodyPivot/HipsPivot/TorsoPivot/RightShoulderPivot/RightElbowPivot",
+}
 const ROOT_TRANSFORM_PROPERTIES := [&"position", &"rotation", &"transform", &"global_transform"]
 
 func run() -> Array[String]:
@@ -24,6 +36,7 @@ func run() -> Array[String]:
 	TestAssertions.truthy(player != null, "AnimationPlayer exists", failures)
 	if player != null:
 		_assert_animation_metadata(player, failures)
+		_assert_guard_contract(player, failures)
 		_assert_model_root_is_not_animated(player, failures)
 		_assert_playback_contract(model, player, failures)
 	_assert_feedback_contract(model, failures)
@@ -38,6 +51,25 @@ func _assert_animation_metadata(player: AnimationPlayer, failures: Array[String]
 			var animation := player.get_animation(animation_id)
 			TestAssertions.near(animation.length, EXPECTED_LENGTHS[animation_id], 0.02, "%s duration" % animation_id, failures)
 			TestAssertions.equal(animation.loop_mode == Animation.LOOP_LINEAR, animation_id == &"idle", "%s loop contract" % animation_id, failures)
+
+func _assert_guard_contract(player: AnimationPlayer, failures: Array[String]) -> void:
+	for animation_id: StringName in EXPECTED_LENGTHS:
+		if not player.has_animation(animation_id):
+			continue
+		var animation := player.get_animation(animation_id)
+		for pivot_id: StringName in EXPECTED_GUARD_ROTATIONS:
+			var expected := Quaternion.from_euler(EXPECTED_GUARD_ROTATIONS[pivot_id] as Vector3)
+			var start := _sample_rotation(animation, String(PIVOT_PATHS[pivot_id]), 0.0)
+			var finish := _sample_rotation(animation, String(PIVOT_PATHS[pivot_id]), animation.length)
+			TestAssertions.truthy(start.is_equal_approx(expected), "%s begins in guard at %s" % [animation_id, pivot_id], failures)
+			TestAssertions.truthy(finish.is_equal_approx(expected), "%s recovers to guard at %s" % [animation_id, pivot_id], failures)
+
+func _sample_rotation(animation: Animation, node_path: String, time: float) -> Quaternion:
+	var track_path := NodePath("%s:rotation" % node_path)
+	var track_index := animation.find_track(track_path, Animation.TYPE_ROTATION_3D)
+	if track_index < 0:
+		return Quaternion.IDENTITY
+	return animation.rotation_track_interpolate(track_index, time)
 
 func _assert_model_root_is_not_animated(player: AnimationPlayer, failures: Array[String]) -> void:
 	for animation_id: StringName in EXPECTED_LENGTHS:

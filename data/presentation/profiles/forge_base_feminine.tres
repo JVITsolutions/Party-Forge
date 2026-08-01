@@ -1,4 +1,4 @@
-[gd_resource type="Resource" script_class="CharacterVisualProfile" load_steps=13 format=3]
+[gd_resource type="Resource" script_class="CharacterVisualProfile" load_steps=14 format=3]
 
 [ext_resource type="Script" path="res://scripts/presentation/character_visual_profile.gd" id="1"]
 [ext_resource type="PackedScene" path="res://scenes/characters/presentation/forge_base_feminine.tscn" id="2"]
@@ -12,6 +12,7 @@
 [ext_resource type="Resource" path="res://data/presentation/equipment/forge_vanguard_amulet.tres" id="10"]
 [ext_resource type="Resource" path="res://data/presentation/equipment/forge_vanguard_ring_left.tres" id="11"]
 [ext_resource type="Resource" path="res://data/presentation/equipment/forge_vanguard_ring_right.tres" id="12"]
+[ext_resource type="Resource" path="res://data/presentation/equipment/forge_vanguard_hammer.tres" id="13"]
 
 [resource]
 script = ExtResource("1")
@@ -21,6 +22,6 @@ default_body_preset = &"feminine"
 default_palette_id = &"red"
 palette_colors = {&"red": Color(0.8509804, 0.30980393, 0.30980393, 1), &"blue": Color(0.30980393, 0.47058824, 0.8509804, 1), &"green": Color(0.30980393, 0.6862745, 0.44705883, 1)}
 default_equipment_visuals = []
-available_equipment_visuals = [ExtResource("3"), ExtResource("4"), ExtResource("5"), ExtResource("6"), ExtResource("7"), ExtResource("8"), ExtResource("9"), ExtResource("10"), ExtResource("11"), ExtResource("12")]
+available_equipment_visuals = [ExtResource("3"), ExtResource("13"), ExtResource("4"), ExtResource("5"), ExtResource("6"), ExtResource("7"), ExtResource("8"), ExtResource("9"), ExtResource("10"), ExtResource("11"), ExtResource("12")]
 required_animation_names = [&"idle", &"attack_slash", &"attack_combo", &"hit_flinch"]
 attack_animation_by_id = {&"fighter_cleave": &"attack_slash"}

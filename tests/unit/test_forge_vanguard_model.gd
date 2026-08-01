@@ -1,6 +1,8 @@
 extends RefCounted
 
 const PROFILE_PATH := "res://data/presentation/profiles/forge_vanguard.tres"
+const SWORD_PATH := "res://data/presentation/equipment/forge_vanguard_sword.tres"
+const HAMMER_PATH := "res://data/presentation/equipment/forge_vanguard_hammer.tres"
 const EQUIPMENT_PATHS: Dictionary = {
 	&"main_hand": "res://data/presentation/equipment/forge_vanguard_sword.tres",
 	&"off_hand": "res://data/presentation/equipment/forge_vanguard_shield.tres",
@@ -23,7 +25,7 @@ func run() -> Array[String]:
 	TestAssertions.equal(profile.palette_colors.keys().size(), 3, "three palettes", failures)
 	TestAssertions.equal(profile.validate(), PackedStringArray(), "Forge Vanguard profile validates", failures)
 	var available_visuals: Variant = profile.get("available_equipment_visuals")
-	TestAssertions.truthy(available_visuals is Array and (available_visuals as Array).size() == EquipmentSlotCatalog.SLOT_IDS.size(), "all equipment visuals are discoverable", failures)
+	TestAssertions.truthy(available_visuals is Array and (available_visuals as Array).size() == EquipmentSlotCatalog.SLOT_IDS.size() + 1, "all equipment visuals are discoverable", failures)
 	for slot_id: StringName in [&"amulet", &"ring_left", &"ring_right"]:
 		TestAssertions.truthy(profile.has_method(&"get_available_equipment_visual"), "%s visual accessor exists" % slot_id, failures)
 		var discovered := profile.call(&"get_available_equipment_visual", slot_id) as EquipmentVisualDefinition if profile.has_method(&"get_available_equipment_visual") else null
@@ -43,7 +45,7 @@ func run() -> Array[String]:
 	_assert_jewelry_emission(model, failures)
 	_assert_unequipped_jewelry_visibility(model, profile, failures)
 	var bounds: AABB = model.call(&"visual_bounds") as AABB
-	TestAssertions.truthy(bounds.size.y >= 1.6 and bounds.size.y <= 1.85, "humanoid height fits actor scale", failures)
+	TestAssertions.truthy(bounds.size.y >= 1.6 and bounds.size.y <= 1.9, "humanoid height fits actor scale", failures)
 	TestAssertions.near(bounds.position.y, 0.0, 0.05, "model feet begin at local floor", failures)
 	for slot_id: StringName in EquipmentSlotCatalog.SLOT_IDS:
 		var definition := load(EQUIPMENT_PATHS[slot_id]) as EquipmentVisualDefinition
@@ -56,13 +58,14 @@ func run() -> Array[String]:
 				TestAssertions.truthy(model.call(&"apply_equipment_visual", slot_id, definition), "%s equipment visual applies" % slot_id, failures)
 				var equipment_root := _equipment_root(model, slot_id)
 				TestAssertions.truthy(equipment_root != null and equipment_root.visible, "%s equipment root becomes visible when applied" % slot_id, failures)
+	_assert_main_hand_variants(model, profile, failures)
 	_assert_invalid_geometry_keys_do_not_change_slot(model, failures)
 	model.free()
 	return failures
 
 func _assert_invalid_geometry_keys_do_not_change_slot(model: Node3D, failures: Array[String]) -> void:
 	var slot_id := &"main_hand"
-	var equipment_root := _equipment_root(model, slot_id)
+	var equipment_root := _equipment_root_by_visual_id(model, &"forge_vanguard_sword")
 	var valid_definition := load(EQUIPMENT_PATHS[slot_id]) as EquipmentVisualDefinition
 	TestAssertions.truthy(equipment_root != null and valid_definition != null, "main-hand fixture exists for geometry rejection", failures)
 	if equipment_root == null or valid_definition == null:
@@ -82,6 +85,43 @@ func _assert_invalid_geometry_keys_do_not_change_slot(model: Node3D, failures: A
 	TestAssertions.truthy(not model.call(&"apply_equipment_visual", slot_id, unmatched_key), "unmatched geometry key is rejected by model", failures)
 	TestAssertions.truthy(equipment_root.visible, "unmatched geometry key leaves current main-hand state unchanged", failures)
 
+func _assert_main_hand_variants(model: Node3D, profile: CharacterVisualProfile, failures: Array[String]) -> void:
+	var sword := load(SWORD_PATH) as EquipmentVisualDefinition
+	var hammer := load(HAMMER_PATH) as EquipmentVisualDefinition
+	TestAssertions.truthy(sword != null and hammer != null, "sword and hammer definitions load", failures)
+	if sword == null or hammer == null:
+		return
+	var variants := profile.get_available_equipment_visuals_for_slot(&"main_hand")
+	TestAssertions.equal(variants.size(), 2, "Fighter profile exposes two main-hand variants", failures)
+	if variants.size() >= 2:
+		TestAssertions.equal(variants[0].id, &"forge_vanguard_sword", "sword remains first main-hand variant", failures)
+		TestAssertions.equal(variants[1].id, &"forge_vanguard_hammer", "hammer is the second main-hand variant", failures)
+	TestAssertions.truthy(not profile.default_equipment_visuals.is_empty(), "Fighter profile has default equipment", failures)
+	if not profile.default_equipment_visuals.is_empty():
+		TestAssertions.equal(profile.default_equipment_visuals[0].id, &"forge_vanguard_sword", "Fighter defaults to sword", failures)
+	var hammer_root := _equipment_root_by_visual_id(model, &"forge_vanguard_hammer")
+	var sword_root := _equipment_root_by_visual_id(model, &"forge_vanguard_sword")
+	TestAssertions.truthy(hammer_root != null and sword_root != null, "separate hammer and sword roots exist", failures)
+	if hammer_root == null or sword_root == null:
+		return
+	var hammer_mesh := hammer_root.get_node_or_null("ReadableChannel") as MeshInstance3D
+	TestAssertions.truthy(hammer_mesh != null and hammer_mesh.mesh is BoxMesh, "preserved hammer remains one box mesh", failures)
+	if hammer_mesh != null and hammer_mesh.mesh is BoxMesh:
+		TestAssertions.equal((hammer_mesh.mesh as BoxMesh).size, Vector3(0.09, 0.92, 0.07), "hammer dimensions are unchanged", failures)
+	TestAssertions.equal(hammer_root.position, Vector3(0.03, 0.11, 0), "hammer socket position is unchanged", failures)
+	for part_name: StringName in [&"Blade", &"Tip", &"Crossguard", &"Grip", &"Pommel"]:
+		TestAssertions.truthy(sword_root.get_node_or_null(NodePath(part_name)) is MeshInstance3D, "sword part exists: %s" % part_name, failures)
+	TestAssertions.truthy(model.call(&"apply_equipment_visual", &"main_hand", hammer), "hammer equips", failures)
+	TestAssertions.truthy(hammer_root.visible and not sword_root.visible, "equipping hammer hides sword", failures)
+	TestAssertions.truthy(model.call(&"apply_equipment_visual", &"main_hand", sword), "sword equips", failures)
+	TestAssertions.truthy(sword_root.visible and not hammer_root.visible, "equipping sword hides hammer", failures)
+
+func _equipment_root_by_visual_id(model: Node3D, visual_id: StringName) -> Node3D:
+	for node: Node in model.find_children("*", "Node3D", true, false):
+		if StringName(node.get_meta(&"equipment_visual_id", &"")) == visual_id:
+			return node as Node3D
+	return null
+
 func _default_equips_slot(profile: CharacterVisualProfile, slot_id: StringName) -> bool:
 	for definition: EquipmentVisualDefinition in profile.default_equipment_visuals:
 		if definition != null and definition.slot_id == slot_id:
@@ -94,7 +134,8 @@ func _assert_functional_pivot_contract(model: Node3D, failures: Array[String]) -
 	var torso_pivot := model.get_node_or_null("HitPivot/BodyPivot/HipsPivot/TorsoPivot") as Node3D
 	var right_hand := model.get_node_or_null("HitPivot/BodyPivot/HipsPivot/TorsoPivot/RightShoulderPivot/RightElbowPivot/RightHandSocket") as Node3D
 	var left_hand := model.get_node_or_null("HitPivot/BodyPivot/HipsPivot/TorsoPivot/LeftShoulderPivot/LeftElbowPivot/LeftHandSocket") as Node3D
-	var sword := model.get_node_or_null("HitPivot/BodyPivot/HipsPivot/TorsoPivot/RightShoulderPivot/RightElbowPivot/RightHandSocket/MainHandVisual/ReadableChannel") as MeshInstance3D
+	var sword_root := _equipment_root_by_visual_id(model, &"forge_vanguard_sword")
+	var sword := sword_root.get_node_or_null("Blade") as MeshInstance3D if sword_root != null else null
 	var shield := model.get_node_or_null("HitPivot/BodyPivot/HipsPivot/TorsoPivot/LeftShoulderPivot/LeftElbowPivot/LeftHandSocket/OffHandVisual/ReadableChannel") as MeshInstance3D
 	var arm := model.get_node_or_null("HitPivot/BodyPivot/HipsPivot/TorsoPivot/RightShoulderPivot/MasculineUpperArm/ReadableChannel") as MeshInstance3D
 	var torso := model.get_node_or_null("HitPivot/BodyPivot/HipsPivot/TorsoPivot/MasculineTorso/ReadableChannel") as MeshInstance3D
@@ -137,7 +178,9 @@ func _assert_shield_front_readability(model: Node3D, failures: Array[String]) ->
 	TestAssertions.near(shield_bounds.size.z, 0.14, 0.01, "shield depth remains thin", failures)
 
 func _assert_unequipped_jewelry_visibility(model: Node3D, profile: CharacterVisualProfile, failures: Array[String]) -> void:
-	for slot_id: StringName in [&"main_hand", &"off_hand", &"helmet", &"body_armour", &"gloves", &"boots", &"belt"]:
+	var sword_root := _equipment_root_by_visual_id(model, &"forge_vanguard_sword")
+	TestAssertions.truthy(sword_root != null and sword_root.visible, "main_hand default equipment root starts visible", failures)
+	for slot_id: StringName in [&"off_hand", &"helmet", &"body_armour", &"gloves", &"boots", &"belt"]:
 		var default_root := _equipment_root(model, slot_id)
 		TestAssertions.truthy(default_root != null and default_root.visible, "%s default equipment root starts visible" % slot_id, failures)
 	for slot_id: StringName in [&"amulet", &"ring_left", &"ring_right"]:

@@ -47,14 +47,35 @@ func get_available_equipment_visual(slot_id: StringName) -> EquipmentVisualDefin
 			return definition
 	return null
 
+func get_available_equipment_visual_by_id(equipment_id: StringName) -> EquipmentVisualDefinition:
+	for definition: EquipmentVisualDefinition in available_equipment_visuals:
+		if definition != null and definition.id == equipment_id:
+			return definition
+	return null
+
+func get_available_equipment_visuals_for_slot(slot_id: StringName) -> Array[EquipmentVisualDefinition]:
+	var matches: Array[EquipmentVisualDefinition] = []
+	for definition: EquipmentVisualDefinition in available_equipment_visuals:
+		if definition != null and definition.slot_id == slot_id:
+			matches.append(definition)
+	return matches
+
 func _validate_equipment_visuals(definitions: Array[EquipmentVisualDefinition], collection_name: StringName, errors: PackedStringArray) -> void:
 	var equipment_slots: Dictionary = {}
+	var equipment_ids: Dictionary = {}
+	var geometry_keys: Dictionary = {}
 	for definition: EquipmentVisualDefinition in definitions:
 		if definition == null:
 			errors.append("profile %s has null %s equipment visual" % [id, collection_name])
 			continue
 		for reason: String in definition.validate():
 			errors.append("profile %s %s" % [id, reason])
-		if equipment_slots.has(definition.slot_id):
-			errors.append("profile %s has duplicate %s equipment slot %s" % [id, collection_name, definition.slot_id])
+		if equipment_ids.has(definition.id):
+			errors.append("profile %s has duplicate %s equipment id %s" % [id, collection_name, definition.id])
+		equipment_ids[definition.id] = true
+		if not definition.geometry_key.is_empty() and geometry_keys.has(definition.geometry_key):
+			errors.append("profile %s has duplicate %s geometry key %s" % [id, collection_name, definition.geometry_key])
+		geometry_keys[definition.geometry_key] = true
+		if collection_name == &"default" and equipment_slots.has(definition.slot_id):
+			errors.append("profile %s has duplicate default equipment slot %s" % [id, definition.slot_id])
 		equipment_slots[definition.slot_id] = true
