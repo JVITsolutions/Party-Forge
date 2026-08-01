@@ -1,0 +1,61 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/ui/settings/profiles_settings_page.gd" id="1_profiles"]
+
+[node name="Profiles" type="MarginContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+script = ExtResource("1_profiles")
+
+[node name="Layout" type="VBoxContainer" parent="."]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+theme_override_constants/separation = 10
+
+[node name="Explanation" type="Label" parent="Layout"]
+layout_mode = 2
+text = "Create a local player profile or activate an existing one. Profile changes are saved immediately and are not affected by Apply or Cancel."
+autowrap_mode = 2
+
+[node name="EmptyState" type="Label" parent="Layout"]
+layout_mode = 2
+text = "Create a profile to begin playing."
+horizontal_alignment = 1
+autowrap_mode = 2
+
+[node name="ProfileList" type="ItemList" parent="Layout"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+focus_mode = 2
+allow_reselect = true
+
+[node name="CreateRow" type="HBoxContainer" parent="Layout"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 10
+
+[node name="ProfileName" type="LineEdit" parent="Layout/CreateRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 2
+placeholder_text = "Profile name"
+max_length = 32
+
+[node name="Create" type="Button" parent="Layout/CreateRow"]
+layout_mode = 2
+focus_mode = 2
+text = "Create Profile"
+
+[node name="Activate" type="Button" parent="Layout"]
+layout_mode = 2
+focus_mode = 2
+text = "Activate Selected Profile"
+
+[node name="Status" type="Label" parent="Layout"]
+custom_minimum_size = Vector2(0, 36)
+layout_mode = 2
+focus_mode = 2
+autowrap_mode = 2
