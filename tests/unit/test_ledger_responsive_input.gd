@@ -179,8 +179,49 @@ func _test_layout_controller_and_pause_edges(failures: Array[String]) -> void:
 	TestAssertions.truthy(ledger.open_for_player(), "ledger opens during BOSS", failures)
 	ledger.close()
 	TestAssertions.truthy(not tree.paused, "ledger close restores unpaused BOSS", failures)
+	_test_provider_refresh_focus_lifecycle(ledger, party, catalog, failures)
 
 	_cleanup(ledger, run, party)
+
+
+func _test_provider_refresh_focus_lifecycle(ledger: CharacterLedger, party: PartyManager, catalog: GameCatalog, failures: Array[String]) -> void:
+	if not ledger.is_inside_tree():
+		return
+	for index: int in range(party.members.size() - 1, -1, -1):
+		if party.members[index].member_id not in [1, 24]:
+			party.members.remove_at(index)
+	if party.member_by_id(24) == null:
+		party.members.append(PartyMemberState.new(24, catalog.class_by_id(&"fighter"), false, "Twenty Four"))
+	ledger.context.selected_member_id = 1
+	ledger.context.active_page_id = &"stats"
+	TestAssertions.truthy(ledger.open_for_player(), "refresh-focus ledger opens", failures)
+
+	var entries := ledger.get_node("Overlay/Frame/Layout/Body/PartyScroll/PartyEntries") as GridContainer
+	var member_24 := entries.get_node("Member_24") as Button
+	member_24.grab_focus()
+	TestAssertions.equal(ledger.get_viewport().gui_get_focus_owner(), member_24, "refresh fixture starts with actual member 24 focus", failures)
+	TestAssertions.truthy(party.recruit(catalog.class_by_id(&"fighter")), "recruit triggers provider party refresh", failures)
+	var rebuilt_member_24 := entries.get_node("Member_24") as Button
+	TestAssertions.truthy(rebuilt_member_24 != member_24, "provider refresh rebuilds member 24", failures)
+	TestAssertions.equal(ledger.get_viewport().gui_get_focus_owner(), rebuilt_member_24, "provider refresh restores actual member 24 focus", failures)
+	TestAssertions.truthy(rebuilt_member_24.is_visible_in_tree(), "provider refresh keeps focused member 24 visible", failures)
+	TestAssertions.equal(int(ledger.get("_member_visibility_request_target_id")), 24, "provider refresh requests focused member 24 visibility", failures)
+
+	var show_all := ledger.get_node("Overlay/Frame/Layout/Body/PageHost/StatsLedgerPage/Layout/Content/StatSide/ShowAll") as CheckButton
+	show_all.grab_focus()
+	ledger.refresh()
+	TestAssertions.equal(ledger.get_viewport().gui_get_focus_owner(), show_all, "roster refresh does not steal active-page focus", failures)
+
+	TestAssertions.truthy(ledger.select_member(24), "removal fixture selects member 24", failures)
+	rebuilt_member_24 = entries.get_node("Member_24") as Button
+	rebuilt_member_24.grab_focus()
+	party.members.erase(party.member_by_id(24))
+	ledger.refresh()
+	var fallback_member := entries.get_node("Member_1") as Button
+	TestAssertions.equal(ledger.context.selected_member_id, 1, "removed focused selection falls back to member 1", failures)
+	TestAssertions.equal(ledger.get_viewport().gui_get_focus_owner(), fallback_member, "removed focused selection restores actual fallback member 1 focus", failures)
+	TestAssertions.truthy(fallback_member.is_visible_in_tree(), "removed focused selection keeps fallback member 1 visible", failures)
+	TestAssertions.equal(int(ledger.get("_member_visibility_request_target_id")), 1, "removed focused selection requests fallback member 1 visibility", failures)
 
 
 func _tab_for(ledger: CharacterLedger, page_id: StringName) -> Button:

@@ -131,6 +131,7 @@ func is_open() -> bool:
 func refresh() -> void:
 	if provider == null or context == null:
 		return
+	var focused_member_id := _member_id_for_control(get_viewport().gui_get_focus_owner()) if is_inside_tree() else 0
 	context.ensure_valid_member(party)
 	_rebuild_member_rail()
 	var active_page := _pages.get(_active_page_id) as CharacterLedgerPage
@@ -138,6 +139,8 @@ func refresh() -> void:
 		active_page.configure(provider, context)
 		active_page.refresh()
 		_wire_roster_page_focus_bridge()
+	if focused_member_id > 0:
+		_restore_member_focus_after_refresh(focused_member_id)
 
 func apply_viewport_size(size: Vector2) -> void:
 	_viewport_size = size
@@ -391,6 +394,15 @@ func _member_id_for_control(control: Control) -> int:
 		return 0
 	var member_id := int(control.get_meta("member_id", 0))
 	return member_id if _member_buttons.get(member_id) == control else 0
+
+func _restore_member_focus_after_refresh(previous_member_id: int) -> void:
+	var member_id := previous_member_id if _member_buttons.has(previous_member_id) else context.selected_member_id
+	var button := _member_buttons.get(member_id) as Button
+	if button == null or not button.is_inside_tree() or not button.is_visible_in_tree():
+		return
+	button.grab_focus()
+	_request_member_visibility(member_id)
+	_ensure_member_visible(member_id)
 
 func _wire_roster_page_focus_bridge() -> void:
 	if context == null:
