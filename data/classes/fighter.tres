@@ -3,6 +3,7 @@
 [ext_resource type="Resource" path="res://data/names/fighter.tres" id="1_pjtn8"]
 [ext_resource type="Resource" path="res://data/attacks/fighter_cleave.tres" id="1_q4mbg"]
 [ext_resource type="Script" path="res://scripts/data/class_definition.gd" id="2_pjtn8"]
+[ext_resource type="Resource" path="res://data/presentation/profiles/forge_vanguard.tres" id="3_forge_vanguard"]
 
 [resource]
 script = ExtResource("2_pjtn8")
@@ -18,3 +19,4 @@ move_speed = 6.2
 engagement_distance = 5.0
 tether_distance = 9.0
 primary_attack = ExtResource("1_q4mbg")
+visual_profile = ExtResource("3_forge_vanguard")

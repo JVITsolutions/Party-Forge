@@ -79,6 +79,7 @@ func _test_scene_contracts(failures: Array[String]) -> void:
     TestAssertions.truthy(leader.get_node("HealthComponent") is HealthComponent, "leader owns health component", failures)
     TestAssertions.truthy(leader.get_node("CollisionShape3D") is CollisionShape3D, "leader owns collision shape", failures)
     TestAssertions.truthy(leader.get_node("MeshInstance3D") is MeshInstance3D, "leader owns colored mesh", failures)
+    TestAssertions.truthy(leader.get_node("Presentation") is CharacterPresentation, "leader owns character presentation", failures)
     TestAssertions.truthy(leader.get_node("AttackController") is AttackController, "leader owns attack controller", failures)
     TestAssertions.equal(leader.get("member_state"), null, "leader starts before member configuration", failures)
     var initial_target: CombatTarget = leader.call("get_combat_target") as CombatTarget

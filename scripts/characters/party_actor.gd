@@ -44,7 +44,9 @@ func configure(member_state: PartyMemberState) -> void:
         attack.configure(definition.primary_attack, team_id)
     _configure_support_controller(definition.support_action)
     base_visual_color = definition.color
-    _set_visual_color(base_visual_color)
+    var presentation := _presentation()
+    if presentation == null or not presentation.apply_profile(definition.visual_profile, base_visual_color):
+        _set_visual_color(base_visual_color)
     _refresh_team_group()
     _ensure_combat_runtime()
     _apply_combat_policy()
@@ -167,6 +169,9 @@ func _health_component() -> HealthComponent:
 func _attack_controller() -> AttackController:
     return get_node_or_null("AttackController") as AttackController
 
+func _presentation() -> CharacterPresentation:
+    return get_node_or_null("Presentation") as CharacterPresentation
+
 func _configure_support_controller(definition: AttackDefinition) -> void:
     if definition == null:
         if support_controller != null:
@@ -210,8 +215,16 @@ func _ensure_combat_runtime() -> void:
     var execute_callable := Callable(attack_executor, "execute")
     if primary != null and not primary.attack_ready.is_connected(execute_callable):
         primary.attack_ready.connect(execute_callable)
+    var visual_attack := Callable(self, "_on_visual_attack_ready")
+    if primary != null and not primary.attack_ready.is_connected(visual_attack):
+        primary.attack_ready.connect(visual_attack)
     if support_controller != null and not support_controller.attack_ready.is_connected(execute_callable):
         support_controller.attack_ready.connect(execute_callable)
+
+func _on_visual_attack_ready(definition: AttackDefinition, target: CombatTarget) -> void:
+    var presentation := _presentation()
+    if presentation != null and presentation.active_profile != null:
+        presentation.play_attack(definition, target)
 
 func _collect_combat_targets() -> Array[CombatTarget]:
     var targets: Array[CombatTarget] = []
@@ -247,29 +260,49 @@ func _refresh_team_group() -> void:
 func _on_visual_health_changed(current: float, _maximum: float) -> void:
     if current < last_visual_health:
         damage_flash_remaining = 0.1
-        _set_visual_color(Color.WHITE)
+        var presentation := _presentation()
+        if presentation != null and presentation.active_profile != null:
+            presentation.flash_hit()
+        else:
+            _set_visual_color(Color.WHITE)
     last_visual_health = current
 
 func _on_visual_damage_received(_attempted_damage: float, _health_removed: float) -> void:
     damage_flash_remaining = 0.1
-    _set_visual_color(Color.WHITE)
+    var presentation := _presentation()
+    if presentation != null and presentation.active_profile != null:
+        presentation.flash_hit()
+    else:
+        _set_visual_color(Color.WHITE)
 
 func _on_visual_downed() -> void:
     damage_flash_remaining = 0.0
-    _set_visual_color(Color(0.45, 0.45, 0.45))
+    var presentation := _presentation()
+    if presentation != null and presentation.active_profile != null:
+        presentation.set_downed(true)
+    else:
+        _set_visual_color(Color(0.45, 0.45, 0.45))
 
 func _on_visual_revived() -> void:
     damage_flash_remaining = 0.0
-    _set_visual_color(base_visual_color)
+    var presentation := _presentation()
+    if presentation != null and presentation.active_profile != null:
+        presentation.set_downed(false)
+    else:
+        _set_visual_color(base_visual_color)
 
 func _advance_visual_feedback(delta: float) -> void:
+    var presentation := _presentation()
+    if presentation != null:
+        presentation.advance_feedback(delta)
     if damage_flash_remaining <= 0.0:
         return
     damage_flash_remaining = maxf(0.0, damage_flash_remaining - maxf(delta, 0.0))
     if damage_flash_remaining <= 0.0:
         var health := _health_component()
         if health == null or not health.is_downed:
-            _set_visual_color(base_visual_color)
+            if presentation == null or presentation.active_profile == null:
+                _set_visual_color(base_visual_color)
 
 func _set_visual_color(color: Color) -> void:
     var mesh := get_node_or_null("MeshInstance3D") as MeshInstance3D

@@ -1,8 +1,9 @@
-[gd_scene load_steps=7 format=3]
+[gd_scene load_steps=8 format=3]
 
 [ext_resource type="Script" path="res://scripts/characters/companion.gd" id="1_companion"]
 [ext_resource type="Script" path="res://scripts/combat/health_component.gd" id="2_health"]
 [ext_resource type="Script" path="res://scripts/combat/attack_controller.gd" id="3_attack"]
+[ext_resource type="PackedScene" path="res://scenes/characters/presentation/character_presentation.tscn" id="4_presentation"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_companion"]
 radius = 0.4
@@ -28,6 +29,9 @@ shape = SubResource("CapsuleShape3D_companion")
 [node name="MeshInstance3D" type="MeshInstance3D" parent="."]
 material_override = SubResource("StandardMaterial3D_companion")
 mesh = SubResource("CapsuleMesh_companion")
+
+[node name="Presentation" parent="." instance=ExtResource("4_presentation")]
+fallback_mesh_path = NodePath("../MeshInstance3D")
 
 [node name="HealthComponent" type="Node" parent="."]
 script = ExtResource("2_health")
