@@ -30,6 +30,7 @@ func run() -> Array[String]:
 	profile.default_palette_id = &"red"
 	profile.palette_colors = {&"red": Color("d94f4f"), &"blue": Color("4f78d9"), &"green": Color("4faf72")}
 	profile.default_equipment_visuals = [sword]
+	profile.available_equipment_visuals = [sword]
 	profile.required_animation_names = [&"idle", &"attack_slash", &"attack_combo", &"hit_flinch"]
 	profile.attack_animation_by_id = {&"fighter_cleave": &"attack_slash"}
 	TestAssertions.truthy(profile.validate().has("profile forge_vanguard presentation scene is missing"), "scene is required", failures)
@@ -45,7 +46,27 @@ func run() -> Array[String]:
 		if "visual profile" in reason:
 			has_visual_profile_error = true
 	TestAssertions.truthy(has_visual_profile_error, "class forwards profile validation", failures)
+
+	var duplicate_available := CharacterVisualProfile.new()
+	duplicate_available.id = &"duplicate_available"
+	duplicate_available.default_palette_id = &"red"
+	duplicate_available.palette_colors = {&"red": Color.WHITE}
+	duplicate_available.available_equipment_visuals = [sword, sword]
+	TestAssertions.truthy(_errors_contain(duplicate_available.validate(), "duplicate available equipment slot"), "duplicate available equipment slots are rejected", failures)
+
+	var empty_available := CharacterVisualProfile.new()
+	empty_available.id = &"empty_available"
+	empty_available.default_palette_id = &"red"
+	empty_available.palette_colors = {&"red": Color.WHITE}
+	empty_available.available_equipment_visuals = []
+	TestAssertions.truthy(not _errors_contain(empty_available.validate(), "available equipment"), "empty available equipment remains valid", failures)
 	return failures
+
+func _errors_contain(errors: PackedStringArray, fragment: String) -> bool:
+	for reason: String in errors:
+		if fragment in reason:
+			return true
+	return false
 
 func _valid_attack() -> AttackDefinition:
 	var component := AttackDamageComponent.new()
