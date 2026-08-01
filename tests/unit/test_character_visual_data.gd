@@ -63,8 +63,9 @@ func run() -> Array[String]:
 	if profile.has_method(&"get_available_equipment_visuals_for_slot"):
 		var main_hand_variants: Array = profile.call(&"get_available_equipment_visuals_for_slot", &"main_hand")
 		TestAssertions.equal(main_hand_variants.size(), 2, "main hand exposes sword and hammer", failures)
-		TestAssertions.equal(main_hand_variants[0], sword, "legacy first main-hand variant remains sword", failures)
-		TestAssertions.equal(main_hand_variants[1], hammer, "second main-hand variant is hammer", failures)
+		if main_hand_variants.size() >= 2:
+			TestAssertions.equal(main_hand_variants[0], sword, "legacy first main-hand variant remains sword", failures)
+			TestAssertions.equal(main_hand_variants[1], hammer, "second main-hand variant is hammer", failures)
 		var charm_variants: Array = profile.call(&"get_available_equipment_visuals_for_slot", &"charm")
 		TestAssertions.truthy(charm_variants.is_empty(), "unknown slot returns an empty variant array", failures)
 

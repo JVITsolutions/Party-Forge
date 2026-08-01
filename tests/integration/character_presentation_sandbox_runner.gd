@@ -5,6 +5,20 @@ const SIDE_IDS: Array[StringName] = [&"Masculine", &"Feminine"]
 const BODY_IDS: Array[StringName] = [&"masculine", &"feminine"]
 const PALETTE_IDS: Array[StringName] = [&"red", &"blue", &"green"]
 const CLIP_IDS: Array[StringName] = [&"idle", &"attack_slash", &"attack_combo", &"hit_flinch"]
+const REQUIRED_SANDBOX_METHODS: Array[StringName] = [
+	&"_ready",
+	&"set_base_profile",
+	&"is_base_profile",
+	&"get_equipped_visual_id",
+	&"cycle_slot_variant",
+	&"set_body",
+	&"set_palette",
+	&"get_palette_id",
+	&"toggle_slot",
+	&"play_clip",
+	&"trigger_hit",
+	&"set_downed",
+]
 
 func _initialize() -> void:
 	var scene := load(SANDBOX_PATH) as PackedScene
@@ -15,6 +29,10 @@ func _initialize() -> void:
 	if sandbox == null:
 		_fail("scene root is invalid")
 		return
+	for method_name: StringName in REQUIRED_SANDBOX_METHODS:
+		if not sandbox.has_method(method_name):
+			_fail("sandbox missing required method=%s" % method_name)
+			return
 	root.add_child(sandbox)
 	sandbox._ready()
 	for side_id: StringName in SIDE_IDS:

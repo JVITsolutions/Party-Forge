@@ -93,9 +93,12 @@ func _assert_main_hand_variants(model: Node3D, profile: CharacterVisualProfile, 
 		return
 	var variants := profile.get_available_equipment_visuals_for_slot(&"main_hand")
 	TestAssertions.equal(variants.size(), 2, "Fighter profile exposes two main-hand variants", failures)
-	TestAssertions.equal(variants[0].id, &"forge_vanguard_sword", "sword remains first main-hand variant", failures)
-	TestAssertions.equal(variants[1].id, &"forge_vanguard_hammer", "hammer is the second main-hand variant", failures)
-	TestAssertions.equal(profile.default_equipment_visuals[0].id, &"forge_vanguard_sword", "Fighter defaults to sword", failures)
+	if variants.size() >= 2:
+		TestAssertions.equal(variants[0].id, &"forge_vanguard_sword", "sword remains first main-hand variant", failures)
+		TestAssertions.equal(variants[1].id, &"forge_vanguard_hammer", "hammer is the second main-hand variant", failures)
+	TestAssertions.truthy(not profile.default_equipment_visuals.is_empty(), "Fighter profile has default equipment", failures)
+	if not profile.default_equipment_visuals.is_empty():
+		TestAssertions.equal(profile.default_equipment_visuals[0].id, &"forge_vanguard_sword", "Fighter defaults to sword", failures)
 	var hammer_root := _equipment_root_by_visual_id(model, &"forge_vanguard_hammer")
 	var sword_root := _equipment_root_by_visual_id(model, &"forge_vanguard_sword")
 	TestAssertions.truthy(hammer_root != null and sword_root != null, "separate hammer and sword roots exist", failures)

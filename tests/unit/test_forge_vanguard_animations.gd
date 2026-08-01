@@ -54,6 +54,8 @@ func _assert_animation_metadata(player: AnimationPlayer, failures: Array[String]
 
 func _assert_guard_contract(player: AnimationPlayer, failures: Array[String]) -> void:
 	for animation_id: StringName in EXPECTED_LENGTHS:
+		if not player.has_animation(animation_id):
+			continue
 		var animation := player.get_animation(animation_id)
 		for pivot_id: StringName in EXPECTED_GUARD_ROTATIONS:
 			var expected := Quaternion.from_euler(EXPECTED_GUARD_ROTATIONS[pivot_id] as Vector3)
