@@ -119,6 +119,8 @@ func advance_combat(delta: float, candidates: Array[CombatTarget]) -> void:
         return
     var health: HealthComponent = _health_component()
     if health != null and (health.is_downed or health.is_dead):
+        if attack_sequence_controller != null and attack_sequence_controller.is_busy():
+            attack_sequence_controller.cancel_for_owner_downed()
         return
     _ensure_combat_runtime()
     var combatants: Array[Node3D] = []
@@ -296,6 +298,8 @@ func _on_visual_damage_received(_attempted_damage: float, _health_removed: float
 
 func _on_visual_downed() -> void:
     damage_flash_remaining = 0.0
+    if attack_sequence_controller != null and attack_sequence_controller.is_busy():
+        attack_sequence_controller.cancel_for_owner_downed()
     var presentation := _presentation()
     if presentation != null and presentation.active_profile != null:
         presentation.set_downed(true)

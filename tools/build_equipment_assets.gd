@@ -256,7 +256,8 @@ func _required_tags(set_id: StringName, item_id: StringName, armour_slot: bool) 
 	if armour_slot:
 		if set_id == &"paladin": return [&"martial", &"vanguard"]
 		if set_id == &"rogue": return [&"martial", &"skirmisher"]
-		if set_id in [&"ranger", &"marksman"]: return [&"ranged"]
+		if set_id in [&"ranger", &"marksman"]: return [&"martial", &"ranged"]
+		if set_id in [&"mage", &"frost_mage", &"cleric", &"warlock"]: return [&"caster"]
 	return []
 
 func _weight_class(set_id: StringName, item_id: StringName, armour_slot: bool, slot: StringName) -> StringName:

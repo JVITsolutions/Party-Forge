@@ -31,6 +31,7 @@ func run() -> Array[String]:
 	_test_primary_attack_keeps_executor_and_uses_slash(failures)
 	_test_fighter_attack_presentation_contract(failures)
 	_test_sequence_bridge_and_feedback_isolation(failures)
+	_test_downed_mid_attack_cancels_sequence(failures)
 	_test_damage_downed_and_revival_feedback(failures)
 	_test_fighter_palettes_remain_instance_local(failures)
 	return failures
@@ -203,6 +204,31 @@ func _test_sequence_bridge_and_feedback_isolation(failures: Array[String]) -> vo
 	TestAssertions.truthy("%d:attack_slash:finished" % token in events, "model finish is bridged with gameplay token", failures)
 	TestAssertions.equal(player.current_animation, &"walk", "attack finish restores latest locomotion", failures)
 	TestAssertions.near(presentation.rotation.y, -PI / 2.0, 0.001, "restored eastward locomotion faces east", failures)
+	root.free()
+
+func _test_downed_mid_attack_cancels_sequence(failures: Array[String]) -> void:
+	var root := _new_root("PartyActorDownedAttackCancellationTest")
+	var definition := _definition(&"fighter")
+	var fighter := _new_actor(root, COMPANION_SCENE, definition, false)
+	var hostile := _new_actor(root, COMPANION_SCENE, definition, false)
+	hostile.team_id = 2
+	hostile.position = Vector3(1.0, 0.0, 0.0)
+	var presentation := fighter.get_node("Presentation") as CharacterPresentation
+	var visual := presentation.call(&"resolve_attack_presentation", definition.primary_attack) as AttackPresentationDefinition
+	var executor_probe := SequenceExecutorProbe.new()
+	root.add_child(executor_probe)
+	fighter.attack_sequence_controller.configure(fighter, presentation, executor_probe)
+	var first_token := fighter.attack_sequence_controller.request(definition.primary_attack, hostile.get_combat_target(), visual, 1.0, 1.0)
+	TestAssertions.truthy(first_token > 0 and fighter.attack_sequence_controller.is_busy(), "attack is active before owner is downed", failures)
+	var health := fighter.get_node("HealthComponent") as HealthComponent
+	health.apply_damage(health.max_health)
+	TestAssertions.truthy(not fighter.attack_sequence_controller.is_busy(), "downed signal immediately cancels active attack sequence", failures)
+	health.advance_time(health.revive_delay)
+	var second_token := fighter.attack_sequence_controller.request(definition.primary_attack, hostile.get_combat_target(), visual, 1.0, 1.0)
+	TestAssertions.truthy(second_token > first_token, "revived actor can immediately begin a new attack", failures)
+	presentation.active_model.call(&"emit_action_event", visual.required_event_name)
+	presentation.active_model.action_finished.emit(visual.action_id)
+	TestAssertions.truthy(not fighter.attack_sequence_controller.is_busy(), "revived actor attack completes through the normal event bridge", failures)
 	root.free()
 
 func _test_damage_downed_and_revival_feedback(failures: Array[String]) -> void:

@@ -69,17 +69,19 @@ func _assert_item_contracts(failures: Array[String]) -> void:
 func _assert_cross_eligibility(failures: Array[String]) -> void:
 	var ranger := _class_with_equipment_tags("res://data/classes/ranger.tres", [&"armour_light", &"armour_medium", &"bow_light_medium"])
 	var marksman := _class_with_equipment_tags("res://data/classes/marksman.tres", [&"armour_light", &"armour_medium", &"bow_light_medium", &"greatbow"])
+	var warlock := _class_with_equipment_tags("res://data/classes/warlock.tres", [&"armour_light"])
 	var greenwood := load("res://data/equipment/bases/greenwood/greenwood_jerkin.tres") as EquipmentBaseDefinition
 	var siege := load("res://data/equipment/bases/siege_archer/siege_archer_coat.tres") as EquipmentBaseDefinition
 	TestAssertions.truthy(EquipmentEligibility.validate_equip(greenwood, marksman, &"body_armour").is_empty(), "Marksman may wear Greenwood armour", failures)
 	TestAssertions.truthy(EquipmentEligibility.validate_equip(siege, ranger, &"body_armour").is_empty(), "Ranger may wear Siege armour", failures)
+	TestAssertions.truthy(not EquipmentEligibility.validate_equip(greenwood, warlock, &"body_armour").is_empty(), "Warlock cannot wear ranged-physical armour", failures)
 	for item_id: StringName in ClassEquipmentRows.SET_ITEM_IDS[&"ranger"].slice(0, 5):
 		var base := load("res://data/equipment/bases/greenwood/%s.tres" % item_id) as EquipmentBaseDefinition
-		TestAssertions.equal(base.required_all_tags, [&"ranged"], "%s is shared ranged armour" % item_id, failures)
+		TestAssertions.equal(base.required_all_tags, [&"martial", &"ranged"], "%s is shared ranged-physical armour" % item_id, failures)
 		TestAssertions.equal(base.weight_class_id, &"light", "%s is mobile light armour" % item_id, failures)
 	for item_id: StringName in ClassEquipmentRows.SET_ITEM_IDS[&"marksman"].slice(0, 5):
 		var base := load("res://data/equipment/bases/siege_archer/%s.tres" % item_id) as EquipmentBaseDefinition
-		TestAssertions.equal(base.required_all_tags, [&"ranged"], "%s is shared ranged armour" % item_id, failures)
+		TestAssertions.equal(base.required_all_tags, [&"martial", &"ranged"], "%s is shared ranged-physical armour" % item_id, failures)
 		var expected_weight := &"medium" if item_id in [&"siege_archer_coat", &"siege_archer_braced_leggings"] else &"light"
 		TestAssertions.equal(base.weight_class_id, expected_weight, "%s ranged armour weight" % item_id, failures)
 
@@ -99,6 +101,8 @@ func _assert_bow_rules(failures: Array[String]) -> void:
 	TestAssertions.truthy(EquipmentEligibility.validate_equip(light_quiver, ranger, &"off_hand", {&"main_hand": recurve}).is_empty(), "Ranger bow accepts light quiver exception", failures)
 	TestAssertions.truthy(EquipmentEligibility.validate_equip(greatbow, marksman, &"main_hand").is_empty(), "Marksman accepts greatbow", failures)
 	TestAssertions.truthy(EquipmentEligibility.validate_equip(heavy_quiver, marksman, &"off_hand", {&"main_hand": greatbow}).is_empty(), "Marksman bow accepts heavy quiver exception", failures)
+	TestAssertions.truthy(not EquipmentEligibility.validate_equip(heavy_quiver, marksman, &"off_hand", {&"main_hand": recurve}).is_empty(), "light bow rejects heavy-family quiver", failures)
+	TestAssertions.truthy(not EquipmentEligibility.validate_equip(greatbow, marksman, &"main_hand", {&"off_hand": light_quiver}).is_empty(), "greatbow rejects equipped light-family quiver", failures)
 	TestAssertions.truthy(not EquipmentEligibility.validate_equip(greatbow, ranger, &"main_hand").is_empty(), "Ranger rejects greatbow", failures)
 	TestAssertions.truthy(not EquipmentEligibility.validate_equip(shield, ranger, &"off_hand", {&"main_hand": recurve}).is_empty(), "bow reservation rejects shield coexistence", failures)
 

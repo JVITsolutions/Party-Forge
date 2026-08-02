@@ -73,6 +73,14 @@ func cancel(reason: String) -> void:
 	_sequence_error(token, action_id, reason, attack_id)
 	_return_to_locomotion()
 
+func cancel_for_owner_downed() -> void:
+	if not is_busy():
+		return
+	# CharacterPresentation.set_downed() clears its action lock and stops the
+	# animation immediately after this call, so starting locomotion here would
+	# fight the downed transition.
+	_clear_active()
+
 func _on_attack_event(token: int, action_id: StringName, event_name: StringName) -> void:
 	if token != active_token:
 		_sequence_error(token, action_id, "stale event")

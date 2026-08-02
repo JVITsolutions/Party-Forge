@@ -103,6 +103,11 @@ func _assert_eligibility_and_weapon_rules(failures: Array[String]) -> void:
 			var base := load("res://data/equipment/bases/%s/%s.tres" % [folder, item_id]) as EquipmentBaseDefinition
 			var result := EquipmentEligibility.validate_equip(base, actor_class, base.compatible_slot_ids[0])
 			TestAssertions.truthy(result.is_empty(), "%s equips on its caster class" % item_id, failures)
+			if base.item_type_id in [&"helmet", &"body_armour", &"legs", &"gloves", &"boots"]:
+				TestAssertions.equal(base.required_all_tags, [&"caster"], "%s requires the caster armour family" % item_id, failures)
+	var rogue := _class_with_equipment_tags("res://data/classes/rogue.tres", [&"armour_light"])
+	var mage_robe := load("res://data/equipment/bases/emberweave/emberweave_robe.tres") as EquipmentBaseDefinition
+	TestAssertions.truthy(not EquipmentEligibility.validate_equip(mage_robe, rogue, &"body_armour").is_empty(), "light-armour martial cannot wear caster robes", failures)
 	for item_id: StringName in WEAPON_RULES:
 		var set_id := _set_for_item(item_id)
 		var folder := String(SET_FOLDERS[set_id])
