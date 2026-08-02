@@ -69,3 +69,17 @@ Run these final gates after any presentation or equipment change:
 ```
 
 Open the sandbox for the visual matrix whenever body geometry, sockets, equipment scenes, animations, or materials change.
+
+## 2026-08-02 icon distinction correction
+
+- Replaced filename-guessed slot silhouettes with catalog- and registered-slot-driven icon families.
+- Regenerated 99 transparent 256px masters, 99 transparent 128px runtime icons, and nine class contact sheets.
+- Verified 99 unique master pixel hashes and 99 unique runtime pixel hashes through independent SHA-256 maps.
+- Verified deterministic regeneration across all 207 PNG outputs with `EQUIPMENT_ICON_DETERMINISM_OK files=207`.
+- Reviewed all nine contact sheets at original resolution. Every sheet passed for correct slot silhouette, visible distinction within the set, class-palette coherence, runtime-size readability, transparent padding, centering, clipping, and visual noise. The related Ranger and Marksman palettes remain intentionally earthy while their bow, quiver, and identity details remain distinguishable.
+- A clean Godot editor import scan exited 0 without script or resource-import errors.
+- Standalone validation exited 0 with `EQUIPMENT_ICON_VALIDATION_OK sets=9 items=99 unique_master=99 unique_runtime=99`.
+- Presentation smoke exited 0 with `PARTY_FORGE_PLAYABLE_PRESENTATION_SMOKE_OK classes=9 bodies=2 slots=11 items=99 icons=198 animations=21 projectiles=6 effects=5`.
+- Locomotion smoke exited 0 with `PARTY_FORGE_LOCOMOTION_SMOKE_OK directions=4 walk=1 idle=1 attack_lock=1 equipment_independent=1`.
+- The complete regression suite exited 0 with `TEST_SUMMARY: PASS (92 suites)`. Its existing negative-case diagnostics and exit-time leak notices remained present without changing the passing result.
+- Preserved the 99 resources as canonical base items for the equipment system. Rarity and affix visuals remain future runtime item-instance layers rather than duplicated base resources.
