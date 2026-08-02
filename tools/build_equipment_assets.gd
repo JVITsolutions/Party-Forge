@@ -50,7 +50,9 @@ func _write_item(id: StringName, slot: StringName) -> bool:
 			var attachment := original.duplicate() as Node3D
 			_trace("duplicate_done item=%s node=%s" % [id, original.name])
 			attachment.name = &"Attachment"
-			attachment.visible = true
+			# Hammer, amulet, and rings depart from hidden embedded alternatives so
+			# modular runtime attachments and isolated icon capture remain visible.
+			attachment.visible = original.visible or id in [&"forge_vanguard_hammer", &"forge_vanguard_amulet", &"forge_vanguard_ring_left", &"forge_vanguard_ring_right"]
 			attachment.set_meta(&"equipment_socket_id", _attachment_socket(id, slot, source, original))
 			_trace("meta_done item=%s node=%s" % [id, original.name])
 			root.add_child(attachment)

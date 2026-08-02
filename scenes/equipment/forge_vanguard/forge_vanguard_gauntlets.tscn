@@ -1,39 +1,37 @@
 [gd_scene format=3]
 
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_vjxtm"]
+albedo_color = Color(0.8509804, 0.30980393, 0.30980393, 1)
+roughness = 0.78
+
+[sub_resource type="BoxMesh" id="BoxMesh_qgmd3"]
+size = Vector3(0.16, 0.17, 0.16)
+
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_2rxl3"]
-albedo_color = Color(0.1882353, 0.22745098, 0.2784314, 1)
-metallic = 0.7
+albedo_color = Color(0.8509804, 0.30980393, 0.30980393, 1)
 roughness = 0.78
 
 [sub_resource type="BoxMesh" id="BoxMesh_plvbm"]
-size = Vector3(0.18, 0.2, 0.2)
-
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_02en6"]
-albedo_color = Color(0.1882353, 0.22745098, 0.2784314, 1)
-metallic = 0.7
-roughness = 0.78
-
-[sub_resource type="BoxMesh" id="BoxMesh_sp45n"]
-size = Vector3(0.18, 0.2, 0.2)
+size = Vector3(0.16, 0.17, 0.16)
 
 [node name="forge_vanguard_gauntlets" type="Node3D"]
 
 [node name="Attachment" type="Node3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.04, 0, 0)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.02, -0.2, 0)
 metadata/equipment_visual_id = &"forge_vanguard_gauntlets"
 metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot/LeftShoulderPivot/LeftElbowPivot/LeftHandSocket"
 
 [node name="ReadableChannel" type="MeshInstance3D" parent="Attachment"]
-material_override = SubResource("StandardMaterial3D_2rxl3")
-mesh = SubResource("BoxMesh_plvbm")
-metadata/palette_region = &"metal"
+material_override = SubResource("StandardMaterial3D_vjxtm")
+mesh = SubResource("BoxMesh_qgmd3")
+metadata/palette_region = &"primary"
 
 [node name="@Node3D@5" type="Node3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.04, 0, 0)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.02, -0.2, 0)
 metadata/equipment_visual_id = &"forge_vanguard_gauntlets"
 metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot/RightShoulderPivot/RightElbowPivot/RightHandSocket"
 
 [node name="ReadableChannel" type="MeshInstance3D" parent="@Node3D@5"]
-material_override = SubResource("StandardMaterial3D_02en6")
-mesh = SubResource("BoxMesh_sp45n")
-metadata/palette_region = &"metal"
+material_override = SubResource("StandardMaterial3D_2rxl3")
+mesh = SubResource("BoxMesh_plvbm")
+metadata/palette_region = &"primary"

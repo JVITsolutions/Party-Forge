@@ -10,6 +10,20 @@ const FIGHTER_IDS: Array[StringName] = [
 	&"forge_vanguard_ring_left", &"forge_vanguard_ring_right", &"forge_vanguard_belt",
 	&"forge_vanguard_sword", &"forge_vanguard_shield", &"forge_vanguard_hammer",
 ]
+const SOURCE_GEOMETRY := {
+	&"forge_vanguard_helmet": [{&"socket": "HelmetSocket", &"position": Vector3.ZERO, &"size": Vector3(0.38, 0.34, 0.34), &"region": &"metal"}],
+	&"forge_vanguard_armour": [{&"socket": "BodyArmourSocket", &"position": Vector3(0, 0.06, 0), &"size": Vector3(0.76, 0.56, 0.36), &"region": &"primary"}],
+	&"forge_vanguard_greaves": [{&"socket": "LeftHipPivot", &"position": Vector3(0, -0.28, 0), &"size": Vector3(0.24, 0.42, 0.24), &"region": &"metal"}, {&"socket": "RightHipPivot", &"position": Vector3(0, -0.28, 0), &"size": Vector3(0.24, 0.42, 0.24), &"region": &"metal"}],
+	&"forge_vanguard_gauntlets": [{&"socket": "LeftHandSocket", &"position": Vector3(-0.02, -0.20, 0), &"size": Vector3(0.16, 0.17, 0.16), &"region": &"primary"}, {&"socket": "RightHandSocket", &"position": Vector3(0.02, -0.20, 0), &"size": Vector3(0.16, 0.17, 0.16), &"region": &"primary"}],
+	&"forge_vanguard_boots": [{&"socket": "LeftFootPivot", &"position": Vector3(-0.01, 0.05, 0), &"size": Vector3(0.23, 0.18, 0.34), &"region": &"primary"}, {&"socket": "RightFootPivot", &"position": Vector3(0.01, 0.05, 0), &"size": Vector3(0.23, 0.18, 0.34), &"region": &"primary"}],
+	&"forge_vanguard_amulet": [{&"socket": "AmuletSocket", &"position": Vector3(0, 0.20, -0.2), &"size": Vector3(0.10, 0.10, 0.04), &"region": &"brass", &"emits": true}],
+	&"forge_vanguard_ring_left": [{&"socket": "LeftHandSocket", &"position": Vector3(-0.03, -0.24, 0), &"size": Vector3(0.07, 0.07, 0.07), &"region": &"brass", &"emits": true}],
+	&"forge_vanguard_ring_right": [{&"socket": "RightHandSocket", &"position": Vector3(0.03, -0.24, 0), &"size": Vector3(0.07, 0.07, 0.07), &"region": &"brass", &"emits": true}],
+	&"forge_vanguard_belt": [{&"socket": "BeltSocket", &"position": Vector3(0, -0.04, 0), &"size": Vector3(0.58, 0.11, 0.32), &"region": &"leather"}],
+	&"forge_vanguard_sword": [{&"socket": "RightHandSocket", &"position": Vector3(0.03, 0.09, 0), &"size": Vector3(0.10, 0.68, 0.035), &"region": &"metal"}],
+	&"forge_vanguard_shield": [{&"socket": "LeftHandSocket", &"position": Vector3(-0.04, 0.21, 0.02), &"size": Vector3(0.68, 0.68, 0.14), &"region": &"metal"}],
+	&"forge_vanguard_hammer": [{&"socket": "RightHandSocket", &"position": Vector3(0.03, 0.11, 0), &"size": Vector3(0.09, 0.92, 0.07), &"region": &"metal"}],
+}
 
 func run() -> Array[String]:
 	var failures: Array[String] = []
@@ -58,7 +72,97 @@ func _assert_standalone_equipment_source(failures: Array[String]) -> void:
 		TestAssertions.truthy(item != null, "%s exists in standalone equipment source" % item_id, failures)
 		if item != null:
 			TestAssertions.truthy(not item.get_children().is_empty(), "%s source includes low-poly geometry" % item_id, failures)
+			_assert_source_geometry(item, SOURCE_GEOMETRY[item_id] as Array, failures)
+	_assert_sword_signature(source, failures)
+	_assert_armour_signature(source, failures)
 	source.free()
+
+func _assert_source_geometry(item: Node3D, expected_attachments: Array, failures: Array[String]) -> void:
+	var attachments: Array[Node3D] = []
+	for child: Node in item.get_children():
+		if child is Node3D:
+			attachments.append(child as Node3D)
+	TestAssertions.equal(attachments.size(), expected_attachments.size(), "%s source attachment count is pinned" % item.name, failures)
+	for index: int in mini(attachments.size(), expected_attachments.size()):
+		var attachment := attachments[index]
+		var expected := expected_attachments[index] as Dictionary
+		TestAssertions.equal(attachment.name, _expected_source_attachment_name(StringName(item.name), index), "%s attachment %d node name is pinned" % [item.name, index], failures)
+		TestAssertions.truthy(String(attachment.get_meta(&"equipment_socket_id", "")).ends_with(String(expected[&"socket"])), "%s attachment %d socket tag is pinned" % [item.name, index], failures)
+		TestAssertions.equal(attachment.position, expected[&"position"], "%s attachment %d position is pinned" % [item.name, index], failures)
+		var mesh := attachment.get_node_or_null("ReadableChannel") as MeshInstance3D
+		if mesh == null:
+			mesh = attachment.get_node_or_null("Blade") as MeshInstance3D
+		TestAssertions.truthy(mesh != null and mesh.mesh is BoxMesh, "%s attachment %d has pinned box mesh node" % [item.name, index], failures)
+		if mesh == null or not mesh.mesh is BoxMesh:
+			continue
+		TestAssertions.equal((mesh.mesh as BoxMesh).size, expected[&"size"], "%s attachment %d box dimensions are pinned" % [item.name, index], failures)
+		TestAssertions.equal(StringName(mesh.get_meta(&"palette_region", &"")), expected[&"region"], "%s attachment %d palette region is pinned" % [item.name, index], failures)
+		var material := mesh.material_override as StandardMaterial3D
+		TestAssertions.truthy(material != null and is_equal_approx(material.roughness, 0.78), "%s attachment %d material roughness is pinned" % [item.name, index], failures)
+		if material != null:
+			var region := expected[&"region"] as StringName
+			TestAssertions.truthy(material.albedo_color.is_equal_approx(_region_color(region)), "%s attachment %d material color is pinned" % [item.name, index], failures)
+			TestAssertions.near(material.metallic, _region_metallic(region), 0.0001, "%s attachment %d material metallic is pinned" % [item.name, index], failures)
+		if bool(expected.get(&"emits", false)):
+			TestAssertions.truthy(material != null and material.emission_enabled and material.emission.is_equal_approx(Color("ffd27a")), "%s attachment %d emission is pinned" % [item.name, index], failures)
+
+func _assert_sword_signature(source: Node3D, failures: Array[String]) -> void:
+	var sword := source.get_node_or_null("forge_vanguard_sword") as Node3D
+	if sword == null or sword.get_child_count() == 0:
+		return
+	var attachment := sword.get_child(0) as Node3D
+	for node_name: StringName in [&"Blade", &"Tip", &"Crossguard", &"Grip", &"Pommel"]:
+		TestAssertions.truthy(attachment.get_node_or_null(NodePath(String(node_name))) != null, "sword retains %s geometry node" % node_name, failures)
+	var tip_mesh := attachment.get_node_or_null("Tip") as MeshInstance3D
+	TestAssertions.truthy(tip_mesh != null and tip_mesh.mesh is CylinderMesh, "sword tip remains a four-sided cylinder", failures)
+	if tip_mesh != null and tip_mesh.mesh is CylinderMesh:
+		var tip := tip_mesh.mesh as CylinderMesh
+		TestAssertions.near(tip.top_radius, 0.0, 0.0001, "sword tip top radius", failures)
+		TestAssertions.near(tip.bottom_radius, 0.065, 0.0001, "sword tip bottom radius", failures)
+		TestAssertions.near(tip.height, 0.16, 0.0001, "sword tip height", failures)
+		TestAssertions.equal(tip.radial_segments, 4, "sword tip radial segments", failures)
+
+func _assert_armour_signature(source: Node3D, failures: Array[String]) -> void:
+	var armour := source.get_node_or_null("forge_vanguard_armour") as Node3D
+	if armour == null or armour.get_child_count() == 0:
+		return
+	var attachment := armour.get_child(0) as Node3D
+	for expected: Dictionary in [{&"name": &"LeftShoulderPlate", &"position": Vector3(-0.42, 0.24, 0)}, {&"name": &"RightShoulderPlate", &"position": Vector3(0.42, 0.24, 0)}]:
+		var mesh := attachment.get_node_or_null(NodePath(String(expected[&"name"]))) as MeshInstance3D
+		TestAssertions.truthy(mesh != null and mesh.mesh is BoxMesh, "armour retains %s box mesh" % expected[&"name"], failures)
+		if mesh != null and mesh.mesh is BoxMesh:
+			TestAssertions.equal(mesh.position, expected[&"position"], "armour %s position is pinned" % expected[&"name"], failures)
+			TestAssertions.equal((mesh.mesh as BoxMesh).size, Vector3(0.12, 0.20, 0.38), "armour %s dimensions are pinned" % expected[&"name"], failures)
+			TestAssertions.equal(StringName(mesh.get_meta(&"palette_region", &"")), &"metal", "armour %s palette region is pinned" % expected[&"name"], failures)
+
+func _expected_source_attachment_name(item_id: StringName, index: int) -> StringName:
+	match item_id:
+		&"forge_vanguard_helmet": return &"HelmetVisual"
+		&"forge_vanguard_armour": return &"BodyArmourVisual"
+		&"forge_vanguard_greaves": return &"LeftGreavesVisual" if index == 0 else &"RightGreavesVisual"
+		&"forge_vanguard_gauntlets": return &"LeftGlovesVisual" if index == 0 else &"RightGlovesVisual"
+		&"forge_vanguard_boots": return &"LeftBootsVisual" if index == 0 else &"RightBootsVisual"
+		&"forge_vanguard_amulet": return &"AmuletVisual"
+		&"forge_vanguard_ring_left": return &"RingLeftVisual"
+		&"forge_vanguard_ring_right": return &"RingRightVisual"
+		&"forge_vanguard_belt": return &"BeltVisual"
+		&"forge_vanguard_sword": return &"SwordVisual"
+		&"forge_vanguard_shield": return &"OffHandVisual"
+		&"forge_vanguard_hammer": return &"HammerVisual"
+	return &""
+
+func _region_color(region: StringName) -> Color:
+	match region:
+		&"primary": return Color("d94f4f")
+		&"metal": return Color("303a47")
+		&"brass": return Color("b68b3a")
+		&"leather": return Color("4a3426")
+	return Color("d8a47f")
+
+func _region_metallic(region: StringName) -> float:
+	if region == &"metal": return 0.7
+	if region == &"brass": return 0.55
+	return 0.0
 
 func _assert_runtime_visibility_and_socket_contract(profile: CharacterVisualProfile, failures: Array[String]) -> void:
 	var model := profile.presentation_scene.instantiate() as ForgeHumanoidModel

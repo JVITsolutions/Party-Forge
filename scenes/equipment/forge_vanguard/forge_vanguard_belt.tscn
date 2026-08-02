@@ -1,19 +1,20 @@
 [gd_scene format=3]
 
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_atg7h"]
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_yobar"]
 albedo_color = Color(0.2901961, 0.20392157, 0.14901961, 1)
 roughness = 0.78
 
-[sub_resource type="BoxMesh" id="BoxMesh_whnit"]
-size = Vector3(0.72, 0.12, 0.34)
+[sub_resource type="BoxMesh" id="BoxMesh_57of6"]
+size = Vector3(0.58, 0.11, 0.32)
 
 [node name="forge_vanguard_belt" type="Node3D"]
 
 [node name="Attachment" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.04, 0)
 metadata/equipment_visual_id = &"forge_vanguard_belt"
 metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/BeltSocket"
 
 [node name="ReadableChannel" type="MeshInstance3D" parent="Attachment"]
-material_override = SubResource("StandardMaterial3D_atg7h")
-mesh = SubResource("BoxMesh_whnit")
+material_override = SubResource("StandardMaterial3D_yobar")
+mesh = SubResource("BoxMesh_57of6")
 metadata/palette_region = &"leather"

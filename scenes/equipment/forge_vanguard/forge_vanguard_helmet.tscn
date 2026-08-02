@@ -6,15 +6,7 @@ metallic = 0.7
 roughness = 0.78
 
 [sub_resource type="BoxMesh" id="BoxMesh_ar0q1"]
-size = Vector3(0.38, 0.3, 0.36)
-
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_4fb84"]
-albedo_color = Color(0.7137255, 0.54509807, 0.22745098, 1)
-metallic = 0.55
-roughness = 0.78
-
-[sub_resource type="BoxMesh" id="BoxMesh_52t65"]
-size = Vector3(0.1, 0.18, 0.26)
+size = Vector3(0.38, 0.34, 0.34)
 
 [node name="forge_vanguard_helmet" type="Node3D"]
 
@@ -26,9 +18,3 @@ metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot/HeadPivo
 material_override = SubResource("StandardMaterial3D_dytnx")
 mesh = SubResource("BoxMesh_ar0q1")
 metadata/palette_region = &"metal"
-
-[node name="Crest" type="MeshInstance3D" parent="Attachment"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.21, 0)
-material_override = SubResource("StandardMaterial3D_4fb84")
-mesh = SubResource("BoxMesh_52t65")
-metadata/palette_region = &"brass"

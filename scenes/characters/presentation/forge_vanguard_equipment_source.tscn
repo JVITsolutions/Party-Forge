@@ -6,15 +6,14 @@ metallic = 0.7
 roughness = 0.78
 
 [sub_resource type="BoxMesh" id="BoxMesh_ar0q1"]
-size = Vector3(0.38, 0.3, 0.36)
+size = Vector3(0.38, 0.34, 0.34)
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_4fb84"]
-albedo_color = Color(0.7137255, 0.54509807, 0.22745098, 1)
-metallic = 0.55
+albedo_color = Color(0.8509804, 0.30980393, 0.30980393, 1)
 roughness = 0.78
 
 [sub_resource type="BoxMesh" id="BoxMesh_52t65"]
-size = Vector3(0.1, 0.18, 0.26)
+size = Vector3(0.76, 0.56, 0.36)
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_7gs1i"]
 albedo_color = Color(0.1882353, 0.22745098, 0.2784314, 1)
@@ -22,7 +21,7 @@ metallic = 0.7
 roughness = 0.78
 
 [sub_resource type="BoxMesh" id="BoxMesh_yrwjo"]
-size = Vector3(0.72, 0.58, 0.34)
+size = Vector3(0.12, 0.2, 0.38)
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_rlix2"]
 albedo_color = Color(0.1882353, 0.22745098, 0.2784314, 1)
@@ -30,7 +29,7 @@ metallic = 0.7
 roughness = 0.78
 
 [sub_resource type="BoxMesh" id="BoxMesh_j5jur"]
-size = Vector3(0.16, 0.18, 0.4)
+size = Vector3(0.12, 0.2, 0.38)
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_jgaa1"]
 albedo_color = Color(0.1882353, 0.22745098, 0.2784314, 1)
@@ -38,7 +37,7 @@ metallic = 0.7
 roughness = 0.78
 
 [sub_resource type="BoxMesh" id="BoxMesh_650q2"]
-size = Vector3(0.16, 0.18, 0.4)
+size = Vector3(0.24, 0.42, 0.24)
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_7pg34"]
 albedo_color = Color(0.1882353, 0.22745098, 0.2784314, 1)
@@ -49,95 +48,106 @@ roughness = 0.78
 size = Vector3(0.24, 0.42, 0.24)
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_vjxtm"]
-albedo_color = Color(0.1882353, 0.22745098, 0.2784314, 1)
-metallic = 0.7
+albedo_color = Color(0.8509804, 0.30980393, 0.30980393, 1)
 roughness = 0.78
 
 [sub_resource type="BoxMesh" id="BoxMesh_qgmd3"]
-size = Vector3(0.24, 0.42, 0.24)
+size = Vector3(0.16, 0.17, 0.16)
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_2rxl3"]
-albedo_color = Color(0.1882353, 0.22745098, 0.2784314, 1)
-metallic = 0.7
+albedo_color = Color(0.8509804, 0.30980393, 0.30980393, 1)
 roughness = 0.78
 
 [sub_resource type="BoxMesh" id="BoxMesh_plvbm"]
-size = Vector3(0.18, 0.2, 0.2)
+size = Vector3(0.16, 0.17, 0.16)
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_02en6"]
-albedo_color = Color(0.1882353, 0.22745098, 0.2784314, 1)
-metallic = 0.7
+albedo_color = Color(0.8509804, 0.30980393, 0.30980393, 1)
 roughness = 0.78
 
 [sub_resource type="BoxMesh" id="BoxMesh_sp45n"]
-size = Vector3(0.18, 0.2, 0.2)
+size = Vector3(0.23, 0.18, 0.34)
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_5jspc"]
-albedo_color = Color(0.2901961, 0.20392157, 0.14901961, 1)
+albedo_color = Color(0.8509804, 0.30980393, 0.30980393, 1)
 roughness = 0.78
 
 [sub_resource type="BoxMesh" id="BoxMesh_bylml"]
-size = Vector3(0.24, 0.16, 0.38)
+size = Vector3(0.23, 0.18, 0.34)
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_ynhs8"]
-albedo_color = Color(0.2901961, 0.20392157, 0.14901961, 1)
+albedo_color = Color(0.7137255, 0.54509807, 0.22745098, 1)
+metallic = 0.55
 roughness = 0.78
+emission_enabled = true
+emission = Color(1, 0.8235294, 0.47843137, 1)
+emission_energy_multiplier = 0.7
 
 [sub_resource type="BoxMesh" id="BoxMesh_70n5f"]
-size = Vector3(0.24, 0.16, 0.38)
+size = Vector3(0.1, 0.1, 0.04)
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_3t67j"]
 albedo_color = Color(0.7137255, 0.54509807, 0.22745098, 1)
 metallic = 0.55
 roughness = 0.78
+emission_enabled = true
+emission = Color(1, 0.8235294, 0.47843137, 1)
+emission_energy_multiplier = 0.7
 
 [sub_resource type="BoxMesh" id="BoxMesh_qedqm"]
-size = Vector3(0.1, 0.28, 0.08)
+size = Vector3(0.07, 0.07, 0.07)
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_d58ey"]
 albedo_color = Color(0.7137255, 0.54509807, 0.22745098, 1)
 metallic = 0.55
 roughness = 0.78
+emission_enabled = true
+emission = Color(1, 0.8235294, 0.47843137, 1)
+emission_energy_multiplier = 0.7
 
 [sub_resource type="BoxMesh" id="BoxMesh_m7fpn"]
-size = Vector3(0.18, 0.18, 0.1)
+size = Vector3(0.07, 0.07, 0.07)
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_yobar"]
-albedo_color = Color(0.7137255, 0.54509807, 0.22745098, 1)
-metallic = 0.55
+albedo_color = Color(0.2901961, 0.20392157, 0.14901961, 1)
 roughness = 0.78
 
 [sub_resource type="BoxMesh" id="BoxMesh_57of6"]
-size = Vector3(0.2, 0.2, 0.08)
+size = Vector3(0.58, 0.11, 0.32)
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_s8y7e"]
-albedo_color = Color(0.8509804, 0.30980393, 0.30980393, 1)
+albedo_color = Color(0.1882353, 0.22745098, 0.2784314, 1)
+metallic = 0.7
 roughness = 0.78
 
 [sub_resource type="BoxMesh" id="BoxMesh_pk3de"]
-size = Vector3(0.1, 0.1, 0.1)
+size = Vector3(0.1, 0.68, 0.035)
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_23ahm"]
-albedo_color = Color(0.7137255, 0.54509807, 0.22745098, 1)
-metallic = 0.55
+albedo_color = Color(0.1882353, 0.22745098, 0.2784314, 1)
+metallic = 0.7
 roughness = 0.78
 
-[sub_resource type="BoxMesh" id="BoxMesh_bn304"]
-size = Vector3(0.2, 0.2, 0.08)
+[sub_resource type="CylinderMesh" id="CylinderMesh_bn304"]
+top_radius = 0.0
+bottom_radius = 0.065
+height = 0.16
+radial_segments = 4
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_w835e"]
-albedo_color = Color(0.8509804, 0.30980393, 0.30980393, 1)
+albedo_color = Color(0.1882353, 0.22745098, 0.2784314, 1)
+metallic = 0.7
 roughness = 0.78
 
 [sub_resource type="BoxMesh" id="BoxMesh_hqd4m"]
-size = Vector3(0.1, 0.1, 0.1)
+size = Vector3(0.3, 0.055, 0.08)
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_atg7h"]
 albedo_color = Color(0.2901961, 0.20392157, 0.14901961, 1)
 roughness = 0.78
 
 [sub_resource type="BoxMesh" id="BoxMesh_whnit"]
-size = Vector3(0.72, 0.12, 0.34)
+size = Vector3(0.065, 0.22, 0.065)
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_1ip5r"]
 albedo_color = Color(0.1882353, 0.22745098, 0.2784314, 1)
@@ -145,279 +155,232 @@ metallic = 0.7
 roughness = 0.78
 
 [sub_resource type="BoxMesh" id="BoxMesh_dsna7"]
-size = Vector3(0.1, 0.72, 0.05)
+size = Vector3(0.09, 0.08, 0.08)
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_2fqxw"]
-albedo_color = Color(0.7137255, 0.54509807, 0.22745098, 1)
-metallic = 0.55
+albedo_color = Color(0.1882353, 0.22745098, 0.2784314, 1)
+metallic = 0.7
 roughness = 0.78
 
 [sub_resource type="BoxMesh" id="BoxMesh_0ttht"]
-size = Vector3(0.34, 0.06, 0.1)
+size = Vector3(0.68, 0.68, 0.14)
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_h4vh1"]
-albedo_color = Color(0.2901961, 0.20392157, 0.14901961, 1)
+albedo_color = Color(0.1882353, 0.22745098, 0.2784314, 1)
+metallic = 0.7
 roughness = 0.78
 
 [sub_resource type="BoxMesh" id="BoxMesh_to6tj"]
-size = Vector3(0.08, 0.22, 0.08)
-
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_ykxln"]
-albedo_color = Color(0.1882353, 0.22745098, 0.2784314, 1)
-metallic = 0.7
-roughness = 0.78
-
-[sub_resource type="BoxMesh" id="BoxMesh_m7rd1"]
-size = Vector3(0.68, 0.84, 0.13)
-
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_2awi0"]
-albedo_color = Color(0.7137255, 0.54509807, 0.22745098, 1)
-metallic = 0.55
-roughness = 0.78
-
-[sub_resource type="BoxMesh" id="BoxMesh_aqdwc"]
-size = Vector3(0.22, 0.22, 0.1)
-
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_hbj3d"]
-albedo_color = Color(0.2901961, 0.20392157, 0.14901961, 1)
-roughness = 0.78
-
-[sub_resource type="BoxMesh" id="BoxMesh_aehlm"]
 size = Vector3(0.09, 0.92, 0.07)
-
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_7sw4s"]
-albedo_color = Color(0.1882353, 0.22745098, 0.2784314, 1)
-metallic = 0.7
-roughness = 0.78
-
-[sub_resource type="BoxMesh" id="BoxMesh_be3c5"]
-size = Vector3(0.42, 0.2, 0.24)
 
 [node name="ForgeVanguardEquipmentSource" type="Node3D"]
 
 [node name="forge_vanguard_helmet" type="Node3D" parent="."]
 
-[node name="Attachment" type="Node3D" parent="forge_vanguard_helmet"]
+[node name="HelmetVisual" type="Node3D" parent="forge_vanguard_helmet"]
 metadata/equipment_visual_id = &"forge_vanguard_helmet"
 metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot/HeadPivot/HelmetSocket"
 
-[node name="ReadableChannel" type="MeshInstance3D" parent="forge_vanguard_helmet/Attachment"]
+[node name="ReadableChannel" type="MeshInstance3D" parent="forge_vanguard_helmet/HelmetVisual"]
 material_override = SubResource("StandardMaterial3D_dytnx")
 mesh = SubResource("BoxMesh_ar0q1")
 metadata/palette_region = &"metal"
 
-[node name="Crest" type="MeshInstance3D" parent="forge_vanguard_helmet/Attachment"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.21, 0)
-material_override = SubResource("StandardMaterial3D_4fb84")
-mesh = SubResource("BoxMesh_52t65")
-metadata/palette_region = &"brass"
-
 [node name="forge_vanguard_armour" type="Node3D" parent="."]
 
-[node name="Attachment" type="Node3D" parent="forge_vanguard_armour"]
+[node name="BodyArmourVisual" type="Node3D" parent="forge_vanguard_armour"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.06, 0)
 metadata/equipment_visual_id = &"forge_vanguard_armour"
 metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot/BodyArmourSocket"
 
-[node name="ReadableChannel" type="MeshInstance3D" parent="forge_vanguard_armour/Attachment"]
+[node name="ReadableChannel" type="MeshInstance3D" parent="forge_vanguard_armour/BodyArmourVisual"]
+material_override = SubResource("StandardMaterial3D_4fb84")
+mesh = SubResource("BoxMesh_52t65")
+metadata/palette_region = &"primary"
+
+[node name="LeftShoulderPlate" type="MeshInstance3D" parent="forge_vanguard_armour/BodyArmourVisual"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.42, 0.24, 0)
 material_override = SubResource("StandardMaterial3D_7gs1i")
 mesh = SubResource("BoxMesh_yrwjo")
 metadata/palette_region = &"metal"
 
-[node name="LeftShoulderPlate" type="MeshInstance3D" parent="forge_vanguard_armour/Attachment"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.42, 0.2, 0)
+[node name="RightShoulderPlate" type="MeshInstance3D" parent="forge_vanguard_armour/BodyArmourVisual"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.42, 0.24, 0)
 material_override = SubResource("StandardMaterial3D_rlix2")
 mesh = SubResource("BoxMesh_j5jur")
 metadata/palette_region = &"metal"
 
-[node name="RightShoulderPlate" type="MeshInstance3D" parent="forge_vanguard_armour/Attachment"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.42, 0.2, 0)
+[node name="forge_vanguard_greaves" type="Node3D" parent="."]
+
+[node name="LeftGreavesVisual" type="Node3D" parent="forge_vanguard_greaves"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.28, 0)
+metadata/equipment_visual_id = &"forge_vanguard_greaves"
+metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/LeftHipPivot"
+
+[node name="ReadableChannel" type="MeshInstance3D" parent="forge_vanguard_greaves/LeftGreavesVisual"]
 material_override = SubResource("StandardMaterial3D_jgaa1")
 mesh = SubResource("BoxMesh_650q2")
 metadata/palette_region = &"metal"
 
-[node name="forge_vanguard_greaves" type="Node3D" parent="."]
-
-[node name="Attachment" type="Node3D" parent="forge_vanguard_greaves"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.12, -0.22, 0)
+[node name="RightGreavesVisual" type="Node3D" parent="forge_vanguard_greaves"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.28, 0)
 metadata/equipment_visual_id = &"forge_vanguard_greaves"
-metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/LeftHipPivot"
+metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/RightHipPivot"
 
-[node name="ReadableChannel" type="MeshInstance3D" parent="forge_vanguard_greaves/Attachment"]
+[node name="ReadableChannel" type="MeshInstance3D" parent="forge_vanguard_greaves/RightGreavesVisual"]
 material_override = SubResource("StandardMaterial3D_7pg34")
 mesh = SubResource("BoxMesh_5lg75")
 metadata/palette_region = &"metal"
 
-[node name="@Node3D@2" type="Node3D" parent="forge_vanguard_greaves"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.12, -0.22, 0)
-metadata/equipment_visual_id = &"forge_vanguard_greaves"
-metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/RightHipPivot"
-
-[node name="ReadableChannel" type="MeshInstance3D" parent="forge_vanguard_greaves/@Node3D@2"]
-material_override = SubResource("StandardMaterial3D_vjxtm")
-mesh = SubResource("BoxMesh_qgmd3")
-metadata/palette_region = &"metal"
-
 [node name="forge_vanguard_gauntlets" type="Node3D" parent="."]
 
-[node name="Attachment" type="Node3D" parent="forge_vanguard_gauntlets"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.04, 0, 0)
+[node name="LeftGlovesVisual" type="Node3D" parent="forge_vanguard_gauntlets"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.02, -0.2, 0)
 metadata/equipment_visual_id = &"forge_vanguard_gauntlets"
 metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot/LeftShoulderPivot/LeftElbowPivot/LeftHandSocket"
 
-[node name="ReadableChannel" type="MeshInstance3D" parent="forge_vanguard_gauntlets/Attachment"]
-material_override = SubResource("StandardMaterial3D_2rxl3")
-mesh = SubResource("BoxMesh_plvbm")
-metadata/palette_region = &"metal"
+[node name="ReadableChannel" type="MeshInstance3D" parent="forge_vanguard_gauntlets/LeftGlovesVisual"]
+material_override = SubResource("StandardMaterial3D_vjxtm")
+mesh = SubResource("BoxMesh_qgmd3")
+metadata/palette_region = &"primary"
 
-[node name="@Node3D@3" type="Node3D" parent="forge_vanguard_gauntlets"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.04, 0, 0)
+[node name="RightGlovesVisual" type="Node3D" parent="forge_vanguard_gauntlets"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.02, -0.2, 0)
 metadata/equipment_visual_id = &"forge_vanguard_gauntlets"
 metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot/RightShoulderPivot/RightElbowPivot/RightHandSocket"
 
-[node name="ReadableChannel" type="MeshInstance3D" parent="forge_vanguard_gauntlets/@Node3D@3"]
-material_override = SubResource("StandardMaterial3D_02en6")
-mesh = SubResource("BoxMesh_sp45n")
-metadata/palette_region = &"metal"
+[node name="ReadableChannel" type="MeshInstance3D" parent="forge_vanguard_gauntlets/RightGlovesVisual"]
+material_override = SubResource("StandardMaterial3D_2rxl3")
+mesh = SubResource("BoxMesh_plvbm")
+metadata/palette_region = &"primary"
 
 [node name="forge_vanguard_boots" type="Node3D" parent="."]
 
-[node name="Attachment" type="Node3D" parent="forge_vanguard_boots"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.13, -0.02, 0.05)
+[node name="LeftBootsVisual" type="Node3D" parent="forge_vanguard_boots"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.01, 0.05, 0)
 metadata/equipment_visual_id = &"forge_vanguard_boots"
 metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/LeftHipPivot/LeftKneePivot/LeftFootPivot"
 
-[node name="ReadableChannel" type="MeshInstance3D" parent="forge_vanguard_boots/Attachment"]
-material_override = SubResource("StandardMaterial3D_5jspc")
-mesh = SubResource("BoxMesh_bylml")
-metadata/palette_region = &"leather"
+[node name="ReadableChannel" type="MeshInstance3D" parent="forge_vanguard_boots/LeftBootsVisual"]
+material_override = SubResource("StandardMaterial3D_02en6")
+mesh = SubResource("BoxMesh_sp45n")
+metadata/palette_region = &"primary"
 
-[node name="@Node3D@4" type="Node3D" parent="forge_vanguard_boots"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.13, -0.02, 0.05)
+[node name="RightBootsVisual" type="Node3D" parent="forge_vanguard_boots"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.01, 0.05, 0)
 metadata/equipment_visual_id = &"forge_vanguard_boots"
 metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/RightHipPivot/RightKneePivot/RightFootPivot"
 
-[node name="ReadableChannel" type="MeshInstance3D" parent="forge_vanguard_boots/@Node3D@4"]
-material_override = SubResource("StandardMaterial3D_ynhs8")
-mesh = SubResource("BoxMesh_70n5f")
-metadata/palette_region = &"leather"
+[node name="ReadableChannel" type="MeshInstance3D" parent="forge_vanguard_boots/RightBootsVisual"]
+material_override = SubResource("StandardMaterial3D_5jspc")
+mesh = SubResource("BoxMesh_bylml")
+metadata/palette_region = &"primary"
 
 [node name="forge_vanguard_amulet" type="Node3D" parent="."]
 
-[node name="Attachment" type="Node3D" parent="forge_vanguard_amulet"]
+[node name="AmuletVisual" type="Node3D" parent="forge_vanguard_amulet"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.2, -0.2)
 metadata/equipment_visual_id = &"forge_vanguard_amulet"
 metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot/AmuletSocket"
 
-[node name="ReadableChannel" type="MeshInstance3D" parent="forge_vanguard_amulet/Attachment"]
-material_override = SubResource("StandardMaterial3D_3t67j")
-mesh = SubResource("BoxMesh_qedqm")
-metadata/palette_region = &"brass"
-
-[node name="Pendant" type="MeshInstance3D" parent="forge_vanguard_amulet/Attachment"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.16, 0)
-material_override = SubResource("StandardMaterial3D_d58ey")
-mesh = SubResource("BoxMesh_m7fpn")
+[node name="ReadableChannel" type="MeshInstance3D" parent="forge_vanguard_amulet/AmuletVisual"]
+material_override = SubResource("StandardMaterial3D_ynhs8")
+mesh = SubResource("BoxMesh_70n5f")
 metadata/palette_region = &"brass"
 
 [node name="forge_vanguard_ring_left" type="Node3D" parent="."]
 
-[node name="Attachment" type="Node3D" parent="forge_vanguard_ring_left"]
+[node name="RingLeftVisual" type="Node3D" parent="forge_vanguard_ring_left"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.03, -0.24, 0)
 metadata/equipment_visual_id = &"forge_vanguard_ring_left"
 metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot/LeftShoulderPivot/LeftElbowPivot/LeftHandSocket"
 
-[node name="ReadableChannel" type="MeshInstance3D" parent="forge_vanguard_ring_left/Attachment"]
-material_override = SubResource("StandardMaterial3D_yobar")
-mesh = SubResource("BoxMesh_57of6")
+[node name="ReadableChannel" type="MeshInstance3D" parent="forge_vanguard_ring_left/RingLeftVisual"]
+material_override = SubResource("StandardMaterial3D_3t67j")
+mesh = SubResource("BoxMesh_qedqm")
 metadata/palette_region = &"brass"
-
-[node name="Gem" type="MeshInstance3D" parent="forge_vanguard_ring_left/Attachment"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.12, 0)
-material_override = SubResource("StandardMaterial3D_s8y7e")
-mesh = SubResource("BoxMesh_pk3de")
-metadata/palette_region = &"primary"
 
 [node name="forge_vanguard_ring_right" type="Node3D" parent="."]
 
-[node name="Attachment" type="Node3D" parent="forge_vanguard_ring_right"]
+[node name="RingRightVisual" type="Node3D" parent="forge_vanguard_ring_right"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.03, -0.24, 0)
 metadata/equipment_visual_id = &"forge_vanguard_ring_right"
 metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot/RightShoulderPivot/RightElbowPivot/RightHandSocket"
 
-[node name="ReadableChannel" type="MeshInstance3D" parent="forge_vanguard_ring_right/Attachment"]
-material_override = SubResource("StandardMaterial3D_23ahm")
-mesh = SubResource("BoxMesh_bn304")
+[node name="ReadableChannel" type="MeshInstance3D" parent="forge_vanguard_ring_right/RingRightVisual"]
+material_override = SubResource("StandardMaterial3D_d58ey")
+mesh = SubResource("BoxMesh_m7fpn")
 metadata/palette_region = &"brass"
-
-[node name="Gem" type="MeshInstance3D" parent="forge_vanguard_ring_right/Attachment"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.12, 0)
-material_override = SubResource("StandardMaterial3D_w835e")
-mesh = SubResource("BoxMesh_hqd4m")
-metadata/palette_region = &"primary"
 
 [node name="forge_vanguard_belt" type="Node3D" parent="."]
 
-[node name="Attachment" type="Node3D" parent="forge_vanguard_belt"]
+[node name="BeltVisual" type="Node3D" parent="forge_vanguard_belt"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.04, 0)
 metadata/equipment_visual_id = &"forge_vanguard_belt"
 metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot/BeltSocket"
 
-[node name="ReadableChannel" type="MeshInstance3D" parent="forge_vanguard_belt/Attachment"]
-material_override = SubResource("StandardMaterial3D_atg7h")
-mesh = SubResource("BoxMesh_whnit")
+[node name="ReadableChannel" type="MeshInstance3D" parent="forge_vanguard_belt/BeltVisual"]
+material_override = SubResource("StandardMaterial3D_yobar")
+mesh = SubResource("BoxMesh_57of6")
 metadata/palette_region = &"leather"
 
 [node name="forge_vanguard_sword" type="Node3D" parent="."]
 
-[node name="Attachment" type="Node3D" parent="forge_vanguard_sword"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.34, 0)
+[node name="SwordVisual" type="Node3D" parent="forge_vanguard_sword"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.03, 0.09, 0)
 metadata/equipment_visual_id = &"forge_vanguard_sword"
 metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot/RightShoulderPivot/RightElbowPivot/RightHandSocket"
 
-[node name="ReadableChannel" type="MeshInstance3D" parent="forge_vanguard_sword/Attachment"]
+[node name="Blade" type="MeshInstance3D" parent="forge_vanguard_sword/SwordVisual"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.38, 0)
+material_override = SubResource("StandardMaterial3D_s8y7e")
+mesh = SubResource("BoxMesh_pk3de")
+metadata/palette_region = &"metal"
+
+[node name="Tip" type="MeshInstance3D" parent="forge_vanguard_sword/SwordVisual"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.8, 0)
+material_override = SubResource("StandardMaterial3D_23ahm")
+mesh = SubResource("CylinderMesh_bn304")
+metadata/palette_region = &"metal"
+
+[node name="Crossguard" type="MeshInstance3D" parent="forge_vanguard_sword/SwordVisual"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.02, 0)
+material_override = SubResource("StandardMaterial3D_w835e")
+mesh = SubResource("BoxMesh_hqd4m")
+metadata/palette_region = &"metal"
+
+[node name="Grip" type="MeshInstance3D" parent="forge_vanguard_sword/SwordVisual"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.11, 0)
+material_override = SubResource("StandardMaterial3D_atg7h")
+mesh = SubResource("BoxMesh_whnit")
+metadata/palette_region = &"leather"
+
+[node name="Pommel" type="MeshInstance3D" parent="forge_vanguard_sword/SwordVisual"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.25, 0)
 material_override = SubResource("StandardMaterial3D_1ip5r")
 mesh = SubResource("BoxMesh_dsna7")
 metadata/palette_region = &"metal"
 
-[node name="Crossguard" type="MeshInstance3D" parent="forge_vanguard_sword/Attachment"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.38, 0)
-material_override = SubResource("StandardMaterial3D_2fqxw")
-mesh = SubResource("BoxMesh_0ttht")
-metadata/palette_region = &"brass"
-
-[node name="Grip" type="MeshInstance3D" parent="forge_vanguard_sword/Attachment"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.51, 0)
-material_override = SubResource("StandardMaterial3D_h4vh1")
-mesh = SubResource("BoxMesh_to6tj")
-metadata/palette_region = &"leather"
-
 [node name="forge_vanguard_shield" type="Node3D" parent="."]
 
-[node name="Attachment" type="Node3D" parent="forge_vanguard_shield"]
+[node name="OffHandVisual" type="Node3D" parent="forge_vanguard_shield"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.04, 0.21, 0.02)
 metadata/equipment_visual_id = &"forge_vanguard_shield"
 metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot/LeftShoulderPivot/LeftElbowPivot/LeftHandSocket"
 
-[node name="ReadableChannel" type="MeshInstance3D" parent="forge_vanguard_shield/Attachment"]
-material_override = SubResource("StandardMaterial3D_ykxln")
-mesh = SubResource("BoxMesh_m7rd1")
+[node name="ReadableChannel" type="MeshInstance3D" parent="forge_vanguard_shield/OffHandVisual"]
+material_override = SubResource("StandardMaterial3D_2fqxw")
+mesh = SubResource("BoxMesh_0ttht")
 metadata/palette_region = &"metal"
-
-[node name="Boss" type="MeshInstance3D" parent="forge_vanguard_shield/Attachment"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0.1)
-material_override = SubResource("StandardMaterial3D_2awi0")
-mesh = SubResource("BoxMesh_aqdwc")
-metadata/palette_region = &"brass"
 
 [node name="forge_vanguard_hammer" type="Node3D" parent="."]
 
-[node name="Attachment" type="Node3D" parent="forge_vanguard_hammer"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.05, 0)
+[node name="HammerVisual" type="Node3D" parent="forge_vanguard_hammer"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.03, 0.11, 0)
 metadata/equipment_visual_id = &"forge_vanguard_hammer"
 metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot/RightShoulderPivot/RightElbowPivot/RightHandSocket"
 
-[node name="ReadableChannel" type="MeshInstance3D" parent="forge_vanguard_hammer/Attachment"]
-material_override = SubResource("StandardMaterial3D_hbj3d")
-mesh = SubResource("BoxMesh_aehlm")
-metadata/palette_region = &"leather"
-
-[node name="HammerHead" type="MeshInstance3D" parent="forge_vanguard_hammer/Attachment"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.42, 0)
-material_override = SubResource("StandardMaterial3D_7sw4s")
-mesh = SubResource("BoxMesh_be3c5")
+[node name="ReadableChannel" type="MeshInstance3D" parent="forge_vanguard_hammer/HammerVisual"]
+material_override = SubResource("StandardMaterial3D_h4vh1")
+mesh = SubResource("BoxMesh_to6tj")
 metadata/palette_region = &"metal"

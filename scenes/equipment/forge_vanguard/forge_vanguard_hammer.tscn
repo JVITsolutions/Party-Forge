@@ -1,34 +1,21 @@
 [gd_scene format=3]
 
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_hbj3d"]
-albedo_color = Color(0.2901961, 0.20392157, 0.14901961, 1)
-roughness = 0.78
-
-[sub_resource type="BoxMesh" id="BoxMesh_aehlm"]
-size = Vector3(0.09, 0.92, 0.07)
-
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_7sw4s"]
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_h4vh1"]
 albedo_color = Color(0.1882353, 0.22745098, 0.2784314, 1)
 metallic = 0.7
 roughness = 0.78
 
-[sub_resource type="BoxMesh" id="BoxMesh_be3c5"]
-size = Vector3(0.42, 0.2, 0.24)
+[sub_resource type="BoxMesh" id="BoxMesh_to6tj"]
+size = Vector3(0.09, 0.92, 0.07)
 
 [node name="forge_vanguard_hammer" type="Node3D"]
 
 [node name="Attachment" type="Node3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.05, 0)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.03, 0.11, 0)
 metadata/equipment_visual_id = &"forge_vanguard_hammer"
 metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot/RightShoulderPivot/RightElbowPivot/RightHandSocket"
 
 [node name="ReadableChannel" type="MeshInstance3D" parent="Attachment"]
-material_override = SubResource("StandardMaterial3D_hbj3d")
-mesh = SubResource("BoxMesh_aehlm")
-metadata/palette_region = &"leather"
-
-[node name="HammerHead" type="MeshInstance3D" parent="Attachment"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.42, 0)
-material_override = SubResource("StandardMaterial3D_7sw4s")
-mesh = SubResource("BoxMesh_be3c5")
+material_override = SubResource("StandardMaterial3D_h4vh1")
+mesh = SubResource("BoxMesh_to6tj")
 metadata/palette_region = &"metal"
