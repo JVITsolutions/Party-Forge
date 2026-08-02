@@ -23,13 +23,16 @@ func run() -> Array[String]:
 	TestAssertions.truthy(not ledger.open_for_player(99), "ledger rejects an unknown local player context", failures)
 	TestAssertions.truthy(ledger.open_for_player(), "ledger opens during running state", failures)
 	TestAssertions.truthy(tree.paused, "ledger pauses gameplay", failures)
-	var party_entries := ledger.get_node("Overlay/Frame/Layout/Body/PartyScroll/PartyEntries") as Container
+	var party_entries := ledger.get_node("Overlay/Frame/Layout/Body/PartyColumn/PartyScroll/PartyEntries") as Container
 	TestAssertions.equal(party_entries.get_child_count(), 1, "rail shows only current members", failures)
+	var party_count := ledger.get_node("Overlay/Frame/Layout/Body/PartyColumn/PartyCount") as Label
+	TestAssertions.equal(party_count.text, "Party Members: 1 / 4", "ledger shows live production occupancy", failures)
 	var stats_page := ledger.get_node("Overlay/Frame/Layout/Body/PageHost/StatsLedgerPage") as Control
 	var upgrades_page := ledger.get_node("Overlay/Frame/Layout/Body/PageHost/UpgradesLedgerPage") as Control
 	TestAssertions.truthy(stats_page.visible and not upgrades_page.visible, "opening activates only the selected page lifecycle", failures)
 
 	TestAssertions.truthy(party.recruit(catalog.class_by_id(&"fighter")), "provider refresh fixture recruits a member", failures)
+	TestAssertions.equal(party_count.text, "Party Members: 2 / 4", "party signal refreshes occupancy", failures)
 	TestAssertions.equal(party_entries.get_child_count(), 2, "party signal refreshes the rail", failures)
 	TestAssertions.truthy(ledger.select_member(2), "current rail member can be selected", failures)
 	TestAssertions.truthy(ledger.activate_page(&"current_upgrades"), "available page activates", failures)

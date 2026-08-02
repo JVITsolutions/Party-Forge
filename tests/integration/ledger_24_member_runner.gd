@@ -1,9 +1,10 @@
 extends SceneTree
 
 const LEDGER_SCENE_PATH := "res://scenes/ui/ledger/character_ledger.tscn"
-const PARTY_SCROLL_PATH := ^"Overlay/Frame/Layout/Body/PartyScroll"
-const MEMBER_1_PATH := ^"Overlay/Frame/Layout/Body/PartyScroll/PartyEntries/Member_1"
-const MEMBER_24_PATH := ^"Overlay/Frame/Layout/Body/PartyScroll/PartyEntries/Member_24"
+const PARTY_SCROLL_PATH := ^"Overlay/Frame/Layout/Body/PartyColumn/PartyScroll"
+const PARTY_COUNT_PATH := ^"Overlay/Frame/Layout/Body/PartyColumn/PartyCount"
+const MEMBER_1_PATH := ^"Overlay/Frame/Layout/Body/PartyColumn/PartyScroll/PartyEntries/Member_1"
+const MEMBER_24_PATH := ^"Overlay/Frame/Layout/Body/PartyColumn/PartyScroll/PartyEntries/Member_24"
 
 var _failures: Array[String] = []
 
@@ -55,6 +56,7 @@ func _exercise_viewport(viewport_size: Vector2i, compact: bool) -> void:
 	ledger.configure(run, party, catalog, Callable(), [context])
 	ledger.apply_viewport_size(Vector2(viewport_size))
 	_assert(ledger.open_for_player(), "%s ledger opens" % mode)
+	_assert((ledger.get_node(PARTY_COUNT_PATH) as Label).text == "Party Members: 24 / 24", "%s count reports all developer members" % mode)
 	await _wait_for_layout()
 
 	var expected_frame := Rect2(
@@ -124,6 +126,7 @@ func _exercise_provider_refresh_focus_lifecycle() -> void:
 	ledger.configure(run, party, catalog, Callable(), [context])
 	ledger.apply_viewport_size(Vector2(viewport.size))
 	_assert(ledger.open_for_player(), "refresh-focus ledger opens")
+	_assert((ledger.get_node(PARTY_COUNT_PATH) as Label).text == "Party Members: 2 / 24", "refresh fixture count reports initial members")
 	await _wait_for_layout()
 
 	var scroll := ledger.get_node(PARTY_SCROLL_PATH) as ScrollContainer
@@ -131,6 +134,7 @@ func _exercise_provider_refresh_focus_lifecycle() -> void:
 	member_24.grab_focus()
 	_assert(viewport.gui_get_focus_owner() == member_24, "refresh fixture starts with actual member 24 focus")
 	_assert(party.recruit(catalog.class_by_id(&"fighter")), "recruit triggers provider party refresh")
+	_assert((ledger.get_node(PARTY_COUNT_PATH) as Label).text == "Party Members: 3 / 24", "refresh fixture count reports recruited member")
 	await _wait_for_layout()
 	var rebuilt_member_24 := ledger.get_node(MEMBER_24_PATH) as Button
 	_assert(viewport.gui_get_focus_owner() == rebuilt_member_24, "provider refresh restores actual member 24 focus")
