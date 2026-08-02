@@ -5,7 +5,10 @@ const CATALOG := preload("res://data/equipment/core_equipment_catalog.tres")
 const RENDERER_SCRIPT := preload("res://tools/equipment_icon_cpu_renderer.gd")
 
 func _initialize() -> void:
-	var requested_sets := _requested_sets()
+	var registry_error := _registry_error()
+	if not registry_error.is_empty(): push_error("EQUIPMENT_ICON_VALIDATION_ERROR registries disagree %s" % registry_error); quit(1); return
+	var registered_sets := _registered_sets()
+	var requested_sets := _requested_sets(registered_sets)
 	if requested_sets.is_empty(): push_error("EQUIPMENT_ICON_VALIDATION_ERROR no registered sets requested"); quit(1); return
 	var item_count := 0
 	var seen_hashes := {256: {}, 128: {}}
@@ -17,16 +20,31 @@ func _initialize() -> void:
 			if not _validate(set_id, index, renderer, seen_hashes): quit(1); return
 			item_count += 1
 	print("EQUIPMENT_ICON_VALIDATION_OK sets=%d items=%d unique_master=%d unique_runtime=%d" % [requested_sets.size(), item_count, (seen_hashes[256] as Dictionary).size(), (seen_hashes[128] as Dictionary).size()]); quit(0)
+func _registry_error() -> String:
+	for set_id: StringName in SET_FOLDERS:
+		if not ClassEquipmentRows.SET_ITEM_IDS.has(set_id):
+			return "set=%s missing manifest" % set_id
+	for set_id: StringName in ClassEquipmentRows.SET_ITEM_IDS:
+		if not SET_FOLDERS.has(set_id):
+			return "set=%s missing folder mapping" % set_id
+	return ""
 
-func _requested_sets() -> Array[StringName]:
+func _registered_sets() -> Array[StringName]:
+	var registered_sets: Array[StringName] = []
+	for set_id: StringName in SET_FOLDERS.keys():
+		registered_sets.append(set_id)
+	registered_sets.sort()
+	return registered_sets
+
+func _requested_sets(registered_sets: Array[StringName]) -> Array[StringName]:
 	for arg: String in OS.get_cmdline_user_args():
 		if arg.begins_with("--sets="):
 			var result: Array[StringName] = []
 			for raw: String in arg.trim_prefix("--sets=").split(","):
 				var set_id := StringName(raw.strip_edges())
 				if set_id == &"all":
-					return [&"fighter", &"paladin", &"ranger", &"marksman", &"rogue", &"mage", &"frost_mage", &"cleric", &"warlock"]
-				if set_id.is_empty() or not ClassEquipmentRows.SET_ITEM_IDS.has(set_id): return []
+					return registered_sets.duplicate()
+				if set_id.is_empty() or set_id not in registered_sets: return []
 				result.append(set_id)
 			return result
 	return [&"fighter"]
