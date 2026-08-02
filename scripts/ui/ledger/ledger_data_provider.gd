@@ -81,6 +81,35 @@ func stat_detail(member_id: int, stat_id: StringName) -> Dictionary:
 		"sources": snapshot.breakdown(stat_id),
 	}
 
+func combat_estimate_rows(member_id: int) -> Array[ActionCombatEstimate]:
+	var rows: Array[ActionCombatEstimate] = []
+	var member := party.member_by_id(member_id) if party != null else null
+	if member == null or catalog == null:
+		return rows
+	var seen_ids: Dictionary = {}
+	var seen_instances: Dictionary = {}
+	for attack: AttackDefinition in _owned_actions(member.class_definition):
+		if attack == null or attack.is_healing() or attack.damage_components.is_empty():
+			continue
+		var instance_key := attack.get_instance_id()
+		if seen_instances.has(instance_key) or (not attack.id.is_empty() and seen_ids.has(attack.id)):
+			continue
+		seen_instances[instance_key] = true
+		if not attack.id.is_empty():
+			seen_ids[attack.id] = true
+		rows.append(ActionCombatEstimateService.estimate(attack, member_id, party, catalog.damage_types))
+	return rows
+
+func _owned_actions(definition: ClassDefinition) -> Array[AttackDefinition]:
+	var result: Array[AttackDefinition] = []
+	if definition == null:
+		return result
+	if definition.primary_attack != null:
+		result.append(definition.primary_attack)
+	if definition.support_action != null:
+		result.append(definition.support_action)
+	return result
+
 func upgrade_rows(member_id: int) -> Array[Dictionary]:
 	var rows: Array[Dictionary] = []
 	var member := party.member_by_id(member_id) if party != null else null

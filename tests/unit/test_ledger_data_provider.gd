@@ -87,4 +87,30 @@ func run() -> Array[String]:
 		provider.data_changed.disconnect(on_data_changed)
 	health.free()
 	party.free()
+	_test_combat_estimate_action_discovery(failures)
 	return failures
+
+func _test_combat_estimate_action_discovery(failures: Array[String]) -> void:
+	var catalog := GameCatalog.load_defaults()
+	var definition := catalog.class_by_id(&"fighter").duplicate(true) as ClassDefinition
+	definition.id = &"estimate_fixture"
+	definition.primary_attack = catalog.class_by_id(&"fighter").primary_attack
+	definition.support_action = catalog.class_by_id(&"ranger").primary_attack
+	var party := PartyManager.new()
+	party.initialize(definition, catalog.traits)
+	var provider := LedgerDataProvider.new()
+	provider.configure(party, catalog, Callable())
+	var rows := provider.combat_estimate_rows(1)
+	TestAssertions.equal(rows.map(func(row: ActionCombatEstimate) -> StringName: return row.action_id), [&"fighter_cleave", &"ranger_shot"], "provider preserves authored action-slot order", failures)
+
+	definition.support_action = definition.primary_attack
+	party.initialize(definition, catalog.traits)
+	rows = provider.combat_estimate_rows(1)
+	TestAssertions.equal(rows.size(), 1, "duplicate action ID/resource appears once", failures)
+
+	definition.support_action = catalog.class_by_id(&"cleric").support_action
+	party.initialize(definition, catalog.traits)
+	rows = provider.combat_estimate_rows(1)
+	TestAssertions.equal(rows.size(), 1, "healing-only support action is excluded", failures)
+	provider.configure(null, null, Callable())
+	party.free()
