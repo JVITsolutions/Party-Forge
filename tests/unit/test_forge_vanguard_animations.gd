@@ -44,6 +44,7 @@ func run() -> Array[String]:
 	if player != null:
 		_assert_animation_metadata(player, failures)
 		_assert_guard_contract(player, failures)
+		_assert_idle_guard_throughout_loop(player, failures)
 		_assert_walk_contract(player, failures)
 		_assert_model_root_is_not_animated(player, failures)
 		_assert_playback_contract(model, player, failures)
@@ -88,6 +89,20 @@ func _sample_position(animation: Animation, node_path: String, time: float) -> V
 	if track_index < 0:
 		return Vector3.INF
 	return animation.position_track_interpolate(track_index, time)
+
+func _assert_idle_guard_throughout_loop(player: AnimationPlayer, failures: Array[String]) -> void:
+	TestAssertions.truthy(player.has_animation(&"idle"), "shared humanoid exposes guard idle", failures)
+	if not player.has_animation(&"idle"):
+		return
+	var idle := player.get_animation(&"idle")
+	for pivot_id: StringName in EXPECTED_GUARD_ROTATIONS:
+		var track := idle.find_track(NodePath("%s:rotation" % PIVOT_PATHS[pivot_id]), Animation.TYPE_ROTATION_3D)
+		TestAssertions.truthy(track >= 0, "idle contains guard rotation track for %s" % pivot_id, failures)
+		if track < 0:
+			continue
+		for sample_time: float in [0.0, 0.4, 0.8, 1.2, 1.6]:
+			var sampled := idle.rotation_track_interpolate(track, sample_time)
+			TestAssertions.truthy(sampled.angle_to(Quaternion.IDENTITY) > 0.05, "idle keeps %s materially bent at %.1f to prevent A-pose" % [pivot_id, sample_time], failures)
 
 func _assert_walk_contract(player: AnimationPlayer, failures: Array[String]) -> void:
 	TestAssertions.truthy(player.has_animation(&"walk"), "shared humanoid exposes authored walk", failures)
