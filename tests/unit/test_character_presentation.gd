@@ -31,6 +31,7 @@ func run() -> Array[String]:
 	_test_instances_keep_model_state_independent(failures)
 	_test_loadout_entry_owns_supported_ring_side(failures)
 	_test_item_base_presentations_validate_in_each_profile_array(failures)
+	_test_default_item_base_validates_its_own_contract(failures)
 	return failures
 
 func _test_profile_application_and_feedback(failures: Array[String]) -> void:
@@ -144,6 +145,16 @@ func _test_item_base_presentations_validate_in_each_profile_array(failures: Arra
 	available_item.presentation.readability_channels = []
 	available_profile.available_equipment = [available_item]
 	TestAssertions.truthy(_errors_contain(available_profile.validate(), "readability channels are empty"), "available item presentation validates full visual contract", failures)
+
+func _test_default_item_base_validates_its_own_contract(failures: Array[String]) -> void:
+	var profile := _profile_for_scene(load(FIXTURE_SCENE_PATH) as PackedScene, &"invalid_default_item_base")
+	var item := _item_base(&"invalid_default_base", [&"main_hand"])
+	item.display_name = ""
+	var entry := EquipmentLoadoutEntry.new()
+	entry.slot_id = &"main_hand"
+	entry.item = item
+	profile.default_equipment = [entry]
+	TestAssertions.truthy(_errors_contain(profile.validate(), "display name is empty"), "default item validates base contract in addition to loadout and visual contracts", failures)
 
 func _item_base(item_id: StringName, supported_slots: Array[StringName]) -> EquipmentBaseDefinition:
 	var visual := EquipmentVisualDefinition.new()

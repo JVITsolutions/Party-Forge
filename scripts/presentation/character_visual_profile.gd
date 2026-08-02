@@ -95,6 +95,8 @@ func _validate_default_equipment(definitions: Array[EquipmentLoadoutEntry], erro
 		for reason: String in entry.validate():
 			errors.append("profile %s %s" % [id, reason])
 		if entry.item != null:
+			for reason: String in entry.item.validate():
+				errors.append("profile %s %s" % [id, reason])
 			_validate_item_presentation(entry.item, errors)
 			if item_ids.has(entry.item.id):
 				errors.append("profile %s has duplicate default equipment id %s" % [id, entry.item.id])

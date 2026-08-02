@@ -86,6 +86,7 @@ func apply_equipment_visual(slot_id: StringName, definition: EquipmentVisualDefi
 		candidate_root.free()
 	equipped_nodes[slot_id] = installed
 	equipped_definitions[slot_id] = definition
+	_apply_feedback_colors()
 	return true
 
 func clear_equipment_visual(slot_id: StringName) -> bool:
@@ -145,9 +146,16 @@ func set_downed(is_downed: bool) -> void:
 
 func _clear_equipped_node(slot_id: StringName) -> void:
 	var old_nodes: Array = equipped_nodes.get(slot_id, [])
+	var erased_meshes: Dictionary = {}
 	for old: Variant in old_nodes:
-		if old is Node3D and is_instance_valid(old):
-			(old as Node3D).free()
+		if not (old is Node3D and is_instance_valid(old)):
+			continue
+		for mesh: MeshInstance3D in _meshes_including_root(old as Node3D):
+			if erased_meshes.has(mesh):
+				continue
+			erased_meshes[mesh] = true
+			base_materials.erase(mesh)
+		(old as Node3D).free()
 	equipped_nodes.erase(slot_id)
 
 func _ensure_cache() -> void:
@@ -201,7 +209,7 @@ func _refresh_equipped_wearer_accents() -> void:
 			for mesh: MeshInstance3D in _meshes_including_root(attachment):
 				if StringName(mesh.get_meta(&"palette_region", &"")) != definition.wearer_accent_channel:
 					continue
-				var material := mesh.material_override as StandardMaterial3D
+				var material := base_materials.get(mesh, mesh.material_override) as StandardMaterial3D
 				if material == null:
 					continue
 				var unique_material := material.duplicate() as StandardMaterial3D
@@ -224,7 +232,7 @@ func _all_meshes() -> Array[MeshInstance3D]:
 	return meshes
 
 func _assign_unique_color(mesh: MeshInstance3D, color: Color) -> void:
-	var material := mesh.material_override as StandardMaterial3D
+	var material := base_materials.get(mesh, mesh.material_override) as StandardMaterial3D
 	if material == null:
 		return
 	var unique_material := material.duplicate() as StandardMaterial3D

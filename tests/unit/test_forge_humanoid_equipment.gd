@@ -8,6 +8,9 @@ func run() -> Array[String]:
 	_test_item_colors_and_wearer_accent_isolation(failures)
 	_test_palette_refreshes_equipped_accent_without_leaking(failures)
 	_test_root_mesh_item_colors(failures)
+	_test_palette_rebases_clean_materials_during_feedback(failures)
+	_test_equipment_inherits_active_feedback(failures)
+	_test_repeated_swap_and_clear_release_item_material_caches(failures)
 	return failures
 
 func _test_failed_replacement_and_clear(failures: Array[String]) -> void:
@@ -91,6 +94,70 @@ func _test_root_mesh_item_colors(failures: Array[String]) -> void:
 	TestAssertions.truthy(model.apply_equipment_visual(&"main_hand", definition), "root MeshInstance3D item equips", failures)
 	var root_mesh := model.get_node("MainHandSocket/RootMesh") as MeshInstance3D
 	TestAssertions.equal((root_mesh.material_override as StandardMaterial3D).albedo_color, definition.item_colors[&"metal"], "root MeshInstance3D receives item color", failures)
+	_free_model(model)
+
+func _test_palette_rebases_clean_materials_during_feedback(failures: Array[String]) -> void:
+	var definition := _visual(&"feedback_palette_sword", &"main_hand", &"MainHandSocket", _colored_attachment_scene())
+	definition.item_colors = {&"metal": Color(0.1, 0.8, 0.2, 1.0)}
+	definition.wearer_accent_channel = &"accent"
+	var model := _model_with_sockets([&"MainHandSocket"])
+	model.set_palette(&"red", Color(0.9, 0.1, 0.1, 1.0))
+	TestAssertions.truthy(model.apply_equipment_visual(&"main_hand", definition), "feedback palette item equips", failures)
+	model.set_hit_weight(1.0)
+	model.set_palette(&"blue", Color(0.2, 0.8, 0.9, 1.0))
+	var body := model.get_node("BodyMesh") as MeshInstance3D
+	var accent := model.get_node("MainHandSocket/ColoredAttachment/Accent") as MeshInstance3D
+	TestAssertions.equal((body.material_override as StandardMaterial3D).albedo_color, Color(0.2, 0.8, 0.9, 1.0).lerp(Color.WHITE, 0.7), "hit feedback uses rebased body palette", failures)
+	TestAssertions.equal((accent.material_override as StandardMaterial3D).albedo_color, Color(0.2, 0.8, 0.9, 1.0).lerp(Color.WHITE, 0.7), "hit feedback uses rebased wearer accent", failures)
+	model.set_hit_weight(0.0)
+	TestAssertions.equal((body.material_override as StandardMaterial3D).albedo_color, Color(0.2, 0.8, 0.9, 1.0), "cleared hit restores clean body palette", failures)
+	TestAssertions.equal((accent.material_override as StandardMaterial3D).albedo_color, Color(0.2, 0.8, 0.9, 1.0), "cleared hit restores clean wearer accent", failures)
+	TestAssertions.truthy(not (body.material_override as StandardMaterial3D).emission_enabled, "cleared hit removes feedback emission from body base", failures)
+	TestAssertions.truthy(not (accent.material_override as StandardMaterial3D).emission_enabled, "cleared hit removes feedback emission from accent base", failures)
+	model.set_downed(true)
+	model.set_palette(&"green", Color(0.2, 0.9, 0.3, 1.0))
+	var downed_color := (body.material_override as StandardMaterial3D).albedo_color
+	TestAssertions.near(downed_color.r, downed_color.g, 0.001, "downed palette remains grayscale after rebasing", failures)
+	TestAssertions.near(downed_color.g, downed_color.b, 0.001, "downed palette keeps grayscale channels equal", failures)
+	model.set_downed(false)
+	TestAssertions.equal((body.material_override as StandardMaterial3D).albedo_color, Color(0.2, 0.9, 0.3, 1.0), "cleared downed restores clean rebased palette", failures)
+	_free_model(model)
+
+func _test_equipment_inherits_active_feedback(failures: Array[String]) -> void:
+	var hit_item := _visual(&"hit_item", &"main_hand", &"MainHandSocket", _root_mesh_scene())
+	hit_item.item_colors = {&"metal": Color(0.2, 0.7, 0.3, 1.0)}
+	var downed_item := _visual(&"downed_item", &"main_hand", &"MainHandSocket", _root_mesh_scene())
+	downed_item.item_colors = {&"metal": Color(0.8, 0.3, 0.2, 1.0)}
+	var model := _model_with_sockets([&"MainHandSocket"])
+	model.set_hit_weight(1.0)
+	TestAssertions.truthy(model.apply_equipment_visual(&"main_hand", hit_item), "hit-active item equips", failures)
+	var hit_mesh := model.get_node("MainHandSocket/RootMesh") as MeshInstance3D
+	TestAssertions.equal((hit_mesh.material_override as StandardMaterial3D).albedo_color, hit_item.item_colors[&"metal"].lerp(Color.WHITE, 0.7), "hit-active item immediately receives feedback tint", failures)
+	TestAssertions.truthy((hit_mesh.material_override as StandardMaterial3D).emission_enabled, "hit-active item immediately receives feedback emission", failures)
+	model.set_hit_weight(0.0)
+	TestAssertions.equal((hit_mesh.material_override as StandardMaterial3D).albedo_color, hit_item.item_colors[&"metal"], "cleared hit restores equipped item base color", failures)
+	model.set_downed(true)
+	TestAssertions.truthy(model.apply_equipment_visual(&"main_hand", downed_item), "downed replacement item equips", failures)
+	var downed_mesh := model.get_node("MainHandSocket/RootMesh") as MeshInstance3D
+	var downed_color := (downed_mesh.material_override as StandardMaterial3D).albedo_color
+	TestAssertions.near(downed_color.r, downed_color.g, 0.001, "downed replacement immediately receives grayscale", failures)
+	TestAssertions.near(downed_color.g, downed_color.b, 0.001, "downed replacement grayscale channels match", failures)
+	model.set_downed(false)
+	TestAssertions.equal((downed_mesh.material_override as StandardMaterial3D).albedo_color, downed_item.item_colors[&"metal"], "cleared downed restores replacement base color", failures)
+	_free_model(model)
+
+func _test_repeated_swap_and_clear_release_item_material_caches(failures: Array[String]) -> void:
+	var first := _visual(&"cache_first", &"main_hand", &"MainHandSocket", _root_mesh_scene())
+	first.item_colors = {&"metal": Color(0.2, 0.3, 0.4, 1.0)}
+	var second := _visual(&"cache_second", &"main_hand", &"MainHandSocket", _root_mesh_scene())
+	second.item_colors = {&"metal": Color(0.4, 0.3, 0.2, 1.0)}
+	var model := _model_with_sockets([&"MainHandSocket"])
+	TestAssertions.truthy(model.apply_equipment_visual(&"main_hand", first), "first cache item equips", failures)
+	TestAssertions.equal(model.base_materials.size(), 2, "first item contributes one material cache entry", failures)
+	TestAssertions.truthy(model.apply_equipment_visual(&"main_hand", second), "second cache item replaces first", failures)
+	TestAssertions.equal(model.base_materials.size(), 2, "replacement releases old item material cache", failures)
+	TestAssertions.truthy(model.clear_equipment_visual(&"main_hand"), "cache item clear succeeds", failures)
+	TestAssertions.equal(model.base_materials.size(), 1, "clear releases all item material cache entries", failures)
 	_free_model(model)
 
 func _model_with_sockets(socket_ids: Array[StringName]) -> ForgeHumanoidModel:
