@@ -4,6 +4,7 @@ extends MarginContainer
 signal profile_action_failed(message: String)
 
 var _manager: ProfileManager
+var _has_selectable_profiles := false
 
 
 func _ready() -> void:
@@ -32,25 +33,36 @@ func bind(manager: ProfileManager) -> void:
 func refresh() -> void:
 	var list := _profile_list()
 	list.clear()
-	var available: Array[ProfileState] = []
+	var statuses: Array[ProfileEntryStatus] = []
 	if _manager != null:
-		available = _manager.profiles()
+		statuses = _manager.profile_statuses()
 	var active := _manager.active_profile() if _manager != null else null
-	for profile: ProfileState in available:
-		var is_active := active != null and active.profile_id == profile.profile_id
-		var index := list.add_item("%s%s" % [profile.display_name, "  [Active]" if is_active else ""])
-		list.set_item_metadata(index, profile.profile_id)
+	_has_selectable_profiles = false
+	for status: ProfileEntryStatus in statuses:
+		var is_active := active != null and active.profile_id == status.profile_id
+		var suffix := ""
+		if is_active:
+			suffix += "  [Active]"
+		if status.state == ProfileEntryStatus.State.RECOVERED:
+			suffix += "  [Recovered]"
+		elif status.state == ProfileEntryStatus.State.DAMAGED:
+			suffix += "  [Damaged]"
+		var index := list.add_item("%s%s" % [status.display_name, suffix])
+		list.set_item_metadata(index, status.profile_id)
+		list.set_item_disabled(index, not status.selectable())
+		_has_selectable_profiles = _has_selectable_profiles or status.selectable()
 		if is_active:
 			list.select(index)
-	_empty_state().visible = available.is_empty()
-	list.visible = not available.is_empty()
-	_activate_button().disabled = available.is_empty()
-	_configure_focus_order(not available.is_empty())
+	_empty_state().visible = statuses.is_empty()
+	list.visible = not statuses.is_empty()
+	_activate_button().disabled = not _has_selectable_profiles
+	_configure_focus_order(_has_selectable_profiles)
+	_update_profile_health(statuses)
 
 
 func initial_focus() -> Control:
 	var list := _profile_list()
-	return list if list.visible and list.item_count > 0 else _profile_name()
+	return list if list.visible and list.item_count > 0 and _has_selectable_profiles else _profile_name()
 
 
 func _create_profile() -> void:
@@ -114,12 +126,35 @@ func _friendly_error(error: String) -> String:
 func _show_error(primary: String, technical: String) -> void:
 	_status().text = primary
 	_status().tooltip_text = technical
+	_technical_details().text = technical
+	_technical_details().visible = not technical.is_empty()
 	profile_action_failed.emit(technical)
 
 
 func _clear_error() -> void:
-	_status().text = ""
-	_status().tooltip_text = ""
+	_update_profile_health(_manager.profile_statuses() if _manager != null else [])
+
+func _update_profile_health(statuses: Array[ProfileEntryStatus]) -> void:
+	var recovered_count := 0
+	var damaged_count := 0
+	var details: Array[String] = []
+	for status: ProfileEntryStatus in statuses:
+		if status.state == ProfileEntryStatus.State.RECOVERED:
+			recovered_count += 1
+		elif status.state == ProfileEntryStatus.State.DAMAGED:
+			damaged_count += 1
+		if not status.error.is_empty():
+			details.append(status.error)
+	var primary := ""
+	if damaged_count > 0:
+		primary = "%d damaged profile%s need recovery and cannot be activated." % [damaged_count, "s" if damaged_count != 1 else ""]
+	if recovered_count > 0:
+		var recovered_message := "%d profile%s recovered from a verified backup." % [recovered_count, "s" if recovered_count != 1 else ""]
+		primary = "%s %s" % [primary, recovered_message] if not primary.is_empty() else recovered_message
+	_status().text = primary
+	_status().tooltip_text = " | ".join(details)
+	_technical_details().text = "\n".join(details)
+	_technical_details().visible = not details.is_empty()
 
 
 func _configure_focus_order(has_profiles: bool) -> void:
@@ -162,3 +197,6 @@ func _empty_state() -> Label:
 
 func _status() -> Label:
 	return get_node("Layout/Status") as Label
+
+func _technical_details() -> Label:
+	return get_node("Layout/TechnicalDetails") as Label

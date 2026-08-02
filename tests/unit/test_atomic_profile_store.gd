@@ -21,7 +21,8 @@ func run() -> Array[String]:
 	_test_corrupt_primary_without_backup_refuses_overwrite(failures)
 	_test_corrupt_primary_failed_promotion_keeps_recovery(failures)
 	_test_promoted_verification_failure_restores_generations(failures)
-	_test_cleanup_failure_is_surfaced(failures)
+	_test_post_commit_cleanup_failure_retains_committed_state(failures)
+	_test_malformed_schema_field_recovers_backup(failures)
 	_test_missing_profile_is_distinct(failures)
 	_test_absent_profile_root_lists_cleanly(failures)
 	_cleanup()
@@ -164,7 +165,7 @@ func _test_promoted_verification_failure_restores_generations(failures: Array[St
 	TestAssertions.equal(restored_primary.profile.gold if restored_primary.ok() else -1, 2, "verification failure restores current primary", failures)
 	TestAssertions.equal(restored_backup.profile.gold if restored_backup.ok() else -1, 1, "verification failure restores older backup", failures)
 
-func _test_cleanup_failure_is_surfaced(failures: Array[String]) -> void:
+func _test_post_commit_cleanup_failure_retains_committed_state(failures: Array[String]) -> void:
 	var documents := CleanupFailingAtomicJsonStore.new()
 	var store := ProfileStore.new(documents)
 	var first := ProfileState.new_profile("profile-cleanup1", "Cleanup", 8000)
@@ -178,7 +179,30 @@ func _test_cleanup_failure_is_surfaced(failures: Array[String]) -> void:
 	third.gold = 3
 	third.updated_at_unix = 8002
 	var error := store.save_profile(third, _root)
-	TestAssertions.truthy(error.contains("stage=remove-staged-backup") and error.contains("code=%d" % ERR_CANT_CREATE), "staged-backup cleanup failure is surfaced", failures)
+	TestAssertions.equal(error, "", "post-commit cleanup failure does not report the verified promotion as failed", failures)
+	var primary_path := store.profile_path(first.profile_id, _root)
+	var committed := _decode_file(primary_path)
+	var previous := _decode_file("%s.bak" % primary_path)
+	var cleanup_debt := _decode_file("%s.bak.previous" % primary_path)
+	TestAssertions.equal(committed.profile.gold if committed.ok() else -1, 3, "post-commit cleanup failure retains the committed primary", failures)
+	TestAssertions.equal(previous.profile.gold if previous.ok() else -1, 2, "post-commit cleanup failure retains the verified backup", failures)
+	TestAssertions.equal(cleanup_debt.profile.gold if cleanup_debt.ok() else -1, 0, "post-commit cleanup debt remains recoverable", failures)
+
+func _test_malformed_schema_field_recovers_backup(failures: Array[String]) -> void:
+	var store := ProfileStore.new()
+	var profile := ProfileState.new_profile("profile-types001", "Types", 9000)
+	profile.gold = 10
+	TestAssertions.equal(store.save_profile(profile, _root), "", "typed recovery fixture first save succeeds", failures)
+	profile.gold = 20
+	profile.updated_at_unix = 9001
+	TestAssertions.equal(store.save_profile(profile, _root), "", "typed recovery fixture creates backup", failures)
+	var path := store.profile_path(profile.profile_id, _root)
+	var malformed := profile.to_dictionary()
+	malformed["gold"] = "20"
+	_write_text(path, JSON.stringify(malformed))
+	var recovered := store.load_profile(profile.profile_id, _root)
+	TestAssertions.truthy(recovered.ok() and recovered.recovered_from_backup, "malformed schema field triggers verified backup recovery", failures)
+	TestAssertions.equal(recovered.profile.gold if recovered.ok() else -1, 10, "typed recovery returns the previous valid generation", failures)
 
 func _test_missing_profile_is_distinct(failures: Array[String]) -> void:
 	var missing := ProfileStore.new().load_profile("profile-missing1", _root)

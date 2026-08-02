@@ -5,6 +5,14 @@ const MAX_INT := 0x7fffffffffffffff
 
 var _root := ""
 
+class CleanupFailingAtomicJsonStore extends AtomicJsonStore:
+	var failure_path := ""
+
+	func _remove(path: String) -> Error:
+		if path == failure_path:
+			return ERR_CANT_CREATE
+		return super._remove(path)
+
 func run() -> Array[String]:
 	var failures: Array[String] = []
 	_root = "user://tests/profile_mutation_%d_%d" % [OS.get_process_id(), Time.get_ticks_usec()]
@@ -25,6 +33,8 @@ func run() -> Array[String]:
 	_test_callback_and_load_failures_leave_state_unchanged(failures)
 	_reset_profile(failures)
 	_test_failed_save_leaves_prior_generation_readable(failures)
+	_reset_profile(failures)
+	_test_post_commit_cleanup_is_successful_to_caller(failures)
 	ProfileTestSupport.remove_tree(_root)
 	return failures
 
@@ -39,22 +49,32 @@ func _test_duplicate_transactions_do_not_reapply(failures: Array[String]) -> voi
 		profile.tree_allocations["party-forge-city-v1"] = ["city-heart"]
 		return ""
 	var first := service.apply(ID, "enemy-42-gold", mutate, _root, 2000)
+	var intervening := service.grant_gold(ID, "enemy-43-gold", 10, _root)
 	var retry := service.apply(ID, "enemy-42-gold", mutate, _root, 9000)
 	TestAssertions.truthy(first.ok() and not first.duplicate, "first mutation commits", failures)
+	TestAssertions.truthy(intervening.ok(), "intervening mutation commits", failures)
 	TestAssertions.truthy(retry.ok() and retry.duplicate, "retry reports prior commit", failures)
 	TestAssertions.equal(invocations[0], 1, "duplicate transaction does not invoke callback", failures)
 	var saved := store.load_profile(ID, _root).profile
-	TestAssertions.equal(saved.gold, 25, "duplicate transaction does not reapply value", failures)
-	TestAssertions.equal(saved.updated_at_unix, 2000, "duplicate transaction preserves update timestamp", failures)
-	TestAssertions.equal(saved.applied_transactions.get("enemy-42-gold"), 2000, "transaction keeps original timestamp", failures)
-	TestAssertions.equal(saved.applied_transactions.size(), 1, "transaction map grows once per commit", failures)
-	var persisted_timestamp: Variant = saved.applied_transactions["enemy-42-gold"]
-	TestAssertions.truthy(typeof(persisted_timestamp) in [TYPE_INT, TYPE_FLOAT] and float(persisted_timestamp) == floor(float(persisted_timestamp)), "transaction timestamp persists as an integral JSON number", failures)
+	TestAssertions.equal(saved.gold, 35, "duplicate transaction does not reapply value", failures)
+	TestAssertions.equal(retry.profile.gold, 25, "retry returns the original committed profile result", failures)
+	TestAssertions.equal(retry.profile.updated_at_unix, 2000, "retry returns the original committed timestamp", failures)
+	var transaction: Variant = saved.applied_transactions.get("enemy-42-gold", {})
+	TestAssertions.truthy(transaction is Dictionary, "transaction persists as a structured record", failures)
+	if transaction is Dictionary:
+		TestAssertions.equal(transaction.get("operation"), "custom", "transaction records its operation", failures)
+		TestAssertions.equal(transaction.get("committed_at_unix"), 2000, "transaction keeps original timestamp", failures)
+		TestAssertions.truthy(str(transaction.get("fingerprint", "")).length() == 64, "transaction stores a SHA-256 request fingerprint", failures)
+	TestAssertions.equal(saved.applied_transactions.size(), 2, "transaction map grows once per commit", failures)
 	(first.profile.tree_allocations["party-forge-city-v1"] as Array).append("shared-stash")
 	retry.profile.gold = 999
 	var isolated := store.load_profile(ID, _root).profile
 	TestAssertions.equal((isolated.tree_allocations["party-forge-city-v1"] as Array).size(), 1, "successful result is a deep copy", failures)
-	TestAssertions.equal(isolated.gold, 25, "duplicate result is isolated from persisted state", failures)
+	TestAssertions.equal(isolated.gold, 35, "duplicate result is isolated from persisted state", failures)
+	var collision := service.grant_passive_points(ID, "enemy-42-gold", 1, _root)
+	TestAssertions.truthy(not collision.ok() and collision.error.contains("transaction id conflict"), "same key with a different operation is rejected", failures)
+	var changed_payload := service.grant_gold(ID, "enemy-43-gold", 11, _root)
+	TestAssertions.truthy(not changed_payload.ok() and changed_payload.error.contains("transaction id conflict"), "same key with a different payload is rejected", failures)
 
 func _test_commit_timestamp_is_monotonic(failures: Array[String]) -> void:
 	var store := ProfileStore.new()
@@ -69,7 +89,10 @@ func _test_commit_timestamp_is_monotonic(failures: Array[String]) -> void:
 	var saved := store.load_profile(ID, _root).profile
 	TestAssertions.equal(saved.gold, 1, "older caller clock still commits value", failures)
 	TestAssertions.equal(saved.updated_at_unix, 5000, "committed update time never regresses", failures)
-	TestAssertions.equal(saved.applied_transactions.get("older-clock"), saved.updated_at_unix, "transaction records the committed monotonic timestamp", failures)
+	var record: Variant = saved.applied_transactions.get("older-clock")
+	TestAssertions.truthy(record is Dictionary, "monotonic transaction persists as a structured record", failures)
+	if record is Dictionary:
+		TestAssertions.equal(record.get("committed_at_unix"), saved.updated_at_unix, "transaction records the committed monotonic timestamp", failures)
 
 func _test_protected_metadata_changes_are_rejected(failures: Array[String]) -> void:
 	_assert_protected_rejection("protect-schema", "schema_version", func(profile: ProfileState) -> String:
@@ -115,11 +138,12 @@ func _test_validation_failure_leaves_state_unchanged(failures: Array[String]) ->
 
 func _test_duplicate_recovered_from_backup_does_not_rewrite(failures: Array[String]) -> void:
 	var store := ProfileStore.new()
+	var committed := ProfileMutationService.new(store).apply(ID, "backup-transaction", func(profile: ProfileState) -> String:
+		profile.gold = 10
+		return ""
+	, _root, 2000)
+	TestAssertions.truthy(committed.ok(), "backup duplicate fixture saves prior transaction", failures)
 	var backup_generation := store.load_profile(ID, _root).profile
-	backup_generation.gold = 10
-	backup_generation.updated_at_unix = 2000
-	backup_generation.applied_transactions["backup-transaction"] = 2000
-	TestAssertions.equal(store.save_profile(backup_generation, _root), "", "backup duplicate fixture saves prior transaction", failures)
 	var newer := backup_generation.copy()
 	newer.gold = 20
 	newer.updated_at_unix = 3000
@@ -149,8 +173,9 @@ func _assert_protected_rejection(transaction_id: String, field: String, mutate: 
 	var store := ProfileStore.new()
 	var fixture := ProfileState.new_profile(ID, "Jacob", 1000)
 	fixture.updated_at_unix = 1500
-	fixture.applied_transactions["seed-transaction"] = 1500
 	TestAssertions.equal(store.save_profile(fixture, _root), "", "protected field fixture saves for %s" % field, failures)
+	var seeded := ProfileMutationService.new(store).apply(ID, "seed-transaction", func(_profile: ProfileState) -> String: return "", _root, 1500)
+	TestAssertions.truthy(seeded.ok(), "protected field fixture records a valid seed transaction for %s" % field, failures)
 	var before := store.load_profile(ID, _root).profile.to_dictionary()
 	var rejected := ProfileMutationService.new(store).apply(ID, transaction_id, mutate, _root, 2000)
 	TestAssertions.equal(rejected.error, "PROFILE_MUTATION_ERROR profile=%s transaction=%s reason=protected field changed field=%s" % [ID, transaction_id, field], "protected field change is rejected for %s" % field, failures)
@@ -275,6 +300,19 @@ func _test_failed_save_leaves_prior_generation_readable(failures: Array[String])
 	TestAssertions.truthy(after.ok(), "prior persisted state remains readable after failed save", failures)
 	TestAssertions.equal(after.profile.to_dictionary(), before.to_dictionary(), "failed save retains values timestamps and transactions", failures)
 	TestAssertions.truthy(not after.profile.applied_transactions.has("failed-save"), "failed save does not leave an idempotency record", failures)
+
+func _test_post_commit_cleanup_is_successful_to_caller(failures: Array[String]) -> void:
+	var documents := CleanupFailingAtomicJsonStore.new()
+	var store := ProfileStore.new(documents)
+	var first := store.load_profile(ID, _root).profile
+	first.updated_at_unix = 1100
+	TestAssertions.equal(store.save_profile(first, _root), "", "mutation cleanup fixture creates backup", failures)
+	documents.failure_path = "%s.bak.previous" % store.profile_path(ID, _root)
+	var committed := ProfileMutationService.new(store).grant_gold(ID, "cleanup-commit", 5, _root)
+	TestAssertions.truthy(committed.ok(), "verified mutation remains successful when only post-commit cleanup fails", failures)
+	var saved := store.load_profile(ID, _root).profile
+	TestAssertions.equal(saved.gold, 5, "post-commit cleanup failure retains mutation value", failures)
+	TestAssertions.truthy(saved.applied_transactions.has("cleanup-commit"), "post-commit cleanup failure retains idempotency record", failures)
 
 func _reset_profile(failures: Array[String]) -> void:
 	ProfileTestSupport.remove_tree(_root)

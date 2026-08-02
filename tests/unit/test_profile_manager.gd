@@ -14,6 +14,14 @@ class CleanupFailingProfileManager extends ProfileManager:
 	func _remove_created_profile_primary(_profile_id: String) -> Error:
 		return ERR_CANT_CREATE
 
+class CleanupFailingAtomicJsonStore extends AtomicJsonStore:
+	var failure_path := ""
+
+	func _remove(path: String) -> Error:
+		if path == failure_path:
+			return ERR_CANT_CREATE
+		return super._remove(path)
+
 func run() -> Array[String]:
 	var failures: Array[String] = []
 	_root = "user://tests/profile_manager_%d_%d" % [OS.get_process_id(), Time.get_ticks_usec()]
@@ -43,6 +51,10 @@ func run() -> Array[String]:
 	_test_refresh_rolls_back_when_index_save_fails(failures)
 	_reset_root()
 	_test_invalid_id_is_rejected_before_filesystem_probe(failures)
+	_reset_root()
+	_test_post_commit_index_cleanup_does_not_rollback_create(failures)
+	_reset_root()
+	_test_bootstrap_exposes_profile_health_statuses(failures)
 	ProfileTestSupport.remove_tree(_root)
 	return failures
 
@@ -292,6 +304,52 @@ func _test_invalid_id_is_rejected_before_filesystem_probe(failures: Array[String
 	var result := manager.create_profile("Traversal", 7500)
 	TestAssertions.truthy(not result.ok() and result.error.contains("invalid profile id") and not result.error.contains("id collision"), "invalid id is validated before artifact probing", failures)
 	TestAssertions.equal(FileAccess.get_file_as_string(sentinel_path), sentinel_bytes, "invalid id causes no filesystem side effect outside manager root", failures)
+
+func _test_post_commit_index_cleanup_does_not_rollback_create(failures: Array[String]) -> void:
+	var documents := CleanupFailingAtomicJsonStore.new()
+	var index_store := ProfileIndexStore.new(documents)
+	var profile_store := ProfileStore.new()
+	var ids: Array[String] = ["profile-commit001", "profile-commit002"]
+	var manager := ProfileManager.new(profile_store, index_store, func() -> String: return ids.pop_front())
+	TestAssertions.equal(manager.bootstrap(_root), "", "post-commit manager fixture bootstraps", failures)
+	TestAssertions.truthy(manager.create_profile("First", 8000).ok(), "post-commit manager fixture creates first profile", failures)
+	documents.failure_path = _root.path_join("%s.bak.previous" % ProfileIndexStore.FILE_NAME)
+	var second := manager.create_profile("Second", 8001)
+	TestAssertions.truthy(second.ok(), "verified index promotion is not rolled back for cleanup debt", failures)
+	TestAssertions.equal(manager.active_profile().display_name if manager.active_profile() != null else "", "Second", "post-commit create remains active in memory", failures)
+	TestAssertions.truthy(FileAccess.file_exists(profile_store.profile_path("profile-commit002", _root)), "post-commit create retains its profile primary", failures)
+	var reloaded := ProfileManager.new()
+	TestAssertions.equal(reloaded.bootstrap(_root), "", "post-commit create reloads without index inconsistency", failures)
+	TestAssertions.equal(reloaded.active_profile().display_name if reloaded.active_profile() != null else "", "Second", "post-commit active selection persists", failures)
+
+func _test_bootstrap_exposes_profile_health_statuses(failures: Array[String]) -> void:
+	var store := ProfileStore.new()
+	var healthy := ProfileState.new_profile("profile-healthy01", "Healthy", 9000)
+	var recovered := ProfileState.new_profile("profile-recover01", "Recovered", 8000)
+	TestAssertions.equal(store.save_profile(healthy, _root), "", "health status healthy fixture saves", failures)
+	TestAssertions.equal(store.save_profile(recovered, _root), "", "health status recovered fixture first save succeeds", failures)
+	recovered.gold = 2
+	recovered.updated_at_unix = 8001
+	TestAssertions.equal(store.save_profile(recovered, _root), "", "health status recovered fixture creates backup", failures)
+	_write_text(store.profile_path(recovered.profile_id, _root), "corrupt recovered primary")
+	_write_text(_root.path_join("profile-damaged01.json"), "corrupt without backup")
+	var manager := ProfileManager.new()
+	var error := manager.bootstrap(_root)
+	TestAssertions.truthy(error.contains("profile=profile-damaged01"), "damaged profile remains a bootstrap diagnostic", failures)
+	var has_status_api := manager.has_method(&"profile_statuses")
+	TestAssertions.truthy(has_status_api, "manager exposes structured profile health statuses", failures)
+	if not has_status_api:
+		return
+	var statuses: Array = manager.call(&"profile_statuses")
+	TestAssertions.equal(statuses.size(), 3, "health status list retains healthy recovered and damaged profiles", failures)
+	var by_id: Dictionary = {}
+	for status: Variant in statuses:
+		by_id[status.get("profile_id")] = status
+	TestAssertions.equal(by_id[healthy.profile_id].call(&"state_name"), "healthy", "healthy profile is identified", failures)
+	TestAssertions.equal(by_id[recovered.profile_id].call(&"state_name"), "recovered", "verified backup recovery is identified", failures)
+	TestAssertions.truthy(bool(by_id[recovered.profile_id].get("recovered")), "recovered profile retains recovery evidence", failures)
+	TestAssertions.equal(by_id["profile-damaged01"].call(&"state_name"), "damaged", "unrecoverable profile remains visible as damaged", failures)
+	TestAssertions.truthy(not str(by_id["profile-damaged01"].get("error")).is_empty(), "damaged profile retains technical details", failures)
 
 func _reset_root() -> void:
 	ProfileTestSupport.remove_tree(_root)

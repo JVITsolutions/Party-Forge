@@ -14,6 +14,11 @@ func run() -> Array[String]:
 	ProfileTestSupport.remove_tree(error_root)
 	_test_bootstrap_error_routes_to_profiles(error_root, failures)
 	_remove_file(error_root)
+
+	var mixed_root := "%s_mixed_%d_%d" % [PROFILE_ROOT_PREFIX, OS.get_process_id(), Time.get_ticks_usec()]
+	ProfileTestSupport.remove_tree(mixed_root)
+	_test_mixed_healthy_and_damaged_boot(mixed_root, failures)
+	ProfileTestSupport.remove_tree(mixed_root)
 	return failures
 
 
@@ -66,6 +71,32 @@ func _test_bootstrap_error_routes_to_profiles(root: String, failures: Array[Stri
 	TestAssertions.truthy(settings.is_open(), "bootstrap error opens Settings", failures)
 	TestAssertions.truthy(not main.call("select_leader_class", &"fighter"), "bootstrap error cannot launch a run", failures)
 	TestAssertions.equal(main.get("run_started"), false, "bootstrap error leaves gameplay unstarted", failures)
+	(Engine.get_main_loop() as SceneTree).paused = false
+	main.free()
+
+func _test_mixed_healthy_and_damaged_boot(root: String, failures: Array[String]) -> void:
+	var store := ProfileStore.new()
+	var healthy := ProfileState.new_profile("profile-bootgood1", "Healthy", 1000)
+	TestAssertions.equal(store.save_profile(healthy, root), "", "mixed boot healthy fixture saves", failures)
+	var corrupt_path := root.path_join("profile-bootbad01.json")
+	var corrupt := FileAccess.open(corrupt_path, FileAccess.WRITE)
+	if corrupt != null:
+		corrupt.store_string("corrupt without backup")
+		corrupt.close()
+	var main := (load("res://scenes/game/main.tscn") as PackedScene).instantiate() as PartyForgeMain
+	main.set("profile_root", root)
+	(Engine.get_main_loop() as SceneTree).root.add_child(main)
+	main.call("_ready")
+	var settings := main.get_node("SettingsScreen") as SettingsScreen
+	var list := settings.get_node("Overlay/Frame/Layout/Tabs/Profiles/Layout/ProfileList") as ItemList
+	TestAssertions.truthy(settings.is_open(), "mixed boot opens Profiles Settings for damaged status", failures)
+	TestAssertions.equal(list.item_count, 2, "mixed boot visibly retains healthy and damaged profiles", failures)
+	TestAssertions.equal((main.call("active_profile") as ProfileState).profile_id, healthy.profile_id, "mixed boot retains the healthy active profile", failures)
+	var damaged_index := -1
+	for index: int in range(list.item_count):
+		if list.get_item_text(index).contains("[Damaged]"):
+			damaged_index = index
+	TestAssertions.truthy(damaged_index >= 0 and list.is_item_disabled(damaged_index), "mixed boot disables the damaged profile row", failures)
 	(Engine.get_main_loop() as SceneTree).paused = false
 	main.free()
 

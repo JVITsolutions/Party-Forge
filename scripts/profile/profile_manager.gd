@@ -5,6 +5,7 @@ signal profiles_changed
 signal active_profile_changed(profile: ProfileState)
 
 var _profiles: Dictionary = {}
+var _profile_statuses: Dictionary = {}
 var _index := ProfileIndex.new()
 var _profile_store: ProfileStore
 var _index_store: ProfileIndexStore
@@ -19,6 +20,7 @@ func _init(profile_store: ProfileStore = null, index_store: ProfileIndexStore = 
 func bootstrap(root: String = ProfileStore.DEFAULT_ROOT) -> String:
 	_root = root
 	_profiles.clear()
+	_profile_statuses.clear()
 	_index = ProfileIndex.new()
 	var globalized_root := ProjectSettings.globalize_path(_root)
 	var mkdir_error := DirAccess.make_dir_recursive_absolute(globalized_root)
@@ -31,8 +33,12 @@ func bootstrap(root: String = ProfileStore.DEFAULT_ROOT) -> String:
 		var loaded := _profile_store.load_profile(profile_id, _root)
 		if loaded.ok():
 			_profiles[profile_id] = loaded.profile
+			var recovery_detail := "PROFILE_RECOVERY_NOTICE profile=%s primary=%s backup=verified" % [profile_id, loaded.recovery_detail] if loaded.recovered_from_backup else ""
+			_profile_statuses[profile_id] = ProfileEntryStatus.from_profile(loaded.profile, loaded.recovered_from_backup, recovery_detail)
 		else:
-			diagnostics.append("profile=%s error=%s" % [profile_id, loaded.error])
+			var profile_error := loaded.error if not loaded.error.is_empty() else "profile is missing"
+			diagnostics.append("profile=%s error=%s" % [profile_id, profile_error])
+			_profile_statuses[profile_id] = ProfileEntryStatus.damaged(profile_id, "PROFILE_DAMAGED profile=%s error=%s" % [profile_id, profile_error])
 	var loaded_index := _index_store.load_index(_root)
 	if loaded_index.ok():
 		_index = loaded_index.index
@@ -53,6 +59,17 @@ func profiles() -> Array[ProfileState]:
 	for profile: ProfileState in _profiles.values():
 		result.append(profile.copy())
 	result.sort_custom(func(a: ProfileState, b: ProfileState) -> bool: return a.updated_at_unix > b.updated_at_unix)
+	return result
+
+func profile_statuses() -> Array[ProfileEntryStatus]:
+	var result: Array[ProfileEntryStatus] = []
+	for status: ProfileEntryStatus in _profile_statuses.values():
+		result.append(status.copy())
+	result.sort_custom(func(a: ProfileEntryStatus, b: ProfileEntryStatus) -> bool:
+		if a.state == b.state:
+			return a.display_name.naturalnocasecmp_to(b.display_name) < 0
+		return a.state < b.state
+	)
 	return result
 
 func active_profile() -> ProfileState:
@@ -86,12 +103,14 @@ func create_profile(display_name: String, now_unix: int = -1) -> ProfileOperatio
 		return result
 	var previous_active := _index.active_profile_id
 	_profiles[profile_id] = profile
+	_profile_statuses[profile_id] = ProfileEntryStatus.from_profile(profile)
 	_index.active_profile_id = profile_id
 	_rebuild_index()
 	var index_error := _index_store.save_index(_index, _root)
 	if not index_error.is_empty():
 		var rollback_remove_error := _remove_created_profile_primary(profile_id)
 		_profiles.erase(profile_id)
+		_profile_statuses.erase(profile_id)
 		_index.active_profile_id = previous_active
 		_rebuild_index()
 		result.error = "%s rollback_remove_code=%d" % [index_error, rollback_remove_error]
@@ -117,16 +136,21 @@ func refresh_profile(profile_id: String) -> String:
 	var loaded := _profile_store.load_profile(profile_id, _root)
 	if not loaded.ok():
 		var reason := loaded.error if not loaded.error.is_empty() else "unknown profile"
+		_profile_statuses[profile_id] = ProfileEntryStatus.damaged(profile_id, "PROFILE_DAMAGED profile=%s error=%s" % [profile_id, reason])
 		return "PROFILE_REFRESH_ERROR profile=%s error=%s" % [profile_id, reason]
 	var previous := _profiles.get(profile_id) as ProfileState
 	_profiles[profile_id] = loaded.profile
+	var recovery_detail := "PROFILE_RECOVERY_NOTICE profile=%s primary=%s backup=verified" % [profile_id, loaded.recovery_detail] if loaded.recovered_from_backup else ""
+	_profile_statuses[profile_id] = ProfileEntryStatus.from_profile(loaded.profile, loaded.recovered_from_backup, recovery_detail)
 	_rebuild_index()
 	var save_error := _index_store.save_index(_index, _root)
 	if not save_error.is_empty():
 		if previous != null:
 			_profiles[profile_id] = previous
+			_profile_statuses[profile_id] = ProfileEntryStatus.from_profile(previous)
 		else:
 			_profiles.erase(profile_id)
+			_profile_statuses.erase(profile_id)
 		_rebuild_index()
 		return save_error
 	profiles_changed.emit()

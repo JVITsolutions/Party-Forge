@@ -78,3 +78,14 @@ The controller quit the Godot editor after manual validation. Immediately before
 ```text
 ?? docs/verification/
 ```
+
+## Post-review corrective verification
+
+The independent senior review identified four Important persistence issues. Focused test-first corrections now cover strict schema-v1 JSON typing and nested shapes, verified-promotion commit semantics, fingerprinted idempotency records with stable committed results, and structured healthy/recovered/damaged profile disclosure in Settings.
+
+- RED: `.superpowers/sdd/task-8-profile-fixes-red3.log` exited 1 with `TASK8_PROFILE_FIX_SUMMARY: FAIL (37 failures)` before production changes.
+- Profile-health UI RED: `.superpowers/sdd/task-8-profile-health-ui-red.log` exited 1 with `TASK8_PROFILE_FIX_SUMMARY: FAIL (6 failures)` before profile-status/UI production changes.
+- Focused GREEN: `.superpowers/sdd/task-8-profile-fixes-green2.log` exited 0 with `TASK8_PROFILE_FIX_SUMMARY: PASS (7 suites)`.
+- Retained integration GREEN: `PROFILE_BOOT_MAIN_FLOW_SUMMARY: PASS`, `PROFILE_SETTINGS_NAVIGATION_SUMMARY: PASS`, and `RESPONSIVE_GEOMETRY_SUMMARY: PASS (4 sizes)` in the corresponding `task-8-*.log` files.
+
+The earlier `DamageResolver` `StringName` sorting fix remains intentionally in this branch. Its pre-fix evidence showed `tags.sort()` returning `[physical, melee]` where deterministic string order required `[melee, physical]`; `.superpowers/sdd/damage-tag-order-green.log` recorded `DAMAGE_TAG_ORDER_FOCUSED: PASS`. `tests/unit/test_damage_resolver.gd` now retains a focused multi-tag lexicographic regression assertion.

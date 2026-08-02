@@ -80,7 +80,7 @@ func save_document(path: String, document: Dictionary, validator: Callable) -> S
 	if displaced_old_backup:
 		var cleanup_error := _remove(displaced_backup)
 		if cleanup_error != OK:
-			return "JSON_STORE_SAVE_ERROR path=%s stage=remove-staged-backup code=%d" % [path, cleanup_error]
+			push_warning("JSON_STORE_CLEANUP_DEBT path=%s artifact=%s code=%d committed=true" % [path, displaced_backup, cleanup_error])
 	return ""
 
 func load_document(path: String, validator: Callable, recover_backup: bool = true) -> JsonDocumentResult:
@@ -97,6 +97,7 @@ func load_document(path: String, validator: Callable, recover_backup: bool = tru
 	var backup := _load_one(backup_path, validator)
 	if backup.ok():
 		backup.recovered_from_backup = true
+		backup.recovery_detail = primary.error if not primary.error.is_empty() else "primary is missing"
 		return backup
 	if primary.missing and backup.missing:
 		return primary

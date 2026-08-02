@@ -59,3 +59,11 @@ custom_minimum_size = Vector2(0, 36)
 layout_mode = 2
 focus_mode = 2
 autowrap_mode = 2
+
+[node name="TechnicalDetails" type="Label" parent="Layout"]
+visible = false
+layout_mode = 2
+focus_mode = 2
+text = ""
+autowrap_mode = 2
+selectable = true

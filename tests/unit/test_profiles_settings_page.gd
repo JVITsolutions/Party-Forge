@@ -20,6 +20,8 @@ func run() -> Array[String]:
 	ProfileTestSupport.remove_tree(root)
 	_test_errors_and_rebinding(root, failures)
 	ProfileTestSupport.remove_tree(root)
+	_test_profile_health_disclosure(root, failures)
+	ProfileTestSupport.remove_tree(root)
 	return failures
 
 
@@ -115,9 +117,55 @@ func _test_errors_and_rebinding(root: String, failures: Array[String]) -> void:
 	TestAssertions.equal(list.item_count, 0, "null manager clears stale profiles", failures)
 	page.free()
 
+func _test_profile_health_disclosure(root: String, failures: Array[String]) -> void:
+	var store := ProfileStore.new()
+	var healthy := ProfileState.new_profile("profile-uihealthy", "Healthy", 9000)
+	var recovered := ProfileState.new_profile("profile-uirecover", "Recovered", 8000)
+	TestAssertions.equal(store.save_profile(healthy, root), "", "health UI healthy fixture saves", failures)
+	TestAssertions.equal(store.save_profile(recovered, root), "", "health UI recovered fixture first save succeeds", failures)
+	recovered.updated_at_unix = 8001
+	TestAssertions.equal(store.save_profile(recovered, root), "", "health UI recovered fixture creates backup", failures)
+	_write_text(store.profile_path(recovered.profile_id, root), "corrupt recovered primary")
+	_write_text(root.path_join("profile-uidamaged.json"), "corrupt without backup")
+	var manager := ProfileManager.new()
+	TestAssertions.truthy(not manager.bootstrap(root).is_empty(), "health UI fixture surfaces damaged bootstrap", failures)
+	var page := (load(SCENE_PATH) as PackedScene).instantiate() as ProfilesSettingsPage
+	(Engine.get_main_loop() as SceneTree).root.add_child(page)
+	page.call("_ready")
+	page.bind(manager)
+	var list := page.get_node("Layout/ProfileList") as ItemList
+	TestAssertions.equal(list.item_count, 3, "Profiles list visibly retains healthy recovered and damaged entries", failures)
+	var recovered_index := _index_containing(list, "Recovered")
+	var damaged_index := _index_containing(list, "profile-uidamaged")
+	TestAssertions.truthy(recovered_index >= 0 and list.get_item_text(recovered_index).contains("[Recovered]"), "recovered profile is visibly labeled", failures)
+	TestAssertions.truthy(damaged_index >= 0 and list.get_item_text(damaged_index).contains("[Damaged]"), "damaged profile is visibly labeled", failures)
+	if damaged_index >= 0:
+		TestAssertions.truthy(list.is_item_disabled(damaged_index), "damaged profile cannot be activated", failures)
+	var has_details := page.has_node("Layout/TechnicalDetails")
+	TestAssertions.truthy(has_details, "Profiles page exposes visible technical profile details", failures)
+	var status := page.get_node("Layout/Status") as Label
+	TestAssertions.truthy(status.text.contains("recovery") or status.text.contains("damaged"), "Profiles page explains recovery-required state", failures)
+	if has_details:
+		var details := page.get_node("Layout/TechnicalDetails") as Label
+		TestAssertions.truthy(details.visible and details.text.contains("profile-uidamaged"), "Profiles page shows damaged profile technical details", failures)
+	page.free()
+
 
 func _index_for_id(list: ItemList, profile_id: String) -> int:
 	for index: int in range(list.item_count):
 		if str(list.get_item_metadata(index)) == profile_id:
 			return index
 	return -1
+
+func _index_containing(list: ItemList, fragment: String) -> int:
+	for index: int in range(list.item_count):
+		if list.get_item_text(index).contains(fragment):
+			return index
+	return -1
+
+func _write_text(path: String, text: String) -> void:
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(path.get_base_dir()))
+	var file := FileAccess.open(path, FileAccess.WRITE)
+	if file != null:
+		file.store_string(text)
+		file.close()

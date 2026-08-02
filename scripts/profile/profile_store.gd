@@ -22,6 +22,7 @@ func load_profile(profile_id: String, root: String = DEFAULT_ROOT) -> ProfileLoa
 	var loaded := _documents.load_document(profile_path(profile_id, root), _validate_document)
 	result.missing = loaded.missing
 	result.recovered_from_backup = loaded.recovered_from_backup
+	result.recovery_detail = loaded.recovery_detail
 	result.error = loaded.error
 	if loaded.ok():
 		var decoded := ProfileCodec.decode(JSON.stringify(loaded.document))
