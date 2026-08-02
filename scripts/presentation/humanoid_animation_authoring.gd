@@ -11,8 +11,10 @@ const RIGHT_SHOULDER := "HitPivot/BodyPivot/HipsPivot/TorsoPivot/RightShoulderPi
 const RIGHT_ELBOW := "HitPivot/BodyPivot/HipsPivot/TorsoPivot/RightShoulderPivot/RightElbowPivot"
 const LEFT_HIP := "HitPivot/BodyPivot/HipsPivot/LeftHipPivot"
 const LEFT_KNEE := "HitPivot/BodyPivot/HipsPivot/LeftHipPivot/LeftKneePivot"
+const LEFT_FOOT := "HitPivot/BodyPivot/HipsPivot/LeftHipPivot/LeftKneePivot/LeftFootPivot"
 const RIGHT_HIP := "HitPivot/BodyPivot/HipsPivot/RightHipPivot"
 const RIGHT_KNEE := "HitPivot/BodyPivot/HipsPivot/RightHipPivot/RightKneePivot"
+const RIGHT_FOOT := "HitPivot/BodyPivot/HipsPivot/RightHipPivot/RightKneePivot/RightFootPivot"
 const IDLE_TIMES: Array[float] = [0.0, 0.4, 0.8, 1.2, 1.6]
 const PHASES: Array[float] = [0.0, 0.28, 0.52, 0.76, 1.0]
 const ATTACK_TIMING := {
@@ -65,7 +67,23 @@ static func build_idle(action_id: StringName) -> Animation:
 	return animation
 
 static func build_walk(action_id: StringName) -> Animation:
-	return build_idle(action_id)
+	var animation := Animation.new()
+	animation.length = 0.8
+	animation.loop_mode = Animation.LOOP_LINEAR
+	var times: Array[float] = [0.0, 0.2, 0.4, 0.6, 0.8]
+	_add_rotation_track(animation, LEFT_HIP, _five(Vector3(0.42, 0, 0), Vector3(0.08, 0, 0), Vector3(-0.42, 0, 0), Vector3(-0.08, 0, 0), Vector3(0.42, 0, 0)), times)
+	_add_rotation_track(animation, LEFT_KNEE, _five(Vector3(0.12, 0, 0), Vector3(0.30, 0, 0), Vector3(0.36, 0, 0), Vector3(0.18, 0, 0), Vector3(0.12, 0, 0)), times)
+	_add_rotation_track(animation, LEFT_FOOT, _five(Vector3(-0.08, 0, 0), Vector3(-0.16, 0, 0), Vector3(0.18, 0, 0), Vector3(0.08, 0, 0), Vector3(-0.08, 0, 0)), times)
+	_add_rotation_track(animation, RIGHT_HIP, _five(Vector3(-0.42, 0, 0), Vector3(-0.08, 0, 0), Vector3(0.42, 0, 0), Vector3(0.08, 0, 0), Vector3(-0.42, 0, 0)), times)
+	_add_rotation_track(animation, RIGHT_KNEE, _five(Vector3(0.36, 0, 0), Vector3(0.18, 0, 0), Vector3(0.12, 0, 0), Vector3(0.30, 0, 0), Vector3(0.36, 0, 0)), times)
+	_add_rotation_track(animation, RIGHT_FOOT, _five(Vector3(0.18, 0, 0), Vector3(0.08, 0, 0), Vector3(-0.08, 0, 0), Vector3(-0.16, 0, 0), Vector3(0.18, 0, 0)), times)
+	_add_position_track(animation, BODY, _five(Vector3.ZERO, Vector3(0, -0.025, 0), Vector3.ZERO, Vector3(0, -0.025, 0), Vector3.ZERO), times)
+	_add_rotation_track(animation, TORSO, _five(Vector3(-0.04, 0.08, 0), Vector3(-0.04, 0, 0), Vector3(-0.04, -0.08, 0), Vector3(-0.04, 0, 0), Vector3(-0.04, 0.08, 0)), times)
+	_add_rotation_track(animation, LEFT_SHOULDER, _five(Vector3(-0.28, -0.05, -0.55), Vector3(-0.24, -0.05, -0.50), Vector3(-0.32, -0.05, -0.58), Vector3(-0.30, -0.05, -0.56), Vector3(-0.28, -0.05, -0.55)), times)
+	_add_rotation_track(animation, LEFT_ELBOW, _five(Vector3(0.10, 0, -0.65), Vector3(0.14, 0, -0.62), Vector3(0.08, 0, -0.68), Vector3(0.06, 0, -0.66), Vector3(0.10, 0, -0.65)), times)
+	_add_rotation_track(animation, RIGHT_SHOULDER, _five(Vector3(-0.18, -0.16, 0.34), Vector3(-0.22, -0.16, 0.38), Vector3(-0.15, -0.16, 0.30), Vector3(-0.16, -0.16, 0.32), Vector3(-0.18, -0.16, 0.34)), times)
+	_add_rotation_track(animation, RIGHT_ELBOW, _five(Vector3(0.10, 0, 0.38), Vector3(0.06, 0, 0.36), Vector3(0.14, 0, 0.42), Vector3(0.12, 0, 0.40), Vector3(0.10, 0, 0.38)), times)
+	return animation
 
 static func build_attack(action_id: StringName, event_name: StringName) -> Animation:
 	if not ATTACK_TIMING.has(action_id):

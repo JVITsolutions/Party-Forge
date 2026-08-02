@@ -62,6 +62,13 @@ func _configure_authored_action_players(model: Node3D) -> bool:
 		if library.has_animation(action_id):
 			library.remove_animation(action_id)
 		library.add_animation(action_id, idle)
+	var walk := ANIMATION_AUTHORING.build_walk(&"walk") as Animation
+	if walk == null:
+		_fail("walk authoring failed")
+		return false
+	if library.has_animation(&"walk"):
+		library.remove_animation(&"walk")
+	library.add_animation(&"walk", walk)
 	var attack_events := {
 		&"attack_slash": &"impact",
 		&"paladin_hammer_smite": &"impact",

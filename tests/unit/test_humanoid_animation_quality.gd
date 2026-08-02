@@ -23,8 +23,47 @@ func run() -> Array[String]:
 	for index: int in range(1, ATTACKS.size()):
 		var attack_id := ATTACKS[index]
 		TestAssertions.truthy(_track_signature(player.get_animation(attack_id)) != fighter_signature, "%s is not a scaled Fighter slash" % attack_id, failures)
+	_assert_walk_quality(player, failures)
 	model.free()
 	return failures
+
+func _assert_walk_quality(player: AnimationPlayer, failures: Array[String]) -> void:
+	var walk := player.get_animation(&"walk")
+	TestAssertions.truthy(walk != null and is_equal_approx(walk.length, 0.8), "walk is an authored 0.8 second loop", failures)
+	if walk == null:
+		return
+	var left_foot_path := "HitPivot/BodyPivot/HipsPivot/LeftHipPivot/LeftKneePivot/LeftFootPivot"
+	var right_foot_path := "HitPivot/BodyPivot/HipsPivot/RightHipPivot/RightKneePivot/RightFootPivot"
+	var left_foot_track := walk.find_track(NodePath("%s:rotation" % left_foot_path), Animation.TYPE_ROTATION_3D)
+	var right_foot_track := walk.find_track(NodePath("%s:rotation" % right_foot_path), Animation.TYPE_ROTATION_3D)
+	TestAssertions.truthy(left_foot_track >= 0, "walk authors the left foot pivot", failures)
+	TestAssertions.truthy(right_foot_track >= 0, "walk authors the right foot pivot", failures)
+	if left_foot_track < 0 or right_foot_track < 0:
+		return
+	var left_hip_0 := _rotation_x(walk, "HitPivot/BodyPivot/HipsPivot/LeftHipPivot", 0.0)
+	var left_hip_4 := _rotation_x(walk, "HitPivot/BodyPivot/HipsPivot/LeftHipPivot", 0.4)
+	var right_hip_0 := _rotation_x(walk, "HitPivot/BodyPivot/HipsPivot/RightHipPivot", 0.0)
+	var right_hip_4 := _rotation_x(walk, "HitPivot/BodyPivot/HipsPivot/RightHipPivot", 0.4)
+	TestAssertions.truthy(left_hip_0 > 0.0 and left_hip_4 < 0.0 and right_hip_0 < 0.0 and right_hip_4 > 0.0, "walk hips alternate stride signs", failures)
+	var left_knee_range := absf(_rotation_x(walk, "HitPivot/BodyPivot/HipsPivot/LeftHipPivot/LeftKneePivot", 0.4) - _rotation_x(walk, "HitPivot/BodyPivot/HipsPivot/LeftHipPivot/LeftKneePivot", 0.0))
+	var right_knee_range := absf(_rotation_x(walk, "HitPivot/BodyPivot/HipsPivot/RightHipPivot/RightKneePivot", 0.4) - _rotation_x(walk, "HitPivot/BodyPivot/HipsPivot/RightHipPivot/RightKneePivot", 0.0))
+	TestAssertions.truthy(left_knee_range >= 0.12 and right_knee_range >= 0.12, "walk knees visibly alternate flexion", failures)
+	var baseline_low := minf(_foot_bottom(walk, true, 0.0), _foot_bottom(walk, false, 0.0))
+	for support_time: float in [0.0, 0.4]:
+		var support_low := minf(_foot_bottom(walk, true, support_time), _foot_bottom(walk, false, support_time))
+		TestAssertions.near(support_low, baseline_low, 0.015, "walk support foot remains grounded at %.1f" % support_time, failures)
+	TestAssertions.truthy(_poses_near(_sample_pose(walk, 0.0), _sample_pose(walk, 0.8), 0.001), "walk closes its stride loop", failures)
+
+func _rotation_x(animation: Animation, node_path: String, time: float) -> float:
+	var track := animation.find_track(NodePath("%s:rotation" % node_path), Animation.TYPE_ROTATION_3D)
+	return animation.rotation_track_interpolate(track, time).get_euler().x if track >= 0 else 0.0
+
+func _foot_bottom(animation: Animation, left: bool, time: float) -> float:
+	var side := "Left" if left else "Right"
+	var hip := _rotation_x(animation, "HitPivot/BodyPivot/HipsPivot/%sHipPivot" % side, time)
+	var knee := _rotation_x(animation, "HitPivot/BodyPivot/HipsPivot/%sHipPivot/%sKneePivot" % [side, side], time)
+	var foot := _rotation_x(animation, "HitPivot/BodyPivot/HipsPivot/%sHipPivot/%sKneePivot/%sFootPivot" % [side, side, side], time)
+	return -0.48 * cos(hip) - 0.46 * cos(hip + knee) - 0.12 * cos(hip + knee + foot)
 
 func _assert_idle_is_guarded(animation: Animation, action_id: StringName, failures: Array[String]) -> void:
 	var samples: Array[Dictionary] = []
