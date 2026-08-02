@@ -22,12 +22,12 @@ size = Vector3(0.16, 0.16, 0.04)
 metadata/equipment_visual_id = &"nightstep_utility_belt"
 metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/BeltSocket"
 
-[node name="@MeshInstance3D@41" type="MeshInstance3D" parent="Attachment"]
+[node name="@MeshInstance3D@99" type="MeshInstance3D" parent="Attachment"]
 material_override = SubResource("StandardMaterial3D_dqsxy")
 mesh = SubResource("BoxMesh_j1htv")
 metadata/palette_region = &"leather"
 
-[node name="@MeshInstance3D@42" type="MeshInstance3D" parent="Attachment"]
+[node name="@MeshInstance3D@100" type="MeshInstance3D" parent="Attachment"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -0.2)
 material_override = SubResource("StandardMaterial3D_ny00t")
 mesh = SubResource("BoxMesh_ftcft")

@@ -22,13 +22,13 @@ size = Vector3(0.12, 0.62, 0.15)
 metadata/equipment_visual_id = &"dawn_bulwark_shield"
 metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot/LeftShoulderPivot/LeftElbowPivot/LeftHandSocket"
 
-[node name="@MeshInstance3D@23" type="MeshInstance3D" parent="Attachment"]
+[node name="@MeshInstance3D@28" type="MeshInstance3D" parent="Attachment"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.18, 0.12)
 material_override = SubResource("StandardMaterial3D_dfo8r")
 mesh = SubResource("BoxMesh_2sguq")
 metadata/palette_region = &"metal"
 
-[node name="@MeshInstance3D@24" type="MeshInstance3D" parent="Attachment"]
+[node name="@MeshInstance3D@29" type="MeshInstance3D" parent="Attachment"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.18, 0.04)
 material_override = SubResource("StandardMaterial3D_wko1h")
 mesh = SubResource("BoxMesh_ksy3y")

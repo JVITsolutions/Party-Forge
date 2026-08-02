@@ -22,13 +22,13 @@ size = Vector3(0.26, 0.06, 0.12)
 metadata/equipment_visual_id = &"nightstep_dagger_main"
 metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot/RightShoulderPivot/RightElbowPivot/RightHandSocket"
 
-[node name="@MeshInstance3D@43" type="MeshInstance3D" parent="Attachment"]
+[node name="@MeshInstance3D@101" type="MeshInstance3D" parent="Attachment"]
 transform = Transform3D(0.99280864, -0.119712204, 0, 0.119712204, 0.99280864, 0, 0, 0, 1, 0, 0.34, 0)
 material_override = SubResource("StandardMaterial3D_sy2ld")
 mesh = SubResource("BoxMesh_0kswi")
 metadata/palette_region = &"metal"
 
-[node name="@MeshInstance3D@44" type="MeshInstance3D" parent="Attachment"]
+[node name="@MeshInstance3D@102" type="MeshInstance3D" parent="Attachment"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.04, 0)
 material_override = SubResource("StandardMaterial3D_t3qwc")
 mesh = SubResource("BoxMesh_wenom")

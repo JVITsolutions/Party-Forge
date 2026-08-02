@@ -9,6 +9,9 @@ const EXPECTED_PROJECTILES := 6
 const EXPECTED_EFFECTS := 5
 
 func _initialize() -> void:
+	call_deferred(&"_run")
+
+func _run() -> void:
 	var catalog := GameCatalog.load_defaults()
 	var catalog_errors := catalog.validate()
 	if not catalog_errors.is_empty():
@@ -87,7 +90,7 @@ func _initialize() -> void:
 			if presentation.hit_remaining <= 0.0:
 				_fail(_context(class_id, body_id, &"<none>", &"<none>", &"hit_flinch", "hit feedback rejected"))
 				return
-			presentation.free()
+			presentation.queue_free()
 	if unique_items.size() != EXPECTED_ITEMS or unique_actions.size() != EXPECTED_ANIMATIONS or projectile_count != EXPECTED_PROJECTILES or effect_count != EXPECTED_EFFECTS:
 		_fail("class=<counts> body=<none> slot=<none> item=%d action=%d reason=projectiles=%d effects=%d" % [unique_items.size(), unique_actions.size(), projectile_count, effect_count])
 		return
@@ -96,6 +99,8 @@ func _initialize() -> void:
 	if hammer == null:
 		_fail(_context(&"fighter", &"masculine", &"main_hand", &"forge_vanguard_hammer", &"attack_slash", "hammer alternative missing"))
 		return
+	await process_frame
+	await process_frame
 	print("PARTY_FORGE_PLAYABLE_PRESENTATION_SMOKE_OK classes=9 bodies=2 slots=11 items=99 icons=198 animations=21 projectiles=6 effects=5")
 	quit(0)
 

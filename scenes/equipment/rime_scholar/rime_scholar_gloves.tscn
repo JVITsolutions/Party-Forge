@@ -22,16 +22,16 @@ size = Vector3(0.22, 0.22, 0.24)
 metadata/equipment_visual_id = &"rime_scholar_gloves"
 metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot/LeftShoulderPivot/LeftElbowPivot/LeftHandSocket"
 
-[node name="@MeshInstance3D@33" type="MeshInstance3D" parent="Attachment"]
+[node name="@MeshInstance3D@136" type="MeshInstance3D" parent="Attachment"]
 material_override = SubResource("StandardMaterial3D_clfa6")
 mesh = SubResource("BoxMesh_3ite0")
 metadata/palette_region = &"leather"
 
-[node name="@Node3D@35" type="Node3D" parent="."]
+[node name="@Node3D@138" type="Node3D" parent="."]
 metadata/equipment_visual_id = &"rime_scholar_gloves"
 metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot/RightShoulderPivot/RightElbowPivot/RightHandSocket"
 
-[node name="@MeshInstance3D@34" type="MeshInstance3D" parent="@Node3D@35"]
+[node name="@MeshInstance3D@137" type="MeshInstance3D" parent="@Node3D@138"]
 material_override = SubResource("StandardMaterial3D_hoybr")
 mesh = SubResource("BoxMesh_swqg6")
 metadata/palette_region = &"leather"

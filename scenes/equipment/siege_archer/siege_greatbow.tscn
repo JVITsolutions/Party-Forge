@@ -38,24 +38,24 @@ size = Vector3(0.025, 1.34, 0.025)
 metadata/equipment_visual_id = &"siege_greatbow"
 metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot/RightShoulderPivot/RightElbowPivot/RightHandSocket"
 
-[node name="@MeshInstance3D@47" type="MeshInstance3D" parent="Attachment"]
+[node name="@MeshInstance3D@75" type="MeshInstance3D" parent="Attachment"]
 transform = Transform3D(0.9427547, 0.3334871, 0, -0.3334871, 0.9427547, 0, 0, 0, 1, -0.18, 0.46, 0)
 material_override = SubResource("StandardMaterial3D_aw4x2")
 mesh = SubResource("BoxMesh_560yw")
 metadata/palette_region = &"leather"
 
-[node name="@MeshInstance3D@48" type="MeshInstance3D" parent="Attachment"]
+[node name="@MeshInstance3D@76" type="MeshInstance3D" parent="Attachment"]
 transform = Transform3D(0.9427547, 0.3334871, 0, -0.3334871, 0.9427547, 0, 0, 0, 1, 0.18, -0.46, 0)
 material_override = SubResource("StandardMaterial3D_b0rug")
 mesh = SubResource("BoxMesh_x6ji0")
 metadata/palette_region = &"leather"
 
-[node name="@MeshInstance3D@49" type="MeshInstance3D" parent="Attachment"]
+[node name="@MeshInstance3D@77" type="MeshInstance3D" parent="Attachment"]
 material_override = SubResource("StandardMaterial3D_s20cw")
 mesh = SubResource("BoxMesh_t8xk1")
 metadata/palette_region = &"metal"
 
-[node name="@MeshInstance3D@50" type="MeshInstance3D" parent="Attachment"]
+[node name="@MeshInstance3D@78" type="MeshInstance3D" parent="Attachment"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0.03)
 material_override = SubResource("StandardMaterial3D_knu3o")
 mesh = SubResource("BoxMesh_1unvp")

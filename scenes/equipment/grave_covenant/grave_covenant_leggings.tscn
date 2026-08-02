@@ -22,17 +22,17 @@ size = Vector3(0.25, 0.44, 0.28)
 metadata/equipment_visual_id = &"grave_covenant_leggings"
 metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/LeftHipPivot"
 
-[node name="@MeshInstance3D@76" type="MeshInstance3D" parent="Attachment"]
+[node name="@MeshInstance3D@179" type="MeshInstance3D" parent="Attachment"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.23, 0)
 material_override = SubResource("StandardMaterial3D_hit7y")
 mesh = SubResource("BoxMesh_spiir")
 metadata/palette_region = &"leather"
 
-[node name="@Node3D@78" type="Node3D" parent="."]
+[node name="@Node3D@181" type="Node3D" parent="."]
 metadata/equipment_visual_id = &"grave_covenant_leggings"
 metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/RightHipPivot"
 
-[node name="@MeshInstance3D@77" type="MeshInstance3D" parent="@Node3D@78"]
+[node name="@MeshInstance3D@180" type="MeshInstance3D" parent="@Node3D@181"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.23, 0)
 material_override = SubResource("StandardMaterial3D_wjy3m")
 mesh = SubResource("BoxMesh_e84ww")

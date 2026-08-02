@@ -28,13 +28,13 @@ rings = 6
 metadata/equipment_visual_id = &"emberweave_circlet"
 metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot/HeadPivot/HelmetSocket"
 
-[node name="@MeshInstance3D@2" type="MeshInstance3D" parent="Attachment"]
+[node name="@MeshInstance3D@105" type="MeshInstance3D" parent="Attachment"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.1, 0)
 material_override = SubResource("StandardMaterial3D_7uqhn")
 mesh = SubResource("BoxMesh_bp5q5")
 metadata/palette_region = &"primary"
 
-[node name="@MeshInstance3D@3" type="MeshInstance3D" parent="Attachment"]
+[node name="@MeshInstance3D@106" type="MeshInstance3D" parent="Attachment"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.2, -0.16)
 material_override = SubResource("StandardMaterial3D_344m0")
 mesh = SubResource("SphereMesh_51v1w")

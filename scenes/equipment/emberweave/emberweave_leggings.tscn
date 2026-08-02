@@ -22,17 +22,17 @@ size = Vector3(0.25, 0.44, 0.28)
 metadata/equipment_visual_id = &"emberweave_leggings"
 metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/LeftHipPivot"
 
-[node name="@MeshInstance3D@7" type="MeshInstance3D" parent="Attachment"]
+[node name="@MeshInstance3D@110" type="MeshInstance3D" parent="Attachment"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.23, 0)
 material_override = SubResource("StandardMaterial3D_7chr4")
 mesh = SubResource("BoxMesh_h7wie")
 metadata/palette_region = &"leather"
 
-[node name="@Node3D@9" type="Node3D" parent="."]
+[node name="@Node3D@112" type="Node3D" parent="."]
 metadata/equipment_visual_id = &"emberweave_leggings"
 metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/RightHipPivot"
 
-[node name="@MeshInstance3D@8" type="MeshInstance3D" parent="@Node3D@9"]
+[node name="@MeshInstance3D@111" type="MeshInstance3D" parent="@Node3D@112"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.23, 0)
 material_override = SubResource("StandardMaterial3D_w65py")
 mesh = SubResource("BoxMesh_bgxve")

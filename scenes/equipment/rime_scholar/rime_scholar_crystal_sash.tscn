@@ -25,12 +25,12 @@ size = Vector3(0.16, 0.16, 0.04)
 metadata/equipment_visual_id = &"rime_scholar_crystal_sash"
 metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/BeltSocket"
 
-[node name="@MeshInstance3D@42" type="MeshInstance3D" parent="Attachment"]
+[node name="@MeshInstance3D@145" type="MeshInstance3D" parent="Attachment"]
 material_override = SubResource("StandardMaterial3D_qblo7")
 mesh = SubResource("BoxMesh_gytk0")
 metadata/palette_region = &"leather"
 
-[node name="@MeshInstance3D@43" type="MeshInstance3D" parent="Attachment"]
+[node name="@MeshInstance3D@146" type="MeshInstance3D" parent="Attachment"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -0.2)
 material_override = SubResource("StandardMaterial3D_q3sjg")
 mesh = SubResource("BoxMesh_4874w")

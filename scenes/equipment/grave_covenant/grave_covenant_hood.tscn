@@ -28,13 +28,13 @@ rings = 6
 metadata/equipment_visual_id = &"grave_covenant_hood"
 metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot/HeadPivot/HelmetSocket"
 
-[node name="@MeshInstance3D@71" type="MeshInstance3D" parent="Attachment"]
+[node name="@MeshInstance3D@174" type="MeshInstance3D" parent="Attachment"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.1, 0)
 material_override = SubResource("StandardMaterial3D_7l6fm")
 mesh = SubResource("BoxMesh_wm7hr")
 metadata/palette_region = &"primary"
 
-[node name="@MeshInstance3D@72" type="MeshInstance3D" parent="Attachment"]
+[node name="@MeshInstance3D@175" type="MeshInstance3D" parent="Attachment"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.2, -0.16)
 material_override = SubResource("StandardMaterial3D_qpmn7")
 mesh = SubResource("SphereMesh_h28pf")

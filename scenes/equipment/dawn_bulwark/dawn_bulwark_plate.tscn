@@ -22,13 +22,13 @@ size = Vector3(0.92, 0.12, 0.44)
 metadata/equipment_visual_id = &"dawn_bulwark_plate"
 metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot/BodyArmourSocket"
 
-[node name="@MeshInstance3D@4" type="MeshInstance3D" parent="Attachment"]
+[node name="@MeshInstance3D@9" type="MeshInstance3D" parent="Attachment"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.02, 0)
 material_override = SubResource("StandardMaterial3D_i0vey")
 mesh = SubResource("BoxMesh_8tfsh")
 metadata/palette_region = &"metal"
 
-[node name="@MeshInstance3D@5" type="MeshInstance3D" parent="Attachment"]
+[node name="@MeshInstance3D@10" type="MeshInstance3D" parent="Attachment"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.22, 0)
 material_override = SubResource("StandardMaterial3D_ehvwq")
 mesh = SubResource("BoxMesh_7bii3")

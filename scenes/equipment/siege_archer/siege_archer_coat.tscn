@@ -30,19 +30,19 @@ size = Vector3(0.58, 0.12, 0.36)
 metadata/equipment_visual_id = &"siege_archer_coat"
 metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot/BodyArmourSocket"
 
-[node name="@MeshInstance3D@30" type="MeshInstance3D" parent="Attachment"]
+[node name="@MeshInstance3D@58" type="MeshInstance3D" parent="Attachment"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.02, 0)
 material_override = SubResource("StandardMaterial3D_pyisw")
 mesh = SubResource("BoxMesh_kn425")
 metadata/palette_region = &"leather"
 
-[node name="@MeshInstance3D@31" type="MeshInstance3D" parent="Attachment"]
+[node name="@MeshInstance3D@59" type="MeshInstance3D" parent="Attachment"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.22, 0)
 material_override = SubResource("StandardMaterial3D_h1l5l")
 mesh = SubResource("BoxMesh_orerm")
 metadata/palette_region = &"primary"
 
-[node name="@MeshInstance3D@32" type="MeshInstance3D" parent="Attachment"]
+[node name="@MeshInstance3D@60" type="MeshInstance3D" parent="Attachment"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.2, 0)
 material_override = SubResource("StandardMaterial3D_y6lwk")
 mesh = SubResource("BoxMesh_ujt0l")

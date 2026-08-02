@@ -22,17 +22,17 @@ size = Vector3(0.25, 0.44, 0.28)
 metadata/equipment_visual_id = &"dawn_bulwark_greaves"
 metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/LeftHipPivot"
 
-[node name="@MeshInstance3D@6" type="MeshInstance3D" parent="Attachment"]
+[node name="@MeshInstance3D@11" type="MeshInstance3D" parent="Attachment"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.23, 0)
 material_override = SubResource("StandardMaterial3D_losfe")
 mesh = SubResource("BoxMesh_oy3qn")
 metadata/palette_region = &"metal"
 
-[node name="@Node3D@8" type="Node3D" parent="."]
+[node name="@Node3D@13" type="Node3D" parent="."]
 metadata/equipment_visual_id = &"dawn_bulwark_greaves"
 metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/RightHipPivot"
 
-[node name="@MeshInstance3D@7" type="MeshInstance3D" parent="@Node3D@8"]
+[node name="@MeshInstance3D@12" type="MeshInstance3D" parent="@Node3D@13"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.23, 0)
 material_override = SubResource("StandardMaterial3D_53icf")
 mesh = SubResource("BoxMesh_jxpra")

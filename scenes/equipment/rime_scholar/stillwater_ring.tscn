@@ -20,7 +20,7 @@ radial_segments = 10
 metadata/equipment_visual_id = &"stillwater_ring"
 metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot/RightShoulderPivot/RightElbowPivot/RightHandSocket"
 
-[node name="@MeshInstance3D@41" type="MeshInstance3D" parent="Attachment"]
+[node name="@MeshInstance3D@144" type="MeshInstance3D" parent="Attachment"]
 transform = Transform3D(-4.371139e-08, -1, 0, 1, -4.371139e-08, 0, 0, 0, 1, 0, 0, 0)
 material_override = SubResource("StandardMaterial3D_u12hn")
 mesh = SubResource("CylinderMesh_d5c5j")

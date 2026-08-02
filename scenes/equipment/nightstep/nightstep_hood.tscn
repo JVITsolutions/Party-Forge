@@ -22,13 +22,13 @@ size = Vector3(0.08, 0.18, 0.08)
 metadata/equipment_visual_id = &"nightstep_hood"
 metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot/HeadPivot/HelmetSocket"
 
-[node name="@MeshInstance3D@25" type="MeshInstance3D" parent="Attachment"]
+[node name="@MeshInstance3D@83" type="MeshInstance3D" parent="Attachment"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.02, 0)
 material_override = SubResource("StandardMaterial3D_5lx2o")
 mesh = SubResource("BoxMesh_hkwto")
 metadata/palette_region = &"leather"
 
-[node name="@MeshInstance3D@26" type="MeshInstance3D" parent="Attachment"]
+[node name="@MeshInstance3D@84" type="MeshInstance3D" parent="Attachment"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.24, 0)
 material_override = SubResource("StandardMaterial3D_sfw5p")
 mesh = SubResource("BoxMesh_fg7km")

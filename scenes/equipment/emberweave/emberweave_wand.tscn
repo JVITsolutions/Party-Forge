@@ -31,13 +31,13 @@ rings = 6
 metadata/equipment_visual_id = &"emberweave_wand"
 metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot/RightShoulderPivot/RightElbowPivot/RightHandSocket"
 
-[node name="@MeshInstance3D@21" type="MeshInstance3D" parent="Attachment"]
+[node name="@MeshInstance3D@124" type="MeshInstance3D" parent="Attachment"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.28, 0)
 material_override = SubResource("StandardMaterial3D_uxaoi")
 mesh = SubResource("CylinderMesh_y1dhm")
 metadata/palette_region = &"leather"
 
-[node name="@MeshInstance3D@22" type="MeshInstance3D" parent="Attachment"]
+[node name="@MeshInstance3D@125" type="MeshInstance3D" parent="Attachment"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.68, 0)
 material_override = SubResource("StandardMaterial3D_p33c1")
 mesh = SubResource("SphereMesh_ldchb")

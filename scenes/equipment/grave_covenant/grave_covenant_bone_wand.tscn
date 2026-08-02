@@ -31,13 +31,13 @@ rings = 6
 metadata/equipment_visual_id = &"grave_covenant_bone_wand"
 metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot/RightShoulderPivot/RightElbowPivot/RightHandSocket"
 
-[node name="@MeshInstance3D@90" type="MeshInstance3D" parent="Attachment"]
+[node name="@MeshInstance3D@193" type="MeshInstance3D" parent="Attachment"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.28, 0)
 material_override = SubResource("StandardMaterial3D_qudum")
 mesh = SubResource("CylinderMesh_pg3la")
 metadata/palette_region = &"leather"
 
-[node name="@MeshInstance3D@91" type="MeshInstance3D" parent="Attachment"]
+[node name="@MeshInstance3D@194" type="MeshInstance3D" parent="Attachment"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.68, 0)
 material_override = SubResource("StandardMaterial3D_mtu2g")
 mesh = SubResource("SphereMesh_cljb3")

@@ -22,12 +22,12 @@ size = Vector3(0.16, 0.16, 0.04)
 metadata/equipment_visual_id = &"dawn_bulwark_belt"
 metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/BeltSocket"
 
-[node name="@MeshInstance3D@18" type="MeshInstance3D" parent="Attachment"]
+[node name="@MeshInstance3D@23" type="MeshInstance3D" parent="Attachment"]
 material_override = SubResource("StandardMaterial3D_md574")
 mesh = SubResource("BoxMesh_rvml4")
 metadata/palette_region = &"leather"
 
-[node name="@MeshInstance3D@19" type="MeshInstance3D" parent="Attachment"]
+[node name="@MeshInstance3D@24" type="MeshInstance3D" parent="Attachment"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -0.2)
 material_override = SubResource("StandardMaterial3D_27a1e")
 mesh = SubResource("BoxMesh_mgd2s")

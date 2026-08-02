@@ -42,19 +42,19 @@ rings = 6
 metadata/equipment_visual_id = &"storm_chaplain_sceptre"
 metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot/RightShoulderPivot/RightElbowPivot/RightHandSocket"
 
-[node name="@MeshInstance3D@66" type="MeshInstance3D" parent="Attachment"]
+[node name="@MeshInstance3D@169" type="MeshInstance3D" parent="Attachment"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.32, 0)
 material_override = SubResource("StandardMaterial3D_81byh")
 mesh = SubResource("CylinderMesh_rutqj")
 metadata/palette_region = &"metal"
 
-[node name="@MeshInstance3D@67" type="MeshInstance3D" parent="Attachment"]
+[node name="@MeshInstance3D@170" type="MeshInstance3D" parent="Attachment"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.75, 0)
 material_override = SubResource("StandardMaterial3D_l5ube")
 mesh = SubResource("BoxMesh_jfc0f")
 metadata/palette_region = &"accent"
 
-[node name="@MeshInstance3D@68" type="MeshInstance3D" parent="Attachment"]
+[node name="@MeshInstance3D@171" type="MeshInstance3D" parent="Attachment"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.88, 0)
 material_override = SubResource("StandardMaterial3D_wfgl6")
 mesh = SubResource("SphereMesh_r4qo0")

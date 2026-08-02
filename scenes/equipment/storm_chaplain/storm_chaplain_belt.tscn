@@ -25,12 +25,12 @@ size = Vector3(0.16, 0.16, 0.04)
 metadata/equipment_visual_id = &"storm_chaplain_belt"
 metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/BeltSocket"
 
-[node name="@MeshInstance3D@64" type="MeshInstance3D" parent="Attachment"]
+[node name="@MeshInstance3D@167" type="MeshInstance3D" parent="Attachment"]
 material_override = SubResource("StandardMaterial3D_6kxvy")
 mesh = SubResource("BoxMesh_t0yvw")
 metadata/palette_region = &"leather"
 
-[node name="@MeshInstance3D@65" type="MeshInstance3D" parent="Attachment"]
+[node name="@MeshInstance3D@168" type="MeshInstance3D" parent="Attachment"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -0.2)
 material_override = SubResource("StandardMaterial3D_r3lt5")
 mesh = SubResource("BoxMesh_wbjjf")
