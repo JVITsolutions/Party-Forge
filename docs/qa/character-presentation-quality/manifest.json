@@ -1,0 +1,5424 @@
+[
+  {
+    "action": "idle",
+    "body": "masculine",
+    "class": "fighter",
+    "clearance": {
+      "main_hand": 0.12159888446331,
+      "off_hand": 0.309205383062363
+    },
+    "equipment": {
+      "main_hand": "forge_vanguard_sword",
+      "off_hand": "forge_vanguard_shield"
+    },
+    "ground_gap": -0.828515976667404,
+    "path": "docs/qa/character-presentation-quality/fighter/masculine/01_idle_front.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "idle_front"
+  },
+  {
+    "action": "idle",
+    "body": "masculine",
+    "class": "fighter",
+    "clearance": {
+      "main_hand": 0.12159888446331,
+      "off_hand": 0.309205383062363
+    },
+    "equipment": {
+      "main_hand": "forge_vanguard_sword",
+      "off_hand": "forge_vanguard_shield"
+    },
+    "ground_gap": -0.828515976667404,
+    "path": "docs/qa/character-presentation-quality/fighter/masculine/02_idle_three_quarter.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "idle_three_quarter"
+  },
+  {
+    "action": "idle",
+    "body": "masculine",
+    "class": "fighter",
+    "clearance": {
+      "main_hand": 0.12159888446331,
+      "off_hand": 0.309205383062363
+    },
+    "equipment": {
+      "main_hand": "forge_vanguard_sword",
+      "off_hand": "forge_vanguard_shield"
+    },
+    "ground_gap": -0.828515976667404,
+    "path": "docs/qa/character-presentation-quality/fighter/masculine/03_idle_side.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "idle_side"
+  },
+  {
+    "action": "idle",
+    "body": "masculine",
+    "class": "fighter",
+    "clearance": {
+      "main_hand": 0.12159888446331,
+      "off_hand": 0.309205383062363
+    },
+    "equipment": {
+      "main_hand": "forge_vanguard_sword",
+      "off_hand": "forge_vanguard_shield"
+    },
+    "ground_gap": -0.828515976667404,
+    "path": "docs/qa/character-presentation-quality/fighter/masculine/04_idle_rear.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "idle_rear"
+  },
+  {
+    "action": "walk",
+    "body": "masculine",
+    "class": "fighter",
+    "clearance": {
+      "main_hand": 0.12457101047039,
+      "off_hand": 0.315056324005127
+    },
+    "equipment": {
+      "main_hand": "forge_vanguard_sword",
+      "off_hand": "forge_vanguard_shield"
+    },
+    "ground_gap": -0.832769006490707,
+    "path": "docs/qa/character-presentation-quality/fighter/masculine/05_walk_0_0.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "walk_0_0"
+  },
+  {
+    "action": "walk",
+    "body": "masculine",
+    "class": "fighter",
+    "clearance": {
+      "main_hand": 0.111652076244354,
+      "off_hand": 0.29572194814682
+    },
+    "equipment": {
+      "main_hand": "forge_vanguard_sword",
+      "off_hand": "forge_vanguard_shield"
+    },
+    "ground_gap": -0.876766592264175,
+    "path": "docs/qa/character-presentation-quality/fighter/masculine/06_walk_0_2.png",
+    "projectile_overlay": false,
+    "sample_time": 0.2,
+    "state": "walk_0_2"
+  },
+  {
+    "action": "walk",
+    "body": "masculine",
+    "class": "fighter",
+    "clearance": {
+      "main_hand": 0.126222938299179,
+      "off_hand": 0.322851091623306
+    },
+    "equipment": {
+      "main_hand": "forge_vanguard_sword",
+      "off_hand": "forge_vanguard_shield"
+    },
+    "ground_gap": -0.832769006490707,
+    "path": "docs/qa/character-presentation-quality/fighter/masculine/07_walk_0_4.png",
+    "projectile_overlay": false,
+    "sample_time": 0.4,
+    "state": "walk_0_4"
+  },
+  {
+    "action": "walk",
+    "body": "masculine",
+    "class": "fighter",
+    "clearance": {
+      "main_hand": 0.125461831688881,
+      "off_hand": 0.307210355997086
+    },
+    "equipment": {
+      "main_hand": "forge_vanguard_sword",
+      "off_hand": "forge_vanguard_shield"
+    },
+    "ground_gap": -0.876766532659531,
+    "path": "docs/qa/character-presentation-quality/fighter/masculine/08_walk_0_6.png",
+    "projectile_overlay": false,
+    "sample_time": 0.6,
+    "state": "walk_0_6"
+  },
+  {
+    "action": "attack_slash",
+    "body": "masculine",
+    "class": "fighter",
+    "clearance": {
+      "main_hand": 0.12159888446331,
+      "off_hand": 0.309205383062363
+    },
+    "equipment": {
+      "main_hand": "forge_vanguard_sword",
+      "off_hand": "forge_vanguard_shield"
+    },
+    "ground_gap": -0.882141381502151,
+    "path": "docs/qa/character-presentation-quality/fighter/masculine/09_attack_start.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "attack_start"
+  },
+  {
+    "action": "attack_slash",
+    "body": "masculine",
+    "class": "fighter",
+    "clearance": {
+      "main_hand": 0.212458789348602,
+      "off_hand": 0.171081498265266
+    },
+    "equipment": {
+      "main_hand": "forge_vanguard_sword",
+      "off_hand": "forge_vanguard_shield"
+    },
+    "ground_gap": -0.888596028089523,
+    "path": "docs/qa/character-presentation-quality/fighter/masculine/10_attack_loaded.png",
+    "projectile_overlay": false,
+    "sample_time": 0.154,
+    "state": "attack_loaded"
+  },
+  {
+    "action": "attack_slash",
+    "body": "masculine",
+    "class": "fighter",
+    "clearance": {
+      "main_hand": 0.105988226830959,
+      "off_hand": 0.206580981612206
+    },
+    "equipment": {
+      "main_hand": "forge_vanguard_sword",
+      "off_hand": "forge_vanguard_shield"
+    },
+    "ground_gap": -0.894018024206162,
+    "path": "docs/qa/character-presentation-quality/fighter/masculine/11_attack_release.png",
+    "projectile_overlay": false,
+    "sample_time": 0.286,
+    "state": "attack_release"
+  },
+  {
+    "action": "attack_slash",
+    "body": "masculine",
+    "class": "fighter",
+    "clearance": {
+      "main_hand": 0.17607706785202,
+      "off_hand": 0.267829149961472
+    },
+    "equipment": {
+      "main_hand": "forge_vanguard_sword",
+      "off_hand": "forge_vanguard_shield"
+    },
+    "ground_gap": -0.886415332555771,
+    "path": "docs/qa/character-presentation-quality/fighter/masculine/12_attack_follow_through.png",
+    "projectile_overlay": false,
+    "sample_time": 0.418,
+    "state": "attack_follow_through"
+  },
+  {
+    "action": "attack_slash",
+    "body": "masculine",
+    "class": "fighter",
+    "clearance": {
+      "main_hand": 0.121719375252724,
+      "off_hand": 0.307313919067383
+    },
+    "equipment": {
+      "main_hand": "forge_vanguard_sword",
+      "off_hand": "forge_vanguard_shield"
+    },
+    "ground_gap": -0.882192343473434,
+    "path": "docs/qa/character-presentation-quality/fighter/masculine/13_attack_recovery.png",
+    "projectile_overlay": false,
+    "sample_time": 0.549,
+    "state": "attack_recovery"
+  },
+  {
+    "action": "idle",
+    "body": "masculine",
+    "class": "fighter",
+    "clearance": {
+      "main_hand": 0.12159888446331,
+      "off_hand": 0.309205383062363
+    },
+    "equipment": {
+      "main_hand": "forge_vanguard_sword",
+      "off_hand": "forge_vanguard_shield"
+    },
+    "ground_gap": -0.882141381502151,
+    "path": "docs/qa/character-presentation-quality/fighter/masculine/14_hit.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "hit"
+  },
+  {
+    "action": "idle",
+    "body": "masculine",
+    "class": "fighter",
+    "clearance": {
+      "main_hand": 0.12159888446331,
+      "off_hand": 0.309205383062363
+    },
+    "equipment": {
+      "main_hand": "forge_vanguard_sword",
+      "off_hand": "forge_vanguard_shield"
+    },
+    "ground_gap": -0.882141381502151,
+    "path": "docs/qa/character-presentation-quality/fighter/masculine/15_hands_equipped.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "hands_equipped"
+  },
+  {
+    "action": "idle",
+    "body": "masculine",
+    "class": "fighter",
+    "clearance": {},
+    "equipment": {
+      "main_hand": "",
+      "off_hand": ""
+    },
+    "ground_gap": 0.0,
+    "path": "docs/qa/character-presentation-quality/fighter/masculine/16_hands_cleared.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "hands_cleared"
+  },
+  {
+    "action": "idle",
+    "body": "masculine",
+    "class": "fighter",
+    "clearance": {
+      "main_hand": 0.12159888446331,
+      "off_hand": 0.309205383062363
+    },
+    "equipment": {
+      "main_hand": "forge_vanguard_sword",
+      "off_hand": "forge_vanguard_shield"
+    },
+    "ground_gap": 0.0,
+    "path": "docs/qa/character-presentation-quality/fighter/masculine/17_grounding_side.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "grounding_side"
+  },
+  {
+    "action": "idle",
+    "body": "feminine",
+    "class": "fighter",
+    "clearance": {
+      "main_hand": 0.12159888446331,
+      "off_hand": 0.309205383062363
+    },
+    "equipment": {
+      "main_hand": "forge_vanguard_sword",
+      "off_hand": "forge_vanguard_shield"
+    },
+    "ground_gap": -0.828515976667404,
+    "path": "docs/qa/character-presentation-quality/fighter/feminine/01_idle_front.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "idle_front"
+  },
+  {
+    "action": "idle",
+    "body": "feminine",
+    "class": "fighter",
+    "clearance": {
+      "main_hand": 0.12159888446331,
+      "off_hand": 0.309205383062363
+    },
+    "equipment": {
+      "main_hand": "forge_vanguard_sword",
+      "off_hand": "forge_vanguard_shield"
+    },
+    "ground_gap": -0.828515976667404,
+    "path": "docs/qa/character-presentation-quality/fighter/feminine/02_idle_three_quarter.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "idle_three_quarter"
+  },
+  {
+    "action": "idle",
+    "body": "feminine",
+    "class": "fighter",
+    "clearance": {
+      "main_hand": 0.12159888446331,
+      "off_hand": 0.309205383062363
+    },
+    "equipment": {
+      "main_hand": "forge_vanguard_sword",
+      "off_hand": "forge_vanguard_shield"
+    },
+    "ground_gap": -0.828515976667404,
+    "path": "docs/qa/character-presentation-quality/fighter/feminine/03_idle_side.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "idle_side"
+  },
+  {
+    "action": "idle",
+    "body": "feminine",
+    "class": "fighter",
+    "clearance": {
+      "main_hand": 0.12159888446331,
+      "off_hand": 0.309205383062363
+    },
+    "equipment": {
+      "main_hand": "forge_vanguard_sword",
+      "off_hand": "forge_vanguard_shield"
+    },
+    "ground_gap": -0.828515976667404,
+    "path": "docs/qa/character-presentation-quality/fighter/feminine/04_idle_rear.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "idle_rear"
+  },
+  {
+    "action": "walk",
+    "body": "feminine",
+    "class": "fighter",
+    "clearance": {
+      "main_hand": 0.12457101047039,
+      "off_hand": 0.315056324005127
+    },
+    "equipment": {
+      "main_hand": "forge_vanguard_sword",
+      "off_hand": "forge_vanguard_shield"
+    },
+    "ground_gap": -0.832769006490707,
+    "path": "docs/qa/character-presentation-quality/fighter/feminine/05_walk_0_0.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "walk_0_0"
+  },
+  {
+    "action": "walk",
+    "body": "feminine",
+    "class": "fighter",
+    "clearance": {
+      "main_hand": 0.111652076244354,
+      "off_hand": 0.29572194814682
+    },
+    "equipment": {
+      "main_hand": "forge_vanguard_sword",
+      "off_hand": "forge_vanguard_shield"
+    },
+    "ground_gap": -0.876766592264175,
+    "path": "docs/qa/character-presentation-quality/fighter/feminine/06_walk_0_2.png",
+    "projectile_overlay": false,
+    "sample_time": 0.2,
+    "state": "walk_0_2"
+  },
+  {
+    "action": "walk",
+    "body": "feminine",
+    "class": "fighter",
+    "clearance": {
+      "main_hand": 0.126222938299179,
+      "off_hand": 0.322851091623306
+    },
+    "equipment": {
+      "main_hand": "forge_vanguard_sword",
+      "off_hand": "forge_vanguard_shield"
+    },
+    "ground_gap": -0.832769006490707,
+    "path": "docs/qa/character-presentation-quality/fighter/feminine/07_walk_0_4.png",
+    "projectile_overlay": false,
+    "sample_time": 0.4,
+    "state": "walk_0_4"
+  },
+  {
+    "action": "walk",
+    "body": "feminine",
+    "class": "fighter",
+    "clearance": {
+      "main_hand": 0.125461831688881,
+      "off_hand": 0.307210355997086
+    },
+    "equipment": {
+      "main_hand": "forge_vanguard_sword",
+      "off_hand": "forge_vanguard_shield"
+    },
+    "ground_gap": -0.876766532659531,
+    "path": "docs/qa/character-presentation-quality/fighter/feminine/08_walk_0_6.png",
+    "projectile_overlay": false,
+    "sample_time": 0.6,
+    "state": "walk_0_6"
+  },
+  {
+    "action": "attack_slash",
+    "body": "feminine",
+    "class": "fighter",
+    "clearance": {
+      "main_hand": 0.12159888446331,
+      "off_hand": 0.309205383062363
+    },
+    "equipment": {
+      "main_hand": "forge_vanguard_sword",
+      "off_hand": "forge_vanguard_shield"
+    },
+    "ground_gap": -0.882141381502151,
+    "path": "docs/qa/character-presentation-quality/fighter/feminine/09_attack_start.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "attack_start"
+  },
+  {
+    "action": "attack_slash",
+    "body": "feminine",
+    "class": "fighter",
+    "clearance": {
+      "main_hand": 0.212458789348602,
+      "off_hand": 0.171081498265266
+    },
+    "equipment": {
+      "main_hand": "forge_vanguard_sword",
+      "off_hand": "forge_vanguard_shield"
+    },
+    "ground_gap": -0.888596028089523,
+    "path": "docs/qa/character-presentation-quality/fighter/feminine/10_attack_loaded.png",
+    "projectile_overlay": false,
+    "sample_time": 0.154,
+    "state": "attack_loaded"
+  },
+  {
+    "action": "attack_slash",
+    "body": "feminine",
+    "class": "fighter",
+    "clearance": {
+      "main_hand": 0.105988226830959,
+      "off_hand": 0.206580981612206
+    },
+    "equipment": {
+      "main_hand": "forge_vanguard_sword",
+      "off_hand": "forge_vanguard_shield"
+    },
+    "ground_gap": -0.894018024206162,
+    "path": "docs/qa/character-presentation-quality/fighter/feminine/11_attack_release.png",
+    "projectile_overlay": false,
+    "sample_time": 0.286,
+    "state": "attack_release"
+  },
+  {
+    "action": "attack_slash",
+    "body": "feminine",
+    "class": "fighter",
+    "clearance": {
+      "main_hand": 0.17607706785202,
+      "off_hand": 0.267829149961472
+    },
+    "equipment": {
+      "main_hand": "forge_vanguard_sword",
+      "off_hand": "forge_vanguard_shield"
+    },
+    "ground_gap": -0.886415332555771,
+    "path": "docs/qa/character-presentation-quality/fighter/feminine/12_attack_follow_through.png",
+    "projectile_overlay": false,
+    "sample_time": 0.418,
+    "state": "attack_follow_through"
+  },
+  {
+    "action": "attack_slash",
+    "body": "feminine",
+    "class": "fighter",
+    "clearance": {
+      "main_hand": 0.121719375252724,
+      "off_hand": 0.307313919067383
+    },
+    "equipment": {
+      "main_hand": "forge_vanguard_sword",
+      "off_hand": "forge_vanguard_shield"
+    },
+    "ground_gap": -0.882192343473434,
+    "path": "docs/qa/character-presentation-quality/fighter/feminine/13_attack_recovery.png",
+    "projectile_overlay": false,
+    "sample_time": 0.549,
+    "state": "attack_recovery"
+  },
+  {
+    "action": "idle",
+    "body": "feminine",
+    "class": "fighter",
+    "clearance": {
+      "main_hand": 0.12159888446331,
+      "off_hand": 0.309205383062363
+    },
+    "equipment": {
+      "main_hand": "forge_vanguard_sword",
+      "off_hand": "forge_vanguard_shield"
+    },
+    "ground_gap": -0.882141381502151,
+    "path": "docs/qa/character-presentation-quality/fighter/feminine/14_hit.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "hit"
+  },
+  {
+    "action": "idle",
+    "body": "feminine",
+    "class": "fighter",
+    "clearance": {
+      "main_hand": 0.12159888446331,
+      "off_hand": 0.309205383062363
+    },
+    "equipment": {
+      "main_hand": "forge_vanguard_sword",
+      "off_hand": "forge_vanguard_shield"
+    },
+    "ground_gap": -0.882141381502151,
+    "path": "docs/qa/character-presentation-quality/fighter/feminine/15_hands_equipped.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "hands_equipped"
+  },
+  {
+    "action": "idle",
+    "body": "feminine",
+    "class": "fighter",
+    "clearance": {},
+    "equipment": {
+      "main_hand": "",
+      "off_hand": ""
+    },
+    "ground_gap": 0.0,
+    "path": "docs/qa/character-presentation-quality/fighter/feminine/16_hands_cleared.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "hands_cleared"
+  },
+  {
+    "action": "idle",
+    "body": "feminine",
+    "class": "fighter",
+    "clearance": {
+      "main_hand": 0.12159888446331,
+      "off_hand": 0.309205383062363
+    },
+    "equipment": {
+      "main_hand": "forge_vanguard_sword",
+      "off_hand": "forge_vanguard_shield"
+    },
+    "ground_gap": 0.0,
+    "path": "docs/qa/character-presentation-quality/fighter/feminine/17_grounding_side.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "grounding_side"
+  },
+  {
+    "action": "ranger_idle",
+    "body": "masculine",
+    "class": "ranger",
+    "clearance": {
+      "main_hand": 0.151648849248886,
+      "off_hand": 0.218553304672241
+    },
+    "equipment": {
+      "main_hand": "greenwood_recurve_bow",
+      "off_hand": "greenwood_light_quiver"
+    },
+    "ground_gap": -0.830573946237564,
+    "path": "docs/qa/character-presentation-quality/ranger/masculine/01_idle_front.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "idle_front"
+  },
+  {
+    "action": "ranger_idle",
+    "body": "masculine",
+    "class": "ranger",
+    "clearance": {
+      "main_hand": 0.151648849248886,
+      "off_hand": 0.218553304672241
+    },
+    "equipment": {
+      "main_hand": "greenwood_recurve_bow",
+      "off_hand": "greenwood_light_quiver"
+    },
+    "ground_gap": -0.830573946237564,
+    "path": "docs/qa/character-presentation-quality/ranger/masculine/02_idle_three_quarter.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "idle_three_quarter"
+  },
+  {
+    "action": "ranger_idle",
+    "body": "masculine",
+    "class": "ranger",
+    "clearance": {
+      "main_hand": 0.151648849248886,
+      "off_hand": 0.218553304672241
+    },
+    "equipment": {
+      "main_hand": "greenwood_recurve_bow",
+      "off_hand": "greenwood_light_quiver"
+    },
+    "ground_gap": -0.830573946237564,
+    "path": "docs/qa/character-presentation-quality/ranger/masculine/03_idle_side.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "idle_side"
+  },
+  {
+    "action": "ranger_idle",
+    "body": "masculine",
+    "class": "ranger",
+    "clearance": {
+      "main_hand": 0.151648849248886,
+      "off_hand": 0.218553304672241
+    },
+    "equipment": {
+      "main_hand": "greenwood_recurve_bow",
+      "off_hand": "greenwood_light_quiver"
+    },
+    "ground_gap": -0.830573946237564,
+    "path": "docs/qa/character-presentation-quality/ranger/masculine/04_idle_rear.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "idle_rear"
+  },
+  {
+    "action": "walk",
+    "body": "masculine",
+    "class": "ranger",
+    "clearance": {
+      "main_hand": 0.0965038612484932,
+      "off_hand": 0.299880921840668
+    },
+    "equipment": {
+      "main_hand": "greenwood_recurve_bow",
+      "off_hand": "greenwood_light_quiver"
+    },
+    "ground_gap": -0.825969010591507,
+    "path": "docs/qa/character-presentation-quality/ranger/masculine/05_walk_0_0.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "walk_0_0"
+  },
+  {
+    "action": "walk",
+    "body": "masculine",
+    "class": "ranger",
+    "clearance": {
+      "main_hand": 0.0865883529186249,
+      "off_hand": 0.297083795070648
+    },
+    "equipment": {
+      "main_hand": "greenwood_recurve_bow",
+      "off_hand": "greenwood_light_quiver"
+    },
+    "ground_gap": -0.873509138822556,
+    "path": "docs/qa/character-presentation-quality/ranger/masculine/06_walk_0_2.png",
+    "projectile_overlay": false,
+    "sample_time": 0.2,
+    "state": "walk_0_2"
+  },
+  {
+    "action": "walk",
+    "body": "masculine",
+    "class": "ranger",
+    "clearance": {
+      "main_hand": 0.100106135010719,
+      "off_hand": 0.294605404138565
+    },
+    "equipment": {
+      "main_hand": "greenwood_recurve_bow",
+      "off_hand": "greenwood_light_quiver"
+    },
+    "ground_gap": -0.825969010591507,
+    "path": "docs/qa/character-presentation-quality/ranger/masculine/07_walk_0_4.png",
+    "projectile_overlay": false,
+    "sample_time": 0.4,
+    "state": "walk_0_4"
+  },
+  {
+    "action": "walk",
+    "body": "masculine",
+    "class": "ranger",
+    "clearance": {
+      "main_hand": 0.0980646759271622,
+      "off_hand": 0.301082372665405
+    },
+    "equipment": {
+      "main_hand": "greenwood_recurve_bow",
+      "off_hand": "greenwood_light_quiver"
+    },
+    "ground_gap": -0.873509079217911,
+    "path": "docs/qa/character-presentation-quality/ranger/masculine/08_walk_0_6.png",
+    "projectile_overlay": false,
+    "sample_time": 0.6,
+    "state": "walk_0_6"
+  },
+  {
+    "action": "ranger_quick_bow_shot",
+    "body": "masculine",
+    "class": "ranger",
+    "clearance": {
+      "main_hand": 0.0941964611411095,
+      "off_hand": 0.299578815698624
+    },
+    "equipment": {
+      "main_hand": "greenwood_recurve_bow",
+      "off_hand": "greenwood_light_quiver"
+    },
+    "ground_gap": -0.88041153550148,
+    "path": "docs/qa/character-presentation-quality/ranger/masculine/09_attack_start.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "attack_start"
+  },
+  {
+    "action": "ranger_quick_bow_shot",
+    "body": "masculine",
+    "class": "ranger",
+    "clearance": {
+      "main_hand": 0.129692614078522,
+      "off_hand": 0.151743158698082
+    },
+    "equipment": {
+      "main_hand": "greenwood_recurve_bow",
+      "off_hand": "greenwood_light_quiver"
+    },
+    "ground_gap": -0.883481472730637,
+    "path": "docs/qa/character-presentation-quality/ranger/masculine/10_attack_loaded.png",
+    "projectile_overlay": false,
+    "sample_time": 0.1176,
+    "state": "attack_loaded"
+  },
+  {
+    "action": "ranger_quick_bow_shot",
+    "body": "masculine",
+    "class": "ranger",
+    "clearance": {
+      "main_hand": 0.137990474700928,
+      "off_hand": 0.248925477266312
+    },
+    "equipment": {
+      "main_hand": "greenwood_recurve_bow",
+      "off_hand": "greenwood_light_quiver"
+    },
+    "ground_gap": -0.894100874662399,
+    "path": "docs/qa/character-presentation-quality/ranger/masculine/11_attack_release.png",
+    "projectile_overlay": true,
+    "sample_time": 0.2184,
+    "state": "attack_release"
+  },
+  {
+    "action": "ranger_quick_bow_shot",
+    "body": "masculine",
+    "class": "ranger",
+    "clearance": {
+      "main_hand": 0.136467218399048,
+      "off_hand": 0.22505521774292
+    },
+    "equipment": {
+      "main_hand": "greenwood_recurve_bow",
+      "off_hand": "greenwood_light_quiver"
+    },
+    "ground_gap": -0.88041153550148,
+    "path": "docs/qa/character-presentation-quality/ranger/masculine/12_attack_follow_through.png",
+    "projectile_overlay": false,
+    "sample_time": 0.3192,
+    "state": "attack_follow_through"
+  },
+  {
+    "action": "ranger_quick_bow_shot",
+    "body": "masculine",
+    "class": "ranger",
+    "clearance": {
+      "main_hand": 0.0945509672164917,
+      "off_hand": 0.299689918756485
+    },
+    "equipment": {
+      "main_hand": "greenwood_recurve_bow",
+      "off_hand": "greenwood_light_quiver"
+    },
+    "ground_gap": -0.88041153550148,
+    "path": "docs/qa/character-presentation-quality/ranger/masculine/13_attack_recovery.png",
+    "projectile_overlay": false,
+    "sample_time": 0.419,
+    "state": "attack_recovery"
+  },
+  {
+    "action": "ranger_idle",
+    "body": "masculine",
+    "class": "ranger",
+    "clearance": {
+      "main_hand": 0.151648849248886,
+      "off_hand": 0.218553304672241
+    },
+    "equipment": {
+      "main_hand": "greenwood_recurve_bow",
+      "off_hand": "greenwood_light_quiver"
+    },
+    "ground_gap": -0.881327003240585,
+    "path": "docs/qa/character-presentation-quality/ranger/masculine/14_hit.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "hit"
+  },
+  {
+    "action": "ranger_idle",
+    "body": "masculine",
+    "class": "ranger",
+    "clearance": {
+      "main_hand": 0.151648849248886,
+      "off_hand": 0.218553304672241
+    },
+    "equipment": {
+      "main_hand": "greenwood_recurve_bow",
+      "off_hand": "greenwood_light_quiver"
+    },
+    "ground_gap": -0.881327003240585,
+    "path": "docs/qa/character-presentation-quality/ranger/masculine/15_hands_equipped.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "hands_equipped"
+  },
+  {
+    "action": "ranger_idle",
+    "body": "masculine",
+    "class": "ranger",
+    "clearance": {},
+    "equipment": {
+      "main_hand": "",
+      "off_hand": ""
+    },
+    "ground_gap": 0.0,
+    "path": "docs/qa/character-presentation-quality/ranger/masculine/16_hands_cleared.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "hands_cleared"
+  },
+  {
+    "action": "ranger_idle",
+    "body": "masculine",
+    "class": "ranger",
+    "clearance": {
+      "main_hand": 0.151648849248886,
+      "off_hand": 0.218553304672241
+    },
+    "equipment": {
+      "main_hand": "greenwood_recurve_bow",
+      "off_hand": "greenwood_light_quiver"
+    },
+    "ground_gap": 0.0,
+    "path": "docs/qa/character-presentation-quality/ranger/masculine/17_grounding_side.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "grounding_side"
+  },
+  {
+    "action": "ranger_idle",
+    "body": "feminine",
+    "class": "ranger",
+    "clearance": {
+      "main_hand": 0.151648849248886,
+      "off_hand": 0.218553304672241
+    },
+    "equipment": {
+      "main_hand": "greenwood_recurve_bow",
+      "off_hand": "greenwood_light_quiver"
+    },
+    "ground_gap": -0.830573946237564,
+    "path": "docs/qa/character-presentation-quality/ranger/feminine/01_idle_front.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "idle_front"
+  },
+  {
+    "action": "ranger_idle",
+    "body": "feminine",
+    "class": "ranger",
+    "clearance": {
+      "main_hand": 0.151648849248886,
+      "off_hand": 0.218553304672241
+    },
+    "equipment": {
+      "main_hand": "greenwood_recurve_bow",
+      "off_hand": "greenwood_light_quiver"
+    },
+    "ground_gap": -0.830573946237564,
+    "path": "docs/qa/character-presentation-quality/ranger/feminine/02_idle_three_quarter.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "idle_three_quarter"
+  },
+  {
+    "action": "ranger_idle",
+    "body": "feminine",
+    "class": "ranger",
+    "clearance": {
+      "main_hand": 0.151648849248886,
+      "off_hand": 0.218553304672241
+    },
+    "equipment": {
+      "main_hand": "greenwood_recurve_bow",
+      "off_hand": "greenwood_light_quiver"
+    },
+    "ground_gap": -0.830573946237564,
+    "path": "docs/qa/character-presentation-quality/ranger/feminine/03_idle_side.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "idle_side"
+  },
+  {
+    "action": "ranger_idle",
+    "body": "feminine",
+    "class": "ranger",
+    "clearance": {
+      "main_hand": 0.151648849248886,
+      "off_hand": 0.218553304672241
+    },
+    "equipment": {
+      "main_hand": "greenwood_recurve_bow",
+      "off_hand": "greenwood_light_quiver"
+    },
+    "ground_gap": -0.830573946237564,
+    "path": "docs/qa/character-presentation-quality/ranger/feminine/04_idle_rear.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "idle_rear"
+  },
+  {
+    "action": "walk",
+    "body": "feminine",
+    "class": "ranger",
+    "clearance": {
+      "main_hand": 0.0965038612484932,
+      "off_hand": 0.299880921840668
+    },
+    "equipment": {
+      "main_hand": "greenwood_recurve_bow",
+      "off_hand": "greenwood_light_quiver"
+    },
+    "ground_gap": -0.825969010591507,
+    "path": "docs/qa/character-presentation-quality/ranger/feminine/05_walk_0_0.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "walk_0_0"
+  },
+  {
+    "action": "walk",
+    "body": "feminine",
+    "class": "ranger",
+    "clearance": {
+      "main_hand": 0.0865883529186249,
+      "off_hand": 0.297083795070648
+    },
+    "equipment": {
+      "main_hand": "greenwood_recurve_bow",
+      "off_hand": "greenwood_light_quiver"
+    },
+    "ground_gap": -0.873509138822556,
+    "path": "docs/qa/character-presentation-quality/ranger/feminine/06_walk_0_2.png",
+    "projectile_overlay": false,
+    "sample_time": 0.2,
+    "state": "walk_0_2"
+  },
+  {
+    "action": "walk",
+    "body": "feminine",
+    "class": "ranger",
+    "clearance": {
+      "main_hand": 0.100106135010719,
+      "off_hand": 0.294605404138565
+    },
+    "equipment": {
+      "main_hand": "greenwood_recurve_bow",
+      "off_hand": "greenwood_light_quiver"
+    },
+    "ground_gap": -0.825969010591507,
+    "path": "docs/qa/character-presentation-quality/ranger/feminine/07_walk_0_4.png",
+    "projectile_overlay": false,
+    "sample_time": 0.4,
+    "state": "walk_0_4"
+  },
+  {
+    "action": "walk",
+    "body": "feminine",
+    "class": "ranger",
+    "clearance": {
+      "main_hand": 0.0980646759271622,
+      "off_hand": 0.301082372665405
+    },
+    "equipment": {
+      "main_hand": "greenwood_recurve_bow",
+      "off_hand": "greenwood_light_quiver"
+    },
+    "ground_gap": -0.873509079217911,
+    "path": "docs/qa/character-presentation-quality/ranger/feminine/08_walk_0_6.png",
+    "projectile_overlay": false,
+    "sample_time": 0.6,
+    "state": "walk_0_6"
+  },
+  {
+    "action": "ranger_quick_bow_shot",
+    "body": "feminine",
+    "class": "ranger",
+    "clearance": {
+      "main_hand": 0.0941964611411095,
+      "off_hand": 0.299578815698624
+    },
+    "equipment": {
+      "main_hand": "greenwood_recurve_bow",
+      "off_hand": "greenwood_light_quiver"
+    },
+    "ground_gap": -0.88041153550148,
+    "path": "docs/qa/character-presentation-quality/ranger/feminine/09_attack_start.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "attack_start"
+  },
+  {
+    "action": "ranger_quick_bow_shot",
+    "body": "feminine",
+    "class": "ranger",
+    "clearance": {
+      "main_hand": 0.129692614078522,
+      "off_hand": 0.151743158698082
+    },
+    "equipment": {
+      "main_hand": "greenwood_recurve_bow",
+      "off_hand": "greenwood_light_quiver"
+    },
+    "ground_gap": -0.883481472730637,
+    "path": "docs/qa/character-presentation-quality/ranger/feminine/10_attack_loaded.png",
+    "projectile_overlay": false,
+    "sample_time": 0.1176,
+    "state": "attack_loaded"
+  },
+  {
+    "action": "ranger_quick_bow_shot",
+    "body": "feminine",
+    "class": "ranger",
+    "clearance": {
+      "main_hand": 0.137990474700928,
+      "off_hand": 0.248925477266312
+    },
+    "equipment": {
+      "main_hand": "greenwood_recurve_bow",
+      "off_hand": "greenwood_light_quiver"
+    },
+    "ground_gap": -0.894100874662399,
+    "path": "docs/qa/character-presentation-quality/ranger/feminine/11_attack_release.png",
+    "projectile_overlay": true,
+    "sample_time": 0.2184,
+    "state": "attack_release"
+  },
+  {
+    "action": "ranger_quick_bow_shot",
+    "body": "feminine",
+    "class": "ranger",
+    "clearance": {
+      "main_hand": 0.136467218399048,
+      "off_hand": 0.22505521774292
+    },
+    "equipment": {
+      "main_hand": "greenwood_recurve_bow",
+      "off_hand": "greenwood_light_quiver"
+    },
+    "ground_gap": -0.88041153550148,
+    "path": "docs/qa/character-presentation-quality/ranger/feminine/12_attack_follow_through.png",
+    "projectile_overlay": false,
+    "sample_time": 0.3192,
+    "state": "attack_follow_through"
+  },
+  {
+    "action": "ranger_quick_bow_shot",
+    "body": "feminine",
+    "class": "ranger",
+    "clearance": {
+      "main_hand": 0.0945509672164917,
+      "off_hand": 0.299689918756485
+    },
+    "equipment": {
+      "main_hand": "greenwood_recurve_bow",
+      "off_hand": "greenwood_light_quiver"
+    },
+    "ground_gap": -0.88041153550148,
+    "path": "docs/qa/character-presentation-quality/ranger/feminine/13_attack_recovery.png",
+    "projectile_overlay": false,
+    "sample_time": 0.419,
+    "state": "attack_recovery"
+  },
+  {
+    "action": "ranger_idle",
+    "body": "feminine",
+    "class": "ranger",
+    "clearance": {
+      "main_hand": 0.151648849248886,
+      "off_hand": 0.218553304672241
+    },
+    "equipment": {
+      "main_hand": "greenwood_recurve_bow",
+      "off_hand": "greenwood_light_quiver"
+    },
+    "ground_gap": -0.881327003240585,
+    "path": "docs/qa/character-presentation-quality/ranger/feminine/14_hit.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "hit"
+  },
+  {
+    "action": "ranger_idle",
+    "body": "feminine",
+    "class": "ranger",
+    "clearance": {
+      "main_hand": 0.151648849248886,
+      "off_hand": 0.218553304672241
+    },
+    "equipment": {
+      "main_hand": "greenwood_recurve_bow",
+      "off_hand": "greenwood_light_quiver"
+    },
+    "ground_gap": -0.881327003240585,
+    "path": "docs/qa/character-presentation-quality/ranger/feminine/15_hands_equipped.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "hands_equipped"
+  },
+  {
+    "action": "ranger_idle",
+    "body": "feminine",
+    "class": "ranger",
+    "clearance": {},
+    "equipment": {
+      "main_hand": "",
+      "off_hand": ""
+    },
+    "ground_gap": 0.0,
+    "path": "docs/qa/character-presentation-quality/ranger/feminine/16_hands_cleared.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "hands_cleared"
+  },
+  {
+    "action": "ranger_idle",
+    "body": "feminine",
+    "class": "ranger",
+    "clearance": {
+      "main_hand": 0.151648849248886,
+      "off_hand": 0.218553304672241
+    },
+    "equipment": {
+      "main_hand": "greenwood_recurve_bow",
+      "off_hand": "greenwood_light_quiver"
+    },
+    "ground_gap": 0.0,
+    "path": "docs/qa/character-presentation-quality/ranger/feminine/17_grounding_side.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "grounding_side"
+  },
+  {
+    "action": "mage_idle",
+    "body": "masculine",
+    "class": "mage",
+    "clearance": {
+      "main_hand": 0.172303110361099,
+      "off_hand": 0.0634365677833557
+    },
+    "equipment": {
+      "main_hand": "emberweave_wand",
+      "off_hand": "emberweave_flame_focus"
+    },
+    "ground_gap": -0.829643934965134,
+    "path": "docs/qa/character-presentation-quality/mage/masculine/01_idle_front.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "idle_front"
+  },
+  {
+    "action": "mage_idle",
+    "body": "masculine",
+    "class": "mage",
+    "clearance": {
+      "main_hand": 0.172303110361099,
+      "off_hand": 0.0634365677833557
+    },
+    "equipment": {
+      "main_hand": "emberweave_wand",
+      "off_hand": "emberweave_flame_focus"
+    },
+    "ground_gap": -0.829643934965134,
+    "path": "docs/qa/character-presentation-quality/mage/masculine/02_idle_three_quarter.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "idle_three_quarter"
+  },
+  {
+    "action": "mage_idle",
+    "body": "masculine",
+    "class": "mage",
+    "clearance": {
+      "main_hand": 0.172303110361099,
+      "off_hand": 0.0634365677833557
+    },
+    "equipment": {
+      "main_hand": "emberweave_wand",
+      "off_hand": "emberweave_flame_focus"
+    },
+    "ground_gap": -0.829643934965134,
+    "path": "docs/qa/character-presentation-quality/mage/masculine/03_idle_side.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "idle_side"
+  },
+  {
+    "action": "mage_idle",
+    "body": "masculine",
+    "class": "mage",
+    "clearance": {
+      "main_hand": 0.172303110361099,
+      "off_hand": 0.0634365677833557
+    },
+    "equipment": {
+      "main_hand": "emberweave_wand",
+      "off_hand": "emberweave_flame_focus"
+    },
+    "ground_gap": -0.829643934965134,
+    "path": "docs/qa/character-presentation-quality/mage/masculine/04_idle_rear.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "idle_rear"
+  },
+  {
+    "action": "walk",
+    "body": "masculine",
+    "class": "mage",
+    "clearance": {
+      "main_hand": 0.0928465500473976,
+      "off_hand": 0.115361288189888
+    },
+    "equipment": {
+      "main_hand": "emberweave_wand",
+      "off_hand": "emberweave_flame_focus"
+    },
+    "ground_gap": -0.825969010591507,
+    "path": "docs/qa/character-presentation-quality/mage/masculine/05_walk_0_0.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "walk_0_0"
+  },
+  {
+    "action": "walk",
+    "body": "masculine",
+    "class": "mage",
+    "clearance": {
+      "main_hand": 0.0793866217136383,
+      "off_hand": 0.11932784318924
+    },
+    "equipment": {
+      "main_hand": "emberweave_wand",
+      "off_hand": "emberweave_flame_focus"
+    },
+    "ground_gap": -0.873509138822556,
+    "path": "docs/qa/character-presentation-quality/mage/masculine/06_walk_0_2.png",
+    "projectile_overlay": false,
+    "sample_time": 0.2,
+    "state": "walk_0_2"
+  },
+  {
+    "action": "walk",
+    "body": "masculine",
+    "class": "mage",
+    "clearance": {
+      "main_hand": 0.0946609452366829,
+      "off_hand": 0.109578497707844
+    },
+    "equipment": {
+      "main_hand": "emberweave_wand",
+      "off_hand": "emberweave_flame_focus"
+    },
+    "ground_gap": -0.825969010591507,
+    "path": "docs/qa/character-presentation-quality/mage/masculine/07_walk_0_4.png",
+    "projectile_overlay": false,
+    "sample_time": 0.4,
+    "state": "walk_0_4"
+  },
+  {
+    "action": "walk",
+    "body": "masculine",
+    "class": "mage",
+    "clearance": {
+      "main_hand": 0.0936618447303772,
+      "off_hand": 0.110463418066502
+    },
+    "equipment": {
+      "main_hand": "emberweave_wand",
+      "off_hand": "emberweave_flame_focus"
+    },
+    "ground_gap": -0.873509079217911,
+    "path": "docs/qa/character-presentation-quality/mage/masculine/08_walk_0_6.png",
+    "projectile_overlay": false,
+    "sample_time": 0.6,
+    "state": "walk_0_6"
+  },
+  {
+    "action": "mage_fire_burst",
+    "body": "masculine",
+    "class": "mage",
+    "clearance": {
+      "main_hand": 0.0888828560709953,
+      "off_hand": 0.113795831799507
+    },
+    "equipment": {
+      "main_hand": "emberweave_wand",
+      "off_hand": "emberweave_flame_focus"
+    },
+    "ground_gap": -0.88041153550148,
+    "path": "docs/qa/character-presentation-quality/mage/masculine/09_attack_start.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "attack_start"
+  },
+  {
+    "action": "mage_fire_burst",
+    "body": "masculine",
+    "class": "mage",
+    "clearance": {
+      "main_hand": 0.127368807792664,
+      "off_hand": 0.0910298675298691
+    },
+    "equipment": {
+      "main_hand": "emberweave_wand",
+      "off_hand": "emberweave_flame_focus"
+    },
+    "ground_gap": -0.884126633405685,
+    "path": "docs/qa/character-presentation-quality/mage/masculine/10_attack_loaded.png",
+    "projectile_overlay": false,
+    "sample_time": 0.2128,
+    "state": "attack_loaded"
+  },
+  {
+    "action": "mage_fire_burst",
+    "body": "masculine",
+    "class": "mage",
+    "clearance": {
+      "main_hand": 0.0871341750025749,
+      "off_hand": 0.046326570212841
+    },
+    "equipment": {
+      "main_hand": "emberweave_wand",
+      "off_hand": "emberweave_flame_focus"
+    },
+    "ground_gap": -0.888493150472641,
+    "path": "docs/qa/character-presentation-quality/mage/masculine/11_attack_release.png",
+    "projectile_overlay": false,
+    "sample_time": 0.3952,
+    "state": "attack_release"
+  },
+  {
+    "action": "mage_fire_burst",
+    "body": "masculine",
+    "class": "mage",
+    "clearance": {
+      "main_hand": 0.120747253298759,
+      "off_hand": 0.100116789340973
+    },
+    "equipment": {
+      "main_hand": "emberweave_wand",
+      "off_hand": "emberweave_flame_focus"
+    },
+    "ground_gap": -0.882234543561935,
+    "path": "docs/qa/character-presentation-quality/mage/masculine/12_attack_follow_through.png",
+    "projectile_overlay": false,
+    "sample_time": 0.5776,
+    "state": "attack_follow_through"
+  },
+  {
+    "action": "mage_fire_burst",
+    "body": "masculine",
+    "class": "mage",
+    "clearance": {
+      "main_hand": 0.0887244492769241,
+      "off_hand": 0.1133097037673
+    },
+    "equipment": {
+      "main_hand": "emberweave_wand",
+      "off_hand": "emberweave_flame_focus"
+    },
+    "ground_gap": -0.880434662103653,
+    "path": "docs/qa/character-presentation-quality/mage/masculine/13_attack_recovery.png",
+    "projectile_overlay": false,
+    "sample_time": 0.759,
+    "state": "attack_recovery"
+  },
+  {
+    "action": "mage_idle",
+    "body": "masculine",
+    "class": "mage",
+    "clearance": {
+      "main_hand": 0.172303110361099,
+      "off_hand": 0.0634365677833557
+    },
+    "equipment": {
+      "main_hand": "emberweave_wand",
+      "off_hand": "emberweave_flame_focus"
+    },
+    "ground_gap": -0.88041153550148,
+    "path": "docs/qa/character-presentation-quality/mage/masculine/14_hit.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "hit"
+  },
+  {
+    "action": "mage_idle",
+    "body": "masculine",
+    "class": "mage",
+    "clearance": {
+      "main_hand": 0.172303110361099,
+      "off_hand": 0.0634365677833557
+    },
+    "equipment": {
+      "main_hand": "emberweave_wand",
+      "off_hand": "emberweave_flame_focus"
+    },
+    "ground_gap": -0.88041153550148,
+    "path": "docs/qa/character-presentation-quality/mage/masculine/15_hands_equipped.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "hands_equipped"
+  },
+  {
+    "action": "mage_idle",
+    "body": "masculine",
+    "class": "mage",
+    "clearance": {},
+    "equipment": {
+      "main_hand": "",
+      "off_hand": ""
+    },
+    "ground_gap": 0.0,
+    "path": "docs/qa/character-presentation-quality/mage/masculine/16_hands_cleared.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "hands_cleared"
+  },
+  {
+    "action": "mage_idle",
+    "body": "masculine",
+    "class": "mage",
+    "clearance": {
+      "main_hand": 0.172303110361099,
+      "off_hand": 0.0634365677833557
+    },
+    "equipment": {
+      "main_hand": "emberweave_wand",
+      "off_hand": "emberweave_flame_focus"
+    },
+    "ground_gap": 0.0,
+    "path": "docs/qa/character-presentation-quality/mage/masculine/17_grounding_side.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "grounding_side"
+  },
+  {
+    "action": "mage_idle",
+    "body": "feminine",
+    "class": "mage",
+    "clearance": {
+      "main_hand": 0.172303110361099,
+      "off_hand": 0.0634365677833557
+    },
+    "equipment": {
+      "main_hand": "emberweave_wand",
+      "off_hand": "emberweave_flame_focus"
+    },
+    "ground_gap": -0.829643934965134,
+    "path": "docs/qa/character-presentation-quality/mage/feminine/01_idle_front.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "idle_front"
+  },
+  {
+    "action": "mage_idle",
+    "body": "feminine",
+    "class": "mage",
+    "clearance": {
+      "main_hand": 0.172303110361099,
+      "off_hand": 0.0634365677833557
+    },
+    "equipment": {
+      "main_hand": "emberweave_wand",
+      "off_hand": "emberweave_flame_focus"
+    },
+    "ground_gap": -0.829643934965134,
+    "path": "docs/qa/character-presentation-quality/mage/feminine/02_idle_three_quarter.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "idle_three_quarter"
+  },
+  {
+    "action": "mage_idle",
+    "body": "feminine",
+    "class": "mage",
+    "clearance": {
+      "main_hand": 0.172303110361099,
+      "off_hand": 0.0634365677833557
+    },
+    "equipment": {
+      "main_hand": "emberweave_wand",
+      "off_hand": "emberweave_flame_focus"
+    },
+    "ground_gap": -0.829643934965134,
+    "path": "docs/qa/character-presentation-quality/mage/feminine/03_idle_side.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "idle_side"
+  },
+  {
+    "action": "mage_idle",
+    "body": "feminine",
+    "class": "mage",
+    "clearance": {
+      "main_hand": 0.172303110361099,
+      "off_hand": 0.0634365677833557
+    },
+    "equipment": {
+      "main_hand": "emberweave_wand",
+      "off_hand": "emberweave_flame_focus"
+    },
+    "ground_gap": -0.829643934965134,
+    "path": "docs/qa/character-presentation-quality/mage/feminine/04_idle_rear.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "idle_rear"
+  },
+  {
+    "action": "walk",
+    "body": "feminine",
+    "class": "mage",
+    "clearance": {
+      "main_hand": 0.0928465500473976,
+      "off_hand": 0.115361288189888
+    },
+    "equipment": {
+      "main_hand": "emberweave_wand",
+      "off_hand": "emberweave_flame_focus"
+    },
+    "ground_gap": -0.825969010591507,
+    "path": "docs/qa/character-presentation-quality/mage/feminine/05_walk_0_0.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "walk_0_0"
+  },
+  {
+    "action": "walk",
+    "body": "feminine",
+    "class": "mage",
+    "clearance": {
+      "main_hand": 0.0793866217136383,
+      "off_hand": 0.11932784318924
+    },
+    "equipment": {
+      "main_hand": "emberweave_wand",
+      "off_hand": "emberweave_flame_focus"
+    },
+    "ground_gap": -0.873509138822556,
+    "path": "docs/qa/character-presentation-quality/mage/feminine/06_walk_0_2.png",
+    "projectile_overlay": false,
+    "sample_time": 0.2,
+    "state": "walk_0_2"
+  },
+  {
+    "action": "walk",
+    "body": "feminine",
+    "class": "mage",
+    "clearance": {
+      "main_hand": 0.0946609452366829,
+      "off_hand": 0.109578497707844
+    },
+    "equipment": {
+      "main_hand": "emberweave_wand",
+      "off_hand": "emberweave_flame_focus"
+    },
+    "ground_gap": -0.825969010591507,
+    "path": "docs/qa/character-presentation-quality/mage/feminine/07_walk_0_4.png",
+    "projectile_overlay": false,
+    "sample_time": 0.4,
+    "state": "walk_0_4"
+  },
+  {
+    "action": "walk",
+    "body": "feminine",
+    "class": "mage",
+    "clearance": {
+      "main_hand": 0.0936618447303772,
+      "off_hand": 0.110463418066502
+    },
+    "equipment": {
+      "main_hand": "emberweave_wand",
+      "off_hand": "emberweave_flame_focus"
+    },
+    "ground_gap": -0.873509079217911,
+    "path": "docs/qa/character-presentation-quality/mage/feminine/08_walk_0_6.png",
+    "projectile_overlay": false,
+    "sample_time": 0.6,
+    "state": "walk_0_6"
+  },
+  {
+    "action": "mage_fire_burst",
+    "body": "feminine",
+    "class": "mage",
+    "clearance": {
+      "main_hand": 0.0888828560709953,
+      "off_hand": 0.113795831799507
+    },
+    "equipment": {
+      "main_hand": "emberweave_wand",
+      "off_hand": "emberweave_flame_focus"
+    },
+    "ground_gap": -0.88041153550148,
+    "path": "docs/qa/character-presentation-quality/mage/feminine/09_attack_start.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "attack_start"
+  },
+  {
+    "action": "mage_fire_burst",
+    "body": "feminine",
+    "class": "mage",
+    "clearance": {
+      "main_hand": 0.127368807792664,
+      "off_hand": 0.0910298675298691
+    },
+    "equipment": {
+      "main_hand": "emberweave_wand",
+      "off_hand": "emberweave_flame_focus"
+    },
+    "ground_gap": -0.884126633405685,
+    "path": "docs/qa/character-presentation-quality/mage/feminine/10_attack_loaded.png",
+    "projectile_overlay": false,
+    "sample_time": 0.2128,
+    "state": "attack_loaded"
+  },
+  {
+    "action": "mage_fire_burst",
+    "body": "feminine",
+    "class": "mage",
+    "clearance": {
+      "main_hand": 0.0871341750025749,
+      "off_hand": 0.046326570212841
+    },
+    "equipment": {
+      "main_hand": "emberweave_wand",
+      "off_hand": "emberweave_flame_focus"
+    },
+    "ground_gap": -0.888493150472641,
+    "path": "docs/qa/character-presentation-quality/mage/feminine/11_attack_release.png",
+    "projectile_overlay": false,
+    "sample_time": 0.3952,
+    "state": "attack_release"
+  },
+  {
+    "action": "mage_fire_burst",
+    "body": "feminine",
+    "class": "mage",
+    "clearance": {
+      "main_hand": 0.120747253298759,
+      "off_hand": 0.100116789340973
+    },
+    "equipment": {
+      "main_hand": "emberweave_wand",
+      "off_hand": "emberweave_flame_focus"
+    },
+    "ground_gap": -0.882234543561935,
+    "path": "docs/qa/character-presentation-quality/mage/feminine/12_attack_follow_through.png",
+    "projectile_overlay": false,
+    "sample_time": 0.5776,
+    "state": "attack_follow_through"
+  },
+  {
+    "action": "mage_fire_burst",
+    "body": "feminine",
+    "class": "mage",
+    "clearance": {
+      "main_hand": 0.0887244492769241,
+      "off_hand": 0.1133097037673
+    },
+    "equipment": {
+      "main_hand": "emberweave_wand",
+      "off_hand": "emberweave_flame_focus"
+    },
+    "ground_gap": -0.880434662103653,
+    "path": "docs/qa/character-presentation-quality/mage/feminine/13_attack_recovery.png",
+    "projectile_overlay": false,
+    "sample_time": 0.759,
+    "state": "attack_recovery"
+  },
+  {
+    "action": "mage_idle",
+    "body": "feminine",
+    "class": "mage",
+    "clearance": {
+      "main_hand": 0.172303110361099,
+      "off_hand": 0.0634365677833557
+    },
+    "equipment": {
+      "main_hand": "emberweave_wand",
+      "off_hand": "emberweave_flame_focus"
+    },
+    "ground_gap": -0.88041153550148,
+    "path": "docs/qa/character-presentation-quality/mage/feminine/14_hit.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "hit"
+  },
+  {
+    "action": "mage_idle",
+    "body": "feminine",
+    "class": "mage",
+    "clearance": {
+      "main_hand": 0.172303110361099,
+      "off_hand": 0.0634365677833557
+    },
+    "equipment": {
+      "main_hand": "emberweave_wand",
+      "off_hand": "emberweave_flame_focus"
+    },
+    "ground_gap": -0.88041153550148,
+    "path": "docs/qa/character-presentation-quality/mage/feminine/15_hands_equipped.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "hands_equipped"
+  },
+  {
+    "action": "mage_idle",
+    "body": "feminine",
+    "class": "mage",
+    "clearance": {},
+    "equipment": {
+      "main_hand": "",
+      "off_hand": ""
+    },
+    "ground_gap": 0.0,
+    "path": "docs/qa/character-presentation-quality/mage/feminine/16_hands_cleared.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "hands_cleared"
+  },
+  {
+    "action": "mage_idle",
+    "body": "feminine",
+    "class": "mage",
+    "clearance": {
+      "main_hand": 0.172303110361099,
+      "off_hand": 0.0634365677833557
+    },
+    "equipment": {
+      "main_hand": "emberweave_wand",
+      "off_hand": "emberweave_flame_focus"
+    },
+    "ground_gap": 0.0,
+    "path": "docs/qa/character-presentation-quality/mage/feminine/17_grounding_side.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "grounding_side"
+  },
+  {
+    "action": "cleric_idle",
+    "body": "masculine",
+    "class": "cleric",
+    "clearance": {
+      "main_hand": 0.210174307227135,
+      "off_hand": 0.0787308067083359
+    },
+    "equipment": {
+      "main_hand": "storm_chaplain_sceptre",
+      "off_hand": "storm_chaplain_holy_tome"
+    },
+    "ground_gap": -0.829643934965134,
+    "path": "docs/qa/character-presentation-quality/cleric/masculine/01_idle_front.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "idle_front"
+  },
+  {
+    "action": "cleric_idle",
+    "body": "masculine",
+    "class": "cleric",
+    "clearance": {
+      "main_hand": 0.210174307227135,
+      "off_hand": 0.0787308067083359
+    },
+    "equipment": {
+      "main_hand": "storm_chaplain_sceptre",
+      "off_hand": "storm_chaplain_holy_tome"
+    },
+    "ground_gap": -0.829643934965134,
+    "path": "docs/qa/character-presentation-quality/cleric/masculine/02_idle_three_quarter.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "idle_three_quarter"
+  },
+  {
+    "action": "cleric_idle",
+    "body": "masculine",
+    "class": "cleric",
+    "clearance": {
+      "main_hand": 0.210174307227135,
+      "off_hand": 0.0787308067083359
+    },
+    "equipment": {
+      "main_hand": "storm_chaplain_sceptre",
+      "off_hand": "storm_chaplain_holy_tome"
+    },
+    "ground_gap": -0.829643934965134,
+    "path": "docs/qa/character-presentation-quality/cleric/masculine/03_idle_side.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "idle_side"
+  },
+  {
+    "action": "cleric_idle",
+    "body": "masculine",
+    "class": "cleric",
+    "clearance": {
+      "main_hand": 0.210174307227135,
+      "off_hand": 0.0787308067083359
+    },
+    "equipment": {
+      "main_hand": "storm_chaplain_sceptre",
+      "off_hand": "storm_chaplain_holy_tome"
+    },
+    "ground_gap": -0.829643934965134,
+    "path": "docs/qa/character-presentation-quality/cleric/masculine/04_idle_rear.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "idle_rear"
+  },
+  {
+    "action": "walk",
+    "body": "masculine",
+    "class": "cleric",
+    "clearance": {
+      "main_hand": 0.132475465536118,
+      "off_hand": 0.0247712433338165
+    },
+    "equipment": {
+      "main_hand": "storm_chaplain_sceptre",
+      "off_hand": "storm_chaplain_holy_tome"
+    },
+    "ground_gap": -0.825969010591507,
+    "path": "docs/qa/character-presentation-quality/cleric/masculine/05_walk_0_0.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "walk_0_0"
+  },
+  {
+    "action": "walk",
+    "body": "masculine",
+    "class": "cleric",
+    "clearance": {
+      "main_hand": 0.118193842470646,
+      "off_hand": 0.00180760025978088
+    },
+    "equipment": {
+      "main_hand": "storm_chaplain_sceptre",
+      "off_hand": "storm_chaplain_holy_tome"
+    },
+    "ground_gap": -0.873509138822556,
+    "path": "docs/qa/character-presentation-quality/cleric/masculine/06_walk_0_2.png",
+    "projectile_overlay": false,
+    "sample_time": 0.2,
+    "state": "walk_0_2"
+  },
+  {
+    "action": "walk",
+    "body": "masculine",
+    "class": "cleric",
+    "clearance": {
+      "main_hand": 0.133954256772995,
+      "off_hand": 0.0412743389606476
+    },
+    "equipment": {
+      "main_hand": "storm_chaplain_sceptre",
+      "off_hand": "storm_chaplain_holy_tome"
+    },
+    "ground_gap": -0.825969010591507,
+    "path": "docs/qa/character-presentation-quality/cleric/masculine/07_walk_0_4.png",
+    "projectile_overlay": false,
+    "sample_time": 0.4,
+    "state": "walk_0_4"
+  },
+  {
+    "action": "walk",
+    "body": "masculine",
+    "class": "cleric",
+    "clearance": {
+      "main_hand": 0.133171990513802,
+      "off_hand": 0.0359393060207367
+    },
+    "equipment": {
+      "main_hand": "storm_chaplain_sceptre",
+      "off_hand": "storm_chaplain_holy_tome"
+    },
+    "ground_gap": -0.873509079217911,
+    "path": "docs/qa/character-presentation-quality/cleric/masculine/08_walk_0_6.png",
+    "projectile_overlay": false,
+    "sample_time": 0.6,
+    "state": "walk_0_6"
+  },
+  {
+    "action": "cleric_lightning_bolt",
+    "body": "masculine",
+    "class": "cleric",
+    "clearance": {
+      "main_hand": 0.12824185192585,
+      "off_hand": 0.0247712731361389
+    },
+    "equipment": {
+      "main_hand": "storm_chaplain_sceptre",
+      "off_hand": "storm_chaplain_holy_tome"
+    },
+    "ground_gap": -0.88041153550148,
+    "path": "docs/qa/character-presentation-quality/cleric/masculine/09_attack_start.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "attack_start"
+  },
+  {
+    "action": "cleric_lightning_bolt",
+    "body": "masculine",
+    "class": "cleric",
+    "clearance": {
+      "main_hand": 0.163932949304581,
+      "off_hand": 0.102366462349892
+    },
+    "equipment": {
+      "main_hand": "storm_chaplain_sceptre",
+      "off_hand": "storm_chaplain_holy_tome"
+    },
+    "ground_gap": -0.882234543561935,
+    "path": "docs/qa/character-presentation-quality/cleric/masculine/10_attack_loaded.png",
+    "projectile_overlay": false,
+    "sample_time": 0.1736,
+    "state": "attack_loaded"
+  },
+  {
+    "action": "cleric_lightning_bolt",
+    "body": "masculine",
+    "class": "cleric",
+    "clearance": {
+      "main_hand": 0.139290645718575,
+      "off_hand": 0.0350502505898476
+    },
+    "equipment": {
+      "main_hand": "storm_chaplain_sceptre",
+      "off_hand": "storm_chaplain_holy_tome"
+    },
+    "ground_gap": -0.887882858514786,
+    "path": "docs/qa/character-presentation-quality/cleric/masculine/11_attack_release.png",
+    "projectile_overlay": false,
+    "sample_time": 0.3224,
+    "state": "attack_release"
+  },
+  {
+    "action": "cleric_lightning_bolt",
+    "body": "masculine",
+    "class": "cleric",
+    "clearance": {
+      "main_hand": 0.161448448896408,
+      "off_hand": 0.0923457592725754
+    },
+    "equipment": {
+      "main_hand": "storm_chaplain_sceptre",
+      "off_hand": "storm_chaplain_holy_tome"
+    },
+    "ground_gap": -0.880023449659348,
+    "path": "docs/qa/character-presentation-quality/cleric/masculine/12_attack_follow_through.png",
+    "projectile_overlay": false,
+    "sample_time": 0.4712,
+    "state": "attack_follow_through"
+  },
+  {
+    "action": "cleric_lightning_bolt",
+    "body": "masculine",
+    "class": "cleric",
+    "clearance": {
+      "main_hand": 0.128069967031479,
+      "off_hand": 0.0240429937839508
+    },
+    "equipment": {
+      "main_hand": "storm_chaplain_sceptre",
+      "off_hand": "storm_chaplain_holy_tome"
+    },
+    "ground_gap": -0.880419760942459,
+    "path": "docs/qa/character-presentation-quality/cleric/masculine/13_attack_recovery.png",
+    "projectile_overlay": false,
+    "sample_time": 0.619,
+    "state": "attack_recovery"
+  },
+  {
+    "action": "cleric_idle",
+    "body": "masculine",
+    "class": "cleric",
+    "clearance": {
+      "main_hand": 0.210174307227135,
+      "off_hand": 0.0787308067083359
+    },
+    "equipment": {
+      "main_hand": "storm_chaplain_sceptre",
+      "off_hand": "storm_chaplain_holy_tome"
+    },
+    "ground_gap": -0.88041153550148,
+    "path": "docs/qa/character-presentation-quality/cleric/masculine/14_hit.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "hit"
+  },
+  {
+    "action": "cleric_idle",
+    "body": "masculine",
+    "class": "cleric",
+    "clearance": {
+      "main_hand": 0.210174307227135,
+      "off_hand": 0.0787308067083359
+    },
+    "equipment": {
+      "main_hand": "storm_chaplain_sceptre",
+      "off_hand": "storm_chaplain_holy_tome"
+    },
+    "ground_gap": -0.88041153550148,
+    "path": "docs/qa/character-presentation-quality/cleric/masculine/15_hands_equipped.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "hands_equipped"
+  },
+  {
+    "action": "cleric_idle",
+    "body": "masculine",
+    "class": "cleric",
+    "clearance": {},
+    "equipment": {
+      "main_hand": "",
+      "off_hand": ""
+    },
+    "ground_gap": 0.0,
+    "path": "docs/qa/character-presentation-quality/cleric/masculine/16_hands_cleared.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "hands_cleared"
+  },
+  {
+    "action": "cleric_idle",
+    "body": "masculine",
+    "class": "cleric",
+    "clearance": {
+      "main_hand": 0.210174307227135,
+      "off_hand": 0.0787308067083359
+    },
+    "equipment": {
+      "main_hand": "storm_chaplain_sceptre",
+      "off_hand": "storm_chaplain_holy_tome"
+    },
+    "ground_gap": 0.0,
+    "path": "docs/qa/character-presentation-quality/cleric/masculine/17_grounding_side.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "grounding_side"
+  },
+  {
+    "action": "cleric_idle",
+    "body": "feminine",
+    "class": "cleric",
+    "clearance": {
+      "main_hand": 0.210174307227135,
+      "off_hand": 0.0787308067083359
+    },
+    "equipment": {
+      "main_hand": "storm_chaplain_sceptre",
+      "off_hand": "storm_chaplain_holy_tome"
+    },
+    "ground_gap": -0.829643934965134,
+    "path": "docs/qa/character-presentation-quality/cleric/feminine/01_idle_front.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "idle_front"
+  },
+  {
+    "action": "cleric_idle",
+    "body": "feminine",
+    "class": "cleric",
+    "clearance": {
+      "main_hand": 0.210174307227135,
+      "off_hand": 0.0787308067083359
+    },
+    "equipment": {
+      "main_hand": "storm_chaplain_sceptre",
+      "off_hand": "storm_chaplain_holy_tome"
+    },
+    "ground_gap": -0.829643934965134,
+    "path": "docs/qa/character-presentation-quality/cleric/feminine/02_idle_three_quarter.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "idle_three_quarter"
+  },
+  {
+    "action": "cleric_idle",
+    "body": "feminine",
+    "class": "cleric",
+    "clearance": {
+      "main_hand": 0.210174307227135,
+      "off_hand": 0.0787308067083359
+    },
+    "equipment": {
+      "main_hand": "storm_chaplain_sceptre",
+      "off_hand": "storm_chaplain_holy_tome"
+    },
+    "ground_gap": -0.829643934965134,
+    "path": "docs/qa/character-presentation-quality/cleric/feminine/03_idle_side.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "idle_side"
+  },
+  {
+    "action": "cleric_idle",
+    "body": "feminine",
+    "class": "cleric",
+    "clearance": {
+      "main_hand": 0.210174307227135,
+      "off_hand": 0.0787308067083359
+    },
+    "equipment": {
+      "main_hand": "storm_chaplain_sceptre",
+      "off_hand": "storm_chaplain_holy_tome"
+    },
+    "ground_gap": -0.829643934965134,
+    "path": "docs/qa/character-presentation-quality/cleric/feminine/04_idle_rear.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "idle_rear"
+  },
+  {
+    "action": "walk",
+    "body": "feminine",
+    "class": "cleric",
+    "clearance": {
+      "main_hand": 0.132475465536118,
+      "off_hand": 0.0247712433338165
+    },
+    "equipment": {
+      "main_hand": "storm_chaplain_sceptre",
+      "off_hand": "storm_chaplain_holy_tome"
+    },
+    "ground_gap": -0.825969010591507,
+    "path": "docs/qa/character-presentation-quality/cleric/feminine/05_walk_0_0.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "walk_0_0"
+  },
+  {
+    "action": "walk",
+    "body": "feminine",
+    "class": "cleric",
+    "clearance": {
+      "main_hand": 0.118193842470646,
+      "off_hand": 0.00180760025978088
+    },
+    "equipment": {
+      "main_hand": "storm_chaplain_sceptre",
+      "off_hand": "storm_chaplain_holy_tome"
+    },
+    "ground_gap": -0.873509138822556,
+    "path": "docs/qa/character-presentation-quality/cleric/feminine/06_walk_0_2.png",
+    "projectile_overlay": false,
+    "sample_time": 0.2,
+    "state": "walk_0_2"
+  },
+  {
+    "action": "walk",
+    "body": "feminine",
+    "class": "cleric",
+    "clearance": {
+      "main_hand": 0.133954256772995,
+      "off_hand": 0.0412743389606476
+    },
+    "equipment": {
+      "main_hand": "storm_chaplain_sceptre",
+      "off_hand": "storm_chaplain_holy_tome"
+    },
+    "ground_gap": -0.825969010591507,
+    "path": "docs/qa/character-presentation-quality/cleric/feminine/07_walk_0_4.png",
+    "projectile_overlay": false,
+    "sample_time": 0.4,
+    "state": "walk_0_4"
+  },
+  {
+    "action": "walk",
+    "body": "feminine",
+    "class": "cleric",
+    "clearance": {
+      "main_hand": 0.133171990513802,
+      "off_hand": 0.0359393060207367
+    },
+    "equipment": {
+      "main_hand": "storm_chaplain_sceptre",
+      "off_hand": "storm_chaplain_holy_tome"
+    },
+    "ground_gap": -0.873509079217911,
+    "path": "docs/qa/character-presentation-quality/cleric/feminine/08_walk_0_6.png",
+    "projectile_overlay": false,
+    "sample_time": 0.6,
+    "state": "walk_0_6"
+  },
+  {
+    "action": "cleric_lightning_bolt",
+    "body": "feminine",
+    "class": "cleric",
+    "clearance": {
+      "main_hand": 0.12824185192585,
+      "off_hand": 0.0247712731361389
+    },
+    "equipment": {
+      "main_hand": "storm_chaplain_sceptre",
+      "off_hand": "storm_chaplain_holy_tome"
+    },
+    "ground_gap": -0.88041153550148,
+    "path": "docs/qa/character-presentation-quality/cleric/feminine/09_attack_start.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "attack_start"
+  },
+  {
+    "action": "cleric_lightning_bolt",
+    "body": "feminine",
+    "class": "cleric",
+    "clearance": {
+      "main_hand": 0.163932949304581,
+      "off_hand": 0.102366462349892
+    },
+    "equipment": {
+      "main_hand": "storm_chaplain_sceptre",
+      "off_hand": "storm_chaplain_holy_tome"
+    },
+    "ground_gap": -0.882234543561935,
+    "path": "docs/qa/character-presentation-quality/cleric/feminine/10_attack_loaded.png",
+    "projectile_overlay": false,
+    "sample_time": 0.1736,
+    "state": "attack_loaded"
+  },
+  {
+    "action": "cleric_lightning_bolt",
+    "body": "feminine",
+    "class": "cleric",
+    "clearance": {
+      "main_hand": 0.139290645718575,
+      "off_hand": 0.0350502505898476
+    },
+    "equipment": {
+      "main_hand": "storm_chaplain_sceptre",
+      "off_hand": "storm_chaplain_holy_tome"
+    },
+    "ground_gap": -0.887882858514786,
+    "path": "docs/qa/character-presentation-quality/cleric/feminine/11_attack_release.png",
+    "projectile_overlay": false,
+    "sample_time": 0.3224,
+    "state": "attack_release"
+  },
+  {
+    "action": "cleric_lightning_bolt",
+    "body": "feminine",
+    "class": "cleric",
+    "clearance": {
+      "main_hand": 0.161448448896408,
+      "off_hand": 0.0923457592725754
+    },
+    "equipment": {
+      "main_hand": "storm_chaplain_sceptre",
+      "off_hand": "storm_chaplain_holy_tome"
+    },
+    "ground_gap": -0.880023449659348,
+    "path": "docs/qa/character-presentation-quality/cleric/feminine/12_attack_follow_through.png",
+    "projectile_overlay": false,
+    "sample_time": 0.4712,
+    "state": "attack_follow_through"
+  },
+  {
+    "action": "cleric_lightning_bolt",
+    "body": "feminine",
+    "class": "cleric",
+    "clearance": {
+      "main_hand": 0.128069967031479,
+      "off_hand": 0.0240429937839508
+    },
+    "equipment": {
+      "main_hand": "storm_chaplain_sceptre",
+      "off_hand": "storm_chaplain_holy_tome"
+    },
+    "ground_gap": -0.880419760942459,
+    "path": "docs/qa/character-presentation-quality/cleric/feminine/13_attack_recovery.png",
+    "projectile_overlay": false,
+    "sample_time": 0.619,
+    "state": "attack_recovery"
+  },
+  {
+    "action": "cleric_idle",
+    "body": "feminine",
+    "class": "cleric",
+    "clearance": {
+      "main_hand": 0.210174307227135,
+      "off_hand": 0.0787308067083359
+    },
+    "equipment": {
+      "main_hand": "storm_chaplain_sceptre",
+      "off_hand": "storm_chaplain_holy_tome"
+    },
+    "ground_gap": -0.88041153550148,
+    "path": "docs/qa/character-presentation-quality/cleric/feminine/14_hit.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "hit"
+  },
+  {
+    "action": "cleric_idle",
+    "body": "feminine",
+    "class": "cleric",
+    "clearance": {
+      "main_hand": 0.210174307227135,
+      "off_hand": 0.0787308067083359
+    },
+    "equipment": {
+      "main_hand": "storm_chaplain_sceptre",
+      "off_hand": "storm_chaplain_holy_tome"
+    },
+    "ground_gap": -0.88041153550148,
+    "path": "docs/qa/character-presentation-quality/cleric/feminine/15_hands_equipped.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "hands_equipped"
+  },
+  {
+    "action": "cleric_idle",
+    "body": "feminine",
+    "class": "cleric",
+    "clearance": {},
+    "equipment": {
+      "main_hand": "",
+      "off_hand": ""
+    },
+    "ground_gap": 0.0,
+    "path": "docs/qa/character-presentation-quality/cleric/feminine/16_hands_cleared.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "hands_cleared"
+  },
+  {
+    "action": "cleric_idle",
+    "body": "feminine",
+    "class": "cleric",
+    "clearance": {
+      "main_hand": 0.210174307227135,
+      "off_hand": 0.0787308067083359
+    },
+    "equipment": {
+      "main_hand": "storm_chaplain_sceptre",
+      "off_hand": "storm_chaplain_holy_tome"
+    },
+    "ground_gap": 0.0,
+    "path": "docs/qa/character-presentation-quality/cleric/feminine/17_grounding_side.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "grounding_side"
+  },
+  {
+    "action": "paladin_idle",
+    "body": "masculine",
+    "class": "paladin",
+    "clearance": {
+      "main_hand": 0.243474915623665,
+      "off_hand": 0.122866630554199
+    },
+    "equipment": {
+      "main_hand": "sunforged_warhammer",
+      "off_hand": "dawn_bulwark_shield"
+    },
+    "ground_gap": -0.829643934965134,
+    "path": "docs/qa/character-presentation-quality/paladin/masculine/01_idle_front.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "idle_front"
+  },
+  {
+    "action": "paladin_idle",
+    "body": "masculine",
+    "class": "paladin",
+    "clearance": {
+      "main_hand": 0.243474915623665,
+      "off_hand": 0.122866630554199
+    },
+    "equipment": {
+      "main_hand": "sunforged_warhammer",
+      "off_hand": "dawn_bulwark_shield"
+    },
+    "ground_gap": -0.829643934965134,
+    "path": "docs/qa/character-presentation-quality/paladin/masculine/02_idle_three_quarter.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "idle_three_quarter"
+  },
+  {
+    "action": "paladin_idle",
+    "body": "masculine",
+    "class": "paladin",
+    "clearance": {
+      "main_hand": 0.243474915623665,
+      "off_hand": 0.122866630554199
+    },
+    "equipment": {
+      "main_hand": "sunforged_warhammer",
+      "off_hand": "dawn_bulwark_shield"
+    },
+    "ground_gap": -0.829643934965134,
+    "path": "docs/qa/character-presentation-quality/paladin/masculine/03_idle_side.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "idle_side"
+  },
+  {
+    "action": "paladin_idle",
+    "body": "masculine",
+    "class": "paladin",
+    "clearance": {
+      "main_hand": 0.243474915623665,
+      "off_hand": 0.122866630554199
+    },
+    "equipment": {
+      "main_hand": "sunforged_warhammer",
+      "off_hand": "dawn_bulwark_shield"
+    },
+    "ground_gap": -0.829643934965134,
+    "path": "docs/qa/character-presentation-quality/paladin/masculine/04_idle_rear.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "idle_rear"
+  },
+  {
+    "action": "walk",
+    "body": "masculine",
+    "class": "paladin",
+    "clearance": {
+      "main_hand": 0.182047128677368,
+      "off_hand": 0.208677336573601
+    },
+    "equipment": {
+      "main_hand": "sunforged_warhammer",
+      "off_hand": "dawn_bulwark_shield"
+    },
+    "ground_gap": -0.825969010591507,
+    "path": "docs/qa/character-presentation-quality/paladin/masculine/05_walk_0_0.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "walk_0_0"
+  },
+  {
+    "action": "walk",
+    "body": "masculine",
+    "class": "paladin",
+    "clearance": {
+      "main_hand": 0.166711285710335,
+      "off_hand": 0.216259941458702
+    },
+    "equipment": {
+      "main_hand": "sunforged_warhammer",
+      "off_hand": "dawn_bulwark_shield"
+    },
+    "ground_gap": -0.873509138822556,
+    "path": "docs/qa/character-presentation-quality/paladin/masculine/06_walk_0_2.png",
+    "projectile_overlay": false,
+    "sample_time": 0.2,
+    "state": "walk_0_2"
+  },
+  {
+    "action": "walk",
+    "body": "masculine",
+    "class": "paladin",
+    "clearance": {
+      "main_hand": 0.183139368891716,
+      "off_hand": 0.206560134887695
+    },
+    "equipment": {
+      "main_hand": "sunforged_warhammer",
+      "off_hand": "dawn_bulwark_shield"
+    },
+    "ground_gap": -0.825969010591507,
+    "path": "docs/qa/character-presentation-quality/paladin/masculine/07_walk_0_4.png",
+    "projectile_overlay": false,
+    "sample_time": 0.4,
+    "state": "walk_0_4"
+  },
+  {
+    "action": "walk",
+    "body": "masculine",
+    "class": "paladin",
+    "clearance": {
+      "main_hand": 0.182602047920227,
+      "off_hand": 0.205167457461357
+    },
+    "equipment": {
+      "main_hand": "sunforged_warhammer",
+      "off_hand": "dawn_bulwark_shield"
+    },
+    "ground_gap": -0.873509079217911,
+    "path": "docs/qa/character-presentation-quality/paladin/masculine/08_walk_0_6.png",
+    "projectile_overlay": false,
+    "sample_time": 0.6,
+    "state": "walk_0_6"
+  },
+  {
+    "action": "paladin_hammer_smite",
+    "body": "masculine",
+    "class": "paladin",
+    "clearance": {
+      "main_hand": 0.177447333931923,
+      "off_hand": 0.207185357809067
+    },
+    "equipment": {
+      "main_hand": "sunforged_warhammer",
+      "off_hand": "dawn_bulwark_shield"
+    },
+    "ground_gap": -0.88041153550148,
+    "path": "docs/qa/character-presentation-quality/paladin/masculine/09_attack_start.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "attack_start"
+  },
+  {
+    "action": "paladin_hammer_smite",
+    "body": "masculine",
+    "class": "paladin",
+    "clearance": {
+      "main_hand": 0.209110602736473,
+      "off_hand": 0.115361481904984
+    },
+    "equipment": {
+      "main_hand": "sunforged_warhammer",
+      "off_hand": "dawn_bulwark_shield"
+    },
+    "ground_gap": -0.885699063539505,
+    "path": "docs/qa/character-presentation-quality/paladin/masculine/10_attack_loaded.png",
+    "projectile_overlay": false,
+    "sample_time": 0.2408,
+    "state": "attack_loaded"
+  },
+  {
+    "action": "paladin_hammer_smite",
+    "body": "masculine",
+    "class": "paladin",
+    "clearance": {
+      "main_hand": 0.236672163009644,
+      "off_hand": 0.217267841100693
+    },
+    "equipment": {
+      "main_hand": "sunforged_warhammer",
+      "off_hand": "dawn_bulwark_shield"
+    },
+    "ground_gap": -0.888395458459854,
+    "path": "docs/qa/character-presentation-quality/paladin/masculine/11_attack_release.png",
+    "projectile_overlay": false,
+    "sample_time": 0.4472,
+    "state": "attack_release"
+  },
+  {
+    "action": "paladin_hammer_smite",
+    "body": "masculine",
+    "class": "paladin",
+    "clearance": {
+      "main_hand": 0.23604941368103,
+      "off_hand": 0.240579128265381
+    },
+    "equipment": {
+      "main_hand": "sunforged_warhammer",
+      "off_hand": "dawn_bulwark_shield"
+    },
+    "ground_gap": -0.884126633405685,
+    "path": "docs/qa/character-presentation-quality/paladin/masculine/12_attack_follow_through.png",
+    "projectile_overlay": false,
+    "sample_time": 0.6536,
+    "state": "attack_follow_through"
+  },
+  {
+    "action": "paladin_hammer_smite",
+    "body": "masculine",
+    "class": "paladin",
+    "clearance": {
+      "main_hand": 0.17738051712513,
+      "off_hand": 0.207844823598862
+    },
+    "equipment": {
+      "main_hand": "sunforged_warhammer",
+      "off_hand": "dawn_bulwark_shield"
+    },
+    "ground_gap": -0.880446463823318,
+    "path": "docs/qa/character-presentation-quality/paladin/masculine/13_attack_recovery.png",
+    "projectile_overlay": false,
+    "sample_time": 0.859,
+    "state": "attack_recovery"
+  },
+  {
+    "action": "paladin_idle",
+    "body": "masculine",
+    "class": "paladin",
+    "clearance": {
+      "main_hand": 0.243474915623665,
+      "off_hand": 0.122866690158844
+    },
+    "equipment": {
+      "main_hand": "sunforged_warhammer",
+      "off_hand": "dawn_bulwark_shield"
+    },
+    "ground_gap": -0.88041153550148,
+    "path": "docs/qa/character-presentation-quality/paladin/masculine/14_hit.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "hit"
+  },
+  {
+    "action": "paladin_idle",
+    "body": "masculine",
+    "class": "paladin",
+    "clearance": {
+      "main_hand": 0.243474915623665,
+      "off_hand": 0.122866690158844
+    },
+    "equipment": {
+      "main_hand": "sunforged_warhammer",
+      "off_hand": "dawn_bulwark_shield"
+    },
+    "ground_gap": -0.88041153550148,
+    "path": "docs/qa/character-presentation-quality/paladin/masculine/15_hands_equipped.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "hands_equipped"
+  },
+  {
+    "action": "paladin_idle",
+    "body": "masculine",
+    "class": "paladin",
+    "clearance": {},
+    "equipment": {
+      "main_hand": "",
+      "off_hand": ""
+    },
+    "ground_gap": 0.0,
+    "path": "docs/qa/character-presentation-quality/paladin/masculine/16_hands_cleared.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "hands_cleared"
+  },
+  {
+    "action": "paladin_idle",
+    "body": "masculine",
+    "class": "paladin",
+    "clearance": {
+      "main_hand": 0.243474915623665,
+      "off_hand": 0.122866690158844
+    },
+    "equipment": {
+      "main_hand": "sunforged_warhammer",
+      "off_hand": "dawn_bulwark_shield"
+    },
+    "ground_gap": 0.0,
+    "path": "docs/qa/character-presentation-quality/paladin/masculine/17_grounding_side.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "grounding_side"
+  },
+  {
+    "action": "paladin_idle",
+    "body": "feminine",
+    "class": "paladin",
+    "clearance": {
+      "main_hand": 0.243474915623665,
+      "off_hand": 0.122866630554199
+    },
+    "equipment": {
+      "main_hand": "sunforged_warhammer",
+      "off_hand": "dawn_bulwark_shield"
+    },
+    "ground_gap": -0.829643934965134,
+    "path": "docs/qa/character-presentation-quality/paladin/feminine/01_idle_front.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "idle_front"
+  },
+  {
+    "action": "paladin_idle",
+    "body": "feminine",
+    "class": "paladin",
+    "clearance": {
+      "main_hand": 0.243474915623665,
+      "off_hand": 0.122866630554199
+    },
+    "equipment": {
+      "main_hand": "sunforged_warhammer",
+      "off_hand": "dawn_bulwark_shield"
+    },
+    "ground_gap": -0.829643934965134,
+    "path": "docs/qa/character-presentation-quality/paladin/feminine/02_idle_three_quarter.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "idle_three_quarter"
+  },
+  {
+    "action": "paladin_idle",
+    "body": "feminine",
+    "class": "paladin",
+    "clearance": {
+      "main_hand": 0.243474915623665,
+      "off_hand": 0.122866630554199
+    },
+    "equipment": {
+      "main_hand": "sunforged_warhammer",
+      "off_hand": "dawn_bulwark_shield"
+    },
+    "ground_gap": -0.829643934965134,
+    "path": "docs/qa/character-presentation-quality/paladin/feminine/03_idle_side.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "idle_side"
+  },
+  {
+    "action": "paladin_idle",
+    "body": "feminine",
+    "class": "paladin",
+    "clearance": {
+      "main_hand": 0.243474915623665,
+      "off_hand": 0.122866630554199
+    },
+    "equipment": {
+      "main_hand": "sunforged_warhammer",
+      "off_hand": "dawn_bulwark_shield"
+    },
+    "ground_gap": -0.829643934965134,
+    "path": "docs/qa/character-presentation-quality/paladin/feminine/04_idle_rear.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "idle_rear"
+  },
+  {
+    "action": "walk",
+    "body": "feminine",
+    "class": "paladin",
+    "clearance": {
+      "main_hand": 0.182047128677368,
+      "off_hand": 0.208677336573601
+    },
+    "equipment": {
+      "main_hand": "sunforged_warhammer",
+      "off_hand": "dawn_bulwark_shield"
+    },
+    "ground_gap": -0.825969010591507,
+    "path": "docs/qa/character-presentation-quality/paladin/feminine/05_walk_0_0.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "walk_0_0"
+  },
+  {
+    "action": "walk",
+    "body": "feminine",
+    "class": "paladin",
+    "clearance": {
+      "main_hand": 0.166711285710335,
+      "off_hand": 0.216259941458702
+    },
+    "equipment": {
+      "main_hand": "sunforged_warhammer",
+      "off_hand": "dawn_bulwark_shield"
+    },
+    "ground_gap": -0.873509138822556,
+    "path": "docs/qa/character-presentation-quality/paladin/feminine/06_walk_0_2.png",
+    "projectile_overlay": false,
+    "sample_time": 0.2,
+    "state": "walk_0_2"
+  },
+  {
+    "action": "walk",
+    "body": "feminine",
+    "class": "paladin",
+    "clearance": {
+      "main_hand": 0.183139368891716,
+      "off_hand": 0.206560134887695
+    },
+    "equipment": {
+      "main_hand": "sunforged_warhammer",
+      "off_hand": "dawn_bulwark_shield"
+    },
+    "ground_gap": -0.825969010591507,
+    "path": "docs/qa/character-presentation-quality/paladin/feminine/07_walk_0_4.png",
+    "projectile_overlay": false,
+    "sample_time": 0.4,
+    "state": "walk_0_4"
+  },
+  {
+    "action": "walk",
+    "body": "feminine",
+    "class": "paladin",
+    "clearance": {
+      "main_hand": 0.182602047920227,
+      "off_hand": 0.205167457461357
+    },
+    "equipment": {
+      "main_hand": "sunforged_warhammer",
+      "off_hand": "dawn_bulwark_shield"
+    },
+    "ground_gap": -0.873509079217911,
+    "path": "docs/qa/character-presentation-quality/paladin/feminine/08_walk_0_6.png",
+    "projectile_overlay": false,
+    "sample_time": 0.6,
+    "state": "walk_0_6"
+  },
+  {
+    "action": "paladin_hammer_smite",
+    "body": "feminine",
+    "class": "paladin",
+    "clearance": {
+      "main_hand": 0.177447333931923,
+      "off_hand": 0.207185357809067
+    },
+    "equipment": {
+      "main_hand": "sunforged_warhammer",
+      "off_hand": "dawn_bulwark_shield"
+    },
+    "ground_gap": -0.88041153550148,
+    "path": "docs/qa/character-presentation-quality/paladin/feminine/09_attack_start.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "attack_start"
+  },
+  {
+    "action": "paladin_hammer_smite",
+    "body": "feminine",
+    "class": "paladin",
+    "clearance": {
+      "main_hand": 0.209110602736473,
+      "off_hand": 0.115361481904984
+    },
+    "equipment": {
+      "main_hand": "sunforged_warhammer",
+      "off_hand": "dawn_bulwark_shield"
+    },
+    "ground_gap": -0.885699063539505,
+    "path": "docs/qa/character-presentation-quality/paladin/feminine/10_attack_loaded.png",
+    "projectile_overlay": false,
+    "sample_time": 0.2408,
+    "state": "attack_loaded"
+  },
+  {
+    "action": "paladin_hammer_smite",
+    "body": "feminine",
+    "class": "paladin",
+    "clearance": {
+      "main_hand": 0.236672163009644,
+      "off_hand": 0.217267841100693
+    },
+    "equipment": {
+      "main_hand": "sunforged_warhammer",
+      "off_hand": "dawn_bulwark_shield"
+    },
+    "ground_gap": -0.888395458459854,
+    "path": "docs/qa/character-presentation-quality/paladin/feminine/11_attack_release.png",
+    "projectile_overlay": false,
+    "sample_time": 0.4472,
+    "state": "attack_release"
+  },
+  {
+    "action": "paladin_hammer_smite",
+    "body": "feminine",
+    "class": "paladin",
+    "clearance": {
+      "main_hand": 0.23604941368103,
+      "off_hand": 0.240579128265381
+    },
+    "equipment": {
+      "main_hand": "sunforged_warhammer",
+      "off_hand": "dawn_bulwark_shield"
+    },
+    "ground_gap": -0.884126633405685,
+    "path": "docs/qa/character-presentation-quality/paladin/feminine/12_attack_follow_through.png",
+    "projectile_overlay": false,
+    "sample_time": 0.6536,
+    "state": "attack_follow_through"
+  },
+  {
+    "action": "paladin_hammer_smite",
+    "body": "feminine",
+    "class": "paladin",
+    "clearance": {
+      "main_hand": 0.17738051712513,
+      "off_hand": 0.207844823598862
+    },
+    "equipment": {
+      "main_hand": "sunforged_warhammer",
+      "off_hand": "dawn_bulwark_shield"
+    },
+    "ground_gap": -0.880446463823318,
+    "path": "docs/qa/character-presentation-quality/paladin/feminine/13_attack_recovery.png",
+    "projectile_overlay": false,
+    "sample_time": 0.859,
+    "state": "attack_recovery"
+  },
+  {
+    "action": "paladin_idle",
+    "body": "feminine",
+    "class": "paladin",
+    "clearance": {
+      "main_hand": 0.243474915623665,
+      "off_hand": 0.122866690158844
+    },
+    "equipment": {
+      "main_hand": "sunforged_warhammer",
+      "off_hand": "dawn_bulwark_shield"
+    },
+    "ground_gap": -0.88041153550148,
+    "path": "docs/qa/character-presentation-quality/paladin/feminine/14_hit.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "hit"
+  },
+  {
+    "action": "paladin_idle",
+    "body": "feminine",
+    "class": "paladin",
+    "clearance": {
+      "main_hand": 0.243474915623665,
+      "off_hand": 0.122866690158844
+    },
+    "equipment": {
+      "main_hand": "sunforged_warhammer",
+      "off_hand": "dawn_bulwark_shield"
+    },
+    "ground_gap": -0.88041153550148,
+    "path": "docs/qa/character-presentation-quality/paladin/feminine/15_hands_equipped.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "hands_equipped"
+  },
+  {
+    "action": "paladin_idle",
+    "body": "feminine",
+    "class": "paladin",
+    "clearance": {},
+    "equipment": {
+      "main_hand": "",
+      "off_hand": ""
+    },
+    "ground_gap": 0.0,
+    "path": "docs/qa/character-presentation-quality/paladin/feminine/16_hands_cleared.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "hands_cleared"
+  },
+  {
+    "action": "paladin_idle",
+    "body": "feminine",
+    "class": "paladin",
+    "clearance": {
+      "main_hand": 0.243474915623665,
+      "off_hand": 0.122866690158844
+    },
+    "equipment": {
+      "main_hand": "sunforged_warhammer",
+      "off_hand": "dawn_bulwark_shield"
+    },
+    "ground_gap": 0.0,
+    "path": "docs/qa/character-presentation-quality/paladin/feminine/17_grounding_side.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "grounding_side"
+  },
+  {
+    "action": "rogue_idle",
+    "body": "masculine",
+    "class": "rogue",
+    "clearance": {
+      "main_hand": 0.174681156873703,
+      "off_hand": 0.180692374706268
+    },
+    "equipment": {
+      "main_hand": "nightstep_dagger_main",
+      "off_hand": "nightstep_dagger_off"
+    },
+    "ground_gap": -0.829643934965134,
+    "path": "docs/qa/character-presentation-quality/rogue/masculine/01_idle_front.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "idle_front"
+  },
+  {
+    "action": "rogue_idle",
+    "body": "masculine",
+    "class": "rogue",
+    "clearance": {
+      "main_hand": 0.174681156873703,
+      "off_hand": 0.180692374706268
+    },
+    "equipment": {
+      "main_hand": "nightstep_dagger_main",
+      "off_hand": "nightstep_dagger_off"
+    },
+    "ground_gap": -0.829643934965134,
+    "path": "docs/qa/character-presentation-quality/rogue/masculine/02_idle_three_quarter.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "idle_three_quarter"
+  },
+  {
+    "action": "rogue_idle",
+    "body": "masculine",
+    "class": "rogue",
+    "clearance": {
+      "main_hand": 0.174681156873703,
+      "off_hand": 0.180692374706268
+    },
+    "equipment": {
+      "main_hand": "nightstep_dagger_main",
+      "off_hand": "nightstep_dagger_off"
+    },
+    "ground_gap": -0.829643934965134,
+    "path": "docs/qa/character-presentation-quality/rogue/masculine/03_idle_side.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "idle_side"
+  },
+  {
+    "action": "rogue_idle",
+    "body": "masculine",
+    "class": "rogue",
+    "clearance": {
+      "main_hand": 0.174681156873703,
+      "off_hand": 0.180692374706268
+    },
+    "equipment": {
+      "main_hand": "nightstep_dagger_main",
+      "off_hand": "nightstep_dagger_off"
+    },
+    "ground_gap": -0.829643934965134,
+    "path": "docs/qa/character-presentation-quality/rogue/masculine/04_idle_rear.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "idle_rear"
+  },
+  {
+    "action": "walk",
+    "body": "masculine",
+    "class": "rogue",
+    "clearance": {
+      "main_hand": 0.0928465500473976,
+      "off_hand": 0.161650389432907
+    },
+    "equipment": {
+      "main_hand": "nightstep_dagger_main",
+      "off_hand": "nightstep_dagger_off"
+    },
+    "ground_gap": -0.825969010591507,
+    "path": "docs/qa/character-presentation-quality/rogue/masculine/05_walk_0_0.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "walk_0_0"
+  },
+  {
+    "action": "walk",
+    "body": "masculine",
+    "class": "rogue",
+    "clearance": {
+      "main_hand": 0.0793866217136383,
+      "off_hand": 0.148384854197502
+    },
+    "equipment": {
+      "main_hand": "nightstep_dagger_main",
+      "off_hand": "nightstep_dagger_off"
+    },
+    "ground_gap": -0.873509138822556,
+    "path": "docs/qa/character-presentation-quality/rogue/masculine/06_walk_0_2.png",
+    "projectile_overlay": false,
+    "sample_time": 0.2,
+    "state": "walk_0_2"
+  },
+  {
+    "action": "walk",
+    "body": "masculine",
+    "class": "rogue",
+    "clearance": {
+      "main_hand": 0.0946609452366829,
+      "off_hand": 0.153595000505447
+    },
+    "equipment": {
+      "main_hand": "nightstep_dagger_main",
+      "off_hand": "nightstep_dagger_off"
+    },
+    "ground_gap": -0.825969010591507,
+    "path": "docs/qa/character-presentation-quality/rogue/masculine/07_walk_0_4.png",
+    "projectile_overlay": false,
+    "sample_time": 0.4,
+    "state": "walk_0_4"
+  },
+  {
+    "action": "walk",
+    "body": "masculine",
+    "class": "rogue",
+    "clearance": {
+      "main_hand": 0.0936618447303772,
+      "off_hand": 0.160531729459763
+    },
+    "equipment": {
+      "main_hand": "nightstep_dagger_main",
+      "off_hand": "nightstep_dagger_off"
+    },
+    "ground_gap": -0.873509079217911,
+    "path": "docs/qa/character-presentation-quality/rogue/masculine/08_walk_0_6.png",
+    "projectile_overlay": false,
+    "sample_time": 0.6,
+    "state": "walk_0_6"
+  },
+  {
+    "action": "rogue_dagger_flurry",
+    "body": "masculine",
+    "class": "rogue",
+    "clearance": {
+      "main_hand": 0.0888828560709953,
+      "off_hand": 0.157209381461143
+    },
+    "equipment": {
+      "main_hand": "nightstep_dagger_main",
+      "off_hand": "nightstep_dagger_off"
+    },
+    "ground_gap": -0.88041153550148,
+    "path": "docs/qa/character-presentation-quality/rogue/masculine/09_attack_start.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "attack_start"
+  },
+  {
+    "action": "rogue_dagger_flurry",
+    "body": "masculine",
+    "class": "rogue",
+    "clearance": {
+      "main_hand": 0.147620186209679,
+      "off_hand": 0.128892600536346
+    },
+    "equipment": {
+      "main_hand": "nightstep_dagger_main",
+      "off_hand": "nightstep_dagger_off"
+    },
+    "ground_gap": -0.881991237401962,
+    "path": "docs/qa/character-presentation-quality/rogue/masculine/10_attack_loaded.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0784,
+    "state": "attack_loaded"
+  },
+  {
+    "action": "rogue_dagger_flurry",
+    "body": "masculine",
+    "class": "rogue",
+    "clearance": {
+      "main_hand": 0.0827252864837646,
+      "off_hand": 0.132478520274162
+    },
+    "equipment": {
+      "main_hand": "nightstep_dagger_main",
+      "off_hand": "nightstep_dagger_off"
+    },
+    "ground_gap": -0.881991237401962,
+    "path": "docs/qa/character-presentation-quality/rogue/masculine/11_attack_release.png",
+    "projectile_overlay": false,
+    "sample_time": 0.1456,
+    "state": "attack_release"
+  },
+  {
+    "action": "rogue_dagger_flurry",
+    "body": "masculine",
+    "class": "rogue",
+    "clearance": {
+      "main_hand": 0.0937577784061432,
+      "off_hand": 0.115949213504791
+    },
+    "equipment": {
+      "main_hand": "nightstep_dagger_main",
+      "off_hand": "nightstep_dagger_off"
+    },
+    "ground_gap": -0.88199183344841,
+    "path": "docs/qa/character-presentation-quality/rogue/masculine/12_attack_follow_through.png",
+    "projectile_overlay": false,
+    "sample_time": 0.2128,
+    "state": "attack_follow_through"
+  },
+  {
+    "action": "rogue_dagger_flurry",
+    "body": "masculine",
+    "class": "rogue",
+    "clearance": {
+      "main_hand": 0.0885057747364044,
+      "off_hand": 0.156752943992615
+    },
+    "equipment": {
+      "main_hand": "nightstep_dagger_main",
+      "off_hand": "nightstep_dagger_off"
+    },
+    "ground_gap": -0.880122810602188,
+    "path": "docs/qa/character-presentation-quality/rogue/masculine/13_attack_recovery.png",
+    "projectile_overlay": false,
+    "sample_time": 0.279,
+    "state": "attack_recovery"
+  },
+  {
+    "action": "rogue_idle",
+    "body": "masculine",
+    "class": "rogue",
+    "clearance": {
+      "main_hand": 0.174681156873703,
+      "off_hand": 0.180692374706268
+    },
+    "equipment": {
+      "main_hand": "nightstep_dagger_main",
+      "off_hand": "nightstep_dagger_off"
+    },
+    "ground_gap": -0.88041153550148,
+    "path": "docs/qa/character-presentation-quality/rogue/masculine/14_hit.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "hit"
+  },
+  {
+    "action": "rogue_idle",
+    "body": "masculine",
+    "class": "rogue",
+    "clearance": {
+      "main_hand": 0.174681156873703,
+      "off_hand": 0.180692374706268
+    },
+    "equipment": {
+      "main_hand": "nightstep_dagger_main",
+      "off_hand": "nightstep_dagger_off"
+    },
+    "ground_gap": -0.88041153550148,
+    "path": "docs/qa/character-presentation-quality/rogue/masculine/15_hands_equipped.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "hands_equipped"
+  },
+  {
+    "action": "rogue_idle",
+    "body": "masculine",
+    "class": "rogue",
+    "clearance": {},
+    "equipment": {
+      "main_hand": "",
+      "off_hand": ""
+    },
+    "ground_gap": 0.0,
+    "path": "docs/qa/character-presentation-quality/rogue/masculine/16_hands_cleared.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "hands_cleared"
+  },
+  {
+    "action": "rogue_idle",
+    "body": "masculine",
+    "class": "rogue",
+    "clearance": {
+      "main_hand": 0.174681156873703,
+      "off_hand": 0.180692374706268
+    },
+    "equipment": {
+      "main_hand": "nightstep_dagger_main",
+      "off_hand": "nightstep_dagger_off"
+    },
+    "ground_gap": 0.0,
+    "path": "docs/qa/character-presentation-quality/rogue/masculine/17_grounding_side.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "grounding_side"
+  },
+  {
+    "action": "rogue_idle",
+    "body": "feminine",
+    "class": "rogue",
+    "clearance": {
+      "main_hand": 0.174681156873703,
+      "off_hand": 0.180692374706268
+    },
+    "equipment": {
+      "main_hand": "nightstep_dagger_main",
+      "off_hand": "nightstep_dagger_off"
+    },
+    "ground_gap": -0.829643934965134,
+    "path": "docs/qa/character-presentation-quality/rogue/feminine/01_idle_front.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "idle_front"
+  },
+  {
+    "action": "rogue_idle",
+    "body": "feminine",
+    "class": "rogue",
+    "clearance": {
+      "main_hand": 0.174681156873703,
+      "off_hand": 0.180692374706268
+    },
+    "equipment": {
+      "main_hand": "nightstep_dagger_main",
+      "off_hand": "nightstep_dagger_off"
+    },
+    "ground_gap": -0.829643934965134,
+    "path": "docs/qa/character-presentation-quality/rogue/feminine/02_idle_three_quarter.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "idle_three_quarter"
+  },
+  {
+    "action": "rogue_idle",
+    "body": "feminine",
+    "class": "rogue",
+    "clearance": {
+      "main_hand": 0.174681156873703,
+      "off_hand": 0.180692374706268
+    },
+    "equipment": {
+      "main_hand": "nightstep_dagger_main",
+      "off_hand": "nightstep_dagger_off"
+    },
+    "ground_gap": -0.829643934965134,
+    "path": "docs/qa/character-presentation-quality/rogue/feminine/03_idle_side.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "idle_side"
+  },
+  {
+    "action": "rogue_idle",
+    "body": "feminine",
+    "class": "rogue",
+    "clearance": {
+      "main_hand": 0.174681156873703,
+      "off_hand": 0.180692374706268
+    },
+    "equipment": {
+      "main_hand": "nightstep_dagger_main",
+      "off_hand": "nightstep_dagger_off"
+    },
+    "ground_gap": -0.829643934965134,
+    "path": "docs/qa/character-presentation-quality/rogue/feminine/04_idle_rear.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "idle_rear"
+  },
+  {
+    "action": "walk",
+    "body": "feminine",
+    "class": "rogue",
+    "clearance": {
+      "main_hand": 0.0928465500473976,
+      "off_hand": 0.161650389432907
+    },
+    "equipment": {
+      "main_hand": "nightstep_dagger_main",
+      "off_hand": "nightstep_dagger_off"
+    },
+    "ground_gap": -0.825969010591507,
+    "path": "docs/qa/character-presentation-quality/rogue/feminine/05_walk_0_0.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "walk_0_0"
+  },
+  {
+    "action": "walk",
+    "body": "feminine",
+    "class": "rogue",
+    "clearance": {
+      "main_hand": 0.0793866217136383,
+      "off_hand": 0.148384854197502
+    },
+    "equipment": {
+      "main_hand": "nightstep_dagger_main",
+      "off_hand": "nightstep_dagger_off"
+    },
+    "ground_gap": -0.873509138822556,
+    "path": "docs/qa/character-presentation-quality/rogue/feminine/06_walk_0_2.png",
+    "projectile_overlay": false,
+    "sample_time": 0.2,
+    "state": "walk_0_2"
+  },
+  {
+    "action": "walk",
+    "body": "feminine",
+    "class": "rogue",
+    "clearance": {
+      "main_hand": 0.0946609452366829,
+      "off_hand": 0.153595000505447
+    },
+    "equipment": {
+      "main_hand": "nightstep_dagger_main",
+      "off_hand": "nightstep_dagger_off"
+    },
+    "ground_gap": -0.825969010591507,
+    "path": "docs/qa/character-presentation-quality/rogue/feminine/07_walk_0_4.png",
+    "projectile_overlay": false,
+    "sample_time": 0.4,
+    "state": "walk_0_4"
+  },
+  {
+    "action": "walk",
+    "body": "feminine",
+    "class": "rogue",
+    "clearance": {
+      "main_hand": 0.0936618447303772,
+      "off_hand": 0.160531729459763
+    },
+    "equipment": {
+      "main_hand": "nightstep_dagger_main",
+      "off_hand": "nightstep_dagger_off"
+    },
+    "ground_gap": -0.873509079217911,
+    "path": "docs/qa/character-presentation-quality/rogue/feminine/08_walk_0_6.png",
+    "projectile_overlay": false,
+    "sample_time": 0.6,
+    "state": "walk_0_6"
+  },
+  {
+    "action": "rogue_dagger_flurry",
+    "body": "feminine",
+    "class": "rogue",
+    "clearance": {
+      "main_hand": 0.0888828560709953,
+      "off_hand": 0.157209381461143
+    },
+    "equipment": {
+      "main_hand": "nightstep_dagger_main",
+      "off_hand": "nightstep_dagger_off"
+    },
+    "ground_gap": -0.88041153550148,
+    "path": "docs/qa/character-presentation-quality/rogue/feminine/09_attack_start.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "attack_start"
+  },
+  {
+    "action": "rogue_dagger_flurry",
+    "body": "feminine",
+    "class": "rogue",
+    "clearance": {
+      "main_hand": 0.147620186209679,
+      "off_hand": 0.128892600536346
+    },
+    "equipment": {
+      "main_hand": "nightstep_dagger_main",
+      "off_hand": "nightstep_dagger_off"
+    },
+    "ground_gap": -0.881991237401962,
+    "path": "docs/qa/character-presentation-quality/rogue/feminine/10_attack_loaded.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0784,
+    "state": "attack_loaded"
+  },
+  {
+    "action": "rogue_dagger_flurry",
+    "body": "feminine",
+    "class": "rogue",
+    "clearance": {
+      "main_hand": 0.0827252864837646,
+      "off_hand": 0.132478520274162
+    },
+    "equipment": {
+      "main_hand": "nightstep_dagger_main",
+      "off_hand": "nightstep_dagger_off"
+    },
+    "ground_gap": -0.881991237401962,
+    "path": "docs/qa/character-presentation-quality/rogue/feminine/11_attack_release.png",
+    "projectile_overlay": false,
+    "sample_time": 0.1456,
+    "state": "attack_release"
+  },
+  {
+    "action": "rogue_dagger_flurry",
+    "body": "feminine",
+    "class": "rogue",
+    "clearance": {
+      "main_hand": 0.0937577784061432,
+      "off_hand": 0.115949213504791
+    },
+    "equipment": {
+      "main_hand": "nightstep_dagger_main",
+      "off_hand": "nightstep_dagger_off"
+    },
+    "ground_gap": -0.88199183344841,
+    "path": "docs/qa/character-presentation-quality/rogue/feminine/12_attack_follow_through.png",
+    "projectile_overlay": false,
+    "sample_time": 0.2128,
+    "state": "attack_follow_through"
+  },
+  {
+    "action": "rogue_dagger_flurry",
+    "body": "feminine",
+    "class": "rogue",
+    "clearance": {
+      "main_hand": 0.0885057747364044,
+      "off_hand": 0.156752943992615
+    },
+    "equipment": {
+      "main_hand": "nightstep_dagger_main",
+      "off_hand": "nightstep_dagger_off"
+    },
+    "ground_gap": -0.880122810602188,
+    "path": "docs/qa/character-presentation-quality/rogue/feminine/13_attack_recovery.png",
+    "projectile_overlay": false,
+    "sample_time": 0.279,
+    "state": "attack_recovery"
+  },
+  {
+    "action": "rogue_idle",
+    "body": "feminine",
+    "class": "rogue",
+    "clearance": {
+      "main_hand": 0.174681156873703,
+      "off_hand": 0.180692374706268
+    },
+    "equipment": {
+      "main_hand": "nightstep_dagger_main",
+      "off_hand": "nightstep_dagger_off"
+    },
+    "ground_gap": -0.88041153550148,
+    "path": "docs/qa/character-presentation-quality/rogue/feminine/14_hit.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "hit"
+  },
+  {
+    "action": "rogue_idle",
+    "body": "feminine",
+    "class": "rogue",
+    "clearance": {
+      "main_hand": 0.174681156873703,
+      "off_hand": 0.180692374706268
+    },
+    "equipment": {
+      "main_hand": "nightstep_dagger_main",
+      "off_hand": "nightstep_dagger_off"
+    },
+    "ground_gap": -0.88041153550148,
+    "path": "docs/qa/character-presentation-quality/rogue/feminine/15_hands_equipped.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "hands_equipped"
+  },
+  {
+    "action": "rogue_idle",
+    "body": "feminine",
+    "class": "rogue",
+    "clearance": {},
+    "equipment": {
+      "main_hand": "",
+      "off_hand": ""
+    },
+    "ground_gap": 0.0,
+    "path": "docs/qa/character-presentation-quality/rogue/feminine/16_hands_cleared.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "hands_cleared"
+  },
+  {
+    "action": "rogue_idle",
+    "body": "feminine",
+    "class": "rogue",
+    "clearance": {
+      "main_hand": 0.174681156873703,
+      "off_hand": 0.180692374706268
+    },
+    "equipment": {
+      "main_hand": "nightstep_dagger_main",
+      "off_hand": "nightstep_dagger_off"
+    },
+    "ground_gap": 0.0,
+    "path": "docs/qa/character-presentation-quality/rogue/feminine/17_grounding_side.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "grounding_side"
+  },
+  {
+    "action": "frost_mage_idle",
+    "body": "masculine",
+    "class": "frost_mage",
+    "clearance": {
+      "main_hand": 0.534832179546356
+    },
+    "equipment": {
+      "main_hand": "rime_scholar_staff",
+      "off_hand": ""
+    },
+    "ground_gap": -0.829643934965134,
+    "path": "docs/qa/character-presentation-quality/frost_mage/masculine/01_idle_front.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "idle_front"
+  },
+  {
+    "action": "frost_mage_idle",
+    "body": "masculine",
+    "class": "frost_mage",
+    "clearance": {
+      "main_hand": 0.534832179546356
+    },
+    "equipment": {
+      "main_hand": "rime_scholar_staff",
+      "off_hand": ""
+    },
+    "ground_gap": -0.829643934965134,
+    "path": "docs/qa/character-presentation-quality/frost_mage/masculine/02_idle_three_quarter.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "idle_three_quarter"
+  },
+  {
+    "action": "frost_mage_idle",
+    "body": "masculine",
+    "class": "frost_mage",
+    "clearance": {
+      "main_hand": 0.534832179546356
+    },
+    "equipment": {
+      "main_hand": "rime_scholar_staff",
+      "off_hand": ""
+    },
+    "ground_gap": -0.829643934965134,
+    "path": "docs/qa/character-presentation-quality/frost_mage/masculine/03_idle_side.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "idle_side"
+  },
+  {
+    "action": "frost_mage_idle",
+    "body": "masculine",
+    "class": "frost_mage",
+    "clearance": {
+      "main_hand": 0.534832179546356
+    },
+    "equipment": {
+      "main_hand": "rime_scholar_staff",
+      "off_hand": ""
+    },
+    "ground_gap": -0.829643934965134,
+    "path": "docs/qa/character-presentation-quality/frost_mage/masculine/04_idle_rear.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "idle_rear"
+  },
+  {
+    "action": "walk",
+    "body": "masculine",
+    "class": "frost_mage",
+    "clearance": {
+      "main_hand": 0.422296643257141
+    },
+    "equipment": {
+      "main_hand": "rime_scholar_staff",
+      "off_hand": ""
+    },
+    "ground_gap": -0.825969010591507,
+    "path": "docs/qa/character-presentation-quality/frost_mage/masculine/05_walk_0_0.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "walk_0_0"
+  },
+  {
+    "action": "walk",
+    "body": "masculine",
+    "class": "frost_mage",
+    "clearance": {
+      "main_hand": 0.425530761480331
+    },
+    "equipment": {
+      "main_hand": "rime_scholar_staff",
+      "off_hand": ""
+    },
+    "ground_gap": -0.873509138822556,
+    "path": "docs/qa/character-presentation-quality/frost_mage/masculine/06_walk_0_2.png",
+    "projectile_overlay": false,
+    "sample_time": 0.2,
+    "state": "walk_0_2"
+  },
+  {
+    "action": "walk",
+    "body": "masculine",
+    "class": "frost_mage",
+    "clearance": {
+      "main_hand": 0.406374007463455
+    },
+    "equipment": {
+      "main_hand": "rime_scholar_staff",
+      "off_hand": ""
+    },
+    "ground_gap": -0.825969010591507,
+    "path": "docs/qa/character-presentation-quality/frost_mage/masculine/07_walk_0_4.png",
+    "projectile_overlay": false,
+    "sample_time": 0.4,
+    "state": "walk_0_4"
+  },
+  {
+    "action": "walk",
+    "body": "masculine",
+    "class": "frost_mage",
+    "clearance": {
+      "main_hand": 0.417745411396027
+    },
+    "equipment": {
+      "main_hand": "rime_scholar_staff",
+      "off_hand": ""
+    },
+    "ground_gap": -0.873509079217911,
+    "path": "docs/qa/character-presentation-quality/frost_mage/masculine/08_walk_0_6.png",
+    "projectile_overlay": false,
+    "sample_time": 0.6,
+    "state": "walk_0_6"
+  },
+  {
+    "action": "frost_staff_shard",
+    "body": "masculine",
+    "class": "frost_mage",
+    "clearance": {
+      "main_hand": 0.425798684358597
+    },
+    "equipment": {
+      "main_hand": "rime_scholar_staff",
+      "off_hand": ""
+    },
+    "ground_gap": -0.88041153550148,
+    "path": "docs/qa/character-presentation-quality/frost_mage/masculine/09_attack_start.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "attack_start"
+  },
+  {
+    "action": "frost_staff_shard",
+    "body": "masculine",
+    "class": "frost_mage",
+    "clearance": {
+      "main_hand": 0.530978798866272
+    },
+    "equipment": {
+      "main_hand": "rime_scholar_staff",
+      "off_hand": ""
+    },
+    "ground_gap": -0.88041153550148,
+    "path": "docs/qa/character-presentation-quality/frost_mage/masculine/10_attack_loaded.png",
+    "projectile_overlay": false,
+    "sample_time": 0.2464,
+    "state": "attack_loaded"
+  },
+  {
+    "action": "frost_staff_shard",
+    "body": "masculine",
+    "class": "frost_mage",
+    "clearance": {
+      "main_hand": 0.467006415128708
+    },
+    "equipment": {
+      "main_hand": "rime_scholar_staff",
+      "off_hand": ""
+    },
+    "ground_gap": -0.88041153550148,
+    "path": "docs/qa/character-presentation-quality/frost_mage/masculine/11_attack_release.png",
+    "projectile_overlay": false,
+    "sample_time": 0.4576,
+    "state": "attack_release"
+  },
+  {
+    "action": "frost_staff_shard",
+    "body": "masculine",
+    "class": "frost_mage",
+    "clearance": {
+      "main_hand": 0.473223954439163
+    },
+    "equipment": {
+      "main_hand": "rime_scholar_staff",
+      "off_hand": ""
+    },
+    "ground_gap": -0.88041153550148,
+    "path": "docs/qa/character-presentation-quality/frost_mage/masculine/12_attack_follow_through.png",
+    "projectile_overlay": false,
+    "sample_time": 0.6688,
+    "state": "attack_follow_through"
+  },
+  {
+    "action": "frost_staff_shard",
+    "body": "masculine",
+    "class": "frost_mage",
+    "clearance": {
+      "main_hand": 0.428819447755814
+    },
+    "equipment": {
+      "main_hand": "rime_scholar_staff",
+      "off_hand": ""
+    },
+    "ground_gap": -0.88041153550148,
+    "path": "docs/qa/character-presentation-quality/frost_mage/masculine/13_attack_recovery.png",
+    "projectile_overlay": false,
+    "sample_time": 0.879,
+    "state": "attack_recovery"
+  },
+  {
+    "action": "frost_mage_idle",
+    "body": "masculine",
+    "class": "frost_mage",
+    "clearance": {
+      "main_hand": 0.534832179546356
+    },
+    "equipment": {
+      "main_hand": "rime_scholar_staff",
+      "off_hand": ""
+    },
+    "ground_gap": -0.88041153550148,
+    "path": "docs/qa/character-presentation-quality/frost_mage/masculine/14_hit.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "hit"
+  },
+  {
+    "action": "frost_mage_idle",
+    "body": "masculine",
+    "class": "frost_mage",
+    "clearance": {
+      "main_hand": 0.534832179546356
+    },
+    "equipment": {
+      "main_hand": "rime_scholar_staff",
+      "off_hand": ""
+    },
+    "ground_gap": -0.88041153550148,
+    "path": "docs/qa/character-presentation-quality/frost_mage/masculine/15_hands_equipped.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "hands_equipped"
+  },
+  {
+    "action": "frost_mage_idle",
+    "body": "masculine",
+    "class": "frost_mage",
+    "clearance": {},
+    "equipment": {
+      "main_hand": "",
+      "off_hand": ""
+    },
+    "ground_gap": 0.0,
+    "path": "docs/qa/character-presentation-quality/frost_mage/masculine/16_hands_cleared.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "hands_cleared"
+  },
+  {
+    "action": "frost_mage_idle",
+    "body": "masculine",
+    "class": "frost_mage",
+    "clearance": {
+      "main_hand": 0.534832179546356
+    },
+    "equipment": {
+      "main_hand": "rime_scholar_staff",
+      "off_hand": ""
+    },
+    "ground_gap": 0.0,
+    "path": "docs/qa/character-presentation-quality/frost_mage/masculine/17_grounding_side.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "grounding_side"
+  },
+  {
+    "action": "frost_mage_idle",
+    "body": "feminine",
+    "class": "frost_mage",
+    "clearance": {
+      "main_hand": 0.534832179546356
+    },
+    "equipment": {
+      "main_hand": "rime_scholar_staff",
+      "off_hand": ""
+    },
+    "ground_gap": -0.829643934965134,
+    "path": "docs/qa/character-presentation-quality/frost_mage/feminine/01_idle_front.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "idle_front"
+  },
+  {
+    "action": "frost_mage_idle",
+    "body": "feminine",
+    "class": "frost_mage",
+    "clearance": {
+      "main_hand": 0.534832179546356
+    },
+    "equipment": {
+      "main_hand": "rime_scholar_staff",
+      "off_hand": ""
+    },
+    "ground_gap": -0.829643934965134,
+    "path": "docs/qa/character-presentation-quality/frost_mage/feminine/02_idle_three_quarter.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "idle_three_quarter"
+  },
+  {
+    "action": "frost_mage_idle",
+    "body": "feminine",
+    "class": "frost_mage",
+    "clearance": {
+      "main_hand": 0.534832179546356
+    },
+    "equipment": {
+      "main_hand": "rime_scholar_staff",
+      "off_hand": ""
+    },
+    "ground_gap": -0.829643934965134,
+    "path": "docs/qa/character-presentation-quality/frost_mage/feminine/03_idle_side.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "idle_side"
+  },
+  {
+    "action": "frost_mage_idle",
+    "body": "feminine",
+    "class": "frost_mage",
+    "clearance": {
+      "main_hand": 0.534832179546356
+    },
+    "equipment": {
+      "main_hand": "rime_scholar_staff",
+      "off_hand": ""
+    },
+    "ground_gap": -0.829643934965134,
+    "path": "docs/qa/character-presentation-quality/frost_mage/feminine/04_idle_rear.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "idle_rear"
+  },
+  {
+    "action": "walk",
+    "body": "feminine",
+    "class": "frost_mage",
+    "clearance": {
+      "main_hand": 0.422296643257141
+    },
+    "equipment": {
+      "main_hand": "rime_scholar_staff",
+      "off_hand": ""
+    },
+    "ground_gap": -0.825969010591507,
+    "path": "docs/qa/character-presentation-quality/frost_mage/feminine/05_walk_0_0.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "walk_0_0"
+  },
+  {
+    "action": "walk",
+    "body": "feminine",
+    "class": "frost_mage",
+    "clearance": {
+      "main_hand": 0.425530761480331
+    },
+    "equipment": {
+      "main_hand": "rime_scholar_staff",
+      "off_hand": ""
+    },
+    "ground_gap": -0.873509138822556,
+    "path": "docs/qa/character-presentation-quality/frost_mage/feminine/06_walk_0_2.png",
+    "projectile_overlay": false,
+    "sample_time": 0.2,
+    "state": "walk_0_2"
+  },
+  {
+    "action": "walk",
+    "body": "feminine",
+    "class": "frost_mage",
+    "clearance": {
+      "main_hand": 0.406374007463455
+    },
+    "equipment": {
+      "main_hand": "rime_scholar_staff",
+      "off_hand": ""
+    },
+    "ground_gap": -0.825969010591507,
+    "path": "docs/qa/character-presentation-quality/frost_mage/feminine/07_walk_0_4.png",
+    "projectile_overlay": false,
+    "sample_time": 0.4,
+    "state": "walk_0_4"
+  },
+  {
+    "action": "walk",
+    "body": "feminine",
+    "class": "frost_mage",
+    "clearance": {
+      "main_hand": 0.417745411396027
+    },
+    "equipment": {
+      "main_hand": "rime_scholar_staff",
+      "off_hand": ""
+    },
+    "ground_gap": -0.873509079217911,
+    "path": "docs/qa/character-presentation-quality/frost_mage/feminine/08_walk_0_6.png",
+    "projectile_overlay": false,
+    "sample_time": 0.6,
+    "state": "walk_0_6"
+  },
+  {
+    "action": "frost_staff_shard",
+    "body": "feminine",
+    "class": "frost_mage",
+    "clearance": {
+      "main_hand": 0.425798684358597
+    },
+    "equipment": {
+      "main_hand": "rime_scholar_staff",
+      "off_hand": ""
+    },
+    "ground_gap": -0.88041153550148,
+    "path": "docs/qa/character-presentation-quality/frost_mage/feminine/09_attack_start.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "attack_start"
+  },
+  {
+    "action": "frost_staff_shard",
+    "body": "feminine",
+    "class": "frost_mage",
+    "clearance": {
+      "main_hand": 0.530978798866272
+    },
+    "equipment": {
+      "main_hand": "rime_scholar_staff",
+      "off_hand": ""
+    },
+    "ground_gap": -0.88041153550148,
+    "path": "docs/qa/character-presentation-quality/frost_mage/feminine/10_attack_loaded.png",
+    "projectile_overlay": false,
+    "sample_time": 0.2464,
+    "state": "attack_loaded"
+  },
+  {
+    "action": "frost_staff_shard",
+    "body": "feminine",
+    "class": "frost_mage",
+    "clearance": {
+      "main_hand": 0.467006415128708
+    },
+    "equipment": {
+      "main_hand": "rime_scholar_staff",
+      "off_hand": ""
+    },
+    "ground_gap": -0.88041153550148,
+    "path": "docs/qa/character-presentation-quality/frost_mage/feminine/11_attack_release.png",
+    "projectile_overlay": false,
+    "sample_time": 0.4576,
+    "state": "attack_release"
+  },
+  {
+    "action": "frost_staff_shard",
+    "body": "feminine",
+    "class": "frost_mage",
+    "clearance": {
+      "main_hand": 0.473223954439163
+    },
+    "equipment": {
+      "main_hand": "rime_scholar_staff",
+      "off_hand": ""
+    },
+    "ground_gap": -0.88041153550148,
+    "path": "docs/qa/character-presentation-quality/frost_mage/feminine/12_attack_follow_through.png",
+    "projectile_overlay": false,
+    "sample_time": 0.6688,
+    "state": "attack_follow_through"
+  },
+  {
+    "action": "frost_staff_shard",
+    "body": "feminine",
+    "class": "frost_mage",
+    "clearance": {
+      "main_hand": 0.428819447755814
+    },
+    "equipment": {
+      "main_hand": "rime_scholar_staff",
+      "off_hand": ""
+    },
+    "ground_gap": -0.88041153550148,
+    "path": "docs/qa/character-presentation-quality/frost_mage/feminine/13_attack_recovery.png",
+    "projectile_overlay": false,
+    "sample_time": 0.879,
+    "state": "attack_recovery"
+  },
+  {
+    "action": "frost_mage_idle",
+    "body": "feminine",
+    "class": "frost_mage",
+    "clearance": {
+      "main_hand": 0.534832179546356
+    },
+    "equipment": {
+      "main_hand": "rime_scholar_staff",
+      "off_hand": ""
+    },
+    "ground_gap": -0.88041153550148,
+    "path": "docs/qa/character-presentation-quality/frost_mage/feminine/14_hit.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "hit"
+  },
+  {
+    "action": "frost_mage_idle",
+    "body": "feminine",
+    "class": "frost_mage",
+    "clearance": {
+      "main_hand": 0.534832179546356
+    },
+    "equipment": {
+      "main_hand": "rime_scholar_staff",
+      "off_hand": ""
+    },
+    "ground_gap": -0.88041153550148,
+    "path": "docs/qa/character-presentation-quality/frost_mage/feminine/15_hands_equipped.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "hands_equipped"
+  },
+  {
+    "action": "frost_mage_idle",
+    "body": "feminine",
+    "class": "frost_mage",
+    "clearance": {},
+    "equipment": {
+      "main_hand": "",
+      "off_hand": ""
+    },
+    "ground_gap": 0.0,
+    "path": "docs/qa/character-presentation-quality/frost_mage/feminine/16_hands_cleared.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "hands_cleared"
+  },
+  {
+    "action": "frost_mage_idle",
+    "body": "feminine",
+    "class": "frost_mage",
+    "clearance": {
+      "main_hand": 0.534832179546356
+    },
+    "equipment": {
+      "main_hand": "rime_scholar_staff",
+      "off_hand": ""
+    },
+    "ground_gap": 0.0,
+    "path": "docs/qa/character-presentation-quality/frost_mage/feminine/17_grounding_side.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "grounding_side"
+  },
+  {
+    "action": "warlock_idle",
+    "body": "masculine",
+    "class": "warlock",
+    "clearance": {
+      "main_hand": 0.170658960938454,
+      "off_hand": 0.0164659433066845
+    },
+    "equipment": {
+      "main_hand": "grave_covenant_bone_wand",
+      "off_hand": "grave_covenant_grimoire"
+    },
+    "ground_gap": -0.829643934965134,
+    "path": "docs/qa/character-presentation-quality/warlock/masculine/01_idle_front.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "idle_front"
+  },
+  {
+    "action": "warlock_idle",
+    "body": "masculine",
+    "class": "warlock",
+    "clearance": {
+      "main_hand": 0.170658960938454,
+      "off_hand": 0.0164659433066845
+    },
+    "equipment": {
+      "main_hand": "grave_covenant_bone_wand",
+      "off_hand": "grave_covenant_grimoire"
+    },
+    "ground_gap": -0.829643934965134,
+    "path": "docs/qa/character-presentation-quality/warlock/masculine/02_idle_three_quarter.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "idle_three_quarter"
+  },
+  {
+    "action": "warlock_idle",
+    "body": "masculine",
+    "class": "warlock",
+    "clearance": {
+      "main_hand": 0.170658960938454,
+      "off_hand": 0.0164659433066845
+    },
+    "equipment": {
+      "main_hand": "grave_covenant_bone_wand",
+      "off_hand": "grave_covenant_grimoire"
+    },
+    "ground_gap": -0.829643934965134,
+    "path": "docs/qa/character-presentation-quality/warlock/masculine/03_idle_side.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "idle_side"
+  },
+  {
+    "action": "warlock_idle",
+    "body": "masculine",
+    "class": "warlock",
+    "clearance": {
+      "main_hand": 0.170658960938454,
+      "off_hand": 0.0164659433066845
+    },
+    "equipment": {
+      "main_hand": "grave_covenant_bone_wand",
+      "off_hand": "grave_covenant_grimoire"
+    },
+    "ground_gap": -0.829643934965134,
+    "path": "docs/qa/character-presentation-quality/warlock/masculine/04_idle_rear.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "idle_rear"
+  },
+  {
+    "action": "walk",
+    "body": "masculine",
+    "class": "warlock",
+    "clearance": {
+      "main_hand": 0.0928465500473976,
+      "off_hand": 0.0247712433338165
+    },
+    "equipment": {
+      "main_hand": "grave_covenant_bone_wand",
+      "off_hand": "grave_covenant_grimoire"
+    },
+    "ground_gap": -0.825969010591507,
+    "path": "docs/qa/character-presentation-quality/warlock/masculine/05_walk_0_0.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "walk_0_0"
+  },
+  {
+    "action": "walk",
+    "body": "masculine",
+    "class": "warlock",
+    "clearance": {
+      "main_hand": 0.0793866217136383,
+      "off_hand": 0.00180760025978088
+    },
+    "equipment": {
+      "main_hand": "grave_covenant_bone_wand",
+      "off_hand": "grave_covenant_grimoire"
+    },
+    "ground_gap": -0.873509138822556,
+    "path": "docs/qa/character-presentation-quality/warlock/masculine/06_walk_0_2.png",
+    "projectile_overlay": false,
+    "sample_time": 0.2,
+    "state": "walk_0_2"
+  },
+  {
+    "action": "walk",
+    "body": "masculine",
+    "class": "warlock",
+    "clearance": {
+      "main_hand": 0.0946609452366829,
+      "off_hand": 0.0412743389606476
+    },
+    "equipment": {
+      "main_hand": "grave_covenant_bone_wand",
+      "off_hand": "grave_covenant_grimoire"
+    },
+    "ground_gap": -0.825969010591507,
+    "path": "docs/qa/character-presentation-quality/warlock/masculine/07_walk_0_4.png",
+    "projectile_overlay": false,
+    "sample_time": 0.4,
+    "state": "walk_0_4"
+  },
+  {
+    "action": "walk",
+    "body": "masculine",
+    "class": "warlock",
+    "clearance": {
+      "main_hand": 0.0936618447303772,
+      "off_hand": 0.0359393060207367
+    },
+    "equipment": {
+      "main_hand": "grave_covenant_bone_wand",
+      "off_hand": "grave_covenant_grimoire"
+    },
+    "ground_gap": -0.873509079217911,
+    "path": "docs/qa/character-presentation-quality/warlock/masculine/08_walk_0_6.png",
+    "projectile_overlay": false,
+    "sample_time": 0.6,
+    "state": "walk_0_6"
+  },
+  {
+    "action": "warlock_chaos_bolt",
+    "body": "masculine",
+    "class": "warlock",
+    "clearance": {
+      "main_hand": 0.0888828560709953,
+      "off_hand": 0.0247712731361389
+    },
+    "equipment": {
+      "main_hand": "grave_covenant_bone_wand",
+      "off_hand": "grave_covenant_grimoire"
+    },
+    "ground_gap": -0.88041153550148,
+    "path": "docs/qa/character-presentation-quality/warlock/masculine/09_attack_start.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "attack_start"
+  },
+  {
+    "action": "warlock_chaos_bolt",
+    "body": "masculine",
+    "class": "warlock",
+    "clearance": {
+      "main_hand": 0.181690961122513,
+      "off_hand": 0.0567566379904747
+    },
+    "equipment": {
+      "main_hand": "grave_covenant_bone_wand",
+      "off_hand": "grave_covenant_grimoire"
+    },
+    "ground_gap": -0.88041153550148,
+    "path": "docs/qa/character-presentation-quality/warlock/masculine/10_attack_loaded.png",
+    "projectile_overlay": false,
+    "sample_time": 0.2856,
+    "state": "attack_loaded"
+  },
+  {
+    "action": "warlock_chaos_bolt",
+    "body": "masculine",
+    "class": "warlock",
+    "clearance": {
+      "main_hand": 0.096796989440918,
+      "off_hand": 0.0963846817612648
+    },
+    "equipment": {
+      "main_hand": "grave_covenant_bone_wand",
+      "off_hand": "grave_covenant_grimoire"
+    },
+    "ground_gap": -0.88041153550148,
+    "path": "docs/qa/character-presentation-quality/warlock/masculine/11_attack_release.png",
+    "projectile_overlay": false,
+    "sample_time": 0.5304,
+    "state": "attack_release"
+  },
+  {
+    "action": "warlock_chaos_bolt",
+    "body": "masculine",
+    "class": "warlock",
+    "clearance": {
+      "main_hand": 0.126456186175346,
+      "off_hand": 0.102702647447586
+    },
+    "equipment": {
+      "main_hand": "grave_covenant_bone_wand",
+      "off_hand": "grave_covenant_grimoire"
+    },
+    "ground_gap": -0.880411595106125,
+    "path": "docs/qa/character-presentation-quality/warlock/masculine/12_attack_follow_through.png",
+    "projectile_overlay": false,
+    "sample_time": 0.7752,
+    "state": "attack_follow_through"
+  },
+  {
+    "action": "warlock_chaos_bolt",
+    "body": "masculine",
+    "class": "warlock",
+    "clearance": {
+      "main_hand": 0.0887094289064407,
+      "off_hand": 0.0243316888809204
+    },
+    "equipment": {
+      "main_hand": "grave_covenant_bone_wand",
+      "off_hand": "grave_covenant_grimoire"
+    },
+    "ground_gap": -0.88041153550148,
+    "path": "docs/qa/character-presentation-quality/warlock/masculine/13_attack_recovery.png",
+    "projectile_overlay": false,
+    "sample_time": 1.019,
+    "state": "attack_recovery"
+  },
+  {
+    "action": "warlock_idle",
+    "body": "masculine",
+    "class": "warlock",
+    "clearance": {
+      "main_hand": 0.170658960938454,
+      "off_hand": 0.0164659433066845
+    },
+    "equipment": {
+      "main_hand": "grave_covenant_bone_wand",
+      "off_hand": "grave_covenant_grimoire"
+    },
+    "ground_gap": -0.88041153550148,
+    "path": "docs/qa/character-presentation-quality/warlock/masculine/14_hit.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "hit"
+  },
+  {
+    "action": "warlock_idle",
+    "body": "masculine",
+    "class": "warlock",
+    "clearance": {
+      "main_hand": 0.170658960938454,
+      "off_hand": 0.0164659433066845
+    },
+    "equipment": {
+      "main_hand": "grave_covenant_bone_wand",
+      "off_hand": "grave_covenant_grimoire"
+    },
+    "ground_gap": -0.88041153550148,
+    "path": "docs/qa/character-presentation-quality/warlock/masculine/15_hands_equipped.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "hands_equipped"
+  },
+  {
+    "action": "warlock_idle",
+    "body": "masculine",
+    "class": "warlock",
+    "clearance": {},
+    "equipment": {
+      "main_hand": "",
+      "off_hand": ""
+    },
+    "ground_gap": 0.0,
+    "path": "docs/qa/character-presentation-quality/warlock/masculine/16_hands_cleared.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "hands_cleared"
+  },
+  {
+    "action": "warlock_idle",
+    "body": "masculine",
+    "class": "warlock",
+    "clearance": {
+      "main_hand": 0.170658960938454,
+      "off_hand": 0.0164659433066845
+    },
+    "equipment": {
+      "main_hand": "grave_covenant_bone_wand",
+      "off_hand": "grave_covenant_grimoire"
+    },
+    "ground_gap": 0.0,
+    "path": "docs/qa/character-presentation-quality/warlock/masculine/17_grounding_side.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "grounding_side"
+  },
+  {
+    "action": "warlock_idle",
+    "body": "feminine",
+    "class": "warlock",
+    "clearance": {
+      "main_hand": 0.170658960938454,
+      "off_hand": 0.0164659433066845
+    },
+    "equipment": {
+      "main_hand": "grave_covenant_bone_wand",
+      "off_hand": "grave_covenant_grimoire"
+    },
+    "ground_gap": -0.829643934965134,
+    "path": "docs/qa/character-presentation-quality/warlock/feminine/01_idle_front.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "idle_front"
+  },
+  {
+    "action": "warlock_idle",
+    "body": "feminine",
+    "class": "warlock",
+    "clearance": {
+      "main_hand": 0.170658960938454,
+      "off_hand": 0.0164659433066845
+    },
+    "equipment": {
+      "main_hand": "grave_covenant_bone_wand",
+      "off_hand": "grave_covenant_grimoire"
+    },
+    "ground_gap": -0.829643934965134,
+    "path": "docs/qa/character-presentation-quality/warlock/feminine/02_idle_three_quarter.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "idle_three_quarter"
+  },
+  {
+    "action": "warlock_idle",
+    "body": "feminine",
+    "class": "warlock",
+    "clearance": {
+      "main_hand": 0.170658960938454,
+      "off_hand": 0.0164659433066845
+    },
+    "equipment": {
+      "main_hand": "grave_covenant_bone_wand",
+      "off_hand": "grave_covenant_grimoire"
+    },
+    "ground_gap": -0.829643934965134,
+    "path": "docs/qa/character-presentation-quality/warlock/feminine/03_idle_side.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "idle_side"
+  },
+  {
+    "action": "warlock_idle",
+    "body": "feminine",
+    "class": "warlock",
+    "clearance": {
+      "main_hand": 0.170658960938454,
+      "off_hand": 0.0164659433066845
+    },
+    "equipment": {
+      "main_hand": "grave_covenant_bone_wand",
+      "off_hand": "grave_covenant_grimoire"
+    },
+    "ground_gap": -0.829643934965134,
+    "path": "docs/qa/character-presentation-quality/warlock/feminine/04_idle_rear.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "idle_rear"
+  },
+  {
+    "action": "walk",
+    "body": "feminine",
+    "class": "warlock",
+    "clearance": {
+      "main_hand": 0.0928465500473976,
+      "off_hand": 0.0247712433338165
+    },
+    "equipment": {
+      "main_hand": "grave_covenant_bone_wand",
+      "off_hand": "grave_covenant_grimoire"
+    },
+    "ground_gap": -0.825969010591507,
+    "path": "docs/qa/character-presentation-quality/warlock/feminine/05_walk_0_0.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "walk_0_0"
+  },
+  {
+    "action": "walk",
+    "body": "feminine",
+    "class": "warlock",
+    "clearance": {
+      "main_hand": 0.0793866217136383,
+      "off_hand": 0.00180760025978088
+    },
+    "equipment": {
+      "main_hand": "grave_covenant_bone_wand",
+      "off_hand": "grave_covenant_grimoire"
+    },
+    "ground_gap": -0.873509138822556,
+    "path": "docs/qa/character-presentation-quality/warlock/feminine/06_walk_0_2.png",
+    "projectile_overlay": false,
+    "sample_time": 0.2,
+    "state": "walk_0_2"
+  },
+  {
+    "action": "walk",
+    "body": "feminine",
+    "class": "warlock",
+    "clearance": {
+      "main_hand": 0.0946609452366829,
+      "off_hand": 0.0412743389606476
+    },
+    "equipment": {
+      "main_hand": "grave_covenant_bone_wand",
+      "off_hand": "grave_covenant_grimoire"
+    },
+    "ground_gap": -0.825969010591507,
+    "path": "docs/qa/character-presentation-quality/warlock/feminine/07_walk_0_4.png",
+    "projectile_overlay": false,
+    "sample_time": 0.4,
+    "state": "walk_0_4"
+  },
+  {
+    "action": "walk",
+    "body": "feminine",
+    "class": "warlock",
+    "clearance": {
+      "main_hand": 0.0936618447303772,
+      "off_hand": 0.0359393060207367
+    },
+    "equipment": {
+      "main_hand": "grave_covenant_bone_wand",
+      "off_hand": "grave_covenant_grimoire"
+    },
+    "ground_gap": -0.873509079217911,
+    "path": "docs/qa/character-presentation-quality/warlock/feminine/08_walk_0_6.png",
+    "projectile_overlay": false,
+    "sample_time": 0.6,
+    "state": "walk_0_6"
+  },
+  {
+    "action": "warlock_chaos_bolt",
+    "body": "feminine",
+    "class": "warlock",
+    "clearance": {
+      "main_hand": 0.0888828560709953,
+      "off_hand": 0.0247712731361389
+    },
+    "equipment": {
+      "main_hand": "grave_covenant_bone_wand",
+      "off_hand": "grave_covenant_grimoire"
+    },
+    "ground_gap": -0.88041153550148,
+    "path": "docs/qa/character-presentation-quality/warlock/feminine/09_attack_start.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "attack_start"
+  },
+  {
+    "action": "warlock_chaos_bolt",
+    "body": "feminine",
+    "class": "warlock",
+    "clearance": {
+      "main_hand": 0.181690961122513,
+      "off_hand": 0.0567566379904747
+    },
+    "equipment": {
+      "main_hand": "grave_covenant_bone_wand",
+      "off_hand": "grave_covenant_grimoire"
+    },
+    "ground_gap": -0.88041153550148,
+    "path": "docs/qa/character-presentation-quality/warlock/feminine/10_attack_loaded.png",
+    "projectile_overlay": false,
+    "sample_time": 0.2856,
+    "state": "attack_loaded"
+  },
+  {
+    "action": "warlock_chaos_bolt",
+    "body": "feminine",
+    "class": "warlock",
+    "clearance": {
+      "main_hand": 0.096796989440918,
+      "off_hand": 0.0963846817612648
+    },
+    "equipment": {
+      "main_hand": "grave_covenant_bone_wand",
+      "off_hand": "grave_covenant_grimoire"
+    },
+    "ground_gap": -0.88041153550148,
+    "path": "docs/qa/character-presentation-quality/warlock/feminine/11_attack_release.png",
+    "projectile_overlay": false,
+    "sample_time": 0.5304,
+    "state": "attack_release"
+  },
+  {
+    "action": "warlock_chaos_bolt",
+    "body": "feminine",
+    "class": "warlock",
+    "clearance": {
+      "main_hand": 0.126456186175346,
+      "off_hand": 0.102702647447586
+    },
+    "equipment": {
+      "main_hand": "grave_covenant_bone_wand",
+      "off_hand": "grave_covenant_grimoire"
+    },
+    "ground_gap": -0.880411595106125,
+    "path": "docs/qa/character-presentation-quality/warlock/feminine/12_attack_follow_through.png",
+    "projectile_overlay": false,
+    "sample_time": 0.7752,
+    "state": "attack_follow_through"
+  },
+  {
+    "action": "warlock_chaos_bolt",
+    "body": "feminine",
+    "class": "warlock",
+    "clearance": {
+      "main_hand": 0.0887094289064407,
+      "off_hand": 0.0243316888809204
+    },
+    "equipment": {
+      "main_hand": "grave_covenant_bone_wand",
+      "off_hand": "grave_covenant_grimoire"
+    },
+    "ground_gap": -0.88041153550148,
+    "path": "docs/qa/character-presentation-quality/warlock/feminine/13_attack_recovery.png",
+    "projectile_overlay": false,
+    "sample_time": 1.019,
+    "state": "attack_recovery"
+  },
+  {
+    "action": "warlock_idle",
+    "body": "feminine",
+    "class": "warlock",
+    "clearance": {
+      "main_hand": 0.170658960938454,
+      "off_hand": 0.0164659433066845
+    },
+    "equipment": {
+      "main_hand": "grave_covenant_bone_wand",
+      "off_hand": "grave_covenant_grimoire"
+    },
+    "ground_gap": -0.88041153550148,
+    "path": "docs/qa/character-presentation-quality/warlock/feminine/14_hit.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "hit"
+  },
+  {
+    "action": "warlock_idle",
+    "body": "feminine",
+    "class": "warlock",
+    "clearance": {
+      "main_hand": 0.170658960938454,
+      "off_hand": 0.0164659433066845
+    },
+    "equipment": {
+      "main_hand": "grave_covenant_bone_wand",
+      "off_hand": "grave_covenant_grimoire"
+    },
+    "ground_gap": -0.88041153550148,
+    "path": "docs/qa/character-presentation-quality/warlock/feminine/15_hands_equipped.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "hands_equipped"
+  },
+  {
+    "action": "warlock_idle",
+    "body": "feminine",
+    "class": "warlock",
+    "clearance": {},
+    "equipment": {
+      "main_hand": "",
+      "off_hand": ""
+    },
+    "ground_gap": 0.0,
+    "path": "docs/qa/character-presentation-quality/warlock/feminine/16_hands_cleared.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "hands_cleared"
+  },
+  {
+    "action": "warlock_idle",
+    "body": "feminine",
+    "class": "warlock",
+    "clearance": {
+      "main_hand": 0.170658960938454,
+      "off_hand": 0.0164659433066845
+    },
+    "equipment": {
+      "main_hand": "grave_covenant_bone_wand",
+      "off_hand": "grave_covenant_grimoire"
+    },
+    "ground_gap": 0.0,
+    "path": "docs/qa/character-presentation-quality/warlock/feminine/17_grounding_side.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "grounding_side"
+  },
+  {
+    "action": "marksman_idle",
+    "body": "masculine",
+    "class": "marksman",
+    "clearance": {
+      "main_hand": 0.215555310249329,
+      "off_hand": 0.204167857766151
+    },
+    "equipment": {
+      "main_hand": "siege_greatbow",
+      "off_hand": "siege_heavy_quiver"
+    },
+    "ground_gap": -0.834988564252853,
+    "path": "docs/qa/character-presentation-quality/marksman/masculine/01_idle_front.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "idle_front"
+  },
+  {
+    "action": "marksman_idle",
+    "body": "masculine",
+    "class": "marksman",
+    "clearance": {
+      "main_hand": 0.215555310249329,
+      "off_hand": 0.204167857766151
+    },
+    "equipment": {
+      "main_hand": "siege_greatbow",
+      "off_hand": "siege_heavy_quiver"
+    },
+    "ground_gap": -0.834988564252853,
+    "path": "docs/qa/character-presentation-quality/marksman/masculine/02_idle_three_quarter.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "idle_three_quarter"
+  },
+  {
+    "action": "marksman_idle",
+    "body": "masculine",
+    "class": "marksman",
+    "clearance": {
+      "main_hand": 0.215555310249329,
+      "off_hand": 0.204167857766151
+    },
+    "equipment": {
+      "main_hand": "siege_greatbow",
+      "off_hand": "siege_heavy_quiver"
+    },
+    "ground_gap": -0.834988564252853,
+    "path": "docs/qa/character-presentation-quality/marksman/masculine/03_idle_side.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "idle_side"
+  },
+  {
+    "action": "marksman_idle",
+    "body": "masculine",
+    "class": "marksman",
+    "clearance": {
+      "main_hand": 0.215555310249329,
+      "off_hand": 0.204167857766151
+    },
+    "equipment": {
+      "main_hand": "siege_greatbow",
+      "off_hand": "siege_heavy_quiver"
+    },
+    "ground_gap": -0.834988564252853,
+    "path": "docs/qa/character-presentation-quality/marksman/masculine/04_idle_rear.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "idle_rear"
+  },
+  {
+    "action": "walk",
+    "body": "masculine",
+    "class": "marksman",
+    "clearance": {
+      "main_hand": 0.136159241199493,
+      "off_hand": 0.299880921840668
+    },
+    "equipment": {
+      "main_hand": "siege_greatbow",
+      "off_hand": "siege_heavy_quiver"
+    },
+    "ground_gap": -0.825969010591507,
+    "path": "docs/qa/character-presentation-quality/marksman/masculine/05_walk_0_0.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "walk_0_0"
+  },
+  {
+    "action": "walk",
+    "body": "masculine",
+    "class": "marksman",
+    "clearance": {
+      "main_hand": 0.125404700636864,
+      "off_hand": 0.297083795070648
+    },
+    "equipment": {
+      "main_hand": "siege_greatbow",
+      "off_hand": "siege_heavy_quiver"
+    },
+    "ground_gap": -0.873509138822556,
+    "path": "docs/qa/character-presentation-quality/marksman/masculine/06_walk_0_2.png",
+    "projectile_overlay": false,
+    "sample_time": 0.2,
+    "state": "walk_0_2"
+  },
+  {
+    "action": "walk",
+    "body": "masculine",
+    "class": "marksman",
+    "clearance": {
+      "main_hand": 0.139310479164124,
+      "off_hand": 0.294605404138565
+    },
+    "equipment": {
+      "main_hand": "siege_greatbow",
+      "off_hand": "siege_heavy_quiver"
+    },
+    "ground_gap": -0.825969010591507,
+    "path": "docs/qa/character-presentation-quality/marksman/masculine/07_walk_0_4.png",
+    "projectile_overlay": false,
+    "sample_time": 0.4,
+    "state": "walk_0_4"
+  },
+  {
+    "action": "walk",
+    "body": "masculine",
+    "class": "marksman",
+    "clearance": {
+      "main_hand": 0.137557193636894,
+      "off_hand": 0.301082372665405
+    },
+    "equipment": {
+      "main_hand": "siege_greatbow",
+      "off_hand": "siege_heavy_quiver"
+    },
+    "ground_gap": -0.873509079217911,
+    "path": "docs/qa/character-presentation-quality/marksman/masculine/08_walk_0_6.png",
+    "projectile_overlay": false,
+    "sample_time": 0.6,
+    "state": "walk_0_6"
+  },
+  {
+    "action": "marksman_heavy_bow_shot",
+    "body": "masculine",
+    "class": "marksman",
+    "clearance": {
+      "main_hand": 0.133553087711334,
+      "off_hand": 0.299578815698624
+    },
+    "equipment": {
+      "main_hand": "siege_greatbow",
+      "off_hand": "siege_heavy_quiver"
+    },
+    "ground_gap": -0.88041153550148,
+    "path": "docs/qa/character-presentation-quality/marksman/masculine/09_attack_start.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "attack_start"
+  },
+  {
+    "action": "marksman_heavy_bow_shot",
+    "body": "masculine",
+    "class": "marksman",
+    "clearance": {
+      "main_hand": 0.147059559822083,
+      "off_hand": 0.122542008757591
+    },
+    "equipment": {
+      "main_hand": "siege_greatbow",
+      "off_hand": "siege_heavy_quiver"
+    },
+    "ground_gap": -0.89514347910881,
+    "path": "docs/qa/character-presentation-quality/marksman/masculine/10_attack_loaded.png",
+    "projectile_overlay": false,
+    "sample_time": 0.434,
+    "state": "attack_loaded"
+  },
+  {
+    "action": "marksman_heavy_bow_shot",
+    "body": "masculine",
+    "class": "marksman",
+    "clearance": {
+      "main_hand": 0.167457342147827,
+      "off_hand": 0.221114993095398
+    },
+    "equipment": {
+      "main_hand": "siege_greatbow",
+      "off_hand": "siege_heavy_quiver"
+    },
+    "ground_gap": -0.895900100469589,
+    "path": "docs/qa/character-presentation-quality/marksman/masculine/11_attack_release.png",
+    "projectile_overlay": true,
+    "sample_time": 0.806,
+    "state": "attack_release"
+  },
+  {
+    "action": "marksman_heavy_bow_shot",
+    "body": "masculine",
+    "class": "marksman",
+    "clearance": {
+      "main_hand": 0.166713178157806,
+      "off_hand": 0.201702862977982
+    },
+    "equipment": {
+      "main_hand": "siege_greatbow",
+      "off_hand": "siege_heavy_quiver"
+    },
+    "ground_gap": -0.890434235334396,
+    "path": "docs/qa/character-presentation-quality/marksman/masculine/12_attack_follow_through.png",
+    "projectile_overlay": false,
+    "sample_time": 1.178,
+    "state": "attack_follow_through"
+  },
+  {
+    "action": "marksman_heavy_bow_shot",
+    "body": "masculine",
+    "class": "marksman",
+    "clearance": {
+      "main_hand": 0.13364215195179,
+      "off_hand": 0.299581408500671
+    },
+    "equipment": {
+      "main_hand": "siege_greatbow",
+      "off_hand": "siege_heavy_quiver"
+    },
+    "ground_gap": -0.880449265241623,
+    "path": "docs/qa/character-presentation-quality/marksman/masculine/13_attack_recovery.png",
+    "projectile_overlay": false,
+    "sample_time": 1.549,
+    "state": "attack_recovery"
+  },
+  {
+    "action": "marksman_idle",
+    "body": "masculine",
+    "class": "marksman",
+    "clearance": {
+      "main_hand": 0.215555310249329,
+      "off_hand": 0.204167857766151
+    },
+    "equipment": {
+      "main_hand": "siege_greatbow",
+      "off_hand": "siege_heavy_quiver"
+    },
+    "ground_gap": -0.885150998830795,
+    "path": "docs/qa/character-presentation-quality/marksman/masculine/14_hit.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "hit"
+  },
+  {
+    "action": "marksman_idle",
+    "body": "masculine",
+    "class": "marksman",
+    "clearance": {
+      "main_hand": 0.215555310249329,
+      "off_hand": 0.204167857766151
+    },
+    "equipment": {
+      "main_hand": "siege_greatbow",
+      "off_hand": "siege_heavy_quiver"
+    },
+    "ground_gap": -0.885150998830795,
+    "path": "docs/qa/character-presentation-quality/marksman/masculine/15_hands_equipped.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "hands_equipped"
+  },
+  {
+    "action": "marksman_idle",
+    "body": "masculine",
+    "class": "marksman",
+    "clearance": {},
+    "equipment": {
+      "main_hand": "",
+      "off_hand": ""
+    },
+    "ground_gap": 0.0,
+    "path": "docs/qa/character-presentation-quality/marksman/masculine/16_hands_cleared.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "hands_cleared"
+  },
+  {
+    "action": "marksman_idle",
+    "body": "masculine",
+    "class": "marksman",
+    "clearance": {
+      "main_hand": 0.215555310249329,
+      "off_hand": 0.204167857766151
+    },
+    "equipment": {
+      "main_hand": "siege_greatbow",
+      "off_hand": "siege_heavy_quiver"
+    },
+    "ground_gap": 0.0,
+    "path": "docs/qa/character-presentation-quality/marksman/masculine/17_grounding_side.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "grounding_side"
+  },
+  {
+    "action": "marksman_idle",
+    "body": "feminine",
+    "class": "marksman",
+    "clearance": {
+      "main_hand": 0.215555310249329,
+      "off_hand": 0.204167857766151
+    },
+    "equipment": {
+      "main_hand": "siege_greatbow",
+      "off_hand": "siege_heavy_quiver"
+    },
+    "ground_gap": -0.834988564252853,
+    "path": "docs/qa/character-presentation-quality/marksman/feminine/01_idle_front.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "idle_front"
+  },
+  {
+    "action": "marksman_idle",
+    "body": "feminine",
+    "class": "marksman",
+    "clearance": {
+      "main_hand": 0.215555310249329,
+      "off_hand": 0.204167857766151
+    },
+    "equipment": {
+      "main_hand": "siege_greatbow",
+      "off_hand": "siege_heavy_quiver"
+    },
+    "ground_gap": -0.834988564252853,
+    "path": "docs/qa/character-presentation-quality/marksman/feminine/02_idle_three_quarter.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "idle_three_quarter"
+  },
+  {
+    "action": "marksman_idle",
+    "body": "feminine",
+    "class": "marksman",
+    "clearance": {
+      "main_hand": 0.215555310249329,
+      "off_hand": 0.204167857766151
+    },
+    "equipment": {
+      "main_hand": "siege_greatbow",
+      "off_hand": "siege_heavy_quiver"
+    },
+    "ground_gap": -0.834988564252853,
+    "path": "docs/qa/character-presentation-quality/marksman/feminine/03_idle_side.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "idle_side"
+  },
+  {
+    "action": "marksman_idle",
+    "body": "feminine",
+    "class": "marksman",
+    "clearance": {
+      "main_hand": 0.215555310249329,
+      "off_hand": 0.204167857766151
+    },
+    "equipment": {
+      "main_hand": "siege_greatbow",
+      "off_hand": "siege_heavy_quiver"
+    },
+    "ground_gap": -0.834988564252853,
+    "path": "docs/qa/character-presentation-quality/marksman/feminine/04_idle_rear.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "idle_rear"
+  },
+  {
+    "action": "walk",
+    "body": "feminine",
+    "class": "marksman",
+    "clearance": {
+      "main_hand": 0.136159241199493,
+      "off_hand": 0.299880921840668
+    },
+    "equipment": {
+      "main_hand": "siege_greatbow",
+      "off_hand": "siege_heavy_quiver"
+    },
+    "ground_gap": -0.825969010591507,
+    "path": "docs/qa/character-presentation-quality/marksman/feminine/05_walk_0_0.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "walk_0_0"
+  },
+  {
+    "action": "walk",
+    "body": "feminine",
+    "class": "marksman",
+    "clearance": {
+      "main_hand": 0.125404700636864,
+      "off_hand": 0.297083795070648
+    },
+    "equipment": {
+      "main_hand": "siege_greatbow",
+      "off_hand": "siege_heavy_quiver"
+    },
+    "ground_gap": -0.873509138822556,
+    "path": "docs/qa/character-presentation-quality/marksman/feminine/06_walk_0_2.png",
+    "projectile_overlay": false,
+    "sample_time": 0.2,
+    "state": "walk_0_2"
+  },
+  {
+    "action": "walk",
+    "body": "feminine",
+    "class": "marksman",
+    "clearance": {
+      "main_hand": 0.139310479164124,
+      "off_hand": 0.294605404138565
+    },
+    "equipment": {
+      "main_hand": "siege_greatbow",
+      "off_hand": "siege_heavy_quiver"
+    },
+    "ground_gap": -0.825969010591507,
+    "path": "docs/qa/character-presentation-quality/marksman/feminine/07_walk_0_4.png",
+    "projectile_overlay": false,
+    "sample_time": 0.4,
+    "state": "walk_0_4"
+  },
+  {
+    "action": "walk",
+    "body": "feminine",
+    "class": "marksman",
+    "clearance": {
+      "main_hand": 0.137557193636894,
+      "off_hand": 0.301082372665405
+    },
+    "equipment": {
+      "main_hand": "siege_greatbow",
+      "off_hand": "siege_heavy_quiver"
+    },
+    "ground_gap": -0.873509079217911,
+    "path": "docs/qa/character-presentation-quality/marksman/feminine/08_walk_0_6.png",
+    "projectile_overlay": false,
+    "sample_time": 0.6,
+    "state": "walk_0_6"
+  },
+  {
+    "action": "marksman_heavy_bow_shot",
+    "body": "feminine",
+    "class": "marksman",
+    "clearance": {
+      "main_hand": 0.133553087711334,
+      "off_hand": 0.299578815698624
+    },
+    "equipment": {
+      "main_hand": "siege_greatbow",
+      "off_hand": "siege_heavy_quiver"
+    },
+    "ground_gap": -0.88041153550148,
+    "path": "docs/qa/character-presentation-quality/marksman/feminine/09_attack_start.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "attack_start"
+  },
+  {
+    "action": "marksman_heavy_bow_shot",
+    "body": "feminine",
+    "class": "marksman",
+    "clearance": {
+      "main_hand": 0.147059559822083,
+      "off_hand": 0.122542008757591
+    },
+    "equipment": {
+      "main_hand": "siege_greatbow",
+      "off_hand": "siege_heavy_quiver"
+    },
+    "ground_gap": -0.89514347910881,
+    "path": "docs/qa/character-presentation-quality/marksman/feminine/10_attack_loaded.png",
+    "projectile_overlay": false,
+    "sample_time": 0.434,
+    "state": "attack_loaded"
+  },
+  {
+    "action": "marksman_heavy_bow_shot",
+    "body": "feminine",
+    "class": "marksman",
+    "clearance": {
+      "main_hand": 0.167457342147827,
+      "off_hand": 0.221114993095398
+    },
+    "equipment": {
+      "main_hand": "siege_greatbow",
+      "off_hand": "siege_heavy_quiver"
+    },
+    "ground_gap": -0.895900100469589,
+    "path": "docs/qa/character-presentation-quality/marksman/feminine/11_attack_release.png",
+    "projectile_overlay": true,
+    "sample_time": 0.806,
+    "state": "attack_release"
+  },
+  {
+    "action": "marksman_heavy_bow_shot",
+    "body": "feminine",
+    "class": "marksman",
+    "clearance": {
+      "main_hand": 0.166713178157806,
+      "off_hand": 0.201702862977982
+    },
+    "equipment": {
+      "main_hand": "siege_greatbow",
+      "off_hand": "siege_heavy_quiver"
+    },
+    "ground_gap": -0.890434235334396,
+    "path": "docs/qa/character-presentation-quality/marksman/feminine/12_attack_follow_through.png",
+    "projectile_overlay": false,
+    "sample_time": 1.178,
+    "state": "attack_follow_through"
+  },
+  {
+    "action": "marksman_heavy_bow_shot",
+    "body": "feminine",
+    "class": "marksman",
+    "clearance": {
+      "main_hand": 0.13364215195179,
+      "off_hand": 0.299581408500671
+    },
+    "equipment": {
+      "main_hand": "siege_greatbow",
+      "off_hand": "siege_heavy_quiver"
+    },
+    "ground_gap": -0.880449265241623,
+    "path": "docs/qa/character-presentation-quality/marksman/feminine/13_attack_recovery.png",
+    "projectile_overlay": false,
+    "sample_time": 1.549,
+    "state": "attack_recovery"
+  },
+  {
+    "action": "marksman_idle",
+    "body": "feminine",
+    "class": "marksman",
+    "clearance": {
+      "main_hand": 0.215555310249329,
+      "off_hand": 0.204167857766151
+    },
+    "equipment": {
+      "main_hand": "siege_greatbow",
+      "off_hand": "siege_heavy_quiver"
+    },
+    "ground_gap": -0.885150998830795,
+    "path": "docs/qa/character-presentation-quality/marksman/feminine/14_hit.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "hit"
+  },
+  {
+    "action": "marksman_idle",
+    "body": "feminine",
+    "class": "marksman",
+    "clearance": {
+      "main_hand": 0.215555310249329,
+      "off_hand": 0.204167857766151
+    },
+    "equipment": {
+      "main_hand": "siege_greatbow",
+      "off_hand": "siege_heavy_quiver"
+    },
+    "ground_gap": -0.885150998830795,
+    "path": "docs/qa/character-presentation-quality/marksman/feminine/15_hands_equipped.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "hands_equipped"
+  },
+  {
+    "action": "marksman_idle",
+    "body": "feminine",
+    "class": "marksman",
+    "clearance": {},
+    "equipment": {
+      "main_hand": "",
+      "off_hand": ""
+    },
+    "ground_gap": 0.0,
+    "path": "docs/qa/character-presentation-quality/marksman/feminine/16_hands_cleared.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "hands_cleared"
+  },
+  {
+    "action": "marksman_idle",
+    "body": "feminine",
+    "class": "marksman",
+    "clearance": {
+      "main_hand": 0.215555310249329,
+      "off_hand": 0.204167857766151
+    },
+    "equipment": {
+      "main_hand": "siege_greatbow",
+      "off_hand": "siege_heavy_quiver"
+    },
+    "ground_gap": 0.0,
+    "path": "docs/qa/character-presentation-quality/marksman/feminine/17_grounding_side.png",
+    "projectile_overlay": false,
+    "sample_time": 0.0,
+    "state": "grounding_side"
+  }
+]
