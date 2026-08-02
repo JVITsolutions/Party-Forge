@@ -1,0 +1,37 @@
+[gd_scene format=3]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_qblo7"]
+albedo_color = Color(0.21568628, 0.30588236, 0.36078432, 1)
+metallic = 0.05
+roughness = 0.78
+
+[sub_resource type="BoxMesh" id="BoxMesh_gytk0"]
+size = Vector3(0.7, 0.12, 0.34)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_q3sjg"]
+albedo_color = Color(0.5568628, 0.9098039, 1, 1)
+metallic = 0.05
+roughness = 0.78
+emission_enabled = true
+emission = Color(0.5568628, 0.9098039, 1, 1)
+emission_energy_multiplier = 0.85
+
+[sub_resource type="BoxMesh" id="BoxMesh_4874w"]
+size = Vector3(0.16, 0.16, 0.04)
+
+[node name="rime_scholar_crystal_sash" type="Node3D"]
+
+[node name="Attachment" type="Node3D" parent="."]
+metadata/equipment_visual_id = &"rime_scholar_crystal_sash"
+metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/BeltSocket"
+
+[node name="@MeshInstance3D@42" type="MeshInstance3D" parent="Attachment"]
+material_override = SubResource("StandardMaterial3D_qblo7")
+mesh = SubResource("BoxMesh_gytk0")
+metadata/palette_region = &"leather"
+
+[node name="@MeshInstance3D@43" type="MeshInstance3D" parent="Attachment"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -0.2)
+material_override = SubResource("StandardMaterial3D_q3sjg")
+mesh = SubResource("BoxMesh_4874w")
+metadata/palette_region = &"accent"

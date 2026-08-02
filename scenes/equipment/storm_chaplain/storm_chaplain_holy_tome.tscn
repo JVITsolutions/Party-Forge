@@ -1,0 +1,38 @@
+[gd_scene format=3]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_xwjpr"]
+albedo_color = Color(0.4, 0.3372549, 0.23921569, 1)
+metallic = 0.05
+roughness = 0.78
+
+[sub_resource type="BoxMesh" id="BoxMesh_s8sjt"]
+size = Vector3(0.38, 0.5, 0.12)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_ggikq"]
+albedo_color = Color(1, 0.9411765, 0.5411765, 1)
+metallic = 0.05
+roughness = 0.78
+emission_enabled = true
+emission = Color(1, 0.9411765, 0.5411765, 1)
+emission_energy_multiplier = 0.85
+
+[sub_resource type="BoxMesh" id="BoxMesh_dcd25"]
+size = Vector3(0.25, 0.06, 0.14)
+
+[node name="storm_chaplain_holy_tome" type="Node3D"]
+
+[node name="Attachment" type="Node3D" parent="."]
+metadata/equipment_visual_id = &"storm_chaplain_holy_tome"
+metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot/LeftShoulderPivot/LeftElbowPivot/LeftHandSocket"
+
+[node name="@MeshInstance3D@69" type="MeshInstance3D" parent="Attachment"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.15, 0)
+material_override = SubResource("StandardMaterial3D_xwjpr")
+mesh = SubResource("BoxMesh_s8sjt")
+metadata/palette_region = &"leather"
+
+[node name="@MeshInstance3D@70" type="MeshInstance3D" parent="Attachment"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.15, -0.02)
+material_override = SubResource("StandardMaterial3D_ggikq")
+mesh = SubResource("BoxMesh_dcd25")
+metadata/palette_region = &"accent"

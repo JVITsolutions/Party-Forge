@@ -74,7 +74,34 @@ func _configure_action_players(model: Node3D) -> bool:
 		_offset_rotation_tracks(ranger_attack, {"TorsoPivot:rotation": Vector3(0.06, -0.10, 0), "LeftShoulderPivot:rotation": Vector3(-0.22, -0.18, 0.20), "RightShoulderPivot:rotation": Vector3(-0.28, 0.22, -0.24), "LeftHipPivot:rotation": Vector3(0, 0, -0.04), "RightHipPivot:rotation": Vector3(0, 0, 0.04)})
 	if marksman_attack != null:
 		_offset_rotation_tracks(marksman_attack, {"TorsoPivot:rotation": Vector3(-0.16, 0.14, 0), "LeftShoulderPivot:rotation": Vector3(-0.34, -0.24, 0.28), "RightShoulderPivot:rotation": Vector3(-0.44, 0.34, -0.34), "LeftHipPivot:rotation": Vector3(0, 0, -0.20), "RightHipPivot:rotation": Vector3(0, 0, 0.20)})
-	if paladin_attack == null or rogue_attack == null or ranger_attack == null or marksman_attack == null:
+	var mage_idle := action_player.get_animation(&"idle").duplicate(true) as Animation
+	mage_idle.loop_mode = Animation.LOOP_LINEAR
+	_offset_rotation_tracks(mage_idle, {"TorsoPivot:rotation": Vector3(-0.02, -0.08, 0), "LeftShoulderPivot:rotation": Vector3(-0.24, -0.10, 0.34), "LeftElbowPivot:rotation": Vector3(-0.28, 0, 0.12), "RightShoulderPivot:rotation": Vector3(-0.12, 0.12, -0.16), "RightElbowPivot:rotation": Vector3(-0.18, 0, -0.08)})
+	var frost_idle := action_player.get_animation(&"idle").duplicate(true) as Animation
+	frost_idle.loop_mode = Animation.LOOP_LINEAR
+	_offset_rotation_tracks(frost_idle, {"TorsoPivot:rotation": Vector3(-0.06, 0, 0), "LeftShoulderPivot:rotation": Vector3(-0.30, -0.22, 0.30), "LeftElbowPivot:rotation": Vector3(-0.40, 0, 0.12), "RightShoulderPivot:rotation": Vector3(-0.30, 0.22, -0.30), "RightElbowPivot:rotation": Vector3(-0.40, 0, -0.12)})
+	var cleric_idle := action_player.get_animation(&"idle").duplicate(true) as Animation
+	cleric_idle.loop_mode = Animation.LOOP_LINEAR
+	_offset_rotation_tracks(cleric_idle, {"TorsoPivot:rotation": Vector3(-0.04, 0.06, 0), "LeftShoulderPivot:rotation": Vector3(-0.42, -0.12, 0.30), "LeftElbowPivot:rotation": Vector3(-0.36, 0, 0.16), "RightShoulderPivot:rotation": Vector3(-0.10, 0.08, -0.14), "RightElbowPivot:rotation": Vector3(-0.16, 0, -0.08)})
+	var warlock_idle := action_player.get_animation(&"idle").duplicate(true) as Animation
+	warlock_idle.loop_mode = Animation.LOOP_LINEAR
+	_offset_rotation_tracks(warlock_idle, {"TorsoPivot:rotation": Vector3(0.12, -0.06, 0), "LeftShoulderPivot:rotation": Vector3(-0.32, -0.18, 0.24), "LeftElbowPivot:rotation": Vector3(-0.42, 0, 0.18), "RightShoulderPivot:rotation": Vector3(-0.38, 0.18, -0.24), "RightElbowPivot:rotation": Vector3(-0.46, 0, -0.18)})
+	var mage_attack := _scaled_action(action_player.get_animation(&"attack_slash"), 0.76, 0.46, &"release")
+	var frost_attack := _scaled_action(action_player.get_animation(&"attack_slash"), 0.88, 0.52, &"release")
+	var cleric_lightning := _scaled_action(action_player.get_animation(&"attack_slash"), 0.62, 0.34, &"release")
+	var cleric_heal := _scaled_action(action_player.get_animation(&"attack_slash"), 1.08, 0.72, &"release")
+	var warlock_attack := _scaled_action(action_player.get_animation(&"attack_slash"), 1.02, 0.64, &"release")
+	if mage_attack != null:
+		_offset_rotation_tracks(mage_attack, {"TorsoPivot:rotation": Vector3(-0.08, -0.16, 0), "LeftShoulderPivot:rotation": Vector3(-0.48, -0.20, 0.40), "LeftElbowPivot:rotation": Vector3(-0.44, 0, 0.20), "RightShoulderPivot:rotation": Vector3(-0.20, 0.24, -0.22)})
+	if frost_attack != null:
+		_offset_rotation_tracks(frost_attack, {"TorsoPivot:rotation": Vector3(-0.16, 0, 0), "LeftShoulderPivot:rotation": Vector3(-0.48, -0.28, 0.36), "RightShoulderPivot:rotation": Vector3(-0.48, 0.28, -0.36), "LeftElbowPivot:rotation": Vector3(-0.50, 0, 0.20), "RightElbowPivot:rotation": Vector3(-0.50, 0, -0.20)})
+	if cleric_lightning != null:
+		_offset_rotation_tracks(cleric_lightning, {"TorsoPivot:rotation": Vector3(-0.10, 0.12, 0), "LeftShoulderPivot:rotation": Vector3(-0.46, -0.18, 0.36), "RightShoulderPivot:rotation": Vector3(-0.22, 0.18, -0.20)})
+	if cleric_heal != null:
+		_offset_rotation_tracks(cleric_heal, {"TorsoPivot:rotation": Vector3(-0.14, 0, 0), "LeftShoulderPivot:rotation": Vector3(-0.58, -0.16, 0.42), "RightShoulderPivot:rotation": Vector3(-0.58, 0.16, -0.42), "LeftElbowPivot:rotation": Vector3(-0.38, 0, 0.18), "RightElbowPivot:rotation": Vector3(-0.38, 0, -0.18)})
+	if warlock_attack != null:
+		_offset_rotation_tracks(warlock_attack, {"TorsoPivot:rotation": Vector3(0.18, -0.14, 0), "LeftShoulderPivot:rotation": Vector3(-0.52, -0.24, 0.32), "RightShoulderPivot:rotation": Vector3(-0.58, 0.30, -0.36), "LeftElbowPivot:rotation": Vector3(-0.56, 0, 0.22), "RightElbowPivot:rotation": Vector3(-0.60, 0, -0.24)})
+	if paladin_attack == null or rogue_attack == null or ranger_attack == null or marksman_attack == null or mage_attack == null or frost_attack == null or cleric_lightning == null or cleric_heal == null or warlock_attack == null:
 		_fail("class action generation failed")
 		return false
 	library.add_animation(&"paladin_idle", paladin_idle)
@@ -85,6 +112,15 @@ func _configure_action_players(model: Node3D) -> bool:
 	library.add_animation(&"marksman_idle", marksman_idle)
 	library.add_animation(&"ranger_quick_bow_shot", ranger_attack)
 	library.add_animation(&"marksman_heavy_bow_shot", marksman_attack)
+	library.add_animation(&"mage_idle", mage_idle)
+	library.add_animation(&"frost_mage_idle", frost_idle)
+	library.add_animation(&"cleric_idle", cleric_idle)
+	library.add_animation(&"warlock_idle", warlock_idle)
+	library.add_animation(&"mage_fire_burst", mage_attack)
+	library.add_animation(&"frost_staff_shard", frost_attack)
+	library.add_animation(&"cleric_lightning_bolt", cleric_lightning)
+	library.add_animation(&"cleric_healing_blessing", cleric_heal)
+	library.add_animation(&"warlock_chaos_bolt", warlock_attack)
 	var feedback_player := AnimationPlayer.new()
 	feedback_player.name = &"FeedbackAnimationPlayer"
 	feedback_player.root_node = NodePath("..")

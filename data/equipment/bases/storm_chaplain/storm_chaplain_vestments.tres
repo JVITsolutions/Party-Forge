@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="EquipmentBaseDefinition" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/equipment/equipment_base_definition.gd" id="1"]
+[ext_resource type="Resource" path="res://data/presentation/equipment/storm_chaplain/storm_chaplain_vestments.tres" id="2"]
+
+[resource]
+script = ExtResource("1")
+id = &"storm_chaplain_vestments"
+display_name = "Storm Chaplain Vestments"
+item_type_id = &"body_armour"
+compatible_slot_ids = [&"body_armour"]
+weight_class_id = &"medium"
+required_all_tags = []
+handedness_id = &"none"
+reserved_slot_ids = []
+compatible_offhand_item_types = []
+weapon_family_id = &""
+implicit_family_id = &"storm_chaplain"
+presentation = ExtResource("2")

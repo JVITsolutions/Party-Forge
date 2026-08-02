@@ -1,0 +1,41 @@
+[gd_scene format=3]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_e50bm"]
+albedo_color = Color(0.30980393, 0.49803922, 0.61960787, 1)
+metallic = 0.05
+roughness = 0.78
+
+[sub_resource type="BoxMesh" id="BoxMesh_0dshn"]
+size = Vector3(0.42, 0.09, 0.4)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_so0km"]
+albedo_color = Color(0.5568628, 0.9098039, 1, 1)
+metallic = 0.05
+roughness = 0.78
+emission_enabled = true
+emission = Color(0.5568628, 0.9098039, 1, 1)
+emission_energy_multiplier = 0.85
+
+[sub_resource type="SphereMesh" id="SphereMesh_ft7vp"]
+radius = 0.09
+height = 0.18
+radial_segments = 12
+rings = 6
+
+[node name="rime_scholar_circlet" type="Node3D"]
+
+[node name="Attachment" type="Node3D" parent="."]
+metadata/equipment_visual_id = &"rime_scholar_circlet"
+metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot/HeadPivot/HelmetSocket"
+
+[node name="@MeshInstance3D@25" type="MeshInstance3D" parent="Attachment"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.1, 0)
+material_override = SubResource("StandardMaterial3D_e50bm")
+mesh = SubResource("BoxMesh_0dshn")
+metadata/palette_region = &"primary"
+
+[node name="@MeshInstance3D@26" type="MeshInstance3D" parent="Attachment"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.2, -0.16)
+material_override = SubResource("StandardMaterial3D_so0km")
+mesh = SubResource("SphereMesh_ft7vp")
+metadata/palette_region = &"accent"

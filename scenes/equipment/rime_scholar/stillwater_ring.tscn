@@ -1,0 +1,27 @@
+[gd_scene format=3]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_u12hn"]
+albedo_color = Color(0.5568628, 0.9098039, 1, 1)
+metallic = 0.05
+roughness = 0.78
+emission_enabled = true
+emission = Color(0.5568628, 0.9098039, 1, 1)
+emission_energy_multiplier = 0.85
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_d5c5j"]
+top_radius = 0.08
+bottom_radius = 0.08
+height = 0.05
+radial_segments = 10
+
+[node name="stillwater_ring" type="Node3D"]
+
+[node name="Attachment" type="Node3D" parent="."]
+metadata/equipment_visual_id = &"stillwater_ring"
+metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot/RightShoulderPivot/RightElbowPivot/RightHandSocket"
+
+[node name="@MeshInstance3D@41" type="MeshInstance3D" parent="Attachment"]
+transform = Transform3D(-4.371139e-08, -1, 0, 1, -4.371139e-08, 0, 0, 0, 1, 0, 0, 0)
+material_override = SubResource("StandardMaterial3D_u12hn")
+mesh = SubResource("CylinderMesh_d5c5j")
+metadata/palette_region = &"accent"

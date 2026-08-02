@@ -1,0 +1,44 @@
+[gd_scene format=3]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_qudum"]
+albedo_color = Color(0.1882353, 0.14117648, 0.19215687, 1)
+metallic = 0.05
+roughness = 0.78
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_pg3la"]
+top_radius = 0.035
+bottom_radius = 0.035
+height = 0.68
+radial_segments = 10
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_mtu2g"]
+albedo_color = Color(0.54901963, 0.27058825, 0.7882353, 1)
+metallic = 0.05
+roughness = 0.78
+emission_enabled = true
+emission = Color(0.54901963, 0.27058825, 0.7882353, 1)
+emission_energy_multiplier = 0.85
+
+[sub_resource type="SphereMesh" id="SphereMesh_cljb3"]
+radius = 0.12
+height = 0.24
+radial_segments = 12
+rings = 6
+
+[node name="grave_covenant_bone_wand" type="Node3D"]
+
+[node name="Attachment" type="Node3D" parent="."]
+metadata/equipment_visual_id = &"grave_covenant_bone_wand"
+metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot/RightShoulderPivot/RightElbowPivot/RightHandSocket"
+
+[node name="@MeshInstance3D@90" type="MeshInstance3D" parent="Attachment"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.28, 0)
+material_override = SubResource("StandardMaterial3D_qudum")
+mesh = SubResource("CylinderMesh_pg3la")
+metadata/palette_region = &"leather"
+
+[node name="@MeshInstance3D@91" type="MeshInstance3D" parent="Attachment"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.68, 0)
+material_override = SubResource("StandardMaterial3D_mtu2g")
+mesh = SubResource("SphereMesh_cljb3")
+metadata/palette_region = &"accent"

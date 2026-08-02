@@ -1,0 +1,52 @@
+[gd_scene format=3]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_x2dmo"]
+albedo_color = Color(0.30980393, 0.49803922, 0.61960787, 1)
+metallic = 0.05
+roughness = 0.78
+
+[sub_resource type="BoxMesh" id="BoxMesh_kn6w5"]
+size = Vector3(0.68, 0.84, 0.3)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_egvb8"]
+albedo_color = Color(0.21568628, 0.30588236, 0.36078432, 1)
+metallic = 0.05
+roughness = 0.78
+
+[sub_resource type="BoxMesh" id="BoxMesh_6irvp"]
+size = Vector3(0.58, 0.18, 0.34)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_yi0yf"]
+albedo_color = Color(0.5568628, 0.9098039, 1, 1)
+metallic = 0.05
+roughness = 0.78
+emission_enabled = true
+emission = Color(0.5568628, 0.9098039, 1, 1)
+emission_energy_multiplier = 0.85
+
+[sub_resource type="BoxMesh" id="BoxMesh_g78kr"]
+size = Vector3(0.12, 0.58, 0.04)
+
+[node name="rime_scholar_robe" type="Node3D"]
+
+[node name="Attachment" type="Node3D" parent="."]
+metadata/equipment_visual_id = &"rime_scholar_robe"
+metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot/BodyArmourSocket"
+
+[node name="@MeshInstance3D@27" type="MeshInstance3D" parent="Attachment"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.08, 0)
+material_override = SubResource("StandardMaterial3D_x2dmo")
+mesh = SubResource("BoxMesh_kn6w5")
+metadata/palette_region = &"primary"
+
+[node name="@MeshInstance3D@28" type="MeshInstance3D" parent="Attachment"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.2, 0)
+material_override = SubResource("StandardMaterial3D_egvb8")
+mesh = SubResource("BoxMesh_6irvp")
+metadata/palette_region = &"leather"
+
+[node name="@MeshInstance3D@29" type="MeshInstance3D" parent="Attachment"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.06, -0.18)
+material_override = SubResource("StandardMaterial3D_yi0yf")
+mesh = SubResource("BoxMesh_g78kr")
+metadata/palette_region = &"accent"

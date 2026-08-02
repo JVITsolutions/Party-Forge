@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="EquipmentBaseDefinition" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/equipment/equipment_base_definition.gd" id="1"]
+[ext_resource type="Resource" path="res://data/presentation/equipment/storm_chaplain/storm_chaplain_holy_tome.tres" id="2"]
+
+[resource]
+script = ExtResource("1")
+id = &"storm_chaplain_holy_tome"
+display_name = "Storm Chaplain Holy Tome"
+item_type_id = &"tome"
+compatible_slot_ids = [&"off_hand"]
+weight_class_id = &"weapon"
+required_all_tags = [&"divine_tome"]
+handedness_id = &"one_hand"
+reserved_slot_ids = []
+compatible_offhand_item_types = []
+weapon_family_id = &"tome"
+implicit_family_id = &"storm_chaplain"
+presentation = ExtResource("2")

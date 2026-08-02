@@ -1,0 +1,39 @@
+[gd_scene format=3]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_let5a"]
+albedo_color = Color(0.21568628, 0.30588236, 0.36078432, 1)
+metallic = 0.05
+roughness = 0.78
+
+[sub_resource type="BoxMesh" id="BoxMesh_xbo87"]
+size = Vector3(0.27, 0.3, 0.38)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_oswa4"]
+albedo_color = Color(0.21568628, 0.30588236, 0.36078432, 1)
+metallic = 0.05
+roughness = 0.78
+
+[sub_resource type="BoxMesh" id="BoxMesh_bjtvf"]
+size = Vector3(0.27, 0.3, 0.38)
+
+[node name="rime_scholar_boots" type="Node3D"]
+
+[node name="Attachment" type="Node3D" parent="."]
+metadata/equipment_visual_id = &"rime_scholar_boots"
+metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/LeftHipPivot/LeftKneePivot/LeftFootPivot"
+
+[node name="@MeshInstance3D@36" type="MeshInstance3D" parent="Attachment"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.13, -0.04)
+material_override = SubResource("StandardMaterial3D_let5a")
+mesh = SubResource("BoxMesh_xbo87")
+metadata/palette_region = &"leather"
+
+[node name="@Node3D@38" type="Node3D" parent="."]
+metadata/equipment_visual_id = &"rime_scholar_boots"
+metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/RightHipPivot/RightKneePivot/RightFootPivot"
+
+[node name="@MeshInstance3D@37" type="MeshInstance3D" parent="@Node3D@38"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.13, -0.04)
+material_override = SubResource("StandardMaterial3D_oswa4")
+mesh = SubResource("BoxMesh_bjtvf")
+metadata/palette_region = &"leather"

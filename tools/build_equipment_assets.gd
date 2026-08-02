@@ -2,12 +2,16 @@ extends SceneTree
 
 const IDS: Array[StringName] = ClassEquipmentRows.SET_ITEM_IDS[&"fighter"]
 const SOURCE_PATH := "res://scenes/characters/presentation/forge_vanguard_equipment_source.tscn"
-const SET_FOLDERS := {&"fighter": &"forge_vanguard", &"paladin": &"dawn_bulwark", &"ranger": &"greenwood", &"marksman": &"siege_archer", &"rogue": &"nightstep"}
+const SET_FOLDERS := {&"fighter": &"forge_vanguard", &"paladin": &"dawn_bulwark", &"ranger": &"greenwood", &"marksman": &"siege_archer", &"rogue": &"nightstep", &"mage": &"emberweave", &"frost_mage": &"rime_scholar", &"cleric": &"storm_chaplain", &"warlock": &"grave_covenant"}
 const SET_STYLES := {
 	&"paladin": {&"primary": Color("e0b94f"), &"metal": Color("d7dce2"), &"leather": Color("553c28"), &"accent": Color("fff0a1")},
 	&"ranger": {&"primary": Color("4f7a4d"), &"metal": Color("59636a"), &"leather": Color("5a3f28"), &"accent": Color("83b86a")},
 	&"marksman": {&"primary": Color("59613b"), &"metal": Color("4b5157"), &"leather": Color("493b2a"), &"accent": Color("a89d5b")},
 	&"rogue": {&"primary": Color("5a426e"), &"metal": Color("4b5360"), &"leather": Color("282127"), &"accent": Color("8b5aa5")},
+	&"mage": {&"primary": Color("7c4d9e"), &"metal": Color("61556c"), &"leather": Color("4b334f"), &"accent": Color("ff7043")},
+	&"frost_mage": {&"primary": Color("4f7f9e"), &"metal": Color("6b8292"), &"leather": Color("374e5c"), &"accent": Color("8ee8ff")},
+	&"cleric": {&"primary": Color("d8c36a"), &"metal": Color("69727a"), &"leather": Color("66563d"), &"accent": Color("fff08a")},
+	&"warlock": {&"primary": Color("513663"), &"metal": Color("41404a"), &"leather": Color("302431"), &"accent": Color("8c45c9")},
 }
 const SOCKETS := {&"helmet": "HitPivot/BodyPivot/HipsPivot/TorsoPivot/HeadPivot/HelmetSocket", &"body_armour": "HitPivot/BodyPivot/HipsPivot/TorsoPivot/BodyArmourSocket", &"legs": "HitPivot/BodyPivot/HipsPivot/LegsSocket", &"gloves": "HitPivot/BodyPivot/HipsPivot/GlovesSocket", &"boots": "HitPivot/BodyPivot/HipsPivot/BootsSocket", &"amulet": "HitPivot/BodyPivot/HipsPivot/TorsoPivot/AmuletSocket", &"belt": "HitPivot/BodyPivot/HipsPivot/BeltSocket", &"ring_left": "HitPivot/BodyPivot/HipsPivot/TorsoPivot/LeftShoulderPivot/LeftElbowPivot/LeftHandSocket", &"ring_right": "HitPivot/BodyPivot/HipsPivot/TorsoPivot/RightShoulderPivot/RightElbowPivot/RightHandSocket", &"main_hand": "HitPivot/BodyPivot/HipsPivot/TorsoPivot/RightShoulderPivot/RightElbowPivot/RightHandSocket", &"off_hand": "HitPivot/BodyPivot/HipsPivot/TorsoPivot/LeftShoulderPivot/LeftElbowPivot/LeftHandSocket"}
 
@@ -78,14 +82,24 @@ func _new_attachment(item_id: StringName, socket_path: String) -> Node3D:
 func _add_wearable_geometry(root: Node3D, set_id: StringName, item_id: StringName, slot: StringName, side: String) -> void:
 	var heavy := set_id == &"paladin"
 	var braced := set_id == &"marksman"
+	var caster := set_id in [&"mage", &"frost_mage", &"cleric", &"warlock"]
 	match slot:
 		&"helmet":
-			_add_box(root, Vector3(0.42 if heavy else 0.36, 0.30, 0.38), Vector3(0, 0.02, 0), &"metal" if heavy else &"leather", set_id)
-			_add_box(root, Vector3(0.08, 0.18, 0.08), Vector3(0, 0.24, 0), &"accent", set_id)
+			if caster:
+				_add_box(root, Vector3(0.42, 0.09, 0.40), Vector3(0, 0.10, 0), &"primary", set_id)
+				_add_sphere(root, 0.09, Vector3(0, 0.20, -0.16), &"accent", set_id)
+			else:
+				_add_box(root, Vector3(0.42 if heavy else 0.36, 0.30, 0.38), Vector3(0, 0.02, 0), &"metal" if heavy else &"leather", set_id)
+				_add_box(root, Vector3(0.08, 0.18, 0.08), Vector3(0, 0.24, 0), &"accent", set_id)
 		&"body_armour":
-			_add_box(root, Vector3(0.82 if heavy else (0.72 if braced else 0.64), 0.72, 0.38 if heavy else (0.32 if braced else 0.28)), Vector3(0, -0.02, 0), &"metal" if heavy else &"leather", set_id)
-			_add_box(root, Vector3(0.92 if heavy else (0.80 if braced else 0.68), 0.12, 0.44 if heavy else (0.34 if braced else 0.30)), Vector3(0, 0.22, 0), &"primary", set_id)
-			if braced: _add_box(root, Vector3(0.58, 0.12, 0.36), Vector3(0, -0.20, 0), &"metal", set_id)
+			if caster:
+				_add_box(root, Vector3(0.68 if set_id != &"cleric" else 0.76, 0.84, 0.30), Vector3(0, -0.08, 0), &"primary", set_id)
+				_add_box(root, Vector3(0.58, 0.18, 0.34), Vector3(0, 0.20, 0), &"metal" if set_id == &"cleric" else &"leather", set_id)
+				_add_box(root, Vector3(0.12, 0.58, 0.04), Vector3(0, -0.06, -0.18), &"accent", set_id)
+			else:
+				_add_box(root, Vector3(0.82 if heavy else (0.72 if braced else 0.64), 0.72, 0.38 if heavy else (0.32 if braced else 0.28)), Vector3(0, -0.02, 0), &"metal" if heavy else &"leather", set_id)
+				_add_box(root, Vector3(0.92 if heavy else (0.80 if braced else 0.68), 0.12, 0.44 if heavy else (0.34 if braced else 0.30)), Vector3(0, 0.22, 0), &"primary", set_id)
+				if braced: _add_box(root, Vector3(0.58, 0.12, 0.36), Vector3(0, -0.20, 0), &"metal", set_id)
 		&"legs":
 			_add_box(root, Vector3(0.25, 0.44, 0.28), Vector3(0, -0.23, 0), &"metal" if heavy else &"leather", set_id)
 		&"gloves":
@@ -120,6 +134,23 @@ func _add_wearable_geometry(root: Node3D, set_id: StringName, item_id: StringNam
 				_add_cylinder(root, 0.15 if heavy_quiver else 0.12, 0.62 if heavy_quiver else 0.48, Vector3(0, 0.08, 0), &"leather", set_id)
 				for x: float in [-0.07, 0.0, 0.07]:
 					_add_cylinder(root, 0.018, 0.72 if heavy_quiver else 0.58, Vector3(x, 0.18, 0), &"metal", set_id)
+			elif item_id == &"rime_scholar_staff":
+				_add_cylinder(root, 0.045, 1.35, Vector3(0, 0.58, 0), &"leather", set_id)
+				_add_sphere(root, 0.17, Vector3(0, 1.27, 0), &"accent", set_id)
+				_add_cylinder(root, 0.085, 0.22, Vector3(0, 1.08, 0), &"metal", set_id)
+			elif item_id in [&"emberweave_wand", &"grave_covenant_bone_wand"]:
+				_add_cylinder(root, 0.035, 0.68, Vector3(0, 0.28, 0), &"leather", set_id)
+				_add_sphere(root, 0.12, Vector3(0, 0.68, 0), &"accent", set_id)
+			elif item_id == &"storm_chaplain_sceptre":
+				_add_cylinder(root, 0.05, 0.78, Vector3(0, 0.32, 0), &"metal", set_id)
+				_add_box(root, Vector3(0.30, 0.12, 0.12), Vector3(0, 0.75, 0), &"accent", set_id)
+				_add_sphere(root, 0.10, Vector3(0, 0.88, 0), &"accent", set_id)
+			elif item_id == &"emberweave_flame_focus":
+				_add_sphere(root, 0.22, Vector3(0, 0.08, 0), &"accent", set_id)
+				_add_cylinder(root, 0.055, 0.38, Vector3(0, -0.10, 0), &"metal", set_id)
+			elif item_id in [&"storm_chaplain_holy_tome", &"grave_covenant_grimoire"]:
+				_add_box(root, Vector3(0.38, 0.50, 0.12), Vector3(0, 0.15, 0), &"leather", set_id)
+				_add_box(root, Vector3(0.25, 0.06, 0.14), Vector3(0, 0.15, -0.02), &"accent", set_id)
 			else:
 				_add_box(root, Vector3(0.10, 0.74, 0.06), Vector3(0, 0.34, 0), &"metal", set_id, Vector3(0, 0, -0.12 if side == "Right" else 0.12))
 				_add_box(root, Vector3(0.26, 0.06, 0.12), Vector3(0, -0.04, 0), &"accent", set_id)
@@ -138,12 +169,23 @@ func _add_cylinder(parent: Node3D, radius: float, height: float, position: Vecto
 	_configure_mesh(mesh, region, set_id)
 	parent.add_child(mesh)
 
+func _add_sphere(parent: Node3D, radius: float, position: Vector3, region: StringName, set_id: StringName) -> void:
+	var mesh := MeshInstance3D.new()
+	var sphere := SphereMesh.new(); sphere.radius = radius; sphere.height = radius * 2.0; sphere.radial_segments = 12; sphere.rings = 6; mesh.mesh = sphere
+	mesh.position = position
+	_configure_mesh(mesh, region, set_id)
+	parent.add_child(mesh)
+
 func _configure_mesh(mesh: MeshInstance3D, region: StringName, set_id: StringName) -> void:
 	mesh.set_meta(&"palette_region", region)
 	var material := StandardMaterial3D.new()
 	material.albedo_color = SET_STYLES[set_id].get(region, Color.WHITE)
 	material.metallic = 0.72 if region == &"metal" else 0.05
 	material.roughness = 0.42 if region == &"metal" else 0.78
+	if region == &"accent" and set_id in [&"mage", &"frost_mage", &"cleric", &"warlock"]:
+		material.emission_enabled = true
+		material.emission = SET_STYLES[set_id][&"accent"]
+		material.emission_energy_multiplier = 0.85
 	mesh.material_override = material
 
 func _paired_socket(slot: StringName, side: String) -> String:
@@ -166,7 +208,7 @@ func _write_procedural_resources(set_id: StringName, item_id: StringName, slot: 
 	if not _write_text(visual_path, visual): return false
 	var armour_slot := slot in [&"helmet", &"body_armour", &"legs", &"gloves", &"boots"]
 	var tags := _required_tags(set_id, item_id, armour_slot)
-	var base := "[gd_resource type=\"Resource\" script_class=\"EquipmentBaseDefinition\" load_steps=3 format=3]\n\n[ext_resource type=\"Script\" path=\"res://scripts/equipment/equipment_base_definition.gd\" id=\"1\"]\n[ext_resource type=\"Resource\" path=\"%s\" id=\"2\"]\n\n[resource]\nscript = ExtResource(\"1\")\nid = &\"%s\"\ndisplay_name = \"%s\"\nitem_type_id = &\"%s\"\ncompatible_slot_ids = %s\nweight_class_id = &\"%s\"\nrequired_all_tags = %s\nhandedness_id = &\"%s\"\nreserved_slot_ids = %s\ncompatible_offhand_item_types = %s\nweapon_family_id = &\"%s\"\nimplicit_family_id = &\"%s\"\npresentation = ExtResource(\"2\")\n" % [visual_path, item_id, String(item_id).replace("_", " ").capitalize(), _item_type(item_id, slot), supported, _weight_class(set_id, item_id, armour_slot, slot), _string_name_array(tags), _handedness(item_id, slot), _string_name_array([&"off_hand"] if item_id in [&"greenwood_recurve_bow", &"siege_greatbow"] else []), _string_name_array([&"quiver"] if item_id in [&"greenwood_recurve_bow", &"siege_greatbow"] else []), family, folder]
+	var base := "[gd_resource type=\"Resource\" script_class=\"EquipmentBaseDefinition\" load_steps=3 format=3]\n\n[ext_resource type=\"Script\" path=\"res://scripts/equipment/equipment_base_definition.gd\" id=\"1\"]\n[ext_resource type=\"Resource\" path=\"%s\" id=\"2\"]\n\n[resource]\nscript = ExtResource(\"1\")\nid = &\"%s\"\ndisplay_name = \"%s\"\nitem_type_id = &\"%s\"\ncompatible_slot_ids = %s\nweight_class_id = &\"%s\"\nrequired_all_tags = %s\nhandedness_id = &\"%s\"\nreserved_slot_ids = %s\ncompatible_offhand_item_types = %s\nweapon_family_id = &\"%s\"\nimplicit_family_id = &\"%s\"\npresentation = ExtResource(\"2\")\n" % [visual_path, item_id, String(item_id).replace("_", " ").capitalize(), _item_type(item_id, slot), supported, _weight_class(set_id, item_id, armour_slot, slot), _string_name_array(tags), _handedness(item_id, slot), _string_name_array([&"off_hand"] if item_id in [&"greenwood_recurve_bow", &"siege_greatbow", &"rime_scholar_staff"] else []), _string_name_array([&"quiver"] if item_id in [&"greenwood_recurve_bow", &"siege_greatbow"] else []), family, folder]
 	return _write_text(base_path, base)
 
 func _weapon_family(item_id: StringName) -> StringName:
@@ -175,6 +217,12 @@ func _weapon_family(item_id: StringName) -> StringName:
 	if item_id in [&"nightstep_dagger_main", &"nightstep_dagger_off"]: return &"dual_daggers"
 	if item_id in [&"greenwood_recurve_bow", &"greenwood_light_quiver"]: return &"light_bow"
 	if item_id in [&"siege_greatbow", &"siege_heavy_quiver"]: return &"greatbow"
+	if item_id in [&"emberweave_wand", &"grave_covenant_bone_wand"]: return &"wand"
+	if item_id == &"emberweave_flame_focus": return &"focus"
+	if item_id == &"rime_scholar_staff": return &"staff"
+	if item_id == &"storm_chaplain_sceptre": return &"sceptre"
+	if item_id == &"storm_chaplain_holy_tome": return &"tome"
+	if item_id == &"grave_covenant_grimoire": return &"grimoire"
 	return &""
 
 func _item_type(item_id: StringName, slot: StringName) -> StringName:
@@ -183,6 +231,12 @@ func _item_type(item_id: StringName, slot: StringName) -> StringName:
 	if item_id in [&"nightstep_dagger_main", &"nightstep_dagger_off"]: return &"dagger"
 	if item_id in [&"greenwood_recurve_bow", &"siege_greatbow"]: return &"bow"
 	if item_id in [&"greenwood_light_quiver", &"siege_heavy_quiver"]: return &"quiver"
+	if item_id in [&"emberweave_wand", &"grave_covenant_bone_wand"]: return &"wand"
+	if item_id == &"emberweave_flame_focus": return &"focus"
+	if item_id == &"rime_scholar_staff": return &"staff"
+	if item_id == &"storm_chaplain_sceptre": return &"sceptre"
+	if item_id == &"storm_chaplain_holy_tome": return &"tome"
+	if item_id == &"grave_covenant_grimoire": return &"grimoire"
 	if slot in [&"ring_left", &"ring_right"]: return &"ring"
 	return slot
 
@@ -192,6 +246,13 @@ func _required_tags(set_id: StringName, item_id: StringName, armour_slot: bool) 
 	if item_id in [&"nightstep_dagger_main", &"nightstep_dagger_off"]: return [&"dagger", &"dual_wield"]
 	if item_id in [&"greenwood_recurve_bow", &"greenwood_light_quiver"]: return [&"ranged", &"bow_light_medium"]
 	if item_id in [&"siege_greatbow", &"siege_heavy_quiver"]: return [&"ranged", &"greatbow"]
+	if item_id == &"emberweave_wand": return [&"caster_wand"]
+	if item_id == &"emberweave_flame_focus": return [&"caster_focus"]
+	if item_id == &"rime_scholar_staff": return [&"caster_staff"]
+	if item_id == &"storm_chaplain_sceptre": return [&"divine_sceptre"]
+	if item_id == &"storm_chaplain_holy_tome": return [&"divine_tome"]
+	if item_id == &"grave_covenant_bone_wand": return [&"occult_wand"]
+	if item_id == &"grave_covenant_grimoire": return [&"occult_grimoire"]
 	if armour_slot:
 		if set_id == &"paladin": return [&"martial", &"vanguard"]
 		if set_id == &"rogue": return [&"martial", &"skirmisher"]
@@ -203,10 +264,11 @@ func _weight_class(set_id: StringName, item_id: StringName, armour_slot: bool, s
 	if not armour_slot: return &"accessory"
 	if set_id == &"paladin": return &"heavy"
 	if set_id == &"marksman" and item_id in [&"siege_archer_coat", &"siege_archer_braced_leggings"]: return &"medium"
+	if set_id == &"cleric": return &"medium"
 	return &"light"
 
 func _handedness(item_id: StringName, slot: StringName) -> StringName:
-	if item_id in [&"greenwood_recurve_bow", &"siege_greatbow"]: return &"two_hand"
+	if item_id in [&"greenwood_recurve_bow", &"siege_greatbow", &"rime_scholar_staff"]: return &"two_hand"
 	if item_id in [&"greenwood_light_quiver", &"siege_heavy_quiver"]: return &"none"
 	return &"one_hand" if slot in [&"main_hand", &"off_hand"] else &"none"
 

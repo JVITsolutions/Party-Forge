@@ -1,6 +1,6 @@
 extends SceneTree
 
-const SET_FOLDERS := {&"fighter": &"forge_vanguard", &"paladin": &"dawn_bulwark", &"ranger": &"greenwood", &"marksman": &"siege_archer", &"rogue": &"nightstep"}
+const SET_FOLDERS := {&"fighter": &"forge_vanguard", &"paladin": &"dawn_bulwark", &"ranger": &"greenwood", &"marksman": &"siege_archer", &"rogue": &"nightstep", &"mage": &"emberweave", &"frost_mage": &"rime_scholar", &"cleric": &"storm_chaplain", &"warlock": &"grave_covenant"}
 func _initialize() -> void:
 	var requested_sets := _requested_sets()
 	if requested_sets.is_empty(): push_error("EQUIPMENT_ICON_VALIDATION_ERROR no registered sets requested"); quit(1); return

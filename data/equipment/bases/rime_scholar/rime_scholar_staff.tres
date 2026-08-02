@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="EquipmentBaseDefinition" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/equipment/equipment_base_definition.gd" id="1"]
+[ext_resource type="Resource" path="res://data/presentation/equipment/rime_scholar/rime_scholar_staff.tres" id="2"]
+
+[resource]
+script = ExtResource("1")
+id = &"rime_scholar_staff"
+display_name = "Rime Scholar Staff"
+item_type_id = &"staff"
+compatible_slot_ids = [&"main_hand"]
+weight_class_id = &"weapon"
+required_all_tags = [&"caster_staff"]
+handedness_id = &"two_hand"
+reserved_slot_ids = [&"off_hand"]
+compatible_offhand_item_types = []
+weapon_family_id = &"staff"
+implicit_family_id = &"rime_scholar"
+presentation = ExtResource("2")

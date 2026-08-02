@@ -1,0 +1,39 @@
+[gd_scene format=3]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_7chr4"]
+albedo_color = Color(0.29411766, 0.2, 0.30980393, 1)
+metallic = 0.05
+roughness = 0.78
+
+[sub_resource type="BoxMesh" id="BoxMesh_h7wie"]
+size = Vector3(0.25, 0.44, 0.28)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_w65py"]
+albedo_color = Color(0.29411766, 0.2, 0.30980393, 1)
+metallic = 0.05
+roughness = 0.78
+
+[sub_resource type="BoxMesh" id="BoxMesh_bgxve"]
+size = Vector3(0.25, 0.44, 0.28)
+
+[node name="emberweave_leggings" type="Node3D"]
+
+[node name="Attachment" type="Node3D" parent="."]
+metadata/equipment_visual_id = &"emberweave_leggings"
+metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/LeftHipPivot"
+
+[node name="@MeshInstance3D@7" type="MeshInstance3D" parent="Attachment"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.23, 0)
+material_override = SubResource("StandardMaterial3D_7chr4")
+mesh = SubResource("BoxMesh_h7wie")
+metadata/palette_region = &"leather"
+
+[node name="@Node3D@9" type="Node3D" parent="."]
+metadata/equipment_visual_id = &"emberweave_leggings"
+metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/RightHipPivot"
+
+[node name="@MeshInstance3D@8" type="MeshInstance3D" parent="@Node3D@9"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.23, 0)
+material_override = SubResource("StandardMaterial3D_w65py")
+mesh = SubResource("BoxMesh_bgxve")
+metadata/palette_region = &"leather"

@@ -1,0 +1,39 @@
+[gd_scene format=3]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_hit7y"]
+albedo_color = Color(0.1882353, 0.14117648, 0.19215687, 1)
+metallic = 0.05
+roughness = 0.78
+
+[sub_resource type="BoxMesh" id="BoxMesh_spiir"]
+size = Vector3(0.25, 0.44, 0.28)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_wjy3m"]
+albedo_color = Color(0.1882353, 0.14117648, 0.19215687, 1)
+metallic = 0.05
+roughness = 0.78
+
+[sub_resource type="BoxMesh" id="BoxMesh_e84ww"]
+size = Vector3(0.25, 0.44, 0.28)
+
+[node name="grave_covenant_leggings" type="Node3D"]
+
+[node name="Attachment" type="Node3D" parent="."]
+metadata/equipment_visual_id = &"grave_covenant_leggings"
+metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/LeftHipPivot"
+
+[node name="@MeshInstance3D@76" type="MeshInstance3D" parent="Attachment"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.23, 0)
+material_override = SubResource("StandardMaterial3D_hit7y")
+mesh = SubResource("BoxMesh_spiir")
+metadata/palette_region = &"leather"
+
+[node name="@Node3D@78" type="Node3D" parent="."]
+metadata/equipment_visual_id = &"grave_covenant_leggings"
+metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/RightHipPivot"
+
+[node name="@MeshInstance3D@77" type="MeshInstance3D" parent="@Node3D@78"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.23, 0)
+material_override = SubResource("StandardMaterial3D_wjy3m")
+mesh = SubResource("BoxMesh_e84ww")
+metadata/palette_region = &"leather"

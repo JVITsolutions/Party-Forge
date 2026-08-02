@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="EquipmentBaseDefinition" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/equipment/equipment_base_definition.gd" id="1"]
+[ext_resource type="Resource" path="res://data/presentation/equipment/emberweave/emberweave_wand.tres" id="2"]
+
+[resource]
+script = ExtResource("1")
+id = &"emberweave_wand"
+display_name = "Emberweave Wand"
+item_type_id = &"wand"
+compatible_slot_ids = [&"main_hand"]
+weight_class_id = &"weapon"
+required_all_tags = [&"caster_wand"]
+handedness_id = &"one_hand"
+reserved_slot_ids = []
+compatible_offhand_item_types = []
+weapon_family_id = &"wand"
+implicit_family_id = &"emberweave"
+presentation = ExtResource("2")

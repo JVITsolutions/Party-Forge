@@ -1,0 +1,37 @@
+[gd_scene format=3]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_d6vlq"]
+albedo_color = Color(0.4, 0.3372549, 0.23921569, 1)
+metallic = 0.05
+roughness = 0.78
+
+[sub_resource type="BoxMesh" id="BoxMesh_tidoy"]
+size = Vector3(0.22, 0.22, 0.24)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_nex05"]
+albedo_color = Color(0.4, 0.3372549, 0.23921569, 1)
+metallic = 0.05
+roughness = 0.78
+
+[sub_resource type="BoxMesh" id="BoxMesh_qut0j"]
+size = Vector3(0.22, 0.22, 0.24)
+
+[node name="storm_chaplain_prayer_gloves" type="Node3D"]
+
+[node name="Attachment" type="Node3D" parent="."]
+metadata/equipment_visual_id = &"storm_chaplain_prayer_gloves"
+metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot/LeftShoulderPivot/LeftElbowPivot/LeftHandSocket"
+
+[node name="@MeshInstance3D@55" type="MeshInstance3D" parent="Attachment"]
+material_override = SubResource("StandardMaterial3D_d6vlq")
+mesh = SubResource("BoxMesh_tidoy")
+metadata/palette_region = &"leather"
+
+[node name="@Node3D@57" type="Node3D" parent="."]
+metadata/equipment_visual_id = &"storm_chaplain_prayer_gloves"
+metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot/RightShoulderPivot/RightElbowPivot/RightHandSocket"
+
+[node name="@MeshInstance3D@56" type="MeshInstance3D" parent="@Node3D@57"]
+material_override = SubResource("StandardMaterial3D_nex05")
+mesh = SubResource("BoxMesh_qut0j")
+metadata/palette_region = &"leather"
