@@ -12,6 +12,7 @@ func run() -> Array[String]:
 	_test_overkill_life_steal(types, failures)
 	_test_invalid_resolution_boundaries(types, failures)
 	_test_open_ended_radiant_type(types, failures)
+	_test_action_tags_use_deterministic_string_order(failures)
 	for health: HealthComponent in _health_nodes:
 		health.free()
 	return failures
@@ -168,6 +169,11 @@ func _test_open_ended_radiant_type(types: DamageTypeCatalog, failures: Array[Str
 	var result := DamageResolver.resolve(packet, target, CombatRng.new(13), custom_types)
 	TestAssertions.truthy(packet.valid and result.valid, "custom radiant type resolves", failures)
 	TestAssertions.near(result.final_damage, 75.0, 0.001, "custom resistance rule needs no resolver branch", failures)
+
+func _test_action_tags_use_deterministic_string_order(failures: Array[String]) -> void:
+	var attack := _attack([&"physical", &"fire"], [1.0, 1.0])
+	attack.action_tags = [&"zeta", &"alpha"]
+	TestAssertions.equal(DamageResolver.action_tags_for(attack), [&"alpha", &"fire", &"physical", &"zeta"], "StringName action and damage tags sort by deterministic string value", failures)
 
 func _attack(type_ids: Array[StringName], amounts: Array[float], can_crit: bool = false) -> AttackDefinition:
 	var attack := AttackDefinition.new()

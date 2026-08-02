@@ -8,7 +8,7 @@ static func action_tags_for(attack: AttackDefinition) -> Array[StringName]:
 		for component: AttackDamageComponent in attack.damage_components:
 			if component != null and not component.damage_type_id.is_empty() and component.damage_type_id not in tags:
 				tags.append(component.damage_type_id)
-	tags.sort()
+	tags.sort_custom(func(left: StringName, right: StringName) -> bool: return String(left) < String(right))
 	return tags
 
 static func prepare(attack: AttackDefinition, source: CombatantAdapter, rng: CombatRng, types: DamageTypeCatalog) -> DamagePacket:

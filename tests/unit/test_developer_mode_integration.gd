@@ -3,11 +3,16 @@ extends RefCounted
 const BADGE_SCENE_PATH := "res://scenes/ui/developer_mode_badge.tscn"
 const MAIN_SCENE_PATH := "res://scenes/game/main.tscn"
 
+var _profile_root := ""
+
 
 func run() -> Array[String]:
 	var failures: Array[String] = []
+	_profile_root = "user://tests/developer_mode_integration-profiles_%d_%d" % [OS.get_process_id(), Time.get_ticks_usec()]
+	ProfileTestSupport.remove_tree(_profile_root)
 	_test_badge_summary_uses_immutable_snapshot(failures)
 	_test_main_configures_badge_from_active_run(failures)
+	ProfileTestSupport.remove_tree(_profile_root)
 	return failures
 
 
@@ -94,7 +99,7 @@ func _test_main_configures_badge_from_active_run(failures: Array[String]) -> voi
 	player_settings.enemy_density_percent = 500
 	TestAssertions.equal(store.save_settings(player_settings), "", "Player Simulation end-to-end fixture saves", failures)
 	var player_main := (load(MAIN_SCENE_PATH) as PackedScene).instantiate()
-	player_main.call(&"_ready")
+	_prepare_main(player_main)
 	TestAssertions.truthy(player_main.call(&"select_leader_class", &"fighter"), "Player Simulation end-to-end fixture starts", failures)
 	var player_badge := player_main.get_node_or_null("DeveloperModeBadge")
 	TestAssertions.truthy(player_badge != null and not player_badge.visible, "Player Simulation run keeps the badge absent", failures)
@@ -110,7 +115,7 @@ func _test_main_configures_badge_from_active_run(failures: Array[String]) -> voi
 	developer_settings.enemy_density_percent = 500
 	TestAssertions.equal(store.save_settings(developer_settings), "", "Developer Mode end-to-end fixture saves", failures)
 	var developer_main := (load(MAIN_SCENE_PATH) as PackedScene).instantiate()
-	developer_main.call(&"_ready")
+	_prepare_main(developer_main)
 	TestAssertions.truthy(developer_main.call(&"select_leader_class", &"fighter"), "Developer Mode end-to-end fixture starts", failures)
 	var developer_badge := developer_main.get_node_or_null("DeveloperModeBadge")
 	TestAssertions.truthy(developer_badge != null and developer_badge.visible, "Developer Mode run shows the configured badge", failures)
@@ -130,6 +135,15 @@ func _test_main_configures_badge_from_active_run(failures: Array[String]) -> voi
 func _cleanup_main(main: Node) -> void:
 	(Engine.get_main_loop() as SceneTree).paused = false
 	main.free()
+
+
+func _prepare_main(main: Node) -> void:
+	main.set("profile_root", _profile_root)
+	main.call(&"_ready")
+	var manager := main.get("profile_manager") as ProfileManager
+	if manager.active_profile() == null:
+		manager.create_profile("Test Profile")
+	(main.get_node("SettingsScreen") as SettingsScreen).close()
 
 
 func _cleanup_default_settings_artifacts() -> void:
