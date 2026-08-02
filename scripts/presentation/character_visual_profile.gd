@@ -95,6 +95,7 @@ func _validate_default_equipment(definitions: Array[EquipmentLoadoutEntry], erro
 		for reason: String in entry.validate():
 			errors.append("profile %s %s" % [id, reason])
 		if entry.item != null:
+			_validate_item_presentation(entry.item, errors)
 			if item_ids.has(entry.item.id):
 				errors.append("profile %s has duplicate default equipment id %s" % [id, entry.item.id])
 			item_ids[entry.item.id] = true
@@ -110,6 +111,13 @@ func _validate_available_equipment(definitions: Array[EquipmentBaseDefinition], 
 			continue
 		for reason: String in item.validate():
 			errors.append("profile %s %s" % [id, reason])
+		_validate_item_presentation(item, errors)
 		if item_ids.has(item.id):
 			errors.append("profile %s has duplicate available equipment id %s" % [id, item.id])
 		item_ids[item.id] = true
+
+func _validate_item_presentation(item: EquipmentBaseDefinition, errors: PackedStringArray) -> void:
+	if item.presentation == null:
+		return
+	for reason: String in item.presentation.validate():
+		errors.append("profile %s %s" % [id, reason])

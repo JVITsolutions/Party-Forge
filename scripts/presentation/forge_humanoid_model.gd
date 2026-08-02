@@ -39,6 +39,7 @@ func set_palette(palette_id: StringName, primary_color: Color) -> bool:
 	_primary_color = primary_color
 	for mesh: MeshInstance3D in palette_meshes.get(&"primary", []):
 		_assign_unique_color(mesh, primary_color)
+	_refresh_equipped_wearer_accents()
 	_apply_feedback_colors()
 	return true
 
@@ -174,8 +175,7 @@ func _ensure_cache() -> void:
 	_cache_ready = true
 
 func _apply_item_colors(root: Node3D, definition: EquipmentVisualDefinition) -> void:
-	for node: Node in root.find_children("*", "MeshInstance3D", true, false):
-		var mesh := node as MeshInstance3D
+	for mesh: MeshInstance3D in _meshes_including_root(root):
 		var region := StringName(mesh.get_meta(&"palette_region", &""))
 		var material := mesh.material_override as StandardMaterial3D
 		if material == null:
@@ -191,6 +191,31 @@ func _apply_item_colors(root: Node3D, definition: EquipmentVisualDefinition) -> 
 		unique_material.albedo_color = color as Color
 		mesh.material_override = unique_material
 		base_materials[mesh] = unique_material.duplicate() as StandardMaterial3D
+
+func _refresh_equipped_wearer_accents() -> void:
+	for slot_id: StringName in equipped_definitions:
+		var definition := equipped_definitions[slot_id] as EquipmentVisualDefinition
+		if definition == null or definition.wearer_accent_channel.is_empty():
+			continue
+		for attachment: Node3D in equipped_nodes.get(slot_id, []):
+			for mesh: MeshInstance3D in _meshes_including_root(attachment):
+				if StringName(mesh.get_meta(&"palette_region", &"")) != definition.wearer_accent_channel:
+					continue
+				var material := mesh.material_override as StandardMaterial3D
+				if material == null:
+					continue
+				var unique_material := material.duplicate() as StandardMaterial3D
+				unique_material.albedo_color = _primary_color
+				mesh.material_override = unique_material
+				base_materials[mesh] = unique_material.duplicate() as StandardMaterial3D
+
+func _meshes_including_root(root: Node3D) -> Array[MeshInstance3D]:
+	var meshes: Array[MeshInstance3D] = []
+	if root is MeshInstance3D:
+		meshes.append(root as MeshInstance3D)
+	for node: Node in root.find_children("*", "MeshInstance3D", true, false):
+		meshes.append(node as MeshInstance3D)
+	return meshes
 
 func _all_meshes() -> Array[MeshInstance3D]:
 	var meshes: Array[MeshInstance3D] = []

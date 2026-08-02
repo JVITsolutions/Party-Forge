@@ -30,6 +30,7 @@ func run() -> Array[String]:
 	_test_incomplete_feedback_api_keeps_fallback_visible(failures)
 	_test_instances_keep_model_state_independent(failures)
 	_test_loadout_entry_owns_supported_ring_side(failures)
+	_test_item_base_presentations_validate_in_each_profile_array(failures)
 	return failures
 
 func _test_profile_application_and_feedback(failures: Array[String]) -> void:
@@ -117,28 +118,62 @@ func _test_instances_keep_model_state_independent(failures: Array[String]) -> vo
 func _test_loadout_entry_owns_supported_ring_side(failures: Array[String]) -> void:
 	var root := _new_root("CharacterPresentationRingLoadoutTest")
 	var presentation := _new_presentation(root)
-	var ring_visual := EquipmentVisualDefinition.new()
-	ring_visual.id = &"test_ring"
-	ring_visual.slot_id = &"ring_left"
-	ring_visual.supported_slot_ids = [&"ring_left", &"ring_right"]
-	ring_visual.combat_visible = false
-	var ring := EquipmentBaseDefinition.new()
-	ring.id = &"test_ring"
-	ring.display_name = "Test Ring"
-	ring.item_type_id = &"ring"
-	ring.compatible_slot_ids = [&"ring_left", &"ring_right"]
-	ring.implicit_family_id = &"test"
-	ring.presentation = ring_visual
+	var ring := _item_base(&"test_ring", [&"ring_left", &"ring_right"])
 	var entry := EquipmentLoadoutEntry.new()
 	entry.slot_id = &"ring_right"
 	entry.item = ring
 	var profile := _profile_for_scene(load(FIXTURE_SCENE_PATH) as PackedScene, &"ring_loadout")
 	profile.default_equipment = [entry]
 	TestAssertions.truthy(presentation.apply_profile(profile, Color.WHITE), "loadout applies a ring to its selected supported side", failures)
-	TestAssertions.truthy(presentation.apply_equipment_visual(&"ring_right", ring_visual), "runtime ring selection accepts a supported non-primary side", failures)
+	TestAssertions.truthy(presentation.apply_equipment_visual(&"ring_right", ring.presentation), "runtime ring selection accepts a supported non-primary side", failures)
 	var model := presentation.active_model as FakeCharacterModel
 	TestAssertions.equal(model.equipped.get(&"ring_right") if model != null else &"", &"test_ring", "ring base does not own the selected side", failures)
 	root.free()
+
+func _test_item_base_presentations_validate_in_each_profile_array(failures: Array[String]) -> void:
+	var default_profile := _profile_for_scene(load(FIXTURE_SCENE_PATH) as PackedScene, &"invalid_default_item_presentation")
+	var default_item := _item_base(&"default_invalid", [&"main_hand"])
+	default_item.presentation.icon_master = null
+	var entry := EquipmentLoadoutEntry.new()
+	entry.slot_id = &"main_hand"
+	entry.item = default_item
+	default_profile.default_equipment = [entry]
+	TestAssertions.truthy(_errors_contain(default_profile.validate(), "icon pair is incomplete"), "default item presentation validates full visual contract", failures)
+	var available_profile := _profile_for_scene(load(FIXTURE_SCENE_PATH) as PackedScene, &"invalid_available_item_presentation")
+	var available_item := _item_base(&"available_invalid", [&"main_hand"])
+	available_item.presentation.readability_channels = []
+	available_profile.available_equipment = [available_item]
+	TestAssertions.truthy(_errors_contain(available_profile.validate(), "readability channels are empty"), "available item presentation validates full visual contract", failures)
+
+func _item_base(item_id: StringName, supported_slots: Array[StringName]) -> EquipmentBaseDefinition:
+	var visual := EquipmentVisualDefinition.new()
+	visual.id = item_id
+	visual.slot_id = supported_slots[0]
+	visual.supported_slot_ids = supported_slots
+	visual.body_preset_ids = [&"masculine", &"feminine"]
+	visual.icon_master = _icon()
+	visual.icon_runtime = _icon()
+	visual.combat_visible = false
+	visual.readability_channels = [&"silhouette"]
+	var item := EquipmentBaseDefinition.new()
+	item.id = item_id
+	item.display_name = "Test Item"
+	item.item_type_id = &"test"
+	item.compatible_slot_ids = supported_slots
+	item.implicit_family_id = &"test"
+	item.presentation = visual
+	return item
+
+func _icon() -> ImageTexture:
+	var image := Image.create(1, 1, false, Image.FORMAT_RGBA8)
+	image.fill(Color.WHITE)
+	return ImageTexture.create_from_image(image)
+
+func _errors_contain(errors: PackedStringArray, expected: String) -> bool:
+	for error: String in errors:
+		if expected in error:
+			return true
+	return false
 
 func _valid_profile() -> CharacterVisualProfile:
 	var sword := EquipmentVisualDefinition.new()
