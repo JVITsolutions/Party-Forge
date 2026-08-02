@@ -8,6 +8,9 @@ const BODY_PRESETS: Array[StringName] = [&"masculine", &"feminine"]
 @export var default_body_preset: StringName = &"masculine"
 @export var default_palette_id: StringName = &"red"
 @export var palette_colors: Dictionary = {}
+@export var default_equipment: Array[EquipmentLoadoutEntry] = []
+@export var available_equipment: Array[EquipmentBaseDefinition] = []
+@export var idle_action_id: StringName = &"idle"
 @export var default_equipment_visuals: Array[EquipmentVisualDefinition] = []
 @export var available_equipment_visuals: Array[EquipmentVisualDefinition] = []
 @export var required_animation_names: Array[StringName] = [&"idle"]
@@ -26,6 +29,8 @@ func validate() -> PackedStringArray:
 	for palette_id: Variant in palette_colors:
 		if StringName(palette_id).is_empty() or typeof(palette_colors[palette_id]) != TYPE_COLOR:
 			errors.append("profile %s palette %s is invalid" % [id, palette_id])
+	_validate_default_equipment(default_equipment, errors)
+	_validate_available_equipment(available_equipment, errors)
 	_validate_equipment_visuals(default_equipment_visuals, &"default", errors)
 	_validate_equipment_visuals(available_equipment_visuals, &"available", errors)
 	var animation_names: Dictionary = {}
@@ -33,8 +38,8 @@ func validate() -> PackedStringArray:
 		if animation_id.is_empty() or animation_names.has(animation_id):
 			errors.append("profile %s has empty or duplicate animation" % id)
 		animation_names[animation_id] = true
-	if not animation_names.has(&"idle"):
-		errors.append("profile %s idle animation is missing" % id)
+	if idle_action_id.is_empty() or not animation_names.has(idle_action_id):
+		errors.append("profile %s idle animation %s is missing" % [id, idle_action_id])
 	for attack_id: Variant in attack_animation_by_id:
 		var animation_id := StringName(attack_animation_by_id[attack_id])
 		if StringName(attack_id).is_empty() or not animation_names.has(animation_id):
@@ -79,3 +84,32 @@ func _validate_equipment_visuals(definitions: Array[EquipmentVisualDefinition], 
 		if collection_name == &"default" and equipment_slots.has(definition.slot_id):
 			errors.append("profile %s has duplicate default equipment slot %s" % [id, definition.slot_id])
 		equipment_slots[definition.slot_id] = true
+
+func _validate_default_equipment(definitions: Array[EquipmentLoadoutEntry], errors: PackedStringArray) -> void:
+	var item_ids: Dictionary = {}
+	var slots: Dictionary = {}
+	for entry: EquipmentLoadoutEntry in definitions:
+		if entry == null:
+			errors.append("profile %s has null default equipment entry" % id)
+			continue
+		for reason: String in entry.validate():
+			errors.append("profile %s %s" % [id, reason])
+		if entry.item != null:
+			if item_ids.has(entry.item.id):
+				errors.append("profile %s has duplicate default equipment id %s" % [id, entry.item.id])
+			item_ids[entry.item.id] = true
+		if slots.has(entry.slot_id):
+			errors.append("profile %s has duplicate default equipment slot %s" % [id, entry.slot_id])
+		slots[entry.slot_id] = true
+
+func _validate_available_equipment(definitions: Array[EquipmentBaseDefinition], errors: PackedStringArray) -> void:
+	var item_ids: Dictionary = {}
+	for item: EquipmentBaseDefinition in definitions:
+		if item == null:
+			errors.append("profile %s has null available equipment item" % id)
+			continue
+		for reason: String in item.validate():
+			errors.append("profile %s %s" % [id, reason])
+		if item_ids.has(item.id):
+			errors.append("profile %s has duplicate available equipment id %s" % [id, item.id])
+		item_ids[item.id] = true

@@ -42,11 +42,17 @@ func apply_profile(profile: CharacterVisualProfile, primary_color: Color) -> boo
 	active_palette_id = profile.default_palette_id
 	if not _call_bool(&"set_palette", [active_palette_id, primary_color]):
 		return _fail_active(&"palette", "palette rejected")
-	for definition: EquipmentVisualDefinition in profile.default_equipment_visuals:
-		if not _call_bool(&"apply_equipment_visual", [definition.slot_id, definition]):
-			_log_once(StringName("slot_%s" % definition.slot_id), "profile=%s operation=equipment slot=%s reason=visual rejected" % [profile.id, definition.slot_id])
+	if profile.default_equipment.is_empty():
+		for definition: EquipmentVisualDefinition in profile.default_equipment_visuals:
+			if definition == null or not _call_bool(&"apply_equipment_visual", [definition.slot_id, definition]):
+				return _fail_active(StringName("slot_%s" % (definition.slot_id if definition != null else &"<null>")), "equipment visual rejected")
+	else:
+		for entry: EquipmentLoadoutEntry in profile.default_equipment:
+			if entry == null or entry.item == null or entry.item.presentation == null or not _call_bool(&"apply_equipment_visual", [entry.slot_id, entry.item.presentation]):
+				return _fail_active(StringName("slot_%s" % (entry.slot_id if entry != null else &"<null>")), "equipment item rejected")
+	if not play_idle():
+		return _fail_active(&"idle", "idle action rejected")
 	_set_fallback_visible(false)
-	play_action(&"idle")
 	return true
 
 func set_body_preset(preset_id: StringName) -> bool:
@@ -59,7 +65,11 @@ func set_palette(palette_id: StringName, primary_color: Color) -> bool:
 	return true
 
 func apply_equipment_visual(slot_id: StringName, definition: EquipmentVisualDefinition) -> bool:
-	if active_model == null or definition == null or not EquipmentSlotCatalog.is_valid(slot_id) or definition.slot_id != slot_id:
+	if active_model == null or definition == null or not EquipmentSlotCatalog.is_valid(slot_id):
+		return false
+	if definition.supported_slot_ids.is_empty() and definition.slot_id != slot_id:
+		return false
+	if not definition.supported_slot_ids.is_empty() and slot_id not in definition.supported_slot_ids:
 		return false
 	return _call_bool(&"apply_equipment_visual", [slot_id, definition])
 
@@ -67,6 +77,15 @@ func clear_equipment_visual(slot_id: StringName) -> bool:
 	if active_model == null or not EquipmentSlotCatalog.is_valid(slot_id):
 		return false
 	return _call_bool(&"clear_equipment_visual", [slot_id])
+
+func equipped_weapon_family() -> StringName:
+	return StringName(active_model.call(&"equipped_weapon_family")) if active_model != null and active_model.has_method(&"equipped_weapon_family") else &"unarmed"
+
+func socket_global_transform(socket_id: StringName) -> Transform3D:
+	if active_model == null or not active_model.has_method(&"socket_global_transform"):
+		return global_transform
+	var value: Transform3D = active_model.call(&"socket_global_transform", socket_id)
+	return value
 
 func play_attack(definition: AttackDefinition, _target: CombatTarget = null) -> void:
 	if active_profile == null or definition == null:
@@ -77,6 +96,9 @@ func play_attack(definition: AttackDefinition, _target: CombatTarget = null) -> 
 
 func play_action(animation_id: StringName) -> bool:
 	return active_model != null and _call_bool(&"play_action", [animation_id])
+
+func play_idle() -> bool:
+	return active_profile != null and play_action(active_profile.idle_action_id)
 
 func flash_hit() -> void:
 	if active_model == null:

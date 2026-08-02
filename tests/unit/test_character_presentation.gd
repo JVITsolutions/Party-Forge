@@ -29,6 +29,7 @@ func run() -> Array[String]:
 	_test_invalid_profile_keeps_fallback_visible(failures)
 	_test_incomplete_feedback_api_keeps_fallback_visible(failures)
 	_test_instances_keep_model_state_independent(failures)
+	_test_loadout_entry_owns_supported_ring_side(failures)
 	return failures
 
 func _test_profile_application_and_feedback(failures: Array[String]) -> void:
@@ -111,6 +112,32 @@ func _test_instances_keep_model_state_independent(failures: Array[String]) -> vo
 	TestAssertions.truthy(first_model != second_model, "adapter instances own independent models", failures)
 	if first_model != null and second_model != null:
 		TestAssertions.truthy(first_model.primary_color != second_model.primary_color, "adapter instances keep palette material state independent", failures)
+	root.free()
+
+func _test_loadout_entry_owns_supported_ring_side(failures: Array[String]) -> void:
+	var root := _new_root("CharacterPresentationRingLoadoutTest")
+	var presentation := _new_presentation(root)
+	var ring_visual := EquipmentVisualDefinition.new()
+	ring_visual.id = &"test_ring"
+	ring_visual.slot_id = &"ring_left"
+	ring_visual.supported_slot_ids = [&"ring_left", &"ring_right"]
+	ring_visual.combat_visible = false
+	var ring := EquipmentBaseDefinition.new()
+	ring.id = &"test_ring"
+	ring.display_name = "Test Ring"
+	ring.item_type_id = &"ring"
+	ring.compatible_slot_ids = [&"ring_left", &"ring_right"]
+	ring.implicit_family_id = &"test"
+	ring.presentation = ring_visual
+	var entry := EquipmentLoadoutEntry.new()
+	entry.slot_id = &"ring_right"
+	entry.item = ring
+	var profile := _profile_for_scene(load(FIXTURE_SCENE_PATH) as PackedScene, &"ring_loadout")
+	profile.default_equipment = [entry]
+	TestAssertions.truthy(presentation.apply_profile(profile, Color.WHITE), "loadout applies a ring to its selected supported side", failures)
+	TestAssertions.truthy(presentation.apply_equipment_visual(&"ring_right", ring_visual), "runtime ring selection accepts a supported non-primary side", failures)
+	var model := presentation.active_model as FakeCharacterModel
+	TestAssertions.equal(model.equipped.get(&"ring_right") if model != null else &"", &"test_ring", "ring base does not own the selected side", failures)
 	root.free()
 
 func _valid_profile() -> CharacterVisualProfile:
