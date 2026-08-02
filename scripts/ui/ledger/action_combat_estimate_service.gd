@@ -12,10 +12,8 @@ static func estimate(attack: AttackDefinition, member_id: int, party: PartyManag
 	var validation := attack.validate(types)
 	if not validation.is_empty():
 		return _unavailable(result, String(validation[0]).trim_prefix("PARTY_FORGE_DAMAGE_ERROR "))
-	if attack.is_healing() or attack.damage_components.is_empty():
+	if attack.is_healing():
 		return _unavailable(result, "Action does not deal direct damage.")
-	if not is_finite(attack.cooldown) or attack.cooldown <= 0.0:
-		return _unavailable(result, "Invalid action cooldown.")
 	var action_stats := party.stats_for_action(member_id, DamageResolver.action_tags_for(attack))
 	var cooldown_stats := party.stats_for(member_id)
 	if action_stats == null or cooldown_stats == null:
@@ -27,11 +25,7 @@ static func estimate(attack: AttackDefinition, member_id: int, party: PartyManag
 	crit_chance = clampf(crit_chance, 0.0, 1.0)
 	var crit_multiplier := maxf(1.0, action_stats.value(&"crit_multiplier", 1.5))
 	for component: AttackDamageComponent in attack.damage_components:
-		if component == null:
-			return _unavailable(result, "Null damage component.")
 		var type_definition := types.definition(component.damage_type_id)
-		if type_definition == null:
-			return _unavailable(result, "Unknown damage type: %s." % component.damage_type_id)
 		var normal := component.base_amount * action_stats.value(&"damage", 1.0) * action_stats.value(type_definition.offense_stat_id, 1.0)
 		if not is_finite(normal) or normal < 0.0:
 			return _unavailable(result, "Invalid derived damage for %s." % type_definition.display_name)
