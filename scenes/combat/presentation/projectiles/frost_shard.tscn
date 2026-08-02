@@ -1,0 +1,19 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scripts/combat/projectile.gd" id="1_j25t3"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_q1d73"]
+albedo_color = Color(0.5568628, 0.9098039, 1, 1)
+roughness = 0.72
+emission_enabled = true
+emission = Color(0.5568628, 0.9098039, 1, 1)
+
+[sub_resource type="PrismMesh" id="PrismMesh_analr"]
+size = Vector3(0.22, 0.22, 0.62)
+
+[node name="FrostShard" type="Node3D"]
+script = ExtResource("1_j25t3")
+
+[node name="Shard" type="MeshInstance3D" parent="."]
+material_override = SubResource("StandardMaterial3D_q1d73")
+mesh = SubResource("PrismMesh_analr")

@@ -1,0 +1,26 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scripts/combat/presentation_effect.gd" id="1_wjuig"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_u21fp"]
+transparency = 1
+albedo_color = Color(0.54901963, 0.27058825, 0.7882353, 0.68)
+roughness = 0.72
+emission_enabled = true
+emission = Color(0.54901963, 0.27058825, 0.7882353, 1)
+emission_energy_multiplier = 1.25
+
+[sub_resource type="SphereMesh" id="SphereMesh_56e3k"]
+radius = 0.72
+height = 1.44
+radial_segments = 12
+rings = 6
+
+[node name="ChaosImpact" type="Node3D"]
+script = ExtResource("1_wjuig")
+effect_color = Color(0.54901963, 0.27058825, 0.7882353, 1)
+duration = 0.5
+
+[node name="EffectMesh" type="MeshInstance3D" parent="."]
+material_override = SubResource("StandardMaterial3D_u21fp")
+mesh = SubResource("SphereMesh_56e3k")

@@ -1,0 +1,26 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scripts/combat/presentation_effect.gd" id="1_ijqow"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_4ialr"]
+transparency = 1
+albedo_color = Color(1, 0.41960785, 0.20784314, 0.68)
+roughness = 0.72
+emission_enabled = true
+emission = Color(1, 0.41960785, 0.20784314, 1)
+emission_energy_multiplier = 1.25
+
+[sub_resource type="SphereMesh" id="SphereMesh_k23hq"]
+radius = 0.7
+height = 1.4
+radial_segments = 12
+rings = 6
+
+[node name="FireImpact" type="Node3D"]
+script = ExtResource("1_ijqow")
+effect_color = Color(1, 0.41960785, 0.20784314, 1)
+duration = 0.32
+
+[node name="EffectMesh" type="MeshInstance3D" parent="."]
+material_override = SubResource("StandardMaterial3D_4ialr")
+mesh = SubResource("SphereMesh_k23hq")

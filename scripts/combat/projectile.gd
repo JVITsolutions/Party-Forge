@@ -16,8 +16,11 @@ var target: CombatTarget
 var effects_parent: Node
 var combatants: Array[Node3D] = []
 var direction := Vector3.FORWARD
+var impact_scene: PackedScene
+var impact_color := Color.WHITE
+var visual_scale := Vector3.ONE
 
-func configure(damage_packet: DamagePacket, rng: CombatRng, types: DamageTypeCatalog, projectile_speed: float, impact_radius: float, range_limit: float, duration: float, combat_target: CombatTarget, effect_container: Node, actor_candidates: Array[Node3D] = []) -> void:
+func configure(damage_packet: DamagePacket, rng: CombatRng, types: DamageTypeCatalog, projectile_speed: float, impact_radius: float, range_limit: float, duration: float, combat_target: CombatTarget, effect_container: Node, actor_candidates: Array[Node3D] = [], presentation_impact_scene: PackedScene = null, presentation_impact_color: Color = Color.WHITE, presentation_scale: Vector3 = Vector3.ONE) -> void:
     packet = damage_packet
     combat_rng = rng
     damage_types = types
@@ -28,6 +31,10 @@ func configure(damage_packet: DamagePacket, rng: CombatRng, types: DamageTypeCat
     target = combat_target
     effects_parent = effect_container
     combatants = actor_candidates
+    impact_scene = presentation_impact_scene
+    impact_color = presentation_impact_color
+    visual_scale = presentation_scale if presentation_scale.is_finite() else Vector3.ONE
+    scale = visual_scale
     elapsed = 0.0
     distance_travelled = 0.0
     _refresh_direction()
@@ -36,6 +43,7 @@ func _process(delta: float) -> void:
     var step_delta := maxf(delta, 0.0)
     elapsed += step_delta
     if elapsed >= lifetime or distance_travelled >= maximum_range:
+        _spawn_impact_presentation()
         queue_free()
         return
     if target != null and target.actor != null:
@@ -61,6 +69,7 @@ func _process(delta: float) -> void:
     _set_current_position(current_position + direction * step)
     distance_travelled += step
     if distance_travelled >= maximum_range:
+        _spawn_impact_presentation()
         queue_free()
 
 func _refresh_direction() -> void:
@@ -72,6 +81,7 @@ func _refresh_direction() -> void:
         direction = next_direction
 
 func _impact() -> void:
+    _spawn_impact_presentation()
     if area_radius > 0.0:
         var burst := AREA_BURST_SCENE.instantiate() as Node3D
         var parent := _effect_parent()
@@ -87,6 +97,27 @@ func _impact() -> void:
         if adapter != null:
             DamageResolver.resolve(packet, adapter, combat_rng, damage_types)
     queue_free()
+
+func _spawn_impact_presentation() -> void:
+    if impact_scene == null:
+        return
+    var candidate := impact_scene.instantiate()
+    var effect := candidate as Node3D
+    if effect == null:
+        if candidate != null:
+            candidate.free()
+        return
+    var parent := _effect_parent()
+    if parent == null:
+        effect.free()
+        return
+    parent.add_child(effect)
+    if is_inside_tree() and effect.is_inside_tree():
+        effect.global_position = global_position
+    else:
+        effect.position = position
+    if effect.has_method(&"configure"):
+        effect.call(&"configure", impact_color)
 
 func _effect_parent() -> Node:
     if effects_parent != null and is_instance_valid(effects_parent):

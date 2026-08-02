@@ -1,6 +1,8 @@
 class_name AttackExecutor
 extends Node
 
+signal projectile_presentation_error(message: String)
+
 const PROJECTILE_SCENE := preload("res://scenes/combat/projectile.tscn")
 const HEAL_EFFECT_SCENE := preload("res://scenes/combat/heal_effect.tscn")
 const CombatModifiersScript := preload("res://scripts/combat/combat_modifiers.gd")
@@ -26,7 +28,7 @@ func execute(definition: AttackDefinition, target: CombatTarget, presentation: A
     var source_adapter := owner_actor.get_combat_adapter(action_tags)
     var modifiers: RefCounted = CombatModifiersScript.resolve(owner_actor.member_state, party_manager)
     if definition.kind == AttackDefinition.Kind.HEAL:
-        _execute_heal(definition, target, source_adapter)
+        _execute_heal(definition, target, source_adapter, presentation)
         return
     var rng := party_manager.combat_rng if party_manager != null else null
     var types := party_manager.damage_types if party_manager != null else null
@@ -42,7 +44,7 @@ func execute(definition: AttackDefinition, target: CombatTarget, presentation: A
         AttackDefinition.Kind.MELEE_CLEAVE:
             _execute_melee(packet, target, geometry.area_radius)
         AttackDefinition.Kind.PROJECTILE, AttackDefinition.Kind.AREA_PROJECTILE:
-            _spawn_projectile(definition, target, modifiers, packet, geometry)
+            _spawn_projectile(definition, target, modifiers, packet, geometry, presentation)
         _:
             push_error("PARTY_FORGE_DAMAGE_ERROR attack=%s kind=%d reason=unsupported party runtime kind" % [definition.id, definition.kind])
 
@@ -68,23 +70,44 @@ func _execute_melee(packet: DamagePacket, primary_target: CombatTarget, radius: 
     for adapter: CombatantAdapter in targets:
         DamageResolver.resolve(packet, adapter, party_manager.combat_rng, party_manager.damage_types)
 
-func _spawn_projectile(definition: AttackDefinition, target: CombatTarget, modifiers: RefCounted, packet: DamagePacket, geometry: ResolvedAttackGeometry) -> void:
+func _spawn_projectile(definition: AttackDefinition, target: CombatTarget, modifiers: RefCounted, packet: DamagePacket, geometry: ResolvedAttackGeometry, presentation: AttackPresentationDefinition = null) -> void:
     var parent := _effect_parent()
     if parent == null:
         return
-    var projectile := PROJECTILE_SCENE.instantiate() as Node3D
+    var projectile: Node3D
+    if presentation != null and presentation.projectile_scene != null:
+        var candidate := presentation.projectile_scene.instantiate()
+        projectile = candidate as Node3D
+        if projectile == null or not projectile.has_method(&"configure"):
+            if candidate != null:
+                candidate.free()
+            projectile = null
+            _report_projectile_presentation_error(definition, presentation)
+    if projectile == null:
+        projectile = PROJECTILE_SCENE.instantiate() as Node3D
     parent.add_child(projectile)
-    if owner_actor.is_inside_tree() and projectile.is_inside_tree():
-        projectile.global_position = owner_actor.global_position
-    else:
-        projectile.position = owner_actor.position
+    var launched_from_socket := false
+    if presentation != null and not presentation.launch_socket_id.is_empty():
+        var character_presentation := owner_actor.get_node_or_null("Presentation") as CharacterPresentation
+        if character_presentation != null:
+            _set_world_transform(projectile, character_presentation.socket_global_transform(presentation.launch_socket_id))
+            launched_from_socket = true
+    if not launched_from_socket:
+        if owner_actor.is_inside_tree() and projectile.is_inside_tree():
+            projectile.global_position = owner_actor.global_position
+        else:
+            projectile.position = owner_actor.position
+    var visual_scale := presentation.projectile_scale if presentation != null and presentation.projectile_scale.is_finite() else Vector3.ONE
+    if presentation != null:
+        projectile.rotation_degrees += presentation.projectile_rotation_degrees
+    projectile.scale = visual_scale
     var projectile_speed: float = definition.projectile_speed * float(modifiers.get("projectile_multiplier"))
     var maximum_range: float = geometry.range
     var area_radius: float = geometry.area_radius
     var lifetime: float = clampf(maximum_range / maxf(projectile_speed, 0.01) + 0.5, 0.1, 10.0)
-    projectile.call("configure", packet, party_manager.combat_rng, party_manager.damage_types, projectile_speed, area_radius, maximum_range, lifetime, target, parent, _combatants())
+    projectile.call("configure", packet, party_manager.combat_rng, party_manager.damage_types, projectile_speed, area_radius, maximum_range, lifetime, target, parent, _combatants(), presentation.impact_scene if presentation != null else null, presentation.impact_color if presentation != null else Color.WHITE, visual_scale)
 
-func _execute_heal(definition: AttackDefinition, target: CombatTarget, source_adapter: CombatantAdapter) -> void:
+func _execute_heal(definition: AttackDefinition, target: CombatTarget, source_adapter: CombatantAdapter, presentation: AttackPresentationDefinition = null) -> void:
     if target.team_id != owner_actor.team_id or not target.is_available or target.actor == null:
         return
     var target_health: HealthComponent = target.actor.get_node_or_null("HealthComponent") as HealthComponent
@@ -94,13 +117,44 @@ func _execute_heal(definition: AttackDefinition, target: CombatTarget, source_ad
     var parent := _effect_parent()
     if parent == null:
         return
-    var effect := HEAL_EFFECT_SCENE.instantiate() as Node3D
+    var candidate := presentation.impact_scene.instantiate() if presentation != null and presentation.impact_scene != null else null
+    var effect := candidate as Node3D
+    var specialized := effect != null and effect.has_method(&"configure")
+    if not specialized:
+        if candidate != null:
+            candidate.free()
+        effect = HEAL_EFFECT_SCENE.instantiate() as Node3D
     parent.add_child(effect)
     if effect.is_inside_tree():
         effect.global_position = target.position
     else:
         effect.position = target.position
-    effect.call("configure", 0.4)
+    if specialized:
+        effect.call("configure", presentation.impact_color)
+    else:
+        effect.call("configure", 0.4)
+
+func _report_projectile_presentation_error(definition: AttackDefinition, presentation: AttackPresentationDefinition) -> void:
+    var message := "PARTY_FORGE_PROJECTILE_PRESENTATION_ERROR attack=%s presentation=%s reason=specialized scene failed; generic fallback used" % [definition.id, presentation.id if presentation != null else &"<missing>"]
+    projectile_presentation_error.emit(message)
+    push_error(message)
+
+func _set_world_transform(node: Node3D, world_transform: Transform3D) -> void:
+    if node.is_inside_tree():
+        node.global_transform = world_transform
+        return
+    var parent_3d := node.get_parent() as Node3D
+    var parent_transform := _transform_without_tree(parent_3d) if parent_3d != null else Transform3D.IDENTITY
+    node.transform = parent_transform.affine_inverse() * world_transform
+
+func _transform_without_tree(node: Node3D) -> Transform3D:
+    var result := Transform3D.IDENTITY
+    var cursor: Node = node
+    while cursor != null:
+        if cursor is Node3D:
+            result = (cursor as Node3D).transform * result
+        cursor = cursor.get_parent()
+    return result
 
 func _effect_parent() -> Node:
     if effects_parent != null and is_instance_valid(effects_parent):
