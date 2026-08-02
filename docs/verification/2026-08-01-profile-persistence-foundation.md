@@ -86,6 +86,7 @@ The independent senior review identified four Important persistence issues. Focu
 - RED: `.superpowers/sdd/task-8-profile-fixes-red3.log` exited 1 with `TASK8_PROFILE_FIX_SUMMARY: FAIL (37 failures)` before production changes.
 - Profile-health UI RED: `.superpowers/sdd/task-8-profile-health-ui-red.log` exited 1 with `TASK8_PROFILE_FIX_SUMMARY: FAIL (6 failures)` before profile-status/UI production changes.
 - Focused GREEN: `.superpowers/sdd/task-8-profile-fixes-green2.log` exited 0 with `TASK8_PROFILE_FIX_SUMMARY: PASS (7 suites)`.
+- Required-operation follow-up: `.superpowers/sdd/task-8-operation-required-red.log` exited 1 before the low-level default was removed; `.superpowers/sdd/task-8-operation-required-green.log` exited 0 with `TASK8_PROFILE_FIX_SUMMARY: PASS (7 suites)`.
 - Retained integration GREEN: `PROFILE_BOOT_MAIN_FLOW_SUMMARY: PASS`, `PROFILE_SETTINGS_NAVIGATION_SUMMARY: PASS`, and `RESPONSIVE_GEOMETRY_SUMMARY: PASS (4 sizes)` in the corresponding `task-8-*.log` files.
 
 The earlier `DamageResolver` `StringName` sorting fix remains intentionally in this branch. Its pre-fix evidence showed `tags.sort()` returning `[physical, melee]` where deterministic string order required `[melee, physical]`; `.superpowers/sdd/damage-tag-order-green.log` recorded `DAMAGE_TAG_ORDER_FOCUSED: PASS`. `tests/unit/test_damage_resolver.gd` now retains a focused multi-tag lexicographic regression assertion.

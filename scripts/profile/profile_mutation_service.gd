@@ -8,7 +8,7 @@ var _store: ProfileStore
 func _init(store: ProfileStore = null) -> void:
 	_store = store if store != null else ProfileStore.new()
 
-func apply(profile_id: String, transaction_id: String, mutate: Callable, root: String = ProfileStore.DEFAULT_ROOT, now_unix: int = -1, operation: String = "custom", request: Dictionary = {}) -> ProfileMutationResult:
+func apply(profile_id: String, transaction_id: String, mutate: Callable, root: String = ProfileStore.DEFAULT_ROOT, now_unix: int = -1, operation: String = "", request: Dictionary = {}) -> ProfileMutationResult:
 	var result := ProfileMutationResult.new()
 	if transaction_id.strip_edges().is_empty():
 		result.error = "PROFILE_MUTATION_ERROR profile=%s reason=transaction id is required" % profile_id
