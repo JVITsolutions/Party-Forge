@@ -1,6 +1,6 @@
 # Playable Class Model and Equipment Expansion Design
 
-**Status:** Approved design awaiting written-spec review
+**Status:** Implemented and validated (89-suite gate plus presentation and locomotion smoke)
 
 **Date:** 2026-08-01
 

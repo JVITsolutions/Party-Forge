@@ -62,6 +62,8 @@ The numbered learning path is complete. Follow it in order on a first pass, then
 - Use [Debugging, Testing, Saving, and Git](09-debugging-testing-saving-and-git.md) when behavior differs from a checkpoint or repository state is unclear.
 - Use [Party Forge Architecture Reference](10-party-forge-architecture-reference.md) when you need an owner, registry, runtime flow, verification checklist, or glossary term.
 - Use the existing [Party Forge Responsive UI Tutorial](../development/RESPONSIVE_UI_TUTORIAL.md) for anchors, offsets, resizing centered panels, and responsive-layout verification. This handbook links to that focused tutorial instead of repeating it.
+- Use the [Character and Blender Handoff](../art/party-forge-character-blender-handoff.md) for reusable unequipped bodies, independent equipment paths, socket rules, and future GLB replacement requirements.
+- Use the [Playable Class Presentation Validation](../qa/2026-08-01-playable-class-presentation-validation.md) for the current nine-class verification markers and reproducible presentation gates.
 
 ## Callout labels
 
