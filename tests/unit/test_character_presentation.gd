@@ -30,6 +30,16 @@ class MissingActionFinishedModel extends Node3D:
 	func set_hit_weight(_value: float) -> void: pass
 	func set_downed(_value: bool) -> void: pass
 
+class WrongActionFinishedSignatureModel extends Node3D:
+	signal action_finished(action_id: StringName, source: Node3D)
+	func set_body_preset(_value: StringName) -> bool: return true
+	func set_palette(_value: StringName, _color: Color) -> bool: return true
+	func apply_equipment_visual(_slot_id: StringName, _definition: EquipmentVisualDefinition) -> bool: return true
+	func clear_equipment_visual(_slot_id: StringName) -> bool: return true
+	func play_action(_animation_id: StringName) -> bool: return true
+	func set_hit_weight(_value: float) -> void: pass
+	func set_downed(_value: bool) -> void: pass
+
 func run() -> Array[String]:
 	var failures: Array[String] = []
 	TestAssertions.truthy(ResourceLoader.exists(ADAPTER_SCENE_PATH), "character presentation scene exists", failures)
@@ -40,10 +50,15 @@ func run() -> Array[String]:
 	_test_invalid_profile_keeps_fallback_visible(failures)
 	_test_incomplete_feedback_api_keeps_fallback_visible(failures)
 	_test_missing_action_finished_signal_keeps_fallback_visible(failures)
+	if _test_signal_signature_contract_api_exists(failures):
+		_test_wrong_action_finished_signature_keeps_fallback_visible(failures)
 	if _test_locomotion_api_exists(failures):
 		_test_locomotion_selects_actions_and_cardinal_facing(failures)
 		_test_nonfinite_locomotion_fails_closed_once(failures)
+		_test_locomotion_rejection_is_transactional(failures)
+		_test_locomotion_without_active_model_fails_closed(failures)
 		_test_attack_facing_locks_until_matching_completion(failures)
+		_test_replaced_model_cannot_finish_current_transient(failures)
 		_test_unavailable_attack_target_retains_facing(failures)
 		_test_hit_transient_restores_latest_locomotion(failures)
 		_test_downed_blocks_and_revival_restores_locomotion(failures)
@@ -136,6 +151,29 @@ func _test_missing_action_finished_signal_keeps_fallback_visible(failures: Array
 	TestAssertions.truthy(presentation.logged_errors.has(&"missing_action_finished"), "missing action-finished signal uses bounded diagnostic", failures)
 	root.free()
 
+func _test_signal_signature_contract_api_exists(failures: Array[String]) -> bool:
+	var root := _new_root("CharacterPresentationSignalContractApiTest")
+	var presentation := _new_presentation(root)
+	var exposes_validation := presentation.has_method(&"_has_valid_action_finished_signal")
+	TestAssertions.truthy(exposes_validation, "presentation exposes exact action-finished signal validation", failures)
+	root.free()
+	return exposes_validation
+
+func _test_wrong_action_finished_signature_keeps_fallback_visible(failures: Array[String]) -> void:
+	var root := _new_root("CharacterPresentationWrongActionFinishedSignatureTest")
+	var presentation := _new_presentation(root)
+	var packed_scene := PackedScene.new()
+	var model := WrongActionFinishedSignatureModel.new()
+	TestAssertions.equal(packed_scene.pack(model), OK, "wrong action-finished signature fixture packs", failures)
+	model.free()
+	var profile := _profile_for_scene(packed_scene, &"wrong_action_finished_signature")
+	TestAssertions.truthy(not presentation.apply_profile(profile, Color.WHITE), "wrong action-finished signature is rejected", failures)
+	var fallback := root.get_node("Fallback") as MeshInstance3D
+	TestAssertions.truthy(fallback.visible, "wrong action-finished signature keeps fallback visible", failures)
+	TestAssertions.equal(presentation.active_model, null, "wrong action-finished signature model is cleared", failures)
+	TestAssertions.truthy(presentation.logged_errors.has(&"invalid_action_finished"), "wrong action-finished signature uses bounded diagnostic", failures)
+	root.free()
+
 func _test_locomotion_api_exists(failures: Array[String]) -> bool:
 	var root := _new_root("CharacterPresentationLocomotionApiTest")
 	var presentation := _new_presentation(root)
@@ -189,6 +227,37 @@ func _test_nonfinite_locomotion_fails_closed_once(failures: Array[String]) -> vo
 		TestAssertions.equal(presentation.logged_errors.size(), 1, "repeated invalid locomotion logs only once", failures)
 	root.free()
 
+func _test_locomotion_rejection_is_transactional(failures: Array[String]) -> void:
+	var root := _new_root("CharacterPresentationRejectedLocomotionTest")
+	var presentation := _new_presentation(root)
+	TestAssertions.truthy(presentation.apply_profile(_valid_profile(), Color.WHITE), "profile applies before rejected locomotion", failures)
+	var model := presentation.active_model as FakeCharacterModel
+	if model != null:
+		model.rejected_actions = [&"walk"]
+		var retained_yaw := presentation.rotation.y
+		var retained_direction := presentation.last_movement_direction
+		var retained_locomotion := presentation.locomotion_action_id
+		var retained_model_action := model.current_action_id
+		var played_count := model.played.size()
+		TestAssertions.truthy(not presentation.update_locomotion(Vector3(3.0, 0.0, 0.0)), "rejected walk returns false", failures)
+		TestAssertions.near(presentation.rotation.y, retained_yaw, 0.001, "rejected walk preserves facing", failures)
+		TestAssertions.equal(presentation.last_movement_direction, retained_direction, "rejected walk preserves retained movement direction", failures)
+		TestAssertions.equal(presentation.locomotion_action_id, retained_locomotion, "rejected walk preserves locomotion action id", failures)
+		TestAssertions.equal(model.current_action_id, retained_model_action, "rejected walk preserves model action", failures)
+		TestAssertions.equal(model.played.size(), played_count + 1, "rejected walk makes exactly one playback attempt", failures)
+		TestAssertions.truthy(presentation.logged_errors.has(&"locomotion_action_rejected"), "rejected walk records bounded diagnostic", failures)
+		TestAssertions.truthy(not presentation.update_locomotion(Vector3(3.0, 0.0, 0.0)), "repeated rejected walk remains false", failures)
+		TestAssertions.equal(presentation.logged_errors.size(), 1, "repeated rejected walk logs only once", failures)
+	root.free()
+
+func _test_locomotion_without_active_model_fails_closed(failures: Array[String]) -> void:
+	var root := _new_root("CharacterPresentationMissingModelLocomotionTest")
+	var presentation := _new_presentation(root)
+	TestAssertions.truthy(not presentation.update_locomotion(Vector3(1.0, 0.0, 0.0)), "locomotion without profile or model returns false", failures)
+	TestAssertions.equal(presentation.latest_planar_velocity, Vector3.ZERO, "missing model locomotion preserves stored velocity", failures)
+	TestAssertions.near(presentation.rotation.y, 0.0, 0.001, "missing model locomotion preserves facing", failures)
+	root.free()
+
 func _test_attack_facing_locks_until_matching_completion(failures: Array[String]) -> void:
 	var root := _new_root("CharacterPresentationAttackFacingTest")
 	var presentation := _new_presentation(root)
@@ -213,6 +282,26 @@ func _test_attack_facing_locks_until_matching_completion(failures: Array[String]
 		model.finish_action(&"attack_slash")
 		TestAssertions.near(presentation.rotation.y, PI / 2.0, 0.001, "matching completion restores latest movement facing", failures)
 		TestAssertions.equal(model.current_action_id, &"walk", "matching completion resumes latest locomotion", failures)
+	root.free()
+
+func _test_replaced_model_cannot_finish_current_transient(failures: Array[String]) -> void:
+	var root := _new_root("CharacterPresentationReplacedModelSignalTest")
+	var presentation := _new_presentation(root)
+	var profile := _valid_profile()
+	TestAssertions.truthy(presentation.apply_profile(profile, Color.WHITE), "first profile applies before model replacement", failures)
+	var old_model := presentation.active_model as FakeCharacterModel
+	presentation.play_attack(_fighter_cleave())
+	TestAssertions.truthy(presentation.apply_profile(profile, Color.WHITE), "replacement profile applies", failures)
+	var current_model := presentation.active_model as FakeCharacterModel
+	presentation.play_attack(_fighter_cleave())
+	if old_model != null and current_model != null:
+		TestAssertions.truthy(is_instance_valid(old_model), "old queued model remains available for stale signal regression", failures)
+		old_model.finish_action(&"attack_slash")
+		TestAssertions.equal(current_model.current_action_id, &"attack_slash", "old model completion cannot release current same-id attack", failures)
+		TestAssertions.truthy(presentation.transient_locked, "old model completion leaves current transient locked", failures)
+		current_model.finish_action(&"attack_slash")
+		TestAssertions.equal(current_model.current_action_id, &"idle", "current model completion restores locomotion", failures)
+		TestAssertions.truthy(not presentation.transient_locked, "current model completion releases transient lock", failures)
 	root.free()
 
 func _test_unavailable_attack_target_retains_facing(failures: Array[String]) -> void:

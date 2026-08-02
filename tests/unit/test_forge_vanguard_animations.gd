@@ -48,6 +48,7 @@ func run() -> Array[String]:
 		_assert_walk_contract(player, failures)
 		_assert_model_root_is_not_animated(player, failures)
 		_assert_playback_contract(model, player, failures)
+		_assert_downed_playback_contract(model, player, failures)
 	_assert_feedback_contract(model, profile, failures)
 	_assert_fighter_cleave_mapping(profile, failures)
 	model.free()
@@ -154,6 +155,28 @@ func _assert_playback_contract(model: ForgeHumanoidModel, player: AnimationPlaye
 			TestAssertions.truthy(player.get_queue().is_empty(), "%s remains a persistent locomotion loop" % animation_id, failures)
 		else:
 			TestAssertions.truthy(&"idle" in player.get_queue(), "%s queues idle recovery" % animation_id, failures)
+
+func _assert_downed_playback_contract(model: ForgeHumanoidModel, player: AnimationPlayer, failures: Array[String]) -> void:
+	var body_pivot := model.get_node_or_null("HitPivot/BodyPivot") as Node3D
+	TestAssertions.truthy(body_pivot != null, "body pivot exists for downed pose retention", failures)
+	TestAssertions.truthy(model.play_action(&"walk"), "walk starts before downed stop", failures)
+	player.advance(0.2)
+	var retained_position := body_pivot.position if body_pivot != null else Vector3.ZERO
+	model.set_downed(true)
+	TestAssertions.truthy(not player.is_playing(), "downed stops active walk playback", failures)
+	TestAssertions.truthy(player.get_queue().is_empty(), "downed clears walk queue", failures)
+	TestAssertions.equal(model.active_action_id, &"", "downed clears active walk action id", failures)
+	if body_pivot != null:
+		TestAssertions.equal(body_pivot.position, retained_position, "downed preserves current authored pose", failures)
+	model.set_downed(false)
+	TestAssertions.truthy(not player.is_playing(), "revival does not auto-resume walk in the model", failures)
+	TestAssertions.truthy(model.play_action(&"attack_slash"), "attack starts before downed stop", failures)
+	TestAssertions.truthy(&"idle" in player.get_queue(), "attack has queued idle before downed stop", failures)
+	model.set_downed(true)
+	TestAssertions.truthy(not player.is_playing(), "downed stops active attack playback", failures)
+	TestAssertions.truthy(player.get_queue().is_empty(), "downed clears queued attack recovery", failures)
+	TestAssertions.equal(model.active_action_id, &"", "downed clears active attack action id", failures)
+	model.set_downed(false)
 
 
 func _assert_feedback_contract(model: ForgeHumanoidModel, profile: CharacterVisualProfile, failures: Array[String]) -> void:

@@ -155,6 +155,12 @@ func set_hit_weight(weight: float) -> void:
 
 func set_downed(is_downed: bool) -> void:
 	_is_downed = is_downed
+	if is_downed:
+		var player := find_child("AnimationPlayer", true, false) as AnimationPlayer
+		if player != null:
+			player.stop(true)
+			player.clear_queue()
+		active_action_id = &""
 	_apply_feedback_colors()
 
 func _clear_equipped_node(slot_id: StringName) -> void:

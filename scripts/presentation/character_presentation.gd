@@ -25,6 +25,7 @@ var locomotion_action_id: StringName = &""
 var transient_action_id: StringName = &""
 var transient_locked := false
 var downed_locked := false
+var _action_finished_callable := Callable()
 
 func apply_profile(profile: CharacterVisualProfile, primary_color: Color) -> bool:
 	_clear_model()
@@ -46,7 +47,11 @@ func apply_profile(profile: CharacterVisualProfile, primary_color: Color) -> boo
 		return _fail_active(&"model_api", "required model API is incomplete")
 	if not active_model.has_signal(&"action_finished"):
 		return _fail_active(&"missing_action_finished", "required model signal action_finished is missing")
-	active_model.connect(&"action_finished", _on_model_action_finished)
+	if not _has_valid_action_finished_signal():
+		return _fail_active(&"invalid_action_finished", "required model signal action_finished must declare exactly one StringName argument")
+	_action_finished_callable = Callable(self, &"_on_model_action_finished").bind(active_model)
+	if active_model.connect(&"action_finished", _action_finished_callable) != OK:
+		return _fail_active(&"connect_action_finished", "required model signal action_finished could not be connected")
 	if not _call_bool(&"set_body_preset", [profile.default_body_preset]):
 		return _fail_active(&"body", "body preset rejected")
 	active_palette_id = profile.default_palette_id
@@ -123,11 +128,12 @@ func update_locomotion(world_velocity: Vector3) -> bool:
 	if not world_velocity.is_finite():
 		_log_once(&"invalid_locomotion_velocity", "profile=%s operation=locomotion reason=velocity is not finite" % _profile_id())
 		return false
+	if active_profile == null or active_model == null:
+		return false
 	latest_planar_velocity = Vector3(world_velocity.x, 0.0, world_velocity.z)
 	if transient_locked or downed_locked:
 		return true
-	_apply_latest_locomotion()
-	return true
+	return _apply_latest_locomotion()
 
 func flash_hit() -> void:
 	if active_model == null:
@@ -155,18 +161,24 @@ func set_downed(is_downed: bool) -> void:
 		locomotion_action_id = &""
 		_apply_latest_locomotion()
 
-func _apply_latest_locomotion() -> void:
+func _apply_latest_locomotion() -> bool:
 	if active_profile == null or active_model == null:
-		return
+		return false
 	var moving := latest_planar_velocity.length_squared() > MOVEMENT_EPSILON_SQUARED
+	var requested := active_profile.walk_action_id if moving else active_profile.idle_action_id
+	if requested == locomotion_action_id:
+		if moving:
+			last_movement_direction = latest_planar_velocity.normalized()
+			_face_direction(last_movement_direction)
+		return true
+	if not play_action(requested):
+		_log_once(&"locomotion_action_rejected", "profile=%s operation=locomotion reason=action %s was rejected" % [_profile_id(), requested])
+		return false
 	if moving:
 		last_movement_direction = latest_planar_velocity.normalized()
 		_face_direction(last_movement_direction)
-	var requested := active_profile.walk_action_id if moving else active_profile.idle_action_id
-	if requested == locomotion_action_id:
-		return
-	if play_action(requested):
-		locomotion_action_id = requested
+	locomotion_action_id = requested
+	return true
 
 func _face_direction(direction: Vector3) -> void:
 	var planar := Vector3(direction.x, 0.0, direction.z)
@@ -181,7 +193,9 @@ func _begin_transient(animation_id: StringName) -> bool:
 	transient_locked = true
 	return true
 
-func _on_model_action_finished(animation_id: StringName) -> void:
+func _on_model_action_finished(animation_id: StringName, source_model: Node3D) -> void:
+	if source_model != active_model:
+		return
 	if not transient_locked or animation_id != transient_action_id:
 		return
 	transient_locked = false
@@ -189,6 +203,19 @@ func _on_model_action_finished(animation_id: StringName) -> void:
 	locomotion_action_id = &""
 	if not downed_locked:
 		_apply_latest_locomotion()
+
+func _has_valid_action_finished_signal() -> bool:
+	if active_model == null:
+		return false
+	for signal_info: Dictionary in active_model.get_signal_list():
+		if StringName(signal_info.get(&"name", &"")) != &"action_finished":
+			continue
+		var arguments: Array = signal_info.get(&"args", [])
+		if arguments.size() != 1:
+			return false
+		var argument := arguments[0] as Dictionary
+		return int(argument.get(&"type", TYPE_NIL)) == TYPE_STRING_NAME
+	return false
 
 func _call_bool(method: StringName, arguments: Array) -> bool:
 	if active_model == null or not active_model.has_method(method):
@@ -206,7 +233,10 @@ func _validate_active_model_api() -> bool:
 
 func _clear_model() -> void:
 	if active_model != null:
+		if _action_finished_callable.is_valid() and active_model.has_signal(&"action_finished") and active_model.is_connected(&"action_finished", _action_finished_callable):
+			active_model.disconnect(&"action_finished", _action_finished_callable)
 		active_model.queue_free()
+	_action_finished_callable = Callable()
 	active_model = null
 	active_palette_id = &""
 	hit_remaining = 0.0
