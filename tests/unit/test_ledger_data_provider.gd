@@ -108,13 +108,21 @@ func _test_combat_estimate_action_discovery(failures: Array[String]) -> void:
 	rows = provider.combat_estimate_rows(1)
 	TestAssertions.equal(rows.size(), 1, "duplicate action ID/resource appears once", failures)
 
+	var expected_primary := ActionCombatEstimateService.estimate(definition.primary_attack, 1, party, catalog.damage_types)
+	var original_primary_component := definition.primary_attack.damage_components[0]
+	var original_primary_base_amount := original_primary_component.base_amount
 	var duplicate_id_attack := definition.primary_attack.duplicate(true) as AttackDefinition
-	duplicate_id_attack.damage_components[0].base_amount = 999.0
+	var duplicate_component := original_primary_component.duplicate(true) as AttackDamageComponent
+	duplicate_component.base_amount = 999.0
+	duplicate_id_attack.damage_components = [duplicate_component]
 	definition.support_action = duplicate_id_attack
 	party.initialize(definition, catalog.traits)
 	rows = provider.combat_estimate_rows(1)
-	var expected_primary := ActionCombatEstimateService.estimate(definition.primary_attack, 1, party, catalog.damage_types)
+	TestAssertions.equal(duplicate_id_attack.id, definition.primary_attack.id, "duplicate resource retains the same non-empty action ID", failures)
 	TestAssertions.truthy(duplicate_id_attack.get_instance_id() != definition.primary_attack.get_instance_id(), "duplicate action ID fixture uses distinct resources", failures)
+	TestAssertions.truthy(duplicate_component.get_instance_id() != original_primary_component.get_instance_id(), "duplicate action fixture uses a distinct damage component resource", failures)
+	TestAssertions.near(definition.primary_attack.damage_components[0].base_amount, original_primary_base_amount, 0.001, "configuring duplicate action leaves original component unchanged", failures)
+	TestAssertions.truthy(not is_equal_approx(duplicate_component.base_amount, original_primary_base_amount), "duplicate action damage differs from original", failures)
 	TestAssertions.equal(rows.size(), 1, "duplicate action ID across resources appears once", failures)
 	TestAssertions.near(rows[0].normal_hit, expected_primary.normal_hit, 0.001, "duplicate action ID keeps the first authored action", failures)
 
