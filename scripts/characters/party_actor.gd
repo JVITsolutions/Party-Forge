@@ -172,6 +172,11 @@ func _attack_controller() -> AttackController:
 func _presentation() -> CharacterPresentation:
     return get_node_or_null("Presentation") as CharacterPresentation
 
+func update_presentation_locomotion() -> void:
+    var presentation := _presentation()
+    if presentation != null and presentation.active_profile != null:
+        presentation.update_locomotion(velocity)
+
 func _configure_support_controller(definition: AttackDefinition) -> void:
     if definition == null:
         if support_controller != null:

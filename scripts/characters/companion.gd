@@ -10,9 +10,11 @@ func _physics_process(_delta: float) -> void:
     var health: HealthComponent = _health_component()
     if leader == null or member_state == null or member_state.class_definition == null:
         velocity = Vector3.ZERO
+        update_presentation_locomotion()
         return
     if (is_inside_tree() and get_tree().paused) or (health != null and (health.is_downed or health.is_dead)):
         velocity = Vector3.ZERO
+        update_presentation_locomotion()
         return
 
     var definition: ClassDefinition = member_state.class_definition
@@ -29,6 +31,7 @@ func _physics_process(_delta: float) -> void:
         move_speed
     )
     move_and_slide()
+    update_presentation_locomotion()
 
 func _nearest_hostile() -> CombatTarget:
     if not is_inside_tree():

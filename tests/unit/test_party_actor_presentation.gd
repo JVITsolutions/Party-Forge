@@ -7,19 +7,57 @@ var slash_requests := 0
 
 class PresentationProbe extends CharacterPresentation:
 	var flash_hit_requests := 0
+	var locomotion_requests: Array[Vector3] = []
 
 	func flash_hit() -> void:
 		flash_hit_requests += 1
 		super.flash_hit()
 
+	func update_locomotion(world_velocity: Vector3) -> bool:
+		locomotion_requests.append(world_velocity)
+		return true
+
 func run() -> Array[String]:
 	var failures: Array[String] = []
 	_test_scene_hosts_and_collision_contracts(failures)
+	_test_actor_forwards_actual_velocity_to_active_presentation(failures)
+	_test_unprofiled_actor_keeps_fallback_when_locomotion_updates(failures)
 	_test_fighter_profile_activation_and_ranger_fallback(failures)
 	_test_primary_attack_keeps_executor_and_uses_slash(failures)
 	_test_damage_downed_and_revival_feedback(failures)
 	_test_fighter_palettes_remain_instance_local(failures)
 	return failures
+
+func _test_actor_forwards_actual_velocity_to_active_presentation(failures: Array[String]) -> void:
+	var actor := LEADER_SCENE.instantiate() as PartyActor
+	var scene_presentation := actor.get_node("Presentation") as CharacterPresentation
+	var probe := PresentationProbe.new()
+	probe.name = scene_presentation.name
+	probe.fallback_mesh_path = scene_presentation.fallback_mesh_path
+	actor.remove_child(scene_presentation)
+	scene_presentation.free()
+	actor.add_child(probe)
+	probe.active_profile = CharacterVisualProfile.new()
+	actor.velocity = Vector3(2.0, 0.0, -1.0)
+	TestAssertions.truthy(actor.has_method(&"update_presentation_locomotion"), "party actor exposes shared presentation locomotion bridge", failures)
+	if actor.has_method(&"update_presentation_locomotion"):
+		actor.call(&"update_presentation_locomotion")
+	TestAssertions.equal(probe.locomotion_requests, [Vector3(2.0, 0.0, -1.0)], "actor forwards actual CharacterBody3D velocity", failures)
+	actor.free()
+
+func _test_unprofiled_actor_keeps_fallback_when_locomotion_updates(failures: Array[String]) -> void:
+	var root := _new_root("PartyActorFallbackLocomotionTest")
+	var ranger := _new_actor(root, COMPANION_SCENE, _definition(&"ranger"), false)
+	var presentation := ranger.get_node("Presentation") as CharacterPresentation
+	var fallback := ranger.get_node("MeshInstance3D") as MeshInstance3D
+	var presentation_rotation := presentation.rotation
+	ranger.velocity = Vector3(4.0, 0.0, 0.0)
+	if ranger.has_method(&"update_presentation_locomotion"):
+		ranger.call(&"update_presentation_locomotion")
+	TestAssertions.truthy(presentation.active_profile == null, "unprofiled class remains without an active presentation", failures)
+	TestAssertions.truthy(fallback.visible, "unprofiled class keeps capsule fallback visible after locomotion update", failures)
+	TestAssertions.equal(presentation.rotation, presentation_rotation, "unprofiled locomotion does not rotate fallback presentation", failures)
+	root.free()
 
 func _test_scene_hosts_and_collision_contracts(failures: Array[String]) -> void:
 	var leader := LEADER_SCENE.instantiate() as PartyActor

@@ -8,8 +8,28 @@ func run() -> Array[String]:
     TestAssertions.truthy(diagonal.length() <= 6.0001, "diagonal never exceeds speed", failures)
     TestAssertions.near(diagonal.length(), 6.0, 0.001, "diagonal preserves full speed", failures)
     _test_party_actor_interface(failures)
+    _test_presentation_locomotion_call_sites(failures)
     _test_scene_contracts(failures)
     return failures
+
+func _test_presentation_locomotion_call_sites(failures: Array[String]) -> void:
+    _assert_controller_locomotion_contract("res://scripts/characters/leader.gd", 1, "leader", failures)
+    _assert_controller_locomotion_contract("res://scripts/characters/companion.gd", 2, "companion", failures)
+
+func _assert_controller_locomotion_contract(path: String, expected_stationary_returns: int, label: String, failures: Array[String]) -> void:
+    var source := FileAccess.get_file_as_string(path)
+    var function_start := source.find("func _physics_process")
+    var function_end := source.find("\nfunc ", function_start + 1)
+    var physics_source := source.substr(function_start, function_end - function_start if function_end >= 0 else source.length() - function_start)
+    var stationary_pattern := RegEx.new()
+    stationary_pattern.compile("velocity\\s*=\\s*Vector3\\.ZERO\\s*\\n\\s*update_presentation_locomotion\\(\\)\\s*\\n\\s*return")
+    var return_pattern := RegEx.new()
+    return_pattern.compile("(?m)^\\s*return\\s*$")
+    var post_slide_pattern := RegEx.new()
+    post_slide_pattern.compile("move_and_slide\\(\\)\\s*\\n\\s*update_presentation_locomotion\\(\\)")
+    TestAssertions.equal(return_pattern.search_all(physics_source).size(), expected_stationary_returns, "%s physics return count is pinned" % label, failures)
+    TestAssertions.equal(stationary_pattern.search_all(physics_source).size(), expected_stationary_returns, "%s forwards zero velocity before every stationary return" % label, failures)
+    TestAssertions.equal(post_slide_pattern.search_all(physics_source).size(), 1, "%s forwards actual velocity immediately after move_and_slide" % label, failures)
 
 func _test_party_actor_interface(failures: Array[String]) -> void:
     var actor_scene: PackedScene = load("res://scenes/characters/leader.tscn") as PackedScene
