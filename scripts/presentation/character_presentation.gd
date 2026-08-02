@@ -2,6 +2,7 @@ class_name CharacterPresentation
 extends Node3D
 
 const HIT_DURATION := 0.1
+const MOVEMENT_EPSILON_SQUARED := 0.0001
 const REQUIRED_MODEL_METHODS: Array[StringName] = [
 	&"set_body_preset",
 	&"set_palette",
@@ -18,6 +19,12 @@ var active_model: Node3D
 var active_palette_id: StringName
 var hit_remaining := 0.0
 var logged_errors: Dictionary = {}
+var latest_planar_velocity := Vector3.ZERO
+var last_movement_direction := Vector3.FORWARD
+var locomotion_action_id: StringName = &""
+var transient_action_id: StringName = &""
+var transient_locked := false
+var downed_locked := false
 
 func apply_profile(profile: CharacterVisualProfile, primary_color: Color) -> bool:
 	_clear_model()
@@ -37,6 +44,9 @@ func apply_profile(profile: CharacterVisualProfile, primary_color: Color) -> boo
 	active_profile = profile
 	if not _validate_active_model_api():
 		return _fail_active(&"model_api", "required model API is incomplete")
+	if not active_model.has_signal(&"action_finished"):
+		return _fail_active(&"missing_action_finished", "required model signal action_finished is missing")
+	active_model.connect(&"action_finished", _on_model_action_finished)
 	if not _call_bool(&"set_body_preset", [profile.default_body_preset]):
 		return _fail_active(&"body", "body preset rejected")
 	active_palette_id = profile.default_palette_id
@@ -52,6 +62,7 @@ func apply_profile(profile: CharacterVisualProfile, primary_color: Color) -> boo
 				return _fail_active(StringName("slot_%s" % (entry.slot_id if entry != null else &"<null>")), "equipment item rejected")
 	if not play_idle():
 		return _fail_active(&"idle", "idle action rejected")
+	locomotion_action_id = profile.idle_action_id
 	_set_fallback_visible(false)
 	return true
 
@@ -87,12 +98,20 @@ func socket_global_transform(socket_id: StringName) -> Transform3D:
 	var value: Transform3D = active_model.call(&"socket_global_transform", socket_id)
 	return value
 
-func play_attack(definition: AttackDefinition, _target: CombatTarget = null) -> void:
+func play_attack(definition: AttackDefinition, target: CombatTarget = null) -> void:
 	if active_profile == null or definition == null:
-		play_action(&"idle")
 		return
 	var animation_id := StringName(active_profile.attack_animation_by_id.get(definition.id, &"idle"))
-	play_action(animation_id)
+	if animation_id == active_profile.idle_action_id:
+		play_idle()
+		locomotion_action_id = active_profile.idle_action_id
+		return
+	var previous_yaw := rotation.y
+	if target != null and target.is_available and is_instance_valid(target.actor):
+		var presentation_position := global_position if is_inside_tree() else position
+		_face_direction(target.position - presentation_position)
+	if not _begin_transient(animation_id):
+		rotation.y = previous_yaw
 
 func play_action(animation_id: StringName) -> bool:
 	return active_model != null and _call_bool(&"play_action", [animation_id])
@@ -100,12 +119,22 @@ func play_action(animation_id: StringName) -> bool:
 func play_idle() -> bool:
 	return active_profile != null and play_action(active_profile.idle_action_id)
 
+func update_locomotion(world_velocity: Vector3) -> bool:
+	if not world_velocity.is_finite():
+		_log_once(&"invalid_locomotion_velocity", "profile=%s operation=locomotion reason=velocity is not finite" % _profile_id())
+		return false
+	latest_planar_velocity = Vector3(world_velocity.x, 0.0, world_velocity.z)
+	if transient_locked or downed_locked:
+		return true
+	_apply_latest_locomotion()
+	return true
+
 func flash_hit() -> void:
 	if active_model == null:
 		return
 	hit_remaining = HIT_DURATION
 	active_model.call(&"set_hit_weight", 1.0)
-	play_action(&"hit_flinch")
+	_begin_transient(&"hit_flinch")
 
 func advance_feedback(delta: float) -> void:
 	if hit_remaining <= 0.0:
@@ -115,8 +144,51 @@ func advance_feedback(delta: float) -> void:
 		active_model.call(&"set_hit_weight", 0.0)
 
 func set_downed(is_downed: bool) -> void:
-	if active_model != null:
-		active_model.call(&"set_downed", is_downed)
+	downed_locked = is_downed
+	if is_downed:
+		transient_locked = false
+		transient_action_id = &""
+	if active_model == null:
+		return
+	active_model.call(&"set_downed", is_downed)
+	if not is_downed:
+		locomotion_action_id = &""
+		_apply_latest_locomotion()
+
+func _apply_latest_locomotion() -> void:
+	if active_profile == null or active_model == null:
+		return
+	var moving := latest_planar_velocity.length_squared() > MOVEMENT_EPSILON_SQUARED
+	if moving:
+		last_movement_direction = latest_planar_velocity.normalized()
+		_face_direction(last_movement_direction)
+	var requested := active_profile.walk_action_id if moving else active_profile.idle_action_id
+	if requested == locomotion_action_id:
+		return
+	if play_action(requested):
+		locomotion_action_id = requested
+
+func _face_direction(direction: Vector3) -> void:
+	var planar := Vector3(direction.x, 0.0, direction.z)
+	if planar.length_squared() <= MOVEMENT_EPSILON_SQUARED:
+		return
+	rotation.y = atan2(-planar.x, -planar.z)
+
+func _begin_transient(animation_id: StringName) -> bool:
+	if not play_action(animation_id):
+		return false
+	transient_action_id = animation_id
+	transient_locked = true
+	return true
+
+func _on_model_action_finished(animation_id: StringName) -> void:
+	if not transient_locked or animation_id != transient_action_id:
+		return
+	transient_locked = false
+	transient_action_id = &""
+	locomotion_action_id = &""
+	if not downed_locked:
+		_apply_latest_locomotion()
 
 func _call_bool(method: StringName, arguments: Array) -> bool:
 	if active_model == null or not active_model.has_method(method):
@@ -138,6 +210,13 @@ func _clear_model() -> void:
 	active_model = null
 	active_palette_id = &""
 	hit_remaining = 0.0
+	latest_planar_velocity = Vector3.ZERO
+	last_movement_direction = Vector3.FORWARD
+	locomotion_action_id = &""
+	transient_action_id = &""
+	transient_locked = false
+	downed_locked = false
+	rotation.y = 0.0
 
 func _fail_active(key: StringName, reason: String) -> bool:
 	_log_once(key, "profile=%s operation=apply reason=%s" % [_profile_id(), reason])

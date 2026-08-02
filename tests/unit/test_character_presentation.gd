@@ -4,6 +4,7 @@ const ADAPTER_SCENE_PATH := "res://scenes/characters/presentation/character_pres
 const FIXTURE_SCENE_PATH := "res://tests/fixtures/fake_character_model.tscn"
 
 class MissingHitWeightModel extends Node3D:
+	signal action_finished(action_id: StringName)
 	func set_body_preset(_value: StringName) -> bool: return true
 	func set_palette(_value: StringName, _color: Color) -> bool: return true
 	func apply_equipment_visual(_slot_id: StringName, _definition: EquipmentVisualDefinition) -> bool: return true
@@ -12,12 +13,22 @@ class MissingHitWeightModel extends Node3D:
 	func set_downed(_value: bool) -> void: pass
 
 class MissingDownedModel extends Node3D:
+	signal action_finished(action_id: StringName)
 	func set_body_preset(_value: StringName) -> bool: return true
 	func set_palette(_value: StringName, _color: Color) -> bool: return true
 	func apply_equipment_visual(_slot_id: StringName, _definition: EquipmentVisualDefinition) -> bool: return true
 	func clear_equipment_visual(_slot_id: StringName) -> bool: return true
 	func play_action(_animation_id: StringName) -> bool: return true
 	func set_hit_weight(_value: float) -> void: pass
+
+class MissingActionFinishedModel extends Node3D:
+	func set_body_preset(_value: StringName) -> bool: return true
+	func set_palette(_value: StringName, _color: Color) -> bool: return true
+	func apply_equipment_visual(_slot_id: StringName, _definition: EquipmentVisualDefinition) -> bool: return true
+	func clear_equipment_visual(_slot_id: StringName) -> bool: return true
+	func play_action(_animation_id: StringName) -> bool: return true
+	func set_hit_weight(_value: float) -> void: pass
+	func set_downed(_value: bool) -> void: pass
 
 func run() -> Array[String]:
 	var failures: Array[String] = []
@@ -28,6 +39,14 @@ func run() -> Array[String]:
 	_test_invalid_equipment_slot_is_not_forwarded(failures)
 	_test_invalid_profile_keeps_fallback_visible(failures)
 	_test_incomplete_feedback_api_keeps_fallback_visible(failures)
+	_test_missing_action_finished_signal_keeps_fallback_visible(failures)
+	if _test_locomotion_api_exists(failures):
+		_test_locomotion_selects_actions_and_cardinal_facing(failures)
+		_test_nonfinite_locomotion_fails_closed_once(failures)
+		_test_attack_facing_locks_until_matching_completion(failures)
+		_test_unavailable_attack_target_retains_facing(failures)
+		_test_hit_transient_restores_latest_locomotion(failures)
+		_test_downed_blocks_and_revival_restores_locomotion(failures)
 	_test_instances_keep_model_state_independent(failures)
 	_test_loadout_entry_owns_supported_ring_side(failures)
 	_test_item_base_presentations_validate_in_each_profile_array(failures)
@@ -101,6 +120,154 @@ func _test_incomplete_feedback_api_keeps_fallback_visible(failures: Array[String
 		TestAssertions.equal(presentation.active_model, null, "%s model is cleared after rejected activation" % fixture[&"name"], failures)
 		TestAssertions.truthy(presentation.logged_errors.has(StringName("missing_%s" % fixture[&"method"])), "%s failure uses bounded presentation diagnostic" % fixture[&"name"], failures)
 		root.free()
+
+func _test_missing_action_finished_signal_keeps_fallback_visible(failures: Array[String]) -> void:
+	var root := _new_root("CharacterPresentationMissingActionFinishedTest")
+	var presentation := _new_presentation(root)
+	var packed_scene := PackedScene.new()
+	var model := MissingActionFinishedModel.new()
+	TestAssertions.equal(packed_scene.pack(model), OK, "missing action-finished fixture packs", failures)
+	model.free()
+	var profile := _profile_for_scene(packed_scene, &"missing_action_finished")
+	TestAssertions.truthy(not presentation.apply_profile(profile, Color.WHITE), "model without action-finished signal is rejected", failures)
+	var fallback := root.get_node("Fallback") as MeshInstance3D
+	TestAssertions.truthy(fallback.visible, "missing action-finished signal keeps fallback visible", failures)
+	TestAssertions.equal(presentation.active_model, null, "missing action-finished model is cleared", failures)
+	TestAssertions.truthy(presentation.logged_errors.has(&"missing_action_finished"), "missing action-finished signal uses bounded diagnostic", failures)
+	root.free()
+
+func _test_locomotion_api_exists(failures: Array[String]) -> bool:
+	var root := _new_root("CharacterPresentationLocomotionApiTest")
+	var presentation := _new_presentation(root)
+	var exposes_api := presentation.has_method(&"update_locomotion")
+	TestAssertions.truthy(exposes_api, "presentation exposes locomotion update API", failures)
+	root.free()
+	return exposes_api
+
+func _test_locomotion_selects_actions_and_cardinal_facing(failures: Array[String]) -> void:
+	var root := _new_root("CharacterPresentationLocomotionTest")
+	var presentation := _new_presentation(root)
+	TestAssertions.truthy(presentation.apply_profile(_valid_profile(), Color.WHITE), "profile applies before locomotion", failures)
+	var model := presentation.active_model as FakeCharacterModel
+	if model != null:
+		TestAssertions.truthy(presentation.update_locomotion(Vector3(0.0, 0.0, -3.0)), "forward locomotion applies", failures)
+		TestAssertions.equal(model.played.back(), &"walk", "movement starts walk", failures)
+		TestAssertions.near(presentation.rotation.y, 0.0, 0.001, "-Z faces model forward", failures)
+		var played_after_walk := model.played.size()
+		presentation.update_locomotion(Vector3(3.0, 0.0, 0.0))
+		TestAssertions.near(presentation.rotation.y, -PI / 2.0, 0.001, "+X faces right", failures)
+		presentation.update_locomotion(Vector3(0.0, 0.0, 3.0))
+		TestAssertions.near(absf(presentation.rotation.y), PI, 0.001, "+Z faces backward", failures)
+		presentation.update_locomotion(Vector3(-3.0, 0.0, 0.0))
+		TestAssertions.near(presentation.rotation.y, PI / 2.0, 0.001, "-X faces left", failures)
+		TestAssertions.equal(model.played.size(), played_after_walk, "direction changes do not restart walk", failures)
+		var retained_yaw := presentation.rotation.y
+		presentation.update_locomotion(Vector3(0.0, 8.0, 0.0))
+		TestAssertions.equal(model.played.back(), &"idle", "vertical-only velocity selects idle", failures)
+		TestAssertions.near(presentation.rotation.y, retained_yaw, 0.001, "idle retains last movement facing", failures)
+		var played_after_idle := model.played.size()
+		presentation.update_locomotion(Vector3.ZERO)
+		TestAssertions.equal(model.played.size(), played_after_idle, "repeated idle does not restart", failures)
+	root.free()
+
+func _test_nonfinite_locomotion_fails_closed_once(failures: Array[String]) -> void:
+	var root := _new_root("CharacterPresentationInvalidLocomotionTest")
+	var presentation := _new_presentation(root)
+	TestAssertions.truthy(presentation.apply_profile(_valid_profile(), Color.WHITE), "profile applies before invalid locomotion", failures)
+	var model := presentation.active_model as FakeCharacterModel
+	if model != null:
+		presentation.update_locomotion(Vector3(2.0, 0.0, 0.0))
+		var retained_yaw := presentation.rotation.y
+		var retained_action := model.current_action_id
+		var played_count := model.played.size()
+		TestAssertions.truthy(not presentation.update_locomotion(Vector3(NAN, 0.0, 0.0)), "NaN locomotion is rejected", failures)
+		TestAssertions.truthy(not presentation.update_locomotion(Vector3(INF, 0.0, 0.0)), "infinite locomotion is rejected", failures)
+		TestAssertions.near(presentation.rotation.y, retained_yaw, 0.001, "invalid locomotion preserves facing", failures)
+		TestAssertions.equal(model.current_action_id, retained_action, "invalid locomotion preserves action", failures)
+		TestAssertions.equal(model.played.size(), played_count, "invalid locomotion does not request playback", failures)
+		TestAssertions.truthy(presentation.logged_errors.has(&"invalid_locomotion_velocity"), "invalid locomotion records bounded diagnostic", failures)
+		TestAssertions.equal(presentation.logged_errors.size(), 1, "repeated invalid locomotion logs only once", failures)
+	root.free()
+
+func _test_attack_facing_locks_until_matching_completion(failures: Array[String]) -> void:
+	var root := _new_root("CharacterPresentationAttackFacingTest")
+	var presentation := _new_presentation(root)
+	TestAssertions.truthy(presentation.apply_profile(_valid_profile(), Color.WHITE), "profile applies before attack facing", failures)
+	var model := presentation.active_model as FakeCharacterModel
+	var target_actor := Node3D.new()
+	root.add_child(target_actor)
+	target_actor.position = Vector3(4.0, 0.0, 0.0)
+	var target := CombatTarget.new(target_actor, target_actor.position, 2)
+	if model != null:
+		presentation.update_locomotion(Vector3(0.0, 0.0, -2.0))
+		presentation.play_attack(_fighter_cleave(), target)
+		TestAssertions.equal(model.current_action_id, &"attack_slash", "attack action starts", failures)
+		TestAssertions.near(presentation.rotation.y, -PI / 2.0, 0.001, "attack faces locked target", failures)
+		var played_during_attack := model.played.size()
+		presentation.update_locomotion(Vector3(-3.0, 0.0, 0.0))
+		TestAssertions.near(presentation.rotation.y, -PI / 2.0, 0.001, "movement cannot override attack facing", failures)
+		TestAssertions.equal(model.played.size(), played_during_attack, "movement cannot interrupt attack playback", failures)
+		model.finish_action(&"hit_flinch")
+		TestAssertions.near(presentation.rotation.y, -PI / 2.0, 0.001, "stale completion cannot release attack facing", failures)
+		TestAssertions.equal(model.current_action_id, &"attack_slash", "stale completion cannot replace attack action", failures)
+		model.finish_action(&"attack_slash")
+		TestAssertions.near(presentation.rotation.y, PI / 2.0, 0.001, "matching completion restores latest movement facing", failures)
+		TestAssertions.equal(model.current_action_id, &"walk", "matching completion resumes latest locomotion", failures)
+	root.free()
+
+func _test_unavailable_attack_target_retains_facing(failures: Array[String]) -> void:
+	var root := _new_root("CharacterPresentationUnavailableTargetTest")
+	var presentation := _new_presentation(root)
+	TestAssertions.truthy(presentation.apply_profile(_valid_profile(), Color.WHITE), "profile applies before unavailable target", failures)
+	var target_actor := Node3D.new()
+	root.add_child(target_actor)
+	target_actor.position = Vector3(5.0, 0.0, 0.0)
+	var target := CombatTarget.new(target_actor, target_actor.position, 2)
+	target.is_available = false
+	presentation.update_locomotion(Vector3(0.0, 0.0, -1.0))
+	var retained_yaw := presentation.rotation.y
+	presentation.play_attack(_fighter_cleave(), target)
+	TestAssertions.near(presentation.rotation.y, retained_yaw, 0.001, "unavailable target does not change facing", failures)
+	target_actor.free()
+	target.is_available = true
+	presentation.play_attack(_fighter_cleave(), target)
+	TestAssertions.near(presentation.rotation.y, retained_yaw, 0.001, "freed target does not change facing or throw", failures)
+	root.free()
+
+func _test_hit_transient_restores_latest_locomotion(failures: Array[String]) -> void:
+	var root := _new_root("CharacterPresentationHitTransientTest")
+	var presentation := _new_presentation(root)
+	TestAssertions.truthy(presentation.apply_profile(_valid_profile(), Color.WHITE), "profile applies before hit transient", failures)
+	var model := presentation.active_model as FakeCharacterModel
+	if model != null:
+		presentation.update_locomotion(Vector3(0.0, 0.0, -2.0))
+		presentation.flash_hit()
+		TestAssertions.equal(model.current_action_id, &"hit_flinch", "hit starts flinch action", failures)
+		var played_during_hit := model.played.size()
+		presentation.update_locomotion(Vector3.ZERO)
+		TestAssertions.equal(model.played.size(), played_during_hit, "locomotion cannot interrupt hit flinch", failures)
+		model.finish_action(&"hit_flinch")
+		TestAssertions.equal(model.current_action_id, &"idle", "hit completion restores latest idle", failures)
+	root.free()
+
+func _test_downed_blocks_and_revival_restores_locomotion(failures: Array[String]) -> void:
+	var root := _new_root("CharacterPresentationDownedLocomotionTest")
+	var presentation := _new_presentation(root)
+	TestAssertions.truthy(presentation.apply_profile(_valid_profile(), Color.WHITE), "profile applies before downed locomotion", failures)
+	var model := presentation.active_model as FakeCharacterModel
+	if model != null:
+		presentation.flash_hit()
+		presentation.set_downed(true)
+		TestAssertions.truthy(model.downed, "downed state reaches model", failures)
+		var played_while_downed := model.played.size()
+		presentation.update_locomotion(Vector3(3.0, 0.0, 0.0))
+		model.finish_action(&"hit_flinch")
+		TestAssertions.equal(model.played.size(), played_while_downed, "downed lock blocks movement and stale transient completion", failures)
+		presentation.set_downed(false)
+		TestAssertions.truthy(not model.downed, "revival reaches model", failures)
+		TestAssertions.equal(model.current_action_id, &"walk", "revival restores stored moving state", failures)
+		TestAssertions.near(presentation.rotation.y, -PI / 2.0, 0.001, "revival restores stored movement facing", failures)
+	root.free()
 
 func _test_instances_keep_model_state_independent(failures: Array[String]) -> void:
 	var root := _new_root("CharacterPresentationIsolationTest")
