@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="EquipmentBaseDefinition" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/equipment/equipment_base_definition.gd" id="1"]
+[ext_resource type="Resource" path="res://data/presentation/equipment/grave_covenant/grave_covenant_leggings.tres" id="2"]
+
+[resource]
+script = ExtResource("1")
+id = &"grave_covenant_leggings"
+display_name = "Grave Covenant Leggings"
+item_type_id = &"legs"
+compatible_slot_ids = [&"legs"]
+weight_class_id = &"light"
+required_all_tags = [&"caster"]
+handedness_id = &"none"
+reserved_slot_ids = []
+compatible_offhand_item_types = []
+weapon_family_id = &""
+implicit_family_id = &"grave_covenant"
+presentation = ExtResource("2")

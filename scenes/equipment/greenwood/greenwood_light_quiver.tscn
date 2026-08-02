@@ -1,0 +1,75 @@
+[gd_scene format=3]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_xotim"]
+albedo_color = Color(0.3529412, 0.24705882, 0.15686275, 1)
+metallic = 0.05
+roughness = 0.78
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_8n57n"]
+top_radius = 0.12
+bottom_radius = 0.12
+height = 0.48
+radial_segments = 10
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_jesa3"]
+albedo_color = Color(0.34901962, 0.3882353, 0.41568628, 1)
+metallic = 0.72
+roughness = 0.42
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_v66ja"]
+top_radius = 0.018
+bottom_radius = 0.018
+height = 0.58
+radial_segments = 10
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_hp7rt"]
+albedo_color = Color(0.34901962, 0.3882353, 0.41568628, 1)
+metallic = 0.72
+roughness = 0.42
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_f6iyk"]
+top_radius = 0.018
+bottom_radius = 0.018
+height = 0.58
+radial_segments = 10
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_ff2lb"]
+albedo_color = Color(0.34901962, 0.3882353, 0.41568628, 1)
+metallic = 0.72
+roughness = 0.42
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_qhayj"]
+top_radius = 0.018
+bottom_radius = 0.018
+height = 0.58
+radial_segments = 10
+
+[node name="greenwood_light_quiver" type="Node3D"]
+
+[node name="Attachment" type="Node3D" parent="."]
+metadata/equipment_visual_id = &"greenwood_light_quiver"
+metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot/LeftShoulderPivot/LeftElbowPivot/LeftHandSocket"
+
+[node name="@MeshInstance3D@52" type="MeshInstance3D" parent="Attachment"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.08, 0)
+material_override = SubResource("StandardMaterial3D_xotim")
+mesh = SubResource("CylinderMesh_8n57n")
+metadata/palette_region = &"leather"
+
+[node name="@MeshInstance3D@53" type="MeshInstance3D" parent="Attachment"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.07, 0.18, 0)
+material_override = SubResource("StandardMaterial3D_jesa3")
+mesh = SubResource("CylinderMesh_v66ja")
+metadata/palette_region = &"metal"
+
+[node name="@MeshInstance3D@54" type="MeshInstance3D" parent="Attachment"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.18, 0)
+material_override = SubResource("StandardMaterial3D_hp7rt")
+mesh = SubResource("CylinderMesh_f6iyk")
+metadata/palette_region = &"metal"
+
+[node name="@MeshInstance3D@55" type="MeshInstance3D" parent="Attachment"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.07, 0.18, 0)
+material_override = SubResource("StandardMaterial3D_ff2lb")
+mesh = SubResource("CylinderMesh_qhayj")
+metadata/palette_region = &"metal"

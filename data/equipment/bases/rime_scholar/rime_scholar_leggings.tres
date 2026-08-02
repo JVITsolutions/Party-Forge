@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="EquipmentBaseDefinition" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/equipment/equipment_base_definition.gd" id="1"]
+[ext_resource type="Resource" path="res://data/presentation/equipment/rime_scholar/rime_scholar_leggings.tres" id="2"]
+
+[resource]
+script = ExtResource("1")
+id = &"rime_scholar_leggings"
+display_name = "Rime Scholar Leggings"
+item_type_id = &"legs"
+compatible_slot_ids = [&"legs"]
+weight_class_id = &"light"
+required_all_tags = [&"caster"]
+handedness_id = &"none"
+reserved_slot_ids = []
+compatible_offhand_item_types = []
+weapon_family_id = &""
+implicit_family_id = &"rime_scholar"
+presentation = ExtResource("2")

@@ -1,0 +1,62 @@
+[gd_scene format=3]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_cgrqc"]
+albedo_color = Color(0.3529412, 0.24705882, 0.15686275, 1)
+metallic = 0.05
+roughness = 0.78
+
+[sub_resource type="BoxMesh" id="BoxMesh_hw8me"]
+size = Vector3(0.055, 0.43, 0.06)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_oiw6f"]
+albedo_color = Color(0.3529412, 0.24705882, 0.15686275, 1)
+metallic = 0.05
+roughness = 0.78
+
+[sub_resource type="BoxMesh" id="BoxMesh_3cpsl"]
+size = Vector3(0.055, 0.43, 0.06)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_npck6"]
+albedo_color = Color(0.34901962, 0.3882353, 0.41568628, 1)
+metallic = 0.72
+roughness = 0.42
+
+[sub_resource type="BoxMesh" id="BoxMesh_n8bd7"]
+size = Vector3(0.12, 0.24, 0.09)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_cl265"]
+albedo_color = Color(0.5137255, 0.72156864, 0.41568628, 1)
+metallic = 0.05
+roughness = 0.78
+
+[sub_resource type="BoxMesh" id="BoxMesh_jjeuh"]
+size = Vector3(0.025, 0.96, 0.025)
+
+[node name="greenwood_recurve_bow" type="Node3D"]
+
+[node name="Attachment" type="Node3D" parent="."]
+metadata/equipment_visual_id = &"greenwood_recurve_bow"
+metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot/RightShoulderPivot/RightElbowPivot/RightHandSocket"
+
+[node name="@MeshInstance3D@48" type="MeshInstance3D" parent="Attachment"]
+transform = Transform3D(0.9427547, 0.3334871, 0, -0.3334871, 0.9427547, 0, 0, 0, 1, -0.14, 0.34, 0)
+material_override = SubResource("StandardMaterial3D_cgrqc")
+mesh = SubResource("BoxMesh_hw8me")
+metadata/palette_region = &"leather"
+
+[node name="@MeshInstance3D@49" type="MeshInstance3D" parent="Attachment"]
+transform = Transform3D(0.9427547, 0.3334871, 0, -0.3334871, 0.9427547, 0, 0, 0, 1, 0.14, -0.34, 0)
+material_override = SubResource("StandardMaterial3D_oiw6f")
+mesh = SubResource("BoxMesh_3cpsl")
+metadata/palette_region = &"leather"
+
+[node name="@MeshInstance3D@50" type="MeshInstance3D" parent="Attachment"]
+material_override = SubResource("StandardMaterial3D_npck6")
+mesh = SubResource("BoxMesh_n8bd7")
+metadata/palette_region = &"metal"
+
+[node name="@MeshInstance3D@51" type="MeshInstance3D" parent="Attachment"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0.03)
+material_override = SubResource("StandardMaterial3D_cl265")
+mesh = SubResource("BoxMesh_jjeuh")
+metadata/palette_region = &"accent"

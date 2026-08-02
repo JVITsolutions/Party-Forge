@@ -9,6 +9,10 @@ const REQUIRED_NODES := [
 	"DirectionalLight3D",
 	"Floor",
 	"UI/Instructions",
+	"UI/ClassSelector",
+	"UI/BodySelector",
+	"UI/SlotSelector",
+	"UI/Diagnostics",
 ]
 
 func run() -> Array[String]:
@@ -18,7 +22,7 @@ func run() -> Array[String]:
 	if scene == null:
 		return failures
 	var sandbox := scene.instantiate() as Node3D
-	var has_review_api := sandbox != null and sandbox.get_script() != null and sandbox.has_method(&"set_body") and sandbox.has_method(&"set_palette") and sandbox.has_method(&"toggle_slot") and sandbox.has_method(&"play_clip") and sandbox.has_method(&"trigger_hit") and sandbox.has_method(&"cycle_slot_variant") and sandbox.has_method(&"equip_variant") and sandbox.has_method(&"get_equipped_visual_id")
+	var has_review_api := sandbox != null and sandbox.get_script() != null and sandbox.has_method(&"set_class") and sandbox.has_method(&"get_class_id") and sandbox.has_method(&"set_body") and sandbox.has_method(&"set_palette") and sandbox.has_method(&"toggle_slot") and sandbox.has_method(&"play_clip") and sandbox.has_method(&"play_primary") and sandbox.has_method(&"preview_specialized_effect") and sandbox.has_method(&"trigger_hit") and sandbox.has_method(&"cycle_slot_variant") and sandbox.has_method(&"equip_variant") and sandbox.has_method(&"get_equipped_visual_id")
 	TestAssertions.truthy(has_review_api, "presentation sandbox exposes review API", failures)
 	if sandbox == null or not has_review_api:
 		return failures
@@ -27,6 +31,18 @@ func run() -> Array[String]:
 	var instructions := sandbox.get_node_or_null("UI/Instructions") as Label
 	TestAssertions.truthy(instructions != null and "1/2 Body" in instructions.text and "Space Toggle Selected Slot" in instructions.text and "V Cycle Variant" in instructions.text, "presentation sandbox lists controls", failures)
 	(Engine.get_main_loop() as SceneTree).root.add_child(sandbox)
+	sandbox.call(&"_process", 0.0)
+	TestAssertions.equal((sandbox.get_node("UI/ClassSelector") as OptionButton).item_count, 9, "sandbox has nine class selectors", failures)
+	TestAssertions.equal((sandbox.get_node("UI/BodySelector") as OptionButton).item_count, 2, "sandbox has two body selectors", failures)
+	TestAssertions.equal((sandbox.get_node("UI/SlotSelector") as OptionButton).item_count, 11, "sandbox has eleven slot selectors", failures)
+	for class_id: StringName in [&"fighter", &"ranger", &"mage", &"cleric", &"paladin", &"rogue", &"frost_mage", &"warlock", &"marksman"]:
+		TestAssertions.truthy(bool(sandbox.call(&"set_class", class_id, &"Masculine")), "sandbox selects %s" % class_id, failures)
+		TestAssertions.equal(sandbox.call(&"get_class_id", &"Masculine"), class_id, "sandbox records %s" % class_id, failures)
+		TestAssertions.truthy(bool(sandbox.call(&"play_primary", &"Masculine")), "sandbox plays %s primary" % class_id, failures)
+		TestAssertions.truthy(bool(sandbox.call(&"preview_specialized_effect", &"Masculine")), "sandbox previews %s effect" % class_id, failures)
+	TestAssertions.truthy(bool(sandbox.call(&"set_class", &"fighter", &"Masculine")), "sandbox restores Fighter", failures)
+	var diagnostics := sandbox.get_node("UI/Diagnostics") as Label
+	TestAssertions.truthy("class=fighter" in diagnostics.text and "body=" in diagnostics.text and "slot=" in diagnostics.text and "item=" in diagnostics.text and "action=" in diagnostics.text, "sandbox diagnostics expose review IDs", failures)
 	TestAssertions.truthy(sandbox.has_method(&"_process"), "presentation sandbox advances feedback during frame updates", failures)
 	if not sandbox.has_method(&"_process"):
 		sandbox.free()

@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="AttackPresentationDefinition" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/presentation/attack_presentation_definition.gd" id="1"]
+[ext_resource type="PackedScene" path="res://scenes/combat/presentation/effects/healing_blessing.tscn" id="2"]
+
+[resource]
+script = ExtResource("1")
+id = &"cleric_heal_visual"
+attack_id = &"cleric_heal"
+action_id = &"cleric_healing_blessing"
+required_event_name = &"release"
+weapon_animation_family_id = &"sceptre"
+launch_socket_id = &"HitPivot/BodyPivot/HipsPivot/TorsoPivot/RightShoulderPivot/RightElbowPivot/RightHandSocket/ProjectileLaunchSocket"
+impact_scene = ExtResource("2")
+impact_color = Color(1.0, 0.94117647409439, 0.54117649793625, 1.0)
+action_duration = 1.08
+release_time = 0.72

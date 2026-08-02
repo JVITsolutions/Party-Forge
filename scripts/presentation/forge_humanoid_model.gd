@@ -119,7 +119,11 @@ func equipped_weapon_family() -> StringName:
 
 func socket_global_transform(socket_id: StringName) -> Transform3D:
 	var socket := get_node_or_null(NodePath(String(socket_id))) as Node3D
-	return socket.global_transform if socket != null else global_transform
+	if socket != null and socket.is_inside_tree():
+		return socket.global_transform
+	if socket != null:
+		return _transform_without_tree(socket)
+	return global_transform if is_inside_tree() else _transform_without_tree(self)
 
 func has_equipment_slot(slot_id: StringName) -> bool:
 	return EquipmentSlotCatalog.is_valid(slot_id) and SLOT_SOCKET_PATHS.has(slot_id) and get_node_or_null(NodePath(String(SLOT_SOCKET_PATHS[slot_id]))) != null
@@ -135,17 +139,26 @@ func visual_bounds() -> AABB:
 		has_bounds = true
 	return bounds
 
-func play_action(animation_id: StringName) -> bool:
-	if _is_downed:
+func play_action(animation_id: StringName, playback_rate: float = 1.0) -> bool:
+	if _is_downed or not is_finite(playback_rate) or playback_rate <= 0.0:
 		return false
 	var player := find_child("AnimationPlayer", true, false) as AnimationPlayer
 	if player == null or not player.has_animation(animation_id):
 		return false
 	active_action_id = animation_id
 	player.clear_queue()
+	player.speed_scale = playback_rate
 	player.play(animation_id)
-	if animation_id not in [&"idle", &"walk"] and player.has_animation(&"idle"):
-		player.queue(&"idle")
+	return true
+
+func play_feedback(animation_id: StringName) -> bool:
+	if _is_downed:
+		return false
+	var player := find_child("FeedbackAnimationPlayer", true, false) as AnimationPlayer
+	if player == null or not player.has_animation(animation_id):
+		return false
+	player.stop(true)
+	player.play(animation_id)
 	return true
 
 func emit_action_event(event_name: StringName) -> void:
@@ -163,6 +176,9 @@ func set_downed(is_downed: bool) -> void:
 			player.stop(true)
 			player.clear_queue()
 		active_action_id = &""
+		var feedback_player := find_child("FeedbackAnimationPlayer", true, false) as AnimationPlayer
+		if feedback_player != null:
+			feedback_player.stop(true)
 	_apply_feedback_colors()
 
 func _clear_equipped_node(slot_id: StringName) -> void:
@@ -298,6 +314,18 @@ func _transform_from_model(node: Node3D) -> Transform3D:
 		cursor = cursor.get_parent()
 	return result
 
+func _transform_without_tree(node: Node3D) -> Transform3D:
+	var result := Transform3D.IDENTITY
+	var cursor: Node = node
+	while cursor != null:
+		if cursor is Node3D:
+			result = (cursor as Node3D).transform * result
+		cursor = cursor.get_parent()
+	return result
+
 func _on_animation_finished(animation_id: StringName) -> void:
 	if animation_id == active_action_id:
+		var player := find_child("AnimationPlayer", true, false) as AnimationPlayer
+		if player != null:
+			player.speed_scale = 1.0
 		action_finished.emit(animation_id)

@@ -63,4 +63,31 @@ offset_right = 760.0
 offset_bottom = 118.0
 theme_override_colors/font_color = Color(0.93, 0.95, 0.98, 1)
 theme_override_font_sizes/font_size = 20
-text = "1/2 Body   R/B/G Palette   I Idle   A Slash   C Combo   H Hit\nQ/E Cycle Slot   Space Toggle Selected Slot   V Cycle Variant\nM Toggle Base/Equipped Profile"
+text = "Tab Class   1/2 Body   R/B/G Palette   I Idle   P Primary   H Hit   F Effect\nQ/E Cycle Slot   Space Toggle Selected Slot   V Cycle Variant\nM Toggle Base/Equipped Profile"
+
+[node name="ClassSelector" type="OptionButton" parent="UI"]
+offset_left = 28.0
+offset_top = 132.0
+offset_right = 218.0
+offset_bottom = 172.0
+
+[node name="BodySelector" type="OptionButton" parent="UI"]
+offset_left = 228.0
+offset_top = 132.0
+offset_right = 398.0
+offset_bottom = 172.0
+
+[node name="SlotSelector" type="OptionButton" parent="UI"]
+offset_left = 408.0
+offset_top = 132.0
+offset_right = 618.0
+offset_bottom = 172.0
+
+[node name="Diagnostics" type="Label" parent="UI"]
+offset_left = 28.0
+offset_top = 184.0
+offset_right = 900.0
+offset_bottom = 222.0
+theme_override_colors/font_color = Color(0.72, 0.88, 1, 1)
+theme_override_font_sizes/font_size = 18
+text = "class=fighter body=masculine slot=head item= action=idle"

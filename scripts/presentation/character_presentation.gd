@@ -1,6 +1,9 @@
 class_name CharacterPresentation
 extends Node3D
 
+signal attack_event(token: int, action_id: StringName, event_name: StringName)
+signal attack_finished(token: int, action_id: StringName)
+
 const HIT_DURATION := 0.1
 const MOVEMENT_EPSILON_SQUARED := 0.0001
 const REQUIRED_MODEL_METHODS: Array[StringName] = [
@@ -9,6 +12,7 @@ const REQUIRED_MODEL_METHODS: Array[StringName] = [
 	&"apply_equipment_visual",
 	&"clear_equipment_visual",
 	&"play_action",
+	&"play_feedback",
 	&"set_hit_weight",
 	&"set_downed",
 ]
@@ -25,6 +29,8 @@ var locomotion_action_id: StringName = &""
 var transient_action_id: StringName = &""
 var transient_locked := false
 var downed_locked := false
+var active_sequence_token := 0
+var _action_event_callable := Callable()
 var _action_finished_callable := Callable()
 
 func apply_profile(profile: CharacterVisualProfile, primary_color: Color) -> bool:
@@ -47,9 +53,16 @@ func apply_profile(profile: CharacterVisualProfile, primary_color: Color) -> boo
 		return _fail_active(&"model_api", "required model API is incomplete")
 	if not active_model.has_signal(&"action_finished"):
 		return _fail_active(&"missing_action_finished", "required model signal action_finished is missing")
-	if not _has_valid_action_finished_signal():
+	if not active_model.has_signal(&"action_event"):
+		return _fail_active(&"missing_action_event", "required model signal action_event is missing")
+	if not _has_valid_model_signal(&"action_finished", [TYPE_STRING_NAME]):
 		return _fail_active(&"invalid_action_finished", "required model signal action_finished must declare exactly one StringName argument")
+	if not _has_valid_model_signal(&"action_event", [TYPE_STRING_NAME, TYPE_STRING_NAME]):
+		return _fail_active(&"invalid_action_event", "required model signal action_event must declare exactly two StringName arguments")
+	_action_event_callable = Callable(self, &"_on_model_action_event").bind(active_model)
 	_action_finished_callable = Callable(self, &"_on_model_action_finished").bind(active_model)
+	if active_model.connect(&"action_event", _action_event_callable) != OK:
+		return _fail_active(&"connect_action_event", "required model signal action_event could not be connected")
 	if active_model.connect(&"action_finished", _action_finished_callable) != OK:
 		return _fail_active(&"connect_action_finished", "required model signal action_finished could not be connected")
 	if not _call_bool(&"set_body_preset", [profile.default_body_preset]):
@@ -103,6 +116,41 @@ func socket_global_transform(socket_id: StringName) -> Transform3D:
 	var value: Transform3D = active_model.call(&"socket_global_transform", socket_id)
 	return value
 
+func resolve_attack_presentation(definition: AttackDefinition) -> AttackPresentationDefinition:
+	if active_profile == null or definition == null:
+		return null
+	return active_profile.resolve_attack_presentation(definition.id, equipped_weapon_family())
+
+func start_attack(definition: AttackDefinition, target: CombatTarget, presentation: AttackPresentationDefinition, token: int, playback_rate: float) -> bool:
+	if downed_locked or active_model == null or definition == null or target == null or presentation == null or token <= 0 or not is_finite(playback_rate) or playback_rate <= 0.0:
+		return false
+	var previous_yaw := rotation.y
+	if target.is_available and target.actor != null and is_instance_valid(target.actor):
+		var presentation_position := global_position if is_inside_tree() else position
+		_face_direction(target.position - presentation_position)
+	active_sequence_token = token
+	if _begin_transient(presentation.action_id, playback_rate):
+		return true
+	active_sequence_token = 0
+	rotation.y = previous_yaw
+	return false
+
+func action_playback_rate() -> float:
+	if active_model == null:
+		return 1.0
+	var player := active_model.get_node_or_null("AnimationPlayer") as AnimationPlayer
+	return maxf(player.speed_scale, 0.001) if player != null else 1.0
+
+func finish_attack_sequence() -> void:
+	active_sequence_token = 0
+	if not transient_locked:
+		return
+	transient_locked = false
+	transient_action_id = &""
+	locomotion_action_id = &""
+	if not downed_locked:
+		_apply_latest_locomotion()
+
 func play_attack(definition: AttackDefinition, target: CombatTarget = null) -> void:
 	if downed_locked or active_profile == null or definition == null:
 		return
@@ -118,8 +166,8 @@ func play_attack(definition: AttackDefinition, target: CombatTarget = null) -> v
 	if not _begin_transient(animation_id):
 		rotation.y = previous_yaw
 
-func play_action(animation_id: StringName) -> bool:
-	return not downed_locked and active_model != null and _call_bool(&"play_action", [animation_id])
+func play_action(animation_id: StringName, playback_rate: float = 1.0) -> bool:
+	return not downed_locked and active_model != null and _call_bool(&"play_action", [animation_id, playback_rate])
 
 func play_idle() -> bool:
 	return active_profile != null and play_action(active_profile.idle_action_id)
@@ -140,7 +188,7 @@ func flash_hit() -> void:
 		return
 	hit_remaining = HIT_DURATION
 	active_model.call(&"set_hit_weight", 1.0)
-	_begin_transient(&"hit_flinch")
+	active_model.call(&"play_feedback", &"hit_flinch")
 
 func advance_feedback(delta: float) -> void:
 	if hit_remaining <= 0.0:
@@ -152,6 +200,7 @@ func advance_feedback(delta: float) -> void:
 func set_downed(is_downed: bool) -> void:
 	downed_locked = is_downed
 	if is_downed:
+		active_sequence_token = 0
 		transient_locked = false
 		transient_action_id = &""
 	if active_model == null:
@@ -186,18 +235,26 @@ func _face_direction(direction: Vector3) -> void:
 		return
 	rotation.y = atan2(-planar.x, -planar.z)
 
-func _begin_transient(animation_id: StringName) -> bool:
+func _begin_transient(animation_id: StringName, playback_rate: float = 1.0) -> bool:
 	if downed_locked:
 		return false
-	if not play_action(animation_id):
+	if not play_action(animation_id, playback_rate):
 		return false
 	transient_action_id = animation_id
 	transient_locked = true
 	return true
 
+func _on_model_action_event(animation_id: StringName, event_name: StringName, source_model: Node3D) -> void:
+	if source_model == active_model:
+		attack_event.emit(active_sequence_token, animation_id, event_name)
+
 func _on_model_action_finished(animation_id: StringName, source_model: Node3D) -> void:
 	if source_model != active_model:
 		return
+	var finished_token := active_sequence_token
+	attack_finished.emit(finished_token, animation_id)
+	if active_sequence_token == finished_token:
+		active_sequence_token = 0
 	if not transient_locked or animation_id != transient_action_id:
 		return
 	transient_locked = false
@@ -206,17 +263,20 @@ func _on_model_action_finished(animation_id: StringName, source_model: Node3D) -
 	if not downed_locked:
 		_apply_latest_locomotion()
 
-func _has_valid_action_finished_signal() -> bool:
+func _has_valid_model_signal(signal_name: StringName, expected_types: Array[int]) -> bool:
 	if active_model == null:
 		return false
 	for signal_info: Dictionary in active_model.get_signal_list():
-		if StringName(signal_info.get(&"name", &"")) != &"action_finished":
+		if StringName(signal_info.get(&"name", &"")) != signal_name:
 			continue
 		var arguments: Array = signal_info.get(&"args", [])
-		if arguments.size() != 1:
+		if arguments.size() != expected_types.size():
 			return false
-		var argument := arguments[0] as Dictionary
-		return int(argument.get(&"type", TYPE_NIL)) == TYPE_STRING_NAME
+		for index: int in arguments.size():
+			var argument := arguments[index] as Dictionary
+			if int(argument.get(&"type", TYPE_NIL)) != expected_types[index]:
+				return false
+		return true
 	return false
 
 func _call_bool(method: StringName, arguments: Array) -> bool:
@@ -235,9 +295,12 @@ func _validate_active_model_api() -> bool:
 
 func _clear_model() -> void:
 	if active_model != null:
+		if _action_event_callable.is_valid() and active_model.has_signal(&"action_event") and active_model.is_connected(&"action_event", _action_event_callable):
+			active_model.disconnect(&"action_event", _action_event_callable)
 		if _action_finished_callable.is_valid() and active_model.has_signal(&"action_finished") and active_model.is_connected(&"action_finished", _action_finished_callable):
 			active_model.disconnect(&"action_finished", _action_finished_callable)
 		active_model.queue_free()
+	_action_event_callable = Callable()
 	_action_finished_callable = Callable()
 	active_model = null
 	active_palette_id = &""
@@ -248,6 +311,7 @@ func _clear_model() -> void:
 	transient_action_id = &""
 	transient_locked = false
 	downed_locked = false
+	active_sequence_token = 0
 	rotation.y = 0.0
 
 func _fail_active(key: StringName, reason: String) -> bool:

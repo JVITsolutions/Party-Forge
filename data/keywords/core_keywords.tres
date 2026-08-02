@@ -326,6 +326,125 @@ display_name = "Bow"
 explanation = "A trait shared by specialized bow users."
 is_capability_tag = true
 
+[sub_resource type="Resource" id="Resource_eq_armour_light"]
+script = ExtResource("1_plt8n")
+id = &"armour_light"
+display_name = "Light Armour"
+explanation = "Allows light armour equipment."
+is_capability_tag = true
+
+[sub_resource type="Resource" id="Resource_eq_armour_medium"]
+script = ExtResource("1_plt8n")
+id = &"armour_medium"
+display_name = "Medium Armour"
+explanation = "Allows medium armour equipment."
+is_capability_tag = true
+
+[sub_resource type="Resource" id="Resource_eq_armour_heavy"]
+script = ExtResource("1_plt8n")
+id = &"armour_heavy"
+display_name = "Heavy Armour"
+explanation = "Allows heavy armour equipment."
+is_capability_tag = true
+
+[sub_resource type="Resource" id="Resource_eq_one_hand_sword"]
+script = ExtResource("1_plt8n")
+id = &"one_hand_sword"
+display_name = "One-Handed Sword"
+explanation = "Allows one-handed sword equipment."
+is_capability_tag = true
+
+[sub_resource type="Resource" id="Resource_eq_shield"]
+script = ExtResource("1_plt8n")
+id = &"shield"
+display_name = "Shield"
+explanation = "Allows shield equipment."
+is_capability_tag = true
+
+[sub_resource type="Resource" id="Resource_eq_one_hand_hammer"]
+script = ExtResource("1_plt8n")
+id = &"one_hand_hammer"
+display_name = "One-Handed Hammer"
+explanation = "Allows one-handed hammer equipment."
+is_capability_tag = true
+
+[sub_resource type="Resource" id="Resource_eq_bow_light_medium"]
+script = ExtResource("1_plt8n")
+id = &"bow_light_medium"
+display_name = "Light and Medium Bow"
+explanation = "Allows light and medium bow equipment."
+is_capability_tag = true
+
+[sub_resource type="Resource" id="Resource_eq_greatbow"]
+script = ExtResource("1_plt8n")
+id = &"greatbow"
+display_name = "Greatbow"
+explanation = "Allows greatbow equipment."
+is_capability_tag = true
+
+[sub_resource type="Resource" id="Resource_eq_dagger"]
+script = ExtResource("1_plt8n")
+id = &"dagger"
+display_name = "Dagger"
+explanation = "Allows dagger equipment."
+is_capability_tag = true
+
+[sub_resource type="Resource" id="Resource_eq_dual_wield"]
+script = ExtResource("1_plt8n")
+id = &"dual_wield"
+display_name = "Dual Wield"
+explanation = "Allows compatible weapons in both hands."
+is_capability_tag = true
+
+[sub_resource type="Resource" id="Resource_eq_caster_wand"]
+script = ExtResource("1_plt8n")
+id = &"caster_wand"
+display_name = "Caster Wand"
+explanation = "Allows arcane wand equipment."
+is_capability_tag = true
+
+[sub_resource type="Resource" id="Resource_eq_caster_focus"]
+script = ExtResource("1_plt8n")
+id = &"caster_focus"
+display_name = "Caster Focus"
+explanation = "Allows arcane focus equipment."
+is_capability_tag = true
+
+[sub_resource type="Resource" id="Resource_eq_caster_staff"]
+script = ExtResource("1_plt8n")
+id = &"caster_staff"
+display_name = "Caster Staff"
+explanation = "Allows two-handed caster staff equipment."
+is_capability_tag = true
+
+[sub_resource type="Resource" id="Resource_eq_divine_sceptre"]
+script = ExtResource("1_plt8n")
+id = &"divine_sceptre"
+display_name = "Divine Sceptre"
+explanation = "Allows divine sceptre equipment."
+is_capability_tag = true
+
+[sub_resource type="Resource" id="Resource_eq_divine_tome"]
+script = ExtResource("1_plt8n")
+id = &"divine_tome"
+display_name = "Divine Tome"
+explanation = "Allows divine tome equipment."
+is_capability_tag = true
+
+[sub_resource type="Resource" id="Resource_eq_occult_wand"]
+script = ExtResource("1_plt8n")
+id = &"occult_wand"
+display_name = "Occult Wand"
+explanation = "Allows occult wand equipment."
+is_capability_tag = true
+
+[sub_resource type="Resource" id="Resource_eq_occult_grimoire"]
+script = ExtResource("1_plt8n")
+id = &"occult_grimoire"
+display_name = "Occult Grimoire"
+explanation = "Allows occult grimoire equipment."
+is_capability_tag = true
+
 [sub_resource type="Resource" id="Resource_3odbh"]
 script = ExtResource("1_plt8n")
 id = &"increased"
@@ -352,4 +471,4 @@ explanation = "A multiplicative penalty applied after increased and reduced valu
 
 [resource]
 script = ExtResource("2_457uq")
-definitions = Array[ExtResource("1_plt8n")]([SubResource("Resource_gqqx3"), SubResource("Resource_qmoyr"), SubResource("Resource_2uuwi"), SubResource("Resource_j72g7"), SubResource("Resource_wavwi"), SubResource("Resource_wsag4"), SubResource("Resource_bdgur"), SubResource("Resource_jpw6j"), SubResource("Resource_vbvf6"), SubResource("Resource_nchm6"), SubResource("Resource_i51ed"), SubResource("Resource_wfxcw"), SubResource("Resource_3s5yq"), SubResource("Resource_58p53"), SubResource("Resource_oe05s"), SubResource("Resource_70vpw"), SubResource("Resource_2cvye"), SubResource("Resource_ah527"), SubResource("Resource_ivq6n"), SubResource("Resource_bfmjh"), SubResource("Resource_qo46h"), SubResource("Resource_rw8sv"), SubResource("Resource_xfgc3"), SubResource("Resource_exo8j"), SubResource("Resource_iqcui"), SubResource("Resource_uydlp"), SubResource("Resource_f4kyr"), SubResource("Resource_rrusv"), SubResource("Resource_vvurm"), SubResource("Resource_3tya2"), SubResource("Resource_pnaii"), SubResource("Resource_5wfo4"), SubResource("Resource_ej47h"), SubResource("Resource_gd2vi"), SubResource("Resource_677xj"), SubResource("Resource_cnt6g"), SubResource("Resource_ls5cs"), SubResource("Resource_0jkje"), SubResource("Resource_svdfn"), SubResource("Resource_r80ah"), SubResource("Resource_j1n4n"), SubResource("Resource_ulpjg"), SubResource("Resource_mqyou"), SubResource("Resource_ajgcb"), SubResource("Resource_cy2jx"), SubResource("Resource_uundj"), SubResource("Resource_8iljj"), SubResource("Resource_05m0a"), SubResource("Resource_7osf6"), SubResource("Resource_swg7m"), SubResource("Resource_3odbh"), SubResource("Resource_4mm4v"), SubResource("Resource_pveks"), SubResource("Resource_0g7pm")])
+definitions = Array[ExtResource("1_plt8n")]([SubResource("Resource_gqqx3"), SubResource("Resource_qmoyr"), SubResource("Resource_2uuwi"), SubResource("Resource_j72g7"), SubResource("Resource_wavwi"), SubResource("Resource_wsag4"), SubResource("Resource_bdgur"), SubResource("Resource_jpw6j"), SubResource("Resource_vbvf6"), SubResource("Resource_nchm6"), SubResource("Resource_i51ed"), SubResource("Resource_wfxcw"), SubResource("Resource_3s5yq"), SubResource("Resource_58p53"), SubResource("Resource_oe05s"), SubResource("Resource_70vpw"), SubResource("Resource_2cvye"), SubResource("Resource_ah527"), SubResource("Resource_ivq6n"), SubResource("Resource_bfmjh"), SubResource("Resource_qo46h"), SubResource("Resource_rw8sv"), SubResource("Resource_xfgc3"), SubResource("Resource_exo8j"), SubResource("Resource_iqcui"), SubResource("Resource_uydlp"), SubResource("Resource_f4kyr"), SubResource("Resource_rrusv"), SubResource("Resource_vvurm"), SubResource("Resource_3tya2"), SubResource("Resource_pnaii"), SubResource("Resource_5wfo4"), SubResource("Resource_ej47h"), SubResource("Resource_gd2vi"), SubResource("Resource_677xj"), SubResource("Resource_cnt6g"), SubResource("Resource_ls5cs"), SubResource("Resource_0jkje"), SubResource("Resource_svdfn"), SubResource("Resource_r80ah"), SubResource("Resource_j1n4n"), SubResource("Resource_ulpjg"), SubResource("Resource_mqyou"), SubResource("Resource_ajgcb"), SubResource("Resource_cy2jx"), SubResource("Resource_uundj"), SubResource("Resource_8iljj"), SubResource("Resource_05m0a"), SubResource("Resource_7osf6"), SubResource("Resource_swg7m"), SubResource("Resource_eq_armour_light"), SubResource("Resource_eq_armour_medium"), SubResource("Resource_eq_armour_heavy"), SubResource("Resource_eq_one_hand_sword"), SubResource("Resource_eq_shield"), SubResource("Resource_eq_one_hand_hammer"), SubResource("Resource_eq_bow_light_medium"), SubResource("Resource_eq_greatbow"), SubResource("Resource_eq_dagger"), SubResource("Resource_eq_dual_wield"), SubResource("Resource_eq_caster_wand"), SubResource("Resource_eq_caster_focus"), SubResource("Resource_eq_caster_staff"), SubResource("Resource_eq_divine_sceptre"), SubResource("Resource_eq_divine_tome"), SubResource("Resource_eq_occult_wand"), SubResource("Resource_eq_occult_grimoire"), SubResource("Resource_3odbh"), SubResource("Resource_4mm4v"), SubResource("Resource_pveks"), SubResource("Resource_0g7pm")])

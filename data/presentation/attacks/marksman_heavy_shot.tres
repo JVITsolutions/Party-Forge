@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="AttackPresentationDefinition" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/presentation/attack_presentation_definition.gd" id="1"]
+[ext_resource type="PackedScene" path="res://scenes/combat/presentation/projectiles/marksman_heavy_arrow.tscn" id="2"]
+
+[resource]
+script = ExtResource("1")
+id = &"marksman_heavy_shot_visual"
+attack_id = &"marksman_heavy_shot"
+action_id = &"marksman_heavy_bow_shot"
+required_event_name = &"release"
+weapon_animation_family_id = &"greatbow"
+launch_socket_id = &"HitPivot/BodyPivot/HipsPivot/TorsoPivot/RightShoulderPivot/RightElbowPivot/RightHandSocket/ProjectileLaunchSocket"
+projectile_scene = ExtResource("2")
+projectile_scale = Vector3(1.45000004768372, 1.45000004768372, 1.45000004768372)
+impact_color = Color(1.0, 1.0, 1.0, 1.0)
+action_duration = 1.55
+release_time = 1.15

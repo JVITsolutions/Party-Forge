@@ -1,0 +1,24 @@
+[gd_scene format=3]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_0qhni"]
+albedo_color = Color(0.65882355, 0.6156863, 0.35686275, 1)
+metallic = 0.05
+roughness = 0.78
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_0hgsq"]
+top_radius = 0.08
+bottom_radius = 0.08
+height = 0.05
+radial_segments = 10
+
+[node name="steady_hand_ring" type="Node3D"]
+
+[node name="Attachment" type="Node3D" parent="."]
+metadata/equipment_visual_id = &"steady_hand_ring"
+metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot/LeftShoulderPivot/LeftElbowPivot/LeftHandSocket"
+
+[node name="@MeshInstance3D@71" type="MeshInstance3D" parent="Attachment"]
+transform = Transform3D(-4.371139e-08, -1, 0, 1, -4.371139e-08, 0, 0, 0, 1, 0, 0, 0)
+material_override = SubResource("StandardMaterial3D_0qhni")
+mesh = SubResource("CylinderMesh_0hgsq")
+metadata/palette_region = &"accent"

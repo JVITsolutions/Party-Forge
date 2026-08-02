@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="AttackPresentationDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/presentation/attack_presentation_definition.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"rogue_flurry_visual"
+attack_id = &"rogue_flurry"
+action_id = &"rogue_dagger_flurry"
+required_event_name = &"impact"
+weapon_animation_family_id = &"dual_daggers"
+launch_socket_id = &"HitPivot/BodyPivot/HipsPivot/TorsoPivot/RightShoulderPivot/RightElbowPivot/RightHandSocket/ProjectileLaunchSocket"
+impact_color = Color(1.0, 1.0, 1.0, 1.0)
+action_duration = 0.28
+release_time = 0.16

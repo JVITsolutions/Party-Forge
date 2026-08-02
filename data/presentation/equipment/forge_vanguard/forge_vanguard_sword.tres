@@ -20,5 +20,5 @@ body_preset_ids = [&"masculine", &"feminine"]
 combat_visible = true
 item_colors = {&"primary": Color(0.8509804, 0.30980393, 0.30980393, 1), &"metal": Color(0.1882353, 0.227451, 0.278431, 1), &"leather": Color(0.290196, 0.203922, 0.14902, 1), &"brass": Color(0.713725, 0.545098, 0.227451, 1)}
 wearer_accent_channel = &"primary"
-weapon_animation_family_id = &"sword_shield"
+weapon_animation_family_id = &"one_hand_sword"
 readability_channels = [&"silhouette"]

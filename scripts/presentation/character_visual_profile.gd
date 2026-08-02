@@ -16,6 +16,7 @@ const BODY_PRESETS: Array[StringName] = [&"masculine", &"feminine"]
 @export var available_equipment_visuals: Array[EquipmentVisualDefinition] = []
 @export var required_animation_names: Array[StringName] = [&"idle"]
 @export var attack_animation_by_id: Dictionary = {}
+@export var attack_presentations: Array[AttackPresentationDefinition] = []
 
 func validate() -> PackedStringArray:
 	var errors := PackedStringArray()
@@ -47,7 +48,28 @@ func validate() -> PackedStringArray:
 		var animation_id := StringName(attack_animation_by_id[attack_id])
 		if StringName(attack_id).is_empty() or not animation_names.has(animation_id):
 			errors.append("profile %s attack mapping %s -> %s is invalid" % [id, attack_id, animation_id])
+	var attack_presentation_ids: Dictionary = {}
+	for definition: AttackPresentationDefinition in attack_presentations:
+		if definition == null:
+			errors.append("profile %s has null attack presentation" % id)
+			continue
+		if definition.id.is_empty() or definition.attack_id.is_empty() or definition.action_id.is_empty() or definition.required_event_name not in [&"release", &"impact"]:
+			errors.append("profile %s attack presentation identity is invalid" % id)
+		if attack_presentation_ids.has(definition.id):
+			errors.append("profile %s has duplicate attack presentation %s" % [id, definition.id])
+		attack_presentation_ids[definition.id] = true
+		if not animation_names.has(definition.action_id):
+			errors.append("profile %s attack presentation %s action %s is missing" % [id, definition.id, definition.action_id])
 	return errors
+
+func resolve_attack_presentation(attack_id: StringName, weapon_family_id: StringName) -> AttackPresentationDefinition:
+	for value: AttackPresentationDefinition in attack_presentations:
+		if value != null and value.attack_id == attack_id and value.weapon_animation_family_id == weapon_family_id:
+			return value
+	for value: AttackPresentationDefinition in attack_presentations:
+		if value != null and value.attack_id == attack_id and value.weapon_animation_family_id.is_empty():
+			return value
+	return null
 
 func get_available_equipment_visual(slot_id: StringName) -> EquipmentVisualDefinition:
 	for item: EquipmentBaseDefinition in available_equipment:

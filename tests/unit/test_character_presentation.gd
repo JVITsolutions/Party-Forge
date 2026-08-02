@@ -5,38 +5,46 @@ const FIXTURE_SCENE_PATH := "res://tests/fixtures/fake_character_model.tscn"
 
 class MissingHitWeightModel extends Node3D:
 	signal action_finished(action_id: StringName)
+	signal action_event(action_id: StringName, event_name: StringName)
 	func set_body_preset(_value: StringName) -> bool: return true
 	func set_palette(_value: StringName, _color: Color) -> bool: return true
 	func apply_equipment_visual(_slot_id: StringName, _definition: EquipmentVisualDefinition) -> bool: return true
 	func clear_equipment_visual(_slot_id: StringName) -> bool: return true
-	func play_action(_animation_id: StringName) -> bool: return true
+	func play_action(_animation_id: StringName, _playback_rate: float = 1.0) -> bool: return true
+	func play_feedback(_animation_id: StringName) -> bool: return true
 	func set_downed(_value: bool) -> void: pass
 
 class MissingDownedModel extends Node3D:
 	signal action_finished(action_id: StringName)
+	signal action_event(action_id: StringName, event_name: StringName)
 	func set_body_preset(_value: StringName) -> bool: return true
 	func set_palette(_value: StringName, _color: Color) -> bool: return true
 	func apply_equipment_visual(_slot_id: StringName, _definition: EquipmentVisualDefinition) -> bool: return true
 	func clear_equipment_visual(_slot_id: StringName) -> bool: return true
-	func play_action(_animation_id: StringName) -> bool: return true
+	func play_action(_animation_id: StringName, _playback_rate: float = 1.0) -> bool: return true
+	func play_feedback(_animation_id: StringName) -> bool: return true
 	func set_hit_weight(_value: float) -> void: pass
 
 class MissingActionFinishedModel extends Node3D:
+	signal action_event(action_id: StringName, event_name: StringName)
 	func set_body_preset(_value: StringName) -> bool: return true
 	func set_palette(_value: StringName, _color: Color) -> bool: return true
 	func apply_equipment_visual(_slot_id: StringName, _definition: EquipmentVisualDefinition) -> bool: return true
 	func clear_equipment_visual(_slot_id: StringName) -> bool: return true
-	func play_action(_animation_id: StringName) -> bool: return true
+	func play_action(_animation_id: StringName, _playback_rate: float = 1.0) -> bool: return true
+	func play_feedback(_animation_id: StringName) -> bool: return true
 	func set_hit_weight(_value: float) -> void: pass
 	func set_downed(_value: bool) -> void: pass
 
 class WrongActionFinishedSignatureModel extends Node3D:
 	signal action_finished(action_id: StringName, source: Node3D)
+	signal action_event(action_id: StringName, event_name: StringName)
 	func set_body_preset(_value: StringName) -> bool: return true
 	func set_palette(_value: StringName, _color: Color) -> bool: return true
 	func apply_equipment_visual(_slot_id: StringName, _definition: EquipmentVisualDefinition) -> bool: return true
 	func clear_equipment_visual(_slot_id: StringName) -> bool: return true
-	func play_action(_animation_id: StringName) -> bool: return true
+	func play_action(_animation_id: StringName, _playback_rate: float = 1.0) -> bool: return true
+	func play_feedback(_animation_id: StringName) -> bool: return true
 	func set_hit_weight(_value: float) -> void: pass
 	func set_downed(_value: bool) -> void: pass
 
@@ -156,8 +164,8 @@ func _test_missing_action_finished_signal_keeps_fallback_visible(failures: Array
 func _test_signal_signature_contract_api_exists(failures: Array[String]) -> bool:
 	var root := _new_root("CharacterPresentationSignalContractApiTest")
 	var presentation := _new_presentation(root)
-	var exposes_validation := presentation.has_method(&"_has_valid_action_finished_signal")
-	TestAssertions.truthy(exposes_validation, "presentation exposes exact action-finished signal validation", failures)
+	var exposes_validation := presentation.has_method(&"_has_valid_model_signal")
+	TestAssertions.truthy(exposes_validation, "presentation exposes exact model signal validation", failures)
 	root.free()
 	return exposes_validation
 
@@ -333,12 +341,12 @@ func _test_hit_transient_restores_latest_locomotion(failures: Array[String]) -> 
 	if model != null:
 		presentation.update_locomotion(Vector3(0.0, 0.0, -2.0))
 		presentation.flash_hit()
-		TestAssertions.equal(model.current_action_id, &"hit_flinch", "hit starts flinch action", failures)
+		TestAssertions.equal(model.current_action_id, &"walk", "hit feedback leaves locomotion action active", failures)
+		TestAssertions.equal(model.feedback_played.back(), &"hit_flinch", "hit starts flinch on feedback layer", failures)
 		var played_during_hit := model.played.size()
 		presentation.update_locomotion(Vector3.ZERO)
-		TestAssertions.equal(model.played.size(), played_during_hit, "locomotion cannot interrupt hit flinch", failures)
-		model.finish_action(&"hit_flinch")
-		TestAssertions.equal(model.current_action_id, &"idle", "hit completion restores latest idle", failures)
+		TestAssertions.equal(model.played.size(), played_during_hit + 1, "locomotion remains responsive during hit feedback", failures)
+		TestAssertions.equal(model.current_action_id, &"idle", "hit feedback does not delay latest idle", failures)
 	root.free()
 
 func _test_downed_blocks_and_revival_restores_locomotion(failures: Array[String]) -> void:

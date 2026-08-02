@@ -1,0 +1,88 @@
+[gd_resource type="Resource" script_class="CharacterVisualProfile" load_steps=28 format=3]
+
+[ext_resource type="Script" path="res://scripts/presentation/character_visual_profile.gd" id="1"]
+[ext_resource type="Script" path="res://scripts/equipment/equipment_loadout_entry.gd" id="2"]
+[ext_resource type="PackedScene" path="res://scenes/characters/presentation/forge_humanoid_model.tscn" id="3"]
+[ext_resource type="Resource" path="res://data/equipment/bases/storm_chaplain/storm_chaplain_hood.tres" id="4"]
+[ext_resource type="Resource" path="res://data/equipment/bases/storm_chaplain/storm_chaplain_vestments.tres" id="5"]
+[ext_resource type="Resource" path="res://data/equipment/bases/storm_chaplain/storm_chaplain_leggings.tres" id="6"]
+[ext_resource type="Resource" path="res://data/equipment/bases/storm_chaplain/storm_chaplain_prayer_gloves.tres" id="7"]
+[ext_resource type="Resource" path="res://data/equipment/bases/storm_chaplain/storm_chaplain_boots.tres" id="8"]
+[ext_resource type="Resource" path="res://data/equipment/bases/storm_chaplain/storm_chaplain_reliquary.tres" id="9"]
+[ext_resource type="Resource" path="res://data/equipment/bases/storm_chaplain/storm_ring.tres" id="10"]
+[ext_resource type="Resource" path="res://data/equipment/bases/storm_chaplain/mercy_ring.tres" id="11"]
+[ext_resource type="Resource" path="res://data/equipment/bases/storm_chaplain/storm_chaplain_belt.tres" id="12"]
+[ext_resource type="Resource" path="res://data/equipment/bases/storm_chaplain/storm_chaplain_sceptre.tres" id="13"]
+[ext_resource type="Resource" path="res://data/equipment/bases/storm_chaplain/storm_chaplain_holy_tome.tres" id="14"]
+[ext_resource type="Resource" path="res://data/presentation/attacks/cleric_bolt.tres" id="15"]
+[ext_resource type="Resource" path="res://data/presentation/attacks/cleric_heal.tres" id="16"]
+
+[sub_resource type="Resource" id="Entry0"]
+script = ExtResource("2")
+slot_id = &"helmet"
+item = ExtResource("4")
+
+[sub_resource type="Resource" id="Entry1"]
+script = ExtResource("2")
+slot_id = &"body_armour"
+item = ExtResource("5")
+
+[sub_resource type="Resource" id="Entry2"]
+script = ExtResource("2")
+slot_id = &"legs"
+item = ExtResource("6")
+
+[sub_resource type="Resource" id="Entry3"]
+script = ExtResource("2")
+slot_id = &"gloves"
+item = ExtResource("7")
+
+[sub_resource type="Resource" id="Entry4"]
+script = ExtResource("2")
+slot_id = &"boots"
+item = ExtResource("8")
+
+[sub_resource type="Resource" id="Entry5"]
+script = ExtResource("2")
+slot_id = &"amulet"
+item = ExtResource("9")
+
+[sub_resource type="Resource" id="Entry6"]
+script = ExtResource("2")
+slot_id = &"ring_left"
+item = ExtResource("10")
+
+[sub_resource type="Resource" id="Entry7"]
+script = ExtResource("2")
+slot_id = &"ring_right"
+item = ExtResource("11")
+
+[sub_resource type="Resource" id="Entry8"]
+script = ExtResource("2")
+slot_id = &"belt"
+item = ExtResource("12")
+
+[sub_resource type="Resource" id="Entry9"]
+script = ExtResource("2")
+slot_id = &"main_hand"
+item = ExtResource("13")
+
+[sub_resource type="Resource" id="Entry10"]
+script = ExtResource("2")
+slot_id = &"off_hand"
+item = ExtResource("14")
+
+[resource]
+script = ExtResource("1")
+id = &"cleric"
+presentation_scene = ExtResource("3")
+default_body_preset = &"masculine"
+default_palette_id = &"class"
+palette_colors = {&"class": Color(0.94117647409439, 0.81960785388947, 0.35686275362968, 1.0)}
+default_equipment = [SubResource("Entry0"), SubResource("Entry1"), SubResource("Entry2"), SubResource("Entry3"), SubResource("Entry4"), SubResource("Entry5"), SubResource("Entry6"), SubResource("Entry7"), SubResource("Entry8"), SubResource("Entry9"), SubResource("Entry10")]
+available_equipment = [ExtResource("4"), ExtResource("5"), ExtResource("6"), ExtResource("7"), ExtResource("8"), ExtResource("9"), ExtResource("10"), ExtResource("11"), ExtResource("12"), ExtResource("13"), ExtResource("14")]
+idle_action_id = &"cleric_idle"
+walk_action_id = &"walk"
+required_animation_names = [&"idle", &"walk", &"hit_flinch", &"cleric_idle", &"cleric_lightning_bolt", &"cleric_healing_blessing"]
+attack_animation_by_id = {&"cleric_bolt": &"cleric_lightning_bolt", &"cleric_heal": &"cleric_healing_blessing"}
+attack_presentations = [ExtResource("15"), ExtResource("16")]

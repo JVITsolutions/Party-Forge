@@ -24,6 +24,7 @@ func run() -> Array[String]:
 
     _test_healing_selector(failures)
     _test_melee_execution(failures)
+    _test_animation_event_sequence_execution(failures)
     _test_defender_resolution_order(failures)
     _test_rogue_range_and_target_centered_cleave(failures)
     _test_zero_area_melee_hits_primary_only(failures)
@@ -36,6 +37,31 @@ func run() -> Array[String]:
     _test_combat_modifiers(failures)
     _test_cleric_primary_fallback(failures)
     return failures
+
+func _test_animation_event_sequence_execution(failures: Array[String]) -> void:
+    var test_root := _new_test_root("AnimationEventSequenceExecutionTest")
+    var catalog := GameCatalog.load_defaults()
+    var fighter := catalog.class_by_id(&"fighter")
+    var party := PartyManager.new()
+    test_root.add_child(party)
+    party.initialize(fighter, catalog.traits)
+    party.call("configure_combat", CombatRng.new(150), catalog.damage_types)
+    var owner := _create_member_actor(test_root, party, party.members[0], 1, Vector3.ZERO)
+    var target := _create_actor(test_root, fighter, 2, Vector3(1.0, 0.0, 0.0))
+    _set_health(target, 100.0, 100.0)
+    var combatants: Array[Node3D] = [target]
+    owner.attack_executor.call("configure", owner, party, test_root, combatants)
+    var presentation := owner.get_node("Presentation") as CharacterPresentation
+    var visual := presentation.resolve_attack_presentation(fighter.primary_attack)
+    var sequence := owner.attack_sequence_controller
+    sequence.configure(owner, presentation, owner.attack_executor)
+    var token := sequence.request(fighter.primary_attack, target.get_combat_target(), visual, 1.0, 1.0)
+    TestAssertions.truthy(token > 0, "real Fighter attack sequence starts", failures)
+    sequence.advance(0.27)
+    TestAssertions.near(_health(target).current_health, 100.0, 0.001, "real Fighter deals no damage before authored impact", failures)
+    presentation.active_model.call(&"emit_action_event", &"impact")
+    TestAssertions.near(_health(target).current_health, 82.0, 0.001, "real Fighter deals damage exactly at authored impact", failures)
+    test_root.free()
 
 func _test_healing_selector(failures: Array[String]) -> void:
     var test_root := _new_test_root("HealingSelectorTest")
@@ -166,6 +192,8 @@ func _test_rogue_range_and_target_centered_cleave(failures: Array[String]) -> vo
 
     var acquisition_candidates: Array[CombatTarget] = [primary.get_combat_target()]
     rogue.call("advance_combat", 0.1, acquisition_candidates)
+    var rogue_presentation := rogue.get_node("Presentation") as CharacterPresentation
+    rogue_presentation.active_model.call(&"emit_action_event", &"impact")
     TestAssertions.truthy(_health(primary).current_health < 100.0, "Rogue range 2.0 acquires primary", failures)
 
     var combatants: Array[Node3D] = [rogue, primary, near_primary, behind_rogue]

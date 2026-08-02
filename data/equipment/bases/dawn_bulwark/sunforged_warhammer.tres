@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="EquipmentBaseDefinition" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/equipment/equipment_base_definition.gd" id="1"]
+[ext_resource type="Resource" path="res://data/presentation/equipment/dawn_bulwark/sunforged_warhammer.tres" id="2"]
+
+[resource]
+script = ExtResource("1")
+id = &"sunforged_warhammer"
+display_name = "Sunforged Warhammer"
+item_type_id = &"warhammer"
+compatible_slot_ids = [&"main_hand"]
+weight_class_id = &"weapon"
+required_all_tags = [&"martial", &"one_hand_hammer"]
+handedness_id = &"one_hand"
+reserved_slot_ids = []
+compatible_offhand_item_types = []
+weapon_family_id = &"one_hand_hammer"
+implicit_family_id = &"dawn_bulwark"
+presentation = ExtResource("2")

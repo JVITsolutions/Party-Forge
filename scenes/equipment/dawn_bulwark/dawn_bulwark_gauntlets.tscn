@@ -1,0 +1,37 @@
+[gd_scene format=3]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_l3etr"]
+albedo_color = Color(0.84313726, 0.8627451, 0.8862745, 1)
+metallic = 0.72
+roughness = 0.42
+
+[sub_resource type="BoxMesh" id="BoxMesh_koc5r"]
+size = Vector3(0.22, 0.22, 0.24)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_24dhx"]
+albedo_color = Color(0.84313726, 0.8627451, 0.8862745, 1)
+metallic = 0.72
+roughness = 0.42
+
+[sub_resource type="BoxMesh" id="BoxMesh_734hw"]
+size = Vector3(0.22, 0.22, 0.24)
+
+[node name="dawn_bulwark_gauntlets" type="Node3D"]
+
+[node name="Attachment" type="Node3D" parent="."]
+metadata/equipment_visual_id = &"dawn_bulwark_gauntlets"
+metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot/LeftShoulderPivot/LeftElbowPivot/LeftHandSocket"
+
+[node name="@MeshInstance3D@14" type="MeshInstance3D" parent="Attachment"]
+material_override = SubResource("StandardMaterial3D_l3etr")
+mesh = SubResource("BoxMesh_koc5r")
+metadata/palette_region = &"metal"
+
+[node name="@Node3D@16" type="Node3D" parent="."]
+metadata/equipment_visual_id = &"dawn_bulwark_gauntlets"
+metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot/RightShoulderPivot/RightElbowPivot/RightHandSocket"
+
+[node name="@MeshInstance3D@15" type="MeshInstance3D" parent="@Node3D@16"]
+material_override = SubResource("StandardMaterial3D_24dhx")
+mesh = SubResource("BoxMesh_734hw")
+metadata/palette_region = &"metal"

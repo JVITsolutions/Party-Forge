@@ -3,6 +3,7 @@
 [ext_resource type="Resource" path="res://data/names/rogue.tres" id="1_51p68"]
 [ext_resource type="Resource" uid="uid://ba7tar1q4u13w" path="res://data/attacks/rogue_flurry.tres" id="1_qgxf2"]
 [ext_resource type="Script" uid="uid://bg7wmynvpw0r8" path="res://scripts/data/class_definition.gd" id="2_51p68"]
+[ext_resource type="Resource" path="res://data/presentation/profiles/rogue.tres" id="3_profile"]
 
 [resource]
 script = ExtResource("2_51p68")
@@ -11,7 +12,7 @@ display_name = "Rogue"
 role = 1
 color = Color(0.6627451, 0.35686275, 0.9098039, 1)
 traits = Array[StringName]([&"martial", &"skirmisher"])
-capability_tags = Array[StringName]([&"area", &"crit", &"dodge", &"life_steal", &"melee", &"physical"])
+capability_tags = Array[StringName]([&"area", &"crit", &"dodge", &"life_steal", &"melee", &"physical", &"armour_light", &"dagger", &"dual_wield"])
 name_pool = ExtResource("1_51p68")
 base_stat_overrides = {
 &"crit_chance": 0.2,
@@ -25,3 +26,4 @@ preferred_distance = 1.4
 engagement_distance = 3.0
 tether_distance = 8.0
 primary_attack = ExtResource("1_qgxf2")
+visual_profile = ExtResource("3_profile")

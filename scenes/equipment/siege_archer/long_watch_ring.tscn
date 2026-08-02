@@ -1,0 +1,24 @@
+[gd_scene format=3]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_5r8av"]
+albedo_color = Color(0.65882355, 0.6156863, 0.35686275, 1)
+metallic = 0.05
+roughness = 0.78
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_xfxx8"]
+top_radius = 0.08
+bottom_radius = 0.08
+height = 0.05
+radial_segments = 10
+
+[node name="long_watch_ring" type="Node3D"]
+
+[node name="Attachment" type="Node3D" parent="."]
+metadata/equipment_visual_id = &"long_watch_ring"
+metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot/RightShoulderPivot/RightElbowPivot/RightHandSocket"
+
+[node name="@MeshInstance3D@72" type="MeshInstance3D" parent="Attachment"]
+transform = Transform3D(-4.371139e-08, -1, 0, 1, -4.371139e-08, 0, 0, 0, 1, 0, 0, 0)
+material_override = SubResource("StandardMaterial3D_5r8av")
+mesh = SubResource("CylinderMesh_xfxx8")
+metadata/palette_region = &"accent"

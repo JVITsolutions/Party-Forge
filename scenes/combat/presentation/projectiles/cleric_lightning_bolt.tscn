@@ -1,0 +1,37 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scripts/combat/projectile.gd" id="1_3284o"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_ms7qj"]
+albedo_color = Color(1, 0.9411765, 0.5411765, 1)
+roughness = 0.72
+emission_enabled = true
+emission = Color(1, 0.9411765, 0.5411765, 1)
+emission_energy_multiplier = 1.5
+
+[sub_resource type="BoxMesh" id="BoxMesh_jrlgu"]
+size = Vector3(0.06, 0.06, 0.24)
+
+[sub_resource type="BoxMesh" id="BoxMesh_yw7q1"]
+size = Vector3(0.06, 0.06, 0.24)
+
+[sub_resource type="BoxMesh" id="BoxMesh_2e8k2"]
+size = Vector3(0.06, 0.06, 0.24)
+
+[node name="ClericLightningBolt" type="Node3D"]
+script = ExtResource("1_3284o")
+
+[node name="Segment0" type="MeshInstance3D" parent="."]
+transform = Transform3D(0.96105546, 0, 0.27635565, 0, 1, 0, -0.27635565, 0, 0.96105546, 0.06, 0, 0.2376)
+material_override = SubResource("StandardMaterial3D_ms7qj")
+mesh = SubResource("BoxMesh_jrlgu")
+
+[node name="Segment1" type="MeshInstance3D" parent="."]
+transform = Transform3D(0.96105546, 0, -0.27635565, 0, 1, 0, 0.27635565, 0, 0.96105546, -0.06, 0, -0.0024)
+material_override = SubResource("StandardMaterial3D_ms7qj")
+mesh = SubResource("BoxMesh_yw7q1")
+
+[node name="Segment2" type="MeshInstance3D" parent="."]
+transform = Transform3D(0.96105546, 0, 0.27635565, 0, 1, 0, -0.27635565, 0, 0.96105546, 0.06, 0, -0.2424)
+material_override = SubResource("StandardMaterial3D_ms7qj")
+mesh = SubResource("BoxMesh_2e8k2")

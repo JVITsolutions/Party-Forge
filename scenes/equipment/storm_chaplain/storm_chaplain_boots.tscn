@@ -1,0 +1,39 @@
+[gd_scene format=3]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_6l7ji"]
+albedo_color = Color(0.4, 0.3372549, 0.23921569, 1)
+metallic = 0.05
+roughness = 0.78
+
+[sub_resource type="BoxMesh" id="BoxMesh_y5n4p"]
+size = Vector3(0.27, 0.3, 0.38)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_ygo6u"]
+albedo_color = Color(0.4, 0.3372549, 0.23921569, 1)
+metallic = 0.05
+roughness = 0.78
+
+[sub_resource type="BoxMesh" id="BoxMesh_vnl70"]
+size = Vector3(0.27, 0.3, 0.38)
+
+[node name="storm_chaplain_boots" type="Node3D"]
+
+[node name="Attachment" type="Node3D" parent="."]
+metadata/equipment_visual_id = &"storm_chaplain_boots"
+metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/LeftHipPivot/LeftKneePivot/LeftFootPivot"
+
+[node name="@MeshInstance3D@161" type="MeshInstance3D" parent="Attachment"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.13, -0.04)
+material_override = SubResource("StandardMaterial3D_6l7ji")
+mesh = SubResource("BoxMesh_y5n4p")
+metadata/palette_region = &"leather"
+
+[node name="@Node3D@163" type="Node3D" parent="."]
+metadata/equipment_visual_id = &"storm_chaplain_boots"
+metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/RightHipPivot/RightKneePivot/RightFootPivot"
+
+[node name="@MeshInstance3D@162" type="MeshInstance3D" parent="@Node3D@163"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.13, -0.04)
+material_override = SubResource("StandardMaterial3D_ygo6u")
+mesh = SubResource("BoxMesh_vnl70")
+metadata/palette_region = &"leather"

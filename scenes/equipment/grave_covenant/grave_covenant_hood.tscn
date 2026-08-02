@@ -1,0 +1,41 @@
+[gd_scene format=3]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_7l6fm"]
+albedo_color = Color(0.31764707, 0.21176471, 0.3882353, 1)
+metallic = 0.05
+roughness = 0.78
+
+[sub_resource type="BoxMesh" id="BoxMesh_wm7hr"]
+size = Vector3(0.42, 0.09, 0.4)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_qpmn7"]
+albedo_color = Color(0.54901963, 0.27058825, 0.7882353, 1)
+metallic = 0.05
+roughness = 0.78
+emission_enabled = true
+emission = Color(0.54901963, 0.27058825, 0.7882353, 1)
+emission_energy_multiplier = 0.85
+
+[sub_resource type="SphereMesh" id="SphereMesh_h28pf"]
+radius = 0.09
+height = 0.18
+radial_segments = 12
+rings = 6
+
+[node name="grave_covenant_hood" type="Node3D"]
+
+[node name="Attachment" type="Node3D" parent="."]
+metadata/equipment_visual_id = &"grave_covenant_hood"
+metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot/HeadPivot/HelmetSocket"
+
+[node name="@MeshInstance3D@174" type="MeshInstance3D" parent="Attachment"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.1, 0)
+material_override = SubResource("StandardMaterial3D_7l6fm")
+mesh = SubResource("BoxMesh_wm7hr")
+metadata/palette_region = &"primary"
+
+[node name="@MeshInstance3D@175" type="MeshInstance3D" parent="Attachment"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.2, -0.16)
+material_override = SubResource("StandardMaterial3D_qpmn7")
+mesh = SubResource("SphereMesh_h28pf")
+metadata/palette_region = &"accent"

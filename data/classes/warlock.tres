@@ -3,6 +3,7 @@
 [ext_resource type="Resource" path="res://data/names/warlock.tres" id="1_8b5fo"]
 [ext_resource type="Resource" path="res://data/attacks/warlock_bolt.tres" id="1_nil6l"]
 [ext_resource type="Script" path="res://scripts/data/class_definition.gd" id="2_8b5fo"]
+[ext_resource type="Resource" path="res://data/presentation/profiles/warlock.tres" id="3_profile"]
 
 [resource]
 script = ExtResource("2_8b5fo")
@@ -11,7 +12,7 @@ display_name = "Warlock"
 role = 2
 color = Color(0.49411765, 0.29411766, 0.76862746, 1)
 traits = Array[StringName]([&"occult", &"caster", &"chaos"])
-capability_tags = Array[StringName]([&"chaos", &"life_steal", &"projectile", &"ranged"])
+capability_tags = Array[StringName]([&"chaos", &"life_steal", &"projectile", &"ranged", &"armour_light", &"occult_wand", &"occult_grimoire"])
 name_pool = ExtResource("1_8b5fo")
 base_stat_overrides = {
 &"chaos_damage": 1.1,
@@ -24,3 +25,4 @@ preferred_distance = 6.0
 engagement_distance = 12.5
 tether_distance = 12.5
 primary_attack = ExtResource("1_nil6l")
+visual_profile = ExtResource("3_profile")

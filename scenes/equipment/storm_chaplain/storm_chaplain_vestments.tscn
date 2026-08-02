@@ -1,0 +1,52 @@
+[gd_scene format=3]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_ycnr3"]
+albedo_color = Color(0.84705883, 0.7647059, 0.41568628, 1)
+metallic = 0.05
+roughness = 0.78
+
+[sub_resource type="BoxMesh" id="BoxMesh_642t4"]
+size = Vector3(0.76, 0.84, 0.3)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_6b847"]
+albedo_color = Color(0.4117647, 0.44705883, 0.47843137, 1)
+metallic = 0.72
+roughness = 0.42
+
+[sub_resource type="BoxMesh" id="BoxMesh_kdxtr"]
+size = Vector3(0.58, 0.18, 0.34)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_5kpx2"]
+albedo_color = Color(1, 0.9411765, 0.5411765, 1)
+metallic = 0.05
+roughness = 0.78
+emission_enabled = true
+emission = Color(1, 0.9411765, 0.5411765, 1)
+emission_energy_multiplier = 0.85
+
+[sub_resource type="BoxMesh" id="BoxMesh_t4leo"]
+size = Vector3(0.12, 0.58, 0.04)
+
+[node name="storm_chaplain_vestments" type="Node3D"]
+
+[node name="Attachment" type="Node3D" parent="."]
+metadata/equipment_visual_id = &"storm_chaplain_vestments"
+metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot/BodyArmourSocket"
+
+[node name="@MeshInstance3D@152" type="MeshInstance3D" parent="Attachment"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.08, 0)
+material_override = SubResource("StandardMaterial3D_ycnr3")
+mesh = SubResource("BoxMesh_642t4")
+metadata/palette_region = &"primary"
+
+[node name="@MeshInstance3D@153" type="MeshInstance3D" parent="Attachment"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.2, 0)
+material_override = SubResource("StandardMaterial3D_6b847")
+mesh = SubResource("BoxMesh_kdxtr")
+metadata/palette_region = &"metal"
+
+[node name="@MeshInstance3D@154" type="MeshInstance3D" parent="Attachment"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.06, -0.18)
+material_override = SubResource("StandardMaterial3D_5kpx2")
+mesh = SubResource("BoxMesh_t4leo")
+metadata/palette_region = &"accent"

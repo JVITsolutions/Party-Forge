@@ -1,0 +1,52 @@
+[gd_scene format=3]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_3pht3"]
+albedo_color = Color(0.33333334, 0.23529412, 0.15686275, 1)
+metallic = 0.05
+roughness = 0.78
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_tvwsy"]
+top_radius = 0.045
+bottom_radius = 0.045
+height = 0.82
+radial_segments = 10
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_jfrmo"]
+albedo_color = Color(0.84313726, 0.8627451, 0.8862745, 1)
+metallic = 0.72
+roughness = 0.42
+
+[sub_resource type="BoxMesh" id="BoxMesh_8ctl8"]
+size = Vector3(0.42, 0.2, 0.22)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_vb13g"]
+albedo_color = Color(1, 0.9411765, 0.6313726, 1)
+metallic = 0.05
+roughness = 0.78
+
+[sub_resource type="BoxMesh" id="BoxMesh_8q4jt"]
+size = Vector3(0.12, 0.25, 0.13)
+
+[node name="sunforged_warhammer" type="Node3D"]
+
+[node name="Attachment" type="Node3D" parent="."]
+metadata/equipment_visual_id = &"sunforged_warhammer"
+metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot/RightShoulderPivot/RightElbowPivot/RightHandSocket"
+
+[node name="@MeshInstance3D@25" type="MeshInstance3D" parent="Attachment"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.34, 0)
+material_override = SubResource("StandardMaterial3D_3pht3")
+mesh = SubResource("CylinderMesh_tvwsy")
+metadata/palette_region = &"leather"
+
+[node name="@MeshInstance3D@26" type="MeshInstance3D" parent="Attachment"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.77, 0)
+material_override = SubResource("StandardMaterial3D_jfrmo")
+mesh = SubResource("BoxMesh_8ctl8")
+metadata/palette_region = &"metal"
+
+[node name="@MeshInstance3D@27" type="MeshInstance3D" parent="Attachment"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.77, 0)
+material_override = SubResource("StandardMaterial3D_vb13g")
+mesh = SubResource("BoxMesh_8q4jt")
+metadata/palette_region = &"accent"

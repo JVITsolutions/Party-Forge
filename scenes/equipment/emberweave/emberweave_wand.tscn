@@ -1,0 +1,44 @@
+[gd_scene format=3]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_uxaoi"]
+albedo_color = Color(0.29411766, 0.2, 0.30980393, 1)
+metallic = 0.05
+roughness = 0.78
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_y1dhm"]
+top_radius = 0.035
+bottom_radius = 0.035
+height = 0.68
+radial_segments = 10
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_p33c1"]
+albedo_color = Color(1, 0.4392157, 0.2627451, 1)
+metallic = 0.05
+roughness = 0.78
+emission_enabled = true
+emission = Color(1, 0.4392157, 0.2627451, 1)
+emission_energy_multiplier = 0.85
+
+[sub_resource type="SphereMesh" id="SphereMesh_ldchb"]
+radius = 0.12
+height = 0.24
+radial_segments = 12
+rings = 6
+
+[node name="emberweave_wand" type="Node3D"]
+
+[node name="Attachment" type="Node3D" parent="."]
+metadata/equipment_visual_id = &"emberweave_wand"
+metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot/RightShoulderPivot/RightElbowPivot/RightHandSocket"
+
+[node name="@MeshInstance3D@124" type="MeshInstance3D" parent="Attachment"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.28, 0)
+material_override = SubResource("StandardMaterial3D_uxaoi")
+mesh = SubResource("CylinderMesh_y1dhm")
+metadata/palette_region = &"leather"
+
+[node name="@MeshInstance3D@125" type="MeshInstance3D" parent="Attachment"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.68, 0)
+material_override = SubResource("StandardMaterial3D_p33c1")
+mesh = SubResource("SphereMesh_ldchb")
+metadata/palette_region = &"accent"

@@ -1,0 +1,37 @@
+[gd_scene format=3]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_clfa6"]
+albedo_color = Color(0.21568628, 0.30588236, 0.36078432, 1)
+metallic = 0.05
+roughness = 0.78
+
+[sub_resource type="BoxMesh" id="BoxMesh_3ite0"]
+size = Vector3(0.22, 0.22, 0.24)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_hoybr"]
+albedo_color = Color(0.21568628, 0.30588236, 0.36078432, 1)
+metallic = 0.05
+roughness = 0.78
+
+[sub_resource type="BoxMesh" id="BoxMesh_swqg6"]
+size = Vector3(0.22, 0.22, 0.24)
+
+[node name="rime_scholar_gloves" type="Node3D"]
+
+[node name="Attachment" type="Node3D" parent="."]
+metadata/equipment_visual_id = &"rime_scholar_gloves"
+metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot/LeftShoulderPivot/LeftElbowPivot/LeftHandSocket"
+
+[node name="@MeshInstance3D@136" type="MeshInstance3D" parent="Attachment"]
+material_override = SubResource("StandardMaterial3D_clfa6")
+mesh = SubResource("BoxMesh_3ite0")
+metadata/palette_region = &"leather"
+
+[node name="@Node3D@138" type="Node3D" parent="."]
+metadata/equipment_visual_id = &"rime_scholar_gloves"
+metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot/RightShoulderPivot/RightElbowPivot/RightHandSocket"
+
+[node name="@MeshInstance3D@137" type="MeshInstance3D" parent="@Node3D@138"]
+material_override = SubResource("StandardMaterial3D_hoybr")
+mesh = SubResource("BoxMesh_swqg6")
+metadata/palette_region = &"leather"

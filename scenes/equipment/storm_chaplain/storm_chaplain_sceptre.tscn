@@ -1,0 +1,61 @@
+[gd_scene format=3]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_81byh"]
+albedo_color = Color(0.4117647, 0.44705883, 0.47843137, 1)
+metallic = 0.72
+roughness = 0.42
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_rutqj"]
+top_radius = 0.05
+bottom_radius = 0.05
+height = 0.78
+radial_segments = 10
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_l5ube"]
+albedo_color = Color(1, 0.9411765, 0.5411765, 1)
+metallic = 0.05
+roughness = 0.78
+emission_enabled = true
+emission = Color(1, 0.9411765, 0.5411765, 1)
+emission_energy_multiplier = 0.85
+
+[sub_resource type="BoxMesh" id="BoxMesh_jfc0f"]
+size = Vector3(0.3, 0.12, 0.12)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_wfgl6"]
+albedo_color = Color(1, 0.9411765, 0.5411765, 1)
+metallic = 0.05
+roughness = 0.78
+emission_enabled = true
+emission = Color(1, 0.9411765, 0.5411765, 1)
+emission_energy_multiplier = 0.85
+
+[sub_resource type="SphereMesh" id="SphereMesh_r4qo0"]
+radius = 0.1
+height = 0.2
+radial_segments = 12
+rings = 6
+
+[node name="storm_chaplain_sceptre" type="Node3D"]
+
+[node name="Attachment" type="Node3D" parent="."]
+metadata/equipment_visual_id = &"storm_chaplain_sceptre"
+metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot/RightShoulderPivot/RightElbowPivot/RightHandSocket"
+
+[node name="@MeshInstance3D@169" type="MeshInstance3D" parent="Attachment"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.32, 0)
+material_override = SubResource("StandardMaterial3D_81byh")
+mesh = SubResource("CylinderMesh_rutqj")
+metadata/palette_region = &"metal"
+
+[node name="@MeshInstance3D@170" type="MeshInstance3D" parent="Attachment"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.75, 0)
+material_override = SubResource("StandardMaterial3D_l5ube")
+mesh = SubResource("BoxMesh_jfc0f")
+metadata/palette_region = &"accent"
+
+[node name="@MeshInstance3D@171" type="MeshInstance3D" parent="Attachment"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.88, 0)
+material_override = SubResource("StandardMaterial3D_wfgl6")
+mesh = SubResource("SphereMesh_r4qo0")
+metadata/palette_region = &"accent"

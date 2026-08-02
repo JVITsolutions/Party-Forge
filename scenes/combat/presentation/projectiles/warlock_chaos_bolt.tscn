@@ -1,0 +1,23 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scripts/combat/projectile.gd" id="1_ded3k"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_55opa"]
+albedo_color = Color(0.54901963, 0.27058825, 0.7882353, 1)
+roughness = 0.72
+emission_enabled = true
+emission = Color(0.54901963, 0.27058825, 0.7882353, 1)
+emission_energy_multiplier = 1.2
+
+[sub_resource type="SphereMesh" id="SphereMesh_5ate3"]
+radius = 0.22
+height = 0.44
+radial_segments = 12
+rings = 6
+
+[node name="WarlockChaosBolt" type="Node3D"]
+script = ExtResource("1_ded3k")
+
+[node name="Orb" type="MeshInstance3D" parent="."]
+material_override = SubResource("StandardMaterial3D_55opa")
+mesh = SubResource("SphereMesh_5ate3")

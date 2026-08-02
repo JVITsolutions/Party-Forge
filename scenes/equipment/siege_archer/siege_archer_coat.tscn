@@ -1,0 +1,49 @@
+[gd_scene format=3]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_pyisw"]
+albedo_color = Color(0.28627452, 0.23137255, 0.16470589, 1)
+metallic = 0.05
+roughness = 0.78
+
+[sub_resource type="BoxMesh" id="BoxMesh_kn425"]
+size = Vector3(0.72, 0.72, 0.32)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_h1l5l"]
+albedo_color = Color(0.34901962, 0.38039216, 0.23137255, 1)
+metallic = 0.05
+roughness = 0.78
+
+[sub_resource type="BoxMesh" id="BoxMesh_orerm"]
+size = Vector3(0.8, 0.12, 0.34)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_y6lwk"]
+albedo_color = Color(0.29411766, 0.31764707, 0.34117648, 1)
+metallic = 0.72
+roughness = 0.42
+
+[sub_resource type="BoxMesh" id="BoxMesh_ujt0l"]
+size = Vector3(0.58, 0.12, 0.36)
+
+[node name="siege_archer_coat" type="Node3D"]
+
+[node name="Attachment" type="Node3D" parent="."]
+metadata/equipment_visual_id = &"siege_archer_coat"
+metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot/BodyArmourSocket"
+
+[node name="@MeshInstance3D@58" type="MeshInstance3D" parent="Attachment"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.02, 0)
+material_override = SubResource("StandardMaterial3D_pyisw")
+mesh = SubResource("BoxMesh_kn425")
+metadata/palette_region = &"leather"
+
+[node name="@MeshInstance3D@59" type="MeshInstance3D" parent="Attachment"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.22, 0)
+material_override = SubResource("StandardMaterial3D_h1l5l")
+mesh = SubResource("BoxMesh_orerm")
+metadata/palette_region = &"primary"
+
+[node name="@MeshInstance3D@60" type="MeshInstance3D" parent="Attachment"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.2, 0)
+material_override = SubResource("StandardMaterial3D_y6lwk")
+mesh = SubResource("BoxMesh_ujt0l")
+metadata/palette_region = &"metal"

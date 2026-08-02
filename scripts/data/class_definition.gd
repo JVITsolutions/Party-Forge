@@ -56,7 +56,17 @@ func validate(types: DamageTypeCatalog = null) -> PackedStringArray:
 	if visual_profile != null:
 		for reason: String in visual_profile.validate():
 			errors.append("class %s visual profile %s" % [id, reason])
+		_validate_starter_loadout(errors)
 	return errors
+
+func _validate_starter_loadout(errors: PackedStringArray) -> void:
+	var loadout: Dictionary = {}
+	for entry: EquipmentLoadoutEntry in visual_profile.default_equipment:
+		if entry == null or entry.item == null:
+			continue
+		for reason: String in EquipmentEligibility.validate_equip(entry.item, self, entry.slot_id, loadout):
+			errors.append("class %s starter loadout %s" % [id, reason])
+		loadout[entry.slot_id] = entry.item
 
 func _validate_party_attack(attack: AttackDefinition, slot: String, types: DamageTypeCatalog, errors: PackedStringArray) -> void:
 	for reason: String in attack.validate(types):

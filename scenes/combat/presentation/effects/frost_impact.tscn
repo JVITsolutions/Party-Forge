@@ -1,0 +1,26 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scripts/combat/presentation_effect.gd" id="1_c16to"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_e25ua"]
+transparency = 1
+albedo_color = Color(0.5568628, 0.9098039, 1, 0.68)
+roughness = 0.72
+emission_enabled = true
+emission = Color(0.5568628, 0.9098039, 1, 1)
+emission_energy_multiplier = 1.25
+
+[sub_resource type="SphereMesh" id="SphereMesh_lt3tn"]
+radius = 0.85
+height = 1.7
+radial_segments = 12
+rings = 6
+
+[node name="FrostImpact" type="Node3D"]
+script = ExtResource("1_c16to")
+effect_color = Color(0.5568628, 0.9098039, 1, 1)
+duration = 0.38
+
+[node name="EffectMesh" type="MeshInstance3D" parent="."]
+material_override = SubResource("StandardMaterial3D_e25ua")
+mesh = SubResource("SphereMesh_lt3tn")

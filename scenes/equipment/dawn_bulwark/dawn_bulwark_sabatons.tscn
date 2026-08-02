@@ -1,0 +1,39 @@
+[gd_scene format=3]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_bs82v"]
+albedo_color = Color(0.84313726, 0.8627451, 0.8862745, 1)
+metallic = 0.72
+roughness = 0.42
+
+[sub_resource type="BoxMesh" id="BoxMesh_mqu4g"]
+size = Vector3(0.27, 0.3, 0.38)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_5km56"]
+albedo_color = Color(0.84313726, 0.8627451, 0.8862745, 1)
+metallic = 0.72
+roughness = 0.42
+
+[sub_resource type="BoxMesh" id="BoxMesh_yl0gb"]
+size = Vector3(0.27, 0.3, 0.38)
+
+[node name="dawn_bulwark_sabatons" type="Node3D"]
+
+[node name="Attachment" type="Node3D" parent="."]
+metadata/equipment_visual_id = &"dawn_bulwark_sabatons"
+metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/LeftHipPivot/LeftKneePivot/LeftFootPivot"
+
+[node name="@MeshInstance3D@17" type="MeshInstance3D" parent="Attachment"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.13, -0.04)
+material_override = SubResource("StandardMaterial3D_bs82v")
+mesh = SubResource("BoxMesh_mqu4g")
+metadata/palette_region = &"metal"
+
+[node name="@Node3D@19" type="Node3D" parent="."]
+metadata/equipment_visual_id = &"dawn_bulwark_sabatons"
+metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/RightHipPivot/RightKneePivot/RightFootPivot"
+
+[node name="@MeshInstance3D@18" type="MeshInstance3D" parent="@Node3D@19"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.13, -0.04)
+material_override = SubResource("StandardMaterial3D_5km56")
+mesh = SubResource("BoxMesh_yl0gb")
+metadata/palette_region = &"metal"

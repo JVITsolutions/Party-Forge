@@ -1,0 +1,27 @@
+[gd_scene format=3]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_31oby"]
+albedo_color = Color(1, 0.4392157, 0.2627451, 1)
+metallic = 0.05
+roughness = 0.78
+emission_enabled = true
+emission = Color(1, 0.4392157, 0.2627451, 1)
+emission_energy_multiplier = 0.85
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_6xvm3"]
+top_radius = 0.08
+bottom_radius = 0.08
+height = 0.05
+radial_segments = 10
+
+[node name="cinder_ring" type="Node3D"]
+
+[node name="Attachment" type="Node3D" parent="."]
+metadata/equipment_visual_id = &"cinder_ring"
+metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot/LeftShoulderPivot/LeftElbowPivot/LeftHandSocket"
+
+[node name="@MeshInstance3D@120" type="MeshInstance3D" parent="Attachment"]
+transform = Transform3D(-4.371139e-08, -1, 0, 1, -4.371139e-08, 0, 0, 0, 1, 0, 0, 0)
+material_override = SubResource("StandardMaterial3D_31oby")
+mesh = SubResource("CylinderMesh_6xvm3")
+metadata/palette_region = &"accent"

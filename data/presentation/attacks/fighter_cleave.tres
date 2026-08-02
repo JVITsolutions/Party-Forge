@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="AttackPresentationDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/presentation/attack_presentation_definition.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"fighter_cleave_visual"
+attack_id = &"fighter_cleave"
+action_id = &"attack_slash"
+required_event_name = &"impact"
+weapon_animation_family_id = &"one_hand_sword"
+launch_socket_id = &"HitPivot/BodyPivot/HipsPivot/TorsoPivot/RightShoulderPivot/RightElbowPivot/RightHandSocket/ProjectileLaunchSocket"
+impact_color = Color(1.0, 1.0, 1.0, 1.0)
+action_duration = 0.55
+release_time = 0.28

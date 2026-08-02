@@ -3,6 +3,7 @@
 [ext_resource type="Resource" path="res://data/attacks/paladin_smite.tres" id="1_fhai2"]
 [ext_resource type="Resource" path="res://data/names/paladin.tres" id="1_gho34"]
 [ext_resource type="Script" path="res://scripts/data/class_definition.gd" id="2_gho34"]
+[ext_resource type="Resource" path="res://data/presentation/profiles/paladin.tres" id="3_profile"]
 
 [resource]
 script = ExtResource("2_gho34")
@@ -10,7 +11,7 @@ id = &"paladin"
 display_name = "Paladin"
 color = Color(0.9019608, 0.78431374, 0.37254903, 1)
 traits = Array[StringName]([&"divine", &"vanguard", &"martial"])
-capability_tags = Array[StringName]([&"area", &"block", &"melee", &"physical", &"regeneration"])
+capability_tags = Array[StringName]([&"area", &"block", &"melee", &"physical", &"regeneration", &"armour_heavy", &"one_hand_hammer", &"shield"])
 name_pool = ExtResource("1_gho34")
 base_stat_overrides = {
 &"block_chance": 0.18,
@@ -23,3 +24,4 @@ move_speed = 5.6
 engagement_distance = 4.5
 tether_distance = 8.5
 primary_attack = ExtResource("1_fhai2")
+visual_profile = ExtResource("3_profile")

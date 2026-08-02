@@ -1,0 +1,35 @@
+[gd_scene format=3]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_4e1v1"]
+albedo_color = Color(0.3529412, 0.24705882, 0.15686275, 1)
+metallic = 0.05
+roughness = 0.78
+
+[sub_resource type="BoxMesh" id="BoxMesh_d7572"]
+size = Vector3(0.36, 0.3, 0.38)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_0mhno"]
+albedo_color = Color(0.5137255, 0.72156864, 0.41568628, 1)
+metallic = 0.05
+roughness = 0.78
+
+[sub_resource type="BoxMesh" id="BoxMesh_v88gw"]
+size = Vector3(0.08, 0.18, 0.08)
+
+[node name="greenwood_hood" type="Node3D"]
+
+[node name="Attachment" type="Node3D" parent="."]
+metadata/equipment_visual_id = &"greenwood_hood"
+metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot/HeadPivot/HelmetSocket"
+
+[node name="@MeshInstance3D@30" type="MeshInstance3D" parent="Attachment"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.02, 0)
+material_override = SubResource("StandardMaterial3D_4e1v1")
+mesh = SubResource("BoxMesh_d7572")
+metadata/palette_region = &"leather"
+
+[node name="@MeshInstance3D@31" type="MeshInstance3D" parent="Attachment"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.24, 0)
+material_override = SubResource("StandardMaterial3D_0mhno")
+mesh = SubResource("BoxMesh_v88gw")
+metadata/palette_region = &"accent"

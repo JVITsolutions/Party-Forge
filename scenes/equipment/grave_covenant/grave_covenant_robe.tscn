@@ -1,0 +1,52 @@
+[gd_scene format=3]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_jvuvf"]
+albedo_color = Color(0.31764707, 0.21176471, 0.3882353, 1)
+metallic = 0.05
+roughness = 0.78
+
+[sub_resource type="BoxMesh" id="BoxMesh_5kjtl"]
+size = Vector3(0.68, 0.84, 0.3)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_lil0a"]
+albedo_color = Color(0.1882353, 0.14117648, 0.19215687, 1)
+metallic = 0.05
+roughness = 0.78
+
+[sub_resource type="BoxMesh" id="BoxMesh_cbub3"]
+size = Vector3(0.58, 0.18, 0.34)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_x8u2j"]
+albedo_color = Color(0.54901963, 0.27058825, 0.7882353, 1)
+metallic = 0.05
+roughness = 0.78
+emission_enabled = true
+emission = Color(0.54901963, 0.27058825, 0.7882353, 1)
+emission_energy_multiplier = 0.85
+
+[sub_resource type="BoxMesh" id="BoxMesh_mr1ks"]
+size = Vector3(0.12, 0.58, 0.04)
+
+[node name="grave_covenant_robe" type="Node3D"]
+
+[node name="Attachment" type="Node3D" parent="."]
+metadata/equipment_visual_id = &"grave_covenant_robe"
+metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot/BodyArmourSocket"
+
+[node name="@MeshInstance3D@176" type="MeshInstance3D" parent="Attachment"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.08, 0)
+material_override = SubResource("StandardMaterial3D_jvuvf")
+mesh = SubResource("BoxMesh_5kjtl")
+metadata/palette_region = &"primary"
+
+[node name="@MeshInstance3D@177" type="MeshInstance3D" parent="Attachment"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.2, 0)
+material_override = SubResource("StandardMaterial3D_lil0a")
+mesh = SubResource("BoxMesh_cbub3")
+metadata/palette_region = &"leather"
+
+[node name="@MeshInstance3D@178" type="MeshInstance3D" parent="Attachment"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.06, -0.18)
+material_override = SubResource("StandardMaterial3D_x8u2j")
+mesh = SubResource("BoxMesh_mr1ks")
+metadata/palette_region = &"accent"

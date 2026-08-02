@@ -1,0 +1,26 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scripts/combat/presentation_effect.gd" id="1_l0lcc"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_c31y5"]
+transparency = 1
+albedo_color = Color(1, 0.9411765, 0.5411765, 0.68)
+roughness = 0.72
+emission_enabled = true
+emission = Color(1, 0.9411765, 0.5411765, 1)
+emission_energy_multiplier = 1.25
+
+[sub_resource type="SphereMesh" id="SphereMesh_ij17x"]
+radius = 0.55
+height = 1.1
+radial_segments = 12
+rings = 6
+
+[node name="LightningImpact" type="Node3D"]
+script = ExtResource("1_l0lcc")
+effect_color = Color(1, 0.9411765, 0.5411765, 1)
+duration = 0.24
+
+[node name="EffectMesh" type="MeshInstance3D" parent="."]
+material_override = SubResource("StandardMaterial3D_c31y5")
+mesh = SubResource("SphereMesh_ij17x")

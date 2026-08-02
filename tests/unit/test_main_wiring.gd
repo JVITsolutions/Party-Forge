@@ -685,7 +685,7 @@ func _test_visual_language(failures: Array[String]) -> void:
     actor_health.apply_damage(10.0)
     TestAssertions.equal(_mesh_color(actor), Color.WHITE, "party damage flash is white", failures)
     actor_health.apply_damage(9999.0)
-    TestAssertions.equal(_mesh_color(actor), Color(0.45, 0.45, 0.45), "downed actor material is gray", failures)
+    TestAssertions.truthy(_presentation_meshes_are_grayscale(actor), "downed actor presentation is grayscale", failures)
     swarmer.free(); spitter.free(); orb.free(); heal.free(); danger.free(); health_bar.free()
     actor.free()
 
@@ -699,6 +699,24 @@ func _mesh_color(node: Node3D) -> Color:
     if material == null and mesh_instance.mesh != null:
         material = mesh_instance.mesh.material as StandardMaterial3D
     return material.albedo_color if material != null else Color.TRANSPARENT
+
+func _presentation_meshes_are_grayscale(actor: PartyActor) -> bool:
+    var presentation := actor.get_node_or_null("Presentation") as CharacterPresentation
+    if presentation == null or presentation.active_model == null:
+        return _mesh_color(actor) == Color(0.45, 0.45, 0.45)
+    var checked := 0
+    for node: Node in presentation.active_model.find_children("*", "MeshInstance3D", true, false):
+        var mesh := node as MeshInstance3D
+        if not mesh.is_visible_in_tree():
+            continue
+        var material := mesh.material_override as StandardMaterial3D
+        if material == null:
+            continue
+        checked += 1
+        var color := material.albedo_color
+        if not is_equal_approx(color.r, color.g) or not is_equal_approx(color.g, color.b):
+            return false
+    return checked > 0
 
 func _started_main() -> Node:
     var main := (load("res://scenes/game/main.tscn") as PackedScene).instantiate()

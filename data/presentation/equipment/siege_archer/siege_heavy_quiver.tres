@@ -1,0 +1,24 @@
+[gd_resource type="Resource" script_class="EquipmentVisualDefinition" load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://scripts/presentation/equipment_visual_definition.gd" id="1"]
+[ext_resource type="PackedScene" path="res://scenes/equipment/siege_archer/siege_heavy_quiver.tscn" id="2"]
+[ext_resource type="Texture2D" path="res://assets/ui/equipment/master/siege_archer/siege_heavy_quiver_256.png" id="3"]
+[ext_resource type="Texture2D" path="res://assets/ui/equipment/runtime/siege_archer/siege_heavy_quiver_128.png" id="4"]
+
+[resource]
+script = ExtResource("1")
+id = &"siege_heavy_quiver"
+slot_id = &"off_hand"
+geometry_key = &"siege_heavy_quiver"
+visual_channels = [&"geometry", &"silhouette"]
+supported_slot_ids = [&"off_hand"]
+presentation_scene = ExtResource("2")
+icon_master = ExtResource("3")
+icon_runtime = ExtResource("4")
+socket_id = &"HitPivot/BodyPivot/HipsPivot/TorsoPivot/LeftShoulderPivot/LeftElbowPivot/LeftHandSocket"
+body_preset_ids = [&"masculine", &"feminine"]
+combat_visible = true
+item_colors = {&"primary": Color(0.34901961684227, 0.38039216399193, 0.23137255012989, 1.0), &"metal": Color(0.29411765933037, 0.31764706969261, 0.34117648005486, 1.0), &"leather": Color(0.28627452254295, 0.23137255012989, 0.16470588743687, 1.0), &"accent": Color(0.65882354974747, 0.61568629741669, 0.35686275362968, 1.0)}
+wearer_accent_channel = &"primary"
+weapon_animation_family_id = &"greatbow"
+readability_channels = [&"silhouette"]
