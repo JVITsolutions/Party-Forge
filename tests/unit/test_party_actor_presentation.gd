@@ -17,6 +17,11 @@ class PresentationProbe extends CharacterPresentation:
 		locomotion_requests.append(world_velocity)
 		return true
 
+class SequenceExecutorProbe extends Node:
+	var execute_count := 0
+	func execute(_definition: AttackDefinition, _target: CombatTarget, _presentation: AttackPresentationDefinition = null) -> void:
+		execute_count += 1
+
 func run() -> Array[String]:
 	var failures: Array[String] = []
 	_test_scene_hosts_and_collision_contracts(failures)
@@ -49,14 +54,16 @@ func _test_actor_forwards_actual_velocity_to_active_presentation(failures: Array
 
 func _test_unprofiled_actor_keeps_fallback_when_locomotion_updates(failures: Array[String]) -> void:
 	var root := _new_root("PartyActorFallbackLocomotionTest")
-	var ranger := _new_actor(root, COMPANION_SCENE, _definition(&"ranger"), false)
+	var unprofiled_ranger := _definition(&"ranger").duplicate(true) as ClassDefinition
+	unprofiled_ranger.visual_profile = null
+	var ranger := _new_actor(root, COMPANION_SCENE, unprofiled_ranger, false)
 	var presentation := ranger.get_node("Presentation") as CharacterPresentation
 	var fallback := ranger.get_node("MeshInstance3D") as MeshInstance3D
 	var presentation_rotation := presentation.rotation
 	ranger.velocity = Vector3(4.0, 0.0, 0.0)
 	if ranger.has_method(&"update_presentation_locomotion"):
 		ranger.call(&"update_presentation_locomotion")
-	TestAssertions.truthy(presentation.active_profile == null, "unprofiled class remains without an active presentation", failures)
+	TestAssertions.truthy(presentation.active_profile == null, "explicitly unprofiled class remains without an active presentation", failures)
 	TestAssertions.truthy(fallback.visible, "unprofiled class keeps capsule fallback visible after locomotion update", failures)
 	TestAssertions.equal(presentation.rotation, presentation_rotation, "unprofiled locomotion does not rotate fallback presentation", failures)
 	root.free()
@@ -82,8 +89,8 @@ func _test_fighter_profile_activation_and_ranger_fallback(failures: Array[String
 	var ranger := _new_actor(root, COMPANION_SCENE, _definition(&"ranger"), false)
 	var ranger_presentation := ranger.get_node_or_null("Presentation") as CharacterPresentation
 	var ranger_fallback := ranger.get_node_or_null("MeshInstance3D") as MeshInstance3D
-	TestAssertions.truthy(ranger_presentation != null and ranger_presentation.active_profile == null, "ranger has no active visual profile", failures)
-	TestAssertions.truthy(ranger_fallback != null and ranger_fallback.visible, "ranger keeps capsule fallback visible", failures)
+	TestAssertions.truthy(ranger_presentation != null and ranger_presentation.active_profile != null and ranger_presentation.active_profile.id == &"ranger", "ranger activates its visual profile", failures)
+	TestAssertions.truthy(ranger_fallback != null and not ranger_fallback.visible, "ranger hides capsule fallback", failures)
 	root.free()
 
 func _test_primary_attack_keeps_executor_and_uses_slash(failures: Array[String]) -> void:
@@ -103,7 +110,8 @@ func _test_primary_attack_keeps_executor_and_uses_slash(failures: Array[String])
 	hostile.configure(PartyMemberState.new(99, definition, false))
 	var controller := fighter.get_node_or_null("AttackController") as AttackController
 	var presentation := fighter.get_node_or_null("Presentation") as CharacterPresentation
-	TestAssertions.truthy(controller != null and fighter.attack_executor != null and controller.attack_ready.is_connected(Callable(fighter.attack_executor, "execute")), "fighter attack controller still forwards attacks to executor", failures)
+	TestAssertions.truthy(controller != null and fighter.attack_sequence_controller != null and controller.attack_ready.is_connected(Callable(fighter, "_on_attack_requested")), "fighter attack controller routes through sequence gate", failures)
+	TestAssertions.truthy(controller != null and fighter.attack_executor != null and not controller.attack_ready.is_connected(Callable(fighter.attack_executor, "execute")), "fighter has no direct execution bypass", failures)
 	if controller != null and presentation != null and presentation.active_model != null:
 		var player := presentation.active_model.get_node_or_null("AnimationPlayer") as AnimationPlayer
 		if player != null:
@@ -114,10 +122,12 @@ func _test_primary_attack_keeps_executor_and_uses_slash(failures: Array[String])
 			var combatants: Array[Node3D] = [hostile]
 			fighter.attack_executor.call(&"configure", fighter, party, root, combatants)
 			controller.attack_ready.emit(definition.primary_attack, hostile.get_combat_target())
-			TestAssertions.truthy(hostile_health.current_health < health_before, "emitted fighter cleave is processed by AttackExecutor", failures)
+			TestAssertions.near(hostile_health.current_health, health_before, 0.001, "emitted fighter cleave waits for authored impact", failures)
 			TestAssertions.equal(slash_requests, 1, "fighter cleave requests attack slash once", failures)
 			TestAssertions.equal(player.current_animation, &"attack_slash", "fighter cleave selects attack slash", failures)
 			TestAssertions.truthy(player.current_animation != &"attack_combo", "fighter cleave does not request preview-only attack combo", failures)
+			presentation.active_model.call(&"emit_action_event", &"impact")
+			TestAssertions.truthy(hostile_health.current_health < health_before, "fighter cleave executes exactly at impact", failures)
 			player.animation_started.disconnect(_on_animation_started)
 	root.free()
 	party.free()
@@ -170,22 +180,27 @@ func _test_sequence_bridge_and_feedback_isolation(failures: Array[String]) -> vo
 		root.free()
 		return
 	var visual := presentation.call(&"resolve_attack_presentation", definition.primary_attack) as AttackPresentationDefinition
+	var executor_probe := SequenceExecutorProbe.new()
+	root.add_child(executor_probe)
+	fighter.attack_sequence_controller.configure(fighter, presentation, executor_probe)
 	var events: Array[String] = []
 	presentation.attack_event.connect(func(token: int, action_id: StringName, event_name: StringName) -> void: events.append("%d:%s:%s" % [token, action_id, event_name]))
 	presentation.attack_finished.connect(func(token: int, action_id: StringName) -> void: events.append("%d:%s:finished" % [token, action_id]))
-	TestAssertions.truthy(bool(presentation.call(&"start_attack", definition.primary_attack, hostile.get_combat_target(), visual, 42, 1.5)), "tokenized Fighter slash starts", failures)
+	var token := fighter.attack_sequence_controller.request(definition.primary_attack, hostile.get_combat_target(), visual, 1.5, 1.0)
+	TestAssertions.truthy(token > 0, "tokenized Fighter slash starts", failures)
 	TestAssertions.equal(player.current_animation, &"attack_slash", "sequence bridge starts slash on action player", failures)
 	TestAssertions.near(player.speed_scale, 1.5, 0.001, "sequence bridge applies playback rate", failures)
 	TestAssertions.near(presentation.rotation.y, -PI / 2.0, 0.001, "sequence bridge locks facing to target", failures)
 	presentation.update_locomotion(Vector3(1.0, 0.0, 0.0))
 	presentation.active_model.call(&"emit_action_event", &"impact")
-	TestAssertions.truthy("42:attack_slash:impact" in events, "model event is bridged with gameplay token", failures)
+	TestAssertions.truthy("%d:attack_slash:impact" % token in events, "model event is bridged with gameplay token", failures)
+	TestAssertions.equal(executor_probe.execute_count, 1, "bridged impact executes exactly once", failures)
 	presentation.flash_hit()
 	TestAssertions.equal(player.current_animation, &"attack_slash", "hit feedback cannot replace active slash", failures)
 	if feedback_player != null:
 		TestAssertions.equal(feedback_player.current_animation, &"hit_flinch", "hit flinch plays only on feedback layer", failures)
 	presentation.active_model.action_finished.emit(&"attack_slash")
-	TestAssertions.truthy("42:attack_slash:finished" in events, "model finish is bridged with gameplay token", failures)
+	TestAssertions.truthy("%d:attack_slash:finished" % token in events, "model finish is bridged with gameplay token", failures)
 	TestAssertions.equal(player.current_animation, &"walk", "attack finish restores latest locomotion", failures)
 	TestAssertions.near(presentation.rotation.y, -PI / 2.0, 0.001, "restored eastward locomotion faces east", failures)
 	root.free()

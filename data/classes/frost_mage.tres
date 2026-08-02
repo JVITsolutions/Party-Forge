@@ -3,6 +3,7 @@
 [ext_resource type="Resource" path="res://data/names/frost_mage.tres" id="1_68fxb"]
 [ext_resource type="Resource" path="res://data/attacks/frost_shard.tres" id="1_l5w4c"]
 [ext_resource type="Script" path="res://scripts/data/class_definition.gd" id="2_68fxb"]
+[ext_resource type="Resource" path="res://data/presentation/profiles/frost_mage.tres" id="3_profile"]
 
 [resource]
 script = ExtResource("2_68fxb")
@@ -11,10 +12,11 @@ display_name = "Frost Mage"
 role = 2
 color = Color(0.4392157, 0.78431374, 1, 1)
 traits = Array[StringName]([&"arcane", &"caster", &"cold"])
-capability_tags = Array[StringName]([&"area", &"cold", &"projectile"])
+capability_tags = Array[StringName]([&"area", &"cold", &"projectile", &"armour_light", &"caster_staff"])
 name_pool = ExtResource("1_68fxb")
 max_health = 78.0
 preferred_distance = 6.5
 engagement_distance = 12.5
 tether_distance = 12.5
 primary_attack = ExtResource("1_l5w4c")
+visual_profile = ExtResource("3_profile")

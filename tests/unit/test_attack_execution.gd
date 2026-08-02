@@ -53,8 +53,7 @@ func _test_animation_event_sequence_execution(failures: Array[String]) -> void:
     owner.attack_executor.call("configure", owner, party, test_root, combatants)
     var presentation := owner.get_node("Presentation") as CharacterPresentation
     var visual := presentation.resolve_attack_presentation(fighter.primary_attack)
-    var sequence := AttackSequenceController.new()
-    test_root.add_child(sequence)
+    var sequence := owner.attack_sequence_controller
     sequence.configure(owner, presentation, owner.attack_executor)
     var token := sequence.request(fighter.primary_attack, target.get_combat_target(), visual, 1.0, 1.0)
     TestAssertions.truthy(token > 0, "real Fighter attack sequence starts", failures)
@@ -193,6 +192,8 @@ func _test_rogue_range_and_target_centered_cleave(failures: Array[String]) -> vo
 
     var acquisition_candidates: Array[CombatTarget] = [primary.get_combat_target()]
     rogue.call("advance_combat", 0.1, acquisition_candidates)
+    var rogue_presentation := rogue.get_node("Presentation") as CharacterPresentation
+    rogue_presentation.active_model.call(&"emit_action_event", &"impact")
     TestAssertions.truthy(_health(primary).current_health < 100.0, "Rogue range 2.0 acquires primary", failures)
 
     var combatants: Array[Node3D] = [rogue, primary, near_primary, behind_rogue]

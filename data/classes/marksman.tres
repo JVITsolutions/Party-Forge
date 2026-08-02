@@ -3,6 +3,7 @@
 [ext_resource type="Resource" path="res://data/names/marksman.tres" id="1_8o6lm"]
 [ext_resource type="Resource" path="res://data/attacks/marksman_heavy_shot.tres" id="1_md42u"]
 [ext_resource type="Script" path="res://scripts/data/class_definition.gd" id="1_rlqk6"]
+[ext_resource type="Resource" path="res://data/presentation/profiles/marksman.tres" id="3_profile"]
 
 [resource]
 script = ExtResource("1_rlqk6")
@@ -11,7 +12,7 @@ display_name = "Marksman"
 role = 1
 color = Color(0.27579924, 0.36415747, 0.056183092, 1)
 traits = Array[StringName]([&"martial", &"ranged", &"bow"])
-capability_tags = Array[StringName]([&"bow", &"crit", &"physical", &"projectile", &"ranged"])
+capability_tags = Array[StringName]([&"bow", &"crit", &"physical", &"projectile", &"ranged", &"armour_light", &"armour_medium", &"bow_light_medium", &"greatbow"])
 name_pool = ExtResource("1_8o6lm")
 base_stat_overrides = {
 &"crit_chance": 0.1,
@@ -24,4 +25,5 @@ preferred_distance = 8.0
 engagement_distance = 16.0
 tether_distance = 16.0
 primary_attack = ExtResource("1_md42u")
+visual_profile = ExtResource("3_profile")
 metadata/_custom_type_script = "uid://bg7wmynvpw0r8"

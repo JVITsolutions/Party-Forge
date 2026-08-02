@@ -2,6 +2,7 @@ class_name PartyActor
 extends CharacterBody3D
 
 const AttackExecutorScript := preload("res://scripts/combat/attack_executor.gd")
+const AttackSequenceControllerScript := preload("res://scripts/combat/attack_sequence_controller.gd")
 const HealingSelectorScript := preload("res://scripts/combat/healing_selector.gd")
 const CombatModifiersScript := preload("res://scripts/combat/combat_modifiers.gd")
 
@@ -14,6 +15,7 @@ var member_state: PartyMemberState
 var party_manager: PartyManager
 var combat_effects_parent: Node
 var attack_executor: Node
+var attack_sequence_controller: AttackSequenceController
 var recovery_controller: RecoveryController
 var support_controller: AttackController
 var base_visual_color := Color.WHITE
@@ -131,9 +133,11 @@ func advance_combat(delta: float, candidates: Array[CombatTarget]) -> void:
         primary.advance(cooldown_delta)
     if support_controller != null:
         support_controller.advance(cooldown_delta)
+    if attack_sequence_controller != null:
+        attack_sequence_controller.advance(maxf(delta, 0.0))
 
     var combat_origin: Vector3 = global_position if is_inside_tree() else position
-    if support_controller != null and support_controller.definition != null and support_controller.cooldown_remaining <= 0.0:
+    if support_controller != null and support_controller.definition != null and support_controller.cooldown_remaining <= 0.0 and not attack_sequence_controller.is_busy():
         var allies: Array[CombatTarget] = []
         for candidate: CombatTarget in candidates:
             if candidate != null and candidate.team_id == team_id:
@@ -216,20 +220,32 @@ func _ensure_combat_runtime() -> void:
         attack_executor.name = "AttackExecutor"
         add_child(attack_executor)
     attack_executor.call("configure", self, party_manager, combat_effects_parent)
+    if attack_sequence_controller == null:
+        attack_sequence_controller = get_node_or_null("AttackSequenceController") as AttackSequenceController
+    if attack_sequence_controller == null:
+        attack_sequence_controller = AttackSequenceControllerScript.new() as AttackSequenceController
+        attack_sequence_controller.name = "AttackSequenceController"
+        add_child(attack_sequence_controller)
+    attack_sequence_controller.configure(self, _presentation(), attack_executor)
     var primary := _attack_controller()
     var execute_callable := Callable(attack_executor, "execute")
-    if primary != null and not primary.attack_ready.is_connected(execute_callable):
-        primary.attack_ready.connect(execute_callable)
-    var visual_attack := Callable(self, "_on_visual_attack_ready")
-    if primary != null and not primary.attack_ready.is_connected(visual_attack):
-        primary.attack_ready.connect(visual_attack)
-    if support_controller != null and not support_controller.attack_ready.is_connected(execute_callable):
-        support_controller.attack_ready.connect(execute_callable)
+    var sequence_callable := Callable(self, "_on_attack_requested")
+    for controller: AttackController in [primary, support_controller]:
+        if controller == null:
+            continue
+        if controller.attack_ready.is_connected(execute_callable):
+            controller.attack_ready.disconnect(execute_callable)
+        if not controller.attack_ready.is_connected(sequence_callable):
+            controller.attack_ready.connect(sequence_callable)
 
-func _on_visual_attack_ready(definition: AttackDefinition, target: CombatTarget) -> void:
+func _on_attack_requested(definition: AttackDefinition, target: CombatTarget) -> void:
     var presentation := _presentation()
-    if presentation != null and presentation.active_profile != null:
-        presentation.play_attack(definition, target)
+    var attack_visual := presentation.resolve_attack_presentation(definition) if presentation != null else null
+    if attack_visual == null:
+        push_error("PARTY_FORGE_ATTACK_SEQUENCE_ERROR attack=%s action=<missing> token=0 reason=presentation missing" % definition.id)
+        return
+    var modifiers := CombatModifiersScript.resolve(member_state, party_manager)
+    attack_sequence_controller.request(definition, target, attack_visual, float(modifiers.get("cooldown_rate_multiplier")), float(modifiers.get("range_multiplier")))
 
 func _collect_combat_targets() -> Array[CombatTarget]:
     var targets: Array[CombatTarget] = []
@@ -247,7 +263,7 @@ func _collect_combat_targets() -> Array[CombatTarget]:
     return targets
 
 func _try_primary_attack(controller: AttackController, candidates: Array[CombatTarget], range_multiplier: float, area_multiplier: float) -> void:
-    if controller == null or controller.definition == null or controller.cooldown_remaining > 0.0:
+    if controller == null or controller.definition == null or controller.cooldown_remaining > 0.0 or (attack_sequence_controller != null and attack_sequence_controller.is_busy()):
         return
     var origin: Vector3 = global_position if is_inside_tree() else position
     var geometry := ResolvedAttackGeometry.from_attack(controller.definition, range_multiplier, area_multiplier)

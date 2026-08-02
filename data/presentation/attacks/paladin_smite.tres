@@ -4,12 +4,12 @@
 
 [resource]
 script = ExtResource("1")
-id = &"fighter_cleave_visual"
-attack_id = &"fighter_cleave"
-action_id = &"attack_slash"
+id = &"paladin_smite_visual"
+attack_id = &"paladin_smite"
+action_id = &"paladin_hammer_smite"
 required_event_name = &"impact"
-weapon_animation_family_id = &"one_hand_sword"
+weapon_animation_family_id = &"one_hand_hammer"
 launch_socket_id = &"HitPivot/BodyPivot/HipsPivot/TorsoPivot/RightShoulderPivot/RightElbowPivot/RightHandSocket/ProjectileLaunchSocket"
 impact_color = Color(1.0, 1.0, 1.0, 1.0)
-action_duration = 0.55
-release_time = 0.28
+action_duration = 0.86
+release_time = 0.58

@@ -8,6 +8,18 @@ class TypedAttackErrorClass:
             "class %s primary PARTY_FORGE_DAMAGE_ERROR attack=%s type=void reason=unknown component type" % [id, primary_attack.id],
         ])
 
+const EXPECTED_CAPABILITIES := {
+    &"fighter": [&"area", &"melee", &"physical", &"armour_heavy", &"one_hand_sword", &"shield"],
+    &"ranger": [&"physical", &"projectile", &"ranged", &"armour_light", &"armour_medium", &"bow_light_medium"],
+    &"mage": [&"area", &"fire", &"projectile", &"armour_light", &"caster_wand", &"caster_focus"],
+    &"cleric": [&"healing", &"lightning", &"projectile", &"armour_light", &"armour_medium", &"divine_sceptre", &"divine_tome"],
+    &"paladin": [&"area", &"block", &"melee", &"physical", &"regeneration", &"armour_heavy", &"one_hand_hammer", &"shield"],
+    &"rogue": [&"area", &"crit", &"dodge", &"life_steal", &"melee", &"physical", &"armour_light", &"dagger", &"dual_wield"],
+    &"frost_mage": [&"area", &"cold", &"projectile", &"armour_light", &"caster_staff"],
+    &"warlock": [&"chaos", &"life_steal", &"projectile", &"ranged", &"armour_light", &"occult_wand", &"occult_grimoire"],
+    &"marksman": [&"bow", &"crit", &"physical", &"projectile", &"ranged", &"armour_light", &"armour_medium", &"bow_light_medium", &"greatbow"],
+}
+
 func run() -> Array[String]:
     var failures: Array[String] = []
     var catalog: GameCatalog = GameCatalog.load_defaults()
@@ -50,12 +62,6 @@ func _assert_class_names_and_eligibility(catalog: GameCatalog, failures: Array[S
         &"warlock": PackedStringArray(["Azrael", "Belladonna", "Dorian", "Hex", "Lilith", "Malachar", "Morwen", "Sable"]),
         &"marksman": PackedStringArray(["Arlen", "Blythe", "Cora", "Fletcher", "Hawke", "Ivo", "Petra", "Quinn"]),
     }
-    var expected_capabilities := {
-        &"fighter": [&"area", &"melee", &"physical"],
-        &"ranger": [&"physical", &"projectile", &"ranged"],
-        &"mage": [&"area", &"fire", &"projectile"],
-        &"cleric": [&"healing", &"lightning", &"projectile"],
-    }
     for definition: ClassDefinition in catalog.classes:
         TestAssertions.truthy(definition.name_pool != null, "%s has name pool" % definition.id, failures)
         if definition.name_pool != null:
@@ -63,8 +69,8 @@ func _assert_class_names_and_eligibility(catalog: GameCatalog, failures: Array[S
             TestAssertions.equal(definition.name_pool.names, expected_names[definition.id], "%s exact names" % definition.id, failures)
             TestAssertions.equal(definition.name_pool.resource_path, "res://data/names/%s.tres" % definition.id, "%s external name pool" % definition.id, failures)
         TestAssertions.equal(definition.name_pool.validate(8), PackedStringArray(), "%s name pool validates" % definition.id, failures)
-        if expected_capabilities.has(definition.id):
-            TestAssertions.equal(definition.capability_tags, expected_capabilities[definition.id], "%s explicit capabilities" % definition.id, failures)
+        if EXPECTED_CAPABILITIES.has(definition.id):
+            TestAssertions.equal(definition.capability_tags, EXPECTED_CAPABILITIES[definition.id], "%s explicit capabilities" % definition.id, failures)
         var expected_union: Array[StringName] = []
         expected_union.append_array(definition.traits)
         expected_union.append_array(definition.capability_tags)
@@ -114,11 +120,11 @@ func _assert_generated_values(failures: Array[String]) -> void:
         {"path": "res://data/classes/ranger.tres", "values": {"id": &"ranger", "display_name": "Ranger", "role": ClassDefinition.Role.MIDLINE, "color": Color("5fbd72"), "traits": [&"martial", &"ranged"], "max_health": 90.0, "armor": 1.0, "move_speed": 6.6, "preferred_distance": 5.0, "engagement_distance": 11.0, "tether_distance": 11.0, "support_action": null}},
         {"path": "res://data/classes/mage.tres", "values": {"id": &"mage", "display_name": "Mage", "role": ClassDefinition.Role.BACKLINE, "color": Color("9567e8"), "traits": [&"arcane", &"caster", &"fire"], "max_health": 75.0, "armor": 0.0, "move_speed": 6.0, "preferred_distance": 6.5, "engagement_distance": 12.0, "tether_distance": 12.0, "support_action": null}},
         {"path": "res://data/classes/cleric.tres", "values": {"id": &"cleric", "display_name": "Cleric", "role": ClassDefinition.Role.SUPPORT, "color": Color("f0d15b"), "traits": [&"divine", &"support", &"caster"], "max_health": 95.0, "armor": 2.0, "move_speed": 6.0, "preferred_distance": 4.0, "engagement_distance": 10.0, "tether_distance": 10.0}},
-        {"path": "res://data/classes/paladin.tres", "values": {"id": &"paladin", "display_name": "Paladin", "role": ClassDefinition.Role.FRONTLINE, "color": Color("e6c85f"), "traits": [&"divine", &"vanguard", &"martial"], "capability_tags": [&"area", &"block", &"melee", &"physical", &"regeneration"], "base_stat_overrides": {&"block_chance": 0.18, &"block_effectiveness": 0.55, &"health_regeneration": 1.5}, "max_health": 220.0, "armor": 18.0, "move_speed": 5.6, "preferred_distance": 2.0, "engagement_distance": 4.5, "tether_distance": 8.5, "support_action": null}},
-        {"path": "res://data/classes/rogue.tres", "values": {"id": &"rogue", "display_name": "Rogue", "role": ClassDefinition.Role.MIDLINE, "color": Color("a95be8"), "traits": [&"martial", &"skirmisher"], "capability_tags": [&"area", &"crit", &"dodge", &"life_steal", &"melee", &"physical"], "base_stat_overrides": {&"crit_chance": 0.20, &"crit_multiplier": 1.75, &"dodge_chance": 0.18, &"life_steal": 0.05}, "max_health": 72.0, "armor": 0.0, "move_speed": 7.4, "preferred_distance": 1.4, "engagement_distance": 3.0, "tether_distance": 8.0, "support_action": null}},
-        {"path": "res://data/classes/frost_mage.tres", "values": {"id": &"frost_mage", "display_name": "Frost Mage", "role": ClassDefinition.Role.BACKLINE, "color": Color("70c8ff"), "traits": [&"arcane", &"caster", &"cold"], "capability_tags": [&"area", &"cold", &"projectile"], "base_stat_overrides": {}, "max_health": 78.0, "armor": 0.0, "move_speed": 6.0, "preferred_distance": 6.5, "engagement_distance": 12.5, "tether_distance": 12.5, "support_action": null}},
-        {"path": "res://data/classes/warlock.tres", "values": {"id": &"warlock", "display_name": "Warlock", "role": ClassDefinition.Role.BACKLINE, "color": Color("7e4bc4"), "traits": [&"occult", &"caster", &"chaos"], "capability_tags": [&"chaos", &"life_steal", &"projectile", &"ranged"], "base_stat_overrides": {&"chaos_damage": 1.10, &"life_steal": 0.12}, "max_health": 82.0, "armor": 1.0, "move_speed": 5.8, "preferred_distance": 6.0, "engagement_distance": 12.5, "tether_distance": 12.5, "support_action": null}},
-        {"path": "res://data/classes/marksman.tres", "values": {"id": &"marksman", "display_name": "Marksman", "role": ClassDefinition.Role.MIDLINE, "color": Color(0.27579924, 0.36415747, 0.056183092, 1.0), "traits": [&"martial", &"ranged", &"bow"], "capability_tags": [&"bow", &"crit", &"physical", &"projectile", &"ranged"], "base_stat_overrides": {&"crit_chance": 0.10, &"crit_multiplier": 2.0}, "max_health": 80.0, "armor": 2.0, "move_speed": 5.8, "preferred_distance": 8.0, "engagement_distance": 16.0, "tether_distance": 16.0, "support_action": null}},
+        {"path": "res://data/classes/paladin.tres", "values": {"id": &"paladin", "display_name": "Paladin", "role": ClassDefinition.Role.FRONTLINE, "color": Color("e6c85f"), "traits": [&"divine", &"vanguard", &"martial"], "capability_tags": EXPECTED_CAPABILITIES[&"paladin"], "base_stat_overrides": {&"block_chance": 0.18, &"block_effectiveness": 0.55, &"health_regeneration": 1.5}, "max_health": 220.0, "armor": 18.0, "move_speed": 5.6, "preferred_distance": 2.0, "engagement_distance": 4.5, "tether_distance": 8.5, "support_action": null}},
+        {"path": "res://data/classes/rogue.tres", "values": {"id": &"rogue", "display_name": "Rogue", "role": ClassDefinition.Role.MIDLINE, "color": Color("a95be8"), "traits": [&"martial", &"skirmisher"], "capability_tags": EXPECTED_CAPABILITIES[&"rogue"], "base_stat_overrides": {&"crit_chance": 0.20, &"crit_multiplier": 1.75, &"dodge_chance": 0.18, &"life_steal": 0.05}, "max_health": 72.0, "armor": 0.0, "move_speed": 7.4, "preferred_distance": 1.4, "engagement_distance": 3.0, "tether_distance": 8.0, "support_action": null}},
+        {"path": "res://data/classes/frost_mage.tres", "values": {"id": &"frost_mage", "display_name": "Frost Mage", "role": ClassDefinition.Role.BACKLINE, "color": Color("70c8ff"), "traits": [&"arcane", &"caster", &"cold"], "capability_tags": EXPECTED_CAPABILITIES[&"frost_mage"], "base_stat_overrides": {}, "max_health": 78.0, "armor": 0.0, "move_speed": 6.0, "preferred_distance": 6.5, "engagement_distance": 12.5, "tether_distance": 12.5, "support_action": null}},
+        {"path": "res://data/classes/warlock.tres", "values": {"id": &"warlock", "display_name": "Warlock", "role": ClassDefinition.Role.BACKLINE, "color": Color("7e4bc4"), "traits": [&"occult", &"caster", &"chaos"], "capability_tags": EXPECTED_CAPABILITIES[&"warlock"], "base_stat_overrides": {&"chaos_damage": 1.10, &"life_steal": 0.12}, "max_health": 82.0, "armor": 1.0, "move_speed": 5.8, "preferred_distance": 6.0, "engagement_distance": 12.5, "tether_distance": 12.5, "support_action": null}},
+        {"path": "res://data/classes/marksman.tres", "values": {"id": &"marksman", "display_name": "Marksman", "role": ClassDefinition.Role.MIDLINE, "color": Color(0.27579924, 0.36415747, 0.056183092, 1.0), "traits": [&"martial", &"ranged", &"bow"], "capability_tags": EXPECTED_CAPABILITIES[&"marksman"], "base_stat_overrides": {&"crit_chance": 0.10, &"crit_multiplier": 2.0}, "max_health": 80.0, "armor": 2.0, "move_speed": 5.8, "preferred_distance": 8.0, "engagement_distance": 16.0, "tether_distance": 16.0, "support_action": null}},
     ]
     var trait_rows: Array[Dictionary] = [
         {"path": "res://data/traits/martial.tres", "values": {"id": &"martial", "display_name": "Martial", "stat_id": &"attack_speed", "tiers": {2: 0.15, 4: 0.35}}},
