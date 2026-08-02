@@ -6,6 +6,7 @@ func run() -> Array[String]:
 	_test_round_trip_and_deep_copy(failures)
 	_test_malformed_and_future_schema_fail_closed(failures)
 	_test_schema_one_field_types_fail_closed(failures)
+	_test_json_safe_integer_boundaries(failures)
 	_test_transaction_record_shapes_fail_closed(failures)
 	return failures
 
@@ -79,6 +80,57 @@ func _test_schema_one_field_types_fail_closed(failures: Array[String]) -> void:
 		malformed[item["field"]] = item["value"]
 		var result := ProfileCodec.decode(JSON.stringify(malformed))
 		TestAssertions.truthy(not result.ok() and result.error.contains("field=%s" % item["field"]), "schema-one field %s fails closed" % item["field"], failures)
+
+func _test_json_safe_integer_boundaries(failures: Array[String]) -> void:
+	const SAFE_MAX := 9007199254740991
+	const FIRST_UNSAFE := 9007199254740992
+	const ROUNDED_UNSAFE := 9007199254740993
+	var valid := ProfileState.new_profile("profile-12345678", "Jacob", 1000).to_dictionary()
+	valid["gold"] = SAFE_MAX
+	var safe_result := ProfileCodec.decode(JSON.stringify(valid))
+	TestAssertions.truthy(safe_result.ok(), "largest JSON-safe integer decodes", failures)
+	TestAssertions.equal(safe_result.profile.gold if safe_result.ok() else -1, SAFE_MAX, "largest JSON-safe integer round trips exactly", failures)
+	var top_level_fields: Array[String] = [
+		"created_at_unix",
+		"updated_at_unix",
+		"gold",
+		"passive_points_available",
+		"passive_points_lifetime_earned",
+		"squad_capacity",
+		"extraction_capacity",
+	]
+	for field: String in top_level_fields:
+		for unsafe_value: int in [FIRST_UNSAFE, ROUNDED_UNSAFE]:
+			var malformed := ProfileState.new_profile("profile-12345678", "Jacob", 1000).to_dictionary()
+			malformed[field] = unsafe_value
+			if field == "created_at_unix":
+				malformed["updated_at_unix"] = unsafe_value
+			elif field == "passive_points_available":
+				malformed["passive_points_lifetime_earned"] = unsafe_value
+			var result := ProfileCodec.decode(JSON.stringify(malformed))
+			TestAssertions.truthy(not result.ok() and result.error.contains("field=%s" % field), "%s rejects unsafe JSON integer %d" % [field, unsafe_value], failures)
+	var unsafe_visibility := ProfileState.new_profile("profile-12345678", "Jacob", 1000).to_dictionary()
+	unsafe_visibility["tree_visibility_progress"] = {"party-forge-city-v1": FIRST_UNSAFE}
+	var visibility_result := ProfileCodec.decode(JSON.stringify(unsafe_visibility))
+	TestAssertions.truthy(not visibility_result.ok() and visibility_result.error.contains("field=tree_visibility_progress"), "tree visibility rejects unsafe JSON integers", failures)
+	var unsafe_nested := ProfileState.new_profile("profile-12345678", "Jacob", 1000).to_dictionary()
+	unsafe_nested["last_safe_checkpoint"] = {"tick": FIRST_UNSAFE}
+	var nested_result := ProfileCodec.decode(JSON.stringify(unsafe_nested))
+	TestAssertions.truthy(not nested_result.ok() and nested_result.error.contains("field=last_safe_checkpoint"), "nested JSON dictionaries reject unsafe integers", failures)
+	var unsafe_transaction := ProfileState.new_profile("profile-12345678", "Jacob", 1000).to_dictionary()
+	var snapshot := unsafe_transaction.duplicate(true)
+	snapshot["updated_at_unix"] = FIRST_UNSAFE
+	snapshot["applied_transactions"] = {}
+	unsafe_transaction["applied_transactions"] = {
+		"tx": {
+			"operation": "grant_gold",
+			"fingerprint": "a".repeat(64),
+			"committed_at_unix": FIRST_UNSAFE,
+			"result_profile": snapshot,
+		},
+	}
+	var transaction_result := ProfileCodec.decode(JSON.stringify(unsafe_transaction))
+	TestAssertions.truthy(not transaction_result.ok() and transaction_result.error.contains("field=applied_transactions"), "transaction timestamps reject unsafe JSON integers", failures)
 
 func _test_transaction_record_shapes_fail_closed(failures: Array[String]) -> void:
 	var valid := ProfileState.new_profile("profile-12345678", "Jacob", 1000).to_dictionary()

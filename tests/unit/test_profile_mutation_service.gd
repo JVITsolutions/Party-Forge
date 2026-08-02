@@ -1,7 +1,7 @@
 extends RefCounted
 
 const ID := "profile-12345678"
-const MAX_INT := 0x7fffffffffffffff
+const JSON_SAFE_INTEGER_MAX := 9007199254740991
 
 var _root := ""
 
@@ -55,6 +55,8 @@ func _test_duplicate_transactions_do_not_reapply(failures: Array[String]) -> voi
 	TestAssertions.truthy(intervening.ok(), "intervening mutation commits", failures)
 	TestAssertions.truthy(retry.ok() and retry.duplicate, "retry reports prior commit", failures)
 	TestAssertions.equal(invocations[0], 1, "duplicate transaction does not invoke callback", failures)
+	TestAssertions.equal(first.profile.to_dictionary(), retry.profile.to_dictionary(), "retry returns the identical committed profile projection after intervening mutations", failures)
+	TestAssertions.truthy(first.profile.applied_transactions.is_empty() and retry.profile.applied_transactions.is_empty(), "mutation results expose journal-free committed projections", failures)
 	var saved := store.load_profile(ID, _root).profile
 	TestAssertions.equal(saved.gold, 35, "duplicate transaction does not reapply value", failures)
 	TestAssertions.equal(retry.profile.gold, 25, "retry returns the original committed profile result", failures)
@@ -213,7 +215,7 @@ func _test_grant_helpers_and_amount_boundaries(failures: Array[String]) -> void:
 		TestAssertions.truthy(not invalid_points.ok() and invalid_points.error.contains("passive point amount must be positive"), "passive points reject non-positive amount %d" % invalid_amount, failures)
 	var after_invalid := store.load_profile(ID, _root).profile
 	TestAssertions.equal(after_invalid.to_dictionary(), saved.to_dictionary(), "rejected amounts do not change persisted state", failures)
-	var near_limit_value := MAX_INT - 1023
+	var near_limit_value := JSON_SAFE_INTEGER_MAX - 1023
 	var overflowing_amount := 1024
 	var near_limit := after_invalid.copy()
 	near_limit.gold = near_limit_value
@@ -231,6 +233,13 @@ func _test_grant_helpers_and_amount_boundaries(failures: Array[String]) -> void:
 	TestAssertions.equal(after_overflow.passive_points_available, near_limit_value, "passive overflow leaves available points unchanged", failures)
 	TestAssertions.equal(after_overflow.passive_points_lifetime_earned, near_limit_value, "passive overflow leaves lifetime points unchanged", failures)
 	TestAssertions.truthy(not after_overflow.applied_transactions.has("gold-overflow") and not after_overflow.applied_transactions.has("points-overflow"), "overflow does not record transactions", failures)
+	var exact_limit := after_overflow.copy()
+	exact_limit.gold = JSON_SAFE_INTEGER_MAX
+	exact_limit.updated_at_unix = 3001
+	TestAssertions.equal(store.save_profile(exact_limit, _root), "", "JSON-safe integer limit persists exactly", failures)
+	TestAssertions.equal(store.load_profile(ID, _root).profile.gold, JSON_SAFE_INTEGER_MAX, "JSON-safe integer limit reloads exactly", failures)
+	var beyond_safe_limit := service.grant_gold(ID, "gold-json-unsafe", 1, _root)
+	TestAssertions.truthy(not beyond_safe_limit.ok() and beyond_safe_limit.error.contains("gold amount overflow"), "gold rejects values beyond the JSON-safe integer limit", failures)
 
 func _test_prologue_completion_semantics(failures: Array[String]) -> void:
 	var store := ProfileStore.new()
@@ -265,6 +274,8 @@ func _test_callback_and_load_failures_leave_state_unchanged(failures: Array[Stri
 	var before := store.load_profile(ID, _root).profile
 	var missing_operation := service.apply(ID, "missing-operation", func(_profile: ProfileState) -> String: return "", _root, 4000)
 	TestAssertions.truthy(not missing_operation.ok() and missing_operation.error.contains("operation is required"), "generic mutation requires an explicit operation descriptor", failures)
+	var unsafe_request := service.apply(ID, "unsafe-request", func(_profile: ProfileState) -> String: return "", _root, 4000, "test_unsafe_request", {"amount": 9007199254740992})
+	TestAssertions.truthy(not unsafe_request.ok() and unsafe_request.error.contains("invalid request") and unsafe_request.error.contains("JSON-safe integer"), "request fingerprints reject unsafe integer payloads", failures)
 	var missing_callback := service.apply(ID, "missing-callback", Callable(), _root, 4000)
 	TestAssertions.truthy(not missing_callback.ok() and missing_callback.error.contains("mutation is missing"), "invalid callable is rejected", failures)
 	var callback_error := service.apply(ID, "callback-error", func(profile: ProfileState) -> String:

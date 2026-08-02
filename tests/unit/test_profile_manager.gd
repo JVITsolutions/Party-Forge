@@ -177,6 +177,8 @@ func _test_index_numeric_validation(failures: Array[String]) -> void:
 		{"suffix": "fractional_schema", "schema": 1.5, "updated": 1, "reason": "unsupported schema"},
 		{"suffix": "fractional_timestamp", "schema": 1, "updated": 1.5, "reason": "entry fields have invalid types"},
 		{"suffix": "string_timestamp", "schema": 1, "updated": "1", "reason": "entry fields have invalid types"},
+		{"suffix": "first_unsafe_timestamp", "schema": 1, "updated": 9007199254740992, "reason": "entry fields have invalid types"},
+		{"suffix": "rounded_unsafe_timestamp", "schema": 1, "updated": 9007199254740993, "reason": "entry fields have invalid types"},
 	]
 	for item: Dictionary in cases:
 		var case_root := _root.path_join(str(item["suffix"]))
@@ -192,11 +194,11 @@ func _test_index_numeric_validation(failures: Array[String]) -> void:
 	var valid_document := {
 		"schema_version": 1.0,
 		"active_profile_id": "profile-numeric1",
-		"entries": [{"profile_id": "profile-numeric1", "display_name": "Numeric", "updated_at_unix": 7.0}],
+		"entries": [{"profile_id": "profile-numeric1", "display_name": "Numeric", "updated_at_unix": 9007199254740991}],
 	}
 	_write_text(valid_root.path_join(ProfileIndexStore.FILE_NAME), JSON.stringify(valid_document))
 	var valid := ProfileIndexStore.new().load_index(valid_root)
-	TestAssertions.truthy(valid.ok() and typeof(valid.index.schema_version) == TYPE_INT and typeof(valid.index.entries[0]["updated_at_unix"]) == TYPE_INT, "integral JSON numerics decode to ints", failures)
+	TestAssertions.truthy(valid.ok() and typeof(valid.index.schema_version) == TYPE_INT and valid.index.entries[0]["updated_at_unix"] == 9007199254740991, "largest JSON-safe index timestamp decodes exactly", failures)
 
 func _test_bootstrap_filesystem_failure(failures: Array[String]) -> void:
 	var blocker := _root.path_join("blocker")

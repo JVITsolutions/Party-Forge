@@ -4,7 +4,7 @@ Date: 2026-08-01
 
 Milestone state: `PASS`
 
-This record covers the profile-persistence foundation through commit `8a7b5ee2edbef1c8f31b94efc126126a89a76835`. Automated and controller manual verification are recorded below.
+This record covers the initial profile-persistence foundation through commit `8a7b5ee2edbef1c8f31b94efc126126a89a76835` and the post-review corrective commits recorded below. Automated and controller manual verification are recorded below.
 
 ## Task commit ranges
 
@@ -88,5 +88,6 @@ The independent senior review identified four Important persistence issues. Focu
 - Focused GREEN: `.superpowers/sdd/task-8-profile-fixes-green2.log` exited 0 with `TASK8_PROFILE_FIX_SUMMARY: PASS (7 suites)`.
 - Required-operation follow-up: `.superpowers/sdd/task-8-operation-required-red.log` exited 1 before the low-level default was removed; `.superpowers/sdd/task-8-operation-required-green.log` exited 0 with `TASK8_PROFILE_FIX_SUMMARY: PASS (7 suites)`.
 - Retained integration GREEN: `PROFILE_BOOT_MAIN_FLOW_SUMMARY: PASS`, `PROFILE_SETTINGS_NAVIGATION_SUMMARY: PASS`, and `RESPONSIVE_GEOMETRY_SUMMARY: PASS (4 sizes)` in the corresponding `task-8-*.log` files.
+- Final review follow-up: `.superpowers/sdd/task-9-review-fixes-red3.log` exited 1 with `TASK8_PROFILE_FIX_SUMMARY: FAIL (36 failures)` before production changes; `.superpowers/sdd/task-9-review-fixes-green2.log` and `.superpowers/sdd/task-9-review-fixes-final.log` exited 0 with `TASK8_PROFILE_FIX_SUMMARY: PASS (7 suites)`, the final root retained zero profile test roots, and `.superpowers/sdd/task-9-boot.log` exited 0 with `PROFILE_BOOT_MAIN_FLOW_SUMMARY: PASS`. This follow-up is the corrective commit containing this verification update, so its SHA is intentionally supplied by Git history rather than self-referenced here.
 
 The earlier `DamageResolver` `StringName` sorting fix remains intentionally in this branch. Its pre-fix evidence showed `tags.sort()` returning `[physical, melee]` where deterministic string order required `[melee, physical]`; `.superpowers/sdd/damage-tag-order-green.log` recorded `DAMAGE_TAG_ORDER_FOCUSED: PASS`. `tests/unit/test_damage_resolver.gd` now retains a focused multi-tag lexicographic regression assertion.

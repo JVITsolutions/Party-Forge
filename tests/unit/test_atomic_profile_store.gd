@@ -21,6 +21,7 @@ func run() -> Array[String]:
 	_test_corrupt_primary_without_backup_refuses_overwrite(failures)
 	_test_corrupt_primary_failed_promotion_keeps_recovery(failures)
 	_test_promoted_verification_failure_restores_generations(failures)
+	_test_valid_but_different_promotion_restores_generations(failures)
 	_test_post_commit_cleanup_failure_retains_committed_state(failures)
 	_test_malformed_schema_field_recovers_backup(failures)
 	_test_missing_profile_is_distinct(failures)
@@ -164,6 +165,41 @@ func _test_promoted_verification_failure_restores_generations(failures: Array[St
 	var restored_backup := _decode_file("%s.bak" % primary_path)
 	TestAssertions.equal(restored_primary.profile.gold if restored_primary.ok() else -1, 2, "verification failure restores current primary", failures)
 	TestAssertions.equal(restored_backup.profile.gold if restored_backup.ok() else -1, 1, "verification failure restores older backup", failures)
+
+func _test_valid_but_different_promotion_restores_generations(failures: Array[String]) -> void:
+	var good := ProfileStore.new()
+	var first := ProfileState.new_profile("profile-verify02", "Verify Exact", 7100)
+	first.gold = 1
+	TestAssertions.equal(good.save_profile(first, _root), "", "exact verification fixture first save succeeds", failures)
+	var current := first.copy()
+	current.gold = 2
+	current.updated_at_unix = 7101
+	TestAssertions.equal(good.save_profile(current, _root), "", "exact verification fixture creates backup", failures)
+	var substitute := current.copy()
+	substitute.gold = 99
+	substitute.updated_at_unix = 7102
+	var substituting_promoter := func(temporary: String, target: String) -> Error:
+		var promote_error := DirAccess.rename_absolute(ProjectSettings.globalize_path(temporary), ProjectSettings.globalize_path(target))
+		if promote_error != OK:
+			return promote_error
+		var promoted := FileAccess.open(target, FileAccess.WRITE)
+		if promoted == null:
+			return FileAccess.get_open_error()
+		promoted.store_string(ProfileCodec.encode(substitute))
+		var write_error := promoted.get_error()
+		promoted.close()
+		return write_error
+	var replacement := current.copy()
+	replacement.gold = 3
+	replacement.updated_at_unix = 7103
+	var failing := ProfileStore.new(AtomicJsonStore.new(substituting_promoter))
+	var error := failing.save_profile(replacement, _root)
+	TestAssertions.truthy(error.contains("stage=verify-promoted") and error.contains("reason=promoted document differs from verified temporary"), "valid but different promotion reports exact verification failure", failures)
+	var primary_path := good.profile_path(first.profile_id, _root)
+	var restored_primary := _decode_file(primary_path)
+	var restored_backup := _decode_file("%s.bak" % primary_path)
+	TestAssertions.equal(restored_primary.profile.gold if restored_primary.ok() else -1, 2, "different valid promotion restores current primary", failures)
+	TestAssertions.equal(restored_backup.profile.gold if restored_backup.ok() else -1, 1, "different valid promotion restores older backup", failures)
 
 func _test_post_commit_cleanup_failure_retains_committed_state(failures: Array[String]) -> void:
 	var documents := CleanupFailingAtomicJsonStore.new()

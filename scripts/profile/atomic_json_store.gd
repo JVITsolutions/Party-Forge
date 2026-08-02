@@ -73,6 +73,8 @@ func save_document(path: String, document: Dictionary, validator: Callable) -> S
 		var cleanup_error := _remove_if_exists(temporary)
 		return "JSON_STORE_SAVE_ERROR path=%s stage=promote code=%d restore_code=%d cleanup_stage=remove-temporary cleanup_code=%d" % [path, promote_error, restore_after_promote, cleanup_error]
 	var promoted := _load_one(path, validator)
+	if promoted.ok() and _canonical_json(promoted.document) != _canonical_json(temporary_result.document):
+		promoted.error = "promoted document differs from verified temporary"
 	if not promoted.ok():
 		var target_remove_error := _remove_if_exists(path)
 		var restore_after_verify := _restore_previous(path, backup, displaced_backup, had_previous, previous_was_valid, displaced_old_backup)
@@ -82,6 +84,27 @@ func save_document(path: String, document: Dictionary, validator: Callable) -> S
 		if cleanup_error != OK:
 			push_warning("JSON_STORE_CLEANUP_DEBT path=%s artifact=%s code=%d committed=true" % [path, displaced_backup, cleanup_error])
 	return ""
+
+func _canonical_json(document: Dictionary) -> String:
+	return JSON.stringify(_canonicalize(document))
+
+func _canonicalize(value: Variant) -> Variant:
+	if value is Dictionary:
+		var source := value as Dictionary
+		var keys: Array[String] = []
+		for key: Variant in source:
+			keys.append(key as String)
+		keys.sort()
+		var result: Dictionary = {}
+		for key: String in keys:
+			result[key] = _canonicalize(source[key])
+		return result
+	if value is Array:
+		var result: Array = []
+		for item: Variant in value as Array:
+			result.append(_canonicalize(item))
+		return result
+	return value
 
 func load_document(path: String, validator: Callable, recover_backup: bool = true) -> JsonDocumentResult:
 	if not validator.is_valid():

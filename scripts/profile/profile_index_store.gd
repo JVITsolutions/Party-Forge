@@ -48,7 +48,9 @@ func _validate_document(document: Dictionary) -> String:
 	return ""
 
 func _is_json_int(value: Variant) -> bool:
-	if typeof(value) not in [TYPE_INT, TYPE_FLOAT]:
+	if typeof(value) == TYPE_INT:
+		return int(value) >= -ProfileCodec.JSON_SAFE_INTEGER_MAX and int(value) <= ProfileCodec.JSON_SAFE_INTEGER_MAX
+	if typeof(value) != TYPE_FLOAT:
 		return false
 	var number := float(value)
-	return is_finite(number) and number == floor(number)
+	return is_finite(number) and number == floor(number) and number >= -float(ProfileCodec.JSON_SAFE_INTEGER_MAX) and number <= float(ProfileCodec.JSON_SAFE_INTEGER_MAX)

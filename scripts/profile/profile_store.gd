@@ -25,7 +25,7 @@ func load_profile(profile_id: String, root: String = DEFAULT_ROOT) -> ProfileLoa
 	result.recovery_detail = loaded.recovery_detail
 	result.error = loaded.error
 	if loaded.ok():
-		var decoded := ProfileCodec.decode(JSON.stringify(loaded.document))
+		var decoded := ProfileCodec.decode_document(loaded.document)
 		result.profile = decoded.profile
 		result.error = decoded.error
 	return result
@@ -50,7 +50,4 @@ func profile_ids(root: String = DEFAULT_ROOT) -> PackedStringArray:
 	return result
 
 func _validate_document(document: Dictionary) -> String:
-	var decoded := ProfileCodec.decode(JSON.stringify(document))
-	if not decoded.error.is_empty():
-		return decoded.error
-	return ProfileCodec.validate_profile(decoded.profile)
+	return ProfileCodec.validate_document(document)

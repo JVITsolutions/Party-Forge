@@ -1,7 +1,7 @@
 class_name ProfileCodec
 extends RefCounted
 
-const MAX_INT := 0x7fffffffffffffff
+const JSON_SAFE_INTEGER_MAX := 9007199254740991
 
 static func encode(profile: ProfileState) -> String:
 	return JSON.stringify(profile.to_dictionary(), "\t", false)
@@ -13,7 +13,10 @@ static func decode(text: String) -> ProfileLoadResult:
 	if parse_error != OK or not parser.data is Dictionary:
 		result.error = "PROFILE_DECODE_ERROR line=%d reason=%s" % [parser.get_error_line(), parser.get_error_message()]
 		return result
-	var data := parser.data as Dictionary
+	return decode_document(parser.data as Dictionary)
+
+static func decode_document(data: Dictionary) -> ProfileLoadResult:
+	var result := ProfileLoadResult.new()
 	result.error = validate_document(data)
 	if not result.error.is_empty():
 		return result
@@ -67,13 +70,13 @@ static func _validate_document(data: Dictionary, result_snapshot: bool) -> Strin
 	if display_name.is_empty() or display_name.length() > 32 or display_name != display_name.strip_edges():
 		return _field_error("display_name", "must contain 1-32 trimmed characters")
 	for field: String in ["created_at_unix", "updated_at_unix", "gold", "passive_points_available", "passive_points_lifetime_earned", "extraction_capacity"]:
-		var error := _integer_field(data, field, 0, MAX_INT)
+		var error := _integer_field(data, field, 0, JSON_SAFE_INTEGER_MAX)
 		if not error.is_empty():
 			return error
 	var prologue_error := _integer_field(data, "prologue_state", ProfileState.PrologueState.NOT_STARTED, ProfileState.PrologueState.COMPLETED)
 	if not prologue_error.is_empty():
 		return prologue_error
-	var squad_error := _integer_field(data, "squad_capacity", 1, MAX_INT)
+	var squad_error := _integer_field(data, "squad_capacity", 1, JSON_SAFE_INTEGER_MAX)
 	if not squad_error.is_empty():
 		return squad_error
 	var inventory_error := _integer_field(data, "inventory_columns", 0, 8)
@@ -100,7 +103,7 @@ static func _validate_document(data: Dictionary, result_snapshot: bool) -> Strin
 			if typeof(node_id) != TYPE_STRING:
 				return _field_error("tree_allocations", "must map string tree ids to string arrays")
 	for tree_id: Variant in data["tree_visibility_progress"] as Dictionary:
-		if typeof(tree_id) != TYPE_STRING or not _is_json_int((data["tree_visibility_progress"] as Dictionary)[tree_id], 0, MAX_INT):
+		if typeof(tree_id) != TYPE_STRING or not _is_json_int((data["tree_visibility_progress"] as Dictionary)[tree_id], 0, JSON_SAFE_INTEGER_MAX):
 			return _field_error("tree_visibility_progress", "must map string tree ids to non-negative integers")
 	for character_id: Variant in data["owned_characters"] as Dictionary:
 		if typeof(character_id) != TYPE_STRING or not (data["owned_characters"] as Dictionary)[character_id] is Dictionary:
@@ -138,7 +141,7 @@ static func _validate_transaction_record(record: Dictionary) -> String:
 		return "operation must be a non-empty string"
 	if typeof(record["fingerprint"]) != TYPE_STRING or not _is_lower_hex(record["fingerprint"] as String, 64):
 		return "request fingerprint must be 64 lowercase hex characters"
-	if not _is_json_int(record["committed_at_unix"], 0, MAX_INT):
+	if not _is_json_int(record["committed_at_unix"], 0, JSON_SAFE_INTEGER_MAX):
 		return "committed timestamp must be a non-negative integer"
 	if not record["result_profile"] is Dictionary:
 		return "result profile must be a dictionary"
@@ -162,16 +165,19 @@ static func _is_json_int(value: Variant, minimum: int, maximum: int) -> bool:
 	var number := float(value)
 	if not is_finite(number) or number != floor(number) or number < float(minimum):
 		return false
-	if maximum == MAX_INT:
-		return number < 9223372036854775808.0
 	return number <= float(maximum)
 
 static func _is_json_value(value: Variant) -> bool:
 	match typeof(value):
-		TYPE_NIL, TYPE_BOOL, TYPE_STRING, TYPE_INT:
+		TYPE_NIL, TYPE_BOOL, TYPE_STRING:
 			return true
+		TYPE_INT:
+			return int(value) >= -JSON_SAFE_INTEGER_MAX and int(value) <= JSON_SAFE_INTEGER_MAX
 		TYPE_FLOAT:
-			return is_finite(float(value))
+			var number := float(value)
+			if not is_finite(number):
+				return false
+			return number != floor(number) or (number >= -float(JSON_SAFE_INTEGER_MAX) and number <= float(JSON_SAFE_INTEGER_MAX))
 		TYPE_ARRAY:
 			return (value as Array).all(func(item: Variant) -> bool: return _is_json_value(item))
 		TYPE_DICTIONARY:

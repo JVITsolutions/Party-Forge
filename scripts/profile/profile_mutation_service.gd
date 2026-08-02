@@ -1,8 +1,6 @@
 class_name ProfileMutationService
 extends RefCounted
 
-const MAX_INT := 0x7fffffffffffffff
-
 var _store: ProfileStore
 
 func _init(store: ProfileStore = null) -> void:
@@ -43,7 +41,6 @@ func apply(profile_id: String, transaction_id: String, mutate: Callable, root: S
 		if not snapshot.ok():
 			result.error = "PROFILE_MUTATION_ERROR profile=%s transaction=%s reason=stored result is invalid error=%s" % [profile_id, transaction_id, snapshot.error]
 			return result
-		snapshot.profile.applied_transactions = loaded.profile.applied_transactions.duplicate(true)
 		result.profile = snapshot.profile
 		result.duplicate = true
 		return result
@@ -95,14 +92,16 @@ func apply(profile_id: String, transaction_id: String, mutate: Callable, root: S
 	if not save_error.is_empty():
 		result.error = save_error
 		return result
-	result.profile = working.copy()
+	var committed_projection := working.copy()
+	committed_projection.applied_transactions = {}
+	result.profile = committed_projection
 	return result
 
 func grant_gold(profile_id: String, transaction_id: String, amount: int, root: String = ProfileStore.DEFAULT_ROOT) -> ProfileMutationResult:
 	return apply(profile_id, transaction_id, func(profile: ProfileState) -> String:
 		if amount <= 0:
 			return "PROFILE_MUTATION_ERROR reason=gold amount must be positive"
-		if profile.gold > MAX_INT - amount:
+		if amount > ProfileCodec.JSON_SAFE_INTEGER_MAX or profile.gold > ProfileCodec.JSON_SAFE_INTEGER_MAX - amount:
 			return "PROFILE_MUTATION_ERROR reason=gold amount overflow"
 		profile.gold += amount
 		return ""
@@ -112,7 +111,7 @@ func grant_passive_points(profile_id: String, transaction_id: String, amount: in
 	return apply(profile_id, transaction_id, func(profile: ProfileState) -> String:
 		if amount <= 0:
 			return "PROFILE_MUTATION_ERROR reason=passive point amount must be positive"
-		if profile.passive_points_available > MAX_INT - amount or profile.passive_points_lifetime_earned > MAX_INT - amount:
+		if amount > ProfileCodec.JSON_SAFE_INTEGER_MAX or profile.passive_points_available > ProfileCodec.JSON_SAFE_INTEGER_MAX - amount or profile.passive_points_lifetime_earned > ProfileCodec.JSON_SAFE_INTEGER_MAX - amount:
 			return "PROFILE_MUTATION_ERROR reason=passive point amount overflow"
 		profile.passive_points_available += amount
 		profile.passive_points_lifetime_earned += amount
@@ -123,7 +122,7 @@ func complete_prologue(profile_id: String, transaction_id: String, root: String 
 	return apply(profile_id, transaction_id, func(profile: ProfileState) -> String:
 		if profile.prologue_state == ProfileState.PrologueState.COMPLETED:
 			return "PROFILE_MUTATION_ERROR reason=prologue already completed with different transaction"
-		if profile.passive_points_available == MAX_INT or profile.passive_points_lifetime_earned == MAX_INT:
+		if profile.passive_points_available == ProfileCodec.JSON_SAFE_INTEGER_MAX or profile.passive_points_lifetime_earned == ProfileCodec.JSON_SAFE_INTEGER_MAX:
 			return "PROFILE_MUTATION_ERROR reason=passive point amount overflow"
 		profile.prologue_state = ProfileState.PrologueState.COMPLETED
 		profile.passive_points_available += 1
@@ -158,10 +157,16 @@ static func _canonicalize(value: Variant) -> Variant:
 
 static func _validate_request_value(value: Variant) -> String:
 	match typeof(value):
-		TYPE_NIL, TYPE_BOOL, TYPE_STRING, TYPE_INT:
+		TYPE_NIL, TYPE_BOOL, TYPE_STRING:
 			return ""
+		TYPE_INT:
+			var integer := int(value)
+			return "" if integer >= -ProfileCodec.JSON_SAFE_INTEGER_MAX and integer <= ProfileCodec.JSON_SAFE_INTEGER_MAX else "contains integer outside JSON-safe integer range"
 		TYPE_FLOAT:
-			return "" if is_finite(float(value)) else "contains non-finite number"
+			var number := float(value)
+			if not is_finite(number):
+				return "contains non-finite number"
+			return "" if number != floor(number) or (number >= -float(ProfileCodec.JSON_SAFE_INTEGER_MAX) and number <= float(ProfileCodec.JSON_SAFE_INTEGER_MAX)) else "contains integer outside JSON-safe integer range"
 		TYPE_ARRAY:
 			for item: Variant in value as Array:
 				var item_error := _validate_request_value(item)
