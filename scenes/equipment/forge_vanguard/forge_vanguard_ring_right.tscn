@@ -1,25 +1,33 @@
 [gd_scene format=3]
 
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_kedvv"]
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_23ahm"]
 albedo_color = Color(0.7137255, 0.54509807, 0.22745098, 1)
 metallic = 0.55
 roughness = 0.78
-emission_enabled = true
-emission = Color(1, 0.8235294, 0.47843137, 1)
-emission_energy_multiplier = 0.7
 
-[sub_resource type="BoxMesh" id="BoxMesh_ojosj"]
-size = Vector3(0.07, 0.07, 0.07)
+[sub_resource type="BoxMesh" id="BoxMesh_bn304"]
+size = Vector3(0.2, 0.2, 0.08)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_w835e"]
+albedo_color = Color(0.8509804, 0.30980393, 0.30980393, 1)
+roughness = 0.78
+
+[sub_resource type="BoxMesh" id="BoxMesh_hqd4m"]
+size = Vector3(0.1, 0.1, 0.1)
 
 [node name="forge_vanguard_ring_right" type="Node3D"]
 
 [node name="Attachment" type="Node3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.03, -0.24, 0)
-metadata/equipment_slot = &"ring_right"
 metadata/equipment_visual_id = &"forge_vanguard_ring_right"
 metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot/RightShoulderPivot/RightElbowPivot/RightHandSocket"
 
 [node name="ReadableChannel" type="MeshInstance3D" parent="Attachment"]
-material_override = SubResource("StandardMaterial3D_kedvv")
-mesh = SubResource("BoxMesh_ojosj")
+material_override = SubResource("StandardMaterial3D_23ahm")
+mesh = SubResource("BoxMesh_bn304")
 metadata/palette_region = &"brass"
+
+[node name="Gem" type="MeshInstance3D" parent="Attachment"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.12, 0)
+material_override = SubResource("StandardMaterial3D_w835e")
+mesh = SubResource("BoxMesh_hqd4m")
+metadata/palette_region = &"primary"

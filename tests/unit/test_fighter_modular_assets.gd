@@ -36,12 +36,29 @@ func run() -> Array[String]:
 	TestAssertions.truthy(ResourceLoader.exists("res://scenes/characters/presentation/forge_vanguard_equipment_source.tscn"), "Fighter equipment source exists independently of generated item scenes", failures)
 	var builder_source := FileAccess.get_file_as_string("res://tools/build_equipment_assets.gd")
 	TestAssertions.truthy(builder_source.contains("forge_vanguard_equipment_source.tscn"), "equipment builder reads the dedicated baked source instead of target item scenes", failures)
+	_assert_standalone_equipment_source(failures)
 	TestAssertions.truthy(ResourceLoader.exists("res://scenes/characters/presentation/forge_base_masculine.tscn"), "masculine base exists", failures)
 	TestAssertions.truthy(ResourceLoader.exists("res://scenes/characters/presentation/forge_base_feminine.tscn"), "feminine base exists", failures)
 	_assert_fail_closed_nude_models(profile, failures)
 	_assert_profile_starts_guard_idle(profile, failures)
 	_assert_runtime_visibility_and_socket_contract(profile, failures)
 	return failures
+
+func _assert_standalone_equipment_source(failures: Array[String]) -> void:
+	var source_path := "res://scenes/characters/presentation/forge_vanguard_equipment_source.tscn"
+	var serialized := FileAccess.get_file_as_string(source_path)
+	TestAssertions.truthy(not serialized.contains("res://scenes/equipment/forge_vanguard/"), "equipment source has no generated target-scene references", failures)
+	var source_scene := load(source_path) as PackedScene
+	var source := source_scene.instantiate() as Node3D if source_scene != null else null
+	TestAssertions.truthy(source != null, "standalone equipment source instantiates", failures)
+	if source == null:
+		return
+	for item_id: StringName in FIGHTER_IDS:
+		var item := source.get_node_or_null(NodePath(String(item_id))) as Node3D
+		TestAssertions.truthy(item != null, "%s exists in standalone equipment source" % item_id, failures)
+		if item != null:
+			TestAssertions.truthy(not item.get_children().is_empty(), "%s source includes low-poly geometry" % item_id, failures)
+	source.free()
 
 func _assert_runtime_visibility_and_socket_contract(profile: CharacterVisualProfile, failures: Array[String]) -> void:
 	var model := profile.presentation_scene.instantiate() as ForgeHumanoidModel

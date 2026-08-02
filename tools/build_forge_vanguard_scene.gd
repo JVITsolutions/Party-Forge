@@ -144,6 +144,7 @@ func _build_limb_pivots(hips: Node3D, torso: Node3D) -> Dictionary:
 
 func _add_body(torso: Node3D, head: Node3D, pivots: Dictionary, hips: Node3D, preset_id: StringName, shoulder_width: float) -> void:
 	_body_mesh(torso, preset_id, &"Torso", Vector3(0, 0.07, 0), Vector3(shoulder_width * 0.72, 0.58, 0.30), &"metal")
+	_body_mesh(torso, preset_id, &"Tabard", Vector3(0, 0.03, -0.18), Vector3(shoulder_width * 0.44, 0.46, 0.05), &"primary")
 	_body_mesh(head, preset_id, &"Head", Vector3.ZERO, Vector3(0.28, 0.33, 0.28), &"skin")
 	for side_id: StringName in [&"left", &"right"]:
 		var side := -1.0 if side_id == &"left" else 1.0

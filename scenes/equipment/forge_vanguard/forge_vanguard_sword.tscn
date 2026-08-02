@@ -1,81 +1,48 @@
 [gd_scene format=3]
 
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_xicyq"]
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_1ip5r"]
 albedo_color = Color(0.1882353, 0.22745098, 0.2784314, 1)
 metallic = 0.7
 roughness = 0.78
 
-[sub_resource type="BoxMesh" id="BoxMesh_mpqjs"]
-size = Vector3(0.1, 0.68, 0.035)
+[sub_resource type="BoxMesh" id="BoxMesh_dsna7"]
+size = Vector3(0.1, 0.72, 0.05)
 
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_xjem8"]
-albedo_color = Color(0.1882353, 0.22745098, 0.2784314, 1)
-metallic = 0.7
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_2fqxw"]
+albedo_color = Color(0.7137255, 0.54509807, 0.22745098, 1)
+metallic = 0.55
 roughness = 0.78
 
-[sub_resource type="CylinderMesh" id="CylinderMesh_52pwe"]
-top_radius = 0.0
-bottom_radius = 0.065
-height = 0.16
-radial_segments = 4
+[sub_resource type="BoxMesh" id="BoxMesh_0ttht"]
+size = Vector3(0.34, 0.06, 0.1)
 
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_gll0o"]
-albedo_color = Color(0.1882353, 0.22745098, 0.2784314, 1)
-metallic = 0.7
-roughness = 0.78
-
-[sub_resource type="BoxMesh" id="BoxMesh_odglj"]
-size = Vector3(0.3, 0.055, 0.08)
-
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_sdxh6"]
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_h4vh1"]
 albedo_color = Color(0.2901961, 0.20392157, 0.14901961, 1)
 roughness = 0.78
 
-[sub_resource type="BoxMesh" id="BoxMesh_qc2j0"]
-size = Vector3(0.065, 0.22, 0.065)
-
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_p0gfh"]
-albedo_color = Color(0.1882353, 0.22745098, 0.2784314, 1)
-metallic = 0.7
-roughness = 0.78
-
-[sub_resource type="BoxMesh" id="BoxMesh_3s7do"]
-size = Vector3(0.09, 0.08, 0.08)
+[sub_resource type="BoxMesh" id="BoxMesh_to6tj"]
+size = Vector3(0.08, 0.22, 0.08)
 
 [node name="forge_vanguard_sword" type="Node3D"]
 
 [node name="Attachment" type="Node3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.03, 0.09, 0)
-metadata/equipment_slot = &"main_hand"
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.34, 0)
 metadata/equipment_visual_id = &"forge_vanguard_sword"
 metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot/RightShoulderPivot/RightElbowPivot/RightHandSocket"
 
-[node name="Blade" type="MeshInstance3D" parent="Attachment"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.38, 0)
-material_override = SubResource("StandardMaterial3D_xicyq")
-mesh = SubResource("BoxMesh_mpqjs")
-metadata/palette_region = &"metal"
-
-[node name="Tip" type="MeshInstance3D" parent="Attachment"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.8, 0)
-material_override = SubResource("StandardMaterial3D_xjem8")
-mesh = SubResource("CylinderMesh_52pwe")
+[node name="ReadableChannel" type="MeshInstance3D" parent="Attachment"]
+material_override = SubResource("StandardMaterial3D_1ip5r")
+mesh = SubResource("BoxMesh_dsna7")
 metadata/palette_region = &"metal"
 
 [node name="Crossguard" type="MeshInstance3D" parent="Attachment"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.02, 0)
-material_override = SubResource("StandardMaterial3D_gll0o")
-mesh = SubResource("BoxMesh_odglj")
-metadata/palette_region = &"metal"
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.38, 0)
+material_override = SubResource("StandardMaterial3D_2fqxw")
+mesh = SubResource("BoxMesh_0ttht")
+metadata/palette_region = &"brass"
 
 [node name="Grip" type="MeshInstance3D" parent="Attachment"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.11, 0)
-material_override = SubResource("StandardMaterial3D_sdxh6")
-mesh = SubResource("BoxMesh_qc2j0")
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.51, 0)
+material_override = SubResource("StandardMaterial3D_h4vh1")
+mesh = SubResource("BoxMesh_to6tj")
 metadata/palette_region = &"leather"
-
-[node name="Pommel" type="MeshInstance3D" parent="Attachment"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.25, 0)
-material_override = SubResource("StandardMaterial3D_p0gfh")
-mesh = SubResource("BoxMesh_3s7do")
-metadata/palette_region = &"metal"

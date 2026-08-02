@@ -1,39 +1,37 @@
 [gd_scene format=3]
 
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_jnr2p"]
-albedo_color = Color(0.8509804, 0.30980393, 0.30980393, 1)
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_5jspc"]
+albedo_color = Color(0.2901961, 0.20392157, 0.14901961, 1)
 roughness = 0.78
 
-[sub_resource type="BoxMesh" id="BoxMesh_o5l0a"]
-size = Vector3(0.23, 0.18, 0.34)
+[sub_resource type="BoxMesh" id="BoxMesh_bylml"]
+size = Vector3(0.24, 0.16, 0.38)
 
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_hbfl6"]
-albedo_color = Color(0.8509804, 0.30980393, 0.30980393, 1)
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_ynhs8"]
+albedo_color = Color(0.2901961, 0.20392157, 0.14901961, 1)
 roughness = 0.78
 
-[sub_resource type="BoxMesh" id="BoxMesh_lakbl"]
-size = Vector3(0.23, 0.18, 0.34)
+[sub_resource type="BoxMesh" id="BoxMesh_70n5f"]
+size = Vector3(0.24, 0.16, 0.38)
 
 [node name="forge_vanguard_boots" type="Node3D"]
 
 [node name="Attachment" type="Node3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.01, 0.05, 0)
-metadata/equipment_slot = &"boots"
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.13, -0.02, 0.05)
 metadata/equipment_visual_id = &"forge_vanguard_boots"
 metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/LeftHipPivot/LeftKneePivot/LeftFootPivot"
 
 [node name="ReadableChannel" type="MeshInstance3D" parent="Attachment"]
-material_override = SubResource("StandardMaterial3D_jnr2p")
-mesh = SubResource("BoxMesh_o5l0a")
-metadata/palette_region = &"primary"
+material_override = SubResource("StandardMaterial3D_5jspc")
+mesh = SubResource("BoxMesh_bylml")
+metadata/palette_region = &"leather"
 
 [node name="@Node3D@6" type="Node3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.01, 0.05, 0)
-metadata/equipment_slot = &"boots"
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.13, -0.02, 0.05)
 metadata/equipment_visual_id = &"forge_vanguard_boots"
 metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/RightHipPivot/RightKneePivot/RightFootPivot"
 
 [node name="ReadableChannel" type="MeshInstance3D" parent="@Node3D@6"]
-material_override = SubResource("StandardMaterial3D_hbfl6")
-mesh = SubResource("BoxMesh_lakbl")
-metadata/palette_region = &"primary"
+material_override = SubResource("StandardMaterial3D_ynhs8")
+mesh = SubResource("BoxMesh_70n5f")
+metadata/palette_region = &"leather"

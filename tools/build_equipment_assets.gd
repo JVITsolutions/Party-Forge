@@ -2,7 +2,6 @@ extends SceneTree
 
 const IDS: Array[StringName] = ClassEquipmentRows.SET_ITEM_IDS[&"fighter"]
 const SOURCE_PATH := "res://scenes/characters/presentation/forge_vanguard_equipment_source.tscn"
-const SLOTS: Array[StringName] = [&"helmet", &"body_armour", &"legs", &"gloves", &"boots", &"amulet", &"ring_left", &"ring_right", &"belt", &"main_hand", &"off_hand", &"main_hand"]
 const SOCKETS := {&"helmet": "HitPivot/BodyPivot/HipsPivot/TorsoPivot/HeadPivot/HelmetSocket", &"body_armour": "HitPivot/BodyPivot/HipsPivot/TorsoPivot/BodyArmourSocket", &"legs": "HitPivot/BodyPivot/HipsPivot/LegsSocket", &"gloves": "HitPivot/BodyPivot/HipsPivot/GlovesSocket", &"boots": "HitPivot/BodyPivot/HipsPivot/BootsSocket", &"amulet": "HitPivot/BodyPivot/HipsPivot/TorsoPivot/AmuletSocket", &"belt": "HitPivot/BodyPivot/HipsPivot/BeltSocket", &"ring_left": "HitPivot/BodyPivot/HipsPivot/TorsoPivot/LeftShoulderPivot/LeftElbowPivot/LeftHandSocket", &"ring_right": "HitPivot/BodyPivot/HipsPivot/TorsoPivot/RightShoulderPivot/RightElbowPivot/RightHandSocket", &"main_hand": "HitPivot/BodyPivot/HipsPivot/TorsoPivot/RightShoulderPivot/RightElbowPivot/RightHandSocket", &"off_hand": "HitPivot/BodyPivot/HipsPivot/TorsoPivot/LeftShoulderPivot/LeftElbowPivot/LeftHandSocket"}
 
 func _initialize() -> void:
@@ -12,11 +11,11 @@ func _initialize() -> void:
 	if requested_sets.size() != 1 or requested_sets[0] != &"fighter": _fail("only registered Fighter assets exist; requested=%s" % requested_sets); return
 	for index: int in IDS.size():
 		_trace("item_begin=%s" % IDS[index])
-		if not _write_item(IDS[index], SLOTS[index]): return
+		if not _write_item(IDS[index], ClassEquipmentRows.slot_for(&"fighter", index)): return
 	_trace("profile_write_begin")
 	if not _write_profiles(): _fail("profile write failed"); return
 	_trace("profile_write_done")
-	print("EQUIPMENT_ASSET_BUILD_OK sets=1 items=12")
+	print("EQUIPMENT_ASSET_BUILD_OK sets=%d items=%d" % [requested_sets.size(), IDS.size()])
 	quit(0)
 
 func _sets() -> Array[StringName]:
@@ -102,7 +101,7 @@ func _write_profiles() -> bool:
 	var base_dir := "res://data/equipment/bases/forge_vanguard/"
 	var refs := ""; for index: int in IDS.size(): refs += "[ext_resource type=\"Resource\" path=\"%s%s.tres\" id=\"%d\"]\n" % [base_dir, IDS[index], index + 3]
 	var entries := ""; for index: int in 11: entries += "SubResource(\"Entry%d\"), " % index
-	var subresources := ""; for index: int in 11: subresources += "[sub_resource type=\"Resource\" id=\"Entry%d\"]\nscript = ExtResource(\"2\")\nslot_id = &\"%s\"\nitem = ExtResource(\"%d\")\n\n" % [index, SLOTS[index], index + 3]
+	var subresources := ""; for index: int in 11: subresources += "[sub_resource type=\"Resource\" id=\"Entry%d\"]\nscript = ExtResource(\"2\")\nslot_id = &\"%s\"\nitem = ExtResource(\"%d\")\n\n" % [index, ClassEquipmentRows.slot_for(&"fighter", index), index + 3]
 	var available := ""; for index: int in IDS.size(): available += "ExtResource(\"%d\"), " % (index + 3)
 	var common := "[gd_resource type=\"Resource\" script_class=\"CharacterVisualProfile\" load_steps=15 format=3]\n\n[ext_resource type=\"Script\" path=\"res://scripts/presentation/character_visual_profile.gd\" id=\"1\"]\n[ext_resource type=\"Script\" path=\"res://scripts/equipment/equipment_loadout_entry.gd\" id=\"2\"]\n[ext_resource type=\"PackedScene\" path=\"res://scenes/characters/presentation/forge_humanoid_model.tscn\" id=\"20\"]\n%s\n%s[resource]\nscript = ExtResource(\"1\")\nid = &\"forge_vanguard\"\npresentation_scene = ExtResource(\"20\")\ndefault_body_preset = &\"masculine\"\ndefault_palette_id = &\"red\"\npalette_colors = {&\"red\": Color(0.8509804, 0.30980393, 0.30980393, 1), &\"blue\": Color(0.30980393, 0.47058824, 0.8509804, 1), &\"green\": Color(0.30980393, 0.6862745, 0.44705883, 1)}\ndefault_equipment = [%s]\navailable_equipment = [%s]\nrequired_animation_names = [&\"idle\", &\"attack_slash\", &\"attack_combo\", &\"hit_flinch\"]\nattack_animation_by_id = {&\"fighter_cleave\": &\"attack_slash\"}\n" % [refs, subresources, entries.trim_suffix(", "), available.trim_suffix(", ")]
 	if not _write_text("res://data/presentation/profiles/forge_vanguard.tres", common): return false

@@ -1,39 +1,39 @@
 [gd_scene format=3]
 
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_oilfe"]
-albedo_color = Color(0.8509804, 0.30980393, 0.30980393, 1)
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_2rxl3"]
+albedo_color = Color(0.1882353, 0.22745098, 0.2784314, 1)
+metallic = 0.7
 roughness = 0.78
 
-[sub_resource type="BoxMesh" id="BoxMesh_ml1mf"]
-size = Vector3(0.16, 0.17, 0.16)
+[sub_resource type="BoxMesh" id="BoxMesh_plvbm"]
+size = Vector3(0.18, 0.2, 0.2)
 
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_hlupc"]
-albedo_color = Color(0.8509804, 0.30980393, 0.30980393, 1)
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_02en6"]
+albedo_color = Color(0.1882353, 0.22745098, 0.2784314, 1)
+metallic = 0.7
 roughness = 0.78
 
-[sub_resource type="BoxMesh" id="BoxMesh_xg1fn"]
-size = Vector3(0.16, 0.17, 0.16)
+[sub_resource type="BoxMesh" id="BoxMesh_sp45n"]
+size = Vector3(0.18, 0.2, 0.2)
 
 [node name="forge_vanguard_gauntlets" type="Node3D"]
 
 [node name="Attachment" type="Node3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.02, -0.2, 0)
-metadata/equipment_slot = &"gloves"
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.04, 0, 0)
 metadata/equipment_visual_id = &"forge_vanguard_gauntlets"
 metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot/LeftShoulderPivot/LeftElbowPivot/LeftHandSocket"
 
 [node name="ReadableChannel" type="MeshInstance3D" parent="Attachment"]
-material_override = SubResource("StandardMaterial3D_oilfe")
-mesh = SubResource("BoxMesh_ml1mf")
-metadata/palette_region = &"primary"
+material_override = SubResource("StandardMaterial3D_2rxl3")
+mesh = SubResource("BoxMesh_plvbm")
+metadata/palette_region = &"metal"
 
 [node name="@Node3D@5" type="Node3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.02, -0.2, 0)
-metadata/equipment_slot = &"gloves"
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.04, 0, 0)
 metadata/equipment_visual_id = &"forge_vanguard_gauntlets"
 metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot/RightShoulderPivot/RightElbowPivot/RightHandSocket"
 
 [node name="ReadableChannel" type="MeshInstance3D" parent="@Node3D@5"]
-material_override = SubResource("StandardMaterial3D_hlupc")
-mesh = SubResource("BoxMesh_xg1fn")
-metadata/palette_region = &"primary"
+material_override = SubResource("StandardMaterial3D_02en6")
+mesh = SubResource("BoxMesh_sp45n")
+metadata/palette_region = &"metal"
