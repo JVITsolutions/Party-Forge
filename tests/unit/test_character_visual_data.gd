@@ -35,6 +35,7 @@ func run() -> Array[String]:
 	profile.required_animation_names = [&"idle", &"attack_slash", &"attack_combo", &"hit_flinch"]
 	profile.attack_animation_by_id = {&"fighter_cleave": &"attack_slash"}
 	TestAssertions.truthy(profile.validate().has("profile forge_vanguard presentation scene is missing"), "scene is required", failures)
+	_assert_walk_action_contract(failures)
 
 	var class_definition := ClassDefinition.new()
 	class_definition.id = &"test"
@@ -107,6 +108,31 @@ func run() -> Array[String]:
 	empty_available.available_equipment_visuals = []
 	TestAssertions.truthy(not _errors_contain(empty_available.validate(), "available equipment"), "empty available equipment remains valid", failures)
 	return failures
+
+func _assert_walk_action_contract(failures: Array[String]) -> void:
+	var profile := CharacterVisualProfile.new()
+	profile.id = &"forge_vanguard"
+	profile.presentation_scene = PackedScene.new()
+	profile.default_body_preset = &"masculine"
+	profile.default_palette_id = &"red"
+	profile.palette_colors = {&"red": Color("d94f4f")}
+	var property_names: Array[StringName] = []
+	for property: Dictionary in profile.get_property_list():
+		property_names.append(StringName(property[&"name"]))
+	var exposes_walk := &"walk_action_id" in property_names
+	TestAssertions.truthy(exposes_walk, "profile exposes a reusable walk action id", failures)
+	if not exposes_walk:
+		return
+	profile.set(&"idle_action_id", &"idle")
+	profile.set(&"walk_action_id", &"walk")
+	profile.required_animation_names = [&"idle", &"walk", &"attack_slash", &"attack_combo", &"hit_flinch"]
+	TestAssertions.truthy(profile.validate().is_empty(), "profile accepts required idle and walk actions", failures)
+	profile.set(&"walk_action_id", &"missing_walk")
+	TestAssertions.truthy(
+		profile.validate().has("profile forge_vanguard walk animation missing_walk is missing"),
+		"profile rejects an undeclared walk action",
+		failures
+	)
 
 func _errors_contain(errors: PackedStringArray, fragment: String) -> bool:
 	for reason: String in errors:

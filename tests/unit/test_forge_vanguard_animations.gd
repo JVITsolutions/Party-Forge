@@ -3,6 +3,7 @@ extends RefCounted
 const PROFILE_PATH := "res://data/presentation/profiles/forge_vanguard.tres"
 const EXPECTED_LENGTHS := {
 	&"idle": 1.6,
+	&"walk": 0.8,
 	&"attack_slash": 0.55,
 	&"attack_combo": 0.9,
 	&"hit_flinch": 0.25,
@@ -18,6 +19,12 @@ const PIVOT_PATHS := {
 	&"left_elbow": "HitPivot/BodyPivot/HipsPivot/TorsoPivot/LeftShoulderPivot/LeftElbowPivot",
 	&"right_shoulder": "HitPivot/BodyPivot/HipsPivot/TorsoPivot/RightShoulderPivot",
 	&"right_elbow": "HitPivot/BodyPivot/HipsPivot/TorsoPivot/RightShoulderPivot/RightElbowPivot",
+}
+const WALK_LEG_PATHS := {
+	&"left_hip": "HitPivot/BodyPivot/HipsPivot/LeftHipPivot",
+	&"left_knee": "HitPivot/BodyPivot/HipsPivot/LeftHipPivot/LeftKneePivot",
+	&"right_hip": "HitPivot/BodyPivot/HipsPivot/RightHipPivot",
+	&"right_knee": "HitPivot/BodyPivot/HipsPivot/RightHipPivot/RightKneePivot",
 }
 const ROOT_TRANSFORM_PROPERTIES := [&"position", &"rotation", &"transform", &"global_transform"]
 
@@ -37,6 +44,7 @@ func run() -> Array[String]:
 	if player != null:
 		_assert_animation_metadata(player, failures)
 		_assert_guard_contract(player, failures)
+		_assert_walk_contract(player, failures)
 		_assert_model_root_is_not_animated(player, failures)
 		_assert_playback_contract(model, player, failures)
 	_assert_feedback_contract(model, profile, failures)
@@ -50,7 +58,7 @@ func _assert_animation_metadata(player: AnimationPlayer, failures: Array[String]
 		if player.has_animation(animation_id):
 			var animation := player.get_animation(animation_id)
 			TestAssertions.near(animation.length, EXPECTED_LENGTHS[animation_id], 0.02, "%s duration" % animation_id, failures)
-			TestAssertions.equal(animation.loop_mode == Animation.LOOP_LINEAR, animation_id == &"idle", "%s loop contract" % animation_id, failures)
+			TestAssertions.equal(animation.loop_mode == Animation.LOOP_LINEAR, animation_id in [&"idle", &"walk"], "%s loop contract" % animation_id, failures)
 
 func _assert_guard_contract(player: AnimationPlayer, failures: Array[String]) -> void:
 	for animation_id: StringName in EXPECTED_LENGTHS:
@@ -61,6 +69,9 @@ func _assert_guard_contract(player: AnimationPlayer, failures: Array[String]) ->
 			var expected := Quaternion.from_euler(EXPECTED_GUARD_ROTATIONS[pivot_id] as Vector3)
 			var start := _sample_rotation(animation, String(PIVOT_PATHS[pivot_id]), 0.0)
 			var finish := _sample_rotation(animation, String(PIVOT_PATHS[pivot_id]), animation.length)
+			if animation_id == &"walk":
+				TestAssertions.truthy(start.is_equal_approx(finish), "walk closes its guard stride at %s" % pivot_id, failures)
+				continue
 			TestAssertions.truthy(start.is_equal_approx(expected), "%s begins in guard at %s" % [animation_id, pivot_id], failures)
 			TestAssertions.truthy(finish.is_equal_approx(expected), "%s recovers to guard at %s" % [animation_id, pivot_id], failures)
 
@@ -70,6 +81,40 @@ func _sample_rotation(animation: Animation, node_path: String, time: float) -> Q
 	if track_index < 0:
 		return Quaternion.IDENTITY
 	return animation.rotation_track_interpolate(track_index, time)
+
+func _sample_position(animation: Animation, node_path: String, time: float) -> Vector3:
+	var track_path := NodePath("%s:position" % node_path)
+	var track_index := animation.find_track(track_path, Animation.TYPE_POSITION_3D)
+	if track_index < 0:
+		return Vector3.INF
+	return animation.position_track_interpolate(track_index, time)
+
+func _assert_walk_contract(player: AnimationPlayer, failures: Array[String]) -> void:
+	TestAssertions.truthy(player.has_animation(&"walk"), "shared humanoid exposes authored walk", failures)
+	if not player.has_animation(&"walk"):
+		return
+	var walk := player.get_animation(&"walk")
+	for pivot_id: StringName in WALK_LEG_PATHS:
+		var track := walk.find_track(NodePath("%s:rotation" % WALK_LEG_PATHS[pivot_id]), Animation.TYPE_ROTATION_3D)
+		TestAssertions.truthy(track >= 0, "walk contains %s rotation track" % pivot_id, failures)
+	var left_hip_start := _sample_rotation(walk, WALK_LEG_PATHS[&"left_hip"], 0.0).get_euler().x
+	var right_hip_start := _sample_rotation(walk, WALK_LEG_PATHS[&"right_hip"], 0.0).get_euler().x
+	TestAssertions.truthy(left_hip_start > 0.2 and right_hip_start < -0.2, "walk hips oppose at opening stride", failures)
+	var left_knee_start := _sample_rotation(walk, WALK_LEG_PATHS[&"left_knee"], 0.0).get_euler().x
+	var right_knee_start := _sample_rotation(walk, WALK_LEG_PATHS[&"right_knee"], 0.0).get_euler().x
+	var left_knee_opposite := _sample_rotation(walk, WALK_LEG_PATHS[&"left_knee"], 0.4).get_euler().x
+	var right_knee_opposite := _sample_rotation(walk, WALK_LEG_PATHS[&"right_knee"], 0.4).get_euler().x
+	TestAssertions.truthy(right_knee_start > left_knee_start and left_knee_opposite > right_knee_opposite, "walk alternates knee flexion", failures)
+	var bob_high := _sample_position(walk, "HitPivot/BodyPivot", 0.0)
+	var bob_low := _sample_position(walk, "HitPivot/BodyPivot", 0.2)
+	TestAssertions.truthy(bob_high.is_finite() and bob_low.is_finite() and bob_high.y > bob_low.y, "walk contains vertical body bob", failures)
+	for sample_time: float in [0.0, 0.2, 0.4, 0.6]:
+		for pivot_id: StringName in EXPECTED_GUARD_ROTATIONS:
+			var track := walk.find_track(NodePath("%s:rotation" % PIVOT_PATHS[pivot_id]), Animation.TYPE_ROTATION_3D)
+			TestAssertions.truthy(track >= 0, "walk contains guard track %s at %.1f" % [pivot_id, sample_time], failures)
+			if track >= 0:
+				var sampled := walk.rotation_track_interpolate(track, sample_time)
+				TestAssertions.truthy(sampled.angle_to(Quaternion.IDENTITY) > 0.05, "walk keeps %s bent at %.1f to prevent A-pose" % [pivot_id, sample_time], failures)
 
 func _assert_model_root_is_not_animated(player: AnimationPlayer, failures: Array[String]) -> void:
 	for animation_id: StringName in EXPECTED_LENGTHS:
@@ -87,10 +132,12 @@ func _assert_model_root_is_not_animated(player: AnimationPlayer, failures: Array
 
 func _assert_playback_contract(model: ForgeHumanoidModel, player: AnimationPlayer, failures: Array[String]) -> void:
 	TestAssertions.truthy(not model.play_action(&"unknown_action"), "unknown action is rejected", failures)
-	for animation_id: StringName in [&"idle", &"attack_slash", &"attack_combo", &"hit_flinch"]:
+	for animation_id: StringName in [&"idle", &"walk", &"attack_slash", &"attack_combo", &"hit_flinch"]:
 		TestAssertions.truthy(model.play_action(animation_id), "%s action starts" % animation_id, failures)
 		TestAssertions.equal(player.current_animation, animation_id, "%s becomes current animation" % animation_id, failures)
-		if animation_id != &"idle":
+		if animation_id in [&"idle", &"walk"]:
+			TestAssertions.truthy(player.get_queue().is_empty(), "%s remains a persistent locomotion loop" % animation_id, failures)
+		else:
 			TestAssertions.truthy(&"idle" in player.get_queue(), "%s queues idle recovery" % animation_id, failures)
 
 

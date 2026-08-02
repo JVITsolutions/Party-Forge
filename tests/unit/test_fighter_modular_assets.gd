@@ -53,10 +53,22 @@ func run() -> Array[String]:
 	_assert_standalone_equipment_source(failures)
 	TestAssertions.truthy(ResourceLoader.exists("res://scenes/characters/presentation/forge_base_masculine.tscn"), "masculine base exists", failures)
 	TestAssertions.truthy(ResourceLoader.exists("res://scenes/characters/presentation/forge_base_feminine.tscn"), "feminine base exists", failures)
+	_assert_profiles_share_walk_contract(failures)
 	_assert_fail_closed_nude_models(profile, failures)
 	_assert_profile_starts_guard_idle(profile, failures)
 	_assert_runtime_visibility_and_socket_contract(profile, failures)
 	return failures
+
+func _assert_profiles_share_walk_contract(failures: Array[String]) -> void:
+	for profile_path: String in [
+		"res://data/presentation/profiles/forge_vanguard.tres",
+		"res://data/presentation/profiles/forge_base_masculine.tres",
+		"res://data/presentation/profiles/forge_base_feminine.tres",
+	]:
+		var profile := load(profile_path) as CharacterVisualProfile
+		TestAssertions.truthy(profile != null, "%s loads for walk contract" % profile_path, failures)
+		if profile != null:
+			TestAssertions.equal(profile.get(&"walk_action_id"), &"walk", "%s uses shared walk action" % profile_path, failures)
 
 func _assert_standalone_equipment_source(failures: Array[String]) -> void:
 	var source_path := "res://scenes/characters/presentation/forge_vanguard_equipment_source.tscn"

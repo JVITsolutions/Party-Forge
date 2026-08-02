@@ -11,6 +11,7 @@ const BODY_PRESETS: Array[StringName] = [&"masculine", &"feminine"]
 @export var default_equipment: Array[EquipmentLoadoutEntry] = []
 @export var available_equipment: Array[EquipmentBaseDefinition] = []
 @export var idle_action_id: StringName = &"idle"
+@export var walk_action_id: StringName = &"walk"
 @export var default_equipment_visuals: Array[EquipmentVisualDefinition] = []
 @export var available_equipment_visuals: Array[EquipmentVisualDefinition] = []
 @export var required_animation_names: Array[StringName] = [&"idle"]
@@ -40,6 +41,8 @@ func validate() -> PackedStringArray:
 		animation_names[animation_id] = true
 	if idle_action_id.is_empty() or not animation_names.has(idle_action_id):
 		errors.append("profile %s idle animation %s is missing" % [id, idle_action_id])
+	if walk_action_id.is_empty() or not animation_names.has(walk_action_id):
+		errors.append("profile %s walk animation %s is missing" % [id, walk_action_id])
 	for attack_id: Variant in attack_animation_by_id:
 		var animation_id := StringName(attack_animation_by_id[attack_id])
 		if StringName(attack_id).is_empty() or not animation_names.has(animation_id):

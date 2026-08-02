@@ -199,7 +199,7 @@ func _valid_profile() -> CharacterVisualProfile:
 	profile.default_palette_id = &"red"
 	profile.palette_colors = {&"red": Color("d94f4f")}
 	profile.default_equipment_visuals = [sword]
-	profile.required_animation_names = [&"idle", &"attack_slash", &"hit_flinch"]
+	profile.required_animation_names = [&"idle", &"walk", &"attack_slash", &"hit_flinch"]
 	profile.attack_animation_by_id = {&"fighter_cleave": &"attack_slash"}
 	return profile
 
@@ -210,7 +210,7 @@ func _profile_for_scene(scene: PackedScene, profile_id: StringName) -> Character
 	profile.default_body_preset = &"masculine"
 	profile.default_palette_id = &"red"
 	profile.palette_colors = {&"red": Color.WHITE}
-	profile.required_animation_names = [&"idle"]
+	profile.required_animation_names = [&"idle", &"walk"]
 	return profile
 
 func _fighter_cleave() -> AttackDefinition:

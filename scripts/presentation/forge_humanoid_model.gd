@@ -142,7 +142,7 @@ func play_action(animation_id: StringName) -> bool:
 	active_action_id = animation_id
 	player.clear_queue()
 	player.play(animation_id)
-	if animation_id != &"idle" and player.has_animation(&"idle"):
+	if animation_id not in [&"idle", &"walk"] and player.has_animation(&"idle"):
 		player.queue(&"idle")
 	return true
 

@@ -36,6 +36,23 @@ func _add_animations(model: Node3D) -> void:
 		_guard_pose(1.20, {&"body": Vector3(0, -0.010, 0), &"torso": Vector3(0, 0.210, 0)}, {&"left_elbow": Vector3(0, 0, -0.03), &"right_shoulder": Vector3(0, 0, 0.02)}),
 		_guard_pose(1.60),
 	])
+	_add_animation(library, &"walk", 0.8, true, [
+		_guard_pose(0.0,
+			{&"body": Vector3(0.0, 0.02, 0.0)},
+			{&"torso": Vector3(0.0, -0.06, 0.0), &"left_hip": Vector3(0.42, 0.0, 0.0), &"right_hip": Vector3(-0.42, 0.0, 0.0), &"left_knee": Vector3(0.12, 0.0, 0.0), &"right_knee": Vector3(0.48, 0.0, 0.0), &"left_shoulder": Vector3(0.10, 0.0, -0.08), &"right_shoulder": Vector3(-0.10, 0.0, 0.08)}),
+		_guard_pose(0.2,
+			{&"body": Vector3(0.0, -0.02, 0.0)},
+			{&"left_hip": Vector3.ZERO, &"right_hip": Vector3.ZERO, &"left_knee": Vector3(0.28, 0.0, 0.0), &"right_knee": Vector3(0.20, 0.0, 0.0)}),
+		_guard_pose(0.4,
+			{&"body": Vector3(0.0, 0.02, 0.0)},
+			{&"torso": Vector3(0.0, 0.06, 0.0), &"left_hip": Vector3(-0.42, 0.0, 0.0), &"right_hip": Vector3(0.42, 0.0, 0.0), &"left_knee": Vector3(0.48, 0.0, 0.0), &"right_knee": Vector3(0.12, 0.0, 0.0), &"left_shoulder": Vector3(-0.10, 0.0, -0.08), &"right_shoulder": Vector3(0.10, 0.0, 0.08)}),
+		_guard_pose(0.6,
+			{&"body": Vector3(0.0, -0.02, 0.0)},
+			{&"left_hip": Vector3.ZERO, &"right_hip": Vector3.ZERO, &"left_knee": Vector3(0.20, 0.0, 0.0), &"right_knee": Vector3(0.28, 0.0, 0.0)}),
+		_guard_pose(0.8,
+			{&"body": Vector3(0.0, 0.02, 0.0)},
+			{&"torso": Vector3(0.0, -0.06, 0.0), &"left_hip": Vector3(0.42, 0.0, 0.0), &"right_hip": Vector3(-0.42, 0.0, 0.0), &"left_knee": Vector3(0.12, 0.0, 0.0), &"right_knee": Vector3(0.48, 0.0, 0.0), &"left_shoulder": Vector3(0.10, 0.0, -0.08), &"right_shoulder": Vector3(-0.10, 0.0, 0.08)}),
+	])
 	_add_animation(library, &"attack_slash", 0.55, false, [
 		_guard_pose(0.00),
 		_pose(0.12, {&"body": Vector3(-0.025, 0, 0.025), &"torso": Vector3(0, 0.220, 0.025)}, {&"torso": Vector3(0.08, -0.16, -0.10), &"right_shoulder": Vector3(-0.08, -0.24, -1.05), &"right_elbow": Vector3(0.10, 0, -0.45), &"left_shoulder": Vector3(0, 0, -0.10)}),
@@ -93,7 +110,11 @@ func _guard_pose(time: float, position_overrides: Dictionary = {}, rotation_offs
 	return _pose(time, position_overrides, rotations)
 
 func _animated_pivot_ids() -> Array[StringName]:
-	return [&"hit", &"body", &"torso", &"left_shoulder", &"left_elbow", &"right_shoulder", &"right_elbow"]
+	return [
+		&"hit", &"body", &"torso",
+		&"left_shoulder", &"left_elbow", &"right_shoulder", &"right_elbow",
+		&"left_hip", &"left_knee", &"right_hip", &"right_knee",
+	]
 
 func _neutral_positions() -> Dictionary:
 	return {
@@ -104,6 +125,10 @@ func _neutral_positions() -> Dictionary:
 		&"left_elbow": Vector3(-0.08, -0.28, 0),
 		&"right_shoulder": Vector3(0.34, 0.37, 0),
 		&"right_elbow": Vector3(0.08, -0.28, 0),
+		&"left_hip": Vector3(-0.17, -0.04, 0),
+		&"left_knee": Vector3(0, -0.38, 0),
+		&"right_hip": Vector3(0.17, -0.04, 0),
+		&"right_knee": Vector3(0, -0.38, 0),
 	}
 
 func _neutral_rotations() -> Dictionary:
@@ -121,6 +146,10 @@ func _pivot_animation_path(pivot_id: StringName) -> String:
 		&"left_elbow": return "HitPivot/BodyPivot/HipsPivot/TorsoPivot/LeftShoulderPivot/LeftElbowPivot"
 		&"right_shoulder": return "HitPivot/BodyPivot/HipsPivot/TorsoPivot/RightShoulderPivot"
 		&"right_elbow": return "HitPivot/BodyPivot/HipsPivot/TorsoPivot/RightShoulderPivot/RightElbowPivot"
+		&"left_hip": return "HitPivot/BodyPivot/HipsPivot/LeftHipPivot"
+		&"left_knee": return "HitPivot/BodyPivot/HipsPivot/LeftHipPivot/LeftKneePivot"
+		&"right_hip": return "HitPivot/BodyPivot/HipsPivot/RightHipPivot"
+		&"right_knee": return "HitPivot/BodyPivot/HipsPivot/RightHipPivot/RightKneePivot"
 	return ""
 
 func _build_limb_pivots(hips: Node3D, torso: Node3D) -> Dictionary:
