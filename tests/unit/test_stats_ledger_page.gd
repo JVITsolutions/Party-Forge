@@ -83,7 +83,8 @@ func run() -> Array[String]:
 	var unavailable_metrics := page.get_node_or_null("Layout/Content/StatSide/StatScroll/Groups/Group_combat_estimates/Action_mixed_preview/Content/Metrics") as Label
 	TestAssertions.truthy(unavailable_metrics != null, "unavailable estimate exposes its reason", failures)
 	if unavailable_metrics != null:
-		TestAssertions.truthy("Estimate unavailable:" in unavailable_metrics.text and "Unknown damage type" in unavailable_metrics.text, "unavailable estimate explains its reason", failures)
+		var unavailable_text := unavailable_metrics.text.to_lower()
+		TestAssertions.truthy("estimate unavailable:" in unavailable_text and "unknown" in unavailable_text and "type" in unavailable_text, "unavailable estimate explains its invalid type boundary", failures)
 	fighter.primary_attack = null
 	page.refresh()
 	var empty_estimates := page.get_node_or_null("Layout/Content/StatSide/StatScroll/Groups/Group_combat_estimates/Empty") as Label

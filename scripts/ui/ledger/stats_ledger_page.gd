@@ -15,6 +15,7 @@ func _ready() -> void:
 
 func refresh() -> void:
 	_connect_show_all()
+	var focused_stat_id := _focused_stat_id()
 	_clear_generated_groups()
 	_stat_buttons.clear()
 	_first_stat_button = null
@@ -53,6 +54,7 @@ func refresh() -> void:
 		_clear_detail()
 	_sync_pinned_origin()
 	_sync_detail_visibility()
+	_restore_stat_focus(focused_stat_id)
 
 func set_show_all(enabled: bool) -> void:
 	_show_all = enabled
@@ -253,6 +255,20 @@ func _sync_detail_visibility() -> void:
 func _focus_control(control: Control) -> void:
 	if control != null and control.is_inside_tree() and control.is_visible_in_tree():
 		control.grab_focus()
+
+func _focused_stat_id() -> StringName:
+	if not is_inside_tree():
+		return &""
+	var focused := get_viewport().gui_get_focus_owner() as Button
+	if focused == null or not focused.has_meta("stat_id"):
+		return &""
+	var stat_id := focused.get_meta("stat_id") as StringName
+	return stat_id if _stat_buttons.get(stat_id) == focused else &""
+
+func _restore_stat_focus(stat_id: StringName) -> void:
+	if stat_id.is_empty():
+		return
+	_focus_control(_stat_buttons.get(stat_id) as Button)
 
 func _clear_generated_groups() -> void:
 	for child: Node in _groups().get_children():

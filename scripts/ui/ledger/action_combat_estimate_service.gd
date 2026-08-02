@@ -9,6 +9,9 @@ static func estimate(attack: AttackDefinition, member_id: int, party: PartyManag
 	result.display_name = String(attack.id).replace("_", " ").capitalize()
 	if party == null or types == null or member_id <= 0:
 		return _unavailable(result, "Missing character combat data.")
+	var validation := attack.validate(types)
+	if not validation.is_empty():
+		return _unavailable(result, String(validation[0]).trim_prefix("PARTY_FORGE_DAMAGE_ERROR "))
 	if attack.is_healing() or attack.damage_components.is_empty():
 		return _unavailable(result, "Action does not deal direct damage.")
 	if not is_finite(attack.cooldown) or attack.cooldown <= 0.0:

@@ -5,6 +5,8 @@ func run() -> Array[String]:
 	_test_action_aware_critical_estimate(failures)
 	_test_critical_chance_matches_runtime_bounds(failures)
 	_test_noncritical_mixed_damage(failures)
+	_test_zero_base_damage_is_unavailable(failures)
+	_test_missing_attack_id_is_unavailable(failures)
 	_test_invalid_damage_type_is_unavailable(failures)
 	return failures
 
@@ -57,6 +59,28 @@ func _test_noncritical_mixed_damage(failures: Array[String]) -> void:
 	TestAssertions.equal(estimate.component_rows.map(func(row: Dictionary) -> StringName: return row.damage_type_id), [&"physical", &"fire"], "component order stays authored", failures)
 	party.free()
 
+func _test_zero_base_damage_is_unavailable(failures: Array[String]) -> void:
+	var catalog := GameCatalog.load_defaults()
+	var party := PartyManager.new()
+	party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
+	var attack := catalog.class_by_id(&"fighter").primary_attack.duplicate(true) as AttackDefinition
+	attack.damage_components[0].base_amount = 0.0
+	var estimate := ActionCombatEstimateService.estimate(attack, 1, party, catalog.damage_types)
+	TestAssertions.truthy(not estimate.available, "runtime-invalid zero-base damage is unavailable", failures)
+	TestAssertions.truthy("component amount" in estimate.unavailable_reason.to_lower(), "zero-base reason names the invalid damage amount", failures)
+	party.free()
+
+func _test_missing_attack_id_is_unavailable(failures: Array[String]) -> void:
+	var catalog := GameCatalog.load_defaults()
+	var party := PartyManager.new()
+	party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
+	var attack := catalog.class_by_id(&"fighter").primary_attack.duplicate(true) as AttackDefinition
+	attack.id = &""
+	var estimate := ActionCombatEstimateService.estimate(attack, 1, party, catalog.damage_types)
+	TestAssertions.truthy(not estimate.available, "runtime-invalid missing attack ID is unavailable", failures)
+	TestAssertions.truthy("missing id" in estimate.unavailable_reason.to_lower(), "missing-ID reason names the invalid identity boundary", failures)
+	party.free()
+
 func _test_invalid_damage_type_is_unavailable(failures: Array[String]) -> void:
 	var catalog := GameCatalog.load_defaults()
 	var party := PartyManager.new()
@@ -65,7 +89,8 @@ func _test_invalid_damage_type_is_unavailable(failures: Array[String]) -> void:
 	attack.damage_components = [_component(&"void", 10.0)]
 	var estimate := ActionCombatEstimateService.estimate(attack, 1, party, catalog.damage_types)
 	TestAssertions.truthy(not estimate.available, "unknown type cannot produce invented numbers", failures)
-	TestAssertions.truthy("Unknown damage type" in estimate.unavailable_reason, "unavailable reason names the invalid boundary", failures)
+	var reason := estimate.unavailable_reason.to_lower()
+	TestAssertions.truthy("unknown" in reason and "type" in reason, "unavailable reason names the invalid type boundary", failures)
 	party.free()
 
 func _component(type_id: StringName, amount: float) -> AttackDamageComponent:

@@ -140,8 +140,22 @@ func _exercise_provider_refresh_focus_lifecycle() -> void:
 	_assert(viewport.gui_get_focus_owner() == rebuilt_member_24, "provider refresh restores actual member 24 focus")
 	_assert(_rects_intersect(scroll, rebuilt_member_24), "provider refresh keeps focused member 24 in the roster viewport")
 
-	var show_all := ledger.get_node("Overlay/Frame/Layout/Body/PageHost/StatsLedgerPage/Layout/Content/StatSide/ShowAll") as CheckButton
+	var stats_page := ledger.get_node("Overlay/Frame/Layout/Body/PageHost/StatsLedgerPage") as StatsLedgerPage
+	var damage_button := stats_page.get_node("Layout/Content/StatSide/StatScroll/Groups/Group_offense/Stat_damage") as Button
+	damage_button.grab_focus()
+	_assert(viewport.gui_get_focus_owner() == damage_button, "Stats refresh fixture starts with actual stat-button focus")
+	stats_page.refresh()
+	await _wait_for_layout()
+	var rebuilt_damage_button := stats_page.get_node("Layout/Content/StatSide/StatScroll/Groups/Group_offense/Stat_damage") as Button
+	_assert(rebuilt_damage_button != damage_button, "Stats refresh replaces the focused stat button")
+	_assert(rebuilt_damage_button.get_meta("stat_id") == &"damage", "Stats replacement preserves the focused stat ID")
+	_assert(viewport.gui_get_focus_owner() == rebuilt_damage_button, "Stats refresh restores actual focus to the replacement stat button")
+
+	var show_all := stats_page.get_node("Layout/Content/StatSide/ShowAll") as CheckButton
 	show_all.grab_focus()
+	stats_page.refresh()
+	await _wait_for_layout()
+	_assert(viewport.gui_get_focus_owner() == show_all, "Stats refresh does not steal focus from a non-stat control")
 	ledger.refresh()
 	await _wait_for_layout()
 	_assert(viewport.gui_get_focus_owner() == show_all, "roster refresh does not steal active-page focus")
