@@ -44,3 +44,9 @@ Shared animation inventory is exactly `idle`, `attack_slash`, `attack_combo`, an
 - `git diff --check` was clean before final sidecar cleanup.
 
 The full run emits intentional negative-case diagnostics from existing ledger, presentation, damage, and upgrade tests; it nevertheless exits zero with the PASS summary.
+
+## Review follow-up
+
+Review RED/GREEN: runtime visibility/socket coverage was added. After rebuild/import, hammer and amulet now install authored-visible attachment roots; all combat-visible Fighter scenes pass the focused suite. Single-root items use their declared visual socket, while paired gloves/boots/greaves retain animated limb-socket attachments. `has_equipment_slot` now verifies the socket node exists. The body-only compatibility source emits `FORGE_VANGUARD_BODY_SOURCE_BUILD_OK`; shared and base builders pass, focused assets/icons pass, and the fresh full suite exits zero with `TEST_SUMMARY: PASS (76 suites)`.
+
+The review also found and corrected a generator self-dependency: `build_equipment_assets.gd` no longer reads `scenes/equipment/forge_vanguard/*.tscn` outputs. It now reads the committed, distinct `forge_vanguard_equipment_source.tscn`, generated once by `build_forge_vanguard_equipment_source.gd`; the focused regression asserts that source contract. A complete two-pass body/shared/equipment/base build produced identical SHA-256s for all 43 generated resource files: `GENERATION_DETERMINISM_OK files=43`. Current hardware icon generation and strict validation reported `EQUIPMENT_ICON_RENDER_OK sets=1 items=12`, `EQUIPMENT_ICON_VALIDATION_OK sets=1 items=12`, and a two-pass hash comparison reported `ICON_DETERMINISM_OK files=24`. The fresh final full suite again exited zero with `TEST_SUMMARY: PASS (76 suites)`.

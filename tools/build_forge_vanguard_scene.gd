@@ -1,7 +1,7 @@
 extends SceneTree
 
-const SCENE_PATH := "res://scenes/characters/presentation/forge_vanguard_model.tscn"
-const MODEL_SCRIPT := preload("res://scripts/presentation/forge_vanguard_model.gd")
+const SCENE_PATH := "res://scenes/characters/presentation/forge_vanguard_body_source.tscn"
+const MODEL_SCRIPT := preload("res://scripts/presentation/forge_humanoid_model.gd")
 const GUARD_ROTATIONS := {
 	&"left_shoulder": Vector3(-0.28, -0.05, -0.55),
 	&"left_elbow": Vector3(0.10, 0.0, -0.65),
@@ -20,19 +20,6 @@ func _initialize() -> void:
 	var limb_pivots := _build_limb_pivots(hips, torso)
 	_add_body(torso, head, limb_pivots, hips, &"masculine", 0.82)
 	_add_body(torso, head, limb_pivots, hips, &"feminine", 0.72)
-	_add_hammer(limb_pivots[&"right_hand"])
-	_add_sword(limb_pivots[&"right_hand"])
-	_add_equipment(limb_pivots[&"left_hand"], &"off_hand", &"forge_vanguard_shield", Vector3(-0.04, 0.21, 0.02), Vector3(0.68, 0.68, 0.14), &"metal")
-	_add_equipment(head, &"helmet", &"forge_vanguard_helmet", Vector3.ZERO, Vector3(0.38, 0.34, 0.34), &"metal")
-	_add_equipment(torso, &"body_armour", &"forge_vanguard_armour", Vector3(0, 0.06, 0), Vector3(0.76, 0.56, 0.36), &"primary")
-	_add_equipment(limb_pivots[&"left_hand"], &"gloves", &"forge_vanguard_gauntlets", Vector3(-0.02, -0.20, 0), Vector3(0.16, 0.17, 0.16), &"primary")
-	_add_equipment(limb_pivots[&"right_hand"], &"gloves", &"forge_vanguard_gauntlets", Vector3(0.02, -0.20, 0), Vector3(0.16, 0.17, 0.16), &"primary")
-	_add_equipment(limb_pivots[&"left_foot"], &"boots", &"forge_vanguard_boots", Vector3(-0.01, 0.05, 0), Vector3(0.23, 0.18, 0.34), &"primary")
-	_add_equipment(limb_pivots[&"right_foot"], &"boots", &"forge_vanguard_boots", Vector3(0.01, 0.05, 0), Vector3(0.23, 0.18, 0.34), &"primary")
-	_add_equipment(hips, &"belt", &"forge_vanguard_belt", Vector3(0, -0.04, 0), Vector3(0.58, 0.11, 0.32), &"leather")
-	_add_equipment(torso, &"amulet", &"forge_vanguard_amulet", Vector3(0, 0.20, -0.2), Vector3(0.10, 0.10, 0.04), &"brass", true, false)
-	_add_equipment(limb_pivots[&"left_hand"], &"ring_left", &"forge_vanguard_ring_left", Vector3(-0.03, -0.24, 0), Vector3(0.07, 0.07, 0.07), &"brass", true, false)
-	_add_equipment(limb_pivots[&"right_hand"], &"ring_right", &"forge_vanguard_ring_right", Vector3(0.03, -0.24, 0), Vector3(0.07, 0.07, 0.07), &"brass", true, false)
 	_add_animations(model)
 	_save_scene(model)
 
@@ -281,7 +268,7 @@ func _save_scene(model: Node3D) -> void:
 		push_error("FORGE_VANGUARD_BUILD_ERROR reason=stabilize scene failed")
 		quit(1)
 		return
-	print("FORGE_VANGUARD_BUILD_OK path=%s" % SCENE_PATH)
+	print("FORGE_VANGUARD_BODY_SOURCE_BUILD_OK path=%s baked_equipment=false" % SCENE_PATH)
 	quit(0)
 
 func _remove_generated_node_ids() -> bool:

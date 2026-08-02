@@ -23,26 +23,26 @@ roughness = 0.78
 [sub_resource type="BoxMesh" id="BoxMesh_3mbtp"]
 size = Vector3(0.12, 0.2, 0.38)
 
-[node name="forge_vanguard_armour" type="Node3D" unique_id=1328902185]
+[node name="forge_vanguard_armour" type="Node3D"]
 
-[node name="Attachment" type="Node3D" parent="." unique_id=569010402]
+[node name="Attachment" type="Node3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.06, 0)
 metadata/equipment_slot = &"body_armour"
 metadata/equipment_visual_id = &"forge_vanguard_armour"
-metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot"
+metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot/BodyArmourSocket"
 
-[node name="ReadableChannel" type="MeshInstance3D" parent="Attachment" unique_id=1087485552]
+[node name="ReadableChannel" type="MeshInstance3D" parent="Attachment"]
 material_override = SubResource("StandardMaterial3D_hyh63")
 mesh = SubResource("BoxMesh_aitu0")
 metadata/palette_region = &"primary"
 
-[node name="LeftShoulderPlate" type="MeshInstance3D" parent="Attachment" unique_id=694069588]
+[node name="LeftShoulderPlate" type="MeshInstance3D" parent="Attachment"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.42, 0.24, 0)
 material_override = SubResource("StandardMaterial3D_hro3u")
 mesh = SubResource("BoxMesh_qb2mv")
 metadata/palette_region = &"metal"
 
-[node name="RightShoulderPlate" type="MeshInstance3D" parent="Attachment" unique_id=1769302763]
+[node name="RightShoulderPlate" type="MeshInstance3D" parent="Attachment"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.42, 0.24, 0)
 material_override = SubResource("StandardMaterial3D_wpyy2")
 mesh = SubResource("BoxMesh_3mbtp")

@@ -33,11 +33,49 @@ func run() -> Array[String]:
 	for item: EquipmentBaseDefinition in profile.available_equipment:
 		TestAssertions.truthy(item != null and item.presentation != null and item.presentation.presentation_scene != null, "%s has independent scene" % (item.id if item != null else &"<null>"), failures)
 	TestAssertions.truthy(ResourceLoader.exists("res://scenes/characters/presentation/forge_humanoid_model.tscn"), "shared humanoid exists", failures)
+	TestAssertions.truthy(ResourceLoader.exists("res://scenes/characters/presentation/forge_vanguard_equipment_source.tscn"), "Fighter equipment source exists independently of generated item scenes", failures)
+	var builder_source := FileAccess.get_file_as_string("res://tools/build_equipment_assets.gd")
+	TestAssertions.truthy(builder_source.contains("forge_vanguard_equipment_source.tscn"), "equipment builder reads the dedicated baked source instead of target item scenes", failures)
 	TestAssertions.truthy(ResourceLoader.exists("res://scenes/characters/presentation/forge_base_masculine.tscn"), "masculine base exists", failures)
 	TestAssertions.truthy(ResourceLoader.exists("res://scenes/characters/presentation/forge_base_feminine.tscn"), "feminine base exists", failures)
 	_assert_fail_closed_nude_models(profile, failures)
 	_assert_profile_starts_guard_idle(profile, failures)
+	_assert_runtime_visibility_and_socket_contract(profile, failures)
 	return failures
+
+func _assert_runtime_visibility_and_socket_contract(profile: CharacterVisualProfile, failures: Array[String]) -> void:
+	var model := profile.presentation_scene.instantiate() as ForgeHumanoidModel
+	TestAssertions.truthy(model != null, "shared model instantiates for runtime equipment visibility", failures)
+	if model == null:
+		return
+	(Engine.get_main_loop() as SceneTree).root.add_child(model)
+	for slot_id: StringName in EquipmentSlotCatalog.SLOT_IDS:
+		TestAssertions.truthy(model.has_equipment_slot(slot_id), "canonical slot %s resolves to an actual socket" % slot_id, failures)
+	for item: EquipmentBaseDefinition in profile.available_equipment:
+		var visual := item.presentation if item != null else null
+		if visual == null or not visual.combat_visible:
+			continue
+		TestAssertions.truthy(model.apply_equipment_visual(visual.slot_id, visual), "%s applies for runtime visibility" % visual.id, failures)
+		var installed: Array = model.equipped_nodes.get(visual.slot_id, [])
+		TestAssertions.truthy(not installed.is_empty(), "%s creates an installed attachment" % visual.id, failures)
+		for attachment: Node3D in installed:
+			TestAssertions.truthy(attachment.visible and _has_effectively_visible_mesh(attachment), "%s runtime attachment has visible mesh geometry" % visual.id, failures)
+			var socket_id := StringName(attachment.get_meta(&"equipment_socket_id", visual.socket_id))
+			TestAssertions.truthy(model.get_node_or_null(NodePath(String(socket_id))) != null, "%s attachment targets an existing socket" % visual.id, failures)
+		if visual.id in [&"forge_vanguard_helmet", &"forge_vanguard_armour", &"forge_vanguard_amulet", &"forge_vanguard_belt", &"forge_vanguard_sword", &"forge_vanguard_shield", &"forge_vanguard_hammer"]:
+			for attachment: Node3D in installed:
+				TestAssertions.equal(StringName(attachment.get_meta(&"equipment_socket_id", &"")), visual.socket_id, "%s single-root scene declares its visual socket exactly" % visual.id, failures)
+		if visual.id in [&"forge_vanguard_gauntlets", &"forge_vanguard_boots", &"forge_vanguard_greaves"]:
+			TestAssertions.truthy(installed.size() == 2, "%s keeps paired animated limb attachments" % visual.id, failures)
+	model.clear_equipment_visual(&"main_hand")
+	model.clear_equipment_visual(&"off_hand")
+	model.free()
+
+func _has_effectively_visible_mesh(root_node: Node3D) -> bool:
+	for node: Node in root_node.find_children("*", "MeshInstance3D", true, false):
+		if (node as MeshInstance3D).visible:
+			return true
+	return false
 
 func _assert_profile_starts_guard_idle(profile: CharacterVisualProfile, failures: Array[String]) -> void:
 	var presentation := CharacterPresentation.new()

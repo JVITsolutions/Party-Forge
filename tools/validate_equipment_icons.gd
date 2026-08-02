@@ -1,10 +1,22 @@
 extends SceneTree
 
-const IDS: Array[StringName] = [&"forge_vanguard_helmet", &"forge_vanguard_armour", &"forge_vanguard_greaves", &"forge_vanguard_gauntlets", &"forge_vanguard_boots", &"forge_vanguard_amulet", &"forge_vanguard_ring_left", &"forge_vanguard_ring_right", &"forge_vanguard_belt", &"forge_vanguard_sword", &"forge_vanguard_shield", &"forge_vanguard_hammer"]
+const IDS: Array[StringName] = ClassEquipmentRows.SET_ITEM_IDS[&"fighter"]
 func _initialize() -> void:
+	var requested_sets := _requested_sets()
+	if requested_sets != [&"fighter"]: push_error("EQUIPMENT_ICON_VALIDATION_ERROR only registered Fighter icons are materialized requested=%s" % requested_sets); quit(1); return
 	for id: StringName in IDS:
 		if not _validate(id): quit(1); return
-	print("EQUIPMENT_ICON_VALIDATION_OK items=12"); quit(0)
+	print("EQUIPMENT_ICON_VALIDATION_OK sets=%d items=%d" % [requested_sets.size(), IDS.size()]); quit(0)
+func _requested_sets() -> Array[StringName]:
+	for arg: String in OS.get_cmdline_user_args():
+		if arg.begins_with("--sets="):
+			var result: Array[StringName] = []
+			for raw: String in arg.trim_prefix("--sets=").split(","):
+				var set_id := StringName(raw.strip_edges())
+				if set_id.is_empty() or not ClassEquipmentRows.SET_ITEM_IDS.has(set_id): return []
+				result.append(set_id)
+			return result
+	return [&"fighter"]
 func _validate(id: StringName) -> bool:
 	for size: int in [256, 128]:
 		var image := Image.new(); var path := ProjectSettings.globalize_path("res://assets/ui/equipment/%s/forge_vanguard/%s_%d.png" % ["master" if size == 256 else "runtime", id, size])

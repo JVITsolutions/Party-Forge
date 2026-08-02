@@ -1,11 +1,21 @@
 extends SceneTree
 
-const IDS: Array[StringName] = [&"forge_vanguard_helmet", &"forge_vanguard_armour", &"forge_vanguard_greaves", &"forge_vanguard_gauntlets", &"forge_vanguard_boots", &"forge_vanguard_amulet", &"forge_vanguard_ring_left", &"forge_vanguard_ring_right", &"forge_vanguard_belt", &"forge_vanguard_sword", &"forge_vanguard_shield", &"forge_vanguard_hammer"]
+const IDS: Array[StringName] = ClassEquipmentRows.SET_ITEM_IDS[&"fighter"]
+const CAMERA_PRESETS := {
+	&"weapon": {&"direction": Vector3(0.32, 0.08, 1.0), &"margin": 1.42, &"minimum": 0.60},
+	&"shield": {&"direction": Vector3(0.20, 0.10, 1.0), &"margin": 1.36, &"minimum": 0.75},
+	&"armour": {&"direction": Vector3(0.25, 0.10, 1.0), &"margin": 1.34, &"minimum": 0.75},
+	&"jewelry": {&"direction": Vector3(0.10, 0.12, 1.0), &"margin": 1.55, &"minimum": 0.45},
+	&"wearable": {&"direction": Vector3(0.22, 0.10, 1.0), &"margin": 1.38, &"minimum": 0.60},
+}
 
 func _initialize() -> void:
 	call_deferred(&"_render")
 
 func _render() -> void:
+	var requested_sets := _requested_sets()
+	if requested_sets != [&"fighter"]:
+		_fail("only registered Fighter scenes are materialized; requested=%s" % requested_sets); return
 	var viewport := SubViewport.new(); viewport.transparent_bg = true; viewport.size = Vector2i(256, 256); viewport.render_target_update_mode = SubViewport.UPDATE_ONCE
 	var world := World3D.new(); viewport.world_3d = world
 	var camera := Camera3D.new(); camera.projection = Camera3D.PROJECTION_ORTHOGONAL; viewport.add_child(camera)
@@ -16,14 +26,12 @@ func _render() -> void:
 		var scene := load("res://scenes/equipment/forge_vanguard/%s.tscn" % item_id) as PackedScene
 		var item := scene.instantiate() as Node3D if scene != null else null
 		if item == null: _fail("item=%s scene missing" % item_id); return
-		for node: Node in item.find_children("*", "Node3D", true, false): (node as Node3D).visible = true
 		viewport.add_child(item)
 		var bounds := _item_bounds(item)
 		var target := bounds.get_center()
-		# Square orthographic framing with a fixed world-space margin keeps every
-		# equipment class readable while guaranteeing icon-safe transparent padding.
-		camera.size = maxf(maxf(bounds.size.x, bounds.size.y) * 1.30 + 0.20, 0.60)
-		camera.look_at_from_position(target + Vector3(0, 0, 3), target)
+		var preset: Dictionary = CAMERA_PRESETS[_camera_kind(item_id)]
+		camera.size = maxf(maxf(bounds.size.x, bounds.size.y) * float(preset[&"margin"]) + 0.20, float(preset[&"minimum"]))
+		camera.look_at_from_position(target + (preset[&"direction"] as Vector3).normalized() * 3.0, target)
 		viewport.render_target_update_mode = SubViewport.UPDATE_ONCE
 		await RenderingServer.frame_post_draw
 		var image := viewport.get_texture().get_image()
@@ -31,7 +39,19 @@ func _render() -> void:
 		if image == null or image.get_width() != 256 or image.get_height() != 256 or _visible_bounds(image).size == Vector2i.ZERO: _fail("item=%s capture invalid" % item_id); return
 		if _save_pair(item_id, &"forge_vanguard", image) != OK: _fail("item=%s save failed" % item_id); return
 		item.free()
-	viewport.free(); print("EQUIPMENT_ICON_RENDER_OK items=12"); quit(0)
+	viewport.free(); print("EQUIPMENT_ICON_RENDER_OK sets=%d items=%d" % [requested_sets.size(), IDS.size()]); quit(0)
+
+func _requested_sets() -> Array[StringName]:
+	for arg: String in OS.get_cmdline_user_args():
+		if arg.begins_with("--sets="):
+			var result: Array[StringName] = []
+			for raw: String in arg.trim_prefix("--sets=").split(","):
+				var set_id := StringName(raw.strip_edges())
+				if set_id.is_empty() or not ClassEquipmentRows.SET_ITEM_IDS.has(set_id):
+					return []
+				result.append(set_id)
+			return result
+	return [&"fighter"]
 
 func _visible_bounds(image: Image) -> Rect2i:
 	var result := Rect2i(); var found := false
@@ -44,6 +64,12 @@ func _item_bounds(item: Node3D) -> AABB:
 		if mesh.mesh != null:
 			var transformed := mesh.global_transform * mesh.get_aabb(); bounds = transformed if not has_bounds else bounds.merge(transformed); has_bounds = true
 	return bounds
+func _camera_kind(item_id: StringName) -> StringName:
+	if item_id in [&"forge_vanguard_sword", &"forge_vanguard_hammer"]: return &"weapon"
+	if item_id == &"forge_vanguard_shield": return &"shield"
+	if item_id == &"forge_vanguard_armour": return &"armour"
+	if item_id in [&"forge_vanguard_amulet", &"forge_vanguard_ring_left", &"forge_vanguard_ring_right", &"forge_vanguard_belt"]: return &"jewelry"
+	return &"wearable"
 func _fail(reason: String) -> void: push_error("EQUIPMENT_ICON_RENDER_ERROR %s" % reason); quit(1)
 
 func _save_pair(item_id: StringName, set_id: StringName, image: Image) -> Error:

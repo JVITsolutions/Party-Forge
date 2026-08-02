@@ -5,6 +5,19 @@ signal action_event(action_id: StringName, event_name: StringName)
 signal action_finished(action_id: StringName)
 
 const BODY_PRESETS: Array[StringName] = [&"masculine", &"feminine"]
+const SLOT_SOCKET_PATHS := {
+	&"helmet": "HitPivot/BodyPivot/HipsPivot/TorsoPivot/HeadPivot/HelmetSocket",
+	&"body_armour": "HitPivot/BodyPivot/HipsPivot/TorsoPivot/BodyArmourSocket",
+	&"legs": "HitPivot/BodyPivot/HipsPivot/LegsSocket",
+	&"gloves": "HitPivot/BodyPivot/HipsPivot/GlovesSocket",
+	&"boots": "HitPivot/BodyPivot/HipsPivot/BootsSocket",
+	&"amulet": "HitPivot/BodyPivot/HipsPivot/TorsoPivot/AmuletSocket",
+	&"ring_left": "HitPivot/BodyPivot/HipsPivot/TorsoPivot/LeftShoulderPivot/LeftElbowPivot/LeftHandSocket",
+	&"ring_right": "HitPivot/BodyPivot/HipsPivot/TorsoPivot/RightShoulderPivot/RightElbowPivot/RightHandSocket",
+	&"belt": "HitPivot/BodyPivot/HipsPivot/BeltSocket",
+	&"main_hand": "HitPivot/BodyPivot/HipsPivot/TorsoPivot/RightShoulderPivot/RightElbowPivot/RightHandSocket",
+	&"off_hand": "HitPivot/BodyPivot/HipsPivot/TorsoPivot/LeftShoulderPivot/LeftElbowPivot/LeftHandSocket",
+}
 
 var body_nodes: Dictionary = {}
 var palette_meshes: Dictionary = {}
@@ -109,7 +122,7 @@ func socket_global_transform(socket_id: StringName) -> Transform3D:
 	return socket.global_transform if socket != null else global_transform
 
 func has_equipment_slot(slot_id: StringName) -> bool:
-	return EquipmentSlotCatalog.is_valid(slot_id)
+	return EquipmentSlotCatalog.is_valid(slot_id) and SLOT_SOCKET_PATHS.has(slot_id) and get_node_or_null(NodePath(String(SLOT_SOCKET_PATHS[slot_id]))) != null
 
 func visual_bounds() -> AABB:
 	var bounds := AABB()

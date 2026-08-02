@@ -11,16 +11,15 @@ emission_energy_multiplier = 0.7
 [sub_resource type="BoxMesh" id="BoxMesh_ojosj"]
 size = Vector3(0.07, 0.07, 0.07)
 
-[node name="forge_vanguard_ring_right" type="Node3D" unique_id=2091528465]
+[node name="forge_vanguard_ring_right" type="Node3D"]
 
-[node name="Attachment" type="Node3D" parent="." unique_id=1045507001]
+[node name="Attachment" type="Node3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.03, -0.24, 0)
-visible = false
 metadata/equipment_slot = &"ring_right"
 metadata/equipment_visual_id = &"forge_vanguard_ring_right"
 metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot/RightShoulderPivot/RightElbowPivot/RightHandSocket"
 
-[node name="ReadableChannel" type="MeshInstance3D" parent="Attachment" unique_id=1140509400]
+[node name="ReadableChannel" type="MeshInstance3D" parent="Attachment"]
 material_override = SubResource("StandardMaterial3D_kedvv")
 mesh = SubResource("BoxMesh_ojosj")
 metadata/palette_region = &"brass"

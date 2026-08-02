@@ -1,6 +1,6 @@
 extends SceneTree
 
-const SOURCE := preload("res://scenes/characters/presentation/forge_vanguard_model.tscn")
+const SOURCE := preload("res://scenes/characters/presentation/forge_vanguard_body_source.tscn")
 const MODEL_SCRIPT := preload("res://scripts/presentation/forge_humanoid_model.gd")
 const OUTPUT := "res://scenes/characters/presentation/forge_humanoid_model.tscn"
 const SOCKET_PATHS := {
@@ -32,19 +32,21 @@ func _initialize() -> void:
 	print("FORGE_HUMANOID_BUILD_STAGE removed=%d" % removals.size())
 	print("FORGE_HUMANOID_BUILD_STAGE sockets")
 	for socket_id: StringName in SOCKET_PATHS:
-		_ensure_socket(model, NodePath(String(SOCKET_PATHS[socket_id])))
+		if not _ensure_socket(model, NodePath(String(SOCKET_PATHS[socket_id]))):
+			model.free(); return
 	print("FORGE_HUMANOID_BUILD_STAGE sockets_done")
 	print("FORGE_HUMANOID_BUILD_STAGE save")
 	_save(model)
 
-func _ensure_socket(model: Node3D, path: NodePath) -> void:
-	if model.get_node_or_null(path) != null: return
+func _ensure_socket(model: Node3D, path: NodePath) -> bool:
+	if model.get_node_or_null(path) != null: return true
 	var text := String(path)
 	var parent_path := NodePath(text.rsplit("/", false, 1)[0])
 	var parent := model.get_node_or_null(parent_path) as Node3D
 	if parent == null:
-		_fail("missing socket parent %s" % parent_path); return
+		_fail("missing socket parent %s" % parent_path); return false
 	var socket := Node3D.new(); socket.name = StringName(text.get_file()); parent.add_child(socket)
+	return true
 
 func _save(model: Node3D) -> void:
 	_set_owners(model, model)
@@ -52,9 +54,21 @@ func _save(model: Node3D) -> void:
 	if packed.pack(model) != OK or ResourceSaver.save(packed, OUTPUT) != OK:
 		_fail("pack or save failed"); return
 	model.free()
+	if not _remove_generated_node_ids(OUTPUT):
+		_fail("stabilize scene failed"); return
 	print("FORGE_HUMANOID_BUILD_OK path=%s" % OUTPUT)
 	quit(0)
 
 func _set_owners(node: Node, root: Node) -> void:
 	for child: Node in node.get_children(): child.owner = root; _set_owners(child, root)
+func _remove_generated_node_ids(path: String) -> bool:
+	var file := FileAccess.open(path, FileAccess.READ)
+	if file == null: return false
+	var expression := RegEx.new()
+	if expression.compile(" unique_id=[0-9]+") != OK: return false
+	var stable := expression.sub(file.get_as_text(), "", true)
+	file = FileAccess.open(path, FileAccess.WRITE)
+	if file == null: return false
+	file.store_string(stable)
+	return file.get_error() == OK
 func _fail(reason: String) -> void: push_error("FORGE_HUMANOID_BUILD_ERROR reason=%s" % reason); quit(1)
