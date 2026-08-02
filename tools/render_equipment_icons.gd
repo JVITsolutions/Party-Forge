@@ -1,6 +1,5 @@
 extends SceneTree
 
-const SET_FOLDERS := {&"fighter": &"forge_vanguard", &"paladin": &"dawn_bulwark", &"ranger": &"greenwood", &"marksman": &"siege_archer", &"rogue": &"nightstep", &"mage": &"emberweave", &"frost_mage": &"rime_scholar", &"cleric": &"storm_chaplain", &"warlock": &"grave_covenant"}
 const CATALOG := preload("res://data/equipment/core_equipment_catalog.tres")
 const RENDERER_SCRIPT := preload("res://tools/equipment_icon_cpu_renderer.gd")
 
@@ -16,9 +15,9 @@ func _render() -> void:
 	var item_count := 0
 	var renderer := RENDERER_SCRIPT.new() as RefCounted
 	for set_id: StringName in requested_sets:
-		if not SET_FOLDERS.has(set_id):
+		if not ClassEquipmentRows.SET_FOLDERS.has(set_id):
 			_fail("set generator is not registered set=%s" % set_id); return
-		var folder := SET_FOLDERS[set_id] as StringName
+		var folder := ClassEquipmentRows.SET_FOLDERS[set_id] as StringName
 		var item_ids: Array = ClassEquipmentRows.SET_ITEM_IDS[set_id]
 		for index: int in item_ids.size():
 			var item_id := item_ids[index] as StringName
@@ -42,7 +41,7 @@ func _requested_sets() -> Array[StringName]:
 			var requested := arg.trim_prefix("--sets=").strip_edges()
 			if requested == "all":
 				var all_sets: Array[StringName] = []
-				for set_id: StringName in ClassEquipmentRows.SET_ITEM_IDS:
+				for set_id: StringName in ClassEquipmentRows.SET_FOLDERS:
 					all_sets.append(set_id)
 				return all_sets
 			var result: Array[StringName] = []

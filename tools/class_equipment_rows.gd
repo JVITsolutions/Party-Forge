@@ -12,6 +12,11 @@ const SET_ITEM_IDS := {
 	&"warlock": [&"grave_covenant_hood", &"grave_covenant_robe", &"grave_covenant_leggings", &"grave_covenant_ritual_gloves", &"grave_covenant_wrapped_boots", &"grave_covenant_bone_amulet", &"withering_ring", &"pact_ring", &"grave_covenant_chained_sash", &"grave_covenant_bone_wand", &"grave_covenant_grimoire"],
 	&"fighter": [&"forge_vanguard_helmet", &"forge_vanguard_armour", &"forge_vanguard_greaves", &"forge_vanguard_gauntlets", &"forge_vanguard_boots", &"forge_vanguard_amulet", &"forge_vanguard_ring_left", &"forge_vanguard_ring_right", &"forge_vanguard_belt", &"forge_vanguard_sword", &"forge_vanguard_shield", &"forge_vanguard_hammer"],
 }
+const SET_FOLDERS := {
+	&"fighter": &"forge_vanguard", &"paladin": &"dawn_bulwark", &"ranger": &"greenwood",
+	&"marksman": &"siege_archer", &"rogue": &"nightstep", &"mage": &"emberweave",
+	&"frost_mage": &"rime_scholar", &"cleric": &"storm_chaplain", &"warlock": &"grave_covenant",
+}
 
 static func total_item_count() -> int:
 	var total := 0

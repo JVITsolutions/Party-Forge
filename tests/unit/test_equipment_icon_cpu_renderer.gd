@@ -41,7 +41,30 @@ func run() -> Array[String]:
 	_assert_family(renderer, &"hawkeye_band", &"ring", failures)
 	_assert_family(renderer, &"emberweave_rune_sash", &"belt", failures)
 	_assert_family(renderer, &"storm_chaplain_reliquary", &"amulet", failures)
+	_assert_family_resolution_rejects_invalid_inputs(renderer, failures)
+	_assert_slot_authoritative_family_resolution(renderer, failures)
 	return failures
+
+func _assert_family_resolution_rejects_invalid_inputs(renderer: RefCounted, failures: Array[String]) -> void:
+	TestAssertions.equal(StringName(renderer.call(&"family_for", null, &"main_hand")), &"", "null definition fails closed", failures)
+	var definition := _make_definition(&"test_item", &"bow", [&"main_hand"])
+	TestAssertions.equal(StringName(renderer.call(&"family_for", definition, &"not_a_slot")), &"", "invalid registered slot fails closed", failures)
+	TestAssertions.equal(StringName(renderer.call(&"family_for", definition, &"off_hand")), &"", "incompatible registered slot fails closed", failures)
+
+func _assert_slot_authoritative_family_resolution(renderer: RefCounted, failures: Array[String]) -> void:
+	var non_handheld_override := _make_definition(&"forge_vanguard_sword", &"main_hand", [&"helmet"])
+	TestAssertions.equal(StringName(renderer.call(&"family_for", non_handheld_override, &"helmet")), &"helmet", "legacy override ID uses compatible non-handheld slot family", failures)
+	var incompatible_override := _make_definition(&"forge_vanguard_shield", &"shield", [&"main_hand"])
+	TestAssertions.equal(StringName(renderer.call(&"family_for", incompatible_override, &"off_hand")), &"", "legacy override ID with incompatible handheld slot fails closed", failures)
+	var unknown_handheld := _make_definition(&"unknown_handheld", &"unsupported_handheld", [&"main_hand"])
+	TestAssertions.equal(StringName(renderer.call(&"family_for", unknown_handheld, &"main_hand")), &"", "unknown handheld type fails closed", failures)
+
+func _make_definition(item_id: StringName, item_type_id: StringName, slots: Array[StringName]) -> EquipmentBaseDefinition:
+	var definition := EquipmentBaseDefinition.new()
+	definition.id = item_id
+	definition.item_type_id = item_type_id
+	definition.compatible_slot_ids = slots
+	return definition
 
 func _assert_family(renderer: RefCounted, item_id: StringName, expected: StringName, failures: Array[String]) -> void:
 	var definition := CATALOG.definition(item_id)

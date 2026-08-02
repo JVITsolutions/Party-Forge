@@ -31,12 +31,14 @@ const PALETTES := {
 func family_for(definition: EquipmentBaseDefinition, registered_slot: StringName) -> StringName:
 	if definition == null or not EquipmentSlotCatalog.is_valid(registered_slot):
 		return &""
-	if ID_OVERRIDES.has(definition.id):
-		return ID_OVERRIDES[definition.id] as StringName
+	if registered_slot not in definition.compatible_slot_ids:
+		return &""
 	if SLOT_FAMILIES.has(registered_slot):
 		return SLOT_FAMILIES[registered_slot] as StringName
 	if registered_slot in [&"main_hand", &"off_hand"]:
-		return HANDHELD_FAMILIES.get(definition.item_type_id, &"weapon") as StringName
+		if ID_OVERRIDES.has(definition.id):
+			return ID_OVERRIDES[definition.id] as StringName
+		return HANDHELD_FAMILIES.get(definition.item_type_id, &"") as StringName
 	return &""
 
 func identity_variant(item_index: int) -> Vector3i:

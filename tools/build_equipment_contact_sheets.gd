@@ -1,17 +1,12 @@
 extends SceneTree
 
-const SET_FOLDERS := {
-	&"fighter": &"forge_vanguard", &"paladin": &"dawn_bulwark", &"ranger": &"greenwood", &"marksman": &"siege_archer", &"rogue": &"nightstep",
-	&"mage": &"emberweave", &"frost_mage": &"rime_scholar", &"cleric": &"storm_chaplain", &"warlock": &"grave_covenant",
-}
-
 func _initialize() -> void:
 	var output_dir := ProjectSettings.globalize_path("res://assets/ui/equipment/contact_sheets")
 	DirAccess.make_dir_recursive_absolute(output_dir)
-	for class_id: StringName in SET_FOLDERS:
+	for class_id: StringName in ClassEquipmentRows.SET_FOLDERS:
 		var sheet := Image.create(512, 384, false, Image.FORMAT_RGBA8)
 		sheet.fill(Color.TRANSPARENT)
-		var folder := StringName(SET_FOLDERS[class_id])
+		var folder := StringName(ClassEquipmentRows.SET_FOLDERS[class_id])
 		var item_ids: Array = ClassEquipmentRows.SET_ITEM_IDS[class_id]
 		for index: int in item_ids.size():
 			var icon := Image.new()
@@ -24,7 +19,7 @@ func _initialize() -> void:
 		if sheet.save_png(output) != OK:
 			_fail("class=%s output=%s" % [class_id, output])
 			return
-	print("EQUIPMENT_CONTACT_SHEET_BUILD_OK sets=%d items=%d" % [SET_FOLDERS.size(), ClassEquipmentRows.total_item_count()])
+	print("EQUIPMENT_CONTACT_SHEET_BUILD_OK sets=%d items=%d" % [ClassEquipmentRows.SET_FOLDERS.size(), ClassEquipmentRows.total_item_count()])
 	quit(0)
 
 func _fail(reason: String) -> void:
