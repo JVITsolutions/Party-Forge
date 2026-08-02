@@ -383,16 +383,22 @@ func _apply_feedback_colors() -> void:
 		if base_material == null:
 			continue
 		var base := base_material.albedo_color
-		var color := base.lerp(Color.WHITE, _hit_weight * 0.7)
+		var color := _hit_flash_color(base, _hit_weight)
 		if _is_downed:
 			color = Color(color.get_luminance(), color.get_luminance(), color.get_luminance(), color.a)
 		var unique_material := base_material.duplicate() as StandardMaterial3D
 		unique_material.albedo_color = color
 		if _hit_weight > 0.0:
 			unique_material.emission_enabled = true
-			unique_material.emission = base.lerp(Color.WHITE, 0.85)
-			unique_material.emission_energy_multiplier = maxf(unique_material.emission_energy_multiplier, _hit_weight * 0.8)
+			unique_material.emission = _hit_flash_color(base, _hit_weight)
+			unique_material.emission_energy_multiplier = minf(0.45, maxf(unique_material.emission_energy_multiplier, _hit_weight * 0.45))
 		mesh.material_override = unique_material
+
+func _hit_flash_color(base: Color, weight: float) -> Color:
+	var color := base.lightened(clampf(weight, 0.0, 1.0) * 0.35)
+	if base.s > 0.10 and color.s <= 0.10:
+		color = Color.from_hsv(base.h, minf(base.s, maxf(0.11, base.s * 0.65)), color.v, base.a)
+	return color
 
 func _is_effectively_visible(node: Node3D) -> bool:
 	var cursor: Node = node

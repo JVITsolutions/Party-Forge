@@ -118,7 +118,13 @@ func clear_equipment_visual(slot_id: StringName) -> bool:
 	return cleared and (not active_model.has_method(&"refresh_grounding") or refresh_grounding())
 
 func refresh_grounding() -> bool:
-	return active_model != null and active_model.has_method(&"refresh_grounding") and bool(active_model.call(&"refresh_grounding"))
+	var grounded := active_model != null and active_model.has_method(&"refresh_grounding") and bool(active_model.call(&"refresh_grounding"))
+	if grounded:
+		var actor := get_parent()
+		var health_bar := actor.get_node_or_null("HealthBar3D") if actor != null else null
+		if health_bar != null and health_bar.has_method(&"refresh_presentation_anchor"):
+			health_bar.call(&"refresh_presentation_anchor")
+	return grounded
 
 func visual_bounds() -> AABB:
 	if active_model == null or not active_model.has_method(&"visual_bounds"):

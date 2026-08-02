@@ -108,8 +108,8 @@ func _test_palette_rebases_clean_materials_during_feedback(failures: Array[Strin
 	model.set_palette(&"blue", Color(0.2, 0.8, 0.9, 1.0))
 	var body := model.get_node("BodyMesh") as MeshInstance3D
 	var accent := model.get_node("MainHandSocket/ColoredAttachment/Accent") as MeshInstance3D
-	TestAssertions.equal((body.material_override as StandardMaterial3D).albedo_color, Color(0.2, 0.8, 0.9, 1.0).lerp(Color.WHITE, 0.7), "hit feedback uses rebased body palette", failures)
-	TestAssertions.equal((accent.material_override as StandardMaterial3D).albedo_color, Color(0.2, 0.8, 0.9, 1.0).lerp(Color.WHITE, 0.7), "hit feedback uses rebased wearer accent", failures)
+	TestAssertions.equal((body.material_override as StandardMaterial3D).albedo_color, Color(0.2, 0.8, 0.9, 1.0).lightened(0.35), "hit feedback uses rebased body palette", failures)
+	TestAssertions.equal((accent.material_override as StandardMaterial3D).albedo_color, Color(0.2, 0.8, 0.9, 1.0).lightened(0.35), "hit feedback uses rebased wearer accent", failures)
 	model.set_hit_weight(0.0)
 	TestAssertions.equal((body.material_override as StandardMaterial3D).albedo_color, Color(0.2, 0.8, 0.9, 1.0), "cleared hit restores clean body palette", failures)
 	TestAssertions.equal((accent.material_override as StandardMaterial3D).albedo_color, Color(0.2, 0.8, 0.9, 1.0), "cleared hit restores clean wearer accent", failures)
@@ -133,7 +133,7 @@ func _test_equipment_inherits_active_feedback(failures: Array[String]) -> void:
 	model.set_hit_weight(1.0)
 	TestAssertions.truthy(model.apply_equipment_visual(&"main_hand", hit_item), "hit-active item equips", failures)
 	var hit_mesh := model.get_node("MainHandSocket/RootMesh") as MeshInstance3D
-	TestAssertions.equal((hit_mesh.material_override as StandardMaterial3D).albedo_color, hit_item.item_colors[&"metal"].lerp(Color.WHITE, 0.7), "hit-active item immediately receives feedback tint", failures)
+	TestAssertions.equal((hit_mesh.material_override as StandardMaterial3D).albedo_color, hit_item.item_colors[&"metal"].lightened(0.35), "hit-active item immediately receives feedback tint", failures)
 	TestAssertions.truthy((hit_mesh.material_override as StandardMaterial3D).emission_enabled, "hit-active item immediately receives feedback emission", failures)
 	model.set_hit_weight(0.0)
 	TestAssertions.equal((hit_mesh.material_override as StandardMaterial3D).albedo_color, hit_item.item_colors[&"metal"], "cleared hit restores equipped item base color", failures)
@@ -169,7 +169,7 @@ func _test_unmapped_equipment_material_inherits_and_restores_feedback(failures: 
 	model.set_downed(true)
 	TestAssertions.truthy(model.apply_equipment_visual(&"main_hand", definition), "unmapped material item equips under active feedback", failures)
 	var mesh := model.get_node("MainHandSocket/UnmappedRootMesh") as MeshInstance3D
-	var feedback_color := base_color.lerp(Color.WHITE, 0.7)
+	var feedback_color := base_color.lightened(0.35)
 	var grayscale := Color(feedback_color.get_luminance(), feedback_color.get_luminance(), feedback_color.get_luminance(), feedback_color.a)
 	TestAssertions.equal((mesh.material_override as StandardMaterial3D).albedo_color, grayscale, "unmapped material immediately receives hit and downed feedback", failures)
 	TestAssertions.truthy((mesh.material_override as StandardMaterial3D).emission_enabled, "unmapped material receives hit feedback emission", failures)
