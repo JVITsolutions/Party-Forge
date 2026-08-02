@@ -35,6 +35,15 @@ func _run() -> void:
 	developer_settings.god_mode = true
 	developer_settings.party_capacity_override = 12
 	developer_settings.enemy_density_percent = 500
+	var profile_root := "user://tests/responsive_profiles_%d_%d" % [OS.get_process_id(), Time.get_ticks_usec()]
+	ProfileTestSupport.remove_tree(profile_root)
+	var profile_manager := ProfileManager.new()
+	var bootstrap_error := profile_manager.bootstrap(profile_root)
+	if not bootstrap_error.is_empty():
+		_failures.append("Profiles geometry manager bootstrap failed: %s" % bootstrap_error)
+	var created := profile_manager.create_profile("Geometry Profile")
+	if not created.ok():
+		_failures.append("Profiles geometry fixture create failed: %s" % created.error)
 	badge.configure(RunRulesSnapshot.from_settings(developer_settings))
 	await _wait_for_layout()
 	await _assert_settings_focus_input(settings, viewport, developer_settings)
@@ -42,7 +51,15 @@ func _run() -> void:
 	var overlay := settings.get_node("Overlay") as Control
 	var frame := settings.get_node("Overlay/Frame") as Control
 	var tabs := settings.get_node("Overlay/Frame/Layout/Tabs") as TabContainer
+	var controls := settings.get_node("Overlay/Frame/Layout/Tabs/Controls") as Control
 	var controls_scroll := settings.get_node("Overlay/Frame/Layout/Tabs/Controls/Layout/Scroll") as ScrollContainer
+	var profiles := settings.get_node("Overlay/Frame/Layout/Tabs/Profiles") as ProfilesSettingsPage
+	var profile_explanation := profiles.get_node("Layout/Explanation") as Label
+	var profile_empty := profiles.get_node("Layout/EmptyState") as Label
+	var profile_list := profiles.get_node("Layout/ProfileList") as ItemList
+	var profile_name := profiles.get_node("Layout/CreateRow/ProfileName") as LineEdit
+	var profile_create := profiles.get_node("Layout/CreateRow/Create") as Button
+	var profile_activate := profiles.get_node("Layout/Activate") as Button
 	var additional := settings.get_node("Overlay/Frame/Layout/Tabs/Additional Settings") as Control
 	var reset := additional.get_node("Layout/ResetDeveloperOptions") as Button
 	var apply := additional.get_node("Layout/ApplyAndReturn") as Button
@@ -56,7 +73,7 @@ func _run() -> void:
 	for viewport_size: Vector2i in VIEWPORT_SIZES:
 		var failure_count_before := _failures.size()
 		viewport.size = viewport_size
-		tabs.current_tab = 1
+		_select_tab(tabs, controls, "Controls")
 		await _wait_for_layout()
 		var viewport_rect := Rect2(Vector2.ZERO, Vector2(viewport_size))
 		_assert_rect_near(overlay.get_global_rect(), viewport_rect, "Settings overlay", viewport_size)
@@ -66,7 +83,20 @@ func _run() -> void:
 		_assert_visible_contained(tabs.get_tab_bar(), expected_frame, "Settings tab row", viewport_size)
 		_assert_visible_contained(controls_scroll, expected_frame, "Controls scroll", viewport_size)
 
-		tabs.current_tab = 4
+		settings.configure(PartyForgeSettingsStore.new(), developer_settings)
+		_select_tab(tabs, profiles, "Profiles")
+		await _wait_for_layout()
+		for control: Control in [profiles, profile_explanation, profile_empty, profile_name, profile_create, profile_activate]:
+			_assert_visible_contained(control, expected_frame, "Profiles %s" % control.name, viewport_size)
+		_assert_initial_focus(profiles, profile_name, expected_frame, viewport_size, "empty")
+
+		settings.configure(PartyForgeSettingsStore.new(), developer_settings, profile_manager)
+		await _wait_for_layout()
+		for control: Control in [profiles, profile_explanation, profile_list, profile_name, profile_create, profile_activate]:
+			_assert_visible_contained(control, expected_frame, "Populated Profiles %s" % control.name, viewport_size)
+		_assert_initial_focus(profiles, profile_list, expected_frame, viewport_size, "populated")
+
+		_select_tab(tabs, additional, "Additional Settings")
 		await _wait_for_layout()
 		for action: Button in [reset, apply, cancel]:
 			_assert_visible_contained(action, expected_frame, "Additional Settings %s" % action.name, viewport_size)
@@ -81,6 +111,7 @@ func _run() -> void:
 			print("RESPONSIVE_GEOMETRY_SIZE_PASS size=%dx%d" % [viewport_size.x, viewport_size.y])
 
 	viewport.free()
+	ProfileTestSupport.remove_tree(profile_root)
 	if _failures.is_empty():
 		print("RESPONSIVE_GEOMETRY_SUMMARY: PASS (%d sizes)" % VIEWPORT_SIZES.size())
 		quit(0)
@@ -99,7 +130,10 @@ func _wait_for_layout() -> void:
 func _assert_settings_focus_input(settings: SettingsScreen, viewport: SubViewport, developer_settings: PartyForgeSettings) -> void:
 	settings.configure(PartyForgeSettingsStore.new(), developer_settings)
 	var tabs := settings.get_node("Overlay/Frame/Layout/Tabs") as TabContainer
-	tabs.current_tab = 1
+	var controls := settings.get_node("Overlay/Frame/Layout/Tabs/Controls") as Control
+	var graphics := settings.get_node("Overlay/Frame/Layout/Tabs/Graphics") as Control
+	var additional := settings.get_node("Overlay/Frame/Layout/Tabs/Additional Settings") as AdditionalSettingsPage
+	_select_tab(tabs, controls, "Controls")
 	settings.open()
 	await process_frame
 	_assert_focus(viewport, settings.get_node("Overlay/Frame/Layout/Tabs/Controls/Layout/Footer") as Control, "Controls initial focus")
@@ -109,14 +143,14 @@ func _assert_settings_focus_input(settings: SettingsScreen, viewport: SubViewpor
 	bumper.pressed = true
 	viewport.push_input(bumper)
 	await process_frame
-	if tabs.current_tab != 2:
+	if tabs.get_tab_control(tabs.current_tab) != graphics:
 		_failures.append("controller bumper did not advance Controls to Graphics")
 	_assert_focus(viewport, settings.get_node("Overlay/Frame/Layout/Tabs/Graphics/Content/State") as Control, "Graphics controller focus")
 
-	tabs.current_tab = 4
+	_select_tab(tabs, additional, "Additional Settings")
 	settings.call(&"_focus_active_page")
 	await process_frame
-	var page := settings.get_node("Overlay/Frame/Layout/Tabs/Additional Settings") as AdditionalSettingsPage
+	var page := additional
 	var mode := page.get_node("Layout/Mode") as Control
 	var unlock_all := page.get_node("Layout/UnlockAll") as Control
 	_assert_focus(viewport, mode, "Additional Settings initial focus")
@@ -170,6 +204,27 @@ func _assert_settings_focus_input(settings: SettingsScreen, viewport: SubViewpor
 	await process_frame
 	_assert_disclosed_diagnostic(viewport, technical_details, "controller activation")
 	settings.open()
+
+
+func _select_tab(tabs: TabContainer, control: Control, label: String) -> void:
+	for index: int in range(tabs.get_tab_count()):
+		if tabs.get_tab_control(index) == control:
+			tabs.current_tab = index
+			return
+	_failures.append("%s tab control was not found" % label)
+
+
+func _assert_initial_focus(profiles: ProfilesSettingsPage, expected: Control, frame: Rect2, viewport_size: Vector2i, state: String) -> void:
+	var initial_focus := profiles.initial_focus()
+	if initial_focus != expected:
+		_failures.append("%s Profiles initial focus mismatch at %dx%d" % [state, viewport_size.x, viewport_size.y])
+	_assert_visible_contained(initial_focus, frame, "%s Profiles initial focus" % state, viewport_size)
+	if initial_focus.focus_mode == Control.FOCUS_NONE:
+		_failures.append("%s Profiles initial focus is not focusable at %dx%d" % [state, viewport_size.x, viewport_size.y])
+	if initial_focus is LineEdit and not (initial_focus as LineEdit).editable:
+		_failures.append("%s Profiles initial focus is not editable at %dx%d" % [state, viewport_size.x, viewport_size.y])
+	if initial_focus is ItemList and (initial_focus as ItemList).item_count == 0:
+		_failures.append("%s Profiles initial list is empty at %dx%d" % [state, viewport_size.x, viewport_size.y])
 
 
 func _assert_focus(viewport: SubViewport, expected: Control, label: String) -> void:

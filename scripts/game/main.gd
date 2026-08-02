@@ -31,6 +31,8 @@ var catalog_valid := false
 var level_refresh_scheduled := false
 var saved_settings: PartyForgeSettings
 var settings_store: PartyForgeSettingsStore
+var profile_root := ProfileStore.DEFAULT_ROOT
+var profile_manager: ProfileManager
 var active_run_rules: RunRulesSnapshot
 var _level_up_offer_state := LevelUpOfferState.new()
 
@@ -41,7 +43,14 @@ func _ready() -> void:
 	_cache_nodes()
 	settings_store = PartyForgeSettingsStore.new()
 	saved_settings = settings_store.load_settings()
-	(get_node("SettingsScreen") as SettingsScreen).configure(settings_store, saved_settings)
+	profile_manager = ProfileManager.new()
+	var profile_error := profile_manager.bootstrap(profile_root)
+	if not profile_error.is_empty():
+		push_error(profile_error)
+	var settings_screen := get_node("SettingsScreen") as SettingsScreen
+	settings_screen.configure(settings_store, saved_settings, profile_manager)
+	if not profile_error.is_empty() or profile_manager.active_profile() == null:
+		settings_screen.open_profiles(get_node_or_null("HUD/ClassSelection/Content/Actions/Settings") as Control)
 	catalog = GameCatalog.load_defaults()
 	catalog_valid = _validate_catalog(catalog)
 	if not catalog_valid:
@@ -53,6 +62,10 @@ func _ready() -> void:
 func select_leader_class(class_id: StringName) -> bool:
 	if not initialized:
 		_ready()
+	if profile_manager == null or profile_manager.active_profile() == null:
+		push_error("PARTY_FORGE_RUN_PROFILE_REQUIRED")
+		(get_node("SettingsScreen") as SettingsScreen).open_profiles(get_node_or_null("HUD/ClassSelection/Content/Actions/Settings") as Control)
+		return false
 	if run_started or catalog == null or not catalog_valid:
 		return false
 	catalog_valid = _validate_catalog(catalog, false)
@@ -102,6 +115,9 @@ func select_leader_class(class_id: StringName) -> bool:
 	character_ledger.configure(game_run, party_manager, catalog, Callable(self, "_ledger_health_for_member"), [], active_run_rules.feature_policy(LEDGER_FEATURE_IDS))
 	game_run.start_run()
 	return true
+
+func active_profile() -> ProfileState:
+	return profile_manager.active_profile() if profile_manager != null else null
 
 func _apply_choice(choice: UpgradeChoice, report_error: bool = true) -> bool:
 	return _apply_choice_for_member(choice, 0, report_error)

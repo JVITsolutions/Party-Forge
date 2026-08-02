@@ -21,8 +21,13 @@ func run() -> Array[String]:
 	return failures
 
 func _test_developer_run_wires_party_only(failures: Array[String]) -> void:
+	var profile_root := "user://tests/combat_test_overrides-profiles_%d_%d" % [OS.get_process_id(), Time.get_ticks_usec()]
+	ProfileTestSupport.remove_tree(profile_root)
 	var main := MAIN_SCENE.instantiate()
+	main.set("profile_root", profile_root)
 	main.call(&"_ready")
+	(main.get("profile_manager") as ProfileManager).create_profile("Test Profile")
+	(main.get_node("SettingsScreen") as SettingsScreen).close()
 	var settings := main.get("saved_settings") as PartyForgeSettings
 	settings.mode = PartyForgeSettings.Mode.DEVELOPER_MODE
 	settings.god_mode = true
@@ -69,6 +74,7 @@ func _test_developer_run_wires_party_only(failures: Array[String]) -> void:
 
 	(Engine.get_main_loop() as SceneTree).paused = false
 	main.free()
+	ProfileTestSupport.remove_tree(profile_root)
 
 func _test_missing_policy_resets_party_floor(failures: Array[String]) -> void:
 	var actor := LEADER_SCENE.instantiate() as PartyActor

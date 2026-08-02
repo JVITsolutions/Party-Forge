@@ -92,8 +92,13 @@ func _test_ledger_catalog_policy_and_equipment_boundary(failures: Array[String])
 	party.free()
 
 func _test_main_reconfigures_policy_before_run_start(failures: Array[String]) -> void:
+	var profile_root := "user://tests/feature_access_integration-profiles_%d_%d" % [OS.get_process_id(), Time.get_ticks_usec()]
+	ProfileTestSupport.remove_tree(profile_root)
 	var main := (load("res://scenes/game/main.tscn") as PackedScene).instantiate()
+	main.set("profile_root", profile_root)
 	main.call("_ready")
+	(main.get("profile_manager") as ProfileManager).create_profile("Test Profile")
+	(main.get_node("SettingsScreen") as SettingsScreen).close()
 	var ledger := main.get_node("CharacterLedger") as CharacterLedger
 	var neutral_policy := ledger.get("_feature_policy") as FeatureAccessPolicy
 	TestAssertions.equal(neutral_policy.resolve(&"stats", FeatureAccessPolicy.State.DEVELOPER_PREVIEW), FeatureAccessPolicy.State.HIDDEN, "front end ledger starts with neutral Player Simulation access", failures)
@@ -111,6 +116,7 @@ func _test_main_reconfigures_policy_before_run_start(failures: Array[String]) ->
 	TestAssertions.equal(state_at_run_start[0], FeatureAccessPolicy.State.AVAILABLE, "active snapshot configures ledger before GameRun starts", failures)
 	(Engine.get_main_loop() as SceneTree).paused = false
 	main.free()
+	ProfileTestSupport.remove_tree(profile_root)
 
 func _gate_for(settings: PartyForgeSettings) -> LedgerFeatureGate:
 	var policy := RunRulesSnapshot.from_settings(settings).feature_policy(LEDGER_FEATURES, IMPLEMENTED_UNLOCKS)

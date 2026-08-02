@@ -6,23 +6,36 @@ signal settings_applied(settings: PartyForgeSettings)
 var _store: PartyForgeSettingsStore
 var _current_settings: PartyForgeSettings = PartyForgeSettings.new()
 var _draft: PartyForgeSettings = PartyForgeSettings.new()
+var _profile_manager: ProfileManager
 var _return_focus: Control
+var _pending_open := false
+var _pending_profiles_tab := false
 
 
 func _ready() -> void:
+	var should_open := _pending_open
+	var should_open_profiles := _pending_profiles_tab
 	process_mode = Node.PROCESS_MODE_ALWAYS
-	visible = false
+	visible = should_open
 	_notice().text = "Run-affecting changes apply when the next run starts."
 	_connect_additional_actions()
 	if not _technical_toggle().pressed.is_connected(_toggle_technical_details):
 		_technical_toggle().pressed.connect(_toggle_technical_details)
 	_clear_save_error_disclosure()
+	_pending_open = false
+	_pending_profiles_tab = false
+	if should_open:
+		if should_open_profiles:
+			_select_tab_control(_profiles_page())
+		call_deferred(&"_focus_active_page")
 
 
-func configure(store: PartyForgeSettingsStore, settings: PartyForgeSettings) -> void:
+func configure(store: PartyForgeSettingsStore, settings: PartyForgeSettings, profile_manager: ProfileManager = null) -> void:
 	_store = store
 	_current_settings = settings.copy() if settings != null else PartyForgeSettings.new()
 	_draft = _current_settings.copy()
+	_profile_manager = profile_manager
+	_profiles_page().bind(_profile_manager)
 
 
 func open(return_focus: Control = null) -> void:
@@ -34,12 +47,43 @@ func open(return_focus: Control = null) -> void:
 	_status().tooltip_text = ""
 	_clear_save_error_disclosure()
 	visible = true
+	if not is_inside_tree():
+		_pending_open = true
+		_pending_profiles_tab = false
+		return
+	_pending_open = false
 	_focus_active_page()
+
+
+func open_profiles(return_focus: Control = null) -> void:
+	open(return_focus)
+	if not is_inside_tree():
+		_pending_profiles_tab = true
+		return
+	_pending_profiles_tab = false
+	_select_tab_control(_profiles_page())
+	_focus_active_page()
+
+
+func _tab_index_for_control(control: Control) -> int:
+	var tabs := _tabs()
+	for index: int in range(tabs.get_tab_count()):
+		if tabs.get_tab_control(index) == control:
+			return index
+	return -1
+
+
+func _select_tab_control(control: Control) -> void:
+	var index := _tab_index_for_control(control)
+	if index >= 0:
+		_tabs().current_tab = index
 
 
 func close() -> void:
 	visible = false
-	if _return_focus != null and is_instance_valid(_return_focus) and _return_focus.is_inside_tree() and _return_focus.is_visible_in_tree():
+	_pending_open = false
+	_pending_profiles_tab = false
+	if is_inside_tree() and _return_focus != null and is_instance_valid(_return_focus) and _return_focus.is_inside_tree() and _return_focus.is_visible_in_tree():
 		_return_focus.grab_focus()
 	_return_focus = null
 
@@ -184,6 +228,10 @@ func _technical_details() -> LineEdit:
 
 func _additional_page() -> AdditionalSettingsPage:
 	return get_node("Overlay/Frame/Layout/Tabs/Additional Settings") as AdditionalSettingsPage
+
+
+func _profiles_page() -> ProfilesSettingsPage:
+	return get_node("Overlay/Frame/Layout/Tabs/Profiles") as ProfilesSettingsPage
 
 
 func _game_page() -> Node:

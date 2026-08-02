@@ -1,9 +1,10 @@
-[gd_scene load_steps=5 format=3]
+[gd_scene load_steps=6 format=3]
 
 [ext_resource type="Script" path="res://scripts/ui/settings/settings_screen.gd" id="1_settings"]
 [ext_resource type="PackedScene" path="res://scenes/ui/settings/game_settings_page.tscn" id="2_game"]
 [ext_resource type="PackedScene" path="res://scenes/ui/settings/controls_settings_page.tscn" id="2_controls"]
 [ext_resource type="PackedScene" path="res://scenes/ui/settings/additional_settings_page.tscn" id="3_additional"]
+[ext_resource type="PackedScene" path="res://scenes/ui/settings/profiles_settings_page.tscn" id="4_profiles"]
 
 [node name="SettingsScreen" type="CanvasLayer"]
 process_mode = 3
@@ -91,6 +92,11 @@ focus_mode = 2
 text = "Coming Soon"
 horizontal_alignment = 1
 vertical_alignment = 1
+
+[node name="Profiles" parent="Overlay/Frame/Layout/Tabs" instance=ExtResource("4_profiles")]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
 
 [node name="Additional Settings" parent="Overlay/Frame/Layout/Tabs" instance=ExtResource("3_additional")]
 layout_mode = 2

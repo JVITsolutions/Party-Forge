@@ -3,10 +3,12 @@ extends RefCounted
 const SETTINGS_SCENE_PATH := "res://scenes/ui/settings/settings_screen.tscn"
 const GAME_SETTINGS_SCENE_PATH := "res://scenes/ui/settings/game_settings_page.tscn"
 const ADDITIONAL_SETTINGS_SCENE_PATH := "res://scenes/ui/settings/additional_settings_page.tscn"
+const PROFILES_SETTINGS_SCENE_PATH := "res://scenes/ui/settings/profiles_settings_page.tscn"
 
 
 func run() -> Array[String]:
 	var failures: Array[String] = []
+	_test_pre_tree_profile_navigation_state(failures)
 	_test_game_settings_page(failures)
 	_test_additional_settings_page(failures)
 	_test_settings_apply_cancel_and_save_error(failures)
@@ -25,7 +27,7 @@ func run() -> Array[String]:
 	return_focus.name = "SettingsReturnFocus"
 
 	var tabs := screen.get_node("Overlay/Frame/Layout/Tabs") as TabContainer
-	var expected := ["Game Settings", "Controls", "Graphics", "Audio", "Additional Settings"]
+	var expected := ["Game Settings", "Controls", "Graphics", "Audio", "Profiles", "Additional Settings"]
 	var actual: Array[String] = []
 	for index: int in range(tabs.get_tab_count()):
 		actual.append(tabs.get_tab_title(index))
@@ -36,6 +38,7 @@ func run() -> Array[String]:
 	TestAssertions.equal(screen.get_node_or_null("Overlay/Frame/Layout/Tabs/Controls/Content/State"), null, "Controls has no legacy hidden Task 4 state seam", failures)
 	TestAssertions.equal(screen.get_node("Overlay/Frame/Layout/Tabs/Graphics/Content/State").text, "Coming Soon", "Graphics is honest about availability", failures)
 	TestAssertions.equal(screen.get_node("Overlay/Frame/Layout/Tabs/Audio/Content/State").text, "Coming Soon", "Audio is honest about availability", failures)
+	TestAssertions.truthy(screen.get_node_or_null("Overlay/Frame/Layout/Tabs/Profiles") is ProfilesSettingsPage, "Profiles tab contains the functional profile page", failures)
 	TestAssertions.truthy(screen.get_node_or_null("Overlay/Frame/Layout/Tabs/Additional Settings/Layout/Mode") != null, "Additional Settings tab contains functional controls", failures)
 	TestAssertions.equal(screen.get_node("Overlay/Frame/Layout/NextRunNotice").text, "Run-affecting changes apply when the next run starts.", "Settings shows the next-run notice", failures)
 	TestAssertions.equal(screen.process_mode, Node.PROCESS_MODE_ALWAYS, "Settings processes while gameplay is paused", failures)
@@ -45,13 +48,28 @@ func run() -> Array[String]:
 	var supplied := PartyForgeSettings.new()
 	supplied.mode = PartyForgeSettings.Mode.DEVELOPER_MODE
 	supplied.party_capacity_override = 12
-	screen.call("configure", PartyForgeSettingsStore.new(), supplied)
+	var profile_root := "user://tests/settings_screen_profiles_%d_%d" % [OS.get_process_id(), Time.get_ticks_usec()]
+	ProfileTestSupport.remove_tree(profile_root)
+	var profile_manager := ProfileManager.new()
+	TestAssertions.equal(profile_manager.bootstrap(profile_root), "", "Settings profile fixture bootstraps", failures)
+	screen.call("configure", PartyForgeSettingsStore.new(), supplied, profile_manager)
 	supplied.party_capacity_override = 2
 	var draft := screen.call("current_settings") as PartyForgeSettings
 	TestAssertions.equal(draft.party_capacity_override, 12, "Settings drafts a copy of supplied values", failures)
 	draft.party_capacity_override = 3
 	TestAssertions.equal((screen.call("current_settings") as PartyForgeSettings).party_capacity_override, 12, "Current settings returns an isolated copy", failures)
 	_test_active_page_focus(screen, tabs, failures)
+	var profiles_return_focus := Button.new()
+	profiles_return_focus.name = "ProfilesReturnFocus"
+	var profiles_page := screen.get_node("Overlay/Frame/Layout/Tabs/Profiles") as ProfilesSettingsPage
+	profiles_page.call("_ready")
+	screen.call("open_profiles", profiles_return_focus)
+	TestAssertions.truthy(screen.has_method(&"_tab_index_for_control"), "Settings exposes its control-identity tab resolver", failures)
+	if screen.has_method(&"_tab_index_for_control"):
+		TestAssertions.equal(screen.call("_tab_index_for_control", profiles_page), 4, "open_profiles resolves Profiles by control identity", failures)
+	TestAssertions.equal(profiles_page.initial_focus(), screen.get_node("Overlay/Frame/Layout/Tabs/Profiles/Layout/CreateRow/ProfileName"), "open_profiles uses the page's deterministic initial target", failures)
+	TestAssertions.equal(screen.get("_return_focus"), profiles_return_focus, "open_profiles preserves return focus", failures)
+	screen.call("close")
 
 	screen.call("open", return_focus)
 	TestAssertions.truthy(bool(screen.call("is_open")), "Settings opens modally", failures)
@@ -62,7 +80,49 @@ func run() -> Array[String]:
 
 	screen.free()
 	return_focus.free()
+	profiles_return_focus.free()
+	ProfileTestSupport.remove_tree(profile_root)
 	return failures
+
+
+func _test_pre_tree_profile_navigation_state(failures: Array[String]) -> void:
+	var packed := load(SETTINGS_SCENE_PATH) as PackedScene
+	if packed == null:
+		return
+	var requested := packed.instantiate() as SettingsScreen
+	var return_focus := Button.new()
+	requested.open_profiles(return_focus)
+	TestAssertions.truthy(_has_property(requested, &"_pending_open"), "Settings exposes bounded pending-open state", failures)
+	TestAssertions.truthy(_has_property(requested, &"_pending_profiles_tab"), "Settings exposes bounded pending-Profiles state", failures)
+	if _has_property(requested, &"_pending_open"):
+		TestAssertions.truthy(bool(requested.get("_pending_open")), "pre-tree open_profiles records a pending open", failures)
+	if _has_property(requested, &"_pending_profiles_tab"):
+		TestAssertions.truthy(bool(requested.get("_pending_profiles_tab")), "pre-tree open_profiles records the Profiles tab", failures)
+	TestAssertions.equal(requested.get("_return_focus"), return_focus, "pre-tree open_profiles preserves return focus", failures)
+	requested.close()
+	if _has_property(requested, &"_pending_open"):
+		TestAssertions.truthy(not bool(requested.get("_pending_open")), "pre-tree close cancels pending open", failures)
+	if _has_property(requested, &"_pending_profiles_tab"):
+		TestAssertions.truthy(not bool(requested.get("_pending_profiles_tab")), "pre-tree close cancels pending Profiles tab", failures)
+	TestAssertions.equal(requested.get("_return_focus"), null, "pre-tree close clears pending return focus", failures)
+	requested.free()
+	return_focus.free()
+
+	var startup := packed.instantiate() as SettingsScreen
+	startup.call("_ready")
+	TestAssertions.truthy(not startup.is_open(), "Settings without a pending request starts hidden", failures)
+	if _has_property(startup, &"_pending_open"):
+		TestAssertions.truthy(not bool(startup.get("_pending_open")), "normal startup has no pending open", failures)
+	if _has_property(startup, &"_pending_profiles_tab"):
+		TestAssertions.truthy(not bool(startup.get("_pending_profiles_tab")), "normal startup has no pending Profiles tab", failures)
+	startup.free()
+
+
+func _has_property(object: Object, property_name: StringName) -> bool:
+	for property: Dictionary in object.get_property_list():
+		if StringName(property.get("name", "")) == property_name:
+			return true
+	return false
 
 
 func _test_game_settings_page(failures: Array[String]) -> void:

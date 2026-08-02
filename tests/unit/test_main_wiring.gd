@@ -34,6 +34,8 @@ const REQUIRED_MAIN_NODES: PackedStringArray = [
     "DeveloperModeBadge", "CharacterLedger", "RunPauseMenu",
 ]
 
+var _profile_root := ""
+
 func run() -> Array[String]:
     var failures: Array[String] = []
     var all_exist := true
@@ -43,7 +45,10 @@ func run() -> Array[String]:
         all_exist = all_exist and exists
     if not all_exist:
         return failures
+    _profile_root = "user://tests/main_wiring-profiles_%d_%d" % [OS.get_process_id(), Time.get_ticks_usec()]
+    ProfileTestSupport.remove_tree(_profile_root)
     _test_main_scene_graph(failures)
+    _test_profile_boot_and_developer_gate(failures)
     _test_settings_and_next_run_snapshot_wiring(failures)
     _test_integrated_overlay_input_and_front_end_seam(failures)
     _test_hud_contract(failures)
@@ -61,7 +66,35 @@ func run() -> Array[String]:
     _test_result_panel_requests_once(failures)
     _test_visual_language(failures)
     _test_catalog_error_format(failures)
+    ProfileTestSupport.remove_tree(_profile_root)
     return failures
+
+func _test_profile_boot_and_developer_gate(failures: Array[String]) -> void:
+    var profile_root := "user://tests/main_wiring-profile-gate_%d_%d" % [OS.get_process_id(), Time.get_ticks_usec()]
+    ProfileTestSupport.remove_tree(profile_root)
+    var main := (load("res://scenes/game/main.tscn") as PackedScene).instantiate() as PartyForgeMain
+    main.set("profile_root", profile_root)
+    main.call("_ready")
+    var manager := main.get("profile_manager") as ProfileManager
+    var settings := main.get_node("SettingsScreen") as SettingsScreen
+    TestAssertions.truthy(manager != null, "main exposes one ProfileManager", failures)
+    TestAssertions.equal(settings.get("_profile_manager"), manager, "Settings receives the main ProfileManager", failures)
+    TestAssertions.equal(manager.profiles().size(), 0, "fresh main does not auto-create a profile", failures)
+    var developer_settings := PartyForgeSettings.new()
+    developer_settings.mode = PartyForgeSettings.Mode.DEVELOPER_MODE
+    developer_settings.unlock_all_implemented_content = true
+    main.set("saved_settings", developer_settings)
+    TestAssertions.truthy(not main.select_leader_class(&"fighter"), "Developer Mode Unlock All cannot bypass the profile requirement", failures)
+    TestAssertions.equal(manager.profiles().size(), 0, "Developer Mode Unlock All grants no profile", failures)
+    TestAssertions.truthy(not bool(main.get("run_started")), "profile gate leaves Developer Mode gameplay unstarted", failures)
+    var created := manager.create_profile("Test Profile")
+    TestAssertions.truthy(created.ok(), "main profile fixture creates through the production manager", failures)
+    settings.close()
+    TestAssertions.truthy(main.select_leader_class(&"fighter"), "selected profile preserves Fighter arena launch", failures)
+    TestAssertions.truthy(bool(main.get("run_started")) and main.get("leader") != null, "profile-backed launch preserves current run state", failures)
+    (Engine.get_main_loop() as SceneTree).paused = false
+    main.free()
+    ProfileTestSupport.remove_tree(profile_root)
 
 func _test_settings_and_next_run_snapshot_wiring(failures: Array[String]) -> void:
     var original_files := _backup_default_settings_artifacts()
@@ -72,7 +105,7 @@ func _test_settings_and_next_run_snapshot_wiring(failures: Array[String]) -> voi
     player_settings.god_mode = true
     TestAssertions.equal(store.save_settings(player_settings), "", "Player Simulation fixture saves", failures)
     var player_main := (load("res://scenes/game/main.tscn") as PackedScene).instantiate()
-    player_main.call("_ready")
+    _prepare_main(player_main)
     var selector := player_main.get_node("HUD/ClassSelection") as ClassSelectionPanel
     var settings_screen := player_main.get_node("SettingsScreen") as SettingsScreen
     selector.settings_requested.emit()
@@ -96,7 +129,7 @@ func _test_settings_and_next_run_snapshot_wiring(failures: Array[String]) -> voi
     developer_settings.experience_multiplier_percent = 150
     TestAssertions.equal(store.save_settings(developer_settings), "", "Developer Mode fixture saves", failures)
     var developer_main := (load("res://scenes/game/main.tscn") as PackedScene).instantiate()
-    developer_main.call("_ready")
+    _prepare_main(developer_main)
     TestAssertions.truthy(developer_main.call("select_leader_class", &"fighter"), "Developer Mode fixture starts", failures)
     var active_rules := developer_main.get("active_run_rules") as RunRulesSnapshot
     var saved_settings := developer_main.get("saved_settings") as PartyForgeSettings
@@ -144,6 +177,7 @@ func _test_integrated_overlay_input_and_front_end_seam(failures: Array[String]) 
     var tree := Engine.get_main_loop() as SceneTree
     tree.paused = false
     var main := (load("res://scenes/game/main.tscn") as PackedScene).instantiate()
+    _prepare_main(main)
     tree.root.add_child(main)
     TestAssertions.truthy(main.call("select_leader_class", &"fighter"), "integration fixture starts an active run", failures)
     var ledger := main.get_node("CharacterLedger") as CharacterLedger
@@ -211,7 +245,7 @@ func _test_exact_choice_panel(failures: Array[String]) -> void:
 
 func _test_class_selection_starts_run_and_applies_choices(failures: Array[String]) -> void:
     var main := (load("res://scenes/game/main.tscn") as PackedScene).instantiate()
-    main.call("_ready")
+    _prepare_main(main)
     TestAssertions.equal(main.get("run_started"), false, "run timer waits at class selection", failures)
     var selector := main.get_node("HUD/ClassSelection")
     selector.call("configure", GameCatalog.load_defaults().classes)
@@ -254,7 +288,7 @@ func _test_class_selection_starts_run_and_applies_choices(failures: Array[String
         &"rogue", &"frost_mage", &"warlock", &"marksman",
     ]:
         var class_main := (load("res://scenes/game/main.tscn") as PackedScene).instantiate()
-        class_main.call("_ready")
+        _prepare_main(class_main)
         TestAssertions.truthy(class_main.call("select_leader_class", class_id), "%s direct selection succeeds" % class_id, failures)
         var class_party := class_main.get_node("PartyManager") as PartyManager
         if not class_party.members.is_empty():
@@ -444,7 +478,7 @@ func _test_capped_stat_is_disabled_without_hiding(failures: Array[String]) -> vo
 
 func _test_run_offer_seed_and_snapshot_wiring(failures: Array[String]) -> void:
     var reset_main := (load("res://scenes/game/main.tscn") as PackedScene).instantiate()
-    reset_main.call("_ready")
+    _prepare_main(reset_main)
     var has_offer_state := reset_main.get_property_list().any(
         func(property: Dictionary) -> bool: return property["name"] == &"_level_up_offer_state"
     )
@@ -596,7 +630,7 @@ func _test_boss_level_up_resumes_boss(failures: Array[String]) -> void:
 
 func _test_catalog_gate_blocks_public_start(failures: Array[String]) -> void:
     var main := (load("res://scenes/game/main.tscn") as PackedScene).instantiate()
-    main.call("_ready")
+    _prepare_main(main)
     var has_gate := false
     for property: Dictionary in main.get_property_list():
         if property["name"] == &"catalog_valid":
@@ -668,16 +702,24 @@ func _mesh_color(node: Node3D) -> Color:
 
 func _started_main() -> Node:
     var main := (load("res://scenes/game/main.tscn") as PackedScene).instantiate()
-    main.call("_ready")
+    _prepare_main(main)
     main.call("select_leader_class", &"fighter")
     return main
 
 func _started_main_with_settings(settings: PartyForgeSettings) -> Node:
     var main := (load("res://scenes/game/main.tscn") as PackedScene).instantiate()
-    main.call("_ready")
+    _prepare_main(main)
     main.set("saved_settings", settings.copy())
     main.call("select_leader_class", &"fighter")
     return main
+
+func _prepare_main(main: Node) -> void:
+    main.set("profile_root", _profile_root)
+    main.call("_ready")
+    var manager := main.get("profile_manager") as ProfileManager
+    if manager.active_profile() == null:
+        manager.create_profile("Test Profile")
+    (main.get_node("SettingsScreen") as SettingsScreen).close()
 
 func _present_test_offer(main: Node, run_seed: int, pending_count: int = 1) -> void:
     var game_run := main.get_node("GameRun") as GameRun
