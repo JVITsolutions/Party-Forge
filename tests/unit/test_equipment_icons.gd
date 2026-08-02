@@ -1,28 +1,37 @@
 extends RefCounted
 
-const FIGHTER_IDS: Array[StringName] = [
-	&"forge_vanguard_helmet", &"forge_vanguard_armour", &"forge_vanguard_greaves",
-	&"forge_vanguard_gauntlets", &"forge_vanguard_boots", &"forge_vanguard_amulet",
-	&"forge_vanguard_ring_left", &"forge_vanguard_ring_right", &"forge_vanguard_belt",
-	&"forge_vanguard_sword", &"forge_vanguard_shield", &"forge_vanguard_hammer",
-]
+const SET_FOLDERS := {
+	&"fighter": &"forge_vanguard", &"paladin": &"dawn_bulwark", &"ranger": &"greenwood",
+	&"marksman": &"siege_archer", &"rogue": &"nightstep", &"mage": &"emberweave",
+	&"frost_mage": &"rime_scholar", &"cleric": &"storm_chaplain", &"warlock": &"grave_covenant",
+}
 
 func run() -> Array[String]:
 	var failures: Array[String] = []
-	for item_id: StringName in FIGHTER_IDS:
-		var visual := load("res://data/presentation/equipment/forge_vanguard/%s.tres" % item_id) as EquipmentVisualDefinition
-		TestAssertions.truthy(visual != null, "%s visual loads for icon validation" % item_id, failures)
-		if visual == null:
-			continue
-		_assert_icon(visual.icon_master, 256, item_id, "master", failures)
-		_assert_icon(visual.icon_runtime, 128, item_id, "runtime", failures)
+	var hashes := {256: {}, 128: {}}
+	for set_id: StringName in ClassEquipmentRows.SET_ITEM_IDS:
+		var folder := StringName(SET_FOLDERS[set_id])
+		for item_id: StringName in ClassEquipmentRows.SET_ITEM_IDS[set_id]:
+			for size: int in [256, 128]:
+				var kind := "master" if size == 256 else "runtime"
+				var path := "res://assets/ui/equipment/%s/%s/%s_%d.png" % [kind, folder, item_id, size]
+				var image := Image.new()
+				TestAssertions.equal(image.load(ProjectSettings.globalize_path(path)), OK, "%s %s icon loads" % [item_id, kind], failures)
+				if image.is_empty():
+					continue
+				_assert_icon(image, size, item_id, kind, failures)
+				var digest := _image_digest(image)
+				TestAssertions.truthy(not (hashes[size] as Dictionary).has(digest), "%s %s pixels differ from %s" % [item_id, kind, (hashes[size] as Dictionary).get(digest, &"<none>")], failures)
+				(hashes[size] as Dictionary)[digest] = item_id
 	return failures
 
-func _assert_icon(texture: Texture2D, expected_size: int, item_id: StringName, kind: String, failures: Array[String]) -> void:
-	TestAssertions.truthy(texture != null, "%s %s icon exists" % [item_id, kind], failures)
-	if texture == null:
-		return
-	var image := texture.get_image()
+func _image_digest(image: Image) -> String:
+	var context := HashingContext.new()
+	if context.start(HashingContext.HASH_SHA256) != OK or context.update(image.get_data()) != OK:
+		return ""
+	return context.finish().hex_encode()
+
+func _assert_icon(image: Image, expected_size: int, item_id: StringName, kind: String, failures: Array[String]) -> void:
 	TestAssertions.equal(image.get_width(), expected_size, "%s %s icon width" % [item_id, kind], failures)
 	TestAssertions.equal(image.get_height(), expected_size, "%s %s icon height" % [item_id, kind], failures)
 	var bounds := _visible_bounds(image)
