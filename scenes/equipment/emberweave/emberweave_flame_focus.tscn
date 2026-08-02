@@ -31,14 +31,20 @@ radial_segments = 10
 metadata/equipment_visual_id = &"emberweave_flame_focus"
 metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot/LeftShoulderPivot/LeftElbowPivot/LeftHandSocket"
 
-[node name="@MeshInstance3D@126" type="MeshInstance3D" parent="Attachment"]
+[node name="Geometry00" type="MeshInstance3D" parent="Attachment"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.08, 0)
 material_override = SubResource("StandardMaterial3D_qjro6")
 mesh = SubResource("SphereMesh_arb7e")
 metadata/palette_region = &"accent"
 
-[node name="@MeshInstance3D@127" type="MeshInstance3D" parent="Attachment"]
+[node name="Geometry01" type="MeshInstance3D" parent="Attachment"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.1, 0)
 material_override = SubResource("StandardMaterial3D_yywyy")
 mesh = SubResource("CylinderMesh_83e5o")
 metadata/palette_region = &"metal"
+
+[node name="ReadabilityAnchor" type="Node3D" parent="Attachment"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.08, -0.24)
+
+[node name="ActionOriginSocket" type="Node3D" parent="Attachment"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.08, -0.24)

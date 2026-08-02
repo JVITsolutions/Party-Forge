@@ -3927,8 +3927,6 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.08, -0.28, 0)
 [node name="RightHandSocket" type="Node3D" parent="HitPivot/BodyPivot/HipsPivot/TorsoPivot/RightShoulderPivot/RightElbowPivot"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.03, -0.22, 0)
 
-[node name="ProjectileLaunchSocket" type="Node3D" parent="HitPivot/BodyPivot/HipsPivot/TorsoPivot/RightShoulderPivot/RightElbowPivot/RightHandSocket"]
-
 [node name="MasculineForearm" type="Node3D" parent="HitPivot/BodyPivot/HipsPivot/TorsoPivot/RightShoulderPivot/RightElbowPivot"]
 metadata/body_preset = &"masculine"
 
@@ -4004,6 +4002,9 @@ metadata/palette_region = &"primary"
 [node name="BodyArmourSocket" type="Node3D" parent="HitPivot/BodyPivot/HipsPivot/TorsoPivot"]
 
 [node name="AmuletSocket" type="Node3D" parent="HitPivot/BodyPivot/HipsPivot/TorsoPivot"]
+
+[node name="BackSocket" type="Node3D" parent="HitPivot/BodyPivot/HipsPivot/TorsoPivot"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.12, 0.24)
 
 [node name="LeftHipPivot" type="Node3D" parent="HitPivot/BodyPivot/HipsPivot"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.17, -0.04, 0)

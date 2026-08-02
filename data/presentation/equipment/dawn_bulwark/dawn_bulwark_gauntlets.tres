@@ -22,3 +22,4 @@ item_colors = {&"primary": Color(0.87843137979507, 0.72549021244049, 0.309803932
 wearer_accent_channel = &"primary"
 weapon_animation_family_id = &""
 readability_channels = [&"silhouette"]
+attachment_role_id = &"wearable"

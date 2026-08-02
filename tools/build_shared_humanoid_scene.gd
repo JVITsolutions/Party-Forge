@@ -13,7 +13,7 @@ const SOCKET_PATHS := {
 	&"belt": "HitPivot/BodyPivot/HipsPivot/BeltSocket",
 	&"main_hand": "HitPivot/BodyPivot/HipsPivot/TorsoPivot/RightShoulderPivot/RightElbowPivot/RightHandSocket",
 	&"off_hand": "HitPivot/BodyPivot/HipsPivot/TorsoPivot/LeftShoulderPivot/LeftElbowPivot/LeftHandSocket",
-	&"projectile_launch": "HitPivot/BodyPivot/HipsPivot/TorsoPivot/RightShoulderPivot/RightElbowPivot/RightHandSocket/ProjectileLaunchSocket",
+	&"back": "HitPivot/BodyPivot/HipsPivot/TorsoPivot/BackSocket",
 }
 
 func _initialize() -> void:
@@ -34,6 +34,8 @@ func _initialize() -> void:
 	for socket_id: StringName in SOCKET_PATHS:
 		if not _ensure_socket(model, NodePath(String(SOCKET_PATHS[socket_id]))):
 			model.free(); return
+	var back_socket := model.get_node("HitPivot/BodyPivot/HipsPivot/TorsoPivot/BackSocket") as Node3D
+	back_socket.position = Vector3(0.0, 0.12, 0.24)
 	print("FORGE_HUMANOID_BUILD_STAGE sockets_done")
 	if not _configure_action_players(model):
 		model.free(); return

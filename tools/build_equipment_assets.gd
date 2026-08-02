@@ -58,7 +58,7 @@ func _write_procedural_item(set_id: StringName, item_id: StringName, slot: Strin
 			_add_wearable_geometry(attachment, set_id, item_id, slot, side)
 			root.add_child(attachment)
 	else:
-		var attachment := _new_attachment(item_id, String(SOCKETS[slot]))
+		var attachment := _new_attachment(item_id, _socket_for_item(item_id, slot))
 		_add_wearable_geometry(attachment, set_id, item_id, slot, "")
 		root.add_child(attachment)
 	_set_owners(root, root)
@@ -149,14 +149,51 @@ func _add_wearable_geometry(root: Node3D, set_id: StringName, item_id: StringNam
 				_add_sphere(root, 0.22, Vector3(0, 0.08, 0), &"accent", set_id)
 				_add_cylinder(root, 0.055, 0.38, Vector3(0, -0.10, 0), &"metal", set_id)
 			elif item_id in [&"storm_chaplain_holy_tome", &"grave_covenant_grimoire"]:
-				_add_box(root, Vector3(0.38, 0.50, 0.12), Vector3(0, 0.15, 0), &"leather", set_id)
-				_add_box(root, Vector3(0.25, 0.06, 0.14), Vector3(0, 0.15, -0.02), &"accent", set_id)
+				_add_box(root, Vector3(0.38, 0.50, 0.12), Vector3(0, 0.15, -0.08), &"leather", set_id)
+				_add_box(root, Vector3(0.25, 0.06, 0.14), Vector3(0, 0.15, -0.10), &"accent", set_id)
 			else:
 				_add_box(root, Vector3(0.10, 0.74, 0.06), Vector3(0, 0.34, 0), &"metal", set_id, Vector3(0, 0, -0.12 if side == "Right" else 0.12))
 				_add_box(root, Vector3(0.26, 0.06, 0.12), Vector3(0, -0.04, 0), &"accent", set_id)
+			_add_equipment_anchors(root, item_id, slot)
+
+func _add_equipment_anchors(root: Node3D, item_id: StringName, slot: StringName) -> void:
+	if slot not in [&"main_hand", &"off_hand"]:
+		return
+	var readability := Node3D.new()
+	readability.name = &"ReadabilityAnchor"
+	readability.position = _readability_anchor_position(item_id)
+	root.add_child(readability)
+	if item_id in [&"greenwood_light_quiver", &"siege_heavy_quiver"]:
+		return
+	var action_origin := Node3D.new()
+	action_origin.name = &"ActionOriginSocket"
+	action_origin.position = readability.position
+	root.add_child(action_origin)
+	if item_id in [&"greenwood_recurve_bow", &"siege_greatbow"]:
+		var launch := Node3D.new()
+		launch.name = &"ProjectileLaunchSocket"
+		launch.position = readability.position + Vector3(0.0, 0.0, -0.24 if item_id == &"siege_greatbow" else -0.18)
+		launch.rotation = Vector3(0.0, PI, 0.0)
+		root.add_child(launch)
+
+func _readability_anchor_position(item_id: StringName) -> Vector3:
+	if item_id in [&"forge_vanguard_sword"]: return Vector3(0, 0.62, 0)
+	if item_id in [&"forge_vanguard_shield", &"dawn_bulwark_shield"]: return Vector3(0.34, 0.55, 0.18)
+	if item_id in [&"forge_vanguard_hammer", &"sunforged_warhammer"]: return Vector3(0, 0.77, 0)
+	if item_id == &"greenwood_recurve_bow": return Vector3(0, 0.68, 0.03)
+	if item_id == &"siege_greatbow": return Vector3(0, 0.72, 0.03)
+	if item_id in [&"nightstep_dagger_main", &"nightstep_dagger_off"]: return Vector3(0, 0.68, 0)
+	if item_id in [&"emberweave_wand", &"grave_covenant_bone_wand"]: return Vector3(0, 0.68, 0)
+	if item_id == &"emberweave_flame_focus": return Vector3(0, 0.08, -0.24)
+	if item_id == &"rime_scholar_staff": return Vector3(0, 1.05, 0)
+	if item_id == &"storm_chaplain_sceptre": return Vector3(0, 0.72, 0)
+	if item_id in [&"storm_chaplain_holy_tome", &"grave_covenant_grimoire"]: return Vector3(0.19, 0.40, -0.17)
+	if item_id in [&"greenwood_light_quiver", &"siege_heavy_quiver"]: return Vector3(0, 0.35, 0)
+	return Vector3(0, 0.42, 0)
 
 func _add_box(parent: Node3D, size: Vector3, position: Vector3, region: StringName, set_id: StringName, rotation := Vector3.ZERO) -> void:
 	var mesh := MeshInstance3D.new()
+	mesh.name = _next_geometry_name(parent)
 	var box := BoxMesh.new(); box.size = size; mesh.mesh = box
 	mesh.position = position; mesh.rotation = rotation
 	_configure_mesh(mesh, region, set_id)
@@ -164,6 +201,7 @@ func _add_box(parent: Node3D, size: Vector3, position: Vector3, region: StringNa
 
 func _add_cylinder(parent: Node3D, radius: float, height: float, position: Vector3, region: StringName, set_id: StringName, rotation := Vector3.ZERO) -> void:
 	var mesh := MeshInstance3D.new()
+	mesh.name = _next_geometry_name(parent)
 	var cylinder := CylinderMesh.new(); cylinder.top_radius = radius; cylinder.bottom_radius = radius; cylinder.height = height; cylinder.radial_segments = 10; mesh.mesh = cylinder
 	mesh.position = position; mesh.rotation = rotation
 	_configure_mesh(mesh, region, set_id)
@@ -171,10 +209,18 @@ func _add_cylinder(parent: Node3D, radius: float, height: float, position: Vecto
 
 func _add_sphere(parent: Node3D, radius: float, position: Vector3, region: StringName, set_id: StringName) -> void:
 	var mesh := MeshInstance3D.new()
+	mesh.name = _next_geometry_name(parent)
 	var sphere := SphereMesh.new(); sphere.radius = radius; sphere.height = radius * 2.0; sphere.radial_segments = 12; sphere.rings = 6; mesh.mesh = sphere
 	mesh.position = position
 	_configure_mesh(mesh, region, set_id)
 	parent.add_child(mesh)
+
+func _next_geometry_name(parent: Node3D) -> StringName:
+	var mesh_count := 0
+	for child: Node in parent.get_children():
+		if child is MeshInstance3D:
+			mesh_count += 1
+	return StringName("Geometry%02d" % mesh_count)
 
 func _configure_mesh(mesh: MeshInstance3D, region: StringName, set_id: StringName) -> void:
 	mesh.set_meta(&"palette_region", region)
@@ -204,7 +250,8 @@ func _write_procedural_resources(set_id: StringName, item_id: StringName, slot: 
 	var family := _weapon_family(item_id)
 	var colors := SET_STYLES[set_id] as Dictionary
 	var color_text := "{&\"primary\": %s, &\"metal\": %s, &\"leather\": %s, &\"accent\": %s}" % [_color_literal(colors[&"primary"]), _color_literal(colors[&"metal"]), _color_literal(colors[&"leather"]), _color_literal(colors[&"accent"])]
-	var visual := "[gd_resource type=\"Resource\" script_class=\"EquipmentVisualDefinition\" load_steps=5 format=3]\n\n[ext_resource type=\"Script\" path=\"res://scripts/presentation/equipment_visual_definition.gd\" id=\"1\"]\n[ext_resource type=\"PackedScene\" path=\"%s\" id=\"2\"]\n[ext_resource type=\"Texture2D\" path=\"res://assets/ui/equipment/master/%s/%s_256.png\" id=\"3\"]\n[ext_resource type=\"Texture2D\" path=\"res://assets/ui/equipment/runtime/%s/%s_128.png\" id=\"4\"]\n\n[resource]\nscript = ExtResource(\"1\")\nid = &\"%s\"\nslot_id = &\"%s\"\ngeometry_key = &\"%s\"\nvisual_channels = [&\"geometry\", &\"silhouette\"]\nsupported_slot_ids = %s\npresentation_scene = ExtResource(\"2\")\nicon_master = ExtResource(\"3\")\nicon_runtime = ExtResource(\"4\")\nsocket_id = &\"%s\"\nbody_preset_ids = [&\"masculine\", &\"feminine\"]\ncombat_visible = true\nitem_colors = %s\nwearer_accent_channel = &\"primary\"\nweapon_animation_family_id = &\"%s\"\nreadability_channels = [&\"silhouette\"]\n" % [scene_path, folder, item_id, folder, item_id, item_id, slot, item_id, supported, SOCKETS[slot], color_text, family]
+	var visual := "[gd_resource type=\"Resource\" script_class=\"EquipmentVisualDefinition\" load_steps=5 format=3]\n\n[ext_resource type=\"Script\" path=\"res://scripts/presentation/equipment_visual_definition.gd\" id=\"1\"]\n[ext_resource type=\"PackedScene\" path=\"%s\" id=\"2\"]\n[ext_resource type=\"Texture2D\" path=\"res://assets/ui/equipment/master/%s/%s_256.png\" id=\"3\"]\n[ext_resource type=\"Texture2D\" path=\"res://assets/ui/equipment/runtime/%s/%s_128.png\" id=\"4\"]\n\n[resource]\nscript = ExtResource(\"1\")\nid = &\"%s\"\nslot_id = &\"%s\"\ngeometry_key = &\"%s\"\nvisual_channels = [&\"geometry\", &\"silhouette\"]\nsupported_slot_ids = %s\npresentation_scene = ExtResource(\"2\")\nicon_master = ExtResource(\"3\")\nicon_runtime = ExtResource(\"4\")\nsocket_id = &\"%s\"\nbody_preset_ids = [&\"masculine\", &\"feminine\"]\ncombat_visible = true\nitem_colors = %s\nwearer_accent_channel = &\"primary\"\nweapon_animation_family_id = &\"%s\"\nreadability_channels = [&\"silhouette\"]\n" % [scene_path, folder, item_id, folder, item_id, item_id, slot, item_id, supported, _socket_for_item(item_id, slot), color_text, family]
+	visual += _visual_contract_text(item_id, slot)
 	if not _write_text(visual_path, visual): return false
 	var armour_slot := slot in [&"helmet", &"body_armour", &"legs", &"gloves", &"boots"]
 	var tags := _required_tags(set_id, item_id, armour_slot)
@@ -322,6 +369,7 @@ func _write_item(id: StringName, slot: StringName) -> bool:
 			# modular runtime attachments and isolated icon capture remain visible.
 			attachment.visible = original.visible or id in [&"forge_vanguard_hammer", &"forge_vanguard_amulet", &"forge_vanguard_ring_left", &"forge_vanguard_ring_right"]
 			attachment.set_meta(&"equipment_socket_id", _attachment_socket(id, slot, source, original))
+			_add_equipment_anchors(attachment, id, slot)
 			_trace("meta_done item=%s node=%s" % [id, original.name])
 			root.add_child(attachment)
 			_trace("attach_done item=%s node=%s" % [id, original.name])
@@ -346,7 +394,8 @@ func _write_item(id: StringName, slot: StringName) -> bool:
 	var colors := "{&\"primary\": Color(0.8509804, 0.30980393, 0.30980393, 1), &\"metal\": Color(0.1882353, 0.227451, 0.278431, 1), &\"leather\": Color(0.290196, 0.203922, 0.14902, 1), &\"brass\": Color(0.713725, 0.545098, 0.227451, 1)}"
 	var visual_family := "one_hand_sword" if id == &"forge_vanguard_sword" else "sword_shield"
 	var base_family := visual_family if slot in [&"main_hand", &"off_hand"] else ""
-	var visual := "[gd_resource type=\"Resource\" script_class=\"EquipmentVisualDefinition\" load_steps=5 format=3]\n\n[ext_resource type=\"Script\" path=\"res://scripts/presentation/equipment_visual_definition.gd\" id=\"1\"]\n[ext_resource type=\"PackedScene\" path=\"%s\" id=\"2\"]\n[ext_resource type=\"Texture2D\" path=\"res://assets/ui/equipment/master/forge_vanguard/%s_256.png\" id=\"3\"]\n[ext_resource type=\"Texture2D\" path=\"res://assets/ui/equipment/runtime/forge_vanguard/%s_128.png\" id=\"4\"]\n\n[resource]\nscript = ExtResource(\"1\")\nid = &\"%s\"\nslot_id = &\"%s\"\ngeometry_key = &\"%s\"\nvisual_channels = [&\"geometry\", &\"silhouette\"]\nsupported_slot_ids = %s\npresentation_scene = ExtResource(\"2\")\nicon_master = ExtResource(\"3\")\nicon_runtime = ExtResource(\"4\")\nsocket_id = &\"%s\"\nbody_preset_ids = [&\"masculine\", &\"feminine\"]\ncombat_visible = %s\nitem_colors = %s\nwearer_accent_channel = &\"primary\"\nweapon_animation_family_id = &\"%s\"\nreadability_channels = [&\"silhouette\"]\n" % [scene_path, id, id, id, slot, id, supported, SOCKETS[slot], combat_visible, colors, visual_family]
+	var visual := "[gd_resource type=\"Resource\" script_class=\"EquipmentVisualDefinition\" load_steps=5 format=3]\n\n[ext_resource type=\"Script\" path=\"res://scripts/presentation/equipment_visual_definition.gd\" id=\"1\"]\n[ext_resource type=\"PackedScene\" path=\"%s\" id=\"2\"]\n[ext_resource type=\"Texture2D\" path=\"res://assets/ui/equipment/master/forge_vanguard/%s_256.png\" id=\"3\"]\n[ext_resource type=\"Texture2D\" path=\"res://assets/ui/equipment/runtime/forge_vanguard/%s_128.png\" id=\"4\"]\n\n[resource]\nscript = ExtResource(\"1\")\nid = &\"%s\"\nslot_id = &\"%s\"\ngeometry_key = &\"%s\"\nvisual_channels = [&\"geometry\", &\"silhouette\"]\nsupported_slot_ids = %s\npresentation_scene = ExtResource(\"2\")\nicon_master = ExtResource(\"3\")\nicon_runtime = ExtResource(\"4\")\nsocket_id = &\"%s\"\nbody_preset_ids = [&\"masculine\", &\"feminine\"]\ncombat_visible = %s\nitem_colors = %s\nwearer_accent_channel = &\"primary\"\nweapon_animation_family_id = &\"%s\"\nreadability_channels = [&\"silhouette\"]\n" % [scene_path, id, id, id, slot, id, supported, _socket_for_item(id, slot), combat_visible, colors, visual_family]
+	visual += _visual_contract_text(id, slot)
 	_trace("visual_write_begin item=%s" % id)
 	if not _write_text(visual_path, visual): _fail("visual write item=%s" % id); return false
 	_trace("visual_write_done item=%s" % id)
@@ -362,7 +411,22 @@ func _attachment_socket(item_id: StringName, slot: StringName, source: Node3D, o
 	# sockets. Every single-root item instead uses its visual definition socket.
 	if item_id in [&"forge_vanguard_gauntlets", &"forge_vanguard_boots"]:
 		return String(original.get_meta(&"equipment_socket_id", source.get_path_to(original.get_parent())))
+	return _socket_for_item(item_id, slot)
+
+func _socket_for_item(item_id: StringName, slot: StringName) -> String:
+	if item_id in [&"greenwood_light_quiver", &"siege_heavy_quiver"]:
+		return "HitPivot/BodyPivot/HipsPivot/TorsoPivot/BackSocket"
 	return String(SOCKETS[slot])
+
+func _visual_contract_text(item_id: StringName, slot: StringName) -> String:
+	if item_id in [&"greenwood_light_quiver", &"siege_heavy_quiver"]:
+		return "attachment_role_id = &\"back\"\nreadability_anchor_name = &\"ReadabilityAnchor\"\n"
+	if slot not in [&"main_hand", &"off_hand"]:
+		return "attachment_role_id = &\"wearable\"\n"
+	var text := "attachment_role_id = &\"held\"\nreadability_anchor_name = &\"ReadabilityAnchor\"\naction_origin_socket_name = &\"ActionOriginSocket\"\n"
+	if item_id in [&"greenwood_recurve_bow", &"siege_greatbow"]:
+		text += "projectile_launch_socket_name = &\"ProjectileLaunchSocket\"\n"
+	return text
 
 func _add_greaves(root: Node3D) -> void:
 	for side: String in ["Left", "Right"]:

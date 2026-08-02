@@ -118,6 +118,11 @@ func equipped_weapon_family() -> StringName:
 	return main.weapon_animation_family_id if main != null and not main.weapon_animation_family_id.is_empty() else &"unarmed"
 
 func socket_global_transform(socket_id: StringName) -> Transform3D:
+	if not String(socket_id).contains("/"):
+		for slot_id: StringName in [&"main_hand", &"off_hand"]:
+			var equipment_socket := _equipped_node_named(slot_id, socket_id)
+			if equipment_socket != null:
+				return equipment_socket.global_transform if equipment_socket.is_inside_tree() else _transform_without_tree(equipment_socket)
 	var socket := get_node_or_null(NodePath(String(socket_id))) as Node3D
 	if socket != null and socket.is_inside_tree():
 		return socket.global_transform
@@ -127,6 +132,38 @@ func socket_global_transform(socket_id: StringName) -> Transform3D:
 
 func has_equipment_slot(slot_id: StringName) -> bool:
 	return EquipmentSlotCatalog.is_valid(slot_id) and SLOT_SOCKET_PATHS.has(slot_id) and get_node_or_null(NodePath(String(SLOT_SOCKET_PATHS[slot_id]))) != null
+
+func equipped_anchor_names(slot_id: StringName) -> Array[StringName]:
+	var names: Array[StringName] = []
+	for attachment: Node3D in equipped_nodes.get(slot_id, []):
+		for node: Node in attachment.find_children("*", "Node3D", true, false):
+			var node_name := StringName(node.name)
+			if node_name in [&"ReadabilityAnchor", &"ActionOriginSocket", &"ProjectileLaunchSocket"] and node_name not in names:
+				names.append(node_name)
+	return names
+
+func equipment_anchor_global_transform(slot_id: StringName, anchor_name: StringName) -> Transform3D:
+	var anchor := _equipped_node_named(slot_id, anchor_name)
+	if anchor == null:
+		return global_transform if is_inside_tree() else _transform_without_tree(self)
+	return anchor.global_transform if anchor.is_inside_tree() else _transform_without_tree(anchor)
+
+func equipment_anchor_clearance(slot_id: StringName, anchor_name: StringName) -> float:
+	var anchor := _equipped_node_named(slot_id, anchor_name)
+	var arm_bounds := _body_arm_bounds()
+	if anchor == null or arm_bounds.is_empty():
+		return -1.0
+	var clearance := INF
+	var anchor_position := _transform_from_model(anchor).origin
+	for bounds: AABB in arm_bounds:
+		clearance = minf(clearance, _distance_to_aabb(anchor_position, bounds))
+	return clearance
+
+func equipment_visible_extent(slot_id: StringName) -> float:
+	var bounds := _equipment_bounds(slot_id)
+	if bounds.size == Vector3.ZERO:
+		return -1.0
+	return maxf(bounds.size.x, maxf(bounds.size.y, bounds.size.z))
 
 func visual_bounds() -> AABB:
 	var bounds := AABB()
@@ -266,6 +303,54 @@ func _all_meshes() -> Array[MeshInstance3D]:
 	for node: Node in find_children("*", "MeshInstance3D", true, false):
 		meshes.append(node as MeshInstance3D)
 	return meshes
+
+func _equipped_node_named(slot_id: StringName, node_name: StringName) -> Node3D:
+	for attachment: Node3D in equipped_nodes.get(slot_id, []):
+		if StringName(attachment.name) == node_name:
+			return attachment
+		var found := attachment.find_child(String(node_name), true, false) as Node3D
+		if found != null:
+			return found
+	return null
+
+func _equipment_bounds(slot_id: StringName) -> AABB:
+	var bounds := AABB()
+	var has_bounds := false
+	for attachment: Node3D in equipped_nodes.get(slot_id, []):
+		for mesh: MeshInstance3D in _meshes_including_root(attachment):
+			if not _is_effectively_visible(mesh) or mesh.mesh == null:
+				continue
+			var transformed := _transform_from_model(mesh) * mesh.get_aabb()
+			bounds = transformed if not has_bounds else bounds.merge(transformed)
+			has_bounds = true
+	return bounds
+
+func _body_arm_bounds() -> Array[AABB]:
+	var bounds: Array[AABB] = []
+	for mesh: MeshInstance3D in _all_meshes():
+		if not _is_effectively_visible(mesh) or mesh.mesh == null or not _is_body_arm_mesh(mesh):
+			continue
+		bounds.append(_transform_from_model(mesh) * mesh.get_aabb())
+	return bounds
+
+func _is_body_arm_mesh(mesh: MeshInstance3D) -> bool:
+	var path := String(get_path_to(mesh))
+	if "ShoulderPivot" not in path and "ElbowPivot" not in path:
+		return false
+	var cursor: Node = mesh
+	while cursor != null and cursor != self:
+		if cursor is Node3D and cursor.has_meta(&"body_preset"):
+			return true
+		cursor = cursor.get_parent()
+	return false
+
+func _distance_to_aabb(point: Vector3, bounds: AABB) -> float:
+	var closest := Vector3(
+		clampf(point.x, bounds.position.x, bounds.position.x + bounds.size.x),
+		clampf(point.y, bounds.position.y, bounds.position.y + bounds.size.y),
+		clampf(point.z, bounds.position.z, bounds.position.z + bounds.size.z)
+	)
+	return point.distance_to(closest)
 
 func _assign_unique_color(mesh: MeshInstance3D, color: Color) -> void:
 	var material := base_materials.get(mesh, mesh.material_override) as StandardMaterial3D

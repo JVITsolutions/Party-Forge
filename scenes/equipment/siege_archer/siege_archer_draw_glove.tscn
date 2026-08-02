@@ -22,16 +22,16 @@ size = Vector3(0.22, 0.22, 0.24)
 metadata/equipment_visual_id = &"siege_archer_draw_glove"
 metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot/LeftShoulderPivot/LeftElbowPivot/LeftHandSocket"
 
-[node name="@MeshInstance3D@64" type="MeshInstance3D" parent="Attachment"]
+[node name="Geometry00" type="MeshInstance3D" parent="Attachment"]
 material_override = SubResource("StandardMaterial3D_73yuo")
 mesh = SubResource("BoxMesh_i0in2")
 metadata/palette_region = &"leather"
 
-[node name="@Node3D@66" type="Node3D" parent="."]
+[node name="@Node3D@14" type="Node3D" parent="."]
 metadata/equipment_visual_id = &"siege_archer_draw_glove"
 metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot/RightShoulderPivot/RightElbowPivot/RightHandSocket"
 
-[node name="@MeshInstance3D@65" type="MeshInstance3D" parent="@Node3D@66"]
+[node name="Geometry00" type="MeshInstance3D" parent="@Node3D@14"]
 material_override = SubResource("StandardMaterial3D_7r5vj")
 mesh = SubResource("BoxMesh_w54nv")
 metadata/palette_region = &"leather"

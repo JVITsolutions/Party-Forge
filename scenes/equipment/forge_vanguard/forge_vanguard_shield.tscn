@@ -19,3 +19,9 @@ metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot/LeftShou
 material_override = SubResource("StandardMaterial3D_2fqxw")
 mesh = SubResource("BoxMesh_0ttht")
 metadata/palette_region = &"metal"
+
+[node name="ReadabilityAnchor" type="Node3D" parent="Attachment"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.34, 0.55, 0.18)
+
+[node name="ActionOriginSocket" type="Node3D" parent="Attachment"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.34, 0.55, 0.18)

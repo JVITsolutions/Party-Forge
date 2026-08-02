@@ -22,16 +22,16 @@ size = Vector3(0.22, 0.22, 0.24)
 metadata/equipment_visual_id = &"storm_chaplain_prayer_gloves"
 metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot/LeftShoulderPivot/LeftElbowPivot/LeftHandSocket"
 
-[node name="@MeshInstance3D@158" type="MeshInstance3D" parent="Attachment"]
+[node name="Geometry00" type="MeshInstance3D" parent="Attachment"]
 material_override = SubResource("StandardMaterial3D_d6vlq")
 mesh = SubResource("BoxMesh_tidoy")
 metadata/palette_region = &"leather"
 
-[node name="@Node3D@160" type="Node3D" parent="."]
+[node name="@Node3D@26" type="Node3D" parent="."]
 metadata/equipment_visual_id = &"storm_chaplain_prayer_gloves"
 metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot/RightShoulderPivot/RightElbowPivot/RightHandSocket"
 
-[node name="@MeshInstance3D@159" type="MeshInstance3D" parent="@Node3D@160"]
+[node name="Geometry00" type="MeshInstance3D" parent="@Node3D@26"]
 material_override = SubResource("StandardMaterial3D_nex05")
 mesh = SubResource("BoxMesh_qut0j")
 metadata/palette_region = &"leather"

@@ -33,19 +33,19 @@ size = Vector3(0.12, 0.58, 0.04)
 metadata/equipment_visual_id = &"storm_chaplain_vestments"
 metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot/BodyArmourSocket"
 
-[node name="@MeshInstance3D@152" type="MeshInstance3D" parent="Attachment"]
+[node name="Geometry00" type="MeshInstance3D" parent="Attachment"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.08, 0)
 material_override = SubResource("StandardMaterial3D_ycnr3")
 mesh = SubResource("BoxMesh_642t4")
 metadata/palette_region = &"primary"
 
-[node name="@MeshInstance3D@153" type="MeshInstance3D" parent="Attachment"]
+[node name="Geometry01" type="MeshInstance3D" parent="Attachment"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.2, 0)
 material_override = SubResource("StandardMaterial3D_6b847")
 mesh = SubResource("BoxMesh_kdxtr")
 metadata/palette_region = &"metal"
 
-[node name="@MeshInstance3D@154" type="MeshInstance3D" parent="Attachment"]
+[node name="Geometry02" type="MeshInstance3D" parent="Attachment"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.06, -0.18)
 material_override = SubResource("StandardMaterial3D_5kpx2")
 mesh = SubResource("BoxMesh_t4leo")

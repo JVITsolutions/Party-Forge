@@ -22,17 +22,17 @@ size = Vector3(0.27, 0.3, 0.38)
 metadata/equipment_visual_id = &"storm_chaplain_boots"
 metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/LeftHipPivot/LeftKneePivot/LeftFootPivot"
 
-[node name="@MeshInstance3D@161" type="MeshInstance3D" parent="Attachment"]
+[node name="Geometry00" type="MeshInstance3D" parent="Attachment"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.13, -0.04)
 material_override = SubResource("StandardMaterial3D_6l7ji")
 mesh = SubResource("BoxMesh_y5n4p")
 metadata/palette_region = &"leather"
 
-[node name="@Node3D@163" type="Node3D" parent="."]
+[node name="@Node3D@27" type="Node3D" parent="."]
 metadata/equipment_visual_id = &"storm_chaplain_boots"
 metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/RightHipPivot/RightKneePivot/RightFootPivot"
 
-[node name="@MeshInstance3D@162" type="MeshInstance3D" parent="@Node3D@163"]
+[node name="Geometry00" type="MeshInstance3D" parent="@Node3D@27"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.13, -0.04)
 material_override = SubResource("StandardMaterial3D_ygo6u")
 mesh = SubResource("BoxMesh_vnl70")

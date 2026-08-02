@@ -25,12 +25,12 @@ size = Vector3(0.16, 0.16, 0.04)
 metadata/equipment_visual_id = &"emberweave_rune_sash"
 metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/BeltSocket"
 
-[node name="@MeshInstance3D@122" type="MeshInstance3D" parent="Attachment"]
+[node name="Geometry00" type="MeshInstance3D" parent="Attachment"]
 material_override = SubResource("StandardMaterial3D_50g65")
 mesh = SubResource("BoxMesh_hjkrh")
 metadata/palette_region = &"leather"
 
-[node name="@MeshInstance3D@123" type="MeshInstance3D" parent="Attachment"]
+[node name="Geometry01" type="MeshInstance3D" parent="Attachment"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -0.2)
 material_override = SubResource("StandardMaterial3D_178vm")
 mesh = SubResource("BoxMesh_8pj5l")

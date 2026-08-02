@@ -22,3 +22,6 @@ item_colors = {&"primary": Color(0.84705883264542, 0.76470589637756, 0.415686279
 wearer_accent_channel = &"primary"
 weapon_animation_family_id = &"tome"
 readability_channels = [&"silhouette"]
+attachment_role_id = &"held"
+readability_anchor_name = &"ReadabilityAnchor"
+action_origin_socket_name = &"ActionOriginSocket"

@@ -48,28 +48,31 @@ radial_segments = 10
 
 [node name="Attachment" type="Node3D" parent="."]
 metadata/equipment_visual_id = &"siege_heavy_quiver"
-metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot/LeftShoulderPivot/LeftElbowPivot/LeftHandSocket"
+metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot/BackSocket"
 
-[node name="@MeshInstance3D@79" type="MeshInstance3D" parent="Attachment"]
+[node name="Geometry00" type="MeshInstance3D" parent="Attachment"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.08, 0)
 material_override = SubResource("StandardMaterial3D_2gjmi")
 mesh = SubResource("CylinderMesh_dyo8x")
 metadata/palette_region = &"leather"
 
-[node name="@MeshInstance3D@80" type="MeshInstance3D" parent="Attachment"]
+[node name="Geometry01" type="MeshInstance3D" parent="Attachment"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.07, 0.18, 0)
 material_override = SubResource("StandardMaterial3D_6302y")
 mesh = SubResource("CylinderMesh_pacdy")
 metadata/palette_region = &"metal"
 
-[node name="@MeshInstance3D@81" type="MeshInstance3D" parent="Attachment"]
+[node name="Geometry02" type="MeshInstance3D" parent="Attachment"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.18, 0)
 material_override = SubResource("StandardMaterial3D_44dab")
 mesh = SubResource("CylinderMesh_dryn1")
 metadata/palette_region = &"metal"
 
-[node name="@MeshInstance3D@82" type="MeshInstance3D" parent="Attachment"]
+[node name="Geometry03" type="MeshInstance3D" parent="Attachment"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.07, 0.18, 0)
 material_override = SubResource("StandardMaterial3D_i3djh")
 mesh = SubResource("CylinderMesh_vog8o")
 metadata/palette_region = &"metal"
+
+[node name="ReadabilityAnchor" type="Node3D" parent="Attachment"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.35, 0)

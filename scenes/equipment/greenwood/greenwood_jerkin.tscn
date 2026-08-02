@@ -22,13 +22,13 @@ size = Vector3(0.68, 0.12, 0.3)
 metadata/equipment_visual_id = &"greenwood_jerkin"
 metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot/BodyArmourSocket"
 
-[node name="@MeshInstance3D@32" type="MeshInstance3D" parent="Attachment"]
+[node name="Geometry00" type="MeshInstance3D" parent="Attachment"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.02, 0)
 material_override = SubResource("StandardMaterial3D_110nd")
 mesh = SubResource("BoxMesh_p2wh4")
 metadata/palette_region = &"leather"
 
-[node name="@MeshInstance3D@33" type="MeshInstance3D" parent="Attachment"]
+[node name="Geometry01" type="MeshInstance3D" parent="Attachment"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.22, 0)
 material_override = SubResource("StandardMaterial3D_iseno")
 mesh = SubResource("BoxMesh_jdtwp")

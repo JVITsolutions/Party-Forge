@@ -1,7 +1,8 @@
 extends SceneTree
 
 const MODEL_PATH := "res://scenes/characters/presentation/forge_humanoid_model.tscn"
-const LAUNCH_SOCKET := &"HitPivot/BodyPivot/HipsPivot/TorsoPivot/RightShoulderPivot/RightElbowPivot/RightHandSocket/ProjectileLaunchSocket"
+const ACTION_ORIGIN_SOCKET := &"ActionOriginSocket"
+const PROJECTILE_LAUNCH_SOCKET := &"ProjectileLaunchSocket"
 const SET_FOLDERS := {
 	&"fighter": &"forge_vanguard", &"paladin": &"dawn_bulwark", &"ranger": &"greenwood", &"marksman": &"siege_archer", &"rogue": &"nightstep",
 	&"mage": &"emberweave", &"frost_mage": &"rime_scholar", &"cleric": &"storm_chaplain", &"warlock": &"grave_covenant",
@@ -48,7 +49,8 @@ func _write_attack(attack_id: StringName, spec: Dictionary) -> bool:
 	if spec.has(&"impact"):
 		ext_lines += "[ext_resource type=\"PackedScene\" path=\"%s\" id=\"%d\"]\n" % [spec[&"impact"], next_id]
 		impact_ref = "ExtResource(\"%d\")" % next_id; next_id += 1
-	var body := "[resource]\nscript = ExtResource(\"1\")\nid = &\"%s_visual\"\nattack_id = &\"%s\"\naction_id = &\"%s\"\nrequired_event_name = &\"%s\"\nweapon_animation_family_id = &\"%s\"\nlaunch_socket_id = &\"%s\"\n" % [attack_id, attack_id, spec[&"action"], spec[&"event"], spec[&"family"], LAUNCH_SOCKET]
+	var launch_socket := PROJECTILE_LAUNCH_SOCKET if spec[&"family"] in [&"light_bow", &"greatbow"] else ACTION_ORIGIN_SOCKET
+	var body := "[resource]\nscript = ExtResource(\"1\")\nid = &\"%s_visual\"\nattack_id = &\"%s\"\naction_id = &\"%s\"\nrequired_event_name = &\"%s\"\nweapon_animation_family_id = &\"%s\"\nlaunch_socket_id = &\"%s\"\n" % [attack_id, attack_id, spec[&"action"], spec[&"event"], spec[&"family"], launch_socket]
 	if not projectile_ref.is_empty(): body += "projectile_scene = %s\n" % projectile_ref
 	if spec.has(&"scale"): body += "projectile_scale = %s\n" % _vector_literal(spec[&"scale"])
 	if not impact_ref.is_empty(): body += "impact_scene = %s\n" % impact_ref

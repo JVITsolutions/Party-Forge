@@ -22,17 +22,17 @@ size = Vector3(0.25, 0.44, 0.28)
 metadata/equipment_visual_id = &"greenwood_leggings"
 metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/LeftHipPivot"
 
-[node name="@MeshInstance3D@34" type="MeshInstance3D" parent="Attachment"]
+[node name="Geometry00" type="MeshInstance3D" parent="Attachment"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.23, 0)
 material_override = SubResource("StandardMaterial3D_0bcqq")
 mesh = SubResource("BoxMesh_3w2hi")
 metadata/palette_region = &"leather"
 
-[node name="@Node3D@36" type="Node3D" parent="."]
+[node name="@Node3D@10" type="Node3D" parent="."]
 metadata/equipment_visual_id = &"greenwood_leggings"
 metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/RightHipPivot"
 
-[node name="@MeshInstance3D@35" type="MeshInstance3D" parent="@Node3D@36"]
+[node name="Geometry00" type="MeshInstance3D" parent="@Node3D@10"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.23, 0)
 material_override = SubResource("StandardMaterial3D_a8mrd")
 mesh = SubResource("BoxMesh_f011m")

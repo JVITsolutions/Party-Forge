@@ -166,7 +166,7 @@ func _add_held_item_anchors(root: Node3D, item_id: StringName) -> void:
 		root.add_child(launch)
 ```
 
-Use these exact readability anchor positions: sword `(0, 0.62, 0)`, Fighter/Paladin shields `(0, 0.30, 0.12)`, hammer `(0, 0.77, 0)`, Ranger bow `(0, 0.34, 0.03)`, greatbow `(0, 0.52, 0.03)`, daggers `(0, 0.48, 0)`, wand `(0, 0.55, 0)`, focus `(0, 0.08, 0)`, staff `(0, 1.05, 0)`, sceptre `(0, 0.72, 0)`, tome/grimoire `(0, 0.24, 0)`, and quivers `(0, 0.35, 0)`. Add `BackSocket` at `HitPivot/BodyPivot/HipsPivot/TorsoPivot/BackSocket` with local position `(0, 0.12, 0.24)` and make both quiver attachment metadata paths target it.
+Start from the geometry-local readability anchors and tune only toward a real visible surface when the all-body clearance test proves the marker is still inside an animated arm silhouette. The verified positions are: sword `(0, 0.62, 0)`, Fighter/Paladin shields `(0.34, 0.55, 0.18)`, hammer `(0, 0.77, 0)`, Ranger bow `(0, 0.68, 0.03)`, greatbow `(0, 0.72, 0.03)`, daggers `(0, 0.68, 0)`, wand `(0, 0.68, 0)`, focus `(0, 0.08, -0.24)`, staff `(0, 1.05, 0)`, sceptre `(0, 0.72, 0)`, tome/grimoire `(0.19, 0.40, -0.17)`, and quivers `(0, 0.35, 0)`. Move tome/grimoire geometry outward by `-0.08` on local Z so the marker remains on the visible book instead of becoming a test-only point. Add `BackSocket` at `HitPivot/BodyPivot/HipsPivot/TorsoPivot/BackSocket` with local position `(0, 0.12, 0.24)` and make both quiver attachment metadata paths target it.
 
 Change attack profile generation to store `launch_socket_id = &"ProjectileLaunchSocket"`. Update `socket_global_transform()` so simple names resolve first inside equipped main-hand nodes, then off-hand nodes, then the shared model hierarchy.
 

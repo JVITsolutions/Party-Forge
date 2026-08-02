@@ -22,16 +22,16 @@ size = Vector3(0.22, 0.22, 0.24)
 metadata/equipment_visual_id = &"dawn_bulwark_gauntlets"
 metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot/LeftShoulderPivot/LeftElbowPivot/LeftHandSocket"
 
-[node name="@MeshInstance3D@14" type="MeshInstance3D" parent="Attachment"]
+[node name="Geometry00" type="MeshInstance3D" parent="Attachment"]
 material_override = SubResource("StandardMaterial3D_l3etr")
 mesh = SubResource("BoxMesh_koc5r")
 metadata/palette_region = &"metal"
 
-[node name="@Node3D@16" type="Node3D" parent="."]
+[node name="@Node3D@8" type="Node3D" parent="."]
 metadata/equipment_visual_id = &"dawn_bulwark_gauntlets"
 metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot/RightShoulderPivot/RightElbowPivot/RightHandSocket"
 
-[node name="@MeshInstance3D@15" type="MeshInstance3D" parent="@Node3D@16"]
+[node name="Geometry00" type="MeshInstance3D" parent="@Node3D@8"]
 material_override = SubResource("StandardMaterial3D_24dhx")
 mesh = SubResource("BoxMesh_734hw")
 metadata/palette_region = &"metal"

@@ -22,16 +22,16 @@ size = Vector3(0.22, 0.22, 0.24)
 metadata/equipment_visual_id = &"emberweave_spell_gloves"
 metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot/LeftShoulderPivot/LeftElbowPivot/LeftHandSocket"
 
-[node name="@MeshInstance3D@113" type="MeshInstance3D" parent="Attachment"]
+[node name="Geometry00" type="MeshInstance3D" parent="Attachment"]
 material_override = SubResource("StandardMaterial3D_o8fe5")
 mesh = SubResource("BoxMesh_6lyqv")
 metadata/palette_region = &"leather"
 
-[node name="@Node3D@115" type="Node3D" parent="."]
+[node name="@Node3D@20" type="Node3D" parent="."]
 metadata/equipment_visual_id = &"emberweave_spell_gloves"
 metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot/RightShoulderPivot/RightElbowPivot/RightHandSocket"
 
-[node name="@MeshInstance3D@114" type="MeshInstance3D" parent="@Node3D@115"]
+[node name="Geometry00" type="MeshInstance3D" parent="@Node3D@20"]
 material_override = SubResource("StandardMaterial3D_txgnc")
 mesh = SubResource("BoxMesh_i7de3")
 metadata/palette_region = &"leather"

@@ -33,20 +33,26 @@ size = Vector3(0.12, 0.25, 0.13)
 metadata/equipment_visual_id = &"sunforged_warhammer"
 metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot/RightShoulderPivot/RightElbowPivot/RightHandSocket"
 
-[node name="@MeshInstance3D@25" type="MeshInstance3D" parent="Attachment"]
+[node name="Geometry00" type="MeshInstance3D" parent="Attachment"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.34, 0)
 material_override = SubResource("StandardMaterial3D_3pht3")
 mesh = SubResource("CylinderMesh_tvwsy")
 metadata/palette_region = &"leather"
 
-[node name="@MeshInstance3D@26" type="MeshInstance3D" parent="Attachment"]
+[node name="Geometry01" type="MeshInstance3D" parent="Attachment"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.77, 0)
 material_override = SubResource("StandardMaterial3D_jfrmo")
 mesh = SubResource("BoxMesh_8ctl8")
 metadata/palette_region = &"metal"
 
-[node name="@MeshInstance3D@27" type="MeshInstance3D" parent="Attachment"]
+[node name="Geometry02" type="MeshInstance3D" parent="Attachment"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.77, 0)
 material_override = SubResource("StandardMaterial3D_vb13g")
 mesh = SubResource("BoxMesh_8q4jt")
 metadata/palette_region = &"accent"
+
+[node name="ReadabilityAnchor" type="Node3D" parent="Attachment"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.77, 0)
+
+[node name="ActionOriginSocket" type="Node3D" parent="Attachment"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.77, 0)

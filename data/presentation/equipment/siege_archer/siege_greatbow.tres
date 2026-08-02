@@ -22,3 +22,7 @@ item_colors = {&"primary": Color(0.34901961684227, 0.38039216399193, 0.231372550
 wearer_accent_channel = &"primary"
 weapon_animation_family_id = &"greatbow"
 readability_channels = [&"silhouette"]
+attachment_role_id = &"held"
+readability_anchor_name = &"ReadabilityAnchor"
+action_origin_socket_name = &"ActionOriginSocket"
+projectile_launch_socket_name = &"ProjectileLaunchSocket"

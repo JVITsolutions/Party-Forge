@@ -17,6 +17,13 @@ extends Resource
 @export var weapon_animation_family_id: StringName
 @export var launch_socket_id: StringName
 @export var readability_channels: Array[StringName] = []
+@export var readability_anchor_name: StringName
+@export var action_origin_socket_name: StringName
+@export var projectile_launch_socket_name: StringName
+@export var attachment_role_id: StringName = &"wearable"
+
+func is_held_item() -> bool:
+	return combat_visible and attachment_role_id == &"held"
 
 func validate() -> PackedStringArray:
 	var errors := PackedStringArray()
@@ -36,4 +43,8 @@ func validate() -> PackedStringArray:
 	if icon_master == null or icon_runtime == null: errors.append("equipment visual %s icon pair is incomplete" % id)
 	if combat_visible and (presentation_scene == null or socket_id.is_empty()): errors.append("equipment visual %s visible scene or socket is missing" % id)
 	if readability_channels.is_empty(): errors.append("equipment visual %s readability channels are empty" % id)
+	if attachment_role_id not in [&"wearable", &"held", &"back"]: errors.append("equipment visual %s attachment role %s is invalid" % [id, attachment_role_id])
+	if is_held_item() and (readability_anchor_name.is_empty() or action_origin_socket_name.is_empty()): errors.append("equipment visual %s held-item anchors are incomplete" % id)
+	if attachment_role_id == &"back" and readability_anchor_name.is_empty(): errors.append("equipment visual %s back readability anchor is missing" % id)
+	if is_held_item() and weapon_animation_family_id in [&"light_bow", &"greatbow"] and projectile_launch_socket_name.is_empty(): errors.append("equipment visual %s projectile launch socket is missing" % id)
 	return errors

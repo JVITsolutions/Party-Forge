@@ -2,7 +2,8 @@ extends RefCounted
 
 const LEADER_SCENE := preload("res://scenes/characters/leader.tscn")
 const COMPANION_SCENE := preload("res://scenes/characters/companion.tscn")
-const LAUNCH_SOCKET := &"HitPivot/BodyPivot/HipsPivot/TorsoPivot/RightShoulderPivot/RightElbowPivot/RightHandSocket/ProjectileLaunchSocket"
+const ACTION_ORIGIN_SOCKET := &"ActionOriginSocket"
+const PROJECTILE_LAUNCH_SOCKET := &"ProjectileLaunchSocket"
 const PROJECTILES := {
 	&"ranger_shot": ["res://scenes/combat/presentation/projectiles/ranger_arrow.tscn", Vector3.ONE],
 	&"marksman_heavy_shot": ["res://scenes/combat/presentation/projectiles/marksman_heavy_arrow.tscn", Vector3(1.45, 1.45, 1.45)],
@@ -58,7 +59,16 @@ func _test_specialized_launch_and_scale(failures: Array[String]) -> void:
 		var target := fixture[&"target"] as PartyActor
 		var root := fixture[&"root"] as Node3D
 		var presentation := _presentation(attack_id, String(PROJECTILES[attack_id][0]), PROJECTILES[attack_id][1] as Vector3)
-		var socket := (owner.get_node("Presentation") as CharacterPresentation).active_model.get_node(String(LAUNCH_SOCKET)) as Node3D
+		var model := (owner.get_node("Presentation") as CharacterPresentation).active_model as ForgeHumanoidModel
+		var socket: Node3D = null
+		for attachment: Node3D in model.equipped_nodes.get(&"main_hand", []):
+			socket = attachment.find_child(String(PROJECTILE_LAUNCH_SOCKET), true, false) as Node3D
+			if socket != null:
+				break
+		TestAssertions.truthy(socket != null, "%s uses an equipment-local launch socket" % attack_id, failures)
+		if socket == null:
+			root.free()
+			continue
 		socket.position += Vector3(0.67, 0.23, -0.19)
 		var expected_transform := _transform_without_tree(socket)
 		executor.execute(load("res://data/attacks/%s.tres" % attack_id) as AttackDefinition, target.get_combat_target(), presentation)
@@ -154,7 +164,7 @@ func _executor_fixture(attack_id: StringName) -> Dictionary:
 	var catalog := GameCatalog.load_defaults()
 	var party := PartyManager.new()
 	root.add_child(party)
-	party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
+	party.initialize(catalog.class_by_id(_class_for_attack(attack_id)), catalog.traits)
 	party.configure_combat(CombatRng.new(700), catalog.damage_types)
 	var owner := LEADER_SCENE.instantiate() as PartyActor
 	root.add_child(owner)
@@ -177,10 +187,20 @@ func _presentation(attack_id: StringName, scene_path: String, visual_scale: Vect
 	value.attack_id = attack_id
 	value.action_id = &"attack_slash"
 	value.required_event_name = &"release"
-	value.launch_socket_id = LAUNCH_SOCKET
+	value.launch_socket_id = PROJECTILE_LAUNCH_SOCKET if attack_id in [&"ranger_shot", &"marksman_heavy_shot"] else ACTION_ORIGIN_SOCKET
 	value.projectile_scene = load(scene_path) as PackedScene if not scene_path.is_empty() else null
 	value.projectile_scale = visual_scale
 	return value
+
+func _class_for_attack(attack_id: StringName) -> StringName:
+	match attack_id:
+		&"ranger_shot": return &"ranger"
+		&"marksman_heavy_shot": return &"marksman"
+		&"mage_burst": return &"mage"
+		&"frost_shard": return &"frost_mage"
+		&"cleric_bolt", &"cleric_heal": return &"cleric"
+		&"warlock_bolt": return &"warlock"
+	return &"fighter"
 
 func _first_projectile(root: Node) -> PartyProjectile:
 	for child: Node in root.get_children():

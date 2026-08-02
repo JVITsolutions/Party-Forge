@@ -22,16 +22,16 @@ size = Vector3(0.22, 0.22, 0.24)
 metadata/equipment_visual_id = &"nightstep_grip_gloves"
 metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot/LeftShoulderPivot/LeftElbowPivot/LeftHandSocket"
 
-[node name="@MeshInstance3D@90" type="MeshInstance3D" parent="Attachment"]
+[node name="Geometry00" type="MeshInstance3D" parent="Attachment"]
 material_override = SubResource("StandardMaterial3D_p2b3x")
 mesh = SubResource("BoxMesh_0cui3")
 metadata/palette_region = &"leather"
 
-[node name="@Node3D@92" type="Node3D" parent="."]
+[node name="@Node3D@17" type="Node3D" parent="."]
 metadata/equipment_visual_id = &"nightstep_grip_gloves"
 metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot/RightShoulderPivot/RightElbowPivot/RightHandSocket"
 
-[node name="@MeshInstance3D@91" type="MeshInstance3D" parent="@Node3D@92"]
+[node name="Geometry00" type="MeshInstance3D" parent="@Node3D@17"]
 material_override = SubResource("StandardMaterial3D_6ft4m")
 mesh = SubResource("BoxMesh_iopyq")
 metadata/palette_region = &"leather"

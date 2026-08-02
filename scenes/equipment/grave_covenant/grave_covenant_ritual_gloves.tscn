@@ -22,16 +22,16 @@ size = Vector3(0.22, 0.22, 0.24)
 metadata/equipment_visual_id = &"grave_covenant_ritual_gloves"
 metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot/LeftShoulderPivot/LeftElbowPivot/LeftHandSocket"
 
-[node name="@MeshInstance3D@182" type="MeshInstance3D" parent="Attachment"]
+[node name="Geometry00" type="MeshInstance3D" parent="Attachment"]
 material_override = SubResource("StandardMaterial3D_42pp3")
 mesh = SubResource("BoxMesh_dt33b")
 metadata/palette_region = &"leather"
 
-[node name="@Node3D@184" type="Node3D" parent="."]
+[node name="@Node3D@29" type="Node3D" parent="."]
 metadata/equipment_visual_id = &"grave_covenant_ritual_gloves"
 metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot/RightShoulderPivot/RightElbowPivot/RightHandSocket"
 
-[node name="@MeshInstance3D@183" type="MeshInstance3D" parent="@Node3D@184"]
+[node name="Geometry00" type="MeshInstance3D" parent="@Node3D@29"]
 material_override = SubResource("StandardMaterial3D_wti1v")
 mesh = SubResource("BoxMesh_ss07g")
 metadata/palette_region = &"leather"

@@ -25,14 +25,20 @@ size = Vector3(0.25, 0.06, 0.14)
 metadata/equipment_visual_id = &"grave_covenant_grimoire"
 metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot/LeftShoulderPivot/LeftElbowPivot/LeftHandSocket"
 
-[node name="@MeshInstance3D@195" type="MeshInstance3D" parent="Attachment"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.15, 0)
+[node name="Geometry00" type="MeshInstance3D" parent="Attachment"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.15, -0.08)
 material_override = SubResource("StandardMaterial3D_b827v")
 mesh = SubResource("BoxMesh_52xqm")
 metadata/palette_region = &"leather"
 
-[node name="@MeshInstance3D@196" type="MeshInstance3D" parent="Attachment"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.15, -0.02)
+[node name="Geometry01" type="MeshInstance3D" parent="Attachment"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.15, -0.1)
 material_override = SubResource("StandardMaterial3D_6wjnk")
 mesh = SubResource("BoxMesh_6txas")
 metadata/palette_region = &"accent"
+
+[node name="ReadabilityAnchor" type="Node3D" parent="Attachment"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.19, 0.4, -0.17)
+
+[node name="ActionOriginSocket" type="Node3D" parent="Attachment"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.19, 0.4, -0.17)

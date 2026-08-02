@@ -38,25 +38,34 @@ size = Vector3(0.025, 0.96, 0.025)
 metadata/equipment_visual_id = &"greenwood_recurve_bow"
 metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot/RightShoulderPivot/RightElbowPivot/RightHandSocket"
 
-[node name="@MeshInstance3D@48" type="MeshInstance3D" parent="Attachment"]
+[node name="Geometry00" type="MeshInstance3D" parent="Attachment"]
 transform = Transform3D(0.9427547, 0.3334871, 0, -0.3334871, 0.9427547, 0, 0, 0, 1, -0.14, 0.34, 0)
 material_override = SubResource("StandardMaterial3D_cgrqc")
 mesh = SubResource("BoxMesh_hw8me")
 metadata/palette_region = &"leather"
 
-[node name="@MeshInstance3D@49" type="MeshInstance3D" parent="Attachment"]
+[node name="Geometry01" type="MeshInstance3D" parent="Attachment"]
 transform = Transform3D(0.9427547, 0.3334871, 0, -0.3334871, 0.9427547, 0, 0, 0, 1, 0.14, -0.34, 0)
 material_override = SubResource("StandardMaterial3D_oiw6f")
 mesh = SubResource("BoxMesh_3cpsl")
 metadata/palette_region = &"leather"
 
-[node name="@MeshInstance3D@50" type="MeshInstance3D" parent="Attachment"]
+[node name="Geometry02" type="MeshInstance3D" parent="Attachment"]
 material_override = SubResource("StandardMaterial3D_npck6")
 mesh = SubResource("BoxMesh_n8bd7")
 metadata/palette_region = &"metal"
 
-[node name="@MeshInstance3D@51" type="MeshInstance3D" parent="Attachment"]
+[node name="Geometry03" type="MeshInstance3D" parent="Attachment"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0.03)
 material_override = SubResource("StandardMaterial3D_cl265")
 mesh = SubResource("BoxMesh_jjeuh")
 metadata/palette_region = &"accent"
+
+[node name="ReadabilityAnchor" type="Node3D" parent="Attachment"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.68, 0.03)
+
+[node name="ActionOriginSocket" type="Node3D" parent="Attachment"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.68, 0.03)
+
+[node name="ProjectileLaunchSocket" type="Node3D" parent="Attachment"]
+transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 0.68, -0.15)

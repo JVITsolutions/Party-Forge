@@ -22,3 +22,6 @@ item_colors = {&"primary": Color(0.35294118523598, 0.258823543787, 0.43137255311
 wearer_accent_channel = &"primary"
 weapon_animation_family_id = &"dual_daggers"
 readability_channels = [&"silhouette"]
+attachment_role_id = &"held"
+readability_anchor_name = &"ReadabilityAnchor"
+action_origin_socket_name = &"ActionOriginSocket"

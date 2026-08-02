@@ -48,28 +48,31 @@ radial_segments = 10
 
 [node name="Attachment" type="Node3D" parent="."]
 metadata/equipment_visual_id = &"greenwood_light_quiver"
-metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot/LeftShoulderPivot/LeftElbowPivot/LeftHandSocket"
+metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot/BackSocket"
 
-[node name="@MeshInstance3D@52" type="MeshInstance3D" parent="Attachment"]
+[node name="Geometry00" type="MeshInstance3D" parent="Attachment"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.08, 0)
 material_override = SubResource("StandardMaterial3D_xotim")
 mesh = SubResource("CylinderMesh_8n57n")
 metadata/palette_region = &"leather"
 
-[node name="@MeshInstance3D@53" type="MeshInstance3D" parent="Attachment"]
+[node name="Geometry01" type="MeshInstance3D" parent="Attachment"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.07, 0.18, 0)
 material_override = SubResource("StandardMaterial3D_jesa3")
 mesh = SubResource("CylinderMesh_v66ja")
 metadata/palette_region = &"metal"
 
-[node name="@MeshInstance3D@54" type="MeshInstance3D" parent="Attachment"]
+[node name="Geometry02" type="MeshInstance3D" parent="Attachment"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.18, 0)
 material_override = SubResource("StandardMaterial3D_hp7rt")
 mesh = SubResource("CylinderMesh_f6iyk")
 metadata/palette_region = &"metal"
 
-[node name="@MeshInstance3D@55" type="MeshInstance3D" parent="Attachment"]
+[node name="Geometry03" type="MeshInstance3D" parent="Attachment"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.07, 0.18, 0)
 material_override = SubResource("StandardMaterial3D_ff2lb")
 mesh = SubResource("CylinderMesh_qhayj")
 metadata/palette_region = &"metal"
+
+[node name="ReadabilityAnchor" type="Node3D" parent="Attachment"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.35, 0)

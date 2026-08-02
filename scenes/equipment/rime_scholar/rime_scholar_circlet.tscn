@@ -28,13 +28,13 @@ rings = 6
 metadata/equipment_visual_id = &"rime_scholar_circlet"
 metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot/HeadPivot/HelmetSocket"
 
-[node name="@MeshInstance3D@128" type="MeshInstance3D" parent="Attachment"]
+[node name="Geometry00" type="MeshInstance3D" parent="Attachment"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.1, 0)
 material_override = SubResource("StandardMaterial3D_e50bm")
 mesh = SubResource("BoxMesh_0dshn")
 metadata/palette_region = &"primary"
 
-[node name="@MeshInstance3D@129" type="MeshInstance3D" parent="Attachment"]
+[node name="Geometry01" type="MeshInstance3D" parent="Attachment"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.2, -0.16)
 material_override = SubResource("StandardMaterial3D_so0km")
 mesh = SubResource("SphereMesh_ft7vp")
