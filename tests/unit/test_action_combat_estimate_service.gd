@@ -3,6 +3,7 @@ extends RefCounted
 func run() -> Array[String]:
 	var failures: Array[String] = []
 	_test_action_aware_critical_estimate(failures)
+	_test_critical_chance_matches_runtime_bounds(failures)
 	_test_noncritical_mixed_damage(failures)
 	_test_invalid_damage_type_is_unavailable(failures)
 	return failures
@@ -26,6 +27,16 @@ func _test_action_aware_critical_estimate(failures: Array[String]) -> void:
 	TestAssertions.near(estimate.attacks_per_second, 2.0, 0.001, "attack speed divides authored cooldown", failures)
 	TestAssertions.near(estimate.estimated_dps, 44.55, 0.001, "DPS uses average hit and attacks per second", failures)
 	party.free()
+
+func _test_critical_chance_matches_runtime_bounds(failures: Array[String]) -> void:
+	var overcapped := _estimate_with_crit_modifier(2.0, &"overcapped_crit", failures)
+	TestAssertions.near(overcapped.average_hit, overcapped.critical_hit, 0.001, "overcapped crit chance averages at a certain critical hit", failures)
+	var negative := _estimate_with_crit_modifier(-1.0, &"negative_crit", failures)
+	TestAssertions.near(negative.average_hit, negative.normal_hit, 0.001, "negative crit chance averages at a normal hit", failures)
+	var nonfinite := _estimate_with_crit_modifier(NAN, &"nonfinite_crit", failures)
+	TestAssertions.truthy(not nonfinite.available, "non-finite crit chance makes estimate unavailable", failures)
+	TestAssertions.truthy(is_finite(nonfinite.average_hit), "unavailable non-finite crit chance exposes no NaN average", failures)
+	TestAssertions.truthy("critical chance" in nonfinite.unavailable_reason.to_lower(), "non-finite crit chance names the invalid boundary", failures)
 
 func _test_noncritical_mixed_damage(failures: Array[String]) -> void:
 	var catalog := GameCatalog.load_defaults()
@@ -62,3 +73,22 @@ func _component(type_id: StringName, amount: float) -> AttackDamageComponent:
 	result.damage_type_id = type_id
 	result.base_amount = amount
 	return result
+
+func _estimate_with_crit_modifier(value: float, source_id: StringName, failures: Array[String]) -> ActionCombatEstimate:
+	var definition := PartyManager.STAT_CATALOG.definition(&"crit_chance")
+	var had_minimum := definition.has_minimum
+	var had_maximum := definition.has_maximum
+	definition.has_minimum = false
+	definition.has_maximum = false
+	var catalog := GameCatalog.load_defaults()
+	var party := PartyManager.new()
+	party.initialize(catalog.class_by_id(&"ranger"), catalog.traits)
+	var source := StatModifierSource.create(source_id, &"test", "Critical Chance Boundary", 1, [
+		StatModifier.create(&"crit_chance", StatModifier.Operation.FLAT, value, source_id, "Critical Chance Boundary"),
+	])
+	TestAssertions.truthy(party.add_member_source(1, source), "%s source applies" % source_id, failures)
+	var estimate := ActionCombatEstimateService.estimate(catalog.class_by_id(&"ranger").primary_attack, 1, party, catalog.damage_types)
+	party.free()
+	definition.has_minimum = had_minimum
+	definition.has_maximum = had_maximum
+	return estimate

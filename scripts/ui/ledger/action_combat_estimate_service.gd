@@ -19,6 +19,9 @@ static func estimate(attack: AttackDefinition, member_id: int, party: PartyManag
 		return _unavailable(result, "Missing resolved character stats.")
 	result.can_crit = attack.can_crit
 	var crit_chance := action_stats.value(&"crit_chance", 0.0) if result.can_crit else 0.0
+	if not is_finite(crit_chance):
+		return _unavailable(result, "Invalid resolved critical chance.")
+	crit_chance = clampf(crit_chance, 0.0, 1.0)
 	var crit_multiplier := maxf(1.0, action_stats.value(&"crit_multiplier", 1.5))
 	for component: AttackDamageComponent in attack.damage_components:
 		if component == null:
