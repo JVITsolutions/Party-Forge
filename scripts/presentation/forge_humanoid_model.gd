@@ -189,14 +189,13 @@ func _apply_item_colors(root: Node3D, definition: EquipmentVisualDefinition) -> 
 		if material == null:
 			continue
 		var color: Variant = null
-		if region == definition.wearer_accent_channel:
+		if not definition.wearer_accent_channel.is_empty() and region == definition.wearer_accent_channel:
 			color = _primary_color
 		elif definition.item_colors.has(region):
 			color = definition.item_colors[region]
-		if typeof(color) != TYPE_COLOR:
-			continue
 		var unique_material := material.duplicate() as StandardMaterial3D
-		unique_material.albedo_color = color as Color
+		if typeof(color) == TYPE_COLOR:
+			unique_material.albedo_color = color as Color
 		mesh.material_override = unique_material
 		base_materials[mesh] = unique_material.duplicate() as StandardMaterial3D
 

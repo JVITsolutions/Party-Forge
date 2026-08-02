@@ -11,6 +11,7 @@ func run() -> Array[String]:
 	_test_palette_rebases_clean_materials_during_feedback(failures)
 	_test_equipment_inherits_active_feedback(failures)
 	_test_repeated_swap_and_clear_release_item_material_caches(failures)
+	_test_unmapped_equipment_material_inherits_and_restores_feedback(failures)
 	return failures
 
 func _test_failed_replacement_and_clear(failures: Array[String]) -> void:
@@ -160,6 +161,26 @@ func _test_repeated_swap_and_clear_release_item_material_caches(failures: Array[
 	TestAssertions.equal(model.base_materials.size(), 1, "clear releases all item material cache entries", failures)
 	_free_model(model)
 
+func _test_unmapped_equipment_material_inherits_and_restores_feedback(failures: Array[String]) -> void:
+	var definition := _visual(&"unmapped_feedback_item", &"main_hand", &"MainHandSocket", _unmapped_root_mesh_scene())
+	var base_color := Color(0.25, 0.5, 0.75, 1.0)
+	var model := _model_with_sockets([&"MainHandSocket"])
+	model.set_hit_weight(1.0)
+	model.set_downed(true)
+	TestAssertions.truthy(model.apply_equipment_visual(&"main_hand", definition), "unmapped material item equips under active feedback", failures)
+	var mesh := model.get_node("MainHandSocket/UnmappedRootMesh") as MeshInstance3D
+	var feedback_color := base_color.lerp(Color.WHITE, 0.7)
+	var grayscale := Color(feedback_color.get_luminance(), feedback_color.get_luminance(), feedback_color.get_luminance(), feedback_color.a)
+	TestAssertions.equal((mesh.material_override as StandardMaterial3D).albedo_color, grayscale, "unmapped material immediately receives hit and downed feedback", failures)
+	TestAssertions.truthy((mesh.material_override as StandardMaterial3D).emission_enabled, "unmapped material receives hit feedback emission", failures)
+	model.set_hit_weight(0.0)
+	var downed_color := base_color.get_luminance()
+	TestAssertions.equal((mesh.material_override as StandardMaterial3D).albedo_color, Color(downed_color, downed_color, downed_color, 1.0), "cleared hit restores downed unmapped base", failures)
+	TestAssertions.truthy(not (mesh.material_override as StandardMaterial3D).emission_enabled, "cleared hit removes unmapped feedback emission", failures)
+	model.set_downed(false)
+	TestAssertions.equal((mesh.material_override as StandardMaterial3D).albedo_color, base_color, "cleared downed restores clean unmapped base", failures)
+	_free_model(model)
+
 func _model_with_sockets(socket_ids: Array[StringName]) -> ForgeHumanoidModel:
 	var model := ForgeHumanoidModel.new()
 	var body := MeshInstance3D.new()
@@ -244,6 +265,14 @@ func _root_mesh_scene() -> PackedScene:
 	root.name = &"RootMesh"
 	root.set_meta(&"palette_region", &"metal")
 	root.material_override = StandardMaterial3D.new()
+	return _pack_scene(root)
+
+func _unmapped_root_mesh_scene() -> PackedScene:
+	var root := MeshInstance3D.new()
+	root.name = &"UnmappedRootMesh"
+	var material := StandardMaterial3D.new()
+	material.albedo_color = Color(0.25, 0.5, 0.75, 1.0)
+	root.material_override = material
 	return _pack_scene(root)
 
 func _pack_scene(root: Node3D) -> PackedScene:
