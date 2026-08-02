@@ -136,6 +136,8 @@ func visual_bounds() -> AABB:
 	return bounds
 
 func play_action(animation_id: StringName) -> bool:
+	if _is_downed:
+		return false
 	var player := find_child("AnimationPlayer", true, false) as AnimationPlayer
 	if player == null or not player.has_animation(animation_id):
 		return false

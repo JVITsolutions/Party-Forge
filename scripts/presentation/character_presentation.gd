@@ -104,12 +104,12 @@ func socket_global_transform(socket_id: StringName) -> Transform3D:
 	return value
 
 func play_attack(definition: AttackDefinition, target: CombatTarget = null) -> void:
-	if active_profile == null or definition == null:
+	if downed_locked or active_profile == null or definition == null:
 		return
 	var animation_id := StringName(active_profile.attack_animation_by_id.get(definition.id, &"idle"))
 	if animation_id == active_profile.idle_action_id:
-		play_idle()
-		locomotion_action_id = active_profile.idle_action_id
+		if play_idle():
+			locomotion_action_id = active_profile.idle_action_id
 		return
 	var previous_yaw := rotation.y
 	if target != null and target.is_available and is_instance_valid(target.actor):
@@ -119,7 +119,7 @@ func play_attack(definition: AttackDefinition, target: CombatTarget = null) -> v
 		rotation.y = previous_yaw
 
 func play_action(animation_id: StringName) -> bool:
-	return active_model != null and _call_bool(&"play_action", [animation_id])
+	return not downed_locked and active_model != null and _call_bool(&"play_action", [animation_id])
 
 func play_idle() -> bool:
 	return active_profile != null and play_action(active_profile.idle_action_id)
@@ -136,7 +136,7 @@ func update_locomotion(world_velocity: Vector3) -> bool:
 	return _apply_latest_locomotion()
 
 func flash_hit() -> void:
-	if active_model == null:
+	if downed_locked or active_model == null:
 		return
 	hit_remaining = HIT_DURATION
 	active_model.call(&"set_hit_weight", 1.0)
@@ -187,6 +187,8 @@ func _face_direction(direction: Vector3) -> void:
 	rotation.y = atan2(-planar.x, -planar.z)
 
 func _begin_transient(animation_id: StringName) -> bool:
+	if downed_locked:
+		return false
 	if not play_action(animation_id):
 		return false
 	transient_action_id = animation_id

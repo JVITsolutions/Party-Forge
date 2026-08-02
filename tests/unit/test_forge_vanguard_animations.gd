@@ -168,6 +168,11 @@ func _assert_downed_playback_contract(model: ForgeHumanoidModel, player: Animati
 	TestAssertions.equal(model.active_action_id, &"", "downed clears active walk action id", failures)
 	if body_pivot != null:
 		TestAssertions.equal(body_pivot.position, retained_position, "downed preserves current authored pose", failures)
+	TestAssertions.truthy(not model.play_action(&"walk"), "downed model rejects direct walk", failures)
+	TestAssertions.truthy(not model.play_action(&"attack_slash"), "downed model rejects direct attack", failures)
+	TestAssertions.truthy(not player.is_playing(), "downed action rejections leave player stopped", failures)
+	TestAssertions.truthy(player.get_queue().is_empty(), "downed action rejections leave queue empty", failures)
+	TestAssertions.equal(model.active_action_id, &"", "downed action rejections leave action id empty", failures)
 	model.set_downed(false)
 	TestAssertions.truthy(not player.is_playing(), "revival does not auto-resume walk in the model", failures)
 	TestAssertions.truthy(model.play_action(&"attack_slash"), "attack starts before downed stop", failures)

@@ -62,6 +62,8 @@ func run() -> Array[String]:
 		_test_unavailable_attack_target_retains_facing(failures)
 		_test_hit_transient_restores_latest_locomotion(failures)
 		_test_downed_blocks_and_revival_restores_locomotion(failures)
+		_test_downed_blocks_all_action_entry_points(failures)
+		_test_idle_fallback_commits_only_after_playback(failures)
 	_test_instances_keep_model_state_independent(failures)
 	_test_loadout_entry_owns_supported_ring_side(failures)
 	_test_item_base_presentations_validate_in_each_profile_array(failures)
@@ -356,6 +358,50 @@ func _test_downed_blocks_and_revival_restores_locomotion(failures: Array[String]
 		TestAssertions.truthy(not model.downed, "revival reaches model", failures)
 		TestAssertions.equal(model.current_action_id, &"walk", "revival restores stored moving state", failures)
 		TestAssertions.near(presentation.rotation.y, -PI / 2.0, 0.001, "revival restores stored movement facing", failures)
+	root.free()
+
+func _test_downed_blocks_all_action_entry_points(failures: Array[String]) -> void:
+	var root := _new_root("CharacterPresentationDownedActionGateTest")
+	var presentation := _new_presentation(root)
+	TestAssertions.truthy(presentation.apply_profile(_valid_profile(), Color.WHITE), "profile applies before downed action gate", failures)
+	var model := presentation.active_model as FakeCharacterModel
+	if model != null:
+		presentation.set_downed(true)
+		var played_count := model.played.size()
+		presentation.play_attack(_fighter_cleave())
+		var unknown_attack := AttackDefinition.new()
+		unknown_attack.id = &"unknown_attack"
+		presentation.play_attack(unknown_attack)
+		TestAssertions.truthy(not presentation.play_action(&"idle"), "direct idle is rejected while downed", failures)
+		TestAssertions.truthy(not presentation.play_action(&"walk"), "direct walk is rejected while downed", failures)
+		TestAssertions.truthy(not bool(presentation.call(&"_begin_transient", &"attack_slash")), "transient helper rejects while downed", failures)
+		presentation.flash_hit()
+		TestAssertions.truthy(presentation.update_locomotion(Vector3(3.0, 0.0, 0.0)), "downed locomotion stores movement without playback", failures)
+		TestAssertions.equal(model.current_action_id, &"", "downed action attempts leave model action empty", failures)
+		TestAssertions.equal(model.played.size(), played_count, "downed action attempts never reach model playback", failures)
+		TestAssertions.truthy(not presentation.transient_locked, "downed action attempts cannot acquire transient lock", failures)
+		TestAssertions.near(presentation.hit_remaining, 0.0, 0.001, "downed hit attempt does not start feedback timer", failures)
+		TestAssertions.near(model.hit_weight, 0.0, 0.001, "downed hit attempt does not change hit weight", failures)
+		presentation.set_downed(false)
+		TestAssertions.equal(model.current_action_id, &"walk", "revival restores movement stored while action-gated", failures)
+		TestAssertions.near(presentation.rotation.y, -PI / 2.0, 0.001, "revival restores stored facing after action gate", failures)
+	root.free()
+
+func _test_idle_fallback_commits_only_after_playback(failures: Array[String]) -> void:
+	var root := _new_root("CharacterPresentationRejectedIdleFallbackTest")
+	var presentation := _new_presentation(root)
+	TestAssertions.truthy(presentation.apply_profile(_valid_profile(), Color.WHITE), "profile applies before rejected idle fallback", failures)
+	var model := presentation.active_model as FakeCharacterModel
+	if model != null:
+		TestAssertions.truthy(presentation.update_locomotion(Vector3(0.0, 0.0, -2.0)), "walk starts before rejected idle fallback", failures)
+		model.rejected_actions = [&"idle"]
+		var unknown_attack := AttackDefinition.new()
+		unknown_attack.id = &"unknown_attack"
+		var retained_locomotion := presentation.locomotion_action_id
+		var retained_model_action := model.current_action_id
+		presentation.play_attack(unknown_attack)
+		TestAssertions.equal(presentation.locomotion_action_id, retained_locomotion, "rejected idle fallback preserves locomotion action id", failures)
+		TestAssertions.equal(model.current_action_id, retained_model_action, "rejected idle fallback preserves model action", failures)
 	root.free()
 
 func _test_instances_keep_model_state_independent(failures: Array[String]) -> void:
