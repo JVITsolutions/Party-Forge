@@ -2,6 +2,7 @@ extends SceneTree
 
 const SOURCE := preload("res://scenes/characters/presentation/forge_vanguard_body_source.tscn")
 const MODEL_SCRIPT := preload("res://scripts/presentation/forge_humanoid_model.gd")
+const ANIMATION_AUTHORING := preload("res://scripts/presentation/humanoid_animation_authoring.gd")
 const OUTPUT := "res://scenes/characters/presentation/forge_humanoid_model.tscn"
 const SOCKET_PATHS := {
 	&"helmet": "HitPivot/BodyPivot/HipsPivot/TorsoPivot/HeadPivot/HelmetSocket",
@@ -37,10 +38,62 @@ func _initialize() -> void:
 	var back_socket := model.get_node("HitPivot/BodyPivot/HipsPivot/TorsoPivot/BackSocket") as Node3D
 	back_socket.position = Vector3(0.0, 0.12, 0.24)
 	print("FORGE_HUMANOID_BUILD_STAGE sockets_done")
-	if not _configure_action_players(model):
+	if not _configure_authored_action_players(model):
 		model.free(); return
 	print("FORGE_HUMANOID_BUILD_STAGE save")
 	_save(model)
+
+func _configure_authored_action_players(model: Node3D) -> bool:
+	var action_player := model.get_node_or_null("AnimationPlayer") as AnimationPlayer
+	if action_player == null or not action_player.has_animation(&"hit_flinch"):
+		_fail("required source animation player or hit feedback is missing")
+		return false
+	action_player.callback_mode_method = AnimationMixer.ANIMATION_CALLBACK_MODE_METHOD_IMMEDIATE
+	var library := action_player.get_animation_library(&"")
+	if library == null:
+		_fail("default animation library is missing")
+		return false
+	var idle_ids: Array[StringName] = [&"idle", &"paladin_idle", &"ranger_idle", &"marksman_idle", &"rogue_idle", &"mage_idle", &"frost_mage_idle", &"cleric_idle", &"warlock_idle"]
+	for action_id: StringName in idle_ids:
+		var idle := ANIMATION_AUTHORING.build_idle(action_id) as Animation
+		if idle == null:
+			_fail("idle authoring failed action=%s" % action_id)
+			return false
+		if library.has_animation(action_id):
+			library.remove_animation(action_id)
+		library.add_animation(action_id, idle)
+	var attack_events := {
+		&"attack_slash": &"impact",
+		&"paladin_hammer_smite": &"impact",
+		&"ranger_quick_bow_shot": &"release",
+		&"marksman_heavy_bow_shot": &"release",
+		&"rogue_dagger_flurry": &"impact",
+		&"mage_fire_burst": &"release",
+		&"frost_staff_shard": &"release",
+		&"cleric_lightning_bolt": &"release",
+		&"cleric_healing_blessing": &"release",
+		&"warlock_chaos_bolt": &"release",
+	}
+	for action_id: StringName in attack_events:
+		var attack := ANIMATION_AUTHORING.build_attack(action_id, attack_events[action_id]) as Animation
+		if attack == null:
+			_fail("attack authoring failed action=%s" % action_id)
+			return false
+		if library.has_animation(action_id):
+			library.remove_animation(action_id)
+		library.add_animation(action_id, attack)
+	var feedback_player := AnimationPlayer.new()
+	feedback_player.name = &"FeedbackAnimationPlayer"
+	feedback_player.root_node = NodePath("..")
+	model.add_child(feedback_player)
+	var feedback_library := AnimationLibrary.new()
+	var feedback := action_player.get_animation(&"hit_flinch").duplicate(true) as Animation
+	for track_index: int in range(feedback.get_track_count() - 1, -1, -1):
+		if String(feedback.track_get_path(track_index)) != "HitPivot:position":
+			feedback.remove_track(track_index)
+	feedback_library.add_animation(&"hit_flinch", feedback)
+	feedback_player.add_animation_library(&"", feedback_library)
+	return true
 
 func _configure_action_players(model: Node3D) -> bool:
 	var action_player := model.get_node_or_null("AnimationPlayer") as AnimationPlayer
