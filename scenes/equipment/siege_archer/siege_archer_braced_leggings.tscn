@@ -1,0 +1,39 @@
+[gd_scene format=3]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_7vkjw"]
+albedo_color = Color(0.28627452, 0.23137255, 0.16470589, 1)
+metallic = 0.05
+roughness = 0.78
+
+[sub_resource type="BoxMesh" id="BoxMesh_7p2qh"]
+size = Vector3(0.25, 0.44, 0.28)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_sx3jn"]
+albedo_color = Color(0.28627452, 0.23137255, 0.16470589, 1)
+metallic = 0.05
+roughness = 0.78
+
+[sub_resource type="BoxMesh" id="BoxMesh_jwsmm"]
+size = Vector3(0.25, 0.44, 0.28)
+
+[node name="siege_archer_braced_leggings" type="Node3D"]
+
+[node name="Attachment" type="Node3D" parent="."]
+metadata/equipment_visual_id = &"siege_archer_braced_leggings"
+metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/LeftHipPivot"
+
+[node name="@MeshInstance3D@33" type="MeshInstance3D" parent="Attachment"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.23, 0)
+material_override = SubResource("StandardMaterial3D_7vkjw")
+mesh = SubResource("BoxMesh_7p2qh")
+metadata/palette_region = &"leather"
+
+[node name="@Node3D@35" type="Node3D" parent="."]
+metadata/equipment_visual_id = &"siege_archer_braced_leggings"
+metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/RightHipPivot"
+
+[node name="@MeshInstance3D@34" type="MeshInstance3D" parent="@Node3D@35"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.23, 0)
+material_override = SubResource("StandardMaterial3D_sx3jn")
+mesh = SubResource("BoxMesh_jwsmm")
+metadata/palette_region = &"leather"

@@ -2,9 +2,11 @@ extends SceneTree
 
 const IDS: Array[StringName] = ClassEquipmentRows.SET_ITEM_IDS[&"fighter"]
 const SOURCE_PATH := "res://scenes/characters/presentation/forge_vanguard_equipment_source.tscn"
-const SET_FOLDERS := {&"fighter": &"forge_vanguard", &"paladin": &"dawn_bulwark", &"rogue": &"nightstep"}
+const SET_FOLDERS := {&"fighter": &"forge_vanguard", &"paladin": &"dawn_bulwark", &"ranger": &"greenwood", &"marksman": &"siege_archer", &"rogue": &"nightstep"}
 const SET_STYLES := {
 	&"paladin": {&"primary": Color("e0b94f"), &"metal": Color("d7dce2"), &"leather": Color("553c28"), &"accent": Color("fff0a1")},
+	&"ranger": {&"primary": Color("4f7a4d"), &"metal": Color("59636a"), &"leather": Color("5a3f28"), &"accent": Color("83b86a")},
+	&"marksman": {&"primary": Color("59613b"), &"metal": Color("4b5157"), &"leather": Color("493b2a"), &"accent": Color("a89d5b")},
 	&"rogue": {&"primary": Color("5a426e"), &"metal": Color("4b5360"), &"leather": Color("282127"), &"accent": Color("8b5aa5")},
 }
 const SOCKETS := {&"helmet": "HitPivot/BodyPivot/HipsPivot/TorsoPivot/HeadPivot/HelmetSocket", &"body_armour": "HitPivot/BodyPivot/HipsPivot/TorsoPivot/BodyArmourSocket", &"legs": "HitPivot/BodyPivot/HipsPivot/LegsSocket", &"gloves": "HitPivot/BodyPivot/HipsPivot/GlovesSocket", &"boots": "HitPivot/BodyPivot/HipsPivot/BootsSocket", &"amulet": "HitPivot/BodyPivot/HipsPivot/TorsoPivot/AmuletSocket", &"belt": "HitPivot/BodyPivot/HipsPivot/BeltSocket", &"ring_left": "HitPivot/BodyPivot/HipsPivot/TorsoPivot/LeftShoulderPivot/LeftElbowPivot/LeftHandSocket", &"ring_right": "HitPivot/BodyPivot/HipsPivot/TorsoPivot/RightShoulderPivot/RightElbowPivot/RightHandSocket", &"main_hand": "HitPivot/BodyPivot/HipsPivot/TorsoPivot/RightShoulderPivot/RightElbowPivot/RightHandSocket", &"off_hand": "HitPivot/BodyPivot/HipsPivot/TorsoPivot/LeftShoulderPivot/LeftElbowPivot/LeftHandSocket"}
@@ -75,13 +77,15 @@ func _new_attachment(item_id: StringName, socket_path: String) -> Node3D:
 
 func _add_wearable_geometry(root: Node3D, set_id: StringName, item_id: StringName, slot: StringName, side: String) -> void:
 	var heavy := set_id == &"paladin"
+	var braced := set_id == &"marksman"
 	match slot:
 		&"helmet":
 			_add_box(root, Vector3(0.42 if heavy else 0.36, 0.30, 0.38), Vector3(0, 0.02, 0), &"metal" if heavy else &"leather", set_id)
 			_add_box(root, Vector3(0.08, 0.18, 0.08), Vector3(0, 0.24, 0), &"accent", set_id)
 		&"body_armour":
-			_add_box(root, Vector3(0.82 if heavy else 0.64, 0.72, 0.38 if heavy else 0.28), Vector3(0, -0.02, 0), &"metal" if heavy else &"leather", set_id)
-			_add_box(root, Vector3(0.92 if heavy else 0.68, 0.12, 0.44 if heavy else 0.30), Vector3(0, 0.22, 0), &"primary", set_id)
+			_add_box(root, Vector3(0.82 if heavy else (0.72 if braced else 0.64), 0.72, 0.38 if heavy else (0.32 if braced else 0.28)), Vector3(0, -0.02, 0), &"metal" if heavy else &"leather", set_id)
+			_add_box(root, Vector3(0.92 if heavy else (0.80 if braced else 0.68), 0.12, 0.44 if heavy else (0.34 if braced else 0.30)), Vector3(0, 0.22, 0), &"primary", set_id)
+			if braced: _add_box(root, Vector3(0.58, 0.12, 0.36), Vector3(0, -0.20, 0), &"metal", set_id)
 		&"legs":
 			_add_box(root, Vector3(0.25, 0.44, 0.28), Vector3(0, -0.23, 0), &"metal" if heavy else &"leather", set_id)
 		&"gloves":
@@ -103,6 +107,19 @@ func _add_wearable_geometry(root: Node3D, set_id: StringName, item_id: StringNam
 			elif item_id == &"dawn_bulwark_shield":
 				_add_box(root, Vector3(0.68, 0.78, 0.12), Vector3(0, 0.18, 0.12), &"metal", set_id)
 				_add_box(root, Vector3(0.12, 0.62, 0.15), Vector3(0, 0.18, 0.04), &"primary", set_id)
+			elif item_id in [&"greenwood_recurve_bow", &"siege_greatbow"]:
+				var great_bow := item_id == &"siege_greatbow"
+				var limb_height := 0.60 if great_bow else 0.43
+				var limb_width := 0.075 if great_bow else 0.055
+				_add_box(root, Vector3(limb_width, limb_height, 0.06), Vector3(-0.18 if great_bow else -0.14, 0.46 if great_bow else 0.34, 0), &"leather", set_id, Vector3(0, 0, -0.34))
+				_add_box(root, Vector3(limb_width, limb_height, 0.06), Vector3(0.18 if great_bow else 0.14, -0.46 if great_bow else -0.34, 0), &"leather", set_id, Vector3(0, 0, -0.34))
+				_add_box(root, Vector3(0.12, 0.30 if great_bow else 0.24, 0.09), Vector3.ZERO, &"metal", set_id)
+				_add_box(root, Vector3(0.025, 1.34 if great_bow else 0.96, 0.025), Vector3(0, 0, 0.03), &"accent", set_id)
+			elif item_id in [&"greenwood_light_quiver", &"siege_heavy_quiver"]:
+				var heavy_quiver := item_id == &"siege_heavy_quiver"
+				_add_cylinder(root, 0.15 if heavy_quiver else 0.12, 0.62 if heavy_quiver else 0.48, Vector3(0, 0.08, 0), &"leather", set_id)
+				for x: float in [-0.07, 0.0, 0.07]:
+					_add_cylinder(root, 0.018, 0.72 if heavy_quiver else 0.58, Vector3(x, 0.18, 0), &"metal", set_id)
 			else:
 				_add_box(root, Vector3(0.10, 0.74, 0.06), Vector3(0, 0.34, 0), &"metal", set_id, Vector3(0, 0, -0.12 if side == "Right" else 0.12))
 				_add_box(root, Vector3(0.26, 0.06, 0.12), Vector3(0, -0.04, 0), &"accent", set_id)
@@ -148,21 +165,24 @@ func _write_procedural_resources(set_id: StringName, item_id: StringName, slot: 
 	var visual := "[gd_resource type=\"Resource\" script_class=\"EquipmentVisualDefinition\" load_steps=5 format=3]\n\n[ext_resource type=\"Script\" path=\"res://scripts/presentation/equipment_visual_definition.gd\" id=\"1\"]\n[ext_resource type=\"PackedScene\" path=\"%s\" id=\"2\"]\n[ext_resource type=\"Texture2D\" path=\"res://assets/ui/equipment/master/%s/%s_256.png\" id=\"3\"]\n[ext_resource type=\"Texture2D\" path=\"res://assets/ui/equipment/runtime/%s/%s_128.png\" id=\"4\"]\n\n[resource]\nscript = ExtResource(\"1\")\nid = &\"%s\"\nslot_id = &\"%s\"\ngeometry_key = &\"%s\"\nvisual_channels = [&\"geometry\", &\"silhouette\"]\nsupported_slot_ids = %s\npresentation_scene = ExtResource(\"2\")\nicon_master = ExtResource(\"3\")\nicon_runtime = ExtResource(\"4\")\nsocket_id = &\"%s\"\nbody_preset_ids = [&\"masculine\", &\"feminine\"]\ncombat_visible = true\nitem_colors = %s\nwearer_accent_channel = &\"primary\"\nweapon_animation_family_id = &\"%s\"\nreadability_channels = [&\"silhouette\"]\n" % [scene_path, folder, item_id, folder, item_id, item_id, slot, item_id, supported, SOCKETS[slot], color_text, family]
 	if not _write_text(visual_path, visual): return false
 	var armour_slot := slot in [&"helmet", &"body_armour", &"legs", &"gloves", &"boots"]
-	var weapon := slot in [&"main_hand", &"off_hand"]
 	var tags := _required_tags(set_id, item_id, armour_slot)
-	var base := "[gd_resource type=\"Resource\" script_class=\"EquipmentBaseDefinition\" load_steps=3 format=3]\n\n[ext_resource type=\"Script\" path=\"res://scripts/equipment/equipment_base_definition.gd\" id=\"1\"]\n[ext_resource type=\"Resource\" path=\"%s\" id=\"2\"]\n\n[resource]\nscript = ExtResource(\"1\")\nid = &\"%s\"\ndisplay_name = \"%s\"\nitem_type_id = &\"%s\"\ncompatible_slot_ids = %s\nweight_class_id = &\"%s\"\nrequired_all_tags = %s\nhandedness_id = &\"%s\"\nweapon_family_id = &\"%s\"\nimplicit_family_id = &\"%s\"\npresentation = ExtResource(\"2\")\n" % [visual_path, item_id, String(item_id).replace("_", " ").capitalize(), _item_type(item_id, slot), supported, "weapon" if weapon else ("heavy" if set_id == &"paladin" and armour_slot else ("light" if armour_slot else "accessory")), _string_name_array(tags), "one_hand" if weapon else "none", family, folder]
+	var base := "[gd_resource type=\"Resource\" script_class=\"EquipmentBaseDefinition\" load_steps=3 format=3]\n\n[ext_resource type=\"Script\" path=\"res://scripts/equipment/equipment_base_definition.gd\" id=\"1\"]\n[ext_resource type=\"Resource\" path=\"%s\" id=\"2\"]\n\n[resource]\nscript = ExtResource(\"1\")\nid = &\"%s\"\ndisplay_name = \"%s\"\nitem_type_id = &\"%s\"\ncompatible_slot_ids = %s\nweight_class_id = &\"%s\"\nrequired_all_tags = %s\nhandedness_id = &\"%s\"\nreserved_slot_ids = %s\ncompatible_offhand_item_types = %s\nweapon_family_id = &\"%s\"\nimplicit_family_id = &\"%s\"\npresentation = ExtResource(\"2\")\n" % [visual_path, item_id, String(item_id).replace("_", " ").capitalize(), _item_type(item_id, slot), supported, _weight_class(set_id, item_id, armour_slot, slot), _string_name_array(tags), _handedness(item_id, slot), _string_name_array([&"off_hand"] if item_id in [&"greenwood_recurve_bow", &"siege_greatbow"] else []), _string_name_array([&"quiver"] if item_id in [&"greenwood_recurve_bow", &"siege_greatbow"] else []), family, folder]
 	return _write_text(base_path, base)
 
 func _weapon_family(item_id: StringName) -> StringName:
 	if item_id == &"sunforged_warhammer": return &"one_hand_hammer"
 	if item_id == &"dawn_bulwark_shield": return &"shield"
 	if item_id in [&"nightstep_dagger_main", &"nightstep_dagger_off"]: return &"dual_daggers"
+	if item_id in [&"greenwood_recurve_bow", &"greenwood_light_quiver"]: return &"light_bow"
+	if item_id in [&"siege_greatbow", &"siege_heavy_quiver"]: return &"greatbow"
 	return &""
 
 func _item_type(item_id: StringName, slot: StringName) -> StringName:
 	if item_id == &"sunforged_warhammer": return &"warhammer"
 	if item_id == &"dawn_bulwark_shield": return &"shield"
 	if item_id in [&"nightstep_dagger_main", &"nightstep_dagger_off"]: return &"dagger"
+	if item_id in [&"greenwood_recurve_bow", &"siege_greatbow"]: return &"bow"
+	if item_id in [&"greenwood_light_quiver", &"siege_heavy_quiver"]: return &"quiver"
 	if slot in [&"ring_left", &"ring_right"]: return &"ring"
 	return slot
 
@@ -170,8 +190,25 @@ func _required_tags(set_id: StringName, item_id: StringName, armour_slot: bool) 
 	if item_id == &"sunforged_warhammer": return [&"martial", &"one_hand_hammer"]
 	if item_id == &"dawn_bulwark_shield": return [&"martial", &"shield"]
 	if item_id in [&"nightstep_dagger_main", &"nightstep_dagger_off"]: return [&"dagger", &"dual_wield"]
-	if armour_slot: return [&"martial", &"vanguard"] if set_id == &"paladin" else [&"martial", &"skirmisher"]
+	if item_id in [&"greenwood_recurve_bow", &"greenwood_light_quiver"]: return [&"ranged", &"bow_light_medium"]
+	if item_id in [&"siege_greatbow", &"siege_heavy_quiver"]: return [&"ranged", &"greatbow"]
+	if armour_slot:
+		if set_id == &"paladin": return [&"martial", &"vanguard"]
+		if set_id == &"rogue": return [&"martial", &"skirmisher"]
+		if set_id in [&"ranger", &"marksman"]: return [&"ranged"]
 	return []
+
+func _weight_class(set_id: StringName, item_id: StringName, armour_slot: bool, slot: StringName) -> StringName:
+	if slot in [&"main_hand", &"off_hand"]: return &"weapon"
+	if not armour_slot: return &"accessory"
+	if set_id == &"paladin": return &"heavy"
+	if set_id == &"marksman" and item_id in [&"siege_archer_coat", &"siege_archer_braced_leggings"]: return &"medium"
+	return &"light"
+
+func _handedness(item_id: StringName, slot: StringName) -> StringName:
+	if item_id in [&"greenwood_recurve_bow", &"siege_greatbow"]: return &"two_hand"
+	if item_id in [&"greenwood_light_quiver", &"siege_heavy_quiver"]: return &"none"
+	return &"one_hand" if slot in [&"main_hand", &"off_hand"] else &"none"
 
 func _string_name_array(values: Array) -> String:
 	var parts: PackedStringArray = []

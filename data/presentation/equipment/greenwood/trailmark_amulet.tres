@@ -1,0 +1,24 @@
+[gd_resource type="Resource" script_class="EquipmentVisualDefinition" load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://scripts/presentation/equipment_visual_definition.gd" id="1"]
+[ext_resource type="PackedScene" path="res://scenes/equipment/greenwood/trailmark_amulet.tscn" id="2"]
+[ext_resource type="Texture2D" path="res://assets/ui/equipment/master/greenwood/trailmark_amulet_256.png" id="3"]
+[ext_resource type="Texture2D" path="res://assets/ui/equipment/runtime/greenwood/trailmark_amulet_128.png" id="4"]
+
+[resource]
+script = ExtResource("1")
+id = &"trailmark_amulet"
+slot_id = &"amulet"
+geometry_key = &"trailmark_amulet"
+visual_channels = [&"geometry", &"silhouette"]
+supported_slot_ids = [&"amulet"]
+presentation_scene = ExtResource("2")
+icon_master = ExtResource("3")
+icon_runtime = ExtResource("4")
+socket_id = &"HitPivot/BodyPivot/HipsPivot/TorsoPivot/AmuletSocket"
+body_preset_ids = [&"masculine", &"feminine"]
+combat_visible = true
+item_colors = {&"primary": Color(0.3098039329052, 0.47843137383461, 0.30196079611778, 1.0), &"metal": Color(0.34901961684227, 0.38823530077934, 0.41568627953529, 1.0), &"leather": Color(0.35294118523598, 0.24705882370472, 0.15686275064945, 1.0), &"accent": Color(0.5137255191803, 0.72156864404678, 0.41568627953529, 1.0)}
+wearer_accent_channel = &"primary"
+weapon_animation_family_id = &""
+readability_channels = [&"silhouette"]

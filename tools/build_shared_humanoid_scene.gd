@@ -62,13 +62,29 @@ func _configure_action_players(model: Node3D) -> bool:
 	_offset_rotation_tracks(rogue_idle, {"TorsoPivot:rotation": Vector3(0.10, 0, 0), "LeftShoulderPivot:rotation": Vector3(-0.12, 0, 0.18), "RightShoulderPivot:rotation": Vector3(-0.12, 0, -0.18)})
 	var paladin_attack := _scaled_action(action_player.get_animation(&"attack_slash"), 0.86, 0.58)
 	var rogue_attack := _scaled_action(action_player.get_animation(&"attack_slash"), 0.28, 0.16)
-	if paladin_attack == null or rogue_attack == null:
+	var ranger_idle := action_player.get_animation(&"idle").duplicate(true) as Animation
+	ranger_idle.loop_mode = Animation.LOOP_LINEAR
+	_offset_rotation_tracks(ranger_idle, {"TorsoPivot:rotation": Vector3(0.05, -0.06, 0), "LeftShoulderPivot:rotation": Vector3(-0.18, -0.12, 0.18), "RightShoulderPivot:rotation": Vector3(-0.22, 0.18, -0.20), "LeftHipPivot:rotation": Vector3(0, 0, -0.04), "RightHipPivot:rotation": Vector3(0, 0, 0.04)})
+	var marksman_idle := action_player.get_animation(&"idle").duplicate(true) as Animation
+	marksman_idle.loop_mode = Animation.LOOP_LINEAR
+	_offset_rotation_tracks(marksman_idle, {"TorsoPivot:rotation": Vector3(-0.10, 0.08, 0), "LeftShoulderPivot:rotation": Vector3(-0.28, -0.18, 0.25), "RightShoulderPivot:rotation": Vector3(-0.34, 0.26, -0.28), "LeftHipPivot:rotation": Vector3(0, 0, -0.20), "RightHipPivot:rotation": Vector3(0, 0, 0.20)})
+	var ranger_attack := _scaled_action(action_player.get_animation(&"attack_slash"), 0.42, 0.18, &"release")
+	var marksman_attack := _scaled_action(action_player.get_animation(&"attack_slash"), 1.55, 1.15, &"release")
+	if ranger_attack != null:
+		_offset_rotation_tracks(ranger_attack, {"TorsoPivot:rotation": Vector3(0.06, -0.10, 0), "LeftShoulderPivot:rotation": Vector3(-0.22, -0.18, 0.20), "RightShoulderPivot:rotation": Vector3(-0.28, 0.22, -0.24), "LeftHipPivot:rotation": Vector3(0, 0, -0.04), "RightHipPivot:rotation": Vector3(0, 0, 0.04)})
+	if marksman_attack != null:
+		_offset_rotation_tracks(marksman_attack, {"TorsoPivot:rotation": Vector3(-0.16, 0.14, 0), "LeftShoulderPivot:rotation": Vector3(-0.34, -0.24, 0.28), "RightShoulderPivot:rotation": Vector3(-0.44, 0.34, -0.34), "LeftHipPivot:rotation": Vector3(0, 0, -0.20), "RightHipPivot:rotation": Vector3(0, 0, 0.20)})
+	if paladin_attack == null or rogue_attack == null or ranger_attack == null or marksman_attack == null:
 		_fail("class action generation failed")
 		return false
 	library.add_animation(&"paladin_idle", paladin_idle)
 	library.add_animation(&"rogue_idle", rogue_idle)
 	library.add_animation(&"paladin_hammer_smite", paladin_attack)
 	library.add_animation(&"rogue_dagger_flurry", rogue_attack)
+	library.add_animation(&"ranger_idle", ranger_idle)
+	library.add_animation(&"marksman_idle", marksman_idle)
+	library.add_animation(&"ranger_quick_bow_shot", ranger_attack)
+	library.add_animation(&"marksman_heavy_bow_shot", marksman_attack)
 	var feedback_player := AnimationPlayer.new()
 	feedback_player.name = &"FeedbackAnimationPlayer"
 	feedback_player.root_node = NodePath("..")
@@ -82,7 +98,7 @@ func _configure_action_players(model: Node3D) -> bool:
 	feedback_player.add_animation_library(&"", feedback_library)
 	return true
 
-func _scaled_action(source: Animation, target_duration: float, event_time: float) -> Animation:
+func _scaled_action(source: Animation, target_duration: float, event_time: float, event_name: StringName = &"impact") -> Animation:
 	if source == null or source.length <= 0.0:
 		return null
 	var result := source.duplicate(true) as Animation
@@ -97,7 +113,7 @@ func _scaled_action(source: Animation, target_duration: float, event_time: float
 	result.loop_mode = Animation.LOOP_NONE
 	var method_track := result.add_track(Animation.TYPE_METHOD)
 	result.track_set_path(method_track, NodePath("."))
-	result.track_insert_key(method_track, event_time, {&"method": &"emit_action_event", &"args": [&"impact"]})
+	result.track_insert_key(method_track, event_time, {&"method": &"emit_action_event", &"args": [event_name]})
 	return result
 
 func _offset_rotation_tracks(animation: Animation, offsets: Dictionary) -> void:
@@ -110,6 +126,9 @@ func _offset_rotation_tracks(animation: Animation, offsets: Dictionary) -> void:
 				var value: Variant = animation.track_get_key_value(track_index, key_index)
 				if value is Vector3:
 					animation.track_set_key_value(track_index, key_index, value + offsets[suffix])
+				elif value is Quaternion:
+					var offset := Quaternion.from_euler(offsets[suffix] as Vector3)
+					animation.track_set_key_value(track_index, key_index, offset * (value as Quaternion))
 
 func _ensure_socket(model: Node3D, path: NodePath) -> bool:
 	if model.get_node_or_null(path) != null: return true

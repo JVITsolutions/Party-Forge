@@ -1,6 +1,6 @@
 extends SceneTree
 
-const SET_FOLDERS := {&"fighter": &"forge_vanguard", &"paladin": &"dawn_bulwark", &"rogue": &"nightstep"}
+const SET_FOLDERS := {&"fighter": &"forge_vanguard", &"paladin": &"dawn_bulwark", &"ranger": &"greenwood", &"marksman": &"siege_archer", &"rogue": &"nightstep"}
 const CAMERA_PRESETS := {
 	&"weapon": {&"direction": Vector3(0.32, 0.08, 1.0), &"margin": 1.42, &"minimum": 0.60},
 	&"shield": {&"direction": Vector3(0.20, 0.10, 1.0), &"margin": 1.36, &"minimum": 0.75},
@@ -36,19 +36,29 @@ func _render() -> void:
 func _render_cpu_icon(set_id: StringName, item_id: StringName) -> Image:
 	var image := Image.create_empty(256, 256, false, Image.FORMAT_RGBA8)
 	image.fill(Color(0, 0, 0, 0))
-	var primary := Color("e0b94f") if set_id == &"paladin" else (Color("5a426e") if set_id == &"rogue" else Color("d94f4f"))
-	var metal := Color("d7dce2") if set_id == &"paladin" else (Color("657080") if set_id == &"rogue" else Color("303a47"))
-	var leather := Color("553c28") if set_id == &"paladin" else (Color("282127") if set_id == &"rogue" else Color("4a3426"))
-	var accent := Color("fff0a1") if set_id == &"paladin" else (Color("a773c2") if set_id == &"rogue" else Color("b68b3a"))
+	var primary := Color("e0b94f") if set_id == &"paladin" else (Color("4f7a4d") if set_id == &"ranger" else (Color("59613b") if set_id == &"marksman" else (Color("5a426e") if set_id == &"rogue" else Color("d94f4f"))))
+	var metal := Color("d7dce2") if set_id == &"paladin" else (Color("59636a") if set_id == &"ranger" else (Color("4b5157") if set_id == &"marksman" else (Color("657080") if set_id == &"rogue" else Color("303a47"))))
+	var leather := Color("553c28") if set_id == &"paladin" else (Color("5a3f28") if set_id == &"ranger" else (Color("493b2a") if set_id == &"marksman" else (Color("282127") if set_id == &"rogue" else Color("4a3426"))))
+	var accent := Color("fff0a1") if set_id == &"paladin" else (Color("83b86a") if set_id == &"ranger" else (Color("a89d5b") if set_id == &"marksman" else (Color("a773c2") if set_id == &"rogue" else Color("b68b3a"))))
 	_draw_circle(image, Vector2i(132, 140), 70, Color(0.03, 0.04, 0.06, 0.55))
 	var kind := _camera_kind(item_id)
 	match kind:
 		&"weapon":
-			_draw_line(image, Vector2i(78, 204), Vector2i(162, 62), leather, 12)
-			if "hammer" in String(item_id):
+			if "bow" in String(item_id):
+				_draw_line(image, Vector2i(79, 190), Vector2i(79, 68), leather, 11)
+				_draw_line(image, Vector2i(79, 68), Vector2i(145, 46), leather, 11)
+				_draw_line(image, Vector2i(79, 190), Vector2i(145, 212), leather, 11)
+				_draw_line(image, Vector2i(145, 46), Vector2i(145, 212), accent, 4)
+				_draw_line(image, Vector2i(75, 129), Vector2i(199, 129), metal, 8)
+			elif "hammer" in String(item_id):
+				_draw_line(image, Vector2i(78, 204), Vector2i(162, 62), leather, 12)
 				image.fill_rect(Rect2i(112, 42, 92, 48), metal); image.fill_rect(Rect2i(146, 48, 18, 36), accent)
 			else:
+				_draw_line(image, Vector2i(78, 204), Vector2i(162, 62), leather, 12)
 				_draw_line(image, Vector2i(151, 84), Vector2i(194, 45), metal, 18); image.fill_rect(Rect2i(62, 188, 76, 13), accent)
+		&"quiver":
+			image.fill_rect(Rect2i(91, 78, 75, 126), leather); image.fill_rect(Rect2i(86, 72, 85, 20), primary)
+			for x: int in [101, 128, 155]: _draw_line(image, Vector2i(x, 92), Vector2i(x, 42), metal, 5)
 		&"shield":
 			image.fill_rect(Rect2i(65, 49, 126, 148), metal); image.fill_rect(Rect2i(78, 61, 100, 123), primary); image.fill_rect(Rect2i(119, 66, 18, 110), accent); image.fill_rect(Rect2i(82, 111, 92, 18), accent)
 		&"armour":
@@ -118,7 +128,8 @@ func _item_bounds(item: Node3D) -> AABB:
 	return bounds
 func _camera_kind(item_id: StringName) -> StringName:
 	if "shield" in String(item_id): return &"shield"
-	if "sword" in String(item_id) or "hammer" in String(item_id) or "dagger" in String(item_id): return &"weapon"
+	if "quiver" in String(item_id): return &"quiver"
+	if "sword" in String(item_id) or "hammer" in String(item_id) or "dagger" in String(item_id) or "bow" in String(item_id): return &"weapon"
 	if "plate" in String(item_id) or "leathers" in String(item_id) or item_id == &"forge_vanguard_armour": return &"armour"
 	if "amulet" in String(item_id) or "ring" in String(item_id) or "belt" in String(item_id): return &"jewelry"
 	return &"wearable"

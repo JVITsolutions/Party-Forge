@@ -1,0 +1,39 @@
+[gd_scene format=3]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_d8wkj"]
+albedo_color = Color(0.3529412, 0.24705882, 0.15686275, 1)
+metallic = 0.05
+roughness = 0.78
+
+[sub_resource type="BoxMesh" id="BoxMesh_spisr"]
+size = Vector3(0.27, 0.3, 0.38)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_clgyq"]
+albedo_color = Color(0.3529412, 0.24705882, 0.15686275, 1)
+metallic = 0.05
+roughness = 0.78
+
+[sub_resource type="BoxMesh" id="BoxMesh_5vptu"]
+size = Vector3(0.27, 0.3, 0.38)
+
+[node name="greenwood_boots" type="Node3D"]
+
+[node name="Attachment" type="Node3D" parent="."]
+metadata/equipment_visual_id = &"greenwood_boots"
+metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/LeftHipPivot/LeftKneePivot/LeftFootPivot"
+
+[node name="@MeshInstance3D@12" type="MeshInstance3D" parent="Attachment"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.13, -0.04)
+material_override = SubResource("StandardMaterial3D_d8wkj")
+mesh = SubResource("BoxMesh_spisr")
+metadata/palette_region = &"leather"
+
+[node name="@Node3D@14" type="Node3D" parent="."]
+metadata/equipment_visual_id = &"greenwood_boots"
+metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/RightHipPivot/RightKneePivot/RightFootPivot"
+
+[node name="@MeshInstance3D@13" type="MeshInstance3D" parent="@Node3D@14"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.13, -0.04)
+material_override = SubResource("StandardMaterial3D_clgyq")
+mesh = SubResource("BoxMesh_5vptu")
+metadata/palette_region = &"leather"

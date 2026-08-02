@@ -1,0 +1,37 @@
+[gd_scene format=3]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_73yuo"]
+albedo_color = Color(0.28627452, 0.23137255, 0.16470589, 1)
+metallic = 0.05
+roughness = 0.78
+
+[sub_resource type="BoxMesh" id="BoxMesh_i0in2"]
+size = Vector3(0.22, 0.22, 0.24)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_7r5vj"]
+albedo_color = Color(0.28627452, 0.23137255, 0.16470589, 1)
+metallic = 0.05
+roughness = 0.78
+
+[sub_resource type="BoxMesh" id="BoxMesh_w54nv"]
+size = Vector3(0.22, 0.22, 0.24)
+
+[node name="siege_archer_draw_glove" type="Node3D"]
+
+[node name="Attachment" type="Node3D" parent="."]
+metadata/equipment_visual_id = &"siege_archer_draw_glove"
+metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot/LeftShoulderPivot/LeftElbowPivot/LeftHandSocket"
+
+[node name="@MeshInstance3D@36" type="MeshInstance3D" parent="Attachment"]
+material_override = SubResource("StandardMaterial3D_73yuo")
+mesh = SubResource("BoxMesh_i0in2")
+metadata/palette_region = &"leather"
+
+[node name="@Node3D@38" type="Node3D" parent="."]
+metadata/equipment_visual_id = &"siege_archer_draw_glove"
+metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot/RightShoulderPivot/RightElbowPivot/RightHandSocket"
+
+[node name="@MeshInstance3D@37" type="MeshInstance3D" parent="@Node3D@38"]
+material_override = SubResource("StandardMaterial3D_7r5vj")
+mesh = SubResource("BoxMesh_w54nv")
+metadata/palette_region = &"leather"
