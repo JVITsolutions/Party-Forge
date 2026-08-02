@@ -56,7 +56,7 @@ func _exercise_viewport(viewport_size: Vector2i, compact: bool) -> void:
 	ledger.configure(run, party, catalog, Callable(), [context])
 	ledger.apply_viewport_size(Vector2(viewport_size))
 	_assert(ledger.open_for_player(), "%s ledger opens" % mode)
-	_assert((ledger.get_node(PARTY_COUNT_PATH) as Label).text == "Party Members: 24 / 24", "%s count reports all developer members" % mode)
+	_assert_label_text(ledger, PARTY_COUNT_PATH, "Party Members: 24 / 24", "%s count reports all developer members" % mode)
 	await _wait_for_layout()
 
 	var expected_frame := Rect2(
@@ -126,7 +126,7 @@ func _exercise_provider_refresh_focus_lifecycle() -> void:
 	ledger.configure(run, party, catalog, Callable(), [context])
 	ledger.apply_viewport_size(Vector2(viewport.size))
 	_assert(ledger.open_for_player(), "refresh-focus ledger opens")
-	_assert((ledger.get_node(PARTY_COUNT_PATH) as Label).text == "Party Members: 2 / 24", "refresh fixture count reports initial members")
+	_assert_label_text(ledger, PARTY_COUNT_PATH, "Party Members: 2 / 24", "refresh fixture count reports initial members")
 	await _wait_for_layout()
 
 	var scroll := ledger.get_node(PARTY_SCROLL_PATH) as ScrollContainer
@@ -134,7 +134,7 @@ func _exercise_provider_refresh_focus_lifecycle() -> void:
 	member_24.grab_focus()
 	_assert(viewport.gui_get_focus_owner() == member_24, "refresh fixture starts with actual member 24 focus")
 	_assert(party.recruit(catalog.class_by_id(&"fighter")), "recruit triggers provider party refresh")
-	_assert((ledger.get_node(PARTY_COUNT_PATH) as Label).text == "Party Members: 3 / 24", "refresh fixture count reports recruited member")
+	_assert_label_text(ledger, PARTY_COUNT_PATH, "Party Members: 3 / 24", "refresh fixture count reports recruited member")
 	await _wait_for_layout()
 	var rebuilt_member_24 := ledger.get_node(MEMBER_24_PATH) as Button
 	_assert(viewport.gui_get_focus_owner() == rebuilt_member_24, "provider refresh restores actual member 24 focus")
@@ -186,6 +186,18 @@ func _rects_intersect(scroll: ScrollContainer, member: Button) -> bool:
 
 func _assert_rect_near(actual: Rect2, expected: Rect2, message: String) -> void:
 	_assert(actual.position.is_equal_approx(expected.position) and actual.size.is_equal_approx(expected.size), "%s: expected=%s actual=%s" % [message, expected, actual])
+
+
+func _assert_label_text(parent: Node, path: NodePath, expected: String, message: String) -> void:
+	var node := parent.get_node_or_null(path)
+	if node == null:
+		_assert(false, "%s: missing Label at %s" % [message, path])
+		return
+	var label := node as Label
+	if label == null:
+		_assert(false, "%s: expected Label at %s, got %s" % [message, path, node.get_class()])
+		return
+	_assert(label.text == expected, "%s: expected=%s actual=%s" % [message, expected, label.text])
 
 
 func _assert(condition: bool, message: String) -> void:
