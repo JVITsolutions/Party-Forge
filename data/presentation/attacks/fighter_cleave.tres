@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="AttackPresentationDefinition" format=3]
+
+[ext_resource type="Script" path="res://scripts/presentation/attack_presentation_definition.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"fighter_cleave_sword"
+attack_id = &"fighter_cleave"
+action_id = &"attack_slash"
+required_event_name = &"impact"
+weapon_animation_family_id = &"one_hand_sword"
+launch_socket_id = &"projectile_launch"
+action_duration = 0.55
+release_time = 0.28

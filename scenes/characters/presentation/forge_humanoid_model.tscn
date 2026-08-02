@@ -507,6 +507,20 @@ tracks/21/path = NodePath("HitPivot/BodyPivot/HipsPivot/RightHipPivot/RightKneeP
 tracks/21/interp = 1
 tracks/21/loop_wrap = true
 tracks/21/keys = PackedFloat32Array(0, 1, 0, 0, 0, 1, 0.12, 1, 0, 0, 0, 1, 0.28, 1, 0, 0, 0, 1, 0.42, 1, 0, 0, 0, 1, 0.55, 1, 0, 0, 0, 1)
+tracks/22/type = "method"
+tracks/22/imported = false
+tracks/22/enabled = true
+tracks/22/path = NodePath(".")
+tracks/22/interp = 1
+tracks/22/loop_wrap = true
+tracks/22/keys = {
+"times": PackedFloat32Array(0.28),
+"transitions": PackedFloat32Array(1),
+"values": [{
+"args": [&"impact"],
+"method": &"emit_action_event"
+}]
+}
 
 [sub_resource type="Animation" id="Animation_cp37k"]
 length = 0.25
@@ -990,6 +1004,21 @@ _data = {
 &"walk": SubResource("Animation_5uuo1")
 }
 
+[sub_resource type="Animation" id="Animation_hrkev"]
+length = 0.25
+tracks/0/type = "position_3d"
+tracks/0/imported = false
+tracks/0/enabled = true
+tracks/0/path = NodePath("HitPivot:position")
+tracks/0/interp = 1
+tracks/0/loop_wrap = true
+tracks/0/keys = PackedFloat32Array(0, 1, 0, 0, 0, 0.07, 1, 0, 0, 0.09, 0.15, 1, 0, 0, 0.045, 0.25, 1, 0, 0, 0)
+
+[sub_resource type="AnimationLibrary" id="AnimationLibrary_ehh8w"]
+_data = {
+&"hit_flinch": SubResource("Animation_hrkev")
+}
+
 [node name="ForgeHumanoidModel" type="Node3D"]
 script = ExtResource("1_buo13")
 
@@ -1291,4 +1320,8 @@ metadata/palette_region = &"leather"
 [node name="BeltSocket" type="Node3D" parent="HitPivot/BodyPivot/HipsPivot"]
 
 [node name="AnimationPlayer" type="AnimationPlayer" parent="."]
+callback_mode_method = 1
 libraries/ = SubResource("AnimationLibrary_jluad")
+
+[node name="FeedbackAnimationPlayer" type="AnimationPlayer" parent="."]
+libraries/ = SubResource("AnimationLibrary_ehh8w")

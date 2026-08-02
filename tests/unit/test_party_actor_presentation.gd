@@ -24,6 +24,8 @@ func run() -> Array[String]:
 	_test_unprofiled_actor_keeps_fallback_when_locomotion_updates(failures)
 	_test_fighter_profile_activation_and_ranger_fallback(failures)
 	_test_primary_attack_keeps_executor_and_uses_slash(failures)
+	_test_fighter_attack_presentation_contract(failures)
+	_test_sequence_bridge_and_feedback_isolation(failures)
 	_test_damage_downed_and_revival_feedback(failures)
 	_test_fighter_palettes_remain_instance_local(failures)
 	return failures
@@ -119,6 +121,74 @@ func _test_primary_attack_keeps_executor_and_uses_slash(failures: Array[String])
 			player.animation_started.disconnect(_on_animation_started)
 	root.free()
 	party.free()
+
+func _test_fighter_attack_presentation_contract(failures: Array[String]) -> void:
+	var definition := _definition(&"fighter")
+	var profile := definition.visual_profile as CharacterVisualProfile
+	TestAssertions.truthy(profile != null and profile.has_method(&"resolve_attack_presentation"), "Fighter profile exposes attack presentation lookup", failures)
+	if profile == null or not profile.has_method(&"resolve_attack_presentation"):
+		return
+	var visual := profile.call(&"resolve_attack_presentation", definition.primary_attack.id, &"one_hand_sword") as AttackPresentationDefinition
+	TestAssertions.truthy(visual != null, "Fighter sword resolves cleave presentation", failures)
+	if visual != null:
+		TestAssertions.equal(visual.action_id, &"attack_slash", "Fighter cleave uses slash action", failures)
+		TestAssertions.equal(visual.required_event_name, &"impact", "Fighter cleave releases on impact", failures)
+		TestAssertions.near(visual.release_time, 0.28, 0.001, "Fighter cleave impact time", failures)
+		TestAssertions.truthy(visual.validate(definition.primary_attack).is_empty(), "Fighter attack presentation validates against gameplay attack", failures)
+	TestAssertions.truthy(profile.validate().is_empty(), "Fighter profile remains valid with attack presentation", failures)
+	var model := profile.presentation_scene.instantiate() as Node3D
+	var player := model.get_node_or_null("AnimationPlayer") as AnimationPlayer if model != null else null
+	var slash := player.get_animation(&"attack_slash") if player != null and player.has_animation(&"attack_slash") else null
+	var impact_track := -1
+	if slash != null:
+		for track_index: int in slash.get_track_count():
+			if slash.track_get_type(track_index) == Animation.TYPE_METHOD:
+				impact_track = track_index
+				break
+	TestAssertions.truthy(impact_track >= 0, "Fighter slash owns authored method event track", failures)
+	if impact_track >= 0:
+		TestAssertions.near(slash.track_get_key_time(impact_track, 0), 0.28, 0.001, "Fighter slash method event is authored at impact frame", failures)
+		var method_call := slash.track_get_key_value(impact_track, 0) as Dictionary
+		TestAssertions.equal(StringName(method_call.get(&"method", &"")), &"emit_action_event", "Fighter slash method track calls model event bridge", failures)
+		TestAssertions.equal(method_call.get(&"args", []), [&"impact"], "Fighter slash method track names impact event", failures)
+	if model != null:
+		model.free()
+
+func _test_sequence_bridge_and_feedback_isolation(failures: Array[String]) -> void:
+	var root := _new_root("PartyActorAttackSequenceBridgeTest")
+	var definition := _definition(&"fighter")
+	var fighter := _new_actor(root, LEADER_SCENE, definition, true)
+	var hostile := _new_actor(root, COMPANION_SCENE, definition, false)
+	hostile.team_id = 2
+	hostile.position = Vector3(1.0, 0.0, 0.0)
+	var presentation := fighter.get_node("Presentation") as CharacterPresentation
+	var player := presentation.active_model.get_node_or_null("AnimationPlayer") as AnimationPlayer
+	var feedback_player := presentation.active_model.get_node_or_null("FeedbackAnimationPlayer") as AnimationPlayer
+	TestAssertions.truthy(presentation.has_method(&"start_attack") and presentation.has_method(&"finish_attack_sequence"), "presentation exposes tokenized attack bridge", failures)
+	TestAssertions.truthy(feedback_player != null, "Fighter model has independent feedback player", failures)
+	if not presentation.has_method(&"start_attack") or player == null:
+		root.free()
+		return
+	var visual := presentation.call(&"resolve_attack_presentation", definition.primary_attack) as AttackPresentationDefinition
+	var events: Array[String] = []
+	presentation.attack_event.connect(func(token: int, action_id: StringName, event_name: StringName) -> void: events.append("%d:%s:%s" % [token, action_id, event_name]))
+	presentation.attack_finished.connect(func(token: int, action_id: StringName) -> void: events.append("%d:%s:finished" % [token, action_id]))
+	TestAssertions.truthy(bool(presentation.call(&"start_attack", definition.primary_attack, hostile.get_combat_target(), visual, 42, 1.5)), "tokenized Fighter slash starts", failures)
+	TestAssertions.equal(player.current_animation, &"attack_slash", "sequence bridge starts slash on action player", failures)
+	TestAssertions.near(player.speed_scale, 1.5, 0.001, "sequence bridge applies playback rate", failures)
+	TestAssertions.near(presentation.rotation.y, -PI / 2.0, 0.001, "sequence bridge locks facing to target", failures)
+	presentation.update_locomotion(Vector3(1.0, 0.0, 0.0))
+	presentation.active_model.call(&"emit_action_event", &"impact")
+	TestAssertions.truthy("42:attack_slash:impact" in events, "model event is bridged with gameplay token", failures)
+	presentation.flash_hit()
+	TestAssertions.equal(player.current_animation, &"attack_slash", "hit feedback cannot replace active slash", failures)
+	if feedback_player != null:
+		TestAssertions.equal(feedback_player.current_animation, &"hit_flinch", "hit flinch plays only on feedback layer", failures)
+	presentation.active_model.action_finished.emit(&"attack_slash")
+	TestAssertions.truthy("42:attack_slash:finished" in events, "model finish is bridged with gameplay token", failures)
+	TestAssertions.equal(player.current_animation, &"walk", "attack finish restores latest locomotion", failures)
+	TestAssertions.near(presentation.rotation.y, -PI / 2.0, 0.001, "restored eastward locomotion faces east", failures)
+	root.free()
 
 func _test_damage_downed_and_revival_feedback(failures: Array[String]) -> void:
 	var root := _new_root("PartyActorFeedbackPresentationTest")

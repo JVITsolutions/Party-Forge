@@ -16,7 +16,7 @@ func configure(actor: PartyActor, manager: PartyManager, effect_container: Node,
     effects_parent = effect_container
     combatants = actor_candidates
 
-func execute(definition: AttackDefinition, target: CombatTarget) -> void:
+func execute(definition: AttackDefinition, target: CombatTarget, presentation: AttackPresentationDefinition = null) -> void:
     if owner_actor == null or definition == null or target == null:
         return
     var health: HealthComponent = owner_actor.get_node_or_null("HealthComponent") as HealthComponent

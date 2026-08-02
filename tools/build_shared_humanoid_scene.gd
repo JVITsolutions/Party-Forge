@@ -35,8 +35,33 @@ func _initialize() -> void:
 		if not _ensure_socket(model, NodePath(String(SOCKET_PATHS[socket_id]))):
 			model.free(); return
 	print("FORGE_HUMANOID_BUILD_STAGE sockets_done")
+	if not _configure_action_players(model):
+		model.free(); return
 	print("FORGE_HUMANOID_BUILD_STAGE save")
 	_save(model)
+
+func _configure_action_players(model: Node3D) -> bool:
+	var action_player := model.get_node_or_null("AnimationPlayer") as AnimationPlayer
+	if action_player == null or not action_player.has_animation(&"attack_slash") or not action_player.has_animation(&"hit_flinch"):
+		_fail("required action animations are missing")
+		return false
+	action_player.callback_mode_method = AnimationMixer.ANIMATION_CALLBACK_MODE_METHOD_IMMEDIATE
+	var slash := action_player.get_animation(&"attack_slash")
+	var method_track := slash.add_track(Animation.TYPE_METHOD)
+	slash.track_set_path(method_track, NodePath("."))
+	slash.track_insert_key(method_track, 0.28, {&"method": &"emit_action_event", &"args": [&"impact"]})
+	var feedback_player := AnimationPlayer.new()
+	feedback_player.name = &"FeedbackAnimationPlayer"
+	feedback_player.root_node = NodePath("..")
+	model.add_child(feedback_player)
+	var feedback_library := AnimationLibrary.new()
+	var feedback := action_player.get_animation(&"hit_flinch").duplicate(true) as Animation
+	for track_index: int in range(feedback.get_track_count() - 1, -1, -1):
+		if String(feedback.track_get_path(track_index)) != "HitPivot:position":
+			feedback.remove_track(track_index)
+	feedback_library.add_animation(&"hit_flinch", feedback)
+	feedback_player.add_animation_library(&"", feedback_library)
+	return true
 
 func _ensure_socket(model: Node3D, path: NodePath) -> bool:
 	if model.get_node_or_null(path) != null: return true

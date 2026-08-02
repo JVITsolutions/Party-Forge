@@ -148,13 +148,13 @@ func _assert_model_root_is_not_animated(player: AnimationPlayer, failures: Array
 
 func _assert_playback_contract(model: ForgeHumanoidModel, player: AnimationPlayer, failures: Array[String]) -> void:
 	TestAssertions.truthy(not model.play_action(&"unknown_action"), "unknown action is rejected", failures)
-	for animation_id: StringName in [&"idle", &"walk", &"attack_slash", &"attack_combo", &"hit_flinch"]:
+	for animation_id: StringName in [&"idle", &"walk", &"attack_slash", &"attack_combo"]:
 		TestAssertions.truthy(model.play_action(animation_id), "%s action starts" % animation_id, failures)
 		TestAssertions.equal(player.current_animation, animation_id, "%s becomes current animation" % animation_id, failures)
-		if animation_id in [&"idle", &"walk"]:
-			TestAssertions.truthy(player.get_queue().is_empty(), "%s remains a persistent locomotion loop" % animation_id, failures)
-		else:
-			TestAssertions.truthy(&"idle" in player.get_queue(), "%s queues idle recovery" % animation_id, failures)
+		TestAssertions.truthy(player.get_queue().is_empty(), "%s leaves locomotion recovery to presentation state" % animation_id, failures)
+	TestAssertions.truthy(model.play_action(&"attack_slash", 1.5), "attack accepts positive playback rate", failures)
+	TestAssertions.near(player.speed_scale, 1.5, 0.001, "attack applies requested playback rate", failures)
+	TestAssertions.truthy(not model.play_action(&"attack_slash", 0.0), "attack rejects nonpositive playback rate", failures)
 
 func _assert_downed_playback_contract(model: ForgeHumanoidModel, player: AnimationPlayer, failures: Array[String]) -> void:
 	var body_pivot := model.get_node_or_null("HitPivot/BodyPivot") as Node3D
@@ -176,7 +176,7 @@ func _assert_downed_playback_contract(model: ForgeHumanoidModel, player: Animati
 	model.set_downed(false)
 	TestAssertions.truthy(not player.is_playing(), "revival does not auto-resume walk in the model", failures)
 	TestAssertions.truthy(model.play_action(&"attack_slash"), "attack starts before downed stop", failures)
-	TestAssertions.truthy(&"idle" in player.get_queue(), "attack has queued idle before downed stop", failures)
+	TestAssertions.truthy(player.get_queue().is_empty(), "attack owns no implicit idle queue before downed stop", failures)
 	model.set_downed(true)
 	TestAssertions.truthy(not player.is_playing(), "downed stops active attack playback", failures)
 	TestAssertions.truthy(player.get_queue().is_empty(), "downed clears queued attack recovery", failures)
@@ -185,6 +185,14 @@ func _assert_downed_playback_contract(model: ForgeHumanoidModel, player: Animati
 
 
 func _assert_feedback_contract(model: ForgeHumanoidModel, profile: CharacterVisualProfile, failures: Array[String]) -> void:
+	var action_player := model.get_node_or_null("AnimationPlayer") as AnimationPlayer
+	var feedback_player := model.get_node_or_null("FeedbackAnimationPlayer") as AnimationPlayer
+	TestAssertions.truthy(feedback_player != null, "feedback player exists independently of action player", failures)
+	if action_player != null and feedback_player != null:
+		TestAssertions.truthy(model.play_action(&"attack_slash"), "slash starts before feedback isolation check", failures)
+		TestAssertions.truthy(model.play_feedback(&"hit_flinch"), "hit flinch starts on feedback player", failures)
+		TestAssertions.equal(action_player.current_animation, &"attack_slash", "hit flinch leaves slash active", failures)
+		TestAssertions.equal(feedback_player.current_animation, &"hit_flinch", "hit flinch uses feedback player", failures)
 	for entry: EquipmentLoadoutEntry in profile.default_equipment:
 		if entry != null and entry.item != null and entry.item.presentation != null:
 			model.apply_equipment_visual(entry.slot_id, entry.item.presentation)
