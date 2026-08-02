@@ -108,6 +108,31 @@ func _test_combat_estimate_action_discovery(failures: Array[String]) -> void:
 	rows = provider.combat_estimate_rows(1)
 	TestAssertions.equal(rows.size(), 1, "duplicate action ID/resource appears once", failures)
 
+	var duplicate_id_attack := definition.primary_attack.duplicate(true) as AttackDefinition
+	duplicate_id_attack.damage_components[0].base_amount = 999.0
+	definition.support_action = duplicate_id_attack
+	party.initialize(definition, catalog.traits)
+	rows = provider.combat_estimate_rows(1)
+	var expected_primary := ActionCombatEstimateService.estimate(definition.primary_attack, 1, party, catalog.damage_types)
+	TestAssertions.truthy(duplicate_id_attack.get_instance_id() != definition.primary_attack.get_instance_id(), "duplicate action ID fixture uses distinct resources", failures)
+	TestAssertions.equal(rows.size(), 1, "duplicate action ID across resources appears once", failures)
+	TestAssertions.near(rows[0].normal_hit, expected_primary.normal_hit, 0.001, "duplicate action ID keeps the first authored action", failures)
+
+	definition.primary_attack = null
+	definition.support_action = catalog.class_by_id(&"ranger").primary_attack
+	party.initialize(definition, catalog.traits)
+	rows = provider.combat_estimate_rows(1)
+	TestAssertions.equal(rows.map(func(row: ActionCombatEstimate) -> StringName: return row.action_id), [&"ranger_shot"], "null current slot is omitted safely", failures)
+
+	definition.primary_attack = catalog.class_by_id(&"fighter").primary_attack
+	var componentless_attack := catalog.class_by_id(&"ranger").primary_attack.duplicate(true) as AttackDefinition
+	componentless_attack.damage_components = []
+	TestAssertions.truthy(not componentless_attack.is_healing() and componentless_attack.damage_components.is_empty(), "componentless fixture remains non-healing", failures)
+	definition.support_action = componentless_attack
+	party.initialize(definition, catalog.traits)
+	rows = provider.combat_estimate_rows(1)
+	TestAssertions.equal(rows.map(func(row: ActionCombatEstimate) -> StringName: return row.action_id), [&"fighter_cleave"], "non-healing componentless action is excluded", failures)
+
 	definition.support_action = catalog.class_by_id(&"cleric").support_action
 	party.initialize(definition, catalog.traits)
 	rows = provider.combat_estimate_rows(1)
