@@ -28,6 +28,7 @@ func refresh() -> void:
 		_sync_detail_visibility()
 		return
 	_render_header(member)
+	_render_combat_estimates()
 	var rows := provider.stat_rows(context.selected_member_id, _show_all)
 	var current_group_id: StringName
 	var current_group: VBoxContainer = null
@@ -153,6 +154,61 @@ func _render_header(member: Dictionary) -> void:
 		_join_ids(member.get("traits", [])),
 		_join_ids(member.get("capabilities", [])),
 	]
+
+func _render_combat_estimates() -> void:
+	var group := _create_group(&"combat_estimates")
+	(group.get_node("Heading") as Label).text = "Combat Estimates"
+	group.tooltip_text = "Pre-mitigation damage per target, assuming continuous use whenever each action is ready."
+	var estimates := provider.combat_estimate_rows(context.selected_member_id)
+	if estimates.is_empty():
+		var empty := Label.new()
+		empty.name = "Empty"
+		empty.text = "No damaging actions available."
+		empty.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		group.add_child(empty)
+		return
+	for estimate: ActionCombatEstimate in estimates:
+		group.add_child(_create_combat_estimate_card(estimate))
+
+func _create_combat_estimate_card(estimate: ActionCombatEstimate) -> PanelContainer:
+	var panel := PanelContainer.new()
+	panel.name = "Action_%s" % estimate.action_id
+	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	panel.tooltip_text = "Damage is pre-mitigation per target; excludes defenses, misses, travel time, movement, and AI downtime."
+	var content := VBoxContainer.new()
+	content.name = "Content"
+	content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var title := Label.new()
+	title.name = "Title"
+	title.text = estimate.display_name
+	title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	content.add_child(title)
+	var metrics := Label.new()
+	metrics.name = "Metrics"
+	metrics.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	if estimate.available:
+		var critical_text := _estimate_number(estimate.critical_hit) if estimate.can_crit else "Cannot Crit"
+		metrics.text = "Normal Hit: %s\nCritical Hit: %s\nAverage Hit: %s\nAttacks / Second: %.2f\nEstimated DPS: %s" % [
+			_estimate_number(estimate.normal_hit), critical_text, _estimate_number(estimate.average_hit),
+			estimate.attacks_per_second, _estimate_number(estimate.estimated_dps),
+		]
+	else:
+		metrics.text = "Estimate unavailable: %s" % estimate.unavailable_reason
+	content.add_child(metrics)
+	var components := Label.new()
+	components.name = "Components"
+	components.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	components.visible = estimate.available and estimate.component_rows.size() > 1
+	var component_lines := PackedStringArray()
+	for row: Dictionary in estimate.component_rows:
+		component_lines.append("%s: %s normal" % [row.display_name, _estimate_number(float(row.normal_hit))])
+	components.text = "Damage Types\n%s" % "\n".join(component_lines)
+	content.add_child(components)
+	panel.add_child(content)
+	return panel
+
+func _estimate_number(value: float) -> String:
+	return ("%.2f" % value).rstrip("0").rstrip(".")
 
 func _create_group(group_id: StringName) -> VBoxContainer:
 	var group := VBoxContainer.new()
