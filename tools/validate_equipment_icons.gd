@@ -17,6 +17,8 @@ func _requested_sets() -> Array[StringName]:
 			var result: Array[StringName] = []
 			for raw: String in arg.trim_prefix("--sets=").split(","):
 				var set_id := StringName(raw.strip_edges())
+				if set_id == &"all":
+					return [&"fighter", &"paladin", &"ranger", &"marksman", &"rogue", &"mage", &"frost_mage", &"cleric", &"warlock"]
 				if set_id.is_empty() or not ClassEquipmentRows.SET_ITEM_IDS.has(set_id): return []
 				result.append(set_id)
 			return result
