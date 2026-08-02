@@ -20,7 +20,7 @@ static func total_item_count() -> int:
 
 static func slot_for(set_id: StringName, index: int) -> StringName:
 	if set_id == &"fighter" and index == 11: return &"main_hand"
-	return EquipmentSlotCatalog.SLOT_IDS[index]
+	return EquipmentSlotCatalog.SHEET_SLOT_IDS[index]
 
 static func compatible_slots(slot_id: StringName) -> Array[StringName]:
 	var slots: Array[StringName] = []
