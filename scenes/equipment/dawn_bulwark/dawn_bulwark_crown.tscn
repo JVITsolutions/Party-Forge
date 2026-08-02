@@ -1,0 +1,35 @@
+[gd_scene format=3]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_u1tdc"]
+albedo_color = Color(0.84313726, 0.8627451, 0.8862745, 1)
+metallic = 0.72
+roughness = 0.42
+
+[sub_resource type="BoxMesh" id="BoxMesh_6jp5l"]
+size = Vector3(0.42, 0.3, 0.38)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_mya0v"]
+albedo_color = Color(1, 0.9411765, 0.6313726, 1)
+metallic = 0.05
+roughness = 0.78
+
+[sub_resource type="BoxMesh" id="BoxMesh_pya2g"]
+size = Vector3(0.08, 0.18, 0.08)
+
+[node name="dawn_bulwark_crown" type="Node3D"]
+
+[node name="Attachment" type="Node3D" parent="."]
+metadata/equipment_visual_id = &"dawn_bulwark_crown"
+metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot/HeadPivot/HelmetSocket"
+
+[node name="@MeshInstance3D@2" type="MeshInstance3D" parent="Attachment"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.02, 0)
+material_override = SubResource("StandardMaterial3D_u1tdc")
+mesh = SubResource("BoxMesh_6jp5l")
+metadata/palette_region = &"metal"
+
+[node name="@MeshInstance3D@3" type="MeshInstance3D" parent="Attachment"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.24, 0)
+material_override = SubResource("StandardMaterial3D_mya0v")
+mesh = SubResource("BoxMesh_pya2g")
+metadata/palette_region = &"accent"

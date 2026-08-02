@@ -1,0 +1,35 @@
+[gd_scene format=3]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_5rgde"]
+albedo_color = Color(0.15686275, 0.12941177, 0.15294118, 1)
+metallic = 0.05
+roughness = 0.78
+
+[sub_resource type="BoxMesh" id="BoxMesh_lfljl"]
+size = Vector3(0.64, 0.72, 0.28)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_yljwo"]
+albedo_color = Color(0.3529412, 0.25882354, 0.43137255, 1)
+metallic = 0.05
+roughness = 0.78
+
+[sub_resource type="BoxMesh" id="BoxMesh_o27ls"]
+size = Vector3(0.68, 0.12, 0.3)
+
+[node name="nightstep_leathers" type="Node3D"]
+
+[node name="Attachment" type="Node3D" parent="."]
+metadata/equipment_visual_id = &"nightstep_leathers"
+metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot/BodyArmourSocket"
+
+[node name="@MeshInstance3D@27" type="MeshInstance3D" parent="Attachment"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.02, 0)
+material_override = SubResource("StandardMaterial3D_5rgde")
+mesh = SubResource("BoxMesh_lfljl")
+metadata/palette_region = &"leather"
+
+[node name="@MeshInstance3D@28" type="MeshInstance3D" parent="Attachment"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.22, 0)
+material_override = SubResource("StandardMaterial3D_yljwo")
+mesh = SubResource("BoxMesh_o27ls")
+metadata/palette_region = &"primary"

@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="EquipmentBaseDefinition" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/equipment/equipment_base_definition.gd" id="1"]
+[ext_resource type="Resource" path="res://data/presentation/equipment/nightstep/bloodstep_ring.tres" id="2"]
+
+[resource]
+script = ExtResource("1")
+id = &"bloodstep_ring"
+display_name = "Bloodstep Ring"
+item_type_id = &"ring"
+compatible_slot_ids = [&"ring_left", &"ring_right"]
+weight_class_id = &"accessory"
+required_all_tags = []
+handedness_id = &"none"
+weapon_family_id = &""
+implicit_family_id = &"nightstep"
+presentation = ExtResource("2")

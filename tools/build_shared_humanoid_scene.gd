@@ -50,6 +50,25 @@ func _configure_action_players(model: Node3D) -> bool:
 	var method_track := slash.add_track(Animation.TYPE_METHOD)
 	slash.track_set_path(method_track, NodePath("."))
 	slash.track_insert_key(method_track, 0.28, {&"method": &"emit_action_event", &"args": [&"impact"]})
+	var library := action_player.get_animation_library(&"")
+	if library == null:
+		_fail("default animation library is missing")
+		return false
+	var paladin_idle := action_player.get_animation(&"idle").duplicate(true) as Animation
+	paladin_idle.loop_mode = Animation.LOOP_LINEAR
+	_offset_rotation_tracks(paladin_idle, {"TorsoPivot:rotation": Vector3(-0.04, 0, 0), "LeftShoulderPivot:rotation": Vector3(0.08, 0, 0.10), "RightShoulderPivot:rotation": Vector3(0.08, 0, -0.10)})
+	var rogue_idle := action_player.get_animation(&"idle").duplicate(true) as Animation
+	rogue_idle.loop_mode = Animation.LOOP_LINEAR
+	_offset_rotation_tracks(rogue_idle, {"TorsoPivot:rotation": Vector3(0.10, 0, 0), "LeftShoulderPivot:rotation": Vector3(-0.12, 0, 0.18), "RightShoulderPivot:rotation": Vector3(-0.12, 0, -0.18)})
+	var paladin_attack := _scaled_action(action_player.get_animation(&"attack_slash"), 0.86, 0.58)
+	var rogue_attack := _scaled_action(action_player.get_animation(&"attack_slash"), 0.28, 0.16)
+	if paladin_attack == null or rogue_attack == null:
+		_fail("class action generation failed")
+		return false
+	library.add_animation(&"paladin_idle", paladin_idle)
+	library.add_animation(&"rogue_idle", rogue_idle)
+	library.add_animation(&"paladin_hammer_smite", paladin_attack)
+	library.add_animation(&"rogue_dagger_flurry", rogue_attack)
 	var feedback_player := AnimationPlayer.new()
 	feedback_player.name = &"FeedbackAnimationPlayer"
 	feedback_player.root_node = NodePath("..")
@@ -62,6 +81,35 @@ func _configure_action_players(model: Node3D) -> bool:
 	feedback_library.add_animation(&"hit_flinch", feedback)
 	feedback_player.add_animation_library(&"", feedback_library)
 	return true
+
+func _scaled_action(source: Animation, target_duration: float, event_time: float) -> Animation:
+	if source == null or source.length <= 0.0:
+		return null
+	var result := source.duplicate(true) as Animation
+	var scale := target_duration / source.length
+	for track_index: int in range(result.get_track_count() - 1, -1, -1):
+		if result.track_get_type(track_index) == Animation.TYPE_METHOD:
+			result.remove_track(track_index)
+			continue
+		for key_index: int in result.track_get_key_count(track_index):
+			result.track_set_key_time(track_index, key_index, result.track_get_key_time(track_index, key_index) * scale)
+	result.length = target_duration
+	result.loop_mode = Animation.LOOP_NONE
+	var method_track := result.add_track(Animation.TYPE_METHOD)
+	result.track_set_path(method_track, NodePath("."))
+	result.track_insert_key(method_track, event_time, {&"method": &"emit_action_event", &"args": [&"impact"]})
+	return result
+
+func _offset_rotation_tracks(animation: Animation, offsets: Dictionary) -> void:
+	for track_index: int in animation.get_track_count():
+		var path := String(animation.track_get_path(track_index))
+		for suffix: String in offsets:
+			if not path.ends_with(suffix):
+				continue
+			for key_index: int in animation.track_get_key_count(track_index):
+				var value: Variant = animation.track_get_key_value(track_index, key_index)
+				if value is Vector3:
+					animation.track_set_key_value(track_index, key_index, value + offsets[suffix])
 
 func _ensure_socket(model: Node3D, path: NodePath) -> bool:
 	if model.get_node_or_null(path) != null: return true

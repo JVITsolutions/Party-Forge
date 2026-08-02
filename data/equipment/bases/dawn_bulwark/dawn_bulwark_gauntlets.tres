@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="EquipmentBaseDefinition" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/equipment/equipment_base_definition.gd" id="1"]
+[ext_resource type="Resource" path="res://data/presentation/equipment/dawn_bulwark/dawn_bulwark_gauntlets.tres" id="2"]
+
+[resource]
+script = ExtResource("1")
+id = &"dawn_bulwark_gauntlets"
+display_name = "Dawn Bulwark Gauntlets"
+item_type_id = &"gloves"
+compatible_slot_ids = [&"gloves"]
+weight_class_id = &"heavy"
+required_all_tags = [&"martial", &"vanguard"]
+handedness_id = &"none"
+weapon_family_id = &""
+implicit_family_id = &"dawn_bulwark"
+presentation = ExtResource("2")

@@ -1,0 +1,24 @@
+[gd_scene format=3]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_r0v7o"]
+albedo_color = Color(1, 0.9411765, 0.6313726, 1)
+metallic = 0.05
+roughness = 0.78
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_sxpn2"]
+top_radius = 0.08
+bottom_radius = 0.08
+height = 0.05
+radial_segments = 10
+
+[node name="ring_of_mercy" type="Node3D"]
+
+[node name="Attachment" type="Node3D" parent="."]
+metadata/equipment_visual_id = &"ring_of_mercy"
+metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot/RightShoulderPivot/RightElbowPivot/RightHandSocket"
+
+[node name="@MeshInstance3D@17" type="MeshInstance3D" parent="Attachment"]
+transform = Transform3D(-4.371139e-08, -1, 0, 1, -4.371139e-08, 0, 0, 0, 1, 0, 0, 0)
+material_override = SubResource("StandardMaterial3D_r0v7o")
+mesh = SubResource("CylinderMesh_sxpn2")
+metadata/palette_region = &"accent"

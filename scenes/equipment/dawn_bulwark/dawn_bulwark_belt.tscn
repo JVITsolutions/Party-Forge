@@ -1,0 +1,34 @@
+[gd_scene format=3]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_md574"]
+albedo_color = Color(0.33333334, 0.23529412, 0.15686275, 1)
+metallic = 0.05
+roughness = 0.78
+
+[sub_resource type="BoxMesh" id="BoxMesh_rvml4"]
+size = Vector3(0.7, 0.12, 0.34)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_27a1e"]
+albedo_color = Color(1, 0.9411765, 0.6313726, 1)
+metallic = 0.05
+roughness = 0.78
+
+[sub_resource type="BoxMesh" id="BoxMesh_mgd2s"]
+size = Vector3(0.16, 0.16, 0.04)
+
+[node name="dawn_bulwark_belt" type="Node3D"]
+
+[node name="Attachment" type="Node3D" parent="."]
+metadata/equipment_visual_id = &"dawn_bulwark_belt"
+metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/BeltSocket"
+
+[node name="@MeshInstance3D@18" type="MeshInstance3D" parent="Attachment"]
+material_override = SubResource("StandardMaterial3D_md574")
+mesh = SubResource("BoxMesh_rvml4")
+metadata/palette_region = &"leather"
+
+[node name="@MeshInstance3D@19" type="MeshInstance3D" parent="Attachment"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -0.2)
+material_override = SubResource("StandardMaterial3D_27a1e")
+mesh = SubResource("BoxMesh_mgd2s")
+metadata/palette_region = &"accent"

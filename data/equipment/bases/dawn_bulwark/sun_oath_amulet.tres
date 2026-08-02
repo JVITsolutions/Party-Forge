@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="EquipmentBaseDefinition" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/equipment/equipment_base_definition.gd" id="1"]
+[ext_resource type="Resource" path="res://data/presentation/equipment/dawn_bulwark/sun_oath_amulet.tres" id="2"]
+
+[resource]
+script = ExtResource("1")
+id = &"sun_oath_amulet"
+display_name = "Sun Oath Amulet"
+item_type_id = &"amulet"
+compatible_slot_ids = [&"amulet"]
+weight_class_id = &"accessory"
+required_all_tags = []
+handedness_id = &"none"
+weapon_family_id = &""
+implicit_family_id = &"dawn_bulwark"
+presentation = ExtResource("2")

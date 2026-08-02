@@ -1,0 +1,39 @@
+[gd_scene format=3]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_kmsys"]
+albedo_color = Color(0.15686275, 0.12941177, 0.15294118, 1)
+metallic = 0.05
+roughness = 0.78
+
+[sub_resource type="BoxMesh" id="BoxMesh_72mab"]
+size = Vector3(0.25, 0.44, 0.28)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_ccy81"]
+albedo_color = Color(0.15686275, 0.12941177, 0.15294118, 1)
+metallic = 0.05
+roughness = 0.78
+
+[sub_resource type="BoxMesh" id="BoxMesh_o6hpd"]
+size = Vector3(0.25, 0.44, 0.28)
+
+[node name="nightstep_leggings" type="Node3D"]
+
+[node name="Attachment" type="Node3D" parent="."]
+metadata/equipment_visual_id = &"nightstep_leggings"
+metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/LeftHipPivot"
+
+[node name="@MeshInstance3D@29" type="MeshInstance3D" parent="Attachment"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.23, 0)
+material_override = SubResource("StandardMaterial3D_kmsys")
+mesh = SubResource("BoxMesh_72mab")
+metadata/palette_region = &"leather"
+
+[node name="@Node3D@31" type="Node3D" parent="."]
+metadata/equipment_visual_id = &"nightstep_leggings"
+metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/RightHipPivot"
+
+[node name="@MeshInstance3D@30" type="MeshInstance3D" parent="@Node3D@31"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.23, 0)
+material_override = SubResource("StandardMaterial3D_ccy81")
+mesh = SubResource("BoxMesh_o6hpd")
+metadata/palette_region = &"leather"

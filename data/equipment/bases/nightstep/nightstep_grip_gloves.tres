@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="EquipmentBaseDefinition" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/equipment/equipment_base_definition.gd" id="1"]
+[ext_resource type="Resource" path="res://data/presentation/equipment/nightstep/nightstep_grip_gloves.tres" id="2"]
+
+[resource]
+script = ExtResource("1")
+id = &"nightstep_grip_gloves"
+display_name = "Nightstep Grip Gloves"
+item_type_id = &"gloves"
+compatible_slot_ids = [&"gloves"]
+weight_class_id = &"light"
+required_all_tags = [&"martial", &"skirmisher"]
+handedness_id = &"none"
+weapon_family_id = &""
+implicit_family_id = &"nightstep"
+presentation = ExtResource("2")
