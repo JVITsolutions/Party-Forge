@@ -12,7 +12,8 @@ func run() -> Array[String]:
 	tree.root.add_child(page)
 	var catalog := GameCatalog.load_defaults()
 	var party := PartyManager.new()
-	party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
+	var fighter := catalog.class_by_id(&"fighter").duplicate(true) as ClassDefinition
+	party.initialize(fighter, catalog.traits)
 	var provider := LedgerDataProvider.new()
 	provider.configure(party, catalog, func(_member_id: int) -> Dictionary:
 		return {"current": 200.0, "maximum": 260.0, "is_downed": false, "is_dead": false}
@@ -50,13 +51,51 @@ func run() -> Array[String]:
 	TestAssertions.truthy("Physical" in traits_and_capabilities and "Melee" in traits_and_capabilities, "header lists selected capabilities", failures)
 	TestAssertions.truthy(page.has_stat(&"physical_damage"), "fighter shows relevant physical stat", failures)
 	TestAssertions.truthy(not page.has_stat(&"fire_damage"), "fighter hides irrelevant fire stat", failures)
+	var estimates := page.get_node_or_null("Layout/Content/StatSide/StatScroll/Groups/Group_combat_estimates") as VBoxContainer
+	TestAssertions.truthy(estimates != null, "Stats page renders Combat Estimates before stat groups", failures)
+	var fighter_card := page.get_node_or_null("Layout/Content/StatSide/StatScroll/Groups/Group_combat_estimates/Action_fighter_cleave") as PanelContainer
+	TestAssertions.truthy(fighter_card != null, "selected Fighter primary action has an estimate card", failures)
+	if fighter_card != null:
+		var metrics := (fighter_card.get_node("Content/Metrics") as Label).text
+		TestAssertions.truthy("Normal Hit" in metrics and "Critical Hit" in metrics and "Average Hit" in metrics, "card exposes all hit values", failures)
+		TestAssertions.truthy("Attacks / Second" in metrics and "Estimated DPS" in metrics, "card exposes rate and DPS", failures)
+		TestAssertions.truthy("pre-mitigation" in fighter_card.tooltip_text and "per target" in fighter_card.tooltip_text, "card explains estimate boundary", failures)
+	TestAssertions.truthy(page.initial_focus() is Button and (page.initial_focus() as Button).name.begins_with("Stat_"), "combat estimates do not steal first-stat focus", failures)
+
+	var mixed_attack := fighter.primary_attack.duplicate(true) as AttackDefinition
+	mixed_attack.id = &"mixed_preview"
+	mixed_attack.damage_components = [_damage_component(&"physical", 10.0), _damage_component(&"fire", 5.0)]
+	fighter.primary_attack = mixed_attack
+	page.refresh()
+	var mixed_components_label := page.get_node_or_null("Layout/Content/StatSide/StatScroll/Groups/Group_combat_estimates/Action_mixed_preview/Content/Components") as Label
+	TestAssertions.truthy(mixed_components_label != null, "mixed estimate exposes a damage-type component breakdown", failures)
+	if mixed_components_label != null:
+		var mixed_components := mixed_components_label.text
+		TestAssertions.truthy("Physical" in mixed_components and "Fire" in mixed_components, "mixed estimate exposes each damage-type component", failures)
+	mixed_attack.can_crit = false
+	page.refresh()
+	var noncritical_metrics := page.get_node_or_null("Layout/Content/StatSide/StatScroll/Groups/Group_combat_estimates/Action_mixed_preview/Content/Metrics") as Label
+	TestAssertions.truthy(noncritical_metrics != null, "noncritical estimate exposes metrics", failures)
+	if noncritical_metrics != null:
+		TestAssertions.truthy("Critical Hit: Cannot Crit" in noncritical_metrics.text, "noncritical estimate says Cannot Crit", failures)
+	mixed_attack.damage_components = [_damage_component(&"unknown", 10.0)]
+	page.refresh()
+	var unavailable_metrics := page.get_node_or_null("Layout/Content/StatSide/StatScroll/Groups/Group_combat_estimates/Action_mixed_preview/Content/Metrics") as Label
+	TestAssertions.truthy(unavailable_metrics != null, "unavailable estimate exposes its reason", failures)
+	if unavailable_metrics != null:
+		var unavailable_text := unavailable_metrics.text.to_lower()
+		TestAssertions.truthy("estimate unavailable:" in unavailable_text and "unknown" in unavailable_text and "type" in unavailable_text, "unavailable estimate explains its invalid type boundary", failures)
+	fighter.primary_attack = null
+	page.refresh()
+	var empty_estimates := page.get_node_or_null("Layout/Content/StatSide/StatScroll/Groups/Group_combat_estimates/Empty") as Label
+	TestAssertions.truthy(empty_estimates != null and empty_estimates.text == "No damaging actions available.", "empty estimate group explains that no damaging actions are available", failures)
 
 	page.set_show_all(true)
 	TestAssertions.truthy(page.has_stat(&"fire_damage"), "Show All reveals fire stat", failures)
 	var group_names := (page.get_node("Layout/Content/StatSide/StatScroll/Groups") as VBoxContainer).get_children().map(
 		func(group: Node) -> StringName: return group.name
 	)
-	TestAssertions.equal(group_names, [&"Group_overview", &"Group_offense", &"Group_defense", &"Group_resistances", &"Group_utility"], "Show All follows canonical group order", failures)
+	TestAssertions.equal(group_names, [&"Group_combat_estimates", &"Group_overview", &"Group_offense", &"Group_defense", &"Group_resistances", &"Group_utility"], "Show All follows canonical group order", failures)
 	var resistance_group := page.get_node_or_null("Layout/Content/StatSide/StatScroll/Groups/Group_resistances")
 	TestAssertions.truthy(resistance_group != null, "Show All creates a Resistances group", failures)
 	if resistance_group != null:
@@ -99,6 +138,13 @@ func run() -> Array[String]:
 	page.free()
 	party.free()
 	return failures
+
+
+func _damage_component(type_id: StringName, amount: float) -> AttackDamageComponent:
+	var result := AttackDamageComponent.new()
+	result.damage_type_id = type_id
+	result.base_amount = amount
+	return result
 
 
 func _test_member_24_identity(failures: Array[String]) -> void:

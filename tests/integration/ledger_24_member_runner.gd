@@ -1,9 +1,10 @@
 extends SceneTree
 
 const LEDGER_SCENE_PATH := "res://scenes/ui/ledger/character_ledger.tscn"
-const PARTY_SCROLL_PATH := ^"Overlay/Frame/Layout/Body/PartyScroll"
-const MEMBER_1_PATH := ^"Overlay/Frame/Layout/Body/PartyScroll/PartyEntries/Member_1"
-const MEMBER_24_PATH := ^"Overlay/Frame/Layout/Body/PartyScroll/PartyEntries/Member_24"
+const PARTY_SCROLL_PATH := ^"Overlay/Frame/Layout/Body/PartyColumn/PartyScroll"
+const PARTY_COUNT_PATH := ^"Overlay/Frame/Layout/Body/PartyColumn/PartyCount"
+const MEMBER_1_PATH := ^"Overlay/Frame/Layout/Body/PartyColumn/PartyScroll/PartyEntries/Member_1"
+const MEMBER_24_PATH := ^"Overlay/Frame/Layout/Body/PartyColumn/PartyScroll/PartyEntries/Member_24"
 
 var _failures: Array[String] = []
 
@@ -55,6 +56,7 @@ func _exercise_viewport(viewport_size: Vector2i, compact: bool) -> void:
 	ledger.configure(run, party, catalog, Callable(), [context])
 	ledger.apply_viewport_size(Vector2(viewport_size))
 	_assert(ledger.open_for_player(), "%s ledger opens" % mode)
+	_assert_label_text(ledger, PARTY_COUNT_PATH, "Party Members: 24 / 24", "%s count reports all developer members" % mode)
 	await _wait_for_layout()
 
 	var expected_frame := Rect2(
@@ -124,6 +126,7 @@ func _exercise_provider_refresh_focus_lifecycle() -> void:
 	ledger.configure(run, party, catalog, Callable(), [context])
 	ledger.apply_viewport_size(Vector2(viewport.size))
 	_assert(ledger.open_for_player(), "refresh-focus ledger opens")
+	_assert_label_text(ledger, PARTY_COUNT_PATH, "Party Members: 2 / 24", "refresh fixture count reports initial members")
 	await _wait_for_layout()
 
 	var scroll := ledger.get_node(PARTY_SCROLL_PATH) as ScrollContainer
@@ -131,13 +134,28 @@ func _exercise_provider_refresh_focus_lifecycle() -> void:
 	member_24.grab_focus()
 	_assert(viewport.gui_get_focus_owner() == member_24, "refresh fixture starts with actual member 24 focus")
 	_assert(party.recruit(catalog.class_by_id(&"fighter")), "recruit triggers provider party refresh")
+	_assert_label_text(ledger, PARTY_COUNT_PATH, "Party Members: 3 / 24", "refresh fixture count reports recruited member")
 	await _wait_for_layout()
 	var rebuilt_member_24 := ledger.get_node(MEMBER_24_PATH) as Button
 	_assert(viewport.gui_get_focus_owner() == rebuilt_member_24, "provider refresh restores actual member 24 focus")
 	_assert(_rects_intersect(scroll, rebuilt_member_24), "provider refresh keeps focused member 24 in the roster viewport")
 
-	var show_all := ledger.get_node("Overlay/Frame/Layout/Body/PageHost/StatsLedgerPage/Layout/Content/StatSide/ShowAll") as CheckButton
+	var stats_page := ledger.get_node("Overlay/Frame/Layout/Body/PageHost/StatsLedgerPage") as StatsLedgerPage
+	var damage_button := stats_page.get_node("Layout/Content/StatSide/StatScroll/Groups/Group_offense/Stat_damage") as Button
+	damage_button.grab_focus()
+	_assert(viewport.gui_get_focus_owner() == damage_button, "Stats refresh fixture starts with actual stat-button focus")
+	stats_page.refresh()
+	await _wait_for_layout()
+	var rebuilt_damage_button := stats_page.get_node("Layout/Content/StatSide/StatScroll/Groups/Group_offense/Stat_damage") as Button
+	_assert(rebuilt_damage_button != damage_button, "Stats refresh replaces the focused stat button")
+	_assert(rebuilt_damage_button.get_meta("stat_id") == &"damage", "Stats replacement preserves the focused stat ID")
+	_assert(viewport.gui_get_focus_owner() == rebuilt_damage_button, "Stats refresh restores actual focus to the replacement stat button")
+
+	var show_all := stats_page.get_node("Layout/Content/StatSide/ShowAll") as CheckButton
 	show_all.grab_focus()
+	stats_page.refresh()
+	await _wait_for_layout()
+	_assert(viewport.gui_get_focus_owner() == show_all, "Stats refresh does not steal focus from a non-stat control")
 	ledger.refresh()
 	await _wait_for_layout()
 	_assert(viewport.gui_get_focus_owner() == show_all, "roster refresh does not steal active-page focus")
@@ -182,6 +200,18 @@ func _rects_intersect(scroll: ScrollContainer, member: Button) -> bool:
 
 func _assert_rect_near(actual: Rect2, expected: Rect2, message: String) -> void:
 	_assert(actual.position.is_equal_approx(expected.position) and actual.size.is_equal_approx(expected.size), "%s: expected=%s actual=%s" % [message, expected, actual])
+
+
+func _assert_label_text(parent: Node, path: NodePath, expected: String, message: String) -> void:
+	var node := parent.get_node_or_null(path)
+	if node == null:
+		_assert(false, "%s: missing Label at %s" % [message, path])
+		return
+	var label := node as Label
+	if label == null:
+		_assert(false, "%s: expected Label at %s, got %s" % [message, path, node.get_class()])
+		return
+	_assert(label.text == expected, "%s: expected=%s actual=%s" % [message, expected, label.text])
 
 
 func _assert(condition: bool, message: String) -> void:

@@ -148,7 +148,7 @@ func apply_viewport_size(size: Vector2) -> void:
 	var compact := _responsive_mode == RESPONSIVE_LAYOUT.Mode.COMPACT
 	_body().vertical = compact
 	_party_entries().columns = 3 if compact else 1
-	_party_scroll().custom_minimum_size = Vector2(0.0, 112.0) if compact else Vector2(260.0, 0.0)
+	_party_column().custom_minimum_size = Vector2(0.0, 136.0) if compact else Vector2(260.0, 0.0)
 	_page_host().custom_minimum_size = Vector2(0.0, 220.0) if compact else Vector2(600.0, 420.0)
 	_body().split_offset = 132 if compact else 280
 	var frame := _frame()
@@ -305,7 +305,7 @@ func _clear_dynamic_ui() -> void:
 	if host != null:
 		for child: Node in host.get_children():
 			child.free()
-	var entries := get_node_or_null("Overlay/Frame/Layout/Body/PartyScroll/PartyEntries")
+	var entries := get_node_or_null("Overlay/Frame/Layout/Body/PartyColumn/PartyScroll/PartyEntries")
 	if entries != null:
 		for child: Node in entries.get_children():
 			child.free()
@@ -326,6 +326,7 @@ func _disconnect_provider() -> void:
 	provider = null
 
 func _rebuild_member_rail() -> void:
+	_refresh_party_count()
 	var entries := _party_entries()
 	for child: Node in entries.get_children():
 		child.free()
@@ -346,6 +347,11 @@ func _rebuild_member_rail() -> void:
 	_configure_member_focus_neighbors()
 	_wire_roster_page_focus_bridge()
 	_request_member_visibility(context.selected_member_id)
+
+func _refresh_party_count() -> void:
+	var current := party.members.size() if party != null else 0
+	var maximum := party.capacity() if party != null else 0
+	_party_count().text = "Party Members: %d / %d" % [current, maximum]
 
 func _configure_member_focus_neighbors() -> void:
 	var buttons: Array[Button] = []
@@ -571,11 +577,17 @@ func _frame() -> PanelContainer:
 func _body() -> SplitContainer:
 	return get_node("Overlay/Frame/Layout/Body") as SplitContainer
 
+func _party_column() -> VBoxContainer:
+	return get_node("Overlay/Frame/Layout/Body/PartyColumn") as VBoxContainer
+
+func _party_count() -> Label:
+	return get_node("Overlay/Frame/Layout/Body/PartyColumn/PartyCount") as Label
+
 func _party_scroll() -> ScrollContainer:
-	return get_node("Overlay/Frame/Layout/Body/PartyScroll") as ScrollContainer
+	return get_node("Overlay/Frame/Layout/Body/PartyColumn/PartyScroll") as ScrollContainer
 
 func _party_entries() -> GridContainer:
-	return get_node("Overlay/Frame/Layout/Body/PartyScroll/PartyEntries") as GridContainer
+	return get_node("Overlay/Frame/Layout/Body/PartyColumn/PartyScroll/PartyEntries") as GridContainer
 
 func _page_host() -> Control:
 	return get_node("Overlay/Frame/Layout/Body/PageHost") as Control

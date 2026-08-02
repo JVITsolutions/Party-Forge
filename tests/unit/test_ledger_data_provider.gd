@@ -87,4 +87,63 @@ func run() -> Array[String]:
 		provider.data_changed.disconnect(on_data_changed)
 	health.free()
 	party.free()
+	_test_combat_estimate_action_discovery(failures)
 	return failures
+
+func _test_combat_estimate_action_discovery(failures: Array[String]) -> void:
+	var catalog := GameCatalog.load_defaults()
+	var definition := catalog.class_by_id(&"fighter").duplicate(true) as ClassDefinition
+	definition.id = &"estimate_fixture"
+	definition.primary_attack = catalog.class_by_id(&"fighter").primary_attack
+	definition.support_action = catalog.class_by_id(&"ranger").primary_attack
+	var party := PartyManager.new()
+	party.initialize(definition, catalog.traits)
+	var provider := LedgerDataProvider.new()
+	provider.configure(party, catalog, Callable())
+	var rows := provider.combat_estimate_rows(1)
+	TestAssertions.equal(rows.map(func(row: ActionCombatEstimate) -> StringName: return row.action_id), [&"fighter_cleave", &"ranger_shot"], "provider preserves authored action-slot order", failures)
+
+	definition.support_action = definition.primary_attack
+	party.initialize(definition, catalog.traits)
+	rows = provider.combat_estimate_rows(1)
+	TestAssertions.equal(rows.size(), 1, "duplicate action ID/resource appears once", failures)
+
+	var expected_primary := ActionCombatEstimateService.estimate(definition.primary_attack, 1, party, catalog.damage_types)
+	var original_primary_component := definition.primary_attack.damage_components[0]
+	var original_primary_base_amount := original_primary_component.base_amount
+	var duplicate_id_attack := definition.primary_attack.duplicate(true) as AttackDefinition
+	var duplicate_component := original_primary_component.duplicate(true) as AttackDamageComponent
+	duplicate_component.base_amount = 999.0
+	duplicate_id_attack.damage_components = [duplicate_component]
+	definition.support_action = duplicate_id_attack
+	party.initialize(definition, catalog.traits)
+	rows = provider.combat_estimate_rows(1)
+	TestAssertions.equal(duplicate_id_attack.id, definition.primary_attack.id, "duplicate resource retains the same non-empty action ID", failures)
+	TestAssertions.truthy(duplicate_id_attack.get_instance_id() != definition.primary_attack.get_instance_id(), "duplicate action ID fixture uses distinct resources", failures)
+	TestAssertions.truthy(duplicate_component.get_instance_id() != original_primary_component.get_instance_id(), "duplicate action fixture uses a distinct damage component resource", failures)
+	TestAssertions.near(definition.primary_attack.damage_components[0].base_amount, original_primary_base_amount, 0.001, "configuring duplicate action leaves original component unchanged", failures)
+	TestAssertions.truthy(not is_equal_approx(duplicate_component.base_amount, original_primary_base_amount), "duplicate action damage differs from original", failures)
+	TestAssertions.equal(rows.size(), 1, "duplicate action ID across resources appears once", failures)
+	TestAssertions.near(rows[0].normal_hit, expected_primary.normal_hit, 0.001, "duplicate action ID keeps the first authored action", failures)
+
+	definition.primary_attack = null
+	definition.support_action = catalog.class_by_id(&"ranger").primary_attack
+	party.initialize(definition, catalog.traits)
+	rows = provider.combat_estimate_rows(1)
+	TestAssertions.equal(rows.map(func(row: ActionCombatEstimate) -> StringName: return row.action_id), [&"ranger_shot"], "null current slot is omitted safely", failures)
+
+	definition.primary_attack = catalog.class_by_id(&"fighter").primary_attack
+	var componentless_attack := catalog.class_by_id(&"ranger").primary_attack.duplicate(true) as AttackDefinition
+	componentless_attack.damage_components = []
+	TestAssertions.truthy(not componentless_attack.is_healing() and componentless_attack.damage_components.is_empty(), "componentless fixture remains non-healing", failures)
+	definition.support_action = componentless_attack
+	party.initialize(definition, catalog.traits)
+	rows = provider.combat_estimate_rows(1)
+	TestAssertions.equal(rows.map(func(row: ActionCombatEstimate) -> StringName: return row.action_id), [&"fighter_cleave"], "non-healing componentless action is excluded", failures)
+
+	definition.support_action = catalog.class_by_id(&"cleric").support_action
+	party.initialize(definition, catalog.traits)
+	rows = provider.combat_estimate_rows(1)
+	TestAssertions.equal(rows.size(), 1, "healing-only support action is excluded", failures)
+	provider.configure(null, null, Callable())
+	party.free()
