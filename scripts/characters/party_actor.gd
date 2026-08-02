@@ -317,6 +317,7 @@ func _on_visual_revived() -> void:
 func _advance_visual_feedback(delta: float) -> void:
     var presentation := _presentation()
     if presentation != null:
+        presentation.advance_visual(delta)
         presentation.advance_feedback(delta)
     if damage_flash_remaining <= 0.0:
         return

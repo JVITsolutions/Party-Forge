@@ -6,6 +6,9 @@ signal attack_finished(token: int, action_id: StringName)
 
 const HIT_DURATION := 0.1
 const MOVEMENT_EPSILON_SQUARED := 0.0001
+const LOCOMOTION_TURN_RATE := 10.0
+const COMBAT_TURN_RATE := 16.0
+const CONTACT_SHADOW_HEIGHT := 0.006
 const REQUIRED_MODEL_METHODS: Array[StringName] = [
 	&"set_body_preset",
 	&"set_palette",
@@ -25,6 +28,7 @@ var hit_remaining := 0.0
 var logged_errors: Dictionary = {}
 var latest_planar_velocity := Vector3.ZERO
 var last_movement_direction := Vector3.FORWARD
+var target_yaw := 0.0
 var locomotion_action_id: StringName = &""
 var transient_action_id: StringName = &""
 var transient_locked := false
@@ -35,6 +39,7 @@ var _action_finished_callable := Callable()
 
 func apply_profile(profile: CharacterVisualProfile, primary_color: Color) -> bool:
 	_clear_model()
+	_ensure_contact_shadow()
 	active_profile = null
 	_set_fallback_visible(true)
 	if profile == null:
@@ -80,12 +85,15 @@ func apply_profile(profile: CharacterVisualProfile, primary_color: Color) -> boo
 				return _fail_active(StringName("slot_%s" % (entry.slot_id if entry != null else &"<null>")), "equipment item rejected")
 	if not play_idle():
 		return _fail_active(&"idle", "idle action rejected")
+	if active_model.has_method(&"refresh_grounding") and not refresh_grounding():
+		return _fail_active(&"grounding", "visible model bounds could not be grounded")
 	locomotion_action_id = profile.idle_action_id
 	_set_fallback_visible(false)
 	return true
 
 func set_body_preset(preset_id: StringName) -> bool:
-	return active_model != null and _call_bool(&"set_body_preset", [preset_id])
+	var applied := active_model != null and _call_bool(&"set_body_preset", [preset_id])
+	return applied and (not active_model.has_method(&"refresh_grounding") or refresh_grounding())
 
 func set_palette(palette_id: StringName, primary_color: Color) -> bool:
 	if active_model == null or not _call_bool(&"set_palette", [palette_id, primary_color]):
@@ -100,12 +108,23 @@ func apply_equipment_visual(slot_id: StringName, definition: EquipmentVisualDefi
 		return false
 	if not definition.supported_slot_ids.is_empty() and slot_id not in definition.supported_slot_ids:
 		return false
-	return _call_bool(&"apply_equipment_visual", [slot_id, definition])
+	var applied := _call_bool(&"apply_equipment_visual", [slot_id, definition])
+	return applied and (not active_model.has_method(&"refresh_grounding") or refresh_grounding())
 
 func clear_equipment_visual(slot_id: StringName) -> bool:
 	if active_model == null or not EquipmentSlotCatalog.is_valid(slot_id):
 		return false
-	return _call_bool(&"clear_equipment_visual", [slot_id])
+	var cleared := _call_bool(&"clear_equipment_visual", [slot_id])
+	return cleared and (not active_model.has_method(&"refresh_grounding") or refresh_grounding())
+
+func refresh_grounding() -> bool:
+	return active_model != null and active_model.has_method(&"refresh_grounding") and bool(active_model.call(&"refresh_grounding"))
+
+func visual_bounds() -> AABB:
+	if active_model == null or not active_model.has_method(&"visual_bounds"):
+		return AABB()
+	var bounds: AABB = active_model.call(&"visual_bounds")
+	return active_model.transform * bounds
 
 func equipped_weapon_family() -> StringName:
 	return StringName(active_model.call(&"equipped_weapon_family")) if active_model != null and active_model.has_method(&"equipped_weapon_family") else &"unarmed"
@@ -125,6 +144,7 @@ func start_attack(definition: AttackDefinition, target: CombatTarget, presentati
 	if downed_locked or active_model == null or definition == null or target == null or presentation == null or token <= 0 or not is_finite(playback_rate) or playback_rate <= 0.0:
 		return false
 	var previous_yaw := rotation.y
+	var previous_target_yaw := target_yaw
 	if target.is_available and target.actor != null and is_instance_valid(target.actor):
 		var presentation_position := global_position if is_inside_tree() else position
 		_face_direction(target.position - presentation_position)
@@ -133,6 +153,7 @@ func start_attack(definition: AttackDefinition, target: CombatTarget, presentati
 		return true
 	active_sequence_token = 0
 	rotation.y = previous_yaw
+	target_yaw = previous_target_yaw
 	return false
 
 func action_playback_rate() -> float:
@@ -160,11 +181,13 @@ func play_attack(definition: AttackDefinition, target: CombatTarget = null) -> v
 			locomotion_action_id = active_profile.idle_action_id
 		return
 	var previous_yaw := rotation.y
+	var previous_target_yaw := target_yaw
 	if target != null and target.is_available and is_instance_valid(target.actor):
 		var presentation_position := global_position if is_inside_tree() else position
 		_face_direction(target.position - presentation_position)
 	if not _begin_transient(animation_id):
 		rotation.y = previous_yaw
+		target_yaw = previous_target_yaw
 
 func play_action(animation_id: StringName, playback_rate: float = 1.0) -> bool:
 	return not downed_locked and active_model != null and _call_bool(&"play_action", [animation_id, playback_rate])
@@ -196,6 +219,14 @@ func advance_feedback(delta: float) -> void:
 	hit_remaining = maxf(0.0, hit_remaining - maxf(0.0, delta))
 	if is_zero_approx(hit_remaining) and active_model != null:
 		active_model.call(&"set_hit_weight", 0.0)
+
+func advance_visual(delta: float) -> void:
+	if not is_finite(delta) or delta <= 0.0:
+		return
+	var rate := COMBAT_TURN_RATE if transient_locked else LOCOMOTION_TURN_RATE
+	var maximum_step := rate * delta
+	var difference := angle_difference(rotation.y, target_yaw)
+	rotation.y = wrapf(rotation.y + clampf(difference, -maximum_step, maximum_step), -PI, PI)
 
 func set_downed(is_downed: bool) -> void:
 	downed_locked = is_downed
@@ -233,7 +264,7 @@ func _face_direction(direction: Vector3) -> void:
 	var planar := Vector3(direction.x, 0.0, direction.z)
 	if planar.length_squared() <= MOVEMENT_EPSILON_SQUARED:
 		return
-	rotation.y = atan2(-planar.x, -planar.z)
+	target_yaw = atan2(-planar.x, -planar.z)
 
 func _begin_transient(animation_id: StringName, playback_rate: float = 1.0) -> bool:
 	if downed_locked:
@@ -313,6 +344,29 @@ func _clear_model() -> void:
 	downed_locked = false
 	active_sequence_token = 0
 	rotation.y = 0.0
+	target_yaw = 0.0
+
+func _ensure_contact_shadow() -> void:
+	if get_node_or_null("ContactShadow") != null:
+		return
+	var shadow := MeshInstance3D.new()
+	shadow.name = "ContactShadow"
+	var mesh := CylinderMesh.new()
+	mesh.top_radius = 0.34
+	mesh.bottom_radius = 0.34
+	mesh.height = 0.008
+	mesh.radial_segments = 24
+	var material := StandardMaterial3D.new()
+	material.albedo_color = Color(0.02, 0.02, 0.025, 0.42)
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.disable_receive_shadows = true
+	material.cull_mode = BaseMaterial3D.CULL_DISABLED
+	mesh.material = material
+	shadow.mesh = mesh
+	shadow.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	shadow.position.y = CONTACT_SHADOW_HEIGHT
+	add_child(shadow)
 
 func _fail_active(key: StringName, reason: String) -> bool:
 	_log_once(key, "profile=%s operation=apply reason=%s" % [_profile_id(), reason])

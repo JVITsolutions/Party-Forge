@@ -176,6 +176,20 @@ func visual_bounds() -> AABB:
 		has_bounds = true
 	return bounds
 
+func refresh_grounding() -> bool:
+	position.y = 0.0
+	var bounds := visual_bounds()
+	if bounds.size == Vector3.ZERO or not bounds.position.is_finite() or not bounds.size.is_finite():
+		return false
+	position.y = -bounds.position.y
+	return absf(ground_gap()) <= 0.001
+
+func ground_gap() -> float:
+	var bounds := visual_bounds()
+	if bounds.size == Vector3.ZERO or not bounds.position.is_finite():
+		return INF
+	return position.y + bounds.position.y
+
 func play_action(animation_id: StringName, playback_rate: float = 1.0) -> bool:
 	if _is_downed or not is_finite(playback_rate) or playback_rate <= 0.0:
 		return false

@@ -188,6 +188,7 @@ func _test_sequence_bridge_and_feedback_isolation(failures: Array[String]) -> vo
 	presentation.attack_event.connect(func(token: int, action_id: StringName, event_name: StringName) -> void: events.append("%d:%s:%s" % [token, action_id, event_name]))
 	presentation.attack_finished.connect(func(token: int, action_id: StringName) -> void: events.append("%d:%s:finished" % [token, action_id]))
 	var token := fighter.attack_sequence_controller.request(definition.primary_attack, hostile.get_combat_target(), visual, 1.5, 1.0)
+	_advance_visual_to_target(presentation)
 	TestAssertions.truthy(token > 0, "tokenized Fighter slash starts", failures)
 	TestAssertions.equal(player.current_animation, &"attack_slash", "sequence bridge starts slash on action player", failures)
 	TestAssertions.near(player.speed_scale, 1.5, 0.001, "sequence bridge applies playback rate", failures)
@@ -201,10 +202,17 @@ func _test_sequence_bridge_and_feedback_isolation(failures: Array[String]) -> vo
 	if feedback_player != null:
 		TestAssertions.equal(feedback_player.current_animation, &"hit_flinch", "hit flinch plays only on feedback layer", failures)
 	presentation.active_model.action_finished.emit(&"attack_slash")
+	_advance_visual_to_target(presentation)
 	TestAssertions.truthy("%d:attack_slash:finished" % token in events, "model finish is bridged with gameplay token", failures)
 	TestAssertions.equal(player.current_animation, &"walk", "attack finish restores latest locomotion", failures)
 	TestAssertions.near(presentation.rotation.y, -PI / 2.0, 0.001, "restored eastward locomotion faces east", failures)
 	root.free()
+
+func _advance_visual_to_target(presentation: CharacterPresentation) -> void:
+	for _step: int in 120:
+		presentation.advance_visual(0.016)
+		if absf(angle_difference(presentation.rotation.y, presentation.target_yaw)) <= 0.001:
+			return
 
 func _test_downed_mid_attack_cancels_sequence(failures: Array[String]) -> void:
 	var root := _new_root("PartyActorDownedAttackCancellationTest")

@@ -199,14 +199,18 @@ func _test_locomotion_selects_actions_and_cardinal_facing(failures: Array[String
 	var model := presentation.active_model as FakeCharacterModel
 	if model != null:
 		TestAssertions.truthy(presentation.update_locomotion(Vector3(0.0, 0.0, -3.0)), "forward locomotion applies", failures)
+		_advance_visual_to_target(presentation)
 		TestAssertions.equal(model.played.back(), &"walk", "movement starts walk", failures)
 		TestAssertions.near(presentation.rotation.y, 0.0, 0.001, "-Z faces model forward", failures)
 		var played_after_walk := model.played.size()
 		presentation.update_locomotion(Vector3(3.0, 0.0, 0.0))
+		_advance_visual_to_target(presentation)
 		TestAssertions.near(presentation.rotation.y, -PI / 2.0, 0.001, "+X faces right", failures)
 		presentation.update_locomotion(Vector3(0.0, 0.0, 3.0))
+		_advance_visual_to_target(presentation)
 		TestAssertions.near(absf(presentation.rotation.y), PI, 0.001, "+Z faces backward", failures)
 		presentation.update_locomotion(Vector3(-3.0, 0.0, 0.0))
+		_advance_visual_to_target(presentation)
 		TestAssertions.near(presentation.rotation.y, PI / 2.0, 0.001, "-X faces left", failures)
 		TestAssertions.equal(model.played.size(), played_after_walk, "direction changes do not restart walk", failures)
 		var retained_yaw := presentation.rotation.y
@@ -280,6 +284,7 @@ func _test_attack_facing_locks_until_matching_completion(failures: Array[String]
 	if model != null:
 		presentation.update_locomotion(Vector3(0.0, 0.0, -2.0))
 		presentation.play_attack(_fighter_cleave(), target)
+		_advance_visual_to_target(presentation)
 		TestAssertions.equal(model.current_action_id, &"attack_slash", "attack action starts", failures)
 		TestAssertions.near(presentation.rotation.y, -PI / 2.0, 0.001, "attack faces locked target", failures)
 		var played_during_attack := model.played.size()
@@ -290,6 +295,7 @@ func _test_attack_facing_locks_until_matching_completion(failures: Array[String]
 		TestAssertions.near(presentation.rotation.y, -PI / 2.0, 0.001, "stale completion cannot release attack facing", failures)
 		TestAssertions.equal(model.current_action_id, &"attack_slash", "stale completion cannot replace attack action", failures)
 		model.finish_action(&"attack_slash")
+		_advance_visual_to_target(presentation)
 		TestAssertions.near(presentation.rotation.y, PI / 2.0, 0.001, "matching completion restores latest movement facing", failures)
 		TestAssertions.equal(model.current_action_id, &"walk", "matching completion resumes latest locomotion", failures)
 	root.free()
@@ -363,6 +369,7 @@ func _test_downed_blocks_and_revival_restores_locomotion(failures: Array[String]
 		model.finish_action(&"hit_flinch")
 		TestAssertions.equal(model.played.size(), played_while_downed, "downed lock blocks movement and stale transient completion", failures)
 		presentation.set_downed(false)
+		_advance_visual_to_target(presentation)
 		TestAssertions.truthy(not model.downed, "revival reaches model", failures)
 		TestAssertions.equal(model.current_action_id, &"walk", "revival restores stored moving state", failures)
 		TestAssertions.near(presentation.rotation.y, -PI / 2.0, 0.001, "revival restores stored movement facing", failures)
@@ -391,6 +398,7 @@ func _test_downed_blocks_all_action_entry_points(failures: Array[String]) -> voi
 		TestAssertions.near(presentation.hit_remaining, 0.0, 0.001, "downed hit attempt does not start feedback timer", failures)
 		TestAssertions.near(model.hit_weight, 0.0, 0.001, "downed hit attempt does not change hit weight", failures)
 		presentation.set_downed(false)
+		_advance_visual_to_target(presentation)
 		TestAssertions.equal(model.current_action_id, &"walk", "revival restores movement stored while action-gated", failures)
 		TestAssertions.near(presentation.rotation.y, -PI / 2.0, 0.001, "revival restores stored facing after action gate", failures)
 	root.free()
@@ -542,3 +550,9 @@ func _new_root(root_name: String) -> Node3D:
 	root.name = root_name
 	(Engine.get_main_loop() as SceneTree).root.add_child(root)
 	return root
+
+func _advance_visual_to_target(presentation: CharacterPresentation) -> void:
+	for _step: int in 120:
+		presentation.advance_visual(0.016)
+		if absf(angle_difference(presentation.rotation.y, presentation.target_yaw)) <= 0.001:
+			return

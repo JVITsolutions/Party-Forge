@@ -24,8 +24,12 @@ func _initialize() -> void:
 	for entry: Dictionary in directions:
 		actor.velocity = entry[&"velocity"] as Vector3
 		actor.call(&"update_presentation_locomotion")
-		if not _yaw_matches(presentation.rotation.y, float(entry[&"yaw"])) or model.active_action_id != &"walk" or actor.rotation != actor_rotation:
+		if not _yaw_matches(presentation.target_yaw, float(entry[&"yaw"])) or model.active_action_id != &"walk" or actor.rotation != actor_rotation:
 			_fail("cardinal direction did not rotate only the walking presentation")
+			return
+		_advance_to_target(presentation)
+		if not _yaw_matches(presentation.rotation.y, float(entry[&"yaw"])):
+			_fail("bounded visual turn did not converge")
 			return
 	actor.velocity = Vector3.ZERO
 	actor.call(&"update_presentation_locomotion")
@@ -37,19 +41,25 @@ func _initialize() -> void:
 	root.add_child(target_actor)
 	var target := CombatTarget.new(target_actor, target_actor.position, 2)
 	presentation.play_attack(FIGHTER_DEFINITION.primary_attack, target)
+	_advance_to_target(presentation)
 	actor.velocity = Vector3(-2.0, 0.0, 0.0)
 	actor.call(&"update_presentation_locomotion")
 	if model.active_action_id != &"attack_slash" or not is_equal_approx(presentation.rotation.y, -PI / 2.0):
 		_fail("attack target lock did not override movement")
 		return
 	model.call(&"_on_animation_finished", &"attack_slash")
+	_advance_to_target(presentation)
 	if model.active_action_id != &"walk" or not is_equal_approx(presentation.rotation.y, PI / 2.0):
 		_fail("source model attack completion did not restore latest movement")
 		return
 	if not _equipment_is_independent(presentation, model):
 		_fail("sword shield or arm equipment independence failed")
 		return
-	print("PARTY_FORGE_LOCOMOTION_SMOKE_OK directions=4 walk=1 idle=1 attack_lock=1 equipment_independent=1")
+	var shadow := presentation.get_node_or_null("ContactShadow") as MeshInstance3D
+	if not presentation.refresh_grounding() or absf(model.ground_gap()) > 0.01 or shadow == null or shadow.position.y < 0.002 or shadow.position.y > 0.01:
+		_fail("grounding or contact shadow contract failed")
+		return
+	print("PARTY_FORGE_LOCOMOTION_SMOKE_OK directions=4 walk=1 idle=1 smooth_turn=1 attack_lock=1 equipment_independent=1 grounding=1 shadow=1")
 	actor.free()
 	target_actor.free()
 	quit(0)
@@ -112,3 +122,9 @@ func _fail(reason: String) -> void:
 
 func _yaw_matches(actual: float, expected: float) -> bool:
 	return absf(angle_difference(actual, expected)) <= 0.001
+
+func _advance_to_target(presentation: CharacterPresentation) -> void:
+	for _step: int in 120:
+		presentation.advance_visual(0.016)
+		if _yaw_matches(presentation.rotation.y, presentation.target_yaw):
+			return
