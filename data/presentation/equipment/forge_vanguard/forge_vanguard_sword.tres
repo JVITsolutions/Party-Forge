@@ -1,0 +1,24 @@
+[gd_resource type="Resource" script_class="EquipmentVisualDefinition" load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://scripts/presentation/equipment_visual_definition.gd" id="1"]
+[ext_resource type="PackedScene" path="res://scenes/equipment/forge_vanguard/forge_vanguard_sword.tscn" id="2"]
+[ext_resource type="Texture2D" path="res://assets/ui/equipment/master/forge_vanguard/forge_vanguard_sword_256.png" id="3"]
+[ext_resource type="Texture2D" path="res://assets/ui/equipment/runtime/forge_vanguard/forge_vanguard_sword_128.png" id="4"]
+
+[resource]
+script = ExtResource("1")
+id = &"forge_vanguard_sword"
+slot_id = &"main_hand"
+geometry_key = &"forge_vanguard_sword"
+visual_channels = [&"geometry", &"silhouette"]
+supported_slot_ids = [&"main_hand"]
+presentation_scene = ExtResource("2")
+icon_master = ExtResource("3")
+icon_runtime = ExtResource("4")
+socket_id = &"HitPivot/BodyPivot/HipsPivot/TorsoPivot/RightShoulderPivot/RightElbowPivot/RightHandSocket"
+body_preset_ids = [&"masculine", &"feminine"]
+combat_visible = true
+item_colors = {&"primary": Color(0.8509804, 0.30980393, 0.30980393, 1), &"metal": Color(0.1882353, 0.227451, 0.278431, 1), &"leather": Color(0.290196, 0.203922, 0.14902, 1), &"brass": Color(0.713725, 0.545098, 0.227451, 1)}
+wearer_accent_channel = &"primary"
+weapon_animation_family_id = &"sword_shield"
+readability_channels = [&"silhouette"]

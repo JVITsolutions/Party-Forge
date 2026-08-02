@@ -1,0 +1,22 @@
+[gd_scene format=3]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_l41kq"]
+albedo_color = Color(0.1882353, 0.22745098, 0.2784314, 1)
+metallic = 0.7
+roughness = 0.78
+
+[sub_resource type="BoxMesh" id="BoxMesh_r8xmn"]
+size = Vector3(0.68, 0.68, 0.14)
+
+[node name="forge_vanguard_shield" type="Node3D" unique_id=680402802]
+
+[node name="Attachment" type="Node3D" parent="." unique_id=197175733]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.04, 0.21, 0.02)
+metadata/equipment_slot = &"off_hand"
+metadata/equipment_visual_id = &"forge_vanguard_shield"
+metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot/LeftShoulderPivot/LeftElbowPivot/LeftHandSocket"
+
+[node name="ReadableChannel" type="MeshInstance3D" parent="Attachment" unique_id=1366785380]
+material_override = SubResource("StandardMaterial3D_l41kq")
+mesh = SubResource("BoxMesh_r8xmn")
+metadata/palette_region = &"metal"

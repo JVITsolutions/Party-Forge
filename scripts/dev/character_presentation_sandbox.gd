@@ -177,10 +177,16 @@ func _apply_profile_mode(side_id: StringName, use_base_profile: bool) -> bool:
 	for slot_id: StringName in EquipmentSlotCatalog.SLOT_IDS:
 		_slot_enabled[_slot_key(side_id, slot_id)] = false
 		_equipped_visual_id.erase(_slot_key(side_id, slot_id))
-	for definition: EquipmentVisualDefinition in profile.default_equipment_visuals:
-		if definition != null:
-			_slot_enabled[_slot_key(side_id, definition.slot_id)] = true
-			_equipped_visual_id[_slot_key(side_id, definition.slot_id)] = definition.id
+	if profile.default_equipment.is_empty():
+		for definition: EquipmentVisualDefinition in profile.default_equipment_visuals:
+			if definition != null:
+				_slot_enabled[_slot_key(side_id, definition.slot_id)] = true
+				_equipped_visual_id[_slot_key(side_id, definition.slot_id)] = definition.id
+	else:
+		for entry: EquipmentLoadoutEntry in profile.default_equipment:
+			if entry != null and entry.item != null:
+				_slot_enabled[_slot_key(side_id, entry.slot_id)] = true
+				_equipped_visual_id[_slot_key(side_id, entry.slot_id)] = entry.item.id
 	return true
 
 func _presentation(side_id: StringName) -> CharacterPresentation:

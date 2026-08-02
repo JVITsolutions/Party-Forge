@@ -1,0 +1,21 @@
+[gd_scene format=3]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_1tmfx"]
+albedo_color = Color(0.2901961, 0.20392157, 0.14901961, 1)
+roughness = 0.78
+
+[sub_resource type="BoxMesh" id="BoxMesh_1lv42"]
+size = Vector3(0.58, 0.11, 0.32)
+
+[node name="forge_vanguard_belt" type="Node3D" unique_id=1282978714]
+
+[node name="Attachment" type="Node3D" parent="." unique_id=1048294602]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.04, 0)
+metadata/equipment_slot = &"belt"
+metadata/equipment_visual_id = &"forge_vanguard_belt"
+metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot"
+
+[node name="ReadableChannel" type="MeshInstance3D" parent="Attachment" unique_id=1781550377]
+material_override = SubResource("StandardMaterial3D_1tmfx")
+mesh = SubResource("BoxMesh_1lv42")
+metadata/palette_region = &"leather"

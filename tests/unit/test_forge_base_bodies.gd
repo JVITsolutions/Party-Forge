@@ -37,8 +37,8 @@ func _assert_base_body(preset_id: StringName, paths: Dictionary, failures: Array
 		return
 	TestAssertions.equal(profile.validate(), PackedStringArray(), "%s base profile validates" % preset_id, failures)
 	TestAssertions.equal(profile.default_body_preset, preset_id, "%s base profile selects its body" % preset_id, failures)
-	TestAssertions.truthy(profile.default_equipment_visuals.is_empty(), "%s base profile has no default equipment" % preset_id, failures)
-	TestAssertions.equal(profile.available_equipment_visuals.size(), EquipmentSlotCatalog.SLOT_IDS.size() + 1, "%s base profile exposes all slot visuals" % preset_id, failures)
+	TestAssertions.truthy(profile.default_equipment.is_empty(), "%s base profile has no default equipment" % preset_id, failures)
+	TestAssertions.equal(profile.available_equipment.size(), EquipmentSlotCatalog.SLOT_IDS.size() + 1, "%s base profile exposes all Fighter items" % preset_id, failures)
 	var model := scene.instantiate() as Node3D
 	TestAssertions.truthy(model != null and model.has_method(&"set_body_preset") and model.has_method(&"set_palette") and model.has_method(&"apply_equipment_visual") and model.has_method(&"clear_equipment_visual") and model.has_method(&"play_action"), "%s base scene retains public model API" % preset_id, failures)
 	if model == null:
@@ -47,15 +47,9 @@ func _assert_base_body(preset_id: StringName, paths: Dictionary, failures: Array
 		TestAssertions.truthy(model.get_node_or_null(pivot_path) != null, "%s retains pivot %s" % [preset_id, pivot_path], failures)
 	for slot_id: StringName in EquipmentSlotCatalog.SLOT_IDS:
 		var equipment_roots := _equipment_roots(model, slot_id)
-		var expected_count := 2 if slot_id == &"main_hand" else 1
-		var visual_ids: Array[StringName] = []
-		for equipment_root: Node3D in equipment_roots:
-			var visual_id := StringName(equipment_root.get_meta(&"equipment_visual_id", &""))
-			if not visual_ids.has(visual_id):
-				visual_ids.append(visual_id)
-			TestAssertions.truthy(not equipment_root.visible, "%s base scene hides %s variant %s" % [preset_id, slot_id, equipment_root.name], failures)
-		TestAssertions.equal(visual_ids.size(), expected_count, "%s base scene retains %s variants" % [preset_id, slot_id], failures)
-		TestAssertions.truthy(profile.get_available_equipment_visual(slot_id) != null, "%s base profile exposes %s" % [preset_id, slot_id], failures)
+		TestAssertions.equal(equipment_roots.size(), 0, "%s base scene contains no pre-equipped %s nodes" % [preset_id, slot_id], failures)
+		TestAssertions.truthy(model.call(&"has_equipment_slot", slot_id), "%s base scene exposes %s socket" % [preset_id, slot_id], failures)
+		TestAssertions.truthy(_has_available_item_for_slot(profile, slot_id), "%s base profile exposes %s equipment" % [preset_id, slot_id], failures)
 	for body_id: StringName in CharacterVisualProfile.BODY_PRESETS:
 		for body_node: Node3D in _body_nodes(model, body_id):
 			TestAssertions.equal(body_node.visible, body_id == preset_id, "%s base scene only shows its requested body" % preset_id, failures)
@@ -109,6 +103,12 @@ func _equipment_roots(model: Node3D, slot_id: StringName) -> Array[Node3D]:
 		if StringName(node.get_meta(&"equipment_slot", &"")) == slot_id:
 			roots.append(node as Node3D)
 	return roots
+
+func _has_available_item_for_slot(profile: CharacterVisualProfile, slot_id: StringName) -> bool:
+	for item: EquipmentBaseDefinition in profile.available_equipment:
+		if item != null and slot_id in item.compatible_slot_ids and item.presentation != null:
+			return true
+	return false
 
 func _body_nodes(model: Node3D, body_id: StringName) -> Array[Node3D]:
 	var nodes: Array[Node3D] = []

@@ -27,7 +27,7 @@ func run() -> Array[String]:
 	TestAssertions.truthy(profile != null and profile.presentation_scene != null, "Forge Vanguard animation scene loads", failures)
 	if profile == null or profile.presentation_scene == null:
 		return failures
-	var model := profile.presentation_scene.instantiate() as ForgeVanguardModel
+	var model := profile.presentation_scene.instantiate() as ForgeHumanoidModel
 	TestAssertions.truthy(model != null, "Forge Vanguard model instantiates for animation contract", failures)
 	if model == null:
 		return failures
@@ -39,7 +39,7 @@ func run() -> Array[String]:
 		_assert_guard_contract(player, failures)
 		_assert_model_root_is_not_animated(player, failures)
 		_assert_playback_contract(model, player, failures)
-	_assert_feedback_contract(model, failures)
+	_assert_feedback_contract(model, profile, failures)
 	_assert_fighter_cleave_mapping(profile, failures)
 	model.free()
 	return failures
@@ -85,7 +85,7 @@ func _assert_model_root_is_not_animated(player: AnimationPlayer, failures: Array
 			var property := StringName(target_and_property[1])
 			TestAssertions.truthy(not (targets_root and property in ROOT_TRANSFORM_PROPERTIES), "%s does not animate the model root %s" % [animation_id, property], failures)
 
-func _assert_playback_contract(model: ForgeVanguardModel, player: AnimationPlayer, failures: Array[String]) -> void:
+func _assert_playback_contract(model: ForgeHumanoidModel, player: AnimationPlayer, failures: Array[String]) -> void:
 	TestAssertions.truthy(not model.play_action(&"unknown_action"), "unknown action is rejected", failures)
 	for animation_id: StringName in [&"idle", &"attack_slash", &"attack_combo", &"hit_flinch"]:
 		TestAssertions.truthy(model.play_action(animation_id), "%s action starts" % animation_id, failures)
@@ -93,7 +93,11 @@ func _assert_playback_contract(model: ForgeVanguardModel, player: AnimationPlaye
 		if animation_id != &"idle":
 			TestAssertions.truthy(&"idle" in player.get_queue(), "%s queues idle recovery" % animation_id, failures)
 
-func _assert_feedback_contract(model: ForgeVanguardModel, failures: Array[String]) -> void:
+
+func _assert_feedback_contract(model: ForgeHumanoidModel, profile: CharacterVisualProfile, failures: Array[String]) -> void:
+	for entry: EquipmentLoadoutEntry in profile.default_equipment:
+		if entry != null and entry.item != null and entry.item.presentation != null:
+			model.apply_equipment_visual(entry.slot_id, entry.item.presentation)
 	model.set_palette(&"red", Color("d94f4f"))
 	var primary := _first_primary_mesh(model)
 	TestAssertions.truthy(primary != null, "primary palette mesh exists for hit feedback", failures)
@@ -122,7 +126,7 @@ func _assert_fighter_cleave_mapping(profile: CharacterVisualProfile, failures: A
 	TestAssertions.equal(profile.attack_animation_by_id.get(&"fighter_cleave"), &"attack_slash", "fighter cleave maps only to slash", failures)
 	TestAssertions.truthy(not profile.attack_animation_by_id.values().has(&"attack_combo"), "fighter cleave does not map to combo", failures)
 
-func _first_primary_mesh(model: ForgeVanguardModel) -> MeshInstance3D:
+func _first_primary_mesh(model: ForgeHumanoidModel) -> MeshInstance3D:
 	for node: Node in model.find_children("*", "MeshInstance3D", true, false):
 		if StringName(node.get_meta(&"palette_region", &"")) == &"primary":
 			return node as MeshInstance3D

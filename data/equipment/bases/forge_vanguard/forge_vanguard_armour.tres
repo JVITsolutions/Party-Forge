@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="EquipmentBaseDefinition" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/equipment/equipment_base_definition.gd" id="1"]
+[ext_resource type="Resource" path="res://data/presentation/equipment/forge_vanguard/forge_vanguard_armour.tres" id="2"]
+
+[resource]
+script = ExtResource("1")
+id = &"forge_vanguard_armour"
+display_name = "Forge Vanguard Armour"
+item_type_id = &"body_armour"
+compatible_slot_ids = [&"body_armour"]
+weight_class_id = &"accessory"
+handedness_id = &"none"
+weapon_family_id = &""
+implicit_family_id = &"forge_vanguard"
+presentation = ExtResource("2")

@@ -1,0 +1,39 @@
+[gd_scene format=3]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_jnr2p"]
+albedo_color = Color(0.8509804, 0.30980393, 0.30980393, 1)
+roughness = 0.78
+
+[sub_resource type="BoxMesh" id="BoxMesh_o5l0a"]
+size = Vector3(0.23, 0.18, 0.34)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_hbfl6"]
+albedo_color = Color(0.8509804, 0.30980393, 0.30980393, 1)
+roughness = 0.78
+
+[sub_resource type="BoxMesh" id="BoxMesh_lakbl"]
+size = Vector3(0.23, 0.18, 0.34)
+
+[node name="forge_vanguard_boots" type="Node3D" unique_id=1887694166]
+
+[node name="Attachment" type="Node3D" parent="." unique_id=1723566087]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.01, 0.05, 0)
+metadata/equipment_slot = &"boots"
+metadata/equipment_visual_id = &"forge_vanguard_boots"
+metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/LeftHipPivot/LeftKneePivot/LeftFootPivot"
+
+[node name="ReadableChannel" type="MeshInstance3D" parent="Attachment" unique_id=1758034071]
+material_override = SubResource("StandardMaterial3D_jnr2p")
+mesh = SubResource("BoxMesh_o5l0a")
+metadata/palette_region = &"primary"
+
+[node name="@Node3D@6" type="Node3D" parent="." unique_id=1788316126]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.01, 0.05, 0)
+metadata/equipment_slot = &"boots"
+metadata/equipment_visual_id = &"forge_vanguard_boots"
+metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/RightHipPivot/RightKneePivot/RightFootPivot"
+
+[node name="ReadableChannel" type="MeshInstance3D" parent="@Node3D@6" unique_id=1800340995]
+material_override = SubResource("StandardMaterial3D_hbfl6")
+mesh = SubResource("BoxMesh_lakbl")
+metadata/palette_region = &"primary"

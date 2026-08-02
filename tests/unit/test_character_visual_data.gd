@@ -1,8 +1,8 @@
 extends RefCounted
 
 const EXPECTED_SLOTS: Array[StringName] = [
-	&"main_hand", &"off_hand", &"helmet", &"body_armour", &"gloves",
-	&"boots", &"belt", &"amulet", &"ring_left", &"ring_right",
+	&"helmet", &"body_armour", &"legs", &"gloves", &"boots", &"amulet",
+	&"ring_left", &"ring_right", &"belt", &"main_hand", &"off_hand",
 ]
 
 func run() -> Array[String]:

@@ -47,12 +47,18 @@ func validate() -> PackedStringArray:
 	return errors
 
 func get_available_equipment_visual(slot_id: StringName) -> EquipmentVisualDefinition:
+	for item: EquipmentBaseDefinition in available_equipment:
+		if item != null and slot_id in item.compatible_slot_ids and item.presentation != null:
+			return item.presentation
 	for definition: EquipmentVisualDefinition in available_equipment_visuals:
 		if definition != null and definition.slot_id == slot_id:
 			return definition
 	return null
 
 func get_available_equipment_visual_by_id(equipment_id: StringName) -> EquipmentVisualDefinition:
+	for item: EquipmentBaseDefinition in available_equipment:
+		if item != null and item.id == equipment_id:
+			return item.presentation
 	for definition: EquipmentVisualDefinition in available_equipment_visuals:
 		if definition != null and definition.id == equipment_id:
 			return definition
@@ -60,6 +66,9 @@ func get_available_equipment_visual_by_id(equipment_id: StringName) -> Equipment
 
 func get_available_equipment_visuals_for_slot(slot_id: StringName) -> Array[EquipmentVisualDefinition]:
 	var matches: Array[EquipmentVisualDefinition] = []
+	for item: EquipmentBaseDefinition in available_equipment:
+		if item != null and slot_id in item.compatible_slot_ids and item.presentation != null:
+			matches.append(item.presentation)
 	for definition: EquipmentVisualDefinition in available_equipment_visuals:
 		if definition != null and definition.slot_id == slot_id:
 			matches.append(definition)

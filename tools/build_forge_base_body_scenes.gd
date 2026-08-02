@@ -1,6 +1,6 @@
 extends SceneTree
 
-const SOURCE_SCENE := preload("res://scenes/characters/presentation/forge_vanguard_model.tscn")
+const SOURCE_SCENE := preload("res://scenes/characters/presentation/forge_humanoid_model.tscn")
 const OUTPUT_PATHS := {
 	&"masculine": "res://scenes/characters/presentation/forge_base_masculine.tscn",
 	&"feminine": "res://scenes/characters/presentation/forge_base_feminine.tscn",
@@ -17,7 +17,7 @@ func _initialize() -> void:
 	quit(0)
 
 func _build_base_body(preset_id: StringName, output_path: String) -> bool:
-	var model := SOURCE_SCENE.instantiate() as ForgeVanguardModel
+	var model := SOURCE_SCENE.instantiate() as ForgeHumanoidModel
 	if model == null or not model.set_body_preset(preset_id):
 		push_error("FORGE_BASE_BODY_BUILD_ERROR preset=%s reason=body selection failed" % preset_id)
 		return false

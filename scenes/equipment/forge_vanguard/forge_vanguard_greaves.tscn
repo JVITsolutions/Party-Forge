@@ -1,0 +1,37 @@
+[gd_scene format=3]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_3gw54"]
+albedo_color = Color(0.1882353, 0.22745098, 0.2784314, 1)
+metallic = 0.7
+roughness = 0.78
+
+[sub_resource type="BoxMesh" id="BoxMesh_ropks"]
+size = Vector3(0.24, 0.42, 0.24)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_che5d"]
+albedo_color = Color(0.1882353, 0.22745098, 0.2784314, 1)
+metallic = 0.7
+roughness = 0.78
+
+[sub_resource type="BoxMesh" id="BoxMesh_ijhw2"]
+size = Vector3(0.24, 0.42, 0.24)
+
+[node name="forge_vanguard_greaves" type="Node3D" unique_id=1387311152]
+
+[node name="Attachment" type="Node3D" parent="." unique_id=1684409486]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.28, 0)
+metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/LeftHipPivot"
+
+[node name="@MeshInstance3D@2" type="MeshInstance3D" parent="Attachment" unique_id=50178096]
+material_override = SubResource("StandardMaterial3D_3gw54")
+mesh = SubResource("BoxMesh_ropks")
+metadata/palette_region = &"metal"
+
+[node name="@Node3D@4" type="Node3D" parent="." unique_id=1172692233]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.28, 0)
+metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/RightHipPivot"
+
+[node name="@MeshInstance3D@3" type="MeshInstance3D" parent="@Node3D@4" unique_id=1521929204]
+material_override = SubResource("StandardMaterial3D_che5d")
+mesh = SubResource("BoxMesh_ijhw2")
+metadata/palette_region = &"metal"
