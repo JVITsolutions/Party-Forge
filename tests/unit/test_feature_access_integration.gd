@@ -1,7 +1,6 @@
 extends RefCounted
 
 const LEDGER_FEATURES: Array[StringName] = [&"stats", &"current_upgrades", &"equipment_inventory"]
-const IMPLEMENTED_UNLOCKS: Array[StringName] = [&"advanced_stats"]
 
 func run() -> Array[String]:
 	var failures: Array[String] = []
@@ -16,11 +15,14 @@ func _test_feature_state_matrix(failures: Array[String]) -> void:
 	developer_settings.mode = PartyForgeSettings.Mode.DEVELOPER_MODE
 	var unlock_all_settings := developer_settings.copy()
 	unlock_all_settings.unlock_all_implemented_content = true
+	var implemented_unlock := _city_unlock_id(&"equipment-registry", &"feature_unlock")
+	TestAssertions.equal(implemented_unlock, &"equipment_inventory", "implemented unlock comes from the committed City artifact", failures)
 
-	var player_gate := _gate_for(player_settings)
-	var developer_gate := _gate_for(developer_settings)
-	var unlock_all_gate := _gate_for(unlock_all_settings)
-	var definition := _definition(&"stats", &"advanced_stats")
+	var player_gate := _gate_for(player_settings, implemented_unlock)
+	var developer_gate := _gate_for(developer_settings, implemented_unlock)
+	var unlock_all_gate := _gate_for(unlock_all_settings, implemented_unlock)
+	var allocated_gate := _gate_for(player_settings, implemented_unlock, [implemented_unlock])
+	var definition := _definition(&"equipment_inventory", implemented_unlock)
 	var cases: Array[Dictionary] = [
 		{
 			"state": LedgerPageDefinition.State.HIDDEN,
@@ -56,6 +58,9 @@ func _test_feature_state_matrix(failures: Array[String]) -> void:
 		TestAssertions.equal(player_gate.resolve(definition), int(test_case.player), "%s resolves in Player Simulation" % test_case.label, failures)
 		TestAssertions.equal(developer_gate.resolve(definition), int(test_case.developer), "%s resolves in Developer Mode" % test_case.label, failures)
 		TestAssertions.equal(unlock_all_gate.resolve(definition), int(test_case.unlock_all), "%s resolves with Unlock All" % test_case.label, failures)
+	definition.development_state = LedgerPageDefinition.State.AVAILABLE
+	TestAssertions.equal(allocated_gate.resolve(definition), LedgerPageDefinition.State.AVAILABLE, "implemented content is available after exact passive unlock allocation", failures)
+	_test_prefixed_unlocks_do_not_collide(player_settings, failures)
 
 func _test_ledger_catalog_policy_and_equipment_boundary(failures: Array[String]) -> void:
 	var stats := load("res://data/ui/ledger_pages/stats.tres") as LedgerPageDefinition
@@ -118,9 +123,33 @@ func _test_main_reconfigures_policy_before_run_start(failures: Array[String]) ->
 	main.free()
 	ProfileTestSupport.remove_tree(profile_root)
 
-func _gate_for(settings: PartyForgeSettings) -> LedgerFeatureGate:
-	var policy := RunRulesSnapshot.from_settings(settings).feature_policy(LEDGER_FEATURES, IMPLEMENTED_UNLOCKS)
-	return LedgerFeatureGate.new(policy, LEDGER_FEATURES, IMPLEMENTED_UNLOCKS)
+func _test_prefixed_unlocks_do_not_collide(settings: PartyForgeSettings, failures: Array[String]) -> void:
+	var unprefixed := _city_unlock_id(&"equipment-registry", &"feature_unlock")
+	var prefixed: Array[StringName] = [
+		_city_unlock_id(&"arena-charter", &"mode_unlock"),
+		_city_unlock_id(&"artificers-hall", &"city_service_unlock"),
+		_city_unlock_id(&"north-road-charter", &"region_unlock"),
+	]
+	var known_unlocks := prefixed.duplicate()
+	known_unlocks.append(unprefixed)
+	var policy := RunRulesSnapshot.from_settings(settings).feature_policy(LEDGER_FEATURES, known_unlocks, prefixed)
+	TestAssertions.equal(policy.resolve(&"equipment_inventory", FeatureAccessPolicy.State.AVAILABLE, unprefixed), FeatureAccessPolicy.State.HIDDEN, "prefixed mode/service/region unlocks cannot activate an unprefixed feature", failures)
+	TestAssertions.truthy(unprefixed not in prefixed, "passive unlock namespaces remain distinct", failures)
+	TestAssertions.equal(prefixed, [&"mode:battle", &"service:crafting", &"region:north-road"], "City mode/service/region unlock prefixes are exact", failures)
+
+func _gate_for(settings: PartyForgeSettings, implemented_unlock: StringName, unlocked: Array[StringName] = []) -> LedgerFeatureGate:
+	var implemented_unlocks: Array[StringName] = [implemented_unlock]
+	var policy := RunRulesSnapshot.from_settings(settings).feature_policy(LEDGER_FEATURES, implemented_unlocks, unlocked)
+	return LedgerFeatureGate.new(policy, LEDGER_FEATURES, implemented_unlocks)
+
+func _city_unlock_id(node_id: StringName, effect_id: StringName) -> StringName:
+	var catalog_result := PassiveTreeCatalog.load_defaults()
+	if not catalog_result.ok():
+		return &""
+	for effect: PassiveTreeEffect in catalog_result.tree.node(node_id).effects:
+		if effect.effect_id == effect_id:
+			return PassiveEffectRegistry.new().unlock_id(effect)
+	return &""
 
 func _definition(feature_id: StringName, unlock_id: StringName = &"") -> LedgerPageDefinition:
 	var result := LedgerPageDefinition.new()
