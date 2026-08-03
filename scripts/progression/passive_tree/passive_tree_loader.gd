@@ -6,6 +6,8 @@ const FORMAT_VERSION := 1
 const OPERATIONS: Array[StringName] = [&"add_flat", &"add_percent", &"multiply", &"set", &"custom"]
 const DIRECTIONS: Array[StringName] = [&"bidirectional", &"forward"]
 const ERROR_PREFIX := "PARTY_FORGE_PASSIVE_TREE_ERROR path="
+const SIGNED_64_MIN_AS_FLOAT := -9223372036854775808.0
+const SIGNED_64_MAX_EXCLUSIVE_AS_FLOAT := 9223372036854775808.0
 
 func load_path(path: String) -> PassiveTreeLoadResult:
 	var result := PassiveTreeLoadResult.new()
@@ -116,11 +118,14 @@ func load_dictionary(document: Dictionary, source_path: String) -> PassiveTreeLo
 		if direction != &"" and not DIRECTIONS.has(direction):
 			_add_error(errors, source_path, "%s.direction" % field, "must be bidirectional or forward")
 		if from_id != &"" and to_id != &"" and from_id != to_id:
-			var endpoint_pair := "%s\u001f%s" % [from_id, to_id] if String(from_id) < String(to_id) else "%s\u001f%s" % [to_id, from_id]
-			if endpoint_pairs.has(endpoint_pair):
+			var first_endpoint := from_id if String(from_id) < String(to_id) else to_id
+			var second_endpoint := to_id if first_endpoint == from_id else from_id
+			var paired_endpoints: Dictionary = endpoint_pairs.get(first_endpoint, {})
+			if paired_endpoints.has(second_endpoint):
 				_add_error(errors, source_path, field, "duplicate endpoint pair '%s' and '%s'" % [from_id, to_id])
 			else:
-				endpoint_pairs[endpoint_pair] = true
+				paired_endpoints[second_endpoint] = true
+				endpoint_pairs[first_endpoint] = paired_endpoints
 		connections.append(PassiveTreeConnection.new(connection_id, from_id, to_id, direction, connection_cost, conditions, connection_metadata))
 
 	if errors.is_empty():
@@ -174,7 +179,11 @@ func _position(value: Variant, field: String, source_path: String, errors: Array
 		return Vector2.ZERO
 	var x := _finite_number(document.get("x"), "%s.x" % field, source_path, errors)
 	var y := _finite_number(document.get("y"), "%s.y" % field, source_path, errors)
-	return Vector2(x, y)
+	var position := Vector2(x, y)
+	if not position.is_finite():
+		_add_error(errors, source_path, field, "components must remain a finite Vector2 after conversion")
+		return Vector2.ZERO
+	return position
 
 func _array(value: Variant, field: String, source_path: String, errors: Array[String]) -> Array:
 	if not value is Array:
@@ -205,7 +214,7 @@ func _string_name(value: Variant, field: String, source_path: String, errors: Ar
 
 func _non_negative_integer(value: Variant, field: String, source_path: String, errors: Array[String]) -> int:
 	if not _is_json_integer(value):
-		_add_error(errors, source_path, field, "must be a non-negative integer")
+		_add_error(errors, source_path, field, "must be a representable signed 64-bit non-negative integer")
 		return 0
 	var integer := int(value)
 	if integer < 0:
@@ -228,7 +237,9 @@ func _validate_exact_string(value: Variant, expected: String, field: String, sou
 		_add_error(errors, source_path, field, "must equal '%s'" % expected)
 
 func _validate_exact_integer(value: Variant, expected: int, field: String, source_path: String, errors: Array[String]) -> void:
-	if not _is_json_integer(value) or int(value) != expected:
+	if not _is_json_integer(value):
+		_add_error(errors, source_path, field, "must be a representable signed 64-bit integer equal to %d" % expected)
+	elif int(value) != expected:
 		_add_error(errors, source_path, field, "must equal integer %d" % expected)
 
 func _is_json_integer(value: Variant) -> bool:
@@ -237,7 +248,11 @@ func _is_json_integer(value: Variant) -> bool:
 	if typeof(value) != TYPE_FLOAT:
 		return false
 	var number := value as float
-	return not is_nan(number) and not is_inf(number) and number == floorf(number)
+	return not is_nan(number) \
+		and not is_inf(number) \
+		and number == floorf(number) \
+		and number >= SIGNED_64_MIN_AS_FLOAT \
+		and number < SIGNED_64_MAX_EXCLUSIVE_AS_FLOAT
 
 func _add_error(errors: Array[String], source_path: String, field: String, message: String) -> void:
 	errors.append("%s%s field=%s message=%s" % [ERROR_PREFIX, source_path, field, message])

@@ -67,6 +67,8 @@ func _test_root_contract(failures: Array[String]) -> void:
 	_assert_invalid_change(["format"], "other", "format must be exact", "format", failures)
 	_assert_invalid_change(["formatVersion"], 2, "version must be exact", "formatVersion", failures)
 	_assert_invalid_change(["formatVersion"], 1.5, "version must be an exact integer value", "formatVersion", failures)
+	_assert_invalid_change(["formatVersion"], 1e300, "positive out-of-range version is rejected before conversion", "signed 64-bit", failures)
+	_assert_invalid_change(["formatVersion"], -1e300, "negative out-of-range version is rejected before conversion", "signed 64-bit", failures)
 	_assert_invalid_change(["treeId"], "", "tree ID must be non-empty", "treeId", failures)
 	_assert_invalid_change(["name"], "  ", "tree name must be non-empty", "name", failures)
 	_assert_invalid_change(["startingNodeIds"], {}, "starting IDs must be an array", "startingNodeIds", failures)
@@ -83,8 +85,11 @@ func _test_node_contract(failures: Array[String]) -> void:
 	_assert_invalid_change(["nodes", 0, "position"], [], "position must be an object", "nodes[0].position", failures)
 	_assert_invalid_change(["nodes", 0, "position", "x"], NAN, "position must be finite", "position.x", failures)
 	_assert_invalid_change(["nodes", 0, "position", "y"], INF, "position infinity rejected", "position.y", failures)
+	_assert_invalid_change(["nodes", 0, "position", "x"], 1e300, "position must remain finite after Vector2 narrowing", "finite Vector2", failures)
 	_assert_invalid_change(["nodes", 0, "cost"], -1, "node cost must be non-negative", "nodes[0].cost", failures)
 	_assert_invalid_change(["nodes", 0, "cost"], 1.5, "node cost must be integer", "nodes[0].cost", failures)
+	_assert_invalid_change(["nodes", 0, "cost"], 1e300, "positive out-of-range node cost is rejected before conversion", "signed 64-bit", failures)
+	_assert_invalid_change(["nodes", 0, "cost"], -1e300, "negative out-of-range node cost is rejected before conversion", "signed 64-bit", failures)
 	_assert_invalid_change(["nodes", 0, "tags"], {}, "tags must be an array", "nodes[0].tags", failures)
 	_assert_invalid_change(["nodes", 0, "metadata"], [], "node metadata must be an object", "nodes[0].metadata", failures)
 
@@ -131,6 +136,25 @@ func _test_connection_contract(failures: Array[String]) -> void:
 	reverse["to"] = "root"
 	(duplicate_endpoints["connections"] as Array).append(reverse)
 	_assert_invalid(duplicate_endpoints, "duplicate unordered endpoints rejected", "duplicate endpoint pair", failures)
+
+	var delimiter_ids := _valid_document()
+	delimiter_ids["startingNodeIds"] = ["a"]
+	var node_template: Dictionary = (delimiter_ids["nodes"] as Array)[0].duplicate(true)
+	var delimiter_nodes: Array = []
+	for node_id: String in ["a", "b\u001fc", "a\u001fb", "c"]:
+		var node_document := node_template.duplicate(true)
+		node_document["id"] = node_id
+		node_document["name"] = "Node %s" % node_id
+		node_document["type"] = "start" if node_id == "a" else "small"
+		delimiter_nodes.append(node_document)
+	delimiter_ids["nodes"] = delimiter_nodes
+	delimiter_ids["connections"] = [
+		{"id": "first", "from": "a", "to": "b\u001fc", "direction": "bidirectional", "cost": 0, "conditions": [], "metadata": {}},
+		{"id": "second", "from": "a\u001fb", "to": "c", "direction": "bidirectional", "cost": 0, "conditions": [], "metadata": {}},
+	]
+	var delimiter_result := PassiveTreeLoader.new().load_dictionary(delimiter_ids, "memory://delimiter-ids")
+	TestAssertions.truthy(delimiter_result.ok(), "distinct endpoint pairs containing the old delimiter do not collide", failures)
+	TestAssertions.equal(delimiter_result.errors, [], "delimiter endpoint-pair errors", failures)
 
 	for direction: String in ["bidirectional", "forward"]:
 		var document := _valid_document()
