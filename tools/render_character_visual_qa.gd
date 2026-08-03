@@ -4,12 +4,15 @@ const BODY_IDS: Array[StringName] = [&"masculine", &"feminine"]
 const OUTPUT_ROOT := "res://docs/qa/character-presentation-quality"
 const FRAME_SIZE := Vector2i(768, 768)
 const CONTACT_COLUMNS := 5
-const SAMPLE_COUNT := 17
+const SAMPLE_COUNT := 19
 const LEADER_SCENE := preload("res://scenes/characters/leader.tscn")
 const HEALTH_BAR_SCENE := preload("res://scenes/ui/health_bar_3d.tscn")
+const LEFT_HAND_PATH := "HitPivot/BodyPivot/HipsPivot/TorsoPivot/LeftShoulderPivot/LeftElbowPivot/LeftHandSocket"
+const RIGHT_HAND_PATH := "HitPivot/BodyPivot/HipsPivot/TorsoPivot/RightShoulderPivot/RightElbowPivot/RightHandSocket"
 
 var viewport: SubViewport
 var stage: Node3D
+var camera: Camera3D
 var overlay_nodes: Array[Node3D] = []
 var manifest_rows: Array[Dictionary] = []
 
@@ -62,10 +65,12 @@ func _setup_stage() -> void:
 	light.light_energy = 1.25
 	light.shadow_enabled = true
 	stage.add_child(light)
-	var camera := Camera3D.new()
+	camera = Camera3D.new()
 	camera.projection = Camera3D.PROJECTION_ORTHOGONAL
 	camera.size = 4.2
-	camera.position = Vector3(3.4, 3.15, 5.2)
+	# Runtime humanoids face local -Z. Observe that axis directly so the frame
+	# named "front" cannot silently become a rear-view pose regression.
+	camera.position = Vector3(0.0, 3.15, -5.8)
 	camera.look_at_from_position(camera.position, Vector3(0.0, 1.0, 0.0), Vector3.UP)
 	camera.current = true
 	stage.add_child(camera)
@@ -124,6 +129,7 @@ func _render_combination(definition: ClassDefinition, body_id: StringName) -> bo
 		_clear_overlays()
 		presentation.rotation.y = float(sample[&"yaw"])
 		presentation.target_yaw = presentation.rotation.y
+		camera.size = float(sample.get(&"camera_size", 4.2))
 		if bool(sample.get(&"clear_hands", false)):
 			presentation.clear_equipment_visual(&"main_hand")
 			presentation.clear_equipment_visual(&"off_hand")
@@ -172,10 +178,12 @@ func _samples(idle_action: StringName, walk_action: StringName, attack_action: S
 		_sample(&"hands_equipped", idle_action, 0.0, -PI / 2.0),
 		_sample(&"hands_cleared", idle_action, 0.0, -PI / 2.0, false, true),
 		_sample(&"grounding_side", idle_action, 0.0, -PI / 2.0),
+		_sample(&"hands_equipped_close", idle_action, 0.0, -PI / 4.0, false, false, false, 2.5),
+		_sample(&"attack_release_close", attack_action, attack_length * 0.52, -PI / 4.0, false, false, true, 2.5),
 	]
 
-func _sample(name: StringName, action: StringName, time: float, yaw: float, hit := false, clear_hands := false, launch_overlay := false) -> Dictionary:
-	return {&"name": name, &"action": action, &"time": time, &"yaw": yaw, &"hit": hit, &"clear_hands": clear_hands, &"launch_overlay": launch_overlay}
+func _sample(name: StringName, action: StringName, time: float, yaw: float, hit := false, clear_hands := false, launch_overlay := false, camera_size := 4.2) -> Dictionary:
+	return {&"name": name, &"action": action, &"time": time, &"yaw": yaw, &"hit": hit, &"clear_hands": clear_hands, &"launch_overlay": launch_overlay, &"camera_size": camera_size}
 
 func _seek_action(player: AnimationPlayer, action_id: StringName, sample_time: float) -> void:
 	player.play(action_id)
@@ -275,11 +283,14 @@ func _valid_contact_sheet(sheet: Image) -> bool:
 func _manifest_row(definition: ClassDefinition, body_id: StringName, model: ForgeHumanoidModel, sample: Dictionary, file_name: String) -> Dictionary:
 	var equipment: Dictionary = {}
 	var clearances: Dictionary = {}
+	var equipment_arm_overlap: Dictionary = {}
 	for slot_id: StringName in [&"main_hand", &"off_hand"]:
 		var item_id := model.equipped_item_id(slot_id)
 		equipment[String(slot_id)] = String(item_id)
 		if not item_id.is_empty() and &"ReadabilityAnchor" in model.equipped_anchor_names(slot_id):
 			clearances[String(slot_id)] = model.equipment_anchor_clearance(slot_id, &"ReadabilityAnchor")
+			equipment_arm_overlap[String(slot_id)] = model.equipment_arm_intersection_volume(slot_id)
+	var silhouette := _silhouette_metrics(model)
 	return {
 		"class": String(definition.id),
 		"body": String(body_id),
@@ -289,8 +300,25 @@ func _manifest_row(definition: ClassDefinition, body_id: StringName, model: Forg
 		"equipment": equipment,
 		"ground_gap": model.ground_gap(),
 		"clearance": clearances,
+		"hand_behind_torso": silhouette[&"hand_behind_torso"],
+		"arm_span_ratio": silhouette[&"arm_span_ratio"],
+		"equipment_arm_overlap": equipment_arm_overlap,
 		"projectile_overlay": bool(sample.get(&"launch_overlay", false)) and _has_projectile_socket(model),
 		"path": "%s/%s/%s/%s" % [OUTPUT_ROOT.trim_prefix("res://"), definition.id, body_id, file_name],
+	}
+
+func _silhouette_metrics(model: ForgeHumanoidModel) -> Dictionary:
+	var left_hand := model.get_node_or_null(LEFT_HAND_PATH) as Node3D
+	var right_hand := model.get_node_or_null(RIGHT_HAND_PATH) as Node3D
+	if left_hand == null or right_hand == null:
+		return {&"hand_behind_torso": true, &"arm_span_ratio": INF}
+	var left_position: Vector3 = model.call(&"_transform_from_model", left_hand).origin
+	var right_position: Vector3 = model.call(&"_transform_from_model", right_hand).origin
+	var mean_z := (left_position.z + right_position.z) * 0.5
+	var body_width := maxf(0.001, model.visual_bounds().size.x)
+	return {
+		&"hand_behind_torso": mean_z > 0.10,
+		&"arm_span_ratio": absf(right_position.x - left_position.x) / body_width,
 	}
 
 func _has_projectile_socket(model: ForgeHumanoidModel) -> bool:
