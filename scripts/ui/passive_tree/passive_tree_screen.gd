@@ -4,6 +4,7 @@ extends CanvasLayer
 signal tree_closed
 
 const UNAVAILABLE_STATUS := "City passive tree unavailable"
+const STALE_ACTION_STATUS := "Passive tree action is no longer available."
 const RESPEC_SERVICE_ID := "service:passive_respec"
 
 var _tree_definition: PassiveTreeDefinition
@@ -16,6 +17,8 @@ var _views: Dictionary = {}
 var _pause_lease := RunPauseLease.new()
 var _return_focus: Control
 var _pending_action := ""
+var _pending_node_id: StringName = &""
+var _observed_viewport: Viewport
 var _transaction_serial := 0
 var _processing := false
 
@@ -23,17 +26,25 @@ var _processing := false
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	visible = false
-	_canvas().selection_changed.connect(_on_selection_changed)
-	_allocate_button().pressed.connect(_request_allocate)
-	_refund_button().pressed.connect(_request_refund)
-	_confirm_button().pressed.connect(_confirm_action)
-	_cancel_button().pressed.connect(_cancel_confirmation)
-	_close_button().pressed.connect(close)
-	_confirmation().visible = false
+	_connect_once(_canvas().selection_changed, _on_selection_changed)
+	_connect_once(_allocate_button().pressed, _request_allocate)
+	_connect_once(_refund_button().pressed, _request_refund)
+	_connect_once(_confirm_button().pressed, _confirm_action)
+	_connect_once(_cancel_button().pressed, _cancel_confirmation)
+	_connect_once(_close_button().pressed, close)
+	_observe_viewport()
+	_clear_confirmation(false)
 
 
 func _notification(what: int) -> void:
-	if what == NOTIFICATION_PREDELETE and _pause_lease != null and _pause_lease.is_active():
+	if what != NOTIFICATION_PREDELETE:
+		return
+	if _observed_viewport != null:
+		var resize_callback := Callable(self, "_on_viewport_size_changed")
+		if _observed_viewport.size_changed.is_connected(resize_callback):
+			_observed_viewport.size_changed.disconnect(resize_callback)
+		_observed_viewport = null
+	if _pause_lease != null and _pause_lease.is_active():
 		_pause_lease.release(Engine.get_main_loop() as SceneTree)
 
 
@@ -47,6 +58,7 @@ func configure(
 ) -> void:
 	if is_open():
 		close()
+	_clear_confirmation(false)
 	_tree_definition = tree
 	_profiles = profiles
 	_mutations = mutations
@@ -58,6 +70,9 @@ func configure(
 
 func open(return_focus: Control = null) -> void:
 	_return_focus = return_focus
+	var viewport := _live_viewport()
+	if viewport != null:
+		apply_viewport_size(viewport.get_visible_rect().size)
 	_rebuild(_canvas().selected_node_id())
 	visible = true
 	_pause_lease.acquire(Engine.get_main_loop() as SceneTree)
@@ -125,6 +140,7 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _rebuild(preferred_id: StringName = &"") -> void:
+	_clear_confirmation(false)
 	_views.clear()
 	_canvas().rebuild([], [])
 	_clear_detail()
@@ -224,16 +240,27 @@ func _request_confirmation(action: String) -> void:
 	if view == null or (action == "allocate" and not view.allocatable) or (action == "refund" and (not view.allocated or view.permanent)):
 		return
 	_pending_action = action
+	_pending_node_id = view.id
 	_confirmation_text().text = "%s %s?" % ["Allocate" if action == "allocate" else "Refund", view.display_name]
+	_confirmation_blocker().visible = true
 	_confirmation().visible = true
 	if _cancel_button().is_inside_tree() and _cancel_button().is_visible_in_tree():
 		_cancel_button().grab_focus()
 
 
 func _cancel_confirmation() -> void:
+	_clear_confirmation(true)
+
+
+func _clear_confirmation(restore_focus: bool) -> void:
 	_pending_action = ""
+	_pending_node_id = &""
+	_confirmation_text().text = ""
+	_confirmation_blocker().visible = false
 	_confirmation().visible = false
 	_confirm_button().disabled = false
+	if not restore_focus:
+		return
 	var selected := _canvas().node_control(_canvas().selected_node_id())
 	if selected != null and selected.is_inside_tree() and selected.is_visible_in_tree():
 		selected.grab_focus()
@@ -242,8 +269,15 @@ func _cancel_confirmation() -> void:
 func _confirm_action() -> void:
 	if _processing or _pending_action.is_empty():
 		return
+	var action := _pending_action
+	var node_id := _pending_node_id
+	var view := _views.get(node_id) as PassiveTreeNodeViewData
+	var eligible := view != null and ((action == "allocate" and view.allocatable) or (action == "refund" and view.allocated and not view.permanent))
+	if node_id.is_empty() or not eligible:
+		_status().text = STALE_ACTION_STATUS
+		_cancel_confirmation()
+		return
 	var profile := _profiles.active_profile() if _profiles != null else null
-	var node_id := _canvas().selected_node_id()
 	if profile == null or node_id.is_empty() or _mutations == null or _tree_definition == null:
 		_status().text = UNAVAILABLE_STATUS
 		_cancel_confirmation()
@@ -251,8 +285,7 @@ func _confirm_action() -> void:
 	_processing = true
 	_confirm_button().disabled = true
 	_transaction_serial += 1
-	var transaction_id := "passive-tree-screen-%s-%s-%d-%d" % [profile.profile_id, _pending_action, Time.get_ticks_usec(), _transaction_serial]
-	var action := _pending_action
+	var transaction_id := "passive-tree-screen-%s-%s-%d-%d" % [profile.profile_id, action, Time.get_ticks_usec(), _transaction_serial]
 	var result: ProfileMutationResult
 	if action == "allocate":
 		result = _mutations.allocate(profile.profile_id, transaction_id, _tree_definition, node_id, _developer_context, _profile_root)
@@ -270,9 +303,6 @@ func _confirm_action() -> void:
 		_status().text = refresh_error
 		_cancel_confirmation()
 		return
-	_pending_action = ""
-	_confirmation().visible = false
-	_confirm_button().disabled = false
 	_rebuild(node_id)
 	var rebuilt := _views.get(node_id) as PassiveTreeNodeViewData
 	_status().text = "%s %s." % ["Allocated" if action == "allocate" else "Refunded", rebuilt.display_name if rebuilt != null else String(node_id)]
@@ -281,6 +311,37 @@ func _confirm_action() -> void:
 func _mark_input_handled() -> void:
 	if is_inside_tree():
 		get_viewport().set_input_as_handled()
+
+
+func _connect_once(signal_value: Signal, callback: Callable) -> void:
+	if not signal_value.is_connected(callback):
+		signal_value.connect(callback)
+
+
+func _observe_viewport() -> void:
+	var viewport := _live_viewport()
+	if viewport == null:
+		return
+	if _observed_viewport != null and _observed_viewport != viewport:
+		var old_callback := Callable(self, "_on_viewport_size_changed")
+		if _observed_viewport.size_changed.is_connected(old_callback):
+			_observed_viewport.size_changed.disconnect(old_callback)
+	_observed_viewport = viewport
+	_connect_once(_observed_viewport.size_changed, _on_viewport_size_changed)
+	_on_viewport_size_changed()
+
+
+func _live_viewport() -> Viewport:
+	var viewport := get_viewport()
+	if viewport != null:
+		return viewport
+	var scene_tree := Engine.get_main_loop() as SceneTree
+	return scene_tree.root if scene_tree != null else null
+
+
+func _on_viewport_size_changed() -> void:
+	if _observed_viewport != null:
+		apply_viewport_size(_observed_viewport.get_visible_rect().size)
 
 
 func _canvas() -> PassiveTreeCanvas:
@@ -325,6 +386,10 @@ func _close_button() -> Button:
 
 func _confirmation() -> Control:
 	return get_node("Overlay/Confirmation") as Control
+
+
+func _confirmation_blocker() -> Control:
+	return get_node("Overlay/ConfirmationBlocker") as Control
 
 
 func _confirmation_text() -> Label:
