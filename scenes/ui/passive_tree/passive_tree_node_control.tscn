@@ -1,0 +1,12 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/ui/passive_tree/passive_tree_node_control.gd" id="1_node"]
+
+[node name="PassiveTreeNodeControl" type="Button"]
+process_mode = 3
+custom_minimum_size = Vector2(104, 104)
+focus_mode = 2
+mouse_default_cursor_shape = 2
+text = "???"
+text_overrun_behavior = 3
+script = ExtResource("1_node")
