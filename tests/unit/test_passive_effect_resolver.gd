@@ -9,6 +9,7 @@ func run() -> Array[String]:
 	_test_exact_unlock_ids_and_future_states(failures)
 	_test_unknown_and_invalid_inputs_fail_closed(failures)
 	_test_integer_overflow_fails_closed(failures)
+	_test_same_key_overflow_is_independent_of_effect_order(failures)
 	return failures
 
 func _test_city_numeric_aggregation_is_deterministic(failures: Array[String]) -> void:
@@ -124,6 +125,17 @@ func _test_integer_overflow_fails_closed(failures: Array[String]) -> void:
 	])
 	var resolution := PassiveEffectResolver.new(PassiveEffectRegistry.new()).resolve(tree, [&"b-overflow", &"a-maximum"])
 	TestAssertions.equal(resolution.flat_value(&"party_capacity", &"profile"), SIGNED_64_MAX, "overflowing contribution is ignored without integer wrap", failures)
+
+func _test_same_key_overflow_is_independent_of_effect_order(failures: Array[String]) -> void:
+	var maximum := PassiveTreeEffect.new(&"party_capacity", &"add_flat", SIGNED_64_MAX, {"scope": "profile"})
+	var positive := PassiveTreeEffect.new(&"party_capacity", &"add_flat", 1, {"scope": "profile"})
+	var negative := PassiveTreeEffect.new(&"party_capacity", &"add_flat", -1, {"scope": "profile"})
+	var first_tree := _tree_with_nodes([_node(&"same-key", [maximum, positive, negative])])
+	var second_tree := _tree_with_nodes([_node(&"same-key", [negative, positive, maximum])])
+	var resolver := PassiveEffectResolver.new(PassiveEffectRegistry.new())
+	var first := resolver.resolve(first_tree, [&"same-key"])
+	var second := resolver.resolve(second_tree, [&"same-key"])
+	TestAssertions.equal(first.flat_values(), second.flat_values(), "same-key overflow aggregation is independent of source effect order", failures)
 
 func _city_tree(failures: Array[String]) -> PassiveTreeDefinition:
 	var result := PassiveTreeCatalog.load_defaults()
