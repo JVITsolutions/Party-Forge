@@ -36,6 +36,7 @@ func run() -> Array[String]:
 	_test_requirement_contract(failures)
 	_test_city_policy(failures)
 	_test_default_catalog(failures)
+	_test_catalog_semantic_fail_closed(failures)
 	return failures
 
 func _test_all_registered_effect_contracts(failures: Array[String]) -> void:
@@ -92,6 +93,17 @@ func _test_effect_contracts_fail_closed(failures: Array[String]) -> void:
 	_assert_effect_invalid(registry, fractional_additive, "fractional additive value is not an integer", "integer", failures)
 	var fractional_slots := PassiveTreeEffect.new(&"stash_tabs", &"add_flat", 1, {"scope": "profile", "slotsPerTab": 100.5})
 	_assert_effect_invalid(registry, fractional_slots, "stash tab size must be integer-valued", "slotsPerTab", failures)
+	var string_additive := PassiveTreeEffect.new(&"party_capacity", &"add_flat", "1", {"scope": "profile"})
+	_assert_effect_invalid(registry, string_additive, "additive value rejects numeric string", "integer", failures)
+	var bool_additive := PassiveTreeEffect.new(&"inventory_columns", &"add_flat", true, {"scope": "profile"})
+	_assert_effect_invalid(registry, bool_additive, "additive value rejects boolean", "integer", failures)
+	var string_set := PassiveTreeEffect.new(&"feature_unlock", &"set", "true", {"featureId": "inventory"})
+	_assert_effect_invalid(registry, string_set, "set value rejects boolean string", "boolean", failures)
+	for invalid_number: float in [NAN, INF, -INF, 1e300, -1e300]:
+		var invalid_numeric_effect := PassiveTreeEffect.new(&"experience_gain", &"add_percent", invalid_number, {"scope": "all_run_experience"})
+		_assert_effect_invalid(registry, invalid_numeric_effect, "integer contract rejects non-finite or out-of-range %s" % invalid_number, "integer", failures)
+	var out_of_range_slots := PassiveTreeEffect.new(&"stash_tabs", &"add_flat", 1, {"scope": "profile", "slotsPerTab": 1e300})
+	_assert_effect_invalid(registry, out_of_range_slots, "stash tab size rejects out-of-range integer", "slotsPerTab", failures)
 	var empty_identifier := PassiveTreeEffect.new(&"feature_unlock", &"set", true, {"featureId": ""})
 	_assert_effect_invalid(registry, empty_identifier, "set contract rejects empty identifier", "featureId", failures)
 	var malformed_identifier := PassiveTreeEffect.new(&"tree_discovery", &"set", true, {"treeId": "Bad Tree"})
@@ -132,6 +144,15 @@ func _test_city_policy(failures: Array[String]) -> void:
 	if valid_tree == null:
 		return
 	TestAssertions.equal(policy.validate(valid_tree), [], "production City fixture satisfies City policy", failures)
+	var wrong_tree_id := _load_city_tree(failures)
+	wrong_tree_id.id = &"wrong-city"
+	_assert_policy_invalid(policy, wrong_tree_id, "City policy requires exact tree ID", "party-forge-city-v1", failures)
+	var wrong_start := _load_city_tree(failures)
+	wrong_start.starting_node_ids.assign([&"field-pack"])
+	_assert_policy_invalid(policy, wrong_start, "City policy requires city-heart start", "city-heart", failures)
+	var extra_start := _load_city_tree(failures)
+	extra_start.starting_node_ids.assign([&"city-heart", &"field-pack"])
+	_assert_policy_invalid(policy, extra_start, "City policy rejects extra starting node", "city-heart", failures)
 
 	var missing_node_tree := _load_city_tree(failures)
 	missing_node_tree.nodes.remove_at(0)
@@ -176,6 +197,26 @@ func _test_default_catalog(failures: Array[String]) -> void:
 		TestAssertions.equal(second.tree.nodes.size(), 30, "default catalog does not cache a partial or mutable tree", failures)
 		TestAssertions.truthy(first.tree != second.tree, "default catalog returns independent tree definitions", failures)
 
+func _test_catalog_semantic_fail_closed(failures: Array[String]) -> void:
+	var unknown_effect_document := _city_document()
+	var arena_charter := _document_node(unknown_effect_document, "arena-charter")
+	(arena_charter["effects"] as Array)[0]["effectId"] = "unknown_effect"
+	_assert_catalog_invalid(unknown_effect_document, "user://task-5-unknown-effect.json", "unknown effect is rejected at catalog boundary", "unknown effect", failures)
+
+	var unknown_requirement_document := _city_document()
+	var extraction_license := _document_node(unknown_requirement_document, "extraction-license")
+	(extraction_license["requirements"] as Array)[0]["requirementId"] = "unknown_requirement"
+	_assert_catalog_invalid(unknown_requirement_document, "user://task-5-unknown-requirement.json", "unknown requirement is rejected at catalog boundary", "unknown requirement", failures)
+
+	var wrong_city_document := _city_document()
+	wrong_city_document["treeId"] = "wrong-city"
+	_assert_catalog_invalid(wrong_city_document, "user://task-5-wrong-city-policy.json", "City policy violation is rejected at catalog boundary", "party-forge-city-v1", failures)
+
+	var default_after_errors := PassiveTreeCatalog.load_defaults()
+	TestAssertions.truthy(default_after_errors.ok(), "semantic errors do not poison the default catalog", failures)
+	if default_after_errors.ok():
+		TestAssertions.equal(default_after_errors.tree.nodes.size(), 30, "catalog caches no partial tree after semantic errors", failures)
+
 func _effect(contract: Array) -> PassiveTreeEffect:
 	return PassiveTreeEffect.new(contract[0], contract[1], contract[2], contract[3])
 
@@ -213,3 +254,22 @@ func _assert_policy_invalid(policy: CityPassiveTreePolicy, tree: PassiveTreeDefi
 	var errors := policy.validate(tree)
 	TestAssertions.truthy(not errors.is_empty(), label, failures)
 	TestAssertions.truthy(errors.any(func(error: String) -> bool: return fragment in error), "%s reports %s" % [label, fragment], failures)
+
+func _city_document() -> Dictionary:
+	return JSON.parse_string(FileAccess.get_file_as_string(CITY_PATH)) as Dictionary
+
+func _document_node(document: Dictionary, node_id: String) -> Dictionary:
+	for node_value: Variant in document["nodes"]:
+		var node_document := node_value as Dictionary
+		if node_document.get("id") == node_id:
+			return node_document
+	return {}
+
+func _assert_catalog_invalid(document: Dictionary, path: String, label: String, fragment: String, failures: Array[String]) -> void:
+	var file := FileAccess.open(path, FileAccess.WRITE)
+	file.store_string(JSON.stringify(document))
+	file.close()
+	var result := PassiveTreeCatalog.load_path(path)
+	TestAssertions.truthy(not result.errors.is_empty(), label, failures)
+	TestAssertions.equal(result.tree, null, "%s returns no partial tree" % label, failures)
+	TestAssertions.truthy(result.errors.any(func(error: String) -> bool: return fragment in error), "%s reports %s" % [label, fragment], failures)

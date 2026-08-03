@@ -4,7 +4,10 @@ extends RefCounted
 const CITY_PATH := "res://data/passive_trees/city/party-forge-city.pstree.json"
 
 static func load_defaults() -> PassiveTreeLoadResult:
-	var result := PassiveTreeLoader.new().load_path(CITY_PATH)
+	return load_path(CITY_PATH)
+
+static func load_path(path: String) -> PassiveTreeLoadResult:
+	var result := PassiveTreeLoader.new().load_path(path)
 	if not result.ok():
 		return result
 	var effect_registry := PassiveEffectRegistry.new()

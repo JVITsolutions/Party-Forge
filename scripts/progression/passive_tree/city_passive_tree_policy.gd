@@ -11,6 +11,10 @@ func validate(tree: PassiveTreeDefinition) -> Array[String]:
 	if tree == null:
 		errors.append("%s reason=tree must not be null" % ERROR_PREFIX)
 		return errors
+	if tree.id != &"party-forge-city-v1":
+		errors.append("%s field=treeId reason=City tree ID must equal party-forge-city-v1" % ERROR_PREFIX)
+	if tree.starting_node_ids != [&"city-heart"]:
+		errors.append("%s field=startingNodeIds reason=City tree must have exactly one starting node city-heart" % ERROR_PREFIX)
 	if tree.nodes.size() != 30:
 		errors.append("%s field=nodes reason=City tree must contain exactly 30 nodes" % ERROR_PREFIX)
 	if tree.connections.size() != 30:
