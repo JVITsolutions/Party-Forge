@@ -11,7 +11,7 @@ size = Vector3(0.09, 0.92, 0.07)
 [node name="forge_vanguard_hammer" type="Node3D"]
 
 [node name="Attachment" type="Node3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.03, 0.11, 0)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.03, -0.48, -0.1)
 metadata/equipment_visual_id = &"forge_vanguard_hammer"
 metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot/RightShoulderPivot/RightElbowPivot/RightHandSocket"
 

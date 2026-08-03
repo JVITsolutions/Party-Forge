@@ -165,6 +165,23 @@ func equipment_visible_extent(slot_id: StringName) -> float:
 		return -1.0
 	return maxf(bounds.size.x, maxf(bounds.size.y, bounds.size.z))
 
+func equipment_arm_intersection_volume(slot_id: StringName) -> float:
+	var arm_bounds := _body_arm_bounds()
+	if arm_bounds.is_empty():
+		return -1.0
+	var total_volume := 0.0
+	for attachment: Node3D in equipped_nodes.get(slot_id, []):
+		for mesh: MeshInstance3D in _meshes_including_root(attachment):
+			if not _is_effectively_visible(mesh) or mesh.mesh == null:
+				continue
+			var equipment_bounds := _transform_from_model(mesh) * mesh.get_aabb()
+			for body_bounds: AABB in arm_bounds:
+				var overlap := equipment_bounds.intersection(body_bounds)
+				if overlap.size.x <= 0.0 or overlap.size.y <= 0.0 or overlap.size.z <= 0.0:
+					continue
+				total_volume += overlap.size.x * overlap.size.y * overlap.size.z
+	return total_volume
+
 func visual_bounds() -> AABB:
 	var bounds := AABB()
 	var has_bounds := false

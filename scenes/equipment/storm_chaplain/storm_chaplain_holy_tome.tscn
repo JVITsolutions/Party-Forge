@@ -22,6 +22,7 @@ size = Vector3(0.25, 0.06, 0.14)
 [node name="storm_chaplain_holy_tome" type="Node3D"]
 
 [node name="Attachment" type="Node3D" parent="."]
+transform = Transform3D(-1, 8.742278e-08, 0, -8.742278e-08, -1, 0, 0, 0, 1, 0, -0.06, -0.3)
 metadata/equipment_visual_id = &"storm_chaplain_holy_tome"
 metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot/LeftShoulderPivot/LeftElbowPivot/LeftHandSocket"
 

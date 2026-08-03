@@ -54,8 +54,8 @@ func _make_item(item_id: StringName, slot_id: StringName) -> Node3D:
 		&"forge_vanguard_ring_right": _equipment(item, &"RingRightVisual", item_id, SOCKETS[slot_id], Vector3(0.03, -0.24, 0), Vector3(0.07, 0.07, 0.07), &"brass", true, true)
 		&"forge_vanguard_belt": _equipment(item, &"BeltVisual", item_id, SOCKETS[slot_id], Vector3(0, -0.04, 0), Vector3(0.58, 0.11, 0.32), &"leather")
 		&"forge_vanguard_sword": _sword(item, item_id, SOCKETS[slot_id])
-		&"forge_vanguard_shield": _equipment(item, &"OffHandVisual", item_id, SOCKETS[slot_id], Vector3(-0.04, 0.21, 0.02), Vector3(0.68, 0.68, 0.14), &"metal")
-		&"forge_vanguard_hammer": _equipment(item, &"HammerVisual", item_id, SOCKETS[slot_id], Vector3(0.03, 0.11, 0), Vector3(0.09, 0.92, 0.07), &"metal", false, true)
+		&"forge_vanguard_shield": _equipment(item, &"OffHandVisual", item_id, SOCKETS[slot_id], Vector3(-0.10, -0.38, -0.20), Vector3(0.68, 0.68, 0.14), &"metal")
+		&"forge_vanguard_hammer": _equipment(item, &"HammerVisual", item_id, SOCKETS[slot_id], Vector3(0.03, -0.48, -0.10), Vector3(0.09, 0.92, 0.07), &"metal", false, true)
 	return item
 
 func _equipment(item: Node3D, node_name: StringName, item_id: StringName, socket_id: String, position: Vector3, size: Vector3, region: StringName, emits: bool = false, starts_visible: bool = true) -> Node3D:
@@ -65,7 +65,7 @@ func _equipment(item: Node3D, node_name: StringName, item_id: StringName, socket
 	return attachment
 
 func _sword(item: Node3D, item_id: StringName, socket_id: String) -> void:
-	var sword := Node3D.new(); sword.name = &"SwordVisual"; sword.position = Vector3(0.03, 0.09, 0); sword.visible = true
+	var sword := Node3D.new(); sword.name = &"SwordVisual"; sword.position = Vector3(0.03, -0.12, -0.10); sword.rotation.z = PI; sword.visible = true
 	sword.set_meta(&"equipment_visual_id", item_id); sword.set_meta(&"equipment_socket_id", socket_id); item.add_child(sword)
 	_box(sword, &"Blade", Vector3(0, 0.38, 0), Vector3(0.10, 0.68, 0.035), &"metal")
 	var tip := MeshInstance3D.new(); tip.name = &"Tip"; tip.position = Vector3(0, 0.80, 0); var cylinder := CylinderMesh.new(); cylinder.top_radius = 0.0; cylinder.bottom_radius = 0.065; cylinder.height = 0.16; cylinder.radial_segments = 4; tip.mesh = cylinder; tip.material_override = _material(&"metal"); tip.set_meta(&"palette_region", &"metal"); sword.add_child(tip)

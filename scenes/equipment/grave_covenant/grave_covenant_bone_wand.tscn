@@ -28,6 +28,7 @@ rings = 6
 [node name="grave_covenant_bone_wand" type="Node3D"]
 
 [node name="Attachment" type="Node3D" parent="."]
+transform = Transform3D(-1, 8.742278e-08, 0, -8.742278e-08, -1, 0, 0, 0, 1, 0, -0.06, -0.12)
 metadata/equipment_visual_id = &"grave_covenant_bone_wand"
 metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot/RightShoulderPivot/RightElbowPivot/RightHandSocket"
 

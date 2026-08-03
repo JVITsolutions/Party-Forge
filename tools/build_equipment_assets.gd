@@ -83,6 +83,12 @@ func _add_wearable_geometry(root: Node3D, set_id: StringName, item_id: StringNam
 	var heavy := set_id == &"paladin"
 	var braced := set_id == &"marksman"
 	var caster := set_id in [&"mage", &"frost_mage", &"cleric", &"warlock"]
+	if slot in [&"main_hand", &"off_hand"] and item_id not in [&"greenwood_light_quiver", &"siege_heavy_quiver"]:
+		# Hand sockets inherit the forearm's local frame, where +Y points back
+		# toward the elbow. Turn held geometry outward and give its silhouette a
+		# small forward offset instead of building the item through the arm.
+		root.position = _held_attachment_position(item_id)
+		root.rotation.z = PI
 	match slot:
 		&"helmet":
 			if caster:
@@ -178,7 +184,8 @@ func _add_equipment_anchors(root: Node3D, item_id: StringName, slot: StringName)
 
 func _readability_anchor_position(item_id: StringName) -> Vector3:
 	if item_id in [&"forge_vanguard_sword"]: return Vector3(0, 0.62, 0)
-	if item_id in [&"forge_vanguard_shield", &"dawn_bulwark_shield"]: return Vector3(0.34, 0.55, 0.18)
+	if item_id == &"forge_vanguard_shield": return Vector3(0.34, -0.20, -0.18)
+	if item_id == &"dawn_bulwark_shield": return Vector3(0.34, 0.55, 0.18)
 	if item_id in [&"forge_vanguard_hammer", &"sunforged_warhammer"]: return Vector3(0, 0.77, 0)
 	if item_id == &"greenwood_recurve_bow": return Vector3(0, 0.68, 0.03)
 	if item_id == &"siege_greatbow": return Vector3(0, 0.72, 0.03)
@@ -190,6 +197,19 @@ func _readability_anchor_position(item_id: StringName) -> Vector3:
 	if item_id in [&"storm_chaplain_holy_tome", &"grave_covenant_grimoire"]: return Vector3(0.19, 0.40, -0.17)
 	if item_id in [&"greenwood_light_quiver", &"siege_heavy_quiver"]: return Vector3(0, 0.35, 0)
 	return Vector3(0, 0.42, 0)
+
+func _held_attachment_position(item_id: StringName) -> Vector3:
+	if item_id == &"greenwood_recurve_bow":
+		return Vector3(0.0, -0.06, -0.45)
+	if item_id == &"siege_greatbow":
+		return Vector3(0.0, -0.06, -0.62)
+	if item_id == &"dawn_bulwark_shield":
+		return Vector3(0.0, -0.06, -0.52)
+	if item_id == &"emberweave_flame_focus":
+		return Vector3(0.0, -0.06, -0.40)
+	if item_id in [&"storm_chaplain_holy_tome", &"grave_covenant_grimoire"]:
+		return Vector3(0.0, -0.06, -0.30)
+	return Vector3(0.0, -0.06, -0.12)
 
 func _add_box(parent: Node3D, size: Vector3, position: Vector3, region: StringName, set_id: StringName, rotation := Vector3.ZERO) -> void:
 	var mesh := MeshInstance3D.new()

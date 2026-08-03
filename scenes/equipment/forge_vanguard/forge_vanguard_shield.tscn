@@ -11,7 +11,7 @@ size = Vector3(0.68, 0.68, 0.14)
 [node name="forge_vanguard_shield" type="Node3D"]
 
 [node name="Attachment" type="Node3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.04, 0.21, 0.02)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.1, -0.38, -0.2)
 metadata/equipment_visual_id = &"forge_vanguard_shield"
 metadata/equipment_socket_id = "HitPivot/BodyPivot/HipsPivot/TorsoPivot/LeftShoulderPivot/LeftElbowPivot/LeftHandSocket"
 
@@ -21,7 +21,7 @@ mesh = SubResource("BoxMesh_0ttht")
 metadata/palette_region = &"metal"
 
 [node name="ReadabilityAnchor" type="Node3D" parent="Attachment"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.34, 0.55, 0.18)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.34, -0.2, -0.18)
 
 [node name="ActionOriginSocket" type="Node3D" parent="Attachment"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.34, 0.55, 0.18)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.34, -0.2, -0.18)
