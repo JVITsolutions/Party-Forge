@@ -53,7 +53,12 @@ func run() -> Array[String]:
 	ProfileTestSupport.remove_tree(profile_root)
 	var profile_manager := ProfileManager.new()
 	TestAssertions.equal(profile_manager.bootstrap(profile_root), "", "Settings profile fixture bootstraps", failures)
-	screen.call("configure", PartyForgeSettingsStore.new(), supplied, profile_manager)
+	var save_attempts: Array[String] = []
+	var tracking_store := PartyForgeSettingsStore.new(func(temporary: String, target: String) -> Error:
+		save_attempts.append("%s -> %s" % [temporary, target])
+		return OK
+	)
+	screen.call("configure", tracking_store, supplied, profile_manager)
 	supplied.party_capacity_override = 2
 	var draft := screen.call("current_settings") as PartyForgeSettings
 	TestAssertions.equal(draft.party_capacity_override, 12, "Settings drafts a copy of supplied values", failures)
@@ -81,21 +86,52 @@ func run() -> Array[String]:
 
 	var city_button := screen.get_node("Overlay/Frame/Layout/Tabs/Additional Settings/Layout/OpenCityPassiveTree") as Button
 	var additional_page := screen.get_node("Overlay/Frame/Layout/Tabs/Additional Settings") as AdditionalSettingsPage
+	var applied_count: Array[int] = [0]
+	screen.settings_applied.connect(func(_settings: PartyForgeSettings) -> void: applied_count[0] += 1)
 	screen.call("open", return_focus)
 	(additional_page.get_node("Layout/Mode") as OptionButton).selected = PartyForgeSettings.Mode.DEVELOPER_MODE
 	additional_page.call("_on_mode_changed", PartyForgeSettings.Mode.DEVELOPER_MODE)
+	(additional_page.get_node("Layout/PartyCapacity/Value") as HSlider).value = 19
 	city_button.pressed.emit()
 	TestAssertions.truthy(not screen.is_open(), "forwarding City tree request temporarily hides Settings", failures)
+	TestAssertions.truthy(bool(screen.get("_child_resume_pending")), "City tree request records an explicit child-resume sentinel", failures)
 	TestAssertions.equal(screen.get("_child_return_focus"), return_focus, "City tree request preserves the external Settings return target", failures)
 	screen.call("open_additional", city_button)
 	TestAssertions.equal(screen.call("_tab_index_for_control", additional_page), 5, "Additional Settings resolves by control identity", failures)
 	TestAssertions.equal(tabs.get_tab_control(tabs.current_tab), additional_page, "open_additional selects Additional Settings", failures)
 	TestAssertions.equal(screen.get("_return_focus"), return_focus, "return from City tree preserves the original external Settings caller", failures)
+	TestAssertions.equal((additional_page.get_node("Layout/Mode") as OptionButton).selected, PartyForgeSettings.Mode.DEVELOPER_MODE, "City tree round trip preserves the unsaved draft mode", failures)
+	TestAssertions.equal(int((additional_page.get_node("Layout/PartyCapacity/Value") as HSlider).value), 19, "City tree round trip preserves another unsaved draft value", failures)
+	TestAssertions.equal((screen.call("current_settings") as PartyForgeSettings).party_capacity_override, 12, "City tree round trip leaves current settings unchanged", failures)
+	TestAssertions.equal(applied_count[0], 0, "City tree round trip emits no settings-applied signal", failures)
+	TestAssertions.equal(save_attempts, [], "City tree round trip performs no store save", failures)
 	screen.call("close")
+
+	var fresh_return := Button.new()
+	fresh_return.name = "FreshSettingsReturn"
+	screen.call("open", return_focus)
+	(additional_page.get_node("Layout/Mode") as OptionButton).selected = PartyForgeSettings.Mode.DEVELOPER_MODE
+	additional_page.call("_on_mode_changed", PartyForgeSettings.Mode.DEVELOPER_MODE)
+	city_button.pressed.emit()
+	screen.call("open", fresh_return)
+	TestAssertions.truthy(not bool(screen.get("_child_resume_pending")), "fresh external open clears the child-resume sentinel", failures)
+	TestAssertions.equal(screen.get("_child_return_focus"), null, "fresh external open clears interrupted child state", failures)
+	TestAssertions.equal(screen.get("_return_focus"), fresh_return, "fresh external open owns its explicit return target", failures)
+	screen.call("open_additional", fresh_return)
+	TestAssertions.equal(screen.get("_return_focus"), fresh_return, "stale child state cannot override a fresh explicit return target", failures)
+	screen.call("close")
+
+	screen.call("open", return_focus)
+	(additional_page.get_node("Layout/Mode") as OptionButton).selected = PartyForgeSettings.Mode.DEVELOPER_MODE
+	additional_page.call("_on_mode_changed", PartyForgeSettings.Mode.DEVELOPER_MODE)
+	city_button.pressed.emit()
+	screen.call("close")
+	TestAssertions.equal(screen.get("_child_return_focus"), null, "normal close clears interrupted child state", failures)
 
 	screen.free()
 	return_focus.free()
 	profiles_return_focus.free()
+	fresh_return.free()
 	ProfileTestSupport.remove_tree(profile_root)
 	return failures
 

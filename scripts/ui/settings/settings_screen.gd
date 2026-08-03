@@ -10,6 +10,7 @@ var _draft: PartyForgeSettings = PartyForgeSettings.new()
 var _profile_manager: ProfileManager
 var _return_focus: Control
 var _child_return_focus: Control
+var _child_resume_pending := false
 var _pending_open := false
 var _pending_profiles_tab := false
 
@@ -41,6 +42,7 @@ func configure(store: PartyForgeSettingsStore, settings: PartyForgeSettings, pro
 
 
 func open(return_focus: Control = null) -> void:
+	_clear_child_resume_state()
 	_return_focus = return_focus
 	_draft = _current_settings.copy()
 	_game_page().call(&"bind", _draft)
@@ -68,14 +70,29 @@ func open_profiles(return_focus: Control = null) -> void:
 
 
 func open_additional(return_focus: Control = null) -> void:
-	var external_return := _child_return_focus if _child_return_focus != null and is_instance_valid(_child_return_focus) else return_focus
-	_child_return_focus = null
-	open(external_return)
+	if _child_resume_pending:
+		_resume_additional_from_child(return_focus)
+		return
+	open(return_focus)
 	_select_tab_control(_additional_page())
 	if not is_inside_tree():
 		return
-	if return_focus != null and is_instance_valid(return_focus) and return_focus.is_inside_tree() and return_focus.is_visible_in_tree():
-		return_focus.grab_focus()
+	_focus_active_page()
+
+
+func _resume_additional_from_child(focus_target: Control) -> void:
+	var external_return := _child_return_focus if _child_return_focus != null and is_instance_valid(_child_return_focus) else null
+	_clear_child_resume_state()
+	_return_focus = external_return
+	visible = true
+	_pending_open = false
+	_pending_profiles_tab = false
+	_select_tab_control(_additional_page())
+	if not is_inside_tree():
+		_pending_open = true
+		return
+	if focus_target != null and is_instance_valid(focus_target) and focus_target.is_inside_tree() and focus_target.is_visible_in_tree():
+		focus_target.grab_focus()
 	else:
 		_focus_active_page()
 
@@ -97,12 +114,16 @@ func _select_tab_control(control: Control) -> void:
 
 
 func close() -> void:
+	var handled_return := _return_focus
+	if handled_return == null and _child_resume_pending:
+		handled_return = _child_return_focus
 	visible = false
 	_pending_open = false
 	_pending_profiles_tab = false
-	if is_inside_tree() and _return_focus != null and is_instance_valid(_return_focus) and _return_focus.is_inside_tree() and _return_focus.is_visible_in_tree():
-		_return_focus.grab_focus()
+	if is_inside_tree() and handled_return != null and is_instance_valid(handled_return) and handled_return.is_inside_tree() and handled_return.is_visible_in_tree():
+		handled_return.grab_focus()
 	_return_focus = null
+	_clear_child_resume_state()
 
 
 func is_open() -> bool:
@@ -229,9 +250,15 @@ func _on_city_tree_requested(developer_preview: bool) -> void:
 	if not developer_preview:
 		return
 	_child_return_focus = _return_focus
+	_child_resume_pending = true
 	_return_focus = null
 	visible = false
 	city_tree_requested.emit(true)
+
+
+func _clear_child_resume_state() -> void:
+	_child_resume_pending = false
+	_child_return_focus = null
 
 
 func _tabs() -> TabContainer:
