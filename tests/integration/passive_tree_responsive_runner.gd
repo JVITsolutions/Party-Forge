@@ -62,6 +62,7 @@ func _run() -> void:
 	var confirm_button := screen.get_node("Overlay/Confirmation/Content/Buttons/ConfirmButton") as Button
 	var cancel_button := screen.get_node("Overlay/Confirmation/Content/Buttons/CancelButton") as Button
 	var allocate_button := screen.get_node("Overlay/Frame/Layout/Body/DetailScroll/DetailBody/Actions/AllocateButton") as Button
+	var detail_sections := screen.get_node("Overlay/Frame/Layout/Body/DetailScroll/DetailBody/DetailSections") as Label
 
 	for viewport_size: Vector2i in VIEWPORT_SIZES:
 		var before_failure_count := _failures.size()
@@ -89,6 +90,8 @@ func _run() -> void:
 		_assert(_encloses(canvas.get_global_rect(), far_control.get_global_rect()), "canvas pan brings the far selected node into view at %dx%d" % [viewport_size.x, viewport_size.y])
 
 		canvas.select_node(&"equipment-registry")
+		_assert(detail_sections.text.contains("Cost") and detail_sections.text.contains("Refund Policy"), "selected detail disclosures remain readable at %dx%d" % [viewport_size.x, viewport_size.y])
+		_assert(detail_sections.text.contains("Coming Soon") and detail_sections.text.contains("Developer Preview"), "future-contract disclosure remains readable at %dx%d" % [viewport_size.x, viewport_size.y])
 		allocate_button.pressed.emit()
 		await _frames(2)
 		_assert(confirmation.visible and confirmation.is_visible_in_tree(), "confirmation is visible at %dx%d" % [viewport_size.x, viewport_size.y])

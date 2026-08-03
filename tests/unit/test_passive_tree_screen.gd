@@ -18,6 +18,7 @@ func run() -> Array[String]:
 	_test_canvas_copy_draw_zoom_pan_and_navigation(failures)
 	_test_screen_invalid_safe_state_and_geometry(failures)
 	_test_screen_obscured_nonleak(failures)
+	_test_visible_detail_disclosures_and_permanent_styling(failures)
 	_test_lifecycle_pause_ownership_and_focus(failures)
 	_test_confirmation_real_mutation_refresh_and_errors(failures)
 	_test_confirmation_captures_allocation_and_refund_targets(failures)
@@ -96,7 +97,7 @@ func _test_scene_and_type_contracts(failures: Array[String]) -> void:
 		TestAssertions.equal(screen.process_mode, Node.PROCESS_MODE_ALWAYS, "screen scene always processes while paused", failures)
 		var canvas := screen.find_child("Canvas", true, false)
 		TestAssertions.truthy(canvas != null and canvas.get_script() == load(CANVAS_SCRIPT_PATH), "screen owns the exact typed canvas", failures)
-		for required_name: String in ["Overlay", "Frame", "Title", "Points", "Canvas", "DetailTitle", "DetailDescription", "DetailScroll", "DetailBody", "Status", "AllocateButton", "RefundButton", "ConfirmationBlocker", "Confirmation", "ConfirmButton", "CancelButton", "CloseButton"]:
+		for required_name: String in ["Overlay", "Frame", "Title", "Points", "Canvas", "DetailTitle", "DetailDescription", "DetailScroll", "DetailBody", "Status", "Unresolved", "AllocateButton", "RefundButton", "ConfirmationBlocker", "Confirmation", "ConfirmButton", "CancelButton", "CloseButton"]:
 			TestAssertions.truthy(screen.find_child(required_name, true, false) != null, "screen exposes stable node %s" % required_name, failures)
 		var blocker := screen.find_child("ConfirmationBlocker", true, false) as Control
 		var confirmation := screen.find_child("Confirmation", true, false) as Control
@@ -106,6 +107,12 @@ func _test_scene_and_type_contracts(failures: Array[String]) -> void:
 			TestAssertions.truthy(blocker.anchor_left == 0.0 and blocker.anchor_top == 0.0 and blocker.anchor_right == 1.0 and blocker.anchor_bottom == 1.0, "confirmation blocker covers the viewport", failures)
 			TestAssertions.truthy(frame.get_index() < blocker.get_index() and blocker.get_index() < confirmation.get_index(), "blocker renders above the screen and below the dialog", failures)
 			TestAssertions.truthy(not blocker.visible and not confirmation.visible, "confirmation blocker and dialog start hidden together", failures)
+		var confirm := screen.find_child("ConfirmButton", true, false) as Button
+		var cancel := screen.find_child("CancelButton", true, false) as Button
+		if confirm != null and cancel != null:
+			for property_name: StringName in [&"focus_next", &"focus_previous", &"focus_neighbor_left", &"focus_neighbor_right", &"focus_neighbor_top", &"focus_neighbor_bottom"]:
+				TestAssertions.equal(confirm.get(property_name), confirm.get_path_to(cancel), "Confirm %s is trapped to Cancel" % property_name, failures)
+				TestAssertions.equal(cancel.get(property_name), cancel.get_path_to(confirm), "Cancel %s is trapped to Confirm" % property_name, failures)
 		screen.free()
 
 
@@ -128,6 +135,41 @@ func _test_node_control_copy_activation_and_redaction(failures: Array[String]) -
 	node_control.pressed.emit()
 	TestAssertions.equal(selected_ids, [&"hidden"], "node activation emits one stable node ID", failures)
 	node_control.free()
+
+
+func _test_visible_detail_disclosures_and_permanent_styling(failures: Array[String]) -> void:
+	var root := _case_root("disclosures")
+	var store := ProfileStore.new()
+	var tree := _mutation_tree()
+	var profile := ProfileState.new_profile("disclosure-profile", "Disclosure", 1000)
+	profile.discovered_trees = [String(tree.id)]
+	profile.tree_allocations[String(tree.id)] = ["root", "removed-zeta", "removed-alpha"]
+	profile.passive_points_available = 2
+	profile.passive_points_lifetime_earned = 2
+	ProfileTestSupport.remove_tree(root)
+	TestAssertions.equal(store.save_profile(profile, root), "", "disclosure fixture saves", failures)
+	var manager := ProfileManager.new()
+	TestAssertions.equal(manager.bootstrap(root), "", "disclosure manager bootstraps", failures)
+	var screen := _configured_screen(tree, manager, _services(store), true, root)
+	var canvas := screen.find_child("Canvas", true, false) as PassiveTreeCanvas
+	canvas.select_node(&"target")
+	var detail := _label(screen, "DetailSections").text
+	TestAssertions.truthy(detail.contains("Cost\n1"), "visible detail renders node cost", failures)
+	TestAssertions.truthy(detail.contains("Refund Policy\nRefundable"), "visible detail renders explicit refundable policy", failures)
+	TestAssertions.truthy(detail.contains("Coming Soon") and detail.contains("Developer Preview"), "Developer detail renders both future-contract disclosures", failures)
+	var unresolved_label := _label(screen, "Unresolved")
+	TestAssertions.truthy(unresolved_label != null, "screen exposes dedicated unresolved-allocation disclosure", failures)
+	if unresolved_label != null:
+		TestAssertions.equal(unresolved_label.text, "Unresolved saved allocations: removed-alpha, removed-zeta", "screen discloses sorted unresolved saved IDs", failures)
+	canvas.select_node(&"root")
+	TestAssertions.truthy(_label(screen, "DetailSections").text.contains("Refund Policy\nPermanent"), "permanent detail is accessible without relying on color", failures)
+	var permanent_control := canvas.node_control(&"root") as PassiveTreeNodeControl
+	var ordinary_control := canvas.node_control(&"target") as PassiveTreeNodeControl
+	TestAssertions.truthy(permanent_control.get_theme_color("font_outline_color") != ordinary_control.get_theme_color("font_outline_color"), "permanent node has distinct outline styling", failures)
+	TestAssertions.truthy(permanent_control.tooltip_text.contains("Permanent"), "permanent node tooltip conveys permanence", failures)
+	screen.call(&"close")
+	screen.free()
+	ProfileTestSupport.remove_tree(root)
 
 
 func _test_canvas_copy_draw_zoom_pan_and_navigation(failures: Array[String]) -> void:
@@ -271,10 +313,11 @@ func _test_screen_obscured_nonleak(failures: Array[String]) -> void:
 	var canvas := screen.find_child("Canvas", true, false)
 	TestAssertions.truthy(canvas.call(&"select_node", &"hidden"), "obscured node remains selectable by stable ID", failures)
 	var surfaces := _control_surface_text(screen)
-	for hidden_text: String in ["Vault Secret", "Do not leak this description", "Experience Gain", "Requires allocated node", "Allocated Node", "Secret Metadata", "73"]:
+	for hidden_text: String in ["Vault Secret", "Do not leak this description", "Experience Gain", "Requires allocated node", "Allocated Node", "Secret Metadata", "Coming Soon", "Developer Preview", "73"]:
 		TestAssertions.truthy(not surfaces.contains(hidden_text), "obscured screen does not expose %s" % hidden_text, failures)
 	TestAssertions.equal(_label(screen, "DetailTitle").text, "???", "obscured detail title is redacted", failures)
 	TestAssertions.equal(_label(screen, "DetailDescription").text, "???", "obscured detail description is redacted", failures)
+	TestAssertions.equal(_label(screen, "DetailSections").text, "", "obscured detail reveals no cost, refund, or development presentation", failures)
 	TestAssertions.truthy(_button(screen, "AllocateButton").disabled and _button(screen, "RefundButton").disabled, "obscured detail disables mutations", failures)
 	screen.call(&"close")
 	screen.free()
@@ -467,7 +510,7 @@ func _view(id: StringName, position: Vector2, state: StringName = &"allocatable"
 func _mutation_tree() -> PassiveTreeDefinition:
 	var nodes: Array[PassiveTreeNode] = [
 		PassiveTreeNode.new(&"root", &"start", Vector2.ZERO, "Root", "Root description", 0),
-		PassiveTreeNode.new(&"target", &"small", Vector2(140, 0), "Target", "Target description", 1),
+		PassiveTreeNode.new(&"target", &"small", Vector2(140, 0), "Target", "Target description", 1, [], null, [], [], {"integrationStatus": "future-contract"}),
 		PassiveTreeNode.new(&"other", &"small", Vector2(-140, 0), "Other", "Other description", 1),
 	]
 	var connections: Array[PassiveTreeConnection] = [
@@ -485,7 +528,7 @@ func _obscured_tree() -> PassiveTreeDefinition:
 		PassiveTreeNode.new(&"root", &"start", Vector2.ZERO, "Root", "Root", 0),
 		PassiveTreeNode.new(&"one", &"small", Vector2(100, 0), "One", "One", 1),
 		PassiveTreeNode.new(&"two", &"small", Vector2(200, 0), "Two", "Two", 1),
-		PassiveTreeNode.new(&"hidden", &"keystone", Vector2(300, 0), "Vault Secret", "Do not leak this description", 73, [], null, hidden_effects, hidden_requirements, {"secret": "Secret Metadata"}),
+		PassiveTreeNode.new(&"hidden", &"keystone", Vector2(300, 0), "Vault Secret", "Do not leak this description", 73, [], null, hidden_effects, hidden_requirements, {"secret": "Secret Metadata", "integrationStatus": "future-contract", "refundPolicy": "permanent"}),
 	]
 	var connections: Array[PassiveTreeConnection] = [
 		PassiveTreeConnection.new(&"root-one", &"root", &"one", &"bidirectional"),

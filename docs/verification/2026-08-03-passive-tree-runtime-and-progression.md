@@ -67,6 +67,36 @@ All three new runners remove their exact disposable `user://tests/passive_tree_*
 - The input runner covers actual `Viewport.push_input` mouse selection, middle/right drag, wheel zoom, device-0 left-stick linked navigation, right-stick continuous pan, trigger zoom, controller allocation/refund/cancel, keyboard allocation/confirmation, keyboard close, and both levels of focus restoration.
 - The responsive runner measures real `Control.get_global_rect()` geometry in live `SubViewport` layouts at 1920x1080, 2560x1440, and 3840x2160. It verifies the frame/canvas/detail/points header, reachable confirmation buttons, linked navigation to `hero-registry`, and panning that far node into the clipped canvas.
 
+## Post-review correction gate
+
+The final independent review identified four Important gaps after the original Task 13 gate. They were corrected test-first without changing either Creator artifact:
+
+- Visible node details now render Cost, an explicit Permanent/Refundable policy, and typed future-contract disclosure. Player projection says `Coming Soon`; Developer projection says both `Coming Soon` and `Developer Preview`. Obscured projection redacts all of those fields. Permanent nodes use a gold, thicker outline and also state permanence in tooltip/detail text.
+- A dedicated status-area label preserves and sorts unresolved saved allocation IDs while leaving exact mutation success, decision rejection, and save-error status strings unchanged.
+- Cross-tree `allocated_node` requirements fail closed because this service does not yet receive the other tree's validated definition; raw profile JSON is not treated as authority.
+- Nonzero connection costs and nonempty connection conditions are rejected at the catalog with stable `PARTY_FORGE_PASSIVE_TREE_ERROR` diagnostics and at the direct runtime decision boundary with `unsupported_connection_semantics`, before graph construction or point projection.
+- Confirmation focus is trapped between Confirm and Cancel for next/previous and all four directions. An actual SubViewport run exercised Tab, Shift-Tab, D-pad, arrows, and focused `ui_accept`; Cancel performs no mutation and Confirm performs only the captured action.
+
+RED evidence was recorded before production changes. The four-suite focused run exited 1 with 46 expected failures, including missing presentation fields/UI, raw cross-tree authorization returning `ok`, unsupported connection semantics returning `ok`, catalog acceptance, and unset dialog focus neighbors. After a fresh import, the actual input runner exited 1 with nine modal-focus/action failures. One initial input attempt before import was discarded as invalid harness evidence because missing import sidecars prevented the composed project from loading.
+
+Fresh GREEN evidence after correction:
+
+| Gate | Exit | Result |
+| --- | ---: | --- |
+| Four focused review suites | 0 | `TEST_SUMMARY: PASS (0 failures)` |
+| 12-suite progression/contracts/view/screen/settings/main/input matrix | 0 | `TEST_SUMMARY: PASS (0 failures)` |
+| Passive-tree profile runner | 0 | `PASSIVE_TREE_PROFILE_SUMMARY: PASS` |
+| Passive-tree input runner | 0 | `PASSIVE_TREE_INPUT_SUMMARY: PASS` |
+| Passive-tree responsive runner | 0 | `PASSIVE_TREE_RESPONSIVE_SUMMARY: PASS (3 sizes)` |
+| Existing responsive geometry runner | 0 | `RESPONSIVE_GEOMETRY_SUMMARY: PASS (4 sizes)` |
+| Fresh editor import | 0 | import completed with no parse/script error |
+| Complete unit suite | 0 | `TEST_SUMMARY: PASS (108 suites)` |
+| `git diff --check` | 0 | no output |
+
+The complete suite retains the established intentional negative-path diagnostics and exit warnings described above. Manual rendered validation remains pending. This correction is pending fresh independent re-review.
+
+Creator state was rechecked read-only during this correction: `E:\Projects\Passive Skill Tree Creator` `main` was exactly `c5bf5ba` (`docs: plan v0.3.1 release hardening`), while the City logistics worktree remained `b9b4ac7` with its pre-existing untracked autosave. The game artifacts were not regenerated or edited; Creator reconciliation remains a later task.
+
 ## Manual approval matrix
 
 No live rendered interaction was witnessed for this Task 13 execution. Automated real-input and real-layout evidence does not replace the user's visual/feel approval.

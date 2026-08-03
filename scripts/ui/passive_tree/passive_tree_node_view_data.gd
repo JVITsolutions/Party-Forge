@@ -18,6 +18,8 @@ var allocated := false
 var allocatable := false
 var decision_code: StringName
 var decision_message: String
+var refund_policy_text: String
+var development_lines: Array[String] = []
 
 func _init(
 	p_id: StringName = &"",
@@ -37,6 +39,8 @@ func _init(
 	p_allocatable: bool = false,
 	p_decision_code: StringName = &"node_obscured",
 	p_decision_message: String = "",
+	p_refund_policy_text: String = "",
+	p_development_lines: Array[String] = [],
 ) -> void:
 	id = p_id
 	position = p_position
@@ -55,6 +59,8 @@ func _init(
 	allocatable = p_allocatable
 	decision_code = p_decision_code
 	decision_message = p_decision_message
+	refund_policy_text = p_refund_policy_text
+	development_lines.assign(p_development_lines)
 
 func copy() -> PassiveTreeNodeViewData:
 	return PassiveTreeNodeViewData.new(
@@ -75,6 +81,8 @@ func copy() -> PassiveTreeNodeViewData:
 		allocatable,
 		decision_code,
 		decision_message,
+		refund_policy_text,
+		development_lines,
 	)
 
 static func value_only_copy(value: Variant) -> Variant:

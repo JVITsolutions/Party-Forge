@@ -47,6 +47,12 @@ func _run() -> void:
 	_assert(prologue.ok(), "input profile discovers the City through the production prologue mutation")
 	var grant := profile_mutations.grant_passive_points(profile_id, "input-runner-grant", 5, _profile_root)
 	_assert(grant.ok(), "input profile receives test points through grant_passive_points")
+	var persisted := ProfileStore.new().load_profile(profile_id, _profile_root)
+	if persisted.ok():
+		var allocations: Array = persisted.profile.tree_allocations.get(TREE_ID, []) as Array
+		allocations.append_array(["removed-zeta", "removed-alpha"])
+		persisted.profile.tree_allocations[TREE_ID] = allocations
+		_assert(ProfileStore.new().save_profile(persisted.profile, _profile_root).is_empty(), "input fixture stores unresolved historical allocation IDs")
 	_assert(manager.refresh_profile(profile_id).is_empty(), "composed manager refreshes the mutation results")
 
 	settings.close()
@@ -80,6 +86,10 @@ func _run() -> void:
 
 	await _joy_motion(viewport, JOY_AXIS_LEFT_X, 1.0)
 	_assert(canvas.selected_node_id() == &"equipment-registry", "device-0 left stick navigates to the linked right node")
+	var detail_sections := (screen.get_node("Overlay/Frame/Layout/Body/DetailScroll/DetailBody/DetailSections") as Label).text
+	_assert(detail_sections.contains("Cost") and detail_sections.contains("Refund Policy"), "composed selected detail discloses cost and refund policy")
+	_assert(detail_sections.contains("Coming Soon") and detail_sections.contains("Developer Preview"), "composed Developer detail discloses future-contract state")
+	_assert((screen.get_node("Overlay/Frame/Layout/Unresolved") as Label).text == "Unresolved saved allocations: removed-alpha, removed-zeta", "composed screen discloses sorted unresolved saved allocations")
 	await _joy_motion(viewport, JOY_AXIS_LEFT_X, 0.0)
 
 	var pan_before_controller := canvas.pan_value()
@@ -104,6 +114,25 @@ func _run() -> void:
 
 	await _joy_button(viewport, JOY_BUTTON_A)
 	_assert((screen.get_node("Overlay/Confirmation") as Control).visible, "controller south face initiates allocation confirmation")
+	var confirm_button := screen.get_node("Overlay/Confirmation/Content/Buttons/ConfirmButton") as Button
+	var cancel_button := screen.get_node("Overlay/Confirmation/Content/Buttons/CancelButton") as Button
+	_assert(viewport.gui_get_focus_owner() == cancel_button, "modal confirmation starts keyboard focus on Cancel")
+	for _index: int in 2:
+		await _key(viewport, KEY_TAB)
+		_assert(viewport.gui_get_focus_owner() in [confirm_button, cancel_button], "Tab focus remains trapped inside confirmation")
+		await _key_with_shift(viewport, KEY_TAB)
+		_assert(viewport.gui_get_focus_owner() in [confirm_button, cancel_button], "Shift-Tab focus remains trapped inside confirmation")
+		await _joy_button(viewport, JOY_BUTTON_DPAD_LEFT)
+		_assert(viewport.gui_get_focus_owner() in [confirm_button, cancel_button], "D-pad focus remains trapped inside confirmation")
+		await _key(viewport, KEY_RIGHT)
+		_assert(viewport.gui_get_focus_owner() in [confirm_button, cancel_button], "arrow focus remains trapped inside confirmation")
+	cancel_button.grab_focus()
+	await _joy_button(viewport, JOY_BUTTON_A)
+	_assert(not (screen.get_node("Overlay/Confirmation") as Control).visible, "ui_accept activates focused Cancel rather than a background or hard-coded confirm action")
+	_assert("equipment-registry" not in manager.active_profile().tree_allocations.get(TREE_ID, []), "focused Cancel performs no allocation")
+	await _joy_button(viewport, JOY_BUTTON_A)
+	_assert((screen.get_node("Overlay/Confirmation") as Control).visible, "controller can reopen allocation confirmation after focused Cancel")
+	confirm_button.grab_focus()
 	await _joy_button(viewport, JOY_BUTTON_A)
 	_assert("equipment-registry" in manager.active_profile().tree_allocations.get(TREE_ID, []), "controller confirmation persists the selected allocation")
 	_assert(not (screen.get_node("Overlay/Confirmation") as Control).visible, "successful allocation closes its confirmation")
@@ -116,6 +145,8 @@ func _run() -> void:
 	_assert(canvas.selected_node_id() == &"shared-lessons-1", "device-0 left stick navigates to the linked upper node")
 	await _key(viewport, KEY_ENTER)
 	_assert((screen.get_node("Overlay/Confirmation") as Control).visible, "keyboard Enter initiates allocation")
+	await _key(viewport, KEY_TAB)
+	_assert(viewport.gui_get_focus_owner() == confirm_button, "keyboard focus moves from Cancel to Confirm inside the modal")
 	await _key(viewport, KEY_ENTER)
 	_assert("shared-lessons-1" in manager.active_profile().tree_allocations.get(TREE_ID, []), "keyboard Enter confirms allocation")
 	await _joy_button(viewport, JOY_BUTTON_X)
@@ -162,6 +193,19 @@ func _frames(count: int) -> void:
 func _key(viewport: SubViewport, keycode: Key) -> void:
 	var event := InputEventKey.new()
 	event.keycode = keycode
+	event.pressed = true
+	viewport.push_input(event)
+	await process_frame
+	var release := event.duplicate() as InputEventKey
+	release.pressed = false
+	viewport.push_input(release)
+	await process_frame
+
+
+func _key_with_shift(viewport: SubViewport, keycode: Key) -> void:
+	var event := InputEventKey.new()
+	event.keycode = keycode
+	event.shift_pressed = true
 	event.pressed = true
 	viewport.push_input(event)
 	await process_frame

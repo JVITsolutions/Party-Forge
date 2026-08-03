@@ -3,6 +3,8 @@ extends RefCounted
 func run() -> Array[String]:
 	var failures: Array[String] = []
 	_test_state_projection_and_redaction(failures)
+	_test_typed_presentation_copy_and_development_state(failures)
+	_test_unsupported_connection_semantics_are_unavailable(failures)
 	_test_implicit_legacy_root_is_projected_active(failures)
 	_test_developer_reveal_is_view_only(failures)
 	_test_committed_city_projection_is_lexical(failures)
@@ -43,6 +45,8 @@ func _test_state_projection_and_redaction(failures: Array[String]) -> void:
 	TestAssertions.equal(allocatable.display_name, "Exact Creator Name", "Creator name remains display copy", failures)
 	TestAssertions.equal(allocatable.description, "Exact Creator description; it is not parsed.", "Creator description remains display copy", failures)
 	TestAssertions.equal(allocatable.cost_text, "1", "visible cost text", failures)
+	TestAssertions.equal(allocatable.get("refund_policy_text"), "Refundable", "visible refundable policy is typed presentation data", failures)
+	TestAssertions.equal(allocatable.get("development_lines"), ["Coming Soon"], "Player projection labels future contract without Developer availability", failures)
 	TestAssertions.equal(allocatable.effect_lines, ["Experience Gain: +2% (all_run_experience).", "Experience Gain: +3% (all_run_experience)."], "effect lines come from typed contracts in authored order", failures)
 	TestAssertions.equal(allocatable.keyword_lines, ["Experience Gain: Increases experience earned in the named scope."], "keyword explanations are deduplicated", failures)
 	TestAssertions.equal(allocatable.decision_code, &"ok", "allocatable exact decision code", failures)
@@ -68,6 +72,7 @@ func _test_state_projection_and_redaction(failures: Array[String]) -> void:
 	var metadata_permanent := _node(result, &"f-permanent-metadata")
 	TestAssertions.equal(metadata_permanent.state, &"allocatable", "metadata permanence does not replace allocation state", failures)
 	TestAssertions.truthy(metadata_permanent.permanent, "metadata permanence is projected", failures)
+	TestAssertions.equal(metadata_permanent.get("refund_policy_text"), "Permanent", "permanent policy is explicit presentation data", failures)
 	var effect_permanent := _node(result, &"g-permanent-effect")
 	TestAssertions.equal(effect_permanent.state, &"allocatable", "effect permanence does not replace allocation state", failures)
 	TestAssertions.truthy(effect_permanent.permanent, "effect permanence is projected", failures)
@@ -89,9 +94,31 @@ func _test_state_projection_and_redaction(failures: Array[String]) -> void:
 	TestAssertions.equal(obscured.keyword_lines, [], "obscured keywords are redacted", failures)
 	TestAssertions.equal(obscured.cost, -1, "obscured numeric cost is redacted", failures)
 	TestAssertions.equal(obscured.metadata, {}, "obscured metadata is redacted", failures)
+	TestAssertions.equal(obscured.get("refund_policy_text"), "", "obscured refund policy is redacted", failures)
+	TestAssertions.equal(obscured.get("development_lines"), [], "obscured development state is redacted", failures)
 	TestAssertions.truthy(not obscured.permanent and not obscured.allocated and not obscured.allocatable, "obscured flags reveal no hidden mechanics", failures)
 	TestAssertions.equal(obscured.decision_code, &"node_obscured", "obscured decision is generic", failures)
 	TestAssertions.equal(obscured.decision_message, "Reveal this passive node before allocating it.", "obscured decision reveals no mechanics", failures)
+
+func _test_typed_presentation_copy_and_development_state(failures: Array[String]) -> void:
+	var tree := _tree()
+	var profile := _profile(tree.id)
+	var developer := _view_model().build(tree, profile, true)
+	var source := _node(developer, &"b-allocatable")
+	TestAssertions.equal(source.get("development_lines"), ["Coming Soon", "Developer Preview"], "Developer projection exposes both future-contract disclosures", failures)
+	var copied := source.copy()
+	var source_lines: Variant = source.get("development_lines")
+	if source_lines is Array:
+		source_lines.append("Caller Mutation")
+	TestAssertions.equal(copied.get("development_lines"), ["Coming Soon", "Developer Preview"], "typed development presentation is defensively copied", failures)
+	TestAssertions.equal(copied.get("refund_policy_text"), "Refundable", "typed refund presentation survives copy", failures)
+
+func _test_unsupported_connection_semantics_are_unavailable(failures: Array[String]) -> void:
+	var tree := _tree()
+	tree.connections[tree.connections.size() - 1].cost = 1
+	var view := _node(_view_model().build(tree, _profile(tree.id), true), &"b-allocatable")
+	TestAssertions.equal(view.state, &"unavailable", "unsupported connection semantics never present a node as allocatable", failures)
+	TestAssertions.equal(view.decision_code, &"unsupported_connection_semantics", "unsupported connection presentation keeps stable rejection code", failures)
 
 func _test_implicit_legacy_root_is_projected_active(failures: Array[String]) -> void:
 	var tree := _tree()
@@ -284,6 +311,7 @@ func _tree() -> PassiveTreeDefinition:
 		PassiveTreeRequirement.new(&"allocated_node", &"equals", "a-start", {"treeId": "party-forge-view-test-v1"}),
 	]
 	var metadata := {"nested": {"value": 1}}
+	var future_metadata := {"integrationStatus": "future-contract", "nested": {"value": 1}}
 	var nodes: Array[PassiveTreeNode] = [
 		PassiveTreeNode.new(&"z-obscured", &"large", Vector2(300, 0), "Hidden Mechanics", "Secret description.", 7, [], null, hidden_effects, requirement, metadata),
 		PassiveTreeNode.new(&"i-invalid", &"small", Vector2(0, 60), "Invalid", "Invalid copy.", 1, [], null, invalid_effects, invalid_requirements, metadata),
@@ -293,7 +321,7 @@ func _tree() -> PassiveTreeDefinition:
 		PassiveTreeNode.new(&"e-disconnected", &"small", Vector2(0, 20), "Disconnected", "Disconnected copy.", 1, [], null, no_effects, no_requirements, metadata),
 		PassiveTreeNode.new(&"d-poor", &"small", Vector2(0, 10), "Expensive", "Expensive copy.", 99, [], null, no_effects, no_requirements, metadata),
 		PassiveTreeNode.new(&"c-requirement", &"small", Vector2(0, 5), "Requirement", "Requirement copy.", 1, [], null, no_effects, requirement, metadata),
-		PassiveTreeNode.new(&"b-allocatable", &"small", Vector2(0, 1), "Exact Creator Name", "Exact Creator description; it is not parsed.", 1, [], null, experience_effects, no_requirements, metadata),
+		PassiveTreeNode.new(&"b-allocatable", &"small", Vector2(0, 1), "Exact Creator Name", "Exact Creator description; it is not parsed.", 1, [], null, experience_effects, no_requirements, future_metadata),
 		PassiveTreeNode.new(&"a-start", &"start", Vector2.ZERO, "Start", "Start copy.", 0, [], null, no_effects, no_requirements, metadata),
 		PassiveTreeNode.new(&"x-one", &"small", Vector2(100, 0), "One", "One copy.", 1, [], null, no_effects, no_requirements, metadata),
 		PassiveTreeNode.new(&"y-two", &"small", Vector2(200, 0), "Two", "Two copy.", 1, [], null, no_effects, no_requirements, metadata),

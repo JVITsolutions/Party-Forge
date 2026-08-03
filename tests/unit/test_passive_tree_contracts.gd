@@ -253,6 +253,14 @@ func _test_catalog_semantic_fail_closed(failures: Array[String]) -> void:
 	wrong_city_document["treeId"] = "wrong-city"
 	_assert_catalog_invalid(wrong_city_document, "user://task-5-wrong-city-policy.json", "City policy violation is rejected at catalog boundary", "party-forge-city-v1", failures)
 
+	var connection_cost_document := _city_document()
+	(connection_cost_document["connections"] as Array)[0]["cost"] = 1
+	_assert_catalog_invalid(connection_cost_document, "user://task-review-connection-cost.json", "unsupported connection cost is rejected at catalog boundary", "PARTY_FORGE_PASSIVE_TREE_ERROR semantic=unsupported_connection_cost", failures)
+
+	var connection_condition_document := _city_document()
+	(connection_condition_document["connections"] as Array)[0]["conditions"] = [{"requirementId": "allocated_node", "operator": "contains", "value": "city-heart", "parameters": {"treeId": "party-forge-city-v1"}}]
+	_assert_catalog_invalid(connection_condition_document, "user://task-review-connection-condition.json", "unsupported connection conditions are rejected at catalog boundary", "PARTY_FORGE_PASSIVE_TREE_ERROR semantic=unsupported_connection_conditions", failures)
+
 	var default_after_errors := PassiveTreeCatalog.load_defaults()
 	TestAssertions.truthy(default_after_errors.ok(), "semantic errors do not poison the default catalog", failures)
 	if default_after_errors.ok():

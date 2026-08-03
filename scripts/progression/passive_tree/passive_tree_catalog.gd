@@ -23,6 +23,10 @@ static func load_path(path: String) -> PassiveTreeLoadResult:
 			if not requirement_error.is_empty():
 				semantic_errors.append("%s node=%s requirement_index=%d" % [requirement_error, tree_node.id, requirement_index])
 	for connection: PassiveTreeConnection in result.tree.connections:
+		if connection.cost != 0:
+			semantic_errors.append("PARTY_FORGE_PASSIVE_TREE_ERROR semantic=unsupported_connection_cost connection=%s" % connection.id)
+		if not connection.conditions.is_empty():
+			semantic_errors.append("PARTY_FORGE_PASSIVE_TREE_ERROR semantic=unsupported_connection_conditions connection=%s" % connection.id)
 		for condition_index: int in connection.conditions.size():
 			var condition_error := requirement_registry.validate(connection.conditions[condition_index])
 			if not condition_error.is_empty():

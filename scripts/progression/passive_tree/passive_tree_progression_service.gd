@@ -15,6 +15,7 @@ const MESSAGES := {
 	&"respec_service_required": "Unlock the Passive Respec service before refunding nodes.",
 	&"retained_path_disconnected": "Refunding this node would disconnect an allocated path.",
 	&"retained_requirement_failed": "Refunding this node would break another allocated node's requirements.",
+	&"unsupported_connection_semantics": "This passive tree uses unsupported connection rules.",
 }
 
 var _effect_registry: PassiveEffectRegistry
@@ -30,6 +31,8 @@ func allocation_decision(
 	node_id: StringName,
 	developer_context: bool,
 ) -> PassiveTreeActionDecision:
+	if _has_unsupported_connection_semantics(tree):
+		return _decision(&"unsupported_connection_semantics", false, 0, _saved_allocations(profile, tree.id), [])
 	var graph := PassiveTreeGraph.new(tree)
 	var snapshot := PassiveTreeSnapshot.build(tree, profile, developer_context, graph)
 	var current := _combined_ids(snapshot.allocated, snapshot.unresolved)
@@ -60,6 +63,8 @@ func refund_decision(
 	developer_context: bool,
 	has_respec_service: bool,
 ) -> PassiveTreeActionDecision:
+	if _has_unsupported_connection_semantics(tree):
+		return _decision(&"unsupported_connection_semantics", false, 0, _saved_allocations(profile, tree.id), [])
 	var graph := PassiveTreeGraph.new(tree)
 	var snapshot := PassiveTreeSnapshot.build(tree, profile, false, graph)
 	var current := _combined_ids(snapshot.allocated, snapshot.unresolved)
@@ -108,15 +113,29 @@ func _requirements_pass(
 		if required_tree_id == String(tree.id):
 			allocations.assign(current_tree_allocations)
 		else:
-			var saved: Variant = profile.tree_allocations.get(required_tree_id, [])
-			if saved is Array:
-				for saved_id: Variant in saved as Array:
-					var allocation_id := StringName(saved_id)
-					if allocation_id not in allocations:
-						allocations.append(allocation_id)
+			# Cross-tree allocations require the other tree's validated definition.
+			# This service currently receives only the active tree, so raw saved IDs are never authoritative.
+			return false
 		if StringName(requirement.value) not in allocations:
 			return false
 	return true
+
+func _has_unsupported_connection_semantics(tree: PassiveTreeDefinition) -> bool:
+	for connection: PassiveTreeConnection in tree.connections:
+		if connection.cost != 0 or not connection.conditions.is_empty():
+			return true
+	return false
+
+func _saved_allocations(profile: ProfileState, tree_id: StringName) -> Array[StringName]:
+	var result: Array[StringName] = []
+	var saved: Variant = profile.tree_allocations.get(String(tree_id), [])
+	if saved is Array:
+		for value: Variant in saved as Array:
+			var node_id := StringName(value)
+			if node_id not in result:
+				result.append(node_id)
+	result.sort_custom(func(left: StringName, right: StringName) -> bool: return String(left) < String(right))
+	return result
 
 func _is_permanent(tree_node: PassiveTreeNode) -> bool:
 	if tree_node.metadata.get("refundPolicy", "") == "permanent":

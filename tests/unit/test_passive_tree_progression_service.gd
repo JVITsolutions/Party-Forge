@@ -14,6 +14,7 @@ const MESSAGES := {
 	&"respec_service_required": "Unlock the Passive Respec service before refunding nodes.",
 	&"retained_path_disconnected": "Refunding this node would disconnect an allocated path.",
 	&"retained_requirement_failed": "Refunding this node would break another allocated node's requirements.",
+	&"unsupported_connection_semantics": "This passive tree uses unsupported connection rules.",
 }
 
 func run() -> Array[String]:
@@ -22,6 +23,8 @@ func run() -> Array[String]:
 	_test_extraction_license_requires_both_prerequisites(failures)
 	_test_directed_connectivity_and_implicit_roots(failures)
 	_test_unresolved_same_tree_ids_do_not_satisfy_requirements(failures)
+	_test_cross_tree_saved_ids_fail_closed_without_authoritative_definition(failures)
+	_test_unsupported_connection_semantics_fail_closed(failures)
 	_test_allocation_success_is_sorted_defensive_and_pure(failures)
 	_test_refund_rejections_and_precedence(failures)
 	_test_refund_retained_path_and_requirements(failures)
@@ -115,6 +118,29 @@ func _test_unresolved_same_tree_ids_do_not_satisfy_requirements(failures: Array[
 	_assert_decision(refund, &"retained_requirement_failed", false, "unresolved saved ID cannot authorize retained requirement", failures)
 	TestAssertions.equal(refund.next_allocations, [&"city-heart", &"field-pack", &"leaf", &"removed-prerequisite", &"unresolved-dependent"], "refund rejection preserves unresolved ID in persistence projection", failures)
 	TestAssertions.equal(refund_profile.to_dictionary(), refund_before, "unresolved refund requirement check does not mutate profile", failures)
+
+func _test_cross_tree_saved_ids_fail_closed_without_authoritative_definition(failures: Array[String]) -> void:
+	var tree := _tree()
+	var cross_requirement: Array[PassiveTreeRequirement] = [
+		PassiveTreeRequirement.new(&"allocated_node", &"contains", "removed-warehouse-node", {"treeId": "party-forge-warehouse-v1"}),
+	]
+	var target := tree.node(&"unresolved-dependent")
+	target.requirements.assign(cross_requirement)
+	var profile := _profile(tree.id, true, [&"city-heart"], 10)
+	profile.tree_allocations["party-forge-warehouse-v1"] = ["removed-warehouse-node"]
+	var decision := _service().allocation_decision(tree, profile, target.id, true)
+	_assert_decision(decision, &"requirement_failed", false, "raw cross-tree saved IDs cannot authorize a requirement", failures)
+
+func _test_unsupported_connection_semantics_fail_closed(failures: Array[String]) -> void:
+	var cost_tree := _tree()
+	cost_tree.connections[0].cost = 1
+	var profile := _profile(cost_tree.id, true, [&"city-heart"], 10)
+	_assert_decision(_service().allocation_decision(cost_tree, profile, &"field-pack", true), &"unsupported_connection_semantics", false, "connection point costs fail closed before allocation", failures)
+
+	var condition_tree := _tree()
+	condition_tree.connections[0].conditions.append(_requirement(&"city-heart"))
+	var refund_profile := _profile(condition_tree.id, true, [&"city-heart", &"field-pack", &"leaf"], 0)
+	_assert_decision(_service().refund_decision(condition_tree, refund_profile, &"leaf", true, true), &"unsupported_connection_semantics", false, "connection conditions fail closed before refund", failures)
 
 func _test_allocation_success_is_sorted_defensive_and_pure(failures: Array[String]) -> void:
 	var tree := _tree()

@@ -134,8 +134,14 @@ func _unhandled_input(event: InputEvent) -> void:
 	if not is_open():
 		return
 	if _confirmation().visible:
-		if event.is_action_pressed(&"passive_tree_allocate"):
-			_confirm_action()
+		if event.is_action_pressed(&"ui_accept"):
+			var focus_owner := get_viewport().gui_get_focus_owner() if get_viewport() != null else null
+			if focus_owner == _confirm_button():
+				_confirm_action()
+			elif focus_owner == _cancel_button():
+				_cancel_confirmation()
+			else:
+				_cancel_button().grab_focus()
 			_mark_input_handled()
 		elif event.is_action_pressed(&"passive_tree_close") or event.is_action_pressed(&"ui_cancel"):
 			_cancel_confirmation()
@@ -203,6 +209,8 @@ func _rebuild(preferred_id: StringName = &"") -> void:
 	_title().text = String(projection.get("tree_name", "City Passive Tree"))
 	_points().text = String(projection.get("points_text", "Passive Points: 0 / 0"))
 	_status().text = ""
+	var unresolved: Array = projection.get("unresolved_ids", []) as Array
+	_unresolved().text = "" if unresolved.is_empty() else "Unresolved saved allocations: %s" % ", ".join(unresolved.map(func(value: Variant) -> String: return String(value)))
 	var projected_nodes: Array = projection.get("nodes", []) as Array
 	for value: Variant in projected_nodes:
 		var view := value as PassiveTreeNodeViewData
@@ -220,6 +228,7 @@ func _show_unavailable() -> void:
 	_title().text = "City Passive Tree"
 	_points().text = "Passive Points: 0 / 0"
 	_status().text = UNAVAILABLE_STATUS
+	_unresolved().text = ""
 	_allocate_button().disabled = true
 	_refund_button().disabled = true
 
@@ -246,6 +255,9 @@ func _on_selection_changed(node_id: StringName) -> void:
 		_detail_title().text = view.display_name
 		_detail_description().text = view.description
 		var sections: Array[String] = []
+		_append_section(sections, "Cost", [view.cost_text])
+		_append_section(sections, "Refund Policy", [view.refund_policy_text])
+		_append_section(sections, "Development", view.development_lines)
 		_append_section(sections, "Effects", view.effect_lines)
 		_append_section(sections, "Requirements", view.requirement_lines)
 		_append_section(sections, "Keywords", view.keyword_lines)
@@ -403,6 +415,10 @@ func _points() -> Label:
 
 func _status() -> Label:
 	return get_node("Overlay/Frame/Layout/Status") as Label
+
+
+func _unresolved() -> Label:
+	return get_node("Overlay/Frame/Layout/Unresolved") as Label
 
 
 func _detail_title() -> Label:

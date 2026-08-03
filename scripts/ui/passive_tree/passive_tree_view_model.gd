@@ -129,6 +129,12 @@ func _project_node(
 	for keyword: Variant in keyword_members.keys():
 		keyword_lines.append(String(keyword))
 	keyword_lines.sort()
+	var permanent := _is_permanent(tree, tree_node)
+	var development_lines: Array[String] = []
+	if tree_node.metadata.get("integrationStatus", "") == "future-contract":
+		development_lines.append("Coming Soon")
+		if developer_reveal:
+			development_lines.append("Developer Preview")
 
 	return PassiveTreeNodeViewData.new(
 		tree_node.id,
@@ -143,11 +149,13 @@ func _project_node(
 		requirement_lines,
 		keyword_lines,
 		tree_node.metadata,
-		_is_permanent(tree, tree_node),
+		permanent,
 		is_allocated,
 		is_allocatable,
 		decision_code,
 		decision_message,
+		"Permanent" if permanent else "Refundable",
+		development_lines,
 	)
 
 func _is_permanent(tree: PassiveTreeDefinition, tree_node: PassiveTreeNode) -> bool:
