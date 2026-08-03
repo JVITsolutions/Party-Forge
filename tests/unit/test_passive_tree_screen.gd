@@ -22,8 +22,63 @@ func run() -> Array[String]:
 	_test_confirmation_real_mutation_refresh_and_errors(failures)
 	_test_confirmation_captures_allocation_and_refund_targets(failures)
 	_test_confirmation_invalidation_and_clear_contract(failures)
+	_test_keyboard_controller_actions_and_modal_block(failures)
 	_test_exact_save_error_surface(failures)
 	return failures
+
+
+func _test_keyboard_controller_actions_and_modal_block(failures: Array[String]) -> void:
+	var root := _case_root("input")
+	var store := ProfileStore.new()
+	var tree := _mutation_tree()
+	var profile := ProfileState.new_profile("input-profile", "Input", 1000)
+	profile.discovered_trees = [String(tree.id)]
+	profile.tree_allocations[String(tree.id)] = ["root"]
+	profile.passive_points_available = 2
+	profile.passive_points_lifetime_earned = 2
+	ProfileTestSupport.remove_tree(root)
+	TestAssertions.equal(store.save_profile(profile, root), "", "input fixture saves", failures)
+	var manager := ProfileManager.new()
+	TestAssertions.equal(manager.bootstrap(root), "", "input manager bootstraps", failures)
+	var screen := _configured_screen(tree, manager, _services(store), true, root)
+	var canvas := screen.find_child("Canvas", true, false) as PassiveTreeCanvas
+	canvas.select_node(&"root")
+	screen.call("_unhandled_input", _action_event(&"passive_tree_navigate_right"))
+	TestAssertions.equal(canvas.selected_node_id(), &"target", "tree action navigates to the linked right node", failures)
+	screen.call("_unhandled_input", _action_event(&"passive_tree_allocate"))
+	TestAssertions.truthy((screen.find_child("Confirmation", true, false) as Control).visible, "allocate action opens confirmation", failures)
+	var selected_before := canvas.selected_node_id()
+	var pan_before := canvas.pan_value()
+	screen.call("_unhandled_input", _action_event(&"passive_tree_navigate_left"))
+	var has_continuous_input := screen.has_method(&"_process") and InputMap.has_action(&"passive_tree_pan_right") and InputMap.has_action(&"passive_tree_zoom_in")
+	TestAssertions.truthy(has_continuous_input, "tree screen exposes mapped continuous pan and zoom processing", failures)
+	if has_continuous_input:
+		Input.action_press(&"passive_tree_pan_right", 1.0)
+		screen.call("_process", 0.5)
+		Input.action_release(&"passive_tree_pan_right")
+	TestAssertions.equal(canvas.selected_node_id(), selected_before, "modal confirmation blocks navigation behind it", failures)
+	TestAssertions.equal(canvas.pan_value(), pan_before, "modal confirmation blocks pan behind it", failures)
+	screen.call("_unhandled_input", _action_event(&"passive_tree_close"))
+	TestAssertions.truthy(not (screen.find_child("Confirmation", true, false) as Control).visible and screen.is_open(), "close action cancels confirmation before closing screen", failures)
+	if has_continuous_input:
+		Input.action_press(&"passive_tree_pan_right", 1.0)
+		Input.action_press(&"passive_tree_zoom_in", 1.0)
+		screen.call("_process", 0.5)
+		Input.action_release(&"passive_tree_pan_right")
+		Input.action_release(&"passive_tree_zoom_in")
+		TestAssertions.truthy(canvas.pan_value().x > pan_before.x, "right-stick action pans at a bounded delta rate", failures)
+		TestAssertions.truthy(canvas.zoom_value() > 1.0 and canvas.zoom_value() <= PassiveTreeCanvas.MAX_ZOOM, "trigger action zooms through the canvas clamp", failures)
+	screen.call("_unhandled_input", _action_event(&"passive_tree_close"))
+	TestAssertions.truthy(not screen.is_open(), "close action closes the tree when no confirmation is active", failures)
+	screen.free()
+	ProfileTestSupport.remove_tree(root)
+
+
+func _action_event(action: StringName) -> InputEventAction:
+	var event := InputEventAction.new()
+	event.action = action
+	event.pressed = true
+	return event
 
 
 func _test_scene_and_type_contracts(failures: Array[String]) -> void:

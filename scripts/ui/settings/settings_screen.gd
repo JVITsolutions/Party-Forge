@@ -2,12 +2,14 @@ class_name SettingsScreen
 extends CanvasLayer
 
 signal settings_applied(settings: PartyForgeSettings)
+signal city_tree_requested(developer_preview: bool)
 
 var _store: PartyForgeSettingsStore
 var _current_settings: PartyForgeSettings = PartyForgeSettings.new()
 var _draft: PartyForgeSettings = PartyForgeSettings.new()
 var _profile_manager: ProfileManager
 var _return_focus: Control
+var _child_return_focus: Control
 var _pending_open := false
 var _pending_profiles_tab := false
 
@@ -65,6 +67,19 @@ func open_profiles(return_focus: Control = null) -> void:
 	_focus_active_page()
 
 
+func open_additional(return_focus: Control = null) -> void:
+	var external_return := _child_return_focus if _child_return_focus != null and is_instance_valid(_child_return_focus) else return_focus
+	_child_return_focus = null
+	open(external_return)
+	_select_tab_control(_additional_page())
+	if not is_inside_tree():
+		return
+	if return_focus != null and is_instance_valid(return_focus) and return_focus.is_inside_tree() and return_focus.is_visible_in_tree():
+		return_focus.grab_focus()
+	else:
+		_focus_active_page()
+
+
 func _tab_index_for_control(control: Control) -> int:
 	var tabs := _tabs()
 	for index: int in range(tabs.get_tab_count()):
@@ -76,7 +91,9 @@ func _tab_index_for_control(control: Control) -> int:
 func _select_tab_control(control: Control) -> void:
 	var index := _tab_index_for_control(control)
 	if index >= 0:
-		_tabs().current_tab = index
+		var tabs := _tabs()
+		tabs.set_current_tab(index)
+		tabs.get_tab_bar().set_current_tab(index)
 
 
 func close() -> void:
@@ -195,6 +212,8 @@ func _mark_input_handled() -> void:
 
 func _connect_additional_actions() -> void:
 	var page := _additional_page()
+	if not page.city_tree_requested.is_connected(_on_city_tree_requested):
+		page.city_tree_requested.connect(_on_city_tree_requested)
 	var apply := page.get_node("Layout/ApplyAndReturn") as Button
 	var cancel := page.get_node("Layout/Cancel") as Button
 	var reset := page.get_node("Layout/ResetDeveloperOptions") as Button
@@ -204,6 +223,15 @@ func _connect_additional_actions() -> void:
 		cancel.pressed.connect(_cancel)
 	if not reset.pressed.is_connected(_reset_developer_options):
 		reset.pressed.connect(_reset_developer_options)
+
+
+func _on_city_tree_requested(developer_preview: bool) -> void:
+	if not developer_preview:
+		return
+	_child_return_focus = _return_focus
+	_return_focus = null
+	visible = false
+	city_tree_requested.emit(true)
 
 
 func _tabs() -> TabContainer:

@@ -6,6 +6,8 @@ signal tree_closed
 const UNAVAILABLE_STATUS := "City passive tree unavailable"
 const STALE_ACTION_STATUS := "Passive tree action is no longer available."
 const RESPEC_SERVICE_ID := "service:passive_respec"
+const CONTROLLER_PAN_SPEED := 640.0
+const CONTROLLER_ZOOM_BASE := 2.0
 
 var _tree_definition: PassiveTreeDefinition
 var _profiles: ProfileManager
@@ -131,12 +133,55 @@ func layout_snapshot(viewport_size: Vector2) -> Dictionary:
 func _unhandled_input(event: InputEvent) -> void:
 	if not is_open():
 		return
-	if _confirmation().visible and event.is_action_pressed(&"ui_cancel"):
-		_cancel_confirmation()
-		_mark_input_handled()
-	elif event.is_action_pressed(&"ui_cancel"):
+	if _confirmation().visible:
+		if event.is_action_pressed(&"passive_tree_allocate"):
+			_confirm_action()
+			_mark_input_handled()
+		elif event.is_action_pressed(&"passive_tree_close") or event.is_action_pressed(&"ui_cancel"):
+			_cancel_confirmation()
+			_mark_input_handled()
+		elif _is_tree_action(event):
+			_mark_input_handled()
+		return
+	if event.is_action_pressed(&"passive_tree_navigate_left"):
+		_canvas().select_connected(Vector2.LEFT)
+	elif event.is_action_pressed(&"passive_tree_navigate_right"):
+		_canvas().select_connected(Vector2.RIGHT)
+	elif event.is_action_pressed(&"passive_tree_navigate_up"):
+		_canvas().select_connected(Vector2.UP)
+	elif event.is_action_pressed(&"passive_tree_navigate_down"):
+		_canvas().select_connected(Vector2.DOWN)
+	elif event.is_action_pressed(&"passive_tree_allocate"):
+		_request_allocate()
+	elif event.is_action_pressed(&"passive_tree_refund"):
+		_request_refund()
+	elif event.is_action_pressed(&"passive_tree_close") or event.is_action_pressed(&"ui_cancel"):
 		close()
-		_mark_input_handled()
+	else:
+		return
+	_mark_input_handled()
+
+
+func _process(delta: float) -> void:
+	if not is_open() or _confirmation().visible or delta <= 0.0:
+		return
+	var pan_input := Input.get_vector(&"passive_tree_pan_left", &"passive_tree_pan_right", &"passive_tree_pan_up", &"passive_tree_pan_down")
+	if not pan_input.is_zero_approx():
+		_canvas().set_pan(_canvas().pan_value() + pan_input * CONTROLLER_PAN_SPEED * delta)
+	var zoom_input := Input.get_action_strength(&"passive_tree_zoom_in") - Input.get_action_strength(&"passive_tree_zoom_out")
+	if not is_zero_approx(zoom_input):
+		_canvas().set_zoom(_canvas().zoom_value() * pow(CONTROLLER_ZOOM_BASE, zoom_input * delta))
+
+
+func _is_tree_action(event: InputEvent) -> bool:
+	for action: StringName in [
+		&"passive_tree_navigate_left", &"passive_tree_navigate_right", &"passive_tree_navigate_up", &"passive_tree_navigate_down",
+		&"passive_tree_pan_left", &"passive_tree_pan_right", &"passive_tree_pan_up", &"passive_tree_pan_down",
+		&"passive_tree_zoom_in", &"passive_tree_zoom_out", &"passive_tree_allocate", &"passive_tree_refund",
+	]:
+		if event.is_action_pressed(action):
+			return true
+	return false
 
 
 func _rebuild(preferred_id: StringName = &"") -> void:

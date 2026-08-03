@@ -33,6 +33,9 @@ var saved_settings: PartyForgeSettings
 var settings_store: PartyForgeSettingsStore
 var profile_root := ProfileStore.DEFAULT_ROOT
 var profile_manager: ProfileManager
+var passive_tree_definition: PassiveTreeDefinition
+var passive_tree_mutations: PassiveTreeMutationService
+var passive_tree_view_model: PassiveTreeViewModel
 var active_run_rules: RunRulesSnapshot
 var _level_up_offer_state := LevelUpOfferState.new()
 
@@ -55,6 +58,7 @@ func _ready() -> void:
 	catalog_valid = _validate_catalog(catalog)
 	if not catalog_valid:
 		return
+	_load_passive_tree_runtime()
 	_wire_static_ui()
 	print("PARTY_FORGE_BOOT_OK")
 	print("PARTY_FORGE_CLASS_SELECTION_READY")
@@ -244,6 +248,11 @@ func _wire_static_ui() -> void:
 	var settings_screen := get_node("SettingsScreen") as SettingsScreen
 	if not settings_screen.settings_applied.is_connected(_on_settings_applied):
 		settings_screen.settings_applied.connect(_on_settings_applied)
+	if not settings_screen.city_tree_requested.is_connected(_open_city_passive_tree):
+		settings_screen.city_tree_requested.connect(_open_city_passive_tree)
+	var passive_screen := get_node("PassiveTreeScreen") as PassiveTreeScreen
+	if not passive_screen.tree_closed.is_connected(_on_city_passive_tree_closed):
+		passive_screen.tree_closed.connect(_on_city_passive_tree_closed)
 	var level_panel := get_node("HUD/LevelUpPanel") as LevelUpPanel
 	level_panel.configure(catalog, UpgradeApplicationService.new(), Callable(self, "_health_for_member"))
 	var legacy_apply := Callable(self, "_apply_choice")
@@ -267,6 +276,33 @@ func _wire_static_ui() -> void:
 func _open_settings() -> void:
 	var return_focus := get_node("HUD/ClassSelection/Content/Actions/Settings") as Control
 	(get_node("SettingsScreen") as SettingsScreen).open(return_focus)
+
+
+func _load_passive_tree_runtime() -> void:
+	var loaded := PassiveTreeCatalog.load_defaults()
+	for reason: String in loaded.errors:
+		push_error(reason)
+	passive_tree_definition = loaded.tree
+	var effects := PassiveEffectRegistry.new()
+	var requirements := PassiveRequirementRegistry.new()
+	var progression := PassiveTreeProgressionService.new(effects, requirements)
+	var resolver := PassiveEffectResolver.new(effects)
+	passive_tree_mutations = PassiveTreeMutationService.new(ProfileMutationService.new(ProfileStore.new()), progression, resolver)
+	passive_tree_view_model = PassiveTreeViewModel.new(progression, resolver, effects, requirements)
+
+
+func _open_city_passive_tree(developer_preview: bool) -> void:
+	if not developer_preview:
+		return
+	var button := get_node("SettingsScreen/Overlay/Frame/Layout/Tabs/Additional Settings/Layout/OpenCityPassiveTree") as Control
+	var screen := get_node("PassiveTreeScreen") as PassiveTreeScreen
+	screen.configure(passive_tree_definition, profile_manager, passive_tree_mutations, passive_tree_view_model, true, profile_root)
+	screen.open(button)
+
+
+func _on_city_passive_tree_closed() -> void:
+	var button := get_node("SettingsScreen/Overlay/Frame/Layout/Tabs/Additional Settings/Layout/OpenCityPassiveTree") as Control
+	(get_node("SettingsScreen") as SettingsScreen).open_additional(button)
 
 func _on_settings_applied(settings: PartyForgeSettings) -> void:
 	saved_settings = settings.copy()

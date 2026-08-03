@@ -44,6 +44,7 @@ func run() -> Array[String]:
 	TestAssertions.equal(screen.process_mode, Node.PROCESS_MODE_ALWAYS, "Settings processes while gameplay is paused", failures)
 	TestAssertions.truthy(not bool(screen.call("is_open")), "Settings starts hidden", failures)
 	TestAssertions.truthy(screen.has_signal("settings_applied"), "Settings exposes its applied signal", failures)
+	TestAssertions.truthy(screen.has_signal("city_tree_requested"), "Settings exposes its City tree forwarding signal", failures)
 
 	var supplied := PartyForgeSettings.new()
 	supplied.mode = PartyForgeSettings.Mode.DEVELOPER_MODE
@@ -77,6 +78,20 @@ func run() -> Array[String]:
 	screen.call("_unhandled_input", _action_event(&"ui_cancel"))
 	TestAssertions.truthy(not bool(screen.call("is_open")), "Cancel closes Settings", failures)
 	TestAssertions.equal(screen.get("_return_focus"), null, "Closing Settings clears the handled return focus", failures)
+
+	var city_button := screen.get_node("Overlay/Frame/Layout/Tabs/Additional Settings/Layout/OpenCityPassiveTree") as Button
+	var additional_page := screen.get_node("Overlay/Frame/Layout/Tabs/Additional Settings") as AdditionalSettingsPage
+	screen.call("open", return_focus)
+	(additional_page.get_node("Layout/Mode") as OptionButton).selected = PartyForgeSettings.Mode.DEVELOPER_MODE
+	additional_page.call("_on_mode_changed", PartyForgeSettings.Mode.DEVELOPER_MODE)
+	city_button.pressed.emit()
+	TestAssertions.truthy(not screen.is_open(), "forwarding City tree request temporarily hides Settings", failures)
+	TestAssertions.equal(screen.get("_child_return_focus"), return_focus, "City tree request preserves the external Settings return target", failures)
+	screen.call("open_additional", city_button)
+	TestAssertions.equal(screen.call("_tab_index_for_control", additional_page), 5, "Additional Settings resolves by control identity", failures)
+	TestAssertions.equal(tabs.get_tab_control(tabs.current_tab), additional_page, "open_additional selects Additional Settings", failures)
+	TestAssertions.equal(screen.get("_return_focus"), return_focus, "return from City tree preserves the original external Settings caller", failures)
+	screen.call("close")
 
 	screen.free()
 	return_focus.free()
@@ -172,7 +187,10 @@ func _test_additional_settings_page(failures: Array[String]) -> void:
 	var enemy_density := page.get_node("Layout/EnemyDensity/Value") as HSlider
 	var experience_multiplier := page.get_node("Layout/ExperienceMultiplier/Value") as HSlider
 	var level_up_card_count := page.get_node("Layout/LevelUpCardCount/Value") as HSlider
+	var open_city_tree := page.get_node_or_null("Layout/OpenCityPassiveTree") as Button
 	var inactive_status := page.get_node_or_null("Layout/InactiveStatus") as Label
+	var requests: Array[bool] = []
+	TestAssertions.truthy(open_city_tree != null, "Additional Settings exposes Open City Passive Tree", failures)
 	TestAssertions.equal(mode.item_count, 2, "Mode exposes exactly two choices", failures)
 	TestAssertions.equal(mode.get_item_text(0), "Player Simulation", "Mode starts with Player Simulation", failures)
 	TestAssertions.equal(mode.get_item_text(1), "Developer Mode", "Mode includes Developer Mode", failures)
@@ -193,6 +211,11 @@ func _test_additional_settings_page(failures: Array[String]) -> void:
 	TestAssertions.truthy(unlock_all.disabled, "Player Simulation disables Unlock All", failures)
 	TestAssertions.truthy(god_mode.disabled and party_capacity.editable == false and enemy_density.editable == false and experience_multiplier.editable == false and level_up_card_count.editable == false, "Player Simulation disables every developer override", failures)
 	TestAssertions.truthy(inactive_status != null and inactive_status.visible, "Player Simulation shows a non-color inactive explanation", failures)
+	if open_city_tree != null:
+		TestAssertions.truthy(open_city_tree.disabled, "Player Simulation disables City tree preview", failures)
+		page.connect(&"city_tree_requested", func(developer_preview: bool) -> void: requests.append(developer_preview))
+		open_city_tree.pressed.emit()
+		TestAssertions.equal(requests, [], "disabled City tree preview emits no request", failures)
 	if inactive_status != null:
 		TestAssertions.truthy(inactive_status.text.contains("retained") and inactive_status.text.contains("Developer Mode"), "inactive explanation states values are retained until Developer Mode", failures)
 		TestAssertions.truthy(inactive_status.focus_mode != Control.FOCUS_NONE, "inactive explanation is controller and keyboard focusable", failures)
@@ -209,6 +232,11 @@ func _test_additional_settings_page(failures: Array[String]) -> void:
 	TestAssertions.truthy(not unlock_all.disabled, "Developer Mode enables overrides", failures)
 	TestAssertions.truthy(not god_mode.disabled and party_capacity.editable and enemy_density.editable and experience_multiplier.editable and level_up_card_count.editable, "Developer Mode enables every override", failures)
 	TestAssertions.truthy(inactive_status != null and not inactive_status.visible, "Developer Mode hides the inactive explanation", failures)
+	if open_city_tree != null:
+		TestAssertions.truthy(not open_city_tree.disabled, "Developer Mode enables City tree preview", failures)
+		open_city_tree.pressed.emit()
+		TestAssertions.equal(requests, [true], "Developer City tree preview emits true exactly once", failures)
+		TestAssertions.equal(level_up_card_count.focus_next, level_up_card_count.get_path_to(open_city_tree), "Developer focus order reaches City tree preview", failures)
 	TestAssertions.truthy(page.has_method(&"initial_focus"), "Additional Settings exposes the Settings page focus contract", failures)
 	if page.has_method(&"initial_focus"):
 		TestAssertions.equal(page.call(&"initial_focus"), mode, "Additional Settings initially focuses Mode", failures)
@@ -393,6 +421,7 @@ func _test_additional_focus_traversal(page: Control, failures: Array[String]) ->
 		page.get_node("Layout/EnemyDensity/Value") as Control,
 		page.get_node("Layout/ExperienceMultiplier/Value") as Control,
 		page.get_node("Layout/LevelUpCardCount/Value") as Control,
+		page.get_node("Layout/OpenCityPassiveTree") as Control,
 		page.get_node("Layout/ResetDeveloperOptions") as Control,
 		page.get_node("Layout/ApplyAndReturn") as Control,
 		page.get_node("Layout/Cancel") as Control,

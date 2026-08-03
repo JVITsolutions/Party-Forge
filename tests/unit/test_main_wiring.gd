@@ -32,6 +32,7 @@ const REQUIRED_MAIN_NODES: PackedStringArray = [
     "GameRun", "PartyManager", "ExperienceSystem", "SpawnDirector",
     "PartyActorSpawner", "Arena", "Actors", "Enemies", "Effects", "HUD",
     "DeveloperModeBadge", "CharacterLedger", "RunPauseMenu",
+    "SettingsScreen", "PassiveTreeScreen",
 ]
 
 var _profile_root := ""
@@ -49,6 +50,7 @@ func run() -> Array[String]:
     ProfileTestSupport.remove_tree(_profile_root)
     _test_main_scene_graph(failures)
     _test_profile_boot_and_developer_gate(failures)
+    _test_passive_tree_developer_composition(failures)
     _test_settings_and_next_run_snapshot_wiring(failures)
     _test_integrated_overlay_input_and_front_end_seam(failures)
     _test_hud_contract(failures)
@@ -95,6 +97,46 @@ func _test_profile_boot_and_developer_gate(failures: Array[String]) -> void:
     (Engine.get_main_loop() as SceneTree).paused = false
     main.free()
     ProfileTestSupport.remove_tree(profile_root)
+
+func _test_passive_tree_developer_composition(failures: Array[String]) -> void:
+    var root := "user://tests/main_wiring-passive-tree_%d_%d" % [OS.get_process_id(), Time.get_ticks_usec()]
+    ProfileTestSupport.remove_tree(root)
+    var main := (load("res://scenes/game/main.tscn") as PackedScene).instantiate() as PartyForgeMain
+    main.set("profile_root", root)
+    (Engine.get_main_loop() as SceneTree).root.add_child(main)
+    main.call("_ready")
+    var settings := main.get_node("SettingsScreen") as SettingsScreen
+    var tree_screen := main.get_node_or_null("PassiveTreeScreen") as PassiveTreeScreen
+    TestAssertions.truthy(tree_screen != null, "main composes the reusable PassiveTreeScreen", failures)
+    var has_definition := _has_property(main, &"passive_tree_definition")
+    TestAssertions.truthy(has_definition, "main exposes one loaded passive tree definition", failures)
+    if has_definition:
+        TestAssertions.truthy(main.get("passive_tree_definition") != null, "main loads the validated City tree once at bootstrap", failures)
+    TestAssertions.truthy(settings.has_method(&"open_additional"), "Settings exposes Additional-tab reopen routing", failures)
+    TestAssertions.truthy(settings.has_signal(&"city_tree_requested"), "Settings forwards City tree requests", failures)
+    if settings.has_method(&"open_additional") and settings.has_signal(&"city_tree_requested"):
+        settings.call("open_additional", null)
+        (settings.get_node("Overlay/Frame/Layout/Tabs/Additional Settings/Layout/Mode") as OptionButton).selected = PartyForgeSettings.Mode.DEVELOPER_MODE
+        (settings.get_node("Overlay/Frame/Layout/Tabs/Additional Settings") as AdditionalSettingsPage).call("_on_mode_changed", PartyForgeSettings.Mode.DEVELOPER_MODE)
+        settings.emit_signal("city_tree_requested", true)
+    if tree_screen != null:
+        TestAssertions.truthy(tree_screen.is_open(), "Developer Settings request opens the City tree", failures)
+        TestAssertions.equal(tree_screen.get("_developer_context"), true, "main configures developer reveal without profile persistence", failures)
+        TestAssertions.equal((tree_screen.find_child("Status", true, false) as Label).text, PassiveTreeScreen.UNAVAILABLE_STATUS, "no active profile keeps City tree unavailable", failures)
+        TestAssertions.truthy(tree_screen.tree_closed.is_connected(Callable(main, "_on_city_passive_tree_closed")), "main listens for City tree close exactly once", failures)
+        tree_screen.close()
+        TestAssertions.truthy(settings.is_open(), "closing City tree returns to Settings", failures)
+    var additional := settings.get_node("Overlay/Frame/Layout/Tabs/Additional Settings")
+    TestAssertions.equal((settings.get_node("Overlay/Frame/Layout/Tabs") as TabContainer).get_tab_control((settings.get_node("Overlay/Frame/Layout/Tabs") as TabContainer).current_tab), additional, "closing City tree restores Additional Settings tab", failures)
+    settings.close()
+    main.free()
+    ProfileTestSupport.remove_tree(root)
+
+func _has_property(object: Object, property_name: StringName) -> bool:
+    for property: Dictionary in object.get_property_list():
+        if StringName(property.get("name", "")) == property_name:
+            return true
+    return false
 
 func _test_settings_and_next_run_snapshot_wiring(failures: Array[String]) -> void:
     var original_files := _backup_default_settings_artifacts()
