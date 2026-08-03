@@ -52,7 +52,7 @@ func build(tree: PassiveTreeDefinition, profile: ProfileState, developer_reveal:
 			"to_id": connection.to_id,
 			"direction": connection.direction,
 			"cost": connection.cost,
-			"metadata": connection.metadata.duplicate(true),
+			"metadata": PassiveTreeNodeViewData.value_only_copy(connection.metadata),
 		})
 
 	var unresolved_ids: Array[StringName] = []
@@ -98,9 +98,15 @@ func _project_node(
 			PassiveTreeProgressionService.MESSAGES[&"node_obscured"],
 		)
 
-	var decision := _progression.allocation_decision(tree, profile, tree_node.id, developer_reveal)
-	var is_allocated := tree_node.id in snapshot.allocated
-	var is_allocatable := not is_allocated and decision.ok()
+	var is_allocated := tree_node.id in snapshot.allocated or tree_node.id in snapshot.implicit_start_nodes
+	var decision_code: StringName = &"already_allocated"
+	var decision_message := String(PassiveTreeProgressionService.MESSAGES[decision_code])
+	var is_allocatable := false
+	if not is_allocated:
+		var decision := _progression.allocation_decision(tree, profile, tree_node.id, developer_reveal)
+		decision_code = decision.code
+		decision_message = decision.message
+		is_allocatable = decision.ok()
 	var state: StringName = &"allocated" if is_allocated else (&"allocatable" if is_allocatable else &"unavailable")
 	var effect_lines: Array[String] = []
 	var requirement_lines: Array[String] = []
@@ -140,8 +146,8 @@ func _project_node(
 		_is_permanent(tree, tree_node),
 		is_allocated,
 		is_allocatable,
-		decision.code,
-		decision.message,
+		decision_code,
+		decision_message,
 	)
 
 func _is_permanent(tree: PassiveTreeDefinition, tree_node: PassiveTreeNode) -> bool:

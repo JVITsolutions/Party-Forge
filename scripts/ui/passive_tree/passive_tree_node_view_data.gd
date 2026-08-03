@@ -49,7 +49,7 @@ func _init(
 	effect_lines.assign(p_effect_lines)
 	requirement_lines.assign(p_requirement_lines)
 	keyword_lines.assign(p_keyword_lines)
-	metadata = p_metadata.duplicate(true)
+	metadata = value_only_copy(p_metadata) as Dictionary
 	permanent = p_permanent
 	allocated = p_allocated
 	allocatable = p_allocatable
@@ -76,3 +76,29 @@ func copy() -> PassiveTreeNodeViewData:
 		decision_code,
 		decision_message,
 	)
+
+static func value_only_copy(value: Variant) -> Variant:
+	var result := _value_copy_result(value)
+	return result["value"] if result["supported"] else null
+
+static func _value_copy_result(value: Variant) -> Dictionary:
+	match typeof(value):
+		TYPE_NIL, TYPE_BOOL, TYPE_INT, TYPE_FLOAT, TYPE_STRING, TYPE_STRING_NAME, TYPE_VECTOR2:
+			return {"supported": true, "value": value}
+		TYPE_ARRAY:
+			var copied_array: Array = []
+			for item: Variant in value as Array:
+				var item_result := _value_copy_result(item)
+				if item_result["supported"]:
+					copied_array.append(item_result["value"])
+			return {"supported": true, "value": copied_array}
+		TYPE_DICTIONARY:
+			var copied_dictionary: Dictionary = {}
+			for key: Variant in (value as Dictionary).keys():
+				var key_result := _value_copy_result(key)
+				var value_result := _value_copy_result((value as Dictionary)[key])
+				if key_result["supported"] and value_result["supported"]:
+					copied_dictionary[key_result["value"]] = value_result["value"]
+			return {"supported": true, "value": copied_dictionary}
+		_:
+			return {"supported": false, "value": null}

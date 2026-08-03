@@ -3,9 +3,11 @@ extends RefCounted
 func run() -> Array[String]:
 	var failures: Array[String] = []
 	_test_state_projection_and_redaction(failures)
+	_test_implicit_legacy_root_is_projected_active(failures)
 	_test_developer_reveal_is_view_only(failures)
 	_test_committed_city_projection_is_lexical(failures)
 	_test_results_are_deeply_isolated(failures)
+	_test_metadata_projection_is_value_only(failures)
 	_test_null_inputs_fail_closed(failures)
 	return failures
 
@@ -91,6 +93,21 @@ func _test_state_projection_and_redaction(failures: Array[String]) -> void:
 	TestAssertions.equal(obscured.decision_code, &"node_obscured", "obscured decision is generic", failures)
 	TestAssertions.equal(obscured.decision_message, "Reveal this passive node before allocating it.", "obscured decision reveals no mechanics", failures)
 
+func _test_implicit_legacy_root_is_projected_active(failures: Array[String]) -> void:
+	var tree := _tree()
+	var profile := _profile(tree.id)
+	profile.tree_allocations[String(tree.id)] = [&"h-allocated"]
+	var profile_before := profile.to_dictionary()
+	var root := _node(_view_model().build(tree, profile, false), &"a-start")
+
+	TestAssertions.equal(root.state, &"allocated", "implicit legacy root is projected active", failures)
+	TestAssertions.truthy(root.allocated, "implicit legacy root uses the allocated flag", failures)
+	TestAssertions.truthy(not root.allocatable, "implicit legacy root is never offered for allocation", failures)
+	TestAssertions.truthy(root.permanent, "implicit legacy root remains structurally permanent", failures)
+	TestAssertions.equal(root.decision_code, &"already_allocated", "implicit legacy root uses stable non-action code", failures)
+	TestAssertions.equal(root.decision_message, "This passive node is already allocated.", "implicit legacy root uses stable non-action message", failures)
+	TestAssertions.equal(profile.to_dictionary(), profile_before, "implicit root projection does not persist or mutate legacy profile", failures)
+
 func _test_developer_reveal_is_view_only(failures: Array[String]) -> void:
 	var tree := _tree()
 	var profile := _profile(tree.id)
@@ -169,6 +186,53 @@ func _test_results_are_deeply_isolated(failures: Array[String]) -> void:
 	for connection: Dictionary in repeated["connections"]:
 		TestAssertions.truthy(not _contains_domain_reference(connection), "%s connection has no domain references" % connection["id"], failures)
 	TestAssertions.truthy(not _contains_domain_reference(repeated["unresolved_ids"]), "unresolved projection has no domain references", failures)
+
+func _test_metadata_projection_is_value_only(failures: Array[String]) -> void:
+	var tree := _tree()
+	var profile := _profile(tree.id)
+	var embedded_node := PassiveTreeNode.new(&"embedded-node")
+	var embedded_connection := PassiveTreeConnection.new(&"embedded-connection")
+	var embedded_effect := PassiveTreeEffect.new(&"feature_unlock", &"set", true, {"featureId": "inventory"})
+	var embedded_requirement := PassiveTreeRequirement.new(&"allocated_node", &"contains", "a-start", {"treeId": "party-forge-view-test-v1"})
+	var embedded_profile := ProfileState.new_profile("profile-embedded", "Embedded", 1000)
+	var source_node := tree.node(&"b-allocatable")
+	var source_connection := tree.connection(&"b-allocatable")
+	source_node.metadata = {
+		"safe": {"enabled": true, "id": &"safe-id", "position": Vector2(4, 8), "values": [1, "two"]},
+		"embedded_node": embedded_node,
+		"nested": {"keep": "yes", "embedded_connection": embedded_connection},
+		"mixed": ["first", embedded_effect, 7, embedded_requirement, embedded_profile],
+	}
+	source_connection.metadata = {
+		"safe": [false, &"connection-id", Vector2(2, 3)],
+		"embedded_effect": embedded_effect,
+		"nested": {"embedded_profile": embedded_profile, "keep": 9},
+	}
+	var profile_before := profile.to_dictionary()
+	var result := _view_model().build(tree, profile, false)
+	var view := _node(result, &"b-allocatable")
+	var connection := _connection(result, &"b-allocatable")
+
+	TestAssertions.equal(view.metadata["safe"], {"enabled": true, "id": &"safe-id", "position": Vector2(4, 8), "values": [1, "two"]}, "node metadata retains allowed value types", failures)
+	TestAssertions.truthy(not view.metadata.has("embedded_node"), "node metadata omits embedded node object", failures)
+	TestAssertions.equal(view.metadata["nested"], {"keep": "yes"}, "nested node metadata omits embedded connection object", failures)
+	TestAssertions.equal(view.metadata["mixed"], ["first", 7], "node metadata arrays omit embedded effect requirement and profile objects", failures)
+	TestAssertions.equal(connection["metadata"]["safe"], [false, &"connection-id", Vector2(2, 3)], "connection metadata retains allowed value types", failures)
+	TestAssertions.truthy(not connection["metadata"].has("embedded_effect"), "connection metadata omits embedded effect object", failures)
+	TestAssertions.equal(connection["metadata"]["nested"], {"keep": 9}, "nested connection metadata omits embedded profile object", failures)
+	TestAssertions.truthy(not _contains_domain_reference(view.metadata), "node metadata contains no Object or domain reference", failures)
+	TestAssertions.truthy(not _contains_domain_reference(connection["metadata"]), "connection metadata contains no Object or domain reference", failures)
+
+	view.metadata["late_profile"] = embedded_profile
+	var copied := view.copy()
+	TestAssertions.truthy(not copied.metadata.has("late_profile"), "view-data copy sanitizes caller-inserted objects", failures)
+	(copied.metadata["safe"] as Dictionary)["enabled"] = false
+	TestAssertions.equal((view.metadata["safe"] as Dictionary)["enabled"], true, "view-data copy remains deeply isolated", failures)
+	TestAssertions.equal(source_node.metadata["embedded_node"], embedded_node, "source node metadata retains its original object", failures)
+	TestAssertions.equal((source_node.metadata["nested"] as Dictionary)["embedded_connection"], embedded_connection, "source nested node metadata is unchanged", failures)
+	TestAssertions.equal(source_connection.metadata["embedded_effect"], embedded_effect, "source connection metadata retains its original object", failures)
+	TestAssertions.equal((source_connection.metadata["nested"] as Dictionary)["embedded_profile"], embedded_profile, "source nested connection metadata is unchanged", failures)
+	TestAssertions.equal(profile.to_dictionary(), profile_before, "metadata sanitization does not mutate build profile", failures)
 
 func _test_null_inputs_fail_closed(failures: Array[String]) -> void:
 	var profile := _profile(&"party-forge-view-test-v1")
@@ -256,6 +320,12 @@ func _node(result: Dictionary, node_id: StringName) -> PassiveTreeNodeViewData:
 			return view
 	return null
 
+func _connection(result: Dictionary, connection_id: StringName) -> Dictionary:
+	for connection: Dictionary in result["connections"]:
+		if connection["id"] == connection_id:
+			return connection
+	return {}
+
 func _view_contains_domain_reference(view: PassiveTreeNodeViewData) -> bool:
 	return _contains_domain_reference(view.id) or _contains_domain_reference(view.position) \
 		or _contains_domain_reference(view.type) or _contains_domain_reference(view.state) \
@@ -265,8 +335,7 @@ func _view_contains_domain_reference(view: PassiveTreeNodeViewData) -> bool:
 		or _contains_domain_reference(view.decision_code) or _contains_domain_reference(view.decision_message)
 
 func _contains_domain_reference(value: Variant) -> bool:
-	if value is PassiveTreeNode or value is PassiveTreeConnection or value is PassiveTreeEffect \
-		or value is PassiveTreeRequirement or value is PassiveTreeDefinition or value is ProfileState:
+	if value is Object:
 		return true
 	if value is Array:
 		for item: Variant in value as Array:
