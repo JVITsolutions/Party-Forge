@@ -68,7 +68,7 @@ func _test_controls_page(failures: Array[String]) -> void:
 			TestAssertions.equal((section_node.get_node("Heading") as Label).text, section, "%s section has stable heading" % section, failures)
 	TestAssertions.equal((page.get_node("Layout/Footer") as Label).text, "Rebinding: Coming Soon", "Controls states rebinding boundary", failures)
 
-	for action_id: StringName in [&"move_left", &"pause_menu", &"character_ledger", &"settings_previous_tab", &"settings_next_tab"]:
+	for action_id: StringName in [&"move_left", &"move_right", &"move_forward", &"move_back", &"pause_menu", &"character_ledger", &"settings_previous_tab", &"settings_next_tab"]:
 		var row := page.row_for(action_id)
 		TestAssertions.truthy(not row.is_empty(), "Controls lists %s" % action_id, failures)
 		if row.is_empty():
@@ -78,11 +78,12 @@ func _test_controls_page(failures: Array[String]) -> void:
 		TestAssertions.equal(String(row.get("controller_text")), InputBindingFormatter.events_for_device(InputMap.action_get_events(action_id), true), "%s controller text comes from InputMap" % action_id, failures)
 		TestAssertions.truthy(row.has("missing_binding"), "%s row exposes missing state" % action_id, failures)
 
+	for action_id: StringName in [&"move_left", &"move_right", &"move_forward", &"move_back"]:
+		var move_row := page.row_for(action_id)
+		TestAssertions.truthy(String(move_row.get("controller_text", "")).ends_with(" +/-"), "%s reports a controller axis" % action_id, failures)
+		TestAssertions.equal(bool(move_row.get("missing_binding", true)), false, "%s has no missing binding" % action_id, failures)
+
 	var move_row := page.row_for(&"move_left")
-	TestAssertions.truthy(bool(move_row.get("missing_binding", false)), "Move Left records its missing controller binding", failures)
-	var move_controller := page.get_node("Layout/Scroll/Groups/Group_gameplay/Rows/Row_move_left/Controller") as Label
-	TestAssertions.equal(move_controller.text, "Missing binding", "Missing controller side is visible", failures)
-	TestAssertions.truthy(not move_controller.tooltip_text.is_empty(), "Missing controller side has warning tooltip", failures)
 	move_row["keyboard_text"] = "Changed by caller"
 	TestAssertions.truthy(String(page.row_for(&"move_left").get("keyboard_text")) != "Changed by caller", "row_for returns isolated metadata", failures)
 	page.free()
