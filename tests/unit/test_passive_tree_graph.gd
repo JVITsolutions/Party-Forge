@@ -4,6 +4,7 @@ func run() -> Array[String]:
 	var failures: Array[String] = []
 	_test_directional_and_undirected_indexes(failures)
 	_test_distances_are_undirected_and_multi_source(failures)
+	_test_distance_keys_preserve_lexical_order(failures)
 	_test_allocation_reachability_and_retained_paths(failures)
 	return failures
 
@@ -25,6 +26,30 @@ func _test_distances_are_undirected_and_multi_source(failures: Array[String]) ->
 	TestAssertions.equal(multi_distances.get(&"depth-three", -1), 3, "first start contributes visibility distances", failures)
 	TestAssertions.truthy(not multi_distances.has(&"orphan-a"), "disconnected nodes have no visibility distance", failures)
 	TestAssertions.equal(multi_distances.size(), 6, "multi-source distances contain only reachable known nodes", failures)
+
+func _test_distance_keys_preserve_lexical_order(failures: Array[String]) -> void:
+	var deliberately_interned: Array[StringName] = []
+	for node_text: String in ["task6-distance-zeta", "task6-distance-root", "task6-distance-alpha", "task6-distance-middle"]:
+		deliberately_interned.append(StringName(node_text))
+	var zeta := deliberately_interned[0]
+	var root := deliberately_interned[1]
+	var alpha := deliberately_interned[2]
+	var middle := deliberately_interned[3]
+	var nodes: Array[PassiveTreeNode] = [
+		PassiveTreeNode.new(zeta, &"small"),
+		PassiveTreeNode.new(root, &"start"),
+		PassiveTreeNode.new(alpha, &"small"),
+		PassiveTreeNode.new(middle, &"small"),
+	]
+	var connections: Array[PassiveTreeConnection] = [
+		PassiveTreeConnection.new(&"distance-root-zeta", root, zeta, &"bidirectional"),
+		PassiveTreeConnection.new(&"distance-root-alpha", root, alpha, &"bidirectional"),
+		PassiveTreeConnection.new(&"distance-root-middle", root, middle, &"bidirectional"),
+	]
+	var starts: Array[StringName] = [root]
+	var graph := PassiveTreeGraph.new(PassiveTreeDefinition.new(&"distance-order-tree", "Distance Order Tree", starts, nodes, connections))
+	var expected: Array[StringName] = [alpha, middle, root, zeta]
+	TestAssertions.equal(graph.distances_from([root]).keys(), expected, "distance keys preserve lexical order despite StringName interning order", failures)
 
 func _test_allocation_reachability_and_retained_paths(failures: Array[String]) -> void:
 	var graph := PassiveTreeGraph.new(_tree())

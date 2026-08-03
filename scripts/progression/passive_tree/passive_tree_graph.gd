@@ -52,7 +52,6 @@ func distances_from(sources: Array[StringName]) -> Dictionary:
 	var sorted_distances: Dictionary = {}
 	for node_id: StringName in sorted_ids:
 		sorted_distances[node_id] = distances[node_id]
-	sorted_distances.sort()
 	return sorted_distances
 
 func candidate_reachable(allocated: Array[StringName], candidate: StringName) -> bool:
