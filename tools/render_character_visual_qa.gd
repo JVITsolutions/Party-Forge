@@ -4,11 +4,13 @@ const BODY_IDS: Array[StringName] = [&"masculine", &"feminine"]
 const OUTPUT_ROOT := "res://docs/qa/character-presentation-quality"
 const FRAME_SIZE := Vector2i(768, 768)
 const CONTACT_COLUMNS := 5
-const SAMPLE_COUNT := 19
+const SAMPLE_COUNT := 20
 const LEADER_SCENE := preload("res://scenes/characters/leader.tscn")
 const HEALTH_BAR_SCENE := preload("res://scenes/ui/health_bar_3d.tscn")
 const LEFT_HAND_PATH := "HitPivot/BodyPivot/HipsPivot/TorsoPivot/LeftShoulderPivot/LeftElbowPivot/LeftHandSocket"
 const RIGHT_HAND_PATH := "HitPivot/BodyPivot/HipsPivot/TorsoPivot/RightShoulderPivot/RightElbowPivot/RightHandSocket"
+const LEFT_ELBOW_PATH := "HitPivot/BodyPivot/HipsPivot/TorsoPivot/LeftShoulderPivot/LeftElbowPivot"
+const RIGHT_ELBOW_PATH := "HitPivot/BodyPivot/HipsPivot/TorsoPivot/RightShoulderPivot/RightElbowPivot"
 
 var viewport: SubViewport
 var stage: Node3D
@@ -108,6 +110,9 @@ func _render_combination(definition: ClassDefinition, body_id: StringName) -> bo
 	bar.configure(actor.get_node("HealthComponent") as HealthComponent)
 	var output_dir := ProjectSettings.globalize_path("%s/%s/%s" % [OUTPUT_ROOT, definition.id, body_id])
 	DirAccess.make_dir_recursive_absolute(output_dir)
+	if not _clear_png_output(output_dir):
+		_fail("class=%s body=%s state=setup reason=stale PNG cleanup failed" % [definition.id, body_id])
+		return false
 	var player := model.get_node_or_null("AnimationPlayer") as AnimationPlayer
 	if player == null:
 		_fail("class=%s body=%s state=setup reason=animation player missing" % [definition.id, body_id])
@@ -158,6 +163,21 @@ func _render_combination(definition: ClassDefinition, body_id: StringName) -> bo
 	actor.free()
 	return true
 
+func _clear_png_output(output_dir: String) -> bool:
+	var directory := DirAccess.open(output_dir)
+	if directory == null:
+		return false
+	directory.list_dir_begin()
+	var entry := directory.get_next()
+	while not entry.is_empty():
+		if not directory.current_is_dir() and entry.to_lower().ends_with(".png"):
+			if directory.remove(entry) != OK:
+				directory.list_dir_end()
+				return false
+		entry = directory.get_next()
+	directory.list_dir_end()
+	return true
+
 func _samples(idle_action: StringName, walk_action: StringName, attack_action: StringName, player: AnimationPlayer) -> Array[Dictionary]:
 	var attack_length := player.get_animation(attack_action).length
 	return [
@@ -179,6 +199,7 @@ func _samples(idle_action: StringName, walk_action: StringName, attack_action: S
 		_sample(&"hands_cleared", idle_action, 0.0, -PI / 2.0, false, true),
 		_sample(&"grounding_side", idle_action, 0.0, -PI / 2.0),
 		_sample(&"hands_equipped_close", idle_action, 0.0, -PI / 4.0, false, false, false, 2.5),
+		_sample(&"attack_loaded_close", attack_action, attack_length * 0.28, -PI / 4.0, false, false, false, 2.5),
 		_sample(&"attack_release_close", attack_action, attack_length * 0.52, -PI / 4.0, false, false, true, 2.5),
 	]
 
@@ -301,6 +322,10 @@ func _manifest_row(definition: ClassDefinition, body_id: StringName, model: Forg
 		"ground_gap": model.ground_gap(),
 		"clearance": clearances,
 		"hand_behind_torso": silhouette[&"hand_behind_torso"],
+		"left_hand_z": silhouette[&"left_hand_z"],
+		"right_hand_z": silhouette[&"right_hand_z"],
+		"left_elbow_z": silhouette[&"left_elbow_z"],
+		"right_elbow_z": silhouette[&"right_elbow_z"],
 		"arm_span_ratio": silhouette[&"arm_span_ratio"],
 		"equipment_arm_overlap": equipment_arm_overlap,
 		"projectile_overlay": bool(sample.get(&"launch_overlay", false)) and _has_projectile_socket(model),
@@ -310,14 +335,29 @@ func _manifest_row(definition: ClassDefinition, body_id: StringName, model: Forg
 func _silhouette_metrics(model: ForgeHumanoidModel) -> Dictionary:
 	var left_hand := model.get_node_or_null(LEFT_HAND_PATH) as Node3D
 	var right_hand := model.get_node_or_null(RIGHT_HAND_PATH) as Node3D
-	if left_hand == null or right_hand == null:
-		return {&"hand_behind_torso": true, &"arm_span_ratio": INF}
+	var left_elbow := model.get_node_or_null(LEFT_ELBOW_PATH) as Node3D
+	var right_elbow := model.get_node_or_null(RIGHT_ELBOW_PATH) as Node3D
+	if left_hand == null or right_hand == null or left_elbow == null or right_elbow == null:
+		return {
+			&"hand_behind_torso": true,
+			&"left_hand_z": INF,
+			&"right_hand_z": INF,
+			&"left_elbow_z": INF,
+			&"right_elbow_z": INF,
+			&"arm_span_ratio": INF,
+		}
 	var left_position: Vector3 = model.call(&"_transform_from_model", left_hand).origin
 	var right_position: Vector3 = model.call(&"_transform_from_model", right_hand).origin
+	var left_elbow_position: Vector3 = model.call(&"_transform_from_model", left_elbow).origin
+	var right_elbow_position: Vector3 = model.call(&"_transform_from_model", right_elbow).origin
 	var mean_z := (left_position.z + right_position.z) * 0.5
 	var body_width := maxf(0.001, model.visual_bounds().size.x)
 	return {
 		&"hand_behind_torso": mean_z > 0.10,
+		&"left_hand_z": left_position.z,
+		&"right_hand_z": right_position.z,
+		&"left_elbow_z": left_elbow_position.z,
+		&"right_elbow_z": right_elbow_position.z,
 		&"arm_span_ratio": absf(right_position.x - left_position.x) / body_width,
 	}
 
