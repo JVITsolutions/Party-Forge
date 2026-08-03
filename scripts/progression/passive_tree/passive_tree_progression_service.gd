@@ -42,14 +42,15 @@ func allocation_decision(
 		return _decision(&"already_allocated", false, 0, current, snapshot.implicit_start_nodes)
 	if node_id not in snapshot.visible:
 		return _decision(&"node_obscured", false, 0, current, snapshot.implicit_start_nodes)
-	var allocated_with_roots := _combined_ids(current, snapshot.implicit_start_nodes)
-	if not _requirements_pass(tree, profile, tree_node, allocated_with_roots):
+	var validation_allocations := _combined_ids(snapshot.allocated, snapshot.implicit_start_nodes)
+	if not _requirements_pass(tree, profile, tree_node, validation_allocations):
 		return _decision(&"requirement_failed", false, 0, current, snapshot.implicit_start_nodes)
 	if profile.passive_points_available < tree_node.cost:
 		return _decision(&"insufficient_points", false, 0, current, snapshot.implicit_start_nodes)
-	if not graph.candidate_reachable(allocated_with_roots, node_id):
+	if not graph.candidate_reachable(validation_allocations, node_id):
 		return _decision(&"not_connected", false, 0, current, snapshot.implicit_start_nodes)
-	var projected := _combined_ids(allocated_with_roots, [node_id])
+	var projected := _combined_ids(current, snapshot.implicit_start_nodes)
+	projected = _combined_ids(projected, [node_id])
 	return _decision(&"ok", true, -tree_node.cost, projected, snapshot.implicit_start_nodes)
 
 func refund_decision(
@@ -82,11 +83,12 @@ func refund_decision(
 		return _decision(&"retained_path_disconnected", false, 0, current, snapshot.implicit_start_nodes)
 
 	var final_implicit_roots := _missing_start_nodes(tree, retained_known)
+	var validation_allocations := _combined_ids(retained_known, final_implicit_roots)
 	var projected := _combined_ids(retained_known, snapshot.unresolved)
 	projected = _combined_ids(projected, final_implicit_roots)
 	for retained_id: StringName in retained_known:
 		var retained_node := tree.node(retained_id)
-		if retained_node != null and not _requirements_pass(tree, profile, retained_node, projected):
+		if retained_node != null and not _requirements_pass(tree, profile, retained_node, validation_allocations):
 			return _decision(&"retained_requirement_failed", false, 0, current, snapshot.implicit_start_nodes)
 	return _decision(&"ok", true, tree_node.cost, projected, final_implicit_roots)
 

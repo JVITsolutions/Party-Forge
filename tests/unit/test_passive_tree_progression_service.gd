@@ -21,6 +21,7 @@ func run() -> Array[String]:
 	_test_allocation_rejections_are_stable(failures)
 	_test_extraction_license_requires_both_prerequisites(failures)
 	_test_directed_connectivity_and_implicit_roots(failures)
+	_test_unresolved_same_tree_ids_do_not_satisfy_requirements(failures)
 	_test_allocation_success_is_sorted_defensive_and_pure(failures)
 	_test_refund_rejections_and_precedence(failures)
 	_test_refund_retained_path_and_requirements(failures)
@@ -97,6 +98,23 @@ func _test_directed_connectivity_and_implicit_roots(failures: Array[String]) -> 
 	var reverse_profile := _profile(tree.id, true, [&"directed-child"], 10)
 	var reverse := service.allocation_decision(tree, reverse_profile, &"directed-parent", true)
 	_assert_decision(reverse, &"not_connected", false, "forward edge cannot allocate in reverse", failures)
+
+func _test_unresolved_same_tree_ids_do_not_satisfy_requirements(failures: Array[String]) -> void:
+	var tree := _tree()
+	var service := _service()
+	var allocation_profile := _profile(tree.id, true, [&"city-heart", &"removed-prerequisite"], 10)
+	var allocation_before := allocation_profile.to_dictionary()
+	var allocation := service.allocation_decision(tree, allocation_profile, &"unresolved-dependent", false)
+	_assert_decision(allocation, &"requirement_failed", false, "unresolved saved ID cannot authorize allocation requirement", failures)
+	TestAssertions.equal(allocation.next_allocations, [&"city-heart", &"removed-prerequisite"], "allocation rejection preserves unresolved ID in persistence projection", failures)
+	TestAssertions.equal(allocation_profile.to_dictionary(), allocation_before, "unresolved allocation requirement check does not mutate profile", failures)
+
+	var refund_profile := _profile(tree.id, true, [&"city-heart", &"field-pack", &"leaf", &"removed-prerequisite", &"unresolved-dependent"], 0)
+	var refund_before := refund_profile.to_dictionary()
+	var refund := service.refund_decision(tree, refund_profile, &"leaf", false, true)
+	_assert_decision(refund, &"retained_requirement_failed", false, "unresolved saved ID cannot authorize retained requirement", failures)
+	TestAssertions.equal(refund.next_allocations, [&"city-heart", &"field-pack", &"leaf", &"removed-prerequisite", &"unresolved-dependent"], "refund rejection preserves unresolved ID in persistence projection", failures)
+	TestAssertions.equal(refund_profile.to_dictionary(), refund_before, "unresolved refund requirement check does not mutate profile", failures)
 
 func _test_allocation_success_is_sorted_defensive_and_pure(failures: Array[String]) -> void:
 	var tree := _tree()
@@ -213,6 +231,7 @@ func _tree() -> PassiveTreeDefinition:
 		_requirement(&"stash-access"),
 	]
 	var dependent_requirements: Array[PassiveTreeRequirement] = [_requirement(&"field-pack")]
+	var unresolved_requirements: Array[PassiveTreeRequirement] = [_requirement(&"removed-prerequisite")]
 	var permanent_effects: Array[PassiveTreeEffect] = [
 		PassiveTreeEffect.new(&"feature_unlock", &"set", true, {"featureId": "inventory"}),
 	]
@@ -224,6 +243,7 @@ func _tree() -> PassiveTreeDefinition:
 		PassiveTreeNode.new(&"extraction-license", &"large", Vector2.ZERO, "Extraction License", "", 3, [], null, no_effects, extraction_requirements),
 		PassiveTreeNode.new(&"leaf", &"small", Vector2.ZERO, "Leaf", "", 2),
 		PassiveTreeNode.new(&"dependent", &"small", Vector2.ZERO, "Dependent", "", 1, [], null, no_effects, dependent_requirements),
+		PassiveTreeNode.new(&"unresolved-dependent", &"small", Vector2.ZERO, "Unresolved Dependent", "", 1, [], null, no_effects, unresolved_requirements),
 		PassiveTreeNode.new(&"deep-one", &"small", Vector2.ZERO, "Deep One", "", 1),
 		PassiveTreeNode.new(&"deep-two", &"small", Vector2.ZERO, "Deep Two", "", 1),
 		PassiveTreeNode.new(&"obscured", &"small", Vector2.ZERO, "Obscured", "", 1),
@@ -240,6 +260,7 @@ func _tree() -> PassiveTreeDefinition:
 		PassiveTreeConnection.new(&"stash-extraction", &"stash-access", &"extraction-license", &"bidirectional"),
 		PassiveTreeConnection.new(&"field-leaf", &"field-pack", &"leaf", &"bidirectional"),
 		PassiveTreeConnection.new(&"heart-dependent", &"city-heart", &"dependent", &"bidirectional"),
+		PassiveTreeConnection.new(&"heart-unresolved-dependent", &"city-heart", &"unresolved-dependent", &"bidirectional"),
 		PassiveTreeConnection.new(&"heart-deep-one", &"city-heart", &"deep-one", &"bidirectional"),
 		PassiveTreeConnection.new(&"deep-one-two", &"deep-one", &"deep-two", &"bidirectional"),
 		PassiveTreeConnection.new(&"deep-two-obscured", &"deep-two", &"obscured", &"bidirectional"),
