@@ -8,9 +8,13 @@ const BODY_IDS: Array[StringName] = [&"masculine", &"feminine"]
 const IDLE_RUNTIME_SAMPLES: Array[float] = [0.0, 0.4, 0.8, 1.2]
 const LEFT_HAND_PATH := "HitPivot/BodyPivot/HipsPivot/TorsoPivot/LeftShoulderPivot/LeftElbowPivot/LeftHandSocket"
 const RIGHT_HAND_PATH := "HitPivot/BodyPivot/HipsPivot/TorsoPivot/RightShoulderPivot/RightElbowPivot/RightHandSocket"
+const LEFT_ELBOW_PATH := "HitPivot/BodyPivot/HipsPivot/TorsoPivot/LeftShoulderPivot/LeftElbowPivot"
+const RIGHT_ELBOW_PATH := "HitPivot/BodyPivot/HipsPivot/TorsoPivot/RightShoulderPivot/RightElbowPivot"
 const MAX_IDLE_HAND_MEAN_BEHIND := 0.10
 const MAX_IDLE_HAND_SPAN := 0.85
-const ATTACK_ENDPOINT_SAMPLES: Array[float] = [0.0, 1.0]
+const MAX_ATTACK_HAND_BEHIND_Z := 0.18
+const MAX_BOW_DRAW_HAND_BEHIND_Z := 0.26
+const MAX_ATTACK_ELBOW_BEHIND_Z := 0.14
 
 func run() -> Array[String]:
 	var failures: Array[String] = []
@@ -31,7 +35,7 @@ func run() -> Array[String]:
 			_assert_attack_has_phases(attack, attack_id, failures)
 			for body_id: StringName in BODY_IDS:
 				TestAssertions.truthy(model.set_body_preset(body_id), "%s body activates for %s" % [body_id, attack_id], failures)
-				_assert_runtime_attack_endpoints(model, player, attack, attack_id, body_id, failures)
+				_assert_runtime_attack_curve(model, player, attack, attack_id, body_id, failures)
 	var fighter_signature := _track_signature(player.get_animation(&"attack_slash"))
 	for index: int in range(1, ATTACKS.size()):
 		var attack_id := ATTACKS[index]
@@ -52,17 +56,30 @@ func _assert_runtime_idle_silhouette(model: ForgeHumanoidModel, player: Animatio
 		TestAssertions.truthy(mean_z <= MAX_IDLE_HAND_MEAN_BEHIND, "%s %s keeps hands out from behind the back at %.1f (mean_z=%.3f)" % [action_id, body_id, sample_time, mean_z], failures)
 		TestAssertions.truthy(hand_span <= MAX_IDLE_HAND_SPAN, "%s %s avoids a T-pose hand span at %.1f (span=%.3f)" % [action_id, body_id, sample_time, hand_span], failures)
 
-func _assert_runtime_attack_endpoints(model: ForgeHumanoidModel, player: AnimationPlayer, animation: Animation, action_id: StringName, body_id: StringName, failures: Array[String]) -> void:
-	for normalized_time: float in ATTACK_ENDPOINT_SAMPLES:
+func _assert_runtime_attack_curve(model: ForgeHumanoidModel, player: AnimationPlayer, animation: Animation, action_id: StringName, body_id: StringName, failures: Array[String]) -> void:
+	for normalized_time: float in _attack_sample_times():
 		player.play(action_id)
 		player.seek(normalized_time * animation.length, true)
 		player.advance(0.0)
-		var left_hand := _transform_from_model(model, model.get_node(LEFT_HAND_PATH) as Node3D).origin
-		var right_hand := _transform_from_model(model, model.get_node(RIGHT_HAND_PATH) as Node3D).origin
-		var mean_z := (left_hand.z + right_hand.z) * 0.5
-		var hand_span := absf(right_hand.x - left_hand.x)
-		TestAssertions.truthy(mean_z <= MAX_IDLE_HAND_MEAN_BEHIND, "%s %s endpoint %.1f keeps hands out from behind the back (mean_z=%.3f)" % [action_id, body_id, normalized_time, mean_z], failures)
-		TestAssertions.truthy(hand_span <= MAX_IDLE_HAND_SPAN, "%s %s endpoint %.1f avoids a T-pose hand span (span=%.3f)" % [action_id, body_id, normalized_time, hand_span], failures)
+		var right_hand_limit := MAX_BOW_DRAW_HAND_BEHIND_Z if action_id in [&"ranger_quick_bow_shot", &"marksman_heavy_bow_shot"] else MAX_ATTACK_HAND_BEHIND_Z
+		_assert_attack_joint_depth(model, LEFT_HAND_PATH, &"left_hand", MAX_ATTACK_HAND_BEHIND_Z, action_id, body_id, normalized_time, failures)
+		_assert_attack_joint_depth(model, RIGHT_HAND_PATH, &"right_hand", right_hand_limit, action_id, body_id, normalized_time, failures)
+		_assert_attack_joint_depth(model, LEFT_ELBOW_PATH, &"left_elbow", MAX_ATTACK_ELBOW_BEHIND_Z, action_id, body_id, normalized_time, failures)
+		_assert_attack_joint_depth(model, RIGHT_ELBOW_PATH, &"right_elbow", MAX_ATTACK_ELBOW_BEHIND_Z, action_id, body_id, normalized_time, failures)
+
+func _attack_sample_times() -> Array[float]:
+	var samples: Array[float] = []
+	for index: int in 21:
+		samples.append(float(index) / 20.0)
+	return samples
+
+func _assert_attack_joint_depth(model: ForgeHumanoidModel, node_path: String, joint_label: StringName, limit: float, action_id: StringName, body_id: StringName, normalized_time: float, failures: Array[String]) -> void:
+	var joint := model.get_node_or_null(node_path) as Node3D
+	TestAssertions.truthy(joint != null, "%s %s has %s" % [action_id, body_id, joint_label], failures)
+	if joint == null:
+		return
+	var depth := _transform_from_model(model, joint).origin.z
+	TestAssertions.truthy(depth <= limit, "%s %s %s stays out from behind the back at %.2f (z=%.3f limit=%.3f)" % [action_id, body_id, joint_label, normalized_time, depth, limit], failures)
 
 func _transform_from_model(model: Node3D, node: Node3D) -> Transform3D:
 	var result := Transform3D.IDENTITY
