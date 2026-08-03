@@ -4,6 +4,12 @@ const MODEL_SCENE := preload("res://scenes/characters/presentation/forge_humanoi
 const IDLES: Array[StringName] = [&"idle", &"paladin_idle", &"ranger_idle", &"marksman_idle", &"rogue_idle", &"mage_idle", &"frost_mage_idle", &"cleric_idle", &"warlock_idle"]
 const ATTACKS: Array[StringName] = [&"attack_slash", &"paladin_hammer_smite", &"ranger_quick_bow_shot", &"marksman_heavy_bow_shot", &"rogue_dagger_flurry", &"mage_fire_burst", &"frost_staff_shard", &"cleric_lightning_bolt", &"cleric_healing_blessing", &"warlock_chaos_bolt"]
 const POSE_SAMPLES: Array[float] = [0.0, 0.28, 0.52, 0.76, 1.0]
+const BODY_IDS: Array[StringName] = [&"masculine", &"feminine"]
+const IDLE_RUNTIME_SAMPLES: Array[float] = [0.0, 0.4, 0.8, 1.2]
+const LEFT_HAND_PATH := "HitPivot/BodyPivot/HipsPivot/TorsoPivot/LeftShoulderPivot/LeftElbowPivot/LeftHandSocket"
+const RIGHT_HAND_PATH := "HitPivot/BodyPivot/HipsPivot/TorsoPivot/RightShoulderPivot/RightElbowPivot/RightHandSocket"
+const MAX_IDLE_HAND_MEAN_BEHIND := 0.10
+const MAX_IDLE_HAND_SPAN := 0.85
 
 func run() -> Array[String]:
 	var failures: Array[String] = []
@@ -14,6 +20,9 @@ func run() -> Array[String]:
 		TestAssertions.truthy(idle != null, "%s exists" % idle_id, failures)
 		if idle != null:
 			_assert_idle_is_guarded(idle, idle_id, failures)
+			for body_id: StringName in BODY_IDS:
+				TestAssertions.truthy(model.set_body_preset(body_id), "%s body activates for %s" % [body_id, idle_id], failures)
+				_assert_runtime_idle_silhouette(model, player, idle_id, body_id, failures)
 	for attack_id: StringName in ATTACKS:
 		var attack := player.get_animation(attack_id)
 		TestAssertions.truthy(attack != null, "%s exists" % attack_id, failures)
@@ -26,6 +35,27 @@ func run() -> Array[String]:
 	_assert_walk_quality(player, failures)
 	model.free()
 	return failures
+
+func _assert_runtime_idle_silhouette(model: ForgeHumanoidModel, player: AnimationPlayer, action_id: StringName, body_id: StringName, failures: Array[String]) -> void:
+	for sample_time: float in IDLE_RUNTIME_SAMPLES:
+		player.play(action_id)
+		player.seek(sample_time, true)
+		player.advance(0.0)
+		var left_hand := _transform_from_model(model, model.get_node(LEFT_HAND_PATH) as Node3D).origin
+		var right_hand := _transform_from_model(model, model.get_node(RIGHT_HAND_PATH) as Node3D).origin
+		var mean_z := (left_hand.z + right_hand.z) * 0.5
+		var hand_span := absf(right_hand.x - left_hand.x)
+		TestAssertions.truthy(mean_z <= MAX_IDLE_HAND_MEAN_BEHIND, "%s %s keeps hands out from behind the back at %.1f (mean_z=%.3f)" % [action_id, body_id, sample_time, mean_z], failures)
+		TestAssertions.truthy(hand_span <= MAX_IDLE_HAND_SPAN, "%s %s avoids a T-pose hand span at %.1f (span=%.3f)" % [action_id, body_id, sample_time, hand_span], failures)
+
+func _transform_from_model(model: Node3D, node: Node3D) -> Transform3D:
+	var result := Transform3D.IDENTITY
+	var cursor: Node = node
+	while cursor != null and cursor != model:
+		if cursor is Node3D:
+			result = (cursor as Node3D).transform * result
+		cursor = cursor.get_parent()
+	return result
 
 func _assert_walk_quality(player: AnimationPlayer, failures: Array[String]) -> void:
 	var walk := player.get_animation(&"walk")
