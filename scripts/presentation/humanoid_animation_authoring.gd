@@ -202,10 +202,10 @@ static func _attack_pose_data(action_id: StringName) -> Dictionary:
 static func _base_attack_pose() -> Dictionary:
 	return {
 		TORSO: _same_five(Vector3(-0.04, 0, 0)),
-		LEFT_SHOULDER: _same_five(Vector3(-0.28, -0.05, -0.55)),
-		LEFT_ELBOW: _same_five(Vector3(0.10, 0.0, -0.65)),
-		RIGHT_SHOULDER: _same_five(Vector3(-0.18, -0.16, 0.34)),
-		RIGHT_ELBOW: _same_five(Vector3(0.10, 0.0, 0.38)),
+		LEFT_SHOULDER: _same_five(Vector3(0.30, -0.05, 0.38)),
+		LEFT_ELBOW: _same_five(Vector3(0.42, 0.0, 0.18)),
+		RIGHT_SHOULDER: _same_five(Vector3(0.24, -0.16, -0.32)),
+		RIGHT_ELBOW: _same_five(Vector3(0.36, 0.0, -0.16)),
 		LEFT_HIP: _same_five(Vector3(0.02, 0, -0.05)),
 		RIGHT_HIP: _same_five(Vector3(0.02, 0, 0.05)),
 		LEFT_KNEE: _same_five(Vector3(0.08, 0, 0)),

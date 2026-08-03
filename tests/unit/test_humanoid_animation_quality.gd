@@ -10,6 +10,7 @@ const LEFT_HAND_PATH := "HitPivot/BodyPivot/HipsPivot/TorsoPivot/LeftShoulderPiv
 const RIGHT_HAND_PATH := "HitPivot/BodyPivot/HipsPivot/TorsoPivot/RightShoulderPivot/RightElbowPivot/RightHandSocket"
 const MAX_IDLE_HAND_MEAN_BEHIND := 0.10
 const MAX_IDLE_HAND_SPAN := 0.85
+const ATTACK_ENDPOINT_SAMPLES: Array[float] = [0.0, 1.0]
 
 func run() -> Array[String]:
 	var failures: Array[String] = []
@@ -28,6 +29,9 @@ func run() -> Array[String]:
 		TestAssertions.truthy(attack != null, "%s exists" % attack_id, failures)
 		if attack != null:
 			_assert_attack_has_phases(attack, attack_id, failures)
+			for body_id: StringName in BODY_IDS:
+				TestAssertions.truthy(model.set_body_preset(body_id), "%s body activates for %s" % [body_id, attack_id], failures)
+				_assert_runtime_attack_endpoints(model, player, attack, attack_id, body_id, failures)
 	var fighter_signature := _track_signature(player.get_animation(&"attack_slash"))
 	for index: int in range(1, ATTACKS.size()):
 		var attack_id := ATTACKS[index]
@@ -47,6 +51,18 @@ func _assert_runtime_idle_silhouette(model: ForgeHumanoidModel, player: Animatio
 		var hand_span := absf(right_hand.x - left_hand.x)
 		TestAssertions.truthy(mean_z <= MAX_IDLE_HAND_MEAN_BEHIND, "%s %s keeps hands out from behind the back at %.1f (mean_z=%.3f)" % [action_id, body_id, sample_time, mean_z], failures)
 		TestAssertions.truthy(hand_span <= MAX_IDLE_HAND_SPAN, "%s %s avoids a T-pose hand span at %.1f (span=%.3f)" % [action_id, body_id, sample_time, hand_span], failures)
+
+func _assert_runtime_attack_endpoints(model: ForgeHumanoidModel, player: AnimationPlayer, animation: Animation, action_id: StringName, body_id: StringName, failures: Array[String]) -> void:
+	for normalized_time: float in ATTACK_ENDPOINT_SAMPLES:
+		player.play(action_id)
+		player.seek(normalized_time * animation.length, true)
+		player.advance(0.0)
+		var left_hand := _transform_from_model(model, model.get_node(LEFT_HAND_PATH) as Node3D).origin
+		var right_hand := _transform_from_model(model, model.get_node(RIGHT_HAND_PATH) as Node3D).origin
+		var mean_z := (left_hand.z + right_hand.z) * 0.5
+		var hand_span := absf(right_hand.x - left_hand.x)
+		TestAssertions.truthy(mean_z <= MAX_IDLE_HAND_MEAN_BEHIND, "%s %s endpoint %.1f keeps hands out from behind the back (mean_z=%.3f)" % [action_id, body_id, normalized_time, mean_z], failures)
+		TestAssertions.truthy(hand_span <= MAX_IDLE_HAND_SPAN, "%s %s endpoint %.1f avoids a T-pose hand span (span=%.3f)" % [action_id, body_id, normalized_time, hand_span], failures)
 
 func _transform_from_model(model: Node3D, node: Node3D) -> Transform3D:
 	var result := Transform3D.IDENTITY
