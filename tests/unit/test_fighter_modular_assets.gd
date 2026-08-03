@@ -20,9 +20,9 @@ const SOURCE_GEOMETRY := {
 	&"forge_vanguard_ring_left": [{&"socket": "LeftHandSocket", &"position": Vector3(-0.03, -0.24, 0), &"size": Vector3(0.07, 0.07, 0.07), &"region": &"brass", &"emits": true}],
 	&"forge_vanguard_ring_right": [{&"socket": "RightHandSocket", &"position": Vector3(0.03, -0.24, 0), &"size": Vector3(0.07, 0.07, 0.07), &"region": &"brass", &"emits": true}],
 	&"forge_vanguard_belt": [{&"socket": "BeltSocket", &"position": Vector3(0, -0.04, 0), &"size": Vector3(0.58, 0.11, 0.32), &"region": &"leather"}],
-	&"forge_vanguard_sword": [{&"socket": "RightHandSocket", &"position": Vector3(0.03, 0.09, 0), &"size": Vector3(0.10, 0.68, 0.035), &"region": &"metal"}],
-	&"forge_vanguard_shield": [{&"socket": "LeftHandSocket", &"position": Vector3(-0.04, 0.21, 0.02), &"size": Vector3(0.68, 0.68, 0.14), &"region": &"metal"}],
-	&"forge_vanguard_hammer": [{&"socket": "RightHandSocket", &"position": Vector3(0.03, 0.11, 0), &"size": Vector3(0.09, 0.92, 0.07), &"region": &"metal"}],
+	&"forge_vanguard_sword": [{&"socket": "RightHandSocket", &"position": Vector3(0.03, -0.12, -0.10), &"size": Vector3(0.10, 0.68, 0.035), &"region": &"metal"}],
+	&"forge_vanguard_shield": [{&"socket": "LeftHandSocket", &"position": Vector3(-0.10, -0.38, -0.20), &"size": Vector3(0.68, 0.68, 0.14), &"region": &"metal"}],
+	&"forge_vanguard_hammer": [{&"socket": "RightHandSocket", &"position": Vector3(0.03, -0.48, -0.10), &"size": Vector3(0.09, 0.92, 0.07), &"region": &"metal"}],
 }
 
 func run() -> Array[String]:

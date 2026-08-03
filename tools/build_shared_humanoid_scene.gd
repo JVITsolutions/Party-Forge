@@ -89,6 +89,9 @@ func _configure_authored_action_players(model: Node3D) -> bool:
 		if library.has_animation(action_id):
 			library.remove_animation(action_id)
 		library.add_animation(action_id, attack)
+	for legacy_action_id: StringName in [&"attack_combo", &"hit_flinch"]:
+		if library.has_animation(legacy_action_id):
+			_pin_guard_endpoints(library.get_animation(legacy_action_id))
 	var feedback_player := AnimationPlayer.new()
 	feedback_player.name = &"FeedbackAnimationPlayer"
 	feedback_player.root_node = NodePath("..")
@@ -101,6 +104,20 @@ func _configure_authored_action_players(model: Node3D) -> bool:
 	feedback_library.add_animation(&"hit_flinch", feedback)
 	feedback_player.add_animation_library(&"", feedback_library)
 	return true
+
+func _pin_guard_endpoints(animation: Animation) -> void:
+	for pivot_path: String in [
+		ANIMATION_AUTHORING.LEFT_SHOULDER,
+		ANIMATION_AUTHORING.LEFT_ELBOW,
+		ANIMATION_AUTHORING.RIGHT_SHOULDER,
+		ANIMATION_AUTHORING.RIGHT_ELBOW,
+	]:
+		var track := animation.find_track(NodePath("%s:rotation" % pivot_path), Animation.TYPE_ROTATION_3D)
+		if track < 0 or animation.track_get_key_count(track) == 0:
+			continue
+		var guard := ANIMATION_AUTHORING.guard_rotation(pivot_path)
+		animation.track_set_key_value(track, 0, guard)
+		animation.track_set_key_value(track, animation.track_get_key_count(track) - 1, guard)
 
 func _configure_action_players(model: Node3D) -> bool:
 	var action_player := model.get_node_or_null("AnimationPlayer") as AnimationPlayer

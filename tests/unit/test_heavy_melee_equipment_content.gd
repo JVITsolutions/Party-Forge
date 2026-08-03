@@ -1,7 +1,7 @@
 extends RefCounted
 
 const SET_FOLDERS := {&"paladin": &"dawn_bulwark", &"rogue": &"nightstep"}
-const MAX_BOUNDS := AABB(Vector3(-1.25, 0.0, -0.85), Vector3(2.5, 2.7, 1.7))
+const MAX_BOUNDS := AABB(Vector3(-1.25, -0.10, -0.85), Vector3(2.5, 2.8, 1.7))
 const GUARD_LIMBS := [
 	"HitPivot/BodyPivot/HipsPivot/TorsoPivot/LeftShoulderPivot",
 	"HitPivot/BodyPivot/HipsPivot/TorsoPivot/LeftShoulderPivot/LeftElbowPivot",

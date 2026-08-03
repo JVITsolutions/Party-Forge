@@ -120,6 +120,11 @@ static func sample_pose(animation: Animation, time: float) -> Dictionary:
 				pose[String(animation.track_get_path(track_index))] = animation.rotation_track_interpolate(track_index, sample_time)
 	return pose
 
+static func guard_rotation(path: String) -> Quaternion:
+	var pose := _base_attack_pose()
+	var values: Array = pose.get(path, [])
+	return Quaternion.from_euler(values[0] as Vector3) if not values.is_empty() else Quaternion.IDENTITY
+
 static func _idle_style(action_id: StringName) -> Dictionary:
 	match action_id:
 		&"paladin_idle": return {&"torso_y": 0.0, &"shoulder_x": 0.30, &"shoulder_z": 0.38, &"elbow_x": 0.50, &"elbow_z": 0.16}
