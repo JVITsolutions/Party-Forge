@@ -18,6 +18,19 @@ func validate(requirement: PassiveTreeRequirement) -> String:
 		return "%s requirement=%s field=treeId reason=treeId must be a non-empty kebab-case string" % [ERROR_PREFIX, requirement.requirement_id]
 	return ""
 
+func display_name(requirement_id: StringName) -> String:
+	return "Allocated Node" if requirement_id == &"allocated_node" else ""
+
+func describe(requirement: PassiveTreeRequirement) -> String:
+	if requirement == null or not validate(requirement).is_empty():
+		return ""
+	return "Requires allocated node: %s (%s)." % [requirement.value, requirement.parameters["treeId"]]
+
+func keyword_explanation(requirement_id: StringName) -> String:
+	if requirement_id != &"allocated_node":
+		return ""
+	return "Allocated Node: Requires the named node to be allocated in the named passive tree."
+
 func _is_kebab_case(value: Variant) -> bool:
 	if typeof(value) != TYPE_STRING:
 		return false

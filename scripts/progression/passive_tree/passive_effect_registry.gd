@@ -32,6 +32,38 @@ const PERMANENT_EFFECTS: Array[StringName] = [
 	&"stash_tabs", &"tree_discovery",
 ]
 
+const DISPLAY_NAMES := {
+	&"city_service_unlock": "City Service",
+	&"experience_gain": "Experience Gain",
+	&"feature_unlock": "Feature",
+	&"mode_unlock": "Mode",
+	&"party_capacity": "Party Capacity",
+	&"region_unlock": "Region",
+	&"vendor_inventory_slots": "Vendor Inventory Slots",
+	&"vendor_reroll_count": "Vendor Rerolls",
+	&"building_discovery": "Building Discovery",
+	&"extraction_capacity": "Extraction Capacity",
+	&"inventory_columns": "Inventory Columns",
+	&"stash_tabs": "Stash Tabs",
+	&"tree_discovery": "Passive Tree Discovery",
+}
+
+const KEYWORD_EXPLANATIONS := {
+	&"city_service_unlock": "City Service: Permanently unlocks access to a named City service.",
+	&"experience_gain": "Experience Gain: Increases experience earned in the named scope.",
+	&"feature_unlock": "Feature: Permanently unlocks access to a named profile feature.",
+	&"mode_unlock": "Mode: Permanently unlocks access to a named game mode.",
+	&"party_capacity": "Party Capacity: Increases the number of characters the profile can field.",
+	&"region_unlock": "Region: Permanently unlocks access to a named world region.",
+	&"vendor_inventory_slots": "Vendor Inventory Slots: Adds choices to vendor inventories for the profile.",
+	&"vendor_reroll_count": "Vendor Rerolls: Adds vendor inventory refreshes for the profile.",
+	&"building_discovery": "Building Discovery: Permanently discovers a named City building.",
+	&"extraction_capacity": "Extraction Capacity: Increases how many items the profile can extract.",
+	&"inventory_columns": "Inventory Columns: Adds inventory space for the profile.",
+	&"stash_tabs": "Stash Tabs: Adds profile stash tabs with the stated slots per tab.",
+	&"tree_discovery": "Passive Tree Discovery: Permanently discovers a named passive tree.",
+}
+
 func validate(effect: PassiveTreeEffect) -> String:
 	if effect == null:
 		return "%s effect=null reason=effect must not be null" % ERROR_PREFIX
@@ -66,6 +98,45 @@ func validate(effect: PassiveTreeEffect) -> String:
 
 func development_state(effect_id: StringName) -> int:
 	return FeatureAccessPolicy.State.COMING_SOON if CONTRACTS.has(effect_id) else FeatureAccessPolicy.State.HIDDEN
+
+func display_name(effect_id: StringName) -> String:
+	return String(DISPLAY_NAMES.get(effect_id, ""))
+
+func describe(effect: PassiveTreeEffect) -> String:
+	if effect == null or not validate(effect).is_empty():
+		return ""
+	match effect.effect_id:
+		&"city_service_unlock":
+			return "Unlock City Service: %s." % effect.parameters["serviceId"]
+		&"experience_gain":
+			return "Experience Gain: %s%% (%s)." % [_signed_integer(int(effect.value)), effect.parameters["scope"]]
+		&"feature_unlock":
+			return "Unlock Feature: %s." % effect.parameters["featureId"]
+		&"mode_unlock":
+			return "Unlock Mode: %s." % effect.parameters["modeId"]
+		&"party_capacity":
+			return "Party Capacity: %s (%s)." % [_signed_integer(int(effect.value)), effect.parameters["scope"]]
+		&"region_unlock":
+			return "Unlock Region: %s." % effect.parameters["regionId"]
+		&"vendor_inventory_slots":
+			return "Vendor Inventory Slots: %s (%s)." % [_signed_integer(int(effect.value)), effect.parameters["scope"]]
+		&"vendor_reroll_count":
+			return "Vendor Rerolls: %s (%s)." % [_signed_integer(int(effect.value)), effect.parameters["scope"]]
+		&"building_discovery":
+			return "Discover Building: %s." % effect.parameters["buildingId"]
+		&"extraction_capacity":
+			return "Extraction Capacity: %s (%s)." % [_signed_integer(int(effect.value)), effect.parameters["scope"]]
+		&"inventory_columns":
+			return "Inventory Columns: %s (%s)." % [_signed_integer(int(effect.value)), effect.parameters["scope"]]
+		&"stash_tabs":
+			return "Stash Tabs: %s x %d slots (%s)." % [_signed_integer(int(effect.value)), int(effect.parameters["slotsPerTab"]), effect.parameters["scope"]]
+		&"tree_discovery":
+			return "Discover Passive Tree: %s." % effect.parameters["treeId"]
+		_:
+			return ""
+
+func keyword_explanation(effect_id: StringName) -> String:
+	return String(KEYWORD_EXPLANATIONS.get(effect_id, ""))
 
 func is_permanent(effect: PassiveTreeEffect) -> bool:
 	return effect != null and validate(effect).is_empty() and effect.effect_id in PERMANENT_EFFECTS
@@ -114,3 +185,6 @@ func _is_json_integer(value: Variant) -> bool:
 	var number := value as float
 	return not is_nan(number) and not is_inf(number) and number == floorf(number) \
 		and number >= SIGNED_64_MIN_AS_FLOAT and number < SIGNED_64_MAX_EXCLUSIVE_AS_FLOAT
+
+func _signed_integer(value: int) -> String:
+	return "+%d" % value if value >= 0 else str(value)

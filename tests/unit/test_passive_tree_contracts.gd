@@ -24,6 +24,22 @@ const PERMANENT_EFFECT_IDS: Array[StringName] = [
 	&"stash_tabs", &"tree_discovery",
 ]
 
+const EFFECT_PRESENTATION := {
+	&"city_service_unlock": ["City Service", "Unlock City Service: city_vendors.", "City Service: Permanently unlocks access to a named City service."],
+	&"experience_gain": ["Experience Gain", "Experience Gain: +2% (all_run_experience).", "Experience Gain: Increases experience earned in the named scope."],
+	&"feature_unlock": ["Feature", "Unlock Feature: equipment_inventory.", "Feature: Permanently unlocks access to a named profile feature."],
+	&"mode_unlock": ["Mode", "Unlock Mode: practice.", "Mode: Permanently unlocks access to a named game mode."],
+	&"party_capacity": ["Party Capacity", "Party Capacity: +1 (profile).", "Party Capacity: Increases the number of characters the profile can field."],
+	&"region_unlock": ["Region", "Unlock Region: north-road.", "Region: Permanently unlocks access to a named world region."],
+	&"vendor_inventory_slots": ["Vendor Inventory Slots", "Vendor Inventory Slots: +1 (profile).", "Vendor Inventory Slots: Adds choices to vendor inventories for the profile."],
+	&"vendor_reroll_count": ["Vendor Rerolls", "Vendor Rerolls: +1 (profile).", "Vendor Rerolls: Adds vendor inventory refreshes for the profile."],
+	&"building_discovery": ["Building Discovery", "Discover Building: warehouse.", "Building Discovery: Permanently discovers a named City building."],
+	&"extraction_capacity": ["Extraction Capacity", "Extraction Capacity: +1 (profile).", "Extraction Capacity: Increases how many items the profile can extract."],
+	&"inventory_columns": ["Inventory Columns", "Inventory Columns: +1 (profile).", "Inventory Columns: Adds inventory space for the profile."],
+	&"stash_tabs": ["Stash Tabs", "Stash Tabs: +1 x 100 slots (profile).", "Stash Tabs: Adds profile stash tabs with the stated slots per tab."],
+	&"tree_discovery": ["Passive Tree Discovery", "Discover Passive Tree: party-forge-warehouse-v1.", "Passive Tree Discovery: Permanently discovers a named passive tree."],
+}
+
 const LOGISTICS_IDS: Array[StringName] = [
 	&"field-pack", &"stash-access", &"extraction-license", &"secured-loadout",
 ]
@@ -33,7 +49,9 @@ func run() -> Array[String]:
 	_test_all_registered_effect_contracts(failures)
 	_test_effect_contracts_fail_closed(failures)
 	_test_development_permanence_and_unlock_projection(failures)
+	_test_effect_presentation_contracts(failures)
 	_test_requirement_contract(failures)
+	_test_requirement_presentation_contract(failures)
 	_test_city_policy(failures)
 	_test_default_catalog(failures)
 	_test_catalog_semantic_fail_closed(failures)
@@ -124,6 +142,19 @@ func _test_development_permanence_and_unlock_projection(failures: Array[String])
 	TestAssertions.equal(registry.unlock_id(PassiveTreeEffect.new(&"experience_gain", &"add_percent", 2, {"scope": "all_run_experience"})), &"", "numeric effect has no unlock ID", failures)
 	TestAssertions.equal(registry.unlock_id(PassiveTreeEffect.new(&"mode_unlock", &"custom", true, {"modeId": "practice"})), &"", "malformed unlock contract fails closed", failures)
 
+func _test_effect_presentation_contracts(failures: Array[String]) -> void:
+	var registry := PassiveEffectRegistry.new()
+	for contract: Array in EFFECT_CONTRACTS:
+		var effect := _effect(contract)
+		var expected := EFFECT_PRESENTATION[effect.effect_id] as Array
+		TestAssertions.equal(registry.display_name(effect.effect_id), expected[0], "%s stable display name" % effect.effect_id, failures)
+		TestAssertions.equal(registry.describe(effect), expected[1], "%s structured description" % effect.effect_id, failures)
+		TestAssertions.equal(registry.keyword_explanation(effect.effect_id), expected[2], "%s keyword explanation" % effect.effect_id, failures)
+	var malformed := PassiveTreeEffect.new(&"stash_tabs", &"add_flat", 1, {"scope": "profile", "slotsPerTab": 0})
+	TestAssertions.equal(registry.describe(malformed), "", "malformed effect has no presentation description", failures)
+	TestAssertions.equal(registry.display_name(&"unknown_effect"), "", "unknown effect has no display name", failures)
+	TestAssertions.equal(registry.keyword_explanation(&"unknown_effect"), "", "unknown effect has no keyword explanation", failures)
+
 func _test_requirement_contract(failures: Array[String]) -> void:
 	var registry := PassiveRequirementRegistry.new()
 	var valid := PassiveTreeRequirement.new(&"allocated_node", &"contains", "field-pack", {"treeId": "party-forge-city-v1"})
@@ -137,6 +168,16 @@ func _test_requirement_contract(failures: Array[String]) -> void:
 	_assert_requirement_invalid(registry, PassiveTreeRequirement.new(&"allocated_node", &"contains", "field-pack", {}), "allocated_node requires treeId", "treeId", failures)
 	_assert_requirement_invalid(registry, PassiveTreeRequirement.new(&"allocated_node", &"contains", "field-pack", {"treeId": "party-forge-city-v1", "extra": true}), "allocated_node rejects extra parameter", "parameters", failures)
 	_assert_requirement_invalid(registry, PassiveTreeRequirement.new(&"allocated_node", &"contains", "field-pack", {"treeId": "bad tree"}), "allocated_node requires kebab-case treeId", "treeId", failures)
+
+func _test_requirement_presentation_contract(failures: Array[String]) -> void:
+	var registry := PassiveRequirementRegistry.new()
+	var requirement := PassiveTreeRequirement.new(&"allocated_node", &"contains", "field-pack", {"treeId": "party-forge-city-v1"})
+	TestAssertions.equal(registry.display_name(requirement.requirement_id), "Allocated Node", "requirement stable display name", failures)
+	TestAssertions.equal(registry.describe(requirement), "Requires allocated node: field-pack (party-forge-city-v1).", "requirement structured description", failures)
+	TestAssertions.equal(registry.keyword_explanation(requirement.requirement_id), "Allocated Node: Requires the named node to be allocated in the named passive tree.", "requirement keyword explanation", failures)
+	TestAssertions.equal(registry.describe(PassiveTreeRequirement.new(&"allocated_node", &"equals", "field-pack", {"treeId": "party-forge-city-v1"})), "", "malformed requirement has no presentation description", failures)
+	TestAssertions.equal(registry.display_name(&"unknown_requirement"), "", "unknown requirement has no display name", failures)
+	TestAssertions.equal(registry.keyword_explanation(&"unknown_requirement"), "", "unknown requirement has no keyword explanation", failures)
 
 func _test_city_policy(failures: Array[String]) -> void:
 	var policy := CityPassiveTreePolicy.new()
