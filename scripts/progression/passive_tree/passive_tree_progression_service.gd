@@ -46,7 +46,7 @@ func allocation_decision(
 	if node_id not in snapshot.visible:
 		return _decision(&"node_obscured", false, 0, current, snapshot.implicit_start_nodes)
 	var validation_allocations := _combined_ids(snapshot.allocated, snapshot.implicit_start_nodes)
-	if not _requirements_pass(tree, profile, tree_node, validation_allocations):
+	if not _requirements_pass(tree, tree_node, validation_allocations):
 		return _decision(&"requirement_failed", false, 0, current, snapshot.implicit_start_nodes)
 	if profile.passive_points_available < tree_node.cost:
 		return _decision(&"insufficient_points", false, 0, current, snapshot.implicit_start_nodes)
@@ -93,13 +93,12 @@ func refund_decision(
 	projected = _combined_ids(projected, final_implicit_roots)
 	for retained_id: StringName in retained_known:
 		var retained_node := tree.node(retained_id)
-		if retained_node != null and not _requirements_pass(tree, profile, retained_node, validation_allocations):
+		if retained_node != null and not _requirements_pass(tree, retained_node, validation_allocations):
 			return _decision(&"retained_requirement_failed", false, 0, current, snapshot.implicit_start_nodes)
 	return _decision(&"ok", true, tree_node.cost, projected, final_implicit_roots)
 
 func _requirements_pass(
 	tree: PassiveTreeDefinition,
-	profile: ProfileState,
 	tree_node: PassiveTreeNode,
 	current_tree_allocations: Array[StringName],
 ) -> bool:

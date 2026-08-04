@@ -362,7 +362,7 @@ func _configure_member_focus_neighbors() -> void:
 	var columns := maxi(_party_entries().columns, 1)
 	for index: int in buttons.size():
 		var button := buttons[index]
-		var row := index / columns
+		var row := floori(float(index) / float(columns))
 		var column := index % columns
 		_set_neighbor(button, &"focus_neighbor_left", buttons[index - 1] if columns > 1 and index > 0 else null)
 		_set_neighbor(button, &"focus_neighbor_right", buttons[index + 1] if column + 1 < columns and index + 1 < buttons.size() else null)
@@ -435,8 +435,8 @@ func _wire_roster_page_focus_bridge() -> void:
 	if member_index < 0:
 		return
 	var columns := maxi(_party_entries().columns, 1)
-	var last_row := (visible_buttons.size() - 1) / columns
-	if member_index / columns == last_row:
+	var last_row := floori(float(visible_buttons.size() - 1) / float(columns))
+	if floori(float(member_index) / float(columns)) == last_row:
 		_set_neighbor(member_button, &"focus_neighbor_bottom", page_target)
 		_set_neighbor(page_target, &"focus_neighbor_top", member_button)
 

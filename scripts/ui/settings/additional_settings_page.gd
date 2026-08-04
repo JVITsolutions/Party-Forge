@@ -47,7 +47,7 @@ func bind(settings: PartyForgeSettings) -> void:
 func write_to(settings: PartyForgeSettings) -> void:
 	if settings == null:
 		return
-	settings.mode = _mode().selected
+	settings.mode = _mode().selected as PartyForgeSettings.Mode
 	settings.unlock_all_implemented_content = _unlock_all().button_pressed
 	settings.god_mode = _god_mode().button_pressed
 	settings.party_capacity_override = int(_party_capacity().value)

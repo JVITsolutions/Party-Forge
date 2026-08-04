@@ -79,7 +79,9 @@ func set_bootstrap_diagnostic(safe_status: String, technical_detail: String) -> 
 
 func initial_focus() -> Control:
 	var list := _profile_list()
-	return list if list.visible and list.item_count > 0 and _has_selectable_profiles else _profile_name()
+	if list.visible and list.item_count > 0 and _has_selectable_profiles:
+		return list
+	return _profile_name()
 
 
 func _create_profile() -> void:

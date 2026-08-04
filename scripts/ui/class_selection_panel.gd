@@ -118,7 +118,7 @@ func _rebuild_directional_focus() -> void:
 	if class_buttons.is_empty() or settings == null or back == null:
 		return
 	var columns := maxi(_grid().columns, 1)
-	var last_row_start := ((class_buttons.size() - 1) / columns) * columns
+	var last_row_start := floori(float(class_buttons.size() - 1) / float(columns)) * columns
 	for index: int in range(class_buttons.size()):
 		var button := class_buttons[index]
 		var column := index % columns

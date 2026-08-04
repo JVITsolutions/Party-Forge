@@ -141,7 +141,9 @@ func _resolve_area() -> void:
 		var adapter := _adapter_for(actor)
 		if adapter == null or not adapter.available:
 			continue
-		var resolution_id: Variant = adapter.combatant_id if not adapter.combatant_id.is_empty() else actor.get_instance_id()
+		var resolution_id: Variant = actor.get_instance_id()
+		if not adapter.combatant_id.is_empty():
+			resolution_id = adapter.combatant_id
 		if resolved_ids.has(resolution_id):
 			continue
 		resolved_ids[resolution_id] = true

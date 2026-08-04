@@ -39,12 +39,12 @@ func rebuild(node_views: Array, connections: Array) -> void:
 	copies.sort_custom(func(left: PassiveTreeNodeViewData, right: PassiveTreeNodeViewData) -> bool: return String(left.id) < String(right.id))
 	for view: PassiveTreeNodeViewData in copies:
 		_views[view.id] = view
-		var node_control := NODE_SCENE.instantiate() as PassiveTreeNodeControl
-		node_control.name = "Node_%s" % String(view.id).validate_node_name()
-		node_control.bind_view(view)
-		node_control.node_selected.connect(select_node)
-		add_child(node_control)
-		_controls[view.id] = node_control
+		var new_control := NODE_SCENE.instantiate() as PassiveTreeNodeControl
+		new_control.name = "Node_%s" % String(view.id).validate_node_name()
+		new_control.bind_view(view)
+		new_control.node_selected.connect(select_node)
+		add_child(new_control)
+		_controls[view.id] = new_control
 	for value: Variant in connections:
 		if value is Dictionary:
 			_connections.append(PassiveTreeNodeViewData.value_only_copy(value) as Dictionary)
@@ -156,8 +156,8 @@ func _layout_nodes() -> void:
 		control.position = _project(view.position) - control.size * 0.5
 
 
-func _project(position: Vector2) -> Vector2:
-	return size * 0.5 + _pan + position * _zoom
+func _project(source_position: Vector2) -> Vector2:
+	return size * 0.5 + _pan + source_position * _zoom
 
 
 func _draw() -> void:

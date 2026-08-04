@@ -24,7 +24,7 @@ func load_settings(path: String = DEFAULT_PATH) -> PartyForgeSettings:
 		return result
 	result.schema_version = loaded_version
 	var mode_value: Variant = config.get_value(SECTION, "mode", PartyForgeSettings.Mode.PLAYER_SIMULATION)
-	result.mode = int(mode_value) if typeof(mode_value) == TYPE_INT else PartyForgeSettings.Mode.PLAYER_SIMULATION
+	result.mode = int(mode_value) as PartyForgeSettings.Mode if typeof(mode_value) == TYPE_INT else PartyForgeSettings.Mode.PLAYER_SIMULATION
 	var unlock_value: Variant = config.get_value(SECTION, "unlock_all_implemented_content", false)
 	result.unlock_all_implemented_content = bool(unlock_value) if typeof(unlock_value) == TYPE_BOOL else false
 	var god_value: Variant = config.get_value(SECTION, "god_mode", false)

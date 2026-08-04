@@ -7,9 +7,9 @@ var _developer_mode := false
 var _unlock_all := false
 var _capacity := 4
 
-func _init(god_mode: bool, density: int, developer_mode: bool, unlock_all: bool, capacity: int) -> void:
+func _init(god_mode_enabled: bool, density: int, developer_mode: bool, unlock_all: bool, capacity: int) -> void:
 	_developer_mode = developer_mode
-	_god_mode = god_mode and developer_mode
+	_god_mode = god_mode_enabled and developer_mode
 	_density = clampi(density, 0, 1000) if developer_mode else 100
 	_unlock_all = unlock_all and developer_mode
 	_capacity = clampi(capacity, 1, 24) if developer_mode else 4

@@ -26,7 +26,7 @@ static func decode_document(data: Dictionary) -> ProfileLoadResult:
 	profile.display_name = data["display_name"] as String
 	profile.created_at_unix = int(data["created_at_unix"])
 	profile.updated_at_unix = int(data["updated_at_unix"])
-	profile.prologue_state = int(data["prologue_state"])
+	profile.prologue_state = int(data["prologue_state"]) as ProfileState.PrologueState
 	profile.last_safe_checkpoint = (data["last_safe_checkpoint"] as Dictionary).duplicate(true)
 	profile.gold = int(data["gold"])
 	profile.passive_points_available = int(data["passive_points_available"])

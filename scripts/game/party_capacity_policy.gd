@@ -3,8 +3,8 @@ extends RefCounted
 
 var _capacity := 4
 
-func _init(capacity: int) -> void:
-	_capacity = clampi(capacity, PartyForgeSettings.MIN_PARTY_CAPACITY, PartyForgeSettings.MAX_PARTY_CAPACITY)
+func _init(capacity_value: int) -> void:
+	_capacity = clampi(capacity_value, PartyForgeSettings.MIN_PARTY_CAPACITY, PartyForgeSettings.MAX_PARTY_CAPACITY)
 
 func capacity() -> int: return _capacity
 
