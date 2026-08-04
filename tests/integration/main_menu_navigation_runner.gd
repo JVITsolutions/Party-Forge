@@ -14,11 +14,20 @@ func _run() -> void:
 	_profile_root = "user://tests/main_menu_navigation_%d_%d" % [OS.get_process_id(), Time.get_ticks_usec()]
 	ProfileTestSupport.remove_tree(_profile_root)
 	_cleanup_settings_fixture()
-	_assert(PartyForgeSettingsStore.new().save_settings(PartyForgeSettings.new()).is_empty(), "navigation fixture starts from saved Player Mode")
+	var fixture_error := PartyForgeSettingsStore.new().save_settings(PartyForgeSettings.new())
+	_assert(fixture_error.is_empty(), "fixture setup: navigation starts from saved Player Mode")
+	if not fixture_error.is_empty():
+		await _finish(null)
+		return
 	var viewport: Viewport = root
 	root.size = Vector2i(1920, 1080)
 	viewport.gui_focus_changed.connect(_on_focus_changed)
-	var main := (load("res://scenes/game/main.tscn") as PackedScene).instantiate() as PartyForgeMain
+	var main_scene := load("res://scenes/game/main.tscn") as PackedScene
+	_assert(main_scene != null, "fixture setup: composed main scene loads")
+	if main_scene == null:
+		await _finish(null)
+		return
+	var main := main_scene.instantiate() as PartyForgeMain
 	main.profile_root = _profile_root
 	root.add_child(main)
 	await _frames(3)
@@ -49,6 +58,25 @@ func _run() -> void:
 	_assert(main.active_profile() != null and main.active_profile().display_name == "Task 8 Navigation", "controller activation creates the profile")
 	_assert(menu.is_open() and not settings.is_open(), "profile creation returns to the main menu")
 	_assert_focus(viewport, primary, "profile creation exact PrimaryAction return")
+	if main.active_profile() == null:
+		await _finish(main)
+		return
+
+	_assert(_ui_joy_mapping_has_device(&"ui_accept", JOY_BUTTON_A, -1), "ui_accept maps controller south face for any device")
+	_assert(_ui_joy_mapping_has_device(&"ui_cancel", JOY_BUTTON_B, -1), "ui_cancel maps controller B/Circle for any device")
+	await _joy_button(viewport, JOY_BUTTON_DPAD_DOWN, 1)
+	_assert_focus(viewport, menu_settings, "device-1 D-pad uses standard ui_down")
+	await _joy_button(viewport, JOY_BUTTON_A, 1)
+	_assert(settings.is_open(), "device-1 south face activates main-menu Settings")
+	if not settings.is_open():
+		await _key(viewport, KEY_ENTER)
+	await _joy_button(viewport, JOY_BUTTON_B, 1)
+	_assert(not settings.is_open(), "device-1 B/Circle closes Settings")
+	if settings.is_open():
+		await _key(viewport, KEY_ESCAPE)
+	_assert_focus(viewport, menu_settings, "device-1 cancel exact Settings return")
+	await _key(viewport, KEY_UP)
+	_assert_focus(viewport, primary, "alternate-device flow returns to PrimaryAction")
 
 	await _joy_motion(viewport, JOY_AXIS_LEFT_Y, 1.0)
 	await _joy_motion(viewport, JOY_AXIS_LEFT_Y, 0.0)
@@ -62,7 +90,6 @@ func _run() -> void:
 	_assert_focus_is_available(settings_focus, settings, "shoulder-selected Settings page")
 	await _joy_button(viewport, JOY_BUTTON_LEFT_SHOULDER)
 	_assert(tabs.current_tab == tab_before, "left shoulder restores the Settings tab")
-	_assert(InputMap.action_get_events(&"ui_cancel").any(func(event: InputEvent) -> bool: return event is InputEventJoypadButton and (event as InputEventJoypadButton).button_index == JOY_BUTTON_B), "ui_cancel maps controller B/Circle")
 	await _joy_button(viewport, JOY_BUTTON_B)
 	_assert(not settings.is_open() and menu.is_open(), "controller B closes Settings")
 	if settings.is_open():
@@ -107,8 +134,12 @@ func _run() -> void:
 	_assert(tabs.get_tab_control(tabs.current_tab) == additional, "shoulder navigation reaches Additional Settings")
 	var mode := additional.get_node("Layout/Mode") as OptionButton
 	_assert_focus(viewport, mode, "Additional Settings initial Mode focus")
-	mode.selected = PartyForgeSettings.Mode.DEVELOPER_MODE
-	mode.item_selected.emit(PartyForgeSettings.Mode.DEVELOPER_MODE)
+	await _key(viewport, KEY_ENTER)
+	_assert(mode.get_popup().visible, "keyboard Enter opens the real Mode dropdown")
+	await _key(viewport, KEY_DOWN)
+	await _key(viewport, KEY_ENTER)
+	_assert(not mode.get_popup().visible, "keyboard selection closes the real Mode dropdown")
+	_assert(mode.selected == PartyForgeSettings.Mode.DEVELOPER_MODE, "real keyboard input selects Developer Mode")
 	var apply := additional.get_node("Layout/ApplyAndReturn") as Button
 	var tab_guard := 0
 	while viewport.gui_get_focus_owner() != apply and tab_guard < 16:
@@ -149,9 +180,9 @@ func _key(viewport: Viewport, keycode: Key) -> void:
 	await process_frame
 
 
-func _joy_button(viewport: Viewport, button: JoyButton) -> void:
+func _joy_button(viewport: Viewport, button: JoyButton, device: int = 0) -> void:
 	var event := InputEventJoypadButton.new()
-	event.device = 0
+	event.device = device
 	event.button_index = button
 	event.pressed = true
 	viewport.push_input(event)
@@ -224,6 +255,14 @@ func _on_focus_changed(control: Control) -> void:
 	_assert(control.focus_mode != Control.FOCUS_NONE, "focus change never enters a disabled-focus control: %s" % control.get_path())
 	if control is BaseButton:
 		_assert(not (control as BaseButton).disabled, "focus change never enters a disabled button: %s" % control.get_path())
+
+
+func _ui_joy_mapping_has_device(action_id: StringName, button: JoyButton, device: int) -> bool:
+	return InputMap.action_get_events(action_id).any(func(event: InputEvent) -> bool:
+		return event is InputEventJoypadButton \
+			and (event as InputEventJoypadButton).button_index == button \
+			and event.device == device
+	)
 
 
 func _finish(main: PartyForgeMain) -> void:
