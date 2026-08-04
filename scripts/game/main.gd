@@ -41,6 +41,7 @@ var catalog_valid := false
 var level_refresh_scheduled := false
 var saved_settings: PartyForgeSettings
 var settings_store: PartyForgeSettingsStore
+var settings_path := PartyForgeSettingsStore.DEFAULT_PATH
 var profile_root := ProfileStore.DEFAULT_ROOT
 var profile_manager: ProfileManager
 var profile_bootstrap_error := ""
@@ -58,13 +59,13 @@ func _ready() -> void:
 	initialized = true
 	_cache_nodes()
 	settings_store = PartyForgeSettingsStore.new()
-	saved_settings = settings_store.load_settings()
+	saved_settings = settings_store.load_settings(settings_path)
 	profile_manager = ProfileManager.new()
 	profile_bootstrap_error = profile_manager.bootstrap(profile_root)
 	if not profile_bootstrap_error.is_empty():
 		push_error(profile_bootstrap_error)
 	var settings_screen := get_node("SettingsScreen") as SettingsScreen
-	settings_screen.configure(settings_store, saved_settings, profile_manager)
+	settings_screen.configure(settings_store, saved_settings, profile_manager, settings_path)
 	_expose_profile_bootstrap_diagnostic()
 	catalog = GameCatalog.load_defaults()
 	catalog_valid = _validate_catalog(catalog)

@@ -311,6 +311,8 @@ func _test_additional_settings_page(failures: Array[String]) -> void:
 func _test_settings_apply_cancel_and_save_error(failures: Array[String]) -> void:
 	if not ResourceLoader.exists(SETTINGS_SCENE_PATH) or not ResourceLoader.exists(ADDITIONAL_SETTINGS_SCENE_PATH):
 		return
+	var custom_settings_path := "user://tests/settings_screen_custom_%d_%d.cfg" % [OS.get_process_id(), Time.get_ticks_usec()]
+	_cleanup_settings_artifacts(custom_settings_path)
 	var original_files := _backup_default_settings_artifacts()
 	_cleanup_default_settings_artifacts()
 	var tree := Engine.get_main_loop() as SceneTree
@@ -322,7 +324,7 @@ func _test_settings_apply_cancel_and_save_error(failures: Array[String]) -> void
 	saved.mode = PartyForgeSettings.Mode.DEVELOPER_MODE
 	saved.party_capacity_override = 12
 	saved.set("reduced_motion", false)
-	screen.call("configure", PartyForgeSettingsStore.new(), saved)
+	screen.call("configure", PartyForgeSettingsStore.new(), saved, null, custom_settings_path)
 	screen.call("open")
 	var page := screen.get_node("Overlay/Frame/Layout/Tabs/Additional Settings")
 	var game_page := screen.get_node("Overlay/Frame/Layout/Tabs/Game Settings")
@@ -353,13 +355,14 @@ func _test_settings_apply_cancel_and_save_error(failures: Array[String]) -> void
 	TestAssertions.truthy(not bool(screen.call("is_open")), "successful Apply closes Settings", failures)
 	TestAssertions.equal(applied.size(), 1, "successful Apply emits once", failures)
 	TestAssertions.equal((screen.call("current_settings") as PartyForgeSettings).party_capacity_override, 9, "successful Apply replaces current settings", failures)
-	TestAssertions.equal(PartyForgeSettingsStore.new().load_settings().party_capacity_override, 9, "successful Apply persists through the store", failures)
+	TestAssertions.equal(PartyForgeSettingsStore.new().load_settings(custom_settings_path).party_capacity_override, 9, "successful Apply persists through the configured store path", failures)
 	TestAssertions.equal((screen.call("current_settings") as PartyForgeSettings).get("reduced_motion"), true, "successful Apply writes reduced motion", failures)
-	TestAssertions.equal(PartyForgeSettingsStore.new().load_settings().get("reduced_motion"), true, "successful Apply persists reduced motion", failures)
+	TestAssertions.equal(PartyForgeSettingsStore.new().load_settings(custom_settings_path).get("reduced_motion"), true, "successful Apply persists reduced motion at the configured path", failures)
 	if not applied.is_empty():
 		applied[0].party_capacity_override = 2
 	TestAssertions.equal((screen.call("current_settings") as PartyForgeSettings).party_capacity_override, 9, "applied signal receives an isolated copy", failures)
 	screen.free()
+	_cleanup_settings_artifacts(custom_settings_path)
 	_cleanup_default_settings_artifacts()
 
 	var failing_screen := (load(SETTINGS_SCENE_PATH) as PackedScene).instantiate()
@@ -401,7 +404,11 @@ func _test_settings_apply_cancel_and_save_error(failures: Array[String]) -> void
 
 
 func _cleanup_default_settings_artifacts() -> void:
-	for path: String in [PartyForgeSettingsStore.DEFAULT_PATH, "%s.tmp" % PartyForgeSettingsStore.DEFAULT_PATH, "%s.bak" % PartyForgeSettingsStore.DEFAULT_PATH]:
+	_cleanup_settings_artifacts(PartyForgeSettingsStore.DEFAULT_PATH)
+
+
+func _cleanup_settings_artifacts(settings_path: String) -> void:
+	for path: String in [settings_path, "%s.tmp" % settings_path, "%s.bak" % settings_path]:
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
 
 

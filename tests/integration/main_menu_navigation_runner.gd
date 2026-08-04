@@ -4,6 +4,7 @@ const TREE_ID := "party-forge-city-v1"
 
 var _failures: Array[String] = []
 var _profile_root := ""
+var _settings_path := ""
 
 
 func _initialize() -> void:
@@ -12,9 +13,11 @@ func _initialize() -> void:
 
 func _run() -> void:
 	_profile_root = "user://tests/main_menu_navigation_%d_%d" % [OS.get_process_id(), Time.get_ticks_usec()]
+	_settings_path = "%s/party_forge_settings.cfg" % _profile_root
 	ProfileTestSupport.remove_tree(_profile_root)
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(_profile_root))
 	_cleanup_settings_fixture()
-	var fixture_error := PartyForgeSettingsStore.new().save_settings(PartyForgeSettings.new())
+	var fixture_error := PartyForgeSettingsStore.new().save_settings(PartyForgeSettings.new(), _settings_path)
 	_assert(fixture_error.is_empty(), "fixture setup: navigation starts from saved Player Mode")
 	if not fixture_error.is_empty():
 		await _finish(null)
@@ -29,6 +32,7 @@ func _run() -> void:
 		return
 	var main := main_scene.instantiate() as PartyForgeMain
 	main.profile_root = _profile_root
+	main.settings_path = _settings_path
 	root.add_child(main)
 	await _frames(3)
 
@@ -150,7 +154,7 @@ func _run() -> void:
 	await _key(viewport, KEY_ENTER)
 	_assert(not settings.is_open() and menu.is_open(), "Enter saves Developer Mode and returns to menu")
 	_assert(main.saved_settings.mode == PartyForgeSettings.Mode.DEVELOPER_MODE, "Developer Mode is saved into the composed main state")
-	_assert(PartyForgeSettingsStore.new().load_settings().mode == PartyForgeSettings.Mode.DEVELOPER_MODE, "Developer Mode persists to the real settings store")
+	_assert(PartyForgeSettingsStore.new().load_settings(_settings_path).mode == PartyForgeSettings.Mode.DEVELOPER_MODE, "Developer Mode persists to the disposable settings store")
 	_assert(quick_start.visible and not quick_start.disabled, "saved Developer Mode exposes Quick Start")
 	_assert_focus(viewport, menu_settings, "Developer settings exact Settings return")
 	await _joy_motion(viewport, JOY_AXIS_LEFT_Y, -1.0)
@@ -289,6 +293,8 @@ func _assert(condition: bool, message: String) -> void:
 
 
 func _cleanup_settings_fixture() -> void:
-	for path: String in [PartyForgeSettingsStore.DEFAULT_PATH, "%s.tmp" % PartyForgeSettingsStore.DEFAULT_PATH, "%s.bak" % PartyForgeSettingsStore.DEFAULT_PATH]:
+	if _settings_path.is_empty():
+		return
+	for path: String in [_settings_path, "%s.tmp" % _settings_path, "%s.bak" % _settings_path]:
 		if FileAccess.file_exists(path):
 			DirAccess.remove_absolute(ProjectSettings.globalize_path(path))

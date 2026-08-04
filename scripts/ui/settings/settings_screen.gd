@@ -8,6 +8,7 @@ var _store: PartyForgeSettingsStore
 var _current_settings: PartyForgeSettings = PartyForgeSettings.new()
 var _draft: PartyForgeSettings = PartyForgeSettings.new()
 var _profile_manager: ProfileManager
+var _settings_path := PartyForgeSettingsStore.DEFAULT_PATH
 var _return_focus: Control
 var _child_return_focus: Control
 var _child_resume_pending := false
@@ -33,11 +34,12 @@ func _ready() -> void:
 		call_deferred(&"_focus_active_page")
 
 
-func configure(store: PartyForgeSettingsStore, settings: PartyForgeSettings, profile_manager: ProfileManager = null) -> void:
+func configure(store: PartyForgeSettingsStore, settings: PartyForgeSettings, profile_manager: ProfileManager = null, settings_path: String = PartyForgeSettingsStore.DEFAULT_PATH) -> void:
 	_store = store
 	_current_settings = settings.copy() if settings != null else PartyForgeSettings.new()
 	_draft = _current_settings.copy()
 	_profile_manager = profile_manager
+	_settings_path = settings_path
 	_profiles_page().bind(_profile_manager)
 
 
@@ -145,7 +147,7 @@ func _apply_and_return() -> void:
 	_game_page().call(&"write_to", _draft)
 	_additional_page().write_to(_draft)
 	_draft.normalize()
-	var error := _store.save_settings(_draft) if _store != null else "PARTY_FORGE_SETTINGS_SAVE_ERROR reason=store is missing"
+	var error := _store.save_settings(_draft, _settings_path) if _store != null else "PARTY_FORGE_SETTINGS_SAVE_ERROR reason=store is missing"
 	if not error.is_empty():
 		push_error(error)
 		_status().text = "Settings could not be saved. Check that the settings folder is writable, then try again."
