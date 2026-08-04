@@ -21,6 +21,7 @@ func _run() -> void:
 	var profiles := settings.get_node("Overlay/Frame/Layout/Tabs/Profiles") as ProfilesSettingsPage
 	var tabs := settings.get_node("Overlay/Frame/Layout/Tabs") as TabContainer
 	var profile_name := profiles.get_node("Layout/CreateRow/ProfileName") as LineEdit
+	var run_hud := main.get_node("HUD/Margin") as Control
 	_assert(manager != null, "main owns ProfileManager")
 	_assert(manager.profiles().is_empty(), "fresh boot has no profiles")
 	_assert(main.active_profile() == null, "fresh boot has no active profile")
@@ -28,6 +29,7 @@ func _run() -> void:
 	_assert(tabs.get_tab_control(tabs.current_tab) == profiles, "fresh boot selects Profiles")
 	_assert(profiles.initial_focus() == profile_name, "fresh Profiles target is ProfileName")
 	_assert(root.gui_get_focus_owner() == profile_name, "fresh boot focuses ProfileName")
+	_assert(not run_hud.visible, "pre-run arena HUD remains hidden")
 	var selector := main.get_node("HUD/ClassSelection") as ClassSelectionPanel
 	profile_name.grab_focus()
 	var ready_focus_fixture := (load("res://scenes/ui/hud.tscn") as PackedScene).instantiate() as HUD
@@ -70,6 +72,7 @@ func _run() -> void:
 	_assert(party.members.size() == 1 and party.members[0].class_definition.id == &"fighter", "Fighter launch initializes the party")
 	_assert(game_run.current_state() == RunStateMachine.State.RUNNING, "Fighter launch begins the arena flow")
 	_assert(not (main.get_node("HUD/ClassSelection") as Control).visible, "arena flow closes class selection")
+	_assert(run_hud.visible, "successful arena start reveals the run HUD")
 
 	paused = false
 	main.free()
