@@ -1,14 +1,6 @@
 extends RefCounted
 
-class StubRunContext extends RefCounted:
-	var run_player_id: StringName
-	var player_slot_index: int
-	var profile_id: String
-
-	func _init(run_id: StringName, slot: int, owned_profile_id: String) -> void:
-		run_player_id = run_id
-		player_slot_index = slot
-		profile_id = owned_profile_id
+var _parties: Array[PartyManager] = []
 
 func run() -> Array[String]:
 	var failures: Array[String] = []
@@ -16,14 +8,15 @@ func run() -> Array[String]:
 	_assert_unassigned_and_sorted_contract(failures)
 	_assert_device_reassignment_contract(failures)
 	_assert_join_policy(failures)
+	for party: PartyManager in _parties:
+		party.free()
+	_parties.clear()
 	return failures
 
 func _assert_registration_contract(failures: Array[String]) -> void:
 	var registry := RunContextRegistry.new()
 	TestAssertions.equal(registry.register_context(null).code, RunContextRegistrationResult.Code.INVALID_CONTEXT, "null context is invalid", failures)
-	TestAssertions.equal(registry.register_context(_context(&"", 0, "profile-alpha")).code, RunContextRegistrationResult.Code.INVALID_CONTEXT, "run player ID is required", failures)
-	TestAssertions.equal(registry.register_context(_context(&"player_alpha", 0, "")).code, RunContextRegistrationResult.Code.INVALID_CONTEXT, "profile ID is required", failures)
-	TestAssertions.equal(registry.register_context(_context(&"player_alpha", -1, "profile-alpha")).code, RunContextRegistrationResult.Code.INVALID_CONTEXT, "slot must be nonnegative", failures)
+	TestAssertions.equal(registry.register_context(PlayerRunContext.new()).code, RunContextRegistrationResult.Code.INVALID_CONTEXT, "unconfigured context is invalid", failures)
 	var alpha := _context(&"player_alpha", 0, "profile-alpha")
 	TestAssertions.equal(registry.register_context(alpha, 0).code, RunContextRegistrationResult.Code.OK, "first context registers", failures)
 	TestAssertions.equal(registry.register_context(alpha, 0).code, RunContextRegistrationResult.Code.DUPLICATE_RUN_PLAYER, "run player is unique", failures)
@@ -46,7 +39,7 @@ func _assert_unassigned_and_sorted_contract(failures: Array[String]) -> void:
 	TestAssertions.equal(registry.register_context(early_slot, -1).code, RunContextRegistrationResult.Code.OK, "unassigned sentinel may repeat", failures)
 	TestAssertions.equal(registry.device_for(&"player_late"), -1, "omitted device remains unassigned", failures)
 	TestAssertions.equal(registry.device_for(&"player_early"), -1, "explicit negative device remains unassigned", failures)
-	var sorted := registry.all_contexts()
+	var sorted: Array[PlayerRunContext] = registry.all_contexts()
 	TestAssertions.equal(sorted.size(), 2, "both unassigned contexts register", failures)
 	TestAssertions.truthy(sorted[0] == early_slot, "contexts sort by ascending slot", failures)
 	TestAssertions.truthy(sorted[1] == late_slot, "registration order does not control sorting", failures)
@@ -72,5 +65,12 @@ func _assert_join_policy(failures: Array[String]) -> void:
 	TestAssertions.truthy(not RunJoinPolicy.can_accept(&"adventure", false, false), "Adventure rejects away from safe checkpoint", failures)
 	TestAssertions.truthy(not RunJoinPolicy.can_accept(&"unknown", false, true), "unknown mode rejects", failures)
 
-func _context(run_id: StringName, slot: int, profile_id: String) -> RefCounted:
-	return StubRunContext.new(run_id, slot, profile_id)
+func _context(run_id: StringName, slot: int, profile_id: String) -> PlayerRunContext:
+	var catalog := GameCatalog.load_defaults()
+	var party := PartyManager.new()
+	party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
+	_parties.append(party)
+	var context := PlayerRunContext.new()
+	var errors := context.configure(run_id, slot, ProfileState.new_profile(profile_id, "Registry Fixture", 1000), 1337, party, 100)
+	assert(errors.is_empty())
+	return context

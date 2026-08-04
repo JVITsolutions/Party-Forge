@@ -8,12 +8,12 @@ var _by_device: Dictionary = {}
 var _device_by_run_player: Dictionary = {}
 var _arena_roster_locked := false
 
-func register_context(context: RefCounted, device_id: int = -1) -> RunContextRegistrationResult:
+func register_context(context: PlayerRunContext, device_id: int = -1) -> RunContextRegistrationResult:
 	if context == null:
 		return RunContextRegistrationResult.failure(RunContextRegistrationResult.Code.INVALID_CONTEXT, "context is null")
-	var run_player_id := StringName(context.get("run_player_id"))
-	var profile_id := String(context.get("profile_id"))
-	var slot := int(context.get("player_slot_index"))
+	var run_player_id := context.run_player_id
+	var profile_id := context.profile_id
+	var slot := context.player_slot_index
 	if run_player_id.is_empty() or profile_id.is_empty() or slot < 0:
 		return RunContextRegistrationResult.failure(RunContextRegistrationResult.Code.INVALID_CONTEXT, "identity fields are invalid")
 	if _arena_roster_locked:
@@ -34,15 +34,15 @@ func register_context(context: RefCounted, device_id: int = -1) -> RunContextReg
 		_device_by_run_player[run_player_id] = device_id
 	return RunContextRegistrationResult.success()
 
-func context_for(run_player_id: StringName) -> RefCounted:
-	return _by_run_player.get(run_player_id) as RefCounted
+func context_for(run_player_id: StringName) -> PlayerRunContext:
+	return _by_run_player.get(run_player_id) as PlayerRunContext
 
-func all_contexts() -> Array[RefCounted]:
-	var result: Array[RefCounted] = []
+func all_contexts() -> Array[PlayerRunContext]:
+	var result: Array[PlayerRunContext] = []
 	for value: Variant in _by_run_player.values():
-		result.append(value as RefCounted)
-	result.sort_custom(func(left: RefCounted, right: RefCounted) -> bool:
-		return int(left.get("player_slot_index")) < int(right.get("player_slot_index")))
+		result.append(value as PlayerRunContext)
+	result.sort_custom(func(left: PlayerRunContext, right: PlayerRunContext) -> bool:
+		return left.player_slot_index < right.player_slot_index)
 	return result
 
 func lock_arena_roster() -> void:
