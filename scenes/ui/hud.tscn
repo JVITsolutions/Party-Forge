@@ -118,5 +118,11 @@ layout_mode = 2
 focus_mode = 2
 text = "Settings"
 
+[node name="Back" type="Button" parent="ClassSelection/Content/Actions"]
+custom_minimum_size = Vector2(220, 56)
+layout_mode = 2
+focus_mode = 2
+text = "Back"
+
 [node name="LevelUpPanel" parent="." instance=ExtResource("2")]
 [node name="RunResultPanel" parent="." instance=ExtResource("3")]
