@@ -30,11 +30,11 @@
 - Produces: `PartyForgeMain.settings_path: String`, defaulting to `PartyForgeSettingsStore.DEFAULT_PATH`.
 - Produces: `SettingsScreen.configure(store, settings, profile_manager = null, settings_path = PartyForgeSettingsStore.DEFAULT_PATH)`.
 
-- [ ] **Step 1: Write the failing custom-path persistence test**
+- [x] **Step 1: Write the failing custom-path persistence test**
 
 Add a test fixture that configures `SettingsScreen` with a unique `user://tests/...cfg` path, applies a changed setting, and asserts that `PartyForgeSettingsStore.load_settings(custom_path)` contains the change.
 
-- [ ] **Step 2: Run the focused test and verify RED**
+- [x] **Step 2: Run the focused test and verify RED**
 
 Run:
 
@@ -44,19 +44,19 @@ godot --headless --path . --quit-after 60 --script res://tests/focused_test_runn
 
 Expected: FAIL because `SettingsScreen.configure` does not yet accept or use the custom path.
 
-- [ ] **Step 3: Implement the minimal settings-path injection**
+- [x] **Step 3: Implement the minimal settings-path injection**
 
 Store the configured path in `SettingsScreen`, pass it to `save_settings`, and have `PartyForgeMain` use its public `settings_path` for both load and screen configuration.
 
-- [ ] **Step 4: Move the integration runner to its disposable path**
+- [x] **Step 4: Move the integration runner to its disposable path**
 
 Set `main.settings_path` before adding it to the tree, save/load only that path, and make cleanup remove only that path plus its `.tmp` and `.bak` artifacts.
 
-- [ ] **Step 5: Verify GREEN and the standalone runner**
+- [x] **Step 5: Verify GREEN and the standalone runner**
 
 Run the focused settings test and `main_menu_navigation_runner.gd`; both must pass.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```powershell
 git add scripts/game/main.gd scripts/ui/settings/settings_screen.gd tests/unit/test_settings_screen.gd tests/integration/main_menu_navigation_runner.gd
@@ -73,15 +73,15 @@ git commit -m "test: isolate main menu navigation settings"
 - Produces: private `_cancel_expected()` behavior that clears the active sequence and restores locomotion without emitting `PARTY_FORGE_ATTACK_SEQUENCE_ERROR`.
 - Preserves: `cancel(reason)` as the diagnostic path for missing events, stale protocol state, failed presentation, and explicit abnormal cancellation.
 
-- [ ] **Step 1: Write the failing cancellation assertions**
+- [x] **Step 1: Write the failing cancellation assertions**
 
 Record the sequence-error count before invalidating the locked target and before downing the owner. Assert that each release clears the sequence, performs no execution or retargeting, restores locomotion, and leaves the error count unchanged.
 
-- [ ] **Step 2: Run the focused test and verify RED**
+- [x] **Step 2: Run the focused test and verify RED**
 
 Expected: FAIL because both normal races currently call `cancel(reason)`, which emits `PARTY_FORGE_ATTACK_SEQUENCE_ERROR`.
 
-- [ ] **Step 3: Implement the minimal expected-cancellation path**
+- [x] **Step 3: Implement the minimal expected-cancellation path**
 
 Add:
 
@@ -93,11 +93,11 @@ func _cancel_expected() -> void:
 
 Use it only when the locked target is no longer valid at release or the owner becomes downed at release.
 
-- [ ] **Step 4: Verify GREEN**
+- [x] **Step 4: Verify GREEN**
 
 Run `tests/unit/test_attack_sequence_controller.gd` and the playable-class presentation test. Genuine stale, duplicate, and missing-event diagnostics must still be asserted.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```powershell
 git add tests/unit/test_attack_sequence_controller.gd scripts/combat/attack_sequence_controller.gd
@@ -122,19 +122,19 @@ git commit -m "fix: cancel invalid attack targets quietly"
 **Interfaces:**
 - Preserves all public signatures except removing the unused private `profile` argument from `_requirements_pass`.
 
-- [ ] **Step 1: Apply behavior-preserving warning corrections**
+- [x] **Step 1: Apply behavior-preserving warning corrections**
 
 Rename shadowing parameters/locals, replace incompatible ternaries with explicit branches, use explicit enum casts, express intended integer flooring explicitly, remove the unused private argument, and rename the passive-tree projection parameter.
 
-- [ ] **Step 2: Run focused owning suites**
+- [x] **Step 2: Run focused owning suites**
 
 Run the settings, profile, projectile, ledger, class-selection, and passive-tree focused tests. Expected: all pass with no new failure marker.
 
-- [ ] **Step 3: Run a fresh import and full suite**
+- [x] **Step 3: Run a fresh import and full suite**
 
 Expected: import exit 0 with zero script/parse/loader errors and exact `TEST_SUMMARY: PASS (112 suites)`.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```powershell
 git add scripts
@@ -149,12 +149,12 @@ git commit -m "chore: resolve actionable gdscript warnings"
 **Interfaces:**
 - Produces: exact commands, pass markers, known remaining diagnostics, and the deferred physical-controller row.
 
-- [ ] **Step 1: Run `git diff --check`, focused regressions, full import, complete suite, and startup smoke**
+- [x] **Step 1: Run `git diff --check`, focused regressions, full import, complete suite, and startup smoke**
 
-- [ ] **Step 2: Remove only verification-generated sidecars through the established validated allowlist**
+- [x] **Step 2: Remove only verification-generated sidecars through the established validated allowlist**
 
-- [ ] **Step 3: Obtain a fresh read-only review**
+- [x] **Step 3: Obtain a fresh read-only review**
 
-- [ ] **Step 4: Record evidence and commit the verification document**
+- [x] **Step 4: Record evidence and commit the verification document**
 
-- [ ] **Step 5: Recheck clean authoritative `main` before any fast-forward integration**
+- [x] **Step 5: Recheck clean authoritative `main` before any fast-forward integration**
