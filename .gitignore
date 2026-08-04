@@ -1,3 +1,6 @@
 .godot/
 .superpowers/
 .worktrees/
+
+# Godot regenerates source-adjacent image import sidecars in this project.
+*.png.import
