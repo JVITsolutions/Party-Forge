@@ -8,6 +8,8 @@ const CLASS_IDS: Array[StringName] = [
 func run() -> Array[String]:
     var failures: Array[String] = []
     _test_experience_system_context_facade(failures)
+    _test_experience_system_rejects_non_leader_bindings(failures)
+    _test_experience_system_multiplier_ownership(failures)
     var fighter := load("res://data/progression/class_growth/fighter.tres") as ClassGrowthDefinition
     var tuning := load("res://data/progression/default_experience.tres") as ExperienceTuning
     var initial := CharacterProgressionState.fresh(1, tuning)
@@ -114,6 +116,97 @@ func _test_experience_system_context_facade(failures: Array[String]) -> void:
     TestAssertions.equal(emitted_levels, [2], "follower level does not proxy through facade", failures)
     TestAssertions.truthy(facade.consume_pending_level(), "facade consumes one leader queue entry", failures)
     TestAssertions.equal(facade.pending_level_numbers, [], "facade consumption is FIFO", failures)
+    facade.free()
+    party.free()
+
+func _test_experience_system_rejects_non_leader_bindings(failures: Array[String]) -> void:
+    var catalog := GameCatalog.load_defaults()
+    var party := PartyManager.new()
+    party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
+    party.recruit(catalog.class_by_id(&"ranger"))
+    var context := PlayerRunContext.new()
+    var profile := ProfileState.new_profile("profile-invalid01", "Invalid Binding", 1000)
+    TestAssertions.equal(
+        context.configure(&"player_invalid", 0, profile, 1337, party, 150),
+        PackedStringArray(),
+        "invalid-binding fixture context configures",
+        failures,
+    )
+    context.award_experience(1, 14)
+    TestAssertions.equal(context.pending_leader_levels(), [2], "invalid-binding fixture has a real leader queue", failures)
+
+    var facade := ExperienceSystem.new()
+    var emitted_levels: Array[int] = []
+    facade.level_ready.connect(func(level_value: int) -> void: emitted_levels.append(level_value))
+    var invalid_bindings: Array[Dictionary] = [
+        {"context": context, "member_id": 2, "label": "follower"},
+        {"context": context, "member_id": 99, "label": "nonexistent positive member"},
+        {"context": context, "member_id": 0, "label": "nonpositive member"},
+        {"context": null, "member_id": 1, "label": "null context"},
+        {"context": PlayerRunContext.new(), "member_id": 1, "label": "unconfigured context"},
+    ]
+    for binding: Dictionary in invalid_bindings:
+        var label := String(binding.label)
+        facade.configure_multiplier(250)
+        facade.configure_context(binding.context as PlayerRunContext, int(binding.member_id))
+        TestAssertions.equal(facade.run_context, null, "%s leaves no facade context" % label, failures)
+        TestAssertions.equal(facade.leader_member_id, 0, "%s leaves no facade leader" % label, failures)
+        TestAssertions.equal(facade.level, 1, "%s keeps safe level" % label, failures)
+        TestAssertions.equal(facade.experience, 0, "%s keeps safe experience" % label, failures)
+        TestAssertions.equal(facade.pending_levels, 0, "%s keeps safe pending count" % label, failures)
+        TestAssertions.equal(facade.pending_level_numbers, [], "%s keeps safe pending queue" % label, failures)
+        TestAssertions.equal(facade.experience_for_next_level(), 20, "%s keeps safe requirement" % label, failures)
+        TestAssertions.equal(facade.current_pending_level(), 0, "%s keeps safe queue front" % label, failures)
+        TestAssertions.near(facade.fractional_experience, 0.0, 0.001, "%s keeps safe fractional XP" % label, failures)
+        TestAssertions.near(facade.experience_multiplier, 1.0, 0.001, "%s keeps safe multiplier" % label, failures)
+        var leader_before := context.progression_for(1).to_snapshot()
+        var follower_before := context.progression_for(2).to_snapshot()
+        facade.add_experience(20)
+        TestAssertions.equal(context.progression_for(1).to_snapshot(), leader_before, "%s cannot award leader XP" % label, failures)
+        TestAssertions.equal(context.progression_for(2).to_snapshot(), follower_before, "%s cannot award follower XP" % label, failures)
+        TestAssertions.truthy(not facade.consume_pending_level(), "%s cannot consume a level" % label, failures)
+        TestAssertions.equal(context.pending_leader_levels(), [2], "%s cannot consume the real leader queue" % label, failures)
+        context.member_level_ready.emit(1, 77)
+        context.member_level_ready.emit(2, 77)
+        TestAssertions.equal(emitted_levels, [], "%s binds no level-ready effects" % label, failures)
+    facade.free()
+    party.free()
+
+func _test_experience_system_multiplier_ownership(failures: Array[String]) -> void:
+    var catalog := GameCatalog.load_defaults()
+    var party := PartyManager.new()
+    party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
+    var context := PlayerRunContext.new()
+    var profile := ProfileState.new_profile("profile-scale001", "Scale Owner", 1000)
+    TestAssertions.equal(
+        context.configure(&"player_scale", 0, profile, 7331, party, 150),
+        PackedStringArray(),
+        "multiplier fixture context configures",
+        failures,
+    )
+    var facade := ExperienceSystem.new()
+    facade.configure_multiplier(700)
+    TestAssertions.equal(facade.configured_multiplier_percent, 700, "pre-bind multiplier remains a temporary compatibility value", failures)
+    TestAssertions.near(facade.experience_multiplier, 7.0, 0.001, "pre-bind float multiplier mirrors compatibility value", failures)
+
+    facade.configure_context(context, 1)
+    TestAssertions.equal(facade.configured_multiplier_percent, 150, "bound facade proxies context multiplier percent", failures)
+    TestAssertions.near(facade.experience_multiplier, 1.5, 0.001, "bound facade proxies context float multiplier", failures)
+    facade.configure_multiplier(900)
+    TestAssertions.equal(facade.configured_multiplier_percent, 150, "bound compatibility configuration cannot drift from context", failures)
+    facade.add_experience(1)
+    facade.add_experience(1)
+    TestAssertions.equal(context.progression_for(1).experience, 3, "facade delegates two awards for exactly one 150 percent scaling pass", failures)
+    TestAssertions.near(context.progression_for(1).fractional_experience, 0.0, 0.001, "authoritative context owns fractional scaling carry", failures)
+
+    facade.configure_context(null, 0)
+    TestAssertions.equal(facade.configured_multiplier_percent, 100, "unconfigure clears the temporary multiplier", failures)
+    TestAssertions.near(facade.experience_multiplier, 1.0, 0.001, "unconfigured facade returns safe multiplier", failures)
+    facade.configure_multiplier(250)
+    TestAssertions.equal(facade.configured_multiplier_percent, 250, "temporary multiplier can be configured again after unconfigure", failures)
+    facade.configure_context(PlayerRunContext.new(), 1)
+    TestAssertions.equal(facade.configured_multiplier_percent, 100, "rejected reconfiguration clears temporary multiplier", failures)
+    TestAssertions.equal(facade.run_context, null, "rejected reconfiguration leaves facade unbound", failures)
     facade.free()
     party.free()
 
