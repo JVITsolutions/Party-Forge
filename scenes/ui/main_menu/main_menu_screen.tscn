@@ -1,0 +1,197 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/ui/main_menu/main_menu_screen.gd" id="1_screen"]
+
+[node name="MainMenuScreen" type="CanvasLayer"]
+process_mode = 3
+layer = 5
+visible = false
+script = ExtResource("1_screen")
+
+[node name="Backdrop" type="Control" parent="."]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="Sky" type="ColorRect" parent="Backdrop"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0.025, 0.055, 0.11, 1)
+
+[node name="HorizonGlow" type="ColorRect" parent="Backdrop"]
+layout_mode = 1
+anchors_preset = 12
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_top = -300.0
+grow_horizontal = 2
+grow_vertical = 0
+mouse_filter = 2
+color = Color(0.16, 0.095, 0.13, 1)
+
+[node name="CityMass" type="ColorRect" parent="Backdrop"]
+layout_mode = 1
+anchors_preset = 12
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_top = -190.0
+grow_horizontal = 2
+grow_vertical = 0
+mouse_filter = 2
+color = Color(0.018, 0.022, 0.037, 1)
+
+[node name="ForgeTower" type="ColorRect" parent="Backdrop"]
+layout_mode = 1
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = 180.0
+offset_top = -390.0
+offset_right = 270.0
+grow_horizontal = 2
+grow_vertical = 0
+mouse_filter = 2
+color = Color(0.055, 0.06, 0.09, 1)
+
+[node name="ForgeLight" type="ColorRect" parent="Backdrop/ForgeTower"]
+layout_mode = 1
+anchors_preset = 10
+anchor_right = 1.0
+offset_left = 18.0
+offset_top = 38.0
+offset_right = -18.0
+offset_bottom = 45.0
+grow_horizontal = 2
+mouse_filter = 2
+color = Color(0.95, 0.5, 0.16, 1)
+
+[node name="Title" type="Label" parent="."]
+layout_mode = 3
+anchors_preset = 0
+anchor_left = 0.08
+anchor_top = 0.1
+anchor_right = 0.54
+anchor_bottom = 0.2
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.96, 0.86, 0.65, 1)
+theme_override_font_sizes/font_size = 54
+text = "PARTY FORGE"
+vertical_alignment = 1
+
+[node name="ActiveProfile" type="Label" parent="."]
+layout_mode = 3
+anchors_preset = 0
+anchor_left = 0.085
+anchor_top = 0.215
+anchor_right = 0.54
+anchor_bottom = 0.27
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.76, 0.81, 0.9, 1)
+theme_override_font_sizes/font_size = 20
+text = "No active profile"
+vertical_alignment = 1
+
+[node name="PrimaryAction" type="Button" parent="."]
+custom_minimum_size = Vector2(280, 56)
+layout_mode = 3
+anchors_preset = 0
+anchor_left = 0.09
+anchor_top = 0.33
+anchor_right = 0.39
+anchor_bottom = 0.405
+grow_horizontal = 2
+grow_vertical = 2
+focus_mode = 2
+theme_override_font_sizes/font_size = 24
+text = "Play"
+
+[node name="CityTree" type="Button" parent="."]
+visible = false
+custom_minimum_size = Vector2(280, 50)
+layout_mode = 3
+anchors_preset = 0
+anchor_left = 0.09
+anchor_top = 0.425
+anchor_right = 0.39
+anchor_bottom = 0.495
+grow_horizontal = 2
+grow_vertical = 2
+focus_mode = 0
+theme_override_font_sizes/font_size = 20
+text = "City Passive Tree"
+
+[node name="DeveloperQuickStart" type="Button" parent="."]
+visible = false
+custom_minimum_size = Vector2(280, 50)
+layout_mode = 3
+anchors_preset = 0
+anchor_left = 0.09
+anchor_top = 0.515
+anchor_right = 0.39
+anchor_bottom = 0.585
+grow_horizontal = 2
+grow_vertical = 2
+focus_mode = 0
+theme_override_font_sizes/font_size = 20
+text = "Developer Quick Start"
+
+[node name="Settings" type="Button" parent="."]
+custom_minimum_size = Vector2(280, 50)
+layout_mode = 3
+anchors_preset = 0
+anchor_left = 0.09
+anchor_top = 0.605
+anchor_right = 0.39
+anchor_bottom = 0.675
+grow_horizontal = 2
+grow_vertical = 2
+focus_mode = 2
+theme_override_font_sizes/font_size = 20
+text = "Settings"
+
+[node name="Quit" type="Button" parent="."]
+custom_minimum_size = Vector2(280, 50)
+layout_mode = 3
+anchors_preset = 0
+anchor_left = 0.09
+anchor_top = 0.695
+anchor_right = 0.39
+anchor_bottom = 0.765
+grow_horizontal = 2
+grow_vertical = 2
+focus_mode = 2
+theme_override_font_sizes/font_size = 20
+text = "Quit"
+
+[node name="Status" type="Label" parent="."]
+layout_mode = 3
+anchors_preset = 0
+anchor_left = 0.08
+anchor_top = 0.81
+anchor_right = 0.54
+anchor_bottom = 0.9
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.72, 0.75, 0.82, 1)
+theme_override_font_sizes/font_size = 18
+text = "Create or choose a profile to play."
+vertical_alignment = 1
+autowrap_mode = 2
