@@ -330,6 +330,8 @@ func _on_prologue_resume_requested() -> void:
 
 
 func _on_developer_quick_start_requested() -> void:
+	if not _developer_quick_start_surface_active():
+		return
 	var denial_status := _developer_quick_start_denial()
 	if not denial_status.is_empty():
 		_fail_developer_quick_start(denial_status)
@@ -338,14 +340,28 @@ func _on_developer_quick_start_requested() -> void:
 		_fail_developer_quick_start(DEVELOPER_QUICK_START_UNAVAILABLE_STATUS)
 
 
+func _developer_quick_start_surface_active() -> bool:
+	return (
+		(get_node("MainMenuScreen") as MainMenuScreen).is_open()
+		and not run_started
+		and not (get_node("HUD/ClassSelection") as ClassSelectionPanel).is_open()
+		and not (get_node("SettingsScreen") as SettingsScreen).is_open()
+		and not _city_tree_is_open()
+	)
+
+
 func _developer_quick_start_denial() -> String:
 	if saved_settings == null or saved_settings.mode != PartyForgeSettings.Mode.DEVELOPER_MODE:
 		return DEVELOPER_QUICK_START_MODE_REQUIRED_STATUS
 	var profile := profile_manager.active_profile() if profile_manager != null else null
 	if profile == null or not ProfileCodec.validate_profile(profile).is_empty():
 		return DEVELOPER_QUICK_START_PROFILE_REQUIRED_STATUS
-	if catalog == null or not catalog_valid or not _validate_catalog(catalog, false) or catalog.class_by_id(&"fighter") == null:
-		catalog_valid = false
+	if catalog == null or not catalog_valid:
+		return DEVELOPER_QUICK_START_UNAVAILABLE_STATUS
+	catalog_valid = _validate_catalog(catalog, false)
+	if not catalog_valid:
+		return DEVELOPER_QUICK_START_UNAVAILABLE_STATUS
+	if catalog.class_by_id(&"fighter") == null:
 		return DEVELOPER_QUICK_START_UNAVAILABLE_STATUS
 	return ""
 
@@ -354,9 +370,10 @@ func _fail_developer_quick_start(status_text: String) -> void:
 	(get_node("HUD/ClassSelection") as ClassSelectionPanel).close()
 	var menu := get_node("MainMenuScreen") as MainMenuScreen
 	var quick_start := menu.get_node("DeveloperQuickStart") as Control
-	menu.open(quick_start)
+	var return_focus := quick_start if quick_start.visible and not (quick_start as Button).disabled and quick_start.focus_mode != Control.FOCUS_NONE else menu.get_node("PrimaryAction") as Control
+	menu.open(return_focus)
 	(menu.get_node("Status") as Label).text = status_text
-	_focus_control_if_available(quick_start)
+	_focus_control_if_available(return_focus)
 
 
 func _open_run_setup() -> void:
