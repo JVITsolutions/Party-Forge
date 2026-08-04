@@ -58,9 +58,19 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	cancel_requested.emit()
 	if is_inside_tree():
-		if not _is_available_action(get_tree().root.gui_get_focus_owner()):
+		if _should_repair_menu_focus_after_cancel(get_tree().root.gui_get_focus_owner()):
 			_focus_available_action()
 		get_tree().root.set_input_as_handled()
+
+
+func _should_repair_menu_focus_after_cancel(focus_owner: Control) -> bool:
+	if not is_open():
+		return false
+	if focus_owner == null:
+		return true
+	if not is_ancestor_of(focus_owner):
+		return false
+	return not _is_available_action(focus_owner)
 
 
 func _apply_projection() -> void:

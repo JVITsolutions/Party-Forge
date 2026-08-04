@@ -100,6 +100,24 @@ func _test_action_signals_and_cancel(screen: CanvasLayer, failures: Array[String
 	screen.call(&"_unhandled_input", _action_event(&"ui_cancel"))
 	TestAssertions.equal(cancel_count[0], 1, "Cancel emits an intent for the composition root", failures)
 	TestAssertions.truthy(bool(screen.call(&"is_open")), "Cancel does not close or quit from inside the screen", failures)
+	TestAssertions.truthy(screen.has_method(&"_should_repair_menu_focus_after_cancel"), "Cancel exposes a composable post-signal focus policy", failures)
+	if screen.has_method(&"_should_repair_menu_focus_after_cancel"):
+		var external_focus := Button.new()
+		external_focus.name = "ChildScreenFocus"
+		TestAssertions.truthy(
+			not bool(screen.call(&"_should_repair_menu_focus_after_cancel", external_focus)),
+			"Cancel preserves focus established by a composition listener",
+			failures
+		)
+		screen.cancel_requested.connect(func() -> void: screen.call(&"close"), CONNECT_ONE_SHOT)
+		screen.call(&"_unhandled_input", _action_event(&"ui_cancel"))
+		TestAssertions.truthy(not bool(screen.call(&"is_open")), "A cancel listener can close the menu without post-signal focus repair", failures)
+		TestAssertions.truthy(
+			not bool(screen.call(&"_should_repair_menu_focus_after_cancel", null)),
+			"Closed menu never repairs focus after cancel",
+			failures
+		)
+		external_focus.free()
 	screen.call(&"close")
 
 
