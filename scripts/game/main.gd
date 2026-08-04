@@ -379,12 +379,10 @@ func _expose_profile_bootstrap_diagnostic() -> void:
 	if profile_bootstrap_error.is_empty():
 		return
 	var profiles := get_node("SettingsScreen/Overlay/Frame/Layout/Tabs/Profiles") as ProfilesSettingsPage
-	var status := profiles.get_node("Layout/Status") as Label
-	var technical := profiles.get_node("Layout/TechnicalDetails") as Label
-	status.text = "Some profile data could not be loaded. You can create or choose another profile."
-	status.tooltip_text = profile_bootstrap_error
-	technical.text = profile_bootstrap_error
-	technical.visible = true
+	profiles.set_bootstrap_diagnostic(
+		"Some profile data could not be loaded. You can create or choose another profile.",
+		profile_bootstrap_error
+	)
 
 
 func _load_passive_tree_runtime() -> void:

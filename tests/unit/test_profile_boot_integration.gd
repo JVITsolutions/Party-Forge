@@ -19,6 +19,11 @@ func run() -> Array[String]:
 	ProfileTestSupport.remove_tree(mixed_root)
 	_test_mixed_healthy_and_damaged_boot(mixed_root, failures)
 	ProfileTestSupport.remove_tree(mixed_root)
+
+	var diagnostic_root := "%s_diagnostic_%d_%d" % [PROFILE_ROOT_PREFIX, OS.get_process_id(), Time.get_ticks_usec()]
+	ProfileTestSupport.remove_tree(diagnostic_root)
+	_test_bootstrap_diagnostic_survives_profile_lifecycle(diagnostic_root, failures)
+	ProfileTestSupport.remove_tree(diagnostic_root)
 	return failures
 
 
@@ -148,6 +153,66 @@ func _test_mixed_healthy_and_damaged_boot(root: String, failures: Array[String])
 	TestAssertions.truthy(damaged_index >= 0 and list.is_item_disabled(damaged_index), "mixed boot disables the damaged profile row", failures)
 	(Engine.get_main_loop() as SceneTree).paused = false
 	main.free()
+
+
+func _test_bootstrap_diagnostic_survives_profile_lifecycle(root: String, failures: Array[String]) -> void:
+	var store := ProfileStore.new()
+	var healthy := ProfileState.new_profile("profile-diagnostic1", "Healthy Diagnostic", 1000)
+	TestAssertions.equal(store.save_profile(healthy, root), "", "diagnostic boot healthy fixture saves", failures)
+	var index_file := FileAccess.open(root.path_join(ProfileIndexStore.FILE_NAME), FileAccess.WRITE)
+	TestAssertions.truthy(index_file != null, "diagnostic boot malformed index fixture opens", failures)
+	if index_file == null:
+		return
+	index_file.store_string("{not valid json")
+	index_file.close()
+	var main := (load("res://scenes/game/main.tscn") as PackedScene).instantiate() as PartyForgeMain
+	main.profile_root = root
+	(Engine.get_main_loop() as SceneTree).root.add_child(main)
+	main.call("_ready")
+	var raw_diagnostic := main.profile_bootstrap_error
+	var menu := main.get_node("MainMenuScreen") as MainMenuScreen
+	var profiles := main.get_node("SettingsScreen/Overlay/Frame/Layout/Tabs/Profiles") as ProfilesSettingsPage
+	var status := profiles.get_node("Layout/Status") as Label
+	var technical := profiles.get_node("Layout/TechnicalDetails") as Label
+	TestAssertions.truthy(not raw_diagnostic.is_empty(), "malformed index produces a bootstrap diagnostic", failures)
+	_assert_safe_bootstrap_disclosure(status, technical, menu, raw_diagnostic, root, "initial bootstrap", failures)
+	# Repair the injected index artifact so successful profile operations can
+	# exercise both manager signals after the original boot diagnostic.
+	_remove_file(root.path_join(ProfileIndexStore.FILE_NAME))
+
+	var manager := main.profile_manager
+	var created := manager.create_profile("Created After Diagnostic", 2000)
+	TestAssertions.truthy(created.ok(), "profile creation succeeds after recoverable index diagnostic", failures)
+	_assert_safe_bootstrap_disclosure(status, technical, menu, raw_diagnostic, root, "profiles_changed and active_profile_changed", failures)
+	TestAssertions.equal(manager.select_profile(healthy.profile_id), "", "healthy profile can be selected after bootstrap diagnostic", failures)
+	_assert_safe_bootstrap_disclosure(status, technical, menu, raw_diagnostic, root, "active_profile_changed selection", failures)
+	TestAssertions.equal(manager.refresh_profile(healthy.profile_id), "", "healthy profile refresh succeeds after bootstrap diagnostic", failures)
+	_assert_safe_bootstrap_disclosure(status, technical, menu, raw_diagnostic, root, "profiles_changed refresh", failures)
+	var immediate_error := "PROFILE_ACTION_ERROR reason=forced immediate failure"
+	profiles.call("_show_error", "The selected profile action could not be completed.", immediate_error)
+	TestAssertions.equal(manager.refresh_profile(healthy.profile_id), "", "profile refresh still succeeds while an action error is displayed", failures)
+	TestAssertions.equal(status.text, "The selected profile action could not be completed.", "profile refresh does not erase the immediate action status", failures)
+	TestAssertions.truthy(technical.text.contains(immediate_error), "profile refresh retains immediate action technical details", failures)
+	TestAssertions.truthy(technical.text.contains(raw_diagnostic), "immediate action disclosure keeps bootstrap technical details available", failures)
+	TestAssertions.truthy(not menu.projection().status_text.contains(immediate_error), "immediate action diagnostic never enters main-menu text", failures)
+	(Engine.get_main_loop() as SceneTree).paused = false
+	main.free()
+
+
+func _assert_safe_bootstrap_disclosure(
+	status: Label,
+	technical: Label,
+	menu: MainMenuScreen,
+	raw_diagnostic: String,
+	root: String,
+	stage: String,
+	failures: Array[String]
+) -> void:
+	TestAssertions.truthy(not status.text.is_empty(), "%s keeps a player-safe Profiles status" % stage, failures)
+	TestAssertions.truthy(not status.text.contains("PROFILE_") and not status.text.contains(root), "%s keeps raw diagnostics out of Profiles status" % stage, failures)
+	TestAssertions.truthy(not status.tooltip_text.contains("PROFILE_") and not status.tooltip_text.contains(root), "%s keeps raw diagnostics out of Profiles tooltip" % stage, failures)
+	TestAssertions.truthy(technical.visible and technical.text.contains(raw_diagnostic), "%s retains raw Profiles technical details" % stage, failures)
+	TestAssertions.truthy(not menu.projection().status_text.contains("PROFILE_") and not menu.projection().status_text.contains(root), "%s keeps the main menu nontechnical" % stage, failures)
 
 
 func _remove_file(path: String) -> void:

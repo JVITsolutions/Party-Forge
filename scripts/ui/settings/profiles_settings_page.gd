@@ -5,6 +5,11 @@ signal profile_action_failed(message: String)
 
 var _manager: ProfileManager
 var _has_selectable_profiles := false
+var _bootstrap_safe_status := ""
+var _bootstrap_technical_detail := ""
+var _action_error_active := false
+var _action_error_primary := ""
+var _action_error_technical := ""
 
 
 func _ready() -> void:
@@ -57,7 +62,19 @@ func refresh() -> void:
 	list.visible = not statuses.is_empty()
 	_activate_button().disabled = not _has_selectable_profiles
 	_configure_focus_order(_has_selectable_profiles)
-	_update_profile_health(statuses)
+	if _action_error_active:
+		_render_action_error()
+	else:
+		_update_profile_health(statuses)
+
+
+func set_bootstrap_diagnostic(safe_status: String, technical_detail: String) -> void:
+	_bootstrap_safe_status = safe_status.strip_edges()
+	_bootstrap_technical_detail = technical_detail.strip_edges()
+	if _action_error_active:
+		_render_action_error()
+	else:
+		_update_profile_health(_manager.profile_statuses() if _manager != null else [])
 
 
 func initial_focus() -> Control:
@@ -124,14 +141,17 @@ func _friendly_error(error: String) -> String:
 
 
 func _show_error(primary: String, technical: String) -> void:
-	_status().text = primary
-	_status().tooltip_text = technical
-	_technical_details().text = technical
-	_technical_details().visible = not technical.is_empty()
+	_action_error_active = true
+	_action_error_primary = primary
+	_action_error_technical = technical
+	_render_action_error()
 	profile_action_failed.emit(technical)
 
 
 func _clear_error() -> void:
+	_action_error_active = false
+	_action_error_primary = ""
+	_action_error_technical = ""
 	_update_profile_health(_manager.profile_statuses() if _manager != null else [])
 
 func _update_profile_health(statuses: Array[ProfileEntryStatus]) -> void:
@@ -151,8 +171,28 @@ func _update_profile_health(statuses: Array[ProfileEntryStatus]) -> void:
 	if recovered_count > 0:
 		var recovered_message := "%d profile%s recovered from a verified backup." % [recovered_count, "s" if recovered_count != 1 else ""]
 		primary = "%s %s" % [primary, recovered_message] if not primary.is_empty() else recovered_message
+	if not _bootstrap_safe_status.is_empty():
+		primary = "%s %s" % [primary, _bootstrap_safe_status] if not primary.is_empty() else _bootstrap_safe_status
+	var tooltip := " | ".join(details)
+	if not _bootstrap_technical_detail.is_empty():
+		if not details.has(_bootstrap_technical_detail):
+			details.append(_bootstrap_technical_detail)
+		var bootstrap_hint := "Additional technical details are available below."
+		tooltip = "%s %s" % [tooltip, bootstrap_hint] if not tooltip.is_empty() else bootstrap_hint
 	_status().text = primary
-	_status().tooltip_text = " | ".join(details)
+	_status().tooltip_text = tooltip
+	_technical_details().text = "\n".join(details)
+	_technical_details().visible = not details.is_empty()
+
+
+func _render_action_error() -> void:
+	_status().text = _action_error_primary
+	_status().tooltip_text = _action_error_technical
+	var details: Array[String] = []
+	if not _action_error_technical.is_empty():
+		details.append(_action_error_technical)
+	if not _bootstrap_technical_detail.is_empty() and not details.has(_bootstrap_technical_detail):
+		details.append(_bootstrap_technical_detail)
 	_technical_details().text = "\n".join(details)
 	_technical_details().visible = not details.is_empty()
 
