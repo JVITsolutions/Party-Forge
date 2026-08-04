@@ -22,6 +22,17 @@ func _run() -> void:
 	viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
 	root.add_child(viewport)
 
+	var hud := (load("res://scenes/ui/hud.tscn") as PackedScene).instantiate() as HUD
+	hud.custom_viewport = viewport
+	viewport.add_child(hud)
+	var run_setup := hud.get_node("ClassSelection") as ClassSelectionPanel
+	run_setup.configure(GameCatalog.load_defaults().classes)
+	var run_setup_actions := run_setup.get_node("Content/Actions") as HBoxContainer
+	var run_setup_settings := run_setup.get_node("Content/Actions/Settings") as Button
+	var run_setup_back := run_setup.get_node("Content/Actions/Back") as Button
+	if (hud.get_node("Margin") as Control).visible:
+		_failures.append("run HUD status is visible before a confirmed run start")
+
 	var settings := (load("res://scenes/ui/settings/settings_screen.tscn") as PackedScene).instantiate() as SettingsScreen
 	settings.custom_viewport = viewport
 	viewport.add_child(settings)
@@ -73,6 +84,23 @@ func _run() -> void:
 	for viewport_size: Vector2i in VIEWPORT_SIZES:
 		var failure_count_before := _failures.size()
 		viewport.size = viewport_size
+		run_setup.open()
+		await _wait_for_layout()
+		var run_setup_failure_count_before := _failures.size()
+		var run_setup_rect := run_setup.get_global_rect()
+		var actions_rect := run_setup_actions.get_global_rect()
+		var run_setup_settings_rect := run_setup_settings.get_global_rect()
+		var run_setup_back_rect := run_setup_back.get_global_rect()
+		_assert_visible_contained(run_setup_actions, run_setup_rect, "Run setup actions", viewport_size)
+		_assert_visible_contained(run_setup_settings, actions_rect, "Run setup Settings", viewport_size)
+		_assert_visible_contained(run_setup_back, actions_rect, "Run setup Back", viewport_size)
+		if not is_equal_approx(run_setup_settings_rect.position.y, run_setup_back_rect.position.y):
+			_failures.append("Run setup Settings and Back do not share a row at %dx%d" % [viewport_size.x, viewport_size.y])
+		if run_setup_settings_rect.end.x > run_setup_back_rect.position.x:
+			_failures.append("Run setup Settings overlaps Back at %dx%d" % [viewport_size.x, viewport_size.y])
+		if _failures.size() == run_setup_failure_count_before:
+			print("RUN_SETUP_ACTIONS_SIZE_PASS size=%dx%d" % [viewport_size.x, viewport_size.y])
+		run_setup.close()
 		_select_tab(tabs, controls, "Controls")
 		await _wait_for_layout()
 		var viewport_rect := Rect2(Vector2.ZERO, Vector2(viewport_size))

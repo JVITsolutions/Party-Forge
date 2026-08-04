@@ -14,9 +14,12 @@ func _ready() -> void:
 	_ensure_actions_wired()
 	_rebuild_focus_graph()
 	if is_open():
-		_focus_initial()
+		_run_status_block().visible = false
+		if _should_claim_implicit_focus():
+			_focus_initial()
 
 func configure(definitions: Array[ClassDefinition]) -> void:
+	var should_claim_focus := is_open() and _should_claim_implicit_focus()
 	var target_grid := _grid()
 	for child: Node in target_grid.get_children():
 		target_grid.remove_child(child)
@@ -33,7 +36,7 @@ func configure(definitions: Array[ClassDefinition]) -> void:
 		button.pressed.connect(_emit_selection.bind(definition.id))
 		target_grid.add_child(button)
 	_rebuild_focus_graph()
-	if is_open():
+	if should_claim_focus:
 		_focus_initial()
 
 func open() -> void:
@@ -149,6 +152,15 @@ func _focus_initial() -> void:
 	if target != null and target.is_inside_tree() and target.is_visible_in_tree():
 		target.grab_focus()
 		_pending_initial_focus = null
+
+func _should_claim_implicit_focus() -> bool:
+	if not is_inside_tree():
+		return true
+	var viewport := get_viewport()
+	if viewport == null:
+		return false
+	var focus_owner := viewport.gui_get_focus_owner()
+	return focus_owner == null or is_ancestor_of(focus_owner)
 
 func _first_eligible_focus() -> Button:
 	for control: Button in _focus_controls():

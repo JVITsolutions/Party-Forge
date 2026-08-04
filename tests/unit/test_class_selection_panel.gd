@@ -11,7 +11,7 @@ func run() -> Array[String]:
 	var panel_script := panel.get_script() as Script
 	TestAssertions.equal(panel_script.resource_path if panel_script != null else "", SELECTOR_SCRIPT_PATH, "selector uses reusable script", failures)
 	if panel_script != null and panel_script.resource_path == SELECTOR_SCRIPT_PATH:
-		panel.call("_ready")
+		_test_initial_hud_invariant(panel, hud, failures)
 		var catalog := GameCatalog.load_defaults()
 		panel.call("configure", catalog.classes)
 		_test_scene_and_class_contract(panel, catalog, failures)
@@ -20,6 +20,14 @@ func run() -> Array[String]:
 		_test_focus_wiring(panel, failures)
 	hud.free()
 	return failures
+
+
+func _test_initial_hud_invariant(panel: Control, hud: CanvasLayer, failures: Array[String]) -> void:
+	var status_block := hud.get_node("Margin") as Control
+	TestAssertions.truthy(not status_block.visible, "run HUD starts hidden while initial run setup is visible", failures)
+	status_block.visible = true
+	panel.call(&"_ready")
+	TestAssertions.truthy(not status_block.visible, "ready restores the initial run-setup HUD invariant", failures)
 
 
 func _test_scene_and_class_contract(panel: Control, catalog: GameCatalog, failures: Array[String]) -> void:

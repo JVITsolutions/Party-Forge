@@ -28,6 +28,19 @@ func _run() -> void:
 	_assert(tabs.get_tab_control(tabs.current_tab) == profiles, "fresh boot selects Profiles")
 	_assert(profiles.initial_focus() == profile_name, "fresh Profiles target is ProfileName")
 	_assert(root.gui_get_focus_owner() == profile_name, "fresh boot focuses ProfileName")
+	var selector := main.get_node("HUD/ClassSelection") as ClassSelectionPanel
+	profile_name.grab_focus()
+	var ready_focus_fixture := (load("res://scenes/ui/hud.tscn") as PackedScene).instantiate() as HUD
+	root.add_child(ready_focus_fixture)
+	_assert(root.gui_get_focus_owner() == profile_name, "run-setup ready preserves external ProfileName focus")
+	ready_focus_fixture.free()
+	profile_name.grab_focus()
+	selector.configure(GameCatalog.load_defaults().classes)
+	_assert(root.gui_get_focus_owner() == profile_name, "run-setup configure preserves external ProfileName focus")
+	selector.open()
+	var initial_class_focus := selector.get_node("Content/Scroll/Grid").get_child(0) as Button
+	_assert(root.gui_get_focus_owner() == initial_class_focus, "explicit run-setup open claims eligible class focus")
+	profile_name.grab_focus()
 
 	profile_name.text = "Integration Profile"
 	(profiles.get_node("Layout/CreateRow/Create") as Button).pressed.emit()
