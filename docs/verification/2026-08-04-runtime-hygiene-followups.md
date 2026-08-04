@@ -1,7 +1,7 @@
 # Runtime Hygiene Follow-ups Verification
 
-Date: 2026-08-04  
-Base: `0788df080e0387bf8a7361c8d143f2f727b7abaa`  
+Date: 2026-08-04
+Base: `0788df080e0387bf8a7361c8d143f2f727b7abaa`
 Branch: `fix/runtime-hygiene`
 
 ## Delivered behavior
