@@ -2,7 +2,7 @@
 
 > **Architecture baseline:** `a293f6208bd3a62246043c1b3e7c0a49ad5fef73`<br>
 > **Godot version:** `4.7.1`<br>
-> **Last checked:** `2026-07-29`
+> **Last checked:** `2026-08-04`
 
 ## What you will learn
 
@@ -103,7 +103,7 @@ This exercise is read-only. Its expected changed-file list is empty.
 4. Locate `res://scenes/game/main.tscn`. Double-click it and inspect its Scene tree.
 5. Locate `res://data/classes/fighter.tres`. Select it and read its fields in the Inspector without typing.
 6. Locate `res://scripts/game/main.gd`. Open it in the Script workspace and find `class_name PartyForgeMain` without editing.
-7. Press `F5`. Confirm the class-selection interface appears and the Output panel includes `PARTY_FORGE_BOOT_OK` and `PARTY_FORGE_CLASS_SELECTION_READY`.
+7. Press `F5`. Confirm the functional main menu appears first and the Output panel includes `PARTY_FORGE_BOOT_OK` and `PARTY_FORGE_CLASS_SELECTION_READY`. The second marker means the reusable run-setup selector is configured; it does not mean class selection is the boot screen.
 8. Press `F8`.
 9. Run `git status --short` again and compare it line for line with step 2.
 
@@ -130,7 +130,7 @@ Then edit through the Inspector, press `Ctrl+S`, and compare the contract with `
 
 For this chapter, success is observable:
 
-- `F5` starts `scenes/game/main.tscn` and reaches the class-selection screen.
+- `F5` starts `scenes/game/main.tscn` and reaches the functional main menu before Profiles or class selection.
 - The Output panel contains both Party Forge boot messages.
 - `F8` stops the run.
 - The before-and-after `git status --short` output matches.

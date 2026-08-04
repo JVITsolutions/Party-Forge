@@ -1,16 +1,16 @@
 # 10. Party Forge Architecture Reference
 
-> **Runtime architecture:** Party Forge Character Ledger milestone through `7886a9c5ef03442352b398992d3bf707ffaa4aa0`<br>
+> **Runtime architecture:** Functional Main Menu Plan 3A automation candidate through `ce057a949f8f64bfb661aded26dcfec3cdcdb44c`<br>
 > **Godot version:** `4.7.1`<br>
-> **Last checked:** `2026-07-31`
+> **Last checked:** `2026-08-04`
 
 ## How to use this reference
 
 Use this chapter after you understand the concepts in Chapters 1–9. Start with the change-owner decision table, follow its path to the owning data, scene, or script, then use the matching verification checklist.
 
-This is a map of the architecture at the immutable nine-class runtime commit above, not a promise that every folder is automatically discovered or every exported field is consumed. Confirm the live source before extending it.
+This is a map of the architecture at the immutable Plan 3A automation-candidate commit above. Its automated verification is recorded in `docs/verification/2026-08-03-functional-main-menu.md`; connected manual windowed acceptance remains a separate gate. The map is not a promise that every folder is automatically discovered or every exported field is consumed. Confirm the live source before extending it.
 
-> **Party Forge convention:** Data definitions describe content, scenes compose runtime nodes, focused scripts own behavior, and `PartyForgeMain` wires the main run.
+> **Party Forge convention:** Data definitions describe content, scenes compose runtime nodes, focused scripts own behavior, and `PartyForgeMain` wires front-end routing and the main run.
 
 ## Top-level project map
 
@@ -46,13 +46,19 @@ The saved main tree begins as:
 13. `Main/CharacterLedger` — full-screen paused character inspection, instanced from `scenes/ui/ledger/character_ledger.tscn`.
 14. `Main/RunPauseMenu` — separate Resume, Settings Coming Soon, and confirmed Quit Run overlay, instanced from `scenes/ui/run_pause_menu.tscn`.
 
-After leader selection, `PartyForgeMain` instances `Leader` under `Actors`, configures it from a `ClassDefinition`, attaches one `HealthBar3D`, configures the camera and spawn director, hides class selection, and starts the run. Recruits create `Companion` instances under `Actors`; enemies and effects appear only at runtime. Use the Remote tree to see them.
+15. `Main/MainMenuScreen` - Plan 3A front door on canvas layer 5.
+16. `Main/SettingsScreen` - Settings and Profiles child route on layer 10.
+17. `Main/PassiveTreeScreen` - production City tree or Developer preview child route on layer 12.
+18. `Main/ProfileManager` - composed profile persistence and selection service.
+19. `Main/DeveloperModeBadge` - applied run-rule mode indicator above the front-end backdrop.
+
+Boot opens `MainMenuScreen`; class selection remains hidden until a profile-aware route opens it as run setup. After leader selection, `PartyForgeMain` instances `Leader` under `Actors`, configures it from a `ClassDefinition`, attaches one `HealthBar3D`, configures the camera and spawn director, hides run setup, reveals the run HUD, and starts the run. Recruits create `Companion` instances under `Actors`; enemies and effects appear only at runtime. Use the Remote tree to see them.
 
 ## System ownership table
 
 | Owner | File | Owns | Does not own |
 | --- | --- | --- | --- |
-| `PartyForgeMain` | `scripts/game/main.gd` | Catalog gate, leader selection, service wiring, central upgrade revalidation/application, live member-health lookup, boss creation, runtime health bars, result UI, hostile-effect cancellation | Definition values or low-level combat math |
+| `PartyForgeMain` | `scripts/game/main.gd` | Profile-aware boot, menu/Settings/run-setup/City routing, desktop quit, catalog gate, leader selection, run-rule capture, service wiring, upgrade application, boss creation, result UI | Definition values, profile schema rules, passive-tree rules, or low-level combat math |
 | `GameRun` | `scripts/game/game_run.gd` | Run-state facade, pause policy, elapsed-time forwarding, debug time scale, victory/defeat signals | Enemy weights or UI layout |
 | `RunStateMachine` | `scripts/game/run_state_machine.gd` | `SETUP`, `RUNNING`, `LEVEL_UP`, `BOSS`, `VICTORY`, `DEFEAT`; five-minute boss transition; terminal lock | Scene instancing |
 | `PartyManager` | `scripts/party/party_manager.gd` | Members, class ranks, trait counts/tiers, party-stat ranks, per-trait upgrades, action-aware stat snapshots, shared party combat dependencies, four-member cap | Actor node movement or rendering |
@@ -66,7 +72,10 @@ After leader selection, `PartyForgeMain` instances `Leader` under `Actors`, conf
 | `RecoveryController` | `scripts/combat/recovery_controller.gd` | Frame-rate-independent regeneration from current resolved stats | Damage mitigation or revive timing |
 | `HealthComponent` | `scripts/combat/health_component.gd` | Final health application, down/death state, healing, revive timing, and health signals | Armor/resistance/dodge/block formulas, actor movement, targeting, or rewards |
 | `HUD` | `scripts/ui/hud.gd` and `scenes/ui/hud.tscn` | Status text, party/trait display, boss status and banner, composition of panels | Applying an upgrade choice |
-| `ClassSelectionPanel` | `scripts/ui/class_selection_panel.gd` and `scenes/ui/hud.tscn` | Ordered runtime buttons from `Array[ClassDefinition]`, scroll-grid presentation, stable `Class_<id>` node names, and `class_selected(class_id)` | Catalog registration, ID validation, or starting the run |
+| `MainMenuViewModel` | `scripts/ui/main_menu/main_menu_view_model.gd` | Pure projection of active profile, applied settings, and City runtime availability into stable route IDs and visible actions | Nodes, files, routing side effects, or profile mutation |
+| `MainMenuScreen` | `scripts/ui/main_menu/main_menu_screen.gd` and `scenes/ui/main_menu/main_menu_screen.tscn` | Blockout presentation, copied projections, route intents, accessibility text, responsive geometry, and visible-action focus loop | Profiles, settings files, run initialization, passive-tree rules, or desktop quit |
+| `ProfileManager` | `scripts/profile/profile_manager.gd` | Profile bootstrap, active-profile selection, refresh, and change signals over the profile store | Main-menu presentation or scene routing |
+| `ClassSelectionPanel` | `scripts/ui/class_selection_panel.gd` and `scenes/ui/hud.tscn` | Reusable run-setup lifecycle, Back intent, ordered runtime buttons, stable `Class_<id>` names, and `class_selected(class_id)` | Catalog registration, ID validation, profile mutation, or starting the run |
 | `LevelUpPanel` | `scripts/ui/level_up_panel.gd` and `scenes/ui/level_up_panel.tscn` | Three upgrade cards, shared hover/focus tooltip presentation, recipient selection, confirmation/rejection state, guarded `confirmation_requested` signal | Final revalidation or mutating party state |
 | `RunResultPanel` | `scripts/ui/run_result_panel.gd` and `scenes/ui/run_result_panel.tscn` | Victory/defeat display and restart/quit requests | Deciding the run result |
 | `CharacterLedger` | `scripts/ui/ledger/character_ledger.gd` and `scenes/ui/ledger/character_ledger.tscn` | Open/close and pause lease, page registry, selected member/page context, tab and party-rail focus, responsive mode, page instancing | Stat formulas, upgrade eligibility/application, profile unlocks, multiplayer input assignment |
@@ -89,18 +98,20 @@ After leader selection, `PartyForgeMain` instances `Leader` under `Actors`, conf
 
 Definitions are Resources, not running actors. `GameCatalog` explicitly loads class, trait, enemy, damage-type, keyword, and required upgrade definitions; `PartyManager.STAT_CATALOG` loads the stat catalog. Party attacks are reached through class references; enemy definitions link their behavior-required attacks explicitly. Card source rows live in `tools/character_upgrade_content_rows.gd`; `tools/create_character_upgrade_data.gd` generates their `.tres` files, whose exact paths must also be added to `GameCatalog.REQUIRED_UPGRADE_PATHS`.
 
-## Main run data flow
+## Front-end and main run data flow
 
 1. Godot instances `scenes/game/main.tscn` from `project.godot`.
-2. `PartyForgeMain._ready()` caches the main service nodes and calls `GameCatalog.load_defaults()`.
-3. Catalog validation must pass before `ClassSelectionPanel.configure(catalog.classes)` creates the ordered scroll-grid buttons.
-4. A runtime `Class_<id>` button emits `class_selected(class_id)`, connected once to `select_leader_class(class_id)`.
-5. The selected definition initializes `PartyManager`; the leader, health bar, camera, HUD, `PartyActorSpawner`, and `SpawnDirector` are configured.
-6. `GameRun.start_run()` moves the state machine from `SETUP` to `RUNNING`.
-7. `GameRun` advances elapsed time while `SpawnDirector` advances its regular spawn schedule.
-8. Level-ready signals pause the run in `LEVEL_UP`; selecting a valid choice resumes the prior running or boss state.
-9. At 300 seconds, `RunStateMachine` enters `BOSS` and emits `boss_requested`; `PartyForgeMain` instances the Forge Guardian.
-10. Leader terminal death locks `DEFEAT`; boss defeat during `BOSS` locks `VICTORY`. The result panel appears and hostile transient effects are cancelled.
+2. `PartyForgeMain._ready()` bootstraps profiles, loads applied machine settings, loads catalog/passive-tree services, wires intents once, and presents `MainMenuScreen`. It does not auto-open Profiles or class selection.
+3. `MainMenuViewModel.build()` creates a copy-owned projection. With no active profile, the player sees Play, Settings, and Quit; Play opens Settings directly on Profiles and focuses profile creation.
+4. Profile creation or activation emits manager signals. `PartyForgeMain` refreshes the projection, returns to the menu, and displays the selected profile without starting a run.
+5. `NOT_STARTED` and `IN_PROGRESS` primary actions use named temporary prologue seams; `COMPLETED` uses Begin Run. Plan 3A routes all three to existing run setup without mutating prologue state.
+6. A completed profile with durable City discovery can open the production passive-tree projection. Applied Developer Mode exposes a full-visibility City preview and Developer Quick Start; neither override grants durable profile progress.
+7. Run setup calls `ClassSelectionPanel.configure(catalog.classes)` for the nine ordered buttons. Back returns to the menu; Settings and passive-tree children restore their exact originating controls.
+8. A runtime `Class_<id>` button emits `class_selected(class_id)`, connected once to `select_leader_class(class_id)`. Developer Quick Start delegates to the same Fighter launch path after saved-mode/profile/catalog guards.
+9. The selected definition initializes `PartyManager`; the leader, health bar, camera, HUD, `PartyActorSpawner`, and `SpawnDirector` are configured. `GameRun.start_run()` moves `SETUP` to `RUNNING`.
+10. `GameRun` advances elapsed time while `SpawnDirector` advances its regular spawn schedule. Level-ready signals pause in `LEVEL_UP`; selecting a valid choice resumes the prior running or boss state.
+11. At 300 seconds, `RunStateMachine` enters `BOSS` and emits `boss_requested`; `PartyForgeMain` instances the Forge Guardian.
+12. Leader terminal death locks `DEFEAT`; boss defeat during `BOSS` locks `VICTORY`. The result panel appears and hostile transient effects are cancelled.
 
 ## Character Ledger and run-pause flow
 
@@ -147,13 +158,13 @@ Character inspection and ordinary pausing are separate:
 - `character_ledger` (`Tab`, `I`, or controller View/Back) toggles the ledger during `RUNNING`, `BOSS`, or `LEVEL_UP`; `ui_cancel` closes it. Its lease records whether another system had already paused the tree, so closing a ledger opened over level-up preserves that pause.
 - `pause_menu` (`Escape` or controller Menu/Start) opens `scripts/ui/run_pause_menu.gd` only during `RUNNING` or `BOSS`. It refuses to open while the ledger is visible. Its own lease prevents Resume from clearing a pause it did not add, and Quit confirmation handles Cancel before the surrounding menu.
 
-`scripts/game/main.gd` connects `RunPauseMenu.quit_run_confirmed` to `_return_to_front_end()`. The current route unpauses and reloads `scenes/game/main.tscn`, returning to class selection/start. It is not save-and-quit, a persistent profile route, or the desktop `_quit()` path.
+`scripts/game/main.gd` connects `RunPauseMenu.quit_run_confirmed` to `_return_to_front_end()`. The current route unpauses and reloads `scenes/game/main.tscn`, returning to the functional main menu with the active profile reloaded. It is not save-and-quit or the desktop `_quit()` path.
 
 ### Current single-player boundary
 
 `scripts/ui/ledger/ledger_player_context.gd` stores a local-player ID, selected member, active page, last focus path, and opener state. The shell accepts a context collection, but this milestone creates and uses only local player `0`, with the current leader as the initial controlled member. The responsive policy supports one desktop layout and a compact boundary below `1100x650`; it does not create per-player viewports.
 
-The following remain explicitly deferred: functional Equipment and Inventory; Developer Mode and production unlock evaluation; persistent profiles, saving, and run history; local multiplayer, controller assignment, and close arbitration; multiple ledger panes; and split, merged, or dynamic gameplay cameras.
+The following remain explicitly deferred: functional Equipment and Inventory; resumable run checkpoints/history; final character-ownership filtering; local multiplayer profile seats, controller assignment, and close arbitration; multiple ledger panes; and split, merged, or dynamic gameplay cameras. Profiles, applied Developer Mode, production City-tree access, and the blockout main-menu routes are now composed outside the ledger.
 
 ## Class and party flow
 
@@ -224,7 +235,7 @@ The Forge Guardian is boss-only. `PartyForgeMain` instances it in response to th
 | Formation data | `engagement_distance` is exported but not consumed by verified runtime movement/targeting | Editing it alone has no gameplay effect |
 | Presentation | Damage flash expects a direct `MeshInstance3D` | Nested imported hierarchies need an adapter or recursive handling |
 | Audio | No reviewed custom bus layout or established audio integration | Verify actual buses; do not assume Music/SFX/UI names |
-| Deferred progression UI | Rarity scaling/styling, inventory, passive trees, save/load persistence, and player-facing renaming controls are not implemented | Do not document schema fields or stored names as complete versions of those systems |
+| Profiles and City progression | `ProfileManager` persists active profiles; the City passive tree uses typed runtime services and profile mutations | Inventory/stash/extraction UI, resumable runs, and final player-facing progression presentation remain separate future systems |
 
 > **Current limitation:** These are implementation facts, not Godot restrictions. Change them deliberately with source, tests, and updated handbook guidance.
 

@@ -1,8 +1,8 @@
 # 3. Typed GDScript, Signals, and Party Forge Data Flow
 
-> **Runtime architecture:** Party Forge nine-class selector at `b0be05a03bbd3ea5aae04d3e38ffdc0769a211ba`<br>
+> **Runtime architecture:** Functional Main Menu Plan 3A automation candidate through `ce057a949f8f64bfb661aded26dcfec3cdcdb44c`<br>
 > **Godot version:** `4.7.1`<br>
-> **Last checked:** `2026-07-30`
+> **Last checked:** `2026-08-04`
 
 ## What you will learn
 
@@ -10,7 +10,7 @@
 - Recognize variables, constants, functions, arrays, dictionaries, enums, and `StringName` identifiers.
 - Choose `_ready()`, `_process()`, or `_physics_process()` for the right kind of work.
 - Tell an action-requesting method from an event-announcing signal.
-- Follow Party Forge's run flow from class selection through a level-up choice.
+- Follow Party Forge's run flow from the profile-aware main menu through run setup and a level-up choice.
 - Connect an existing game event to presentation without duplicating its rule.
 
 ## Reading a typed GDScript file
@@ -192,16 +192,18 @@ func select_leader_class(class_id: StringName) -> bool:
 
 Follow this chain through the current source:
 
-1. **Class selection:** `ClassSelectionPanel.configure(catalog.classes)` creates all nine buttons. Pressing one emits `class_selected(class_id)`, which is connected to `PartyForgeMain.select_leader_class(class_id)` in `scripts/game/main.gd`.
-2. **Catalog lookup:** `GameCatalog.class_by_id(class_id)` returns the matching `ClassDefinition`. An unknown ID is rejected with a `PARTY_FORGE_RESOURCE_ERROR`.
-3. **Party initialization:** `PartyManager.initialize(definition, catalog.traits)` creates the leader's `PartyMemberState`. `member_added` is emitted, although `PartyActorSpawner` is connected after this initial leader step and ignores leader members in any case.
-4. **Leader instance:** `leader.tscn` is instantiated under `Main/Actors`, then configured from the leader member and its `ClassDefinition`.
-5. **Auto-combat:** The leader and later companions receive `AttackDefinition` data. Their attack controller selects targets and emits `attack_ready`; the combat executor performs the matching attack kind.
-6. **Enemy reward:** On defeat, `EnemyActor` emits `reward_dropped(experience, drop_position)` exactly once. `SpawnDirector._on_reward_dropped()` creates an experience-orb scene at that position.
-7. **Experience:** When the orb reaches the leader, `ExperienceOrb` calls `ExperienceSystem.add_experience(value)`. If a threshold is crossed, `ExperienceSystem` increments `pending_levels` and emits `level_ready(level)`.
-8. **Level-ready signal:** `PartyForgeMain._on_level_ready()` asks `GameRun` to enter the level-up state and calls the level-up panel with three valid `UpgradeChoice` values.
-9. **UI choice:** `LevelUpPanel` emits `choice_selected(choice)`. `PartyForgeMain._apply_choice()` validates the choice and asks `PartyManager` to recruit, rank up, upgrade a trait, or upgrade a party stat.
-10. **Party update:** `PartyManager` changes its authoritative state and emits the corresponding event. For a recruit, `member_added` causes `PartyActorSpawner` to instantiate and configure a companion. The pending level is consumed and the run resumes when none remain.
+1. **Front door:** `PartyForgeMain._ready()` bootstraps profiles and presents a `MainMenuProjection`; it does not open Profiles or class selection automatically.
+2. **Profile-aware route:** Play with no profile opens Settings on Profiles. With a profile, the main action uses the approved prologue/run-setup route without mutating prologue state.
+3. **Class selection:** `ClassSelectionPanel.configure(catalog.classes)` creates all nine run-setup buttons. Pressing one emits `class_selected(class_id)`, which is connected to `PartyForgeMain.select_leader_class(class_id)` in `scripts/game/main.gd`.
+4. **Catalog lookup:** `GameCatalog.class_by_id(class_id)` returns the matching `ClassDefinition`. An unknown ID is rejected with a `PARTY_FORGE_RESOURCE_ERROR`.
+5. **Party initialization:** `PartyManager.initialize(definition, catalog.traits)` creates the leader's `PartyMemberState`. `member_added` is emitted, although `PartyActorSpawner` is connected after this initial leader step and ignores leader members in any case.
+6. **Leader instance:** `leader.tscn` is instantiated under `Main/Actors`, then configured from the leader member and its `ClassDefinition`.
+7. **Auto-combat:** The leader and later companions receive `AttackDefinition` data. Their attack controller selects targets and emits `attack_ready`; the combat executor performs the matching attack kind.
+8. **Enemy reward:** On defeat, `EnemyActor` emits `reward_dropped(experience, drop_position)` exactly once. `SpawnDirector._on_reward_dropped()` creates an experience-orb scene at that position.
+9. **Experience:** When the orb reaches the leader, `ExperienceOrb` calls `ExperienceSystem.add_experience(value)`. If a threshold is crossed, `ExperienceSystem` increments `pending_levels` and emits `level_ready(level)`.
+10. **Level-ready signal:** `PartyForgeMain._on_level_ready()` asks `GameRun` to enter the level-up state and calls the level-up panel with valid `UpgradeChoice` values.
+11. **UI choice:** `LevelUpPanel` emits `choice_selected(choice)`. `PartyForgeMain._apply_choice()` validates the choice and asks `PartyManager` to recruit, rank up, upgrade a trait, or upgrade a party stat.
+12. **Party update:** `PartyManager` changes its authoritative state and emits the corresponding event. For a recruit, `member_added` causes `PartyActorSpawner` to instantiate and configure a companion. The pending level is consumed and the run resumes when none remain.
 
 This is a chain of owners, not one giant script. Catalog owns lookups, party manager owns party state, combat owns attacks, experience owns thresholds, game run owns run state, and UI presents choices.
 
