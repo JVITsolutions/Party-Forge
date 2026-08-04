@@ -52,6 +52,7 @@ func run() -> Array[String]:
     extended_party.free()
 
     _test_resolved_party_stats(failures)
+    _test_replace_member_source(failures)
     _test_party_actor_stats_signal_lifecycle(failures)
     return failures
 
@@ -118,6 +119,45 @@ func _test_resolved_party_stats(failures: Array[String]) -> void:
     TestAssertions.truthy(party.recruit(catalog.class_by_id(&"ranger")), "recruit succeeds after snapshot", failures)
     TestAssertions.equal(party.members[0].member_id, leader_id, "recruitment preserves leader identity", failures)
     TestAssertions.equal(party.stats_for(leader_id).value(&"max_health"), 273.0, "recruitment preserves leader snapshot value", failures)
+    party.free()
+
+func _test_replace_member_source(failures: Array[String]) -> void:
+    var catalog := GameCatalog.load_defaults()
+    var party := PartyManager.new()
+    party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
+    var member_id := party.members[0].member_id
+    TestAssertions.truthy(party.has_method(&"replace_member_source"), "party manager exposes replace_member_source", failures)
+    if not party.has_method(&"replace_member_source"):
+        party.free()
+        return
+
+    var changed: Array[int] = []
+    party.stats_changed.connect(func(changed_member_id: int) -> void: changed.append(changed_member_id))
+    var source_id := &"character_growth_1"
+    var first := StatModifierSource.create(source_id, &"character_growth", "Class Growth", member_id, [
+        StatModifier.create(&"strength", StatModifier.Operation.FLAT, 1.0, source_id, "Class Growth"),
+    ])
+    TestAssertions.truthy(bool(party.call(&"replace_member_source", member_id, first)), "first stable source succeeds", failures)
+    TestAssertions.equal(changed, [member_id], "successful source replacement emits exactly once", failures)
+    TestAssertions.near(party.stats_for(member_id).value(&"strength"), 1.0, 0.001, "first source resolves", failures)
+
+    changed.clear()
+    var replacement := StatModifierSource.create(source_id, &"character_growth", "Class Growth", member_id, [
+        StatModifier.create(&"strength", StatModifier.Operation.FLAT, 3.0, source_id, "Class Growth"),
+    ])
+    TestAssertions.truthy(bool(party.call(&"replace_member_source", member_id, replacement)), "same stable source replaces", failures)
+    TestAssertions.equal(changed, [member_id], "replacement emits exactly once", failures)
+    TestAssertions.near(party.stats_for(member_id).value(&"strength"), 3.0, 0.001, "replacement does not append", failures)
+    TestAssertions.equal(party.members[0].modifier_sources.filter(func(source: StatModifierSource) -> bool: return source.id == source_id).size(), 1, "stable source ID remains unique", failures)
+
+    changed.clear()
+    var invalid := StatModifierSource.create(source_id, &"character_growth", "Class Growth", member_id, [
+        StatModifier.create(&"unknown_attribute", StatModifier.Operation.FLAT, 99.0, source_id, "Class Growth"),
+    ])
+    TestAssertions.truthy(not bool(party.call(&"replace_member_source", member_id, invalid)), "unknown stat replacement fails", failures)
+    TestAssertions.equal(changed, [], "failed replacement emits no stats signal", failures)
+    TestAssertions.near(party.stats_for(member_id).value(&"strength"), 3.0, 0.001, "failed replacement preserves resolved values", failures)
+    TestAssertions.equal(party.members[0].modifier_sources[0].modifiers[0].stat_id, &"strength", "failed replacement preserves owned source", failures)
     party.free()
 
 func _test_party_actor_stats_signal_lifecycle(failures: Array[String]) -> void:

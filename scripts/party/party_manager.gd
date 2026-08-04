@@ -111,6 +111,19 @@ func add_member_source(member_id: int, source: StatModifierSource) -> bool:
     _invalidate_member(member_id)
     return true
 
+func replace_member_source(member_id: int, source: StatModifierSource) -> bool:
+    var member := member_by_id(member_id)
+    if member == null or source == null:
+        return false
+    var validation_errors := StatResolver.validate_sources(STAT_CATALOG, [source])
+    if not validation_errors.is_empty():
+        for error: String in validation_errors:
+            push_error(error)
+        return false
+    member._replace_modifier_source(source)
+    _invalidate_member(member_id)
+    return true
+
 func upgrade_rank(upgrade_id: StringName, member_id: int = 0) -> int:
     if member_id > 0:
         var member := member_by_id(member_id)
