@@ -134,6 +134,13 @@ func current_settings() -> PartyForgeSettings:
 	return _current_settings.copy()
 
 
+func show_route_status(message: String, focus_target: Control = null) -> void:
+	_status().text = message
+	_status().tooltip_text = ""
+	if is_inside_tree() and focus_target != null and is_instance_valid(focus_target) and focus_target.is_inside_tree() and focus_target.is_visible_in_tree() and focus_target.focus_mode != Control.FOCUS_NONE:
+		focus_target.grab_focus()
+
+
 func _apply_and_return() -> void:
 	_game_page().call(&"write_to", _draft)
 	_additional_page().write_to(_draft)

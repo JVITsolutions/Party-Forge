@@ -39,6 +39,11 @@ const REQUIRED_MAIN_NODES: PackedStringArray = [
 
 var _profile_root := ""
 
+const CITY_TREE_ID := "party-forge-city-v1"
+const CITY_UNAVAILABLE_STATUS := "City services are temporarily unavailable."
+const CITY_LOCKED_STATUS := "Complete the prologue to unlock the City passive tree."
+const CITY_DEVELOPER_REQUIRED_STATUS := "Save Developer Mode before opening the Developer City Preview."
+
 func run() -> Array[String]:
     var failures: Array[String] = []
     var all_exist := true
@@ -53,7 +58,7 @@ func run() -> Array[String]:
     _test_main_scene_graph(failures)
     _test_profile_boot_and_developer_gate(failures)
     _test_main_menu_route_composition(failures)
-    _test_passive_tree_developer_composition(failures)
+    _test_passive_tree_route_composition(failures)
     _test_settings_and_next_run_snapshot_wiring(failures)
     _test_integrated_overlay_input_and_front_end_seam(failures)
     _test_hud_contract(failures)
@@ -149,7 +154,7 @@ func _test_main_menu_route_composition(failures: Array[String]) -> void:
     main.free()
     ProfileTestSupport.remove_tree(root)
 
-func _test_passive_tree_developer_composition(failures: Array[String]) -> void:
+func _test_passive_tree_route_composition(failures: Array[String]) -> void:
     var root := "user://tests/main_wiring-passive-tree_%d_%d" % [OS.get_process_id(), Time.get_ticks_usec()]
     ProfileTestSupport.remove_tree(root)
     var main := (load("res://scenes/game/main.tscn") as PackedScene).instantiate() as PartyForgeMain
@@ -157,28 +162,93 @@ func _test_passive_tree_developer_composition(failures: Array[String]) -> void:
     (Engine.get_main_loop() as SceneTree).root.add_child(main)
     main.call("_ready")
     var settings := main.get_node("SettingsScreen") as SettingsScreen
+    var menu := main.get_node("MainMenuScreen") as MainMenuScreen
+    var city_button := menu.get_node("CityTree") as Button
+    var menu_settings_button := menu.get_node("Settings") as Button
+    var additional := settings.get_node("Overlay/Frame/Layout/Tabs/Additional Settings") as AdditionalSettingsPage
+    var open_city_button := additional.get_node("Layout/OpenCityPassiveTree") as Button
+    var mode := additional.get_node("Layout/Mode") as OptionButton
     var tree_screen := main.get_node_or_null("PassiveTreeScreen") as PassiveTreeScreen
     TestAssertions.truthy(tree_screen != null, "main composes the reusable PassiveTreeScreen", failures)
     var has_definition := _has_property(main, &"passive_tree_definition")
     TestAssertions.truthy(has_definition, "main exposes one loaded passive tree definition", failures)
     if has_definition:
         TestAssertions.truthy(main.get("passive_tree_definition") != null, "main loads the validated City tree once at bootstrap", failures)
-    TestAssertions.truthy(settings.has_method(&"open_additional"), "Settings exposes Additional-tab reopen routing", failures)
+    TestAssertions.equal(_method_arg_count(main, &"_open_city_passive_tree"), 3, "main exposes one City route with context, origin, and return control", failures)
+    TestAssertions.truthy(settings.has_method(&"open_additional"), "Settings exposes Additional-tab resume routing", failures)
+    TestAssertions.truthy(settings.has_method(&"show_route_status"), "Settings exposes a player-facing child-route status contract", failures)
     TestAssertions.truthy(settings.has_signal(&"city_tree_requested"), "Settings forwards City tree requests", failures)
-    if settings.has_method(&"open_additional") and settings.has_signal(&"city_tree_requested"):
-        settings.call("open_additional", null)
-        (settings.get_node("Overlay/Frame/Layout/Tabs/Additional Settings/Layout/Mode") as OptionButton).selected = PartyForgeSettings.Mode.DEVELOPER_MODE
-        (settings.get_node("Overlay/Frame/Layout/Tabs/Additional Settings") as AdditionalSettingsPage).call("_on_mode_changed", PartyForgeSettings.Mode.DEVELOPER_MODE)
-        settings.emit_signal("city_tree_requested", true)
-    if tree_screen != null:
-        TestAssertions.truthy(tree_screen.is_open(), "Developer Settings request opens the City tree", failures)
-        TestAssertions.equal(tree_screen.get("_developer_context"), true, "main configures developer reveal without profile persistence", failures)
-        TestAssertions.equal((tree_screen.find_child("Status", true, false) as Label).text, PassiveTreeScreen.UNAVAILABLE_STATUS, "no active profile keeps City tree unavailable", failures)
-        TestAssertions.truthy(tree_screen.tree_closed.is_connected(Callable(main, "_on_city_passive_tree_closed")), "main listens for City tree close exactly once", failures)
-        tree_screen.close()
-        TestAssertions.truthy(settings.is_open(), "closing City tree returns to Settings", failures)
-    var additional := settings.get_node("Overlay/Frame/Layout/Tabs/Additional Settings")
-    TestAssertions.equal((settings.get_node("Overlay/Frame/Layout/Tabs") as TabContainer).get_tab_control((settings.get_node("Overlay/Frame/Layout/Tabs") as TabContainer).current_tab), additional, "closing City tree restores Additional Settings tab", failures)
+
+    var created := main.profile_manager.create_profile("City Route Tester", 1000)
+    TestAssertions.truthy(created.ok(), "City route fixture creates an active profile", failures)
+    var player_unlock_all := PartyForgeSettings.new()
+    player_unlock_all.mode = PartyForgeSettings.Mode.PLAYER_SIMULATION
+    player_unlock_all.unlock_all_implemented_content = true
+    main.call("_on_settings_applied", player_unlock_all)
+    settings.configure(main.settings_store, player_unlock_all, main.profile_manager)
+    main.call("_on_main_menu_route_requested", MainMenuViewModel.ROUTE_CITY_TREE)
+    TestAssertions.truthy(not tree_screen.is_open(), "Player Mode Unlock All cannot bypass durable City authorization", failures)
+    TestAssertions.equal((menu.get_node("Status") as Label).text, CITY_LOCKED_STATUS, "normal authorization denial is player-facing at the menu", failures)
+
+    var developer_settings := PartyForgeSettings.new()
+    developer_settings.mode = PartyForgeSettings.Mode.DEVELOPER_MODE
+    main.call("_on_settings_applied", developer_settings)
+    settings.configure(main.settings_store, developer_settings, main.profile_manager)
+    main.call("_on_main_menu_route_requested", MainMenuViewModel.ROUTE_CITY_TREE)
+    TestAssertions.truthy(tree_screen.is_open() and not menu.is_open(), "Developer Mode menu preview requires only an active profile and closes the menu", failures)
+    TestAssertions.equal(tree_screen.get("_developer_context"), true, "Developer Mode menu route preserves preview context", failures)
+    tree_screen.close()
+    main.call("_on_settings_applied", player_unlock_all)
+    settings.configure(main.settings_store, player_unlock_all, main.profile_manager)
+
+    var profile_id := created.profile.profile_id if created.ok() else ""
+    var profile_mutations := ProfileMutationService.new(ProfileStore.new())
+    var completed := profile_mutations.complete_prologue(profile_id, "main-wiring-city-complete", root)
+    TestAssertions.truthy(completed.ok(), "normal City route fixture completes the prologue durably", failures)
+    TestAssertions.equal(main.profile_manager.refresh_profile(profile_id), "", "normal City route fixture refreshes discovered City state", failures)
+    TestAssertions.truthy(main.active_profile().prologue_state == ProfileState.PrologueState.COMPLETED and CITY_TREE_ID in main.active_profile().discovered_trees, "normal City authorization uses completed durable profile state", failures)
+    main.call("_on_main_menu_route_requested", MainMenuViewModel.ROUTE_CITY_TREE)
+    TestAssertions.truthy(tree_screen.is_open() and not menu.is_open(), "authorized menu City route closes the menu and opens the tree", failures)
+    TestAssertions.equal(tree_screen.get("_developer_context"), false, "menu City route configures production progression context", failures)
+    TestAssertions.equal(tree_screen.get("_profiles"), main.profile_manager, "production City route uses the composed profile manager", failures)
+    TestAssertions.truthy(tree_screen.tree_closed.is_connected(Callable(main, "_on_city_passive_tree_closed")), "main listens for City tree close exactly once", failures)
+    tree_screen.close()
+    TestAssertions.truthy(menu.is_open() and not settings.is_open(), "closing production City returns only to the menu", failures)
+
+    main.call("_on_settings_applied", developer_settings)
+    settings.configure(main.settings_store, developer_settings, main.profile_manager)
+    settings.open_additional(menu_settings_button)
+    settings.call("_on_city_tree_requested", true)
+    TestAssertions.truthy(tree_screen.is_open() and not settings.is_open(), "saved Developer Mode opens the City preview from Additional Settings", failures)
+    TestAssertions.equal(tree_screen.get("_developer_context"), true, "Additional Settings configures developer preview context", failures)
+    var menu_projection_before_refresh := menu.get("_projection") as MainMenuProjection
+    main.profile_manager.profiles_changed.emit()
+    TestAssertions.truthy(tree_screen.is_open(), "profile projection refresh leaves the passive-tree child open", failures)
+    TestAssertions.truthy(menu.get("_projection") != menu_projection_before_refresh, "profile refresh updates the parent-menu projection while the passive-tree child remains open", failures)
+    tree_screen.close()
+    TestAssertions.truthy(settings.is_open(), "closing Developer City preview resumes Settings", failures)
+    TestAssertions.equal((settings.get_node("Overlay/Frame/Layout/Tabs") as TabContainer).get_tab_control((settings.get_node("Overlay/Frame/Layout/Tabs") as TabContainer).current_tab), additional, "closing Developer City preview restores Additional Settings tab", failures)
+
+    settings.close()
+    main.call("_on_settings_applied", player_unlock_all)
+    settings.configure(main.settings_store, player_unlock_all, main.profile_manager)
+    settings.open_additional(menu_settings_button)
+    mode.selected = PartyForgeSettings.Mode.DEVELOPER_MODE
+    additional.call("_on_mode_changed", PartyForgeSettings.Mode.DEVELOPER_MODE)
+    settings.call("_on_city_tree_requested", true)
+    TestAssertions.truthy(not tree_screen.is_open() and settings.is_open(), "unsaved Developer draft cannot authorize a preview", failures)
+    TestAssertions.equal((settings.get_node("Overlay/Frame/Layout/Status") as Label).text, CITY_DEVELOPER_REQUIRED_STATUS, "saved-mode denial is player-facing in Settings", failures)
+
+    settings.close()
+    main.call("_on_settings_applied", developer_settings)
+    settings.configure(main.settings_store, developer_settings, main.profile_manager)
+    settings.open_additional(menu_settings_button)
+    var original_definition := main.passive_tree_definition
+    main.passive_tree_definition = null
+    settings.call("_on_city_tree_requested", true)
+    TestAssertions.truthy(not tree_screen.is_open() and settings.is_open(), "unavailable City catalog never opens a half-configured preview", failures)
+    TestAssertions.equal((settings.get_node("Overlay/Frame/Layout/Status") as Label).text, CITY_UNAVAILABLE_STATUS, "unavailable preview reports at Additional Settings", failures)
+    main.passive_tree_definition = original_definition
     settings.close()
     main.free()
     ProfileTestSupport.remove_tree(root)
@@ -188,6 +258,12 @@ func _has_property(object: Object, property_name: StringName) -> bool:
         if StringName(property.get("name", "")) == property_name:
             return true
     return false
+
+func _method_arg_count(object: Object, method_name: StringName) -> int:
+    for method: Dictionary in object.get_method_list():
+        if StringName(method.get("name", "")) == method_name:
+            return (method.get("args", []) as Array).size()
+    return -1
 
 func _test_settings_and_next_run_snapshot_wiring(failures: Array[String]) -> void:
     var original_files := _backup_default_settings_artifacts()

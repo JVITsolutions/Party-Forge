@@ -29,7 +29,9 @@ func _run() -> void:
 	var manager := main.profile_manager
 	var settings := main.get_node("SettingsScreen") as SettingsScreen
 	var screen := main.get_node("PassiveTreeScreen") as PassiveTreeScreen
-	var settings_button := main.get_node("HUD/ClassSelection/Content/Actions/Settings") as Button
+	var menu := main.get_node("MainMenuScreen") as MainMenuScreen
+	var city_button := menu.get_node("CityTree") as Button
+	var settings_button := menu.get_node("Settings") as Button
 	_assert(manager != null and settings != null and screen != null, "composed Main exposes profile, Settings, and passive-tree services")
 	if manager == null or settings == null or screen == null:
 		await _finish(viewport)
@@ -55,29 +57,22 @@ func _run() -> void:
 		_assert(ProfileStore.new().save_profile(persisted.profile, _profile_root).is_empty(), "input fixture stores unresolved historical allocation IDs")
 	_assert(manager.refresh_profile(profile_id).is_empty(), "composed manager refreshes the mutation results")
 
-	settings.close()
 	await _frames(2)
-	_assert(viewport.gui_get_focus_owner() == settings_button, "fresh-profile Settings close restores the original caller")
-	settings_button.pressed.emit()
-	await _frames(2)
-	settings.open_additional(settings_button)
-	await _frames(2)
+	_assert(city_button.visible and not city_button.disabled, "completed durable profile exposes the production City route")
+	var before_view := manager.active_profile()
+	var before_allocations := before_view.tree_allocations.duplicate(true)
+	var before_visibility := before_view.tree_visibility_progress.duplicate(true)
+	city_button.pressed.emit()
+	await _frames(3)
+	_assert(screen.is_open() and not menu.is_open(), "menu City request closes the menu and opens the composed tree screen")
+	_assert(screen.get("_developer_context") == false, "menu City request uses production progression context")
+	_assert(manager.active_profile().tree_allocations == before_allocations, "production open performs no allocation before an explicit mutation")
+	_assert(manager.active_profile().tree_visibility_progress == before_visibility, "production open performs no visibility mutation")
+
 	var additional := settings.get_node("Overlay/Frame/Layout/Tabs/Additional Settings") as AdditionalSettingsPage
 	var mode := additional.get_node("Layout/Mode") as OptionButton
 	var capacity := additional.get_node("Layout/PartyCapacity/Value") as HSlider
 	var open_tree := additional.get_node("Layout/OpenCityPassiveTree") as Button
-	mode.select(PartyForgeSettings.Mode.DEVELOPER_MODE)
-	mode.item_selected.emit(PartyForgeSettings.Mode.DEVELOPER_MODE)
-	capacity.value = 9
-	_assert(not open_tree.disabled, "Developer draft enables Open City Passive Tree")
-	var before_view := manager.active_profile()
-	var before_allocations := before_view.tree_allocations.duplicate(true)
-	var before_visibility := before_view.tree_visibility_progress.duplicate(true)
-	open_tree.pressed.emit()
-	await _frames(3)
-	_assert(screen.is_open() and not settings.is_open(), "Developer Settings request opens the composed tree screen")
-	_assert(manager.active_profile().tree_allocations == before_allocations, "Developer reveal does not persist allocations before an explicit mutation")
-	_assert(manager.active_profile().tree_visibility_progress == before_visibility, "Developer reveal does not persist visibility")
 
 	var canvas := screen.get_node("Overlay/Frame/Layout/Body/Canvas") as PassiveTreeCanvas
 	_assert(canvas.selected_node_id() == &"city-heart", "tree opens on the allocated City root")
@@ -88,7 +83,6 @@ func _run() -> void:
 	_assert(canvas.selected_node_id() == &"equipment-registry", "device-0 left stick navigates to the linked right node")
 	var detail_sections := (screen.get_node("Overlay/Frame/Layout/Body/DetailScroll/DetailBody/DetailSections") as Label).text
 	_assert(detail_sections.contains("Cost") and detail_sections.contains("Refund Policy"), "composed selected detail discloses cost and refund policy")
-	_assert(detail_sections.contains("Coming Soon") and detail_sections.contains("Developer Preview"), "composed Developer detail discloses future-contract state")
 	_assert((screen.get_node("Overlay/Frame/Layout/Unresolved") as Label).text == "Unresolved saved allocations: removed-alpha, removed-zeta", "composed screen discloses sorted unresolved saved allocations")
 	await _joy_motion(viewport, JOY_AXIS_LEFT_X, 0.0)
 
@@ -136,6 +130,9 @@ func _run() -> void:
 	await _joy_button(viewport, JOY_BUTTON_A)
 	_assert("equipment-registry" in manager.active_profile().tree_allocations.get(TREE_ID, []), "controller confirmation persists the selected allocation")
 	_assert(not (screen.get_node("Overlay/Confirmation") as Control).visible, "successful allocation closes its confirmation")
+	var mutation_focus := viewport.gui_get_focus_owner()
+	_assert(screen.is_open() and not menu.is_open(), "successful mutation refresh leaves the production City child open")
+	_assert(mutation_focus != null and screen.is_ancestor_of(mutation_focus) and mutation_focus.is_visible_in_tree(), "successful mutation refresh preserves visible passive-tree focus")
 	await _joy_button(viewport, JOY_BUTTON_X)
 	_assert(not (screen.get_node("Overlay/Confirmation") as Control).visible, "permanent node refund request is rejected before confirmation")
 
@@ -155,30 +152,87 @@ func _run() -> void:
 	_assert(screen.is_open() and not (screen.get_node("Overlay/Confirmation") as Control).visible, "controller east face cancels a pending refund without closing the tree")
 
 	await _key(viewport, KEY_ESCAPE)
-	_assert(not screen.is_open() and settings.is_open(), "keyboard Escape closes the tree and resumes Settings")
-	_assert(viewport.gui_get_focus_owner() == open_tree, "tree close restores focus to Open City Passive Tree")
+	_assert(not screen.is_open() and menu.is_open() and not settings.is_open(), "keyboard Escape closes production City and returns to the menu")
+	_assert(viewport.gui_get_focus_owner() == city_button, "production City close restores exact CityTree focus")
+	_assert(menu.projection().city_tree_visible and menu.projection().city_tree_enabled, "latest mutated profile projection is visible after production City close")
+	var valid_definition := main.passive_tree_definition
+	main.passive_tree_definition = null
+	city_button.pressed.emit()
+	await _frames(2)
+	_assert(not screen.is_open() and menu.is_open(), "unavailable City catalog fails closed at the production menu")
+	_assert((menu.get_node("Status") as Label).text == "City services are temporarily unavailable.", "unavailable production route reports a nontechnical menu status")
+	_assert(viewport.gui_get_focus_owner() == city_button, "unavailable production route retains exact CityTree focus")
+	main.passive_tree_definition = valid_definition
+	main.call("_refresh_main_menu_projection")
+	menu.open(city_button)
+
+	var developer_settings := PartyForgeSettings.new()
+	developer_settings.mode = PartyForgeSettings.Mode.DEVELOPER_MODE
+	main.call("_on_settings_applied", developer_settings)
+	settings.configure(main.settings_store, developer_settings, manager)
+	settings_button.pressed.emit()
+	await _frames(2)
+	settings.open_additional(settings_button)
+	await _frames(2)
+	capacity.value = 9
+	_assert(not open_tree.disabled, "saved Developer Mode enables Open City Passive Tree")
+	var before_developer_view := manager.active_profile()
+	open_tree.pressed.emit()
+	await _frames(3)
+	_assert(screen.is_open() and not settings.is_open(), "Developer Settings request opens the composed tree screen")
+	_assert(screen.get("_developer_context") == true, "Developer Settings request uses preview progression context")
+	_assert(manager.active_profile().tree_allocations == before_developer_view.tree_allocations, "Developer reveal performs no allocation before an explicit mutation")
+	_assert(manager.active_profile().tree_visibility_progress == before_developer_view.tree_visibility_progress, "Developer reveal performs no visibility mutation")
+	var menu_projection_before_developer_mutation := menu.get("_projection") as MainMenuProjection
+	canvas = screen.get_node("Overlay/Frame/Layout/Body/Canvas") as PassiveTreeCanvas
+	_assert(canvas.select_node(&"open-market"), "Developer preview can select a connected unallocated node")
+	await _joy_button(viewport, JOY_BUTTON_A)
+	confirm_button.grab_focus()
+	await _joy_button(viewport, JOY_BUTTON_A)
+	_assert("open-market" in manager.active_profile().tree_allocations.get(TREE_ID, []), "Developer preview mutation refreshes the composed profile manager")
+	_assert(menu.get("_projection") != menu_projection_before_developer_mutation, "Developer mutation refreshes the menu projection while the child remains open")
+	var developer_mutation_focus := viewport.gui_get_focus_owner()
+	_assert(screen.is_open() and developer_mutation_focus != null and screen.is_ancestor_of(developer_mutation_focus) and developer_mutation_focus.is_visible_in_tree(), "Developer mutation keeps visible passive-tree focus while the menu projection refreshes")
+	await _key(viewport, KEY_ESCAPE)
+	_assert(not screen.is_open() and settings.is_open(), "keyboard Escape closes Developer City and resumes Settings")
+	_assert(viewport.gui_get_focus_owner() == open_tree, "Developer City close restores exact Open City Passive Tree focus")
 	_assert(int(capacity.value) == 9, "unsaved Settings draft survives the child tree round trip")
 	_assert(settings.current_settings().party_capacity_override != 9, "tree round trip does not apply the unsaved draft")
 	await _key(viewport, KEY_ESCAPE)
 	_assert(not settings.is_open() and viewport.gui_get_focus_owner() == settings_button, "closing resumed Settings restores its original external caller")
+
+	var player_unlock_all := PartyForgeSettings.new()
+	player_unlock_all.mode = PartyForgeSettings.Mode.PLAYER_SIMULATION
+	player_unlock_all.unlock_all_implemented_content = true
+	main.call("_on_settings_applied", player_unlock_all)
+	settings.configure(main.settings_store, player_unlock_all, manager)
+	settings.open_additional(settings_button)
+	await _frames(2)
+	mode.selected = PartyForgeSettings.Mode.DEVELOPER_MODE
+	mode.item_selected.emit(PartyForgeSettings.Mode.DEVELOPER_MODE)
+	open_tree.pressed.emit()
+	await _frames(3)
+	_assert(not screen.is_open() and settings.is_open(), "Player Mode Unlock All and an unsaved Developer draft cannot authorize preview")
+	_assert((settings.get_node("Overlay/Frame/Layout/Status") as Label).text == "Save Developer Mode before opening the Developer City Preview.", "saved-mode denial is nontechnical at Additional Settings")
+	_assert(viewport.gui_get_focus_owner() == open_tree, "saved-mode denial restores exact Additional City focus")
+	settings.close()
 
 	var original_definition := main.passive_tree_definition
 	_assert(_write_invalid_tree_fixture(), "disposable invalid-tree fixture is written outside committed data")
 	var invalid := PassiveTreeCatalog.load_path(_invalid_path)
 	_assert(not invalid.ok() and invalid.tree == null, "disposable malformed tree fails closed")
 	main.passive_tree_definition = invalid.tree
+	main.call("_on_settings_applied", developer_settings)
+	settings.configure(main.settings_store, developer_settings, manager)
 	settings.open_additional(settings_button)
 	await _frames(2)
-	mode.select(PartyForgeSettings.Mode.DEVELOPER_MODE)
-	mode.item_selected.emit(PartyForgeSettings.Mode.DEVELOPER_MODE)
 	open_tree.pressed.emit()
 	await _frames(3)
-	_assert(screen.is_open(), "invalid tree still opens the safe passive-tree screen")
-	_assert((screen.get_node("Overlay/Frame/Layout/Status") as Label).text == "City passive tree unavailable", "invalid tree shows the exact unavailable message")
+	_assert(not screen.is_open() and settings.is_open(), "invalid City catalog fails closed before configuring the passive-tree screen")
+	_assert((settings.get_node("Overlay/Frame/Layout/Status") as Label).text == "City services are temporarily unavailable.", "invalid tree reports a nontechnical status at Additional Settings")
+	_assert(viewport.gui_get_focus_owner() == open_tree, "invalid tree restores exact Additional City focus")
 	_assert(manager.active_profile() != null and manager.active_profile().profile_id == profile_id, "invalid tree leaves the active profile usable")
 	_assert(main.catalog_valid and not main.run_started, "invalid tree leaves Main and the arena launch catalog usable")
-	await _joy_button(viewport, JOY_BUTTON_B)
-	_assert(settings.is_open() and viewport.gui_get_focus_owner() == open_tree, "safe unavailable screen returns to usable Settings")
 	main.passive_tree_definition = original_definition
 	settings.close()
 

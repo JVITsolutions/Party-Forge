@@ -10,6 +10,13 @@ const RunResultPanelScript := preload("res://scripts/ui/run_result_panel.gd")
 const RUN_SEED := 1337
 const CURRENT_STARTING_PARTY_SIZE := 1
 const LEDGER_FEATURE_IDS: Array[StringName] = [&"stats", &"current_upgrades", &"equipment_inventory"]
+const CITY_TREE_ID := "party-forge-city-v1"
+const CITY_ORIGIN_MAIN_MENU: StringName = &"main_menu"
+const CITY_ORIGIN_ADDITIONAL_SETTINGS: StringName = &"additional_settings"
+const CITY_UNAVAILABLE_STATUS := "City services are temporarily unavailable."
+const CITY_LOCKED_STATUS := "Complete the prologue to unlock the City passive tree."
+const CITY_PROFILE_REQUIRED_STATUS := "Choose a profile before opening the City passive tree."
+const CITY_DEVELOPER_REQUIRED_STATUS := "Save Developer Mode before opening the Developer City Preview."
 
 var party_stats: Dictionary = {}
 var trait_upgrade_ranks: Dictionary = {}
@@ -39,6 +46,8 @@ var passive_tree_mutations: PassiveTreeMutationService
 var passive_tree_view_model: PassiveTreeViewModel
 var active_run_rules: RunRulesSnapshot
 var _level_up_offer_state := LevelUpOfferState.new()
+var _city_tree_origin: StringName = &""
+var _city_tree_return_focus: Control
 
 func _ready() -> void:
 	if initialized:
@@ -253,8 +262,8 @@ func _wire_static_ui() -> void:
 	var settings_screen := get_node("SettingsScreen") as SettingsScreen
 	if not settings_screen.settings_applied.is_connected(_on_settings_applied):
 		settings_screen.settings_applied.connect(_on_settings_applied)
-	if not settings_screen.city_tree_requested.is_connected(_open_city_passive_tree):
-		settings_screen.city_tree_requested.connect(_open_city_passive_tree)
+	if not settings_screen.city_tree_requested.is_connected(_on_settings_city_tree_requested):
+		settings_screen.city_tree_requested.connect(_on_settings_city_tree_requested)
 	var passive_screen := get_node("PassiveTreeScreen") as PassiveTreeScreen
 	if not passive_screen.tree_closed.is_connected(_on_city_passive_tree_closed):
 		passive_screen.tree_closed.connect(_on_city_passive_tree_closed)
@@ -300,7 +309,9 @@ func _on_main_menu_route_requested(route_id: StringName) -> void:
 		MainMenuViewModel.ROUTE_SETTINGS:
 			_open_settings_from_main_menu()
 		MainMenuViewModel.ROUTE_CITY_TREE:
-			_open_city_passive_tree(saved_settings != null and saved_settings.mode == PartyForgeSettings.Mode.DEVELOPER_MODE)
+			var menu := get_node("MainMenuScreen") as MainMenuScreen
+			var developer_preview := saved_settings != null and saved_settings.mode == PartyForgeSettings.Mode.DEVELOPER_MODE
+			_open_city_passive_tree(developer_preview, CITY_ORIGIN_MAIN_MENU, menu.get_node("CityTree") as Control)
 		MainMenuViewModel.ROUTE_QUIT:
 			_quit()
 
@@ -364,6 +375,8 @@ func _on_profiles_changed() -> void:
 
 func _on_active_profile_changed(_profile: ProfileState) -> void:
 	_refresh_main_menu_projection()
+	if _city_tree_is_open():
+		return
 	if run_started:
 		return
 	var settings_screen := get_node("SettingsScreen") as SettingsScreen
@@ -398,18 +411,85 @@ func _load_passive_tree_runtime() -> void:
 	passive_tree_view_model = PassiveTreeViewModel.new(progression, resolver, effects, requirements)
 
 
-func _open_city_passive_tree(developer_preview: bool) -> void:
-	if not developer_preview:
-		return
+func _on_settings_city_tree_requested(developer_preview: bool) -> void:
 	var button := get_node("SettingsScreen/Overlay/Frame/Layout/Tabs/Additional Settings/Layout/OpenCityPassiveTree") as Control
+	_open_city_passive_tree(developer_preview, CITY_ORIGIN_ADDITIONAL_SETTINGS, button)
+
+
+func _open_city_passive_tree(developer_preview: bool, origin: StringName, return_focus: Control) -> bool:
+	var denial_status := _city_route_denial(developer_preview)
+	if not denial_status.is_empty():
+		_fail_city_route(origin, return_focus, denial_status)
+		return false
+	_city_tree_origin = origin
+	_city_tree_return_focus = return_focus
 	var screen := get_node("PassiveTreeScreen") as PassiveTreeScreen
-	screen.configure(passive_tree_definition, profile_manager, passive_tree_mutations, passive_tree_view_model, true, profile_root)
-	screen.open(button)
+	screen.configure(passive_tree_definition, profile_manager, passive_tree_mutations, passive_tree_view_model, developer_preview, profile_root)
+	if origin == CITY_ORIGIN_MAIN_MENU:
+		(get_node("MainMenuScreen") as MainMenuScreen).close()
+	screen.open(return_focus)
+	return true
+
+
+func _city_route_denial(developer_preview: bool) -> String:
+	var profile := profile_manager.active_profile() if profile_manager != null else null
+	if profile == null:
+		return CITY_PROFILE_REQUIRED_STATUS
+	if developer_preview:
+		if saved_settings == null or saved_settings.mode != PartyForgeSettings.Mode.DEVELOPER_MODE:
+			return CITY_DEVELOPER_REQUIRED_STATUS
+	elif profile.prologue_state != ProfileState.PrologueState.COMPLETED or CITY_TREE_ID not in profile.discovered_trees:
+		return CITY_LOCKED_STATUS
+	if not _city_runtime_available():
+		return CITY_UNAVAILABLE_STATUS
+	return ""
+
+
+func _city_runtime_available() -> bool:
+	return (
+		passive_tree_definition != null
+		and String(passive_tree_definition.id) == CITY_TREE_ID
+		and profile_manager != null
+		and passive_tree_mutations != null
+		and passive_tree_view_model != null
+	)
+
+
+func _fail_city_route(origin: StringName, return_focus: Control, status_text: String) -> void:
+	_city_tree_origin = &""
+	_city_tree_return_focus = null
+	if origin == CITY_ORIGIN_ADDITIONAL_SETTINGS:
+		var settings := get_node("SettingsScreen") as SettingsScreen
+		settings.open_additional(return_focus)
+		settings.show_route_status(status_text, return_focus)
+		return
+	var menu := get_node("MainMenuScreen") as MainMenuScreen
+	menu.open(return_focus)
+	(menu.get_node("Status") as Label).text = status_text
+	_focus_control_if_available(return_focus)
+
+
+func _focus_control_if_available(control: Control) -> void:
+	if control != null and is_instance_valid(control) and control.is_inside_tree() and control.is_visible_in_tree() and control.focus_mode != Control.FOCUS_NONE:
+		control.grab_focus()
+
+
+func _city_tree_is_open() -> bool:
+	var screen := get_node_or_null("PassiveTreeScreen") as PassiveTreeScreen
+	return screen != null and screen.is_open()
 
 
 func _on_city_passive_tree_closed() -> void:
-	var button := get_node("SettingsScreen/Overlay/Frame/Layout/Tabs/Additional Settings/Layout/OpenCityPassiveTree") as Control
-	(get_node("SettingsScreen") as SettingsScreen).open_additional(button)
+	var origin := _city_tree_origin
+	var return_focus := _city_tree_return_focus
+	_city_tree_origin = &""
+	_city_tree_return_focus = null
+	_refresh_main_menu_projection()
+	if origin == CITY_ORIGIN_ADDITIONAL_SETTINGS:
+		(get_node("SettingsScreen") as SettingsScreen).open_additional(return_focus)
+		return
+	if origin == CITY_ORIGIN_MAIN_MENU:
+		(get_node("MainMenuScreen") as MainMenuScreen).open(return_focus)
 
 func _on_settings_applied(settings: PartyForgeSettings) -> void:
 	saved_settings = settings.copy()
