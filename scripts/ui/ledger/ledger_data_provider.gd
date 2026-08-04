@@ -9,19 +9,42 @@ const GROUP_ORDER: Array[StringName] = [&"overview", &"attributes", &"offense", 
 var party: PartyManager
 var catalog: GameCatalog
 var health_provider: Callable
+var progression_provider: Callable
+var progression_context: PlayerRunContext
 var _health_components: Dictionary = {}
 
-func configure(manager: PartyManager, game_catalog: GameCatalog, runtime_health: Callable) -> void:
+func _notification(what: int) -> void:
+	if what != NOTIFICATION_PREDELETE:
+		return
+	if progression_context != null and is_instance_valid(progression_context):
+		var callback := Callable(self, "_on_progression_changed")
+		if progression_context.progression_changed.is_connected(callback):
+			progression_context.progression_changed.disconnect(callback)
+	progression_context = null
+	progression_provider = Callable()
+
+func configure(
+	manager: PartyManager,
+	game_catalog: GameCatalog,
+	runtime_health: Callable,
+	progression_provider: Callable = Callable(),
+	progression_context: PlayerRunContext = null,
+) -> void:
 	_disconnect_party()
+	_disconnect_progression_context()
 	party = manager
 	catalog = game_catalog
 	health_provider = runtime_health
+	self.progression_provider = progression_provider
+	self.progression_context = progression_context
 	if party != null:
 		party.member_added.connect(_on_member_added)
 		party.stats_changed.connect(_on_stats_changed)
 		party.upgrades_changed.connect(_on_upgrades_changed)
 		party.class_rank_changed.connect(_on_class_rank_changed)
 		party.active_traits_changed.connect(_on_traits_changed)
+	if self.progression_context != null:
+		self.progression_context.progression_changed.connect(_on_progression_changed)
 
 func member_rows() -> Array[Dictionary]:
 	var rows: Array[Dictionary] = []
@@ -30,7 +53,7 @@ func member_rows() -> Array[Dictionary]:
 	for member: PartyMemberState in party.members:
 		var health: Dictionary = health_provider.call(member.member_id) if health_provider.is_valid() else {}
 		_observe_health_component(member.member_id, health.get("component") as HealthComponent)
-		rows.append({
+		var row := {
 			"member_id": member.member_id,
 			"character_name": member.character_name,
 			"class_name": member.class_definition.display_name,
@@ -43,7 +66,18 @@ func member_rows() -> Array[Dictionary]:
 			"is_dead": bool(health.get("is_dead", false)),
 			"traits": member.class_definition.traits.duplicate(),
 			"capabilities": member.capability_tags.duplicate(),
-		})
+		}
+		var progression := progression_provider.call(member.member_id) as CharacterProgressionState if progression_provider.is_valid() else null
+		var required := ExperienceSystem.DEFAULT_TUNING.requirement_for_level(1)
+		if progression != null:
+			required = progression.experience_required
+		row["character_level"] = progression.level if progression != null else 1
+		row["experience"] = progression.experience if progression != null else 0
+		row["experience_required"] = required
+		row["experience_fraction"] = float(row.experience) / float(maxi(required, 1))
+		row["guaranteed_growth_count"] = progression.guaranteed_growth_history.size() if progression != null else 0
+		row["milestone_count"] = progression.milestone_outcomes.size() if progression != null else 0
+		rows.append(row)
 	return rows
 
 func stat_rows(member_id: int, show_all := false) -> Array[Dictionary]:
@@ -251,6 +285,9 @@ func _on_class_rank_changed(_class_id: StringName, _rank: int) -> void:
 func _on_traits_changed(_tiers: Dictionary) -> void:
 	data_changed.emit(0)
 
+func _on_progression_changed(member_id: int) -> void:
+	data_changed.emit(member_id)
+
 func _observe_health_component(member_id: int, component: HealthComponent) -> void:
 	if component == null or not is_instance_valid(component):
 		return
@@ -308,3 +345,11 @@ func _disconnect_party() -> void:
 		var callback: Callable = connection[1]
 		if signal_value.is_connected(callback):
 			signal_value.disconnect(callback)
+
+func _disconnect_progression_context() -> void:
+	if progression_context != null and is_instance_valid(progression_context):
+		var callback := Callable(self, "_on_progression_changed")
+		if progression_context.progression_changed.is_connected(callback):
+			progression_context.progression_changed.disconnect(callback)
+	progression_context = null
+	progression_provider = Callable()

@@ -14,10 +14,25 @@ func run() -> Array[String]:
 	var party := PartyManager.new()
 	var fighter := catalog.class_by_id(&"fighter").duplicate(true) as ClassDefinition
 	party.initialize(fighter, catalog.traits)
-	var provider := LedgerDataProvider.new()
-	provider.configure(party, catalog, func(_member_id: int) -> Dictionary:
-		return {"current": 200.0, "maximum": 260.0, "is_downed": false, "is_dead": false}
+	var progression_context := PlayerRunContext.new()
+	TestAssertions.equal(
+		progression_context.configure(
+			&"stats_ledger_player",
+			0,
+			ProfileState.new_profile("profile-stats01", "Stats Ledger", 1000),
+			1337,
+			party,
+			100,
+		),
+		PackedStringArray(),
+		"Stats page progression context configures",
+		failures,
 	)
+	TestAssertions.truthy(progression_context.award_experience(1, 57).ok(), "Stats page member reaches level three with overflow XP", failures)
+	var runtime_health := {"current": 200.0, "maximum": 260.0, "is_downed": false, "is_dead": false}
+	var provider := LedgerDataProvider.new()
+	var health_provider := func(_member_id: int) -> Dictionary: return runtime_health.duplicate()
+	provider.configure(party, catalog, health_provider, Callable(progression_context, "progression_for"), progression_context)
 	var context := LedgerPlayerContext.new(0)
 	context.selected_member_id = 1
 	page.configure(provider, context)
@@ -45,7 +60,18 @@ func run() -> Array[String]:
 	page.refresh()
 	var identity := (page.get_node("Layout/Header/Identity") as Label).text
 	TestAssertions.truthy("Fighter" in identity and "Rank 1" in identity and "Frontline" in identity, "header identifies selected class rank and role", failures)
+	TestAssertions.truthy("Level 3" in identity, "header includes selected member level", failures)
+	TestAssertions.truthy("XP 7 / 44" in identity, "header includes selected member XP and current requirement", failures)
 	TestAssertions.truthy("200" in identity and "260" in identity, "header includes runtime health", failures)
+	runtime_health.is_downed = true
+	page.refresh()
+	TestAssertions.truthy("| Downed" in (page.get_node("Layout/Header/Identity") as Label).text, "progression header preserves downed state", failures)
+	runtime_health.is_dead = true
+	page.refresh()
+	TestAssertions.truthy("| Dead" in (page.get_node("Layout/Header/Identity") as Label).text, "progression header preserves dead state", failures)
+	runtime_health.is_downed = false
+	runtime_health.is_dead = false
+	page.refresh()
 	var traits_and_capabilities := (page.get_node("Layout/Header/TraitsAndCapabilities") as Label).text
 	TestAssertions.truthy("Martial" in traits_and_capabilities and "Vanguard" in traits_and_capabilities, "header lists selected traits", failures)
 	TestAssertions.truthy("Physical" in traits_and_capabilities and "Melee" in traits_and_capabilities, "header lists selected capabilities", failures)

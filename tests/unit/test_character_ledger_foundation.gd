@@ -7,7 +7,29 @@ func run() -> Array[String]:
 	_test_context_fallback(failures)
 	_test_pause_lease(failures)
 	_test_input_actions(failures)
+	_test_progression_contract_surface(failures)
 	return failures
+
+func _test_progression_contract_surface(failures: Array[String]) -> void:
+	var provider := LedgerDataProvider.new()
+	TestAssertions.equal(_method_argument_names(provider, &"configure"), [
+		&"manager", &"game_catalog", &"runtime_health", &"progression_provider", &"progression_context",
+	], "provider configure keeps exact trailing progression arguments", failures)
+	var ledger := CharacterLedger.new()
+	TestAssertions.equal(_method_argument_names(ledger, &"configure"), [
+		&"game_run", &"manager", &"game_catalog", &"health_provider", &"initial_contexts", &"feature_policy", &"progression_provider", &"progression_context",
+	], "ledger configure keeps exact trailing progression arguments", failures)
+	ledger.free()
+
+func _method_argument_names(instance: Object, method_name: StringName) -> Array[StringName]:
+	for method: Dictionary in instance.get_method_list():
+		if StringName(method.get("name", "")) != method_name:
+			continue
+		var names: Array[StringName] = []
+		for argument: Dictionary in method.get("args", []):
+			names.append(StringName(argument.get("name", "")))
+		return names
+	return []
 
 func _test_page_validation_and_order(failures: Array[String]) -> void:
 	var policy := RunRulesSnapshot.from_settings(PartyForgeSettings.new()).feature_policy([&"stats", &"upgrades"])

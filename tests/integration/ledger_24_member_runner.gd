@@ -15,10 +15,11 @@ func _initialize() -> void:
 
 func _run() -> void:
 	await _exercise_viewport(Vector2i(1920, 1080), false)
-	await _exercise_viewport(Vector2i(960, 540), true)
+	await _exercise_viewport(Vector2i(2560, 1440), false)
+	await _exercise_viewport(Vector2i(3840, 2160), false)
 	await _exercise_provider_refresh_focus_lifecycle()
 	if _failures.is_empty():
-		print("LEDGER_24_MEMBER_SUMMARY: PASS (2 viewports)")
+		print("LEDGER_24_MEMBER_SUMMARY: PASS (3 viewports)")
 		quit(0)
 		return
 	for failure: String in _failures:
@@ -28,7 +29,7 @@ func _run() -> void:
 
 
 func _exercise_viewport(viewport_size: Vector2i, compact: bool) -> void:
-	var mode := "compact" if compact else "desktop"
+	var mode := "%dx%d" % [viewport_size.x, viewport_size.y]
 	var viewport := SubViewport.new()
 	viewport.disable_3d = true
 	viewport.size = viewport_size
@@ -45,19 +46,37 @@ func _exercise_viewport(viewport_size: Vector2i, compact: bool) -> void:
 	_assert(member_state_24 != null, "%s fixture includes member 24" % mode)
 	if member_state_24 != null:
 		member_state_24.character_name = "Twenty Four"
+	var progression_context := PlayerRunContext.new()
+	_assert(progression_context.configure(
+		&"ledger_24_player",
+		0,
+		ProfileState.new_profile("profile-ledger24", "Ledger 24", 1000),
+		1337,
+		party,
+		100,
+	).is_empty(), "%s progression context configures" % mode)
+	_assert(progression_context.award_experience(1, 20).ok(), "%s member 1 reaches level two" % mode)
+	_assert(progression_context.award_experience(24, 57).ok(), "%s member 24 reaches level three with overflow XP" % mode)
 
 	var run := GameRun.new()
 	run.start_run()
 	var context := LedgerPlayerContext.new(0)
 	context.selected_member_id = 1
 	context.active_page_id = &"stats"
+	var ledger_contexts: Array[LedgerPlayerContext] = [context]
 	var ledger := (load(LEDGER_SCENE_PATH) as PackedScene).instantiate() as CharacterLedger
 	viewport.add_child(ledger)
-	ledger.configure(run, party, catalog, Callable(), [context])
+	ledger.configure(run, party, catalog, Callable(), ledger_contexts, null, Callable(progression_context, "progression_for"), progression_context)
 	ledger.apply_viewport_size(Vector2(viewport_size))
 	_assert(ledger.open_for_player(), "%s ledger opens" % mode)
 	_assert_label_text(ledger, PARTY_COUNT_PATH, "Party Members: 24 / 24", "%s count reports all developer members" % mode)
 	await _wait_for_layout()
+	var rows_by_id: Dictionary = {}
+	for row: Dictionary in ledger.provider.member_rows():
+		rows_by_id[int(row.member_id)] = row
+	_assert(rows_by_id.get(1, {}).get("character_level") == 2 and rows_by_id.get(1, {}).get("experience") == 0, "%s member 1 projects level 2 and XP 0" % mode)
+	_assert(rows_by_id.get(24, {}).get("character_level") == 3 and rows_by_id.get(24, {}).get("experience") == 7, "%s member 24 projects distinct level 3 and XP 7" % mode)
+	_assert_identity_progression(ledger, "Level 2", "XP 0 / 30", "%s member 1 header projection" % mode)
 
 	var expected_frame := Rect2(
 		Vector2(16.0, 12.0) if compact else Vector2(48.0, 36.0),
@@ -71,10 +90,11 @@ func _exercise_viewport(viewport_size: Vector2i, compact: bool) -> void:
 
 	member_24.grab_focus()
 	await _wait_for_layout()
-	_assert(scroll.scroll_vertical > minimum_scroll, "%s native focus scrolls member 24 into view" % mode)
+	_assert_roster_scroll_valid(scroll, member_24, minimum_scroll, "%s native focus keeps member 24 reachable" % mode)
 	_assert(_rects_intersect(scroll, member_24), "%s directly focused member 24 intersects the roster viewport" % mode)
 	member_24.pressed.emit()
 	_assert(context.selected_member_id == 24, "%s direct press selects member 24" % mode)
+	_assert_identity_progression(ledger, "Level 3", "XP 7 / 44", "%s member 24 direct-selection header projection" % mode)
 
 	member_1.grab_focus()
 	await _wait_for_layout()
@@ -82,6 +102,7 @@ func _exercise_viewport(viewport_size: Vector2i, compact: bool) -> void:
 	await _wait_for_layout()
 	_assert(context.selected_member_id == 1, "%s reset press selects member 1" % mode)
 	_assert(scroll.scroll_vertical <= minimum_scroll + 1, "%s focusing member 1 returns roster scroll to its minimum" % mode)
+	_assert_identity_progression(ledger, "Level 2", "XP 0 / 30", "%s member 1 reset-selection header projection" % mode)
 
 	if compact:
 		for _step: int in 7:
@@ -93,11 +114,12 @@ func _exercise_viewport(viewport_size: Vector2i, compact: bool) -> void:
 			await _push_action(viewport, &"ui_down")
 	var directional_focus := viewport.gui_get_focus_owner() as Button
 	_assert(directional_focus == member_24, "%s directional input reaches Member_24" % mode)
-	_assert(scroll.scroll_vertical > minimum_scroll, "%s directional focus scrolls member 24 into view" % mode)
+	_assert_roster_scroll_valid(scroll, member_24, minimum_scroll, "%s directional focus keeps member 24 reachable" % mode)
 	_assert(_rects_intersect(scroll, member_24), "%s directionally focused member 24 intersects the roster viewport" % mode)
 	if directional_focus != null:
 		directional_focus.pressed.emit()
 	_assert(context.selected_member_id == 24, "%s directional selection updates context to member 24" % mode)
+	_assert_identity_progression(ledger, "Level 3", "XP 7 / 44", "%s member 24 directional-selection header projection" % mode)
 
 	ledger.close()
 	paused = false
@@ -198,6 +220,12 @@ func _rects_intersect(scroll: ScrollContainer, member: Button) -> bool:
 	return member.is_visible_in_tree() and scroll.get_global_rect().intersects(member.get_global_rect())
 
 
+func _assert_roster_scroll_valid(scroll: ScrollContainer, member: Button, minimum_scroll: int, message: String) -> void:
+	var scroll_bar := scroll.get_v_scroll_bar()
+	var has_overflow := scroll_bar.max_value > scroll_bar.page
+	_assert((scroll.scroll_vertical > minimum_scroll if has_overflow else scroll.scroll_vertical <= minimum_scroll + 1) and _rects_intersect(scroll, member), message)
+
+
 func _assert_rect_near(actual: Rect2, expected: Rect2, message: String) -> void:
 	_assert(actual.position.is_equal_approx(expected.position) and actual.size.is_equal_approx(expected.size), "%s: expected=%s actual=%s" % [message, expected, actual])
 
@@ -212,6 +240,11 @@ func _assert_label_text(parent: Node, path: NodePath, expected: String, message:
 		_assert(false, "%s: expected Label at %s, got %s" % [message, path, node.get_class()])
 		return
 	_assert(label.text == expected, "%s: expected=%s actual=%s" % [message, expected, label.text])
+
+
+func _assert_identity_progression(ledger: CharacterLedger, level_text: String, xp_text: String, message: String) -> void:
+	var identity := ledger.get_node_or_null("Overlay/Frame/Layout/Body/PageHost/StatsLedgerPage/Layout/Header/Identity") as Label
+	_assert(identity != null and level_text in identity.text and xp_text in identity.text, "%s: expected level=%s xp=%s actual=%s" % [message, level_text, xp_text, identity.text if identity != null else "<missing>"])
 
 
 func _assert(condition: bool, message: String) -> void:

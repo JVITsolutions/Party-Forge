@@ -23,6 +23,12 @@ func run() -> Array[String]:
 	TestAssertions.equal(members.size(), 1, "provider returns only current members", failures)
 	TestAssertions.equal(members[0].health_current, 200.0, "provider uses runtime health", failures)
 	TestAssertions.truthy(not members[0].is_downed and not members[0].is_dead, "provider exposes current runtime health state", failures)
+	TestAssertions.equal(members[0].get("character_level"), 1, "neutral provider defaults members to level one", failures)
+	TestAssertions.equal(members[0].get("experience"), 0, "neutral provider defaults members to zero XP", failures)
+	TestAssertions.equal(members[0].get("experience_required"), ExperienceSystem.DEFAULT_TUNING.requirement_for_level(1), "neutral provider uses the default level-one XP requirement", failures)
+	TestAssertions.near(float(members[0].get("experience_fraction", -1.0)), 0.0, 0.0001, "neutral provider defaults XP fraction to zero", failures)
+	TestAssertions.equal(members[0].get("guaranteed_growth_count"), 0, "neutral provider defaults guaranteed growth count to zero", failures)
+	TestAssertions.equal(members[0].get("milestone_count"), 0, "neutral provider defaults milestone count to zero", failures)
 	var health_changes: Array[int] = []
 	var on_data_changed := func(member_id: int) -> void: health_changes.append(member_id)
 	provider.data_changed.connect(on_data_changed)
@@ -87,8 +93,72 @@ func run() -> Array[String]:
 		provider.data_changed.disconnect(on_data_changed)
 	health.free()
 	party.free()
+	_test_independent_progression_projection_and_core_attributes(failures)
 	_test_combat_estimate_action_discovery(failures)
 	return failures
+
+func _test_independent_progression_projection_and_core_attributes(failures: Array[String]) -> void:
+	var catalog := GameCatalog.load_defaults()
+	var party := PartyManager.new()
+	party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
+	TestAssertions.truthy(party.recruit(catalog.class_by_id(&"ranger")), "progression fixture recruits an independent follower", failures)
+	var context := PlayerRunContext.new()
+	TestAssertions.equal(
+		context.configure(
+			&"ledger_player",
+			0,
+			ProfileState.new_profile("profile-ledger01", "Ledger Player", 1000),
+			1337,
+			party,
+			100,
+		),
+		PackedStringArray(),
+		"ledger progression context configures",
+		failures,
+	)
+	TestAssertions.truthy(context.award_experience(1, 57).ok(), "member one reaches level three with overflow XP", failures)
+	TestAssertions.truthy(context.award_experience(2, 20).ok(), "member two reaches level two independently", failures)
+
+	var provider := LedgerDataProvider.new()
+	provider.configure(party, catalog, Callable(), Callable(context, "progression_for"), context)
+	var rows_by_id: Dictionary = {}
+	for row: Dictionary in provider.member_rows():
+		rows_by_id[int(row.member_id)] = row
+	var first := rows_by_id.get(1, {}) as Dictionary
+	var second := rows_by_id.get(2, {}) as Dictionary
+	TestAssertions.equal(first.get("character_level"), 3, "member one projects its own level", failures)
+	TestAssertions.equal(first.get("experience"), 7, "member one projects its own overflow XP", failures)
+	TestAssertions.equal(first.get("experience_required"), 44, "member one projects its current requirement", failures)
+	TestAssertions.near(float(first.get("experience_fraction", -1.0)), 7.0 / 44.0, 0.0001, "member one projects its XP fraction", failures)
+	TestAssertions.equal(first.get("guaranteed_growth_count"), 2, "member one projects guaranteed growth history", failures)
+	TestAssertions.equal(first.get("milestone_count"), 0, "member one projects milestone count", failures)
+	TestAssertions.equal(second.get("character_level"), 2, "member two does not mirror member one's level", failures)
+	TestAssertions.equal(second.get("experience"), 0, "member two does not mirror member one's XP", failures)
+	TestAssertions.equal(second.get("experience_required"), 30, "member two projects its own current requirement", failures)
+	TestAssertions.equal(second.get("guaranteed_growth_count"), 1, "member two projects its own growth history", failures)
+
+	var visible_attribute_ids := provider.stat_rows(1).map(func(row: Dictionary) -> StringName: return row.stat_id)
+	for attribute_id: StringName in ClassGrowthDefinition.CORE_ATTRIBUTE_IDS:
+		TestAssertions.truthy(attribute_id in visible_attribute_ids, "%s core attribute is visible without Show All" % attribute_id, failures)
+		var detail := provider.stat_detail(1, attribute_id)
+		TestAssertions.truthy(
+			Array(detail.get("sources", [])).any(func(source: Dictionary) -> bool: return String(source.get("source_label", "")) == "Class Growth"),
+			"%s detail includes the resolver-backed Class Growth source" % attribute_id,
+			failures,
+		)
+		TestAssertions.truthy(not String(detail.get("description", "")).is_empty() and not String(detail.get("description", "")).begins_with("Missing definition:"), "%s retains its keyword explanation" % attribute_id, failures)
+
+	var progression_events: Array[int] = []
+	var on_progression_data_changed := func(member_id: int) -> void: progression_events.append(member_id)
+	provider.data_changed.connect(on_progression_data_changed)
+	TestAssertions.truthy(context.award_experience(1, 1).ok(), "progression change fixture accepts another award", failures)
+	TestAssertions.equal(progression_events, [1], "context progression changes refresh only the affected member", failures)
+	provider.configure(null, null, Callable())
+	TestAssertions.truthy(context.award_experience(2, 1).ok(), "disconnected context can continue progressing", failures)
+	TestAssertions.equal(progression_events, [1], "provider disconnects progression context during reconfiguration", failures)
+	if provider.data_changed.is_connected(on_progression_data_changed):
+		provider.data_changed.disconnect(on_progression_data_changed)
+	party.free()
 
 func _test_combat_estimate_action_discovery(failures: Array[String]) -> void:
 	var catalog := GameCatalog.load_defaults()

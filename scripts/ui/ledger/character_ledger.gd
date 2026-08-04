@@ -53,7 +53,9 @@ func configure(
 	game_catalog: GameCatalog,
 	health_provider: Callable,
 	initial_contexts: Array[LedgerPlayerContext] = [],
-	feature_policy: FeatureAccessPolicy = null
+	feature_policy: FeatureAccessPolicy = null,
+	progression_provider: Callable = Callable(),
+	progression_context: PlayerRunContext = null,
 ) -> void:
 	_invalidate_member_visibility_requests()
 	if is_open():
@@ -76,7 +78,7 @@ func configure(
 		_contexts[0] = LedgerPlayerContext.new(0)
 	context = _contexts.get(0) as LedgerPlayerContext
 	provider = LedgerDataProvider.new()
-	provider.configure(party, catalog, health_provider)
+	provider.configure(party, catalog, health_provider, progression_provider, progression_context)
 	provider.data_changed.connect(_on_provider_data_changed)
 	provider.party_changed.connect(_on_provider_party_changed)
 	_build_pages()

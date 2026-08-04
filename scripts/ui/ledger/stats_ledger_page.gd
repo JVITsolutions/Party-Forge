@@ -143,10 +143,13 @@ func _render_header(member: Dictionary) -> void:
 		health_state = " | Dead"
 	elif bool(member.get("is_downed", false)):
 		health_state = " | Downed"
-	_identity().text = "%s | %s Rank %d | %s | Health %s / %s%s" % [
+	_identity().text = "%s | %s Rank %d | Level %d | XP %d / %d | %s | Health %s / %s%s" % [
 		character_name,
 		String(member.class_name),
 		int(member.class_rank),
+		int(member.character_level),
+		int(member.experience),
+		int(member.experience_required),
 		String(member.role_name),
 		_number(float(member.health_current)),
 		_number(float(member.health_maximum)),

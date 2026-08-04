@@ -160,7 +160,16 @@ func select_leader_class(class_id: StringName) -> bool:
 	if not experience_system.level_ready.is_connected(_on_level_ready): experience_system.level_ready.connect(_on_level_ready)
 	if not spawn_director.enemy_spawned.is_connected(_on_enemy_spawned): spawn_director.enemy_spawned.connect(_on_enemy_spawned)
 	run_started = true
-	character_ledger.configure(game_run, party_manager, catalog, Callable(self, "_ledger_health_for_member"), [], active_run_rules.feature_policy(LEDGER_FEATURE_IDS))
+	character_ledger.configure(
+		game_run,
+		party_manager,
+		catalog,
+		Callable(self, "_ledger_health_for_member"),
+		[],
+		active_run_rules.feature_policy(LEDGER_FEATURE_IDS),
+		Callable(active_run_context, "progression_for"),
+		active_run_context,
+	)
 	game_run.start_run()
 	(get_node("MainMenuScreen") as MainMenuScreen).close()
 	(get_node("HUD/ClassSelection") as ClassSelectionPanel).confirm_run_started()
