@@ -362,7 +362,7 @@ func _refresh_main_menu_projection() -> void:
 	var projection := MainMenuViewModel.build(
 		profile_manager.active_profile() if profile_manager != null else null,
 		saved_settings,
-		passive_tree_definition != null
+		_city_runtime_available()
 	)
 	if not profile_bootstrap_error.is_empty():
 		projection.status_text = "Some profile data needs attention. Open Settings > Profiles for details."

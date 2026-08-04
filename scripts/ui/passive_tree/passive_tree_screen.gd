@@ -311,6 +311,8 @@ func _cancel_confirmation() -> void:
 
 
 func _clear_confirmation(restore_focus: bool) -> void:
+	if not restore_focus and is_open() and _confirmation().visible and _close_button().is_inside_tree() and _close_button().is_visible_in_tree():
+		_close_button().grab_focus()
 	_pending_action = ""
 	_pending_node_id = &""
 	_confirmation_text().text = ""

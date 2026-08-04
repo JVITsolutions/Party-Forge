@@ -188,9 +188,17 @@ func _run() -> void:
 	_assert(canvas.select_node(&"open-market"), "Developer preview can select a connected unallocated node")
 	await _joy_button(viewport, JOY_BUTTON_A)
 	confirm_button.grab_focus()
+	var developer_mutation_focus_events: Array[Control] = []
+	var record_developer_mutation_focus := func(control: Control) -> void:
+		developer_mutation_focus_events.append(control)
+	viewport.gui_focus_changed.connect(record_developer_mutation_focus)
 	await _joy_button(viewport, JOY_BUTTON_A)
+	viewport.gui_focus_changed.disconnect(record_developer_mutation_focus)
+	var developer_mutation_focus_paths := developer_mutation_focus_events.map(func(control: Control) -> String: return "<none>" if control == null else String(control.get_path()))
 	_assert("open-market" in manager.active_profile().tree_allocations.get(TREE_ID, []), "Developer preview mutation refreshes the composed profile manager")
 	_assert(menu.get("_projection") != menu_projection_before_developer_mutation, "Developer mutation refreshes the menu projection while the child remains open")
+	_assert(not developer_mutation_focus_events.any(func(control: Control) -> bool: return control != null and menu.is_ancestor_of(control)), "Developer mutation never enters parent-menu focus during projection refresh events=%s" % [developer_mutation_focus_paths])
+	_assert(developer_mutation_focus_events.all(func(control: Control) -> bool: return control == null or screen.is_ancestor_of(control)), "Developer mutation focus never exits the open passive-tree child events=%s" % [developer_mutation_focus_paths])
 	var developer_mutation_focus := viewport.gui_get_focus_owner()
 	_assert(screen.is_open() and developer_mutation_focus != null and screen.is_ancestor_of(developer_mutation_focus) and developer_mutation_focus.is_visible_in_tree(), "Developer mutation keeps visible passive-tree focus while the menu projection refreshes")
 	await _key(viewport, KEY_ESCAPE)

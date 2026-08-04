@@ -215,6 +215,19 @@ func _test_passive_tree_route_composition(failures: Array[String]) -> void:
     tree_screen.close()
     TestAssertions.truthy(menu.is_open() and not settings.is_open(), "closing production City returns only to the menu", failures)
 
+    var original_tree_id := main.passive_tree_definition.id
+    main.passive_tree_definition.id = &"wrong-city-tree"
+    main.call("_refresh_main_menu_projection")
+    TestAssertions.truthy(menu.projection().city_tree_visible and not menu.projection().city_tree_enabled, "wrong City tree ID cannot advertise an enabled returning-menu route", failures)
+    main.passive_tree_definition.id = original_tree_id
+    var original_mutation_service := main.passive_tree_mutations
+    main.passive_tree_mutations = null
+    main.call("_refresh_main_menu_projection")
+    TestAssertions.truthy(menu.projection().city_tree_visible and not menu.projection().city_tree_enabled, "partial City runtime cannot advertise an enabled returning-menu route", failures)
+    main.passive_tree_mutations = original_mutation_service
+    main.call("_refresh_main_menu_projection")
+    TestAssertions.truthy(menu.projection().city_tree_enabled, "restored complete City runtime re-enables the durable route", failures)
+
     main.call("_on_settings_applied", developer_settings)
     settings.configure(main.settings_store, developer_settings, main.profile_manager)
     settings.open_additional(menu_settings_button)

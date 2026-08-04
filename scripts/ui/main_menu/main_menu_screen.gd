@@ -21,8 +21,8 @@ func present(next_projection: MainMenuProjection) -> void:
 	_projection = next_projection.copy() if next_projection != null else MainMenuProjection.new()
 	_apply_projection()
 	if is_open() and is_inside_tree():
-		var focus_owner := get_tree().root.gui_get_focus_owner()
-		if not _is_available_action(focus_owner):
+		var focus_owner := get_viewport().gui_get_focus_owner()
+		if (focus_owner == null or is_ancestor_of(focus_owner)) and not _is_available_action(focus_owner):
 			_focus_available_action()
 
 
