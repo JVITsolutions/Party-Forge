@@ -36,6 +36,7 @@ var experience_tuning: ExperienceTuning = DEFAULT_EXPERIENCE_TUNING
 var _progression_by_member: Dictionary = {}
 var _pending_leader_levels: Array[int] = []
 var _actor_by_member: Dictionary = {}
+var _configured := false
 
 func configure(
 	run_player_id_value: StringName,
@@ -45,6 +46,8 @@ func configure(
 	manager: PartyManager,
 	experience_multiplier: int,
 ) -> PackedStringArray:
+	if _configured:
+		return PackedStringArray(["PARTY_FORGE_RUN_CONTEXT_ERROR field=configuration reason=already configured"])
 	var errors := PackedStringArray()
 	if run_player_id_value.is_empty():
 		errors.append("PARTY_FORGE_RUN_CONTEXT_ERROR field=run_player_id")
@@ -54,8 +57,7 @@ func configure(
 		errors.append("PARTY_FORGE_RUN_CONTEXT_ERROR field=profile")
 	if run_seed_value <= 0:
 		errors.append("PARTY_FORGE_RUN_CONTEXT_ERROR field=run_seed")
-	if not _party_is_initialized(manager):
-		errors.append("PARTY_FORGE_RUN_CONTEXT_ERROR field=party")
+	errors.append_array(_party_validation_errors(manager))
 	if experience_multiplier < 100 or experience_multiplier > 1000:
 		errors.append("PARTY_FORGE_RUN_CONTEXT_ERROR field=experience_multiplier")
 	if not errors.is_empty():
@@ -87,6 +89,7 @@ func configure(
 	_actor_by_member.clear()
 	if not party.member_added.is_connected(member_added_callback):
 		party.member_added.connect(member_added_callback)
+	_configured = true
 	return errors
 
 func progression_for(member_id: int) -> CharacterProgressionState:
@@ -169,12 +172,20 @@ func _on_member_added(member: PartyMemberState) -> void:
 	if state != null:
 		_progression_by_member[member.member_id] = state
 
-func _party_is_initialized(manager: PartyManager) -> bool:
+func _party_validation_errors(manager: PartyManager) -> PackedStringArray:
+	var errors := PackedStringArray()
 	if manager == null or manager.members.is_empty():
-		return false
+		errors.append("PARTY_FORGE_RUN_CONTEXT_ERROR field=party")
+		return errors
 	var member_ids: Dictionary = {}
 	for member: PartyMemberState in manager.members:
 		if member == null or member.member_id <= 0 or member.class_definition == null or member_ids.has(member.member_id):
-			return false
+			return PackedStringArray(["PARTY_FORGE_RUN_CONTEXT_ERROR field=party"])
 		member_ids[member.member_id] = true
-	return true
+		var growth := member.class_definition.growth_definition
+		if growth == null:
+			errors.append("PARTY_FORGE_RUN_CONTEXT_ERROR field=party member=%d reason=growth definition missing" % member.member_id)
+			continue
+		for reason: String in growth.validate():
+			errors.append("PARTY_FORGE_RUN_CONTEXT_ERROR field=party member=%d reason=%s" % [member.member_id, reason])
+	return errors

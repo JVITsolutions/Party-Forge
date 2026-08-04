@@ -5,6 +5,7 @@ var _parties: Array[PartyManager] = []
 func run() -> Array[String]:
 	var failures: Array[String] = []
 	_assert_registration_contract(failures)
+	_assert_party_ownership_contract(failures)
 	_assert_unassigned_and_sorted_contract(failures)
 	_assert_device_reassignment_contract(failures)
 	_assert_join_policy(failures)
@@ -30,6 +31,34 @@ func _assert_registration_contract(failures: Array[String]) -> void:
 	registry.clear()
 	TestAssertions.equal(registry.all_contexts().size(), 0, "clear releases registrations", failures)
 	TestAssertions.truthy(not registry.is_arena_roster_locked(), "clear releases Arena roster lock", failures)
+
+func _assert_party_ownership_contract(failures: Array[String]) -> void:
+	var registry := RunContextRegistry.new()
+	var shared_party := _party()
+	var alpha := _context_for_party(&"party_owner_alpha", 0, "profile-party-alpha", shared_party)
+	var alias := _context_for_party(&"party_owner_beta", 1, "profile-party-beta", shared_party)
+	TestAssertions.truthy(registry.register_context(alpha, 7).ok(), "first party owner registers", failures)
+	var alias_result := registry.register_context(alias, 8)
+	TestAssertions.equal(
+		RunContextRegistrationResult.Code.keys()[alias_result.code],
+		"DUPLICATE_PARTY",
+		"one mutable party cannot be shared by two registered contexts",
+		failures,
+	)
+	TestAssertions.equal(
+		alias_result.message,
+		"PARTY_FORGE_RUN_CONTEXT_ERROR code=DUPLICATE_PARTY reason=party already registered",
+		"duplicate party rejection is stable and grep-friendly",
+		failures,
+	)
+	TestAssertions.equal(registry.all_contexts().size(), 1, "duplicate party rejection does not append a context", failures)
+	TestAssertions.equal(registry.context_for(&"party_owner_beta"), null, "duplicate party rejection does not index run player", failures)
+	TestAssertions.equal(registry.device_for(&"party_owner_beta"), -1, "duplicate party rejection does not index device", failures)
+
+	var replacement := _context(&"party_owner_beta", 1, "profile-party-beta")
+	TestAssertions.truthy(registry.register_context(replacement, 8).ok(), "same identity and device can retry with an unowned party", failures)
+	TestAssertions.equal(registry.all_contexts().size(), 2, "successful retry proves all rejected indexes stayed unchanged", failures)
+	TestAssertions.truthy(registry.context_for(&"party_owner_alpha") == alpha, "duplicate party rejection preserves original lookup", failures)
 
 func _assert_unassigned_and_sorted_contract(failures: Array[String]) -> void:
 	var registry := RunContextRegistry.new()
@@ -57,6 +86,15 @@ func _assert_device_reassignment_contract(failures: Array[String]) -> void:
 	TestAssertions.equal(registry.reassign_device(&"player_alpha", 1).code, RunContextRegistrationResult.Code.DUPLICATE_DEVICE, "assigned device cannot be stolen", failures)
 	TestAssertions.equal(registry.device_for(&"player_alpha"), 2, "failed reassignment preserves Alpha device", failures)
 	TestAssertions.equal(registry.device_for(&"player_beta"), 1, "failed reassignment preserves Beta device", failures)
+	registry.lock_arena_roster()
+	var current_result := registry.reassign_device(&"player_alpha", 2)
+	TestAssertions.equal(current_result.code, RunContextRegistrationResult.Code.ARENA_RUN_LOCKED, "Arena lock rejects reassignment to the current device", failures)
+	TestAssertions.equal(current_result.message, "PARTY_FORGE_RUN_CONTEXT_ERROR code=ARENA_RUN_LOCKED reason=Arena roster is locked", "locked current-device rejection is stable", failures)
+	var collision_result := registry.reassign_device(&"player_alpha", 1)
+	TestAssertions.equal(collision_result.code, RunContextRegistrationResult.Code.ARENA_RUN_LOCKED, "Arena lock has priority over a collision destination", failures)
+	TestAssertions.equal(collision_result.message, "PARTY_FORGE_RUN_CONTEXT_ERROR code=ARENA_RUN_LOCKED reason=Arena roster is locked", "locked collision rejection is stable", failures)
+	TestAssertions.equal(registry.device_for(&"player_alpha"), 2, "locked reassignments preserve Alpha device", failures)
+	TestAssertions.equal(registry.device_for(&"player_beta"), 1, "locked reassignments preserve Beta device", failures)
 
 func _assert_join_policy(failures: Array[String]) -> void:
 	TestAssertions.truthy(RunJoinPolicy.can_accept(&"arena", false, false), "Arena accepts while roster is unlocked", failures)
@@ -66,10 +104,16 @@ func _assert_join_policy(failures: Array[String]) -> void:
 	TestAssertions.truthy(not RunJoinPolicy.can_accept(&"unknown", false, true), "unknown mode rejects", failures)
 
 func _context(run_id: StringName, slot: int, profile_id: String) -> PlayerRunContext:
+	return _context_for_party(run_id, slot, profile_id, _party())
+
+func _party() -> PartyManager:
 	var catalog := GameCatalog.load_defaults()
 	var party := PartyManager.new()
 	party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
 	_parties.append(party)
+	return party
+
+func _context_for_party(run_id: StringName, slot: int, profile_id: String, party: PartyManager) -> PlayerRunContext:
 	var context := PlayerRunContext.new()
 	var errors := context.configure(run_id, slot, ProfileState.new_profile(profile_id, "Registry Fixture", 1000), 1337, party, 100)
 	assert(errors.is_empty())

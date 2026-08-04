@@ -9,6 +9,7 @@ enum Code {
 	DUPLICATE_SLOT,
 	DUPLICATE_DEVICE,
 	ARENA_RUN_LOCKED,
+	DUPLICATE_PARTY,
 }
 
 var code := Code.OK

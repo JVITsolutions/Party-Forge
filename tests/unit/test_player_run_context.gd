@@ -11,6 +11,7 @@ class RejectingPartyManager extends PartyManager:
 func run() -> Array[String]:
 	var failures: Array[String] = []
 	_test_configuration_validation_and_copy_ownership(failures)
+	_test_configuration_rejects_invalid_member_growth_atomically(failures)
 	_test_atomic_progression_and_leader_queue(failures)
 	_test_future_recruits_initialize_once(failures)
 	_test_actor_binding_availability_and_position(failures)
@@ -32,6 +33,15 @@ func _test_configuration_validation_and_copy_ownership(failures: Array[String]) 
 	TestAssertions.equal(invalid.run_player_id, &"", "failed configuration does not set run player", failures)
 	TestAssertions.equal(invalid.party, null, "failed configuration does not set party", failures)
 	uninitialized_party.free()
+	var retry_party := PartyManager.new()
+	retry_party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
+	TestAssertions.equal(
+		invalid.configure(&"retry_player", 4, ProfileState.new_profile("profile-retry001", "Retry Owner", 1000), 4004, retry_party, 100),
+		PackedStringArray(),
+		"failed initial configuration remains retryable",
+		failures,
+	)
+	retry_party.free()
 
 	var party := PartyManager.new()
 	party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
@@ -43,7 +53,6 @@ func _test_configuration_validation_and_copy_ownership(failures: Array[String]) 
 	TestAssertions.equal(context.player_slot_index, 3, "context exposes player slot", failures)
 	TestAssertions.equal(context.run_seed, 1337, "context exposes run seed", failures)
 	TestAssertions.equal(context.experience_multiplier_percent, 100, "context exposes XP multiplier", failures)
-
 	original_profile.gold = 99
 	var exposed_profile := context.profile_snapshot
 	TestAssertions.equal(exposed_profile.gold, 17, "configured profile is privately copied", failures)
@@ -54,18 +63,149 @@ func _test_configuration_validation_and_copy_ownership(failures: Array[String]) 
 	exposed_progression.core_attribute_gains[&"strength"] = 99
 	TestAssertions.equal(context.progression_for(1).level, 1, "progression getter isolates level", failures)
 	TestAssertions.equal(context.progression_for(1).core_attribute_gains[&"strength"], 0, "progression getter isolates attributes", failures)
+	var actor := Node3D.new()
+	var health := HealthComponent.new()
+	health.name = "HealthComponent"
+	health.configure(100.0, true, 8.0, 0.5)
+	actor.add_child(health)
+	TestAssertions.truthy(context.bind_actor(1, actor), "configured context binds its leader actor", failures)
+	TestAssertions.truthy(context.award_experience(1, 20).ok(), "configured context can establish progression and queue state", failures)
+	var registry := RunContextRegistry.new()
+	TestAssertions.truthy(registry.register_context(context).ok(), "configured context registers before immutability checks", failures)
+	var distributor := RewardDistributionService.new()
+	TestAssertions.equal(
+		distributor.configure(registry, load("res://data/progression/reward_distribution.tres") as RewardDistributionTuning),
+		PackedStringArray(),
+		"reward distributor configures for identity immutability",
+		failures,
+	)
+	var identity_packet := RewardPacket.create(&"identity_immutable_packet", 1, Vector3.ZERO)
+	TestAssertions.equal(
+		distributor.distribute(identity_packet).awarded_members,
+		PackedStringArray(["player_copy:1"]),
+		"identity packet resolves under the configured run-player ID",
+		failures,
+	)
 
 	var before_profile := context.profile_snapshot.to_dictionary()
 	var before_progression := context.progression_for(1).to_snapshot()
+	var before_queue := context.pending_leader_levels()
 	TestAssertions.equal(context.configure(&"replacement", 9, original_profile, 9999, party, 1001), PackedStringArray([
-		"PARTY_FORGE_RUN_CONTEXT_ERROR field=experience_multiplier",
-	]), "out-of-range XP multiplier is rejected", failures)
+		"PARTY_FORGE_RUN_CONTEXT_ERROR field=configuration reason=already configured",
+	]), "invalid reconfiguration is rejected by the single-configuration invariant", failures)
 	TestAssertions.equal(context.run_player_id, &"player_copy", "failed reconfiguration preserves run player", failures)
 	TestAssertions.equal(context.player_slot_index, 3, "failed reconfiguration preserves slot", failures)
 	TestAssertions.equal(context.profile_snapshot.to_dictionary(), before_profile, "failed reconfiguration preserves profile", failures)
 	TestAssertions.equal(context.progression_for(1).to_snapshot(), before_progression, "failed reconfiguration preserves progression", failures)
+	TestAssertions.equal(context.pending_leader_levels(), before_queue, "failed reconfiguration preserves leader queue", failures)
+	TestAssertions.truthy(context.actor_for(1) == actor, "failed reconfiguration preserves actor bindings", failures)
 	TestAssertions.truthy(context.party == party, "failed reconfiguration preserves party", failures)
+
+	var replacement_party := PartyManager.new()
+	replacement_party.initialize(catalog.class_by_id(&"ranger"), catalog.traits)
+	var replacement_profile := ProfileState.new_profile("profile-replacement", "Replacement", 2000)
+	TestAssertions.equal(context.configure(&"replacement", 9, replacement_profile, 9999, replacement_party, 250), PackedStringArray([
+		"PARTY_FORGE_RUN_CONTEXT_ERROR field=configuration reason=already configured",
+	]), "valid reconfiguration is rejected by the single-configuration invariant", failures)
+	TestAssertions.equal(context.run_player_id, &"player_copy", "valid reconfiguration cannot mutate run player", failures)
+	TestAssertions.equal(context.player_slot_index, 3, "valid reconfiguration cannot mutate slot", failures)
+	TestAssertions.equal(context.profile_snapshot.to_dictionary(), before_profile, "valid reconfiguration cannot mutate profile", failures)
+	TestAssertions.equal(context.run_seed, 1337, "valid reconfiguration cannot mutate run seed", failures)
+	TestAssertions.equal(context.experience_multiplier_percent, 100, "valid reconfiguration cannot mutate XP multiplier", failures)
+	TestAssertions.truthy(context.party == party, "valid reconfiguration cannot replace the owned party", failures)
+	TestAssertions.equal(context.progression_for(1).to_snapshot(), before_progression, "valid reconfiguration cannot reset progression", failures)
+	TestAssertions.equal(context.pending_leader_levels(), before_queue, "valid reconfiguration cannot clear leader queue", failures)
+	TestAssertions.truthy(context.actor_for(1) == actor, "valid reconfiguration cannot clear actor bindings", failures)
+	TestAssertions.truthy(registry.context_for(&"player_copy") == context, "registry lookup remains coherent under the original identity", failures)
+	TestAssertions.equal(registry.context_for(&"replacement"), null, "registry gains no lookup for a rejected identity", failures)
+	TestAssertions.truthy(distributor.has_resolved(&"identity_immutable_packet", &"player_copy"), "reward idempotency retains the original identity key", failures)
+	TestAssertions.truthy(not distributor.has_resolved(&"identity_immutable_packet", &"replacement"), "reward idempotency gains no drifted identity key", failures)
+	TestAssertions.equal(distributor.distribute(identity_packet), {
+		"awarded_members": PackedStringArray(),
+		"skipped_contexts": PackedStringArray(),
+		"errors": PackedStringArray(),
+	}, "same packet remains idempotent after rejected reconfiguration", failures)
+	TestAssertions.equal(context.progression_for(1).to_snapshot(), before_progression, "idempotent retry leaves progression unchanged", failures)
+	replacement_party.free()
+	actor.free()
 	party.free()
+
+func _test_configuration_rejects_invalid_member_growth_atomically(failures: Array[String]) -> void:
+	var catalog := GameCatalog.load_defaults()
+	var missing_party := PartyManager.new()
+	missing_party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
+	var missing_growth_class := catalog.class_by_id(&"ranger").duplicate(true) as ClassDefinition
+	missing_growth_class.growth_definition = null
+	TestAssertions.truthy(missing_party.recruit(missing_growth_class), "missing-growth follower joins the fixture party", failures)
+	var missing_context := PlayerRunContext.new()
+	var missing_signals: Array[String] = []
+	missing_context.member_level_ready.connect(func(member_id: int, level: int) -> void: missing_signals.append("level:%d:%d" % [member_id, level]))
+	missing_context.progression_changed.connect(func(member_id: int) -> void: missing_signals.append("changed:%d" % member_id))
+	TestAssertions.equal(
+		missing_context.configure(
+			&"missing_growth_player",
+			2,
+			ProfileState.new_profile("profile-missing-growth", "Missing Growth", 3000),
+			3003,
+			missing_party,
+			100,
+		),
+		PackedStringArray([
+			"PARTY_FORGE_RUN_CONTEXT_ERROR field=party member=2 reason=growth definition missing",
+		]),
+		"a missing member growth definition prevents context configuration",
+		failures,
+	)
+	_assert_unconfigured_context(missing_context, missing_signals, "missing growth", failures)
+	TestAssertions.truthy(missing_party.recruit(catalog.class_by_id(&"cleric")), "missing-growth party can change after rejection", failures)
+	TestAssertions.equal(missing_context.progression_for(3), null, "missing-growth rejection connects no member-added callback", failures)
+	missing_party.free()
+
+	var malformed_party := PartyManager.new()
+	malformed_party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
+	var malformed_class := catalog.class_by_id(&"ranger").duplicate(true) as ClassDefinition
+	var malformed_growth := ClassGrowthDefinition.new()
+	malformed_growth.guaranteed_cycle = [&"damage"]
+	malformed_growth.milestone_weights = {&"strength": 0.0}
+	malformed_class.growth_definition = malformed_growth
+	TestAssertions.truthy(malformed_party.recruit(malformed_class), "malformed-growth follower joins the fixture party", failures)
+	var malformed_context := PlayerRunContext.new()
+	var malformed_signals: Array[String] = []
+	malformed_context.member_level_ready.connect(func(member_id: int, level: int) -> void: malformed_signals.append("level:%d:%d" % [member_id, level]))
+	malformed_context.progression_changed.connect(func(member_id: int) -> void: malformed_signals.append("changed:%d" % member_id))
+	TestAssertions.equal(
+		malformed_context.configure(
+			&"malformed_growth_player",
+			3,
+			ProfileState.new_profile("profile-malformed-growth", "Malformed Growth", 4000),
+			4004,
+			malformed_party,
+			100,
+		),
+		PackedStringArray([
+			"PARTY_FORGE_RUN_CONTEXT_ERROR field=party member=2 reason=PARTY_FORGE_GROWTH_ERROR field=guaranteed_cycle value=damage reason=unknown core attribute",
+			"PARTY_FORGE_RUN_CONTEXT_ERROR field=party member=2 reason=PARTY_FORGE_GROWTH_ERROR field=milestone_weights reason=no positive weights",
+		]),
+		"malformed member growth prevents context configuration with stable reasons",
+		failures,
+	)
+	_assert_unconfigured_context(malformed_context, malformed_signals, "malformed growth", failures)
+	TestAssertions.truthy(malformed_party.recruit(catalog.class_by_id(&"cleric")), "malformed-growth party can change after rejection", failures)
+	TestAssertions.equal(malformed_context.progression_for(3), null, "malformed-growth rejection connects no member-added callback", failures)
+	malformed_party.free()
+
+func _assert_unconfigured_context(context: PlayerRunContext, signals: Array[String], label: String, failures: Array[String]) -> void:
+	TestAssertions.equal(context.run_player_id, &"", "%s rejection preserves empty run player" % label, failures)
+	TestAssertions.equal(context.player_slot_index, -1, "%s rejection preserves empty slot" % label, failures)
+	TestAssertions.equal(context.profile_id, "", "%s rejection preserves empty profile ID" % label, failures)
+	TestAssertions.equal(context.profile_snapshot, null, "%s rejection preserves empty profile snapshot" % label, failures)
+	TestAssertions.equal(context.run_seed, 0, "%s rejection preserves empty run seed" % label, failures)
+	TestAssertions.equal(context.experience_multiplier_percent, 100, "%s rejection preserves default multiplier" % label, failures)
+	TestAssertions.equal(context.party, null, "%s rejection preserves empty party" % label, failures)
+	TestAssertions.equal(context.progression_for(1), null, "%s rejection creates no leader progression" % label, failures)
+	TestAssertions.equal(context.progression_for(2), null, "%s rejection creates no follower progression" % label, failures)
+	TestAssertions.equal(context.pending_leader_levels(), [], "%s rejection creates no upgrade queue" % label, failures)
+	TestAssertions.equal(signals, [], "%s rejection emits no signals" % label, failures)
 
 func _test_atomic_progression_and_leader_queue(failures: Array[String]) -> void:
 	var fixture := _configured_fixture(RejectingPartyManager.new())
