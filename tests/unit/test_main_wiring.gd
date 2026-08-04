@@ -129,6 +129,7 @@ func _test_main_menu_route_composition(failures: Array[String]) -> void:
     TestAssertions.truthy(settings.settings_applied.is_connected(Callable(main, "_on_settings_applied")), "applied settings refresh the menu projection", failures)
     TestAssertions.truthy(main.has_method("_on_prologue_start_requested"), "main exposes a named temporary prologue-start handler", failures)
     TestAssertions.truthy(main.has_method("_on_prologue_resume_requested"), "main exposes a named temporary prologue-resume handler", failures)
+    TestAssertions.truthy(main.has_method("_on_developer_quick_start_requested"), "main exposes one dedicated Developer Quick Start handler", failures)
     TestAssertions.truthy(menu.route_requested.is_connected(Callable(main, "_on_main_menu_route_requested")), "main connects menu routes exactly through composition", failures)
     TestAssertions.truthy(not menu.route_requested.is_connected(Callable(main, "_quit")), "menu route signal does not bypass the route dispatcher", failures)
     TestAssertions.truthy((main.get_node("HUD/RunResultPanel") as Control).is_connected("quit_requested", Callable(main, "_quit")), "result panel keeps desktop quit ownership", failures)

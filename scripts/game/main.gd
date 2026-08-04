@@ -17,6 +17,9 @@ const CITY_UNAVAILABLE_STATUS := "City services are temporarily unavailable."
 const CITY_LOCKED_STATUS := "Complete the prologue to unlock the City passive tree."
 const CITY_PROFILE_REQUIRED_STATUS := "Choose a profile before opening the City passive tree."
 const CITY_DEVELOPER_REQUIRED_STATUS := "Save Developer Mode before opening the Developer City Preview."
+const DEVELOPER_QUICK_START_UNAVAILABLE_STATUS := "Developer Quick Start is temporarily unavailable."
+const DEVELOPER_QUICK_START_PROFILE_REQUIRED_STATUS := "Choose a profile before using Developer Quick Start."
+const DEVELOPER_QUICK_START_MODE_REQUIRED_STATUS := "Save Developer Mode before using Developer Quick Start."
 
 var party_stats: Dictionary = {}
 var trait_upgrade_ranks: Dictionary = {}
@@ -304,8 +307,10 @@ func _on_main_menu_route_requested(route_id: StringName) -> void:
 			_on_prologue_start_requested()
 		MainMenuViewModel.ROUTE_PROLOGUE_RESUME:
 			_on_prologue_resume_requested()
-		MainMenuViewModel.ROUTE_RUN_SETUP, MainMenuViewModel.ROUTE_DEVELOPER_QUICK_START:
+		MainMenuViewModel.ROUTE_RUN_SETUP:
 			_open_run_setup()
+		MainMenuViewModel.ROUTE_DEVELOPER_QUICK_START:
+			_on_developer_quick_start_requested()
 		MainMenuViewModel.ROUTE_SETTINGS:
 			_open_settings_from_main_menu()
 		MainMenuViewModel.ROUTE_CITY_TREE:
@@ -322,6 +327,36 @@ func _on_prologue_start_requested() -> void:
 
 func _on_prologue_resume_requested() -> void:
 	_open_run_setup()
+
+
+func _on_developer_quick_start_requested() -> void:
+	var denial_status := _developer_quick_start_denial()
+	if not denial_status.is_empty():
+		_fail_developer_quick_start(denial_status)
+		return
+	if not select_leader_class(&"fighter"):
+		_fail_developer_quick_start(DEVELOPER_QUICK_START_UNAVAILABLE_STATUS)
+
+
+func _developer_quick_start_denial() -> String:
+	if saved_settings == null or saved_settings.mode != PartyForgeSettings.Mode.DEVELOPER_MODE:
+		return DEVELOPER_QUICK_START_MODE_REQUIRED_STATUS
+	var profile := profile_manager.active_profile() if profile_manager != null else null
+	if profile == null or not ProfileCodec.validate_profile(profile).is_empty():
+		return DEVELOPER_QUICK_START_PROFILE_REQUIRED_STATUS
+	if catalog == null or not catalog_valid or not _validate_catalog(catalog, false) or catalog.class_by_id(&"fighter") == null:
+		catalog_valid = false
+		return DEVELOPER_QUICK_START_UNAVAILABLE_STATUS
+	return ""
+
+
+func _fail_developer_quick_start(status_text: String) -> void:
+	(get_node("HUD/ClassSelection") as ClassSelectionPanel).close()
+	var menu := get_node("MainMenuScreen") as MainMenuScreen
+	var quick_start := menu.get_node("DeveloperQuickStart") as Control
+	menu.open(quick_start)
+	(menu.get_node("Status") as Label).text = status_text
+	_focus_control_if_available(quick_start)
 
 
 func _open_run_setup() -> void:
