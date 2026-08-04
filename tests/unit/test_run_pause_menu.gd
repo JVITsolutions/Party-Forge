@@ -44,6 +44,7 @@ func run() -> Array[String]:
 	var quit_run := menu.get_node("Overlay/Panel/Content/QuitRun") as Button
 	var confirmation := menu.get_node("Overlay/QuitConfirmation") as Control
 	var confirm := menu.get_node("Overlay/QuitConfirmation/Panel/Content/Confirm") as Button
+	var cancel := menu.get_node("Overlay/QuitConfirmation/Panel/Content/Cancel") as Button
 	TestAssertions.truthy(settings.focus_mode != Control.FOCUS_NONE, "Settings remains focusable", failures)
 	TestAssertions.truthy(settings.has_meta("coming_soon") and bool(settings.get_meta("coming_soon")), "Settings is marked Coming Soon", failures)
 	settings.pressed.emit()
@@ -52,6 +53,9 @@ func run() -> Array[String]:
 
 	quit_run.pressed.emit()
 	TestAssertions.truthy(confirmation.visible and tree.paused, "Quit Run opens confirmation without releasing pause", failures)
+	for property_name: StringName in [&"focus_neighbor_left", &"focus_neighbor_top", &"focus_neighbor_right", &"focus_neighbor_bottom", &"focus_next", &"focus_previous"]:
+		TestAssertions.equal(confirm.get(property_name), confirm.get_path_to(cancel), "Confirm %s stays inside the modal" % property_name, failures)
+		TestAssertions.equal(cancel.get(property_name), cancel.get_path_to(confirm), "Cancel %s stays inside the modal" % property_name, failures)
 	menu.call("_unhandled_input", _action_event(&"ui_cancel"))
 	TestAssertions.truthy(bool(menu.visible) and not confirmation.visible, "Cancel closes only confirmation", failures)
 	TestAssertions.truthy(quit_run.focus_mode != Control.FOCUS_NONE, "Cancel leaves Quit Run as a valid focus-return target", failures)

@@ -109,9 +109,21 @@ custom_minimum_size = Vector2(0, 56)
 layout_mode = 2
 focus_mode = 2
 text = "Quit Run"
+focus_neighbor_left = NodePath("../Cancel")
+focus_neighbor_top = NodePath("../Cancel")
+focus_neighbor_right = NodePath("../Cancel")
+focus_neighbor_bottom = NodePath("../Cancel")
+focus_next = NodePath("../Cancel")
+focus_previous = NodePath("../Cancel")
 
 [node name="Cancel" type="Button" parent="Overlay/QuitConfirmation/Panel/Content"]
 custom_minimum_size = Vector2(0, 56)
 layout_mode = 2
 focus_mode = 2
 text = "Cancel"
+focus_neighbor_left = NodePath("../Confirm")
+focus_neighbor_top = NodePath("../Confirm")
+focus_neighbor_right = NodePath("../Confirm")
+focus_neighbor_bottom = NodePath("../Confirm")
+focus_next = NodePath("../Confirm")
+focus_previous = NodePath("../Confirm")
