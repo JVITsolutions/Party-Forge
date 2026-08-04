@@ -23,7 +23,7 @@ func bind_view(view: PassiveTreeNodeViewData) -> void:
 		text = ""
 		disabled = true
 		tooltip_text = ""
-		queue_redraw()
+		_node_visual().call(&"bind_view", null)
 		return
 	if _view.state == &"obscured":
 		_view.display_name = OBSCURED_NAME
@@ -48,10 +48,13 @@ func bind_view(view: PassiveTreeNodeViewData) -> void:
 		var tooltip_lines: Array[String] = [_view.description, "Refund Policy: %s" % _view.refund_policy_text]
 		tooltip_lines.append_array(_view.development_lines)
 		tooltip_text = "\n".join(tooltip_lines)
-	add_theme_color_override("font_outline_color", Color(0.98, 0.72, 0.22, 1.0) if _view.permanent else Color(0.08, 0.1, 0.16, 1.0))
-	add_theme_constant_override("outline_size", 4 if _view.permanent else 1)
+	var font_color := _font_color_for_state(_view.state)
+	for color_name: StringName in [&"font_color", &"font_hover_color", &"font_pressed_color", &"font_hover_pressed_color", &"font_focus_color", &"font_disabled_color"]:
+		add_theme_color_override(color_name, font_color)
+	add_theme_color_override("font_outline_color", _font_outline_color(font_color, _view.permanent))
+	add_theme_constant_override("outline_size", 4 if _view.permanent else 3)
 	disabled = false
-	queue_redraw()
+	_node_visual().call(&"bind_view", _view)
 
 
 func view_data() -> PassiveTreeNodeViewData:
@@ -63,37 +66,15 @@ func _on_pressed() -> void:
 		node_selected.emit(_view.id)
 
 
-func _draw() -> void:
-	if _view == null:
-		return
-	var center := size * 0.5
-	var radius := maxf(10.0, minf(size.x, size.y) * 0.42)
-	var fill := _state_color(_view.state)
-	if _view.type in [&"keystone", &"start"]:
-		var points := PackedVector2Array([
-			center + Vector2(0.0, -radius),
-			center + Vector2(radius, 0.0),
-			center + Vector2(0.0, radius),
-			center + Vector2(-radius, 0.0),
-		])
-		draw_colored_polygon(points, fill)
-		draw_polyline(PackedVector2Array([points[0], points[1], points[2], points[3], points[0]]), _outline_color(), 4.0 if _view.permanent else 3.0, true)
-	else:
-		draw_circle(center, radius, fill)
-		draw_arc(center, radius, 0.0, TAU, 32, _outline_color(), 4.0 if _view.permanent else 3.0, true)
+func _node_visual() -> Control:
+	return get_node("NodeVisual") as Control
 
 
-func _outline_color() -> Color:
-	return Color(0.98, 0.72, 0.22, 1.0) if _view != null and _view.permanent else Color(0.88, 0.9, 1.0)
+func _font_color_for_state(state: StringName) -> Color:
+	return Color(0.025, 0.035, 0.055, 1.0) if state in [&"allocated", &"allocatable"] else Color(0.97, 0.98, 1.0, 1.0)
 
 
-func _state_color(state: StringName) -> Color:
-	match state:
-		&"allocated":
-			return Color(0.18, 0.72, 0.48, 0.95)
-		&"allocatable":
-			return Color(0.2, 0.48, 0.88, 0.95)
-		&"obscured":
-			return Color(0.12, 0.14, 0.2, 0.98)
-		_:
-			return Color(0.32, 0.34, 0.42, 0.95)
+func _font_outline_color(font_color: Color, permanent: bool) -> Color:
+	if permanent:
+		return Color(0.98, 0.72, 0.22, 1.0)
+	return Color(0.92, 0.95, 1.0, 1.0) if font_color.get_luminance() < 0.5 else Color(0.025, 0.035, 0.055, 1.0)

@@ -243,6 +243,7 @@ func _default_selection() -> StringName:
 
 
 func _on_selection_changed(node_id: StringName) -> void:
+	_detail_scroll().scroll_vertical = 0
 	var view := _views.get(node_id) as PassiveTreeNodeViewData
 	if view == null:
 		_clear_detail()
@@ -423,6 +424,10 @@ func _unresolved() -> Label:
 
 func _detail_title() -> Label:
 	return get_node("Overlay/Frame/Layout/Body/DetailScroll/DetailBody/DetailTitle") as Label
+
+
+func _detail_scroll() -> ScrollContainer:
+	return get_node("Overlay/Frame/Layout/Body/DetailScroll") as ScrollContainer
 
 
 func _detail_description() -> Label:
