@@ -33,6 +33,7 @@ var saved_settings: PartyForgeSettings
 var settings_store: PartyForgeSettingsStore
 var profile_root := ProfileStore.DEFAULT_ROOT
 var profile_manager: ProfileManager
+var profile_bootstrap_error := ""
 var passive_tree_definition: PassiveTreeDefinition
 var passive_tree_mutations: PassiveTreeMutationService
 var passive_tree_view_model: PassiveTreeViewModel
@@ -47,19 +48,17 @@ func _ready() -> void:
 	settings_store = PartyForgeSettingsStore.new()
 	saved_settings = settings_store.load_settings()
 	profile_manager = ProfileManager.new()
-	var profile_error := profile_manager.bootstrap(profile_root)
-	if not profile_error.is_empty():
-		push_error(profile_error)
+	profile_bootstrap_error = profile_manager.bootstrap(profile_root)
+	if not profile_bootstrap_error.is_empty():
+		push_error(profile_bootstrap_error)
 	var settings_screen := get_node("SettingsScreen") as SettingsScreen
 	settings_screen.configure(settings_store, saved_settings, profile_manager)
-	if not profile_error.is_empty() or profile_manager.active_profile() == null:
-		settings_screen.open_profiles(get_node_or_null("HUD/ClassSelection/Content/Actions/Settings") as Control)
+	_expose_profile_bootstrap_diagnostic()
 	catalog = GameCatalog.load_defaults()
 	catalog_valid = _validate_catalog(catalog)
-	if not catalog_valid:
-		return
 	_load_passive_tree_runtime()
 	_wire_static_ui()
+	_present_front_end()
 	print("PARTY_FORGE_BOOT_OK")
 	print("PARTY_FORGE_CLASS_SELECTION_READY")
 
@@ -68,7 +67,7 @@ func select_leader_class(class_id: StringName) -> bool:
 		_ready()
 	if profile_manager == null or profile_manager.active_profile() == null:
 		push_error("PARTY_FORGE_RUN_PROFILE_REQUIRED")
-		(get_node("SettingsScreen") as SettingsScreen).open_profiles(get_node_or_null("HUD/ClassSelection/Content/Actions/Settings") as Control)
+		_open_profiles_from_main_menu()
 		return false
 	if run_started or catalog == null or not catalog_valid:
 		return false
@@ -117,6 +116,7 @@ func select_leader_class(class_id: StringName) -> bool:
 	run_started = true
 	character_ledger.configure(game_run, party_manager, catalog, Callable(self, "_ledger_health_for_member"), [], active_run_rules.feature_policy(LEDGER_FEATURE_IDS))
 	game_run.start_run()
+	(get_node("MainMenuScreen") as MainMenuScreen).close()
 	(get_node("HUD/ClassSelection") as ClassSelectionPanel).confirm_run_started()
 	return true
 
@@ -245,6 +245,11 @@ func _wire_static_ui() -> void:
 		selector.class_selected.connect(select_leader_class)
 	if not selector.settings_requested.is_connected(_open_settings):
 		selector.settings_requested.connect(_open_settings)
+	if not selector.back_requested.is_connected(_on_run_setup_back_requested):
+		selector.back_requested.connect(_on_run_setup_back_requested)
+	var main_menu := get_node("MainMenuScreen") as MainMenuScreen
+	if not main_menu.route_requested.is_connected(_on_main_menu_route_requested):
+		main_menu.route_requested.connect(_on_main_menu_route_requested)
 	var settings_screen := get_node("SettingsScreen") as SettingsScreen
 	if not settings_screen.settings_applied.is_connected(_on_settings_applied):
 		settings_screen.settings_applied.connect(_on_settings_applied)
@@ -253,6 +258,10 @@ func _wire_static_ui() -> void:
 	var passive_screen := get_node("PassiveTreeScreen") as PassiveTreeScreen
 	if not passive_screen.tree_closed.is_connected(_on_city_passive_tree_closed):
 		passive_screen.tree_closed.connect(_on_city_passive_tree_closed)
+	if not profile_manager.profiles_changed.is_connected(_on_profiles_changed):
+		profile_manager.profiles_changed.connect(_on_profiles_changed)
+	if not profile_manager.active_profile_changed.is_connected(_on_active_profile_changed):
+		profile_manager.active_profile_changed.connect(_on_active_profile_changed)
 	var level_panel := get_node("HUD/LevelUpPanel") as LevelUpPanel
 	level_panel.configure(catalog, UpgradeApplicationService.new(), Callable(self, "_health_for_member"))
 	var legacy_apply := Callable(self, "_apply_choice")
@@ -276,6 +285,106 @@ func _wire_static_ui() -> void:
 func _open_settings() -> void:
 	var return_focus := get_node("HUD/ClassSelection/Content/Actions/Settings") as Control
 	(get_node("SettingsScreen") as SettingsScreen).open(return_focus)
+
+
+func _on_main_menu_route_requested(route_id: StringName) -> void:
+	match route_id:
+		MainMenuViewModel.ROUTE_PROFILES:
+			_open_profiles_from_main_menu()
+		MainMenuViewModel.ROUTE_PROLOGUE_START:
+			_on_prologue_start_requested()
+		MainMenuViewModel.ROUTE_PROLOGUE_RESUME:
+			_on_prologue_resume_requested()
+		MainMenuViewModel.ROUTE_RUN_SETUP, MainMenuViewModel.ROUTE_DEVELOPER_QUICK_START:
+			_open_run_setup()
+		MainMenuViewModel.ROUTE_SETTINGS:
+			_open_settings_from_main_menu()
+		MainMenuViewModel.ROUTE_CITY_TREE:
+			_open_city_passive_tree(saved_settings != null and saved_settings.mode == PartyForgeSettings.Mode.DEVELOPER_MODE)
+		MainMenuViewModel.ROUTE_QUIT:
+			_quit()
+
+
+func _on_prologue_start_requested() -> void:
+	_open_run_setup()
+
+
+func _on_prologue_resume_requested() -> void:
+	_open_run_setup()
+
+
+func _open_run_setup() -> void:
+	(get_node("MainMenuScreen") as MainMenuScreen).close()
+	(get_node("HUD/ClassSelection") as ClassSelectionPanel).open()
+
+
+func _on_run_setup_back_requested() -> void:
+	var selector := get_node("HUD/ClassSelection") as ClassSelectionPanel
+	selector.close()
+	var menu := get_node("MainMenuScreen") as MainMenuScreen
+	menu.open(menu.get_node("PrimaryAction") as Control)
+
+
+func _open_profiles_from_main_menu() -> void:
+	var menu := get_node("MainMenuScreen") as MainMenuScreen
+	menu.open(menu.get_node("PrimaryAction") as Control)
+	(get_node("HUD/ClassSelection") as ClassSelectionPanel).close()
+	(get_node("SettingsScreen") as SettingsScreen).open_profiles(menu.get_node("PrimaryAction") as Control)
+
+
+func _open_settings_from_main_menu() -> void:
+	var menu := get_node("MainMenuScreen") as MainMenuScreen
+	(get_node("SettingsScreen") as SettingsScreen).open(menu.get_node("Settings") as Control)
+
+
+func _present_front_end(preferred_focus: Control = null) -> void:
+	run_started = false
+	(get_node("HUD/Margin") as Control).visible = false
+	(get_node("HUD/ClassSelection") as ClassSelectionPanel).close()
+	(get_node("SettingsScreen") as SettingsScreen).close()
+	_refresh_main_menu_projection()
+	var menu := get_node("MainMenuScreen") as MainMenuScreen
+	menu.open(preferred_focus if preferred_focus != null else menu.get_node("PrimaryAction") as Control)
+
+
+func _refresh_main_menu_projection() -> void:
+	var projection := MainMenuViewModel.build(
+		profile_manager.active_profile() if profile_manager != null else null,
+		saved_settings,
+		passive_tree_definition != null
+	)
+	if not profile_bootstrap_error.is_empty():
+		projection.status_text = "Some profile data needs attention. Open Settings > Profiles for details."
+	(get_node("MainMenuScreen") as MainMenuScreen).present(projection)
+
+
+func _on_profiles_changed() -> void:
+	_refresh_main_menu_projection()
+
+
+func _on_active_profile_changed(_profile: ProfileState) -> void:
+	_refresh_main_menu_projection()
+	if run_started:
+		return
+	var settings_screen := get_node("SettingsScreen") as SettingsScreen
+	if settings_screen.is_open():
+		settings_screen.close()
+	var selector := get_node("HUD/ClassSelection") as ClassSelectionPanel
+	selector.close()
+	var menu := get_node("MainMenuScreen") as MainMenuScreen
+	menu.open(menu.get_node("PrimaryAction") as Control)
+
+
+func _expose_profile_bootstrap_diagnostic() -> void:
+	if profile_bootstrap_error.is_empty():
+		return
+	var profiles := get_node("SettingsScreen/Overlay/Frame/Layout/Tabs/Profiles") as ProfilesSettingsPage
+	var status := profiles.get_node("Layout/Status") as Label
+	var technical := profiles.get_node("Layout/TechnicalDetails") as Label
+	status.text = "Some profile data could not be loaded. You can create or choose another profile."
+	status.tooltip_text = profile_bootstrap_error
+	technical.text = profile_bootstrap_error
+	technical.visible = true
 
 
 func _load_passive_tree_runtime() -> void:
@@ -306,6 +415,7 @@ func _on_city_passive_tree_closed() -> void:
 
 func _on_settings_applied(settings: PartyForgeSettings) -> void:
 	saved_settings = settings.copy()
+	_refresh_main_menu_projection()
 
 func _on_level_ready(_level: int) -> void:
 	if not run_started:

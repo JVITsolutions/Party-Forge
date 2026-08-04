@@ -1,4 +1,4 @@
-[gd_scene load_steps=16 format=3]
+[gd_scene load_steps=17 format=3]
 
 [ext_resource type="Script" path="res://scripts/game/main.gd" id="1_main"]
 [ext_resource type="PackedScene" path="res://scenes/arena/arena.tscn" id="2_arena"]
@@ -14,6 +14,7 @@
 [ext_resource type="PackedScene" path="res://scenes/ui/settings/settings_screen.tscn" id="12_settings"]
 [ext_resource type="PackedScene" path="res://scenes/ui/developer_mode_badge.tscn" id="13_badge"]
 [ext_resource type="PackedScene" path="res://scenes/ui/passive_tree/passive_tree_screen.tscn" id="14_passive_tree"]
+[ext_resource type="PackedScene" path="res://scenes/ui/main_menu/main_menu_screen.tscn" id="15_main_menu"]
 
 [node name="Main" type="Node"]
 script = ExtResource("1_main")
@@ -44,6 +45,8 @@ script = ExtResource("8_actor_spawn")
 [node name="LeaderCamera" parent="." instance=ExtResource("3_camera")]
 
 [node name="HUD" parent="." instance=ExtResource("9_hud")]
+
+[node name="MainMenuScreen" parent="." instance=ExtResource("15_main_menu")]
 
 [node name="DeveloperModeBadge" parent="." instance=ExtResource("13_badge")]
 

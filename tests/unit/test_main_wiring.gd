@@ -9,6 +9,7 @@ const REQUIRED_PATHS: PackedStringArray = [
     "res://scripts/ui/ledger/character_ledger.gd",
     "res://scripts/ui/run_pause_menu.gd",
     "res://scripts/ui/developer_mode_badge.gd",
+    "res://scripts/ui/main_menu/main_menu_screen.gd",
     "res://scenes/ui/hud.tscn",
     "res://scenes/ui/level_up_panel.tscn",
     "res://scenes/ui/run_result_panel.tscn",
@@ -16,6 +17,7 @@ const REQUIRED_PATHS: PackedStringArray = [
     "res://scenes/ui/ledger/character_ledger.tscn",
     "res://scenes/ui/run_pause_menu.tscn",
     "res://scenes/ui/developer_mode_badge.tscn",
+    "res://scenes/ui/main_menu/main_menu_screen.tscn",
     "res://scenes/game/main.tscn",
     "res://scenes/arena/arena.tscn",
     "res://scenes/characters/leader.tscn",
@@ -32,7 +34,7 @@ const REQUIRED_MAIN_NODES: PackedStringArray = [
     "GameRun", "PartyManager", "ExperienceSystem", "SpawnDirector",
     "PartyActorSpawner", "Arena", "Actors", "Enemies", "Effects", "HUD",
     "DeveloperModeBadge", "CharacterLedger", "RunPauseMenu",
-    "SettingsScreen", "PassiveTreeScreen",
+    "MainMenuScreen", "SettingsScreen", "PassiveTreeScreen",
 ]
 
 var _profile_root := ""
@@ -50,6 +52,7 @@ func run() -> Array[String]:
     ProfileTestSupport.remove_tree(_profile_root)
     _test_main_scene_graph(failures)
     _test_profile_boot_and_developer_gate(failures)
+    _test_main_menu_route_composition(failures)
     _test_passive_tree_developer_composition(failures)
     _test_settings_and_next_run_snapshot_wiring(failures)
     _test_integrated_overlay_input_and_front_end_seam(failures)
@@ -79,9 +82,11 @@ func _test_profile_boot_and_developer_gate(failures: Array[String]) -> void:
     main.call("_ready")
     var manager := main.get("profile_manager") as ProfileManager
     var settings := main.get_node("SettingsScreen") as SettingsScreen
+    var menu := main.get_node_or_null("MainMenuScreen") as MainMenuScreen
     TestAssertions.truthy(manager != null, "main exposes one ProfileManager", failures)
     TestAssertions.equal(settings.get("_profile_manager"), manager, "Settings receives the main ProfileManager", failures)
     TestAssertions.equal(manager.profiles().size(), 0, "fresh main does not auto-create a profile", failures)
+    TestAssertions.truthy(menu != null and menu.is_open() and not (main.get_node("HUD/ClassSelection") as ClassSelectionPanel).is_open(), "fresh main composes menu before run setup", failures)
     var developer_settings := PartyForgeSettings.new()
     developer_settings.mode = PartyForgeSettings.Mode.DEVELOPER_MODE
     developer_settings.unlock_all_implemented_content = true
@@ -97,6 +102,52 @@ func _test_profile_boot_and_developer_gate(failures: Array[String]) -> void:
     (Engine.get_main_loop() as SceneTree).paused = false
     main.free()
     ProfileTestSupport.remove_tree(profile_root)
+
+func _test_main_menu_route_composition(failures: Array[String]) -> void:
+    var root := "user://tests/main-wiring-menu-routes_%d_%d" % [OS.get_process_id(), Time.get_ticks_usec()]
+    ProfileTestSupport.remove_tree(root)
+    var main := (load("res://scenes/game/main.tscn") as PackedScene).instantiate() as PartyForgeMain
+    main.profile_root = root
+    (Engine.get_main_loop() as SceneTree).root.add_child(main)
+    main.call("_ready")
+    var menu := main.get_node_or_null("MainMenuScreen") as MainMenuScreen
+    var selector := main.get_node("HUD/ClassSelection") as ClassSelectionPanel
+    var settings := main.get_node("SettingsScreen") as SettingsScreen
+    TestAssertions.truthy(menu != null, "route composition owns MainMenuScreen", failures)
+    if menu == null:
+        main.free()
+        ProfileTestSupport.remove_tree(root)
+        return
+    TestAssertions.truthy(menu.route_requested.is_connected(Callable(main, "_on_main_menu_route_requested")), "main owns the menu route dispatcher", failures)
+    TestAssertions.truthy(main.profile_manager.profiles_changed.is_connected(Callable(main, "_on_profiles_changed")), "profile-list changes refresh the menu projection", failures)
+    TestAssertions.truthy(main.profile_manager.active_profile_changed.is_connected(Callable(main, "_on_active_profile_changed")), "active-profile changes refresh the menu projection", failures)
+    TestAssertions.truthy(settings.settings_applied.is_connected(Callable(main, "_on_settings_applied")), "applied settings refresh the menu projection", failures)
+    TestAssertions.truthy(main.has_method("_on_prologue_start_requested"), "main exposes a named temporary prologue-start handler", failures)
+    TestAssertions.truthy(main.has_method("_on_prologue_resume_requested"), "main exposes a named temporary prologue-resume handler", failures)
+    TestAssertions.truthy(menu.route_requested.is_connected(Callable(main, "_on_main_menu_route_requested")), "main connects menu routes exactly through composition", failures)
+    TestAssertions.truthy(not menu.route_requested.is_connected(Callable(main, "_quit")), "menu route signal does not bypass the route dispatcher", failures)
+    TestAssertions.truthy((main.get_node("HUD/RunResultPanel") as Control).is_connected("quit_requested", Callable(main, "_quit")), "result panel keeps desktop quit ownership", failures)
+    var created := main.profile_manager.create_profile("Route Tester")
+    TestAssertions.truthy(created.ok(), "route fixture creates an active profile", failures)
+    var initial_state := main.active_profile().prologue_state
+    main.call("_on_main_menu_route_requested", MainMenuViewModel.ROUTE_PROLOGUE_START)
+    TestAssertions.truthy(selector.is_open() and not menu.is_open(), "prologue start opens run setup", failures)
+    TestAssertions.equal(main.active_profile().prologue_state, initial_state, "prologue start leaves durable state unchanged", failures)
+    selector.back_requested.emit()
+    TestAssertions.truthy(menu.is_open() and not selector.is_open(), "run-setup Back returns to the main menu", failures)
+    main.call("_on_main_menu_route_requested", MainMenuViewModel.ROUTE_PROLOGUE_RESUME)
+    TestAssertions.truthy(selector.is_open(), "prologue resume opens the same run setup", failures)
+    TestAssertions.equal(main.active_profile().prologue_state, initial_state, "prologue resume leaves durable state unchanged", failures)
+    selector.back_requested.emit()
+    main.call("_on_main_menu_route_requested", MainMenuViewModel.ROUTE_RUN_SETUP)
+    TestAssertions.truthy(selector.is_open(), "run_setup opens the same class-selection destination", failures)
+    selector.settings_requested.emit()
+    TestAssertions.truthy(settings.is_open(), "run-setup Settings opens Settings", failures)
+    settings.close()
+    selector.back_requested.emit()
+    TestAssertions.truthy(not main.run_started and main.leader == null, "front-end route traversal never starts gameplay", failures)
+    main.free()
+    ProfileTestSupport.remove_tree(root)
 
 func _test_passive_tree_developer_composition(failures: Array[String]) -> void:
     var root := "user://tests/main_wiring-passive-tree_%d_%d" % [OS.get_process_id(), Time.get_ticks_usec()]
@@ -198,7 +249,11 @@ func _test_main_scene_graph(failures: Array[String]) -> void:
         TestAssertions.truthy(main.get_node_or_null(node_name) != null, "main owns %s" % node_name, failures)
     TestAssertions.equal(main.get_node_or_null("Leader"), null, "main waits for initial class selection before creating leader", failures)
     var class_selection := main.get_node_or_null("HUD/ClassSelection") as Control
-    TestAssertions.truthy(class_selection != null and class_selection.visible, "initial class selection is visible", failures)
+    var main_menu := main.get_node_or_null("MainMenuScreen") as CanvasLayer
+    TestAssertions.truthy(main_menu != null and main_menu.layer == 5, "main composes the menu at layer 5", failures)
+    TestAssertions.truthy((main.get_node("SettingsScreen") as CanvasLayer).layer == 10, "Settings remains at layer 10", failures)
+    TestAssertions.truthy((main.get_node("PassiveTreeScreen") as CanvasLayer).layer == 12, "passive tree remains at layer 12", failures)
+    TestAssertions.truthy(class_selection != null and class_selection.visible, "scene retains reusable class selection before composition boot", failures)
     var ledger := main.get_node_or_null("CharacterLedger") as CanvasLayer
     var pause_menu := main.get_node_or_null("RunPauseMenu") as CanvasLayer
     var developer_badge := main.get_node_or_null("DeveloperModeBadge") as CanvasLayer
@@ -236,6 +291,8 @@ func _test_integrated_overlay_input_and_front_end_seam(failures: Array[String]) 
     TestAssertions.truthy(pause_menu.is_connected("quit_run_confirmed", front_end_callable), "confirmed Quit Run routes to the front-end seam", failures)
     var result := main.get_node("HUD/RunResultPanel")
     TestAssertions.truthy(result.is_connected("quit_requested", Callable(main, "_quit")), "desktop result-panel Quit keeps its protected route", failures)
+    var menu := main.get_node_or_null("MainMenuScreen") as MainMenuScreen
+    TestAssertions.truthy(menu != null and menu.route_requested.is_connected(Callable(main, "_on_main_menu_route_requested")), "main-menu Quit intent remains routed through PartyForgeMain", failures)
     tree.paused = false
     main.free()
 

@@ -30,7 +30,30 @@ func _test_fresh_boot_and_run_gate(root: String, failures: Array[String]) -> voi
 	TestAssertions.truthy(main.get("profile_manager") is ProfileManager, "main creates ProfileManager", failures)
 	TestAssertions.equal(main.call("active_profile"), null, "fresh boot has no active profile", failures)
 	var settings := main.get_node("SettingsScreen") as SettingsScreen
-	TestAssertions.truthy(settings.is_open(), "fresh boot opens Profiles Settings", failures)
+	var menu := main.get_node_or_null("MainMenuScreen") as MainMenuScreen
+	var selector := main.get_node("HUD/ClassSelection") as ClassSelectionPanel
+	var run_hud := main.get_node("HUD/Margin") as Control
+	var game_run := main.get_node("GameRun") as GameRun
+	TestAssertions.truthy(menu != null, "fresh boot composes MainMenuScreen", failures)
+	if menu == null:
+		(Engine.get_main_loop() as SceneTree).paused = false
+		main.free()
+		return
+	var primary := menu.get_node("PrimaryAction") as Button
+	TestAssertions.truthy(menu.is_open(), "fresh boot opens the main menu", failures)
+	TestAssertions.truthy(not settings.is_open(), "fresh boot keeps Settings closed", failures)
+	TestAssertions.truthy(not selector.is_open(), "fresh boot keeps run setup hidden", failures)
+	TestAssertions.truthy(not run_hud.visible, "fresh boot keeps the run HUD hidden", failures)
+	TestAssertions.equal(main.get("leader"), null, "fresh boot creates no leader", failures)
+	TestAssertions.equal(game_run.current_state(), RunStateMachine.State.SETUP, "fresh boot keeps the run timer in setup", failures)
+	TestAssertions.near(game_run.elapsed_time(), 0.0, 0.001, "fresh boot keeps elapsed run time at zero", failures)
+	TestAssertions.equal(primary.text, "Play", "fresh boot presents the no-profile Play action", failures)
+	menu.route_requested.emit(menu.projection().primary_route_id)
+	var profiles := settings.get_node("Overlay/Frame/Layout/Tabs/Profiles") as ProfilesSettingsPage
+	var profile_name := profiles.get_node("Layout/CreateRow/ProfileName") as LineEdit
+	TestAssertions.truthy(settings.is_open(), "no-profile Play opens Settings", failures)
+	TestAssertions.equal(settings.get("_return_focus"), primary, "no-profile Play preserves PrimaryAction return focus", failures)
+	TestAssertions.equal(profiles.initial_focus(), profile_name, "no-profile Play targets ProfileName as initial focus", failures)
 
 	TestAssertions.truthy(not main.call("select_leader_class", &"fighter"), "run launch rejects missing profile", failures)
 	TestAssertions.truthy(not main.call("select_leader_class", &"fighter"), "repeated run launch still rejects missing profile", failures)
@@ -46,6 +69,14 @@ func _test_fresh_boot_and_run_gate(root: String, failures: Array[String]) -> voi
 	if exposed != null:
 		exposed.display_name = "Mutated Copy"
 		TestAssertions.equal((main.call("active_profile") as ProfileState).display_name, "Jacob", "main active profile is a defensive copy", failures)
+	TestAssertions.truthy(menu.is_open() and not settings.is_open(), "profile creation returns to the main menu", failures)
+	TestAssertions.equal(menu.projection().active_profile_text, "Active Profile: Jacob", "profile creation refreshes the selected display name", failures)
+	TestAssertions.equal(main.get("run_started"), false, "profile creation never auto-starts a run", failures)
+	TestAssertions.truthy(not selector.is_open() and not run_hud.visible, "profile creation leaves run setup and HUD hidden", failures)
+	var before_prologue := (main.call("active_profile") as ProfileState).prologue_state
+	menu.route_requested.emit(menu.projection().primary_route_id)
+	TestAssertions.truthy(selector.is_open() and not menu.is_open(), "prologue start routes to current run setup", failures)
+	TestAssertions.equal((main.call("active_profile") as ProfileState).prologue_state, before_prologue, "temporary prologue start route does not mutate profile progress", failures)
 	TestAssertions.truthy(main.call("select_leader_class", &"fighter"), "active profile permits existing arena launch", failures)
 	TestAssertions.equal(main.get("run_started"), true, "profile-backed class selection starts gameplay", failures)
 	(Engine.get_main_loop() as SceneTree).paused = false
@@ -66,9 +97,19 @@ func _test_bootstrap_error_routes_to_profiles(root: String, failures: Array[Stri
 	(Engine.get_main_loop() as SceneTree).root.add_child(main)
 	main.call("_ready")
 	var settings := main.get_node("SettingsScreen") as SettingsScreen
+	var menu := main.get_node_or_null("MainMenuScreen") as MainMenuScreen
 	TestAssertions.equal(main.call("active_profile"), null, "bootstrap error exposes no active profile", failures)
 	TestAssertions.equal(settings.get("_profile_manager"), main.get("profile_manager"), "bootstrap error routes the main manager to Profiles Settings", failures)
-	TestAssertions.truthy(settings.is_open(), "bootstrap error opens Settings", failures)
+	TestAssertions.truthy(menu != null, "bootstrap error composes MainMenuScreen", failures)
+	if menu == null:
+		(Engine.get_main_loop() as SceneTree).paused = false
+		main.free()
+		return
+	TestAssertions.truthy(menu.is_open() and not settings.is_open(), "bootstrap error still boots to the main menu", failures)
+	TestAssertions.truthy(not menu.projection().status_text.contains("PROFILE_") and not menu.projection().status_text.contains(root), "bootstrap error menu status is nontechnical", failures)
+	menu.route_requested.emit(menu.projection().primary_route_id)
+	var technical := settings.get_node("Overlay/Frame/Layout/Tabs/Profiles/Layout/TechnicalDetails") as Label
+	TestAssertions.truthy(settings.is_open() and technical.text.contains(expected_error), "Profiles retains bootstrap technical details", failures)
 	TestAssertions.truthy(not main.call("select_leader_class", &"fighter"), "bootstrap error cannot launch a run", failures)
 	TestAssertions.equal(main.get("run_started"), false, "bootstrap error leaves gameplay unstarted", failures)
 	(Engine.get_main_loop() as SceneTree).paused = false
@@ -88,8 +129,16 @@ func _test_mixed_healthy_and_damaged_boot(root: String, failures: Array[String])
 	(Engine.get_main_loop() as SceneTree).root.add_child(main)
 	main.call("_ready")
 	var settings := main.get_node("SettingsScreen") as SettingsScreen
+	var menu := main.get_node_or_null("MainMenuScreen") as MainMenuScreen
 	var list := settings.get_node("Overlay/Frame/Layout/Tabs/Profiles/Layout/ProfileList") as ItemList
-	TestAssertions.truthy(settings.is_open(), "mixed boot opens Profiles Settings for damaged status", failures)
+	TestAssertions.truthy(menu != null, "mixed boot composes MainMenuScreen", failures)
+	if menu == null:
+		(Engine.get_main_loop() as SceneTree).paused = false
+		main.free()
+		return
+	TestAssertions.truthy(menu.is_open() and not settings.is_open(), "mixed healthy and damaged boot opens the main menu", failures)
+	TestAssertions.truthy(not menu.projection().status_text.contains("PROFILE_"), "mixed boot exposes only a safe menu status", failures)
+	settings.open_profiles(menu.get_node("Settings") as Control)
 	TestAssertions.equal(list.item_count, 2, "mixed boot visibly retains healthy and damaged profiles", failures)
 	TestAssertions.equal((main.call("active_profile") as ProfileState).profile_id, healthy.profile_id, "mixed boot retains the healthy active profile", failures)
 	var damaged_index := -1
