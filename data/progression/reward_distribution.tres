@@ -1,0 +1,8 @@
+[gd_resource type="Resource" script_class="RewardDistributionTuning" format=3]
+
+[ext_resource type="Script" path="res://scripts/run/reward_distribution_tuning.gd" id="1_tuning"]
+
+[resource]
+script = ExtResource("1_tuning")
+leader_event_share_radius = 18.0
+follower_squad_link_radius = 14.0
