@@ -346,6 +346,72 @@ visibility = 1
 capability_tags = Array[StringName]([&"chaos"])
 keyword_id = &"chaos_resistance"
 
+[sub_resource type="Resource" id="Resource_attribute_strength"]
+script = ExtResource("1_w76bv")
+id = &"strength"
+display_name = "Strength"
+ui_group = &"attributes"
+value_format = 1
+precision = 0
+default_value = 0.0
+visibility = 0
+keyword_id = &"strength"
+
+[sub_resource type="Resource" id="Resource_attribute_dexterity"]
+script = ExtResource("1_w76bv")
+id = &"dexterity"
+display_name = "Dexterity"
+ui_group = &"attributes"
+value_format = 1
+precision = 0
+default_value = 0.0
+visibility = 0
+keyword_id = &"dexterity"
+
+[sub_resource type="Resource" id="Resource_attribute_constitution"]
+script = ExtResource("1_w76bv")
+id = &"constitution"
+display_name = "Constitution"
+ui_group = &"attributes"
+value_format = 1
+precision = 0
+default_value = 0.0
+visibility = 0
+keyword_id = &"constitution"
+
+[sub_resource type="Resource" id="Resource_attribute_intelligence"]
+script = ExtResource("1_w76bv")
+id = &"intelligence"
+display_name = "Intelligence"
+ui_group = &"attributes"
+value_format = 1
+precision = 0
+default_value = 0.0
+visibility = 0
+keyword_id = &"intelligence"
+
+[sub_resource type="Resource" id="Resource_attribute_wisdom"]
+script = ExtResource("1_w76bv")
+id = &"wisdom"
+display_name = "Wisdom"
+ui_group = &"attributes"
+value_format = 1
+precision = 0
+default_value = 0.0
+visibility = 0
+keyword_id = &"wisdom"
+
+[sub_resource type="Resource" id="Resource_attribute_charisma"]
+script = ExtResource("1_w76bv")
+id = &"charisma"
+display_name = "Charisma"
+ui_group = &"attributes"
+value_format = 1
+precision = 0
+default_value = 0.0
+visibility = 0
+keyword_id = &"charisma"
+
 [resource]
 script = ExtResource("2_e1y7i")
-definitions = Array[ExtResource("1_w76bv")]([SubResource("Resource_qjanc"), SubResource("Resource_jx3mg"), SubResource("Resource_shobl"), SubResource("Resource_33hiy"), SubResource("Resource_tgtbh"), SubResource("Resource_v1otm"), SubResource("Resource_u5fvm"), SubResource("Resource_rjyfy"), SubResource("Resource_uayb7"), SubResource("Resource_g57sx"), SubResource("Resource_fvbyb"), SubResource("Resource_nlvwj"), SubResource("Resource_l7acj"), SubResource("Resource_xbx42"), SubResource("Resource_54wba"), SubResource("Resource_svrb2"), SubResource("Resource_qdbv7"), SubResource("Resource_mpru1"), SubResource("Resource_tfru6"), SubResource("Resource_c127o"), SubResource("Resource_q1ios"), SubResource("Resource_jinps"), SubResource("Resource_g3u3i"), SubResource("Resource_cdcd2"), SubResource("Resource_p683c"), SubResource("Resource_lfd5q"), SubResource("Resource_xo1vt")])
+definitions = Array[ExtResource("1_w76bv")]([SubResource("Resource_qjanc"), SubResource("Resource_attribute_strength"), SubResource("Resource_attribute_dexterity"), SubResource("Resource_attribute_constitution"), SubResource("Resource_attribute_intelligence"), SubResource("Resource_attribute_wisdom"), SubResource("Resource_attribute_charisma"), SubResource("Resource_jx3mg"), SubResource("Resource_shobl"), SubResource("Resource_33hiy"), SubResource("Resource_tgtbh"), SubResource("Resource_v1otm"), SubResource("Resource_u5fvm"), SubResource("Resource_rjyfy"), SubResource("Resource_uayb7"), SubResource("Resource_g57sx"), SubResource("Resource_fvbyb"), SubResource("Resource_nlvwj"), SubResource("Resource_l7acj"), SubResource("Resource_xbx42"), SubResource("Resource_54wba"), SubResource("Resource_svrb2"), SubResource("Resource_qdbv7"), SubResource("Resource_mpru1"), SubResource("Resource_tfru6"), SubResource("Resource_c127o"), SubResource("Resource_q1ios"), SubResource("Resource_jinps"), SubResource("Resource_g3u3i"), SubResource("Resource_cdcd2"), SubResource("Resource_p683c"), SubResource("Resource_lfd5q"), SubResource("Resource_xo1vt")])

@@ -12,6 +12,15 @@ func run() -> Array[String]:
 	TestAssertions.near(catalog.definition(&"crit_chance").finalize_value(0.92), 0.75, 0.0001, "crit chance clamps to cap", failures)
 	TestAssertions.near(catalog.definition(&"armor").finalize_value(-12.0), 0.0, 0.0001, "armor clamps at zero", failures)
 	TestAssertions.equal(catalog.definition(&"life_steal").format_value(0.125), "12.5%", "ratio formatting", failures)
+	for attribute_id: StringName in ClassGrowthDefinition.CORE_ATTRIBUTE_IDS:
+		var attribute := catalog.definition(attribute_id)
+		TestAssertions.truthy(attribute != null, "%s core attribute exists" % attribute_id, failures)
+		if attribute == null:
+			continue
+		TestAssertions.equal(attribute.visibility, StatDefinition.Visibility.UNIVERSAL, "%s is universal" % attribute_id, failures)
+		TestAssertions.near(attribute.default_value, 0.0, 0.0001, "%s defaults to zero" % attribute_id, failures)
+		TestAssertions.equal(attribute.value_format, StatDefinition.ValueFormat.INTEGER, "%s uses integer formatting" % attribute_id, failures)
+		TestAssertions.truthy(GameCatalog.KEYWORD_CATALOG.has_definition(attribute.keyword_id), "%s has a keyword" % attribute_id, failures)
 
 	var duplicate := StatCatalog.new()
 	duplicate.definitions = [catalog.definition(&"armor"), catalog.definition(&"armor")]

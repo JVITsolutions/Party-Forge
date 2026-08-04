@@ -11,6 +11,7 @@ enum Role { FRONTLINE, MIDLINE, BACKLINE, SUPPORT }
 @export var capability_tags: Array[StringName] = []
 @export var name_pool: CharacterNamePool
 @export var visual_profile: CharacterVisualProfile
+@export var growth_definition: ClassGrowthDefinition
 @export var base_stat_overrides: Dictionary = {}
 @export var max_health: float = 100.0
 @export var armor: float = 0.0
@@ -49,6 +50,11 @@ func validate(types: DamageTypeCatalog = null) -> PackedStringArray:
 	if revive_delay <= 0.0: errors.append("class %s revive delay must be positive" % id)
 	if revive_health_fraction <= 0.0 or revive_health_fraction > 1.0: errors.append("class %s revive health fraction must be between zero and one" % id)
 	if primary_attack == null: errors.append("class %s primary attack is missing" % id)
+	if growth_definition == null:
+		errors.append("class %s growth definition is missing" % id)
+	else:
+		for reason: String in growth_definition.validate():
+			errors.append("class %s %s" % [id, reason])
 	if primary_attack != null:
 		_validate_party_attack(primary_attack, "primary", types, errors)
 	if support_action != null:

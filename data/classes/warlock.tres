@@ -4,6 +4,7 @@
 [ext_resource type="Resource" path="res://data/attacks/warlock_bolt.tres" id="1_nil6l"]
 [ext_resource type="Script" path="res://scripts/data/class_definition.gd" id="2_8b5fo"]
 [ext_resource type="Resource" path="res://data/presentation/profiles/warlock.tres" id="3_profile"]
+[ext_resource type="Resource" path="res://data/progression/class_growth/warlock.tres" id="4_growth"]
 
 [resource]
 script = ExtResource("2_8b5fo")
@@ -14,6 +15,7 @@ color = Color(0.49411765, 0.29411766, 0.76862746, 1)
 traits = Array[StringName]([&"occult", &"caster", &"chaos"])
 capability_tags = Array[StringName]([&"chaos", &"life_steal", &"projectile", &"ranged", &"armour_light", &"occult_wand", &"occult_grimoire"])
 name_pool = ExtResource("1_8b5fo")
+growth_definition = ExtResource("4_growth")
 base_stat_overrides = {
 &"chaos_damage": 1.1,
 &"life_steal": 0.12

@@ -469,6 +469,42 @@ id = &"less"
 display_name = "Less"
 explanation = "A multiplicative penalty applied after increased and reduced values."
 
+[sub_resource type="Resource" id="Resource_attribute_strength"]
+script = ExtResource("1_plt8n")
+id = &"strength"
+display_name = "Strength"
+explanation = "A core attribute associated with physical power and forceful actions."
+
+[sub_resource type="Resource" id="Resource_attribute_dexterity"]
+script = ExtResource("1_plt8n")
+id = &"dexterity"
+display_name = "Dexterity"
+explanation = "A core attribute associated with precision, agility, and quick actions."
+
+[sub_resource type="Resource" id="Resource_attribute_constitution"]
+script = ExtResource("1_plt8n")
+id = &"constitution"
+display_name = "Constitution"
+explanation = "A core attribute associated with toughness, endurance, and survival."
+
+[sub_resource type="Resource" id="Resource_attribute_intelligence"]
+script = ExtResource("1_plt8n")
+id = &"intelligence"
+display_name = "Intelligence"
+explanation = "A core attribute associated with learned magic, analysis, and complex effects."
+
+[sub_resource type="Resource" id="Resource_attribute_wisdom"]
+script = ExtResource("1_plt8n")
+id = &"wisdom"
+display_name = "Wisdom"
+explanation = "A core attribute associated with awareness, discipline, and restorative power."
+
+[sub_resource type="Resource" id="Resource_attribute_charisma"]
+script = ExtResource("1_plt8n")
+id = &"charisma"
+display_name = "Charisma"
+explanation = "A core attribute associated with presence, conviction, and influence."
+
 [resource]
 script = ExtResource("2_457uq")
-definitions = Array[ExtResource("1_plt8n")]([SubResource("Resource_gqqx3"), SubResource("Resource_qmoyr"), SubResource("Resource_2uuwi"), SubResource("Resource_j72g7"), SubResource("Resource_wavwi"), SubResource("Resource_wsag4"), SubResource("Resource_bdgur"), SubResource("Resource_jpw6j"), SubResource("Resource_vbvf6"), SubResource("Resource_nchm6"), SubResource("Resource_i51ed"), SubResource("Resource_wfxcw"), SubResource("Resource_3s5yq"), SubResource("Resource_58p53"), SubResource("Resource_oe05s"), SubResource("Resource_70vpw"), SubResource("Resource_2cvye"), SubResource("Resource_ah527"), SubResource("Resource_ivq6n"), SubResource("Resource_bfmjh"), SubResource("Resource_qo46h"), SubResource("Resource_rw8sv"), SubResource("Resource_xfgc3"), SubResource("Resource_exo8j"), SubResource("Resource_iqcui"), SubResource("Resource_uydlp"), SubResource("Resource_f4kyr"), SubResource("Resource_rrusv"), SubResource("Resource_vvurm"), SubResource("Resource_3tya2"), SubResource("Resource_pnaii"), SubResource("Resource_5wfo4"), SubResource("Resource_ej47h"), SubResource("Resource_gd2vi"), SubResource("Resource_677xj"), SubResource("Resource_cnt6g"), SubResource("Resource_ls5cs"), SubResource("Resource_0jkje"), SubResource("Resource_svdfn"), SubResource("Resource_r80ah"), SubResource("Resource_j1n4n"), SubResource("Resource_ulpjg"), SubResource("Resource_mqyou"), SubResource("Resource_ajgcb"), SubResource("Resource_cy2jx"), SubResource("Resource_uundj"), SubResource("Resource_8iljj"), SubResource("Resource_05m0a"), SubResource("Resource_7osf6"), SubResource("Resource_swg7m"), SubResource("Resource_eq_armour_light"), SubResource("Resource_eq_armour_medium"), SubResource("Resource_eq_armour_heavy"), SubResource("Resource_eq_one_hand_sword"), SubResource("Resource_eq_shield"), SubResource("Resource_eq_one_hand_hammer"), SubResource("Resource_eq_bow_light_medium"), SubResource("Resource_eq_greatbow"), SubResource("Resource_eq_dagger"), SubResource("Resource_eq_dual_wield"), SubResource("Resource_eq_caster_wand"), SubResource("Resource_eq_caster_focus"), SubResource("Resource_eq_caster_staff"), SubResource("Resource_eq_divine_sceptre"), SubResource("Resource_eq_divine_tome"), SubResource("Resource_eq_occult_wand"), SubResource("Resource_eq_occult_grimoire"), SubResource("Resource_3odbh"), SubResource("Resource_4mm4v"), SubResource("Resource_pveks"), SubResource("Resource_0g7pm")])
+definitions = Array[ExtResource("1_plt8n")]([SubResource("Resource_gqqx3"), SubResource("Resource_attribute_strength"), SubResource("Resource_attribute_dexterity"), SubResource("Resource_attribute_constitution"), SubResource("Resource_attribute_intelligence"), SubResource("Resource_attribute_wisdom"), SubResource("Resource_attribute_charisma"), SubResource("Resource_qmoyr"), SubResource("Resource_2uuwi"), SubResource("Resource_j72g7"), SubResource("Resource_wavwi"), SubResource("Resource_wsag4"), SubResource("Resource_bdgur"), SubResource("Resource_jpw6j"), SubResource("Resource_vbvf6"), SubResource("Resource_nchm6"), SubResource("Resource_i51ed"), SubResource("Resource_wfxcw"), SubResource("Resource_3s5yq"), SubResource("Resource_58p53"), SubResource("Resource_oe05s"), SubResource("Resource_70vpw"), SubResource("Resource_2cvye"), SubResource("Resource_ah527"), SubResource("Resource_ivq6n"), SubResource("Resource_bfmjh"), SubResource("Resource_qo46h"), SubResource("Resource_rw8sv"), SubResource("Resource_xfgc3"), SubResource("Resource_exo8j"), SubResource("Resource_iqcui"), SubResource("Resource_uydlp"), SubResource("Resource_f4kyr"), SubResource("Resource_rrusv"), SubResource("Resource_vvurm"), SubResource("Resource_3tya2"), SubResource("Resource_pnaii"), SubResource("Resource_5wfo4"), SubResource("Resource_ej47h"), SubResource("Resource_gd2vi"), SubResource("Resource_677xj"), SubResource("Resource_cnt6g"), SubResource("Resource_ls5cs"), SubResource("Resource_0jkje"), SubResource("Resource_svdfn"), SubResource("Resource_r80ah"), SubResource("Resource_j1n4n"), SubResource("Resource_ulpjg"), SubResource("Resource_mqyou"), SubResource("Resource_ajgcb"), SubResource("Resource_cy2jx"), SubResource("Resource_uundj"), SubResource("Resource_8iljj"), SubResource("Resource_05m0a"), SubResource("Resource_7osf6"), SubResource("Resource_swg7m"), SubResource("Resource_eq_armour_light"), SubResource("Resource_eq_armour_medium"), SubResource("Resource_eq_armour_heavy"), SubResource("Resource_eq_one_hand_sword"), SubResource("Resource_eq_shield"), SubResource("Resource_eq_one_hand_hammer"), SubResource("Resource_eq_bow_light_medium"), SubResource("Resource_eq_greatbow"), SubResource("Resource_eq_dagger"), SubResource("Resource_eq_dual_wield"), SubResource("Resource_eq_caster_wand"), SubResource("Resource_eq_caster_focus"), SubResource("Resource_eq_caster_staff"), SubResource("Resource_eq_divine_sceptre"), SubResource("Resource_eq_divine_tome"), SubResource("Resource_eq_occult_wand"), SubResource("Resource_eq_occult_grimoire"), SubResource("Resource_3odbh"), SubResource("Resource_4mm4v"), SubResource("Resource_pveks"), SubResource("Resource_0g7pm")])

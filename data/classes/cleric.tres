@@ -5,6 +5,7 @@
 [ext_resource type="Script" path="res://scripts/data/class_definition.gd" id="2_wyf0b"]
 [ext_resource type="Resource" path="res://data/attacks/cleric_heal.tres" id="3_e674p"]
 [ext_resource type="Resource" path="res://data/presentation/profiles/cleric.tres" id="4_profile"]
+[ext_resource type="Resource" path="res://data/progression/class_growth/cleric.tres" id="5_growth"]
 
 [resource]
 script = ExtResource("2_wyf0b")
@@ -15,6 +16,7 @@ color = Color(0.9411765, 0.81960785, 0.35686275, 1)
 traits = Array[StringName]([&"divine", &"support", &"caster"])
 capability_tags = Array[StringName]([&"healing", &"lightning", &"projectile", &"armour_light", &"armour_medium", &"divine_sceptre", &"divine_tome"])
 name_pool = ExtResource("1_wyf0b")
+growth_definition = ExtResource("5_growth")
 max_health = 95.0
 armor = 2.0
 preferred_distance = 4.0

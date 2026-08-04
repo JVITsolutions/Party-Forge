@@ -1,0 +1,8 @@
+[gd_resource type="Resource" script_class="ClassGrowthDefinition" format=3]
+
+[ext_resource type="Script" path="res://scripts/progression/class_growth_definition.gd" id="1_growth"]
+
+[resource]
+script = ExtResource("1_growth")
+guaranteed_cycle = Array[StringName]([&"strength", &"constitution", &"strength", &"dexterity"])
+milestone_weights = {&"strength": 50.0, &"constitution": 30.0, &"dexterity": 15.0, &"wisdom": 5.0}

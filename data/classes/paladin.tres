@@ -4,6 +4,7 @@
 [ext_resource type="Resource" path="res://data/names/paladin.tres" id="1_gho34"]
 [ext_resource type="Script" path="res://scripts/data/class_definition.gd" id="2_gho34"]
 [ext_resource type="Resource" path="res://data/presentation/profiles/paladin.tres" id="3_profile"]
+[ext_resource type="Resource" path="res://data/progression/class_growth/paladin.tres" id="4_growth"]
 
 [resource]
 script = ExtResource("2_gho34")
@@ -13,6 +14,7 @@ color = Color(0.9019608, 0.78431374, 0.37254903, 1)
 traits = Array[StringName]([&"divine", &"vanguard", &"martial"])
 capability_tags = Array[StringName]([&"area", &"block", &"melee", &"physical", &"regeneration", &"armour_heavy", &"one_hand_hammer", &"shield"])
 name_pool = ExtResource("1_gho34")
+growth_definition = ExtResource("4_growth")
 base_stat_overrides = {
 &"block_chance": 0.18,
 &"block_effectiveness": 0.55,

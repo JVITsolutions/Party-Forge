@@ -95,7 +95,7 @@ func run() -> Array[String]:
 	var group_names := (page.get_node("Layout/Content/StatSide/StatScroll/Groups") as VBoxContainer).get_children().map(
 		func(group: Node) -> StringName: return group.name
 	)
-	TestAssertions.equal(group_names, [&"Group_combat_estimates", &"Group_overview", &"Group_offense", &"Group_defense", &"Group_resistances", &"Group_utility"], "Show All follows canonical group order", failures)
+	TestAssertions.equal(group_names, [&"Group_combat_estimates", &"Group_overview", &"Group_attributes", &"Group_offense", &"Group_defense", &"Group_resistances", &"Group_utility"], "Show All follows canonical group order", failures)
 	var resistance_group := page.get_node_or_null("Layout/Content/StatSide/StatScroll/Groups/Group_resistances")
 	TestAssertions.truthy(resistance_group != null, "Show All creates a Resistances group", failures)
 	if resistance_group != null:

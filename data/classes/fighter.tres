@@ -4,6 +4,7 @@
 [ext_resource type="Resource" path="res://data/attacks/fighter_cleave.tres" id="1_q4mbg"]
 [ext_resource type="Script" path="res://scripts/data/class_definition.gd" id="2_pjtn8"]
 [ext_resource type="Resource" path="res://data/presentation/profiles/forge_vanguard.tres" id="3_forge_vanguard"]
+[ext_resource type="Resource" path="res://data/progression/class_growth/fighter.tres" id="4_growth"]
 
 [resource]
 script = ExtResource("2_pjtn8")
@@ -13,6 +14,7 @@ color = Color(0.8509804, 0.30980393, 0.30980393, 1)
 traits = Array[StringName]([&"martial", &"vanguard"])
 capability_tags = Array[StringName]([&"area", &"melee", &"physical", &"armour_heavy", &"one_hand_sword", &"shield"])
 name_pool = ExtResource("1_pjtn8")
+growth_definition = ExtResource("4_growth")
 max_health = 260.0
 armor = 10.0
 move_speed = 6.2

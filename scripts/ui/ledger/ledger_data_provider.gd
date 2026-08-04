@@ -4,7 +4,7 @@ extends RefCounted
 signal data_changed(member_id: int)
 signal party_changed
 
-const GROUP_ORDER: Array[StringName] = [&"overview", &"offense", &"defense", &"resistances", &"utility"]
+const GROUP_ORDER: Array[StringName] = [&"overview", &"attributes", &"offense", &"defense", &"resistances", &"utility"]
 
 var party: PartyManager
 var catalog: GameCatalog

@@ -4,6 +4,7 @@
 [ext_resource type="Resource" path="res://data/attacks/marksman_heavy_shot.tres" id="1_md42u"]
 [ext_resource type="Script" path="res://scripts/data/class_definition.gd" id="1_rlqk6"]
 [ext_resource type="Resource" path="res://data/presentation/profiles/marksman.tres" id="3_profile"]
+[ext_resource type="Resource" path="res://data/progression/class_growth/marksman.tres" id="4_growth"]
 
 [resource]
 script = ExtResource("1_rlqk6")
@@ -14,6 +15,7 @@ color = Color(0.27579924, 0.36415747, 0.056183092, 1)
 traits = Array[StringName]([&"martial", &"ranged", &"bow"])
 capability_tags = Array[StringName]([&"bow", &"crit", &"physical", &"projectile", &"ranged", &"armour_light", &"armour_medium", &"bow_light_medium", &"greatbow"])
 name_pool = ExtResource("1_8o6lm")
+growth_definition = ExtResource("4_growth")
 base_stat_overrides = {
 &"crit_chance": 0.1,
 &"crit_multiplier": 2.0

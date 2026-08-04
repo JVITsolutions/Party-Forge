@@ -30,6 +30,14 @@ func run() -> Array[String]:
     TestAssertions.equal(catalog.class_by_id(&"fighter").traits, [&"martial", &"vanguard"], "fighter traits", failures)
     TestAssertions.equal(catalog.class_by_id(&"cleric").support_action.id, &"cleric_heal", "cleric heal", failures)
     _assert_class_names_and_eligibility(catalog, failures)
+    var fighter := catalog.class_by_id(&"fighter")
+    fighter.growth_definition = null
+    TestAssertions.truthy(
+        catalog.validate().has("PARTY_FORGE_RESOURCE_ERROR id=fighter reason=class fighter growth definition is missing"),
+        "missing fighter growth definition fails catalog validation",
+        failures,
+    )
+    fighter.growth_definition = load("res://data/progression/class_growth/fighter.tres") as ClassGrowthDefinition
     var attack_links: Array[Array] = [
         [&"fighter", &"primary_attack", "res://data/attacks/fighter_cleave.tres"],
         [&"ranger", &"primary_attack", "res://data/attacks/ranger_shot.tres"],

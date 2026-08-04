@@ -165,6 +165,7 @@ func _valid_class() -> ClassDefinition:
 	definition.id = &"review_class"
 	definition.display_name = "Review Class"
 	definition.traits = [&"review"]
+	definition.growth_definition = load("res://data/progression/class_growth/fighter.tres") as ClassGrowthDefinition
 	definition.primary_attack = _valid_attack(&"review_primary", AttackDefinition.Kind.PROJECTILE, &"physical")
 	return definition
 
