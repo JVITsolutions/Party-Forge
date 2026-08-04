@@ -2,15 +2,15 @@
 
 Date: 2026-08-04
 
-Milestone state: `AUTOMATED EXACT-HEAD PASS; MANUAL WINDOWED ACCEPTANCE PENDING`
+Milestone state: `AUTOMATED PASS; GODOT MCP WINDOWED ACCEPTANCE PASS; FINAL REVIEW PENDING`
 
-Task 9 is not complete and this branch is not approved for integration. This record covers fresh automated evidence captured from the clean implementation head `ce057a949f8f64bfb661aded26dcfec3cdcdb44c` (`fix: support any-controller main menu input`) before these documentation edits. No commit, merge, or authoritative-main activation was performed.
+Task 9 acceptance is complete. The original automated gate covered implementation head `ce057a949f8f64bfb661aded26dcfec3cdcdb44c` (`fix: support any-controller main menu input`). Direct Godot MCP acceptance then found one modal-focus defect, which was fixed test-first in `2bd4d3e5ffddc16612f1a0e50cb17dead6b05f6f` (`fix: trap quit confirmation focus`). Integration still requires the planned fresh review and authoritative-main verification.
 
 ## Evidence boundaries
 
 - **Fresh exact-head automation:** isolated headless import, the complete custom suite, headless input/layout integrations, focused run/profile regressions, and repository checks run against exact implementation HEAD `ce057a9`.
 - **Scripted real-window renderer evidence:** `main_menu_responsive_runner.gd` drove the real root `Window` through the OpenGL Compatibility renderer, measured the production `canvas_items` scale path, and captured pixels. This is automated renderer evidence, not a person's connected playtest.
-- **Manual Windows/controller acceptance:** no person performed the Task 9 windowed smoke during this automation pass. Every item in the manual matrix remains `PENDING CONTROLLER MANUAL WINDOWED EVIDENCE`.
+- **Godot MCP Windows/controller acceptance:** an isolated Godot 4.7.1 editor ran the actual 3840x2160 game window while the MCP inspected focus/state, injected mouse, keyboard, and synthetic controller events, captured rendered frames, and read editor/game logs. This is direct runtime evidence, but it is not a human holding a physical controller.
 
 All Godot commands used `Godot_v4.7.1-stable_mono_win64_console.exe`, the functional-main-menu worktree, and fresh task-specific roots:
 
@@ -20,6 +20,8 @@ LOCALAPPDATA=.superpowers/task-9-localappdata
 ```
 
 The live user profile/settings location was not used.
+
+The connected acceptance session used `functional-main-menu@dba2` and separate roots under `.superpowers/task-9-godot-mcp-20260804/`. It created only isolated `MCPAlpha` and `MCPBeta` profiles and isolated settings.
 
 ## Fresh exact-head automated gate
 
@@ -38,9 +40,12 @@ Raw logs are retained under `.superpowers/sdd/task-9-automation/`.
 | Existing UI geometry | `... res://tests/integration/responsive_ui_geometry_runner.gd` | 0 | `RESPONSIVE_GEOMETRY_SUMMARY: PASS (4 sizes)` plus run-setup action size markers |
 | Locomotion smoke | `... res://tests/integration/character_locomotion_smoke.gd` | 0 | `PARTY_FORGE_LOCOMOTION_SMOKE_OK directions=4 walk=1 idle=1 smooth_turn=1 attack_lock=1 equipment_independent=1 grounding=1 shadow=1` |
 | Focused run/profile batch | `focused_test_runner.gd -- test_developer_quick_start.gd test_run_pause_menu.gd test_game_run_pause_clock.gd test_controller_movement_bindings.gd test_leader_movement.gd test_combat_sandbox.gd test_main_wiring.gd` | 0 | `TEST_SUMMARY: PASS (0 failures)`; zero failure/parse/loader matches |
+| Modal focus regression | `focused_test_runner.gd -- tests/unit/test_run_pause_menu.gd` | 0 | accepted RED was 12 failures before the scene fix; final `TEST_SUMMARY: PASS (0 failures)` |
+| Post-fix full import | `godot --headless --path . --import` | 0 | zero `SCRIPT ERROR`, `Parse Error`, `ERROR:`, or `No loader found` matches |
+| Post-fix complete suite | `godot --headless --path . --quit-after 300 --script res://tests/test_runner.gd` | 0 | exactly `TEST_SUMMARY: PASS (112 suites)`; zero `TEST_FAILURE`, script, parse, or loader matches |
 | Whitespace/path check | `git diff --check` | 0 | no output after the intentional documentation edits |
 
-`rg --files` found no dedicated file named as an arena-smoke runner, run-pause integration runner, or controller-movement integration runner. The gate therefore records the exact existing focused equivalents instead of inventing runner names: `test_combat_sandbox.gd` plus `test_main_wiring.gd` for arena composition, `test_run_pause_menu.gd` plus `test_game_run_pause_clock.gd` for pause behavior, and `test_controller_movement_bindings.gd` plus `test_leader_movement.gd` and `character_locomotion_smoke.gd` for controller/movement coverage. Ordinary rendered arena and pause behavior remain in the manual matrix.
+`rg --files` found no dedicated file named as an arena-smoke runner, run-pause integration runner, or controller-movement integration runner. The gate therefore records the exact existing focused equivalents instead of inventing runner names: `test_combat_sandbox.gd` plus `test_main_wiring.gd` for arena composition, `test_run_pause_menu.gd` plus `test_game_run_pause_clock.gd` for pause behavior, and `test_controller_movement_bindings.gd` plus `test_leader_movement.gd` and `character_locomotion_smoke.gd` for controller/movement coverage. Ordinary rendered arena and pause behavior were subsequently exercised through the connected Godot MCP session.
 
 ## Scripted real-window renderer gate
 
@@ -93,37 +98,38 @@ They are recorded as baseline diagnostics, not relabeled as clean shutdown and n
 - **Input map:** `project.godot` preserves keyboard accept/cancel and makes only shared standard UI A/B bindings any-controller; player-specific movement/custom actions remain scoped.
 - **Integration coverage:** the five changed/added integration scripts and their intended UIDs cover menu navigation, real-renderer responsiveness, profile boot, City input/focus, and run-setup geometry.
 - **Unit coverage:** the seven changed/added unit scripts and their intended UIDs cover policy, screen, wiring, class-selection lifecycle, boot, and Quick Start noncontamination.
-- **File inventory:** the branch range `71a1054..ce057a9` contains exactly 31 intentional files: 12 production/configuration paths, 11 test scripts, and eight intended `.gd.uid` sidecars. No unexplained binary, `.png.import`, cache, or generated baseline UID is part of the range.
+- **File inventory:** the branch range from `71a1054` through the modal-fix head contains exactly 37 intentional files: four documentation files, one project configuration, four scenes, eight production scripts, 12 test scripts, and eight intended `.gd.uid` sidecars. No unexplained binary, `.png.import`, cache, or generated baseline UID is part of the range.
 
 ## Repository preservation
 
 - Pre-gate state: clean `feat/functional-main-menu` at exact `ce057a9`, zero sidecars, zero worktree Godot processes, and four safety stashes.
 - Verification-generated state: exactly 629 untracked sidecars, comprising 591 `.import` and 38 `.uid`; no other untracked path.
 - Cleanup: the established `task-1-final-sidecar-cleanup.ps1` and its 629-path allowlist validated every target as an in-worktree, untracked leaf and reported `CLEANUP_PASS validated=629 deleted=629 final_status_count=0 stash_diff=0` before documentation edits.
-- Post-documentation state is limited to the intentional Task 9 Markdown paths. No Godot process remains and the four stashes are unchanged.
+- The connected editor and post-fix import each recreated the same 629 allowlisted sidecars. Cleanup revalidated and deleted all 629; its final-status assertion then reported only the intentional modal-fix or verification-document changes. No Godot process remains and the four stashes are unchanged.
 
-## Connected Windows attempt - control bridge blocked
+## Connected Godot MCP acceptance
 
-On 2026-08-04, the controller launched the exact worktree twice with isolated `APPDATA` and `LOCALAPPDATA`: once as the standalone `Party Forge (DEBUG)` game and once through `Party Forge - Godot Engine` for an embedded-game fallback. Both created responsive native Windows processes and discoverable windows. The desktop-control bridge then rejected both freshly returned Godot window handles with a stale-owner error even though the reported and current owner identifiers were identical. No menu input could be sent through the approved desktop-control path, so none of the manual rows below is promoted to PASS.
+The restored Godot AI connection targeted only `functional-main-menu@dba2`, an isolated editor whose project path was the feature worktree. The game ran at physical 3840x2160 with a 1920x1080 logical canvas. MCP screenshots reported current frames at 1920x1080 capture resolution, while state queries read the real focus owner, open surfaces, run state, pause state, profile state, and process liveness.
 
-Both attempted processes were closed, the resulting 629 known import/UID sidecars were removed through the validated allowlist, the editor-only removal of the input-policy comments was restored exactly, and the four safety stashes remained unchanged. This is a tooling limitation, not evidence that a menu flow passed or failed.
-
-## Manual Windows/controller acceptance - pending
-
-No row below is passed by automation.
-
-| Manual flow | Status |
+| Windowed flow | Result |
 | --- | --- |
-| No-profile boot visibly offers only Play, Settings, and Quit; Play opens Profiles with profile-name focus | `PENDING CONTROLLER MANUAL WINDOWED EVIDENCE` |
-| Create a profile, switch profiles, and confirm the selected name returns to the menu without starting a run | `PENDING CONTROLLER MANUAL WINDOWED EVIDENCE` |
-| Open/close Settings and confirm exact originating focus | `PENDING CONTROLLER MANUAL WINDOWED EVIDENCE` |
-| Open class-selection run setup and use Back to return to the primary menu action | `PENDING CONTROLLER MANUAL WINDOWED EVIDENCE` |
-| Select a class and confirm the ordinary arena/combat launch | `PENDING CONTROLLER MANUAL WINDOWED EVIDENCE` |
-| Open the run pause menu and confirm Quit Run returns to the functional main menu | `PENDING CONTROLLER MANUAL WINDOWED EVIDENCE` |
-| Use a completed/discovered profile to open the production City tree and return to exact City focus | `PENDING CONTROLLER MANUAL WINDOWED EVIDENCE` |
-| Use saved Developer Mode to run Developer Quick Start and independently inspect the persisted test profile afterward | `PENDING CONTROLLER MANUAL WINDOWED EVIDENCE` |
-| Exercise mouse, keyboard, controller 0, and a second connected controller through accept/cancel/focus routes | `PENDING CONTROLLER MANUAL WINDOWED EVIDENCE` |
-| Use desktop Quit and confirm the Windows process closes; inspect the connected editor/game logs after each flow | `PENDING CONTROLLER MANUAL WINDOWED EVIDENCE` |
+| Fresh no-profile boot visibly offered only Play, Settings, and Quit; controller A opened Profiles with ProfileName focus | `PASS` |
+| Created `MCPAlpha` and `MCPBeta`, switched back to `MCPAlpha`, and returned to PrimaryAction without starting a run | `PASS` |
+| Opened/closed Settings and restored exact Settings focus | `PASS` |
+| Opened nine-class run setup, used Back, launched Fighter, and observed the live arena | `PASS` |
+| Controller movement changed the leader from x=0 to about x=3.41 in 0.5 seconds with positive x velocity | `PASS` |
+| Opened pause, navigated to Quit Run, confirmed, and returned to a fresh unpaused main menu focused on PrimaryAction | `PASS` |
+| Completed the isolated profile through `ProfileMutationService`, refreshed it, opened production City with `developer_context=false`, and controller B returned to exact CityTree focus | `PASS` |
+| Saved isolated Developer Mode, used second-controller left-stick to reach Developer Quick Start, and controller A launched Fighter | `PASS` |
+| Compared `ProfileCodec.encode(active_profile).sha256_text()` before and after Quick Start; both were `dd4a35dfc654847f0211ed3219914e1558af3f27ba539ef1c8dd5dc54215cdad` | `PASS` |
+| Exercised synthetic mouse input at physical-window coordinates, keyboard text/Tab/Enter, controller 0, and synthetic controller device 1 accept/cancel/analog routes | `PASS` |
+| Focused desktop Quit, activated it from controller device 1, and observed `game_status.status=stopped`, `is_playing=false`, and `session_active=false` | `PASS` |
+
+The MCP pass exposed one real defect: with Quit Run confirmation open, D-pad Up could escape from Cancel to the Settings button behind the modal. A focused test first failed all 12 explicit focus-neighbor/traversal assertions. The scene now loops each of Confirm's six focus directions to Cancel and each of Cancel's six directions to Confirm. The focused test passed, and the live 4K rerun proved Cancel -> D-pad Up -> Confirm while the confirmation remained open and the tree remained paused.
+
+The clean final desktop-Quit run's game log contained only the helper registration plus `PARTY_FORGE_BOOT_OK` and `PARTY_FORGE_CLASS_SELECTION_READY`. The editor still reports 14 known GDScript warnings (shadowing, integer division, enum casts, incompatible ternaries, and one unused parameter); these predate the modal fix and are not parse/runtime failures. During the earlier extended arena run, normal target despawns also produced `PARTY_FORGE_ATTACK_SEQUENCE_ERROR ... target invalid at release` diagnostics. That combat cancellation diagnostic is recorded for a later focused cleanup rather than hidden or attributed to Plan 3A.
+
+The connected controllers are synthetic MCP events, not physical-hardware certification. A short human-held controller smoke remains advisable before a public build, but it is no longer an integration blocker for this Plan 3A branch.
 
 ## Explicitly deferred to Plan 3B
 
