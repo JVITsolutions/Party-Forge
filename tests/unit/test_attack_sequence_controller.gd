@@ -76,20 +76,26 @@ func run() -> Array[String]:
 	TestAssertions.truthy(_has_reason(errors, "stale event"), "stale event emits stable sequence diagnostic", failures)
 	controller.cancel("test reset")
 
+	var errors_before_target_loss := errors.size()
+	var idle_before_target_loss := presentation.idle_requests
 	var invalid_target_token := controller.request(attack, target.get_combat_target(), visual, 1.0, 1.0)
 	(target.get_node("HealthComponent") as HealthComponent).kill()
 	presentation.attack_event.emit(invalid_target_token, visual.action_id, visual.required_event_name)
 	TestAssertions.equal(executor.calls, 1, "invalidated locked target cancels without executing", failures)
 	TestAssertions.truthy(not controller.is_busy(), "invalidated target clears sequence", failures)
-	TestAssertions.truthy(_has_reason(errors, "target invalid at release"), "invalidated target reports cancellation reason", failures)
+	TestAssertions.equal(errors.size(), errors_before_target_loss, "invalidated target is an expected cancellation without a sequence error", failures)
+	TestAssertions.equal(presentation.idle_requests, idle_before_target_loss + 1, "invalidated target restores locomotion", failures)
 	TestAssertions.truthy(executor.last_target.actor != alternate, "invalidated target never retargets", failures)
 
 	var owner_health := owner.get_node("HealthComponent") as HealthComponent
+	var errors_before_owner_down := errors.size()
+	var idle_before_owner_down := presentation.idle_requests
 	var downed_token := controller.request(attack, alternate.get_combat_target(), visual, 1.0, 1.0)
 	owner_health.is_downed = true
 	presentation.attack_event.emit(downed_token, visual.action_id, visual.required_event_name)
 	TestAssertions.equal(executor.calls, 1, "downed owner cannot release attack", failures)
-	TestAssertions.truthy(_has_reason(errors, "owner downed at release"), "downed release reports cancellation reason", failures)
+	TestAssertions.equal(errors.size(), errors_before_owner_down, "downed release is an expected cancellation without a sequence error", failures)
+	TestAssertions.equal(presentation.idle_requests, idle_before_owner_down + 1, "downed release restores locomotion", failures)
 	owner_health.is_downed = false
 
 	var missing_event_token := controller.request(attack, alternate.get_combat_target(), visual, 1.0, 1.0)

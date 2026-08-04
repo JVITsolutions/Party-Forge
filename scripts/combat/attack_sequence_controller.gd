@@ -81,6 +81,10 @@ func cancel_for_owner_downed() -> void:
 	# fight the downed transition.
 	_clear_active()
 
+func _cancel_expected() -> void:
+	_clear_active()
+	_return_to_locomotion()
+
 func _on_attack_event(token: int, action_id: StringName, event_name: StringName) -> void:
 	if token != active_token:
 		_sequence_error(token, action_id, "stale event")
@@ -92,10 +96,10 @@ func _on_attack_event(token: int, action_id: StringName, event_name: StringName)
 		return
 	var refreshed := _revalidate_locked_target()
 	if refreshed == null:
-		cancel("target invalid at release")
+		_cancel_expected()
 		return
 	if _owner_is_downed():
-		cancel("owner downed at release")
+		_cancel_expected()
 		return
 	released = true
 	executor.call(&"execute", active_definition, refreshed, active_presentation)
