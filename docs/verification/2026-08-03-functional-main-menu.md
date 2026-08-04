@@ -2,9 +2,9 @@
 
 Date: 2026-08-04
 
-Milestone state: `AUTOMATED PASS; GODOT MCP WINDOWED ACCEPTANCE PASS; FINAL REVIEW PENDING`
+Milestone state: `INTEGRATED; POST-MERGE VERIFIED`
 
-Task 9 acceptance is complete. The original automated gate covered implementation head `ce057a949f8f64bfb661aded26dcfec3cdcdb44c` (`fix: support any-controller main menu input`). Direct Godot MCP acceptance then found one modal-focus defect, which was fixed test-first in `2bd4d3e5ffddc16612f1a0e50cb17dead6b05f6f` (`fix: trap quit confirmation focus`). Integration still requires the planned fresh review and authoritative-main verification.
+Task 9 acceptance and integration are complete. The original automated gate covered implementation head `ce057a949f8f64bfb661aded26dcfec3cdcdb44c` (`fix: support any-controller main menu input`). Direct Godot MCP acceptance then found one modal-focus defect, which was fixed test-first in `2bd4d3e5ffddc16612f1a0e50cb17dead6b05f6f` (`fix: trap quit confirmation focus`). A fresh independent review reported no Critical or Important findings and returned `READY TO INTEGRATE: YES`. Clean authoritative `main` then fast-forwarded from `71a1054` to accepted branch head `dc1a32a`.
 
 ## Evidence boundaries
 
@@ -130,6 +130,14 @@ The MCP pass exposed one real defect: with Quit Run confirmation open, D-pad Up 
 The clean final desktop-Quit run's game log contained only the helper registration plus `PARTY_FORGE_BOOT_OK` and `PARTY_FORGE_CLASS_SELECTION_READY`. The editor still reports 14 known GDScript warnings (shadowing, integer division, enum casts, incompatible ternaries, and one unused parameter); these predate the modal fix and are not parse/runtime failures. During the earlier extended arena run, normal target despawns also produced `PARTY_FORGE_ATTACK_SEQUENCE_ERROR ... target invalid at release` diagnostics. That combat cancellation diagnostic is recorded for a later focused cleanup rather than hidden or attributed to Plan 3A.
 
 The connected controllers are synthetic MCP events, not physical-hardware certification. A short human-held controller smoke remains advisable before a public build, but it is no longer an integration blocker for this Plan 3A branch.
+
+## Independent review and authoritative integration
+
+- Independent review found no Critical or Important defects. Its one Minor finding is test-harness hardening: `tests/integration/main_menu_navigation_runner.gd` removes the default settings file and assumes the documented isolated `APPDATA`/`LOCALAPPDATA` roots. Running that standalone runner against normal user data remains unsupported until it gains backup/restore protection.
+- Before integration, both worktrees were clean, authoritative `main` was still the exact planned base `71a1054`, no Godot process was active, the four safety stashes were unchanged, and Git confirmed fast-forward eligibility.
+- `main` fast-forwarded to `dc1a32a` without applying either cleanup stash or rewriting unrelated work.
+- Fresh post-merge validation on authoritative `main` passed: full import exit 0 with zero script/parse/loader errors; exact `TEST_SUMMARY: PASS (112 suites)`; and headless editor startup exit 0 with zero script/parse/loader errors.
+- Post-merge cleanup validated and removed exactly the 629 known generated sidecars. Godot's unrelated indentation rewrite of `scripts/progression/upgrade_choice.gd` was restored to the committed bytes. Final authoritative-main status was clean and all four stashes remained unchanged.
 
 ## Explicitly deferred to Plan 3B
 
