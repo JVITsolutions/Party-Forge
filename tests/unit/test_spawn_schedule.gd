@@ -34,8 +34,8 @@ func run() -> Array[String]:
     _test_boltcaster_telegraph_preserves_sampled_aim(failures)
     _test_linear_projectile_preserves_sampled_aim(failures)
     _test_homing_projectile_tracks_live_target(failures)
-    _test_experience_orb_collection(failures)
     _test_seeded_director_and_stop(failures)
+    _test_deterministic_reward_packet_ids(failures)
     _test_density_adjusted_schedule(failures)
     _test_director_pause(failures)
     _test_pickup_upgrade_reaches_existing_orbs(failures)
@@ -218,32 +218,10 @@ func _test_homing_projectile_tracks_live_target(failures: Array[String]) -> void
     TestAssertions.truthy(projectile.is_queued_for_deletion(), "homing projectile expires at attack range", failures)
     root.free()
 
-func _test_experience_orb_collection(failures: Array[String]) -> void:
-    var root := _new_root("ExperienceOrbTest")
-    var leader := _party_actor(root, Vector3.ZERO)
-    var experience := ExperienceSystem.new()
-    root.add_child(experience)
-    var orb_scene := load("res://scenes/progression/experience_orb.tscn") as PackedScene
-    var orb: Node3D = orb_scene.instantiate() as Node3D
-    root.add_child(orb)
-    orb.position = Vector3(6.0, 0.0, 0.0)
-    orb.call("configure", 7, leader, experience, 1.0)
-    orb.call("advance_collection", 0.1)
-    TestAssertions.near((orb.get("velocity") as Vector3).length(), 0.0, 0.001, "orb remains still outside pickup range", failures)
-    orb.call("set_pickup_radius_multiplier", 2.0)
-    orb.call("advance_collection", 0.1)
-    TestAssertions.truthy(float(orb.get("velocity").x) < 0.0, "shared pickup modifier expands attraction radius", failures)
-    orb.position = Vector3(0.5, 0.0, 0.0)
-    orb.call("advance_collection", 0.01)
-    TestAssertions.equal(experience.experience, 7, "orb adds its integer value on collection", failures)
-    TestAssertions.truthy(orb.is_queued_for_deletion(), "collected orb frees itself", failures)
-    root.free()
-
 func _test_seeded_director_and_stop(failures: Array[String]) -> void:
     var root := _new_root("SpawnDirectorTest")
     var leader := _party_actor(root, Vector3.ZERO)
-    var experience := ExperienceSystem.new()
-    root.add_child(experience)
+    var distributor := RewardDistributionService.new()
     var markers: Array[Node3D] = []
     for position: Vector3 in [Vector3(-17.0, 0.0, -12.0), Vector3(17.0, 0.0, 12.0)]:
         var marker := Marker3D.new()
@@ -256,8 +234,8 @@ func _test_seeded_director_and_stop(failures: Array[String]) -> void:
     root.add_child(first)
     root.add_child(second)
     var types := GameCatalog.load_defaults().damage_types
-    first.call("configure", 4242, leader, experience, markers, null, root, root, 1.0, CombatRng.new(4242), types)
-    second.call("configure", 4242, leader, experience, markers, null, root, root, 1.0, CombatRng.new(4242), types)
+    first.call("configure", 4242, leader, distributor, markers, null, root, root, 1.0, CombatRng.new(4242), types)
+    second.call("configure", 4242, leader, distributor, markers, null, root, root, 1.0, CombatRng.new(4242), types)
     var first_ids: Array[StringName] = []
     var second_ids: Array[StringName] = []
     for index: int in range(2000):
@@ -279,15 +257,48 @@ func _test_seeded_director_and_stop(failures: Array[String]) -> void:
     TestAssertions.equal(first.call("active_band"), null, "director stops ordinary schedule at 300 seconds", failures)
     root.free()
 
+func _test_deterministic_reward_packet_ids(failures: Array[String]) -> void:
+    var root := _new_root("RewardPacketSequenceTest")
+    var first_effects := Node3D.new()
+    var second_effects := Node3D.new()
+    root.add_child(first_effects)
+    root.add_child(second_effects)
+    var first_leader := _party_actor(root, Vector3.ZERO)
+    var second_leader := _party_actor(root, Vector3(3.0, 0.0, 0.0))
+    var distributor := RewardDistributionService.new()
+    var first := (load("res://scripts/game/spawn_director.gd") as Script).new() as Node
+    var second := (load("res://scripts/game/spawn_director.gd") as Script).new() as Node
+    root.add_child(first)
+    root.add_child(second)
+    var markers: Array[Node3D] = []
+    var types := GameCatalog.load_defaults().damage_types
+    first.call("configure", 1337, first_leader, distributor, markers, null, root, first_effects, 1.0, CombatRng.new(1337), types)
+    second.call("configure", 1337, first_leader, distributor, markers, null, root, second_effects, 1.0, CombatRng.new(1337), types)
+    first.call("_on_reward_dropped", 2, Vector3.ONE)
+    first.call("_on_reward_dropped", 3, Vector3(2.0, 0.0, 0.0))
+    second.call("_on_reward_dropped", 2, Vector3.ONE)
+    second.call("_on_reward_dropped", 3, Vector3(2.0, 0.0, 0.0))
+    var first_orbs := _experience_orbs(first_effects)
+    var second_orbs := _experience_orbs(second_effects)
+    TestAssertions.equal(_packet_ids(first_orbs), [&"xp_1337_1", &"xp_1337_2"], "sequential drops use distinct deterministic IDs", failures)
+    TestAssertions.equal(_packet_ids(second_orbs), _packet_ids(first_orbs), "fresh same-seed director reproduces packet sequence", failures)
+    TestAssertions.truthy(first_orbs.all(func(orb: Node3D) -> bool: return orb.get("leader") == first_leader), "spawned orbs target the current active leader", failures)
+
+    first.call("configure", 1337, second_leader, distributor, markers, null, root, first_effects, 1.0, CombatRng.new(1337), types)
+    first.call("_on_reward_dropped", 5, Vector3(3.0, 0.0, 0.0))
+    var reset_orb := _experience_orbs(first_effects)[-1]
+    TestAssertions.equal(reset_orb.get("packet_id"), &"xp_1337_1", "reconfiguration resets reward sequence", failures)
+    TestAssertions.truthy(reset_orb.get("leader") == second_leader, "reconfiguration targets the new active leader", failures)
+    root.free()
+
 func _test_director_pause(failures: Array[String]) -> void:
     var root := _new_root("SpawnDirectorPauseTest")
     var leader := _party_actor(root, Vector3.ZERO)
-    var experience := ExperienceSystem.new()
-    root.add_child(experience)
+    var distributor := RewardDistributionService.new()
     var markers: Array[Node3D] = []
     var director := (load("res://scripts/game/spawn_director.gd") as Script).new() as Node
     root.add_child(director)
-    director.call("configure", 7, leader, experience, markers, null, root, root, 1.0, CombatRng.new(7), GameCatalog.load_defaults().damage_types)
+    director.call("configure", 7, leader, distributor, markers, null, root, root, 1.0, CombatRng.new(7), GameCatalog.load_defaults().damage_types)
     var tree := Engine.get_main_loop() as SceneTree
     tree.paused = true
     director.call("advance_time", 10.0)
@@ -298,8 +309,7 @@ func _test_director_pause(failures: Array[String]) -> void:
 func _test_density_adjusted_schedule(failures: Array[String]) -> void:
     var root := _new_root("SpawnDensityTest")
     var leader := _party_actor(root, Vector3.ZERO)
-    var experience := ExperienceSystem.new()
-    root.add_child(experience)
+    var distributor := RewardDistributionService.new()
     var markers: Array[Node3D] = []
     for position: Vector3 in [Vector3(-17.0, 0.0, -12.0), Vector3(17.0, 0.0, 12.0)]:
         var marker := Marker3D.new()
@@ -320,19 +330,19 @@ func _test_density_adjusted_schedule(failures: Array[String]) -> void:
 
     var zero: Node = director_script.new() as Node
     root.add_child(zero)
-    zero.call("configure", 10, leader, experience, markers, null, root, root, 1.0, CombatRng.new(10), types, 0)
+    zero.call("configure", 10, leader, distributor, markers, null, root, root, 1.0, CombatRng.new(10), types, 0)
     TestAssertions.equal(zero.call("advance_time", 10.0), 0, "zero density disables scheduled normal spawns", failures)
     TestAssertions.near(float(zero.get("elapsed_seconds")), 10.0, 0.001, "zero density still advances schedule time", failures)
     TestAssertions.truthy(zero.call("spawn_enemy", &"swarmer") != null, "zero density preserves direct enemy spawning", failures)
 
     var normal: Node = director_script.new() as Node
     root.add_child(normal)
-    normal.call("configure", 11, leader, experience, markers, null, root, root, 1.0, CombatRng.new(11), types, 100)
+    normal.call("configure", 11, leader, distributor, markers, null, root, root, 1.0, CombatRng.new(11), types, 100)
     TestAssertions.equal(normal.call("advance_time", 1.26), 3, "100 percent preserves retuned baseline schedule including initial spawn", failures)
 
     var extreme: Node = director_script.new() as Node
     root.add_child(extreme)
-    extreme.call("configure", 12, leader, experience, markers, null, root, root, 1.0, CombatRng.new(12), types, 1000)
+    extreme.call("configure", 12, leader, distributor, markers, null, root, root, 1.0, CombatRng.new(12), types, 1000)
     TestAssertions.equal(extreme.call("advance_time", 30.0), director_script.get("MAX_SCHEDULED_SPAWNS_PER_UPDATE"), "1000 percent is bounded per update", failures)
     TestAssertions.truthy(float(extreme.get("spawn_cooldown")) > 0.0, "overflow debt resets to one effective interval", failures)
     TestAssertions.near(float(extreme.get("elapsed_seconds")), 30.0, 0.001, "overflow handling advances the remaining clock", failures)
@@ -341,15 +351,14 @@ func _test_density_adjusted_schedule(failures: Array[String]) -> void:
 func _test_pickup_upgrade_reaches_existing_orbs(failures: Array[String]) -> void:
     var root := _new_root("ExistingOrbPickupUpgradeTest")
     var leader := _party_actor(root, Vector3.ZERO)
-    var experience := ExperienceSystem.new()
-    root.add_child(experience)
+    var distributor := RewardDistributionService.new()
     var director := (load("res://scripts/game/spawn_director.gd") as Script).new() as Node
     root.add_child(director)
     var markers: Array[Node3D] = []
-    director.call("configure", 9, leader, experience, markers, null, root, root, 1.0, CombatRng.new(9), GameCatalog.load_defaults().damage_types)
+    director.call("configure", 9, leader, distributor, markers, null, root, root, 1.0, CombatRng.new(9), GameCatalog.load_defaults().damage_types)
     var orb := (load("res://scenes/progression/experience_orb.tscn") as PackedScene).instantiate() as Node3D
     root.add_child(orb)
-    orb.call("configure", 1, leader, experience, 1.0)
+    orb.call("configure", 1, &"xp_9_1", leader, distributor, 1.0)
     director.call("set_pickup_radius_multiplier", 2.5)
     TestAssertions.near(float(orb.get("pickup_radius_multiplier")), 2.5, 0.001, "pickup upgrade propagates to existing XP orbs", failures)
     root.free()
@@ -383,6 +392,19 @@ func _count_named(parent: Node, node_name: StringName) -> int:
         if child.name == node_name:
             count += 1
     return count
+
+func _experience_orbs(parent: Node) -> Array[Node3D]:
+    var result: Array[Node3D] = []
+    for child: Node in parent.get_children():
+        if child is ExperienceOrb:
+            result.append(child as Node3D)
+    return result
+
+func _packet_ids(orbs: Array[Node3D]) -> Array[StringName]:
+    var result: Array[StringName] = []
+    for orb: Node3D in orbs:
+        result.append(orb.get("packet_id") as StringName)
+    return result
 
 func _method_accepts(object: Object, method_name: StringName, argument_count: int) -> bool:
     for row: Dictionary in object.get_method_list():

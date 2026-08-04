@@ -18,8 +18,9 @@ const ENEMY_SCENES := {
 var elapsed_seconds := 0.0
 var spawn_cooldown := 0.0
 var rng := RandomNumberGenerator.new()
+var run_seed := 0
 var leader: Node3D
-var experience_system: ExperienceSystem
+var reward_distributor: RewardDistributionService
 var spawn_markers: Array[Node3D] = []
 var camera: Camera3D
 var enemies_parent: Node
@@ -28,12 +29,14 @@ var pickup_radius_multiplier := 1.0
 var combat_rng: CombatRng
 var damage_types: DamageTypeCatalog
 var _enemy_sequence := 0
+var _reward_sequence := 0
 var _enemy_density_percent := 100
 
-func configure(seed_value: int, target_leader: Node3D, target_experience: ExperienceSystem, markers: Array[Node3D], view_camera: Camera3D, enemy_container: Node, effect_container: Node, radius_multiplier: float, shared_combat_rng: CombatRng, shared_damage_types: DamageTypeCatalog, density_percent: int = 100) -> void:
+func configure(seed_value: int, target_leader: Node3D, target_distributor: Variant, markers: Array[Node3D], view_camera: Camera3D, enemy_container: Node, effect_container: Node, radius_multiplier: float, shared_combat_rng: CombatRng, shared_damage_types: DamageTypeCatalog, density_percent: int = 100) -> void:
     rng.seed = seed_value
+    run_seed = seed_value
     leader = target_leader
-    experience_system = target_experience
+    reward_distributor = target_distributor as RewardDistributionService
     spawn_markers = markers.duplicate()
     camera = view_camera
     enemies_parent = enemy_container
@@ -43,6 +46,7 @@ func configure(seed_value: int, target_leader: Node3D, target_experience: Experi
     damage_types = shared_damage_types
     _enemy_density_percent = clampi(density_percent, 0, 1000)
     _enemy_sequence = 0
+    _reward_sequence = 0
     elapsed_seconds = 0.0
     spawn_cooldown = 0.0
 
@@ -162,8 +166,13 @@ func _on_reward_dropped(experience: int, drop_position: Vector3) -> void:
         return
     var orb := EXPERIENCE_ORB_SCENE.instantiate() as Node3D
     parent.add_child(orb)
-    orb.global_position = drop_position
-    orb.call("configure", experience, leader, experience_system, pickup_radius_multiplier)
+    if orb.is_inside_tree():
+        orb.global_position = drop_position
+    else:
+        orb.position = drop_position
+    _reward_sequence += 1
+    var packet_id := StringName("xp_%d_%d" % [run_seed, _reward_sequence])
+    orb.call("configure", experience, packet_id, leader, reward_distributor, pickup_radius_multiplier)
 
 func _tree_is_paused() -> bool:
     var tree := Engine.get_main_loop() as SceneTree

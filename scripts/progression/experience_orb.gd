@@ -7,17 +7,26 @@ const ACCELERATION := 22.0
 const MAX_SPEED := 12.0
 
 var value := 1
+var packet_id: StringName = &""
 var leader: Node3D
-var experience_system: ExperienceSystem
+var reward_distributor: RewardDistributionService
 var pickup_radius_multiplier := 1.0
 var velocity := Vector3.ZERO
 var collected := false
 
-func configure(experience_value: int, target_leader: Node3D, target_system: ExperienceSystem, radius_multiplier: float = 1.0) -> void:
+func configure(experience_value: int, target_packet_or_leader: Variant, target_leader_or_system: Variant, distributor_or_radius: Variant = null, radius_multiplier: float = 1.0) -> void:
     value = maxi(experience_value, 0)
-    leader = target_leader
-    experience_system = target_system
-    set_pickup_radius_multiplier(radius_multiplier)
+    var configured_radius := radius_multiplier
+    if target_packet_or_leader is Node3D:
+        packet_id = &""
+        leader = target_packet_or_leader as Node3D
+        reward_distributor = null
+        configured_radius = float(distributor_or_radius)
+    else:
+        packet_id = StringName(target_packet_or_leader)
+        leader = target_leader_or_system as Node3D
+        reward_distributor = distributor_or_radius as RewardDistributionService
+    set_pickup_radius_multiplier(configured_radius)
     velocity = Vector3.ZERO
     collected = false
 
@@ -52,6 +61,13 @@ func _collect() -> void:
     if collected:
         return
     collected = true
-    if experience_system != null and is_instance_valid(experience_system):
-        experience_system.add_experience(value)
+    var origin := global_position if is_inside_tree() else position
+    var packet := RewardPacket.create(packet_id, value, origin)
+    if reward_distributor != null and is_instance_valid(reward_distributor):
+        reward_distributor.distribute(packet)
+    else:
+        push_error(format_distributor_unavailable(packet_id))
     queue_free()
+
+static func format_distributor_unavailable(target_packet_id: StringName) -> String:
+    return "PARTY_FORGE_REWARD_ERROR packet=%s reason=distributor unavailable" % target_packet_id

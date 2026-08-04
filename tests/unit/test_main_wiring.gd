@@ -358,6 +358,15 @@ func _test_main_scene_graph(failures: Array[String]) -> void:
         TestAssertions.truthy(developer_badge.get_index() < main.get_node("SettingsScreen").get_index(), "Developer Mode badge is below Settings", failures)
         TestAssertions.truthy(developer_badge.get_index() < ledger.get_index(), "Developer Mode badge is below CharacterLedger", failures)
         TestAssertions.truthy(ledger.get_index() < pause_menu.get_index(), "RunPauseMenu is layered after CharacterLedger", failures)
+    var orb := (load("res://scenes/progression/experience_orb.tscn") as PackedScene).instantiate() as ExperienceOrb
+    var director := (load("res://scripts/game/spawn_director.gd") as Script).new() as SpawnDirector
+    TestAssertions.equal(_method_arg_count(orb, &"configure"), 5, "orb wiring accepts packet identity and distributor", failures)
+    TestAssertions.truthy(_has_property(orb, &"reward_distributor"), "orb wiring owns reward distributor", failures)
+    TestAssertions.truthy(not _has_property(orb, &"experience_system"), "orb wiring has no global ExperienceSystem route", failures)
+    TestAssertions.truthy(_has_property(director, &"reward_distributor"), "spawn director wiring owns reward distributor", failures)
+    TestAssertions.truthy(not _has_property(director, &"experience_system"), "spawn director wiring has no global ExperienceSystem route", failures)
+    orb.free()
+    director.free()
     main.free()
 
 func _test_integrated_overlay_input_and_front_end_seam(failures: Array[String]) -> void:
