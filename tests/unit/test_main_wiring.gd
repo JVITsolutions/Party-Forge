@@ -38,6 +38,7 @@ const REQUIRED_MAIN_NODES: PackedStringArray = [
 ]
 
 var _profile_root := ""
+var _settings_path := ""
 
 const CITY_TREE_ID := "party-forge-city-v1"
 const CITY_UNAVAILABLE_STATUS := "City services are temporarily unavailable."
@@ -54,7 +55,9 @@ func run() -> Array[String]:
     if not all_exist:
         return failures
     _profile_root = "user://tests/main_wiring-profiles_%d_%d" % [OS.get_process_id(), Time.get_ticks_usec()]
+    _settings_path = "user://tests/main_wiring-settings_%d_%d.cfg" % [OS.get_process_id(), Time.get_ticks_usec()]
     ProfileTestSupport.remove_tree(_profile_root)
+    _cleanup_settings_artifacts(_settings_path)
     _test_main_scene_graph(failures)
     _test_profile_boot_and_developer_gate(failures)
     _test_active_run_context_graph_and_failure_cleanup(failures)
@@ -78,6 +81,7 @@ func run() -> Array[String]:
     _test_visual_language(failures)
     _test_catalog_error_format(failures)
     ProfileTestSupport.remove_tree(_profile_root)
+    _cleanup_settings_artifacts(_settings_path)
     return failures
 
 func _test_profile_boot_and_developer_gate(failures: Array[String]) -> void:
@@ -344,15 +348,15 @@ func _method_arg_count(object: Object, method_name: StringName) -> int:
     return -1
 
 func _test_settings_and_next_run_snapshot_wiring(failures: Array[String]) -> void:
-    var original_files := _backup_default_settings_artifacts()
-    _cleanup_default_settings_artifacts()
+    var settings_path := "user://tests/main_wiring-settings-fixture_%d_%d.cfg" % [OS.get_process_id(), Time.get_ticks_usec()]
+    _cleanup_settings_artifacts(settings_path)
     var store := PartyForgeSettingsStore.new()
     var player_settings := PartyForgeSettings.new()
     player_settings.mode = PartyForgeSettings.Mode.PLAYER_SIMULATION
     player_settings.god_mode = true
-    TestAssertions.equal(store.save_settings(player_settings), "", "Player Simulation fixture saves", failures)
+    TestAssertions.equal(store.save_settings(player_settings, settings_path), "", "Player Simulation fixture saves", failures)
     var player_main := (load("res://scenes/game/main.tscn") as PackedScene).instantiate()
-    _prepare_main(player_main)
+    _prepare_main(player_main, settings_path)
     var selector := player_main.get_node("HUD/ClassSelection") as ClassSelectionPanel
     var settings_screen := player_main.get_node("SettingsScreen") as SettingsScreen
     selector.settings_requested.emit()
@@ -374,9 +378,9 @@ func _test_settings_and_next_run_snapshot_wiring(failures: Array[String]) -> voi
     developer_settings.mode = PartyForgeSettings.Mode.DEVELOPER_MODE
     developer_settings.party_capacity_override = 9
     developer_settings.experience_multiplier_percent = 150
-    TestAssertions.equal(store.save_settings(developer_settings), "", "Developer Mode fixture saves", failures)
+    TestAssertions.equal(store.save_settings(developer_settings, settings_path), "", "Developer Mode fixture saves", failures)
     var developer_main := (load("res://scenes/game/main.tscn") as PackedScene).instantiate()
-    _prepare_main(developer_main)
+    _prepare_main(developer_main, settings_path)
     TestAssertions.truthy(developer_main.call("select_leader_class", &"fighter"), "Developer Mode fixture starts", failures)
     var active_rules := developer_main.get("active_run_rules") as RunRulesSnapshot
     var saved_settings := developer_main.get("saved_settings") as PartyForgeSettings
@@ -394,8 +398,7 @@ func _test_settings_and_next_run_snapshot_wiring(failures: Array[String]) -> voi
         TestAssertions.equal(active_rules.experience_multiplier_percent(), 150, "active run XP snapshot ignores later saved-settings mutation", failures)
         TestAssertions.near(experience_system.experience_multiplier, 1.5, 0.001, "configured ExperienceSystem ignores later saved-settings mutation", failures)
     _cleanup_main(developer_main)
-    _cleanup_default_settings_artifacts()
-    _restore_default_settings_artifacts(original_files)
+    _cleanup_settings_artifacts(settings_path)
 
 func _test_main_scene_graph(failures: Array[String]) -> void:
     var main := (load("res://scenes/game/main.tscn") as PackedScene).instantiate()
@@ -993,8 +996,9 @@ func _started_main_with_settings(settings: PartyForgeSettings) -> Node:
     main.call("select_leader_class", &"fighter")
     return main
 
-func _prepare_main(main: Node) -> void:
+func _prepare_main(main: Node, settings_path: String = "") -> void:
     main.set("profile_root", _profile_root)
+    main.set("settings_path", settings_path if not settings_path.is_empty() else _settings_path)
     main.call("_ready")
     var manager := main.get("profile_manager") as ProfileManager
     if manager.active_profile() == null:
@@ -1026,22 +1030,9 @@ func _cleanup_main(main: Node) -> void:
     (Engine.get_main_loop() as SceneTree).paused = false
     main.free()
 
-func _cleanup_default_settings_artifacts() -> void:
-    for path: String in [PartyForgeSettingsStore.DEFAULT_PATH, "%s.tmp" % PartyForgeSettingsStore.DEFAULT_PATH, "%s.bak" % PartyForgeSettingsStore.DEFAULT_PATH]:
+func _cleanup_settings_artifacts(settings_path: String) -> void:
+    for path: String in [settings_path, "%s.tmp" % settings_path, "%s.bak" % settings_path]:
         DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
-
-func _backup_default_settings_artifacts() -> Dictionary:
-    var result: Dictionary = {}
-    for path: String in [PartyForgeSettingsStore.DEFAULT_PATH, "%s.tmp" % PartyForgeSettingsStore.DEFAULT_PATH, "%s.bak" % PartyForgeSettingsStore.DEFAULT_PATH]:
-        if FileAccess.file_exists(path):
-            result[path] = FileAccess.get_file_as_bytes(path)
-    return result
-
-func _restore_default_settings_artifacts(files: Dictionary) -> void:
-    for path: String in files:
-        var file := FileAccess.open(path, FileAccess.WRITE)
-        if file != null:
-            file.store_buffer(files[path] as PackedByteArray)
 
 func _escape_key_event() -> InputEventKey:
     var event := InputEventKey.new()
