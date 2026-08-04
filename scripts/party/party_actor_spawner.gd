@@ -12,8 +12,9 @@ var actor_container: Node3D
 var leader: PartyActor
 var combat_effects_parent: Node
 var combat_policy: CombatTestPolicy
+var owner_context: PlayerRunContext
 
-func initialize(manager: PartyManager, container: Node3D, leader_actor: PartyActor, effect_container: Node = null, policy: CombatTestPolicy = null) -> void:
+func initialize(manager: PartyManager, container: Node3D, leader_actor: PartyActor, effect_container: Node = null, policy: CombatTestPolicy = null, context: PlayerRunContext = null) -> void:
     if party_manager != null and party_manager.member_added.is_connected(_on_member_added):
         party_manager.member_added.disconnect(_on_member_added)
     party_manager = manager
@@ -21,6 +22,7 @@ func initialize(manager: PartyManager, container: Node3D, leader_actor: PartyAct
     leader = leader_actor
     combat_effects_parent = effect_container
     combat_policy = policy
+    owner_context = context
     if party_manager != null and not party_manager.member_added.is_connected(_on_member_added):
         party_manager.member_added.connect(_on_member_added)
 
@@ -37,6 +39,12 @@ func _on_member_added(member: PartyMemberState) -> void:
     companion.add_child(health_bar)
     health_bar.call("configure", companion.get_node("HealthComponent"))
     actor_container.add_child(companion)
+    if owner_context != null and not owner_context.bind_actor(member.member_id, companion):
+        push_error(format_actor_bind_error(member.member_id))
+        companion.free()
+
+static func format_actor_bind_error(member_id: int) -> String:
+    return "PARTY_FORGE_RUN_CONTEXT_ERROR member=%d reason=actor bind failed" % member_id
 
 func _companion_count() -> int:
     var count := 0

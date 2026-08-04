@@ -9,7 +9,7 @@ func _ready() -> void:
 	_sync_label()
 
 
-func configure(snapshot: RunRulesSnapshot) -> void:
+func configure(snapshot: RunRulesSnapshot, reward_tuning: RewardDistributionTuning = null) -> void:
 	_summary = ""
 	if snapshot == null or not snapshot.developer_mode_active():
 		visible = false
@@ -21,6 +21,9 @@ func configure(snapshot: RunRulesSnapshot) -> void:
 		parts.append("XP %d%%" % snapshot.experience_multiplier_percent())
 	if snapshot.level_up_card_count() != 5:
 		parts.append("CARDS %d" % snapshot.level_up_card_count())
+	if reward_tuning != null and reward_tuning.validate().is_empty():
+		parts.append("XP SHARE %.1fm" % reward_tuning.leader_event_share_radius)
+		parts.append("SQUAD LINK %.1fm" % reward_tuning.follower_squad_link_radius)
 	_summary = " | ".join(parts)
 	visible = true
 	_sync_label()

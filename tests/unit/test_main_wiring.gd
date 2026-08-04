@@ -57,6 +57,7 @@ func run() -> Array[String]:
     ProfileTestSupport.remove_tree(_profile_root)
     _test_main_scene_graph(failures)
     _test_profile_boot_and_developer_gate(failures)
+    _test_active_run_context_graph_and_failure_cleanup(failures)
     _test_main_menu_route_composition(failures)
     _test_passive_tree_route_composition(failures)
     _test_settings_and_next_run_snapshot_wiring(failures)
@@ -82,6 +83,7 @@ func run() -> Array[String]:
 func _test_profile_boot_and_developer_gate(failures: Array[String]) -> void:
     var profile_root := "user://tests/main_wiring-profile-gate_%d_%d" % [OS.get_process_id(), Time.get_ticks_usec()]
     ProfileTestSupport.remove_tree(profile_root)
+
     var main := (load("res://scenes/game/main.tscn") as PackedScene).instantiate() as PartyForgeMain
     main.set("profile_root", profile_root)
     main.call("_ready")
@@ -107,6 +109,68 @@ func _test_profile_boot_and_developer_gate(failures: Array[String]) -> void:
     (Engine.get_main_loop() as SceneTree).paused = false
     main.free()
     ProfileTestSupport.remove_tree(profile_root)
+
+func _test_active_run_context_graph_and_failure_cleanup(failures: Array[String]) -> void:
+    var main := _started_main()
+    var registry := main.get("run_context_registry") as RunContextRegistry
+    var context := main.get("active_run_context") as PlayerRunContext
+    var distributor := main.get("reward_distribution_service") as RewardDistributionService
+    var facade := main.get_node("ExperienceSystem") as ExperienceSystem
+    var spawner := main.get_node("PartyActorSpawner") as PartyActorSpawner
+    var director := main.get_node("SpawnDirector") as SpawnDirector
+    TestAssertions.truthy(registry != null, "main owns the single-player run context registry", failures)
+    TestAssertions.truthy(context != null, "main owns the active player run context", failures)
+    TestAssertions.truthy(distributor != null, "main owns the reward distribution service", failures)
+    if registry != null and context != null:
+        TestAssertions.equal(registry.all_contexts(), [context], "main registers exactly one active context", failures)
+        TestAssertions.truthy(registry.is_arena_roster_locked(), "single-player Arena locks its context roster", failures)
+        TestAssertions.equal(registry.device_for(&"player_1"), -1, "single-player context starts with unassigned device", failures)
+        TestAssertions.truthy(context.party == main.party_manager and main.party_manager == main.get_node("PartyManager"), "compatibility PartyManager is the context party", failures)
+        TestAssertions.equal(context.profile_id, main.active_profile().profile_id, "context derives identity from the active profile copy", failures)
+        var exposed_profile: ProfileState = main.active_profile()
+        exposed_profile.gold += 99
+        TestAssertions.truthy(context.profile_snapshot.gold != exposed_profile.gold, "context profile remains defensively isolated", failures)
+        var leader_member_id := context.party.members[0].member_id
+        TestAssertions.truthy(context.actor_for(leader_member_id) == main.leader, "main binds the production leader to its context", failures)
+        TestAssertions.truthy(facade.get("run_context") == context, "ExperienceSystem facade targets the active context", failures)
+        TestAssertions.equal(facade.get("leader_member_id"), leader_member_id, "ExperienceSystem facade targets the leader member", failures)
+        TestAssertions.truthy(spawner.get("owner_context") == context, "PartyActorSpawner owns the same context", failures)
+    if distributor != null:
+        TestAssertions.truthy(distributor.registry == registry, "reward service uses the active registry", failures)
+        TestAssertions.truthy(distributor.tuning != null, "reward service owns loaded distance tuning", failures)
+        TestAssertions.truthy(director.reward_distributor == distributor, "SpawnDirector receives the reward service rather than global XP", failures)
+    _cleanup_main(main)
+
+    var failure_root := "user://tests/main_wiring-context-failure_%d_%d" % [OS.get_process_id(), Time.get_ticks_usec()]
+    var failure_main := (load("res://scenes/game/main.tscn") as PackedScene).instantiate() as PartyForgeMain
+    failure_main.profile_root = failure_root
+    ProfileTestSupport.remove_tree(failure_root)
+    _prepare_main(failure_main)
+    var failure_party := failure_main.party_manager
+    failure_party.initialize(failure_main.catalog.class_by_id(&"fighter"), failure_main.catalog.traits)
+    var failed_context := PlayerRunContext.new()
+    TestAssertions.equal(failed_context.configure(&"player_1", 0, failure_main.active_profile(), 1337, failure_party, 100), PackedStringArray(), "failure fixture context configures", failures)
+    failure_main.active_run_context = failed_context
+    failure_main.run_context_registry = RunContextRegistry.new()
+    TestAssertions.truthy(failure_main.run_context_registry.register_context(failed_context).ok(), "failure fixture context registers", failures)
+    failure_main.experience_system.configure_context(failed_context, 1)
+    var failed_leader := (load("res://scenes/characters/leader.tscn") as PackedScene).instantiate() as PartyActor
+    failure_main.get_node("Actors").add_child(failed_leader)
+    failed_leader.configure(failure_party.members[0])
+    failure_main.leader = failed_leader
+    var member_callback := Callable(failed_context, "_on_member_added")
+    TestAssertions.truthy(failure_party.member_added.is_connected(member_callback), "configured context observes its party before abort", failures)
+    TestAssertions.truthy(not failure_main.call("_abort_run_start", PackedStringArray(["PARTY_FORGE_RUN_CONTEXT_ERROR field=test"]), failed_leader), "context abort returns failure", failures)
+    TestAssertions.truthy(not is_instance_valid(failed_leader), "context abort frees the newly spawned leader", failures)
+    TestAssertions.truthy(not failure_main.run_started, "context abort leaves run unstarted", failures)
+    TestAssertions.equal(failure_main.leader, null, "context abort clears leader compatibility state", failures)
+    TestAssertions.truthy((failure_main.get_node("MainMenuScreen") as MainMenuScreen).is_open(), "context abort restores the front end", failures)
+    TestAssertions.truthy(failure_main.run_context_registry.all_contexts().is_empty(), "context abort leaves no partial registration", failures)
+    TestAssertions.equal(failure_main.active_run_context, null, "context abort clears active context", failures)
+    TestAssertions.equal(failure_main.experience_system.run_context, null, "context abort clears the facade", failures)
+    TestAssertions.truthy(not failure_party.member_added.is_connected(member_callback), "context abort disconnects partial party ownership", failures)
+    failure_main.free()
+    ProfileTestSupport.remove_tree(failure_root)
 
 func _test_main_menu_route_composition(failures: Array[String]) -> void:
     var root := "user://tests/main-wiring-menu-routes_%d_%d" % [OS.get_process_id(), Time.get_ticks_usec()]
@@ -464,13 +528,13 @@ func _test_class_selection_starts_run_and_applies_choices(failures: Array[String
     TestAssertions.truthy(main.get("leader") != null, "class selection creates configured leader", failures)
 
     var experience := main.get_node("ExperienceSystem") as ExperienceSystem
-    experience.pending_levels = 1
+    _queue_leader_levels(main, 1)
     game_run.call("begin_level_up")
     var stat_choice := UpgradeChoice.new(UpgradeChoice.Kind.PARTY_STAT, &"pickup_radius", "Pickup Radius")
     (main.get("party_stats") as Dictionary)[&"pickup_radius"] = 19
     main.call("_apply_choice", stat_choice)
     TestAssertions.equal(int((main.get("party_stats") as Dictionary)[&"pickup_radius"]), 20, "party stat upgrades cap at 20", failures)
-    experience.pending_levels = 1
+    _queue_leader_levels(main, 1)
     game_run.call("begin_level_up")
     var recruit := UpgradeChoice.new(UpgradeChoice.Kind.RECRUIT, &"ranger", "Recruit Ranger")
     TestAssertions.truthy(main.call("_apply_choice", recruit), "central choice recruits valid class", failures)
@@ -508,7 +572,7 @@ func _test_targeted_confirmation_routes_through_main(failures: Array[String]) ->
     var party := main.get_node("PartyManager") as PartyManager
     var experience := main.get_node("ExperienceSystem") as ExperienceSystem
     var game_run := main.get_node("GameRun") as GameRun
-    experience.pending_levels = 1
+    _queue_leader_levels(main, 1)
     game_run.begin_level_up()
     var choice := UpgradeChoice.authored((main.get("catalog") as GameCatalog).upgrade_by_id(&"vitality"))
     var choices: Array[UpgradeChoice] = [
@@ -533,7 +597,7 @@ func _test_stale_target_rejects_without_consuming(failures: Array[String]) -> vo
     var party := main.get_node("PartyManager") as PartyManager
     var experience := main.get_node("ExperienceSystem") as ExperienceSystem
     var game_run := main.get_node("GameRun") as GameRun
-    experience.pending_levels = 1
+    _queue_leader_levels(main, 1)
     game_run.begin_level_up()
     var choice := UpgradeChoice.authored((main.get("catalog") as GameCatalog).upgrade_by_id(&"vitality"))
     panel.show_choices([
@@ -654,7 +718,7 @@ func _test_capped_stat_is_disabled_without_hiding(failures: Array[String]) -> vo
     var main := _started_main()
     (main.get("party_stats") as Dictionary)[&"damage"] = 20
     var experience := main.get_node("ExperienceSystem") as ExperienceSystem
-    experience.pending_levels = 1
+    _queue_leader_levels(main, 1)
     var game_run: Node = main.get_node("GameRun")
     game_run.call("begin_level_up")
     var apply_arg_count := 0
@@ -817,7 +881,7 @@ func _test_boss_level_up_resumes_boss(failures: Array[String]) -> void:
         game_run.disconnect("boss_requested", spawn_boss_callback)
     game_run.call("advance_run_time", 300.0)
     var experience := main.get_node("ExperienceSystem") as ExperienceSystem
-    experience.pending_levels = 1
+    _queue_leader_levels(main, 1)
     main.call("_on_level_ready", experience.level + 1)
     TestAssertions.equal(game_run.call("current_state"), 2, "boss-phase level-up enters LEVEL_UP", failures)
     TestAssertions.truthy((Engine.get_main_loop() as SceneTree).paused, "boss-phase level-up pauses gameplay", failures)
@@ -941,13 +1005,22 @@ func _present_test_offer(main: Node, run_seed: int, pending_count: int = 1) -> v
     var game_run := main.get_node("GameRun") as GameRun
     var experience := main.get_node("ExperienceSystem") as ExperienceSystem
     game_run.configure_seed(run_seed)
-    experience.level = 1 + pending_count
-    experience.pending_levels = pending_count
-    experience.pending_level_numbers = []
-    for pending_level: int in range(2, pending_count + 2):
-        experience.pending_level_numbers.append(pending_level)
+    var level_handler := Callable(main, "_on_level_ready")
+    var reconnect_level_handler := experience.level_ready.is_connected(level_handler)
+    if reconnect_level_handler:
+        experience.level_ready.disconnect(level_handler)
+    _queue_leader_levels(main, pending_count)
+    if reconnect_level_handler:
+        experience.level_ready.connect(level_handler)
     game_run.begin_level_up()
     main.call("_present_pending_level")
+
+func _queue_leader_levels(main: Node, count: int) -> void:
+    var experience := main.get_node("ExperienceSystem") as ExperienceSystem
+    var amount := 0
+    for offset: int in range(maxi(count, 0)):
+        amount += experience.tuning.requirement_for_level(experience.level + offset)
+    experience.add_experience(amount)
 
 func _cleanup_main(main: Node) -> void:
     (Engine.get_main_loop() as SceneTree).paused = false

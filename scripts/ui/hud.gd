@@ -43,7 +43,7 @@ func _refresh_status() -> void:
 			(get_node("Margin/Status/LeaderHealth") as ProgressBar).value = health.current_health
 	if experience_system != null:
 		var xp := get_node("Margin/Status/Experience") as ProgressBar
-		xp.max_value = experience_system.experience_for_next_level()
+		xp.max_value = maxi(experience_system.experience_for_next_level(), 1)
 		xp.value = experience_system.experience
 	if game_run != null:
 		(get_node("Margin/Status/RunTime") as Label).text = _format_time(float(game_run.call("elapsed_time")))

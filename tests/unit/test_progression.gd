@@ -7,6 +7,7 @@ const CLASS_IDS: Array[StringName] = [
 
 func run() -> Array[String]:
     var failures: Array[String] = []
+    _test_experience_system_context_facade(failures)
     var fighter := load("res://data/progression/class_growth/fighter.tres") as ClassGrowthDefinition
     var tuning := load("res://data/progression/default_experience.tres") as ExperienceTuning
     var initial := CharacterProgressionState.fresh(1, tuning)
@@ -74,6 +75,47 @@ func run() -> Array[String]:
     TestAssertions.truthy(stat_fallbacks.all(func(choice: UpgradeChoice) -> bool: return choice.is_valid_for(empty_party)), "shared-stat fallbacks usable", failures)
     empty_party.free()
     return failures
+
+func _test_experience_system_context_facade(failures: Array[String]) -> void:
+    var catalog := GameCatalog.load_defaults()
+    var party := PartyManager.new()
+    party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
+    party.recruit(catalog.class_by_id(&"ranger"))
+    var context := PlayerRunContext.new()
+    var profile := ProfileState.new_profile("profile-facade01", "Facade Player", 1000)
+    TestAssertions.equal(
+        context.configure(&"player_facade", 0, profile, 1337, party, 100),
+        PackedStringArray(),
+        "facade fixture context configures",
+        failures,
+    )
+    var facade := ExperienceSystem.new()
+    var emitted_levels: Array[int] = []
+    facade.level_ready.connect(func(level_value: int) -> void: emitted_levels.append(level_value))
+    TestAssertions.equal(facade.level, 1, "unconfigured facade has safe level", failures)
+    TestAssertions.equal(facade.experience, 0, "unconfigured facade has safe experience", failures)
+    TestAssertions.equal(facade.pending_levels, 0, "unconfigured facade has no pending levels", failures)
+    TestAssertions.equal(facade.pending_level_numbers, [], "unconfigured facade has a safe queue", failures)
+    TestAssertions.equal(facade.experience_for_next_level(), 20, "unconfigured facade uses default tuning", failures)
+    TestAssertions.equal(facade.current_pending_level(), 0, "unconfigured facade has no current pending level", failures)
+    TestAssertions.truthy(not facade.consume_pending_level(), "unconfigured facade cannot consume a level", failures)
+
+    facade.configure_context(context, 1)
+    facade.add_experience(20)
+    var leader_state := context.progression_for(1)
+    TestAssertions.equal(facade.level, leader_state.level, "facade mirrors leader level", failures)
+    TestAssertions.equal(facade.experience, leader_state.experience, "facade mirrors leader experience", failures)
+    TestAssertions.equal(facade.experience_for_next_level(), leader_state.experience_required, "facade mirrors leader requirement", failures)
+    TestAssertions.equal(facade.pending_levels, 1, "facade mirrors leader queue count", failures)
+    TestAssertions.equal(facade.pending_level_numbers, [2], "facade mirrors leader queue order", failures)
+    TestAssertions.equal(facade.current_pending_level(), 2, "facade exposes leader queue front", failures)
+    TestAssertions.equal(emitted_levels, [2], "facade proxies the configured leader level only", failures)
+    context.award_experience(2, 20)
+    TestAssertions.equal(emitted_levels, [2], "follower level does not proxy through facade", failures)
+    TestAssertions.truthy(facade.consume_pending_level(), "facade consumes one leader queue entry", failures)
+    TestAssertions.equal(facade.pending_level_numbers, [], "facade consumption is FIFO", failures)
+    facade.free()
+    party.free()
 
 func _choice_keys(choices: Array[UpgradeChoice]) -> PackedStringArray:
     var keys: PackedStringArray = []

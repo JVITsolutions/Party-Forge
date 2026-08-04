@@ -7,6 +7,7 @@ const HEALTH_BAR_SCENE := preload("res://scenes/ui/health_bar_3d.tscn")
 const HUDScript := preload("res://scripts/ui/hud.gd")
 const LevelUpPanelScript := preload("res://scripts/ui/level_up_panel.gd")
 const RunResultPanelScript := preload("res://scripts/ui/run_result_panel.gd")
+const REWARD_DISTRIBUTION_TUNING: RewardDistributionTuning = preload("res://data/progression/reward_distribution.tres")
 const RUN_SEED := 1337
 const CURRENT_STARTING_PARTY_SIZE := 1
 const LEDGER_FEATURE_IDS: Array[StringName] = [&"stats", &"current_upgrades", &"equipment_inventory"]
@@ -26,6 +27,10 @@ var trait_upgrade_ranks: Dictionary = {}
 var catalog: GameCatalog
 var party_manager: PartyManager
 var experience_system: ExperienceSystem
+var run_context_registry: RunContextRegistry
+var active_run_context: PlayerRunContext
+var reward_distribution_service: RewardDistributionService
+var reward_distribution_tuning: RewardDistributionTuning
 var game_run: GameRun
 var spawn_director: SpawnDirector
 var party_actor_spawner: PartyActorSpawner
@@ -95,7 +100,6 @@ func select_leader_class(class_id: StringName) -> bool:
 	_level_up_offer_state = LevelUpOfferState.new()
 	(get_node("HUD/LevelUpPanel") as LevelUpPanel).configure_reduced_motion(active_run_rules.reduced_motion())
 	experience_system.configure_multiplier(active_run_rules.experience_multiplier_percent())
-	developer_mode_badge.configure(active_run_rules)
 	party_manager.configure_capacity(active_run_rules.capacity_policy())
 	if CURRENT_STARTING_PARTY_SIZE > active_run_rules.party_capacity():
 		push_error("PARTY_FORGE_STARTING_PARTY_CAPACITY_ERROR selected=%d capacity=%d" % [CURRENT_STARTING_PARTY_SIZE, active_run_rules.party_capacity()])
@@ -104,6 +108,25 @@ func select_leader_class(class_id: StringName) -> bool:
 	party_manager.configure_identity(game_run.run_seed, catalog.generic_name_pool)
 	party_manager.initialize(definition, catalog.traits)
 	party_manager.configure_combat(game_run.combat_rng, catalog.damage_types)
+	run_context_registry = RunContextRegistry.new()
+	active_run_context = PlayerRunContext.new()
+	var context_errors := active_run_context.configure(
+		&"player_1",
+		0,
+		active_profile(),
+		game_run.run_seed,
+		party_manager,
+		active_run_rules.experience_multiplier_percent(),
+	)
+	if not context_errors.is_empty():
+		return _abort_run_start(context_errors)
+	var registration := run_context_registry.register_context(active_run_context, -1)
+	if not registration.ok():
+		return _abort_run_start(PackedStringArray([registration.message]))
+	run_context_registry.lock_arena_roster()
+	party_manager = active_run_context.party
+	var leader_member_id := party_manager.members[0].member_id
+	experience_system.configure_context(active_run_context, leader_member_id)
 	leader = LEADER_SCENE.instantiate() as PartyActor
 	get_node("Actors").add_child(leader)
 	var spawn := get_node("Arena/PlayerSpawn") as Marker3D
@@ -113,12 +136,22 @@ func select_leader_class(class_id: StringName) -> bool:
 	leader.configure_combat(party_manager, get_node("Effects"))
 	leader.configure_combat_policy(combat_policy)
 	_attach_health_bar(leader)
-	party_actor_spawner.initialize(party_manager, get_node("Actors") as Node3D, leader, get_node("Effects"), combat_policy)
+	if not active_run_context.bind_actor(leader_member_id, leader):
+		return _abort_run_start(PackedStringArray([
+			PartyActorSpawner.format_actor_bind_error(leader_member_id),
+		]), leader)
+	party_actor_spawner.initialize(party_manager, get_node("Actors") as Node3D, leader, get_node("Effects"), combat_policy, active_run_context)
+	reward_distribution_tuning = REWARD_DISTRIBUTION_TUNING
+	reward_distribution_service = RewardDistributionService.new()
+	var reward_errors := reward_distribution_service.configure(run_context_registry, reward_distribution_tuning)
+	if not reward_errors.is_empty():
+		return _abort_run_start(reward_errors, leader)
+	developer_mode_badge.configure(active_run_rules, reward_distribution_tuning)
 	var camera_rig := get_node("LeaderCamera") as LeaderCamera
 	camera_rig.target = leader
 	var markers := _spawn_markers()
 	var camera := camera_rig.get_node("Camera3D") as Camera3D
-	spawn_director.configure(RUN_SEED, leader, experience_system, markers, camera, get_node("Enemies"), get_node("Effects"), _pickup_multiplier(), game_run.combat_rng, catalog.damage_types, active_run_rules.enemy_density_percent())
+	spawn_director.configure(RUN_SEED, leader, reward_distribution_service, markers, camera, get_node("Enemies"), get_node("Effects"), _pickup_multiplier(), game_run.combat_rng, catalog.damage_types, active_run_rules.enemy_density_percent())
 	spawn_director.process_mode = Node.PROCESS_MODE_INHERIT
 	hud.call("configure", game_run, party_manager, experience_system)
 	hud.call("set_leader", leader)
@@ -132,6 +165,29 @@ func select_leader_class(class_id: StringName) -> bool:
 	(get_node("MainMenuScreen") as MainMenuScreen).close()
 	(get_node("HUD/ClassSelection") as ClassSelectionPanel).confirm_run_started()
 	return true
+
+func _abort_run_start(diagnostics: PackedStringArray, spawned_leader: PartyActor = null) -> bool:
+	if spawned_leader != null and is_instance_valid(spawned_leader):
+		spawned_leader.free()
+	if leader == spawned_leader:
+		leader = null
+	party_actor_spawner.initialize(null, null, null)
+	experience_system.configure_context(null, 0)
+	if active_run_context != null and active_run_context.party != null:
+		var member_callback := Callable(active_run_context, "_on_member_added")
+		if active_run_context.party.member_added.is_connected(member_callback):
+			active_run_context.party.member_added.disconnect(member_callback)
+	if run_context_registry != null:
+		run_context_registry.clear()
+	active_run_context = null
+	reward_distribution_service = null
+	reward_distribution_tuning = null
+	run_started = false
+	developer_mode_badge.configure(null)
+	_present_front_end()
+	for diagnostic: String in diagnostics:
+		push_error(diagnostic)
+	return false
 
 func active_profile() -> ProfileState:
 	return profile_manager.active_profile() if profile_manager != null else null

@@ -120,13 +120,13 @@ func _test_main_configures_badge_from_active_run(failures: Array[String]) -> voi
 	var developer_badge := developer_main.get_node_or_null("DeveloperModeBadge")
 	TestAssertions.truthy(developer_badge != null and developer_badge.visible, "Developer Mode run shows the configured badge", failures)
 	if developer_badge != null:
-		TestAssertions.equal(developer_badge.call(&"summary_text"), "DEV MODE | UNLOCK ALL | GOD | PARTY 12 | ENEMIES 500%", "main passes the active snapshot to the badge", failures)
+		TestAssertions.equal(developer_badge.call(&"summary_text"), "DEV MODE | UNLOCK ALL | GOD | PARTY 12 | ENEMIES 500% | XP SHARE 18.0m | SQUAD LINK 14.0m", "main passes the active snapshot and reward tuning to the badge", failures)
 		var saved := developer_main.get("saved_settings") as PartyForgeSettings
 		saved.unlock_all_implemented_content = false
 		saved.god_mode = false
 		saved.party_capacity_override = 2
 		saved.enemy_density_percent = 20
-		TestAssertions.equal(developer_badge.call(&"summary_text"), "DEV MODE | UNLOCK ALL | GOD | PARTY 12 | ENEMIES 500%", "running main badge ignores later saved-settings mutation", failures)
+		TestAssertions.equal(developer_badge.call(&"summary_text"), "DEV MODE | UNLOCK ALL | GOD | PARTY 12 | ENEMIES 500% | XP SHARE 18.0m | SQUAD LINK 14.0m", "running main badge ignores later saved-settings mutation", failures)
 	_cleanup_main(developer_main)
 	_cleanup_default_settings_artifacts()
 	_restore_default_settings_artifacts(original_files)
