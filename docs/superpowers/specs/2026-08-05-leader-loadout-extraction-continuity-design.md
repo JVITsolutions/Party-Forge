@@ -13,6 +13,7 @@ This milestone designs:
 - The relationship between ordinary extraction capacity and leader equipment.
 - A persistent per-profile leader loadout.
 - The Armoury equipment-and-stash page and city entry point.
+- The separation between Armoury, Warehouse, and Barracks progression.
 - Run-to-run reuse of compatible leader gear.
 - Class-compatibility checks before starting a run.
 - Explicit handling when incompatible gear cannot fit in the stash.
@@ -28,7 +29,17 @@ Player Mode does not expose the Armoury equipment-and-stash page or its city bui
 
 ### Equipment and Stash Available
 
-Unlocking equipment exposes an equipment-and-stash page on the main menu and a clickable Armoury building in the city. The page displays the active leader loadout beside the profile's stash. A later Armoury passive tree expands equipment-related capabilities without placing every upgrade on the City tree.
+Unlocking equipment exposes an Armoury page on the main menu and a clickable Armoury building in the city. Armoury v1 displays the active leader loadout beside a direct view into the profile's complete Warehouse stash. The player can switch among every unlocked stash tab and equip, unequip, compare, or swap items without moving them into a separate staging container.
+
+The Armoury does not own another stash. Armoury and Warehouse are two purpose-built views over the same profile-owned item registry and stash tabs.
+
+### Building Responsibilities
+
+The **Armoury** answers, "What are my characters wearing?" It owns equipment-sheet presentation, comparison, equip/unequip actions, class compatibility, saved loadout conveniences, and later follower equipment sheets. A later Armoury passive tree expands loadout and equipment-management features.
+
+The **Warehouse** answers, "What items does my profile own?" It owns full stash management, additional 100-slot tabs, searching, sorting, filters, categories, and bulk organization. Its passive tree expands capacity and storage-management features. The Armoury's stash browser consumes the same Warehouse data and supports switching among all unlocked tabs, but it does not duplicate Warehouse ownership or create Armoury-only storage.
+
+The **Barracks** answers, "Who may start a run with me, and may they bring prepared gear?" It owns starting-follower capacity and the global permission for starting followers to bring persistent loadouts. It does not store items or implement equip/unequip actions.
 
 ### Ordinary Extraction
 
@@ -62,6 +73,21 @@ Once active:
 - One item can never be selected by both systems.
 
 The ordinary extraction system therefore acts as an early bridge for leader gear, then specializes into follower and inventory recovery after the stronger unlock is earned.
+
+## Barracks Starting-Follower Progression
+
+The Barracks passive tree contains two independent progression paths:
+
+- `starting_follower_capacity`: every allocated point permits `+1` owned follower to be selected before a run.
+- `followers_bring_gear`: one permanent feature unlock permits every selected starting follower to bring a persistent equipment loadout into the run.
+
+`starting_follower_capacity` begins at zero. Starting followers remain subject to the profile's overall squad capacity after accounting for human players. Unlocking one or more starting-follower slots does not grant `followers_bring_gear`, and unlocking `followers_bring_gear` does not increase the number of starting followers.
+
+The existing City-tree `expanded-barracks` concept becomes the discovery gateway for the dedicated Barracks building/tree. Repeated `+1 starting follower` nodes and the separate `followers_bring_gear` node live in the Barracks tree rather than filling the City tree.
+
+Armoury v1 remains leader-only. Once the profile has at least one starting-follower slot, the Armoury may reveal its follower-sheet selector. Before `followers_bring_gear`, every selected starting follower enters without persistent gear. After the unlock, every selected starting follower may check their saved loadout into the run. Followers may still find and equip items during the run regardless of the unlock.
+
+Until persistent follower loadouts are implemented, ordinary extraction may still recover follower equipment into the Warehouse stash under the existing extraction-capacity rules. This design does not grant automatic full-follower extraction.
 
 ## Persistent Ownership Model
 
@@ -123,7 +149,9 @@ Once equipment is unlocked, the profile can reach the same equipment-and-stash p
 - The clickable Armoury building in the city.
 - The incompatible-class warning's **Go to Armoury** action.
 
-The page presents the active leader equipment sheet and profile stash together. The active loadout remains visually distinct from stored items because equipped items do not consume stash capacity. Player Mode obeys progression visibility; Developer Mode may reveal the unfinished page and future controls for testing.
+The Armoury page presents the active leader equipment sheet and a tab-switchable view of every unlocked Warehouse stash tab. The active loadout remains visually distinct from stored items because equipped items do not consume stash capacity. The Warehouse page uses the same underlying data but prioritizes storage-wide search, organization, and bulk actions rather than a character sheet.
+
+Follower equipment sheets remain hidden in the initial Armoury release. They become available only with the later Barracks starting-follower/loadout milestone. Player Mode obeys progression visibility; Developer Mode may reveal unfinished pages and future controls for testing.
 
 ## Local Multiplayer
 
@@ -164,6 +192,8 @@ The future implementation plan must prove at minimum:
 - Confirmed destruction affects only the listed overflow items.
 - Cancellation, save failure, replay, or interruption leaves item ownership and profile bytes unchanged.
 - Each local profile resolves its loadout and extraction independently.
+- Armoury and Warehouse views always project the same profile-owned stash records and exact tab placements.
+- Repeated `+1 starting follower` nodes and the global `followers_bring_gear` permission are independent Barracks effects; starting followers never exceed overall squad constraints.
 
 ## Relationship to Plan 4B
 
