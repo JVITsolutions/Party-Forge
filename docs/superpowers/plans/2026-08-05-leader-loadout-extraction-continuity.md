@@ -21,6 +21,10 @@
 - Destruction requires an exact-item preview and a separate hold-to-confirm action.
 - A rejected validation, cancellation, interrupted operation, replay, or save failure preserves the previous profile bytes and ownership state.
 - Production destruction may not call or expose `ItemTransactionRequest.SANDBOX_REMOVE`.
+- Armoury and Warehouse are separate interfaces over the same profile item registry and stash tabs; Armoury owns no storage and has no staging tray.
+- Armoury v1 displays only the leader equipment sheet and permits direct browsing of every unlocked Warehouse stash tab.
+- Warehouse owns storage-wide tab management, search, sorting, filtering, categories, and bulk organization.
+- Starting followers, follower persistent equipment sheets, repeated `+1 starting follower` Barracks nodes, and the global `followers_bring_gear` Barracks unlock require a separate later design and are not implemented by this leader-loadout plan.
 - The Passive Skill Tree Creator remains authoritative for `.pstree` source and deterministic runtime export; do not hand-edit only Party Forge's runtime JSON.
 - Player Mode obeys permanent feature unlocks. Developer Mode may preview unfinished UI without mutating production progression.
 - Use typed GDScript, defensive copies at public boundaries, strict RED-GREEN-REFACTOR, focused commits, and an independent review after every task.
@@ -40,7 +44,9 @@
 - `scripts/extraction/run_resolution_service.gd`: atomic transfer from run ownership to profile ownership.
 - `scripts/equipment/loadout_compatibility_service.gd`: pure selected-class compatibility projection.
 - `scripts/equipment/loadout_transition_service.gd`: atomic stash move or explicitly confirmed overflow destruction.
-- `scripts/ui/armoury/*`, `scenes/ui/armoury/*`: equipment-and-stash interface.
+- `scripts/ui/storage/profile_storage_projection.gd`: one defensive projection shared by Armoury and Warehouse views.
+- `scripts/ui/armoury/*`, `scenes/ui/armoury/*`: leader equipment sheet with direct tab-switchable Warehouse access.
+- `scripts/ui/warehouse/*`, `scenes/ui/warehouse/*`: storage-focused stash management over the same profile records.
 - `scripts/ui/loadout_warning/*`, `scenes/ui/loadout_warning/*`: two-stage incompatible-class warning and confirmation.
 - `scripts/ui/main_menu/*`, `scripts/game/main.gd`: feature-gated Armoury and run-setup routing.
 - `scripts/run/local_run_setup_coordinator.gd`: waits for every participating profile's loadout decision.
@@ -569,12 +575,16 @@ git add scripts/equipment tests/unit/test_loadout_transition_service.gd
 git commit -m "feat: validate retained loadout transitions"
 ```
 
-### Task 9: Armoury Equipment and Stash Interface
+### Task 9: Shared Armoury and Warehouse Interfaces
 
 **Files:**
+- Create: `scripts/ui/storage/profile_storage_projection.gd`
 - Create: `scripts/ui/armoury/armoury_projection.gd`
 - Create: `scripts/ui/armoury/armoury_screen.gd`
 - Create: `scenes/ui/armoury/armoury_screen.tscn`
+- Create: `scripts/ui/warehouse/warehouse_projection.gd`
+- Create: `scripts/ui/warehouse/warehouse_screen.gd`
+- Create: `scenes/ui/warehouse/warehouse_screen.tscn`
 - Modify: `scripts/ui/main_menu/main_menu_projection.gd`
 - Modify: `scripts/ui/main_menu/main_menu_view_model.gd`
 - Modify: `scripts/ui/main_menu/main_menu_screen.gd`
@@ -582,61 +592,87 @@ git commit -m "feat: validate retained loadout transitions"
 - Modify: `scripts/game/main.gd`
 - Modify: `scenes/game/main.tscn`
 - Create: `tests/unit/test_armoury_screen.gd`
+- Create: `tests/unit/test_warehouse_screen.gd`
+- Create: `tests/unit/test_profile_storage_projection.gd`
 - Modify: `tests/unit/test_main_menu_view_model.gd`
 - Modify: `tests/unit/test_main_menu_screen.gd`
 - Modify: `tests/unit/test_main_wiring.gd`
 
 **Interfaces:**
 - Consumes: defensive profile item/loadout/stash projections and FeatureAccessPolicy.
-- Produces: `MainMenuViewModel.ROUTE_ARMOURY`, `ArmouryScreen.open(profile, return_focus)`, `close_requested`, and item move/equip intent signals.
+- Produces: `ProfileStorageProjection.from_profile(profile, equipment, foundation)`, `MainMenuViewModel.ROUTE_ARMOURY`, `ROUTE_WAREHOUSE`, `ArmouryScreen.open(storage_projection, return_focus)`, `WarehouseScreen.open(storage_projection, return_focus)`, and intent-only move/equip/organization signals.
 
 - [ ] **Step 1: Write RED route and screen tests**
 
-Require Armoury hidden before equipment unlock, visible/available after the implemented equipment unlock, and visible as Developer Preview only in Developer Mode. Direct route invocation must recheck access.
+Require Armoury hidden before equipment unlock, visible/available after the implemented equipment unlock, and visible as Developer Preview only in Developer Mode. Require Warehouse hidden before Stash Access, available after the `stash` unlock, and previewable only in Developer Mode. Direct invocation of either route must recheck access.
 
-Instantiate the screen and require eleven equipment buttons in canonical slot order, every materialized 100-slot stash tab, icon/name/rarity/item-level/affix inspector, controller focus containment, mouse/controller selection, move/equip intent emission, and no direct mutation of the supplied profile. Closing returns focus to the Armoury main-menu action.
+Build one profile with three sparse stash tabs. Require `ProfileStorageProjection` to preserve exact tab order, IDs, capacities, occupied slots, and item details while returning defensive copies.
+
+Instantiate Armoury and require exactly eleven **leader** equipment buttons in canonical slot order, direct switching among all three Warehouse tabs, icon/name/rarity/item-level/affix inspection, mouse/controller selection, move/equip intent emission, and no follower-sheet selector. Instantiate Warehouse and require all three tabs, search text, rarity/item-type filters, stable sort controls, category labels, bulk-selection intents, and no character equipment sheet. Both views must project the same item IDs and exact slot placements. Closing returns focus to the originating main-menu action.
 
 - [ ] **Step 2: Run RED**
 
 ```powershell
-& $godot --headless --path $project --quit-after 180 --script res://tests/focused_test_runner.gd -- tests/unit/test_armoury_screen.gd tests/unit/test_main_menu_view_model.gd tests/unit/test_main_menu_screen.gd tests/unit/test_main_wiring.gd
+& $godot --headless --path $project --quit-after 180 --script res://tests/focused_test_runner.gd -- tests/unit/test_profile_storage_projection.gd tests/unit/test_armoury_screen.gd tests/unit/test_warehouse_screen.gd tests/unit/test_main_menu_view_model.gd tests/unit/test_main_menu_screen.gd tests/unit/test_main_wiring.gd
 ```
 
-Expected: missing route, projection fields, scene, and screen.
+Expected: missing shared projection, both routes, projection fields, scenes, and screens.
 
-- [ ] **Step 3: Implement feature-gated Armoury composition**
+- [ ] **Step 3: Implement the shared projection and separate feature-gated views**
 
-Add projection fields `armoury_label/visible/enabled/route_id`, action button/focus wiring, and the exact route ID `&"armoury"`. Build the screen as a process-always modal above the main menu with equipment sheet left, scrollable stash right, inspector, profile label, status, and Close.
+`ProfileStorageProjection` decodes one strict profile ownership state and produces immutable-by-convention leader slots, exact ordered stash-tab projections, and item inspector records. It does not sort, compact, move, equip, or rewrite items.
+
+Add main-menu projection fields for Armoury and Warehouse, action/focus wiring, and exact route IDs `&"armoury"` and `&"warehouse"`. Build both screens as process-always modals above the main menu. Armoury uses leader equipment left, tab-switchable stash right, and an inspector. Warehouse uses tab navigation, storage-wide search/filter/sort/category controls, a scrollable grid, bulk selection, and an inspector. Search/sort/filter alter only the displayed projection and never serialized placement.
 
 ```gdscript
 # main_menu_view_model.gd
 const ROUTE_ARMOURY: StringName = &"armoury"
+const ROUTE_WAREHOUSE: StringName = &"warehouse"
+
+# profile_storage_projection.gd
+static func from_profile(
+	profile: ProfileState,
+	equipment: EquipmentCatalog,
+	foundation: ItemFoundationCatalog,
+) -> ProfileStorageProjection:
+	return _decode_strict_projection(profile, equipment, foundation)
 
 # armoury_screen.gd
 signal close_requested
 signal move_requested(item_id: String, destination_container_id: StringName, destination_slot: int)
 signal equip_requested(item_id: String, equipment_slot_id: StringName)
 
-func open(profile: ProfileState, return_focus: Control = null) -> void:
-	_projection = ArmouryProjection.from_profile(profile)
+func open(storage: ProfileStorageProjection, return_focus: Control = null) -> void:
+	_projection = ArmouryProjection.from_storage(storage)
+	_return_focus = return_focus
+	visible = true
+	_render_projection()
+
+# warehouse_screen.gd
+signal close_requested
+signal move_requested(item_id: String, destination_container_id: StringName, destination_slot: int)
+signal bulk_action_requested(action_id: StringName, item_ids: PackedStringArray)
+
+func open(storage: ProfileStorageProjection, return_focus: Control = null) -> void:
+	_projection = WarehouseProjection.from_storage(storage)
 	_return_focus = return_focus
 	visible = true
 	_render_projection()
 ```
 
-`PartyForgeMain` loads the current profile, rechecks the unlock/developer policy, hides the main menu, opens Armoury, delegates move/equip intents through profile services, refreshes from a newly loaded defensive profile, and restores focus on close. No screen script edits item dictionaries.
+`PartyForgeMain` loads the current profile, builds one shared storage projection, rechecks the requested route's unlock/developer policy, hides the main menu, and opens the requested screen. It delegates move/equip/storage intents through policy services, reloads the profile after a committed change, rebuilds both views from new defensive data, and restores focus on close. No screen script edits item dictionaries.
 
-Add a labelled blockout Armoury hotspot/action representing the future clickable city building. Its route is identical to the menu Armoury route; later city art may replace the button without changing the signal contract.
+Add separate labelled blockout Armoury and Warehouse hotspots/actions representing the future clickable city buildings. Their routes match their main-menu actions; later city art may replace either button without changing the signal contract.
 
 - [ ] **Step 4: Run GREEN and responsive UI gate**
 
-Run Task 9 plus settings, feature-access, ledger, main-menu navigation, and controller-input suites. Add an integration runner at 1920x1080, 2560x1440, and 3840x2160 proving equipment/stash/inspector reachability and focus containment.
+Run Task 9 plus settings, feature-access, ledger, main-menu navigation, profile storage, and controller-input suites. Add an integration runner at 1920x1080, 2560x1440, and 3840x2160 proving leader equipment, tab switching, Warehouse organization controls, shared item identity/placement, inspector reachability, and focus containment.
 
 - [ ] **Step 5: Commit**
 
 ```powershell
-git add scripts/ui/armoury scenes/ui/armoury scripts/ui/main_menu scenes/ui/main_menu scripts/game/main.gd scenes/game/main.tscn tests/unit tests/integration
-git commit -m "feat: add profile Armoury interface"
+git add scripts/ui/storage scripts/ui/armoury scenes/ui/armoury scripts/ui/warehouse scenes/ui/warehouse scripts/ui/main_menu scenes/ui/main_menu scripts/game/main.gd scenes/game/main.tscn tests/unit tests/integration
+git commit -m "feat: add Armoury and Warehouse interfaces"
 ```
 
 ### Task 10: Two-Stage Incompatible-Class Warning
@@ -776,13 +812,15 @@ git commit -m "feat: coordinate per-profile loadout setup"
 
 - [ ] **Step 1: Write the handbook acceptance checklist before documentation**
 
-Create a focused documentation test or static assertions requiring the new handbook page to name the exact profile/run containers, extraction precedence, Creator artifact path, Armoury route, class warning states, 1.25-second destructive hold, per-profile multiplayer isolation, and Developer Mode behavior. Confirm RED while the page is absent.
+Create a focused documentation test or static assertions requiring the new handbook page to name the exact profile/run containers, extraction precedence, Creator artifact path, separate Armoury and Warehouse routes, their shared stash ownership, the leader-only Armoury v1 boundary, class warning states, 1.25-second destructive hold, per-profile multiplayer isolation, and Developer Mode behavior. Require it to identify starting followers and follower equipment as later Barracks-tree work rather than silently implying support. Confirm RED while the page is absent.
 
 - [ ] **Step 2: Write the handbook page**
 
 Document how to:
 
 - Inspect active loadout and stash data without editing JSON.
+- Use the Armoury for leader equipment and direct access to every unlocked stash tab.
+- Use the Warehouse for storage-wide search, sorting, filtering, categories, and bulk organization over those same item records.
 - Add equipment eligibility tags and verify them.
 - Modify the City node through Latticewright and re-export safely.
 - Test ordinary versus full leader extraction.
@@ -797,7 +835,7 @@ Run a clean Godot import, resource probe, all focused new suites, the complete s
 
 - [ ] **Step 4: Run rendered/controller acceptance**
 
-At 1080p, 1440p, and 4K verify Armoury layout, stash scrolling, item inspection, compatible repeated-class start, incompatible warning, Armoury redirect, safe cancellation, sufficient-stash move, exact overflow list, destructive hold, and focus restoration. Repeat with two and four local profiles using distinct controllers. Record physical-controller checks separately from synthetic input.
+At 1080p, 1440p, and 4K verify Armoury layout, leader-only equipment controls, switching through every unlocked stash tab, Warehouse search/sort/filter/category/bulk controls, exact shared item identity and slot placement across both views, item inspection, compatible repeated-class start, incompatible warning, Armoury redirect, safe cancellation, sufficient-stash move, exact overflow list, destructive hold, and focus restoration. Repeat with two and four local profiles using distinct controllers. Record physical-controller checks separately from synthetic input.
 
 - [ ] **Step 5: Independent complete-range review and commit**
 
