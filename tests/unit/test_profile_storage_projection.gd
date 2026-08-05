@@ -6,6 +6,17 @@ func run() -> Array[String]:
 	var failures: Array[String] = []
 	var first := _item("item-zeta", &"dawn_bulwark_crown", 0)
 	var second := _item("item-alpha", &"windrunner_band", 1)
+	second.rarity_id = &"uncommon"
+	var affix := ItemAffixInstance.new()
+	affix.definition_id = &"stout"
+	affix.affix_kind = "prefix"
+	affix.tier = 2
+	var roll := ItemModifierRoll.new()
+	roll.stat_id = &"constitution"
+	roll.operation = StatModifier.Operation.FLAT
+	roll.value = 5.0
+	affix.rolls.append(roll)
+	second.affixes.append(affix)
 	var profile := ProfileState.new_profile(PROFILE_ID, "Projection Tester", 1000)
 	profile.item_records = ItemRegistry.new([first, second] as Array[ItemInstance]).to_dictionary()
 	profile.leader_loadout = ItemSlotContainer.create(
@@ -29,9 +40,15 @@ func run() -> Array[String]:
 	var detail := projection.item(second.instance_id)
 	TestAssertions.equal(detail["instance_id"], second.instance_id, "inspector exposes exact item identity", failures)
 	TestAssertions.equal(detail["name"], "Windrunner Band", "inspector exposes authoritative name", failures)
-	TestAssertions.equal(detail["rarity_name"], "Common", "inspector exposes authoritative rarity", failures)
+	TestAssertions.equal(detail["rarity_name"], "Uncommon", "inspector exposes authoritative rarity", failures)
 	TestAssertions.equal(detail["item_level"], 31, "inspector exposes item level", failures)
-	TestAssertions.equal(detail["affixes"], [], "inspector exposes affixes", failures)
+	TestAssertions.equal(detail["affixes"], [{
+		"definition_id": "stout",
+		"display_name": "Stout",
+		"affix_kind": "prefix",
+		"tier": 2,
+		"rolls": [{"stat_id": "constitution", "operation": StatModifier.Operation.FLAT, "operation_name": "Flat", "value": 5.0}],
+	}], "inspector exposes complete projected affix identity and roll fields", failures)
 	TestAssertions.truthy(String(detail["icon_path"]).ends_with("windrunner_band_128.png"), "inspector exposes authoritative equipment icon", failures)
 	var escaped_tabs := projection.stash_tabs
 	escaped_tabs[0]["slots"] = {}
@@ -39,9 +56,13 @@ func run() -> Array[String]:
 	escaped_slots[0]["instance_id"] = "escaped"
 	var escaped_detail := projection.item(second.instance_id)
 	escaped_detail["name"] = "escaped"
+	(escaped_detail["affixes"] as Array)[0]["display_name"] = "escaped"
 	TestAssertions.equal(projection.stash_tabs[0]["slots"], {"99": second.instance_id}, "stash projection is defensive", failures)
 	TestAssertions.equal(projection.leader_slots[0]["instance_id"], first.instance_id, "leader projection is defensive", failures)
 	TestAssertions.equal(projection.item(second.instance_id)["name"], "Windrunner Band", "inspector is defensive", failures)
+	TestAssertions.equal(projection.item(second.instance_id)["affixes"][0]["display_name"], "Stout", "projected affix documents are defensive", failures)
+	var malformed_text := ProfileStorageProjection.inspector_text({"affixes": [{"rolls": [null]}]})
+	TestAssertions.truthy(malformed_text.contains("Unknown roll"), "inspector formatting tolerates malformed projected affixes", failures)
 	var malformed := profile.copy()
 	malformed.stash_tabs.reverse()
 	(malformed.stash_tabs[0]["slots"] as Dictionary)["0"] = first.instance_id

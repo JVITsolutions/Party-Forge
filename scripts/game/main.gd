@@ -514,6 +514,8 @@ func _refresh_main_menu_projection() -> void:
 
 
 func _open_storage_route(route_id: StringName) -> void:
+	var authoritative_settings := settings_store.load_settings(settings_path) if settings_store != null else PartyForgeSettings.new()
+	saved_settings = authoritative_settings.copy()
 	var profile := profile_manager.active_profile() if profile_manager != null else null
 	if profile == null or not _storage_route_allowed(route_id, profile):
 		return
@@ -572,7 +574,7 @@ func _on_armoury_move_requested(item_id: String, destination_container_id: Strin
 
 func _apply_armoury_assignment(item_id: String, destination_container_id: StringName, destination_slot: int, class_id: StringName) -> void:
 	var profile := profile_manager.active_profile() if profile_manager != null else null
-	if profile == null or _shared_storage_projection == null: return
+	if not _storage_projection_matches_profile(profile): return
 	var source := _storage_item_location(_shared_storage_projection, item_id)
 	var expected := _storage_item_at(_shared_storage_projection, destination_container_id, destination_slot)
 	if source.is_empty(): return
@@ -589,7 +591,7 @@ func _apply_armoury_assignment(item_id: String, destination_container_id: String
 
 func _on_warehouse_move_requested(item_id: String, destination_container_id: StringName, destination_slot: int) -> void:
 	var profile := profile_manager.active_profile() if profile_manager != null else null
-	if profile == null or _shared_storage_projection == null: return
+	if not _storage_projection_matches_profile(profile): return
 	var source := _storage_item_location(_shared_storage_projection, item_id)
 	if source.is_empty() or String(source["container_id"]) == "leader-loadout": return
 	var occupied := _storage_item_at(_shared_storage_projection, destination_container_id, destination_slot)
@@ -629,11 +631,26 @@ func _storage_item_at(storage: ProfileStorageProjection, container_id: StringNam
 	return ""
 
 
+func _storage_projection_matches_profile(profile: ProfileState) -> bool:
+	return (
+		profile != null
+		and _shared_storage_projection != null
+		and _shared_storage_projection.valid
+		and _shared_storage_projection.profile_id == profile.profile_id
+	)
+
+
 func _on_profiles_changed() -> void:
 	_refresh_main_menu_projection()
 
 
 func _on_active_profile_changed(_profile: ProfileState) -> void:
+	var armoury := get_node("ArmouryScreen") as ArmouryScreen
+	var warehouse := get_node("WarehouseScreen") as WarehouseScreen
+	if armoury.is_open(): armoury.close()
+	if warehouse.is_open(): warehouse.close()
+	_shared_storage_projection = null
+	_storage_return_focus = null
 	_refresh_main_menu_projection()
 	if _city_tree_is_open():
 		return

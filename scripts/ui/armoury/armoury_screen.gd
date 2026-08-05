@@ -68,7 +68,7 @@ func apply_viewport_size(size: Vector2i) -> void:
 func request_drop(source_container_id: StringName, source_slot: int, item_id: String, destination_container_id: StringName, destination_slot: int) -> void:
 	_handle_drop(source_container_id, source_slot, item_id, destination_container_id, destination_slot)
 
-func _unhandled_input(event: InputEvent) -> void:
+func _input(event: InputEvent) -> void:
 	if not visible:
 		return
 	if event.is_action_pressed(&"ui_cancel"):
@@ -94,6 +94,7 @@ func _render_projection() -> void:
 	for definition: ClassDefinition in _classes:
 		_class_chooser().add_item(definition.display_name)
 		_class_chooser().set_item_metadata(_class_chooser().item_count - 1, definition.id)
+	_select_projected_class()
 	_rebuild_equipment()
 	_rebuild_tabs()
 	_rebuild_stash()
@@ -162,7 +163,18 @@ func _select_item(item_id: String) -> void:
 func _render_inspector() -> void:
 	var detail := _projection.item(_held_item_id)
 	_inspector_icon().texture = load(String(detail.get("icon_path", ""))) as Texture2D if not detail.is_empty() and not String(detail.get("icon_path", "")).is_empty() else null
-	_inspector().text = "Select an item" if detail.is_empty() else "%s\n%s • Item Level %d\n%s\nAffixes: %d" % [detail["name"], detail["rarity_name"], detail["item_level"], detail["item_type_id"], (detail["affixes"] as Array).size()]
+	_inspector().text = ProfileStorageProjection.inspector_text(detail)
+
+func _select_projected_class() -> void:
+	if _class_chooser().item_count == 0:
+		return
+	var selected_index := 0
+	if not _projection.active_class_id.is_empty():
+		for index: int in _class_chooser().item_count:
+			if StringName(_class_chooser().get_item_metadata(index)) == _projection.active_class_id:
+				selected_index = index
+				break
+	_class_chooser().select(selected_index)
 
 func _locate(item_id: String) -> Dictionary:
 	for entry: Dictionary in _projection.leader_slots:

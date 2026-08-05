@@ -105,6 +105,16 @@ func _test_storage_route_policy_and_shared_projection_wiring(failures: Array[Str
     TestAssertions.truthy(menu.is_open() and not (main.get_node("ArmouryScreen") as ArmouryScreen).is_open(), "direct locked Armoury invocation rechecks access", failures)
     main.call("_on_main_menu_route_requested", MainMenuViewModel.ROUTE_WAREHOUSE)
     TestAssertions.truthy(menu.is_open() and not (main.get_node("WarehouseScreen") as WarehouseScreen).is_open(), "direct locked Warehouse invocation rechecks access", failures)
+    var persisted_player := PartyForgeSettings.new()
+    persisted_player.mode = PartyForgeSettings.Mode.PLAYER_SIMULATION
+    persisted_player.unlock_all_implemented_content = false
+    TestAssertions.equal(PartyForgeSettingsStore.new().save_settings(persisted_player, _settings_path), "", "route fixture persists authoritative Player Mode", failures)
+    var stale_developer := PartyForgeSettings.new()
+    stale_developer.mode = PartyForgeSettings.Mode.DEVELOPER_MODE
+    stale_developer.unlock_all_implemented_content = true
+    main.set("saved_settings", stale_developer)
+    main.call("_on_main_menu_route_requested", MainMenuViewModel.ROUTE_ARMOURY)
+    TestAssertions.truthy(menu.is_open() and not (main.get_node("ArmouryScreen") as ArmouryScreen).is_open(), "direct route reloads persisted Player Mode instead of trusting stale cached Developer Mode", failures)
     var profile := manager.active_profile()
     profile.permanent_feature_unlocks = ["equipment_inventory", "stash"]
     TestAssertions.equal(ProfileStore.new().save_profile(profile, root), "", "route fixture persists unlocks", failures)
@@ -115,6 +125,35 @@ func _test_storage_route_policy_and_shared_projection_wiring(failures: Array[Str
     main.call("_on_main_menu_route_requested", MainMenuViewModel.ROUTE_WAREHOUSE)
     TestAssertions.truthy((main.get_node("WarehouseScreen") as WarehouseScreen).is_open() and not menu.is_open(), "unlocked Warehouse route opens separate modal", failures)
     TestAssertions.truthy(main.get("_shared_storage_projection") is ProfileStorageProjection, "both routes are wired through one shared profile storage projection", failures)
+    var warehouse := main.get_node("WarehouseScreen") as WarehouseScreen
+    warehouse.set("_held_item_id", "stale-held")
+    var old_projection := main.get("_shared_storage_projection") as ProfileStorageProjection
+    var second := manager.create_profile("Second Storage Profile")
+    TestAssertions.truthy(second.ok(), "profile-switch fixture creates a new active profile", failures)
+    TestAssertions.truthy(not warehouse.is_open(), "active profile switch closes an open Warehouse", failures)
+    TestAssertions.equal(main.get("_shared_storage_projection"), null, "active profile switch clears shared storage projection", failures)
+    TestAssertions.equal(main.get("_storage_return_focus"), null, "active profile switch clears storage return focus", failures)
+    TestAssertions.equal(warehouse.get("_held_item_id"), "", "active profile switch clears held Warehouse state", failures)
+    TestAssertions.truthy(menu.is_open() and (menu.get_node("ActiveProfile") as Label).text.contains("Second Storage Profile"), "active profile switch presents the new profile menu", failures)
+    main.set("_shared_storage_projection", old_projection)
+    var sequence_before := int(main.get("_storage_transaction_sequence"))
+    var current_before := manager.active_profile().to_dictionary()
+    main.call("_on_armoury_equip_requested", "item-ring", &"ring_left", &"fighter")
+    main.call("_on_armoury_move_requested", "item-ring", &"stash-tab-alpha", 4)
+    main.call("_on_warehouse_move_requested", "item-ring", &"stash-tab-zeta", 4)
+    TestAssertions.equal(main.get("_storage_transaction_sequence"), sequence_before, "all storage mutation handlers reject a stale cross-profile projection before issuing requests", failures)
+    TestAssertions.equal(manager.active_profile().to_dictionary(), current_before, "stale cross-profile storage intents cannot mutate the active profile", failures)
+    var armoury := main.get_node("ArmouryScreen") as ArmouryScreen
+    armoury.open(old_projection, menu.get_node("Armoury") as Control)
+    armoury.set("_held_item_id", "stale-armoury-held")
+    main.set("_shared_storage_projection", old_projection)
+    main.set("_storage_return_focus", menu.get_node("Armoury") as Control)
+    var third := manager.create_profile("Third Storage Profile")
+    TestAssertions.truthy(third.ok() and not armoury.is_open(), "active profile switch also closes an open Armoury", failures)
+    TestAssertions.equal(armoury.get("_held_item_id"), "", "active profile switch clears held Armoury state", failures)
+    TestAssertions.equal(main.get("_shared_storage_projection"), null, "Armoury profile switch clears the shared projection", failures)
+    TestAssertions.equal(main.get("_storage_return_focus"), null, "Armoury profile switch clears return focus", failures)
+    TestAssertions.truthy(menu.is_open() and (menu.get_node("ActiveProfile") as Label).text.contains("Third Storage Profile"), "Armoury profile switch presents the newest profile menu", failures)
     main.free()
     ProfileTestSupport.remove_tree(root)
 

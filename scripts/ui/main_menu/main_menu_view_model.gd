@@ -51,7 +51,7 @@ static func build(profile: Variant, settings: Variant, city_tree_available: Vari
 	result.developer_quick_start_enabled = developer_mode
 	var feature_policy := FeatureAccessPolicy.new(
 		developer_mode,
-		settings_valid and supplied_settings.unlock_all_implemented_content,
+		false,
 		[&"armoury", &"warehouse"],
 		[&"equipment_inventory", &"stash"],
 		_to_names(supplied_profile.permanent_feature_unlocks),

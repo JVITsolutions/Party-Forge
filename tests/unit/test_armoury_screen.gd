@@ -12,6 +12,10 @@ func run() -> Array[String]:
 	TestAssertions.equal(screen.stash_tab_count(), 3, "Armoury directly reaches every unlocked stash tab", failures)
 	TestAssertions.truthy(screen.get_node_or_null("Overlay/Frame/Layout/Body/Follower") == null, "Armoury v1 has no follower sheet selector", failures)
 	TestAssertions.truthy((screen.get_node("Overlay/Frame/Layout/Header/ClassChooser") as OptionButton).visible, "empty loadout exposes target class chooser", failures)
+	screen.call("_select_item", "item-ring")
+	var inspector_text := (screen.get_node("Overlay/Frame/Layout/Body/Inspector/Content/Detail") as Label).text
+	for expected: String in ["stout", "Stout", "Tier 2", "Flat", "constitution", "5"]:
+		TestAssertions.truthy(inspector_text.contains(expected), "Armoury inspector renders affix field: %s" % expected, failures)
 	var equip: Array = []
 	screen.equip_requested.connect(func(item_id: String, slot_id: StringName, class_id: StringName) -> void: equip.append([item_id, slot_id, class_id]))
 	screen.request_drop(&"stash-tab-zeta", 99, "item-ring", &"leader-loadout", 6)
@@ -34,5 +38,13 @@ func run() -> Array[String]:
 	screen.loadout_class_change_requested.connect(func(class_id: StringName) -> void: transitions.append(class_id))
 	screen.choose_class(&"mage")
 	TestAssertions.equal(transitions, [&"mage"], "nonempty class choice emits future compatibility-transition intent", failures)
+
+	var empty_mage := Task9StorageFixture.storage(false, &"mage")
+	screen.open(empty_mage)
+	var chooser := screen.get_node("Overlay/Frame/Layout/Header/ClassChooser") as OptionButton
+	TestAssertions.equal(StringName(chooser.get_item_metadata(chooser.selected)), &"mage", "empty loadout chooser selects stored active class", failures)
+	equip.clear()
+	screen.request_drop(&"stash-tab-zeta", 99, "item-ring", &"leader-loadout", 6)
+	TestAssertions.equal((equip[0] as Array)[2] if not equip.is_empty() else &"", &"mage", "first empty-loadout equip submits stored Mage target", failures)
 	screen.free()
 	return failures

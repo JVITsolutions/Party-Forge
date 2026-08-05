@@ -81,6 +81,10 @@ text = "Assign Category"
 [node name="BulkMove" type="Button" parent="Overlay/Frame/Layout/Footer"]
 layout_mode = 2
 text = "Bulk Move"
+[node name="BulkSelect" type="Button" parent="Overlay/Frame/Layout/Footer"]
+layout_mode = 2
+text = "Toggle Bulk Selection"
+tooltip_text = "Toggle the focused item in the bulk selection"
 [node name="Close" type="Button" parent="Overlay/Frame/Layout/Footer"]
 layout_mode = 2
 text = "Close"

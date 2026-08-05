@@ -80,6 +80,7 @@ func _test_player_mode_ignores_developer_overrides(failures: Array[String]) -> v
 	var projection := MainMenuViewModel.build(profile, settings, true)
 	TestAssertions.truthy(not projection.city_tree_visible, "Player Mode unlock-all does not masquerade as City discovery", failures)
 	TestAssertions.truthy(not projection.developer_quick_start_visible, "Player Mode unlock-all does not expose Quick Start", failures)
+	TestAssertions.truthy(not projection.armoury_visible and not projection.warehouse_visible, "Player Mode unlock-all never exposes hidden storage interfaces", failures)
 	TestAssertions.truthy(projection.reduced_motion, "valid reduced-motion setting reaches the value projection", failures)
 
 func _test_developer_mode_exposes_nonpersistent_tools(failures: Array[String]) -> void:
