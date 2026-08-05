@@ -43,7 +43,11 @@ static func create(
 		if result._slots.has(slot):
 			result._set_construction_error("slots[%d]" % slot, "duplicate slot")
 			continue
-		result._slots[slot] = String(slots[key])
+		var item_id_value: Variant = slots[key]
+		if typeof(item_id_value) != TYPE_STRING:
+			result._set_construction_error("slots[%d]" % slot, "instance ID must be a string")
+			continue
+		result._slots[slot] = String(item_id_value)
 	return result
 
 func item_id_at(slot: int) -> String:
@@ -159,7 +163,10 @@ static func _known_kind_strings() -> Array[String]:
 	return [String(RUN_INVENTORY), String(PROFILE_STASH_TAB), String(DEVELOPER_INVENTORY), String(DEVELOPER_STASH_TAB)]
 
 static func _error_from_registry(error: String) -> String:
-	return error.replace("PARTY_FORGE_ITEM_REGISTRY_ERROR", "PARTY_FORGE_CONTAINER_ERROR")
+	const REGISTRY_PREFIX := "PARTY_FORGE_ITEM_REGISTRY_ERROR"
+	if not error.begins_with(REGISTRY_PREFIX):
+		return error
+	return "PARTY_FORGE_CONTAINER_ERROR%s" % error.substr(REGISTRY_PREFIX.length())
 
 static func _error(field: String, reason: String) -> String:
 	return "PARTY_FORGE_CONTAINER_ERROR field=%s reason=%s" % [field, reason]

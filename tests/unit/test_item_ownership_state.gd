@@ -14,6 +14,7 @@ func run() -> Array[String]:
 		return failures
 	_assert_exact_placement_and_round_trip(equipment, foundation, failures)
 	_assert_defensive_accessors(failures)
+	_assert_public_constructor_rejections(equipment, foundation, failures)
 	_assert_canonical_ordering(failures)
 	_assert_strict_rejections(equipment, foundation, failures)
 	return failures
@@ -51,15 +52,24 @@ func _assert_defensive_accessors(failures: Array[String]) -> void:
 	returned_ids.append("mutated-id")
 	var registry_document := registry_copy.to_dictionary()
 	(registry_document["items"] as Array)[0]["instance_id"] = "mutated-document-id"
+	TestAssertions.equal(registry_copy.item(item.instance_id).instance_id, item.instance_id, "detached registry item accessor owns returned item", failures)
+	TestAssertions.equal(registry_copy.item(item.instance_id).origin["seed"], 1001, "detached registry item accessor owns nested values", failures)
+	TestAssertions.equal(registry_copy.ids(), [item.instance_id], "detached registry owns returned id list", failures)
+	TestAssertions.equal(registry_copy.to_dictionary()["items"][0]["instance_id"], item.instance_id, "detached registry owns returned document", failures)
 	TestAssertions.equal(state.registry().item(item.instance_id).instance_id, item.instance_id, "registry item accessor is defensive", failures)
 	TestAssertions.equal(state.registry().item(item.instance_id).origin["seed"], 1001, "registry item owns nested values", failures)
 	TestAssertions.equal(state.registry().ids(), [item.instance_id], "registry id list is defensive", failures)
 	TestAssertions.equal(state.registry().to_dictionary()["items"][0]["instance_id"], item.instance_id, "registry document is defensive", failures)
 
 	var returned_container := state.container(&"stash-tab-000")
-	returned_container.capacity = 3
 	var slot_document := returned_container.to_dictionary()
 	(slot_document["slots"] as Dictionary)["0"] = "mutated-slot-id"
+	var returned_slots := returned_container.occupied_slots()
+	returned_slots.append(0)
+	TestAssertions.equal(returned_container.item_id_at(42), item.instance_id, "detached container owns returned slot document", failures)
+	TestAssertions.equal(returned_container.occupied_slots(), [42], "detached container owns returned occupied slots", failures)
+	TestAssertions.equal(returned_container.to_dictionary()["slots"], {"42": item.instance_id}, "detached container serializes unchanged slots", failures)
+	returned_container.capacity = 3
 	var returned_containers := state.containers()
 	returned_containers[0].capacity = 17
 	returned_containers.clear()
@@ -75,6 +85,32 @@ func _assert_defensive_accessors(failures: Array[String]) -> void:
 	TestAssertions.equal(state.owner_id, OWNER_ID, "state document does not expose owner mutation", failures)
 	TestAssertions.equal(state.registry().item(item.instance_id).origin["seed"], 1001, "state document does not expose item mutation", failures)
 	TestAssertions.equal(state.container(&"stash-tab-000").item_id_at(42), item.instance_id, "state document does not expose slot mutation", failures)
+
+func _assert_public_constructor_rejections(
+	equipment: EquipmentCatalog,
+	foundation: ItemFoundationCatalog,
+	failures: Array[String]
+) -> void:
+	var item := _make_item("item-owned-0001", 1)
+	var cases: Array[Dictionary] = [
+		{"label": "StringName matching a registry id", "value": StringName(item.instance_id)},
+		{"label": "StringName for an unknown registry id", "value": &"unregistered-item"},
+	]
+	for item_case: Dictionary in cases:
+		var container_value := ItemSlotContainer.create(
+			&"run-inventory",
+			ItemSlotContainer.RUN_INVENTORY,
+			OWNER_ID,
+			5,
+			{0: item_case["value"]}
+		)
+		var state := ItemOwnershipState.create(OWNER_ID, ItemRegistry.new([item]), [container_value])
+		TestAssertions.equal(
+			state.validate(equipment, foundation),
+			"PARTY_FORGE_CONTAINER_ERROR field=containers[0].slots[0] reason=instance ID must be a string",
+			"public constructor rejects %s" % item_case["label"],
+			failures
+		)
 
 func _assert_canonical_ordering(failures: Array[String]) -> void:
 	var item_z := _make_item("item-z", 2)
@@ -168,6 +204,41 @@ func _assert_strict_rejections(
 	var unexpected_container := document.duplicate(true)
 	unexpected_container["containers"][0]["surplus"] = true
 	_assert_decode_error(unexpected_container, "PARTY_FORGE_CONTAINER_ERROR field=containers[0] reason=unexpected fields surplus", equipment, foundation, "unexpected container field", failures)
+
+	var missing_state := document.duplicate(true)
+	missing_state.erase("owner_id")
+	_assert_decode_error(missing_state, "PARTY_FORGE_CONTAINER_ERROR field=document reason=missing fields owner_id", equipment, foundation, "missing state field", failures)
+
+	var missing_registry := document.duplicate(true)
+	missing_registry["registry"].erase("items")
+	_assert_decode_error(missing_registry, "PARTY_FORGE_ITEM_REGISTRY_ERROR field=registry reason=missing fields items", equipment, foundation, "missing registry field", failures)
+
+	var missing_container := document.duplicate(true)
+	missing_container["containers"][0].erase("slots")
+	_assert_decode_error(missing_container, "PARTY_FORGE_CONTAINER_ERROR field=containers[0] reason=missing fields slots", equipment, foundation, "missing container field", failures)
+
+	const UNUSUAL_FIELD := "surplus_PARTY_FORGE_ITEM_REGISTRY_ERROR_marker"
+	var unusual_state_field := document.duplicate(true)
+	unusual_state_field[UNUSUAL_FIELD] = true
+	_assert_decode_error(
+		unusual_state_field,
+		"PARTY_FORGE_CONTAINER_ERROR field=document reason=unexpected fields %s" % UNUSUAL_FIELD,
+		equipment,
+		foundation,
+		"state error conversion preserves unusual field content",
+		failures
+	)
+
+	var unusual_container_field := document.duplicate(true)
+	unusual_container_field["containers"][0][UNUSUAL_FIELD] = true
+	_assert_decode_error(
+		unusual_container_field,
+		"PARTY_FORGE_CONTAINER_ERROR field=containers[0] reason=unexpected fields %s" % UNUSUAL_FIELD,
+		equipment,
+		foundation,
+		"container error conversion preserves unusual field content",
+		failures
+	)
 
 func _assert_decode_error(
 	document: Variant,

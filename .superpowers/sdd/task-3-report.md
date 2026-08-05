@@ -118,3 +118,18 @@ Result: exit `0`; `TEST_SUMMARY: PASS (123 suites)`; zero `TEST_FAILURE`, `SCRIP
 - `git diff --check` was clean before the final verification pass.
 - The focused runner can print its PASS summary before later runtime errors reach the console, so every accepted focused result was checked for engine error markers rather than trusting the summary alone.
 - No open Task 3 production concern is known. Task 4 mutation APIs were not implemented.
+
+## Independent Task 3 review corrections
+
+The sequential independent review identified two Important and two Minor issues. All four were addressed without starting Task 4:
+
+- `ItemSlotContainer.create()` now rejects every non-`String` slot value before storage instead of coercing it. Constructor regressions include a `StringName` whose text exactly matches a valid registry ID and a second unknown `StringName`.
+- Defensive-copy coverage now mutates `item()`, `ids()`, `occupied_slots()`, and `to_dictionary()` results from detached registry/container copies, then re-reads those same detached objects as well as the original state.
+- Strict-schema coverage now includes missing fields on the ownership state, nested registry, and nested container.
+- Registry-to-container diagnostic adaptation replaces only the leading prefix. Unusual field names containing `PARTY_FORGE_ITEM_REGISTRY_ERROR` retain their exact field/reason content.
+
+Accepted review RED used the focused ownership command and exited `1` with exactly four assertions: two constructor coercion failures and two diagnostic-content corruption failures. It emitted no script, parse, or loader errors. The detached-copy and missing-field additions were already green, proving those changes strengthened coverage rather than masking a production defect.
+
+After the minimal production changes, the same focused ownership command exited `0` with `TEST_SUMMARY: PASS (0 failures)`. The combined ownership, item codec, profile codec, and equipment contract batch also exited `0` with `PASS (0 failures)`. A complete import exited `0` with zero script/parse/loader failures, and the complete suite exited `0` with `TEST_SUMMARY: PASS (123 suites)` and zero `TEST_FAILURE`, script, parse, or loader markers.
+
+The import recreated three untracked test `.uid` files; all three verification-generated test sidecars were removed. Only the four tracked production-script UIDs remain.

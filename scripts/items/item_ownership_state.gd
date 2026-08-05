@@ -107,7 +107,7 @@ static func decode(
 	var data := document as Dictionary
 	var fields_error := ItemRegistry._exact_fields(data, FIELDS, "document")
 	if not fields_error.is_empty():
-		result.error = fields_error.replace("PARTY_FORGE_ITEM_REGISTRY_ERROR", "PARTY_FORGE_CONTAINER_ERROR")
+		result.error = ItemSlotContainer._error_from_registry(fields_error)
 		return result
 	if not ItemInstanceCodec._is_json_int(data["schema_version"], SCHEMA_VERSION, SCHEMA_VERSION):
 		result.error = _error("schema_version", "must equal supported schema %d" % SCHEMA_VERSION)
