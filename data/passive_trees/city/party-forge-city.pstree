@@ -1110,6 +1110,42 @@
           "developmentState": "coming-soon",
           "refundPolicy": "permanent"
         }
+      },
+      {
+        "id": "leader-loadout-extraction",
+        "type": "large",
+        "position": {
+          "x": -540,
+          "y": 810
+        },
+        "name": "Leader Loadout Extraction",
+        "description": "Extract the leader's complete equipped loadout when a run ends successfully.",
+        "cost": 1,
+        "tags": [
+          "party-forge",
+          "city",
+          "profile-logistics",
+          "large"
+        ],
+        "icon": null,
+        "effects": [
+          {
+            "effectId": "feature_unlock",
+            "operation": "set",
+            "value": true,
+            "parameters": {
+              "featureId": "leader_loadout_extraction"
+            }
+          }
+        ],
+        "requirements": [],
+        "metadata": {
+          "district": "profile-logistics",
+          "integrationStatus": "future-contract",
+          "integrationTarget": "party-forge",
+          "developmentState": "coming-soon",
+          "refundPolicy": "permanent"
+        }
       }
     ],
     "connections": [
@@ -1436,6 +1472,17 @@
         "id": "city-edge-30",
         "from": "extraction-license",
         "to": "secured-loadout",
+        "direction": "bidirectional",
+        "cost": 0,
+        "conditions": [],
+        "metadata": {
+          "fixture": "party-forge-city-v1"
+        }
+      },
+      {
+        "id": "city-edge-31",
+        "from": "secured-loadout",
+        "to": "leader-loadout-extraction",
         "direction": "bidirectional",
         "cost": 0,
         "conditions": [],

@@ -4,6 +4,7 @@ extends RefCounted
 const ERROR_PREFIX := "PARTY_FORGE_CITY_PASSIVE_TREE_ERROR"
 const LOGISTICS_IDS: Array[StringName] = [
 	&"field-pack", &"stash-access", &"extraction-license", &"secured-loadout",
+	&"leader-loadout-extraction",
 ]
 
 func validate(tree: PassiveTreeDefinition) -> Array[String]:
@@ -15,10 +16,10 @@ func validate(tree: PassiveTreeDefinition) -> Array[String]:
 		errors.append("%s field=treeId reason=City tree ID must equal party-forge-city-v1" % ERROR_PREFIX)
 	if tree.starting_node_ids != [&"city-heart"]:
 		errors.append("%s field=startingNodeIds reason=City tree must have exactly one starting node city-heart" % ERROR_PREFIX)
-	if tree.nodes.size() != 30:
-		errors.append("%s field=nodes reason=City tree must contain exactly 30 nodes" % ERROR_PREFIX)
-	if tree.connections.size() != 30:
-		errors.append("%s field=connections reason=City tree must contain exactly 30 connections" % ERROR_PREFIX)
+	if tree.nodes.size() != 31:
+		errors.append("%s field=nodes reason=City tree must contain exactly 31 nodes" % ERROR_PREFIX)
+	if tree.connections.size() != 31:
+		errors.append("%s field=connections reason=City tree must contain exactly 31 connections" % ERROR_PREFIX)
 	var nodes_by_id: Dictionary = {}
 	for tree_node: PassiveTreeNode in tree.nodes:
 		nodes_by_id[tree_node.id] = tree_node

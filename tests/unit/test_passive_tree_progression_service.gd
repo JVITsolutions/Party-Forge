@@ -21,6 +21,7 @@ func run() -> Array[String]:
 	var failures: Array[String] = []
 	_test_allocation_rejections_are_stable(failures)
 	_test_extraction_license_requires_both_prerequisites(failures)
+	_test_leader_loadout_extraction_requires_secured_path(failures)
 	_test_directed_connectivity_and_implicit_roots(failures)
 	_test_unresolved_same_tree_ids_do_not_satisfy_requirements(failures)
 	_test_cross_tree_saved_ids_fail_closed_without_authoritative_definition(failures)
@@ -84,6 +85,20 @@ func _test_extraction_license_requires_both_prerequisites(failures: Array[String
 	var accepted := service.allocation_decision(tree, both, &"extraction-license", false)
 	_assert_decision(accepted, &"ok", true, "Extraction License accepts both prerequisites", failures)
 	TestAssertions.equal(accepted.point_delta, -3, "Extraction License spends its exact cost", failures)
+
+func _test_leader_loadout_extraction_requires_secured_path(failures: Array[String]) -> void:
+	var result := PassiveTreeLoader.new().load_path("res://data/passive_trees/city/party-forge-city.pstree.json")
+	TestAssertions.truthy(result.ok(), "committed City artifact loads for leader extraction allocation", failures)
+	if not result.ok():
+		return
+	var service := _service()
+	var incomplete := _profile(result.tree.id, true, [&"city-heart", &"field-pack", &"stash-access", &"extraction-license"], 10)
+	_assert_decision(service.allocation_decision(result.tree, incomplete, &"leader-loadout-extraction", false), &"not_connected", false, "Leader Loadout Extraction requires Secured Loadout on its allocated path", failures)
+	var ready := _profile(result.tree.id, true, [&"city-heart", &"field-pack", &"stash-access", &"extraction-license", &"secured-loadout"], 1)
+	var accepted := service.allocation_decision(result.tree, ready, &"leader-loadout-extraction", false)
+	_assert_decision(accepted, &"ok", true, "Leader Loadout Extraction allocates after Secured Loadout", failures)
+	TestAssertions.equal(accepted.point_delta, -1, "Leader Loadout Extraction spends one Passive Point", failures)
+	TestAssertions.equal(accepted.next_allocations, [&"city-heart", &"extraction-license", &"field-pack", &"leader-loadout-extraction", &"secured-loadout", &"stash-access"], "Leader Loadout Extraction persists the complete path", failures)
 
 func _test_directed_connectivity_and_implicit_roots(failures: Array[String]) -> void:
 	var tree := _tree()

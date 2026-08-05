@@ -161,8 +161,8 @@ func _test_committed_city_projection_is_lexical(failures: Array[String]) -> void
 	var profile := _profile(load_result.tree.id)
 	var result := _view_model().build(load_result.tree, profile, true)
 	TestAssertions.equal(result["tree_id"], &"party-forge-city-v1", "committed City stable tree ID", failures)
-	TestAssertions.equal((result["nodes"] as Array).size(), 30, "committed City projects every node", failures)
-	TestAssertions.equal((result["connections"] as Array).size(), 30, "committed City projects every connection", failures)
+	TestAssertions.equal((result["nodes"] as Array).size(), 31, "committed City projects every node", failures)
+	TestAssertions.equal((result["connections"] as Array).size(), 31, "committed City projects every connection", failures)
 	var node_ids: Array[String] = []
 	for view: PassiveTreeNodeViewData in result["nodes"]:
 		node_ids.append(String(view.id))

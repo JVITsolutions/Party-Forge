@@ -17,8 +17,8 @@ func run() -> Array[String]:
     TestAssertions.equal(source_document.get("projectFormat"), "passive-tree-project", "source format", failures)
     TestAssertions.equal(runtime_document.get("format"), "passive-skill-tree", "runtime format", failures)
     TestAssertions.equal(_canonical_runtime(source_document.get("tree")), runtime_document, "source tree matches runtime export semantically", failures)
-    TestAssertions.equal((runtime_document.get("nodes") as Array).size(), 30, "City node count", failures)
-    TestAssertions.equal((runtime_document.get("connections") as Array).size(), 30, "City connection count", failures)
+    TestAssertions.equal((runtime_document.get("nodes") as Array).size(), 31, "City node count", failures)
+    TestAssertions.equal((runtime_document.get("connections") as Array).size(), 31, "City connection count", failures)
     return failures
 
 func _canonical_runtime(source_tree: Dictionary) -> Dictionary:

@@ -60,8 +60,8 @@ func _test_production_city_artifact(failures: Array[String]) -> void:
 	if not result.ok():
 		return
 	TestAssertions.equal(result.tree.id, &"party-forge-city-v1", "tree ID", failures)
-	TestAssertions.equal(result.tree.nodes.size(), 30, "node count", failures)
-	TestAssertions.equal(result.tree.connections.size(), 30, "connection count", failures)
+	TestAssertions.equal(result.tree.nodes.size(), 31, "node count", failures)
+	TestAssertions.equal(result.tree.connections.size(), 31, "connection count", failures)
 
 func _test_root_contract(failures: Array[String]) -> void:
 	_assert_invalid_change(["format"], "other", "format must be exact", "format", failures)
