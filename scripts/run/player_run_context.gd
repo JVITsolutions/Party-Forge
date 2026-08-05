@@ -136,13 +136,15 @@ func apply_item_transaction(
 		return _item_transaction_failure(ItemTransactionResult.Code.INVALID_REQUEST)
 	if request == null or equipment == null or foundation == null:
 		return _item_transaction_failure(ItemTransactionResult.Code.INVALID_REQUEST)
+	var service := ItemContainerTransactionService.new()
+	if not service._request_is_valid(request):
+		return _item_transaction_failure(ItemTransactionResult.Code.INVALID_REQUEST)
 	if request.operation not in [
 		ItemTransactionRequest.CREATE_AND_PLACE,
 		ItemTransactionRequest.MOVE_TO_EMPTY,
 		ItemTransactionRequest.SWAP_OCCUPIED,
 	]:
 		return _item_transaction_failure(ItemTransactionResult.Code.INVALID_REQUEST)
-	var service := ItemContainerTransactionService.new()
 	if request.owner_id != _item_state.owner_id:
 		return service.apply(_item_state, request, _item_journal, equipment, foundation)
 	if request.operation == ItemTransactionRequest.CREATE_AND_PLACE:

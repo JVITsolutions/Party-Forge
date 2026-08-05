@@ -93,15 +93,60 @@ func _test_configuration_validation_and_copy_ownership(failures: Array[String]) 
 			GameCatalog.EQUIPMENT_CATALOG,
 			GameCatalog.ITEM_FOUNDATION_CATALOG,
 		) as ItemTransactionResult
+		TestAssertions.equal(retry_created.code, ItemTransactionResult.Code.OK, "valid configuration retry creates the item exactly once", failures)
+		TestAssertions.equal((invalid.call(&"item_state") as ItemOwnershipState).registry().size(), 1, "configuration retry journal cannot duplicate the item", failures)
+		var item_state_before_reconfigure := (invalid.call(&"item_state") as ItemOwnershipState).to_dictionary()
+		var replacement_party := PartyManager.new()
+		replacement_party.initialize(catalog.class_by_id(&"ranger"), catalog.traits)
+		var replacement_profile := ProfileState.new_profile("profile-retry-replacement", "Retry Replacement", 2000)
+		replacement_profile.inventory_columns = 8
+		TestAssertions.equal(
+			invalid.configure(&"retry_replacement", 9, replacement_profile, 9999, replacement_party, 250),
+			PackedStringArray(["PARTY_FORGE_RUN_CONTEXT_ERROR field=configuration reason=already configured"]),
+			"successful configured context rejects valid reconfiguration after an item commit",
+			failures,
+		)
+		TestAssertions.equal((invalid.call(&"item_state") as ItemOwnershipState).to_dictionary(), item_state_before_reconfigure, "rejected valid reconfiguration preserves exact item state", failures)
 		var retry_replayed := invalid.call(
 			&"apply_item_transaction",
 			retry_request,
 			GameCatalog.EQUIPMENT_CATALOG,
 			GameCatalog.ITEM_FOUNDATION_CATALOG,
 		) as ItemTransactionResult
-		TestAssertions.equal(retry_created.code, ItemTransactionResult.Code.OK, "valid configuration retry creates the item exactly once", failures)
-		TestAssertions.equal(retry_replayed.code, ItemTransactionResult.Code.TRANSACTION_REPLAY, "valid configuration retry owns one replay journal entry", failures)
-		TestAssertions.equal((invalid.call(&"item_state") as ItemOwnershipState).registry().size(), 1, "configuration retry journal cannot duplicate the item", failures)
+		TestAssertions.equal(retry_replayed.code, ItemTransactionResult.Code.TRANSACTION_REPLAY, "rejected valid reconfiguration preserves the context journal", failures)
+		TestAssertions.truthy(retry_replayed.duplicate, "post-reconfiguration replay remains a duplicate success", failures)
+		TestAssertions.equal(retry_replayed.next_state.to_dictionary(), item_state_before_reconfigure, "post-reconfiguration replay returns the original committed ownership state", failures)
+		var next_retry_issue := ItemInstanceIssuer.issue(
+			"run:profile-retry001:4004:retry_player",
+			1,
+			"configuration_retry_sequence_test",
+			4005,
+			{
+				"affixes": [],
+				"base_definition_id": "forge_vanguard_sword",
+				"item_level": 1,
+				"rarity_id": "common",
+			},
+			GameCatalog.EQUIPMENT_CATALOG,
+			GameCatalog.ITEM_FOUNDATION_CATALOG,
+		)
+		TestAssertions.truthy(next_retry_issue.ok(), "post-reconfiguration sequence fixture issues", failures)
+		var next_retry_request := ItemTransactionRequest.create(
+			"configuration-retry-create-next",
+			"retry_player",
+			&"run-inventory",
+			1,
+			next_retry_issue.item,
+		)
+		var next_retry_created := invalid.call(
+			&"apply_item_transaction",
+			next_retry_request,
+			GameCatalog.EQUIPMENT_CATALOG,
+			GameCatalog.ITEM_FOUNDATION_CATALOG,
+		) as ItemTransactionResult
+		TestAssertions.equal(next_retry_created.code, ItemTransactionResult.Code.OK, "rejected valid reconfiguration preserves next run issuance sequence", failures)
+		TestAssertions.equal((invalid.call(&"item_state") as ItemOwnershipState).registry().size(), 2, "post-reconfiguration create commits once in the original context", failures)
+		replacement_party.free()
 	retry_party.free()
 
 	var party := PartyManager.new()

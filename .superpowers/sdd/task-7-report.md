@@ -64,6 +64,31 @@ All final evidence below ran against parent `580fd29` with Godot `4.7.1`, isolat
 
 The complete suite emitted the established 48 intentional negative-path error lines and eight established warning/shutdown lines, matching the pre-Task-7 127-suite baseline and the prior Task 6 evidence. No line originated from the new Task 7 suite or implementation.
 
+## Review correction: request validation precedence
+
+Review found that the run wrapper checked create-origin namespace and sequence before the transaction service checked the canonical request shape. A combined malformed create request could therefore report `INVALID_ITEM` instead of the required `INVALID_REQUEST` precedence.
+
+The correction regression combines schema `99`, create-inapplicable source fields, the wrong run namespace, and a future issuance sequence. Accepted RED ran the three Task 7 suites, exited `1`, reported exactly one assertion failure, and emitted no parse/script/loader diagnostics:
+
+```text
+malformed request precedes invalid run issuance policy has stable code: expected 1, got 9
+TEST_SUMMARY: FAIL (1 failures)
+```
+
+The minimal correction asks the shared transaction service to validate the canonical request shape before the run wrapper evaluates the production-operation whitelist, owner, namespace, or sequence policy. The same regression proves `INVALID_REQUEST`, no candidate state, byte-equivalent context state, no journal entry, and no sequence consumption because the corrected request can retry with the same transaction ID and sequence zero.
+
+The player-context suite now also commits an item, attempts a fully valid reconfiguration, and proves that the rejection preserves the exact ownership document, the existing transaction's replay behavior, and the next run issuance sequence by committing sequence one exactly once afterward.
+
+Final correction evidence ran against parent `26df2ad` (`docs: separate Armoury and Warehouse plan`):
+
+- Task 7 focused batch: exit `0`, `TEST_SUMMARY: PASS (0 failures)`.
+- Required eight-suite run regression: exit `0`, `TEST_SUMMARY: PASS (0 failures)`.
+- Five-suite item-foundation regression: exit `0`, `ITEM_TRANSACTION_MATRIX: PASS`, `TEST_SUMMARY: PASS (0 failures)`.
+- Fresh import: exit `0`; only the established cache-regeneration warnings for missing untracked test UIDs appeared, with zero error/script/parse/loader markers.
+- Fresh complete suite: exit `0`, 538 captured lines, zero test/script/parse/loader/failed-resource markers, `TEST_SUMMARY: PASS (128 suites)`, and the established 48 intentional error plus eight warning/shutdown lines.
+
+The eight verification-created untracked test UID sidecars were path-validated and removed. No future-design document or Task 8 implementation is included in this correction.
+
 ## Hygiene and diagnostics
 
 - `git diff --check` is clean before commit.

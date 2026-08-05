@@ -180,9 +180,22 @@ func _test_invalid_inputs_and_operation_policy_are_atomic(failures: Array[String
 	_assert_failure_is_atomic(context, null, equipment, foundation, ItemTransactionResult.Code.INVALID_REQUEST, "null request", failures)
 	_assert_failure_is_atomic(context, valid_create, null, foundation, ItemTransactionResult.Code.INVALID_REQUEST, "missing equipment catalog", failures)
 	_assert_failure_is_atomic(context, valid_create, equipment, null, ItemTransactionResult.Code.INVALID_REQUEST, "missing foundation catalog", failures)
-	var malformed := ItemTransactionRequest.create("policy-create", String(context.run_player_id), INVENTORY_ID, 0, item)
+	var malformed_item := item.copy()
+	malformed_item.origin["issuer_namespace"] = "profile:%s" % context.profile_id
+	malformed_item.origin["sequence"] = 7
+	var malformed := ItemTransactionRequest.create("policy-create", String(context.run_player_id), INVENTORY_ID, 0, malformed_item)
 	malformed.schema_version = 99
-	_assert_failure_is_atomic(context, malformed, equipment, foundation, ItemTransactionResult.Code.INVALID_REQUEST, "malformed request", failures)
+	malformed.source_container_id = String(INVENTORY_ID)
+	malformed.source_slot = 0
+	_assert_failure_is_atomic(
+		context,
+		malformed,
+		equipment,
+		foundation,
+		ItemTransactionResult.Code.INVALID_REQUEST,
+		"malformed request precedes invalid run issuance policy",
+		failures
+	)
 	TestAssertions.equal(_apply(context, valid_create, equipment, foundation).code, ItemTransactionResult.Code.OK, "valid create retries after invalid inputs without consumed sequence or journal", failures)
 
 	var forbidden := ItemTransactionRequest.sandbox_remove("policy-operation-retry", String(context.run_player_id), INVENTORY_ID, 0, item.instance_id)
