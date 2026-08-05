@@ -33,10 +33,6 @@ var _projection: LoadoutCompatibilityProjection
 var projection: LoadoutCompatibilityProjection:
 	get: return _copy_projection(_projection)
 	set(_value): pass
-var _context: PlayerRunContext
-var context: PlayerRunContext:
-	get: return _context
-	set(_value): pass
 
 func _init(
 	profile_id_value: String = "",
@@ -54,17 +50,12 @@ func _snapshot() -> LocalRunSetupParticipant:
 	result._decision_state = _decision_state
 	result._ready = _ready
 	result._projection = _copy_projection(_projection)
-	result._context = _context
 	return result
 
 func _set_projection(value: LoadoutCompatibilityProjection) -> void:
 	_projection = _copy_projection(value)
-	_context = null
 	_ready = value != null and value.valid and value.incompatible_items.is_empty()
 	_decision_state = READY if _ready else DECISION_REQUIRED
-
-func _set_context(value: PlayerRunContext) -> void:
-	_context = value
 
 static func _copy_projection(source: LoadoutCompatibilityProjection) -> LoadoutCompatibilityProjection:
 	if source == null:

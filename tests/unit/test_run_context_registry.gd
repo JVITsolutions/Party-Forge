@@ -132,7 +132,7 @@ func _assert_local_setup_registry_seam(failures: Array[String]) -> void:
 	TestAssertions.truthy(coordinator.has_method(&"run_context_registry"), "local setup exposes the existing registry contract", failures)
 	var source := FileAccess.get_file_as_string("res://scripts/run/local_run_setup_coordinator.gd")
 	TestAssertions.truthy(source.contains("RunContextRegistry.new()"), "local setup validates final ownership with RunContextRegistry", failures)
-	TestAssertions.truthy(source.contains("register_context(context, participant_value.device_id)"), "local setup registers exact per-player device ownership", failures)
+	TestAssertions.truthy(source.contains("register_context(contexts[index], sorted[index].device_id)"), "local setup registers exact per-player device ownership only after every context validates", failures)
 	TestAssertions.truthy(source.contains("lock_arena_roster()"), "local setup locks Arena only after every joined participant is ready", failures)
 	TestAssertions.truthy(not source.contains("RunJoinPolicy.ADVENTURE"), "local setup does not add Adventure drop-in behavior", failures)
 

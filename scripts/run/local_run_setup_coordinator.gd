@@ -26,9 +26,12 @@ var _catalog: GameCatalog
 var _equipment: EquipmentCatalog
 var _foundation: ItemFoundationCatalog
 var _assignment_guard: Callable
+var _checkout_service: RunLoadoutCheckoutService
+var _checkout_request_factory: Callable
 var _context_factory: Callable
 var _participants_by_profile: Dictionary = {}
 var _participants: Array[LocalRunSetupParticipant] = []
+var _checkout_recovery_by_profile: Dictionary = {}
 var _locked := false
 var _registry: RunContextRegistry
 
@@ -59,11 +62,17 @@ func _init(dependencies: Dictionary = {}) -> void:
 			_catalog,
 		)
 	_assignment_guard = dependencies.get("assignment_guard", Callable()) as Callable
+	_checkout_service = dependencies.get("checkout_service") as RunLoadoutCheckoutService
+	if _checkout_service == null:
+		_checkout_service = RunLoadoutCheckoutService.new(ProfileMutationService.new(_profile_store))
+	_checkout_request_factory = dependencies.get("checkout_request_factory", Callable()) as Callable
 	_context_factory = dependencies.get("context_factory", Callable()) as Callable
 
 func begin(values: Array) -> PackedStringArray:
 	if _locked:
 		return _errors("field=state reason=coordinator is locked")
+	if not _checkout_recovery_by_profile.is_empty():
+		return _errors("field=state reason=committed checkout recovery is active")
 	if values.is_empty() or values.size() > MAX_PARTICIPANTS:
 		return _errors("field=participants reason=participant count must be between 1 and %d" % MAX_PARTICIPANTS)
 	var profiles: Dictionary = {}
@@ -116,6 +125,7 @@ func begin(values: Array) -> PackedStringArray:
 		next_by_profile[participant_value.profile_id] = participant_value
 	_participants = captured
 	_participants_by_profile = next_by_profile
+	_checkout_recovery_by_profile.clear()
 	_registry = null
 	for participant_value: LocalRunSetupParticipant in pending:
 		decision_required.emit(participant_value.profile_id, participant_value.projection)
@@ -191,12 +201,11 @@ func ready_contexts() -> Array[PlayerRunContext]:
 	for participant_value: LocalRunSetupParticipant in _participants:
 		if not participant_value.ready:
 			return []
-	if not _context_factory.is_valid():
+	if not _checkout_request_factory.is_valid() or not _context_factory.is_valid():
 		return []
 	var sorted := _participants.duplicate()
 	sorted.sort_custom(func(left: LocalRunSetupParticipant, right: LocalRunSetupParticipant) -> bool:
 		return left.player_slot < right.player_slot)
-	var next_registry := RunContextRegistry.new()
 	var contexts: Array[PlayerRunContext] = []
 	for participant_value: LocalRunSetupParticipant in sorted:
 		if not _assignment_is_current(participant_value):
@@ -213,22 +222,31 @@ func ready_contexts() -> Array[PlayerRunContext]:
 		)
 		if projection == null or not projection.valid or not projection.incompatible_items.is_empty():
 			return []
-		var context := _context_factory.call(participant_value._snapshot(), profile.copy()) as PlayerRunContext
+		var prepared := _prepare_committed_checkout(participant_value, profile)
+		if not String(prepared.get("error", "")).is_empty():
+			return []
+		profile = prepared["profile"] as ProfileState
+		var bootstrap := prepared["bootstrap"] as RunItemBootstrap
+		var context := _context_factory.call(participant_value._snapshot(), profile, bootstrap) as PlayerRunContext
 		if (
 			context == null
 			or context.profile_id != participant_value.profile_id
 			or context.player_slot_index != participant_value.player_slot
-			or context.run_player_id.is_empty()
+			or context.run_player_id != bootstrap.run_player_id
+			or context.run_id != bootstrap.run_id
+			or context.run_seed != bootstrap.run_seed
 			or context.party == null
+			or context.item_state() == null
+			or context.item_state().to_dictionary() != bootstrap.item_state().to_dictionary()
 		):
 			return []
-		var registration := next_registry.register_context(context, participant_value.device_id)
+		contexts.append(context)
+	var next_registry := RunContextRegistry.new()
+	for index: int in contexts.size():
+		var registration := next_registry.register_context(contexts[index], sorted[index].device_id)
 		if not registration.ok():
 			return []
-		contexts.append(context)
 	next_registry.lock_arena_roster()
-	for index: int in sorted.size():
-		sorted[index]._set_context(contexts[index])
 	_registry = next_registry
 	_locked = true
 	return _registry.all_contexts()
@@ -267,7 +285,73 @@ func _load_strict_profile(profile_id: String) -> Dictionary:
 	return {"error": "", "profile": loaded.profile.copy()}
 
 func _assignment_is_current(participant_value: LocalRunSetupParticipant) -> bool:
-	return not _assignment_guard.is_valid() or bool(_assignment_guard.call(participant_value._snapshot()))
+	return _assignment_guard.is_valid() and bool(_assignment_guard.call(participant_value._snapshot()))
+
+
+func _prepare_committed_checkout(
+	participant_value: LocalRunSetupParticipant,
+	profile: ProfileState,
+) -> Dictionary:
+	var recovery := _checkout_recovery_by_profile.get(participant_value.profile_id, {}) as Dictionary
+	if recovery.is_empty():
+		var request := _checkout_request_factory.call(participant_value._snapshot(), profile.copy()) as RunLoadoutCheckoutRequest
+		if request == null:
+			return {"error": "checkout request unavailable"}
+		var result := _checkout_service.checkout(participant_value.profile_id, request, _profile_root)
+		if result == null or not result.ok() or result.profile == null:
+			return {"error": result.error if result != null else "checkout unavailable"}
+		var committed_document := result.profile.resumable_run.duplicate(true)
+		if committed_document.is_empty():
+			return {"error": "committed resumable run unavailable"}
+		recovery = {
+			"request": request.canonical_document(),
+			"resumable_run": committed_document,
+		}
+		_checkout_recovery_by_profile[participant_value.profile_id] = recovery.duplicate(true)
+	var loaded := _load_strict_profile(participant_value.profile_id)
+	if not String(loaded.get("error", "")).is_empty():
+		return {"error": loaded["error"]}
+	var committed_profile := loaded["profile"] as ProfileState
+	var expected_document := recovery.get("resumable_run", {}) as Dictionary
+	if expected_document.is_empty() or committed_profile.resumable_run != expected_document:
+		return {"error": "committed resumable run mismatch"}
+	var bootstrap := _checkout_service.bootstrap_from(committed_profile)
+	var request_document := recovery.get("request", {}) as Dictionary
+	if not _bootstrap_matches_recovery(participant_value, bootstrap, request_document, expected_document):
+		return {"error": "committed bootstrap identity mismatch"}
+	committed_profile.resumable_run = ResumableRunItemCodec.encode(bootstrap)
+	return {
+		"error": "",
+		"profile": committed_profile,
+		"bootstrap": bootstrap,
+	}
+
+
+func _bootstrap_matches_recovery(
+	participant_value: LocalRunSetupParticipant,
+	bootstrap: RunItemBootstrap,
+	request_document: Dictionary,
+	expected_document: Dictionary,
+) -> bool:
+	if bootstrap == null or participant_value == null or request_document.is_empty():
+		return false
+	var canonical := ResumableRunItemCodec.encode(bootstrap)
+	var expected_bootstrap := ResumableRunItemCodec.decode(
+		expected_document,
+		GameCatalog.EQUIPMENT_CATALOG,
+		GameCatalog.ITEM_FOUNDATION_CATALOG,
+	)
+	var canonical_expected := ResumableRunItemCodec.encode(expected_bootstrap) if expected_bootstrap != null else {}
+	return (
+		not canonical.is_empty()
+		and canonical == canonical_expected
+		and String(request_document.get("profile_id", "")) == participant_value.profile_id
+		and StringName(request_document.get("selected_leader_class_id", "")) == participant_value.selected_class_id
+		and String(bootstrap.run_id) == String(request_document.get("run_id", ""))
+		and bootstrap.run_seed == int(request_document.get("run_seed", 0))
+		and String(bootstrap.run_player_id) == String(request_document.get("run_player_id", ""))
+		and bootstrap.leader_member_id == int(request_document.get("leader_member_id", 0))
+	)
 
 func _validate_decision_document(participant_value: LocalRunSetupParticipant, decision: Dictionary) -> String:
 	if decision.size() != DECISION_FIELDS.size():
@@ -323,6 +407,7 @@ func _projection_matches(left: LoadoutCompatibilityProjection, right: LoadoutCom
 func _cancel_unlocked() -> void:
 	_participants_by_profile.clear()
 	_participants.clear()
+	_checkout_recovery_by_profile.clear()
 	_registry = null
 
 func _array_of_strings(values: Array) -> Array[String]:

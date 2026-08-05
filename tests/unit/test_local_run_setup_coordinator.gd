@@ -5,18 +5,108 @@ const COORDINATOR_PATH := "res://scripts/run/local_run_setup_coordinator.gd"
 const PARTICIPANT_SCRIPT := preload(PARTICIPANT_PATH)
 const COORDINATOR_SCRIPT := preload(COORDINATOR_PATH)
 
+
+class RecordingCheckout extends RunLoadoutCheckoutService:
+	var calls_by_profile: Dictionary = {}
+	var tracked_paths: Dictionary = {}
+	var observations: Array[Dictionary] = []
+
+	func checkout(
+		profile_id: String,
+		request: RunLoadoutCheckoutRequest,
+		root: String = ProfileStore.DEFAULT_ROOT,
+	) -> ProfileMutationResult:
+		var before := _artifacts()
+		calls_by_profile[profile_id] = int(calls_by_profile.get(profile_id, 0)) + 1
+		var result := super.checkout(profile_id, request, root)
+		observations.append({
+			"profile_id": profile_id,
+			"request": request.canonical_document() if request != null else {},
+			"before": before,
+			"after": _artifacts(),
+		})
+		return result
+
+	func _artifacts() -> Dictionary:
+		var result: Dictionary = {}
+		for profile_id: String in tracked_paths:
+			var path := String(tracked_paths[profile_id])
+			var bytes := {"primary": FileAccess.get_file_as_bytes(path)}
+			var backup_path := "%s.bak" % path
+			if FileAccess.file_exists(backup_path):
+				bytes["backup"] = FileAccess.get_file_as_bytes(backup_path)
+			result[profile_id] = bytes
+		return result
+
+
+class BootstrapContextFactory extends RefCounted:
+	var fail_once_slot := -1
+	var failed := false
+	var received_documents: Dictionary = {}
+	var calls_by_profile: Dictionary = {}
+	var party_sink: Array[PartyManager]
+
+	func create(
+		participant: LocalRunSetupParticipant,
+		profile: ProfileState,
+		bootstrap: RunItemBootstrap = null,
+	) -> PlayerRunContext:
+		if participant == null or profile == null or bootstrap == null:
+			return null
+		calls_by_profile[participant.profile_id] = int(calls_by_profile.get(participant.profile_id, 0)) + 1
+		received_documents[participant.profile_id] = ResumableRunItemCodec.encode(bootstrap)
+		if participant.player_slot == fail_once_slot and not failed:
+			failed = true
+			return null
+		var catalog := GameCatalog.load_defaults()
+		var party := PartyManager.new()
+		party.initialize(catalog.class_by_id(participant.selected_class_id), catalog.traits)
+		party_sink.append(party)
+		var context := PlayerRunContext.new()
+		var errors := context.configure(
+			bootstrap.run_player_id,
+			participant.player_slot,
+			profile,
+			bootstrap.run_seed,
+			party,
+			100,
+			bootstrap,
+		)
+		return context if errors.is_empty() else null
+
+
+class AssignmentGate extends RefCounted:
+	var assignments: Dictionary = {}
+	var enabled := true
+
+	func validate(participant: LocalRunSetupParticipant) -> bool:
+		if not enabled or participant == null:
+			return false
+		var current := assignments.get(participant.profile_id, {}) as Dictionary
+		return (
+			int(current.get("device_id", -999)) == participant.device_id
+			and int(current.get("player_slot", -999)) == participant.player_slot
+			and StringName(current.get("selected_class_id", "")) == participant.selected_class_id
+		)
+
+
 var _root_counter := 0
 var _parties: Array[PartyManager] = []
+var _context_factories: Array[BootstrapContextFactory] = []
 
 func run() -> Array[String]:
 	var failures: Array[String] = []
 	_test_api_and_participant_defense(failures)
 	_test_begin_validation_and_state_atomicity(failures)
+	_test_assignment_guard_fails_closed(failures)
 	_test_cancellation_stale_assignment_and_wrong_decisions(failures)
+	_test_partial_checkout_retry_reuses_exact_bootstraps(failures)
+	_test_cancellation_checkout_boundary(failures)
 	_test_four_profile_isolation_and_stable_registry_lock(failures)
 	for party: PartyManager in _parties:
 		party.free()
 	_parties.clear()
+	_context_factories.clear()
 	return failures
 
 func _test_api_and_participant_defense(failures: Array[String]) -> void:
@@ -34,6 +124,7 @@ func _test_api_and_participant_defense(failures: Array[String]) -> void:
 	participant.set("device_id", 99)
 	TestAssertions.equal(participant.get("profile_id"), "profile-local-alpha", "participant identity is externally read-only", failures)
 	TestAssertions.equal(participant.get("device_id"), -1, "participant device ownership is externally read-only", failures)
+	TestAssertions.truthy(not _has_property(participant, &"context"), "participant does not expose a stored mutable run context", failures)
 
 func _test_begin_validation_and_state_atomicity(failures: Array[String]) -> void:
 	var root := _case_root("begin_validation")
@@ -69,6 +160,40 @@ func _test_begin_validation_and_state_atomicity(failures: Array[String]) -> void
 	TestAssertions.truthy(not too_many.is_empty() and too_many[0].contains("participant count"), "more than four participants rejects", failures)
 	TestAssertions.truthy(coordinator.call("participant", alpha.profile_id) != null, "unsupported count preserves previous state", failures)
 	ProfileTestSupport.remove_tree(root)
+
+
+func _test_assignment_guard_fails_closed(failures: Array[String]) -> void:
+	var root := _case_root("assignment_guard")
+	var store := ProfileStore.new()
+	var profile := _profile("profile-guard-alpha", "Guard Alpha", &"fighter", &"forge_vanguard_sword", 9, 1, 0, 31, ["bring_in_gear"])
+	_save(store, profile, root, "assignment guard profile", failures)
+	var participant: LocalRunSetupParticipant = _participant(profile.profile_id, -1, 0, &"fighter") as LocalRunSetupParticipant
+	var path := store.profile_path(profile.profile_id, root)
+	var artifacts_before := _profile_artifact_bytes(path)
+	var missing_guard := COORDINATOR_SCRIPT.new({
+		"profile_store": store,
+		"profile_root": root,
+	}) as LocalRunSetupCoordinator
+	var missing_errors := missing_guard.begin([participant])
+	TestAssertions.truthy(not missing_errors.is_empty() and missing_errors[0].contains("assignment"), "ordinary coordinator without assignment validation fails closed", failures)
+	TestAssertions.equal(missing_guard.participant(profile.profile_id), null, "missing guard publishes no captured participant", failures)
+	TestAssertions.equal(_profile_artifact_bytes(path), artifacts_before, "missing guard rejection performs no primary or backup write", failures)
+
+	var gate := AssignmentGate.new()
+	gate.assignments = _assignment_map([participant])
+	var context_factory := BootstrapContextFactory.new()
+	context_factory.party_sink = _parties
+	var coordinator := _coordinator(store, root, gate.assignments, {
+		"assignment_guard": Callable(gate, "validate"),
+		"context_factory": Callable(context_factory, "create"),
+	}) as LocalRunSetupCoordinator
+	TestAssertions.equal(coordinator.begin([participant]), PackedStringArray(), "valid guard captures a compatible participant", failures)
+	gate.enabled = false
+	TestAssertions.equal(coordinator.ready_contexts(), [], "invalidated assignment blocks readiness", failures)
+	TestAssertions.equal(coordinator.armoury_projection(profile.profile_id), null, "invalidated assignment blocks profile inspection", failures)
+	TestAssertions.equal(_profile_artifact_bytes(path), artifacts_before, "failed-closed readiness and inspection perform no writes", failures)
+	ProfileTestSupport.remove_tree(root)
+
 
 func _test_cancellation_stale_assignment_and_wrong_decisions(failures: Array[String]) -> void:
 	var root := _case_root("decision_rejections")
@@ -116,6 +241,133 @@ func _test_cancellation_stale_assignment_and_wrong_decisions(failures: Array[Str
 	TestAssertions.truthy(not bool(coordinator.call("is_locked")), "cancellation leaves coordinator unlocked", failures)
 	TestAssertions.truthy(not bool(coordinator.call("cancel")), "repeated cancellation is deterministic and does no work", failures)
 	ProfileTestSupport.remove_tree(root)
+
+
+func _test_partial_checkout_retry_reuses_exact_bootstraps(failures: Array[String]) -> void:
+	var root := _case_root("checkout_retry")
+	var store := ProfileStore.new()
+	var profiles: Array[ProfileState] = []
+	var joined: Array = []
+	for slot: int in 4:
+		var profile := _profile(
+			"profile-retry-%02d" % slot,
+			"Retry %d" % slot,
+			&"fighter",
+			&"forge_vanguard_sword",
+			9,
+			slot + 1,
+			slot,
+			700 + slot,
+			["bring_in_gear"],
+		)
+		profiles.append(profile)
+		joined.append(_participant(profile.profile_id, slot - 1, slot, &"fighter"))
+		_save(store, profile, root, profile.display_name, failures)
+	var paths: Dictionary = {}
+	for profile: ProfileState in profiles:
+		paths[profile.profile_id] = store.profile_path(profile.profile_id, root)
+	var checkout := RecordingCheckout.new(ProfileMutationService.new(store))
+	checkout.tracked_paths = paths
+	var context_factory := BootstrapContextFactory.new()
+	context_factory.fail_once_slot = 2
+	context_factory.party_sink = _parties
+	var coordinator := _coordinator(store, root, _assignment_map(joined), {
+		"checkout_service": checkout,
+		"context_factory": Callable(context_factory, "create"),
+	}) as LocalRunSetupCoordinator
+	TestAssertions.equal(coordinator.begin(joined), PackedStringArray(), "four compatible profiles begin before checkout", failures)
+	TestAssertions.equal(coordinator.ready_contexts(), [], "injected third-context failure keeps readiness retryable", failures)
+	TestAssertions.equal(coordinator.run_context_registry(), null, "failed readiness publishes no partial registry", failures)
+	TestAssertions.truthy(not coordinator.is_locked(), "failed readiness does not lock a partial registry", failures)
+	TestAssertions.equal(checkout.observations.size(), 3, "failure after the third committed checkout leaves the fourth unattempted", failures)
+	for observation_index: int in checkout.observations.size():
+		var observation := checkout.observations[observation_index]
+		var changed_profile_id := String(observation["profile_id"])
+		for profile: ProfileState in profiles:
+			var before: Dictionary = (observation["before"] as Dictionary)[profile.profile_id]
+			var after: Dictionary = (observation["after"] as Dictionary)[profile.profile_id]
+			if profile.profile_id == changed_profile_id:
+				TestAssertions.truthy(after != before, "staggered checkout %d changes only %s artifacts" % [observation_index, profile.profile_id], failures)
+			else:
+				TestAssertions.equal(after, before, "staggered checkout %d preserves exact %s primary and backup" % [observation_index, profile.profile_id], failures)
+	for slot: int in 3:
+		var durable := store.load_profile(profiles[slot].profile_id, root).profile
+		TestAssertions.truthy(not durable.resumable_run.is_empty(), "partial failure retains committed bootstrap for slot %d" % slot, failures)
+		TestAssertions.equal(_operation_count(durable, "run_loadout_checkout"), 1, "partial failure records one checkout journal entry for slot %d" % slot, failures)
+	TestAssertions.equal(store.load_profile(profiles[3].profile_id, root).profile.resumable_run, {}, "future profile remains uncommitted after earlier context failure", failures)
+
+	var contexts := coordinator.ready_contexts()
+	TestAssertions.equal(contexts.size(), 4, "retry completes all four contexts from durable continuity", failures)
+	if contexts.size() == 4:
+		TestAssertions.equal([contexts[0].player_slot_index, contexts[1].player_slot_index, contexts[2].player_slot_index, contexts[3].player_slot_index], [0, 1, 2, 3], "retry preserves stable ascending slot order", failures)
+	TestAssertions.truthy(coordinator.run_context_registry() != null and coordinator.run_context_registry().is_arena_roster_locked(), "registry publishes and locks only after retry validates every context", failures)
+	for slot: int in 4:
+		var profile := store.load_profile(profiles[slot].profile_id, root).profile
+		var profile_id := profile.profile_id
+		TestAssertions.equal(int(checkout.calls_by_profile.get(profile_id, 0)), 1, "retry performs exactly one checkout call for %s" % profile_id, failures)
+		TestAssertions.equal(_operation_count(profile, "run_loadout_checkout"), 1, "retry leaves exactly one checkout journal entry for %s" % profile_id, failures)
+		TestAssertions.equal(context_factory.received_documents.get(profile_id, {}), _canonical_resumable(profile.resumable_run), "context factory receives the exact committed bootstrap for %s" % profile_id, failures)
+		if contexts.size() == 4:
+			TestAssertions.equal(String(contexts[slot].run_id), String(profile.resumable_run.get("run_id", "")), "context uses the committed run id for slot %d" % slot, failures)
+			TestAssertions.equal(contexts[slot].run_seed, int(profile.resumable_run.get("run_seed", 0)), "context uses the committed run seed for slot %d" % slot, failures)
+			var run_equipment := contexts[slot].equipment_for(1)
+			TestAssertions.equal(run_equipment.item_id_at(9), "item-%s" % profile_id, "checked-out gear populates only %s run equipment" % profile_id, failures)
+		TestAssertions.equal(_profile_item_ids(profile), _expected_stash_item_ids(profile_id, slot), "bring-in gear leaves %s persistent profile ownership" % profile_id, failures)
+	ProfileTestSupport.remove_tree(root)
+
+
+func _test_cancellation_checkout_boundary(failures: Array[String]) -> void:
+	var root := _case_root("checkout_cancel")
+	var store := ProfileStore.new()
+	var profiles: Array[ProfileState] = [
+		_profile("profile-cancel-alpha", "Cancel Alpha", &"fighter", &"forge_vanguard_sword", 9, 1, 0, 801, ["bring_in_gear"]),
+		_profile("profile-cancel-beta", "Cancel Beta", &"fighter", &"forge_vanguard_sword", 9, 2, 1, 802, ["bring_in_gear"]),
+	]
+	var joined: Array = [
+		_participant(profiles[0].profile_id, -1, 0, &"fighter"),
+		_participant(profiles[1].profile_id, 0, 1, &"fighter"),
+	]
+	for profile: ProfileState in profiles:
+		_save(store, profile, root, profile.display_name, failures)
+	var paths := {
+		profiles[0].profile_id: store.profile_path(profiles[0].profile_id, root),
+		profiles[1].profile_id: store.profile_path(profiles[1].profile_id, root),
+	}
+	var checkout := RecordingCheckout.new(ProfileMutationService.new(store))
+	checkout.tracked_paths = paths
+	var context_factory := BootstrapContextFactory.new()
+	context_factory.fail_once_slot = 0
+	context_factory.party_sink = _parties
+	var coordinator := _coordinator(store, root, _assignment_map(joined), {
+		"checkout_service": checkout,
+		"context_factory": Callable(context_factory, "create"),
+	}) as LocalRunSetupCoordinator
+	var before_begin := {
+		profiles[0].profile_id: _profile_artifact_bytes(paths[profiles[0].profile_id]),
+		profiles[1].profile_id: _profile_artifact_bytes(paths[profiles[1].profile_id]),
+	}
+	TestAssertions.equal(coordinator.begin(joined), PackedStringArray(), "cancellation fixture begins without checkout", failures)
+	TestAssertions.truthy(coordinator.cancel(), "pre-checkout cancellation returns setup to editable state", failures)
+	for profile: ProfileState in profiles:
+		TestAssertions.equal(_profile_artifact_bytes(paths[profile.profile_id]), before_begin[profile.profile_id], "begin/cancel before checkout writes no %s artifact" % profile.profile_id, failures)
+
+	TestAssertions.equal(coordinator.begin(joined), PackedStringArray(), "cancelled setup can begin again", failures)
+	TestAssertions.equal(coordinator.ready_contexts(), [], "injected context failure occurs after the first durable checkout", failures)
+	TestAssertions.equal(int(checkout.calls_by_profile.get(profiles[0].profile_id, 0)), 1, "first profile checkout commits once before failure", failures)
+	TestAssertions.equal(int(checkout.calls_by_profile.get(profiles[1].profile_id, 0)), 0, "later profile remains unattempted before cancellation", failures)
+	var committed_artifacts: Dictionary = {}
+	for profile: ProfileState in profiles:
+		committed_artifacts[profile.profile_id] = _profile_artifact_bytes(paths[profile.profile_id])
+	TestAssertions.truthy(coordinator.cancel(), "post-checkout cancellation follows the explicit no-rollback contract", failures)
+	TestAssertions.equal(coordinator.run_context_registry(), null, "post-checkout cancellation publishes no registry", failures)
+	for profile: ProfileState in profiles:
+		TestAssertions.equal(_profile_artifact_bytes(paths[profile.profile_id]), committed_artifacts[profile.profile_id], "post-checkout cancellation performs no rollback, forfeit, or write for %s" % profile.profile_id, failures)
+	var committed := store.load_profile(profiles[0].profile_id, root).profile
+	TestAssertions.truthy(not committed.resumable_run.is_empty(), "post-checkout cancellation retains the committed resumable run", failures)
+	TestAssertions.equal(_operation_count(committed, "run_loadout_checkout"), 1, "post-checkout cancellation retains one checkout journal entry", failures)
+	TestAssertions.equal(_operation_count(committed, "run_loadout_forfeit"), 0, "post-checkout cancellation never forfeits checked-out gear", failures)
+	ProfileTestSupport.remove_tree(root)
+
 
 func _test_four_profile_isolation_and_stable_registry_lock(failures: Array[String]) -> void:
 	var root := _case_root("four_profile")
@@ -178,6 +430,7 @@ func _test_four_profile_isolation_and_stable_registry_lock(failures: Array[Strin
 	if contexts.size() == 4:
 		TestAssertions.equal([contexts[0].player_slot_index, contexts[1].player_slot_index, contexts[2].player_slot_index, contexts[3].player_slot_index], [0, 1, 2, 3], "ready contexts use ascending stable player-slot order", failures)
 		TestAssertions.equal([contexts[0].profile_id, contexts[1].profile_id, contexts[2].profile_id, contexts[3].profile_id], [profiles[1].profile_id, profiles[3].profile_id, profiles[2].profile_id, profiles[0].profile_id], "slot order preserves exact profile ownership", failures)
+		TestAssertions.equal(contexts[3].equipment_for(1).item_id_at(9), "item-%s" % profiles[0].profile_id, "Alpha retained bring-in gear populates only Alpha run equipment", failures)
 	TestAssertions.truthy(bool(coordinator.call("is_locked")), "first successful ready call locks Arena join-before-run roster", failures)
 	var registry := coordinator.call("run_context_registry") as RunContextRegistry
 	TestAssertions.truthy(registry != null and registry.is_arena_roster_locked() and registry.all_contexts().size() == 4, "coordinator consumes the existing RunContextRegistry lock contract", failures)
@@ -200,10 +453,13 @@ func _test_four_profile_isolation_and_stable_registry_lock(failures: Array[Strin
 	var saved_beta := store.load_profile(profiles[1].profile_id, root).profile
 	var saved_gamma := store.load_profile(profiles[2].profile_id, root).profile
 	var saved_delta := store.load_profile(profiles[3].profile_id, root).profile
-	TestAssertions.equal(_profile_item_ids(saved_alpha), ["item-profile-local-alpha", "stash-profile-local-alpha-000"], "Alpha retains its exact item ids", failures)
+	TestAssertions.equal(_profile_item_ids(saved_alpha), ["stash-profile-local-alpha-000"], "Alpha checked-out gear leaves persistent profile ownership", failures)
 	TestAssertions.equal(_profile_item_ids(saved_beta), [], "Beta destroys only its own confirmed overflow item", failures)
 	TestAssertions.equal(_profile_item_ids(saved_gamma), ["item-profile-local-gamma", "stash-profile-local-gamma-000", "stash-profile-local-gamma-001"], "Gamma moves but preserves its exact item ids", failures)
 	TestAssertions.equal(_profile_item_ids(saved_delta), ["item-profile-local-delta", "stash-profile-local-delta-000", "stash-profile-local-delta-001", "stash-profile-local-delta-002"], "Delta moves but preserves its exact item ids", failures)
+	for saved: ProfileState in [saved_alpha, saved_beta, saved_gamma, saved_delta]:
+		TestAssertions.truthy(not saved.resumable_run.is_empty(), "%s owns an exact committed resumable bootstrap" % saved.profile_id, failures)
+		TestAssertions.equal(_operation_count(saved, "run_loadout_checkout"), 1, "%s has exactly one checkout journal entry" % saved.profile_id, failures)
 	TestAssertions.equal([saved_alpha.stash_tabs.size(), saved_beta.stash_tabs.size(), saved_gamma.stash_tabs.size(), saved_delta.stash_tabs.size()], [1, 0, 2, 3], "four profiles retain different stash capacities", failures)
 	TestAssertions.equal([_stash_occupancy(saved_alpha), _stash_occupancy(saved_beta), _stash_occupancy(saved_gamma), _stash_occupancy(saved_delta)], [1, 0, 3, 4], "four profiles retain independent distinct stash occupancy after their own transitions", failures)
 	TestAssertions.equal([saved_alpha.gold, saved_beta.gold, saved_gamma.gold, saved_delta.gold], [101, 202, 303, 404], "all four gold balances remain isolated", failures)
@@ -211,8 +467,11 @@ func _test_four_profile_isolation_and_stable_registry_lock(failures: Array[Strin
 	TestAssertions.equal([saved_alpha.permanent_feature_unlocks, saved_beta.permanent_feature_unlocks, saved_gamma.permanent_feature_unlocks, saved_delta.permanent_feature_unlocks], [profiles[0].permanent_feature_unlocks, profiles[1].permanent_feature_unlocks, profiles[2].permanent_feature_unlocks, profiles[3].permanent_feature_unlocks], "all four unlock sets remain isolated", failures)
 	ProfileTestSupport.remove_tree(root)
 
-func _coordinator(store: ProfileStore, root: String, assignments: Dictionary) -> Object:
-	return COORDINATOR_SCRIPT.new({
+func _coordinator(store: ProfileStore, root: String, assignments: Dictionary, overrides: Dictionary = {}) -> Object:
+	var context_factory := BootstrapContextFactory.new()
+	context_factory.party_sink = _parties
+	_context_factories.append(context_factory)
+	var dependencies := {
 		"profile_store": store,
 		"profile_root": root,
 		"assignment_guard": func(participant: Object) -> bool:
@@ -222,23 +481,29 @@ func _coordinator(store: ProfileStore, root: String, assignments: Dictionary) ->
 				and int(current.get("player_slot", -999)) == int(participant.get("player_slot"))
 				and StringName(current.get("selected_class_id", "")) == participant.get("selected_class_id")
 			),
-		"context_factory": func(participant: Object, profile: ProfileState) -> PlayerRunContext:
-			var catalog := GameCatalog.load_defaults()
-			var party := PartyManager.new()
-			party.initialize(catalog.class_by_id(participant.get("selected_class_id")), catalog.traits)
-			_parties.append(party)
-			var context := PlayerRunContext.new()
-			var slot := int(participant.get("player_slot"))
-			var errors := context.configure(
-				StringName("local-player-%02d" % slot),
-				slot,
-				profile,
-				5100 + slot,
-				party,
-				100,
-			)
-			return context if errors.is_empty() else null,
-	}) as Object
+		"checkout_service": RunLoadoutCheckoutService.new(ProfileMutationService.new(store)),
+		"checkout_request_factory": Callable(self, "_request_for_participant"),
+		"context_factory": Callable(context_factory, "create"),
+	}
+	for key: Variant in overrides:
+		dependencies[key] = overrides[key]
+	return COORDINATOR_SCRIPT.new(dependencies) as Object
+
+
+func _request_for_participant(participant: LocalRunSetupParticipant, profile: ProfileState) -> RunLoadoutCheckoutRequest:
+	if participant == null or profile == null:
+		return null
+	var slot := participant.player_slot
+	return RunLoadoutCheckoutRequest.create(
+		"local-checkout-%s" % profile.profile_id,
+		profile.profile_id,
+		StringName("local-run-%s" % profile.profile_id),
+		6100 + slot,
+		StringName("local-player-%02d" % slot),
+		1,
+		participant.selected_class_id,
+		"bring_in_gear" in profile.permanent_feature_unlocks,
+	)
 
 func _participant(profile_id: String, device_id: int, player_slot: int, class_id: StringName) -> Object:
 	return PARTICIPANT_SCRIPT.new(profile_id, device_id, player_slot, class_id) as Object
@@ -345,6 +610,26 @@ func _profile_item_ids(profile: ProfileState) -> Array[String]:
 	if not String(decoded["error"]).is_empty():
 		return []
 	return (decoded["value"] as ItemRegistry).ids()
+
+
+func _expected_stash_item_ids(profile_id: String, stash_count: int) -> Array[String]:
+	var result: Array[String] = []
+	for index: int in stash_count:
+		result.append("stash-%s-%03d" % [profile_id, index])
+	return result
+
+
+func _operation_count(profile: ProfileState, operation: String) -> int:
+	var count := 0
+	for entry: Variant in profile.applied_transactions.values():
+		if entry is Dictionary and String((entry as Dictionary).get("operation", "")) == operation:
+			count += 1
+	return count
+
+
+func _canonical_resumable(document: Dictionary) -> Dictionary:
+	var bootstrap := ResumableRunItemCodec.decode(document, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)
+	return ResumableRunItemCodec.encode(bootstrap) if bootstrap != null else {}
 
 func _stash_occupancy(profile: ProfileState) -> int:
 	var result := 0
