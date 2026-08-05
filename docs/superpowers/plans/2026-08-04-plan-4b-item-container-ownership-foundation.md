@@ -409,6 +409,7 @@ git commit -m "feat: add atomic item container transactions"
 **Files:**
 - Create: `scripts/profile/profile_migrator.gd`
 - Create: `scripts/profile/profile_migration_result.gd`
+- Modify: `scripts/profile/atomic_json_store.gd`
 - Modify: `scripts/profile/profile_state.gd`
 - Modify: `scripts/profile/profile_codec.gd`
 - Modify: `scripts/profile/profile_store.gd`
@@ -456,7 +457,7 @@ var next_item_sequence := 0
 
 Keep `inventory_columns` and `extraction_capacity` unchanged. `item_records` is the exact schema-one `ItemRegistry.to_dictionary()` document; it is never an unversioned ID map. `stash_tabs` contains only schema-one `profile_stash_tab` container documents. Include item fields in deterministic `to_dictionary()` order and defensive copy behavior.
 
-`ProfileMigrationResult` and `ProfileLoadResult` expose `profile`, `error`, `migrated`, and `source_schema_version`. Failed results expose no partial profile. Migration deep-copies the input, recursively migrates every applied-transaction `result_profile`, and leaves the source dictionary byte-equivalent.
+`ProfileMigrationResult` and `ProfileLoadResult` expose `profile`, `error`, `migrated`, and `source_schema_version`. Failed results expose no partial profile. Migration deep-copies the input, recursively migrates every applied-transaction `result_profile`, decodes/rebuilds each upgraded snapshot into deterministic current field order and integer representation, and leaves the source dictionary byte-equivalent.
 
 Split codec validation into:
 
@@ -466,7 +467,11 @@ Split codec validation into:
 
 Do not accept arbitrary missing or extra keys. Define exact historical version-one and current version-two field arrays; nested transaction snapshots must match their containing source schema during validation. Validate `next_item_sequence` as `0..JSON_SAFE_INTEGER_MAX`. Validate persistent storage by constructing the schema-one ownership document `{schema_version, owner_id = profile_id, registry = item_records, containers = stash_tabs}` and decoding it through `ItemOwnershipState` with `GameCatalog.EQUIPMENT_CATALOG` and `GameCatalog.ITEM_FOUNDATION_CATALOG`.
 
-`ProfileStore.save_profile()` remains current-schema-only. `load_profile()` loads with `validate_loadable_document`. When decode reports migration, first require the schema-two candidate to pass current validation, then atomically save it using the loadable validator so the verified version-one generation can be backed up, and perform a second current-schema load/verification before returning it. Set `ProfileLoadResult.migrated = true` and `source_schema_version = 1`; an ordinary schema-two load reports `migrated = false` and source `2`. If promotion or verification fails, return an error and preserve the old generation; successful promotion leaves the valid version-one generation as backup.
+Extend `AtomicJsonStore.save_document()` with an optional existing-generation validator. The candidate/temporary/promoted document always uses the primary validator; only the existing primary and backup use the optional existing-generation validator. Its promoted reload therefore performs current-schema verification before the old rollback generations are released.
+
+`ProfileStore.save_profile()` remains current-schema-only. `load_profile()` rejects an invalid caller profile ID and a loaded document whose `profile_id` does not match before any write. It loads with `validate_loadable_document`; when decode reports migration, it requires the schema-two candidate to pass current validation, then atomically saves with current candidate validation and loadable existing-generation validation. Set `ProfileLoadResult.migrated = true` and `source_schema_version = 1`; an ordinary schema-two load reports `migrated = false` and source `2`. If promotion/current verification fails, return an error and preserve the old generation; successful promotion leaves the valid version-one generation as backup.
+
+Add regression coverage for v1 backup recovery behind a corrupt primary, failure during atomic promoted-current verification, mismatched/traversal profile IDs, and JSON-parsed nested result snapshots. Compare the complete recursively transformed migration document, not only selected fields.
 
 - [ ] **Step 4: Run GREEN in focused profile batches**
 

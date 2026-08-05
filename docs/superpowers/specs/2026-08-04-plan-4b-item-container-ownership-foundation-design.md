@@ -274,7 +274,9 @@ The version-one migration:
 5. Produces a complete version-two candidate.
 6. Verifies an encode/decode round trip before atomic promotion.
 
-`ProfileMigrationResult` exposes `profile`, `error`, `migrated`, and `source_schema_version`, never partial profile state. Migration operates on a deep copy and cannot change the supplied dictionary. Normal profile saves accept current schema only. Migration promotion uses the loadable validator so the verified version-one primary/backup generation remains eligible to be displaced safely; the already current-validated version-two candidate is then reloaded with the current-only validator before success is returned.
+`ProfileMigrationResult` exposes `profile`, `error`, `migrated`, and `source_schema_version`, never partial profile state. Migration operates on a deep copy and cannot change the supplied dictionary. Every migrated applied-transaction snapshot is decoded and rebuilt as a canonical current document after its recursive schema upgrade; migration cannot retain JSON float representations or legacy field ordering inside nested snapshots.
+
+Normal profile saves accept current schema only. Atomic migration promotion uses the current validator for the temporary and promoted version-two candidate, but a separate loadable existing-generation validator for the version-one primary/backup it may displace. The atomic store's promoted current-schema reload is the required post-promotion verification and occurs before rollback generations are released. `ProfileStore.load_profile()` validates the caller profile ID and requires it to match the loaded document before any migration write.
 
 Migration does not invent unlocks or items.
 
