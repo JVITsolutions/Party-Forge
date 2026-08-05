@@ -16,17 +16,39 @@ func run() -> Array[String]:
 	TestAssertions.truthy(foundation != null, "foundation catalog loads for transactions", failures)
 	if equipment == null or foundation == null:
 		return failures
-	_assert_request_contract_and_defensive_copy(failures)
-	_assert_success_matrix(equipment, foundation, failures)
-	_assert_failure_matrix(equipment, foundation, failures)
-	_assert_replay_and_collision(equipment, foundation, failures)
-	_assert_failed_first_attempt_is_retryable(equipment, foundation, failures)
-	_assert_result_and_journal_defensive_copies(equipment, foundation, failures)
-	_assert_validation_precedence(equipment, foundation, failures)
+	var scenario_methods: Array[StringName] = [
+		&"_assert_request_contract_and_defensive_copy",
+		&"_assert_success_matrix",
+		&"_assert_failure_matrix",
+		&"_assert_replay_and_collision",
+		&"_assert_failed_first_attempt_is_retryable",
+		&"_assert_result_and_journal_defensive_copies",
+		&"_assert_validation_precedence",
+	]
+	if OS.get_environment("PARTY_FORGE_TRANSACTION_CASE_ORDER") == "reordered":
+		scenario_methods = [
+			&"_assert_result_and_journal_defensive_copies",
+			&"_assert_failure_matrix",
+			&"_assert_request_contract_and_defensive_copy",
+			&"_assert_validation_precedence",
+			&"_assert_success_matrix",
+			&"_assert_failed_first_attempt_is_retryable",
+			&"_assert_replay_and_collision",
+		]
+	var executed: Dictionary = {}
+	for method: StringName in scenario_methods:
+		TestAssertions.truthy(not executed.has(method), "scenario group %s executes once" % method, failures)
+		executed[method] = true
+		call(method, equipment, foundation, failures)
+	TestAssertions.equal(executed.size(), 7, "all transaction scenario groups execute", failures)
 	print("ITEM_TRANSACTION_MATRIX: %s" % ("PASS" if failures.is_empty() else "FAIL"))
 	return failures
 
-func _assert_request_contract_and_defensive_copy(failures: Array[String]) -> void:
+func _assert_request_contract_and_defensive_copy(
+	_equipment: EquipmentCatalog,
+	_foundation: ItemFoundationCatalog,
+	failures: Array[String]
+) -> void:
 	var item := _make_item("item-request", 7)
 	var request := ItemTransactionRequest.create("tx-request", OWNER_ID, DESTINATION_ID, 9, item)
 	var expected_fields: Array = [
@@ -82,13 +104,28 @@ func _assert_request_contract_and_defensive_copy(failures: Array[String]) -> voi
 
 func _assert_success_matrix(equipment: EquipmentCatalog, foundation: ItemFoundationCatalog, failures: Array[String]) -> void:
 	var create_item := _make_item("item-created", 10)
-	var create_state := _empty_state()
+	var create_source_neighbor := _make_item("item-create-source-neighbor", 9)
+	var create_destination_neighbor := _make_item("item-create-destination-neighbor", 8)
+	var create_state := _state_with_placements(
+		[create_source_neighbor, create_destination_neighbor],
+		{3: create_source_neighbor.instance_id},
+		{42: create_destination_neighbor.instance_id}
+	)
 	var create_before := JSON.stringify(create_state.to_dictionary())
+	var create_source_before := JSON.stringify(create_state.container(SOURCE_ID).to_dictionary())
+	var create_destination_expected := create_state.container(DESTINATION_ID).to_dictionary()
+	(create_destination_expected["slots"] as Dictionary)["17"] = create_item.instance_id
+	var create_source_record_before := JSON.stringify(create_state.registry().item(create_source_neighbor.instance_id).to_dictionary())
+	var create_destination_record_before := JSON.stringify(create_state.registry().item(create_destination_neighbor.instance_id).to_dictionary())
 	var created := _service.apply(create_state, ItemTransactionRequest.create("tx-create", OWNER_ID, DESTINATION_ID, 17, create_item), ItemTransactionJournal.new(), equipment, foundation)
 	_assert_success(created, "create-and-place", failures)
 	TestAssertions.equal(JSON.stringify(create_state.to_dictionary()), create_before, "create leaves original bytes unchanged", failures)
 	TestAssertions.equal(created.next_state.container(DESTINATION_ID).item_id_at(17), create_item.instance_id, "create preserves exact destination slot", failures)
 	TestAssertions.equal(created.next_state.registry().item(create_item.instance_id).to_dictionary(), create_item.to_dictionary(), "create preserves exact item record", failures)
+	TestAssertions.equal(JSON.stringify(created.next_state.container(SOURCE_ID).to_dictionary()), create_source_before, "create preserves unrelated source slots byte-exact", failures)
+	TestAssertions.equal(created.next_state.container(DESTINATION_ID).to_dictionary(), create_destination_expected, "create preserves unrelated destination slots byte-exact", failures)
+	TestAssertions.equal(JSON.stringify(created.next_state.registry().item(create_source_neighbor.instance_id).to_dictionary()), create_source_record_before, "create preserves unrelated source item byte-exact", failures)
+	TestAssertions.equal(JSON.stringify(created.next_state.registry().item(create_destination_neighbor.instance_id).to_dictionary()), create_destination_record_before, "create preserves unrelated destination item byte-exact", failures)
 
 	var move_item := _make_item("item-moved", 11)
 	var move_state := _state_with_placements([move_item], {0: move_item.instance_id}, {})
@@ -112,13 +149,29 @@ func _assert_success_matrix(equipment: EquipmentCatalog, foundation: ItemFoundat
 	TestAssertions.equal(swapped.next_state.registry().to_dictionary(), swap_state.registry().to_dictionary(), "swap preserves registry byte values", failures)
 
 	var removed_item := _make_item("item-removed", 14)
-	var remove_state := _state_with_placements([removed_item], {4: removed_item.instance_id}, {})
+	var remove_source_neighbor := _make_item("item-remove-source-neighbor", 15)
+	var remove_destination_neighbor := _make_item("item-remove-destination-neighbor", 16)
+	var remove_state := _state_with_placements(
+		[removed_item, remove_source_neighbor, remove_destination_neighbor],
+		{2: remove_source_neighbor.instance_id, 4: removed_item.instance_id},
+		{42: remove_destination_neighbor.instance_id}
+	)
 	var remove_before := JSON.stringify(remove_state.to_dictionary())
+	var remove_source_expected := remove_state.container(SOURCE_ID).to_dictionary()
+	(remove_source_expected["slots"] as Dictionary).erase("4")
+	var remove_destination_before := JSON.stringify(remove_state.container(DESTINATION_ID).to_dictionary())
+	var remove_source_record_before := JSON.stringify(remove_state.registry().item(remove_source_neighbor.instance_id).to_dictionary())
+	var remove_destination_record_before := JSON.stringify(remove_state.registry().item(remove_destination_neighbor.instance_id).to_dictionary())
 	var removed := _service.apply(remove_state, ItemTransactionRequest.sandbox_remove("tx-remove", OWNER_ID, SOURCE_ID, 4, removed_item.instance_id), ItemTransactionJournal.new(), equipment, foundation)
 	_assert_success(removed, "sandbox-remove", failures)
 	TestAssertions.equal(JSON.stringify(remove_state.to_dictionary()), remove_before, "remove leaves original bytes unchanged", failures)
 	TestAssertions.equal(removed.next_state.container(SOURCE_ID).item_id_at(4), "", "remove clears exact source", failures)
 	TestAssertions.truthy(not removed.next_state.registry().has(removed_item.instance_id), "remove erases registry record atomically", failures)
+	TestAssertions.equal(removed.next_state.container(SOURCE_ID).to_dictionary(), remove_source_expected, "remove preserves unrelated source slots byte-exact", failures)
+	TestAssertions.equal(JSON.stringify(removed.next_state.container(DESTINATION_ID).to_dictionary()), remove_destination_before, "remove preserves unrelated destination slots byte-exact", failures)
+	TestAssertions.equal(JSON.stringify(removed.next_state.registry().item(remove_source_neighbor.instance_id).to_dictionary()), remove_source_record_before, "remove preserves unrelated source item byte-exact", failures)
+	TestAssertions.equal(JSON.stringify(removed.next_state.registry().item(remove_destination_neighbor.instance_id).to_dictionary()), remove_destination_record_before, "remove preserves unrelated destination item byte-exact", failures)
+	TestAssertions.equal(removed.next_state.registry().size(), 2, "remove erases only the targeted registry record", failures)
 
 func _assert_failure_matrix(equipment: EquipmentCatalog, foundation: ItemFoundationCatalog, failures: Array[String]) -> void:
 	var item_a := _make_item("item-a", 21)
@@ -139,8 +192,11 @@ func _assert_failure_matrix(equipment: EquipmentCatalog, foundation: ItemFoundat
 		{"label": "duplicate reference", "code": ItemTransactionResult.Code.DUPLICATE_REFERENCE, "state": duplicate_reference, "request": ItemTransactionRequest.move("tx-reference", OWNER_ID, SOURCE_ID, 0, item_a.instance_id, DESTINATION_ID, 3)},
 		{"label": "invalid item", "code": ItemTransactionResult.Code.INVALID_ITEM, "state": valid, "request": ItemTransactionRequest.create("tx-item", OWNER_ID, DESTINATION_ID, 2, invalid_item)},
 	]
-	if OS.get_environment("PARTY_FORGE_TRANSACTION_CASE_ORDER") == "reverse":
-		cases.reverse()
+	if OS.get_environment("PARTY_FORGE_TRANSACTION_CASE_ORDER") == "reordered":
+		var original_cases := cases.duplicate()
+		cases.clear()
+		for index: int in [5, 1, 8, 3, 0, 7, 2, 6, 4]:
+			cases.append(original_cases[index])
 	for test_case: Dictionary in cases:
 		_assert_failure(test_case["state"] as ItemOwnershipState, test_case["request"] as ItemTransactionRequest, int(test_case["code"]), equipment, foundation, String(test_case["label"]), failures)
 
@@ -168,6 +224,23 @@ func _assert_replay_and_collision(equipment: EquipmentCatalog, foundation: ItemF
 	TestAssertions.equal(JSON.stringify(state.to_dictionary()), original_before_collision, "collision leaves original byte-equivalent", failures)
 	var after_collision := _service.apply(state, request, journal, equipment, foundation)
 	TestAssertions.equal(after_collision.next_state.to_dictionary(), first_document, "collision does not replace journal entry", failures)
+
+	var owner_a_before := JSON.stringify(state.to_dictionary())
+	var other_owner_state := _empty_state_for_owner("profile-b")
+	var owner_b_before := JSON.stringify(other_owner_state.to_dictionary())
+	var journal_before := _journal_document(journal)
+	var misrouted_replay := _service.apply(other_owner_state, request, journal, equipment, foundation)
+	TestAssertions.equal(misrouted_replay.code, ItemTransactionResult.Code.UNKNOWN_OWNER, "cross-owner exact replay is rejected before journal lookup", failures)
+	TestAssertions.equal(misrouted_replay.next_state, null, "cross-owner exact replay exposes no recorded state", failures)
+	TestAssertions.truthy(not misrouted_replay.duplicate, "cross-owner exact replay is not marked duplicate", failures)
+	TestAssertions.equal(JSON.stringify(state.to_dictionary()), owner_a_before, "cross-owner replay preserves original owner state bytes", failures)
+	TestAssertions.equal(JSON.stringify(other_owner_state.to_dictionary()), owner_b_before, "cross-owner replay preserves misrouted state bytes", failures)
+	TestAssertions.equal(_journal_document(journal), journal_before, "cross-owner replay leaves journal unchanged", failures)
+
+	var null_state_replay := _service.apply(null, request, journal, equipment, foundation)
+	TestAssertions.equal(null_state_replay.code, ItemTransactionResult.Code.INVALID_REQUEST, "null-state exact replay is rejected before journal lookup", failures)
+	TestAssertions.equal(null_state_replay.next_state, null, "null-state exact replay exposes no recorded state", failures)
+	TestAssertions.equal(_journal_document(journal), journal_before, "null-state replay leaves journal unchanged", failures)
 
 func _assert_failed_first_attempt_is_retryable(equipment: EquipmentCatalog, foundation: ItemFoundationCatalog, failures: Array[String]) -> void:
 	var item := _make_item("item-retry", 40)
@@ -275,11 +348,29 @@ func _assert_failure(
 func _empty_state() -> ItemOwnershipState:
 	return _state_with_placements([], {}, {})
 
+func _empty_state_for_owner(owner_id: String) -> ItemOwnershipState:
+	return _state_with_owner_placements(owner_id, [], {}, {})
+
 func _state_with_placements(items: Array[ItemInstance], source_slots: Dictionary, destination_slots: Dictionary) -> ItemOwnershipState:
+	return _state_with_owner_placements(OWNER_ID, items, source_slots, destination_slots)
+
+func _state_with_owner_placements(owner_id: String, items: Array[ItemInstance], source_slots: Dictionary, destination_slots: Dictionary) -> ItemOwnershipState:
 	var registry := ItemRegistry.new(items)
-	var source := ItemSlotContainer.create(SOURCE_ID, ItemSlotContainer.RUN_INVENTORY, OWNER_ID, 5, source_slots)
-	var destination := ItemSlotContainer.create(DESTINATION_ID, ItemSlotContainer.PROFILE_STASH_TAB, OWNER_ID, 100, destination_slots)
-	return ItemOwnershipState.create(OWNER_ID, registry, [source, destination])
+	var source := ItemSlotContainer.create(SOURCE_ID, ItemSlotContainer.RUN_INVENTORY, owner_id, 5, source_slots)
+	var destination := ItemSlotContainer.create(DESTINATION_ID, ItemSlotContainer.PROFILE_STASH_TAB, owner_id, 100, destination_slots)
+	return ItemOwnershipState.create(owner_id, registry, [source, destination])
+
+func _journal_document(journal: ItemTransactionJournal) -> Dictionary:
+	var result: Dictionary = {}
+	for transaction_id: String in journal.entries():
+		var entry := journal.entry(transaction_id)
+		var state := entry["state"] as ItemOwnershipState
+		result[transaction_id] = {
+			"fingerprint": entry["fingerprint"],
+			"code": entry["code"],
+			"state": state.to_dictionary() if state != null else null,
+		}
+	return result
 
 func _make_item(instance_id: String, sequence: int) -> ItemInstance:
 	var item := ItemInstance.new()

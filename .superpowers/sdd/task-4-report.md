@@ -1,6 +1,6 @@
 # Plan 4B Task 4 report: atomic item container transactions
 
-Status: implementation and local verification complete on `feat/plan-4b-item-ownership`; independent parent review remains the next sequential gate. Task 5 was not started.
+Status: implementation, independent-review corrections, and local verification complete on `feat/plan-4b-item-ownership`. Task 5 was not started.
 
 ## Scope and contracts
 
@@ -58,3 +58,22 @@ All 522 captured lines were inspected programmatically. There were zero `TEST_FA
 - `git diff --check` was clean before final staging.
 - Import/full-suite verification generated four untracked test `.uid` sidecars: the new transaction suite and the three existing Plan 4B item suites. Only those verification-created test UIDs were removed. The four production-script UIDs remain scoped artifacts.
 - No open Task 4 production concern is known. The focused runner can still exit `0` after a suite-load parse failure, so accepted evidence always requires both the PASS marker and a complete output scan.
+
+## Independent Task 4 review corrections
+
+The sequential independent review identified one Important and two Minor findings. All three were corrected without broadening the public API or starting Task 5:
+
+- State-null and request-owner/state-owner validation now occur before journal lookup. An exact-fingerprint request routed with a different ownership state returns `UNKNOWN_OWNER`, exposes no recorded state, is not marked duplicate, and changes neither owner state nor journal. An exact replay with null state returns `INVALID_REQUEST` without exposing the journal snapshot.
+- The reordered focused run now uses a fixed permutation of all seven complete scenario groups: request schema, four successes, failure matrix, replay/collision, failed retry, defensive copies, and validation precedence. Its failure matrix also uses a fixed non-reversal permutation. The forward and reordered runs execute every group exactly once and retain identical output markers.
+- Create and sandbox-remove success fixtures now contain unrelated records in both source and destination containers. They assert the unrelated item documents and sparse slot documents remain byte-exact; remove also proves the registry loses only the targeted record.
+
+Review RED was targeted and exited `1` with exactly five assertions. Before the service correction, cross-owner and null-state exact replays returned `TRANSACTION_REPLAY` and exposed the recorded state; the cross-owner result was also incorrectly marked duplicate. Moving the two state-routing checks before fingerprint/journal lookup made the same focused suite exit `0` with `ITEM_TRANSACTION_MATRIX: PASS` and `TEST_SUMMARY: PASS (0 failures)`.
+
+Targeted mutation evidence temporarily incremented every unrelated create/remove registry item's level while leaving candidates structurally valid. The focused suite exited `1` with exactly four byte-preservation failures: unrelated source and destination records for create, and unrelated source and destination records for remove. The mutation was then removed through `apply_patch`; no mutation code remains.
+
+Final review verification:
+
+- Combined transaction, ownership-state, and item-codec forward run: exit `0`, zero unexpected markers, `ITEM_TRANSACTION_MATRIX: PASS`, `TEST_SUMMARY: PASS (0 failures)`.
+- The same combined suites in deterministic reordered mode: exit `0`, zero unexpected markers, and identical markers.
+- Fresh hermetic import: exit `0`; all 32 captured lines were scanned with zero script, parse, loader, or engine error markers. Verification recreated the transaction-test UID plus the three known missing existing item-test UIDs; only those four generated test sidecars were removed.
+- Fresh hermetic full suite: exit `0`, `TEST_SUMMARY: PASS (124 suites)`. All 522 lines were scanned with zero `TEST_FAILURE`, `SCRIPT ERROR`, `Parse Error`, `Failed to load`, or `No loader found` markers. The established 48 intentional negative-path errors, six warnings, 18 leaked ObjectDB instances, and five resources still in use remain unchanged baseline noise.

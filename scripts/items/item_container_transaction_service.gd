@@ -12,6 +12,10 @@ func apply(
 		return _failure(ItemTransactionResult.Code.INVALID_REQUEST)
 	if journal == null:
 		return _failure(ItemTransactionResult.Code.INVALID_REQUEST)
+	if state == null:
+		return _failure(ItemTransactionResult.Code.INVALID_REQUEST)
+	if request.owner_id != state.owner_id:
+		return _failure(ItemTransactionResult.Code.UNKNOWN_OWNER)
 	var fingerprint := request.fingerprint()
 	if journal.has(request.transaction_id):
 		var recorded := journal.entry(request.transaction_id)
@@ -22,10 +26,6 @@ func apply(
 			recorded.get("state") as ItemOwnershipState,
 			true
 		)
-	if state == null:
-		return _failure(ItemTransactionResult.Code.INVALID_REQUEST)
-	if request.owner_id != state.owner_id:
-		return _failure(ItemTransactionResult.Code.UNKNOWN_OWNER)
 	var source: ItemSlotContainer
 	var destination: ItemSlotContainer
 	if request.operation != ItemTransactionRequest.CREATE_AND_PLACE:
