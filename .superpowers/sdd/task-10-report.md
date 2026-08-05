@@ -61,6 +61,23 @@ The final scope audit found that the UI summary was cleanup-gated but its three 
 
 A final manifest review found two remaining fail-open API paths. The focused contract first exited `1` with exactly one assertion failure because the helper lacked injectable list-begin and parent-open seams. After adding only the optional test-support signature, it exited `1` with exactly four behavior failures: forced `ERR_CANT_OPEN` and null-parent results both produced an empty error plus the normal one-file manifest. The helper now checks and propagates the `Error` from `DirAccess.list_dir_begin()`, represents link inspection as `{error, is_link}`, treats inability to open a parent directory as an error, passes both optional Callables through recursive traversal, and discards all partial entries on any capture error. The focused contract returned to `TEST_SUMMARY: PASS (0 failures)` while retaining normal, sentinel-extra, same-length SHA, and reported-link behavior.
 
+The subsequent nested-traversal review found that the list-begin test seam replaced the real `DirAccess.list_dir_begin()` call. The focused fixture now contains a deterministic root file plus `nested/nested.dat`. Its callback returns `OK` at the root and `ERR_CANT_OPEN` only for the exact simplified nested path. The accepted first RED exited `1` with `TEST_SUMMARY: FAIL (3 failures)`: the nested error was absent, only the root callback ran, and the reported-link seam was absent. After adding only the reported-link signature, the behavior RED exited `1` with `TEST_SUMMARY: FAIL (4 failures)`: the nested callback/error were still absent and a reported descendant link returned a false-success three-entry manifest. The helper now always invokes and checks the real `directory.list_dir_begin()` first, then applies the optional selective error seam without losing enumeration. It propagates that seam and the reported-link result seam recursively. Nested list failure, descendant parent-open failure, and reported descendant-link rejection all return stable exact errors with `entries == []`, discarding root entries accumulated before the descendant failure.
+
+Exact nested-correction commands and results:
+
+```powershell
+& $godot --headless --path $project --quit-after 120 --script res://tests/focused_test_runner.gd -- tests/unit/test_item_storage_responsive_contract.gd
+# RED 1: exit 1, TEST_SUMMARY: FAIL (3 failures)
+# RED 2: exit 1, TEST_SUMMARY: FAIL (4 failures)
+# GREEN: exit 0, TEST_SUMMARY: PASS (0 failures)
+
+& $godot --headless --path $project --quit-after 180 --script res://tests/integration/item_storage_profile_runner.gd
+# exit 0, ITEM_STORAGE_PROFILE_ISOLATION_SUMMARY: PASS profiles=2 items=99
+
+& $godot --headless --path $project --quit-after 300 --script res://tests/focused_test_runner.gd -- tests/unit/test_item_storage_responsive_contract.gd tests/unit/test_developer_item_sandbox_state.gd tests/unit/test_profile_state.gd tests/unit/test_atomic_profile_store.gd tests/unit/test_profile_manager.gd tests/unit/test_profile_item_storage_service.gd tests/unit/test_profile_storage_reconciler.gd
+# exit 0, TEST_SUMMARY: PASS (0 failures), zero blocking diagnostics
+```
+
 ## UI, Controller, and Mouse Acceptance
 
 The production scene is instantiated in a real tree at 1920x1080, 2560x1440, and 3840x2160. The runner first requests `Window.MODE_WINDOWED`, awaits layout, and uses the real root Window when that mode is available. Godot's headless display server honors `root.size` but does not report windowed mode, so headless verification uses the permitted fallback: a real target-sized `SubViewport` with `size_2d_override=1920x1080` and stretch enabled. Each resolution marker is emitted only after the physical Window or fallback target equals the labeled size. The runner separately asserts the project's 1920x1080 `canvas_items` logical policy. It also proves:
@@ -111,6 +128,7 @@ All commands used Godot 4.7.1 stable console with a newly created isolated `APPD
 - Task 9 real focus-owner runner: exit `0`; exact `TASK9_SANDBOX_FOCUS_SUMMARY: PASS (0 failures)` marker present.
 - Upgrade-recipient real controller runner with `--quit-after 10000`: exit `0`; exact `UPGRADE_RECIPIENT_CONTROLLER_SCROLL_SUMMARY: PASS (0 failures, 3 viewports)` marker present. The command rejects exit `0` without that exact marker.
 - Final manifest hardening: focused contract exit `0`; pristine profile-isolation runner exit `0` with its exact marker; bounded seven-suite sandbox/profile/atomic/storage batch exit `0` with `TEST_SUMMARY: PASS (0 failures)` and zero blocking diagnostics. UI and performance interfaces were not touched by this helper-only correction. Per review direction, the complete 131-suite run was not repeated for this final test-support-only change.
+- Nested manifest correction: focused contract, pristine exact profile-isolation runner, and the same bounded seven-suite storage batch all passed with their exact markers. The helper/contract-only interface change did not touch UI, performance, or production code, so the complete suite was not repeated.
 - Fresh editor import: exit `0`; zero parse, script, loader, or failed-resource diagnostics.
 - Complete suite: exit `0` in 70.6 seconds on the final correction tree; exact `TEST_SUMMARY: PASS (131 suites)` marker present; zero test/parser/script/loader failures; sandbox hash remained `c201fd5917d9958da63dacd8201e80d5911c0de51af367977d2a5ee57dd9defe`.
 
@@ -120,6 +138,6 @@ The focused and complete suites emitted their established intentional negative-p
 
 The fresh import recreated 21 `.gd.uid` sidecars proven absent by the clean pre-import snapshot, including sidecars for the new helper/runners/contract and earlier Plan 4B files. All 21 were removed by exact path and are not part of the correction commit. Every worktree-local RED/GREEN runtime directory was removed before final verification; later pristine runtimes lived under the user Temp directory and were deleted after each command.
 
-Original Task 10 commit: `e757b77` (`test: verify item sandbox ownership and layouts`). Review correction commit is intentionally limited to the three runners, responsive contract, filesystem-manifest test support, and this report.
+Original Task 10 commit: `e757b77` (`test: verify item sandbox ownership and layouts`). The latest nested-manifest correction is intentionally limited to the filesystem-manifest test support, responsive contract, and this report.
 
 Stop after the focused Task 10 commit for independent review. Task 11 has not started.

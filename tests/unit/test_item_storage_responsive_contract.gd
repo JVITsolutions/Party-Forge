@@ -82,11 +82,17 @@ func _assert_manifest_sentinel_detection(failures: Array[String]) -> void:
 	var helper_source := FileAccess.get_file_as_string(MANIFEST_HELPER_PATH)
 	var supports_error_injection := "list_begin_override: Callable" in helper_source and "parent_open_override: Callable" in helper_source
 	TestAssertions.truthy(supports_error_injection, "filesystem manifest exposes list-begin and parent-open error injection for focused test support", failures)
+	var supports_reported_link := "link_result_override: Callable" in helper_source
+	TestAssertions.truthy(supports_reported_link, "filesystem manifest exposes a reported-link result seam for focused test support", failures)
 	var absolute_root := ProjectSettings.globalize_path(MANIFEST_FIXTURE_ROOT)
 	TestAssertions.truthy(DirAccess.make_dir_recursive_absolute(absolute_root) in [OK, ERR_ALREADY_EXISTS], "manifest fixture root is created", failures)
 	_write_fixture_file(MANIFEST_FIXTURE_ROOT.path_join("baseline.dat"), PackedByteArray([65, 65, 65, 65]), failures)
+	var nested_root := MANIFEST_FIXTURE_ROOT.path_join("nested")
+	var absolute_nested := ProjectSettings.globalize_path(nested_root).simplify_path()
+	TestAssertions.truthy(DirAccess.make_dir_recursive_absolute(absolute_nested) in [OK, ERR_ALREADY_EXISTS], "nested manifest fixture directory is created", failures)
+	_write_fixture_file(nested_root.path_join("nested.dat"), PackedByteArray([78, 69, 83, 84]), failures)
 	if supports_error_injection:
-		_assert_manifest_failure_injection(helper, absolute_root.simplify_path(), failures)
+		_assert_manifest_failure_injection(helper, absolute_root.simplify_path(), absolute_nested, supports_reported_link, failures)
 	var baseline := helper.call(&"capture", MANIFEST_FIXTURE_ROOT) as Dictionary
 	_write_fixture_file(MANIFEST_FIXTURE_ROOT.path_join("sentinel.extra"), PackedByteArray([83]), failures)
 	var with_extra := helper.call(&"capture", MANIFEST_FIXTURE_ROOT) as Dictionary
@@ -99,33 +105,59 @@ func _assert_manifest_sentinel_detection(failures: Array[String]) -> void:
 	TestAssertions.truthy(not DirAccess.dir_exists_absolute(absolute_root), "manifest contract fixture cleans up", failures)
 
 
-func _assert_manifest_failure_injection(helper: RefCounted, absolute_root: String, failures: Array[String]) -> void:
+func _assert_manifest_failure_injection(helper: RefCounted, absolute_root: String, absolute_nested: String, supports_reported_link: bool, failures: Array[String]) -> void:
+	var begun_paths: Array[String] = []
 	var list_failure := helper.call(
 		&"capture",
 		MANIFEST_FIXTURE_ROOT,
-		func(_absolute_directory: String) -> Error: return ERR_CANT_OPEN,
+		func(absolute_directory: String) -> Error:
+			begun_paths.append(absolute_directory)
+			return ERR_CANT_OPEN if absolute_directory == absolute_nested else OK,
 		Callable()
 	) as Dictionary
 	TestAssertions.equal(
 		String(list_failure.get("error", "")),
-		"cannot begin manifest directory listing code=%d path=%s" % [ERR_CANT_OPEN, absolute_root],
-		"filesystem manifest propagates a stable list-begin error",
+		"cannot begin manifest directory listing code=%d path=%s" % [ERR_CANT_OPEN, absolute_nested],
+		"filesystem manifest propagates a stable selectively injected nested list-begin error",
 		failures
 	)
-	TestAssertions.equal(list_failure.get("entries", []), [], "list-begin failure produces no false-success manifest entries", failures)
+	TestAssertions.equal(begun_paths, [absolute_root, absolute_nested], "list-begin seam observes real root traversal before selectively failing the nested directory", failures)
+	TestAssertions.equal(list_failure.get("entries", []), [], "nested list-begin failure discards every previously accumulated root entry", failures)
+	var opened_parent_paths: Array[String] = []
 	var parent_failure := helper.call(
 		&"capture",
 		MANIFEST_FIXTURE_ROOT,
 		Callable(),
-		func(_absolute_parent: String) -> Variant: return null
+		func(absolute_parent: String) -> Variant:
+			opened_parent_paths.append(absolute_parent)
+			return null if absolute_parent == absolute_nested else DirAccess.open(absolute_parent)
 	) as Dictionary
 	TestAssertions.equal(
 		String(parent_failure.get("error", "")),
-		"cannot inspect manifest link because parent cannot open: %s" % absolute_root.get_base_dir(),
-		"filesystem manifest propagates a stable parent-open error",
+		"cannot inspect manifest link because parent cannot open: %s" % absolute_nested,
+		"filesystem manifest propagates a stable descendant parent-open error after root traversal",
 		failures
 	)
-	TestAssertions.equal(parent_failure.get("entries", []), [], "parent-open failure produces no false-success manifest entries", failures)
+	TestAssertions.truthy(absolute_nested in opened_parent_paths, "parent-open seam reaches the exact descendant parent", failures)
+	TestAssertions.equal(parent_failure.get("entries", []), [], "descendant parent-open failure discards every previously accumulated root entry", failures)
+	if not supports_reported_link:
+		return
+	var reported_link_path := absolute_nested.path_join("nested.dat").simplify_path()
+	var link_failure := helper.call(
+		&"capture",
+		MANIFEST_FIXTURE_ROOT,
+		Callable(),
+		Callable(),
+		func(absolute_path: String) -> Dictionary:
+			return {"error": "", "is_link": absolute_path == reported_link_path}
+	) as Dictionary
+	TestAssertions.equal(
+		String(link_failure.get("error", "")),
+		"manifest entry is a link/reparse point: %s" % reported_link_path,
+		"filesystem manifest rejects a selectively reported descendant link",
+		failures
+	)
+	TestAssertions.equal(link_failure.get("entries", []), [], "reported descendant link discards every previously accumulated entry", failures)
 
 
 func _write_fixture_file(path: String, bytes: PackedByteArray, failures: Array[String]) -> void:

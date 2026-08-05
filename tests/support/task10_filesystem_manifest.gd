@@ -5,18 +5,19 @@ extends RefCounted
 static func capture(
 	root_path: String,
 	list_begin_override: Callable = Callable(),
-	parent_open_override: Callable = Callable()
+	parent_open_override: Callable = Callable(),
+	link_result_override: Callable = Callable()
 ) -> Dictionary:
 	var absolute_root := ProjectSettings.globalize_path(root_path).simplify_path()
 	if not DirAccess.dir_exists_absolute(absolute_root):
 		return {"error": "manifest root is missing: %s" % absolute_root, "entries": []}
-	var root_link := _is_link(absolute_root, parent_open_override)
+	var root_link := _is_link(absolute_root, parent_open_override, link_result_override)
 	if not String(root_link["error"]).is_empty():
 		return {"error": root_link["error"], "entries": []}
 	if bool(root_link["is_link"]):
 		return {"error": "manifest root is a link/reparse point: %s" % absolute_root, "entries": []}
 	var entries: Array[Dictionary] = []
-	var error := _capture_directory(absolute_root, "", entries, list_begin_override, parent_open_override)
+	var error := _capture_directory(absolute_root, "", entries, list_begin_override, parent_open_override, link_result_override)
 	if not error.is_empty():
 		return {"error": error, "entries": []}
 	entries.sort_custom(func(first: Dictionary, second: Dictionary) -> bool: return String(first["relative_path"]) < String(second["relative_path"]))
@@ -38,20 +39,26 @@ static func _capture_directory(
 	relative_directory: String,
 	entries: Array[Dictionary],
 	list_begin_override: Callable,
-	parent_open_override: Callable
+	parent_open_override: Callable,
+	link_result_override: Callable
 ) -> String:
 	var directory := DirAccess.open(absolute_directory)
 	if directory == null:
 		return "cannot open manifest directory: %s" % absolute_directory
-	var list_begin_error: Error = list_begin_override.call(absolute_directory) if list_begin_override.is_valid() else directory.list_dir_begin()
+	var list_begin_error := directory.list_dir_begin()
 	if list_begin_error != OK:
 		return "cannot begin manifest directory listing code=%d path=%s" % [list_begin_error, absolute_directory]
+	if list_begin_override.is_valid():
+		list_begin_error = list_begin_override.call(absolute_directory) as Error
+		if list_begin_error != OK:
+			directory.list_dir_end()
+			return "cannot begin manifest directory listing code=%d path=%s" % [list_begin_error, absolute_directory]
 	var name := directory.get_next()
 	while not name.is_empty():
 		if name not in [".", ".."]:
 			var absolute_path := absolute_directory.path_join(name).simplify_path()
 			var relative_path := (name if relative_directory.is_empty() else relative_directory.path_join(name)).replace("\\", "/")
-			var link_result := _is_link(absolute_path, parent_open_override)
+			var link_result := _is_link(absolute_path, parent_open_override, link_result_override)
 			if not String(link_result["error"]).is_empty():
 				directory.list_dir_end()
 				return String(link_result["error"])
@@ -66,7 +73,7 @@ static func _capture_directory(
 					"sha256": "",
 					"resolved_path": absolute_path,
 				})
-				var nested_error := _capture_directory(absolute_path, relative_path, entries, list_begin_override, parent_open_override)
+				var nested_error := _capture_directory(absolute_path, relative_path, entries, list_begin_override, parent_open_override, link_result_override)
 				if not nested_error.is_empty():
 					directory.list_dir_end()
 					return nested_error
@@ -92,7 +99,7 @@ static func _capture_directory(
 	return ""
 
 
-static func _is_link(absolute_path: String, parent_open_override: Callable) -> Dictionary:
+static func _is_link(absolute_path: String, parent_open_override: Callable, link_result_override: Callable) -> Dictionary:
 	var absolute_parent := absolute_path.get_base_dir()
 	var parent := parent_open_override.call(absolute_parent) as DirAccess if parent_open_override.is_valid() else DirAccess.open(absolute_parent)
 	if parent == null:
@@ -100,6 +107,14 @@ static func _is_link(absolute_path: String, parent_open_override: Callable) -> D
 			"error": "cannot inspect manifest link because parent cannot open: %s" % absolute_parent,
 			"is_link": false,
 		}
+	if link_result_override.is_valid():
+		var reported: Variant = link_result_override.call(absolute_path)
+		if not reported is Dictionary:
+			return {"error": "invalid reported-link result for path: %s" % absolute_path, "is_link": false}
+		var reported_result := reported as Dictionary
+		if not reported_result.has("error") or not reported_result.has("is_link") or not reported_result["error"] is String or not reported_result["is_link"] is bool:
+			return {"error": "invalid reported-link result for path: %s" % absolute_path, "is_link": false}
+		return {"error": String(reported_result["error"]), "is_link": bool(reported_result["is_link"])}
 	return {"error": "", "is_link": parent.is_link(absolute_path.get_file())}
 
 
