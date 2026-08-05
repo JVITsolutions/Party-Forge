@@ -59,6 +59,8 @@ func _validate_request(profile_id: String, request: LoadoutTransitionRequest) ->
 		return _error("field=confirmed reason=explicit confirmation required")
 	if request.confirmation_token.is_empty():
 		return _error("field=confirmation_token reason=confirmation token is required")
+	if request.state_fingerprint.length() != 64 or not request.state_fingerprint.is_valid_hex_number(false):
+		return _error("field=state_fingerprint reason=preflight state fingerprint is required")
 
 	var shape_error := _validate_projection_shape(
 		request.incompatible_sources,
@@ -143,6 +145,7 @@ func _apply_candidate(candidate: ProfileState, request: LoadoutTransitionRequest
 		or request.planned_stash_destinations != projection.planned_stash_destinations
 		or request.overflow_item_ids != projection.overflow_item_ids
 		or request.confirmation_token != projection.confirmation_token
+		or request.state_fingerprint != projection.state_fingerprint
 	):
 		return _error("field=projection reason=stale projection")
 

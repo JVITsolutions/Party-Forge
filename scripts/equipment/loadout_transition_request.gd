@@ -7,6 +7,7 @@ var _selected_class_id: StringName
 var _confirmed := false
 var _cancelled := false
 var _confirmation_token := ""
+var _state_fingerprint := ""
 
 var _incompatible_sources: Array[Dictionary] = []
 var _planned_stash_destinations: Array[Dictionary] = []
@@ -36,6 +37,10 @@ var confirmation_token: String:
 	get:
 		return _confirmation_token
 
+var state_fingerprint: String:
+	get:
+		return _state_fingerprint
+
 var incompatible_sources: Array[Dictionary]:
 	get:
 		return _incompatible_sources.duplicate(true)
@@ -58,6 +63,7 @@ static func create(
 	confirmed_value: bool,
 	cancelled_value: bool,
 	confirmation_token_value: String,
+	state_fingerprint_value: String,
 ) -> LoadoutTransitionRequest:
 	var result := LoadoutTransitionRequest.new()
 	result._transaction_id = transaction_id_value
@@ -69,6 +75,7 @@ static func create(
 	result._confirmed = confirmed_value
 	result._cancelled = cancelled_value
 	result._confirmation_token = confirmation_token_value
+	result._state_fingerprint = state_fingerprint_value
 	return result
 
 func canonical_document() -> Dictionary:
@@ -81,5 +88,6 @@ func canonical_document() -> Dictionary:
 		"planned_stash_destinations": _planned_stash_destinations.duplicate(true),
 		"profile_id": profile_id,
 		"selected_class_id": String(selected_class_id),
+		"state_fingerprint": state_fingerprint,
 		"transaction_id": transaction_id,
 	}

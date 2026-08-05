@@ -28,6 +28,7 @@ func project(
 		return _failure("field=leader_loadout reason=canonical leader equipment container is missing")
 
 	var stash_tabs: Array[ItemSlotContainer] = []
+	var stash_documents: Array[Dictionary] = []
 	for index: int in profile.stash_tabs.size():
 		var stored_document := profile.stash_tabs[index]
 		var container_id := StringName(String(stored_document.get("container_id", "")))
@@ -35,6 +36,13 @@ func project(
 		if tab == null or tab.container_kind != ItemSlotContainer.PROFILE_STASH_TAB:
 			return _failure("field=stash_tabs[%d] reason=stored profile stash tab is unavailable" % index)
 		stash_tabs.append(tab)
+		stash_documents.append(tab.to_dictionary())
+	var state_fingerprint := LoadoutCompatibilityProjection.state_fingerprint_for(
+		profile.leader_loadout_class_id,
+		class_definition.id,
+		leader.to_dictionary(),
+		stash_documents,
+	)
 
 	var attributes := _base_core_attributes(class_definition)
 	var compatible_loadout: Dictionary = {}
@@ -93,7 +101,14 @@ func project(
 			"destination_container_id": String(tab.container_id),
 			"destination_slot": destination_slot,
 		})
-	return LoadoutCompatibilityProjection.success(class_definition.id, compatible, incompatible, planned, overflow)
+	return LoadoutCompatibilityProjection.success(
+		class_definition.id,
+		compatible,
+		incompatible,
+		planned,
+		overflow,
+		state_fingerprint,
+	)
 
 func _profile_ownership(
 	profile: ProfileState,

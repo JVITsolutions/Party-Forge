@@ -5,6 +5,7 @@ var _valid := false
 var _error := ""
 var _selected_class_id: StringName
 var _confirmation_token := ""
+var _state_fingerprint := ""
 
 var _compatible_items: Array[Dictionary] = []
 var _incompatible_items: Array[Dictionary] = []
@@ -26,6 +27,10 @@ var selected_class_id: StringName:
 var confirmation_token: String:
 	get:
 		return _confirmation_token
+
+var state_fingerprint: String:
+	get:
+		return _state_fingerprint
 
 var compatible_items: Array[Dictionary]:
 	get:
@@ -49,6 +54,7 @@ static func success(
 	incompatible: Array[Dictionary],
 	destinations: Array[Dictionary],
 	overflow: Array[String],
+	state_fingerprint_value: String,
 ) -> LoadoutCompatibilityProjection:
 	var result := LoadoutCompatibilityProjection.new()
 	result._valid = true
@@ -57,6 +63,7 @@ static func success(
 	result._incompatible_items = incompatible.duplicate(true)
 	result._planned_stash_destinations = destinations.duplicate(true)
 	result._overflow_item_ids = overflow.duplicate()
+	result._state_fingerprint = state_fingerprint_value
 	result._confirmation_token = confirmation_token_for(
 		class_id,
 		result.incompatible_sources(),
@@ -95,6 +102,20 @@ static func confirmation_token_for(
 	overflow: Array[String],
 ) -> String:
 	var document := _confirmation_document(class_id, sources, destinations, overflow)
+	return JSON.stringify(_canonicalize(document)).sha256_text()
+
+static func state_fingerprint_for(
+	leader_loadout_class_id: String,
+	selected_class_id_value: StringName,
+	leader_loadout: Dictionary,
+	stash_tabs: Array[Dictionary],
+) -> String:
+	var document := {
+		"leader_loadout": leader_loadout.duplicate(true),
+		"leader_loadout_class_id": leader_loadout_class_id,
+		"selected_class_id": String(selected_class_id_value),
+		"stash_tabs": stash_tabs.duplicate(true),
+	}
 	return JSON.stringify(_canonicalize(document)).sha256_text()
 
 static func _confirmation_document(

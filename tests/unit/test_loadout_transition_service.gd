@@ -12,6 +12,9 @@ func run() -> Array[String]:
 	_test_transition_to_empty_loadout_retains_selected_class(failures)
 	_test_overflow_transition_destroys_only_confirmed_instances(failures)
 	_test_transition_rejections_and_save_failure_preserve_bytes(failures)
+	_test_compatible_identity_and_slot_change_stales_request(failures)
+	_test_leader_loadout_class_change_stales_request(failures)
+	_test_unrelated_stash_occupancy_change_stales_request(failures)
 	return failures
 
 func _test_projection_is_canonical_deterministic_and_defensive(failures: Array[String]) -> void:
@@ -57,6 +60,7 @@ func _test_projection_is_canonical_deterministic_and_defensive(failures: Array[S
 	], "stash plan follows stored nonlexical tab order and first-empty slots", failures)
 	TestAssertions.equal(projection.overflow_item_ids, [], "sufficient stash produces no overflow", failures)
 	TestAssertions.equal(projection.confirmation_token, _expected_token(projection.confirmation_document()), "confirmation token is canonical SHA-256", failures)
+	TestAssertions.equal(projection.state_fingerprint.length(), 64, "projection exposes the exact preflight state fingerprint", failures)
 	TestAssertions.equal(projection.confirmation_document().keys(), [
 		"incompatible_sources", "overflow_item_ids", "planned_stash_destinations", "selected_class_id",
 	], "confirmation document exposes the exact token field set", failures)
@@ -64,6 +68,7 @@ func _test_projection_is_canonical_deterministic_and_defensive(failures: Array[S
 	var repeated := service.project(profile, mage, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)
 	TestAssertions.equal(repeated.confirmation_document(), projection.confirmation_document(), "projection is deterministic", failures)
 	TestAssertions.equal(repeated.confirmation_token, projection.confirmation_token, "deterministic projection has stable token", failures)
+	TestAssertions.equal(repeated.state_fingerprint, projection.state_fingerprint, "deterministic projection has stable state fingerprint", failures)
 	var escaped_items := projection.incompatible_items
 	escaped_items[0]["instance_id"] = "escaped"
 	var escaped_destinations := projection.planned_stash_destinations
@@ -153,7 +158,7 @@ func _test_nonoverflow_transition_is_atomic_replay_safe_and_exact(failures: Arra
 	var request_before := request.canonical_document()
 	TestAssertions.equal(request_before.keys(), [
 		"cancelled", "confirmation_token", "confirmed", "incompatible_sources", "overflow_item_ids",
-		"planned_stash_destinations", "profile_id", "selected_class_id", "transaction_id",
+		"planned_stash_destinations", "profile_id", "selected_class_id", "state_fingerprint", "transaction_id",
 	], "transition request fingerprints the exact contracted fields", failures)
 	var escaped_sources := request.incompatible_sources
 	escaped_sources[0]["instance_id"] = "escaped"
@@ -192,6 +197,7 @@ func _test_nonoverflow_transition_is_atomic_replay_safe_and_exact(failures: Arra
 		request.transaction_id, PROFILE_ID, &"fighter", request.incompatible_sources,
 		request.planned_stash_destinations, request.overflow_item_ids, true, false,
 		LoadoutCompatibilityProjection.confirmation_token_for(&"fighter", request.incompatible_sources, request.planned_stash_destinations, request.overflow_item_ids),
+		request.state_fingerprint,
 	)
 	_assert_failure(service.apply(PROFILE_ID, collision, root), "transaction id conflict", "transition collision", failures)
 	TestAssertions.equal(FileAccess.get_file_as_bytes(path), committed_bytes, "transition collision preserves exact committed bytes", failures)
@@ -268,14 +274,15 @@ func _test_transition_rejections_and_save_failure_preserve_bytes(failures: Array
 		"reject-wrong-known-class", PROFILE_ID, &"fighter", projection.incompatible_sources(),
 		projection.planned_stash_destinations, projection.overflow_item_ids, true, false,
 		LoadoutCompatibilityProjection.confirmation_token_for(&"fighter", projection.incompatible_sources(), projection.planned_stash_destinations, projection.overflow_item_ids),
+		projection.state_fingerprint,
 	)
 	var cases: Array[Dictionary] = [
-		{"label": "missing token", "request": LoadoutTransitionRequest.create("reject-missing-token", PROFILE_ID, &"mage", projection.incompatible_sources(), projection.planned_stash_destinations, projection.overflow_item_ids, true, false, ""), "expected": "confirmation token"},
-		{"label": "stale token", "request": LoadoutTransitionRequest.create("reject-stale-token", PROFILE_ID, &"mage", projection.incompatible_sources(), projection.planned_stash_destinations, projection.overflow_item_ids, true, false, "0".repeat(64)), "expected": "confirmation token"},
-		{"label": "not confirmed", "request": LoadoutTransitionRequest.create("reject-not-confirmed", PROFILE_ID, &"mage", projection.incompatible_sources(), projection.planned_stash_destinations, projection.overflow_item_ids, false, false, projection.confirmation_token), "expected": "confirmation required"},
-		{"label": "cancelled", "request": LoadoutTransitionRequest.create("reject-cancelled", PROFILE_ID, &"mage", projection.incompatible_sources(), projection.planned_stash_destinations, projection.overflow_item_ids, true, true, projection.confirmation_token), "expected": "cancelled"},
-		{"label": "wrong request profile", "request": LoadoutTransitionRequest.create("reject-wrong-profile", "profile-transition-other", &"mage", projection.incompatible_sources(), projection.planned_stash_destinations, projection.overflow_item_ids, true, false, projection.confirmation_token), "expected": "profile identity"},
-		{"label": "unknown class", "request": LoadoutTransitionRequest.create("reject-unknown-class", PROFILE_ID, &"unknown", projection.incompatible_sources(), projection.planned_stash_destinations, projection.overflow_item_ids, true, false, projection.confirmation_token), "expected": "unknown selected class"},
+		{"label": "missing token", "request": LoadoutTransitionRequest.create("reject-missing-token", PROFILE_ID, &"mage", projection.incompatible_sources(), projection.planned_stash_destinations, projection.overflow_item_ids, true, false, "", projection.state_fingerprint), "expected": "confirmation token"},
+		{"label": "stale token", "request": LoadoutTransitionRequest.create("reject-stale-token", PROFILE_ID, &"mage", projection.incompatible_sources(), projection.planned_stash_destinations, projection.overflow_item_ids, true, false, "0".repeat(64), projection.state_fingerprint), "expected": "confirmation token"},
+		{"label": "not confirmed", "request": LoadoutTransitionRequest.create("reject-not-confirmed", PROFILE_ID, &"mage", projection.incompatible_sources(), projection.planned_stash_destinations, projection.overflow_item_ids, false, false, projection.confirmation_token, projection.state_fingerprint), "expected": "confirmation required"},
+		{"label": "cancelled", "request": LoadoutTransitionRequest.create("reject-cancelled", PROFILE_ID, &"mage", projection.incompatible_sources(), projection.planned_stash_destinations, projection.overflow_item_ids, true, true, projection.confirmation_token, projection.state_fingerprint), "expected": "cancelled"},
+		{"label": "wrong request profile", "request": LoadoutTransitionRequest.create("reject-wrong-profile", "profile-transition-other", &"mage", projection.incompatible_sources(), projection.planned_stash_destinations, projection.overflow_item_ids, true, false, projection.confirmation_token, projection.state_fingerprint), "expected": "profile identity"},
+		{"label": "unknown class", "request": LoadoutTransitionRequest.create("reject-unknown-class", PROFILE_ID, &"unknown", projection.incompatible_sources(), projection.planned_stash_destinations, projection.overflow_item_ids, true, false, projection.confirmation_token, projection.state_fingerprint), "expected": "unknown selected class"},
 		{"label": "wrong known class", "request": wrong_known_class, "expected": "stale projection"},
 	]
 	for test_case: Dictionary in cases:
@@ -327,6 +334,69 @@ func _test_transition_rejections_and_save_failure_preserve_bytes(failures: Array
 	ProfileTestSupport.remove_tree(save_root)
 	ProfileTestSupport.remove_tree(root)
 
+func _test_compatible_identity_and_slot_change_stales_request(failures: Array[String]) -> void:
+	var root := _case_root("stale_compatible")
+	var store := ProfileStore.new()
+	var plate := _item("item-stale-compatible-plate", &"dawn_bulwark_plate", 0)
+	var original_ring := _item("item-stale-compatible-ring-original", &"windrunner_band", 1)
+	var replacement_ring := _item("item-stale-compatible-ring-replacement", &"windrunner_band", 2)
+	var original := _profile(
+		[plate, original_ring],
+		{1: plate.instance_id, 6: original_ring.instance_id},
+		[_stash(&"stash-tab-000", {})],
+		"fighter",
+	)
+	_save_profile(store, original, root, "compatible stale-state source fixture", failures)
+	var request := _request("reject-stale-compatible", _project(original, &"mage"))
+	var changed := _profile(
+		[plate, replacement_ring],
+		{1: plate.instance_id, 7: replacement_ring.instance_id},
+		[_stash(&"stash-tab-000", {})],
+		"fighter",
+	)
+	TestAssertions.equal(store.save_profile(changed, root), "", "compatible stale-state fixture changes only compatible identity and slot", failures)
+	_assert_stale_rejection_preserves_all_bytes(store, root, request, "compatible identity and slot change", failures)
+	ProfileTestSupport.remove_tree(root)
+
+func _test_leader_loadout_class_change_stales_request(failures: Array[String]) -> void:
+	var root := _case_root("stale_class")
+	var store := ProfileStore.new()
+	var plate := _item("item-stale-class-plate", &"dawn_bulwark_plate", 0)
+	var original := _profile([plate], {1: plate.instance_id}, [_stash(&"stash-tab-000", {})], "fighter")
+	_save_profile(store, original, root, "class stale-state source fixture", failures)
+	var request := _request("reject-stale-class", _project(original, &"mage"))
+	var changed := original.copy()
+	changed.leader_loadout_class_id = "ranger"
+	TestAssertions.equal(store.save_profile(changed, root), "", "class stale-state fixture changes only stored leader class", failures)
+	_assert_stale_rejection_preserves_all_bytes(store, root, request, "leader loadout class change", failures)
+	ProfileTestSupport.remove_tree(root)
+
+func _test_unrelated_stash_occupancy_change_stales_request(failures: Array[String]) -> void:
+	var root := _case_root("stale_stash")
+	var store := ProfileStore.new()
+	var plate := _item("item-stale-stash-plate", &"dawn_bulwark_plate", 0)
+	var first := _item("item-stale-stash-first", &"windrunner_band", 1)
+	var unrelated := _item("item-stale-stash-unrelated", &"windrunner_band", 2)
+	var original := _profile(
+		[plate, first, unrelated],
+		{1: plate.instance_id},
+		[_stash(&"stash-tab-000", {0: first.instance_id, 50: unrelated.instance_id})],
+		"fighter",
+	)
+	_save_profile(store, original, root, "stash stale-state source fixture", failures)
+	var projection := _project(original, &"mage")
+	TestAssertions.equal(projection.planned_stash_destinations, [
+		{"instance_id": plate.instance_id, "destination_container_id": "stash-tab-000", "destination_slot": 1},
+	], "stash stale-state source plans the stable first-empty destination", failures)
+	var request := _request("reject-stale-stash", projection)
+	var changed := original.copy()
+	(changed.stash_tabs[0]["slots"] as Dictionary).erase("50")
+	(changed.stash_tabs[0]["slots"] as Dictionary)["51"] = unrelated.instance_id
+	TestAssertions.equal(store.save_profile(changed, root), "", "stash stale-state fixture changes unrelated occupancy only", failures)
+	TestAssertions.equal(_project(changed, &"mage").planned_stash_destinations, projection.planned_stash_destinations, "unrelated stash move preserves the original first-empty plan", failures)
+	_assert_stale_rejection_preserves_all_bytes(store, root, request, "unrelated stash occupancy change", failures)
+	ProfileTestSupport.remove_tree(root)
+
 func _project(profile: ProfileState, class_id: StringName) -> LoadoutCompatibilityProjection:
 	return LoadoutCompatibilityService.new().project(
 		profile,
@@ -346,6 +416,7 @@ func _request(transaction_id: String, projection: LoadoutCompatibilityProjection
 		true,
 		false,
 		projection.confirmation_token,
+		projection.state_fingerprint,
 	)
 
 func _profile(items: Array[ItemInstance], loadout_slots: Dictionary, tabs: Array[Dictionary], class_id: String) -> ProfileState:
@@ -426,6 +497,30 @@ func _assert_failure(result: ProfileMutationResult, expected: String, label: Str
 	TestAssertions.equal(result.profile, null, "%s exposes no candidate profile" % label, failures)
 	TestAssertions.truthy(result.error.contains(expected), "%s reports %s" % [label, expected], failures)
 	TestAssertions.truthy(not result.duplicate, "%s is not duplicate success" % label, failures)
+
+func _assert_stale_rejection_preserves_all_bytes(
+	store: ProfileStore,
+	root: String,
+	request: LoadoutTransitionRequest,
+	label: String,
+	failures: Array[String],
+) -> void:
+	var path := store.profile_path(PROFILE_ID, root)
+	var backup_path := "%s.bak" % path
+	TestAssertions.truthy(FileAccess.file_exists(backup_path), "%s has a backup generation before rejection" % label, failures)
+	var primary_before := FileAccess.get_file_as_bytes(path)
+	var backup_before := FileAccess.get_file_as_bytes(backup_path)
+	var loaded_before := store.load_profile(PROFILE_ID, root)
+	TestAssertions.truthy(loaded_before.ok(), "%s current profile loads before rejection" % label, failures)
+	var profile_before := JSON.stringify(loaded_before.profile.to_dictionary()).to_utf8_buffer() if loaded_before.ok() else PackedByteArray()
+	var service := LoadoutTransitionService.new(ProfileMutationService.new(store))
+	_assert_failure(service.apply(PROFILE_ID, request, root), "stale projection", label, failures)
+	TestAssertions.equal(FileAccess.get_file_as_bytes(path), primary_before, "%s preserves exact primary bytes" % label, failures)
+	TestAssertions.equal(FileAccess.get_file_as_bytes(backup_path), backup_before, "%s preserves exact backup bytes" % label, failures)
+	var loaded_after := store.load_profile(PROFILE_ID, root)
+	TestAssertions.truthy(loaded_after.ok(), "%s current profile loads after rejection" % label, failures)
+	var profile_after := JSON.stringify(loaded_after.profile.to_dictionary()).to_utf8_buffer() if loaded_after.ok() else PackedByteArray()
+	TestAssertions.equal(profile_after, profile_before, "%s preserves exact decoded profile bytes" % label, failures)
 
 func _case_root(label: String) -> String:
 	_root_counter += 1
