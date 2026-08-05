@@ -83,35 +83,49 @@ func _resolve_candidate(
 	var profile_registry := profile_state.registry()
 	var leader_loadout := profile_state.container(&"leader-loadout")
 	var stash_tabs: Array[ItemSlotContainer] = []
-	for container: ItemSlotContainer in profile_state.containers():
-		if container.container_kind == ItemSlotContainer.PROFILE_STASH_TAB:
-			stash_tabs.append(container)
-	stash_tabs.sort_custom(func(left: ItemSlotContainer, right: ItemSlotContainer) -> bool:
-		return String(left.container_id) < String(right.container_id)
-	)
+	for stash_document: Dictionary in candidate.stash_tabs:
+		var container := profile_state.container(StringName(String(stash_document["container_id"])))
+		if container == null or container.container_kind != ItemSlotContainer.PROFILE_STASH_TAB:
+			return _error("field=profile.stash_tabs reason=stored tab unavailable")
+		stash_tabs.append(container)
 
-	var required_stash_slots := projection.selected_item_ids.size()
+	var automatic_leader := RunExtractionPolicy.AUTOMATIC_LEADER_UNLOCK in candidate.permanent_feature_unlocks
+	var live_registry := live_state.registry()
+	var leader_equipment := live_state.container(StringName("run-equipment-%03d" % request.leader_member_id))
+	if automatic_leader:
+		var eligibility_error := _validate_live_leader_loadout(context, request.leader_member_id, live_registry, leader_equipment)
+		if not eligibility_error.is_empty():
+			return eligibility_error
+	var displaced_item_ids: Array[String] = []
+	if automatic_leader:
+		for slot: int in leader_loadout.occupied_slots():
+			displaced_item_ids.append(leader_loadout.item_id_at(slot))
+	var required_stash_slots := displaced_item_ids.size() + projection.selected_item_ids.size()
 	if _empty_stash_slots(stash_tabs) < required_stash_slots:
 		return _error("field=stash reason=insufficient empty slots required=%d" % required_stash_slots)
 
 	var next_items: Array[ItemInstance] = []
 	for instance_id: String in profile_registry.ids():
 		next_items.append(profile_registry.item(instance_id))
-	var live_registry := live_state.registry()
-	var leader_equipment := live_state.container(StringName("run-equipment-%03d" % request.leader_member_id))
-	for instance_id: String in projection.automatic_item_ids:
-		if profile_registry.has(instance_id):
-			return _error("field=item.instance_id reason=already exists in profile %s" % instance_id)
-		var source_slot := _slot_for_item(leader_equipment, instance_id)
-		if source_slot < 0:
-			return _error("field=automatic_item reason=leader source missing %s" % instance_id)
-		if not leader_loadout.item_id_at(source_slot).is_empty():
-			return _error("field=leader_loadout.slots[%d] reason=destination occupied" % source_slot)
-		var item := live_registry.item(instance_id)
-		if item == null:
-			return _error("field=context.item_state.registry reason=missing item %s" % instance_id)
-		next_items.append(item)
-		leader_loadout._set_item_id(source_slot, instance_id)
+	if automatic_leader:
+		for slot: int in leader_loadout.occupied_slots():
+			leader_loadout._clear_slot(slot)
+		for instance_id: String in displaced_item_ids:
+			var displaced_destination := _first_empty_stash_destination(stash_tabs)
+			if displaced_destination.is_empty():
+				return _error("field=stash reason=insufficient empty slots")
+			(stash_tabs[displaced_destination[0]] as ItemSlotContainer)._set_item_id(displaced_destination[1], instance_id)
+		for instance_id: String in projection.automatic_item_ids:
+			if profile_registry.has(instance_id):
+				return _error("field=item.instance_id reason=already exists in profile %s" % instance_id)
+			var source_slot := _slot_for_item(leader_equipment, instance_id)
+			if source_slot < 0:
+				return _error("field=automatic_item reason=leader source missing %s" % instance_id)
+			var item := live_registry.item(instance_id)
+			if item == null:
+				return _error("field=context.item_state.registry reason=missing item %s" % instance_id)
+			next_items.append(item)
+			leader_loadout._set_item_id(source_slot, instance_id)
 
 	for instance_id: String in projection.selected_item_ids:
 		if profile_registry.has(instance_id):
@@ -134,9 +148,8 @@ func _resolve_candidate(
 	candidate.item_records = resolved_ownership.registry().to_dictionary()
 	candidate.leader_loadout = resolved_ownership.container(&"leader-loadout").to_dictionary()
 	var resolved_tabs: Array[Dictionary] = []
-	for container: ItemSlotContainer in resolved_ownership.containers():
-		if container.container_kind == ItemSlotContainer.PROFILE_STASH_TAB:
-			resolved_tabs.append(container.to_dictionary())
+	for stored_tab: ItemSlotContainer in stash_tabs:
+		resolved_tabs.append(resolved_ownership.container(stored_tab.container_id).to_dictionary())
 	candidate.stash_tabs = resolved_tabs
 	candidate.leader_loadout_class_id = String(_leader_class_id(context, request.leader_member_id))
 	candidate.resumable_run = {}
@@ -203,6 +216,49 @@ func _slot_for_item(container: ItemSlotContainer, instance_id: String) -> int:
 		if container.item_id_at(slot) == instance_id:
 			return slot
 	return -1
+
+func _validate_live_leader_loadout(
+	context: PlayerRunContext,
+	member_id: int,
+	registry: ItemRegistry,
+	leader_equipment: ItemSlotContainer,
+) -> String:
+	var member := context.party.member_by_id(member_id) if context != null and context.party != null else null
+	if member == null or member.class_definition == null:
+		return _error("field=leader_class reason=authoritative live leader class missing")
+	if registry == null or leader_equipment == null:
+		return _error("field=leader_loadout reason=live ownership unavailable")
+	var loadout: Dictionary = {}
+	for slot: int in leader_equipment.occupied_slots():
+		var slot_id := EquipmentSlotIndex.slot_for(slot)
+		var item := registry.item(leader_equipment.item_id_at(slot))
+		var definition := GameCatalog.EQUIPMENT_CATALOG.definition(item.base_definition_id) if item != null else null
+		if slot_id.is_empty() or definition == null:
+			return _error("field=leader_loadout reason=unknown live equipment")
+		loadout[slot_id] = definition
+	var attributes: Dictionary = {}
+	var snapshot := context.party.stats_for(member_id)
+	if snapshot == null:
+		return _error("field=leader_attributes reason=resolved live attributes missing")
+	for attribute_id: StringName in ClassGrowthDefinition.CORE_ATTRIBUTE_IDS:
+		attributes[attribute_id] = snapshot.value(attribute_id)
+	for slot_id: StringName in EquipmentSlotCatalog.SLOT_IDS:
+		var definition := loadout.get(slot_id) as EquipmentBaseDefinition
+		if definition == null:
+			continue
+		var errors := EquipmentEligibility.validate_equip(definition, member.class_definition, slot_id, loadout, attributes)
+		if not errors.is_empty():
+			return _error("field=leader_loadout reason=ineligible detail=%s" % errors[0])
+	var off_hand := loadout.get(&"off_hand") as EquipmentBaseDefinition
+	if off_hand != null and off_hand.item_type_id == &"quiver":
+		var main_hand := loadout.get(&"main_hand") as EquipmentBaseDefinition
+		if main_hand == null:
+			return _error("field=leader_loadout reason=ineligible detail=quiver requires a main-hand bow")
+		if &"off_hand" not in main_hand.reserved_slot_ids or off_hand.item_type_id not in main_hand.compatible_offhand_item_types:
+			return _error("field=leader_loadout reason=ineligible detail=quiver is not permitted by main hand")
+		if main_hand.weapon_family_id.is_empty() or off_hand.weapon_family_id != main_hand.weapon_family_id:
+			return _error("field=leader_loadout reason=ineligible detail=quiver family does not match main hand")
+	return ""
 
 func _empty_stash_slots(stash_tabs: Array[ItemSlotContainer]) -> int:
 	var result := 0

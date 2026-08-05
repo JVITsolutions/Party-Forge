@@ -11,6 +11,8 @@ const FOLLOWER_ITEM := "item-follower"
 const INVENTORY_ZERO := "item-inventory-zero"
 const INVENTORY_FOUR := "item-inventory-four"
 const EXISTING_STASH := "item-existing-stash"
+const PRIOR_OVERLAP := "item-prior-overlap"
+const PRIOR_NONOVERLAP := "item-prior-nonoverlap"
 
 func run() -> Array[String]:
 	var failures: Array[String] = []
@@ -19,6 +21,10 @@ func run() -> Array[String]:
 	_test_service_type_exists(failures)
 	_test_ordinary_resolution_and_irreversible_loss(failures)
 	_test_automatic_leader_and_ordinary_follower_resolution(failures)
+	_test_automatic_leader_replaces_prior_loadout_without_loss(failures)
+	_test_automatic_empty_leader_replaces_prior_loadout_without_loss(failures)
+	_test_automatic_replacement_requires_stash_for_displaced_and_selected_items(failures)
+	_test_automatic_leader_revalidates_live_equipment(failures)
 	_test_live_state_can_advance_past_checkout_snapshot(failures)
 	_test_stash_placement_rolls_over_tabs_deterministically(failures)
 	_test_failure_atomicity_matrix(failures)
@@ -158,8 +164,8 @@ func _test_stash_placement_rolls_over_tabs_deterministically(failures: Array[Str
 		first_tab_slots[slot] = filler.instance_id
 	candidate.item_records = ItemRegistry.new(profile_items).to_dictionary()
 	candidate.stash_tabs = [
-		ItemSlotContainer.create(&"stash-tab-000", ItemSlotContainer.PROFILE_STASH_TAB, PROFILE_ID, 100, first_tab_slots).to_dictionary(),
-		ItemSlotContainer.create(&"stash-tab-001", ItemSlotContainer.PROFILE_STASH_TAB, PROFILE_ID, 100).to_dictionary(),
+		ItemSlotContainer.create(&"stash-tab-001", ItemSlotContainer.PROFILE_STASH_TAB, PROFILE_ID, 100, first_tab_slots).to_dictionary(),
+		ItemSlotContainer.create(&"stash-tab-000", ItemSlotContainer.PROFILE_STASH_TAB, PROFILE_ID, 100).to_dictionary(),
 	]
 	TestAssertions.equal(store.save_profile(candidate, fixture.root), "", "cross-tab stash fixture saves", failures)
 	var result := RunResolutionService.new(ProfileMutationService.new(store)).resolve(PROFILE_ID, fixture.context, _request("resolution-stash-rollover", [
@@ -168,8 +174,9 @@ func _test_stash_placement_rolls_over_tabs_deterministically(failures: Array[Str
 	]), fixture.root)
 	TestAssertions.truthy(result.ok(), "cross-tab extraction resolves", failures)
 	var saved := store.load_profile(PROFILE_ID, fixture.root).profile
-	TestAssertions.equal(saved.stash_tabs[0]["slots"]["99"], FOLLOWER_ITEM, "first selected item uses final empty slot in first stash tab", failures)
-	TestAssertions.equal(saved.stash_tabs[1]["slots"]["0"], INVENTORY_ZERO, "next selected item rolls to first slot in next stash tab", failures)
+	TestAssertions.equal(saved.stash_tabs.map(func(tab: Dictionary) -> String: return String(tab["container_id"])), ["stash-tab-001", "stash-tab-000"], "resolution preserves nonlexical stored stash-tab order", failures)
+	TestAssertions.equal(saved.stash_tabs[0]["slots"].get("99", ""), FOLLOWER_ITEM, "first selected item uses final empty slot in first stash tab", failures)
+	TestAssertions.equal(saved.stash_tabs[1]["slots"].get("0", ""), INVENTORY_ZERO, "next selected item rolls to first slot in next stash tab", failures)
 	_cleanup(fixture)
 
 func _test_automatic_leader_and_ordinary_follower_resolution(failures: Array[String]) -> void:
@@ -189,6 +196,89 @@ func _test_automatic_leader_and_ordinary_follower_resolution(failures: Array[Str
 	_assert_exact_item(saved, fixture.items[FOLLOWER_ITEM], "automatic ordinary follower", failures)
 	var saved_text := JSON.stringify(saved.to_dictionary())
 	TestAssertions.truthy(not saved_text.contains(INVENTORY_ZERO) and not saved_text.contains(INVENTORY_FOUR), "automatic resolution still loses unselected ordinary items", failures)
+	_cleanup(fixture)
+
+func _test_automatic_leader_replaces_prior_loadout_without_loss(failures: Array[String]) -> void:
+	var fixture := _fixture("automatic_prior", 1, ["leader_loadout_extraction"], true)
+	var store := fixture.store as ProfileStore
+	var prior_overlap := _profile_item_with_base(PRIOR_OVERLAP, 60, &"forge_vanguard_helmet")
+	var prior_nonoverlap := _profile_item_with_base(PRIOR_NONOVERLAP, 61, &"forge_vanguard_shield")
+	var candidate := store.load_profile(PROFILE_ID, fixture.root).profile
+	var existing := fixture.items[EXISTING_STASH] as ItemInstance
+	candidate.item_records = ItemRegistry.new([existing, prior_overlap, prior_nonoverlap]).to_dictionary()
+	candidate.leader_loadout = ItemSlotContainer.create(
+		&"leader-loadout", ItemSlotContainer.PROFILE_LEADER_EQUIPMENT, PROFILE_ID,
+		EquipmentSlotIndex.capacity(), {0: PRIOR_OVERLAP, 10: PRIOR_NONOVERLAP},
+	).to_dictionary()
+	candidate.leader_loadout_class_id = "fighter"
+	TestAssertions.equal(store.save_profile(candidate, fixture.root), "", "occupied prior loadout fixture saves", failures)
+	var result := RunResolutionService.new(ProfileMutationService.new(store)).resolve(PROFILE_ID, fixture.context, _request("resolution-automatic-prior", [
+		ExtractionSelection.create(FOLLOWER_ITEM, &"run-equipment-002", 7),
+	]), fixture.root)
+	TestAssertions.truthy(result.ok(), "automatic resolution atomically replaces an occupied prior leader loadout", failures)
+	var saved := store.load_profile(PROFILE_ID, fixture.root).profile
+	TestAssertions.equal(saved.leader_loadout["slots"], {"0": LEADER_HEAD, "9": LEADER_HAND}, "complete final live loadout replaces overlapping and nonoverlapping prior slots", failures)
+	TestAssertions.equal(saved.stash_tabs[0]["slots"], {
+		"0": EXISTING_STASH,
+		"1": PRIOR_OVERLAP,
+		"2": PRIOR_NONOVERLAP,
+		"3": FOLLOWER_ITEM,
+	}, "displaced equipment uses canonical equipment-slot order before ordinary projection order", failures)
+	_assert_exact_item(saved, prior_overlap, "displaced overlapping prior item", failures)
+	_assert_exact_item(saved, prior_nonoverlap, "displaced nonoverlapping prior item", failures)
+	_cleanup(fixture)
+
+func _test_automatic_empty_leader_replaces_prior_loadout_without_loss(failures: Array[String]) -> void:
+	var fixture := _fixture("automatic_empty_prior", 0, ["leader_loadout_extraction"], true)
+	var store := fixture.store as ProfileStore
+	var prior_overlap := _profile_item_with_base(PRIOR_OVERLAP, 60, &"forge_vanguard_helmet")
+	var prior_nonoverlap := _profile_item_with_base(PRIOR_NONOVERLAP, 61, &"forge_vanguard_shield")
+	var candidate := store.load_profile(PROFILE_ID, fixture.root).profile
+	var existing := fixture.items[EXISTING_STASH] as ItemInstance
+	candidate.item_records = ItemRegistry.new([existing, prior_overlap, prior_nonoverlap]).to_dictionary()
+	candidate.leader_loadout = ItemSlotContainer.create(
+		&"leader-loadout", ItemSlotContainer.PROFILE_LEADER_EQUIPMENT, PROFILE_ID,
+		EquipmentSlotIndex.capacity(), {0: PRIOR_OVERLAP, 10: PRIOR_NONOVERLAP},
+	).to_dictionary()
+	candidate.leader_loadout_class_id = "fighter"
+	TestAssertions.equal(store.save_profile(candidate, fixture.root), "", "empty final loadout fixture saves", failures)
+	_remove_live_leader_equipment(fixture.context)
+	var result := RunResolutionService.new(ProfileMutationService.new(store)).resolve(PROFILE_ID, fixture.context, _request("resolution-automatic-empty-prior", []), fixture.root)
+	TestAssertions.truthy(result.ok(), "automatic resolution installs an empty final live leader loadout", failures)
+	var saved := store.load_profile(PROFILE_ID, fixture.root).profile
+	TestAssertions.equal(saved.leader_loadout["slots"], {}, "empty final live leader loadout clears every prior equipment slot", failures)
+	TestAssertions.equal(saved.stash_tabs[0]["slots"], {"0": EXISTING_STASH, "1": PRIOR_OVERLAP, "2": PRIOR_NONOVERLAP}, "empty final loadout preserves all displaced items in canonical slot order", failures)
+	_cleanup(fixture)
+
+func _test_automatic_replacement_requires_stash_for_displaced_and_selected_items(failures: Array[String]) -> void:
+	var fixture := _fixture("automatic_prior_no_space", 1, ["leader_loadout_extraction"], false)
+	var store := fixture.store as ProfileStore
+	var prior_overlap := _profile_item_with_base(PRIOR_OVERLAP, 60, &"forge_vanguard_helmet")
+	var prior_nonoverlap := _profile_item_with_base(PRIOR_NONOVERLAP, 61, &"forge_vanguard_shield")
+	var candidate := store.load_profile(PROFILE_ID, fixture.root).profile
+	candidate.item_records = ItemRegistry.new([prior_overlap, prior_nonoverlap]).to_dictionary()
+	candidate.leader_loadout = ItemSlotContainer.create(
+		&"leader-loadout", ItemSlotContainer.PROFILE_LEADER_EQUIPMENT, PROFILE_ID,
+		EquipmentSlotIndex.capacity(), {0: PRIOR_OVERLAP, 10: PRIOR_NONOVERLAP},
+	).to_dictionary()
+	candidate.leader_loadout_class_id = "fighter"
+	TestAssertions.equal(store.save_profile(candidate, fixture.root), "", "automatic no-space fixture saves", failures)
+	_assert_atomic_failure(fixture, _request("resolution-automatic-prior-no-space", [
+		ExtractionSelection.create(FOLLOWER_ITEM, &"run-equipment-002", 7),
+	]), null, "insufficient empty slots required=3", "displaced plus ordinary stash capacity", failures)
+	_cleanup(fixture)
+
+func _test_automatic_leader_revalidates_live_equipment(failures: Array[String]) -> void:
+	var fixture := _fixture("automatic_invalid_live", 0, ["leader_loadout_extraction"], true)
+	var context := fixture.context as PlayerRunContext
+	var current := context.item_state()
+	var invalid_hand := current.registry().item(LEADER_HAND)
+	invalid_hand.base_definition_id = &"rime_scholar_staff"
+	var next_items: Array[ItemInstance] = []
+	for instance_id: String in current.registry().ids():
+		next_items.append(invalid_hand if instance_id == LEADER_HAND else current.registry().item(instance_id))
+	context._item_state = ItemOwnershipState.create(current.owner_id, ItemRegistry.new(next_items), current.containers())
+	_assert_atomic_failure(fixture, _request("resolution-automatic-invalid-live", []), null, "ineligible", "forged ineligible live leader loadout", failures)
 	_cleanup(fixture)
 
 func _test_failure_atomicity_matrix(failures: Array[String]) -> void:
@@ -282,7 +372,7 @@ func _fixture(label: String, capacity: int, unlocks: Array[String], with_stash: 
 	party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
 	assert(party.recruit(catalog.class_by_id(&"ranger")))
 	var items := {
-		LEADER_HEAD: _item(LEADER_HEAD, 0),
+		LEADER_HEAD: _item_with_base(LEADER_HEAD, 0, &"forge_vanguard_helmet"),
 		LEADER_HAND: _item(LEADER_HAND, 1),
 		FOLLOWER_ITEM: _item(FOLLOWER_ITEM, 2),
 		INVENTORY_ZERO: _item(INVENTORY_ZERO, 3),
@@ -315,9 +405,12 @@ func _request(transaction_id: String, selections: Array[ExtractionSelection]) ->
 	return RunResolutionRequest.create(transaction_id, PROFILE_ID, RUN_ID, RUN_SEED, RUN_PLAYER_ID, LEADER_ID, selections)
 
 func _item(instance_id: String, sequence: int) -> ItemInstance:
+	return _item_with_base(instance_id, sequence, &"forge_vanguard_sword")
+
+func _item_with_base(instance_id: String, sequence: int, base_definition_id: StringName) -> ItemInstance:
 	var item := ItemInstance.new()
 	item.instance_id = instance_id
-	item.base_definition_id = &"forge_vanguard_sword"
+	item.base_definition_id = base_definition_id
 	item.item_level = 28
 	item.rarity_id = &"common"
 	item.affixes = []
@@ -328,6 +421,26 @@ func _profile_item(instance_id: String, sequence: int) -> ItemInstance:
 	var item := _item(instance_id, sequence)
 	item.origin["issuer_namespace"] = "profile:%s" % PROFILE_ID
 	return item
+
+func _profile_item_with_base(instance_id: String, sequence: int, base_definition_id: StringName) -> ItemInstance:
+	var item := _item_with_base(instance_id, sequence, base_definition_id)
+	item.origin["issuer_namespace"] = "profile:%s" % PROFILE_ID
+	return item
+
+func _remove_live_leader_equipment(context: PlayerRunContext) -> void:
+	var current := context.item_state()
+	var leader := current.container(&"run-equipment-001")
+	var removed: Dictionary = {}
+	for slot: int in leader.occupied_slots():
+		removed[leader.item_id_at(slot)] = true
+	var items: Array[ItemInstance] = []
+	for instance_id: String in current.registry().ids():
+		if not removed.has(instance_id):
+			items.append(current.registry().item(instance_id))
+	var containers: Array[ItemSlotContainer] = []
+	for container: ItemSlotContainer in current.containers():
+		containers.append(ItemSlotContainer.create(container.container_id, container.container_kind, container.owner_id, container.capacity) if container.container_id == &"run-equipment-001" else container)
+	context._item_state = ItemOwnershipState.create(current.owner_id, ItemRegistry.new(items), containers)
 
 func _assert_exact_item(profile: ProfileState, expected: ItemInstance, label: String, failures: Array[String]) -> void:
 	var decoded := ItemRegistry._decode(profile.item_records, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)
