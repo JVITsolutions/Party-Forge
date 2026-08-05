@@ -7,6 +7,34 @@ func _init(store: ProfileStore = null) -> void:
 	_store = store if store != null else ProfileStore.new()
 
 func apply(profile_id: String, transaction_id: String, mutate: Callable, root: String = ProfileStore.DEFAULT_ROOT, now_unix: int = -1, operation: String = "", request: Dictionary = {}) -> ProfileMutationResult:
+	return _apply_internal(profile_id, transaction_id, mutate, root, now_unix, operation, request, "")
+
+func apply_with_resumable_run_revocation(
+	profile_id: String,
+	transaction_id: String,
+	revoked_run_id: StringName,
+	mutate: Callable,
+	root: String = ProfileStore.DEFAULT_ROOT,
+	now_unix: int = -1,
+	operation: String = "",
+	request: Dictionary = {},
+) -> ProfileMutationResult:
+	if String(revoked_run_id).strip_edges().is_empty():
+		var result := ProfileMutationResult.new()
+		result.error = "PROFILE_MUTATION_ERROR profile=%s transaction=%s reason=revoked run id is required" % [profile_id, transaction_id]
+		return result
+	return _apply_internal(profile_id, transaction_id, mutate, root, now_unix, operation, request, String(revoked_run_id))
+
+func _apply_internal(
+	profile_id: String,
+	transaction_id: String,
+	mutate: Callable,
+	root: String,
+	now_unix: int,
+	operation: String,
+	request: Dictionary,
+	revoked_run_id: String,
+) -> ProfileMutationResult:
 	var result := ProfileMutationResult.new()
 	if transaction_id.strip_edges().is_empty():
 		result.error = "PROFILE_MUTATION_ERROR profile=%s reason=transaction id is required" % profile_id
@@ -45,6 +73,9 @@ func apply(profile_id: String, transaction_id: String, mutate: Callable, root: S
 		result.duplicate = true
 		return result
 	var working := loaded.profile.copy()
+	var revoked_instance_ids: Array[String] = []
+	if not revoked_run_id.is_empty():
+		revoked_instance_ids = _strict_run_instance_ids(working.resumable_run, revoked_run_id)
 	var protected_schema_version := working.schema_version
 	var protected_profile_id := working.profile_id
 	var protected_created_at_unix := working.created_at_unix
@@ -72,6 +103,8 @@ func apply(profile_id: String, transaction_id: String, mutate: Callable, root: S
 	if not protected_field.is_empty():
 		result.error = "PROFILE_MUTATION_ERROR profile=%s transaction=%s reason=protected field changed field=%s" % [profile_id, transaction_id, protected_field]
 		return result
+	if not revoked_run_id.is_empty():
+		_revoke_run_item_snapshots(working, revoked_run_id, revoked_instance_ids)
 	working.normalize()
 	var validation := ProfileCodec.validate_profile(working)
 	if not validation.is_empty():
@@ -88,7 +121,7 @@ func apply(profile_id: String, transaction_id: String, mutate: Callable, root: S
 		"committed_at_unix": committed_timestamp,
 		"result_profile": result_profile,
 	}
-	var save_error := _store.save_profile(working, root)
+	var save_error := _store.save_profile_irreversible(working, root) if not revoked_run_id.is_empty() else _store.save_profile(working, root)
 	if not save_error.is_empty():
 		result.error = save_error
 		return result
@@ -96,6 +129,51 @@ func apply(profile_id: String, transaction_id: String, mutate: Callable, root: S
 	committed_projection.applied_transactions = {}
 	result.profile = committed_projection
 	return result
+
+static func _strict_run_instance_ids(resumable_run: Dictionary, revoked_run_id: String) -> Array[String]:
+	var result: Array[String] = []
+	if not resumable_run.has("item_state") or String(resumable_run.get("run_id", "")) != revoked_run_id:
+		return result
+	var item_state := resumable_run.get("item_state", {}) as Dictionary
+	var registry := item_state.get("registry", {}) as Dictionary
+	var items := registry.get("items", []) as Array
+	for item: Variant in items:
+		if item is Dictionary:
+			var instance_id := String((item as Dictionary).get("instance_id", ""))
+			if not instance_id.is_empty() and instance_id not in result:
+				result.append(instance_id)
+	result.sort()
+	return result
+
+static func _revoke_run_item_snapshots(profile: ProfileState, revoked_run_id: String, revoked_instance_ids: Array[String]) -> void:
+	var sanitized := profile.to_dictionary()
+	sanitized["applied_transactions"] = {}
+	for transaction_id: Variant in profile.applied_transactions:
+		var record := (profile.applied_transactions[transaction_id] as Dictionary).duplicate(true)
+		var snapshot := record["result_profile"] as Dictionary
+		var resumable := snapshot["resumable_run"] as Dictionary
+		var owns_revoked_run := resumable.has("item_state") and String(resumable.get("run_id", "")) == revoked_run_id
+		if owns_revoked_run or _contains_any_string(snapshot, revoked_instance_ids):
+			var replacement := sanitized.duplicate(true)
+			replacement["updated_at_unix"] = record["committed_at_unix"]
+			record["result_profile"] = replacement
+			profile.applied_transactions[transaction_id] = record
+
+static func _contains_any_string(value: Variant, needles: Array[String]) -> bool:
+	if needles.is_empty():
+		return false
+	if value is String or value is StringName:
+		return String(value) in needles
+	if value is Array:
+		for child: Variant in value as Array:
+			if _contains_any_string(child, needles):
+				return true
+		return false
+	if value is Dictionary:
+		for key: Variant in value as Dictionary:
+			if _contains_any_string(key, needles) or _contains_any_string((value as Dictionary)[key], needles):
+				return true
+	return false
 
 func grant_gold(profile_id: String, transaction_id: String, amount: int, root: String = ProfileStore.DEFAULT_ROOT) -> ProfileMutationResult:
 	return apply(profile_id, transaction_id, func(profile: ProfileState) -> String:

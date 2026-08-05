@@ -17,6 +17,12 @@ func save_profile(profile: ProfileState, root: String = DEFAULT_ROOT) -> String:
 		return validation
 	return _documents.save_document(profile_path(profile.profile_id, root), profile.to_dictionary(), _validate_current_document)
 
+func save_profile_irreversible(profile: ProfileState, root: String = DEFAULT_ROOT) -> String:
+	var validation := ProfileCodec.validate_profile(profile)
+	if not validation.is_empty():
+		return validation
+	return _documents.save_irreversible_document(profile_path(profile.profile_id, root), profile.to_dictionary(), _validate_current_document)
+
 func load_profile(profile_id: String, root: String = DEFAULT_ROOT) -> ProfileLoadResult:
 	var result := ProfileLoadResult.new()
 	var profile_id_error := ProfileCodec.validate_profile_id(profile_id)

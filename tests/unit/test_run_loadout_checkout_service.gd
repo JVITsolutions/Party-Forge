@@ -224,10 +224,22 @@ func _test_forfeit_is_atomic_replay_safe_and_never_uses_sandbox_remove(failures:
 	var root := _case_root("forfeit")
 	var store := ProfileStore.new()
 	var sword := _item("item-forfeit-sword", &"forge_vanguard_sword", 0)
-	_save_profile(store, _profile_with_loadout([sword], {9: sword.instance_id}, {}, "fighter"), root, "forfeit source fixture", failures)
+	_save_profile(store, _profile_with_loadout([], {}, {}, "fighter"), root, "forfeit source fixture", failures)
+	var unrelated := ProfileMutationService.new(store).grant_gold(PROFILE_ID, "forfeit-unrelated-gold", 1, root)
+	TestAssertions.truthy(unrelated.ok(), "forfeit fixture records history before the doomed item exists", failures)
+	var unrelated_record_before := (store.load_profile(PROFILE_ID, root).profile.applied_transactions["forfeit-unrelated-gold"] as Dictionary).duplicate(true)
+	var equipped := store.load_profile(PROFILE_ID, root).profile
+	equipped.item_records = ItemRegistry.new([sword]).to_dictionary()
+	equipped.leader_loadout = ItemSlotContainer.create(
+		&"leader-loadout", ItemSlotContainer.PROFILE_LEADER_EQUIPMENT, PROFILE_ID, EquipmentSlotIndex.capacity(), {9: sword.instance_id}
+	).to_dictionary()
+	TestAssertions.equal(store.save_profile(equipped, root), "", "forfeit fixture equips the future run item", failures)
+	var pre_checkout := ProfileMutationService.new(store).grant_gold(PROFILE_ID, "forfeit-pre-checkout-gold", 1, root)
+	TestAssertions.truthy(pre_checkout.ok(), "forfeit fixture records a pre-checkout transaction containing the future run item", failures)
 	var service := RunLoadoutCheckoutService.new(ProfileMutationService.new(store))
 	var checkout := service.checkout(PROFILE_ID, _request("forfeit-checkout", true), root)
 	TestAssertions.truthy(checkout.ok(), "forfeit fixture checks out", failures)
+	var checkout_record_before := (store.load_profile(PROFILE_ID, root).profile.applied_transactions["forfeit-checkout"] as Dictionary).duplicate(true)
 	var path := store.profile_path(PROFILE_ID, root)
 	var active_bytes := FileAccess.get_file_as_bytes(path)
 	var wrong := service.forfeit(PROFILE_ID, &"run-stale-001", root)
@@ -244,10 +256,48 @@ func _test_forfeit_is_atomic_replay_safe_and_never_uses_sandbox_remove(failures:
 	var saved := store.load_profile(PROFILE_ID, root).profile
 	TestAssertions.equal(saved.resumable_run, {}, "forfeit clears the entire matching resumable run", failures)
 	TestAssertions.equal(saved.item_records["items"], [], "forfeit never reconstructs checked-out items in profile storage", failures)
+	var checkout_record := saved.applied_transactions.get("forfeit-checkout", {}) as Dictionary
+	TestAssertions.truthy(not checkout_record.is_empty(), "forfeit preserves the checkout idempotency record", failures)
+	for immutable_field: String in ["operation", "fingerprint", "committed_at_unix"]:
+		TestAssertions.equal(checkout_record.get(immutable_field), checkout_record_before.get(immutable_field), "forfeit preserves checkout transaction %s" % immutable_field, failures)
+	var checkout_snapshot := checkout_record.get("result_profile", {}) as Dictionary
+	TestAssertions.equal(checkout_snapshot.get("resumable_run", {}), {}, "forfeit revokes the checked-out run from the historical checkout result", failures)
+	TestAssertions.equal(saved.applied_transactions.get("forfeit-unrelated-gold", {}), unrelated_record_before, "forfeit leaves unrelated historical results byte-for-byte equivalent", failures)
 	var forfeited_bytes := FileAccess.get_file_as_bytes(path)
+	var forfeited_text := FileAccess.get_file_as_string(path)
+	TestAssertions.truthy(not forfeited_text.contains(sword.instance_id), "forfeit removes checked-out instance ids from all durable profile history", failures)
+	TestAssertions.truthy(not forfeited_text.contains("\"item_state\""), "forfeit removes strict run item state from all durable profile history", failures)
+	var backup_path := "%s.bak" % path
+	TestAssertions.truthy(FileAccess.file_exists(backup_path), "forfeit retains a valid recovery generation", failures)
+	var backup_text := FileAccess.get_file_as_string(backup_path)
+	TestAssertions.truthy(not backup_text.contains(sword.instance_id) and not backup_text.contains("\"item_state\""), "forfeit recovery generation contains no doomed run items", failures)
+	var directory := DirAccess.open(root)
+	if directory != null:
+		for file_name: String in directory.get_files():
+			var artifact_text := FileAccess.get_file_as_string(root.path_join(file_name))
+			TestAssertions.truthy(not artifact_text.contains(sword.instance_id), "forfeit artifact %s contains no doomed item id" % file_name, failures)
+	var checkout_replay := service.checkout(PROFILE_ID, _request("forfeit-checkout", true), root)
+	TestAssertions.truthy(checkout_replay.ok() and checkout_replay.duplicate, "forfeited checkout still replays as a duplicate", failures)
+	TestAssertions.equal(service.bootstrap_from(checkout_replay.profile), null, "forfeited checkout replay cannot reconstruct a usable bootstrap", failures)
+	TestAssertions.truthy(not JSON.stringify(checkout_replay.profile.to_dictionary()).contains(sword.instance_id), "forfeited checkout replay exposes no lost item instance", failures)
+	TestAssertions.equal(FileAccess.get_file_as_bytes(path), forfeited_bytes, "forfeited checkout replay performs no write", failures)
+	var pre_checkout_replay := ProfileMutationService.new(store).grant_gold(PROFILE_ID, "forfeit-pre-checkout-gold", 1, root)
+	TestAssertions.truthy(pre_checkout_replay.ok() and pre_checkout_replay.duplicate, "affected pre-checkout transaction keeps duplicate replay semantics", failures)
+	TestAssertions.truthy(not JSON.stringify(pre_checkout_replay.profile.to_dictionary()).contains(sword.instance_id), "pre-checkout replay cannot recover a forfeited item", failures)
+	TestAssertions.equal(service.bootstrap_from(pre_checkout_replay.profile), null, "pre-checkout replay cannot recover the forfeited run bootstrap", failures)
+	TestAssertions.equal(FileAccess.get_file_as_bytes(path), forfeited_bytes, "affected pre-checkout replay performs no write", failures)
 	var replay := service.forfeit(PROFILE_ID, RUN_ID, root)
 	TestAssertions.truthy(replay.ok() and replay.duplicate, "matching forfeit replay is duplicate success", failures)
 	TestAssertions.equal(FileAccess.get_file_as_bytes(path), forfeited_bytes, "forfeit replay performs no write", failures)
+	var corrupt := FileAccess.open(path, FileAccess.WRITE)
+	if corrupt != null:
+		corrupt.store_string("corrupt forfeited primary")
+		corrupt.close()
+	var recovered := store.load_profile(PROFILE_ID, root)
+	TestAssertions.truthy(recovered.ok() and recovered.recovered_from_backup, "corrupt forfeited primary recovers the sanitized generation", failures)
+	if recovered.ok():
+		TestAssertions.equal(recovered.profile.resumable_run, {}, "recovered forfeited generation has no run bootstrap", failures)
+		TestAssertions.truthy(not JSON.stringify(recovered.profile.to_dictionary()).contains(sword.instance_id), "recovered forfeited generation has no doomed item", failures)
 
 	var collision_root := _case_root("forfeit_collision")
 	var collision_store := ProfileStore.new()

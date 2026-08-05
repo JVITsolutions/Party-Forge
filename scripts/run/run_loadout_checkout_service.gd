@@ -38,9 +38,10 @@ func forfeit(
 	if String(run_id).strip_edges().is_empty():
 		return _failure("PARTY_FORGE_RUN_LOADOUT_CHECKOUT_ERROR field=run_id reason=must not be empty")
 	var request_document := {"run_id": String(run_id)}
-	return _mutations.apply(
+	return _mutations.apply_with_resumable_run_revocation(
 		profile_id,
 		"forfeit:%s" % run_id,
+		run_id,
 		func(candidate: ProfileState) -> String:
 			return _forfeit_candidate(candidate, run_id),
 		root,

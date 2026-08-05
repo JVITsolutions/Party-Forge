@@ -91,6 +91,82 @@ func save_document(
 			push_warning("JSON_STORE_CLEANUP_DEBT path=%s artifact=%s code=%d committed=true" % [path, displaced_backup, cleanup_error])
 	return ""
 
+func save_irreversible_document(path: String, document: Dictionary, validator: Callable) -> String:
+	if not validator.is_valid():
+		return "JSON_STORE_SAVE_ERROR path=%s stage=validate reason=validator is missing" % path
+	var validation := str(validator.call(document))
+	if not validation.is_empty():
+		return "JSON_STORE_SAVE_ERROR path=%s stage=validate reason=%s" % [path, validation]
+	var mkdir_error := DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(path).get_base_dir())
+	if mkdir_error not in [OK, ERR_ALREADY_EXISTS]:
+		return "JSON_STORE_SAVE_ERROR path=%s stage=mkdir code=%d" % [path, mkdir_error]
+
+	var backup := "%s.bak" % path
+	var primary_temporary := "%s.irreversible-primary.tmp" % path
+	var backup_temporary := "%s.irreversible-backup.tmp" % path
+	var previous_primary := "%s.irreversible-primary.previous" % path
+	var previous_backup := "%s.irreversible-backup.previous" % path
+	for stale_path: String in [primary_temporary, backup_temporary, previous_primary, previous_backup, "%s.previous" % backup]:
+		if FileAccess.file_exists(stale_path):
+			return "JSON_STORE_SAVE_ERROR path=%s stage=stale-artifact artifact=%s" % [path, stale_path]
+	var document_text := JSON.stringify(document, "\t", false)
+	var candidate_canonical := ""
+	for temporary_path: String in [primary_temporary, backup_temporary]:
+		var write_error := _write_text(temporary_path, document_text)
+		if write_error != OK:
+			var cleanup_error := _cleanup_paths([primary_temporary, backup_temporary])
+			return "JSON_STORE_SAVE_ERROR path=%s stage=write code=%d cleanup_code=%d" % [path, write_error, cleanup_error]
+		var temporary_result := _load_one(temporary_path, validator)
+		if not temporary_result.ok():
+			var cleanup_error := _cleanup_paths([primary_temporary, backup_temporary])
+			return "JSON_STORE_SAVE_ERROR path=%s stage=verify-temporary cleanup_code=%d reason=%s" % [path, cleanup_error, temporary_result.error]
+		var temporary_canonical := _canonical_json(temporary_result.document)
+		if candidate_canonical.is_empty():
+			candidate_canonical = temporary_canonical
+		elif temporary_canonical != candidate_canonical:
+			var cleanup_error := _cleanup_paths([primary_temporary, backup_temporary])
+			return "JSON_STORE_SAVE_ERROR path=%s stage=verify-temporary cleanup_code=%d reason=staged generations differ" % [path, cleanup_error]
+
+	var had_primary := FileAccess.file_exists(path)
+	var had_backup := FileAccess.file_exists(backup)
+	if had_primary:
+		var move_primary_error := _rename(path, previous_primary)
+		if move_primary_error != OK:
+			var cleanup_error := _cleanup_paths([primary_temporary, backup_temporary])
+			return "JSON_STORE_SAVE_ERROR path=%s stage=stage-primary code=%d cleanup_code=%d" % [path, move_primary_error, cleanup_error]
+	if had_backup:
+		var move_backup_error := _rename(backup, previous_backup)
+		if move_backup_error != OK:
+			var restore_error := _rename(previous_primary, path) if had_primary else OK
+			var cleanup_error := _cleanup_paths([primary_temporary, backup_temporary])
+			return "JSON_STORE_SAVE_ERROR path=%s stage=stage-backup code=%d restore_code=%d cleanup_code=%d" % [path, move_backup_error, restore_error, cleanup_error]
+
+	var promote_primary_error: Error = _promote_file.call(primary_temporary, path) if _promote_file.is_valid() else _promote(primary_temporary, path)
+	if promote_primary_error != OK:
+		var restore_error := _restore_irreversible_generations(path, backup, previous_primary, previous_backup, had_primary, had_backup)
+		var cleanup_error := _cleanup_paths([primary_temporary, backup_temporary])
+		return "JSON_STORE_SAVE_ERROR path=%s stage=promote-primary code=%d restore_code=%d cleanup_code=%d" % [path, promote_primary_error, restore_error, cleanup_error]
+	var promote_backup_error: Error = _promote_file.call(backup_temporary, backup) if _promote_file.is_valid() else _promote(backup_temporary, backup)
+	if promote_backup_error != OK:
+		var restore_error := _restore_irreversible_generations(path, backup, previous_primary, previous_backup, had_primary, had_backup)
+		var cleanup_error := _cleanup_paths([primary_temporary, backup_temporary])
+		return "JSON_STORE_SAVE_ERROR path=%s stage=promote-backup code=%d restore_code=%d cleanup_code=%d" % [path, promote_backup_error, restore_error, cleanup_error]
+
+	for promoted_path: String in [path, backup]:
+		var promoted := _load_one(promoted_path, validator)
+		if not promoted.ok() or _canonical_json(promoted.document) != candidate_canonical:
+			var restore_error := _restore_irreversible_generations(path, backup, previous_primary, previous_backup, had_primary, had_backup)
+			return "JSON_STORE_SAVE_ERROR path=%s stage=verify-promoted restore_code=%d reason=%s" % [path, restore_error, promoted.error]
+
+	var displaced_paths: Array[String] = [previous_primary, previous_backup]
+	var cleanup_error := _cleanup_paths(displaced_paths)
+	if cleanup_error != OK:
+		var sanitize_error := _sanitize_remaining_artifacts(displaced_paths, document_text, validator, candidate_canonical)
+		if sanitize_error != OK:
+			return "JSON_STORE_SAVE_ERROR path=%s stage=cleanup-unsafe code=%d sanitize_code=%d committed=true" % [path, cleanup_error, sanitize_error]
+		push_warning("JSON_STORE_CLEANUP_DEBT path=%s code=%d committed=true sanitized_generations=true" % [path, cleanup_error])
+	return ""
+
 func replace_document(path: String, document: Dictionary, validator: Callable) -> String:
 	if not validator.is_valid():
 		return "JSON_STORE_REPLACE_ERROR path=%s stage=validate reason=validator is missing" % path
@@ -257,6 +333,57 @@ func _restore_replaced_generations(
 		if first_error == OK and backup_error != OK:
 			first_error = backup_error
 	return first_error
+
+func _restore_irreversible_generations(
+	path: String,
+	backup: String,
+	previous_primary: String,
+	previous_backup: String,
+	had_primary: bool,
+	had_backup: bool,
+) -> Error:
+	var first_error := _remove_if_exists(path)
+	var remove_backup_error := _remove_if_exists(backup)
+	if first_error == OK and remove_backup_error != OK:
+		first_error = remove_backup_error
+	if had_primary:
+		var primary_error := _rename(previous_primary, path)
+		if first_error == OK and primary_error != OK:
+			first_error = primary_error
+	if had_backup:
+		var backup_error := _rename(previous_backup, backup)
+		if first_error == OK and backup_error != OK:
+			first_error = backup_error
+	return first_error
+
+func _write_text(path: String, contents: String) -> Error:
+	var file := FileAccess.open(path, FileAccess.WRITE)
+	if file == null:
+		return FileAccess.get_open_error()
+	file.store_string(contents)
+	var error := file.get_error()
+	file.close()
+	return error
+
+func _cleanup_paths(paths: Array[String]) -> Error:
+	var first_error := OK
+	for path: String in paths:
+		var cleanup_error := _remove_if_exists(path)
+		if first_error == OK and cleanup_error != OK:
+			first_error = cleanup_error
+	return first_error
+
+func _sanitize_remaining_artifacts(paths: Array[String], contents: String, validator: Callable, expected_canonical: String) -> Error:
+	for path: String in paths:
+		if not FileAccess.file_exists(path):
+			continue
+		var write_error := _write_text(path, contents)
+		if write_error != OK:
+			return write_error
+		var sanitized := _load_one(path, validator)
+		if not sanitized.ok() or _canonical_json(sanitized.document) != expected_canonical:
+			return ERR_FILE_CORRUPT
+	return OK
 
 func _corrupt_artifact_path(path: String) -> String:
 	var base := "%s.corrupt-%d" % [path, int(Time.get_unix_time_from_system())]
