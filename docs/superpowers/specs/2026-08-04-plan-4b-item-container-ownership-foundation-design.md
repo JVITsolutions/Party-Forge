@@ -259,6 +259,10 @@ Plan 4B increments the profile schema version. The new profile representation ad
 - Versioned stash-tab container records.
 - Stable item issuance state required for unique IDs.
 
+The version-two `item_records` field is the exact schema-one `ItemRegistry` document, not an unversioned ID map. `stash_tabs` is an array of exact schema-one `profile_stash_tab` container documents. Current-document validation constructs one synthetic `ItemOwnershipState` document with `owner_id = profile_id`, the registry document, and the stash containers, then uses the authoritative Equipment and Item Foundation catalogs to perform strict Tasks 2/3 decode. An empty migrated registry is therefore `{"schema_version": 1, "items": []}`, not `{}`.
+
+`next_item_sequence` is a JSON-safe nonnegative integer. Version-two validation requires exact top-level fields; version-one loadability also requires its exact historical field set. Applied-transaction `result_profile` snapshots use the same schema as their containing source document during validation and are migrated recursively without changing their existing empty-journal rule.
+
 The existing `inventory_columns`, `extraction_capacity`, passive allocations, permanent unlocks, and applied-transaction history remain authoritative profile progression fields.
 
 The version-one migration:
@@ -269,6 +273,8 @@ The version-one migration:
 4. Requires version-one `stash_tabs` to be empty because no earlier production storage service created item-bearing tabs. A nonempty version-one value fails migration as unsupported legacy storage and leaves the source generation untouched.
 5. Produces a complete version-two candidate.
 6. Verifies an encode/decode round trip before atomic promotion.
+
+`ProfileMigrationResult` exposes `profile`, `error`, `migrated`, and `source_schema_version`, never partial profile state. Migration operates on a deep copy and cannot change the supplied dictionary. Normal profile saves accept current schema only. Migration promotion uses the loadable validator so the verified version-one primary/backup generation remains eligible to be displaced safely; the already current-validated version-two candidate is then reloaded with the current-only validator before success is returned.
 
 Migration does not invent unlocks or items.
 

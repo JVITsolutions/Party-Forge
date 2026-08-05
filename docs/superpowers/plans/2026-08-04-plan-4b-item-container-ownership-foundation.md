@@ -430,7 +430,7 @@ Construct a complete valid version-one dictionary using current fields, includin
 TestAssertions.equal(migrated.profile.schema_version, 2, "profile migrates to schema two", failures)
 TestAssertions.equal(migrated.profile.gold, 77, "gold survives migration", failures)
 TestAssertions.equal(migrated.profile.tree_allocations, original["tree_allocations"], "allocations survive migration", failures)
-TestAssertions.equal(migrated.profile.item_records, {}, "migration invents no items", failures)
+TestAssertions.equal(migrated.profile.item_records, {"schema_version": 1, "items": []}, "migration invents no items", failures)
 TestAssertions.equal(migrated.profile.stash_tabs, [], "migration invents no stash", failures)
 TestAssertions.equal(migrated.profile.next_item_sequence, 0, "issuance starts empty", failures)
 ```
@@ -449,12 +449,14 @@ Add to `ProfileState`:
 
 ```gdscript
 const SCHEMA_VERSION := 2
-var item_records: Dictionary = {}
+var item_records: Dictionary = {"schema_version": 1, "items": []}
 var stash_tabs: Array[Dictionary] = []
 var next_item_sequence := 0
 ```
 
-Keep `inventory_columns` and `extraction_capacity` unchanged. Include item fields in `to_dictionary()` and defensive copy behavior.
+Keep `inventory_columns` and `extraction_capacity` unchanged. `item_records` is the exact schema-one `ItemRegistry.to_dictionary()` document; it is never an unversioned ID map. `stash_tabs` contains only schema-one `profile_stash_tab` container documents. Include item fields in deterministic `to_dictionary()` order and defensive copy behavior.
+
+`ProfileMigrationResult` and `ProfileLoadResult` expose `profile`, `error`, `migrated`, and `source_schema_version`. Failed results expose no partial profile. Migration deep-copies the input, recursively migrates every applied-transaction `result_profile`, and leaves the source dictionary byte-equivalent.
 
 Split codec validation into:
 
@@ -462,9 +464,9 @@ Split codec validation into:
 - `validate_loadable_document(document)` — complete schema one or schema two.
 - `decode_document(document)` — migrate first, then construct only a schema-two `ProfileState`.
 
-Do not accept arbitrary extra keys. Validate `next_item_sequence` as `0..JSON_SAFE_INTEGER_MAX`. Validate persistent item records and every stash container through Tasks 2 and 3 with the authoritative catalogs.
+Do not accept arbitrary missing or extra keys. Define exact historical version-one and current version-two field arrays; nested transaction snapshots must match their containing source schema during validation. Validate `next_item_sequence` as `0..JSON_SAFE_INTEGER_MAX`. Validate persistent storage by constructing the schema-one ownership document `{schema_version, owner_id = profile_id, registry = item_records, containers = stash_tabs}` and decoding it through `ItemOwnershipState` with `GameCatalog.EQUIPMENT_CATALOG` and `GameCatalog.ITEM_FOUNDATION_CATALOG`.
 
-`ProfileStore.load_profile()` must load with `validate_loadable_document`. When decode reports migration, atomically save the schema-two profile and perform a second current-schema load/verification before returning it. Set `ProfileLoadResult.migrated = true` and `source_schema_version = 1`. If promotion or verification fails, return an error and preserve the old generation.
+`ProfileStore.save_profile()` remains current-schema-only. `load_profile()` loads with `validate_loadable_document`. When decode reports migration, first require the schema-two candidate to pass current validation, then atomically save it using the loadable validator so the verified version-one generation can be backed up, and perform a second current-schema load/verification before returning it. Set `ProfileLoadResult.migrated = true` and `source_schema_version = 1`; an ordinary schema-two load reports `migrated = false` and source `2`. If promotion or verification fails, return an error and preserve the old generation; successful promotion leaves the valid version-one generation as backup.
 
 - [ ] **Step 4: Run GREEN in focused profile batches**
 
