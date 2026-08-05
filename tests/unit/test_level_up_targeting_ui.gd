@@ -3,6 +3,7 @@ extends RefCounted
 func run() -> Array[String]:
 	var failures: Array[String] = []
 	_test_exact_offer_target_cancel_and_confirmation(failures)
+	_test_recipient_focus_contract(failures)
 	_test_dynamic_card_count_and_focus(failures)
 	_test_duplicate_class_recipients_keep_identity(failures)
 	_test_non_personal_confirmation_uses_zero(failures)
@@ -14,6 +15,48 @@ func run() -> Array[String]:
 	_test_pending_label_motion_policy(failures)
 	_test_run_snapshots_reduced_motion_for_reveals(failures)
 	return failures
+
+
+func _test_recipient_focus_contract(failures: Array[String]) -> void:
+	var catalog := GameCatalog.load_defaults()
+	var picker := (load("res://scenes/ui/upgrade_recipient_picker.tscn") as PackedScene).instantiate() as UpgradeRecipientPicker
+	picker.call(&"_ready")
+	var choice := UpgradeChoice.authored(catalog.upgrade_by_id(&"vitality"))
+	var recipient_rows: Array[Dictionary] = []
+	for member_id: int in range(1, 5):
+		var eligible := member_id != 2
+		recipient_rows.append({
+			"member_id": member_id,
+			"character_name": "Member %d" % member_id,
+			"class_name": "Fighter",
+			"role_name": "Frontline",
+			"class_rank": 1,
+			"health_current": 100.0,
+			"health_maximum": 100.0,
+			"current_rank": 0,
+			"next_rank": 1,
+			"preview_lines": [],
+			"eligible": eligible,
+			"disabled_reason": "At maximum rank." if not eligible else "",
+		})
+	picker.show_for(choice, recipient_rows)
+	var rows := picker.get_node("Content/RecipientsScroll/Rows") as VBoxContainer
+	var first := rows.get_node("Member_1") as Button
+	var disabled := rows.get_node("Member_2") as Button
+	var third := rows.get_node("Member_3") as Button
+	var last := rows.get_node("Member_4") as Button
+	var cancel := picker.get_node("Content/Cancel") as Button
+	TestAssertions.equal(disabled.focus_mode, Control.FOCUS_NONE, "disabled recipient rows cannot trap controller focus", failures)
+	TestAssertions.equal(_focus_neighbor(first, first.focus_neighbor_bottom), third, "first recipient skips disabled row when navigating down", failures)
+	TestAssertions.equal(_focus_neighbor(third, third.focus_neighbor_top), first, "recipient up navigation returns in party-row order", failures)
+	TestAssertions.equal(_focus_neighbor(third, third.focus_neighbor_bottom), last, "recipient down navigation continues in party-row order", failures)
+	TestAssertions.equal(_focus_neighbor(last, last.focus_neighbor_bottom), cancel, "last enabled recipient navigates to Back to Offers", failures)
+	TestAssertions.equal(_focus_neighbor(cancel, cancel.focus_neighbor_top), last, "Back to Offers navigates up to last enabled recipient", failures)
+	picker.free()
+
+
+func _focus_neighbor(origin: Control, path: NodePath) -> Control:
+	return origin.get_node_or_null(path) as Control if not path.is_empty() else null
 
 func _test_pending_level_indicator(failures: Array[String]) -> void:
 	var catalog := GameCatalog.load_defaults()

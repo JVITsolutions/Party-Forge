@@ -78,7 +78,9 @@ func _test_responsive_hud_layout(failures: Array[String]) -> void:
 	)
 	_assert_center_anchors(result_panel, "run result panel", failures)
 	TestAssertions.truthy(level_up.get_node_or_null("ContentPanel/OfferView") is ScrollContainer, "offer content is scrollable", failures)
-	TestAssertions.truthy(level_up.get_node_or_null("ContentPanel/RecipientView/Content/RecipientsScroll") is ScrollContainer, "recipient content is scrollable", failures)
+	var recipients_scroll := level_up.get_node_or_null("ContentPanel/RecipientView/Content/RecipientsScroll") as ScrollContainer
+	TestAssertions.truthy(recipients_scroll != null, "recipient content is scrollable", failures)
+	TestAssertions.truthy(recipients_scroll != null and recipients_scroll.follow_focus, "recipient scroll follows keyboard and controller focus", failures)
 	TestAssertions.truthy(level_up.get_node_or_null("ContentPanel/ConfirmationView") is ScrollContainer, "confirmation content is scrollable", failures)
 	TestAssertions.equal(
 		Vector4(boss_banner.anchor_left, boss_banner.anchor_top, boss_banner.anchor_right, boss_banner.anchor_bottom),
