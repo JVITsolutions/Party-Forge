@@ -49,6 +49,7 @@ func _test_projection_is_canonical_deterministic_and_defensive(failures: Array[S
 	TestAssertions.equal(_ids(projection.compatible_items), [ring.instance_id], "projection retains compatible equipment", failures)
 	TestAssertions.equal(_ids(projection.incompatible_items), [crown.instance_id, plate.instance_id], "projection uses canonical equipment-slot order", failures)
 	var incompatibles := projection.incompatible_items
+	TestAssertions.equal(incompatibles[0].get("display_name", ""), "Dawn Bulwark Crown", "projection exposes the exact equipment display name for warning UI", failures)
 	TestAssertions.equal(incompatibles[0]["source_container_id"], "leader-loadout", "incompatible source names the leader container", failures)
 	TestAssertions.equal(incompatibles[0]["source_slot"], 0, "incompatible source preserves exact equipment position", failures)
 	TestAssertions.equal(incompatibles[0]["slot_id"], "helmet", "incompatible source exposes canonical slot id", failures)

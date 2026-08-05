@@ -7,6 +7,7 @@ const HEALTH_BAR_SCENE := preload("res://scenes/ui/health_bar_3d.tscn")
 const HUDScript := preload("res://scripts/ui/hud.gd")
 const LevelUpPanelScript := preload("res://scripts/ui/level_up_panel.gd")
 const RunResultPanelScript := preload("res://scripts/ui/run_result_panel.gd")
+const LoadoutWarningDialogScript := preload("res://scripts/ui/loadout_warning/loadout_warning_dialog.gd")
 const REWARD_DISTRIBUTION_TUNING: RewardDistributionTuning = preload("res://data/progression/reward_distribution.tres")
 const RUN_SEED := 1337
 const CURRENT_STARTING_PARTY_SIZE := 1
@@ -63,6 +64,16 @@ var _profile_loadout_assignments := ProfileLoadoutAssignmentService.new()
 var _profile_item_storage := ProfileItemStorageService.new()
 var _storage_transaction_sequence := 0
 var _storage_return_focus: Control
+var _loadout_compatibility := LoadoutCompatibilityService.new()
+var _loadout_transitions := LoadoutTransitionService.new()
+var _loadout_checkout := RunLoadoutCheckoutService.new()
+var _pending_loadout_projection: LoadoutCompatibilityProjection
+var _pending_loadout_profile_id := ""
+var _pending_loadout_class_id: StringName
+var _loadout_transaction_sequence := 0
+var _armoury_from_loadout_warning := false
+var _armoury_warning_class_id: StringName
+var _armoury_warning_origin: Control
 
 func _ready() -> void:
 	if initialized:
@@ -93,7 +104,7 @@ func select_leader_class(class_id: StringName) -> bool:
 		push_error("PARTY_FORGE_RUN_PROFILE_REQUIRED")
 		_open_profiles_from_main_menu()
 		return false
-	if run_started or catalog == null or not catalog_valid:
+	if run_started or catalog == null or not catalog_valid or _pending_loadout_projection != null:
 		return false
 	catalog_valid = _validate_catalog(catalog, false)
 	if not catalog_valid:
@@ -101,6 +112,43 @@ func select_leader_class(class_id: StringName) -> bool:
 	var definition := catalog.class_by_id(class_id)
 	if definition == null:
 		push_error(format_resource_error("res://data/classes", "unknown leader class %s" % class_id))
+		return false
+	var profile := profile_manager.active_profile()
+	var refresh_error := profile_manager.refresh_profile(profile.profile_id)
+	if not refresh_error.is_empty():
+		_show_run_setup_error(refresh_error)
+		return false
+	profile = profile_manager.active_profile()
+	if profile == null:
+		_show_run_setup_error("PARTY_FORGE_RUN_PROFILE_REQUIRED")
+		return false
+	definition = catalog.class_by_id(class_id)
+	if definition == null:
+		return false
+	var projection := _project_loadout_compatibility(profile, class_id)
+	if projection == null or not projection.valid:
+		_show_run_setup_error(projection.error if projection != null else "PARTY_FORGE_LOADOUT_COMPATIBILITY_ERROR field=projection reason=unavailable")
+		return false
+	if not projection.incompatible_items.is_empty():
+		_pending_loadout_projection = projection
+		_pending_loadout_profile_id = profile.profile_id
+		_pending_loadout_class_id = class_id
+		var selector := get_node("HUD/ClassSelection") as ClassSelectionPanel
+		var origin := selector.begin_compatibility_gate(class_id)
+		if not get_node("LoadoutWarningDialog").call("open", projection, origin):
+			_clear_pending_loadout_warning(true)
+		return false
+	return _checkout_and_start_leader_class(profile, definition)
+
+
+func _project_loadout_compatibility(profile: ProfileState, class_id: StringName) -> LoadoutCompatibilityProjection:
+	var definition := catalog.class_by_id(class_id) if catalog != null else null
+	return _loadout_compatibility.project(profile, definition, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)
+
+
+func _checkout_and_start_leader_class(profile: ProfileState, definition: ClassDefinition) -> bool:
+	if profile == null or definition == null or profile.profile_id != active_profile().profile_id:
+		_show_run_setup_error("PARTY_FORGE_RUN_LOADOUT_CHECKOUT_ERROR field=profile_id reason=active profile changed")
 		return false
 	active_run_rules = RunRulesSnapshot.from_settings(saved_settings)
 	_level_up_offer_state = LevelUpOfferState.new()
@@ -114,15 +162,51 @@ func select_leader_class(class_id: StringName) -> bool:
 	party_manager.configure_identity(game_run.run_seed, catalog.generic_name_pool)
 	party_manager.initialize(definition, catalog.traits)
 	party_manager.configure_combat(game_run.combat_rng, catalog.damage_types)
+	if party_manager.members.is_empty():
+		_show_run_setup_error("PARTY_FORGE_RUN_LOADOUT_CHECKOUT_ERROR field=leader reason=party initialization failed")
+		return false
+	_loadout_transaction_sequence += 1
+	var leader_member_id := party_manager.members[0].member_id
+	var unique := "%d-%d" % [Time.get_ticks_usec(), _loadout_transaction_sequence]
+	var run_id := StringName("run-%s-%s" % [profile.profile_id, unique])
+	var request := RunLoadoutCheckoutRequest.create(
+		"run-checkout-%s" % unique,
+		profile.profile_id,
+		run_id,
+		game_run.run_seed,
+		&"player_1",
+		leader_member_id,
+		definition.id,
+		"bring_in_gear" in profile.permanent_feature_unlocks,
+	)
+	var result := _loadout_checkout.checkout(profile.profile_id, request, profile_root)
+	if not result.ok():
+		_show_run_setup_error(result.error)
+		return false
+	var refresh_error := profile_manager.refresh_profile(profile.profile_id)
+	if not refresh_error.is_empty():
+		_show_run_setup_error(refresh_error)
+		return false
+	var committed_profile := profile_manager.active_profile()
+	var bootstrap := _loadout_checkout.bootstrap_from(committed_profile)
+	if bootstrap == null or bootstrap.run_id != run_id:
+		_show_run_setup_error("PARTY_FORGE_RUN_LOADOUT_CHECKOUT_ERROR field=bootstrap reason=committed bootstrap unavailable")
+		return false
+	committed_profile.resumable_run = ResumableRunItemCodec.encode(bootstrap)
+	return _start_leader_class_from_checkout(definition, committed_profile, bootstrap)
+
+
+func _start_leader_class_from_checkout(definition: ClassDefinition, committed_profile: ProfileState, bootstrap: RunItemBootstrap) -> bool:
 	run_context_registry = RunContextRegistry.new()
 	active_run_context = PlayerRunContext.new()
 	var context_errors := active_run_context.configure(
 		&"player_1",
 		0,
-		active_profile(),
+		committed_profile,
 		game_run.run_seed,
 		party_manager,
 		active_run_rules.experience_multiplier_percent(),
+		bootstrap,
 	)
 	if not context_errors.is_empty():
 		return _abort_run_start(context_errors)
@@ -131,7 +215,7 @@ func select_leader_class(class_id: StringName) -> bool:
 		return _abort_run_start(PackedStringArray([registration.message]))
 	run_context_registry.lock_arena_roster()
 	party_manager = active_run_context.party
-	var leader_member_id := party_manager.members[0].member_id
+	var leader_member_id := bootstrap.leader_member_id
 	experience_system.configure_context(active_run_context, leader_member_id)
 	leader = LEADER_SCENE.instantiate() as PartyActor
 	get_node("Actors").add_child(leader)
@@ -178,6 +262,7 @@ func select_leader_class(class_id: StringName) -> bool:
 	)
 	game_run.start_run()
 	(get_node("MainMenuScreen") as MainMenuScreen).close()
+	_clear_pending_loadout_warning(false)
 	(get_node("HUD/ClassSelection") as ClassSelectionPanel).confirm_run_started()
 	return true
 
@@ -355,6 +440,12 @@ func _wire_static_ui() -> void:
 	var warehouse := get_node("WarehouseScreen") as WarehouseScreen
 	if not warehouse.close_requested.is_connected(_on_warehouse_closed): warehouse.close_requested.connect(_on_warehouse_closed)
 	if not warehouse.move_requested.is_connected(_on_warehouse_move_requested): warehouse.move_requested.connect(_on_warehouse_move_requested)
+	var loadout_warning := get_node("LoadoutWarningDialog")
+	if not loadout_warning.go_to_armoury.is_connected(_on_loadout_go_to_armoury): loadout_warning.go_to_armoury.connect(_on_loadout_go_to_armoury)
+	if not loadout_warning.choose_another_class.is_connected(_on_loadout_choose_another_class): loadout_warning.choose_another_class.connect(_on_loadout_choose_another_class)
+	if not loadout_warning.continue_anyway.is_connected(_on_loadout_continue_anyway): loadout_warning.continue_anyway.connect(_on_loadout_continue_anyway)
+	if not loadout_warning.destroy_confirmed.is_connected(_on_loadout_destroy_confirmed): loadout_warning.destroy_confirmed.connect(_on_loadout_destroy_confirmed)
+	if not loadout_warning.cancelled.is_connected(_on_loadout_cancelled): loadout_warning.cancelled.connect(_on_loadout_cancelled)
 	if not profile_manager.profiles_changed.is_connected(_on_profiles_changed):
 		profile_manager.profiles_changed.connect(_on_profiles_changed)
 	if not profile_manager.active_profile_changed.is_connected(_on_active_profile_changed):
@@ -467,7 +558,154 @@ func _fail_developer_quick_start(status_text: String) -> void:
 
 func _open_run_setup() -> void:
 	(get_node("MainMenuScreen") as MainMenuScreen).close()
-	(get_node("HUD/ClassSelection") as ClassSelectionPanel).open()
+	var selector := get_node("HUD/ClassSelection") as ClassSelectionPanel
+	selector.clear_status()
+	selector.open()
+
+
+func _on_loadout_choose_another_class() -> void:
+	_clear_pending_loadout_warning(true)
+
+
+func _on_loadout_cancelled() -> void:
+	_clear_pending_loadout_warning(true)
+
+
+func _on_loadout_go_to_armoury() -> void:
+	var warning := get_node("LoadoutWarningDialog")
+	if _pending_loadout_projection == null or not warning.is_open():
+		return
+	var profile := profile_manager.active_profile() if profile_manager != null else null
+	if profile == null or profile.profile_id != _pending_loadout_profile_id or not _storage_route_allowed(MainMenuViewModel.ROUTE_ARMOURY, profile):
+		_show_run_setup_error("PARTY_FORGE_LOADOUT_WARNING_ERROR field=armoury reason=route unavailable")
+		return
+	var projection := ProfileStorageProjection.from_profile(profile, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)
+	if not projection.valid:
+		_show_run_setup_error(projection.error)
+		return
+	var selector := get_node("HUD/ClassSelection") as ClassSelectionPanel
+	var origin := selector.selection_focus(_pending_loadout_class_id)
+	var display_class := _pending_loadout_class_id
+	_clear_pending_loadout_warning(false)
+	selector.close()
+	_armoury_from_loadout_warning = true
+	_armoury_warning_class_id = display_class
+	_armoury_warning_origin = origin
+	_shared_storage_projection = projection
+	_storage_return_focus = origin
+	(get_node("MainMenuScreen") as MainMenuScreen).close()
+	var armoury := get_node("ArmouryScreen") as ArmouryScreen
+	armoury.open(projection, origin)
+	armoury.set_pending_run_class(display_class)
+
+
+func _on_loadout_continue_anyway() -> void:
+	var warning := get_node("LoadoutWarningDialog")
+	if not warning.call("is_open") or warning.call("state") != LoadoutWarningDialogScript.State.INCOMPATIBLE:
+		return
+	if _pending_loadout_projection == null or not _pending_loadout_projection.overflow_item_ids.is_empty():
+		return
+	_submit_pending_loadout_transition(_pending_loadout_projection.confirmation_token)
+
+
+func _on_loadout_destroy_confirmed(confirmation_token: String) -> void:
+	var warning := get_node("LoadoutWarningDialog")
+	if not warning.call("is_open") or warning.call("state") != LoadoutWarningDialogScript.State.DESTRUCTIVE_CONFIRMATION:
+		return
+	if _pending_loadout_projection == null or _pending_loadout_projection.overflow_item_ids.is_empty():
+		return
+	_submit_pending_loadout_transition(confirmation_token)
+
+
+func _submit_pending_loadout_transition(confirmation_token: String = "") -> bool:
+	var warning := get_node("LoadoutWarningDialog")
+	if (
+		_pending_loadout_projection == null
+		or _pending_loadout_profile_id.is_empty()
+		or _pending_loadout_class_id.is_empty()
+		or not warning.call("is_open")
+		or confirmation_token != _pending_loadout_projection.confirmation_token
+	):
+		return false
+	var active := profile_manager.active_profile() if profile_manager != null else null
+	if active == null or active.profile_id != _pending_loadout_profile_id:
+		_show_run_setup_error("PARTY_FORGE_LOADOUT_TRANSITION_ERROR field=profile_id reason=active profile changed")
+		return false
+	var refresh_error := profile_manager.refresh_profile(active.profile_id)
+	if not refresh_error.is_empty():
+		_show_run_setup_error(refresh_error)
+		return false
+	active = profile_manager.active_profile()
+	if active == null or active.profile_id != _pending_loadout_profile_id:
+		return false
+	var fresh := _project_loadout_compatibility(active, _pending_loadout_class_id)
+	if not _projection_matches_pending(fresh):
+		_show_run_setup_error("PARTY_FORGE_LOADOUT_TRANSITION_ERROR field=projection reason=selection or profile state changed")
+		return false
+	_loadout_transaction_sequence += 1
+	var request := LoadoutTransitionRequest.create(
+		"loadout-transition-%d-%d" % [Time.get_ticks_usec(), _loadout_transaction_sequence],
+		active.profile_id,
+		_pending_loadout_class_id,
+		fresh.incompatible_sources(),
+		fresh.planned_stash_destinations,
+		fresh.overflow_item_ids,
+		true,
+		false,
+		fresh.confirmation_token,
+		fresh.state_fingerprint,
+	)
+	var result := _loadout_transitions.apply(active.profile_id, request, profile_root)
+	if not result.ok():
+		_show_run_setup_error(result.error)
+		return false
+	refresh_error = profile_manager.refresh_profile(active.profile_id)
+	if not refresh_error.is_empty():
+		_show_run_setup_error(refresh_error)
+		return false
+	var transitioned := profile_manager.active_profile()
+	var definition := catalog.class_by_id(_pending_loadout_class_id) if catalog != null else null
+	var reprojected := _project_loadout_compatibility(transitioned, _pending_loadout_class_id)
+	if definition == null or reprojected == null or not reprojected.valid or not reprojected.incompatible_items.is_empty():
+		_show_run_setup_error("PARTY_FORGE_LOADOUT_TRANSITION_ERROR field=reprojection reason=transition did not produce a compatible loadout")
+		return false
+	_clear_pending_loadout_warning(false)
+	return _checkout_and_start_leader_class(transitioned, definition)
+
+
+func _projection_matches_pending(fresh: LoadoutCompatibilityProjection) -> bool:
+	return (
+		fresh != null
+		and fresh.valid
+		and fresh.selected_class_id == _pending_loadout_class_id
+		and fresh.confirmation_token == _pending_loadout_projection.confirmation_token
+		and fresh.state_fingerprint == _pending_loadout_projection.state_fingerprint
+		and fresh.incompatible_sources() == _pending_loadout_projection.incompatible_sources()
+		and fresh.planned_stash_destinations == _pending_loadout_projection.planned_stash_destinations
+		and fresh.overflow_item_ids == _pending_loadout_projection.overflow_item_ids
+	)
+
+
+func _clear_pending_loadout_warning(restore_focus: bool) -> void:
+	var warning := get_node_or_null("LoadoutWarningDialog")
+	if warning != null and warning.call("is_open"):
+		warning.call("close")
+	_pending_loadout_projection = null
+	_pending_loadout_profile_id = ""
+	_pending_loadout_class_id = &""
+	var selector := get_node_or_null("HUD/ClassSelection") as ClassSelectionPanel
+	if selector != null:
+		selector.end_compatibility_gate(restore_focus)
+
+
+func _show_run_setup_error(message: String) -> void:
+	push_error(message)
+	var warning := get_node_or_null("LoadoutWarningDialog")
+	if warning != null and warning.call("is_open"):
+		warning.call("show_error", message)
+	var selector := get_node_or_null("HUD/ClassSelection") as ClassSelectionPanel
+	if selector != null:
+		selector.show_status("Unable to start run. %s" % message)
 
 
 func _on_run_setup_back_requested() -> void:
@@ -549,6 +787,19 @@ func _storage_route_allowed(route_id: StringName, profile: ProfileState) -> bool
 func _on_armoury_closed() -> void:
 	var screen := get_node("ArmouryScreen") as ArmouryScreen
 	screen.close()
+	if _armoury_from_loadout_warning:
+		var class_id := _armoury_warning_class_id
+		var origin := _armoury_warning_origin
+		_armoury_from_loadout_warning = false
+		_armoury_warning_class_id = &""
+		_armoury_warning_origin = null
+		_storage_return_focus = null
+		_shared_storage_projection = null
+		var selector := get_node("HUD/ClassSelection") as ClassSelectionPanel
+		selector.open()
+		var class_focus := selector.selection_focus(class_id)
+		_focus_control_if_available(class_focus if class_focus != null else origin)
+		return
 	var menu := get_node("MainMenuScreen") as MainMenuScreen
 	menu.open(_storage_return_focus if _storage_return_focus != null else menu.get_node("Armoury") as Control)
 	_storage_return_focus = null
@@ -651,6 +902,10 @@ func _on_active_profile_changed(_profile: ProfileState) -> void:
 	if warehouse.is_open(): warehouse.close()
 	_shared_storage_projection = null
 	_storage_return_focus = null
+	_armoury_from_loadout_warning = false
+	_armoury_warning_class_id = &""
+	_armoury_warning_origin = null
+	_clear_pending_loadout_warning(false)
 	_refresh_main_menu_projection()
 	if _city_tree_is_open():
 		return

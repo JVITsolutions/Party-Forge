@@ -4,6 +4,7 @@ func run() -> Array[String]:
 	var failures: Array[String] = []
 	var storage := Task9StorageFixture.storage(false)
 	var screen := (load("res://scenes/ui/armoury/armoury_screen.tscn") as PackedScene).instantiate() as ArmouryScreen
+	TestAssertions.truthy(screen.has_method(&"set_pending_run_class"), "Armoury exposes display-only pending run class", failures)
 	screen.call("_ready")
 	screen.configure_classes(GameCatalog.load_defaults().classes)
 	screen.open(storage)

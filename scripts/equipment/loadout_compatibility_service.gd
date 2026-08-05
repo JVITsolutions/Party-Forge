@@ -73,6 +73,7 @@ func project(
 				reasons.append("PARTY_FORGE_EQUIPMENT_ERROR item=%s reason=quiver family does not match %s" % [definition.id, main_hand.id])
 		var entry := {
 			"base_definition_id": String(item.base_definition_id),
+			"display_name": definition.display_name,
 			"instance_id": instance_id,
 			"slot_id": String(slot_id),
 			"source_container_id": String(leader.container_id),

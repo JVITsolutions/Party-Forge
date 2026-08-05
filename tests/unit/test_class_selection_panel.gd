@@ -34,6 +34,9 @@ func _test_scene_and_class_contract(panel: Control, catalog: GameCatalog, failur
 	for method: StringName in [&"open", &"close", &"is_open", &"confirm_run_started"]:
 		TestAssertions.truthy(panel.has_method(method), "selector exposes %s lifecycle contract" % method, failures)
 	TestAssertions.truthy(panel.has_signal(&"back_requested"), "selector exposes Back intent", failures)
+	TestAssertions.truthy(panel.has_method(&"begin_compatibility_gate"), "selector exposes explicit compatibility gate entry", failures)
+	TestAssertions.truthy(panel.has_method(&"end_compatibility_gate"), "selector exposes explicit compatibility gate exit", failures)
+	TestAssertions.truthy(panel.has_method(&"selection_focus"), "selector exposes exact selected-class focus origin", failures)
 	var back := panel.get_node_or_null("Content/Actions/Back") as Button
 	TestAssertions.truthy(back != null, "selector keeps stable Back action beside Settings", failures)
 	var grid := panel.get_node("Content/Scroll/Grid") as GridContainer

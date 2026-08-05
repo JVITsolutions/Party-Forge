@@ -12,7 +12,7 @@ func run() -> Array[String]:
 	_test_hidden_direct_route_preserves_active_surfaces(failures)
 	_test_invalid_catalog_and_missing_fighter_fail_closed(failures)
 	_test_saved_settings_store_authorizes_quick_start(failures)
-	_test_developer_route_starts_fighter_without_profile_write(failures)
+	_test_developer_route_starts_fighter_from_durable_checkout(failures)
 	return failures
 
 
@@ -135,7 +135,7 @@ func _test_saved_settings_store_authorizes_quick_start(failures: Array[String]) 
 	_restore_default_settings_artifacts(original_files)
 
 
-func _test_developer_route_starts_fighter_without_profile_write(failures: Array[String]) -> void:
+func _test_developer_route_starts_fighter_from_durable_checkout(failures: Array[String]) -> void:
 	var root := _root("success")
 	var main := _main(root)
 	var created := main.profile_manager.create_profile("Quick Start Durable", 1000)
@@ -171,11 +171,7 @@ func _test_developer_route_starts_fighter_without_profile_write(failures: Array[
 	settings.reduced_motion = true
 	main.call("_on_settings_applied", settings)
 	var expected_rules := RunRulesSnapshot.from_settings(settings)
-	var profile_path := store.profile_path(profile_id, root)
-	var before_bytes := FileAccess.get_file_as_bytes(profile_path)
-	var before_modified := FileAccess.get_modified_time(profile_path)
 	var before_profile := store.load_profile(profile_id, root).profile.to_dictionary()
-	var before_root := _snapshot_root(root)
 	var profile_events: Array[int] = [0]
 	var active_events: Array[int] = [0]
 	main.profile_manager.profiles_changed.connect(func() -> void: profile_events[0] += 1)
@@ -191,11 +187,26 @@ func _test_developer_route_starts_fighter_without_profile_write(failures: Array[
 	TestAssertions.truthy(not party.members.is_empty() and party.members[0].class_definition.id == &"fighter", "Developer Quick Start launches Fighter", failures)
 	_assert_rules(main.active_run_rules, expected_rules, failures)
 	var after_profile := store.load_profile(profile_id, root).profile.to_dictionary()
-	TestAssertions.equal(after_profile, before_profile, "Quick Start preserves the whole durable profile dictionary", failures)
-	TestAssertions.equal(FileAccess.get_file_as_bytes(profile_path), before_bytes, "Quick Start performs no profile-content write", failures)
-	TestAssertions.equal(FileAccess.get_modified_time(profile_path), before_modified, "Quick Start performs no profile-file write", failures)
-	TestAssertions.equal(_snapshot_root(root), before_root, "Quick Start preserves every profile-root path, byte, length, and file time", failures)
-	TestAssertions.equal(profile_events[0], 0, "Quick Start emits no profile-list mutation signal", failures)
+	var stable_after := after_profile.duplicate(true)
+	stable_after["updated_at_unix"] = before_profile["updated_at_unix"]
+	stable_after["resumable_run"] = before_profile["resumable_run"]
+	stable_after["applied_transactions"] = before_profile["applied_transactions"]
+	TestAssertions.equal(stable_after, before_profile, "Quick Start checkout preserves every unrelated durable profile field", failures)
+	TestAssertions.truthy(int(after_profile["updated_at_unix"]) >= int(before_profile["updated_at_unix"]), "Quick Start checkout advances the durable update timestamp monotonically", failures)
+	var bootstrap := ResumableRunItemCodec.decode(after_profile["resumable_run"], GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)
+	TestAssertions.truthy(bootstrap != null, "Quick Start durably records a valid committed run bootstrap", failures)
+	if bootstrap != null:
+		TestAssertions.equal(bootstrap.run_seed, 1337, "Quick Start committed bootstrap preserves the arena seed", failures)
+		TestAssertions.equal(bootstrap.run_player_id, &"player_1", "Quick Start committed bootstrap preserves the run player", failures)
+		TestAssertions.truthy(not bootstrap.run_id.is_empty(), "Quick Start committed bootstrap has a run identity", failures)
+	var before_transactions := before_profile["applied_transactions"] as Dictionary
+	var after_transactions := after_profile["applied_transactions"] as Dictionary
+	TestAssertions.equal(after_transactions.size(), before_transactions.size() + 1, "Quick Start records exactly one durable checkout transaction", failures)
+	var checkout_entries := after_transactions.values().filter(func(entry: Variant) -> bool:
+		return entry is Dictionary and String((entry as Dictionary).get("operation", "")) == "run_loadout_checkout"
+	)
+	TestAssertions.equal(checkout_entries.size(), 1, "Quick Start journal identifies the durable checkout operation", failures)
+	TestAssertions.equal(profile_events[0], 2, "Quick Start publishes authoritative preflight and committed-checkout refreshes", failures)
 	TestAssertions.equal(active_events[0], 0, "Quick Start emits no active-profile mutation signal", failures)
 	_cleanup(main, root)
 

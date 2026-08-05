@@ -11,6 +11,7 @@ var _return_focus: Control
 var _selected_tab := 0
 var _held_item_id := ""
 var _classes: Array[ClassDefinition] = []
+var _pending_run_class_id: StringName
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -22,6 +23,7 @@ func configure_classes(classes: Array[ClassDefinition]) -> void:
 
 func open(storage: ProfileStorageProjection, return_focus: Control = null) -> void:
 	_projection = ArmouryProjection.from_storage(storage)
+	_pending_run_class_id = &""
 	_return_focus = return_focus
 	_selected_tab = mini(_selected_tab, maxi(0, _projection.stash_tabs.size() - 1))
 	_held_item_id = ""
@@ -37,6 +39,7 @@ func refresh(storage: ProfileStorageProjection) -> void:
 func close() -> void:
 	visible = false
 	_held_item_id = ""
+	_pending_run_class_id = &""
 	if is_inside_tree() and _return_focus != null and is_instance_valid(_return_focus) and _return_focus.is_inside_tree() and _return_focus.is_visible_in_tree():
 		_return_focus.grab_focus()
 	_return_focus = null
@@ -46,6 +49,10 @@ func equipment_button_count() -> int: return _equipment_grid().get_child_count()
 func stash_tab_count() -> int: return _tab_bar().get_tab_count()
 func selected_item_detail() -> Dictionary: return _projection.item(_held_item_id)
 func projection() -> ArmouryProjection: return ArmouryProjection.from_storage(_projection.storage_projection())
+
+func set_pending_run_class(class_id: StringName) -> void:
+	_pending_run_class_id = class_id
+	_render_class_label()
 
 func choose_class(target_class_id: StringName) -> void:
 	if target_class_id.is_empty(): return
@@ -88,7 +95,7 @@ func _input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 
 func _render_projection() -> void:
-	_class_label().text = "Active Class: %s" % (String(_projection.active_class_id) if not _projection.active_class_id.is_empty() else "Unbound")
+	_render_class_label()
 	_class_chooser().visible = _projection.loadout_empty
 	_class_chooser().clear()
 	for definition: ClassDefinition in _classes:
@@ -100,6 +107,11 @@ func _render_projection() -> void:
 	_rebuild_stash()
 	_render_inspector()
 	_rebuild_focus_loop()
+
+func _render_class_label() -> void:
+	_class_label().text = "Active Class: %s" % (String(_projection.active_class_id) if not _projection.active_class_id.is_empty() else "Unbound")
+	if not _pending_run_class_id.is_empty():
+		_class_label().text += " | Pending Run: %s" % String(_pending_run_class_id)
 
 func _rebuild_equipment() -> void:
 	_clear(_equipment_grid())

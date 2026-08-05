@@ -99,7 +99,7 @@ func _test_main_configures_badge_from_active_run(failures: Array[String]) -> voi
 	player_settings.enemy_density_percent = 500
 	TestAssertions.equal(store.save_settings(player_settings), "", "Player Simulation end-to-end fixture saves", failures)
 	var player_main := (load(MAIN_SCENE_PATH) as PackedScene).instantiate()
-	_prepare_main(player_main)
+	_prepare_main(player_main, _profile_root.path_join("player"))
 	TestAssertions.truthy(player_main.call(&"select_leader_class", &"fighter"), "Player Simulation end-to-end fixture starts", failures)
 	var player_badge := player_main.get_node_or_null("DeveloperModeBadge")
 	TestAssertions.truthy(player_badge != null and not player_badge.visible, "Player Simulation run keeps the badge absent", failures)
@@ -115,7 +115,7 @@ func _test_main_configures_badge_from_active_run(failures: Array[String]) -> voi
 	developer_settings.enemy_density_percent = 500
 	TestAssertions.equal(store.save_settings(developer_settings), "", "Developer Mode end-to-end fixture saves", failures)
 	var developer_main := (load(MAIN_SCENE_PATH) as PackedScene).instantiate()
-	_prepare_main(developer_main)
+	_prepare_main(developer_main, _profile_root.path_join("developer"))
 	TestAssertions.truthy(developer_main.call(&"select_leader_class", &"fighter"), "Developer Mode end-to-end fixture starts", failures)
 	var developer_badge := developer_main.get_node_or_null("DeveloperModeBadge")
 	TestAssertions.truthy(developer_badge != null and developer_badge.visible, "Developer Mode run shows the configured badge", failures)
@@ -137,8 +137,8 @@ func _cleanup_main(main: Node) -> void:
 	main.free()
 
 
-func _prepare_main(main: Node) -> void:
-	main.set("profile_root", _profile_root)
+func _prepare_main(main: Node, profile_root: String) -> void:
+	main.set("profile_root", profile_root)
 	main.call(&"_ready")
 	var manager := main.get("profile_manager") as ProfileManager
 	if manager.active_profile() == null:

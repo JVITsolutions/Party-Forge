@@ -7,6 +7,8 @@ signal back_requested
 
 var grid: GridContainer
 var _pending_initial_focus: Control
+var _compatibility_gate_active := false
+var _compatibility_class_id: StringName
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -48,6 +50,8 @@ func open() -> void:
 func close() -> void:
 	visible = false
 	_pending_initial_focus = null
+	_compatibility_gate_active = false
+	_compatibility_class_id = &""
 	if not is_inside_tree():
 		return
 	var focus_owner := get_viewport().gui_get_focus_owner()
@@ -60,6 +64,35 @@ func is_open() -> bool:
 func confirm_run_started() -> void:
 	close()
 	_run_status_block().visible = true
+
+func begin_compatibility_gate(class_id: StringName) -> Control:
+	_compatibility_gate_active = true
+	_compatibility_class_id = class_id
+	return selection_focus(class_id)
+
+func end_compatibility_gate(restore_focus := true) -> void:
+	var target := selection_focus(_compatibility_class_id)
+	_compatibility_gate_active = false
+	_compatibility_class_id = &""
+	if restore_focus and target != null:
+		_pending_initial_focus = target
+		if target.is_inside_tree() and target.is_visible_in_tree():
+			target.grab_focus()
+			_pending_initial_focus = null
+
+func compatibility_gate_active() -> bool:
+	return _compatibility_gate_active
+
+func selection_focus(class_id: StringName) -> Control:
+	return _grid().get_node_or_null("Class_%s" % class_id) as Control
+
+func show_status(message: String) -> void:
+	var status := _status_label()
+	status.text = message
+	status.visible = not message.strip_edges().is_empty()
+
+func clear_status() -> void:
+	show_status("")
 
 func _unhandled_input(event: InputEvent) -> void:
 	if not is_open() or not event.is_action_pressed(&"ui_cancel"):
@@ -74,6 +107,8 @@ func _grid() -> GridContainer:
 	return grid
 
 func _emit_selection(class_id: StringName) -> void:
+	if _compatibility_gate_active:
+		return
 	class_selected.emit(class_id)
 
 func _emit_settings_requested() -> void:
@@ -195,6 +230,19 @@ func _set_focus_neighbor(control: Control, property_name: StringName, target: Co
 
 func _run_status_block() -> Control:
 	return get_node("../Margin") as Control
+
+func _status_label() -> Label:
+	var existing := get_node_or_null("Content/GateStatus") as Label
+	if existing != null:
+		return existing
+	var status := Label.new()
+	status.name = "GateStatus"
+	status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	status.visible = false
+	(get_node("Content") as VBoxContainer).add_child(status)
+	(get_node("Content") as VBoxContainer).move_child(status, 1)
+	return status
 
 func _role_label(role: ClassDefinition.Role) -> String:
 	match role:

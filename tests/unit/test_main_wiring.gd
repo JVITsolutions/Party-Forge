@@ -13,6 +13,8 @@ const REQUIRED_PATHS: PackedStringArray = [
     "res://scripts/ui/developer_item_sandbox.gd",
     "res://scripts/ui/storage/profile_storage_projection.gd",
     "res://scripts/equipment/profile_loadout_assignment_service.gd",
+    "res://scripts/ui/loadout_warning/loadout_warning_dialog.gd",
+    "res://scenes/ui/loadout_warning/loadout_warning_dialog.tscn",
     "res://scenes/ui/armoury/armoury_screen.tscn",
     "res://scenes/ui/warehouse/warehouse_screen.tscn",
     "res://scenes/ui/hud.tscn",
@@ -40,7 +42,7 @@ const REQUIRED_MAIN_NODES: PackedStringArray = [
     "GameRun", "PartyManager", "ExperienceSystem", "SpawnDirector",
     "PartyActorSpawner", "Arena", "Actors", "Enemies", "Effects", "HUD",
     "DeveloperModeBadge", "CharacterLedger", "RunPauseMenu",
-    "MainMenuScreen", "SettingsScreen", "PassiveTreeScreen", "DeveloperItemSandbox", "ArmouryScreen", "WarehouseScreen",
+    "MainMenuScreen", "SettingsScreen", "PassiveTreeScreen", "DeveloperItemSandbox", "ArmouryScreen", "WarehouseScreen", "LoadoutWarningDialog",
 ]
 
 var _profile_root := ""
@@ -69,6 +71,7 @@ func run() -> Array[String]:
     _test_active_run_context_graph_and_failure_cleanup(failures)
     _test_main_menu_route_composition(failures)
     _test_storage_route_policy_and_shared_projection_wiring(failures)
+    _test_loadout_warning_preflight_and_transition_wiring(failures)
     _test_passive_tree_route_composition(failures)
     _test_settings_and_next_run_snapshot_wiring(failures)
     _test_integrated_overlay_input_and_front_end_seam(failures)
@@ -156,6 +159,91 @@ func _test_storage_route_policy_and_shared_projection_wiring(failures: Array[Str
     TestAssertions.truthy(menu.is_open() and (menu.get_node("ActiveProfile") as Label).text.contains("Third Storage Profile"), "Armoury profile switch presents the newest profile menu", failures)
     main.free()
     ProfileTestSupport.remove_tree(root)
+
+
+func _test_loadout_warning_preflight_and_transition_wiring(failures: Array[String]) -> void:
+    var main := (load("res://scenes/game/main.tscn") as PackedScene).instantiate() as PartyForgeMain
+    var warning := main.get_node_or_null("LoadoutWarningDialog")
+    TestAssertions.truthy(warning != null, "main composes the loadout warning above run setup", failures)
+    for method_name: StringName in [&"_project_loadout_compatibility", &"_submit_pending_loadout_transition", &"_checkout_and_start_leader_class"]:
+        TestAssertions.truthy(main.has_method(method_name), "main exposes %s preflight seam" % method_name, failures)
+    if warning == null or not main.has_method(&"_project_loadout_compatibility"):
+        main.free()
+        return
+
+    var root := "user://tests/main_wiring-loadout-warning_%d_%d" % [OS.get_process_id(), Time.get_ticks_usec()]
+    ProfileTestSupport.remove_tree(root)
+    main.set("profile_root", root)
+    main.set("settings_path", _settings_path)
+    main.call("_ready")
+    warning.call("_ready")
+    var manager := main.get("profile_manager") as ProfileManager
+    var created := manager.create_profile("Warning Flow Tester")
+    TestAssertions.truthy(created.ok(), "warning fixture creates active profile", failures)
+    var profile := manager.active_profile()
+    var item := _main_loadout_item(profile.profile_id, "item-warning-sword", &"forge_vanguard_sword", 0)
+    profile.item_records = ItemRegistry.new([item]).to_dictionary()
+    profile.leader_loadout = ItemSlotContainer.create(&"leader-loadout", ItemSlotContainer.PROFILE_LEADER_EQUIPMENT, profile.profile_id, EquipmentSlotIndex.capacity(), {0: item.instance_id}).to_dictionary()
+    profile.leader_loadout_class_id = "fighter"
+    profile.stash_tabs = [ItemSlotContainer.create(&"stash-tab-alpha", ItemSlotContainer.PROFILE_STASH_TAB, profile.profile_id, ItemSlotContainer.STASH_CAPACITY).to_dictionary()]
+    profile.permanent_feature_unlocks = ["bring_in_gear", "equipment_inventory", "stash"]
+    TestAssertions.equal(ProfileStore.new().save_profile(profile, root), "", "warning fixture persists compatible Fighter loadout", failures)
+    TestAssertions.equal(manager.refresh_profile(profile.profile_id), "", "warning fixture refreshes authoritative profile", failures)
+    var profile_path := ProfileStore.new().profile_path(profile.profile_id, root)
+    var bytes_before := FileAccess.get_file_as_bytes(profile_path)
+    main.call("_open_run_setup")
+    TestAssertions.truthy(not main.select_leader_class(&"mage"), "incompatible selection opens decision gate instead of starting", failures)
+    TestAssertions.truthy(warning.call("is_open"), "incompatible selection opens warning", failures)
+    TestAssertions.truthy(not bool(main.get("run_started")) and main.get("active_run_context") == null, "warning preflight creates no run context", failures)
+    TestAssertions.equal(FileAccess.get_file_as_bytes(profile_path), bytes_before, "warning preflight changes no profile bytes", failures)
+    var selector := main.get_node("HUD/ClassSelection") as ClassSelectionPanel
+    TestAssertions.truthy(selector.compatibility_gate_active(), "class selection is explicitly gated while warning is open", failures)
+
+    (warning.get_node("Overlay/Frame/Layout/Actions/Armoury") as Button).pressed.emit()
+    var armoury := main.get_node("ArmouryScreen") as ArmouryScreen
+    TestAssertions.truthy(armoury.is_open() and not warning.call("is_open") and not selector.is_open(), "Go to Armoury opens the same-profile Task 9 interface", failures)
+    TestAssertions.truthy((armoury.get_node("Overlay/Frame/Layout/Header/Class") as Label).text.contains("Pending Run: mage"), "Armoury shows selected class for display only", failures)
+    TestAssertions.equal(FileAccess.get_file_as_bytes(profile_path), bytes_before, "Armoury redirect mutates no profile bytes", failures)
+    main.call("_on_armoury_closed")
+    TestAssertions.truthy(selector.is_open() and not bool(main.get("run_started")), "returning from warning Armoury requires fresh class selection", failures)
+    TestAssertions.equal(main.get("_pending_loadout_projection"), null, "Armoury return cannot reuse stale approval", failures)
+
+    TestAssertions.truthy(not main.select_leader_class(&"mage"), "post-Armoury selection creates another fresh projection", failures)
+    (warning.get_node("Overlay/Frame/Layout/Actions/ChooseAnother") as Button).pressed.emit()
+    TestAssertions.truthy(not warning.call("is_open") and selector.is_open(), "Choose Another Class returns to run setup", failures)
+    TestAssertions.truthy(not selector.compatibility_gate_active(), "Choose Another Class clears the gate", failures)
+    TestAssertions.equal(FileAccess.get_file_as_bytes(profile_path), bytes_before, "Choose Another Class mutates no profile bytes", failures)
+    main.call("_on_loadout_continue_anyway")
+    TestAssertions.truthy(not bool(main.get("run_started")), "direct stale Continue signal cannot start a run", failures)
+    TestAssertions.equal(FileAccess.get_file_as_bytes(profile_path), bytes_before, "direct stale Continue signal cannot mutate profile", failures)
+
+    TestAssertions.truthy(not main.select_leader_class(&"mage"), "fresh incompatible selection creates a fresh projection", failures)
+    (warning.get_node("Overlay/Frame/Layout/Actions/Continue") as Button).pressed.emit()
+    TestAssertions.truthy(bool(main.get("run_started")), "confirmed nonoverflow transition starts after revalidation and checkout", failures)
+    TestAssertions.truthy(main.get("active_run_context") != null, "successful transition starts from committed checkout bootstrap", failures)
+    TestAssertions.truthy(not warning.call("is_open"), "successful transition closes warning", failures)
+    var saved := ProfileStore.new().load_profile(profile.profile_id, root).profile
+    TestAssertions.equal(saved.leader_loadout["slots"], {}, "transition removes incompatible item from active loadout", failures)
+    TestAssertions.equal(saved.stash_tabs[0]["slots"], {"0": item.instance_id}, "transition uses exact deterministic first-empty stash destination", failures)
+    TestAssertions.truthy(saved.resumable_run.has("item_state"), "successful warning flow durably checks out before context start", failures)
+    (Engine.get_main_loop() as SceneTree).paused = false
+    main.free()
+    ProfileTestSupport.remove_tree(root)
+
+
+func _main_loadout_item(profile_id: String, instance_id: String, base_id: StringName, sequence: int) -> ItemInstance:
+    var item := ItemInstance.new()
+    item.instance_id = instance_id
+    item.base_definition_id = base_id
+    item.item_level = 1
+    item.rarity_id = &"common"
+    item.origin = {
+        "issuer_namespace": "profile:%s" % profile_id,
+        "seed": 41010,
+        "sequence": sequence,
+        "source": "main_loadout_warning_test",
+    }
+    return item
 
 func _test_profile_boot_and_developer_gate(failures: Array[String]) -> void:
     var profile_root := "user://tests/main_wiring-profile-gate_%d_%d" % [OS.get_process_id(), Time.get_ticks_usec()]
@@ -1078,6 +1166,11 @@ func _prepare_main(main: Node, settings_path: String = "") -> void:
     var manager := main.get("profile_manager") as ProfileManager
     if manager.active_profile() == null:
         manager.create_profile("Test Profile")
+    var profile := manager.active_profile()
+    if profile != null and not profile.resumable_run.is_empty():
+        profile.resumable_run = {}
+        ProfileStore.new().save_profile(profile, _profile_root)
+        manager.refresh_profile(profile.profile_id)
     (main.get_node("SettingsScreen") as SettingsScreen).close()
 
 func _present_test_offer(main: Node, run_seed: int, pending_count: int = 1) -> void:
