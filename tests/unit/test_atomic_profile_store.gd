@@ -10,13 +10,28 @@ class CleanupFailingAtomicJsonStore extends AtomicJsonStore:
 			return ERR_CANT_CREATE
 		return super._remove(path)
 
+class PostCommitReportingFailureAtomicJsonStore extends AtomicJsonStore:
+	func _cleanup_paths(_paths: Array[String]) -> Error:
+		return ERR_CANT_CREATE
+
+	func _sanitize_remaining_artifacts(
+		_paths: Array[String],
+		_contents: String,
+		_validator: Callable,
+		_expected_canonical: String
+	) -> Error:
+		return ERR_CANT_CREATE
+
 func run() -> Array[String]:
 	var failures: Array[String] = []
 	_root = "user://tests/profile_store_%d_%d" % [OS.get_process_id(), Time.get_ticks_usec()]
 	_cleanup()
 	_test_round_trip_and_backup_recovery(failures)
 	_test_irreversible_save_replaces_both_recovery_generations(failures)
+	_test_irreversible_promotion_order_keeps_a_discoverable_generation(failures)
 	_test_irreversible_save_second_promotion_failure_restores_exact_generations(failures)
+	_test_irreversible_reported_promotion_failure_accepts_verified_commit(failures)
+	_test_irreversible_post_commit_reporting_failure_returns_success(failures)
 	_test_irreversible_cleanup_debt_is_sanitized(failures)
 	_test_backup_only_is_discoverable(failures)
 	_test_corrupt_primary_is_preserved_before_resave(failures)
@@ -77,6 +92,37 @@ func _test_irreversible_save_replaces_both_recovery_generations(failures: Array[
 	TestAssertions.truthy(recovered.ok() and recovered.recovered_from_backup, "irreversible state recovers from its sanitized backup", failures)
 	TestAssertions.equal(recovered.profile.gold if recovered.ok() else -1, 99, "irreversible recovery cannot restore the displaced state", failures)
 
+func _test_irreversible_promotion_order_keeps_a_discoverable_generation(failures: Array[String]) -> void:
+	var good := ProfileStore.new()
+	var profile := ProfileState.new_profile("profile-irrev-order", "Irreversible Order", 1150)
+	profile.gold = 1
+	TestAssertions.equal(good.save_profile(profile, _root), "", "irreversible ordering fixture saves original generation", failures)
+	profile.gold = 2
+	profile.updated_at_unix = 1151
+	TestAssertions.equal(good.save_profile(profile, _root), "", "irreversible ordering fixture creates recovery generation", failures)
+	var path := good.profile_path(profile.profile_id, _root)
+	var backup := "%s.bak" % path
+	var primary_before := FileAccess.get_file_as_bytes(path)
+	var backup_before := FileAccess.get_file_as_bytes(backup)
+	var observed_targets: Array[String] = []
+	var recoverable_at_boundary: Array[bool] = []
+	var documents := AtomicJsonStore.new(func(temporary: String, target: String) -> Error:
+		observed_targets.append(target)
+		var recovered := ProfileStore.new().load_profile(profile.profile_id, _root)
+		recoverable_at_boundary.append(recovered.ok())
+		if observed_targets.size() == 2:
+			return ERR_CANT_CREATE
+		return DirAccess.rename_absolute(ProjectSettings.globalize_path(temporary), ProjectSettings.globalize_path(target))
+	)
+	profile.gold = 99
+	profile.updated_at_unix = 1152
+	var error := ProfileStore.new(documents).save_profile_irreversible(profile, _root)
+	TestAssertions.truthy(not error.is_empty(), "irreversible boundary fixture reports its injected second-promotion failure", failures)
+	TestAssertions.equal(observed_targets, [backup, path], "irreversible promotion is backup-first then primary", failures)
+	TestAssertions.equal(recoverable_at_boundary, [true, true], "a discoverable profile generation exists at every promotion boundary", failures)
+	TestAssertions.equal(FileAccess.get_file_as_bytes(path), primary_before, "boundary failure restores exact primary bytes", failures)
+	TestAssertions.equal(FileAccess.get_file_as_bytes(backup), backup_before, "boundary failure restores exact backup bytes", failures)
+
 func _test_irreversible_save_second_promotion_failure_restores_exact_generations(failures: Array[String]) -> void:
 	var good := ProfileStore.new()
 	var profile := ProfileState.new_profile("profile-irrev-fail", "Irreversible Failure", 1200)
@@ -98,11 +144,54 @@ func _test_irreversible_save_second_promotion_failure_restores_exact_generations
 	profile.gold = 99
 	profile.updated_at_unix = 1202
 	var error := ProfileStore.new(failing_documents).save_profile_irreversible(profile, _root)
-	TestAssertions.truthy(error.contains("stage=promote-backup"), "irreversible second-promotion failure is reported", failures)
+	TestAssertions.truthy(error.contains("stage=promote-primary"), "irreversible second-promotion failure is reported", failures)
 	TestAssertions.equal(FileAccess.get_file_as_bytes(path), primary_before, "irreversible second-promotion failure restores exact primary bytes", failures)
 	TestAssertions.equal(FileAccess.get_file_as_bytes("%s.bak" % path), backup_before, "irreversible second-promotion failure restores exact backup bytes", failures)
 	for file_name: String in DirAccess.get_files_at(_root):
 		TestAssertions.truthy(not file_name.contains("profile-irrev-fail.json.irreversible"), "irreversible failure leaves no staging artifact", failures)
+
+func _test_irreversible_reported_promotion_failure_accepts_verified_commit(failures: Array[String]) -> void:
+	var good := ProfileStore.new()
+	var profile := ProfileState.new_profile("profile-irrev-reported", "Reported Failure", 1250)
+	profile.gold = 1
+	TestAssertions.equal(good.save_profile(profile, _root), "", "reported-failure fixture saves original generation", failures)
+	profile.gold = 2
+	profile.updated_at_unix = 1251
+	TestAssertions.equal(good.save_profile(profile, _root), "", "reported-failure fixture creates recovery generation", failures)
+	var path := good.profile_path(profile.profile_id, _root)
+	var promotions := [0]
+	var reporting_documents := AtomicJsonStore.new(func(temporary: String, target: String) -> Error:
+		promotions[0] += 1
+		var rename_error := DirAccess.rename_absolute(ProjectSettings.globalize_path(temporary), ProjectSettings.globalize_path(target))
+		if promotions[0] == 2 and rename_error == OK:
+			return ERR_CANT_CREATE
+		return rename_error
+	)
+	profile.gold = 99
+	profile.updated_at_unix = 1252
+	var error := ProfileStore.new(reporting_documents).save_profile_irreversible(profile, _root)
+	TestAssertions.equal(error, "", "a reported late promotion failure returns committed success when both active generations verify", failures)
+	TestAssertions.equal(_decode_file(path).profile.gold, 99, "reported-failure primary retains the verified committed generation", failures)
+	TestAssertions.equal(_decode_file("%s.bak" % path).profile.gold, 99, "reported-failure backup retains the verified committed generation", failures)
+
+func _test_irreversible_post_commit_reporting_failure_returns_success(failures: Array[String]) -> void:
+	var documents := PostCommitReportingFailureAtomicJsonStore.new()
+	var store := ProfileStore.new(documents)
+	var profile := ProfileState.new_profile("profile-irrev-committed", "Committed", 1275)
+	profile.gold = 1
+	TestAssertions.equal(store.save_profile(profile, _root), "", "post-commit fixture saves original generation", failures)
+	profile.gold = 2
+	profile.updated_at_unix = 1276
+	TestAssertions.equal(store.save_profile(profile, _root), "", "post-commit fixture creates recovery generation", failures)
+	profile.gold = 99
+	profile.updated_at_unix = 1277
+	var error := store.save_profile_irreversible(profile, _root)
+	var path := store.profile_path(profile.profile_id, _root)
+	TestAssertions.equal(error, "", "post-commit cleanup and sanitize reporting failures cannot surface an ordinary save failure", failures)
+	TestAssertions.equal(_decode_file(path).profile.gold, 99, "post-commit reporting failure leaves sanitized primary active", failures)
+	TestAssertions.equal(_decode_file("%s.bak" % path).profile.gold, 99, "post-commit reporting failure leaves sanitized backup active", failures)
+	for file_name: String in DirAccess.get_files_at(_root):
+		TestAssertions.truthy(not file_name.contains("profile-irrev-committed.json.irreversible"), "post-commit reporting failure leaves no rollback artifact with displaced data", failures)
 
 func _test_irreversible_cleanup_debt_is_sanitized(failures: Array[String]) -> void:
 	var documents := CleanupFailingAtomicJsonStore.new()
@@ -114,13 +203,22 @@ func _test_irreversible_cleanup_debt_is_sanitized(failures: Array[String]) -> vo
 	profile.updated_at_unix = 1301
 	TestAssertions.equal(store.save_profile(profile, _root), "", "irreversible cleanup fixture creates recovery generation", failures)
 	var path := store.profile_path(profile.profile_id, _root)
-	documents.failure_path = "%s.irreversible-primary.previous" % path
+	documents.failure_path = "%s.bak.previous" % path
+	var debt_file := FileAccess.open(documents.failure_path, FileAccess.WRITE)
+	debt_file.store_buffer(FileAccess.get_file_as_bytes(path))
+	debt_file.close()
 	profile.gold = 99
 	profile.updated_at_unix = 1302
 	TestAssertions.equal(store.save_profile_irreversible(profile, _root), "", "irreversible cleanup debt remains a committed success", failures)
 	TestAssertions.equal(_decode_file(path).profile.gold, 99, "cleanup-debt primary is sanitized", failures)
 	TestAssertions.equal(_decode_file("%s.bak" % path).profile.gold, 99, "cleanup-debt backup is sanitized", failures)
 	TestAssertions.equal(_decode_file(documents.failure_path).profile.gold, 99, "undeletable displaced artifact is overwritten with sanitized state", failures)
+	profile.gold = 100
+	profile.updated_at_unix = 1303
+	TestAssertions.equal(store.save_profile_irreversible(profile, _root), "", "a retained sanitized cleanup artifact does not poison the next irreversible save", failures)
+	TestAssertions.equal(_decode_file(path).profile.gold, 100, "cleanup-debt retry updates primary", failures)
+	TestAssertions.equal(_decode_file("%s.bak" % path).profile.gold, 100, "cleanup-debt retry updates backup", failures)
+	TestAssertions.equal(_decode_file(documents.failure_path).profile.gold, 100, "cleanup-debt retry re-sanitizes the retained artifact", failures)
 
 func _test_failed_promotion_restores_primary_and_older_backup(failures: Array[String]) -> void:
 	var good := ProfileStore.new()

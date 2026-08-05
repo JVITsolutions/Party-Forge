@@ -104,11 +104,13 @@ func save_irreversible_document(path: String, document: Dictionary, validator: C
 	var backup := "%s.bak" % path
 	var primary_temporary := "%s.irreversible-primary.tmp" % path
 	var backup_temporary := "%s.irreversible-backup.tmp" % path
-	var previous_primary := "%s.irreversible-primary.previous" % path
-	var previous_backup := "%s.irreversible-backup.previous" % path
-	for stale_path: String in [primary_temporary, backup_temporary, previous_primary, previous_backup, "%s.previous" % backup]:
-		if FileAccess.file_exists(stale_path):
-			return "JSON_STORE_SAVE_ERROR path=%s stage=stale-artifact artifact=%s" % [path, stale_path]
+	var cleanup_candidates: Array[String] = [
+		primary_temporary,
+		backup_temporary,
+		"%s.irreversible-primary.previous" % path,
+		"%s.irreversible-backup.previous" % path,
+		"%s.previous" % backup,
+	]
 	var document_text := JSON.stringify(document, "\t", false)
 	var candidate_canonical := ""
 	for temporary_path: String in [primary_temporary, backup_temporary]:
@@ -129,41 +131,75 @@ func save_irreversible_document(path: String, document: Dictionary, validator: C
 
 	var had_primary := FileAccess.file_exists(path)
 	var had_backup := FileAccess.file_exists(backup)
+	var primary_before := PackedByteArray()
+	var backup_before := PackedByteArray()
 	if had_primary:
-		var move_primary_error := _rename(path, previous_primary)
-		if move_primary_error != OK:
+		primary_before = FileAccess.get_file_as_bytes(path)
+		if FileAccess.get_open_error() != OK:
 			var cleanup_error := _cleanup_paths([primary_temporary, backup_temporary])
-			return "JSON_STORE_SAVE_ERROR path=%s stage=stage-primary code=%d cleanup_code=%d" % [path, move_primary_error, cleanup_error]
+			return "JSON_STORE_SAVE_ERROR path=%s stage=snapshot-primary code=%d cleanup_code=%d" % [path, FileAccess.get_open_error(), cleanup_error]
 	if had_backup:
-		var move_backup_error := _rename(backup, previous_backup)
-		if move_backup_error != OK:
-			var restore_error := _rename(previous_primary, path) if had_primary else OK
+		backup_before = FileAccess.get_file_as_bytes(backup)
+		if FileAccess.get_open_error() != OK:
 			var cleanup_error := _cleanup_paths([primary_temporary, backup_temporary])
-			return "JSON_STORE_SAVE_ERROR path=%s stage=stage-backup code=%d restore_code=%d cleanup_code=%d" % [path, move_backup_error, restore_error, cleanup_error]
+			return "JSON_STORE_SAVE_ERROR path=%s stage=snapshot-backup code=%d cleanup_code=%d" % [path, FileAccess.get_open_error(), cleanup_error]
 
-	var promote_primary_error: Error = _promote_file.call(primary_temporary, path) if _promote_file.is_valid() else _promote(primary_temporary, path)
-	if promote_primary_error != OK:
-		var restore_error := _restore_irreversible_generations(path, backup, previous_primary, previous_backup, had_primary, had_backup)
+	var remove_backup_error := _remove_if_exists(backup)
+	if remove_backup_error != OK:
+		var restore_error := _restore_irreversible_snapshots(path, backup, had_primary, primary_before, had_backup, backup_before)
 		var cleanup_error := _cleanup_paths([primary_temporary, backup_temporary])
-		return "JSON_STORE_SAVE_ERROR path=%s stage=promote-primary code=%d restore_code=%d cleanup_code=%d" % [path, promote_primary_error, restore_error, cleanup_error]
+		return "JSON_STORE_SAVE_ERROR path=%s stage=replace-backup code=%d restore_code=%d cleanup_code=%d" % [path, remove_backup_error, restore_error, cleanup_error]
 	var promote_backup_error: Error = _promote_file.call(backup_temporary, backup) if _promote_file.is_valid() else _promote(backup_temporary, backup)
-	if promote_backup_error != OK:
-		var restore_error := _restore_irreversible_generations(path, backup, previous_primary, previous_backup, had_primary, had_backup)
+	if promote_backup_error != OK and not _generation_matches(backup, validator, candidate_canonical):
+		var restore_error := _restore_irreversible_snapshots(path, backup, had_primary, primary_before, had_backup, backup_before)
 		var cleanup_error := _cleanup_paths([primary_temporary, backup_temporary])
+		if restore_error == OK:
+			return "JSON_STORE_SAVE_ERROR path=%s stage=promote-backup code=%d restore_code=%d cleanup_code=%d" % [path, promote_backup_error, restore_error, cleanup_error]
+		if _finalize_irreversible_commit(path, backup, document_text, validator, candidate_canonical) == OK:
+			push_warning("JSON_STORE_IRREVERSIBLE_COMMIT_RECOVERED path=%s stage=promote-backup code=%d restore_code=%d committed=true" % [path, promote_backup_error, restore_error])
+			return ""
 		return "JSON_STORE_SAVE_ERROR path=%s stage=promote-backup code=%d restore_code=%d cleanup_code=%d" % [path, promote_backup_error, restore_error, cleanup_error]
+	if not _generation_matches(backup, validator, candidate_canonical):
+		var restore_error := _restore_irreversible_snapshots(path, backup, had_primary, primary_before, had_backup, backup_before)
+		var cleanup_error := _cleanup_paths([primary_temporary, backup_temporary])
+		return "JSON_STORE_SAVE_ERROR path=%s stage=verify-backup restore_code=%d cleanup_code=%d" % [path, restore_error, cleanup_error]
 
-	for promoted_path: String in [path, backup]:
-		var promoted := _load_one(promoted_path, validator)
-		if not promoted.ok() or _canonical_json(promoted.document) != candidate_canonical:
-			var restore_error := _restore_irreversible_generations(path, backup, previous_primary, previous_backup, had_primary, had_backup)
-			return "JSON_STORE_SAVE_ERROR path=%s stage=verify-promoted restore_code=%d reason=%s" % [path, restore_error, promoted.error]
+	var remove_primary_error := _remove_if_exists(path)
+	if remove_primary_error != OK:
+		var restore_error := _restore_irreversible_snapshots(path, backup, had_primary, primary_before, had_backup, backup_before)
+		var cleanup_error := _cleanup_paths([primary_temporary, backup_temporary])
+		if restore_error == OK:
+			return "JSON_STORE_SAVE_ERROR path=%s stage=replace-primary code=%d restore_code=%d cleanup_code=%d" % [path, remove_primary_error, restore_error, cleanup_error]
+		if _finalize_irreversible_commit(path, backup, document_text, validator, candidate_canonical) == OK:
+			push_warning("JSON_STORE_IRREVERSIBLE_COMMIT_RECOVERED path=%s stage=replace-primary code=%d restore_code=%d committed=true" % [path, remove_primary_error, restore_error])
+			return ""
+		return "JSON_STORE_SAVE_ERROR path=%s stage=replace-primary code=%d restore_code=%d cleanup_code=%d" % [path, remove_primary_error, restore_error, cleanup_error]
+	var promote_primary_error: Error = _promote_file.call(primary_temporary, path) if _promote_file.is_valid() else _promote(primary_temporary, path)
+	if promote_primary_error != OK and not _generation_matches(path, validator, candidate_canonical):
+		var restore_error := _restore_irreversible_snapshots(path, backup, had_primary, primary_before, had_backup, backup_before)
+		var cleanup_error := _cleanup_paths([primary_temporary, backup_temporary])
+		if restore_error == OK:
+			return "JSON_STORE_SAVE_ERROR path=%s stage=promote-primary code=%d restore_code=%d cleanup_code=%d" % [path, promote_primary_error, restore_error, cleanup_error]
+		if _finalize_irreversible_commit(path, backup, document_text, validator, candidate_canonical) == OK:
+			push_warning("JSON_STORE_IRREVERSIBLE_COMMIT_RECOVERED path=%s stage=promote-primary code=%d restore_code=%d committed=true" % [path, promote_primary_error, restore_error])
+			return ""
+		return "JSON_STORE_SAVE_ERROR path=%s stage=promote-primary code=%d restore_code=%d cleanup_code=%d" % [path, promote_primary_error, restore_error, cleanup_error]
+	if not _generation_matches(path, validator, candidate_canonical):
+		var restore_error := _restore_irreversible_snapshots(path, backup, had_primary, primary_before, had_backup, backup_before)
+		var cleanup_error := _cleanup_paths([primary_temporary, backup_temporary])
+		if restore_error == OK:
+			return "JSON_STORE_SAVE_ERROR path=%s stage=verify-primary restore_code=%d cleanup_code=%d" % [path, restore_error, cleanup_error]
+		if _finalize_irreversible_commit(path, backup, document_text, validator, candidate_canonical) == OK:
+			push_warning("JSON_STORE_IRREVERSIBLE_COMMIT_RECOVERED path=%s stage=verify-primary restore_code=%d committed=true" % [path, restore_error])
+			return ""
+		return "JSON_STORE_SAVE_ERROR path=%s stage=verify-primary restore_code=%d cleanup_code=%d" % [path, restore_error, cleanup_error]
 
-	var displaced_paths: Array[String] = [previous_primary, previous_backup]
-	var cleanup_error := _cleanup_paths(displaced_paths)
+	var cleanup_error := _cleanup_paths(cleanup_candidates)
 	if cleanup_error != OK:
-		var sanitize_error := _sanitize_remaining_artifacts(displaced_paths, document_text, validator, candidate_canonical)
+		var sanitize_error := _sanitize_remaining_artifacts(cleanup_candidates, document_text, validator, candidate_canonical)
 		if sanitize_error != OK:
-			return "JSON_STORE_SAVE_ERROR path=%s stage=cleanup-unsafe code=%d sanitize_code=%d committed=true" % [path, cleanup_error, sanitize_error]
+			push_warning("JSON_STORE_CLEANUP_DEBT path=%s code=%d sanitize_code=%d committed=true active_generations_verified=true" % [path, cleanup_error, sanitize_error])
+			return ""
 		push_warning("JSON_STORE_CLEANUP_DEBT path=%s code=%d committed=true sanitized_generations=true" % [path, cleanup_error])
 	return ""
 
@@ -334,27 +370,58 @@ func _restore_replaced_generations(
 			first_error = backup_error
 	return first_error
 
-func _restore_irreversible_generations(
+func _restore_irreversible_snapshots(
 	path: String,
 	backup: String,
-	previous_primary: String,
-	previous_backup: String,
 	had_primary: bool,
+	primary_bytes: PackedByteArray,
 	had_backup: bool,
+	backup_bytes: PackedByteArray,
 ) -> Error:
-	var first_error := _remove_if_exists(path)
-	var remove_backup_error := _remove_if_exists(backup)
-	if first_error == OK and remove_backup_error != OK:
-		first_error = remove_backup_error
-	if had_primary:
-		var primary_error := _rename(previous_primary, path)
-		if first_error == OK and primary_error != OK:
-			first_error = primary_error
-	if had_backup:
-		var backup_error := _rename(previous_backup, backup)
-		if first_error == OK and backup_error != OK:
-			first_error = backup_error
+	var first_error := _restore_generation_snapshot(path, had_primary, primary_bytes)
+	var backup_error := _restore_generation_snapshot(backup, had_backup, backup_bytes)
+	if first_error == OK and backup_error != OK:
+		first_error = backup_error
 	return first_error
+
+func _restore_generation_snapshot(path: String, existed: bool, bytes: PackedByteArray) -> Error:
+	if not existed:
+		return _remove_if_exists(path)
+	if FileAccess.file_exists(path) and FileAccess.get_file_as_bytes(path) == bytes and FileAccess.get_open_error() == OK:
+		return OK
+	var file := FileAccess.open(path, FileAccess.WRITE)
+	if file == null:
+		return FileAccess.get_open_error()
+	file.store_buffer(bytes)
+	var write_error := file.get_error()
+	file.close()
+	if write_error != OK:
+		return write_error
+	var restored := FileAccess.get_file_as_bytes(path)
+	if FileAccess.get_open_error() != OK or restored != bytes:
+		return ERR_FILE_CORRUPT
+	return OK
+
+func _generation_matches(path: String, validator: Callable, expected_canonical: String) -> bool:
+	var loaded := _load_one(path, validator)
+	return loaded.ok() and _canonical_json(loaded.document) == expected_canonical
+
+func _finalize_irreversible_commit(
+	path: String,
+	backup: String,
+	contents: String,
+	validator: Callable,
+	expected_canonical: String,
+) -> Error:
+	for active_path: String in [backup, path]:
+		if _generation_matches(active_path, validator, expected_canonical):
+			continue
+		var write_error := _write_text(active_path, contents)
+		if write_error != OK:
+			return write_error
+		if not _generation_matches(active_path, validator, expected_canonical):
+			return ERR_FILE_CORRUPT
+	return OK
 
 func _write_text(path: String, contents: String) -> Error:
 	var file := FileAccess.open(path, FileAccess.WRITE)
