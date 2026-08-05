@@ -9,6 +9,7 @@ const STASH_ID := &"developer-stash-000"
 const OWNER_ID := "developer-item-sandbox"
 const SLOT_DATA_KIND := "party_forge_developer_item_slot"
 const EMPTY_INSPECTOR := "Focus or click a populated slot to inspect it."
+const RESPONSIVE_LAYOUT := preload("res://scripts/ui/ledger/ledger_responsive_layout.gd")
 
 class SandboxSlotButton extends Button:
 	var sandbox: DeveloperItemSandbox
@@ -113,6 +114,38 @@ func selected_item() -> Dictionary:
 	return item.to_dictionary() if item != null else {}
 
 
+func slot_button_count() -> int:
+	_ensure_initialized()
+	return _slot_buttons.size()
+
+
+func selected_item_detail() -> Dictionary:
+	return selected_item()
+
+
+func integrity_error() -> String:
+	return _state.integrity_error()
+
+
+func apply_viewport_size(size: Vector2i) -> void:
+	var compact := RESPONSIVE_LAYOUT.mode_for_size(Vector2(size)) == RESPONSIVE_LAYOUT.Mode.COMPACT
+	var body := get_node("Overlay/Frame/Layout/Body") as BoxContainer
+	body.vertical = compact
+	var frame := get_node("Overlay/Frame") as Control
+	frame.offset_left = 16.0 if compact else 48.0
+	frame.offset_top = 12.0 if compact else 36.0
+	frame.offset_right = -16.0 if compact else -48.0
+	frame.offset_bottom = -12.0 if compact else -36.0
+	var inventory_panel := get_node("Overlay/Frame/Layout/Body/InventoryPanel") as Control
+	var stash_panel := get_node("Overlay/Frame/Layout/Body/StashPanel") as Control
+	var inspector_panel := get_node("Overlay/Frame/Layout/Body/InspectorPanel") as Control
+	inventory_panel.custom_minimum_size = Vector2(0.0, 64.0) if compact else Vector2(220.0, 0.0)
+	stash_panel.custom_minimum_size = Vector2(0.0, 220.0) if compact else Vector2(660.0, 0.0)
+	inspector_panel.custom_minimum_size = Vector2(0.0, 150.0) if compact else Vector2(360.0, 0.0)
+	_inventory_grid().columns = 5 if compact else 1
+	_inspector().custom_minimum_size = Vector2(0.0, 0.0) if compact else Vector2(330.0, 0.0)
+
+
 func is_holding_item() -> bool:
 	return not _held_item_id.is_empty()
 
@@ -160,8 +193,11 @@ func _begin_mouse_drag(button: Button) -> Variant:
 	var preview := Label.new()
 	preview.text = "Held: %s" % _display_name_for(_held_item_id)
 	preview.add_theme_font_size_override(&"font_size", 18)
-	if button.is_inside_tree():
+	var viewport := button.get_viewport() if button.is_inside_tree() else null
+	if viewport != null and viewport.gui_is_dragging():
 		button.set_drag_preview(preview)
+	else:
+		preview.free()
 	return {
 		"kind": SLOT_DATA_KIND,
 		"container_id": String(_held_container_id),
@@ -344,7 +380,7 @@ func _add_slot_button(parent: GridContainer, container_id: StringName, slot: int
 	var button := SandboxSlotButton.new()
 	button.name = node_name
 	button.sandbox = self
-	button.custom_minimum_size = Vector2(62, 54)
+	button.custom_minimum_size = Vector2(62, 88 if container_id == STASH_ID else 54)
 	button.focus_mode = Control.FOCUS_ALL
 	button.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	button.set_meta("container_id", String(container_id))
@@ -497,10 +533,9 @@ func _ui_error(code: String) -> String:
 
 
 func _viewport_size_changed() -> void:
-	var body := get_node("Overlay/Frame/Layout/Body") as BoxContainer
 	var viewport := get_viewport()
 	if viewport != null:
-		body.vertical = viewport.get_visible_rect().size.x < 1500.0
+		apply_viewport_size(Vector2i(viewport.get_visible_rect().size))
 
 
 func _mark_input_handled() -> void:
