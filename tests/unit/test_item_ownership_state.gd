@@ -13,6 +13,7 @@ func run() -> Array[String]:
 	if equipment == null or foundation == null:
 		return failures
 	_assert_exact_placement_and_round_trip(equipment, foundation, failures)
+	_assert_fixed_equipment_containers(equipment, foundation, failures)
 	_assert_defensive_accessors(failures)
 	_assert_public_constructor_rejections(equipment, foundation, failures)
 	_assert_canonical_ordering(failures)
@@ -39,6 +40,73 @@ func _assert_exact_placement_and_round_trip(
 		failures.append("ownership state round trip error: %s" % round_trip.error)
 		return
 	TestAssertions.equal(round_trip.state.to_dictionary(), state.to_dictionary(), "ownership state round trip is exact", failures)
+
+func _assert_fixed_equipment_containers(
+	equipment: EquipmentCatalog,
+	foundation: ItemFoundationCatalog,
+	failures: Array[String]
+) -> void:
+	var item := _make_item("item-equipped-0001", 2)
+	var sparse_slot := EquipmentSlotIndex.index_for(&"ring_right")
+	var leader_equipment := ItemSlotContainer.create(
+		&"leader-equipment",
+		ItemSlotContainer.PROFILE_LEADER_EQUIPMENT,
+		OWNER_ID,
+		EquipmentSlotIndex.capacity()
+	)
+	var run_member_equipment := ItemSlotContainer.create(
+		&"run-member-equipment",
+		ItemSlotContainer.RUN_MEMBER_EQUIPMENT,
+		OWNER_ID,
+		EquipmentSlotIndex.capacity(),
+		{sparse_slot: item.instance_id}
+	)
+	var state := ItemOwnershipState.create(
+		OWNER_ID,
+		ItemRegistry.new([item]),
+		[leader_equipment, run_member_equipment]
+	)
+	TestAssertions.equal(state.validate(equipment, foundation), "", "fixed equipment containers validate", failures)
+	TestAssertions.equal(state.container(&"leader-equipment").capacity, 11, "leader equipment capacity is exactly eleven", failures)
+	TestAssertions.equal(state.container(&"leader-equipment").occupied_slots(), [], "leader equipment may be empty", failures)
+	TestAssertions.equal(state.container(&"run-member-equipment").capacity, 11, "run member equipment capacity is exactly eleven", failures)
+	TestAssertions.equal(state.container(&"run-member-equipment").item_id_at(sparse_slot), item.instance_id, "run member equipment preserves its sparse slot", failures)
+	TestAssertions.equal(state.container(&"run-member-equipment").occupied_slots(), [sparse_slot], "run member equipment retains exact sparse placement", failures)
+
+	var round_trip := ItemOwnershipState.decode(state.to_dictionary(), equipment, foundation)
+	TestAssertions.truthy(round_trip.ok(), "fixed equipment containers round trip", failures)
+	if round_trip.ok():
+		TestAssertions.equal(round_trip.state.to_dictionary(), state.to_dictionary(), "fixed equipment container round trip is exact", failures)
+
+	var wrong_leader_capacity := ItemOwnershipState.create(
+		OWNER_ID,
+		ItemRegistry.new([item]),
+		[
+			ItemSlotContainer.create(&"leader-equipment", ItemSlotContainer.PROFILE_LEADER_EQUIPMENT, OWNER_ID, 10),
+			run_member_equipment,
+		]
+	)
+	TestAssertions.equal(
+		wrong_leader_capacity.validate(equipment, foundation),
+		"PARTY_FORGE_CONTAINER_ERROR field=containers[0].capacity reason=profile_leader_equipment capacity must equal 11",
+		"leader equipment rejects the wrong capacity",
+		failures
+	)
+
+	var wrong_member_capacity := ItemOwnershipState.create(
+		OWNER_ID,
+		ItemRegistry.new([item]),
+		[
+			leader_equipment,
+			ItemSlotContainer.create(&"run-member-equipment", ItemSlotContainer.RUN_MEMBER_EQUIPMENT, OWNER_ID, 12, {sparse_slot: item.instance_id}),
+		]
+	)
+	TestAssertions.equal(
+		wrong_member_capacity.validate(equipment, foundation),
+		"PARTY_FORGE_CONTAINER_ERROR field=containers[1].capacity reason=run_member_equipment capacity must equal 11",
+		"run member equipment rejects the wrong capacity",
+		failures
+	)
 
 func _assert_defensive_accessors(failures: Array[String]) -> void:
 	var item := _make_item("item-owned-0001", 1)

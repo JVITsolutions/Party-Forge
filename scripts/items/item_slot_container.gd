@@ -4,6 +4,8 @@ extends RefCounted
 const SCHEMA_VERSION := 1
 const RUN_INVENTORY := &"run_inventory"
 const PROFILE_STASH_TAB := &"profile_stash_tab"
+const PROFILE_LEADER_EQUIPMENT := &"profile_leader_equipment"
+const RUN_MEMBER_EQUIPMENT := &"run_member_equipment"
 const DEVELOPER_INVENTORY := &"developer_inventory"
 const DEVELOPER_STASH_TAB := &"developer_stash_tab"
 const FIELDS: Array[String] = ["schema_version", "container_id", "container_kind", "owner_id", "capacity", "slots"]
@@ -110,6 +112,9 @@ func _validation_error(path: String) -> String:
 	if container_kind == RUN_INVENTORY or container_kind == DEVELOPER_INVENTORY:
 		if capacity < 0 or capacity > INVENTORY_CAPACITY_MAX:
 			return _error("%s.capacity" % path, "%s capacity must be in range 0..40" % container_kind)
+	elif container_kind == PROFILE_LEADER_EQUIPMENT or container_kind == RUN_MEMBER_EQUIPMENT:
+		if capacity != EquipmentSlotIndex.capacity():
+			return _error("%s.capacity" % path, "%s capacity must equal %d" % [container_kind, EquipmentSlotIndex.capacity()])
 	elif capacity != STASH_CAPACITY:
 		return _error("%s.capacity" % path, "%s capacity must equal 100" % container_kind)
 	if not _construction_error_field.is_empty():
@@ -166,7 +171,14 @@ static func _canonical_slot_key(value: String) -> bool:
 	return slot >= 0 and str(slot) == value
 
 static func _known_kind_strings() -> Array[String]:
-	return [String(RUN_INVENTORY), String(PROFILE_STASH_TAB), String(DEVELOPER_INVENTORY), String(DEVELOPER_STASH_TAB)]
+	return [
+		String(RUN_INVENTORY),
+		String(PROFILE_STASH_TAB),
+		String(PROFILE_LEADER_EQUIPMENT),
+		String(RUN_MEMBER_EQUIPMENT),
+		String(DEVELOPER_INVENTORY),
+		String(DEVELOPER_STASH_TAB),
+	]
 
 static func _error_from_registry(error: String) -> String:
 	const REGISTRY_PREFIX := "PARTY_FORGE_ITEM_REGISTRY_ERROR"
