@@ -283,6 +283,21 @@ The regressions now prove that both active generations omit confirmed overflow, 
 
 Post-correction hygiene produced `git diff --check` exit `0`, zero untracked `.gd.uid`/`.import` sidecars, zero sandbox-removal matches in the production feature paths, and exactly the intended mutation service, transition service, loadout regression, and verification record as dirty paths before commit. The correction does not modify the pinned Creator worktree or artifacts.
 
+A second independent complete-range review after `5a9a6bd` found that the irreversible save had sanitized physical generations but not older `applied_transactions[*].result_profile` snapshots containing destroyed overflow IDs. Replaying an ordinary transaction committed before destruction could therefore expose the removed gear from its historical result, including after corrupt-primary backup recovery.
+
+The second correction passes the exact removed instance IDs through the generic irreversible mutation boundary and generalizes the existing run-revocation snapshot sanitizer. Every affected historical result is replaced with a journal-free projection of the post-mutation profile while retaining its original committed timestamp; duplicate detection and the separate resumable-run revocation API remain unchanged.
+
+| Second-correction gate | Exit | Evidence |
+| --- | ---: | --- |
+| RED historical replay regression | 1 | `TEST_SUMMARY: FAIL (4 failures)`; the destroyed ID remained in the current journal, backup journal, recovered journal, and older duplicate result |
+| GREEN focused loadout regression | 0 | `TEST_SUMMARY: PASS (0 failures)` |
+| Mutation/atomic-store/storage/loadout/run-revocation focused batch | 0 | Six named suites; `TEST_SUMMARY: PASS (0 failures)` |
+| Complete suite after second correction | 0 | 93.966 s; exactly one `TEST_SUMMARY: PASS (144 suites)`, zero `TEST_FAILURE` lines, and zero loader/parse/crash/timeout matches |
+
+The historical regression commits an ordinary transaction while the future overflow item exists, destroys that item through the confirmed transition, corrupts and recovers the primary, and replays the older transaction. The replay remains duplicate/idempotent without invoking its callback, while its returned result, both active generations, and the current transaction journal contain no occurrence of the destroyed ID. Earlier irreversible-failure byte/artifact preservation, ordinary-transition backup rotation, destructive replay, corrupt-primary recovery, and run-revocation tests remain in the focused and full passing sets.
+
+Post-second-correction hygiene produced `git diff --check` exit `0`, zero untracked `.gd.uid`/`.import` sidecars, zero sandbox-removal matches in the production feature paths, and exactly the intended mutation service, transition service, loadout regression, and verification record as dirty paths before commit. The pinned Creator worktree remained clean and unchanged.
+
 ## Explicit physical/manual and production-UI deferrals
 
 The following were not performed and are not claimed:

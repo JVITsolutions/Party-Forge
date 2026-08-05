@@ -51,6 +51,7 @@ func apply(
 		-1,
 		OPERATION,
 		request.canonical_document(),
+		request.overflow_item_ids,
 	)
 
 func _validate_request(profile_id: String, request: LoadoutTransitionRequest) -> String:

@@ -295,12 +295,30 @@ func _test_overflow_transition_destroys_only_confirmed_instances(failures: Array
 		stash_slots[slot] = filler.instance_id
 	var profile := _profile(items, {0: crown.instance_id, 1: plate.instance_id, 6: ring.instance_id}, [_stash(&"stash-tab-000", stash_slots)], "fighter")
 	_save_profile(store, profile, root, "overflow transition fixture", failures)
+	var historical_invocations := [0]
+	var historical_mutation := func(candidate: ProfileState) -> String:
+		historical_invocations[0] += 1
+		candidate.gold += 7
+		return ""
+	var mutations := ProfileMutationService.new(store)
+	var historical := mutations.apply(
+		PROFILE_ID,
+		"transition-overflow-history",
+		historical_mutation,
+		root,
+		2000,
+		"test_overflow_history",
+		{"amount": 7},
+	)
+	TestAssertions.truthy(historical.ok(), "ordinary historical transaction commits while overflow item exists", failures)
+	TestAssertions.truthy(_contains_string(historical.profile.to_dictionary(), plate.instance_id), "historical result initially exposes the later destroyed item", failures)
+	profile = store.load_profile(PROFILE_ID, root).profile
 	var projection := _project(profile, &"mage")
 	TestAssertions.equal(projection.planned_stash_destinations, [
 		{"instance_id": crown.instance_id, "destination_container_id": "stash-tab-000", "destination_slot": 99},
 	], "overflow plan moves the first canonical incompatible item", failures)
 	TestAssertions.equal(projection.overflow_item_ids, [plate.instance_id], "overflow plan names the exact later incompatible item", failures)
-	var service := LoadoutTransitionService.new(ProfileMutationService.new(store))
+	var service := LoadoutTransitionService.new(mutations)
 	var request := _request("transition-overflow", projection)
 	var committed := service.apply(PROFILE_ID, request, root)
 	TestAssertions.truthy(committed.ok(), "explicitly confirmed overflow transition commits", failures)
@@ -315,6 +333,7 @@ func _test_overflow_transition_destroys_only_confirmed_instances(failures: Array
 	TestAssertions.equal(saved.stash_tabs[0]["slots"].get("99", ""), crown.instance_id, "planned item uses the exact confirmed stash destination", failures)
 	TestAssertions.equal(saved.leader_loadout_class_id, "mage", "overflow transition records selected target class", failures)
 	TestAssertions.equal(ProfileCodec.validate_profile(saved), "", "overflow candidate reconstruction passes complete ownership validation", failures)
+	TestAssertions.truthy(not _contains_string(saved.to_dictionary(), plate.instance_id), "committed destructive profile and transaction journal contain no destroyed ID", failures)
 	var path := store.profile_path(PROFILE_ID, root)
 	var backup_path := "%s.bak" % path
 	var backup_decode := ProfileCodec.decode(FileAccess.get_file_as_string(backup_path))
@@ -322,6 +341,7 @@ func _test_overflow_transition_destroys_only_confirmed_instances(failures: Array
 	if backup_decode.ok():
 		var backup_registry := ItemRegistry._decode(backup_decode.profile.item_records, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)["value"] as ItemRegistry
 		TestAssertions.truthy(not backup_registry.has(plate.instance_id), "destructive transition backup cannot restore the destroyed instance", failures)
+		TestAssertions.truthy(not _contains_string(backup_decode.profile.to_dictionary(), plate.instance_id), "destructive transition backup journal contains no destroyed ID", failures)
 	var committed_primary := FileAccess.get_file_as_bytes(path)
 	var committed_backup := FileAccess.get_file_as_bytes(backup_path)
 	var replay := service.apply(PROFILE_ID, request, root)
@@ -337,6 +357,20 @@ func _test_overflow_transition_destroys_only_confirmed_instances(failures: Array
 	if recovered.ok():
 		var recovered_registry := ItemRegistry._decode(recovered.profile.item_records, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)["value"] as ItemRegistry
 		TestAssertions.truthy(not recovered_registry.has(plate.instance_id), "corrupt-primary recovery cannot resurrect the destroyed instance", failures)
+		TestAssertions.truthy(not _contains_string(recovered.profile.to_dictionary(), plate.instance_id), "corrupt-primary recovery journal contains no destroyed ID", failures)
+	var historical_replay := mutations.apply(
+		PROFILE_ID,
+		"transition-overflow-history",
+		historical_mutation,
+		root,
+		9000,
+		"test_overflow_history",
+		{"amount": 7},
+	)
+	TestAssertions.truthy(historical_replay.ok() and historical_replay.duplicate, "older transaction replay after destructive backup recovery remains duplicate", failures)
+	TestAssertions.equal(historical_invocations[0], 1, "older transaction replay never invokes its mutation again", failures)
+	if historical_replay.ok():
+		TestAssertions.truthy(not _contains_string(historical_replay.profile.to_dictionary(), plate.instance_id), "older duplicate result cannot expose the destroyed ID", failures)
 	var corrupt_primary_bytes := FileAccess.get_file_as_bytes(path)
 	var recovered_replay := service.apply(PROFILE_ID, request, root)
 	TestAssertions.truthy(recovered_replay.ok() and recovered_replay.duplicate, "destructive replay recovered from backup remains idempotent", failures)
@@ -681,6 +715,20 @@ func _file_snapshot(root: String) -> Dictionary:
 	for file_name: String in DirAccess.get_files_at(root):
 		snapshot[file_name] = FileAccess.get_file_as_bytes(root.path_join(file_name))
 	return snapshot
+
+func _contains_string(value: Variant, needle: String) -> bool:
+	if value is String or value is StringName:
+		return String(value) == needle
+	if value is Array:
+		for child: Variant in value as Array:
+			if _contains_string(child, needle):
+				return true
+		return false
+	if value is Dictionary:
+		for key: Variant in value as Dictionary:
+			if _contains_string(key, needle) or _contains_string((value as Dictionary)[key], needle):
+				return true
+	return false
 
 func _assert_failure(result: ProfileMutationResult, expected: String, label: String, failures: Array[String]) -> void:
 	TestAssertions.truthy(not result.ok(), "%s is rejected" % label, failures)

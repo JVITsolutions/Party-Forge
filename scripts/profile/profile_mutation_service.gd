@@ -7,10 +7,10 @@ func _init(store: ProfileStore = null) -> void:
 	_store = store if store != null else ProfileStore.new()
 
 func apply(profile_id: String, transaction_id: String, mutate: Callable, root: String = ProfileStore.DEFAULT_ROOT, now_unix: int = -1, operation: String = "", request: Dictionary = {}) -> ProfileMutationResult:
-	return _apply_internal(profile_id, transaction_id, mutate, root, now_unix, operation, request, false, "")
+	return _apply_internal(profile_id, transaction_id, mutate, root, now_unix, operation, request, false, [], "")
 
-func apply_irreversible(profile_id: String, transaction_id: String, mutate: Callable, root: String = ProfileStore.DEFAULT_ROOT, now_unix: int = -1, operation: String = "", request: Dictionary = {}) -> ProfileMutationResult:
-	return _apply_internal(profile_id, transaction_id, mutate, root, now_unix, operation, request, true, "")
+func apply_irreversible(profile_id: String, transaction_id: String, mutate: Callable, root: String = ProfileStore.DEFAULT_ROOT, now_unix: int = -1, operation: String = "", request: Dictionary = {}, removed_instance_ids: Array[String] = []) -> ProfileMutationResult:
+	return _apply_internal(profile_id, transaction_id, mutate, root, now_unix, operation, request, true, removed_instance_ids.duplicate(), "")
 
 func apply_with_resumable_run_revocation(
 	profile_id: String,
@@ -26,7 +26,7 @@ func apply_with_resumable_run_revocation(
 		var result := ProfileMutationResult.new()
 		result.error = "PROFILE_MUTATION_ERROR profile=%s transaction=%s reason=revoked run id is required" % [profile_id, transaction_id]
 		return result
-	return _apply_internal(profile_id, transaction_id, mutate, root, now_unix, operation, request, true, String(revoked_run_id))
+	return _apply_internal(profile_id, transaction_id, mutate, root, now_unix, operation, request, true, [], String(revoked_run_id))
 
 func _apply_internal(
 	profile_id: String,
@@ -37,6 +37,7 @@ func _apply_internal(
 	operation: String,
 	request: Dictionary,
 	irreversible: bool,
+	removed_instance_ids: Array[String],
 	revoked_run_id: String,
 ) -> ProfileMutationResult:
 	var result := ProfileMutationResult.new()
@@ -107,8 +108,12 @@ func _apply_internal(
 	if not protected_field.is_empty():
 		result.error = "PROFILE_MUTATION_ERROR profile=%s transaction=%s reason=protected field changed field=%s" % [profile_id, transaction_id, protected_field]
 		return result
-	if not revoked_run_id.is_empty():
-		_revoke_run_item_snapshots(working, revoked_run_id, revoked_instance_ids)
+	if not revoked_run_id.is_empty() or not removed_instance_ids.is_empty():
+		var forbidden_instance_ids := removed_instance_ids.duplicate()
+		for instance_id: String in revoked_instance_ids:
+			if instance_id not in forbidden_instance_ids:
+				forbidden_instance_ids.append(instance_id)
+		_sanitize_historical_transaction_snapshots(working, revoked_run_id, forbidden_instance_ids)
 	working.normalize()
 	var validation := ProfileCodec.validate_profile(working)
 	if not validation.is_empty():
@@ -149,7 +154,7 @@ static func _strict_run_instance_ids(resumable_run: Dictionary, revoked_run_id: 
 	result.sort()
 	return result
 
-static func _revoke_run_item_snapshots(profile: ProfileState, revoked_run_id: String, revoked_instance_ids: Array[String]) -> void:
+static func _sanitize_historical_transaction_snapshots(profile: ProfileState, revoked_run_id: String, forbidden_instance_ids: Array[String]) -> void:
 	var sanitized := profile.to_dictionary()
 	sanitized["applied_transactions"] = {}
 	for transaction_id: Variant in profile.applied_transactions:
@@ -157,7 +162,7 @@ static func _revoke_run_item_snapshots(profile: ProfileState, revoked_run_id: St
 		var snapshot := record["result_profile"] as Dictionary
 		var resumable := snapshot["resumable_run"] as Dictionary
 		var owns_revoked_run := resumable.has("item_state") and String(resumable.get("run_id", "")) == revoked_run_id
-		if owns_revoked_run or _contains_any_string(snapshot, revoked_instance_ids):
+		if owns_revoked_run or _contains_any_string(snapshot, forbidden_instance_ids):
 			var replacement := sanitized.duplicate(true)
 			replacement["updated_at_unix"] = record["committed_at_unix"]
 			record["result_profile"] = replacement
