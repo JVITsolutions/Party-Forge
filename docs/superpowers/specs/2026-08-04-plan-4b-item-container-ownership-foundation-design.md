@@ -144,6 +144,8 @@ Each ownership domain has one `ItemRegistry`:
 
 The registry maps `instance_id` to one immutable item record. It rejects duplicate IDs and invalid records. It never infers ownership from controller number, proximity, active UI focus, or character class.
 
+The registry is schema version `1` and serializes with the exact top-level fields `schema_version` and `items`. `items` is an array of complete ItemInstance documents sorted by `instance_id`; the dictionary lookup key is derived from each document's validated ID and is never serialized as a second source of identity.
+
 An item must have exactly one serialized location in its ownership domain. Creation and placement happen in one transaction, so a persisted registry cannot contain an orphaned item. Future equipment sheets, ground-item collections, extraction carts, and transfer escrows will be modeled as additional typed containers rather than bypassing this invariant.
 
 ## Fixed-slot container model
@@ -155,6 +157,8 @@ An item must have exactly one serialized location in its ownership domain. Creat
 - Ownership-domain identity.
 - Fixed nonnegative `capacity`.
 - Sparse `slot -> instance_id` placement.
+
+Its schema version is `1`, with the exact serialized fields `schema_version`, `container_id`, `container_kind`, `owner_id`, `capacity`, and `slots`. `slots` is a JSON object whose keys are canonical unsigned decimal strings without leading zeroes and whose values are non-empty instance-ID strings. Serialization orders numeric slot keys ascending.
 
 Slots are zero-based integers in `[0, capacity)`. Serialization writes only occupied slots, but the slot number is stable and exact. Empty slots are not compacted automatically.
 
@@ -168,6 +172,10 @@ Plan 4B container kinds are:
 The first production run inventory has `5 * inventory_columns` slots. The current progression range is zero through eight columns, producing zero through 40 slots. A locked inventory therefore has zero accessible slots rather than a hidden default capacity.
 
 Every profile stash tab has exactly 100 slots in Plan 4B. `stash-access` materializes the first tab. Later Warehouse progression may add more tabs and organization features without changing the container contract.
+
+For Plan 4B, `run_inventory` and `developer_inventory` accept capacities from zero through 40, while `profile_stash_tab` and `developer_stash_tab` require exactly 100. Raising those limits later is a deliberate schema-compatible rule change backed by progression and performance tests, not an arbitrary oversized snapshot accepted during decode.
+
+`ItemOwnershipState` is schema version `1` with the exact fields `schema_version`, `owner_id`, `registry`, and `containers`. `containers` is an array sorted by `container_id`. The state owner and every container owner must be the same non-empty ID. Strict decode returns an `ItemOwnershipStateDecodeResult` containing either a complete validated `state` or an `error`; it never exposes partial state.
 
 ## Ownership domains
 

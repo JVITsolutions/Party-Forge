@@ -53,6 +53,7 @@ $godot = 'F:\Projects(root)\Game dev\godot\Godot_v4.7.1-stable_mono_win64\Godot_
 - `scripts/items/item_registry.gd` — canonical instance-ID-to-item records.
 - `scripts/items/item_slot_container.gd` — fixed capacity and sparse exact placement.
 - `scripts/items/item_ownership_state.gd` — one registry plus owner-scoped containers.
+- `scripts/items/item_ownership_state_decode_result.gd` — strict ownership decode result without partial state.
 - `scripts/items/item_transaction_request.gd` — canonical create/move/swap/remove request.
 - `scripts/items/item_transaction_result.gd` — stable result code, candidate state, and duplicate marker.
 - `scripts/items/item_transaction_journal.gd` — request fingerprints and replay results for run/sandbox state.
@@ -262,6 +263,7 @@ git commit -m "feat: add immutable item instance codec"
 - Create: `scripts/items/item_registry.gd`
 - Create: `scripts/items/item_slot_container.gd`
 - Create: `scripts/items/item_ownership_state.gd`
+- Create: `scripts/items/item_ownership_state_decode_result.gd`
 - Test: `tests/unit/test_item_ownership_state.gd`
 
 **Interfaces:**
@@ -298,9 +300,13 @@ const DEVELOPER_INVENTORY := &"developer_inventory"
 const DEVELOPER_STASH_TAB := &"developer_stash_tab"
 ```
 
-It exposes `item_id_at(slot)`, `occupied_slots()`, `first_empty_slot()`, `copy()`, and `to_dictionary()`. `occupied_slots()` returns ascending integers. The sparse JSON `slots` dictionary uses decimal string keys so it is JSON-safe.
+`ItemRegistry` schema `1` uses the exact fields `schema_version` and `items`; items serialize in ascending `instance_id` order. It rejects duplicate IDs and decodes every record through `ItemInstanceCodec`.
 
-`ItemOwnershipState` contains `owner_id`, one registry, and a dictionary of containers. Its validation walks every container reference, counts each instance ID, requires exactly one reference per registry item, and returns the first stable `PARTY_FORGE_ITEM_REGISTRY_ERROR` or `PARTY_FORGE_CONTAINER_ERROR`.
+`ItemSlotContainer` schema `1` uses the exact fields `schema_version`, `container_id`, `container_kind`, `owner_id`, `capacity`, and `slots`. It exposes `item_id_at(slot)`, `occupied_slots()`, `first_empty_slot()`, `copy()`, and `to_dictionary()`. `occupied_slots()` returns ascending integers. The sparse JSON `slots` dictionary uses canonical unsigned decimal string keys without leading zeroes. `run_inventory` and `developer_inventory` accept capacities `0..40`; `profile_stash_tab` and `developer_stash_tab` require capacity `100`.
+
+`ItemOwnershipState` schema `1` uses the exact fields `schema_version`, `owner_id`, `registry`, and `containers`; containers serialize in ascending `container_id` order. It contains one registry and a dictionary of containers. Its validation requires a non-empty owner, requires every container owner to match it, walks every container reference, counts each instance ID, requires exactly one reference per registry item, and returns the first stable `PARTY_FORGE_ITEM_REGISTRY_ERROR` or `PARTY_FORGE_CONTAINER_ERROR`.
+
+Add `ItemOwnershipStateDecodeResult` in `scripts/items/item_ownership_state_decode_result.gd` with `state`, `error`, and `ok()`. `ItemOwnershipState.decode(document, equipment, foundation)` validates exact field sets and returns either one complete defensive state or an error with no partial state.
 
 Keep mutation helpers prefixed and scoped for Task 4; do not expose dictionary references.
 
