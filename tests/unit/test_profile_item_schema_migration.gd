@@ -250,7 +250,7 @@ static func schema_two_document(profile_id: String) -> Dictionary:
 	var document := _expected_schema_two_document(schema_one_document(profile_id, 91, 2100, false))
 	var sword := _item_document(profile_id, "item-migrate-sword", "forge_vanguard_sword", 0)
 	var shield := _item_document(profile_id, "item-migrate-shield", "forge_vanguard_shield", 1)
-	document["item_records"] = {"schema_version": 1, "items": [shield, sword]}
+	document["item_records"] = {"schema_version": 1, "items": [sword, shield]}
 	document["stash_tabs"] = [
 		ItemSlotContainer.create(&"stash-tab-000", ItemSlotContainer.PROFILE_STASH_TAB, profile_id, 100, {3: sword["instance_id"]}).to_dictionary(),
 		ItemSlotContainer.create(&"stash-tab-001", ItemSlotContainer.PROFILE_STASH_TAB, profile_id, 100, {87: shield["instance_id"]}).to_dictionary(),

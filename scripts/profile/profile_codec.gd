@@ -335,7 +335,12 @@ static func _profile_from_current_document(data: Dictionary) -> ProfileState:
 		"containers": container_documents,
 	}
 	var ownership := ItemOwnershipState.decode(ownership_document, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG).state
-	profile.item_records = ownership.registry().to_dictionary()
+	var registry := ownership.registry()
+	profile.item_records = {"schema_version": registry.schema_version, "items": []}
+	for item_document: Dictionary in (data["item_records"] as Dictionary)["items"] as Array:
+		(profile.item_records["items"] as Array).append(
+			registry.item(item_document["instance_id"] as String).to_dictionary()
+		)
 	profile.leader_loadout = ownership.container(&"leader-loadout").to_dictionary()
 	profile.leader_loadout_class_id = data["leader_loadout_class_id"] as String
 	profile.stash_tabs = []
