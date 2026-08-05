@@ -1,13 +1,10 @@
-class_name ProfileLoadResult
+class_name ProfileMigrationResult
 extends RefCounted
 
 var profile: ProfileState
 var error := ""
 var migrated := false
 var source_schema_version := 0
-var missing := false
-var recovered_from_backup := false
-var recovery_detail := ""
 
 func ok() -> bool:
 	return profile != null and error.is_empty()

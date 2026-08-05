@@ -3,7 +3,7 @@ extends RefCounted
 
 enum PrologueState { NOT_STARTED, IN_PROGRESS, COMPLETED }
 
-const SCHEMA_VERSION := 1
+const SCHEMA_VERSION := 2
 
 var schema_version := SCHEMA_VERSION
 var profile_id := ""
@@ -24,7 +24,9 @@ var tree_visibility_progress: Dictionary = {}
 var owned_characters: Dictionary = {}
 var squad_capacity := 1
 var inventory_columns := 0
+var item_records: Dictionary = {"schema_version": 1, "items": []}
 var stash_tabs: Array[Dictionary] = []
+var next_item_sequence := 0
 var extraction_capacity := 0
 var run_history: Array[Dictionary] = []
 var resumable_run: Dictionary = {}
@@ -74,7 +76,9 @@ func to_dictionary() -> Dictionary:
 		"owned_characters": owned_characters.duplicate(true),
 		"squad_capacity": squad_capacity,
 		"inventory_columns": inventory_columns,
+		"item_records": item_records.duplicate(true),
 		"stash_tabs": stash_tabs.duplicate(true),
+		"next_item_sequence": next_item_sequence,
 		"extraction_capacity": extraction_capacity,
 		"run_history": run_history.duplicate(true),
 		"resumable_run": resumable_run.duplicate(true),

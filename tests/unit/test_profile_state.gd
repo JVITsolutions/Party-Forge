@@ -5,7 +5,9 @@ func run() -> Array[String]:
 	_test_new_profile_defaults(failures)
 	_test_round_trip_and_deep_copy(failures)
 	_test_malformed_and_future_schema_fail_closed(failures)
-	_test_schema_one_field_types_fail_closed(failures)
+	_test_current_field_types_fail_closed(failures)
+	_test_exact_historical_and_current_fields_fail_closed(failures)
+	_test_current_item_storage_is_strict_and_defensive(failures)
 	_test_json_safe_integer_boundaries(failures)
 	_test_transaction_record_shapes_fail_closed(failures)
 	return failures
@@ -18,6 +20,9 @@ func _test_new_profile_defaults(failures: Array[String]) -> void:
 	TestAssertions.equal(profile.passive_points_available, 0, "passive points start at zero", failures)
 	TestAssertions.equal(profile.squad_capacity, 1, "profile starts with leader-only capacity", failures)
 	TestAssertions.equal(profile.inventory_columns, 0, "inventory remains locked", failures)
+	TestAssertions.equal(profile.get("item_records"), {"schema_version": 1, "items": []}, "item registry starts as a versioned empty document", failures)
+	TestAssertions.equal(profile.stash_tabs, [], "stash starts empty", failures)
+	TestAssertions.equal(profile.get("next_item_sequence"), 0, "item issuance sequence starts at zero", failures)
 	TestAssertions.equal(profile.extraction_capacity, 0, "extraction remains locked", failures)
 
 func _test_round_trip_and_deep_copy(failures: Array[String]) -> void:
@@ -48,7 +53,7 @@ func _test_malformed_and_future_schema_fail_closed(failures: Array[String]) -> v
 	var future_result := ProfileCodec.decode(JSON.stringify(future))
 	TestAssertions.truthy(not future_result.ok() and future_result.error.contains("unsupported schema"), "future schema fails closed", failures)
 
-func _test_schema_one_field_types_fail_closed(failures: Array[String]) -> void:
+func _test_current_field_types_fail_closed(failures: Array[String]) -> void:
 	var valid := ProfileState.new_profile("profile-12345678", "Jacob", 1000).to_dictionary()
 	var cases: Array[Dictionary] = [
 		{"field": "profile_id", "value": 7},
@@ -69,7 +74,9 @@ func _test_schema_one_field_types_fail_closed(failures: Array[String]) -> void:
 		{"field": "owned_characters", "value": {"fighter": []}},
 		{"field": "squad_capacity", "value": 0},
 		{"field": "inventory_columns", "value": 9},
+		{"field": "item_records", "value": {}},
 		{"field": "stash_tabs", "value": [{} , "bad"]},
+		{"field": "next_item_sequence", "value": -1},
 		{"field": "extraction_capacity", "value": -1},
 		{"field": "run_history", "value": [7]},
 		{"field": "resumable_run", "value": "run"},
@@ -79,7 +86,81 @@ func _test_schema_one_field_types_fail_closed(failures: Array[String]) -> void:
 		var malformed := valid.duplicate(true)
 		malformed[item["field"]] = item["value"]
 		var result := ProfileCodec.decode(JSON.stringify(malformed))
-		TestAssertions.truthy(not result.ok() and result.error.contains("field=%s" % item["field"]), "schema-one field %s fails closed" % item["field"], failures)
+		TestAssertions.truthy(not result.ok() and result.error.contains("field=%s" % item["field"]), "current field %s fails closed" % item["field"], failures)
+
+func _test_exact_historical_and_current_fields_fail_closed(failures: Array[String]) -> void:
+	var current := ProfileState.new_profile("profile-12345678", "Jacob", 1000).to_dictionary()
+	var current_missing := current.duplicate(true)
+	current_missing.erase("gold")
+	TestAssertions.truthy(not _validate_current(current_missing).is_empty(), "current document rejects a missing field", failures)
+	var current_extra := current.duplicate(true)
+	current_extra["unexpected"] = true
+	TestAssertions.truthy(not _validate_current(current_extra).is_empty(), "current document rejects an extra field", failures)
+	var historical := current.duplicate(true)
+	historical["schema_version"] = 1
+	historical.erase("item_records")
+	historical.erase("next_item_sequence")
+	TestAssertions.equal(_validate_loadable(historical), "", "complete historical document remains loadable", failures)
+	TestAssertions.truthy(not _validate_current(historical).is_empty(), "historical document is not current", failures)
+	var historical_missing := historical.duplicate(true)
+	historical_missing.erase("gold")
+	TestAssertions.truthy(not _validate_loadable(historical_missing).is_empty(), "historical document rejects a missing field", failures)
+	var historical_extra := historical.duplicate(true)
+	historical_extra["unexpected"] = true
+	TestAssertions.truthy(not _validate_loadable(historical_extra).is_empty(), "historical document rejects an extra field", failures)
+	var current_snapshot := current.duplicate(true)
+	current_snapshot["applied_transactions"] = {}
+	var current_with_historical_snapshot := current.duplicate(true)
+	var historical_snapshot := historical.duplicate(true)
+	historical_snapshot["applied_transactions"] = {}
+	current_with_historical_snapshot["applied_transactions"] = {"tx": _transaction_record(historical_snapshot)}
+	TestAssertions.truthy(not _validate_current(current_with_historical_snapshot).is_empty(), "current transaction rejects a historical result snapshot", failures)
+	var historical_with_current_snapshot := historical.duplicate(true)
+	historical_with_current_snapshot["applied_transactions"] = {"tx": _transaction_record(current_snapshot)}
+	TestAssertions.truthy(not _validate_loadable(historical_with_current_snapshot).is_empty(), "historical transaction rejects a current result snapshot", failures)
+
+func _test_current_item_storage_is_strict_and_defensive(failures: Array[String]) -> void:
+	var current := ProfileState.new_profile("profile-storage1", "Storage", 1000).to_dictionary()
+	current["item_records"] = {"schema_version": 1, "items": [_valid_item_document()]}
+	current["stash_tabs"] = [{
+		"schema_version": 1,
+		"container_id": "stash-0001",
+		"container_kind": "profile_stash_tab",
+		"owner_id": "profile-storage1",
+		"capacity": 100,
+		"slots": {"7": "item-profile-0001"},
+	}]
+	current["next_item_sequence"] = 1
+	var decoded := ProfileCodec.decode_document(current)
+	TestAssertions.truthy(decoded.ok(), "valid catalog-backed profile storage decodes", failures)
+	current["next_item_sequence"] = 99
+	((current["item_records"] as Dictionary)["items"] as Array)[0]["base_definition_id"] = "unknown_after_decode"
+	((current["stash_tabs"] as Array)[0] as Dictionary)["slots"] = {}
+	if decoded.profile != null:
+		TestAssertions.equal(decoded.profile.get("next_item_sequence"), 1, "decoded issuance sequence is isolated", failures)
+		if decoded.profile.get("item_records") is Dictionary:
+			var decoded_items := (decoded.profile.get("item_records") as Dictionary)["items"] as Array
+			TestAssertions.equal((decoded_items[0] as Dictionary)["base_definition_id"], "forge_vanguard_sword", "decoded item records are isolated", failures)
+		if not decoded.profile.stash_tabs.is_empty():
+			TestAssertions.equal((decoded.profile.stash_tabs[0] as Dictionary)["slots"], {"7": "item-profile-0001"}, "decoded stash records are isolated", failures)
+	var invalid_item := ProfileState.new_profile("profile-storage1", "Storage", 1000).to_dictionary()
+	invalid_item["item_records"] = {"schema_version": 1, "items": [_valid_item_document()]}
+	((invalid_item["item_records"] as Dictionary)["items"] as Array)[0]["base_definition_id"] = "unknown-equipment"
+	TestAssertions.truthy(not ProfileCodec.decode_document(invalid_item).ok(), "unknown persisted item is rejected", failures)
+	var invalid_stash := ProfileState.new_profile("profile-storage1", "Storage", 1000).to_dictionary()
+	invalid_stash["stash_tabs"] = [{
+		"schema_version": 1,
+		"container_id": "run-not-stash",
+		"container_kind": "run_inventory",
+		"owner_id": "profile-storage1",
+		"capacity": 0,
+		"slots": {},
+	}]
+	TestAssertions.truthy(not ProfileCodec.decode_document(invalid_stash).ok(), "non-stash persistent container is rejected", failures)
+	for invalid_sequence: Variant in [-1, 9007199254740992, 1.5, "1"]:
+		var invalid := ProfileState.new_profile("profile-storage1", "Storage", 1000).to_dictionary()
+		invalid["next_item_sequence"] = invalid_sequence
+		TestAssertions.truthy(not ProfileCodec.decode_document(invalid).ok(), "invalid item sequence %s is rejected" % str(invalid_sequence), failures)
 
 func _test_json_safe_integer_boundaries(failures: Array[String]) -> void:
 	const SAFE_MAX := 9007199254740991
@@ -97,6 +178,7 @@ func _test_json_safe_integer_boundaries(failures: Array[String]) -> void:
 		"passive_points_available",
 		"passive_points_lifetime_earned",
 		"squad_capacity",
+		"next_item_sequence",
 		"extraction_capacity",
 	]
 	for field: String in top_level_fields:
@@ -162,3 +244,35 @@ func _test_transaction_record_shapes_fail_closed(failures: Array[String]) -> voi
 		malformed["applied_transactions"] = {"tx": cases[index]}
 		var result := ProfileCodec.decode(JSON.stringify(malformed))
 		TestAssertions.truthy(not result.ok() and result.error.contains("field=applied_transactions"), "transaction record shape %d fails closed" % index, failures)
+
+func _transaction_record(snapshot: Dictionary) -> Dictionary:
+	return {
+		"operation": "grant_gold",
+		"fingerprint": "a".repeat(64),
+		"committed_at_unix": int(snapshot["updated_at_unix"]),
+		"result_profile": snapshot,
+	}
+
+func _validate_current(document: Dictionary) -> String:
+	var validator := Callable(ProfileCodec, "validate_current_document")
+	return str(validator.call(document)) if validator.is_valid() else "missing current validator"
+
+func _validate_loadable(document: Dictionary) -> String:
+	var validator := Callable(ProfileCodec, "validate_loadable_document")
+	return str(validator.call(document)) if validator.is_valid() else "missing loadable validator"
+
+func _valid_item_document() -> Dictionary:
+	return {
+		"affixes": [],
+		"base_definition_id": "forge_vanguard_sword",
+		"instance_id": "item-profile-0001",
+		"item_level": 1,
+		"origin": {
+			"issuer_namespace": "profile:profile-storage1",
+			"seed": 4402,
+			"sequence": 0,
+			"source": "test_fixture",
+		},
+		"rarity_id": "common",
+		"schema_version": 1,
+	}

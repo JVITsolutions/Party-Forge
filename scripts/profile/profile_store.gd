@@ -15,19 +15,46 @@ func save_profile(profile: ProfileState, root: String = DEFAULT_ROOT) -> String:
 	var validation := ProfileCodec.validate_profile(profile)
 	if not validation.is_empty():
 		return validation
-	return _documents.save_document(profile_path(profile.profile_id, root), profile.to_dictionary(), _validate_document)
+	return _documents.save_document(profile_path(profile.profile_id, root), profile.to_dictionary(), _validate_current_document)
 
 func load_profile(profile_id: String, root: String = DEFAULT_ROOT) -> ProfileLoadResult:
 	var result := ProfileLoadResult.new()
-	var loaded := _documents.load_document(profile_path(profile_id, root), _validate_document)
+	var path := profile_path(profile_id, root)
+	var loaded := _documents.load_document(path, _validate_loadable_document)
 	result.missing = loaded.missing
 	result.recovered_from_backup = loaded.recovered_from_backup
 	result.recovery_detail = loaded.recovery_detail
 	result.error = loaded.error
-	if loaded.ok():
-		var decoded := ProfileCodec.decode_document(loaded.document)
+	if not loaded.ok():
+		return result
+	var decoded := ProfileCodec.decode_document(loaded.document)
+	result.error = decoded.error
+	result.source_schema_version = decoded.source_schema_version
+	if not decoded.ok():
+		return result
+	if not decoded.migrated:
 		result.profile = decoded.profile
-		result.error = decoded.error
+		return result
+	var candidate := decoded.profile.to_dictionary()
+	var validation := ProfileCodec.validate_current_document(candidate)
+	if not validation.is_empty():
+		result.error = "PARTY_FORGE_PROFILE_MIGRATION_ERROR field=document reason=current candidate invalid: %s" % validation
+		return result
+	var promotion_error := _documents.save_document(path, candidate, _validate_loadable_document)
+	if not promotion_error.is_empty():
+		result.error = promotion_error
+		return result
+	var verified := _documents.load_document(path, _validate_current_document, false)
+	if not verified.ok():
+		result.error = "PARTY_FORGE_PROFILE_MIGRATION_ERROR field=document reason=current promotion verification failed: %s" % verified.error
+		return result
+	var current := ProfileCodec.decode_document(verified.document)
+	if not current.ok() or current.migrated or current.source_schema_version != ProfileState.SCHEMA_VERSION:
+		result.error = "PARTY_FORGE_PROFILE_MIGRATION_ERROR field=document reason=current promotion reload failed: %s" % current.error
+		return result
+	result.profile = current.profile
+	result.migrated = true
+	result.source_schema_version = decoded.source_schema_version
 	return result
 
 func profile_ids(root: String = DEFAULT_ROOT) -> PackedStringArray:
@@ -49,5 +76,8 @@ func profile_ids(root: String = DEFAULT_ROOT) -> PackedStringArray:
 	result.sort()
 	return result
 
-func _validate_document(document: Dictionary) -> String:
-	return ProfileCodec.validate_document(document)
+func _validate_current_document(document: Dictionary) -> String:
+	return ProfileCodec.validate_current_document(document)
+
+func _validate_loadable_document(document: Dictionary) -> String:
+	return ProfileCodec.validate_loadable_document(document)
