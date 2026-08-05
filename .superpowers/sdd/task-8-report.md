@@ -59,6 +59,30 @@ One earlier test attempt was rejected as RED evidence because the test itself co
 - A follow-up RED exited `1` with exactly one focused failure for a noncanonical moved state carrying an empty journal and sequence zero.
 - GREEN validates an empty journal against exact deterministic issued items and canonical reset placement.
 
+### Independent Review Correction
+
+Independent review proved that the first Task 8 commit still accepted forged journal documents when the entry count, transaction IDs, and final-state equality were superficially valid. Specifically, it accepted an all-zero 64-character fingerprint, a rewound current/final state, and a mutated item record.
+
+The correction was implemented test-first:
+
+- The accepted focused RED exited `1` with `TEST_SUMMARY: FAIL (12 failures)` and no parser, loader, or resource errors.
+- The RED covered forged fingerprints, rewound state, mutated item data, non-first-empty moves, multi-item transitions, and swaps. Reload cases also asserted that rejected primary/backup bytes and the usable in-memory state remain unchanged.
+- Decode now rebuilds the canonical fixture independently, requires the current and every journal registry to match the exact deterministic item documents, and validates the complete transition chain from canonical reset.
+- Each journal transition must reconstruct as exactly one move between the developer inventory and stash into the destination's first empty slot. The validator applies that request through the Task 4 transaction service, requires exact next-state equality, and recomputes the exact Task 4 request fingerprint.
+- Missing/extra items, item-record edits, multiple moves, non-first-empty moves, swaps, forged hashes, and rewound final states therefore fail closed.
+
+After the final forged-ID coverage was present, the exact correction tree passed the focused determinism gate twice:
+
+```text
+CORRECTION_FINAL_FOCUSED_RUN_1
+DEVELOPER_ITEM_SANDBOX_SHA256: c201fd5917d9958da63dacd8201e80d5911c0de51af367977d2a5ee57dd9defe
+TEST_SUMMARY: PASS (0 failures)
+
+CORRECTION_FINAL_FOCUSED_RUN_2
+DEVELOPER_ITEM_SANDBOX_SHA256: c201fd5917d9958da63dacd8201e80d5911c0de51af367977d2a5ee57dd9defe
+TEST_SUMMARY: PASS (0 failures)
+```
+
 ## Determinism Gate
 
 The final focused Task 8 suite ran twice after all production and test changes:
@@ -131,5 +155,7 @@ The complete suite emitted existing intentional negative-test warnings/errors an
 ## Review Boundary
 
 Commit message: `feat: add deterministic developer item sandbox state`
+
+Independent-review correction commit message: `fix: validate developer sandbox journal chain`
 
 Stop after the focused Task 8 commit for independent review. Task 9 has not started.

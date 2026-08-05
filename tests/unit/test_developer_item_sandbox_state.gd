@@ -31,6 +31,7 @@ func run() -> Array[String]:
 	_assert_deterministic_fixture(failures)
 	_assert_explicit_affixes_survive_reload(failures)
 	_assert_movement_replay_collision_and_reset(failures)
+	_assert_forged_journal_documents_fail_atomically(failures)
 	_assert_strict_reload_is_failure_atomic(failures)
 	_assert_atomic_save_failure_and_profile_isolation(failures)
 	_cleanup_sandbox_files()
@@ -262,6 +263,119 @@ func _assert_strict_reload_is_failure_atomic(failures: Array[String]) -> void:
 		TestAssertions.truthy(not reload_error.is_empty(), "malformed sandbox document %d is rejected" % index, failures)
 		TestAssertions.equal(state.to_dictionary(), before, "failed reload %d preserves usable in-memory state" % index, failures)
 
+func _assert_forged_journal_documents_fail_atomically(failures: Array[String]) -> void:
+	_cleanup_sandbox_files()
+	var seed_state: Variant = _state_script.new()
+	var reset_error: String = seed_state.reset()
+	TestAssertions.equal(reset_error, "", "forgery fixture reset succeeds", failures)
+	if not reset_error.is_empty():
+		return
+	var canonical: Dictionary = seed_state.to_dictionary()
+	var moved_item_id: String = seed_state.stash().item_id_at(0)
+	TestAssertions.equal(seed_state.move_to_first_empty_inventory(moved_item_id), "", "forgery fixture move succeeds", failures)
+	var valid_moved: Dictionary = seed_state.to_dictionary()
+	TestAssertions.equal((valid_moved["transaction_journal"] as Array).size(), 1, "forgery fixture has one journal entry", failures)
+
+	var forged_fingerprint := valid_moved.duplicate(true)
+	forged_fingerprint["transaction_journal"][0]["fingerprint"] = "0".repeat(64)
+	var forged_rewind := valid_moved.duplicate(true)
+	forged_rewind["ownership_state"] = canonical["ownership_state"].duplicate(true)
+	forged_rewind["transaction_journal"][0]["state"] = canonical["ownership_state"].duplicate(true)
+	var forged_item_level := valid_moved.duplicate(true)
+	_change_item_level(forged_item_level["ownership_state"] as Dictionary, moved_item_id, 100)
+	_change_item_level(forged_item_level["transaction_journal"][0]["state"] as Dictionary, moved_item_id, 100)
+	var forged_identity := valid_moved.duplicate(true)
+	var replaced_item_id := String(_container_document(forged_identity["ownership_state"] as Dictionary, STASH_ID)["slots"]["1"])
+	var replacement_item_id := "%s-forged" % replaced_item_id
+	_change_item_identity(forged_identity["ownership_state"] as Dictionary, replaced_item_id, replacement_item_id)
+	_change_item_identity(forged_identity["transaction_journal"][0]["state"] as Dictionary, replaced_item_id, replacement_item_id)
+
+	var cases: Array[Dictionary] = [
+		{"label": "forged fingerprint", "document": forged_fingerprint},
+		{"label": "rewound successful move", "document": forged_rewind},
+		{"label": "mutated item level", "document": forged_item_level},
+		{"label": "missing canonical and extra forged item id", "document": forged_identity},
+	]
+	var store: Variant = _store_script.new()
+	var non_first_empty := valid_moved.duplicate(true)
+	var non_first_state: Dictionary = canonical["ownership_state"].duplicate(true)
+	var non_first_inventory := _container_document(non_first_state, INVENTORY_ID)
+	var non_first_stash := _container_document(non_first_state, STASH_ID)
+	non_first_inventory["slots"]["1"] = moved_item_id
+	non_first_stash["slots"].erase("0")
+	non_first_empty["ownership_state"] = non_first_state
+	non_first_empty["transaction_journal"][0]["state"] = non_first_state.duplicate(true)
+	non_first_empty["transaction_journal"][0]["fingerprint"] = ItemTransactionRequest.move(
+		"sandbox-move-%016d" % 0,
+		OWNER_ID,
+		STASH_ID,
+		0,
+		moved_item_id,
+		INVENTORY_ID,
+		1
+	).fingerprint()
+	var multiple_move := valid_moved.duplicate(true)
+	var multiple_state: Dictionary = valid_moved["ownership_state"].duplicate(true)
+	var second_item_id: String = String(_container_document(multiple_state, STASH_ID)["slots"]["1"])
+	_container_document(multiple_state, INVENTORY_ID)["slots"]["1"] = second_item_id
+	_container_document(multiple_state, STASH_ID)["slots"].erase("1")
+	multiple_move["ownership_state"] = multiple_state
+	multiple_move["transaction_journal"][0]["state"] = multiple_state.duplicate(true)
+	var swap_document := valid_moved.duplicate(true)
+	var swap_state: Dictionary = valid_moved["ownership_state"].duplicate(true)
+	_container_document(swap_state, INVENTORY_ID)["slots"]["0"] = second_item_id
+	_container_document(swap_state, STASH_ID)["slots"]["1"] = moved_item_id
+	swap_document["ownership_state"] = swap_state
+	swap_document["issuance_metadata"]["next_transaction_sequence"] = 2
+	swap_document["transaction_journal"].append({
+		"transaction_id": "sandbox-move-%016d" % 1,
+		"fingerprint": ItemTransactionRequest.swap(
+			"sandbox-move-%016d" % 1,
+			OWNER_ID,
+			INVENTORY_ID,
+			0,
+			moved_item_id,
+			STASH_ID,
+			1
+		).fingerprint(),
+		"code": ItemTransactionResult.Code.OK,
+		"state": swap_state.duplicate(true),
+	})
+	var transition_forgeries: Array[Dictionary] = [
+		{"label": "non-first-empty move", "document": non_first_empty},
+		{"label": "multiple-item move", "document": multiple_move},
+		{"label": "swap transition", "document": swap_document},
+	]
+	for test_case: Dictionary in transition_forgeries:
+		TestAssertions.truthy(
+			not String(store.validate_document(test_case["document"] as Dictionary)).is_empty(),
+			"%s fails strict sandbox validation" % String(test_case["label"]),
+			failures
+		)
+	for test_case: Dictionary in cases:
+		var label := String(test_case["label"])
+		var forged := test_case["document"] as Dictionary
+		TestAssertions.truthy(
+			not String(store.validate_document(forged)).is_empty(),
+			"%s fails strict sandbox validation" % label,
+			failures
+		)
+		_cleanup_sandbox_files()
+		var state: Variant = _state_script.new()
+		TestAssertions.equal(state.reset(), "", "%s reload fixture reset succeeds" % label, failures)
+		TestAssertions.equal(state.move_to_first_empty_inventory(state.stash().item_id_at(0)), "", "%s reload fixture move succeeds" % label, failures)
+		var before_memory: Dictionary = state.to_dictionary()
+		var forged_text := JSON.stringify(forged, "\t", false)
+		_write_text(DOCUMENT_PATH, forged_text)
+		_write_text("%s.bak" % DOCUMENT_PATH, forged_text)
+		var before_primary: PackedByteArray = FileAccess.get_file_as_bytes(DOCUMENT_PATH)
+		var before_backup: PackedByteArray = FileAccess.get_file_as_bytes("%s.bak" % DOCUMENT_PATH)
+		var reload_error: String = state.reload()
+		TestAssertions.truthy(not reload_error.is_empty(), "%s reload is rejected" % label, failures)
+		TestAssertions.equal(state.to_dictionary(), before_memory, "%s reload preserves usable in-memory state" % label, failures)
+		TestAssertions.equal(FileAccess.get_file_as_bytes(DOCUMENT_PATH), before_primary, "%s reload preserves primary bytes" % label, failures)
+		TestAssertions.equal(FileAccess.get_file_as_bytes("%s.bak" % DOCUMENT_PATH), before_backup, "%s reload preserves backup bytes" % label, failures)
+
 func _assert_atomic_save_failure_and_profile_isolation(failures: Array[String]) -> void:
 	_cleanup_sandbox_files()
 	var profile_sentinel := ProfileStore.DEFAULT_ROOT.path_join(
@@ -308,6 +422,27 @@ func _minimal_unknown_document() -> Dictionary:
 		"transaction_journal": [],
 		"unknown": true,
 	}
+
+func _change_item_level(ownership_document: Dictionary, item_id: String, item_level: int) -> void:
+	for item: Dictionary in ownership_document["registry"]["items"]:
+		if String(item["instance_id"]) == item_id:
+			item["item_level"] = item_level
+			return
+
+func _change_item_identity(ownership_document: Dictionary, old_id: String, new_id: String) -> void:
+	for item: Dictionary in ownership_document["registry"]["items"]:
+		if String(item["instance_id"]) == old_id:
+			item["instance_id"] = new_id
+	for container: Dictionary in ownership_document["containers"]:
+		for slot: String in container["slots"]:
+			if String(container["slots"][slot]) == old_id:
+				container["slots"][slot] = new_id
+
+func _container_document(ownership_document: Dictionary, container_id: StringName) -> Dictionary:
+	for container: Dictionary in ownership_document["containers"]:
+		if String(container["container_id"]) == String(container_id):
+			return container
+	return {}
 
 func _cleanup_sandbox_files() -> void:
 	for suffix: String in ["", ".bak", ".tmp", ".bak.previous"]:
