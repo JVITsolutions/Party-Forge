@@ -72,4 +72,25 @@ All 48 error lines and eight warning lines were inspected. They are intentional 
 
 - `git diff --check` is clean.
 - Import/full-suite verification created seven untracked test `.gd.uid` sidecars; only those verification-created test UIDs were removed. The two production-script UIDs remain scoped artifacts.
-- No open Task 6 production concern is known.
+- No open Task 6 production-code concern is known; the one rejected engine-shutdown verification anomaly is documented below.
+
+## Review correction: persistent operation policy
+
+Sequential review found that the initial wrapper forwarded Task 4's `sandbox_remove` operation and could therefore persist item destruction in a production profile. Task 4 correctly owns that operation for disposable sandbox teardown, but Plan 4B does not authorize profile destruction, discard, or extraction.
+
+The correction added a positive persistent-operation whitelist containing only `create_and_place`, `move_to_empty`, and `swap_occupied`. Any other request operation now fails before the durable profile mutation boundary with:
+
+```text
+PARTY_FORGE_PROFILE_ITEM_STORAGE_ERROR field=request.operation reason=unsupported persistent operation <operation>
+```
+
+Correction RED exited `1` with `TEST_SUMMARY: FAIL (9 failures)`. The failures proved that `sandbox_remove` had returned success, exposed a committed profile, removed the item and exact slot, changed file bytes/hash, and recorded a durable transaction.
+
+Correction GREEN and final evidence:
+
+- Focused storage/Task 4 ownership/profile mutation/atomic-store batch: exit `0`, 55 captured lines, zero test/script/parse/loader failure markers, `ITEM_TRANSACTION_MATRIX: PASS`, and `TEST_SUMMARY: PASS (0 failures)`.
+- The first post-correction full run reached `TEST_SUMMARY: PASS (127 suites)` with zero test/script/parse/loader failures, then produced Windows access-violation exit `-1073741819` during engine shutdown before the established leak diagnostics. It was rejected as completion evidence.
+- Exact hermetic full-suite retry: exit `0`, 538 captured lines, zero test/script/parse/loader failure markers, and `TEST_SUMMARY: PASS (127 suites)`. The established 48 intentional error lines, eight warnings, 18 leaked `ObjectDB` instances, and five resources-still-in-use diagnostics were inspected.
+- No verification-created test UID sidecars remained after the correction runs.
+
+The regression proves the stable error, no partial profile, byte/hash equivalence, preserved item record and slot 37, unchanged `next_item_sequence`, and absence of a durable journal entry. Task 7 and future extraction behavior remain untouched.

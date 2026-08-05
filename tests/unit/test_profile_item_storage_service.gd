@@ -14,6 +14,7 @@ func run() -> Array[String]:
 	_test_create_preconditions_and_task_four_failures_are_atomic(failures)
 	_test_injected_save_failure_is_atomic(failures)
 	_test_non_create_preserves_sequence(failures)
+	_test_persistent_sandbox_remove_is_rejected(failures)
 	return failures
 
 func _test_persistent_create_replay_collision_and_defensive_results(failures: Array[String]) -> void:
@@ -172,6 +173,35 @@ func _test_non_create_preserves_sequence(failures: Array[String]) -> void:
 	TestAssertions.equal(saved.next_item_sequence, 7, "non-create transaction preserves issuance sequence", failures)
 	TestAssertions.equal(saved.stash_tabs[0]["slots"], {"99": item.instance_id}, "non-create transaction preserves exact move placement", failures)
 	TestAssertions.equal(saved.item_records["items"][0], item.to_dictionary(), "non-create transaction preserves complete item record", failures)
+	ProfileTestSupport.remove_tree(root)
+
+func _test_persistent_sandbox_remove_is_rejected(failures: Array[String]) -> void:
+	var root := _case_root("sandbox_remove_rejected")
+	var store := ProfileStore.new()
+	var item := _item("item-persistent-remove-forbidden", 0)
+	var profile := _profile_with_item(item, 37, 1)
+	_save_profile(store, profile, root, "persistent sandbox-remove fixture", failures)
+	var path := store.profile_path(PROFILE_ID, root)
+	var before_bytes := FileAccess.get_file_as_bytes(path)
+	var before_hash := _file_hash(path)
+	var request := ItemTransactionRequest.sandbox_remove(
+		"persistent-remove-forbidden",
+		PROFILE_ID,
+		STASH_ID,
+		37,
+		item.instance_id
+	)
+	var rejected := ProfileItemStorageService.new(ProfileMutationService.new(store)).apply(PROFILE_ID, request, root)
+	var expected_error := "PARTY_FORGE_PROFILE_ITEM_STORAGE_ERROR field=request.operation reason=unsupported persistent operation sandbox_remove"
+	TestAssertions.equal(rejected.error, expected_error, "persistent sandbox remove reports the stable production-policy error", failures)
+	_assert_failed_result(rejected, expected_error, "persistent sandbox remove", failures)
+	TestAssertions.equal(FileAccess.get_file_as_bytes(path), before_bytes, "persistent sandbox remove preserves exact profile bytes", failures)
+	TestAssertions.equal(_file_hash(path), before_hash, "persistent sandbox remove preserves the profile file hash", failures)
+	var saved := store.load_profile(PROFILE_ID, root).profile
+	TestAssertions.equal(saved.item_records["items"], [item.to_dictionary()], "persistent sandbox remove preserves the item record", failures)
+	TestAssertions.equal(saved.stash_tabs[0]["slots"], {"37": item.instance_id}, "persistent sandbox remove preserves the exact slot", failures)
+	TestAssertions.equal(saved.next_item_sequence, 1, "persistent sandbox remove preserves the issuance sequence", failures)
+	TestAssertions.truthy(not saved.applied_transactions.has("persistent-remove-forbidden"), "persistent sandbox remove records no durable transaction", failures)
 	ProfileTestSupport.remove_tree(root)
 
 func _assert_failed_result(result: ProfileMutationResult, expected_text: String, label: String, failures: Array[String]) -> void:

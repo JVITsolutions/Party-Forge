@@ -2,6 +2,11 @@ class_name ProfileItemStorageService
 extends RefCounted
 
 const OPERATION := "item_storage_transaction"
+const PERSISTENT_OPERATIONS: Array[String] = [
+	ItemTransactionRequest.CREATE_AND_PLACE,
+	ItemTransactionRequest.MOVE_TO_EMPTY,
+	ItemTransactionRequest.SWAP_OCCUPIED,
+]
 
 var _mutations: ProfileMutationService
 var _transactions: ItemContainerTransactionService
@@ -20,6 +25,11 @@ func apply(
 ) -> ProfileMutationResult:
 	if request == null:
 		return _failure("PARTY_FORGE_PROFILE_ITEM_STORAGE_ERROR field=request reason=must not be null")
+	if request.operation not in PERSISTENT_OPERATIONS:
+		return _failure(
+			"PARTY_FORGE_PROFILE_ITEM_STORAGE_ERROR field=request.operation reason=unsupported persistent operation %s"
+			% request.operation
+		)
 	var canonical_request := request.canonical_document()
 	return _mutations.apply(
 		profile_id,
