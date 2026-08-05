@@ -1,0 +1,211 @@
+class_name ArmouryScreen
+extends CanvasLayer
+
+signal close_requested
+signal move_requested(item_id: String, destination_container_id: StringName, destination_slot: int)
+signal equip_requested(item_id: String, equipment_slot_id: StringName, target_class_id: StringName)
+signal loadout_class_change_requested(target_class_id: StringName)
+
+var _projection := ArmouryProjection.new()
+var _return_focus: Control
+var _selected_tab := 0
+var _held_item_id := ""
+var _classes: Array[ClassDefinition] = []
+
+func _ready() -> void:
+	process_mode = Node.PROCESS_MODE_ALWAYS
+	visible = false
+	_connect_controls()
+
+func configure_classes(classes: Array[ClassDefinition]) -> void:
+	_classes = classes.duplicate()
+
+func open(storage: ProfileStorageProjection, return_focus: Control = null) -> void:
+	_projection = ArmouryProjection.from_storage(storage)
+	_return_focus = return_focus
+	_selected_tab = mini(_selected_tab, maxi(0, _projection.stash_tabs.size() - 1))
+	_held_item_id = ""
+	visible = true
+	_render_projection()
+	if is_inside_tree():
+		_first_focus().grab_focus()
+
+func refresh(storage: ProfileStorageProjection) -> void:
+	_projection = ArmouryProjection.from_storage(storage)
+	_render_projection()
+
+func close() -> void:
+	visible = false
+	_held_item_id = ""
+	if is_inside_tree() and _return_focus != null and is_instance_valid(_return_focus) and _return_focus.is_inside_tree() and _return_focus.is_visible_in_tree():
+		_return_focus.grab_focus()
+	_return_focus = null
+
+func is_open() -> bool: return visible
+func equipment_button_count() -> int: return _equipment_grid().get_child_count()
+func stash_tab_count() -> int: return _tab_bar().get_tab_count()
+func selected_item_detail() -> Dictionary: return _projection.item(_held_item_id)
+func projection() -> ArmouryProjection: return ArmouryProjection.from_storage(_projection.storage_projection())
+
+func choose_class(target_class_id: StringName) -> void:
+	if target_class_id.is_empty(): return
+	if not _projection.loadout_empty and target_class_id != _projection.active_class_id:
+		loadout_class_change_requested.emit(target_class_id)
+		return
+	for index: int in _class_chooser().item_count:
+		if StringName(_class_chooser().get_item_metadata(index)) == target_class_id:
+			_class_chooser().select(index)
+			return
+
+func apply_viewport_size(size: Vector2i) -> void:
+	var compact := size.x < 1400 or size.y < 850
+	_body().vertical = compact
+	_frame().offset_left = 16.0 if compact else 48.0
+	_frame().offset_top = 12.0 if compact else 36.0
+	_frame().offset_right = -_frame().offset_left
+	_frame().offset_bottom = -_frame().offset_top
+
+func request_drop(source_container_id: StringName, source_slot: int, item_id: String, destination_container_id: StringName, destination_slot: int) -> void:
+	_handle_drop(source_container_id, source_slot, item_id, destination_container_id, destination_slot)
+
+func _unhandled_input(event: InputEvent) -> void:
+	if not visible:
+		return
+	if event.is_action_pressed(&"ui_cancel"):
+		close_requested.emit()
+		get_viewport().set_input_as_handled()
+	elif event.is_action_pressed(&"item_sandbox_pickup"):
+		var focused := get_viewport().gui_get_focus_owner() as StorageSlotButton
+		if focused != null and not focused.item_id.is_empty():
+			_held_item_id = focused.item_id
+			_render_inspector()
+		get_viewport().set_input_as_handled()
+	elif event.is_action_pressed(&"ui_accept") and not _held_item_id.is_empty():
+		var target := get_viewport().gui_get_focus_owner() as StorageSlotButton
+		if target != null:
+			var source := _locate(_held_item_id)
+			_handle_drop(StringName(source.get("container_id", "")), int(source.get("slot", -1)), _held_item_id, target.container_id, target.slot)
+		get_viewport().set_input_as_handled()
+
+func _render_projection() -> void:
+	_class_label().text = "Active Class: %s" % (String(_projection.active_class_id) if not _projection.active_class_id.is_empty() else "Unbound")
+	_class_chooser().visible = _projection.loadout_empty
+	_class_chooser().clear()
+	for definition: ClassDefinition in _classes:
+		_class_chooser().add_item(definition.display_name)
+		_class_chooser().set_item_metadata(_class_chooser().item_count - 1, definition.id)
+	_rebuild_equipment()
+	_rebuild_tabs()
+	_rebuild_stash()
+	_render_inspector()
+	_rebuild_focus_loop()
+
+func _rebuild_equipment() -> void:
+	_clear(_equipment_grid())
+	for entry: Dictionary in _projection.leader_slots:
+		var button := StorageSlotButton.new()
+		var instance_id := String(entry["instance_id"])
+		button.name = "LeaderSlot_%02d_%s" % [int(entry["slot"]), String(entry["slot_id"])]
+		button.bind(&"leader-loadout", int(entry["slot"]), instance_id, "%s\n%s" % [String(entry["slot_id"]).capitalize(), _item_label(instance_id)])
+		button.item_dropped.connect(_handle_drop)
+		button.pressed.connect(_select_item.bind(instance_id))
+		_equipment_grid().add_child(button)
+
+func _rebuild_tabs() -> void:
+	_tab_bar().clear_tabs()
+	for index: int in _projection.stash_tabs.size():
+		_tab_bar().add_tab("Tab %d" % (index + 1))
+	_tab_bar().current_tab = _selected_tab if _tab_bar().tab_count > 0 else -1
+
+func _rebuild_stash() -> void:
+	_clear(_stash_grid())
+	if _selected_tab < 0 or _selected_tab >= _projection.stash_tabs.size():
+		return
+	var tab := _projection.stash_tabs[_selected_tab]
+	var slots := tab["slots"] as Dictionary
+	for slot: int in int(tab["capacity"]):
+		var item_id := String(slots.get(str(slot), slots.get(slot, "")))
+		var button := StorageSlotButton.new()
+		button.name = "StashSlot_%03d" % slot
+		button.custom_minimum_size = Vector2(104, 58)
+		button.bind(StringName(tab["container_id"]), slot, item_id, "%d\n%s" % [slot + 1, _item_label(item_id)])
+		button.item_dropped.connect(_handle_drop)
+		button.pressed.connect(_select_item.bind(item_id))
+		_stash_grid().add_child(button)
+
+func _handle_drop(_source_container_id: StringName, _source_slot: int, item_id: String, destination_container_id: StringName, destination_slot: int) -> void:
+	if item_id.is_empty():
+		return
+	if destination_container_id == &"leader-loadout":
+		equip_requested.emit(item_id, EquipmentSlotIndex.slot_for(destination_slot), _selected_class_id())
+	else:
+		move_requested.emit(item_id, destination_container_id, destination_slot)
+	_held_item_id = ""
+
+func _on_class_selected(index: int) -> void:
+	if index < 0 or index >= _class_chooser().item_count:
+		return
+	var target := StringName(_class_chooser().get_item_metadata(index))
+	if not _projection.loadout_empty and target != _projection.active_class_id:
+		loadout_class_change_requested.emit(target)
+
+func _selected_class_id() -> StringName:
+	if not _projection.active_class_id.is_empty() and not _projection.loadout_empty:
+		return _projection.active_class_id
+	var index := _class_chooser().selected
+	return StringName(_class_chooser().get_item_metadata(index)) if index >= 0 and index < _class_chooser().item_count else _projection.active_class_id
+
+func _select_item(item_id: String) -> void:
+	_held_item_id = item_id
+	_render_inspector()
+
+func _render_inspector() -> void:
+	var detail := _projection.item(_held_item_id)
+	_inspector_icon().texture = load(String(detail.get("icon_path", ""))) as Texture2D if not detail.is_empty() and not String(detail.get("icon_path", "")).is_empty() else null
+	_inspector().text = "Select an item" if detail.is_empty() else "%s\n%s • Item Level %d\n%s\nAffixes: %d" % [detail["name"], detail["rarity_name"], detail["item_level"], detail["item_type_id"], (detail["affixes"] as Array).size()]
+
+func _locate(item_id: String) -> Dictionary:
+	for entry: Dictionary in _projection.leader_slots:
+		if entry["instance_id"] == item_id: return {"container_id": "leader-loadout", "slot": entry["slot"]}
+	for tab: Dictionary in _projection.stash_tabs:
+		for key: Variant in (tab["slots"] as Dictionary):
+			if String((tab["slots"] as Dictionary)[key]) == item_id: return {"container_id": tab["container_id"], "slot": int(key)}
+	return {}
+
+func _item_label(item_id: String) -> String:
+	var detail := _projection.item(item_id)
+	return "Empty" if detail.is_empty() else String(detail["name"])
+
+func _connect_controls() -> void:
+	if not _close_button().pressed.is_connected(_on_close_pressed): _close_button().pressed.connect(_on_close_pressed)
+	if not _tab_bar().tab_changed.is_connected(_on_tab_changed): _tab_bar().tab_changed.connect(_on_tab_changed)
+	if not _class_chooser().item_selected.is_connected(_on_class_selected): _class_chooser().item_selected.connect(_on_class_selected)
+
+func _on_close_pressed() -> void: close_requested.emit()
+func _on_tab_changed(index: int) -> void: _selected_tab = index; _rebuild_stash(); _rebuild_focus_loop()
+func _rebuild_focus_loop() -> void:
+	var controls: Array[Control] = []
+	if _class_chooser().visible: controls.append(_class_chooser())
+	controls.append(_tab_bar())
+	for child: Node in _equipment_grid().get_children(): controls.append(child as Control)
+	for child: Node in _stash_grid().get_children(): controls.append(child as Control)
+	controls.append(_close_button())
+	for index: int in controls.size():
+		var current := controls[index]
+		var next := controls[(index + 1) % controls.size()]
+		var previous := controls[posmod(index - 1, controls.size())]
+		current.focus_next = current.get_path_to(next)
+		current.focus_previous = current.get_path_to(previous)
+func _clear(parent: Node) -> void:
+	for child: Node in parent.get_children(): child.free()
+func _first_focus() -> Control: return _equipment_grid().get_child(0) as Control if _equipment_grid().get_child_count() > 0 else _close_button()
+func _frame() -> Control: return get_node("Overlay/Frame") as Control
+func _body() -> BoxContainer: return get_node("Overlay/Frame/Layout/Body") as BoxContainer
+func _equipment_grid() -> GridContainer: return get_node("Overlay/Frame/Layout/Body/Equipment/Slots") as GridContainer
+func _stash_grid() -> GridContainer: return get_node("Overlay/Frame/Layout/Body/Stash/Scroll/Grid") as GridContainer
+func _tab_bar() -> TabBar: return get_node("Overlay/Frame/Layout/Body/Stash/Tabs") as TabBar
+func _class_label() -> Label: return get_node("Overlay/Frame/Layout/Header/Class") as Label
+func _class_chooser() -> OptionButton: return get_node("Overlay/Frame/Layout/Header/ClassChooser") as OptionButton
+func _inspector() -> Label: return get_node("Overlay/Frame/Layout/Body/Inspector/Content/Detail") as Label
+func _inspector_icon() -> TextureRect: return get_node("Overlay/Frame/Layout/Body/Inspector/Content/Icon") as TextureRect
+func _close_button() -> Button: return get_node("Overlay/Frame/Layout/Footer/Close") as Button

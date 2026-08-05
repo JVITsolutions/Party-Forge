@@ -11,6 +11,10 @@ const REQUIRED_PATHS: PackedStringArray = [
     "res://scripts/ui/developer_mode_badge.gd",
     "res://scripts/ui/main_menu/main_menu_screen.gd",
     "res://scripts/ui/developer_item_sandbox.gd",
+    "res://scripts/ui/storage/profile_storage_projection.gd",
+    "res://scripts/equipment/profile_loadout_assignment_service.gd",
+    "res://scenes/ui/armoury/armoury_screen.tscn",
+    "res://scenes/ui/warehouse/warehouse_screen.tscn",
     "res://scenes/ui/hud.tscn",
     "res://scenes/ui/level_up_panel.tscn",
     "res://scenes/ui/run_result_panel.tscn",
@@ -36,7 +40,7 @@ const REQUIRED_MAIN_NODES: PackedStringArray = [
     "GameRun", "PartyManager", "ExperienceSystem", "SpawnDirector",
     "PartyActorSpawner", "Arena", "Actors", "Enemies", "Effects", "HUD",
     "DeveloperModeBadge", "CharacterLedger", "RunPauseMenu",
-    "MainMenuScreen", "SettingsScreen", "PassiveTreeScreen", "DeveloperItemSandbox",
+    "MainMenuScreen", "SettingsScreen", "PassiveTreeScreen", "DeveloperItemSandbox", "ArmouryScreen", "WarehouseScreen",
 ]
 
 var _profile_root := ""
@@ -64,6 +68,7 @@ func run() -> Array[String]:
     _test_profile_boot_and_developer_gate(failures)
     _test_active_run_context_graph_and_failure_cleanup(failures)
     _test_main_menu_route_composition(failures)
+    _test_storage_route_policy_and_shared_projection_wiring(failures)
     _test_passive_tree_route_composition(failures)
     _test_settings_and_next_run_snapshot_wiring(failures)
     _test_integrated_overlay_input_and_front_end_seam(failures)
@@ -85,6 +90,33 @@ func run() -> Array[String]:
     ProfileTestSupport.remove_tree(_profile_root)
     _cleanup_settings_artifacts(_settings_path)
     return failures
+
+func _test_storage_route_policy_and_shared_projection_wiring(failures: Array[String]) -> void:
+    var root := "user://tests/main_wiring-storage-routes_%d_%d" % [OS.get_process_id(), Time.get_ticks_usec()]
+    ProfileTestSupport.remove_tree(root)
+    var main := (load("res://scenes/game/main.tscn") as PackedScene).instantiate()
+    main.set("profile_root", root)
+    main.set("settings_path", _settings_path)
+    main.call("_ready")
+    var manager := main.get("profile_manager") as ProfileManager
+    manager.create_profile("Storage Route Tester")
+    var menu := main.get_node("MainMenuScreen") as MainMenuScreen
+    main.call("_on_main_menu_route_requested", MainMenuViewModel.ROUTE_ARMOURY)
+    TestAssertions.truthy(menu.is_open() and not (main.get_node("ArmouryScreen") as ArmouryScreen).is_open(), "direct locked Armoury invocation rechecks access", failures)
+    main.call("_on_main_menu_route_requested", MainMenuViewModel.ROUTE_WAREHOUSE)
+    TestAssertions.truthy(menu.is_open() and not (main.get_node("WarehouseScreen") as WarehouseScreen).is_open(), "direct locked Warehouse invocation rechecks access", failures)
+    var profile := manager.active_profile()
+    profile.permanent_feature_unlocks = ["equipment_inventory", "stash"]
+    TestAssertions.equal(ProfileStore.new().save_profile(profile, root), "", "route fixture persists unlocks", failures)
+    TestAssertions.equal(manager.refresh_profile(profile.profile_id), "", "route fixture refreshes active profile", failures)
+    main.call("_on_main_menu_route_requested", MainMenuViewModel.ROUTE_ARMOURY)
+    TestAssertions.truthy((main.get_node("ArmouryScreen") as ArmouryScreen).is_open() and not menu.is_open(), "unlocked Armoury route opens separate modal", failures)
+    main.call("_on_armoury_closed")
+    main.call("_on_main_menu_route_requested", MainMenuViewModel.ROUTE_WAREHOUSE)
+    TestAssertions.truthy((main.get_node("WarehouseScreen") as WarehouseScreen).is_open() and not menu.is_open(), "unlocked Warehouse route opens separate modal", failures)
+    TestAssertions.truthy(main.get("_shared_storage_projection") is ProfileStorageProjection, "both routes are wired through one shared profile storage projection", failures)
+    main.free()
+    ProfileTestSupport.remove_tree(root)
 
 func _test_profile_boot_and_developer_gate(failures: Array[String]) -> void:
     var profile_root := "user://tests/main_wiring-profile-gate_%d_%d" % [OS.get_process_id(), Time.get_ticks_usec()]

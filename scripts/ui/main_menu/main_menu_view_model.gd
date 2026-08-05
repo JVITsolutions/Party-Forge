@@ -6,6 +6,8 @@ const ROUTE_PROLOGUE_START: StringName = &"prologue_start"
 const ROUTE_PROLOGUE_RESUME: StringName = &"prologue_resume"
 const ROUTE_RUN_SETUP: StringName = &"run_setup"
 const ROUTE_CITY_TREE: StringName = &"city_tree"
+const ROUTE_ARMOURY: StringName = &"armoury"
+const ROUTE_WAREHOUSE: StringName = &"warehouse"
 const ROUTE_DEVELOPER_QUICK_START: StringName = &"developer_quick_start"
 const ROUTE_SETTINGS: StringName = &"settings"
 const ROUTE_QUIT: StringName = &"quit"
@@ -47,6 +49,21 @@ static func build(profile: Variant, settings: Variant, city_tree_available: Vari
 	result.city_tree_label = "Developer City Preview" if developer_mode else "City Passive Tree"
 	result.developer_quick_start_visible = developer_mode
 	result.developer_quick_start_enabled = developer_mode
+	var feature_policy := FeatureAccessPolicy.new(
+		developer_mode,
+		settings_valid and supplied_settings.unlock_all_implemented_content,
+		[&"armoury", &"warehouse"],
+		[&"equipment_inventory", &"stash"],
+		_to_names(supplied_profile.permanent_feature_unlocks),
+	)
+	var armoury_state := feature_policy.resolve(&"armoury", FeatureAccessPolicy.State.AVAILABLE, &"equipment_inventory")
+	var warehouse_state := feature_policy.resolve(&"warehouse", FeatureAccessPolicy.State.AVAILABLE, &"stash")
+	result.armoury_visible = developer_mode or armoury_state == FeatureAccessPolicy.State.AVAILABLE
+	result.armoury_enabled = result.armoury_visible
+	result.armoury_label = "Developer Armoury Preview" if developer_mode and armoury_state != FeatureAccessPolicy.State.AVAILABLE else "Armoury"
+	result.warehouse_visible = developer_mode or warehouse_state == FeatureAccessPolicy.State.AVAILABLE
+	result.warehouse_enabled = result.warehouse_visible
+	result.warehouse_label = "Developer Warehouse Preview" if developer_mode and warehouse_state != FeatureAccessPolicy.State.AVAILABLE else "Warehouse"
 	if result.city_tree_visible and not result.city_tree_enabled:
 		result.status_text = "City services are temporarily unavailable."
 	return result
@@ -59,6 +76,10 @@ static func _safe_projection() -> MainMenuProjection:
 	result.primary_route_id = ROUTE_PROFILES
 	result.city_tree_label = "City Passive Tree"
 	result.city_tree_route_id = ROUTE_CITY_TREE
+	result.armoury_label = "Armoury"
+	result.armoury_route_id = ROUTE_ARMOURY
+	result.warehouse_label = "Warehouse"
+	result.warehouse_route_id = ROUTE_WAREHOUSE
 	result.developer_quick_start_label = "Developer Quick Start"
 	result.developer_quick_start_route_id = ROUTE_DEVELOPER_QUICK_START
 	result.settings_label = "Settings"
@@ -95,3 +116,9 @@ static func _settings_are_valid(settings: PartyForgeSettings) -> bool:
 			PartyForgeSettings.Mode.DEVELOPER_MODE,
 		]
 	)
+
+static func _to_names(values: Array[String]) -> Array[StringName]:
+	var result: Array[StringName] = []
+	for value: String in values:
+		result.append(StringName(value))
+	return result

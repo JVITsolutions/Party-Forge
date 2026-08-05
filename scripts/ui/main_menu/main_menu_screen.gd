@@ -6,6 +6,7 @@ signal cancel_requested
 
 var _projection := MainMenuProjection.new()
 var _pending_preferred_focus: Control
+var _last_route_origin: Control
 
 
 func _ready() -> void:
@@ -52,6 +53,9 @@ func is_open() -> bool:
 func projection() -> MainMenuProjection:
 	return _projection.copy()
 
+func route_origin() -> Control:
+	return _last_route_origin if _last_route_origin != null and is_instance_valid(_last_route_origin) else null
+
 
 func _unhandled_input(event: InputEvent) -> void:
 	if not is_open() or not event.is_action_pressed(&"ui_cancel"):
@@ -76,6 +80,10 @@ func _should_repair_menu_focus_after_cancel(focus_owner: Control) -> bool:
 func _apply_projection() -> void:
 	_configure_action(_primary_action(), _projection.primary_label, _projection.primary_visible, _projection.primary_enabled)
 	_configure_action(_city_tree(), _projection.city_tree_label, _projection.city_tree_visible, _projection.city_tree_enabled)
+	_configure_action(_armoury(), _projection.armoury_label, _projection.armoury_visible, _projection.armoury_enabled)
+	_configure_action(_warehouse(), _projection.warehouse_label, _projection.warehouse_visible, _projection.warehouse_enabled)
+	_configure_action(_city_armoury_hotspot(), "City Armoury", _projection.armoury_visible, _projection.armoury_enabled)
+	_configure_action(_city_warehouse_hotspot(), "City Warehouse", _projection.warehouse_visible, _projection.warehouse_enabled)
 	_configure_action(
 		_developer_quick_start(),
 		_projection.developer_quick_start_label,
@@ -156,6 +164,10 @@ func _connect_actions() -> void:
 		_city_tree().pressed.connect(_on_city_tree_pressed)
 	if not _developer_quick_start().pressed.is_connected(_on_developer_quick_start_pressed):
 		_developer_quick_start().pressed.connect(_on_developer_quick_start_pressed)
+	if not _armoury().pressed.is_connected(_on_armoury_pressed): _armoury().pressed.connect(_on_armoury_pressed)
+	if not _warehouse().pressed.is_connected(_on_warehouse_pressed): _warehouse().pressed.connect(_on_warehouse_pressed)
+	if not _city_armoury_hotspot().pressed.is_connected(_on_city_armoury_hotspot_pressed): _city_armoury_hotspot().pressed.connect(_on_city_armoury_hotspot_pressed)
+	if not _city_warehouse_hotspot().pressed.is_connected(_on_city_warehouse_hotspot_pressed): _city_warehouse_hotspot().pressed.connect(_on_city_warehouse_hotspot_pressed)
 	if not _settings().pressed.is_connected(_on_settings_pressed):
 		_settings().pressed.connect(_on_settings_pressed)
 	if not _quit().pressed.is_connected(_on_quit_pressed):
@@ -163,32 +175,38 @@ func _connect_actions() -> void:
 
 
 func _on_primary_action_pressed() -> void:
-	_emit_route(_projection.primary_route_id)
+	_emit_route(_projection.primary_route_id, _primary_action())
 
 
 func _on_city_tree_pressed() -> void:
-	_emit_route(_projection.city_tree_route_id)
+	_emit_route(_projection.city_tree_route_id, _city_tree())
 
 
 func _on_developer_quick_start_pressed() -> void:
-	_emit_route(_projection.developer_quick_start_route_id)
+	_emit_route(_projection.developer_quick_start_route_id, _developer_quick_start())
+
+func _on_armoury_pressed() -> void: _emit_route(_projection.armoury_route_id, _armoury())
+func _on_warehouse_pressed() -> void: _emit_route(_projection.warehouse_route_id, _warehouse())
+func _on_city_armoury_hotspot_pressed() -> void: _emit_route(_projection.armoury_route_id, _city_armoury_hotspot())
+func _on_city_warehouse_hotspot_pressed() -> void: _emit_route(_projection.warehouse_route_id, _city_warehouse_hotspot())
 
 
 func _on_settings_pressed() -> void:
-	_emit_route(_projection.settings_route_id)
+	_emit_route(_projection.settings_route_id, _settings())
 
 
 func _on_quit_pressed() -> void:
-	_emit_route(_projection.quit_route_id)
+	_emit_route(_projection.quit_route_id, _quit())
 
 
-func _emit_route(route_id: StringName) -> void:
+func _emit_route(route_id: StringName, origin: Control = null) -> void:
 	if route_id != &"":
+		_last_route_origin = origin
 		route_requested.emit(route_id)
 
 
 func _action_buttons() -> Array[Button]:
-	return [_primary_action(), _city_tree(), _developer_quick_start(), _settings(), _quit()]
+	return [_primary_action(), _city_tree(), _armoury(), _warehouse(), _developer_quick_start(), _settings(), _quit(), _city_armoury_hotspot(), _city_warehouse_hotspot()]
 
 
 func _backdrop() -> Control:
@@ -205,6 +223,11 @@ func _primary_action() -> Button:
 
 func _city_tree() -> Button:
 	return get_node("CityTree") as Button
+
+func _armoury() -> Button: return get_node("Armoury") as Button
+func _warehouse() -> Button: return get_node("Warehouse") as Button
+func _city_armoury_hotspot() -> Button: return get_node("CityArmouryHotspot") as Button
+func _city_warehouse_hotspot() -> Button: return get_node("CityWarehouseHotspot") as Button
 
 
 func _developer_quick_start() -> Button:

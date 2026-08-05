@@ -58,6 +58,11 @@ var active_run_rules: RunRulesSnapshot
 var _level_up_offer_state := LevelUpOfferState.new()
 var _city_tree_origin: StringName = &""
 var _city_tree_return_focus: Control
+var _shared_storage_projection: ProfileStorageProjection
+var _profile_loadout_assignments := ProfileLoadoutAssignmentService.new()
+var _profile_item_storage := ProfileItemStorageService.new()
+var _storage_transaction_sequence := 0
+var _storage_return_focus: Control
 
 func _ready() -> void:
 	if initialized:
@@ -342,6 +347,14 @@ func _wire_static_ui() -> void:
 	var passive_screen := get_node("PassiveTreeScreen") as PassiveTreeScreen
 	if not passive_screen.tree_closed.is_connected(_on_city_passive_tree_closed):
 		passive_screen.tree_closed.connect(_on_city_passive_tree_closed)
+	var armoury := get_node("ArmouryScreen") as ArmouryScreen
+	armoury.configure_classes(catalog.classes)
+	if not armoury.close_requested.is_connected(_on_armoury_closed): armoury.close_requested.connect(_on_armoury_closed)
+	if not armoury.equip_requested.is_connected(_on_armoury_equip_requested): armoury.equip_requested.connect(_on_armoury_equip_requested)
+	if not armoury.move_requested.is_connected(_on_armoury_move_requested): armoury.move_requested.connect(_on_armoury_move_requested)
+	var warehouse := get_node("WarehouseScreen") as WarehouseScreen
+	if not warehouse.close_requested.is_connected(_on_warehouse_closed): warehouse.close_requested.connect(_on_warehouse_closed)
+	if not warehouse.move_requested.is_connected(_on_warehouse_move_requested): warehouse.move_requested.connect(_on_warehouse_move_requested)
 	if not profile_manager.profiles_changed.is_connected(_on_profiles_changed):
 		profile_manager.profiles_changed.connect(_on_profiles_changed)
 	if not profile_manager.active_profile_changed.is_connected(_on_active_profile_changed):
@@ -389,6 +402,10 @@ func _on_main_menu_route_requested(route_id: StringName) -> void:
 			var menu := get_node("MainMenuScreen") as MainMenuScreen
 			var developer_preview := saved_settings != null and saved_settings.mode == PartyForgeSettings.Mode.DEVELOPER_MODE
 			_open_city_passive_tree(developer_preview, CITY_ORIGIN_MAIN_MENU, menu.get_node("CityTree") as Control)
+		MainMenuViewModel.ROUTE_ARMOURY:
+			_open_storage_route(MainMenuViewModel.ROUTE_ARMOURY)
+		MainMenuViewModel.ROUTE_WAREHOUSE:
+			_open_storage_route(MainMenuViewModel.ROUTE_WAREHOUSE)
 		MainMenuViewModel.ROUTE_QUIT:
 			_quit()
 
@@ -478,6 +495,8 @@ func _present_front_end(preferred_focus: Control = null) -> void:
 	(get_node("HUD/ClassSelection") as ClassSelectionPanel).close()
 	(get_node("DeveloperItemSandbox") as DeveloperItemSandbox).close()
 	(get_node("SettingsScreen") as SettingsScreen).close()
+	(get_node("ArmouryScreen") as ArmouryScreen).close()
+	(get_node("WarehouseScreen") as WarehouseScreen).close()
 	_refresh_main_menu_projection()
 	var menu := get_node("MainMenuScreen") as MainMenuScreen
 	menu.open(preferred_focus if preferred_focus != null else menu.get_node("PrimaryAction") as Control)
@@ -492,6 +511,122 @@ func _refresh_main_menu_projection() -> void:
 	if not profile_bootstrap_error.is_empty():
 		projection.status_text = "Some profile data needs attention. Open Settings > Profiles for details."
 	(get_node("MainMenuScreen") as MainMenuScreen).present(projection)
+
+
+func _open_storage_route(route_id: StringName) -> void:
+	var profile := profile_manager.active_profile() if profile_manager != null else null
+	if profile == null or not _storage_route_allowed(route_id, profile):
+		return
+	var projection := ProfileStorageProjection.from_profile(profile, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)
+	if not projection.valid:
+		push_error(projection.error)
+		return
+	_shared_storage_projection = projection
+	var menu := get_node("MainMenuScreen") as MainMenuScreen
+	if route_id == MainMenuViewModel.ROUTE_ARMOURY:
+		var origin := menu.route_origin()
+		if origin == null: origin = menu.get_node("Armoury") as Control
+		_storage_return_focus = origin
+		menu.close()
+		(get_node("ArmouryScreen") as ArmouryScreen).open(projection, origin)
+	else:
+		var origin := menu.route_origin()
+		if origin == null: origin = menu.get_node("Warehouse") as Control
+		_storage_return_focus = origin
+		menu.close()
+		(get_node("WarehouseScreen") as WarehouseScreen).open(projection, origin)
+
+
+func _storage_route_allowed(route_id: StringName, profile: ProfileState) -> bool:
+	if route_id not in [MainMenuViewModel.ROUTE_ARMOURY, MainMenuViewModel.ROUTE_WAREHOUSE] or profile == null:
+		return false
+	var projection := MainMenuViewModel.build(profile, saved_settings, _city_runtime_available())
+	return projection.armoury_visible and projection.armoury_enabled if route_id == MainMenuViewModel.ROUTE_ARMOURY else projection.warehouse_visible and projection.warehouse_enabled
+
+
+func _on_armoury_closed() -> void:
+	var screen := get_node("ArmouryScreen") as ArmouryScreen
+	screen.close()
+	var menu := get_node("MainMenuScreen") as MainMenuScreen
+	menu.open(_storage_return_focus if _storage_return_focus != null else menu.get_node("Armoury") as Control)
+	_storage_return_focus = null
+
+
+func _on_warehouse_closed() -> void:
+	var screen := get_node("WarehouseScreen") as WarehouseScreen
+	screen.close()
+	var menu := get_node("MainMenuScreen") as MainMenuScreen
+	menu.open(_storage_return_focus if _storage_return_focus != null else menu.get_node("Warehouse") as Control)
+	_storage_return_focus = null
+
+
+func _on_armoury_equip_requested(item_id: String, slot_id: StringName, class_id: StringName) -> void:
+	_apply_armoury_assignment(item_id, &"leader-loadout", EquipmentSlotIndex.index_for(slot_id), class_id)
+
+
+func _on_armoury_move_requested(item_id: String, destination_container_id: StringName, destination_slot: int) -> void:
+	var profile := profile_manager.active_profile() if profile_manager != null else null
+	var class_id := StringName(profile.leader_loadout_class_id) if profile != null else &""
+	_apply_armoury_assignment(item_id, destination_container_id, destination_slot, class_id)
+
+
+func _apply_armoury_assignment(item_id: String, destination_container_id: StringName, destination_slot: int, class_id: StringName) -> void:
+	var profile := profile_manager.active_profile() if profile_manager != null else null
+	if profile == null or _shared_storage_projection == null: return
+	var source := _storage_item_location(_shared_storage_projection, item_id)
+	var expected := _storage_item_at(_shared_storage_projection, destination_container_id, destination_slot)
+	if source.is_empty(): return
+	_storage_transaction_sequence += 1
+	var request := ProfileLoadoutAssignmentRequest.create(
+		"armoury-%d-%d" % [Time.get_ticks_usec(), _storage_transaction_sequence], profile.profile_id, class_id, item_id,
+		StringName(source["container_id"]), int(source["slot"]), destination_container_id, destination_slot, expected,
+		ProfileLoadoutAssignmentRequest.fingerprint_for(profile),
+	)
+	var result := _profile_loadout_assignments.apply(profile.profile_id, request, profile_root)
+	if result.ok(): _reload_storage_projection(profile.profile_id)
+	else: push_error(result.error)
+
+
+func _on_warehouse_move_requested(item_id: String, destination_container_id: StringName, destination_slot: int) -> void:
+	var profile := profile_manager.active_profile() if profile_manager != null else null
+	if profile == null or _shared_storage_projection == null: return
+	var source := _storage_item_location(_shared_storage_projection, item_id)
+	if source.is_empty() or String(source["container_id"]) == "leader-loadout": return
+	var occupied := _storage_item_at(_shared_storage_projection, destination_container_id, destination_slot)
+	_storage_transaction_sequence += 1
+	var transaction_id := "warehouse-%d-%d" % [Time.get_ticks_usec(), _storage_transaction_sequence]
+	var request := ItemTransactionRequest.swap(transaction_id, profile.profile_id, StringName(source["container_id"]), int(source["slot"]), item_id, destination_container_id, destination_slot) if not occupied.is_empty() else ItemTransactionRequest.move(transaction_id, profile.profile_id, StringName(source["container_id"]), int(source["slot"]), item_id, destination_container_id, destination_slot)
+	var result := _profile_item_storage.apply(profile.profile_id, request, profile_root)
+	if result.ok(): _reload_storage_projection(profile.profile_id)
+	else: push_error(result.error)
+
+
+func _reload_storage_projection(profile_id: String) -> void:
+	var error := profile_manager.refresh_profile(profile_id)
+	if not error.is_empty(): push_error(error); return
+	var profile := profile_manager.active_profile()
+	var projection := ProfileStorageProjection.from_profile(profile, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)
+	if not projection.valid: push_error(projection.error); return
+	_shared_storage_projection = projection
+	(get_node("ArmouryScreen") as ArmouryScreen).refresh(projection)
+	(get_node("WarehouseScreen") as WarehouseScreen).refresh(projection)
+
+
+func _storage_item_location(storage: ProfileStorageProjection, item_id: String) -> Dictionary:
+	for entry: Dictionary in storage.leader_slots:
+		if entry["instance_id"] == item_id: return {"container_id": "leader-loadout", "slot": entry["slot"]}
+	for tab: Dictionary in storage.stash_tabs:
+		for key: Variant in (tab["slots"] as Dictionary):
+			if String((tab["slots"] as Dictionary)[key]) == item_id: return {"container_id": tab["container_id"], "slot": int(key)}
+	return {}
+
+
+func _storage_item_at(storage: ProfileStorageProjection, container_id: StringName, slot: int) -> String:
+	if container_id == &"leader-loadout":
+		return String(storage.leader_slots[slot]["instance_id"]) if slot >= 0 and slot < storage.leader_slots.size() else ""
+	for tab: Dictionary in storage.stash_tabs:
+		if String(tab["container_id"]) == String(container_id): return String((tab["slots"] as Dictionary).get(str(slot), (tab["slots"] as Dictionary).get(slot, "")))
+	return ""
 
 
 func _on_profiles_changed() -> void:

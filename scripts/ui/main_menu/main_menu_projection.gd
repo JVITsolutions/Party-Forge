@@ -11,6 +11,16 @@ var city_tree_visible := false
 var city_tree_enabled := false
 var city_tree_route_id: StringName = &""
 
+var armoury_label := ""
+var armoury_visible := false
+var armoury_enabled := false
+var armoury_route_id: StringName = &""
+
+var warehouse_label := ""
+var warehouse_visible := false
+var warehouse_enabled := false
+var warehouse_route_id: StringName = &""
+
 var developer_quick_start_label := ""
 var developer_quick_start_visible := false
 var developer_quick_start_enabled := false
@@ -40,6 +50,14 @@ func copy() -> MainMenuProjection:
 	result.city_tree_visible = city_tree_visible
 	result.city_tree_enabled = city_tree_enabled
 	result.city_tree_route_id = city_tree_route_id
+	result.armoury_label = armoury_label
+	result.armoury_visible = armoury_visible
+	result.armoury_enabled = armoury_enabled
+	result.armoury_route_id = armoury_route_id
+	result.warehouse_label = warehouse_label
+	result.warehouse_visible = warehouse_visible
+	result.warehouse_enabled = warehouse_enabled
+	result.warehouse_route_id = warehouse_route_id
 	result.developer_quick_start_label = developer_quick_start_label
 	result.developer_quick_start_visible = developer_quick_start_visible
 	result.developer_quick_start_enabled = developer_quick_start_enabled

@@ -13,6 +13,7 @@ func run() -> Array[String]:
 	_test_unavailable_city_tree_fails_closed(failures)
 	_test_malformed_inputs_return_a_safe_projection(failures)
 	_test_projection_is_copy_owned_and_value_only(failures)
+	_test_armoury_and_warehouse_feature_access(failures)
 	return failures
 
 func _test_route_ids_are_stable(failures: Array[String]) -> void:
@@ -21,6 +22,8 @@ func _test_route_ids_are_stable(failures: Array[String]) -> void:
 	TestAssertions.equal(MainMenuViewModel.ROUTE_PROLOGUE_RESUME, &"prologue_resume", "prologue-resume route ID is stable", failures)
 	TestAssertions.equal(MainMenuViewModel.ROUTE_RUN_SETUP, &"run_setup", "run-setup route ID is stable", failures)
 	TestAssertions.equal(MainMenuViewModel.ROUTE_CITY_TREE, &"city_tree", "City-tree route ID is stable", failures)
+	TestAssertions.equal(MainMenuViewModel.ROUTE_ARMOURY, &"armoury", "Armoury route ID is stable", failures)
+	TestAssertions.equal(MainMenuViewModel.ROUTE_WAREHOUSE, &"warehouse", "Warehouse route ID is stable", failures)
 	TestAssertions.equal(MainMenuViewModel.ROUTE_DEVELOPER_QUICK_START, &"developer_quick_start", "Developer Quick Start route ID is stable", failures)
 	TestAssertions.equal(MainMenuViewModel.ROUTE_SETTINGS, &"settings", "Settings route ID is stable", failures)
 	TestAssertions.equal(MainMenuViewModel.ROUTE_QUIT, &"quit", "Quit route ID is stable", failures)
@@ -148,6 +151,24 @@ func _profile(prologue_state: ProfileState.PrologueState) -> ProfileState:
 	var profile := ProfileState.new_profile("profile-menu-1234", "Menu Tester", 1000)
 	profile.prologue_state = prologue_state
 	return profile
+
+func _test_armoury_and_warehouse_feature_access(failures: Array[String]) -> void:
+	var settings := PartyForgeSettings.new()
+	var profile := _profile(ProfileState.PrologueState.COMPLETED)
+	var locked := MainMenuViewModel.build(profile, settings, true)
+	TestAssertions.truthy(not locked.armoury_visible and not locked.warehouse_visible, "player mode hides locked storage routes", failures)
+	profile.permanent_feature_unlocks = ["equipment_inventory"]
+	var equipment := MainMenuViewModel.build(profile, settings, true)
+	TestAssertions.truthy(equipment.armoury_visible and equipment.armoury_enabled, "equipment unlock exposes Armoury", failures)
+	TestAssertions.truthy(not equipment.warehouse_visible, "equipment unlock does not expose Warehouse", failures)
+	profile.permanent_feature_unlocks.append("stash")
+	var stash := MainMenuViewModel.build(profile, settings, true)
+	TestAssertions.truthy(stash.warehouse_visible and stash.warehouse_enabled, "stash unlock exposes Warehouse", failures)
+	settings.mode = PartyForgeSettings.Mode.DEVELOPER_MODE
+	profile.permanent_feature_unlocks.clear()
+	var preview := MainMenuViewModel.build(profile, settings, true)
+	TestAssertions.truthy(preview.armoury_visible and preview.armoury_enabled and preview.armoury_label.contains("Developer"), "Developer Mode exposes Armoury preview without persistence mutation", failures)
+	TestAssertions.truthy(preview.warehouse_visible and preview.warehouse_enabled and preview.warehouse_label.contains("Developer"), "Developer Mode exposes Warehouse preview without persistence mutation", failures)
 
 func _assert_common_actions(projection: MainMenuProjection, failures: Array[String]) -> void:
 	TestAssertions.equal(projection.settings_label, "Settings", "Settings label is stable", failures)

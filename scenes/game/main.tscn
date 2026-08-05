@@ -1,4 +1,4 @@
-[gd_scene load_steps=18 format=3]
+[gd_scene load_steps=20 format=3]
 
 [ext_resource type="Script" path="res://scripts/game/main.gd" id="1_main"]
 [ext_resource type="PackedScene" path="res://scenes/arena/arena.tscn" id="2_arena"]
@@ -16,6 +16,8 @@
 [ext_resource type="PackedScene" path="res://scenes/ui/passive_tree/passive_tree_screen.tscn" id="14_passive_tree"]
 [ext_resource type="PackedScene" path="res://scenes/ui/main_menu/main_menu_screen.tscn" id="15_main_menu"]
 [ext_resource type="PackedScene" path="res://scenes/ui/developer_item_sandbox.tscn" id="16_item_sandbox"]
+[ext_resource type="PackedScene" path="res://scenes/ui/armoury/armoury_screen.tscn" id="17_armoury"]
+[ext_resource type="PackedScene" path="res://scenes/ui/warehouse/warehouse_screen.tscn" id="18_warehouse"]
 
 [node name="Main" type="Node"]
 script = ExtResource("1_main")
@@ -56,6 +58,10 @@ script = ExtResource("8_actor_spawn")
 [node name="PassiveTreeScreen" parent="." instance=ExtResource("14_passive_tree")]
 
 [node name="DeveloperItemSandbox" parent="." instance=ExtResource("16_item_sandbox")]
+
+[node name="ArmouryScreen" parent="." instance=ExtResource("17_armoury")]
+
+[node name="WarehouseScreen" parent="." instance=ExtResource("18_warehouse")]
 
 [node name="CharacterLedger" parent="." instance=ExtResource("10_ledger")]
 layer = 20
