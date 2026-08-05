@@ -4,6 +4,7 @@
 > **Nine-class runtime architecture:** Chapters 3–6 and 10 at `b0be05a03bbd3ea5aae04d3e38ffdc0769a211ba`<br>
 > **Typed-combat enemy tutorial architecture:** Chapter 7 at `97f05b5fa77d8447830bb2a42209b83140384e6b`<br>
 > **Handbook wording alignment:** Chapter 7 at `9f1b9bbb5cdc04374b3288ada07eb8081032a188`<br>
+> **Item ownership foundation:** Chapter 11 through `d4688b9a9744fb06dce2e9e051e7b93f6d569204`<br>
 > **Godot version:** `4.7.1`
 
 ## Who this is for
@@ -16,7 +17,7 @@ The learning path is hybrid:
 
 1. Chapters 1–4 build the editor, scene, script, signal, and Resource vocabulary used by the rest of the project.
 2. Chapters 5–8 turn that vocabulary into focused content and presentation workflows.
-3. Chapters 9–10 become operational references for debugging, Git safety, and architecture.
+3. Chapters 9–11 become operational references for debugging, Git safety, architecture, and item/storage ownership.
 
 Read the explanation, inspect the exact Party Forge paths, perform the exercise, and stop at every **Checkpoint**. If your result differs, use the chapter's troubleshooting section before moving on.
 
@@ -50,6 +51,7 @@ Practice in `scenes/dev/` or another explicitly disposable sandbox before changi
 8. [Visuals, Audio, Effects, and UI](08-visuals-audio-effects-and-ui.md)
 9. [Debugging, Testing, Saving, and Git](09-debugging-testing-saving-and-git.md)
 10. [Party Forge Architecture Reference](10-party-forge-architecture-reference.md)
+11. [Item Instances and Fixed-Slot Storage](11-item-instances-and-storage.md)
 
 The numbered learning path is complete. Follow it in order on a first pass, then use the task-oriented links below.
 
@@ -61,6 +63,7 @@ The numbered learning path is complete. Follow it in order on a first pass, then
 - Use [Visuals, Audio, Effects, and UI](08-visuals-audio-effects-and-ui.md) for imports, wrapper scenes, materials, collision, effects, and audio.
 - Use [Debugging, Testing, Saving, and Git](09-debugging-testing-saving-and-git.md) when behavior differs from a checkpoint or repository state is unclear.
 - Use [Party Forge Architecture Reference](10-party-forge-architecture-reference.md) when you need an owner, registry, runtime flow, verification checklist, or glossary term.
+- Use [Item Instances and Fixed-Slot Storage](11-item-instances-and-storage.md) to author development rarities/affixes, trace registry/container transactions, materialize passive storage, or operate the isolated Developer Item Sandbox.
 - Use the existing [Party Forge Responsive UI Tutorial](../development/RESPONSIVE_UI_TUTORIAL.md) for anchors, offsets, resizing centered panels, and responsive-layout verification. This handbook links to that focused tutorial instead of repeating it.
 - Use the [Character and Blender Handoff](../art/party-forge-character-blender-handoff.md) for reusable unequipped bodies, independent equipment paths, socket rules, and future GLB replacement requirements.
 - Use the [Playable Class Presentation Validation](../qa/2026-08-01-playable-class-presentation-validation.md) for the current nine-class verification markers and reproducible presentation gates.
