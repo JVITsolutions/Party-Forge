@@ -2,14 +2,23 @@ class_name Task10FilesystemManifest
 extends RefCounted
 
 
-static func capture(root_path: String) -> Dictionary:
+static func capture(
+	root_path: String,
+	list_begin_override: Callable = Callable(),
+	parent_open_override: Callable = Callable()
+) -> Dictionary:
 	var absolute_root := ProjectSettings.globalize_path(root_path).simplify_path()
 	if not DirAccess.dir_exists_absolute(absolute_root):
 		return {"error": "manifest root is missing: %s" % absolute_root, "entries": []}
-	if _is_link(absolute_root):
+	var root_link := _is_link(absolute_root, parent_open_override)
+	if not String(root_link["error"]).is_empty():
+		return {"error": root_link["error"], "entries": []}
+	if bool(root_link["is_link"]):
 		return {"error": "manifest root is a link/reparse point: %s" % absolute_root, "entries": []}
 	var entries: Array[Dictionary] = []
-	var error := _capture_directory(absolute_root, "", entries)
+	var error := _capture_directory(absolute_root, "", entries, list_begin_override, parent_open_override)
+	if not error.is_empty():
+		return {"error": error, "entries": []}
 	entries.sort_custom(func(first: Dictionary, second: Dictionary) -> bool: return String(first["relative_path"]) < String(second["relative_path"]))
 	return {"error": error, "entries": entries}
 
@@ -24,17 +33,29 @@ static func describe_difference(expected: Dictionary, actual: Dictionary) -> Str
 	return "expected=%s actual=%s" % [JSON.stringify(expected), JSON.stringify(actual)]
 
 
-static func _capture_directory(absolute_directory: String, relative_directory: String, entries: Array[Dictionary]) -> String:
+static func _capture_directory(
+	absolute_directory: String,
+	relative_directory: String,
+	entries: Array[Dictionary],
+	list_begin_override: Callable,
+	parent_open_override: Callable
+) -> String:
 	var directory := DirAccess.open(absolute_directory)
 	if directory == null:
 		return "cannot open manifest directory: %s" % absolute_directory
-	directory.list_dir_begin()
+	var list_begin_error: Error = list_begin_override.call(absolute_directory) if list_begin_override.is_valid() else directory.list_dir_begin()
+	if list_begin_error != OK:
+		return "cannot begin manifest directory listing code=%d path=%s" % [list_begin_error, absolute_directory]
 	var name := directory.get_next()
 	while not name.is_empty():
 		if name not in [".", ".."]:
 			var absolute_path := absolute_directory.path_join(name).simplify_path()
 			var relative_path := (name if relative_directory.is_empty() else relative_directory.path_join(name)).replace("\\", "/")
-			if directory.is_link(name):
+			var link_result := _is_link(absolute_path, parent_open_override)
+			if not String(link_result["error"]).is_empty():
+				directory.list_dir_end()
+				return String(link_result["error"])
+			if bool(link_result["is_link"]):
 				directory.list_dir_end()
 				return "manifest entry is a link/reparse point: %s" % absolute_path
 			if directory.current_is_dir():
@@ -45,7 +66,7 @@ static func _capture_directory(absolute_directory: String, relative_directory: S
 					"sha256": "",
 					"resolved_path": absolute_path,
 				})
-				var nested_error := _capture_directory(absolute_path, relative_path, entries)
+				var nested_error := _capture_directory(absolute_path, relative_path, entries, list_begin_override, parent_open_override)
 				if not nested_error.is_empty():
 					directory.list_dir_end()
 					return nested_error
@@ -71,9 +92,15 @@ static func _capture_directory(absolute_directory: String, relative_directory: S
 	return ""
 
 
-static func _is_link(absolute_path: String) -> bool:
-	var parent := DirAccess.open(absolute_path.get_base_dir())
-	return parent != null and parent.is_link(absolute_path.get_file())
+static func _is_link(absolute_path: String, parent_open_override: Callable) -> Dictionary:
+	var absolute_parent := absolute_path.get_base_dir()
+	var parent := parent_open_override.call(absolute_parent) as DirAccess if parent_open_override.is_valid() else DirAccess.open(absolute_parent)
+	if parent == null:
+		return {
+			"error": "cannot inspect manifest link because parent cannot open: %s" % absolute_parent,
+			"is_link": false,
+		}
+	return {"error": "", "is_link": parent.is_link(absolute_path.get_file())}
 
 
 static func _sha256(bytes: PackedByteArray) -> Dictionary:

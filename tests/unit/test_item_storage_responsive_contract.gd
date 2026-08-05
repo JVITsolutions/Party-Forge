@@ -79,9 +79,14 @@ func _assert_manifest_sentinel_detection(failures: Array[String]) -> void:
 		return
 	var helper_script := load(MANIFEST_HELPER_PATH) as Script
 	var helper := helper_script.new() as RefCounted
+	var helper_source := FileAccess.get_file_as_string(MANIFEST_HELPER_PATH)
+	var supports_error_injection := "list_begin_override: Callable" in helper_source and "parent_open_override: Callable" in helper_source
+	TestAssertions.truthy(supports_error_injection, "filesystem manifest exposes list-begin and parent-open error injection for focused test support", failures)
 	var absolute_root := ProjectSettings.globalize_path(MANIFEST_FIXTURE_ROOT)
 	TestAssertions.truthy(DirAccess.make_dir_recursive_absolute(absolute_root) in [OK, ERR_ALREADY_EXISTS], "manifest fixture root is created", failures)
 	_write_fixture_file(MANIFEST_FIXTURE_ROOT.path_join("baseline.dat"), PackedByteArray([65, 65, 65, 65]), failures)
+	if supports_error_injection:
+		_assert_manifest_failure_injection(helper, absolute_root.simplify_path(), failures)
 	var baseline := helper.call(&"capture", MANIFEST_FIXTURE_ROOT) as Dictionary
 	_write_fixture_file(MANIFEST_FIXTURE_ROOT.path_join("sentinel.extra"), PackedByteArray([83]), failures)
 	var with_extra := helper.call(&"capture", MANIFEST_FIXTURE_ROOT) as Dictionary
@@ -92,6 +97,35 @@ func _assert_manifest_sentinel_detection(failures: Array[String]) -> void:
 	TestAssertions.truthy(not bool(helper.call(&"equivalent", baseline, with_same_length_change)), "recursive manifest detects a same-length file byte change by SHA-256", failures)
 	ProfileTestSupport.remove_tree(MANIFEST_FIXTURE_ROOT)
 	TestAssertions.truthy(not DirAccess.dir_exists_absolute(absolute_root), "manifest contract fixture cleans up", failures)
+
+
+func _assert_manifest_failure_injection(helper: RefCounted, absolute_root: String, failures: Array[String]) -> void:
+	var list_failure := helper.call(
+		&"capture",
+		MANIFEST_FIXTURE_ROOT,
+		func(_absolute_directory: String) -> Error: return ERR_CANT_OPEN,
+		Callable()
+	) as Dictionary
+	TestAssertions.equal(
+		String(list_failure.get("error", "")),
+		"cannot begin manifest directory listing code=%d path=%s" % [ERR_CANT_OPEN, absolute_root],
+		"filesystem manifest propagates a stable list-begin error",
+		failures
+	)
+	TestAssertions.equal(list_failure.get("entries", []), [], "list-begin failure produces no false-success manifest entries", failures)
+	var parent_failure := helper.call(
+		&"capture",
+		MANIFEST_FIXTURE_ROOT,
+		Callable(),
+		func(_absolute_parent: String) -> Variant: return null
+	) as Dictionary
+	TestAssertions.equal(
+		String(parent_failure.get("error", "")),
+		"cannot inspect manifest link because parent cannot open: %s" % absolute_root.get_base_dir(),
+		"filesystem manifest propagates a stable parent-open error",
+		failures
+	)
+	TestAssertions.equal(parent_failure.get("entries", []), [], "parent-open failure produces no false-success manifest entries", failures)
 
 
 func _write_fixture_file(path: String, bytes: PackedByteArray, failures: Array[String]) -> void:
