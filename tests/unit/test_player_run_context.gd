@@ -32,15 +32,76 @@ func _test_configuration_validation_and_copy_ownership(failures: Array[String]) 
 	]), "configuration reports stable validation fields", failures)
 	TestAssertions.equal(invalid.run_player_id, &"", "failed configuration does not set run player", failures)
 	TestAssertions.equal(invalid.party, null, "failed configuration does not set party", failures)
+	TestAssertions.truthy(invalid.has_method(&"item_state"), "run context exposes item state after Task 7", failures)
+	TestAssertions.truthy(invalid.has_method(&"run_inventory"), "run context exposes run inventory after Task 7", failures)
+	TestAssertions.truthy(invalid.has_method(&"apply_item_transaction"), "run context exposes item transactions after Task 7", failures)
+	if invalid.has_method(&"item_state"):
+		TestAssertions.equal(invalid.call(&"item_state"), null, "failed configuration commits no item state", failures)
+	if invalid.has_method(&"run_inventory"):
+		TestAssertions.equal(invalid.call(&"run_inventory"), null, "failed configuration commits no run inventory", failures)
+	var retry_issue := ItemInstanceIssuer.issue(
+		"run:profile-retry001:4004:retry_player",
+		0,
+		"configuration_retry_test",
+		4004,
+		{
+			"affixes": [],
+			"base_definition_id": "forge_vanguard_sword",
+			"item_level": 1,
+			"rarity_id": "common",
+		},
+		GameCatalog.EQUIPMENT_CATALOG,
+		GameCatalog.ITEM_FOUNDATION_CATALOG,
+	)
+	TestAssertions.truthy(retry_issue.ok(), "configuration retry item fixture issues", failures)
+	var retry_request := ItemTransactionRequest.create(
+		"configuration-retry-create",
+		"retry_player",
+		&"run-inventory",
+		0,
+		retry_issue.item,
+	)
+	if invalid.has_method(&"apply_item_transaction"):
+		var unconfigured_result := invalid.call(
+			&"apply_item_transaction",
+			retry_request,
+			GameCatalog.EQUIPMENT_CATALOG,
+			GameCatalog.ITEM_FOUNDATION_CATALOG,
+		) as ItemTransactionResult
+		TestAssertions.equal(unconfigured_result.code, ItemTransactionResult.Code.INVALID_REQUEST, "failed configuration has no usable transaction journal", failures)
 	uninitialized_party.free()
 	var retry_party := PartyManager.new()
 	retry_party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
+	var retry_profile := ProfileState.new_profile("profile-retry001", "Retry Owner", 1000)
+	retry_profile.inventory_columns = 1
 	TestAssertions.equal(
-		invalid.configure(&"retry_player", 4, ProfileState.new_profile("profile-retry001", "Retry Owner", 1000), 4004, retry_party, 100),
+		invalid.configure(&"retry_player", 4, retry_profile, 4004, retry_party, 100),
 		PackedStringArray(),
 		"failed initial configuration remains retryable",
 		failures,
 	)
+	if invalid.has_method(&"item_state") and invalid.has_method(&"run_inventory"):
+		var retry_state := invalid.call(&"item_state") as ItemOwnershipState
+		var retry_inventory := invalid.call(&"run_inventory") as ItemSlotContainer
+		TestAssertions.truthy(retry_state != null, "valid retry creates one item ownership state", failures)
+		TestAssertions.equal(retry_state.registry().size(), 0, "valid retry creates one empty run registry", failures)
+		TestAssertions.equal(retry_state.containers().size(), 1, "valid retry creates exactly one run container", failures)
+		TestAssertions.equal(retry_inventory.capacity, 5, "valid retry derives its unlocked five-slot inventory", failures)
+		var retry_created := invalid.call(
+			&"apply_item_transaction",
+			retry_request,
+			GameCatalog.EQUIPMENT_CATALOG,
+			GameCatalog.ITEM_FOUNDATION_CATALOG,
+		) as ItemTransactionResult
+		var retry_replayed := invalid.call(
+			&"apply_item_transaction",
+			retry_request,
+			GameCatalog.EQUIPMENT_CATALOG,
+			GameCatalog.ITEM_FOUNDATION_CATALOG,
+		) as ItemTransactionResult
+		TestAssertions.equal(retry_created.code, ItemTransactionResult.Code.OK, "valid configuration retry creates the item exactly once", failures)
+		TestAssertions.equal(retry_replayed.code, ItemTransactionResult.Code.TRANSACTION_REPLAY, "valid configuration retry owns one replay journal entry", failures)
+		TestAssertions.equal((invalid.call(&"item_state") as ItemOwnershipState).registry().size(), 1, "configuration retry journal cannot duplicate the item", failures)
 	retry_party.free()
 
 	var party := PartyManager.new()
@@ -206,6 +267,10 @@ func _assert_unconfigured_context(context: PlayerRunContext, signals: Array[Stri
 	TestAssertions.equal(context.progression_for(2), null, "%s rejection creates no follower progression" % label, failures)
 	TestAssertions.equal(context.pending_leader_levels(), [], "%s rejection creates no upgrade queue" % label, failures)
 	TestAssertions.equal(signals, [], "%s rejection emits no signals" % label, failures)
+	if context.has_method(&"item_state"):
+		TestAssertions.equal(context.call(&"item_state"), null, "%s rejection commits no item state" % label, failures)
+	if context.has_method(&"run_inventory"):
+		TestAssertions.equal(context.call(&"run_inventory"), null, "%s rejection commits no run inventory" % label, failures)
 
 func _test_atomic_progression_and_leader_queue(failures: Array[String]) -> void:
 	var fixture := _configured_fixture(RejectingPartyManager.new())

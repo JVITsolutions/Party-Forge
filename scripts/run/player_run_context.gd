@@ -36,6 +36,9 @@ var experience_tuning: ExperienceTuning = DEFAULT_EXPERIENCE_TUNING
 var _progression_by_member: Dictionary = {}
 var _pending_leader_levels: Array[int] = []
 var _actor_by_member: Dictionary = {}
+var _item_state: ItemOwnershipState
+var _item_journal: ItemTransactionJournal
+var _next_item_sequence := 0
 var _configured := false
 
 func configure(
@@ -61,6 +64,7 @@ func configure(
 	if experience_multiplier < 100 or experience_multiplier > 1000:
 		errors.append("PARTY_FORGE_RUN_CONTEXT_ERROR field=experience_multiplier")
 	if not errors.is_empty():
+		_reset_unconfigured_item_fields()
 		return errors
 
 	var next_progression: Dictionary = {}
@@ -71,7 +75,29 @@ func configure(
 		next_progression[member.member_id] = state
 	var owned_profile := profile.copy()
 	if owned_profile == null:
+		_reset_unconfigured_item_fields()
 		return PackedStringArray(["PARTY_FORGE_RUN_CONTEXT_ERROR field=profile"])
+	var inventory := ItemSlotContainer.create(
+		&"run-inventory",
+		ItemSlotContainer.RUN_INVENTORY,
+		String(run_player_id_value),
+		owned_profile.inventory_columns * 5,
+	)
+	var next_item_state := ItemOwnershipState.create(
+		String(run_player_id_value),
+		ItemRegistry.new(),
+		[inventory],
+	)
+	var item_state_error := next_item_state.validate(
+		GameCatalog.EQUIPMENT_CATALOG,
+		GameCatalog.ITEM_FOUNDATION_CATALOG,
+	)
+	if not item_state_error.is_empty():
+		_reset_unconfigured_item_fields()
+		return PackedStringArray([
+			"PARTY_FORGE_RUN_CONTEXT_ERROR field=item_state reason=%s" % item_state_error,
+		])
+	var next_item_journal := ItemTransactionJournal.new()
 
 	var member_added_callback := Callable(self, "_on_member_added")
 	if party != null and party.member_added.is_connected(member_added_callback):
@@ -87,10 +113,55 @@ func configure(
 	_progression_by_member = next_progression
 	_pending_leader_levels.clear()
 	_actor_by_member.clear()
+	_item_state = next_item_state
+	_item_journal = next_item_journal
+	_next_item_sequence = 0
 	if not party.member_added.is_connected(member_added_callback):
 		party.member_added.connect(member_added_callback)
 	_configured = true
 	return errors
+
+func item_state() -> ItemOwnershipState:
+	return _item_state.copy() if _item_state != null else null
+
+func run_inventory() -> ItemSlotContainer:
+	return _item_state.container(&"run-inventory") if _item_state != null else null
+
+func apply_item_transaction(
+	request: ItemTransactionRequest,
+	equipment: EquipmentCatalog,
+	foundation: ItemFoundationCatalog,
+) -> ItemTransactionResult:
+	if not _configured or _item_state == null or _item_journal == null:
+		return _item_transaction_failure(ItemTransactionResult.Code.INVALID_REQUEST)
+	if request == null or equipment == null or foundation == null:
+		return _item_transaction_failure(ItemTransactionResult.Code.INVALID_REQUEST)
+	if request.operation not in [
+		ItemTransactionRequest.CREATE_AND_PLACE,
+		ItemTransactionRequest.MOVE_TO_EMPTY,
+		ItemTransactionRequest.SWAP_OCCUPIED,
+	]:
+		return _item_transaction_failure(ItemTransactionResult.Code.INVALID_REQUEST)
+	var service := ItemContainerTransactionService.new()
+	if request.owner_id != _item_state.owner_id:
+		return service.apply(_item_state, request, _item_journal, equipment, foundation)
+	if request.operation == ItemTransactionRequest.CREATE_AND_PLACE:
+		var create_item := request.create_item
+		if create_item != null:
+			var expected_namespace := "run:%s:%s:%s" % [profile_id, run_seed, run_player_id]
+			if String(create_item.origin.get("issuer_namespace", "")) != expected_namespace:
+				return _item_transaction_failure(ItemTransactionResult.Code.INVALID_ITEM)
+			var sequence_value: Variant = create_item.origin.get("sequence")
+			if not _is_nonnegative_json_int(sequence_value):
+				return _item_transaction_failure(ItemTransactionResult.Code.INVALID_ITEM)
+			if not _item_journal.has(request.transaction_id) and int(sequence_value) != _next_item_sequence:
+				return _item_transaction_failure(ItemTransactionResult.Code.INVALID_ITEM)
+	var result := service.apply(_item_state, request, _item_journal, equipment, foundation)
+	if result.ok():
+		_item_state = result.next_state
+		if request.operation == ItemTransactionRequest.CREATE_AND_PLACE and not result.duplicate:
+			_next_item_sequence += 1
+	return result
 
 func progression_for(member_id: int) -> CharacterProgressionState:
 	var state := _progression_by_member.get(member_id) as CharacterProgressionState
@@ -189,3 +260,24 @@ func _party_validation_errors(manager: PartyManager) -> PackedStringArray:
 		for reason: String in growth.validate():
 			errors.append("PARTY_FORGE_RUN_CONTEXT_ERROR field=party member=%d reason=%s" % [member.member_id, reason])
 	return errors
+
+func _reset_unconfigured_item_fields() -> void:
+	_item_state = null
+	_item_journal = null
+	_next_item_sequence = 0
+
+func _item_transaction_failure(code: ItemTransactionResult.Code) -> ItemTransactionResult:
+	return ItemTransactionResult.create(code)
+
+func _is_nonnegative_json_int(value: Variant) -> bool:
+	if typeof(value) == TYPE_INT:
+		return int(value) >= 0 and int(value) <= ItemInstanceCodec.JSON_SAFE_INTEGER_MAX
+	if typeof(value) != TYPE_FLOAT:
+		return false
+	var number := float(value)
+	return (
+		is_finite(number)
+		and number == floor(number)
+		and number >= 0.0
+		and number <= float(ItemInstanceCodec.JSON_SAFE_INTEGER_MAX)
+	)

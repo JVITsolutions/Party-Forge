@@ -6,6 +6,7 @@ func run() -> Array[String]:
 	var failures: Array[String] = []
 	_assert_registration_contract(failures)
 	_assert_party_ownership_contract(failures)
+	_assert_item_ownership_registration_contract(failures)
 	_assert_unassigned_and_sorted_contract(failures)
 	_assert_device_reassignment_contract(failures)
 	_assert_join_policy(failures)
@@ -59,6 +60,27 @@ func _assert_party_ownership_contract(failures: Array[String]) -> void:
 	TestAssertions.truthy(registry.register_context(replacement, 8).ok(), "same identity and device can retry with an unowned party", failures)
 	TestAssertions.equal(registry.all_contexts().size(), 2, "successful retry proves all rejected indexes stayed unchanged", failures)
 	TestAssertions.truthy(registry.context_for(&"party_owner_alpha") == alpha, "duplicate party rejection preserves original lookup", failures)
+
+func _assert_item_ownership_registration_contract(failures: Array[String]) -> void:
+	var registry := RunContextRegistry.new()
+	var alpha := _context(&"item_owner_alpha", 0, "profile-item-alpha")
+	var beta := _context(&"item_owner_beta", 1, "profile-item-beta")
+	TestAssertions.truthy(alpha.has_method(&"item_state"), "registered contexts expose run item ownership", failures)
+	TestAssertions.truthy(alpha.has_method(&"run_inventory"), "registered contexts expose fixed run inventories", failures)
+	if not alpha.has_method(&"item_state") or not alpha.has_method(&"run_inventory"):
+		return
+	TestAssertions.truthy(registry.register_context(alpha, 10).ok(), "first item-owning context registers", failures)
+	TestAssertions.truthy(registry.register_context(beta, 11).ok(), "second item-owning context registers", failures)
+	var alpha_state := alpha.call(&"item_state") as ItemOwnershipState
+	var beta_state := beta.call(&"item_state") as ItemOwnershipState
+	TestAssertions.equal(alpha_state.owner_id, "item_owner_alpha", "first registered context keeps its item owner", failures)
+	TestAssertions.equal(beta_state.owner_id, "item_owner_beta", "second registered context keeps its item owner", failures)
+	alpha_state.owner_id = "escaped-registry-owner"
+	var alpha_inventory := alpha.call(&"run_inventory") as ItemSlotContainer
+	alpha_inventory.capacity = 40
+	TestAssertions.equal((registry.context_for(&"item_owner_alpha").call(&"item_state") as ItemOwnershipState).owner_id, "item_owner_alpha", "registry lookup cannot observe an escaped item-state mutation", failures)
+	TestAssertions.equal((registry.context_for(&"item_owner_alpha").call(&"run_inventory") as ItemSlotContainer).capacity, 0, "registry lookup retains the configured zero-capacity inventory", failures)
+	TestAssertions.equal((registry.context_for(&"item_owner_beta").call(&"run_inventory") as ItemSlotContainer).capacity, 0, "second registered context remains isolated", failures)
 
 func _assert_unassigned_and_sorted_contract(failures: Array[String]) -> void:
 	var registry := RunContextRegistry.new()
