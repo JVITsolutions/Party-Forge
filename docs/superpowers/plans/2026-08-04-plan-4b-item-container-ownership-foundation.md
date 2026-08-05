@@ -231,7 +231,7 @@ Run the focused codec test. Expected: failure because the item value classes and
 
 - [ ] **Step 3: Implement immutable values and strict decode**
 
-Use `RefCounted` value classes. `ItemModifierRoll` contains `stat_id`, `operation`, `value`, and `required_tags`. `ItemAffixInstance` contains `definition_id`, `affix_kind`, `tier`, and `rolls: Array[ItemModifierRoll]`. `ItemInstance` contains exactly the fields approved in the spec and deep-copies every nested value.
+Use `RefCounted` value classes. `ItemModifierRoll` contains `stat_id`, `operation`, `value`, and `required_tags`. `ItemAffixInstance` contains `definition_id`, `affix_kind`, `tier`, and `rolls: Array[ItemModifierRoll]`. `ItemInstance` declares `const SCHEMA_VERSION := 1` and contains exactly `schema_version`, `instance_id`, `base_definition_id`, `item_level`, `rarity_id`, `affixes: Array[ItemAffixInstance]`, and `origin`. It deep-copies every nested value. The JSON field is `rolls`; the older design term `rolled_modifiers` is not a second accepted alias.
 
 Add `ItemInstanceDecodeResult` in `scripts/items/item_instance_decode_result.gd` with `item`, `error`, and `ok()`. Decode must validate exact field sets before constructing values. For example, an empty instance ID emits `PARTY_FORGE_ITEM_ERROR field=instance_id reason=must be a non-empty string`.
 

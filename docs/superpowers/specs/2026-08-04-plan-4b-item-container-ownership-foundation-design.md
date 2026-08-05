@@ -124,11 +124,11 @@ Each `ItemAffixInstance` contains:
 - `definition_id`
 - `affix_kind`
 - `tier`
-- `rolled_modifiers`
+- `rolls`
 
 `definition_id` resolves through a typed affix-definition catalog. `affix_kind` is validated against the definition and distinguishes the supported fixture categories such as implicit, prefix, suffix, and special power. `tier` is a positive integer within the definition's allowed range.
 
-`rolled_modifiers` stores exact explicit values rather than a seed-only reconstruction. Each modifier identifies its canonical stat or capability key, operation, and finite value. Definitions validate allowed keys, operations, value types, and tier ranges. Plan 4B does not yet apply these modifiers to characters.
+`rolls` stores exact explicit `ItemModifierRoll` values rather than a seed-only reconstruction. Each roll identifies its canonical stat or capability key, operation, finite value, and required tags. Definitions validate allowed keys, operations, value types, and tier ranges. Plan 4B does not yet apply these modifiers to characters.
 
 ### Preservation rule
 
