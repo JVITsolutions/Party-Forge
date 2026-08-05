@@ -13,6 +13,8 @@ const REQUIRED_PATHS: PackedStringArray = [
     "res://scripts/ui/developer_item_sandbox.gd",
     "res://scripts/ui/storage/profile_storage_projection.gd",
     "res://scripts/equipment/profile_loadout_assignment_service.gd",
+    "res://scripts/run/local_run_setup_participant.gd",
+    "res://scripts/run/local_run_setup_coordinator.gd",
     "res://scripts/ui/loadout_warning/loadout_warning_dialog.gd",
     "res://scenes/ui/loadout_warning/loadout_warning_dialog.tscn",
     "res://scenes/ui/armoury/armoury_screen.tscn",

@@ -10,6 +10,7 @@ func run() -> Array[String]:
 	_assert_unassigned_and_sorted_contract(failures)
 	_assert_device_reassignment_contract(failures)
 	_assert_join_policy(failures)
+	_assert_local_setup_registry_seam(failures)
 	for party: PartyManager in _parties:
 		party.free()
 	_parties.clear()
@@ -124,6 +125,16 @@ func _assert_join_policy(failures: Array[String]) -> void:
 	TestAssertions.truthy(RunJoinPolicy.can_accept(&"adventure", true, true), "Adventure accepts at safe checkpoint", failures)
 	TestAssertions.truthy(not RunJoinPolicy.can_accept(&"adventure", false, false), "Adventure rejects away from safe checkpoint", failures)
 	TestAssertions.truthy(not RunJoinPolicy.can_accept(&"unknown", false, true), "unknown mode rejects", failures)
+
+func _assert_local_setup_registry_seam(failures: Array[String]) -> void:
+	var coordinator := LocalRunSetupCoordinator.new()
+	TestAssertions.truthy(coordinator.has_method(&"ready_contexts"), "local setup exposes one final context handoff", failures)
+	TestAssertions.truthy(coordinator.has_method(&"run_context_registry"), "local setup exposes the existing registry contract", failures)
+	var source := FileAccess.get_file_as_string("res://scripts/run/local_run_setup_coordinator.gd")
+	TestAssertions.truthy(source.contains("RunContextRegistry.new()"), "local setup validates final ownership with RunContextRegistry", failures)
+	TestAssertions.truthy(source.contains("register_context(context, participant_value.device_id)"), "local setup registers exact per-player device ownership", failures)
+	TestAssertions.truthy(source.contains("lock_arena_roster()"), "local setup locks Arena only after every joined participant is ready", failures)
+	TestAssertions.truthy(not source.contains("RunJoinPolicy.ADVENTURE"), "local setup does not add Adventure drop-in behavior", failures)
 
 func _context(run_id: StringName, slot: int, profile_id: String) -> PlayerRunContext:
 	return _context_for_party(run_id, slot, profile_id, _party())
