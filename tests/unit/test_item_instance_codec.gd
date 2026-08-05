@@ -23,17 +23,17 @@ func _assert_immutable_round_trip(
 ) -> void:
 	var item := _make_item()
 	var encoded := ItemInstanceCodec.encode(item)
-	var decoded := ItemInstanceCodec.decode(JSON.parse_string(encoded), equipment, foundation)
+	var decode_foundation := foundation.duplicate(true) as ItemFoundationCatalog
+	var decoded := ItemInstanceCodec.decode(JSON.parse_string(encoded), equipment, decode_foundation)
 	TestAssertions.truthy(decoded.ok(), "explicit item round trip succeeds", failures)
 	if not decoded.ok():
 		failures.append("explicit item round trip error: %s" % decoded.error)
 		return
 	TestAssertions.equal(decoded.item.to_dictionary(), item.to_dictionary(), "round trip preserves exact item bytes", failures)
 
-	var changed_foundation := foundation.duplicate(true) as ItemFoundationCatalog
-	var changed_affix := changed_foundation.affix(&"stout")
+	var changed_affix := decode_foundation.affix(&"stout")
 	changed_affix.minimum_roll_by_tier[0] = 999.0
-	TestAssertions.equal(decoded.item.affixes[0].rolls[0].value, 3.0, "catalog changes do not rewrite issued rolls", failures)
+	TestAssertions.equal(decoded.item.affixes[0].rolls[0].value, 3.0, "decode catalog changes do not rewrite issued rolls", failures)
 
 	var copied := decoded.item.copy()
 	copied.affixes[0].rolls[0].value = 2.0
@@ -215,6 +215,19 @@ func _assert_deterministic_issuer(
 	failures: Array[String]
 ) -> void:
 	var item_data := _issue_data()
+	var surplus_item_data := item_data.duplicate(true)
+	surplus_item_data["surplus"] = true
+	var surplus := ItemInstanceIssuer.issue("profile:profile-a", 42, "quest_reward", 4402, surplus_item_data, equipment, foundation)
+	TestAssertions.truthy(not surplus.ok(), "surplus issuer item data fails", failures)
+	TestAssertions.equal(surplus.item, null, "surplus issuer item data has no item", failures)
+	TestAssertions.equal(surplus.error, "PARTY_FORGE_ITEM_ISSUE_ERROR field=item_data reason=unexpected fields surplus", "surplus issuer item data error is exact", failures)
+	var missing_item_data := item_data.duplicate(true)
+	missing_item_data.erase("base_definition_id")
+	var missing := ItemInstanceIssuer.issue("profile:profile-a", 42, "quest_reward", 4402, missing_item_data, equipment, foundation)
+	TestAssertions.truthy(not missing.ok(), "missing issuer item data fails", failures)
+	TestAssertions.equal(missing.item, null, "missing issuer item data has no item", failures)
+	TestAssertions.equal(missing.error, "PARTY_FORGE_ITEM_ISSUE_ERROR field=item_data reason=missing fields base_definition_id", "missing issuer item data error is exact", failures)
+
 	var first := ItemInstanceIssuer.issue("profile:profile-a", 42, "quest_reward", 4402, item_data, equipment, foundation)
 	var repeated := ItemInstanceIssuer.issue("profile:profile-a", 42, "quest_reward", 4402, item_data, equipment, foundation)
 	var other_namespace := ItemInstanceIssuer.issue("profile:profile-b", 42, "quest_reward", 4402, item_data, equipment, foundation)
@@ -248,11 +261,16 @@ func _assert_deterministic_issuer(
 	TestAssertions.equal(empty_namespace.item, null, "empty issuer namespace has no item", failures)
 	TestAssertions.equal(empty_namespace.error, "PARTY_FORGE_ITEM_ISSUE_ERROR field=issuer_namespace reason=must be a non-empty string", "empty issuer namespace error is exact", failures)
 
-	var moved_reference := first.item.copy()
-	var source_slot := first.item.instance_id
-	var destination_slot := source_slot
-	TestAssertions.equal(destination_slot, first.item.instance_id, "moving item reference does not change id", failures)
-	TestAssertions.equal(moved_reference.instance_id, first.item.instance_id, "copying item for movement does not change id", failures)
+	var item_before_move := first.item.to_dictionary()
+	var source_slots: Dictionary = {0: first.item}
+	var destination_slots: Dictionary = {}
+	var moved_item := source_slots[0] as ItemInstance
+	source_slots.erase(0)
+	destination_slots[3] = moved_item
+	TestAssertions.truthy(not source_slots.has(0), "move clears source slot", failures)
+	TestAssertions.equal(destination_slots[3], first.item, "move transfers the same item value", failures)
+	TestAssertions.equal((destination_slots[3] as ItemInstance).instance_id, item_before_move["instance_id"], "moving item keeps instance id", failures)
+	TestAssertions.equal((destination_slots[3] as ItemInstance).to_dictionary(), item_before_move, "moving item keeps exact values", failures)
 
 func _assert_decode_error(
 	document: Variant,
