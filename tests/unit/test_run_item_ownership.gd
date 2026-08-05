@@ -16,6 +16,7 @@ func run() -> Array[String]:
 	_test_cross_context_state_and_profile_isolation(failures)
 	_test_run_issuance_sequence_and_replay(failures)
 	_test_invalid_inputs_and_operation_policy_are_atomic(failures)
+	_test_generic_transactions_cannot_cross_equipment_boundary(failures)
 	_test_recruit_adds_equipment_without_resetting_item_state(failures)
 	for party: PartyManager in _parties:
 		party.free()
@@ -251,6 +252,105 @@ func _test_invalid_inputs_and_operation_policy_are_atomic(failures: Array[String
 	var third_create := ItemTransactionRequest.create("policy-create-third", String(context.run_player_id), INVENTORY_ID, 2, third_item)
 	TestAssertions.equal(_apply(context, third_create, equipment, foundation).code, ItemTransactionResult.Code.OK, "production swap consumes no create sequence", failures)
 
+func _test_generic_transactions_cannot_cross_equipment_boundary(failures: Array[String]) -> void:
+	var equipment := GameCatalog.EQUIPMENT_CATALOG
+	var foundation := GameCatalog.ITEM_FOUNDATION_CATALOG
+	var main_hand_slot := EquipmentSlotIndex.index_for(&"main_hand")
+	var member_one_equipment := &"run-equipment-001"
+	var member_two_equipment := &"run-equipment-002"
+
+	var create_context := _context(&"equipment_boundary_create", "profile-equipment-boundary-create", 2, 4501)
+	var direct_item := _issued_item(create_context, 0, "equipment-boundary-direct-create", failures)
+	if direct_item != null:
+		var direct_create := ItemTransactionRequest.create(
+			"equipment-boundary-create",
+			String(create_context.run_player_id),
+			member_one_equipment,
+			main_hand_slot,
+			direct_item
+		)
+		_assert_equipment_transaction_rejected(create_context, direct_create, equipment, foundation, "direct create to equipment", failures)
+		var valid_retry := ItemTransactionRequest.create(
+			"equipment-boundary-create",
+			String(create_context.run_player_id),
+			INVENTORY_ID,
+			0,
+			direct_item
+		)
+		TestAssertions.equal(_apply(create_context, valid_retry, equipment, foundation).code, ItemTransactionResult.Code.OK, "rejected equipment create leaves its transaction ID and issuance sequence available", failures)
+		var after_valid_create := _ownership_bytes(create_context)
+		var replay := _apply(create_context, valid_retry, equipment, foundation)
+		TestAssertions.equal(replay.code, ItemTransactionResult.Code.TRANSACTION_REPLAY, "valid inventory retry retains ordinary replay behavior", failures)
+		TestAssertions.truthy(replay.duplicate, "valid inventory retry replay is marked duplicate", failures)
+		TestAssertions.equal(_ownership_bytes(create_context), after_valid_create, "valid inventory replay preserves ownership bytes", failures)
+		var next_item := _issued_item(create_context, 1, "equipment-boundary-next-sequence", failures)
+		if next_item != null:
+			var next_create := ItemTransactionRequest.create("equipment-boundary-next-create", String(create_context.run_player_id), INVENTORY_ID, 1, next_item)
+			TestAssertions.equal(_apply(create_context, next_create, equipment, foundation).code, ItemTransactionResult.Code.OK, "rejected equipment create does not advance the next issuance sequence", failures)
+
+	var inventory_to_equipment := _context(&"equipment_boundary_in", "profile-equipment-boundary-in", 2, 4502)
+	var inbound_item := _issued_item(inventory_to_equipment, 0, "equipment-boundary-inbound", failures)
+	if inbound_item != null:
+		TestAssertions.equal(_apply(inventory_to_equipment, ItemTransactionRequest.create("equipment-boundary-inbound-create", String(inventory_to_equipment.run_player_id), INVENTORY_ID, 0, inbound_item), equipment, foundation).code, ItemTransactionResult.Code.OK, "inventory-to-equipment fixture enters inventory", failures)
+		var move_into_equipment := ItemTransactionRequest.move("equipment-boundary-inbound-move", String(inventory_to_equipment.run_player_id), INVENTORY_ID, 0, inbound_item.instance_id, member_one_equipment, main_hand_slot)
+		_assert_equipment_transaction_rejected(inventory_to_equipment, move_into_equipment, equipment, foundation, "inventory-to-equipment move", failures)
+
+	var equipment_to_inventory := _context(&"equipment_boundary_out", "profile-equipment-boundary-out", 2, 4503)
+	var outbound_item := _issued_item(equipment_to_inventory, 0, "equipment-boundary-outbound", failures)
+	if outbound_item != null:
+		TestAssertions.equal(_apply(equipment_to_inventory, ItemTransactionRequest.create("equipment-boundary-outbound-create", String(equipment_to_inventory.run_player_id), INVENTORY_ID, 0, outbound_item), equipment, foundation).code, ItemTransactionResult.Code.OK, "equipment-to-inventory fixture enters inventory", failures)
+		TestAssertions.truthy(equipment_to_inventory.assign_equipment(1, outbound_item.instance_id, &"main_hand", equipment, foundation).ok(), "equipment-to-inventory fixture equips through the assignment boundary", failures)
+		var move_out_of_equipment := ItemTransactionRequest.move("equipment-boundary-outbound-move", String(equipment_to_inventory.run_player_id), member_one_equipment, main_hand_slot, outbound_item.instance_id, INVENTORY_ID, 1)
+		_assert_equipment_transaction_rejected(equipment_to_inventory, move_out_of_equipment, equipment, foundation, "equipment-to-inventory move", failures)
+
+	var occupied_swap_context := _context(&"equipment_boundary_swap", "profile-equipment-boundary-swap", 2, 4504)
+	var equipped_swap_item := _issued_item(occupied_swap_context, 0, "equipment-boundary-equipped-swap", failures)
+	var inventory_swap_item := _issued_item(occupied_swap_context, 1, "equipment-boundary-inventory-swap", failures)
+	if equipped_swap_item != null and inventory_swap_item != null:
+		TestAssertions.equal(_apply(occupied_swap_context, ItemTransactionRequest.create("equipment-boundary-equipped-swap-create", String(occupied_swap_context.run_player_id), INVENTORY_ID, 0, equipped_swap_item), equipment, foundation).code, ItemTransactionResult.Code.OK, "occupied equipment swap fixture creates equipped item", failures)
+		TestAssertions.equal(_apply(occupied_swap_context, ItemTransactionRequest.create("equipment-boundary-inventory-swap-create", String(occupied_swap_context.run_player_id), INVENTORY_ID, 1, inventory_swap_item), equipment, foundation).code, ItemTransactionResult.Code.OK, "occupied equipment swap fixture creates inventory item", failures)
+		TestAssertions.truthy(occupied_swap_context.assign_equipment(1, equipped_swap_item.instance_id, &"main_hand", equipment, foundation).ok(), "occupied equipment swap fixture equips through the assignment boundary", failures)
+		var occupied_equipment_swap := ItemTransactionRequest.swap("equipment-boundary-occupied-swap", String(occupied_swap_context.run_player_id), INVENTORY_ID, 1, inventory_swap_item.instance_id, member_one_equipment, main_hand_slot)
+		_assert_equipment_transaction_rejected(occupied_swap_context, occupied_equipment_swap, equipment, foundation, "occupied equipment swap", failures)
+
+	var cross_member_move_context := _two_member_context(&"equipment_boundary_member_move", "profile-equipment-boundary-member-move", 2, 4505)
+	var cross_move_item := _issued_item(cross_member_move_context, 0, "equipment-boundary-member-move", failures)
+	if cross_move_item != null:
+		TestAssertions.equal(_apply(cross_member_move_context, ItemTransactionRequest.create("equipment-boundary-member-move-create", String(cross_member_move_context.run_player_id), INVENTORY_ID, 0, cross_move_item), equipment, foundation).code, ItemTransactionResult.Code.OK, "cross-member move fixture creates item", failures)
+		TestAssertions.truthy(cross_member_move_context.assign_equipment(1, cross_move_item.instance_id, &"main_hand", equipment, foundation).ok(), "cross-member move fixture equips through the assignment boundary", failures)
+		var cross_member_move := ItemTransactionRequest.move("equipment-boundary-member-move", String(cross_member_move_context.run_player_id), member_one_equipment, main_hand_slot, cross_move_item.instance_id, member_two_equipment, main_hand_slot)
+		_assert_equipment_transaction_rejected(cross_member_move_context, cross_member_move, equipment, foundation, "cross-member equipment move", failures)
+
+	var cross_member_swap_context := _two_member_context(&"equipment_boundary_member_swap", "profile-equipment-boundary-member-swap", 2, 4506)
+	var member_one_item := _issued_item(cross_member_swap_context, 0, "equipment-boundary-member-one", failures)
+	var member_two_item := _issued_item(cross_member_swap_context, 1, "equipment-boundary-member-two", failures)
+	if member_one_item != null and member_two_item != null:
+		TestAssertions.equal(_apply(cross_member_swap_context, ItemTransactionRequest.create("equipment-boundary-member-one-create", String(cross_member_swap_context.run_player_id), INVENTORY_ID, 0, member_one_item), equipment, foundation).code, ItemTransactionResult.Code.OK, "cross-member swap fixture creates member-one item", failures)
+		TestAssertions.equal(_apply(cross_member_swap_context, ItemTransactionRequest.create("equipment-boundary-member-two-create", String(cross_member_swap_context.run_player_id), INVENTORY_ID, 1, member_two_item), equipment, foundation).code, ItemTransactionResult.Code.OK, "cross-member swap fixture creates member-two item", failures)
+		TestAssertions.truthy(cross_member_swap_context.assign_equipment(1, member_one_item.instance_id, &"main_hand", equipment, foundation).ok(), "cross-member swap fixture equips member one through the assignment boundary", failures)
+		TestAssertions.truthy(cross_member_swap_context.assign_equipment(2, member_two_item.instance_id, &"main_hand", equipment, foundation).ok(), "cross-member swap fixture equips member two through the assignment boundary", failures)
+		var cross_member_swap := ItemTransactionRequest.swap("equipment-boundary-member-swap", String(cross_member_swap_context.run_player_id), member_one_equipment, main_hand_slot, member_one_item.instance_id, member_two_equipment, main_hand_slot)
+		_assert_equipment_transaction_rejected(cross_member_swap_context, cross_member_swap, equipment, foundation, "cross-member equipment swap", failures)
+
+func _assert_equipment_transaction_rejected(
+	context: PlayerRunContext,
+	request: ItemTransactionRequest,
+	equipment: EquipmentCatalog,
+	foundation: ItemFoundationCatalog,
+	label: String,
+	failures: Array[String]
+) -> void:
+	var before := _ownership_bytes(context)
+	var result := _apply(context, request, equipment, foundation)
+	TestAssertions.equal(result.code, ItemTransactionResult.Code.INVALID_REQUEST, "%s is rejected at the ordinary transaction boundary" % label, failures)
+	TestAssertions.equal(result.next_state, null, "%s exposes no candidate state" % label, failures)
+	TestAssertions.truthy(not result.duplicate, "%s is not a duplicate success" % label, failures)
+	TestAssertions.equal(_ownership_bytes(context), before, "%s preserves ownership bytes" % label, failures)
+	var retry := _apply(context, request, equipment, foundation)
+	TestAssertions.equal(retry.code, ItemTransactionResult.Code.INVALID_REQUEST, "%s is not journaled into replay" % label, failures)
+	TestAssertions.truthy(not retry.duplicate, "%s retry remains a nonduplicate rejection" % label, failures)
+	TestAssertions.equal(_ownership_bytes(context), before, "%s retry preserves ownership bytes" % label, failures)
+
 func _assert_failure_is_atomic(
 	context: PlayerRunContext,
 	request: ItemTransactionRequest,
@@ -277,6 +377,17 @@ func _context_with_profile(run_player_id: StringName, profile: ProfileState, see
 	_parties.append(party)
 	var context := PlayerRunContext.new()
 	var errors := context.configure(run_player_id, _parties.size() - 1, profile, seed, party, 100)
+	assert(errors.is_empty())
+	return context
+
+func _two_member_context(run_player_id: StringName, profile_id: String, columns: int, seed: int) -> PlayerRunContext:
+	var catalog := GameCatalog.load_defaults()
+	var party := PartyManager.new()
+	party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
+	assert(party.recruit(catalog.class_by_id(&"fighter")))
+	_parties.append(party)
+	var context := PlayerRunContext.new()
+	var errors := context.configure(run_player_id, _parties.size() - 1, _profile(profile_id, columns, 0), seed, party, 100)
 	assert(errors.is_empty())
 	return context
 
@@ -312,6 +423,9 @@ func _item_state(context: PlayerRunContext) -> ItemOwnershipState:
 
 func _run_inventory(context: PlayerRunContext) -> ItemSlotContainer:
 	return context.call(&"run_inventory") as ItemSlotContainer
+
+func _ownership_bytes(context: PlayerRunContext) -> String:
+	return JSON.stringify(_item_state(context).to_dictionary())
 
 func _apply(
 	context: PlayerRunContext,

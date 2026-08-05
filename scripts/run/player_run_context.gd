@@ -179,6 +179,11 @@ func apply_item_transaction(
 		ItemTransactionRequest.SWAP_OCCUPIED,
 	]:
 		return _item_transaction_failure(ItemTransactionResult.Code.INVALID_REQUEST)
+	if (
+		request.operation != ItemTransactionRequest.CREATE_AND_PLACE
+		and not _container_is_run_inventory(request.source_container_id)
+	) or not _container_is_run_inventory(request.destination_container_id):
+		return _item_transaction_failure(ItemTransactionResult.Code.INVALID_REQUEST)
 	if request.owner_id != _item_state.owner_id:
 		return service.apply(_item_state, request, _item_journal, equipment, foundation)
 	if request.operation == ItemTransactionRequest.CREATE_AND_PLACE:
@@ -324,6 +329,10 @@ func _reset_unconfigured_item_fields() -> void:
 
 func _item_transaction_failure(code: ItemTransactionResult.Code) -> ItemTransactionResult:
 	return ItemTransactionResult.create(code)
+
+func _container_is_run_inventory(container_id: String) -> bool:
+	var container := _item_state.container(StringName(container_id))
+	return container != null and container.container_kind == ItemSlotContainer.RUN_INVENTORY
 
 func _is_nonnegative_json_int(value: Variant) -> bool:
 	if typeof(value) == TYPE_INT:
