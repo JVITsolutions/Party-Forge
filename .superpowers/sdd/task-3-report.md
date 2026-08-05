@@ -64,3 +64,57 @@ The final full run initially exposed that stripping baked equipment had also str
 The standalone constructors now reproduce the approved `90519ce` Fighter geometry/material contract exactly for helmet, armour and plates, sword (including the four-sided tip), shield, hammer, gauntlets, boots, belt, amulet, and rings. Greaves remain the explicit Task 3 paired-leg addition. The only intentional departure is source visibility for hammer, amulet, and rings: formerly hidden embedded alternatives are visible when extracted so modular runtime attachment and isolated icon capture cannot produce invisible geometry. A regression signature now fail-closes on every canonical item’s attachment count, socket tag, node name, transform, mesh type/dimensions, palette region, material color/metallic/roughness/emission, armour plates, and sword component/cylinder values.
 
 This test first failed with 39 precise geometry-signature failures against the remodeled constructors, then passed after restoration. The standalone scan and safe isolated target rebuild/restore again reported `STANDALONE_SOURCE_SCAN_OK` and `CLEAN_REGENERATION_OK scenes=12`. Final evidence: `GENERATION_DETERMINISM_OK files=41`, `EQUIPMENT_ICON_RENDER_OK sets=1 items=12`, `EQUIPMENT_ICON_VALIDATION_OK sets=1 items=12`, `ICON_DETERMINISM_OK files=24`, focused `TEST_SUMMARY: PASS (0 failures)`, and fresh complete-suite `TEST_SUMMARY: PASS (76 suites)`.
+
+---
+
+# Plan 4B Task 3 report: canonical registry and fixed-slot ownership state
+
+Status: implementation and local verification complete on `feat/plan-4b-item-ownership`; independent parent review remains the next sequential gate.
+
+## Scope and contracts
+
+- Worktree: `F:\Projects(root)\Game dev\Projects\party-forge\.worktrees\plan-4b-item-ownership`.
+- Base: `e408532` (`docs: define item ownership snapshot schema`).
+- Added schema-one `ItemRegistry`, `ItemSlotContainer`, `ItemOwnershipState`, and `ItemOwnershipStateDecodeResult`, plus the focused ownership suite and generated UIDs for the four production scripts.
+- Registry items and containers serialize in ascending IDs; sparse slots serialize in ascending numeric order with canonical unsigned decimal string keys.
+- Inventory capacities are restricted to `0..40`; stash capacities require exactly `100`.
+- Strict decode rejects exact-field violations, duplicate item/container IDs, duplicate references, missing records, orphans, invalid capacities/slots/kinds, and owner mismatch without exposing partial state.
+- All registry, item, container, list, and serialized-document accessors return defensive copies; no mutable dictionary reference is exposed.
+
+## RED evidence
+
+Command:
+
+```powershell
+& $godot --headless --path $project --quit-after 120 --script res://tests/focused_test_runner.gd -- tests/unit/test_item_ownership_state.gd
+```
+
+The pre-implementation run failed for the intended missing-feature reason with `Could not find type "ItemOwnershipState"`, `Identifier "ItemRegistry" not declared`, and `Identifier "ItemSlotContainer" not declared`. Because the focused runner crashed while loading the missing suite, Godot returned process exit `0` without a `TEST_SUMMARY`; that exit code was rejected as pass evidence, and the exact parse diagnostics were retained as RED evidence.
+
+## GREEN and regression evidence
+
+A complete import registered the four new global classes and exited `0`. The first executable GREEN run exposed invalid direct `Variant`-to-`String` casts in the new strict decoder. The engine printed runtime stack traces even though the focused runner had already printed a misleading PASS marker. Replacing those casts with explicit conversions fixed the implementation; no test was weakened.
+
+Final focused commands and results:
+
+```powershell
+& $godot --headless --path $project --quit-after 120 --script res://tests/focused_test_runner.gd -- tests/unit/test_item_ownership_state.gd
+& $godot --headless --path $project --quit-after 120 --script res://tests/focused_test_runner.gd -- tests/unit/test_item_ownership_state.gd tests/unit/test_item_instance_codec.gd tests/unit/test_profile_state.gd tests/unit/test_equipment_contract.gd
+```
+
+Both commands exited `0` with `TEST_SUMMARY: PASS (0 failures)` and no script, parse, loader, or test-failure diagnostics.
+
+Full suite command:
+
+```powershell
+& $godot --headless --path $project --quit-after 300 --script res://tests/test_runner.gd
+```
+
+Result: exit `0`; `TEST_SUMMARY: PASS (123 suites)`; zero `TEST_FAILURE`, `SCRIPT ERROR`, `Parse Error`, `Failed to load`, or `No loader found` markers. The existing intentional negative-path errors and shutdown diagnostics (`18 ObjectDB` instances and five resources still in use) remained baseline noise.
+
+## Hygiene and concerns
+
+- The complete import generated UIDs for the new scripts/test and also recreated two unrelated missing test UIDs. All verification-created test sidecars were removed; only the four production-script UIDs remain scoped artifacts.
+- `git diff --check` was clean before the final verification pass.
+- The focused runner can print its PASS summary before later runtime errors reach the console, so every accepted focused result was checked for engine error markers rather than trusting the summary alone.
+- No open Task 3 production concern is known. Task 4 mutation APIs were not implemented.
