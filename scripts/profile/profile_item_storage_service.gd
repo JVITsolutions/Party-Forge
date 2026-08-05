@@ -25,6 +25,9 @@ func apply(
 ) -> ProfileMutationResult:
 	if request == null:
 		return _failure("PARTY_FORGE_PROFILE_ITEM_STORAGE_ERROR field=request reason=must not be null")
+	var container_error := _validate_container_domain(request)
+	if not container_error.is_empty():
+		return _failure(container_error)
 	if request.operation not in PERSISTENT_OPERATIONS:
 		return _failure(
 			"PARTY_FORGE_PROFILE_ITEM_STORAGE_ERROR field=request.operation reason=unsupported persistent operation %s"
@@ -35,12 +38,14 @@ func apply(
 		profile_id,
 		request.transaction_id,
 		func(profile: ProfileState) -> String:
+			var container_documents: Array = [profile.leader_loadout.duplicate(true)]
+			container_documents.append_array(profile.stash_tabs.duplicate(true))
 			var ownership := ItemOwnershipState.decode(
 				{
 					"schema_version": ItemOwnershipState.SCHEMA_VERSION,
 					"owner_id": profile.profile_id,
 					"registry": profile.item_records.duplicate(true),
-					"containers": profile.stash_tabs.duplicate(true),
+					"containers": container_documents,
 				},
 				GameCatalog.EQUIPMENT_CATALOG,
 				GameCatalog.ITEM_FOUNDATION_CATALOG
@@ -64,9 +69,12 @@ func apply(
 			if candidate == null:
 				return "PARTY_FORGE_PROFILE_ITEM_STORAGE_ERROR code=INVALID_ITEM"
 			profile.item_records = candidate.registry().to_dictionary()
+			var stash_ids: Array[StringName] = []
+			for stash_document: Dictionary in profile.stash_tabs:
+				stash_ids.append(StringName(String(stash_document["container_id"])))
 			profile.stash_tabs = []
-			for container: ItemSlotContainer in candidate.containers():
-				profile.stash_tabs.append(container.to_dictionary())
+			for stash_id: StringName in stash_ids:
+				profile.stash_tabs.append(candidate.container(stash_id).to_dictionary())
 			if request.operation == ItemTransactionRequest.CREATE_AND_PLACE:
 				profile.next_item_sequence += 1
 			return ""
@@ -76,6 +84,13 @@ func apply(
 		OPERATION,
 		canonical_request
 	)
+
+static func _validate_container_domain(request: ItemTransactionRequest) -> String:
+	if request.source_container_id == "leader-loadout":
+		return "PARTY_FORGE_PROFILE_ITEM_STORAGE_ERROR field=request.source_container_id reason=leader-loadout is reserved for equipment assignment"
+	if request.destination_container_id == "leader-loadout":
+		return "PARTY_FORGE_PROFILE_ITEM_STORAGE_ERROR field=request.destination_container_id reason=leader-loadout is reserved for equipment assignment"
+	return ""
 
 func _validate_create(profile: ProfileState, request: ItemTransactionRequest) -> String:
 	var item := request.create_item

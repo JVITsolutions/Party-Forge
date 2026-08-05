@@ -2,6 +2,7 @@ extends RefCounted
 
 const PROFILE_ID := "profile-storage02"
 const STASH_ID := &"stash-tab-000"
+const LEADER_ID := &"leader-loadout"
 
 var _root_counter := 0
 
@@ -14,6 +15,7 @@ func run() -> Array[String]:
 	_test_create_preconditions_and_task_four_failures_are_atomic(failures)
 	_test_injected_save_failure_is_atomic(failures)
 	_test_non_create_preserves_sequence(failures)
+	_test_leader_loadout_requests_are_rejected(failures)
 	_test_persistent_sandbox_remove_is_rejected(failures)
 	return failures
 
@@ -164,7 +166,14 @@ func _test_non_create_preserves_sequence(failures: Array[String]) -> void:
 	var root := _case_root("non_create")
 	var store := ProfileStore.new()
 	var item := _item("item-move-persistent", 6)
-	var profile := _profile_with_item(item, 0, 7)
+	var equipped := _item("item-equipped-preserved", 5)
+	var profile := _empty_profile()
+	profile.item_records = ItemRegistry.new([equipped, item]).to_dictionary()
+	profile.set("leader_loadout", _loadout_document({9: equipped.instance_id}))
+	profile.set("leader_loadout_class_id", "fighter")
+	profile.stash_tabs = [_tab_document({0: item.instance_id})]
+	profile.next_item_sequence = 7
+	var loadout_before := profile.get("leader_loadout") as Dictionary
 	_save_profile(store, profile, root, "non-create fixture", failures)
 	var request := ItemTransactionRequest.move("move-persistent", PROFILE_ID, STASH_ID, 0, item.instance_id, STASH_ID, 99)
 	var moved := ProfileItemStorageService.new(ProfileMutationService.new(store)).apply(PROFILE_ID, request, root)
@@ -172,7 +181,41 @@ func _test_non_create_preserves_sequence(failures: Array[String]) -> void:
 	var saved := store.load_profile(PROFILE_ID, root).profile
 	TestAssertions.equal(saved.next_item_sequence, 7, "non-create transaction preserves issuance sequence", failures)
 	TestAssertions.equal(saved.stash_tabs[0]["slots"], {"99": item.instance_id}, "non-create transaction preserves exact move placement", failures)
-	TestAssertions.equal(saved.item_records["items"][0], item.to_dictionary(), "non-create transaction preserves complete item record", failures)
+	TestAssertions.equal(saved.item_records["items"], [equipped.to_dictionary(), item.to_dictionary()], "non-create transaction preserves complete sorted item records", failures)
+	TestAssertions.equal(saved.get("leader_loadout"), loadout_before, "stash-only transaction preserves the exact leader loadout", failures)
+	TestAssertions.equal(saved.get("leader_loadout_class_id"), "fighter", "stash-only transaction preserves the leader class ID", failures)
+	ProfileTestSupport.remove_tree(root)
+
+func _test_leader_loadout_requests_are_rejected(failures: Array[String]) -> void:
+	var root := _case_root("leader_loadout_rejected")
+	var store := ProfileStore.new()
+	var equipped := _item("item-equipped-rejected", 0)
+	var stashed := _item("item-stashed-rejected", 1)
+	var profile := _empty_profile()
+	profile.item_records = ItemRegistry.new([equipped, stashed]).to_dictionary()
+	profile.set("leader_loadout", _loadout_document({9: equipped.instance_id}))
+	profile.set("leader_loadout_class_id", "fighter")
+	profile.stash_tabs = [_tab_document({0: stashed.instance_id})]
+	profile.next_item_sequence = 2
+	_save_profile(store, profile, root, "leader-loadout policy fixture", failures)
+	var path := store.profile_path(PROFILE_ID, root)
+	var before_bytes := FileAccess.get_file_as_bytes(path)
+	var requests: Array[ItemTransactionRequest] = [
+		ItemTransactionRequest.create("create-to-leader", PROFILE_ID, LEADER_ID, 0, _item("item-create-to-leader", 2)),
+		ItemTransactionRequest.move("move-from-leader", PROFILE_ID, LEADER_ID, 9, equipped.instance_id, STASH_ID, 1),
+		ItemTransactionRequest.move("move-to-leader", PROFILE_ID, STASH_ID, 0, stashed.instance_id, LEADER_ID, 0),
+		ItemTransactionRequest.swap("swap-with-leader", PROFILE_ID, STASH_ID, 0, stashed.instance_id, LEADER_ID, 9),
+	]
+	var service := ProfileItemStorageService.new(ProfileMutationService.new(store))
+	for request: ItemTransactionRequest in requests:
+		var rejected := service.apply(PROFILE_ID, request, root)
+		_assert_failed_result(rejected, "leader-loadout", request.transaction_id, failures)
+		TestAssertions.equal(FileAccess.get_file_as_bytes(path), before_bytes, "%s preserves exact profile bytes" % request.transaction_id, failures)
+	var saved := store.load_profile(PROFILE_ID, root).profile
+	TestAssertions.equal(saved.get("leader_loadout"), _loadout_document({9: equipped.instance_id}), "rejected generic requests preserve leader placement", failures)
+	TestAssertions.equal(saved.stash_tabs[0]["slots"], {"0": stashed.instance_id}, "rejected generic requests preserve stash placement", failures)
+	TestAssertions.equal(saved.next_item_sequence, 2, "rejected generic requests consume no sequence", failures)
+	TestAssertions.equal(saved.applied_transactions, {}, "rejected generic requests record no durable transactions", failures)
 	ProfileTestSupport.remove_tree(root)
 
 func _test_persistent_sandbox_remove_is_rejected(failures: Array[String]) -> void:
@@ -224,6 +267,9 @@ func _profile_with_item(item: ItemInstance, slot: int, next_sequence: int) -> Pr
 
 func _tab_document(slots: Dictionary) -> Dictionary:
 	return ItemSlotContainer.create(STASH_ID, ItemSlotContainer.PROFILE_STASH_TAB, PROFILE_ID, 100, slots).to_dictionary()
+
+func _loadout_document(slots: Dictionary) -> Dictionary:
+	return ItemSlotContainer.create(LEADER_ID, ItemSlotContainer.PROFILE_LEADER_EQUIPMENT, PROFILE_ID, 11, slots).to_dictionary()
 
 func _item(instance_id: String, sequence: int) -> ItemInstance:
 	return _item_with_origin(instance_id, "profile:%s" % PROFILE_ID, sequence)

@@ -3,7 +3,7 @@ extends RefCounted
 
 enum PrologueState { NOT_STARTED, IN_PROGRESS, COMPLETED }
 
-const SCHEMA_VERSION := 2
+const SCHEMA_VERSION := 3
 const MAX_STASH_TABS := 100
 
 var schema_version := SCHEMA_VERSION
@@ -26,6 +26,8 @@ var owned_characters: Dictionary = {}
 var squad_capacity := 1
 var inventory_columns := 0
 var item_records: Dictionary = {"schema_version": 1, "items": []}
+var leader_loadout: Dictionary = {}
+var leader_loadout_class_id := ""
 var stash_tabs: Array[Dictionary] = []
 var next_item_sequence := 0
 var extraction_capacity := 0
@@ -39,8 +41,17 @@ static func new_profile(id: String, name: String, now_unix: int) -> ProfileState
 	result.display_name = name.strip_edges()
 	result.created_at_unix = maxi(0, now_unix)
 	result.updated_at_unix = result.created_at_unix
+	result.leader_loadout = _empty_leader_loadout(result.profile_id)
 	result.normalize()
 	return result
+
+static func _empty_leader_loadout(profile_id: String) -> Dictionary:
+	return ItemSlotContainer.create(
+		&"leader-loadout",
+		ItemSlotContainer.PROFILE_LEADER_EQUIPMENT,
+		profile_id,
+		EquipmentSlotIndex.capacity(),
+	).to_dictionary()
 
 func normalize() -> void:
 	display_name = display_name.strip_edges()
@@ -78,6 +89,8 @@ func to_dictionary() -> Dictionary:
 		"squad_capacity": squad_capacity,
 		"inventory_columns": inventory_columns,
 		"item_records": item_records.duplicate(true),
+		"leader_loadout": leader_loadout.duplicate(true),
+		"leader_loadout_class_id": leader_loadout_class_id,
 		"stash_tabs": stash_tabs.duplicate(true),
 		"next_item_sequence": next_item_sequence,
 		"extraction_capacity": extraction_capacity,

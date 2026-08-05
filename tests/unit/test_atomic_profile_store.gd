@@ -234,21 +234,21 @@ func _test_post_commit_cleanup_failure_retains_committed_state(failures: Array[S
 func _test_failed_schema_migration_promotion_preserves_generations(failures: Array[String]) -> void:
 	var path := ProfileStore.new().profile_path("profile-migrate03", _root)
 	var documents := AtomicJsonStore.new()
-	var older := _schema_one_document("profile-migrate03", 10, 1000)
-	var primary := _schema_one_document("profile-migrate03", 20, 1001)
+	var older := _schema_two_document("profile-migrate03", 10, 1000)
+	var primary := _schema_two_document("profile-migrate03", 20, 1001)
 	var loadable_validator := Callable(ProfileCodec, "validate_loadable_document")
 	if not loadable_validator.is_valid():
 		TestAssertions.truthy(false, "failed migration fixture has a loadable profile validator", failures)
 		return
-	TestAssertions.equal(documents.save_document(path, older, loadable_validator), "", "failed migration fixture writes older schema-one generation", failures)
-	TestAssertions.equal(documents.save_document(path, primary, loadable_validator), "", "failed migration fixture writes schema-one primary", failures)
+	TestAssertions.equal(documents.save_document(path, older, loadable_validator), "", "failed migration fixture writes older schema-two generation", failures)
+	TestAssertions.equal(documents.save_document(path, primary, loadable_validator), "", "failed migration fixture writes schema-two primary", failures)
 	var primary_bytes := FileAccess.get_file_as_bytes(path)
 	var backup_bytes := FileAccess.get_file_as_bytes("%s.bak" % path)
 	var failing := ProfileStore.new(AtomicJsonStore.new(func(_temporary: String, _target: String) -> Error: return ERR_CANT_CREATE))
 	var loaded := failing.load_profile("profile-migrate03", _root)
 	TestAssertions.truthy(not loaded.ok() and loaded.profile == null and loaded.error.contains("stage=promote"), "failed migration promotion reports no partial profile", failures)
-	TestAssertions.equal(FileAccess.get_file_as_bytes(path), primary_bytes, "failed migration preserves schema-one primary bytes", failures)
-	TestAssertions.equal(FileAccess.get_file_as_bytes("%s.bak" % path), backup_bytes, "failed migration preserves verified backup bytes", failures)
+	TestAssertions.equal(FileAccess.get_file_as_bytes(path), primary_bytes, "failed migration preserves schema-two primary bytes", failures)
+	TestAssertions.equal(FileAccess.get_file_as_bytes("%s.bak" % path), backup_bytes, "failed migration preserves schema-two backup bytes", failures)
 
 func _test_successful_schema_migration_promotes_and_retains_source(failures: Array[String]) -> void:
 	var path := ProfileStore.new().profile_path("profile-migrate04", _root)
@@ -266,7 +266,7 @@ func _test_successful_schema_migration_promotes_and_retains_source(failures: Arr
 	TestAssertions.truthy(loaded.ok() and loaded.migrated and loaded.source_schema_version == 1, "successful migration reports schema-one source", failures)
 	var promoted := JSON.parse_string(FileAccess.get_file_as_string(path)) as Dictionary
 	var retained := JSON.parse_string(FileAccess.get_file_as_string("%s.bak" % path)) as Dictionary
-	TestAssertions.equal(promoted.get("schema_version", -1), 2, "successful migration stores schema-two primary", failures)
+	TestAssertions.equal(promoted.get("schema_version", -1), 3, "successful migration stores schema-three primary", failures)
 	TestAssertions.equal(retained.get("schema_version", -1), 1, "successful migration retains schema-one backup", failures)
 	TestAssertions.equal(FileAccess.get_file_as_bytes("%s.bak" % path), source_primary_bytes, "successful migration backup exactly retains source primary bytes", failures)
 
@@ -274,14 +274,14 @@ func _test_schema_migration_promoted_current_verification_restores_generations(f
 	var profile_id := "profile-migrate05"
 	var path := ProfileStore.new().profile_path(profile_id, _root)
 	var documents := AtomicJsonStore.new()
-	var older := _schema_one_document(profile_id, 10, 1000)
-	var primary := _schema_one_document(profile_id, 20, 1001)
+	var older := _schema_two_document(profile_id, 10, 1000)
+	var primary := _schema_two_document(profile_id, 20, 1001)
 	var loadable_validator := Callable(ProfileCodec, "validate_loadable_document")
-	TestAssertions.equal(documents.save_document(path, older, loadable_validator), "", "current verification fixture writes older schema-one generation", failures)
-	TestAssertions.equal(documents.save_document(path, primary, loadable_validator), "", "current verification fixture writes schema-one primary", failures)
+	TestAssertions.equal(documents.save_document(path, older, loadable_validator), "", "current verification fixture writes older schema-two generation", failures)
+	TestAssertions.equal(documents.save_document(path, primary, loadable_validator), "", "current verification fixture writes schema-two primary", failures)
 	var primary_bytes := FileAccess.get_file_as_bytes(path)
 	var backup_bytes := FileAccess.get_file_as_bytes("%s.bak" % path)
-	var schema_one_promoter := func(temporary: String, target: String) -> Error:
+	var schema_two_promoter := func(temporary: String, target: String) -> Error:
 		var promote_error := DirAccess.rename_absolute(ProjectSettings.globalize_path(temporary), ProjectSettings.globalize_path(target))
 		if promote_error != OK:
 			return promote_error
@@ -292,11 +292,11 @@ func _test_schema_migration_promoted_current_verification_restores_generations(f
 		var write_error := promoted.get_error()
 		promoted.close()
 		return write_error
-	var loaded := ProfileStore.new(AtomicJsonStore.new(schema_one_promoter)).load_profile(profile_id, _root)
-	TestAssertions.truthy(not loaded.ok() and loaded.profile == null, "promoted schema-one substitution exposes no profile", failures)
+	var loaded := ProfileStore.new(AtomicJsonStore.new(schema_two_promoter)).load_profile(profile_id, _root)
+	TestAssertions.truthy(not loaded.ok() and loaded.profile == null, "promoted schema-two substitution exposes no profile", failures)
 	TestAssertions.truthy(loaded.error.contains("stage=verify-promoted") and loaded.error.contains("PROFILE_SCHEMA_ERROR"), "promoted candidate is verified with the current validator inside atomic save", failures)
-	TestAssertions.equal(FileAccess.get_file_as_bytes(path), primary_bytes, "promoted current-verification failure restores schema-one primary bytes", failures)
-	TestAssertions.equal(FileAccess.get_file_as_bytes("%s.bak" % path), backup_bytes, "promoted current-verification failure restores schema-one backup bytes", failures)
+	TestAssertions.equal(FileAccess.get_file_as_bytes(path), primary_bytes, "promoted current-verification failure restores schema-two primary bytes", failures)
+	TestAssertions.equal(FileAccess.get_file_as_bytes("%s.bak" % path), backup_bytes, "promoted current-verification failure restores schema-two backup bytes", failures)
 
 func _test_profile_load_rejects_traversal_and_mismatched_document(failures: Array[String]) -> void:
 	var store := ProfileStore.new()
@@ -356,7 +356,7 @@ func _test_recovered_schema_one_backup_migrates_with_artifact(failures: Array[St
 	TestAssertions.truthy(loaded.ok() and loaded.recovered_from_backup and loaded.migrated and loaded.source_schema_version == 1, "recovered schema-one backup migrates with source metadata", failures)
 	TestAssertions.equal(loaded.profile.gold if loaded.ok() else -1, 10, "recovered migration returns the backup generation", failures)
 	var promoted := JSON.parse_string(FileAccess.get_file_as_string(path)) as Dictionary
-	TestAssertions.equal(promoted.get("schema_version", -1), 2, "recovered migration promotes schema-two primary", failures)
+	TestAssertions.equal(promoted.get("schema_version", -1), 3, "recovered migration promotes schema-three primary", failures)
 	TestAssertions.equal(FileAccess.get_file_as_bytes("%s.bak" % path), backup_bytes, "recovered migration retains schema-one backup bytes", failures)
 	var artifact_path := _corrupt_artifact_path(profile_id, DirAccess.get_files_at(_root))
 	TestAssertions.truthy(not artifact_path.is_empty(), "recovered migration preserves corrupt-primary artifact", failures)
@@ -447,6 +447,37 @@ func _schema_one_document(profile_id: String, gold: int, updated_at_unix: int) -
 		"resumable_run": {},
 		"applied_transactions": {},
 	}
+
+func _schema_two_document(profile_id: String, gold: int, updated_at_unix: int) -> Dictionary:
+	var document := _schema_one_document(profile_id, gold, updated_at_unix)
+	var item_id := "item-%s-sword" % profile_id
+	document["schema_version"] = 2
+	document["item_records"] = {
+		"schema_version": 1,
+		"items": [{
+			"affixes": [],
+			"base_definition_id": "forge_vanguard_sword",
+			"instance_id": item_id,
+			"item_level": 28,
+			"origin": {
+				"issuer_namespace": "profile:%s" % profile_id,
+				"seed": 4402,
+				"sequence": 0,
+				"source": "schema_two_atomic_fixture",
+			},
+			"rarity_id": "common",
+			"schema_version": 1,
+		}],
+	}
+	document["stash_tabs"] = [ItemSlotContainer.create(
+		&"stash-tab-000",
+		ItemSlotContainer.PROFILE_STASH_TAB,
+		profile_id,
+		ItemSlotContainer.STASH_CAPACITY,
+		{42: item_id}
+	).to_dictionary()]
+	document["next_item_sequence"] = 1
+	return document
 
 func _write_text(path: String, text: String) -> void:
 	var file := FileAccess.open(path, FileAccess.WRITE)

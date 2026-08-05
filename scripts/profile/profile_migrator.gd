@@ -13,7 +13,14 @@ static func migrate_document(document: Dictionary) -> ProfileMigrationResult:
 		result.profile = ProfileCodec._profile_from_current_document(document)
 		return result
 	var candidate := document.duplicate(true)
-	result.error = _migrate_schema_one_document(candidate)
+	if result.source_schema_version == ProfileCodec.LEGACY_SCHEMA_VERSION:
+		result.error = _migrate_schema_one_document(candidate)
+		if not result.error.is_empty():
+			return result
+		result.error = ProfileCodec.validate_schema_two_document(candidate)
+		if not result.error.is_empty():
+			return result
+	result.error = _migrate_schema_two_document(candidate)
 	if not result.error.is_empty():
 		return result
 	result.error = ProfileCodec.validate_current_document(candidate)
@@ -42,19 +49,32 @@ static func _migrate_schema_one_document(document: Dictionary) -> String:
 		var snapshot_error := _migrate_schema_one_document(snapshot)
 		if not snapshot_error.is_empty():
 			return snapshot_error
+		snapshot_error = ProfileCodec.validate_schema_two_document(snapshot)
+		if not snapshot_error.is_empty():
+			return snapshot_error
+		record["result_profile"] = snapshot
+		record["committed_at_unix"] = int(record["committed_at_unix"])
+	document["schema_version"] = ProfileCodec.SCHEMA_TWO_VERSION
+	document["item_records"] = EMPTY_ITEM_REGISTRY.duplicate(true)
+	document["next_item_sequence"] = 0
+	return ""
+
+static func _migrate_schema_two_document(document: Dictionary) -> String:
+	var transactions := document["applied_transactions"] as Dictionary
+	for transaction_id: Variant in transactions:
+		var record := transactions[transaction_id] as Dictionary
+		var snapshot := (record["result_profile"] as Dictionary).duplicate(true)
+		var snapshot_error := _migrate_schema_two_document(snapshot)
+		if not snapshot_error.is_empty():
+			return snapshot_error
 		snapshot_error = ProfileCodec.validate_current_document(snapshot)
 		if not snapshot_error.is_empty():
 			return snapshot_error
-		var snapshot_profile := ProfileCodec._profile_from_current_document(snapshot)
-		transactions[transaction_id] = {
-			"operation": record["operation"],
-			"fingerprint": record["fingerprint"],
-			"committed_at_unix": int(record["committed_at_unix"]),
-			"result_profile": snapshot_profile.to_dictionary(),
-		}
+		record["result_profile"] = ProfileCodec._profile_from_current_document(snapshot).to_dictionary()
+		record["committed_at_unix"] = int(record["committed_at_unix"])
 	document["schema_version"] = ProfileState.SCHEMA_VERSION
-	document["item_records"] = EMPTY_ITEM_REGISTRY.duplicate(true)
-	document["next_item_sequence"] = 0
+	document["leader_loadout"] = ProfileState._empty_leader_loadout(String(document["profile_id"]))
+	document["leader_loadout_class_id"] = ""
 	return ""
 
 static func _source_schema_version(document: Dictionary) -> int:

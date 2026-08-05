@@ -72,11 +72,13 @@ func reconcile(
 		).to_dictionary())
 		existing_ids[stable_id] = new_index
 
+	var proposed_containers: Array = [profile.leader_loadout.duplicate(true)]
+	proposed_containers.append_array(proposed_tabs.duplicate(true))
 	var ownership_document := {
 		"schema_version": ItemOwnershipState.SCHEMA_VERSION,
 		"owner_id": profile.profile_id,
 		"registry": profile.item_records.duplicate(true),
-		"containers": proposed_tabs.duplicate(true),
+		"containers": proposed_containers,
 	}
 	var ownership := ItemOwnershipState.decode(
 		ownership_document,
@@ -84,7 +86,11 @@ func reconcile(
 		GameCatalog.ITEM_FOUNDATION_CATALOG
 	)
 	if not ownership.ok():
-		var field := "item_records" if ownership.error.contains("ITEM_REGISTRY") and not ownership.error.contains("containers") else "stash_tabs"
+		var field := "item_records"
+		if ownership.error.contains("containers[0]"):
+			field = "leader_loadout"
+		elif ownership.error.contains("containers"):
+			field = "stash_tabs"
 		return _error(field, ownership.error)
 
 	profile.inventory_columns = proposed_columns

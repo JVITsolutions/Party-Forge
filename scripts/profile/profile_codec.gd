@@ -3,6 +3,7 @@ extends RefCounted
 
 const JSON_SAFE_INTEGER_MAX := 9007199254740991
 const LEGACY_SCHEMA_VERSION := 1
+const SCHEMA_TWO_VERSION := 2
 const HISTORICAL_FIELDS: Array[String] = [
 	"schema_version",
 	"profile_id",
@@ -29,6 +30,34 @@ const HISTORICAL_FIELDS: Array[String] = [
 	"resumable_run",
 	"applied_transactions",
 ]
+const SCHEMA_TWO_FIELDS: Array[String] = [
+	"schema_version",
+	"profile_id",
+	"display_name",
+	"created_at_unix",
+	"updated_at_unix",
+	"prologue_state",
+	"last_safe_checkpoint",
+	"gold",
+	"passive_points_available",
+	"passive_points_lifetime_earned",
+	"milestones",
+	"permanent_feature_unlocks",
+	"discovered_buildings",
+	"discovered_trees",
+	"tree_allocations",
+	"tree_visibility_progress",
+	"owned_characters",
+	"squad_capacity",
+	"inventory_columns",
+	"item_records",
+	"stash_tabs",
+	"next_item_sequence",
+	"extraction_capacity",
+	"run_history",
+	"resumable_run",
+	"applied_transactions",
+]
 const CURRENT_FIELDS: Array[String] = [
 	"schema_version",
 	"profile_id",
@@ -50,6 +79,8 @@ const CURRENT_FIELDS: Array[String] = [
 	"squad_capacity",
 	"inventory_columns",
 	"item_records",
+	"leader_loadout",
+	"leader_loadout_class_id",
 	"stash_tabs",
 	"next_item_sequence",
 	"extraction_capacity",
@@ -98,10 +129,15 @@ static func validate_profile_id(profile_id: Variant) -> String:
 static func validate_current_document(document: Dictionary) -> String:
 	return _validate_document(document, ProfileState.SCHEMA_VERSION, false)
 
+static func validate_schema_two_document(document: Dictionary) -> String:
+	return _validate_document(document, SCHEMA_TWO_VERSION, false)
+
 static func validate_loadable_document(document: Dictionary) -> String:
 	var schema_value: Variant = document.get("schema_version")
 	if _is_json_int(schema_value, LEGACY_SCHEMA_VERSION, LEGACY_SCHEMA_VERSION):
 		return _validate_document(document, LEGACY_SCHEMA_VERSION, false)
+	if _is_json_int(schema_value, SCHEMA_TWO_VERSION, SCHEMA_TWO_VERSION):
+		return _validate_document(document, SCHEMA_TWO_VERSION, false)
 	if _is_json_int(schema_value, ProfileState.SCHEMA_VERSION, ProfileState.SCHEMA_VERSION):
 		return _validate_document(document, ProfileState.SCHEMA_VERSION, false)
 	return _schema_error(schema_value)
@@ -109,7 +145,11 @@ static func validate_loadable_document(document: Dictionary) -> String:
 static func _validate_document(data: Dictionary, expected_schema: int, result_snapshot: bool) -> String:
 	if not _is_json_int(data.get("schema_version"), expected_schema, expected_schema):
 		return _schema_error(data.get("schema_version", "missing"))
-	var expected_fields := HISTORICAL_FIELDS if expected_schema == LEGACY_SCHEMA_VERSION else CURRENT_FIELDS
+	var expected_fields := HISTORICAL_FIELDS
+	if expected_schema == SCHEMA_TWO_VERSION:
+		expected_fields = SCHEMA_TWO_FIELDS
+	elif expected_schema == ProfileState.SCHEMA_VERSION:
+		expected_fields = CURRENT_FIELDS
 	var fields_error := _exact_fields(data, expected_fields)
 	if not fields_error.is_empty():
 		return fields_error
@@ -123,6 +163,8 @@ static func _validate_document(data: Dictionary, expected_schema: int, result_sn
 		return profile_id_error
 	if display_name.is_empty() or display_name.length() > 32 or display_name != display_name.strip_edges():
 		return _field_error("display_name", "must contain 1-32 trimmed characters")
+	if expected_schema == ProfileState.SCHEMA_VERSION and typeof(data["leader_loadout_class_id"]) != TYPE_STRING:
+		return _field_error("leader_loadout_class_id", "must be a string")
 	for field: String in ["created_at_unix", "updated_at_unix", "gold", "passive_points_available", "passive_points_lifetime_earned", "extraction_capacity"]:
 		var error := _integer_field(data, field, 0, JSON_SAFE_INTEGER_MAX)
 		if not error.is_empty():
@@ -136,7 +178,7 @@ static func _validate_document(data: Dictionary, expected_schema: int, result_sn
 	var inventory_error := _integer_field(data, "inventory_columns", 0, 8)
 	if not inventory_error.is_empty():
 		return inventory_error
-	if expected_schema == ProfileState.SCHEMA_VERSION:
+	if expected_schema >= SCHEMA_TWO_VERSION:
 		var sequence_error := _integer_field(data, "next_item_sequence", 0, JSON_SAFE_INTEGER_MAX)
 		if not sequence_error.is_empty():
 			return sequence_error
@@ -178,6 +220,10 @@ static func _validate_document(data: Dictionary, expected_schema: int, result_sn
 		for item: Variant in data["stash_tabs"] as Array:
 			if not item is Dictionary or not _is_json_value(item):
 				return _field_error("stash_tabs", "must contain only JSON dictionaries")
+	elif expected_schema == SCHEMA_TWO_VERSION:
+		var storage_error := _validate_storage(data, false)
+		if not storage_error.is_empty():
+			return storage_error
 	else:
 		var storage_error := _validate_current_storage(data)
 		if not storage_error.is_empty():
@@ -199,6 +245,9 @@ static func _validate_document(data: Dictionary, expected_schema: int, result_sn
 	return ""
 
 static func _validate_current_storage(data: Dictionary) -> String:
+	return _validate_storage(data, true)
+
+static func _validate_storage(data: Dictionary, include_leader_loadout: bool) -> String:
 	if not data["item_records"] is Dictionary:
 		return _field_error("item_records", "must be a dictionary")
 	var stash_documents := data["stash_tabs"] as Array
@@ -210,15 +259,30 @@ static func _validate_current_storage(data: Dictionary) -> String:
 			return _field_error("stash_tabs", "entry %d must be a dictionary" % index)
 		if typeof((document as Dictionary).get("container_kind")) != TYPE_STRING or String((document as Dictionary).get("container_kind")) != String(ItemSlotContainer.PROFILE_STASH_TAB):
 			return _field_error("stash_tabs", "entry %d must be a profile_stash_tab container" % index)
+	var container_documents: Array = []
+	if include_leader_loadout:
+		if not data["leader_loadout"] is Dictionary:
+			return _field_error("leader_loadout", "must be a dictionary")
+		var leader_document := data["leader_loadout"] as Dictionary
+		if typeof(leader_document.get("container_id")) != TYPE_STRING or String(leader_document.get("container_id")) != "leader-loadout":
+			return _field_error("leader_loadout", "container_id must equal leader-loadout")
+		if typeof(leader_document.get("container_kind")) != TYPE_STRING or String(leader_document.get("container_kind")) != String(ItemSlotContainer.PROFILE_LEADER_EQUIPMENT):
+			return _field_error("leader_loadout", "container_kind must equal profile_leader_equipment")
+		container_documents.append(leader_document.duplicate(true))
+	container_documents.append_array(stash_documents.duplicate(true))
 	var ownership_document := {
 		"schema_version": ItemOwnershipState.SCHEMA_VERSION,
 		"owner_id": data["profile_id"],
 		"registry": (data["item_records"] as Dictionary).duplicate(true),
-		"containers": stash_documents.duplicate(true),
+		"containers": container_documents,
 	}
 	var decoded := ItemOwnershipState.decode(ownership_document, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)
 	if not decoded.ok():
-		var field := "stash_tabs" if decoded.error.contains("containers") else "item_records"
+		var field := "item_records"
+		if include_leader_loadout and decoded.error.contains("containers[0]"):
+			field = "leader_loadout"
+		elif decoded.error.contains("containers"):
+			field = "stash_tabs"
 		return _field_error(field, decoded.error)
 	return ""
 
@@ -262,16 +326,21 @@ static func _profile_from_current_document(data: Dictionary) -> ProfileState:
 	profile.owned_characters = (data["owned_characters"] as Dictionary).duplicate(true)
 	profile.squad_capacity = int(data["squad_capacity"])
 	profile.inventory_columns = int(data["inventory_columns"])
+	var container_documents: Array = [(data["leader_loadout"] as Dictionary).duplicate(true)]
+	container_documents.append_array((data["stash_tabs"] as Array).duplicate(true))
 	var ownership_document := {
 		"schema_version": ItemOwnershipState.SCHEMA_VERSION,
 		"owner_id": data["profile_id"],
 		"registry": (data["item_records"] as Dictionary).duplicate(true),
-		"containers": (data["stash_tabs"] as Array).duplicate(true),
+		"containers": container_documents,
 	}
 	var ownership := ItemOwnershipState.decode(ownership_document, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG).state
 	profile.item_records = ownership.registry().to_dictionary()
+	profile.leader_loadout = ownership.container(&"leader-loadout").to_dictionary()
+	profile.leader_loadout_class_id = data["leader_loadout_class_id"] as String
 	profile.stash_tabs = []
-	for container: ItemSlotContainer in ownership.containers():
+	for stash_document: Variant in data["stash_tabs"] as Array:
+		var container := ownership.container(StringName(String((stash_document as Dictionary)["container_id"])))
 		profile.stash_tabs.append(container.to_dictionary())
 	profile.next_item_sequence = int(data["next_item_sequence"])
 	profile.extraction_capacity = int(data["extraction_capacity"])

@@ -15,6 +15,7 @@ func run() -> Array[String]:
 
 func _test_new_profile_defaults(failures: Array[String]) -> void:
 	var profile := ProfileState.new_profile("profile-12345678", "Jacob", 1000)
+	TestAssertions.equal(ProfileState.SCHEMA_VERSION, 3, "profile schema version is three", failures)
 	TestAssertions.equal(profile.schema_version, ProfileState.SCHEMA_VERSION, "profile uses current schema", failures)
 	TestAssertions.equal(profile.prologue_state, ProfileState.PrologueState.NOT_STARTED, "prologue starts undiscovered", failures)
 	TestAssertions.equal(profile.gold, 0, "gold starts at zero", failures)
@@ -22,20 +23,27 @@ func _test_new_profile_defaults(failures: Array[String]) -> void:
 	TestAssertions.equal(profile.squad_capacity, 1, "profile starts with leader-only capacity", failures)
 	TestAssertions.equal(profile.inventory_columns, 0, "inventory remains locked", failures)
 	TestAssertions.equal(profile.get("item_records"), {"schema_version": 1, "items": []}, "item registry starts as a versioned empty document", failures)
+	TestAssertions.equal(profile.get("leader_loadout"), _leader_loadout_document(profile.profile_id, {}), "leader loadout starts as the exact fixed equipment container", failures)
+	TestAssertions.equal(profile.get("leader_loadout_class_id"), "", "leader loadout starts without a selected class", failures)
 	TestAssertions.equal(profile.stash_tabs, [], "stash starts empty", failures)
 	TestAssertions.equal(profile.get("next_item_sequence"), 0, "item issuance sequence starts at zero", failures)
 	TestAssertions.equal(profile.extraction_capacity, 0, "extraction remains locked", failures)
 
 func _test_round_trip_and_deep_copy(failures: Array[String]) -> void:
-	var profile := ProfileState.new_profile("profile-12345678", "Jacob", 1000)
+	var profile := ProfileState.new_profile("profile-storage1", "Jacob", 1000)
 	profile.permanent_feature_unlocks.append("equipment")
 	profile.tree_allocations["party-forge-city-v1"] = ["city-heart"]
+	profile.set("leader_loadout_class_id", "fighter")
 	var decoded := ProfileCodec.decode(ProfileCodec.encode(profile))
 	TestAssertions.truthy(decoded.ok(), "valid profile decodes", failures)
 	TestAssertions.equal(decoded.profile.to_dictionary(), profile.to_dictionary(), "profile round trips exactly", failures)
+	TestAssertions.equal(decoded.profile.get("leader_loadout_class_id") if decoded.profile != null else "missing", "fighter", "nonempty leader class ID round trips exactly", failures)
 	var copied := profile.copy()
 	(copied.tree_allocations["party-forge-city-v1"] as Array).append("shared-stash")
 	TestAssertions.equal((profile.tree_allocations["party-forge-city-v1"] as Array).size(), 1, "copy isolates nested allocations", failures)
+	if copied.get("leader_loadout") is Dictionary:
+		(copied.get("leader_loadout") as Dictionary)["slots"] = {"9": "escaped-copy"}
+	TestAssertions.equal(profile.get("leader_loadout"), _leader_loadout_document(profile.profile_id, {}), "copy isolates the nested leader loadout", failures)
 
 func _test_malformed_and_future_schema_fail_closed(failures: Array[String]) -> void:
 	var malformed := ProfileCodec.decode("{not json")
@@ -76,6 +84,8 @@ func _test_current_field_types_fail_closed(failures: Array[String]) -> void:
 		{"field": "squad_capacity", "value": 0},
 		{"field": "inventory_columns", "value": 9},
 		{"field": "item_records", "value": {}},
+		{"field": "leader_loadout", "value": []},
+		{"field": "leader_loadout_class_id", "value": 7},
 		{"field": "stash_tabs", "value": [{} , "bad"]},
 		{"field": "next_item_sequence", "value": -1},
 		{"field": "extraction_capacity", "value": -1},
@@ -100,6 +110,8 @@ func _test_exact_historical_and_current_fields_fail_closed(failures: Array[Strin
 	var historical := current.duplicate(true)
 	historical["schema_version"] = 1
 	historical.erase("item_records")
+	historical.erase("leader_loadout")
+	historical.erase("leader_loadout_class_id")
 	historical.erase("next_item_sequence")
 	TestAssertions.equal(_validate_loadable(historical), "", "complete historical document remains loadable", failures)
 	TestAssertions.truthy(not _validate_current(historical).is_empty(), "historical document is not current", failures)
@@ -109,6 +121,14 @@ func _test_exact_historical_and_current_fields_fail_closed(failures: Array[Strin
 	var historical_extra := historical.duplicate(true)
 	historical_extra["unexpected"] = true
 	TestAssertions.truthy(not _validate_loadable(historical_extra).is_empty(), "historical document rejects an extra field", failures)
+	var schema_two := current.duplicate(true)
+	schema_two["schema_version"] = 2
+	schema_two.erase("leader_loadout")
+	schema_two.erase("leader_loadout_class_id")
+	TestAssertions.equal(_validate_loadable(schema_two), "", "complete schema-two document remains loadable for migration", failures)
+	var schema_two_extra := schema_two.duplicate(true)
+	schema_two_extra["leader_loadout"] = _leader_loadout_document("profile-12345678", {})
+	TestAssertions.truthy(not _validate_loadable(schema_two_extra).is_empty(), "schema-two document rejects schema-three fields", failures)
 	var current_snapshot := current.duplicate(true)
 	current_snapshot["applied_transactions"] = {}
 	var current_with_historical_snapshot := current.duplicate(true)
@@ -122,28 +142,61 @@ func _test_exact_historical_and_current_fields_fail_closed(failures: Array[Strin
 
 func _test_current_item_storage_is_strict_and_defensive(failures: Array[String]) -> void:
 	var current := ProfileState.new_profile("profile-storage1", "Storage", 1000).to_dictionary()
-	current["item_records"] = {"schema_version": 1, "items": [_valid_item_document()]}
+	var sword := _valid_item_document("item-profile-sword", "forge_vanguard_sword", 0)
+	var shield := _valid_item_document("item-profile-shield", "forge_vanguard_shield", 1)
+	var armour := _valid_item_document("item-profile-armour", "forge_vanguard_armour", 2)
+	current["item_records"] = {"schema_version": 1, "items": [armour, shield, sword]}
+	current["leader_loadout"] = _leader_loadout_document("profile-storage1", {
+		"9": "item-profile-sword",
+		"10": "item-profile-shield",
+	})
+	current["leader_loadout_class_id"] = "fighter"
 	current["stash_tabs"] = [{
 		"schema_version": 1,
 		"container_id": "stash-0001",
 		"container_kind": "profile_stash_tab",
 		"owner_id": "profile-storage1",
 		"capacity": 100,
-		"slots": {"7": "item-profile-0001"},
+		"slots": {"7": "item-profile-armour"},
 	}]
-	current["next_item_sequence"] = 1
+	current["next_item_sequence"] = 3
 	var decoded := ProfileCodec.decode_document(current)
-	TestAssertions.truthy(decoded.ok(), "valid catalog-backed profile storage decodes", failures)
+	TestAssertions.truthy(decoded.ok(), "valid catalog-backed loadout and stash decode as one ownership domain", failures)
 	current["next_item_sequence"] = 99
 	((current["item_records"] as Dictionary)["items"] as Array)[0]["base_definition_id"] = "unknown_after_decode"
+	(current["leader_loadout"] as Dictionary)["slots"] = {}
+	current["leader_loadout_class_id"] = "mutated_after_decode"
 	((current["stash_tabs"] as Array)[0] as Dictionary)["slots"] = {}
 	if decoded.profile != null:
-		TestAssertions.equal(decoded.profile.get("next_item_sequence"), 1, "decoded issuance sequence is isolated", failures)
+		TestAssertions.equal(decoded.profile.get("next_item_sequence"), 3, "decoded issuance sequence is isolated", failures)
+		TestAssertions.equal(decoded.profile.get("leader_loadout_class_id"), "fighter", "decoded leader class ID is isolated", failures)
+		TestAssertions.equal((decoded.profile.get("leader_loadout") as Dictionary)["slots"], {"9": "item-profile-sword", "10": "item-profile-shield"}, "decoded leader slot placement is exact and isolated", failures)
 		if decoded.profile.get("item_records") is Dictionary:
 			var decoded_items := (decoded.profile.get("item_records") as Dictionary)["items"] as Array
-			TestAssertions.equal((decoded_items[0] as Dictionary)["base_definition_id"], "forge_vanguard_sword", "decoded item records are isolated", failures)
+			TestAssertions.equal((decoded_items[0] as Dictionary)["base_definition_id"], "forge_vanguard_armour", "decoded item records are isolated", failures)
 		if not decoded.profile.stash_tabs.is_empty():
-			TestAssertions.equal((decoded.profile.stash_tabs[0] as Dictionary)["slots"], {"7": "item-profile-0001"}, "decoded stash records are isolated", failures)
+			TestAssertions.equal((decoded.profile.stash_tabs[0] as Dictionary)["slots"], {"7": "item-profile-armour"}, "decoded stash records are isolated", failures)
+		var copied := decoded.profile.copy()
+		(copied.get("leader_loadout") as Dictionary)["slots"] = {}
+		TestAssertions.equal((decoded.profile.get("leader_loadout") as Dictionary)["slots"], {"9": "item-profile-sword", "10": "item-profile-shield"}, "returned profile copies isolate leader placement", failures)
+	var valid_leader := ProfileState.new_profile("profile-storage1", "Storage", 1000).to_dictionary()
+	valid_leader["item_records"] = {"schema_version": 1, "items": [shield, sword]}
+	valid_leader["leader_loadout"] = _leader_loadout_document("profile-storage1", {"9": "item-profile-sword", "10": "item-profile-shield"})
+	valid_leader["next_item_sequence"] = 2
+	var leader_cases: Array[Dictionary] = [
+		{"label": "wrong owner", "field": "owner_id", "value": "profile-other001"},
+		{"label": "wrong kind", "field": "container_kind", "value": "profile_stash_tab"},
+		{"label": "wrong capacity", "field": "capacity", "value": 10},
+	]
+	for test_case: Dictionary in leader_cases:
+		var malformed := valid_leader.duplicate(true)
+		(malformed["leader_loadout"] as Dictionary)[test_case["field"]] = test_case["value"]
+		var result := ProfileCodec.decode_document(malformed)
+		TestAssertions.truthy(not result.ok() and result.error.contains("field=leader_loadout"), "leader loadout rejects %s" % test_case["label"], failures)
+	var orphan := valid_leader.duplicate(true)
+	(orphan["leader_loadout"] as Dictionary)["slots"] = {"9": "item-profile-missing", "10": "item-profile-shield"}
+	var orphan_result := ProfileCodec.decode_document(orphan)
+	TestAssertions.truthy(not orphan_result.ok() and orphan_result.error.contains("field=leader_loadout"), "leader loadout rejects orphan item placement", failures)
 	var wrong_registry_schema := ProfileState.new_profile("profile-storage1", "Storage", 1000).to_dictionary()
 	wrong_registry_schema["item_records"] = {"schema_version": 2, "items": []}
 	var wrong_schema_error := ProfileCodec.validate_current_document(wrong_registry_schema)
@@ -293,16 +346,30 @@ func _validate_loadable(document: Dictionary) -> String:
 	var validator := Callable(ProfileCodec, "validate_loadable_document")
 	return str(validator.call(document)) if validator.is_valid() else "missing loadable validator"
 
-func _valid_item_document() -> Dictionary:
+func _leader_loadout_document(owner_id: String, slots: Dictionary) -> Dictionary:
+	return {
+		"schema_version": 1,
+		"container_id": "leader-loadout",
+		"container_kind": "profile_leader_equipment",
+		"owner_id": owner_id,
+		"capacity": 11,
+		"slots": slots.duplicate(true),
+	}
+
+func _valid_item_document(
+	instance_id: String = "item-profile-0001",
+	base_definition_id: String = "forge_vanguard_sword",
+	sequence: int = 0
+) -> Dictionary:
 	return {
 		"affixes": [],
-		"base_definition_id": "forge_vanguard_sword",
-		"instance_id": "item-profile-0001",
+		"base_definition_id": base_definition_id,
+		"instance_id": instance_id,
 		"item_level": 1,
 		"origin": {
 			"issuer_namespace": "profile:profile-storage1",
 			"seed": 4402,
-			"sequence": 0,
+			"sequence": sequence,
 			"source": "test_fixture",
 		},
 		"rarity_id": "common",
