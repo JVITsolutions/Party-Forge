@@ -41,6 +41,11 @@ var _item_journal: ItemTransactionJournal
 var _next_item_sequence := 0
 var _equipment_assignment_service := EquipmentAssignmentService.new()
 var _configured := false
+var _run_id: StringName = &""
+var run_id: StringName:
+	get:
+		return _run_id
+var _item_resolution_transaction_id := ""
 
 func configure(
 	run_player_id_value: StringName,
@@ -147,6 +152,8 @@ func configure(
 	_item_state = next_item_state
 	_item_journal = next_item_journal
 	_next_item_sequence = 0
+	_run_id = item_bootstrap.run_id if item_bootstrap != null else &""
+	_item_resolution_transaction_id = ""
 	if not party.member_added.is_connected(member_added_callback):
 		party.member_added.connect(member_added_callback)
 	_configured = true
@@ -160,6 +167,16 @@ func run_inventory() -> ItemSlotContainer:
 
 func equipment_for(member_id: int) -> ItemSlotContainer:
 	return _item_state.container(_run_equipment_id(member_id)) if _item_state != null else null
+
+func item_resolution_error(transaction_id: String) -> String:
+	if transaction_id.strip_edges().is_empty():
+		return "PARTY_FORGE_RUN_CONTEXT_ERROR field=item_resolution.transaction_id reason=must not be empty"
+	if not _item_resolution_transaction_id.is_empty() and _item_resolution_transaction_id != transaction_id:
+		return "PARTY_FORGE_RUN_CONTEXT_ERROR field=item_resolution reason=already resolved transaction=%s" % _item_resolution_transaction_id
+	return ""
+
+func mark_items_resolved(transaction_id: String) -> void:
+	_item_resolution_transaction_id = transaction_id
 
 func assign_equipment(
 	member_id: int,
@@ -353,6 +370,8 @@ func _reset_unconfigured_item_fields() -> void:
 	_item_state = null
 	_item_journal = null
 	_next_item_sequence = 0
+	_run_id = &""
+	_item_resolution_transaction_id = ""
 
 func _validate_bootstrap_state(state: ItemOwnershipState, empty_candidate: ItemOwnershipState) -> String:
 	if state == null:
