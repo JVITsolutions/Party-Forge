@@ -31,11 +31,22 @@ func apply(
 	var request_error := _validate_request(profile_id, request)
 	if not request_error.is_empty():
 		return _failure(request_error)
-	return _mutations.apply(
+	var mutate := func(candidate: ProfileState) -> String:
+		return _apply_candidate(candidate, request)
+	if request.overflow_item_ids.is_empty():
+		return _mutations.apply(
+			profile_id,
+			request.transaction_id,
+			mutate,
+			root,
+			-1,
+			OPERATION,
+			request.canonical_document(),
+		)
+	return _mutations.apply_irreversible(
 		profile_id,
 		request.transaction_id,
-		func(candidate: ProfileState) -> String:
-			return _apply_candidate(candidate, request),
+		mutate,
 		root,
 		-1,
 		OPERATION,

@@ -190,7 +190,7 @@ TASK9_STORAGE_RESOLUTION_PASS size=3840x2160
 TASK9_STORAGE_RESPONSIVE_SUMMARY: PASS (0 failures)
 ```
 
-This runner exercised the eleven leader slots, all three unlocked fixture stash tabs, full 100-slot tab reachability, Warehouse search/rarity/item-type/sort control visibility, focus containment/restoration, exact shared item records/placements, Armoury equip intent, and Warehouse exact-slot move intent.
+This runner exercised the eleven rendered leader slots, all three unlocked fixture stash tabs, 100 rendered slots in the selected tab, Warehouse search/rarity/item-type/sort control visibility, focus containment/restoration, exact shared item records/placements, Armoury equip intent emission, and Warehouse exact-slot move intent emission. It did not traverse to the final stash slot or apply and persist an eligibility-checked equip request; those backend contracts are covered by the focused storage/assignment unit suites instead.
 
 Two warning-run attempts used the plan-style `--quit-after 180` command. Both exited `0` after approximately 2.1-2.3 seconds but emitted no required marker because `--quit-after` counts processed frames and stopped the timed 1.25-second hold sequence early. Both runs were rejected. The accepted command lets this self-terminating runner reach its own cleanup and summary:
 
@@ -268,7 +268,20 @@ Tasks 1-11 were independently reviewed before this documentation task. The featu
 | Warning flow | `1400f17` | `736d204` hardens transition authorization |
 | Local setup | `d02a217` | `045c6df`, `e84f5e6`, `3c753f4` preserve checkout continuity, preflight identity, and freeze committed bootstrap |
 
-Task 12 verification found no new Critical or Important product defect. It did find and honestly reject the two truncated warning-run commands described above; the production/test files were not changed because the self-terminating runner completes correctly when allowed to reach its own summary.
+Task 12's initial verification pass found no new Critical or Important product defect. It did find and honestly reject the two truncated warning-run commands described above; the production/test files were not changed because the self-terminating runner completes correctly when allowed to reach its own summary. Independent complete-range review after `9878ca0` then identified an Important recovery defect: confirmed overflow destruction used an ordinary profile save, allowing the pre-destruction backup to resurrect removed gear after primary corruption. The review also identified the synthetic-runner overclaim corrected above.
+
+The complete-range correction added a generic irreversible `ProfileMutationService` entry point and selects it only for validated transitions with nonempty `overflow_item_ids`; non-overflow transitions retain ordinary save rotation, and resumable-run revocation keeps its existing API. Test-first evidence was:
+
+| Correction gate | Exit | Evidence |
+| --- | ---: | --- |
+| RED loadout regression before production changes | 1 | `TEST_SUMMARY: FAIL (10 failures)`; stale backup restored the destroyed item, corrupt-primary replay was not a duplicate, and the injected destructive failure took the ordinary path |
+| GREEN focused loadout regression | 0 | `TEST_SUMMARY: PASS (0 failures)` |
+| Mutation/atomic-store/storage/loadout focused batch | 0 | Five named suites; `TEST_SUMMARY: PASS (0 failures)` |
+| Complete suite after correction | 0 | 92.588 s; exactly one `TEST_SUMMARY: PASS (144 suites)`, zero `TEST_FAILURE` lines, and zero loader/parse/crash/timeout matches |
+
+The regressions now prove that both active generations omit confirmed overflow, corrupt-primary recovery cannot resurrect the destroyed item, replay is byte-stable and idempotent before and after backup recovery, an injected second-promotion failure restores the exact prior profile-directory bytes and artifact set, and an ordinary non-overflow transition still retains its pre-transition profile in `.bak`.
+
+Post-correction hygiene produced `git diff --check` exit `0`, zero untracked `.gd.uid`/`.import` sidecars, zero sandbox-removal matches in the production feature paths, and exactly the intended mutation service, transition service, loadout regression, and verification record as dirty paths before commit. The correction does not modify the pinned Creator worktree or artifacts.
 
 ## Explicit physical/manual and production-UI deferrals
 

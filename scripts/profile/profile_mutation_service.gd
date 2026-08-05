@@ -7,7 +7,10 @@ func _init(store: ProfileStore = null) -> void:
 	_store = store if store != null else ProfileStore.new()
 
 func apply(profile_id: String, transaction_id: String, mutate: Callable, root: String = ProfileStore.DEFAULT_ROOT, now_unix: int = -1, operation: String = "", request: Dictionary = {}) -> ProfileMutationResult:
-	return _apply_internal(profile_id, transaction_id, mutate, root, now_unix, operation, request, "")
+	return _apply_internal(profile_id, transaction_id, mutate, root, now_unix, operation, request, false, "")
+
+func apply_irreversible(profile_id: String, transaction_id: String, mutate: Callable, root: String = ProfileStore.DEFAULT_ROOT, now_unix: int = -1, operation: String = "", request: Dictionary = {}) -> ProfileMutationResult:
+	return _apply_internal(profile_id, transaction_id, mutate, root, now_unix, operation, request, true, "")
 
 func apply_with_resumable_run_revocation(
 	profile_id: String,
@@ -23,7 +26,7 @@ func apply_with_resumable_run_revocation(
 		var result := ProfileMutationResult.new()
 		result.error = "PROFILE_MUTATION_ERROR profile=%s transaction=%s reason=revoked run id is required" % [profile_id, transaction_id]
 		return result
-	return _apply_internal(profile_id, transaction_id, mutate, root, now_unix, operation, request, String(revoked_run_id))
+	return _apply_internal(profile_id, transaction_id, mutate, root, now_unix, operation, request, true, String(revoked_run_id))
 
 func _apply_internal(
 	profile_id: String,
@@ -33,6 +36,7 @@ func _apply_internal(
 	now_unix: int,
 	operation: String,
 	request: Dictionary,
+	irreversible: bool,
 	revoked_run_id: String,
 ) -> ProfileMutationResult:
 	var result := ProfileMutationResult.new()
@@ -121,7 +125,7 @@ func _apply_internal(
 		"committed_at_unix": committed_timestamp,
 		"result_profile": result_profile,
 	}
-	var save_error := _store.save_profile_irreversible(working, root) if not revoked_run_id.is_empty() else _store.save_profile(working, root)
+	var save_error := _store.save_profile_irreversible(working, root) if irreversible else _store.save_profile(working, root)
 	if not save_error.is_empty():
 		result.error = save_error
 		return result

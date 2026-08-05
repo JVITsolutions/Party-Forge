@@ -12,6 +12,7 @@ func run() -> Array[String]:
 	_test_nonoverflow_transition_is_atomic_replay_safe_and_exact(failures)
 	_test_transition_to_empty_loadout_retains_selected_class(failures)
 	_test_overflow_transition_destroys_only_confirmed_instances(failures)
+	_test_overflow_irreversible_save_failure_preserves_all_artifacts(failures)
 	_test_transition_rejections_and_save_failure_preserve_bytes(failures)
 	_test_compatible_identity_and_slot_change_stales_request(failures)
 	_test_overflow_source_record_change_stales_request(failures)
@@ -237,6 +238,13 @@ func _test_nonoverflow_transition_is_atomic_replay_safe_and_exact(failures: Arra
 	var post_projection := _project(saved, &"mage")
 	TestAssertions.truthy(post_projection.valid and post_projection.incompatible_items.is_empty(), "retained loadout is valid for selected class", failures)
 	var path := store.profile_path(PROFILE_ID, root)
+	var backup_path := "%s.bak" % path
+	TestAssertions.truthy(FileAccess.file_exists(backup_path), "ordinary nonoverflow transition rotates a backup generation", failures)
+	var backup_decode := ProfileCodec.decode(FileAccess.get_file_as_string(backup_path))
+	TestAssertions.truthy(backup_decode.ok(), "ordinary nonoverflow transition backup decodes", failures)
+	if backup_decode.ok():
+		TestAssertions.equal(backup_decode.profile.leader_loadout_class_id, "fighter", "ordinary nonoverflow transition retains the pre-transition profile in backup", failures)
+		TestAssertions.equal(backup_decode.profile.leader_loadout["slots"], {"0": crown.instance_id, "1": plate.instance_id, "6": ring.instance_id}, "ordinary nonoverflow backup retains the pre-transition loadout", failures)
 	var committed_bytes := FileAccess.get_file_as_bytes(path)
 	var replay := service.apply(PROFILE_ID, request, root)
 	TestAssertions.truthy(replay.ok() and replay.duplicate, "exact transition replay returns duplicate success", failures)
@@ -293,7 +301,8 @@ func _test_overflow_transition_destroys_only_confirmed_instances(failures: Array
 	], "overflow plan moves the first canonical incompatible item", failures)
 	TestAssertions.equal(projection.overflow_item_ids, [plate.instance_id], "overflow plan names the exact later incompatible item", failures)
 	var service := LoadoutTransitionService.new(ProfileMutationService.new(store))
-	var committed := service.apply(PROFILE_ID, _request("transition-overflow", projection), root)
+	var request := _request("transition-overflow", projection)
+	var committed := service.apply(PROFILE_ID, request, root)
 	TestAssertions.truthy(committed.ok(), "explicitly confirmed overflow transition commits", failures)
 	var saved := store.load_profile(PROFILE_ID, root).profile
 	var saved_registry := ItemRegistry._decode(saved.item_records, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)["value"] as ItemRegistry
@@ -306,6 +315,69 @@ func _test_overflow_transition_destroys_only_confirmed_instances(failures: Array
 	TestAssertions.equal(saved.stash_tabs[0]["slots"].get("99", ""), crown.instance_id, "planned item uses the exact confirmed stash destination", failures)
 	TestAssertions.equal(saved.leader_loadout_class_id, "mage", "overflow transition records selected target class", failures)
 	TestAssertions.equal(ProfileCodec.validate_profile(saved), "", "overflow candidate reconstruction passes complete ownership validation", failures)
+	var path := store.profile_path(PROFILE_ID, root)
+	var backup_path := "%s.bak" % path
+	var backup_decode := ProfileCodec.decode(FileAccess.get_file_as_string(backup_path))
+	TestAssertions.truthy(backup_decode.ok(), "destructive transition creates a valid sanitized backup", failures)
+	if backup_decode.ok():
+		var backup_registry := ItemRegistry._decode(backup_decode.profile.item_records, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)["value"] as ItemRegistry
+		TestAssertions.truthy(not backup_registry.has(plate.instance_id), "destructive transition backup cannot restore the destroyed instance", failures)
+	var committed_primary := FileAccess.get_file_as_bytes(path)
+	var committed_backup := FileAccess.get_file_as_bytes(backup_path)
+	var replay := service.apply(PROFILE_ID, request, root)
+	TestAssertions.truthy(replay.ok() and replay.duplicate, "destructive transition replay is idempotent", failures)
+	TestAssertions.equal(FileAccess.get_file_as_bytes(path), committed_primary, "destructive transition replay does not rewrite primary", failures)
+	TestAssertions.equal(FileAccess.get_file_as_bytes(backup_path), committed_backup, "destructive transition replay does not rewrite backup", failures)
+	var corrupt := FileAccess.open(path, FileAccess.WRITE)
+	if corrupt != null:
+		corrupt.store_string("corrupt destructive transition primary")
+		corrupt.close()
+	var recovered := store.load_profile(PROFILE_ID, root)
+	TestAssertions.truthy(recovered.ok() and recovered.recovered_from_backup, "destructive transition recovers its sanitized backup after primary corruption", failures)
+	if recovered.ok():
+		var recovered_registry := ItemRegistry._decode(recovered.profile.item_records, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)["value"] as ItemRegistry
+		TestAssertions.truthy(not recovered_registry.has(plate.instance_id), "corrupt-primary recovery cannot resurrect the destroyed instance", failures)
+	var corrupt_primary_bytes := FileAccess.get_file_as_bytes(path)
+	var recovered_replay := service.apply(PROFILE_ID, request, root)
+	TestAssertions.truthy(recovered_replay.ok() and recovered_replay.duplicate, "destructive replay recovered from backup remains idempotent", failures)
+	TestAssertions.equal(FileAccess.get_file_as_bytes(path), corrupt_primary_bytes, "backup-recovered destructive replay performs no write", failures)
+	var recovered_after_replay := store.load_profile(PROFILE_ID, root)
+	if recovered_after_replay.ok():
+		var replay_registry := ItemRegistry._decode(recovered_after_replay.profile.item_records, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)["value"] as ItemRegistry
+		TestAssertions.truthy(not replay_registry.has(plate.instance_id), "backup-recovered replay cannot restore the destroyed instance", failures)
+	ProfileTestSupport.remove_tree(root)
+
+func _test_overflow_irreversible_save_failure_preserves_all_artifacts(failures: Array[String]) -> void:
+	var root := _case_root("overflow_irreversible_failure")
+	var good_store := ProfileStore.new()
+	var plate := _item("item-overflow-failure-plate", &"dawn_bulwark_plate", 0)
+	var profile := _profile([plate], {1: plate.instance_id}, [], "fighter")
+	_save_profile(good_store, profile, root, "destructive failure source fixture", failures)
+	TestAssertions.equal(good_store.save_profile(profile, root), "", "destructive failure fixture creates a prior backup generation", failures)
+	var before := _file_snapshot(root)
+	var promotion_count := [0]
+	var failing_documents := AtomicJsonStore.new(func(temporary: String, target: String) -> Error:
+		promotion_count[0] += 1
+		if promotion_count[0] == 2:
+			return ERR_CANT_CREATE
+		return DirAccess.rename_absolute(ProjectSettings.globalize_path(temporary), ProjectSettings.globalize_path(target))
+	)
+	var failing_store := ProfileStore.new(failing_documents)
+	var projection := _project(profile, &"mage")
+	TestAssertions.equal(projection.overflow_item_ids, [plate.instance_id], "destructive failure fixture requires irreversible overflow", failures)
+	var failed := LoadoutTransitionService.new(ProfileMutationService.new(failing_store)).apply(
+		PROFILE_ID,
+		_request("transition-overflow-irreversible-failure", projection),
+		root,
+	)
+	_assert_failure(failed, "stage=promote-primary", "destructive irreversible save failure", failures)
+	TestAssertions.equal(_file_snapshot(root), before, "destructive irreversible save failure preserves exact prior primary backup and artifact bytes", failures)
+	var loaded := good_store.load_profile(PROFILE_ID, root)
+	TestAssertions.truthy(loaded.ok(), "destructive failure leaves the prior profile readable", failures)
+	if loaded.ok():
+		var registry := ItemRegistry._decode(loaded.profile.item_records, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)["value"] as ItemRegistry
+		TestAssertions.truthy(registry.has(plate.instance_id), "failed destructive save leaves the candidate item owned", failures)
+		TestAssertions.truthy(not loaded.profile.applied_transactions.has("transition-overflow-irreversible-failure"), "failed destructive save records no transaction", failures)
 	ProfileTestSupport.remove_tree(root)
 
 func _test_transition_rejections_and_save_failure_preserve_bytes(failures: Array[String]) -> void:
@@ -603,6 +675,12 @@ func _assert_exact_item(profile: ProfileState, expected: ItemInstance, label: St
 func _save_profile(store: ProfileStore, profile: ProfileState, root: String, label: String, failures: Array[String]) -> void:
 	ProfileTestSupport.remove_tree(root)
 	TestAssertions.equal(store.save_profile(profile, root), "", "%s saves" % label, failures)
+
+func _file_snapshot(root: String) -> Dictionary:
+	var snapshot: Dictionary = {}
+	for file_name: String in DirAccess.get_files_at(root):
+		snapshot[file_name] = FileAccess.get_file_as_bytes(root.path_join(file_name))
+	return snapshot
 
 func _assert_failure(result: ProfileMutationResult, expected: String, label: String, failures: Array[String]) -> void:
 	TestAssertions.truthy(not result.ok(), "%s is rejected" % label, failures)
