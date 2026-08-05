@@ -49,6 +49,7 @@ func configure(
 	run_seed_value: int,
 	manager: PartyManager,
 	experience_multiplier: int,
+	item_bootstrap: RunItemBootstrap = null,
 ) -> PackedStringArray:
 	if _configured:
 		return PackedStringArray(["PARTY_FORGE_RUN_CONTEXT_ERROR field=configuration reason=already configured"])
@@ -64,6 +65,23 @@ func configure(
 	errors.append_array(_party_validation_errors(manager))
 	if experience_multiplier < 100 or experience_multiplier > 1000:
 		errors.append("PARTY_FORGE_RUN_CONTEXT_ERROR field=experience_multiplier")
+	var strict_resumable := profile != null and profile.resumable_run.has("item_state")
+	if strict_resumable and item_bootstrap == null:
+		errors.append("PARTY_FORGE_RUN_CONTEXT_ERROR field=item_bootstrap reason=required for resumable item run")
+	elif item_bootstrap != null:
+		var encoded_bootstrap := ResumableRunItemCodec.encode(item_bootstrap)
+		if (
+			profile == null
+			or encoded_bootstrap.is_empty()
+			or profile.resumable_run != encoded_bootstrap
+			or item_bootstrap.run_seed != run_seed_value
+			or item_bootstrap.run_player_id != run_player_id_value
+		):
+			errors.append("PARTY_FORGE_RUN_CONTEXT_ERROR field=item_bootstrap reason=identity mismatch")
+		elif manager == null or not manager.members.any(func(member: PartyMemberState) -> bool:
+			return member != null and member.is_leader and member.member_id == item_bootstrap.leader_member_id
+		):
+			errors.append("PARTY_FORGE_RUN_CONTEXT_ERROR field=item_bootstrap reason=leader mismatch")
 	if not errors.is_empty():
 		_reset_unconfigured_item_fields()
 		return errors
@@ -101,6 +119,15 @@ func configure(
 		return PackedStringArray([
 			"PARTY_FORGE_RUN_CONTEXT_ERROR field=item_state reason=%s" % item_state_error,
 		])
+	if item_bootstrap != null:
+		var bootstrap_state := item_bootstrap.item_state()
+		var bootstrap_error := _validate_bootstrap_state(bootstrap_state, next_item_state)
+		if not bootstrap_error.is_empty():
+			_reset_unconfigured_item_fields()
+			return PackedStringArray([
+				"PARTY_FORGE_RUN_CONTEXT_ERROR field=item_bootstrap reason=%s" % bootstrap_error,
+			])
+		next_item_state = bootstrap_state
 	var next_item_journal := ItemTransactionJournal.new()
 
 	var member_added_callback := Callable(self, "_on_member_added")
@@ -326,6 +353,30 @@ func _reset_unconfigured_item_fields() -> void:
 	_item_state = null
 	_item_journal = null
 	_next_item_sequence = 0
+
+func _validate_bootstrap_state(state: ItemOwnershipState, empty_candidate: ItemOwnershipState) -> String:
+	if state == null:
+		return "item state is missing"
+	var validation := state.validate(GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)
+	if not validation.is_empty():
+		return validation
+	if state.owner_id != empty_candidate.owner_id:
+		return "owner mismatch"
+	var expected := empty_candidate.containers()
+	var actual := state.containers()
+	if actual.size() != expected.size():
+		return "container set mismatch"
+	for expected_container: ItemSlotContainer in expected:
+		var actual_container := state.container(expected_container.container_id)
+		if actual_container == null:
+			return "container set mismatch"
+		if (
+			actual_container.container_kind != expected_container.container_kind
+			or actual_container.owner_id != expected_container.owner_id
+			or actual_container.capacity != expected_container.capacity
+		):
+			return "container contract mismatch"
+	return ""
 
 func _item_transaction_failure(code: ItemTransactionResult.Code) -> ItemTransactionResult:
 	return ItemTransactionResult.create(code)

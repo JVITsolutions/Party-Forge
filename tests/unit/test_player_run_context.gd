@@ -12,11 +12,76 @@ func run() -> Array[String]:
 	var failures: Array[String] = []
 	_test_configuration_validation_and_copy_ownership(failures)
 	_test_initial_member_equipment_is_owned_and_defensive(failures)
+	_test_checked_out_item_bootstrap_identity_and_retry(failures)
 	_test_configuration_rejects_invalid_member_growth_atomically(failures)
 	_test_atomic_progression_and_leader_queue(failures)
 	_test_future_recruits_initialize_once(failures)
 	_test_actor_binding_availability_and_position(failures)
 	return failures
+
+func _test_checked_out_item_bootstrap_identity_and_retry(failures: Array[String]) -> void:
+	var catalog := GameCatalog.load_defaults()
+	var party := PartyManager.new()
+	party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
+	var profile := ProfileState.new_profile("profile-bootstrap01", "Bootstrap Owner", 1000)
+	profile.inventory_columns = 1
+	var item := ItemInstance.new()
+	item.instance_id = "item-context-bootstrap"
+	item.base_definition_id = &"forge_vanguard_sword"
+	item.item_level = 28
+	item.rarity_id = &"common"
+	item.origin = {
+		"issuer_namespace": "profile:profile-bootstrap01",
+		"seed": 4410,
+		"sequence": 0,
+		"source": "context_bootstrap_test",
+	}
+	var state := ItemOwnershipState.create("bootstrap_player", ItemRegistry.new([item]), [
+		ItemSlotContainer.create(&"run-inventory", ItemSlotContainer.RUN_INVENTORY, "bootstrap_player", 5),
+		ItemSlotContainer.create(&"run-equipment-001", ItemSlotContainer.RUN_MEMBER_EQUIPMENT, "bootstrap_player", EquipmentSlotIndex.capacity(), {9: item.instance_id}),
+	])
+	var bootstrap := RunItemBootstrap.create(&"run-bootstrap-001", 4410, &"bootstrap_player", 1, state)
+	profile.resumable_run = ResumableRunItemCodec.encode(bootstrap)
+
+	var missing_context := PlayerRunContext.new()
+	var missing_errors := missing_context.configure(&"bootstrap_player", 0, profile, 4410, party, 100)
+	TestAssertions.equal(missing_errors, PackedStringArray(["PARTY_FORGE_RUN_CONTEXT_ERROR field=item_bootstrap reason=required for resumable item run"]), "strict resumable profile requires its bootstrap", failures)
+	_assert_context_unconfigured(missing_context, "missing bootstrap", failures)
+
+	var cases: Array[Dictionary] = [
+		{"label": "wrong seed", "bootstrap": RunItemBootstrap.create(&"run-bootstrap-001", 4411, &"bootstrap_player", 1, state)},
+		{"label": "wrong run player", "bootstrap": RunItemBootstrap.create(&"run-bootstrap-001", 4410, &"wrong_player", 1, ItemOwnershipState.create("wrong_player", ItemRegistry.new([item]), [
+			ItemSlotContainer.create(&"run-inventory", ItemSlotContainer.RUN_INVENTORY, "wrong_player", 5),
+			ItemSlotContainer.create(&"run-equipment-001", ItemSlotContainer.RUN_MEMBER_EQUIPMENT, "wrong_player", EquipmentSlotIndex.capacity(), {9: item.instance_id}),
+		]))},
+		{"label": "wrong leader", "bootstrap": RunItemBootstrap.create(&"run-bootstrap-001", 4410, &"bootstrap_player", 2, state)},
+		{"label": "wrong run identity", "bootstrap": RunItemBootstrap.create(&"run-bootstrap-other", 4410, &"bootstrap_player", 1, state)},
+	]
+	for test_case: Dictionary in cases:
+		var context := PlayerRunContext.new()
+		var errors := context.configure(&"bootstrap_player", 0, profile, 4410, party, 100, test_case["bootstrap"])
+		TestAssertions.truthy(not errors.is_empty() and errors[0].contains("field=item_bootstrap"), "%s bootstrap is rejected" % test_case["label"], failures)
+		_assert_context_unconfigured(context, test_case["label"], failures)
+
+	var retry_context := PlayerRunContext.new()
+	var wrong_profile := profile.copy()
+	wrong_profile.resumable_run = ResumableRunItemCodec.encode(RunItemBootstrap.create(&"run-bootstrap-other", 4410, &"bootstrap_player", 1, state))
+	var wrong_profile_errors := retry_context.configure(&"bootstrap_player", 0, wrong_profile, 4410, party, 100, bootstrap)
+	TestAssertions.truthy(not wrong_profile_errors.is_empty() and wrong_profile_errors[0].contains("field=item_bootstrap"), "wrong profile/run pairing is rejected", failures)
+	_assert_context_unconfigured(retry_context, "wrong profile", failures)
+	TestAssertions.equal(retry_context.configure(&"bootstrap_player", 0, profile, 4410, party, 100, bootstrap), PackedStringArray(), "failed bootstrap configuration remains retryable", failures)
+	TestAssertions.equal(retry_context.item_state().to_dictionary(), state.to_dictionary(), "successful retry adopts exact checked-out item state", failures)
+	var exposed := retry_context.item_state()
+	exposed._clear_slot(&"run-equipment-001", 9)
+	TestAssertions.equal(retry_context.equipment_for(1).item_id_at(9), item.instance_id, "configured bootstrap state is defensive", failures)
+	party.free()
+
+func _assert_context_unconfigured(context: PlayerRunContext, label: String, failures: Array[String]) -> void:
+	TestAssertions.equal(context.run_player_id, &"", "%s leaves run player unconfigured" % label, failures)
+	TestAssertions.equal(context.profile_id, "", "%s leaves profile unconfigured" % label, failures)
+	TestAssertions.equal(context.run_seed, 0, "%s leaves seed unconfigured" % label, failures)
+	TestAssertions.equal(context.party, null, "%s leaves party unconfigured" % label, failures)
+	TestAssertions.equal(context.item_state(), null, "%s leaves no item state" % label, failures)
 
 func _test_initial_member_equipment_is_owned_and_defensive(failures: Array[String]) -> void:
 	var fixture := _configured_fixture(PartyManager.new())

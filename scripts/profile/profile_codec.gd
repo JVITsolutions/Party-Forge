@@ -216,6 +216,14 @@ static func _validate_document(data: Dictionary, expected_schema: int, result_sn
 	for field: String in ["last_safe_checkpoint", "resumable_run"]:
 		if not _is_json_value(data[field]):
 			return _field_error(field, "contains a non-JSON value")
+	if expected_schema == ProfileState.SCHEMA_VERSION and (data["resumable_run"] as Dictionary).has("item_state"):
+		var resumable_error := ResumableRunItemCodec.validate_document(
+			data["resumable_run"],
+			GameCatalog.EQUIPMENT_CATALOG,
+			GameCatalog.ITEM_FOUNDATION_CATALOG,
+		)
+		if not resumable_error.is_empty():
+			return _field_error("resumable_run", resumable_error)
 	if expected_schema == LEGACY_SCHEMA_VERSION:
 		for item: Variant in data["stash_tabs"] as Array:
 			if not item is Dictionary or not _is_json_value(item):
@@ -228,6 +236,10 @@ static func _validate_document(data: Dictionary, expected_schema: int, result_sn
 		var storage_error := _validate_current_storage(data)
 		if not storage_error.is_empty():
 			return storage_error
+		if (data["resumable_run"] as Dictionary).has("item_state"):
+			var duplicate_error := _validate_distinct_resumable_ownership(data)
+			if not duplicate_error.is_empty():
+				return duplicate_error
 	var transactions := data["applied_transactions"] as Dictionary
 	if result_snapshot:
 		if not transactions.is_empty():
@@ -242,6 +254,28 @@ static func _validate_document(data: Dictionary, expected_schema: int, result_sn
 		var record_error := _validate_transaction_record(record as Dictionary, expected_schema)
 		if not record_error.is_empty():
 			return _field_error("applied_transactions", "transaction=%s %s" % [transaction_id, record_error])
+	return ""
+
+static func _validate_distinct_resumable_ownership(data: Dictionary) -> String:
+	var bootstrap := ResumableRunItemCodec.decode(
+		data["resumable_run"],
+		GameCatalog.EQUIPMENT_CATALOG,
+		GameCatalog.ITEM_FOUNDATION_CATALOG,
+	)
+	if bootstrap == null:
+		return _field_error("resumable_run", "strict item bootstrap is invalid")
+	var run_registry := bootstrap.item_state().registry()
+	var profile_registry := ItemRegistry._decode(
+		data["item_records"],
+		GameCatalog.EQUIPMENT_CATALOG,
+		GameCatalog.ITEM_FOUNDATION_CATALOG,
+	)
+	if not String(profile_registry["error"]).is_empty():
+		return _field_error("item_records", String(profile_registry["error"]))
+	var persistent_registry := profile_registry["value"] as ItemRegistry
+	for instance_id: String in run_registry.ids():
+		if persistent_registry.has(instance_id):
+			return _field_error("resumable_run", "instance %s is also owned by profile storage" % instance_id)
 	return ""
 
 static func _validate_current_storage(data: Dictionary) -> String:
