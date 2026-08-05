@@ -91,6 +91,60 @@ func save_document(
 			push_warning("JSON_STORE_CLEANUP_DEBT path=%s artifact=%s code=%d committed=true" % [path, displaced_backup, cleanup_error])
 	return ""
 
+func replace_document(path: String, document: Dictionary, validator: Callable) -> String:
+	if not validator.is_valid():
+		return "JSON_STORE_REPLACE_ERROR path=%s stage=validate reason=validator is missing" % path
+	var validation := str(validator.call(document))
+	if not validation.is_empty():
+		return "JSON_STORE_REPLACE_ERROR path=%s stage=validate reason=%s" % [path, validation]
+	var mkdir_error := DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(path).get_base_dir())
+	if mkdir_error not in [OK, ERR_ALREADY_EXISTS]:
+		return "JSON_STORE_REPLACE_ERROR path=%s stage=mkdir code=%d" % [path, mkdir_error]
+	var temporary := "%s.tmp" % path
+	var backup := "%s.bak" % path
+	var file := FileAccess.open(temporary, FileAccess.WRITE)
+	if file == null:
+		return "JSON_STORE_REPLACE_ERROR path=%s stage=write code=%d" % [path, FileAccess.get_open_error()]
+	file.store_string(JSON.stringify(document, "\t", false))
+	var write_error := file.get_error()
+	file.close()
+	if write_error != OK:
+		var cleanup_error := _remove_if_exists(temporary)
+		return "JSON_STORE_REPLACE_ERROR path=%s stage=write code=%d cleanup_stage=remove-temporary cleanup_code=%d" % [path, write_error, cleanup_error]
+	var temporary_result := _load_one(temporary, validator)
+	if not temporary_result.ok():
+		var cleanup_error := _remove_if_exists(temporary)
+		return "JSON_STORE_REPLACE_ERROR path=%s stage=verify-temporary cleanup_stage=remove-temporary cleanup_code=%d reason=%s" % [path, cleanup_error, temporary_result.error]
+
+	var had_primary := FileAccess.file_exists(path)
+	var had_backup := FileAccess.file_exists(backup)
+	var primary_quarantine := _corrupt_artifact_path(path) if had_primary else ""
+	var backup_quarantine := _corrupt_artifact_path(backup) if had_backup else ""
+	if had_primary:
+		var quarantine_primary_error := _rename(path, primary_quarantine)
+		if quarantine_primary_error != OK:
+			var cleanup_error := _remove_if_exists(temporary)
+			return "JSON_STORE_REPLACE_ERROR path=%s stage=quarantine-primary code=%d cleanup_stage=remove-temporary cleanup_code=%d" % [path, quarantine_primary_error, cleanup_error]
+	if had_backup:
+		var quarantine_backup_error := _rename(backup, backup_quarantine)
+		if quarantine_backup_error != OK:
+			var restore_primary_error := _rename(primary_quarantine, path) if had_primary else OK
+			var cleanup_error := _remove_if_exists(temporary)
+			return "JSON_STORE_REPLACE_ERROR path=%s stage=quarantine-backup code=%d restore_code=%d cleanup_stage=remove-temporary cleanup_code=%d" % [path, quarantine_backup_error, restore_primary_error, cleanup_error]
+
+	var promote_error: Error = _promote_file.call(temporary, path) if _promote_file.is_valid() else _promote(temporary, path)
+	if promote_error != OK:
+		var restore_error := _restore_replaced_generations(path, backup, primary_quarantine, backup_quarantine, had_primary, had_backup)
+		var cleanup_error := _remove_if_exists(temporary)
+		return "JSON_STORE_REPLACE_ERROR path=%s stage=promote code=%d restore_code=%d cleanup_stage=remove-temporary cleanup_code=%d" % [path, promote_error, restore_error, cleanup_error]
+	var promoted := _load_one(path, validator)
+	if promoted.ok() and _canonical_json(promoted.document) != _canonical_json(temporary_result.document):
+		promoted.error = "promoted document differs from verified temporary"
+	if not promoted.ok():
+		var restore_error := _restore_replaced_generations(path, backup, primary_quarantine, backup_quarantine, had_primary, had_backup)
+		return "JSON_STORE_REPLACE_ERROR path=%s stage=verify-promoted restore_code=%d reason=%s" % [path, restore_error, promoted.error]
+	return ""
+
 func _canonical_json(document: Dictionary) -> String:
 	return JSON.stringify(_canonicalize(document))
 
@@ -184,6 +238,25 @@ func _restore_displaced_backup(backup: String, displaced_backup: String, displac
 	if not displaced_old_backup:
 		return OK
 	return _rename(displaced_backup, backup)
+
+func _restore_replaced_generations(
+	path: String,
+	backup: String,
+	primary_quarantine: String,
+	backup_quarantine: String,
+	had_primary: bool,
+	had_backup: bool
+) -> Error:
+	var first_error := _remove_if_exists(path)
+	if had_primary:
+		var primary_error := _rename(primary_quarantine, path)
+		if first_error == OK and primary_error != OK:
+			first_error = primary_error
+	if had_backup:
+		var backup_error := _rename(backup_quarantine, backup)
+		if first_error == OK and backup_error != OK:
+			first_error = backup_error
+	return first_error
 
 func _corrupt_artifact_path(path: String) -> String:
 	var base := "%s.corrupt-%d" % [path, int(Time.get_unix_time_from_system())]

@@ -70,7 +70,7 @@ func reset() -> String:
 	}
 	var candidate_journal := ItemTransactionJournal.new()
 	var document := _store.document_for(candidate, metadata, candidate_journal)
-	var save_error := _store.save_document(document)
+	var save_error := _store.reset_document(document)
 	if not save_error.is_empty():
 		return _fail(save_error)
 	return _commit_saved_document(document)

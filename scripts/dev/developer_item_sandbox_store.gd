@@ -30,6 +30,13 @@ func _init(documents: AtomicJsonStore = null) -> void:
 func save_document(document: Dictionary) -> String:
 	return _documents.save_document(DOCUMENT_PATH, document, Callable(self, "validate_document"))
 
+func reset_document(document: Dictionary) -> String:
+	var loaded := load_document()
+	var has_generation := FileAccess.file_exists(DOCUMENT_PATH) or FileAccess.file_exists("%s.bak" % DOCUMENT_PATH)
+	if loaded.ok() or not has_generation:
+		return save_document(document)
+	return _documents.replace_document(DOCUMENT_PATH, document, Callable(self, "validate_document"))
+
 func load_document() -> JsonDocumentResult:
 	return _documents.load_document(DOCUMENT_PATH, Callable(self, "validate_document"))
 

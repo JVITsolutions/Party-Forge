@@ -34,6 +34,7 @@ func run() -> Array[String]:
 	_assert_public_slot_transactions_and_integrity(failures)
 	_assert_forged_journal_documents_fail_atomically(failures)
 	_assert_strict_reload_is_failure_atomic(failures)
+	_assert_corrupt_generations_reset_recovery(failures)
 	_assert_atomic_save_failure_and_profile_isolation(failures)
 	_cleanup_sandbox_files()
 	return failures
@@ -459,6 +460,64 @@ func _assert_atomic_save_failure_and_profile_isolation(failures: Array[String]) 
 	TestAssertions.equal(FileAccess.get_file_as_bytes(profile_sentinel), profile_bytes, "failed sandbox save preserves normal profile bytes", failures)
 	_remove_file(profile_sentinel)
 
+func _assert_corrupt_generations_reset_recovery(failures: Array[String]) -> void:
+	_cleanup_sandbox_files()
+	var profile_sentinel := ProfileStore.DEFAULT_ROOT.path_join(
+		"task-11-reset-isolation-sentinel-%d.json" % OS.get_process_id()
+	)
+	_write_text(profile_sentinel, "task-11-active-profile-bytes")
+	var profile_bytes := FileAccess.get_file_as_bytes(profile_sentinel)
+	var seed: Variant = _state_script.new()
+	TestAssertions.equal(seed.reset(), "", "corrupt-reset fixture first creates a canonical sandbox", failures)
+	var canonical: Dictionary = seed.to_dictionary()
+	var corrupt_primary := "task-11 corrupt sandbox primary"
+	var corrupt_backup := "task-11 corrupt sandbox backup"
+	_write_text(DOCUMENT_PATH, corrupt_primary)
+	_write_text("%s.bak" % DOCUMENT_PATH, corrupt_backup)
+
+	var recovered: Variant = _state_script.new()
+	TestAssertions.equal(recovered.reset(), "", "reset replaces corrupt primary and corrupt backup", failures)
+	TestAssertions.equal(recovered.to_dictionary(), canonical, "corrupt-generation reset restores the exact canonical 99-item document", failures)
+	TestAssertions.equal(recovered.registry().size() if recovered.registry() != null else -1, 99, "corrupt-generation reset restores all 99 items", failures)
+	TestAssertions.equal((recovered.to_dictionary()["transaction_journal"] as Array).size(), 0, "corrupt-generation reset clears the transaction journal", failures)
+	TestAssertions.equal(int(recovered.to_dictionary()["issuance_metadata"]["next_transaction_sequence"]), 0, "corrupt-generation reset rewinds the transaction sequence", failures)
+	var quarantined_primary := _sandbox_artifact_with_bytes("sandbox.json.corrupt-", corrupt_primary.to_utf8_buffer())
+	var quarantined_backup := _sandbox_artifact_with_bytes("sandbox.json.bak.corrupt-", corrupt_backup.to_utf8_buffer())
+	TestAssertions.truthy(not quarantined_primary.is_empty(), "reset quarantines the exact corrupt primary bytes inside the sandbox root", failures)
+	TestAssertions.truthy(not quarantined_backup.is_empty(), "reset quarantines the exact corrupt backup bytes inside the sandbox root", failures)
+	TestAssertions.truthy(not FileAccess.file_exists("%s.tmp" % DOCUMENT_PATH), "successful corrupt reset leaves no temporary generation", failures)
+	TestAssertions.truthy(not FileAccess.file_exists("%s.bak.previous" % DOCUMENT_PATH), "successful corrupt reset leaves no displaced generation", failures)
+	var first_item_id: String = recovered.stash().item_id_at(0)
+	TestAssertions.equal(recovered.move_to_first_empty_inventory(first_item_id), "", "first move after corrupt reset succeeds", failures)
+	var moved: Dictionary = recovered.to_dictionary()
+	TestAssertions.equal(String(moved["transaction_journal"][0]["transaction_id"]), "sandbox-move-%016d" % 0, "first move after corrupt reset resumes journal sequence zero", failures)
+	TestAssertions.equal(int(moved["issuance_metadata"]["next_transaction_sequence"]), 1, "first move after corrupt reset advances sequence once", failures)
+	TestAssertions.equal(FileAccess.get_file_as_bytes(profile_sentinel), profile_bytes, "corrupt-primary and corrupt-backup reset preserves active-profile sentinel bytes", failures)
+
+	_cleanup_sandbox_files()
+	_write_text(DOCUMENT_PATH, corrupt_primary)
+	var missing_backup_recovery: Variant = _state_script.new()
+	TestAssertions.equal(missing_backup_recovery.reset(), "", "reset replaces a corrupt primary when backup is missing", failures)
+	TestAssertions.equal(missing_backup_recovery.to_dictionary(), canonical, "missing-backup reset restores the exact canonical 99-item document", failures)
+	TestAssertions.truthy(not FileAccess.file_exists("%s.bak" % DOCUMENT_PATH), "missing-backup reset does not invent a prior backup generation", failures)
+	TestAssertions.equal(FileAccess.get_file_as_bytes(profile_sentinel), profile_bytes, "corrupt-primary and missing-backup reset preserves active-profile sentinel bytes", failures)
+
+	_cleanup_sandbox_files()
+	_write_text(DOCUMENT_PATH, corrupt_primary)
+	_write_text("%s.bak" % DOCUMENT_PATH, corrupt_backup)
+	var before_names := _sandbox_file_names()
+	var before_primary_bytes := FileAccess.get_file_as_bytes(DOCUMENT_PATH)
+	var before_backup_bytes := FileAccess.get_file_as_bytes("%s.bak" % DOCUMENT_PATH)
+	var failing_atomic := AtomicJsonStore.new(func(_temporary: String, _target: String) -> Error: return ERR_CANT_CREATE)
+	var failing_state: Variant = _state_script.new(_store_script.new(failing_atomic))
+	var reset_error: String = failing_state.reset()
+	TestAssertions.truthy(reset_error.contains("stage=promote"), "injected corrupt-reset promotion failure reports the promotion stage", failures)
+	TestAssertions.equal(FileAccess.get_file_as_bytes(DOCUMENT_PATH), before_primary_bytes, "failed corrupt reset restores exact primary bytes", failures)
+	TestAssertions.equal(FileAccess.get_file_as_bytes("%s.bak" % DOCUMENT_PATH), before_backup_bytes, "failed corrupt reset restores exact backup bytes", failures)
+	TestAssertions.equal(_sandbox_file_names(), before_names, "failed corrupt reset restores the exact prior sandbox generation set", failures)
+	TestAssertions.equal(FileAccess.get_file_as_bytes(profile_sentinel), profile_bytes, "failed corrupt reset preserves active-profile sentinel bytes", failures)
+	_remove_file(profile_sentinel)
+
 func _minimal_unknown_document() -> Dictionary:
 	return {
 		"schema_version": 1,
@@ -491,11 +550,28 @@ func _container_document(ownership_document: Dictionary, container_id: StringNam
 	return {}
 
 func _cleanup_sandbox_files() -> void:
-	for suffix: String in ["", ".bak", ".tmp", ".bak.previous"]:
-		_remove_file("%s%s" % [DOCUMENT_PATH, suffix])
+	if DirAccess.dir_exists_absolute(ProjectSettings.globalize_path(SANDBOX_ROOT)):
+		for name: String in DirAccess.get_files_at(SANDBOX_ROOT):
+			if name.begins_with("sandbox.json"):
+				_remove_file(SANDBOX_ROOT.path_join(name))
 	var absolute_root := ProjectSettings.globalize_path(SANDBOX_ROOT)
 	if DirAccess.dir_exists_absolute(absolute_root):
 		DirAccess.remove_absolute(absolute_root)
+
+func _sandbox_file_names() -> PackedStringArray:
+	if not DirAccess.dir_exists_absolute(ProjectSettings.globalize_path(SANDBOX_ROOT)):
+		return PackedStringArray()
+	var names := DirAccess.get_files_at(SANDBOX_ROOT)
+	names.sort()
+	return names
+
+func _sandbox_artifact_with_bytes(prefix: String, expected: PackedByteArray) -> String:
+	for name: String in _sandbox_file_names():
+		if name.begins_with(prefix):
+			var path := SANDBOX_ROOT.path_join(name)
+			if FileAccess.get_file_as_bytes(path) == expected:
+				return path
+	return ""
 
 func _write_text(path: String, text: String) -> void:
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(path.get_base_dir()))
