@@ -214,6 +214,17 @@ A transaction request includes:
 - Destination container and slot when applicable.
 - Item payload only for create operations.
 
+Plan 4B request schema `1` has the exact canonical fields `schema_version`, `transaction_id`, `operation`, `owner_id`, `source_container_id`, `source_slot`, `expected_instance_id`, `destination_container_id`, `destination_slot`, and `create_item`. Inapplicable container/ID fields are empty strings, inapplicable slots are `-1`, and `create_item` is `null` except for `create_and_place`, where it is one complete ItemInstance document. Supported operation strings are `create_and_place`, `move_to_empty`, `swap_occupied`, and `sandbox_remove`.
+
+The public constructors are:
+
+- `create(transaction_id, owner_id, destination_container_id, destination_slot, item)`
+- `move(transaction_id, owner_id, source_container_id, source_slot, expected_instance_id, destination_container_id, destination_slot)`
+- `swap(transaction_id, owner_id, source_container_id, source_slot, expected_instance_id, destination_container_id, destination_slot)`
+- `sandbox_remove(transaction_id, owner_id, source_container_id, source_slot, expected_instance_id)`
+
+`canonical_document()` emits those fields in that order and `fingerprint()` is the SHA-256 of the compact JSON string for that document. Item values are copied at request construction and serialization boundaries.
+
 The expected source ID provides optimistic concurrency protection. A stale UI action cannot move whichever item happens to occupy the old slot later.
 
 ### Validation order
@@ -228,11 +239,15 @@ Before mutation, the service validates:
 6. Unique instance placement across the domain.
 7. The final candidate registry/container state as a complete invariant set.
 
+Stable result mapping is: malformed or self-referential request shape -> `INVALID_REQUEST`; owner mismatch -> `UNKNOWN_OWNER`; missing referenced container -> `UNKNOWN_CONTAINER`; invalid source/destination index -> `SLOT_OUT_OF_BOUNDS`; empty/stale source or an empty swap destination -> `SOURCE_MISMATCH`; occupied create/move destination -> `DESTINATION_OCCUPIED`; create ID already in the registry -> `DUPLICATE_INSTANCE`; preexisting or candidate multiple placement -> `DUPLICATE_REFERENCE`; invalid create item or other item-record integrity failure -> `INVALID_ITEM`. Request validation occurs before journal lookup, and a failed result never carries a candidate state.
+
 The service commits the candidate state only after every validation passes. Any failure returns a stable result code and leaves all original state byte-equivalent.
 
 ### Idempotency
 
 Repeating the same transaction ID with the same canonical request returns the recorded result without applying it twice. Reusing an ID with different request data returns a transaction-collision error and mutates nothing.
+
+Only successful transactions are recorded. A same-ID/same-fingerprint replay returns `TRANSACTION_REPLAY`, `duplicate = true`, and a defensive copy of the originally recorded complete state. A same-ID/different-fingerprint request returns `TRANSACTION_COLLISION`, no candidate state, and does not replace the journal entry. Failed first attempts are not recorded and may be retried after their preconditions change.
 
 Run-only transaction results live in the run context. Persistent stash mutations use the existing profile mutation and atomic-save boundary. The implementation must not write the profile once per validation stage.
 

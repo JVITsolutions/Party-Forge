@@ -324,6 +324,9 @@ git commit -m "feat: add fixed-slot item ownership state"
 ### Task 4: Atomic and idempotent container transactions
 
 **Files:**
+- Modify: `scripts/items/item_registry.gd`
+- Modify: `scripts/items/item_slot_container.gd`
+- Modify: `scripts/items/item_ownership_state.gd`
 - Create: `scripts/items/item_transaction_request.gd`
 - Create: `scripts/items/item_transaction_result.gd`
 - Create: `scripts/items/item_transaction_journal.gd`
@@ -338,7 +341,7 @@ git commit -m "feat: add fixed-slot item ownership state"
 
 Cover create-and-place, move-to-empty, swap-occupied, and sandbox-remove. For every operation, snapshot `JSON.stringify(state.to_dictionary())` before the call. Assert successful exact placement and item-record preservation.
 
-Add one table-driven failure case for each code:
+Add one table-driven failure case for each non-success code:
 
 ```gdscript
 enum Code {
@@ -365,15 +368,28 @@ Expected: missing transaction types.
 
 - [ ] **Step 3: Implement candidate-based transactions**
 
-`ItemTransactionRequest` has exact constructors `create`, `move`, `swap`, and `sandbox_remove`. Its `canonical_document()` sorts keys and contains the operation, owner, source/destination fields, expected item ID, and create payload. `fingerprint()` is `canonical_document().sha256_text()`.
+`ItemTransactionRequest` schema `1` uses the exact ordered fields `schema_version`, `transaction_id`, `operation`, `owner_id`, `source_container_id`, `source_slot`, `expected_instance_id`, `destination_container_id`, `destination_slot`, and `create_item`. Supported operation strings are `create_and_place`, `move_to_empty`, `swap_occupied`, and `sandbox_remove`. Its exact constructors are:
 
-`ItemTransactionJournal` maps transaction ID to `{fingerprint, code, state}` and returns defensive copies. `ItemContainerTransactionService.apply()` must:
+```gdscript
+create(transaction_id, owner_id, destination_container_id, destination_slot, item)
+move(transaction_id, owner_id, source_container_id, source_slot, expected_instance_id, destination_container_id, destination_slot)
+swap(transaction_id, owner_id, source_container_id, source_slot, expected_instance_id, destination_container_id, destination_slot)
+sandbox_remove(transaction_id, owner_id, source_container_id, source_slot, expected_instance_id)
+```
+
+Inapplicable string fields are empty, inapplicable slots are `-1`, and `create_item` is `null` outside create. The request owns a copy of its item. `canonical_document()` emits the complete fields above in that order. `fingerprint()` is `JSON.stringify(canonical_document()).sha256_text()`.
+
+`ItemTransactionResult` exposes `code`, `next_state`, and `duplicate`, owns any returned state, and has `ok()` only for `OK`. `ItemTransactionJournal` maps successful transaction IDs to `{fingerprint, code, state}` and returns defensive copies. Failed first attempts are not recorded. A same-ID/same-fingerprint replay returns `TRANSACTION_REPLAY`, `duplicate = true`, and a copy of the originally recorded state; a changed fingerprint returns `TRANSACTION_COLLISION`, no state, and leaves the journal entry unchanged.
+
+Add only underscore-prefixed state mutation helpers needed by the transaction service; keep registry/container dictionaries private and never return their mutable references. `ItemContainerTransactionService.apply()` must:
 
 1. Validate request and replay state.
 2. Copy the ownership state.
 3. Apply exactly one candidate mutation.
 4. Validate the complete candidate.
 5. Record and return the candidate only after validation passes.
+
+Use this stable failure mapping: malformed or same-source/destination request -> `INVALID_REQUEST`; owner mismatch -> `UNKNOWN_OWNER`; missing container -> `UNKNOWN_CONTAINER`; invalid index -> `SLOT_OUT_OF_BOUNDS`; empty/stale source or empty swap destination -> `SOURCE_MISMATCH`; occupied create/move destination -> `DESTINATION_OCCUPIED`; create ID already registered -> `DUPLICATE_INSTANCE`; multiple placement -> `DUPLICATE_REFERENCE`; invalid create item or other item-record integrity failure -> `INVALID_ITEM`. Validate request shape before journal lookup. Every failure returns `next_state == null`.
 
 Create-and-place must add the registry record and slot in the same candidate. Sandbox-remove must erase both the slot reference and registry record in the same candidate. Move and swap must not touch the registry item document.
 
