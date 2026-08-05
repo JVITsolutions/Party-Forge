@@ -128,7 +128,13 @@ The independent complete-range review found no Critical issues and two Important
 | Sandbox reset could not recover corrupt primary plus corrupt/missing backup because the protected general save path refused overwrite. | `bc0746e` added an explicit sandbox-only validated replacement transaction with quarantine, promotion verification, and exact rollback. The focused sandbox state RED was `TEST_SUMMARY: FAIL (3 failures)`; GREEN was `TEST_SUMMARY: PASS (0 failures)`. |
 | An already-persisted schema-2 profile could contain 101 otherwise-valid stash tabs because the 100-tab cap existed only in reconciliation-local grant logic. | `09b08b8` made `ProfileState.MAX_STASH_TABS` the shared decode/load/snapshot/reconciliation invariant. The focused RED was `TEST_SUMMARY: FAIL (5 failures)`; GREEN and the exact-100 boundary rerun were `TEST_SUMMARY: PASS (0 failures)`. |
 
-The final eight-suite focused regression batch on `09b08b8` exited `0` in 30.7 seconds with `ITEM_TRANSACTION_MATRIX: PASS`, the deterministic sandbox SHA-256 above, and `TEST_SUMMARY: PASS (0 failures)`. This final wave then independently reran import, all 131 suites, all ten required final commands, and both supplemental focus runners.
+The final eight-suite focused regression batch ran this exact command against `09b08b8`:
+
+```powershell
+& $godot --headless --path . --quit-after 300 --script res://tests/focused_test_runner.gd -- tests/unit/test_developer_item_sandbox_state.gd tests/unit/test_atomic_profile_store.gd tests/unit/test_profile_state.gd tests/unit/test_profile_item_schema_migration.gd tests/unit/test_profile_manager.gd tests/unit/test_profile_item_storage_service.gd tests/unit/test_profile_storage_reconciler.gd tests/unit/test_item_container_transactions.gd
+```
+
+It exited `0` in 30.7 seconds with `DEVELOPER_ITEM_SANDBOX_SHA256: c201fd5917d9958da63dacd8201e80d5911c0de51af367977d2a5ee57dd9defe`, `ITEM_TRANSACTION_MATRIX: PASS`, and `TEST_SUMMARY: PASS (0 failures)`. This final wave then independently reran import, all 131 suites, all ten required final commands, and both supplemental focus runners.
 
 ## Explicit deferred scope
 
@@ -149,4 +155,4 @@ The integration runners removed their own `user://` task roots before emitting P
 
 Before authoring this record, `git diff --check` exited `0`, `git status --short --untracked-files=all` was empty, all 21 verification-created sidecars were absent, and all eight validated Temp roots were absent.
 
-The initial documentation-only commit was `42b7f292135a79362e3bf31ee94bf6ea37440524` with subject `docs: verify Plan 4B item ownership foundation`; `git show --format= --name-status HEAD` listed only this new verification document. Immediately afterward, `git status --short --untracked-files=all` and `git ls-files --others --exclude-standard` both returned zero paths, while `git diff --check` and `git diff --check HEAD^..HEAD` both exited `0`. This record was then amended only to include that observed proof; the same clean-status, untracked, scope, and diff checks were rerun after the final amend.
+The initial verification-record history added only this document and left `git status --short --untracked-files=all` and `git ls-files --others --exclude-standard` empty, while `git diff --check` and the documentation-commit range check exited `0`. The later focused correction that adds the exact command above is also documentation-only: the tested code remains `09b08b814657374fc3d66a3d549467e1e35c37f3`. For the current documentation HEAD, `git show --format= --name-status HEAD` lists only this verification document, status and untracked counts are zero, and both the worktree and `HEAD^..HEAD` diff checks exit `0`.
