@@ -40,7 +40,7 @@ func project(
 	var state_fingerprint := LoadoutCompatibilityProjection.state_fingerprint_for(
 		profile.leader_loadout_class_id,
 		class_definition.id,
-		profile.item_records,
+		registry.to_dictionary(),
 		leader.to_dictionary(),
 		stash_documents,
 	)

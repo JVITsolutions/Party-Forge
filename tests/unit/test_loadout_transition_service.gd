@@ -7,6 +7,7 @@ var _root_counter := 0
 func run() -> Array[String]:
 	var failures: Array[String] = []
 	_test_projection_is_canonical_deterministic_and_defensive(failures)
+	_test_registry_record_order_is_fingerprint_canonical(failures)
 	_test_projection_enforces_reserved_slots_attributes_and_malformed_inputs(failures)
 	_test_nonoverflow_transition_is_atomic_replay_safe_and_exact(failures)
 	_test_transition_to_empty_loadout_retains_selected_class(failures)
@@ -91,6 +92,50 @@ func _test_projection_is_canonical_deterministic_and_defensive(failures: Array[S
 	TestAssertions.truthy(no_space_projection.valid, "zero-stash projection remains a valid warning plan", failures)
 	TestAssertions.equal(no_space_projection.planned_stash_destinations, [], "zero stash has no planned moves", failures)
 	TestAssertions.equal(no_space_projection.overflow_item_ids, [crown.instance_id, plate.instance_id], "zero stash overflows in canonical equipment order", failures)
+
+func _test_registry_record_order_is_fingerprint_canonical(failures: Array[String]) -> void:
+	var root := _case_root("registry_order")
+	var store := ProfileStore.new()
+	var plate := _item("item-registry-order-z-plate", &"dawn_bulwark_plate", 0)
+	var ring := _item("item-registry-order-a-ring", &"windrunner_band", 1)
+	var original := _profile(
+		[plate, ring],
+		{1: plate.instance_id},
+		[_stash(&"stash-tab-000", {50: ring.instance_id})],
+		"fighter",
+	)
+	var reordered := original.copy()
+	var reordered_records := reordered.item_records.duplicate(true)
+	(reordered_records["items"] as Array).reverse()
+	reordered.item_records = reordered_records
+	TestAssertions.truthy(original.item_records != reordered.item_records, "registry-order fixture changes raw item array order", failures)
+	TestAssertions.equal(ProfileCodec.validate_profile(reordered), "", "reordered registry remains a valid strict profile", failures)
+	var original_decode := ItemRegistry._decode(original.item_records, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)
+	var reordered_decode := ItemRegistry._decode(reordered.item_records, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)
+	TestAssertions.equal(String(original_decode["error"]), "", "original registry strictly decodes", failures)
+	TestAssertions.equal(String(reordered_decode["error"]), "", "reordered registry strictly decodes", failures)
+	var original_registry := original_decode["value"] as ItemRegistry
+	var reordered_registry := reordered_decode["value"] as ItemRegistry
+	TestAssertions.equal(reordered_registry.to_dictionary(), original_registry.to_dictionary(), "record order preserves exact decoded registry semantics", failures)
+
+	var original_projection := _project(original, &"mage")
+	var reordered_projection := _project(reordered, &"mage")
+	TestAssertions.truthy(original_projection.valid and reordered_projection.valid, "equivalent registries both project", failures)
+	TestAssertions.equal(reordered_projection.confirmation_token, original_projection.confirmation_token, "record order leaves confirmation token unchanged", failures)
+	TestAssertions.equal(reordered_projection.state_fingerprint, original_projection.state_fingerprint, "record order leaves deterministic state fingerprint unchanged", failures)
+	_save_profile(store, reordered, root, "reordered registry transition fixture", failures)
+	var committed := LoadoutTransitionService.new(ProfileMutationService.new(store)).apply(
+		PROFILE_ID,
+		_request("transition-registry-order", original_projection),
+		root,
+	)
+	TestAssertions.truthy(committed.ok(), "request projected before record reordering still commits", failures)
+	var saved := store.load_profile(PROFILE_ID, root).profile
+	TestAssertions.equal(saved.leader_loadout["slots"], {}, "record-order transition moves the incompatible item", failures)
+	TestAssertions.equal(saved.stash_tabs[0]["slots"], {"0": plate.instance_id, "50": ring.instance_id}, "record-order transition preserves stored stash semantics", failures)
+	_assert_exact_item(saved, plate, "record-order moved plate", failures)
+	_assert_exact_item(saved, ring, "record-order unrelated ring", failures)
+	ProfileTestSupport.remove_tree(root)
 
 func _test_projection_enforces_reserved_slots_attributes_and_malformed_inputs(failures: Array[String]) -> void:
 	var service := LoadoutCompatibilityService.new()
