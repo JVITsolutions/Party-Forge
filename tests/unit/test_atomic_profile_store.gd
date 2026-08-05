@@ -22,6 +22,19 @@ class PostCommitReportingFailureAtomicJsonStore extends AtomicJsonStore:
 	) -> Error:
 		return ERR_CANT_CREATE
 
+class PreflightArtifactFailureAtomicJsonStore extends AtomicJsonStore:
+	var failure_path := ""
+
+	func _remove(path: String) -> Error:
+		if path == failure_path:
+			return ERR_CANT_CREATE
+		return super._remove(path)
+
+	func _write_text(path: String, contents: String) -> Error:
+		if path == failure_path:
+			return ERR_CANT_CREATE
+		return super._write_text(path, contents)
+
 func run() -> Array[String]:
 	var failures: Array[String] = []
 	_root = "user://tests/profile_store_%d_%d" % [OS.get_process_id(), Time.get_ticks_usec()]
@@ -33,6 +46,7 @@ func run() -> Array[String]:
 	_test_irreversible_reported_promotion_failure_accepts_verified_commit(failures)
 	_test_irreversible_post_commit_reporting_failure_returns_success(failures)
 	_test_irreversible_cleanup_debt_is_sanitized(failures)
+	_test_irreversible_preflight_failure_preserves_active_generations(failures)
 	_test_backup_only_is_discoverable(failures)
 	_test_corrupt_primary_is_preserved_before_resave(failures)
 	_test_failed_promotion_restores_primary_and_older_backup(failures)
@@ -219,6 +233,49 @@ func _test_irreversible_cleanup_debt_is_sanitized(failures: Array[String]) -> vo
 	TestAssertions.equal(_decode_file(path).profile.gold, 100, "cleanup-debt retry updates primary", failures)
 	TestAssertions.equal(_decode_file("%s.bak" % path).profile.gold, 100, "cleanup-debt retry updates backup", failures)
 	TestAssertions.equal(_decode_file(documents.failure_path).profile.gold, 100, "cleanup-debt retry re-sanitizes the retained artifact", failures)
+
+func _test_irreversible_preflight_failure_preserves_active_generations(failures: Array[String]) -> void:
+	var cases: Array[Dictionary] = [
+		{"id": "profile-preflight-prev", "suffix": ".bak.previous", "label": "legacy displaced backup"},
+		{"id": "profile-preflight-primary-corrupt", "suffix": ".corrupt-1700000000", "label": "profile corrupt artifact"},
+		{"id": "profile-preflight-backup-corrupt", "suffix": ".bak.corrupt-1700000000", "label": "backup corrupt artifact"},
+	]
+	for test_case: Dictionary in cases:
+		var profile_id := String(test_case["id"])
+		var label := String(test_case["label"])
+		var good := ProfileStore.new()
+		var profile := ProfileState.new_profile(profile_id, "Preflight", 1350)
+		profile.gold = 1
+		TestAssertions.equal(good.save_profile(profile, _root), "", "%s fixture saves original generation" % label, failures)
+		profile.gold = 2
+		profile.updated_at_unix = 1351
+		TestAssertions.equal(good.save_profile(profile, _root), "", "%s fixture creates recovery generation" % label, failures)
+		var path := good.profile_path(profile_id, _root)
+		var backup := "%s.bak" % path
+		var primary_before := FileAccess.get_file_as_bytes(path)
+		var backup_before := FileAccess.get_file_as_bytes(backup)
+		var residual_path := "%s%s" % [path, String(test_case["suffix"])]
+		var doomed_bytes := primary_before
+		var residual := FileAccess.open(residual_path, FileAccess.WRITE)
+		if residual != null:
+			residual.store_buffer(doomed_bytes)
+			residual.close()
+		var other_profile_artifact := _root.path_join("profile-preflight-neighbor.json.corrupt-%s" % profile_id)
+		var other_bytes := ("other profile sentinel for %s" % profile_id).to_utf8_buffer()
+		var other := FileAccess.open(other_profile_artifact, FileAccess.WRITE)
+		if other != null:
+			other.store_buffer(other_bytes)
+			other.close()
+		var documents := PreflightArtifactFailureAtomicJsonStore.new()
+		documents.failure_path = residual_path
+		profile.gold = 99
+		profile.updated_at_unix = 1352
+		var error := ProfileStore.new(documents).save_profile_irreversible(profile, _root)
+		TestAssertions.truthy(error.contains("stage=preflight-artifacts"), "%s sanitation failure aborts at preflight" % label, failures)
+		TestAssertions.equal(FileAccess.get_file_as_bytes(path), primary_before, "%s preflight failure preserves exact primary bytes" % label, failures)
+		TestAssertions.equal(FileAccess.get_file_as_bytes(backup), backup_before, "%s preflight failure preserves exact backup bytes" % label, failures)
+		TestAssertions.equal(FileAccess.get_file_as_bytes(residual_path), doomed_bytes, "%s failed sanitation does not disguise the residual artifact" % label, failures)
+		TestAssertions.equal(FileAccess.get_file_as_bytes(other_profile_artifact), other_bytes, "%s preflight does not touch another profile artifact" % label, failures)
 
 func _test_failed_promotion_restores_primary_and_older_backup(failures: Array[String]) -> void:
 	var good := ProfileStore.new()

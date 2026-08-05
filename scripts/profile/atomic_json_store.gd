@@ -104,15 +104,21 @@ func save_irreversible_document(path: String, document: Dictionary, validator: C
 	var backup := "%s.bak" % path
 	var primary_temporary := "%s.irreversible-primary.tmp" % path
 	var backup_temporary := "%s.irreversible-backup.tmp" % path
-	var cleanup_candidates: Array[String] = [
-		primary_temporary,
-		backup_temporary,
-		"%s.irreversible-primary.previous" % path,
-		"%s.irreversible-backup.previous" % path,
-		"%s.previous" % backup,
-	]
 	var document_text := JSON.stringify(document, "\t", false)
-	var candidate_canonical := ""
+	var candidate_document := JSON.parse_string(document_text) as Dictionary
+	var candidate_canonical := _canonical_json(candidate_document)
+	var cleanup_candidates := _irreversible_artifact_paths(path)
+	var preflight_error := _sanitize_irreversible_artifacts_before_commit(
+		cleanup_candidates,
+		document_text,
+		validator,
+		candidate_canonical
+	)
+	if preflight_error != OK:
+		return "JSON_STORE_SAVE_ERROR path=%s stage=preflight-artifacts code=%d" % [path, preflight_error]
+	for staging_path: String in [primary_temporary, backup_temporary]:
+		if staging_path not in cleanup_candidates:
+			cleanup_candidates.append(staging_path)
 	for temporary_path: String in [primary_temporary, backup_temporary]:
 		var write_error := _write_text(temporary_path, document_text)
 		if write_error != OK:
@@ -123,9 +129,7 @@ func save_irreversible_document(path: String, document: Dictionary, validator: C
 			var cleanup_error := _cleanup_paths([primary_temporary, backup_temporary])
 			return "JSON_STORE_SAVE_ERROR path=%s stage=verify-temporary cleanup_code=%d reason=%s" % [path, cleanup_error, temporary_result.error]
 		var temporary_canonical := _canonical_json(temporary_result.document)
-		if candidate_canonical.is_empty():
-			candidate_canonical = temporary_canonical
-		elif temporary_canonical != candidate_canonical:
+		if temporary_canonical != candidate_canonical:
 			var cleanup_error := _cleanup_paths([primary_temporary, backup_temporary])
 			return "JSON_STORE_SAVE_ERROR path=%s stage=verify-temporary cleanup_code=%d reason=staged generations differ" % [path, cleanup_error]
 
@@ -449,6 +453,52 @@ func _sanitize_remaining_artifacts(paths: Array[String], contents: String, valid
 			return write_error
 		var sanitized := _load_one(path, validator)
 		if not sanitized.ok() or _canonical_json(sanitized.document) != expected_canonical:
+			return ERR_FILE_CORRUPT
+	return OK
+
+func _irreversible_artifact_paths(path: String) -> Array[String]:
+	var result: Array[String] = [
+		"%s.tmp" % path,
+		"%s.bak.previous" % path,
+		"%s.irreversible-primary.tmp" % path,
+		"%s.irreversible-backup.tmp" % path,
+		"%s.irreversible-primary.previous" % path,
+		"%s.irreversible-backup.previous" % path,
+	]
+	var directory := DirAccess.open(path.get_base_dir())
+	if directory == null:
+		return result
+	var file_name := path.get_file()
+	var dynamic_prefixes: Array[String] = [
+		"%s.corrupt-" % file_name,
+		"%s.bak.corrupt-" % file_name,
+		"%s.irreversible-" % file_name,
+	]
+	for candidate_name: String in directory.get_files():
+		for prefix: String in dynamic_prefixes:
+			if candidate_name.begins_with(prefix):
+				var candidate_path := path.get_base_dir().path_join(candidate_name)
+				if candidate_path not in result:
+					result.append(candidate_path)
+				break
+	return result
+
+func _sanitize_irreversible_artifacts_before_commit(
+	paths: Array[String],
+	contents: String,
+	validator: Callable,
+	expected_canonical: String,
+) -> Error:
+	for artifact_path: String in paths:
+		if not FileAccess.file_exists(artifact_path):
+			continue
+		_remove(artifact_path)
+		if not FileAccess.file_exists(artifact_path):
+			continue
+		var write_error := _write_text(artifact_path, contents)
+		if write_error != OK:
+			return write_error
+		if not _generation_matches(artifact_path, validator, expected_canonical):
 			return ERR_FILE_CORRUPT
 	return OK
 
