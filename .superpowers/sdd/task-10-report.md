@@ -10,6 +10,7 @@ Created:
 - `tests/integration/item_storage_profile_runner.gd`
 - `tests/integration/item_storage_performance_runner.gd`
 - `tests/unit/test_item_storage_responsive_contract.gd`
+- `tests/support/task10_filesystem_manifest.gd`
 
 Modified only the real developer tool at `scripts/ui/developer_item_sandbox.gd`. No Task 11 documentation, gameplay/content semantics, equipment application, loot, extraction, transfer, shop, crafting, salvage, or profile schema behavior changed.
 
@@ -50,9 +51,17 @@ ITEM_SANDBOX_CONTROLLER_PASS
 ITEM_SANDBOX_UI_SUMMARY: PASS
 ```
 
+### Review correction RED-GREEN
+
+The review contract first exited `1` with `TEST_SUMMARY: FAIL (7 failures)`. All seven were assertion-level failures for the absent recursive profile manifest, sandbox confinement manifest, physical-window/logical-canvas geometry evidence, cleanup verification in each of the three runners, and filesystem-manifest helper. One earlier contract invocation had a fixture type-inference parse error; it was rejected as RED evidence and corrected before this accepted run.
+
+After the helper resource existed as a minimal stub, the contract exited `1` with `TEST_SUMMARY: FAIL (8 failures)`. Two failures specifically proved that the stub failed to detect an added sentinel file and a same-length byte mutation. The finished helper recursively records sorted relative paths, entry kind, file byte length, SHA-256, and simplified resolved path. It rejects the root or any descendant reported by Godot's `DirAccess.is_link()` API as a link/reparse point. The same focused contract then exited `0` with `TEST_SUMMARY: PASS (0 failures)`.
+
+The final scope audit found that the UI summary was cleanup-gated but its three resolution PASS markers were still emitted earlier. A focused ordering contract exited `1` with exactly one assertion failure. The UI runner now records verified sizes and emits every resolution/controller/UI PASS marker only after cleanup succeeds; the focused contract and exact-marker UI runner both returned to GREEN.
+
 ## UI, Controller, and Mouse Acceptance
 
-The production scene is instantiated in a real tree at 1920x1080, 2560x1440, and 3840x2160. The runner proves:
+The production scene is instantiated in a real tree at 1920x1080, 2560x1440, and 3840x2160. The runner first requests `Window.MODE_WINDOWED`, awaits layout, and uses the real root Window when that mode is available. Godot's headless display server honors `root.size` but does not report windowed mode, so headless verification uses the permitted fallback: a real target-sized `SubViewport` with `size_2d_override=1920x1080` and stretch enabled. Each resolution marker is emitted only after the physical Window or fallback target equals the labeled size. The runner separately asserts the project's 1920x1080 `canvas_items` logical policy. It also proves:
 
 - Overlay, safe frame, Inventory, Stash, Inspector, all six actions, and Close remain visible and contained.
 - Exactly 5 inventory plus 100 stash buttons exist.
@@ -65,9 +74,11 @@ The production scene is instantiated in a real tree at 1920x1080, 2560x1440, and
 
 ## Profile Isolation Acceptance
 
-The profile runner uses task-specific roots to create two normal profiles with distinct durable mutation journals, selects one as active, and captures each profile's semantic dictionary, exact primary bytes, SHA-256, journal, plus the exact profile-index bytes and SHA-256.
+The profile runner uses task-specific roots to create two normal profiles with distinct durable mutation journals, selects one as active, and captures each profile's semantic dictionary, exact primary bytes, SHA-256, journal, plus the exact profile-index bytes and SHA-256. It additionally captures the complete recursive normal-profile root before any sandbox operation and compares that exact manifest after the full sequence. This replaces the earlier tautological comparison of two globalized root strings.
 
-It then resets the isolated 99-item sandbox and performs save, reload, selected-slot move, occupied swap, first-empty stash, first-empty inventory, integrity scan, mutated reload, and reset. Both profiles, both journals, the active-profile selection, profile index, roots, bytes, and hashes remain exact. Neither normal profile contains the sandbox owner or any sandbox item ID.
+It then resets the isolated 99-item sandbox and performs save, reload, selected-slot move, occupied swap, first-empty stash, first-empty inventory, integrity scan, mutated reload, and reset. Both profiles, both journals, the active-profile selection, profile index, complete recursive profile-root manifest, bytes, and hashes remain exact. Neither normal profile contains the sandbox owner or any sandbox item ID. A sandbox confinement manifest requires every resolved descendant to remain strictly beneath the simplified sandbox root and allows only the final `sandbox.json` primary and `sandbox.json.bak` atomic generation; directories, temporary/displaced/corrupt generations, profile/index artifacts, and reported links/reparse points fail closed.
+
+All three integration runners now remove their task roots and assert those roots are absent before printing any PASS summary. The same finish path runs after accumulated assertion failures, so cleanup is attempted before FAIL output and exit `1` as well.
 
 Exact marker:
 
@@ -82,8 +93,8 @@ The runner creates unique canonical `ProfileState` ownership domains with per-pr
 Final headless measurements:
 
 ```text
-ITEM_STORAGE_PERFORMANCE_ONE profile=1 items=99 containers=1 encode_ms=0.544 decode_ms=11.712 validate_ms=4.810 save_ms=32.686 reload_ms=16.432 bytes=52757
-ITEM_STORAGE_PERFORMANCE_FOUR profiles=4 items=396 containers=4 elapsed_ms=266.388 bytes=211860 ceiling_ms=15000 ceiling_bytes=8388608 headless_regression_only=true
+ITEM_STORAGE_PERFORMANCE_ONE profile=1 items=99 containers=1 encode_ms=0.547 decode_ms=11.940 validate_ms=4.805 save_ms=33.545 reload_ms=17.546 bytes=52757
+ITEM_STORAGE_PERFORMANCE_FOUR profiles=4 items=396 containers=4 elapsed_ms=276.910 bytes=211860 ceiling_ms=15000 ceiling_bytes=8388608 headless_regression_only=true
 ITEM_STORAGE_PERFORMANCE_SUMMARY: PASS profiles=4 items=396
 ```
 
@@ -94,17 +105,18 @@ The 15,000 ms and 8 MiB ceilings are intentionally generous regression guards. T
 All commands used Godot 4.7.1 stable console with a newly created isolated `APPDATA` and `LOCALAPPDATA` root.
 
 - All three Task 10 runners: exit `0`; all exact markers above.
-- Required 19-suite Task 8/9 state/tamper/UI/settings/main, profile/atomic, responsive, and controller batch: exit `0`; `TEST_SUMMARY: PASS (0 failures)`.
-- Upgrade-recipient real controller runner: exit `0`; `UPGRADE_RECIPIENT_CONTROLLER_SCROLL_SUMMARY: PASS (0 failures, 3 viewports)`.
-- Fresh editor import: exit `0`; no parse, script, loader, or failed-resource error.
-- Complete suite: exit `0` in 67.5 seconds; `TEST_SUMMARY: PASS (131 suites)`; sandbox hash remained `c201fd5917d9958da63dacd8201e80d5911c0de51af367977d2a5ee57dd9defe`.
+- Required bounded 23-suite Task 8/9 state/tamper/UI/settings/main, ownership transaction/run, profile/atomic/storage, responsive, and controller batch: exit `0`; exact `TEST_SUMMARY: PASS (0 failures)` marker present.
+- Task 9 real focus-owner runner: exit `0`; exact `TASK9_SANDBOX_FOCUS_SUMMARY: PASS (0 failures)` marker present.
+- Upgrade-recipient real controller runner with `--quit-after 10000`: exit `0`; exact `UPGRADE_RECIPIENT_CONTROLLER_SCROLL_SUMMARY: PASS (0 failures, 3 viewports)` marker present. The command rejects exit `0` without that exact marker.
+- Fresh editor import: exit `0`; zero parse, script, loader, or failed-resource diagnostics.
+- Complete suite: exit `0` in 70.6 seconds on the final correction tree; exact `TEST_SUMMARY: PASS (131 suites)` marker present; zero test/parser/script/loader failures; sandbox hash remained `c201fd5917d9958da63dacd8201e80d5911c0de51af367977d2a5ee57dd9defe`.
 
 The focused and complete suites emitted their established intentional negative-path diagnostics. The complete suite retained only the established shutdown resource/object diagnostics and no Task 10 assertion, parser, script, loader, resource, input, or UI failure.
 
 ## Artifact and Review Boundary
 
-The fresh import recreated only `.gd.uid` sidecars proven absent by the clean pre-import status, including sidecars for the new runners/contract and earlier Plan 4B files. They were removed by exact path and are not part of the Task 10 commit. The disposable isolated runtime root was also removed after verification.
+The fresh import recreated 21 `.gd.uid` sidecars proven absent by the clean pre-import snapshot, including sidecars for the new helper/runners/contract and earlier Plan 4B files. All 21 were removed by exact path and are not part of the correction commit. Every worktree-local RED/GREEN runtime directory was removed before final verification; later pristine runtimes lived under the user Temp directory and were deleted after each command.
 
-Commit message: `test: verify item sandbox ownership and layouts`
+Original Task 10 commit: `e757b77` (`test: verify item sandbox ownership and layouts`). Review correction commit is intentionally limited to the three runners, responsive contract, filesystem-manifest test support, and this report.
 
 Stop after the focused Task 10 commit for independent review. Task 11 has not started.

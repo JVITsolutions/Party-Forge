@@ -52,6 +52,12 @@ func _run() -> void:
 	if single_bytes > 0:
 		_assert(total_bytes <= single_bytes * (PROFILE_COUNT + 1), "four-profile encoded growth remains close to linear from the one-profile baseline")
 
+	_cleanup()
+	_assert(
+		not DirAccess.dir_exists_absolute(ProjectSettings.globalize_path(SINGLE_ROOT))
+		and not DirAccess.dir_exists_absolute(ProjectSettings.globalize_path(MULTI_ROOT)),
+		"cleanup removes every Task 10 root before summary"
+	)
 	print("ITEM_STORAGE_PERFORMANCE_ONE profile=1 items=%d containers=%d encode_ms=%.3f decode_ms=%.3f validate_ms=%.3f save_ms=%.3f reload_ms=%.3f bytes=%d" % [
 		int(single.get("instances", 0)),
 		int(single.get("containers", 0)),
@@ -72,13 +78,11 @@ func _run() -> void:
 	])
 	if _failures.is_empty():
 		print("ITEM_STORAGE_PERFORMANCE_SUMMARY: PASS profiles=4 items=396")
-		_cleanup()
 		quit(0)
 		return
 	for failure: String in _failures:
 		push_error("ITEM_STORAGE_PERFORMANCE_FAILURE: %s" % failure)
 	print("ITEM_STORAGE_PERFORMANCE_SUMMARY: FAIL (%d failures)" % _failures.size())
-	_cleanup()
 	quit(1)
 
 

@@ -3,6 +3,7 @@ extends SceneTree
 const SANDBOX_SCENE := preload("res://scenes/ui/developer_item_sandbox.tscn")
 const DOCUMENT_PATH := "user://developer_item_sandbox/sandbox.json"
 const SANDBOX_ROOT := "user://developer_item_sandbox"
+const LOGICAL_SIZE := Vector2i(1920, 1080)
 const TARGET_SIZES: Array[Vector2i] = [
 	Vector2i(1920, 1080),
 	Vector2i(2560, 1440),
@@ -18,6 +19,7 @@ const ACTION_PATHS: Array[NodePath] = [
 ]
 
 var _failures: Array[String] = []
+var _verified_resolution_sizes: Array[Vector2i] = []
 
 
 func _initialize() -> void:
@@ -26,27 +28,41 @@ func _initialize() -> void:
 
 func _run() -> void:
 	_cleanup()
+	root.mode = Window.MODE_WINDOWED
+	_assert(root.mode == Window.MODE_WINDOWED or DisplayServer.get_name() == "headless", "sandbox resolution runner uses a true windowed target or the approved headless SubViewport fallback")
+	_assert(root.content_scale_size == LOGICAL_SIZE, "sandbox resolution runner retains the project 1920x1080 logical canvas")
+	_assert(root.content_scale_mode == Window.CONTENT_SCALE_MODE_CANVAS_ITEMS, "sandbox resolution runner uses the project canvas_items stretch policy")
 	for viewport_size: Vector2i in TARGET_SIZES:
 		await _exercise_resolution(viewport_size)
 	await _exercise_controller_and_mouse()
-	_cleanup()
-	if _failures.is_empty():
-		print("ITEM_SANDBOX_CONTROLLER_PASS")
-		print("ITEM_SANDBOX_UI_SUMMARY: PASS")
-		quit(0)
-		return
-	for failure: String in _failures:
-		push_error("ITEM_SANDBOX_UI_FAILURE: %s" % failure)
-	print("ITEM_SANDBOX_UI_SUMMARY: FAIL (%d failures)" % _failures.size())
-	quit(1)
+	_finish()
 
 
 func _exercise_resolution(viewport_size: Vector2i) -> void:
 	var label := "%dx%d" % [viewport_size.x, viewport_size.y]
 	var failures_before := _failures.size()
 	root.size = viewport_size
+	await _frames(4)
+	var geometry_viewport: Viewport = root
+	var geometry_parent: Node = root
+	var headless_viewport: SubViewport = null
+	if root.mode == Window.MODE_WINDOWED:
+		_assert(root.size == viewport_size, "%s root Window reaches the exact requested physical size" % label)
+		_assert(Vector2i(root.get_visible_rect().size) == LOGICAL_SIZE, "%s canvas_items stretch retains the exact 1920x1080 logical viewport" % label)
+	else:
+		headless_viewport = SubViewport.new()
+		headless_viewport.size = viewport_size
+		headless_viewport.size_2d_override = LOGICAL_SIZE
+		headless_viewport.size_2d_override_stretch = true
+		headless_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+		root.add_child(headless_viewport)
+		await _frames(4)
+		geometry_viewport = headless_viewport
+		geometry_parent = headless_viewport
+		_assert(headless_viewport.size == viewport_size, "%s headless SubViewport reaches the exact requested physical target" % label)
+		_assert(headless_viewport.size_2d_override == LOGICAL_SIZE and headless_viewport.size_2d_override_stretch, "%s headless SubViewport explicitly retains the stretched 1920x1080 logical canvas" % label)
 	var sandbox := SANDBOX_SCENE.instantiate() as DeveloperItemSandbox
-	root.add_child(sandbox)
+	geometry_parent.add_child(sandbox)
 	await _frames(3)
 	_assert(sandbox.has_method(&"apply_viewport_size"), "%s sandbox exposes deterministic viewport layout" % label)
 	_assert(sandbox.has_method(&"slot_button_count"), "%s sandbox exposes real slot count diagnostic" % label)
@@ -54,9 +70,13 @@ func _exercise_resolution(viewport_size: Vector2i) -> void:
 	_assert(sandbox.has_method(&"integrity_error"), "%s sandbox exposes read-only integrity status" % label)
 	if not sandbox.has_method(&"apply_viewport_size"):
 		sandbox.free()
+		if headless_viewport != null:
+			headless_viewport.free()
 		await process_frame
 		return
-	sandbox.call(&"apply_viewport_size", viewport_size)
+	# The physical Window target changes per marker while production Controls lay
+	# out in the project's fixed canvas_items logical viewport.
+	sandbox.call(&"apply_viewport_size", LOGICAL_SIZE)
 	_assert(sandbox.open(), "%s production sandbox opens" % label)
 	await _frames(3)
 	var overlay := sandbox.get_node("Overlay") as Control
@@ -70,7 +90,7 @@ func _exercise_resolution(viewport_size: Vector2i) -> void:
 	var inspector_scroll := sandbox.get_node("Overlay/Frame/Layout/Body/InspectorPanel/InspectorScroll") as ScrollContainer
 	var inspector := sandbox.get_node("Overlay/Frame/Layout/Body/InspectorPanel/InspectorScroll/Inspector") as Label
 	var close_button := sandbox.get_node("Overlay/Frame/Layout/Header/Close") as Button
-	var viewport_rect := root.get_visible_rect()
+	var viewport_rect := Rect2(Vector2.ZERO, Vector2(LOGICAL_SIZE)) if headless_viewport != null else geometry_viewport.get_visible_rect()
 	var frame_rect := frame.get_global_rect()
 	_assert(_rect_near(overlay.get_global_rect(), viewport_rect), "%s overlay covers the visible viewport" % label)
 	_assert(_contained(viewport_rect, frame_rect), "%s frame stays inside the visible viewport" % label)
@@ -103,13 +123,18 @@ func _exercise_resolution(viewport_size: Vector2i) -> void:
 	_assert(_closed_focus_graph(sandbox), "%s focus traversal covers every slot/action/Inspector/Close and closes inside the modal" % label)
 	_assert(String(sandbox.call(&"integrity_error")).is_empty(), "%s usable sandbox reports no integrity error" % label)
 	if _failures.size() == failures_before:
-		print("ITEM_SANDBOX_RESOLUTION_PASS size=%dx%d slots=105" % [viewport_size.x, viewport_size.y])
+		_verified_resolution_sizes.append(viewport_size)
 	sandbox.free()
+	if headless_viewport != null:
+		headless_viewport.free()
 	await process_frame
 
 
 func _exercise_controller_and_mouse() -> void:
 	root.size = TARGET_SIZES[0]
+	await _frames(4)
+	_assert(root.size == TARGET_SIZES[0], "controller fixture reaches the exact 1920x1080 physical Window size")
+	_assert(Vector2i(root.get_visible_rect().size) == LOGICAL_SIZE, "controller fixture retains the 1920x1080 logical canvas")
 	var sandbox := SANDBOX_SCENE.instantiate() as DeveloperItemSandbox
 	root.add_child(sandbox)
 	await _frames(3)
@@ -117,7 +142,7 @@ func _exercise_controller_and_mouse() -> void:
 		_assert(false, "controller fixture requires deterministic viewport layout")
 		sandbox.free()
 		return
-	sandbox.call(&"apply_viewport_size", TARGET_SIZES[0])
+	sandbox.call(&"apply_viewport_size", LOGICAL_SIZE)
 	_assert(sandbox.open(), "controller fixture opens production sandbox")
 	await _frames(3)
 	var inventory := sandbox.get_node("Overlay/Frame/Layout/Body/InventoryPanel/InventorySlots") as GridContainer
@@ -288,6 +313,22 @@ func _rect_near(first: Rect2, second: Rect2) -> bool:
 func _assert(condition: bool, message: String) -> void:
 	if not condition:
 		_failures.append(message)
+
+
+func _finish() -> void:
+	_cleanup()
+	_assert(not DirAccess.dir_exists_absolute(ProjectSettings.globalize_path(SANDBOX_ROOT)), "cleanup removes every Task 10 root before summary")
+	if _failures.is_empty():
+		for viewport_size: Vector2i in _verified_resolution_sizes:
+			print("ITEM_SANDBOX_RESOLUTION_PASS size=%dx%d slots=105" % [viewport_size.x, viewport_size.y])
+		print("ITEM_SANDBOX_CONTROLLER_PASS")
+		print("ITEM_SANDBOX_UI_SUMMARY: PASS")
+		quit(0)
+		return
+	for failure: String in _failures:
+		push_error("ITEM_SANDBOX_UI_FAILURE: %s" % failure)
+	print("ITEM_SANDBOX_UI_SUMMARY: FAIL (%d failures)" % _failures.size())
+	quit(1)
 
 
 func _cleanup() -> void:
