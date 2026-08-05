@@ -4,6 +4,7 @@ extends RefCounted
 enum PrologueState { NOT_STARTED, IN_PROGRESS, COMPLETED }
 
 const SCHEMA_VERSION := 2
+const MAX_STASH_TABS := 100
 
 var schema_version := SCHEMA_VERSION
 var profile_id := ""

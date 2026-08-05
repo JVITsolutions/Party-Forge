@@ -27,6 +27,7 @@ func run() -> Array[String]:
 	_test_successful_schema_migration_promotes_and_retains_source(failures)
 	_test_schema_migration_promoted_current_verification_restores_generations(failures)
 	_test_profile_load_rejects_traversal_and_mismatched_document(failures)
+	_test_profile_load_rejects_oversized_current_stash(failures)
 	_test_recovered_schema_one_backup_migrates_with_artifact(failures)
 	_test_recovered_schema_one_backup_failed_promotion_remains_recoverable(failures)
 	_test_malformed_schema_field_recovers_backup(failures)
@@ -317,6 +318,27 @@ func _test_profile_load_rejects_traversal_and_mismatched_document(failures: Arra
 	TestAssertions.truthy(not mismatch.ok() and mismatch.profile == null and mismatch.error.contains("profile id mismatch"), "loaded profile id must match the requested id", failures)
 	TestAssertions.equal(FileAccess.get_file_as_bytes(path), before_bytes, "mismatched profile rejection preserves primary bytes", failures)
 	TestAssertions.truthy(not FileAccess.file_exists("%s.bak" % path), "mismatched profile rejection creates no backup", failures)
+
+func _test_profile_load_rejects_oversized_current_stash(failures: Array[String]) -> void:
+	var profile_id := "profile-stashcap2"
+	var store := ProfileStore.new()
+	var path := store.profile_path(profile_id, _root)
+	var document := ProfileState.new_profile(profile_id, "Stash Cap", 1000).to_dictionary()
+	var tabs: Array[Dictionary] = []
+	for index: int in 101:
+		tabs.append(ItemSlotContainer.create(
+			StringName("stash-tab-%03d" % index),
+			ItemSlotContainer.PROFILE_STASH_TAB,
+			profile_id,
+			ItemSlotContainer.STASH_CAPACITY
+		).to_dictionary())
+	document["stash_tabs"] = tabs
+	_write_text(path, JSON.stringify(document, "\t", false))
+	var before_bytes := FileAccess.get_file_as_bytes(path)
+	var loaded := store.load_profile(profile_id, _root)
+	TestAssertions.truthy(not loaded.ok() and loaded.profile == null and loaded.error.contains("field=stash_tabs") and loaded.error.contains("maximum 100"), "profile load rejects 101 valid unique stash tabs", failures)
+	TestAssertions.equal(FileAccess.get_file_as_bytes(path), before_bytes, "oversized stash load rejection preserves exact primary bytes", failures)
+	TestAssertions.truthy(not FileAccess.file_exists("%s.bak" % path), "oversized stash load rejection creates no backup generation", failures)
 
 func _test_recovered_schema_one_backup_migrates_with_artifact(failures: Array[String]) -> void:
 	var profile_id := "profile-migrate06"

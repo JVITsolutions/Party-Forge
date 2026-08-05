@@ -8,6 +8,7 @@ func run() -> Array[String]:
 	_test_current_field_types_fail_closed(failures)
 	_test_exact_historical_and_current_fields_fail_closed(failures)
 	_test_current_item_storage_is_strict_and_defensive(failures)
+	_test_current_stash_tab_cap(failures)
 	_test_json_safe_integer_boundaries(failures)
 	_test_transaction_record_shapes_fail_closed(failures)
 	return failures
@@ -169,6 +170,29 @@ func _test_current_item_storage_is_strict_and_defensive(failures: Array[String])
 		var invalid := ProfileState.new_profile("profile-storage1", "Storage", 1000).to_dictionary()
 		invalid["next_item_sequence"] = invalid_sequence
 		TestAssertions.truthy(not ProfileCodec.decode_document(invalid).ok(), "invalid item sequence %s is rejected" % str(invalid_sequence), failures)
+
+func _test_current_stash_tab_cap(failures: Array[String]) -> void:
+	TestAssertions.equal(ProfileState.MAX_STASH_TABS, 100, "profile schema exposes the shared 100-tab invariant", failures)
+	var oversized := ProfileState.new_profile("profile-stashcap1", "Stash Cap", 1000).to_dictionary()
+	var tabs: Array[Dictionary] = []
+	for index: int in 101:
+		tabs.append(ItemSlotContainer.create(
+			StringName("stash-tab-%03d" % index),
+			ItemSlotContainer.PROFILE_STASH_TAB,
+			"profile-stashcap1",
+			ItemSlotContainer.STASH_CAPACITY
+		).to_dictionary())
+	var at_cap := oversized.duplicate(true)
+	at_cap["stash_tabs"] = tabs.slice(0, ProfileState.MAX_STASH_TABS)
+	TestAssertions.equal(ProfileCodec.validate_current_document(at_cap), "", "current schema preserves exactly 100 valid unique stash tabs", failures)
+	TestAssertions.truthy(ProfileCodec.decode_document(at_cap).ok(), "codec loads exactly 100 valid unique stash tabs", failures)
+	oversized["stash_tabs"] = tabs
+	var current_error := ProfileCodec.validate_current_document(oversized)
+	var loadable_error := ProfileCodec.validate_loadable_document(oversized)
+	var decoded := ProfileCodec.decode_document(oversized)
+	TestAssertions.truthy(current_error.contains("field=stash_tabs") and current_error.contains("maximum 100"), "current schema rejects 101 valid unique stash tabs", failures)
+	TestAssertions.truthy(loadable_error.contains("field=stash_tabs") and loadable_error.contains("maximum 100"), "load validator rejects 101 valid unique stash tabs", failures)
+	TestAssertions.truthy(not decoded.ok() and decoded.profile == null and decoded.error.contains("field=stash_tabs"), "codec exposes no profile for 101 otherwise-valid stash tabs", failures)
 
 func _test_json_safe_integer_boundaries(failures: Array[String]) -> void:
 	const SAFE_MAX := 9007199254740991

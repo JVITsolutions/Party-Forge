@@ -137,6 +137,21 @@ func _test_failures_are_atomic(tree: PassiveTreeDefinition, failures: Array[Stri
 	malformed_existing.stash_tabs = [_tab_document("profile-other000", "stash-tab-000")]
 	_assert_failure_atomic(malformed_existing, tree, valid_resolver, "stash_tabs", "invalid pre-existing ownership", failures)
 
+	var oversized_existing := _profile(tree.id, ["city-heart"])
+	for index: int in 101:
+		oversized_existing.stash_tabs.append(_tab_document(PROFILE_ID, "stash-tab-%03d" % index))
+	var at_cap := _profile(tree.id, ["city-heart"])
+	at_cap.stash_tabs = oversized_existing.stash_tabs.slice(0, ProfileState.MAX_STASH_TABS)
+	var at_cap_before := JSON.stringify(at_cap.to_dictionary())
+	TestAssertions.equal(reconciler.reconcile(at_cap, tree, valid_resolver), "", "exactly 100 existing stash tabs still reconcile", failures)
+	TestAssertions.equal(JSON.stringify(at_cap.to_dictionary()), at_cap_before, "100-tab reconciliation preserves exact placement and bytes", failures)
+	var oversized_before := oversized_existing.to_dictionary()
+	var oversized_bytes := JSON.stringify(oversized_before)
+	var oversized_error := reconciler.reconcile(oversized_existing, tree, valid_resolver)
+	TestAssertions.truthy(oversized_error.begins_with("PARTY_FORGE_PROFILE_STORAGE_ERROR field=stash_tabs") and oversized_error.contains("maximum 100"), "101 valid existing stash tabs fail at the reconciliation boundary", failures)
+	TestAssertions.equal(oversized_existing.to_dictionary(), oversized_before, "oversized existing stash rejection preserves original profile state", failures)
+	TestAssertions.equal(JSON.stringify(oversized_existing.to_dictionary()), oversized_bytes, "oversized existing stash rejection preserves exact serialized bytes", failures)
+
 func _assert_failure_atomic(
 	profile: ProfileState,
 	tree: PassiveTreeDefinition,

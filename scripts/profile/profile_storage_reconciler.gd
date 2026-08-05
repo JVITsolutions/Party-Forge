@@ -1,8 +1,6 @@
 class_name ProfileStorageReconciler
 extends RefCounted
 
-const MAX_PROFILE_STASH_TABS := 100
-
 func reconcile(
 	profile: ProfileState,
 	tree: PassiveTreeDefinition,
@@ -14,6 +12,8 @@ func reconcile(
 		return _error("tree", "must not be null")
 	if resolver == null:
 		return _error("resolver", "must not be null")
+	if profile.stash_tabs.size() > ProfileState.MAX_STASH_TABS:
+		return _error("stash_tabs", "existing tab count exceeds maximum %d" % ProfileState.MAX_STASH_TABS)
 
 	var saved_allocations: Variant = profile.tree_allocations.get(String(tree.id), [])
 	if not saved_allocations is Array:
@@ -44,8 +44,8 @@ func reconcile(
 		if not _is_json_int(slots_value) or int(slots_value) != ItemSlotContainer.STASH_CAPACITY:
 			return _error("stash_tabs", "profile contract slotsPerTab must equal 100")
 		var count := int(count_value)
-		if count > MAX_PROFILE_STASH_TABS - resolved_tab_count:
-			return _error("stash_tabs", "resolved tab count exceeds maximum %d" % MAX_PROFILE_STASH_TABS)
+		if count > ProfileState.MAX_STASH_TABS - resolved_tab_count:
+			return _error("stash_tabs", "resolved tab count exceeds maximum %d" % ProfileState.MAX_STASH_TABS)
 		resolved_tab_count += count
 
 	var proposed_tabs: Array[Dictionary] = profile.stash_tabs.duplicate(true)

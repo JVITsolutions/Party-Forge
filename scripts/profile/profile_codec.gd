@@ -202,6 +202,8 @@ static func _validate_current_storage(data: Dictionary) -> String:
 	if not data["item_records"] is Dictionary:
 		return _field_error("item_records", "must be a dictionary")
 	var stash_documents := data["stash_tabs"] as Array
+	if stash_documents.size() > ProfileState.MAX_STASH_TABS:
+		return _field_error("stash_tabs", "count exceeds maximum %d" % ProfileState.MAX_STASH_TABS)
 	for index: int in stash_documents.size():
 		var document: Variant = stash_documents[index]
 		if not document is Dictionary:
