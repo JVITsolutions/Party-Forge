@@ -117,6 +117,58 @@ func to_dictionary() -> Dictionary:
 func integrity_error() -> String:
 	return _integrity_error
 
+func scan_integrity() -> String:
+	if _state == null:
+		return _fail("PARTY_FORGE_DEVELOPER_ITEM_SANDBOX_ERROR field=state reason=must reset or reload before scanning")
+	var error := _store.validate_document(_store.document_for(_state, _metadata, _journal))
+	if error.is_empty():
+		error = _store.scan_persisted_document()
+	_integrity_error = error
+	return error
+
+func transfer_slots(
+	source_container_id: StringName,
+	source_slot: int,
+	destination_container_id: StringName,
+	destination_slot: int
+) -> String:
+	if _state == null:
+		return _fail("PARTY_FORGE_DEVELOPER_ITEM_SANDBOX_ERROR field=state reason=must reset or reload before moving")
+	var source := _state.container(source_container_id)
+	var destination := _state.container(destination_container_id)
+	if source == null or destination == null:
+		return _fail("PARTY_FORGE_DEVELOPER_ITEM_SANDBOX_ERROR field=container reason=unknown source or destination container")
+	if source_slot < 0 or source_slot >= source.capacity or destination_slot < 0 or destination_slot >= destination.capacity:
+		return _fail("PARTY_FORGE_DEVELOPER_ITEM_SANDBOX_ERROR field=slot reason=source or destination is out of bounds")
+	if source_container_id == destination_container_id and source_slot == destination_slot:
+		return _fail("PARTY_FORGE_DEVELOPER_ITEM_SANDBOX_ERROR field=destination reason=source and destination must differ")
+	var item_id := source.item_id_at(source_slot)
+	if item_id.is_empty():
+		return _fail("PARTY_FORGE_DEVELOPER_ITEM_SANDBOX_ERROR field=source reason=source slot is empty")
+	var sequence := int(_metadata.get("next_transaction_sequence", 0))
+	var transaction_id := "sandbox-move-%016d" % sequence
+	var request := ItemTransactionRequest.move(
+		transaction_id,
+		OWNER_ID,
+		source_container_id,
+		source_slot,
+		item_id,
+		destination_container_id,
+		destination_slot
+	) if destination.item_id_at(destination_slot).is_empty() else ItemTransactionRequest.swap(
+		transaction_id,
+		OWNER_ID,
+		source_container_id,
+		source_slot,
+		item_id,
+		destination_container_id,
+		destination_slot
+	)
+	var result := _apply_transaction(request)
+	if result.code == ItemTransactionResult.Code.OK:
+		return ""
+	return _integrity_error if not _integrity_error.is_empty() else "PARTY_FORGE_DEVELOPER_ITEM_SANDBOX_ERROR field=transaction reason=code %s" % _code_name(result.code)
+
 func move_to_first_empty_inventory(item_id: String) -> String:
 	return _move_to_first_empty(item_id, INVENTORY_ID)
 

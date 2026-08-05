@@ -2,6 +2,7 @@ class_name AdditionalSettingsPage
 extends MarginContainer
 
 signal city_tree_requested(developer_preview: bool)
+signal item_sandbox_requested
 
 const INACTIVE_EXPLANATION := "Developer options are retained but inactive in Player Simulation. Select Developer Mode to use them in the next run."
 
@@ -23,6 +24,8 @@ func _ready() -> void:
 		_level_up_card_count().value_changed.connect(_on_level_up_card_count_changed)
 	if not _open_city_tree().pressed.is_connected(_on_open_city_tree_pressed):
 		_open_city_tree().pressed.connect(_on_open_city_tree_pressed)
+	if not _open_item_sandbox().pressed.is_connected(_on_open_item_sandbox_pressed):
+		_open_item_sandbox().pressed.connect(_on_open_item_sandbox_pressed)
 	_refresh_value_labels()
 	_refresh_enabled_state()
 
@@ -91,6 +94,11 @@ func _on_open_city_tree_pressed() -> void:
 		city_tree_requested.emit(true)
 
 
+func _on_open_item_sandbox_pressed() -> void:
+	if _mode().selected == PartyForgeSettings.Mode.DEVELOPER_MODE and not _open_item_sandbox().disabled:
+		item_sandbox_requested.emit()
+
+
 func _refresh_enabled_state() -> void:
 	var enabled := _mode().selected == PartyForgeSettings.Mode.DEVELOPER_MODE
 	_unlock_all().disabled = not enabled
@@ -100,8 +108,9 @@ func _refresh_enabled_state() -> void:
 	_experience_multiplier().editable = enabled
 	_level_up_card_count().editable = enabled
 	_open_city_tree().disabled = not enabled
+	_open_item_sandbox().disabled = not enabled
 	_inactive_status().visible = not enabled
-	for control: Control in [_unlock_all(), _god_mode(), _party_capacity(), _enemy_density(), _experience_multiplier(), _level_up_card_count(), _open_city_tree()]:
+	for control: Control in [_unlock_all(), _god_mode(), _party_capacity(), _enemy_density(), _experience_multiplier(), _level_up_card_count(), _open_city_tree(), _open_item_sandbox()]:
 		control.tooltip_text = "" if enabled else INACTIVE_EXPLANATION
 	_configure_focus_order(enabled)
 
@@ -165,10 +174,14 @@ func _open_city_tree() -> Button:
 	return get_node("Layout/OpenCityPassiveTree") as Button
 
 
+func _open_item_sandbox() -> Button:
+	return get_node("Layout/OpenDeveloperItemSandbox") as Button
+
+
 func _configure_focus_order(developer_mode_enabled: bool) -> void:
 	var order: Array[Control] = [_mode()]
 	if developer_mode_enabled:
-		order.append_array([_unlock_all(), _god_mode(), _party_capacity(), _enemy_density(), _experience_multiplier(), _level_up_card_count(), _open_city_tree()])
+		order.append_array([_unlock_all(), _god_mode(), _party_capacity(), _enemy_density(), _experience_multiplier(), _level_up_card_count(), _open_city_tree(), _open_item_sandbox()])
 	else:
 		order.append(_inactive_status())
 	order.append_array([

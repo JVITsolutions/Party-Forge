@@ -10,6 +10,7 @@ const REQUIRED_PATHS: PackedStringArray = [
     "res://scripts/ui/run_pause_menu.gd",
     "res://scripts/ui/developer_mode_badge.gd",
     "res://scripts/ui/main_menu/main_menu_screen.gd",
+    "res://scripts/ui/developer_item_sandbox.gd",
     "res://scenes/ui/hud.tscn",
     "res://scenes/ui/level_up_panel.tscn",
     "res://scenes/ui/run_result_panel.tscn",
@@ -18,6 +19,7 @@ const REQUIRED_PATHS: PackedStringArray = [
     "res://scenes/ui/run_pause_menu.tscn",
     "res://scenes/ui/developer_mode_badge.tscn",
     "res://scenes/ui/main_menu/main_menu_screen.tscn",
+    "res://scenes/ui/developer_item_sandbox.tscn",
     "res://scenes/game/main.tscn",
     "res://scenes/arena/arena.tscn",
     "res://scenes/characters/leader.tscn",
@@ -34,7 +36,7 @@ const REQUIRED_MAIN_NODES: PackedStringArray = [
     "GameRun", "PartyManager", "ExperienceSystem", "SpawnDirector",
     "PartyActorSpawner", "Arena", "Actors", "Enemies", "Effects", "HUD",
     "DeveloperModeBadge", "CharacterLedger", "RunPauseMenu",
-    "MainMenuScreen", "SettingsScreen", "PassiveTreeScreen",
+    "MainMenuScreen", "SettingsScreen", "PassiveTreeScreen", "DeveloperItemSandbox",
 ]
 
 var _profile_root := ""
@@ -410,6 +412,8 @@ func _test_main_scene_graph(failures: Array[String]) -> void:
     TestAssertions.truthy(main_menu != null and main_menu.layer == 5, "main composes the menu at layer 5", failures)
     TestAssertions.truthy((main.get_node("SettingsScreen") as CanvasLayer).layer == 10, "Settings remains at layer 10", failures)
     TestAssertions.truthy((main.get_node("PassiveTreeScreen") as CanvasLayer).layer == 12, "passive tree remains at layer 12", failures)
+    TestAssertions.truthy((main.get_node("DeveloperItemSandbox") as CanvasLayer).layer == 14, "developer item sandbox owns layer 14", failures)
+    TestAssertions.equal((main.get_node("DeveloperItemSandbox") as CanvasLayer).process_mode, Node.PROCESS_MODE_ALWAYS, "developer item sandbox always processes", failures)
     TestAssertions.truthy(class_selection != null and class_selection.visible, "scene retains reusable class selection before composition boot", failures)
     var ledger := main.get_node_or_null("CharacterLedger") as CanvasLayer
     var pause_menu := main.get_node_or_null("RunPauseMenu") as CanvasLayer

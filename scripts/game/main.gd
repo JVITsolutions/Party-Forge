@@ -21,6 +21,7 @@ const CITY_DEVELOPER_REQUIRED_STATUS := "Save Developer Mode before opening the 
 const DEVELOPER_QUICK_START_UNAVAILABLE_STATUS := "Developer Quick Start is temporarily unavailable."
 const DEVELOPER_QUICK_START_PROFILE_REQUIRED_STATUS := "Choose a profile before using Developer Quick Start."
 const DEVELOPER_QUICK_START_MODE_REQUIRED_STATUS := "Save Developer Mode before using Developer Quick Start."
+const ITEM_SANDBOX_DEVELOPER_REQUIRED_STATUS := "Save Developer Mode before opening the Developer Item Sandbox."
 
 var party_stats: Dictionary = {}
 var trait_upgrade_ranks: Dictionary = {}
@@ -333,6 +334,11 @@ func _wire_static_ui() -> void:
 		settings_screen.settings_applied.connect(_on_settings_applied)
 	if not settings_screen.city_tree_requested.is_connected(_on_settings_city_tree_requested):
 		settings_screen.city_tree_requested.connect(_on_settings_city_tree_requested)
+	if not settings_screen.item_sandbox_requested.is_connected(_open_developer_item_sandbox):
+		settings_screen.item_sandbox_requested.connect(_open_developer_item_sandbox)
+	var item_sandbox := get_node("DeveloperItemSandbox") as DeveloperItemSandbox
+	if not item_sandbox.closed.is_connected(_on_developer_item_sandbox_closed):
+		item_sandbox.closed.connect(_on_developer_item_sandbox_closed)
 	var passive_screen := get_node("PassiveTreeScreen") as PassiveTreeScreen
 	if not passive_screen.tree_closed.is_connected(_on_city_passive_tree_closed):
 		passive_screen.tree_closed.connect(_on_city_passive_tree_closed)
@@ -470,6 +476,7 @@ func _present_front_end(preferred_focus: Control = null) -> void:
 	run_started = false
 	(get_node("HUD/Margin") as Control).visible = false
 	(get_node("HUD/ClassSelection") as ClassSelectionPanel).close()
+	(get_node("DeveloperItemSandbox") as DeveloperItemSandbox).close()
 	(get_node("SettingsScreen") as SettingsScreen).close()
 	_refresh_main_menu_projection()
 	var menu := get_node("MainMenuScreen") as MainMenuScreen
@@ -532,6 +539,29 @@ func _load_passive_tree_runtime() -> void:
 func _on_settings_city_tree_requested(developer_preview: bool) -> void:
 	var button := get_node("SettingsScreen/Overlay/Frame/Layout/Tabs/Additional Settings/Layout/OpenCityPassiveTree") as Control
 	_open_city_passive_tree(developer_preview, CITY_ORIGIN_ADDITIONAL_SETTINGS, button)
+
+
+func _open_developer_item_sandbox() -> bool:
+	var modal := get_node("DeveloperItemSandbox") as DeveloperItemSandbox
+	var settings := get_node("SettingsScreen") as SettingsScreen
+	var button := settings.get_node("Overlay/Frame/Layout/Tabs/Additional Settings/Layout/OpenDeveloperItemSandbox") as Control
+	var authoritative := settings_store.load_settings(settings_path) if settings_store != null else PartyForgeSettings.new()
+	if authoritative.mode != PartyForgeSettings.Mode.DEVELOPER_MODE:
+		if modal.is_open():
+			modal.close()
+		settings.open_additional(button)
+		settings.show_route_status(ITEM_SANDBOX_DEVELOPER_REQUIRED_STATUS, button)
+		return false
+	saved_settings = authoritative.copy()
+	if settings.is_open():
+		settings.close()
+	return modal.open(button)
+
+
+func _on_developer_item_sandbox_closed() -> void:
+	var settings := get_node("SettingsScreen") as SettingsScreen
+	var button := settings.get_node("Overlay/Frame/Layout/Tabs/Additional Settings/Layout/OpenDeveloperItemSandbox") as Control
+	settings.open_additional(button)
 
 
 func _open_city_passive_tree(developer_preview: bool, origin: StringName, return_focus: Control) -> bool:

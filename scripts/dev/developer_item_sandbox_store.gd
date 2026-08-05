@@ -33,6 +33,17 @@ func save_document(document: Dictionary) -> String:
 func load_document() -> JsonDocumentResult:
 	return _documents.load_document(DOCUMENT_PATH, Callable(self, "validate_document"))
 
+func scan_persisted_document() -> String:
+	if not FileAccess.file_exists(DOCUMENT_PATH):
+		return _error("document", "persisted sandbox document is missing")
+	var parser := JSON.new()
+	if parser.parse(FileAccess.get_file_as_string(DOCUMENT_PATH)) != OK:
+		return _error("document", "persisted sandbox document must be a valid JSON dictionary")
+	var parsed: Variant = parser.data
+	if not parsed is Dictionary:
+		return _error("document", "persisted sandbox document must be a valid JSON dictionary")
+	return validate_document(parsed as Dictionary)
+
 func validate_document(document: Dictionary) -> String:
 	return String(decode_document(document).get("error", ""))
 
@@ -211,7 +222,13 @@ func _decode_journal(
 		)
 		if not fixture_registry_error.is_empty():
 			return {"error": fixture_registry_error}
-		var transition := _reconstruct_move_request(previous_state, decoded_state.state, transaction_id, path)
+		var transition := _reconstruct_transaction_request(
+			previous_state,
+			decoded_state.state,
+			transaction_id,
+			String(entry["fingerprint"]),
+			path
+		)
 		var transition_error := String(transition.get("error", ""))
 		if not transition_error.is_empty():
 			return {"error": transition_error}
@@ -281,49 +298,60 @@ func _validate_canonical_reset(
 		return _error("transaction_journal", "empty journal requires the exact canonical reset state")
 	return ""
 
-func _reconstruct_move_request(
+func _reconstruct_transaction_request(
 	previous_state: ItemOwnershipState,
 	next_state: ItemOwnershipState,
 	transaction_id: String,
+	fingerprint: String,
 	path: String
 ) -> Dictionary:
 	var changed_ids: Array[String] = []
 	for instance_id: String in previous_state.registry().ids():
 		if _item_location(previous_state, instance_id) != _item_location(next_state, instance_id):
 			changed_ids.append(instance_id)
-	if changed_ids.size() != 1:
-		return _failure(path, "must move exactly one fixture item")
-	var instance_id := changed_ids[0]
-	var source := _item_location(previous_state, instance_id)
-	var destination := _item_location(next_state, instance_id)
-	var source_id := StringName(String(source.get("container_id", "")))
-	var destination_id := StringName(String(destination.get("container_id", "")))
-	if not _is_opposite_developer_container_pair(source_id, destination_id):
-		return _failure(path, "must move between developer stash and inventory")
-	var destination_container := previous_state.container(destination_id)
-	if destination_container == null or destination_container.first_empty_slot() != int(destination.get("slot", -1)):
-		return _failure(path, "destination must be the preceding state's first empty slot")
-	var request := ItemTransactionRequest.move(
-		transaction_id,
-		OWNER_ID,
-		source_id,
-		int(source.get("slot", -1)),
-		instance_id,
-		destination_id,
-		int(destination.get("slot", -1))
-	)
-	var applied := ItemContainerTransactionService.new().apply(
-		previous_state,
-		request,
-		ItemTransactionJournal.new(),
-		GameCatalog.EQUIPMENT_CATALOG,
-		GameCatalog.ITEM_FOUNDATION_CATALOG
-	)
-	if applied.code != ItemTransactionResult.Code.OK or applied.next_state == null:
-		return _failure(path, "canonical move must succeed through Task 4")
-	if not _states_match(applied.next_state, next_state):
-		return _failure(path, "state must equal the exact canonical Task 4 move result")
-	return {"request": request, "error": ""}
+	if changed_ids.size() not in [1, 2]:
+		return _failure(path, "must move one fixture item or swap exactly two fixture items")
+	for instance_id: String in changed_ids:
+		var source := _item_location(previous_state, instance_id)
+		var destination := _item_location(next_state, instance_id)
+		var source_id := StringName(String(source.get("container_id", "")))
+		var destination_id := StringName(String(destination.get("container_id", "")))
+		if not _is_developer_container(source_id) or not _is_developer_container(destination_id):
+			continue
+		var destination_container := previous_state.container(destination_id)
+		if destination_container == null:
+			continue
+		var destination_slot := int(destination.get("slot", -1))
+		var destination_item_id := destination_container.item_id_at(destination_slot)
+		var request := ItemTransactionRequest.move(
+			transaction_id,
+			OWNER_ID,
+			source_id,
+			int(source.get("slot", -1)),
+			instance_id,
+			destination_id,
+			destination_slot
+		) if destination_item_id.is_empty() else ItemTransactionRequest.swap(
+			transaction_id,
+			OWNER_ID,
+			source_id,
+			int(source.get("slot", -1)),
+			instance_id,
+			destination_id,
+			destination_slot
+		)
+		if request.fingerprint() != fingerprint:
+			continue
+		var applied := ItemContainerTransactionService.new().apply(
+			previous_state,
+			request,
+			ItemTransactionJournal.new(),
+			GameCatalog.EQUIPMENT_CATALOG,
+			GameCatalog.ITEM_FOUNDATION_CATALOG
+		)
+		if applied.code == ItemTransactionResult.Code.OK and applied.next_state != null and _states_match(applied.next_state, next_state):
+			return {"request": request, "error": ""}
+	return _failure(path, "state and fingerprint must equal one exact canonical Task 4 move or swap")
 
 func _item_location(state: ItemOwnershipState, instance_id: String) -> Dictionary:
 	for container: ItemSlotContainer in state.containers():
@@ -332,11 +360,8 @@ func _item_location(state: ItemOwnershipState, instance_id: String) -> Dictionar
 				return {"container_id": String(container.container_id), "slot": slot}
 	return {}
 
-func _is_opposite_developer_container_pair(source_id: StringName, destination_id: StringName) -> bool:
-	return (
-		(source_id == &"developer-inventory" and destination_id == &"developer-stash-000")
-		or (source_id == &"developer-stash-000" and destination_id == &"developer-inventory")
-	)
+func _is_developer_container(container_id: StringName) -> bool:
+	return container_id in [&"developer-inventory", &"developer-stash-000"]
 
 func _states_match(first: ItemOwnershipState, second: ItemOwnershipState) -> bool:
 	return JSON.stringify(first.to_dictionary()) == JSON.stringify(second.to_dictionary())

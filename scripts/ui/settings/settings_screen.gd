@@ -3,6 +3,7 @@ extends CanvasLayer
 
 signal settings_applied(settings: PartyForgeSettings)
 signal city_tree_requested(developer_preview: bool)
+signal item_sandbox_requested
 
 var _store: PartyForgeSettingsStore
 var _current_settings: PartyForgeSettings = PartyForgeSettings.new()
@@ -244,6 +245,8 @@ func _connect_additional_actions() -> void:
 	var page := _additional_page()
 	if not page.city_tree_requested.is_connected(_on_city_tree_requested):
 		page.city_tree_requested.connect(_on_city_tree_requested)
+	if not page.item_sandbox_requested.is_connected(_on_item_sandbox_requested):
+		page.item_sandbox_requested.connect(_on_item_sandbox_requested)
 	var apply := page.get_node("Layout/ApplyAndReturn") as Button
 	var cancel := page.get_node("Layout/Cancel") as Button
 	var reset := page.get_node("Layout/ResetDeveloperOptions") as Button
@@ -263,6 +266,14 @@ func _on_city_tree_requested(developer_preview: bool) -> void:
 	_return_focus = null
 	visible = false
 	city_tree_requested.emit(true)
+
+
+func _on_item_sandbox_requested() -> void:
+	_child_return_focus = _return_focus
+	_child_resume_pending = true
+	_return_focus = null
+	visible = false
+	item_sandbox_requested.emit()
 
 
 func _clear_child_resume_state() -> void:

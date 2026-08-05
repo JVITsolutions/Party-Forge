@@ -31,6 +31,7 @@ func run() -> Array[String]:
 	_assert_deterministic_fixture(failures)
 	_assert_explicit_affixes_survive_reload(failures)
 	_assert_movement_replay_collision_and_reset(failures)
+	_assert_public_slot_transactions_and_integrity(failures)
 	_assert_forged_journal_documents_fail_atomically(failures)
 	_assert_strict_reload_is_failure_atomic(failures)
 	_assert_atomic_save_failure_and_profile_isolation(failures)
@@ -239,6 +240,48 @@ func _assert_movement_replay_collision_and_reset(failures: Array[String]) -> voi
 	TestAssertions.equal(reloaded.to_dictionary(), canonical, "reset after mutations reproduces canonical document", failures)
 	TestAssertions.equal(JSON.stringify(reloaded.to_dictionary()).sha256_text(), JSON.stringify(canonical).sha256_text(), "reset after mutations reproduces canonical hash", failures)
 
+func _assert_public_slot_transactions_and_integrity(failures: Array[String]) -> void:
+	_cleanup_sandbox_files()
+	var state: Variant = _state_script.new()
+	TestAssertions.equal(state.reset(), "", "public slot transaction fixture resets", failures)
+	var has_transfer: bool = state.has_method(&"transfer_slots")
+	var has_scan: bool = state.has_method(&"scan_integrity")
+	TestAssertions.truthy(has_transfer, "sandbox exposes a public slot transaction method", failures)
+	TestAssertions.truthy(has_scan, "sandbox exposes a public read-only integrity scan", failures)
+	if not has_transfer or not has_scan:
+		return
+	var first_item_id: String = state.stash().item_id_at(0)
+	var second_item_id: String = state.stash().item_id_at(1)
+	TestAssertions.equal(
+		state.call(&"transfer_slots", STASH_ID, 0, INVENTORY_ID, 3),
+		"",
+		"public slot move accepts an explicit empty destination",
+		failures
+	)
+	TestAssertions.equal(state.inventory().item_id_at(3), first_item_id, "public slot move preserves the exact destination", failures)
+	TestAssertions.equal(state.stash().item_id_at(0), "", "public slot move clears the exact source", failures)
+	TestAssertions.equal(
+		state.call(&"transfer_slots", INVENTORY_ID, 3, STASH_ID, 1),
+		"",
+		"public slot transaction swaps with an occupied destination",
+		failures
+	)
+	TestAssertions.equal(state.inventory().item_id_at(3), second_item_id, "public swap returns the destination item to the source slot", failures)
+	TestAssertions.equal(state.stash().item_id_at(1), first_item_id, "public swap places the source item in the destination slot", failures)
+	var valid_document: Dictionary = state.to_dictionary()
+	var valid_bytes: PackedByteArray = FileAccess.get_file_as_bytes(DOCUMENT_PATH)
+	TestAssertions.equal((_store_script.new()).validate_document(valid_document), "", "strict store accepts exact public move and swap journal entries", failures)
+	TestAssertions.equal(state.call(&"scan_integrity"), "", "read-only integrity scan accepts the usable state", failures)
+	TestAssertions.equal(state.to_dictionary(), valid_document, "integrity scan preserves in-memory state", failures)
+	TestAssertions.equal(FileAccess.get_file_as_bytes(DOCUMENT_PATH), valid_bytes, "integrity scan preserves persisted bytes", failures)
+	var invalid_error: String = state.call(&"transfer_slots", STASH_ID, 99, INVENTORY_ID, 0)
+	TestAssertions.truthy(not invalid_error.is_empty(), "invalid public slot transaction reports an exact domain error", failures)
+	TestAssertions.equal(state.to_dictionary(), valid_document, "failed public slot transaction preserves usable state", failures)
+	TestAssertions.equal(FileAccess.get_file_as_bytes(DOCUMENT_PATH), valid_bytes, "failed public slot transaction preserves persisted bytes", failures)
+	var reloaded: Variant = _state_script.new()
+	TestAssertions.equal(reloaded.reload(), "", "public move and swap journal reloads", failures)
+	TestAssertions.equal(reloaded.to_dictionary(), valid_document, "reload preserves exact public move and swap placement", failures)
+
 func _assert_strict_reload_is_failure_atomic(failures: Array[String]) -> void:
 	var store: Variant = _store_script.new()
 	var unknown := _minimal_unknown_document()
@@ -341,10 +384,13 @@ func _assert_forged_journal_documents_fail_atomically(failures: Array[String]) -
 		"code": ItemTransactionResult.Code.OK,
 		"state": swap_state.duplicate(true),
 	})
+	TestAssertions.equal(store.validate_document(non_first_empty), "", "exact non-first-empty move is a valid selected-slot transition", failures)
+	TestAssertions.equal(store.validate_document(swap_document), "", "exact occupied-destination swap is a valid selected-slot transition", failures)
+	var forged_swap := swap_document.duplicate(true)
+	forged_swap["transaction_journal"][1]["fingerprint"] = "0".repeat(64)
 	var transition_forgeries: Array[Dictionary] = [
-		{"label": "non-first-empty move", "document": non_first_empty},
 		{"label": "multiple-item move", "document": multiple_move},
-		{"label": "swap transition", "document": swap_document},
+		{"label": "forged swap fingerprint", "document": forged_swap},
 	]
 	for test_case: Dictionary in transition_forgeries:
 		TestAssertions.truthy(

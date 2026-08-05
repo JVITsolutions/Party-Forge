@@ -45,6 +45,7 @@ func run() -> Array[String]:
 	TestAssertions.truthy(not bool(screen.call("is_open")), "Settings starts hidden", failures)
 	TestAssertions.truthy(screen.has_signal("settings_applied"), "Settings exposes its applied signal", failures)
 	TestAssertions.truthy(screen.has_signal("city_tree_requested"), "Settings exposes its City tree forwarding signal", failures)
+	TestAssertions.truthy(screen.has_signal("item_sandbox_requested"), "Settings exposes its item sandbox forwarding signal", failures)
 
 	var supplied := PartyForgeSettings.new()
 	supplied.mode = PartyForgeSettings.Mode.DEVELOPER_MODE
@@ -224,9 +225,15 @@ func _test_additional_settings_page(failures: Array[String]) -> void:
 	var experience_multiplier := page.get_node("Layout/ExperienceMultiplier/Value") as HSlider
 	var level_up_card_count := page.get_node("Layout/LevelUpCardCount/Value") as HSlider
 	var open_city_tree := page.get_node_or_null("Layout/OpenCityPassiveTree") as Button
+	var open_item_sandbox := page.get_node_or_null("Layout/OpenDeveloperItemSandbox") as Button
 	var inactive_status := page.get_node_or_null("Layout/InactiveStatus") as Label
 	var requests: Array[bool] = []
+	var sandbox_requests: Array[int] = []
 	TestAssertions.truthy(open_city_tree != null, "Additional Settings exposes Open City Passive Tree", failures)
+	TestAssertions.truthy(open_item_sandbox != null, "Additional Settings exposes Open Developer Item Sandbox", failures)
+	TestAssertions.truthy(page.has_signal(&"item_sandbox_requested"), "Additional Settings owns the sandbox request signal", failures)
+	if open_item_sandbox != null and page.has_signal(&"item_sandbox_requested"):
+		page.connect(&"item_sandbox_requested", func() -> void: sandbox_requests.append(1))
 	TestAssertions.equal(mode.item_count, 2, "Mode exposes exactly two choices", failures)
 	TestAssertions.equal(mode.get_item_text(0), "Player Simulation", "Mode starts with Player Simulation", failures)
 	TestAssertions.equal(mode.get_item_text(1), "Developer Mode", "Mode includes Developer Mode", failures)
@@ -252,6 +259,10 @@ func _test_additional_settings_page(failures: Array[String]) -> void:
 		page.connect(&"city_tree_requested", func(developer_preview: bool) -> void: requests.append(developer_preview))
 		open_city_tree.pressed.emit()
 		TestAssertions.equal(requests, [], "disabled City tree preview emits no request", failures)
+	if open_item_sandbox != null:
+		TestAssertions.truthy(open_item_sandbox.disabled, "Player Simulation disables the item sandbox", failures)
+		open_item_sandbox.pressed.emit()
+		TestAssertions.equal(sandbox_requests, [], "disabled item sandbox emits no request", failures)
 	if inactive_status != null:
 		TestAssertions.truthy(inactive_status.text.contains("retained") and inactive_status.text.contains("Developer Mode"), "inactive explanation states values are retained until Developer Mode", failures)
 		TestAssertions.truthy(inactive_status.focus_mode != Control.FOCUS_NONE, "inactive explanation is controller and keyboard focusable", failures)
@@ -273,6 +284,12 @@ func _test_additional_settings_page(failures: Array[String]) -> void:
 		open_city_tree.pressed.emit()
 		TestAssertions.equal(requests, [true], "Developer City tree preview emits true exactly once", failures)
 		TestAssertions.equal(level_up_card_count.focus_next, level_up_card_count.get_path_to(open_city_tree), "Developer focus order reaches City tree preview", failures)
+	if open_item_sandbox != null:
+		TestAssertions.truthy(not open_item_sandbox.disabled, "Developer Mode enables the item sandbox", failures)
+		open_item_sandbox.pressed.emit()
+		TestAssertions.equal(sandbox_requests, [1], "Developer item sandbox request emits exactly once", failures)
+		if open_city_tree != null:
+			TestAssertions.equal(open_city_tree.focus_next, open_city_tree.get_path_to(open_item_sandbox), "Developer focus order reaches the item sandbox after City tree", failures)
 	TestAssertions.truthy(page.has_method(&"initial_focus"), "Additional Settings exposes the Settings page focus contract", failures)
 	if page.has_method(&"initial_focus"):
 		TestAssertions.equal(page.call(&"initial_focus"), mode, "Additional Settings initially focuses Mode", failures)
@@ -469,6 +486,9 @@ func _test_additional_focus_traversal(page: Control, failures: Array[String]) ->
 		page.get_node("Layout/ApplyAndReturn") as Control,
 		page.get_node("Layout/Cancel") as Control,
 	]
+	var sandbox_button := page.get_node_or_null("Layout/OpenDeveloperItemSandbox") as Control
+	if sandbox_button != null:
+		ordered.insert(8, sandbox_button)
 	for index: int in range(ordered.size()):
 		var current := ordered[index]
 		var next := ordered[(index + 1) % ordered.size()]
