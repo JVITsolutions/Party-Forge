@@ -1,0 +1,239 @@
+class_name ItemInstanceCodec
+extends RefCounted
+
+const JSON_SAFE_INTEGER_MAX := 9007199254740991
+const ITEM_FIELDS: Array[String] = ["affixes", "base_definition_id", "instance_id", "item_level", "origin", "rarity_id", "schema_version"]
+const AFFIX_FIELDS: Array[String] = ["affix_kind", "definition_id", "rolls", "tier"]
+const ROLL_FIELDS: Array[String] = ["operation", "required_tags", "stat_id", "value"]
+const ORIGIN_FIELDS: Array[String] = ["issuer_namespace", "seed", "sequence", "source"]
+
+static func encode(item: ItemInstance) -> String:
+	if item == null:
+		return ""
+	return JSON.stringify(item.to_dictionary())
+
+static func decode(
+	document: Variant,
+	equipment: EquipmentCatalog,
+	foundation: ItemFoundationCatalog
+) -> ItemInstanceDecodeResult:
+	var result := ItemInstanceDecodeResult.new()
+	result.error = _validate_document(document, equipment, foundation)
+	if not result.error.is_empty():
+		return result
+	var data := document as Dictionary
+	var item := ItemInstance.new()
+	item.schema_version = int(data["schema_version"])
+	item.instance_id = data["instance_id"] as String
+	item.base_definition_id = StringName(data["base_definition_id"] as String)
+	item.item_level = int(data["item_level"])
+	item.rarity_id = StringName(data["rarity_id"] as String)
+	for affix_value: Variant in data["affixes"] as Array:
+		var affix_data := affix_value as Dictionary
+		var affix := ItemAffixInstance.new()
+		affix.definition_id = StringName(affix_data["definition_id"] as String)
+		affix.affix_kind = affix_data["affix_kind"] as String
+		affix.tier = int(affix_data["tier"])
+		for roll_value: Variant in affix_data["rolls"] as Array:
+			var roll_data := roll_value as Dictionary
+			var roll := ItemModifierRoll.new()
+			roll.stat_id = StringName(roll_data["stat_id"] as String)
+			roll.operation = int(roll_data["operation"])
+			roll.value = float(roll_data["value"])
+			for tag_value: Variant in roll_data["required_tags"] as Array:
+				roll.required_tags.append(StringName(tag_value as String))
+			affix.rolls.append(roll)
+		item.affixes.append(affix)
+	item.origin = ItemInstance._json_copy(data["origin"] as Dictionary) as Dictionary
+	result.item = item
+	return result
+
+static func validate(
+	item: ItemInstance,
+	equipment: EquipmentCatalog,
+	foundation: ItemFoundationCatalog
+) -> String:
+	if item == null:
+		return _field_error("item", "must not be null")
+	return _validate_document(item.to_dictionary(), equipment, foundation)
+
+static func _validate_document(
+	document: Variant,
+	equipment: EquipmentCatalog,
+	foundation: ItemFoundationCatalog
+) -> String:
+	if not document is Dictionary:
+		return _field_error("document", "must be a dictionary")
+	var data := document as Dictionary
+	var fields_error := _exact_fields(data, ITEM_FIELDS, "document")
+	if not fields_error.is_empty():
+		return fields_error
+	if not _is_json_int(data["schema_version"], ItemInstance.SCHEMA_VERSION, ItemInstance.SCHEMA_VERSION):
+		return _field_error("schema_version", "must equal supported schema %d" % ItemInstance.SCHEMA_VERSION)
+	if not _is_nonempty_string(data["instance_id"]):
+		return _field_error("instance_id", "must be a non-empty string")
+	if not _is_nonempty_string(data["base_definition_id"]):
+		return _field_error("base_definition_id", "must be a non-empty string")
+	if equipment == null:
+		return _field_error("base_definition_id", "equipment catalog is missing")
+	var base_id := StringName(data["base_definition_id"] as String)
+	if equipment.definition(base_id) == null:
+		return _field_error("base_definition_id", "unknown equipment base %s" % base_id)
+	if not _is_json_int(data["item_level"], 1, JSON_SAFE_INTEGER_MAX):
+		return _field_error("item_level", "must be a positive JSON-safe integer")
+	if not _is_nonempty_string(data["rarity_id"]):
+		return _field_error("rarity_id", "must be a non-empty string")
+	if foundation == null:
+		return _field_error("rarity_id", "item foundation catalog is missing")
+	var rarity_id := StringName(data["rarity_id"] as String)
+	var rarity := foundation.rarity(rarity_id)
+	if rarity == null:
+		return _field_error("rarity_id", "unknown rarity %s" % rarity_id)
+	if not rarity.functional:
+		return _field_error("rarity_id", "rarity %s is not functional" % rarity_id)
+	if not data["affixes"] is Array:
+		return _field_error("affixes", "must be an array")
+	var seen_affixes: Dictionary = {}
+	for affix_index: int in (data["affixes"] as Array).size():
+		var affix_error := _validate_affix((data["affixes"] as Array)[affix_index], affix_index, foundation, seen_affixes)
+		if not affix_error.is_empty():
+			return affix_error
+	return _validate_origin(data["origin"])
+
+static func _validate_affix(
+	value: Variant,
+	index: int,
+	foundation: ItemFoundationCatalog,
+	seen_affixes: Dictionary
+) -> String:
+	var path := "affixes[%d]" % index
+	if not value is Dictionary:
+		return _field_error(path, "must be a dictionary")
+	var data := value as Dictionary
+	var fields_error := _exact_fields(data, AFFIX_FIELDS, path)
+	if not fields_error.is_empty():
+		return fields_error
+	if not _is_nonempty_string(data["definition_id"]):
+		return _field_error("%s.definition_id" % path, "must be a non-empty string")
+	var definition_id := StringName(data["definition_id"] as String)
+	if seen_affixes.has(definition_id):
+		return _field_error("%s.definition_id" % path, "duplicate affix %s" % definition_id)
+	seen_affixes[definition_id] = true
+	var definition := foundation.affix(definition_id)
+	if definition == null:
+		return _field_error("%s.definition_id" % path, "unknown affix %s" % definition_id)
+	if typeof(data["affix_kind"]) != TYPE_STRING or data["affix_kind"] != definition.affix_kind:
+		return _field_error("%s.affix_kind" % path, "must match definition kind %s" % definition.affix_kind)
+	if not _is_json_int(data["tier"], definition.minimum_tier, definition.maximum_tier):
+		return _field_error("%s.tier" % path, "must be in definition range %d..%d" % [definition.minimum_tier, definition.maximum_tier])
+	if not data["rolls"] is Array or (data["rolls"] as Array).size() != 1:
+		return _field_error("%s.rolls" % path, "must contain exactly one explicit roll")
+	return _validate_roll((data["rolls"] as Array)[0], "%s.rolls[0]" % path, definition, int(data["tier"]))
+
+static func _validate_roll(
+	value: Variant,
+	path: String,
+	definition: ItemAffixDefinition,
+	tier: int
+) -> String:
+	if not value is Dictionary:
+		return _field_error(path, "must be a dictionary")
+	var data := value as Dictionary
+	var fields_error := _exact_fields(data, ROLL_FIELDS, path)
+	if not fields_error.is_empty():
+		return fields_error
+	if typeof(data["stat_id"]) != TYPE_STRING or StringName(data["stat_id"] as String) != definition.stat_id:
+		return _field_error("%s.stat_id" % path, "must match definition stat %s" % definition.stat_id)
+	if not _is_json_int(data["operation"], definition.operation, definition.operation):
+		return _field_error("%s.operation" % path, "must match definition operation %d" % definition.operation)
+	if not data["value"] is float and not data["value"] is int:
+		return _field_error("%s.value" % path, "must be a finite number")
+	var roll_value := float(data["value"])
+	if not is_finite(roll_value):
+		return _field_error("%s.value" % path, "must be a finite number")
+	var bounds := definition.roll_bounds(tier)
+	if roll_value < bounds.x or roll_value > bounds.y:
+		return _field_error("%s.value" % path, "must be within issued bounds %s..%s" % [_number_text(bounds.x), _number_text(bounds.y)])
+	if not data["required_tags"] is Array:
+		return _field_error("%s.required_tags" % path, "must be an array of strings")
+	var actual_tags: Array[StringName] = []
+	for tag_value: Variant in data["required_tags"] as Array:
+		if typeof(tag_value) != TYPE_STRING:
+			return _field_error("%s.required_tags" % path, "must be an array of strings")
+		actual_tags.append(StringName(tag_value as String))
+	if actual_tags != definition.required_tags:
+		return _field_error("%s.required_tags" % path, "must match definition required tags")
+	return ""
+
+static func _validate_origin(value: Variant) -> String:
+	if not value is Dictionary:
+		return _field_error("origin", "must be a dictionary")
+	var data := value as Dictionary
+	var fields_error := _exact_fields(data, ORIGIN_FIELDS, "origin")
+	if not fields_error.is_empty():
+		return fields_error
+	if not _is_nonempty_string(data["issuer_namespace"]):
+		return _field_error("origin.issuer_namespace", "must be a non-empty string")
+	if not _is_json_int(data["sequence"], 0, JSON_SAFE_INTEGER_MAX):
+		return _field_error("origin.sequence", "must be a non-negative JSON-safe integer")
+	for field: String in ["seed", "source"]:
+		if not _is_json_value(data[field]):
+			return _field_error("origin.%s" % field, "must be JSON-safe")
+	return ""
+
+static func _exact_fields(data: Dictionary, expected: Array[String], path: String) -> String:
+	var missing: Array[String] = []
+	for field: String in expected:
+		if not data.has(field):
+			missing.append(field)
+	var unexpected: Array[String] = []
+	for key: Variant in data:
+		if typeof(key) != TYPE_STRING:
+			unexpected.append(String(key))
+		elif key as String not in expected:
+			unexpected.append(key as String)
+	unexpected.sort()
+	if missing.is_empty() and unexpected.is_empty():
+		return ""
+	var reasons: Array[String] = []
+	if not missing.is_empty():
+		reasons.append("missing fields %s" % ",".join(missing))
+	if not unexpected.is_empty():
+		reasons.append("unexpected fields %s" % ",".join(unexpected))
+	return _field_error(path, "; ".join(reasons))
+
+static func _is_nonempty_string(value: Variant) -> bool:
+	return typeof(value) == TYPE_STRING and not (value as String).strip_edges().is_empty()
+
+static func _is_json_int(value: Variant, minimum: int, maximum: int) -> bool:
+	if typeof(value) == TYPE_INT:
+		return int(value) >= minimum and int(value) <= maximum
+	if typeof(value) != TYPE_FLOAT:
+		return false
+	var number := float(value)
+	return is_finite(number) and number == floor(number) and number >= float(minimum) and number <= float(maximum)
+
+static func _is_json_value(value: Variant) -> bool:
+	match typeof(value):
+		TYPE_NIL, TYPE_BOOL, TYPE_STRING:
+			return true
+		TYPE_INT:
+			return int(value) >= -JSON_SAFE_INTEGER_MAX and int(value) <= JSON_SAFE_INTEGER_MAX
+		TYPE_FLOAT:
+			var number := float(value)
+			return is_finite(number) and (number != floor(number) or (number >= -float(JSON_SAFE_INTEGER_MAX) and number <= float(JSON_SAFE_INTEGER_MAX)))
+		TYPE_ARRAY:
+			return (value as Array).all(func(item: Variant) -> bool: return _is_json_value(item))
+		TYPE_DICTIONARY:
+			for key: Variant in value as Dictionary:
+				if typeof(key) != TYPE_STRING or not _is_json_value((value as Dictionary)[key]):
+					return false
+			return true
+		_:
+			return false
+
+static func _number_text(value: float) -> String:
+	return str(int(value)) if value == floor(value) else str(value)
+
+static func _field_error(field: String, reason: String) -> String:
+	return "PARTY_FORGE_ITEM_ERROR field=%s reason=%s" % [field, reason]
