@@ -294,6 +294,12 @@ Reconciliation rules are:
 - Repeating reconciliation creates no extra capacity or tabs.
 - Removing/refunding a permanent storage unlock does not delete containers or items.
 
+`ProfileStorageReconciler.reconcile(profile, tree, resolver)` returns stable `PARTY_FORGE_PROFILE_STORAGE_ERROR` diagnostics and is failure-atomic even when called directly: it computes and validates proposed columns/tabs first, then changes the supplied profile only after the complete proposal is valid. Null inputs, malformed allocation values, nonpositive/overflowing counts, any profile-scope stash contract whose `slotsPerTab` is not exactly 100, and stable-ID collisions are deterministic errors. Profile-scope contract counts are summed; other scopes are ignored. Plan 4B caps materialized profile stash tabs at 100 (10,000 slots) as a safety limit that a later Warehouse plan may deliberately revise. New tabs use `stash-tab-%03d` for their zero-based index, owner ID equal to the profile ID, kind `profile_stash_tab`, and capacity 100. Existing tabs and item placement are never rewritten.
+
+Persistent stash transactions use the existing profile mutation journal as their durable idempotency layer; the Task 4 journal inside one candidate mutation is intentionally ephemeral. `ProfileItemStorageService` injects or defaults `ProfileMutationService` and `ItemContainerTransactionService`, fingerprints the complete canonical item request through operation `item_storage_transaction`, reconstructs strict ownership state, and commits registry/tab documents only from a successful Task 4 candidate. Task 4 failures become stable `PARTY_FORGE_PROFILE_ITEM_STORAGE_ERROR code=<CodeName>` diagnostics and commit no profile/file change.
+
+For `create_and_place`, the item origin namespace must equal `profile:<profile_id>`, its integral sequence must equal the current `next_item_sequence`, and the sequence must have room to increment. The sequence advances once only in the same successful profile candidate. Exact outer replays return the stored committed projection with `duplicate = true`; conflicts, failures, and replays perform no save and consume no sequence. Non-create operations never alter the sequence.
+
 This reconciliation also handles profiles that allocated the passive nodes before Plan 4B existed and therefore have the unlock record but no materialized storage.
 
 ## Persistence and recovery

@@ -516,9 +516,9 @@ TestAssertions.equal(int(stash.stash_tabs[0]["capacity"]), 100, "stash tab has 1
 TestAssertions.equal(stash.stash_tabs[0]["container_id"], "stash-tab-000", "first stash id is stable", failures)
 ```
 
-Run reconciliation twice and require byte-equivalent results. Reconcile a profile whose allocations no longer contain a permanent storage node and prove capacity/items are not removed.
+Run reconciliation twice and require byte-equivalent results. Reconcile a profile whose allocations no longer contain a permanent storage node and prove capacity/items are not removed. Add failure-atomic cases for null dependencies, a profile-scope contract with `slotsPerTab != 100`, count overflow, and a stable new-tab ID that collides with an existing differently positioned tab; the input profile must remain byte-equivalent on every error.
 
-For `ProfileItemStorageService`, persist a create request, reload the profile, and prove one item/slot. Replay it and prove `duplicate = true`. Reuse the transaction ID with different data and prove no file hash change.
+For `ProfileItemStorageService`, persist a create request, reload the profile, and prove one item/slot. Replay it and prove `duplicate = true` and no file hash change. Reuse the transaction ID with different data and prove no file hash change. Cover owner/origin namespace/sequence mismatches, sequence exhaustion, duplicate instance ID, invalid destination, failed save, and non-create sequence preservation; every failure returns no profile, preserves bytes, and consumes no sequence.
 
 - [ ] **Step 2: Run RED**
 
@@ -533,13 +533,15 @@ var resolved_columns := clampi(resolution.flat_value(&"inventory_columns", &"pro
 profile.inventory_columns = maxi(profile.inventory_columns, resolved_columns)
 ```
 
-For each profile-scope stash contract, require `slotsPerTab == 100`; create stable tabs until the existing tab count reaches the resolved count. Never shrink, reorder, or recreate an existing tab.
+`reconcile()` is failure-atomic: compute proposed values and validate them before assigning either profile field. Return stable `PARTY_FORGE_PROFILE_STORAGE_ERROR field=<field> reason=<reason>` diagnostics. Sum counts only for `scope == profile`; ignore other scopes. For each profile-scope stash contract, require positive JSON-safe count and `slotsPerTab == 100`; reject a resolved total above `MAX_PROFILE_STASH_TABS := 100` before materialization. Create stable tabs until the existing tab count reaches the resolved count, with ID `stash-tab-%03d`, owner `profile.profile_id`, kind `profile_stash_tab`, and capacity 100. Reject a new stable ID that already belongs to a different existing tab. Never shrink, reorder, recreate, or rewrite an existing tab or item record. Validate the final proposed ownership document through Tasks 2/3 before commit.
 
 Call reconciliation inside successful permanent passive allocation candidates after `_project_permanent_effects()`. A reconciliation error aborts the entire passive allocation transaction.
 
-`ProfileItemStorageService.apply()` wraps one Task 4 transaction inside `ProfileMutationService.apply()` with operation `item_storage_transaction` and the transaction's canonical document as the request fingerprint source. It reconstructs the profile stash ownership state, applies, writes the resulting `item_records`/`stash_tabs`, and returns the committed profile.
+`ProfileItemStorageService` accepts optional injected `ProfileMutationService` and `ItemContainerTransactionService` dependencies and defaults them for production. `apply()` rejects a null request, then wraps one Task 4 transaction inside `ProfileMutationService.apply()` using `request.transaction_id`, operation `item_storage_transaction`, and the transaction's complete canonical document as the request fingerprint source. Inside the candidate it reconstructs strict profile ownership state, applies using an ephemeral Task 4 journal and authoritative catalogs, and writes `item_records`/`stash_tabs` only from `Code.OK`. Map a Task 4 failure to `PARTY_FORGE_PROFILE_ITEM_STORAGE_ERROR code=<CodeName>`; the outer profile mutation journal is the durable replay/collision boundary.
 
-For a create request, require item origin namespace `"profile:%s" % profile_id` and origin sequence equal to `profile.next_item_sequence`. Increment `next_item_sequence` exactly once inside the same successful candidate transaction. Failed, colliding, or replayed requests do not consume a sequence; an idempotent replay returns the already committed sequence/result.
+For a create request, require item origin namespace `"profile:%s" % profile_id` and integral origin sequence equal to `profile.next_item_sequence`; reject creation when the sequence cannot increment within `JSON_SAFE_INTEGER_MAX`. Increment `next_item_sequence` exactly once inside the same successful candidate transaction. Non-create requests never change it. Failed, colliding, or replayed requests do not consume a sequence or write the file; an idempotent outer replay returns the already committed profile with `duplicate = true`.
+
+Add `ProfileStorageReconciler` as an optional dependency of `PassiveTreeMutationService` to preserve existing construction sites. After a successful allocation candidate stores `decision.next_allocations` and projects permanent effects, call reconciliation. Any reconciliation error is returned from the mutation callable, so points, allocations, unlocks, storage, and file bytes all remain unchanged. Refunds remain monotonic and never delete already materialized storage.
 
 - [ ] **Step 4: Run GREEN plus passive/profile regression batch**
 
