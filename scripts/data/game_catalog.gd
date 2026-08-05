@@ -58,6 +58,7 @@ const DAMAGE_TYPES: DamageTypeCatalog = preload("res://data/damage_types/core_da
 const KEYWORD_CATALOG: KeywordCatalog = preload("res://data/keywords/core_keywords.tres")
 const GENERIC_NAME_POOL: CharacterNamePool = preload("res://data/names/generic.tres")
 const EQUIPMENT_CATALOG: EquipmentCatalog = preload("res://data/equipment/core_equipment_catalog.tres")
+const ITEM_FOUNDATION_CATALOG: ItemFoundationCatalog = preload("res://data/items/core_item_foundation_catalog.tres")
 
 var damage_types: DamageTypeCatalog = DAMAGE_TYPES
 var classes: Array[ClassDefinition] = []
@@ -67,6 +68,7 @@ var upgrades: Array[UpgradeDefinition] = []
 var keywords: KeywordCatalog = KEYWORD_CATALOG
 var generic_name_pool: CharacterNamePool = GENERIC_NAME_POOL
 var equipment_catalog: EquipmentCatalog = EQUIPMENT_CATALOG
+var item_foundation_catalog: ItemFoundationCatalog = ITEM_FOUNDATION_CATALOG
 var _upgrade_load_errors := PackedStringArray()
 
 static func load_defaults() -> GameCatalog:
@@ -144,6 +146,10 @@ func _validate_foundation(errors: PackedStringArray) -> void:
 		errors.append("PARTY_FORGE_EQUIPMENT_ERROR item=<catalog> reason=resource failed to load")
 	else:
 		errors.append_array(equipment_catalog.validate())
+	if item_foundation_catalog == null:
+		errors.append("PARTY_FORGE_ITEM_FOUNDATION_ERROR id=<catalog> reason=resource failed to load")
+	else:
+		errors.append_array(item_foundation_catalog.validate(STAT_CATALOG))
 
 func _validate_resources(errors: PackedStringArray) -> void:
 	var seen: Dictionary = {}

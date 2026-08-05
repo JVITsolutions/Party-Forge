@@ -1,0 +1,130 @@
+[gd_resource type="Resource" script_class="ItemFoundationCatalog" load_steps=17 format=3]
+
+[ext_resource type="Script" path="res://scripts/items/item_rarity_definition.gd" id="1_rarity"]
+[ext_resource type="Script" path="res://scripts/items/item_affix_definition.gd" id="2_affix"]
+[ext_resource type="Script" path="res://scripts/items/item_foundation_catalog.gd" id="3_catalog"]
+
+[sub_resource type="Resource" id="Rarity_common"]
+script = ExtResource("1_rarity")
+id = &"common"
+display_name = "Common"
+minimum_affixes = 0
+maximum_affixes = 0
+
+[sub_resource type="Resource" id="Rarity_uncommon"]
+script = ExtResource("1_rarity")
+id = &"uncommon"
+display_name = "Uncommon"
+minimum_affixes = 1
+maximum_affixes = 1
+
+[sub_resource type="Resource" id="Rarity_rare"]
+script = ExtResource("1_rarity")
+id = &"rare"
+display_name = "Rare"
+minimum_affixes = 2
+maximum_affixes = 2
+
+[sub_resource type="Resource" id="Rarity_epic"]
+script = ExtResource("1_rarity")
+id = &"epic"
+display_name = "Epic"
+minimum_affixes = 3
+maximum_affixes = 3
+
+[sub_resource type="Resource" id="Rarity_legendary"]
+script = ExtResource("1_rarity")
+id = &"legendary"
+display_name = "Legendary"
+minimum_affixes = 4
+maximum_affixes = 4
+
+[sub_resource type="Resource" id="Rarity_mythic"]
+script = ExtResource("1_rarity")
+id = &"mythic"
+display_name = "Mythic"
+functional = false
+minimum_affixes = 0
+maximum_affixes = 0
+
+[sub_resource type="Resource" id="Rarity_eternal"]
+script = ExtResource("1_rarity")
+id = &"eternal"
+display_name = "Eternal"
+functional = false
+minimum_affixes = 0
+maximum_affixes = 0
+
+[sub_resource type="Resource" id="Affix_stout"]
+script = ExtResource("2_affix")
+id = &"stout"
+display_name = "Stout"
+minimum_tier = 1
+maximum_tier = 3
+stat_id = &"constitution"
+operation = 0
+minimum_roll_by_tier = Array[float]([1.0, 4.0, 7.0])
+maximum_roll_by_tier = Array[float]([3.0, 6.0, 10.0])
+
+[sub_resource type="Resource" id="Affix_keen"]
+script = ExtResource("2_affix")
+id = &"keen"
+display_name = "Keen"
+minimum_tier = 1
+maximum_tier = 3
+stat_id = &"dexterity"
+operation = 0
+minimum_roll_by_tier = Array[float]([1.0, 4.0, 7.0])
+maximum_roll_by_tier = Array[float]([3.0, 6.0, 10.0])
+
+[sub_resource type="Resource" id="Affix_wise"]
+script = ExtResource("2_affix")
+id = &"wise"
+display_name = "Wise"
+minimum_tier = 1
+maximum_tier = 3
+stat_id = &"wisdom"
+operation = 0
+minimum_roll_by_tier = Array[float]([1.0, 4.0, 7.0])
+maximum_roll_by_tier = Array[float]([3.0, 6.0, 10.0])
+
+[sub_resource type="Resource" id="Affix_of_embers"]
+script = ExtResource("2_affix")
+id = &"of_embers"
+display_name = "of Embers"
+affix_kind = "suffix"
+minimum_tier = 1
+maximum_tier = 3
+stat_id = &"fire_damage"
+operation = 1
+minimum_roll_by_tier = Array[float]([0.05, 0.11, 0.21])
+maximum_roll_by_tier = Array[float]([0.1, 0.2, 0.3])
+
+[sub_resource type="Resource" id="Affix_of_rime"]
+script = ExtResource("2_affix")
+id = &"of_rime"
+display_name = "of Rime"
+affix_kind = "suffix"
+minimum_tier = 1
+maximum_tier = 3
+stat_id = &"cold_damage"
+operation = 1
+minimum_roll_by_tier = Array[float]([0.05, 0.11, 0.21])
+maximum_roll_by_tier = Array[float]([0.1, 0.2, 0.3])
+
+[sub_resource type="Resource" id="Affix_of_reach"]
+script = ExtResource("2_affix")
+id = &"of_reach"
+display_name = "of Reach"
+affix_kind = "suffix"
+minimum_tier = 1
+maximum_tier = 3
+stat_id = &"attack_range"
+operation = 1
+minimum_roll_by_tier = Array[float]([0.05, 0.11, 0.21])
+maximum_roll_by_tier = Array[float]([0.1, 0.2, 0.3])
+
+[resource]
+script = ExtResource("3_catalog")
+rarities = Array[ExtResource("1_rarity")]([SubResource("Rarity_common"), SubResource("Rarity_uncommon"), SubResource("Rarity_rare"), SubResource("Rarity_epic"), SubResource("Rarity_legendary"), SubResource("Rarity_mythic"), SubResource("Rarity_eternal")])
+affixes = Array[ExtResource("2_affix")]([SubResource("Affix_stout"), SubResource("Affix_keen"), SubResource("Affix_wise"), SubResource("Affix_of_embers"), SubResource("Affix_of_rime"), SubResource("Affix_of_reach")])
