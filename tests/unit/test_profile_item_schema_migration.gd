@@ -10,6 +10,7 @@ func run() -> Array[String]:
 	if migrator_script == null:
 		return failures
 	_test_complete_schema_one_migrates_recursively(failures)
+	_test_json_parsed_schema_one_migrates_to_complete_canonical_document(failures)
 	_test_unsupported_legacy_stash_fails_without_mutation(failures)
 	_test_current_schema_reports_source_metadata(failures)
 	_test_normal_store_is_current_only(failures)
@@ -38,6 +39,29 @@ func _test_complete_schema_one_migrates_recursively(failures: Array[String]) -> 
 		TestAssertions.equal(nested["gold"], 55, "nested result values survive migration", failures)
 	TestAssertions.equal(original, before, "migration leaves source dictionary unchanged", failures)
 	TestAssertions.equal(JSON.stringify(original, "\t", false), before_text, "migration leaves source serialization byte-equivalent", failures)
+
+func _test_json_parsed_schema_one_migrates_to_complete_canonical_document(failures: Array[String]) -> void:
+	var literal := schema_one_document("profile-migrate08", 77, 2000, true)
+	var original := JSON.parse_string(JSON.stringify(literal, "\t", false)) as Dictionary
+	var before := original.duplicate(true)
+	var before_text := JSON.stringify(original, "\t", false)
+	var migrated: Variant = _migrate(original)
+	var migrated_profile := migrated.get("profile") as ProfileState
+	TestAssertions.truthy(bool(migrated.call("ok")), "JSON-parsed schema-one profile migrates", failures)
+	if migrated_profile != null:
+		var actual := migrated_profile.to_dictionary()
+		var expected := _expected_schema_two_document(original)
+		TestAssertions.equal(actual, expected, "JSON-parsed migration matches the complete canonical schema-two document", failures)
+		TestAssertions.equal(Array(actual.keys()), ProfileCodec.CURRENT_FIELDS, "migrated root uses deterministic current field order", failures)
+		var record := (actual["applied_transactions"] as Dictionary)["grant-001"] as Dictionary
+		var nested := record["result_profile"] as Dictionary
+		TestAssertions.equal(Array(nested.keys()), ProfileCodec.CURRENT_FIELDS, "migrated result snapshot uses deterministic current field order", failures)
+		for field: String in ["schema_version", "created_at_unix", "updated_at_unix", "prologue_state", "gold", "passive_points_available", "passive_points_lifetime_earned", "squad_capacity", "inventory_columns", "next_item_sequence", "extraction_capacity"]:
+			TestAssertions.equal(typeof(nested[field]), TYPE_INT, "migrated result snapshot field %s is an integer" % field, failures)
+		TestAssertions.equal(typeof((nested["tree_visibility_progress"] as Dictionary)["party-forge-city-v1"]), TYPE_INT, "migrated result snapshot visibility is an integer", failures)
+		TestAssertions.equal(typeof(record["committed_at_unix"]), TYPE_INT, "migrated transaction timestamp is an integer", failures)
+	TestAssertions.equal(original, before, "JSON-parsed migration leaves source dictionary unchanged", failures)
+	TestAssertions.equal(JSON.stringify(original, "\t", false), before_text, "JSON-parsed migration leaves source serialization byte-equivalent", failures)
 
 func _test_unsupported_legacy_stash_fails_without_mutation(failures: Array[String]) -> void:
 	var original := schema_one_document("profile-migrate02", 77, 2000, true)
@@ -75,6 +99,48 @@ func _test_normal_store_is_current_only(failures: Array[String]) -> void:
 func _migrate(document: Dictionary) -> Variant:
 	var migrator_script := load("res://scripts/profile/profile_migrator.gd") as Script
 	return migrator_script.call("migrate_document", document)
+
+static func _expected_schema_two_document(legacy: Dictionary) -> Dictionary:
+	var visibility: Dictionary = {}
+	for tree_id: Variant in legacy["tree_visibility_progress"] as Dictionary:
+		visibility[String(tree_id)] = int((legacy["tree_visibility_progress"] as Dictionary)[tree_id])
+	var transactions: Dictionary = {}
+	for transaction_id: Variant in legacy["applied_transactions"] as Dictionary:
+		var record := (legacy["applied_transactions"] as Dictionary)[transaction_id] as Dictionary
+		transactions[String(transaction_id)] = {
+			"operation": record["operation"],
+			"fingerprint": record["fingerprint"],
+			"committed_at_unix": int(record["committed_at_unix"]),
+			"result_profile": _expected_schema_two_document(record["result_profile"] as Dictionary),
+		}
+	return {
+		"schema_version": 2,
+		"profile_id": legacy["profile_id"],
+		"display_name": legacy["display_name"],
+		"created_at_unix": int(legacy["created_at_unix"]),
+		"updated_at_unix": int(legacy["updated_at_unix"]),
+		"prologue_state": int(legacy["prologue_state"]),
+		"last_safe_checkpoint": (legacy["last_safe_checkpoint"] as Dictionary).duplicate(true),
+		"gold": int(legacy["gold"]),
+		"passive_points_available": int(legacy["passive_points_available"]),
+		"passive_points_lifetime_earned": int(legacy["passive_points_lifetime_earned"]),
+		"milestones": (legacy["milestones"] as Array).duplicate(true),
+		"permanent_feature_unlocks": (legacy["permanent_feature_unlocks"] as Array).duplicate(true),
+		"discovered_buildings": (legacy["discovered_buildings"] as Array).duplicate(true),
+		"discovered_trees": (legacy["discovered_trees"] as Array).duplicate(true),
+		"tree_allocations": (legacy["tree_allocations"] as Dictionary).duplicate(true),
+		"tree_visibility_progress": visibility,
+		"owned_characters": (legacy["owned_characters"] as Dictionary).duplicate(true),
+		"squad_capacity": int(legacy["squad_capacity"]),
+		"inventory_columns": int(legacy["inventory_columns"]),
+		"item_records": {"schema_version": 1, "items": []},
+		"stash_tabs": [],
+		"next_item_sequence": 0,
+		"extraction_capacity": int(legacy["extraction_capacity"]),
+		"run_history": (legacy["run_history"] as Array).duplicate(true),
+		"resumable_run": (legacy["resumable_run"] as Dictionary).duplicate(true),
+		"applied_transactions": transactions,
+	}
 
 static func schema_one_document(
 	profile_id: String,

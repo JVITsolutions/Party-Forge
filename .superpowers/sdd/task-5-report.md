@@ -65,3 +65,56 @@ All 522 captured lines were inspected programmatically. There were zero `TEST_FA
 - The separate `ProfileIndex` schema-one literal in `test_profile_manager.gd` was intentionally retained; it is not a profile-document fixture.
 - Verification generated five untracked test `.uid` sidecars: the new migration suite and four existing Plan 4B item suites. Only those test sidecars were removed. The two production-script UIDs remain scoped artifacts.
 - `git diff --check` is clean. No open Task 5 production concern is known.
+
+## Review correction addendum
+
+This addendum supersedes the earlier promotion description above. The corrected
+contract base is `28e3c91` (`docs: keep profile migration verification atomic`).
+`AtomicJsonStore.save_document()` now validates candidate, temporary, and
+promoted bytes with the current-schema validator while validating pre-existing
+primary and backup generations with an optional loadable-schema validator.
+`ProfileStore` supplies both validators and no longer performs a post-commit
+reload after the atomic store has released rollback generations.
+
+The accepted correction RED exited `1` with `TEST_SUMMARY: FAIL (18 failures)`.
+It exposed non-canonical recursively migrated transaction snapshots (legacy key
+order and JSON float representations), promoted candidates not verified as
+current inside the atomic transaction, traversal-like caller IDs accepted before
+path construction, and a requested/loaded profile-ID mismatch accepted with
+filesystem mutation.
+
+A strict-registry mutation temporarily bypassed decoding when the item list was
+empty. `test_profile_state.gd` exited `1` with `TEST_SUMMARY: FAIL (5 failures)`,
+including the new wrong-registry-schema and extra-registry-field assertions. The
+mutation was removed. A second mutation temporarily omitted the optional
+existing-generation validator from the migration call. The atomic profile suite
+exited `1` with `TEST_SUMMARY: FAIL (11 failures)`, rejecting ordinary schema-one
+promotion, promoted-current verification, recovered schema-one backup migration,
+and failed-promotion recovery/artifact/loadability invariants. That mutation was
+also removed.
+
+The corrected migration rebuilds every applied-transaction `result_profile`
+through the current codec, including deterministic field order and integer
+representation. The load boundary validates the caller ID before path
+construction and rejects a loaded document whose internal ID does not equal the
+requested ID before any promotion write. New recovery coverage starts with a
+corrupt primary and valid schema-one backup and proves both successful migration
+with a preserved corrupt artifact and injected-promotion failure with a still
+loadable schema-one generation.
+
+Final hermetic correction gates used worktree-local `APPDATA` and `LOCALAPPDATA`:
+
+- Import: exit `0`, 39 captured lines, zero script/parse/loader/engine-error
+  markers. Four warnings reported cache recreation of the verification-only test
+  UID sidecars removed below.
+- Required five-suite profile batch: exit `0`, 70 captured lines,
+  `TEST_SUMMARY: PASS (0 failures)`, zero test-failure/script/parse/loader
+  markers. Its one error and seven warnings are intentional corrupt-file,
+  rollback, and filesystem-failure fixtures.
+- Full suite: exit `0`, 538 captured lines, `TEST_SUMMARY: PASS (125 suites)`,
+  zero test-failure/script/parse/loader markers. Its 48 errors are intentional
+  negative-path fixtures; its eight warnings comprise the established warning
+  fixtures plus the two new corrupt-primary recovery cases.
+
+Only the five untracked test `.uid` sidecars recreated by import were removed.
+Task 6 was not started. No open Task 5 production concern is known.

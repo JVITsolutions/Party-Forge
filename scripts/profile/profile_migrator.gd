@@ -42,7 +42,16 @@ static func _migrate_schema_one_document(document: Dictionary) -> String:
 		var snapshot_error := _migrate_schema_one_document(snapshot)
 		if not snapshot_error.is_empty():
 			return snapshot_error
-		record["result_profile"] = snapshot
+		snapshot_error = ProfileCodec.validate_current_document(snapshot)
+		if not snapshot_error.is_empty():
+			return snapshot_error
+		var snapshot_profile := ProfileCodec._profile_from_current_document(snapshot)
+		transactions[transaction_id] = {
+			"operation": record["operation"],
+			"fingerprint": record["fingerprint"],
+			"committed_at_unix": int(record["committed_at_unix"]),
+			"result_profile": snapshot_profile.to_dictionary(),
+		}
 	document["schema_version"] = ProfileState.SCHEMA_VERSION
 	document["item_records"] = EMPTY_ITEM_REGISTRY.duplicate(true)
 	document["next_item_sequence"] = 0

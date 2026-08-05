@@ -6,9 +6,15 @@ var _promote_file: Callable
 func _init(promote_file: Callable = Callable()) -> void:
 	_promote_file = promote_file
 
-func save_document(path: String, document: Dictionary, validator: Callable) -> String:
+func save_document(
+	path: String,
+	document: Dictionary,
+	validator: Callable,
+	existing_generation_validator: Callable = Callable()
+) -> String:
 	if not validator.is_valid():
 		return "JSON_STORE_SAVE_ERROR path=%s stage=validate reason=validator is missing" % path
+	var existing_validator := existing_generation_validator if existing_generation_validator.is_valid() else validator
 	var validation := str(validator.call(document))
 	if not validation.is_empty():
 		return "JSON_STORE_SAVE_ERROR path=%s stage=validate reason=%s" % [path, validation]
@@ -37,7 +43,7 @@ func save_document(path: String, document: Dictionary, validator: Callable) -> S
 	var previous_was_valid := false
 	var displaced_old_backup := false
 	if had_previous:
-		var previous := _load_one(path, validator)
+		var previous := _load_one(path, existing_validator)
 		previous_was_valid = previous.ok()
 		if previous_was_valid:
 			if FileAccess.file_exists(displaced_backup):
@@ -57,7 +63,7 @@ func save_document(path: String, document: Dictionary, validator: Callable) -> S
 				var cleanup_error := _remove_if_exists(temporary)
 				return "JSON_STORE_SAVE_ERROR path=%s stage=backup code=%d restore_code=%d cleanup_stage=remove-temporary cleanup_code=%d" % [path, backup_error, restore_displaced_error, cleanup_error]
 		else:
-			var verified_backup := _load_one(backup, validator)
+			var verified_backup := _load_one(backup, existing_validator)
 			if not verified_backup.ok():
 				var cleanup_error := _remove_if_exists(temporary)
 				return "JSON_STORE_SAVE_ERROR path=%s stage=validate-existing cleanup_stage=remove-temporary cleanup_code=%d primary=%s backup=%s" % [path, cleanup_error, previous.error, verified_backup.error]

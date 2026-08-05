@@ -25,6 +25,10 @@ func run() -> Array[String]:
 	_test_post_commit_cleanup_failure_retains_committed_state(failures)
 	_test_failed_schema_migration_promotion_preserves_generations(failures)
 	_test_successful_schema_migration_promotes_and_retains_source(failures)
+	_test_schema_migration_promoted_current_verification_restores_generations(failures)
+	_test_profile_load_rejects_traversal_and_mismatched_document(failures)
+	_test_recovered_schema_one_backup_migrates_with_artifact(failures)
+	_test_recovered_schema_one_backup_failed_promotion_remains_recoverable(failures)
 	_test_malformed_schema_field_recovers_backup(failures)
 	_test_missing_profile_is_distinct(failures)
 	_test_absent_profile_root_lists_cleanly(failures)
@@ -264,6 +268,99 @@ func _test_successful_schema_migration_promotes_and_retains_source(failures: Arr
 	TestAssertions.equal(promoted.get("schema_version", -1), 2, "successful migration stores schema-two primary", failures)
 	TestAssertions.equal(retained.get("schema_version", -1), 1, "successful migration retains schema-one backup", failures)
 	TestAssertions.equal(FileAccess.get_file_as_bytes("%s.bak" % path), source_primary_bytes, "successful migration backup exactly retains source primary bytes", failures)
+
+func _test_schema_migration_promoted_current_verification_restores_generations(failures: Array[String]) -> void:
+	var profile_id := "profile-migrate05"
+	var path := ProfileStore.new().profile_path(profile_id, _root)
+	var documents := AtomicJsonStore.new()
+	var older := _schema_one_document(profile_id, 10, 1000)
+	var primary := _schema_one_document(profile_id, 20, 1001)
+	var loadable_validator := Callable(ProfileCodec, "validate_loadable_document")
+	TestAssertions.equal(documents.save_document(path, older, loadable_validator), "", "current verification fixture writes older schema-one generation", failures)
+	TestAssertions.equal(documents.save_document(path, primary, loadable_validator), "", "current verification fixture writes schema-one primary", failures)
+	var primary_bytes := FileAccess.get_file_as_bytes(path)
+	var backup_bytes := FileAccess.get_file_as_bytes("%s.bak" % path)
+	var schema_one_promoter := func(temporary: String, target: String) -> Error:
+		var promote_error := DirAccess.rename_absolute(ProjectSettings.globalize_path(temporary), ProjectSettings.globalize_path(target))
+		if promote_error != OK:
+			return promote_error
+		var promoted := FileAccess.open(target, FileAccess.WRITE)
+		if promoted == null:
+			return FileAccess.get_open_error()
+		promoted.store_string(JSON.stringify(primary, "\t", false))
+		var write_error := promoted.get_error()
+		promoted.close()
+		return write_error
+	var loaded := ProfileStore.new(AtomicJsonStore.new(schema_one_promoter)).load_profile(profile_id, _root)
+	TestAssertions.truthy(not loaded.ok() and loaded.profile == null, "promoted schema-one substitution exposes no profile", failures)
+	TestAssertions.truthy(loaded.error.contains("stage=verify-promoted") and loaded.error.contains("PROFILE_SCHEMA_ERROR"), "promoted candidate is verified with the current validator inside atomic save", failures)
+	TestAssertions.equal(FileAccess.get_file_as_bytes(path), primary_bytes, "promoted current-verification failure restores schema-one primary bytes", failures)
+	TestAssertions.equal(FileAccess.get_file_as_bytes("%s.bak" % path), backup_bytes, "promoted current-verification failure restores schema-one backup bytes", failures)
+
+func _test_profile_load_rejects_traversal_and_mismatched_document(failures: Array[String]) -> void:
+	var store := ProfileStore.new()
+	var suffix := str(Time.get_ticks_usec())
+	var traversal_root := _root.path_join("traversal_%s" % suffix)
+	var escaped_path := _root.path_join("escaped_%s.json" % suffix)
+	var traversal := store.load_profile("../escaped_%s" % suffix, traversal_root)
+	TestAssertions.truthy(not traversal.ok() and traversal.error.contains("field=profile_id") and traversal.error.contains("invalid profile id"), "traversal profile id is rejected before path construction", failures)
+	TestAssertions.truthy(not FileAccess.file_exists(escaped_path), "traversal load creates no escaped file", failures)
+	TestAssertions.truthy(not DirAccess.dir_exists_absolute(ProjectSettings.globalize_path(traversal_root)), "traversal load creates no profile root", failures)
+	var requested_id := "profile-request01"
+	var loaded_id := "profile-loaded001"
+	var path := store.profile_path(requested_id, _root)
+	var mismatch_document := _schema_one_document(loaded_id, 35, 1001)
+	var loadable_validator := Callable(ProfileCodec, "validate_loadable_document")
+	TestAssertions.equal(AtomicJsonStore.new().save_document(path, mismatch_document, loadable_validator), "", "mismatched profile fixture writes at requested path", failures)
+	var before_bytes := FileAccess.get_file_as_bytes(path)
+	var mismatch := store.load_profile(requested_id, _root)
+	TestAssertions.truthy(not mismatch.ok() and mismatch.profile == null and mismatch.error.contains("profile id mismatch"), "loaded profile id must match the requested id", failures)
+	TestAssertions.equal(FileAccess.get_file_as_bytes(path), before_bytes, "mismatched profile rejection preserves primary bytes", failures)
+	TestAssertions.truthy(not FileAccess.file_exists("%s.bak" % path), "mismatched profile rejection creates no backup", failures)
+
+func _test_recovered_schema_one_backup_migrates_with_artifact(failures: Array[String]) -> void:
+	var profile_id := "profile-migrate06"
+	var path := ProfileStore.new().profile_path(profile_id, _root)
+	var documents := AtomicJsonStore.new()
+	var backup_source := _schema_one_document(profile_id, 10, 1000)
+	var primary_source := _schema_one_document(profile_id, 20, 1001)
+	var loadable_validator := Callable(ProfileCodec, "validate_loadable_document")
+	TestAssertions.equal(documents.save_document(path, backup_source, loadable_validator), "", "recovered migration fixture writes backup source", failures)
+	TestAssertions.equal(documents.save_document(path, primary_source, loadable_validator), "", "recovered migration fixture writes primary source", failures)
+	var backup_bytes := FileAccess.get_file_as_bytes("%s.bak" % path)
+	var corrupt_bytes := "corrupt schema-one primary before migration"
+	_write_text(path, corrupt_bytes)
+	var loaded := ProfileStore.new().load_profile(profile_id, _root)
+	TestAssertions.truthy(loaded.ok() and loaded.recovered_from_backup and loaded.migrated and loaded.source_schema_version == 1, "recovered schema-one backup migrates with source metadata", failures)
+	TestAssertions.equal(loaded.profile.gold if loaded.ok() else -1, 10, "recovered migration returns the backup generation", failures)
+	var promoted := JSON.parse_string(FileAccess.get_file_as_string(path)) as Dictionary
+	TestAssertions.equal(promoted.get("schema_version", -1), 2, "recovered migration promotes schema-two primary", failures)
+	TestAssertions.equal(FileAccess.get_file_as_bytes("%s.bak" % path), backup_bytes, "recovered migration retains schema-one backup bytes", failures)
+	var artifact_path := _corrupt_artifact_path(profile_id, DirAccess.get_files_at(_root))
+	TestAssertions.truthy(not artifact_path.is_empty(), "recovered migration preserves corrupt-primary artifact", failures)
+	TestAssertions.equal(FileAccess.get_file_as_string(artifact_path) if not artifact_path.is_empty() else "", corrupt_bytes, "recovered migration artifact retains corrupt bytes", failures)
+
+func _test_recovered_schema_one_backup_failed_promotion_remains_recoverable(failures: Array[String]) -> void:
+	var profile_id := "profile-migrate07"
+	var path := ProfileStore.new().profile_path(profile_id, _root)
+	var documents := AtomicJsonStore.new()
+	var backup_source := _schema_one_document(profile_id, 10, 1000)
+	var primary_source := _schema_one_document(profile_id, 20, 1001)
+	var loadable_validator := Callable(ProfileCodec, "validate_loadable_document")
+	TestAssertions.equal(documents.save_document(path, backup_source, loadable_validator), "", "recovered failure fixture writes backup source", failures)
+	TestAssertions.equal(documents.save_document(path, primary_source, loadable_validator), "", "recovered failure fixture writes primary source", failures)
+	var backup_bytes := FileAccess.get_file_as_bytes("%s.bak" % path)
+	var corrupt_bytes := "corrupt schema-one primary before failed migration"
+	_write_text(path, corrupt_bytes)
+	var failing := ProfileStore.new(AtomicJsonStore.new(func(_temporary: String, _target: String) -> Error: return ERR_CANT_CREATE))
+	var loaded := failing.load_profile(profile_id, _root)
+	TestAssertions.truthy(not loaded.ok() and loaded.profile == null and loaded.error.contains("stage=promote"), "failed recovered migration exposes no partial profile", failures)
+	TestAssertions.equal(FileAccess.get_file_as_bytes("%s.bak" % path), backup_bytes, "failed recovered migration preserves backup bytes", failures)
+	TestAssertions.equal(FileAccess.get_file_as_bytes(path), backup_bytes, "failed recovered migration restores a loadable schema-one primary", failures)
+	var artifact_path := _corrupt_artifact_path(profile_id, DirAccess.get_files_at(_root))
+	TestAssertions.equal(FileAccess.get_file_as_string(artifact_path) if not artifact_path.is_empty() else "", corrupt_bytes, "failed recovered migration retains corrupt artifact bytes", failures)
+	var recoverable := AtomicJsonStore.new().load_document(path, loadable_validator, false)
+	TestAssertions.truthy(recoverable.ok() and int(recoverable.document.get("schema_version", -1)) == 1, "failed recovered migration remains loadable from schema one", failures)
 
 func _test_malformed_schema_field_recovers_backup(failures: Array[String]) -> void:
 	var store := ProfileStore.new()

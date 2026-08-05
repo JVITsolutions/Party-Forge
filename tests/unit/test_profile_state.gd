@@ -143,6 +143,14 @@ func _test_current_item_storage_is_strict_and_defensive(failures: Array[String])
 			TestAssertions.equal((decoded_items[0] as Dictionary)["base_definition_id"], "forge_vanguard_sword", "decoded item records are isolated", failures)
 		if not decoded.profile.stash_tabs.is_empty():
 			TestAssertions.equal((decoded.profile.stash_tabs[0] as Dictionary)["slots"], {"7": "item-profile-0001"}, "decoded stash records are isolated", failures)
+	var wrong_registry_schema := ProfileState.new_profile("profile-storage1", "Storage", 1000).to_dictionary()
+	wrong_registry_schema["item_records"] = {"schema_version": 2, "items": []}
+	var wrong_schema_error := ProfileCodec.validate_current_document(wrong_registry_schema)
+	TestAssertions.truthy(wrong_schema_error.contains("PARTY_FORGE_ITEM_REGISTRY_ERROR") and wrong_schema_error.contains("field=registry.schema_version"), "empty registry with wrong schema reaches strict ownership validation", failures)
+	var extra_registry_field := ProfileState.new_profile("profile-storage1", "Storage", 1000).to_dictionary()
+	extra_registry_field["item_records"] = {"schema_version": 1, "items": [], "legacy_map": {}}
+	var extra_field_error := ProfileCodec.validate_current_document(extra_registry_field)
+	TestAssertions.truthy(extra_field_error.contains("PARTY_FORGE_ITEM_REGISTRY_ERROR") and extra_field_error.contains("unexpected fields legacy_map"), "empty registry with extra field reaches strict ownership validation", failures)
 	var invalid_item := ProfileState.new_profile("profile-storage1", "Storage", 1000).to_dictionary()
 	invalid_item["item_records"] = {"schema_version": 1, "items": [_valid_item_document()]}
 	((invalid_item["item_records"] as Dictionary)["items"] as Array)[0]["base_definition_id"] = "unknown-equipment"

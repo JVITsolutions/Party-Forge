@@ -87,6 +87,14 @@ static func validate_profile(profile: ProfileState) -> String:
 static func validate_document(document: Dictionary) -> String:
 	return validate_current_document(document)
 
+static func validate_profile_id(profile_id: Variant) -> String:
+	if typeof(profile_id) != TYPE_STRING:
+		return _field_error("profile_id", "must be a string")
+	var value := profile_id as String
+	if value.length() < 8 or not value.is_valid_filename():
+		return _field_error("profile_id", "invalid profile id")
+	return ""
+
 static func validate_current_document(document: Dictionary) -> String:
 	return _validate_document(document, ProfileState.SCHEMA_VERSION, false)
 
@@ -110,8 +118,9 @@ static func _validate_document(data: Dictionary, expected_schema: int, result_sn
 			return _field_error(field, "must be a string")
 	var profile_id := data["profile_id"] as String
 	var display_name := data["display_name"] as String
-	if profile_id.length() < 8 or not profile_id.is_valid_filename():
-		return _field_error("profile_id", "invalid profile id")
+	var profile_id_error := validate_profile_id(profile_id)
+	if not profile_id_error.is_empty():
+		return profile_id_error
 	if display_name.is_empty() or display_name.length() > 32 or display_name != display_name.strip_edges():
 		return _field_error("display_name", "must contain 1-32 trimmed characters")
 	for field: String in ["created_at_unix", "updated_at_unix", "gold", "passive_points_available", "passive_points_lifetime_earned", "extraction_capacity"]:
@@ -247,7 +256,7 @@ static func _profile_from_current_document(data: Dictionary) -> ProfileState:
 	profile.discovered_buildings = _strings(data["discovered_buildings"] as Array)
 	profile.discovered_trees = _strings(data["discovered_trees"] as Array)
 	profile.tree_allocations = (data["tree_allocations"] as Dictionary).duplicate(true)
-	profile.tree_visibility_progress = (data["tree_visibility_progress"] as Dictionary).duplicate(true)
+	profile.tree_visibility_progress = _integer_dictionary(data["tree_visibility_progress"] as Dictionary)
 	profile.owned_characters = (data["owned_characters"] as Dictionary).duplicate(true)
 	profile.squad_capacity = int(data["squad_capacity"])
 	profile.inventory_columns = int(data["inventory_columns"])
@@ -348,4 +357,10 @@ static func _dictionaries(value: Array) -> Array[Dictionary]:
 	var result: Array[Dictionary] = []
 	for item: Variant in value:
 		result.append((item as Dictionary).duplicate(true))
+	return result
+
+static func _integer_dictionary(value: Dictionary) -> Dictionary:
+	var result: Dictionary = {}
+	for key: Variant in value:
+		result[String(key)] = int(value[key])
 	return result
