@@ -4,15 +4,18 @@ extends RefCounted
 var _mutations: ProfileMutationService
 var _progression: PassiveTreeProgressionService
 var _resolver: PassiveEffectResolver
+var _storage_reconciler: ProfileStorageReconciler
 
 func _init(
 	mutations: ProfileMutationService,
 	progression: PassiveTreeProgressionService,
 	resolver: PassiveEffectResolver,
+	storage_reconciler: ProfileStorageReconciler = null,
 ) -> void:
 	_mutations = mutations
 	_progression = progression
 	_resolver = resolver
+	_storage_reconciler = storage_reconciler if storage_reconciler != null else ProfileStorageReconciler.new()
 
 func allocate(
 	profile_id: String,
@@ -37,6 +40,9 @@ func allocate(
 		profile.passive_points_available += decision.point_delta
 		profile.tree_allocations[String(tree.id)] = _allocation_strings(decision.next_allocations)
 		_project_permanent_effects(profile, tree, decision.next_allocations)
+		var storage_error := _storage_reconciler.reconcile(profile, tree, _resolver)
+		if not storage_error.is_empty():
+			return storage_error
 		return ""
 	, root, -1, "allocate_passive_node", request)
 

@@ -4,6 +4,10 @@ const ID := "profile-12345678"
 
 var _root_counter := 0
 
+class RejectingStorageReconciler extends ProfileStorageReconciler:
+	func reconcile(_profile: ProfileState, _tree: PassiveTreeDefinition, _resolver: PassiveEffectResolver) -> String:
+		return "PARTY_FORGE_PROFILE_STORAGE_ERROR field=stash_tabs reason=injected reconciliation failure"
+
 func run() -> Array[String]:
 	var failures: Array[String] = []
 	_test_allocation_persists_exact_projection(failures)
@@ -12,7 +16,8 @@ func run() -> Array[String]:
 	_test_request_fingerprint_conflicts_are_atomic(failures)
 	_test_allocation_rejections_are_atomic(failures)
 	_test_failed_save_is_atomic(failures)
-	_test_stash_projects_permanent_discoveries_without_storage(failures)
+	_test_stash_projects_permanent_discoveries_and_storage(failures)
+	_test_reconciliation_failure_aborts_permanent_allocation(failures)
 	_test_unresolved_allocations_round_trip_without_effects(failures)
 	_test_refund_exact_delta_and_service_authority(failures)
 	_test_refund_cannot_exceed_lifetime_earned(failures)
@@ -140,7 +145,7 @@ func _test_failed_save_is_atomic(failures: Array[String]) -> void:
 	TestAssertions.truthy(not after.applied_transactions.has("allocation-save-fails"), "allocation save failure records no transaction", failures)
 	ProfileTestSupport.remove_tree(root)
 
-func _test_stash_projects_permanent_discoveries_without_storage(failures: Array[String]) -> void:
+func _test_stash_projects_permanent_discoveries_and_storage(failures: Array[String]) -> void:
 	var tree := _city_tree(failures)
 	if tree == null:
 		return
@@ -160,7 +165,29 @@ func _test_stash_projects_permanent_discoveries_without_storage(failures: Array[
 	TestAssertions.equal(saved.permanent_feature_unlocks, ["legacy", "run_history", "stash"], "permanent unlocks merge monotonically in unique lexical form", failures)
 	TestAssertions.equal(saved.discovered_buildings, ["forge", "warehouse"], "building discoveries merge monotonically in unique lexical form", failures)
 	TestAssertions.equal(saved.discovered_trees, ["party-forge-city-v1", "party-forge-warehouse-v1", "zeta-tree"], "tree discoveries merge monotonically in unique lexical form", failures)
-	TestAssertions.equal(saved.stash_tabs, [], "Stash Access does not instantiate stash storage", failures)
+	TestAssertions.equal(saved.stash_tabs.size(), 1, "Stash Access materializes one persistent stash tab", failures)
+	TestAssertions.equal(saved.stash_tabs[0], ItemSlotContainer.create(&"stash-tab-000", ItemSlotContainer.PROFILE_STASH_TAB, ID, 100).to_dictionary(), "permanent allocation materializes the exact stash tab contract", failures)
+	ProfileTestSupport.remove_tree(root)
+
+func _test_reconciliation_failure_aborts_permanent_allocation(failures: Array[String]) -> void:
+	var tree := _city_tree(failures)
+	if tree == null:
+		return
+	var root := _case_root("storage_abort")
+	var store := ProfileStore.new()
+	_save_fixture(store, _profile(tree.id, ["city-heart", "civic-archive"], 5), root, "storage abort fixture", failures)
+	var path := store.profile_path(ID, root)
+	var before_bytes := FileAccess.get_file_as_bytes(path)
+	var rejected := _service(store, RejectingStorageReconciler.new()).allocate(ID, "allocate-stash-storage-aborts", tree, &"stash-access", false, root)
+	TestAssertions.equal(rejected.error, "PARTY_FORGE_PROFILE_STORAGE_ERROR field=stash_tabs reason=injected reconciliation failure", "reconciliation failure is surfaced unchanged", failures)
+	TestAssertions.equal(rejected.profile, null, "reconciliation failure exposes no partial profile", failures)
+	TestAssertions.equal(FileAccess.get_file_as_bytes(path), before_bytes, "reconciliation failure preserves exact profile bytes", failures)
+	var saved := store.load_profile(ID, root).profile
+	TestAssertions.equal(saved.passive_points_available, 5, "reconciliation failure spends no Passive Points", failures)
+	TestAssertions.equal(saved.tree_allocations[String(tree.id)], ["city-heart", "civic-archive"], "reconciliation failure persists no allocation", failures)
+	TestAssertions.truthy("stash" not in saved.permanent_feature_unlocks, "reconciliation failure persists no permanent unlock", failures)
+	TestAssertions.equal(saved.stash_tabs, [], "reconciliation failure persists no storage", failures)
+	TestAssertions.truthy(not saved.applied_transactions.has("allocate-stash-storage-aborts"), "reconciliation failure records no outer transaction", failures)
 	ProfileTestSupport.remove_tree(root)
 
 func _test_unresolved_allocations_round_trip_without_effects(failures: Array[String]) -> void:
@@ -273,12 +300,13 @@ func _test_retained_failures_leave_every_projection_unchanged(failures: Array[St
 		TestAssertions.truthy(not after.applied_transactions.has("refund-%s" % test_case["label"]), "%s records no transaction" % test_case["label"], failures)
 		ProfileTestSupport.remove_tree(root)
 
-func _service(store: ProfileStore) -> PassiveTreeMutationService:
-	return PassiveTreeMutationService.new(
-		ProfileMutationService.new(store),
-		PassiveTreeProgressionService.new(PassiveEffectRegistry.new(), PassiveRequirementRegistry.new()),
-		PassiveEffectResolver.new(PassiveEffectRegistry.new()),
-	)
+func _service(store: ProfileStore, reconciler: ProfileStorageReconciler = null) -> PassiveTreeMutationService:
+	var mutations := ProfileMutationService.new(store)
+	var progression := PassiveTreeProgressionService.new(PassiveEffectRegistry.new(), PassiveRequirementRegistry.new())
+	var resolver := PassiveEffectResolver.new(PassiveEffectRegistry.new())
+	if reconciler == null:
+		return PassiveTreeMutationService.new(mutations, progression, resolver)
+	return PassiveTreeMutationService.new(mutations, progression, resolver, reconciler)
 
 func _profile(tree_id: StringName, allocations: Array[String], points: int) -> ProfileState:
 	var profile := ProfileState.new_profile(ID, "Mutation Tester", 1000)
