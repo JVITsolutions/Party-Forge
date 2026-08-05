@@ -39,6 +39,34 @@ class RecordingCheckout extends RunLoadoutCheckoutService:
 		return result
 
 
+class RecordingRequestFactory extends RefCounted:
+	var calls_by_profile: Dictionary = {}
+	var duplicate_all_run_players := false
+	var duplicate_on_second_call_profile := ""
+	var malformed_slot := -1
+
+	func create(participant: LocalRunSetupParticipant, profile: ProfileState) -> RunLoadoutCheckoutRequest:
+		if participant == null or profile == null:
+			return null
+		var call_count := int(calls_by_profile.get(participant.profile_id, 0)) + 1
+		calls_by_profile[participant.profile_id] = call_count
+		var run_player_id := StringName("local-player-%02d" % participant.player_slot)
+		if duplicate_all_run_players:
+			run_player_id = &"local-player-duplicate"
+		elif participant.profile_id == duplicate_on_second_call_profile and call_count == 2:
+			run_player_id = &"local-player-00"
+		return RunLoadoutCheckoutRequest.create(
+			"local-checkout-%s" % profile.profile_id,
+			"malformed-profile" if participant.player_slot == malformed_slot else profile.profile_id,
+			StringName("local-run-%s" % profile.profile_id),
+			6100 + participant.player_slot,
+			run_player_id,
+			1,
+			participant.selected_class_id,
+			"bring_in_gear" in profile.permanent_feature_unlocks,
+		)
+
+
 class BootstrapContextFactory extends RefCounted:
 	var fail_once_slot := -1
 	var failed := false
@@ -75,6 +103,45 @@ class BootstrapContextFactory extends RefCounted:
 		return context if errors.is_empty() else null
 
 
+class InvalidOnceContextFactory extends RefCounted:
+	var mode := ""
+	var failed := false
+	var calls := 0
+	var party_sink: Array[PartyManager]
+
+	func create(
+		participant: LocalRunSetupParticipant,
+		profile: ProfileState,
+		bootstrap: RunItemBootstrap = null,
+	) -> PlayerRunContext:
+		if participant == null or profile == null or bootstrap == null:
+			return null
+		calls += 1
+		var catalog := GameCatalog.load_defaults()
+		var leader_class := catalog.class_by_id(participant.selected_class_id)
+		var context_profile := profile
+		if not failed and mode == "wrong_class":
+			leader_class = catalog.class_by_id(&"mage")
+			failed = true
+		elif not failed and mode == "altered_profile":
+			context_profile.gold += 1
+			failed = true
+		var party := PartyManager.new()
+		party.initialize(leader_class, catalog.traits)
+		party_sink.append(party)
+		var context := PlayerRunContext.new()
+		var errors := context.configure(
+			bootstrap.run_player_id,
+			participant.player_slot,
+			context_profile,
+			bootstrap.run_seed,
+			party,
+			100,
+			bootstrap,
+		)
+		return context if errors.is_empty() else null
+
+
 class AssignmentGate extends RefCounted:
 	var assignments: Dictionary = {}
 	var enabled := true
@@ -100,7 +167,9 @@ func run() -> Array[String]:
 	_test_begin_validation_and_state_atomicity(failures)
 	_test_assignment_guard_fails_closed(failures)
 	_test_cancellation_stale_assignment_and_wrong_decisions(failures)
+	_test_request_preflight_is_mutation_free(failures)
 	_test_partial_checkout_retry_reuses_exact_bootstraps(failures)
+	_test_context_contract_retry_reuses_committed_checkout(failures)
 	_test_cancellation_checkout_boundary(failures)
 	_test_four_profile_isolation_and_stable_registry_lock(failures)
 	for party: PartyManager in _parties:
@@ -243,6 +312,49 @@ func _test_cancellation_stale_assignment_and_wrong_decisions(failures: Array[Str
 	ProfileTestSupport.remove_tree(root)
 
 
+func _test_request_preflight_is_mutation_free(failures: Array[String]) -> void:
+	for malformed_slot: int in [-1, 1]:
+		var label := "duplicate" if malformed_slot < 0 else "malformed"
+		var root := _case_root("request_preflight_%s" % label)
+		var store := ProfileStore.new()
+		var profiles: Array[ProfileState] = [
+			_profile("profile-preflight-%s-alpha" % label, "Preflight Alpha", &"fighter", &"forge_vanguard_sword", 9, 1, 0, 51, ["bring_in_gear"]),
+			_profile("profile-preflight-%s-beta" % label, "Preflight Beta", &"fighter", &"forge_vanguard_sword", 9, 1, 0, 52, ["bring_in_gear"]),
+		]
+		var joined: Array = [
+			_participant(profiles[0].profile_id, -1, 0, &"fighter"),
+			_participant(profiles[1].profile_id, 0, 1, &"fighter"),
+		]
+		var paths: Dictionary = {}
+		for profile: ProfileState in profiles:
+			_save(store, profile, root, "%s %s" % [label, profile.display_name], failures)
+			paths[profile.profile_id] = store.profile_path(profile.profile_id, root)
+		var artifacts_before: Dictionary = {}
+		for profile: ProfileState in profiles:
+			artifacts_before[profile.profile_id] = _profile_artifact_bytes(paths[profile.profile_id])
+		var checkout := RecordingCheckout.new(ProfileMutationService.new(store))
+		checkout.tracked_paths = paths
+		var requests := RecordingRequestFactory.new()
+		requests.duplicate_all_run_players = malformed_slot < 0
+		requests.malformed_slot = malformed_slot
+		var coordinator := _coordinator(store, root, _assignment_map(joined), {
+			"checkout_service": checkout,
+			"checkout_request_factory": Callable(requests, "create"),
+		}) as LocalRunSetupCoordinator
+		TestAssertions.equal(coordinator.begin(joined), PackedStringArray(), "%s request fixture begins" % label, failures)
+		TestAssertions.equal(coordinator.ready_contexts(), [], "%s request preflight rejects readiness" % label, failures)
+		TestAssertions.equal(checkout.observations.size(), 0, "%s request preflight performs zero checkout calls" % label, failures)
+		TestAssertions.equal(requests.calls_by_profile, {profiles[0].profile_id: 1, profiles[1].profile_id: 1}, "%s request factory runs exactly once per participant" % label, failures)
+		TestAssertions.equal(coordinator.run_context_registry(), null, "%s request preflight publishes no registry" % label, failures)
+		TestAssertions.truthy(not coordinator.is_locked(), "%s request preflight remains retryable" % label, failures)
+		for profile: ProfileState in profiles:
+			var durable := store.load_profile(profile.profile_id, root).profile
+			TestAssertions.equal(_profile_artifact_bytes(paths[profile.profile_id]), artifacts_before[profile.profile_id], "%s preflight preserves exact %s primary and backup bytes" % [label, profile.profile_id], failures)
+			TestAssertions.equal(durable.resumable_run, {}, "%s preflight creates no resumable run for %s" % [label, profile.profile_id], failures)
+			TestAssertions.equal(_operation_count(durable, "run_loadout_checkout"), 0, "%s preflight creates no checkout journal for %s" % [label, profile.profile_id], failures)
+		ProfileTestSupport.remove_tree(root)
+
+
 func _test_partial_checkout_retry_reuses_exact_bootstraps(failures: Array[String]) -> void:
 	var root := _case_root("checkout_retry")
 	var store := ProfileStore.new()
@@ -268,11 +380,14 @@ func _test_partial_checkout_retry_reuses_exact_bootstraps(failures: Array[String
 		paths[profile.profile_id] = store.profile_path(profile.profile_id, root)
 	var checkout := RecordingCheckout.new(ProfileMutationService.new(store))
 	checkout.tracked_paths = paths
+	var requests := RecordingRequestFactory.new()
+	requests.duplicate_on_second_call_profile = profiles[3].profile_id
 	var context_factory := BootstrapContextFactory.new()
 	context_factory.fail_once_slot = 2
 	context_factory.party_sink = _parties
 	var coordinator := _coordinator(store, root, _assignment_map(joined), {
 		"checkout_service": checkout,
+		"checkout_request_factory": Callable(requests, "create"),
 		"context_factory": Callable(context_factory, "create"),
 	}) as LocalRunSetupCoordinator
 	TestAssertions.equal(coordinator.begin(joined), PackedStringArray(), "four compatible profiles begin before checkout", failures)
@@ -296,6 +411,18 @@ func _test_partial_checkout_retry_reuses_exact_bootstraps(failures: Array[String
 		TestAssertions.equal(_operation_count(durable, "run_loadout_checkout"), 1, "partial failure records one checkout journal entry for slot %d" % slot, failures)
 	TestAssertions.equal(store.load_profile(profiles[3].profile_id, root).profile.resumable_run, {}, "future profile remains uncommitted after earlier context failure", failures)
 
+	var partial_artifacts: Dictionary = {}
+	for profile: ProfileState in profiles:
+		partial_artifacts[profile.profile_id] = _profile_artifact_bytes(paths[profile.profile_id])
+	TestAssertions.equal(coordinator.ready_contexts(), [], "retry preflights committed recovery together with an invalid fresh request", failures)
+	TestAssertions.equal(checkout.observations.size(), 3, "failed retry preflight performs no additional checkout", failures)
+	for profile: ProfileState in profiles:
+		TestAssertions.equal(_profile_artifact_bytes(paths[profile.profile_id]), partial_artifacts[profile.profile_id], "failed retry preflight preserves exact %s primary and backup bytes" % profile.profile_id, failures)
+	TestAssertions.equal(int(requests.calls_by_profile.get(profiles[0].profile_id, 0)), 1, "retry does not regenerate first committed request", failures)
+	TestAssertions.equal(int(requests.calls_by_profile.get(profiles[1].profile_id, 0)), 1, "retry does not regenerate second committed request", failures)
+	TestAssertions.equal(int(requests.calls_by_profile.get(profiles[2].profile_id, 0)), 1, "retry does not regenerate third committed request", failures)
+	TestAssertions.equal(int(requests.calls_by_profile.get(profiles[3].profile_id, 0)), 2, "retry generates the uncommitted request exactly once", failures)
+
 	var contexts := coordinator.ready_contexts()
 	TestAssertions.equal(contexts.size(), 4, "retry completes all four contexts from durable continuity", failures)
 	if contexts.size() == 4:
@@ -314,6 +441,46 @@ func _test_partial_checkout_retry_reuses_exact_bootstraps(failures: Array[String
 			TestAssertions.equal(run_equipment.item_id_at(9), "item-%s" % profile_id, "checked-out gear populates only %s run equipment" % profile_id, failures)
 		TestAssertions.equal(_profile_item_ids(profile), _expected_stash_item_ids(profile_id, slot), "bring-in gear leaves %s persistent profile ownership" % profile_id, failures)
 	ProfileTestSupport.remove_tree(root)
+
+
+func _test_context_contract_retry_reuses_committed_checkout(failures: Array[String]) -> void:
+	for mode: String in ["wrong_class", "altered_profile"]:
+		var root := _case_root("context_contract_%s" % mode)
+		var store := ProfileStore.new()
+		var profile := _profile("profile-context-%s" % mode, "Context %s" % mode, &"fighter", &"forge_vanguard_sword", 9, 1, 0, 91, ["bring_in_gear"])
+		_save(store, profile, root, "%s context profile" % mode, failures)
+		var participant := _participant(profile.profile_id, -1, 0, &"fighter") as LocalRunSetupParticipant
+		var path := store.profile_path(profile.profile_id, root)
+		var checkout := RecordingCheckout.new(ProfileMutationService.new(store))
+		checkout.tracked_paths = {profile.profile_id: path}
+		var context_factory := InvalidOnceContextFactory.new()
+		context_factory.mode = mode
+		context_factory.party_sink = _parties
+		var coordinator := _coordinator(store, root, _assignment_map([participant]), {
+			"checkout_service": checkout,
+			"context_factory": Callable(context_factory, "create"),
+		}) as LocalRunSetupCoordinator
+		TestAssertions.equal(coordinator.begin([participant]), PackedStringArray(), "%s context fixture begins" % mode, failures)
+		TestAssertions.equal(coordinator.ready_contexts(), [], "%s context rejects before registry publication" % mode, failures)
+		TestAssertions.equal(coordinator.run_context_registry(), null, "%s context publishes no registry" % mode, failures)
+		TestAssertions.truthy(not coordinator.is_locked(), "%s context failure remains retryable" % mode, failures)
+		var committed := store.load_profile(profile.profile_id, root).profile
+		TestAssertions.truthy(not committed.resumable_run.is_empty(), "%s context failure retains committed checkout" % mode, failures)
+		TestAssertions.equal(int(checkout.calls_by_profile.get(profile.profile_id, 0)), 1, "%s context failure checks out once" % mode, failures)
+		TestAssertions.equal(_operation_count(committed, "run_loadout_checkout"), 1, "%s context failure records one checkout journal" % mode, failures)
+		var committed_artifacts := _profile_artifact_bytes(path)
+		var contexts := coordinator.ready_contexts()
+		TestAssertions.equal(contexts.size(), 1, "%s context retry succeeds from committed recovery" % mode, failures)
+		TestAssertions.equal(context_factory.calls, 2, "%s context factory runs once per readiness attempt" % mode, failures)
+		if contexts.size() == 1:
+			var leader := contexts[0].party.member_by_id(1)
+			TestAssertions.truthy(leader != null and leader.is_leader and leader.class_definition.id == &"fighter", "%s retry publishes the selected Fighter leader" % mode, failures)
+			TestAssertions.equal(ProfileCodec.encode(contexts[0].profile_snapshot), ProfileCodec.encode(store.load_profile(profile.profile_id, root).profile), "%s retry publishes the exact committed profile snapshot" % mode, failures)
+		TestAssertions.equal(int(checkout.calls_by_profile.get(profile.profile_id, 0)), 1, "%s context retry performs no second checkout" % mode, failures)
+		TestAssertions.equal(_operation_count(store.load_profile(profile.profile_id, root).profile, "run_loadout_checkout"), 1, "%s context retry retains one checkout journal" % mode, failures)
+		TestAssertions.equal(_profile_artifact_bytes(path), committed_artifacts, "%s context retry performs no profile write" % mode, failures)
+		TestAssertions.truthy(coordinator.run_context_registry() != null and coordinator.run_context_registry().is_arena_roster_locked(), "%s context retry publishes one locked registry" % mode, failures)
+		ProfileTestSupport.remove_tree(root)
 
 
 func _test_cancellation_checkout_boundary(failures: Array[String]) -> void:

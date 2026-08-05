@@ -17,6 +17,16 @@ const DECISION_FIELDS: Array[String] = [
 	"state_fingerprint",
 	"transaction_id",
 ]
+const CHECKOUT_REQUEST_FIELDS: Array[String] = [
+	"bring_in_gear",
+	"leader_member_id",
+	"profile_id",
+	"run_id",
+	"run_player_id",
+	"run_seed",
+	"selected_leader_class_id",
+	"transaction_id",
+]
 
 var _profile_store: ProfileStore
 var _profile_root := ProfileStore.DEFAULT_ROOT
@@ -206,39 +216,26 @@ func ready_contexts() -> Array[PlayerRunContext]:
 	var sorted := _participants.duplicate()
 	sorted.sort_custom(func(left: LocalRunSetupParticipant, right: LocalRunSetupParticipant) -> bool:
 		return left.player_slot < right.player_slot)
+	var preflight := _preflight_ready_contexts(sorted)
+	if not String(preflight.get("error", "")).is_empty():
+		return []
+	var prepared_by_profile := preflight.get("prepared", {}) as Dictionary
 	var contexts: Array[PlayerRunContext] = []
 	for participant_value: LocalRunSetupParticipant in sorted:
-		if not _assignment_is_current(participant_value):
-			return []
-		var loaded := _load_strict_profile(participant_value.profile_id)
-		if not String(loaded.get("error", "")).is_empty():
-			return []
-		var profile := loaded["profile"] as ProfileState
-		var projection := _compatibility.project(
-			profile,
-			_catalog.class_by_id(participant_value.selected_class_id),
-			_equipment,
-			_foundation,
+		var preflight_entry := prepared_by_profile.get(participant_value.profile_id, {}) as Dictionary
+		var prepared := _prepare_committed_checkout(
+			participant_value,
+			preflight_entry.get("profile") as ProfileState,
+			preflight_entry.get("request") as RunLoadoutCheckoutRequest,
+			(preflight_entry.get("request_document", {}) as Dictionary).duplicate(true),
 		)
-		if projection == null or not projection.valid or not projection.incompatible_items.is_empty():
-			return []
-		var prepared := _prepare_committed_checkout(participant_value, profile)
 		if not String(prepared.get("error", "")).is_empty():
 			return []
-		profile = prepared["profile"] as ProfileState
+		var profile := prepared["profile"] as ProfileState
 		var bootstrap := prepared["bootstrap"] as RunItemBootstrap
+		var committed_profile_document := ProfileCodec.encode(profile.copy())
 		var context := _context_factory.call(participant_value._snapshot(), profile, bootstrap) as PlayerRunContext
-		if (
-			context == null
-			or context.profile_id != participant_value.profile_id
-			or context.player_slot_index != participant_value.player_slot
-			or context.run_player_id != bootstrap.run_player_id
-			or context.run_id != bootstrap.run_id
-			or context.run_seed != bootstrap.run_seed
-			or context.party == null
-			or context.item_state() == null
-			or context.item_state().to_dictionary() != bootstrap.item_state().to_dictionary()
-		):
+		if not _context_matches_commit(participant_value, committed_profile_document, bootstrap, context):
 			return []
 		contexts.append(context)
 	var next_registry := RunContextRegistry.new()
@@ -288,14 +285,148 @@ func _assignment_is_current(participant_value: LocalRunSetupParticipant) -> bool
 	return _assignment_guard.is_valid() and bool(_assignment_guard.call(participant_value._snapshot()))
 
 
+func _preflight_ready_contexts(sorted: Array[LocalRunSetupParticipant]) -> Dictionary:
+	var profiles: Dictionary = {}
+	var devices: Dictionary = {}
+	var slots: Dictionary = {}
+	var run_players: Dictionary = {}
+	var prepared: Dictionary = {}
+	for participant_value: LocalRunSetupParticipant in sorted:
+		if participant_value == null or not _assignment_is_current(participant_value):
+			return {"error": "assignment changed"}
+		if (
+			profiles.has(participant_value.profile_id)
+			or devices.has(participant_value.device_id)
+			or slots.has(participant_value.player_slot)
+		):
+			return {"error": "participant registry identity collision"}
+		profiles[participant_value.profile_id] = true
+		devices[participant_value.device_id] = true
+		slots[participant_value.player_slot] = true
+		var loaded := _load_strict_profile(participant_value.profile_id)
+		if not String(loaded.get("error", "")).is_empty():
+			return {"error": loaded["error"]}
+		var profile := loaded["profile"] as ProfileState
+		var projection := _compatibility.project(
+			profile,
+			_catalog.class_by_id(participant_value.selected_class_id),
+			_equipment,
+			_foundation,
+		)
+		if projection == null or not projection.valid or not projection.incompatible_items.is_empty():
+			return {"error": "profile compatibility is not ready"}
+		var recovery := _checkout_recovery_by_profile.get(participant_value.profile_id, {}) as Dictionary
+		var request: RunLoadoutCheckoutRequest
+		var request_document: Dictionary
+		if recovery.is_empty():
+			var generated := _checkout_request_factory.call(participant_value._snapshot(), profile.copy()) as RunLoadoutCheckoutRequest
+			if generated == null:
+				return {"error": "checkout request unavailable"}
+			request_document = generated.canonical_document().duplicate(true)
+		else:
+			request_document = (recovery.get("request", {}) as Dictionary).duplicate(true)
+		var request_error := _validate_checkout_request_document(participant_value, profile, request_document)
+		if not request_error.is_empty():
+			return {"error": request_error}
+		if recovery.is_empty():
+			request = _owned_checkout_request(request_document)
+			if request == null:
+				return {"error": "checkout request ownership failed"}
+		elif not _recovery_matches_profile(participant_value, profile, recovery, request_document):
+			return {"error": "committed checkout recovery mismatch"}
+		var run_player_id := StringName(request_document["run_player_id"])
+		if run_players.has(run_player_id):
+			return {"error": "duplicate run player"}
+		run_players[run_player_id] = true
+		prepared[participant_value.profile_id] = {
+			"profile": profile.copy(),
+			"request": request,
+			"request_document": request_document.duplicate(true),
+		}
+	return {"error": "", "prepared": prepared}
+
+
+func _validate_checkout_request_document(
+	participant_value: LocalRunSetupParticipant,
+	profile: ProfileState,
+	request_document: Dictionary,
+) -> String:
+	if request_document.size() != CHECKOUT_REQUEST_FIELDS.size():
+		return "checkout request must contain exact fields"
+	for field: String in CHECKOUT_REQUEST_FIELDS:
+		if not request_document.has(field):
+			return "checkout request must contain exact fields"
+	if (
+		typeof(request_document["transaction_id"]) != TYPE_STRING
+		or typeof(request_document["profile_id"]) != TYPE_STRING
+		or typeof(request_document["run_id"]) != TYPE_STRING
+		or typeof(request_document["run_player_id"]) != TYPE_STRING
+		or typeof(request_document["selected_leader_class_id"]) != TYPE_STRING
+		or typeof(request_document["run_seed"]) != TYPE_INT
+		or typeof(request_document["leader_member_id"]) != TYPE_INT
+		or typeof(request_document["bring_in_gear"]) != TYPE_BOOL
+	):
+		return "checkout request fields are malformed"
+	var profile_id := String(request_document["profile_id"])
+	var class_id := StringName(request_document["selected_leader_class_id"])
+	if not ProfileCodec.validate_profile_id(profile_id).is_empty() or profile_id != participant_value.profile_id or profile_id != profile.profile_id:
+		return "checkout request profile mismatch"
+	if class_id != participant_value.selected_class_id or _catalog.class_by_id(class_id) == null:
+		return "checkout request selected class mismatch"
+	if bool(request_document["bring_in_gear"]) != ("bring_in_gear" in profile.permanent_feature_unlocks):
+		return "checkout request bring-in policy mismatch"
+	if String(request_document["transaction_id"]).strip_edges().is_empty():
+		return "checkout request transaction id is empty"
+	if String(request_document["run_id"]).strip_edges().is_empty():
+		return "checkout request run id is empty"
+	if String(request_document["run_player_id"]).strip_edges().is_empty():
+		return "checkout request run player id is empty"
+	if int(request_document["run_seed"]) <= 0:
+		return "checkout request run seed must be positive"
+	if int(request_document["leader_member_id"]) <= 0:
+		return "checkout request leader member id must be positive"
+	return ""
+
+
+func _owned_checkout_request(request_document: Dictionary) -> RunLoadoutCheckoutRequest:
+	return RunLoadoutCheckoutRequest.create(
+		String(request_document["transaction_id"]),
+		String(request_document["profile_id"]),
+		StringName(request_document["run_id"]),
+		int(request_document["run_seed"]),
+		StringName(request_document["run_player_id"]),
+		int(request_document["leader_member_id"]),
+		StringName(request_document["selected_leader_class_id"]),
+		bool(request_document["bring_in_gear"]),
+	)
+
+
+func _recovery_matches_profile(
+	participant_value: LocalRunSetupParticipant,
+	profile: ProfileState,
+	recovery: Dictionary,
+	request_document: Dictionary,
+) -> bool:
+	var expected_document := recovery.get("resumable_run", {}) as Dictionary
+	if expected_document.is_empty() or profile.resumable_run != expected_document:
+		return false
+	return _bootstrap_matches_recovery(
+		participant_value,
+		_checkout_service.bootstrap_from(profile),
+		request_document,
+		expected_document,
+	)
+
+
 func _prepare_committed_checkout(
 	participant_value: LocalRunSetupParticipant,
 	profile: ProfileState,
+	request: RunLoadoutCheckoutRequest,
+	request_document: Dictionary,
 ) -> Dictionary:
 	var recovery := _checkout_recovery_by_profile.get(participant_value.profile_id, {}) as Dictionary
 	if recovery.is_empty():
-		var request := _checkout_request_factory.call(participant_value._snapshot(), profile.copy()) as RunLoadoutCheckoutRequest
-		if request == null:
+		if request == null or request.canonical_document() != request_document:
 			return {"error": "checkout request unavailable"}
 		var result := _checkout_service.checkout(participant_value.profile_id, request, _profile_root)
 		if result == null or not result.ok() or result.profile == null:
@@ -304,8 +435,8 @@ func _prepare_committed_checkout(
 		if committed_document.is_empty():
 			return {"error": "committed resumable run unavailable"}
 		recovery = {
-			"request": request.canonical_document(),
-			"resumable_run": committed_document,
+			"request": request_document.duplicate(true),
+			"resumable_run": committed_document.duplicate(true),
 		}
 		_checkout_recovery_by_profile[participant_value.profile_id] = recovery.duplicate(true)
 	var loaded := _load_strict_profile(participant_value.profile_id)
@@ -316,8 +447,8 @@ func _prepare_committed_checkout(
 	if expected_document.is_empty() or committed_profile.resumable_run != expected_document:
 		return {"error": "committed resumable run mismatch"}
 	var bootstrap := _checkout_service.bootstrap_from(committed_profile)
-	var request_document := recovery.get("request", {}) as Dictionary
-	if not _bootstrap_matches_recovery(participant_value, bootstrap, request_document, expected_document):
+	var recovery_request_document := recovery.get("request", {}) as Dictionary
+	if not _bootstrap_matches_recovery(participant_value, bootstrap, recovery_request_document, expected_document):
 		return {"error": "committed bootstrap identity mismatch"}
 	committed_profile.resumable_run = ResumableRunItemCodec.encode(bootstrap)
 	return {
@@ -325,6 +456,33 @@ func _prepare_committed_checkout(
 		"profile": committed_profile,
 		"bootstrap": bootstrap,
 	}
+
+
+func _context_matches_commit(
+	participant_value: LocalRunSetupParticipant,
+	committed_profile_document: String,
+	bootstrap: RunItemBootstrap,
+	context: PlayerRunContext,
+) -> bool:
+	if context == null or committed_profile_document.is_empty() or bootstrap == null:
+		return false
+	var context_profile := context.profile_snapshot
+	var leader := context.party.member_by_id(bootstrap.leader_member_id) if context.party != null else null
+	return (
+		context.profile_id == participant_value.profile_id
+		and context.player_slot_index == participant_value.player_slot
+		and context.run_player_id == bootstrap.run_player_id
+		and context.run_id == bootstrap.run_id
+		and context.run_seed == bootstrap.run_seed
+		and context_profile != null
+		and ProfileCodec.encode(context_profile) == committed_profile_document
+		and leader != null
+		and leader.is_leader
+		and leader.class_definition != null
+		and leader.class_definition.id == participant_value.selected_class_id
+		and context.item_state() != null
+		and context.item_state().to_dictionary() == bootstrap.item_state().to_dictionary()
+	)
 
 
 func _bootstrap_matches_recovery(
