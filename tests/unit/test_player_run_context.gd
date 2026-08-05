@@ -11,11 +11,35 @@ class RejectingPartyManager extends PartyManager:
 func run() -> Array[String]:
 	var failures: Array[String] = []
 	_test_configuration_validation_and_copy_ownership(failures)
+	_test_initial_member_equipment_is_owned_and_defensive(failures)
 	_test_configuration_rejects_invalid_member_growth_atomically(failures)
 	_test_atomic_progression_and_leader_queue(failures)
 	_test_future_recruits_initialize_once(failures)
 	_test_actor_binding_availability_and_position(failures)
 	return failures
+
+func _test_initial_member_equipment_is_owned_and_defensive(failures: Array[String]) -> void:
+	var fixture := _configured_fixture(PartyManager.new())
+	var context := fixture.context as PlayerRunContext
+	var party := fixture.party as PartyManager
+	TestAssertions.truthy(context.has_method(&"equipment_for"), "run context exposes member equipment", failures)
+	if not context.has_method(&"equipment_for"):
+		party.free()
+		return
+	for member_id: int in [1, 2]:
+		var equipment := context.call(&"equipment_for", member_id) as ItemSlotContainer
+		TestAssertions.truthy(equipment != null, "configured member %d owns equipment" % member_id, failures)
+		if equipment == null:
+			continue
+		TestAssertions.equal(equipment.container_id, StringName("run-equipment-%03d" % member_id), "member %d equipment has stable ID" % member_id, failures)
+		TestAssertions.equal(equipment.container_kind, ItemSlotContainer.RUN_MEMBER_EQUIPMENT, "member %d equipment has run kind" % member_id, failures)
+		TestAssertions.equal(equipment.owner_id, String(context.run_player_id), "member %d equipment belongs to the run player" % member_id, failures)
+		TestAssertions.equal(equipment.capacity, EquipmentSlotIndex.capacity(), "member %d equipment uses all canonical slots" % member_id, failures)
+		TestAssertions.equal(equipment.occupied_slots(), [], "member %d equipment starts empty" % member_id, failures)
+		equipment.capacity = 0
+		TestAssertions.equal((context.call(&"equipment_for", member_id) as ItemSlotContainer).capacity, EquipmentSlotIndex.capacity(), "member %d equipment accessor is defensive" % member_id, failures)
+	TestAssertions.equal(context.call(&"equipment_for", 99), null, "unknown member has no equipment", failures)
+	party.free()
 
 func _test_configuration_validation_and_copy_ownership(failures: Array[String]) -> void:
 	var catalog := GameCatalog.load_defaults()
@@ -85,7 +109,7 @@ func _test_configuration_validation_and_copy_ownership(failures: Array[String]) 
 		var retry_inventory := invalid.call(&"run_inventory") as ItemSlotContainer
 		TestAssertions.truthy(retry_state != null, "valid retry creates one item ownership state", failures)
 		TestAssertions.equal(retry_state.registry().size(), 0, "valid retry creates one empty run registry", failures)
-		TestAssertions.equal(retry_state.containers().size(), 1, "valid retry creates exactly one run container", failures)
+		TestAssertions.equal(retry_state.containers().size(), 2, "valid retry creates inventory plus leader equipment", failures)
 		TestAssertions.equal(retry_inventory.capacity, 5, "valid retry derives its unlocked five-slot inventory", failures)
 		var retry_created := invalid.call(
 			&"apply_item_transaction",

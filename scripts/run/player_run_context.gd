@@ -39,6 +39,7 @@ var _actor_by_member: Dictionary = {}
 var _item_state: ItemOwnershipState
 var _item_journal: ItemTransactionJournal
 var _next_item_sequence := 0
+var _equipment_assignment_service := EquipmentAssignmentService.new()
 var _configured := false
 
 func configure(
@@ -83,10 +84,13 @@ func configure(
 		String(run_player_id_value),
 		owned_profile.inventory_columns * 5,
 	)
+	var item_containers: Array[ItemSlotContainer] = [inventory]
+	for member: PartyMemberState in manager.members:
+		item_containers.append(_run_equipment_container(member.member_id, String(run_player_id_value)))
 	var next_item_state := ItemOwnershipState.create(
 		String(run_player_id_value),
 		ItemRegistry.new(),
-		[inventory],
+		item_containers,
 	)
 	var item_state_error := next_item_state.validate(
 		GameCatalog.EQUIPMENT_CATALOG,
@@ -126,6 +130,36 @@ func item_state() -> ItemOwnershipState:
 
 func run_inventory() -> ItemSlotContainer:
 	return _item_state.container(&"run-inventory") if _item_state != null else null
+
+func equipment_for(member_id: int) -> ItemSlotContainer:
+	return _item_state.container(_run_equipment_id(member_id)) if _item_state != null else null
+
+func assign_equipment(
+	member_id: int,
+	item_id: String,
+	slot_id: StringName,
+	equipment: EquipmentCatalog,
+	foundation: ItemFoundationCatalog,
+) -> EquipmentAssignmentResult:
+	var member := party.member_by_id(member_id) if party != null else null
+	var snapshot := party.stats_for(member_id) if party != null else null
+	var attributes: Dictionary = {}
+	if snapshot != null:
+		for attribute_id: StringName in ClassGrowthDefinition.CORE_ATTRIBUTE_IDS:
+			attributes[attribute_id] = snapshot.value(attribute_id)
+	var result := _equipment_assignment_service.preview(
+		_item_state,
+		member_id,
+		item_id,
+		slot_id,
+		equipment,
+		foundation,
+		member.class_definition if member != null else null,
+		attributes,
+	)
+	if result.ok():
+		_item_state = result.state()
+	return result
 
 func apply_item_transaction(
 	request: ItemTransactionRequest,
@@ -241,9 +275,29 @@ func member_position(member_id: int) -> Dictionary:
 func _on_member_added(member: PartyMemberState) -> void:
 	if member == null or member.member_id <= 0 or _progression_by_member.has(member.member_id):
 		return
-	var state := CharacterProgressionState.fresh(member.member_id, experience_tuning)
-	if state != null:
-		_progression_by_member[member.member_id] = state
+	if _item_state == null or _item_state.container(_run_equipment_id(member.member_id)) != null:
+		return
+	var next_progression := CharacterProgressionState.fresh(member.member_id, experience_tuning)
+	if next_progression == null:
+		return
+	var next_containers := _item_state.containers()
+	next_containers.append(_run_equipment_container(member.member_id, _item_state.owner_id))
+	var next_item_state := ItemOwnershipState.create(_item_state.owner_id, _item_state.registry(), next_containers)
+	if not next_item_state.validate(GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG).is_empty():
+		return
+	_item_state = next_item_state
+	_progression_by_member[member.member_id] = next_progression
+
+func _run_equipment_id(member_id: int) -> StringName:
+	return StringName("run-equipment-%03d" % member_id)
+
+func _run_equipment_container(member_id: int, owner_id: String) -> ItemSlotContainer:
+	return ItemSlotContainer.create(
+		_run_equipment_id(member_id),
+		ItemSlotContainer.RUN_MEMBER_EQUIPMENT,
+		owner_id,
+		EquipmentSlotIndex.capacity(),
+	)
 
 func _party_validation_errors(manager: PartyManager) -> PackedStringArray:
 	var errors := PackedStringArray()

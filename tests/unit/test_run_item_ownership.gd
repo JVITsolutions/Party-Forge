@@ -16,10 +16,49 @@ func run() -> Array[String]:
 	_test_cross_context_state_and_profile_isolation(failures)
 	_test_run_issuance_sequence_and_replay(failures)
 	_test_invalid_inputs_and_operation_policy_are_atomic(failures)
+	_test_recruit_adds_equipment_without_resetting_item_state(failures)
 	for party: PartyManager in _parties:
 		party.free()
 	_parties.clear()
 	return failures
+
+func _test_recruit_adds_equipment_without_resetting_item_state(failures: Array[String]) -> void:
+	var catalog := GameCatalog.load_defaults()
+	var party := PartyManager.new()
+	party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
+	party.recruit(catalog.class_by_id(&"ranger"))
+	_parties.append(party)
+	var context := PlayerRunContext.new()
+	var profile := _profile("profile-recruit-equipment", 2, 0)
+	TestAssertions.equal(context.configure(&"recruit_equipment", 0, profile, 7301, party, 100), PackedStringArray(), "recruit continuity context configures", failures)
+	var first_item := _issued_item(context, 0, "recruit-before", failures)
+	if first_item == null:
+		return
+	var first_create := ItemTransactionRequest.create("recruit-before-create", String(context.run_player_id), INVENTORY_ID, 0, first_item)
+	TestAssertions.equal(_apply(context, first_create, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG).code, ItemTransactionResult.Code.OK, "pre-recruit inventory item commits", failures)
+	var member_one_before := (context.call(&"equipment_for", 1) as ItemSlotContainer).to_dictionary()
+	var member_two_before := (context.call(&"equipment_for", 2) as ItemSlotContainer).to_dictionary()
+	var inventory_before := _run_inventory(context).to_dictionary()
+	TestAssertions.truthy(party.recruit(catalog.class_by_id(&"cleric")), "post-configuration recruit joins", failures)
+	var recruited := context.call(&"equipment_for", 3) as ItemSlotContainer
+	TestAssertions.truthy(recruited != null, "recruit receives one equipment container", failures)
+	if recruited != null:
+		TestAssertions.equal(recruited.container_id, &"run-equipment-003", "recruit equipment ID is stable", failures)
+		TestAssertions.equal(recruited.container_kind, ItemSlotContainer.RUN_MEMBER_EQUIPMENT, "recruit equipment has run kind", failures)
+		TestAssertions.equal(recruited.owner_id, String(context.run_player_id), "recruit equipment retains run owner", failures)
+		TestAssertions.equal(recruited.capacity, EquipmentSlotIndex.capacity(), "recruit equipment has eleven slots", failures)
+		TestAssertions.equal(recruited.occupied_slots(), [], "recruit equipment starts empty", failures)
+	TestAssertions.equal((context.call(&"equipment_for", 1) as ItemSlotContainer).to_dictionary(), member_one_before, "recruit preserves leader equipment bytes", failures)
+	TestAssertions.equal((context.call(&"equipment_for", 2) as ItemSlotContainer).to_dictionary(), member_two_before, "recruit preserves follower equipment bytes", failures)
+	TestAssertions.equal(_run_inventory(context).to_dictionary(), inventory_before, "recruit preserves inventory bytes", failures)
+	var replay := _apply(context, first_create, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)
+	TestAssertions.equal(replay.code, ItemTransactionResult.Code.TRANSACTION_REPLAY, "recruit preserves transaction journal", failures)
+	var second_item := _issued_item(context, 1, "recruit-after", failures)
+	if second_item != null:
+		var second_create := ItemTransactionRequest.create("recruit-after-create", String(context.run_player_id), INVENTORY_ID, 1, second_item)
+		TestAssertions.equal(_apply(context, second_create, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG).code, ItemTransactionResult.Code.OK, "recruit preserves next issuance sequence", failures)
+	party.member_added.emit(party.member_by_id(3))
+	TestAssertions.equal(_item_state(context).containers().size(), 4, "repeated member-added signal creates no duplicate container", failures)
 
 func _test_exact_inventory_capacities(failures: Array[String]) -> void:
 	for test_case: Dictionary in [
