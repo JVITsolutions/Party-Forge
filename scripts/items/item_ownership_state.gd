@@ -44,6 +44,24 @@ func containers() -> Array[ItemSlotContainer]:
 		result.append((_containers[key] as ItemSlotContainer).copy())
 	return result
 
+func _insert_item(item_value: ItemInstance) -> void:
+	if _registry != null:
+		_registry._insert(item_value)
+
+func _erase_item(instance_id: String) -> void:
+	if _registry != null:
+		_registry._erase(instance_id)
+
+func _set_slot(container_id_value: StringName, slot: int, instance_id: String) -> void:
+	var value := _containers.get(String(container_id_value)) as ItemSlotContainer
+	if value != null:
+		value._set_item_id(slot, instance_id)
+
+func _clear_slot(container_id_value: StringName, slot: int) -> void:
+	var value := _containers.get(String(container_id_value)) as ItemSlotContainer
+	if value != null:
+		value._clear_slot(slot)
+
 func copy() -> ItemOwnershipState:
 	var result := ItemOwnershipState.create(owner_id, _registry, containers())
 	result.schema_version = schema_version

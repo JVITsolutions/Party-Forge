@@ -40,6 +40,14 @@ func ids() -> Array[String]:
 func size() -> int:
 	return _items.size()
 
+func _insert(item_value: ItemInstance) -> void:
+	if item_value == null:
+		return
+	_items[item_value.instance_id] = item_value.copy()
+
+func _erase(instance_id: String) -> void:
+	_items.erase(instance_id)
+
 func copy() -> ItemRegistry:
 	var result := ItemRegistry.new()
 	result.schema_version = schema_version

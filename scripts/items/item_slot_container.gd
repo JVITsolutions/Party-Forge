@@ -66,6 +66,12 @@ func first_empty_slot() -> int:
 			return slot
 	return -1
 
+func _set_item_id(slot: int, instance_id: String) -> void:
+	_slots[slot] = instance_id
+
+func _clear_slot(slot: int) -> void:
+	_slots.erase(slot)
+
 func copy() -> ItemSlotContainer:
 	var result := ItemSlotContainer.new()
 	result.schema_version = schema_version
