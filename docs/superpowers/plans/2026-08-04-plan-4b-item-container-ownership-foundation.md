@@ -167,7 +167,7 @@ Expected: nonzero exit because `ItemFoundationCatalog` and the resource do not e
 
 `roll_bounds(tier: int) -> Vector2` returns the exact configured bounds or `Vector2(INF, -INF)` for an invalid tier. `validate(stat_catalog)` rejects nonfinite values and requires one minimum/maximum pair for every tier.
 
-Create `core_item_foundation_catalog.tres` with exactly seven rarity subresources in the approved order. Add at least these deterministic fixture affixes with valid canonical stat IDs: `stout` (`constitution`, FLAT), `keen` (`dexterity`, FLAT), `wise` (`wisdom`, FLAT), `of_embers` (`fire_damage`, INCREASED), `of_rime` (`cold_damage`, INCREASED), and `of_reach` (`range`, INCREASED). Give every affix three finite tiers with ascending nonoverlapping ranges.
+Create `core_item_foundation_catalog.tres` with exactly seven rarity subresources in the approved order. Add at least these deterministic fixture affixes with valid canonical stat IDs: `stout` (`constitution`, FLAT), `keen` (`dexterity`, FLAT), `wise` (`wisdom`, FLAT), `of_embers` (`fire_damage`, INCREASED), `of_rime` (`cold_damage`, INCREASED), and `of_reach` (`attack_range`, INCREASED). Give every affix three finite tiers with ascending nonoverlapping ranges.
 
 Add `const ITEM_FOUNDATION_CATALOG` and `var item_foundation_catalog` to `GameCatalog`; append its validation errors after the equipment catalog errors.
 
