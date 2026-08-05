@@ -139,3 +139,45 @@ Final staging is limited to Task 9 source/scenes/tests/report, the required inpu
 Commit message: `feat: expose isolated developer item sandbox`
 
 Stop after the Task 9 commit for independent review. Task 10 has not started.
+
+## Independent Review Focus-Owner Correction
+
+Independent review reproduced a real controller-input defect in commit `01bbf30`: after a slot had been inspected, `_focused_slot_button()` returned that historical slot whenever the live viewport focus owner was a non-slot control. Holding an item, visiting an empty slot, moving actual focus to Save/Inspector/Close, and pressing controller south face therefore transferred to the stale slot. Controller west face on those non-slot controls could also pick up the last inspected populated slot.
+
+The correction was implemented test-first with `tests/integration/task9_developer_item_sandbox_focus_runner.gd`, a real-tree runner that uses `Input.parse_input_event` and the viewport's actual focus owner.
+
+Accepted stale-focus RED:
+
+```text
+TASK9_SANDBOX_FOCUS_SUMMARY: FAIL (9 failures)
+TASK9_STALE_FOCUS_RED_EXIT=1
+```
+
+All real-tree setup and focus-reachability assertions passed. The nine intentional failures were exact projection/byte changes from south face on Save, Inspector, and Close (six failures), plus stale pickup from west face on those same non-slot controls (three failures).
+
+The first post-fix run was rejected as GREEN evidence. Its assertions passed, but the Inspector case emitted typed-array validation errors because `_is_slot_button()` attempted to find a `Label` inside `Array[Button]`. The final predicate first requires a real `Button`; no engine error remains.
+
+Final real-input GREEN:
+
+```text
+TASK9_SANDBOX_FOCUS_SUMMARY: PASS (0 failures)
+TASK9_STALE_FOCUS_GREEN_EXIT=0
+```
+
+The minimal production correction now treats any actual non-null non-slot focus owner as no slot. Historical-slot fallback remains only when there is genuinely no focus owner, preserving the existing off-tree test seam. South face on a non-slot clears held mode without mutation; west face cannot pick stale state. Save, Inspector, and Close remain reachable through the closed focus graph.
+
+Independent review also found that the route fixture assumed `user://tests` already existed. A pristine isolated `APPDATA`/`LOCALAPPDATA` RED exited `1` with exactly one assertion failure: `Player Simulation route fixture saves`, settings error code `7`. The fixture now creates the settings path's parent directory explicitly. The same pristine-root focused command then exited `0` with `TEST_SUMMARY: PASS (0 failures)`.
+
+Post-correction seeded gates on the exact tree:
+
+```text
+DEVELOPER_ITEM_SANDBOX_SHA256: c201fd5917d9958da63dacd8201e80d5911c0de51af367977d2a5ee57dd9defe
+TEST_SUMMARY: PASS (0 failures) # required 20-suite batch
+ITEM_TRANSACTION_MATRIX: PASS
+TEST_SUMMARY: PASS (130 suites)
+TASK9_CORRECTION_FULL_SUITE_EXIT=0
+```
+
+The established intentional negative-test diagnostics and exit-time leak warnings remained unchanged. No unexpected parser, script, loader, resource, input, or UI assertion failure occurred. Both temporary pristine roots were deleted by exact validated path, and no source-adjacent verification sidecar was created.
+
+Correction staging is limited to the sandbox focus resolution, the pristine settings fixture line, the real-input Task 9 regression runner, and this report. Task 10 remains untouched. Stop after the correction commit for another independent review.

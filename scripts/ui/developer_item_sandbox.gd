@@ -476,13 +476,15 @@ func _location_for(item_id: String) -> Dictionary:
 
 
 func _is_slot_button(control: Control) -> bool:
-	return control != null and control in _slot_buttons and control.has_meta("container_id") and control.has_meta("slot")
+	return control is Button and control in _slot_buttons and control.has_meta("container_id") and control.has_meta("slot")
 
 
 func _focused_slot_button() -> Button:
 	var viewport := get_viewport()
-	var focused := viewport.gui_get_focus_owner() as Button if viewport != null else null
-	return focused if _is_slot_button(focused) else _last_focused_slot if _is_slot_button(_last_focused_slot) else null
+	var focused := viewport.gui_get_focus_owner() if viewport != null else null
+	if focused != null:
+		return focused as Button if _is_slot_button(focused) else null
+	return _last_focused_slot if _is_slot_button(_last_focused_slot) else null
 
 
 func _set_status(action: String, error: String = "") -> void:

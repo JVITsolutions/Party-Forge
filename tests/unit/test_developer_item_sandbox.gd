@@ -204,6 +204,7 @@ func _test_main_route_and_profile_isolation(failures: Array[String]) -> void:
 	var settings_path := "user://tests/task9-settings-%s.cfg" % token
 	ProfileTestSupport.remove_tree(profile_root)
 	_cleanup_settings_artifacts(settings_path)
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(settings_path.get_base_dir()))
 	var store := PartyForgeSettingsStore.new()
 	var player_settings := PartyForgeSettings.new()
 	player_settings.mode = PartyForgeSettings.Mode.PLAYER_SIMULATION
