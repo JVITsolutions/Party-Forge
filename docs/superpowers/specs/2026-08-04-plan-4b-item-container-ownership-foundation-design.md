@@ -448,8 +448,13 @@ Later plans add new container kinds and transaction policies around this foundat
 - Extraction selection and transfer escrow.
 - Player-to-player drops and ownership transfer.
 - Vendor inventories and carts.
+- Data-driven weighted production affix pools and tier selection.
 - Crafting, salvage, and destruction confirmation.
 - Persistent bring-in loadouts.
 - Warehouse tabs, sorting, search, and organization.
+
+The later production affix generator will first filter eligible modifiers by item/base tags, item level, affix kind and available prefix/suffix capacity, generation domain, and mutually exclusive modifier families. It will then select from that eligible pool by relative spawn weight. Stronger, more synergistic affixes and higher tiers should generally carry lower weights so they are materially rarer, while future difficulty, item rarity, crafting, passive-tree, and special-drop systems may apply explicit weight modifiers. Selection must use deterministic seeded randomness for reproducible tests and runs; after issuance, the chosen affix IDs, tiers, operations, and rolled values remain explicit and immutable.
+
+Design inspiration includes Path of Exile 1/2's tagged spawn weights and modifier groups, Lootun's affix-driven build variety, Last Epoch's prefix/suffix and drop-only high-tier structure, and Grim Dawn's relative affix-combination weights. The dedicated generator design will compare those systems before choosing Party Forge's exact tables and tuning.
 
 Those systems may add rules around a transaction, but they must not create a second item identity system or mutate containers directly.
