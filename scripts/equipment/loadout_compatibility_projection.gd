@@ -107,10 +107,12 @@ static func confirmation_token_for(
 static func state_fingerprint_for(
 	leader_loadout_class_id: String,
 	selected_class_id_value: StringName,
+	item_records: Dictionary,
 	leader_loadout: Dictionary,
 	stash_tabs: Array[Dictionary],
 ) -> String:
 	var document := {
+		"item_records": item_records.duplicate(true),
 		"leader_loadout": leader_loadout.duplicate(true),
 		"leader_loadout_class_id": leader_loadout_class_id,
 		"selected_class_id": String(selected_class_id_value),

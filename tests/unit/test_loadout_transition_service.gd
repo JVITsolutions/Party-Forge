@@ -13,6 +13,8 @@ func run() -> Array[String]:
 	_test_overflow_transition_destroys_only_confirmed_instances(failures)
 	_test_transition_rejections_and_save_failure_preserve_bytes(failures)
 	_test_compatible_identity_and_slot_change_stales_request(failures)
+	_test_overflow_source_record_change_stales_request(failures)
+	_test_unrelated_stash_record_change_stales_request(failures)
 	_test_leader_loadout_class_change_stales_request(failures)
 	_test_unrelated_stash_occupancy_change_stales_request(failures)
 	return failures
@@ -358,6 +360,59 @@ func _test_compatible_identity_and_slot_change_stales_request(failures: Array[St
 	_assert_stale_rejection_preserves_all_bytes(store, root, request, "compatible identity and slot change", failures)
 	ProfileTestSupport.remove_tree(root)
 
+func _test_overflow_source_record_change_stales_request(failures: Array[String]) -> void:
+	var root := _case_root("stale_overflow_record")
+	var store := ProfileStore.new()
+	var plate := _item("item-stale-overflow-record-plate", &"dawn_bulwark_plate", 0)
+	var original := _profile([plate], {1: plate.instance_id}, [], "fighter")
+	_save_profile(store, original, root, "overflow record stale-state source fixture", failures)
+	var projection := _project(original, &"mage")
+	TestAssertions.equal(projection.planned_stash_destinations, [], "overflow record source has no stash destination", failures)
+	TestAssertions.equal(projection.overflow_item_ids, [plate.instance_id], "overflow record source plans exact destructive item", failures)
+	var request := _request("reject-stale-overflow-record", projection)
+	var changed := store.load_profile(PROFILE_ID, root).profile
+	TestAssertions.truthy(_set_item_level(changed, plate.instance_id, plate.item_level + 1), "overflow record fixture finds equipped source record", failures)
+	TestAssertions.equal(changed.leader_loadout, original.leader_loadout, "overflow record mutation preserves leader placement", failures)
+	TestAssertions.equal(changed.stash_tabs, original.stash_tabs, "overflow record mutation preserves stored stash order and placement", failures)
+	TestAssertions.equal(ProfileCodec.validate_profile(changed), "", "overflow record mutation remains a valid strict profile", failures)
+	TestAssertions.equal(store.save_profile(changed, root), "", "overflow record fixture changes only equipped source data", failures)
+	var changed_projection := _project(changed, &"mage")
+	TestAssertions.equal(changed_projection.confirmation_document(), projection.confirmation_document(), "equipped record mutation preserves the narrow destructive confirmation document", failures)
+	TestAssertions.equal(changed_projection.confirmation_token, projection.confirmation_token, "equipped record mutation preserves the narrow destructive confirmation token", failures)
+	TestAssertions.truthy(changed_projection.state_fingerprint != projection.state_fingerprint, "equipped record mutation changes the complete preflight state fingerprint", failures)
+	_assert_stale_rejection_preserves_all_bytes(store, root, request, "equipped overflow source record change", failures)
+	ProfileTestSupport.remove_tree(root)
+
+func _test_unrelated_stash_record_change_stales_request(failures: Array[String]) -> void:
+	var root := _case_root("stale_stash_record")
+	var store := ProfileStore.new()
+	var plate := _item("item-stale-stash-record-plate", &"dawn_bulwark_plate", 0)
+	var unrelated := _item("item-stale-stash-record-unrelated", &"windrunner_band", 1)
+	var original := _profile(
+		[plate, unrelated],
+		{1: plate.instance_id},
+		[_stash(&"stash-tab-000", {50: unrelated.instance_id})],
+		"fighter",
+	)
+	_save_profile(store, original, root, "stash record stale-state source fixture", failures)
+	var projection := _project(original, &"mage")
+	TestAssertions.equal(projection.planned_stash_destinations, [
+		{"instance_id": plate.instance_id, "destination_container_id": "stash-tab-000", "destination_slot": 0},
+	], "stash record source plans a stable destination unrelated to the changed item", failures)
+	var request := _request("reject-stale-stash-record", projection)
+	var changed := store.load_profile(PROFILE_ID, root).profile
+	TestAssertions.truthy(_set_item_level(changed, unrelated.instance_id, unrelated.item_level + 1), "stash record fixture finds unrelated stored record", failures)
+	TestAssertions.equal(changed.leader_loadout, original.leader_loadout, "stash record mutation preserves leader placement", failures)
+	TestAssertions.equal(changed.stash_tabs, original.stash_tabs, "stash record mutation preserves stored stash order and placement", failures)
+	TestAssertions.equal(ProfileCodec.validate_profile(changed), "", "stash record mutation remains a valid strict profile", failures)
+	TestAssertions.equal(store.save_profile(changed, root), "", "stash record fixture changes only unrelated stash item data", failures)
+	var changed_projection := _project(changed, &"mage")
+	TestAssertions.equal(changed_projection.confirmation_document(), projection.confirmation_document(), "unrelated stash record mutation preserves the transition plan", failures)
+	TestAssertions.equal(changed_projection.confirmation_token, projection.confirmation_token, "unrelated stash record mutation preserves the narrow confirmation token", failures)
+	TestAssertions.truthy(changed_projection.state_fingerprint != projection.state_fingerprint, "unrelated stash record mutation changes the complete preflight state fingerprint", failures)
+	_assert_stale_rejection_preserves_all_bytes(store, root, request, "unrelated stash item record change", failures)
+	ProfileTestSupport.remove_tree(root)
+
 func _test_leader_loadout_class_change_stales_request(failures: Array[String]) -> void:
 	var root := _case_root("stale_class")
 	var store := ProfileStore.new()
@@ -445,6 +500,17 @@ func _item(instance_id: String, base_id: StringName, sequence: int) -> ItemInsta
 		"source": "loadout_transition_test",
 	}
 	return item
+
+func _set_item_level(profile: ProfileState, instance_id: String, item_level: int) -> bool:
+	var records := profile.item_records.duplicate(true)
+	var items := records.get("items", []) as Array
+	for index: int in items.size():
+		var item_document := items[index] as Dictionary
+		if String(item_document.get("instance_id", "")) == instance_id:
+			item_document["item_level"] = item_level
+			profile.item_records = records
+			return true
+	return false
 
 func _equipment_with_requirement(base_id: StringName, attribute_id: StringName, requirement: float) -> EquipmentCatalog:
 	var result := EquipmentCatalog.new()
