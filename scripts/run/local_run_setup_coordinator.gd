@@ -232,10 +232,26 @@ func ready_contexts() -> Array[PlayerRunContext]:
 		if not String(prepared.get("error", "")).is_empty():
 			return []
 		var profile := prepared["profile"] as ProfileState
-		var bootstrap := prepared["bootstrap"] as RunItemBootstrap
+		var committed_bootstrap := prepared["bootstrap"] as RunItemBootstrap
+		var frozen_bootstrap_document := profile.resumable_run.duplicate(true)
+		if (
+			committed_bootstrap == null
+			or frozen_bootstrap_document.is_empty()
+			or ResumableRunItemCodec.encode(committed_bootstrap) != frozen_bootstrap_document
+		):
+			return []
+		var factory_bootstrap := ResumableRunItemCodec.decode(
+			frozen_bootstrap_document,
+			_equipment,
+			_foundation,
+		)
+		if factory_bootstrap == null:
+			return []
 		var committed_profile_document := ProfileCodec.encode(profile.copy())
-		var context := _context_factory.call(participant_value._snapshot(), profile, bootstrap) as PlayerRunContext
-		if not _context_matches_commit(participant_value, committed_profile_document, bootstrap, context):
+		var context := _context_factory.call(participant_value._snapshot(), profile, factory_bootstrap) as PlayerRunContext
+		if ResumableRunItemCodec.encode(factory_bootstrap) != frozen_bootstrap_document:
+			return []
+		if not _context_matches_commit(participant_value, committed_profile_document, frozen_bootstrap_document, context):
 			return []
 		contexts.append(context)
 	var next_registry := RunContextRegistry.new()
@@ -461,19 +477,20 @@ func _prepare_committed_checkout(
 func _context_matches_commit(
 	participant_value: LocalRunSetupParticipant,
 	committed_profile_document: String,
-	bootstrap: RunItemBootstrap,
+	frozen_bootstrap_document: Dictionary,
 	context: PlayerRunContext,
 ) -> bool:
-	if context == null or committed_profile_document.is_empty() or bootstrap == null:
+	if context == null or committed_profile_document.is_empty() or frozen_bootstrap_document.is_empty():
 		return false
 	var context_profile := context.profile_snapshot
-	var leader := context.party.member_by_id(bootstrap.leader_member_id) if context.party != null else null
+	var frozen_leader_member_id := int(frozen_bootstrap_document.get("leader_member_id", 0))
+	var leader := context.party.member_by_id(frozen_leader_member_id) if context.party != null else null
 	return (
 		context.profile_id == participant_value.profile_id
 		and context.player_slot_index == participant_value.player_slot
-		and context.run_player_id == bootstrap.run_player_id
-		and context.run_id == bootstrap.run_id
-		and context.run_seed == bootstrap.run_seed
+		and context.run_player_id == StringName(frozen_bootstrap_document.get("run_player_id", ""))
+		and context.run_id == StringName(frozen_bootstrap_document.get("run_id", ""))
+		and context.run_seed == int(frozen_bootstrap_document.get("run_seed", 0))
 		and context_profile != null
 		and ProfileCodec.encode(context_profile) == committed_profile_document
 		and leader != null
@@ -481,7 +498,7 @@ func _context_matches_commit(
 		and leader.class_definition != null
 		and leader.class_definition.id == participant_value.selected_class_id
 		and context.item_state() != null
-		and context.item_state().to_dictionary() == bootstrap.item_state().to_dictionary()
+		and context.item_state().to_dictionary() == frozen_bootstrap_document.get("item_state", {})
 	)
 
 

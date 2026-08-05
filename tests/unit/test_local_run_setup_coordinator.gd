@@ -142,6 +142,58 @@ class InvalidOnceContextFactory extends RefCounted:
 		return context if errors.is_empty() else null
 
 
+class BootstrapMutatingOnceContextFactory extends RefCounted:
+	var calls := 0
+	var committed_document: Dictionary = {}
+	var mutated_document: Dictionary = {}
+	var party_sink: Array[PartyManager]
+
+	func create(
+		participant: LocalRunSetupParticipant,
+		profile: ProfileState,
+		bootstrap: RunItemBootstrap = null,
+	) -> PlayerRunContext:
+		if participant == null or profile == null or bootstrap == null:
+			return null
+		calls += 1
+		committed_document = ResumableRunItemCodec.encode(bootstrap)
+		var catalog := GameCatalog.load_defaults()
+		var party := PartyManager.new()
+		party.initialize(catalog.class_by_id(participant.selected_class_id), catalog.traits)
+		party_sink.append(party)
+		var context := PlayerRunContext.new()
+		var errors := context.configure(
+			bootstrap.run_player_id,
+			participant.player_slot,
+			profile,
+			bootstrap.run_seed,
+			party,
+			100,
+			bootstrap,
+		)
+		if not errors.is_empty() or calls != 1:
+			return context if errors.is_empty() else null
+		var mutated_run_player_id := &"mutated-local-player"
+		var mutated_containers := bootstrap.item_state().containers()
+		for container: ItemSlotContainer in mutated_containers:
+			container.owner_id = String(mutated_run_player_id)
+		var mutated_state := ItemOwnershipState.create(
+			String(mutated_run_player_id),
+			bootstrap.item_state().registry(),
+			mutated_containers,
+		)
+		bootstrap.set("_run_id", &"mutated-local-run")
+		bootstrap.set("_run_seed", bootstrap.run_seed + 1000)
+		bootstrap.set("_run_player_id", mutated_run_player_id)
+		bootstrap.set("_item_state", mutated_state)
+		context.set("_run_id", bootstrap.run_id)
+		context.set("_run_seed", bootstrap.run_seed)
+		context.set("_run_player_id", bootstrap.run_player_id)
+		context.set("_item_state", bootstrap.item_state())
+		mutated_document = ResumableRunItemCodec.encode(bootstrap)
+		return context
+
+
 class AssignmentGate extends RefCounted:
 	var assignments: Dictionary = {}
 	var enabled := true
@@ -170,6 +222,7 @@ func run() -> Array[String]:
 	_test_request_preflight_is_mutation_free(failures)
 	_test_partial_checkout_retry_reuses_exact_bootstraps(failures)
 	_test_context_contract_retry_reuses_committed_checkout(failures)
+	_test_mutated_bootstrap_cannot_redefine_committed_authority(failures)
 	_test_cancellation_checkout_boundary(failures)
 	_test_four_profile_isolation_and_stable_registry_lock(failures)
 	for party: PartyManager in _parties:
@@ -481,6 +534,48 @@ func _test_context_contract_retry_reuses_committed_checkout(failures: Array[Stri
 		TestAssertions.equal(_profile_artifact_bytes(path), committed_artifacts, "%s context retry performs no profile write" % mode, failures)
 		TestAssertions.truthy(coordinator.run_context_registry() != null and coordinator.run_context_registry().is_arena_roster_locked(), "%s context retry publishes one locked registry" % mode, failures)
 		ProfileTestSupport.remove_tree(root)
+
+
+func _test_mutated_bootstrap_cannot_redefine_committed_authority(failures: Array[String]) -> void:
+	var root := _case_root("mutated_bootstrap")
+	var store := ProfileStore.new()
+	var profile := _profile("profile-mutated-bootstrap", "Mutated Bootstrap", &"fighter", &"forge_vanguard_sword", 9, 1, 0, 92, ["bring_in_gear"])
+	_save(store, profile, root, "mutated bootstrap profile", failures)
+	var participant := _participant(profile.profile_id, -1, 0, &"fighter") as LocalRunSetupParticipant
+	var path := store.profile_path(profile.profile_id, root)
+	var checkout := RecordingCheckout.new(ProfileMutationService.new(store))
+	checkout.tracked_paths = {profile.profile_id: path}
+	var context_factory := BootstrapMutatingOnceContextFactory.new()
+	context_factory.party_sink = _parties
+	var coordinator := _coordinator(store, root, _assignment_map([participant]), {
+		"checkout_service": checkout,
+		"context_factory": Callable(context_factory, "create"),
+	}) as LocalRunSetupCoordinator
+	TestAssertions.equal(coordinator.begin([participant]), PackedStringArray(), "mutated bootstrap fixture begins", failures)
+	TestAssertions.equal(coordinator.ready_contexts(), [], "factory cannot redefine the committed bootstrap authority", failures)
+	TestAssertions.equal(context_factory.calls, 1, "adversarial factory runs once before rejection", failures)
+	TestAssertions.equal(coordinator.run_context_registry(), null, "mutated bootstrap publishes no registry", failures)
+	TestAssertions.truthy(not coordinator.is_locked(), "mutated bootstrap cannot lock the registry", failures)
+	var committed := store.load_profile(profile.profile_id, root).profile
+	TestAssertions.equal(_canonical_resumable(committed.resumable_run), context_factory.committed_document, "durable resumable run remains the factory's exact canonical input authority", failures)
+	TestAssertions.truthy(context_factory.mutated_document != committed.resumable_run, "adversarial factory changed bootstrap identity and item state", failures)
+	TestAssertions.equal(int(checkout.calls_by_profile.get(profile.profile_id, 0)), 1, "adversarial failure performs exactly one checkout", failures)
+	TestAssertions.equal(_operation_count(committed, "run_loadout_checkout"), 1, "adversarial failure retains one checkout journal", failures)
+	var committed_artifacts := _profile_artifact_bytes(path)
+
+	var contexts := coordinator.ready_contexts()
+	TestAssertions.equal(contexts.size(), 1, "normal retry succeeds from the single committed checkout", failures)
+	TestAssertions.equal(context_factory.calls, 2, "retry invokes the factory exactly once more", failures)
+	TestAssertions.equal(int(checkout.calls_by_profile.get(profile.profile_id, 0)), 1, "retry reuses exactly one checkout", failures)
+	TestAssertions.equal(_profile_artifact_bytes(path), committed_artifacts, "retry performs no profile write", failures)
+	if contexts.size() == 1:
+		var frozen_bootstrap := ResumableRunItemCodec.decode(committed.resumable_run, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)
+		TestAssertions.equal(contexts[0].run_id, frozen_bootstrap.run_id, "retry context uses the frozen run id", failures)
+		TestAssertions.equal(contexts[0].run_seed, frozen_bootstrap.run_seed, "retry context uses the frozen run seed", failures)
+		TestAssertions.equal(contexts[0].run_player_id, frozen_bootstrap.run_player_id, "retry context uses the frozen run player", failures)
+		TestAssertions.equal(contexts[0].item_state().to_dictionary(), frozen_bootstrap.item_state().to_dictionary(), "retry context uses the frozen item state", failures)
+	TestAssertions.truthy(coordinator.run_context_registry() != null and coordinator.run_context_registry().is_arena_roster_locked(), "normal retry publishes one locked registry", failures)
+	ProfileTestSupport.remove_tree(root)
 
 
 func _test_cancellation_checkout_boundary(failures: Array[String]) -> void:
