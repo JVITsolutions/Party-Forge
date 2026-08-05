@@ -28,6 +28,8 @@
 - The Passive Skill Tree Creator remains authoritative for `.pstree` source and deterministic runtime export; do not hand-edit only Party Forge's runtime JSON.
 - Player Mode obeys permanent feature unlocks. Developer Mode may preview unfinished UI without mutating production progression.
 - Use typed GDScript, defensive copies at public boundaries, strict RED-GREEN-REFACTOR, focused commits, and an independent review after every task.
+- Approved preflight corrections: the new handbook page is Chapter 12 because Plan 4B already owns Chapter 11; Task 6's deterministic rerun repeats Task 6 rather than Task 5; and Armoury equip/unequip/swap intents must be backed by an eligibility-checked atomic per-profile loadout assignment service.
+- Schema three stores the active leader-loadout class ID so persistent equipment eligibility never depends on transient UI state. An empty loadout may select its target class; changing a nonempty loadout to another class uses the explicit compatibility/transition policy.
 
 ---
 
@@ -125,13 +127,15 @@ git commit -m "feat: define fixed equipment containers"
 - Modify: `scripts/profile/profile_codec.gd`
 - Modify: `scripts/profile/profile_migrator.gd`
 - Modify: `scripts/profile/profile_storage_reconciler.gd`
+- Modify: `scripts/profile/profile_item_storage_service.gd`
 - Modify: `tests/unit/test_profile_state.gd`
 - Modify: `tests/unit/test_profile_item_schema_migration.gd`
 - Modify: `tests/unit/test_atomic_profile_store.gd`
+- Modify: `tests/unit/test_profile_item_storage_service.gd`
 
 **Interfaces:**
 - Consumes: `ItemSlotContainer.PROFILE_LEADER_EQUIPMENT`.
-- Produces: `ProfileState.leader_loadout: Dictionary`, schema version `3`, and v2-to-v3 atomic migration.
+- Produces: `ProfileState.leader_loadout: Dictionary`, `ProfileState.leader_loadout_class_id: String`, schema version `3`, and v2-to-v3 atomic migration.
 
 - [ ] **Step 1: Write RED profile and migration tests**
 
@@ -148,6 +152,8 @@ Require a new profile to encode this exact container:
 }
 ```
 
+Require `leader_loadout_class_id == ""` for a new or migrated empty loadout. Round-trip a valid nonempty class ID defensively. Profile schema validation accepts the canonical string field; authoritative class existence and equipment eligibility are rechecked by the assignment, checkout, compatibility, transition, and resolution services.
+
 Add tests that populate two leader slots with real item IDs, round-trip exact placement, reject wrong owner/kind/capacity/orphan items, and prove returned profiles are defensive. Migrate a v2 profile with item-bearing stash and require the stash bytes/placements, item records, sequence, transactions, and every existing progression field to survive while the empty leader loadout is added. Inject failed promotion/current verification and prove the v2 primary/backup bytes remain recoverable.
 
 - [ ] **Step 2: Run RED**
@@ -160,11 +166,12 @@ Expected: schema/version/field failures for missing `leader_loadout`.
 
 - [ ] **Step 3: Implement schema three and strict ownership decoding**
 
-Set `ProfileState.SCHEMA_VERSION := 3`, add `leader_loadout`, and initialize it from the profile ID in `new_profile()`. Extend the exact codec field list. Build the synthetic profile ownership state from `[leader_loadout] + stash_tabs`; decode through authoritative catalogs and assign only after all validation succeeds.
+Set `ProfileState.SCHEMA_VERSION := 3`, add `leader_loadout` plus `leader_loadout_class_id`, and initialize them from the profile ID in `new_profile()`. Extend the exact codec field list. Build the synthetic profile ownership state from `[leader_loadout] + stash_tabs`; decode through authoritative catalogs and assign only after all validation succeeds.
 
 ```gdscript
 const SCHEMA_VERSION := 3
 var leader_loadout: Dictionary = {}
+var leader_loadout_class_id := ""
 
 static func _empty_leader_loadout(profile_id: String) -> Dictionary:
 	return ItemSlotContainer.create(
@@ -177,14 +184,16 @@ static func _empty_leader_loadout(profile_id: String) -> Dictionary:
 
 Add v2 migration that preserves all v2 fields byte-semantically and creates only the empty exact leader container. Keep the existing v1-to-v2 migration, then apply v2-to-v3 so v1 documents migrate through both steps in memory before one atomic promotion. `ProfileStorageReconciler` validates the combined loadout/stash ownership proposal and never rewrites the existing loadout.
 
+Update `ProfileItemStorageService` to decode and write the combined `[leader_loadout] + stash_tabs` ownership domain while preserving exact container roles and ordering. Its generic storage path must reject any request whose source or destination is `leader-loadout`; persistent equip/unequip/swap is reserved for the eligibility-aware assignment service added in Task 9.
+
 - [ ] **Step 4: Run GREEN and complete profile regressions**
 
-Run the Task 2 command plus profile manager, mutation, storage reconciliation, storage service, and boot integration suites. Expected: exit `0` and no partial-artifact leakage.
+Run the Task 2 command plus profile manager, mutation, storage reconciliation, storage service, and boot integration suites. Require generic profile storage to preserve the loadout while moving stash items and to reject direct leader-loadout source/destination requests. Expected: exit `0` and no partial-artifact leakage.
 
 - [ ] **Step 5: Commit**
 
 ```powershell
-git add scripts/profile tests/unit/test_profile_state.gd tests/unit/test_profile_item_schema_migration.gd tests/unit/test_atomic_profile_store.gd
+git add scripts/profile tests/unit/test_profile_state.gd tests/unit/test_profile_item_schema_migration.gd tests/unit/test_atomic_profile_store.gd tests/unit/test_profile_item_storage_service.gd
 git commit -m "feat: persist profile leader loadouts"
 ```
 
@@ -273,6 +282,8 @@ git commit -m "feat: own equipment by run member"
 Build a profile with a compatible leader loadout and `bring_in_gear`. Checkout must atomically remove those instances from profile `item_records`/`leader_loadout`, create an exact strict run ownership snapshot under `resumable_run`, and return a defensive bootstrap that places the same item instances into `run-equipment-001`. There must be no moment when durable profile bytes serialize the same instance in both ownership domains.
 
 Cover empty loadout; absent `bring_in_gear`; incompatible class; transaction replay and collision; active resumable run; wrong profile/run/player/leader identity; injected save failure; defensive request/bootstrap results; and starting a context from the bootstrap. Every failure preserves profile bytes and creates no configured context item state.
+
+If the loadout is nonempty, checkout requires the request's selected leader class to equal `leader_loadout_class_id` after any approved transition. An absent `bring_in_gear` succeeds with an empty run equipment bootstrap while leaving the profile loadout and its class ID untouched.
 
 Call `forfeit()` for a full-death fixture and require the matching resumable run and every checked-out item to be removed in one profile mutation. Wrong/stale run ID, replay, collision, and save failure must preserve the resumable run and its items. Forfeit does not call `SANDBOX_REMOVE`; loss occurs by committing a profile candidate that deliberately clears the entire closed run ownership document.
 
@@ -439,7 +450,7 @@ static func project(
 
 - [ ] **Step 4: Run GREEN and ownership regressions**
 
-Run Task 5 twice, then context ownership, item ownership, passive resolution, and profile state suites. Expected: identical ordering and exit `0`.
+Run Task 6 twice, then context ownership, item ownership, passive resolution, and profile state suites. Expected: identical ordering and exit `0`.
 
 - [ ] **Step 5: Commit**
 
@@ -487,6 +498,8 @@ The request contains a stable resolution transaction ID and exact ordinary selec
 6. Clears the matching `resumable_run` candidate so no item remains serialized in two ownership domains.
 7. Builds and strictly validates the complete profile registry/loadout/stash ownership state.
 8. Returns the candidate for one atomic save.
+
+Set `leader_loadout_class_id` to the resolved leader's authoritative class ID whenever a successful run is resolved, including an empty resulting loadout. This preserves the intended class context for later Armoury assignment. Ordinary stash extraction never substitutes a different class ID.
 
 Before saving, the service calls `context.item_resolution_error(transaction_id)`; an already resolved context accepts only the same ID. After that successful preflight, `mark_items_resolved()` is an infallible local assignment and runs only after save success. Run-only lost items require no production remove operation because the resolved context becomes closed and is discarded as a whole.
 
@@ -551,6 +564,8 @@ The compatibility service resolves each equipped instance's base and calls `Equi
 
 The transition service recomputes the projection inside `ProfileMutationService`, compares the complete canonical request/fingerprint, and commits either all stash moves or all moves plus the exact confirmed overflow deletions. Overflow deletion rebuilds the candidate registry/container documents and strictly validates them; it never calls `SANDBOX_REMOVE` and is callable only with a valid confirmation token equal to the SHA-256 of the canonical selected-class/source/destination/overflow projection.
 
+After a successful transition, set `leader_loadout_class_id` to the selected class when compatible equipment remains. If the transition empties the leader loadout, retain the selected class as the target for subsequent Armoury assignment; changing that empty target is safe because no equipped item can become invalid.
+
 ```gdscript
 func project(
 	profile: ProfileState,
@@ -579,6 +594,8 @@ git commit -m "feat: validate retained loadout transitions"
 
 **Files:**
 - Create: `scripts/ui/storage/profile_storage_projection.gd`
+- Create: `scripts/equipment/profile_loadout_assignment_request.gd`
+- Create: `scripts/equipment/profile_loadout_assignment_service.gd`
 - Create: `scripts/ui/armoury/armoury_projection.gd`
 - Create: `scripts/ui/armoury/armoury_screen.gd`
 - Create: `scenes/ui/armoury/armoury_screen.tscn`
@@ -594,13 +611,14 @@ git commit -m "feat: validate retained loadout transitions"
 - Create: `tests/unit/test_armoury_screen.gd`
 - Create: `tests/unit/test_warehouse_screen.gd`
 - Create: `tests/unit/test_profile_storage_projection.gd`
+- Create: `tests/unit/test_profile_loadout_assignment_service.gd`
 - Modify: `tests/unit/test_main_menu_view_model.gd`
 - Modify: `tests/unit/test_main_menu_screen.gd`
 - Modify: `tests/unit/test_main_wiring.gd`
 
 **Interfaces:**
 - Consumes: defensive profile item/loadout/stash projections and FeatureAccessPolicy.
-- Produces: `ProfileStorageProjection.from_profile(profile, equipment, foundation)`, `MainMenuViewModel.ROUTE_ARMOURY`, `ROUTE_WAREHOUSE`, `ArmouryScreen.open(storage_projection, return_focus)`, `WarehouseScreen.open(storage_projection, return_focus)`, and intent-only move/equip/organization signals.
+- Produces: `ProfileStorageProjection.from_profile(profile, equipment, foundation)`, `ProfileLoadoutAssignmentService.apply(profile_id, request, root) -> ProfileMutationResult`, `MainMenuViewModel.ROUTE_ARMOURY`, `ROUTE_WAREHOUSE`, `ArmouryScreen.open(storage_projection, return_focus)`, `WarehouseScreen.open(storage_projection, return_focus)`, and intent-only move/equip/organization signals.
 
 - [ ] **Step 1: Write RED route and screen tests**
 
@@ -608,12 +626,14 @@ Require Armoury hidden before equipment unlock, visible/available after the impl
 
 Build one profile with three sparse stash tabs. Require `ProfileStorageProjection` to preserve exact tab order, IDs, capacities, occupied slots, and item details while returning defensive copies.
 
-Instantiate Armoury and require exactly eleven **leader** equipment buttons in canonical slot order, direct switching among all three Warehouse tabs, icon/name/rarity/item-level/affix inspection, mouse/controller selection, move/equip intent emission, and no follower-sheet selector. Instantiate Warehouse and require all three tabs, search text, rarity/item-type filters, stable sort controls, category labels, bulk-selection intents, and no character equipment sheet. Both views must project the same item IDs and exact slot placements. Closing returns focus to the originating main-menu action.
+Create assignment-service tests for stash-to-loadout equip, loadout-to-stash unequip, occupied-slot swap, and first-item target-class selection. Require authoritative class lookup and `EquipmentEligibility` checks, reserved-slot/quiver rules, exact instance preservation, transaction replay/collision handling, stale source/destination rejection, save-failure byte identity, defensive requests/results, and rejection of changing a nonempty loadout's class outside the transition service. No failed assignment may alter profile bytes, item records, loadout class, loadout slots, or stash placement.
+
+Instantiate Armoury and require exactly eleven **leader** equipment buttons in canonical slot order, the active loadout class label, a target-class chooser only while the loadout is empty, direct switching among all three Warehouse tabs, icon/name/rarity/item-level/affix inspection, mouse/controller selection, class-qualified move/equip intent emission, and no follower-sheet selector. With a nonempty loadout, choosing another class must emit the compatibility/transition route rather than directly changing the assignment class. Instantiate Warehouse and require all three tabs, search text, rarity/item-type filters, stable sort controls, category labels, bulk-selection intents, and no character equipment sheet. Both views must project the same item IDs and exact slot placements. Closing returns focus to the originating main-menu action.
 
 - [ ] **Step 2: Run RED**
 
 ```powershell
-& $godot --headless --path $project --quit-after 180 --script res://tests/focused_test_runner.gd -- tests/unit/test_profile_storage_projection.gd tests/unit/test_armoury_screen.gd tests/unit/test_warehouse_screen.gd tests/unit/test_main_menu_view_model.gd tests/unit/test_main_menu_screen.gd tests/unit/test_main_wiring.gd
+& $godot --headless --path $project --quit-after 180 --script res://tests/focused_test_runner.gd -- tests/unit/test_profile_loadout_assignment_service.gd tests/unit/test_profile_storage_projection.gd tests/unit/test_armoury_screen.gd tests/unit/test_warehouse_screen.gd tests/unit/test_main_menu_view_model.gd tests/unit/test_main_menu_screen.gd tests/unit/test_main_wiring.gd
 ```
 
 Expected: missing shared projection, both routes, projection fields, scenes, and screens.
@@ -621,6 +641,8 @@ Expected: missing shared projection, both routes, projection fields, scenes, and
 - [ ] **Step 3: Implement the shared projection and separate feature-gated views**
 
 `ProfileStorageProjection` decodes one strict profile ownership state and produces immutable-by-convention leader slots, exact ordered stash-tab projections, and item inspector records. It does not sort, compact, move, equip, or rewrite items.
+
+`ProfileLoadoutAssignmentService` is the only ordinary persistent equip/unequip/swap boundary. Its request fingerprints the selected class, exact item/source/destination slots, and expected occupied IDs. Inside one `ProfileMutationService` candidate it decodes the combined leader/stash ownership state, rechecks class identity and eligibility for the complete resulting loadout, applies the exact move/swap through `ItemContainerTransactionService`, preserves item instances byte-semantically, writes the leader container and stash tabs back to their canonical fields, and updates `leader_loadout_class_id` only under the empty/nonempty rules above. It never issues, extracts, destroys, compacts, or calls `SANDBOX_REMOVE`.
 
 Add main-menu projection fields for Armoury and Warehouse, action/focus wiring, and exact route IDs `&"armoury"` and `&"warehouse"`. Build both screens as process-always modals above the main menu. Armoury uses leader equipment left, tab-switchable stash right, and an inspector. Warehouse uses tab navigation, storage-wide search/filter/sort/category controls, a scrollable grid, bulk selection, and an inspector. Search/sort/filter alter only the displayed projection and never serialized placement.
 
@@ -640,7 +662,8 @@ static func from_profile(
 # armoury_screen.gd
 signal close_requested
 signal move_requested(item_id: String, destination_container_id: StringName, destination_slot: int)
-signal equip_requested(item_id: String, equipment_slot_id: StringName)
+signal equip_requested(item_id: String, equipment_slot_id: StringName, target_class_id: StringName)
+signal loadout_class_change_requested(target_class_id: StringName)
 
 func open(storage: ProfileStorageProjection, return_focus: Control = null) -> void:
 	_projection = ArmouryProjection.from_storage(storage)
@@ -660,18 +683,18 @@ func open(storage: ProfileStorageProjection, return_focus: Control = null) -> vo
 	_render_projection()
 ```
 
-`PartyForgeMain` loads the current profile, builds one shared storage projection, rechecks the requested route's unlock/developer policy, hides the main menu, and opens the requested screen. It delegates move/equip/storage intents through policy services, reloads the profile after a committed change, rebuilds both views from new defensive data, and restores focus on close. No screen script edits item dictionaries.
+`PartyForgeMain` loads the current profile, builds one shared storage projection, rechecks the requested route's unlock/developer policy, hides the main menu, and opens the requested screen. It delegates Armoury equip/unequip/swap intents through `ProfileLoadoutAssignmentService` and Warehouse-only storage intents through `ProfileItemStorageService`, reloads the profile after a committed change, rebuilds both views from new defensive data, and restores focus on close. No screen script edits item dictionaries.
 
 Add separate labelled blockout Armoury and Warehouse hotspots/actions representing the future clickable city buildings. Their routes match their main-menu actions; later city art may replace either button without changing the signal contract.
 
 - [ ] **Step 4: Run GREEN and responsive UI gate**
 
-Run Task 9 plus settings, feature-access, ledger, main-menu navigation, profile storage, and controller-input suites. Add an integration runner at 1920x1080, 2560x1440, and 3840x2160 proving leader equipment, tab switching, Warehouse organization controls, shared item identity/placement, inspector reachability, and focus containment.
+Run Task 9 plus assignment, settings, feature-access, ledger, main-menu navigation, profile storage, and controller-input suites. Add an integration runner at 1920x1080, 2560x1440, and 3840x2160 proving leader equipment, eligibility-checked equip/unequip/swap, tab switching, Warehouse organization controls, shared item identity/placement, inspector reachability, and focus containment.
 
 - [ ] **Step 5: Commit**
 
 ```powershell
-git add scripts/ui/storage scripts/ui/armoury scenes/ui/armoury scripts/ui/warehouse scenes/ui/warehouse scripts/ui/main_menu scenes/ui/main_menu scripts/game/main.gd scenes/game/main.tscn tests/unit tests/integration
+git add scripts/equipment/profile_loadout_assignment_request.gd scripts/equipment/profile_loadout_assignment_service.gd scripts/ui/storage scripts/ui/armoury scenes/ui/armoury scripts/ui/warehouse scenes/ui/warehouse scripts/ui/main_menu scenes/ui/main_menu scripts/game/main.gd scenes/game/main.tscn tests/unit tests/integration
 git commit -m "feat: add Armoury and Warehouse interfaces"
 ```
 
@@ -802,7 +825,7 @@ git commit -m "feat: coordinate per-profile loadout setup"
 ### Task 12: Documentation, Full Verification, and Final Review
 
 **Files:**
-- Create: `docs/handbook/11-equipment-stash-and-extraction.md`
+- Create: `docs/handbook/12-equipment-stash-and-extraction.md`
 - Create: `docs/verification/2026-08-05-leader-loadout-extraction-continuity.md`
 - Modify: `docs/handbook/README.md`
 
