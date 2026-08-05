@@ -24,6 +24,8 @@ const DEVELOPER_QUICK_START_PROFILE_REQUIRED_STATUS := "Choose a profile before 
 const DEVELOPER_QUICK_START_MODE_REQUIRED_STATUS := "Save Developer Mode before using Developer Quick Start."
 const ITEM_SANDBOX_DEVELOPER_REQUIRED_STATUS := "Save Developer Mode before opening the Developer Item Sandbox."
 
+enum LoadoutOrigin { RUN_SETUP, DEVELOPER_QUICK_START }
+
 var party_stats: Dictionary = {}
 var trait_upgrade_ranks: Dictionary = {}
 var catalog: GameCatalog
@@ -67,13 +69,17 @@ var _storage_return_focus: Control
 var _loadout_compatibility := LoadoutCompatibilityService.new()
 var _loadout_transitions := LoadoutTransitionService.new()
 var _loadout_checkout := RunLoadoutCheckoutService.new()
+var _pending_checkout_recovery: Dictionary = {}
+var _run_context_factory: Callable = func() -> PlayerRunContext: return PlayerRunContext.new()
 var _pending_loadout_projection: LoadoutCompatibilityProjection
 var _pending_loadout_profile_id := ""
 var _pending_loadout_class_id: StringName
+var _pending_loadout_origin := LoadoutOrigin.RUN_SETUP
 var _loadout_transaction_sequence := 0
 var _armoury_from_loadout_warning := false
 var _armoury_warning_class_id: StringName
 var _armoury_warning_origin: Control
+var _armoury_warning_origin_mode := LoadoutOrigin.RUN_SETUP
 
 func _ready() -> void:
 	if initialized:
@@ -98,6 +104,10 @@ func _ready() -> void:
 	print("PARTY_FORGE_CLASS_SELECTION_READY")
 
 func select_leader_class(class_id: StringName) -> bool:
+	return _select_leader_class(class_id, LoadoutOrigin.RUN_SETUP)
+
+
+func _select_leader_class(class_id: StringName, origin_mode: LoadoutOrigin) -> bool:
 	if not initialized:
 		_ready()
 	if profile_manager == null or profile_manager.active_profile() == null:
@@ -125,6 +135,8 @@ func select_leader_class(class_id: StringName) -> bool:
 	definition = catalog.class_by_id(class_id)
 	if definition == null:
 		return false
+	if not _pending_checkout_recovery.is_empty():
+		return _resume_pending_checkout(profile, definition)
 	var projection := _project_loadout_compatibility(profile, class_id)
 	if projection == null or not projection.valid:
 		_show_run_setup_error(projection.error if projection != null else "PARTY_FORGE_LOADOUT_COMPATIBILITY_ERROR field=projection reason=unavailable")
@@ -133,12 +145,16 @@ func select_leader_class(class_id: StringName) -> bool:
 		_pending_loadout_projection = projection
 		_pending_loadout_profile_id = profile.profile_id
 		_pending_loadout_class_id = class_id
-		var selector := get_node("HUD/ClassSelection") as ClassSelectionPanel
-		var origin := selector.begin_compatibility_gate(class_id)
+		_pending_loadout_origin = origin_mode
+		var origin: Control
+		if origin_mode == LoadoutOrigin.DEVELOPER_QUICK_START:
+			origin = (get_node("MainMenuScreen") as MainMenuScreen).get_node("DeveloperQuickStart") as Control
+		else:
+			origin = (get_node("HUD/ClassSelection") as ClassSelectionPanel).begin_compatibility_gate(class_id)
 		if not get_node("LoadoutWarningDialog").call("open", projection, origin):
 			_clear_pending_loadout_warning(true)
 		return false
-	return _checkout_and_start_leader_class(profile, definition)
+	return _checkout_and_start_leader_class(profile, definition, origin_mode)
 
 
 func _project_loadout_compatibility(profile: ProfileState, class_id: StringName) -> LoadoutCompatibilityProjection:
@@ -146,24 +162,11 @@ func _project_loadout_compatibility(profile: ProfileState, class_id: StringName)
 	return _loadout_compatibility.project(profile, definition, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)
 
 
-func _checkout_and_start_leader_class(profile: ProfileState, definition: ClassDefinition) -> bool:
+func _checkout_and_start_leader_class(profile: ProfileState, definition: ClassDefinition, origin_mode := LoadoutOrigin.RUN_SETUP) -> bool:
 	if profile == null or definition == null or profile.profile_id != active_profile().profile_id:
 		_show_run_setup_error("PARTY_FORGE_RUN_LOADOUT_CHECKOUT_ERROR field=profile_id reason=active profile changed")
 		return false
-	active_run_rules = RunRulesSnapshot.from_settings(saved_settings)
-	_level_up_offer_state = LevelUpOfferState.new()
-	(get_node("HUD/LevelUpPanel") as LevelUpPanel).configure_reduced_motion(active_run_rules.reduced_motion())
-	experience_system.configure_multiplier(active_run_rules.experience_multiplier_percent())
-	party_manager.configure_capacity(active_run_rules.capacity_policy())
-	if CURRENT_STARTING_PARTY_SIZE > active_run_rules.party_capacity():
-		push_error("PARTY_FORGE_STARTING_PARTY_CAPACITY_ERROR selected=%d capacity=%d" % [CURRENT_STARTING_PARTY_SIZE, active_run_rules.party_capacity()])
-		return false
-	game_run.configure_seed(RUN_SEED)
-	party_manager.configure_identity(game_run.run_seed, catalog.generic_name_pool)
-	party_manager.initialize(definition, catalog.traits)
-	party_manager.configure_combat(game_run.combat_rng, catalog.damage_types)
-	if party_manager.members.is_empty():
-		_show_run_setup_error("PARTY_FORGE_RUN_LOADOUT_CHECKOUT_ERROR field=leader reason=party initialization failed")
+	if not _prepare_run_start(definition):
 		return false
 	_loadout_transaction_sequence += 1
 	var leader_member_id := party_manager.members[0].member_id
@@ -181,24 +184,90 @@ func _checkout_and_start_leader_class(profile: ProfileState, definition: ClassDe
 	)
 	var result := _loadout_checkout.checkout(profile.profile_id, request, profile_root)
 	if not result.ok():
-		_show_run_setup_error(result.error)
+		_show_loadout_origin_error(result.error, origin_mode, definition.id)
 		return false
+	_pending_checkout_recovery = {
+		"profile_id": profile.profile_id,
+		"class_id": String(definition.id),
+		"run_id": String(run_id),
+		"run_seed": game_run.run_seed,
+		"run_player_id": String(request.run_player_id),
+		"leader_member_id": leader_member_id,
+		"resumable_run": result.profile.resumable_run.duplicate(true),
+		"origin_mode": origin_mode,
+	}
 	var refresh_error := profile_manager.refresh_profile(profile.profile_id)
 	if not refresh_error.is_empty():
 		_show_run_setup_error(refresh_error)
 		return false
-	var committed_profile := profile_manager.active_profile()
-	var bootstrap := _loadout_checkout.bootstrap_from(committed_profile)
-	if bootstrap == null or bootstrap.run_id != run_id:
-		_show_run_setup_error("PARTY_FORGE_RUN_LOADOUT_CHECKOUT_ERROR field=bootstrap reason=committed bootstrap unavailable")
+	return _resume_pending_checkout(profile_manager.active_profile(), definition)
+
+
+func _prepare_run_start(definition: ClassDefinition) -> bool:
+	if definition == null:
+		_show_run_setup_error("PARTY_FORGE_RUN_LOADOUT_CHECKOUT_ERROR field=class reason=unavailable")
 		return false
-	committed_profile.resumable_run = ResumableRunItemCodec.encode(bootstrap)
+	active_run_rules = RunRulesSnapshot.from_settings(saved_settings)
+	_level_up_offer_state = LevelUpOfferState.new()
+	(get_node("HUD/LevelUpPanel") as LevelUpPanel).configure_reduced_motion(active_run_rules.reduced_motion())
+	experience_system.configure_multiplier(active_run_rules.experience_multiplier_percent())
+	party_manager.configure_capacity(active_run_rules.capacity_policy())
+	if CURRENT_STARTING_PARTY_SIZE > active_run_rules.party_capacity():
+		push_error("PARTY_FORGE_STARTING_PARTY_CAPACITY_ERROR selected=%d capacity=%d" % [CURRENT_STARTING_PARTY_SIZE, active_run_rules.party_capacity()])
+		return false
+	game_run.configure_seed(RUN_SEED)
+	party_manager.configure_identity(game_run.run_seed, catalog.generic_name_pool)
+	party_manager.initialize(definition, catalog.traits)
+	party_manager.configure_combat(game_run.combat_rng, catalog.damage_types)
+	if party_manager.members.is_empty():
+		_show_run_setup_error("PARTY_FORGE_RUN_LOADOUT_CHECKOUT_ERROR field=leader reason=party initialization failed")
+		return false
+	return true
+
+
+func _resume_pending_checkout(committed_profile: ProfileState, definition: ClassDefinition) -> bool:
+	if _pending_checkout_recovery.is_empty():
+		return false
+	var expected_profile_id := String(_pending_checkout_recovery.get("profile_id", ""))
+	var expected_class_id := StringName(_pending_checkout_recovery.get("class_id", ""))
+	if committed_profile == null or committed_profile.profile_id != expected_profile_id:
+		_show_run_setup_error("PARTY_FORGE_RUN_LOADOUT_CHECKOUT_ERROR field=profile_id reason=committed recovery profile mismatch")
+		return false
+	if definition == null or definition.id != expected_class_id:
+		_show_run_setup_error("PARTY_FORGE_RUN_LOADOUT_CHECKOUT_ERROR field=selected_leader_class_id reason=committed recovery class mismatch")
+		return false
+	var expected_document := _pending_checkout_recovery.get("resumable_run", {}) as Dictionary
+	if expected_document.is_empty() or committed_profile.resumable_run != expected_document:
+		_show_run_setup_error("PARTY_FORGE_RUN_LOADOUT_CHECKOUT_ERROR field=bootstrap reason=committed bootstrap mismatch")
+		return false
+	var bootstrap := _loadout_checkout.bootstrap_from(committed_profile)
+	if (
+		bootstrap == null
+		or String(bootstrap.run_id) != String(_pending_checkout_recovery.get("run_id", ""))
+		or bootstrap.run_seed != int(_pending_checkout_recovery.get("run_seed", 0))
+		or String(bootstrap.run_player_id) != String(_pending_checkout_recovery.get("run_player_id", ""))
+		or bootstrap.leader_member_id != int(_pending_checkout_recovery.get("leader_member_id", 0))
+	):
+		_show_run_setup_error("PARTY_FORGE_RUN_LOADOUT_CHECKOUT_ERROR field=bootstrap reason=committed bootstrap unavailable or mismatched")
+		return false
+	var canonical_bootstrap := ResumableRunItemCodec.encode(bootstrap)
+	if canonical_bootstrap.is_empty():
+		_show_run_setup_error("PARTY_FORGE_RUN_LOADOUT_CHECKOUT_ERROR field=bootstrap reason=committed bootstrap canonicalization failed")
+		return false
+	committed_profile.resumable_run = canonical_bootstrap.duplicate(true)
+	if not _prepare_run_start(definition):
+		return false
+	if party_manager.members.is_empty() or party_manager.members[0].member_id != bootstrap.leader_member_id:
+		_show_run_setup_error("PARTY_FORGE_RUN_LOADOUT_CHECKOUT_ERROR field=leader_member_id reason=committed bootstrap mismatch")
+		return false
 	return _start_leader_class_from_checkout(definition, committed_profile, bootstrap)
 
 
 func _start_leader_class_from_checkout(definition: ClassDefinition, committed_profile: ProfileState, bootstrap: RunItemBootstrap) -> bool:
 	run_context_registry = RunContextRegistry.new()
-	active_run_context = PlayerRunContext.new()
+	active_run_context = _run_context_factory.call() as PlayerRunContext
+	if active_run_context == null:
+		return _abort_run_start(PackedStringArray(["PARTY_FORGE_RUN_CONTEXT_ERROR field=factory reason=context unavailable"]))
 	var context_errors := active_run_context.configure(
 		&"player_1",
 		0,
@@ -264,6 +333,7 @@ func _start_leader_class_from_checkout(definition: ClassDefinition, committed_pr
 	(get_node("MainMenuScreen") as MainMenuScreen).close()
 	_clear_pending_loadout_warning(false)
 	(get_node("HUD/ClassSelection") as ClassSelectionPanel).confirm_run_started()
+	_pending_checkout_recovery = {}
 	return true
 
 func _abort_run_start(diagnostics: PackedStringArray, spawned_leader: PartyActor = null) -> bool:
@@ -284,9 +354,12 @@ func _abort_run_start(diagnostics: PackedStringArray, spawned_leader: PartyActor
 	reward_distribution_tuning = null
 	run_started = false
 	developer_mode_badge.configure(null)
-	_present_front_end()
+	if _pending_checkout_recovery.is_empty():
+		_present_front_end()
 	for diagnostic: String in diagnostics:
 		push_error(diagnostic)
+	if not _pending_checkout_recovery.is_empty():
+		_show_checkout_recovery_error(" | ".join(diagnostics))
 	return false
 
 func active_profile() -> ProfileState:
@@ -516,7 +589,9 @@ func _on_developer_quick_start_requested() -> void:
 	if not denial_status.is_empty():
 		_fail_developer_quick_start(denial_status)
 		return
-	if not select_leader_class(&"fighter"):
+	if not _select_leader_class(&"fighter", LoadoutOrigin.DEVELOPER_QUICK_START):
+		if _pending_loadout_projection != null and _pending_loadout_origin == LoadoutOrigin.DEVELOPER_QUICK_START:
+			return
 		_fail_developer_quick_start(DEVELOPER_QUICK_START_UNAVAILABLE_STATUS)
 
 
@@ -564,6 +639,10 @@ func _open_run_setup() -> void:
 
 
 func _on_loadout_choose_another_class() -> void:
+	if _pending_loadout_origin == LoadoutOrigin.DEVELOPER_QUICK_START:
+		_clear_pending_loadout_warning(false)
+		_open_run_setup()
+		return
 	_clear_pending_loadout_warning(true)
 
 
@@ -584,13 +663,19 @@ func _on_loadout_go_to_armoury() -> void:
 		_show_run_setup_error(projection.error)
 		return
 	var selector := get_node("HUD/ClassSelection") as ClassSelectionPanel
-	var origin := selector.selection_focus(_pending_loadout_class_id)
+	var origin_mode := _pending_loadout_origin
+	var origin := (
+		(get_node("MainMenuScreen") as MainMenuScreen).get_node("DeveloperQuickStart") as Control
+		if origin_mode == LoadoutOrigin.DEVELOPER_QUICK_START
+		else selector.selection_focus(_pending_loadout_class_id)
+	)
 	var display_class := _pending_loadout_class_id
 	_clear_pending_loadout_warning(false)
 	selector.close()
 	_armoury_from_loadout_warning = true
 	_armoury_warning_class_id = display_class
 	_armoury_warning_origin = origin
+	_armoury_warning_origin_mode = origin_mode
 	_shared_storage_projection = projection
 	_storage_return_focus = origin
 	(get_node("MainMenuScreen") as MainMenuScreen).close()
@@ -611,6 +696,8 @@ func _on_loadout_continue_anyway() -> void:
 func _on_loadout_destroy_confirmed(confirmation_token: String) -> void:
 	var warning := get_node("LoadoutWarningDialog")
 	if not warning.call("is_open") or warning.call("state") != LoadoutWarningDialogScript.State.DESTRUCTIVE_CONFIRMATION:
+		return
+	if not warning.call("consume_destroy_authorization", confirmation_token):
 		return
 	if _pending_loadout_projection == null or _pending_loadout_projection.overflow_item_ids.is_empty():
 		return
@@ -659,18 +746,20 @@ func _submit_pending_loadout_transition(confirmation_token: String = "") -> bool
 	if not result.ok():
 		_show_run_setup_error(result.error)
 		return false
+	var committed_class_id := _pending_loadout_class_id
+	var committed_origin := _pending_loadout_origin
+	_clear_pending_loadout_warning(true)
 	refresh_error = profile_manager.refresh_profile(active.profile_id)
 	if not refresh_error.is_empty():
-		_show_run_setup_error(refresh_error)
+		_show_loadout_origin_error(refresh_error, committed_origin, committed_class_id)
 		return false
 	var transitioned := profile_manager.active_profile()
-	var definition := catalog.class_by_id(_pending_loadout_class_id) if catalog != null else null
-	var reprojected := _project_loadout_compatibility(transitioned, _pending_loadout_class_id)
+	var definition := catalog.class_by_id(committed_class_id) if catalog != null else null
+	var reprojected := _project_loadout_compatibility(transitioned, committed_class_id)
 	if definition == null or reprojected == null or not reprojected.valid or not reprojected.incompatible_items.is_empty():
-		_show_run_setup_error("PARTY_FORGE_LOADOUT_TRANSITION_ERROR field=reprojection reason=transition did not produce a compatible loadout")
+		_show_loadout_origin_error("PARTY_FORGE_LOADOUT_TRANSITION_ERROR field=reprojection reason=transition did not produce a compatible loadout", committed_origin, committed_class_id)
 		return false
-	_clear_pending_loadout_warning(false)
-	return _checkout_and_start_leader_class(transitioned, definition)
+	return _checkout_and_start_leader_class(transitioned, definition, committed_origin)
 
 
 func _projection_matches_pending(fresh: LoadoutCompatibilityProjection) -> bool:
@@ -687,15 +776,24 @@ func _projection_matches_pending(fresh: LoadoutCompatibilityProjection) -> bool:
 
 
 func _clear_pending_loadout_warning(restore_focus: bool) -> void:
+	var origin_mode := _pending_loadout_origin
 	var warning := get_node_or_null("LoadoutWarningDialog")
 	if warning != null and warning.call("is_open"):
 		warning.call("close")
 	_pending_loadout_projection = null
 	_pending_loadout_profile_id = ""
 	_pending_loadout_class_id = &""
+	_pending_loadout_origin = LoadoutOrigin.RUN_SETUP
 	var selector := get_node_or_null("HUD/ClassSelection") as ClassSelectionPanel
-	if selector != null:
+	if selector != null and origin_mode == LoadoutOrigin.RUN_SETUP:
 		selector.end_compatibility_gate(restore_focus)
+	elif selector != null and origin_mode == LoadoutOrigin.DEVELOPER_QUICK_START:
+		selector.close()
+		if restore_focus:
+			var menu := get_node("MainMenuScreen") as MainMenuScreen
+			var quick_start := menu.get_node("DeveloperQuickStart") as Control
+			menu.open(quick_start)
+			_focus_control_if_available(quick_start)
 
 
 func _show_run_setup_error(message: String) -> void:
@@ -703,9 +801,53 @@ func _show_run_setup_error(message: String) -> void:
 	var warning := get_node_or_null("LoadoutWarningDialog")
 	if warning != null and warning.call("is_open"):
 		warning.call("show_error", message)
+	if not _pending_checkout_recovery.is_empty():
+		_show_checkout_recovery_error(message)
+		return
 	var selector := get_node_or_null("HUD/ClassSelection") as ClassSelectionPanel
 	if selector != null:
 		selector.show_status("Unable to start run. %s" % message)
+
+
+func _show_loadout_origin_error(message: String, origin_mode: int, class_id: StringName) -> void:
+	if origin_mode == LoadoutOrigin.DEVELOPER_QUICK_START:
+		push_error(message)
+		var selector := get_node("HUD/ClassSelection") as ClassSelectionPanel
+		selector.close()
+		var menu := get_node("MainMenuScreen") as MainMenuScreen
+		var quick_start := menu.get_node("DeveloperQuickStart") as Control
+		menu.open(quick_start)
+		(menu.get_node("Status") as Label).text = "Unable to start run. %s" % message
+		_focus_control_if_available(quick_start)
+		return
+	_show_run_setup_error(message)
+	var selector := get_node("HUD/ClassSelection") as ClassSelectionPanel
+	if not selector.is_open():
+		selector.open()
+	selector.show_status("Unable to start run. %s" % message)
+	var class_focus := selector.selection_focus(class_id)
+	selector.set("_pending_initial_focus", class_focus)
+	_focus_control_if_available(class_focus)
+
+
+func _show_checkout_recovery_error(message: String) -> void:
+	var origin_mode := int(_pending_checkout_recovery.get("origin_mode", LoadoutOrigin.RUN_SETUP))
+	var class_id := StringName(_pending_checkout_recovery.get("class_id", ""))
+	var selector := get_node("HUD/ClassSelection") as ClassSelectionPanel
+	var menu := get_node("MainMenuScreen") as MainMenuScreen
+	if origin_mode == LoadoutOrigin.DEVELOPER_QUICK_START:
+		selector.close()
+		var quick_start := menu.get_node("DeveloperQuickStart") as Control
+		menu.open(quick_start)
+		(menu.get_node("Status") as Label).text = "Unable to start run. %s" % message
+		_focus_control_if_available(quick_start)
+		return
+	menu.close()
+	selector.open()
+	selector.show_status("Unable to start run. %s" % message)
+	var class_focus := selector.selection_focus(class_id)
+	selector.set("_pending_initial_focus", class_focus)
+	_focus_control_if_available(class_focus)
 
 
 func _on_run_setup_back_requested() -> void:
@@ -790,15 +932,23 @@ func _on_armoury_closed() -> void:
 	if _armoury_from_loadout_warning:
 		var class_id := _armoury_warning_class_id
 		var origin := _armoury_warning_origin
+		var origin_mode := _armoury_warning_origin_mode
 		_armoury_from_loadout_warning = false
 		_armoury_warning_class_id = &""
 		_armoury_warning_origin = null
+		_armoury_warning_origin_mode = LoadoutOrigin.RUN_SETUP
 		_storage_return_focus = null
 		_shared_storage_projection = null
 		var selector := get_node("HUD/ClassSelection") as ClassSelectionPanel
-		selector.open()
-		var class_focus := selector.selection_focus(class_id)
-		_focus_control_if_available(class_focus if class_focus != null else origin)
+		if origin_mode == LoadoutOrigin.DEVELOPER_QUICK_START:
+			selector.close()
+			var menu := get_node("MainMenuScreen") as MainMenuScreen
+			menu.open(origin)
+			_focus_control_if_available(origin)
+		else:
+			selector.open()
+			var class_focus := selector.selection_focus(class_id)
+			_focus_control_if_available(class_focus if class_focus != null else origin)
 		return
 	var menu := get_node("MainMenuScreen") as MainMenuScreen
 	menu.open(_storage_return_focus if _storage_return_focus != null else menu.get_node("Armoury") as Control)
@@ -905,6 +1055,7 @@ func _on_active_profile_changed(_profile: ProfileState) -> void:
 	_armoury_from_loadout_warning = false
 	_armoury_warning_class_id = &""
 	_armoury_warning_origin = null
+	_armoury_warning_origin_mode = LoadoutOrigin.RUN_SETUP
 	_clear_pending_loadout_warning(false)
 	_refresh_main_menu_projection()
 	if _city_tree_is_open():

@@ -32,6 +32,24 @@ func _run() -> void:
 		_assert(_frame_reachable(frame), "warning frame reachable at %s" % viewport_size, failures)
 		_assert(details.size.y > scroll.size.y, "long exact item/reason list scrolls at %s" % viewport_size, failures)
 		_assert(_inside(root.gui_get_focus_owner(), dialog), "warning contains initial controller focus at %s" % viewport_size, failures)
+		var actions := dialog.get_node("Overlay/Frame/Layout/Actions") as BoxContainer
+		var expected_focus: Array[Control] = [
+			actions.get_node("Armoury") as Control,
+			actions.get_node("ChooseAnother") as Control,
+			actions.get_node("Continue") as Control,
+			actions.get_node("Cancel") as Control,
+		]
+		for expected: Control in expected_focus.slice(1):
+			await _joy_button(JOY_BUTTON_DPAD_RIGHT, 0.0)
+			_assert(root.gui_get_focus_owner() == expected, "real D-pad traverses only visible warning actions at %s" % viewport_size, failures)
+		await _joy_button(JOY_BUTTON_DPAD_RIGHT, 0.0)
+		_assert(root.gui_get_focus_owner() == expected_focus[0], "directional warning focus closes its visible action loop at %s" % viewport_size, failures)
+		scroll.scroll_vertical = 0
+		for pulse: int in 24:
+			await _joy_axis(JOY_AXIS_RIGHT_Y, 1.0)
+		for pulse: int in 24:
+			await _joy_button(JOY_BUTTON_DPAD_DOWN, 0.0)
+		_assert(_scroll_at_end(scroll), "real right-stick and D-pad input reach the last warning content at %s" % viewport_size, failures)
 		dialog.call("close")
 		await process_frame
 	print("TASK10_LOADOUT_WARNING_RESPONSIVE_PASS")
@@ -71,9 +89,29 @@ func _run() -> void:
 	await _joy_button(JOY_BUTTON_A, 0.0)
 	await _joy_button(JOY_BUTTON_Y, 0.45)
 	_assert(confirmations.is_empty(), "ordinary accept and short controller hold do not confirm", failures)
+	await _joy_press(JOY_BUTTON_Y)
+	await create_timer(0.70).timeout
+	await _joy_press(JOY_BUTTON_Y)
+	await create_timer(0.70).timeout
+	await _joy_release(JOY_BUTTON_Y)
+	_assert(confirmations.is_empty(), "duplicate controller press resets a split hold instead of accumulating confirmation", failures)
 	await _joy_button(JOY_BUTTON_Y, 1.30)
 	_assert(confirmations == [projection.confirmation_token], "real controller continuous hold emits exact token once", failures)
 	print("TASK10_LOADOUT_WARNING_CONTROLLER_PASS")
+
+	confirmations.clear()
+	dialog.call("open", projection, origin)
+	await process_frame
+	await _mouse_click(dialog.get_node("Overlay/Frame/Layout/Actions/Continue") as Button)
+	await _key_press(KEY_D)
+	await create_timer(0.70).timeout
+	await _key_press(KEY_D)
+	await create_timer(0.70).timeout
+	await _key_release(KEY_D)
+	_assert(confirmations.is_empty(), "duplicate non-echo keyboard press resets a split hold instead of accumulating confirmation", failures)
+	await _key_hold(KEY_D, 1.30)
+	_assert(confirmations == [projection.confirmation_token], "real keyboard uninterrupted hold emits exact token once", failures)
+	print("TASK10_LOADOUT_WARNING_KEYBOARD_PASS")
 
 	confirmations.clear()
 	dialog.call("open", projection, origin)
@@ -119,17 +157,65 @@ func _projection() -> LoadoutCompatibilityProjection:
 
 
 func _joy_button(button_index: JoyButton, held_seconds: float) -> void:
+	await _joy_press(button_index)
+	if held_seconds > 0.0:
+		await create_timer(held_seconds).timeout
+	await _joy_release(button_index)
+
+
+func _joy_press(button_index: JoyButton) -> void:
 	var event := InputEventJoypadButton.new()
 	event.device = 0
 	event.button_index = button_index
 	event.pressed = true
 	Input.parse_input_event(event)
 	await process_frame
-	if held_seconds > 0.0:
-		await create_timer(held_seconds).timeout
-	var release := event.duplicate() as InputEventJoypadButton
-	release.pressed = false
+
+
+func _joy_release(button_index: JoyButton) -> void:
+	var event := InputEventJoypadButton.new()
+	event.device = 0
+	event.button_index = button_index
+	event.pressed = false
+	Input.parse_input_event(event)
+	await process_frame
+
+
+func _joy_axis(axis: JoyAxis, value: float) -> void:
+	var event := InputEventJoypadMotion.new()
+	event.device = 0
+	event.axis = axis
+	event.axis_value = value
+	Input.parse_input_event(event)
+	await process_frame
+	var release := event.duplicate() as InputEventJoypadMotion
+	release.axis_value = 0.0
 	Input.parse_input_event(release)
+	await process_frame
+
+
+func _key_hold(keycode: Key, held_seconds: float) -> void:
+	await _key_press(keycode)
+	await create_timer(held_seconds).timeout
+	await _key_release(keycode)
+
+
+func _key_press(keycode: Key) -> void:
+	var event := InputEventKey.new()
+	event.keycode = keycode
+	event.physical_keycode = keycode
+	event.pressed = true
+	event.echo = false
+	Input.parse_input_event(event)
+	await process_frame
+
+
+func _key_release(keycode: Key) -> void:
+	var event := InputEventKey.new()
+	event.keycode = keycode
+	event.physical_keycode = keycode
+	event.pressed = false
+	Input.parse_input_event(event)
 	await process_frame
 
 
@@ -159,6 +245,11 @@ func _inside(control: Control, ancestor: Node) -> bool:
 
 func _frame_reachable(frame: Control) -> bool:
 	return frame != null and frame.is_visible_in_tree() and frame.size.x > 0.0 and frame.size.y > 0.0 and frame.position.x >= 0.0 and frame.position.y >= 0.0
+
+
+func _scroll_at_end(scroll: ScrollContainer) -> bool:
+	var bar := scroll.get_v_scroll_bar()
+	return scroll.scroll_vertical >= ceili(bar.max_value - bar.page) - 2
 
 
 func _assert(condition: bool, message: String, failures: Array[String]) -> void:

@@ -6,6 +6,8 @@ enum State { CLOSED, INCOMPATIBLE, DESTRUCTIVE_CONFIRMATION }
 const DESTRUCTIVE_HOLD_SECONDS := 1.25
 const DESTROY_KEY := KEY_D
 const DESTROY_CONTROLLER_BUTTON := JOY_BUTTON_Y
+const CONTROLLER_SCROLL_STEP := 160
+const RIGHT_STICK_DEADZONE := 0.35
 
 signal go_to_armoury
 signal choose_another_class
@@ -19,6 +21,7 @@ var _return_focus: Control
 var _hold_seconds := 0.0
 var _destroy_held := false
 var _destroy_emitted := false
+var _destroy_authorization := ""
 
 
 func _ready() -> void:
@@ -101,8 +104,21 @@ func advance_destroy_hold(delta: float, held: bool) -> void:
 	_destroy_emitted = true
 	_destroy_held = false
 	var token := _projection.confirmation_token
+	_destroy_authorization = token
 	_reset_hold_progress()
 	destroy_confirmed.emit(token)
+
+
+func consume_destroy_authorization(confirmation_token: String) -> bool:
+	var authorized := (
+		_state == State.DESTRUCTIVE_CONFIRMATION
+		and _projection != null
+		and not confirmation_token.is_empty()
+		and confirmation_token == _projection.confirmation_token
+		and confirmation_token == _destroy_authorization
+	)
+	_destroy_authorization = ""
+	return authorized
 
 
 func _process(delta: float) -> void:
@@ -116,6 +132,9 @@ func _input(event: InputEvent) -> void:
 	if event.is_action_pressed(&"ui_cancel"):
 		cancelled.emit()
 		close()
+		_mark_input_handled()
+		return
+	if _scroll_from_controller(event):
 		_mark_input_handled()
 		return
 	if _state != State.DESTRUCTIVE_CONFIRMATION:
@@ -253,15 +272,20 @@ func _on_cancel_pressed() -> void:
 func _set_destroy_held(held: bool) -> void:
 	if not held:
 		_destroy_held = false
+		_destroy_authorization = ""
 		_reset_hold_progress()
 		return
 	if _state == State.DESTRUCTIVE_CONFIRMATION and not _destroy_emitted:
+		if _destroy_held:
+			_destroy_authorization = ""
+			_reset_hold_progress()
 		_destroy_held = true
 
 
 func _reset_hold() -> void:
 	_destroy_held = false
 	_destroy_emitted = false
+	_destroy_authorization = ""
 	_reset_hold_progress()
 
 
@@ -333,6 +357,32 @@ func _rebuild_focus_loop() -> void:
 		current.focus_mode = Control.FOCUS_ALL
 		current.focus_next = current.get_path_to(next)
 		current.focus_previous = current.get_path_to(previous)
+		current.focus_neighbor_left = current.get_path_to(previous)
+		current.focus_neighbor_right = current.get_path_to(next)
+		current.focus_neighbor_top = current.get_path_to(previous)
+		current.focus_neighbor_bottom = current.get_path_to(next)
+
+
+func _scroll_from_controller(event: InputEvent) -> bool:
+	if event is InputEventJoypadMotion:
+		var motion := event as InputEventJoypadMotion
+		if motion.axis != JOY_AXIS_RIGHT_Y or absf(motion.axis_value) < RIGHT_STICK_DEADZONE:
+			return false
+		_scroll_details(roundi(float(CONTROLLER_SCROLL_STEP) * motion.axis_value))
+		return true
+	if event is InputEventJoypadButton:
+		var button := event as InputEventJoypadButton
+		if not button.pressed or button.button_index not in [JOY_BUTTON_DPAD_UP, JOY_BUTTON_DPAD_DOWN]:
+			return false
+		_scroll_details(-CONTROLLER_SCROLL_STEP if button.button_index == JOY_BUTTON_DPAD_UP else CONTROLLER_SCROLL_STEP)
+	return false
+
+
+func _scroll_details(amount: int) -> void:
+	var scroll := get_node("Overlay/Frame/Layout/Scroll") as ScrollContainer
+	var bar := scroll.get_v_scroll_bar()
+	var maximum := maxi(ceili(bar.max_value - bar.page), 0)
+	scroll.scroll_vertical = clampi(scroll.scroll_vertical + amount, 0, maximum)
 
 
 func _frame() -> Control: return get_node("Overlay/Frame") as Control

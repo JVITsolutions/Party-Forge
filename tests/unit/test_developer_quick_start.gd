@@ -12,6 +12,7 @@ func run() -> Array[String]:
 	_test_hidden_direct_route_preserves_active_surfaces(failures)
 	_test_invalid_catalog_and_missing_fighter_fail_closed(failures)
 	_test_saved_settings_store_authorizes_quick_start(failures)
+	_test_incompatible_warning_preserves_quick_start_origin(failures)
 	_test_developer_route_starts_fighter_from_durable_checkout(failures)
 	return failures
 
@@ -211,6 +212,57 @@ func _test_developer_route_starts_fighter_from_durable_checkout(failures: Array[
 	_cleanup(main, root)
 
 
+func _test_incompatible_warning_preserves_quick_start_origin(failures: Array[String]) -> void:
+	var root := _root("incompatible-warning")
+	var main := _developer_main_with_profile(root, "Quick Warning", failures)
+	var settings := _developer_settings()
+	settings.unlock_all_implemented_content = true
+	main.call("_on_settings_applied", settings)
+	var profile := main.profile_manager.active_profile()
+	var item := ItemInstance.new()
+	item.instance_id = "item-quick-warning-staff"
+	item.base_definition_id = &"rime_scholar_staff"
+	item.item_level = 1
+	item.rarity_id = &"common"
+	item.origin = {"issuer_namespace": "profile:%s" % profile.profile_id, "seed": 771, "sequence": 0, "source": "quick_warning_test"}
+	profile.item_records = ItemRegistry.new([item]).to_dictionary()
+	profile.leader_loadout = ItemSlotContainer.create(&"leader-loadout", ItemSlotContainer.PROFILE_LEADER_EQUIPMENT, profile.profile_id, EquipmentSlotIndex.capacity(), {0: item.instance_id}).to_dictionary()
+	profile.leader_loadout_class_id = "frost_mage"
+	profile.stash_tabs = [ItemSlotContainer.create(&"stash-tab-alpha", ItemSlotContainer.PROFILE_STASH_TAB, profile.profile_id, ItemSlotContainer.STASH_CAPACITY).to_dictionary()]
+	profile.permanent_feature_unlocks = ["bring_in_gear", "equipment_inventory", "stash"]
+	TestAssertions.equal(ProfileStore.new().save_profile(profile, root), "", "Quick Start warning fixture persists incompatible exact loadout", failures)
+	TestAssertions.equal(main.profile_manager.refresh_profile(profile.profile_id), "", "Quick Start warning fixture refreshes active profile", failures)
+
+	var menu := main.get_node("MainMenuScreen") as MainMenuScreen
+	var quick_start := menu.get_node("DeveloperQuickStart") as Button
+	var selector := main.get_node("HUD/ClassSelection") as ClassSelectionPanel
+	var warning := main.get_node("LoadoutWarningDialog")
+	warning.call("_ready")
+	main.call("_on_main_menu_route_requested", MainMenuViewModel.ROUTE_DEVELOPER_QUICK_START)
+	TestAssertions.truthy(warning.call("is_open") and menu.is_open() and not selector.is_open(), "incompatible Quick Start keeps the visible menu behind its modal warning", failures)
+	TestAssertions.equal(warning.call("projection").selected_class_id, &"fighter", "Quick Start warning retains its exact Fighter class", failures)
+	TestAssertions.equal(warning.get("_return_focus"), quick_start, "Quick Start warning binds its modal lifecycle to the visible menu action", failures)
+	(warning.get_node("Overlay/Frame/Layout/Actions/Cancel") as Button).pressed.emit()
+	TestAssertions.truthy(not warning.call("is_open") and menu.is_open() and not selector.is_open(), "Quick Start warning cancel returns to the visible menu", failures)
+	TestAssertions.equal(_focus_or_pending(menu), quick_start, "Quick Start warning cancel restores Developer Quick Start focus", failures)
+
+	main.call("_on_main_menu_route_requested", MainMenuViewModel.ROUTE_DEVELOPER_QUICK_START)
+	(warning.get_node("Overlay/Frame/Layout/Actions/Armoury") as Button).pressed.emit()
+	var armoury := main.get_node("ArmouryScreen") as ArmouryScreen
+	TestAssertions.truthy(armoury.is_open() and not menu.is_open() and not selector.is_open(), "Quick Start warning opens Armoury without exposing run setup", failures)
+	TestAssertions.truthy((armoury.get_node("Overlay/Frame/Layout/Header/Class") as Label).text.contains("Pending Run: fighter"), "Quick Start Armoury retains exact Fighter semantics", failures)
+	main.call("_on_armoury_closed")
+	TestAssertions.truthy(menu.is_open() and not selector.is_open(), "Quick Start Armoury return restores the main-menu origin", failures)
+	TestAssertions.equal(_focus_or_pending(menu), quick_start, "Quick Start Armoury return restores Developer Quick Start focus", failures)
+
+	main.call("_on_main_menu_route_requested", MainMenuViewModel.ROUTE_DEVELOPER_QUICK_START)
+	(warning.get_node("Overlay/Frame/Layout/Actions/Continue") as Button).pressed.emit()
+	TestAssertions.truthy(main.run_started and main.party_manager.members[0].class_definition.id == &"fighter", "confirmed Quick Start warning transitions and starts exact Fighter", failures)
+	var saved := ProfileStore.new().load_profile(profile.profile_id, root).profile
+	TestAssertions.truthy(saved.resumable_run.has("item_state"), "confirmed Quick Start warning durably checks out before starting", failures)
+	_cleanup(main, root)
+
+
 func _assert_failed_route(main: PartyForgeMain, expected_status: String, expected_focus_path: String, label: String, failures: Array[String]) -> void:
 	var menu := main.get_node("MainMenuScreen") as MainMenuScreen
 	var selector := main.get_node("HUD/ClassSelection") as ClassSelectionPanel
@@ -223,6 +275,12 @@ func _assert_failed_route(main: PartyForgeMain, expected_status: String, expecte
 	else:
 		focus_target = menu.get("_pending_preferred_focus") as Control
 	TestAssertions.equal(focus_target, menu.get_node(expected_focus_path), "%s restores exact %s focus" % [label, expected_focus_path], failures)
+
+
+func _focus_or_pending(menu: MainMenuScreen) -> Control:
+	var viewport := (Engine.get_main_loop() as SceneTree).root
+	var focus := viewport.gui_get_focus_owner()
+	return focus if focus != null else menu.get("_pending_preferred_focus") as Control
 
 
 func _assert_rules(actual: RunRulesSnapshot, expected: RunRulesSnapshot, failures: Array[String]) -> void:

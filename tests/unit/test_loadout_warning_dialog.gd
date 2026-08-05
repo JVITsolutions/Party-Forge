@@ -20,7 +20,7 @@ func run() -> Array[String]:
 	TestAssertions.equal(dialog_script.resource_path if dialog_script != null else "", SCRIPT_PATH, "warning scene uses the intent-only dialog controller", failures)
 	for signal_name: StringName in [&"go_to_armoury", &"choose_another_class", &"continue_anyway", &"destroy_confirmed", &"cancelled"]:
 		TestAssertions.truthy(dialog.has_signal(signal_name), "warning exposes %s intent" % signal_name, failures)
-	for method_name: StringName in [&"open", &"close", &"is_open", &"state", &"projection", &"details_text", &"show_error", &"advance_destroy_hold", &"apply_viewport_size"]:
+	for method_name: StringName in [&"open", &"close", &"is_open", &"state", &"projection", &"details_text", &"show_error", &"advance_destroy_hold", &"consume_destroy_authorization", &"apply_viewport_size"]:
 		TestAssertions.truthy(dialog.has_method(method_name), "warning exposes %s contract" % method_name, failures)
 	if failures.is_empty():
 		_test_incompatible_and_destructive_states(dialog, failures)
@@ -64,7 +64,14 @@ func _test_incompatible_and_destructive_states(dialog: Node, failures: Array[Str
 		TestAssertions.truthy(displayed.contains(exact_text), "destructive warning displays exact detail: %s" % exact_text, failures)
 
 	var confirmations: Array[String] = []
-	dialog.connect("destroy_confirmed", func(token: String) -> void: confirmations.append(token))
+	var consumptions: Array[bool] = []
+	var consume_on_signal: Array[bool] = [true]
+	dialog.connect("destroy_confirmed", func(token: String) -> void:
+		confirmations.append(token)
+		if consume_on_signal[0]:
+			consumptions.append(bool(dialog.call("consume_destroy_authorization", token)))
+	)
+	TestAssertions.truthy(not bool(dialog.call("consume_destroy_authorization", projection.confirmation_token)), "exact public token has no authority before a completed hold", failures)
 	dialog.call("_input", _action_event(&"ui_accept", true))
 	dialog.call("advance_destroy_hold", 1.24, true)
 	TestAssertions.equal(confirmations, [], "ordinary accept and short hold cannot confirm destruction", failures)
@@ -75,6 +82,20 @@ func _test_incompatible_and_destructive_states(dialog: Node, failures: Array[Str
 	dialog.call("advance_destroy_hold", 1.25, true)
 	dialog.call("advance_destroy_hold", 4.0, true)
 	TestAssertions.equal(confirmations, [projection.confirmation_token], "one continuous hold emits the exact token exactly once", failures)
+	TestAssertions.equal(consumptions, [true], "completed hold grants one internal authorization before signal delivery", failures)
+	TestAssertions.truthy(not bool(dialog.call("consume_destroy_authorization", projection.confirmation_token)), "consumed authorization cannot be replayed", failures)
+	dialog.emit_signal("destroy_confirmed", projection.confirmation_token)
+	TestAssertions.equal(consumptions, [true, false], "direct public signal emission cannot forge destroy authorization", failures)
+
+	consume_on_signal[0] = false
+	dialog.call("close")
+	dialog.call("open", projection)
+	(dialog.get_node("Overlay/Frame/Layout/Actions/Continue") as Button).pressed.emit()
+	dialog.call("advance_destroy_hold", 1.25, true)
+	dialog.call("close")
+	dialog.call("open", projection)
+	(dialog.get_node("Overlay/Frame/Layout/Actions/Continue") as Button).pressed.emit()
+	TestAssertions.truthy(not bool(dialog.call("consume_destroy_authorization", projection.confirmation_token)), "close and projection replacement clear any unconsumed authorization", failures)
 
 
 func _test_nonoverflow_continue_and_safe_cancellation(dialog: Node, failures: Array[String]) -> void:
