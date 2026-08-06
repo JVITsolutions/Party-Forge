@@ -1,6 +1,8 @@
 class_name WarehouseScreen
 extends CanvasLayer
 
+const COMPARISON_RESOLVER := preload("res://scripts/ui/storage/item_comparison_resolver.gd")
+
 signal close_requested
 signal move_requested(item_id: String, destination_container_id: StringName, destination_slot: int)
 signal bulk_action_requested(action_id: StringName, item_ids: PackedStringArray)
@@ -11,15 +13,17 @@ var _selected_tab := 0
 var _selected_item_id := ""
 var _held_item_id := ""
 var _selected_ids := PackedStringArray()
+var _developer_mode := false
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	visible = false
 	_connect_controls()
 
-func open(storage: ProfileStorageProjection, return_focus: Control = null) -> void:
+func open(storage: ProfileStorageProjection, return_focus: Control = null, developer_mode: bool = false) -> void:
 	_projection = WarehouseProjection.from_storage(storage)
 	_return_focus = return_focus
+	_developer_mode = developer_mode
 	_selected_tab = mini(_selected_tab, maxi(0, _projection.stash_tabs.size() - 1))
 	_selected_ids.clear()
 	_held_item_id = ""
@@ -28,10 +32,12 @@ func open(storage: ProfileStorageProjection, return_focus: Control = null) -> vo
 	if is_inside_tree(): _initial_focus().grab_focus()
 
 func refresh(storage: ProfileStorageProjection) -> void:
+	_tooltip().call("force_dismiss")
 	_projection = WarehouseProjection.from_storage(storage)
 	_render_projection()
 
 func close() -> void:
+	_tooltip().call("force_dismiss")
 	visible = false
 	_held_item_id = ""
 	_selected_item_id = ""
@@ -64,7 +70,6 @@ func _input(event: InputEvent) -> void:
 		if focused != null and not focused.item_id.is_empty():
 			_held_item_id = focused.item_id
 			_selected_item_id = focused.item_id
-			_render_inspector()
 			get_viewport().set_input_as_handled()
 	elif event.is_action_pressed(&"ui_accept") and not _held_item_id.is_empty():
 		var target := get_viewport().gui_get_focus_owner() as StorageSlotButton
@@ -78,7 +83,6 @@ func _render_projection() -> void:
 	_tabs().current_tab = _selected_tab if _tabs().tab_count > 0 else -1
 	_populate_filters()
 	_rebuild_grid()
-	_render_inspector()
 	_rebuild_focus_loop()
 
 func _populate_filters() -> void:
@@ -112,10 +116,10 @@ func _rebuild_grid() -> void:
 		var item_id := String(detail.get("instance_id", ""))
 		var button := StorageSlotButton.new()
 		button.name = "WarehouseCard_%03d" % display_index
-		button.custom_minimum_size = Vector2(112, 58)
-		button.bind(StringName(tab["container_id"]), slot, item_id, "%d\n%s" % [slot + 1, String(detail.get("name", "Empty"))])
+		button.bind_item(StringName(tab["container_id"]), slot, item_id, _projection.item(item_id))
 		button.item_dropped.connect(_on_drop)
 		button.pressed.connect(_select_item.bind(item_id))
+		_wire_item_inspection(button)
 		_grid().add_child(button)
 	_rebuild_focus_loop()
 
@@ -123,16 +127,29 @@ func _on_drop(_source_container: StringName, _source_slot: int, item_id: String,
 	if not item_id.is_empty(): move_requested.emit(item_id, destination_container, destination_slot)
 	_held_item_id = ""
 
-func _select_item(item_id: String) -> void: _selected_item_id = item_id; _render_inspector()
+func _select_item(item_id: String) -> void: _selected_item_id = item_id
 func _toggle_bulk(item_id: String) -> void:
 	if item_id in _selected_ids: _selected_ids.remove_at(_selected_ids.find(item_id))
 	else: _selected_ids.append(item_id)
 	_bulk_status().text = "%d selected" % _selected_ids.size()
 func _emit_bulk(action: StringName) -> void: bulk_action_requested.emit(action, _selected_ids.duplicate())
-func _render_inspector() -> void:
-	var detail := _projection.item(_selected_item_id)
-	_inspector_icon().texture = load(String(detail.get("icon_path", ""))) as Texture2D if not detail.is_empty() and not String(detail.get("icon_path", "")).is_empty() else null
-	_inspector().text = ProfileStorageProjection.inspector_text(detail)
+
+func _wire_item_inspection(button: StorageSlotButton) -> void:
+	button.inspection_started.connect(_show_item_tooltip)
+	button.inspection_ended.connect(_release_item_tooltip)
+
+
+func _show_item_tooltip(source: StorageSlotButton) -> void:
+	var detail := source.detail()
+	if detail.is_empty():
+		return
+	var storage := _projection.storage_projection()
+	var comparisons: Array[Dictionary] = COMPARISON_RESOLVER.resolve(detail, storage.leader_slots, storage.item_records)
+	_tooltip().call("show_item", detail, comparisons, source, source.source_id(), _developer_mode)
+
+
+func _release_item_tooltip(source: StorageSlotButton) -> void:
+	_tooltip().call("release_item", source.source_id())
 
 func _connect_controls() -> void:
 	_close_button().pressed.connect(func() -> void: close_requested.emit())
@@ -176,6 +193,5 @@ func _rarity() -> OptionButton: return get_node("Overlay/Frame/Layout/Organizati
 func _item_type() -> OptionButton: return get_node("Overlay/Frame/Layout/Organization/ItemType") as OptionButton
 func _sort() -> OptionButton: return get_node("Overlay/Frame/Layout/Organization/Sort") as OptionButton
 func _bulk_status() -> Label: return get_node("Overlay/Frame/Layout/Footer/BulkStatus") as Label
-func _inspector() -> Label: return get_node("Overlay/Frame/Layout/Body/Inspector/Content/Detail") as Label
-func _inspector_icon() -> TextureRect: return get_node("Overlay/Frame/Layout/Body/Inspector/Content/Icon") as TextureRect
+func _tooltip() -> Control: return get_node("Overlay/ItemTooltip") as Control
 func _close_button() -> Button: return get_node("Overlay/Frame/Layout/Footer/Close") as Button

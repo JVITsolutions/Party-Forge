@@ -916,7 +916,7 @@ func _open_storage_route(route_id: StringName) -> void:
 		if origin == null: origin = menu.get_node("Warehouse") as Control
 		_storage_return_focus = origin
 		menu.close()
-		(get_node("WarehouseScreen") as WarehouseScreen).open(projection, origin)
+		(get_node("WarehouseScreen") as WarehouseScreen).open(projection, origin, _developer_mode_enabled())
 
 
 func _storage_route_allowed(route_id: StringName, profile: ProfileState) -> bool:
