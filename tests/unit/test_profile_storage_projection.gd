@@ -47,8 +47,20 @@ func run() -> Array[String]:
 		"display_name": "Stout",
 		"affix_kind": "prefix",
 		"tier": 2,
-		"rolls": [{"stat_id": "constitution", "operation": StatModifier.Operation.FLAT, "operation_name": "Flat", "value": 5.0}],
+		"rolls": [{
+			"stat_id": "constitution",
+			"stat_name": "Constitution",
+			"operation": StatModifier.Operation.FLAT,
+			"operation_name": "Flat",
+			"value": 5.0,
+			"effect_text": "+5 Constitution",
+			"minimum_roll": 4.0,
+			"maximum_roll": 6.0,
+			"roll_fraction": 0.5,
+		}],
 	}], "inspector exposes complete projected affix identity and roll fields", failures)
+	TestAssertions.equal(detail["compatible_slot_ids"], ["ring_left", "ring_right"], "inspector exposes compatible slots", failures)
+	TestAssertions.equal(detail["modifier_totals"], {"constitution|0": 5.0}, "inspector exposes safe comparable totals", failures)
 	TestAssertions.truthy(String(detail["icon_path"]).ends_with("windrunner_band_128.png"), "inspector exposes authoritative equipment icon", failures)
 	var escaped_tabs := projection.stash_tabs
 	escaped_tabs[0]["slots"] = {}

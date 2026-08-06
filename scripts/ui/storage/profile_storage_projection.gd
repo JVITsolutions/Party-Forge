@@ -2,6 +2,7 @@ class_name ProfileStorageProjection
 extends RefCounted
 
 const ERROR_PREFIX := "PARTY_FORGE_PROFILE_STORAGE_PROJECTION_ERROR"
+const PRESENTATION_PROJECTOR := preload("res://scripts/ui/storage/item_presentation_projector.gd")
 
 var valid := false
 var error := ""
@@ -15,7 +16,13 @@ var leader_slots: Array[Dictionary]: get = _get_leader_slots
 var stash_tabs: Array[Dictionary]: get = _get_stash_tabs
 var item_records: Dictionary: get = _get_item_records
 
-static func from_profile(profile: ProfileState, equipment: EquipmentCatalog, foundation: ItemFoundationCatalog) -> ProfileStorageProjection:
+static func from_profile(
+	profile: ProfileState,
+	equipment: EquipmentCatalog,
+	foundation: ItemFoundationCatalog,
+	stats: StatCatalog = GameCatalog.STAT_CATALOG,
+	class_definition: ClassDefinition = null,
+) -> ProfileStorageProjection:
 	var result := ProfileStorageProjection.new()
 	if profile == null or equipment == null or foundation == null:
 		result.error = "%s field=input reason=profile and catalogs are required" % ERROR_PREFIX
@@ -58,45 +65,13 @@ static func from_profile(profile: ProfileState, equipment: EquipmentCatalog, fou
 		})
 	var registry := state.registry()
 	for instance_id: String in registry.ids():
-		var item := registry.item(instance_id)
-		var base := equipment.definition(item.base_definition_id)
-		var rarity := foundation.rarity(item.rarity_id)
-		var affix_documents: Array[Dictionary] = []
-		for affix: ItemAffixInstance in item.affixes:
-			if affix == null:
-				affix_documents.append({})
-				continue
-			var definition := foundation.affix(affix.definition_id)
-			var rolls: Array[Dictionary] = []
-			for roll: ItemModifierRoll in affix.rolls:
-				if roll == null:
-					rolls.append({})
-					continue
-				rolls.append({
-					"stat_id": String(roll.stat_id),
-					"operation": roll.operation,
-					"operation_name": operation_name(roll.operation),
-					"value": roll.value,
-				})
-			affix_documents.append({
-				"definition_id": String(affix.definition_id),
-				"display_name": definition.display_name if definition != null else "",
-				"affix_kind": affix.affix_kind,
-				"tier": affix.tier,
-				"rolls": rolls,
-			})
-		result._item_records[instance_id] = {
-			"instance_id": instance_id,
-			"base_definition_id": String(item.base_definition_id),
-			"name": base.display_name,
-			"item_type_id": String(base.item_type_id),
-			"icon_path": _icon_path(base),
-			"rarity_id": String(item.rarity_id),
-			"rarity_name": rarity.display_name,
-			"item_level": item.item_level,
-			"affixes": affix_documents,
-			"item": item.to_dictionary(),
-		}
+		var detail: Dictionary = PRESENTATION_PROJECTOR.project(
+			registry.item(instance_id), equipment, foundation, stats, class_definition
+		)
+		if detail.is_empty():
+			result.error = "%s field=item_records instance=%s reason=presentation data is unavailable" % [ERROR_PREFIX, instance_id]
+			return result
+		result._item_records[instance_id] = detail
 	result.valid = true
 	return result
 
@@ -165,7 +140,3 @@ static func operation_name(operation: int) -> String:
 func _get_leader_slots() -> Array[Dictionary]: return _leader_slots.duplicate(true)
 func _get_stash_tabs() -> Array[Dictionary]: return _stash_tabs.duplicate(true)
 func _get_item_records() -> Dictionary: return _item_records.duplicate(true)
-
-static func _icon_path(base: EquipmentBaseDefinition) -> String:
-	var path := "res://assets/ui/equipment/runtime/%s/%s_128.png" % [String(base.implicit_family_id), String(base.id)]
-	return path if ResourceLoader.exists(path) else ""
