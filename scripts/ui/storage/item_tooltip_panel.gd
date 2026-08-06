@@ -4,6 +4,8 @@ extends "res://scripts/ui/temporary_hover_popup.gd"
 const CARD_SCRIPT := preload("res://scripts/ui/storage/item_tooltip_card.gd")
 const METRICS := preload("res://scripts/ui/storage/equipment_ui_metrics.gd")
 const DISMISS_GRACE_SECONDS := 0.12
+const HORIZONTAL_CHROME := 44.0
+const VERTICAL_CHROME := 140.0
 
 var _detail: Dictionary = {}
 var _comparisons: Array[Dictionary] = []
@@ -42,6 +44,7 @@ func show_item(
 		_advanced_active = false
 	_rebuild_cards()
 	_size_and_position()
+	call_deferred(&"_deferred_size_and_position", source_id)
 	return true
 
 
@@ -59,6 +62,7 @@ func set_compare_active(active: bool) -> void:
 	if visible:
 		_rebuild_cards()
 		_size_and_position()
+		call_deferred(&"_deferred_size_and_position", current_source_id())
 
 
 func set_advanced_active(active: bool) -> void:
@@ -68,6 +72,7 @@ func set_advanced_active(active: bool) -> void:
 	if visible:
 		_rebuild_cards()
 		_size_and_position()
+		call_deferred(&"_deferred_size_and_position", current_source_id())
 
 
 func comparison_active() -> bool:
@@ -181,10 +186,10 @@ func _size_and_position() -> void:
 		(child as Control).custom_minimum_size.x = card_width
 	var group_width := card_width * count + gap * (count - 1)
 	var maximum_height := float(metrics["maximum_card_height"])
-	var popup_size := Vector2(group_width + 36.0, maximum_height)
+	var popup_size := Vector2(group_width + HORIZONTAL_CHROME, maximum_height)
+	custom_minimum_size = Vector2(popup_size.x, minf(360.0, maximum_height))
+	_body_scroll().custom_minimum_size.y = maxf(220.0, maximum_height - VERTICAL_CHROME)
 	size = popup_size
-	custom_minimum_size = Vector2(group_width + 36.0, minf(360.0, maximum_height))
-	_body_scroll().custom_minimum_size.y = maxf(220.0, maximum_height - 92.0)
 	var margin := float(metrics["edge_margin"])
 	var anchor_rect := _anchor.get_global_rect()
 	var right_x := anchor_rect.end.x + margin
@@ -193,6 +198,11 @@ func _size_and_position() -> void:
 	var x := right_x if right_x + popup_size.x <= viewport_size.x - margin else left_x if left_x >= margin else clampf(right_x, margin, maximum_x)
 	var maximum_y := maxf(margin, viewport_size.y - popup_size.y - margin)
 	global_position = Vector2(clampf(x, margin, maximum_x), clampf(anchor_rect.position.y, margin, maximum_y))
+
+
+func _deferred_size_and_position(source_id: StringName) -> void:
+	if visible and is_current_source(source_id):
+		_size_and_position()
 
 
 func _viewport_size() -> Vector2:

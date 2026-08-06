@@ -27,6 +27,11 @@ func _run() -> void:
 		await process_frame
 		_assert(armoury.equipment_button_count() == 11, "Armoury has eleven leader slots at %s" % viewport_size, failures)
 		_assert(armoury.stash_tab_count() == 3, "Armoury reaches every stash tab at %s" % viewport_size, failures)
+		var armoury_ring := armoury.get_node("Overlay/Frame/Layout/Body/Stash/Scroll/Grid").get_child(99) as StorageSlotButton
+		_assert(armoury_ring.text.is_empty() and armoury_ring.icon != null, "Armoury uses icon-only occupied cells at %s" % viewport_size, failures)
+		armoury_ring.inspection_started.emit(armoury_ring)
+		var armoury_tooltip := armoury.get_node("Overlay/ItemTooltip") as Control
+		_assert(armoury_tooltip.visible and int(armoury_tooltip.call("card_count")) == 1, "Armoury opens shared item tooltip at %s" % viewport_size, failures)
 		_assert(_inside(root.gui_get_focus_owner(), armoury), "Armoury focus is contained at %s" % viewport_size, failures)
 		_assert(_frame_reachable(armoury.get_node("Overlay/Frame") as Control), "Armoury frame stays on-screen at %s" % viewport_size, failures)
 		var tabs := armoury.get_node("Overlay/Frame/Layout/Body/Stash/Tabs") as TabBar
@@ -42,6 +47,12 @@ func _run() -> void:
 		warehouse.open(storage, origin)
 		await process_frame
 		_assert(warehouse.stash_tab_count() == 3 and warehouse.slot_button_count() == 100, "Warehouse tabs/grid reachable at %s" % viewport_size, failures)
+		var warehouse_ring := _button_for_item(warehouse.get_node("Overlay/Frame/Layout/Body/Storage/Scroll/Grid") as GridContainer, "item-ring")
+		_assert(warehouse_ring != null and warehouse_ring.text.is_empty() and warehouse_ring.icon != null, "Warehouse uses icon-only occupied cells at %s" % viewport_size, failures)
+		if warehouse_ring != null:
+			warehouse_ring.inspection_started.emit(warehouse_ring)
+		var warehouse_tooltip := warehouse.get_node("Overlay/ItemTooltip") as Control
+		_assert(warehouse_tooltip.visible and int(warehouse_tooltip.call("card_count")) == 1, "Warehouse opens shared item tooltip at %s" % viewport_size, failures)
 		_assert(_inside(root.gui_get_focus_owner(), warehouse), "Warehouse focus is contained at %s" % viewport_size, failures)
 		_assert(_frame_reachable(warehouse.get_node("Overlay/Frame") as Control), "Warehouse frame stays on-screen at %s" % viewport_size, failures)
 		for path: String in ["Search", "Rarity", "ItemType", "Sort"]:
