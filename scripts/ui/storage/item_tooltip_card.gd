@@ -233,21 +233,21 @@ func _set_delta_lines(lines: Array[Dictionary]) -> void:
 func _build_technical_details() -> void:
 	for child: Node in _technical_details.get_children():
 		child.free()
-	var fields := [
-		["Instance ID", _detail.get("instance_id", "")],
-		["Base ID", _detail.get("base_definition_id", "")],
-		["Container", _detail.get("container_id", "")],
-		["Slot", _detail.get("slot", "")],
-	]
-	for field: Array in fields:
-		var value := String(field[1])
-		if value.is_empty():
-			continue
-		var label := Label.new()
-		label.text = "%s: %s" % [field[0], value]
-		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		_technical_details.add_child(label)
+	_add_technical_line("Instance ID", _detail.get("instance_id", ""))
+	_add_technical_line("Base ID", _detail.get("base_definition_id", ""))
+	_add_technical_line("Container", _detail.get("container_id", ""))
+	_add_technical_line("Slot", _detail.get("slot", ""))
+
+
+func _add_technical_line(field_name: String, field_value: Variant) -> void:
+	var value := str(field_value)
+	if value.is_empty():
+		return
+	var label := Label.new()
+	label.text = "%s: %s" % [field_name, value]
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_technical_details.add_child(label)
 
 
 func _set_label(label: Label, lines: PackedStringArray) -> void:

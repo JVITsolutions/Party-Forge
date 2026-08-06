@@ -84,25 +84,23 @@ func _exercise_resolution(viewport_size: Vector2i) -> void:
 	var body := sandbox.get_node("Overlay/Frame/Layout/Body") as BoxContainer
 	var inventory_panel := sandbox.get_node("Overlay/Frame/Layout/Body/InventoryPanel") as Control
 	var stash_panel := sandbox.get_node("Overlay/Frame/Layout/Body/StashPanel") as Control
-	var inspector_panel := sandbox.get_node("Overlay/Frame/Layout/Body/InspectorPanel") as Control
 	var stash_scroll := sandbox.get_node("Overlay/Frame/Layout/Body/StashPanel/StashScroll") as ScrollContainer
 	var stash_grid := sandbox.get_node("Overlay/Frame/Layout/Body/StashPanel/StashScroll/StashSlots") as GridContainer
-	var inspector_scroll := sandbox.get_node("Overlay/Frame/Layout/Body/InspectorPanel/InspectorScroll") as ScrollContainer
-	var inspector := sandbox.get_node("Overlay/Frame/Layout/Body/InspectorPanel/InspectorScroll/Inspector") as Label
+	var tooltip := sandbox.get_node("Overlay/ItemTooltip") as Control
 	var close_button := sandbox.get_node("Overlay/Frame/Layout/Header/Close") as Button
 	var viewport_rect := Rect2(Vector2.ZERO, Vector2(LOGICAL_SIZE)) if headless_viewport != null else geometry_viewport.get_visible_rect()
 	var frame_rect := frame.get_global_rect()
 	_assert(_rect_near(overlay.get_global_rect(), viewport_rect), "%s overlay covers the visible viewport" % label)
 	_assert(_contained(viewport_rect, frame_rect), "%s frame stays inside the visible viewport" % label)
-	for panel: Control in [inventory_panel, stash_panel, inspector_panel]:
+	for panel: Control in [inventory_panel, stash_panel]:
 		_assert(panel.is_visible_in_tree() and panel.get_global_rect().has_area(), "%s %s is visible with positive geometry" % [label, panel.name])
 		_assert(_contained(frame_rect, panel.get_global_rect()), "%s %s stays inside the safe frame" % [label, panel.name])
 	for action_path: NodePath in ACTION_PATHS:
 		var action := sandbox.get_node(action_path) as Button
 		_assert(action.is_visible_in_tree() and _contained(frame_rect, action.get_global_rect()), "%s action %s stays visible inside the safe frame" % [label, action.name])
 	_assert(close_button.is_visible_in_tree() and _contained(frame_rect, close_button.get_global_rect()), "%s Close stays visible inside the safe frame" % label)
-	_assert(inspector_scroll.is_visible_in_tree() and _contained(frame_rect, inspector_scroll.get_global_rect()), "%s inspector scroll remains reachable" % label)
-	_assert(inspector.focus_mode != Control.FOCUS_NONE, "%s inspector remains controller-focusable" % label)
+	_assert(sandbox.get_node_or_null("Overlay/Frame/Layout/Body/InspectorPanel") == null, "%s has no persistent inspector column" % label)
+	_assert(tooltip != null and not tooltip.visible, "%s shared tooltip starts hidden until item inspection" % label)
 	_assert(int(sandbox.call(&"slot_button_count")) == 105, "%s exact 5 + 100 slot count is reported" % label)
 	_assert(stash_grid.get_child_count() == 100, "%s production stash owns 100 real buttons" % label)
 	var scroll_bar := stash_scroll.get_v_scroll_bar()
@@ -120,7 +118,7 @@ func _exercise_resolution(viewport_size: Vector2i) -> void:
 	var last_slot := stash_grid.get_child(99) as Button
 	_assert(stash_scroll.scroll_vertical > minimum_scroll, "%s stash scrolling changes the real scroll value" % label)
 	_assert(_intersects(stash_scroll.get_global_rect(), last_slot.get_global_rect()), "%s stash scroll reaches the final slot" % label)
-	_assert(_closed_focus_graph(sandbox), "%s focus traversal covers every slot/action/Inspector/Close and closes inside the modal" % label)
+	_assert(_closed_focus_graph(sandbox), "%s focus traversal covers every slot/action/Close and closes inside the modal" % label)
 	_assert(String(sandbox.call(&"integrity_error")).is_empty(), "%s usable sandbox reports no integrity error" % label)
 	if _failures.size() == failures_before:
 		_verified_resolution_sizes.append(viewport_size)
@@ -260,11 +258,10 @@ func _closed_focus_graph(sandbox: DeveloperItemSandbox) -> bool:
 	var stash := sandbox.get_node("Overlay/Frame/Layout/Body/StashPanel/StashScroll/StashSlots") as GridContainer
 	for child: Node in inventory.get_children() + stash.get_children():
 		controls.append(child as Control)
-	controls.append(sandbox.get_node("Overlay/Frame/Layout/Body/InspectorPanel/InspectorScroll/Inspector") as Control)
 	for path: NodePath in ACTION_PATHS:
 		controls.append(sandbox.get_node(path) as Control)
 	controls.append(sandbox.get_node("Overlay/Frame/Layout/Header/Close") as Control)
-	if controls.size() != 113:
+	if controls.size() != 112:
 		return false
 	var visited: Dictionary = {}
 	var current := controls[0]

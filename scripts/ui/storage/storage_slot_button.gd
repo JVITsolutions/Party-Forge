@@ -68,12 +68,6 @@ func bind_item(
 	_apply_style()
 
 
-func bind(container_id_value: StringName, slot_value: int, item_id_value: String, label: String) -> void:
-	bind_item(container_id_value, slot_value, item_id_value, {}, label)
-	text = label
-	accessibility_name = label
-
-
 func detail() -> Dictionary:
 	return _detail.duplicate(true)
 

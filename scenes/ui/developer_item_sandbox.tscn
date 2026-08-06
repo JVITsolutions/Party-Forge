@@ -1,6 +1,7 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=3 format=3]
 
 [ext_resource type="Script" path="res://scripts/ui/developer_item_sandbox.gd" id="1_sandbox"]
+[ext_resource type="PackedScene" path="res://scenes/ui/storage/item_tooltip_panel.tscn" id="2_tooltip"]
 
 [node name="DeveloperItemSandbox" type="CanvasLayer"]
 process_mode = 3
@@ -96,24 +97,6 @@ columns = 10
 theme_override_constants/h_separation = 4
 theme_override_constants/v_separation = 4
 
-[node name="InspectorPanel" type="PanelContainer" parent="Overlay/Frame/Layout/Body"]
-custom_minimum_size = Vector2(360, 0)
-layout_mode = 2
-
-[node name="InspectorScroll" type="ScrollContainer" parent="Overlay/Frame/Layout/Body/InspectorPanel"]
-layout_mode = 2
-size_flags_horizontal = 3
-size_flags_vertical = 3
-follow_focus = true
-
-[node name="Inspector" type="Label" parent="Overlay/Frame/Layout/Body/InspectorPanel/InspectorScroll"]
-custom_minimum_size = Vector2(330, 0)
-layout_mode = 2
-size_flags_horizontal = 3
-focus_mode = 2
-text = "Focus or click a populated slot to inspect it."
-autowrap_mode = 2
-
 [node name="Actions" type="HBoxContainer" parent="Overlay/Frame/Layout"]
 layout_mode = 2
 alignment = 1
@@ -148,3 +131,5 @@ text = "Integrity Scan"
 layout_mode = 2
 focus_mode = 2
 text = "Reset"
+
+[node name="ItemTooltip" parent="Overlay" instance=ExtResource("2_tooltip")]

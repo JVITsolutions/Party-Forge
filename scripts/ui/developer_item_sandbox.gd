@@ -8,21 +8,23 @@ const INVENTORY_ID := &"developer-inventory"
 const STASH_ID := &"developer-stash-000"
 const OWNER_ID := "developer-item-sandbox"
 const SLOT_DATA_KIND := "party_forge_developer_item_slot"
-const EMPTY_INSPECTOR := "Focus or click a populated slot to inspect it."
 const RESPONSIVE_LAYOUT := preload("res://scripts/ui/ledger/ledger_responsive_layout.gd")
+const PRESENTATION_PROJECTOR := preload("res://scripts/ui/storage/item_presentation_projector.gd")
 
-class SandboxSlotButton extends Button:
+class SandboxSlotButton extends StorageSlotButton:
 	var sandbox: DeveloperItemSandbox
 
-	func _get_drag_data(_at_position: Vector2) -> Variant:
-		return sandbox._begin_mouse_drag(self) if sandbox != null else null
+	func _get_drag_data(at_position: Vector2) -> Variant:
+		return sandbox._begin_mouse_drag(self) if sandbox != null else super(at_position)
 
-	func _can_drop_data(_at_position: Vector2, data: Variant) -> bool:
-		return sandbox._can_drop_on(self, data) if sandbox != null else false
+	func _can_drop_data(at_position: Vector2, data: Variant) -> bool:
+		return sandbox._can_drop_on(self, data) if sandbox != null else super(at_position, data)
 
-	func _drop_data(_at_position: Vector2, data: Variant) -> void:
+	func _drop_data(at_position: Vector2, data: Variant) -> void:
 		if sandbox != null:
 			sandbox._drop_on(self, data)
+		else:
+			super(at_position, data)
 
 	func _notification(what: int) -> void:
 		if what == NOTIFICATION_DRAG_END and sandbox != null and sandbox.is_holding_item():
@@ -93,6 +95,7 @@ func configure(state: DeveloperItemSandboxState) -> void:
 func close() -> void:
 	if not visible:
 		return
+	_tooltip().call("force_dismiss")
 	_clear_held_item()
 	visible = false
 	closed.emit()
@@ -138,12 +141,9 @@ func apply_viewport_size(size: Vector2i) -> void:
 	frame.offset_bottom = -12.0 if compact else -36.0
 	var inventory_panel := get_node("Overlay/Frame/Layout/Body/InventoryPanel") as Control
 	var stash_panel := get_node("Overlay/Frame/Layout/Body/StashPanel") as Control
-	var inspector_panel := get_node("Overlay/Frame/Layout/Body/InspectorPanel") as Control
 	inventory_panel.custom_minimum_size = Vector2(0.0, 64.0) if compact else Vector2(220.0, 0.0)
 	stash_panel.custom_minimum_size = Vector2(0.0, 220.0) if compact else Vector2(660.0, 0.0)
-	inspector_panel.custom_minimum_size = Vector2(0.0, 150.0) if compact else Vector2(360.0, 0.0)
 	_inventory_grid().columns = 5 if compact else 1
-	_inspector().custom_minimum_size = Vector2(0.0, 0.0) if compact else Vector2(330.0, 0.0)
 
 
 func is_holding_item() -> bool:
@@ -190,9 +190,22 @@ func _unhandled_input(event: InputEvent) -> void:
 func _begin_mouse_drag(button: Button) -> Variant:
 	if not _begin_held_item(button):
 		return null
-	var preview := Label.new()
-	preview.text = "Held: %s" % _display_name_for(_held_item_id)
-	preview.add_theme_font_size_override(&"font_size", 18)
+	var slot_button := button as StorageSlotButton
+	var preview: Control
+	if slot_button != null and slot_button.icon != null:
+		var texture := TextureRect.new()
+		texture.texture = slot_button.icon
+		texture.custom_minimum_size = Vector2(64.0, 64.0)
+		texture.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		texture.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		preview = texture
+	else:
+		var fallback := Label.new()
+		fallback.text = "?"
+		fallback.custom_minimum_size = Vector2(64.0, 64.0)
+		fallback.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		fallback.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		preview = fallback
 	var viewport := button.get_viewport() if button.is_inside_tree() else null
 	if viewport != null and viewport.gui_is_dragging():
 		button.set_drag_preview(preview)
@@ -288,8 +301,6 @@ func _perform_transfer(
 func _inspect_slot(container_id: StringName, slot: int) -> void:
 	_selected_container_id = container_id
 	_selected_slot = slot
-	var item := _item_at(container_id, slot)
-	_inspector().text = _inspector_text(item, container_id, slot) if item != null else EMPTY_INSPECTOR
 	_sync_slot_affordances()
 
 
@@ -344,11 +355,11 @@ func _complete_state_action(action: String, error: String) -> void:
 	else:
 		_selected_container_id = StringName()
 		_selected_slot = -1
-		_inspector().text = EMPTY_INSPECTOR
 	_set_status(action)
 
 
 func _refresh_projection() -> void:
+	_tooltip().call("force_dismiss")
 	var registry := _state.registry()
 	var inventory := _state.inventory()
 	var stash := _state.stash()
@@ -362,8 +373,22 @@ func _refresh_projection() -> void:
 		var container_id := StringName(String(button.get_meta("container_id", "")))
 		var slot := int(button.get_meta("slot", -1))
 		var item_id := _item_id_at(container_id, slot)
+		var item := _registry.item(item_id) if not item_id.is_empty() else null
+		var detail: Dictionary = PRESENTATION_PROJECTOR.project(
+			item,
+			GameCatalog.EQUIPMENT_CATALOG,
+			GameCatalog.ITEM_FOUNDATION_CATALOG,
+			GameCatalog.STAT_CATALOG,
+		) if item != null else {}
+		if not detail.is_empty():
+			detail["owner_id"] = OWNER_ID
+			detail["container_id"] = String(container_id)
+			detail["slot"] = slot
+		var shared := button as StorageSlotButton
+		shared.bind_item(container_id, slot, item_id, detail)
+		if container_id == STASH_ID:
+			shared.custom_minimum_size.y = maxf(shared.custom_minimum_size.y, 88.0)
 		button.set_meta("item_id", item_id)
-		button.text = "%d\n%s" % [slot, _display_name_for(item_id) if not item_id.is_empty() else "Empty"]
 	_sync_slot_affordances()
 
 
@@ -380,14 +405,14 @@ func _add_slot_button(parent: GridContainer, container_id: StringName, slot: int
 	var button := SandboxSlotButton.new()
 	button.name = node_name
 	button.sandbox = self
-	button.custom_minimum_size = Vector2(62, 88 if container_id == STASH_ID else 54)
 	button.focus_mode = Control.FOCUS_ALL
-	button.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	button.set_meta("container_id", String(container_id))
 	button.set_meta("slot", slot)
 	button.set_meta("item_id", "")
 	button.pressed.connect(_on_slot_inspected.bind(button))
 	button.focus_entered.connect(_on_slot_inspected.bind(button))
+	button.inspection_started.connect(_show_item_tooltip)
+	button.inspection_ended.connect(_release_item_tooltip)
 	parent.add_child(button)
 	_slot_buttons.append(button)
 
@@ -417,7 +442,6 @@ func _configure_focus_graph() -> void:
 	var controls: Array[Control] = []
 	for button: Button in _slot_buttons:
 		controls.append(button)
-	controls.append(_inspector())
 	for action_name: String in ["FirstEmptyInventory", "FirstEmptyStash", "Save", "Reload", "IntegrityScan", "Reset"]:
 		controls.append(_action_button(action_name))
 	controls.append(_close_button())
@@ -437,50 +461,18 @@ func _configure_focus_graph() -> void:
 func _sync_slot_affordances() -> void:
 	for button: Button in _slot_buttons:
 		button.set_meta("drop_target", false)
-		button.modulate = Color.WHITE
-		button.tooltip_text = "Click or focus to inspect. Drag a populated slot to move or swap."
 		var container_id := StringName(String(button.get_meta("container_id", "")))
 		var slot := int(button.get_meta("slot", -1))
+		var shared := button as StorageSlotButton
+		var selected := not is_holding_item() and container_id == _selected_container_id and slot == _selected_slot
+		var held := is_holding_item() and container_id == _held_container_id and slot == _held_slot
+		var drop_target := is_holding_item() and not held
+		shared.set_selected(selected)
+		shared.set_held(held)
+		shared.set_drop_target(drop_target, true)
 		if is_holding_item():
-			if container_id == _held_container_id and slot == _held_slot:
-				button.modulate = Color(1.0, 0.78, 0.28)
-				button.tooltip_text = "HELD source. Drop on another slot or cancel."
-			else:
-				button.modulate = Color(0.65, 0.82, 1.0)
+			if not held:
 				button.set_meta("drop_target", true)
-				button.tooltip_text = "Drop target: move if empty, swap if occupied."
-		elif container_id == _selected_container_id and slot == _selected_slot:
-			button.modulate = Color(0.72, 1.0, 0.76)
-		var item_id := String(button.get_meta("item_id", ""))
-		var label := _display_name_for(item_id) if not item_id.is_empty() else "Empty"
-		button.text = "%s%d\n%s" % ["HELD " if container_id == _held_container_id and slot == _held_slot else "", slot, label]
-
-
-func _inspector_text(item: ItemInstance, container_id: StringName, slot: int) -> String:
-	var base := GameCatalog.EQUIPMENT_CATALOG.definition(item.base_definition_id)
-	var rarity := GameCatalog.ITEM_FOUNDATION_CATALOG.rarity(item.rarity_id)
-	var lines: Array[String] = [
-		"Base: %s" % (base.display_name if base != null else String(item.base_definition_id)),
-		"Instance ID: %s" % item.instance_id,
-		"Rarity: %s" % (rarity.display_name if rarity != null else String(item.rarity_id)),
-		"Item Level: %d" % item.item_level,
-	]
-	if item.affixes.is_empty():
-		lines.append("Affixes: None")
-	for index: int in item.affixes.size():
-		var affix := item.affixes[index]
-		var definition := GameCatalog.ITEM_FOUNDATION_CATALOG.affix(affix.definition_id)
-		lines.append("Affix %d: %s" % [index + 1, definition.display_name if definition != null else String(affix.definition_id)])
-		lines.append("  Tier: %d" % affix.tier)
-		for roll: ItemModifierRoll in affix.rolls:
-			var operation_names := StatModifier.Operation.keys()
-			var operation := String(operation_names[roll.operation]) if roll.operation >= 0 and roll.operation < operation_names.size() else "UNKNOWN"
-			lines.append("  Operation: %s" % operation)
-			lines.append("  Roll: %s = %s" % [roll.stat_id, str(roll.value)])
-	lines.append("Owner: %s" % OWNER_ID)
-	lines.append("Container: %s" % container_id)
-	lines.append("Slot: %d" % slot)
-	return "\n".join(lines)
 
 
 func _item_at(container_id: StringName, slot: int) -> ItemInstance:
@@ -491,14 +483,6 @@ func _item_at(container_id: StringName, slot: int) -> ItemInstance:
 func _item_id_at(container_id: StringName, slot: int) -> String:
 	var container := _inventory if container_id == INVENTORY_ID else _stash if container_id == STASH_ID else null
 	return container.item_id_at(slot) if container != null and slot >= 0 and slot < container.capacity else ""
-
-
-func _display_name_for(item_id: String) -> String:
-	if item_id.is_empty() or _registry == null:
-		return ""
-	var item := _registry.item(item_id)
-	var base := GameCatalog.EQUIPMENT_CATALOG.definition(item.base_definition_id) if item != null else null
-	return base.display_name if base != null else item_id
 
 
 func _location_for(item_id: String) -> Dictionary:
@@ -551,8 +535,20 @@ func _stash_grid() -> GridContainer:
 	return get_node("Overlay/Frame/Layout/Body/StashPanel/StashScroll/StashSlots") as GridContainer
 
 
-func _inspector() -> Label:
-	return get_node("Overlay/Frame/Layout/Body/InspectorPanel/InspectorScroll/Inspector") as Label
+func _show_item_tooltip(source: StorageSlotButton) -> void:
+	var detail := source.detail()
+	if detail.is_empty():
+		return
+	var no_comparisons: Array[Dictionary] = []
+	_tooltip().call("show_item", detail, no_comparisons, source, source.source_id(), true)
+
+
+func _release_item_tooltip(source: StorageSlotButton) -> void:
+	_tooltip().call("release_item", source.source_id())
+
+
+func _tooltip() -> Control:
+	return get_node("Overlay/ItemTooltip") as Control
 
 
 func _status() -> Label:

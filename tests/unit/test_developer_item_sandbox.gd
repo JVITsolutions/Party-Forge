@@ -53,13 +53,13 @@ func _test_modal_contract(packed: PackedScene, failures: Array[String]) -> void:
 	var inventory_grid := sandbox.get_node_or_null("Overlay/Frame/Layout/Body/InventoryPanel/InventorySlots") as GridContainer
 	var stash_scroll := sandbox.get_node_or_null("Overlay/Frame/Layout/Body/StashPanel/StashScroll") as ScrollContainer
 	var stash_grid := sandbox.get_node_or_null("Overlay/Frame/Layout/Body/StashPanel/StashScroll/StashSlots") as GridContainer
-	var inspector_scroll := sandbox.get_node_or_null("Overlay/Frame/Layout/Body/InspectorPanel/InspectorScroll") as ScrollContainer
-	var inspector := sandbox.get_node_or_null("Overlay/Frame/Layout/Body/InspectorPanel/InspectorScroll/Inspector") as Label
+	var tooltip := sandbox.get_node_or_null("Overlay/ItemTooltip") as Control
 	var control_hints := sandbox.get_node_or_null("Overlay/Frame/Layout/ControlHints") as Label
 	TestAssertions.truthy(inventory_grid != null and inventory_grid.get_child_count() == 5, "sandbox owns exactly five inventory slot buttons", failures)
 	TestAssertions.truthy(stash_grid != null and stash_grid.columns == 10 and stash_grid.get_child_count() == 100, "sandbox owns exactly 100 stash slots in ten columns", failures)
 	TestAssertions.truthy(stash_scroll != null and stash_scroll.follow_focus, "stash grid is scrollable and follows controller focus", failures)
-	TestAssertions.truthy(inspector_scroll != null and inspector != null, "sandbox owns one scrollable inspector", failures)
+	TestAssertions.truthy(sandbox.get_node_or_null("Overlay/Frame/Layout/Body/InspectorPanel") == null, "sandbox removes the persistent inspector column", failures)
+	TestAssertions.truthy(tooltip != null, "sandbox owns the shared item tooltip overlay", failures)
 	TestAssertions.truthy(control_hints != null and control_hints.text.contains("drag") and control_hints.text.contains("X / Square") and control_hints.text.contains("A / Cross"), "sandbox shows mouse and controller held-item hints", failures)
 	TestAssertions.truthy(sandbox.has_signal(&"held_item_changed"), "sandbox exposes exact held-item state changes", failures)
 	TestAssertions.truthy(InputMap.has_action(&"item_sandbox_pickup"), "sandbox registers a dedicated pickup action", failures)
@@ -78,7 +78,7 @@ func _test_modal_contract(packed: PackedScene, failures: Array[String]) -> void:
 		^"Overlay/Frame/Layout/Actions/Reset",
 	]:
 		TestAssertions.truthy(sandbox.get_node_or_null(path) is Control, "sandbox exposes required control %s" % path, failures)
-	if inventory_grid == null or stash_grid == null or inspector == null:
+	if inventory_grid == null or stash_grid == null:
 		sandbox.free()
 		return_focus.free()
 		return
@@ -104,18 +104,30 @@ func _test_modal_contract(packed: PackedScene, failures: Array[String]) -> void:
 			held_events.append({"held": held, "container_id": container_id, "slot": slot})
 		)
 	TestAssertions.truthy(not inventory_zero.disabled and not stash_zero.disabled, "slot buttons support keyboard and controller activation", failures)
+	TestAssertions.equal(inventory_zero.text, "", "empty inventory cell has no rendered index or Empty label", failures)
+	TestAssertions.truthy(inventory_zero.accessibility_name.contains("Empty storage slot"), "empty inventory cell remains accessible", failures)
+	TestAssertions.equal(stash_one.text, "", "occupied sandbox cell is icon-only", failures)
+	TestAssertions.truthy(stash_one.icon != null, "occupied sandbox cell renders the authored icon", failures)
 	stash_one.focus_entered.emit()
 	var focus_item_id := String((sandbox.call(&"selected_item") as Dictionary).get("instance_id", ""))
-	TestAssertions.truthy(not focus_item_id.is_empty(), "focus alone updates the inspector selection", failures)
+	TestAssertions.truthy(not focus_item_id.is_empty(), "focus alone updates the selected item", failures)
 	stash_one.pressed.emit()
 	var selected_item_id := String((sandbox.call(&"selected_item") as Dictionary).get("instance_id", ""))
-	TestAssertions.truthy(not selected_item_id.is_empty(), "mouse click inspects a populated slot", failures)
+	TestAssertions.truthy(not selected_item_id.is_empty(), "mouse click selects a populated slot", failures)
 	TestAssertions.truthy(not bool(sandbox.call(&"is_holding_item")), "ordinary mouse click does not enter held-item mode", failures)
-	for required_text: String in ["Base:", "Instance ID:", "Rarity:", "Item Level:", "Affix", "Tier", "Operation", "Roll", "Owner:", "Container:", "Slot:"]:
-		TestAssertions.truthy(inspector.text.contains(required_text), "inspector renders %s" % required_text, failures)
+	if tooltip != null:
+		TestAssertions.truthy(tooltip.visible, "focus opens the shared sandbox item tooltip", failures)
+		var card := tooltip.get_node("Layout/BodyScroll/Cards").get_child(0) as Control
+		TestAssertions.truthy((card.get_node("Layout/TechnicalToggle") as Button).visible, "sandbox tooltip exposes Developer Mode technical details", failures)
+		card.call("set_technical_expanded", true)
+		var technical_text := String(card.call("rendered_text"))
+		for required_text: String in ["Instance ID:", "Base ID:", "Container:", "Slot:"]:
+			TestAssertions.truthy(technical_text.contains(required_text), "sandbox tooltip renders %s" % required_text, failures)
 	var drag_data: Variant = stash_one.call(&"_get_drag_data", Vector2.ZERO)
 	TestAssertions.truthy(drag_data is Dictionary and bool(sandbox.call(&"is_holding_item")), "dragging a populated slot enters held-item mode", failures)
-	TestAssertions.truthy(stash_one.text.contains("HELD") and bool(inventory_zero.get_meta("drop_target", false)), "held source and destinations show affordances", failures)
+	var shared_held_state := stash_one.get_property_list().any(func(property: Dictionary) -> bool: return String(property.get("name", "")) == "_held")
+	TestAssertions.truthy(shared_held_state and stash_one.get("_held") == true and bool(inventory_zero.get_meta("drop_target", false)), "held source and destinations show affordances", failures)
+	TestAssertions.equal(stash_one.text, "", "held affordance never restores index/name text", failures)
 	TestAssertions.truthy(bool(inventory_zero.call(&"_can_drop_data", Vector2.ZERO, drag_data)), "empty inventory slot accepts valid drag data", failures)
 	inventory_zero.call(&"_drop_data", Vector2.ZERO, drag_data)
 	TestAssertions.equal(String(inventory_zero.get_meta("item_id", "")), selected_item_id, "empty destination performs exact canonical move", failures)
@@ -178,7 +190,6 @@ func _test_modal_contract(packed: PackedScene, failures: Array[String]) -> void:
 	var all_focus_controls: Array[Control] = []
 	for child: Node in inventory_grid.get_children() + stash_grid.get_children():
 		all_focus_controls.append(child as Control)
-	all_focus_controls.append(inspector)
 	for path: NodePath in [^"Overlay/Frame/Layout/Actions/FirstEmptyInventory", ^"Overlay/Frame/Layout/Actions/FirstEmptyStash", ^"Overlay/Frame/Layout/Actions/Save", ^"Overlay/Frame/Layout/Actions/Reload", ^"Overlay/Frame/Layout/Actions/IntegrityScan", ^"Overlay/Frame/Layout/Actions/Reset", ^"Overlay/Frame/Layout/Header/Close"]:
 		all_focus_controls.append(sandbox.get_node(path) as Control)
 	for control: Control in all_focus_controls:

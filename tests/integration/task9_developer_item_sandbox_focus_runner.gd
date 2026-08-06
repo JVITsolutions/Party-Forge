@@ -26,17 +26,17 @@ func _run() -> void:
 	var stash := sandbox.get_node("Overlay/Frame/Layout/Body/StashPanel/StashScroll/StashSlots") as GridContainer
 	var source := stash.get_child(0) as Button
 	var stale_destination := stash.get_child(99) as Button
-	var inspector := sandbox.get_node("Overlay/Frame/Layout/Body/InspectorPanel/InspectorScroll/Inspector") as Control
 	var save := sandbox.get_node("Overlay/Frame/Layout/Actions/Save") as Button
+	var integrity_scan := sandbox.get_node("Overlay/Frame/Layout/Actions/IntegrityScan") as Button
 	var close_button := sandbox.get_node("Overlay/Frame/Layout/Header/Close") as Button
-	for target: Control in [save, inspector, close_button]:
+	for target: Control in [save, integrity_scan, close_button]:
 		await _assert_accept_ignores_stale_slot(sandbox, source, stale_destination, target)
 		(sandbox.get_node("Overlay/Frame/Layout/Actions/Reset") as Button).pressed.emit()
 		await _frames(2)
-	for target: Control in [save, inspector, close_button]:
+	for target: Control in [save, integrity_scan, close_button]:
 		await _assert_pickup_ignores_stale_slot(sandbox, source, target)
 	_assert_focus_reachable(source, save)
-	_assert_focus_reachable(source, inspector)
+	_assert_focus_reachable(source, integrity_scan)
 	_assert_focus_reachable(source, close_button)
 	sandbox.queue_free()
 	await process_frame
