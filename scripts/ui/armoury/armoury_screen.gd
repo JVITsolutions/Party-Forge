@@ -1,6 +1,8 @@
 class_name ArmouryScreen
 extends CanvasLayer
 
+const COMPARISON_RESOLVER := preload("res://scripts/ui/storage/item_comparison_resolver.gd")
+
 signal close_requested
 signal move_requested(item_id: String, destination_container_id: StringName, destination_slot: int)
 signal equip_requested(item_id: String, equipment_slot_id: StringName, target_class_id: StringName)
@@ -12,6 +14,7 @@ var _selected_tab := 0
 var _held_item_id := ""
 var _classes: Array[ClassDefinition] = []
 var _pending_run_class_id: StringName
+var _developer_mode := false
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -21,10 +24,11 @@ func _ready() -> void:
 func configure_classes(classes: Array[ClassDefinition]) -> void:
 	_classes = classes.duplicate()
 
-func open(storage: ProfileStorageProjection, return_focus: Control = null) -> void:
+func open(storage: ProfileStorageProjection, return_focus: Control = null, developer_mode: bool = false) -> void:
 	_projection = ArmouryProjection.from_storage(storage)
 	_pending_run_class_id = &""
 	_return_focus = return_focus
+	_developer_mode = developer_mode
 	_selected_tab = mini(_selected_tab, maxi(0, _projection.stash_tabs.size() - 1))
 	_held_item_id = ""
 	visible = true
@@ -33,10 +37,12 @@ func open(storage: ProfileStorageProjection, return_focus: Control = null) -> vo
 		_first_focus().grab_focus()
 
 func refresh(storage: ProfileStorageProjection) -> void:
+	_tooltip().call("force_dismiss")
 	_projection = ArmouryProjection.from_storage(storage)
 	_render_projection()
 
 func close() -> void:
+	_tooltip().call("force_dismiss")
 	visible = false
 	_held_item_id = ""
 	_pending_run_class_id = &""
@@ -85,7 +91,6 @@ func _input(event: InputEvent) -> void:
 		var focused := get_viewport().gui_get_focus_owner() as StorageSlotButton
 		if focused != null and not focused.item_id.is_empty():
 			_held_item_id = focused.item_id
-			_render_inspector()
 		get_viewport().set_input_as_handled()
 	elif event.is_action_pressed(&"ui_accept") and not _held_item_id.is_empty():
 		var target := get_viewport().gui_get_focus_owner() as StorageSlotButton
@@ -105,7 +110,6 @@ func _render_projection() -> void:
 	_rebuild_equipment()
 	_rebuild_tabs()
 	_rebuild_stash()
-	_render_inspector()
 	_rebuild_focus_loop()
 
 func _render_class_label() -> void:
@@ -118,10 +122,12 @@ func _rebuild_equipment() -> void:
 	for entry: Dictionary in _projection.leader_slots:
 		var button := StorageSlotButton.new()
 		var instance_id := String(entry["instance_id"])
+		var detail := _projection.item(instance_id)
 		button.name = "LeaderSlot_%02d_%s" % [int(entry["slot"]), String(entry["slot_id"])]
-		button.bind(&"leader-loadout", int(entry["slot"]), instance_id, "%s\n%s" % [String(entry["slot_id"]).capitalize(), _item_label(instance_id)])
+		button.bind_item(&"leader-loadout", int(entry["slot"]), instance_id, detail, String(entry["slot_id"]).capitalize())
 		button.item_dropped.connect(_handle_drop)
 		button.pressed.connect(_select_item.bind(instance_id))
+		_wire_item_inspection(button)
 		_equipment_grid().add_child(button)
 
 func _rebuild_tabs() -> void:
@@ -140,10 +146,10 @@ func _rebuild_stash() -> void:
 		var item_id := String(slots.get(str(slot), slots.get(slot, "")))
 		var button := StorageSlotButton.new()
 		button.name = "StashSlot_%03d" % slot
-		button.custom_minimum_size = Vector2(104, 58)
-		button.bind(StringName(tab["container_id"]), slot, item_id, "%d\n%s" % [slot + 1, _item_label(item_id)])
+		button.bind_item(StringName(tab["container_id"]), slot, item_id, _projection.item(item_id))
 		button.item_dropped.connect(_handle_drop)
 		button.pressed.connect(_select_item.bind(item_id))
+		_wire_item_inspection(button)
 		_stash_grid().add_child(button)
 
 func _handle_drop(_source_container_id: StringName, _source_slot: int, item_id: String, destination_container_id: StringName, destination_slot: int) -> void:
@@ -170,12 +176,24 @@ func _selected_class_id() -> StringName:
 
 func _select_item(item_id: String) -> void:
 	_held_item_id = item_id
-	_render_inspector()
 
-func _render_inspector() -> void:
-	var detail := _projection.item(_held_item_id)
-	_inspector_icon().texture = load(String(detail.get("icon_path", ""))) as Texture2D if not detail.is_empty() and not String(detail.get("icon_path", "")).is_empty() else null
-	_inspector().text = ProfileStorageProjection.inspector_text(detail)
+
+func _wire_item_inspection(button: StorageSlotButton) -> void:
+	button.inspection_started.connect(_show_item_tooltip)
+	button.inspection_ended.connect(_release_item_tooltip)
+
+
+func _show_item_tooltip(source: StorageSlotButton) -> void:
+	var detail := source.detail()
+	if detail.is_empty():
+		return
+	var storage := _projection.storage_projection()
+	var comparisons: Array[Dictionary] = COMPARISON_RESOLVER.resolve(detail, storage.leader_slots, storage.item_records)
+	_tooltip().call("show_item", detail, comparisons, source, source.source_id(), _developer_mode)
+
+
+func _release_item_tooltip(source: StorageSlotButton) -> void:
+	_tooltip().call("release_item", source.source_id())
 
 func _select_projected_class() -> void:
 	if _class_chooser().item_count == 0:
@@ -195,10 +213,6 @@ func _locate(item_id: String) -> Dictionary:
 		for key: Variant in (tab["slots"] as Dictionary):
 			if String((tab["slots"] as Dictionary)[key]) == item_id: return {"container_id": tab["container_id"], "slot": int(key)}
 	return {}
-
-func _item_label(item_id: String) -> String:
-	var detail := _projection.item(item_id)
-	return "Empty" if detail.is_empty() else String(detail["name"])
 
 func _connect_controls() -> void:
 	if not _close_button().pressed.is_connected(_on_close_pressed): _close_button().pressed.connect(_on_close_pressed)
@@ -230,6 +244,5 @@ func _stash_grid() -> GridContainer: return get_node("Overlay/Frame/Layout/Body/
 func _tab_bar() -> TabBar: return get_node("Overlay/Frame/Layout/Body/Stash/Tabs") as TabBar
 func _class_label() -> Label: return get_node("Overlay/Frame/Layout/Header/Class") as Label
 func _class_chooser() -> OptionButton: return get_node("Overlay/Frame/Layout/Header/ClassChooser") as OptionButton
-func _inspector() -> Label: return get_node("Overlay/Frame/Layout/Body/Inspector/Content/Detail") as Label
-func _inspector_icon() -> TextureRect: return get_node("Overlay/Frame/Layout/Body/Inspector/Content/Icon") as TextureRect
+func _tooltip() -> Control: return get_node("Overlay/ItemTooltip") as Control
 func _close_button() -> Button: return get_node("Overlay/Frame/Layout/Footer/Close") as Button

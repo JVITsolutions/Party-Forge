@@ -1,6 +1,7 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=3 format=3]
 
 [ext_resource type="Script" path="res://scripts/ui/armoury/armoury_screen.gd" id="1"]
+[ext_resource type="PackedScene" path="res://scenes/ui/storage/item_tooltip_panel.tscn" id="2_tooltip"]
 
 [node name="ArmouryScreen" type="CanvasLayer"]
 process_mode = 3
@@ -63,21 +64,6 @@ size_flags_vertical = 3
 layout_mode = 2
 size_flags_horizontal = 3
 columns = 5
-[node name="Inspector" type="PanelContainer" parent="Overlay/Frame/Layout/Body"]
-custom_minimum_size = Vector2(280, 0)
-layout_mode = 2
-[node name="Content" type="VBoxContainer" parent="Overlay/Frame/Layout/Body/Inspector"]
-layout_mode = 2
-[node name="Icon" type="TextureRect" parent="Overlay/Frame/Layout/Body/Inspector/Content"]
-custom_minimum_size = Vector2(128, 128)
-layout_mode = 2
-expand_mode = 3
-stretch_mode = 5
-[node name="Detail" type="Label" parent="Overlay/Frame/Layout/Body/Inspector/Content"]
-layout_mode = 2
-text = "Select an item"
-autowrap_mode = 2
-
 [node name="Footer" type="HBoxContainer" parent="Overlay/Frame/Layout"]
 layout_mode = 2
 [node name="Help" type="Label" parent="Overlay/Frame/Layout/Footer"]
@@ -87,3 +73,5 @@ text = "Mouse: drag/drop • Controller: West pick up, South place"
 [node name="Close" type="Button" parent="Overlay/Frame/Layout/Footer"]
 layout_mode = 2
 text = "Close"
+
+[node name="ItemTooltip" parent="Overlay" instance=ExtResource("2_tooltip")]

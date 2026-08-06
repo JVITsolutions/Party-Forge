@@ -658,7 +658,7 @@ func _on_loadout_go_to_armoury() -> void:
 	if profile == null or profile.profile_id != _pending_loadout_profile_id or not _storage_route_allowed(MainMenuViewModel.ROUTE_ARMOURY, profile):
 		_show_run_setup_error("PARTY_FORGE_LOADOUT_WARNING_ERROR field=armoury reason=route unavailable")
 		return
-	var projection := ProfileStorageProjection.from_profile(profile, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)
+	var projection := _profile_storage_projection(profile)
 	if not projection.valid:
 		_show_run_setup_error(projection.error)
 		return
@@ -680,7 +680,7 @@ func _on_loadout_go_to_armoury() -> void:
 	_storage_return_focus = origin
 	(get_node("MainMenuScreen") as MainMenuScreen).close()
 	var armoury := get_node("ArmouryScreen") as ArmouryScreen
-	armoury.open(projection, origin)
+	armoury.open(projection, origin, _developer_mode_enabled())
 	armoury.set_pending_run_class(display_class)
 
 
@@ -899,7 +899,7 @@ func _open_storage_route(route_id: StringName) -> void:
 	var profile := profile_manager.active_profile() if profile_manager != null else null
 	if profile == null or not _storage_route_allowed(route_id, profile):
 		return
-	var projection := ProfileStorageProjection.from_profile(profile, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)
+	var projection := _profile_storage_projection(profile)
 	if not projection.valid:
 		push_error(projection.error)
 		return
@@ -910,7 +910,7 @@ func _open_storage_route(route_id: StringName) -> void:
 		if origin == null: origin = menu.get_node("Armoury") as Control
 		_storage_return_focus = origin
 		menu.close()
-		(get_node("ArmouryScreen") as ArmouryScreen).open(projection, origin)
+		(get_node("ArmouryScreen") as ArmouryScreen).open(projection, origin, _developer_mode_enabled())
 	else:
 		var origin := menu.route_origin()
 		if origin == null: origin = menu.get_node("Warehouse") as Control
@@ -1008,11 +1008,26 @@ func _reload_storage_projection(profile_id: String) -> void:
 	var error := profile_manager.refresh_profile(profile_id)
 	if not error.is_empty(): push_error(error); return
 	var profile := profile_manager.active_profile()
-	var projection := ProfileStorageProjection.from_profile(profile, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)
+	var projection := _profile_storage_projection(profile)
 	if not projection.valid: push_error(projection.error); return
 	_shared_storage_projection = projection
 	(get_node("ArmouryScreen") as ArmouryScreen).refresh(projection)
 	(get_node("WarehouseScreen") as WarehouseScreen).refresh(projection)
+
+
+func _profile_storage_projection(profile: ProfileState) -> ProfileStorageProjection:
+	var class_definition := catalog.class_by_id(StringName(profile.leader_loadout_class_id)) if catalog != null and profile != null else null
+	return ProfileStorageProjection.from_profile(
+		profile,
+		GameCatalog.EQUIPMENT_CATALOG,
+		GameCatalog.ITEM_FOUNDATION_CATALOG,
+		GameCatalog.STAT_CATALOG,
+		class_definition,
+	)
+
+
+func _developer_mode_enabled() -> bool:
+	return saved_settings != null and saved_settings.mode == PartyForgeSettings.Mode.DEVELOPER_MODE
 
 
 func _storage_item_location(storage: ProfileStorageProjection, item_id: String) -> Dictionary:
