@@ -91,6 +91,10 @@ func is_current_source(source_id: StringName) -> bool:
 	return not _source_id.is_empty() and _source_id == source_id
 
 
+func current_source_id() -> StringName:
+	return _source_id
+
+
 func scroll_to_top() -> void:
 	var scroll := _scroll_target()
 	if scroll != null:

@@ -6,6 +6,8 @@ func _initialize() -> void:
 	_set_button_action(&"tooltip_pin", JOY_BUTTON_Y)
 	_set_axis_action(&"tooltip_scroll_up", JOY_AXIS_RIGHT_Y, -1.0)
 	_set_axis_action(&"tooltip_scroll_down", JOY_AXIS_RIGHT_Y, 1.0)
+	_set_action(&"tooltip_compare", [_key(KEY_ALT), _axis(JOY_AXIS_TRIGGER_LEFT, 1.0)])
+	_set_action(&"tooltip_advanced", [_key(KEY_SHIFT), _axis(JOY_AXIS_TRIGGER_RIGHT, 1.0)])
 	ProjectSettings.save()
 	print("PARTY_FORGE_TOOLTIP_INPUTS_OK")
 	quit(0)
@@ -30,6 +32,20 @@ func _set_axis_action(action: StringName, axis: JoyAxis, value: float) -> void:
 	event.axis = axis
 	event.axis_value = value
 	_set_action(action, [event])
+
+
+func _key(keycode: Key) -> InputEventKey:
+	var event := InputEventKey.new()
+	event.keycode = keycode
+	return event
+
+
+func _axis(axis: JoyAxis, value: float) -> InputEventJoypadMotion:
+	var event := InputEventJoypadMotion.new()
+	event.device = -1
+	event.axis = axis
+	event.axis_value = value
+	return event
 
 
 func _set_action(action: StringName, events: Array[InputEvent]) -> void:
