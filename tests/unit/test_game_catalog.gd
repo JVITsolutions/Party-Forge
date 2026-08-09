@@ -30,6 +30,7 @@ func run() -> Array[String]:
     TestAssertions.equal(catalog.class_by_id(&"fighter").traits, [&"martial", &"vanguard"], "fighter traits", failures)
     TestAssertions.equal(catalog.class_by_id(&"cleric").support_action.id, &"cleric_heal", "cleric heal", failures)
     _assert_class_names_and_eligibility(catalog, failures)
+    _assert_item_foundation_reachability(catalog, failures)
     var fighter := catalog.class_by_id(&"fighter")
     fighter.growth_definition = null
     TestAssertions.truthy(
@@ -57,6 +58,139 @@ func run() -> Array[String]:
     _assert_generated_values(failures)
     _assert_persisted_attack_damage_path(failures)
     return failures
+
+func _assert_item_foundation_reachability(catalog: GameCatalog, failures: Array[String]) -> void:
+    var stats := load("res://data/stats/core_stats.tres") as StatCatalog
+    var live_foundation := load("res://data/items/core_item_foundation_catalog.tres") as ItemFoundationCatalog
+    var live_equipment := load("res://data/equipment/core_equipment_catalog.tres") as EquipmentCatalog
+    TestAssertions.equal(live_foundation.validate(stats, live_equipment), PackedStringArray(), "live item foundation is reachable", failures)
+
+    var unknown_implicit_equipment := live_equipment.duplicate(true) as EquipmentCatalog
+    var sword_index := _equipment_index(unknown_implicit_equipment, &"forge_vanguard_sword")
+    unknown_implicit_equipment.definitions[sword_index] = unknown_implicit_equipment.definitions[sword_index].duplicate(true) as EquipmentBaseDefinition
+    unknown_implicit_equipment.definitions[sword_index].implicit_affix_ids = [&"missing_implicit"]
+    var unknown_implicit_errors := live_foundation.validate(stats, unknown_implicit_equipment)
+    TestAssertions.truthy(
+        unknown_implicit_errors.has("PARTY_FORGE_ITEM_AFFIX_ERROR id=missing_implicit base=forge_vanguard_sword reason=unknown implicit affix reference"),
+        "unknown equipment implicit is rejected exactly",
+        failures,
+    )
+
+    var wrong_kind_foundation := live_foundation.duplicate(true) as ItemFoundationCatalog
+    var wrong_kind_equipment := live_equipment.duplicate(true) as EquipmentCatalog
+    sword_index = _equipment_index(wrong_kind_equipment, &"forge_vanguard_sword")
+    wrong_kind_equipment.definitions[sword_index] = wrong_kind_equipment.definitions[sword_index].duplicate(true) as EquipmentBaseDefinition
+    wrong_kind_equipment.definitions[sword_index].implicit_affix_ids = [&"stout"]
+    TestAssertions.truthy(
+        wrong_kind_foundation.validate(stats, wrong_kind_equipment).has("PARTY_FORGE_ITEM_AFFIX_ERROR id=stout base=forge_vanguard_sword reason=base implicit references affix kind prefix"),
+        "base implicit must reference an implicit definition",
+        failures,
+    )
+
+    var impossible_tag_foundation := live_foundation.duplicate(true) as ItemFoundationCatalog
+    var stout_index := _affix_index(impossible_tag_foundation, &"stout")
+    impossible_tag_foundation.affixes[stout_index] = impossible_tag_foundation.affixes[stout_index].duplicate(true) as ItemAffixDefinition
+    impossible_tag_foundation.affixes[stout_index].required_item_tags = [&"impossible_live_tag"]
+    TestAssertions.truthy(
+        impossible_tag_foundation.validate(stats, live_equipment).has("PARTY_FORGE_ITEM_AFFIX_ERROR id=stout reason=affix stout references unknown required item tag impossible_live_tag"),
+        "affix required tag must exist on live equipment",
+        failures,
+    )
+
+    var live_normalized_tag_foundation := live_foundation.duplicate(true) as ItemFoundationCatalog
+    stout_index = _affix_index(live_normalized_tag_foundation, &"stout")
+    live_normalized_tag_foundation.affixes[stout_index] = live_normalized_tag_foundation.affixes[stout_index].duplicate(true) as ItemAffixDefinition
+    live_normalized_tag_foundation.affixes[stout_index].required_item_tags = [&"martial"]
+    TestAssertions.truthy(
+        not live_normalized_tag_foundation.validate(stats, live_equipment).has("PARTY_FORGE_ITEM_AFFIX_ERROR id=stout reason=affix stout references unknown required item tag martial"),
+        "affix accepts a tag from the live normalized equipment union",
+        failures,
+    )
+
+    var empty_pattern_foundation := live_foundation.duplicate(true) as ItemFoundationCatalog
+    var common_index := _rarity_index(empty_pattern_foundation, &"common")
+    empty_pattern_foundation.rarities[common_index] = empty_pattern_foundation.rarities[common_index].duplicate(true) as ItemRarityDefinition
+    empty_pattern_foundation.rarities[common_index].patterns = []
+    TestAssertions.truthy(
+        empty_pattern_foundation.validate(stats, live_equipment).has("PARTY_FORGE_ITEM_RARITY_ERROR id=common reason=ordinary generation has no reachable pattern"),
+        "ordinary rarity without patterns is rejected exactly",
+        failures,
+    )
+
+    var unavailable_kind_foundation := live_foundation.duplicate(true) as ItemFoundationCatalog
+    common_index = _rarity_index(unavailable_kind_foundation, &"common")
+    unavailable_kind_foundation.rarities[common_index] = unavailable_kind_foundation.rarities[common_index].duplicate(true) as ItemRarityDefinition
+    var unavailable_pattern := unavailable_kind_foundation.rarities[common_index].patterns[0].duplicate(true) as ItemAffixPatternDefinition
+    unavailable_pattern.special_count = 1
+    unavailable_kind_foundation.rarities[common_index].patterns[0] = unavailable_pattern
+    TestAssertions.truthy(
+        unavailable_kind_foundation.validate(stats, live_equipment).has("PARTY_FORGE_ITEM_RARITY_ERROR id=common pattern=common_zero kind=special reason=no live affix can fill declared slot"),
+        "pattern kind without live candidates is rejected exactly",
+        failures,
+    )
+
+    var unreachable_tier_foundation := live_foundation.duplicate(true) as ItemFoundationCatalog
+    stout_index = _affix_index(unreachable_tier_foundation, &"stout")
+    unreachable_tier_foundation.affixes[stout_index] = unreachable_tier_foundation.affixes[stout_index].duplicate(true) as ItemAffixDefinition
+    for tier_index: int in unreachable_tier_foundation.affixes[stout_index].tiers.size():
+        unreachable_tier_foundation.affixes[stout_index].tiers[tier_index] = unreachable_tier_foundation.affixes[stout_index].tiers[tier_index].duplicate(true) as ItemAffixTierDefinition
+        unreachable_tier_foundation.affixes[stout_index].tiers[tier_index].minimum_item_level = 1001
+    TestAssertions.truthy(
+        unreachable_tier_foundation.validate(stats, live_equipment).has("PARTY_FORGE_ITEM_AFFIX_ERROR id=stout reason=no tier is reachable at item level 1..1000"),
+        "affix with no reachable tier is rejected exactly",
+        failures,
+    )
+
+    var duplicate_path_foundation := live_foundation.duplicate(true) as ItemFoundationCatalog
+    duplicate_path_foundation.affixes.append(duplicate_path_foundation.affixes[0])
+    var duplicate_path := duplicate_path_foundation.affixes[0].resource_path
+    TestAssertions.truthy(
+        duplicate_path_foundation.validate(stats, live_equipment).has("PARTY_FORGE_ITEM_MANIFEST_ERROR reason=duplicate resource path %s" % duplicate_path),
+        "duplicate manifest resource path is rejected exactly",
+        failures,
+    )
+
+    var upper_ordinary_foundation := live_foundation.duplicate(true) as ItemFoundationCatalog
+    var mythic_index := _rarity_index(upper_ordinary_foundation, &"mythic")
+    upper_ordinary_foundation.rarities[mythic_index] = upper_ordinary_foundation.rarities[mythic_index].duplicate(true) as ItemRarityDefinition
+    upper_ordinary_foundation.rarities[mythic_index].ordinary_generation_enabled = true
+    TestAssertions.truthy(
+        upper_ordinary_foundation.validate(stats, live_equipment).has("PARTY_FORGE_ITEM_RARITY_ERROR id=mythic reason=ordinary generation is limited to rarity ranks 1..5"),
+        "upper rarity cannot enter ordinary generation",
+        failures,
+    )
+
+    var propagated_foundation := live_foundation.duplicate(true) as ItemFoundationCatalog
+    mythic_index = _rarity_index(propagated_foundation, &"mythic")
+    propagated_foundation.rarities[mythic_index] = propagated_foundation.rarities[mythic_index].duplicate(true) as ItemRarityDefinition
+    propagated_foundation.rarities[mythic_index].ordinary_generation_enabled = true
+    catalog.item_foundation_catalog = propagated_foundation
+    catalog.equipment_catalog = live_equipment
+    TestAssertions.truthy(
+        catalog.validate().has("PARTY_FORGE_ITEM_RARITY_ERROR id=mythic reason=ordinary generation is limited to rarity ranks 1..5"),
+        "game catalog propagates cross-catalog foundation errors",
+        failures,
+    )
+    catalog.item_foundation_catalog = live_foundation
+    catalog.equipment_catalog = live_equipment
+
+func _rarity_index(catalog: ItemFoundationCatalog, id: StringName) -> int:
+    for index: int in catalog.rarities.size():
+        if catalog.rarities[index] != null and catalog.rarities[index].id == id:
+            return index
+    return -1
+
+func _affix_index(catalog: ItemFoundationCatalog, id: StringName) -> int:
+    for index: int in catalog.affixes.size():
+        if catalog.affixes[index] != null and catalog.affixes[index].id == id:
+            return index
+    return -1
+
+func _equipment_index(catalog: EquipmentCatalog, id: StringName) -> int:
+    for index: int in catalog.definitions.size():
+        if catalog.definitions[index] != null and catalog.definitions[index].id == id:
+            return index
+    return -1
 
 func _assert_class_names_and_eligibility(catalog: GameCatalog, failures: Array[String]) -> void:
     var expected_names := {
