@@ -38,6 +38,7 @@ func run() -> Array[String]:
 	_test_projection_failure_is_atomic(failures)
 	_test_non_action_aggregate_overflow_is_rejected_atomically(failures)
 	_test_candidate_equipment_tagged_overflow_is_rejected(failures)
+	_test_candidate_geometry_overflow_is_rejected_atomically(failures)
 	_test_mixed_component_and_invalid_type_actions_are_rejected(failures)
 	_test_critical_and_rate_overflow_are_rejected(failures)
 	_test_healing_projection_validation(failures)
@@ -78,6 +79,35 @@ func _test_preview_is_pure_and_resolves_final_stats(failures: Array[String]) -> 
 	TestAssertions.equal(party.stats_for(1), cached_before, "preview leaves the member cache untouched", failures)
 	TestAssertions.equal(party.member_by_id(1).modifier_sources.size(), 0, "preview commits no member source", failures)
 	TestAssertions.equal(changed, [], "preview emits no stat-change signal", failures)
+	party.free()
+
+
+func _test_candidate_geometry_overflow_is_rejected_atomically(failures: Array[String]) -> void:
+	var catalog := GameCatalog.load_defaults()
+	var fighter := _class_with_action_tag(catalog.class_by_id(&"fighter"), &"fighter_cleave", ACTION_ONLY_TAG)
+	fighter.primary_attack.range = 1.0e308
+	var party := _party_with_class(PartyManager.new(), fighter)
+	var fixture := _tagged_equipment_fixture(&"attack_range", [ACTION_ONLY_TAG], 1.0, 1)
+	var item := fixture.item as ItemInstance
+	var foundation := fixture.foundation as ItemFoundationCatalog
+	var state := _state(item)
+	var state_before := _bytes(state)
+	var base_before := party.stats_for(1)
+	var action_tags := DamageResolver.action_tags_for(fighter.primary_attack)
+	var action_before := party.stats_for_action(1, action_tags)
+	var revision_before := party.stat_revision()
+	var changed: Array[int] = []
+	party.stats_changed.connect(func(member_id: int) -> void: changed.append(member_id))
+	var result: Variant = _service.preview(
+		state, 1, item.instance_id, &"helmet", party,
+		GameCatalog.EQUIPMENT_CATALOG, foundation,
+	)
+	_assert_action_rejection(result, item.instance_id, &"helmet", fighter.primary_attack.id, "range", "effective geometry overflow", failures)
+	TestAssertions.equal(_bytes(state), state_before, "geometry rejection preserves ownership", failures)
+	TestAssertions.truthy(is_same(party.stats_for(1), base_before), "geometry rejection preserves base cache identity", failures)
+	TestAssertions.truthy(is_same(party.stats_for_action(1, action_tags), action_before), "geometry rejection preserves action cache identity", failures)
+	TestAssertions.equal(party.stat_revision(), revision_before, "geometry rejection preserves revision", failures)
+	TestAssertions.equal(changed, [], "geometry rejection emits no stat signal", failures)
 	party.free()
 
 func _test_non_action_aggregate_overflow_is_rejected_atomically(failures: Array[String]) -> void:

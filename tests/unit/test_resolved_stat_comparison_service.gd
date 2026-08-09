@@ -80,12 +80,22 @@ func _test_action_and_disabled_warning_rows(service: Script, failures: Array[Str
 	current_estimate.available = true
 	current_estimate.average_hit = 10.0
 	current_estimate.estimated_dps = 20.0
+	var supports_geometry := _has_property(current_estimate, &"range") and _has_property(current_estimate, &"area_radius") and _has_property(current_estimate, &"projectile_speed")
+	TestAssertions.truthy(supports_geometry, "comparison estimates expose effective geometry fields", failures)
+	if supports_geometry:
+		current_estimate.set("range", 8.0)
+		current_estimate.set("area_radius", 1.5)
+		current_estimate.set("projectile_speed", 10.0)
 	var candidate_estimate := ActionCombatEstimate.new()
 	candidate_estimate.action_id = &"fighter_slash"
 	candidate_estimate.display_name = "Fighter Slash"
 	candidate_estimate.available = true
 	candidate_estimate.average_hit = 12.0
 	candidate_estimate.estimated_dps = 24.0
+	if supports_geometry:
+		candidate_estimate.set("range", 12.0)
+		candidate_estimate.set("area_radius", 2.25)
+		candidate_estimate.set("projectile_speed", 15.0)
 	var current_activation := _activation(["support", "dependent"], {})
 	var candidate_activation := _activation(["candidate"], {"dependent": PackedStringArray(["Requires Strength 15 (has 10)"])})
 	var rows: Array = service.call(
@@ -106,6 +116,11 @@ func _test_action_and_disabled_warning_rows(service: Script, failures: Array[Str
 	TestAssertions.truthy(rows.any(func(row: Dictionary) -> bool:
 		return String(row.get("row_type", "")) == "action" and String(row.get("text", "")).contains("DPS") and int(row.get("direction", 0)) == 1
 	), "action DPS improvement is projected", failures)
+	if supports_geometry:
+		for geometry_label: String in ["Range", "Area", "Projectile Speed"]:
+			TestAssertions.truthy(rows.any(func(row: Dictionary) -> bool:
+				return String(row.get("row_type", "")) == "action" and String(row.get("text", "")).contains(geometry_label) and "improved" in String(row.get("accessible_text", "")).to_lower()
+			), "action %s improvement is projected accessibly" % geometry_label, failures)
 	var warning := rows.filter(func(row: Dictionary) -> bool: return String(row.get("row_type", "")) == "warning")
 	TestAssertions.equal(warning.size(), 1, "newly disabled equipment adds one prominent warning", failures)
 	if not warning.is_empty():
@@ -149,3 +164,9 @@ func _row(rows: Array, stat_id: StringName) -> Dictionary:
 		if value is Dictionary and StringName(String((value as Dictionary).get("stat_id", ""))) == stat_id:
 			return value as Dictionary
 	return {}
+
+
+func _has_property(object: Object, property_name: StringName) -> bool:
+	return object != null and object.get_property_list().any(
+		func(property: Dictionary) -> bool: return property.get("name") == property_name
+	)

@@ -130,7 +130,6 @@ func advance_combat(delta: float, candidates: Array[CombatTarget]) -> void:
         if candidate != null and candidate.actor != null and is_instance_valid(candidate.actor):
             combatants.append(candidate.actor)
     attack_executor.call("configure", self, party_manager, combat_effects_parent, combatants)
-    var modifiers: RefCounted = CombatModifiersScript.resolve(member_state, party_manager)
     var primary := _attack_controller()
     _advance_action_cooldown(primary, delta)
     _advance_action_cooldown(support_controller, delta)
@@ -139,20 +138,20 @@ func advance_combat(delta: float, candidates: Array[CombatTarget]) -> void:
 
     var combat_origin: Vector3 = global_position if is_inside_tree() else position
     if support_controller != null and support_controller.definition != null and support_controller.cooldown_remaining <= 0.0 and not attack_sequence_controller.is_busy():
+        var support_modifiers: RefCounted = CombatModifiersScript.resolve_for_action(member_state, party_manager, support_controller.definition)
+        if not bool(support_modifiers.call("ok")):
+            return
         var allies: Array[CombatTarget] = []
         for candidate: CombatTarget in candidates:
             if candidate != null and candidate.team_id == team_id:
                 allies.append(candidate)
-        var support_geometry := ResolvedAttackGeometry.from_attack(
-            support_controller.definition,
-            float(modifiers.get("range_multiplier")),
-            float(modifiers.get("area_multiplier"))
-        )
+        var support_geometry := support_modifiers.get("geometry") as ResolvedAttackGeometry
         var heal_target: CombatTarget = HealingSelectorScript.most_injured(allies, support_geometry.range, combat_origin)
         if heal_target != null:
             support_controller.cooldown_remaining = support_controller.definition.cooldown
             support_controller.attack_ready.emit(support_controller.definition, heal_target)
-    _try_primary_attack(primary, candidates, float(modifiers.get("range_multiplier")), float(modifiers.get("area_multiplier")))
+    var primary_modifiers: RefCounted = CombatModifiersScript.resolve_for_action(member_state, party_manager, primary.definition) if primary != null and primary.definition != null else null
+    _try_primary_attack(primary, candidates, primary_modifiers)
 
 func get_combat_adapter(tags: Array[StringName]) -> CombatantAdapter:
     var health := _health_component()
@@ -245,9 +244,9 @@ func _on_attack_requested(definition: AttackDefinition, target: CombatTarget) ->
     if attack_visual == null:
         push_error("PARTY_FORGE_ATTACK_SEQUENCE_ERROR attack=%s action=<missing> token=0 reason=presentation missing" % definition.id)
         return
-    var modifiers := CombatModifiersScript.resolve(member_state, party_manager)
+    var modifiers := CombatModifiersScript.resolve_for_action(member_state, party_manager, definition)
     var cadence := CombatModifiersScript.action_cadence(member_state, party_manager, definition)
-    if not bool(cadence.call("ok")):
+    if not bool(modifiers.call("ok")) or not bool(cadence.call("ok")):
         return
     attack_sequence_controller.request(definition, target, attack_visual, float(cadence.get("progress_multiplier")), float(modifiers.get("range_multiplier")))
 
@@ -274,11 +273,13 @@ func _collect_combat_targets() -> Array[CombatTarget]:
                 targets.append(target)
     return targets
 
-func _try_primary_attack(controller: AttackController, candidates: Array[CombatTarget], range_multiplier: float, area_multiplier: float) -> void:
+func _try_primary_attack(controller: AttackController, candidates: Array[CombatTarget], modifiers: RefCounted) -> void:
     if controller == null or controller.definition == null or controller.cooldown_remaining > 0.0 or (attack_sequence_controller != null and attack_sequence_controller.is_busy()):
         return
+    if modifiers == null or not bool(modifiers.call("ok")):
+        return
     var origin: Vector3 = global_position if is_inside_tree() else position
-    var geometry := ResolvedAttackGeometry.from_attack(controller.definition, range_multiplier, area_multiplier)
+    var geometry := modifiers.get("geometry") as ResolvedAttackGeometry
     var target: CombatTarget = TargetSelector.nearest(origin, candidates, geometry.range, team_id)
     if target == null:
         return

@@ -32,6 +32,12 @@ static func estimate_from_snapshot(attack: AttackDefinition, action_stats: Resol
 	result.display_name = String(attack.id).replace("_", " ").capitalize()
 	if action_stats == null or types == null:
 		return _unavailable(result, "Missing resolved character stats.")
+	var geometry := ResolvedAttackGeometry.from_snapshot(attack, action_stats)
+	if not geometry.ok():
+		return _unavailable(result, geometry.error)
+	result.range = geometry.range
+	result.area_radius = geometry.area_radius
+	result.projectile_speed = geometry.projectile_speed
 	var cadence := ACTION_CADENCE.resolve(
 		attack.cooldown,
 		action_stats.value(&"attack_speed", 1.0),

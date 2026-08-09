@@ -35,6 +35,10 @@ func run() -> Array[String]:
     _test_cleric_healing(failures)
     _test_party_recovery(failures)
     _test_combat_modifiers(failures)
+    _test_action_tagged_projectile_executor_geometry(failures)
+    _test_party_actor_action_tagged_target_acquisition(failures)
+    _test_action_snapshot_failure_stops_execution(failures)
+    _test_missing_action_context_stops_runtime_healing(failures)
     _test_wisdom_runtime_cadence_matches_estimates(failures)
     _test_cleric_primary_fallback(failures)
     return failures
@@ -447,6 +451,137 @@ func _test_combat_modifiers(failures: Array[String]) -> void:
     TestAssertions.near(float(mage_modifiers.get("projectile_multiplier")), 1.0, 0.001, "Mage no longer gains Ranged projectile bonus", failures)
     TestAssertions.near(float(mage_modifiers.get("cooldown_rate_multiplier")), 1.14, 0.001, "active Caster tier resolves rounded attack rate", failures)
     mage_party.free()
+
+
+func _test_action_tagged_projectile_executor_geometry(failures: Array[String]) -> void:
+    var test_root := _new_test_root("ActionTaggedProjectileGeometryTest")
+    var catalog := GameCatalog.load_defaults()
+    var mage := catalog.class_by_id(&"mage").duplicate(true) as ClassDefinition
+    mage.primary_attack = mage.primary_attack.duplicate(true) as AttackDefinition
+    mage.primary_attack.action_tags = mage.primary_attack.action_tags.duplicate()
+    mage.primary_attack.action_tags.append(&"task10j_runtime_action")
+    var attack := mage.primary_attack
+    var party := PartyManager.new()
+    test_root.add_child(party)
+    party.initialize(mage, catalog.traits)
+    party.configure_combat(CombatRng.new(120), catalog.damage_types)
+    var source := StatModifierSource.create(&"task10j_runtime_geometry", &"test", "Task 10J Runtime Geometry", 1, [
+        StatModifier.create(&"attack_range", StatModifier.Operation.INCREASED, 0.20, &"task10j_runtime_global_range", "Global Range"),
+        StatModifier.create(&"attack_range", StatModifier.Operation.INCREASED, 0.30, &"task10j_runtime_area_range", "Tagged Range", [&"task10j_runtime_action"]),
+        StatModifier.create(&"attack_range", StatModifier.Operation.INCREASED, 4.0, &"task10j_runtime_melee_range", "Melee Range", [&"melee"]),
+        StatModifier.create(&"area_size", StatModifier.Operation.INCREASED, 0.40, &"task10j_runtime_area", "Area Size", [&"task10j_runtime_action"]),
+        StatModifier.create(&"projectile_speed", StatModifier.Operation.INCREASED, 0.50, &"task10j_runtime_projectile", "Projectile Speed", [&"task10j_runtime_action"]),
+    ])
+    TestAssertions.truthy(party.add_member_source(1, source), "runtime geometry source applies", failures)
+    var action_stats := party.stats_for_action(1, DamageResolver.action_tags_for(attack))
+    var generic_stats := party.stats_for(1)
+    TestAssertions.truthy(action_stats.value(&"attack_range") > generic_stats.value(&"attack_range"), "matching action range differs from context-free member range", failures)
+    var owner := _create_member_actor(test_root, party, party.members[0], 1, Vector3.ZERO)
+    var target := _create_actor(test_root, _target_definition(&"task10j_projectile_target"), 2, Vector3(5.0, 0.0, 0.0))
+    _set_health(target, 100.0, 100.0)
+    var effects := Node3D.new()
+    test_root.add_child(effects)
+    var targets: Array[Node3D] = [target]
+    owner.attack_executor.call("configure", owner, party, effects, targets)
+    owner.attack_executor.call("execute", attack, target.get_combat_target())
+    var projectile := _first_child_of_type(effects, "PartyProjectile")
+    TestAssertions.truthy(projectile != null, "action-tagged geometry still launches a projectile", failures)
+    if projectile != null:
+        TestAssertions.near(float(projectile.get("maximum_range")), attack.range * action_stats.value(&"attack_range"), 0.001, "executor range uses the exact action snapshot", failures)
+        TestAssertions.near(float(projectile.get("area_radius")), attack.area_radius * action_stats.value(&"area_size"), 0.001, "executor area uses the exact action snapshot", failures)
+        TestAssertions.near(float(projectile.get("speed")), attack.projectile_speed * action_stats.value(&"projectile_speed"), 0.001, "executor speed uses the exact action snapshot", failures)
+    test_root.free()
+
+
+func _test_party_actor_action_tagged_target_acquisition(failures: Array[String]) -> void:
+    var test_root := _new_test_root("ActionTaggedTargetAcquisitionTest")
+    var catalog := GameCatalog.load_defaults()
+    var ranger := catalog.class_by_id(&"ranger").duplicate(true) as ClassDefinition
+    ranger.primary_attack = ranger.primary_attack.duplicate(true) as AttackDefinition
+    ranger.primary_attack.action_tags = ranger.primary_attack.action_tags.duplicate()
+    ranger.primary_attack.action_tags.append(&"task10j_acquisition_action")
+    var party := PartyManager.new()
+    test_root.add_child(party)
+    party.initialize(ranger, catalog.traits)
+    party.configure_combat(CombatRng.new(121), catalog.damage_types)
+    var range_source := StatModifierSource.create(&"task10j_acquisition", &"test", "Task 10J Acquisition", 1, [
+        StatModifier.create(&"attack_range", StatModifier.Operation.INCREASED, 0.50, &"task10j_projectile_range", "Projectile Range", [&"task10j_acquisition_action"]),
+    ])
+    TestAssertions.truthy(party.add_member_source(1, range_source), "tagged acquisition source applies", failures)
+    var actor := _create_member_actor(test_root, party, party.members[0], 1, Vector3.ZERO)
+    var hostile := _create_actor(test_root, _target_definition(&"task10j_far_hostile"), 2, Vector3(14.0, 0.0, 0.0))
+    _set_health(hostile, 100.0, 100.0)
+    var candidates: Array[CombatTarget] = [hostile.get_combat_target()]
+    actor.advance_combat(0.1, candidates)
+    TestAssertions.truthy(actor.attack_sequence_controller.is_busy(), "PartyActor acquires a target inside tagged range but beyond generic range", failures)
+    TestAssertions.truthy((actor.get_node("AttackController") as AttackController).cooldown_remaining > 0.0, "tagged acquisition starts the primary cooldown", failures)
+    test_root.free()
+
+    var heal_root := _new_test_root("ActionTaggedHealingAcquisitionTest")
+    var cleric := catalog.class_by_id(&"cleric").duplicate(true) as ClassDefinition
+    cleric.support_action = cleric.support_action.duplicate(true) as AttackDefinition
+    cleric.support_action.action_tags = cleric.support_action.action_tags.duplicate()
+    cleric.support_action.action_tags.append(&"task10j_heal_action")
+    var heal_party := PartyManager.new()
+    heal_root.add_child(heal_party)
+    heal_party.initialize(cleric, catalog.traits)
+    heal_party.configure_combat(CombatRng.new(122), catalog.damage_types)
+    var heal_range := StatModifierSource.create(&"task10j_heal_range", &"test", "Task 10J Heal Range", 1, [
+        StatModifier.create(&"attack_range", StatModifier.Operation.INCREASED, 0.50, &"task10j_healing_range", "Healing Range", [&"task10j_heal_action"]),
+    ])
+    TestAssertions.truthy(heal_party.add_member_source(1, heal_range), "tagged healing range source applies", failures)
+    var healer := _create_member_actor(heal_root, heal_party, heal_party.members[0], 1, Vector3.ZERO)
+    var ally := _create_actor(heal_root, _target_definition(&"task10j_far_ally"), 1, Vector3(12.0, 0.0, 0.0))
+    _set_health(ally, 100.0, 50.0)
+    var heal_candidates: Array[CombatTarget] = [ally.get_combat_target()]
+    healer.advance_combat(0.1, heal_candidates)
+    var support := healer.get_node_or_null("SupportController") as AttackController
+    TestAssertions.truthy(support != null and support.cooldown_remaining > 0.0, "healing support acquires an ally through its exact tagged range", failures)
+    heal_root.free()
+
+
+func _test_action_snapshot_failure_stops_execution(failures: Array[String]) -> void:
+    var test_root := _new_test_root("MissingActionSnapshotExecutionTest")
+    var catalog := GameCatalog.load_defaults()
+    var ranger := catalog.class_by_id(&"ranger")
+    var party := PartyManager.new()
+    test_root.add_child(party)
+    party.initialize(ranger, catalog.traits)
+    party.configure_combat(CombatRng.new(123), catalog.damage_types)
+    var unmanaged_state := PartyMemberState.new(999, ranger, true)
+    var owner := _create_actor(test_root, ranger, 1, Vector3.ZERO, true)
+    owner.configure(unmanaged_state)
+    owner.configure_combat(party, test_root)
+    var target := _create_actor(test_root, _target_definition(&"task10j_missing_snapshot_target"), 2, Vector3(5.0, 0.0, 0.0))
+    var targets: Array[Node3D] = [target]
+    owner.attack_executor.call("configure", owner, party, test_root, targets)
+    owner.attack_executor.call("execute", ranger.primary_attack, target.get_combat_target())
+    TestAssertions.equal(_first_child_of_type(test_root, "PartyProjectile"), null, "missing managed action snapshot stops projectile execution safely", failures)
+    test_root.free()
+
+
+func _test_missing_action_context_stops_runtime_healing(failures: Array[String]) -> void:
+    var test_root := _new_test_root("MissingActionContextHealingTest")
+    var catalog := GameCatalog.load_defaults()
+    var cleric := catalog.class_by_id(&"cleric")
+    var party := PartyManager.new()
+    test_root.add_child(party)
+    party.initialize(cleric, catalog.traits)
+    party.configure_combat(CombatRng.new(124), catalog.damage_types)
+    var owner := _create_member_actor(test_root, party, party.members[0], 1, Vector3.ZERO)
+    var ally := _create_actor(test_root, _target_definition(&"task10j_contextless_heal_target"), 1, Vector3(2.0, 0.0, 0.0))
+    _set_health(ally, 100.0, 40.0)
+    var allies: Array[Node3D] = [ally]
+
+    owner.attack_executor.call("configure", owner, null, test_root, allies)
+    owner.attack_executor.call("execute", cleric.support_action, ally.get_combat_target())
+    TestAssertions.near(_health(ally).current_health, 40.0, 0.001, "missing manager snapshot stops healing execution safely", failures)
+
+    owner.attack_executor.call("configure", owner, party, test_root, allies)
+    owner.member_state = null
+    owner.attack_executor.call("execute", cleric.support_action, ally.get_combat_target())
+    TestAssertions.near(_health(ally).current_health, 40.0, 0.001, "missing member snapshot stops healing execution safely", failures)
+    test_root.free()
 
 func _test_wisdom_runtime_cadence_matches_estimates(failures: Array[String]) -> void:
     var test_root := _new_test_root("WisdomRuntimeCadenceParityTest")

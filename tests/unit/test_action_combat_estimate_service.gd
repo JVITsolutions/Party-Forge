@@ -7,12 +7,77 @@ func run() -> Array[String]:
 	_test_noncritical_mixed_damage(failures)
 	_test_mixed_caster_runtime_parity(failures)
 	_test_snapshot_estimate_matches_party_estimate(failures)
+	_test_action_geometry_estimate_parity_and_tag_filtering(failures)
+	_test_geometry_only_changes_do_not_invent_dps(failures)
 	_test_wisdom_only_damage_and_healing_estimates(failures)
 	_test_zero_base_damage_is_unavailable(failures)
 	_test_missing_attack_id_is_unavailable(failures)
 	_test_invalid_damage_type_is_unavailable(failures)
 	_test_estimate_invariants_are_contextual(failures)
 	return failures
+
+
+func _test_action_geometry_estimate_parity_and_tag_filtering(failures: Array[String]) -> void:
+	var catalog := GameCatalog.load_defaults()
+	var party := PartyManager.new()
+	var mage := catalog.class_by_id(&"mage").duplicate(true) as ClassDefinition
+	mage.primary_attack = mage.primary_attack.duplicate(true) as AttackDefinition
+	mage.primary_attack.action_tags = mage.primary_attack.action_tags.duplicate()
+	mage.primary_attack.action_tags.append(&"task10j_estimate_action")
+	party.initialize(mage, catalog.traits)
+	var attack := mage.primary_attack
+	var source := StatModifierSource.create(&"task10j_geometry_estimate", &"test", "Task 10J Geometry", 1, [
+		StatModifier.create(&"attack_range", StatModifier.Operation.INCREASED, 0.25, &"task10j_global_range", "Global Range"),
+		StatModifier.create(&"attack_range", StatModifier.Operation.INCREASED, 0.50, &"task10j_area_range", "Tagged Range", [&"task10j_estimate_action"]),
+		StatModifier.create(&"attack_range", StatModifier.Operation.INCREASED, 4.0, &"task10j_melee_range", "Melee Range", [&"melee"]),
+		StatModifier.create(&"area_size", StatModifier.Operation.INCREASED, 0.40, &"task10j_area_size", "Area Size", [&"task10j_estimate_action"]),
+		StatModifier.create(&"projectile_speed", StatModifier.Operation.INCREASED, 0.30, &"task10j_projectile_speed", "Projectile Speed", [&"task10j_estimate_action"]),
+	])
+	TestAssertions.truthy(party.add_member_source(1, source), "geometry estimate source applies", failures)
+	var estimate := ActionCombatEstimateService.estimate(attack, 1, party, catalog.damage_types)
+	var supports_geometry := _has_property(estimate, &"range") and _has_property(estimate, &"area_radius") and _has_property(estimate, &"projectile_speed")
+	TestAssertions.truthy(supports_geometry, "action estimate exposes effective geometry fields", failures)
+	if not supports_geometry:
+		party.free()
+		return
+	TestAssertions.truthy(estimate.available, "action-tagged geometry estimate is available", failures)
+	TestAssertions.near(float(estimate.get("range")), attack.range * 1.75, 0.001, "global and matching tagged range combine once", failures)
+	TestAssertions.near(float(estimate.get("area_radius")), attack.area_radius * 1.40, 0.001, "matching area tag changes effective radius", failures)
+	TestAssertions.near(float(estimate.get("projectile_speed")), attack.projectile_speed * 1.30, 0.001, "matching projectile tag changes effective speed", failures)
+	var exact_snapshot := party.stats_for_action(1, DamageResolver.action_tags_for(attack))
+	var snapshot_estimate := ActionCombatEstimateService.estimate_from_snapshot(attack, exact_snapshot, catalog.damage_types)
+	TestAssertions.near(float(snapshot_estimate.get("range")), float(estimate.get("range")), 0.001, "party and pure preview range use the same exact action snapshot", failures)
+	TestAssertions.near(float(snapshot_estimate.get("area_radius")), float(estimate.get("area_radius")), 0.001, "party and pure preview area use the same exact action snapshot", failures)
+	TestAssertions.near(float(snapshot_estimate.get("projectile_speed")), float(estimate.get("projectile_speed")), 0.001, "party and pure preview speed use the same exact action snapshot", failures)
+	party.free()
+
+
+func _test_geometry_only_changes_do_not_invent_dps(failures: Array[String]) -> void:
+	var catalog := GameCatalog.load_defaults()
+	var attack := catalog.class_by_id(&"ranger").primary_attack
+	var neutral := ActionCombatEstimateService.estimate_from_snapshot(attack, _snapshot({}), catalog.damage_types)
+	var geometry_only := ActionCombatEstimateService.estimate_from_snapshot(attack, _snapshot({
+		&"attack_range": 1.5,
+		&"projectile_speed": 2.0,
+		&"area_size": 3.0,
+	}), catalog.damage_types)
+	var supports_geometry := _has_property(geometry_only, &"range") and _has_property(geometry_only, &"area_radius") and _has_property(geometry_only, &"projectile_speed")
+	if not supports_geometry:
+		return
+	TestAssertions.truthy(neutral.available and geometry_only.available, "neutral and geometry-only previews are available", failures)
+	TestAssertions.near(float(geometry_only.get("range")), attack.range * 1.5, 0.001, "geometry-only preview exposes effective range", failures)
+	TestAssertions.near(float(geometry_only.get("projectile_speed")), attack.projectile_speed * 2.0, 0.001, "geometry-only preview exposes effective speed", failures)
+	TestAssertions.near(float(geometry_only.get("area_radius")), 0.0, 0.001, "non-area action omits effective area", failures)
+	TestAssertions.near(geometry_only.average_hit, neutral.average_hit, 0.001, "geometry-only changes do not alter hit projection", failures)
+	TestAssertions.near(geometry_only.estimated_dps, neutral.estimated_dps, 0.001, "geometry-only changes do not invent DPS", failures)
+
+	var overflow := ActionCombatEstimateService.estimate_from_snapshot(
+		attack,
+		_snapshot({&"attack_range": 1.0e308}),
+		catalog.damage_types,
+	)
+	TestAssertions.truthy(not overflow.available, "non-finite effective runtime geometry makes the preview unavailable", failures)
+	TestAssertions.truthy("range" in overflow.unavailable_reason.to_lower(), "geometry overflow preview names range", failures)
 
 func _test_action_aware_critical_estimate(failures: Array[String]) -> void:
 	var catalog := GameCatalog.load_defaults()

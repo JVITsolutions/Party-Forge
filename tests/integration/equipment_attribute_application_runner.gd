@@ -266,6 +266,33 @@ func _run() -> void:
 	_assert(Vector2(rejection_health.current_health, rejection_health.max_health) == rejection_health_before, "24-member aggregate rejection preserves current and maximum health")
 	_assert_untouched_snapshots(resumed_party, rejection_tags, rejection_untouched, "aggregate stat refresh rejection")
 	_assert_item_bytes(resumed_context.item_state(), immutable_item_bytes, "aggregate stat refresh rejection")
+
+	var geometry_source := StatModifierSource.create(
+		&"task10j_integration_geometry", &"test", "Task 10J Geometry Overflow", 1, [
+			StatModifier.create(
+				&"attack_range", StatModifier.Operation.INCREASED, 1.0,
+				&"task10j_integration_geometry_roll", "Task 10J Geometry Overflow", [ACTION_ONLY_TAG],
+			),
+		],
+	)
+	var cache_probe_started := Time.get_ticks_usec()
+	for _probe_index: int in 512:
+		_assert(is_same(resumed_party.stats_for_action(1, rejection_tags), rejection_action_before), "action cache probe preserves member-one exact snapshot identity")
+	var cache_probe_usec := Time.get_ticks_usec() - cache_probe_started
+	_assert(cache_probe_usec < 2_000_000, "512 action-cache hits remain bounded: usec=%d" % cache_probe_usec)
+	resumed_changed_members.clear()
+	_assert(not resumed_party.add_member_source(1, geometry_source), "non-finite effective geometry rejects the coordinated 24-member refresh")
+	_assert(JSON.stringify(resumed_context.item_state().to_dictionary()) == rejection_state_before, "24-member geometry rejection preserves ownership atomically")
+	_assert(resumed_context.equipment_activation(1).active_item_ids == rejection_activation_before.active_item_ids, "24-member geometry rejection preserves activation")
+	_assert(resumed_party.member_by_id(1).modifier_sources.map(func(source: StatModifierSource) -> StringName: return source.id) == rejection_source_ids_before, "24-member geometry rejection preserves sources")
+	_assert(is_same(resumed_party.stats_for(1), rejection_base_before), "24-member geometry rejection preserves member-one base cache identity")
+	_assert(is_same(resumed_party.stats_for_action(1, rejection_tags), rejection_action_before), "24-member geometry rejection preserves member-one action cache identity")
+	_assert(resumed_party.stat_revision() == rejection_revision_before, "24-member geometry rejection preserves revision")
+	_assert(resumed_changed_members.is_empty(), "24-member geometry rejection emits no stat signal")
+	_assert(Vector2(rejection_health.current_health, rejection_health.max_health) == rejection_health_before, "24-member geometry rejection preserves runtime health")
+	_assert_untouched_snapshots(resumed_party, rejection_tags, rejection_untouched, "geometry refresh rejection")
+	_assert_item_bytes(resumed_context.item_state(), immutable_item_bytes, "geometry refresh rejection")
+	print("TASK10J_ACTION_CACHE_SUMMARY: PASS members=24 hits=512 usec=%d" % cache_probe_usec)
 	rejection_actor.free()
 
 	equipment.definitions[damage_index] = original_damage_base
@@ -278,6 +305,7 @@ func _party() -> PartyManager:
 	mage.primary_attack = mage.primary_attack.duplicate(true) as AttackDefinition
 	mage.primary_attack.action_tags = mage.primary_attack.action_tags.duplicate()
 	mage.primary_attack.action_tags.append(ACTION_ONLY_TAG)
+	mage.primary_attack.range = 1.0e308
 	var party := PartyManager.new()
 	party.configure_capacity(PartyCapacityPolicy.new(MEMBER_COUNT))
 	party.initialize(mage, catalog.traits)

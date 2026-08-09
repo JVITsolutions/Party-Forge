@@ -196,16 +196,24 @@ func _create_combat_estimate_card(estimate: ActionCombatEstimate) -> PanelContai
 	metrics.name = "Metrics"
 	metrics.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	if estimate.available:
+		var metric_lines := PackedStringArray()
 		if estimate.is_healing:
-			metrics.text = "Healing / Use: %s\nUses / Second: %.2f\nEstimated HPS: %s" % [
-				_estimate_number(estimate.healing_amount), estimate.attacks_per_second, _estimate_number(estimate.estimated_hps),
-			]
+			metric_lines.append("Healing / Use: %s" % _estimate_number(estimate.healing_amount))
+			metric_lines.append("Uses / Second: %.2f" % estimate.attacks_per_second)
+			metric_lines.append("Estimated HPS: %s" % _estimate_number(estimate.estimated_hps))
 		else:
 			var critical_text := _estimate_number(estimate.critical_hit) if estimate.can_crit else "Cannot Crit"
-			metrics.text = "Normal Hit: %s\nCritical Hit: %s\nAverage Hit: %s\nAttacks / Second: %.2f\nEstimated DPS: %s" % [
-				_estimate_number(estimate.normal_hit), critical_text, _estimate_number(estimate.average_hit),
-				estimate.attacks_per_second, _estimate_number(estimate.estimated_dps),
-			]
+			metric_lines.append("Normal Hit: %s" % _estimate_number(estimate.normal_hit))
+			metric_lines.append("Critical Hit: %s" % critical_text)
+			metric_lines.append("Average Hit: %s" % _estimate_number(estimate.average_hit))
+			metric_lines.append("Attacks / Second: %.2f" % estimate.attacks_per_second)
+			metric_lines.append("Estimated DPS: %s" % _estimate_number(estimate.estimated_dps))
+		metric_lines.append("Range: %s" % _estimate_number(estimate.range))
+		if estimate.area_radius > 0.0:
+			metric_lines.append("Area Radius: %s" % _estimate_number(estimate.area_radius))
+		if estimate.projectile_speed > 0.0:
+			metric_lines.append("Projectile Speed: %s" % _estimate_number(estimate.projectile_speed))
+		metrics.text = "\n".join(metric_lines)
 	else:
 		metrics.text = "Estimate unavailable: %s" % estimate.unavailable_reason
 	content.add_child(metrics)

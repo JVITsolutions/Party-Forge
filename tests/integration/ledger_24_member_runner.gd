@@ -264,7 +264,7 @@ func _assert_healing_card(ledger: CharacterLedger, mode: String) -> void:
 	var metrics := healing_card.get_node_or_null("Content/Metrics") as Label
 	_assert(metrics != null and metrics.is_visible_in_tree(), "%s Cleric healing metrics are visible" % mode)
 	if metrics != null:
-		for expected: String in ["Healing / Use", "Uses / Second", "Estimated HPS"]:
+		for expected: String in ["Healing / Use", "Uses / Second", "Estimated HPS", "Range"]:
 			_assert(expected in metrics.text, "%s healing metrics expose visible/accessibility wording %s" % [mode, expected])
 	var boundary := healing_card.tooltip_text
 	_assert(

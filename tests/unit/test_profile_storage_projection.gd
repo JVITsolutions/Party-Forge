@@ -5,6 +5,7 @@ const PROFILE_ID := "profile-storage-projection"
 func run() -> Array[String]:
 	var failures: Array[String] = []
 	_test_owned_action_consumer_parity(failures)
+	_test_support_range_comparison(failures)
 	_test_disabled_cascade_projection(failures)
 	_test_rejected_preview_suppresses_raw_fallback(failures)
 	_test_two_hand_displacement_projection(failures)
@@ -132,6 +133,44 @@ func _test_owned_action_consumer_parity(failures: Array[String]) -> void:
 	var activation := projection.get("_current_activation") as EquipmentActivationResult
 	var estimates := projection.call("_action_estimates", activation) as Array
 	TestAssertions.equal(estimates.size(), fighter.owned_actions().size(), "profile projection consumes the authoritative owned-action enumeration", failures)
+
+
+func _test_support_range_comparison(failures: Array[String]) -> void:
+	var cleric := GameCatalog.load_defaults().class_by_id(&"cleric")
+	var profile := ProfileState.new_profile("support-range-comparison", "Support Range Comparison", 1000)
+	profile.leader_loadout = ItemSlotContainer.create(
+		&"leader-loadout", ItemSlotContainer.PROFILE_LEADER_EQUIPMENT, profile.profile_id,
+		EquipmentSlotIndex.capacity(),
+	).to_dictionary()
+	profile.leader_loadout_class_id = "cleric"
+	profile.stash_tabs = [ItemSlotContainer.create(
+		&"stash-tab-support-range", ItemSlotContainer.PROFILE_STASH_TAB, profile.profile_id, 100,
+	).to_dictionary()]
+	var projection := ProfileStorageProjection.from_profile(
+		profile, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG, GameCatalog.STAT_CATALOG, cleric,
+	)
+	TestAssertions.truthy(projection.valid, "support range comparison fixture projects", failures)
+	if not projection.valid:
+		return
+	var activation := projection.get("_current_activation") as EquipmentActivationResult
+	var current_estimates := projection.call("_action_estimates", activation) as Array
+	var current_heal := current_estimates.filter(func(value: Variant) -> bool:
+		return value is ActionCombatEstimate and (value as ActionCombatEstimate).action_id == cleric.support_action.id
+	)
+	TestAssertions.equal(current_heal.size(), 1, "profile comparison includes the owned healing action", failures)
+	if current_heal.is_empty():
+		return
+	var candidate_stats := ResolvedStatSnapshot.new()
+	candidate_stats.set_resolved(&"attack_range", 1.10, [])
+	var candidate_heal := ActionCombatEstimateService.estimate_from_snapshot(cleric.support_action, candidate_stats, GameCatalog.DAMAGE_TYPES)
+	var comparison_script := load("res://scripts/ui/storage/equipment_comparison_projection_service.gd") as Script
+	var rows: Array = comparison_script.call(
+		"compare", ResolvedStatSnapshot.new(), ResolvedStatSnapshot.new(), GameCatalog.STAT_CATALOG,
+		[current_heal[0]], [candidate_heal],
+	)
+	TestAssertions.truthy(rows.any(func(row_data: Dictionary) -> bool:
+		return String(row_data.get("stat_id", "")) == "action:cleric_heal:range" and is_equal_approx(float(row_data.get("delta", 0.0)), cleric.support_action.range * 0.10)
+	), "support-only range change produces a healing action comparison row", failures)
 
 
 func _test_disabled_cascade_projection(failures: Array[String]) -> void:

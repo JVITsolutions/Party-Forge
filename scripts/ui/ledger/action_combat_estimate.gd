@@ -14,4 +14,8 @@ var critical_hit := 0.0
 var average_hit := 0.0
 var attacks_per_second := 0.0
 var estimated_dps := 0.0
+@warning_ignore("shadowed_global_identifier")
+var range := 0.0
+var area_radius := 0.0
+var projectile_speed := 0.0
 var component_rows: Array[Dictionary] = []

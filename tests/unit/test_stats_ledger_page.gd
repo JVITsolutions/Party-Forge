@@ -88,6 +88,8 @@ func run() -> Array[String]:
 		var metrics := (fighter_card.get_node("Content/Metrics") as Label).text
 		TestAssertions.truthy("Normal Hit" in metrics and "Critical Hit" in metrics and "Average Hit" in metrics, "card exposes all hit values", failures)
 		TestAssertions.truthy("Attacks / Second" in metrics and "Estimated DPS" in metrics, "card exposes rate and DPS", failures)
+		TestAssertions.truthy("Range" in metrics and "Area Radius" in metrics, "nonprojectile area card exposes relevant effective geometry", failures)
+		TestAssertions.truthy("Projectile Speed" not in metrics, "nonprojectile card omits projectile geometry", failures)
 		TestAssertions.truthy("pre-mitigation" in fighter_card.tooltip_text and "per target" in fighter_card.tooltip_text, "card explains estimate boundary", failures)
 	var original_support_action := fighter.support_action
 	fighter.support_action = catalog.class_by_id(&"cleric").support_action
@@ -97,6 +99,8 @@ func run() -> Array[String]:
 	if healing_card != null:
 		var healing_metrics := (healing_card.get_node("Content/Metrics") as Label).text
 		TestAssertions.truthy("Healing / Use" in healing_metrics and "Estimated HPS" in healing_metrics, "healing card exposes amount, cadence, and HPS", failures)
+		TestAssertions.truthy("Range" in healing_metrics, "healing card exposes effective support range", failures)
+		TestAssertions.truthy("Area Radius" not in healing_metrics and "Projectile Speed" not in healing_metrics, "healing card omits inapplicable geometry", failures)
 	fighter.support_action = original_support_action
 	page.refresh()
 	TestAssertions.truthy(page.initial_focus() is Button and (page.initial_focus() as Button).name.begins_with("Stat_"), "combat estimates do not steal first-stat focus", failures)

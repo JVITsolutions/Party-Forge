@@ -30,6 +30,7 @@ func run() -> Array[String]:
 	_test_refresh_commit_failure_rolls_back_exact_state(failures)
 	_test_action_overflow_refresh_is_rejected_atomically(failures)
 	_test_resume_action_overflow_is_rejected_atomically(failures)
+	_test_resume_geometry_overflow_is_rejected_atomically(failures)
 	_test_aggregate_stat_overflow_refresh_is_rejected_atomically(failures)
 	_test_resume_aggregate_stat_overflow_is_rejected_atomically(failures)
 	return failures
@@ -308,6 +309,45 @@ func _test_resume_action_overflow_is_rejected_atomically(failures: Array[String]
 	party.free()
 
 
+func _test_resume_geometry_overflow_is_rejected_atomically(failures: Array[String]) -> void:
+	var party := _party_with_action_only_tag(2)
+	party.member_by_id(1).class_definition.primary_attack.range = 1.0e308
+	TestAssertions.truthy(party.add_member_source(1, _geometry_overflow_source()), "resume geometry fixture installs its finite preexisting source", failures)
+	var owner := "task10j-resume-player"
+	var seed := 10403
+	var containers: Array[ItemSlotContainer] = [
+		ItemSlotContainer.create(&"run-inventory", ItemSlotContainer.RUN_INVENTORY, owner, 5),
+		ItemSlotContainer.create(&"run-equipment-001", ItemSlotContainer.RUN_MEMBER_EQUIPMENT, owner, EquipmentSlotIndex.capacity()),
+		ItemSlotContainer.create(&"run-equipment-002", ItemSlotContainer.RUN_MEMBER_EQUIPMENT, owner, EquipmentSlotIndex.capacity()),
+	]
+	var state := ItemOwnershipState.create(owner, ItemRegistry.new(), containers)
+	var bootstrap := RunItemBootstrap.create(&"task10j-resume-run", seed, StringName(owner), 1, state)
+	var profile := ProfileState.new_profile("task10j-resume-profile", "Task 10J Resume", 1000)
+	profile.inventory_columns = 1
+	profile.resumable_run = ResumableRunItemCodec.encode(bootstrap)
+	var context := PlayerRunContext.new()
+	var action_tags := DamageResolver.action_tags_for(party.member_by_id(1).class_definition.primary_attack)
+	var sources_before := _source_documents(party.member_by_id(1))
+	var base_before := party.stats_for(1)
+	var action_before := party.stats_for_action(1, action_tags)
+	var member_two_base_before := party.stats_for(2)
+	var member_two_action_before := party.stats_for_action(2, action_tags)
+	var revision_before := party.stat_revision()
+	var changed: Array[int] = []
+	party.stats_changed.connect(func(member_id: int) -> void: changed.append(member_id))
+	var errors := context.configure(StringName(owner), 0, profile, seed, party, 100, bootstrap)
+	TestAssertions.truthy(not errors.is_empty() and String(errors[0]).contains("action=fighter_cleave") and String(errors[0]).contains("range"), "resume reconstruction rejects non-finite effective range", failures)
+	TestAssertions.truthy(not context.is_configured(), "geometry-rejected resume remains unconfigured", failures)
+	TestAssertions.equal(_source_documents(party.member_by_id(1)), sources_before, "geometry-rejected resume preserves sources", failures)
+	TestAssertions.equal(party.stat_revision(), revision_before, "geometry-rejected resume preserves revision", failures)
+	TestAssertions.equal(changed, [], "geometry-rejected resume emits no stat signal", failures)
+	TestAssertions.truthy(is_same(party.stats_for(1), base_before), "geometry-rejected resume preserves affected base cache", failures)
+	TestAssertions.truthy(is_same(party.stats_for_action(1, action_tags), action_before), "geometry-rejected resume preserves affected action cache", failures)
+	TestAssertions.truthy(is_same(party.stats_for(2), member_two_base_before), "geometry-rejected resume preserves unrelated base cache", failures)
+	TestAssertions.truthy(is_same(party.stats_for_action(2, action_tags), member_two_action_before), "geometry-rejected resume preserves unrelated action cache", failures)
+	party.free()
+
+
 func _test_aggregate_stat_overflow_refresh_is_rejected_atomically(failures: Array[String]) -> void:
 	var party := _party(2)
 	var profile := ProfileState.new_profile("task10i-refresh-profile", "Task 10I Refresh", 1000)
@@ -428,6 +468,15 @@ func _action_overflow_source() -> StatModifierSource:
 			StringName("task10d_refresh_overflow_%d" % index), "Task 10D Refresh Overflow", [ACTION_ONLY_TAG],
 		))
 	return StatModifierSource.create(&"task10d_refresh_overflow", &"character_growth", "Task 10D Refresh Overflow", 1, modifiers)
+
+
+func _geometry_overflow_source() -> StatModifierSource:
+	return StatModifierSource.create(&"task10j_refresh_geometry", &"character_growth", "Task 10J Geometry Overflow", 1, [
+		StatModifier.create(
+			&"attack_range", StatModifier.Operation.INCREASED, 1.0,
+			&"task10j_refresh_geometry_roll", "Task 10J Geometry Overflow", [ACTION_ONLY_TAG],
+		),
+	])
 
 
 func _aggregate_overflow_source() -> StatModifierSource:

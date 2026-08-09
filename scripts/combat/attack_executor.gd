@@ -26,7 +26,10 @@ func execute(definition: AttackDefinition, target: CombatTarget, presentation: A
         return
     var action_tags := DamageResolver.action_tags_for(definition)
     var source_adapter := owner_actor.get_combat_adapter(action_tags)
-    var modifiers: RefCounted = CombatModifiersScript.resolve(owner_actor.member_state, party_manager)
+    var modifiers: RefCounted = CombatModifiersScript.resolve_for_action(owner_actor.member_state, party_manager, definition)
+    if not bool(modifiers.call("ok")):
+        return
+    var geometry := modifiers.get("geometry") as ResolvedAttackGeometry
     if definition.kind == AttackDefinition.Kind.HEAL:
         _execute_heal(definition, target, source_adapter, presentation)
         return
@@ -35,16 +38,11 @@ func execute(definition: AttackDefinition, target: CombatTarget, presentation: A
     var packet := DamageResolver.prepare(definition, source_adapter, rng, types)
     if not packet.valid:
         return
-    var geometry := ResolvedAttackGeometry.from_attack(
-        definition,
-        float(modifiers.get("range_multiplier")),
-        float(modifiers.get("area_multiplier"))
-    )
     match definition.kind:
         AttackDefinition.Kind.MELEE_CLEAVE:
             _execute_melee(packet, target, geometry.area_radius)
         AttackDefinition.Kind.PROJECTILE, AttackDefinition.Kind.AREA_PROJECTILE:
-            _spawn_projectile(definition, target, modifiers, packet, geometry, presentation)
+            _spawn_projectile(definition, target, packet, geometry, presentation)
         _:
             push_error("PARTY_FORGE_DAMAGE_ERROR attack=%s kind=%d reason=unsupported party runtime kind" % [definition.id, definition.kind])
 
@@ -70,7 +68,7 @@ func _execute_melee(packet: DamagePacket, primary_target: CombatTarget, radius: 
     for adapter: CombatantAdapter in targets:
         DamageResolver.resolve(packet, adapter, party_manager.combat_rng, party_manager.damage_types)
 
-func _spawn_projectile(definition: AttackDefinition, target: CombatTarget, modifiers: RefCounted, packet: DamagePacket, geometry: ResolvedAttackGeometry, presentation: AttackPresentationDefinition = null) -> void:
+func _spawn_projectile(definition: AttackDefinition, target: CombatTarget, packet: DamagePacket, geometry: ResolvedAttackGeometry, presentation: AttackPresentationDefinition = null) -> void:
     var parent := _effect_parent()
     if parent == null:
         return
@@ -101,7 +99,7 @@ func _spawn_projectile(definition: AttackDefinition, target: CombatTarget, modif
     if presentation != null:
         projectile.rotation_degrees += presentation.projectile_rotation_degrees
     projectile.scale = visual_scale
-    var projectile_speed: float = definition.projectile_speed * float(modifiers.get("projectile_multiplier"))
+    var projectile_speed: float = geometry.projectile_speed
     var maximum_range: float = geometry.range
     var area_radius: float = geometry.area_radius
     var lifetime: float = clampf(maximum_range / maxf(projectile_speed, 0.01) + 0.5, 0.1, 10.0)

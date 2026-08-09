@@ -41,6 +41,11 @@ static func _append_action_rows(result: Array[Dictionary], current_values: Array
 		var label := candidate.display_name if not candidate.display_name.is_empty() else action_id.replace("_", " ").capitalize()
 		_append_action_row(result, action_id, label, "average_hit", "Average Hit", current.average_hit, candidate.average_hit)
 		_append_action_row(result, action_id, label, "estimated_dps", "DPS", current.estimated_dps, candidate.estimated_dps)
+		_append_action_row(result, action_id, label, "range", "Range", current.range, candidate.range)
+		if current.area_radius > 0.0 or candidate.area_radius > 0.0:
+			_append_action_row(result, action_id, label, "area_radius", "Area Radius", current.area_radius, candidate.area_radius)
+		if current.projectile_speed > 0.0 or candidate.projectile_speed > 0.0:
+			_append_action_row(result, action_id, label, "projectile_speed", "Projectile Speed", current.projectile_speed, candidate.projectile_speed)
 
 
 static func _append_action_row(
