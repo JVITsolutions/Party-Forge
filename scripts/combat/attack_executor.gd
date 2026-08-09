@@ -18,17 +18,17 @@ func configure(actor: PartyActor, manager: PartyManager, effect_container: Node,
     effects_parent = effect_container
     combatants = actor_candidates
 
-func execute(definition: AttackDefinition, target: CombatTarget, presentation: AttackPresentationDefinition = null) -> void:
+func execute(definition: AttackDefinition, target: CombatTarget, presentation: AttackPresentationDefinition = null, action_context: RefCounted = null) -> void:
     if owner_actor == null or definition == null or target == null:
         return
     var health: HealthComponent = owner_actor.get_node_or_null("HealthComponent") as HealthComponent
     if health != null and (health.is_downed or health.is_dead):
         return
-    var action_tags := DamageResolver.action_tags_for(definition)
-    var source_adapter := owner_actor.get_combat_adapter(action_tags)
-    var modifiers: RefCounted = CombatModifiersScript.resolve_for_action(owner_actor.member_state, party_manager, definition)
-    if not bool(modifiers.call("ok")):
+    var modifiers: RefCounted = action_context if action_context != null else CombatModifiersScript.resolve_for_action(owner_actor.member_state, party_manager, definition)
+    if modifiers == null or not bool(modifiers.call("matches", owner_actor.member_state, party_manager, definition)):
         return
+    var action_tags := DamageResolver.action_tags_for(definition)
+    var source_adapter := owner_actor.get_combat_adapter(action_tags, modifiers.get("action_stats") as ResolvedStatSnapshot)
     var geometry := modifiers.get("geometry") as ResolvedAttackGeometry
     if definition.kind == AttackDefinition.Kind.HEAL:
         _execute_heal(definition, target, source_adapter, presentation)

@@ -54,6 +54,10 @@ Separate pre-implementation gates proved resume and coordinated 24-member refres
 - 24-member isolation for members 2-24 and repeated exact action-cache identity.
 - Comparison symbols/accessibility text and ledger card containment at three target viewports.
 - Healing/support actions in equipment comparison, including a support-only effective-range delta.
+- Exact authoritative `PartyMemberState` identity, including same-ID foreign-state projectile and healing rejection.
+- One reusable action context per actor/action tick through cooldown, targeting, sequence revalidation, and execution.
+- Context-free combat modifiers expose cadence only; geometry multipliers require an exact action snapshot.
+- Geometry-only healing comparison preserves healing amount and estimated HPS.
 
 ## Fresh verification
 
@@ -116,6 +120,40 @@ TASK10J_FINAL_FULL_EXIT_CODE=0
 ```
 
 Independent re-review found no Critical, Important, or Minor issues and returned `READY`.
+
+### Parent review corrections and final rerun
+
+Parent review found two Important and two Minor issues: same-ID foreign member states could borrow the authoritative member's action cache, `PartyActor` repeatedly resolved and allocated action state through one tick/request, the legacy context-free modifier path still exposed geometry multipliers, and healing comparison did not directly pin geometry-only amount/HPS parity.
+
+Controlled parent-review RED exited `1` with four focused failures:
+
+```text
+same-ID foreign member state cannot launch a projectile: got Projectile instead of null
+same-ID foreign member state cannot execute healing: expected 40, got 58
+24-actor primary hot path resolves exactly one action snapshot per actor tick: failed
+targeting, sequence request, and execution reuse one exact action context: expected 1 call, got 6
+TASK10J_PARENT_REVIEW_RED_EXIT_CODE=1
+```
+
+The added geometry-only healing test already passed in that RED run, confirming range changes did not alter healing amount or HPS. The implementation now verifies `PartyManager.member_by_id()` returns the identical `PartyMemberState`, and one context owns the exact snapshot, geometry, cadence, member, manager, and action identity. `PartyActor` resolves that context once per action tick and passes it through target selection, sequence range revalidation, and `AttackExecutor`; the executor reuses the retained snapshot for the source adapter. Cadence is projected once inside the context. `CombatModifiers.resolve()` is explicitly deprecated for geometry and leaves range, area, and projectile multipliers neutral.
+
+Fresh parent-review verification:
+
+```text
+TEST_SUMMARY: PASS (0 failures)
+TASK10J_RUNTIME_CONTEXT_GREEN_EXIT_CODE=0
+TEST_SUMMARY: PASS (0 failures)
+TASK10J_PARENT_REVIEW_AFFECTED_EXIT_CODE=0
+TASK10J_ACTION_CACHE_SUMMARY: PASS members=24 hits=512 usec=1852
+EQUIPMENT_ATTRIBUTE_APPLICATION_SUMMARY: PASS members=24 untouched=23 items=2
+TASK10J_PARENT_REVIEW_24_MEMBER_EXIT_CODE=0
+LEDGER_24_MEMBER_SUMMARY: PASS (3 viewports)
+TASK10J_PARENT_REVIEW_LEDGER_EXIT_CODE=0
+TEST_SUMMARY: PASS (166 suites)
+TASK10J_PARENT_REVIEW_FULL_EXIT_CODE=0
+```
+
+The hot-path regression creates 24 live `PartyActor` instances and asserts exactly 24 action-snapshot calls for one tick. A separate attack request asserts the call count remains exactly one after targeting, sequence start, locked-target revalidation, and impact execution.
 
 ## Scope and hygiene
 

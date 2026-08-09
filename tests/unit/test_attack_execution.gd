@@ -1,5 +1,12 @@
 extends RefCounted
 
+class CountingPartyManager extends PartyManager:
+    var action_snapshot_calls := 0
+
+    func stats_for_action(member_id: int, action_tags: Array[StringName]) -> ResolvedStatSnapshot:
+        action_snapshot_calls += 1
+        return super.stats_for_action(member_id, action_tags)
+
 const REQUIRED_PATHS: PackedStringArray = [
     "res://scripts/combat/attack_executor.gd",
     "res://scripts/combat/projectile.gd",
@@ -39,6 +46,8 @@ func run() -> Array[String]:
     _test_party_actor_action_tagged_target_acquisition(failures)
     _test_action_snapshot_failure_stops_execution(failures)
     _test_missing_action_context_stops_runtime_healing(failures)
+    _test_same_id_foreign_member_stops_runtime_actions(failures)
+    _test_action_context_resolves_once_per_actor_tick_and_request(failures)
     _test_wisdom_runtime_cadence_matches_estimates(failures)
     _test_cleric_primary_fallback(failures)
     return failures
@@ -446,7 +455,7 @@ func _test_combat_modifiers(failures: Array[String]) -> void:
     var mage_party := PartyManager.new()
     mage_party.initialize(catalog.class_by_id(&"mage"), catalog.traits)
     mage_party.recruit(catalog.class_by_id(&"mage"))
-    var mage_modifiers: RefCounted = modifier_script.call("resolve", mage_party.members[0], mage_party) as RefCounted
+    var mage_modifiers: RefCounted = modifier_script.call("resolve_for_action", mage_party.members[0], mage_party, catalog.class_by_id(&"mage").primary_attack) as RefCounted
     TestAssertions.near(float(mage_modifiers.get("area_multiplier")), 1.18, 0.001, "active Arcane tier scales area", failures)
     TestAssertions.near(float(mage_modifiers.get("projectile_multiplier")), 1.0, 0.001, "Mage no longer gains Ranged projectile bonus", failures)
     TestAssertions.near(float(mage_modifiers.get("cooldown_rate_multiplier")), 1.14, 0.001, "active Caster tier resolves rounded attack rate", failures)
@@ -582,6 +591,80 @@ func _test_missing_action_context_stops_runtime_healing(failures: Array[String])
     owner.attack_executor.call("execute", cleric.support_action, ally.get_combat_target())
     TestAssertions.near(_health(ally).current_health, 40.0, 0.001, "missing member snapshot stops healing execution safely", failures)
     test_root.free()
+
+
+func _test_same_id_foreign_member_stops_runtime_actions(failures: Array[String]) -> void:
+    var test_root := _new_test_root("ForeignSameIdRuntimeActionTest")
+    var catalog := GameCatalog.load_defaults()
+    var ranger := catalog.class_by_id(&"ranger")
+    var party := PartyManager.new()
+    test_root.add_child(party)
+    party.initialize(ranger, catalog.traits)
+    party.configure_combat(CombatRng.new(125), catalog.damage_types)
+    var foreign_ranger := PartyMemberState.new(party.members[0].member_id, ranger, true)
+    var owner := _create_actor(test_root, ranger, 1, Vector3.ZERO, true)
+    owner.configure(foreign_ranger)
+    owner.configure_combat(party, test_root)
+    var hostile := _create_actor(test_root, _target_definition(&"task10j_foreign_projectile_target"), 2, Vector3(5.0, 0.0, 0.0))
+    var hostiles: Array[Node3D] = [hostile]
+    owner.attack_executor.call("configure", owner, party, test_root, hostiles)
+    owner.attack_executor.call("execute", ranger.primary_attack, hostile.get_combat_target())
+    TestAssertions.equal(_first_child_of_type(test_root, "PartyProjectile"), null, "same-ID foreign member state cannot launch a projectile", failures)
+    test_root.free()
+
+    var heal_root := _new_test_root("ForeignSameIdHealingTest")
+    var cleric := catalog.class_by_id(&"cleric")
+    var heal_party := PartyManager.new()
+    heal_root.add_child(heal_party)
+    heal_party.initialize(cleric, catalog.traits)
+    heal_party.configure_combat(CombatRng.new(126), catalog.damage_types)
+    var foreign_cleric := PartyMemberState.new(heal_party.members[0].member_id, cleric, true)
+    var healer := _create_actor(heal_root, cleric, 1, Vector3.ZERO, true)
+    healer.configure(foreign_cleric)
+    healer.configure_combat(heal_party, heal_root)
+    var ally := _create_actor(heal_root, _target_definition(&"task10j_foreign_heal_target"), 1, Vector3(2.0, 0.0, 0.0))
+    _set_health(ally, 100.0, 40.0)
+    var allies: Array[Node3D] = [ally]
+    healer.attack_executor.call("configure", healer, heal_party, heal_root, allies)
+    healer.attack_executor.call("execute", cleric.support_action, ally.get_combat_target())
+    TestAssertions.near(_health(ally).current_health, 40.0, 0.001, "same-ID foreign member state cannot execute healing", failures)
+    heal_root.free()
+
+
+func _test_action_context_resolves_once_per_actor_tick_and_request(failures: Array[String]) -> void:
+    var test_root := _new_test_root("ActionContextHotPathTest")
+    var catalog := GameCatalog.load_defaults()
+    var fighter := catalog.class_by_id(&"fighter")
+    var party := CountingPartyManager.new()
+    test_root.add_child(party)
+    party.initialize(fighter, catalog.traits)
+    party.configure_combat(CombatRng.new(127), catalog.damage_types)
+    var actors: Array[PartyActor] = []
+    for _index: int in 24:
+        actors.append(_create_member_actor(test_root, party, party.members[0], 1, Vector3.ZERO))
+    party.action_snapshot_calls = 0
+    var no_targets: Array[CombatTarget] = []
+    for actor: PartyActor in actors:
+        actor.advance_combat(0.1, no_targets)
+    TestAssertions.equal(party.action_snapshot_calls, 24, "24-actor primary hot path resolves exactly one action snapshot per actor tick", failures)
+    test_root.free()
+
+    var request_root := _new_test_root("ActionContextRequestReuseTest")
+    var request_party := CountingPartyManager.new()
+    request_root.add_child(request_party)
+    request_party.initialize(fighter, catalog.traits)
+    request_party.configure_combat(CombatRng.new(128), catalog.damage_types)
+    var owner := _create_member_actor(request_root, request_party, request_party.members[0], 1, Vector3.ZERO)
+    var hostile := _create_actor(request_root, _target_definition(&"task10j_context_reuse_target"), 2, Vector3(1.0, 0.0, 0.0))
+    request_party.action_snapshot_calls = 0
+    var candidates: Array[CombatTarget] = [hostile.get_combat_target()]
+    owner.advance_combat(0.1, candidates)
+    var sequence := owner.attack_sequence_controller
+    TestAssertions.truthy(sequence.is_busy(), "context reuse fixture starts an attack request", failures)
+    if sequence.is_busy():
+        sequence.call("_on_attack_event", sequence.active_token, sequence.active_presentation.action_id, sequence.active_presentation.required_event_name)
+    TestAssertions.equal(request_party.action_snapshot_calls, 1, "targeting, sequence request, and execution reuse one exact action context", failures)
+    request_root.free()
 
 func _test_wisdom_runtime_cadence_matches_estimates(failures: Array[String]) -> void:
     var test_root := _new_test_root("WisdomRuntimeCadenceParityTest")

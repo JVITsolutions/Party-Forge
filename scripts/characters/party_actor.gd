@@ -131,32 +131,31 @@ func advance_combat(delta: float, candidates: Array[CombatTarget]) -> void:
             combatants.append(candidate.actor)
     attack_executor.call("configure", self, party_manager, combat_effects_parent, combatants)
     var primary := _attack_controller()
-    _advance_action_cooldown(primary, delta)
-    _advance_action_cooldown(support_controller, delta)
+    var primary_context: RefCounted = CombatModifiersScript.resolve_for_action(member_state, party_manager, primary.definition) if primary != null and primary.definition != null else null
+    var support_context: RefCounted = CombatModifiersScript.resolve_for_action(member_state, party_manager, support_controller.definition) if support_controller != null and support_controller.definition != null else null
+    _advance_action_cooldown(primary, delta, primary_context)
+    _advance_action_cooldown(support_controller, delta, support_context)
     if attack_sequence_controller != null:
         attack_sequence_controller.advance(maxf(delta, 0.0))
 
     var combat_origin: Vector3 = global_position if is_inside_tree() else position
     if support_controller != null and support_controller.definition != null and support_controller.cooldown_remaining <= 0.0 and not attack_sequence_controller.is_busy():
-        var support_modifiers: RefCounted = CombatModifiersScript.resolve_for_action(member_state, party_manager, support_controller.definition)
-        if not bool(support_modifiers.call("ok")):
-            return
-        var allies: Array[CombatTarget] = []
-        for candidate: CombatTarget in candidates:
-            if candidate != null and candidate.team_id == team_id:
-                allies.append(candidate)
-        var support_geometry := support_modifiers.get("geometry") as ResolvedAttackGeometry
-        var heal_target: CombatTarget = HealingSelectorScript.most_injured(allies, support_geometry.range, combat_origin)
-        if heal_target != null:
-            support_controller.cooldown_remaining = support_controller.definition.cooldown
-            support_controller.attack_ready.emit(support_controller.definition, heal_target)
-    var primary_modifiers: RefCounted = CombatModifiersScript.resolve_for_action(member_state, party_manager, primary.definition) if primary != null and primary.definition != null else null
-    _try_primary_attack(primary, candidates, primary_modifiers)
+        if support_context != null and bool(support_context.call("ok")):
+            var allies: Array[CombatTarget] = []
+            for candidate: CombatTarget in candidates:
+                if candidate != null and candidate.team_id == team_id:
+                    allies.append(candidate)
+            var support_geometry := support_context.get("geometry") as ResolvedAttackGeometry
+            var heal_target: CombatTarget = HealingSelectorScript.most_injured(allies, support_geometry.range, combat_origin)
+            if heal_target != null:
+                support_controller.cooldown_remaining = support_controller.definition.cooldown
+                _on_attack_requested(support_controller.definition, heal_target, support_context)
+    _try_primary_attack(primary, candidates, primary_context)
 
-func get_combat_adapter(tags: Array[StringName]) -> CombatantAdapter:
+func get_combat_adapter(tags: Array[StringName], resolved_action_stats: ResolvedStatSnapshot = null) -> CombatantAdapter:
     var health := _health_component()
     var identity := StringName("party:%d" % member_state.member_id) if member_state != null else &""
-    var stats := party_manager.stats_for_action(member_state.member_id, tags) if party_manager != null and member_state != null else null
+    var stats := resolved_action_stats if resolved_action_stats != null else party_manager.stats_for_action(member_state.member_id, tags) if party_manager != null and member_state != null else null
     var available := member_state != null and health != null and not health.is_downed and not health.is_dead
     return CombatantAdapter.new(self, identity, team_id, health, stats, available, Callable(self, "_incoming_damage_multiplier"))
 
@@ -238,24 +237,24 @@ func _ensure_combat_runtime() -> void:
         if not controller.attack_ready.is_connected(sequence_callable):
             controller.attack_ready.connect(sequence_callable)
 
-func _on_attack_requested(definition: AttackDefinition, target: CombatTarget) -> void:
+func _on_attack_requested(definition: AttackDefinition, target: CombatTarget, action_context: RefCounted = null) -> void:
     var presentation := _presentation()
     var attack_visual := presentation.resolve_attack_presentation(definition) if presentation != null else null
     if attack_visual == null:
         push_error("PARTY_FORGE_ATTACK_SEQUENCE_ERROR attack=%s action=<missing> token=0 reason=presentation missing" % definition.id)
         return
-    var modifiers := CombatModifiersScript.resolve_for_action(member_state, party_manager, definition)
-    var cadence := CombatModifiersScript.action_cadence(member_state, party_manager, definition)
-    if not bool(modifiers.call("ok")) or not bool(cadence.call("ok")):
+    var context := action_context if action_context != null else CombatModifiersScript.resolve_for_action(member_state, party_manager, definition)
+    if context == null or not bool(context.call("matches", member_state, party_manager, definition)):
         return
-    attack_sequence_controller.request(definition, target, attack_visual, float(cadence.get("progress_multiplier")), float(modifiers.get("range_multiplier")))
+    var cadence := context.get("cadence") as RefCounted
+    attack_sequence_controller.request(definition, target, attack_visual, float(cadence.get("progress_multiplier")), float(context.get("range_multiplier")), context)
 
-func _advance_action_cooldown(controller: AttackController, delta: float) -> void:
+func _advance_action_cooldown(controller: AttackController, delta: float, action_context: RefCounted) -> void:
     if controller == null or controller.definition == null:
         return
-    var cadence := CombatModifiersScript.action_cadence(member_state, party_manager, controller.definition)
-    if not bool(cadence.call("ok")):
+    if action_context == null or not bool(action_context.call("matches", member_state, party_manager, controller.definition)):
         return
+    var cadence := action_context.get("cadence") as RefCounted
     controller.advance(maxf(delta, 0.0) * float(cadence.get("progress_multiplier")))
 
 func _collect_combat_targets() -> Array[CombatTarget]:
@@ -284,7 +283,7 @@ func _try_primary_attack(controller: AttackController, candidates: Array[CombatT
     if target == null:
         return
     controller.cooldown_remaining = controller.definition.cooldown
-    controller.attack_ready.emit(controller.definition, target)
+    _on_attack_requested(controller.definition, target, modifiers)
 
 func _refresh_team_group() -> void:
     remove_from_group("party_actors")

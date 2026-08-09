@@ -9,12 +9,24 @@ func run() -> Array[String]:
 	_test_snapshot_estimate_matches_party_estimate(failures)
 	_test_action_geometry_estimate_parity_and_tag_filtering(failures)
 	_test_geometry_only_changes_do_not_invent_dps(failures)
+	_test_geometry_only_healing_range_preserves_amount_and_hps(failures)
 	_test_wisdom_only_damage_and_healing_estimates(failures)
 	_test_zero_base_damage_is_unavailable(failures)
 	_test_missing_attack_id_is_unavailable(failures)
 	_test_invalid_damage_type_is_unavailable(failures)
 	_test_estimate_invariants_are_contextual(failures)
 	return failures
+
+
+func _test_geometry_only_healing_range_preserves_amount_and_hps(failures: Array[String]) -> void:
+	var catalog := GameCatalog.load_defaults()
+	var healing := catalog.class_by_id(&"cleric").support_action
+	var neutral := ActionCombatEstimateService.estimate_from_snapshot(healing, _snapshot({}), catalog.damage_types)
+	var ranged := ActionCombatEstimateService.estimate_from_snapshot(healing, _snapshot({&"attack_range": 1.5}), catalog.damage_types)
+	TestAssertions.truthy(neutral.available and ranged.available and neutral.is_healing and ranged.is_healing, "geometry-only healing comparison estimates are available", failures)
+	TestAssertions.near(ranged.range, neutral.range * 1.5, 0.0001, "geometry-only healing comparison changes effective range", failures)
+	TestAssertions.near(ranged.healing_amount, neutral.healing_amount, 0.0001, "geometry-only healing range does not change healing amount", failures)
+	TestAssertions.near(ranged.estimated_hps, neutral.estimated_hps, 0.0001, "geometry-only healing range does not change HPS", failures)
 
 
 func _test_action_geometry_estimate_parity_and_tag_filtering(failures: Array[String]) -> void:

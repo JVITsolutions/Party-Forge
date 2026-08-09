@@ -102,6 +102,9 @@ func _test_party_stat_runtime_effects(failures: Array[String]) -> void:
     TestAssertions.truthy(party.call("upgrade_party_stat", &"attack_speed"), "attack-speed upgrade applies", failures)
     var attack_modifiers := CombatModifiers.resolve(party.members[0], party)
     TestAssertions.near(float(attack_modifiers.get("cooldown_rate_multiplier")), 1.04, 0.001, "attack-speed upgrade changes cooldown rate", failures)
+    TestAssertions.near(float(attack_modifiers.get("range_multiplier")), 1.0, 0.001, "context-free combat modifiers do not expose attack range", failures)
+    TestAssertions.near(float(attack_modifiers.get("area_multiplier")), 1.0, 0.001, "context-free combat modifiers do not expose area size", failures)
+    TestAssertions.near(float(attack_modifiers.get("projectile_multiplier")), 1.0, 0.001, "context-free combat modifiers do not expose projectile speed", failures)
 
     var effects := main.get_node("Effects") as Node3D
     var orb := (load("res://scenes/progression/experience_orb.tscn") as PackedScene).instantiate() as Node3D
@@ -136,12 +139,12 @@ func _test_trait_upgrade_runtime_effects(failures: Array[String]) -> void:
     if not party.has_method("upgrade_trait") or not party.has_method("effective_trait_value"):
         party.free()
         return
-    var before := CombatModifiers.resolve(party.members[0], party)
+    var before := CombatModifiers.resolve_for_action(party.members[0], party, catalog.class_by_id(&"mage").primary_attack)
     TestAssertions.near(float(before.get("area_multiplier")), 1.18, 0.001, "base active Arcane effect", failures)
     TestAssertions.truthy(party.call("upgrade_trait", &"arcane"), "active Arcane upgrade applies", failures)
     TestAssertions.equal(int(party.call("trait_upgrade_rank", &"arcane")), 1, "trait upgrade rank centralized", failures)
     TestAssertions.near(float(party.call("effective_trait_value", &"arcane")), 0.225, 0.001, "trait upgrade scales selected active value", failures)
-    var after := CombatModifiers.resolve(party.members[0], party)
+    var after := CombatModifiers.resolve_for_action(party.members[0], party, catalog.class_by_id(&"mage").primary_attack)
     TestAssertions.near(float(after.get("area_multiplier")), 1.23, 0.001, "trait selection changes resolved rounded area result", failures)
     TestAssertions.truthy(not party.call("upgrade_trait", &"divine"), "inactive trait cannot upgrade", failures)
     party.free()

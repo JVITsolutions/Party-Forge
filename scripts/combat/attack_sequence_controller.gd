@@ -14,6 +14,7 @@ var next_token := 1
 var released := false
 var elapsed_scaled := 0.0
 var locked_range_multiplier := 1.0
+var active_action_context: RefCounted
 
 func configure(actor: PartyActor, visual: Node, attack_executor: Node) -> void:
 	_disconnect_presentation()
@@ -25,7 +26,7 @@ func configure(actor: PartyActor, visual: Node, attack_executor: Node) -> void:
 	if presentation != null and presentation.has_signal(&"attack_finished"):
 		presentation.connect(&"attack_finished", _on_attack_finished)
 
-func request(definition: AttackDefinition, target: CombatTarget, visual: AttackPresentationDefinition, playback_rate: float, range_multiplier: float) -> int:
+func request(definition: AttackDefinition, target: CombatTarget, visual: AttackPresentationDefinition, playback_rate: float, range_multiplier: float, action_context: RefCounted = null) -> int:
 	if is_busy() or definition == null or target == null or visual == null or not is_finite(playback_rate) or playback_rate <= 0.0 or not is_finite(range_multiplier) or range_multiplier <= 0.0:
 		return 0
 	var validation_errors := visual.validate(definition)
@@ -43,6 +44,7 @@ func request(definition: AttackDefinition, target: CombatTarget, visual: AttackP
 	released = false
 	elapsed_scaled = 0.0
 	locked_range_multiplier = range_multiplier
+	active_action_context = action_context
 	if not bool(presentation.call(&"start_attack", definition, target, visual, active_token, playback_rate)):
 		var failed_token := active_token
 		_clear_active()
@@ -102,7 +104,10 @@ func _on_attack_event(token: int, action_id: StringName, event_name: StringName)
 		_cancel_expected()
 		return
 	released = true
-	executor.call(&"execute", active_definition, refreshed, active_presentation)
+	if active_action_context != null:
+		executor.call(&"execute", active_definition, refreshed, active_presentation, active_action_context)
+	else:
+		executor.call(&"execute", active_definition, refreshed, active_presentation)
 
 func _on_attack_finished(token: int, action_id: StringName) -> void:
 	if token != active_token:
@@ -126,7 +131,7 @@ func _revalidate_locked_target() -> CombatTarget:
 	if (current.team_id == owner_actor.team_id) != expects_ally:
 		return null
 	var origin := owner_actor.global_position if owner_actor.is_inside_tree() else owner_actor.position
-	var geometry := ResolvedAttackGeometry.from_attack(active_definition, locked_range_multiplier, 1.0)
+	var geometry := active_action_context.get("geometry") as ResolvedAttackGeometry if active_action_context != null else ResolvedAttackGeometry.from_attack(active_definition, locked_range_multiplier, 1.0)
 	return current if origin.distance_squared_to(current.position) <= geometry.range * geometry.range else null
 
 func _owner_is_downed() -> bool:
@@ -149,6 +154,7 @@ func _clear_active() -> void:
 	released = false
 	elapsed_scaled = 0.0
 	locked_range_multiplier = 1.0
+	active_action_context = null
 
 func _sequence_error(token: int, action_id: StringName, reason: String, attack_id: StringName = &"") -> void:
 	var resolved_attack_id := attack_id
