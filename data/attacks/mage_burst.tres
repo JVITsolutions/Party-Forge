@@ -17,5 +17,5 @@ range = 12.0
 projectile_speed = 11.0
 area_radius = 2.5
 damage_components = Array[ExtResource("1_fbuys")]([SubResource("Resource_fbuys")])
-action_tags = Array[StringName]([&"projectile", &"area", &"fire"])
+action_tags = Array[StringName]([&"area", &"caster", &"fire", &"projectile"])
 can_crit = true

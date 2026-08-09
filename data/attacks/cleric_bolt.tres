@@ -15,5 +15,5 @@ kind = 1
 range = 10.0
 projectile_speed = 13.0
 damage_components = Array[ExtResource("1_jsdac")]([SubResource("Resource_jsdac")])
-action_tags = Array[StringName]([&"projectile", &"lightning"])
+action_tags = Array[StringName]([&"caster", &"lightning", &"projectile"])
 can_crit = true

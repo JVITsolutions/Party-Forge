@@ -17,5 +17,5 @@ range = 12.5
 projectile_speed = 10.0
 area_radius = 3.0
 damage_components = Array[ExtResource("1_w0rqm")]([SubResource("Resource_w0rqm")])
-action_tags = Array[StringName]([&"area", &"cold", &"projectile"])
+action_tags = Array[StringName]([&"area", &"caster", &"cold", &"projectile"])
 can_crit = true

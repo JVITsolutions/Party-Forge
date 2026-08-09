@@ -18,7 +18,7 @@ func run() -> Array[String]:
 	return failures
 
 func _test_preparation_and_armor(types: DamageTypeCatalog, failures: Array[String]) -> void:
-	var source := _adapter(&"party:1", 1, null, {&"damage": 1.20, &"physical_damage": 1.50})
+	var source := _adapter(&"party:1", 1, null, {&"damage": 1.20, &"melee_damage": 1.30, &"physical_damage": 1.50})
 	var attack := _attack([&"physical"], [100.0])
 	attack.id = &"scaled_physical"
 	attack.action_tags = [&"melee"]
@@ -27,24 +27,24 @@ func _test_preparation_and_armor(types: DamageTypeCatalog, failures: Array[Strin
 	TestAssertions.equal(packet.action_tags, [&"melee", &"physical"], "action tags include sorted damage type", failures)
 	TestAssertions.near(packet.components[0].authored_amount, 100.0, 0.001, "authored physical amount", failures)
 	TestAssertions.near(packet.components[0].global_scaled, 120.0, 0.001, "global damage scaling", failures)
-	TestAssertions.near(packet.components[0].typed_scaled, 180.0, 0.001, "typed physical scaling", failures)
-	TestAssertions.near(packet.components[0].post_crit, 180.0, 0.001, "prepared physical amount", failures)
+	TestAssertions.near(packet.components[0].typed_scaled, 234.0, 0.001, "archetype and typed physical scaling", failures)
+	TestAssertions.near(packet.components[0].post_crit, 234.0, 0.001, "prepared physical amount", failures)
 
 	var target_health := _health(250.0, 250.0)
 	var target := _adapter(&"enemy:armor", 2, target_health, {&"armor": 80.0})
 	var result := DamageResolver.resolve(packet, target, CombatRng.new(2), types)
 	TestAssertions.truthy(result.valid, "armor result is valid", failures)
-	TestAssertions.near(result.final_damage, 100.0, 0.001, "180 physical against 80 armor", failures)
-	TestAssertions.near(result.actual_health_removed, 100.0, 0.001, "armor health removal", failures)
+	TestAssertions.near(result.final_damage, 130.0, 0.001, "234 physical against 80 armor", failures)
+	TestAssertions.near(result.actual_health_removed, 130.0, 0.001, "armor health removal", failures)
 	TestAssertions.equal(result.component_breakdowns, [{
 		"damage_type_id": &"physical",
 		"authored_amount": 100.0,
 		"global_scaled": 120.0,
-		"typed_scaled": 180.0,
-		"post_crit": 180.0,
+		"typed_scaled": 234.0,
+		"post_crit": 234.0,
 		"defense_stat_id": &"armor",
 		"defense_value": 80.0,
-		"post_mitigation": 100.0,
+		"post_mitigation": 130.0,
 	}], "physical calculation evidence", failures)
 
 func _test_resistance_and_mixed_damage(types: DamageTypeCatalog, failures: Array[String]) -> void:

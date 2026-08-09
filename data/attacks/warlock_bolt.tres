@@ -16,5 +16,5 @@ cooldown = 1.75
 range = 12.5
 projectile_speed = 9.0
 damage_components = Array[ExtResource("1_c6mh6")]([SubResource("Resource_c6mh6")])
-action_tags = Array[StringName]([&"chaos", &"projectile", &"ranged"])
+action_tags = Array[StringName]([&"caster", &"chaos", &"projectile"])
 can_crit = true

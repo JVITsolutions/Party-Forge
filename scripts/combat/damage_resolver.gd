@@ -1,6 +1,9 @@
 class_name DamageResolver
 extends RefCounted
 
+const ACTION_ARCHETYPE := preload("res://scripts/combat/action_archetype.gd")
+const ACTION_DAMAGE_PROJECTION := preload("res://scripts/combat/action_damage_projection.gd")
+
 static func action_tags_for(attack: AttackDefinition) -> Array[StringName]:
 	var tags: Array[StringName] = []
 	if attack != null:
@@ -26,11 +29,14 @@ static func prepare(attack: AttackDefinition, source: CombatantAdapter, rng: Com
 	var crit_roll := rng.roll(crit_chance)
 	var critical := bool(crit_roll["success"])
 	var crit_multiplier := maxf(1.0, source.stat_value(&"crit_multiplier", 1.5))
+	var global_multiplier := source.stat_value(&"damage", 1.0)
+	var archetype_stat_id := ACTION_ARCHETYPE.stat_id(attack)
+	var archetype_multiplier := source.stat_value(archetype_stat_id, 1.0)
 	var prepared: Array[PreparedDamageComponent] = []
 	for component: AttackDamageComponent in attack.damage_components:
 		var type_definition := types.definition(component.damage_type_id)
-		var global_scaled := component.base_amount * source.stat_value(&"damage", 1.0)
-		var typed_scaled := global_scaled * source.stat_value(type_definition.offense_stat_id, 1.0)
+		var global_scaled := component.base_amount * global_multiplier
+		var typed_scaled := ACTION_DAMAGE_PROJECTION.normal_component(component.base_amount, global_multiplier, archetype_multiplier, source.stat_value(type_definition.offense_stat_id, 1.0))
 		var post_crit := typed_scaled * crit_multiplier if critical else typed_scaled
 		if not is_finite(post_crit): return _invalid_packet("attack=%s source=%s type=%s reason=non-finite prepared amount" % [attack.id, source.combatant_id, component.damage_type_id], source, attack.id)
 		prepared.append(PreparedDamageComponent.new(component.damage_type_id, component.base_amount, global_scaled, typed_scaled, post_crit))

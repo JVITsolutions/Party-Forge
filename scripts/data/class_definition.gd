@@ -1,6 +1,8 @@
 class_name ClassDefinition
 extends Resource
 
+const ACTION_ARCHETYPE := preload("res://scripts/combat/action_archetype.gd")
+
 enum Role { FRONTLINE, MIDLINE, BACKLINE, SUPPORT }
 
 @export var id: StringName
@@ -76,6 +78,8 @@ func _validate_starter_loadout(errors: PackedStringArray) -> void:
 
 func _validate_party_attack(attack: AttackDefinition, slot: String, types: DamageTypeCatalog, errors: PackedStringArray) -> void:
 	for reason: String in attack.validate(types):
+		errors.append("class %s %s %s" % [id, slot, reason])
+	for reason: String in ACTION_ARCHETYPE.validate_player_damage_action(attack):
 		errors.append("class %s %s %s" % [id, slot, reason])
 	var kind_value := int(attack.kind)
 	if kind_value >= 0 and kind_value < AttackDefinition.Kind.size() and kind_value not in [AttackDefinition.Kind.MELEE_CLEAVE, AttackDefinition.Kind.PROJECTILE, AttackDefinition.Kind.AREA_PROJECTILE, AttackDefinition.Kind.HEAL]:

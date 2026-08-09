@@ -5,6 +5,7 @@ func run() -> Array[String]:
 	_test_action_aware_critical_estimate(failures)
 	_test_critical_chance_matches_runtime_bounds(failures)
 	_test_noncritical_mixed_damage(failures)
+	_test_mixed_caster_runtime_parity(failures)
 	_test_zero_base_damage_is_unavailable(failures)
 	_test_missing_attack_id_is_unavailable(failures)
 	_test_invalid_damage_type_is_unavailable(failures)
@@ -67,6 +68,38 @@ func _test_noncritical_mixed_damage(failures: Array[String]) -> void:
 	TestAssertions.near(estimate.normal_hit, 15.0, 0.001, "mixed components sum into one hit", failures)
 	TestAssertions.near(estimate.average_hit, 15.0, 0.001, "noncritical average equals normal", failures)
 	TestAssertions.equal(estimate.component_rows.map(func(row: Dictionary) -> StringName: return row.damage_type_id), [&"physical", &"fire"], "component order stays authored", failures)
+	party.free()
+
+func _test_mixed_caster_runtime_parity(failures: Array[String]) -> void:
+	var catalog := GameCatalog.load_defaults()
+	var party := PartyManager.new()
+	party.initialize(catalog.class_by_id(&"mage"), catalog.traits)
+	var source := StatModifierSource.create(&"caster_parity", &"test", "Caster Parity", 1, [
+		StatModifier.create(&"damage", StatModifier.Operation.INCREASED, 0.20, &"caster_global", "Global Damage"),
+		StatModifier.create(&"caster_damage", StatModifier.Operation.INCREASED, 0.30, &"caster_archetype", "Caster Damage"),
+		StatModifier.create(&"fire_damage", StatModifier.Operation.INCREASED, 0.40, &"caster_fire", "Fire Damage"),
+		StatModifier.create(&"cold_damage", StatModifier.Operation.INCREASED, 0.10, &"caster_cold", "Cold Damage"),
+	])
+	TestAssertions.truthy(party.add_member_source(1, source), "caster parity source applies", failures)
+	var attack := AttackDefinition.new()
+	attack.id = &"mixed_caster"
+	attack.kind = AttackDefinition.Kind.AREA_PROJECTILE
+	attack.cooldown = 2.0
+	attack.range = 8.0
+	attack.projectile_speed = 10.0
+	attack.area_radius = 2.0
+	attack.action_tags = [&"area", &"caster", &"projectile"]
+	attack.damage_components = [_component(&"fire", 10.0), _component(&"cold", 5.0)]
+	var action_stats := party.stats_for_action(1, DamageResolver.action_tags_for(attack))
+	var adapter := CombatantAdapter.new(null, &"party:caster", 1, null, action_stats)
+	var packet := DamageResolver.prepare(attack, adapter, CombatRng.new(2048), catalog.damage_types)
+	var estimate := ActionCombatEstimateService.estimate(attack, 1, party, catalog.damage_types)
+	TestAssertions.truthy(packet.valid and estimate.available, "mixed caster runtime and estimate are available", failures)
+	if packet.valid and estimate.available:
+		TestAssertions.near(packet.components[0].typed_scaled, 21.84, 0.0001, "runtime fire component applies global, caster, and fire once", failures)
+		TestAssertions.near(packet.components[1].typed_scaled, 8.58, 0.0001, "runtime cold component applies global, caster, and cold once", failures)
+		for index: int in packet.components.size():
+			TestAssertions.near(packet.components[index].typed_scaled, float(estimate.component_rows[index].normal_hit), 0.0001, "runtime and ledger component %d share normal projection" % index, failures)
 	party.free()
 
 func _test_zero_base_damage_is_unavailable(failures: Array[String]) -> void:
