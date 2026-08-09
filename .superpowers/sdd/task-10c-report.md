@@ -55,6 +55,20 @@ TASK10C_POSTREVIEW_FOCUSED_EXIT_CODE=0
 TASK10C_POSTREVIEW_FOCUSED_BAD_MARKERS=0
 ```
 
+### Configured storage-order follow-up
+
+A reviewer-suggested focused regression fills the primary/source stash completely after the occupied swap, gives the next configured stash occupied slots `0..3`, and leaves a still-later configured stash empty. Preview and apply both place the reserved offhand in slot `4` of the next configured stash. This proves stable configured-container ordering wins over a later container's lower vacancy, and that the selected container uses its first empty slot. The same regression proves exact source-slot replacement, unchanged item records, unchanged preview input, and preview/apply parity.
+
+Focused planner/profile gate:
+
+```text
+TEST_SUMMARY: PASS (0 failures)
+TASK10C_STORAGE_ORDER_FOCUSED_EXIT_CODE=0
+TASK10C_STORAGE_ORDER_FOCUSED_BAD_MARKERS=0
+```
+
+This follow-up changed only the profile assignment test and this report. No production file changed, so no additional broad run was required.
+
 ## Integration and complete suite
 
 Godot: `4.7.1.stable.official.a13da4feb`.

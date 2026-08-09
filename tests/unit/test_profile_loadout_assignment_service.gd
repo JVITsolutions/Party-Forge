@@ -11,6 +11,7 @@ func run() -> Array[String]:
 	_test_preview_allows_disabled_dependents_and_rejects_inactive_candidate(failures)
 	_test_reverse_swap_rejects_inactive_item_entering_loadout(failures)
 	_test_two_hand_displacement_and_reverse_swap_parity(failures)
+	_test_displacement_uses_later_configured_stash_first_vacancy(failures)
 	return failures
 
 
@@ -201,6 +202,66 @@ func _test_two_hand_displacement_and_reverse_swap_parity(failures: Array[String]
 		TestAssertions.truthy(reverse_commit.ok(), "reverse occupied swap commits", failures)
 		if reverse_preview.ok() and reverse_commit.ok():
 			TestAssertions.equal(_assignment_projection(reverse_commit.profile), _assignment_projection(reverse_preview.profile), "reverse swap preview matches apply", failures)
+	ProfileTestSupport.remove_tree(root)
+
+
+func _test_displacement_uses_later_configured_stash_first_vacancy(failures: Array[String]) -> void:
+	var root := _root("later_stash_displacement")
+	var store := ProfileStore.new()
+	var light_bow := _item("priority-light-bow", &"greenwood_recurve_bow", 100)
+	var light_quiver := _item("priority-light-quiver", &"greenwood_light_quiver", 101)
+	var greatbow := _item("priority-greatbow", &"siege_greatbow", 102)
+	var items: Array[ItemInstance] = [light_bow, light_quiver, greatbow]
+	var primary_slots: Dictionary = {}
+	for slot: int in ItemSlotContainer.STASH_CAPACITY:
+		if slot == 7:
+			primary_slots[slot] = greatbow.instance_id
+			continue
+		var filler := _item("priority-primary-%03d" % slot, &"steady_hand_ring", 200 + slot)
+		items.append(filler)
+		primary_slots[slot] = filler.instance_id
+	var later_slots: Dictionary = {}
+	for slot: int in 4:
+		var filler := _item("priority-later-%03d" % slot, &"steady_hand_ring", 400 + slot)
+		items.append(filler)
+		later_slots[slot] = filler.instance_id
+	var profile := ProfileState.new_profile(PROFILE_ID, "Storage Priority", 1000)
+	profile.item_records = ItemRegistry.new(items).to_dictionary()
+	profile.leader_loadout = ItemSlotContainer.create(
+		&"leader-loadout", ItemSlotContainer.PROFILE_LEADER_EQUIPMENT, PROFILE_ID, EquipmentSlotIndex.capacity(),
+		{
+			EquipmentSlotIndex.index_for(&"main_hand"): light_bow.instance_id,
+			EquipmentSlotIndex.index_for(&"off_hand"): light_quiver.instance_id,
+		},
+	).to_dictionary()
+	profile.leader_loadout_class_id = "marksman"
+	profile.stash_tabs = [
+		ItemSlotContainer.create(&"stash-tab-zeta", ItemSlotContainer.PROFILE_STASH_TAB, PROFILE_ID, ItemSlotContainer.STASH_CAPACITY, primary_slots).to_dictionary(),
+		ItemSlotContainer.create(&"stash-tab-alpha", ItemSlotContainer.PROFILE_STASH_TAB, PROFILE_ID, ItemSlotContainer.STASH_CAPACITY, later_slots).to_dictionary(),
+		ItemSlotContainer.create(&"stash-tab-omega", ItemSlotContainer.PROFILE_STASH_TAB, PROFILE_ID, ItemSlotContainer.STASH_CAPACITY).to_dictionary(),
+	]
+	TestAssertions.equal(store.save_profile(profile, root), "", "later-stash displacement fixture saves", failures)
+	var request := _request(
+		"profile-storage-priority", profile, &"marksman", greatbow.instance_id,
+		&"stash-tab-zeta", 7, &"leader-loadout", EquipmentSlotIndex.index_for(&"main_hand"), light_bow.instance_id,
+	)
+	var profile_before := profile.to_dictionary()
+	var records_before := profile.item_records.duplicate(true)
+	var service := ProfileLoadoutAssignmentService.new(ProfileMutationService.new(store))
+	var preview := service.preview(profile, request)
+	TestAssertions.truthy(preview.ok(), "full primary stash falls through to a later configured stash", failures)
+	TestAssertions.equal(profile.to_dictionary(), profile_before, "storage-priority preview preserves its input profile", failures)
+	if preview.ok():
+		TestAssertions.equal(preview.profile.leader_loadout["slots"], {"9": greatbow.instance_id}, "storage-priority preview equips the requested greatbow", failures)
+		TestAssertions.equal((preview.profile.stash_tabs[0]["slots"] as Dictionary).size(), ItemSlotContainer.STASH_CAPACITY, "primary storage remains full after exact occupied swap", failures)
+		TestAssertions.equal(preview.profile.stash_tabs[0]["slots"]["7"], light_bow.instance_id, "occupied main-hand item returns to the exact primary source slot", failures)
+		TestAssertions.equal(preview.profile.stash_tabs[1]["slots"]["4"], light_quiver.instance_id, "reserved offhand uses the first vacancy in the next configured stash", failures)
+		TestAssertions.equal((preview.profile.stash_tabs[2]["slots"] as Dictionary), {}, "later empty stash remains untouched because configured order wins", failures)
+		TestAssertions.equal(preview.profile.item_records, records_before, "cross-stash displacement preserves every immutable item record", failures)
+	var committed := service.apply(PROFILE_ID, request, root)
+	TestAssertions.truthy(committed.ok(), "cross-stash displacement commits", failures)
+	if preview.ok() and committed.ok():
+		TestAssertions.equal(_assignment_projection(committed.profile), _assignment_projection(preview.profile), "cross-stash displacement preview matches apply", failures)
 	ProfileTestSupport.remove_tree(root)
 
 
