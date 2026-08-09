@@ -131,12 +131,9 @@ func advance_combat(delta: float, candidates: Array[CombatTarget]) -> void:
             combatants.append(candidate.actor)
     attack_executor.call("configure", self, party_manager, combat_effects_parent, combatants)
     var modifiers: RefCounted = CombatModifiersScript.resolve(member_state, party_manager)
-    var cooldown_delta: float = maxf(delta, 0.0) * float(modifiers.get("cooldown_rate_multiplier"))
     var primary := _attack_controller()
-    if primary != null:
-        primary.advance(cooldown_delta)
-    if support_controller != null:
-        support_controller.advance(cooldown_delta)
+    _advance_action_cooldown(primary, delta)
+    _advance_action_cooldown(support_controller, delta)
     if attack_sequence_controller != null:
         attack_sequence_controller.advance(maxf(delta, 0.0))
 
@@ -249,7 +246,18 @@ func _on_attack_requested(definition: AttackDefinition, target: CombatTarget) ->
         push_error("PARTY_FORGE_ATTACK_SEQUENCE_ERROR attack=%s action=<missing> token=0 reason=presentation missing" % definition.id)
         return
     var modifiers := CombatModifiersScript.resolve(member_state, party_manager)
-    attack_sequence_controller.request(definition, target, attack_visual, float(modifiers.get("cooldown_rate_multiplier")), float(modifiers.get("range_multiplier")))
+    var cadence := CombatModifiersScript.action_cadence(member_state, party_manager, definition)
+    if not bool(cadence.call("ok")):
+        return
+    attack_sequence_controller.request(definition, target, attack_visual, float(cadence.get("progress_multiplier")), float(modifiers.get("range_multiplier")))
+
+func _advance_action_cooldown(controller: AttackController, delta: float) -> void:
+    if controller == null or controller.definition == null:
+        return
+    var cadence := CombatModifiersScript.action_cadence(member_state, party_manager, controller.definition)
+    if not bool(cadence.call("ok")):
+        return
+    controller.advance(maxf(delta, 0.0) * float(cadence.get("progress_multiplier")))
 
 func _collect_combat_targets() -> Array[CombatTarget]:
     var targets: Array[CombatTarget] = []

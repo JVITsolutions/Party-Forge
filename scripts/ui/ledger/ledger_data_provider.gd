@@ -121,7 +121,7 @@ func combat_estimate_rows(member_id: int) -> Array[ActionCombatEstimate]:
 	if member == null or catalog == null:
 		return rows
 	for attack: AttackDefinition in member.class_definition.owned_actions():
-		if attack == null or attack.is_healing() or attack.damage_components.is_empty():
+		if attack == null or (not attack.is_healing() and attack.damage_components.is_empty()):
 			continue
 		rows.append(ActionCombatEstimateService.estimate(attack, member_id, party, catalog.damage_types))
 	return rows

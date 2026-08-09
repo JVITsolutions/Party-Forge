@@ -7,6 +7,7 @@ func run() -> Array[String]:
 	_test_noncritical_mixed_damage(failures)
 	_test_mixed_caster_runtime_parity(failures)
 	_test_snapshot_estimate_matches_party_estimate(failures)
+	_test_wisdom_only_damage_and_healing_estimates(failures)
 	_test_zero_base_damage_is_unavailable(failures)
 	_test_missing_attack_id_is_unavailable(failures)
 	_test_invalid_damage_type_is_unavailable(failures)
@@ -130,6 +131,39 @@ func _test_snapshot_estimate_matches_party_estimate(failures: Array[String]) -> 
 		TestAssertions.near(snapshot_estimate.estimated_dps, party_estimate.estimated_dps, 0.0001, "snapshot and party DPS share one path", failures)
 	party.free()
 
+
+func _test_wisdom_only_damage_and_healing_estimates(failures: Array[String]) -> void:
+	var catalog := GameCatalog.load_defaults()
+	var cleric := catalog.class_by_id(&"cleric")
+	var damage_attack := cleric.primary_attack
+	var healing_action := cleric.support_action
+	var neutral_damage := ActionCombatEstimateService.estimate_from_snapshot(damage_attack, _snapshot({}), catalog.damage_types)
+	var wisdom_damage := ActionCombatEstimateService.estimate_from_snapshot(
+		damage_attack,
+		_snapshot({&"cooldown_rate": 1.05, &"healing_power": 1.2}),
+		catalog.damage_types,
+	)
+	TestAssertions.truthy(neutral_damage.available and wisdom_damage.available, "neutral and Wisdom-only damage estimates are available", failures)
+	TestAssertions.near(wisdom_damage.average_hit, neutral_damage.average_hit, 0.0001, "Wisdom cooldown recovery does not alter unrelated damage per hit", failures)
+	TestAssertions.near(wisdom_damage.attacks_per_second, neutral_damage.attacks_per_second * 1.05, 0.0001, "Wisdom-only cooldown recovery increases damaging action cadence", failures)
+
+	var neutral_heal := ActionCombatEstimateService.estimate_from_snapshot(healing_action, _snapshot({}), catalog.damage_types)
+	var wisdom_heal := ActionCombatEstimateService.estimate_from_snapshot(
+		healing_action,
+		_snapshot({&"cooldown_rate": 1.05, &"healing_power": 1.2}),
+		catalog.damage_types,
+	)
+	TestAssertions.truthy(neutral_heal.available and wisdom_heal.available, "healing actions expose available ledger estimates without damage archetypes", failures)
+	var supports_healing := _has_property(wisdom_heal, &"is_healing") and _has_property(wisdom_heal, &"healing_amount") and _has_property(wisdom_heal, &"estimated_hps")
+	TestAssertions.truthy(supports_healing, "healing estimate exposes healing semantics and HPS", failures)
+	if not supports_healing:
+		return
+	TestAssertions.truthy(bool(wisdom_heal.get("is_healing")), "healing estimate identifies its semantic kind", failures)
+	TestAssertions.near(float(neutral_heal.get("healing_amount")), healing_action.power, 0.0001, "neutral healing estimate preserves authored power", failures)
+	TestAssertions.near(float(wisdom_heal.get("healing_amount")), healing_action.power * 1.2, 0.0001, "Wisdom healing power changes heal amount once", failures)
+	TestAssertions.near(wisdom_heal.attacks_per_second, neutral_heal.attacks_per_second * 1.05, 0.0001, "Wisdom-only cooldown recovery increases healing cadence", failures)
+	TestAssertions.near(float(wisdom_heal.get("estimated_hps")), float(wisdom_heal.get("healing_amount")) * wisdom_heal.attacks_per_second, 0.0001, "healing HPS uses the shared action rate", failures)
+
 func _test_zero_base_damage_is_unavailable(failures: Array[String]) -> void:
 	var catalog := GameCatalog.load_defaults()
 	var party := PartyManager.new()
@@ -185,6 +219,14 @@ func _test_estimate_invariants_are_contextual(failures: Array[String]) -> void:
 	TestAssertions.truthy(not rate_overflow.available, "action-rate overflow is unavailable", failures)
 	TestAssertions.truthy("action rate" in rate_overflow.unavailable_reason.to_lower(), "action-rate overflow names the rate invariant", failures)
 
+	var recovery_overflow := ActionCombatEstimateService.estimate_from_snapshot(
+		fighter_attack,
+		_snapshot({&"attack_speed": 1.0e200, &"cooldown_rate": 1.0e200}),
+		catalog.damage_types,
+	)
+	TestAssertions.truthy(not recovery_overflow.available, "combined attack-speed and cooldown-recovery overflow is unavailable", failures)
+	TestAssertions.truthy("progress multiplier" in recovery_overflow.unavailable_reason.to_lower(), "combined cadence overflow names the multiplier invariant", failures)
+
 	var dps_overflow := ActionCombatEstimateService.estimate_from_snapshot(
 		fighter_attack,
 		_snapshot({&"damage": 1.0e200, &"attack_speed": 1.0e200}),
@@ -226,6 +268,12 @@ func _component_total(rows: Array[Dictionary], field: String) -> float:
 	for row: Dictionary in rows:
 		total += float(row.get(field, 0.0))
 	return total
+
+
+func _has_property(object: Object, property_name: StringName) -> bool:
+	return object != null and object.get_property_list().any(
+		func(property: Dictionary) -> bool: return property.get("name") == property_name
+	)
 
 func _estimate_with_crit_modifier(value: float, source_id: StringName, failures: Array[String]) -> ActionCombatEstimate:
 	var definition := PartyManager.STAT_CATALOG.definition(&"crit_chance")

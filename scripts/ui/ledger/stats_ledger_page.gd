@@ -179,7 +179,11 @@ func _create_combat_estimate_card(estimate: ActionCombatEstimate) -> PanelContai
 	var panel := PanelContainer.new()
 	panel.name = "Action_%s" % estimate.action_id
 	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	panel.tooltip_text = "Damage is pre-mitigation per target; excludes defenses, misses, travel time, movement, and AI downtime."
+	panel.tooltip_text = (
+		"Healing is theoretical per use; excludes missing health, targeting, movement, and AI downtime."
+		if estimate.is_healing else
+		"Damage is pre-mitigation per target; excludes defenses, misses, travel time, movement, and AI downtime."
+	)
 	var content := VBoxContainer.new()
 	content.name = "Content"
 	content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -192,11 +196,16 @@ func _create_combat_estimate_card(estimate: ActionCombatEstimate) -> PanelContai
 	metrics.name = "Metrics"
 	metrics.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	if estimate.available:
-		var critical_text := _estimate_number(estimate.critical_hit) if estimate.can_crit else "Cannot Crit"
-		metrics.text = "Normal Hit: %s\nCritical Hit: %s\nAverage Hit: %s\nAttacks / Second: %.2f\nEstimated DPS: %s" % [
-			_estimate_number(estimate.normal_hit), critical_text, _estimate_number(estimate.average_hit),
-			estimate.attacks_per_second, _estimate_number(estimate.estimated_dps),
-		]
+		if estimate.is_healing:
+			metrics.text = "Healing / Use: %s\nUses / Second: %.2f\nEstimated HPS: %s" % [
+				_estimate_number(estimate.healing_amount), estimate.attacks_per_second, _estimate_number(estimate.estimated_hps),
+			]
+		else:
+			var critical_text := _estimate_number(estimate.critical_hit) if estimate.can_crit else "Cannot Crit"
+			metrics.text = "Normal Hit: %s\nCritical Hit: %s\nAverage Hit: %s\nAttacks / Second: %.2f\nEstimated DPS: %s" % [
+				_estimate_number(estimate.normal_hit), critical_text, _estimate_number(estimate.average_hit),
+				estimate.attacks_per_second, _estimate_number(estimate.estimated_dps),
+			]
 	else:
 		metrics.text = "Estimate unavailable: %s" % estimate.unavailable_reason
 	content.add_child(metrics)

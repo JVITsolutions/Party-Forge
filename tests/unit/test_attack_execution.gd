@@ -35,6 +35,7 @@ func run() -> Array[String]:
     _test_cleric_healing(failures)
     _test_party_recovery(failures)
     _test_combat_modifiers(failures)
+    _test_wisdom_runtime_cadence_matches_estimates(failures)
     _test_cleric_primary_fallback(failures)
     return failures
 
@@ -446,6 +447,37 @@ func _test_combat_modifiers(failures: Array[String]) -> void:
     TestAssertions.near(float(mage_modifiers.get("projectile_multiplier")), 1.0, 0.001, "Mage no longer gains Ranged projectile bonus", failures)
     TestAssertions.near(float(mage_modifiers.get("cooldown_rate_multiplier")), 1.14, 0.001, "active Caster tier resolves rounded attack rate", failures)
     mage_party.free()
+
+func _test_wisdom_runtime_cadence_matches_estimates(failures: Array[String]) -> void:
+    var test_root := _new_test_root("WisdomRuntimeCadenceParityTest")
+    var catalog := GameCatalog.load_defaults()
+    var cleric_definition := catalog.class_by_id(&"cleric")
+    var party := PartyManager.new()
+    test_root.add_child(party)
+    party.initialize(cleric_definition, catalog.traits)
+    party.call("configure_combat", CombatRng.new(112), catalog.damage_types)
+    var neutral_damage := ActionCombatEstimateService.estimate(cleric_definition.primary_attack, 1, party, catalog.damage_types)
+    var wisdom := StatModifierSource.create(&"wisdom_runtime_parity", &"test", "Wisdom Runtime Parity", 1, [
+        StatModifier.create(&"wisdom", StatModifier.Operation.FLAT, 10.0, &"wisdom_runtime_parity", "Wisdom Runtime Parity"),
+    ])
+    TestAssertions.truthy(party.add_member_source(1, wisdom), "Wisdom-only runtime source applies", failures)
+    var damage_estimate := ActionCombatEstimateService.estimate(cleric_definition.primary_attack, 1, party, catalog.damage_types)
+    var healing_estimate := ActionCombatEstimateService.estimate(cleric_definition.support_action, 1, party, catalog.damage_types)
+    TestAssertions.truthy(damage_estimate.available and healing_estimate.available, "Wisdom runtime parity estimates are available", failures)
+    TestAssertions.near(damage_estimate.average_hit, neutral_damage.average_hit, 0.0001, "Wisdom does not alter Cleric Bolt damage per hit", failures)
+
+    var cleric := _create_member_actor(test_root, party, party.members[0], 1, Vector3.ZERO)
+    var primary := cleric.get_node("AttackController") as AttackController
+    var support := cleric.get_node_or_null("SupportController") as AttackController
+    primary.cooldown_remaining = primary.definition.cooldown
+    support.cooldown_remaining = support.definition.cooldown
+    var no_candidates: Array[CombatTarget] = []
+    cleric.advance_combat(0.5, no_candidates)
+    var primary_progress := primary.definition.cooldown - primary.cooldown_remaining
+    var support_progress := support.definition.cooldown - support.cooldown_remaining
+    TestAssertions.near(primary_progress, 0.5 * damage_estimate.attacks_per_second * primary.definition.cooldown, 0.0001, "runtime damage cooldown progress matches ledger cadence", failures)
+    TestAssertions.near(support_progress, 0.5 * healing_estimate.attacks_per_second * support.definition.cooldown, 0.0001, "runtime healing cooldown progress matches ledger cadence", failures)
+    test_root.free()
 
 func _test_cleric_primary_fallback(failures: Array[String]) -> void:
     var test_root := _new_test_root("ClericFallbackTest")

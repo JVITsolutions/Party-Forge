@@ -89,6 +89,16 @@ func run() -> Array[String]:
 		TestAssertions.truthy("Normal Hit" in metrics and "Critical Hit" in metrics and "Average Hit" in metrics, "card exposes all hit values", failures)
 		TestAssertions.truthy("Attacks / Second" in metrics and "Estimated DPS" in metrics, "card exposes rate and DPS", failures)
 		TestAssertions.truthy("pre-mitigation" in fighter_card.tooltip_text and "per target" in fighter_card.tooltip_text, "card explains estimate boundary", failures)
+	var original_support_action := fighter.support_action
+	fighter.support_action = catalog.class_by_id(&"cleric").support_action
+	page.refresh()
+	var healing_card := page.get_node_or_null("Layout/Content/StatSide/StatScroll/Groups/Group_combat_estimates/Action_cleric_heal") as PanelContainer
+	TestAssertions.truthy(healing_card != null, "Stats page renders an owned healing estimate card", failures)
+	if healing_card != null:
+		var healing_metrics := (healing_card.get_node("Content/Metrics") as Label).text
+		TestAssertions.truthy("Healing / Use" in healing_metrics and "Estimated HPS" in healing_metrics, "healing card exposes amount, cadence, and HPS", failures)
+	fighter.support_action = original_support_action
+	page.refresh()
 	TestAssertions.truthy(page.initial_focus() is Button and (page.initial_focus() as Button).name.begins_with("Stat_"), "combat estimates do not steal first-stat focus", failures)
 
 	var mixed_attack := fighter.primary_attack.duplicate(true) as AttackDefinition

@@ -46,19 +46,6 @@ static func _validate_projection(
 ) -> String:
 	if action_stats == null:
 		return "Missing resolved character stats."
-	if attack.is_healing():
-		var healing_power := action_stats.value(&"healing_power", 1.0)
-		if not _is_finite_nonnegative(healing_power):
-			return "Invalid resolved healing power."
-		var healing_amount := attack.power * healing_power
-		if not _is_finite_nonnegative(healing_amount):
-			return "Invalid derived healing amount."
-		var action_rate := action_stats.value(&"attack_speed", 1.0) / attack.cooldown
-		if not _is_finite_nonnegative(action_rate):
-			return "Invalid derived healing action rate."
-		if not _is_finite_nonnegative(healing_amount * action_rate):
-			return "Invalid derived healing per second."
-		return ""
 	var estimate := ActionCombatEstimateService.estimate_from_snapshot(
 		attack,
 		action_stats,
@@ -67,7 +54,3 @@ static func _validate_projection(
 	if estimate == null or not estimate.available:
 		return estimate.unavailable_reason if estimate != null else "candidate action is unavailable"
 	return ""
-
-
-static func _is_finite_nonnegative(value: float) -> bool:
-	return is_finite(value) and value >= 0.0

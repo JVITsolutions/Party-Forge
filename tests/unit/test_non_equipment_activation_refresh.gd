@@ -314,7 +314,7 @@ func _action_overflow_source() -> StatModifierSource:
 	var modifiers: Array[StatModifier] = []
 	for index: int in 4:
 		modifiers.append(StatModifier.create(
-			&"damage", StatModifier.Operation.MORE, 1.0e100,
+			&"cooldown_rate", StatModifier.Operation.MORE, 1.0e100,
 			StringName("task10d_refresh_overflow_%d" % index), "Task 10D Refresh Overflow", [&"melee"],
 		))
 	return StatModifierSource.create(&"task10d_refresh_overflow", &"character_growth", "Task 10D Refresh Overflow", 1, modifiers)

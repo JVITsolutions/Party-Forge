@@ -176,7 +176,8 @@ func _test_mixed_component_and_invalid_type_actions_are_rejected(failures: Array
 func _test_critical_and_rate_overflow_are_rejected(failures: Array[String]) -> void:
 	for case: Dictionary in [
 		{"stat": &"crit_multiplier", "detail": "critical", "label": "critical overflow"},
-		{"stat": &"attack_speed", "detail": "action rate", "label": "action-rate overflow"},
+		{"stat": &"attack_speed", "detail": "attack speed", "label": "action-rate overflow"},
+		{"stat": &"cooldown_rate", "detail": "cooldown recovery", "label": "cooldown-recovery overflow"},
 	]:
 		var party := _party(CandidateActionPartyManager.new()) as CandidateActionPartyManager
 		party.candidate_sources.append(_overflow_source(case.stat, &"melee"))

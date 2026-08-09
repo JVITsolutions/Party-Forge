@@ -3,6 +3,7 @@ extends RefCounted
 
 const ACTION_ARCHETYPE := preload("res://scripts/combat/action_archetype.gd")
 const ACTION_DAMAGE_PROJECTION := preload("res://scripts/combat/action_damage_projection.gd")
+const ACTION_CADENCE := preload("res://scripts/combat/action_cadence.gd")
 
 static func estimate(attack: AttackDefinition, member_id: int, party: PartyManager, types: DamageTypeCatalog) -> ActionCombatEstimate:
 	var result := ActionCombatEstimate.new()
@@ -31,8 +32,27 @@ static func estimate_from_snapshot(attack: AttackDefinition, action_stats: Resol
 	result.display_name = String(attack.id).replace("_", " ").capitalize()
 	if action_stats == null or types == null:
 		return _unavailable(result, "Missing resolved character stats.")
+	var cadence := ACTION_CADENCE.resolve(
+		attack.cooldown,
+		action_stats.value(&"attack_speed", 1.0),
+		action_stats.value(&"cooldown_rate", 1.0),
+	)
+	if not bool(cadence.call("ok")):
+		return _unavailable(result, String(cadence.get("error")))
+	result.attacks_per_second = float(cadence.get("actions_per_second"))
 	if attack.is_healing():
-		return _unavailable(result, "Action does not deal direct damage.")
+		result.is_healing = true
+		var healing_power := action_stats.value(&"healing_power", 1.0)
+		if not _is_finite_nonnegative(healing_power):
+			return _unavailable(result, "Invalid resolved healing power.")
+		result.healing_amount = attack.power * healing_power
+		if not _is_finite_nonnegative(result.healing_amount):
+			return _unavailable(result, "Invalid derived healing amount.")
+		result.estimated_hps = result.healing_amount * result.attacks_per_second
+		if not _is_finite_nonnegative(result.estimated_hps):
+			return _unavailable(result, "Invalid derived healing per second.")
+		result.available = true
+		return result
 	var archetype_validation := ACTION_ARCHETYPE.validate_player_damage_action(attack)
 	if not archetype_validation.is_empty():
 		return _unavailable(result, String(archetype_validation[0]).trim_prefix("PARTY_FORGE_DAMAGE_ERROR "))
@@ -79,12 +99,6 @@ static func estimate_from_snapshot(attack: AttackDefinition, action_stats: Resol
 			"critical_hit": critical,
 			"average_hit": average,
 		})
-	var attack_speed := action_stats.value(&"attack_speed", 1.0)
-	if not _is_finite_nonnegative(attack_speed):
-		return _unavailable(result, "Invalid derived action rate.")
-	result.attacks_per_second = attack_speed / attack.cooldown
-	if not _is_finite_nonnegative(result.attacks_per_second):
-		return _unavailable(result, "Invalid derived action rate.")
 	result.estimated_dps = result.average_hit * result.attacks_per_second
 	if not _is_finite_nonnegative(result.estimated_dps):
 		return _unavailable(result, "Invalid derived DPS.")

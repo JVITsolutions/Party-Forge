@@ -95,6 +95,7 @@ func run() -> Array[String]:
 	party.free()
 	_test_independent_progression_projection_and_core_attributes(failures)
 	_test_combat_estimate_action_discovery(failures)
+	_test_healing_estimate_discovery(failures)
 	_test_archetype_relevance_equipment_attribution_and_action_totals(failures)
 	return failures
 
@@ -216,7 +217,24 @@ func _test_combat_estimate_action_discovery(failures: Array[String]) -> void:
 	definition.support_action = catalog.class_by_id(&"cleric").support_action
 	party.initialize(definition, catalog.traits)
 	rows = provider.combat_estimate_rows(1)
-	TestAssertions.equal(rows.size(), 1, "healing-only support action is excluded", failures)
+	TestAssertions.equal(rows.map(func(row: ActionCombatEstimate) -> StringName: return row.action_id), [&"fighter_cleave", &"cleric_heal"], "healing-only support action is included after the damaging primary", failures)
+	provider.configure(null, null, Callable())
+	party.free()
+
+
+func _test_healing_estimate_discovery(failures: Array[String]) -> void:
+	var catalog := GameCatalog.load_defaults()
+	var party := PartyManager.new()
+	party.initialize(catalog.class_by_id(&"cleric"), catalog.traits)
+	var provider := LedgerDataProvider.new()
+	provider.configure(party, catalog, Callable())
+	var rows := provider.combat_estimate_rows(1)
+	TestAssertions.equal(rows.map(func(row: ActionCombatEstimate) -> StringName: return row.action_id), [&"cleric_bolt", &"cleric_heal"], "ledger preserves damaging and healing action order", failures)
+	var healing := rows[1] if rows.size() > 1 else null
+	var supports_healing := healing != null and healing.get_property_list().any(func(property: Dictionary) -> bool: return property.get("name") == &"is_healing")
+	TestAssertions.truthy(supports_healing and healing.available and bool(healing.get("is_healing")), "ledger exposes the Cleric healing estimate", failures)
+	if supports_healing:
+		TestAssertions.near(float(healing.get("estimated_hps")), float(healing.get("healing_amount")) * healing.attacks_per_second, 0.0001, "ledger healing HPS matches amount and cadence", failures)
 	provider.configure(null, null, Callable())
 	party.free()
 
