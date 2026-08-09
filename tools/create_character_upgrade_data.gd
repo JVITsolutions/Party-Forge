@@ -29,6 +29,9 @@ static func generate() -> PackedStringArray:
 	return errors
 
 static func _save_keywords(errors: PackedStringArray) -> void:
+	_save_checked(build_keyword_catalog(), "res://data/keywords/core_keywords.tres", errors)
+
+static func build_keyword_catalog() -> KeywordCatalog:
 	var catalog := KeywordCatalog.new()
 	for row: Dictionary in ContentRows.KEYWORD_ROWS:
 		var definition := KeywordDefinition.new()
@@ -37,7 +40,7 @@ static func _save_keywords(errors: PackedStringArray) -> void:
 		definition.explanation = row["explanation"]
 		definition.is_capability_tag = row["capability"]
 		catalog.definitions.append(definition)
-	_save_checked(catalog, "res://data/keywords/core_keywords.tres", errors)
+	return catalog
 
 static func _save_experience(errors: PackedStringArray) -> void:
 	_save_checked(ExperienceTuning.new(), "res://data/progression/default_experience.tres", errors)

@@ -14,6 +14,12 @@ static func build_catalog() -> StatCatalog:
 	var catalog := StatCatalog.new()
 	catalog.definitions = [
 		_stat(&"max_health", "Maximum Health", &"overview", 100.0, StatDefinition.ValueFormat.INTEGER, 0, true, 1.0, false, 0.0, StatDefinition.Visibility.UNIVERSAL),
+		_stat(&"strength", "Strength", &"attributes", 0.0, StatDefinition.ValueFormat.INTEGER, 0, false, 0.0, false, 0.0, StatDefinition.Visibility.UNIVERSAL),
+		_stat(&"dexterity", "Dexterity", &"attributes", 0.0, StatDefinition.ValueFormat.INTEGER, 0, false, 0.0, false, 0.0, StatDefinition.Visibility.UNIVERSAL),
+		_stat(&"constitution", "Constitution", &"attributes", 0.0, StatDefinition.ValueFormat.INTEGER, 0, false, 0.0, false, 0.0, StatDefinition.Visibility.UNIVERSAL),
+		_stat(&"intelligence", "Intelligence", &"attributes", 0.0, StatDefinition.ValueFormat.INTEGER, 0, false, 0.0, false, 0.0, StatDefinition.Visibility.UNIVERSAL),
+		_stat(&"wisdom", "Wisdom", &"attributes", 0.0, StatDefinition.ValueFormat.INTEGER, 0, false, 0.0, false, 0.0, StatDefinition.Visibility.UNIVERSAL),
+		_stat(&"charisma", "Charisma", &"attributes", 0.0, StatDefinition.ValueFormat.INTEGER, 0, false, 0.0, false, 0.0, StatDefinition.Visibility.UNIVERSAL),
 		_stat(&"armor", "Armor", &"defense", 0.0, StatDefinition.ValueFormat.NUMBER, 1, true, 0.0, false, 0.0, StatDefinition.Visibility.UNIVERSAL),
 		_stat(&"move_speed", "Movement Speed", &"utility", 6.0, StatDefinition.ValueFormat.NUMBER, 2, true, 0.1, false, 0.0, StatDefinition.Visibility.UNIVERSAL),
 		_stat(&"damage", "Damage", &"offense", 1.0, StatDefinition.ValueFormat.MULTIPLIER, 2, true, 0.0, false, 0.0, StatDefinition.Visibility.UNIVERSAL),
@@ -48,7 +54,7 @@ static func build_catalog() -> StatCatalog:
 	return catalog
 
 static func _resistance(id: StringName, label: String, capability: StringName) -> StatDefinition:
-	return _stat(id, label, &"defense", 0.0, StatDefinition.ValueFormat.RATIO_PERCENT, 1, true, -1.0, true, 0.75, StatDefinition.Visibility.CAPABILITY, [capability])
+	return _stat(id, label, &"resistances", 0.0, StatDefinition.ValueFormat.RATIO_PERCENT, 1, true, -1.0, true, 0.75, StatDefinition.Visibility.CAPABILITY, [capability])
 
 static func _stat(id: StringName, label: String, group: StringName, base: float, format: StatDefinition.ValueFormat, precision: int, has_min: bool, min_value: float, has_max: bool, max_value: float, visibility: StatDefinition.Visibility, tags: Array[StringName] = []) -> StatDefinition:
 	var definition := StatDefinition.new()
