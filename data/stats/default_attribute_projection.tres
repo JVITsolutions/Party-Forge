@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="AttributeProjectionTuning" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/stats/attribute_projection_tuning.gd" id="1_projection"]
+
+[resource]
+script = ExtResource("1_projection")
+melee_damage_per_strength = 0.02
+armor_per_strength = 0.25
+ranged_damage_per_dexterity = 0.02
+attack_speed_per_dexterity = 0.005
+dodge_per_dexterity = 0.001
+max_health_per_constitution = 3.0
+regeneration_per_constitution = 0.05
+caster_damage_per_intelligence = 0.02
+area_size_per_intelligence = 0.0075
+healing_power_per_wisdom = 0.02
+cooldown_rate_per_wisdom = 0.005
+party_influence_per_charisma = 1.0

@@ -346,6 +346,56 @@ visibility = 1
 capability_tags = Array[StringName]([&"chaos"])
 keyword_id = &"chaos_resistance"
 
+[sub_resource type="Resource" id="Resource_melee_damage"]
+script = ExtResource("1_w76bv")
+id = &"melee_damage"
+display_name = "Melee Damage"
+ui_group = &"offense"
+value_format = 3
+precision = 2
+default_value = 1.0
+has_minimum = true
+visibility = 1
+capability_tags = Array[StringName]([&"melee"])
+keyword_id = &"melee_damage"
+
+[sub_resource type="Resource" id="Resource_ranged_damage"]
+script = ExtResource("1_w76bv")
+id = &"ranged_damage"
+display_name = "Ranged Damage"
+ui_group = &"offense"
+value_format = 3
+precision = 2
+default_value = 1.0
+has_minimum = true
+visibility = 1
+capability_tags = Array[StringName]([&"ranged"])
+keyword_id = &"ranged_damage"
+
+[sub_resource type="Resource" id="Resource_caster_damage"]
+script = ExtResource("1_w76bv")
+id = &"caster_damage"
+display_name = "Caster Damage"
+ui_group = &"offense"
+value_format = 3
+precision = 2
+default_value = 1.0
+has_minimum = true
+visibility = 1
+capability_tags = Array[StringName]([&"caster"])
+keyword_id = &"caster_damage"
+
+[sub_resource type="Resource" id="Resource_party_influence"]
+script = ExtResource("1_w76bv")
+id = &"party_influence"
+display_name = "Party Influence"
+ui_group = &"utility"
+value_format = 0
+default_value = 0.0
+has_minimum = true
+visibility = 2
+keyword_id = &"party_influence"
+
 [sub_resource type="Resource" id="Resource_attribute_strength"]
 script = ExtResource("1_w76bv")
 id = &"strength"
@@ -414,4 +464,4 @@ keyword_id = &"charisma"
 
 [resource]
 script = ExtResource("2_e1y7i")
-definitions = Array[ExtResource("1_w76bv")]([SubResource("Resource_qjanc"), SubResource("Resource_attribute_strength"), SubResource("Resource_attribute_dexterity"), SubResource("Resource_attribute_constitution"), SubResource("Resource_attribute_intelligence"), SubResource("Resource_attribute_wisdom"), SubResource("Resource_attribute_charisma"), SubResource("Resource_jx3mg"), SubResource("Resource_shobl"), SubResource("Resource_33hiy"), SubResource("Resource_tgtbh"), SubResource("Resource_v1otm"), SubResource("Resource_u5fvm"), SubResource("Resource_rjyfy"), SubResource("Resource_uayb7"), SubResource("Resource_g57sx"), SubResource("Resource_fvbyb"), SubResource("Resource_nlvwj"), SubResource("Resource_l7acj"), SubResource("Resource_xbx42"), SubResource("Resource_54wba"), SubResource("Resource_svrb2"), SubResource("Resource_qdbv7"), SubResource("Resource_mpru1"), SubResource("Resource_tfru6"), SubResource("Resource_c127o"), SubResource("Resource_q1ios"), SubResource("Resource_jinps"), SubResource("Resource_g3u3i"), SubResource("Resource_cdcd2"), SubResource("Resource_p683c"), SubResource("Resource_lfd5q"), SubResource("Resource_xo1vt")])
+definitions = Array[ExtResource("1_w76bv")]([SubResource("Resource_qjanc"), SubResource("Resource_attribute_strength"), SubResource("Resource_attribute_dexterity"), SubResource("Resource_attribute_constitution"), SubResource("Resource_attribute_intelligence"), SubResource("Resource_attribute_wisdom"), SubResource("Resource_attribute_charisma"), SubResource("Resource_jx3mg"), SubResource("Resource_shobl"), SubResource("Resource_33hiy"), SubResource("Resource_tgtbh"), SubResource("Resource_v1otm"), SubResource("Resource_u5fvm"), SubResource("Resource_rjyfy"), SubResource("Resource_uayb7"), SubResource("Resource_g57sx"), SubResource("Resource_fvbyb"), SubResource("Resource_nlvwj"), SubResource("Resource_l7acj"), SubResource("Resource_xbx42"), SubResource("Resource_54wba"), SubResource("Resource_svrb2"), SubResource("Resource_qdbv7"), SubResource("Resource_mpru1"), SubResource("Resource_tfru6"), SubResource("Resource_c127o"), SubResource("Resource_q1ios"), SubResource("Resource_jinps"), SubResource("Resource_g3u3i"), SubResource("Resource_cdcd2"), SubResource("Resource_p683c"), SubResource("Resource_lfd5q"), SubResource("Resource_xo1vt"), SubResource("Resource_melee_damage"), SubResource("Resource_ranged_damage"), SubResource("Resource_caster_damage"), SubResource("Resource_party_influence")])

@@ -3,6 +3,7 @@ extends Resource
 
 enum ValueFormat { NUMBER, INTEGER, RATIO_PERCENT, MULTIPLIER, PER_SECOND }
 enum Visibility { UNIVERSAL, CAPABILITY, NON_DEFAULT }
+enum ComparisonDirection { HIGHER_IS_BETTER, LOWER_IS_BETTER, NEUTRAL }
 
 @export var id: StringName
 @export var display_name: String
@@ -17,6 +18,7 @@ enum Visibility { UNIVERSAL, CAPABILITY, NON_DEFAULT }
 @export var visibility := Visibility.NON_DEFAULT
 @export var capability_tags: Array[StringName] = []
 @export var keyword_id: StringName
+@export var comparison_direction := ComparisonDirection.HIGHER_IS_BETTER
 
 func finalize_value(value: float) -> float:
 	var result := value

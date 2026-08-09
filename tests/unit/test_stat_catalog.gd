@@ -21,6 +21,26 @@ func run() -> Array[String]:
 		TestAssertions.near(attribute.default_value, 0.0, 0.0001, "%s defaults to zero" % attribute_id, failures)
 		TestAssertions.equal(attribute.value_format, StatDefinition.ValueFormat.INTEGER, "%s uses integer formatting" % attribute_id, failures)
 		TestAssertions.truthy(GameCatalog.KEYWORD_CATALOG.has_definition(attribute.keyword_id), "%s has a keyword" % attribute_id, failures)
+	_assert_archetype_stat(catalog, &"melee_damage", "Melee Damage", &"melee", failures)
+	_assert_archetype_stat(catalog, &"ranged_damage", "Ranged Damage", &"ranged", failures)
+	_assert_archetype_stat(catalog, &"caster_damage", "Caster Damage", &"caster", failures)
+	_assert_keyword(&"melee_damage", "Melee Damage", "Modifies damage dealt by actions whose primary archetype is Melee.", failures)
+	_assert_keyword(&"ranged_damage", "Ranged Damage", "Modifies damage dealt by actions whose primary archetype is Ranged.", failures)
+	_assert_keyword(&"caster_damage", "Caster Damage", "Modifies damage dealt by actions whose primary archetype is Caster.", failures)
+	_assert_keyword(&"party_influence", "Party Influence", "Measures the character's presence and influence within the party.", failures)
+	var influence := catalog.definition(&"party_influence")
+	TestAssertions.truthy(influence != null, "party influence stat exists", failures)
+	if influence != null:
+		TestAssertions.equal(influence.display_name, "Party Influence", "party influence display name", failures)
+		TestAssertions.equal(influence.ui_group, &"utility", "party influence UI group", failures)
+		TestAssertions.equal(influence.value_format, StatDefinition.ValueFormat.NUMBER, "party influence number format", failures)
+		TestAssertions.near(influence.default_value, 0.0, 0.0001, "party influence defaults to zero", failures)
+		TestAssertions.truthy(influence.has_minimum, "party influence has minimum", failures)
+		TestAssertions.near(influence.minimum, 0.0, 0.0001, "party influence minimum is zero", failures)
+		TestAssertions.equal(influence.visibility, StatDefinition.Visibility.NON_DEFAULT, "party influence hides at default", failures)
+		TestAssertions.equal(influence.keyword_id, &"party_influence", "party influence keyword identity", failures)
+		_assert_default_comparison_direction(influence, "party influence", failures)
+		TestAssertions.truthy(GameCatalog.KEYWORD_CATALOG.has_definition(influence.keyword_id), "party influence has a keyword", failures)
 
 	var duplicate := StatCatalog.new()
 	duplicate.definitions = [catalog.definition(&"armor"), catalog.definition(&"armor")]
@@ -37,3 +57,46 @@ func run() -> Array[String]:
 	TestAssertions.truthy(mutable.definition(&"armor") == null, "replaced stat ID leaves the index", failures)
 	TestAssertions.equal(mutable.definition(&"max_health"), catalog.definition(&"max_health"), "replacement stat enters the index", failures)
 	return failures
+
+func _assert_archetype_stat(
+	catalog: StatCatalog,
+	stat_id: StringName,
+	display_name: String,
+	capability_tag: StringName,
+	failures: Array[String],
+) -> void:
+	var definition := catalog.definition(stat_id)
+	TestAssertions.truthy(definition != null, "%s stat exists" % stat_id, failures)
+	if definition == null:
+		return
+	TestAssertions.equal(definition.display_name, display_name, "%s display name" % stat_id, failures)
+	TestAssertions.equal(definition.ui_group, &"offense", "%s UI group" % stat_id, failures)
+	TestAssertions.equal(definition.value_format, StatDefinition.ValueFormat.MULTIPLIER, "%s multiplier format" % stat_id, failures)
+	TestAssertions.near(definition.default_value, 1.0, 0.0001, "%s defaults to one" % stat_id, failures)
+	TestAssertions.truthy(definition.has_minimum, "%s has minimum" % stat_id, failures)
+	TestAssertions.near(definition.minimum, 0.0, 0.0001, "%s minimum is zero" % stat_id, failures)
+	TestAssertions.equal(definition.visibility, StatDefinition.Visibility.CAPABILITY, "%s has capability visibility" % stat_id, failures)
+	TestAssertions.equal(definition.capability_tags, [capability_tag], "%s capability tag" % stat_id, failures)
+	TestAssertions.equal(definition.keyword_id, stat_id, "%s keyword identity" % stat_id, failures)
+	_assert_default_comparison_direction(definition, String(stat_id), failures)
+	TestAssertions.truthy(GameCatalog.KEYWORD_CATALOG.has_definition(definition.keyword_id), "%s has a keyword" % stat_id, failures)
+
+func _assert_default_comparison_direction(definition: StatDefinition, label: String, failures: Array[String]) -> void:
+	var found := false
+	var value: Variant = null
+	for property: Dictionary in definition.get_property_list():
+		if StringName(String(property.get("name", ""))) == &"comparison_direction":
+			found = true
+			value = definition.get(&"comparison_direction")
+			break
+	TestAssertions.truthy(found, "%s has comparison direction metadata" % label, failures)
+	if found:
+		TestAssertions.equal(int(value), 0, "%s comparison defaults higher-is-better" % label, failures)
+
+func _assert_keyword(id: StringName, display_name: String, explanation: String, failures: Array[String]) -> void:
+	var keyword := GameCatalog.KEYWORD_CATALOG.definition(id)
+	TestAssertions.truthy(keyword != null, "%s keyword exists" % id, failures)
+	if keyword == null:
+		return
+	TestAssertions.equal(keyword.display_name, display_name, "%s keyword display name" % id, failures)
+	TestAssertions.equal(keyword.explanation, explanation, "%s keyword explanation" % id, failures)
