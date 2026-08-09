@@ -38,7 +38,7 @@ func run() -> Array[String]:
 	_test_candidate_equipment_tagged_overflow_is_rejected(failures)
 	_test_mixed_component_and_invalid_type_actions_are_rejected(failures)
 	_test_critical_and_rate_overflow_are_rejected(failures)
-	_test_healing_action_is_exempt_from_damage_estimation(failures)
+	_test_healing_projection_validation(failures)
 	_test_multi_action_and_missing_primary_contract(failures)
 	_test_context_commit_rejection_is_atomic(failures)
 	return failures
@@ -188,7 +188,7 @@ func _test_critical_and_rate_overflow_are_rejected(failures: Array[String]) -> v
 		_assert_action_rejection(result, item.instance_id, &"helmet", &"fighter_cleave", case.detail, case.label, failures)
 		party.free()
 
-func _test_healing_action_is_exempt_from_damage_estimation(failures: Array[String]) -> void:
+func _test_healing_projection_validation(failures: Array[String]) -> void:
 	var catalog := GameCatalog.load_defaults()
 	var party := _party_with_class(CandidateActionPartyManager.new(), catalog.class_by_id(&"cleric"))
 	party.candidate_sources.append(StatModifierSource.create(&"healing_candidate", &"test", "Healing Candidate", 1, [
@@ -201,6 +201,16 @@ func _test_healing_action_is_exempt_from_damage_estimation(failures: Array[Strin
 	)
 	TestAssertions.truthy(result != null and result.ok(), "healing support action remains valid without a damage archetype estimate", failures)
 	party.free()
+
+	var overflow_party := _party_with_class(CandidateActionPartyManager.new(), catalog.class_by_id(&"cleric"))
+	overflow_party.candidate_sources.append(_overflow_source(&"healing_power", &"healing"))
+	var overflow_item := _stout_helmet("item-transition-healing-overflow", 131)
+	var overflow_result: Variant = _service.preview(
+		_state(overflow_item), 1, overflow_item.instance_id, &"helmet", overflow_party,
+		GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG,
+	)
+	_assert_action_rejection(overflow_result, overflow_item.instance_id, &"helmet", &"cleric_heal", "healing", "healing projection overflow", failures)
+	overflow_party.free()
 
 func _test_multi_action_and_missing_primary_contract(failures: Array[String]) -> void:
 	var catalog := GameCatalog.load_defaults()
@@ -234,7 +244,6 @@ func _test_multi_action_and_missing_primary_contract(failures: Array[String]) ->
 
 func _test_context_commit_rejection_is_atomic(failures: Array[String]) -> void:
 	var party := _party(CandidateActionPartyManager.new()) as CandidateActionPartyManager
-	party.candidate_sources.append(_overflow_source(&"damage", &"melee"))
 	var context := PlayerRunContext.new()
 	var profile := ProfileState.new_profile("task10d-profile", "Task 10D", 1000)
 	profile.inventory_columns = 1
@@ -257,6 +266,7 @@ func _test_context_commit_rejection_is_atomic(failures: Array[String]) -> void:
 		GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG,
 	)
 	TestAssertions.truthy(create_result.ok(), "atomic rejection fixture item enters inventory", failures)
+	party.candidate_sources.append(_overflow_source(&"damage", &"melee"))
 	var actor := Node3D.new()
 	var health := HealthComponent.new()
 	health.name = "HealthComponent"

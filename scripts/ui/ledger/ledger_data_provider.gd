@@ -120,17 +120,9 @@ func combat_estimate_rows(member_id: int) -> Array[ActionCombatEstimate]:
 	var member := party.member_by_id(member_id) if party != null else null
 	if member == null or catalog == null:
 		return rows
-	var seen_ids: Dictionary = {}
-	var seen_instances: Dictionary = {}
 	for attack: AttackDefinition in member.class_definition.owned_actions():
 		if attack == null or attack.is_healing() or attack.damage_components.is_empty():
 			continue
-		var instance_key := attack.get_instance_id()
-		if seen_instances.has(instance_key) or (not attack.id.is_empty() and seen_ids.has(attack.id)):
-			continue
-		seen_instances[instance_key] = true
-		if not attack.id.is_empty():
-			seen_ids[attack.id] = true
 		rows.append(ActionCombatEstimateService.estimate(attack, member_id, party, catalog.damage_types))
 	return rows
 

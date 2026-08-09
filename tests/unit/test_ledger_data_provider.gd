@@ -194,8 +194,9 @@ func _test_combat_estimate_action_discovery(failures: Array[String]) -> void:
 	TestAssertions.truthy(duplicate_component.get_instance_id() != original_primary_component.get_instance_id(), "duplicate action fixture uses a distinct damage component resource", failures)
 	TestAssertions.near(definition.primary_attack.damage_components[0].base_amount, original_primary_base_amount, 0.001, "configuring duplicate action leaves original component unchanged", failures)
 	TestAssertions.truthy(not is_equal_approx(duplicate_component.base_amount, original_primary_base_amount), "duplicate action damage differs from original", failures)
-	TestAssertions.equal(rows.size(), 1, "duplicate action ID across resources appears once", failures)
+	TestAssertions.equal(rows.size(), 2, "owned-action enumeration preserves distinct resources even when invalid authored IDs collide", failures)
 	TestAssertions.near(rows[0].normal_hit, expected_primary.normal_hit, 0.001, "duplicate action ID keeps the first authored action", failures)
+	TestAssertions.truthy(rows.size() < 2 or not is_equal_approx(rows[1].normal_hit, expected_primary.normal_hit), "duplicate action ID retains the distinct second resource for consumer parity", failures)
 
 	definition.primary_attack = null
 	definition.support_action = catalog.class_by_id(&"ranger").primary_attack

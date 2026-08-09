@@ -5,6 +5,7 @@ signal progression_changed(member_id: int)
 signal member_level_ready(member_id: int, level: int)
 
 const DEFAULT_EXPERIENCE_TUNING: ExperienceTuning = preload("res://data/progression/default_experience.tres")
+const CANDIDATE_ACTION_VALIDATION := preload("res://scripts/combat/candidate_action_validation_service.gd")
 
 var _run_player_id: StringName = &""
 var run_player_id: StringName:
@@ -563,6 +564,21 @@ func _preview_member_equipment_activation_with_sources(
 	if not resolution.ok():
 		return EquipmentActivationResult.failure(
 			"PARTY_FORGE_EQUIPMENT_ACTIVATION_ERROR member=%d detail=%s" % [member_id, resolution.error]
+		)
+	var action_error := CANDIDATE_ACTION_VALIDATION.validate(
+		member.class_definition,
+		member_id,
+		GameCatalog.STAT_CATALOG,
+		GameCatalog.DAMAGE_TYPES,
+		manager.member_base_values(member_id),
+		manager.member_capabilities(member_id),
+		final_sources,
+		manager.stat_revision(),
+		PartyManager.DEFAULT_ATTRIBUTE_PROJECTION,
+	)
+	if not action_error.is_empty():
+		return EquipmentActivationResult.failure(
+			"PARTY_FORGE_EQUIPMENT_ACTIVATION_ERROR member=%d detail=%s" % [member_id, action_error]
 		)
 	return activation
 

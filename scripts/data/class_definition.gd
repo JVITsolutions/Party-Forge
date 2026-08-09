@@ -67,6 +67,14 @@ func validate(types: DamageTypeCatalog = null) -> PackedStringArray:
 	if revive_delay <= 0.0: errors.append("class %s revive delay must be positive" % id)
 	if revive_health_fraction <= 0.0 or revive_health_fraction > 1.0: errors.append("class %s revive health fraction must be between zero and one" % id)
 	if primary_attack == null: errors.append("class %s primary attack is missing" % id)
+	var seen_action_ids: Dictionary = {}
+	for attack: AttackDefinition in owned_actions():
+		if attack.id.is_empty():
+			continue
+		if seen_action_ids.has(attack.id):
+			errors.append("class %s action id %s is duplicated across owned action resources" % [id, attack.id])
+		else:
+			seen_action_ids[attack.id] = true
 	if growth_definition == null:
 		errors.append("class %s growth definition is missing" % id)
 	else:

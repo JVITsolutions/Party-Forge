@@ -4,6 +4,7 @@ const PROFILE_ID := "profile-storage-projection"
 
 func run() -> Array[String]:
 	var failures: Array[String] = []
+	_test_owned_action_consumer_parity(failures)
 	_test_disabled_cascade_projection(failures)
 	_test_rejected_preview_suppresses_raw_fallback(failures)
 	_test_two_hand_displacement_projection(failures)
@@ -101,6 +102,35 @@ func run() -> Array[String]:
 	var rejected := ProfileStorageProjection.from_profile(malformed, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)
 	TestAssertions.truthy(not rejected.valid and rejected.error.contains("ownership"), "strict projection rejects duplicate ownership", failures)
 	return failures
+
+
+func _test_owned_action_consumer_parity(failures: Array[String]) -> void:
+	var catalog := GameCatalog.load_defaults()
+	var fighter := catalog.class_by_id(&"fighter").duplicate(true) as ClassDefinition
+	fighter.support_action = fighter.primary_attack
+	var profile := ProfileState.new_profile("owned-action-parity", "Owned Action Parity", 1000)
+	profile.inventory_columns = 1
+	profile.leader_loadout_class_id = "fighter"
+	profile.leader_loadout = ItemSlotContainer.create(
+		&"leader-loadout", ItemSlotContainer.PROFILE_LEADER_EQUIPMENT, profile.profile_id,
+		EquipmentSlotIndex.capacity(),
+	).to_dictionary()
+	profile.stash_tabs = [ItemSlotContainer.create(
+		&"stash-tab-owned-action-parity", ItemSlotContainer.PROFILE_STASH_TAB, profile.profile_id, 100,
+	).to_dictionary()]
+	var projection := ProfileStorageProjection.from_profile(
+		profile,
+		GameCatalog.EQUIPMENT_CATALOG,
+		GameCatalog.ITEM_FOUNDATION_CATALOG,
+		GameCatalog.STAT_CATALOG,
+		fighter,
+	)
+	TestAssertions.truthy(projection.valid, "owned-action parity projection configures", failures)
+	if not projection.valid:
+		return
+	var activation := projection.get("_current_activation") as EquipmentActivationResult
+	var estimates := projection.call("_action_estimates", activation) as Array
+	TestAssertions.equal(estimates.size(), fighter.owned_actions().size(), "profile projection consumes the authoritative owned-action enumeration", failures)
 
 
 func _test_disabled_cascade_projection(failures: Array[String]) -> void:

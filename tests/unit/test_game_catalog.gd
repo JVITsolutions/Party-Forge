@@ -30,6 +30,7 @@ func run() -> Array[String]:
     TestAssertions.equal(catalog.class_by_id(&"fighter").traits, [&"martial", &"vanguard"], "fighter traits", failures)
     TestAssertions.equal(catalog.class_by_id(&"cleric").support_action.id, &"cleric_heal", "cleric heal", failures)
     _assert_owned_action_contract(catalog, failures)
+    _assert_duplicate_action_id_validation(catalog, failures)
     _assert_class_names_and_eligibility(catalog, failures)
     _assert_primary_action_estimates(catalog, failures)
     _assert_item_foundation_reachability(catalog, failures)
@@ -81,6 +82,18 @@ func _assert_owned_action_contract(catalog: GameCatalog, failures: Array[String]
     definition.primary_attack = null
     definition.support_action = support
     TestAssertions.equal(definition.call(&"owned_actions"), [support], "owned actions filter null entries while preserving support actions", failures)
+
+
+func _assert_duplicate_action_id_validation(catalog: GameCatalog, failures: Array[String]) -> void:
+    var definition := catalog.class_by_id(&"fighter").duplicate(true) as ClassDefinition
+    definition.support_action = definition.primary_attack.duplicate(true) as AttackDefinition
+    TestAssertions.truthy(
+        definition.validate(catalog.damage_types).has(
+            "class fighter action id fighter_cleave is duplicated across owned action resources"
+        ),
+        "distinct owned action resources reject the same non-empty action ID",
+        failures,
+    )
 
 
 func _assert_primary_action_estimates(catalog: GameCatalog, failures: Array[String]) -> void:

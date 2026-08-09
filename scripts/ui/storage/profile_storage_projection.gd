@@ -242,7 +242,7 @@ func _resolve_stats(activation: EquipmentActivationResult, action_tags: Array[St
 
 func _action_estimates(activation: EquipmentActivationResult) -> Array:
 	var result: Array = []
-	for attack: AttackDefinition in [_class_definition.primary_attack, _class_definition.support_action]:
+	for attack: AttackDefinition in _class_definition.owned_actions():
 		if attack == null or attack.is_healing():
 			continue
 		var action_resolution := _resolve_stats(activation, DamageResolver.action_tags_for(attack))
