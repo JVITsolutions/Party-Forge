@@ -3,6 +3,9 @@ extends RefCounted
 const EQUIPMENT_PATH := "res://data/equipment/core_equipment_catalog.tres"
 const FOUNDATION_PATH := "res://data/items/core_item_foundation_catalog.tres"
 const ISSUER_NAMESPACE := "generation:test"
+const GENERATION_PROVENANCE_BEFORE := "\"generation\":{\"domain\":\"ordinary_drop\",\"generator_version\":1,\"item_level\":750,\"request_sequence\":7,\"source_id\":\"ordinary_enemy\"}"
+const CONTENT_SEQUENCE_SEVEN := "{\"affixes\":[{\"affix_kind\":\"implicit\",\"definition_id\":\"tempered_edge\",\"rolls\":[{\"operation\":1,\"required_tags\":[],\"stat_id\":\"physical_damage\",\"value\":0.172786754480471}],\"tier\":2},{\"affix_kind\":\"prefix\",\"definition_id\":\"stout\",\"rolls\":[{\"operation\":0,\"required_tags\":[],\"stat_id\":\"constitution\",\"value\":1.63195639848709}],\"tier\":1},{\"affix_kind\":\"suffix\",\"definition_id\":\"of_reach\",\"rolls\":[{\"operation\":1,\"required_tags\":[],\"stat_id\":\"attack_range\",\"value\":0.248318827866737}],\"tier\":3}],\"base_definition_id\":\"forge_vanguard_sword\",\"rarity_id\":\"rare\"}"
+const CONTENT_SEQUENCE_EIGHT := "{\"affixes\":[{\"affix_kind\":\"implicit\",\"definition_id\":\"tempered_edge\",\"rolls\":[{\"operation\":1,\"required_tags\":[],\"stat_id\":\"physical_damage\",\"value\":0.0558172252896015}],\"tier\":1},{\"affix_kind\":\"prefix\",\"definition_id\":\"stout\",\"rolls\":[{\"operation\":0,\"required_tags\":[],\"stat_id\":\"constitution\",\"value\":4.49810710549355}],\"tier\":2},{\"affix_kind\":\"suffix\",\"definition_id\":\"of_embers\",\"rolls\":[{\"operation\":1,\"required_tags\":[],\"stat_id\":\"fire_damage\",\"value\":0.242149115546694}],\"tier\":3}],\"base_definition_id\":\"forge_vanguard_sword\",\"rarity_id\":\"rare\"}"
 const GOLDEN_COMMON := "{\"affixes\":[{\"affix_kind\":\"implicit\",\"definition_id\":\"tempered_edge\",\"rolls\":[{\"operation\":1,\"required_tags\":[],\"stat_id\":\"physical_damage\",\"value\":0.172786754480471}],\"tier\":2}],\"base_definition_id\":\"forge_vanguard_sword\",\"instance_id\":\"item-4bf817c72b18f86df8718cb3af718fcdd265a9a8ca6b37df17eb10747adb5bc7-0000000000000101\",\"item_level\":750,\"origin\":{\"issuer_namespace\":\"generation:test\",\"seed\":424242,\"sequence\":101,\"source\":{\"generation\":{\"domain\":\"ordinary_drop\",\"generator_version\":1,\"item_level\":750,\"request_sequence\":7,\"source_id\":\"ordinary_enemy\"}}},\"rarity_id\":\"common\",\"schema_version\":1}"
 const GOLDEN_UNCOMMON := "{\"affixes\":[{\"affix_kind\":\"implicit\",\"definition_id\":\"tempered_edge\",\"rolls\":[{\"operation\":1,\"required_tags\":[],\"stat_id\":\"physical_damage\",\"value\":0.172786754480471}],\"tier\":2},{\"affix_kind\":\"prefix\",\"definition_id\":\"stout\",\"rolls\":[{\"operation\":0,\"required_tags\":[],\"stat_id\":\"constitution\",\"value\":1.63195639848709}],\"tier\":1}],\"base_definition_id\":\"forge_vanguard_sword\",\"instance_id\":\"item-4bf817c72b18f86df8718cb3af718fcdd265a9a8ca6b37df17eb10747adb5bc7-0000000000000102\",\"item_level\":750,\"origin\":{\"issuer_namespace\":\"generation:test\",\"seed\":424242,\"sequence\":102,\"source\":{\"generation\":{\"domain\":\"ordinary_drop\",\"generator_version\":1,\"item_level\":750,\"request_sequence\":7,\"source_id\":\"ordinary_enemy\"}}},\"rarity_id\":\"uncommon\",\"schema_version\":1}"
 const GOLDEN_RARE := "{\"affixes\":[{\"affix_kind\":\"implicit\",\"definition_id\":\"tempered_edge\",\"rolls\":[{\"operation\":1,\"required_tags\":[],\"stat_id\":\"physical_damage\",\"value\":0.172786754480471}],\"tier\":2},{\"affix_kind\":\"prefix\",\"definition_id\":\"stout\",\"rolls\":[{\"operation\":0,\"required_tags\":[],\"stat_id\":\"constitution\",\"value\":1.63195639848709}],\"tier\":1},{\"affix_kind\":\"suffix\",\"definition_id\":\"of_reach\",\"rolls\":[{\"operation\":1,\"required_tags\":[],\"stat_id\":\"attack_range\",\"value\":0.248318827866737}],\"tier\":3}],\"base_definition_id\":\"forge_vanguard_sword\",\"instance_id\":\"item-4bf817c72b18f86df8718cb3af718fcdd265a9a8ca6b37df17eb10747adb5bc7-0000000000000103\",\"item_level\":750,\"origin\":{\"issuer_namespace\":\"generation:test\",\"seed\":424242,\"sequence\":103,\"source\":{\"generation\":{\"domain\":\"ordinary_drop\",\"generator_version\":1,\"item_level\":750,\"request_sequence\":7,\"source_id\":\"ordinary_enemy\"}}},\"rarity_id\":\"rare\",\"schema_version\":1}"
@@ -37,7 +40,8 @@ func _test_fixed_seed_items(equipment: EquipmentCatalog, foundation: ItemFoundat
 		if result == null or not result.ok():
 			continue
 		var exact_document := result.item.to_dictionary()
-		TestAssertions.equal(ItemInstanceCodec.encode(result.item), golden_by_rarity[rarity_id], "%s fixed request has exact schema-one dictionary" % rarity_id, failures)
+		var exact_golden := _golden_with_provenance(golden_by_rarity[rarity_id], rarity_id)
+		TestAssertions.equal(ItemInstanceCodec.encode(result.item), exact_golden, "%s fixed request has exact schema-one dictionary" % rarity_id, failures)
 		TestAssertions.equal(result.item.affixes[0].affix_kind, "implicit", "%s guaranteed implicit is first" % rarity_id, failures)
 		var origin := result.item.origin
 		var origin_keys: Array = origin.keys()
@@ -45,6 +49,10 @@ func _test_fixed_seed_items(equipment: EquipmentCatalog, foundation: ItemFoundat
 		TestAssertions.equal(origin_keys, ["issuer_namespace", "seed", "sequence", "source"], "%s origin preserves four top-level fields" % rarity_id, failures)
 		TestAssertions.truthy(not origin.has("generator_version"), "%s generator provenance is not top-level" % rarity_id, failures)
 		TestAssertions.equal(origin["source"]["generation"]["generator_version"], 1, "%s generator version is nested under source" % rarity_id, failures)
+		TestAssertions.equal(origin["source"]["generation"]["selected_base_id"], "forge_vanguard_sword", "%s selected base provenance is exact" % rarity_id, failures)
+		TestAssertions.equal(origin["source"]["generation"]["selected_rarity_id"], String(rarity_id), "%s selected rarity provenance is exact" % rarity_id, failures)
+		TestAssertions.equal(origin["source"]["generation"]["forced_base_id"], "forge_vanguard_sword", "%s authorized forced base provenance is exact" % rarity_id, failures)
+		TestAssertions.equal(origin["source"]["generation"]["forced_rarity_id"], String(rarity_id), "%s authorized forced rarity provenance is exact" % rarity_id, failures)
 		var decoded := ItemInstanceCodec.decode(JSON.parse_string(ItemInstanceCodec.encode(result.item)), equipment, foundation)
 		TestAssertions.truthy(decoded.ok(), "%s encoded item decodes" % rarity_id, failures)
 		if decoded.ok():
@@ -58,12 +66,14 @@ func _test_deterministic_sequences(equipment: EquipmentCatalog, foundation: Item
 	TestAssertions.truthy(first.ok() and repeated.ok(), "repeated request results succeed", failures)
 	if first.ok() and repeated.ok():
 		TestAssertions.equal(first.item.to_dictionary(), repeated.item.to_dictionary(), "same request and item sequence repeat exactly", failures)
+		TestAssertions.equal(_generation_content(first.item), CONTENT_SEQUENCE_SEVEN, "sequence seven generation content is exact", failures)
 	var changed_request := _request(&"rare")
 	changed_request.generation_sequence += 1
 	var changed := ItemGenerationService.generate(changed_request, ISSUER_NAMESPACE, caller_item_sequence, equipment, foundation)
 	TestAssertions.truthy(changed.ok(), "changed generation sequence succeeds", failures)
 	if first.ok() and changed.ok():
-		TestAssertions.truthy(first.item.to_dictionary() != changed.item.to_dictionary(), "generation sequence changes deterministic output", failures)
+		TestAssertions.equal(_generation_content(changed.item), CONTENT_SEQUENCE_EIGHT, "sequence eight generation content is exact", failures)
+		TestAssertions.truthy(_generation_content(first.item) != _generation_content(changed.item), "generation sequence changes generated affixes independently of identity and origin", failures)
 	TestAssertions.equal(caller_item_sequence, 401, "successful generation does not mutate caller item sequence", failures)
 
 func _test_structured_failures(equipment: EquipmentCatalog, foundation: ItemFoundationCatalog, failures: Array[String]) -> void:
@@ -71,19 +81,35 @@ func _test_structured_failures(equipment: EquipmentCatalog, foundation: ItemFoun
 	_assert_failure(invalid, null, &"request", &"invalid_request", failures)
 	TestAssertions.truthy(String(invalid.failure.details.get("message", "")).begins_with("PARTY_FORGE_ITEM_GENERATION_ERROR"), "invalid request carries exact structured diagnostic", failures)
 
+	var missing_foundation_request := _request(&"common")
+	var missing_foundation := ItemGenerationService.generate(missing_foundation_request, ISSUER_NAMESPACE, 1, equipment, null)
+	_assert_failure(missing_foundation, missing_foundation_request, &"request", &"invalid_request", failures)
+	TestAssertions.equal(missing_foundation.failure.details, {"message": "PARTY_FORGE_ITEM_GENERATION_ERROR stage=request field=foundation reason=manifest missing"}, "missing foundation has a stable diagnostic", failures)
+
+	var missing_equipment_request := _request(&"common")
+	var missing_equipment := ItemGenerationService.generate(missing_equipment_request, ISSUER_NAMESPACE, 1, null, foundation)
+	_assert_failure(missing_equipment, missing_equipment_request, &"base", &"no_eligible_base", failures)
+	TestAssertions.equal(missing_equipment.failure.details, {"rejected": {"<catalog>": "equipment_catalog_missing"}}, "missing equipment has a stable base rejection", failures)
+
 	var base_request := _request(&"common")
 	base_request.forced_base_id = &"missing_base"
-	_assert_failure(ItemGenerationService.generate(base_request, ISSUER_NAMESPACE, 2, equipment, foundation), base_request, &"base", &"no_eligible_base", failures)
+	var base_failure := ItemGenerationService.generate(base_request, ISSUER_NAMESPACE, 2, equipment, foundation)
+	_assert_failure(base_failure, base_request, &"base", &"no_eligible_base", failures)
+	TestAssertions.equal(base_failure.failure.details, {"rejected": {"missing_base": "unknown_forced_base"}}, "base failure copies canonical selector rejection summary", failures)
 
 	var rarity_request := _request(&"mythic")
-	_assert_failure(ItemGenerationService.generate(rarity_request, ISSUER_NAMESPACE, 3, equipment, foundation), rarity_request, &"rarity", &"no_eligible_rarity", failures)
+	var rarity_failure := ItemGenerationService.generate(rarity_request, ISSUER_NAMESPACE, 3, equipment, foundation)
+	_assert_failure(rarity_failure, rarity_request, &"rarity", &"no_eligible_rarity", failures)
+	TestAssertions.equal(rarity_failure.failure.details.get("rejected", {}).get("mythic", ""), "ordinary_generation_disabled", "rarity failure copies relevant canonical selector rejection", failures)
 
 	var pattern_foundation := foundation.duplicate(true) as ItemFoundationCatalog
 	var common_index := pattern_foundation.rarities.find(pattern_foundation.rarity(&"common"))
 	pattern_foundation.rarities[common_index] = pattern_foundation.rarities[common_index].duplicate(true) as ItemRarityDefinition
 	pattern_foundation.rarities[common_index].patterns = []
 	var pattern_request := _request(&"common")
-	_assert_failure(ItemGenerationService.generate(pattern_request, ISSUER_NAMESPACE, 4, equipment, pattern_foundation), pattern_request, &"pattern", &"no_eligible_pattern", failures)
+	var pattern_failure := ItemGenerationService.generate(pattern_request, ISSUER_NAMESPACE, 4, equipment, pattern_foundation)
+	_assert_failure(pattern_failure, pattern_request, &"pattern", &"no_eligible_pattern", failures)
+	TestAssertions.equal(pattern_failure.failure.details, {"rarity_id": "common", "rejected": {"common": "no_eligible_pattern"}}, "pattern failure copies canonical selector rejection summary", failures)
 
 	var affix_request := _request(&"uncommon")
 	affix_request.forced_base_id = &"forge_vanguard_helmet"
@@ -107,6 +133,18 @@ func _test_structured_failures(equipment: EquipmentCatalog, foundation: ItemFoun
 	_assert_failure(issuer_failure, issuer_request, &"issuance", &"issuer_rejected", failures)
 	TestAssertions.truthy(String(issuer_failure.failure.details.get("message", "")).contains("field=issuer_namespace"), "issuer failure preserves issuer diagnostic", failures)
 	TestAssertions.equal(caller_item_sequence, 77, "failed generation does not mutate caller item sequence", failures)
+
+	var negative_item_sequence := -1
+	var negative_sequence_failure := ItemGenerationService.generate(issuer_request, ISSUER_NAMESPACE, negative_item_sequence, equipment, foundation)
+	_assert_failure(negative_sequence_failure, issuer_request, &"issuance", &"issuer_rejected", failures)
+	TestAssertions.truthy(String(negative_sequence_failure.failure.details.get("message", "")).contains("field=sequence"), "negative item sequence preserves issuer diagnostic", failures)
+	TestAssertions.equal(negative_item_sequence, -1, "negative caller item sequence remains unchanged", failures)
+
+	var oversized_item_sequence := ItemInstanceCodec.JSON_SAFE_INTEGER_MAX + 1
+	var oversized_sequence_failure := ItemGenerationService.generate(issuer_request, ISSUER_NAMESPACE, oversized_item_sequence, equipment, foundation)
+	_assert_failure(oversized_sequence_failure, issuer_request, &"issuance", &"issuer_rejected", failures)
+	TestAssertions.truthy(String(oversized_sequence_failure.failure.details.get("message", "")).contains("field=sequence"), "oversized item sequence preserves issuer diagnostic", failures)
+	TestAssertions.equal(oversized_item_sequence, ItemInstanceCodec.JSON_SAFE_INTEGER_MAX + 1, "oversized caller item sequence remains unchanged", failures)
 
 func _test_codec_immutability(equipment: EquipmentCatalog, foundation: ItemFoundationCatalog, failures: Array[String]) -> void:
 	var generated := ItemGenerationService.generate(_request(&"rare"), ISSUER_NAMESPACE, 103, equipment, foundation)
@@ -139,6 +177,7 @@ func _assert_failure(result: ItemGenerationResult, request: ItemGenerationReques
 		return
 	TestAssertions.equal(result.failure.stage, stage, "%s failure records stage" % stage, failures)
 	TestAssertions.equal(result.failure.code, code, "%s failure records stable code" % stage, failures)
+	TestAssertions.equal(result.failure.generator_version, 1, "%s failure records generator version" % stage, failures)
 	if request != null:
 		TestAssertions.equal(result.failure.source_id, request.source_id, "%s failure copies request source" % stage, failures)
 		TestAssertions.equal(result.failure.seed, request.seed, "%s failure copies request seed" % stage, failures)
@@ -150,3 +189,17 @@ func _request(rarity_id: StringName) -> ItemGenerationRequest:
 	request.forced_rarity_id = rarity_id
 	request.unlock_tags = [&"rarity_rare_unlocked", &"rarity_epic_unlocked", &"rarity_legendary_unlocked"]
 	return request
+
+func _golden_with_provenance(golden: String, rarity_id: StringName) -> String:
+	var replacement := "\"generation\":{\"domain\":\"ordinary_drop\",\"forced_base_id\":\"forge_vanguard_sword\",\"forced_rarity_id\":\"%s\",\"generator_version\":1,\"item_level\":750,\"request_sequence\":7,\"selected_base_id\":\"forge_vanguard_sword\",\"selected_rarity_id\":\"%s\",\"source_id\":\"ordinary_enemy\"}" % [rarity_id, rarity_id]
+	return golden.replace(GENERATION_PROVENANCE_BEFORE, replacement)
+
+func _generation_content(item: ItemInstance) -> String:
+	var affixes: Array[Dictionary] = []
+	for affix: ItemAffixInstance in item.affixes:
+		affixes.append(affix.to_dictionary())
+	return JSON.stringify({
+		"affixes": affixes,
+		"base_definition_id": String(item.base_definition_id),
+		"rarity_id": String(item.rarity_id),
+	})

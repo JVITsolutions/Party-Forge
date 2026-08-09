@@ -137,6 +137,7 @@ func _test_request_validation(foundation: ItemFoundationCatalog, failures: Array
 
 func _test_structured_outcomes(failures: Array[String]) -> void:
 	var failure := ItemGenerationFailure.new()
+	failure.generator_version = 1
 	failure.stage = &"rarity"
 	failure.code = &"no_eligible_rarity"
 	failure.source_id = &"ordinary_enemy"
@@ -144,7 +145,7 @@ func _test_structured_outcomes(failures: Array[String]) -> void:
 	failure.generation_sequence = 4
 	TestAssertions.equal(
 		failure.message(),
-		"PARTY_FORGE_ITEM_GENERATION_ERROR stage=rarity code=no_eligible_rarity source=ordinary_enemy seed=991 sequence=4",
+		"PARTY_FORGE_ITEM_GENERATION_ERROR generator_version=1 stage=rarity code=no_eligible_rarity source=ordinary_enemy seed=991 sequence=4",
 		"structured failure has stable message",
 		failures
 	)
