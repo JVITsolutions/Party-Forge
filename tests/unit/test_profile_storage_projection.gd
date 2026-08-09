@@ -6,6 +6,7 @@ func run() -> Array[String]:
 	var failures: Array[String] = []
 	_test_owned_action_consumer_parity(failures)
 	_test_support_range_comparison(failures)
+	_test_healing_profile_preview_apply_parity(failures)
 	_test_disabled_cascade_projection(failures)
 	_test_rejected_preview_suppresses_raw_fallback(failures)
 	_test_two_hand_displacement_projection(failures)
@@ -173,6 +174,65 @@ func _test_support_range_comparison(failures: Array[String]) -> void:
 	), "support-only range change produces a healing action comparison row", failures)
 
 
+func _test_healing_profile_preview_apply_parity(failures: Array[String]) -> void:
+	var cleric := GameCatalog.load_defaults().class_by_id(&"cleric")
+	var ring := _item_with_affix("healing-comparison-ring", &"mercy_ring", 39, _wise(5.0))
+	var profile := ProfileState.new_profile(PROFILE_ID, "Healing Comparison", 1000)
+	profile.item_records = ItemRegistry.new([ring] as Array[ItemInstance]).to_dictionary()
+	profile.leader_loadout = ItemSlotContainer.create(
+		&"leader-loadout", ItemSlotContainer.PROFILE_LEADER_EQUIPMENT, profile.profile_id,
+		EquipmentSlotIndex.capacity(),
+	).to_dictionary()
+	profile.leader_loadout_class_id = "cleric"
+	profile.stash_tabs = [_stash(&"stash-tab-healing", {0: ring.instance_id})]
+	var current_projection := ProfileStorageProjection.from_profile(
+		profile, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG, GameCatalog.STAT_CATALOG, cleric,
+	)
+	TestAssertions.truthy(current_projection.valid, "healing comparison profile projects", failures)
+	if not current_projection.valid:
+		return
+	var preview_rows: Array = current_projection.comparison_lines_by_slot(ring.instance_id).get("ring_left", [])
+	var request := ProfileLoadoutAssignmentRequest.create(
+		"healing-comparison-apply",
+		profile.profile_id,
+		&"cleric",
+		ring.instance_id,
+		&"stash-tab-healing",
+		0,
+		&"leader-loadout",
+		EquipmentSlotIndex.index_for(&"ring_left"),
+		"",
+		ProfileLoadoutAssignmentRequest.fingerprint_for(profile),
+	)
+	var root := "user://tests/task10l_healing_comparison_%d" % OS.get_process_id()
+	ProfileTestSupport.remove_tree(root)
+	var store := ProfileStore.new()
+	TestAssertions.equal(store.save_profile(profile, root), "", "healing comparison profile saves for apply parity", failures)
+	var service := ProfileLoadoutAssignmentService.new(ProfileMutationService.new(store))
+	var applied := service.apply(profile.profile_id, request, root)
+	TestAssertions.truthy(applied.ok(), "healing comparison profile apply succeeds error=%s" % applied.error, failures)
+	if applied.ok():
+		var applied_projection := ProfileStorageProjection.from_profile(
+			applied.profile, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG, GameCatalog.STAT_CATALOG, cleric,
+		)
+		TestAssertions.truthy(applied_projection.valid, "applied healing profile projects", failures)
+		if applied_projection.valid:
+			var current_heal := _estimate_by_id(current_projection, cleric.support_action.id)
+			var applied_heal := _estimate_by_id(applied_projection, cleric.support_action.id)
+			TestAssertions.truthy(current_heal != null and applied_heal != null, "preview and applied profile expose the same owned healing action", failures)
+			if current_heal != null and applied_heal != null:
+				var expected_deltas := {
+					&"action:cleric_heal:healing_amount": applied_heal.healing_amount - current_heal.healing_amount,
+					&"action:cleric_heal:uses_per_second": applied_heal.attacks_per_second - current_heal.attacks_per_second,
+					&"action:cleric_heal:estimated_hps": applied_heal.estimated_hps - current_heal.estimated_hps,
+				}
+				for stat_id: StringName in expected_deltas:
+					var row := _comparison_row(preview_rows, stat_id)
+					TestAssertions.truthy(not row.is_empty(), "profile preview includes %s" % stat_id, failures)
+					TestAssertions.near(float(row.get("delta", 0.0)), float(expected_deltas[stat_id]), 0.0001, "profile preview %s matches the applied shared estimate" % stat_id, failures)
+	ProfileTestSupport.remove_tree(root)
+
+
 func _test_disabled_cascade_projection(failures: Array[String]) -> void:
 	var equipment := _requirements_catalog()
 	var foundation := GameCatalog.ITEM_FOUNDATION_CATALOG.duplicate(true) as ItemFoundationCatalog
@@ -321,6 +381,36 @@ func _stout(value: float) -> ItemAffixInstance:
 	result.tier = 1
 	result.rolls = [roll]
 	return result
+
+
+func _wise(value: float) -> ItemAffixInstance:
+	var roll := ItemModifierRoll.new()
+	roll.stat_id = &"wisdom"
+	roll.operation = StatModifier.Operation.FLAT
+	roll.value = value
+	var result := ItemAffixInstance.new()
+	result.definition_id = &"wise"
+	result.affix_kind = "prefix"
+	result.tier = 2
+	result.rolls = [roll]
+	return result
+
+
+func _estimate_by_id(projection: ProfileStorageProjection, action_id: StringName) -> ActionCombatEstimate:
+	var activation := projection.get("_current_activation") as EquipmentActivationResult
+	var estimates := projection.call("_action_estimates", activation) as Array
+	for value: Variant in estimates:
+		var estimate := value as ActionCombatEstimate
+		if estimate != null and estimate.action_id == action_id:
+			return estimate
+	return null
+
+
+func _comparison_row(rows: Array, stat_id: StringName) -> Dictionary:
+	for value: Variant in rows:
+		if value is Dictionary and StringName(String((value as Dictionary).get("stat_id", ""))) == stat_id:
+			return value as Dictionary
+	return {}
 
 func _stash(id: StringName, slots: Dictionary) -> Dictionary:
 	return ItemSlotContainer.create(id, ItemSlotContainer.PROFILE_STASH_TAB, PROFILE_ID, 100, slots).to_dictionary()

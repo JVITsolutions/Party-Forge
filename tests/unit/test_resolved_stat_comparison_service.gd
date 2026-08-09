@@ -16,6 +16,7 @@ func run() -> Array[String]:
 	_test_delta_formatting_ignores_absolute_stat_bounds(resolved_service, failures)
 	_test_attribute_derived_final_stats(resolved_service, failures)
 	_test_action_and_disabled_warning_rows(equipment_service, failures)
+	_test_healing_action_rows(equipment_service, failures)
 	return failures
 
 
@@ -127,6 +128,66 @@ func _test_action_and_disabled_warning_rows(service: Script, failures: Array[Str
 		TestAssertions.equal(warning[0].get("direction"), -1, "disabled warning is harmful", failures)
 		TestAssertions.truthy(String(warning[0].get("text", "")).begins_with("▼ Warning:"), "disabled warning has symbol and prominence", failures)
 		TestAssertions.truthy(String(warning[0].get("accessible_text", "")).contains("Dependent Plate") and String(warning[0].get("accessible_text", "")).contains("Requires Strength 15 (has 10)"), "disabled warning names item and exact requirement", failures)
+
+
+func _test_healing_action_rows(service: Script, failures: Array[String]) -> void:
+	var current := _healing_estimate(50.0, 1.0, 50.0, 10.0)
+	var improved := _healing_estimate(60.0, 1.25, 75.0, 10.0)
+	var improved_rows: Array = service.call(
+		"compare", ResolvedStatSnapshot.new(), ResolvedStatSnapshot.new(), GameCatalog.STAT_CATALOG,
+		[current], [improved],
+	)
+	for expected: Dictionary in [
+		{"stat_id": &"action:cleric_heal:healing_amount", "label": "Healing / Use", "delta": 10.0},
+		{"stat_id": &"action:cleric_heal:uses_per_second", "label": "Uses / Second", "delta": 0.25},
+		{"stat_id": &"action:cleric_heal:estimated_hps", "label": "Estimated HPS", "delta": 25.0},
+	]:
+		var row := _row(improved_rows, expected["stat_id"])
+		TestAssertions.near(float(row.get("delta", 0.0)), float(expected["delta"]), 0.0001, "%s increase uses the shared estimate delta" % expected["label"], failures)
+		TestAssertions.equal(row.get("direction"), 1, "%s increase is beneficial" % expected["label"], failures)
+		TestAssertions.truthy(not String(row.get("text", "")).begins_with("Cleric Heal") and String(row.get("text", "")).contains(expected["label"]), "%s increase has a visible prefix indicator" % expected["label"], failures)
+		TestAssertions.truthy("improved" in String(row.get("accessible_text", "")).to_lower(), "%s increase exposes accessible benefit wording" % expected["label"], failures)
+
+	var reduced := _healing_estimate(40.0, 0.75, 30.0, 10.0)
+	var reduced_rows: Array = service.call(
+		"compare", ResolvedStatSnapshot.new(), ResolvedStatSnapshot.new(), GameCatalog.STAT_CATALOG,
+		[current], [reduced],
+	)
+	for stat_id: StringName in [
+		&"action:cleric_heal:healing_amount",
+		&"action:cleric_heal:uses_per_second",
+		&"action:cleric_heal:estimated_hps",
+	]:
+		var row := _row(reduced_rows, stat_id)
+		TestAssertions.equal(row.get("direction"), -1, "%s decrease is harmful" % stat_id, failures)
+		TestAssertions.truthy(not String(row.get("text", "")).begins_with("Cleric Heal"), "%s decrease has a visible prefix indicator" % stat_id, failures)
+		TestAssertions.truthy("reduced" in String(row.get("accessible_text", "")).to_lower(), "%s decrease exposes accessible loss wording" % stat_id, failures)
+
+	var geometry_only := _healing_estimate(50.0, 1.0, 50.0, 12.0)
+	var geometry_rows: Array = service.call(
+		"compare", ResolvedStatSnapshot.new(), ResolvedStatSnapshot.new(), GameCatalog.STAT_CATALOG,
+		[current], [geometry_only],
+	)
+	TestAssertions.truthy(not _row(geometry_rows, &"action:cleric_heal:range").is_empty(), "geometry-only healing change keeps its range row", failures)
+	for stat_id: StringName in [
+		&"action:cleric_heal:healing_amount",
+		&"action:cleric_heal:uses_per_second",
+		&"action:cleric_heal:estimated_hps",
+	]:
+		TestAssertions.truthy(_row(geometry_rows, stat_id).is_empty(), "geometry-only healing change does not invent %s drift" % stat_id, failures)
+
+
+func _healing_estimate(healing_amount: float, uses_per_second: float, hps: float, action_range: float) -> ActionCombatEstimate:
+	var result := ActionCombatEstimate.new()
+	result.action_id = &"cleric_heal"
+	result.display_name = "Cleric Heal"
+	result.available = true
+	result.is_healing = true
+	result.healing_amount = healing_amount
+	result.attacks_per_second = uses_per_second
+	result.estimated_hps = hps
+	result.range = action_range
+	return result
 
 
 func _definition(id: StringName, display_name: String, direction: int) -> StatDefinition:
