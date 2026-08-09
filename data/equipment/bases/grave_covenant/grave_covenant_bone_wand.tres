@@ -16,4 +16,5 @@ reserved_slot_ids = []
 compatible_offhand_item_types = []
 weapon_family_id = &"wand"
 implicit_family_id = &"grave_covenant"
+generation_tags = [&"caster"]
 presentation = ExtResource("2")

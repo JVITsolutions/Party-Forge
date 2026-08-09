@@ -1,9 +1,22 @@
 extends RefCounted
 
+const LIVE_SET_ARCHETYPES := {
+	"dawn_bulwark": &"melee",
+	"forge_vanguard": &"melee",
+	"nightstep": &"melee",
+	"greenwood": &"ranged",
+	"siege_archer": &"ranged",
+	"emberweave": &"caster",
+	"grave_covenant": &"caster",
+	"rime_scholar": &"caster",
+	"storm_chaplain": &"caster",
+}
+
 func run() -> Array[String]:
 	var failures: Array[String] = []
 	_test_normalized_base_tags_and_validation(failures)
 	_test_weight_policy(failures)
+	_test_live_catalog_smart_loot_archetypes(failures)
 	_test_base_selection_soft_bias_and_stability(failures)
 	_test_base_selection_hard_filters(failures)
 	_test_forced_base_rejections(failures)
@@ -80,6 +93,49 @@ func _test_weight_policy(failures: Array[String]) -> void:
 	tier.base_weight = 50.0
 	TestAssertions.near(ItemGenerationWeightPolicy.tier_weight(tier, request), 80.0, 0.00001, "tier weight uses exact progress factor", failures)
 	TestAssertions.near(ItemGenerationWeightPolicy.roll_quality(0.5, 100.0), 0.541497215, 0.00001, "roll quality uses exact Charisma exponent", failures)
+
+func _test_live_catalog_smart_loot_archetypes(failures: Array[String]) -> void:
+	var equipment := GameCatalog.EQUIPMENT_CATALOG
+	var foundation := GameCatalog.ITEM_FOUNDATION_CATALOG
+	var normalized_union: Array[StringName] = []
+	var expected_melee_ids: Array[StringName] = []
+	TestAssertions.equal(equipment.definitions.size(), 99, "live smart-loot authoring covers all 99 catalogued bases", failures)
+	for base: EquipmentBaseDefinition in equipment.definitions:
+		if base == null:
+			continue
+		var set_id := base.resource_path.get_base_dir().get_file()
+		var expected_tag: StringName = LIVE_SET_ARCHETYPES.get(set_id, &"")
+		TestAssertions.truthy(not expected_tag.is_empty(), "%s belongs to a registered equipment-set directory" % base.id, failures)
+		TestAssertions.equal(base.generation_tags, [expected_tag], "%s authors exactly its %s class identity" % [base.id, expected_tag], failures)
+		if expected_tag == &"melee":
+			expected_melee_ids.append(base.id)
+		for tag: StringName in base.normalized_generation_tags():
+			if tag not in normalized_union:
+				normalized_union.append(tag)
+	for required_tag: StringName in [&"melee", &"ranged", &"caster", &"global"]:
+		TestAssertions.truthy(required_tag in normalized_union, "live normalized generation union includes %s" % required_tag, failures)
+
+	var request := _request()
+	request.party_archetype_tags = [&"melee"]
+	var melee := equipment.definition(&"forge_vanguard_sword")
+	var off_party := equipment.definition(&"greenwood_recurve_bow")
+	var global_capable := equipment.definition(&"cinder_ring")
+	TestAssertions.equal(ItemGenerationWeightPolicy.base_weight(melee, request), melee.generation_weight * 3.0, "representative live melee base receives exact 3.0x weight", failures)
+	TestAssertions.equal(ItemGenerationWeightPolicy.base_weight(off_party, request), off_party.generation_weight, "representative off-party live base retains authored weight", failures)
+	TestAssertions.truthy(ItemGenerationWeightPolicy.base_weight(off_party, request) > 0.0, "representative off-party live base remains eligible", failures)
+	TestAssertions.truthy(&"global" in global_capable.normalized_generation_tags(), "unrestricted live base retains normalized global capability", failures)
+	TestAssertions.equal(ItemGenerationWeightPolicy.base_weight(global_capable, request), global_capable.generation_weight, "global-capable off-party base retains authored weight", failures)
+	TestAssertions.truthy(ItemGenerationWeightPolicy.base_weight(global_capable, request) > 0.0, "global-capable off-party live base remains eligible", failures)
+
+	request = _request()
+	request.required_base_tags = [&"melee"]
+	TestAssertions.equal(request.validate(foundation), "", "required live melee base tag validates against the canonical manifest", failures)
+	var trace := ItemGenerationTrace.new()
+	var selected := ItemBaseSelector.select(request, equipment, trace)
+	expected_melee_ids.sort_custom(func(left: StringName, right: StringName) -> bool: return String(left) < String(right))
+	TestAssertions.truthy(selected != null and &"melee" in selected.normalized_generation_tags(), "required melee selection returns a live melee base", failures)
+	if not trace.stages.is_empty():
+		TestAssertions.equal((trace.stages[0] as Dictionary)["eligible"], Array(expected_melee_ids, TYPE_STRING, &"", null), "required melee filter exposes exactly the live melee candidates", failures)
 
 func _test_base_selection_soft_bias_and_stability(failures: Array[String]) -> void:
 	var melee := _base(&"melee_base", [&"melee"])

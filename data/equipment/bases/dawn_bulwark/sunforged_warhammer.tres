@@ -16,4 +16,5 @@ reserved_slot_ids = []
 compatible_offhand_item_types = []
 weapon_family_id = &"one_hand_hammer"
 implicit_family_id = &"dawn_bulwark"
+generation_tags = [&"melee"]
 presentation = ExtResource("2")

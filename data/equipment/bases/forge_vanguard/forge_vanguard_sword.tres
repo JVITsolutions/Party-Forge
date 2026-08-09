@@ -14,4 +14,5 @@ implicit_affix_ids = [&"tempered_edge"]
 handedness_id = &"one_hand"
 weapon_family_id = &"one_hand_sword"
 implicit_family_id = &"forge_vanguard"
+generation_tags = [&"melee"]
 presentation = ExtResource("2")

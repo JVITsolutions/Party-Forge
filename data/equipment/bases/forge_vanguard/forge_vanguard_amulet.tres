@@ -13,4 +13,5 @@ weight_class_id = &"accessory"
 handedness_id = &"none"
 weapon_family_id = &""
 implicit_family_id = &"forge_vanguard"
+generation_tags = [&"melee"]
 presentation = ExtResource("2")

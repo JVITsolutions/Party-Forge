@@ -46,7 +46,7 @@ $godot = 'C:\Users\Jacob\AppData\Local\Microsoft\WinGet\Packages\GodotEngine.God
 ```
 
 - Exit: `0`.
-- Duration: `4.716s` measured inside PowerShell after final review corrections.
+- Duration: `4.580s` measured inside PowerShell after live smart-loot archetype authoring.
 - Forbidden diagnostic count for `SCRIPT ERROR`, `Parse Error`, `No loader found`, failed-resource text, and failed resource loads: `0`.
 
 ### Focused Increment 1 batch
@@ -56,7 +56,7 @@ $godot = 'C:\Users\Jacob\AppData\Local\Microsoft\WinGet\Packages\GodotEngine.God
 ```
 
 - Exit: `0`.
-- Duration: `12.230s` after final review corrections.
+- Duration: `12.340s` after live smart-loot archetype authoring.
 - Exact summary: `TEST_SUMMARY: PASS (0 failures)` once.
 - `TEST_FAILURE` count: `0`.
 
@@ -67,7 +67,7 @@ $godot = 'C:\Users\Jacob\AppData\Local\Microsoft\WinGet\Packages\GodotEngine.God
 ```
 
 - Exit: `0`.
-- Duration: `107.223s` after final review corrections.
+- Duration: `108.380s` after live smart-loot archetype authoring.
 - Exact summary: `TEST_SUMMARY: PASS (156 suites)` once.
 - `TEST_FAILURE` count: `0`.
 - Script/parse/loader error count: `0`.
@@ -81,7 +81,7 @@ $godot = 'C:\Users\Jacob\AppData\Local\Microsoft\WinGet\Packages\GodotEngine.God
 ```
 
 - Exit: `0`.
-- Duration: `1.834s` after final review corrections.
+- Duration: `1.785s` after live smart-loot archetype authoring.
 - `PARTY_FORGE_BOOT_OK`: exactly once.
 - `PARTY_FORGE_CLASS_SELECTION_READY`: exactly once.
 - Script/parse/loader/resource-load error count: `0`.
@@ -117,6 +117,22 @@ Final review identified three reachability/vocabulary gaps and one distribution 
 - Charisma distribution now separately proves `rate_1000 > rate_100 > rate_0` and that the marginal gain from 100 to 1000 is smaller than the gain from 0 to 100. Both exact replay hashes remained unchanged.
 
 The review-fix commit adds only the canonical manifest, foundation/request contracts, their focused tests, and this verification record. No schema, ownership, issuer sequence, profile, save, cache, UID, or production-wiring file is included.
+
+## Live smart-loot archetype authoring
+
+Final live-data review found that the smart-loot policy and synthetic tests were correct, but none of the 99 live equipment bases authored a class-identity `generation_tags` value. A live-catalog regression was written first and observed RED with `TEST_SUMMARY: FAIL (104 failures)`: all 99 resources lacked their expected directory identity, the normalized union lacked `melee`, the representative Fighter base remained at 1.0x, request validation rejected `required_base_tags = [&"melee"]`, and live melee selection had no eligible candidates.
+
+The data correction authors exactly one explicit class identity on every live base, based on its equipment-set directory rather than inferring from a broad `martial` tag:
+
+- melee: Dawn Bulwark, Forge Vanguard, and Nightstep (`34` bases);
+- ranged: Greenwood and Siege Archer (`22` bases);
+- caster: Emberweave, Grave Covenant, Rime Scholar, and Storm Chaplain (`43` bases).
+
+A mechanical audit found exactly `99` tag lines and zero directory/tag mismatches. Unrestricted bases continue to gain `global` through `normalized_generation_tags()`, so the exact live normalized union now includes `melee`, `ranged`, `caster`, and `global`. The canonical `known_item_tags` manifest was updated with `melee`.
+
+The regression reads `GameCatalog.EQUIPMENT_CATALOG`, proves every catalogued resource path maps to its expected set and exact authored identity, proves a representative live melee base receives the exact 3.0x multiplier, proves live off-party and global-capable bases retain positive authored weight, and proves a validated `required_base_tags = [&"melee"]` request exposes exactly the 34 live melee candidates. Its GREEN rerun was `TEST_SUMMARY: PASS (0 failures)`.
+
+The required focused batch retained both deterministic replay hashes unchanged. This follow-up changes only the 99 equipment base resources, the canonical item-foundation manifest, the live regression, and this verification record; no script, UID, profile/save, or cache file is included.
 
 ## Deferred items assessed
 

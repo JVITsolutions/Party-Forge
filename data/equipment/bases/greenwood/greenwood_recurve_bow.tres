@@ -16,4 +16,5 @@ reserved_slot_ids = [&"off_hand"]
 compatible_offhand_item_types = [&"quiver"]
 weapon_family_id = &"light_bow"
 implicit_family_id = &"greenwood"
+generation_tags = [&"ranged"]
 presentation = ExtResource("2")

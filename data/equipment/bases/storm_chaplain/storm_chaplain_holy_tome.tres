@@ -16,4 +16,5 @@ reserved_slot_ids = []
 compatible_offhand_item_types = []
 weapon_family_id = &"tome"
 implicit_family_id = &"storm_chaplain"
+generation_tags = [&"caster"]
 presentation = ExtResource("2")
