@@ -17,7 +17,182 @@ func run() -> Array[String]:
 	_test_atomic_progression_and_leader_queue(failures)
 	_test_future_recruits_initialize_once(failures)
 	_test_actor_binding_availability_and_position(failures)
+	_test_atomic_equipment_commit_and_member_local_cache(failures)
+	_test_equipment_source_rejection_rolls_back(failures)
+	_test_resume_reconstructs_equipment_activation(failures)
 	return failures
+
+func _test_atomic_equipment_commit_and_member_local_cache(failures: Array[String]) -> void:
+	var fixture := _configured_fixture(PartyManager.new(), 1)
+	var context := fixture.context as PlayerRunContext
+	var party := fixture.party as PartyManager
+	var has_preview := context.has_method(&"preview_equipment_assignment")
+	var has_activation := context.has_method(&"equipment_activation")
+	TestAssertions.truthy(has_preview, "run context exposes pure equipment transition preview", failures)
+	TestAssertions.truthy(has_activation, "run context exposes resolved equipment activation", failures)
+	if not has_preview or not has_activation:
+		party.free()
+		return
+	var item := _issue_stout_helmet(context, 0, 0, failures)
+	if item == null:
+		party.free()
+		return
+	var item_before := JSON.stringify(item.to_dictionary())
+	var state_before := JSON.stringify(context.item_state().to_dictionary())
+	var member_one_before := party.stats_for(1)
+	var member_two_before := party.stats_for(2)
+	var action_tags: Array[StringName] = [&"ranged", &"physical"]
+	var member_two_action_before := party.stats_for_action(2, action_tags)
+	var events: Array[int] = []
+	var observations: Array[Dictionary] = []
+	party.stats_changed.connect(func(member_id: int) -> void:
+		events.append(member_id)
+		if member_id == 1:
+			var activation: EquipmentActivationResult = context.call(&"equipment_activation", 1)
+			observations.append({
+				"active": activation != null and activation.is_active(item.instance_id),
+				"equipped": context.equipment_for(1).item_id_at(EquipmentSlotIndex.index_for(&"helmet")),
+				"maximum": party.stats_for(1).value(&"max_health"),
+				"source_present": party.member_by_id(1).modifier_sources.any(func(source: StatModifierSource) -> bool: return source.id == &"equipment_member_1"),
+			})
+	)
+
+	var preview: Variant = context.call(
+		&"preview_equipment_assignment", 1, item.instance_id, &"helmet",
+		GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG,
+	)
+	TestAssertions.truthy(preview != null and preview.ok(), "run-context equipment preview succeeds", failures)
+	if preview != null and preview.ok():
+		TestAssertions.near(preview.resolution().final_stats.value(&"max_health"), member_one_before.value(&"max_health") + 9.0, 0.0001, "preview resolves constitution-derived health", failures)
+	TestAssertions.equal(JSON.stringify(context.item_state().to_dictionary()), state_before, "run-context preview preserves ownership", failures)
+	TestAssertions.equal(party.stats_for(1), member_one_before, "run-context preview preserves member cache", failures)
+	TestAssertions.equal(events, [], "run-context preview emits no stat signal", failures)
+
+	var equipped := context.assign_equipment(1, item.instance_id, &"helmet", GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)
+	TestAssertions.truthy(equipped.ok(), "run-context equipment commit succeeds", failures)
+	TestAssertions.equal(events, [1], "equipment commit emits one member-local stat signal", failures)
+	TestAssertions.equal(observations.size(), 1, "synchronous observer runs exactly once", failures)
+	if observations.size() == 1:
+		TestAssertions.truthy(bool(observations[0]["active"]), "observer sees committed activation", failures)
+		TestAssertions.equal(observations[0]["equipped"], item.instance_id, "observer sees committed ownership", failures)
+		TestAssertions.truthy(bool(observations[0]["source_present"]), "observer sees committed equipment source", failures)
+		TestAssertions.near(float(observations[0]["maximum"]), member_one_before.value(&"max_health") + 9.0, 0.0001, "observer sees final equipment stats", failures)
+	TestAssertions.equal(party.stats_for(2), member_two_before, "member one commit preserves member two base cache identity", failures)
+	TestAssertions.equal(party.stats_for_action(2, action_tags), member_two_action_before, "member one commit preserves member two action cache identity", failures)
+	TestAssertions.equal(JSON.stringify(item.to_dictionary()), item_before, "equipment commit leaves caller item immutable", failures)
+
+	var unequipped := context.assign_equipment(1, item.instance_id, &"", GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)
+	TestAssertions.truthy(unequipped.ok(), "run-context unequip commit succeeds", failures)
+	TestAssertions.equal(events, [1, 1], "unequip emits one additional member-local stat signal", failures)
+	TestAssertions.near(party.stats_for(1).value(&"max_health"), member_one_before.value(&"max_health"), 0.0001, "unequip removes equipment-derived health", failures)
+	TestAssertions.equal(party.stats_for(2), member_two_before, "unequip still preserves member two base cache identity", failures)
+	TestAssertions.equal(party.stats_for_action(2, action_tags), member_two_action_before, "unequip still preserves member two action cache identity", failures)
+	party.free()
+
+func _test_equipment_source_rejection_rolls_back(failures: Array[String]) -> void:
+	var fixture := _configured_fixture(RejectingPartyManager.new(), 1)
+	var context := fixture.context as PlayerRunContext
+	var party := fixture.party as RejectingPartyManager
+	if not context.has_method(&"equipment_activation"):
+		party.free()
+		return
+	var item := _issue_stout_helmet(context, 0, 0, failures)
+	if item == null:
+		party.free()
+		return
+	var state_before := JSON.stringify(context.item_state().to_dictionary())
+	var activation_before: EquipmentActivationResult = context.call(&"equipment_activation", 1)
+	var snapshot_before := party.stats_for(1)
+	var changed: Array[int] = []
+	party.stats_changed.connect(func(member_id: int) -> void: changed.append(member_id))
+	party.reject_growth_source = true
+	var result := context.assign_equipment(1, item.instance_id, &"helmet", GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)
+	TestAssertions.truthy(not result.ok(), "rejected equipment source fails commit", failures)
+	TestAssertions.equal(result.error, "PARTY_FORGE_EQUIPMENT_TRANSITION_ERROR member=1 reason=stat source commit rejected", "source rejection has stable transition diagnostic", failures)
+	TestAssertions.equal(JSON.stringify(context.item_state().to_dictionary()), state_before, "source rejection restores exact ownership", failures)
+	var activation_after: EquipmentActivationResult = context.call(&"equipment_activation", 1)
+	TestAssertions.equal(activation_after.active_item_ids, activation_before.active_item_ids, "source rejection restores prior activation", failures)
+	TestAssertions.equal(party.stats_for(1), snapshot_before, "source rejection preserves cached snapshot identity", failures)
+	TestAssertions.equal(changed, [], "source rejection emits no misleading stat signal", failures)
+	party.free()
+
+func _test_resume_reconstructs_equipment_activation(failures: Array[String]) -> void:
+	var probe := PlayerRunContext.new()
+	if not probe.has_method(&"equipment_activation"):
+		return
+	var catalog := GameCatalog.load_defaults()
+	var party := PartyManager.new()
+	party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
+	var item := _stout_helmet_record("item-resume-stout", "profile:profile-resume01", 0)
+	var item_before := JSON.stringify(item.to_dictionary())
+	var state := ItemOwnershipState.create("resume_player", ItemRegistry.new([item]), [
+		ItemSlotContainer.create(&"run-inventory", ItemSlotContainer.RUN_INVENTORY, "resume_player", 5),
+		ItemSlotContainer.create(&"run-equipment-001", ItemSlotContainer.RUN_MEMBER_EQUIPMENT, "resume_player", EquipmentSlotIndex.capacity(), {
+			EquipmentSlotIndex.index_for(&"helmet"): item.instance_id,
+		}),
+	])
+	var bootstrap := RunItemBootstrap.create(&"run-resume-task6", 7701, &"resume_player", 1, state)
+	var profile := ProfileState.new_profile("profile-resume01", "Resume Task 6", 1000)
+	profile.inventory_columns = 1
+	profile.resumable_run = ResumableRunItemCodec.encode(bootstrap)
+	var base_maximum := party.stats_for(1).value(&"max_health")
+	var context := PlayerRunContext.new()
+	var errors := context.configure(&"resume_player", 0, profile, 7701, party, 100, bootstrap)
+	TestAssertions.equal(errors, PackedStringArray(), "resume reconstructs valid equipment state", failures)
+	if errors.is_empty():
+		var activation: EquipmentActivationResult = context.call(&"equipment_activation", 1)
+		TestAssertions.truthy(activation.ok() and activation.is_active(item.instance_id), "resume reconstructs active equipment identity", failures)
+		TestAssertions.near(party.stats_for(1).value(&"max_health"), base_maximum + 9.0, 0.0001, "resume reconstructs equipment and derived stats", failures)
+		TestAssertions.equal(context.equipment_for(1).item_id_at(EquipmentSlotIndex.index_for(&"helmet")), item.instance_id, "resume retains exact equipped item", failures)
+	TestAssertions.equal(JSON.stringify(item.to_dictionary()), item_before, "resume reconstruction leaves immutable item record unchanged", failures)
+	party.free()
+
+func _issue_stout_helmet(context: PlayerRunContext, sequence: int, slot: int, failures: Array[String]) -> ItemInstance:
+	var item_data := {
+		"affixes": [_stout_affix_document()],
+		"base_definition_id": "forge_vanguard_helmet",
+		"item_level": 1,
+		"rarity_id": "common",
+	}
+	var issued := ItemInstanceIssuer.issue(
+		"run:%s:%s:%s" % [context.profile_id, context.run_seed, context.run_player_id],
+		sequence, "task_6", context.run_seed + sequence, item_data,
+		GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG,
+	)
+	TestAssertions.truthy(issued.ok(), "Task 6 stout helmet issues", failures)
+	if not issued.ok():
+		return null
+	var request := ItemTransactionRequest.create("task6-create-%d" % sequence, String(context.run_player_id), &"run-inventory", slot, issued.item)
+	var result := context.apply_item_transaction(request, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)
+	TestAssertions.equal(result.code, ItemTransactionResult.Code.OK, "Task 6 stout helmet enters run inventory", failures)
+	return issued.item if result.ok() else null
+
+func _stout_helmet_record(instance_id: String, issuer_namespace: String, sequence: int) -> ItemInstance:
+	var document := {
+		"schema_version": ItemInstance.SCHEMA_VERSION,
+		"instance_id": instance_id,
+		"base_definition_id": "forge_vanguard_helmet",
+		"item_level": 1,
+		"rarity_id": "common",
+		"affixes": [_stout_affix_document()],
+		"origin": {"issuer_namespace": issuer_namespace, "seed": 7701, "sequence": sequence, "source": "task_6_resume"},
+	}
+	var decoded := ItemInstanceCodec.decode(document, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)
+	assert(decoded.ok())
+	return decoded.item
+
+func _stout_affix_document() -> Dictionary:
+	return {
+		"definition_id": "stout",
+		"affix_kind": "prefix",
+		"tier": 1,
+		"rolls": [{
+			"stat_id": "constitution",
+			"operation": StatModifier.Operation.FLAT,
+			"value": 3.0,
+			"required_tags": [],
+		}],
+	}
 
 func _test_checked_out_item_bootstrap_identity_and_retry(failures: Array[String]) -> void:
 	var catalog := GameCatalog.load_defaults()
@@ -422,8 +597,9 @@ func _test_atomic_progression_and_leader_queue(failures: Array[String]) -> void:
 	TestAssertions.equal(context.progression_for(1).level, 2, "leader reaches level two", failures)
 	TestAssertions.equal(context.progression_for(2).level, 1, "leader award leaves follower unchanged", failures)
 	TestAssertions.equal(party.stats_for(1).value(&"strength"), 1.0, "fighter growth source resolves strength", failures)
-	TestAssertions.equal(party.member_by_id(1).modifier_sources.size(), 1, "leader receives one cumulative growth source", failures)
-	TestAssertions.equal(party.member_by_id(1).modifier_sources[0].id, &"character_growth_1", "leader growth source has stable ID", failures)
+	var growth_sources := party.member_by_id(1).modifier_sources.filter(func(source: StatModifierSource) -> bool: return source.id == &"character_growth_1")
+	TestAssertions.equal(growth_sources.size(), 1, "leader receives one cumulative growth source alongside equipment", failures)
+	TestAssertions.equal(growth_sources[0].id if not growth_sources.is_empty() else &"", &"character_growth_1", "leader growth source has stable ID", failures)
 	TestAssertions.equal(context.pending_leader_levels(), [2], "leader level enters ordered queue", failures)
 	TestAssertions.equal(context.current_pending_level(), 2, "current pending level is queue front", failures)
 	TestAssertions.equal(events, ["level:1:2", "changed:1"], "level signal precedes one progression signal", failures)
@@ -440,7 +616,7 @@ func _test_atomic_progression_and_leader_queue(failures: Array[String]) -> void:
 
 	var stored_before := context.progression_for(1).to_snapshot()
 	var queue_before := context.pending_leader_levels()
-	var source_before := party.member_by_id(1).modifier_sources[0]
+	var source_before := growth_sources[0] as StatModifierSource
 	var strength_before := party.stats_for(1).value(&"strength")
 	var event_count_before := events.size()
 	var original_growth := fighter.growth_definition
@@ -455,8 +631,9 @@ func _test_atomic_progression_and_leader_queue(failures: Array[String]) -> void:
 	TestAssertions.equal(context.pending_leader_levels(), queue_before, "invalid growth preserves queue", failures)
 	TestAssertions.equal(events.size(), event_count_before, "invalid growth emits no signals", failures)
 	TestAssertions.equal(party.stats_for(1).value(&"strength"), strength_before, "invalid growth preserves resolved attributes", failures)
-	TestAssertions.equal(party.member_by_id(1).modifier_sources[0].id, source_before.id, "invalid growth preserves source ID", failures)
-	TestAssertions.equal(party.member_by_id(1).modifier_sources[0].modifiers[0].value, source_before.modifiers[0].value, "invalid growth preserves source values", failures)
+	var growth_after := party.member_by_id(1).modifier_sources.filter(func(source: StatModifierSource) -> bool: return source.id == &"character_growth_1")
+	TestAssertions.equal(growth_after[0].id if not growth_after.is_empty() else &"", source_before.id, "invalid growth preserves source ID", failures)
+	TestAssertions.equal(growth_after[0].modifiers[0].value if not growth_after.is_empty() else NAN, source_before.modifiers[0].value, "invalid growth preserves source values", failures)
 
 	party.reject_growth_source = true
 	var rejected_award := context.award_experience(1, 30)
@@ -519,13 +696,14 @@ func _test_actor_binding_availability_and_position(failures: Array[String]) -> v
 	actor.free()
 	party.free()
 
-func _configured_fixture(manager: PartyManager) -> Dictionary:
+func _configured_fixture(manager: PartyManager, inventory_columns: int = 0) -> Dictionary:
 	var catalog := GameCatalog.load_defaults()
 	var fighter := catalog.class_by_id(&"fighter")
 	manager.initialize(fighter, catalog.traits)
 	manager.recruit(catalog.class_by_id(&"ranger"))
 	var context := PlayerRunContext.new()
 	var profile := ProfileState.new_profile("profile-player01", "Player One", 1000)
+	profile.inventory_columns = inventory_columns
 	var errors := context.configure(&"player_one", 0, profile, 1337, manager, 100)
 	assert(errors.is_empty())
 	return {

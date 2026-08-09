@@ -1,0 +1,75 @@
+class_name EquipmentTransitionService
+extends RefCounted
+
+const ERROR_PREFIX := "PARTY_FORGE_EQUIPMENT_TRANSITION_ERROR"
+
+static func preview(
+	state: ItemOwnershipState,
+	member_id: int,
+	item_id: String,
+	slot_id: StringName,
+	party: PartyManager,
+	equipment: EquipmentCatalog,
+	foundation: ItemFoundationCatalog,
+) -> EquipmentTransitionResult:
+	var member := party.member_by_id(member_id) if party != null else null
+	if party == null or member == null:
+		return _failure(member_id, item_id, slot_id, "member is unavailable")
+	var assignment := EquipmentAssignmentService.new().preview(
+		state,
+		member_id,
+		item_id,
+		slot_id,
+		equipment,
+		foundation,
+		member.class_definition,
+	)
+	if not assignment.ok():
+		return _failure(member_id, item_id, slot_id, "structural assignment failed detail=%s" % assignment.error)
+	var candidate := assignment.state()
+	var activation := _activation_for(candidate, member_id, party, equipment, foundation)
+	if not activation.ok():
+		return _failure(member_id, item_id, slot_id, "activation failed detail=%s" % activation.error)
+	if not slot_id.is_empty() and not activation.is_active(item_id):
+		var reasons := activation.disabled_reasons(item_id)
+		return _failure(member_id, item_id, slot_id, "requested item is disabled detail=%s" % "; ".join(reasons))
+	var final_sources := party.member_sources_without_equipment(member_id)
+	final_sources.append(activation.source)
+	var resolution := MemberStatResolutionService.resolve(
+		member_id,
+		GameCatalog.STAT_CATALOG,
+		party.member_base_values(member_id),
+		party.member_capabilities(member_id),
+		final_sources,
+		[],
+		party.stat_revision(),
+		PartyManager.DEFAULT_ATTRIBUTE_PROJECTION,
+	)
+	if not resolution.ok():
+		return _failure(member_id, item_id, slot_id, "stat resolution failed detail=%s" % resolution.error)
+	return EquipmentTransitionResult.success(candidate, activation, resolution)
+
+static func _activation_for(
+	state: ItemOwnershipState,
+	member_id: int,
+	party: PartyManager,
+	equipment: EquipmentCatalog,
+	foundation: ItemFoundationCatalog,
+) -> EquipmentActivationResult:
+	return EquipmentActivationResolver.resolve(
+		member_id,
+		StringName("run-equipment-%03d" % member_id),
+		state,
+		equipment,
+		foundation,
+		GameCatalog.STAT_CATALOG,
+		party.member_base_values(member_id),
+		party.member_capabilities(member_id),
+		party.member_sources_without_equipment(member_id),
+		party.stat_revision(),
+	)
+
+static func _failure(member_id: int, item_id: String, slot_id: StringName, detail: String) -> EquipmentTransitionResult:
+	return EquipmentTransitionResult.failure(
+		"%s member=%d item=%s slot=%s reason=%s" % [ERROR_PREFIX, member_id, item_id, slot_id, detail]
+	)

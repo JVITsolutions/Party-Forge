@@ -37,7 +37,36 @@ func run() -> Array[String]:
     _test_damage_floor_clamping(failures)
     _test_damage_floor_survives_max_health_changes(failures)
     _test_damage_never_heals_below_floor(failures)
+    _test_runtime_stat_refresh_clamps_without_healing(failures)
     return failures
+
+func _test_runtime_stat_refresh_clamps_without_healing(failures: Array[String]) -> void:
+    var catalog := GameCatalog.load_defaults()
+    var party := PartyManager.new()
+    party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
+    var actor_scene := load("res://scenes/characters/leader.tscn") as PackedScene
+    var actor := actor_scene.instantiate() as PartyActor
+    actor.configure(party.member_by_id(1))
+    actor.configure_combat(party)
+    var health := actor.get_node("HealthComponent") as HealthComponent
+    health.apply_damage(40.0)
+    var current_before := health.current_health
+    var base_maximum := health.max_health
+    var source := StatModifierSource.create(&"task6_health_refresh", &"equipment", "Task 6 Health", 1, [
+        StatModifier.create(&"max_health", StatModifier.Operation.FLAT, 50.0, &"task6_health_up", "Task 6 Health"),
+    ])
+    TestAssertions.truthy(party.replace_member_source(1, source), "runtime maximum-health increase commits", failures)
+    TestAssertions.near(health.max_health, base_maximum + 50.0, 0.0001, "runtime refresh raises maximum health", failures)
+    TestAssertions.near(health.current_health, current_before, 0.0001, "runtime maximum-health increase grants no healing", failures)
+    health.current_health = base_maximum + 25.0
+    var reduced := StatModifierSource.create(&"task6_health_refresh", &"equipment", "Task 6 Health", 1, [
+        StatModifier.create(&"max_health", StatModifier.Operation.FLAT, -50.0, &"task6_health_down", "Task 6 Health"),
+    ])
+    TestAssertions.truthy(party.replace_member_source(1, reduced), "runtime maximum-health decrease commits", failures)
+    TestAssertions.near(health.max_health, base_maximum - 50.0, 0.0001, "runtime refresh lowers maximum health", failures)
+    TestAssertions.near(health.current_health, base_maximum - 50.0, 0.0001, "runtime maximum-health decrease clamps current health", failures)
+    actor.free()
+    party.free()
 
 func _test_damage_floor(failures: Array[String]) -> void:
     var health: HealthComponent = HealthScript.new()

@@ -39,7 +39,7 @@ var _actor_by_member: Dictionary = {}
 var _item_state: ItemOwnershipState
 var _item_journal: ItemTransactionJournal
 var _next_item_sequence := 0
-var _equipment_assignment_service := EquipmentAssignmentService.new()
+var _equipment_activation_by_member: Dictionary = {}
 var _configured := false
 var _run_id: StringName = &""
 var run_id: StringName:
@@ -134,6 +134,18 @@ func configure(
 			])
 		next_item_state = bootstrap_state
 	var next_item_journal := ItemTransactionJournal.new()
+	var reconstruction := _preview_equipment_reconstruction(next_item_state, manager)
+	if not String(reconstruction["error"]).is_empty():
+		_reset_unconfigured_item_fields()
+		return PackedStringArray([String(reconstruction["error"])])
+	var next_equipment_activations := reconstruction["activations"] as Dictionary
+	for member: PartyMemberState in manager.members:
+		var activation := next_equipment_activations.get(member.member_id) as EquipmentActivationResult
+		if activation == null or not manager.replace_member_source(member.member_id, activation.source):
+			_reset_unconfigured_item_fields()
+			return PackedStringArray([
+				"PARTY_FORGE_RUN_CONTEXT_ERROR field=equipment_activation member=%d reason=stat source commit rejected" % member.member_id,
+			])
 
 	var member_added_callback := Callable(self, "_on_member_added")
 	if party != null and party.member_added.is_connected(member_added_callback):
@@ -151,6 +163,9 @@ func configure(
 	_actor_by_member.clear()
 	_item_state = next_item_state
 	_item_journal = next_item_journal
+	_equipment_activation_by_member.clear()
+	for member_id: Variant in next_equipment_activations:
+		_equipment_activation_by_member[int(member_id)] = (next_equipment_activations[member_id] as EquipmentActivationResult).copy()
 	_next_item_sequence = 0
 	_run_id = item_bootstrap.run_id if item_bootstrap != null else &""
 	_item_resolution_transaction_id = ""
@@ -167,6 +182,14 @@ func run_inventory() -> ItemSlotContainer:
 
 func equipment_for(member_id: int) -> ItemSlotContainer:
 	return _item_state.container(_run_equipment_id(member_id)) if _item_state != null else null
+
+func equipment_activation(member_id: int) -> EquipmentActivationResult:
+	var activation := _equipment_activation_by_member.get(member_id) as EquipmentActivationResult
+	if activation == null:
+		return EquipmentActivationResult.failure(
+			"PARTY_FORGE_EQUIPMENT_ACTIVATION_ERROR member=%d detail=activation unavailable" % member_id
+		)
+	return activation.copy()
 
 func item_resolution_error(transaction_id: String) -> String:
 	if transaction_id.strip_edges().is_empty():
@@ -185,25 +208,44 @@ func assign_equipment(
 	equipment: EquipmentCatalog,
 	foundation: ItemFoundationCatalog,
 ) -> EquipmentAssignmentResult:
-	var member := party.member_by_id(member_id) if party != null else null
-	var snapshot := party.stats_for(member_id) if party != null else null
-	var attributes: Dictionary = {}
-	if snapshot != null:
-		for attribute_id: StringName in ClassGrowthDefinition.CORE_ATTRIBUTE_IDS:
-			attributes[attribute_id] = snapshot.value(attribute_id)
-	var result := _equipment_assignment_service.preview(
-		_item_state,
+	var preview := preview_equipment_assignment(
 		member_id,
 		item_id,
 		slot_id,
 		equipment,
 		foundation,
-		member.class_definition if member != null else null,
-		attributes,
 	)
-	if result.ok():
-		_item_state = result.state()
-	return result
+	if not preview.ok():
+		return EquipmentAssignmentResult.failure(preview.error)
+	var previous_state := _item_state
+	var previous_activation := equipment_activation(member_id)
+	var next_activation := preview.activation()
+	_item_state = preview.state()
+	_equipment_activation_by_member[member_id] = next_activation.copy()
+	if party == null or not party.replace_member_source(member_id, next_activation.source):
+		_item_state = previous_state
+		_equipment_activation_by_member[member_id] = previous_activation
+		return EquipmentAssignmentResult.failure(
+			"PARTY_FORGE_EQUIPMENT_TRANSITION_ERROR member=%d reason=stat source commit rejected" % member_id
+		)
+	return EquipmentAssignmentResult.success(_item_state)
+
+func preview_equipment_assignment(
+	member_id: int,
+	item_id: String,
+	slot_id: StringName,
+	equipment: EquipmentCatalog,
+	foundation: ItemFoundationCatalog,
+) -> EquipmentTransitionResult:
+	return EquipmentTransitionService.preview(
+		_item_state,
+		member_id,
+		item_id,
+		slot_id,
+		party,
+		equipment,
+		foundation,
+	)
 
 func apply_item_transaction(
 	request: ItemTransactionRequest,
@@ -334,7 +376,17 @@ func _on_member_added(member: PartyMemberState) -> void:
 	var next_item_state := ItemOwnershipState.create(_item_state.owner_id, _item_state.registry(), next_containers)
 	if not next_item_state.validate(GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG).is_empty():
 		return
+	var activation := _preview_member_equipment_activation(next_item_state, member.member_id, party)
+	if not activation.ok():
+		return
+	var previous_state := _item_state
+	var previous_activation := equipment_activation(member.member_id)
 	_item_state = next_item_state
+	_equipment_activation_by_member[member.member_id] = activation.copy()
+	if party == null or not party.replace_member_source(member.member_id, activation.source):
+		_item_state = previous_state
+		_equipment_activation_by_member[member.member_id] = previous_activation
+		return
 	_progression_by_member[member.member_id] = next_progression
 
 func _run_equipment_id(member_id: int) -> StringName:
@@ -369,9 +421,59 @@ func _party_validation_errors(manager: PartyManager) -> PackedStringArray:
 func _reset_unconfigured_item_fields() -> void:
 	_item_state = null
 	_item_journal = null
+	_equipment_activation_by_member.clear()
 	_next_item_sequence = 0
 	_run_id = &""
 	_item_resolution_transaction_id = ""
+
+func _preview_equipment_reconstruction(state: ItemOwnershipState, manager: PartyManager) -> Dictionary:
+	var activations: Dictionary = {}
+	for member: PartyMemberState in manager.members:
+		var activation := _preview_member_equipment_activation(state, member.member_id, manager)
+		if not activation.ok():
+			return {
+				"error": "PARTY_FORGE_RUN_CONTEXT_ERROR field=equipment_activation member=%d reason=%s" % [member.member_id, activation.error],
+				"activations": {},
+			}
+		activations[member.member_id] = activation.copy()
+	return {"error": "", "activations": activations}
+
+func _preview_member_equipment_activation(
+	state: ItemOwnershipState,
+	member_id: int,
+	manager: PartyManager,
+) -> EquipmentActivationResult:
+	var activation := EquipmentActivationResolver.resolve(
+		member_id,
+		_run_equipment_id(member_id),
+		state,
+		GameCatalog.EQUIPMENT_CATALOG,
+		GameCatalog.ITEM_FOUNDATION_CATALOG,
+		GameCatalog.STAT_CATALOG,
+		manager.member_base_values(member_id),
+		manager.member_capabilities(member_id),
+		manager.member_sources_without_equipment(member_id),
+		manager.stat_revision(),
+	)
+	if not activation.ok():
+		return activation
+	var final_sources := manager.member_sources_without_equipment(member_id)
+	final_sources.append(activation.source)
+	var resolution := MemberStatResolutionService.resolve(
+		member_id,
+		GameCatalog.STAT_CATALOG,
+		manager.member_base_values(member_id),
+		manager.member_capabilities(member_id),
+		final_sources,
+		[],
+		manager.stat_revision(),
+		PartyManager.DEFAULT_ATTRIBUTE_PROJECTION,
+	)
+	if not resolution.ok():
+		return EquipmentActivationResult.failure(
+			"PARTY_FORGE_EQUIPMENT_ACTIVATION_ERROR member=%d detail=%s" % [member_id, resolution.error]
+		)
+	return activation
 
 func _validate_bootstrap_state(state: ItemOwnershipState, empty_candidate: ItemOwnershipState) -> String:
 	if state == null:

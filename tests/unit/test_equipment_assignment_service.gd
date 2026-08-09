@@ -164,7 +164,7 @@ func _assert_assignment_failure(context: PlayerRunContext, member_id: int, item_
 	var before := _bytes(context.item_state())
 	var result := context.assign_equipment(member_id, item_id, slot_id, equipment, GameCatalog.ITEM_FOUNDATION_CATALOG)
 	TestAssertions.truthy(not result.ok(), "%s assignment fails" % label, failures)
-	TestAssertions.truthy(result.error.begins_with("PARTY_FORGE_EQUIPMENT_ASSIGNMENT_ERROR"), "%s exposes a stable diagnostic prefix" % label, failures)
+	TestAssertions.truthy(result.error.begins_with("PARTY_FORGE_EQUIPMENT_TRANSITION_ERROR"), "%s exposes the run-context transition diagnostic prefix" % label, failures)
 	TestAssertions.equal(result.state(), null, "%s exposes no candidate state" % label, failures)
 	TestAssertions.equal(_bytes(context.item_state()), before, "%s leaves ownership bytes unchanged" % label, failures)
 

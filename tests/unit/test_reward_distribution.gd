@@ -199,7 +199,6 @@ func _test_idempotent_collection_time_resolution(failures: Array[String]) -> voi
 
 func _test_slot_order_and_failure_isolation(failures: Array[String]) -> void:
 	var rejecting_party := RejectingPartyManager.new()
-	rejecting_party.rejected_member_ids = [1]
 	var early_fixture := _context_fixture(
 		&"player_early",
 		0,
@@ -208,6 +207,7 @@ func _test_slot_order_and_failure_isolation(failures: Array[String]) -> void:
 		Vector3.ONE,
 		rejecting_party,
 	)
+	rejecting_party.rejected_member_ids = [1]
 	var late_fixture := _context_fixture(
 		&"player_late",
 		1,

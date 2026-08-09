@@ -87,7 +87,7 @@ func _test_party_stat_runtime_effects(failures: Array[String]) -> void:
     TestAssertions.truthy(party.call("upgrade_party_stat", &"max_health"), "max-health upgrade applies", failures)
     TestAssertions.near(float(party.call("party_stat_multiplier", &"max_health")), 1.05, 0.001, "max-health upgrade multiplier", failures)
     TestAssertions.near(health.max_health, 273.0, 0.001, "max-health upgrade immediately updates existing leader", failures)
-    TestAssertions.near(health.current_health, 273.0, 0.001, "max-health upgrade preserves full-health fraction", failures)
+    TestAssertions.near(health.current_health, 260.0, 0.001, "max-health upgrade grants no free healing", failures)
 
     TestAssertions.truthy(party.call("upgrade_party_stat", &"damage"), "damage upgrade applies", failures)
     TestAssertions.truthy(party.has_method("stats_for_action"), "damage upgrade exposes action-aware stats", failures)

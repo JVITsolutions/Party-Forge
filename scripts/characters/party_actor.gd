@@ -21,6 +21,7 @@ var support_controller: AttackController
 var base_visual_color := Color.WHITE
 var damage_flash_remaining := 0.0
 var last_visual_health := 0.0
+var _runtime_stats_initialized := false
 var combat_policy: CombatTestPolicy = DEFAULT_COMBAT_POLICY.new(false, 100, false, false, 4)
 
 func _ready() -> void:
@@ -37,6 +38,7 @@ func configure(member_state: PartyMemberState) -> void:
     var health: HealthComponent = _health_component()
     if health != null:
         health.configure(definition.max_health, member_state.is_leader, definition.revive_delay, definition.revive_health_fraction)
+        _runtime_stats_initialized = false
         last_visual_health = health.current_health
         if not health.health_changed.is_connected(_on_visual_health_changed): health.health_changed.connect(_on_visual_health_changed)
         if not health.downed.is_connected(_on_visual_downed): health.downed.connect(_on_visual_downed)
@@ -356,6 +358,11 @@ func _refresh_runtime_stats() -> void:
     move_speed = stats.value(&"move_speed", definition.move_speed) if stats != null else definition.move_speed
     var health := _health_component()
     if health != null:
-        health.set_max_health(stats.value(&"max_health", definition.max_health) if stats != null else definition.max_health, true)
+        var initialize_full_health := not _runtime_stats_initialized
+        health.set_max_health(stats.value(&"max_health", health.max_health) if stats != null else definition.max_health, false)
+        if initialize_full_health and not health.is_dead and not health.is_downed:
+            health.current_health = health.max_health
+            health.health_changed.emit(health.current_health, health.max_health)
         health.revive_delay = definition.revive_delay * (party_manager.revive_delay_multiplier() if party_manager != null else 1.0)
         health.revive_health_fraction = definition.revive_health_fraction
+        _runtime_stats_initialized = true
