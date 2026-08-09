@@ -245,6 +245,32 @@ func _test_deterministic_random(failures: Array[String]) -> void:
 		"insertion and StringName allocation order cannot change the lexical golden choice",
 		failures
 	)
+	var boundary_sorted: Dictionary = {}
+	boundary_sorted[&"a"] = 6674796938896180
+	boundary_sorted[&"b"] = 3325203061103820
+	boundary_sorted[&"c"] = 1
+	boundary_sorted[&"d"] = 1
+	var boundary_reordered: Dictionary = {}
+	boundary_reordered[&"c"] = 1
+	boundary_reordered[&"d"] = 1
+	boundary_reordered[&"a"] = 6674796938896180
+	boundary_reordered[&"b"] = 3325203061103820
+	var boundary_sorted_choice := ItemDeterministicRandom.weighted_id(991, 4, &"base", 0, boundary_sorted)
+	var boundary_reordered_choice := ItemDeterministicRandom.weighted_id(991, 4, &"base", 0, boundary_reordered)
+	TestAssertions.equal(boundary_sorted_choice, &"b", "reviewer boundary vector has an exact lexical-order base choice", failures)
+	TestAssertions.equal(boundary_reordered_choice, &"b", "reviewer boundary vector base choice ignores dictionary insertion order", failures)
+	TestAssertions.equal(
+		ItemDeterministicRandom.weighted_id(991, 4, &"rarity", 0, boundary_sorted),
+		&"a",
+		"lexically accumulated boundary total has an exact rarity choice",
+		failures
+	)
+	TestAssertions.equal(
+		ItemDeterministicRandom.weighted_id(991, 4, &"rarity", 0, boundary_reordered),
+		&"a",
+		"boundary total accumulation ignores dictionary insertion order",
+		failures
+	)
 	TestAssertions.equal(ItemDeterministicRandom.weighted_id(991, 4, &"base", 0, {}), &"", "empty weights are rejected", failures)
 	TestAssertions.equal(ItemDeterministicRandom.weighted_id(991, 4, &"base", 0, {&"a": 0.0}), &"", "nonpositive weights are rejected", failures)
 	TestAssertions.equal(ItemDeterministicRandom.weighted_id(991, 4, &"base", 0, {&"a": NAN}), &"", "nonfinite weights are rejected", failures)

@@ -26,10 +26,13 @@ static func weighted_id(seed: int, sequence: int, stage: StringName, draw: int, 
 			return &""
 		canonical_weights[id] = weight
 		ids.append(id)
-		total += weight
+	ids.sort()
+	for id: String in ids:
+		total += float(canonical_weights[id])
 		if not is_finite(total):
 			return &""
-	ids.sort()
+	if total <= 0.0:
+		return &""
 	var roll := unit(seed, sequence, stage, draw) * total
 	var cumulative := 0.0
 	for id: String in ids:
