@@ -1,6 +1,6 @@
 # Task 10K report: restrict atomic equipment-source batches
 
-Status: implementation and fresh verification complete; scoped commit pending at report-writing time.
+Status: implementation, sibling-bypass review remediation, and fresh verification complete; review-fix commit pending at report-writing time.
 
 ## Root cause and remediation
 
@@ -19,6 +19,22 @@ Before any snapshot or mutation, the replacement contract:
 - validates every source against the canonical stat catalog.
 
 Only after the full batch passes does the existing transaction snapshot sources, commit through the protected no-invalidation seam, restore every member on a selective commit rejection, and invalidate all affected members under one shared revision. Successful signals remain member-ID ordered. Failure preserves exact source documents, revision, base/action cache identity, signals, configuration state, coordinator ownership, and item/activation state.
+
+## Sibling-bypass review remediation
+
+Review found that the member-local paired seam, `replace_member_source_with_equipment_atomically()`, was still publicly callable without proof that the exact bound `PlayerRunContext` coordinator initiated the transaction. A direct caller could submit an arbitrary Strength source together with the current empty equipment source. Party sources, revision, caches, and signals changed while the configured requirement item retained stale disabled activation.
+
+The paired seam now requires opaque coordinator authority:
+
+- `PartyManager.bind_member_source_refresh_coordinator()` issues one fresh `RefCounted` identity only while no coordinator or authority is bound;
+- `PlayerRunContext` privately retains that identity and passes it to the paired commit;
+- the paired commit rejects missing, wrong, or stale identity before source validation, snapshots, or mutation;
+- exact unbind requires both the coordinator Callable and the identical authority object;
+- context reset and registry clear exact-unbind and discard the retained identity;
+- `PartyManager.initialize()` invalidates both the prior coordinator and prior authority; and
+- a late clear from an old registry cannot unbind a replacement coordinator because its authority identity is stale.
+
+The paired seam also verifies both source owner IDs match the requested member. The optional default is rejection-only so a legacy three-argument direct call fails closed; there is no compatibility alias or convenience path that commits without authority.
 
 ## TDD evidence
 
@@ -44,12 +60,26 @@ TASK10K_FIRST_GREEN_EXIT_CODE=0
 
 A later malformed Variant case exposed a runtime cast diagnostic. That run was not accepted as RED evidence because it contained a script error. The final input guard rejects non-source values contextually without a cast error; the focused PartyManager rerun returned `TEST_SUMMARY: PASS (0 failures)` and exit `0`.
 
+### Accepted sibling-bypass RED
+
+After removing one invalid test-fixture cleanup attempt, the PartyManager/non-equipment regression executed normally against the first Task 10K commit and returned:
+
+```text
+TEST_SUMMARY: FAIL (12 failures)
+TASK10K_AUTHORITY_ACCEPTED_RED_EXIT_CODE=1
+```
+
+The assertion failures proved the missing fourth authority argument/token contract and the live bypass: direct paired commit installed arbitrary Strength, advanced the revision, emitted one member signal, replaced affected base/action caches, and left the newly eligible sword disabled with stale activation.
+
 ## Coverage
 
 The final tests cover:
 
 - explicit absence of `replace_member_sources_atomically()` and presence of the narrow replacement;
+- missing, wrong, exact, and stale paired-commit authority behavior;
+- exact coordinator bind/unbind ownership plus clear, replacement, duplicate-context, reinitialize, and late-clear lifecycle behavior;
 - arbitrary non-equipment core sources, wrong source type, wrong canonical ID, wrong owner, null and wrong-Variant values;
+- empty batch, non-integer key, unknown positive member, and zero/negative member-key results;
 - mixed valid/invalid batches and duplicate source ownership across member keys;
 - deterministic lowest-member rejection when insertion order differs;
 - canonical equipment success with one shared revision and sorted signals;
@@ -96,6 +126,28 @@ TASK10K_HARDENED_FULL_EXIT_CODE=0
 
 The complete runner finished in 126.5 seconds and retained its established asserted negative-path domain errors, JSON-store warnings, and shutdown diagnostics. It exited `0` with no failure summary.
 
+### Final review-remediation rerun
+
+The final authority tree returned:
+
+```text
+TEST_SUMMARY: PASS (0 failures)
+TASK10K_AUTHORITY_FINAL_FOCUSED_EXIT_CODE=0
+
+TASK10J_ACTION_CACHE_SUMMARY: PASS members=24 hits=512 usec=1676
+EQUIPMENT_ATTRIBUTE_APPLICATION_SUMMARY: PASS members=24 untouched=23 items=2
+TASK10K_AUTHORITY_EQUIPMENT_24_EXIT_CODE=0
+
+PROGRESSION_24_MEMBER_ISOLATION_PASS members=24 untouched=23
+PROGRESSION_24_MEMBER_SUMMARY: PASS
+TASK10K_AUTHORITY_PROGRESSION_24_EXIT_CODE=0
+
+TEST_SUMMARY: PASS (166 suites)
+TASK10K_AUTHORITY_HARDENED_FULL_EXIT_CODE=0
+```
+
+The review-remediation complete runner finished in 138.5 seconds and retained only the same established asserted diagnostics and warnings.
+
 ## Scope and hygiene
 
 Task 10K changes are limited to:
@@ -104,6 +156,7 @@ Task 10K changes are limited to:
 - `scripts/run/player_run_context.gd`
 - `tests/unit/test_party_manager.gd`
 - `tests/unit/test_non_equipment_activation_refresh.gd`
+- `tests/unit/test_run_context_registry.gd`
 - `.superpowers/sdd/task-10k-report.md`
 
 `git diff --check` passed before report creation. The worktree's pre-existing untracked `.gd.uid` sidecars were not edited or staged. Task-specific APPDATA/LOCALAPPDATA directories remain ignored under `.superpowers/sdd` and are not commit scope.

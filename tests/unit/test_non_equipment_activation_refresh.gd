@@ -26,6 +26,7 @@ class ResumeOverflowPartyManager extends PartyManager:
 func run() -> Array[String]:
 	var failures: Array[String] = []
 	_test_arbitrary_batch_cannot_bypass_activation_refresh(failures)
+	_test_direct_coordinated_commit_requires_context_authority(failures)
 	_test_growth_reactivates_and_requirement_loss_disables(failures)
 	_test_personal_attribute_upgrade_and_direct_source_replacement(failures)
 	_test_refresh_commit_failure_rolls_back_exact_state(failures)
@@ -68,6 +69,43 @@ func _test_arbitrary_batch_cannot_bypass_activation_refresh(failures: Array[Stri
 	TestAssertions.truthy(is_same(party.stats_for(1), base_before), "rejected arbitrary batch preserves affected base cache identity", failures)
 	TestAssertions.truthy(is_same(party.stats_for_action(1, action_tags), action_before), "rejected arbitrary batch preserves affected action cache identity", failures)
 	TestAssertions.truthy(is_same(party.stats_for(2), member_two_before), "rejected arbitrary batch preserves unrelated cache identity", failures)
+	party.free()
+	_restore_definition(definition_fixture)
+
+
+func _test_direct_coordinated_commit_requires_context_authority(failures: Array[String]) -> void:
+	var definition_fixture := _install_required_sword_definition()
+	var party := _party(2)
+	var fixture := _configured_equipped_fixture(party, "coordinated_bypass", 10092)
+	var context := fixture["context"] as PlayerRunContext
+	var item := fixture["item"] as ItemInstance
+	var action_tags := DamageResolver.action_tags_for(party.member_by_id(1).class_definition.primary_attack)
+	var activation_before := context.equipment_activation(1)
+	var sources_before := _source_documents(party.member_by_id(1))
+	var base_before := party.stats_for(1)
+	var action_before := party.stats_for_action(1, action_tags)
+	var member_two_before := party.stats_for(2)
+	var revision_before := party.stat_revision()
+	var changed: Array[int] = []
+	party.stats_changed.connect(func(member_id: int) -> void: changed.append(member_id))
+	var arbitrary_growth := StatModifierSource.create(&"task10k_direct_growth", &"character_growth", "Direct Growth", 1, [
+		StatModifier.create(&"strength", StatModifier.Operation.FLAT, REQUIRED_STRENGTH, &"task10k_direct_strength", "Direct Growth"),
+	])
+	var accepted := party.replace_member_source_with_equipment_atomically(
+		1,
+		arbitrary_growth,
+		activation_before.source,
+	)
+	TestAssertions.truthy(not accepted, "direct coordinated commit without context authority is rejected", failures)
+	TestAssertions.truthy(not _has_source(party.member_by_id(1), arbitrary_growth.id), "direct coordinated bypass cannot install Strength", failures)
+	TestAssertions.truthy(not context.equipment_activation(1).is_active(item.instance_id), "direct coordinated bypass cannot leave newly eligible equipment stale", failures)
+	TestAssertions.equal(context.equipment_activation(1).active_item_ids, activation_before.active_item_ids, "direct coordinated rejection preserves activation IDs", failures)
+	TestAssertions.equal(_source_documents(party.member_by_id(1)), sources_before, "direct coordinated rejection preserves exact sources", failures)
+	TestAssertions.equal(party.stat_revision(), revision_before, "direct coordinated rejection preserves revision", failures)
+	TestAssertions.equal(changed, [], "direct coordinated rejection emits no stat signal", failures)
+	TestAssertions.truthy(is_same(party.stats_for(1), base_before), "direct coordinated rejection preserves base cache identity", failures)
+	TestAssertions.truthy(is_same(party.stats_for_action(1, action_tags), action_before), "direct coordinated rejection preserves action cache identity", failures)
+	TestAssertions.truthy(is_same(party.stats_for(2), member_two_before), "direct coordinated rejection preserves unrelated cache identity", failures)
 	party.free()
 	_restore_definition(definition_fixture)
 

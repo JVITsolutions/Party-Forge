@@ -34,6 +34,7 @@ var _stat_revision := 0
 var _stat_cache: Dictionary = {}
 var _action_stat_cache: Dictionary = {}
 var _member_source_refresh_coordinator: Callable
+var _member_source_refresh_authority: RefCounted
 
 func _init() -> void:
     for stat_id: StringName in PARTY_STAT_IDS:
@@ -41,6 +42,7 @@ func _init() -> void:
 
 func initialize(leader_class: ClassDefinition, traits: Array[TraitDefinition], tuning: UpgradeTuning = null) -> void:
     _member_source_refresh_coordinator = Callable()
+    _member_source_refresh_authority = null
     members.clear(); class_ranks.clear(); active_tiers.clear(); trait_upgrade_ranks.clear(); _party_upgrade_ranks.clear(); _party_upgrade_definitions.clear(); _party_upgrade_sources.clear(); trait_definitions = traits
     upgrade_tuning = tuning if tuning != null else DEFAULT_UPGRADE_TUNING
     for stat_id: StringName in PARTY_STAT_IDS:
@@ -93,20 +95,31 @@ func member_sources_without_equipment(member_id: int) -> Array[StatModifierSourc
 func stat_revision() -> int:
     return _stat_revision
 
-func bind_member_source_refresh_coordinator(coordinator: Callable) -> bool:
+func bind_member_source_refresh_coordinator(coordinator: Callable) -> RefCounted:
     if not coordinator.is_valid():
-        return false
-    if _member_source_refresh_coordinator.is_valid() and _member_source_refresh_coordinator != coordinator:
-        return false
+        return null
+    if _member_source_refresh_coordinator.is_valid() or _member_source_refresh_authority != null:
+        return null
     _member_source_refresh_coordinator = coordinator
-    return true
+    _member_source_refresh_authority = RefCounted.new()
+    return _member_source_refresh_authority
 
-func unbind_member_source_refresh_coordinator(coordinator: Callable) -> void:
-    if _member_source_refresh_coordinator == coordinator:
+func unbind_member_source_refresh_coordinator(coordinator: Callable, authority: RefCounted) -> void:
+    if (
+        authority != null
+        and is_same(authority, _member_source_refresh_authority)
+        and _member_source_refresh_coordinator == coordinator
+    ):
         _member_source_refresh_coordinator = Callable()
+        _member_source_refresh_authority = null
 
-func owns_member_source_refresh_coordinator(coordinator: Callable) -> bool:
-    return coordinator.is_valid() and _member_source_refresh_coordinator == coordinator
+func owns_member_source_refresh_coordinator(coordinator: Callable, authority: RefCounted) -> bool:
+    return (
+        authority != null
+        and is_same(authority, _member_source_refresh_authority)
+        and coordinator.is_valid()
+        and _member_source_refresh_coordinator == coordinator
+    )
 
 func stats_for(member_id: int) -> ResolvedStatSnapshot:
     var member := member_by_id(member_id)
@@ -245,15 +258,21 @@ func replace_member_source_with_equipment_atomically(
     member_id: int,
     member_source: StatModifierSource,
     equipment_source: StatModifierSource,
+    authority: RefCounted = null,
 ) -> bool:
     var member := member_by_id(member_id)
     if (
-        member == null
+        authority == null
+        or not is_same(authority, _member_source_refresh_authority)
+        or not _member_source_refresh_coordinator.is_valid()
+        or member == null
         or member_source == null
         or member_source.source_type == &"equipment"
+        or member_source.owner_member_id != member_id
         or equipment_source == null
         or equipment_source.source_type != &"equipment"
         or equipment_source.id != StringName("equipment_member_%d" % member_id)
+        or equipment_source.owner_member_id != member_id
         or member_source.id == equipment_source.id
     ):
         return false

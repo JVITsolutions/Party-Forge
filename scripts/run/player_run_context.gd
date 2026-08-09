@@ -41,6 +41,7 @@ var _item_state: ItemOwnershipState
 var _item_journal: ItemTransactionJournal
 var _next_item_sequence := 0
 var _equipment_activation_by_member: Dictionary = {}
+var _source_refresh_authority: RefCounted
 var _configured := false
 var _run_id: StringName = &""
 var run_id: StringName:
@@ -152,7 +153,8 @@ func configure(
 			])
 		next_equipment_sources[member.member_id] = activation.source
 	var source_refresh_callback := Callable(self, "_replace_non_equipment_source_atomically")
-	if not manager.bind_member_source_refresh_coordinator(source_refresh_callback):
+	var source_refresh_authority := manager.bind_member_source_refresh_coordinator(source_refresh_callback)
+	if source_refresh_authority == null:
 		_stage_rejected_registration_identity(run_player_id_value, slot, owned_profile.profile_id, manager)
 		return PackedStringArray([
 			"PARTY_FORGE_RUN_CONTEXT_ERROR field=source_refresh reason=party coordinator unavailable",
@@ -168,6 +170,7 @@ func configure(
 	_run_seed = run_seed_value
 	_experience_multiplier_percent = experience_multiplier
 	party = manager
+	_source_refresh_authority = source_refresh_authority
 	experience_tuning = DEFAULT_EXPERIENCE_TUNING
 	_progression_by_member = next_progression
 	_pending_leader_levels.clear()
@@ -202,12 +205,19 @@ func owns_source_refresh_coordinator() -> bool:
 	return (
 		_configured
 		and party != null
-		and party.owns_member_source_refresh_coordinator(Callable(self, "_replace_non_equipment_source_atomically"))
+		and party.owns_member_source_refresh_coordinator(
+			Callable(self, "_replace_non_equipment_source_atomically"),
+			_source_refresh_authority,
+		)
 	)
 
 func release_source_refresh_coordinator() -> void:
 	if party != null:
-		party.unbind_member_source_refresh_coordinator(Callable(self, "_replace_non_equipment_source_atomically"))
+		party.unbind_member_source_refresh_coordinator(
+			Callable(self, "_replace_non_equipment_source_atomically"),
+			_source_refresh_authority,
+		)
+	_source_refresh_authority = null
 
 func item_state() -> ItemOwnershipState:
 	return _item_state.copy() if _item_state != null else null
@@ -462,7 +472,11 @@ func _reset_unconfigured_fields() -> void:
 	if party != null and party.member_added.is_connected(member_added_callback):
 		party.member_added.disconnect(member_added_callback)
 	if party != null:
-		party.unbind_member_source_refresh_coordinator(Callable(self, "_replace_non_equipment_source_atomically"))
+		party.unbind_member_source_refresh_coordinator(
+			Callable(self, "_replace_non_equipment_source_atomically"),
+			_source_refresh_authority,
+		)
+	_source_refresh_authority = null
 	_run_player_id = &""
 	_player_slot_index = -1
 	_profile_id = ""
@@ -612,7 +626,12 @@ func _replace_non_equipment_source_atomically(member_id: int, source: StatModifi
 		return false
 	var previous_activation := equipment_activation(member_id)
 	_equipment_activation_by_member[member_id] = next_activation.copy()
-	if not party.replace_member_source_with_equipment_atomically(member_id, source, next_activation.source):
+	if not party.replace_member_source_with_equipment_atomically(
+		member_id,
+		source,
+		next_activation.source,
+		_source_refresh_authority,
+	):
 		_equipment_activation_by_member[member_id] = previous_activation
 		return false
 	return true

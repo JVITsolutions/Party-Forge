@@ -1,5 +1,9 @@
 extends RefCounted
 
+class CoordinatorProbe extends RefCounted:
+    func refresh(_member_id: int, _source: StatModifierSource) -> bool:
+        return false
+
 func run() -> Array[String]:
     var failures: Array[String] = []
     _test_effective_capacity(failures)
@@ -54,6 +58,7 @@ func run() -> Array[String]:
     _test_resolved_party_stats(failures)
     _test_replace_member_source(failures)
     _test_atomic_equipment_source_batch_contract(failures)
+    _test_coordinated_source_authority_contract(failures)
     _test_two_pass_cache_isolation_and_preview_inputs(failures)
     _test_party_actor_stats_signal_lifecycle(failures)
     return failures
@@ -78,6 +83,12 @@ func _test_atomic_equipment_source_batch_contract(failures: Array[String]) -> vo
     if not party.has_method(&"replace_member_equipment_sources_atomically"):
         party.free()
         return
+
+    TestAssertions.equal(int(party.call(&"replace_member_equipment_sources_atomically", {})), -1, "empty equipment batch returns the stable batch rejection", failures)
+    TestAssertions.equal(int(party.call(&"replace_member_equipment_sources_atomically", {"1": _equipment_source(1, 1.0)})), -1, "non-integer equipment batch key is rejected", failures)
+    TestAssertions.equal(int(party.call(&"replace_member_equipment_sources_atomically", {99: _equipment_source(99, 1.0)})), 99, "unknown positive member returns its contextual ID", failures)
+    TestAssertions.equal(int(party.call(&"replace_member_equipment_sources_atomically", {0: _equipment_source(0, 1.0)})), -1, "zero member key is rejected at batch scope", failures)
+    TestAssertions.equal(int(party.call(&"replace_member_equipment_sources_atomically", {-1: _equipment_source(-1, 1.0)})), -1, "negative member key is rejected at batch scope", failures)
 
     var action_tags: Array[StringName] = [&"ranged", &"physical"]
     var member_one_before := party.stats_for(1)
@@ -174,6 +185,67 @@ func _test_atomic_equipment_source_batch_contract(failures: Array[String]) -> vo
     TestAssertions.equal(party.stat_revision(), stable_revision, "deterministic rejection preserves revision", failures)
     TestAssertions.equal(events, [], "deterministic rejection emits no stat signal", failures)
     party.free()
+
+func _test_coordinated_source_authority_contract(failures: Array[String]) -> void:
+    var catalog := GameCatalog.load_defaults()
+    var party := PartyManager.new()
+    party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
+    var method_argument_count := _method_argument_count(party, &"replace_member_source_with_equipment_atomically")
+    TestAssertions.equal(method_argument_count, 4, "coordinated source commit requires explicit authority", failures)
+    var probe := CoordinatorProbe.new()
+    var coordinator := Callable(probe, "refresh")
+    var authority_value: Variant = party.bind_member_source_refresh_coordinator(coordinator)
+    TestAssertions.truthy(authority_value is RefCounted, "coordinator binding issues opaque authority", failures)
+    var member_source := StatModifierSource.create(&"task10k_authority_growth", &"character_growth", "Authority Growth", 1, [
+        StatModifier.create(&"strength", StatModifier.Operation.FLAT, 1.0, &"task10k_authority_strength", "Authority Growth"),
+    ])
+    var equipment_source := _equipment_source(1, 2.0)
+    var sources_before := _member_source_documents(party.member_by_id(1))
+    var base_before := party.stats_for(1)
+    var action_tags: Array[StringName] = [&"melee", &"physical"]
+    var action_before := party.stats_for_action(1, action_tags)
+    var revision_before := party.stat_revision()
+    var events: Array[int] = []
+    party.stats_changed.connect(func(member_id: int) -> void: events.append(member_id))
+
+    var wrong_rejected := false
+    if method_argument_count == 4:
+        wrong_rejected = not bool(party.call(&"replace_member_source_with_equipment_atomically", 1, member_source, equipment_source, RefCounted.new()))
+    TestAssertions.truthy(wrong_rejected, "wrong coordinator authority is rejected", failures)
+    TestAssertions.equal(_member_source_documents(party.member_by_id(1)), sources_before, "wrong authority preserves exact sources", failures)
+    TestAssertions.equal(party.stat_revision(), revision_before, "wrong authority preserves revision", failures)
+    TestAssertions.equal(events, [], "wrong authority emits no stat signal", failures)
+    TestAssertions.truthy(is_same(party.stats_for(1), base_before), "wrong authority preserves base cache identity", failures)
+    TestAssertions.truthy(is_same(party.stats_for_action(1, action_tags), action_before), "wrong authority preserves action cache identity", failures)
+
+    var exact_committed := false
+    if method_argument_count == 4 and authority_value is RefCounted:
+        exact_committed = bool(party.call(&"replace_member_source_with_equipment_atomically", 1, member_source, equipment_source, authority_value))
+    TestAssertions.truthy(exact_committed, "exact bound coordinator authority commits", failures)
+    TestAssertions.equal(events, [1] if exact_committed else [], "exact authority emits one member-local stat signal", failures)
+    var committed_sources := _member_source_documents(party.member_by_id(1))
+    var committed_base := party.stats_for(1)
+    var committed_action := party.stats_for_action(1, action_tags)
+    var committed_revision := party.stat_revision()
+    events.clear()
+    if authority_value is RefCounted:
+        party.call(&"unbind_member_source_refresh_coordinator", coordinator, authority_value)
+    var stale_rejected := false
+    if method_argument_count == 4 and authority_value is RefCounted:
+        stale_rejected = not bool(party.call(&"replace_member_source_with_equipment_atomically", 1, member_source, equipment_source, authority_value))
+    TestAssertions.truthy(stale_rejected, "unbound coordinator authority becomes stale", failures)
+    TestAssertions.equal(_member_source_documents(party.member_by_id(1)), committed_sources, "stale authority preserves exact sources", failures)
+    TestAssertions.equal(party.stat_revision(), committed_revision, "stale authority preserves revision", failures)
+    TestAssertions.equal(events, [], "stale authority emits no stat signal", failures)
+    TestAssertions.truthy(is_same(party.stats_for(1), committed_base), "stale authority preserves base cache identity", failures)
+    TestAssertions.truthy(is_same(party.stats_for_action(1, action_tags), committed_action), "stale authority preserves action cache identity", failures)
+    party.free()
+
+func _method_argument_count(instance: Object, method_name: StringName) -> int:
+    for method: Dictionary in instance.get_method_list():
+        if StringName(method.get("name", "")) == method_name:
+            return (method.get("args", []) as Array).size()
+    return -1
 
 func _equipment_source(member_id: int, strength: float) -> StatModifierSource:
     var source_id := StringName("equipment_member_%d" % member_id)
