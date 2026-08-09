@@ -19,6 +19,10 @@ func register_context(context: PlayerRunContext, device_id: int = -1) -> RunCont
 		return RunContextRegistrationResult.failure(RunContextRegistrationResult.Code.INVALID_CONTEXT, "identity fields are invalid")
 	if _arena_roster_locked:
 		return RunContextRegistrationResult.failure(RunContextRegistrationResult.Code.ARENA_RUN_LOCKED, "Arena roster is locked")
+	if not context.is_configured() and _by_party.has(context.party):
+		return RunContextRegistrationResult.failure(RunContextRegistrationResult.Code.DUPLICATE_PARTY, "party already registered")
+	if not context.is_configured():
+		return RunContextRegistrationResult.failure(RunContextRegistrationResult.Code.INVALID_CONTEXT, "context is not configured")
 	if _by_run_player.has(run_player_id):
 		return RunContextRegistrationResult.failure(RunContextRegistrationResult.Code.DUPLICATE_RUN_PLAYER, "run player %s already registered" % run_player_id)
 	if _by_profile.has(profile_id):
@@ -29,6 +33,8 @@ func register_context(context: PlayerRunContext, device_id: int = -1) -> RunCont
 		return RunContextRegistrationResult.failure(RunContextRegistrationResult.Code.DUPLICATE_PARTY, "party already registered")
 	if device_id >= 0 and _by_device.has(device_id):
 		return RunContextRegistrationResult.failure(RunContextRegistrationResult.Code.DUPLICATE_DEVICE, "device %d already assigned" % device_id)
+	if not context.owns_source_refresh_coordinator():
+		return RunContextRegistrationResult.failure(RunContextRegistrationResult.Code.INVALID_CONTEXT, "party coordinator is unavailable")
 	_by_run_player[run_player_id] = context
 	_by_profile[profile_id] = context
 	_by_slot[slot] = context
@@ -73,6 +79,10 @@ func device_for(run_player_id: StringName) -> int:
 	return int(_device_by_run_player.get(run_player_id, -1))
 
 func clear() -> void:
+	for value: Variant in _by_run_player.values():
+		var context := value as PlayerRunContext
+		if context != null:
+			context.release_source_refresh_coordinator()
 	_by_run_player.clear()
 	_by_profile.clear()
 	_by_slot.clear()

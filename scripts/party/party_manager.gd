@@ -40,6 +40,7 @@ func _init() -> void:
         party_stat_ranks[stat_id] = 0
 
 func initialize(leader_class: ClassDefinition, traits: Array[TraitDefinition], tuning: UpgradeTuning = null) -> void:
+    _member_source_refresh_coordinator = Callable()
     members.clear(); class_ranks.clear(); active_tiers.clear(); trait_upgrade_ranks.clear(); _party_upgrade_ranks.clear(); _party_upgrade_definitions.clear(); _party_upgrade_sources.clear(); trait_definitions = traits
     upgrade_tuning = tuning if tuning != null else DEFAULT_UPGRADE_TUNING
     for stat_id: StringName in PARTY_STAT_IDS:
@@ -103,6 +104,9 @@ func bind_member_source_refresh_coordinator(coordinator: Callable) -> bool:
 func unbind_member_source_refresh_coordinator(coordinator: Callable) -> void:
     if _member_source_refresh_coordinator == coordinator:
         _member_source_refresh_coordinator = Callable()
+
+func owns_member_source_refresh_coordinator(coordinator: Callable) -> bool:
+    return coordinator.is_valid() and _member_source_refresh_coordinator == coordinator
 
 func stats_for(member_id: int) -> ResolvedStatSnapshot:
     var member := member_by_id(member_id)

@@ -58,6 +58,8 @@ func configure(
 ) -> PackedStringArray:
 	if _configured:
 		return PackedStringArray(["PARTY_FORGE_RUN_CONTEXT_ERROR field=configuration reason=already configured"])
+	if party != null:
+		_reset_unconfigured_fields()
 	var errors := PackedStringArray()
 	if run_player_id_value.is_empty():
 		errors.append("PARTY_FORGE_RUN_CONTEXT_ERROR field=run_player_id")
@@ -148,6 +150,12 @@ func configure(
 				"PARTY_FORGE_RUN_CONTEXT_ERROR field=equipment_activation member=%d reason=activation missing" % member.member_id,
 			])
 		next_equipment_sources[member.member_id] = activation.source
+	var source_refresh_callback := Callable(self, "_replace_non_equipment_source_atomically")
+	if not manager.bind_member_source_refresh_coordinator(source_refresh_callback):
+		_stage_rejected_registration_identity(run_player_id_value, slot, owned_profile.profile_id, manager)
+		return PackedStringArray([
+			"PARTY_FORGE_RUN_CONTEXT_ERROR field=source_refresh reason=party coordinator unavailable",
+		])
 
 	var member_added_callback := Callable(self, "_on_member_added")
 	if party != null and party.member_added.is_connected(member_added_callback):
@@ -173,8 +181,6 @@ func configure(
 	_item_resolution_transaction_id = ""
 	if not party.member_added.is_connected(member_added_callback):
 		party.member_added.connect(member_added_callback)
-	var source_refresh_callback := Callable(self, "_replace_non_equipment_source_atomically")
-	party.bind_member_source_refresh_coordinator(source_refresh_callback)
 	_configured = true
 	var rejected_member_id := manager.replace_member_sources_atomically(next_equipment_sources)
 	if rejected_member_id != 0:
@@ -187,6 +193,20 @@ func configure(
 			"PARTY_FORGE_RUN_CONTEXT_ERROR field=equipment_activation reason=stat source commit rejected",
 		])
 	return errors
+
+func is_configured() -> bool:
+	return _configured
+
+func owns_source_refresh_coordinator() -> bool:
+	return (
+		_configured
+		and party != null
+		and party.owns_member_source_refresh_coordinator(Callable(self, "_replace_non_equipment_source_atomically"))
+	)
+
+func release_source_refresh_coordinator() -> void:
+	if party != null:
+		party.unbind_member_source_refresh_coordinator(Callable(self, "_replace_non_equipment_source_atomically"))
 
 func item_state() -> ItemOwnershipState:
 	return _item_state.copy() if _item_state != null else null
@@ -460,6 +480,17 @@ func _reset_unconfigured_fields() -> void:
 	_run_id = &""
 	_item_resolution_transaction_id = ""
 	_configured = false
+
+func _stage_rejected_registration_identity(
+	run_player_id_value: StringName,
+	slot: int,
+	profile_id_value: String,
+	manager: PartyManager,
+) -> void:
+	_run_player_id = run_player_id_value
+	_player_slot_index = slot
+	_profile_id = profile_id_value
+	party = manager
 
 func _preview_equipment_reconstruction(state: ItemOwnershipState, manager: PartyManager) -> Dictionary:
 	var activations: Dictionary = {}

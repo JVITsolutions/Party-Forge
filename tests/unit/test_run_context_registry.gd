@@ -2,10 +2,16 @@ extends RefCounted
 
 var _parties: Array[PartyManager] = []
 
+class CoordinatorRejectingPartyManager extends PartyManager:
+	func bind_member_source_refresh_coordinator(_coordinator: Callable) -> bool:
+		return false
+
 func run() -> Array[String]:
 	var failures: Array[String] = []
 	_assert_registration_contract(failures)
 	_assert_party_ownership_contract(failures)
+	_assert_bind_failure_is_non_mutating(failures)
+	_assert_reinitialize_releases_stale_coordinator(failures)
 	_assert_item_ownership_registration_contract(failures)
 	_assert_unassigned_and_sorted_contract(failures)
 	_assert_device_reassignment_contract(failures)
@@ -37,9 +43,31 @@ func _assert_registration_contract(failures: Array[String]) -> void:
 func _assert_party_ownership_contract(failures: Array[String]) -> void:
 	var registry := RunContextRegistry.new()
 	var shared_party := _party()
-	var alpha := _context_for_party(&"party_owner_alpha", 0, "profile-party-alpha", shared_party)
-	var alias := _context_for_party(&"party_owner_beta", 1, "profile-party-beta", shared_party)
+	var alpha_fixture := _configure_stout_context(&"party_owner_alpha", 0, "profile-party-alpha", 7701, shared_party)
+	var alpha := alpha_fixture["context"] as PlayerRunContext
+	var item := alpha_fixture["item"] as ItemInstance
+	TestAssertions.equal(alpha_fixture["errors"], PackedStringArray(), "first party owner configures with equipped attributes", failures)
 	TestAssertions.truthy(registry.register_context(alpha, 7).ok(), "first party owner registers", failures)
+	var action_tags := DamageResolver.action_tags_for(shared_party.member_by_id(1).class_definition.primary_attack)
+	var sources_before := _source_documents(shared_party.member_by_id(1))
+	var activation_before := _activation_document(alpha.equipment_activation(1), item.instance_id)
+	var base_before := shared_party.stats_for(1)
+	var action_before := shared_party.stats_for_action(1, action_tags)
+	var revision_before := shared_party.stat_revision()
+	var changed: Array[int] = []
+	shared_party.stats_changed.connect(func(member_id: int) -> void: changed.append(member_id))
+
+	var alias_fixture := _configure_context(&"party_owner_beta", 1, "profile-party-beta", 7702, shared_party)
+	var alias := alias_fixture["context"] as PlayerRunContext
+	TestAssertions.equal(alias_fixture["errors"], PackedStringArray([
+		"PARTY_FORGE_RUN_CONTEXT_ERROR field=source_refresh reason=party coordinator unavailable",
+	]), "duplicate context cannot configure against an owned party", failures)
+	TestAssertions.equal(_source_documents(shared_party.member_by_id(1)), sources_before, "duplicate configure preserves exact member sources", failures)
+	TestAssertions.equal(_activation_document(alpha.equipment_activation(1), item.instance_id), activation_before, "duplicate configure preserves owner activation", failures)
+	TestAssertions.equal(shared_party.stat_revision(), revision_before, "duplicate configure preserves stat revision", failures)
+	TestAssertions.equal(changed, [], "duplicate configure emits no stat signal", failures)
+	TestAssertions.truthy(is_same(shared_party.stats_for(1), base_before), "duplicate configure preserves base cache identity", failures)
+	TestAssertions.truthy(is_same(shared_party.stats_for_action(1, action_tags), action_before), "duplicate configure preserves action cache identity", failures)
 	var alias_result := registry.register_context(alias, 8)
 	TestAssertions.equal(
 		RunContextRegistrationResult.Code.keys()[alias_result.code],
@@ -57,10 +85,108 @@ func _assert_party_ownership_contract(failures: Array[String]) -> void:
 	TestAssertions.equal(registry.context_for(&"party_owner_beta"), null, "duplicate party rejection does not index run player", failures)
 	TestAssertions.equal(registry.device_for(&"party_owner_beta"), -1, "duplicate party rejection does not index device", failures)
 
-	var replacement := _context(&"party_owner_beta", 1, "profile-party-beta")
-	TestAssertions.truthy(registry.register_context(replacement, 8).ok(), "same identity and device can retry with an unowned party", failures)
-	TestAssertions.equal(registry.all_contexts().size(), 2, "successful retry proves all rejected indexes stayed unchanged", failures)
-	TestAssertions.truthy(registry.context_for(&"party_owner_alpha") == alpha, "duplicate party rejection preserves original lookup", failures)
+	registry.clear()
+	TestAssertions.equal(registry.all_contexts().size(), 0, "clear removes the original party owner", failures)
+	var replacement_fixture := _configure_context(&"party_owner_beta", 1, "profile-party-beta", 7703, shared_party)
+	var replacement := replacement_fixture["context"] as PlayerRunContext
+	TestAssertions.equal(replacement_fixture["errors"], PackedStringArray(), "same PartyManager can bind a replacement after clear", failures)
+	TestAssertions.truthy(registry.register_context(replacement, 8).ok(), "replacement becomes the authoritative registered owner", failures)
+	TestAssertions.truthy(registry.context_for(&"party_owner_beta") == replacement, "replacement is indexed by exact identity", failures)
+
+	changed.clear()
+	var replacement_activation_before := _activation_document(replacement.equipment_activation(1), item.instance_id)
+	var replacement_base_before := shared_party.stats_for(1)
+	var replacement_action_before := shared_party.stats_for_action(1, action_tags)
+	var replacement_revision_before := shared_party.stat_revision()
+	var source := StatModifierSource.create(&"registry_replacement_constitution", &"character_growth", "Registry Replacement", 1, [
+		StatModifier.create(&"constitution", StatModifier.Operation.FLAT, 1.0, &"registry_replacement_constitution_roll", "Registry Replacement"),
+	])
+	TestAssertions.truthy(shared_party.replace_member_source(1, source), "replacement owner refreshes a direct non-equipment source", failures)
+	TestAssertions.equal(_source_ids(shared_party.member_by_id(1)), PackedStringArray([
+		"equipment_member_1",
+		"registry_replacement_constitution",
+	]), "replacement refresh commits the exact non-equipment and empty-equipment sources", failures)
+	TestAssertions.equal(replacement_activation_before, {
+		"active": [],
+		"disabled": PackedStringArray(),
+		"raw_constitution": 0.0,
+		"source": _source_document(replacement.equipment_activation(1).source),
+	}, "replacement starts with exact empty equipment activation", failures)
+	TestAssertions.equal(_activation_document(replacement.equipment_activation(1), item.instance_id), {
+		"active": [],
+		"disabled": PackedStringArray(),
+		"raw_constitution": 1.0,
+		"source": _source_document(replacement.equipment_activation(1).source),
+	}, "replacement activation refreshes against the new source without stale equipment", failures)
+	TestAssertions.near(shared_party.stats_for(1).value(&"max_health"), 263.0, 0.0001, "cleared owner is not invoked after same-party replacement", failures)
+	TestAssertions.equal(shared_party.stat_revision(), replacement_revision_before + 1, "replacement refresh advances the revision once", failures)
+	TestAssertions.equal(changed, [1], "replacement refresh emits one member-local stat signal", failures)
+	TestAssertions.truthy(not is_same(shared_party.stats_for(1), replacement_base_before), "replacement refresh replaces the base cache", failures)
+	TestAssertions.truthy(not is_same(shared_party.stats_for_action(1, action_tags), replacement_action_before), "replacement refresh replaces the action cache", failures)
+	TestAssertions.equal(_activation_document(alpha.equipment_activation(1), item.instance_id), activation_before, "cleared context retains local state but no longer owns party refresh", failures)
+
+func _assert_bind_failure_is_non_mutating(failures: Array[String]) -> void:
+	var catalog := GameCatalog.load_defaults()
+	var party := CoordinatorRejectingPartyManager.new()
+	party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
+	_parties.append(party)
+	var action_tags := DamageResolver.action_tags_for(party.member_by_id(1).class_definition.primary_attack)
+	var sources_before := _source_documents(party.member_by_id(1))
+	var base_before := party.stats_for(1)
+	var action_before := party.stats_for_action(1, action_tags)
+	var revision_before := party.stat_revision()
+	var changed: Array[int] = []
+	party.stats_changed.connect(func(member_id: int) -> void: changed.append(member_id))
+	var fixture := _configure_context(&"bind_rejected", 0, "profile-bind-rejected", 7801, party)
+	var context := fixture["context"] as PlayerRunContext
+	TestAssertions.equal(fixture["errors"], PackedStringArray([
+		"PARTY_FORGE_RUN_CONTEXT_ERROR field=source_refresh reason=party coordinator unavailable",
+	]), "coordinator bind failure is explicit and stable", failures)
+	TestAssertions.equal(_source_documents(party.member_by_id(1)), sources_before, "bind failure preserves exact sources", failures)
+	TestAssertions.equal(party.stat_revision(), revision_before, "bind failure preserves exact revision", failures)
+	TestAssertions.equal(changed, [], "bind failure emits no stat signal", failures)
+	TestAssertions.truthy(is_same(party.stats_for(1), base_before), "bind failure preserves base cache identity", failures)
+	TestAssertions.truthy(is_same(party.stats_for_action(1, action_tags), action_before), "bind failure preserves action cache identity", failures)
+	TestAssertions.equal(context.equipment_activation(1).error, "PARTY_FORGE_EQUIPMENT_ACTIVATION_ERROR member=1 detail=activation unavailable", "bind failure exposes no partial activation", failures)
+	var registration := RunContextRegistry.new().register_context(context)
+	TestAssertions.equal(registration.code, RunContextRegistrationResult.Code.INVALID_CONTEXT, "unowned bind failure cannot register", failures)
+
+func _assert_reinitialize_releases_stale_coordinator(failures: Array[String]) -> void:
+	var catalog := GameCatalog.load_defaults()
+	var party := _party()
+	var old_fixture := _configure_stout_context(&"reinitialize_old", 0, "profile-reinitialize-old", 7901, party)
+	var old_context := old_fixture["context"] as PlayerRunContext
+	var old_item := old_fixture["item"] as ItemInstance
+	TestAssertions.equal(old_fixture["errors"], PackedStringArray(), "pre-reinitialize context owns equipped activation", failures)
+	TestAssertions.truthy(old_context.equipment_activation(1).is_active(old_item.instance_id), "pre-reinitialize helmet is active", failures)
+	var old_registry := RunContextRegistry.new()
+	TestAssertions.truthy(old_registry.register_context(old_context).ok(), "pre-reinitialize context registers as owner", failures)
+	party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
+	var replacement_fixture := _configure_context(&"reinitialize_new", 0, "profile-reinitialize-new", 7902, party)
+	var replacement := replacement_fixture["context"] as PlayerRunContext
+	TestAssertions.equal(replacement_fixture["errors"], PackedStringArray(), "PartyManager reinitialize permits a fresh coordinator", failures)
+	old_registry.clear()
+	var action_tags := DamageResolver.action_tags_for(party.member_by_id(1).class_definition.primary_attack)
+	var base_before := party.stats_for(1)
+	var action_before := party.stats_for_action(1, action_tags)
+	var revision_before := party.stat_revision()
+	var changed: Array[int] = []
+	party.stats_changed.connect(func(member_id: int) -> void: changed.append(member_id))
+	var source := StatModifierSource.create(&"reinitialize_constitution", &"character_growth", "Reinitialize", 1, [
+		StatModifier.create(&"constitution", StatModifier.Operation.FLAT, 1.0, &"reinitialize_constitution_roll", "Reinitialize"),
+	])
+	TestAssertions.truthy(party.replace_member_source(1, source), "late clear exact-unbinds the stale owner without releasing the fresh owner", failures)
+	TestAssertions.equal(_source_ids(party.member_by_id(1)), PackedStringArray([
+		"equipment_member_1",
+		"reinitialize_constitution",
+	]), "post-reinitialize refresh commits exact fresh-context sources", failures)
+	TestAssertions.equal(replacement.equipment_activation(1).active_item_ids, [], "post-reinitialize activation contains no stale item", failures)
+	TestAssertions.near(replacement.equipment_activation(1).raw_attributes.value(&"constitution"), 1.0, 0.0001, "post-reinitialize activation sees the direct source", failures)
+	TestAssertions.near(party.stats_for(1).value(&"max_health"), 263.0, 0.0001, "post-reinitialize stats exclude stale old-context equipment", failures)
+	TestAssertions.equal(party.stat_revision(), revision_before + 1, "post-reinitialize refresh advances one revision", failures)
+	TestAssertions.equal(changed, [1], "post-reinitialize refresh emits one signal", failures)
+	TestAssertions.truthy(not is_same(party.stats_for(1), base_before), "post-reinitialize refresh replaces base cache", failures)
+	TestAssertions.truthy(not is_same(party.stats_for_action(1, action_tags), action_before), "post-reinitialize refresh replaces action cache", failures)
 
 func _assert_item_ownership_registration_contract(failures: Array[String]) -> void:
 	var registry := RunContextRegistry.new()
@@ -147,7 +273,95 @@ func _party() -> PartyManager:
 	return party
 
 func _context_for_party(run_id: StringName, slot: int, profile_id: String, party: PartyManager) -> PlayerRunContext:
+	var configured := _configure_context(run_id, slot, profile_id, 1337, party)
+	assert((configured["errors"] as PackedStringArray).is_empty())
+	return configured["context"] as PlayerRunContext
+
+func _configure_context(run_id: StringName, slot: int, profile_id: String, seed: int, party: PartyManager) -> Dictionary:
 	var context := PlayerRunContext.new()
-	var errors := context.configure(run_id, slot, ProfileState.new_profile(profile_id, "Registry Fixture", 1000), 1337, party, 100)
-	assert(errors.is_empty())
-	return context
+	var errors := context.configure(run_id, slot, ProfileState.new_profile(profile_id, "Registry Fixture", 1000), seed, party, 100)
+	return {"context": context, "errors": errors}
+
+func _configure_stout_context(run_id: StringName, slot: int, profile_id: String, seed: int, party: PartyManager) -> Dictionary:
+	var owner := String(run_id)
+	var item_document := {
+		"schema_version": ItemInstance.SCHEMA_VERSION,
+		"instance_id": "%s-stout-helmet" % owner,
+		"base_definition_id": "forge_vanguard_helmet",
+		"item_level": 1,
+		"rarity_id": "common",
+		"affixes": [{
+			"definition_id": "stout",
+			"affix_kind": "prefix",
+			"tier": 1,
+			"rolls": [{
+				"stat_id": "constitution",
+				"operation": StatModifier.Operation.FLAT,
+				"value": 3.0,
+				"required_tags": [],
+			}],
+		}],
+		"origin": {"issuer_namespace": "run:%s:%d:%s" % [profile_id, seed, owner], "seed": seed, "sequence": 0, "source": "registry_lifecycle"},
+	}
+	var decoded := ItemInstanceCodec.decode(item_document, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)
+	assert(decoded.ok())
+	var item := decoded.item
+	var state := ItemOwnershipState.create(owner, ItemRegistry.new([item]), [
+		ItemSlotContainer.create(&"run-inventory", ItemSlotContainer.RUN_INVENTORY, owner, 5),
+		ItemSlotContainer.create(&"run-equipment-001", ItemSlotContainer.RUN_MEMBER_EQUIPMENT, owner, EquipmentSlotIndex.capacity(), {
+			EquipmentSlotIndex.index_for(&"helmet"): item.instance_id,
+		}),
+	])
+	var bootstrap := RunItemBootstrap.create(StringName("%s-run" % owner), seed, run_id, 1, state)
+	var profile := ProfileState.new_profile(profile_id, "Registry Equipped Fixture", 1000)
+	profile.inventory_columns = 1
+	profile.resumable_run = ResumableRunItemCodec.encode(bootstrap)
+	var context := PlayerRunContext.new()
+	var errors := context.configure(run_id, slot, profile, seed, party, 100, bootstrap)
+	return {"context": context, "errors": errors, "item": item}
+
+func _activation_document(activation: EquipmentActivationResult, item_id: String) -> Dictionary:
+	return {
+		"active": activation.active_item_ids,
+		"disabled": activation.disabled_reasons(item_id),
+		"raw_constitution": activation.raw_attributes.value(&"constitution") if activation.raw_attributes != null else -1.0,
+		"source": _source_document(activation.source),
+	}
+
+func _source_ids(member: PartyMemberState) -> PackedStringArray:
+	var ids := PackedStringArray()
+	for source: StatModifierSource in member.modifier_sources:
+		ids.append(String(source.id))
+	return ids
+
+func _source_documents(member: PartyMemberState) -> String:
+	var documents: Array[Dictionary] = []
+	for source: StatModifierSource in member.modifier_sources:
+		documents.append(_source_document(source))
+	return JSON.stringify(documents)
+
+func _source_document(source: StatModifierSource) -> Dictionary:
+	if source == null:
+		return {}
+	var modifiers: Array[Dictionary] = []
+	for modifier: StatModifier in source.modifiers:
+		modifiers.append({
+			"stat_id": String(modifier.stat_id),
+			"operation": modifier.operation,
+			"value": modifier.value,
+			"source_id": String(modifier.source_id),
+			"source_label": modifier.source_label,
+			"required_tags": modifier.required_tags,
+			"excluded_tags": modifier.excluded_tags,
+			"required_capability_tags": modifier.required_capability_tags,
+			"excluded_capability_tags": modifier.excluded_capability_tags,
+			"required_action_tags": modifier.required_action_tags,
+			"excluded_action_tags": modifier.excluded_action_tags,
+		})
+	return {
+		"id": String(source.id),
+		"source_type": String(source.source_type),
+		"label": source.label,
+		"owner_member_id": source.owner_member_id,
+		"modifiers": modifiers,
+	}
