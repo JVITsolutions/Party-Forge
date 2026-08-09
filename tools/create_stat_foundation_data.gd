@@ -4,6 +4,13 @@ const OUTPUT := "res://data/stats/core_stats.tres"
 
 func _initialize() -> void:
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path("res://data/stats"))
+	var catalog := build_catalog()
+	var result := ResourceSaver.save(catalog, OUTPUT)
+	if result != OK:
+		push_error("PARTY_FORGE_STAT_ERROR id=catalog reason=save failed code=%d" % result)
+	quit(result)
+
+static func build_catalog() -> StatCatalog:
 	var catalog := StatCatalog.new()
 	catalog.definitions = [
 		_stat(&"max_health", "Maximum Health", &"overview", 100.0, StatDefinition.ValueFormat.INTEGER, 0, true, 1.0, false, 0.0, StatDefinition.Visibility.UNIVERSAL),
@@ -33,16 +40,17 @@ func _initialize() -> void:
 		_resistance(&"cold_resistance", "Cold Resistance", &"cold"),
 		_resistance(&"lightning_resistance", "Lightning Resistance", &"lightning"),
 		_resistance(&"chaos_resistance", "Chaos Resistance", &"chaos"),
+		_stat(&"melee_damage", "Melee Damage", &"offense", 1.0, StatDefinition.ValueFormat.MULTIPLIER, 2, true, 0.0, false, 0.0, StatDefinition.Visibility.CAPABILITY, [&"melee"]),
+		_stat(&"ranged_damage", "Ranged Damage", &"offense", 1.0, StatDefinition.ValueFormat.MULTIPLIER, 2, true, 0.0, false, 0.0, StatDefinition.Visibility.CAPABILITY, [&"ranged"]),
+		_stat(&"caster_damage", "Caster Damage", &"offense", 1.0, StatDefinition.ValueFormat.MULTIPLIER, 2, true, 0.0, false, 0.0, StatDefinition.Visibility.CAPABILITY, [&"caster"]),
+		_stat(&"party_influence", "Party Influence", &"utility", 0.0, StatDefinition.ValueFormat.NUMBER, 1, true, 0.0, false, 0.0, StatDefinition.Visibility.NON_DEFAULT),
 	]
-	var result := ResourceSaver.save(catalog, OUTPUT)
-	if result != OK:
-		push_error("PARTY_FORGE_STAT_ERROR id=catalog reason=save failed code=%d" % result)
-	quit(result)
+	return catalog
 
-func _resistance(id: StringName, label: String, capability: StringName) -> StatDefinition:
+static func _resistance(id: StringName, label: String, capability: StringName) -> StatDefinition:
 	return _stat(id, label, &"defense", 0.0, StatDefinition.ValueFormat.RATIO_PERCENT, 1, true, -1.0, true, 0.75, StatDefinition.Visibility.CAPABILITY, [capability])
 
-func _stat(id: StringName, label: String, group: StringName, base: float, format: StatDefinition.ValueFormat, precision: int, has_min: bool, min_value: float, has_max: bool, max_value: float, visibility: StatDefinition.Visibility, tags: Array[StringName] = []) -> StatDefinition:
+static func _stat(id: StringName, label: String, group: StringName, base: float, format: StatDefinition.ValueFormat, precision: int, has_min: bool, min_value: float, has_max: bool, max_value: float, visibility: StatDefinition.Visibility, tags: Array[StringName] = []) -> StatDefinition:
 	var definition := StatDefinition.new()
 	definition.id = id
 	definition.display_name = label
