@@ -88,7 +88,7 @@ func _render_projection() -> void:
 func _populate_filters() -> void:
 	if _rarity().item_count == 0:
 		_rarity().add_item("All Rarities"); _rarity().set_item_metadata(0, &"")
-		for id: StringName in GameCatalog.ITEM_FOUNDATION_CATALOG.ordinary_rarity_ids(): _rarity().add_item(String(id).capitalize()); _rarity().set_item_metadata(_rarity().item_count - 1, id)
+		for id: StringName in GameCatalog.ITEM_FOUNDATION_CATALOG.supported_rarity_ids(): _rarity().add_item(String(id).capitalize()); _rarity().set_item_metadata(_rarity().item_count - 1, id)
 	if _item_type().item_count == 0:
 		_item_type().add_item("All Item Types"); _item_type().set_item_metadata(0, &"")
 		var types: Array[StringName] = []

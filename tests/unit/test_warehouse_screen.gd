@@ -1,5 +1,7 @@
 extends RefCounted
 
+const EXPECTED_SUPPORTED_RARITIES: Array[StringName] = [&"common", &"uncommon", &"rare", &"epic", &"legendary", &"mythic", &"exotic", &"ascendant", &"divine", &"eternal"]
+
 func run() -> Array[String]:
 	var failures: Array[String] = []
 	var constants := (load("res://scripts/ui/main_menu/main_menu_view_model.gd") as Script).get_script_constant_map()
@@ -15,6 +17,7 @@ func run() -> Array[String]:
 	TestAssertions.truthy(screen.get_node_or_null("Overlay/Frame/Layout/Body/Equipment") == null, "Warehouse has no equipment sheet", failures)
 	for path: String in ["Organization/Search", "Organization/Rarity", "Organization/ItemType", "Organization/Sort", "Footer/Category", "Footer/BulkMove"]:
 		TestAssertions.truthy(screen.get_node_or_null("Overlay/Frame/Layout/%s" % path) != null, "Warehouse organization control exists: %s" % path, failures)
+	_assert_supported_rarity_filters(screen, failures)
 	var projection := screen.projection()
 	TestAssertions.equal(projection.stash_tabs[0]["slots"], {"99": "item-ring"}, "Warehouse retains exact shared sparse placement", failures)
 	TestAssertions.equal(projection.item("item-ring")["instance_id"], "item-ring", "Warehouse shares exact item identity", failures)
@@ -64,6 +67,19 @@ func run() -> Array[String]:
 	TestAssertions.truthy(not tooltip.visible and not bool(tooltip.call("is_pinned")), "closing Warehouse force-dismisses and unpins its tooltip", failures)
 	screen.free()
 	return failures
+
+func _assert_supported_rarity_filters(screen: WarehouseScreen, failures: Array[String]) -> void:
+	var control := screen.get_node("Overlay/Frame/Layout/Organization/Rarity") as OptionButton
+	TestAssertions.equal(control.item_count, EXPECTED_SUPPORTED_RARITIES.size() + 1, "Warehouse exposes All plus all ten supported rarities", failures)
+	TestAssertions.equal(StringName(control.get_item_metadata(0)), &"", "Warehouse All Rarities metadata is empty", failures)
+	var actual_ids: Array[StringName] = []
+	for index: int in range(1, control.item_count):
+		actual_ids.append(StringName(control.get_item_metadata(index)))
+		var rarity_id := EXPECTED_SUPPORTED_RARITIES[index - 1] if index - 1 < EXPECTED_SUPPORTED_RARITIES.size() else &""
+		TestAssertions.equal(control.get_item_text(index), String(rarity_id).capitalize(), "Warehouse rarity %d label follows manifest order" % index, failures)
+	TestAssertions.equal(actual_ids, EXPECTED_SUPPORTED_RARITIES, "Warehouse rarity filter metadata follows all ten supported IDs in manifest order", failures)
+	for rarity_id: StringName in [&"exotic", &"ascendant", &"divine"]:
+		TestAssertions.truthy(rarity_id in actual_ids, "Warehouse includes supported %s rarity filter" % rarity_id, failures)
 
 func _visible_ids(screen: WarehouseScreen, count: int) -> PackedStringArray:
 	var result := PackedStringArray()
