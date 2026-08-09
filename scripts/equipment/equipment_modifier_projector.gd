@@ -87,7 +87,7 @@ static func project(
 					return EquipmentModifierProjection.failure(_error(member_id, String(slot_id), item_id, affix_id, str(roll_index), stat_id, "unsupported operation %d" % roll.operation))
 				if not is_finite(roll.value):
 					return EquipmentModifierProjection.failure(_error(member_id, String(slot_id), item_id, affix_id, str(roll_index), stat_id, "non-finite value"))
-				var tag_error := _validate_tags(roll.required_tags)
+				var tag_error := _validate_tags(roll.required_tags, foundation.known_item_tags)
 				if not tag_error.is_empty():
 					return EquipmentModifierProjection.failure(_error(member_id, String(slot_id), item_id, affix_id, str(roll_index), stat_id, tag_error))
 				var effect := definition.effects[roll_index]
@@ -154,13 +154,15 @@ static func _validate_inputs(
 		return _error(member_id, "<none>", "<none>", "<none>", "<none>", "<none>", "item registry is null")
 	return ""
 
-static func _validate_tags(tags: Array[StringName]) -> String:
+static func _validate_tags(tags: Array[StringName], known_tags: Array[StringName]) -> String:
 	var seen: Dictionary = {}
 	for tag: StringName in tags:
 		if tag.is_empty():
 			return "empty required tag"
 		if seen.has(tag):
 			return "duplicate required tag %s" % tag
+		if tag not in known_tags:
+			return "unknown required tag %s" % tag
 		seen[tag] = true
 	return ""
 

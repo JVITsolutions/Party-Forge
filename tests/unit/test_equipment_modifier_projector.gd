@@ -194,6 +194,20 @@ func _test_invalid_rolls_fail_atomically(
 		"empty required tag", failures,
 	)
 
+	var unknown_tag_foundation := foundation.duplicate(true) as ItemFoundationCatalog
+	var unknown_tag_definition := unknown_tag_foundation.affix(&"melee_focus").duplicate(true) as ItemAffixDefinition
+	unknown_tag_definition.effects[0] = unknown_tag_definition.effects[0].duplicate(true) as ItemModifierEffectDefinition
+	unknown_tag_definition.effects[0].required_tags = [&"review_unknown_tag"]
+	unknown_tag_foundation.affixes[unknown_tag_foundation.affixes.find(unknown_tag_foundation.affix(&"melee_focus"))] = unknown_tag_definition
+	var unknown_tag := _active_item()
+	unknown_tag.affixes[3].rolls[0].required_tags = [&"review_unknown_tag"]
+	_assert_projection_error(
+		_state([unknown_tag], {EquipmentSlotIndex.index_for(&"main_hand"): unknown_tag.instance_id}),
+		[unknown_tag.instance_id], equipment, unknown_tag_foundation, stats,
+		"PARTY_FORGE_EQUIPMENT_PROJECTION_ERROR member=1 slot=main_hand item=item-active affix=melee_focus roll=0 stat=attack_speed reason=unknown required tag review_unknown_tag",
+		"unknown required tag", failures,
+	)
+
 func _test_invalid_inputs_fail_atomically(
 	equipment: EquipmentCatalog,
 	foundation: ItemFoundationCatalog,
