@@ -142,8 +142,10 @@ func _test_charisma_rare_family_direction(failures: Array[String]) -> void:
 	var charisma_1000_rate := _rare_family_rate(1000.0)
 	var charisma_100_gain := charisma_100_rate - zero_rate
 	var charisma_1000_gain := charisma_1000_rate - zero_rate
-	TestAssertions.truthy(charisma_100_rate > zero_rate, "Charisma improves rare-family rate", failures)
-	TestAssertions.truthy(charisma_1000_gain < charisma_100_gain * 2.0, "Charisma gains diminish", failures)
+	TestAssertions.truthy(charisma_100_rate > zero_rate, "Charisma 100 improves rare-family rate", failures)
+	TestAssertions.truthy(charisma_1000_rate > charisma_100_rate, "Charisma 1000 improves beyond Charisma 100", failures)
+	TestAssertions.truthy(charisma_1000_rate - charisma_100_rate < charisma_100_gain, "Charisma marginal gain diminishes", failures)
+	TestAssertions.truthy(charisma_1000_gain < charisma_100_gain * 2.0, "total Charisma gains reflect diminishing returns", failures)
 
 func _rare_family_rate(charisma: float) -> float:
 	var affixes: Array[ItemAffixDefinition] = []

@@ -46,7 +46,7 @@ $godot = 'C:\Users\Jacob\AppData\Local\Microsoft\WinGet\Packages\GodotEngine.God
 ```
 
 - Exit: `0`.
-- Duration: `4.547s` measured inside PowerShell.
+- Duration: `4.716s` measured inside PowerShell after final review corrections.
 - Forbidden diagnostic count for `SCRIPT ERROR`, `Parse Error`, `No loader found`, failed-resource text, and failed resource loads: `0`.
 
 ### Focused Increment 1 batch
@@ -56,7 +56,7 @@ $godot = 'C:\Users\Jacob\AppData\Local\Microsoft\WinGet\Packages\GodotEngine.God
 ```
 
 - Exit: `0`.
-- Duration: `11.926s`.
+- Duration: `12.230s` after final review corrections.
 - Exact summary: `TEST_SUMMARY: PASS (0 failures)` once.
 - `TEST_FAILURE` count: `0`.
 
@@ -67,7 +67,7 @@ $godot = 'C:\Users\Jacob\AppData\Local\Microsoft\WinGet\Packages\GodotEngine.God
 ```
 
 - Exit: `0`.
-- Duration: `109.300s`.
+- Duration: `107.223s` after final review corrections.
 - Exact summary: `TEST_SUMMARY: PASS (156 suites)` once.
 - `TEST_FAILURE` count: `0`.
 - Script/parse/loader error count: `0`.
@@ -81,7 +81,7 @@ $godot = 'C:\Users\Jacob\AppData\Local\Microsoft\WinGet\Packages\GodotEngine.God
 ```
 
 - Exit: `0`.
-- Duration: `1.852s`.
+- Duration: `1.834s` after final review corrections.
 - `PARTY_FORGE_BOOT_OK`: exactly once.
 - `PARTY_FORGE_CLASS_SELECTION_READY`: exactly once.
 - Script/parse/loader/resource-load error count: `0`.
@@ -96,7 +96,7 @@ git status --short
 git diff --stat main...HEAD
 ```
 
-`git diff --check` produced no findings. Task 8 stages only these planned paths:
+`git diff --check` produced no findings. The initial Task 8 commit contained these planned paths:
 
 - `scripts/items/item_foundation_catalog.gd`
 - `tests/unit/test_game_catalog.gd`
@@ -104,6 +104,19 @@ git diff --stat main...HEAD
 - `docs/verification/2026-08-08-weighted-loot-definitions-and-generator.md`
 
 `scripts/data/game_catalog.gd` already passed `equipment_catalog` into foundation validation in the prior manifest work, so Task 8 required no additional edit there. No profile data, user save, `.godot` cache, or `.gd.uid` sidecar is part of the change. Generated UID sidecars remain untracked and deliberately untouched.
+
+## Final review corrections
+
+Final review identified three reachability/vocabulary gaps and one distribution assertion gap. The follow-up corrects them without production drop or placement wiring:
+
+- Reachability now solves one complete pattern scenario on one base and one domain/source pair. Base implicits seed the same blocked-definition and blocked-family state used by prefix, suffix, and special slots. Candidate IDs are lexically ordered, failed states are memoized, and the default 10,000-state exploration budget fails closed with `reason=reachability exploration budget exhausted`.
+- Regression fixtures prove rejection of cross-kind family conflicts, implicit/explicit family conflicts, kinds that are individually feasible only on different bases, incompatible domain/source routes, and an exhausted exploration budget.
+- `known_item_tags` is the manifest-backed canonical vocabulary for generation filters. It now exactly equals the union of all live `normalized_generation_tags()`, including explicit generation tags, eligibility tags, item types, weight classes, and weapon families. Request base/affix filters validate against the same registry.
+- `ItemFoundationCatalog.generation_unlock_tags()` is the Increment 1 unlock vocabulary. Its source is the union of rarity and affix `required_unlock_tags` authored in the item foundation manifest. A later progression increment may replace or cross-check it against a global progression registry; Increment 1 intentionally has no separate progression registry.
+- An end-to-end service regression proves an unlock-gated affix is rejected before issuance without its tag and generated when that manifest tag is supplied.
+- Charisma distribution now separately proves `rate_1000 > rate_100 > rate_0` and that the marginal gain from 100 to 1000 is smaller than the gain from 0 to 100. Both exact replay hashes remained unchanged.
+
+The review-fix commit adds only the canonical manifest, foundation/request contracts, their focused tests, and this verification record. No schema, ownership, issuer sequence, profile, save, cache, UID, or production-wiring file is included.
 
 ## Deferred items assessed
 

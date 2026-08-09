@@ -114,8 +114,15 @@ func _test_request_validation(foundation: ItemFoundationCatalog, failures: Array
 	request = _valid_request()
 	request.unlock_tags = [&"rarity_rare_unlocked"]
 	TestAssertions.equal(request.validate(foundation), "", "manifest rarity unlock tag passes", failures)
+	var affix_unlock_foundation := foundation.duplicate(true) as ItemFoundationCatalog
+	var unlocked_index := affix_unlock_foundation.affixes.find(affix_unlock_foundation.affix(&"stout"))
+	affix_unlock_foundation.affixes[unlocked_index] = affix_unlock_foundation.affixes[unlocked_index].duplicate(true) as ItemAffixDefinition
+	affix_unlock_foundation.affixes[unlocked_index].required_unlock_tags = [&"affix_stout_unlocked"]
+	request.unlock_tags = [&"affix_stout_unlocked"]
+	TestAssertions.equal(request.validate(affix_unlock_foundation), "", "manifest affix unlock tag passes", failures)
+	TestAssertions.truthy(&"affix_stout_unlocked" in affix_unlock_foundation.generation_unlock_tags(), "foundation exposes affix unlock vocabulary", failures)
 	request.unlock_tags = [&"missing_unlock"]
-	_expect_error(request, foundation, "unlock_tags", "unknown unlock tag missing_unlock", "unknown unlock tag", failures)
+	_expect_error(request, affix_unlock_foundation, "unlock_tags", "unknown unlock tag missing_unlock", "unknown unlock tag", failures)
 	request = _valid_request()
 	request.party_archetype_tags = [&"missing_archetype"]
 	_expect_error(request, foundation, "party_archetype_tags", "unknown archetype tag missing_archetype", "unknown archetype tag", failures)
@@ -127,9 +134,9 @@ func _test_request_validation(foundation: ItemFoundationCatalog, failures: Array
 	_expect_error(request, foundation, "required_affix_tags", "unknown item tag missing_item_tag", "unknown affix tag", failures)
 
 	request = _valid_request()
-	request.required_base_tags = [&"melee"]
-	request.excluded_base_tags = [&"melee"]
-	_expect_error(request, foundation, "required_base_tags", "contradicts excluded tag melee", "base tag contradiction", failures)
+	request.required_base_tags = [&"ranged"]
+	request.excluded_base_tags = [&"ranged"]
+	_expect_error(request, foundation, "required_base_tags", "contradicts excluded tag ranged", "base tag contradiction", failures)
 	request = _valid_request()
 	request.required_affix_tags = [&"caster"]
 	request.excluded_affix_tags = [&"caster"]

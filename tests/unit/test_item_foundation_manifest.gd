@@ -90,12 +90,13 @@ func _assert_external_affixes(catalog: ItemFoundationCatalog, failures: Array[St
 		TestAssertions.truthy(definition.resource_path.begins_with("res://data/items/affixes/"), "%s is an external manifest resource" % definition.id, failures)
 
 func _assert_equipment_tag_registry(catalog: ItemFoundationCatalog, equipment: EquipmentCatalog, failures: Array[String]) -> void:
-	for tag: StringName in ItemGenerationVocabulary.ARCHETYPES:
-		TestAssertions.truthy(tag in catalog.known_item_tags, "archetype tag %s is registered" % tag, failures)
+	var live_tags: Array[StringName] = []
 	for definition: EquipmentBaseDefinition in equipment.definitions:
-		for tag: StringName in [definition.item_type_id, definition.weight_class_id, definition.weapon_family_id]:
-			if not tag.is_empty():
-				TestAssertions.truthy(tag in catalog.known_item_tags, "equipment tag %s is registered" % tag, failures)
+		for tag: StringName in definition.normalized_generation_tags():
+			if tag not in live_tags:
+				live_tags.append(tag)
+	live_tags.sort_custom(func(left: StringName, right: StringName) -> bool: return String(left) < String(right))
+	TestAssertions.equal(catalog.known_item_tags, live_tags, "manifest registry is exact normalized equipment tag union", failures)
 
 func _assert_upper_rarity_issuance(catalog: ItemFoundationCatalog, equipment: EquipmentCatalog, failures: Array[String]) -> void:
 	for index: int in range(5, EXPECTED_RARITIES.size()):

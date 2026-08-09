@@ -1,6 +1,8 @@
 class_name ItemFoundationCatalog
 extends Resource
 
+const DEFAULT_REACHABILITY_EXPLORATION_BUDGET := 10000
+
 @export var modifier_family_ids: Array[StringName] = []
 @export var known_source_ids: Array[StringName] = []
 @export var known_item_tags: Array[StringName] = []
@@ -33,12 +35,32 @@ func ordinary_rarity_ids() -> Array[StringName]:
 			ids.append(definition.id)
 	return ids
 
-func validate(stat_catalog: StatCatalog, equipment_catalog: EquipmentCatalog = null) -> PackedStringArray:
+func generation_unlock_tags() -> Array[StringName]:
+	var tags: Array[StringName] = []
+	for rarity_definition: ItemRarityDefinition in rarities:
+		if rarity_definition == null:
+			continue
+		for tag: StringName in rarity_definition.required_unlock_tags:
+			if not tag.is_empty() and tag not in tags:
+				tags.append(tag)
+	for affix_definition: ItemAffixDefinition in affixes:
+		if affix_definition == null:
+			continue
+		for tag: StringName in affix_definition.required_unlock_tags:
+			if not tag.is_empty() and tag not in tags:
+				tags.append(tag)
+	tags.sort_custom(func(left: StringName, right: StringName) -> bool: return String(left) < String(right))
+	return tags
+
+func validate(
+	stat_catalog: StatCatalog,
+	equipment_catalog: EquipmentCatalog = null,
+	reachability_exploration_budget: int = DEFAULT_REACHABILITY_EXPLORATION_BUDGET
+) -> PackedStringArray:
 	var errors := PackedStringArray()
 	_validate_registry(modifier_family_ids, "modifier family", errors)
 	_validate_registry(known_source_ids, "source", errors)
 	_validate_registry(known_item_tags, "item tag", errors)
-	var live_item_tags := _live_equipment_tags(equipment_catalog)
 	_validate_equipment_tags(equipment_catalog, errors)
 
 	var known_rarities: Array[StringName] = []
@@ -82,13 +104,13 @@ func validate(stat_catalog: StatCatalog, equipment_catalog: EquipmentCatalog = n
 			ItemGenerationVocabulary.DOMAINS,
 			known_source_ids,
 			known_rarities,
-			live_item_tags if equipment_catalog != null else known_item_tags
+			known_item_tags
 		):
 			errors.append("PARTY_FORGE_ITEM_AFFIX_ERROR id=%s reason=%s" % [definition.id, reason])
 		if not _has_reachable_tier(definition, &"", &"", &""):
 			errors.append("PARTY_FORGE_ITEM_AFFIX_ERROR id=%s reason=no tier is reachable at item level 1..1000" % definition.id)
 	_validate_base_implicits(equipment_catalog, errors)
-	_validate_ordinary_pattern_reachability(equipment_catalog, errors)
+	_validate_ordinary_pattern_reachability(equipment_catalog, reachability_exploration_budget, errors)
 	return errors
 
 func _validate_registry(values: Array[StringName], label: String, errors: PackedStringArray) -> void:
@@ -111,26 +133,18 @@ func _live_equipment_tags(equipment_catalog: EquipmentCatalog) -> Array[StringNa
 		for tag: StringName in definition.normalized_generation_tags():
 			if not tag.is_empty() and tag not in result:
 				result.append(tag)
-	result.sort()
+	result.sort_custom(func(left: StringName, right: StringName) -> bool: return String(left) < String(right))
 	return result
 
 func _validate_equipment_tags(equipment_catalog: EquipmentCatalog, errors: PackedStringArray) -> void:
 	if equipment_catalog == null:
 		return
-	var expected: Dictionary = {}
-	for tag: StringName in ItemGenerationVocabulary.ARCHETYPES:
-		expected[tag] = true
-	for definition: EquipmentBaseDefinition in equipment_catalog.definitions:
-		if definition == null:
-			continue
-		for tag: StringName in [definition.item_type_id, definition.weight_class_id, definition.weapon_family_id]:
-			if not tag.is_empty():
-				expected[tag] = true
-	for tag: StringName in expected:
+	var live_item_tags := _live_equipment_tags(equipment_catalog)
+	for tag: StringName in live_item_tags:
 		if tag not in known_item_tags:
 			errors.append("PARTY_FORGE_ITEM_MANIFEST_ERROR reason=missing current equipment item tag %s" % tag)
 	for tag: StringName in known_item_tags:
-		if not expected.has(tag):
+		if tag not in live_item_tags:
 			errors.append("PARTY_FORGE_ITEM_MANIFEST_ERROR reason=unknown current equipment item tag %s" % tag)
 
 func _validate_base_implicits(equipment_catalog: EquipmentCatalog, errors: PackedStringArray) -> void:
@@ -146,45 +160,104 @@ func _validate_base_implicits(equipment_catalog: EquipmentCatalog, errors: Packe
 			elif definition.affix_kind != "implicit":
 				errors.append("PARTY_FORGE_ITEM_AFFIX_ERROR id=%s base=%s reason=base implicit references affix kind %s" % [implicit_id, base.id, definition.affix_kind])
 
-func _validate_ordinary_pattern_reachability(equipment_catalog: EquipmentCatalog, errors: PackedStringArray) -> void:
+func _validate_ordinary_pattern_reachability(
+	equipment_catalog: EquipmentCatalog,
+	exploration_budget: int,
+	errors: PackedStringArray
+) -> void:
 	if equipment_catalog == null:
 		return
+	var available_unlock_tags := generation_unlock_tags()
 	for rarity_definition: ItemRarityDefinition in rarities:
 		if rarity_definition == null or not rarity_definition.ordinary_generation_enabled:
 			continue
 		for pattern: ItemAffixPatternDefinition in rarity_definition.patterns:
 			if pattern == null:
 				continue
-			for kind: String in ["prefix", "suffix", "special"]:
-				var required_count := _pattern_kind_count(pattern, kind)
-				if required_count <= 0:
-					continue
-				if not _pattern_kind_is_reachable(rarity_definition.id, kind, required_count, equipment_catalog):
-					errors.append("PARTY_FORGE_ITEM_RARITY_ERROR id=%s pattern=%s kind=%s reason=no live affix can fill declared slot" % [rarity_definition.id, pattern.id, kind])
+			var state := {"remaining": maxi(exploration_budget, 0), "exhausted": false}
+			if _whole_pattern_is_reachable(rarity_definition.id, pattern, equipment_catalog, available_unlock_tags, state):
+				continue
+			if bool(state["exhausted"]):
+				errors.append("PARTY_FORGE_ITEM_RARITY_ERROR id=%s pattern=%s reason=reachability exploration budget exhausted" % [rarity_definition.id, pattern.id])
+			else:
+				errors.append("PARTY_FORGE_ITEM_RARITY_ERROR id=%s pattern=%s reason=no complete live generation scenario" % [rarity_definition.id, pattern.id])
 
-func _pattern_kind_is_reachable(
+func _whole_pattern_is_reachable(
 	rarity_id: StringName,
-	kind: String,
-	required_count: int,
-	equipment_catalog: EquipmentCatalog
+	pattern: ItemAffixPatternDefinition,
+	equipment_catalog: EquipmentCatalog,
+	available_unlock_tags: Array[StringName],
+	budget: Dictionary
 ) -> bool:
-	for base: EquipmentBaseDefinition in equipment_catalog.definitions:
-		if base == null:
-			continue
-		var candidates: Array[ItemAffixDefinition] = []
-		var base_tags := base.normalized_generation_tags()
-		for definition: ItemAffixDefinition in affixes:
-			if _affix_is_live_candidate(definition, kind, rarity_id, base_tags):
-				candidates.append(definition)
-		if _has_family_compatible_set(candidates, 0, {}, required_count):
+	var domains := pattern.allowed_generation_domains.duplicate()
+	if domains.is_empty():
+		domains = ItemGenerationVocabulary.DOMAINS.duplicate()
+	domains.sort_custom(func(left: StringName, right: StringName) -> bool: return String(left) < String(right))
+	var sources := known_source_ids.duplicate()
+	sources.sort_custom(func(left: StringName, right: StringName) -> bool: return String(left) < String(right))
+	var bases := equipment_catalog.definitions.duplicate()
+	bases.sort_custom(func(left: EquipmentBaseDefinition, right: EquipmentBaseDefinition) -> bool:
+		if left == null:
+			return false
+		if right == null:
 			return true
+		return String(left.id) < String(right.id)
+	)
+	for domain: StringName in domains:
+		for source_id: StringName in sources:
+			for base: EquipmentBaseDefinition in bases:
+				if base == null:
+					continue
+				if _scenario_is_reachable(rarity_id, pattern, base, domain, source_id, available_unlock_tags, budget):
+					return true
+				if bool(budget["exhausted"]):
+					return false
 	return false
 
-func _affix_is_live_candidate(
+func _scenario_is_reachable(
+	rarity_id: StringName,
+	pattern: ItemAffixPatternDefinition,
+	base: EquipmentBaseDefinition,
+	domain: StringName,
+	source_id: StringName,
+	available_unlock_tags: Array[StringName],
+	budget: Dictionary
+) -> bool:
+	var base_tags := base.normalized_generation_tags()
+	var blocked_ids: Dictionary = {}
+	var blocked_families: Dictionary = {}
+	var implicit_ids := base.implicit_affix_ids.duplicate()
+	implicit_ids.sort_custom(func(left: StringName, right: StringName) -> bool: return String(left) < String(right))
+	for implicit_id: StringName in implicit_ids:
+		var implicit := affix(implicit_id)
+		if not _affix_is_scenario_candidate(implicit, "implicit", rarity_id, base_tags, domain, source_id, available_unlock_tags):
+			return false
+		if blocked_ids.has(implicit.id) or implicit.modifier_family_ids.any(func(family_id: StringName) -> bool: return blocked_families.has(family_id)):
+			return false
+		_block_reachability_affix(implicit, blocked_ids, blocked_families)
+
+	var slots: Array[String] = []
+	for kind: String in ["prefix", "suffix", "special"]:
+		for _slot: int in _pattern_kind_count(pattern, kind):
+			slots.append(kind)
+	var candidates_by_kind: Dictionary = {}
+	for kind: String in ["prefix", "suffix", "special"]:
+		var candidates: Array[ItemAffixDefinition] = []
+		for definition: ItemAffixDefinition in affixes:
+			if _affix_is_scenario_candidate(definition, kind, rarity_id, base_tags, domain, source_id, available_unlock_tags):
+				candidates.append(definition)
+		candidates.sort_custom(func(left: ItemAffixDefinition, right: ItemAffixDefinition) -> bool: return String(left.id) < String(right.id))
+		candidates_by_kind[kind] = candidates
+	return _fill_pattern_slots(slots, 0, candidates_by_kind, blocked_ids, blocked_families, {}, budget)
+
+func _affix_is_scenario_candidate(
 	definition: ItemAffixDefinition,
 	kind: String,
 	rarity_id: StringName,
-	base_tags: Array[StringName]
+	base_tags: Array[StringName],
+	domain: StringName,
+	source_id: StringName,
+	available_unlock_tags: Array[StringName]
 ) -> bool:
 	if definition == null or definition.affix_kind != kind:
 		return false
@@ -192,13 +265,15 @@ func _affix_is_live_candidate(
 		return false
 	if definition.excluded_item_tags.any(func(tag: StringName) -> bool: return tag in base_tags):
 		return false
-	if not definition.allowed_generation_domains.is_empty() and &"ordinary_drop" not in definition.allowed_generation_domains:
+	if not definition.allowed_generation_domains.is_empty() and domain not in definition.allowed_generation_domains:
 		return false
-	if not definition.allowed_source_ids.is_empty() and &"ordinary_enemy" not in definition.allowed_source_ids:
+	if not definition.allowed_source_ids.is_empty() and source_id not in definition.allowed_source_ids:
 		return false
 	if not definition.allowed_rarity_ids.is_empty() and rarity_id not in definition.allowed_rarity_ids:
 		return false
-	return _has_reachable_tier(definition, rarity_id, &"ordinary_enemy", &"ordinary_drop")
+	if definition.required_unlock_tags.any(func(tag: StringName) -> bool: return tag not in available_unlock_tags):
+		return false
+	return _has_reachable_tier(definition, rarity_id, source_id, domain)
 
 func _has_reachable_tier(
 	definition: ItemAffixDefinition,
@@ -222,24 +297,57 @@ func _has_reachable_tier(
 		return true
 	return false
 
-func _has_family_compatible_set(
-	candidates: Array[ItemAffixDefinition],
-	index: int,
+func _fill_pattern_slots(
+	slots: Array[String],
+	slot_index: int,
+	candidates_by_kind: Dictionary,
+	blocked_ids: Dictionary,
 	blocked_families: Dictionary,
-	remaining: int
+	memo: Dictionary,
+	budget: Dictionary
 ) -> bool:
-	if remaining <= 0:
+	if slot_index >= slots.size():
 		return true
-	if index >= candidates.size() or candidates.size() - index < remaining:
+	var key := _reachability_state_key(slot_index, blocked_ids, blocked_families)
+	if memo.has(key):
+		return bool(memo[key])
+	if int(budget["remaining"]) <= 0:
+		budget["exhausted"] = true
 		return false
-	var current := candidates[index]
-	if not current.modifier_family_ids.any(func(family_id: StringName) -> bool: return blocked_families.has(family_id)):
-		var with_blocked := blocked_families.duplicate()
-		for family_id: StringName in current.modifier_family_ids:
-			with_blocked[family_id] = true
-		if _has_family_compatible_set(candidates, index + 1, with_blocked, remaining - 1):
+	budget["remaining"] = int(budget["remaining"]) - 1
+	var kind := slots[slot_index]
+	var candidates := candidates_by_kind[kind] as Array[ItemAffixDefinition]
+	for candidate: ItemAffixDefinition in candidates:
+		if blocked_ids.has(candidate.id):
+			continue
+		if candidate.modifier_family_ids.any(func(family_id: StringName) -> bool: return blocked_families.has(family_id)):
+			continue
+		var next_ids := blocked_ids.duplicate()
+		var next_families := blocked_families.duplicate()
+		_block_reachability_affix(candidate, next_ids, next_families)
+		if _fill_pattern_slots(slots, slot_index + 1, candidates_by_kind, next_ids, next_families, memo, budget):
+			memo[key] = true
 			return true
-	return _has_family_compatible_set(candidates, index + 1, blocked_families, remaining)
+		if bool(budget["exhausted"]):
+			return false
+	memo[key] = false
+	return false
+
+func _block_reachability_affix(definition: ItemAffixDefinition, blocked_ids: Dictionary, blocked_families: Dictionary) -> void:
+	blocked_ids[definition.id] = true
+	for family_id: StringName in definition.modifier_family_ids:
+		blocked_families[family_id] = true
+
+func _reachability_state_key(slot_index: int, blocked_ids: Dictionary, blocked_families: Dictionary) -> String:
+	var ids: Array[String] = []
+	for id: Variant in blocked_ids:
+		ids.append(String(id))
+	ids.sort()
+	var families: Array[String] = []
+	for family_id: Variant in blocked_families:
+		families.append(String(family_id))
+	families.sort()
+	return "%d|%s|%s" % [slot_index, ",".join(ids), ",".join(families)]
 
 func _pattern_kind_count(pattern: ItemAffixPatternDefinition, kind: String) -> int:
 	match kind:

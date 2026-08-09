@@ -65,7 +65,7 @@ func validate(foundation: ItemFoundationCatalog) -> String:
 	if not is_finite(charisma_value) or charisma_value < 0.0:
 		return _error("charisma_value", "must be finite and nonnegative")
 
-	var unlock_error := _validate_names(unlock_tags, _known_unlock_tags(foundation), "unlock_tags", "unlock tag")
+	var unlock_error := _validate_names(unlock_tags, foundation.generation_unlock_tags(), "unlock_tags", "unlock tag")
 	if not unlock_error.is_empty():
 		return unlock_error
 	var required_base_error := _validate_names(required_base_tags, foundation.known_item_tags, "required_base_tags", "item tag")
@@ -140,16 +140,6 @@ func _contradiction(required: Array[StringName], excluded: Array[StringName], fi
 		if value in excluded:
 			return _error(field, "contradicts excluded tag %s" % value)
 	return ""
-
-func _known_unlock_tags(foundation: ItemFoundationCatalog) -> Array[StringName]:
-	var tags: Array[StringName] = []
-	for rarity: ItemRarityDefinition in foundation.rarities:
-		if rarity == null:
-			continue
-		for tag: StringName in rarity.required_unlock_tags:
-			if tag not in tags:
-				tags.append(tag)
-	return tags
 
 func _canonical_names(values: Array[StringName]) -> Array[String]:
 	var result: Array[String] = []

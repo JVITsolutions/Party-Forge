@@ -22,6 +22,7 @@ func run() -> Array[String]:
 	_test_fixed_seed_items(equipment, foundation, failures)
 	_test_deterministic_sequences(equipment, foundation, failures)
 	_test_structured_failures(equipment, foundation, failures)
+	_test_affix_unlock_gate(equipment, foundation, failures)
 	_test_codec_immutability(equipment, foundation, failures)
 	return failures
 
@@ -113,7 +114,7 @@ func _test_structured_failures(equipment: EquipmentCatalog, foundation: ItemFoun
 
 	var affix_request := _request(&"uncommon")
 	affix_request.forced_base_id = &"forge_vanguard_helmet"
-	affix_request.required_affix_tags = [&"melee"]
+	affix_request.required_affix_tags = [&"ranged"]
 	_assert_failure(ItemGenerationService.generate(affix_request, ISSUER_NAMESPACE, 5, equipment, foundation), affix_request, &"affix", &"no_eligible_affix", failures)
 
 	var tier_foundation := foundation.duplicate(true) as ItemFoundationCatalog
@@ -145,6 +146,24 @@ func _test_structured_failures(equipment: EquipmentCatalog, foundation: ItemFoun
 	_assert_failure(oversized_sequence_failure, issuer_request, &"issuance", &"issuer_rejected", failures)
 	TestAssertions.truthy(String(oversized_sequence_failure.failure.details.get("message", "")).contains("field=sequence"), "oversized item sequence preserves issuer diagnostic", failures)
 	TestAssertions.equal(oversized_item_sequence, ItemInstanceCodec.JSON_SAFE_INTEGER_MAX + 1, "oversized caller item sequence remains unchanged", failures)
+
+func _test_affix_unlock_gate(equipment: EquipmentCatalog, foundation: ItemFoundationCatalog, failures: Array[String]) -> void:
+	var gated_foundation := foundation.duplicate(true) as ItemFoundationCatalog
+	var uncommon_index := gated_foundation.rarities.find(gated_foundation.rarity(&"uncommon"))
+	gated_foundation.rarities[uncommon_index] = gated_foundation.rarities[uncommon_index].duplicate(true) as ItemRarityDefinition
+	gated_foundation.rarities[uncommon_index].patterns = [gated_foundation.rarities[uncommon_index].patterns[0]]
+	var gated_affix := gated_foundation.affix(&"stout").duplicate(true) as ItemAffixDefinition
+	gated_affix.required_unlock_tags = [&"affix_stout_unlocked"]
+	gated_foundation.affixes = [gated_affix]
+	var request := _request(&"uncommon")
+	request.forced_base_id = &"forge_vanguard_helmet"
+	request.unlock_tags = []
+	_assert_failure(ItemGenerationService.generate(request, ISSUER_NAMESPACE, 900, equipment, gated_foundation), request, &"affix", &"no_eligible_affix", failures)
+	request.unlock_tags = [&"affix_stout_unlocked"]
+	var unlocked := ItemGenerationService.generate(request, ISSUER_NAMESPACE, 901, equipment, gated_foundation)
+	TestAssertions.truthy(unlocked.ok(), "unlock-gated affix generates after its manifest unlock is supplied", failures)
+	if unlocked.ok():
+		TestAssertions.equal(unlocked.item.affixes[0].definition_id, &"stout", "unlocked service result contains gated affix", failures)
 
 func _test_codec_immutability(equipment: EquipmentCatalog, foundation: ItemFoundationCatalog, failures: Array[String]) -> void:
 	var generated := ItemGenerationService.generate(_request(&"rare"), ISSUER_NAMESPACE, 103, equipment, foundation)

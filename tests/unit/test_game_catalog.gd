@@ -64,6 +64,8 @@ func _assert_item_foundation_reachability(catalog: GameCatalog, failures: Array[
     var live_foundation := load("res://data/items/core_item_foundation_catalog.tres") as ItemFoundationCatalog
     var live_equipment := load("res://data/equipment/core_equipment_catalog.tres") as EquipmentCatalog
     TestAssertions.equal(live_foundation.validate(stats, live_equipment), PackedStringArray(), "live item foundation is reachable", failures)
+    _assert_whole_pattern_reachability_regressions(live_foundation, live_equipment, stats, failures)
+    _assert_canonical_generation_tag_registry(live_foundation, live_equipment, stats, failures)
 
     var unknown_implicit_equipment := live_equipment.duplicate(true) as EquipmentCatalog
     var sword_index := _equipment_index(unknown_implicit_equipment, &"forge_vanguard_sword")
@@ -124,7 +126,7 @@ func _assert_item_foundation_reachability(catalog: GameCatalog, failures: Array[
     unavailable_pattern.special_count = 1
     unavailable_kind_foundation.rarities[common_index].patterns[0] = unavailable_pattern
     TestAssertions.truthy(
-        unavailable_kind_foundation.validate(stats, live_equipment).has("PARTY_FORGE_ITEM_RARITY_ERROR id=common pattern=common_zero kind=special reason=no live affix can fill declared slot"),
+        unavailable_kind_foundation.validate(stats, live_equipment).has("PARTY_FORGE_ITEM_RARITY_ERROR id=common pattern=common_zero reason=no complete live generation scenario"),
         "pattern kind without live candidates is rejected exactly",
         failures,
     )
@@ -173,6 +175,127 @@ func _assert_item_foundation_reachability(catalog: GameCatalog, failures: Array[
     )
     catalog.item_foundation_catalog = live_foundation
     catalog.equipment_catalog = live_equipment
+
+func _assert_whole_pattern_reachability_regressions(
+    live_foundation: ItemFoundationCatalog,
+    live_equipment: EquipmentCatalog,
+    stats: StatCatalog,
+    failures: Array[String]
+) -> void:
+    var cross_kind := live_foundation.duplicate(true) as ItemFoundationCatalog
+    var cross_prefix := cross_kind.affix(&"stout").duplicate(true) as ItemAffixDefinition
+    var cross_suffix := cross_kind.affix(&"of_embers").duplicate(true) as ItemAffixDefinition
+    cross_prefix.modifier_family_ids = [&"cross_kind_family"]
+    cross_suffix.modifier_family_ids = [&"cross_kind_family"]
+    cross_kind.modifier_family_ids.append(&"cross_kind_family")
+    cross_kind.affixes = [cross_prefix, cross_suffix]
+    TestAssertions.truthy(
+        cross_kind.validate(stats, live_equipment).has("PARTY_FORGE_ITEM_RARITY_ERROR id=rare pattern=rare_balanced reason=no complete live generation scenario"),
+        "whole-pattern solver rejects cross-kind family conflict",
+        failures,
+    )
+
+    var implicit_conflict := live_foundation.duplicate(true) as ItemFoundationCatalog
+    var implicit := implicit_conflict.affix(&"tempered_edge").duplicate(true) as ItemAffixDefinition
+    var explicit := implicit_conflict.affix(&"stout").duplicate(true) as ItemAffixDefinition
+    implicit.modifier_family_ids = [&"implicit_explicit_conflict"]
+    explicit.modifier_family_ids = [&"implicit_explicit_conflict"]
+    implicit_conflict.modifier_family_ids.append(&"implicit_explicit_conflict")
+    implicit_conflict.affixes = [implicit, explicit]
+    var sword_only := EquipmentCatalog.new()
+    sword_only.definitions = [live_equipment.definition(&"forge_vanguard_sword")]
+    TestAssertions.truthy(
+        implicit_conflict.validate(stats, sword_only).has("PARTY_FORGE_ITEM_RARITY_ERROR id=uncommon pattern=uncommon_prefix reason=no complete live generation scenario"),
+        "base implicits block conflicting explicit families",
+        failures,
+    )
+
+    var split_bases := _scenario_foundation(live_foundation, &"prefix_only", &"suffix_only", &"ordinary_drop", &"ordinary_enemy", &"ordinary_drop", &"ordinary_enemy")
+    var split_equipment := EquipmentCatalog.new()
+    split_equipment.definitions = [_scenario_base(&"prefix_base", &"prefix_only"), _scenario_base(&"suffix_base", &"suffix_only")]
+    split_bases.known_item_tags = _live_tags(split_equipment)
+    TestAssertions.truthy(
+        split_bases.validate(stats, split_equipment).has("PARTY_FORGE_ITEM_RARITY_ERROR id=rare pattern=rare_balanced reason=no complete live generation scenario"),
+        "whole pattern must be feasible on one base",
+        failures,
+    )
+
+    var mismatched_route := _scenario_foundation(live_foundation, &"route", &"route", &"boss_drop", &"boss", &"ordinary_drop", &"ordinary_enemy")
+    var route_equipment := EquipmentCatalog.new()
+    route_equipment.definitions = [_scenario_base(&"route_base", &"route")]
+    mismatched_route.known_item_tags = _live_tags(route_equipment)
+    TestAssertions.truthy(
+        mismatched_route.validate(stats, route_equipment).has("PARTY_FORGE_ITEM_RARITY_ERROR id=rare pattern=rare_balanced reason=no complete live generation scenario"),
+        "whole pattern requires one compatible domain and source",
+        failures,
+    )
+
+    TestAssertions.truthy(
+        live_foundation.validate(stats, live_equipment, 0).has("PARTY_FORGE_ITEM_RARITY_ERROR id=uncommon pattern=uncommon_prefix reason=reachability exploration budget exhausted"),
+        "reachability budget exhaustion rejects instead of accepting",
+        failures,
+    )
+
+func _assert_canonical_generation_tag_registry(
+    live_foundation: ItemFoundationCatalog,
+    live_equipment: EquipmentCatalog,
+    stats: StatCatalog,
+    failures: Array[String]
+) -> void:
+    TestAssertions.equal(live_foundation.known_item_tags, _live_tags(live_equipment), "manifest tag registry is exact live normalized union", failures)
+    var injected_equipment := live_equipment.duplicate(true) as EquipmentCatalog
+    injected_equipment.definitions[0] = injected_equipment.definitions[0].duplicate(true) as EquipmentBaseDefinition
+    injected_equipment.definitions[0].generation_tags.append(&"injected_explicit_tag")
+    TestAssertions.truthy(
+        live_foundation.validate(stats, injected_equipment).has("PARTY_FORGE_ITEM_MANIFEST_ERROR reason=missing current equipment item tag injected_explicit_tag"),
+        "explicit equipment generation tag requires manifest registration",
+        failures,
+    )
+    var registered := live_foundation.duplicate(true) as ItemFoundationCatalog
+    registered.known_item_tags.append(&"injected_explicit_tag")
+    registered.known_item_tags.sort()
+    var request := ItemGenerationRequest.create(5, 0, 1, &"ordinary_enemy", &"ordinary_drop", [&"common"])
+    request.required_base_tags = [&"injected_explicit_tag"]
+    TestAssertions.equal(request.validate(registered), "", "registered explicit generation tag is accepted by requests", failures)
+
+func _scenario_foundation(
+    source: ItemFoundationCatalog,
+    prefix_tag: StringName,
+    suffix_tag: StringName,
+    prefix_domain: StringName,
+    prefix_source: StringName,
+    suffix_domain: StringName,
+    suffix_source: StringName
+) -> ItemFoundationCatalog:
+    var result := source.duplicate(true) as ItemFoundationCatalog
+    var prefix := result.affix(&"stout").duplicate(true) as ItemAffixDefinition
+    var suffix := result.affix(&"of_embers").duplicate(true) as ItemAffixDefinition
+    prefix.required_item_tags = [prefix_tag]
+    suffix.required_item_tags = [suffix_tag]
+    prefix.allowed_generation_domains = [prefix_domain]
+    suffix.allowed_generation_domains = [suffix_domain]
+    prefix.allowed_source_ids = [prefix_source]
+    suffix.allowed_source_ids = [suffix_source]
+    result.affixes = [prefix, suffix]
+    return result
+
+func _scenario_base(id: StringName, tag: StringName) -> EquipmentBaseDefinition:
+    var base := EquipmentBaseDefinition.new()
+    base.id = id
+    base.generation_tags = [tag]
+    base.required_any_tags = [tag]
+    return base
+
+func _live_tags(equipment: EquipmentCatalog) -> Array[StringName]:
+    var result: Array[StringName] = []
+    for base: EquipmentBaseDefinition in equipment.definitions:
+        if base == null:
+            continue
+        for tag: StringName in base.normalized_generation_tags():
+            if tag not in result:
+                result.append(tag)
+    result.sort_custom(func(left: StringName, right: StringName) -> bool: return String(left) < String(right))
+    return result
 
 func _rarity_index(catalog: ItemFoundationCatalog, id: StringName) -> int:
     for index: int in catalog.rarities.size():
