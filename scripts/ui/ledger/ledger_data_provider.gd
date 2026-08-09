@@ -185,14 +185,16 @@ func upgrade_detail(row: Dictionary) -> Dictionary:
 	}
 
 func _is_visible(definition: StatDefinition, snapshot: ResolvedStatSnapshot, breakdown: Array[Dictionary]) -> bool:
-	var has_modifier_source := breakdown.size() > 1
+	var has_meaningful_modifier := breakdown.any(func(row: Dictionary) -> bool:
+		return int(row.get("operation", -1)) != -1 and not is_zero_approx(float(row.get("value", 0.0)))
+	)
 	if definition.visibility == StatDefinition.Visibility.UNIVERSAL:
 		return true
 	if definition.visibility == StatDefinition.Visibility.CAPABILITY:
-		return has_modifier_source or definition.capability_tags.any(
+		return has_meaningful_modifier or definition.capability_tags.any(
 			func(tag: StringName) -> bool: return tag in snapshot.capabilities
 		)
-	return has_modifier_source or not is_equal_approx(
+	return has_meaningful_modifier or not is_equal_approx(
 		snapshot.value(definition.id, definition.default_value),
 		definition.default_value
 	)

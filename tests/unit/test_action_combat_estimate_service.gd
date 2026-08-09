@@ -66,7 +66,11 @@ func _test_noncritical_mixed_damage(failures: Array[String]) -> void:
 	var estimate := ActionCombatEstimateService.estimate(attack, 1, party, catalog.damage_types)
 	TestAssertions.truthy(estimate.available and not estimate.can_crit, "mixed noncritical estimate is available", failures)
 	TestAssertions.near(estimate.normal_hit, 15.0, 0.001, "mixed components sum into one hit", failures)
+	TestAssertions.near(estimate.normal_hit, _component_total(estimate.component_rows, "normal_hit"), 0.001, "normal total equals independently readable component rows", failures)
+	TestAssertions.near(estimate.critical_hit, _component_total(estimate.component_rows, "critical_hit"), 0.001, "critical total equals independently readable component rows", failures)
 	TestAssertions.near(estimate.average_hit, 15.0, 0.001, "noncritical average equals normal", failures)
+	TestAssertions.near(estimate.average_hit, _component_total(estimate.component_rows, "average_hit"), 0.001, "average total equals independently readable component rows", failures)
+	TestAssertions.near(estimate.estimated_dps, estimate.average_hit * estimate.attacks_per_second, 0.001, "DPS total is derived from average hit and action rate", failures)
 	TestAssertions.equal(estimate.component_rows.map(func(row: Dictionary) -> StringName: return row.damage_type_id), [&"physical", &"fire"], "component order stays authored", failures)
 	party.free()
 
@@ -141,6 +145,12 @@ func _component(type_id: StringName, amount: float) -> AttackDamageComponent:
 	result.damage_type_id = type_id
 	result.base_amount = amount
 	return result
+
+func _component_total(rows: Array[Dictionary], field: String) -> float:
+	var total := 0.0
+	for row: Dictionary in rows:
+		total += float(row.get(field, 0.0))
+	return total
 
 func _estimate_with_crit_modifier(value: float, source_id: StringName, failures: Array[String]) -> ActionCombatEstimate:
 	var definition := PartyManager.STAT_CATALOG.definition(&"crit_chance")

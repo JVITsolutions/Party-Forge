@@ -95,6 +95,7 @@ func run() -> Array[String]:
 	party.free()
 	_test_independent_progression_projection_and_core_attributes(failures)
 	_test_combat_estimate_action_discovery(failures)
+	_test_archetype_relevance_equipment_attribution_and_action_totals(failures)
 	return failures
 
 func _test_independent_progression_projection_and_core_attributes(failures: Array[String]) -> void:
@@ -215,5 +216,82 @@ func _test_combat_estimate_action_discovery(failures: Array[String]) -> void:
 	party.initialize(definition, catalog.traits)
 	rows = provider.combat_estimate_rows(1)
 	TestAssertions.equal(rows.size(), 1, "healing-only support action is excluded", failures)
+	provider.configure(null, null, Callable())
+	party.free()
+
+func _test_archetype_relevance_equipment_attribution_and_action_totals(failures: Array[String]) -> void:
+	var catalog := GameCatalog.load_defaults()
+	var party := PartyManager.new()
+	party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
+	TestAssertions.truthy(party.recruit(catalog.class_by_id(&"ranger")), "ledger relevance fixture recruits Ranger", failures)
+	TestAssertions.truthy(party.recruit(catalog.class_by_id(&"mage")), "ledger relevance fixture recruits Mage", failures)
+	var attribute_sources: Array[StatModifierSource] = [
+		StatModifierSource.create(&"fighter_attributes", &"class_growth", "Fighter Attributes", 1, [
+			StatModifier.create(&"strength", StatModifier.Operation.FLAT, 3.0, &"fighter_strength", "Fighter Strength"),
+		]),
+		StatModifierSource.create(&"ranger_attributes", &"class_growth", "Ranger Attributes", 2, [
+			StatModifier.create(&"dexterity", StatModifier.Operation.FLAT, 4.0, &"ranger_dexterity", "Ranger Dexterity"),
+		]),
+		StatModifierSource.create(&"mage_attributes", &"class_growth", "Mage Attributes", 3, [
+			StatModifier.create(&"intelligence", StatModifier.Operation.FLAT, 5.0, &"mage_intelligence", "Mage Intelligence"),
+		]),
+	]
+	for member_id: int in attribute_sources.size():
+		TestAssertions.truthy(party.add_member_source(member_id + 1, attribute_sources[member_id]), "member %d attribute source applies" % (member_id + 1), failures)
+
+	var equipment_modifier_id := &"equip_m1_smain_hand_iiron_sword_a0_tempered_edge_r0"
+	var equipment_label := "Iron Sword — Tempered Edge"
+	var equipment_source := StatModifierSource.create(&"equipment_member_1", &"equipment", "Equipment", 1, [
+		StatModifier.create(&"melee_damage", StatModifier.Operation.INCREASED, 0.25, equipment_modifier_id, equipment_label),
+		StatModifier.create(&"caster_damage", StatModifier.Operation.INCREASED, 0.0, &"equip_m1_smain_hand_iiron_sword_a1_dormant_focus_r0", "Iron Sword — Dormant Focus"),
+	])
+	TestAssertions.truthy(party.add_member_source(1, equipment_source), "equipment attribution fixture applies", failures)
+
+	var provider := LedgerDataProvider.new()
+	provider.configure(party, catalog, Callable())
+	var expected_archetypes := {1: &"melee_damage", 2: &"ranged_damage", 3: &"caster_damage"}
+	for member_id: int in expected_archetypes:
+		var visible_ids := provider.stat_rows(member_id).map(func(row: Dictionary) -> StringName: return row.stat_id)
+		var expected_id := expected_archetypes[member_id] as StringName
+		TestAssertions.truthy(expected_id in visible_ids, "member %d shows its relevant archetype stat" % member_id, failures)
+		for archetype_id: StringName in [&"melee_damage", &"ranged_damage", &"caster_damage"]:
+			if archetype_id != expected_id:
+				TestAssertions.truthy(archetype_id not in visible_ids, "member %d hides irrelevant %s despite zero derived rows" % [member_id, archetype_id], failures)
+		TestAssertions.truthy(&"party_influence" not in visible_ids, "member %d hides default Party Influence" % member_id, failures)
+		var action_rows := provider.combat_estimate_rows(member_id)
+		TestAssertions.truthy(not action_rows.is_empty(), "member %d exposes a damaging action estimate" % member_id, failures)
+		for estimate: ActionCombatEstimate in action_rows:
+			TestAssertions.truthy(estimate.available, "member %d action estimate is available" % member_id, failures)
+			TestAssertions.truthy(not estimate.component_rows.is_empty(), "member %d action exposes component rows" % member_id, failures)
+			var component_normal := 0.0
+			var component_critical := 0.0
+			var component_average := 0.0
+			for component: Dictionary in estimate.component_rows:
+				TestAssertions.truthy(component.has("damage_type_id") and component.has("display_name"), "component row retains readable damage identity", failures)
+				TestAssertions.truthy(component.has("normal_hit") and component.has("critical_hit") and component.has("average_hit"), "component row exposes all hit totals", failures)
+				component_normal += float(component.get("normal_hit", 0.0))
+				component_critical += float(component.get("critical_hit", 0.0))
+				component_average += float(component.get("average_hit", 0.0))
+			TestAssertions.near(estimate.normal_hit, component_normal, 0.0001, "action normal hit is the sum of components", failures)
+			TestAssertions.near(estimate.critical_hit, component_critical, 0.0001, "action critical hit is the sum of components", failures)
+			TestAssertions.near(estimate.average_hit, component_average, 0.0001, "action average hit is the sum of components", failures)
+			TestAssertions.truthy(estimate.attacks_per_second > 0.0, "action exposes attacks per second", failures)
+			TestAssertions.near(estimate.estimated_dps, estimate.average_hit * estimate.attacks_per_second, 0.0001, "action DPS uses average hit and rate", failures)
+
+	var melee_detail := provider.stat_detail(1, &"melee_damage")
+	TestAssertions.truthy(
+		Array(melee_detail.get("sources", [])).any(func(source: Dictionary) -> bool: return source.get("source_id", &"") == equipment_modifier_id and String(source.get("source_label", "")) == equipment_label),
+		"stat detail preserves equipment affix label and stable detailed source ID",
+		failures,
+	)
+	var charisma_source := StatModifierSource.create(&"mage_charisma", &"class_growth", "Mage Charisma", 3, [
+		StatModifier.create(&"charisma", StatModifier.Operation.FLAT, 2.0, &"mage_charisma_points", "Mage Charisma"),
+	])
+	TestAssertions.truthy(party.add_member_source(3, charisma_source), "non-default Party Influence fixture applies", failures)
+	TestAssertions.truthy(
+		provider.stat_rows(3).any(func(row: Dictionary) -> bool: return row.stat_id == &"party_influence"),
+		"Party Influence appears once Charisma makes it non-default",
+		failures,
+	)
 	provider.configure(null, null, Callable())
 	party.free()

@@ -1,97 +1,104 @@
-# Plan 4B Task 7 report: run-context inventory ownership
+# Task 7 report: ledger relevance, equipment attribution, and action totals
 
-Status: implementation and local verification complete on `feat/plan-4b-item-ownership`. Task 8 was not started.
+Status: implementation, fresh verification, independent review, and scoped commit complete.
 
-## Scope and contracts
+Implementation commit subject: `feat: show equipment-derived combat stats`. The final hash is recorded in the parent handoff because this tracked report is part of that same commit.
 
-- Final parent verified before the Task 7 commit: `580fd29` (`docs: plan leader loadout extraction continuity`).
-- `PlayerRunContext.configure()` now builds and validates one context-owned `run-inventory` plus an empty registry before committing any identity, profile, party, progression, journal, or sequence fields.
-- Inventory capacity is exactly `5 * profile.inventory_columns`: zero, one, and eight columns materialize `0`, `5`, and `40` slots.
-- Every configured context owns an independent `ItemOwnershipState`, `ItemTransactionJournal`, and run issuance sequence starting at zero. Public state and inventory accessors return defensive copies.
-- Run create requests require namespace `run:<profile_id>:<run_seed>:<run_player_id>` and the current integral run sequence. Only a successful, nonduplicate create advances the run sequence.
-- Exact replays, collisions, failed validation, moves, swaps, and rejected sandbox-only removes consume no create sequence. Journal entries and identical transaction IDs remain isolated between contexts.
-- The production run-operation whitelist contains only `create_and_place`, `move_to_empty`, and `swap_occupied`. `sandbox_remove` is rejected before mutation or journaling.
-- The source profile and defensive profile snapshot remain byte-equivalent, including persistent `next_item_sequence` and `resumable_run`; run ownership is not persisted.
-- Equipment, extraction, ground pickup, run loss, cross-player transfer, persistent resumable-run ownership, and Task 8 remain outside this task.
+## Scope and behavior
 
-## RED evidence
+- `LedgerDataProvider` remains fully data-driven: canonical `CAPABILITY` rows use `StatDefinition.capability_tags` and snapshot capabilities, with no class-ID cases.
+- A breakdown row counts as modifier relevance only when it is a modifier operation and its contribution is genuinely non-zero. Task 1's zero-valued derived rows therefore do not reveal irrelevant melee/ranged/caster rows or default Party Influence.
+- Non-zero modifiers still reveal otherwise irrelevant specialized stats, and `NON_DEFAULT` rows still appear when their resolved value differs from the canonical default.
+- `stat_detail().sources` preserves the equipment projector contract: the human item/affix label remains `source_label`, while the detailed deterministic modifier identity remains `source_id`.
+- Existing Task 3 action estimates continue to call `ActionDamageProjection.normal_component()` through `ActionCombatEstimateService`. Added coverage proves every component keeps damage identity plus normal/critical/average values; action normal, critical, and average totals equal their component sums; DPS equals average hit times attacks per second.
+- No Task 8 tooltip/comparison/layout behavior was changed.
 
-Tests were authored before `scripts/run/player_run_context.gd` was changed. The first attempted RED run exposed and corrected a test-only reserved-word parse error; it was rejected as RED evidence and production code remained untouched.
+## TDD evidence
 
-The accepted focused RED command ran:
+### Baseline
 
-```text
-res://tests/unit/test_run_item_ownership.gd
-res://tests/unit/test_player_run_context.gd
-res://tests/unit/test_run_context_registry.gd
-```
-
-It exited `1` with `TEST_SUMMARY: FAIL (7 failures)`, no parse/script/loader failure, and these exact intended missing-API assertions:
+The required three-suite batch passed before Task 7 edits:
 
 ```text
-run context exposes defensive item state: expected true
-run context exposes its fixed inventory projection: expected true
-run context exposes its production item transaction boundary: expected true
-run context exposes item state after Task 7: expected true
-run context exposes run inventory after Task 7: expected true
-registered contexts expose run item ownership: expected true
-registered contexts expose fixed run inventories: expected true
+TEST_SUMMARY: PASS (0 failures)
+TASK7_BASELINE_EXIT_CODE=0
 ```
 
-## Coverage
+### Controlled RED
 
-`test_run_item_ownership.gd` proves:
-
-- exact capacities `0`, `5`, and `40`, stable `run-inventory` identity/kind, and context owner identity;
-- cross-context registry/container/profile isolation, including mutation attempts against every returned state, registry, item, container, transaction-result, and profile projection;
-- wrong-owner atomic rejection and independent use of the same transaction ID by two contexts;
-- exact run namespace, sequence zero, rejection of wrong namespace/future/fractional sequence, and valid retry with the same unjournaled ID;
-- sequence advancement only after successful nonduplicate creates, with replay/collision/move behavior retaining the expected next sequence;
-- atomic null-request, missing-catalog, malformed-request, and sandbox-remove rejection;
-- positive production create, move, and swap behavior, plus proof that rejected remove is unjournaled and cannot destroy the item.
-
-The existing player-context suite now proves failed configuration commits no item state/inventory or usable journal, a valid retry creates one registry/container/journal entry, and replay cannot duplicate the item. The registry suite proves registered contexts retain independent defensive ownership projections.
-
-## GREEN and regression evidence
-
-All final evidence below ran against parent `580fd29` with Godot `4.7.1`, isolated task-specific `APPDATA` and `LOCALAPPDATA`, and exited `0`.
-
-- Task 7 focused batch (three suites): four captured lines, `TEST_SUMMARY: PASS (0 failures)`, zero test/script/parse/loader markers.
-- Required run regression batch (Task 7, player context, run registry, reward distribution, experience orb, progression, character progression, and main wiring): eight suites, 88 captured lines, `TEST_SUMMARY: PASS (0 failures)`, zero test/script/parse/loader markers.
-- Item-foundation regression batch (container transactions, ownership state, instance codec, persistent storage wrapper, and storage reconciliation): five suites, `ITEM_TRANSACTION_MATRIX: PASS`, `TEST_SUMMARY: PASS (0 failures)`, zero test/script/parse/loader markers.
-- Fresh final import: 21 captured lines, exit `0`, zero errors, warnings, script/parse/loader failures, or failed-resource markers.
-- Fresh final complete suite: 538 captured lines, exit `0`, zero `TEST_FAILURE`, script, parse, loader, or failed-resource markers, and `TEST_SUMMARY: PASS (128 suites)`.
-
-The complete suite emitted the established 48 intentional negative-path error lines and eight established warning/shutdown lines, matching the pre-Task-7 127-suite baseline and the prior Task 6 evidence. No line originated from the new Task 7 suite or implementation.
-
-## Review correction: request validation precedence
-
-Review found that the run wrapper checked create-origin namespace and sequence before the transaction service checked the canonical request shape. A combined malformed create request could therefore report `INVALID_ITEM` instead of the required `INVALID_REQUEST` precedence.
-
-The correction regression combines schema `99`, create-inapplicable source fields, the wrong run namespace, and a future issuance sequence. Accepted RED ran the three Task 7 suites, exited `1`, reported exactly one assertion failure, and emitted no parse/script/loader diagnostics:
+Tests were authored before production changes. The first attempt exposed a test-only multiline-lambda indentation error and Godot returned misleading exit `0`; that run was rejected as evidence and production remained untouched. After correcting the test syntax and replacing Task 6's already-installed empty equipment source in the page fixture, the accepted RED was:
 
 ```text
-malformed request precedes invalid run issuance policy has stable code: expected 1, got 9
-TEST_SUMMARY: FAIL (1 failures)
+TEST_SUMMARY: FAIL (11 failures)
+TASK7_ACCEPTED_RED_EXIT_CODE=1
 ```
 
-The minimal correction asks the shared transaction service to validate the canonical request shape before the run wrapper evaluates the production-operation whitelist, owner, namespace, or sequence policy. The same regression proves `INVALID_REQUEST`, no candidate state, byte-equivalent context state, no journal entry, and no sequence consumption because the corrected request can retry with the same transaction ID and sequence zero.
+The 11 failures were exactly the missing behavior:
 
-The player-context suite now also commits an item, attempts a fully valid reconfiguration, and proves that the rejection preserves the exact ownership document, the existing transaction's replay behavior, and the next run issuance sequence by committing sequence one exactly once afterward.
+- Fighter exposed irrelevant ranged/caster rows and default Party Influence.
+- Ranger exposed irrelevant melee/caster rows and default Party Influence.
+- Mage exposed irrelevant melee/ranged rows and default Party Influence.
+- The Stats page exposed irrelevant Fighter archetype rows and default Party Influence.
 
-Final correction evidence ran against parent `26df2ad` (`docs: separate Armoury and Warehouse plan`):
+There were no script, parse, or load failures in the accepted RED. The batch retained the established intentional non-finite-source rejection diagnostic.
 
-- Task 7 focused batch: exit `0`, `TEST_SUMMARY: PASS (0 failures)`.
-- Required eight-suite run regression: exit `0`, `TEST_SUMMARY: PASS (0 failures)`.
-- Five-suite item-foundation regression: exit `0`, `ITEM_TRANSACTION_MATRIX: PASS`, `TEST_SUMMARY: PASS (0 failures)`.
-- Fresh import: exit `0`; only the established cache-regeneration warnings for missing untracked test UIDs appeared, with zero error/script/parse/loader markers.
-- Fresh complete suite: exit `0`, 538 captured lines, zero test/script/parse/loader/failed-resource markers, `TEST_SUMMARY: PASS (128 suites)`, and the established 48 intentional error plus eight warning/shutdown lines.
+### Focused GREEN
 
-The eight verification-created untracked test UID sidecars were path-validated and removed. No future-design document or Task 8 implementation is included in this correction.
+Command:
 
-## Hygiene and diagnostics
+```powershell
+& $godot --headless --path . --quit-after 300 --script res://tests/focused_test_runner.gd -- tests/unit/test_ledger_data_provider.gd tests/unit/test_action_combat_estimate_service.gd tests/unit/test_stats_ledger_page.gd
+```
 
-- `git diff --check` is clean before commit.
-- The first fresh import generated eight untracked test `.gd.uid` sidecars and warned that cached UIDs were being recreated. Their exact paths were validated as untracked files under `tests/unit`; only those eight verification-created sidecars were removed.
-- A concurrent future extraction-plan document was committed separately as `580fd29` and excluded from Task 7 staging.
-- No open Task 7 production-code concern is known. The extraction/loadout design remains documentation-only.
+Final result after the clarity refactor:
+
+```text
+TEST_SUMMARY: PASS (0 failures)
+TASK7_FINAL_FOCUSED_EXIT_CODE=0
+```
+
+The focused output includes the pre-existing intentional non-finite-source rejection plus ObjectDB/resource shutdown diagnostics; no Task 7 assertion failed.
+
+## Complete-suite verification
+
+Godot: `4.7.1.stable.official.a13da4feb`.
+
+Command:
+
+```powershell
+& $godot --headless --path . --quit-after 1800 --script res://tests/test_runner.gd
+```
+
+Fresh result:
+
+```text
+TEST_SUMMARY: PASS (162 suites)
+TASK7_FULL_TEST_FAILURE_LINES=0
+TASK7_FULL_SCRIPT_PARSE_LOAD_LINES=0
+TASK7_FULL_ERROR_LINES=56
+TASK7_FULL_WARNING_LINES=10
+TASK7_FULL_EXIT_CODE=0
+```
+
+The 56 error and 10 warning lines are the established intentional negative-path and shutdown diagnostics already recorded by Task 6. There were zero assertion failures and zero script/parse/load markers.
+
+## Files in scoped commit
+
+- `scripts/ui/ledger/ledger_data_provider.gd`
+- `tests/unit/test_action_combat_estimate_service.gd`
+- `tests/unit/test_ledger_data_provider.gd`
+- `tests/unit/test_stats_ledger_page.gd`
+
+`scripts/ui/ledger/action_combat_estimate.gd` required no production change because Task 3 already supplied independently readable component rows and the requested total fields; Task 7 adds regression proof rather than duplicating or replacing that shared projection.
+
+## Hygiene and concerns
+
+- `git diff --check` passes.
+- Only the four scoped tracked files are modified.
+- Pre-existing untracked `.gd.uid` sidecars remain untouched and will not be staged.
+- `.superpowers/sdd/task-7-report.md` is an ignored coordination artifact and will not be staged.
+- No open Task 7 functional concern is known. Complete-runner output is not diagnostically pristine because established rejection tests intentionally emit errors and shutdown warnings.
+
+## Independent review
+
+An independent static review of the complete Task 7 diff against the approved brief and design reported no Critical, Important, or Minor findings. The reviewer did not rerun tests because fresh focused and full-suite verification was already recorded above.

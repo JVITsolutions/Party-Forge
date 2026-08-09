@@ -77,6 +77,9 @@ func run() -> Array[String]:
 	TestAssertions.truthy("Physical" in traits_and_capabilities and "Melee" in traits_and_capabilities, "header lists selected capabilities", failures)
 	TestAssertions.truthy(page.has_stat(&"physical_damage"), "fighter shows relevant physical stat", failures)
 	TestAssertions.truthy(not page.has_stat(&"fire_damage"), "fighter hides irrelevant fire stat", failures)
+	TestAssertions.truthy(page.has_stat(&"melee_damage"), "fighter shows canonical melee archetype stat", failures)
+	TestAssertions.truthy(not page.has_stat(&"ranged_damage") and not page.has_stat(&"caster_damage"), "fighter hides irrelevant archetype rows", failures)
+	TestAssertions.truthy(not page.has_stat(&"party_influence"), "fighter hides default Party Influence", failures)
 	var estimates := page.get_node_or_null("Layout/Content/StatSide/StatScroll/Groups/Group_combat_estimates") as VBoxContainer
 	TestAssertions.truthy(estimates != null, "Stats page renders Combat Estimates before stat groups", failures)
 	var fighter_card := page.get_node_or_null("Layout/Content/StatSide/StatScroll/Groups/Group_combat_estimates/Action_fighter_cleave") as PanelContainer
@@ -138,6 +141,12 @@ func run() -> Array[String]:
 		[StatModifier.create(&"fire_damage", StatModifier.Operation.INCREASED, 0.25, &"test_fire", "Test Fire")],
 	)
 	party.add_member_source(1, fire_source)
+	var equipment_label := "Iron Sword — Tempered Edge"
+	var equipment_modifier_id := &"equip_m1_smain_hand_iiron_sword_a0_tempered_edge_r0"
+	var equipment_source := StatModifierSource.create(&"equipment_member_1", &"equipment", "Equipment", 1, [
+		StatModifier.create(&"melee_damage", StatModifier.Operation.INCREASED, 0.25, equipment_modifier_id, equipment_label),
+	])
+	TestAssertions.truthy(party.replace_member_source(1, equipment_source), "Stats equipment attribution source replaces the configured empty equipment source", failures)
 	page.refresh()
 	TestAssertions.truthy(page.has_stat(&"fire_damage"), "modifier-caused fire stat remains visible", failures)
 	TestAssertions.truthy(page.select_stat(&"armor"), "armor detail opens", failures)
@@ -159,6 +168,9 @@ func run() -> Array[String]:
 	fire_button.focus_entered.emit()
 	TestAssertions.equal((page.get_node("Layout/Content/DetailPanel/Detail/Description") as Label).text, canonical_description, "focus uses the same canonical keyword detail", failures)
 	TestAssertions.truthy(page.initial_focus() is Button, "initial focus returns the first stat row", failures)
+	TestAssertions.truthy(page.select_stat(&"melee_damage"), "equipment-modified melee detail opens", failures)
+	var melee_sources := (page.get_node("Layout/Content/DetailPanel/Detail/Sources") as Label).text
+	TestAssertions.truthy(equipment_label in melee_sources, "Stats detail renders the equipment item and affix label", failures)
 
 	provider.configure(null, null, Callable())
 	page.free()
