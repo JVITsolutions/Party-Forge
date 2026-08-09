@@ -12,6 +12,9 @@ func run() -> Array[String]:
 	_test_reverse_swap_rejects_inactive_item_entering_loadout(failures)
 	_test_two_hand_displacement_and_reverse_swap_parity(failures)
 	_test_displacement_uses_later_configured_stash_first_vacancy(failures)
+	_test_profile_final_stat_overflow_is_rejected_before_persistence(failures)
+	_test_profile_owned_action_overflow_is_rejected_before_persistence(failures)
+	_test_injected_stat_catalog_is_used_by_assignment_validation(failures)
 	return failures
 
 
@@ -269,6 +272,207 @@ func _item_with_affix(instance_id: String, base_id: StringName, sequence: int, a
 	var result := _item(instance_id, base_id, sequence)
 	result.affixes = [affix]
 	return result
+
+
+func _test_profile_final_stat_overflow_is_rejected_before_persistence(failures: Array[String]) -> void:
+	var root := _root("final_stat_overflow")
+	var store := ProfileStore.new()
+	var fixture := _aggregate_affix_fixture(&"task10i_max_health_overflow", &"max_health", StatModifier.Operation.MORE, 1.0e20, 4, [])
+	GameCatalog.ITEM_FOUNDATION_CATALOG.affixes.append(fixture.definition)
+	var item := _item_with_affix("task10i-profile-final-overflow", &"forge_vanguard_helmet", 201, fixture.affix)
+	fixture.item_before = item.to_dictionary()
+	var profile := _profile([item], {}, [{3: item.instance_id}, {}], "")
+	TestAssertions.equal(store.save_profile(profile, root), "", "profile final-overflow fixture saves", failures)
+	var classes := _classes_with_base_overrides(&"fighter", {&"constitution": 1.0e240})
+	var service := ProfileLoadoutAssignmentService.new(
+		ProfileMutationService.new(store), null, GameCatalog.EQUIPMENT_CATALOG, fixture.foundation, classes,
+	)
+	var request := _request(
+		"task10i-profile-final-overflow", profile, &"fighter", item.instance_id,
+		&"stash-tab-zeta", 3, &"leader-loadout", EquipmentSlotIndex.index_for(&"helmet"), "",
+	)
+	var profile_before := profile.to_dictionary()
+	var path := store.profile_path(PROFILE_ID, root)
+	var bytes_before := FileAccess.get_file_as_bytes(path)
+	var expected_error := "PARTY_FORGE_PROFILE_LOADOUT_ASSIGNMENT_ERROR field=leader_loadout reason=stat resolution failed detail=PARTY_FORGE_STAT_RESOLUTION_ERROR member=1 stat=max_health stage=final value=inf reason=resolved value is non-finite"
+	var preview := service.preview(profile, request)
+	TestAssertions.equal(preview.error, expected_error, "profile preview returns stable final-stat overflow context", failures)
+	TestAssertions.equal(profile.to_dictionary(), profile_before, "profile final-stat preview rejection preserves the input profile", failures)
+	TestAssertions.equal(FileAccess.get_file_as_bytes(path), bytes_before, "profile final-stat preview writes no persistence bytes", failures)
+	var applied := service.apply(PROFILE_ID, request, root)
+	TestAssertions.equal(applied.error, expected_error, "profile apply returns the same final-stat overflow context", failures)
+	TestAssertions.equal(FileAccess.get_file_as_bytes(path), bytes_before, "profile final-stat apply rejection preserves exact persistence bytes", failures)
+	TestAssertions.equal(store.load_profile(PROFILE_ID, root).profile.to_dictionary(), profile_before, "profile final-stat rejection preserves ownership and loadout documents", failures)
+	TestAssertions.equal(item.to_dictionary(), (fixture.item_before as Dictionary), "profile final-stat validation does not mutate the item fixture", failures)
+	GameCatalog.ITEM_FOUNDATION_CATALOG.affixes.erase(fixture.definition)
+	ProfileTestSupport.remove_tree(root)
+
+
+func _test_profile_owned_action_overflow_is_rejected_before_persistence(failures: Array[String]) -> void:
+	var root := _root("owned_action_overflow")
+	var store := ProfileStore.new()
+	var fixture := _aggregate_affix_fixture(&"task10i_action_overflow", &"damage", StatModifier.Operation.MORE, 1.0e20, 16, [&"task10i_action"])
+	GameCatalog.ITEM_FOUNDATION_CATALOG.affixes.append(fixture.definition)
+	var item := _item_with_affix("task10i-profile-action-overflow", &"forge_vanguard_helmet", 202, fixture.affix)
+	fixture.item_before = item.to_dictionary()
+	var profile := _profile([item], {}, [{4: item.instance_id}, {}], "")
+	TestAssertions.equal(store.save_profile(profile, root), "", "profile action-overflow fixture saves", failures)
+	var classes := _classes_with_action_tag(&"fighter", &"task10i_action")
+	var service := ProfileLoadoutAssignmentService.new(
+		ProfileMutationService.new(store), null, GameCatalog.EQUIPMENT_CATALOG, fixture.foundation, classes,
+	)
+	var request := _request(
+		"task10i-profile-action-overflow", profile, &"fighter", item.instance_id,
+		&"stash-tab-zeta", 4, &"leader-loadout", EquipmentSlotIndex.index_for(&"helmet"), "",
+	)
+	var profile_before := profile.to_dictionary()
+	var path := store.profile_path(PROFILE_ID, root)
+	var bytes_before := FileAccess.get_file_as_bytes(path)
+	var expected_error := "PARTY_FORGE_PROFILE_LOADOUT_ASSIGNMENT_ERROR field=leader_loadout reason=action stat resolution failed action=fighter_cleave detail=PARTY_FORGE_STAT_RESOLUTION_ERROR member=1 stat=damage stage=final value=inf reason=resolved value is non-finite"
+	var preview := service.preview(profile, request)
+	TestAssertions.equal(preview.error, expected_error, "profile preview runs shared owned-action validation", failures)
+	TestAssertions.equal(profile.to_dictionary(), profile_before, "profile action preview rejection preserves the input profile", failures)
+	var applied := service.apply(PROFILE_ID, request, root)
+	TestAssertions.equal(applied.error, expected_error, "profile apply runs the same owned-action validation", failures)
+	TestAssertions.equal(FileAccess.get_file_as_bytes(path), bytes_before, "profile action apply rejection preserves exact persistence bytes", failures)
+	TestAssertions.equal(store.load_profile(PROFILE_ID, root).profile.to_dictionary(), profile_before, "profile action rejection preserves ownership and loadout documents", failures)
+	TestAssertions.equal(item.to_dictionary(), fixture.item_before, "profile action validation does not mutate the item fixture", failures)
+	GameCatalog.ITEM_FOUNDATION_CATALOG.affixes.erase(fixture.definition)
+	ProfileTestSupport.remove_tree(root)
+
+
+func _test_injected_stat_catalog_is_used_by_assignment_validation(failures: Array[String]) -> void:
+	var service_script := load("res://scripts/equipment/profile_loadout_assignment_service.gd") as Script
+	var init_argument_count := 0
+	for method: Dictionary in service_script.get_script_method_list():
+		if String(method.get("name", "")) == "_init":
+			init_argument_count = (method.get("args", []) as Array).size()
+			break
+	TestAssertions.truthy(init_argument_count >= 8, "profile assignment constructor accepts stat/damage/tuning dependencies", failures)
+	if init_argument_count < 8:
+		return
+	var custom_stats := GameCatalog.STAT_CATALOG.duplicate(true) as StatCatalog
+	var custom_definition := StatDefinition.new()
+	custom_definition.id = &"task10i_profile_custom"
+	custom_definition.display_name = "Task 10I Profile Custom"
+	custom_definition.ui_group = &"utility"
+	custom_definition.keyword_id = &"task10i_profile_custom"
+	custom_stats.definitions.append(custom_definition)
+	var fixture := _aggregate_affix_fixture(&"task10i_custom_catalog", custom_definition.id, StatModifier.Operation.FLAT, 2.0, 1, [])
+	GameCatalog.ITEM_FOUNDATION_CATALOG.affixes.append(fixture.definition)
+	var item := _item_with_affix("task10i-profile-custom-catalog", &"forge_vanguard_helmet", 203, fixture.affix)
+	var profile := _profile([item], {}, [{5: item.instance_id}, {}], "")
+	var request := _request(
+		"task10i-profile-custom-catalog", profile, &"fighter", item.instance_id,
+		&"stash-tab-zeta", 5, &"leader-loadout", EquipmentSlotIndex.index_for(&"helmet"), "",
+	)
+	var default_service := ProfileLoadoutAssignmentService.new(
+		null, null, GameCatalog.EQUIPMENT_CATALOG, fixture.foundation, GameCatalog.load_defaults(),
+	)
+	TestAssertions.truthy(not default_service.preview(profile, request).ok(), "constructor defaults retain the canonical catalog boundary", failures)
+	var injected_service: ProfileLoadoutAssignmentService = service_script.new(
+		null, null, GameCatalog.EQUIPMENT_CATALOG, fixture.foundation, GameCatalog.load_defaults(),
+		custom_stats, GameCatalog.DAMAGE_TYPES, null,
+	)
+	var injected_preview := injected_service.preview(profile, request)
+	TestAssertions.truthy(injected_preview.ok(), "assignment validation uses the injected stat catalog error=%s" % injected_preview.error, failures)
+	var projection := ProfileStorageProjection.from_profile(
+		profile, GameCatalog.EQUIPMENT_CATALOG, fixture.foundation, custom_stats, GameCatalog.load_defaults().class_by_id(&"fighter"),
+	)
+	var rows: Array = projection.comparison_lines_by_slot(item.instance_id).get("helmet", [])
+	TestAssertions.truthy(
+		rows.any(func(row: Dictionary) -> bool: return String(row.get("stat_id", "")) == "task10i_profile_custom"),
+		"profile comparison preview passes its injected stat catalog into assignment validation",
+		failures,
+	)
+	var custom_class := GameCatalog.load_defaults().class_by_id(&"fighter").duplicate(true) as ClassDefinition
+	custom_class.id = &"task10i_profile_custom_class"
+	var custom_profile := profile.copy()
+	custom_profile.leader_loadout_class_id = String(custom_class.id)
+	var custom_class_projection := ProfileStorageProjection.from_profile(
+		custom_profile, GameCatalog.EQUIPMENT_CATALOG, fixture.foundation, custom_stats, custom_class,
+	)
+	var custom_class_rows: Array = custom_class_projection.comparison_lines_by_slot(item.instance_id).get("helmet", [])
+	TestAssertions.truthy(
+		custom_class_rows.any(func(row: Dictionary) -> bool: return String(row.get("stat_id", "")) == "task10i_profile_custom"),
+		"profile comparison validation authorizes an injected class absent from the default catalog",
+		failures,
+	)
+	GameCatalog.ITEM_FOUNDATION_CATALOG.affixes.erase(fixture.definition)
+
+
+func _aggregate_affix_fixture(
+	affix_id: StringName,
+	stat_id: StringName,
+	operation: int,
+	value: float,
+	count: int,
+	required_tags: Array[StringName],
+) -> Dictionary:
+	var foundation := GameCatalog.ITEM_FOUNDATION_CATALOG.duplicate(true) as ItemFoundationCatalog
+	for tag: StringName in required_tags:
+		if tag not in foundation.known_item_tags:
+			foundation.known_item_tags.append(tag)
+	var definition := ItemAffixDefinition.new()
+	definition.id = affix_id
+	definition.display_name = String(affix_id).replace("_", " ").capitalize()
+	definition.affix_kind = "prefix"
+	definition.modifier_family_ids = [affix_id]
+	var effects: Array[ItemModifierEffectDefinition] = []
+	var minimums: Array[float] = []
+	var maximums: Array[float] = []
+	var rolls: Array[ItemModifierRoll] = []
+	for _index: int in count:
+		var effect := ItemModifierEffectDefinition.new()
+		effect.stat_id = stat_id
+		effect.operation = operation
+		effect.required_tags = required_tags.duplicate()
+		effects.append(effect)
+		minimums.append(value * 0.9)
+		maximums.append(value * 1.1)
+		var roll := ItemModifierRoll.new()
+		roll.stat_id = stat_id
+		roll.operation = operation
+		roll.value = value
+		roll.required_tags = required_tags.duplicate()
+		rolls.append(roll)
+	definition.effects = effects
+	var tier := ItemAffixTierDefinition.new()
+	tier.tier = 1
+	tier.minimum_item_level = 1
+	tier.minimum_rolls = minimums
+	tier.maximum_rolls = maximums
+	definition.tiers = [tier]
+	foundation.affixes.append(definition)
+	var affix := ItemAffixInstance.new()
+	affix.definition_id = affix_id
+	affix.affix_kind = definition.affix_kind
+	affix.tier = 1
+	affix.rolls = rolls
+	return {"foundation": foundation, "definition": definition, "affix": affix, "item_before": {}}
+
+
+func _classes_with_base_overrides(class_id: StringName, overrides: Dictionary) -> GameCatalog:
+	var classes := GameCatalog.load_defaults()
+	for index: int in classes.classes.size():
+		if classes.classes[index] != null and classes.classes[index].id == class_id:
+			var owned := classes.classes[index].duplicate(true) as ClassDefinition
+			owned.base_stat_overrides = overrides.duplicate(true)
+			classes.classes[index] = owned
+			break
+	return classes
+
+
+func _classes_with_action_tag(class_id: StringName, action_tag: StringName) -> GameCatalog:
+	var classes := GameCatalog.load_defaults()
+	for index: int in classes.classes.size():
+		if classes.classes[index] != null and classes.classes[index].id == class_id:
+			var owned := classes.classes[index].duplicate(true) as ClassDefinition
+			owned.primary_attack = owned.primary_attack.duplicate(true) as AttackDefinition
+			owned.primary_attack.action_tags.append(action_tag)
+			classes.classes[index] = owned
+			break
+	return classes
 
 
 func _stout(value: float) -> ItemAffixInstance:

@@ -6,6 +6,7 @@ const ITEM_CONSTITUTION := 3.0
 const ITEM_ID := "task10a-required-sword"
 const BASE_ID := &"forge_vanguard_sword"
 const SLOT_ID := &"main_hand"
+const ACTION_ONLY_TAG := &"task10d_action_only"
 
 
 class RejectingRefreshPartyManager extends PartyManager:
@@ -17,6 +18,11 @@ class RejectingRefreshPartyManager extends PartyManager:
 		return super._commit_member_source_without_invalidation(member_id, source)
 
 
+class ResumeOverflowPartyManager extends PartyManager:
+	func install_source_without_invalidation(member_id: int, source: StatModifierSource) -> bool:
+		return _commit_member_source_without_invalidation(member_id, source)
+
+
 func run() -> Array[String]:
 	var failures: Array[String] = []
 	_test_growth_reactivates_and_requirement_loss_disables(failures)
@@ -24,6 +30,8 @@ func run() -> Array[String]:
 	_test_refresh_commit_failure_rolls_back_exact_state(failures)
 	_test_action_overflow_refresh_is_rejected_atomically(failures)
 	_test_resume_action_overflow_is_rejected_atomically(failures)
+	_test_aggregate_stat_overflow_refresh_is_rejected_atomically(failures)
+	_test_resume_aggregate_stat_overflow_is_rejected_atomically(failures)
 	return failures
 
 
@@ -213,7 +221,7 @@ func _test_refresh_commit_failure_rolls_back_exact_state(failures: Array[String]
 
 
 func _test_action_overflow_refresh_is_rejected_atomically(failures: Array[String]) -> void:
-	var party := _party(2)
+	var party := _party_with_action_only_tag(2)
 	var profile := ProfileState.new_profile("task10d-refresh-profile", "Task 10D Refresh", 1000)
 	profile.inventory_columns = 1
 	var context := PlayerRunContext.new()
@@ -251,7 +259,7 @@ func _test_action_overflow_refresh_is_rejected_atomically(failures: Array[String
 
 
 func _test_resume_action_overflow_is_rejected_atomically(failures: Array[String]) -> void:
-	var party := _party(2)
+	var party := _party_with_action_only_tag(2)
 	TestAssertions.truthy(party.add_member_source(1, _action_overflow_source()), "resume overflow fixture installs its preexisting source", failures)
 	var owner := "task10d-resume-player"
 	var seed := 10402
@@ -300,6 +308,94 @@ func _test_resume_action_overflow_is_rejected_atomically(failures: Array[String]
 	party.free()
 
 
+func _test_aggregate_stat_overflow_refresh_is_rejected_atomically(failures: Array[String]) -> void:
+	var party := _party(2)
+	var profile := ProfileState.new_profile("task10i-refresh-profile", "Task 10I Refresh", 1000)
+	profile.inventory_columns = 1
+	var context := PlayerRunContext.new()
+	TestAssertions.equal(context.configure(&"task10i-refresh-player", 0, profile, 10501, party, 100), PackedStringArray(), "aggregate-overflow refresh fixture configures", failures)
+	var action_tags := DamageResolver.action_tags_for(party.member_by_id(1).class_definition.primary_attack)
+	var actor_scene := load("res://scenes/characters/leader.tscn") as PackedScene
+	var actor := actor_scene.instantiate() as PartyActor
+	actor.configure(party.member_by_id(1))
+	actor.configure_combat(party)
+	var health := actor.get_node("HealthComponent") as HealthComponent
+	health.apply_damage(40.0)
+	var health_before := Vector2(health.current_health, health.max_health)
+	var sources_before := _source_documents(party.member_by_id(1))
+	var activation_before := context.equipment_activation(1)
+	var base_before := party.stats_for(1)
+	var action_before := party.stats_for_action(1, action_tags)
+	var member_two_base_before := party.stats_for(2)
+	var member_two_action_before := party.stats_for_action(2, action_tags)
+	var revision_before := party.stat_revision()
+	var changed: Array[int] = []
+	party.stats_changed.connect(func(member_id: int) -> void: changed.append(member_id))
+
+	TestAssertions.truthy(not party.add_member_source(1, _aggregate_overflow_source()), "aggregate stat overflow rejects the coordinated refresh", failures)
+	TestAssertions.equal(_source_documents(party.member_by_id(1)), sources_before, "aggregate-overflow refresh preserves exact sources", failures)
+	TestAssertions.equal(context.equipment_activation(1).active_item_ids, activation_before.active_item_ids, "aggregate-overflow refresh preserves activation", failures)
+	TestAssertions.equal(party.stat_revision(), revision_before, "aggregate-overflow refresh preserves revision", failures)
+	TestAssertions.equal(changed, [], "aggregate-overflow refresh emits no stat signal", failures)
+	TestAssertions.truthy(is_same(party.stats_for(1), base_before), "aggregate-overflow refresh preserves affected base cache identity", failures)
+	TestAssertions.truthy(is_same(party.stats_for_action(1, action_tags), action_before), "aggregate-overflow refresh preserves affected action cache identity", failures)
+	TestAssertions.truthy(is_same(party.stats_for(2), member_two_base_before), "aggregate-overflow refresh preserves unrelated base cache identity", failures)
+	TestAssertions.truthy(is_same(party.stats_for_action(2, action_tags), member_two_action_before), "aggregate-overflow refresh preserves unrelated action cache identity", failures)
+	TestAssertions.equal(Vector2(health.current_health, health.max_health), health_before, "aggregate-overflow refresh preserves runtime health", failures)
+	actor.free()
+	party.free()
+
+
+func _test_resume_aggregate_stat_overflow_is_rejected_atomically(failures: Array[String]) -> void:
+	var party := _party(2, null, ResumeOverflowPartyManager.new()) as ResumeOverflowPartyManager
+	var owner := "task10i-resume-player"
+	var seed := 10502
+	var containers: Array[ItemSlotContainer] = [
+		ItemSlotContainer.create(&"run-inventory", ItemSlotContainer.RUN_INVENTORY, owner, 5),
+		ItemSlotContainer.create(&"run-equipment-001", ItemSlotContainer.RUN_MEMBER_EQUIPMENT, owner, EquipmentSlotIndex.capacity()),
+		ItemSlotContainer.create(&"run-equipment-002", ItemSlotContainer.RUN_MEMBER_EQUIPMENT, owner, EquipmentSlotIndex.capacity()),
+	]
+	var state := ItemOwnershipState.create(owner, ItemRegistry.new(), containers)
+	var bootstrap := RunItemBootstrap.create(&"task10i-resume-run", seed, StringName(owner), 1, state)
+	var profile := ProfileState.new_profile("task10i-resume-profile", "Task 10I Resume", 1000)
+	profile.inventory_columns = 1
+	profile.resumable_run = ResumableRunItemCodec.encode(bootstrap)
+	var context := PlayerRunContext.new()
+	var action_tags := DamageResolver.action_tags_for(party.member_by_id(1).class_definition.primary_attack)
+	var actor_scene := load("res://scenes/characters/leader.tscn") as PackedScene
+	var actor := actor_scene.instantiate() as PartyActor
+	actor.configure(party.member_by_id(1))
+	actor.configure_combat(party)
+	var health := actor.get_node("HealthComponent") as HealthComponent
+	health.apply_damage(40.0)
+	var health_before := Vector2(health.current_health, health.max_health)
+	var activation_before := context.equipment_activation(1)
+	var base_before := party.stats_for(1)
+	var action_before := party.stats_for_action(1, action_tags)
+	var member_two_base_before := party.stats_for(2)
+	var member_two_action_before := party.stats_for_action(2, action_tags)
+	var revision_before := party.stat_revision()
+	var changed: Array[int] = []
+	party.stats_changed.connect(func(member_id: int) -> void: changed.append(member_id))
+	TestAssertions.truthy(party.install_source_without_invalidation(1, _aggregate_overflow_source()), "resume aggregate-overflow fixture installs its preexisting source without observable mutation", failures)
+	var sources_before := _source_documents(party.member_by_id(1))
+
+	var errors := context.configure(StringName(owner), 0, profile, seed, party, 100, bootstrap)
+	TestAssertions.truthy(not errors.is_empty() and String(errors[0]).contains("stat=max_health stage=raw"), "resume reconstruction rejects the preexisting aggregate stat overflow", failures)
+	TestAssertions.truthy(not context.is_configured(), "aggregate-overflow resume remains unconfigured", failures)
+	TestAssertions.equal(_source_documents(party.member_by_id(1)), sources_before, "aggregate-overflow resume preserves exact sources", failures)
+	TestAssertions.equal(context.equipment_activation(1).error, activation_before.error, "aggregate-overflow resume preserves activation state", failures)
+	TestAssertions.equal(party.stat_revision(), revision_before, "aggregate-overflow resume preserves revision", failures)
+	TestAssertions.equal(changed, [], "aggregate-overflow resume emits no stat signal", failures)
+	TestAssertions.truthy(is_same(party.stats_for(1), base_before), "aggregate-overflow resume preserves affected base cache identity", failures)
+	TestAssertions.truthy(is_same(party.stats_for_action(1, action_tags), action_before), "aggregate-overflow resume preserves affected action cache identity", failures)
+	TestAssertions.truthy(is_same(party.stats_for(2), member_two_base_before), "aggregate-overflow resume preserves unrelated base cache identity", failures)
+	TestAssertions.truthy(is_same(party.stats_for_action(2, action_tags), member_two_action_before), "aggregate-overflow resume preserves unrelated action cache identity", failures)
+	TestAssertions.equal(Vector2(health.current_health, health.max_health), health_before, "aggregate-overflow resume preserves runtime health", failures)
+	actor.free()
+	party.free()
+
+
 func _party(member_count: int, catalog: GameCatalog = null, manager: PartyManager = null) -> PartyManager:
 	var owned_catalog := catalog if catalog != null else GameCatalog.load_defaults()
 	var party := manager if manager != null else PartyManager.new()
@@ -310,14 +406,38 @@ func _party(member_count: int, catalog: GameCatalog = null, manager: PartyManage
 	return party
 
 
+func _party_with_action_only_tag(member_count: int) -> PartyManager:
+	var catalog := GameCatalog.load_defaults()
+	var fighter := catalog.class_by_id(&"fighter").duplicate(true) as ClassDefinition
+	fighter.primary_attack = fighter.primary_attack.duplicate(true) as AttackDefinition
+	fighter.primary_attack.action_tags = fighter.primary_attack.action_tags.duplicate()
+	fighter.primary_attack.action_tags.append(ACTION_ONLY_TAG)
+	var party := PartyManager.new()
+	party.configure_capacity(PartyCapacityPolicy.new(member_count))
+	party.initialize(fighter, catalog.traits)
+	for _index: int in range(1, member_count):
+		assert(party.recruit(fighter))
+	return party
+
+
 func _action_overflow_source() -> StatModifierSource:
 	var modifiers: Array[StatModifier] = []
 	for index: int in 4:
 		modifiers.append(StatModifier.create(
 			&"cooldown_rate", StatModifier.Operation.MORE, 1.0e100,
-			StringName("task10d_refresh_overflow_%d" % index), "Task 10D Refresh Overflow", [&"melee"],
+			StringName("task10d_refresh_overflow_%d" % index), "Task 10D Refresh Overflow", [ACTION_ONLY_TAG],
 		))
 	return StatModifierSource.create(&"task10d_refresh_overflow", &"character_growth", "Task 10D Refresh Overflow", 1, modifiers)
+
+
+func _aggregate_overflow_source() -> StatModifierSource:
+	var modifiers: Array[StatModifier] = []
+	for index: int in 4:
+		modifiers.append(StatModifier.create(
+			&"max_health", StatModifier.Operation.MORE, 1.0e100,
+			StringName("task10i_refresh_aggregate_%d" % index), "Task 10I Aggregate Overflow",
+		))
+	return StatModifierSource.create(&"task10i_refresh_aggregate", &"character_growth", "Task 10I Aggregate Overflow", 1, modifiers)
 
 
 func _configured_equipped_fixture(party: PartyManager, label: String, seed: int) -> Dictionary:

@@ -4,6 +4,7 @@ const RESULT_PATH := "res://scripts/equipment/equipment_transition_result.gd"
 const SERVICE_PATH := "res://scripts/equipment/equipment_transition_service.gd"
 const INVENTORY_ID := &"run-inventory"
 const EQUIPMENT_ID := &"run-equipment-001"
+const ACTION_ONLY_TAG := &"task10d_action_only"
 
 class InvalidPreviewPartyManager extends PartyManager:
 	func member_sources_without_equipment(member_id: int) -> Array[StatModifierSource]:
@@ -35,6 +36,7 @@ func run() -> Array[String]:
 	_test_preview_is_pure_and_resolves_final_stats(failures)
 	_test_newly_placed_disabled_item_is_rejected(failures)
 	_test_projection_failure_is_atomic(failures)
+	_test_non_action_aggregate_overflow_is_rejected_atomically(failures)
 	_test_candidate_equipment_tagged_overflow_is_rejected(failures)
 	_test_mixed_component_and_invalid_type_actions_are_rejected(failures)
 	_test_critical_and_rate_overflow_are_rejected(failures)
@@ -76,6 +78,39 @@ func _test_preview_is_pure_and_resolves_final_stats(failures: Array[String]) -> 
 	TestAssertions.equal(party.stats_for(1), cached_before, "preview leaves the member cache untouched", failures)
 	TestAssertions.equal(party.member_by_id(1).modifier_sources.size(), 0, "preview commits no member source", failures)
 	TestAssertions.equal(changed, [], "preview emits no stat-change signal", failures)
+	party.free()
+
+func _test_non_action_aggregate_overflow_is_rejected_atomically(failures: Array[String]) -> void:
+	var party := _party(CandidateActionPartyManager.new()) as CandidateActionPartyManager
+	party.candidate_sources.append(_non_action_overflow_source())
+	var item := _stout_helmet("item-transition-aggregate-overflow", 130)
+	var state := _state(item)
+	var state_before := _bytes(state)
+	var item_before := item.to_dictionary()
+	var class_before := party.member_by_id(1).class_definition.base_stat_overrides.duplicate(true)
+	var cached_before := party.stats_for(1)
+	var revision_before := party.stat_revision()
+	var changed: Array[int] = []
+	party.stats_changed.connect(func(member_id: int) -> void: changed.append(member_id))
+	var result: Variant = _service.preview(
+		state, 1, item.instance_id, &"helmet", party,
+		GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG,
+	)
+	TestAssertions.truthy(result != null and not result.ok(), "non-action aggregate overflow rejects equipment preview", failures)
+	if result != null:
+		TestAssertions.equal(
+			result.error,
+			"PARTY_FORGE_EQUIPMENT_TRANSITION_ERROR member=1 item=%s slot=helmet reason=stat resolution failed detail=PARTY_FORGE_STAT_RESOLUTION_ERROR member=1 stat=max_health stage=raw value=inf reason=resolved value is non-finite" % item.instance_id,
+			"non-action aggregate overflow retains stable nested stat context",
+			failures,
+		)
+		TestAssertions.truthy(result.state() == null and result.activation() == null and result.resolution() == null, "aggregate overflow exposes no partial transition", failures)
+	TestAssertions.equal(_bytes(state), state_before, "aggregate overflow preserves ownership", failures)
+	TestAssertions.equal(item.to_dictionary(), item_before, "aggregate overflow preserves immutable item bytes", failures)
+	TestAssertions.equal(party.member_by_id(1).class_definition.base_stat_overrides, class_before, "aggregate overflow preserves class data", failures)
+	TestAssertions.truthy(is_same(party.stats_for(1), cached_before), "aggregate overflow preserves cache identity", failures)
+	TestAssertions.equal(party.stat_revision(), revision_before, "aggregate overflow preserves revision", failures)
+	TestAssertions.equal(changed, [], "aggregate overflow emits no stat signal", failures)
 	party.free()
 
 func _test_newly_placed_disabled_item_is_rejected(failures: Array[String]) -> void:
@@ -123,8 +158,9 @@ func _test_projection_failure_is_atomic(failures: Array[String]) -> void:
 	party.free()
 
 func _test_candidate_equipment_tagged_overflow_is_rejected(failures: Array[String]) -> void:
-	var party := _party(PartyManager.new())
-	var fixture := _tagged_equipment_fixture(&"damage", [&"melee"], 1.0e31, 10)
+	var fighter := _class_with_action_tag(GameCatalog.load_defaults().class_by_id(&"fighter"), &"fighter_cleave", ACTION_ONLY_TAG)
+	var party := _party_with_class(PartyManager.new(), fighter)
+	var fixture := _tagged_equipment_fixture(&"damage", [ACTION_ONLY_TAG], 1.0e31, 10)
 	var item := fixture.item as ItemInstance
 	var foundation := fixture.foundation as ItemFoundationCatalog
 	var state := _state(item)
@@ -175,13 +211,26 @@ func _test_mixed_component_and_invalid_type_actions_are_rejected(failures: Array
 
 func _test_critical_and_rate_overflow_are_rejected(failures: Array[String]) -> void:
 	for case: Dictionary in [
-		{"stat": &"crit_multiplier", "detail": "critical", "label": "critical overflow"},
-		{"stat": &"attack_speed", "detail": "attack speed", "label": "action-rate overflow"},
-		{"stat": &"cooldown_rate", "detail": "cooldown recovery", "label": "cooldown-recovery overflow"},
+		{
+			"modifiers": {&"damage": 1.0e200, &"crit_multiplier": 1.0e200},
+			"detail": "critical",
+			"label": "critical overflow",
+		},
+		{
+			"modifiers": {&"damage": 1.0e200, &"attack_speed": 1.0e200},
+			"detail": "DPS",
+			"label": "action-rate overflow",
+		},
+		{
+			"modifiers": {&"damage": 1.0e200, &"cooldown_rate": 1.0e200},
+			"detail": "DPS",
+			"label": "cooldown-recovery overflow",
+		},
 	]:
-		var party := _party(CandidateActionPartyManager.new()) as CandidateActionPartyManager
-		party.candidate_sources.append(_overflow_source(case.stat, &"melee"))
-		var item := _stout_helmet("item-transition-%s" % String(case.stat), 12)
+		var fighter := _class_with_action_tag(GameCatalog.load_defaults().class_by_id(&"fighter"), &"fighter_cleave", ACTION_ONLY_TAG)
+		var party := _party_with_class(CandidateActionPartyManager.new(), fighter) as CandidateActionPartyManager
+		party.candidate_sources.append(_finite_action_overflow_source(case.modifiers))
+		var item := _stout_helmet("item-transition-%s" % String(case.label).replace(" ", "-"), 12)
 		var result: Variant = _service.preview(
 			_state(item), 1, item.instance_id, &"helmet", party,
 			GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG,
@@ -203,8 +252,9 @@ func _test_healing_projection_validation(failures: Array[String]) -> void:
 	TestAssertions.truthy(result != null and result.ok(), "healing support action remains valid without a damage archetype estimate", failures)
 	party.free()
 
-	var overflow_party := _party_with_class(CandidateActionPartyManager.new(), catalog.class_by_id(&"cleric"))
-	overflow_party.candidate_sources.append(_overflow_source(&"healing_power", &"healing"))
+	var overflow_cleric := _class_with_action_tag(catalog.class_by_id(&"cleric"), &"cleric_heal", ACTION_ONLY_TAG)
+	var overflow_party := _party_with_class(CandidateActionPartyManager.new(), overflow_cleric)
+	overflow_party.candidate_sources.append(_overflow_source(&"healing_power", ACTION_ONLY_TAG))
 	var overflow_item := _stout_helmet("item-transition-healing-overflow", 131)
 	var overflow_result: Variant = _service.preview(
 		_state(overflow_item), 1, overflow_item.instance_id, &"helmet", overflow_party,
@@ -244,7 +294,8 @@ func _test_multi_action_and_missing_primary_contract(failures: Array[String]) ->
 	missing_party.free()
 
 func _test_context_commit_rejection_is_atomic(failures: Array[String]) -> void:
-	var party := _party(CandidateActionPartyManager.new()) as CandidateActionPartyManager
+	var fighter := _class_with_action_tag(GameCatalog.load_defaults().class_by_id(&"fighter"), &"fighter_cleave", ACTION_ONLY_TAG)
+	var party := _party_with_class(CandidateActionPartyManager.new(), fighter) as CandidateActionPartyManager
 	var context := PlayerRunContext.new()
 	var profile := ProfileState.new_profile("task10d-profile", "Task 10D", 1000)
 	profile.inventory_columns = 1
@@ -267,7 +318,7 @@ func _test_context_commit_rejection_is_atomic(failures: Array[String]) -> void:
 		GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG,
 	)
 	TestAssertions.truthy(create_result.ok(), "atomic rejection fixture item enters inventory", failures)
-	party.candidate_sources.append(_overflow_source(&"damage", &"melee"))
+	party.candidate_sources.append(_overflow_source(&"damage", ACTION_ONLY_TAG))
 	var actor := Node3D.new()
 	var health := HealthComponent.new()
 	health.name = "HealthComponent"
@@ -314,6 +365,22 @@ func _party_with_class(manager: PartyManager, class_definition: ClassDefinition)
 	var catalog := GameCatalog.load_defaults()
 	manager.initialize(class_definition, catalog.traits)
 	return manager
+
+func _class_with_action_tag(
+	class_definition: ClassDefinition,
+	action_id: StringName,
+	action_tag: StringName,
+) -> ClassDefinition:
+	var owned := class_definition.duplicate(true) as ClassDefinition
+	if owned.primary_attack != null and owned.primary_attack.id == action_id:
+		owned.primary_attack = owned.primary_attack.duplicate(true) as AttackDefinition
+		if action_tag not in owned.primary_attack.action_tags:
+			owned.primary_attack.action_tags.append(action_tag)
+	elif owned.support_action != null and owned.support_action.id == action_id:
+		owned.support_action = owned.support_action.duplicate(true) as AttackDefinition
+		if action_tag not in owned.support_action.action_tags:
+			owned.support_action.action_tags.append(action_tag)
+	return owned
 
 func _state(item: ItemInstance) -> ItemOwnershipState:
 	return ItemOwnershipState.create("transition-owner", ItemRegistry.new([item]), [
@@ -378,6 +445,25 @@ func _overflow_source(stat_id: StringName, action_tag: StringName) -> StatModifi
 		))
 	return StatModifierSource.create(StringName("task10d_%s_source" % stat_id), &"test", "Task 10D Overflow", 1, modifiers)
 
+func _finite_action_overflow_source(values: Dictionary) -> StatModifierSource:
+	var modifiers: Array[StatModifier] = []
+	for stat_value: Variant in values:
+		var stat_id := stat_value as StringName
+		modifiers.append(StatModifier.create(
+			stat_id, StatModifier.Operation.FLAT, float(values[stat_id]),
+			StringName("task10d_finite_%s" % stat_id), "Task 10D Finite Action Overflow", [ACTION_ONLY_TAG],
+		))
+	return StatModifierSource.create(&"task10d_finite_action_overflow", &"test", "Task 10D Finite Action Overflow", 1, modifiers)
+
+func _non_action_overflow_source() -> StatModifierSource:
+	var modifiers: Array[StatModifier] = []
+	for index: int in 4:
+		modifiers.append(StatModifier.create(
+			&"max_health", StatModifier.Operation.MORE, 1.0e100,
+			StringName("task10i_transition_overflow_%d" % index), "Task 10I Aggregate Overflow",
+		))
+	return StatModifierSource.create(&"task10i_transition_overflow", &"test", "Task 10I Aggregate Overflow", 1, modifiers)
+
 func _damage_action(id: StringName, tags: Array[StringName], components: Array[AttackDamageComponent]) -> AttackDefinition:
 	var result := AttackDefinition.new()
 	result.id = id
@@ -400,6 +486,9 @@ func _component(type_id: StringName, amount: float) -> AttackDamageComponent:
 func _tagged_equipment_fixture(stat_id: StringName, tags: Array[StringName], value: float, effect_count: int) -> Dictionary:
 	var foundation := ItemFoundationCatalog.new()
 	foundation.known_item_tags = GameCatalog.ITEM_FOUNDATION_CATALOG.known_item_tags.duplicate()
+	for tag: StringName in tags:
+		if tag not in foundation.known_item_tags:
+			foundation.known_item_tags.append(tag)
 	foundation.rarities = GameCatalog.ITEM_FOUNDATION_CATALOG.rarities.duplicate()
 	var definition := ItemAffixDefinition.new()
 	definition.id = &"task10d_tagged"

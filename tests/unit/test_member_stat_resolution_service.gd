@@ -14,6 +14,7 @@ func run() -> Array[String]:
 	if service_script == null or not service_script.can_instantiate():
 		return failures
 	_test_two_pass_resolution_has_no_attribute_feedback(service_script, failures)
+	_test_aggregate_raw_and_final_values_must_be_finite(service_script, failures)
 	_test_generated_source_id_collision_is_rejected(service_script, failures)
 	_test_derived_source_rejects_core_attributes(failures)
 	_test_source_validation_contract(failures)
@@ -52,6 +53,74 @@ func _test_two_pass_resolution_has_no_attribute_feedback(service_script: Script,
 			"resolved derived source contains no core attributes",
 			failures,
 		)
+
+func _test_aggregate_raw_and_final_values_must_be_finite(service_script: Script, failures: Array[String]) -> void:
+	var capabilities: Array[StringName] = []
+	var action_tags: Array[StringName] = []
+	var raw_sources := _overflowing_more_sources(&"max_health", 1.0e100, 4, &"raw_overflow")
+	var raw_snapshot := StatResolver.resolve(7, STAT_CATALOG, {}, capabilities, raw_sources, action_tags, 6)
+	var raw_result: Variant = service_script.resolve(
+		7, STAT_CATALOG, {}, capabilities, raw_sources, action_tags, 6, DEFAULT_TUNING,
+	)
+	TestAssertions.truthy(not raw_result.ok(), "finite modifiers whose raw aggregate overflows are rejected", failures)
+	TestAssertions.equal(
+		raw_result.error,
+		_resolution_error(7, &"max_health", "raw", raw_snapshot.value(&"max_health")),
+		"raw aggregate overflow returns stable member/stat/stage/value context",
+		failures,
+	)
+	TestAssertions.truthy(
+		raw_result.raw_attributes == null and raw_result.derived_source == null and raw_result.final_stats == null,
+		"raw aggregate overflow returns no partial resolution",
+		failures,
+	)
+
+	var final_sources := _overflowing_more_sources(&"max_health", 1.0e30, 4, &"final_overflow")
+	var base_values := {&"constitution": 1.0e200}
+	var raw_final_snapshot := StatResolver.resolve(8, STAT_CATALOG, base_values, capabilities, final_sources, action_tags, 7)
+	var projection := AttributeDerivedSourceProjector.project(8, raw_final_snapshot, DEFAULT_TUNING)
+	var combined_sources := final_sources.duplicate()
+	combined_sources.append(projection.source)
+	var expected_final_snapshot := StatResolver.resolve(8, STAT_CATALOG, base_values, capabilities, combined_sources, action_tags, 7)
+	TestAssertions.truthy(is_finite(raw_final_snapshot.value(&"max_health")), "final-stage fixture remains finite before derived projection", failures)
+	TestAssertions.truthy(not is_finite(expected_final_snapshot.value(&"max_health")), "final-stage fixture overflows only after derived projection", failures)
+	var final_result: Variant = service_script.resolve(
+		8, STAT_CATALOG, base_values, capabilities, final_sources, action_tags, 7, DEFAULT_TUNING,
+	)
+	TestAssertions.truthy(not final_result.ok(), "finite modifiers whose final aggregate overflows are rejected", failures)
+	TestAssertions.equal(
+		final_result.error,
+		_resolution_error(8, &"max_health", "final", expected_final_snapshot.value(&"max_health")),
+		"final aggregate overflow returns stable member/stat/stage/value context",
+		failures,
+	)
+	TestAssertions.truthy(
+		final_result.raw_attributes == null and final_result.derived_source == null and final_result.final_stats == null,
+		"final aggregate overflow returns no partial resolution",
+		failures,
+	)
+
+func _overflowing_more_sources(
+	stat_id: StringName,
+	value: float,
+	count: int,
+	prefix: StringName,
+) -> Array[StatModifierSource]:
+	var modifiers: Array[StatModifier] = []
+	for index: int in count:
+		modifiers.append(StatModifier.create(
+			stat_id,
+			StatModifier.Operation.MORE,
+			value,
+			StringName("%s_modifier_%d" % [prefix, index]),
+			"Aggregate Overflow",
+		))
+	return [StatModifierSource.create(prefix, &"test", "Aggregate Overflow", 7 if prefix == &"raw_overflow" else 8, modifiers)]
+
+func _resolution_error(member_id: int, stat_id: StringName, stage: String, value: float) -> String:
+	return "PARTY_FORGE_STAT_RESOLUTION_ERROR member=%d stat=%s stage=%s value=%s reason=resolved value is non-finite" % [
+		member_id, stat_id, stage, str(value),
+	]
 
 func _test_generated_source_id_collision_is_rejected(service_script: Script, failures: Array[String]) -> void:
 	var colliding_source := StatModifierSource.create(&"attribute_projection_1", &"growth", "Colliding Growth", 1, [

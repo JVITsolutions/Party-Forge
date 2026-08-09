@@ -4,12 +4,17 @@ extends RefCounted
 const OPERATION := "profile_loadout_assignment"
 const ERROR_PREFIX := "PARTY_FORGE_PROFILE_LOADOUT_ASSIGNMENT_ERROR"
 const LEADER_ID := &"leader-loadout"
+const DEFAULT_ATTRIBUTE_PROJECTION: AttributeProjectionTuning = preload("res://data/stats/default_attribute_projection.tres")
+const CANDIDATE_ACTION_VALIDATION := preload("res://scripts/combat/candidate_action_validation_service.gd")
 
 var _mutations: ProfileMutationService
 var _transactions: ItemContainerTransactionService
 var _equipment: EquipmentCatalog
 var _foundation: ItemFoundationCatalog
 var _classes: GameCatalog
+var _stats: StatCatalog
+var _damage_types: DamageTypeCatalog
+var _attribute_tuning: AttributeProjectionTuning
 
 func _init(
 	mutations: ProfileMutationService = null,
@@ -17,12 +22,18 @@ func _init(
 	equipment: EquipmentCatalog = null,
 	foundation: ItemFoundationCatalog = null,
 	classes: GameCatalog = null,
+	stats: StatCatalog = null,
+	damage_types: DamageTypeCatalog = null,
+	attribute_tuning: AttributeProjectionTuning = null,
 ) -> void:
 	_mutations = mutations if mutations != null else ProfileMutationService.new()
 	_transactions = transactions if transactions != null else ItemContainerTransactionService.new()
 	_equipment = equipment if equipment != null else GameCatalog.EQUIPMENT_CATALOG
 	_foundation = foundation if foundation != null else GameCatalog.ITEM_FOUNDATION_CATALOG
 	_classes = classes if classes != null else GameCatalog.load_defaults()
+	_stats = stats if stats != null else GameCatalog.STAT_CATALOG
+	_damage_types = damage_types if damage_types != null else GameCatalog.DAMAGE_TYPES
+	_attribute_tuning = attribute_tuning if attribute_tuning != null else DEFAULT_ATTRIBUTE_PROJECTION
 
 func apply(profile_id: String, request: ProfileLoadoutAssignmentRequest, root: String = ProfileStore.DEFAULT_ROOT) -> ProfileMutationResult:
 	var error := _validate_request(profile_id, request)
@@ -134,7 +145,7 @@ func _apply_candidate(candidate: ProfileState, request: ProfileLoadoutAssignment
 		next_state,
 		_equipment,
 		_foundation,
-		GameCatalog.STAT_CATALOG,
+		_stats,
 		selected_class.stat_base_values(),
 		selected_class.capability_tags,
 		[],
@@ -145,6 +156,9 @@ func _apply_candidate(candidate: ProfileState, request: ProfileLoadoutAssignment
 	for item_entering_leader: String in planned.newly_equipped_item_ids():
 		if not activation.is_active(item_entering_leader):
 			return _error("field=leader_loadout item=%s reason=newly placed item is inactive detail=%s" % [item_entering_leader, "; ".join(activation.disabled_reasons(item_entering_leader))])
+	var candidate_error := _validate_candidate_projection(selected_class, activation)
+	if not candidate_error.is_empty():
+		return _error("field=leader_loadout reason=%s" % candidate_error)
 
 	candidate.item_records = next_state.registry().to_dictionary()
 	candidate.leader_loadout = next_state.container(LEADER_ID).to_dictionary()
@@ -157,6 +171,35 @@ func _apply_candidate(candidate: ProfileState, request: ProfileLoadoutAssignment
 	candidate.stash_tabs = stored_tabs
 	candidate.leader_loadout_class_id = String(request.selected_class_id)
 	return ""
+
+func _validate_candidate_projection(
+	class_definition: ClassDefinition,
+	activation: EquipmentActivationResult,
+) -> String:
+	var sources: Array[StatModifierSource] = [activation.source]
+	var resolution := MemberStatResolutionService.resolve(
+		1,
+		_stats,
+		class_definition.stat_base_values(),
+		class_definition.capability_tags,
+		sources,
+		[],
+		0,
+		_attribute_tuning,
+	)
+	if not resolution.ok():
+		return "stat resolution failed detail=%s" % resolution.error
+	return CANDIDATE_ACTION_VALIDATION.validate(
+		class_definition,
+		1,
+		_stats,
+		_damage_types,
+		class_definition.stat_base_values(),
+		class_definition.capability_tags,
+		sources,
+		0,
+		_attribute_tuning,
+	)
 
 func _validate_complete_loadout(state: ItemOwnershipState, class_definition: ClassDefinition) -> String:
 	var leader := state.container(LEADER_ID)

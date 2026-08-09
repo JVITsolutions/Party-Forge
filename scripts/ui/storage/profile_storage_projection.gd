@@ -18,6 +18,8 @@ var _state: ItemOwnershipState
 var _equipment: EquipmentCatalog
 var _foundation: ItemFoundationCatalog
 var _stats: StatCatalog
+var _damage_types: DamageTypeCatalog
+var _attribute_tuning: AttributeProjectionTuning
 var _class_definition: ClassDefinition
 var _current_activation: EquipmentActivationResult
 var _current_resolution: MemberStatResolution
@@ -34,6 +36,8 @@ static func from_profile(
 	foundation: ItemFoundationCatalog,
 	stats: StatCatalog = GameCatalog.STAT_CATALOG,
 	class_definition: ClassDefinition = null,
+	damage_types: DamageTypeCatalog = GameCatalog.DAMAGE_TYPES,
+	attribute_tuning: AttributeProjectionTuning = DEFAULT_ATTRIBUTE_PROJECTION,
 ) -> ProfileStorageProjection:
 	var result := ProfileStorageProjection.new()
 	if profile == null or equipment == null or foundation == null:
@@ -62,12 +66,14 @@ static func from_profile(
 	result._equipment = equipment
 	result._foundation = foundation
 	result._stats = stats
+	result._damage_types = damage_types
+	result._attribute_tuning = attribute_tuning
 	result._class_definition = class_definition
 	if result._class_definition == null and not result.active_class_id.is_empty():
 		result._class_definition = GameCatalog.load_defaults().class_by_id(result.active_class_id)
 	if result._class_definition != null:
 		result._assignment_service = ProfileLoadoutAssignmentService.new(
-			null, null, equipment, foundation, result._comparison_classes()
+			null, null, equipment, foundation, result._comparison_classes(), stats, damage_types, attribute_tuning
 		)
 		result._current_activation = result._resolve_activation(state)
 		if not result._current_activation.ok():
@@ -129,6 +135,8 @@ func copy() -> ProfileStorageProjection:
 	result._equipment = _equipment
 	result._foundation = _foundation
 	result._stats = _stats
+	result._damage_types = _damage_types
+	result._attribute_tuning = _attribute_tuning
 	result._class_definition = _class_definition
 	result._current_activation = _current_activation.copy() if _current_activation != null else null
 	result._current_resolution = _current_resolution
@@ -224,10 +232,14 @@ func _resolve_activation(state: ItemOwnershipState) -> EquipmentActivationResult
 
 func _comparison_classes() -> GameCatalog:
 	var classes := GameCatalog.load_defaults()
+	var replaced := false
 	for index: int in classes.classes.size():
 		if classes.classes[index] != null and classes.classes[index].id == _class_definition.id:
 			classes.classes[index] = _class_definition
+			replaced = true
 			break
+	if not replaced:
+		classes.classes.append(_class_definition)
 	return classes
 
 func _resolve_stats(activation: EquipmentActivationResult, action_tags: Array[StringName]) -> MemberStatResolution:
@@ -242,7 +254,7 @@ func _resolve_stats(activation: EquipmentActivationResult, action_tags: Array[St
 		sources,
 		action_tags,
 		0,
-		DEFAULT_ATTRIBUTE_PROJECTION,
+		_attribute_tuning,
 	)
 
 func _action_estimates(activation: EquipmentActivationResult) -> Array:
@@ -252,7 +264,7 @@ func _action_estimates(activation: EquipmentActivationResult) -> Array:
 			continue
 		var action_resolution := _resolve_stats(activation, DamageResolver.action_tags_for(attack))
 		if action_resolution.ok():
-			result.append(ActionCombatEstimateService.estimate_from_snapshot(attack, action_resolution.final_stats, GameCatalog.DAMAGE_TYPES))
+			result.append(ActionCombatEstimateService.estimate_from_snapshot(attack, action_resolution.final_stats, _damage_types))
 	return result
 
 func _location_for(instance_id: String) -> Dictionary:

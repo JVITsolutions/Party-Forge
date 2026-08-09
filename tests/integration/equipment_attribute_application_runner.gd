@@ -12,6 +12,7 @@ const DAMAGE_BASE_ID := &"emberweave_wand"
 const SUPPORT_SLOT_ID := &"helmet"
 const DAMAGE_SLOT_ID := &"main_hand"
 const REQUIRED_CONSTITUTION := 3.0
+const ACTION_ONLY_TAG := &"task10d_integration_action_only"
 
 var _failures: Array[String] = []
 
@@ -213,7 +214,7 @@ func _run() -> void:
 		overflow_modifiers.append(StatModifier.create(
 			&"damage", StatModifier.Operation.MORE, 1.0e100,
 			StringName("task10d_integration_overflow_%d" % modifier_index),
-			"Task 10D Integration Overflow", [&"caster"],
+			"Task 10D Integration Overflow", [ACTION_ONLY_TAG],
 		))
 	var overflow_source := StatModifierSource.create(
 		&"task10d_integration_overflow", &"test", "Task 10D Integration Overflow", 1, overflow_modifiers,
@@ -241,6 +242,30 @@ func _run() -> void:
 	_assert(Vector2(rejection_health.current_health, rejection_health.max_health) == rejection_health_before, "24-member refresh rejection preserves current and maximum health")
 	_assert_untouched_snapshots(resumed_party, rejection_tags, rejection_untouched, "invalid action refresh rejection")
 	_assert_item_bytes(resumed_context.item_state(), immutable_item_bytes, "invalid action refresh rejection")
+
+	var aggregate_modifiers: Array[StatModifier] = []
+	for modifier_index: int in 4:
+		aggregate_modifiers.append(StatModifier.create(
+			&"max_health", StatModifier.Operation.MORE, 1.0e100,
+			StringName("task10i_integration_aggregate_%d" % modifier_index),
+			"Task 10I Integration Aggregate Overflow",
+		))
+	var aggregate_source := StatModifierSource.create(
+		&"task10i_integration_aggregate", &"test", "Task 10I Integration Aggregate Overflow", 1, aggregate_modifiers,
+	)
+	resumed_changed_members.clear()
+	_assert(not resumed_party.add_member_source(1, aggregate_source), "aggregate non-action overflow rejects the coordinated 24-member refresh")
+	_assert(JSON.stringify(resumed_context.item_state().to_dictionary()) == rejection_state_before, "24-member aggregate rejection preserves ownership atomically")
+	_assert(resumed_context.equipment_activation(1).active_item_ids == rejection_activation_before.active_item_ids, "24-member aggregate rejection preserves activation")
+	_assert(resumed_context.equipment_activation(1).error == rejection_activation_before.error, "24-member aggregate rejection preserves activation error state")
+	_assert(resumed_party.member_by_id(1).modifier_sources.map(func(source: StatModifierSource) -> StringName: return source.id) == rejection_source_ids_before, "24-member aggregate rejection preserves sources")
+	_assert(is_same(resumed_party.stats_for(1), rejection_base_before), "24-member aggregate rejection preserves member-one base cache identity")
+	_assert(is_same(resumed_party.stats_for_action(1, rejection_tags), rejection_action_before), "24-member aggregate rejection preserves member-one action cache identity")
+	_assert(resumed_party.stat_revision() == rejection_revision_before, "24-member aggregate rejection preserves the shared revision")
+	_assert(resumed_changed_members.is_empty(), "24-member aggregate rejection emits no stat signal")
+	_assert(Vector2(rejection_health.current_health, rejection_health.max_health) == rejection_health_before, "24-member aggregate rejection preserves current and maximum health")
+	_assert_untouched_snapshots(resumed_party, rejection_tags, rejection_untouched, "aggregate stat refresh rejection")
+	_assert_item_bytes(resumed_context.item_state(), immutable_item_bytes, "aggregate stat refresh rejection")
 	rejection_actor.free()
 
 	equipment.definitions[damage_index] = original_damage_base
@@ -249,11 +274,15 @@ func _run() -> void:
 
 func _party() -> PartyManager:
 	var catalog := GameCatalog.load_defaults()
+	var mage := catalog.class_by_id(&"mage").duplicate(true) as ClassDefinition
+	mage.primary_attack = mage.primary_attack.duplicate(true) as AttackDefinition
+	mage.primary_attack.action_tags = mage.primary_attack.action_tags.duplicate()
+	mage.primary_attack.action_tags.append(ACTION_ONLY_TAG)
 	var party := PartyManager.new()
 	party.configure_capacity(PartyCapacityPolicy.new(MEMBER_COUNT))
-	party.initialize(catalog.class_by_id(&"mage"), catalog.traits)
+	party.initialize(mage, catalog.traits)
 	for _member_index: int in range(1, MEMBER_COUNT):
-		_assert(party.recruit(catalog.class_by_id(&"mage")), "24-member fixture recruits member %d" % (_member_index + 1))
+		_assert(party.recruit(mage), "24-member fixture recruits member %d" % (_member_index + 1))
 	_assert(party.members.size() == MEMBER_COUNT, "developer capacity owns exactly 24 members")
 	return party
 
