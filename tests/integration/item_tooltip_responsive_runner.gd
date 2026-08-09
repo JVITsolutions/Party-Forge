@@ -62,7 +62,7 @@ func _exercise_size(viewport: SubViewport, host: Control, viewport_size: Vector2
 				host.add_child(panel)
 				var comparisons := _comparisons(comparison_count)
 				var source_id := StringName("%d_%d_%d_%s" % [viewport_size.x, anchor_index, comparison_count, mode])
-				_assert(bool(panel.call("show_item", _detail("inspected"), comparisons, anchor, source_id, false)), "item opens %s" % source_id)
+				_assert(bool(panel.call("show_item", _detail("inspected", true), comparisons, anchor, source_id, false)), "item opens %s" % source_id)
 				panel.call("set_compare_active", mode in [&"comparison", &"combined"])
 				panel.call("set_advanced_active", mode in [&"advanced", &"combined"])
 				var expected_cards := comparison_count + 1 if mode in [&"comparison", &"combined"] else 1
@@ -83,6 +83,8 @@ func _exercise_size(viewport: SubViewport, host: Control, viewport_size: Vector2
 		var first_card := panel.get_node("Layout/BodyScroll/Cards").get_child(0) as Control
 		var rendered := String(first_card.call("rendered_text"))
 		_assert(not rendered.contains("inspected-instance-id"), "Player Mode hides technical identifiers at %s" % context)
+		_assert(rendered.contains("Disabled — requirements not met"), "disabled status remains visible at %s" % context)
+		_assert(rendered.contains("Requires Strength 15 (has 10)") and rendered.contains("Requires Dexterity 12 (has 8)"), "all disabled requirements remain visible at %s" % context)
 		panel.free()
 	for anchor: Control in anchors:
 		anchor.free()
@@ -128,7 +130,7 @@ func _comparisons(count: int) -> Array[Dictionary]:
 	return result
 
 
-func _detail(name: String) -> Dictionary:
+func _detail(name: String, disabled: bool = false) -> Dictionary:
 	var affixes: Array[Dictionary] = []
 	for index: int in 24:
 		affixes.append({
@@ -161,6 +163,8 @@ func _detail(name: String) -> Dictionary:
 		"requirement_lines": PackedStringArray(["Requires Dexterity 12"]),
 		"equip_warning_lines": PackedStringArray(),
 		"core_value_lines": PackedStringArray(["12 Armour"]),
+		"is_disabled": disabled,
+		"disabled_requirement_lines": PackedStringArray(["Requires Strength 15 (has 10)", "Requires Dexterity 12 (has 8)"]) if disabled else PackedStringArray(),
 		"affixes": affixes,
 	}
 

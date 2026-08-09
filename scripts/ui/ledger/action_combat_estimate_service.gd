@@ -15,11 +15,24 @@ static func estimate(attack: AttackDefinition, member_id: int, party: PartyManag
 	var validation := attack.validate(types)
 	if not validation.is_empty():
 		return _unavailable(result, String(validation[0]).trim_prefix("PARTY_FORGE_DAMAGE_ERROR "))
-	if attack.is_healing():
-		return _unavailable(result, "Action does not deal direct damage.")
 	var action_stats := party.stats_for_action(member_id, DamageResolver.action_tags_for(attack))
 	if action_stats == null:
 		return _unavailable(result, "Missing resolved character stats.")
+	return estimate_from_snapshot(attack, action_stats, types)
+
+static func estimate_from_snapshot(attack: AttackDefinition, action_stats: ResolvedStatSnapshot, types: DamageTypeCatalog) -> ActionCombatEstimate:
+	var result := ActionCombatEstimate.new()
+	if attack == null:
+		return _unavailable(result, "Missing attack definition.")
+	var validation := attack.validate(types)
+	if not validation.is_empty():
+		return _unavailable(result, String(validation[0]).trim_prefix("PARTY_FORGE_DAMAGE_ERROR "))
+	result.action_id = attack.id
+	result.display_name = String(attack.id).replace("_", " ").capitalize()
+	if action_stats == null or types == null:
+		return _unavailable(result, "Missing resolved character stats.")
+	if attack.is_healing():
+		return _unavailable(result, "Action does not deal direct damage.")
 	result.can_crit = attack.can_crit
 	var crit_chance := action_stats.value(&"crit_chance", 0.0) if result.can_crit else 0.0
 	if not is_finite(crit_chance):

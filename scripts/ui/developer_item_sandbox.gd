@@ -10,6 +10,20 @@ const OWNER_ID := "developer-item-sandbox"
 const SLOT_DATA_KIND := "party_forge_developer_item_slot"
 const RESPONSIVE_LAYOUT := preload("res://scripts/ui/ledger/ledger_responsive_layout.gd")
 const PRESENTATION_PROJECTOR := preload("res://scripts/ui/storage/item_presentation_projector.gd")
+const COMPARISON_RESOLVER := preload("res://scripts/ui/storage/item_comparison_resolver.gd")
+const COMPARISON_BASELINE_BY_SLOT := {
+	&"helmet": &"forge_vanguard_helmet",
+	&"body_armour": &"forge_vanguard_armour",
+	&"legs": &"forge_vanguard_greaves",
+	&"gloves": &"forge_vanguard_gauntlets",
+	&"boots": &"forge_vanguard_boots",
+	&"amulet": &"forge_vanguard_amulet",
+	&"ring_left": &"forge_vanguard_ring_left",
+	&"ring_right": &"forge_vanguard_ring_right",
+	&"belt": &"forge_vanguard_belt",
+	&"main_hand": &"forge_vanguard_sword",
+	&"off_hand": &"forge_vanguard_shield",
+}
 
 class SandboxSlotButton extends StorageSlotButton:
 	var sandbox: DeveloperItemSandbox
@@ -36,6 +50,7 @@ var _registry: ItemRegistry
 var _inventory: ItemSlotContainer
 var _stash: ItemSlotContainer
 var _projection: Dictionary = {}
+var _comparison_projection: ProfileStorageProjection
 var _return_focus: Control
 var _selected_container_id := StringName()
 var _selected_slot := -1
@@ -369,6 +384,8 @@ func _refresh_projection() -> void:
 	_inventory = inventory
 	_stash = stash
 	_projection = _state.to_dictionary()
+	_comparison_projection = _build_comparison_projection()
+	var fixture_class := GameCatalog.load_defaults().class_by_id(&"fighter")
 	for button: Button in _slot_buttons:
 		var container_id := StringName(String(button.get_meta("container_id", "")))
 		var slot := int(button.get_meta("slot", -1))
@@ -379,6 +396,7 @@ func _refresh_projection() -> void:
 			GameCatalog.EQUIPMENT_CATALOG,
 			GameCatalog.ITEM_FOUNDATION_CATALOG,
 			GameCatalog.STAT_CATALOG,
+			fixture_class,
 		) if item != null else {}
 		if not detail.is_empty():
 			detail["owner_id"] = OWNER_ID
@@ -539,8 +557,62 @@ func _show_item_tooltip(source: StorageSlotButton) -> void:
 	var detail := source.detail()
 	if detail.is_empty():
 		return
-	var no_comparisons: Array[Dictionary] = []
-	_tooltip().call("show_item", detail, no_comparisons, source, source.source_id(), true)
+	var comparisons: Array[Dictionary] = []
+	if _comparison_projection != null and _comparison_projection.valid:
+		var projected_by_slot := _comparison_projection.comparison_lines_by_slot(String(detail.get("instance_id", "")))
+		comparisons = COMPARISON_RESOLVER.resolve(
+			detail,
+			_comparison_projection.leader_slots,
+			_comparison_projection.item_records,
+			projected_by_slot,
+		)
+	_tooltip().call("show_item", detail, comparisons, source, source.source_id(), true)
+
+
+func _build_comparison_projection() -> ProfileStorageProjection:
+	if _registry == null or _inventory == null or _stash == null:
+		return null
+	var profile := ProfileState.new_profile(OWNER_ID, "Developer Fixture", 0)
+	profile.item_records = _registry.to_dictionary()
+	var leader_slots: Dictionary = {}
+	var baseline_ids: Array[String] = []
+	for slot_id: StringName in COMPARISON_BASELINE_BY_SLOT:
+		var baseline_id := _instance_id_for_base(COMPARISON_BASELINE_BY_SLOT[slot_id])
+		if baseline_id.is_empty():
+			continue
+		leader_slots[EquipmentSlotIndex.index_for(slot_id)] = baseline_id
+		baseline_ids.append(baseline_id)
+	var preview_slots: Dictionary = {}
+	for instance_id: String in _registry.ids():
+		if instance_id not in baseline_ids:
+			preview_slots[preview_slots.size()] = instance_id
+	profile.leader_loadout = ItemSlotContainer.create(
+		&"leader-loadout",
+		ItemSlotContainer.PROFILE_LEADER_EQUIPMENT,
+		OWNER_ID,
+		EquipmentSlotIndex.capacity(),
+		leader_slots,
+	).to_dictionary()
+	profile.leader_loadout_class_id = "fighter"
+	profile.stash_tabs = [
+		ItemSlotContainer.create(&"sandbox-preview-stash", ItemSlotContainer.PROFILE_STASH_TAB, OWNER_ID, 100, preview_slots).to_dictionary(),
+	]
+	var fixture_class := GameCatalog.load_defaults().class_by_id(&"fighter")
+	return ProfileStorageProjection.from_profile(
+		profile,
+		GameCatalog.EQUIPMENT_CATALOG,
+		GameCatalog.ITEM_FOUNDATION_CATALOG,
+		GameCatalog.STAT_CATALOG,
+		fixture_class,
+	)
+
+
+func _instance_id_for_base(base_id: StringName) -> String:
+	for instance_id: String in _registry.ids():
+		var item := _registry.item(instance_id)
+		if item != null and item.base_definition_id == base_id:
+			return instance_id
+	return ""
 
 
 func _release_item_tooltip(source: StorageSlotButton) -> void:

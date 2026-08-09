@@ -54,4 +54,7 @@ func displayed_items(search: String, rarity_id: StringName, item_type_id: String
 func storage_projection() -> ProfileStorageProjection:
 	return _storage.copy() if _storage != null else ProfileStorageProjection.new()
 
+func comparison_lines_by_slot(instance_id: String) -> Dictionary:
+	return _storage.comparison_lines_by_slot(instance_id) if _storage != null else {}
+
 func _get_stash_tabs() -> Array[Dictionary]: return _storage.stash_tabs if _storage != null else []

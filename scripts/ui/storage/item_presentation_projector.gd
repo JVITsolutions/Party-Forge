@@ -39,6 +39,8 @@ static func project(
 		"excluded_tags": _strings(base.excluded_tags),
 		"requirement_lines": _requirement_lines(base, stats),
 		"equip_warning_lines": _equip_warning_lines(base, class_definition, stats),
+		"is_disabled": false,
+		"disabled_requirement_lines": PackedStringArray(),
 		"core_value_lines": PackedStringArray(),
 		"affixes": affixes,
 		"modifier_totals": totals,

@@ -7,7 +7,180 @@ func run() -> Array[String]:
 	var failures: Array[String] = []
 	_test_equip_replay_collision_stale_and_save_failure(failures)
 	_test_unequip_swap_class_and_reserved_rules(failures)
+	_test_pure_preview_matches_apply(failures)
+	_test_preview_allows_disabled_dependents_and_rejects_inactive_candidate(failures)
+	_test_reverse_swap_rejects_inactive_item_entering_loadout(failures)
 	return failures
+
+
+func _test_pure_preview_matches_apply(failures: Array[String]) -> void:
+	var root := _root("pure_preview")
+	var store := ProfileStore.new()
+	var crown := _item("item-preview-crown", &"dawn_bulwark_crown", 20)
+	var profile := _profile([crown], {}, [{3: crown.instance_id}, {}], "")
+	TestAssertions.equal(store.save_profile(profile, root), "", "preview parity fixture saves", failures)
+	var request := _request("preview-equip", profile, &"fighter", crown.instance_id, &"stash-tab-zeta", 3, &"leader-loadout", 0, "")
+	var profile_before := profile.to_dictionary()
+	var request_before := request.canonical_document()
+	var disk_before := FileAccess.get_file_as_bytes(store.profile_path(PROFILE_ID, root))
+	var service := ProfileLoadoutAssignmentService.new(ProfileMutationService.new(store))
+	TestAssertions.truthy(service.has_method("preview"), "profile loadout service exposes pure preview", failures)
+	if not service.has_method("preview"):
+		ProfileTestSupport.remove_tree(root)
+		return
+	var preview := service.call("preview", profile, request) as ProfileMutationResult
+	TestAssertions.truthy(preview != null and preview.ok(), "public loadout preview succeeds without persistence", failures)
+	TestAssertions.equal(profile.to_dictionary(), profile_before, "preview does not mutate the supplied profile", failures)
+	TestAssertions.equal(request.canonical_document(), request_before, "preview does not mutate the immutable request", failures)
+	TestAssertions.equal(FileAccess.get_file_as_bytes(store.profile_path(PROFILE_ID, root)), disk_before, "preview writes no profile bytes", failures)
+	var committed := service.apply(PROFILE_ID, request, root)
+	TestAssertions.truthy(committed.ok(), "previewed request still commits", failures)
+	if preview != null and preview.ok() and committed.ok():
+		TestAssertions.equal(_assignment_projection(preview.profile), _assignment_projection(committed.profile), "preview ownership candidate matches committed candidate", failures)
+	ProfileTestSupport.remove_tree(root)
+
+
+func _assignment_projection(profile: ProfileState) -> Dictionary:
+	return {
+		"item_records": profile.item_records.duplicate(true),
+		"leader_loadout": profile.leader_loadout.duplicate(true),
+		"leader_loadout_class_id": profile.leader_loadout_class_id,
+		"stash_tabs": profile.stash_tabs.duplicate(true),
+	}
+
+
+func _test_preview_allows_disabled_dependents_and_rejects_inactive_candidate(failures: Array[String]) -> void:
+	var root := _root("disabled_preview")
+	var store := ProfileStore.new()
+	var support := _item_with_affix("item-support", &"forge_vanguard_sword", 30, _stout(2.0))
+	var dependent := _item("item-dependent", &"forge_vanguard_helmet", 31)
+	var replacement := _item("item-replacement", &"forge_vanguard_hammer", 32)
+	var inactive := _item("item-inactive", &"forge_vanguard_boots", 33)
+	var profile := _profile(
+		[support, dependent, replacement, inactive],
+		{EquipmentSlotIndex.index_for(&"helmet"): dependent.instance_id, EquipmentSlotIndex.index_for(&"main_hand"): support.instance_id},
+		[{3: replacement.instance_id, 4: inactive.instance_id}, {}],
+		"fighter",
+	)
+	TestAssertions.equal(store.save_profile(profile, root), "", "disabled preview fixture saves", failures)
+	var equipment := _requirements_catalog()
+	var foundation := GameCatalog.ITEM_FOUNDATION_CATALOG.duplicate(true) as ItemFoundationCatalog
+	var classes := GameCatalog.load_defaults()
+	var fighter := classes.class_by_id(&"fighter").duplicate(true) as ClassDefinition
+	fighter.base_stat_overrides = {&"constitution": 3.0}
+	for index: int in classes.classes.size():
+		if classes.classes[index].id == &"fighter":
+			classes.classes[index] = fighter
+	var service := ProfileLoadoutAssignmentService.new(ProfileMutationService.new(store), null, equipment, foundation, classes)
+	var swap_request := _request(
+		"disabled-dependent-preview", profile, &"fighter", replacement.instance_id,
+		&"stash-tab-zeta", 3, &"leader-loadout", EquipmentSlotIndex.index_for(&"main_hand"), support.instance_id,
+	)
+	var profile_before := profile.to_dictionary()
+	var preview := service.preview(profile, swap_request)
+	TestAssertions.truthy(preview.ok(), "support replacement may leave existing dependent equipped but disabled", failures)
+	TestAssertions.equal(profile.to_dictionary(), profile_before, "disabled-dependent preview preserves supplied profile", failures)
+	if preview.ok():
+		var candidate_state := _ownership(preview.profile, equipment, foundation)
+		var activation := EquipmentActivationResolver.resolve(
+			1, &"leader-loadout", candidate_state, equipment, foundation, GameCatalog.STAT_CATALOG,
+			fighter.stat_base_values(), fighter.capability_tags, [], 0,
+		)
+		TestAssertions.truthy(activation.ok() and activation.is_active(replacement.instance_id), "replacement is active in candidate", failures)
+		TestAssertions.truthy(not activation.is_active(dependent.instance_id), "dependent remains equipped but disabled", failures)
+		TestAssertions.truthy(not activation.disabled_reasons(dependent.instance_id).is_empty(), "disabled dependent exposes exact unmet requirement", failures)
+	var committed := service.apply(PROFILE_ID, swap_request, root)
+	TestAssertions.truthy(committed.ok(), "disabled-dependent candidate commits through the same path", failures)
+	if preview.ok() and committed.ok():
+		TestAssertions.equal(_assignment_projection(preview.profile), _assignment_projection(committed.profile), "disabled-dependent preview matches apply", failures)
+
+	var inactive_profile := committed.profile if committed.ok() else profile
+	var inactive_request := _request(
+		"inactive-candidate-preview", inactive_profile, &"fighter", inactive.instance_id,
+		&"stash-tab-zeta", 4, &"leader-loadout", EquipmentSlotIndex.index_for(&"boots"), "",
+	)
+	var inactive_before := inactive_profile.to_dictionary()
+	var rejected := service.preview(inactive_profile, inactive_request)
+	TestAssertions.truthy(not rejected.ok() and rejected.error.contains("newly placed item is inactive"), "newly placed inactive item is rejected", failures)
+	TestAssertions.equal(inactive_profile.to_dictionary(), inactive_before, "inactive rejection preserves supplied profile", failures)
+	ProfileTestSupport.remove_tree(root)
+
+
+func _requirements_catalog() -> EquipmentCatalog:
+	var result := EquipmentCatalog.new()
+	for definition: EquipmentBaseDefinition in GameCatalog.EQUIPMENT_CATALOG.definitions:
+		var owned := definition.duplicate(true) as EquipmentBaseDefinition
+		if owned.id == &"forge_vanguard_helmet":
+			owned.attribute_requirements = {&"constitution": 5.0}
+		elif owned.id == &"forge_vanguard_boots":
+			owned.attribute_requirements = {&"constitution": 10.0}
+		result.definitions.append(owned)
+	return result
+
+
+func _hammer_requirements_catalog() -> EquipmentCatalog:
+	var result := _requirements_catalog()
+	for definition: EquipmentBaseDefinition in result.definitions:
+		if definition.id == &"forge_vanguard_hammer":
+			definition.attribute_requirements = {&"constitution": 10.0}
+	return result
+
+
+func _test_reverse_swap_rejects_inactive_item_entering_loadout(failures: Array[String]) -> void:
+	var support := _item("reverse-support", &"forge_vanguard_sword", 50)
+	var inactive := _item("reverse-inactive", &"forge_vanguard_hammer", 51)
+	var profile := _profile(
+		[support, inactive],
+		{EquipmentSlotIndex.index_for(&"main_hand"): support.instance_id},
+		[{7: inactive.instance_id}, {}],
+		"fighter",
+	)
+	var classes := GameCatalog.load_defaults()
+	var fighter := classes.class_by_id(&"fighter").duplicate(true) as ClassDefinition
+	fighter.base_stat_overrides = {&"constitution": 3.0}
+	for index: int in classes.classes.size():
+		if classes.classes[index].id == &"fighter":
+			classes.classes[index] = fighter
+	var service := ProfileLoadoutAssignmentService.new(null, null, _hammer_requirements_catalog(), GameCatalog.ITEM_FOUNDATION_CATALOG, classes)
+	var request := _request(
+		"reverse-inactive-swap", profile, &"fighter", support.instance_id,
+		&"leader-loadout", EquipmentSlotIndex.index_for(&"main_hand"), &"stash-tab-zeta", 7, inactive.instance_id,
+	)
+	var before := profile.to_dictionary()
+	var preview := service.preview(profile, request)
+	TestAssertions.truthy(not preview.ok() and preview.error.contains("newly placed item is inactive") and preview.error.contains(inactive.instance_id), "reverse occupied swap rejects the inactive item entering the loadout", failures)
+	TestAssertions.equal(profile.to_dictionary(), before, "reverse occupied swap rejection preserves supplied profile", failures)
+
+
+func _item_with_affix(instance_id: String, base_id: StringName, sequence: int, affix: ItemAffixInstance) -> ItemInstance:
+	var result := _item(instance_id, base_id, sequence)
+	result.affixes = [affix]
+	return result
+
+
+func _stout(value: float) -> ItemAffixInstance:
+	var roll := ItemModifierRoll.new()
+	roll.stat_id = &"constitution"
+	roll.operation = StatModifier.Operation.FLAT
+	roll.value = value
+	var result := ItemAffixInstance.new()
+	result.definition_id = &"stout"
+	result.affix_kind = "prefix"
+	result.tier = 1
+	result.rolls = [roll]
+	return result
+
+
+func _ownership(profile: ProfileState, equipment: EquipmentCatalog, foundation: ItemFoundationCatalog) -> ItemOwnershipState:
+	var containers: Array = [profile.leader_loadout.duplicate(true)]
+	containers.append_array(profile.stash_tabs.duplicate(true))
+	var decoded := ItemOwnershipState.decode({
+		"schema_version": ItemOwnershipState.SCHEMA_VERSION,
+		"owner_id": profile.profile_id,
+		"registry": profile.item_records.duplicate(true),
+		"containers": containers,
+	}, equipment, foundation)
+	return decoded.state if decoded.ok() else null
 
 func _test_equip_replay_collision_stale_and_save_failure(failures: Array[String]) -> void:
 	var root := _root("equip")

@@ -20,10 +20,12 @@ var _mouse_inside := false
 var _focus_inside := false
 var _inspection_active := false
 var _wired := false
+var _disabled_overlay: Label
 
 
 func _ready() -> void:
 	_wire_inspection()
+	_ensure_disabled_overlay()
 
 
 func bind_item(
@@ -34,6 +36,7 @@ func bind_item(
 	empty_label: String = "",
 ) -> void:
 	_wire_inspection()
+	_ensure_disabled_overlay()
 	container_id = container_id_value
 	slot = slot_value
 	item_id = item_id_value
@@ -64,6 +67,20 @@ func bind_item(
 		accessibility_name = "%s, %s" % [name, rarity]
 		if icon == null:
 			accessibility_name += ", icon unavailable"
+	var is_disabled := not item_id.is_empty() and bool(_detail.get("is_disabled", false))
+	_disabled_overlay.visible = is_disabled
+	if is_disabled:
+		var reasons := PackedStringArray()
+		var value: Variant = _detail.get("disabled_requirement_lines", [])
+		if value is PackedStringArray:
+			reasons = (value as PackedStringArray).duplicate()
+		elif value is Array:
+			for reason: Variant in value as Array:
+				reasons.append(String(reason))
+		accessibility_name += ", Disabled"
+		if not reasons.is_empty():
+			accessibility_name += ", %s" % "; ".join(reasons)
+	_apply_disabled_content_style(is_disabled)
 	apply_viewport_size(get_viewport_rect().size if is_inside_tree() else Vector2(1920.0, 1080.0))
 	_apply_style()
 
@@ -134,6 +151,38 @@ func _wire_inspection() -> void:
 	mouse_exited.connect(_on_mouse_exited)
 	focus_entered.connect(_on_focus_entered)
 	focus_exited.connect(_on_focus_exited)
+
+
+func _ensure_disabled_overlay() -> void:
+	if _disabled_overlay != null and is_instance_valid(_disabled_overlay):
+		return
+	_disabled_overlay = Label.new()
+	_disabled_overlay.name = "DisabledOverlay"
+	_disabled_overlay.text = "DISABLED"
+	_disabled_overlay.visible = false
+	_disabled_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_disabled_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT, Control.PRESET_MODE_MINSIZE, 8)
+	_disabled_overlay.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_disabled_overlay.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_disabled_overlay.add_theme_font_size_override("font_size", 13)
+	_disabled_overlay.add_theme_color_override("font_color", Color(1.0, 0.94, 0.88))
+	var warning_style := StyleBoxFlat.new()
+	warning_style.bg_color = Color(0.42, 0.055, 0.025, 0.96)
+	warning_style.border_color = Color(1.0, 0.48, 0.22)
+	warning_style.set_border_width_all(2)
+	warning_style.set_corner_radius_all(4)
+	_disabled_overlay.add_theme_stylebox_override("normal", warning_style)
+	_disabled_overlay.z_index = 10
+	add_child(_disabled_overlay)
+
+
+func _apply_disabled_content_style(disabled: bool) -> void:
+	var icon_color := Color(0.62, 0.62, 0.62, 0.50) if disabled else Color.WHITE
+	for theme_name: String in ["icon_normal_color", "icon_hover_color", "icon_pressed_color", "icon_focus_color"]:
+		add_theme_color_override(theme_name, icon_color)
+	var text_color := Color(0.68, 0.68, 0.68) if disabled else Color(0.88, 0.90, 0.94)
+	for theme_name: String in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color"]:
+		add_theme_color_override(theme_name, text_color)
 
 
 func _on_mouse_entered() -> void:

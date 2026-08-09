@@ -6,6 +6,7 @@ static func resolve(
 	inspected: Dictionary,
 	leader_slots: Array[Dictionary],
 	item_records: Dictionary,
+	projected_lines_by_slot: Dictionary = {},
 ) -> Array[Dictionary]:
 	var result: Array[Dictionary] = []
 	var compatible: Array = inspected.get("compatible_slot_ids", [])
@@ -26,7 +27,7 @@ static func resolve(
 		result.append({
 			"slot_id": slot_id,
 			"item": equipped,
-			"delta_lines": _delta_lines(inspected, equipped),
+			"delta_lines": (projected_lines_by_slot[slot_id] as Array).duplicate(true) if projected_lines_by_slot.has(slot_id) else _delta_lines(inspected, equipped),
 		})
 	return result
 

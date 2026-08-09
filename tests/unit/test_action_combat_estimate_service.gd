@@ -6,6 +6,7 @@ func run() -> Array[String]:
 	_test_critical_chance_matches_runtime_bounds(failures)
 	_test_noncritical_mixed_damage(failures)
 	_test_mixed_caster_runtime_parity(failures)
+	_test_snapshot_estimate_matches_party_estimate(failures)
 	_test_zero_base_damage_is_unavailable(failures)
 	_test_missing_attack_id_is_unavailable(failures)
 	_test_invalid_damage_type_is_unavailable(failures)
@@ -104,6 +105,28 @@ func _test_mixed_caster_runtime_parity(failures: Array[String]) -> void:
 		TestAssertions.near(packet.components[1].typed_scaled, 8.58, 0.0001, "runtime cold component applies global, caster, and cold once", failures)
 		for index: int in packet.components.size():
 			TestAssertions.near(packet.components[index].typed_scaled, float(estimate.component_rows[index].normal_hit), 0.0001, "runtime and ledger component %d share normal projection" % index, failures)
+	party.free()
+
+
+func _test_snapshot_estimate_matches_party_estimate(failures: Array[String]) -> void:
+	var catalog := GameCatalog.load_defaults()
+	var party := PartyManager.new()
+	party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
+	var attack := catalog.class_by_id(&"fighter").primary_attack
+	var action_stats := party.stats_for_action(1, DamageResolver.action_tags_for(attack))
+	var party_estimate := ActionCombatEstimateService.estimate(attack, 1, party, catalog.damage_types)
+	var service_script := load("res://scripts/ui/ledger/action_combat_estimate_service.gd") as Script
+	var supports_snapshot := service_script.get_script_method_list().any(func(method: Dictionary) -> bool: return String(method.get("name", "")) == "estimate_from_snapshot")
+	TestAssertions.truthy(supports_snapshot, "estimate service exposes pure snapshot projection", failures)
+	if not supports_snapshot:
+		party.free()
+		return
+	var snapshot_estimate := service_script.call("estimate_from_snapshot", attack, action_stats, catalog.damage_types) as ActionCombatEstimate
+	TestAssertions.truthy(snapshot_estimate != null and snapshot_estimate.available, "pure snapshot estimate is available", failures)
+	if snapshot_estimate != null:
+		TestAssertions.near(snapshot_estimate.normal_hit, party_estimate.normal_hit, 0.0001, "snapshot and party normal hit share one path", failures)
+		TestAssertions.near(snapshot_estimate.average_hit, party_estimate.average_hit, 0.0001, "snapshot and party average hit share one path", failures)
+		TestAssertions.near(snapshot_estimate.estimated_dps, party_estimate.estimated_dps, 0.0001, "snapshot and party DPS share one path", failures)
 	party.free()
 
 func _test_zero_base_damage_is_unavailable(failures: Array[String]) -> void:

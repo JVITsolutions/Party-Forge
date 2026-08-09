@@ -13,6 +13,7 @@ var _title_label: Label
 var _rarity_label: Label
 var _classification_label: Label
 var _requirements_label: Label
+var _disabled_label: Label
 var _core_values_label: Label
 var _implicit_label: Label
 var _explicit_label: Label
@@ -48,6 +49,12 @@ func present(
 	add_theme_stylebox_override("panel", _panel_style(rarity_color))
 	_set_label(_classification_label, _classification_lines())
 	_set_label(_requirements_label, _string_lines(_detail.get("requirement_lines", [])))
+	var disabled_lines := PackedStringArray()
+	if bool(_detail.get("is_disabled", false)):
+		disabled_lines.append("Disabled — requirements not met")
+		disabled_lines.append_array(_string_lines(_detail.get("disabled_requirement_lines", [])))
+	_set_label(_disabled_label, disabled_lines)
+	_disabled_label.add_theme_color_override("font_color", Color(1.0, 0.42, 0.26))
 	_set_label(_core_values_label, _string_lines(_detail.get("core_value_lines", [])))
 	var modifiers := _modifier_lines()
 	_set_label(_implicit_label, modifiers["implicit"])
@@ -102,6 +109,7 @@ func _ensure_built() -> void:
 	_rarity_label = _add_label("Rarity", 15)
 	_classification_label = _add_label("Classification", 14)
 	_requirements_label = _add_label("Requirements", 14)
+	_disabled_label = _add_label("DisabledStatus", 15)
 	_core_values_label = _add_label("CoreValues", 15)
 	_implicit_label = _add_label("ImplicitModifiers", 14)
 	_explicit_label = _add_label("ExplicitModifiers", 14)
@@ -224,6 +232,7 @@ func _set_delta_lines(lines: Array[Dictionary]) -> void:
 	for line: Dictionary in lines:
 		var label := Label.new()
 		label.text = String(line.get("text", ""))
+		label.accessibility_name = String(line.get("accessible_text", label.text))
 		label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		var direction := int(line.get("direction", 0))
 		label.add_theme_color_override("font_color", Color(0.34, 0.92, 0.48) if direction > 0 else Color(1.0, 0.38, 0.34) if direction < 0 else Color(0.78, 0.80, 0.84))

@@ -11,6 +11,7 @@ func run() -> Array[String]:
 	var card_script: Script = load(CARD_PATH)
 	_test_normal_and_advanced_layers(card_script, failures)
 	_test_equipped_role_and_deltas(card_script, failures)
+	_test_disabled_status_and_accessible_deltas(card_script, failures)
 	_test_developer_technical_gate(card_script, failures)
 	return failures
 
@@ -52,6 +53,31 @@ func _test_equipped_role_and_deltas(card_script: Script, failures: Array[String]
 	TestAssertions.truthy(text.contains("Equipped - Ring Left"), "equipped role names replacement slot", failures)
 	TestAssertions.truthy(text.contains("+3 Constitution") and text.contains("-5% Fire Damage"), "comparison deltas render", failures)
 	TestAssertions.equal(String(card.call("displayed_instance_id")), "item-instance-1", "card query keeps inspected identity", failures)
+	card.free()
+
+
+func _test_disabled_status_and_accessible_deltas(card_script: Script, failures: Array[String]) -> void:
+	var card: Control = card_script.new()
+	var detail := _detail()
+	detail["is_disabled"] = true
+	detail["disabled_requirement_lines"] = PackedStringArray([
+		"Requires Strength 15 (has 10)",
+		"Requires Dexterity 12 (has 8)",
+	])
+	var deltas: Array[Dictionary] = [
+		{"stat_id": "armor", "delta": 2.0, "direction": 1, "text": "▲ +2.0 Armour — improved", "accessible_text": "Armour improved by 2.0"},
+		{"stat_id": "move_speed", "delta": -1.0, "direction": -1, "text": "▼ -1.0 Move Speed — reduced", "accessible_text": "Move Speed reduced by 1.0"},
+	]
+	card.call("present", detail, &"inspected", false, deltas, false)
+	var text := String(card.call("rendered_text"))
+	TestAssertions.truthy(text.contains("Disabled — requirements not met"), "tooltip announces disabled equipment prominently", failures)
+	TestAssertions.truthy(text.contains("Requires Strength 15 (has 10)") and text.contains("Requires Dexterity 12 (has 8)"), "tooltip shows every exact unmet requirement", failures)
+	var delta_box := card.get_node("Layout/ComparisonDeltas") as VBoxContainer
+	var positive := delta_box.get_child(0) as Label
+	var negative := delta_box.get_child(1) as Label
+	TestAssertions.truthy(positive.text.begins_with("▲") and negative.text.begins_with("▼"), "comparison rows retain non-color symbols", failures)
+	TestAssertions.truthy("improved" in positive.accessibility_name.to_lower() and "reduced" in negative.accessibility_name.to_lower(), "comparison labels expose accessible benefit wording", failures)
+	TestAssertions.truthy(positive.get_theme_color("font_color") != negative.get_theme_color("font_color"), "improvements and losses retain distinct colors", failures)
 	card.free()
 
 

@@ -1,0 +1,151 @@
+extends RefCounted
+
+const RESOLVED_SERVICE_PATH := "res://scripts/ui/storage/resolved_stat_comparison_service.gd"
+const EQUIPMENT_SERVICE_PATH := "res://scripts/ui/storage/equipment_comparison_projection_service.gd"
+
+
+func run() -> Array[String]:
+	var failures: Array[String] = []
+	TestAssertions.truthy(ResourceLoader.exists(RESOLVED_SERVICE_PATH), "resolved comparison service exists", failures)
+	TestAssertions.truthy(ResourceLoader.exists(EQUIPMENT_SERVICE_PATH), "equipment comparison projection service exists", failures)
+	if not ResourceLoader.exists(RESOLVED_SERVICE_PATH) or not ResourceLoader.exists(EQUIPMENT_SERVICE_PATH):
+		return failures
+	var resolved_service: Script = load(RESOLVED_SERVICE_PATH)
+	var equipment_service: Script = load(EQUIPMENT_SERVICE_PATH)
+	_test_benefit_direction_and_accessible_text(resolved_service, failures)
+	_test_delta_formatting_ignores_absolute_stat_bounds(resolved_service, failures)
+	_test_attribute_derived_final_stats(resolved_service, failures)
+	_test_action_and_disabled_warning_rows(equipment_service, failures)
+	return failures
+
+
+func _test_benefit_direction_and_accessible_text(service: Script, failures: Array[String]) -> void:
+	var higher := _definition(&"power", "Power", StatDefinition.ComparisonDirection.HIGHER_IS_BETTER)
+	var lower := _definition(&"delay", "Delay", StatDefinition.ComparisonDirection.LOWER_IS_BETTER)
+	var neutral := _definition(&"reach", "Reach", StatDefinition.ComparisonDirection.NEUTRAL)
+	var catalog := StatCatalog.new()
+	catalog.definitions = [higher, lower, neutral]
+	var current := _snapshot({&"power": 10.0, &"delay": 5.0, &"reach": 2.0})
+	var candidate := _snapshot({&"power": 12.0, &"delay": 7.0, &"reach": 3.0})
+	var rows: Array = service.call("compare", current, candidate, catalog)
+	var power := _row(rows, &"power")
+	var delay := _row(rows, &"delay")
+	var reach := _row(rows, &"reach")
+	TestAssertions.equal(power.get("direction"), 1, "higher-is-better gain is beneficial", failures)
+	TestAssertions.truthy(String(power.get("text", "")).begins_with("▲"), "benefit has an upward symbol", failures)
+	TestAssertions.truthy("improved" in String(power.get("accessible_text", "")).to_lower(), "benefit accessibility says improved", failures)
+	TestAssertions.equal(delay.get("direction"), -1, "lower-is-better increase is harmful", failures)
+	TestAssertions.truthy(String(delay.get("text", "")).begins_with("▼"), "loss has a downward symbol", failures)
+	TestAssertions.truthy("reduced" in String(delay.get("accessible_text", "")).to_lower(), "loss accessibility says reduced", failures)
+	TestAssertions.equal(reach.get("direction"), 0, "neutral metadata keeps a neutral direction", failures)
+	TestAssertions.truthy(String(reach.get("text", "")).begins_with("•"), "neutral change has a non-color symbol", failures)
+
+
+func _test_delta_formatting_ignores_absolute_stat_bounds(service: Script, failures: Array[String]) -> void:
+	var current := _snapshot({&"attack_speed": 1.0, &"crit_multiplier": 1.5})
+	var candidate := _snapshot({&"attack_speed": 1.02, &"crit_multiplier": 1.6})
+	var rows: Array = service.call("compare", current, candidate, GameCatalog.STAT_CATALOG)
+	TestAssertions.truthy(String(_row(rows, &"attack_speed").get("text", "")).contains("+0.02x Attack Speed"), "attack-speed delta is formatted without the absolute minimum clamp", failures)
+	TestAssertions.truthy(String(_row(rows, &"crit_multiplier").get("text", "")).contains("+10% Critical Strike Multiplier"), "ratio delta is formatted as a percent without the absolute minimum clamp", failures)
+
+
+func _test_attribute_derived_final_stats(service: Script, failures: Array[String]) -> void:
+	var current := _snapshot({
+		&"melee_damage": 1.0,
+		&"ranged_damage": 1.0,
+		&"caster_damage": 1.0,
+		&"armor": 4.0,
+		&"max_health": 100.0,
+	})
+	var candidate := _snapshot({
+		&"melee_damage": 1.10,
+		&"ranged_damage": 1.08,
+		&"caster_damage": 1.06,
+		&"armor": 5.25,
+		&"max_health": 109.0,
+	})
+	var rows: Array = service.call("compare", current, candidate, GameCatalog.STAT_CATALOG)
+	for stat_id: StringName in [&"melee_damage", &"ranged_damage", &"caster_damage", &"armor", &"max_health"]:
+		var row := _row(rows, stat_id)
+		TestAssertions.truthy(not row.is_empty(), "final comparison includes %s" % stat_id, failures)
+		TestAssertions.equal(row.get("direction"), 1, "%s final change is beneficial" % stat_id, failures)
+
+
+func _test_action_and_disabled_warning_rows(service: Script, failures: Array[String]) -> void:
+	var current_stats := _snapshot({&"armor": 4.0})
+	var candidate_stats := _snapshot({&"armor": 5.0})
+	var current_estimate := ActionCombatEstimate.new()
+	current_estimate.action_id = &"fighter_slash"
+	current_estimate.display_name = "Fighter Slash"
+	current_estimate.available = true
+	current_estimate.average_hit = 10.0
+	current_estimate.estimated_dps = 20.0
+	var candidate_estimate := ActionCombatEstimate.new()
+	candidate_estimate.action_id = &"fighter_slash"
+	candidate_estimate.display_name = "Fighter Slash"
+	candidate_estimate.available = true
+	candidate_estimate.average_hit = 12.0
+	candidate_estimate.estimated_dps = 24.0
+	var current_activation := _activation(["support", "dependent"], {})
+	var candidate_activation := _activation(["candidate"], {"dependent": PackedStringArray(["Requires Strength 15 (has 10)"])})
+	var rows: Array = service.call(
+		"compare",
+		current_stats,
+		candidate_stats,
+		GameCatalog.STAT_CATALOG,
+		[current_estimate],
+		[candidate_estimate],
+		current_activation,
+		candidate_activation,
+		"candidate",
+		{"dependent": "Dependent Plate"},
+	)
+	TestAssertions.truthy(rows.any(func(row: Dictionary) -> bool:
+		return String(row.get("row_type", "")) == "action" and String(row.get("text", "")).contains("Average Hit") and int(row.get("direction", 0)) == 1
+	), "action average-hit improvement is projected", failures)
+	TestAssertions.truthy(rows.any(func(row: Dictionary) -> bool:
+		return String(row.get("row_type", "")) == "action" and String(row.get("text", "")).contains("DPS") and int(row.get("direction", 0)) == 1
+	), "action DPS improvement is projected", failures)
+	var warning := rows.filter(func(row: Dictionary) -> bool: return String(row.get("row_type", "")) == "warning")
+	TestAssertions.equal(warning.size(), 1, "newly disabled equipment adds one prominent warning", failures)
+	if not warning.is_empty():
+		TestAssertions.equal(warning[0].get("direction"), -1, "disabled warning is harmful", failures)
+		TestAssertions.truthy(String(warning[0].get("text", "")).begins_with("▼ Warning:"), "disabled warning has symbol and prominence", failures)
+		TestAssertions.truthy(String(warning[0].get("accessible_text", "")).contains("Dependent Plate") and String(warning[0].get("accessible_text", "")).contains("Requires Strength 15 (has 10)"), "disabled warning names item and exact requirement", failures)
+
+
+func _definition(id: StringName, display_name: String, direction: int) -> StatDefinition:
+	var result := StatDefinition.new()
+	result.id = id
+	result.display_name = display_name
+	result.ui_group = &"test"
+	result.keyword_id = id
+	result.precision = 1
+	result.comparison_direction = direction
+	return result
+
+
+func _snapshot(values: Dictionary) -> ResolvedStatSnapshot:
+	var result := ResolvedStatSnapshot.new()
+	for stat_id: Variant in values:
+		result.set_resolved(StringName(String(stat_id)), float(values[stat_id]), [])
+	return result
+
+
+func _activation(active_ids: Array[String], disabled: Dictionary) -> EquipmentActivationResult:
+	var raw := ResolvedStatSnapshot.new()
+	for attribute_id: StringName in ClassGrowthDefinition.CORE_ATTRIBUTE_IDS:
+		raw.set_resolved(attribute_id, 0.0, [])
+	return EquipmentActivationResult.success(
+		active_ids,
+		disabled,
+		raw,
+		StatModifierSource.create(&"equipment_member_1", &"equipment", "Equipment", 1, []),
+	)
+
+
+func _row(rows: Array, stat_id: StringName) -> Dictionary:
+	for value: Variant in rows:
+		if value is Dictionary and StringName(String((value as Dictionary).get("stat_id", ""))) == stat_id:
+			return value as Dictionary
+	return {}

@@ -38,6 +38,26 @@ func apply(profile_id: String, request: ProfileLoadoutAssignmentRequest, root: S
 		request.canonical_document(),
 	)
 
+func preview(profile: ProfileState, request: ProfileLoadoutAssignmentRequest) -> ProfileMutationResult:
+	if profile == null:
+		return _failure(_error("field=profile reason=must not be null"))
+	var error := _validate_request(profile.profile_id, request)
+	if not error.is_empty():
+		return _failure(error)
+	var candidate := profile.copy()
+	if candidate == null:
+		return _failure(_error("field=profile reason=copy failed"))
+	error = _apply_candidate(candidate, request)
+	if not error.is_empty():
+		return _failure(error)
+	candidate.normalize()
+	var validation := ProfileCodec.validate_profile(candidate)
+	if not validation.is_empty():
+		return _failure(validation)
+	var result := ProfileMutationResult.new()
+	result.profile = candidate
+	return result
+
 func _validate_request(profile_id: String, request: ProfileLoadoutAssignmentRequest) -> String:
 	if request == null:
 		return _error("field=request reason=must not be null")
@@ -101,6 +121,27 @@ func _apply_candidate(candidate: ProfileState, request: ProfileLoadoutAssignment
 	var eligibility_error := _validate_complete_loadout(next_state, selected_class)
 	if not eligibility_error.is_empty():
 		return _error("field=leader_loadout reason=ineligible resulting loadout detail=%s" % eligibility_error)
+	var activation := EquipmentActivationResolver.resolve(
+		1,
+		LEADER_ID,
+		next_state,
+		_equipment,
+		_foundation,
+		GameCatalog.STAT_CATALOG,
+		selected_class.stat_base_values(),
+		selected_class.capability_tags,
+		[],
+		0,
+	)
+	if not activation.ok():
+		return _error("field=leader_loadout reason=activation failed detail=%s" % activation.error)
+	var item_entering_leader := ""
+	if request.destination_container_id == LEADER_ID:
+		item_entering_leader = request.item_id
+	elif request.source_container_id == LEADER_ID and not occupied.is_empty():
+		item_entering_leader = occupied
+	if not item_entering_leader.is_empty() and not activation.is_active(item_entering_leader):
+		return _error("field=leader_loadout item=%s reason=newly placed item is inactive detail=%s" % [item_entering_leader, "; ".join(activation.disabled_reasons(item_entering_leader))])
 
 	candidate.item_records = next_state.registry().to_dictionary()
 	candidate.leader_loadout = next_state.container(LEADER_ID).to_dictionary()
@@ -130,7 +171,7 @@ func _validate_complete_loadout(state: ItemOwnershipState, class_definition: Cla
 		var definition := loadout.get(slot_id) as EquipmentBaseDefinition
 		if definition == null:
 			continue
-		var errors := EquipmentEligibility.validate_equip(definition, class_definition, slot_id, loadout, class_definition.stat_base_values())
+		var errors := EquipmentEligibility.validate_structure(definition, class_definition, slot_id, loadout)
 		if not errors.is_empty():
 			return errors[0]
 	var off_hand := loadout.get(&"off_hand") as EquipmentBaseDefinition

@@ -13,6 +13,7 @@ func run() -> Array[String]:
 	_test_both_ring_candidates(resolver, failures)
 	_test_both_one_hand_candidates(resolver, failures)
 	_test_empty_and_self_slots_are_skipped(resolver, failures)
+	_test_projected_rows_replace_raw_fallback(resolver, failures)
 	_test_results_are_defensive(resolver, failures)
 	return failures
 
@@ -77,6 +78,34 @@ func _test_empty_and_self_slots_are_skipped(resolver: Script, failures: Array[St
 	]
 	var candidates: Array = resolver.call("resolve", inspected, leader, {"equipped-ring": inspected, "helmet": _detail("helmet", ["helmet"], {})})
 	TestAssertions.equal(candidates, [], "self, empty, and incompatible slots create no candidates", failures)
+
+
+func _test_projected_rows_replace_raw_fallback(resolver: Script, failures: Array[String]) -> void:
+	var supports_projection := false
+	for method: Dictionary in resolver.get_script_method_list():
+		if String(method.get("name", "")) == "resolve" and int((method.get("args", []) as Array).size()) >= 4:
+			supports_projection = true
+	TestAssertions.truthy(supports_projection, "resolver accepts projected rows by slot", failures)
+	if not supports_projection:
+		return
+	var inspected := _detail("new-ring", ["ring_left", "ring_right"], {"constitution|0": 8.0})
+	var leader: Array[Dictionary] = [
+		{"slot_id": "ring_left", "slot": 8, "instance_id": "left-ring"},
+		{"slot_id": "ring_right", "slot": 9, "instance_id": "right-ring"},
+	]
+	var records := {
+		"left-ring": _detail("left-ring", ["ring_left", "ring_right"], {"constitution|0": 5.0}),
+		"right-ring": _detail("right-ring", ["ring_left", "ring_right"], {"constitution|0": 6.0}),
+	}
+	var projected := {
+		"ring_left": [{"stat_id": "max_health", "delta": 9.0, "direction": 1, "text": "▲ +9.0 Maximum Health — improved", "accessible_text": "Maximum Health improved by 9.0"}],
+		"ring_right": [],
+	}
+	var candidates: Array = resolver.call("resolve", inspected, leader, records, projected)
+	TestAssertions.equal(candidates[0]["delta_lines"], projected["ring_left"], "projected final-stat rows replace raw-roll deltas", failures)
+	TestAssertions.equal(candidates[1]["delta_lines"], [], "an explicit empty projection does not fall back to raw rolls", failures)
+	var fallback: Array = resolver.call("resolve", inspected, leader, records)
+	TestAssertions.equal(fallback[0]["delta_lines"][0]["stat_id"], "constitution", "raw-roll deltas remain when no projection exists", failures)
 
 
 func _test_results_are_defensive(resolver: Script, failures: Array[String]) -> void:

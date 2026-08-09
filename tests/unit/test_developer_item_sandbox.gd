@@ -89,6 +89,7 @@ func _test_modal_contract(packed: PackedScene, failures: Array[String]) -> void:
 
 	TestAssertions.truthy(bool(sandbox.call(&"open", return_focus)), "sandbox opens a usable isolated fixture", failures)
 	TestAssertions.truthy(sandbox.visible, "sandbox open makes only its layer visible", failures)
+	_test_projected_comparison_fixture(sandbox, stash_grid, tooltip, failures)
 	var initial_projection: Dictionary = sandbox.call(&"projection")
 	TestAssertions.equal(int(initial_projection.get("schema_version", 0)), 1, "sandbox exposes a defensive state projection", failures)
 	initial_projection["owner_id"] = "mutated-ui-copy"
@@ -206,6 +207,41 @@ func _test_modal_contract(packed: PackedScene, failures: Array[String]) -> void:
 		TestAssertions.equal(sandbox.get("_return_focus"), null, "sandbox close consumes the exact return-focus request", failures)
 	sandbox.free()
 	return_focus.free()
+
+
+func _test_projected_comparison_fixture(sandbox: Variant, stash_grid: GridContainer, tooltip: Control, failures: Array[String]) -> void:
+	var comparison_projection := sandbox.get("_comparison_projection") as ProfileStorageProjection
+	TestAssertions.truthy(comparison_projection != null, "sandbox builds a comparison projection", failures)
+	if comparison_projection != null:
+		TestAssertions.truthy(comparison_projection.valid, "sandbox comparison projection is valid: %s" % comparison_projection.error, failures)
+		TestAssertions.equal(comparison_projection.leader_slots.filter(func(entry: Dictionary) -> bool: return not String(entry.get("instance_id", "")).is_empty()).size(), EquipmentSlotIndex.capacity(), "sandbox comparison fixture fills every canonical equipment slot", failures)
+	var source: StorageSlotButton
+	if comparison_projection != null and comparison_projection.valid:
+		for child: Node in stash_grid.get_children():
+			var button := child as StorageSlotButton
+			if button == null or button.detail().is_empty():
+				continue
+			var detail := button.detail()
+			var projected := comparison_projection.comparison_lines_by_slot(String(detail.get("instance_id", "")))
+			var comparisons := ItemComparisonResolver.resolve(detail, comparison_projection.leader_slots, comparison_projection.item_records, projected)
+			if comparisons.any(func(value: Dictionary) -> bool:
+				return (value.get("delta_lines", []) as Array).any(func(row: Dictionary) -> bool: return String(row.get("row_type", "")) in ["stat", "action"])
+			):
+				source = button
+				break
+	TestAssertions.truthy(source != null, "sandbox fixture offers an inspected item with projected equipped-stat rows", failures)
+	if source == null or tooltip == null:
+		return
+	sandbox.call(&"_show_item_tooltip", source)
+	tooltip.call("set_compare_active", true)
+	TestAssertions.truthy(int(tooltip.call("card_count")) > 1, "sandbox compare mode renders an equipped comparison card", failures)
+	var rendered_delta := false
+	for index: int in range(1, int(tooltip.call("card_count"))):
+		var text := String(tooltip.get_node("Layout/BodyScroll/Cards").get_child(index).call("rendered_text"))
+		if "improved" in text.to_lower() or "reduced" in text.to_lower() or "changed" in text.to_lower():
+			rendered_delta = true
+	TestAssertions.truthy(rendered_delta, "sandbox comparison card visibly renders projected stat or action meaning", failures)
+	tooltip.call("force_dismiss")
 
 
 func _test_main_route_and_profile_isolation(failures: Array[String]) -> void:

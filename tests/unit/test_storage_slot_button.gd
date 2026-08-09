@@ -56,6 +56,27 @@ func _test_slot_contract(failures: Array[String]) -> void:
 	TestAssertions.truthy(button.icon != null, "occupied slot loads its real icon", failures)
 	TestAssertions.equal(button.tooltip_text, "", "native tooltip cannot compete with item card", failures)
 	TestAssertions.truthy(button.accessibility_name.contains("Windrunner Band"), "accessible name keeps item identity", failures)
+	button.call("bind_item", &"leader-loadout", 8, "disabled-item", {
+		"name": "Dependent Plate",
+		"icon_path": ICON_PATH,
+		"rarity_id": "rare",
+		"rarity_name": "Rare",
+		"is_disabled": true,
+		"disabled_requirement_lines": PackedStringArray(["Requires Strength 15 (has 10)", "Requires Dexterity 12 (has 8)"]),
+	})
+	var overlay := button.get_node_or_null("DisabledOverlay") as Label
+	TestAssertions.truthy(overlay != null and overlay.visible and overlay.text == "DISABLED", "disabled item has a centered warning overlay", failures)
+	TestAssertions.truthy(button.accessibility_name.contains("Disabled"), "disabled state is announced in the accessible name", failures)
+	TestAssertions.truthy(button.accessibility_name.contains("Requires Strength 15 (has 10)") and button.accessibility_name.contains("Requires Dexterity 12 (has 8)"), "accessible name includes every unmet requirement", failures)
+	TestAssertions.truthy(button.modulate.a >= 0.99, "slot warning is not dimmed with the item icon", failures)
+	button.call("bind_item", &"stash-tab-000", 42, "item-1", {
+		"name": "Windrunner Band",
+		"icon_path": ICON_PATH,
+		"rarity_id": "uncommon",
+		"rarity_name": "Uncommon",
+	})
+	if overlay != null:
+		TestAssertions.truthy(not overlay.visible, "rebinding an active item clears the disabled overlay", failures)
 	var bound_icon := button.icon
 	button.call("set_selected", true)
 	button.call("set_held", true)

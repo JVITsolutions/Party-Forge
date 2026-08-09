@@ -1,161 +1,114 @@
-# Task 8 Report: Deterministic Developer Item Sandbox State
+# Task 8 Report: Disabled Equipment and Projected Comparisons
 
 ## Scope
 
-Implemented only Plan 4B Task 8 on `feat/plan-4b-item-ownership` from parent `90150ee36e0ac45c748c2292af241448cf62832f`.
+Implemented Plan 5 Task 8 on `feat/equipment-attribute-application` from parent `d9bea3ffc856c825cc86d533d3e8c9ab508b43ba`.
+
+The implementation:
+
+- compares current and dry-run candidate final stat snapshots using each stat's benefit direction;
+- appends projected action average-hit/DPS changes and activation cascade warnings;
+- uses green/up, red/down, and neutral symbols together with explicit accessible wording;
+- annotates inactive equipped items, renders a `DISABLED` slot overlay, and lists exact human requirements such as `Requires Constitution 5 (has 3)`;
+- supplies projected rows to Armoury, Warehouse, and the Developer Item Sandbox, retaining raw modifier comparison only when no character/class projection exists;
+- preserves comparison caches through the Armoury and Warehouse projection wrappers.
+
+Two narrow domain seams were added because the approved UI projection cannot be correct without them:
+
+- `ProfileLoadoutAssignmentService.preview(profile, request)` performs the normal assignment path on a defensive profile copy without persistence.
+- `ActionCombatEstimateService.estimate_from_snapshot(attack, snapshot, damage_types)` estimates actions from an already-resolved candidate snapshot.
+
+Profile assignment now validates structural compatibility separately from activation, permits already-equipped dependents to become disabled, rejects the newly placed inactive item in either swap direction, and uses the same activation resolver for preview and apply.
+
+## Files
 
 Created:
 
-- `scripts/dev/developer_item_fixture_issuer.gd`
-- `scripts/dev/developer_item_sandbox_state.gd`
-- `scripts/dev/developer_item_sandbox_store.gd`
-- `tests/unit/test_developer_item_sandbox_state.gd`
+- `scripts/ui/storage/resolved_stat_comparison_service.gd`
+- `scripts/ui/storage/equipment_comparison_projection_service.gd`
+- `tests/unit/test_resolved_stat_comparison_service.gd`
 
-No Task 9 UI, Player Mode routing, Task 7 source, future extraction/loadout documentation, profile-manager bootstrap path, or normal profile implementation was changed.
+Modified:
 
-## Implementation Result
+- `scripts/equipment/profile_loadout_assignment_service.gd`
+- `scripts/ui/ledger/action_combat_estimate_service.gd`
+- shared storage presentation, comparison, slot, tooltip, and profile-projection scripts;
+- Armoury and Warehouse projection/screen adapters;
+- Developer Item Sandbox comparison fixture;
+- focused unit and responsive integration coverage.
 
-- Reset issues all 99 equipment definitions in exact catalog order through `ItemInstanceIssuer` under namespace `sandbox:developer-item-sandbox`.
-- Item level is `1 + (index % 100)` and rarity is `functional_rarity_ids()[index % 5]`.
-- Deterministic fixture affixes use catalog definitions, explicit tiers and operations, and a clamped midpoint roll inside each authored tier.
-- Canonical containers are `developer-inventory` with capacity 5 and `developer-stash-000` with capacity 100.
-- All 99 initial placements are applied through Task 4 create transactions. The construction-only journal is discarded after the candidate is complete; the persisted mutation journal starts empty.
-- The persisted document contains sandbox schema version, fixed owner, strict ownership state, issuance metadata, and the Task 4 mutation journal through `AtomicJsonStore` at `user://developer_item_sandbox/sandbox.json`.
-- Successful writes commit the JSON-normalized document, so in-memory values, persisted values, reload projections, and deterministic hashes agree exactly.
-- Mutation journal integrity requires entry count equal to `next_transaction_sequence`, canonical zero-padded sequence transaction IDs, current ownership equal to the final journal state, and exact canonical reset placement when the journal is empty.
-- Public ownership projections and serialized documents are defensive copies.
-- Save, reload, movement, reset, malformed/corrupt rejection, atomic failure, Task 4 replay, and Task 4 collision preserve the required state and byte boundaries.
+No `.gd.uid`, import, screenshot, or scratch artifacts are part of the intended commit.
 
-## RED-GREEN-REFACTOR Evidence
+## RED-GREEN Evidence
 
-### Initial RED
+The initial Task 8 focused RED exited `1` with `TEST_SUMMARY: FAIL (14 failures)`. It contained assertion failures for the absent comparison and disabled-presentation behavior, with no accepted parser/loader failure.
 
-Command:
+The semantic profile-assignment follow-up RED exited with three failures covering disabled-dependent preview/apply parity and rejection of a newly placed inactive candidate.
 
-```powershell
-Godot_v4.7.1-stable_win64_console.exe --headless --path <task-8-worktree> --quit-after 120 --script res://tests/focused_test_runner.gd -- tests/unit/test_developer_item_sandbox_state.gd
-```
+Independent review then identified five missing boundaries. The accepted combined review RED exited `1` with `TEST_SUMMARY: FAIL (10 failures)` and covered:
 
-Accepted result:
+- delta formatting independent of absolute stat minimums;
+- an explicit projected-slot result when dry-run assignment is rejected;
+- inactive items entering the loadout through the reverse side of an occupied swap;
+- exact human requirement wording from live activation data;
+- a valid Developer Sandbox fixture that renders projected stat/action rows.
 
-- Exit `1`.
-- `TEST_SUMMARY: FAIL (3 failures)`.
-- The three failures were intentional assertions for the absent fixture issuer, sandbox state, and sandbox store resources.
-- There were no parser, script, loader, or resource failures in the accepted RED run.
-
-One earlier test attempt was rejected as RED evidence because the test itself contained parser/type-inference errors and emitted no trustworthy summary. Those test errors were corrected before the accepted RED run.
-
-### GREEN and Refactor
-
-- A fresh Godot import exited `0` and registered the three new global classes.
-- An initial post-import GREEN found a real float-bound persistence failure. Boundary fixture rolls were replaced with clamped authored-tier midpoints.
-- The next GREEN found pre-JSON in-memory floats differed from the stored JSON-normalized representation. Successful reset and transaction commits now adopt the validated JSON-normalized document.
-- First valid GREEN exited `0` with `TEST_SUMMARY: PASS (0 failures)` and marker `c201fd5917d9958da63dacd8201e80d5911c0de51af367977d2a5ee57dd9defe`.
-
-### Strict Journal Integrity RED-GREEN
-
-- RED exited `1` with exactly two focused failures: a journal-count/next-sequence mismatch was accepted, and a rewound ownership snapshot matching an earlier journal entry was accepted.
-- GREEN exited `0` after requiring matching count, canonical sequence IDs, and current ownership equal to the final serialized journal entry.
-- A follow-up RED exited `1` with exactly one focused failure for a noncanonical moved state carrying an empty journal and sequence zero.
-- GREEN validates an empty journal against exact deterministic issued items and canonical reset placement.
-
-### Independent Review Correction
-
-Independent review proved that the first Task 8 commit still accepted forged journal documents when the entry count, transaction IDs, and final-state equality were superficially valid. Specifically, it accepted an all-zero 64-character fingerprint, a rewound current/final state, and a mutated item record.
-
-The correction was implemented test-first:
-
-- The accepted focused RED exited `1` with `TEST_SUMMARY: FAIL (12 failures)` and no parser, loader, or resource errors.
-- The RED covered forged fingerprints, rewound state, mutated item data, non-first-empty moves, multi-item transitions, and swaps. Reload cases also asserted that rejected primary/backup bytes and the usable in-memory state remain unchanged.
-- Decode now rebuilds the canonical fixture independently, requires the current and every journal registry to match the exact deterministic item documents, and validates the complete transition chain from canonical reset.
-- Each journal transition must reconstruct as exactly one move between the developer inventory and stash into the destination's first empty slot. The validator applies that request through the Task 4 transaction service, requires exact next-state equality, and recomputes the exact Task 4 request fingerprint.
-- Missing/extra items, item-record edits, multiple moves, non-first-empty moves, swaps, forged hashes, and rewound final states therefore fail closed.
-
-After the final forged-ID coverage was present, the exact correction tree passed the focused determinism gate twice:
+After correction, the four-suite review batch passed:
 
 ```text
-CORRECTION_FINAL_FOCUSED_RUN_1
-DEVELOPER_ITEM_SANDBOX_SHA256: c201fd5917d9958da63dacd8201e80d5911c0de51af367977d2a5ee57dd9defe
-TEST_SUMMARY: PASS (0 failures)
-
-CORRECTION_FINAL_FOCUSED_RUN_2
-DEVELOPER_ITEM_SANDBOX_SHA256: c201fd5917d9958da63dacd8201e80d5911c0de51af367977d2a5ee57dd9defe
 TEST_SUMMARY: PASS (0 failures)
 ```
 
-## Determinism Gate
+The sandbox correction also exposed and fixed an older invalid synthetic profile boundary: a five-slot developer inventory had been modeled as a profile stash tab, whose required capacity is 100. The fixture now equips one deterministic Forge baseline per canonical slot and repacks all other items into one valid 100-slot synthetic stash.
 
-The final focused Task 8 suite ran twice after all production and test changes:
+## Final Verification
+
+Affected 12-suite batch:
 
 ```text
-TASK8_FINAL_FOCUSED_RUN_1_EXIT=0
-DEVELOPER_ITEM_SANDBOX_SHA256: c201fd5917d9958da63dacd8201e80d5911c0de51af367977d2a5ee57dd9defe
 TEST_SUMMARY: PASS (0 failures)
-
-TASK8_FINAL_FOCUSED_RUN_2_EXIT=0
-DEVELOPER_ITEM_SANDBOX_SHA256: c201fd5917d9958da63dacd8201e80d5911c0de51af367977d2a5ee57dd9defe
-TEST_SUMMARY: PASS (0 failures)
-
-TASK8_FINAL_DETERMINISM_MATCH=YES
 ```
 
-Neither final focused run emitted unexpected parser, script, loader, or resource failures.
+This covered resolved and action comparisons, profile assignment/projection, raw-fallback suppression, slot/button/card/panel presentation, Armoury, Warehouse, and the Developer Item Sandbox.
 
-## Required Regression Gate
-
-The focused regression batch covered:
-
-- item instance codec and deterministic issuance;
-- canonical ownership state;
-- Task 4 transaction matrix;
-- atomic profile store;
-- profile item-schema migration and profile state;
-- profile manager and mutation persistence;
-- profile storage reconciliation and item storage service;
-- passive-tree storage integration;
-- Task 7 run item ownership.
-
-Result:
+Responsive runner:
 
 ```text
-ITEM_TRANSACTION_MATRIX: PASS
-TEST_SUMMARY: PASS (0 failures)
-TASK8_REQUIRED_REGRESSION_EXIT=0
+ITEM_TOOLTIP_COMPATIBILITY_PASS size=1280x720
+ITEM_TOOLTIP_RESPONSIVE_SIZE_PASS size=1920x1080
+ITEM_TOOLTIP_RESPONSIVE_SIZE_PASS size=2560x1440
+ITEM_TOOLTIP_RESPONSIVE_SIZE_PASS size=3840x2160
+ITEM_TOOLTIP_RESPONSIVE_SUMMARY: PASS (3 sizes)
 ```
 
-The atomic/profile suites emitted their established intentional corruption, promotion-failure, cleanup-debt, and filesystem-failure diagnostics while returning the passing summary.
-
-## Complete Suite
-
-Command:
-
-```powershell
-Godot_v4.7.1-stable_win64_console.exe --headless --path <task-8-worktree> --quit-after 720 --script res://tests/test_runner.gd
-```
-
-Result:
+Complete unit suite after all production fixes:
 
 ```text
 DEVELOPER_ITEM_SANDBOX_SHA256: c201fd5917d9958da63dacd8201e80d5911c0de51af367977d2a5ee57dd9defe
 ITEM_TRANSACTION_MATRIX: PASS
-TEST_SUMMARY: PASS (129 suites)
-TASK8_FULL_SUITE_EXIT=0
+TEST_SUMMARY: PASS (163 suites)
 ```
 
-The complete suite emitted existing intentional negative-test warnings/errors and the established exit-time leak diagnostics. It emitted no unexpected parser, script, loader, or resource failure for Task 8 and exited `0`.
+The full suite exited `0` in 165.5 seconds. Its error stream contained established intentional negative-test diagnostics; the passing summary is authoritative.
 
-## Isolation and Artifact Evidence
+`git diff --check` is clean.
 
-- Production Task 8 sources contain no `ProfileManager` reference and never call `ProfileManager.bootstrap()`.
-- The sandbox document path does not begin with `ProfileStore.DEFAULT_ROOT`.
-- The focused test preserves a per-process sentinel under the normal profile root across reset and injected sandbox-save failure, proving normal profile bytes are unchanged.
-- The required fresh import generated 12 previously absent untracked `.gd.uid` files. Baseline status proved they were verification-created; all 12 were removed and none is intended for the Task 8 commit.
-- Final staging is limited to the three Task 8 source files, the focused Task 8 suite, and this report.
+## Independent Review
 
-## Review Boundary
+The first review reported zero Critical, five Important, and one Minor finding. All were corrected test-first. The same reviewer re-reviewed the final diff and reported:
 
-Commit message: `feat: add deterministic developer item sandbox state`
+```text
+No actionable findings.
+All five prior Important findings and the Minor cache issue are resolved.
+No new Critical or Important issues.
+```
 
-Independent-review correction commit message: `fix: validate developer sandbox journal chain`
+## Visual QA Boundary
 
-Stop after the focused Task 8 commit for independent review. Task 9 has not started.
+The responsive runner exercises real tooltip/card layout and visible text geometry at 720p compatibility, 1080p, 1440p, and 4K, including edge anchors, multiple comparison-card counts, normal/compare/advanced/combined modes, pin reachability, and scrollbar containment. It reported no overflow.
+
+No manual screenshot or pixel-by-pixel art review was performed. Remaining visual risk is therefore limited to subjective color/typography polish rather than measured containment or missing content.
+
+## Commit
+
+Intended commit message: `feat: show projected equipment comparisons`

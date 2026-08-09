@@ -144,7 +144,8 @@ func _show_item_tooltip(source: StorageSlotButton) -> void:
 	if detail.is_empty():
 		return
 	var storage := _projection.storage_projection()
-	var comparisons: Array[Dictionary] = COMPARISON_RESOLVER.resolve(detail, storage.leader_slots, storage.item_records)
+	var projected_by_slot := _projection.comparison_lines_by_slot(String(detail.get("instance_id", "")))
+	var comparisons: Array[Dictionary] = COMPARISON_RESOLVER.resolve(detail, storage.leader_slots, storage.item_records, projected_by_slot)
 	_tooltip().call("show_item", detail, comparisons, source, source.source_id(), _developer_mode)
 
 
