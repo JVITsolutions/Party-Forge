@@ -493,8 +493,7 @@ Cover these exact cases:
 - A and B cannot mutually bootstrap from insufficient base attributes;
 - removing A leaves B equipped but disabled and removes all B affixes;
 - restoring A automatically reactivates B;
-- an illegal class/slot/handedness assignment still fails structurally;
-- a newly placed item that remains disabled is rejected.
+- an illegal class/slot/handedness assignment still fails structurally.
 
 - [ ] **Step 2: Run the focused RED test**
 
@@ -569,6 +568,7 @@ Assert:
 
 - successful equip changes ownership and the equipment source before `stats_changed` observers query them;
 - failed projection changes neither state nor source and emits no `stats_changed`;
+- a newly placed item that remains disabled is rejected without mutation;
 - equipping Constitution gear raises maximum without raising current health;
 - removing it clamps only when current health exceeds the new maximum;
 - member 1 equipment changes do not replace member 2 snapshots;
