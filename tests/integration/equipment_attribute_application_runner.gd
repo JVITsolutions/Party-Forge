@@ -201,6 +201,47 @@ func _run() -> void:
 	_assert(_estimate_document(_estimate(resumed_mage, resumed_party)) == active_action, "reactivation restores identical action estimates")
 	_assert_item_bytes(resumed_context.item_state(), immutable_item_bytes, "resumed reactivation")
 
+	var rejection_actor := Node3D.new()
+	var rejection_health := HealthComponent.new()
+	rejection_health.name = "HealthComponent"
+	rejection_health.configure(resumed_party.stats_for(1).value(&"max_health"), true, 8.0, 0.5)
+	rejection_health.current_health = 42.0
+	rejection_actor.add_child(rejection_health)
+	_assert(resumed_context.bind_actor(1, rejection_actor), "24-member rejection fixture binds runtime health")
+	var overflow_modifiers: Array[StatModifier] = []
+	for modifier_index: int in 4:
+		overflow_modifiers.append(StatModifier.create(
+			&"damage", StatModifier.Operation.MORE, 1.0e100,
+			StringName("task10d_integration_overflow_%d" % modifier_index),
+			"Task 10D Integration Overflow", [&"caster"],
+		))
+	var overflow_source := StatModifierSource.create(
+		&"task10d_integration_overflow", &"test", "Task 10D Integration Overflow", 1, overflow_modifiers,
+	)
+	_assert(resumed_party.add_member_source(1, overflow_source), "finite tagged overflow source stages for rejection coverage")
+	resumed_changed_members.clear()
+	var rejection_tags := DamageResolver.action_tags_for(resumed_mage.primary_attack)
+	var rejection_untouched := _capture_untouched_snapshots(resumed_party, rejection_tags)
+	var rejection_state_before := JSON.stringify(resumed_context.item_state().to_dictionary())
+	var rejection_activation_before := resumed_context.equipment_activation(1)
+	var rejection_base_before := resumed_party.stats_for(1)
+	var rejection_action_before := resumed_party.stats_for_action(1, rejection_tags)
+	var rejection_revision_before := resumed_party.stat_revision()
+	var rejection_health_before := Vector2(rejection_health.current_health, rejection_health.max_health)
+	var rejected_transition := resumed_context.assign_equipment(1, SUPPORT_ITEM_ID, &"", equipment, foundation)
+	_assert(not rejected_transition.ok(), "invalid tagged Mage estimate rejects the equipment commit")
+	_assert(rejected_transition.error.contains("action=mage_burst"), "24-member rejection retains Mage action context")
+	_assert(JSON.stringify(resumed_context.item_state().to_dictionary()) == rejection_state_before, "24-member rejection preserves ownership atomically")
+	_assert(resumed_context.equipment_activation(1).active_item_ids == rejection_activation_before.active_item_ids, "24-member rejection preserves activation")
+	_assert(is_same(resumed_party.stats_for(1), rejection_base_before), "24-member rejection preserves member-one base cache identity")
+	_assert(is_same(resumed_party.stats_for_action(1, rejection_tags), rejection_action_before), "24-member rejection preserves member-one action cache identity")
+	_assert(resumed_party.stat_revision() == rejection_revision_before, "24-member rejection preserves the shared revision")
+	_assert(resumed_changed_members.is_empty(), "24-member rejection emits no stat signal")
+	_assert(Vector2(rejection_health.current_health, rejection_health.max_health) == rejection_health_before, "24-member rejection preserves current and maximum health")
+	_assert_untouched_snapshots(resumed_party, rejection_tags, rejection_untouched, "invalid action rejection")
+	_assert_item_bytes(resumed_context.item_state(), immutable_item_bytes, "invalid action rejection")
+	rejection_actor.free()
+
 	equipment.definitions[damage_index] = original_damage_base
 	_finish(party, resumed_party)
 

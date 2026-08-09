@@ -42,6 +42,21 @@ func normalized_eligibility_tags() -> Array[StringName]:
 	result.sort()
 	return result
 
+## Authoritative current-model action enumeration. Future class action slots must
+## be added here so combat estimates and transition validation stay in lockstep.
+func owned_actions() -> Array[AttackDefinition]:
+	var result: Array[AttackDefinition] = []
+	var seen_instances: Dictionary = {}
+	for attack: AttackDefinition in [primary_attack, support_action]:
+		if attack == null:
+			continue
+		var instance_id := attack.get_instance_id()
+		if seen_instances.has(instance_id):
+			continue
+		seen_instances[instance_id] = true
+		result.append(attack)
+	return result
+
 func validate(types: DamageTypeCatalog = null) -> PackedStringArray:
 	var errors: PackedStringArray = []
 	if id.is_empty(): errors.append("class id is empty")

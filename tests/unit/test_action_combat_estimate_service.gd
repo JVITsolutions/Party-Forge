@@ -10,6 +10,7 @@ func run() -> Array[String]:
 	_test_zero_base_damage_is_unavailable(failures)
 	_test_missing_attack_id_is_unavailable(failures)
 	_test_invalid_damage_type_is_unavailable(failures)
+	_test_estimate_invariants_are_contextual(failures)
 	return failures
 
 func _test_action_aware_critical_estimate(failures: Array[String]) -> void:
@@ -162,6 +163,57 @@ func _test_invalid_damage_type_is_unavailable(failures: Array[String]) -> void:
 	var reason := estimate.unavailable_reason.to_lower()
 	TestAssertions.truthy("unknown" in reason and "type" in reason, "unavailable reason names the invalid type boundary", failures)
 	party.free()
+
+func _test_estimate_invariants_are_contextual(failures: Array[String]) -> void:
+	var catalog := GameCatalog.load_defaults()
+	var fighter_attack := catalog.class_by_id(&"fighter").primary_attack.duplicate(true) as AttackDefinition
+	var critical_overflow := ActionCombatEstimateService.estimate_from_snapshot(
+		fighter_attack,
+		_snapshot({&"crit_chance": 0.5, &"crit_multiplier": 1.0e308}),
+		catalog.damage_types,
+	)
+	TestAssertions.truthy(not critical_overflow.available, "critical overflow is unavailable", failures)
+	TestAssertions.truthy("critical" in critical_overflow.unavailable_reason.to_lower(), "critical overflow names the critical invariant", failures)
+
+	var rate_attack := fighter_attack.duplicate(true) as AttackDefinition
+	rate_attack.cooldown = 0.1
+	var rate_overflow := ActionCombatEstimateService.estimate_from_snapshot(
+		rate_attack,
+		_snapshot({&"attack_speed": 1.0e308}),
+		catalog.damage_types,
+	)
+	TestAssertions.truthy(not rate_overflow.available, "action-rate overflow is unavailable", failures)
+	TestAssertions.truthy("action rate" in rate_overflow.unavailable_reason.to_lower(), "action-rate overflow names the rate invariant", failures)
+
+	var dps_overflow := ActionCombatEstimateService.estimate_from_snapshot(
+		fighter_attack,
+		_snapshot({&"damage": 1.0e200, &"attack_speed": 1.0e200}),
+		catalog.damage_types,
+	)
+	TestAssertions.truthy(not dps_overflow.available, "DPS overflow is unavailable", failures)
+	TestAssertions.truthy("dps" in dps_overflow.unavailable_reason.to_lower(), "DPS overflow names the DPS invariant", failures)
+
+	var mixed := fighter_attack.duplicate(true) as AttackDefinition
+	mixed.id = &"mixed_total_overflow"
+	mixed.damage_components = [_component(&"fire", 1.0e308), _component(&"cold", 1.0e308)]
+	var mixed_overflow := ActionCombatEstimateService.estimate_from_snapshot(mixed, _snapshot({}), catalog.damage_types)
+	TestAssertions.truthy(not mixed_overflow.available, "mixed-component total overflow is unavailable", failures)
+	TestAssertions.truthy("normal hit total" in mixed_overflow.unavailable_reason.to_lower(), "mixed overflow names the normal-total invariant", failures)
+
+	var negative := ActionCombatEstimateService.estimate_from_snapshot(
+		fighter_attack,
+		_snapshot({&"damage": -1.0}),
+		catalog.damage_types,
+	)
+	TestAssertions.truthy(not negative.available, "negative projected component is unavailable", failures)
+	TestAssertions.truthy("damage" in negative.unavailable_reason.to_lower(), "negative projection names the damage invariant", failures)
+
+func _snapshot(overrides: Dictionary) -> ResolvedStatSnapshot:
+	var snapshot := ResolvedStatSnapshot.new()
+	for definition: StatDefinition in GameCatalog.STAT_CATALOG.definitions:
+		var value := float(overrides.get(definition.id, definition.default_value))
+		snapshot.set_resolved(definition.id, value, [])
+	return snapshot
 
 func _component(type_id: StringName, amount: float) -> AttackDamageComponent:
 	var result := AttackDamageComponent.new()

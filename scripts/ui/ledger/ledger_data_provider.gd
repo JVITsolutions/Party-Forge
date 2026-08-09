@@ -122,7 +122,7 @@ func combat_estimate_rows(member_id: int) -> Array[ActionCombatEstimate]:
 		return rows
 	var seen_ids: Dictionary = {}
 	var seen_instances: Dictionary = {}
-	for attack: AttackDefinition in _owned_actions(member.class_definition):
+	for attack: AttackDefinition in member.class_definition.owned_actions():
 		if attack == null or attack.is_healing() or attack.damage_components.is_empty():
 			continue
 		var instance_key := attack.get_instance_id()
@@ -133,16 +133,6 @@ func combat_estimate_rows(member_id: int) -> Array[ActionCombatEstimate]:
 			seen_ids[attack.id] = true
 		rows.append(ActionCombatEstimateService.estimate(attack, member_id, party, catalog.damage_types))
 	return rows
-
-func _owned_actions(definition: ClassDefinition) -> Array[AttackDefinition]:
-	var result: Array[AttackDefinition] = []
-	if definition == null:
-		return result
-	if definition.primary_attack != null:
-		result.append(definition.primary_attack)
-	if definition.support_action != null:
-		result.append(definition.support_action)
-	return result
 
 func upgrade_rows(member_id: int) -> Array[Dictionary]:
 	var rows: Array[Dictionary] = []

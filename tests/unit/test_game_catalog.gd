@@ -29,6 +29,7 @@ func run() -> Array[String]:
     TestAssertions.equal(catalog.validate().size(), 0, "catalog validates", failures)
     TestAssertions.equal(catalog.class_by_id(&"fighter").traits, [&"martial", &"vanguard"], "fighter traits", failures)
     TestAssertions.equal(catalog.class_by_id(&"cleric").support_action.id, &"cleric_heal", "cleric heal", failures)
+    _assert_owned_action_contract(catalog, failures)
     _assert_class_names_and_eligibility(catalog, failures)
     _assert_primary_action_estimates(catalog, failures)
     _assert_item_foundation_reachability(catalog, failures)
@@ -59,6 +60,27 @@ func run() -> Array[String]:
     _assert_generated_values(failures)
     _assert_persisted_attack_damage_path(failures)
     return failures
+
+
+func _assert_owned_action_contract(catalog: GameCatalog, failures: Array[String]) -> void:
+    var definition := ClassDefinition.new()
+    var primary := catalog.class_by_id(&"fighter").primary_attack
+    var support := catalog.class_by_id(&"cleric").support_action
+    definition.primary_attack = primary
+    definition.support_action = support
+    var has_interface := definition.has_method(&"owned_actions")
+    TestAssertions.truthy(has_interface, "class definition exposes authoritative owned actions", failures)
+    if not has_interface:
+        return
+    var first: Array = definition.call(&"owned_actions")
+    TestAssertions.equal(first, [primary, support], "owned actions preserve deterministic primary then support order", failures)
+    first.clear()
+    TestAssertions.equal(definition.call(&"owned_actions"), [primary, support], "owned actions return a defensive array", failures)
+    definition.support_action = primary
+    TestAssertions.equal(definition.call(&"owned_actions"), [primary], "owned actions deduplicate identical resources", failures)
+    definition.primary_attack = null
+    definition.support_action = support
+    TestAssertions.equal(definition.call(&"owned_actions"), [support], "owned actions filter null entries while preserving support actions", failures)
 
 
 func _assert_primary_action_estimates(catalog: GameCatalog, failures: Array[String]) -> void:
