@@ -115,14 +115,14 @@ func _validate_families(values: Array[StringName], known: Array[StringName], syn
 			errors.append("affix %s has duplicate modifier family %s" % [id, value])
 		else:
 			seen[value] = true
-			if not synthesized_legacy_family and not known.is_empty() and value not in known:
+			if not synthesized_legacy_family and value not in known:
 				errors.append("affix %s references unknown modifier family %s" % [id, value])
 
 func _validate_references(values: Array[StringName], known: Array[StringName], label: String, errors: PackedStringArray) -> void:
 	for value: StringName in values:
 		if value.is_empty():
 			errors.append("affix %s %s is empty" % [id, label])
-		elif not known.is_empty() and value not in known:
+		elif value not in known:
 			errors.append("affix %s references unknown %s %s" % [id, label, value])
 
 func _validate_nonempty(values: Array[StringName], label: String, errors: PackedStringArray) -> void:

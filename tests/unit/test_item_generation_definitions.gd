@@ -113,37 +113,67 @@ func _test_affix_rejections(failures: Array[String]) -> void:
 	var known_sources: Array[StringName] = [&"enemy"]
 	var known_rarities: Array[StringName] = [&"rare"]
 	var known_item_tags: Array[StringName] = [&"caster"]
+	var empty_known: Array[StringName] = []
 
 	var empty_effects := _valid_affix()
 	empty_effects.effects.clear()
-	TestAssertions.truthy(not empty_effects.validate(stats, known_families, known_domains, known_sources, known_rarities, known_item_tags).is_empty(), "empty effects fail", failures)
+	TestAssertions.truthy(_has_diagnostic(empty_effects.validate(stats, known_families, known_domains, known_sources, known_rarities, known_item_tags), "requires at least one effect"), "empty effects fail", failures)
 
 	var empty_families := _valid_affix()
 	empty_families.modifier_family_ids.clear()
-	TestAssertions.truthy(not empty_families.validate(stats, known_families, known_domains, known_sources, known_rarities, known_item_tags).is_empty(), "empty families fail", failures)
+	TestAssertions.truthy(_has_diagnostic(empty_families.validate(stats, known_families, known_domains, known_sources, known_rarities, known_item_tags), "requires at least one modifier family"), "empty families fail", failures)
 
 	var duplicate_families := _valid_affix()
 	duplicate_families.modifier_family_ids.append(&"caster_power")
-	TestAssertions.truthy(not duplicate_families.validate(stats, known_families, known_domains, known_sources, known_rarities, known_item_tags).is_empty(), "duplicate families fail", failures)
+	TestAssertions.truthy(_has_diagnostic(duplicate_families.validate(stats, known_families, known_domains, known_sources, known_rarities, known_item_tags), "duplicate modifier family caster_power"), "duplicate families fail", failures)
 
 	var duplicate_tiers := _valid_affix()
 	duplicate_tiers.tiers.append(_valid_tier(1, 2, 3.0, 5.0))
-	TestAssertions.truthy(not duplicate_tiers.validate(stats, known_families, known_domains, known_sources, known_rarities, known_item_tags).is_empty(), "duplicate tier numbers fail", failures)
+	TestAssertions.truthy(_has_diagnostic(duplicate_tiers.validate(stats, known_families, known_domains, known_sources, known_rarities, known_item_tags), "duplicate tier 1"), "duplicate tier numbers fail", failures)
 
 	var descending_tiers := _valid_affix()
 	descending_tiers.tiers.append(_valid_tier(0, 2, 3.0, 5.0))
-	TestAssertions.truthy(not descending_tiers.validate(stats, known_families, known_domains, known_sources, known_rarities, known_item_tags).is_empty(), "nonascending tier numbers fail", failures)
+	TestAssertions.truthy(_has_diagnostic(descending_tiers.validate(stats, known_families, known_domains, known_sources, known_rarities, known_item_tags), "tier numbers must ascend"), "nonascending tier numbers fail", failures)
 
 	var descending_levels := _valid_affix()
 	descending_levels.tiers.append(_valid_tier(2, 1, 3.0, 5.0))
-	TestAssertions.truthy(not descending_levels.validate(stats, known_families, known_domains, known_sources, known_rarities, known_item_tags).is_empty(), "nonascending item levels fail", failures)
+	TestAssertions.truthy(_has_diagnostic(descending_levels.validate(stats, known_families, known_domains, known_sources, known_rarities, known_item_tags), "tier minimum item levels must ascend"), "nonascending item levels fail", failures)
 
-	var unknown_references := _valid_affix()
-	unknown_references.modifier_family_ids = [&"unknown_family"]
-	unknown_references.allowed_source_ids = [&"unknown_source"]
-	unknown_references.allowed_rarity_ids = [&"unknown_rarity"]
-	unknown_references.required_item_tags = [&"unknown_tag"]
-	TestAssertions.truthy(not unknown_references.validate(stats, known_families, known_domains, known_sources, known_rarities, known_item_tags).is_empty(), "unknown affix references fail", failures)
+	var unknown_family := _valid_affix()
+	unknown_family.modifier_family_ids = [&"unknown_family"]
+	TestAssertions.truthy(_has_diagnostic(unknown_family.validate(stats, known_families, known_domains, known_sources, known_rarities, known_item_tags), "unknown modifier family unknown_family"), "unknown family fails", failures)
+
+	var unknown_domain := _valid_affix()
+	unknown_domain.allowed_generation_domains = [&"unknown_domain"]
+	TestAssertions.truthy(_has_diagnostic(unknown_domain.validate(stats, known_families, known_domains, known_sources, known_rarities, known_item_tags), "unknown generation domain unknown_domain"), "unknown domain diagnostic", failures)
+
+	var unknown_source := _valid_affix()
+	unknown_source.allowed_source_ids = [&"unknown_source"]
+	TestAssertions.truthy(_has_diagnostic(unknown_source.validate(stats, known_families, known_domains, known_sources, known_rarities, known_item_tags), "unknown source unknown_source"), "unknown source fails", failures)
+
+	var unknown_rarity := _valid_affix()
+	unknown_rarity.allowed_rarity_ids = [&"unknown_rarity"]
+	TestAssertions.truthy(_has_diagnostic(unknown_rarity.validate(stats, known_families, known_domains, known_sources, known_rarities, known_item_tags), "unknown rarity unknown_rarity"), "unknown rarity fails", failures)
+
+	var unknown_item_tag := _valid_affix()
+	unknown_item_tag.required_item_tags = [&"unknown_tag"]
+	TestAssertions.truthy(_has_diagnostic(unknown_item_tag.validate(stats, known_families, known_domains, known_sources, known_rarities, known_item_tags), "unknown required item tag unknown_tag"), "unknown item tag fails", failures)
+
+	var empty_family_manifest := _valid_affix()
+	TestAssertions.truthy(_has_diagnostic(empty_family_manifest.validate(stats, empty_known, known_domains, known_sources, known_rarities, known_item_tags), "unknown modifier family caster_power"), "explicit family fails against empty manifest", failures)
+
+	var empty_domain_manifest := _valid_affix()
+	TestAssertions.truthy(_has_diagnostic(empty_domain_manifest.validate(stats, known_families, empty_known, known_sources, known_rarities, known_item_tags), "unknown generation domain ordinary_drop"), "explicit domain fails against empty manifest", failures)
+
+	var empty_source_manifest := _valid_affix()
+	empty_source_manifest.allowed_source_ids = [&"enemy"]
+	TestAssertions.truthy(_has_diagnostic(empty_source_manifest.validate(stats, known_families, known_domains, empty_known, known_rarities, known_item_tags), "unknown source enemy"), "explicit source fails against empty manifest", failures)
+
+	var empty_rarity_manifest := _valid_affix()
+	TestAssertions.truthy(_has_diagnostic(empty_rarity_manifest.validate(stats, known_families, known_domains, known_sources, empty_known, known_item_tags), "unknown rarity rare"), "explicit rarity fails against empty manifest", failures)
+
+	var empty_item_tag_manifest := _valid_affix()
+	TestAssertions.truthy(_has_diagnostic(empty_item_tag_manifest.validate(stats, known_families, known_domains, known_sources, known_rarities, empty_known), "unknown required item tag caster"), "explicit item tag fails against empty manifest", failures)
 
 	var hybrid_unknown_family := _valid_affix()
 	hybrid_unknown_family.effects.clear()
@@ -159,7 +189,7 @@ func _test_affix_rejections(failures: Array[String]) -> void:
 
 	var unknown_tier_reference := _valid_affix()
 	unknown_tier_reference.tiers[0].allowed_generation_domains = [&"unknown_domain"]
-	TestAssertions.truthy(not unknown_tier_reference.validate(stats, known_families, known_domains, known_sources, known_rarities, known_item_tags).is_empty(), "unknown tier references fail", failures)
+	TestAssertions.truthy(_has_diagnostic(unknown_tier_reference.validate(stats, known_families, known_domains, known_sources, known_rarities, known_item_tags), "unknown tier generation domain unknown_domain"), "unknown tier references fail", failures)
 
 	var overlapping_tags := _valid_affix()
 	overlapping_tags.excluded_item_tags = [&"caster"]
@@ -167,7 +197,7 @@ func _test_affix_rejections(failures: Array[String]) -> void:
 
 	var descending_maximums := _valid_affix()
 	descending_maximums.tiers.append(_valid_tier(2, 2, 0.5, 2.0))
-	TestAssertions.truthy(not descending_maximums.validate(stats, known_families, known_domains, known_sources, known_rarities, known_item_tags).is_empty(), "later tier maximum below earlier maximum fails", failures)
+	TestAssertions.truthy(_has_diagnostic(descending_maximums.validate(stats, known_families, known_domains, known_sources, known_rarities, known_item_tags), "maximum descends"), "later tier maximum below earlier maximum fails", failures)
 
 func _test_generation_vocabulary(failures: Array[String]) -> void:
 	TestAssertions.equal(ItemGenerationVocabulary.DOMAINS, [&"ordinary_drop", &"boss_drop", &"raid_drop", &"vendor", &"crafting", &"developer"], "generation domains stay stable", failures)
@@ -197,3 +227,6 @@ func _valid_tier(tier_number: int, minimum_level: int, minimum_roll: float, maxi
 	tier.minimum_rolls = [minimum_roll]
 	tier.maximum_rolls = [maximum_roll]
 	return tier
+
+func _has_diagnostic(errors: PackedStringArray, expected: String) -> bool:
+	return expected in "\n".join(errors)
