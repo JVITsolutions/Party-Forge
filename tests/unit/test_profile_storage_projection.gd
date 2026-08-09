@@ -6,6 +6,7 @@ func run() -> Array[String]:
 	var failures: Array[String] = []
 	_test_disabled_cascade_projection(failures)
 	_test_rejected_preview_suppresses_raw_fallback(failures)
+	_test_two_hand_displacement_projection(failures)
 	var first := _item("item-zeta", &"dawn_bulwark_crown", 0)
 	var second := _item("item-alpha", &"windrunner_band", 1)
 	var equipped_ring := _item("item-equipped-ring", &"windrunner_band", 2)
@@ -159,6 +160,31 @@ func _test_rejected_preview_suppresses_raw_fallback(failures: Array[String]) -> 
 		TestAssertions.truthy((by_slot.get("boots", []) as Array).any(func(row: Dictionary) -> bool:
 			return String(row.get("row_type", "")) == "warning" and String(row.get("accessible_text", "")).contains("cannot be equipped")
 		), "rejected dry run exposes an accessible projection warning instead of raw modifier fallback", failures)
+
+
+func _test_two_hand_displacement_projection(failures: Array[String]) -> void:
+	var light_bow := _item("projection-light-bow", &"greenwood_recurve_bow", 80)
+	var light_quiver := _item("projection-light-quiver", &"greenwood_light_quiver", 81)
+	var greatbow := _item_with_affix("projection-greatbow", &"siege_greatbow", 82, _stout(2.0))
+	var profile := ProfileState.new_profile(PROFILE_ID, "Two Hand Projection", 1000)
+	profile.item_records = ItemRegistry.new([light_bow, light_quiver, greatbow] as Array[ItemInstance]).to_dictionary()
+	profile.leader_loadout = ItemSlotContainer.create(
+		&"leader-loadout", ItemSlotContainer.PROFILE_LEADER_EQUIPMENT, PROFILE_ID, EquipmentSlotIndex.capacity(),
+		{
+			EquipmentSlotIndex.index_for(&"main_hand"): light_bow.instance_id,
+			EquipmentSlotIndex.index_for(&"off_hand"): light_quiver.instance_id,
+		},
+	).to_dictionary()
+	profile.leader_loadout_class_id = "marksman"
+	profile.stash_tabs = [_stash(&"stash-tab-projection", {7: greatbow.instance_id})]
+	var projection := ProfileStorageProjection.from_profile(profile, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)
+	TestAssertions.truthy(projection.valid, "two-hand comparison fixture projects", failures)
+	if projection.valid:
+		var rows: Array = projection.comparison_lines_by_slot(greatbow.instance_id).get("main_hand", [])
+		TestAssertions.truthy(not rows.any(func(row: Dictionary) -> bool: return String(row.get("stat_id", "")).begins_with("comparison_unavailable:")), "valid occupied/reserved displacement exposes a projection", failures)
+		TestAssertions.truthy(rows.any(func(row: Dictionary) -> bool:
+			return String(row.get("stat_id", "")) == "constitution" and is_equal_approx(float(row.get("delta", 0.0)), 2.0)
+		), "two-hand displacement comparison includes candidate final stats", failures)
 
 
 func _requirements_catalog() -> EquipmentCatalog:

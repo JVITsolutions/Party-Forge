@@ -107,17 +107,24 @@ func _apply_candidate(candidate: ProfileState, request: ProfileLoadoutAssignment
 	if was_nonempty and candidate.leader_loadout_class_id != String(request.selected_class_id):
 		return _error("field=selected_class_id reason=nonempty loadout requires compatibility transition")
 
-	var transaction_request := ItemTransactionRequest.swap(
-		request.transaction_id, candidate.profile_id, request.source_container_id, request.source_slot,
-		request.item_id, request.destination_container_id, request.destination_slot,
-	) if not occupied.is_empty() else ItemTransactionRequest.move(
-		request.transaction_id, candidate.profile_id, request.source_container_id, request.source_slot,
-		request.item_id, request.destination_container_id, request.destination_slot,
+	var storage_ids: Array[StringName] = []
+	for stash_document: Dictionary in candidate.stash_tabs:
+		storage_ids.append(StringName(String(stash_document.get("container_id", ""))))
+	var planned := EquipmentOwnershipTransitionPlanner.preview(
+		state,
+		request.item_id,
+		request.source_container_id,
+		request.source_slot,
+		request.destination_container_id,
+		request.destination_slot,
+		LEADER_ID,
+		storage_ids,
+		_equipment,
+		_foundation,
 	)
-	var transaction := _transactions.apply(state, transaction_request, ItemTransactionJournal.new(), _equipment, _foundation)
-	if transaction.code != ItemTransactionResult.Code.OK or transaction.next_state == null:
-		return _error("field=transaction reason=%s" % _transaction_code(transaction.code))
-	var next_state := transaction.next_state
+	if not planned.ok():
+		return _error("field=transition reason=%s" % planned.error)
+	var next_state := planned.state()
 	var eligibility_error := _validate_complete_loadout(next_state, selected_class)
 	if not eligibility_error.is_empty():
 		return _error("field=leader_loadout reason=ineligible resulting loadout detail=%s" % eligibility_error)
@@ -135,13 +142,9 @@ func _apply_candidate(candidate: ProfileState, request: ProfileLoadoutAssignment
 	)
 	if not activation.ok():
 		return _error("field=leader_loadout reason=activation failed detail=%s" % activation.error)
-	var item_entering_leader := ""
-	if request.destination_container_id == LEADER_ID:
-		item_entering_leader = request.item_id
-	elif request.source_container_id == LEADER_ID and not occupied.is_empty():
-		item_entering_leader = occupied
-	if not item_entering_leader.is_empty() and not activation.is_active(item_entering_leader):
-		return _error("field=leader_loadout item=%s reason=newly placed item is inactive detail=%s" % [item_entering_leader, "; ".join(activation.disabled_reasons(item_entering_leader))])
+	for item_entering_leader: String in planned.newly_equipped_item_ids():
+		if not activation.is_active(item_entering_leader):
+			return _error("field=leader_loadout item=%s reason=newly placed item is inactive detail=%s" % [item_entering_leader, "; ".join(activation.disabled_reasons(item_entering_leader))])
 
 	candidate.item_records = next_state.registry().to_dictionary()
 	candidate.leader_loadout = next_state.container(LEADER_ID).to_dictionary()

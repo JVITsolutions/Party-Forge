@@ -67,26 +67,38 @@ func preview(
 	if source_container_id != INVENTORY_ID and source_container_id != equipment_id:
 		return _failure("member=%d item=%s reason=item belongs to another container" % [member_id, item_id])
 
-	var candidate := state.copy()
+	var destination_container_id: StringName
+	var destination_slot := -1
 	if slot_id.is_empty():
 		if source_container_id != equipment_id:
 			return _failure("member=%d item=%s reason=item is not equipped" % [member_id, item_id])
-		var inventory_slot := inventory.first_empty_slot()
-		if inventory_slot < 0:
+		destination_container_id = INVENTORY_ID
+		destination_slot = inventory.first_empty_slot()
+		if destination_slot < 0:
 			return _failure("item=%s reason=run inventory full" % item_id)
-		candidate._clear_slot(source_container_id, source_slot)
-		candidate._set_slot(INVENTORY_ID, inventory_slot, item_id)
 	else:
-		var destination_slot := EquipmentSlotIndex.index_for(slot_id)
+		destination_container_id = equipment_id
+		destination_slot = EquipmentSlotIndex.index_for(slot_id)
 		if destination_slot < 0:
 			return _failure("slot=%s reason=invalid slot" % slot_id)
-		var destination_item_id := member_equipment.item_id_at(destination_slot)
-		if not destination_item_id.is_empty() and destination_item_id != item_id:
-			return _failure("member=%d slot=%s reason=destination occupied" % [member_id, slot_id])
 		if source_container_id == equipment_id and source_slot == destination_slot:
 			return _failure("member=%d item=%s slot=%s reason=item already equipped" % [member_id, item_id, slot_id])
-		candidate._clear_slot(source_container_id, source_slot)
-		candidate._set_slot(equipment_id, destination_slot, item_id)
+	var storage_ids: Array[StringName] = [INVENTORY_ID]
+	var planned := EquipmentOwnershipTransitionPlanner.preview(
+		state,
+		item_id,
+		source_container_id,
+		source_slot,
+		destination_container_id,
+		destination_slot,
+		equipment_id,
+		storage_ids,
+		equipment,
+		foundation,
+	)
+	if not planned.ok():
+		return _failure("member=%d item=%s slot=%s reason=ownership transition failed detail=%s" % [member_id, item_id, slot_id, planned.error])
+	var candidate := planned.state()
 
 	var loadout_result := _loadout_for(candidate, equipment_id, equipment)
 	if not String(loadout_result["error"]).is_empty():
@@ -98,7 +110,7 @@ func preview(
 	var candidate_error := candidate.validate(equipment, foundation)
 	if not candidate_error.is_empty():
 		return _failure("reason=invalid candidate detail=%s" % candidate_error)
-	return EquipmentAssignmentResult.success(candidate)
+	return EquipmentAssignmentResult.success(candidate, planned.newly_equipped_item_ids())
 
 func _loadout_for(state: ItemOwnershipState, equipment_id: StringName, equipment: EquipmentCatalog) -> Dictionary:
 	var container := state.container(equipment_id)

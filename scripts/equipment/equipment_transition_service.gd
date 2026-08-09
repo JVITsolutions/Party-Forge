@@ -30,9 +30,11 @@ static func preview(
 	var activation := _activation_for(candidate, member_id, party, equipment, foundation)
 	if not activation.ok():
 		return _failure(member_id, item_id, slot_id, "activation failed detail=%s" % activation.error)
-	if not slot_id.is_empty() and not activation.is_active(item_id):
-		var reasons := activation.disabled_reasons(item_id)
-		return _failure(member_id, item_id, slot_id, "requested item is disabled detail=%s" % "; ".join(reasons))
+	for newly_equipped_item_id: String in assignment.newly_equipped_item_ids():
+		if activation.is_active(newly_equipped_item_id):
+			continue
+		var reasons := activation.disabled_reasons(newly_equipped_item_id)
+		return _failure(member_id, newly_equipped_item_id, slot_id, "requested item is disabled detail=%s" % "; ".join(reasons))
 	var final_sources := party.member_sources_without_equipment(member_id)
 	final_sources.append(activation.source)
 	var resolution := MemberStatResolutionService.resolve(

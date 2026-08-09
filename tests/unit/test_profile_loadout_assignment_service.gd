@@ -10,6 +10,7 @@ func run() -> Array[String]:
 	_test_pure_preview_matches_apply(failures)
 	_test_preview_allows_disabled_dependents_and_rejects_inactive_candidate(failures)
 	_test_reverse_swap_rejects_inactive_item_entering_loadout(failures)
+	_test_two_hand_displacement_and_reverse_swap_parity(failures)
 	return failures
 
 
@@ -150,6 +151,57 @@ func _test_reverse_swap_rejects_inactive_item_entering_loadout(failures: Array[S
 	var preview := service.preview(profile, request)
 	TestAssertions.truthy(not preview.ok() and preview.error.contains("newly placed item is inactive") and preview.error.contains(inactive.instance_id), "reverse occupied swap rejects the inactive item entering the loadout", failures)
 	TestAssertions.equal(profile.to_dictionary(), before, "reverse occupied swap rejection preserves supplied profile", failures)
+
+
+func _test_two_hand_displacement_and_reverse_swap_parity(failures: Array[String]) -> void:
+	var root := _root("two_hand_displacement")
+	var store := ProfileStore.new()
+	var light_bow := _item("profile-light-bow", &"greenwood_recurve_bow", 70)
+	var light_quiver := _item("profile-light-quiver", &"greenwood_light_quiver", 71)
+	var greatbow := _item("profile-greatbow", &"siege_greatbow", 72)
+	var profile := _profile(
+		[light_bow, light_quiver, greatbow],
+		{
+			EquipmentSlotIndex.index_for(&"main_hand"): light_bow.instance_id,
+			EquipmentSlotIndex.index_for(&"off_hand"): light_quiver.instance_id,
+		},
+		[{7: greatbow.instance_id}, {}],
+		"marksman",
+	)
+	TestAssertions.equal(store.save_profile(profile, root), "", "two-hand displacement fixture saves", failures)
+	var service := ProfileLoadoutAssignmentService.new(ProfileMutationService.new(store))
+	var equip_request := _request(
+		"profile-greatbow-equip", profile, &"marksman", greatbow.instance_id,
+		&"stash-tab-zeta", 7, &"leader-loadout", EquipmentSlotIndex.index_for(&"main_hand"), light_bow.instance_id,
+	)
+	var profile_before := profile.to_dictionary()
+	var item_records_before := profile.item_records.duplicate(true)
+	var preview := service.preview(profile, equip_request)
+	TestAssertions.truthy(preview.ok(), "profile preview accepts occupied main-hand swap with reserved offhand displacement", failures)
+	TestAssertions.equal(profile.to_dictionary(), profile_before, "displacement preview leaves its input profile unchanged", failures)
+	if preview.ok():
+		TestAssertions.equal(preview.profile.leader_loadout["slots"], {"9": greatbow.instance_id}, "two-hand preview equips only the greatbow", failures)
+		TestAssertions.equal(preview.profile.stash_tabs[0]["slots"], {"0": light_quiver.instance_id, "7": light_bow.instance_id}, "two-hand preview stores displaced items deterministically", failures)
+		TestAssertions.equal(preview.profile.item_records, item_records_before, "two-hand preview preserves immutable item records", failures)
+	var committed := service.apply(PROFILE_ID, equip_request, root)
+	TestAssertions.truthy(committed.ok(), "profile apply accepts the previewed displacement", failures)
+	if preview.ok() and committed.ok():
+		TestAssertions.equal(_assignment_projection(committed.profile), _assignment_projection(preview.profile), "two-hand displacement preview matches apply", failures)
+		var reverse_request := _request(
+			"profile-greatbow-reverse", committed.profile, &"marksman", greatbow.instance_id,
+			&"leader-loadout", EquipmentSlotIndex.index_for(&"main_hand"), &"stash-tab-zeta", 7, light_bow.instance_id,
+		)
+		var reverse_preview := service.preview(committed.profile, reverse_request)
+		TestAssertions.truthy(reverse_preview.ok(), "reverse occupied swap restores the stored main-hand item", failures)
+		if reverse_preview.ok():
+			TestAssertions.equal(reverse_preview.profile.leader_loadout["slots"], {"9": light_bow.instance_id}, "reverse swap puts the displaced storage item into the vacated equipment slot", failures)
+			TestAssertions.equal(reverse_preview.profile.stash_tabs[0]["slots"], {"0": light_quiver.instance_id, "7": greatbow.instance_id}, "reverse swap preserves every exact item identity", failures)
+			TestAssertions.equal(reverse_preview.profile.item_records, item_records_before, "reverse swap preserves immutable item records", failures)
+		var reverse_commit := service.apply(PROFILE_ID, reverse_request, root)
+		TestAssertions.truthy(reverse_commit.ok(), "reverse occupied swap commits", failures)
+		if reverse_preview.ok() and reverse_commit.ok():
+			TestAssertions.equal(_assignment_projection(reverse_commit.profile), _assignment_projection(reverse_preview.profile), "reverse swap preview matches apply", failures)
+	ProfileTestSupport.remove_tree(root)
 
 
 func _item_with_affix(instance_id: String, base_id: StringName, sequence: int, affix: ItemAffixInstance) -> ItemInstance:

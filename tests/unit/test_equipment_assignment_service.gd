@@ -9,6 +9,7 @@ func run() -> Array[String]:
 	_test_compatible_armour_and_exact_unequip(failures)
 	_test_failures_are_atomic_and_diagnostic(failures)
 	_test_two_hand_and_quiver_rules(failures)
+	_test_reserved_displacement_capacity_rejection_is_atomic(failures)
 	_test_result_and_service_boundaries_are_defensive(failures)
 	for party: PartyManager in _parties:
 		party.free()
@@ -44,7 +45,10 @@ func _test_failures_are_atomic_and_diagnostic(failures: Array[String]) -> void:
 	_assert_assignment_failure(context, 1, "missing-instance", &"body_armour", GameCatalog.EQUIPMENT_CATALOG, "unknown item", failures)
 	_assert_assignment_failure(context, 1, compatible.instance_id, &"unknown", GameCatalog.EQUIPMENT_CATALOG, "unknown slot", failures)
 	TestAssertions.truthy(context.assign_equipment(1, first_ring.instance_id, &"ring_left", GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG).ok(), "first ring occupies destination", failures)
-	_assert_assignment_failure(context, 1, second_ring.instance_id, &"ring_left", GameCatalog.EQUIPMENT_CATALOG, "occupied destination", failures)
+	var swapped := context.assign_equipment(1, second_ring.instance_id, &"ring_left", GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)
+	TestAssertions.truthy(swapped.ok(), "occupied destination swaps atomically", failures)
+	TestAssertions.equal(context.equipment_for(1).item_id_at(EquipmentSlotIndex.index_for(&"ring_left")), second_ring.instance_id, "occupied swap equips requested item", failures)
+	TestAssertions.equal(context.run_inventory().item_id_at(3), first_ring.instance_id, "occupied swap returns displaced item to exact source slot", failures)
 
 	var attribute_catalog := _catalog_with_attribute_requirement(&"greenwood_boots", &"strength", 999.0)
 	var attribute_item := _issue_into(context, 4, 4, &"greenwood_boots", attribute_catalog, failures)
@@ -68,6 +72,7 @@ func _test_failures_are_atomic_and_diagnostic(failures: Array[String]) -> void:
 func _test_two_hand_and_quiver_rules(failures: Array[String]) -> void:
 	var fixture := _fixture(&"marksman", 8301, 8)
 	var context := fixture.context as PlayerRunContext
+	var party := fixture.party as PartyManager
 	var equipment := _catalog_with_required_tags(&"dawn_bulwark_shield", [&"martial"])
 	var bow := _issue_into(context, 0, 0, &"greenwood_recurve_bow", equipment, failures)
 	var matching := _issue_into(context, 1, 1, &"greenwood_light_quiver", equipment, failures)
@@ -76,14 +81,70 @@ func _test_two_hand_and_quiver_rules(failures: Array[String]) -> void:
 	if bow == null or matching == null or mismatching == null or shield == null:
 		return
 	TestAssertions.truthy(context.assign_equipment(1, shield.instance_id, &"off_hand", equipment, GameCatalog.ITEM_FOUNDATION_CATALOG).ok(), "ordinary offhand equips before a reserved main hand", failures)
-	_assert_assignment_failure(context, 1, bow.instance_id, &"main_hand", equipment, "two-hand occupied offhand", failures)
-	TestAssertions.truthy(context.assign_equipment(1, shield.instance_id, &"", equipment, GameCatalog.ITEM_FOUNDATION_CATALOG).ok(), "shield unequips before bow", failures)
-	TestAssertions.truthy(context.assign_equipment(1, bow.instance_id, &"main_hand", equipment, GameCatalog.ITEM_FOUNDATION_CATALOG).ok(), "two-hand bow equips with vacant reserved slot", failures)
+	var records_before := JSON.stringify(context.item_state().registry().to_dictionary())
+	var cached_before := party.stats_for(1)
+	var revision_before := party.stat_revision()
+	var changed: Array[int] = []
+	var observer_state: Array[Dictionary] = []
+	party.stats_changed.connect(func(member_id: int) -> void:
+		changed.append(member_id)
+		observer_state.append({
+			"main_hand": context.equipment_for(1).item_id_at(EquipmentSlotIndex.index_for(&"main_hand")),
+			"off_hand": context.equipment_for(1).item_id_at(EquipmentSlotIndex.index_for(&"off_hand")),
+			"stored_shield": context.run_inventory().item_id_at(0),
+			"source_present": party.member_by_id(1).modifier_sources.any(func(source: StatModifierSource) -> bool: return source.id == &"equipment_member_1"),
+		}))
+	TestAssertions.truthy(context.assign_equipment(1, bow.instance_id, &"main_hand", equipment, GameCatalog.ITEM_FOUNDATION_CATALOG).ok(), "two-hand bow displaces an incompatible occupied offhand", failures)
+	TestAssertions.equal(context.run_inventory().item_id_at(0), shield.instance_id, "reserved-slot displacement uses the candidate's vacated source first", failures)
+	TestAssertions.equal(changed, [1], "successful multi-item displacement emits one member-local stat signal", failures)
+	TestAssertions.equal(party.stat_revision(), revision_before + 1, "successful multi-item displacement advances one stat revision", failures)
+	TestAssertions.truthy(party.stats_for(1) != cached_before, "successful multi-item displacement replaces the affected cache", failures)
+	TestAssertions.equal(JSON.stringify(context.item_state().registry().to_dictionary()), records_before, "successful multi-item displacement preserves immutable item records", failures)
+	TestAssertions.equal(observer_state, [{
+		"main_hand": bow.instance_id,
+		"off_hand": "",
+		"stored_shield": shield.instance_id,
+		"source_present": true,
+	}], "synchronous observer sees ownership, storage, and source committed together", failures)
 	_assert_assignment_failure(context, 1, mismatching.instance_id, &"off_hand", equipment, "mismatching quiver", failures)
 	TestAssertions.truthy(context.assign_equipment(1, matching.instance_id, &"off_hand", equipment, GameCatalog.ITEM_FOUNDATION_CATALOG).ok(), "matching quiver is the reserved-slot exception", failures)
 	_assert_assignment_failure(context, 1, bow.instance_id, &"", equipment, "orphaned quiver", failures)
 	TestAssertions.truthy(context.assign_equipment(1, matching.instance_id, &"", equipment, GameCatalog.ITEM_FOUNDATION_CATALOG).ok(), "matching quiver unequips", failures)
 	TestAssertions.truthy(context.assign_equipment(1, bow.instance_id, &"", equipment, GameCatalog.ITEM_FOUNDATION_CATALOG).ok(), "bow unequips after reserved slot is clear", failures)
+
+func _test_reserved_displacement_capacity_rejection_is_atomic(failures: Array[String]) -> void:
+	var fixture := _fixture(&"marksman", 8351, 2)
+	var context := fixture.context as PlayerRunContext
+	var party := fixture.party as PartyManager
+	var light_bow := _issue_into(context, 0, 0, &"greenwood_recurve_bow", GameCatalog.EQUIPMENT_CATALOG, failures)
+	if light_bow == null or not context.assign_equipment(1, light_bow.instance_id, &"main_hand", GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG).ok():
+		failures.append("capacity fixture equips its light bow")
+		return
+	var light_quiver := _issue_into(context, 1, 0, &"greenwood_light_quiver", GameCatalog.EQUIPMENT_CATALOG, failures)
+	if light_quiver == null or not context.assign_equipment(1, light_quiver.instance_id, &"off_hand", GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG).ok():
+		failures.append("capacity fixture equips its matching quiver")
+		return
+	var greatbow := _issue_into(context, 2, 0, &"siege_greatbow", GameCatalog.EQUIPMENT_CATALOG, failures)
+	if greatbow == null:
+		return
+	for slot: int in range(1, context.run_inventory().capacity):
+		if _issue_into(context, 2 + slot, slot, &"steady_hand_ring", GameCatalog.EQUIPMENT_CATALOG, failures) == null:
+			return
+	var state_before := _bytes(context.item_state())
+	var records_before := JSON.stringify(context.item_state().registry().to_dictionary())
+	var sources_before := _source_projection(party.member_by_id(1).modifier_sources)
+	var snapshot_before := party.stats_for(1)
+	var revision_before := party.stat_revision()
+	var changed: Array[int] = []
+	party.stats_changed.connect(func(member_id: int) -> void: changed.append(member_id))
+	var rejected := context.assign_equipment(1, greatbow.instance_id, &"main_hand", GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)
+	TestAssertions.truthy(not rejected.ok() and rejected.error.contains("storage capacity insufficient"), "insufficient room rejects all required displacement with context", failures)
+	TestAssertions.equal(_bytes(context.item_state()), state_before, "capacity rejection preserves exact ownership bytes", failures)
+	TestAssertions.equal(JSON.stringify(context.item_state().registry().to_dictionary()), records_before, "capacity rejection preserves immutable item records", failures)
+	TestAssertions.equal(_source_projection(party.member_by_id(1).modifier_sources), sources_before, "capacity rejection preserves exact equipment source values", failures)
+	TestAssertions.equal(party.stats_for(1), snapshot_before, "capacity rejection preserves cached snapshot identity", failures)
+	TestAssertions.equal(party.stat_revision(), revision_before, "capacity rejection preserves stat revision", failures)
+	TestAssertions.equal(changed, [], "capacity rejection emits no stat-change signal", failures)
 
 func _test_result_and_service_boundaries_are_defensive(failures: Array[String]) -> void:
 	var fixture := _fixture(&"ranger", 8401, 8)
@@ -175,4 +236,24 @@ func _attributes(snapshot: ResolvedStatSnapshot) -> Dictionary:
 	var result: Dictionary = {}
 	for attribute_id: StringName in ClassGrowthDefinition.CORE_ATTRIBUTE_IDS:
 		result[attribute_id] = snapshot.value(attribute_id) if snapshot != null else 0.0
+	return result
+
+func _source_projection(sources: Array[StatModifierSource]) -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	for source: StatModifierSource in sources:
+		var modifiers: Array[Dictionary] = []
+		for modifier: StatModifier in source.modifiers:
+			modifiers.append({
+				"stat_id": String(modifier.stat_id),
+				"operation": modifier.operation,
+				"value": modifier.value,
+				"source_id": String(modifier.source_id),
+				"required_tags": modifier.required_tags.duplicate(),
+			})
+		result.append({
+			"id": String(source.id),
+			"source_type": String(source.source_type),
+			"owner_member_id": source.owner_member_id,
+			"modifiers": modifiers,
+		})
 	return result
