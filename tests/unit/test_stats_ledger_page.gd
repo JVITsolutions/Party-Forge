@@ -92,6 +92,7 @@ func run() -> Array[String]:
 	TestAssertions.truthy(page.initial_focus() is Button and (page.initial_focus() as Button).name.begins_with("Stat_"), "combat estimates do not steal first-stat focus", failures)
 
 	var mixed_attack := fighter.primary_attack.duplicate(true) as AttackDefinition
+	var original_primary_attack := fighter.primary_attack
 	mixed_attack.id = &"mixed_preview"
 	mixed_attack.damage_components = [_damage_component(&"physical", 10.0), _damage_component(&"fire", 5.0)]
 	fighter.primary_attack = mixed_attack
@@ -118,6 +119,8 @@ func run() -> Array[String]:
 	page.refresh()
 	var empty_estimates := page.get_node_or_null("Layout/Content/StatSide/StatScroll/Groups/Group_combat_estimates/Empty") as Label
 	TestAssertions.truthy(empty_estimates != null and empty_estimates.text == "No damaging actions available.", "empty estimate group explains that no damaging actions are available", failures)
+	fighter.primary_attack = original_primary_attack
+	page.refresh()
 
 	page.set_show_all(true)
 	TestAssertions.truthy(page.has_stat(&"fire_damage"), "Show All reveals fire stat", failures)
@@ -140,7 +143,7 @@ func run() -> Array[String]:
 		1,
 		[StatModifier.create(&"fire_damage", StatModifier.Operation.INCREASED, 0.25, &"test_fire", "Test Fire")],
 	)
-	party.add_member_source(1, fire_source)
+	TestAssertions.truthy(party.add_member_source(1, fire_source), "Stats modifier-visibility source applies through the configured run context", failures)
 	var equipment_label := "Iron Sword — Tempered Edge"
 	var equipment_modifier_id := &"equip_m1_smain_hand_iiron_sword_a0_tempered_edge_r0"
 	var equipment_source := StatModifierSource.create(&"equipment_member_1", &"equipment", "Equipment", 1, [
@@ -161,12 +164,14 @@ func run() -> Array[String]:
 	var fire_sources := (page.get_node("Layout/Content/DetailPanel/Detail/Sources") as Label).text
 	TestAssertions.truthy("Base: 1" in fire_sources, "source detail includes deterministic base value", failures)
 	TestAssertions.truthy("Test Fire: +25% increased" in fire_sources, "source detail includes every named modifier", failures)
-	var fire_button := page.get_node("Layout/Content/StatSide/StatScroll/Groups/Group_offense/Stat_fire_damage") as Button
+	var fire_button := page.get_node_or_null("Layout/Content/StatSide/StatScroll/Groups/Group_offense/Stat_fire_damage") as Button
 	var canonical_description := String(provider.stat_detail(1, &"fire_damage").description)
-	TestAssertions.equal(fire_button.tooltip_text, canonical_description, "hover tooltip uses canonical keyword explanation", failures)
-	TestAssertions.truthy(fire_button.focus_mode != Control.FOCUS_NONE, "stat rows remain keyboard focusable", failures)
-	fire_button.focus_entered.emit()
-	TestAssertions.equal((page.get_node("Layout/Content/DetailPanel/Detail/Description") as Label).text, canonical_description, "focus uses the same canonical keyword detail", failures)
+	TestAssertions.truthy(fire_button != null, "modifier-visible fire stat owns a rendered row", failures)
+	if fire_button != null:
+		TestAssertions.equal(fire_button.tooltip_text, canonical_description, "hover tooltip uses canonical keyword explanation", failures)
+		TestAssertions.truthy(fire_button.focus_mode != Control.FOCUS_NONE, "stat rows remain keyboard focusable", failures)
+		fire_button.focus_entered.emit()
+		TestAssertions.equal((page.get_node("Layout/Content/DetailPanel/Detail/Description") as Label).text, canonical_description, "focus uses the same canonical keyword detail", failures)
 	TestAssertions.truthy(page.initial_focus() is Button, "initial focus returns the first stat row", failures)
 	TestAssertions.truthy(page.select_stat(&"melee_damage"), "equipment-modified melee detail opens", failures)
 	var melee_sources := (page.get_node("Layout/Content/DetailPanel/Detail/Sources") as Label).text

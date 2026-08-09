@@ -55,6 +55,20 @@ Independent review found and drove fixes for:
 4. Profile and developer-sandbox callers treating a presentation error dictionary as valid detail. Fixed by propagating/rejecting the error and binding an empty detail document.
 5. Profile projection retaining earlier valid records when a later sorted record failed presentation. Fixed by accumulating locally and publishing only after the full loop succeeds.
 
+Follow-up parent review found two additional Important blockers:
+
+1. Developer sandbox refresh published registry/container/projection/comparison fields and slot bindings incrementally, while move transactions persisted before presentation validation. The valid-before-invalid end-to-end regression failed 15 assertions across OPEN, transfer, and first-empty move. Sandbox state actions now accept a candidate validator before commit/persistence, and `_refresh_projection()` stages the registry, inventory, stash, serialized document, comparison projection, and all 105 slot details before publishing or binding anything. The regression asserts exact slot bindings, in-memory state bytes, and every persisted artifact byte remain unchanged.
+2. The stats-ledger test could abort on an exact missing-row lookup after leaving its primary-action fixture nulled and ignoring a coordinated source-application result. The runner then reported a false pass because it trusted only the suite's returned array. The fixture now restores its primary action, asserts source application, guards the data-driven row lookup with an explicit failure, and reaches equipment attribution and cleanup. Both test runners now install a mutex-protected Godot `Logger` and convert every `ERROR_TYPE_SCRIPT` event into a test failure.
+
+Deliberate runner proof:
+
+```text
+before: TEST_SUMMARY: PASS (0 failures), exit=0, followed by deliberate SCRIPT ERROR
+after:  TEST_SUMMARY: FAIL (1 failures), exit=1, captured file/line/reason
+```
+
+The probe lives under `tests/support`, so normal unit-suite discovery does not include it.
+
 ## Fresh verification
 
 Godot: `4.7.1.stable.official.a13da4feb`.
@@ -66,14 +80,14 @@ TEST_SUMMARY: PASS (0 failures)
 exit=0
 ```
 
-Same-process 15-suite affected gate, ordered so malformed presentation fixtures run before the live catalog audit:
+Same-process 18-suite final affected gate, ordered so malformed presentation fixtures run before the live catalog audit and including sandbox state/UI plus ledger page/provider coverage:
 
 ```text
 TEST_SUMMARY: PASS (0 failures)
 exit=0
 ```
 
-The gate covered modifier projection, activation, assignment, item presentation, profile storage, developer sandbox, full game catalog, generation definitions, equipment contracts/transitions, profile assignment, non-equipment refresh, member stat resolution, derived attributes, and resolved-stat comparisons.
+The gate covered modifier projection, activation, assignment, item presentation, profile storage, developer sandbox state/UI, stats ledger page/provider, full game catalog, generation definitions, equipment contracts/transitions, profile assignment, non-equipment refresh, member stat resolution, derived attributes, and resolved-stat comparisons. It completed with no captured script errors.
 
 24-member integration scenario:
 
@@ -87,6 +101,7 @@ Fresh complete suite:
 ```text
 TEST_SUMMARY: PASS (165 suites)
 exit=0
+captured SCRIPT ERROR count=0
 ```
 
 `git diff --check` passed before the report/commit cycle.
@@ -95,6 +110,7 @@ exit=0
 
 Production:
 
+- `scripts/dev/developer_item_sandbox_state.gd`
 - `scripts/equipment/equipment_activation_resolver.gd`
 - `scripts/equipment/equipment_base_definition.gd`
 - `scripts/equipment/equipment_eligibility.gd`
@@ -106,6 +122,10 @@ Production:
 
 Tests:
 
+- `tests/focused_test_runner.gd`
+- `tests/test_runner.gd`
+- `tests/support/script_error_capture_probe.gd`
+- `tests/support/test_script_error_capture.gd`
 - `tests/unit/test_developer_item_sandbox.gd`
 - `tests/unit/test_equipment_activation_resolver.gd`
 - `tests/unit/test_equipment_assignment_service.gd`
@@ -113,6 +133,7 @@ Tests:
 - `tests/unit/test_game_catalog.gd`
 - `tests/unit/test_item_presentation_projector.gd`
 - `tests/unit/test_profile_storage_projection.gd`
+- `tests/unit/test_stats_ledger_page.gd`
 
 Report:
 
@@ -122,5 +143,5 @@ Report:
 
 - No canonical `.tres` data, generator policy, swap planner, or storage comparison calculation was rewritten.
 - Pre-existing untracked Godot `.gd.uid` sidecars remain in the worktree and are excluded from the Task 10E commit.
-- The complete suite retains established intentional negative-path errors, storage-cleanup warnings, renderer/resource leak warnings, and a pre-existing stats-ledger script error. The authoritative fresh result is exit `0` with `PASS (165 suites)`; none of those diagnostics originated in this task's changed files.
+- The complete suite retains established intentional negative-path errors and storage-cleanup warnings. The hardened runner distinguishes those ordinary logged errors from runtime script errors; the authoritative fresh result is exit `0`, `PASS (165 suites)`, and zero captured `SCRIPT ERROR` events.
 - The fixed-point contract deliberately fails closed if future non-equipment math causes adding active equipment to lower any requirement attribute, even when the final value remains nonnegative. Such a future design needs an explicit solver/policy redesign rather than a silent exception.

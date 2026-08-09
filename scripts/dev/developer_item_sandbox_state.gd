@@ -15,7 +15,7 @@ var _integrity_error: String
 func _init(store: DeveloperItemSandboxStore = null) -> void:
 	_store = store if store != null else DeveloperItemSandboxStore.new()
 
-func reset() -> String:
+func reset(candidate_validator: Callable = Callable()) -> String:
 	var issued := DeveloperItemFixtureIssuer.issue_all(
 		GameCatalog.EQUIPMENT_CATALOG,
 		GameCatalog.ITEM_FOUNDATION_CATALOG
@@ -70,21 +70,28 @@ func reset() -> String:
 	}
 	var candidate_journal := ItemTransactionJournal.new()
 	var document := _store.document_for(candidate, metadata, candidate_journal)
+	var candidate_error := _validate_candidate(candidate_validator, candidate, document)
+	if not candidate_error.is_empty():
+		return _fail(candidate_error)
 	var save_error := _store.reset_document(document)
 	if not save_error.is_empty():
 		return _fail(save_error)
 	return _commit_saved_document(document)
 
-func save() -> String:
+func save(candidate_validator: Callable = Callable()) -> String:
 	if _state == null:
 		return _fail("PARTY_FORGE_DEVELOPER_ITEM_SANDBOX_ERROR field=state reason=must reset or reload before save")
-	var save_error := _store.save_document(_store.document_for(_state, _metadata, _journal))
+	var document := _store.document_for(_state, _metadata, _journal)
+	var candidate_error := _validate_candidate(candidate_validator, _state, document)
+	if not candidate_error.is_empty():
+		return _fail(candidate_error)
+	var save_error := _store.save_document(document)
 	if not save_error.is_empty():
 		return _fail(save_error)
 	_integrity_error = ""
 	return ""
 
-func reload() -> String:
+func reload(candidate_validator: Callable = Callable()) -> String:
 	var loaded := _store.load_document()
 	if not loaded.ok():
 		var reason := loaded.error if not loaded.error.is_empty() else "sandbox document is missing"
@@ -93,6 +100,13 @@ func reload() -> String:
 	var decode_error := String(decoded.get("error", ""))
 	if not decode_error.is_empty():
 		return _fail(decode_error)
+	var candidate_error := _validate_candidate(
+		candidate_validator,
+		decoded["state"] as ItemOwnershipState,
+		loaded.document,
+	)
+	if not candidate_error.is_empty():
+		return _fail(candidate_error)
 	_commit(
 		decoded["state"] as ItemOwnershipState,
 		decoded["metadata"] as Dictionary,
@@ -130,7 +144,8 @@ func transfer_slots(
 	source_container_id: StringName,
 	source_slot: int,
 	destination_container_id: StringName,
-	destination_slot: int
+	destination_slot: int,
+	candidate_validator: Callable = Callable(),
 ) -> String:
 	if _state == null:
 		return _fail("PARTY_FORGE_DEVELOPER_ITEM_SANDBOX_ERROR field=state reason=must reset or reload before moving")
@@ -164,18 +179,18 @@ func transfer_slots(
 		destination_container_id,
 		destination_slot
 	)
-	var result := _apply_transaction(request)
+	var result := _apply_transaction(request, candidate_validator)
 	if result.code == ItemTransactionResult.Code.OK:
 		return ""
 	return _integrity_error if not _integrity_error.is_empty() else "PARTY_FORGE_DEVELOPER_ITEM_SANDBOX_ERROR field=transaction reason=code %s" % _code_name(result.code)
 
-func move_to_first_empty_inventory(item_id: String) -> String:
-	return _move_to_first_empty(item_id, INVENTORY_ID)
+func move_to_first_empty_inventory(item_id: String, candidate_validator: Callable = Callable()) -> String:
+	return _move_to_first_empty(item_id, INVENTORY_ID, candidate_validator)
 
-func move_to_first_empty_stash(item_id: String) -> String:
-	return _move_to_first_empty(item_id, STASH_ID)
+func move_to_first_empty_stash(item_id: String, candidate_validator: Callable = Callable()) -> String:
+	return _move_to_first_empty(item_id, STASH_ID, candidate_validator)
 
-func _apply_transaction(request: ItemTransactionRequest) -> ItemTransactionResult:
+func _apply_transaction(request: ItemTransactionRequest, candidate_validator: Callable = Callable()) -> ItemTransactionResult:
 	if _state == null or request == null:
 		_integrity_error = "PARTY_FORGE_DEVELOPER_ITEM_SANDBOX_ERROR field=transaction reason=state and request are required"
 		return ItemTransactionResult.create(ItemTransactionResult.Code.INVALID_REQUEST)
@@ -200,17 +215,21 @@ func _apply_transaction(request: ItemTransactionRequest) -> ItemTransactionResul
 		_integrity_error = "PARTY_FORGE_DEVELOPER_ITEM_SANDBOX_ERROR field=issuance_metadata.next_transaction_sequence reason=sequence exhausted"
 		return ItemTransactionResult.create(ItemTransactionResult.Code.INVALID_REQUEST)
 	candidate_metadata["next_transaction_sequence"] = next_sequence + 1
-	var save_error := _store.save_document(_store.document_for(candidate_state, candidate_metadata, candidate_journal))
+	var saved_document := _store.document_for(candidate_state, candidate_metadata, candidate_journal)
+	var candidate_error := _validate_candidate(candidate_validator, candidate_state, saved_document)
+	if not candidate_error.is_empty():
+		_integrity_error = candidate_error
+		return ItemTransactionResult.create(ItemTransactionResult.Code.INVALID_ITEM)
+	var save_error := _store.save_document(saved_document)
 	if not save_error.is_empty():
 		_integrity_error = save_error
 		return ItemTransactionResult.create(ItemTransactionResult.Code.INVALID_ITEM)
-	var saved_document := _store.document_for(candidate_state, candidate_metadata, candidate_journal)
 	var commit_error := _commit_saved_document(saved_document)
 	if not commit_error.is_empty():
 		return ItemTransactionResult.create(ItemTransactionResult.Code.INVALID_ITEM)
 	return result
 
-func _move_to_first_empty(item_id: String, destination_id: StringName) -> String:
+func _move_to_first_empty(item_id: String, destination_id: StringName, candidate_validator: Callable = Callable()) -> String:
 	if _state == null:
 		return _fail("PARTY_FORGE_DEVELOPER_ITEM_SANDBOX_ERROR field=state reason=must reset or reload before moving")
 	if item_id.strip_edges().is_empty() or not _state.registry().has(item_id):
@@ -243,7 +262,7 @@ func _move_to_first_empty(item_id: String, destination_id: StringName) -> String
 		destination_id,
 		destination_slot
 	)
-	var result := _apply_transaction(request)
+	var result := _apply_transaction(request, candidate_validator)
 	if result.code == ItemTransactionResult.Code.OK:
 		return ""
 	return _integrity_error if not _integrity_error.is_empty() else "PARTY_FORGE_DEVELOPER_ITEM_SANDBOX_ERROR field=transaction reason=code %s" % _code_name(result.code)
@@ -270,6 +289,18 @@ func _commit_saved_document(document: Dictionary) -> String:
 		decoded["journal"] as ItemTransactionJournal
 	)
 	return ""
+
+func _validate_candidate(
+	candidate_validator: Callable,
+	candidate_state: ItemOwnershipState,
+	document: Dictionary,
+) -> String:
+	if not candidate_validator.is_valid():
+		return ""
+	var validation: Variant = candidate_validator.call(candidate_state.copy(), document.duplicate(true))
+	if not validation is String:
+		return "PARTY_FORGE_DEVELOPER_ITEM_SANDBOX_ERROR field=projection reason=candidate validator returned a non-string result"
+	return String(validation)
 
 func _fail(error: String) -> String:
 	_integrity_error = error

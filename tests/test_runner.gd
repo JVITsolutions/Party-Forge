@@ -1,14 +1,28 @@
 extends SceneTree
 
+const SCRIPT_ERROR_CAPTURE := preload("res://tests/support/test_script_error_capture.gd")
+
 func _initialize() -> void:
     var failures: Array[String] = []
+    var script_errors := SCRIPT_ERROR_CAPTURE.new()
+    OS.add_logger(script_errors)
     var suite_paths: PackedStringArray = _collect_suites("res://tests/unit")
     for suite_path: String in suite_paths:
         var suite_script: Script = load(suite_path)
+        if suite_script == null:
+            failures.append("%s :: suite failed to load" % suite_path)
+            continue
         var suite: RefCounted = suite_script.new()
-        var suite_failures: Array[String] = suite.run()
+        var suite_result: Variant = suite.call(&"run")
+        if not suite_result is Array:
+            failures.append("%s :: suite did not return a failure array" % suite_path)
+            continue
+        var suite_failures: Array = suite_result as Array
         for failure: String in suite_failures:
             failures.append("%s :: %s" % [suite_path, failure])
+    for script_error: String in script_errors.errors():
+        failures.append("SCRIPT ERROR :: %s" % script_error)
+    OS.remove_logger(script_errors)
     if failures.is_empty():
         print("TEST_SUMMARY: PASS (%d suites)" % suite_paths.size())
         quit(0)

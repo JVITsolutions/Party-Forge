@@ -60,6 +60,7 @@ var _held_item_id := ""
 var _last_focused_slot: Button
 var _slot_buttons: Array[Button] = []
 var _wired := false
+var _presentation_projection_override: Callable
 
 
 func _ready() -> void:
@@ -83,9 +84,10 @@ func open(return_focus: Control = null) -> bool:
 	if visible:
 		return true
 	_return_focus = return_focus
-	var error := _state.reload()
+	var candidate_validator := Callable(self, "_candidate_projection_error")
+	var error := _state.reload(candidate_validator)
 	if not error.is_empty() and not FileAccess.file_exists(DeveloperItemSandboxStore.DOCUMENT_PATH):
-		error = _state.reset()
+		error = _state.reset(candidate_validator)
 	if error.is_empty():
 		error = _refresh_projection()
 	if error.is_empty():
@@ -98,10 +100,11 @@ func open(return_focus: Control = null) -> bool:
 	return true
 
 
-func configure(state: DeveloperItemSandboxState) -> void:
+func configure(state: DeveloperItemSandboxState, presentation_projection: Callable = Callable()) -> void:
 	if visible or state == null:
 		return
 	_state = state
+	_presentation_projection_override = presentation_projection
 	_registry = null
 	_inventory = null
 	_stash = null
@@ -304,7 +307,10 @@ func _perform_transfer(
 ) -> void:
 	var destination_item_id := _item_id_at(destination_container_id, destination_slot)
 	var action := "SWAP" if not destination_item_id.is_empty() else "MOVE"
-	var error := _state.transfer_slots(source_container_id, source_slot, destination_container_id, destination_slot)
+	var error := _state.transfer_slots(
+		source_container_id, source_slot, destination_container_id, destination_slot,
+		Callable(self, "_candidate_projection_error"),
+	)
 	_clear_held_item()
 	if not error.is_empty():
 		_set_status(action, error)
@@ -337,7 +343,8 @@ func _move_selected_to_first_empty(inventory_destination: bool) -> void:
 	if item == null:
 		_set_status(action, _ui_error("NO_SELECTED_ITEM"))
 		return
-	var error := _state.move_to_first_empty_inventory(item.instance_id) if inventory_destination else _state.move_to_first_empty_stash(item.instance_id)
+	var candidate_validator := Callable(self, "_candidate_projection_error")
+	var error := _state.move_to_first_empty_inventory(item.instance_id, candidate_validator) if inventory_destination else _state.move_to_first_empty_stash(item.instance_id, candidate_validator)
 	if not error.is_empty():
 		_set_status(action, error)
 		return
@@ -351,11 +358,11 @@ func _move_selected_to_first_empty(inventory_destination: bool) -> void:
 
 
 func _on_save() -> void:
-	_complete_state_action("SAVE", _state.save())
+	_complete_state_action("SAVE", _state.save(Callable(self, "_candidate_projection_error")))
 
 
 func _on_reload() -> void:
-	_complete_state_action("RELOAD", _state.reload())
+	_complete_state_action("RELOAD", _state.reload(Callable(self, "_candidate_projection_error")))
 
 
 func _on_integrity_scan() -> void:
@@ -363,7 +370,7 @@ func _on_integrity_scan() -> void:
 
 
 func _on_reset() -> void:
-	_complete_state_action("RESET", _state.reset())
+	_complete_state_action("RESET", _state.reset(Callable(self, "_candidate_projection_error")))
 
 
 func _complete_state_action(action: String, error: String) -> void:
@@ -384,44 +391,108 @@ func _complete_state_action(action: String, error: String) -> void:
 
 
 func _refresh_projection() -> String:
-	_tooltip().call("force_dismiss")
 	var registry := _state.registry()
 	var inventory := _state.inventory()
 	var stash := _state.stash()
-	if registry == null or inventory == null or stash == null:
+	var staged := _stage_projection(registry, inventory, stash, _state.to_dictionary())
+	var error := String(staged.get("error", ""))
+	if not error.is_empty():
+		return error
+	_tooltip().call("force_dismiss")
+	_registry = staged["registry"] as ItemRegistry
+	_inventory = staged["inventory"] as ItemSlotContainer
+	_stash = staged["stash"] as ItemSlotContainer
+	_projection = (staged["projection"] as Dictionary).duplicate(true)
+	_comparison_projection = staged["comparison"] as ProfileStorageProjection
+	var slot_bindings := staged["slot_bindings"] as Array[Dictionary]
+	for index: int in _slot_buttons.size():
+		var binding := slot_bindings[index]
+		var button := _slot_buttons[index]
+		var container_id := binding["container_id"] as StringName
+		var slot := int(binding["slot"])
+		var item_id := String(binding["item_id"])
+		var shared := button as StorageSlotButton
+		shared.bind_item(container_id, slot, item_id, binding["detail"] as Dictionary)
+		if container_id == STASH_ID:
+			shared.custom_minimum_size.y = maxf(shared.custom_minimum_size.y, 88.0)
+		button.set_meta("item_id", item_id)
+	_sync_slot_affordances()
+	return ""
+
+
+func _candidate_projection_error(candidate_state: ItemOwnershipState, document: Dictionary) -> String:
+	if candidate_state == null:
 		return "PARTY_FORGE_DEVELOPER_ITEM_SANDBOX_ERROR reason=projection state is unavailable"
-	_registry = registry
-	_inventory = inventory
-	_stash = stash
-	_projection = _state.to_dictionary()
-	_comparison_projection = _build_comparison_projection()
+	var staged := _stage_projection(
+		candidate_state.registry(),
+		candidate_state.container(INVENTORY_ID),
+		candidate_state.container(STASH_ID),
+		document,
+	)
+	return String(staged.get("error", ""))
+
+
+func _stage_projection(
+	registry: ItemRegistry,
+	inventory: ItemSlotContainer,
+	stash: ItemSlotContainer,
+	serialized: Dictionary,
+) -> Dictionary:
+	if registry == null or inventory == null or stash == null:
+		return {"error": "PARTY_FORGE_DEVELOPER_ITEM_SANDBOX_ERROR reason=projection state is unavailable"}
+	var comparison := _build_comparison_projection(registry)
+	if comparison == null or not comparison.valid:
+		var comparison_error := comparison.error if comparison != null else "comparison projection is unavailable"
+		return {"error": "PARTY_FORGE_DEVELOPER_ITEM_SANDBOX_ERROR field=comparison reason=%s" % comparison_error}
 	var fixture_class := GameCatalog.load_defaults().class_by_id(&"fighter")
-	var first_error := ""
+	var slot_bindings: Array[Dictionary] = []
 	for button: Button in _slot_buttons:
 		var container_id := StringName(String(button.get_meta("container_id", "")))
 		var slot := int(button.get_meta("slot", -1))
-		var item_id := _item_id_at(container_id, slot)
-		var item := _registry.item(item_id) if not item_id.is_empty() else null
-		var detail: Dictionary = PRESENTATION_PROJECTOR.project(
+		var container := inventory if container_id == INVENTORY_ID else stash if container_id == STASH_ID else null
+		var item_id := container.item_id_at(slot) if container != null and slot >= 0 and slot < container.capacity else ""
+		var item := registry.item(item_id) if not item_id.is_empty() else null
+		var detail := _project_presentation(item, fixture_class) if item != null else {}
+		if detail.has("error"):
+			return {"error": String(detail.get("error", "PARTY_FORGE_ITEM_PRESENTATION_ERROR reason=presentation data is invalid"))}
+		elif not detail.is_empty():
+			detail = _bindable_presentation_detail(detail, container_id, slot)
+		slot_bindings.append({
+			"container_id": container_id,
+			"slot": slot,
+			"item_id": item_id,
+			"detail": detail,
+		})
+	return {
+		"error": "",
+		"registry": registry,
+		"inventory": inventory,
+		"stash": stash,
+		"projection": serialized.duplicate(true),
+		"comparison": comparison,
+		"slot_bindings": slot_bindings,
+	}
+
+
+func _project_presentation(item: ItemInstance, fixture_class: ClassDefinition) -> Dictionary:
+	if _presentation_projection_override.is_valid():
+		var projected: Variant = _presentation_projection_override.call(
 			item,
 			GameCatalog.EQUIPMENT_CATALOG,
 			GameCatalog.ITEM_FOUNDATION_CATALOG,
 			GameCatalog.STAT_CATALOG,
 			fixture_class,
-		) if item != null else {}
-		if detail.has("error"):
-			if first_error.is_empty():
-				first_error = String(detail.get("error", "PARTY_FORGE_ITEM_PRESENTATION_ERROR reason=presentation data is invalid"))
-			detail = {}
-		elif not detail.is_empty():
-			detail = _bindable_presentation_detail(detail, container_id, slot)
-		var shared := button as StorageSlotButton
-		shared.bind_item(container_id, slot, item_id, detail)
-		if container_id == STASH_ID:
-			shared.custom_minimum_size.y = maxf(shared.custom_minimum_size.y, 88.0)
-		button.set_meta("item_id", item_id)
-	_sync_slot_affordances()
-	return first_error
+		)
+		return projected as Dictionary if projected is Dictionary else {
+			"error": "PARTY_FORGE_ITEM_PRESENTATION_ERROR item=%s reason=projector returned non-dictionary data" % item.instance_id,
+		}
+	return PRESENTATION_PROJECTOR.project(
+		item,
+		GameCatalog.EQUIPMENT_CATALOG,
+		GameCatalog.ITEM_FOUNDATION_CATALOG,
+		GameCatalog.STAT_CATALOG,
+		fixture_class,
+	)
 
 
 func _bindable_presentation_detail(detail: Dictionary, container_id: StringName, slot: int) -> Dictionary:
@@ -593,21 +664,21 @@ func _show_item_tooltip(source: StorageSlotButton) -> void:
 	_tooltip().call("show_item", detail, comparisons, source, source.source_id(), true)
 
 
-func _build_comparison_projection() -> ProfileStorageProjection:
-	if _registry == null or _inventory == null or _stash == null:
+func _build_comparison_projection(registry: ItemRegistry) -> ProfileStorageProjection:
+	if registry == null:
 		return null
 	var profile := ProfileState.new_profile(OWNER_ID, "Developer Fixture", 0)
-	profile.item_records = _registry.to_dictionary()
+	profile.item_records = registry.to_dictionary()
 	var leader_slots: Dictionary = {}
 	var baseline_ids: Array[String] = []
 	for slot_id: StringName in COMPARISON_BASELINE_BY_SLOT:
-		var baseline_id := _instance_id_for_base(COMPARISON_BASELINE_BY_SLOT[slot_id])
+		var baseline_id := _instance_id_for_base(COMPARISON_BASELINE_BY_SLOT[slot_id], registry)
 		if baseline_id.is_empty():
 			continue
 		leader_slots[EquipmentSlotIndex.index_for(slot_id)] = baseline_id
 		baseline_ids.append(baseline_id)
 	var preview_slots: Dictionary = {}
-	for instance_id: String in _registry.ids():
+	for instance_id: String in registry.ids():
 		if instance_id not in baseline_ids:
 			preview_slots[preview_slots.size()] = instance_id
 	profile.leader_loadout = ItemSlotContainer.create(
@@ -631,9 +702,11 @@ func _build_comparison_projection() -> ProfileStorageProjection:
 	)
 
 
-func _instance_id_for_base(base_id: StringName) -> String:
-	for instance_id: String in _registry.ids():
-		var item := _registry.item(instance_id)
+func _instance_id_for_base(base_id: StringName, registry: ItemRegistry) -> String:
+	if registry == null:
+		return ""
+	for instance_id: String in registry.ids():
+		var item := registry.item(instance_id)
 		if item != null and item.base_definition_id == base_id:
 			return instance_id
 	return ""

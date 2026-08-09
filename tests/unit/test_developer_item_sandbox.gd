@@ -7,6 +7,7 @@ const DOCUMENT_PATH := "user://developer_item_sandbox/sandbox.json"
 const SANDBOX_ROOT := "user://developer_item_sandbox"
 const INVENTORY_ID := &"developer-inventory"
 const STASH_ID := &"developer-stash-000"
+const PRESENTATION_PROJECTOR := preload("res://scripts/ui/storage/item_presentation_projector.gd")
 
 
 func run() -> Array[String]:
@@ -22,6 +23,8 @@ func run() -> Array[String]:
 	_cleanup_sandbox_files()
 	_test_modal_contract(packed, failures)
 	_cleanup_sandbox_files()
+	_test_projection_failure_atomic_ui(packed, failures)
+	_cleanup_sandbox_files()
 	_test_failure_atomic_ui(packed, failures)
 	_cleanup_sandbox_files()
 	_test_main_route_and_profile_isolation(failures)
@@ -32,6 +35,10 @@ func run() -> Array[String]:
 func _test_modal_contract(packed: PackedScene, failures: Array[String]) -> void:
 	var tree := Engine.get_main_loop() as SceneTree
 	var sandbox: Variant = packed.instantiate()
+	var configure_method: Dictionary = (sandbox.get_method_list() as Array).filter(
+		func(method: Dictionary) -> bool: return String(method.get("name", "")) == "configure"
+	).front()
+	TestAssertions.truthy((configure_method.get("args", []) as Array).size() >= 2, "sandbox accepts an injectable presentation boundary for end-to-end failure testing", failures)
 	tree.root.add_child(sandbox)
 	var return_focus := Button.new()
 	return_focus.name = "SandboxReturnFocus"
@@ -373,6 +380,75 @@ func _test_failure_atomic_ui(packed: PackedScene, failures: Array[String]) -> vo
 	TestAssertions.equal(FileAccess.get_file_as_bytes(DOCUMENT_PATH), corrupt_primary, "failed reload preserves rejected primary bytes", failures)
 	TestAssertions.equal(FileAccess.get_file_as_bytes("%s.bak" % DOCUMENT_PATH), corrupt_backup, "failed reload preserves rejected backup bytes", failures)
 	sandbox.free()
+
+
+func _test_projection_failure_atomic_ui(packed: PackedScene, failures: Array[String]) -> void:
+	for action: String in ["OPEN", "TRANSFER", "FIRST_EMPTY"]:
+		var seed := DeveloperItemSandboxState.new()
+		TestAssertions.equal(seed.reset(), "", "%s projection-failure fixture seeds usable bytes" % action, failures)
+		var state := DeveloperItemSandboxState.new()
+		TestAssertions.equal(state.reload(), "", "%s projection-failure fixture reloads usable state" % action, failures)
+		var failure_control := {"item_id": ""}
+		var presentation_projection := func(
+			item: ItemInstance,
+			equipment: EquipmentCatalog,
+			foundation: ItemFoundationCatalog,
+			stats: StatCatalog,
+			class_definition: ClassDefinition,
+		) -> Dictionary:
+			if item != null and item.instance_id == String(failure_control["item_id"]):
+				return {"error": "PARTY_FORGE_ITEM_PRESENTATION_ERROR item=%s reason=deliberate valid-before-invalid failure" % item.instance_id}
+			return PRESENTATION_PROJECTOR.project(item, equipment, foundation, stats, class_definition)
+		var sandbox: Variant = packed.instantiate()
+		sandbox.call(&"configure", state, presentation_projection)
+		sandbox.call(&"_ready")
+		var stash_grid := sandbox.get_node("Overlay/Frame/Layout/Body/StashPanel/StashScroll/StashSlots") as GridContainer
+		var inventory_grid := sandbox.get_node("Overlay/Frame/Layout/Body/InventoryPanel/InventorySlots") as GridContainer
+		if action != "OPEN":
+			TestAssertions.truthy(bool(sandbox.call(&"open")), "%s projection-failure fixture opens valid UI" % action, failures)
+		failure_control["item_id"] = String((stash_grid.get_child(1) as Button).get_meta("item_id", "")) if action != "OPEN" else state.stash().item_id_at(1)
+		var bindings_before := _slot_bindings(sandbox)
+		var projection_before: Dictionary = sandbox.call(&"projection")
+		var state_before := var_to_bytes(state.to_dictionary())
+		var persisted_before := _sandbox_persisted_bytes()
+		if action == "OPEN":
+			sandbox.call(&"open")
+		elif action == "TRANSFER":
+			sandbox.call(&"_perform_transfer", STASH_ID, 0, INVENTORY_ID, 0)
+		else:
+			sandbox.call(&"_inspect_slot", STASH_ID, 0)
+			sandbox.call(&"_on_first_empty_inventory")
+		var status := sandbox.get_node("Overlay/Frame/Layout/Header/Status") as Label
+		TestAssertions.truthy(status.text.contains("deliberate valid-before-invalid failure"), "%s surfaces the exact staged presentation failure" % action, failures)
+		TestAssertions.equal(_slot_bindings(sandbox), bindings_before, "%s publishes no partial slot bindings" % action, failures)
+		TestAssertions.equal(sandbox.call(&"projection"), projection_before, "%s preserves the last published serialized projection" % action, failures)
+		TestAssertions.equal(var_to_bytes(state.to_dictionary()), state_before, "%s preserves exact in-memory state bytes" % action, failures)
+		TestAssertions.equal(_sandbox_persisted_bytes(), persisted_before, "%s preserves every persisted artifact byte" % action, failures)
+		if action != "OPEN":
+			TestAssertions.equal(String((inventory_grid.get_child(0) as Button).get_meta("item_id", "")), "", "%s never publishes the candidate destination" % action, failures)
+		sandbox.free()
+
+
+func _slot_bindings(sandbox: Variant) -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	for button: StorageSlotButton in sandbox.get("_slot_buttons") as Array[Button]:
+		result.append({
+			"container_id": String(button.container_id),
+			"slot": button.slot,
+			"item_id": button.item_id,
+			"meta_item_id": String(button.get_meta("item_id", "")),
+			"detail": button.detail(),
+			"accessibility_name": button.accessibility_name,
+			"text": button.text,
+		})
+	return result
+
+
+func _sandbox_persisted_bytes() -> Dictionary:
+	var result: Dictionary = {}
+	for path: String in [DOCUMENT_PATH, "%s.bak" % DOCUMENT_PATH, "%s.bak.previous" % DOCUMENT_PATH, "%s.tmp" % DOCUMENT_PATH]:
+		result[path] = FileAccess.get_file_as_bytes(path) if FileAccess.file_exists(path) else null
+	return result
 
 
 func _assert_slot_metadata(button: Button, container_id: StringName, slot: int, failures: Array[String]) -> void:
