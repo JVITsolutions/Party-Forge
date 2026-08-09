@@ -11,7 +11,7 @@ static func unit(seed: int, sequence: int, stage: StringName, draw: int) -> floa
 static func weighted_id(seed: int, sequence: int, stage: StringName, draw: int, weights: Dictionary) -> StringName:
 	if weights.is_empty():
 		return &""
-	var ids: Array[StringName] = []
+	var ids: Array[String] = []
 	var canonical_weights: Dictionary = {}
 	var total := 0.0
 	for candidate: Variant in weights:
@@ -20,7 +20,7 @@ static func weighted_id(seed: int, sequence: int, stage: StringName, draw: int, 
 		var raw_weight: Variant = weights[candidate]
 		if typeof(raw_weight) not in [TYPE_INT, TYPE_FLOAT]:
 			return &""
-		var id := StringName(String(candidate))
+		var id := String(candidate)
 		var weight := float(raw_weight)
 		if id.is_empty() or canonical_weights.has(id) or not is_finite(weight) or weight <= 0.0:
 			return &""
@@ -32,11 +32,11 @@ static func weighted_id(seed: int, sequence: int, stage: StringName, draw: int, 
 	ids.sort()
 	var roll := unit(seed, sequence, stage, draw) * total
 	var cumulative := 0.0
-	for id: StringName in ids:
+	for id: String in ids:
 		cumulative += float(canonical_weights[id])
 		if roll < cumulative:
-			return id
-	return ids.back()
+			return StringName(id)
+	return StringName(ids.back())
 
 static func _stage_seed(seed: int, sequence: int, stage: StringName, draw: int) -> int:
 	var digest := ("%d|%d|%s|%d" % [seed, sequence, stage, draw]).sha256_text()

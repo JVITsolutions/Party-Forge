@@ -221,6 +221,30 @@ func _test_deterministic_random(failures: Array[String]) -> void:
 		failures
 	)
 	TestAssertions.equal(ItemDeterministicRandom.weighted_id(991, 4, &"base", 0, {&"b": 1.0, &"a": 2.0}), &"b", "weighted selection golden vector is exact", failures)
+	var lexical_weights: Dictionary = {}
+	lexical_weights[StringName("c")] = 1.0
+	lexical_weights[StringName("a")] = 1.0
+	lexical_weights[StringName("b")] = 1.0
+	var lexical_stage := StringName("tier:prefix:0:tiered")
+	TestAssertions.equal(
+		ItemDeterministicRandom.weighted_id(8128, 9, lexical_stage, 0, lexical_weights),
+		&"a",
+		"weighted selection golden vector uses lexical id order",
+		failures
+	)
+	var intern_noise: Array[StringName] = []
+	for index: int in 32:
+		intern_noise.append(StringName("weighted_order_noise_%d" % index))
+	var reordered_lexical_weights: Dictionary = {}
+	reordered_lexical_weights["b"] = 1.0
+	reordered_lexical_weights["c"] = 1.0
+	reordered_lexical_weights["a"] = 1.0
+	TestAssertions.equal(
+		ItemDeterministicRandom.weighted_id(8128, 9, lexical_stage, 0, reordered_lexical_weights),
+		&"a",
+		"insertion and StringName allocation order cannot change the lexical golden choice",
+		failures
+	)
 	TestAssertions.equal(ItemDeterministicRandom.weighted_id(991, 4, &"base", 0, {}), &"", "empty weights are rejected", failures)
 	TestAssertions.equal(ItemDeterministicRandom.weighted_id(991, 4, &"base", 0, {&"a": 0.0}), &"", "nonpositive weights are rejected", failures)
 	TestAssertions.equal(ItemDeterministicRandom.weighted_id(991, 4, &"base", 0, {&"a": NAN}), &"", "nonfinite weights are rejected", failures)

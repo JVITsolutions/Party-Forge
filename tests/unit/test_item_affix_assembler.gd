@@ -9,6 +9,7 @@ func run() -> Array[String]:
 	_test_tier_order_and_exact_rolls(failures)
 	_test_high_level_broadens_without_guaranteeing_top_tier(failures)
 	_test_charisma_improves_roll_quality_within_bounds(failures)
+	_test_nonfinite_aggregate_weights_fail_all_or_nothing(failures)
 	_test_all_or_nothing_failures(failures)
 	return failures
 
@@ -226,6 +227,41 @@ func _test_charisma_improves_roll_quality_within_bounds(failures: Array[String])
 		TestAssertions.truthy(zero_value >= 10.0 and zero_value <= 20.0, "zero-Charisma roll stays inside authored bounds", failures)
 		TestAssertions.truthy(high_value >= 10.0 and high_value <= 20.0, "high-Charisma roll stays inside authored bounds", failures)
 		TestAssertions.truthy(high_value >= zero_value, "Charisma shifts exact roll quality upward for the same unit draw", failures)
+
+func _test_nonfinite_aggregate_weights_fail_all_or_nothing(failures: Array[String]) -> void:
+	var implicit := _affix(&"tempered_edge", "implicit", [&"implicit_family"], [_tier(1, 1, 1.0, 1.0, 2.0)])
+	var huge_a := _affix(&"huge_a", "prefix", [&"huge_a_family"], [_tier(1, 1, 1.0, 1.0, 2.0)])
+	huge_a.base_weight = 1.0e308
+	var huge_b := _affix(&"huge_b", "prefix", [&"huge_b_family"], [_tier(1, 1, 1.0, 1.0, 2.0)])
+	huge_b.base_weight = 1.0e308
+	var affix_trace := ItemGenerationTrace.new()
+	var result := ItemAffixAssembler.assemble(
+		_request(1),
+		_base([&"melee"], [&"tempered_edge"]),
+		_rarity(&"rare", 3),
+		_pattern(1, 0, 0),
+		_foundation([huge_b, implicit, huge_a]),
+		affix_trace
+	)
+	TestAssertions.truthy(not result.ok(), "overflowing aggregate affix weight fails assembly", failures)
+	TestAssertions.equal(result.error_code, &"invalid_affix_weight_total", "aggregate affix overflow uses a stable structured code", failures)
+	TestAssertions.equal(result.affixes, [], "aggregate affix overflow discards an already assembled implicit", failures)
+	TestAssertions.equal(result.details, {"kind": "prefix", "slot": 0}, "aggregate affix overflow identifies its exact slot", failures)
+	TestAssertions.equal(_stage(affix_trace, "affix:prefix:0").get("selected", "missing"), "", "overflowing affix pool never falls through to its last candidate", failures)
+
+	var tiered := _affix(&"tier_overflow", "prefix", [&"tier_overflow_family"], [
+		_tier(1, 1, 1.0e308, 1.0, 2.0),
+		_tier(2, 2, 1.0e308, 2.0, 3.0),
+	])
+	var tier_trace := ItemGenerationTrace.new()
+	result = ItemAffixAssembler.assemble(
+		_request(2), _base([&"melee"]), _rarity(&"rare", 3), _pattern(1, 0, 0), _foundation([tiered]), tier_trace
+	)
+	TestAssertions.truthy(not result.ok(), "overflowing aggregate tier weight fails assembly", failures)
+	TestAssertions.equal(result.error_code, &"invalid_tier_weight_total", "aggregate tier overflow uses a stable structured code", failures)
+	TestAssertions.equal(result.affixes, [], "aggregate tier overflow returns no partial affix", failures)
+	TestAssertions.equal(result.details, {"affix_id": "tier_overflow", "slot": "prefix:0"}, "aggregate tier overflow identifies its affix and slot", failures)
+	TestAssertions.equal(_stage(tier_trace, "tier:prefix:0:tier_overflow").get("selected", "missing"), "", "overflowing tier pool never falls through to its last candidate", failures)
 
 func _test_all_or_nothing_failures(failures: Array[String]) -> void:
 	var prefix := _affix(&"only_prefix", "prefix", [&"prefix_family"], [_tier(1, 1, 1.0, 1.0, 2.0)])

@@ -100,7 +100,14 @@ static func _fill_explicit_slot(
 
 	var slot := "%s:%d" % [kind, slot_index]
 	var stage := StringName("affix:%s" % slot)
-	var selected_id := _weighted_affix_id(request, stage, eligible, weights)
+	if eligible.is_empty():
+		trace.record(stage, eligible, rejected, weights, &"")
+		return _failure(&"no_eligible_affix", {"kind": kind, "slot": slot_index})
+	var total_weight := _affix_weight_total(eligible, weights)
+	if not is_finite(total_weight) or total_weight <= 0.0:
+		trace.record(stage, eligible, rejected, weights, &"")
+		return _failure(&"invalid_affix_weight_total", {"kind": kind, "slot": slot_index})
+	var selected_id := _weighted_affix_id(request, stage, eligible, weights, total_weight)
 	trace.record(stage, eligible, rejected, weights, selected_id)
 	var selected := definitions_by_id.get(selected_id) as ItemAffixDefinition
 	if selected == null:
@@ -182,7 +189,11 @@ static func _build_instance(
 		eligible_ids.append(display_id)
 		trace_weights[display_id] = weight
 	var stage := StringName("tier:%s:%s" % [slot, definition.id])
-	var selected_tier := _weighted_tier(request, stage, tiers, trace_weights)
+	var total_weight := _tier_weight_total(tiers, trace_weights)
+	if not is_finite(total_weight) or total_weight <= 0.0:
+		trace.record(stage, eligible_ids, {}, trace_weights, &"")
+		return _failure(&"invalid_tier_weight_total", {"affix_id": String(definition.id), "slot": slot})
+	var selected_tier := _weighted_tier(request, stage, tiers, trace_weights, total_weight)
 	var selected_display_id := StringName(str(selected_tier.tier)) if selected_tier != null else &""
 	trace.record(stage, eligible_ids, {}, trace_weights, selected_display_id)
 	if selected_tier == null:
@@ -219,14 +230,12 @@ static func _weighted_affix_id(
 	request: ItemGenerationRequest,
 	stage: StringName,
 	ordered_ids: Array[StringName],
-	weights: Dictionary
+	weights: Dictionary,
+	total_weight: float
 ) -> StringName:
-	if ordered_ids.is_empty():
+	if ordered_ids.is_empty() or not is_finite(total_weight) or total_weight <= 0.0:
 		return &""
-	var total := 0.0
-	for id: StringName in ordered_ids:
-		total += float(weights[id])
-	var target := ItemDeterministicRandom.unit(request.seed, request.generation_sequence, stage, 0) * total
+	var target := ItemDeterministicRandom.unit(request.seed, request.generation_sequence, stage, 0) * total_weight
 	var cumulative := 0.0
 	for id: StringName in ordered_ids:
 		cumulative += float(weights[id])
@@ -238,20 +247,34 @@ static func _weighted_tier(
 	request: ItemGenerationRequest,
 	stage: StringName,
 	ordered_tiers: Array[ItemAffixTierDefinition],
-	weights: Dictionary
+	weights: Dictionary,
+	total_weight: float
 ) -> ItemAffixTierDefinition:
-	if ordered_tiers.is_empty():
+	if ordered_tiers.is_empty() or not is_finite(total_weight) or total_weight <= 0.0:
 		return null
-	var total := 0.0
-	for tier: ItemAffixTierDefinition in ordered_tiers:
-		total += float(weights[StringName(str(tier.tier))])
-	var target := ItemDeterministicRandom.unit(request.seed, request.generation_sequence, stage, 0) * total
+	var target := ItemDeterministicRandom.unit(request.seed, request.generation_sequence, stage, 0) * total_weight
 	var cumulative := 0.0
 	for tier: ItemAffixTierDefinition in ordered_tiers:
 		cumulative += float(weights[StringName(str(tier.tier))])
 		if target < cumulative:
 			return tier
 	return ordered_tiers.back()
+
+static func _affix_weight_total(ordered_ids: Array[StringName], weights: Dictionary) -> float:
+	var total := 0.0
+	for id: StringName in ordered_ids:
+		total += float(weights[id])
+		if not is_finite(total):
+			return total
+	return total
+
+static func _tier_weight_total(ordered_tiers: Array[ItemAffixTierDefinition], weights: Dictionary) -> float:
+	var total := 0.0
+	for tier: ItemAffixTierDefinition in ordered_tiers:
+		total += float(weights[StringName(str(tier.tier))])
+		if not is_finite(total):
+			return total
+	return total
 
 static func _block_definition(definition: ItemAffixDefinition, blocked_ids: Dictionary, blocked_families: Dictionary) -> void:
 	blocked_ids[definition.id] = true
