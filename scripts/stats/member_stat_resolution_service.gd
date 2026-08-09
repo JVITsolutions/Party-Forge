@@ -25,5 +25,8 @@ static func resolve(
 
 	var final_sources := sources.duplicate()
 	final_sources.append(projection.source)
+	var final_source_errors := StatResolver.validate_sources(catalog, final_sources)
+	if not final_source_errors.is_empty():
+		return MemberStatResolution.failure(final_source_errors[0])
 	var final := StatResolver.resolve(member_id, catalog, base_values, capabilities, final_sources, action_tags, revision)
 	return MemberStatResolution.success(raw, projection.source, final)

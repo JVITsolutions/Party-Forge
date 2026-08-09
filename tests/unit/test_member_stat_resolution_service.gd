@@ -14,6 +14,7 @@ func run() -> Array[String]:
 	if service_script == null or not service_script.can_instantiate():
 		return failures
 	_test_two_pass_resolution_has_no_attribute_feedback(service_script, failures)
+	_test_generated_source_id_collision_is_rejected(service_script, failures)
 	_test_derived_source_rejects_core_attributes(failures)
 	_test_source_validation_contract(failures)
 	return failures
@@ -51,6 +52,36 @@ func _test_two_pass_resolution_has_no_attribute_feedback(service_script: Script,
 			"resolved derived source contains no core attributes",
 			failures,
 		)
+
+func _test_generated_source_id_collision_is_rejected(service_script: Script, failures: Array[String]) -> void:
+	var colliding_source := StatModifierSource.create(&"attribute_projection_1", &"growth", "Colliding Growth", 1, [
+		StatModifier.create(&"strength", StatModifier.Operation.FLAT, 1.0, &"colliding_strength", "Colliding Growth"),
+	])
+	var capabilities: Array[StringName] = []
+	var sources: Array[StatModifierSource] = [colliding_source]
+	var action_tags: Array[StringName] = []
+	var result: Variant = service_script.resolve(
+		1,
+		STAT_CATALOG,
+		{},
+		capabilities,
+		sources,
+		action_tags,
+		5,
+		DEFAULT_TUNING,
+	)
+	TestAssertions.truthy(not result.ok(), "generated source ID collision is rejected", failures)
+	TestAssertions.equal(
+		result.error,
+		"PARTY_FORGE_STAT_ERROR source=attribute_projection_1 stat=<unknown> reason=duplicate source id",
+		"generated source ID collision returns the stable validation error",
+		failures,
+	)
+	TestAssertions.truthy(
+		result.raw_attributes == null and result.derived_source == null and result.final_stats == null,
+		"generated source ID collision returns no partial resolution",
+		failures,
+	)
 
 func _test_derived_source_rejects_core_attributes(failures: Array[String]) -> void:
 	var malicious_source := StatModifierSource.create(&"attribute_projection_1", &"attribute_projection", "Malicious Projection", 1, [
