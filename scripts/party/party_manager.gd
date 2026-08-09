@@ -193,27 +193,36 @@ func replace_member_source(member_id: int, source: StatModifierSource) -> bool:
     _invalidate_member(member_id)
     return true
 
-## Replaces one source per member as a single observable stat-state transition.
+## Replaces one canonical equipment source per member as a single observable stat-state transition.
 ## Returns zero on success, or the rejected member ID. Invalid non-member keys return -1.
-func replace_member_sources_atomically(sources_by_member: Dictionary) -> int:
+func replace_member_equipment_sources_atomically(sources_by_member: Dictionary) -> int:
     if sources_by_member.is_empty():
         return -1
     var member_ids: Array[int] = []
     for member_id_value: Variant in sources_by_member:
         if typeof(member_id_value) != TYPE_INT:
             return -1
-        var member_id := int(member_id_value)
+        member_ids.append(int(member_id_value))
+    member_ids.sort()
+
+    for member_id: int in member_ids:
         var member := member_by_id(member_id)
-        var source := sources_by_member[member_id_value] as StatModifierSource
-        if member == null or source == null:
+        var source_value: Variant = sources_by_member[member_id]
+        if not source_value is StatModifierSource:
+            return member_id if member_id > 0 else -1
+        var source := source_value as StatModifierSource
+        if (
+            member == null
+            or source.source_type != &"equipment"
+            or source.id != StringName("equipment_member_%d" % member_id)
+            or source.owner_member_id != member_id
+        ):
             return member_id if member_id > 0 else -1
         var validation_errors := StatResolver.validate_sources(STAT_CATALOG, [source])
         if not validation_errors.is_empty():
             for error: String in validation_errors:
                 push_error(error)
             return member_id
-        member_ids.append(member_id)
-    member_ids.sort()
 
     var previous_sources: Dictionary = {}
     for member_id: int in member_ids:

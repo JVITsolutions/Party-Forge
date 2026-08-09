@@ -183,7 +183,7 @@ func configure(
 	if not party.member_added.is_connected(member_added_callback):
 		party.member_added.connect(member_added_callback)
 	_configured = true
-	var rejected_member_id := manager.replace_member_sources_atomically(next_equipment_sources)
+	var rejected_member_id := manager.replace_member_equipment_sources_atomically(next_equipment_sources)
 	if rejected_member_id != 0:
 		_reset_unconfigured_fields()
 		if rejected_member_id > 0:

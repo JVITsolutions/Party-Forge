@@ -25,6 +25,7 @@ class ResumeOverflowPartyManager extends PartyManager:
 
 func run() -> Array[String]:
 	var failures: Array[String] = []
+	_test_arbitrary_batch_cannot_bypass_activation_refresh(failures)
 	_test_growth_reactivates_and_requirement_loss_disables(failures)
 	_test_personal_attribute_upgrade_and_direct_source_replacement(failures)
 	_test_refresh_commit_failure_rolls_back_exact_state(failures)
@@ -34,6 +35,41 @@ func run() -> Array[String]:
 	_test_aggregate_stat_overflow_refresh_is_rejected_atomically(failures)
 	_test_resume_aggregate_stat_overflow_is_rejected_atomically(failures)
 	return failures
+
+
+func _test_arbitrary_batch_cannot_bypass_activation_refresh(failures: Array[String]) -> void:
+	var definition_fixture := _install_required_sword_definition()
+	var party := _party(2)
+	var fixture := _configured_equipped_fixture(party, "batch_bypass", 10091)
+	var context := fixture["context"] as PlayerRunContext
+	var item := fixture["item"] as ItemInstance
+	var action_tags := DamageResolver.action_tags_for(party.member_by_id(1).class_definition.primary_attack)
+	var sources_before := _source_documents(party.member_by_id(1))
+	var activation_before := context.equipment_activation(1)
+	var base_before := party.stats_for(1)
+	var action_before := party.stats_for_action(1, action_tags)
+	var member_two_before := party.stats_for(2)
+	var revision_before := party.stat_revision()
+	var changed: Array[int] = []
+	party.stats_changed.connect(func(member_id: int) -> void: changed.append(member_id))
+	var arbitrary_growth := StatModifierSource.create(&"task10k_batch_growth", &"character_growth", "Batch Growth", 1, [
+		StatModifier.create(&"strength", StatModifier.Operation.FLAT, REQUIRED_STRENGTH, &"task10k_batch_strength", "Batch Growth"),
+	])
+	var bypass_result := -1
+	if party.has_method(&"replace_member_sources_atomically"):
+		bypass_result = int(party.call(&"replace_member_sources_atomically", {1: arbitrary_growth}))
+	TestAssertions.truthy(bypass_result != 0, "arbitrary non-equipment batch source has no public commit path", failures)
+	TestAssertions.truthy(not _has_source(party.member_by_id(1), arbitrary_growth.id), "arbitrary batch cannot install a core-attribute source", failures)
+	TestAssertions.truthy(not context.equipment_activation(1).is_active(item.instance_id), "rejected arbitrary batch preserves disabled requirement gear", failures)
+	TestAssertions.equal(context.equipment_activation(1).active_item_ids, activation_before.active_item_ids, "rejected arbitrary batch preserves activation IDs", failures)
+	TestAssertions.equal(_source_documents(party.member_by_id(1)), sources_before, "rejected arbitrary batch preserves exact source documents", failures)
+	TestAssertions.equal(party.stat_revision(), revision_before, "rejected arbitrary batch preserves revision", failures)
+	TestAssertions.equal(changed, [], "rejected arbitrary batch emits no stat signal", failures)
+	TestAssertions.truthy(is_same(party.stats_for(1), base_before), "rejected arbitrary batch preserves affected base cache identity", failures)
+	TestAssertions.truthy(is_same(party.stats_for_action(1, action_tags), action_before), "rejected arbitrary batch preserves affected action cache identity", failures)
+	TestAssertions.truthy(is_same(party.stats_for(2), member_two_before), "rejected arbitrary batch preserves unrelated cache identity", failures)
+	party.free()
+	_restore_definition(definition_fixture)
 
 
 func _test_growth_reactivates_and_requirement_loss_disables(failures: Array[String]) -> void:

@@ -53,6 +53,7 @@ func run() -> Array[String]:
 
     _test_resolved_party_stats(failures)
     _test_replace_member_source(failures)
+    _test_atomic_equipment_source_batch_contract(failures)
     _test_two_pass_cache_isolation_and_preview_inputs(failures)
     _test_party_actor_stats_signal_lifecycle(failures)
     return failures
@@ -65,6 +66,149 @@ func _test_effective_capacity(failures: Array[String]) -> void:
     if not party.has_method(&"configure_capacity") or not party.has_method(&"capacity") or not party.has_method(&"can_recruit"):
         party.free()
         return
+    _continue_effective_capacity(failures, party, catalog)
+
+func _test_atomic_equipment_source_batch_contract(failures: Array[String]) -> void:
+    var catalog := GameCatalog.load_defaults()
+    var party := PartyManager.new()
+    party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
+    TestAssertions.truthy(party.recruit(catalog.class_by_id(&"ranger")), "equipment batch fixture recruits member two", failures)
+    TestAssertions.truthy(party.has_method(&"replace_member_equipment_sources_atomically"), "party manager exposes the narrow equipment-source batch API", failures)
+    TestAssertions.truthy(not party.has_method(&"replace_member_sources_atomically"), "party manager removes the arbitrary source batch bypass", failures)
+    if not party.has_method(&"replace_member_equipment_sources_atomically"):
+        party.free()
+        return
+
+    var action_tags: Array[StringName] = [&"ranged", &"physical"]
+    var member_one_before := party.stats_for(1)
+    var member_two_before := party.stats_for(2)
+    var member_two_action_before := party.stats_for_action(2, action_tags)
+    var revision_before := party.stat_revision()
+    var events: Array[int] = []
+    party.stats_changed.connect(func(member_id: int) -> void: events.append(member_id))
+    var equipment_one := _equipment_source(1, 2.0)
+    var equipment_two := _equipment_source(2, 3.0)
+    TestAssertions.equal(
+        int(party.call(&"replace_member_equipment_sources_atomically", {2: equipment_two, 1: equipment_one})),
+        0,
+        "canonical equipment batch succeeds",
+        failures,
+    )
+    TestAssertions.equal(events, [1, 2], "equipment batch emits deterministic member order", failures)
+    TestAssertions.equal(party.stat_revision(), revision_before + 1, "equipment batch advances one shared revision", failures)
+    TestAssertions.truthy(not is_same(party.stats_for(1), member_one_before), "equipment batch replaces member-one base cache", failures)
+    TestAssertions.truthy(not is_same(party.stats_for(2), member_two_before), "equipment batch replaces member-two base cache", failures)
+    TestAssertions.truthy(not is_same(party.stats_for_action(2, action_tags), member_two_action_before), "equipment batch replaces affected action cache", failures)
+
+    var sources_before := {
+        1: _member_source_documents(party.member_by_id(1)),
+        2: _member_source_documents(party.member_by_id(2)),
+    }
+    var member_one_cache := party.stats_for(1)
+    var member_two_cache := party.stats_for(2)
+    var member_two_action_cache := party.stats_for_action(2, action_tags)
+    var stable_revision := party.stat_revision()
+    events.clear()
+    var invalid_cases: Array[Dictionary] = [
+        {
+            "label": "arbitrary core source",
+            "batch": {1: StatModifierSource.create(&"character_growth_1", &"character_growth", "Growth", 1, [])},
+            "rejected_member": 1,
+        },
+        {
+            "label": "wrong source type",
+            "batch": {1: StatModifierSource.create(&"equipment_member_1", &"character_growth", "Not Equipment", 1, [])},
+            "rejected_member": 1,
+        },
+        {
+            "label": "wrong canonical source ID",
+            "batch": {1: StatModifierSource.create(&"equipment_member_2", &"equipment", "Wrong ID", 1, [])},
+            "rejected_member": 1,
+        },
+        {
+            "label": "wrong source owner",
+            "batch": {1: StatModifierSource.create(&"equipment_member_1", &"equipment", "Wrong Owner", 2, [])},
+            "rejected_member": 1,
+        },
+        {
+            "label": "mixed valid and invalid batch",
+            "batch": {1: _equipment_source(1, 9.0), 2: StatModifierSource.create(&"equipment_member_2", &"equipment", "Wrong Owner", 1, [])},
+            "rejected_member": 2,
+        },
+        {
+            "label": "null source",
+            "batch": {1: _equipment_source(1, 9.0), 2: null},
+            "rejected_member": 2,
+        },
+        {
+            "label": "wrong source value type",
+            "batch": {1: "not a stat source"},
+            "rejected_member": 1,
+        },
+        {
+            "label": "duplicate source ownership",
+            "batch": {1: equipment_one, 2: equipment_one},
+            "rejected_member": 2,
+        },
+    ]
+    for test_case: Dictionary in invalid_cases:
+        TestAssertions.equal(
+            int(party.call(&"replace_member_equipment_sources_atomically", test_case["batch"])),
+            int(test_case["rejected_member"]),
+            "%s returns the stable rejected member" % test_case["label"],
+            failures,
+        )
+        TestAssertions.equal(_member_source_documents(party.member_by_id(1)), sources_before[1], "%s preserves member-one sources" % test_case["label"], failures)
+        TestAssertions.equal(_member_source_documents(party.member_by_id(2)), sources_before[2], "%s preserves member-two sources" % test_case["label"], failures)
+        TestAssertions.equal(party.stat_revision(), stable_revision, "%s preserves the revision" % test_case["label"], failures)
+        TestAssertions.truthy(is_same(party.stats_for(1), member_one_cache), "%s preserves member-one cache identity" % test_case["label"], failures)
+        TestAssertions.truthy(is_same(party.stats_for(2), member_two_cache), "%s preserves member-two cache identity" % test_case["label"], failures)
+        TestAssertions.truthy(is_same(party.stats_for_action(2, action_tags), member_two_action_cache), "%s preserves action-cache identity" % test_case["label"], failures)
+        TestAssertions.equal(events, [], "%s emits no stat signal" % test_case["label"], failures)
+
+    var two_invalid := {
+        2: StatModifierSource.create(&"wrong_two", &"equipment", "Wrong Two", 2, []),
+        1: StatModifierSource.create(&"wrong_one", &"equipment", "Wrong One", 1, []),
+    }
+    TestAssertions.equal(int(party.call(&"replace_member_equipment_sources_atomically", two_invalid)), 1, "batch validation rejects the lowest member ID deterministically", failures)
+    TestAssertions.equal(party.stat_revision(), stable_revision, "deterministic rejection preserves revision", failures)
+    TestAssertions.equal(events, [], "deterministic rejection emits no stat signal", failures)
+    party.free()
+
+func _equipment_source(member_id: int, strength: float) -> StatModifierSource:
+    var source_id := StringName("equipment_member_%d" % member_id)
+    return StatModifierSource.create(source_id, &"equipment", "Equipment", member_id, [
+        StatModifier.create(&"strength", StatModifier.Operation.FLAT, strength, StringName("equipment_strength_%d" % member_id), "Equipment"),
+    ])
+
+func _member_source_documents(member: PartyMemberState) -> String:
+    var documents: Array[Dictionary] = []
+    for source: StatModifierSource in member.modifier_sources:
+        var modifiers: Array[Dictionary] = []
+        for modifier: StatModifier in source.modifiers:
+            modifiers.append({
+                "stat_id": String(modifier.stat_id),
+                "operation": modifier.operation,
+                "value": modifier.value,
+                "source_id": String(modifier.source_id),
+                "source_label": modifier.source_label,
+                "required_tags": modifier.required_tags,
+                "excluded_tags": modifier.excluded_tags,
+                "required_capability_tags": modifier.required_capability_tags,
+                "excluded_capability_tags": modifier.excluded_capability_tags,
+                "required_action_tags": modifier.required_action_tags,
+                "excluded_action_tags": modifier.excluded_action_tags,
+            })
+        documents.append({
+            "id": String(source.id),
+            "source_type": String(source.source_type),
+            "label": source.label,
+            "owner_member_id": source.owner_member_id,
+            "modifiers": modifiers,
+        })
+    return JSON.stringify(documents)
+
+func _continue_effective_capacity(failures: Array[String], party: PartyManager, catalog: GameCatalog) -> void:
 
     TestAssertions.equal(int(party.call("capacity")), PartyManager.MAX_PARTY_SIZE, "unconfigured party uses production capacity", failures)
     party.call("configure_capacity", PartyCapacityPolicy.new(1))
