@@ -1,0 +1,235 @@
+extends RefCounted
+
+const FOUNDATION_PATH := "res://data/items/core_item_foundation_catalog.tres"
+
+func run() -> Array[String]:
+	var failures: Array[String] = []
+	var foundation := load(FOUNDATION_PATH) as ItemFoundationCatalog
+	TestAssertions.truthy(foundation != null, "foundation fixture loads", failures)
+	if foundation == null:
+		return failures
+	_test_create_and_canonical_document(failures)
+	_test_request_validation(foundation, failures)
+	_test_structured_outcomes(failures)
+	_test_trace_canonicalization(failures)
+	_test_deterministic_random(failures)
+	return failures
+
+func _test_create_and_canonical_document(failures: Array[String]) -> void:
+	var permitted: Array[StringName] = [&"uncommon", &"common"]
+	var request := ItemGenerationRequest.create(991, 4, 250, &"ordinary_enemy", &"ordinary_drop", permitted)
+	permitted[0] = &"rare"
+	request.party_archetype_tags = [&"melee", &"caster"]
+	request.charisma_value = 25.0
+	request.unlock_tags = [&"rarity_rare_unlocked", &"rarity_epic_unlocked"]
+	request.required_base_tags = [&"weapon", &"melee"]
+	request.excluded_base_tags = [&"caster"]
+	request.required_affix_tags = [&"melee", &"weapon"]
+	request.excluded_affix_tags = [&"caster"]
+	request.forced_base_id = &"forge_vanguard_sword"
+	request.forced_rarity_id = &"common"
+	var canonical := request.canonical_document()
+	var expected := {
+		"seed": 991,
+		"generation_sequence": 4,
+		"item_level": 250,
+		"source_id": "ordinary_enemy",
+		"generation_domain": "ordinary_drop",
+		"difficulty_id": "normal",
+		"heat": 0.0,
+		"permitted_rarity_ids": ["common", "uncommon"],
+		"party_archetype_tags": ["caster", "melee"],
+		"charisma_value": 25.0,
+		"unlock_tags": ["rarity_epic_unlocked", "rarity_rare_unlocked"],
+		"required_base_tags": ["melee", "weapon"],
+		"excluded_base_tags": ["caster"],
+		"required_affix_tags": ["melee", "weapon"],
+		"excluded_affix_tags": ["caster"],
+		"forced_base_id": "forge_vanguard_sword",
+		"forced_rarity_id": "common",
+	}
+	TestAssertions.equal(canonical, expected, "canonical request has exact JSON-safe sorted shape", failures)
+	TestAssertions.truthy(_is_json_value(canonical), "canonical request contains only JSON value types", failures)
+	TestAssertions.truthy(JSON.parse_string(JSON.stringify(canonical)) != null, "canonical request round-trips through JSON", failures)
+	(canonical["permitted_rarity_ids"] as Array)[0] = "mutated"
+	TestAssertions.equal(request.permitted_rarity_ids, [&"uncommon", &"common"], "create and canonical document isolate permitted rarity arrays", failures)
+	TestAssertions.equal(request.party_archetype_tags, [&"melee", &"caster"], "canonical sorting does not mutate request arrays", failures)
+
+func _test_request_validation(foundation: ItemFoundationCatalog, failures: Array[String]) -> void:
+	var request := _valid_request()
+	TestAssertions.equal(request.validate(foundation), "", "valid request passes", failures)
+
+	request.item_level = 0
+	_expect_error(request, foundation, "item_level", "must be between 1 and 1000", "item level lower bound", failures)
+	request.source_id = &"missing_source"
+	_expect_error(request, foundation, "item_level", "must be between 1 and 1000", "first request error is preserved", failures)
+	request = _valid_request()
+	request.item_level = 1001
+	_expect_error(request, foundation, "item_level", "must be between 1 and 1000", "item level upper bound", failures)
+
+	request = _valid_request()
+	request.generation_sequence = -1
+	_expect_error(request, foundation, "generation_sequence", "must be nonnegative", "negative generation sequence", failures)
+	request = _valid_request()
+	request.source_id = &"missing_source"
+	_expect_error(request, foundation, "source_id", "unknown source missing_source", "unknown source", failures)
+	request = _valid_request()
+	request.generation_domain = &"missing_domain"
+	_expect_error(request, foundation, "generation_domain", "unknown generation domain missing_domain", "unknown domain", failures)
+	request = _valid_request()
+	request.difficulty_id = &"hard"
+	_expect_error(request, foundation, "difficulty_id", "unsupported difficulty hard", "unsupported increment-one difficulty", failures)
+
+	request = _valid_request()
+	request.heat = -0.01
+	_expect_error(request, foundation, "heat", "must be finite and nonnegative", "negative Heat", failures)
+	request = _valid_request()
+	request.heat = NAN
+	_expect_error(request, foundation, "heat", "must be finite and nonnegative", "nonfinite Heat", failures)
+	request = _valid_request()
+	request.charisma_value = -0.01
+	_expect_error(request, foundation, "charisma_value", "must be finite and nonnegative", "negative Charisma", failures)
+	request = _valid_request()
+	request.charisma_value = INF
+	_expect_error(request, foundation, "charisma_value", "must be finite and nonnegative", "nonfinite Charisma", failures)
+
+	request = _valid_request()
+	request.permitted_rarity_ids = []
+	_expect_error(request, foundation, "permitted_rarity_ids", "must not be empty", "empty permitted rarity list", failures)
+	request = _valid_request()
+	request.permitted_rarity_ids = [&"common", &"missing_rarity"]
+	_expect_error(request, foundation, "permitted_rarity_ids", "unknown rarity missing_rarity", "unknown permitted rarity", failures)
+	request = _valid_request()
+	request.permitted_rarity_ids = [&"common", &"common"]
+	_expect_error(request, foundation, "permitted_rarity_ids", "duplicate value common", "duplicate permitted rarity", failures)
+	request = _valid_request()
+	request.forced_rarity_id = &"missing_rarity"
+	_expect_error(request, foundation, "forced_rarity_id", "unknown rarity missing_rarity", "unknown forced rarity", failures)
+
+	request = _valid_request()
+	request.unlock_tags = [&"rarity_rare_unlocked"]
+	TestAssertions.equal(request.validate(foundation), "", "manifest rarity unlock tag passes", failures)
+	request.unlock_tags = [&"missing_unlock"]
+	_expect_error(request, foundation, "unlock_tags", "unknown unlock tag missing_unlock", "unknown unlock tag", failures)
+	request = _valid_request()
+	request.party_archetype_tags = [&"missing_archetype"]
+	_expect_error(request, foundation, "party_archetype_tags", "unknown archetype tag missing_archetype", "unknown archetype tag", failures)
+	request = _valid_request()
+	request.required_base_tags = [&"missing_item_tag"]
+	_expect_error(request, foundation, "required_base_tags", "unknown item tag missing_item_tag", "unknown base tag", failures)
+	request = _valid_request()
+	request.required_affix_tags = [&"missing_item_tag"]
+	_expect_error(request, foundation, "required_affix_tags", "unknown item tag missing_item_tag", "unknown affix tag", failures)
+
+	request = _valid_request()
+	request.required_base_tags = [&"melee"]
+	request.excluded_base_tags = [&"melee"]
+	_expect_error(request, foundation, "required_base_tags", "contradicts excluded tag melee", "base tag contradiction", failures)
+	request = _valid_request()
+	request.required_affix_tags = [&"caster"]
+	request.excluded_affix_tags = [&"caster"]
+	_expect_error(request, foundation, "required_affix_tags", "contradicts excluded tag caster", "affix tag contradiction", failures)
+
+func _test_structured_outcomes(failures: Array[String]) -> void:
+	var failure := ItemGenerationFailure.new()
+	failure.stage = &"rarity"
+	failure.code = &"no_eligible_rarity"
+	failure.source_id = &"ordinary_enemy"
+	failure.seed = 991
+	failure.generation_sequence = 4
+	TestAssertions.equal(
+		failure.message(),
+		"PARTY_FORGE_ITEM_GENERATION_ERROR stage=rarity code=no_eligible_rarity source=ordinary_enemy seed=991 sequence=4",
+		"structured failure has stable message",
+		failures
+	)
+	var result := ItemGenerationResult.new()
+	result.failure = failure
+	TestAssertions.truthy(not result.ok(), "failure result is not ok", failures)
+	result.failure = null
+	result.item = ItemInstance.new()
+	TestAssertions.truthy(result.ok(), "complete item without failure is ok", failures)
+
+func _test_trace_canonicalization(failures: Array[String]) -> void:
+	var trace := ItemGenerationTrace.new()
+	var eligible: Array[StringName] = [&"b", &"a"]
+	var rejected := {
+		&"z": {"codes": [&"later", &"first"]},
+		&"a": {"reason": &"filtered"},
+	}
+	var weights := {&"b": 1.0, &"a": 2.0}
+	trace.record(&"base", eligible, rejected, weights, &"a")
+	eligible[0] = &"mutated"
+	(rejected[&"z"] as Dictionary)["codes"] = [&"mutated"]
+	weights[&"a"] = 99.0
+	var expected := {
+		"stage": "base",
+		"eligible": ["a", "b"],
+		"rejected": {
+			"a": {"reason": "filtered"},
+			"z": {"codes": ["later", "first"]},
+		},
+		"weights": {"a": 2.0, "b": 1.0},
+		"selected": "a",
+	}
+	TestAssertions.equal(trace.stages, [expected], "trace records canonical deep-copied stage evidence", failures)
+	TestAssertions.truthy(_is_json_value(trace.stages), "trace evidence contains only JSON value types", failures)
+	var exposed := trace.stages
+	(exposed[0] as Dictionary)["selected"] = "mutated"
+	TestAssertions.equal(trace.stages, [expected], "trace readers cannot mutate recorded evidence", failures)
+
+func _test_deterministic_random(failures: Array[String]) -> void:
+	var repeated := ItemDeterministicRandom.unit(991, 4, &"rarity", 0)
+	TestAssertions.equal(repeated, ItemDeterministicRandom.unit(991, 4, &"rarity", 0), "same stage roll repeats", failures)
+	TestAssertions.truthy(repeated >= 0.0 and repeated < 1.0, "unit draw stays in half-open unit interval", failures)
+	TestAssertions.truthy(repeated != ItemDeterministicRandom.unit(991, 4, &"base", 0), "stage salt isolates random substreams", failures)
+	TestAssertions.truthy(repeated != ItemDeterministicRandom.unit(991, 4, &"rarity", 1), "draw index isolates random substreams", failures)
+	var before_other_stage := ItemDeterministicRandom.unit(991, 4, &"base", 0)
+	ItemDeterministicRandom.unit(991, 4, &"rarity", 0)
+	TestAssertions.equal(before_other_stage, ItemDeterministicRandom.unit(991, 4, &"base", 0), "other stage draws cannot advance base stream", failures)
+	TestAssertions.equal(
+		ItemDeterministicRandom.weighted_id(991, 4, &"base", 0, {&"b": 1.0, &"a": 2.0}),
+		ItemDeterministicRandom.weighted_id(991, 4, &"base", 0, {&"a": 2.0, &"b": 1.0}),
+		"weight dictionary order is irrelevant",
+		failures
+	)
+	TestAssertions.equal(ItemDeterministicRandom.weighted_id(991, 4, &"base", 0, {}), &"", "empty weights are rejected", failures)
+	TestAssertions.equal(ItemDeterministicRandom.weighted_id(991, 4, &"base", 0, {&"a": 0.0}), &"", "nonpositive weights are rejected", failures)
+	TestAssertions.equal(ItemDeterministicRandom.weighted_id(991, 4, &"base", 0, {&"a": NAN}), &"", "nonfinite weights are rejected", failures)
+
+func _valid_request() -> ItemGenerationRequest:
+	var request := ItemGenerationRequest.create(991, 4, 250, &"ordinary_enemy", &"ordinary_drop", [&"common", &"uncommon"])
+	request.party_archetype_tags = [&"melee"]
+	request.charisma_value = 25.0
+	return request
+
+func _expect_error(
+	request: ItemGenerationRequest,
+	foundation: ItemFoundationCatalog,
+	field: String,
+	reason: String,
+	label: String,
+	failures: Array[String]
+) -> void:
+	TestAssertions.equal(
+		request.validate(foundation),
+		"PARTY_FORGE_ITEM_GENERATION_ERROR stage=request field=%s reason=%s" % [field, reason],
+		label,
+		failures
+	)
+
+func _is_json_value(value: Variant) -> bool:
+	match typeof(value):
+		TYPE_NIL, TYPE_BOOL, TYPE_INT, TYPE_FLOAT, TYPE_STRING:
+			return true
+		TYPE_ARRAY:
+			for entry: Variant in value:
+				if not _is_json_value(entry):
+					return false
+			return true
+		TYPE_DICTIONARY:
+			for key: Variant in value:
+				if typeof(key) != TYPE_STRING or not _is_json_value(value[key]):
+					return false
+			return true
+	return false
