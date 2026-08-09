@@ -374,7 +374,7 @@ func _fixture(label: String, capacity: int, unlocks: Array[String], with_stash: 
 	var items := {
 		LEADER_HEAD: _item_with_base(LEADER_HEAD, 0, &"forge_vanguard_helmet"),
 		LEADER_HAND: _item(LEADER_HAND, 1),
-		FOLLOWER_ITEM: _item(FOLLOWER_ITEM, 2),
+		FOLLOWER_ITEM: _item_with_base(FOLLOWER_ITEM, 2, &"windrunner_band"),
 		INVENTORY_ZERO: _item(INVENTORY_ZERO, 3),
 		INVENTORY_FOUR: _item(INVENTORY_FOUR, 4),
 		EXISTING_STASH: _profile_item(EXISTING_STASH, 40),

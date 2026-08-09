@@ -4,6 +4,29 @@ extends RefCounted
 const ERROR_PREFIX := "PARTY_FORGE_EQUIPMENT_ASSIGNMENT_ERROR"
 const INVENTORY_ID := &"run-inventory"
 
+func validate_member_loadout(
+	state: ItemOwnershipState,
+	member_id: int,
+	equipment: EquipmentCatalog,
+	foundation: ItemFoundationCatalog,
+	class_definition: ClassDefinition,
+) -> String:
+	if state == null or equipment == null or foundation == null or member_id <= 0:
+		return "%s reason=invalid request" % ERROR_PREFIX
+	if class_definition == null:
+		return "%s member=%d reason=class missing" % [ERROR_PREFIX, member_id]
+	var state_error := state.validate(equipment, foundation)
+	if not state_error.is_empty():
+		return "%s reason=invalid ownership state detail=%s" % [ERROR_PREFIX, state_error]
+	var loadout_result := _loadout_for(state, _equipment_id(member_id), equipment)
+	var loadout_error := String(loadout_result["error"])
+	if not loadout_error.is_empty():
+		return "%s member=%d reason=%s" % [ERROR_PREFIX, member_id, loadout_error]
+	var eligibility_error := _validate_complete_loadout(loadout_result["loadout"] as Dictionary, class_definition)
+	if not eligibility_error.is_empty():
+		return "%s member=%d reason=ineligible detail=%s" % [ERROR_PREFIX, member_id, eligibility_error]
+	return ""
+
 func preview(
 	state: ItemOwnershipState,
 	member_id: int,

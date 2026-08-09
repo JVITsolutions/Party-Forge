@@ -224,8 +224,8 @@ func _fixture(capacity: int, unlocks: Array[String], same_follower := false) -> 
 	assert(party.recruit(catalog.class_by_id(&"mage")))
 	var items: Array[ItemInstance] = [
 		_item(LEADER_ITEM, 0),
-		_item(FOLLOWER_TWO_ITEM, 1),
-		_item(FOLLOWER_THREE_ITEM, 2),
+		_item(FOLLOWER_TWO_ITEM, 1, &"windrunner_band"),
+		_item(FOLLOWER_THREE_ITEM, 2, &"greenwood_jerkin" if same_follower else &"emberweave_robe"),
 		_item(INVENTORY_ZERO_ITEM, 3),
 		_item(INVENTORY_FOUR_ITEM, 4),
 	]
@@ -254,10 +254,10 @@ func _fixture(capacity: int, unlocks: Array[String], same_follower := false) -> 
 	assert(context.configure(RUN_PLAYER_ID, 0, profile, RUN_SEED, party, 100, bootstrap).is_empty())
 	return {"catalog": catalog, "party": party, "profile": profile, "context": context}
 
-func _item(instance_id: String, sequence: int) -> ItemInstance:
+func _item(instance_id: String, sequence: int, base_definition_id: StringName = &"forge_vanguard_sword") -> ItemInstance:
 	var item := ItemInstance.new()
 	item.instance_id = instance_id
-	item.base_definition_id = &"forge_vanguard_sword"
+	item.base_definition_id = base_definition_id
 	item.item_level = 28
 	item.rarity_id = &"common"
 	item.affixes = []

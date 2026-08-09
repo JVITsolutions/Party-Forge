@@ -8,6 +8,23 @@ class RejectingPartyManager extends PartyManager:
 			return false
 		return super.replace_member_source(member_id, source)
 
+class SelectiveEquipmentRejectingPartyManager extends PartyManager:
+	var rejected_member_id := 0
+
+	func replace_member_source(member_id: int, source: StatModifierSource) -> bool:
+		if source != null and source.source_type == &"equipment" and member_id == rejected_member_id:
+			return false
+		return super.replace_member_source(member_id, source)
+
+	func _commit_member_source_without_invalidation(member_id: int, source: StatModifierSource) -> bool:
+		if source != null and source.source_type == &"equipment" and member_id == rejected_member_id:
+			return false
+		var member := member_by_id(member_id)
+		if member == null or source == null:
+			return false
+		member._replace_modifier_source(source)
+		return true
+
 func run() -> Array[String]:
 	var failures: Array[String] = []
 	_test_configuration_validation_and_copy_ownership(failures)
@@ -19,6 +36,8 @@ func run() -> Array[String]:
 	_test_actor_binding_availability_and_position(failures)
 	_test_atomic_equipment_commit_and_member_local_cache(failures)
 	_test_equipment_source_rejection_rolls_back(failures)
+	_test_configuration_source_batch_is_atomic_and_observable(failures)
+	_test_resume_rejects_structurally_invalid_loadouts(failures)
 	_test_resume_reconstructs_equipment_activation(failures)
 	return failures
 
@@ -116,6 +135,153 @@ func _test_equipment_source_rejection_rolls_back(failures: Array[String]) -> voi
 	TestAssertions.equal(changed, [], "source rejection emits no misleading stat signal", failures)
 	party.free()
 
+func _test_configuration_source_batch_is_atomic_and_observable(failures: Array[String]) -> void:
+	var catalog := GameCatalog.load_defaults()
+	var rejecting_party := SelectiveEquipmentRejectingPartyManager.new()
+	rejecting_party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
+	TestAssertions.truthy(rejecting_party.recruit(catalog.class_by_id(&"ranger")), "atomic configure fixture recruits member two", failures)
+	var prior_equipment_source := StatModifierSource.create(
+		&"equipment_member_1",
+		&"equipment",
+		"Prior Equipment",
+		1,
+		[StatModifier.create(&"damage", StatModifier.Operation.FLAT, 7.0, &"prior_equipment", "Prior Equipment")],
+	)
+	TestAssertions.truthy(rejecting_party.replace_member_source(1, prior_equipment_source), "atomic configure fixture installs a replaceable member-one source", failures)
+	var member_one_sources_before := _source_documents(rejecting_party.member_by_id(1))
+	var member_two_sources_before := _source_documents(rejecting_party.member_by_id(2))
+	var member_one_snapshot_before := rejecting_party.stats_for(1)
+	var member_two_snapshot_before := rejecting_party.stats_for(2)
+	var action_tags: Array[StringName] = [&"ranged", &"physical"]
+	var member_two_action_before := rejecting_party.stats_for_action(2, action_tags)
+	var revision_before := rejecting_party.stat_revision()
+	var rejected_events: Array[int] = []
+	rejecting_party.stats_changed.connect(func(member_id: int) -> void: rejected_events.append(member_id))
+	rejecting_party.rejected_member_id = 2
+	var rejected_context := PlayerRunContext.new()
+	var rejected_errors := rejected_context.configure(
+		&"atomic_reject_player",
+		0,
+		ProfileState.new_profile("profile-atomic-reject", "Atomic Reject", 1000),
+		8811,
+		rejecting_party,
+		100,
+	)
+	TestAssertions.equal(rejected_errors, PackedStringArray([
+		"PARTY_FORGE_RUN_CONTEXT_ERROR field=equipment_activation member=2 reason=stat source commit rejected",
+	]), "member-two source rejection identifies the failed atomic commit", failures)
+	_assert_context_unconfigured(rejected_context, "member-two source rejection", failures)
+	TestAssertions.equal(_source_documents(rejecting_party.member_by_id(1)), member_one_sources_before, "member-two rejection restores member-one source byte-for-byte", failures)
+	TestAssertions.equal(_source_documents(rejecting_party.member_by_id(2)), member_two_sources_before, "member-two rejection preserves member-two sources", failures)
+	TestAssertions.equal(rejecting_party.stat_revision(), revision_before, "member-two rejection restores the exact stat revision", failures)
+	TestAssertions.equal(rejecting_party.stats_for(1), member_one_snapshot_before, "member-two rejection preserves member-one cached snapshot identity", failures)
+	TestAssertions.equal(rejecting_party.stats_for(2), member_two_snapshot_before, "member-two rejection preserves member-two cached snapshot identity", failures)
+	TestAssertions.equal(rejecting_party.stats_for_action(2, action_tags), member_two_action_before, "member-two rejection preserves unrelated action cache identity", failures)
+	TestAssertions.equal(rejected_events, [], "member-two rejection emits no partial stat signal", failures)
+	rejecting_party.free()
+
+	var visible_party := PartyManager.new()
+	visible_party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
+	TestAssertions.truthy(visible_party.recruit(catalog.class_by_id(&"ranger")), "observable configure fixture recruits member two", failures)
+	var visible_context := PlayerRunContext.new()
+	var visible_events: Array[int] = []
+	var visible_observations: Array[Dictionary] = []
+	var visible_revision_before := visible_party.stat_revision()
+	visible_party.stats_changed.connect(func(member_id: int) -> void:
+		visible_events.append(member_id)
+		visible_observations.append({
+			"context_party": visible_context.party == visible_party,
+			"item_state": visible_context.item_state() != null,
+			"member_one_active": visible_context.equipment_activation(1).ok(),
+			"member_two_active": visible_context.equipment_activation(2).ok(),
+			"member_one_source": visible_party.member_by_id(1).modifier_sources.any(func(source: StatModifierSource) -> bool: return source.id == &"equipment_member_1"),
+			"member_two_source": visible_party.member_by_id(2).modifier_sources.any(func(source: StatModifierSource) -> bool: return source.id == &"equipment_member_2"),
+			"member_one_stats": visible_party.stats_for(1) != null,
+			"member_two_stats": visible_party.stats_for(2) != null,
+		})
+	)
+	var visible_errors := visible_context.configure(
+		&"atomic_visible_player",
+		0,
+		ProfileState.new_profile("profile-atomic-visible", "Atomic Visible", 1000),
+		8812,
+		visible_party,
+		100,
+	)
+	TestAssertions.equal(visible_errors, PackedStringArray(), "atomic source batch configures successfully", failures)
+	TestAssertions.equal(visible_events, [1, 2], "successful source batch emits one ordered signal per member", failures)
+	TestAssertions.equal(visible_party.stat_revision(), visible_revision_before + 1, "successful source batch advances one shared stat revision", failures)
+	TestAssertions.equal(visible_observations.size(), 2, "successful source batch yields two synchronous observations", failures)
+	for observation: Dictionary in visible_observations:
+		for field: String in observation:
+			TestAssertions.truthy(bool(observation[field]), "source-batch observer sees committed %s" % field, failures)
+	visible_party.free()
+
+func _test_resume_rejects_structurally_invalid_loadouts(failures: Array[String]) -> void:
+	var cases: Array[Dictionary] = [
+		{
+			"label": "canonical slot",
+			"class_id": &"fighter",
+			"expected": "reason=incompatible slot",
+			"items": [{"base_id": &"forge_vanguard_sword", "slot_id": &"helmet"}],
+		},
+		{
+			"label": "class compatibility",
+			"class_id": &"ranger",
+			"expected": "reason=missing weight capability armour_heavy",
+			"items": [{"base_id": &"dawn_bulwark_plate", "slot_id": &"body_armour"}],
+		},
+		{
+			"label": "reserved offhand family",
+			"class_id": &"marksman",
+			"expected": "equipped offhand siege_heavy_quiver is incompatible",
+			"items": [
+				{"base_id": &"greenwood_recurve_bow", "slot_id": &"main_hand"},
+				{"base_id": &"siege_heavy_quiver", "slot_id": &"off_hand"},
+			],
+		},
+	]
+	var catalog := GameCatalog.load_defaults()
+	for test_case: Dictionary in cases:
+		var party := PartyManager.new()
+		party.initialize(catalog.class_by_id(test_case["class_id"]), catalog.traits)
+		var registry_items: Array[ItemInstance] = []
+		var equipped_slots: Dictionary = {}
+		var sequence := 0
+		for item_case: Dictionary in test_case["items"]:
+			var item := _plain_item_record(
+				"item-invalid-%s-%d" % [String(test_case["class_id"]), sequence],
+				StringName(item_case["base_id"]),
+				"profile:profile-invalid-%s" % String(test_case["class_id"]),
+				sequence,
+			)
+			registry_items.append(item)
+			equipped_slots[EquipmentSlotIndex.index_for(StringName(item_case["slot_id"]))] = item.instance_id
+			sequence += 1
+		var owner_id := "invalid_%s_player" % String(test_case["class_id"])
+		var state := ItemOwnershipState.create(owner_id, ItemRegistry.new(registry_items), [
+			ItemSlotContainer.create(&"run-inventory", ItemSlotContainer.RUN_INVENTORY, owner_id, 5),
+			ItemSlotContainer.create(&"run-equipment-001", ItemSlotContainer.RUN_MEMBER_EQUIPMENT, owner_id, EquipmentSlotIndex.capacity(), equipped_slots),
+		])
+		var bootstrap := RunItemBootstrap.create(StringName("run-invalid-%s" % String(test_case["class_id"])), 8820 + sequence, StringName(owner_id), 1, state)
+		var profile := ProfileState.new_profile("profile-invalid-%s" % String(test_case["class_id"]), "Invalid Resume", 1000)
+		profile.inventory_columns = 1
+		profile.resumable_run = ResumableRunItemCodec.encode(bootstrap)
+		var revision_before := party.stat_revision()
+		var sources_before := _source_documents(party.member_by_id(1))
+		var changed: Array[int] = []
+		party.stats_changed.connect(func(member_id: int) -> void: changed.append(member_id))
+		var context := PlayerRunContext.new()
+		var errors := context.configure(StringName(owner_id), 0, profile, bootstrap.run_seed, party, 100, bootstrap)
+		TestAssertions.truthy(not errors.is_empty(), "%s resume is rejected" % test_case["label"], failures)
+		if not errors.is_empty():
+			TestAssertions.truthy(errors[0].contains(String(test_case["expected"])), "%s resume reports the structural cause" % test_case["label"], failures)
+		_assert_context_unconfigured(context, "%s resume" % test_case["label"], failures)
+		TestAssertions.equal(_source_documents(party.member_by_id(1)), sources_before, "%s resume preserves member sources" % test_case["label"], failures)
+		TestAssertions.equal(party.stat_revision(), revision_before, "%s resume preserves stat revision" % test_case["label"], failures)
+		TestAssertions.equal(changed, [], "%s resume emits no stat signal" % test_case["label"], failures)
+		party.free()
+
 func _test_resume_reconstructs_equipment_activation(failures: Array[String]) -> void:
 	var probe := PlayerRunContext.new()
 	if not probe.has_method(&"equipment_activation"):
@@ -180,6 +346,47 @@ func _stout_helmet_record(instance_id: String, issuer_namespace: String, sequenc
 	var decoded := ItemInstanceCodec.decode(document, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)
 	assert(decoded.ok())
 	return decoded.item
+
+func _plain_item_record(instance_id: String, base_definition_id: StringName, issuer_namespace: String, sequence: int) -> ItemInstance:
+	var document := {
+		"schema_version": ItemInstance.SCHEMA_VERSION,
+		"instance_id": instance_id,
+		"base_definition_id": String(base_definition_id),
+		"item_level": 1,
+		"rarity_id": "common",
+		"affixes": [],
+		"origin": {"issuer_namespace": issuer_namespace, "seed": 8820, "sequence": sequence, "source": "task_6_invalid_resume"},
+	}
+	var decoded := ItemInstanceCodec.decode(document, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)
+	assert(decoded.ok())
+	return decoded.item
+
+func _source_documents(member: PartyMemberState) -> String:
+	var documents: Array[Dictionary] = []
+	for source: StatModifierSource in member.modifier_sources:
+		var modifiers: Array[Dictionary] = []
+		for modifier: StatModifier in source.modifiers:
+			modifiers.append({
+				"stat_id": String(modifier.stat_id),
+				"operation": modifier.operation,
+				"value": modifier.value,
+				"source_id": String(modifier.source_id),
+				"source_label": modifier.source_label,
+				"required_tags": modifier.required_tags,
+				"excluded_tags": modifier.excluded_tags,
+				"required_capability_tags": modifier.required_capability_tags,
+				"excluded_capability_tags": modifier.excluded_capability_tags,
+				"required_action_tags": modifier.required_action_tags,
+				"excluded_action_tags": modifier.excluded_action_tags,
+			})
+		documents.append({
+			"id": String(source.id),
+			"source_type": String(source.source_type),
+			"label": source.label,
+			"owner_member_id": source.owner_member_id,
+			"modifiers": modifiers,
+		})
+	return JSON.stringify(documents)
 
 func _stout_affix_document() -> Dictionary:
 	return {

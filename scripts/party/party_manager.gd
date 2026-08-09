@@ -172,6 +172,58 @@ func replace_member_source(member_id: int, source: StatModifierSource) -> bool:
     _invalidate_member(member_id)
     return true
 
+## Replaces one source per member as a single observable stat-state transition.
+## Returns zero on success, or the rejected member ID. Invalid non-member keys return -1.
+func replace_member_sources_atomically(sources_by_member: Dictionary) -> int:
+    if sources_by_member.is_empty():
+        return -1
+    var member_ids: Array[int] = []
+    for member_id_value: Variant in sources_by_member:
+        if typeof(member_id_value) != TYPE_INT:
+            return -1
+        var member_id := int(member_id_value)
+        var member := member_by_id(member_id)
+        var source := sources_by_member[member_id_value] as StatModifierSource
+        if member == null or source == null:
+            return member_id if member_id > 0 else -1
+        var validation_errors := StatResolver.validate_sources(STAT_CATALOG, [source])
+        if not validation_errors.is_empty():
+            for error: String in validation_errors:
+                push_error(error)
+            return member_id
+        member_ids.append(member_id)
+    member_ids.sort()
+
+    var previous_sources: Dictionary = {}
+    for member_id: int in member_ids:
+        previous_sources[member_id] = member_by_id(member_id).modifier_sources
+    for member_id: int in member_ids:
+        if not _commit_member_source_without_invalidation(member_id, sources_by_member[member_id] as StatModifierSource):
+            for restore_member_id: int in member_ids:
+                _restore_member_sources_without_invalidation(
+                    restore_member_id,
+                    previous_sources[restore_member_id] as Array[StatModifierSource],
+                )
+            return member_id
+
+    _invalidate_members(member_ids)
+    return 0
+
+func _commit_member_source_without_invalidation(member_id: int, source: StatModifierSource) -> bool:
+    var member := member_by_id(member_id)
+    if member == null or source == null:
+        return false
+    member._replace_modifier_source(source)
+    return true
+
+func _restore_member_sources_without_invalidation(member_id: int, sources: Array[StatModifierSource]) -> void:
+    var member := member_by_id(member_id)
+    if member == null:
+        return
+    member._owned_modifier_sources().clear()
+    for source: StatModifierSource in sources:
+        member._add_modifier_source(source)
+
 func upgrade_rank(upgrade_id: StringName, member_id: int = 0) -> int:
     if member_id > 0:
         var member := member_by_id(member_id)
@@ -206,6 +258,17 @@ func _invalidate_member(member_id: int) -> void:
         if String(key).begins_with(prefix):
             _action_stat_cache.erase(key)
     stats_changed.emit(member_id)
+
+func _invalidate_members(member_ids: Array[int]) -> void:
+    _stat_revision += 1
+    for member_id: int in member_ids:
+        _stat_cache.erase(member_id)
+        var prefix := "%d|" % member_id
+        for key: Variant in _action_stat_cache.keys():
+            if String(key).begins_with(prefix):
+                _action_stat_cache.erase(key)
+    for member_id: int in member_ids:
+        stats_changed.emit(member_id)
 
 func _invalidate_all_members() -> void:
     _stat_revision += 1

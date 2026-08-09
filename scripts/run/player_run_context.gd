@@ -88,7 +88,7 @@ func configure(
 		):
 			errors.append("PARTY_FORGE_RUN_CONTEXT_ERROR field=item_bootstrap reason=leader mismatch")
 	if not errors.is_empty():
-		_reset_unconfigured_item_fields()
+		_reset_unconfigured_fields()
 		return errors
 
 	var next_progression: Dictionary = {}
@@ -99,7 +99,7 @@ func configure(
 		next_progression[member.member_id] = state
 	var owned_profile := profile.copy()
 	if owned_profile == null:
-		_reset_unconfigured_item_fields()
+		_reset_unconfigured_fields()
 		return PackedStringArray(["PARTY_FORGE_RUN_CONTEXT_ERROR field=profile"])
 	var inventory := ItemSlotContainer.create(
 		&"run-inventory",
@@ -120,7 +120,7 @@ func configure(
 		GameCatalog.ITEM_FOUNDATION_CATALOG,
 	)
 	if not item_state_error.is_empty():
-		_reset_unconfigured_item_fields()
+		_reset_unconfigured_fields()
 		return PackedStringArray([
 			"PARTY_FORGE_RUN_CONTEXT_ERROR field=item_state reason=%s" % item_state_error,
 		])
@@ -128,7 +128,7 @@ func configure(
 		var bootstrap_state := item_bootstrap.item_state()
 		var bootstrap_error := _validate_bootstrap_state(bootstrap_state, next_item_state)
 		if not bootstrap_error.is_empty():
-			_reset_unconfigured_item_fields()
+			_reset_unconfigured_fields()
 			return PackedStringArray([
 				"PARTY_FORGE_RUN_CONTEXT_ERROR field=item_bootstrap reason=%s" % bootstrap_error,
 			])
@@ -136,16 +136,18 @@ func configure(
 	var next_item_journal := ItemTransactionJournal.new()
 	var reconstruction := _preview_equipment_reconstruction(next_item_state, manager)
 	if not String(reconstruction["error"]).is_empty():
-		_reset_unconfigured_item_fields()
+		_reset_unconfigured_fields()
 		return PackedStringArray([String(reconstruction["error"])])
 	var next_equipment_activations := reconstruction["activations"] as Dictionary
+	var next_equipment_sources: Dictionary = {}
 	for member: PartyMemberState in manager.members:
 		var activation := next_equipment_activations.get(member.member_id) as EquipmentActivationResult
-		if activation == null or not manager.replace_member_source(member.member_id, activation.source):
-			_reset_unconfigured_item_fields()
+		if activation == null:
+			_reset_unconfigured_fields()
 			return PackedStringArray([
-				"PARTY_FORGE_RUN_CONTEXT_ERROR field=equipment_activation member=%d reason=stat source commit rejected" % member.member_id,
+				"PARTY_FORGE_RUN_CONTEXT_ERROR field=equipment_activation member=%d reason=activation missing" % member.member_id,
 			])
+		next_equipment_sources[member.member_id] = activation.source
 
 	var member_added_callback := Callable(self, "_on_member_added")
 	if party != null and party.member_added.is_connected(member_added_callback):
@@ -172,6 +174,16 @@ func configure(
 	if not party.member_added.is_connected(member_added_callback):
 		party.member_added.connect(member_added_callback)
 	_configured = true
+	var rejected_member_id := manager.replace_member_sources_atomically(next_equipment_sources)
+	if rejected_member_id != 0:
+		_reset_unconfigured_fields()
+		if rejected_member_id > 0:
+			return PackedStringArray([
+				"PARTY_FORGE_RUN_CONTEXT_ERROR field=equipment_activation member=%d reason=stat source commit rejected" % rejected_member_id,
+			])
+		return PackedStringArray([
+			"PARTY_FORGE_RUN_CONTEXT_ERROR field=equipment_activation reason=stat source commit rejected",
+		])
 	return errors
 
 func item_state() -> ItemOwnershipState:
@@ -418,13 +430,28 @@ func _party_validation_errors(manager: PartyManager) -> PackedStringArray:
 			errors.append("PARTY_FORGE_RUN_CONTEXT_ERROR field=party member=%d reason=%s" % [member.member_id, reason])
 	return errors
 
-func _reset_unconfigured_item_fields() -> void:
+func _reset_unconfigured_fields() -> void:
+	var member_added_callback := Callable(self, "_on_member_added")
+	if party != null and party.member_added.is_connected(member_added_callback):
+		party.member_added.disconnect(member_added_callback)
+	_run_player_id = &""
+	_player_slot_index = -1
+	_profile_id = ""
+	_profile_snapshot = null
+	_run_seed = 0
+	_experience_multiplier_percent = 100
+	party = null
+	experience_tuning = DEFAULT_EXPERIENCE_TUNING
+	_progression_by_member.clear()
+	_pending_leader_levels.clear()
+	_actor_by_member.clear()
 	_item_state = null
 	_item_journal = null
 	_equipment_activation_by_member.clear()
 	_next_item_sequence = 0
 	_run_id = &""
 	_item_resolution_transaction_id = ""
+	_configured = false
 
 func _preview_equipment_reconstruction(state: ItemOwnershipState, manager: PartyManager) -> Dictionary:
 	var activations: Dictionary = {}
@@ -443,6 +470,18 @@ func _preview_member_equipment_activation(
 	member_id: int,
 	manager: PartyManager,
 ) -> EquipmentActivationResult:
+	var member := manager.member_by_id(member_id)
+	var structure_error := EquipmentAssignmentService.new().validate_member_loadout(
+		state,
+		member_id,
+		GameCatalog.EQUIPMENT_CATALOG,
+		GameCatalog.ITEM_FOUNDATION_CATALOG,
+		member.class_definition if member != null else null,
+	)
+	if not structure_error.is_empty():
+		return EquipmentActivationResult.failure(
+			"PARTY_FORGE_EQUIPMENT_ACTIVATION_ERROR member=%d detail=%s" % [member_id, structure_error]
+		)
 	var activation := EquipmentActivationResolver.resolve(
 		member_id,
 		_run_equipment_id(member_id),
