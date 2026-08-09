@@ -6,8 +6,8 @@ const CharacterUpgradeData := preload("res://tools/create_character_upgrade_data
 const BASE_ATTACK_ROWS: Array[Dictionary] = [
     {"id":&"fighter_cleave", "kind":AttackDefinition.Kind.MELEE_CLEAVE, "type":&"physical", "amount":18.0, "power":0.0, "cooldown":0.8, "range":2.2, "speed":0.0, "area":1.6, "tags":[&"melee", &"area"], "crit":true},
     {"id":&"ranger_shot", "kind":AttackDefinition.Kind.PROJECTILE, "type":&"physical", "amount":11.0, "power":0.0, "cooldown":0.55, "range":11.0, "speed":16.0, "area":0.0, "tags":[&"projectile", &"ranged"], "crit":true},
-    {"id":&"mage_burst", "kind":AttackDefinition.Kind.AREA_PROJECTILE, "type":&"fire", "amount":24.0, "power":0.0, "cooldown":1.5, "range":12.0, "speed":11.0, "area":2.5, "tags":[&"projectile", &"area", &"fire"], "crit":true},
-    {"id":&"cleric_bolt", "kind":AttackDefinition.Kind.PROJECTILE, "type":&"lightning", "amount":8.0, "power":0.0, "cooldown":1.0, "range":10.0, "speed":13.0, "area":0.0, "tags":[&"projectile", &"lightning"], "crit":true},
+    {"id":&"mage_burst", "kind":AttackDefinition.Kind.AREA_PROJECTILE, "type":&"fire", "amount":24.0, "power":0.0, "cooldown":1.5, "range":12.0, "speed":11.0, "area":2.5, "tags":[&"area", &"caster", &"fire", &"projectile"], "crit":true},
+    {"id":&"cleric_bolt", "kind":AttackDefinition.Kind.PROJECTILE, "type":&"lightning", "amount":8.0, "power":0.0, "cooldown":1.0, "range":10.0, "speed":13.0, "area":0.0, "tags":[&"caster", &"lightning", &"projectile"], "crit":true},
     {"id":&"cleric_heal", "kind":AttackDefinition.Kind.HEAL, "type":&"", "amount":0.0, "power":18.0, "cooldown":3.0, "range":9.0, "speed":0.0, "area":0.0, "tags":[&"healing"], "crit":false},
 ]
 const ATTACK_ROWS: Array[Dictionary] = BASE_ATTACK_ROWS + ExpansionRows.ATTACK_ROWS

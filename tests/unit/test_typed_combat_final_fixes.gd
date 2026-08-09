@@ -1,10 +1,22 @@
 extends RefCounted
 
+const DefaultData := preload("res://tools/create_default_data.gd")
+const ExpansionRows := preload("res://tools/class_expansion_rows.gd")
+const ActionArchetypeService := preload("res://scripts/combat/action_archetype.gd")
+
+const EXPECTED_CASTER_GENERATOR_TAGS := {
+	&"mage_burst": [&"area", &"caster", &"fire", &"projectile"],
+	&"cleric_bolt": [&"caster", &"lightning", &"projectile"],
+	&"frost_shard": [&"area", &"caster", &"cold", &"projectile"],
+	&"warlock_bolt": [&"caster", &"chaos", &"projectile"],
+}
+
 func run() -> Array[String]:
 	var failures: Array[String] = []
 	_test_invalid_mitigation_rule_is_rejected(failures)
 	_test_default_generator_authors_exact_typed_party_attacks(failures)
 	_test_default_generator_types_expansion_class_arrays(failures)
+	_test_generator_rows_preserve_caster_primaries(failures)
 	_test_classes_use_active_types_and_supported_kinds(failures)
 	_test_non_finite_healing_is_rejected(failures)
 	_test_packet_scalar_evidence_is_immutable(failures)
@@ -60,6 +72,23 @@ func _test_default_generator_types_expansion_class_arrays(failures: Array[String
 		"capability_tags.assign(row[\"tags\"])",
 	]:
 		TestAssertions.truthy(fragment in source, "default generator expansion array contract: %s" % fragment, failures)
+
+func _test_generator_rows_preserve_caster_primaries(failures: Array[String]) -> void:
+	var rows: Array[Dictionary] = []
+	rows.append_array(DefaultData.BASE_ATTACK_ROWS)
+	rows.append_array(ExpansionRows.ATTACK_ROWS)
+	for attack_id: StringName in EXPECTED_CASTER_GENERATOR_TAGS:
+		var matches := rows.filter(func(row: Dictionary) -> bool: return StringName(row.get("id", &"")) == attack_id)
+		TestAssertions.equal(matches.size(), 1, "%s has one authoritative generator row" % attack_id, failures)
+		if matches.size() != 1:
+			continue
+		var tags: Array[StringName] = []
+		tags.assign(matches[0].get("tags", []))
+		TestAssertions.equal(tags, EXPECTED_CASTER_GENERATOR_TAGS[attack_id], "%s generator tags stay normalized" % attack_id, failures)
+		var attack := AttackDefinition.new()
+		attack.id = attack_id
+		attack.action_tags = tags
+		TestAssertions.equal(ActionArchetypeService.primary_tag(attack), &"caster", "%s generator row preserves the caster primary" % attack_id, failures)
 
 func _test_classes_use_active_types_and_supported_kinds(failures: Array[String]) -> void:
 	var invalid_kind := _valid_attack(&"invalid_kind", AttackDefinition.Kind.PROJECTILE, &"physical")

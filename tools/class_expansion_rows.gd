@@ -3,8 +3,8 @@ extends RefCounted
 const ATTACK_ROWS: Array[Dictionary] = [
 	{"path": "res://data/attacks/paladin_smite.tres", "id": &"paladin_smite", "kind": AttackDefinition.Kind.MELEE_CLEAVE, "type": &"physical", "amount": 16.0, "power": 0.0, "cooldown": 1.05, "range": 2.1, "speed": 0.0, "area": 1.4, "tags": [&"area", &"melee", &"physical"], "crit": true},
 	{"path": "res://data/attacks/rogue_flurry.tres", "id": &"rogue_flurry", "kind": AttackDefinition.Kind.MELEE_CLEAVE, "type": &"physical", "amount": 8.0, "power": 0.0, "cooldown": 0.32, "range": 1.6, "speed": 0.0, "area": 0.9, "tags": [&"area", &"melee", &"physical", &"skirmisher"], "crit": true},
-	{"path": "res://data/attacks/frost_shard.tres", "id": &"frost_shard", "kind": AttackDefinition.Kind.AREA_PROJECTILE, "type": &"cold", "amount": 20.0, "power": 0.0, "cooldown": 1.35, "range": 12.5, "speed": 10.0, "area": 3.0, "tags": [&"area", &"cold", &"projectile"], "crit": true},
-	{"path": "res://data/attacks/warlock_bolt.tres", "id": &"warlock_bolt", "kind": AttackDefinition.Kind.PROJECTILE, "type": &"chaos", "amount": 30.0, "power": 0.0, "cooldown": 1.75, "range": 12.5, "speed": 9.0, "area": 0.0, "tags": [&"chaos", &"projectile", &"ranged"], "crit": true},
+	{"path": "res://data/attacks/frost_shard.tres", "id": &"frost_shard", "kind": AttackDefinition.Kind.AREA_PROJECTILE, "type": &"cold", "amount": 20.0, "power": 0.0, "cooldown": 1.35, "range": 12.5, "speed": 10.0, "area": 3.0, "tags": [&"area", &"caster", &"cold", &"projectile"], "crit": true},
+	{"path": "res://data/attacks/warlock_bolt.tres", "id": &"warlock_bolt", "kind": AttackDefinition.Kind.PROJECTILE, "type": &"chaos", "amount": 30.0, "power": 0.0, "cooldown": 1.75, "range": 12.5, "speed": 9.0, "area": 0.0, "tags": [&"caster", &"chaos", &"projectile"], "crit": true},
 	{"path": "res://data/attacks/marksman_heavy_shot.tres", "id": &"marksman_heavy_shot", "kind": AttackDefinition.Kind.PROJECTILE, "type": &"physical", "amount": 42.0, "power": 0.0, "cooldown": 2.2, "range": 16.0, "speed": 22.0, "area": 0.0, "tags": [&"bow", &"physical", &"projectile", &"ranged"], "crit": true},
 ]
 

@@ -72,8 +72,39 @@ The focused and complete logs contain existing intentionally asserted negative-p
 
 `git diff --check` passed. Godot generated no Task 3 `.gd.uid` or `.import` sidecars. The worktree still contains the same pre-existing untracked generated `.gd.uid` set; none were modified, removed, staged, or included in the Task 3 commit.
 
+## Generator-authoring review follow-up
+
+Review found that the checked-in attack Resources were normalized, but retained authoring tables could restore stale tags during regeneration. `tools/create_default_data.gd` still omitted `caster` for Mage and Cleric, while `tools/class_expansion_rows.gd` omitted `caster` for Frost Mage and used conflicting `ranged` for Warlock.
+
+The regression test combines both authoritative attack-row tables, requires exactly one row for each of the four caster attacks, compares the complete sorted tag array, and verifies `ActionArchetype.primary_tag()` resolves `caster`. Its controlled RED run exited `1` with:
+
+```text
+TEST_SUMMARY: FAIL (8 failures)
+```
+
+After changing only those four authoring rows, the direct generator-row suite exited `0` with `TEST_SUMMARY: PASS (0 failures)`.
+
+Disposable project snapshots were used so generator execution could not overwrite the authoritative worktree. The default generator exited `0` with `DATA_GENERATION_OK`, and exact post-generation file assertions reported:
+
+```text
+TASK3_REGEN_TAGS_OK scratch=task-3-generator-default actions=4
+TASK3_REGEN_TAGS_OK scratch=task-3-generator-migration actions=4
+```
+
+The expansion migration rewrote and reloaded its attack Resources before its unchanged class-validation phase exited `1` on pre-existing starter-loadout capability/tag diagnostics. The four emitted attack Resources nevertheless matched the exact normalized arrays. `tools/migrate_class_expansion_data.gd` already copies `row["tags"]` directly, so it required no change; broadening this review fix into unrelated class/loadout migration repair was intentionally deferred.
+
+Final authoritative verification with Godot `4.7.1.stable.official.a13da4feb`:
+
+```text
+Task 3 focused batch: exit 0, TEST_SUMMARY: PASS (0 failures)
+Complete suite: exit 0, TEST_SUMMARY: PASS (159 suites)
+```
+
+The review follow-up is committed separately from the original Task 3 implementation. Only the two retained generator tables, their regression test, and this report belong to that follow-up commit.
+
 ## Concerns
 
 - No open Task 3 functional concern is known.
+- The retained expansion migration still fails its later class validation on existing starter-loadout capability/tag mismatches. This did not prevent its attack rows from being emitted and verified, and is outside the reviewed tag-preservation defect.
 - The focused runner can return exit `0` after a suite-load parse failure, so accepted evidence requires both the expected PASS marker and absence of `TEST_FAILURE`/parse/load failures.
 - The report is a pre-existing tracked coordination artifact and is included in the scoped Task 3 commit.
