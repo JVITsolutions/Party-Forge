@@ -81,6 +81,27 @@ The new cadence suite raises the suite count from 165 to 166. The runner exited 
 
 Fresh editor import/parser gate exited `0`, completed filesystem scan and global-class registration including `ActionCadence`, and emitted no parser, script, or failed-resource-load diagnostic. It recreated exactly six known `.gd.uid` sidecars: the two new scripts, the modified candidate-action validator, and three hardened-runner support scripts. All six exact generated files were removed; the pre-existing 127 untracked sidecars were preserved.
 
+### Minor review follow-up: healing-card responsive coverage
+
+Review correctly found that the original three-viewport ledger integration used only Fighters, so its responsive pass did not directly exercise the new healing card. The test-only follow-up makes member 1 a Cleric while retaining the 24-member roster and existing focus/navigation checks. At `1920x1080`, `2560x1440`, and `3840x2160`, it asserts:
+
+- the complete Cleric healing card remains inside the Stats scroll viewport;
+- the card and metrics label are visible;
+- the label exposes `Healing / Use`, `Uses / Second`, and `Estimated HPS` as its visible/accessibility text;
+- the pointer/assistive boundary tooltip identifies the estimate as theoretical per use and names missing health, targeting, movement, and AI downtime.
+
+Fresh test-only follow-up evidence:
+
+```text
+TEST_SUMMARY: PASS (0 failures)
+TASK10G_MINOR_FOCUSED_EXIT_CODE=0
+
+LEDGER_24_MEMBER_SUMMARY: PASS (3 viewports)
+TASK10G_MINOR_LEDGER_EXIT_CODE=0
+```
+
+Both commands exited `0` without a script, parser, loader, test, or compatibility failure. No production file changed, and per review direction the complete 166-suite run was not repeated for this integration-test/report-only follow-up.
+
 ## Coverage highlights
 
 - Neutral values and combined multiplier/effective-cooldown/action-rate arithmetic.
@@ -109,9 +130,10 @@ Fresh editor import/parser gate exited `0`, completed filesystem scan and global
 - `tests/unit/test_non_equipment_activation_refresh.gd`
 - `tests/unit/test_ledger_data_provider.gd`
 - `tests/unit/test_stats_ledger_page.gd`
+- `tests/integration/ledger_24_member_runner.gd`
 
 ## Concerns
 
 - No open Task 10G functional concern is known.
-- Healing-card layout is covered through unit rendering and the three-viewpoint 24-member ledger integration; no new manual visible-window pixel review was performed.
+- Healing-card layout, requested wording, and complete viewport containment are now directly covered through unit rendering and the three-viewport 24-member Cleric integration. No new manual visible-window pixel review was performed.
 - The worktree retains its pre-existing untracked `.gd.uid` sidecars. None are staged or included in Task 10G.

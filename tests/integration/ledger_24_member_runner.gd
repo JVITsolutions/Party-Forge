@@ -39,7 +39,7 @@ func _exercise_viewport(viewport_size: Vector2i, compact: bool) -> void:
 	var catalog := GameCatalog.load_defaults()
 	var party := PartyManager.new()
 	party.configure_capacity(PartyCapacityPolicy.new(24))
-	party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
+	party.initialize(catalog.class_by_id(&"cleric"), catalog.traits)
 	for _index: int in 23:
 		_assert(party.recruit(catalog.class_by_id(&"fighter")), "%s fixture recruits all 24 members" % mode)
 	var member_state_24 := party.member_by_id(24)
@@ -77,6 +77,7 @@ func _exercise_viewport(viewport_size: Vector2i, compact: bool) -> void:
 	_assert(rows_by_id.get(1, {}).get("character_level") == 2 and rows_by_id.get(1, {}).get("experience") == 0, "%s member 1 projects level 2 and XP 0" % mode)
 	_assert(rows_by_id.get(24, {}).get("character_level") == 3 and rows_by_id.get(24, {}).get("experience") == 7, "%s member 24 projects distinct level 3 and XP 7" % mode)
 	_assert_identity_progression(ledger, "Level 2", "XP 0 / 30", "%s member 1 header projection" % mode)
+	_assert_healing_card(ledger, mode)
 
 	var expected_frame := Rect2(
 		Vector2(16.0, 12.0) if compact else Vector2(48.0, 36.0),
@@ -245,6 +246,31 @@ func _assert_label_text(parent: Node, path: NodePath, expected: String, message:
 func _assert_identity_progression(ledger: CharacterLedger, level_text: String, xp_text: String, message: String) -> void:
 	var identity := ledger.get_node_or_null("Overlay/Frame/Layout/Body/PageHost/StatsLedgerPage/Layout/Header/Identity") as Label
 	_assert(identity != null and level_text in identity.text and xp_text in identity.text, "%s: expected level=%s xp=%s actual=%s" % [message, level_text, xp_text, identity.text if identity != null else "<missing>"])
+
+
+func _assert_healing_card(ledger: CharacterLedger, mode: String) -> void:
+	var stats_scroll := ledger.get_node_or_null("Overlay/Frame/Layout/Body/PageHost/StatsLedgerPage/Layout/Content/StatSide/StatScroll") as ScrollContainer
+	var healing_card := ledger.get_node_or_null("Overlay/Frame/Layout/Body/PageHost/StatsLedgerPage/Layout/Content/StatSide/StatScroll/Groups/Group_combat_estimates/Action_cleric_heal") as PanelContainer
+	_assert(stats_scroll != null, "%s healing fixture owns the Stats scroll viewport" % mode)
+	_assert(healing_card != null and healing_card.is_visible_in_tree(), "%s Cleric healing card is visible" % mode)
+	if stats_scroll == null or healing_card == null:
+		return
+	var scroll_rect := stats_scroll.get_global_rect()
+	var card_rect := healing_card.get_global_rect()
+	_assert(
+		scroll_rect.has_point(card_rect.position) and scroll_rect.has_point(card_rect.end - Vector2.ONE),
+		"%s Cleric healing card stays fully contained in the Stats viewport: scroll=%s card=%s" % [mode, scroll_rect, card_rect],
+	)
+	var metrics := healing_card.get_node_or_null("Content/Metrics") as Label
+	_assert(metrics != null and metrics.is_visible_in_tree(), "%s Cleric healing metrics are visible" % mode)
+	if metrics != null:
+		for expected: String in ["Healing / Use", "Uses / Second", "Estimated HPS"]:
+			_assert(expected in metrics.text, "%s healing metrics expose visible/accessibility wording %s" % [mode, expected])
+	var boundary := healing_card.tooltip_text
+	_assert(
+		"theoretical per use" in boundary and "missing health" in boundary and "targeting" in boundary and "movement" in boundary and "AI downtime" in boundary,
+		"%s healing tooltip explains the theoretical estimate boundary for pointer and assistive access" % mode,
+	)
 
 
 func _assert(condition: bool, message: String) -> void:
