@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="ItemRarityDefinition" load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://scripts/items/item_rarity_definition.gd" id="1"]
+[ext_resource type="Resource" path="res://data/items/patterns/uncommon_prefix.tres" id="2"]
+[ext_resource type="Resource" path="res://data/items/patterns/uncommon_suffix.tres" id="3"]
+
+[resource]
+script = ExtResource("1")
+id = &"uncommon"
+display_name = "Uncommon"
+rarity_rank = 2
+instance_supported = true
+ordinary_generation_enabled = true
+base_weight = 450.0
+patterns = Array[ItemAffixPatternDefinition]([ExtResource("2"), ExtResource("3")])
+reserved_special_slots = 0

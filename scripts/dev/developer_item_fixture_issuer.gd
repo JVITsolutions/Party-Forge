@@ -16,9 +16,9 @@ static func issue_all(
 		return _failure("item foundation catalog is missing")
 	if equipment.definitions.size() != EXPECTED_DEFINITION_COUNT:
 		return _failure("equipment definition count must equal %d" % EXPECTED_DEFINITION_COUNT)
-	var rarity_ids := foundation.functional_rarity_ids()
+	var rarity_ids := foundation.ordinary_rarity_ids()
 	if rarity_ids.size() != 5:
-		return _failure("functional rarity count must equal 5")
+		return _failure("ordinary rarity count must equal 5")
 	if foundation.affixes.size() < 4:
 		return _failure("fixture affix catalog must contain at least 4 definitions")
 	var items: Array[ItemInstance] = []
@@ -30,14 +30,16 @@ static func issue_all(
 		var rarity_id: StringName = rarity_ids[index % rarity_ids.size()]
 		var rarity := foundation.rarity(rarity_id)
 		if rarity == null:
-			return _failure("functional rarity %s is missing" % rarity_id)
+			return _failure("ordinary rarity %s is missing" % rarity_id)
+		if rarity.patterns.is_empty():
+			return _failure("ordinary rarity %s has no affix pattern" % rarity_id)
 		var issued := ItemInstanceIssuer.issue(
 			ISSUER_NAMESPACE,
 			index,
 			SOURCE,
 			index,
 			{
-				"affixes": _fixture_affixes(index, rarity.minimum_affixes, foundation),
+				"affixes": _fixture_affixes(index, rarity.patterns[0].explicit_count(), foundation),
 				"base_definition_id": String(definition.id),
 				"item_level": 1 + (index % 100),
 				"rarity_id": String(rarity_id),
@@ -61,27 +63,38 @@ static func _fixture_affixes(
 	foundation: ItemFoundationCatalog
 ) -> Array[Dictionary]:
 	var result: Array[Dictionary] = []
+	var explicit_definitions: Array[ItemAffixDefinition] = []
+	for definition: ItemAffixDefinition in foundation.affixes:
+		if definition != null and definition.affix_kind in ["prefix", "suffix"]:
+			explicit_definitions.append(definition)
+	if explicit_definitions.is_empty():
+		return result
 	for affix_index: int in affix_count:
-		var definition: ItemAffixDefinition = foundation.affixes[
-			(definition_index + affix_index) % foundation.affixes.size()
+		var definition: ItemAffixDefinition = explicit_definitions[
+			(definition_index + affix_index) % explicit_definitions.size()
 		]
-		var tier_count := definition.maximum_tier - definition.minimum_tier + 1
-		var tier := definition.minimum_tier + ((definition_index + affix_index) % tier_count)
-		var bounds := definition.roll_bounds(tier)
-		var explicit_roll := clampf((bounds.x + bounds.y) * 0.5, bounds.x, bounds.y)
-		var required_tags: Array[String] = []
-		for tag: StringName in definition.required_tags:
-			required_tags.append(String(tag))
+		if definition.tiers.is_empty():
+			continue
+		var tier_definition := definition.tiers[(definition_index + affix_index) % definition.tiers.size()]
+		var rolls: Array[Dictionary] = []
+		for effect_index: int in definition.effects.size():
+			var effect := definition.effects[effect_index]
+			var bounds := tier_definition.roll_bounds(effect_index)
+			var explicit_roll := clampf((bounds.x + bounds.y) * 0.5, bounds.x, bounds.y)
+			var required_tags: Array[String] = []
+			for tag: StringName in effect.required_tags:
+				required_tags.append(String(tag))
+			rolls.append({
+				"operation": effect.operation,
+				"required_tags": required_tags,
+				"stat_id": String(effect.stat_id),
+				"value": explicit_roll,
+			})
 		result.append({
 			"affix_kind": definition.affix_kind,
 			"definition_id": String(definition.id),
-			"rolls": [{
-				"operation": definition.operation,
-				"required_tags": required_tags,
-				"stat_id": String(definition.stat_id),
-				"value": explicit_roll,
-			}],
-			"tier": tier,
+			"rolls": rolls,
+			"tier": tier_definition.tier,
 		})
 	return result
 

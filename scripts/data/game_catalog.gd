@@ -149,7 +149,7 @@ func _validate_foundation(errors: PackedStringArray) -> void:
 	if item_foundation_catalog == null:
 		errors.append("PARTY_FORGE_ITEM_FOUNDATION_ERROR id=<catalog> reason=resource failed to load")
 	else:
-		errors.append_array(item_foundation_catalog.validate(STAT_CATALOG))
+		errors.append_array(item_foundation_catalog.validate(STAT_CATALOG, equipment_catalog))
 
 func _validate_resources(errors: PackedStringArray) -> void:
 	var seen: Dictionary = {}

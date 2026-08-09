@@ -175,18 +175,6 @@ func _test_affix_rejections(failures: Array[String]) -> void:
 	var empty_item_tag_manifest := _valid_affix()
 	TestAssertions.truthy(_has_diagnostic(empty_item_tag_manifest.validate(stats, known_families, known_domains, known_sources, known_rarities, empty_known), "unknown required item tag caster"), "explicit item tag fails against empty manifest", failures)
 
-	var hybrid_unknown_family := _valid_affix()
-	hybrid_unknown_family.effects.clear()
-	hybrid_unknown_family.stat_id = &"intelligence"
-	hybrid_unknown_family.modifier_family_ids = [&"unknown_family"]
-	var hybrid_errors := hybrid_unknown_family.validate(stats, known_families, known_domains, known_sources, known_rarities, known_item_tags)
-	TestAssertions.truthy("unknown modifier family" in " ".join(hybrid_errors), "bridge does not bypass explicit family references", failures)
-
-	var hybrid_known_family := _valid_affix()
-	hybrid_known_family.effects.clear()
-	hybrid_known_family.stat_id = &"intelligence"
-	TestAssertions.equal(hybrid_known_family.validate(stats, known_families, known_domains, known_sources, known_rarities, known_item_tags), PackedStringArray(), "legacy effect bridge preserves authoritative tiers", failures)
-
 	var unknown_tier_reference := _valid_affix()
 	unknown_tier_reference.tiers[0].allowed_generation_domains = [&"unknown_domain"]
 	TestAssertions.truthy(_has_diagnostic(unknown_tier_reference.validate(stats, known_families, known_domains, known_sources, known_rarities, known_item_tags), "unknown tier generation domain unknown_domain"), "unknown tier references fail", failures)

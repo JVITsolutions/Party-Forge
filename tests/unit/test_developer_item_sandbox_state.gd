@@ -110,8 +110,8 @@ func _assert_deterministic_fixture(failures: Array[String]) -> void:
 		TestAssertions.equal(first.stash().item_id_at(index), expected_id, "catalog order maps to exact stash slot %d" % index, failures)
 	for definition: Variant in equipment.definitions:
 		TestAssertions.equal(int(seen_bases.get(String(definition.id), 0)), 1, "equipment base %s appears exactly once" % definition.id, failures)
-	for rarity_id: StringName in foundation.functional_rarity_ids():
-		TestAssertions.truthy(seen_rarities.has(String(rarity_id)), "functional rarity %s appears" % rarity_id, failures)
+	for rarity_id: StringName in foundation.ordinary_rarity_ids():
+		TestAssertions.truthy(seen_rarities.has(String(rarity_id)), "ordinary rarity %s appears" % rarity_id, failures)
 	TestAssertions.truthy(not seen_rarities.has("mythic"), "Mythic is never issued", failures)
 	TestAssertions.truthy(not seen_rarities.has("eternal"), "Eternal is never issued", failures)
 
@@ -146,15 +146,17 @@ func _assert_explicit_affixes_survive_reload(failures: Array[String]) -> void:
 			TestAssertions.truthy(definition != null, "fixture affix definition exists", failures)
 			if definition == null:
 				continue
-			TestAssertions.truthy(affix.tier >= definition.minimum_tier and affix.tier <= definition.maximum_tier, "fixture affix tier is bounded", failures)
+			TestAssertions.truthy(definition.tier_definition(affix.tier) != null, "fixture affix tier is authored", failures)
 			TestAssertions.equal(affix.affix_kind, definition.affix_kind, "fixture affix kind is explicit", failures)
-			TestAssertions.equal(affix.rolls.size(), 1, "fixture affix has one explicit roll", failures)
+			TestAssertions.equal(affix.rolls.size(), definition.effects.size(), "fixture affix has one roll per effect", failures)
 			if affix.rolls.is_empty():
 				continue
-			var roll: ItemModifierRoll = affix.rolls[0]
-			var bounds: Vector2 = definition.roll_bounds(affix.tier)
-			TestAssertions.equal(roll.operation, definition.operation, "fixture roll operation is explicit", failures)
-			TestAssertions.truthy(roll.value >= bounds.x and roll.value <= bounds.y, "fixture roll remains inside authored bounds", failures)
+			for effect_index: int in affix.rolls.size():
+				var roll: ItemModifierRoll = affix.rolls[effect_index]
+				var effect := definition.effects[effect_index]
+				var bounds: Vector2 = definition.roll_bounds(affix.tier, effect_index)
+				TestAssertions.equal(roll.operation, effect.operation, "fixture roll operation is explicit", failures)
+				TestAssertions.truthy(roll.value >= bounds.x and roll.value <= bounds.y, "fixture roll remains inside authored bounds", failures)
 	TestAssertions.equal(state.save(), "", "explicit fixture saves", failures)
 	var reloaded: Variant = _state_script.new()
 	TestAssertions.equal(reloaded.reload(), "", "explicit fixture reloads", failures)

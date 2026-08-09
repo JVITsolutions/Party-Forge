@@ -2,6 +2,7 @@ extends RefCounted
 
 const EQUIPMENT_PATH := "res://data/equipment/core_equipment_catalog.tres"
 const FOUNDATION_PATH := "res://data/items/core_item_foundation_catalog.tres"
+const LEGACY_SCHEMA_ONE_ITEM := "{\"affixes\":[{\"affix_kind\":\"prefix\",\"definition_id\":\"stout\",\"rolls\":[{\"operation\":0,\"required_tags\":[],\"stat_id\":\"constitution\",\"value\":3.0}],\"tier\":1},{\"affix_kind\":\"suffix\",\"definition_id\":\"of_reach\",\"rolls\":[{\"operation\":1,\"required_tags\":[],\"stat_id\":\"attack_range\",\"value\":0.2}],\"tier\":2}],\"base_definition_id\":\"forge_vanguard_sword\",\"instance_id\":\"item-explicit-round-trip\",\"item_level\":28,\"origin\":{\"issuer_namespace\":\"profile:profile-a\",\"seed\":4402,\"sequence\":42,\"source\":\"quest_reward\"},\"rarity_id\":\"legendary\",\"schema_version\":1}"
 
 func run() -> Array[String]:
 	var failures: Array[String] = []
@@ -12,6 +13,7 @@ func run() -> Array[String]:
 	if equipment == null or foundation == null:
 		return failures
 	_assert_immutable_round_trip(equipment, foundation, failures)
+	_assert_multi_effect_codec(equipment, foundation, failures)
 	_assert_strict_rejections(equipment, foundation, failures)
 	_assert_deterministic_issuer(equipment, foundation, failures)
 	return failures
@@ -22,17 +24,20 @@ func _assert_immutable_round_trip(
 	failures: Array[String]
 ) -> void:
 	var item := _make_item()
-	var encoded := ItemInstanceCodec.encode(item)
+	var encoded := LEGACY_SCHEMA_ONE_ITEM
 	var decode_foundation := foundation.duplicate(true) as ItemFoundationCatalog
 	var decoded := ItemInstanceCodec.decode(JSON.parse_string(encoded), equipment, decode_foundation)
-	TestAssertions.truthy(decoded.ok(), "explicit item round trip succeeds", failures)
+	TestAssertions.truthy(decoded.ok(), "saved legacy schema-one item round trip succeeds", failures)
 	if not decoded.ok():
 		failures.append("explicit item round trip error: %s" % decoded.error)
 		return
-	TestAssertions.equal(decoded.item.to_dictionary(), item.to_dictionary(), "round trip preserves exact item bytes", failures)
+	TestAssertions.equal(decoded.item.to_dictionary(), item.to_dictionary(), "saved legacy fixture preserves exact item values", failures)
+	TestAssertions.equal(ItemInstanceCodec.encode(decoded.item), LEGACY_SCHEMA_ONE_ITEM, "saved legacy fixture round trips byte-equivalently", failures)
 
-	var changed_affix := decode_foundation.affix(&"stout")
-	changed_affix.minimum_roll_by_tier[0] = 999.0
+	var stout_index := decode_foundation.affixes.find(decode_foundation.affix(&"stout"))
+	decode_foundation.affixes[stout_index] = decode_foundation.affixes[stout_index].duplicate(true) as ItemAffixDefinition
+	var changed_affix := decode_foundation.affixes[stout_index]
+	changed_affix.tiers[0].minimum_rolls[0] = 999.0
 	TestAssertions.equal(decoded.item.affixes[0].rolls[0].value, 3.0, "decode catalog changes do not rewrite issued rolls", failures)
 
 	var copied := decoded.item.copy()
@@ -48,6 +53,65 @@ func _assert_immutable_round_trip(
 	(document["origin"] as Dictionary)["seed"] = "dictionary-change"
 	TestAssertions.equal(decoded.item.affixes[0].rolls[0].value, 3.0, "serialized document owns nested rolls", failures)
 	TestAssertions.equal(decoded.item.origin["seed"], 4402, "serialized document owns origin", failures)
+
+func _assert_multi_effect_codec(
+	equipment: EquipmentCatalog,
+	foundation: ItemFoundationCatalog,
+	failures: Array[String]
+) -> void:
+	var definition := ItemAffixDefinition.new()
+	definition.id = &"two_effect_fixture"
+	definition.display_name = "Two Effect Fixture"
+	definition.affix_kind = "prefix"
+	definition.modifier_family_ids = [&"two_effect_fixture"]
+	var constitution := ItemModifierEffectDefinition.new()
+	constitution.stat_id = &"constitution"
+	constitution.operation = StatModifier.Operation.FLAT
+	var fire := ItemModifierEffectDefinition.new()
+	fire.stat_id = &"fire_damage"
+	fire.operation = StatModifier.Operation.INCREASED
+	definition.effects = [constitution, fire]
+	var tier := ItemAffixTierDefinition.new()
+	tier.tier = 1
+	tier.minimum_rolls = [1.0, 0.05]
+	tier.maximum_rolls = [3.0, 0.1]
+	definition.tiers = [tier]
+	var custom_foundation := foundation.duplicate(true) as ItemFoundationCatalog
+	custom_foundation.affixes.append(definition)
+	var document := _document()
+	document["affixes"] = [{
+		"affix_kind": "prefix",
+		"definition_id": "two_effect_fixture",
+		"rolls": [
+			{"operation": StatModifier.Operation.FLAT, "required_tags": [], "stat_id": "constitution", "value": 2.0},
+			{"operation": StatModifier.Operation.INCREASED, "required_tags": [], "stat_id": "fire_damage", "value": 0.075},
+		],
+		"tier": 1,
+	}]
+	var decoded := ItemInstanceCodec.decode(document, equipment, custom_foundation)
+	TestAssertions.truthy(decoded.ok(), "two-effect affix accepts two ordered rolls", failures)
+	if decoded.ok():
+		TestAssertions.equal(decoded.item.to_dictionary(), document, "two-effect affix preserves ordered rolls", failures)
+	var missing_roll := document.duplicate(true)
+	missing_roll["affixes"][0]["rolls"].resize(1)
+	_assert_decode_error(
+		missing_roll,
+		"PARTY_FORGE_ITEM_ERROR field=affixes[0].rolls reason=must contain one roll per authored effect",
+		equipment,
+		custom_foundation,
+		"missing authored effect roll",
+		failures
+	)
+	var reversed := document.duplicate(true)
+	reversed["affixes"][0]["rolls"].reverse()
+	_assert_decode_error(
+		reversed,
+		"PARTY_FORGE_ITEM_ERROR field=affixes[0].rolls[0].stat_id reason=must match definition stat constitution",
+		equipment,
+		custom_foundation,
+		"reversed authored effect rolls",
+		failures
+	)
 
 func _assert_strict_rejections(
 	equipment: EquipmentCatalog,
@@ -86,12 +150,16 @@ func _assert_strict_rejections(
 		"nonpositive item level",
 		failures
 	)
+	var unsupported_foundation := foundation.duplicate(true) as ItemFoundationCatalog
+	var mythic_index := unsupported_foundation.rarities.find(unsupported_foundation.rarity(&"mythic"))
+	unsupported_foundation.rarities[mythic_index] = unsupported_foundation.rarities[mythic_index].duplicate(true) as ItemRarityDefinition
+	unsupported_foundation.rarity(&"mythic").instance_supported = false
 	_assert_decode_error(
 		_mutated_document("rarity_id", "mythic"),
-		"PARTY_FORGE_ITEM_ERROR field=rarity_id reason=rarity mythic is not functional",
+		"PARTY_FORGE_ITEM_ERROR field=rarity_id reason=rarity mythic does not support item instances",
 		equipment,
-		foundation,
-		"future rarity",
+		unsupported_foundation,
+		"unsupported item-instance rarity",
 		failures
 	)
 

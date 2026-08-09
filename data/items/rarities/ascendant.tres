@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="ItemRarityDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/items/item_rarity_definition.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"ascendant"
+display_name = "Ascendant"
+rarity_rank = 8
+instance_supported = true
+ordinary_generation_enabled = false
+base_weight = 1.0
+patterns = Array[ItemAffixPatternDefinition]([])
+reserved_special_slots = 0

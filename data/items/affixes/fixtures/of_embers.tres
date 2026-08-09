@@ -1,0 +1,44 @@
+[gd_resource type="Resource" script_class="ItemAffixDefinition" load_steps=8 format=3]
+
+[ext_resource type="Script" path="res://scripts/items/item_affix_definition.gd" id="1_affix"]
+[ext_resource type="Script" path="res://scripts/items/item_modifier_effect_definition.gd" id="2_effect"]
+[ext_resource type="Script" path="res://scripts/items/item_affix_tier_definition.gd" id="3_tier"]
+
+[sub_resource type="Resource" id="Effect"]
+script = ExtResource("2_effect")
+stat_id = &"fire_damage"
+operation = 1
+
+[sub_resource type="Resource" id="Tier1"]
+script = ExtResource("3_tier")
+tier = 1
+minimum_item_level = 1
+minimum_rolls = Array[float]([0.05])
+maximum_rolls = Array[float]([0.1])
+
+[sub_resource type="Resource" id="Tier2"]
+script = ExtResource("3_tier")
+tier = 2
+minimum_item_level = 2
+minimum_rolls = Array[float]([0.11])
+maximum_rolls = Array[float]([0.2])
+
+[sub_resource type="Resource" id="Tier3"]
+script = ExtResource("3_tier")
+tier = 3
+minimum_item_level = 3
+minimum_rolls = Array[float]([0.21])
+maximum_rolls = Array[float]([0.3])
+
+[resource]
+script = ExtResource("1_affix")
+id = &"of_embers"
+display_name = "of Embers"
+affix_kind = "suffix"
+base_weight = 100.0
+modifier_family_ids = Array[StringName]([&"damage_fire"])
+allowed_generation_domains = Array[StringName]([&"ordinary_drop", &"boss_drop", &"developer"])
+allowed_source_ids = Array[StringName]([&"ordinary_enemy", &"boss", &"developer"])
+allowed_rarity_ids = Array[StringName]([&"common", &"uncommon", &"rare", &"epic", &"legendary"])
+effects = Array[ExtResource("2_effect")]([SubResource("Effect")])
+tiers = Array[ExtResource("3_tier")]([SubResource("Tier1"), SubResource("Tier2"), SubResource("Tier3")])

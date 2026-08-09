@@ -70,7 +70,8 @@ static func _project_affix(
 ) -> Dictionary:
 	var definition := foundation.affix(instance.definition_id)
 	var rolls: Array[Dictionary] = []
-	for roll: ItemModifierRoll in instance.rolls:
+	for roll_index: int in instance.rolls.size():
+		var roll := instance.rolls[roll_index]
 		if roll == null:
 			rolls.append({})
 			continue
@@ -84,7 +85,7 @@ static func _project_affix(
 			"value": roll.value,
 			"effect_text": _effect_text(stat_name, roll.operation, roll.value),
 		}
-		_append_bounds(document, definition, instance.tier, roll)
+		_append_bounds(document, definition, instance.tier, roll_index, roll)
 		rolls.append(document)
 		var total_key := "%s|%d" % [String(roll.stat_id), roll.operation]
 		totals[total_key] = float(totals.get(total_key, 0.0)) + roll.value
@@ -101,17 +102,20 @@ static func _append_bounds(
 	document: Dictionary,
 	definition: ItemAffixDefinition,
 	tier: int,
+	effect_index: int,
 	roll: ItemModifierRoll,
 ) -> void:
-	if definition == null or roll.stat_id != definition.stat_id or roll.operation != definition.operation:
+	if definition == null or effect_index < 0 or effect_index >= definition.effects.size():
 		return
-	if tier < definition.minimum_tier or tier > definition.maximum_tier:
+	var effect := definition.effects[effect_index]
+	if effect == null or roll.stat_id != effect.stat_id or roll.operation != effect.operation:
 		return
-	var index := tier - definition.minimum_tier
-	if index < 0 or index >= definition.minimum_roll_by_tier.size() or index >= definition.maximum_roll_by_tier.size():
+	var tier_definition := definition.tier_definition(tier)
+	if tier_definition == null:
 		return
-	var minimum := definition.minimum_roll_by_tier[index]
-	var maximum := definition.maximum_roll_by_tier[index]
+	var bounds := tier_definition.roll_bounds(effect_index)
+	var minimum := bounds.x
+	var maximum := bounds.y
 	if not is_finite(minimum) or not is_finite(maximum) or minimum > maximum:
 		return
 	document["minimum_roll"] = minimum

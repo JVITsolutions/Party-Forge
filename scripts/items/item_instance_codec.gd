@@ -89,8 +89,8 @@ static func _validate_document(
 	var rarity := foundation.rarity(rarity_id)
 	if rarity == null:
 		return _field_error("rarity_id", "unknown rarity %s" % rarity_id)
-	if not rarity.functional:
-		return _field_error("rarity_id", "rarity %s is not functional" % rarity_id)
+	if not rarity.instance_supported:
+		return _field_error("rarity_id", "rarity %s does not support item instances" % rarity_id)
 	if not data["affixes"] is Array:
 		return _field_error("affixes", "must be an array")
 	var seen_affixes: Dictionary = {}
@@ -124,17 +124,30 @@ static func _validate_affix(
 		return _field_error("%s.definition_id" % path, "unknown affix %s" % definition_id)
 	if typeof(data["affix_kind"]) != TYPE_STRING or data["affix_kind"] != definition.affix_kind:
 		return _field_error("%s.affix_kind" % path, "must match definition kind %s" % definition.affix_kind)
-	if not _is_json_int(data["tier"], definition.minimum_tier, definition.maximum_tier):
-		return _field_error("%s.tier" % path, "must be in definition range %d..%d" % [definition.minimum_tier, definition.maximum_tier])
-	if not data["rolls"] is Array or (data["rolls"] as Array).size() != 1:
-		return _field_error("%s.rolls" % path, "must contain exactly one explicit roll")
-	return _validate_roll((data["rolls"] as Array)[0], "%s.rolls[0]" % path, definition, int(data["tier"]))
+	if definition.tiers.is_empty():
+		return _field_error("%s.tier" % path, "definition has no authored tiers")
+	var minimum_tier := definition.tiers[0].tier
+	var maximum_tier := definition.tiers[definition.tiers.size() - 1].tier
+	if not _is_json_int(data["tier"], minimum_tier, maximum_tier) or definition.tier_definition(int(data["tier"])) == null:
+		return _field_error("%s.tier" % path, "must be in definition range %d..%d" % [minimum_tier, maximum_tier])
+	if not data["rolls"] is Array or (data["rolls"] as Array).size() != definition.effects.size():
+		return _field_error("%s.rolls" % path, "must contain one roll per authored effect")
+	for effect_index: int in definition.effects.size():
+		var error := _validate_roll(
+			(data["rolls"] as Array)[effect_index],
+			"%s.rolls[%d]" % [path, effect_index],
+			definition.effects[effect_index],
+			definition.roll_bounds(int(data["tier"]), effect_index)
+		)
+		if not error.is_empty():
+			return error
+	return ""
 
 static func _validate_roll(
 	value: Variant,
 	path: String,
-	definition: ItemAffixDefinition,
-	tier: int
+	effect: ItemModifierEffectDefinition,
+	bounds: Vector2
 ) -> String:
 	if not value is Dictionary:
 		return _field_error(path, "must be a dictionary")
@@ -142,16 +155,15 @@ static func _validate_roll(
 	var fields_error := _exact_fields(data, ROLL_FIELDS, path)
 	if not fields_error.is_empty():
 		return fields_error
-	if typeof(data["stat_id"]) != TYPE_STRING or StringName(data["stat_id"] as String) != definition.stat_id:
-		return _field_error("%s.stat_id" % path, "must match definition stat %s" % definition.stat_id)
-	if not _is_json_int(data["operation"], definition.operation, definition.operation):
-		return _field_error("%s.operation" % path, "must match definition operation %d" % definition.operation)
+	if typeof(data["stat_id"]) != TYPE_STRING or StringName(data["stat_id"] as String) != effect.stat_id:
+		return _field_error("%s.stat_id" % path, "must match definition stat %s" % effect.stat_id)
+	if not _is_json_int(data["operation"], effect.operation, effect.operation):
+		return _field_error("%s.operation" % path, "must match definition operation %d" % effect.operation)
 	if not data["value"] is float and not data["value"] is int:
 		return _field_error("%s.value" % path, "must be a finite number")
 	var roll_value := float(data["value"])
 	if not is_finite(roll_value):
 		return _field_error("%s.value" % path, "must be a finite number")
-	var bounds := definition.roll_bounds(tier)
 	if roll_value < bounds.x or roll_value > bounds.y:
 		return _field_error("%s.value" % path, "must be within issued bounds %s..%s" % [_number_text(bounds.x), _number_text(bounds.y)])
 	if not data["required_tags"] is Array:
@@ -161,7 +173,7 @@ static func _validate_roll(
 		if typeof(tag_value) != TYPE_STRING:
 			return _field_error("%s.required_tags" % path, "must be an array of strings")
 		actual_tags.append(StringName(tag_value as String))
-	if actual_tags != definition.required_tags:
+	if actual_tags != effect.required_tags:
 		return _field_error("%s.required_tags" % path, "must match definition required tags")
 	return ""
 

@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="ItemRarityDefinition" load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://scripts/items/item_rarity_definition.gd" id="1"]
+[ext_resource type="Resource" path="res://data/items/patterns/legendary_prefix_heavy.tres" id="2"]
+[ext_resource type="Resource" path="res://data/items/patterns/legendary_balanced.tres" id="3"]
+[ext_resource type="Resource" path="res://data/items/patterns/legendary_suffix_heavy.tres" id="4"]
+
+[resource]
+script = ExtResource("1")
+id = &"legendary"
+display_name = "Legendary"
+rarity_rank = 5
+instance_supported = true
+ordinary_generation_enabled = true
+base_weight = 10.0
+required_unlock_tags = Array[StringName]([&"rarity_legendary_unlocked"])
+patterns = Array[ItemAffixPatternDefinition]([ExtResource("2"), ExtResource("3"), ExtResource("4")])
+reserved_special_slots = 1

@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="ItemRarityDefinition" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/items/item_rarity_definition.gd" id="1"]
+[ext_resource type="Resource" path="res://data/items/patterns/common_zero.tres" id="2"]
+
+[resource]
+script = ExtResource("1")
+id = &"common"
+display_name = "Common"
+rarity_rank = 1
+instance_supported = true
+ordinary_generation_enabled = true
+base_weight = 1000.0
+patterns = Array[ItemAffixPatternDefinition]([ExtResource("2")])
+reserved_special_slots = 0

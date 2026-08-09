@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="ItemRarityDefinition" load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://scripts/items/item_rarity_definition.gd" id="1"]
+[ext_resource type="Resource" path="res://data/items/patterns/rare_two_prefix.tres" id="2"]
+[ext_resource type="Resource" path="res://data/items/patterns/rare_balanced.tres" id="3"]
+[ext_resource type="Resource" path="res://data/items/patterns/rare_two_suffix.tres" id="4"]
+
+[resource]
+script = ExtResource("1")
+id = &"rare"
+display_name = "Rare"
+rarity_rank = 3
+instance_supported = true
+ordinary_generation_enabled = true
+base_weight = 180.0
+required_unlock_tags = Array[StringName]([&"rarity_rare_unlocked"])
+patterns = Array[ItemAffixPatternDefinition]([ExtResource("2"), ExtResource("3"), ExtResource("4")])
+reserved_special_slots = 0
