@@ -15,8 +15,13 @@ static func weighted_id(seed: int, sequence: int, stage: StringName, draw: int, 
 	var canonical_weights: Dictionary = {}
 	var total := 0.0
 	for candidate: Variant in weights:
+		if typeof(candidate) not in [TYPE_STRING, TYPE_STRING_NAME]:
+			return &""
+		var raw_weight: Variant = weights[candidate]
+		if typeof(raw_weight) not in [TYPE_INT, TYPE_FLOAT]:
+			return &""
 		var id := StringName(String(candidate))
-		var weight := float(weights[candidate])
+		var weight := float(raw_weight)
 		if id.is_empty() or canonical_weights.has(id) or not is_finite(weight) or weight <= 0.0:
 			return &""
 		canonical_weights[id] = weight

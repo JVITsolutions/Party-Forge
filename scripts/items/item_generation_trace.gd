@@ -7,6 +7,8 @@ var stages: Array[Dictionary]:
 		return _stages.duplicate(true)
 
 func record(stage: StringName, eligible: Array[StringName], rejected: Dictionary, weights: Dictionary, selected: StringName) -> void:
+	if _contains_nonfinite(rejected) or _contains_nonfinite(weights):
+		return
 	var eligible_ids: Array[String] = []
 	for id: StringName in eligible:
 		eligible_ids.append(String(id))
@@ -46,3 +48,17 @@ func _json_copy(value: Variant) -> Variant:
 		TYPE_NIL, TYPE_BOOL, TYPE_INT, TYPE_FLOAT, TYPE_STRING:
 			return value
 	return String(value)
+
+func _contains_nonfinite(value: Variant) -> bool:
+	match typeof(value):
+		TYPE_FLOAT:
+			return not is_finite(value)
+		TYPE_ARRAY:
+			for entry: Variant in value:
+				if _contains_nonfinite(entry):
+					return true
+		TYPE_DICTIONARY:
+			for key: Variant in value:
+				if _contains_nonfinite(key) or _contains_nonfinite(value[key]):
+					return true
+	return false

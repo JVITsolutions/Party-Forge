@@ -91,6 +91,8 @@ func validate(foundation: ItemFoundationCatalog) -> String:
 	return ""
 
 func canonical_document() -> Dictionary:
+	if not is_finite(heat) or not is_finite(charisma_value):
+		return {}
 	return {
 		"seed": seed,
 		"generation_sequence": generation_sequence,

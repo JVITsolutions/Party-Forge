@@ -54,6 +54,11 @@ func _test_create_and_canonical_document(failures: Array[String]) -> void:
 	(canonical["permitted_rarity_ids"] as Array)[0] = "mutated"
 	TestAssertions.equal(request.permitted_rarity_ids, [&"uncommon", &"common"], "create and canonical document isolate permitted rarity arrays", failures)
 	TestAssertions.equal(request.party_archetype_tags, [&"melee", &"caster"], "canonical sorting does not mutate request arrays", failures)
+	request.heat = NAN
+	TestAssertions.equal(request.canonical_document(), {}, "nonfinite Heat has no canonical document", failures)
+	request.heat = 0.0
+	request.charisma_value = INF
+	TestAssertions.equal(request.canonical_document(), {}, "nonfinite Charisma has no canonical document", failures)
 
 func _test_request_validation(foundation: ItemFoundationCatalog, failures: Array[String]) -> void:
 	var request := _valid_request()
@@ -143,12 +148,29 @@ func _test_structured_outcomes(failures: Array[String]) -> void:
 		"structured failure has stable message",
 		failures
 	)
-	var result := ItemGenerationResult.new()
-	result.failure = failure
-	TestAssertions.truthy(not result.ok(), "failure result is not ok", failures)
-	result.failure = null
-	result.item = ItemInstance.new()
-	TestAssertions.truthy(result.ok(), "complete item without failure is ok", failures)
+	var trace := ItemGenerationTrace.new()
+	var item := ItemInstance.new()
+	var success := ItemGenerationResult.success(item, trace)
+	TestAssertions.truthy(success != null and success.ok(), "success factory creates an ok result", failures)
+	if success != null:
+		TestAssertions.equal(success.item, item, "success result exposes its item", failures)
+		TestAssertions.equal(success.failure, null, "success result has no failure branch", failures)
+		TestAssertions.equal(success.trace, trace, "success result retains its trace", failures)
+	var failed := ItemGenerationResult.failed(failure, trace)
+	TestAssertions.truthy(failed != null and not failed.ok(), "failure factory creates a failed result", failures)
+	if failed != null:
+		TestAssertions.equal(failed.item, null, "failed result has no item branch", failures)
+		TestAssertions.equal(failed.failure, failure, "failed result exposes its failure", failures)
+		TestAssertions.equal(failed.trace, trace, "failed result retains its trace", failures)
+	TestAssertions.equal(ItemGenerationResult.success(null, trace), null, "success factory rejects a missing item", failures)
+	TestAssertions.equal(ItemGenerationResult.failed(null, trace), null, "failure factory rejects a missing failure", failures)
+	var direct_both := ItemGenerationResult.new(item, failure, trace)
+	TestAssertions.truthy((direct_both.item != null) != (direct_both.failure != null), "direct construction normalizes a both-branch state", failures)
+	var direct_neither := ItemGenerationResult.new(null, null, trace)
+	TestAssertions.truthy((direct_neither.item != null) != (direct_neither.failure != null), "direct construction normalizes a neither-branch state", failures)
+	success.item = null
+	success.failure = failure
+	TestAssertions.truthy(success.ok() and success.item == item and success.failure == null, "result branches are read-only after construction", failures)
 
 func _test_trace_canonicalization(failures: Array[String]) -> void:
 	var trace := ItemGenerationTrace.new()
@@ -177,9 +199,14 @@ func _test_trace_canonicalization(failures: Array[String]) -> void:
 	var exposed := trace.stages
 	(exposed[0] as Dictionary)["selected"] = "mutated"
 	TestAssertions.equal(trace.stages, [expected], "trace readers cannot mutate recorded evidence", failures)
+	trace.record(&"invalid_weight", [&"a"], {}, {&"a": INF}, &"a")
+	TestAssertions.equal(trace.stages, [expected], "trace rejects nonfinite weight evidence without mutation", failures)
+	trace.record(&"invalid_detail", [&"a"], {&"a": {"score": NAN}}, {&"a": 1.0}, &"a")
+	TestAssertions.equal(trace.stages, [expected], "trace rejects nested nonfinite rejection evidence without mutation", failures)
 
 func _test_deterministic_random(failures: Array[String]) -> void:
 	var repeated := ItemDeterministicRandom.unit(991, 4, &"rarity", 0)
+	TestAssertions.equal(repeated, 0.66747969388961792, "unit golden vector locks SHA-256 first-15-hex seeding", failures)
 	TestAssertions.equal(repeated, ItemDeterministicRandom.unit(991, 4, &"rarity", 0), "same stage roll repeats", failures)
 	TestAssertions.truthy(repeated >= 0.0 and repeated < 1.0, "unit draw stays in half-open unit interval", failures)
 	TestAssertions.truthy(repeated != ItemDeterministicRandom.unit(991, 4, &"base", 0), "stage salt isolates random substreams", failures)
@@ -193,9 +220,14 @@ func _test_deterministic_random(failures: Array[String]) -> void:
 		"weight dictionary order is irrelevant",
 		failures
 	)
+	TestAssertions.equal(ItemDeterministicRandom.weighted_id(991, 4, &"base", 0, {&"b": 1.0, &"a": 2.0}), &"b", "weighted selection golden vector is exact", failures)
 	TestAssertions.equal(ItemDeterministicRandom.weighted_id(991, 4, &"base", 0, {}), &"", "empty weights are rejected", failures)
 	TestAssertions.equal(ItemDeterministicRandom.weighted_id(991, 4, &"base", 0, {&"a": 0.0}), &"", "nonpositive weights are rejected", failures)
 	TestAssertions.equal(ItemDeterministicRandom.weighted_id(991, 4, &"base", 0, {&"a": NAN}), &"", "nonfinite weights are rejected", failures)
+	TestAssertions.equal(ItemDeterministicRandom.weighted_id(991, 4, &"base", 0, {7: 1.0}), &"", "non-string weight keys are rejected", failures)
+	TestAssertions.equal(ItemDeterministicRandom.weighted_id(991, 4, &"base", 0, {&"a": true}), &"", "boolean weights are rejected", failures)
+	TestAssertions.equal(ItemDeterministicRandom.weighted_id(991, 4, &"base", 0, {&"a": "1.0"}), &"", "numeric string weights are rejected", failures)
+	TestAssertions.truthy(not ItemDeterministicRandom.weighted_id(991, 4, &"base", 0, {&"a": 1, &"b": 2.0}).is_empty(), "integer and float weights are accepted", failures)
 
 func _valid_request() -> ItemGenerationRequest:
 	var request := ItemGenerationRequest.create(991, 4, 250, &"ordinary_enemy", &"ordinary_drop", [&"common", &"uncommon"])
@@ -220,8 +252,10 @@ func _expect_error(
 
 func _is_json_value(value: Variant) -> bool:
 	match typeof(value):
-		TYPE_NIL, TYPE_BOOL, TYPE_INT, TYPE_FLOAT, TYPE_STRING:
+		TYPE_NIL, TYPE_BOOL, TYPE_INT, TYPE_STRING:
 			return true
+		TYPE_FLOAT:
+			return is_finite(value)
 		TYPE_ARRAY:
 			for entry: Variant in value:
 				if not _is_json_value(entry):
