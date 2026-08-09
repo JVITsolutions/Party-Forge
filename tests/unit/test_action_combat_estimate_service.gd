@@ -35,10 +35,20 @@ func _test_critical_chance_matches_runtime_bounds(failures: Array[String]) -> vo
 	TestAssertions.near(overcapped.average_hit, overcapped.critical_hit, 0.001, "overcapped crit chance averages at a certain critical hit", failures)
 	var negative := _estimate_with_crit_modifier(-1.0, &"negative_crit", failures)
 	TestAssertions.near(negative.average_hit, negative.normal_hit, 0.001, "negative crit chance averages at a normal hit", failures)
-	var nonfinite := _estimate_with_crit_modifier(NAN, &"nonfinite_crit", failures)
-	TestAssertions.truthy(not nonfinite.available, "non-finite crit chance makes estimate unavailable", failures)
-	TestAssertions.truthy(is_finite(nonfinite.average_hit), "unavailable non-finite crit chance exposes no NaN average", failures)
-	TestAssertions.truthy("critical chance" in nonfinite.unavailable_reason.to_lower(), "non-finite crit chance names the invalid boundary", failures)
+	_test_nonfinite_modifier_is_rejected_atomically(failures)
+
+func _test_nonfinite_modifier_is_rejected_atomically(failures: Array[String]) -> void:
+	var catalog := GameCatalog.load_defaults()
+	var party := PartyManager.new()
+	party.initialize(catalog.class_by_id(&"ranger"), catalog.traits)
+	var baseline := party.stats_for(1)
+	var source := StatModifierSource.create(&"nonfinite_crit", &"test", "Critical Chance Boundary", 1, [
+		StatModifier.create(&"crit_chance", StatModifier.Operation.FLAT, NAN, &"nonfinite_crit", "Critical Chance Boundary"),
+	])
+	TestAssertions.truthy(not party.add_member_source(1, source), "non-finite crit source is rejected", failures)
+	TestAssertions.truthy(party.members[0].modifier_sources.is_empty(), "rejected non-finite source leaves member sources unchanged", failures)
+	TestAssertions.truthy(is_same(baseline, party.stats_for(1)), "rejected non-finite source preserves the cached snapshot", failures)
+	party.free()
 
 func _test_noncritical_mixed_damage(failures: Array[String]) -> void:
 	var catalog := GameCatalog.load_defaults()

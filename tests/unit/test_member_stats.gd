@@ -231,7 +231,7 @@ func _test_source_breakdown_order(catalog: GameCatalog, failures: Array[String])
 	TestAssertions.truthy(party.upgrade_party_stat(&"attack_speed"), "ordered party attack speed increases", failures)
 	var snapshot := party.stats_for(member_id)
 	TestAssertions.equal(_source_ids(snapshot, &"damage"), [&"base", &"class_rank_ranger", &"personal_damage", &"party_damage"], "damage breakdown orders class member party layers", failures)
-	TestAssertions.equal(_source_ids(snapshot, &"attack_speed"), [&"base", &"personal_attack_speed", &"party_attack_speed", &"martial"], "attack speed breakdown orders member party trait layers", failures)
+	TestAssertions.equal(_source_ids(snapshot, &"attack_speed"), [&"base", &"personal_attack_speed", &"party_attack_speed", &"martial", &"attribute_projection_1_attack_speed"], "attack speed breakdown orders member party trait and derived layers", failures)
 	party.free()
 
 func _source_ids(snapshot: ResolvedStatSnapshot, stat_id: StringName) -> Array[StringName]:

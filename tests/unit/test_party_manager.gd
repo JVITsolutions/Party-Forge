@@ -53,6 +53,7 @@ func run() -> Array[String]:
 
     _test_resolved_party_stats(failures)
     _test_replace_member_source(failures)
+    _test_two_pass_cache_isolation_and_preview_inputs(failures)
     _test_party_actor_stats_signal_lifecycle(failures)
     return failures
 
@@ -158,6 +159,61 @@ func _test_replace_member_source(failures: Array[String]) -> void:
     TestAssertions.equal(changed, [], "failed replacement emits no stats signal", failures)
     TestAssertions.near(party.stats_for(member_id).value(&"strength"), 3.0, 0.001, "failed replacement preserves resolved values", failures)
     TestAssertions.equal(party.members[0].modifier_sources[0].modifiers[0].stat_id, &"strength", "failed replacement preserves owned source", failures)
+    party.free()
+
+func _test_two_pass_cache_isolation_and_preview_inputs(failures: Array[String]) -> void:
+    var catalog := GameCatalog.load_defaults()
+    var party := PartyManager.new()
+    party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
+    TestAssertions.truthy(party.recruit(catalog.class_by_id(&"ranger")), "cache isolation fixture recruits member two", failures)
+    var first_id := party.members[0].member_id
+    var second_id := party.members[1].member_id
+
+    for method_name: StringName in [&"member_base_values", &"member_capabilities", &"member_sources_without_equipment", &"stat_revision"]:
+        TestAssertions.truthy(party.has_method(method_name), "party manager exposes %s" % method_name, failures)
+    if (
+        not party.has_method(&"member_base_values")
+        or not party.has_method(&"member_capabilities")
+        or not party.has_method(&"member_sources_without_equipment")
+        or not party.has_method(&"stat_revision")
+    ):
+        party.free()
+        return
+
+    var first_snapshot := party.stats_for(first_id)
+    var second_snapshot := party.stats_for(second_id)
+    TestAssertions.truthy(is_same(first_snapshot, party.stats_for(first_id)), "repeated member resolution uses the cache", failures)
+    TestAssertions.truthy(is_same(second_snapshot, party.stats_for(second_id)), "second member resolution uses its own cache entry", failures)
+
+    var growth_source := StatModifierSource.create(&"cache_growth_1", &"growth", "Growth", first_id, [
+        StatModifier.create(&"strength", StatModifier.Operation.FLAT, 5.0, &"cache_growth_1_strength", "Growth"),
+    ])
+    TestAssertions.truthy(party.add_member_source(first_id, growth_source), "member one source invalidates successfully", failures)
+    var refreshed_first := party.stats_for(first_id)
+    TestAssertions.truthy(not is_same(first_snapshot, refreshed_first), "invalidated member receives a replacement snapshot", failures)
+    TestAssertions.truthy(is_same(second_snapshot, party.stats_for(second_id)), "invalidating member one preserves member two snapshot identity", failures)
+    TestAssertions.near(refreshed_first.value(&"melee_damage"), 1.10, 0.0001, "party manager uses attribute-derived melee scaling", failures)
+    TestAssertions.equal(refreshed_first.revision, int(party.call(&"stat_revision")), "party manager exposes the active stat revision", failures)
+
+    var base_values: Dictionary = party.call(&"member_base_values", first_id)
+    var original_health := float(base_values.get(&"max_health", 0.0))
+    base_values[&"max_health"] = -999.0
+    TestAssertions.near(float((party.call(&"member_base_values", first_id) as Dictionary).get(&"max_health", 0.0)), original_health, 0.0001, "member base values are defensive", failures)
+
+    var capabilities: Array[StringName] = party.call(&"member_capabilities", first_id)
+    capabilities.append(&"mutated")
+    TestAssertions.truthy(&"mutated" not in (party.call(&"member_capabilities", first_id) as Array[StringName]), "member capabilities are defensive", failures)
+
+    var equipment_source := StatModifierSource.create(&"preview_equipment", &"equipment", "Equipment", first_id, [
+        StatModifier.create(&"strength", StatModifier.Operation.FLAT, 2.0, &"preview_equipment_strength", "Equipment"),
+    ])
+    TestAssertions.truthy(party.add_member_source(first_id, equipment_source), "equipment preview fixture source is accepted", failures)
+    var without_equipment: Array[StatModifierSource] = party.call(&"member_sources_without_equipment", first_id)
+    TestAssertions.truthy(without_equipment.all(func(source: StatModifierSource) -> bool: return source.source_type != &"equipment"), "preview sources exclude only equipment", failures)
+    TestAssertions.truthy(without_equipment.any(func(source: StatModifierSource) -> bool: return source.id == &"cache_growth_1"), "preview sources retain ordinary member sources", failures)
+    var preview_count := without_equipment.size()
+    without_equipment.clear()
+    TestAssertions.equal((party.call(&"member_sources_without_equipment", first_id) as Array[StatModifierSource]).size(), preview_count, "preview source arrays are defensive", failures)
     party.free()
 
 func _test_party_actor_stats_signal_lifecycle(failures: Array[String]) -> void:

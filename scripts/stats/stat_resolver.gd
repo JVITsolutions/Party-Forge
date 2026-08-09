@@ -3,14 +3,30 @@ extends RefCounted
 
 static func validate_sources(catalog: StatCatalog, sources: Array[StatModifierSource]) -> PackedStringArray:
 	var errors := PackedStringArray()
+	if catalog == null:
+		errors.append("PARTY_FORGE_STAT_ERROR source=<unknown> stat=<unknown> reason=catalog is null")
+		return errors
+	var source_ids: Dictionary = {}
 	for source: StatModifierSource in sources:
 		if source == null:
 			errors.append("PARTY_FORGE_STAT_ERROR source=<null> stat=<unknown> reason=null source")
 			continue
+		if source.id.is_empty():
+			errors.append("PARTY_FORGE_STAT_ERROR source=<empty> stat=<unknown> reason=empty source id")
+		elif source_ids.has(source.id):
+			errors.append("PARTY_FORGE_STAT_ERROR source=%s stat=<unknown> reason=duplicate source id" % source.id)
+		else:
+			source_ids[source.id] = true
 		for modifier: StatModifier in source.modifiers:
 			if modifier == null:
 				errors.append("PARTY_FORGE_STAT_ERROR source=%s stat=<null> reason=null modifier" % source.id)
 				continue
+			if modifier.source_id.is_empty():
+				errors.append("PARTY_FORGE_STAT_ERROR source=%s stat=%s reason=empty modifier source id" % [source.id, modifier.stat_id])
+			if modifier.operation < 0 or modifier.operation >= StatModifier.Operation.size():
+				errors.append("PARTY_FORGE_STAT_ERROR source=%s stat=%s reason=unsupported operation" % [source.id, modifier.stat_id])
+			if not is_finite(modifier.value):
+				errors.append("PARTY_FORGE_STAT_ERROR source=%s stat=%s reason=non-finite value" % [source.id, modifier.stat_id])
 			if catalog.definition(modifier.stat_id) == null:
 				errors.append("PARTY_FORGE_STAT_ERROR source=%s stat=%s reason=unknown stat id" % [source.id, modifier.stat_id])
 	return errors

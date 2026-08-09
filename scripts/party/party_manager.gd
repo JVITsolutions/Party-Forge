@@ -10,6 +10,7 @@ signal stats_changed(member_id: int)
 const MAX_PARTY_SIZE := 4
 const PARTY_STAT_IDS: Array[StringName] = [&"max_health", &"damage", &"move_speed", &"attack_speed", &"pickup_radius"]
 const DEFAULT_UPGRADE_TUNING: UpgradeTuning = preload("res://data/upgrades/default_upgrades.tres")
+const DEFAULT_ATTRIBUTE_PROJECTION: AttributeProjectionTuning = preload("res://data/stats/default_attribute_projection.tres")
 const STAT_CATALOG: StatCatalog = preload("res://data/stats/core_stats.tres")
 var members: Array[PartyMemberState] = []
 var class_ranks: Dictionary = {}
@@ -69,13 +70,47 @@ func member_by_id(member_id: int) -> PartyMemberState:
             return member
     return null
 
+func member_base_values(member_id: int) -> Dictionary:
+    var member := member_by_id(member_id)
+    return member.class_definition.stat_base_values() if member != null else {}
+
+func member_capabilities(member_id: int) -> Array[StringName]:
+    var member := member_by_id(member_id)
+    return member.capability_tags.duplicate() if member != null else []
+
+func member_sources_without_equipment(member_id: int) -> Array[StatModifierSource]:
+    var member := member_by_id(member_id)
+    var result: Array[StatModifierSource] = []
+    if member == null:
+        return result
+    for source: StatModifierSource in _sources_for(member):
+        if source == null or source.source_type != &"equipment":
+            result.append(source)
+    return result
+
+func stat_revision() -> int:
+    return _stat_revision
+
 func stats_for(member_id: int) -> ResolvedStatSnapshot:
     var member := member_by_id(member_id)
     if member == null:
         return null
     if _stat_cache.has(member_id):
         return _stat_cache[member_id] as ResolvedStatSnapshot
-    var snapshot := StatResolver.resolve(member_id, STAT_CATALOG, member.class_definition.stat_base_values(), member.capability_tags, _sources_for(member), [], _stat_revision)
+    var resolution := MemberStatResolutionService.resolve(
+        member_id,
+        STAT_CATALOG,
+        member.class_definition.stat_base_values(),
+        member.capability_tags,
+        _sources_for(member),
+        [],
+        _stat_revision,
+        DEFAULT_ATTRIBUTE_PROJECTION,
+    )
+    if not resolution.ok():
+        push_error(resolution.error)
+        return null
+    var snapshot := resolution.final_stats
     _stat_cache[member_id] = snapshot
     return snapshot
 
@@ -94,7 +129,20 @@ func stats_for_action(member_id: int, action_tags: Array[StringName]) -> Resolve
     var key := "%d|%s" % [member_id, ",".join(parts)]
     if _action_stat_cache.has(key):
         return _action_stat_cache[key] as ResolvedStatSnapshot
-    var snapshot := StatResolver.resolve(member_id, STAT_CATALOG, member.class_definition.stat_base_values(), member.capability_tags, _sources_for(member), normalized, _stat_revision)
+    var resolution := MemberStatResolutionService.resolve(
+        member_id,
+        STAT_CATALOG,
+        member.class_definition.stat_base_values(),
+        member.capability_tags,
+        _sources_for(member),
+        normalized,
+        _stat_revision,
+        DEFAULT_ATTRIBUTE_PROJECTION,
+    )
+    if not resolution.ok():
+        push_error(resolution.error)
+        return null
+    var snapshot := resolution.final_stats
     _action_stat_cache[key] = snapshot
     return snapshot
 
