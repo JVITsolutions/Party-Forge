@@ -34,6 +34,7 @@ func run() -> Array[String]:
     _assert_class_names_and_eligibility(catalog, failures)
     _assert_primary_action_estimates(catalog, failures)
     _assert_item_foundation_reachability(catalog, failures)
+    _assert_equipment_attribute_policy(catalog, failures)
     var fighter := catalog.class_by_id(&"fighter")
     fighter.growth_definition = null
     TestAssertions.truthy(
@@ -61,6 +62,157 @@ func run() -> Array[String]:
     _assert_generated_values(failures)
     _assert_persisted_attack_damage_path(failures)
     return failures
+
+
+func _assert_equipment_attribute_policy(catalog: GameCatalog, failures: Array[String]) -> void:
+    var live_equipment := catalog.equipment_catalog
+    var live_foundation := catalog.item_foundation_catalog
+    var stats := GameCatalog.STAT_CATALOG
+    var constants: Dictionary = EquipmentBaseDefinition.new().get_script().get_script_constant_map()
+    TestAssertions.equal(
+        constants.get("REQUIREMENT_ATTRIBUTE_IDS", []),
+        [&"strength", &"dexterity", &"constitution", &"intelligence", &"wisdom", &"charisma"],
+        "equipment requirements expose one canonical six-attribute schema",
+        failures,
+    )
+    TestAssertions.equal(live_equipment.size(), 99, "attribute-policy audit covers all live equipment bases", failures)
+    TestAssertions.equal(live_foundation.affixes.size(), 7, "attribute-policy audit covers all live affix definitions", failures)
+    TestAssertions.equal(live_equipment.validate(), PackedStringArray(), "full live equipment requirement audit passes", failures)
+    TestAssertions.equal(live_foundation.validate(stats, live_equipment), PackedStringArray(), "full live affix modifier audit passes", failures)
+    var issued_count := 0
+    for index: int in live_equipment.definitions.size():
+        var base := live_equipment.definitions[index]
+        if base == null:
+            continue
+        var issued := ItemInstanceIssuer.issue(
+            "task10e:live-catalog-audit",
+            index,
+            "task10e_live_catalog_audit",
+            10000 + index,
+            {"affixes": [], "base_definition_id": String(base.id), "item_level": 1, "rarity_id": "common"},
+            live_equipment,
+            live_foundation,
+        )
+        TestAssertions.truthy(issued.ok(), "live base %s still issues an immutable item" % base.id, failures)
+        if issued.ok():
+            issued_count += 1
+            TestAssertions.equal(
+                ItemInstanceCodec.validate(issued.item, live_equipment, live_foundation),
+                "",
+                "live base %s issued item validates" % base.id,
+                failures,
+            )
+    TestAssertions.equal(issued_count, 99, "all live equipment bases issue valid immutable items", failures)
+
+    var malformed_cases: Array[Dictionary] = [
+        {"requirements": {&"luck": 1.0}, "reason": "requirement attribute=luck value=1.0 reason=unknown core attribute"},
+        {"requirements": {&"strength": "five"}, "reason": "requirement attribute=strength value=five reason=value must be numeric"},
+        {"requirements": {&"strength": NAN}, "reason": "requirement attribute=strength value=nan reason=value must be finite"},
+        {"requirements": {&"strength": INF}, "reason": "requirement attribute=strength value=inf reason=value must be finite"},
+        {"requirements": {&"strength": -1.0}, "reason": "requirement attribute=strength value=-1.0 reason=value must be nonnegative"},
+    ]
+    for malformed: Dictionary in malformed_cases:
+        var malformed_equipment := live_equipment.duplicate(true) as EquipmentCatalog
+        var base_index := _equipment_index(malformed_equipment, &"greenwood_boots")
+        malformed_equipment.definitions[base_index] = malformed_equipment.definitions[base_index].duplicate(true) as EquipmentBaseDefinition
+        malformed_equipment.definitions[base_index].attribute_requirements = (malformed["requirements"] as Dictionary).duplicate(true)
+        TestAssertions.truthy(
+            malformed_equipment.validate().has(
+                "PARTY_FORGE_EQUIPMENT_ERROR item=greenwood_boots reason=%s" % String(malformed["reason"])
+            ),
+            "malformed requirement is rejected with stable item and value context: %s" % String(malformed["reason"]),
+            failures,
+        )
+
+    var all_zero := live_equipment.duplicate(true) as EquipmentCatalog
+    var zero_index := _equipment_index(all_zero, &"greenwood_boots")
+    all_zero.definitions[zero_index] = all_zero.definitions[zero_index].duplicate(true) as EquipmentBaseDefinition
+    all_zero.definitions[zero_index].attribute_requirements = {
+        &"strength": 0.0, &"dexterity": 0, &"constitution": 0.0,
+        &"intelligence": 0, &"wisdom": 0.0, &"charisma": 0,
+    }
+    TestAssertions.equal(all_zero.validate(), PackedStringArray(), "zero requirements are valid and deterministic", failures)
+
+    _assert_affix_policy_rejection(
+        live_foundation, live_equipment, stats,
+        StatModifier.Operation.FLAT, -1.0,
+        "flat", "value must be nonnegative", failures,
+    )
+    _assert_affix_policy_rejection(
+        live_foundation, live_equipment, stats,
+        StatModifier.Operation.REDUCED, 0.25,
+        "reduced", "operation can reduce a core requirement attribute", failures,
+    )
+    _assert_affix_policy_rejection(
+        live_foundation, live_equipment, stats,
+        StatModifier.Operation.LESS, 0.25,
+        "less", "operation can reduce a core requirement attribute", failures,
+    )
+    for operation: int in [
+        StatModifier.Operation.FLAT,
+        StatModifier.Operation.INCREASED,
+        StatModifier.Operation.REDUCED,
+        StatModifier.Operation.MORE,
+        StatModifier.Operation.LESS,
+    ]:
+        var neutral := _foundation_with_stout_policy(live_foundation, operation, 0.0)
+        TestAssertions.equal(
+            neutral.affix(&"stout").validate(
+                stats,
+                neutral.modifier_family_ids,
+                ItemGenerationVocabulary.DOMAINS,
+                neutral.known_source_ids,
+                _rarity_ids(neutral),
+                neutral.known_item_tags,
+            ),
+            PackedStringArray(),
+            "zero core modifier is neutral for operation %d" % operation,
+            failures,
+        )
+
+
+func _assert_affix_policy_rejection(
+    live_foundation: ItemFoundationCatalog,
+    live_equipment: EquipmentCatalog,
+    stats: StatCatalog,
+    operation: int,
+    value: float,
+    operation_name: String,
+    policy_reason: String,
+    failures: Array[String],
+) -> void:
+    var malformed := _foundation_with_stout_policy(live_foundation, operation, value)
+    TestAssertions.truthy(
+        malformed.validate(stats, live_equipment).has(
+            "PARTY_FORGE_ITEM_AFFIX_ERROR id=stout reason=affix stout effect=0 stat=constitution operation=%s value=%s reason=%s" % [
+                operation_name, str(value), policy_reason,
+            ]
+        ),
+        "%s core modifier is rejected with affix/stat/operation/value context" % operation_name,
+        failures,
+    )
+
+
+func _foundation_with_stout_policy(source: ItemFoundationCatalog, operation: int, value: float) -> ItemFoundationCatalog:
+    var result := source.duplicate(true) as ItemFoundationCatalog
+    var index := _affix_index(result, &"stout")
+    var stout := result.affixes[index].duplicate(true) as ItemAffixDefinition
+    stout.effects[0] = stout.effects[0].duplicate(true) as ItemModifierEffectDefinition
+    stout.effects[0].operation = operation
+    for tier_index: int in stout.tiers.size():
+        stout.tiers[tier_index] = stout.tiers[tier_index].duplicate(true) as ItemAffixTierDefinition
+        stout.tiers[tier_index].minimum_rolls = [value]
+        stout.tiers[tier_index].maximum_rolls = [value]
+    result.affixes[index] = stout
+    return result
+
+
+func _rarity_ids(foundation: ItemFoundationCatalog) -> Array[StringName]:
+    var result: Array[StringName] = []
+    for rarity: ItemRarityDefinition in foundation.rarities:
+        if rarity != null:
+            result.append(rarity.id)
+    return result
 
 
 func _assert_owned_action_contract(catalog: GameCatalog, failures: Array[String]) -> void:

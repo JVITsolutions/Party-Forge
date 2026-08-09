@@ -29,6 +29,7 @@ func run() -> Array[String]:
 	_test_active_projection_is_deterministic_and_immutable(equipment, foundation, stats, failures)
 	_test_empty_active_set_returns_uniform_source(equipment, foundation, stats, failures)
 	_test_all_modifier_operations_project(equipment, foundation, stats, failures)
+	_test_core_attribute_modifier_policy(equipment, foundation, stats, failures)
 	_test_invalid_rolls_fail_atomically(equipment, foundation, stats, failures)
 	_test_invalid_inputs_fail_atomically(equipment, foundation, stats, failures)
 	return failures
@@ -136,6 +137,68 @@ func _test_all_modifier_operations_project(
 		for modifier: StatModifier in projection.source.modifiers:
 			actual.append(modifier.operation)
 		TestAssertions.equal(actual, operations, "flat, increased, reduced, more, and less remain exact", failures)
+
+func _test_core_attribute_modifier_policy(
+	equipment: EquipmentCatalog,
+	foundation: ItemFoundationCatalog,
+	stats: StatCatalog,
+	failures: Array[String],
+) -> void:
+	for row: Dictionary in [
+		{"operation": StatModifier.Operation.FLAT, "value": -1.0, "name": "flat", "reason": "value must be nonnegative"},
+		{"operation": StatModifier.Operation.INCREASED, "value": -0.25, "name": "increased", "reason": "value must be nonnegative"},
+		{"operation": StatModifier.Operation.REDUCED, "value": -0.25, "name": "reduced", "reason": "value must be nonnegative"},
+		{"operation": StatModifier.Operation.MORE, "value": -0.25, "name": "more", "reason": "value must be nonnegative"},
+		{"operation": StatModifier.Operation.LESS, "value": -0.25, "name": "less", "reason": "value must be nonnegative"},
+		{"operation": StatModifier.Operation.REDUCED, "value": 0.25, "name": "reduced", "reason": "operation can reduce a core requirement attribute"},
+		{"operation": StatModifier.Operation.LESS, "value": 0.25, "name": "less", "reason": "operation can reduce a core requirement attribute"},
+	]:
+		var policy_foundation := foundation.duplicate(true) as ItemFoundationCatalog
+		var definition := _core_policy_affix(int(row["operation"]), float(row["value"]))
+		policy_foundation.affixes.append(definition)
+		var item := _item("item-core-policy", &"forge_vanguard_sword", [
+			_affix(definition.id, definition.affix_kind, 1, [
+				_roll(&"strength", int(row["operation"]), float(row["value"])),
+			]),
+		], 30)
+		_assert_projection_error(
+			_state([item], {EquipmentSlotIndex.index_for(&"main_hand"): item.instance_id}),
+			[item.instance_id], equipment, policy_foundation, stats,
+			"PARTY_FORGE_EQUIPMENT_PROJECTION_ERROR member=1 slot=main_hand item=item-core-policy affix=core_policy roll=0 stat=strength reason=base=forge_vanguard_sword operation=%s value=%s %s" % [
+				String(row["name"]), str(float(row["value"])), String(row["reason"]),
+			],
+			"%s core modifier" % String(row["name"]), failures,
+		)
+
+	for operation: int in [
+		StatModifier.Operation.FLAT,
+		StatModifier.Operation.INCREASED,
+		StatModifier.Operation.REDUCED,
+		StatModifier.Operation.MORE,
+		StatModifier.Operation.LESS,
+	]:
+		var zero_foundation := foundation.duplicate(true) as ItemFoundationCatalog
+		var zero_definition := _core_policy_affix(operation, 0.0)
+		zero_foundation.affixes.append(zero_definition)
+		var zero_item := _item("item-zero-%d" % operation, &"forge_vanguard_sword", [
+			_affix(zero_definition.id, zero_definition.affix_kind, 1, [_roll(&"strength", operation, 0.0)]),
+		], 40 + operation)
+		var zero_state := _state([zero_item], {EquipmentSlotIndex.index_for(&"main_hand"): zero_item.instance_id})
+		var active_ids: Array[String] = [zero_item.instance_id]
+		var zero_result: Variant = _projector.project(1, CONTAINER_ID, zero_state, active_ids, equipment, zero_foundation, stats)
+		TestAssertions.truthy(zero_result != null and zero_result.ok(), "zero core modifier is neutral for operation %d" % operation, failures)
+
+	for operation: int in [StatModifier.Operation.FLAT, StatModifier.Operation.INCREASED, StatModifier.Operation.MORE]:
+		var boost_foundation := foundation.duplicate(true) as ItemFoundationCatalog
+		var boost_definition := _core_policy_affix(operation, 0.25)
+		boost_foundation.affixes.append(boost_definition)
+		var boost_item := _item("item-boost-%d" % operation, &"forge_vanguard_sword", [
+			_affix(boost_definition.id, boost_definition.affix_kind, 1, [_roll(&"strength", operation, 0.25)]),
+		], 50 + operation)
+		var boost_state := _state([boost_item], {EquipmentSlotIndex.index_for(&"main_hand"): boost_item.instance_id})
+		var boost_ids: Array[String] = [boost_item.instance_id]
+		var boost_result: Variant = _projector.project(1, CONTAINER_ID, boost_state, boost_ids, equipment, boost_foundation, stats)
+		TestAssertions.truthy(boost_result != null and boost_result.ok(), "positive monotonic core boost projects for operation %d" % operation, failures)
 
 func _test_invalid_rolls_fail_atomically(
 	equipment: EquipmentCatalog,
@@ -319,6 +382,12 @@ func _operation_matrix_affix(operations: Array[int]) -> ItemAffixDefinition:
 		minimums.append(0.01 * float(index + 1) - 0.001)
 		maximums.append(0.01 * float(index + 1) + 0.001)
 	return _definition(&"operation_matrix", "Operation Matrix", "special", effects, minimums, maximums)
+
+func _core_policy_affix(operation: int, value: float) -> ItemAffixDefinition:
+	var effect := ItemModifierEffectDefinition.new()
+	effect.stat_id = &"strength"
+	effect.operation = operation
+	return _definition(&"core_policy", "Core Policy", "special", [effect], [value], [value])
 
 func _definition(
 	id: StringName,

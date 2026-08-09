@@ -8,6 +8,7 @@ func run() -> Array[String]:
 	_test_disabled_cascade_projection(failures)
 	_test_rejected_preview_suppresses_raw_fallback(failures)
 	_test_two_hand_displacement_projection(failures)
+	_test_malformed_presentation_fails_closed(failures)
 	var first := _item("item-zeta", &"dawn_bulwark_crown", 0)
 	var second := _item("item-alpha", &"windrunner_band", 1)
 	var equipped_ring := _item("item-equipped-ring", &"windrunner_band", 2)
@@ -217,13 +218,50 @@ func _test_two_hand_displacement_projection(failures: Array[String]) -> void:
 		), "two-hand displacement comparison includes candidate final stats", failures)
 
 
+func _test_malformed_presentation_fails_closed(failures: Array[String]) -> void:
+	var equipment := _copied_equipment_catalog()
+	var base := equipment.definition(&"windrunner_band")
+	base.attribute_requirements = {&"strength": "five"}
+	var valid_item := _item("aaa-valid-presentation-item", &"dawn_bulwark_crown", 89)
+	var item := _item("malformed-presentation-item", &"windrunner_band", 90)
+	var profile := ProfileState.new_profile(PROFILE_ID, "Malformed Presentation", 1000)
+	profile.item_records = ItemRegistry.new([valid_item, item] as Array[ItemInstance]).to_dictionary()
+	profile.leader_loadout = ItemSlotContainer.create(
+		&"leader-loadout", ItemSlotContainer.PROFILE_LEADER_EQUIPMENT, PROFILE_ID,
+		EquipmentSlotIndex.capacity(),
+	).to_dictionary()
+	profile.stash_tabs = [_stash(&"stash-tab-malformed-presentation", {0: valid_item.instance_id, 1: item.instance_id})]
+	var profile_before := var_to_bytes(profile.to_dictionary())
+	var requirements_before := var_to_bytes(base.attribute_requirements)
+	var canonical_requirements_before := var_to_bytes(GameCatalog.EQUIPMENT_CATALOG.definition(&"windrunner_band").attribute_requirements)
+	var projection := ProfileStorageProjection.from_profile(
+		profile, equipment, GameCatalog.ITEM_FOUNDATION_CATALOG
+	)
+	TestAssertions.truthy(not projection.valid, "profile projection rejects malformed presentation data", failures)
+	TestAssertions.equal(
+		projection.error,
+		"PARTY_FORGE_PROFILE_STORAGE_PROJECTION_ERROR field=item_records instance=malformed-presentation-item reason=PARTY_FORGE_ITEM_PRESENTATION_ERROR item=malformed-presentation-item base=windrunner_band requirement attribute=strength value=five reason=value must be numeric",
+		"profile projection propagates stable item presentation context",
+		failures,
+	)
+	TestAssertions.equal(projection.item_records, {}, "failed profile projection publishes no partial item records", failures)
+	TestAssertions.equal(var_to_bytes(profile.to_dictionary()), profile_before, "failed profile projection leaves profile immutable", failures)
+	TestAssertions.equal(var_to_bytes(base.attribute_requirements), requirements_before, "failed profile projection leaves isolated requirements immutable", failures)
+	TestAssertions.equal(var_to_bytes(GameCatalog.EQUIPMENT_CATALOG.definition(&"windrunner_band").attribute_requirements), canonical_requirements_before, "malformed profile fixture leaves canonical catalog immutable", failures)
+
+
 func _requirements_catalog() -> EquipmentCatalog:
-	var result := EquipmentCatalog.new()
-	for definition: EquipmentBaseDefinition in GameCatalog.EQUIPMENT_CATALOG.definitions:
-		var owned := definition.duplicate(true) as EquipmentBaseDefinition
+	var result := _copied_equipment_catalog()
+	for owned: EquipmentBaseDefinition in result.definitions:
 		if owned.id == &"forge_vanguard_helmet":
 			owned.attribute_requirements = {&"constitution": 5.0}
-		result.definitions.append(owned)
+	return result
+
+
+func _copied_equipment_catalog() -> EquipmentCatalog:
+	var result := EquipmentCatalog.new()
+	for definition: EquipmentBaseDefinition in GameCatalog.EQUIPMENT_CATALOG.definitions:
+		result.definitions.append(definition.duplicate(true) as EquipmentBaseDefinition)
 	return result
 
 

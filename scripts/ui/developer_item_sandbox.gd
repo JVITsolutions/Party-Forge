@@ -87,7 +87,8 @@ func open(return_focus: Control = null) -> bool:
 	if not error.is_empty() and not FileAccess.file_exists(DeveloperItemSandboxStore.DOCUMENT_PATH):
 		error = _state.reset()
 	if error.is_empty():
-		_refresh_projection()
+		error = _refresh_projection()
+	if error.is_empty():
 		_set_status("OPEN")
 	else:
 		_set_status("OPEN", error)
@@ -308,7 +309,10 @@ func _perform_transfer(
 	if not error.is_empty():
 		_set_status(action, error)
 		return
-	_refresh_projection()
+	var projection_error := _refresh_projection()
+	if not projection_error.is_empty():
+		_set_status(action, projection_error)
+		return
 	_inspect_slot(destination_container_id, destination_slot)
 	_set_status(action)
 
@@ -337,7 +341,10 @@ func _move_selected_to_first_empty(inventory_destination: bool) -> void:
 	if not error.is_empty():
 		_set_status(action, error)
 		return
-	_refresh_projection()
+	var projection_error := _refresh_projection()
+	if not projection_error.is_empty():
+		_set_status(action, projection_error)
+		return
 	var location := _location_for(item.instance_id)
 	_inspect_slot(StringName(String(location.get("container_id", ""))), int(location.get("slot", -1)))
 	_set_status(action)
@@ -364,7 +371,10 @@ func _complete_state_action(action: String, error: String) -> void:
 		_set_status(action, error)
 		return
 	_clear_held_item()
-	_refresh_projection()
+	var projection_error := _refresh_projection()
+	if not projection_error.is_empty():
+		_set_status(action, projection_error)
+		return
 	if _item_at(_selected_container_id, _selected_slot) != null:
 		_inspect_slot(_selected_container_id, _selected_slot)
 	else:
@@ -373,19 +383,20 @@ func _complete_state_action(action: String, error: String) -> void:
 	_set_status(action)
 
 
-func _refresh_projection() -> void:
+func _refresh_projection() -> String:
 	_tooltip().call("force_dismiss")
 	var registry := _state.registry()
 	var inventory := _state.inventory()
 	var stash := _state.stash()
 	if registry == null or inventory == null or stash == null:
-		return
+		return "PARTY_FORGE_DEVELOPER_ITEM_SANDBOX_ERROR reason=projection state is unavailable"
 	_registry = registry
 	_inventory = inventory
 	_stash = stash
 	_projection = _state.to_dictionary()
 	_comparison_projection = _build_comparison_projection()
 	var fixture_class := GameCatalog.load_defaults().class_by_id(&"fighter")
+	var first_error := ""
 	for button: Button in _slot_buttons:
 		var container_id := StringName(String(button.get_meta("container_id", "")))
 		var slot := int(button.get_meta("slot", -1))
@@ -398,16 +409,29 @@ func _refresh_projection() -> void:
 			GameCatalog.STAT_CATALOG,
 			fixture_class,
 		) if item != null else {}
-		if not detail.is_empty():
-			detail["owner_id"] = OWNER_ID
-			detail["container_id"] = String(container_id)
-			detail["slot"] = slot
+		if detail.has("error"):
+			if first_error.is_empty():
+				first_error = String(detail.get("error", "PARTY_FORGE_ITEM_PRESENTATION_ERROR reason=presentation data is invalid"))
+			detail = {}
+		elif not detail.is_empty():
+			detail = _bindable_presentation_detail(detail, container_id, slot)
 		var shared := button as StorageSlotButton
 		shared.bind_item(container_id, slot, item_id, detail)
 		if container_id == STASH_ID:
 			shared.custom_minimum_size.y = maxf(shared.custom_minimum_size.y, 88.0)
 		button.set_meta("item_id", item_id)
 	_sync_slot_affordances()
+	return first_error
+
+
+func _bindable_presentation_detail(detail: Dictionary, container_id: StringName, slot: int) -> Dictionary:
+	if detail.has("error"):
+		return {}
+	var result := detail.duplicate(true)
+	result["owner_id"] = OWNER_ID
+	result["container_id"] = String(container_id)
+	result["slot"] = slot
+	return result
 
 
 func _build_slots() -> void:

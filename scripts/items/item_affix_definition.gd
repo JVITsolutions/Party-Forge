@@ -78,7 +78,33 @@ func validate(
 	if tiers.is_empty():
 		errors.append("affix %s requires at least one tier" % id)
 	_validate_tiers(tiers, effects.size(), known_domains, known_sources, known_rarities, errors)
+	_validate_monotonic_core_attribute_ranges(errors)
 	return errors
+
+func _validate_monotonic_core_attribute_ranges(errors: PackedStringArray) -> void:
+	var seen: Dictionary = {}
+	for effect_index: int in effects.size():
+		var effect := effects[effect_index]
+		if effect == null or effect.stat_id not in EquipmentBaseDefinition.REQUIREMENT_ATTRIBUTE_IDS:
+			continue
+		for tier: ItemAffixTierDefinition in tiers:
+			if tier == null or effect_index >= tier.minimum_rolls.size() or effect_index >= tier.maximum_rolls.size():
+				continue
+			for value: float in [tier.minimum_rolls[effect_index], tier.maximum_rolls[effect_index]]:
+				var reason := EquipmentBaseDefinition.monotonic_core_modifier_error(effect.stat_id, effect.operation, value)
+				if reason.is_empty():
+					continue
+				var diagnostic := "affix %s effect=%d stat=%s operation=%s value=%s reason=%s" % [
+					id,
+					effect_index,
+					effect.stat_id,
+					EquipmentBaseDefinition.modifier_operation_name(effect.operation),
+					str(value),
+					reason,
+				]
+				if not seen.has(diagnostic):
+					seen[diagnostic] = true
+					errors.append(diagnostic)
 
 func _validate_families(values: Array[StringName], known: Array[StringName], errors: PackedStringArray) -> void:
 	if values.is_empty():

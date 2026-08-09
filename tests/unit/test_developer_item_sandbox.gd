@@ -37,6 +37,15 @@ func _test_modal_contract(packed: PackedScene, failures: Array[String]) -> void:
 	return_focus.name = "SandboxReturnFocus"
 	tree.root.add_child(return_focus)
 	sandbox.call(&"_ready")
+	var malformed_detail := {"error": "PARTY_FORGE_ITEM_PRESENTATION_ERROR item=malformed"}
+	var malformed_before := malformed_detail.duplicate(true)
+	TestAssertions.equal(
+		sandbox.call(&"_bindable_presentation_detail", malformed_detail, STASH_ID, 0),
+		{},
+		"sandbox never binds an item presentation error as normal detail",
+		failures,
+	)
+	TestAssertions.equal(malformed_detail, malformed_before, "sandbox presentation rejection leaves source detail immutable", failures)
 	TestAssertions.equal(sandbox.layer, 14, "sandbox renders at exact layer 14", failures)
 	TestAssertions.equal(sandbox.process_mode, Node.PROCESS_MODE_ALWAYS, "sandbox processes while paused", failures)
 	TestAssertions.truthy(not sandbox.visible, "sandbox starts hidden", failures)

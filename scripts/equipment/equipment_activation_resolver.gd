@@ -27,6 +27,7 @@ static func resolve(
 	equipped_ids.sort()
 
 	var active_ids: Array[String] = []
+	var previous_attributes: Dictionary = {}
 	while true:
 		var pass_result := _project_and_resolve(
 			member_id, container_id, state, active_ids, equipment, foundation, stats,
@@ -36,6 +37,18 @@ static func resolve(
 			return _failure(member_id, String(pass_result["error"]))
 		var raw := pass_result["raw"] as ResolvedStatSnapshot
 		var attributes := _attribute_values(raw)
+		if not previous_attributes.is_empty():
+			for attribute_id: StringName in EquipmentBaseDefinition.REQUIREMENT_ATTRIBUTE_IDS:
+				var before := float(previous_attributes[attribute_id])
+				var after := float(attributes[attribute_id])
+				if after < before:
+					return _failure(
+						member_id,
+						"attribute=%s before=%s after=%s reason=active equipment reduced a requirement attribute" % [
+							attribute_id, str(before), str(after),
+						],
+					)
+		previous_attributes = attributes.duplicate(true)
 		var changed := false
 		for item_id: String in equipped_ids:
 			if item_id in active_ids:
@@ -102,8 +115,11 @@ static func _project_and_resolve(
 		return {"error": source_errors[0], "raw": null, "source": null}
 	var raw := StatResolver.resolve(member_id, stats, base_values, capabilities, raw_sources, [], revision)
 	for attribute_id: StringName in ClassGrowthDefinition.CORE_ATTRIBUTE_IDS:
-		if not is_finite(raw.value(attribute_id, NAN)):
+		var value := raw.value(attribute_id, NAN)
+		if not is_finite(value):
 			return {"error": "attribute=%s reason=resolved value is non-finite" % attribute_id, "raw": null, "source": null}
+		if value < 0.0:
+			return {"error": "attribute=%s reason=resolved value must be nonnegative for monotonic activation" % attribute_id, "raw": null, "source": null}
 	return {"error": "", "raw": raw, "source": projection.source}
 
 static func _validate_inputs(
@@ -135,6 +151,25 @@ static func _validate_inputs(
 		return "reason=equipment container is missing"
 	if container.container_kind != ItemSlotContainer.RUN_MEMBER_EQUIPMENT and container.container_kind != ItemSlotContainer.PROFILE_LEADER_EQUIPMENT:
 		return "reason=container is not equipment"
+	var registry := state.registry()
+	var equipped_ids: Array[String] = []
+	for slot_index: int in container.occupied_slots():
+		var item_id := container.item_id_at(slot_index)
+		equipped_ids.append(item_id)
+		var item := registry.item(item_id) if registry != null else null
+		var base := equipment.definition(item.base_definition_id) if item != null else null
+		if base == null:
+			return "item=%s reason=equipment definition missing" % item_id
+		var requirement_errors := base.validate_attribute_requirements()
+		if not requirement_errors.is_empty():
+			return "item=%s base=%s %s" % [item_id, base.id, requirement_errors[0]]
+	# Fixed-point growth is valid only when every equipped roll is monotonic,
+	# including rolls on items that remain disabled and never enter a pass.
+	var equipment_preflight := EquipmentModifierProjector.project(
+		member_id, container_id, state, equipped_ids, equipment, foundation, stats,
+	)
+	if not equipment_preflight.ok():
+		return equipment_preflight.error
 	var source_errors := StatResolver.validate_sources(stats, non_equipment_sources)
 	if not source_errors.is_empty():
 		return source_errors[0]

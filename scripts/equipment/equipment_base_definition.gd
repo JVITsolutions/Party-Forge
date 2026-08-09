@@ -1,6 +1,12 @@
 class_name EquipmentBaseDefinition
 extends Resource
 
+## The fixed-point activation resolver may only inspect these six requirement
+## attributes. Keep requirement authoring and equipment modifier monotonicity on
+## this single canonical schema so active items can never invalidate an earlier
+## activation pass.
+const REQUIREMENT_ATTRIBUTE_IDS: Array[StringName] = ClassGrowthDefinition.CORE_ATTRIBUTE_IDS
+
 @export var id: StringName
 @export var display_name: String
 @export var item_type_id: StringName
@@ -58,4 +64,52 @@ func validate() -> PackedStringArray:
 		if tag in excluded_tags: errors.append("equipment %s generation tag %s is excluded" % [id, tag])
 	if implicit_family_id.is_empty(): errors.append("equipment %s implicit family hook is empty" % id)
 	if presentation == null or presentation.id != id: errors.append("equipment %s presentation link is invalid" % id)
+	errors.append_array(validate_attribute_requirements())
 	return errors
+
+func validate_attribute_requirements() -> PackedStringArray:
+	var errors := PackedStringArray()
+	var keys: Array[Variant] = attribute_requirements.keys()
+	keys.sort_custom(func(left: Variant, right: Variant) -> bool: return String(left) < String(right))
+	for key: Variant in keys:
+		var attribute_id := StringName(key) if typeof(key) in [TYPE_STRING, TYPE_STRING_NAME] else &""
+		var value: Variant = attribute_requirements[key]
+		var value_text := str(value)
+		if typeof(key) != TYPE_STRING_NAME:
+			errors.append("requirement attribute=%s value=%s reason=attribute id must be StringName" % [String(key), value_text])
+			continue
+		if attribute_id not in REQUIREMENT_ATTRIBUTE_IDS:
+			errors.append("requirement attribute=%s value=%s reason=unknown core attribute" % [attribute_id, value_text])
+			continue
+		if not value is float and not value is int:
+			errors.append("requirement attribute=%s value=%s reason=value must be numeric" % [attribute_id, value_text])
+			continue
+		var numeric_value := float(value)
+		if not is_finite(numeric_value):
+			errors.append("requirement attribute=%s value=%s reason=value must be finite" % [attribute_id, value_text])
+		elif numeric_value < 0.0:
+			errors.append("requirement attribute=%s value=%s reason=value must be nonnegative" % [attribute_id, value_text])
+	return errors
+
+static func monotonic_core_modifier_error(stat_id: StringName, operation: int, value: float) -> String:
+	if stat_id not in REQUIREMENT_ATTRIBUTE_IDS:
+		return ""
+	if not is_finite(value):
+		return "value must be finite"
+	# Every supported operation is exactly neutral at zero, including -0.0.
+	if value == 0.0:
+		return ""
+	if value < 0.0:
+		return "value must be nonnegative"
+	if operation in [StatModifier.Operation.REDUCED, StatModifier.Operation.LESS]:
+		return "operation can reduce a core requirement attribute"
+	return ""
+
+static func modifier_operation_name(operation: int) -> String:
+	match operation:
+		StatModifier.Operation.FLAT: return "flat"
+		StatModifier.Operation.INCREASED: return "increased"
+		StatModifier.Operation.REDUCED: return "reduced"
+		StatModifier.Operation.MORE: return "more"
+		StatModifier.Operation.LESS: return "less"
+		_: return str(operation)

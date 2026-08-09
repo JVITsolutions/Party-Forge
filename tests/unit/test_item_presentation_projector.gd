@@ -12,6 +12,7 @@ func run() -> Array[String]:
 	_test_complete_record(projector, failures)
 	_test_missing_affix_omits_bounds(projector, failures)
 	_test_class_warning(projector, failures)
+	_test_malformed_requirements_fail_closed(projector, failures)
 	return failures
 
 
@@ -70,6 +71,44 @@ func _test_class_warning(projector: Script, failures: Array[String]) -> void:
 	var warnings := PackedStringArray(detail.get("equip_warning_lines", PackedStringArray()))
 	TestAssertions.truthy("Requires all: Martial, Vanguard" in requirements, "tag requirements are player-readable", failures)
 	TestAssertions.truthy("Ranger lacks required tag: Vanguard" in warnings, "unmet class tag is explicit", failures)
+
+
+func _test_malformed_requirements_fail_closed(projector: Script, failures: Array[String]) -> void:
+	var canonical_base := GameCatalog.EQUIPMENT_CATALOG.definition(&"windrunner_band")
+	var canonical_requirements_before := var_to_bytes(canonical_base.attribute_requirements)
+	var malformed_cases: Array[Dictionary] = [
+		{"requirements": {&"luck": 1.0}, "reason": "requirement attribute=luck value=1.0 reason=unknown core attribute"},
+		{"requirements": {&"strength": "five"}, "reason": "requirement attribute=strength value=five reason=value must be numeric"},
+		{"requirements": {&"strength": NAN}, "reason": "requirement attribute=strength value=nan reason=value must be finite"},
+		{"requirements": {&"strength": -1.0}, "reason": "requirement attribute=strength value=-1.0 reason=value must be nonnegative"},
+	]
+	for malformed: Dictionary in malformed_cases:
+		var equipment := _copied_equipment_catalog()
+		var base := equipment.definition(&"windrunner_band")
+		base.attribute_requirements = (malformed["requirements"] as Dictionary).duplicate(true)
+		var requirements_before := var_to_bytes(base.attribute_requirements)
+		var item := _item_with_stout_roll(5.0)
+		var item_before := var_to_bytes(item.to_dictionary())
+		var detail: Dictionary = projector.call(
+			"project", item, equipment,
+			GameCatalog.ITEM_FOUNDATION_CATALOG, GameCatalog.STAT_CATALOG,
+		)
+		TestAssertions.equal(
+			detail,
+			{"error": "PARTY_FORGE_ITEM_PRESENTATION_ERROR item=projector-item base=windrunner_band %s" % String(malformed["reason"])},
+			"malformed requirement fails presentation with stable item/base/value context",
+			failures,
+		)
+		TestAssertions.equal(var_to_bytes(base.attribute_requirements), requirements_before, "failed presentation leaves base requirements immutable", failures)
+		TestAssertions.equal(var_to_bytes(item.to_dictionary()), item_before, "failed presentation leaves item immutable", failures)
+		TestAssertions.equal(var_to_bytes(canonical_base.attribute_requirements), canonical_requirements_before, "malformed fixture leaves canonical catalog immutable", failures)
+
+
+func _copied_equipment_catalog() -> EquipmentCatalog:
+	var result := EquipmentCatalog.new()
+	for definition: EquipmentBaseDefinition in GameCatalog.EQUIPMENT_CATALOG.definitions:
+		result.definitions.append(definition.duplicate(true) as EquipmentBaseDefinition)
+	return result
 
 
 func _item_with_stout_roll(value: float) -> ItemInstance:

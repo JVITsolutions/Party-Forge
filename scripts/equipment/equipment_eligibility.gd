@@ -6,6 +6,8 @@ static func validate_structure(item: EquipmentBaseDefinition, class_definition: 
 	if item == null or class_definition == null:
 		errors.append("PARTY_FORGE_EQUIPMENT_ERROR reason=item or class is missing")
 		return errors
+	for reason: String in item.validate_attribute_requirements():
+		errors.append("PARTY_FORGE_EQUIPMENT_ERROR item=%s reason=%s" % [item.id, reason])
 	if requested_slot_id not in item.compatible_slot_ids:
 		errors.append("PARTY_FORGE_EQUIPMENT_ERROR item=%s slot=%s reason=incompatible slot" % [item.id, requested_slot_id])
 	var tags := class_definition.normalized_eligibility_tags()
@@ -31,12 +33,16 @@ static func unmet_attribute_requirements(item: EquipmentBaseDefinition, attribut
 	if item == null:
 		errors.append("PARTY_FORGE_EQUIPMENT_ERROR reason=item or class is missing")
 		return errors
+	for reason: String in item.validate_attribute_requirements():
+		errors.append("PARTY_FORGE_EQUIPMENT_ERROR item=%s reason=%s" % [item.id, reason])
+	if not errors.is_empty():
+		return errors
 	var attribute_ids: Array[StringName] = []
 	for attribute_id: Variant in item.attribute_requirements:
-		attribute_ids.append(StringName(attribute_id))
+		attribute_ids.append(attribute_id as StringName)
 	attribute_ids.sort_custom(func(left: StringName, right: StringName) -> bool: return String(left) < String(right))
 	for attribute_id: StringName in attribute_ids:
-		var required := float(item.attribute_requirements.get(attribute_id, item.attribute_requirements.get(String(attribute_id), NAN)))
+		var required := float(item.attribute_requirements[attribute_id])
 		var current := float(attributes.get(attribute_id, attributes.get(String(attribute_id), 0.0)))
 		if not is_finite(required) or not is_finite(current) or current < required:
 			errors.append("PARTY_FORGE_EQUIPMENT_ERROR item=%s reason=attribute %s" % [item.id, attribute_id])

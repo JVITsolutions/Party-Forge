@@ -87,6 +87,17 @@ static func project(
 					return EquipmentModifierProjection.failure(_error(member_id, String(slot_id), item_id, affix_id, str(roll_index), stat_id, "unsupported operation %d" % roll.operation))
 				if not is_finite(roll.value):
 					return EquipmentModifierProjection.failure(_error(member_id, String(slot_id), item_id, affix_id, str(roll_index), stat_id, "non-finite value"))
+				var policy_error := EquipmentBaseDefinition.monotonic_core_modifier_error(roll.stat_id, roll.operation, roll.value)
+				if not policy_error.is_empty():
+					return EquipmentModifierProjection.failure(_error(
+						member_id, String(slot_id), item_id, affix_id, str(roll_index), stat_id,
+						"base=%s operation=%s value=%s %s" % [
+							base.id,
+							EquipmentBaseDefinition.modifier_operation_name(roll.operation),
+							str(roll.value),
+							policy_error,
+						],
+					))
 				var tag_error := _validate_tags(roll.required_tags, foundation.known_item_tags)
 				if not tag_error.is_empty():
 					return EquipmentModifierProjection.failure(_error(member_id, String(slot_id), item_id, affix_id, str(roll_index), stat_id, tag_error))

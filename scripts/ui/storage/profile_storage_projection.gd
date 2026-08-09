@@ -96,6 +96,7 @@ static func from_profile(
 			"slots": tab.to_dictionary()["slots"].duplicate(true),
 		})
 	var registry := state.registry()
+	var projected_item_records: Dictionary = {}
 	for instance_id: String in registry.ids():
 		var detail: Dictionary = PRESENTATION_PROJECTOR.project(
 			registry.item(instance_id), equipment, foundation, stats, class_definition
@@ -103,10 +104,14 @@ static func from_profile(
 		if detail.is_empty():
 			result.error = "%s field=item_records instance=%s reason=presentation data is unavailable" % [ERROR_PREFIX, instance_id]
 			return result
+		if detail.has("error"):
+			result.error = "%s field=item_records instance=%s reason=%s" % [ERROR_PREFIX, instance_id, String(detail.get("error", "presentation data is invalid"))]
+			return result
 		if result._container_has_item(leader, instance_id) and result._current_activation != null:
 			detail["is_disabled"] = not result._current_activation.is_active(instance_id)
 			detail["disabled_requirement_lines"] = result._disabled_requirement_lines(state, result._current_activation, instance_id)
-		result._item_records[instance_id] = detail
+		projected_item_records[instance_id] = detail
+	result._item_records = projected_item_records
 	result.valid = true
 	return result
 

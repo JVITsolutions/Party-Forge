@@ -15,6 +15,13 @@ static func project(
 	var rarity := foundation.rarity(item.rarity_id)
 	if base == null or rarity == null:
 		return {}
+	var requirement_errors := base.validate_attribute_requirements()
+	if not requirement_errors.is_empty():
+		return {
+			"error": "PARTY_FORGE_ITEM_PRESENTATION_ERROR item=%s base=%s %s" % [
+				item.instance_id, base.id, requirement_errors[0],
+			],
+		}
 	var affixes: Array[Dictionary] = []
 	var totals: Dictionary = {}
 	for instance: ItemAffixInstance in item.affixes:

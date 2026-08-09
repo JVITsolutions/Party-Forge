@@ -29,6 +29,10 @@ func run() -> Array[String]:
 	_test_support_chain_is_fixed_point_and_deterministic(equipment, foundation, stats, failures)
 	_test_self_and_mutual_bootstraps_remain_disabled(equipment, foundation, stats, failures)
 	_test_removal_disables_and_restoration_reactivates(equipment, foundation, stats, failures)
+	_test_malformed_requirements_fail_before_activation(equipment, foundation, stats, failures)
+	_test_disabled_reducing_roll_fails_before_fixed_point(equipment, foundation, stats, failures)
+	_test_negative_raw_attribute_fails_monotonic_activation(equipment, foundation, stats, failures)
+	_test_each_fixed_point_pass_must_be_monotonic(equipment, foundation, stats, failures)
 	_test_result_copy_and_inputs_are_defensive(equipment, foundation, stats, failures)
 	return failures
 
@@ -163,6 +167,126 @@ func _test_result_copy_and_inputs_are_defensive(
 	TestAssertions.near(result.raw_attributes.value(&"strength"), 5.0, 0.0001, "copy raw snapshot mutation cannot reach original result", failures)
 	TestAssertions.equal(result.active_item_ids, ["item-a-support", "item-b-dependent"], "copy active IDs cannot reach original result", failures)
 
+func _test_malformed_requirements_fail_before_activation(
+	equipment: EquipmentCatalog,
+	foundation: ItemFoundationCatalog,
+	stats: StatCatalog,
+	failures: Array[String],
+) -> void:
+	var malformed_equipment := equipment.duplicate(true) as EquipmentCatalog
+	var malformed_base := malformed_equipment.definition(&"greenwood_boots")
+	malformed_base.attribute_requirements = {&"luck": 1.0}
+	var item := _item("item-malformed-requirement", &"greenwood_boots", [], 10)
+	var state := _state([item], {EquipmentSlotIndex.index_for(&"boots"): item.instance_id})
+	var state_before := var_to_bytes(state.to_dictionary())
+	var requirements_before := var_to_bytes(malformed_base.attribute_requirements)
+	var result: Variant = _resolve(state, malformed_equipment, foundation, stats, {}, 47)
+	TestAssertions.truthy(result != null and not result.ok(), "malformed authored requirement fails activation", failures)
+	if result != null:
+		TestAssertions.equal(result.source, null, "malformed requirement exposes no partial equipment source", failures)
+		TestAssertions.equal(
+			result.error,
+			"PARTY_FORGE_EQUIPMENT_ACTIVATION_ERROR member=1 detail=item=item-malformed-requirement base=greenwood_boots requirement attribute=luck value=1.0 reason=unknown core attribute",
+			"malformed requirement has stable item/base/value activation context",
+			failures,
+		)
+	TestAssertions.equal(var_to_bytes(state.to_dictionary()), state_before, "malformed requirement leaves ownership byte-equivalent", failures)
+	TestAssertions.equal(var_to_bytes(malformed_base.attribute_requirements), requirements_before, "malformed requirement leaves base resource immutable", failures)
+
+func _test_disabled_reducing_roll_fails_before_fixed_point(
+	equipment: EquipmentCatalog,
+	foundation: ItemFoundationCatalog,
+	stats: StatCatalog,
+	failures: Array[String],
+) -> void:
+	var reducing_foundation := foundation.duplicate(true) as ItemFoundationCatalog
+	reducing_foundation.affixes.append(_reducing_strength_affix())
+	var reducing_roll := ItemModifierRoll.new()
+	reducing_roll.stat_id = &"strength"
+	reducing_roll.operation = StatModifier.Operation.REDUCED
+	reducing_roll.value = 0.25
+	var reducing_affix := ItemAffixInstance.new()
+	reducing_affix.definition_id = &"task10e_reducing_strength"
+	reducing_affix.affix_kind = "special"
+	reducing_affix.tier = 1
+	reducing_affix.rolls = [reducing_roll]
+	var item := _item("item-disabled-reducer", &"greenwood_boots", [reducing_affix], 11)
+	var state := _state([item], {EquipmentSlotIndex.index_for(&"boots"): item.instance_id})
+	var state_before := var_to_bytes(state.to_dictionary())
+	var result: Variant = _resolve(state, equipment, reducing_foundation, stats, {}, 48)
+	TestAssertions.truthy(result != null and not result.ok(), "disabled reducing core roll fails before fixed-point activation", failures)
+	if result != null:
+		TestAssertions.equal(result.source, null, "disabled reducing roll exposes no partial source", failures)
+		TestAssertions.equal(
+			result.error,
+			"PARTY_FORGE_EQUIPMENT_ACTIVATION_ERROR member=1 detail=PARTY_FORGE_EQUIPMENT_PROJECTION_ERROR member=1 slot=boots item=item-disabled-reducer affix=task10e_reducing_strength roll=0 stat=strength reason=base=greenwood_boots operation=reduced value=0.25 operation can reduce a core requirement attribute",
+			"disabled reducing roll preserves item/base/affix/stat/operation/value context",
+			failures,
+		)
+	TestAssertions.equal(var_to_bytes(state.to_dictionary()), state_before, "disabled reducing roll leaves ownership byte-equivalent", failures)
+
+func _test_negative_raw_attribute_fails_monotonic_activation(
+	equipment: EquipmentCatalog,
+	foundation: ItemFoundationCatalog,
+	stats: StatCatalog,
+	failures: Array[String],
+) -> void:
+	var boost_foundation := foundation.duplicate(true) as ItemFoundationCatalog
+	boost_foundation.affixes.append(_more_strength_affix())
+	var boost_roll := ItemModifierRoll.new()
+	boost_roll.stat_id = &"strength"
+	boost_roll.operation = StatModifier.Operation.MORE
+	boost_roll.value = 0.25
+	var boost_affix := ItemAffixInstance.new()
+	boost_affix.definition_id = &"task10e_more_strength"
+	boost_affix.affix_kind = "special"
+	boost_affix.tier = 1
+	boost_affix.rolls = [boost_roll]
+	var item := _item("item-negative-raw", &"steady_hand_ring", [boost_affix], 12)
+	var state := _state([item], {EquipmentSlotIndex.index_for(&"ring_left"): item.instance_id})
+	var state_before := var_to_bytes(state.to_dictionary())
+	var result: Variant = _resolve(state, equipment, boost_foundation, stats, {&"strength": -1.0}, 49)
+	TestAssertions.truthy(result != null and not result.ok(), "negative raw requirement attribute fails monotonic activation", failures)
+	if result != null:
+		TestAssertions.equal(result.source, null, "negative raw attribute exposes no partial source", failures)
+		TestAssertions.equal(
+			result.error,
+			"PARTY_FORGE_EQUIPMENT_ACTIVATION_ERROR member=1 detail=attribute=strength reason=resolved value must be nonnegative for monotonic activation",
+			"negative raw attribute has stable monotonic activation context",
+			failures,
+		)
+	TestAssertions.equal(var_to_bytes(state.to_dictionary()), state_before, "negative raw attribute leaves ownership byte-equivalent", failures)
+
+func _test_each_fixed_point_pass_must_be_monotonic(
+	equipment: EquipmentCatalog,
+	foundation: ItemFoundationCatalog,
+	stats: StatCatalog,
+	failures: Array[String],
+) -> void:
+	var counterexample_equipment := equipment.duplicate(true) as EquipmentCatalog
+	counterexample_equipment.definition(&"steady_hand_ring").attribute_requirements = {&"strength": 8.0}
+	var item := _item("item-factor-counterexample", &"steady_hand_ring", [_strength_roll(5.0)], 13)
+	var state := _state([item], {EquipmentSlotIndex.index_for(&"ring_left"): item.instance_id})
+	var state_before := var_to_bytes(state.to_dictionary())
+	var sources: Array[StatModifierSource] = [StatModifierSource.create(&"counterexample_reduced", &"upgrade", "Counterexample", 1, [
+		StatModifier.create(&"strength", StatModifier.Operation.REDUCED, 2.0, &"counterexample_reduced_strength", "Counterexample"),
+	])]
+	var capabilities: Array[StringName] = []
+	var result: Variant = _resolver.resolve(
+		1, CONTAINER_ID, state, counterexample_equipment, foundation, stats,
+		{&"strength": -10.0}, capabilities, sources, 50,
+	)
+	TestAssertions.truthy(result != null and not result.ok(), "fixed-point pass rejects a lower post-activation attribute", failures)
+	if result != null:
+		TestAssertions.equal(result.source, null, "non-monotonic pass exposes no partial source", failures)
+		TestAssertions.equal(
+			result.error,
+			"PARTY_FORGE_EQUIPMENT_ACTIVATION_ERROR member=1 detail=attribute=strength before=10.0 after=5.0 reason=active equipment reduced a requirement attribute",
+			"non-monotonic pass reports stable before/after attribute context",
+			failures,
+		)
+	TestAssertions.equal(var_to_bytes(state.to_dictionary()), state_before, "non-monotonic pass leaves ownership byte-equivalent", failures)
+
 func _resolve(
 	state: ItemOwnershipState,
 	equipment: EquipmentCatalog,
@@ -205,6 +329,42 @@ func _strength_affix() -> ItemAffixDefinition:
 	definition.display_name = "Task 5 Strength"
 	definition.affix_kind = "special"
 	definition.modifier_family_ids = [&"task5_strength_family"]
+	definition.effects = [effect]
+	definition.tiers = [tier]
+	return definition
+
+func _reducing_strength_affix() -> ItemAffixDefinition:
+	var effect := ItemModifierEffectDefinition.new()
+	effect.stat_id = &"strength"
+	effect.operation = StatModifier.Operation.REDUCED
+	var tier := ItemAffixTierDefinition.new()
+	tier.tier = 1
+	tier.minimum_item_level = 1
+	tier.minimum_rolls = [0.25]
+	tier.maximum_rolls = [0.25]
+	var definition := ItemAffixDefinition.new()
+	definition.id = &"task10e_reducing_strength"
+	definition.display_name = "Task 10E Reducing Strength"
+	definition.affix_kind = "special"
+	definition.modifier_family_ids = [&"task10e_reducing_strength_family"]
+	definition.effects = [effect]
+	definition.tiers = [tier]
+	return definition
+
+func _more_strength_affix() -> ItemAffixDefinition:
+	var effect := ItemModifierEffectDefinition.new()
+	effect.stat_id = &"strength"
+	effect.operation = StatModifier.Operation.MORE
+	var tier := ItemAffixTierDefinition.new()
+	tier.tier = 1
+	tier.minimum_item_level = 1
+	tier.minimum_rolls = [0.25]
+	tier.maximum_rolls = [0.25]
+	var definition := ItemAffixDefinition.new()
+	definition.id = &"task10e_more_strength"
+	definition.display_name = "Task 10E More Strength"
+	definition.affix_kind = "special"
+	definition.modifier_family_ids = [&"task10e_more_strength_family"]
 	definition.effects = [effect]
 	definition.tiers = [tier]
 	return definition

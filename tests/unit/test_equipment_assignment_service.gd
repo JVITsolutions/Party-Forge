@@ -69,6 +69,24 @@ func _test_failures_are_atomic_and_diagnostic(failures: Array[String]) -> void:
 		)
 		TestAssertions.truthy(not legacy_errors.is_empty(), "legacy equip validation still reports unmet attributes", failures)
 
+	var malformed_catalog := _catalog_with_attribute_requirement(&"greenwood_boots", &"luck", 1.0)
+	var malformed_item := _issue_into(context, 5, 5, &"greenwood_boots", malformed_catalog, failures)
+	if malformed_item != null:
+		var malformed_before := _bytes(context.item_state())
+		var malformed_preview := EquipmentAssignmentService.new().preview(
+			context.item_state(), 1, malformed_item.instance_id, &"boots", malformed_catalog,
+			GameCatalog.ITEM_FOUNDATION_CATALOG, (fixture.party as PartyManager).member_by_id(1).class_definition, {},
+		)
+		TestAssertions.truthy(not malformed_preview.ok(), "malformed requirement is rejected at structural assignment preview", failures)
+		TestAssertions.equal(
+			malformed_preview.error,
+			"PARTY_FORGE_EQUIPMENT_ASSIGNMENT_ERROR member=1 item=%s slot=boots reason=ineligible detail=PARTY_FORGE_EQUIPMENT_ERROR item=greenwood_boots reason=requirement attribute=luck value=1.0 reason=unknown core attribute" % malformed_item.instance_id,
+			"assignment rejection preserves item/base/value context",
+			failures,
+		)
+		TestAssertions.equal(malformed_preview.state(), null, "malformed requirement exposes no candidate", failures)
+		TestAssertions.equal(_bytes(context.item_state()), malformed_before, "malformed requirement assignment is atomic", failures)
+
 func _test_two_hand_and_quiver_rules(failures: Array[String]) -> void:
 	var fixture := _fixture(&"marksman", 8301, 8)
 	var context := fixture.context as PlayerRunContext
