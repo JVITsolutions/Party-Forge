@@ -8,6 +8,11 @@ func run() -> Array[String]:
 	_test_base_selection_hard_filters(failures)
 	_test_forced_base_rejections(failures)
 	_test_tempered_edge_is_limited_to_forge_vanguard_sword(failures)
+	_test_rarity_selection_authorization_and_unlocks(failures)
+	_test_rarity_eligibility_order(failures)
+	_test_upper_rarity_generator_gates_preserve_direct_issuance(failures)
+	_test_pattern_selection_uses_exact_domain_compatible_patterns(failures)
+	_test_pattern_selection_records_empty_pool(failures)
 	return failures
 
 func _test_normalized_base_tags_and_validation(failures: Array[String]) -> void:
@@ -152,6 +157,131 @@ func _test_tempered_edge_is_limited_to_forge_vanguard_sword(failures: Array[Stri
 			containing.append(base.id)
 	TestAssertions.equal(containing, [&"forge_vanguard_sword"], "tempered_edge is authored only on the Forge Vanguard sword", failures)
 
+func _test_rarity_selection_authorization_and_unlocks(failures: Array[String]) -> void:
+	var foundation := GameCatalog.ITEM_FOUNDATION_CATALOG
+	var request := _request()
+	request.permitted_rarity_ids = [&"common", &"uncommon"]
+	var trace := ItemGenerationTrace.new()
+	var selected := ItemRaritySelector.select(request, foundation, trace)
+	TestAssertions.truthy(selected != null and selected.id in request.permitted_rarity_ids, "rarity selection stays within the request-permitted pool", failures)
+	if not trace.stages.is_empty():
+		var stage := trace.stages[0]
+		TestAssertions.equal(stage["eligible"], ["common", "uncommon"], "only permitted ordinary rarities reach weighting", failures)
+		TestAssertions.equal((stage["rejected"] as Dictionary)["rare"], "not_permitted", "permission is checked before rarity unlocks", failures)
+
+	for locked_id: StringName in [&"rare", &"epic", &"legendary"]:
+		request = _request()
+		request.permitted_rarity_ids = [locked_id]
+		request.forced_rarity_id = locked_id
+		trace = ItemGenerationTrace.new()
+		TestAssertions.equal(ItemRaritySelector.select(request, foundation, trace), null, "locked forced %s cannot bypass its unlock" % locked_id, failures)
+		if not trace.stages.is_empty():
+			TestAssertions.equal((trace.stages[0] as Dictionary)["rejected"][String(locked_id)], "missing_unlock_tag", "locked %s records the hard unlock rejection" % locked_id, failures)
+
+	request = _request()
+	request.permitted_rarity_ids = [&"rare"]
+	request.forced_rarity_id = &"rare"
+	request.unlock_tags = [&"rarity_rare_unlocked"]
+	trace = ItemGenerationTrace.new()
+	selected = ItemRaritySelector.select(request, foundation, trace)
+	TestAssertions.truthy(selected != null and selected.id == &"rare", "unlocked permitted forced Rare is selectable", failures)
+
+func _test_rarity_eligibility_order(failures: Array[String]) -> void:
+	var rarity := ItemRarityDefinition.new()
+	rarity.id = &"ordered"
+	rarity.instance_supported = false
+	rarity.ordinary_generation_enabled = false
+	rarity.required_unlock_tags = [&"ordered_unlock"]
+	var foundation := ItemFoundationCatalog.new()
+	foundation.rarities = [rarity]
+	var request := ItemGenerationRequest.create(17, 2, 100, &"ordinary_enemy", &"ordinary_drop", [&"common"])
+	request.forced_rarity_id = &"ordered"
+	var trace := ItemGenerationTrace.new()
+	TestAssertions.equal(ItemRaritySelector.select(request, foundation, trace), null, "unsupported rarity is rejected", failures)
+	TestAssertions.equal((trace.stages[0] as Dictionary)["rejected"], {"ordered": "instance_unsupported"}, "instance support is the first post-registration gate", failures)
+
+	rarity.instance_supported = true
+	trace = ItemGenerationTrace.new()
+	TestAssertions.equal(ItemRaritySelector.select(request, foundation, trace), null, "unpermitted rarity is rejected", failures)
+	TestAssertions.equal((trace.stages[0] as Dictionary)["rejected"], {"ordered": "not_permitted"}, "request permission precedes ordinary and unlock gates", failures)
+
+	request.permitted_rarity_ids = [&"ordered"]
+	trace = ItemGenerationTrace.new()
+	TestAssertions.equal(ItemRaritySelector.select(request, foundation, trace), null, "ordinary-disabled rarity is rejected", failures)
+	TestAssertions.equal((trace.stages[0] as Dictionary)["rejected"], {"ordered": "ordinary_generation_disabled"}, "ordinary support precedes unlock and forced-id gates", failures)
+
+	rarity.ordinary_generation_enabled = true
+	trace = ItemGenerationTrace.new()
+	TestAssertions.equal(ItemRaritySelector.select(request, foundation, trace), null, "locked rarity is rejected", failures)
+	TestAssertions.equal((trace.stages[0] as Dictionary)["rejected"], {"ordered": "missing_unlock_tag"}, "unlock gate precedes the forced-id filter", failures)
+
+	request.unlock_tags = [&"ordered_unlock"]
+	trace = ItemGenerationTrace.new()
+	TestAssertions.equal(ItemRaritySelector.select(request, foundation, trace), rarity, "registered supported permitted ordinary unlocked forced rarity survives every gate", failures)
+
+	request.forced_rarity_id = &"missing"
+	trace = ItemGenerationTrace.new()
+	TestAssertions.equal(ItemRaritySelector.select(request, foundation, trace), null, "unregistered forced rarity is rejected", failures)
+	TestAssertions.equal((trace.stages[0] as Dictionary)["rejected"], {"missing": "unknown_forced_rarity"}, "registration is checked before all candidate gates", failures)
+
+func _test_upper_rarity_generator_gates_preserve_direct_issuance(failures: Array[String]) -> void:
+	var foundation := GameCatalog.ITEM_FOUNDATION_CATALOG
+	for domain: StringName in [&"ordinary_drop", &"developer"]:
+		var request := ItemGenerationRequest.create(991, 4, 500, &"developer", domain, [&"mythic"])
+		request.forced_rarity_id = &"mythic"
+		var trace := ItemGenerationTrace.new()
+		TestAssertions.equal(ItemRaritySelector.select(request, foundation, trace), null, "forced Mythic is unavailable to the %s generator" % domain, failures)
+		if not trace.stages.is_empty():
+			TestAssertions.equal((trace.stages[0] as Dictionary)["rejected"]["mythic"], "ordinary_generation_disabled", "upper rarity system gate is preserved in %s" % domain, failures)
+
+	var issued := ItemInstanceIssuer.issue(
+		"task-five:upper-rarity-fixture",
+		0,
+		"task_five_fixture",
+		991,
+		{"affixes": [], "base_definition_id": "forge_vanguard_sword", "item_level": 500, "rarity_id": "mythic"},
+		GameCatalog.EQUIPMENT_CATALOG,
+		foundation
+	)
+	TestAssertions.truthy(issued.ok(), "direct ItemInstanceIssuer Mythic fixtures remain valid", failures)
+
+func _test_pattern_selection_uses_exact_domain_compatible_patterns(failures: Array[String]) -> void:
+	var rarity := ItemRarityDefinition.new()
+	rarity.id = &"test_rarity"
+	var ordinary := _pattern(&"ordinary_pattern", 2.0, [&"ordinary_drop"])
+	var ordinary_second := _pattern(&"ordinary_second", 1.3, [&"ordinary_drop"])
+	var developer := _pattern(&"developer_pattern", 100.0, [&"developer"])
+	var invalid := _pattern(&"invalid_pattern", NAN)
+	rarity.patterns = [developer, invalid, ordinary_second, ordinary]
+	var request := _request()
+	var first_trace := ItemGenerationTrace.new()
+	var selected := ItemPatternSelector.select(request, rarity, first_trace)
+	var expected_id := ItemDeterministicRandom.weighted_id(request.seed, request.generation_sequence, &"pattern:test_rarity", 0, {&"ordinary_pattern": 2.0, &"ordinary_second": 1.3})
+	TestAssertions.equal(selected.id if selected != null else &"", expected_id, "pattern selection uses the exact rarity-specific deterministic salt", failures)
+	if not first_trace.stages.is_empty():
+		var stage := first_trace.stages[0]
+		TestAssertions.equal(stage["stage"], "pattern", "pattern selector records the canonical pattern stage", failures)
+		TestAssertions.equal(stage["eligible"], ["ordinary_pattern", "ordinary_second"], "only exact domain-compatible patterns reach weighting", failures)
+		TestAssertions.equal(stage["weights"], {"ordinary_pattern": 2.0, "ordinary_second": 1.3}, "patterns use their exact authored weights", failures)
+		TestAssertions.equal((stage["rejected"] as Dictionary)["developer_pattern"], "domain_not_allowed", "domain mismatch uses a stable rejection code", failures)
+		TestAssertions.equal((stage["rejected"] as Dictionary)["invalid_pattern"], "invalid_weight", "nonfinite pattern weight is rejected before selection", failures)
+
+	var reordered := ItemRarityDefinition.new()
+	reordered.id = rarity.id
+	reordered.patterns = [ordinary, developer, ordinary_second, invalid]
+	var second_trace := ItemGenerationTrace.new()
+	var repeated := ItemPatternSelector.select(request, reordered, second_trace)
+	TestAssertions.equal(repeated.id if repeated != null else &"", selected.id if selected != null else &"", "pattern selection is stable across authored ordering", failures)
+	TestAssertions.equal(second_trace.stages, first_trace.stages, "pattern traces are stable across authored ordering", failures)
+
+func _test_pattern_selection_records_empty_pool(failures: Array[String]) -> void:
+	var request := ItemGenerationRequest.create(991, 4, 500, &"developer", &"developer", [&"mythic"])
+	var rarity := GameCatalog.ITEM_FOUNDATION_CATALOG.rarity(&"mythic")
+	var trace := ItemGenerationTrace.new()
+	TestAssertions.equal(ItemPatternSelector.select(request, rarity, trace), null, "rarity without implemented patterns returns null", failures)
+	if not trace.stages.is_empty():
+		TestAssertions.equal((trace.stages[0] as Dictionary)["rejected"], {"mythic": "no_eligible_pattern"}, "empty pattern pool records no_eligible_pattern", failures)
+
 func _request() -> ItemGenerationRequest:
 	return ItemGenerationRequest.create(991, 4, 250, &"ordinary_enemy", &"ordinary_drop", [&"common"])
 
@@ -176,6 +306,13 @@ func _base(id: StringName, tags: Array[StringName] = []) -> EquipmentBaseDefinit
 	presentation.geometry_key = &"test"
 	base.presentation = presentation
 	return base
+
+func _pattern(id: StringName, weight: float, domains: Array[StringName] = []) -> ItemAffixPatternDefinition:
+	var pattern := ItemAffixPatternDefinition.new()
+	pattern.id = id
+	pattern.weight = weight
+	pattern.allowed_generation_domains = domains.duplicate()
+	return pattern
 
 func _has_diagnostic(errors: PackedStringArray, expected: String) -> bool:
 	return expected in "\n".join(errors)
