@@ -84,6 +84,7 @@ The 56 error and 10 warning lines are the established intentional negative-path 
 
 ## Files in scoped commit
 
+- `.superpowers/sdd/task-7-report.md`
 - `scripts/ui/ledger/ledger_data_provider.gd`
 - `tests/unit/test_action_combat_estimate_service.gd`
 - `tests/unit/test_ledger_data_provider.gd`
@@ -94,9 +95,8 @@ The 56 error and 10 warning lines are the established intentional negative-path 
 ## Hygiene and concerns
 
 - `git diff --check` passes.
-- Only the four scoped tracked files are modified.
+- Exactly five scoped tracked files were committed, including this report.
 - Pre-existing untracked `.gd.uid` sidecars remain untouched and will not be staged.
-- `.superpowers/sdd/task-7-report.md` is an ignored coordination artifact and will not be staged.
 - No open Task 7 functional concern is known. Complete-runner output is not diagnostically pristine because established rejection tests intentionally emit errors and shutdown warnings.
 
 ## Independent review
