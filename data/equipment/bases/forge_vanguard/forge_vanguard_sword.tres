@@ -10,6 +10,7 @@ display_name = "Forge Vanguard Sword"
 item_type_id = &"main_hand"
 compatible_slot_ids = [&"main_hand"]
 weight_class_id = &"weapon"
+implicit_affix_ids = [&"tempered_edge"]
 handedness_id = &"one_hand"
 weapon_family_id = &"one_hand_sword"
 implicit_family_id = &"forge_vanguard"
