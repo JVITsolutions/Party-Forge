@@ -22,8 +22,12 @@ func _log_error(
 	_mutex.unlock()
 
 
-func errors() -> PackedStringArray:
+## Call only after OS.remove_logger(self). Detaching closes the producer boundary;
+## this mutex-protected drain serializes with any callback already writing and
+## leaves the local Logger reference alive until the runner has copied all data.
+func drain_after_detach() -> PackedStringArray:
 	_mutex.lock()
 	var result := _errors.duplicate()
+	_errors.clear()
 	_mutex.unlock()
 	return result

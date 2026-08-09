@@ -20,9 +20,9 @@ func _initialize() -> void:
         var suite_failures: Array = suite_result as Array
         for failure: String in suite_failures:
             failures.append("%s :: %s" % [suite_path, failure])
-    for script_error: String in script_errors.errors():
-        failures.append("SCRIPT ERROR :: %s" % script_error)
     OS.remove_logger(script_errors)
+    for script_error: String in script_errors.drain_after_detach():
+        failures.append("SCRIPT ERROR :: %s" % script_error)
     if failures.is_empty():
         print("TEST_SUMMARY: PASS (%d suites)" % suite_paths.size())
         quit(0)

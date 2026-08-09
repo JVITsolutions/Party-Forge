@@ -18,9 +18,9 @@ func _initialize() -> void:
 			continue
 		for failure: String in suite_result as Array:
 			failures.append("%s :: %s" % [suite_path, failure])
-	for script_error: String in script_errors.errors():
-		failures.append("SCRIPT ERROR :: %s" % script_error)
 	OS.remove_logger(script_errors)
+	for script_error: String in script_errors.drain_after_detach():
+		failures.append("SCRIPT ERROR :: %s" % script_error)
 	for failure: String in failures:
 		push_error("TEST_FAILURE: %s" % failure)
 	print("TEST_SUMMARY: %s (%d failures)" % ["PASS" if failures.is_empty() else "FAIL", failures.size()])

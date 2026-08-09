@@ -69,6 +69,17 @@ after:  TEST_SUMMARY: FAIL (1 failures), exit=1, captured file/line/reason
 
 The probe lives under `tests/support`, so normal unit-suite discovery does not include it.
 
+A final Logger teardown review found one Minor ordering race: both runners snapshotted captured errors before detaching the logger. The teardown-order probe first failed three assertions (missing drain API and wrong ordering in both runners). The capture now documents one `drain_after_detach()` boundary; each runner calls `OS.remove_logger()` before the mutex-protected drain and retains the local logger reference through the snapshot.
+
+Final teardown verification:
+
+```text
+logger teardown-order probe: PASS (0 failures), exit=0
+deliberate SCRIPT ERROR probe: FAIL (1 failures), exit=1
+intentional push_error suite: PASS (0 failures), exit=0
+sandbox + stats-ledger focused: PASS (0 failures), exit=0, captured SCRIPT ERROR count=0
+```
+
 ## Fresh verification
 
 Godot: `4.7.1.stable.official.a13da4feb`.
@@ -125,6 +136,7 @@ Tests:
 - `tests/focused_test_runner.gd`
 - `tests/test_runner.gd`
 - `tests/support/script_error_capture_probe.gd`
+- `tests/support/logger_teardown_order_probe.gd`
 - `tests/support/test_script_error_capture.gd`
 - `tests/unit/test_developer_item_sandbox.gd`
 - `tests/unit/test_equipment_activation_resolver.gd`
