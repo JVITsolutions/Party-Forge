@@ -180,7 +180,9 @@ func add_member_source(member_id: int, source: StatModifierSource) -> bool:
     var member := member_by_id(member_id)
     if member == null or source == null:
         return false
-    if source.source_type != &"equipment" and _member_source_refresh_coordinator.is_valid():
+    if _member_source_refresh_coordinator.is_valid():
+        if source.source_type == &"equipment":
+            return false
         return bool(_member_source_refresh_coordinator.call(member_id, source))
     var validation_errors := StatResolver.validate_sources(STAT_CATALOG, [source])
     if not validation_errors.is_empty():
@@ -195,7 +197,9 @@ func replace_member_source(member_id: int, source: StatModifierSource) -> bool:
     var member := member_by_id(member_id)
     if member == null or source == null:
         return false
-    if source.source_type != &"equipment" and _member_source_refresh_coordinator.is_valid():
+    if _member_source_refresh_coordinator.is_valid():
+        if source.source_type == &"equipment":
+            return false
         return bool(_member_source_refresh_coordinator.call(member_id, source))
     var validation_errors := StatResolver.validate_sources(STAT_CATALOG, [source])
     if not validation_errors.is_empty():
@@ -208,8 +212,16 @@ func replace_member_source(member_id: int, source: StatModifierSource) -> bool:
 
 ## Replaces one canonical equipment source per member as a single observable stat-state transition.
 ## Returns zero on success, or the rejected member ID. Invalid non-member keys return -1.
-func replace_member_equipment_sources_atomically(sources_by_member: Dictionary) -> int:
-    if sources_by_member.is_empty():
+func replace_member_equipment_sources_atomically(
+    sources_by_member: Dictionary,
+    authority: RefCounted = null,
+) -> int:
+    if (
+        authority == null
+        or not is_same(authority, _member_source_refresh_authority)
+        or not _member_source_refresh_coordinator.is_valid()
+        or sources_by_member.is_empty()
+    ):
         return -1
     var member_ids: Array[int] = []
     for member_id_value: Variant in sources_by_member:
@@ -251,6 +263,34 @@ func replace_member_equipment_sources_atomically(sources_by_member: Dictionary) 
 
     _invalidate_members(member_ids)
     return 0
+
+## Commits one canonical equipment source as an authorized member-local transition.
+func replace_member_equipment_source_atomically(
+    member_id: int,
+    equipment_source: StatModifierSource,
+    authority: RefCounted = null,
+) -> bool:
+    var member := member_by_id(member_id)
+    if (
+        authority == null
+        or not is_same(authority, _member_source_refresh_authority)
+        or not _member_source_refresh_coordinator.is_valid()
+        or member == null
+        or equipment_source == null
+        or equipment_source.source_type != &"equipment"
+        or equipment_source.id != StringName("equipment_member_%d" % member_id)
+        or equipment_source.owner_member_id != member_id
+    ):
+        return false
+    var validation_errors := StatResolver.validate_sources(STAT_CATALOG, [equipment_source])
+    if not validation_errors.is_empty():
+        for error: String in validation_errors:
+            push_error(error)
+        return false
+    if not _commit_member_source_without_invalidation(member_id, equipment_source):
+        return false
+    _invalidate_member(member_id)
+    return true
 
 ## Commits one candidate non-equipment source and its recomputed equipment source
 ## as one observable member-local stat transition.

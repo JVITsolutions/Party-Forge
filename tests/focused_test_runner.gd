@@ -7,6 +7,8 @@ func _initialize() -> void:
 	var script_errors := SCRIPT_ERROR_CAPTURE.new()
 	OS.add_logger(script_errors)
 	var suites := OS.get_cmdline_user_args()
+	if suites.is_empty():
+		failures.append("FOCUSED_TEST_RUNNER_ERROR: no suite path arguments")
 	for suite_path: String in suites:
 		var script := load(suite_path) as Script
 		if script == null:

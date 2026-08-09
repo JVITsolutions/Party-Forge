@@ -15,11 +15,13 @@ func run() -> Array[String]:
 	var fighter := catalog.class_by_id(&"fighter").duplicate(true) as ClassDefinition
 	party.initialize(fighter, catalog.traits)
 	var progression_context := PlayerRunContext.new()
+	var progression_profile := ProfileState.new_profile("profile-stats01", "Stats Ledger", 1000)
+	progression_profile.inventory_columns = 1
 	TestAssertions.equal(
 		progression_context.configure(
 			&"stats_ledger_player",
 			0,
-			ProfileState.new_profile("profile-stats01", "Stats Ledger", 1000),
+			progression_profile,
 			1337,
 			party,
 			100,
@@ -158,12 +160,45 @@ func run() -> Array[String]:
 		[StatModifier.create(&"fire_damage", StatModifier.Operation.INCREASED, 0.25, &"test_fire", "Test Fire")],
 	)
 	TestAssertions.truthy(party.add_member_source(1, fire_source), "Stats modifier-visibility source applies through the configured run context", failures)
-	var equipment_label := "Iron Sword — Tempered Edge"
-	var equipment_modifier_id := &"equip_m1_smain_hand_iiron_sword_a0_tempered_edge_r0"
-	var equipment_source := StatModifierSource.create(&"equipment_member_1", &"equipment", "Equipment", 1, [
-		StatModifier.create(&"melee_damage", StatModifier.Operation.INCREASED, 0.25, equipment_modifier_id, equipment_label),
-	])
-	TestAssertions.truthy(party.replace_member_source(1, equipment_source), "Stats equipment attribution source replaces the configured empty equipment source", failures)
+	var equipment_label := "Forge Vanguard Sword — Tempered Edge"
+	var issued := ItemInstanceIssuer.issue(
+		"run:%s:%s:%s" % [progression_context.profile_id, progression_context.run_seed, progression_context.run_player_id],
+		0,
+		"stats_ledger_test",
+		1337,
+		{
+			"affixes": [{
+				"definition_id": "tempered_edge",
+				"affix_kind": "implicit",
+				"tier": 1,
+				"rolls": [{
+					"stat_id": "physical_damage",
+					"operation": StatModifier.Operation.INCREASED,
+					"value": 0.08,
+					"required_tags": [],
+				}],
+			}],
+			"base_definition_id": "forge_vanguard_sword",
+			"item_level": 1,
+			"rarity_id": "common",
+		},
+		GameCatalog.EQUIPMENT_CATALOG,
+		GameCatalog.ITEM_FOUNDATION_CATALOG,
+	)
+	TestAssertions.truthy(issued.ok(), "Stats equipment attribution item issues", failures)
+	if issued.ok():
+		var create_result := progression_context.apply_item_transaction(
+			ItemTransactionRequest.create("stats-ledger-create", String(progression_context.run_player_id), &"run-inventory", 0, issued.item),
+			GameCatalog.EQUIPMENT_CATALOG,
+			GameCatalog.ITEM_FOUNDATION_CATALOG,
+		)
+		TestAssertions.equal(create_result.code, ItemTransactionResult.Code.OK, "Stats equipment attribution item enters run inventory", failures)
+		if create_result.ok():
+			TestAssertions.truthy(
+				progression_context.assign_equipment(1, issued.item.instance_id, &"main_hand", GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG).ok(),
+				"Stats equipment attribution source commits through run context assignment",
+				failures,
+			)
 	page.refresh()
 	TestAssertions.truthy(page.has_stat(&"fire_damage"), "modifier-caused fire stat remains visible", failures)
 	TestAssertions.truthy(page.select_stat(&"armor"), "armor detail opens", failures)
@@ -187,9 +222,9 @@ func run() -> Array[String]:
 		fire_button.focus_entered.emit()
 		TestAssertions.equal((page.get_node("Layout/Content/DetailPanel/Detail/Description") as Label).text, canonical_description, "focus uses the same canonical keyword detail", failures)
 	TestAssertions.truthy(page.initial_focus() is Button, "initial focus returns the first stat row", failures)
-	TestAssertions.truthy(page.select_stat(&"melee_damage"), "equipment-modified melee detail opens", failures)
-	var melee_sources := (page.get_node("Layout/Content/DetailPanel/Detail/Sources") as Label).text
-	TestAssertions.truthy(equipment_label in melee_sources, "Stats detail renders the equipment item and affix label", failures)
+	TestAssertions.truthy(page.select_stat(&"physical_damage"), "equipment-modified physical detail opens", failures)
+	var physical_sources := (page.get_node("Layout/Content/DetailPanel/Detail/Sources") as Label).text
+	TestAssertions.truthy(equipment_label in physical_sources, "Stats detail renders the equipment item and affix label", failures)
 
 	provider.configure(null, null, Callable())
 	page.free()

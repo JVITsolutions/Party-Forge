@@ -186,7 +186,10 @@ func configure(
 	if not party.member_added.is_connected(member_added_callback):
 		party.member_added.connect(member_added_callback)
 	_configured = true
-	var rejected_member_id := manager.replace_member_equipment_sources_atomically(next_equipment_sources)
+	var rejected_member_id := manager.replace_member_equipment_sources_atomically(
+		next_equipment_sources,
+		_source_refresh_authority,
+	)
 	if rejected_member_id != 0:
 		_reset_unconfigured_fields()
 		if rejected_member_id > 0:
@@ -267,7 +270,11 @@ func assign_equipment(
 	var next_activation := preview.activation()
 	_item_state = preview.state()
 	_equipment_activation_by_member[member_id] = next_activation.copy()
-	if party == null or not party.replace_member_source(member_id, next_activation.source):
+	if party == null or not party.replace_member_equipment_source_atomically(
+		member_id,
+		next_activation.source,
+		_source_refresh_authority,
+	):
 		_item_state = previous_state
 		_equipment_activation_by_member[member_id] = previous_activation
 		return EquipmentAssignmentResult.failure(
@@ -432,7 +439,11 @@ func _on_member_added(member: PartyMemberState) -> void:
 	var previous_activation := equipment_activation(member.member_id)
 	_item_state = next_item_state
 	_equipment_activation_by_member[member.member_id] = activation.copy()
-	if party == null or not party.replace_member_source(member.member_id, activation.source):
+	if party == null or not party.replace_member_equipment_source_atomically(
+		member.member_id,
+		activation.source,
+		_source_refresh_authority,
+	):
 		_item_state = previous_state
 		_equipment_activation_by_member[member.member_id] = previous_activation
 		return

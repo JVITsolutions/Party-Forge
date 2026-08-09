@@ -8,6 +8,15 @@ class RejectingPartyManager extends PartyManager:
 			return false
 		return super.replace_member_source(member_id, source)
 
+	func replace_member_equipment_source_atomically(
+		member_id: int,
+		equipment_source: StatModifierSource,
+		authority: RefCounted = null,
+	) -> bool:
+		if reject_growth_source:
+			return false
+		return super.replace_member_equipment_source_atomically(member_id, equipment_source, authority)
+
 class SelectiveEquipmentRejectingPartyManager extends PartyManager:
 	var rejected_member_id := 0
 
@@ -35,6 +44,8 @@ func run() -> Array[String]:
 	_test_future_recruits_initialize_once(failures)
 	_test_actor_binding_availability_and_position(failures)
 	_test_atomic_equipment_commit_and_member_local_cache(failures)
+	_test_direct_equipment_source_bypasses_reject_atomically(failures)
+	_test_equipment_authority_rejections_preserve_runtime(failures)
 	_test_equipment_source_rejection_rolls_back(failures)
 	_test_configuration_source_batch_is_atomic_and_observable(failures)
 	_test_resume_rejects_structurally_invalid_loadouts(failures)
@@ -107,6 +118,217 @@ func _test_atomic_equipment_commit_and_member_local_cache(failures: Array[String
 	TestAssertions.equal(party.stats_for(2), member_two_before, "unequip still preserves member two base cache identity", failures)
 	TestAssertions.equal(party.stats_for_action(2, action_tags), member_two_action_before, "unequip still preserves member two action cache identity", failures)
 	party.free()
+
+func _test_direct_equipment_source_bypasses_reject_atomically(failures: Array[String]) -> void:
+	_assert_direct_equipment_source_rejection(&"add_member_source", true, failures)
+	_assert_direct_equipment_source_rejection(&"replace_member_source", false, failures)
+
+func _assert_direct_equipment_source_rejection(
+	method_name: StringName,
+	duplicate_append: bool,
+	failures: Array[String],
+) -> void:
+	var fixture := _configured_fixture(PartyManager.new(), 1)
+	var context := fixture.context as PlayerRunContext
+	var party := fixture.party as PartyManager
+	var item := _issue_stout_helmet(context, 0, 0, failures)
+	if item == null:
+		party.free()
+		return
+	var actor := Node3D.new()
+	var health := HealthComponent.new()
+	health.name = "HealthComponent"
+	health.configure(137.0, true, 8.0, 0.5)
+	health.apply_damage(19.0)
+	actor.add_child(health)
+	TestAssertions.truthy(context.bind_actor(1, actor), "%s fixture attaches a runtime actor" % method_name, failures)
+	var current_activation := context.equipment_activation(1)
+	var candidate := current_activation.source.duplicate(true) as StatModifierSource
+	if not duplicate_append:
+		candidate = StatModifierSource.create(&"equipment_member_1", &"equipment", "Forbidden Equipment", 1, [
+			StatModifier.create(&"strength", StatModifier.Operation.FLAT, 19.0, &"task10m_forbidden_strength", "Forbidden Equipment"),
+		])
+	var sources_before := _source_documents(party.member_by_id(1))
+	var activation_before := _activation_document(current_activation, [item.instance_id])
+	var state_before := JSON.stringify(context.item_state().to_dictionary())
+	var item_before := JSON.stringify(item.to_dictionary())
+	var revision_before := party.stat_revision()
+	var base_before := party.stats_for(1)
+	var action_tags: Array[StringName] = [&"melee", &"physical"]
+	var action_before := party.stats_for_action(1, action_tags)
+	var maximum_before := health.max_health
+	var current_before := health.current_health
+	var events: Array[int] = []
+	party.stats_changed.connect(func(member_id: int) -> void: events.append(member_id))
+
+	TestAssertions.truthy(
+		not bool(party.call(method_name, 1, candidate)),
+		"configured runtime rejects direct equipment %s" % method_name,
+		failures,
+	)
+	TestAssertions.equal(_source_documents(party.member_by_id(1)), sources_before, "%s rejection preserves canonical sources" % method_name, failures)
+	TestAssertions.equal(_activation_document(context.equipment_activation(1), [item.instance_id]), activation_before, "%s rejection preserves equipment activation" % method_name, failures)
+	TestAssertions.equal(JSON.stringify(context.item_state().to_dictionary()), state_before, "%s rejection preserves ownership containers" % method_name, failures)
+	TestAssertions.equal(party.stat_revision(), revision_before, "%s rejection preserves stat revision" % method_name, failures)
+	TestAssertions.truthy(is_same(party.stats_for(1), base_before), "%s rejection preserves base cache identity" % method_name, failures)
+	TestAssertions.truthy(is_same(party.stats_for_action(1, action_tags), action_before), "%s rejection preserves action cache identity" % method_name, failures)
+	TestAssertions.equal(events, [], "%s rejection emits no stats_changed signal" % method_name, failures)
+	TestAssertions.equal(health.max_health, maximum_before, "%s rejection preserves runtime maximum health" % method_name, failures)
+	TestAssertions.equal(health.current_health, current_before, "%s rejection preserves runtime current health" % method_name, failures)
+	TestAssertions.equal(JSON.stringify(item.to_dictionary()), item_before, "%s rejection preserves immutable item bytes" % method_name, failures)
+	actor.free()
+	party.free()
+
+func _activation_document(activation: EquipmentActivationResult, item_ids: Array[String]) -> String:
+	var disabled: Dictionary = {}
+	for item_id: String in item_ids:
+		disabled[item_id] = activation.disabled_reasons(item_id)
+	return JSON.stringify({
+		"active_item_ids": activation.active_item_ids,
+		"disabled_reasons": disabled,
+		"source": _source_documents_from_array([activation.source]),
+	})
+
+func _source_documents_from_array(sources: Array[StatModifierSource]) -> String:
+	var documents: Array[Dictionary] = []
+	for source: StatModifierSource in sources:
+		var modifiers: Array[Dictionary] = []
+		for modifier: StatModifier in source.modifiers:
+			modifiers.append({
+				"stat_id": String(modifier.stat_id),
+				"operation": modifier.operation,
+				"value": modifier.value,
+				"source_id": String(modifier.source_id),
+				"source_label": modifier.source_label,
+				"required_tags": modifier.required_tags,
+				"excluded_tags": modifier.excluded_tags,
+				"required_capability_tags": modifier.required_capability_tags,
+				"excluded_capability_tags": modifier.excluded_capability_tags,
+				"required_action_tags": modifier.required_action_tags,
+				"excluded_action_tags": modifier.excluded_action_tags,
+			})
+		documents.append({
+			"id": String(source.id),
+			"source_type": String(source.source_type),
+			"label": source.label,
+			"owner_member_id": source.owner_member_id,
+			"modifiers": modifiers,
+		})
+	return JSON.stringify(documents)
+
+func _test_equipment_authority_rejections_preserve_runtime(failures: Array[String]) -> void:
+	var fixture := _configured_fixture(PartyManager.new(), 1)
+	var context := fixture.context as PlayerRunContext
+	var party := fixture.party as PartyManager
+	var item := _issue_stout_helmet(context, 0, 0, failures)
+	if item == null:
+		party.free()
+		return
+	var actor := Node3D.new()
+	var health := HealthComponent.new()
+	health.name = "HealthComponent"
+	health.configure(149.0, true, 8.0, 0.5)
+	health.apply_damage(23.0)
+	actor.add_child(health)
+	TestAssertions.truthy(context.bind_actor(1, actor), "authority rejection fixture attaches a runtime actor", failures)
+	var candidate := context.equipment_activation(1).source
+	var action_tags: Array[StringName] = [&"melee", &"physical"]
+	var events: Array[int] = []
+	party.stats_changed.connect(func(member_id: int) -> void: events.append(member_id))
+	var before := _runtime_integrity_snapshot(context, party, health, item, action_tags)
+	var cases: Array[Dictionary] = [
+		{
+			"label": "missing batch authority",
+			"accepted": int(party.call(&"replace_member_equipment_sources_atomically", {1: candidate})) == 0,
+		},
+		{
+			"label": "wrong batch authority",
+			"accepted": int(party.call(&"replace_member_equipment_sources_atomically", {1: candidate}, RefCounted.new())) == 0,
+		},
+		{
+			"label": "missing member authority",
+			"accepted": bool(party.call(&"replace_member_equipment_source_atomically", 1, candidate)),
+		},
+		{
+			"label": "wrong member authority",
+			"accepted": bool(party.call(&"replace_member_equipment_source_atomically", 1, candidate, RefCounted.new())),
+		},
+	]
+	for test_case: Dictionary in cases:
+		TestAssertions.truthy(not bool(test_case["accepted"]), "%s is rejected" % test_case["label"], failures)
+		_assert_runtime_integrity_snapshot(before, context, party, health, item, action_tags, events, String(test_case["label"]), failures)
+
+	var stale_authority: Variant = context.get("_source_refresh_authority")
+	context.release_source_refresh_coordinator()
+	var replacement := PlayerRunContext.new()
+	var replacement_profile := ProfileState.new_profile("profile-task10m-replacement", "Task 10M Replacement", 1000)
+	replacement_profile.inventory_columns = 1
+	TestAssertions.equal(
+		replacement.configure(&"task10m_replacement", 0, replacement_profile, 7441, party, 100),
+		PackedStringArray(),
+		"replacement context binds after prior authority release",
+		failures,
+	)
+	TestAssertions.truthy(replacement.bind_actor(1, actor), "replacement context attaches the runtime actor", failures)
+	events.clear()
+	var replacement_candidate := replacement.equipment_activation(1).source
+	var replacement_before := _runtime_integrity_snapshot(replacement, party, health, item, action_tags)
+	TestAssertions.truthy(
+		int(party.call(&"replace_member_equipment_sources_atomically", {1: replacement_candidate}, stale_authority)) != 0,
+		"stale batch authority cannot mutate replacement binding",
+		failures,
+	)
+	_assert_runtime_integrity_snapshot(replacement_before, replacement, party, health, item, action_tags, events, "stale batch authority", failures)
+	TestAssertions.truthy(
+		not bool(party.call(&"replace_member_equipment_source_atomically", 1, replacement_candidate, stale_authority)),
+		"stale member authority cannot mutate replacement binding",
+		failures,
+	)
+	_assert_runtime_integrity_snapshot(replacement_before, replacement, party, health, item, action_tags, events, "stale member authority", failures)
+	replacement.release_source_refresh_coordinator()
+	actor.free()
+	party.free()
+
+func _runtime_integrity_snapshot(
+	context: PlayerRunContext,
+	party: PartyManager,
+	health: HealthComponent,
+	item: ItemInstance,
+	action_tags: Array[StringName],
+) -> Dictionary:
+	return {
+		"sources": _source_documents(party.member_by_id(1)),
+		"activation": _activation_document(context.equipment_activation(1), [item.instance_id]),
+		"item_state": JSON.stringify(context.item_state().to_dictionary()),
+		"item": JSON.stringify(item.to_dictionary()),
+		"revision": party.stat_revision(),
+		"base": party.stats_for(1),
+		"action": party.stats_for_action(1, action_tags),
+		"maximum_health": health.max_health,
+		"current_health": health.current_health,
+	}
+
+func _assert_runtime_integrity_snapshot(
+	before: Dictionary,
+	context: PlayerRunContext,
+	party: PartyManager,
+	health: HealthComponent,
+	item: ItemInstance,
+	action_tags: Array[StringName],
+	events: Array[int],
+	label: String,
+	failures: Array[String],
+) -> void:
+	TestAssertions.equal(_source_documents(party.member_by_id(1)), before["sources"], "%s preserves canonical sources" % label, failures)
+	TestAssertions.equal(_activation_document(context.equipment_activation(1), [item.instance_id]), before["activation"], "%s preserves equipment activation" % label, failures)
+	TestAssertions.equal(JSON.stringify(context.item_state().to_dictionary()), before["item_state"], "%s preserves item ownership containers" % label, failures)
+	TestAssertions.equal(JSON.stringify(item.to_dictionary()), before["item"], "%s preserves immutable item bytes" % label, failures)
+	TestAssertions.equal(party.stat_revision(), before["revision"], "%s preserves stat revision" % label, failures)
+	TestAssertions.truthy(is_same(party.stats_for(1), before["base"]), "%s preserves base cache identity" % label, failures)
+	TestAssertions.truthy(is_same(party.stats_for_action(1, action_tags), before["action"]), "%s preserves action cache identity" % label, failures)
+	TestAssertions.equal(events, [], "%s emits no stats_changed signal" % label, failures)
+	TestAssertions.equal(health.max_health, before["maximum_health"], "%s preserves runtime maximum health" % label, failures)
+	TestAssertions.equal(health.current_health, before["current_health"], "%s preserves runtime current health" % label, failures)
 
 func _test_equipment_source_rejection_rolls_back(failures: Array[String]) -> void:
 	var fixture := _configured_fixture(RejectingPartyManager.new(), 1)
@@ -362,31 +584,7 @@ func _plain_item_record(instance_id: String, base_definition_id: StringName, iss
 	return decoded.item
 
 func _source_documents(member: PartyMemberState) -> String:
-	var documents: Array[Dictionary] = []
-	for source: StatModifierSource in member.modifier_sources:
-		var modifiers: Array[Dictionary] = []
-		for modifier: StatModifier in source.modifiers:
-			modifiers.append({
-				"stat_id": String(modifier.stat_id),
-				"operation": modifier.operation,
-				"value": modifier.value,
-				"source_id": String(modifier.source_id),
-				"source_label": modifier.source_label,
-				"required_tags": modifier.required_tags,
-				"excluded_tags": modifier.excluded_tags,
-				"required_capability_tags": modifier.required_capability_tags,
-				"excluded_capability_tags": modifier.excluded_capability_tags,
-				"required_action_tags": modifier.required_action_tags,
-				"excluded_action_tags": modifier.excluded_action_tags,
-			})
-		documents.append({
-			"id": String(source.id),
-			"source_type": String(source.source_type),
-			"label": source.label,
-			"owner_member_id": source.owner_member_id,
-			"modifiers": modifiers,
-		})
-	return JSON.stringify(documents)
+	return _source_documents_from_array(member.modifier_sources)
 
 func _stout_affix_document() -> Dictionary:
 	return {

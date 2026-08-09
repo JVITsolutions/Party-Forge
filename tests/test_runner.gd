@@ -6,7 +6,13 @@ func _initialize() -> void:
     var failures: Array[String] = []
     var script_errors := SCRIPT_ERROR_CAPTURE.new()
     OS.add_logger(script_errors)
-    var suite_paths: PackedStringArray = _collect_suites("res://tests/unit")
+    var discovery := _collect_suites("res://tests/unit")
+    var suite_paths := discovery["paths"] as PackedStringArray
+    var discovery_error := String(discovery["error"])
+    if not discovery_error.is_empty():
+        failures.append(discovery_error)
+    elif suite_paths.is_empty():
+        failures.append("TEST_RUNNER_DISCOVERY_ERROR: zero unit suites discovered in res://tests/unit")
     for suite_path: String in suite_paths:
         var suite_script: Script = load(suite_path)
         if suite_script == null:
@@ -32,12 +38,20 @@ func _initialize() -> void:
     print("TEST_SUMMARY: FAIL (%d failures)" % failures.size())
     quit(1)
 
-func _collect_suites(root: String) -> PackedStringArray:
+func _collect_suites(root: String) -> Dictionary:
     var paths: PackedStringArray = []
     var directory: DirAccess = DirAccess.open(root)
     if directory == null:
-        return paths
-    directory.list_dir_begin()
+        return {
+            "error": "TEST_RUNNER_DISCOVERY_ERROR: cannot open unit suite directory %s" % root,
+            "paths": paths,
+        }
+    var list_error := directory.list_dir_begin()
+    if list_error != OK:
+        return {
+            "error": "TEST_RUNNER_DISCOVERY_ERROR: cannot list unit suite directory %s code=%d" % [root, list_error],
+            "paths": paths,
+        }
     var name: String = directory.get_next()
     while not name.is_empty():
         if not directory.current_is_dir() and name.begins_with("test_") and name.ends_with(".gd"):
@@ -45,4 +59,4 @@ func _collect_suites(root: String) -> PackedStringArray:
         name = directory.get_next()
     directory.list_dir_end()
     paths.sort()
-    return paths
+    return {"error": "", "paths": paths}
