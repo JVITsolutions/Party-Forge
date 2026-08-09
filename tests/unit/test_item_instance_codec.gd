@@ -14,6 +14,7 @@ func run() -> Array[String]:
 		return failures
 	_assert_immutable_round_trip(equipment, foundation, failures)
 	_assert_multi_effect_codec(equipment, foundation, failures)
+	_assert_attribute_and_typed_damage_records_round_trip(equipment, foundation, failures)
 	_assert_strict_rejections(equipment, foundation, failures)
 	_assert_deterministic_issuer(equipment, foundation, failures)
 	return failures
@@ -112,6 +113,47 @@ func _assert_multi_effect_codec(
 		"reversed authored effect rolls",
 		failures
 	)
+
+
+func _assert_attribute_and_typed_damage_records_round_trip(
+	equipment: EquipmentCatalog,
+	foundation: ItemFoundationCatalog,
+	failures: Array[String]
+) -> void:
+	var documents: Array[Dictionary] = [
+		_task9_item_document(
+			"task9-attribute-circlet",
+			"emberweave_circlet",
+			"stout",
+			"prefix",
+			"constitution",
+			StatModifier.Operation.FLAT,
+			3.0,
+			0,
+		),
+		_task9_item_document(
+			"task9-fire-wand",
+			"emberweave_wand",
+			"of_embers",
+			"suffix",
+			"fire_damage",
+			StatModifier.Operation.INCREASED,
+			0.1,
+			1,
+		),
+	]
+	var documents_before := JSON.stringify(documents)
+	for document: Dictionary in documents:
+		var document_before := JSON.stringify(document)
+		var decoded := ItemInstanceCodec.decode(document, equipment, foundation)
+		TestAssertions.truthy(decoded.ok(), "%s Task 9 record decodes" % document["instance_id"], failures)
+		if not decoded.ok():
+			continue
+		TestAssertions.equal(decoded.item.to_dictionary(), document, "%s Task 9 dictionary is exact" % document["instance_id"], failures)
+		TestAssertions.equal(ItemInstanceCodec.encode(decoded.item), document_before, "%s Task 9 record is byte-equivalent" % document["instance_id"], failures)
+		TestAssertions.equal(JSON.stringify(document), document_before, "%s Task 9 decode leaves its input immutable" % document["instance_id"], failures)
+	TestAssertions.equal(JSON.stringify(documents), documents_before, "Task 9 codec batch leaves every serialized item dictionary unchanged", failures)
+
 
 func _assert_strict_rejections(
 	equipment: EquipmentCatalog,
@@ -397,3 +439,39 @@ func _issue_data() -> Dictionary:
 	document.erase("instance_id")
 	document.erase("origin")
 	return document
+
+
+func _task9_item_document(
+	instance_id: String,
+	base_definition_id: String,
+	affix_id: String,
+	affix_kind: String,
+	stat_id: String,
+	operation: int,
+	value: float,
+	sequence: int,
+) -> Dictionary:
+	return {
+		"affixes": [{
+			"affix_kind": affix_kind,
+			"definition_id": affix_id,
+			"rolls": [{
+				"operation": operation,
+				"required_tags": [],
+				"stat_id": stat_id,
+				"value": value,
+			}],
+			"tier": 1,
+		}],
+		"base_definition_id": base_definition_id,
+		"instance_id": instance_id,
+		"item_level": 1,
+		"origin": {
+			"issuer_namespace": "run:task9-equipment-profile:9909:task9_equipment_player",
+			"seed": 9909 + sequence,
+			"sequence": sequence,
+			"source": "task_9_equipment_attribute_application",
+		},
+		"rarity_id": "common",
+		"schema_version": ItemInstance.SCHEMA_VERSION,
+	}

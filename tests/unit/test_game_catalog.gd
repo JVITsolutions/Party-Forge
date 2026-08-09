@@ -30,6 +30,7 @@ func run() -> Array[String]:
     TestAssertions.equal(catalog.class_by_id(&"fighter").traits, [&"martial", &"vanguard"], "fighter traits", failures)
     TestAssertions.equal(catalog.class_by_id(&"cleric").support_action.id, &"cleric_heal", "cleric heal", failures)
     _assert_class_names_and_eligibility(catalog, failures)
+    _assert_primary_action_estimates(catalog, failures)
     _assert_item_foundation_reachability(catalog, failures)
     var fighter := catalog.class_by_id(&"fighter")
     fighter.growth_definition = null
@@ -58,6 +59,48 @@ func run() -> Array[String]:
     _assert_generated_values(failures)
     _assert_persisted_attack_damage_path(failures)
     return failures
+
+
+func _assert_primary_action_estimates(catalog: GameCatalog, failures: Array[String]) -> void:
+    var estimated_class_ids: Array[StringName] = []
+    for definition: ClassDefinition in catalog.classes:
+        var party := PartyManager.new()
+        party.initialize(definition, catalog.traits)
+        var first := ActionCombatEstimateService.estimate(
+            definition.primary_attack,
+            1,
+            party,
+            GameCatalog.DAMAGE_TYPES,
+        )
+        var repeated := ActionCombatEstimateService.estimate(
+            definition.primary_attack,
+            1,
+            party,
+            GameCatalog.DAMAGE_TYPES,
+        )
+        TestAssertions.truthy(first.available, "%s primary action estimate is available" % definition.id, failures)
+        TestAssertions.truthy(first.normal_hit > 0.0, "%s primary action estimate has positive normal damage" % definition.id, failures)
+        TestAssertions.truthy(first.estimated_dps > 0.0, "%s primary action estimate has positive DPS" % definition.id, failures)
+        TestAssertions.equal(_estimate_values(repeated), _estimate_values(first), "%s primary action estimate is deterministic" % definition.id, failures)
+        if first.available:
+            estimated_class_ids.append(definition.id)
+        party.free()
+    estimated_class_ids.sort_custom(func(left: StringName, right: StringName) -> bool: return String(left) < String(right))
+    TestAssertions.equal(estimated_class_ids.size(), 9, "all nine playable classes expose primary action estimates", failures)
+
+
+func _estimate_values(estimate: ActionCombatEstimate) -> Dictionary:
+    return {
+        "action_id": String(estimate.action_id),
+        "available": estimate.available,
+        "normal_hit": estimate.normal_hit,
+        "critical_hit": estimate.critical_hit,
+        "average_hit": estimate.average_hit,
+        "attacks_per_second": estimate.attacks_per_second,
+        "estimated_dps": estimate.estimated_dps,
+        "component_rows": estimate.component_rows.duplicate(true),
+    }
+
 
 func _assert_item_foundation_reachability(catalog: GameCatalog, failures: Array[String]) -> void:
     var stats := load("res://data/stats/core_stats.tres") as StatCatalog

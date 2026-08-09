@@ -15,6 +15,7 @@ func run() -> Array[String]:
 	_test_exact_inventory_capacities(failures)
 	_test_cross_context_state_and_profile_isolation(failures)
 	_test_run_issuance_sequence_and_replay(failures)
+	_test_resumable_attribute_and_typed_damage_records(failures)
 	_test_invalid_inputs_and_operation_policy_are_atomic(failures)
 	_test_generic_transactions_cannot_cross_equipment_boundary(failures)
 	_test_recruit_adds_equipment_without_resetting_item_state(failures)
@@ -206,6 +207,87 @@ func _test_run_issuance_sequence_and_replay(failures: Array[String]) -> void:
 	)
 	TestAssertions.equal(created_two.code, ItemTransactionResult.Code.OK, "non-create operation does not consume issuance sequence two", failures)
 	TestAssertions.equal(context.profile_snapshot.to_dictionary(), snapshot_before, "run issuance never changes persistent sequence or resumable-run bytes", failures)
+
+
+func _test_resumable_attribute_and_typed_damage_records(failures: Array[String]) -> void:
+	var context := _context(&"task9_codec_player", "task9-codec-profile", 1, 9909)
+	var attribute_item := _issued_item_data(context, 0, "task9-attribute", {
+		"affixes": [{
+			"definition_id": "stout",
+			"affix_kind": "prefix",
+			"tier": 1,
+			"rolls": [{
+				"stat_id": "constitution",
+				"operation": StatModifier.Operation.FLAT,
+				"value": 3.0,
+				"required_tags": [],
+			}],
+		}],
+		"base_definition_id": "emberweave_circlet",
+		"item_level": 1,
+		"rarity_id": "common",
+	}, failures)
+	var typed_damage_item := _issued_item_data(context, 1, "task9-fire", {
+		"affixes": [{
+			"definition_id": "of_embers",
+			"affix_kind": "suffix",
+			"tier": 1,
+			"rolls": [{
+				"stat_id": "fire_damage",
+				"operation": StatModifier.Operation.INCREASED,
+				"value": 0.1,
+				"required_tags": [],
+			}],
+		}],
+		"base_definition_id": "emberweave_wand",
+		"item_level": 1,
+		"rarity_id": "common",
+	}, failures)
+	if attribute_item == null or typed_damage_item == null:
+		return
+	var equipment := GameCatalog.EQUIPMENT_CATALOG
+	var foundation := GameCatalog.ITEM_FOUNDATION_CATALOG
+	var attribute_create := ItemTransactionRequest.create(
+		"task9-attribute-create",
+		String(context.run_player_id),
+		INVENTORY_ID,
+		0,
+		attribute_item,
+	)
+	var damage_create := ItemTransactionRequest.create(
+		"task9-fire-create",
+		String(context.run_player_id),
+		INVENTORY_ID,
+		1,
+		typed_damage_item,
+	)
+	TestAssertions.equal(_apply(context, attribute_create, equipment, foundation).code, ItemTransactionResult.Code.OK, "Task 9 attribute item enters run ownership", failures)
+	TestAssertions.equal(_apply(context, damage_create, equipment, foundation).code, ItemTransactionResult.Code.OK, "Task 9 typed-damage item enters run ownership", failures)
+	var state := _item_state(context)
+	var state_bytes := JSON.stringify(state.to_dictionary())
+	var item_bytes: Dictionary = {}
+	item_bytes[attribute_item.instance_id] = JSON.stringify(attribute_item.to_dictionary())
+	item_bytes[typed_damage_item.instance_id] = JSON.stringify(typed_damage_item.to_dictionary())
+	var bootstrap := RunItemBootstrap.create(&"task9-codec-run", context.run_seed, context.run_player_id, 1, state)
+	var encoded := ResumableRunItemCodec.encode(bootstrap)
+	TestAssertions.equal(JSON.stringify(encoded["item_state"]), state_bytes, "resumable encoding preserves exact item ownership bytes", failures)
+	var decoded := ResumableRunItemCodec.decode(encoded, equipment, foundation)
+	TestAssertions.truthy(decoded != null, "resumable attribute and typed-damage state decodes", failures)
+	if decoded == null:
+		return
+	var decoded_state := decoded.item_state()
+	TestAssertions.equal(JSON.stringify(decoded_state.to_dictionary()), state_bytes, "resumable item ownership round trips byte-equivalently", failures)
+	var decoded_registry := decoded_state.registry()
+	for item_id: Variant in item_bytes:
+		TestAssertions.equal(
+			JSON.stringify(decoded_registry.item(String(item_id)).to_dictionary()),
+			item_bytes[item_id],
+			"resumable round trip preserves item %s byte-equivalently" % item_id,
+			failures,
+		)
+	TestAssertions.equal(JSON.stringify(attribute_item.to_dictionary()), item_bytes[attribute_item.instance_id], "resumable codec leaves caller attribute item immutable", failures)
+	TestAssertions.equal(JSON.stringify(typed_damage_item.to_dictionary()), item_bytes[typed_damage_item.instance_id], "resumable codec leaves caller typed-damage item immutable", failures)
+
 
 func _test_invalid_inputs_and_operation_policy_are_atomic(failures: Array[String]) -> void:
 	var context := _context(&"policy_player", "profile-policy", 1, 4404)
@@ -416,6 +498,29 @@ func _issued_item(context: PlayerRunContext, sequence: int, source: String, fail
 	TestAssertions.truthy(issued.ok(), "%s fixture item issues successfully" % source, failures)
 	if not issued.ok():
 		failures.append("%s fixture issuance error: %s" % [source, issued.error])
+	return issued.item
+
+
+func _issued_item_data(
+	context: PlayerRunContext,
+	sequence: int,
+	source: String,
+	item_data: Dictionary,
+	failures: Array[String],
+) -> ItemInstance:
+	var issuer_namespace := "run:%s:%s:%s" % [context.profile_id, context.run_seed, context.run_player_id]
+	var issued := ItemInstanceIssuer.issue(
+		issuer_namespace,
+		sequence,
+		source,
+		context.run_seed + sequence,
+		item_data,
+		GameCatalog.EQUIPMENT_CATALOG,
+		GameCatalog.ITEM_FOUNDATION_CATALOG,
+	)
+	TestAssertions.truthy(issued.ok(), "%s Task 9 item issues successfully" % source, failures)
+	if not issued.ok():
+		failures.append("%s Task 9 issuance error: %s" % [source, issued.error])
 	return issued.item
 
 func _item_state(context: PlayerRunContext) -> ItemOwnershipState:

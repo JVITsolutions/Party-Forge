@@ -1,183 +1,157 @@
-# Task 9 Report: Isolated Developer Item Sandbox Interface
+# Task 9 report: resume, 24-member isolation, and end-to-end regression
 
-## Scope
+Status: regression implementation and fresh verification complete; scoped commit pending at report-writing time.
 
-Implemented only Plan 4B Task 9 on `feat/plan-4b-item-ownership` from parent `c1ae5834d1f06f09a5f2800fd71ebf650608a1fb`.
+## Scope and result
 
-Created:
+Task 9 started from `f8e51c3239e142d7886cd6532d9703850ff56b74` (`feat: show projected equipment comparisons`) on the isolated `feat/equipment-attribute-application` worktree.
 
-- `scripts/ui/developer_item_sandbox.gd`
-- `scenes/ui/developer_item_sandbox.tscn`
-- `tests/unit/test_developer_item_sandbox.gd`
+No production code changed. Task 6 already supplied resumable equipment reconstruction, atomic source replacement, affected-member cache invalidation, and one-signal refresh behavior. Task 9 adds end-to-end and retained regression evidence around those existing seams:
 
-Modified the Additional Settings, Settings Screen, and main scene routing named by the Task 9 brief. The Task 8 state/store received only the small public selected-slot transaction and read-only integrity surfaces required by the interface, together with strict journal reconstruction for those canonical moves and swaps. `project.godot` received the required controller west-face/keyboard pickup action.
+- `equipment_attribute_application_runner.gd` builds one Mage party at the developer capacity of 24 members;
+- it owns an immutable Constitution circlet and fire-damage wand, with the wand requiring the circlet's three Constitution points in the isolated test catalog fixture;
+- it caches both base and Mage-action snapshot objects plus their revisions for members 2-24;
+- each member-one equip, disable, and resumed-reactivation transition proves exactly one revision advance and an exact `stats_changed == [1]` signal sequence;
+- every member 2-24 base/action cache retains the same object identity and original snapshot revision through each transition;
+- removing the circlet leaves the wand equipped but disabled, excludes all of its effects, retains the exact unmet-Constitution reason, and returns both final stats and the fire action estimate to their exact baseline documents;
+- the disabled item state is encoded with `ResumableRunItemCodec`, decoded, configured into a new 24-member context, and compared for identical active IDs, disabled reasons, final stat values/breakdowns, and complete action-estimate values/components;
+- re-equipping the circlet after resume restores the exact pre-disable active IDs, final stat document, and action estimate while again preserving members 2-24;
+- both item dictionaries remain JSON-byte-equivalent after every assignment, disable, encode/decode, resume reconstruction, and reactivation boundary.
 
-No Task 10 work, production equipment application, randomized loot, ground pickup, extraction, run loss, cross-player transfer, shop, crafting, salvage, rarity audiovisual work, or future Armoury/Warehouse documentation was changed.
-
-## Implementation Result
-
-- Additional Settings exposes `item_sandbox_requested` and a clearly labelled launch button. It is disabled in Player Simulation and enabled only for the effective Developer Mode selector.
-- Settings Screen forwards the request and records the exact page/focus restoration point without owning modal creation.
-- `PartyForgeMain` reloads the authoritative saved settings on every request. Stale UI state, a forged signal, a direct method call, unlock-all, and other preview flags cannot bypass the saved-mode gate.
-- Main precomposes one process-always `DeveloperItemSandbox` CanvasLayer at layer 14. Repeated valid opens are idempotent; close restores Additional Settings and the exact launch-button focus target.
-- The responsive modal has safe margins, exactly five inventory buttons, exactly 100 stash buttons in a scrollable ten-column grid, a scrollable inspector, status, close, first-empty move, save, reload, integrity, and reset controls.
-- Every slot exposes `container_id` and integer `slot` metadata. Rendering and inspection use defensive public projections only.
-- Focus/click inspection shows base display name, instance ID, rarity, level, explicit affix/tier/operation/roll information, owner, container, and slot without mutating state.
-- Mouse/keyboard drag-and-drop moves to an empty slot or swaps with an occupied slot. An outside/invalid release clears held state without mutation.
-- Keyboard `X` and controller west face (Xbox X / PlayStation Square) pick up the focused populated slot; focus can then move and controller south face places/swaps. Cancel clears held mode before it can close the modal. Ordinary south-face activation while not holding only inspects.
-- Source-held and eligible-destination states receive distinct affordances and interaction-mode hints. Focus neighbors form a deterministic closed modal loop across slots, inspector/actions, and close.
-- First-empty operations retain their public Task 8 behavior. Arbitrary selected-slot move/swap goes through `DeveloperItemSandboxState.transfer_slots()`, the Task 4 transaction service, and `AtomicJsonStore`.
-- Save, reload, integrity, reset, move, and swap surface stable success or exact failure text. Failure preserves the last usable projection and persisted bytes.
-
-## RED-GREEN Evidence
-
-### Accepted Route and Domain RED
-
-Focused command covered the sandbox state, sandbox UI, Settings Screen, and main wiring suites.
-
-Accepted result:
+The retained progression integration now also creates one real 24-member party and proves a member-one source refresh preserves member 2-24 base/action snapshot identities and revisions. Its new exact marker is:
 
 ```text
-TEST_SUMMARY: FAIL (11 failures)
-TASK9_ACCEPTED_RED_EXIT=1
+PROGRESSION_24_MEMBER_ISOLATION_PASS members=24 untouched=23
 ```
 
-The failures were assertion-level requirements for the absent public selected-slot transfer/integrity API, selected-slot move/swap journal support, sandbox script/scene, Additional Settings signal/button, Settings forwarding, and main resources. There were no parser, loader, script, or resource failures in the accepted RED.
+Unit regressions add:
 
-Two earlier attempts were rejected as evidence because the new test code contained type-inference errors and, separately, mixed indentation in a main-wiring test. Both test defects were corrected before accepting RED.
+- exact attribute and typed-damage `ItemInstance` codec round trips;
+- resumable ownership-state round trips that preserve both item dictionaries byte-equivalently;
+- deterministic, available, positive primary-action estimates for all nine playable classes.
 
-### UI Failure-Atomicity RED
+## TDD and existing-green evidence
 
-A bounded closed-state `configure()` seam was required to inject failing state/store doubles without private UI access.
+### Pre-edit baseline
 
-```text
-TEST_SUMMARY: FAIL (1 failures)
-TASK9_FAILURE_ATOMIC_RED_EXIT=1
-```
-
-The single intentional assertion reported the absent public configuration seam. GREEN after the seam exited `0` with `TEST_SUMMARY: PASS (0 failures)`.
-
-### Focused GREEN
-
-The first UI GREEN was rejected because pre-tree test initialization left slot grids empty and produced two count assertions plus null follow-on errors. Root-cause tracing showed the tests instantiate during `SceneTree._initialize`, before normal `_ready()` timing. Initialization is now pre-tree-safe and idempotent from both `_ready()` and `open()`.
-
-Final combined focused result for the Task 8 state, sandbox UI, Settings Screen, and main wiring suites:
+The exact Task 9 focused batch passed before edits:
 
 ```text
-DEVELOPER_ITEM_SANDBOX_SHA256: c201fd5917d9958da63dacd8201e80d5911c0de51af367977d2a5ee57dd9defe
 TEST_SUMMARY: PASS (0 failures)
-TASK9_COMBINED_FOCUSED_EXIT=0
+TASK9_BASELINE_FOCUSED_EXIT_CODE=0
+TASK9_BASELINE_FOCUSED_SECONDS=5.498
 ```
 
-The standalone sandbox UI suite and the failure-atomic injection suite also exited `0` with `TEST_SUMMARY: PASS (0 failures)`.
-
-After report creation and sidecar cleanup, the same four-suite focused command was rerun from the cleaned tree. It exited `0`, reported the same SHA-256 marker, and ended with `TEST_SUMMARY: PASS (0 failures)`.
-
-## Interaction, Layout, and Isolation Evidence
-
-The focused UI suite covers:
-
-- safe modal margins at 1920x1080, 2560x1440, and 3840x2160;
-- exact 5/100 slot counts, integer metadata, ten-column scrollable stash, and inspector field content;
-- deterministic closed focus graph and focus-driven inspection;
-- mouse drag to empty destination, occupied-destination swap, and outside-drop cancellation;
-- controller/keyboard pickup, navigation, placement/swap, cancellation, and non-held south-face inspection;
-- held-source and destination affordances plus control hints;
-- first-empty, save, reload, integrity, reset, stable success text, and exact failure preservation;
-- corrupt-document reload/integrity rejection with unchanged primary bytes, backup bytes, and usable projection;
-- authoritative main gate, idempotent modal routing, cancel behavior, and exact Settings focus restoration.
-
-The main isolation test performs a real sandbox drag transaction, then proves the active player profile's serialized bytes and semantic hash are unchanged across open, use, and close. The sandbox UI contains no private Task 8 state/store calls and does not edit ownership dictionaries.
-
-## Fresh Import and Regression Gates
-
-A fresh Godot 4.7.1 headless import exited `0` before final verification.
-
-The required 20-suite regression batch covered:
-
-- Task 8 sandbox state and Task 9 UI/settings/main routing;
-- feature access, character ledger shell, and responsive ledger input;
-- main menu, pause menu, and temporary hover popup;
-- controller movement bindings, controls settings, and responsive UI;
-- profile state, atomic profile store, profile manager, profile mutation persistence, item storage, storage reconciliation, and profile boot.
-
-Result:
+The existing progression integration also passed every 1/6/12/24 case before modification:
 
 ```text
-DEVELOPER_ITEM_SANDBOX_SHA256: c201fd5917d9958da63dacd8201e80d5911c0de51af367977d2a5ee57dd9defe
-TEST_SUMMARY: PASS (0 failures)
-TASK9_REQUIRED_REGRESSION_EXIT=0
+PROGRESSION_24_MEMBER_SUMMARY: PASS
+TASK9_BASELINE_24_EXIT_CODE=0
+TASK9_BASELINE_24_SECONDS=16.959
 ```
 
-The regression suites emitted only their established intentional negative-test diagnostics and exit-time leak warnings. They emitted no unexpected Task 9 parser, script, loader, resource, or UI assertion failure.
+### First authored-runner attempt
 
-## Complete Suite
+The first new integration run exited `1` in `2.119` seconds with one assertion:
 
-Command:
+```text
+EQUIPMENT_ATTRIBUTE_APPLICATION_SUMMARY: FAIL failures=1
+EQUIPMENT_ATTRIBUTE_APPLICATION_FAILURE: attribute and typed-damage items are active together
+```
+
+This was not accepted as a production RED. `EquipmentActivationResult` correctly returned both active IDs in its documented sorted order; the new test had written the same two expected IDs in reverse order. Only the test expectation was corrected. No production file was touched.
+
+The corrected regression immediately demonstrated the already-installed behavior:
+
+```text
+EQUIPMENT_ATTRIBUTE_APPLICATION_SUMMARY: PASS members=24 untouched=23 items=2
+TASK9_EXISTING_GREEN_EXIT_CODE=0
+TASK9_EXISTING_GREEN_SECONDS=1.973
+```
+
+This is honestly existing-green coverage. A controlled product RED was not manufactured because the approved implementation already met the Task 9 contract.
+
+## Final verification
+
+Godot: `4.7.1.stable.mono.official.a13da4feb`.
+
+### Focused Task 9 regression
 
 ```powershell
-Godot_v4.7.1-stable_win64_console.exe --headless --path <task-9-worktree> --quit-after 720 --script res://tests/test_runner.gd
+& $godot --headless --path . --quit-after 900 --script res://tests/focused_test_runner.gd -- tests/unit/test_stat_catalog.gd tests/unit/test_stat_resolver.gd tests/unit/test_party_manager.gd tests/unit/test_damage_resolver.gd tests/unit/test_action_combat_estimate_service.gd tests/unit/test_equipment_assignment_service.gd tests/unit/test_run_item_ownership.gd tests/unit/test_item_instance_codec.gd tests/unit/test_game_catalog.gd
 ```
 
-Result on the exact implementation tree:
+```text
+TEST_SUMMARY: PASS (0 failures)
+TASK9_FOCUSED_GREEN_EXIT_CODE=0
+TASK9_FOCUSED_GREEN_SECONDS=6.246
+```
+
+The error stream contains only established intentional negative-path diagnostics from stat, damage, and non-finite estimate tests, plus the existing shutdown diagnostics. No Task 9 assertion, parser, script, or loader failure occurred.
+
+### Equipment attribute application integration
+
+```powershell
+& $godot --headless --path . --quit-after 900 --script res://tests/integration/equipment_attribute_application_runner.gd
+```
+
+```text
+EQUIPMENT_ATTRIBUTE_APPLICATION_SUMMARY: PASS members=24 untouched=23 items=2
+TASK9_EXISTING_GREEN_EXIT_CODE=0
+TASK9_EXISTING_GREEN_SECONDS=1.973
+```
+
+### Progression 24-member integration
+
+```powershell
+& $godot --headless --path . --quit-after 900 --script res://tests/integration/progression_24_member_runner.gd
+```
+
+```text
+PROGRESSION_24_MEMBER_ISOLATION_PASS members=24 untouched=23
+PROGRESSION_LOAD_SIZE_PASS members=1 contexts=1 actors=1 party_members=1 ...
+PROGRESSION_LOAD_SIZE_PASS members=6 contexts=1 actors=6 party_members=6 ...
+PROGRESSION_LOAD_SIZE_PASS members=12 contexts=2 actors=12 party_members=12 ...
+PROGRESSION_LOAD_SIZE_PASS members=24 contexts=4 actors=24 party_members=24 ...
+PROGRESSION_24_MEMBER_SUMMARY: PASS
+TASK9_24_GREEN_EXIT_CODE=0
+TASK9_24_GREEN_SECONDS=17.246
+```
+
+The integration retains its established RID/ObjectDB/resource shutdown diagnostics. All child processes and the parent runner exited `0`.
+
+### Complete suite compatibility
+
+The Task 9 plan commits after focused and integration gates; a complete suite was nevertheless run as an extra compatibility check:
+
+```powershell
+& $godot --headless --path . --quit-after 1800 --script res://tests/test_runner.gd
+```
 
 ```text
 DEVELOPER_ITEM_SANDBOX_SHA256: c201fd5917d9958da63dacd8201e80d5911c0de51af367977d2a5ee57dd9defe
 ITEM_TRANSACTION_MATRIX: PASS
-TEST_SUMMARY: PASS (130 suites)
-TASK9_FULL_SUITE_EXIT=0
+TEST_SUMMARY: PASS (163 suites)
+TASK9_FULL_EXIT_CODE=0
+TASK9_FULL_SECONDS=146.252
 ```
 
-The complete suite emitted the established intentional negative-test diagnostics and exit leak warnings (`1 FontAdvanced`, `5 CanvasItem`, `32 ObjectDB`, and `5 resources`). There was no unexpected Task 9 parser, script, loader, resource, or UI assertion failure, and the process exited `0`.
+The complete runner retains its established intentional negative-path errors/warnings and shutdown diagnostics. The authoritative result is exit `0` with `PASS (163 suites)`.
 
-## Artifact and Review Boundary
+## Files in scoped commit
 
-The fresh import created fourteen previously absent untracked `.gd.uid` sidecars. A clean-untracked baseline identified them as verification artifacts; all fourteen were removed by exact path. No pre-existing sidecar was removed.
+- `.superpowers/sdd/task-9-report.md`
+- `tests/integration/equipment_attribute_application_runner.gd`
+- `tests/integration/progression_24_member_runner.gd`
+- `tests/unit/test_run_item_ownership.gd`
+- `tests/unit/test_item_instance_codec.gd`
+- `tests/unit/test_game_catalog.gd`
 
-Final staging is limited to Task 9 source/scenes/tests/report, the required input action, settings/main routing changes, and the narrowly required Task 8 public API/store validation changes.
+No production script, Resource, scene, asset, project setting, import artifact, or generated sidecar is in scope.
 
-Commit message: `feat: expose isolated developer item sandbox`
+## Hygiene and concerns
 
-Stop after the Task 9 commit for independent review. Task 10 has not started.
-
-## Independent Review Focus-Owner Correction
-
-Independent review reproduced a real controller-input defect in commit `01bbf30`: after a slot had been inspected, `_focused_slot_button()` returned that historical slot whenever the live viewport focus owner was a non-slot control. Holding an item, visiting an empty slot, moving actual focus to Save/Inspector/Close, and pressing controller south face therefore transferred to the stale slot. Controller west face on those non-slot controls could also pick up the last inspected populated slot.
-
-The correction was implemented test-first with `tests/integration/task9_developer_item_sandbox_focus_runner.gd`, a real-tree runner that uses `Input.parse_input_event` and the viewport's actual focus owner.
-
-Accepted stale-focus RED:
-
-```text
-TASK9_SANDBOX_FOCUS_SUMMARY: FAIL (9 failures)
-TASK9_STALE_FOCUS_RED_EXIT=1
-```
-
-All real-tree setup and focus-reachability assertions passed. The nine intentional failures were exact projection/byte changes from south face on Save, Inspector, and Close (six failures), plus stale pickup from west face on those same non-slot controls (three failures).
-
-The first post-fix run was rejected as GREEN evidence. Its assertions passed, but the Inspector case emitted typed-array validation errors because `_is_slot_button()` attempted to find a `Label` inside `Array[Button]`. The final predicate first requires a real `Button`; no engine error remains.
-
-Final real-input GREEN:
-
-```text
-TASK9_SANDBOX_FOCUS_SUMMARY: PASS (0 failures)
-TASK9_STALE_FOCUS_GREEN_EXIT=0
-```
-
-The minimal production correction now treats any actual non-null non-slot focus owner as no slot. Historical-slot fallback remains only when there is genuinely no focus owner, preserving the existing off-tree test seam. South face on a non-slot clears held mode without mutation; west face cannot pick stale state. Save, Inspector, and Close remain reachable through the closed focus graph.
-
-Independent review also found that the route fixture assumed `user://tests` already existed. A pristine isolated `APPDATA`/`LOCALAPPDATA` RED exited `1` with exactly one assertion failure: `Player Simulation route fixture saves`, settings error code `7`. The fixture now creates the settings path's parent directory explicitly. The same pristine-root focused command then exited `0` with `TEST_SUMMARY: PASS (0 failures)`.
-
-Post-correction seeded gates on the exact tree:
-
-```text
-DEVELOPER_ITEM_SANDBOX_SHA256: c201fd5917d9958da63dacd8201e80d5911c0de51af367977d2a5ee57dd9defe
-TEST_SUMMARY: PASS (0 failures) # required 20-suite batch
-ITEM_TRANSACTION_MATRIX: PASS
-TEST_SUMMARY: PASS (130 suites)
-TASK9_CORRECTION_FULL_SUITE_EXIT=0
-```
-
-The established intentional negative-test diagnostics and exit-time leak warnings remained unchanged. No unexpected parser, script, loader, resource, input, or UI assertion failure occurred. Both temporary pristine roots were deleted by exact validated path, and no source-adjacent verification sidecar was created.
-
-Correction staging is limited to the sandbox focus resolution, the pristine settings fixture line, the real-input Task 9 regression runner, and this report. Task 10 remains untouched. Stop after the correction commit for another independent review.
+- `git diff --check` passed before report authoring and will be rerun before commit.
+- The worktree currently retains 123 pre-existing untracked `.gd.uid` sidecars. No `.gd.uid` is staged, and running the new script directly did not create an `equipment_attribute_application_runner.gd.uid` sidecar.
+- The integration temporarily replaces the in-memory live wand definition with a deep-copied fixture that adds the Constitution requirement, then restores the original definition before exit. This is necessary because production content intentionally has no final attribute requirements yet and `PlayerRunContext.configure()` reconstructs against `GameCatalog.EQUIPMENT_CATALOG`. No on-disk catalog or Resource changes.
+- No open Task 9 functional concern is known. Final production content requirements and broad inventory artwork remain outside this increment.

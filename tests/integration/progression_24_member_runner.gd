@@ -72,6 +72,8 @@ func _exercise_size(target_size: int) -> void:
 	scenario.add_child(effects)
 
 	var catalog := GameCatalog.load_defaults()
+	if target_size == 24:
+		_exercise_single_party_snapshot_isolation(catalog)
 	var registry := RunContextRegistry.new()
 	var contexts: Array[PlayerRunContext] = []
 	var profiles_before: Array[Dictionary] = []
@@ -266,6 +268,50 @@ func _has_growth_source(detail: Dictionary) -> bool:
 	return Array(detail.get("sources", [])).any(
 		func(source: Dictionary) -> bool: return String(source.get("source_label", "")) == "Class Growth"
 	)
+
+
+func _exercise_single_party_snapshot_isolation(catalog: GameCatalog) -> void:
+	var party := PartyManager.new()
+	party.configure_capacity(PartyCapacityPolicy.new(24))
+	party.initialize(catalog.class_by_id(&"mage"), catalog.traits)
+	for _member_index: int in range(1, 24):
+		_assert(party.recruit(catalog.class_by_id(&"mage")), "single-party isolation recruits member %d" % (_member_index + 1))
+	_assert(party.members.size() == 24, "single-party isolation reaches the developer capacity")
+	var action_tags := DamageResolver.action_tags_for(catalog.class_by_id(&"mage").primary_attack)
+	var snapshots: Dictionary = {}
+	for member_id: int in range(2, 25):
+		var base := party.stats_for(member_id)
+		var action := party.stats_for_action(member_id, action_tags)
+		snapshots[member_id] = {
+			"base": base,
+			"base_revision": base.revision,
+			"action": action,
+			"action_revision": action.revision,
+		}
+	var changed_members: Array[int] = []
+	party.stats_changed.connect(func(member_id: int) -> void: changed_members.append(member_id))
+	var revision_before := party.stat_revision()
+	var source := StatModifierSource.create(
+		&"progression_24_member_isolation",
+		&"test",
+		"24-member isolation",
+		1,
+		[StatModifier.create(&"constitution", StatModifier.Operation.FLAT, 1.0, &"progression_24_member_isolation_constitution", "24-member isolation")],
+	)
+	_assert(party.replace_member_source(1, source), "single-party member-one source replacement succeeds")
+	_assert(changed_members == [1], "single-party replacement emits only member one")
+	_assert(party.stat_revision() == revision_before + 1, "single-party replacement advances one revision")
+	for member_id: int in range(2, 25):
+		var record := snapshots[member_id] as Dictionary
+		var base := party.stats_for(member_id)
+		var action := party.stats_for_action(member_id, action_tags)
+		_assert(is_same(base, record["base"]), "single-party member %d base snapshot identity is preserved" % member_id)
+		_assert(base.revision == int(record["base_revision"]), "single-party member %d base snapshot revision is preserved" % member_id)
+		_assert(is_same(action, record["action"]), "single-party member %d action snapshot identity is preserved" % member_id)
+		_assert(action.revision == int(record["action_revision"]), "single-party member %d action snapshot revision is preserved" % member_id)
+	if changed_members == [1]:
+		print("PROGRESSION_24_MEMBER_ISOLATION_PASS members=24 untouched=23")
+	party.free()
 
 
 func _assert(condition: bool, message: String) -> void:
