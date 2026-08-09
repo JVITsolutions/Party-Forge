@@ -49,7 +49,21 @@ func _test_failures_are_atomic_and_diagnostic(failures: Array[String]) -> void:
 	var attribute_catalog := _catalog_with_attribute_requirement(&"greenwood_boots", &"strength", 999.0)
 	var attribute_item := _issue_into(context, 4, 4, &"greenwood_boots", attribute_catalog, failures)
 	if attribute_item != null:
-		_assert_assignment_failure(context, 1, attribute_item.instance_id, &"boots", attribute_catalog, "attribute requirement", failures)
+		var before := _bytes(context.item_state())
+		var class_definition := (fixture.party as PartyManager).member_by_id(1).class_definition
+		var class_before: Array[StringName] = class_definition.normalized_eligibility_tags()
+		var structural_preview := EquipmentAssignmentService.new().preview(
+			context.item_state(), 1, attribute_item.instance_id, &"boots", attribute_catalog,
+			GameCatalog.ITEM_FOUNDATION_CATALOG, class_definition, {},
+		)
+		TestAssertions.truthy(structural_preview.ok(), "assignment preview leaves attribute activation to the transition layer", failures)
+		TestAssertions.equal(_bytes(context.item_state()), before, "structural attribute preview remains pure", failures)
+		TestAssertions.equal(class_definition.normalized_eligibility_tags(), class_before, "structural preview leaves class resources unchanged", failures)
+		var legacy_errors := EquipmentEligibility.validate_equip(
+			attribute_catalog.definition(&"greenwood_boots"), class_definition,
+			&"boots", {}, {},
+		)
+		TestAssertions.truthy(not legacy_errors.is_empty(), "legacy equip validation still reports unmet attributes", failures)
 
 func _test_two_hand_and_quiver_rules(failures: Array[String]) -> void:
 	var fixture := _fixture(&"marksman", 8301, 8)

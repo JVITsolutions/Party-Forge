@@ -12,7 +12,7 @@ func preview(
 	equipment: EquipmentCatalog,
 	foundation: ItemFoundationCatalog,
 	class_definition: ClassDefinition = null,
-	attributes: Dictionary = {},
+	_attributes: Dictionary = {},
 ) -> EquipmentAssignmentResult:
 	if state == null or equipment == null or foundation == null or member_id <= 0 or item_id.strip_edges().is_empty():
 		return _failure("reason=invalid request")
@@ -69,7 +69,7 @@ func preview(
 	if not String(loadout_result["error"]).is_empty():
 		return _failure("member=%d reason=%s" % [member_id, String(loadout_result["error"])])
 	var loadout := loadout_result["loadout"] as Dictionary
-	var eligibility_error := _validate_complete_loadout(loadout, class_definition, attributes)
+	var eligibility_error := _validate_complete_loadout(loadout, class_definition)
 	if not eligibility_error.is_empty():
 		return _failure("member=%d item=%s slot=%s reason=ineligible detail=%s" % [member_id, item_id, slot_id, eligibility_error])
 	var candidate_error := candidate.validate(equipment, foundation)
@@ -93,12 +93,12 @@ func _loadout_for(state: ItemOwnershipState, equipment_id: StringName, equipment
 		loadout[EquipmentSlotIndex.slot_for(slot)] = definition
 	return {"loadout": loadout, "error": ""}
 
-func _validate_complete_loadout(loadout: Dictionary, class_definition: ClassDefinition, attributes: Dictionary) -> String:
+func _validate_complete_loadout(loadout: Dictionary, class_definition: ClassDefinition) -> String:
 	for slot_id: StringName in EquipmentSlotCatalog.SLOT_IDS:
 		var definition := loadout.get(slot_id) as EquipmentBaseDefinition
 		if definition == null:
 			continue
-		var errors := EquipmentEligibility.validate_equip(definition, class_definition, slot_id, loadout, attributes)
+		var errors := EquipmentEligibility.validate_structure(definition, class_definition, slot_id, loadout)
 		if not errors.is_empty():
 			return errors[0]
 	var off_hand := loadout.get(&"off_hand") as EquipmentBaseDefinition

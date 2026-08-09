@@ -1,7 +1,7 @@
 class_name EquipmentEligibility
 extends RefCounted
 
-static func validate_equip(item: EquipmentBaseDefinition, class_definition: ClassDefinition, requested_slot_id: StringName, loadout: Dictionary = {}, attributes: Dictionary = {}) -> PackedStringArray:
+static func validate_structure(item: EquipmentBaseDefinition, class_definition: ClassDefinition, requested_slot_id: StringName, loadout: Dictionary = {}) -> PackedStringArray:
 	var errors := PackedStringArray()
 	if item == null or class_definition == null:
 		errors.append("PARTY_FORGE_EQUIPMENT_ERROR reason=item or class is missing")
@@ -18,14 +18,35 @@ static func validate_equip(item: EquipmentBaseDefinition, class_definition: Clas
 		errors.append("PARTY_FORGE_EQUIPMENT_ERROR item=%s reason=no compatible archetype tag" % item.id)
 	for tag: StringName in item.excluded_tags:
 		if tag in tags: errors.append("PARTY_FORGE_EQUIPMENT_ERROR item=%s reason=excluded tag %s" % [item.id, tag])
-	for attribute_id: Variant in item.attribute_requirements:
-		if float(attributes.get(attribute_id, 0.0)) < float(item.attribute_requirements[attribute_id]): errors.append("PARTY_FORGE_EQUIPMENT_ERROR item=%s reason=attribute %s" % [item.id, attribute_id])
 	var main_hand := loadout.get(&"main_hand") as EquipmentBaseDefinition
 	if requested_slot_id == &"off_hand" and main_hand != null and &"off_hand" in main_hand.reserved_slot_ids and not _is_compatible_reserved_offhand(main_hand, item):
 		errors.append("PARTY_FORGE_EQUIPMENT_ERROR item=%s reason=offhand reserved by %s" % [item.id, main_hand.id])
 	if requested_slot_id == &"main_hand" and &"off_hand" in item.reserved_slot_ids:
 		var off_hand := loadout.get(&"off_hand") as EquipmentBaseDefinition
 		if off_hand != null and not _is_compatible_reserved_offhand(item, off_hand): errors.append("PARTY_FORGE_EQUIPMENT_ERROR item=%s reason=equipped offhand %s is incompatible" % [item.id, off_hand.id])
+	return errors
+
+static func unmet_attribute_requirements(item: EquipmentBaseDefinition, attributes: Dictionary) -> PackedStringArray:
+	var errors := PackedStringArray()
+	if item == null:
+		errors.append("PARTY_FORGE_EQUIPMENT_ERROR reason=item or class is missing")
+		return errors
+	var attribute_ids: Array[StringName] = []
+	for attribute_id: Variant in item.attribute_requirements:
+		attribute_ids.append(StringName(attribute_id))
+	attribute_ids.sort_custom(func(left: StringName, right: StringName) -> bool: return String(left) < String(right))
+	for attribute_id: StringName in attribute_ids:
+		var required := float(item.attribute_requirements.get(attribute_id, item.attribute_requirements.get(String(attribute_id), NAN)))
+		var current := float(attributes.get(attribute_id, attributes.get(String(attribute_id), 0.0)))
+		if not is_finite(required) or not is_finite(current) or current < required:
+			errors.append("PARTY_FORGE_EQUIPMENT_ERROR item=%s reason=attribute %s" % [item.id, attribute_id])
+	return errors
+
+static func validate_equip(item: EquipmentBaseDefinition, class_definition: ClassDefinition, requested_slot_id: StringName, loadout: Dictionary = {}, attributes: Dictionary = {}) -> PackedStringArray:
+	var errors := validate_structure(item, class_definition, requested_slot_id, loadout)
+	if item == null or class_definition == null:
+		return errors
+	errors.append_array(unmet_attribute_requirements(item, attributes))
 	return errors
 
 static func _is_compatible_reserved_offhand(main_hand: EquipmentBaseDefinition, off_hand: EquipmentBaseDefinition) -> bool:
