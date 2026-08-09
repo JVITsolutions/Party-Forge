@@ -173,6 +173,8 @@ func configure(
 	_item_resolution_transaction_id = ""
 	if not party.member_added.is_connected(member_added_callback):
 		party.member_added.connect(member_added_callback)
+	var source_refresh_callback := Callable(self, "_replace_non_equipment_source_atomically")
+	party.bind_member_source_refresh_coordinator(source_refresh_callback)
 	_configured = true
 	var rejected_member_id := manager.replace_member_sources_atomically(next_equipment_sources)
 	if rejected_member_id != 0:
@@ -325,11 +327,15 @@ func award_experience(member_id: int, amount: int) -> CharacterProgressionAward:
 		return award
 	if not award.gained_levels.is_empty():
 		var source := CharacterProgressionService.source_for(member_id, award.next_state)
+		var previous_state := current.copy()
+		_progression_by_member[member_id] = award.next_state.copy()
 		if source == null or not party.replace_member_source(member_id, source):
+			_progression_by_member[member_id] = previous_state
 			var failure := CharacterProgressionAward.new()
 			failure.error = "PARTY_FORGE_PROGRESSION_ERROR member=%d reason=stat source rejected" % member_id
 			return failure
-	_progression_by_member[member_id] = award.next_state.copy()
+	else:
+		_progression_by_member[member_id] = award.next_state.copy()
 	if member.is_leader:
 		_pending_leader_levels.append_array(award.gained_levels)
 	for earned_level: int in award.gained_levels:
@@ -434,6 +440,8 @@ func _reset_unconfigured_fields() -> void:
 	var member_added_callback := Callable(self, "_on_member_added")
 	if party != null and party.member_added.is_connected(member_added_callback):
 		party.member_added.disconnect(member_added_callback)
+	if party != null:
+		party.unbind_member_source_refresh_coordinator(Callable(self, "_replace_non_equipment_source_atomically"))
 	_run_player_id = &""
 	_player_slot_index = -1
 	_profile_id = ""
@@ -470,6 +478,19 @@ func _preview_member_equipment_activation(
 	member_id: int,
 	manager: PartyManager,
 ) -> EquipmentActivationResult:
+	return _preview_member_equipment_activation_with_sources(
+		state,
+		member_id,
+		manager,
+		manager.member_sources_without_equipment(member_id),
+	)
+
+func _preview_member_equipment_activation_with_sources(
+	state: ItemOwnershipState,
+	member_id: int,
+	manager: PartyManager,
+	non_equipment_sources: Array[StatModifierSource],
+) -> EquipmentActivationResult:
 	var member := manager.member_by_id(member_id)
 	var structure_error := EquipmentAssignmentService.new().validate_member_loadout(
 		state,
@@ -491,12 +512,12 @@ func _preview_member_equipment_activation(
 		GameCatalog.STAT_CATALOG,
 		manager.member_base_values(member_id),
 		manager.member_capabilities(member_id),
-		manager.member_sources_without_equipment(member_id),
+		non_equipment_sources,
 		manager.stat_revision(),
 	)
 	if not activation.ok():
 		return activation
-	var final_sources := manager.member_sources_without_equipment(member_id)
+	var final_sources := non_equipment_sources.duplicate()
 	final_sources.append(activation.source)
 	var resolution := MemberStatResolutionService.resolve(
 		member_id,
@@ -513,6 +534,41 @@ func _preview_member_equipment_activation(
 			"PARTY_FORGE_EQUIPMENT_ACTIVATION_ERROR member=%d detail=%s" % [member_id, resolution.error]
 		)
 	return activation
+
+func _replace_non_equipment_source_atomically(member_id: int, source: StatModifierSource) -> bool:
+	if (
+		not _configured
+		or party == null
+		or _item_state == null
+		or party.member_by_id(member_id) == null
+		or source == null
+		or source.source_type == &"equipment"
+	):
+		return false
+	var owned_source_ids: Array[StringName] = []
+	for owned_source: StatModifierSource in party.member_by_id(member_id).modifier_sources:
+		if owned_source != null and owned_source.source_type != &"equipment":
+			owned_source_ids.append(owned_source.id)
+	var candidate_sources: Array[StatModifierSource] = []
+	for current_source: StatModifierSource in party.member_sources_without_equipment(member_id):
+		if current_source.id == source.id and source.id in owned_source_ids:
+			continue
+		candidate_sources.append(current_source)
+	candidate_sources.append(source)
+	var next_activation := _preview_member_equipment_activation_with_sources(
+		_item_state,
+		member_id,
+		party,
+		candidate_sources,
+	)
+	if not next_activation.ok():
+		return false
+	var previous_activation := equipment_activation(member_id)
+	_equipment_activation_by_member[member_id] = next_activation.copy()
+	if not party.replace_member_source_with_equipment_atomically(member_id, source, next_activation.source):
+		_equipment_activation_by_member[member_id] = previous_activation
+		return false
+	return true
 
 func _validate_bootstrap_state(state: ItemOwnershipState, empty_candidate: ItemOwnershipState) -> String:
 	if state == null:

@@ -33,6 +33,7 @@ var _fallback_names: CharacterNamePool
 var _stat_revision := 0
 var _stat_cache: Dictionary = {}
 var _action_stat_cache: Dictionary = {}
+var _member_source_refresh_coordinator: Callable
 
 func _init() -> void:
     for stat_id: StringName in PARTY_STAT_IDS:
@@ -90,6 +91,18 @@ func member_sources_without_equipment(member_id: int) -> Array[StatModifierSourc
 
 func stat_revision() -> int:
     return _stat_revision
+
+func bind_member_source_refresh_coordinator(coordinator: Callable) -> bool:
+    if not coordinator.is_valid():
+        return false
+    if _member_source_refresh_coordinator.is_valid() and _member_source_refresh_coordinator != coordinator:
+        return false
+    _member_source_refresh_coordinator = coordinator
+    return true
+
+func unbind_member_source_refresh_coordinator(coordinator: Callable) -> void:
+    if _member_source_refresh_coordinator == coordinator:
+        _member_source_refresh_coordinator = Callable()
 
 func stats_for(member_id: int) -> ResolvedStatSnapshot:
     var member := member_by_id(member_id)
@@ -150,6 +163,8 @@ func add_member_source(member_id: int, source: StatModifierSource) -> bool:
     var member := member_by_id(member_id)
     if member == null or source == null:
         return false
+    if source.source_type != &"equipment" and _member_source_refresh_coordinator.is_valid():
+        return bool(_member_source_refresh_coordinator.call(member_id, source))
     var validation_errors := StatResolver.validate_sources(STAT_CATALOG, [source])
     if not validation_errors.is_empty():
         for error: String in validation_errors:
@@ -163,6 +178,8 @@ func replace_member_source(member_id: int, source: StatModifierSource) -> bool:
     var member := member_by_id(member_id)
     if member == null or source == null:
         return false
+    if source.source_type != &"equipment" and _member_source_refresh_coordinator.is_valid():
+        return bool(_member_source_refresh_coordinator.call(member_id, source))
     var validation_errors := StatResolver.validate_sources(STAT_CATALOG, [source])
     if not validation_errors.is_empty():
         for error: String in validation_errors:
@@ -209,6 +226,39 @@ func replace_member_sources_atomically(sources_by_member: Dictionary) -> int:
     _invalidate_members(member_ids)
     return 0
 
+## Commits one candidate non-equipment source and its recomputed equipment source
+## as one observable member-local stat transition.
+func replace_member_source_with_equipment_atomically(
+    member_id: int,
+    member_source: StatModifierSource,
+    equipment_source: StatModifierSource,
+) -> bool:
+    var member := member_by_id(member_id)
+    if (
+        member == null
+        or member_source == null
+        or member_source.source_type == &"equipment"
+        or equipment_source == null
+        or equipment_source.source_type != &"equipment"
+        or equipment_source.id != StringName("equipment_member_%d" % member_id)
+        or member_source.id == equipment_source.id
+    ):
+        return false
+    var validation_errors := StatResolver.validate_sources(STAT_CATALOG, [member_source, equipment_source])
+    if not validation_errors.is_empty():
+        for error: String in validation_errors:
+            push_error(error)
+        return false
+    var previous_sources := member.modifier_sources
+    if (
+        not _commit_member_source_without_invalidation(member_id, member_source)
+        or not _commit_member_source_without_invalidation(member_id, equipment_source)
+    ):
+        _restore_member_sources_without_invalidation(member_id, previous_sources)
+        return false
+    _invalidate_member(member_id)
+    return true
+
 func _commit_member_source_without_invalidation(member_id: int, source: StatModifierSource) -> bool:
     var member := member_by_id(member_id)
     if member == null or source == null:
@@ -234,9 +284,15 @@ func _commit_personal_upgrade(definition: UpgradeDefinition, member_id: int, ran
     var member := member_by_id(member_id)
     if member == null or definition == null or source == null:
         return false
-    member._replace_modifier_source(source)
+    var previous_rank_present := member._upgrade_ranks.has(definition.id)
+    var previous_rank := member.upgrade_rank(definition.id)
     member._set_upgrade_rank(definition.id, rank)
-    _invalidate_member(member_id)
+    if not replace_member_source(member_id, source):
+        if previous_rank_present:
+            member._set_upgrade_rank(definition.id, previous_rank)
+        else:
+            member._upgrade_ranks.erase(definition.id)
+        return false
     upgrades_changed.emit()
     return true
 
