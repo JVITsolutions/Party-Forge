@@ -288,6 +288,7 @@ func _configure_stout_context(run_id: StringName, slot: int, profile_id: String,
 		"schema_version": ItemInstance.SCHEMA_VERSION,
 		"instance_id": "%s-stout-helmet" % owner,
 		"base_definition_id": "forge_vanguard_helmet",
+		"base_damage_components": [],
 		"item_level": 1,
 		"rarity_id": "common",
 		"affixes": [{

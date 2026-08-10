@@ -186,6 +186,7 @@ func _unplaced_stout_helmet(context: PlayerRunContext, sequence: int, failures: 
 		{
 			"affixes": [_stout_affix_document()],
 			"base_definition_id": "forge_vanguard_helmet",
+			"base_damage_components": [],
 			"item_level": 1,
 			"rarity_id": "common",
 		},
@@ -732,6 +733,7 @@ func _issue_stout_helmet(context: PlayerRunContext, sequence: int, slot: int, fa
 	var item_data := {
 		"affixes": [_stout_affix_document()],
 		"base_definition_id": "forge_vanguard_helmet",
+		"base_damage_components": [],
 		"item_level": 1,
 		"rarity_id": "common",
 	}
@@ -753,6 +755,7 @@ func _stout_helmet_record(instance_id: String, issuer_namespace: String, sequenc
 		"schema_version": ItemInstance.SCHEMA_VERSION,
 		"instance_id": instance_id,
 		"base_definition_id": "forge_vanguard_helmet",
+		"base_damage_components": [],
 		"item_level": 1,
 		"rarity_id": "common",
 		"affixes": [_stout_affix_document()],
@@ -767,6 +770,7 @@ func _plain_item_record(instance_id: String, base_definition_id: StringName, iss
 		"schema_version": ItemInstance.SCHEMA_VERSION,
 		"instance_id": instance_id,
 		"base_definition_id": String(base_definition_id),
+		"base_damage_components": [],
 		"item_level": 1,
 		"rarity_id": "common",
 		"affixes": [],
@@ -909,6 +913,7 @@ func _test_configuration_validation_and_copy_ownership(failures: Array[String]) 
 		{
 			"affixes": [],
 			"base_definition_id": "forge_vanguard_sword",
+			"base_damage_components": [],
 			"item_level": 1,
 			"rarity_id": "common",
 		},
@@ -986,6 +991,7 @@ func _test_configuration_validation_and_copy_ownership(failures: Array[String]) 
 			{
 				"affixes": [],
 				"base_definition_id": "forge_vanguard_sword",
+				"base_damage_components": [],
 				"item_level": 1,
 				"rarity_id": "common",
 			},

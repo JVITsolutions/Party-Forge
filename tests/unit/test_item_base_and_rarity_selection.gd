@@ -295,7 +295,7 @@ func _test_upper_rarity_generator_gates_preserve_direct_issuance(failures: Array
 		0,
 		"task_five_fixture",
 		991,
-		{"affixes": [], "base_definition_id": "forge_vanguard_sword", "item_level": 500, "rarity_id": "mythic"},
+		{"affixes": [], "base_definition_id": "forge_vanguard_sword", "base_damage_components": [], "item_level": 500, "rarity_id": "mythic"},
 		GameCatalog.EQUIPMENT_CATALOG,
 		foundation
 	)

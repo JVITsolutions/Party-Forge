@@ -209,7 +209,7 @@ func _issue_into(context: PlayerRunContext, sequence: int, slot: int, base_id: S
 		sequence,
 		"equipment-assignment-test",
 		context.run_seed + sequence,
-		{"affixes": [], "base_definition_id": String(base_id), "item_level": 10, "rarity_id": "common"},
+		{"affixes": [], "base_definition_id": String(base_id), "base_damage_components": [], "item_level": 10, "rarity_id": "common"},
 		equipment,
 		GameCatalog.ITEM_FOUNDATION_CATALOG,
 	)

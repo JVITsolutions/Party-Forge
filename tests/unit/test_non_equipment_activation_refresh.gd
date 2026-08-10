@@ -570,6 +570,7 @@ func _configured_equipped_fixture(party: PartyManager, label: String, seed: int)
 		"schema_version": ItemInstance.SCHEMA_VERSION,
 		"instance_id": "%s-%s" % [ITEM_ID, label],
 		"base_definition_id": String(BASE_ID),
+		"base_damage_components": [],
 		"item_level": 1,
 		"rarity_id": "common",
 		"affixes": [{

@@ -336,7 +336,7 @@ func _test_context_commit_rejection_is_atomic(failures: Array[String]) -> void:
 		return
 	var issued := ItemInstanceIssuer.issue(
 		"run:task10d-profile:1010:task10d-player", 0, "task_10d", 1010,
-		{"affixes": [_stout_affix_document()], "base_definition_id": "forge_vanguard_helmet", "item_level": 1, "rarity_id": "common"},
+		{"affixes": [_stout_affix_document()], "base_definition_id": "forge_vanguard_helmet", "base_damage_components": [], "item_level": 1, "rarity_id": "common"},
 		GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG,
 	)
 	TestAssertions.truthy(issued.ok(), "atomic rejection fixture item issues", failures)

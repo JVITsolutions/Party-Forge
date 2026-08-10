@@ -224,6 +224,7 @@ func _test_resumable_attribute_and_typed_damage_records(failures: Array[String])
 			}],
 		}],
 		"base_definition_id": "emberweave_circlet",
+		"base_damage_components": [],
 		"item_level": 1,
 		"rarity_id": "common",
 	}, failures)
@@ -240,6 +241,7 @@ func _test_resumable_attribute_and_typed_damage_records(failures: Array[String])
 			}],
 		}],
 		"base_definition_id": "emberweave_wand",
+		"base_damage_components": [],
 		"item_level": 1,
 		"rarity_id": "common",
 	}, failures)
@@ -489,6 +491,7 @@ func _issued_item(context: PlayerRunContext, sequence: int, source: String, fail
 		{
 			"affixes": [],
 			"base_definition_id": "forge_vanguard_sword",
+			"base_damage_components": [],
 			"item_level": 28,
 			"rarity_id": "common",
 		},

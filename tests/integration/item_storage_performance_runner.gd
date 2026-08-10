@@ -172,6 +172,7 @@ func _build_profile(profile_id: String, seed_offset: int) -> Dictionary:
 			{
 				"affixes": [],
 				"base_definition_id": String(definition.id),
+				"base_damage_components": [],
 				"item_level": 1 + (index % 100),
 				"rarity_id": "common",
 			},

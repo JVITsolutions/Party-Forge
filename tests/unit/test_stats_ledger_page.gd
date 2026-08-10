@@ -179,6 +179,7 @@ func run() -> Array[String]:
 				}],
 			}],
 			"base_definition_id": "forge_vanguard_sword",
+			"base_damage_components": [],
 			"item_level": 1,
 			"rarity_id": "common",
 		},

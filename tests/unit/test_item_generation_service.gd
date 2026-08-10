@@ -42,7 +42,7 @@ func _test_fixed_seed_items(equipment: EquipmentCatalog, foundation: ItemFoundat
 			continue
 		var exact_document := result.item.to_dictionary()
 		var exact_golden := _golden_with_provenance(golden_by_rarity[rarity_id], rarity_id)
-		TestAssertions.equal(ItemInstanceCodec.encode(result.item), exact_golden, "%s fixed request has exact schema-one dictionary" % rarity_id, failures)
+		TestAssertions.equal(ItemInstanceCodec.encode(result.item), exact_golden, "%s fixed request has exact schema-two dictionary" % rarity_id, failures)
 		TestAssertions.equal(result.item.affixes[0].affix_kind, "implicit", "%s guaranteed implicit is first" % rarity_id, failures)
 		var origin := result.item.origin
 		var origin_keys: Array = origin.keys()
@@ -211,7 +211,10 @@ func _request(rarity_id: StringName) -> ItemGenerationRequest:
 
 func _golden_with_provenance(golden: String, rarity_id: StringName) -> String:
 	var replacement := "\"generation\":{\"domain\":\"ordinary_drop\",\"forced_base_id\":\"forge_vanguard_sword\",\"forced_rarity_id\":\"%s\",\"generator_version\":1,\"item_level\":750,\"request_sequence\":7,\"selected_base_id\":\"forge_vanguard_sword\",\"selected_rarity_id\":\"%s\",\"source_id\":\"ordinary_enemy\"}" % [rarity_id, rarity_id]
-	return golden.replace(GENERATION_PROVENANCE_BEFORE, replacement)
+	return golden \
+		.replace(GENERATION_PROVENANCE_BEFORE, replacement) \
+		.replace("\"base_definition_id\":", "\"base_damage_components\":[],\"base_definition_id\":") \
+		.replace("\"schema_version\":1", "\"schema_version\":2")
 
 func _generation_content(item: ItemInstance) -> String:
 	var affixes: Array[Dictionary] = []

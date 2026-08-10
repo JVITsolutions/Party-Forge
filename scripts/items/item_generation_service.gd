@@ -61,6 +61,7 @@ static func generate(
 		{
 			"affixes": affix_documents,
 			"base_definition_id": String(base.id),
+			"base_damage_components": [],
 			"item_level": request.item_level,
 			"rarity_id": String(rarity.id),
 		},

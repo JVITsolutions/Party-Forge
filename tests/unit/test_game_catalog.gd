@@ -89,7 +89,7 @@ func _assert_equipment_attribute_policy(catalog: GameCatalog, failures: Array[St
             index,
             "task10e_live_catalog_audit",
             10000 + index,
-            {"affixes": [], "base_definition_id": String(base.id), "item_level": 1, "rarity_id": "common"},
+            {"affixes": [], "base_definition_id": String(base.id), "base_damage_components": [], "item_level": 1, "rarity_id": "common"},
             live_equipment,
             live_foundation,
         )

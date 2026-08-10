@@ -352,6 +352,7 @@ func _item(
 		"schema_version": ItemInstance.SCHEMA_VERSION,
 		"instance_id": instance_id,
 		"base_definition_id": String(base_id),
+		"base_damage_components": [],
 		"item_level": 1,
 		"rarity_id": "common",
 		"affixes": [affix],

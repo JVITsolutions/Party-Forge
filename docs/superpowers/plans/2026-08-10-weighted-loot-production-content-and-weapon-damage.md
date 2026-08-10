@@ -75,6 +75,25 @@
 - Modify: `tests/unit/test_item_instance_codec.gd`
 - Modify: `tests/unit/test_profile_item_schema_migration.gd`
 - Test: `tests/unit/test_item_base_damage_component.gd`
+- Modify: `scripts/dev/developer_item_fixture_issuer.gd`
+- Modify: `scripts/items/item_generation_service.gd`
+- Modify: `tests/integration/equipment_attribute_application_runner.gd`
+- Modify: `tests/integration/item_storage_performance_runner.gd`
+- Modify: `tests/unit/test_developer_item_sandbox_state.gd`
+- Modify: `tests/unit/test_equipment_assignment_service.gd`
+- Modify: `tests/unit/test_equipment_transition_service.gd`
+- Modify: `tests/unit/test_game_catalog.gd`
+- Modify: `tests/unit/test_item_base_and_rarity_selection.gd`
+- Modify: `tests/unit/test_item_foundation_manifest.gd`
+- Modify: `tests/unit/test_item_generation_service.gd`
+- Modify: `tests/unit/test_non_equipment_activation_refresh.gd`
+- Modify: `tests/unit/test_player_run_context.gd`
+- Modify: `tests/unit/test_run_context_registry.gd`
+- Modify: `tests/unit/test_run_item_ownership.gd`
+- Modify: `tests/unit/test_stats_ledger_page.gd`
+- Modify: `docs/superpowers/plans/2026-08-10-weighted-loot-production-content-and-weapon-damage.md`
+
+User-approved review resolution: keep the issuer's schema-2 exact-field contract strict and expand Task 1 scope to every live direct issuer caller and current-schema fixture builder, each of which must explicitly provide `base_damage_components: []` until generation supplies real values.
 
 **Interfaces:**
 - Produces: `ItemBaseDamageComponent.create(type_id: StringName, minimum: float, maximum: float) -> ItemBaseDamageComponent`.
@@ -136,7 +155,7 @@ Expected: exit `0` and `TEST_SUMMARY: PASS (0 failures)`.
 - [ ] **Step 5: Commit the schema increment**
 
 ```powershell
-git add scripts/items/item_base_damage_component.gd scripts/items/item_instance.gd scripts/items/item_instance_codec.gd scripts/items/item_instance_issuer.gd tests/unit/test_item_base_damage_component.gd tests/unit/test_item_instance_codec.gd tests/unit/test_profile_item_schema_migration.gd
+git add scripts/items/item_base_damage_component.gd scripts/items/item_instance.gd scripts/items/item_instance_codec.gd scripts/items/item_instance_issuer.gd scripts/dev/developer_item_fixture_issuer.gd scripts/items/item_generation_service.gd tests/integration/equipment_attribute_application_runner.gd tests/integration/item_storage_performance_runner.gd tests/unit/test_item_base_damage_component.gd tests/unit/test_developer_item_sandbox_state.gd tests/unit/test_equipment_assignment_service.gd tests/unit/test_equipment_transition_service.gd tests/unit/test_game_catalog.gd tests/unit/test_item_base_and_rarity_selection.gd tests/unit/test_item_foundation_manifest.gd tests/unit/test_item_generation_service.gd tests/unit/test_item_instance_codec.gd tests/unit/test_non_equipment_activation_refresh.gd tests/unit/test_player_run_context.gd tests/unit/test_profile_item_schema_migration.gd tests/unit/test_run_context_registry.gd tests/unit/test_run_item_ownership.gd tests/unit/test_stats_ledger_page.gd docs/superpowers/plans/2026-08-10-weighted-loot-production-content-and-weapon-damage.md
 git diff --cached --check
 git commit -m "feat: add immutable weapon damage item data"
 ```

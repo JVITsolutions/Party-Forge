@@ -106,7 +106,7 @@ func _assert_upper_rarity_issuance(catalog: ItemFoundationCatalog, equipment: Eq
 			index,
 			"manifest_test",
 			4402,
-			{"affixes": [], "base_definition_id": "forge_vanguard_sword", "item_level": 500, "rarity_id": String(rarity_id)},
+			{"affixes": [], "base_definition_id": "forge_vanguard_sword", "base_damage_components": [], "item_level": 500, "rarity_id": String(rarity_id)},
 			equipment,
 			catalog
 		)

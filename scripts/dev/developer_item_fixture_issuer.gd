@@ -41,6 +41,7 @@ static func issue_all(
 			{
 				"affixes": _fixture_affixes(index, rarity.patterns[0].explicit_count(), foundation),
 				"base_definition_id": String(definition.id),
+				"base_damage_components": [],
 				"item_level": 1 + (index % 100),
 				"rarity_id": String(rarity_id),
 			},
