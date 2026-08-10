@@ -1,0 +1,137 @@
+[gd_resource type="Resource" script_class="ItemAffixDefinition" load_steps=18 format=3]
+
+[ext_resource type="Script" path="res://scripts/items/item_affix_definition.gd" id="1_affix"]
+[ext_resource type="Script" path="res://scripts/items/item_modifier_effect_definition.gd" id="2_effect"]
+[ext_resource type="Script" path="res://scripts/items/item_affix_tier_definition.gd" id="3_tier"]
+
+[sub_resource type="Resource" id="Effect1"]
+script = ExtResource("2_effect")
+stat_id = &"armor"
+operation = 0
+
+[sub_resource type="Resource" id="Effect2"]
+script = ExtResource("2_effect")
+stat_id = &"max_health"
+operation = 0
+
+[sub_resource type="Resource" id="Tier1"]
+script = ExtResource("3_tier")
+tier = 1
+minimum_item_level = 1
+base_weight = 1000.0
+minimum_rolls = Array[float]([1.70000004768372, 4.25])
+maximum_rolls = Array[float]([3.40000009536743, 8.5])
+allowed_rarity_ids = Array[StringName]([&"common", &"uncommon", &"rare", &"epic", &"legendary"])
+
+[sub_resource type="Resource" id="Tier2"]
+script = ExtResource("3_tier")
+tier = 2
+minimum_item_level = 10
+base_weight = 800.0
+minimum_rolls = Array[float]([2.28999996185303, 5.42999982833862])
+maximum_rolls = Array[float]([4.21999979019165, 10.1099996566772])
+allowed_rarity_ids = Array[StringName]([&"common", &"uncommon", &"rare", &"epic", &"legendary"])
+
+[sub_resource type="Resource" id="Tier3"]
+script = ExtResource("3_tier")
+tier = 3
+minimum_item_level = 30
+base_weight = 640.0
+minimum_rolls = Array[float]([4.1100001335144, 9.05000019073486])
+maximum_rolls = Array[float]([6.76000022888184, 15.0600004196167])
+allowed_rarity_ids = Array[StringName]([&"common", &"uncommon", &"rare", &"epic", &"legendary"])
+
+[sub_resource type="Resource" id="Tier4"]
+script = ExtResource("3_tier")
+tier = 4
+minimum_item_level = 60
+base_weight = 500.0
+minimum_rolls = Array[float]([7.34000015258789, 15.5100002288818])
+maximum_rolls = Array[float]([11.2700004577637, 23.8899993896484])
+allowed_rarity_ids = Array[StringName]([&"uncommon", &"rare", &"epic", &"legendary"])
+
+[sub_resource type="Resource" id="Tier5"]
+script = ExtResource("3_tier")
+tier = 5
+minimum_item_level = 100
+base_weight = 380.0
+minimum_rolls = Array[float]([12.1999998092651, 25.2099990844727])
+maximum_rolls = Array[float]([18.0400009155273, 37.1500015258789])
+allowed_rarity_ids = Array[StringName]([&"uncommon", &"rare", &"epic", &"legendary"])
+
+[sub_resource type="Resource" id="Tier6"]
+script = ExtResource("3_tier")
+tier = 6
+minimum_item_level = 160
+base_weight = 280.0
+minimum_rolls = Array[float]([20.25, 41.25])
+maximum_rolls = Array[float]([29.25, 59.0800018310547])
+allowed_rarity_ids = Array[StringName]([&"rare", &"epic", &"legendary"])
+
+[sub_resource type="Resource" id="Tier7"]
+script = ExtResource("3_tier")
+tier = 7
+minimum_item_level = 240
+base_weight = 200.0
+minimum_rolls = Array[float]([31.9500007629395, 64.5899963378906])
+maximum_rolls = Array[float]([45.560001373291, 90.9899978637695])
+allowed_rarity_ids = Array[StringName]([&"rare", &"epic", &"legendary"])
+
+[sub_resource type="Resource" id="Tier8"]
+script = ExtResource("3_tier")
+tier = 8
+minimum_item_level = 340
+base_weight = 140.0
+minimum_rolls = Array[float]([47.7099990844727, 96.0400009155273])
+maximum_rolls = Array[float]([67.5299987792969, 133.979995727539])
+allowed_rarity_ids = Array[StringName]([&"rare", &"epic", &"legendary"])
+
+[sub_resource type="Resource" id="Tier9"]
+script = ExtResource("3_tier")
+tier = 9
+minimum_item_level = 460
+base_weight = 90.0
+minimum_rolls = Array[float]([67.8899993896484, 136.289993286133])
+maximum_rolls = Array[float]([95.6600036621094, 189.009994506836])
+allowed_rarity_ids = Array[StringName]([&"epic", &"legendary"])
+
+[sub_resource type="Resource" id="Tier10"]
+script = ExtResource("3_tier")
+tier = 10
+minimum_item_level = 600
+base_weight = 55.0
+minimum_rolls = Array[float]([92.8000030517578, 185.990005493164])
+maximum_rolls = Array[float]([130.389999389648, 256.950012207031])
+allowed_rarity_ids = Array[StringName]([&"epic", &"legendary"])
+
+[sub_resource type="Resource" id="Tier11"]
+script = ExtResource("3_tier")
+tier = 11
+minimum_item_level = 770
+base_weight = 30.0
+minimum_rolls = Array[float]([124.650001525879, 249.520004272461])
+maximum_rolls = Array[float]([174.779998779297, 343.809997558594])
+allowed_rarity_ids = Array[StringName]([&"legendary"])
+
+[sub_resource type="Resource" id="Tier12"]
+script = ExtResource("3_tier")
+tier = 12
+minimum_item_level = 950
+base_weight = 15.0
+minimum_rolls = Array[float]([159.940002441406, 319.940002441406])
+maximum_rolls = Array[float]([223.979995727539, 440.070007324219])
+allowed_rarity_ids = Array[StringName]([&"legendary"])
+
+[resource]
+script = ExtResource("1_affix")
+id = &"eternal_bulwark"
+display_name = "Eternal Bulwark"
+affix_kind = "prefix"
+base_weight = 25.0
+modifier_family_ids = Array[StringName]([&"armor_flat", &"max_health_flat"])
+affinity_tags = Array[StringName]([&"melee"])
+allowed_generation_domains = Array[StringName]([&"ordinary_drop", &"boss_drop", &"raid_drop", &"vendor", &"crafting", &"developer"])
+allowed_source_ids = Array[StringName]([&"ordinary_enemy", &"boss", &"developer"])
+allowed_rarity_ids = Array[StringName]([&"common", &"uncommon", &"rare", &"epic", &"legendary"])
+effects = Array[ExtResource("2_effect")]([SubResource("Effect1"), SubResource("Effect2")])
+tiers = Array[ExtResource("3_tier")]([SubResource("Tier1"), SubResource("Tier2"), SubResource("Tier3"), SubResource("Tier4"), SubResource("Tier5"), SubResource("Tier6"), SubResource("Tier7"), SubResource("Tier8"), SubResource("Tier9"), SubResource("Tier10"), SubResource("Tier11"), SubResource("Tier12")])

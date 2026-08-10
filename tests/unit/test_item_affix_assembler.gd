@@ -4,6 +4,7 @@ func run() -> Array[String]:
 	var failures: Array[String] = []
 	_test_implicits_and_exact_pattern_counts(failures)
 	_test_hard_filters_run_before_weights(failures)
+	_test_accessory_affinity_weighting(failures)
 	_test_request_affix_tag_filters(failures)
 	_test_definition_and_family_blocking(failures)
 	_test_tier_order_and_exact_rolls(failures)
@@ -84,6 +85,57 @@ func _test_hard_filters_run_before_weights(failures: Array[String]) -> void:
 	for id: String in ["missing_tag", "excluded_tag", "wrong_domain", "wrong_source", "wrong_rarity", "locked", "tier_too_high", "tier_wrong_domain", "tier_wrong_source", "tier_wrong_rarity", "invalid_weight"]:
 		TestAssertions.truthy(rejected.has(id), "%s records a hard-filter rejection" % id, failures)
 	TestAssertions.equal(stage.get("weights", {}).keys(), ["eligible"], "no rejected candidate receives a weight", failures)
+
+func _test_accessory_affinity_weighting(failures: Array[String]) -> void:
+	var matching := _affix(&"matching_affinity", "prefix", [&"matching_family"], [_tier(1, 1, 1.0, 1.0, 2.0)])
+	var off_family := _affix(&"off_family", "prefix", [&"off_family"], [_tier(1, 1, 1.0, 1.0, 2.0)])
+	var hard_blocked := _affix(&"hard_blocked", "prefix", [&"hard_blocked_family"], [_tier(1, 1, 1.0, 1.0, 2.0)])
+	var properties := _property_names(matching)
+	TestAssertions.truthy(&"affinity_tags" in properties, "affix definitions expose authored soft affinity tags", failures)
+	if &"affinity_tags" not in properties:
+		return
+	matching.affinity_tags = [&"melee"]
+	off_family.affinity_tags = [&"caster"]
+	hard_blocked.affinity_tags = [&"melee"]
+	hard_blocked.required_item_tags = [&"caster"]
+	var request := _request(100)
+	var accessory := _base([&"accessory", &"melee"])
+	accessory.item_type_id = &"ring"
+	accessory.compatible_slot_ids = [&"ring_left", &"ring_right"]
+	accessory.weight_class_id = &"accessory"
+	accessory.weapon_family_id = &""
+	var accessory_trace := ItemGenerationTrace.new()
+	var accessory_result := ItemAffixAssembler.assemble(
+		request,
+		accessory,
+		_rarity(&"rare", 3),
+		_pattern(1, 0, 0),
+		_foundation([matching, off_family, hard_blocked]),
+		accessory_trace
+	)
+	TestAssertions.truthy(accessory_result.ok(), "accessory affinity pool remains selectable", failures)
+	var accessory_stage := _stage(accessory_trace, "affix:prefix:0")
+	var accessory_weights := accessory_stage.get("weights", {}) as Dictionary
+	var baseline := ItemGenerationWeightPolicy.affix_weight(off_family, request)
+	TestAssertions.near(float(accessory_weights.get("matching_affinity", 0.0)), baseline * 1.35, 0.000001, "matching accessory affinity receives exactly 1.35 weight", failures)
+	TestAssertions.near(float(accessory_weights.get("off_family", 0.0)), baseline, 0.000001, "nonmatching accessory affinity retains its original positive weight", failures)
+	TestAssertions.truthy(float(accessory_weights.get("off_family", 0.0)) > 0.0, "nonmatching accessory candidate stays reachable", failures)
+	TestAssertions.equal((accessory_stage.get("rejected", {}) as Dictionary).get("hard_blocked", ""), "missing_required_item_tag", "soft affinity does not weaken hard eligibility", failures)
+
+	var combat := _base([&"weapon", &"melee"])
+	var combat_trace := ItemGenerationTrace.new()
+	var combat_result := ItemAffixAssembler.assemble(
+		request,
+		combat,
+		_rarity(&"rare", 3),
+		_pattern(1, 0, 0),
+		_foundation([matching, off_family]),
+		combat_trace
+	)
+	TestAssertions.truthy(combat_result.ok(), "combat affinity pool remains selectable", failures)
+	var combat_weights := (_stage(combat_trace, "affix:prefix:0").get("weights", {}) as Dictionary)
+	TestAssertions.near(float(combat_weights.get("matching_affinity", 0.0)), baseline, 0.000001, "combat gear receives no affinity multiplier", failures)
+	TestAssertions.near(float(combat_weights.get("off_family", 0.0)), baseline, 0.000001, "combat off-family weight is unchanged", failures)
 
 func _test_request_affix_tag_filters(failures: Array[String]) -> void:
 	var eligible := _affix(&"eligible", "prefix", [&"family"], [_tier(1, 1, 1.0, 1.0, 2.0)])
@@ -391,4 +443,10 @@ func _documents(values: Array[ItemAffixInstance]) -> Array[Dictionary]:
 	var result: Array[Dictionary] = []
 	for value: ItemAffixInstance in values:
 		result.append(value.to_dictionary())
+	return result
+
+func _property_names(resource: Resource) -> Array[StringName]:
+	var result: Array[StringName] = []
+	for property: Dictionary in resource.get_property_list():
+		result.append(StringName(property["name"] as String))
 	return result

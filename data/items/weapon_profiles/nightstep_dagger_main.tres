@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="WeaponDamageProfile" load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://scripts/items/weapon_damage_profile.gd" id="1_profile"]
+[ext_resource type="Script" path="res://scripts/items/weapon_damage_component_curve.gd" id="2_curve"]
+
+[sub_resource type="Resource" id="Component1"]
+script = ExtResource("2_curve")
+damage_type_id = &"physical"
+minimum_at_level_1 = 5.0
+maximum_at_level_1 = 8.0
+minimum_at_level_1000 = 200.0
+maximum_at_level_1000 = 320.0
+
+[resource]
+script = ExtResource("1_profile")
+id = &"weapon_profile_nightstep_dagger_main"
+minimum_item_level = 1
+quality_minimum = 0.85
+quality_maximum = 1.0
+components = Array[ExtResource("2_curve")]([SubResource("Component1")])

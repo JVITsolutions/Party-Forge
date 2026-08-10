@@ -1,7 +1,7 @@
 extends RefCounted
 
 const BATCH_SIZE := 5000
-const PIPELINE_REPLAY_HASH := "2eee553b990823f87038db64aac90ce02a844e6da16bddeb19d4bd76ed3ce044"
+const PIPELINE_REPLAY_HASH := "25d11c0d22c74a93c9dcee6d33a3c3abc353c8367e3c3bb902a85283fa5e0cb0"
 const TIER_REPLAY_HASH := "876b63e583cb4b3b67a495b7f96b372075e7e533bdbea7e3ce0246c0d023b57a"
 
 func run() -> Array[String]:

@@ -312,10 +312,10 @@ func _assert_strict_rejections(
 		failures
 	)
 	var bad_tier := _document()
-	bad_tier["affixes"][0]["tier"] = 4
+	bad_tier["affixes"][0]["tier"] = 13
 	_assert_decode_error(
 		bad_tier,
-		"PARTY_FORGE_ITEM_ERROR field=affixes[0].tier reason=must be in definition range 1..3",
+		"PARTY_FORGE_ITEM_ERROR field=affixes[0].tier reason=must be in definition range 1..12",
 		equipment,
 		foundation,
 		"affix tier out of range",

@@ -76,7 +76,7 @@ func _assert_equipment_attribute_policy(catalog: GameCatalog, failures: Array[St
         failures,
     )
     TestAssertions.equal(live_equipment.size(), 99, "attribute-policy audit covers all live equipment bases", failures)
-    TestAssertions.equal(live_foundation.affixes.size(), 7, "attribute-policy audit covers all live affix definitions", failures)
+    TestAssertions.equal(live_foundation.affixes.size(), 195, "attribute-policy audit covers all live affix definitions", failures)
     TestAssertions.equal(live_equipment.validate(), PackedStringArray(), "full live equipment requirement audit passes", failures)
     TestAssertions.equal(live_foundation.validate(stats, live_equipment), PackedStringArray(), "full live affix modifier audit passes", failures)
     var issued_count := 0

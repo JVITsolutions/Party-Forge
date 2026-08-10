@@ -65,7 +65,10 @@ func validate(damage_types: DamageTypeCatalog = null) -> PackedStringArray:
 		if tag in excluded_tags: errors.append("equipment %s generation tag %s is excluded" % [id, tag])
 	if implicit_family_id.is_empty(): errors.append("equipment %s implicit family hook is empty" % id)
 	if presentation == null or presentation.id != id: errors.append("equipment %s presentation link is invalid" % id)
-	if weapon_damage_profile != null:
+	# Cross-catalog profile validation belongs to EquipmentCatalog, which owns the
+	# authoritative DamageTypeCatalog. Presentation callers intentionally validate
+	# the base-local contract without loading that catalog.
+	if weapon_damage_profile != null and damage_types != null:
 		errors.append_array(weapon_damage_profile.validate(damage_types))
 	errors.append_array(validate_attribute_requirements())
 	return errors

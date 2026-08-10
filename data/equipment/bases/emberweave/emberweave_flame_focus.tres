@@ -1,20 +1,20 @@
 [gd_resource type="Resource" script_class="EquipmentBaseDefinition" load_steps=3 format=3]
 
-[ext_resource type="Script" path="res://scripts/equipment/equipment_base_definition.gd" id="1"]
-[ext_resource type="Resource" path="res://data/presentation/equipment/emberweave/emberweave_flame_focus.tres" id="2"]
+[ext_resource type="Script" path="res://scripts/equipment/equipment_base_definition.gd" id="1_base"]
+[ext_resource type="Resource" path="res://data/presentation/equipment/emberweave/emberweave_flame_focus.tres" id="2_presentation"]
 
 [resource]
-script = ExtResource("1")
+script = ExtResource("1_base")
 id = &"emberweave_flame_focus"
 display_name = "Emberweave Flame Focus"
 item_type_id = &"focus"
-compatible_slot_ids = [&"off_hand"]
+compatible_slot_ids = Array[StringName]([&"off_hand"])
 weight_class_id = &"weapon"
-required_all_tags = [&"caster_focus"]
+required_all_tags = Array[StringName]([&"caster_focus"])
+generation_weight = 100.0
+generation_tags = Array[StringName]([&"caster"])
+implicit_affix_ids = Array[StringName]([&"emberweave_flame_focus_implicit"])
 handedness_id = &"one_hand"
-reserved_slot_ids = []
-compatible_offhand_item_types = []
 weapon_family_id = &"focus"
 implicit_family_id = &"emberweave"
-generation_tags = [&"caster"]
-presentation = ExtResource("2")
+presentation = ExtResource("2_presentation")

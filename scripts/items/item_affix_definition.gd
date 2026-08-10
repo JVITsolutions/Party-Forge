@@ -18,6 +18,7 @@ const VALID_OPERATIONS: Array[int] = [
 @export var modifier_family_ids: Array[StringName] = []
 @export var required_item_tags: Array[StringName] = []
 @export var excluded_item_tags: Array[StringName] = []
+@export var affinity_tags: Array[StringName] = []
 @export var allowed_generation_domains: Array[StringName] = []
 @export var allowed_source_ids: Array[StringName] = []
 @export var allowed_rarity_ids: Array[StringName] = []
@@ -59,6 +60,7 @@ func validate(
 	_validate_references(allowed_rarity_ids, known_rarities, "rarity", errors)
 	_validate_references(required_item_tags, known_item_tags, "required item tag", errors)
 	_validate_references(excluded_item_tags, known_item_tags, "excluded item tag", errors)
+	_validate_affinity_tags(known_item_tags, errors)
 	_validate_nonempty(required_unlock_tags, "unlock tag", errors)
 	for tag: StringName in required_item_tags:
 		if tag in excluded_item_tags:
@@ -132,6 +134,22 @@ func _validate_nonempty(values: Array[StringName], label: String, errors: Packed
 	for value: StringName in values:
 		if value.is_empty():
 			errors.append("affix %s %s is empty" % [id, label])
+
+func _validate_affinity_tags(known_item_tags: Array[StringName], errors: PackedStringArray) -> void:
+	var previous := ""
+	var seen: Dictionary = {}
+	for tag: StringName in affinity_tags:
+		var value := String(tag)
+		if tag.is_empty():
+			errors.append("affix %s affinity tag is empty" % id)
+		elif seen.has(tag):
+			errors.append("affix %s has duplicate affinity tag %s" % [id, tag])
+		elif tag not in known_item_tags:
+			errors.append("affix %s references unknown affinity tag %s" % [id, tag])
+		if not previous.is_empty() and value < previous:
+			errors.append("affix %s affinity tags must use ascending stable order" % id)
+		seen[tag] = true
+		previous = value
 
 func _validate_tiers(
 	values: Array[ItemAffixTierDefinition],

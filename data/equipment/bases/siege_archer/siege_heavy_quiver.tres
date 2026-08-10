@@ -1,20 +1,20 @@
 [gd_resource type="Resource" script_class="EquipmentBaseDefinition" load_steps=3 format=3]
 
-[ext_resource type="Script" path="res://scripts/equipment/equipment_base_definition.gd" id="1"]
-[ext_resource type="Resource" path="res://data/presentation/equipment/siege_archer/siege_heavy_quiver.tres" id="2"]
+[ext_resource type="Script" path="res://scripts/equipment/equipment_base_definition.gd" id="1_base"]
+[ext_resource type="Resource" path="res://data/presentation/equipment/siege_archer/siege_heavy_quiver.tres" id="2_presentation"]
 
 [resource]
-script = ExtResource("1")
+script = ExtResource("1_base")
 id = &"siege_heavy_quiver"
 display_name = "Siege Heavy Quiver"
 item_type_id = &"quiver"
-compatible_slot_ids = [&"off_hand"]
+compatible_slot_ids = Array[StringName]([&"off_hand"])
 weight_class_id = &"weapon"
-required_all_tags = [&"ranged", &"greatbow"]
+required_all_tags = Array[StringName]([&"ranged", &"greatbow"])
+generation_weight = 100.0
+generation_tags = Array[StringName]([&"ranged"])
+implicit_affix_ids = Array[StringName]([&"siege_heavy_quiver_implicit"])
 handedness_id = &"none"
-reserved_slot_ids = []
-compatible_offhand_item_types = []
 weapon_family_id = &"greatbow"
 implicit_family_id = &"siege_archer"
-generation_tags = [&"ranged"]
-presentation = ExtResource("2")
+presentation = ExtResource("2_presentation")

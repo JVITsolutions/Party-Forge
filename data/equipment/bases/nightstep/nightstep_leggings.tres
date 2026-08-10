@@ -1,20 +1,19 @@
 [gd_resource type="Resource" script_class="EquipmentBaseDefinition" load_steps=3 format=3]
 
-[ext_resource type="Script" path="res://scripts/equipment/equipment_base_definition.gd" id="1"]
-[ext_resource type="Resource" path="res://data/presentation/equipment/nightstep/nightstep_leggings.tres" id="2"]
+[ext_resource type="Script" path="res://scripts/equipment/equipment_base_definition.gd" id="1_base"]
+[ext_resource type="Resource" path="res://data/presentation/equipment/nightstep/nightstep_leggings.tres" id="2_presentation"]
 
 [resource]
-script = ExtResource("1")
+script = ExtResource("1_base")
 id = &"nightstep_leggings"
 display_name = "Nightstep Leggings"
 item_type_id = &"legs"
-compatible_slot_ids = [&"legs"]
+compatible_slot_ids = Array[StringName]([&"legs"])
 weight_class_id = &"light"
-required_all_tags = [&"martial", &"skirmisher"]
+required_all_tags = Array[StringName]([&"martial", &"skirmisher"])
+generation_weight = 100.0
+generation_tags = Array[StringName]([&"melee"])
+implicit_affix_ids = Array[StringName]([&"nightstep_leggings_implicit"])
 handedness_id = &"none"
-reserved_slot_ids = []
-compatible_offhand_item_types = []
-weapon_family_id = &""
 implicit_family_id = &"nightstep"
-generation_tags = [&"melee"]
-presentation = ExtResource("2")
+presentation = ExtResource("2_presentation")

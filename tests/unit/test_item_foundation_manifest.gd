@@ -4,8 +4,8 @@ const EQUIPMENT_PATH := "res://data/equipment/core_equipment_catalog.tres"
 const FOUNDATION_PATH := "res://data/items/core_item_foundation_catalog.tres"
 const EXPECTED_RARITIES: Array[StringName] = [&"common", &"uncommon", &"rare", &"epic", &"legendary", &"mythic", &"exotic", &"ascendant", &"divine", &"eternal"]
 const EXPECTED_ORDINARY: Array[StringName] = [&"common", &"uncommon", &"rare", &"epic", &"legendary"]
-const EXPECTED_FAMILIES: Array[StringName] = [&"attribute_constitution", &"attribute_dexterity", &"attribute_wisdom", &"damage_fire", &"damage_cold", &"attack_range", &"implicit_forge_vanguard"]
 const EXPECTED_SOURCES: Array[StringName] = [&"ordinary_enemy", &"boss", &"developer"]
+const ROWS_PATH := "res://tools/weighted_loot_content_rows.gd"
 const EXPECTED_PATTERN_ROWS: Array[Dictionary] = [
 	{"id": &"common_zero", "prefix": 0, "suffix": 0, "weight": 1.0},
 	{"id": &"uncommon_prefix", "prefix": 1, "suffix": 0, "weight": 1.0},
@@ -40,13 +40,13 @@ func run() -> Array[String]:
 	TestAssertions.truthy(equipment != null, "equipment catalog loads for manifest", failures)
 	if catalog == null or equipment == null:
 		return failures
-	TestAssertions.equal(catalog.modifier_family_ids, EXPECTED_FAMILIES, "exact modifier family registry", failures)
 	TestAssertions.equal(catalog.known_source_ids, EXPECTED_SOURCES, "exact source registry", failures)
 	TestAssertions.equal(catalog.supported_rarity_ids(), EXPECTED_RARITIES, "all ten rarities support item instances", failures)
 	TestAssertions.equal(catalog.ordinary_rarity_ids(), EXPECTED_ORDINARY, "only first five rarities allow ordinary generation", failures)
 	_assert_rarities(catalog, failures)
 	_assert_patterns(catalog, failures)
 	_assert_external_affixes(catalog, failures)
+	_assert_production_affixes_and_bases(catalog, equipment, failures)
 	_assert_equipment_tag_registry(catalog, equipment, failures)
 	_assert_upper_rarity_issuance(catalog, equipment, failures)
 	_assert_bridge_removed(failures)
@@ -85,9 +85,85 @@ func _assert_patterns(catalog: ItemFoundationCatalog, failures: Array[String]) -
 		TestAssertions.equal(pattern.weight, expected["weight"], "%s weight" % pattern.id, failures)
 
 func _assert_external_affixes(catalog: ItemFoundationCatalog, failures: Array[String]) -> void:
-	TestAssertions.equal(catalog.affixes.size(), 7, "exact external affix count", failures)
+	TestAssertions.equal(catalog.affixes.size(), 195, "exact external production affix count", failures)
 	for definition: ItemAffixDefinition in catalog.affixes:
 		TestAssertions.truthy(definition.resource_path.begins_with("res://data/items/affixes/"), "%s is an external manifest resource" % definition.id, failures)
+
+func _assert_production_affixes_and_bases(
+	catalog: ItemFoundationCatalog,
+	equipment: EquipmentCatalog,
+	failures: Array[String]
+) -> void:
+	var rows := load(ROWS_PATH) as Script
+	TestAssertions.truthy(rows != null, "weighted loot rows load for production manifest", failures)
+	if rows == null:
+		return
+	var explicit_rows: Array = rows.call(&"explicit_rows")
+	var implicit_rows: Array = rows.call(&"implicit_rows", equipment)
+	var profile_rows: Array = rows.call(&"weapon_profile_rows")
+	TestAssertions.equal(explicit_rows.size(), 96, "exact explicit production row count", failures)
+	TestAssertions.equal(implicit_rows.size(), 99, "exact implicit production row count", failures)
+	TestAssertions.equal(profile_rows.size(), 11, "exact weapon profile row count", failures)
+
+	var expected_paths: Dictionary = {}
+	var expected_families: Array[StringName] = []
+	var category_counts := {"focused": 0, "standard_hybrid": 0, "premium_hybrid": 0, "implicit": 0}
+	for row_variant: Variant in explicit_rows + implicit_rows:
+		var row := row_variant as Dictionary
+		var id: StringName = row["id"]
+		expected_paths[id] = String(row["output_path"])
+		var category := String(row["category"])
+		category_counts[category] = int(category_counts.get(category, 0)) + 1
+		for family_id: StringName in row["modifier_family_ids"]:
+			if family_id not in expected_families:
+				expected_families.append(family_id)
+	expected_families.sort_custom(func(left: StringName, right: StringName) -> bool: return String(left) < String(right))
+	TestAssertions.equal(category_counts, {"focused": 64, "standard_hybrid": 24, "premium_hybrid": 8, "implicit": 99}, "exact production affix category counts", failures)
+	TestAssertions.equal(catalog.modifier_family_ids, expected_families, "exact sorted production modifier family registry", failures)
+	var side_counts := {"prefix": 0, "suffix": 0, "implicit": 0}
+	var affinity_property_exists := &"affinity_tags" in _property_names(ItemAffixDefinition.new())
+	TestAssertions.truthy(affinity_property_exists, "production affix schema exposes affinity tags", failures)
+	for definition: ItemAffixDefinition in catalog.affixes:
+		if definition == null:
+			continue
+		side_counts[definition.affix_kind] = int(side_counts.get(definition.affix_kind, 0)) + 1
+		TestAssertions.equal(definition.resource_path, expected_paths.get(definition.id, ""), "%s exact production output path" % definition.id, failures)
+		TestAssertions.equal(definition.tiers.size(), 12, "%s exact production tier count" % definition.id, failures)
+		if affinity_property_exists:
+			var affinity_tags: Array = definition.get(&"affinity_tags")
+			var sorted_affinities := affinity_tags.duplicate()
+			sorted_affinities.sort_custom(func(left: Variant, right: Variant) -> bool: return String(left) < String(right))
+			TestAssertions.equal(affinity_tags, sorted_affinities, "%s affinities are sorted" % definition.id, failures)
+			for affinity: StringName in affinity_tags:
+				TestAssertions.truthy(affinity in catalog.known_item_tags, "%s affinity %s is a known live tag" % [definition.id, affinity], failures)
+	TestAssertions.equal(side_counts, {"prefix": 48, "suffix": 48, "implicit": 99}, "exact production affix side counts", failures)
+
+	var implicit_ids: Array[StringName] = []
+	var profile_by_base: Dictionary = {}
+	for row_variant: Variant in profile_rows:
+		var row := row_variant as Dictionary
+		profile_by_base[row["base"]] = row
+	var support_ids: Array = rows.call(&"support_base_ids")
+	TestAssertions.equal(support_ids.size(), 7, "exact explicit support base count", failures)
+	for base: EquipmentBaseDefinition in equipment.definitions:
+		TestAssertions.equal(base.implicit_affix_ids.size(), 1, "%s has one production implicit" % base.id, failures)
+		if base.implicit_affix_ids.size() == 1:
+			var implicit_id := base.implicit_affix_ids[0]
+			TestAssertions.truthy(implicit_id not in implicit_ids, "%s implicit assignment is unique" % base.id, failures)
+			implicit_ids.append(implicit_id)
+			TestAssertions.equal(catalog.affix(implicit_id).affix_kind if catalog.affix(implicit_id) != null else "", "implicit", "%s assigned affix is implicit" % base.id, failures)
+		if profile_by_base.has(base.id):
+			var profile_row := profile_by_base[base.id] as Dictionary
+			TestAssertions.truthy(base.weapon_damage_profile != null, "%s exact damage profile link exists" % base.id, failures)
+			if base.weapon_damage_profile != null:
+				TestAssertions.equal(base.weapon_damage_profile.id, profile_row["id"], "%s exact damage profile id" % base.id, failures)
+				TestAssertions.equal(base.weapon_damage_profile.resource_path, profile_row["output_path"], "%s exact external damage profile path" % base.id, failures)
+		elif base.id in support_ids:
+			TestAssertions.equal(base.weapon_damage_profile, null, "%s support base intentionally has no damage profile" % base.id, failures)
+		else:
+			TestAssertions.equal(base.weapon_damage_profile, null, "%s non-weapon base has no damage profile" % base.id, failures)
+	TestAssertions.equal(implicit_ids.size(), 99, "all 99 bases have distinct implicit assignments", failures)
+	TestAssertions.equal(equipment.validate(), PackedStringArray(), "production equipment catalog validates exact links", failures)
 
 func _assert_equipment_tag_registry(catalog: ItemFoundationCatalog, equipment: EquipmentCatalog, failures: Array[String]) -> void:
 	var live_tags: Array[StringName] = []

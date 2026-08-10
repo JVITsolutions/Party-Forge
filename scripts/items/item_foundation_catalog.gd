@@ -2,6 +2,21 @@ class_name ItemFoundationCatalog
 extends Resource
 
 const DEFAULT_REACHABILITY_EXPLORATION_BUDGET := 10000
+const PRODUCTION_BASE_COUNT := 99
+const PRODUCTION_EXPLICIT_COUNT := 96
+const PRODUCTION_IMPLICIT_COUNT := 99
+const PRODUCTION_AFFIX_COUNT := PRODUCTION_EXPLICIT_COUNT + PRODUCTION_IMPLICIT_COUNT
+const LEGACY_EXPLICIT_SIDE_IDS: Array[StringName] = [&"keen", &"of_embers", &"of_reach", &"of_rime", &"stout", &"wise"]
+const PRODUCTION_PREFIX_IDS: Array[StringName] = [
+	&"apex_force", &"arcane", &"battle_hardened", &"benevolent", &"bloodbound", &"brutal",
+	&"commanding", &"commanding_presence", &"cryomantic", &"deadeye", &"duelist", &"elemental_fury",
+	&"eternal_bulwark", &"farshot", &"forceful", &"fortified_vitality", &"glacial", &"hunter_born",
+	&"inspiring", &"ironclad", &"juggernaut", &"keen", &"martial_edge", &"merciful", &"plated",
+	&"potent_weapon", &"primal_convergence", &"profane", &"pyromantic", &"reinforced", &"robust",
+	&"sacred_guard", &"searing", &"sovereign_magic", &"spell_forged", &"spellwoven", &"stormcharged",
+	&"stormfire", &"stout", &"tempered", &"tempestuous", &"towerborn", &"unyielding_force",
+	&"vital", &"voidflame", &"voidtouched", &"winter_storm", &"wise",
+]
 
 @export var modifier_family_ids: Array[StringName] = []
 @export var known_source_ids: Array[StringName] = []
@@ -110,6 +125,8 @@ func validate(
 		if not _has_reachable_tier(definition, &"", &"", &""):
 			errors.append("PARTY_FORGE_ITEM_AFFIX_ERROR id=%s reason=no tier is reachable at item level 1..1000" % definition.id)
 	_validate_base_implicits(equipment_catalog, errors)
+	if equipment_catalog != null and equipment_catalog.size() == PRODUCTION_BASE_COUNT:
+		_validate_production_manifest(equipment_catalog, errors)
 	_validate_ordinary_pattern_reachability(equipment_catalog, reachability_exploration_budget, errors)
 	return errors
 
@@ -159,6 +176,94 @@ func _validate_base_implicits(equipment_catalog: EquipmentCatalog, errors: Packe
 				errors.append("PARTY_FORGE_ITEM_AFFIX_ERROR id=%s base=%s reason=unknown implicit affix reference" % [implicit_id, base.id])
 			elif definition.affix_kind != "implicit":
 				errors.append("PARTY_FORGE_ITEM_AFFIX_ERROR id=%s base=%s reason=base implicit references affix kind %s" % [implicit_id, base.id, definition.affix_kind])
+
+func _validate_production_manifest(equipment_catalog: EquipmentCatalog, errors: PackedStringArray) -> void:
+	if affixes.size() != PRODUCTION_AFFIX_COUNT:
+		errors.append("PARTY_FORGE_ITEM_MANIFEST_ERROR reason=production affix total must equal %d" % PRODUCTION_AFFIX_COUNT)
+	var counts := {"explicit": 0, "implicit": 0, "prefix": 0, "suffix": 0, "focused": 0, "standard_hybrid": 0, "premium_hybrid": 0}
+	var previous_id := ""
+	var implicit_ids: Dictionary = {}
+	for definition: ItemAffixDefinition in affixes:
+		if definition == null:
+			continue
+		var id_text := String(definition.id)
+		if not previous_id.is_empty() and id_text < previous_id:
+			errors.append("PARTY_FORGE_ITEM_MANIFEST_ERROR reason=production affixes must use ascending stable id order")
+		previous_id = id_text
+		if definition.tiers.size() != 12:
+			errors.append("PARTY_FORGE_ITEM_AFFIX_ERROR id=%s reason=production definition requires exactly twelve tiers" % definition.id)
+		_validate_production_rarity_ceilings(definition, errors)
+		if definition.affix_kind == "implicit":
+			counts["implicit"] = int(counts["implicit"]) + 1
+			implicit_ids[definition.id] = true
+			continue
+		counts["explicit"] = int(counts["explicit"]) + 1
+		if definition.affix_kind in ["prefix", "suffix"]:
+			counts[definition.affix_kind] = int(counts[definition.affix_kind]) + 1
+		else:
+			errors.append("PARTY_FORGE_ITEM_AFFIX_ERROR id=%s reason=production explicit kind must be prefix or suffix" % definition.id)
+		var path := definition.resource_path
+		if path.contains("/standard_hybrid/"):
+			counts["standard_hybrid"] = int(counts["standard_hybrid"]) + 1
+		elif path.contains("/premium_hybrid/"):
+			counts["premium_hybrid"] = int(counts["premium_hybrid"]) + 1
+		elif path.contains("/focused/") or path.contains("/fixtures/"):
+			counts["focused"] = int(counts["focused"]) + 1
+		else:
+			errors.append("PARTY_FORGE_ITEM_AFFIX_ERROR id=%s reason=production explicit category path is unknown" % definition.id)
+		var expected_side := "prefix" if definition.id in PRODUCTION_PREFIX_IDS else "suffix"
+		if definition.affix_kind != expected_side:
+			var qualifier := "retained legacy" if definition.id in LEGACY_EXPLICIT_SIDE_IDS else "production"
+			errors.append("PARTY_FORGE_ITEM_AFFIX_ERROR id=%s reason=%s side must be %s" % [definition.id, qualifier, expected_side])
+	for key: String in ["explicit", "implicit", "prefix", "suffix", "focused", "standard_hybrid", "premium_hybrid"]:
+		var expected: int = {"explicit": 96, "implicit": 99, "prefix": 48, "suffix": 48, "focused": 64, "standard_hybrid": 24, "premium_hybrid": 8}[key]
+		if int(counts[key]) != expected:
+			errors.append("PARTY_FORGE_ITEM_MANIFEST_ERROR reason=production %s count must equal %d" % [key, expected])
+	_validate_stable_registry_order(modifier_family_ids, "modifier family", errors)
+	_validate_stable_registry_order(known_item_tags, "item tag", errors)
+	var assigned: Dictionary = {}
+	for base: EquipmentBaseDefinition in equipment_catalog.definitions:
+		if base == null:
+			continue
+		if base.implicit_affix_ids.size() != 1:
+			errors.append("PARTY_FORGE_ITEM_AFFIX_ERROR id=<assignment> base=%s reason=production base requires exactly one implicit" % base.id)
+			continue
+		var implicit_id := base.implicit_affix_ids[0]
+		if not implicit_ids.has(implicit_id):
+			errors.append("PARTY_FORGE_ITEM_AFFIX_ERROR id=%s base=%s reason=production assignment is not a registered implicit" % [implicit_id, base.id])
+		elif assigned.has(implicit_id):
+			errors.append("PARTY_FORGE_ITEM_AFFIX_ERROR id=%s base=%s reason=production implicit is already assigned to %s" % [implicit_id, base.id, assigned[implicit_id]])
+		else:
+			assigned[implicit_id] = base.id
+	if assigned.size() != PRODUCTION_IMPLICIT_COUNT:
+		errors.append("PARTY_FORGE_ITEM_MANIFEST_ERROR reason=production assigned implicit count must equal %d" % PRODUCTION_IMPLICIT_COUNT)
+
+func _validate_production_rarity_ceilings(definition: ItemAffixDefinition, errors: PackedStringArray) -> void:
+	for tier: ItemAffixTierDefinition in definition.tiers:
+		if tier == null:
+			continue
+		var expected: Array[StringName] = []
+		if tier.tier <= 3:
+			expected = [&"common", &"uncommon", &"rare", &"epic", &"legendary"]
+		elif tier.tier <= 5:
+			expected = [&"uncommon", &"rare", &"epic", &"legendary"]
+		elif tier.tier <= 8:
+			expected = [&"rare", &"epic", &"legendary"]
+		elif tier.tier <= 10:
+			expected = [&"epic", &"legendary"]
+		elif tier.tier <= 12:
+			expected = [&"legendary"]
+		if tier.allowed_rarity_ids != expected:
+			errors.append("PARTY_FORGE_ITEM_AFFIX_ERROR id=%s reason=tier %d has invalid production rarity ceiling" % [definition.id, tier.tier])
+
+func _validate_stable_registry_order(values: Array[StringName], label: String, errors: PackedStringArray) -> void:
+	var previous := ""
+	for value: StringName in values:
+		var current := String(value)
+		if not previous.is_empty() and current < previous:
+			errors.append("PARTY_FORGE_ITEM_MANIFEST_ERROR reason=production %s registry must use ascending stable order" % label)
+			return
+		previous = current
 
 func _validate_ordinary_pattern_reachability(
 	equipment_catalog: EquipmentCatalog,

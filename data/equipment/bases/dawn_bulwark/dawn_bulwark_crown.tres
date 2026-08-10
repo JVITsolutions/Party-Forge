@@ -1,20 +1,19 @@
 [gd_resource type="Resource" script_class="EquipmentBaseDefinition" load_steps=3 format=3]
 
-[ext_resource type="Script" path="res://scripts/equipment/equipment_base_definition.gd" id="1"]
-[ext_resource type="Resource" path="res://data/presentation/equipment/dawn_bulwark/dawn_bulwark_crown.tres" id="2"]
+[ext_resource type="Script" path="res://scripts/equipment/equipment_base_definition.gd" id="1_base"]
+[ext_resource type="Resource" path="res://data/presentation/equipment/dawn_bulwark/dawn_bulwark_crown.tres" id="2_presentation"]
 
 [resource]
-script = ExtResource("1")
+script = ExtResource("1_base")
 id = &"dawn_bulwark_crown"
 display_name = "Dawn Bulwark Crown"
 item_type_id = &"helmet"
-compatible_slot_ids = [&"helmet"]
+compatible_slot_ids = Array[StringName]([&"helmet"])
 weight_class_id = &"heavy"
-required_all_tags = [&"martial", &"vanguard"]
+required_all_tags = Array[StringName]([&"martial", &"vanguard"])
+generation_weight = 100.0
+generation_tags = Array[StringName]([&"melee"])
+implicit_affix_ids = Array[StringName]([&"dawn_bulwark_crown_implicit"])
 handedness_id = &"none"
-reserved_slot_ids = []
-compatible_offhand_item_types = []
-weapon_family_id = &""
 implicit_family_id = &"dawn_bulwark"
-generation_tags = [&"melee"]
-presentation = ExtResource("2")
+presentation = ExtResource("2_presentation")

@@ -1,17 +1,18 @@
 [gd_resource type="Resource" script_class="EquipmentBaseDefinition" load_steps=3 format=3]
 
-[ext_resource type="Script" path="res://scripts/equipment/equipment_base_definition.gd" id="1"]
-[ext_resource type="Resource" path="res://data/presentation/equipment/forge_vanguard/forge_vanguard_boots.tres" id="2"]
+[ext_resource type="Script" path="res://scripts/equipment/equipment_base_definition.gd" id="1_base"]
+[ext_resource type="Resource" path="res://data/presentation/equipment/forge_vanguard/forge_vanguard_boots.tres" id="2_presentation"]
 
 [resource]
-script = ExtResource("1")
+script = ExtResource("1_base")
 id = &"forge_vanguard_boots"
 display_name = "Forge Vanguard Boots"
 item_type_id = &"boots"
-compatible_slot_ids = [&"boots"]
+compatible_slot_ids = Array[StringName]([&"boots"])
 weight_class_id = &"accessory"
+generation_weight = 100.0
+generation_tags = Array[StringName]([&"melee"])
+implicit_affix_ids = Array[StringName]([&"forge_vanguard_boots_implicit"])
 handedness_id = &"none"
-weapon_family_id = &""
 implicit_family_id = &"forge_vanguard"
-generation_tags = [&"melee"]
-presentation = ExtResource("2")
+presentation = ExtResource("2_presentation")

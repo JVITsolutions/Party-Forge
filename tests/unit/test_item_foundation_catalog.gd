@@ -2,14 +2,15 @@ extends RefCounted
 
 const EXPECTED_RARITIES: Array[StringName] = [&"common", &"uncommon", &"rare", &"epic", &"legendary", &"mythic", &"exotic", &"ascendant", &"divine", &"eternal"]
 const EXPECTED_ORDINARY: Array[StringName] = [&"common", &"uncommon", &"rare", &"epic", &"legendary"]
+const EXPECTED_PRODUCTION_AFFIX_COUNT := 195
 const EXPECTED_AFFIXES: Array[Dictionary] = [
-	{"id": &"stout", "stat": &"constitution", "operation": StatModifier.Operation.FLAT, "minimum": [1.0, 4.0, 7.0], "maximum": [3.0, 6.0, 10.0]},
-	{"id": &"keen", "stat": &"dexterity", "operation": StatModifier.Operation.FLAT, "minimum": [1.0, 4.0, 7.0], "maximum": [3.0, 6.0, 10.0]},
-	{"id": &"wise", "stat": &"wisdom", "operation": StatModifier.Operation.FLAT, "minimum": [1.0, 4.0, 7.0], "maximum": [3.0, 6.0, 10.0]},
-	{"id": &"of_embers", "stat": &"fire_damage", "operation": StatModifier.Operation.INCREASED, "minimum": [0.05, 0.11, 0.21], "maximum": [0.1, 0.2, 0.3]},
-	{"id": &"of_rime", "stat": &"cold_damage", "operation": StatModifier.Operation.INCREASED, "minimum": [0.05, 0.11, 0.21], "maximum": [0.1, 0.2, 0.3]},
-	{"id": &"of_reach", "stat": &"attack_range", "operation": StatModifier.Operation.INCREASED, "minimum": [0.05, 0.11, 0.21], "maximum": [0.1, 0.2, 0.3]},
-	{"id": &"tempered_edge", "stat": &"physical_damage", "operation": StatModifier.Operation.INCREASED, "minimum": [0.05, 0.11, 0.21], "maximum": [0.1, 0.2, 0.3]},
+	{"id": &"stout", "name": "Stout", "kind": "prefix", "stat": &"constitution", "operation": StatModifier.Operation.FLAT, "minimum": [1.0, 4.0, 7.0], "maximum": [3.0, 6.0, 10.0]},
+	{"id": &"keen", "name": "Keen", "kind": "prefix", "stat": &"dexterity", "operation": StatModifier.Operation.FLAT, "minimum": [1.0, 4.0, 7.0], "maximum": [3.0, 6.0, 10.0]},
+	{"id": &"wise", "name": "Wise", "kind": "prefix", "stat": &"wisdom", "operation": StatModifier.Operation.FLAT, "minimum": [1.0, 4.0, 7.0], "maximum": [3.0, 6.0, 10.0]},
+	{"id": &"of_embers", "name": "of Embers", "kind": "suffix", "stat": &"fire_damage", "operation": StatModifier.Operation.INCREASED, "minimum": [0.05, 0.11, 0.21], "maximum": [0.1, 0.2, 0.3]},
+	{"id": &"of_rime", "name": "of Rime", "kind": "suffix", "stat": &"cold_damage", "operation": StatModifier.Operation.INCREASED, "minimum": [0.05, 0.11, 0.21], "maximum": [0.1, 0.2, 0.3]},
+	{"id": &"of_reach", "name": "of Reach", "kind": "suffix", "stat": &"attack_range", "operation": StatModifier.Operation.INCREASED, "minimum": [0.05, 0.11, 0.21], "maximum": [0.1, 0.2, 0.3]},
+	{"id": &"tempered_edge", "name": "Tempered Edge", "kind": "implicit", "stat": &"physical_damage", "operation": StatModifier.Operation.INCREASED, "minimum": [0.05, 0.11, 0.21], "maximum": [0.1, 0.2, 0.3]},
 ]
 
 func run() -> Array[String]:
@@ -28,21 +29,28 @@ func run() -> Array[String]:
 	return failures
 
 func _assert_affix_contract(catalog: ItemFoundationCatalog, failures: Array[String]) -> void:
-	TestAssertions.equal(catalog.affixes.size(), EXPECTED_AFFIXES.size(), "exact fixture affix count", failures)
-	for index: int in EXPECTED_AFFIXES.size():
-		var expected: Dictionary = EXPECTED_AFFIXES[index]
+	TestAssertions.equal(catalog.affixes.size(), EXPECTED_PRODUCTION_AFFIX_COUNT, "exact production affix count", failures)
+	var ordered_ids: Array[StringName] = []
+	for definition: ItemAffixDefinition in catalog.affixes:
+		if definition != null:
+			ordered_ids.append(definition.id)
+	var sorted_ids := ordered_ids.duplicate()
+	sorted_ids.sort_custom(func(left: StringName, right: StringName) -> bool: return String(left) < String(right))
+	TestAssertions.equal(ordered_ids, sorted_ids, "production affixes use stable id order", failures)
+	for expected: Dictionary in EXPECTED_AFFIXES:
 		var affix_id: StringName = expected["id"]
 		var definition := catalog.affix(affix_id)
 		TestAssertions.truthy(definition != null, "%s fixture affix resolves" % affix_id, failures)
 		if definition == null:
 			continue
-		if index < catalog.affixes.size():
-			TestAssertions.equal(catalog.affixes[index].id, affix_id, "%s fixture order" % affix_id, failures)
+		TestAssertions.equal(definition.resource_path, "res://data/items/affixes/fixtures/%s.tres" % affix_id, "%s retained fixture path" % affix_id, failures)
+		TestAssertions.equal(definition.display_name, expected["name"], "%s retained display name" % affix_id, failures)
+		TestAssertions.equal(definition.affix_kind, expected["kind"], "%s retained affix kind" % affix_id, failures)
 		TestAssertions.equal(definition.effects.size(), 1, "%s effect count" % affix_id, failures)
 		if definition.effects.size() == 1:
 			TestAssertions.equal(definition.effects[0].stat_id, expected["stat"], "%s stat id" % affix_id, failures)
 			TestAssertions.equal(definition.effects[0].operation, expected["operation"], "%s operation" % affix_id, failures)
-		TestAssertions.equal(definition.tiers.size(), 3, "%s tier count" % affix_id, failures)
+		TestAssertions.equal(definition.tiers.size(), 12, "%s production tier count" % affix_id, failures)
 		var expected_minimum: Array = expected["minimum"]
 		var expected_maximum: Array = expected["maximum"]
 		for tier_index: int in expected_minimum.size():
@@ -50,7 +58,8 @@ func _assert_affix_contract(catalog: ItemFoundationCatalog, failures: Array[Stri
 			var expected_bounds := Vector2(expected_minimum[tier_index], expected_maximum[tier_index])
 			TestAssertions.equal(definition.roll_bounds(tier), expected_bounds, "%s tier %d bounds" % [affix_id, tier], failures)
 		TestAssertions.equal(definition.roll_bounds(0), Vector2(INF, -INF), "%s tier below range sentinel" % affix_id, failures)
-		TestAssertions.equal(definition.roll_bounds(4), Vector2(INF, -INF), "%s tier above range sentinel" % affix_id, failures)
+		TestAssertions.equal(definition.roll_bounds(13), Vector2(INF, -INF), "%s tier above range sentinel" % affix_id, failures)
+	_assert_rarity_ceilings(catalog, failures)
 
 func _assert_invalid_copies(
 	catalog: ItemFoundationCatalog,
@@ -107,6 +116,56 @@ func _assert_invalid_copies(
 	var missing_equipment_tag := catalog.duplicate(true) as ItemFoundationCatalog
 	missing_equipment_tag.known_item_tags.erase(&"helmet")
 	TestAssertions.truthy(not missing_equipment_tag.validate(stats, equipment).is_empty(), "missing current equipment item type is rejected", failures)
+
+	var missing_production_affix := catalog.duplicate(true) as ItemFoundationCatalog
+	missing_production_affix.affixes.pop_back()
+	TestAssertions.truthy(not missing_production_affix.validate(stats, equipment).is_empty(), "production affix total is exact", failures)
+
+	var unsorted_affinity := catalog.duplicate(true) as ItemFoundationCatalog
+	var affinity_index := _first_affix_with_affinity(unsorted_affinity)
+	TestAssertions.truthy(affinity_index >= 0, "production catalog contains authored affinity", failures)
+	if affinity_index >= 0:
+		_duplicate_affix_at(unsorted_affinity, affinity_index)
+		unsorted_affinity.affixes[affinity_index].set(&"affinity_tags", [&"ranged", &"melee"])
+		TestAssertions.truthy(not unsorted_affinity.validate(stats, equipment).is_empty(), "affinity tags must be sorted and known", failures)
+
+	var duplicate_affinity := catalog.duplicate(true) as ItemFoundationCatalog
+	affinity_index = _first_affix_with_affinity(duplicate_affinity)
+	if affinity_index >= 0:
+		_duplicate_affix_at(duplicate_affinity, affinity_index)
+		var affinity_tags: Array = duplicate_affinity.affixes[affinity_index].get(&"affinity_tags")
+		var affinity: StringName = affinity_tags[0]
+		duplicate_affinity.affixes[affinity_index].set(&"affinity_tags", [affinity, affinity])
+		TestAssertions.truthy(not duplicate_affinity.validate(stats, equipment).is_empty(), "affinity tags must be unique", failures)
+
+func _assert_rarity_ceilings(catalog: ItemFoundationCatalog, failures: Array[String]) -> void:
+	var expected_by_tier := {
+		1: EXPECTED_ORDINARY, 2: EXPECTED_ORDINARY, 3: EXPECTED_ORDINARY,
+		4: [&"uncommon", &"rare", &"epic", &"legendary"], 5: [&"uncommon", &"rare", &"epic", &"legendary"],
+		6: [&"rare", &"epic", &"legendary"], 7: [&"rare", &"epic", &"legendary"], 8: [&"rare", &"epic", &"legendary"],
+		9: [&"epic", &"legendary"], 10: [&"epic", &"legendary"],
+		11: [&"legendary"], 12: [&"legendary"],
+	}
+	for definition: ItemAffixDefinition in catalog.affixes:
+		if definition == null:
+			continue
+		TestAssertions.equal(definition.tiers.size(), 12, "%s has exactly twelve tiers" % definition.id, failures)
+		for tier: ItemAffixTierDefinition in definition.tiers:
+			if tier != null:
+				TestAssertions.equal(tier.allowed_rarity_ids, expected_by_tier.get(tier.tier, []), "%s tier %d exact rarity ceiling" % [definition.id, tier.tier], failures)
+
+func _first_affix_with_affinity(catalog: ItemFoundationCatalog) -> int:
+	for index: int in catalog.affixes.size():
+		var definition := catalog.affixes[index]
+		if definition != null and &"affinity_tags" in _property_names(definition) and not (definition.get(&"affinity_tags") as Array).is_empty():
+			return index
+	return -1
+
+func _property_names(resource: Resource) -> Array[StringName]:
+	var result: Array[StringName] = []
+	for property: Dictionary in resource.get_property_list():
+		result.append(StringName(property["name"] as String))
+	return result
 
 func _duplicate_affix_at(catalog: ItemFoundationCatalog, index: int) -> void:
 	catalog.affixes[index] = catalog.affixes[index].duplicate(true) as ItemAffixDefinition

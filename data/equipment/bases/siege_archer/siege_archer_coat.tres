@@ -1,20 +1,19 @@
 [gd_resource type="Resource" script_class="EquipmentBaseDefinition" load_steps=3 format=3]
 
-[ext_resource type="Script" path="res://scripts/equipment/equipment_base_definition.gd" id="1"]
-[ext_resource type="Resource" path="res://data/presentation/equipment/siege_archer/siege_archer_coat.tres" id="2"]
+[ext_resource type="Script" path="res://scripts/equipment/equipment_base_definition.gd" id="1_base"]
+[ext_resource type="Resource" path="res://data/presentation/equipment/siege_archer/siege_archer_coat.tres" id="2_presentation"]
 
 [resource]
-script = ExtResource("1")
+script = ExtResource("1_base")
 id = &"siege_archer_coat"
 display_name = "Siege Archer Coat"
 item_type_id = &"body_armour"
-compatible_slot_ids = [&"body_armour"]
+compatible_slot_ids = Array[StringName]([&"body_armour"])
 weight_class_id = &"medium"
-required_all_tags = [&"martial", &"ranged"]
+required_all_tags = Array[StringName]([&"martial", &"ranged"])
+generation_weight = 100.0
+generation_tags = Array[StringName]([&"ranged"])
+implicit_affix_ids = Array[StringName]([&"siege_archer_coat_implicit"])
 handedness_id = &"none"
-reserved_slot_ids = []
-compatible_offhand_item_types = []
-weapon_family_id = &""
 implicit_family_id = &"siege_archer"
-generation_tags = [&"ranged"]
-presentation = ExtResource("2")
+presentation = ExtResource("2_presentation")

@@ -1,20 +1,22 @@
-[gd_resource type="Resource" script_class="EquipmentBaseDefinition" load_steps=3 format=3]
+[gd_resource type="Resource" script_class="EquipmentBaseDefinition" load_steps=4 format=3]
 
-[ext_resource type="Script" path="res://scripts/equipment/equipment_base_definition.gd" id="1"]
-[ext_resource type="Resource" path="res://data/presentation/equipment/nightstep/nightstep_dagger_main.tres" id="2"]
+[ext_resource type="Script" path="res://scripts/equipment/equipment_base_definition.gd" id="1_base"]
+[ext_resource type="Resource" path="res://data/presentation/equipment/nightstep/nightstep_dagger_main.tres" id="2_presentation"]
+[ext_resource type="Resource" path="res://data/items/weapon_profiles/nightstep_dagger_main.tres" id="3_profile"]
 
 [resource]
-script = ExtResource("1")
+script = ExtResource("1_base")
 id = &"nightstep_dagger_main"
 display_name = "Nightstep Dagger Main"
 item_type_id = &"dagger"
-compatible_slot_ids = [&"main_hand"]
+compatible_slot_ids = Array[StringName]([&"main_hand"])
 weight_class_id = &"weapon"
-required_all_tags = [&"dagger", &"dual_wield"]
+required_all_tags = Array[StringName]([&"dagger", &"dual_wield"])
+generation_weight = 100.0
+generation_tags = Array[StringName]([&"melee"])
+implicit_affix_ids = Array[StringName]([&"nightstep_dagger_main_implicit"])
 handedness_id = &"one_hand"
-reserved_slot_ids = []
-compatible_offhand_item_types = []
 weapon_family_id = &"dual_daggers"
+weapon_damage_profile = ExtResource("3_profile")
 implicit_family_id = &"nightstep"
-generation_tags = [&"melee"]
-presentation = ExtResource("2")
+presentation = ExtResource("2_presentation")

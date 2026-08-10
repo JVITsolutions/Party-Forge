@@ -90,7 +90,7 @@ static func _fill_explicit_slot(
 		if not reason.is_empty():
 			rejected[definition.id] = reason
 			continue
-		var weight := ItemGenerationWeightPolicy.affix_weight(definition, request)
+		var weight := ItemGenerationWeightPolicy.affix_weight(definition, request, base_tags)
 		if not is_finite(weight) or weight <= 0.0:
 			rejected[definition.id] = "invalid_weight"
 			continue
