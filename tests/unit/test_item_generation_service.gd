@@ -121,6 +121,11 @@ func _test_damage_profile_does_not_shift_existing_generation(equipment: Equipmen
 	TestAssertions.near(float(stored_component["unit"]), 0.11112670600414, 0.00000000000001, "issued origin stores the fixed base-damage unit", failures)
 	TestAssertions.near(float(stored_component["quality"]), 0.86666900590062, 0.00000000000001, "issued origin stores the fixed base-damage quality", failures)
 	var item_before_profile_mutation := with_profile.item.to_dictionary()
+	var exposed_trace := with_profile.trace.stages
+	for stage: Dictionary in exposed_trace:
+		if stage["stage"] == "base_damage":
+			((stage["details"]["components"] as Array)[0] as Dictionary)["quality"] = -1.0
+	TestAssertions.equal(with_profile.item.to_dictionary(), item_before_profile_mutation, "mutating exposed generation trace cannot rewrite issued provenance", failures)
 	profile.quality_minimum = 0.1
 	curve.minimum_at_level_1 = 999.0
 	TestAssertions.equal(with_profile.item.to_dictionary(), item_before_profile_mutation, "issued damage and provenance never recalculate from the live profile", failures)

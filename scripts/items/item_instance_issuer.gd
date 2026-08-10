@@ -26,6 +26,9 @@ static func issue(
 	result.error = _item_data_fields_error(data)
 	if not result.error.is_empty():
 		return result
+	if not ItemGenerationTrace.json_value_error(source).is_empty():
+		result.error = "PARTY_FORGE_ITEM_ISSUE_ERROR field=origin.source reason=must be JSON-safe"
+		return result
 	var document := {
 		"affixes": data.get("affixes"),
 		"base_damage_components": data.get("base_damage_components"),
@@ -36,7 +39,7 @@ static func issue(
 			"issuer_namespace": issuer_namespace,
 			"seed": seed,
 			"sequence": int(sequence),
-			"source": ItemInstance._json_copy(source),
+			"source": ItemGenerationTrace.canonical_json_copy(source),
 		},
 		"rarity_id": data.get("rarity_id"),
 		"schema_version": ItemInstance.SCHEMA_VERSION,

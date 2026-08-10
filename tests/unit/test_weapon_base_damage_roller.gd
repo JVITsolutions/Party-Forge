@@ -12,6 +12,10 @@ func run() -> Array[String]:
 	_test_fixed_named_substreams_and_rarity_scale(failures)
 	_test_non_damage_base_is_an_explicit_empty_success(failures)
 	_test_profile_request_failure_is_stable(failures)
+	_test_required_inputs_and_unknown_rarity_reject(failures)
+	_test_malformed_profiles_reject_before_rolling(failures)
+	_test_runtime_roll_values_fail_closed(failures)
+	_test_strict_canonical_snapshot_and_real_defensive_copies(failures)
 	return failures
 
 func _test_fixed_named_substreams_and_rarity_scale(failures: Array[String]) -> void:
@@ -67,7 +71,7 @@ func _test_fixed_named_substreams_and_rarity_scale(failures: Array[String]) -> v
 	TestAssertions.equal(provenance["item_level"], expected_provenance["item_level"], "roller provenance stores the item level", failures)
 	TestAssertions.equal(provenance["rarity_multiplier"], expected_provenance["rarity_multiplier"], "roller provenance stores the exact rarity multiplier", failures)
 	var provenance_components := provenance["components"] as Array
-	TestAssertions.equal(_component_evidence_without_random(provenance_components), _component_evidence_without_random(expected_provenance["components"] as Array), "roller provenance stores sorted bounds and final ranges", failures)
+	TestAssertions.equal(_component_evidence_without_random(provenance_components), ItemGenerationTrace.canonical_json_copy(_component_evidence_without_random(expected_provenance["components"] as Array)), "roller provenance stores sorted bounds and final ranges", failures)
 	for index: int in provenance_components.size():
 		TestAssertions.near(float(provenance_components[index]["unit"]), float((expected_provenance["components"] as Array)[index]["unit"]), 0.00000000000001, "component %d stores its fixed unit" % index, failures)
 		TestAssertions.near(float(provenance_components[index]["quality"]), float((expected_provenance["components"] as Array)[index]["quality"]), 0.00000000000001, "component %d stores its fixed quality" % index, failures)
@@ -140,6 +144,194 @@ func _test_profile_request_failure_is_stable(failures: Array[String]) -> void:
 		"selected": "",
 		"details": {"profile_id": "gated_profile", "item_level": 500, "minimum_item_level": 501, "outcome": "rejected"},
 	}], "rejected profile still records one stable base-damage trace row", failures)
+
+func _test_required_inputs_and_unknown_rarity_reject(failures: Array[String]) -> void:
+	var request := ItemGenerationRequest.create(991, 4, 500, &"roller_test", &"ordinary_drop", [&"rare"])
+	var base := EquipmentBaseDefinition.new()
+	base.id = &"input_blade"
+	base.weapon_damage_profile = _profile(&"input_profile", 1, [_curve(&"physical", 10.0, 20.0)])
+	var rarity := _rarity(&"rare")
+	_assert_input_rejection(null, base, rarity, ItemGenerationTrace.new(), "request", "missing", failures)
+	_assert_input_rejection(request, null, rarity, ItemGenerationTrace.new(), "base", "missing", failures)
+	_assert_input_rejection(request, base, null, ItemGenerationTrace.new(), "rarity", "missing", failures)
+	var missing_trace := _roll(request, base, rarity, null)
+	_assert_empty_failure(missing_trace, "PARTY_FORGE_ITEM_GENERATION_ERROR stage=base_damage field=trace reason=missing", "missing trace", failures)
+
+	var unknown_rarity := _rarity(&"mythic")
+	var profiled_trace := ItemGenerationTrace.new()
+	var profiled := _roll(request, base, unknown_rarity, profiled_trace)
+	_assert_empty_failure(profiled, "PARTY_FORGE_ITEM_GENERATION_ERROR stage=base_damage profile=input_profile field=rarity_id value=mythic reason=unsupported rarity", "profiled unknown rarity", failures)
+	_assert_rejected_trace(profiled_trace, "input_profile", "unsupported_rarity", "input_profile", "rarity_id", "unsupported rarity", {"value": "mythic"}, failures)
+
+	var support_base := EquipmentBaseDefinition.new()
+	support_base.id = &"support_focus"
+	var support_trace := ItemGenerationTrace.new()
+	var support := _roll(request, support_base, unknown_rarity, support_trace)
+	_assert_empty_failure(support, "PARTY_FORGE_ITEM_GENERATION_ERROR stage=base_damage field=rarity_id value=mythic reason=unsupported rarity", "no-profile unknown rarity", failures)
+	_assert_rejected_trace(support_trace, "<none>", "unsupported_rarity", "", "rarity_id", "unsupported rarity", {"value": "mythic"}, failures)
+
+func _test_malformed_profiles_reject_before_rolling(failures: Array[String]) -> void:
+	var request := ItemGenerationRequest.create(991, 4, 500, &"roller_test", &"ordinary_drop", [&"rare"])
+	var rarity := _rarity(&"rare")
+
+	var empty_id := _profile(&"", 1, [_curve(&"physical", 10.0, 20.0)])
+	_assert_malformed_profile(request, rarity, empty_id, "profile.id", "must be non-empty", failures)
+	var invalid_minimum := _profile(&"invalid_minimum", 0, [_curve(&"physical", 10.0, 20.0)])
+	_assert_malformed_profile(request, rarity, invalid_minimum, "minimum_item_level", "must be between 1 and 1000", failures)
+	var empty_components := _profile(&"empty_components", 1, [])
+	_assert_malformed_profile(request, rarity, empty_components, "components", "requires at least one component", failures)
+
+	var invalid_quality_cases := [
+		{"field": &"quality_minimum", "value": NAN},
+		{"field": &"quality_minimum", "value": 0.84},
+		{"field": &"quality_maximum", "value": INF},
+		{"field": &"quality_maximum", "value": 0.99},
+	]
+	for test_case: Dictionary in invalid_quality_cases:
+		var profile := _profile(StringName("invalid_%s_%s" % [test_case["field"], str(test_case["value"])]), 1, [_curve(&"physical", 10.0, 20.0)])
+		profile.set(test_case["field"], test_case["value"])
+		_assert_malformed_profile(request, rarity, profile, "quality_bounds", "must equal 0.85..1.00", failures)
+
+	var missing_curve := _profile(&"missing_curve", 1, [null])
+	_assert_malformed_profile(request, rarity, missing_curve, "components[0]", "curve is missing", failures)
+	var empty_type := _profile(&"empty_type", 1, [_curve(&"", 10.0, 20.0)])
+	_assert_malformed_profile(request, rarity, empty_type, "components[0].damage_type_id", "must be non-empty", failures)
+	var duplicate_type := _profile(&"duplicate_type", 1, [_curve(&"physical", 10.0, 20.0), _curve(&"physical", 30.0, 40.0)])
+	_assert_malformed_profile(request, rarity, duplicate_type, "components[1].damage_type_id", "duplicate damage type physical", failures)
+	var unknown_type := _profile(&"unknown_type", 1, [_curve(&"radiant", 10.0, 20.0)])
+	_assert_malformed_profile(request, rarity, unknown_type, "components[0].damage_type_id", "unknown damage type radiant", failures)
+
+	var anchor_cases := [
+		{"field": &"minimum_at_level_1", "value": NAN, "reason": "must be finite"},
+		{"field": &"maximum_at_level_1", "value": -1.0, "reason": "must be nonnegative"},
+		{"field": &"maximum_at_level_1", "value": 5.0, "minimum": 10.0, "reason": "level 1 range is inverted"},
+		{"field": &"maximum_at_level_1000", "value": 5.0, "minimum_1000": 10.0, "reason": "level 1000 range is inverted"},
+		{"field": &"minimum_at_level_1000", "value": 9.0, "reason": "minimum anchors must be monotonic"},
+		{"field": &"maximum_at_level_1000", "value": 19.0, "reason": "maximum anchors must be monotonic"},
+	]
+	for index: int in anchor_cases.size():
+		var test_case := anchor_cases[index] as Dictionary
+		var curve := _curve(&"physical", float(test_case.get("minimum", 10.0)), 20.0)
+		curve.minimum_at_level_1000 = float(test_case.get("minimum_1000", 10.0))
+		curve.maximum_at_level_1000 = 20.0
+		curve.set(test_case["field"], test_case["value"])
+		var profile := _profile(StringName("invalid_anchor_%d" % index), 1, [curve])
+		_assert_malformed_profile(request, rarity, profile, "components[0].%s" % test_case["field"], test_case["reason"], failures)
+
+func _test_runtime_roll_values_fail_closed(failures: Array[String]) -> void:
+	var request := ItemGenerationRequest.create(991, 4, 500, &"roller_test", &"ordinary_drop", [&"legendary"])
+	var base := EquipmentBaseDefinition.new()
+	base.id = &"overflow_blade"
+	var curve := _curve(&"physical", 1.35e308, 1.35e308)
+	base.weapon_damage_profile = _profile(&"overflow_profile", 1, [curve])
+	var trace := ItemGenerationTrace.new()
+	var result := _roll(request, base, _rarity(&"legendary"), trace)
+	_assert_empty_failure(result, "PARTY_FORGE_ITEM_GENERATION_ERROR stage=base_damage profile=overflow_profile field=components.physical.bounds reason=must be finite nonnegative and ordered", "overflowed interpolated bounds", failures)
+	_assert_rejected_trace(trace, "overflow_profile", "invalid_roll", "overflow_profile", "components.physical.bounds", "must be finite nonnegative and ordered", {}, failures)
+
+func _test_strict_canonical_snapshot_and_real_defensive_copies(failures: Array[String]) -> void:
+	var trace := ItemGenerationTrace.new()
+	var no_ids: Array[StringName] = []
+	var accepted: Variant = trace.call(&"record", &"canonical", no_ids, {}, {}, &"", {"integral": 10.0, "name": &"physical"})
+	TestAssertions.equal(accepted, true, "trace reports accepted canonical evidence", failures)
+	TestAssertions.equal(trace.stages[0]["details"], {"integral": 10, "name": "physical"}, "trace canonicalizes integral floats and StringNames once", failures)
+	TestAssertions.equal(typeof(trace.stages[0]["details"]["integral"]), TYPE_INT, "canonical integral is stored as an integer", failures)
+	var baseline := trace.stages
+	TestAssertions.equal(trace.call(&"record", &"unsupported", no_ids, {}, {}, &"", {"bad": NodePath("unsupported")}), false, "trace rejects unsupported variants", failures)
+	TestAssertions.equal(trace.call(&"record", &"unsafe", no_ids, {}, {}, &"", {"bad": ItemInstanceCodec.JSON_SAFE_INTEGER_MAX + 1}), false, "trace rejects unsafe integers", failures)
+	TestAssertions.equal(trace.call(&"record", &"nonfinite", no_ids, {}, {}, &"", {"bad": INF}), false, "trace rejects nonfinite details", failures)
+	TestAssertions.equal(trace.stages, baseline, "strict trace rejection never mutates recorded evidence", failures)
+
+	var base := EquipmentBaseDefinition.new()
+	base.id = &"canonical_blade"
+	base.weapon_damage_profile = _profile(&"canonical_profile", 1, [_curve(&"physical", 10.0, 20.0)])
+	var request := ItemGenerationRequest.create(991, 4, 500, &"roller_test", &"ordinary_drop", [&"rare"])
+	var roll_trace := ItemGenerationTrace.new()
+	var result := _roll(request, base, _rarity(&"rare"), roll_trace)
+	TestAssertions.truthy(result != null and bool(result.call(&"ok")), "canonical roll succeeds", failures)
+	if result == null or not bool(result.call(&"ok")):
+		return
+	var expected := result.get(&"provenance").duplicate(true) as Dictionary
+	var trace_details := roll_trace.stages[0]["details"] as Dictionary
+	TestAssertions.equal(trace_details, expected, "roll result and trace use one exact canonical provenance", failures)
+	TestAssertions.equal(typeof(((expected["components"] as Array)[0]["bounds"] as Dictionary)["minimum"]), TYPE_INT, "roll-result integral bounds use canonical integer representation", failures)
+	var equipment := load("res://data/equipment/core_equipment_catalog.tres") as EquipmentCatalog
+	var foundation := load("res://data/items/core_item_foundation_catalog.tres") as ItemFoundationCatalog
+	var issued := ItemInstanceIssuer.issue(
+		"base-damage-copy-test", 1, {"generation": {"base_damage": result.get(&"provenance")}}, request.seed,
+		{"affixes": [], "base_definition_id": "forge_vanguard_sword", "base_damage_components": result.get(&"components"), "item_level": 500, "rarity_id": "rare"},
+		equipment, foundation
+	)
+	TestAssertions.truthy(issued.ok(), "canonical provenance fixture issues", failures)
+	if not issued.ok():
+		return
+	var issued_provenance := issued.item.origin["source"]["generation"]["base_damage"] as Dictionary
+	TestAssertions.equal(issued_provenance, expected, "issued provenance exactly matches result and trace representation", failures)
+
+	((result.get(&"provenance")["components"] as Array)[0] as Dictionary)["quality"] = -1.0
+	TestAssertions.equal(roll_trace.stages[0]["details"], expected, "mutating actual result provenance cannot rewrite trace details", failures)
+	TestAssertions.equal(issued.item.origin["source"]["generation"]["base_damage"], expected, "mutating actual result provenance cannot rewrite issued provenance", failures)
+	var exposed_trace := roll_trace.stages
+	(((exposed_trace[0] as Dictionary)["details"]["components"] as Array)[0] as Dictionary)["quality"] = -2.0
+	TestAssertions.equal(float(((result.get(&"provenance")["components"] as Array)[0] as Dictionary)["quality"]), -1.0, "mutating exposed trace copy cannot rewrite result provenance", failures)
+	TestAssertions.equal(issued.item.origin["source"]["generation"]["base_damage"], expected, "mutating exposed trace copy cannot rewrite issued provenance", failures)
+
+func _assert_input_rejection(
+	request: ItemGenerationRequest,
+	base: EquipmentBaseDefinition,
+	rarity: ItemRarityDefinition,
+	trace: ItemGenerationTrace,
+	field: String,
+	reason: String,
+	failures: Array[String]
+) -> void:
+	var result := _roll(request, base, rarity, trace)
+	_assert_empty_failure(result, "PARTY_FORGE_ITEM_GENERATION_ERROR stage=base_damage field=%s reason=%s" % [field, reason], "missing %s" % field, failures)
+	_assert_rejected_trace(trace, "<%s>" % field, "missing_%s" % field, "", field, reason, {}, failures)
+
+func _assert_malformed_profile(
+	request: ItemGenerationRequest,
+	rarity: ItemRarityDefinition,
+	profile: WeaponDamageProfile,
+	field: String,
+	reason: String,
+	failures: Array[String]
+) -> void:
+	var base := EquipmentBaseDefinition.new()
+	base.id = &"malformed_blade"
+	base.weapon_damage_profile = profile
+	var trace := ItemGenerationTrace.new()
+	var result := _roll(request, base, rarity, trace)
+	var profile_id := String(profile.id) if not profile.id.is_empty() else "<empty>"
+	_assert_empty_failure(result, "PARTY_FORGE_ITEM_GENERATION_ERROR stage=base_damage profile=%s field=%s reason=%s" % [profile_id, field, reason], "%s malformed profile" % field, failures)
+	_assert_rejected_trace(trace, profile_id, "invalid_profile", String(profile.id), field, reason, {}, failures)
+
+func _assert_empty_failure(result: RefCounted, expected_error: String, label: String, failures: Array[String]) -> void:
+	TestAssertions.truthy(result != null and not bool(result.call(&"ok")), "%s rejects" % label, failures)
+	if result == null:
+		return
+	TestAssertions.equal(result.get(&"components"), [], "%s returns no partial components" % label, failures)
+	TestAssertions.equal(result.get(&"quality_by_type"), {}, "%s returns no partial quality" % label, failures)
+	TestAssertions.equal(result.get(&"provenance"), {}, "%s returns no partial provenance" % label, failures)
+	TestAssertions.equal(result.get(&"error"), expected_error, "%s diagnostic is stable" % label, failures)
+
+func _assert_rejected_trace(
+	trace: ItemGenerationTrace,
+	rejected_id: String,
+	rejected_code: String,
+	profile_id: String,
+	field: String,
+	reason: String,
+	extra_details: Dictionary,
+	failures: Array[String]
+) -> void:
+	var details := {"field": field, "outcome": "rejected", "profile_id": profile_id, "reason": reason}
+	for key: Variant in extra_details:
+		details[key] = extra_details[key]
+	TestAssertions.equal(trace.stages, [{
+		"stage": "base_damage", "eligible": [], "rejected": {rejected_id: rejected_code}, "weights": {}, "selected": "", "details": details,
+	}], "%s rejection trace is exact" % field, failures)
+	TestAssertions.truthy(_is_json_value(trace.stages), "%s rejection trace is finite JSON" % field, failures)
 
 func _roll(request: ItemGenerationRequest, base: EquipmentBaseDefinition, rarity: ItemRarityDefinition, trace: ItemGenerationTrace) -> RefCounted:
 	return (load(ROLLER_PATH) as Script).call(&"roll", request, base, rarity, trace) as RefCounted
