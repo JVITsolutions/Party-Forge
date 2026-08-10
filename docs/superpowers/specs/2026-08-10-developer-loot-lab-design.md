@@ -2,7 +2,7 @@
 
 Date: 2026-08-10
 
-Status: Design approved section by section; final document review pending
+Status: Approved
 
 Parent design: `docs/superpowers/specs/2026-08-08-weighted-loot-generation-and-equipment-stats-design.md`
 
