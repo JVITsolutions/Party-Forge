@@ -13,35 +13,36 @@ func _initialize() -> void:
 		return
 	var requests := ItemGenerationBalanceReport.production_requests(foundation)
 	var report := ItemGenerationBalanceReport.build(equipment, foundation, requests)
-	var evidence_errors: Array[String] = ItemGenerationBalanceReport.production_evidence_errors(report)
-	if not evidence_errors.is_empty():
-		_fail("report evidence validation failed: %s" % "; ".join(evidence_errors))
+	var failures: Array[String] = ItemGenerationBalanceReport.production_evidence_errors(report)
+	if not failures.is_empty():
+		_fail("; ".join(failures))
 		return
 	var json_text := ItemGenerationBalanceReport.to_json(report)
 	var markdown_text := ItemGenerationBalanceReport.to_markdown(report)
-	if json_text.is_empty() or markdown_text.is_empty():
-		_fail("report rendering returned empty output")
+	if json_text != _read_text(JSON_PATH):
+		_fail("independent JSON build differs from committed evidence")
 		return
-	if not _write_text(JSON_PATH, json_text) or not _write_text(MARKDOWN_PATH, markdown_text):
+	if markdown_text != _read_text(MARKDOWN_PATH):
+		_fail("independent Markdown build differs from committed evidence")
 		return
-	print("WEIGHTED_LOOT_BALANCE_REPORT: PASS rows=%d attempts=%d unique_ids=%d json_sha256=%s markdown_sha256=%s" % [
+	var summary := report.get("summary", {}) as Dictionary
+	print("WEIGHTED_LOOT_BALANCE_EVIDENCE: PASS rows=%d attempts=%d unique_ids=%d json_sha256=%s markdown_sha256=%s" % [
 		int((report.get("configuration", {}) as Dictionary).get("scenario_count", 0)),
-		int((report.get("summary", {}) as Dictionary).get("attempted", 0)),
-		int((report.get("summary", {}) as Dictionary).get("unique_instance_id_count", 0)),
+		int(summary.get("attempted", 0)),
+		int(summary.get("unique_instance_id_count", 0)),
 		json_text.sha256_text(),
 		markdown_text.sha256_text(),
 	])
 	quit(0)
 
-func _write_text(path: String, text: String) -> bool:
-	var file := FileAccess.open(path, FileAccess.WRITE)
+func _read_text(path: String) -> String:
+	var file := FileAccess.open(path, FileAccess.READ)
 	if file == null:
-		_fail("cannot open %s for writing: %s" % [path, error_string(FileAccess.get_open_error())])
-		return false
-	file.store_string(text)
+		return ""
+	var text := file.get_as_text()
 	file.close()
-	return true
+	return text
 
 func _fail(message: String) -> void:
-	push_error("WEIGHTED_LOOT_BALANCE_REPORT_ERROR: %s" % message)
+	push_error("WEIGHTED_LOOT_BALANCE_EVIDENCE_ERROR: %s" % message)
 	quit(1)
