@@ -109,6 +109,7 @@ func run() -> Array[String]:
     _test_atomic_weapon_projection_contract(failures)
     _test_twenty_four_member_weapon_projection_isolation(failures)
     _test_all_member_invalidations_restamp_equipped_weapons(failures)
+    _test_all_member_invalidation_publishes_before_signals(failures)
     _test_member_local_revision_is_warm_cold_coherent(failures)
     _test_dead_coordinator_binding_fails_closed(failures)
     _test_two_pass_cache_isolation_and_preview_inputs(failures)
@@ -882,6 +883,68 @@ func _test_all_member_invalidations_restamp_equipped_weapons(failures: Array[Str
     revision_before = party.stat_revision()
     TestAssertions.truthy(bool(party.call(&"_recalculate_traits")), "direct trait recalculation fixture mutates", failures)
     _assert_all_member_revision_state(party, revision_before, caches, events, "trait recalculation", failures)
+
+    party.unbind_member_source_refresh_coordinator(fixture["coordinator"], fixture["authority"])
+    party.free()
+
+func _test_all_member_invalidation_publishes_before_signals(failures: Array[String]) -> void:
+    var fixture := _two_equipped_member_fixture(failures, "signal-time publication")
+    var party := fixture.get("party") as PartyManager
+    if party == null:
+        return
+    var member_two := party.member_by_id(2)
+    var action_tags: Array[StringName] = member_two.class_definition.primary_attack.action_tags
+    var damage_before := party.stats_for(2).value(&"damage")
+    var action_damage_before := party.stats_for_action(2, action_tags).value(&"damage")
+    var revision_before := party.stat_revision()
+    var outer_revision := revision_before + 1
+    var nested_revision := outer_revision + 1
+    var events: Array[int] = []
+    var observations: Dictionary = {}
+    var control := {"nested_started": false}
+    party.stats_changed.connect(func(member_id: int) -> void:
+        events.append(member_id)
+        if member_id == 1 and not bool(control["nested_started"]):
+            control["nested_started"] = true
+            var cold_base := party.stats_for(2)
+            var warm_base := party.stats_for(2)
+            var cold_action := party.stats_for_action(2, action_tags)
+            var warm_action := party.stats_for_action(2, action_tags)
+            var weapon := party.active_weapon_snapshot(2)
+            observations["cold_base_revision"] = cold_base.revision
+            observations["cold_action_revision"] = cold_action.revision
+            observations["warm_base_is_same"] = is_same(cold_base, warm_base)
+            observations["warm_action_is_same"] = is_same(cold_action, warm_action)
+            observations["base_damage"] = cold_base.value(&"damage")
+            observations["action_damage"] = cold_action.value(&"damage")
+            observations["weapon_revision"] = weapon.revision if weapon != null else -1
+            observations["nested_committed"] = _commit_member_one_growth(fixture)
+        elif member_id == 2:
+            observations["later_signal_base_revision"] = party.stats_for(2).revision
+            observations["later_signal_action_revision"] = party.stats_for_action(2, action_tags).revision
+            var later_weapon := party.active_weapon_snapshot(2)
+            observations["later_signal_weapon_revision"] = later_weapon.revision if later_weapon != null else -1
+    )
+
+    TestAssertions.truthy(party.rank_up(&"fighter"), "signal-time fixture mutates every member", failures)
+    TestAssertions.equal(observations.get("cold_base_revision", -1), outer_revision, "first signal sees later member cold base at the complete outer revision", failures)
+    TestAssertions.equal(observations.get("cold_action_revision", -1), outer_revision, "first signal sees later member cold action at the complete outer revision", failures)
+    TestAssertions.truthy(bool(observations.get("warm_base_is_same", false)), "first signal reuses later member warm base cache", failures)
+    TestAssertions.truthy(bool(observations.get("warm_action_is_same", false)), "first signal reuses later member warm action cache", failures)
+    TestAssertions.truthy(float(observations.get("base_damage", damage_before)) > damage_before, "first signal sees later member new base stat values", failures)
+    TestAssertions.truthy(float(observations.get("action_damage", action_damage_before)) > action_damage_before, "first signal sees later member new action stat values", failures)
+    TestAssertions.equal(observations.get("weapon_revision", -1), outer_revision, "first signal sees later member weapon at the complete outer revision", failures)
+    TestAssertions.truthy(bool(observations.get("nested_committed", false)), "first signal commits a reentrant member-local transition", failures)
+    TestAssertions.equal(party.stat_revision(), nested_revision, "reentrant mutation advances a distinct global revision", failures)
+    TestAssertions.equal(party.stats_for(1).revision, nested_revision, "reentrant member owns the nested revision", failures)
+    TestAssertions.equal(party.active_weapon_snapshot(1).revision, nested_revision, "reentrant member weapon owns the nested revision", failures)
+    TestAssertions.equal(party.stats_for(2).revision, outer_revision, "outer transition does not stamp later member base with nested revision", failures)
+    TestAssertions.equal(party.stats_for_action(2, action_tags).revision, outer_revision, "outer transition does not stamp later member action with nested revision", failures)
+    TestAssertions.equal(party.active_weapon_snapshot(2).revision, outer_revision, "outer transition does not stamp later member weapon with nested revision", failures)
+    TestAssertions.equal(observations.get("later_signal_base_revision", -1), outer_revision, "later outer signal observes its own base revision", failures)
+    TestAssertions.equal(observations.get("later_signal_action_revision", -1), outer_revision, "later outer signal observes its own action revision", failures)
+    TestAssertions.equal(observations.get("later_signal_weapon_revision", -1), outer_revision, "later outer signal observes its own weapon revision", failures)
+    TestAssertions.equal(events, [1, 1, 2], "outer and nested transitions retain distinct signal order", failures)
 
     party.unbind_member_source_refresh_coordinator(fixture["coordinator"], fixture["authority"])
     party.free()

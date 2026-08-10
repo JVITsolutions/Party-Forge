@@ -689,12 +689,17 @@ func _invalidate_members(member_ids: Array[int]) -> void:
 
 func _invalidate_all_members() -> void:
     _stat_revision += 1
+    var transition_revision := _stat_revision
     _stat_cache.clear()
     _action_stat_cache.clear()
+    var member_ids: Array[int] = []
     for member: PartyMemberState in members:
-        _member_stat_revision[member.member_id] = _stat_revision
-        _restamp_active_weapon(member.member_id, _stat_revision)
-        stats_changed.emit(member.member_id)
+        var member_id := member.member_id
+        member_ids.append(member_id)
+        _member_stat_revision[member_id] = transition_revision
+        _restamp_active_weapon(member_id, transition_revision)
+    for member_id: int in member_ids:
+        stats_changed.emit(member_id)
 
 func _effective_revision_for_member(member_id: int) -> int:
     return int(_member_stat_revision.get(member_id, _stat_revision))
