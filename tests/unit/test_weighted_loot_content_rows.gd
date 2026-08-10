@@ -52,6 +52,35 @@ const LEGACY_TIER_BOUNDS := {
 }
 const KNOWN_HARD_TAGS := [&"", &"weapon", &"one_hand_sword", &"bow", &"caster", &"melee", &"heavy", &"shield", &"tome", &"accessory"]
 const KNOWN_AFFINITIES := [&"melee", &"ranged", &"caster"]
+const SLOT_PRIORITY := [&"helmet", &"body_armour", &"legs", &"gloves", &"boots", &"amulet", &"ring_left", &"ring_right", &"belt", &"main_hand", &"off_hand"]
+const EXPECTED_SLOT_STATS := {
+	&"helmet": &"max_health", &"body_armour": &"armor", &"legs": &"move_speed", &"gloves": &"attack_speed",
+	&"boots": &"dodge_chance", &"amulet": &"party_influence", &"ring_left": &"crit_chance",
+	&"ring_right": &"crit_chance", &"belt": &"health_regeneration",
+}
+const EXPECTED_PROFILE_ROWS := [
+	{"base": &"forge_vanguard_sword", "type": &"physical", "l1": Vector2(7, 11), "l1000": Vector2(260, 390)},
+	{"base": &"forge_vanguard_hammer", "type": &"physical", "l1": Vector2(9, 14), "l1000": Vector2(310, 470)},
+	{"base": &"sunforged_warhammer", "type": &"physical", "l1": Vector2(12, 18), "l1000": Vector2(380, 570)},
+	{"base": &"greenwood_recurve_bow", "type": &"physical", "l1": Vector2(6, 10), "l1000": Vector2(240, 360)},
+	{"base": &"siege_greatbow", "type": &"physical", "l1": Vector2(12, 20), "l1000": Vector2(400, 640)},
+	{"base": &"nightstep_dagger_main", "type": &"physical", "l1": Vector2(5, 8), "l1000": Vector2(200, 320)},
+	{"base": &"nightstep_dagger_off", "type": &"physical", "l1": Vector2(4, 7), "l1000": Vector2(180, 290)},
+	{"base": &"emberweave_wand", "type": &"fire", "l1": Vector2(7, 11), "l1000": Vector2(270, 420)},
+	{"base": &"grave_covenant_bone_wand", "type": &"chaos", "l1": Vector2(7, 11), "l1000": Vector2(270, 420)},
+	{"base": &"rime_scholar_staff", "type": &"cold", "l1": Vector2(10, 16), "l1000": Vector2(350, 540)},
+	{"base": &"storm_chaplain_sceptre", "type": &"lightning", "l1": Vector2(8, 13), "l1000": Vector2(300, 470)},
+]
+const EXPECTED_SUPPORT_BASE_IDS := [
+	&"dawn_bulwark_shield", &"forge_vanguard_shield", &"greenwood_light_quiver", &"siege_heavy_quiver",
+	&"emberweave_flame_focus", &"grave_covenant_grimoire", &"storm_chaplain_holy_tome",
+]
+const EXPECTED_SUPPORT_STATS := {
+	&"dawn_bulwark_shield": &"block_chance", &"forge_vanguard_shield": &"block_chance",
+	&"greenwood_light_quiver": &"ranged_damage", &"siege_heavy_quiver": &"ranged_damage",
+	&"emberweave_flame_focus": &"caster_damage", &"grave_covenant_grimoire": &"caster_damage",
+	&"storm_chaplain_holy_tome": &"caster_damage",
+}
 
 func run() -> Array[String]:
 	var failures: Array[String] = []
@@ -63,7 +92,171 @@ func run() -> Array[String]:
 	_assert_counts_and_order(rows, failures)
 	_assert_exact_effect_matrix(rows, failures)
 	_assert_metadata_and_tiers(manifest, rows, failures)
+	TestAssertions.equal(manifest.call(&"explicit_rows"), rows, "Task 4 explicit rows remain deterministic", failures)
+	var equipment := load("res://data/equipment/core_equipment_catalog.tres") as EquipmentCatalog
+	TestAssertions.truthy(equipment != null, "live equipment catalog loads", failures)
+	var has_implicit_rows := manifest.has_method(&"implicit_rows")
+	var has_weapon_profile_rows := manifest.has_method(&"weapon_profile_rows")
+	var has_support_base_ids := manifest.has_method(&"support_base_ids")
+	TestAssertions.truthy(has_implicit_rows, "weighted loot source exposes implicit rows", failures)
+	TestAssertions.truthy(has_weapon_profile_rows, "weighted loot source exposes weapon profile rows", failures)
+	TestAssertions.truthy(has_support_base_ids, "weighted loot source exposes support base ids", failures)
+	if equipment != null and has_implicit_rows:
+		_assert_implicit_rows(manifest, equipment, failures)
+	if equipment != null and has_weapon_profile_rows and has_support_base_ids:
+		_assert_weapon_profiles_and_classification(manifest, equipment, failures)
 	return failures
+
+func _assert_implicit_rows(manifest: Script, equipment: EquipmentCatalog, failures: Array[String]) -> void:
+	var rows: Array = manifest.call(&"implicit_rows", equipment)
+	TestAssertions.equal(rows.size(), 99, "exact implicit total", failures)
+	var expected_base_ids := _class_equipment_base_ids()
+	var live_base_ids: Array[StringName] = []
+	for base: EquipmentBaseDefinition in equipment.definitions:
+		if base != null: live_base_ids.append(base.id)
+	TestAssertions.equal(live_base_ids, expected_base_ids, "live equipment catalog exactly matches the class equipment manifest", failures)
+	var actual_base_ids: Array[StringName] = []
+	var seen_ids: Dictionary = {}
+	var seen_names: Dictionary = {}
+	var tempered_bases: Array[StringName] = []
+	for row_variant: Variant in rows:
+		var row := row_variant as Dictionary
+		var base_id: StringName = row.get("base", &"")
+		var base := equipment.definition(base_id)
+		actual_base_ids.append(base_id)
+		TestAssertions.truthy(base != null, "%s implicit assignment references a live base" % base_id, failures)
+		if base == null: continue
+		var id: StringName = row.get("id", &"")
+		var display_name := String(row.get("display_name", ""))
+		var expected_id := &"tempered_edge" if base_id == &"forge_vanguard_sword" else StringName("%s_implicit" % base_id)
+		var expected_name := "Tempered Edge" if base_id == &"forge_vanguard_sword" else "%s Legacy" % base.display_name
+		TestAssertions.equal(id, expected_id, "%s exact base-specific implicit id" % base_id, failures)
+		TestAssertions.equal(display_name, expected_name, "%s exact base-specific implicit name" % base_id, failures)
+		TestAssertions.truthy(not seen_ids.has(id), "%s implicit id is unique" % id, failures)
+		TestAssertions.truthy(not seen_names.has(display_name), "%s implicit display name is unique" % id, failures)
+		seen_ids[id] = true
+		seen_names[display_name] = true
+		if id == &"tempered_edge": tempered_bases.append(base_id)
+		TestAssertions.equal(row.get("category", &""), &"implicit", "%s exact implicit category" % id, failures)
+		TestAssertions.equal(row.get("base_weight", 0.0), 100.0, "%s exact implicit base weight" % id, failures)
+		TestAssertions.equal(row.get("component_scale", 0.0), 1.0, "%s exact implicit component scale" % id, failures)
+		TestAssertions.equal(row.get("required_item_tag", &"missing"), &"", "%s has no random-selection eligibility tag" % id, failures)
+		TestAssertions.equal(row.get("affinity_tags", [&"unexpected"]), [], "%s has no soft affinity tag" % id, failures)
+		var expected_family := StringName("implicit_%s" % base.implicit_family_id)
+		TestAssertions.equal(row.get("modifier_family_ids", []), [expected_family], "%s exact implicit family" % id, failures)
+		var template_slot := _canonical_slot(base.compatible_slot_ids)
+		TestAssertions.equal(row.get("template_slot", &""), template_slot, "%s exact canonical template slot" % id, failures)
+		for compatible_slot: StringName in base.compatible_slot_ids:
+			TestAssertions.truthy(compatible_slot in SLOT_PRIORITY, "%s compatible slot %s has an implicit template policy" % [id, compatible_slot], failures)
+		var expected_stat := _implicit_stat(base_id, template_slot)
+		var effects: Array = row.get("effects", [])
+		TestAssertions.equal(effects.size(), 1, "%s has exactly one implicit effect" % id, failures)
+		if effects.size() == 1:
+			var effect := effects[0] as Dictionary
+			var expected_operation := _operation_for_stat(expected_stat)
+			TestAssertions.equal(effect.get("stat_id", &""), expected_stat, "%s exact implicit stat" % id, failures)
+			TestAssertions.truthy(GameCatalog.STAT_CATALOG.definition(expected_stat) != null, "%s implicit stat is live" % id, failures)
+			TestAssertions.equal(effect.get("operation", -1), expected_operation, "%s exact implicit operation" % id, failures)
+			TestAssertions.equal(effect.get("curve_key", &""), _curve_for(expected_stat, expected_operation), "%s exact implicit curve" % id, failures)
+			TestAssertions.equal(effect.get("modifier_family_id", &""), expected_family, "%s effect uses the exact implicit family" % id, failures)
+		var expected_path := "res://data/items/affixes/fixtures/tempered_edge.tres" if id == &"tempered_edge" else "res://data/items/affixes/production/implicits/%s.tres" % id
+		TestAssertions.equal(row.get("output_path", ""), expected_path, "%s exact implicit output path" % id, failures)
+		_assert_implicit_tiers(manifest, row, expected_stat, failures)
+	TestAssertions.equal(actual_base_ids, expected_base_ids, "exactly one deterministic implicit assignment per live base", failures)
+	TestAssertions.equal(tempered_bases, [&"forge_vanguard_sword"], "tempered_edge is retained only for the Forge Vanguard sword", failures)
+
+func _assert_implicit_tiers(manifest: Script, row: Dictionary, stat_id: StringName, failures: Array[String]) -> void:
+	var id: StringName = row["id"]
+	var tiers: Array = row.get("tiers", [])
+	TestAssertions.equal(tiers.size(), 12, "%s has exactly twelve shared tiers" % id, failures)
+	var operation := _operation_for_stat(stat_id)
+	var generated: Array = manifest.call(&"tier_rows", _curve_for(stat_id, operation), 1.0)
+	for index: int in mini(tiers.size(), 12):
+		var tier := tiers[index] as Dictionary
+		TestAssertions.equal(tier.get("tier", 0), index + 1, "%s implicit tier number %d" % [id, index + 1], failures)
+		TestAssertions.equal(tier.get("minimum_item_level", 0), EXPECTED_LEVELS[index], "%s implicit tier %d exact level" % [id, index + 1], failures)
+		TestAssertions.equal(tier.get("base_weight", 0.0), EXPECTED_TIER_WEIGHTS[index], "%s implicit tier %d exact weight" % [id, index + 1], failures)
+		var minimums: Array = tier.get("minimum_rolls", [])
+		var maximums: Array = tier.get("maximum_rolls", [])
+		TestAssertions.equal(minimums.size(), 1, "%s implicit tier %d minimum arity" % [id, index + 1], failures)
+		TestAssertions.equal(maximums.size(), 1, "%s implicit tier %d maximum arity" % [id, index + 1], failures)
+		if minimums.size() != 1 or maximums.size() != 1: continue
+		var expected_bounds := Vector2(generated[index]["minimum"], generated[index]["maximum"])
+		if id == &"tempered_edge":
+			if index < 3:
+				expected_bounds = [Vector2(0.05, 0.10), Vector2(0.11, 0.20), Vector2(0.21, 0.30)][index]
+			else:
+				var endpoints: Array = CURVE_ENDPOINTS[&"increased_multiplier"]
+				var progress := pow((float(EXPECTED_LEVELS[index]) - 30.0) / 970.0, 1.20)
+				expected_bounds = Vector2(
+					_snap(lerpf(0.30, (endpoints[1] as Vector2).x, progress), float(endpoints[2])),
+					_snap(lerpf(0.30, (endpoints[1] as Vector2).y, progress), float(endpoints[2])),
+				)
+		TestAssertions.equal(Vector2(minimums[0], maximums[0]), expected_bounds, "%s implicit tier %d exact bounds" % [id, index + 1], failures)
+
+func _assert_weapon_profiles_and_classification(manifest: Script, equipment: EquipmentCatalog, failures: Array[String]) -> void:
+	var rows: Array = manifest.call(&"weapon_profile_rows")
+	var support_ids: Array = manifest.call(&"support_base_ids")
+	TestAssertions.equal(rows.size(), 11, "exact weapon profile total", failures)
+	TestAssertions.equal(support_ids, EXPECTED_SUPPORT_BASE_IDS, "exact explicit support base ids", failures)
+	var profile_base_ids: Array[StringName] = []
+	var seen_profile_ids: Dictionary = {}
+	for index: int in mini(rows.size(), EXPECTED_PROFILE_ROWS.size()):
+		var row := rows[index] as Dictionary
+		var expected := EXPECTED_PROFILE_ROWS[index] as Dictionary
+		var base_id: StringName = row.get("base", &"")
+		var type_id: StringName = row.get("type", &"")
+		profile_base_ids.append(base_id)
+		TestAssertions.equal(base_id, expected["base"], "weapon profile %d exact base mapping" % index, failures)
+		TestAssertions.equal(type_id, expected["type"], "%s exact damage type" % base_id, failures)
+		TestAssertions.equal(row.get("l1", Vector2.ZERO), expected["l1"], "%s exact level-1 anchors" % base_id, failures)
+		TestAssertions.equal(row.get("l1000", Vector2.ZERO), expected["l1000"], "%s exact level-1000 anchors" % base_id, failures)
+		TestAssertions.equal(row.get("id", &""), StringName("weapon_profile_%s" % base_id), "%s deterministic profile id" % base_id, failures)
+		TestAssertions.equal(row.get("output_path", ""), "res://data/items/weapon_profiles/%s.tres" % base_id, "%s deterministic profile path" % base_id, failures)
+		TestAssertions.equal(row.get("minimum_item_level", 0), 1, "%s exact minimum item level" % base_id, failures)
+		TestAssertions.equal(row.get("quality_minimum", 0.0), 0.85, "%s exact minimum quality" % base_id, failures)
+		TestAssertions.equal(row.get("quality_maximum", 0.0), 1.00, "%s exact maximum quality" % base_id, failures)
+		TestAssertions.equal(row.get("rarity_multipliers", {}), WeaponDamageProfile.RARITY_MULTIPLIERS, "%s uses the shared rarity map" % base_id, failures)
+		TestAssertions.truthy(not seen_profile_ids.has(row.get("id", &"")), "%s profile id is unique" % base_id, failures)
+		seen_profile_ids[row.get("id", &"")] = true
+		TestAssertions.truthy(equipment.definition(base_id) != null, "%s profile base is live" % base_id, failures)
+		TestAssertions.truthy(GameCatalog.DAMAGE_TYPES.definition(type_id) != null, "%s profile damage type is live" % base_id, failures)
+		var components: Array = row.get("components", [])
+		TestAssertions.equal(components.size(), 1, "%s has one explicit damage component" % base_id, failures)
+		if components.size() == 1:
+			var component := components[0] as Dictionary
+			TestAssertions.equal(component.get("damage_type_id", &""), type_id, "%s component exact damage type" % base_id, failures)
+			TestAssertions.equal(component.get("minimum_at_level_1", NAN), (expected["l1"] as Vector2).x, "%s component level-1 minimum" % base_id, failures)
+			TestAssertions.equal(component.get("maximum_at_level_1", NAN), (expected["l1"] as Vector2).y, "%s component level-1 maximum" % base_id, failures)
+			TestAssertions.equal(component.get("minimum_at_level_1000", NAN), (expected["l1000"] as Vector2).x, "%s component level-1000 minimum" % base_id, failures)
+			TestAssertions.equal(component.get("maximum_at_level_1000", NAN), (expected["l1000"] as Vector2).y, "%s component level-1000 maximum" % base_id, failures)
+	for support_id: StringName in support_ids:
+		TestAssertions.truthy(equipment.definition(support_id) != null, "%s support base is live" % support_id, failures)
+		TestAssertions.truthy(support_id not in profile_base_ids, "%s support base has no damage profile row" % support_id, failures)
+	for base: EquipmentBaseDefinition in equipment.definitions:
+		if base == null: continue
+		var occupies_weapon_slot := &"main_hand" in base.compatible_slot_ids or &"off_hand" in base.compatible_slot_ids
+		var classification_count := int(base.id in profile_base_ids) + int(base.id in support_ids) + int(not occupies_weapon_slot)
+		TestAssertions.equal(classification_count, 1, "%s is exactly one of damage-profile, support, or non-weapon" % base.id, failures)
+
+func _class_equipment_base_ids() -> Array[StringName]:
+	var result: Array[StringName] = []
+	for set_id: StringName in ClassEquipmentRows.SET_ITEM_IDS:
+		for base_id: StringName in ClassEquipmentRows.SET_ITEM_IDS[set_id]: result.append(base_id)
+	return result
+
+func _canonical_slot(compatible_slots: Array[StringName]) -> StringName:
+	for slot_id: StringName in SLOT_PRIORITY:
+		if slot_id in compatible_slots: return slot_id
+	return &""
+
+func _implicit_stat(base_id: StringName, template_slot: StringName) -> StringName:
+	if EXPECTED_SUPPORT_STATS.has(base_id): return EXPECTED_SUPPORT_STATS[base_id]
+	for row: Dictionary in EXPECTED_PROFILE_ROWS:
+		if row["base"] == base_id:
+			var definition := GameCatalog.DAMAGE_TYPES.definition(row["type"])
+			return definition.offense_stat_id if definition != null else &""
+	return EXPECTED_SLOT_STATS.get(template_slot, &"")
 
 func _assert_counts_and_order(rows: Array, failures: Array[String]) -> void:
 	TestAssertions.equal(rows.size(), 96, "exact explicit affix total", failures)

@@ -174,6 +174,48 @@ const AFFINITY_STATS := {
 	&"ranged": [&"ranged_damage", &"dexterity", &"attack_range", &"projectile_speed", &"move_speed", &"dodge_chance"],
 	&"caster": [&"caster_damage", &"intelligence", &"wisdom", &"healing_power", &"area_size", &"cooldown_rate", &"fire_damage", &"cold_damage", &"lightning_damage", &"chaos_damage", &"fire_resistance", &"cold_resistance", &"lightning_resistance", &"chaos_resistance"],
 }
+const IMPLICIT_SLOT_PRIORITY := [
+	&"helmet", &"body_armour", &"legs", &"gloves", &"boots", &"amulet", &"ring_left", &"ring_right", &"belt", &"main_hand", &"off_hand",
+]
+const IMPLICIT_TEMPLATE_EFFECTS := {
+	&"helmet": [&"max_health"],
+	&"body_armour": [&"armor"],
+	&"legs": [&"move_speed"],
+	&"gloves": [&"attack_speed"],
+	&"boots": [&"dodge_chance"],
+	&"amulet": [&"party_influence"],
+	&"ring_left": [&"crit_chance"],
+	&"ring_right": [&"crit_chance"],
+	&"belt": [&"health_regeneration"],
+}
+const DAMAGE_TYPE_IMPLICIT_STATS := {
+	&"physical": &"physical_damage", &"fire": &"fire_damage", &"cold": &"cold_damage",
+	&"lightning": &"lightning_damage", &"chaos": &"chaos_damage",
+}
+const SUPPORT_BASE_EFFECTS := {
+	&"dawn_bulwark_shield": &"block_chance", &"forge_vanguard_shield": &"block_chance",
+	&"greenwood_light_quiver": &"ranged_damage", &"siege_heavy_quiver": &"ranged_damage",
+	&"emberweave_flame_focus": &"caster_damage", &"grave_covenant_grimoire": &"caster_damage",
+	&"storm_chaplain_holy_tome": &"caster_damage",
+}
+const WEAPON_PROFILE_ROWS := [
+	{"base": &"forge_vanguard_sword", "type": &"physical", "l1": Vector2(7, 11), "l1000": Vector2(260, 390)},
+	{"base": &"forge_vanguard_hammer", "type": &"physical", "l1": Vector2(9, 14), "l1000": Vector2(310, 470)},
+	{"base": &"sunforged_warhammer", "type": &"physical", "l1": Vector2(12, 18), "l1000": Vector2(380, 570)},
+	{"base": &"greenwood_recurve_bow", "type": &"physical", "l1": Vector2(6, 10), "l1000": Vector2(240, 360)},
+	{"base": &"siege_greatbow", "type": &"physical", "l1": Vector2(12, 20), "l1000": Vector2(400, 640)},
+	{"base": &"nightstep_dagger_main", "type": &"physical", "l1": Vector2(5, 8), "l1000": Vector2(200, 320)},
+	{"base": &"nightstep_dagger_off", "type": &"physical", "l1": Vector2(4, 7), "l1000": Vector2(180, 290)},
+	{"base": &"emberweave_wand", "type": &"fire", "l1": Vector2(7, 11), "l1000": Vector2(270, 420)},
+	{"base": &"grave_covenant_bone_wand", "type": &"chaos", "l1": Vector2(7, 11), "l1000": Vector2(270, 420)},
+	{"base": &"rime_scholar_staff", "type": &"cold", "l1": Vector2(10, 16), "l1000": Vector2(350, 540)},
+	{"base": &"storm_chaplain_sceptre", "type": &"lightning", "l1": Vector2(8, 13), "l1000": Vector2(300, 470)},
+]
+const SUPPORT_BASE_IDS := [
+	&"dawn_bulwark_shield", &"forge_vanguard_shield", &"greenwood_light_quiver",
+	&"siege_heavy_quiver", &"emberweave_flame_focus", &"grave_covenant_grimoire",
+	&"storm_chaplain_holy_tome",
+]
 
 static func explicit_rows() -> Array[Dictionary]:
 	var rows: Array[Dictionary] = []
@@ -184,6 +226,72 @@ static func explicit_rows() -> Array[Dictionary]:
 	_append_hybrid_rows(rows, PREMIUM_PREFIX_IDS, &"premium_hybrid", &"prefix", 25.0, 0.85)
 	_append_hybrid_rows(rows, PREMIUM_SUFFIX_IDS, &"premium_hybrid", &"suffix", 25.0, 0.85)
 	return rows
+
+static func implicit_rows(equipment: EquipmentCatalog) -> Array[Dictionary]:
+	var rows: Array[Dictionary] = []
+	if equipment == null:
+		return rows
+	for base: EquipmentBaseDefinition in equipment.definitions:
+		if base == null:
+			continue
+		var template_slot := _implicit_template_slot(base.compatible_slot_ids)
+		var stat_id := _implicit_stat_id(base.id, template_slot)
+		if stat_id.is_empty():
+			continue
+		var id := &"tempered_edge" if base.id == &"forge_vanguard_sword" else StringName("%s_implicit" % base.id)
+		var display_name := "Tempered Edge" if base.id == &"forge_vanguard_sword" else "%s Legacy" % base.display_name
+		var operation := _hybrid_operation(stat_id)
+		var family_id := StringName("implicit_%s" % base.implicit_family_id)
+		var effect := _effect(stat_id, operation, 1.0)
+		effect["modifier_family_id"] = family_id
+		var effects: Array[Dictionary] = [effect]
+		rows.append({
+			"base": base.id,
+			"id": id,
+			"display_name": display_name,
+			"category": &"implicit",
+			"side": &"implicit",
+			"base_weight": 100.0,
+			"component_scale": 1.0,
+			"required_item_tag": &"",
+			"affinity_tags": [],
+			"modifier_family_ids": [family_id],
+			"template_slot": template_slot,
+			"effects": effects,
+			"tiers": _combined_tiers(id, effects),
+			"output_path": "res://data/items/affixes/fixtures/tempered_edge.tres" if id == &"tempered_edge" else "res://data/items/affixes/production/implicits/%s.tres" % id,
+		})
+	return rows
+
+static func weapon_profile_rows() -> Array[Dictionary]:
+	var rows: Array[Dictionary] = []
+	for source_variant: Variant in WEAPON_PROFILE_ROWS:
+		var row := (source_variant as Dictionary).duplicate(true)
+		var base_id: StringName = row["base"]
+		var type_id: StringName = row["type"]
+		var level_one: Vector2 = row["l1"]
+		var level_thousand: Vector2 = row["l1000"]
+		row["id"] = StringName("weapon_profile_%s" % base_id)
+		row["minimum_item_level"] = 1
+		row["quality_minimum"] = 0.85
+		row["quality_maximum"] = 1.00
+		row["rarity_multipliers"] = WeaponDamageProfile.RARITY_MULTIPLIERS.duplicate(true)
+		row["components"] = [{
+			"damage_type_id": type_id,
+			"minimum_at_level_1": level_one.x,
+			"maximum_at_level_1": level_one.y,
+			"minimum_at_level_1000": level_thousand.x,
+			"maximum_at_level_1000": level_thousand.y,
+		}]
+		row["output_path"] = "res://data/items/weapon_profiles/%s.tres" % base_id
+		rows.append(row)
+	return rows
+
+static func support_base_ids() -> Array[StringName]:
+	var result: Array[StringName] = []
+	for id: StringName in SUPPORT_BASE_IDS:
+		result.append(id)
+	return result
 
 static func tier_rows(curve_key: StringName, component_scale: float) -> Array[Dictionary]:
 	var rows: Array[Dictionary] = []
@@ -308,6 +416,22 @@ static func _component_bounds(id: StringName, effect: Dictionary, tiers: Array, 
 
 static func _hybrid_operation(stat_id: StringName) -> int:
 	return StatModifier.Operation.FLAT if stat_id in FLAT_STATS else StatModifier.Operation.INCREASED
+
+static func _implicit_template_slot(compatible_slots: Array[StringName]) -> StringName:
+	for slot_id: StringName in IMPLICIT_SLOT_PRIORITY:
+		if slot_id in compatible_slots:
+			return slot_id
+	return &""
+
+static func _implicit_stat_id(base_id: StringName, template_slot: StringName) -> StringName:
+	for source_variant: Variant in WEAPON_PROFILE_ROWS:
+		var profile: Dictionary = source_variant
+		if profile["base"] == base_id:
+			return DAMAGE_TYPE_IMPLICIT_STATS.get(profile["type"], &"")
+	if SUPPORT_BASE_EFFECTS.has(base_id):
+		return SUPPORT_BASE_EFFECTS[base_id]
+	var template_effects: Array = IMPLICIT_TEMPLATE_EFFECTS.get(template_slot, [])
+	return template_effects[0] if not template_effects.is_empty() else &""
 
 static func _curve_key(stat_id: StringName, operation: int) -> StringName:
 	if operation == StatModifier.Operation.INCREASED:
