@@ -16,6 +16,8 @@ func run() -> Array[String]:
 	_test_projected_rows_replace_raw_fallback(resolver, failures)
 	_test_raw_fallback_operation_matrix_is_neutral_and_accessible(resolver, failures)
 	_test_present_only_base_damage_types_have_colored_direction(resolver, failures)
+	_test_opposing_base_damage_endpoints_are_neutral(resolver, failures)
+	_test_identical_base_damage_endpoints_are_unchanged(resolver, failures)
 	_test_results_are_defensive(resolver, failures)
 	return failures
 
@@ -168,6 +170,28 @@ func _test_present_only_base_damage_types_have_colored_direction(resolver: Scrip
 		TestAssertions.equal(damage_rows[0].get("direction"), 1, "candidate-only damage type is improved for green rendering", failures)
 		TestAssertions.equal(damage_rows[1].get("direction"), -1, "equipped-only damage type is reduced for red rendering", failures)
 		TestAssertions.truthy(String(damage_rows[0].get("text", "")).contains("0-0 -> 12-24") and String(damage_rows[1].get("text", "")).contains("9-15 -> 0-0"), "present-only rows preserve before and after typed ranges", failures)
+
+
+func _test_opposing_base_damage_endpoints_are_neutral(resolver: Script, failures: Array[String]) -> void:
+	var rows: Array = resolver.call("base_damage_delta_rows", [
+		{"damage_type_id": "physical", "display_name": "Physical", "minimum_damage": 15.0, "maximum_damage": 20.0},
+		{"damage_type_id": "fire", "display_name": "Fire", "minimum_damage": 5.0, "maximum_damage": 40.0},
+	], [
+		{"damage_type_id": "fire", "display_name": "Fire", "minimum_damage": 10.0, "maximum_damage": 20.0},
+		{"damage_type_id": "physical", "display_name": "Physical", "minimum_damage": 10.0, "maximum_damage": 30.0},
+	])
+	TestAssertions.equal(rows.size(), 2, "opposing endpoint movement emits both changed typed ranges", failures)
+	if rows.size() != 2:
+		return
+	TestAssertions.equal([rows[0].get("damage_type_id"), rows[1].get("damage_type_id")], [&"fire", &"physical"], "opposing typed ranges retain deterministic damage-type order", failures)
+	TestAssertions.equal([rows[0].get("direction"), rows[1].get("direction")], [0, 0], "min-down/max-up and min-up/max-down ranges are both neutral", failures)
+	TestAssertions.truthy(String(rows[0].get("text", "")).ends_with("changed") and String(rows[1].get("text", "")).ends_with("changed"), "opposing endpoint rows describe changed rather than improved or reduced", failures)
+
+
+func _test_identical_base_damage_endpoints_are_unchanged(resolver: Script, failures: Array[String]) -> void:
+	var component := {"damage_type_id": "fire", "display_name": "Fire", "minimum_damage": 10.0, "maximum_damage": 20.0}
+	var rows: Array = resolver.call("base_damage_delta_rows", [component], [component.duplicate(true)])
+	TestAssertions.equal(rows, [], "identical typed endpoints remain unchanged and emit no comparison row", failures)
 
 
 func _detail(instance_id: String, compatible_slots: Array[String], totals: Dictionary, base_damage: Array[Dictionary] = []) -> Dictionary:

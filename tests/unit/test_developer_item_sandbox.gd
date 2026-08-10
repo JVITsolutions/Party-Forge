@@ -248,17 +248,35 @@ func _test_projected_comparison_fixture(sandbox: Variant, stash_grid: GridContai
 	TestAssertions.truthy(source != null, "sandbox fixture offers an inspected item with projected equipped-stat rows", failures)
 	if source == null or tooltip == null:
 		return
-	var typed_detail := source.detail()
-	typed_detail["base_damage_components"] = [{
-		"damage_type_id": "lightning", "display_name": "Lightning",
-		"presentation_color": GameCatalog.DAMAGE_TYPES.definition(&"lightning").presentation_color,
-		"minimum_damage": 5.0, "maximum_damage": 11.0,
-	}]
-	typed_detail["base_damage_lines"] = PackedStringArray(["Lightning Damage: 5-11"])
-	source.bind_item(source.container_id, source.slot, source.item_id, typed_detail)
+	var request := ItemGenerationRequest.create(424242, 7, 750, &"ordinary_enemy", &"ordinary_drop", [&"rare"] as Array[StringName])
+	request.forced_base_id = &"forge_vanguard_sword"
+	request.forced_rarity_id = &"rare"
+	request.unlock_tags = [&"rarity_rare_unlocked", &"rarity_epic_unlocked", &"rarity_legendary_unlocked"]
+	var generated := ItemGenerationService.generate(
+		request,
+		"sandbox:typed-presentation-test",
+		1001,
+		GameCatalog.EQUIPMENT_CATALOG,
+		GameCatalog.ITEM_FOUNDATION_CATALOG,
+	)
+	TestAssertions.truthy(generated != null and generated.ok(), "sandbox typed presentation fixture is generated through the production item service", failures)
+	if generated == null or not generated.ok():
+		return
+	TestAssertions.truthy(not generated.item.base_damage_components.is_empty(), "sandbox production item carries immutable typed base damage", failures)
+	var typed_detail: Dictionary = sandbox.call(
+		&"_project_presentation",
+		generated.item,
+		GameCatalog.load_defaults().class_by_id(&"fighter"),
+	)
+	TestAssertions.truthy(not typed_detail.has("error") and not (typed_detail.get("base_damage_components", []) as Array).is_empty(), "sandbox production projector resolves typed item detail", failures)
+	typed_detail = sandbox.call(&"_bindable_presentation_detail", typed_detail, source.container_id, source.slot)
+	source.bind_item(source.container_id, source.slot, generated.item.instance_id, typed_detail)
+	TestAssertions.equal(source.detail().get("base_damage_components"), typed_detail.get("base_damage_components"), "sandbox shared slot preserves production-projected typed components", failures)
+	var typed_lines := typed_detail.get("base_damage_lines", PackedStringArray()) as PackedStringArray
+	TestAssertions.truthy(not typed_lines.is_empty(), "sandbox production projector provides a typed base-range line", failures)
 	sandbox.call(&"_show_item_tooltip", source)
 	var inspected_text := String(tooltip.get_node("Layout/BodyScroll/Cards").get_child(0).call("rendered_text"))
-	TestAssertions.truthy(inspected_text.contains("Lightning Damage: 5-11"), "sandbox passes shared typed base-range lines into its tooltip unchanged", failures)
+	TestAssertions.truthy(not typed_lines.is_empty() and inspected_text.contains(typed_lines[0]), "sandbox passes production-projected typed base-range lines from its shared slot into the tooltip unchanged", failures)
 	tooltip.call("set_compare_active", true)
 	TestAssertions.truthy(int(tooltip.call("card_count")) > 1, "sandbox compare mode renders an equipped comparison card", failures)
 	var rendered_delta := false

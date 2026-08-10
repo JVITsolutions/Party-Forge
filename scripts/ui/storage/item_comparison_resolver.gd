@@ -95,7 +95,17 @@ static func base_damage_delta_rows(candidate_components: Array, current_componen
 		var before_midpoint := before_minimum + (before_maximum - before_minimum) * 0.5
 		var after_midpoint := after_minimum + (after_maximum - after_minimum) * 0.5
 		var delta := after_midpoint - before_midpoint
-		var direction := 1 if delta > 0.0 else -1 if delta < 0.0 else 0
+		var minimum_equal := is_equal_approx(before_minimum, after_minimum)
+		var maximum_equal := is_equal_approx(before_maximum, after_maximum)
+		var minimum_improved := after_minimum > before_minimum and not minimum_equal
+		var maximum_improved := after_maximum > before_maximum and not maximum_equal
+		var minimum_reduced := after_minimum < before_minimum and not minimum_equal
+		var maximum_reduced := after_maximum < before_maximum and not maximum_equal
+		var direction := 0
+		if (minimum_equal or minimum_improved) and (maximum_equal or maximum_improved):
+			direction = 1
+		elif (minimum_equal or minimum_reduced) and (maximum_equal or maximum_reduced):
+			direction = -1
 		var symbol := "▲" if direction > 0 else "▼" if direction < 0 else "•"
 		var meaning := "improved" if direction > 0 else "reduced" if direction < 0 else "changed"
 		var source := candidate if not candidate.is_empty() else current
