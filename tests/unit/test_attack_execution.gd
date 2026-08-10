@@ -754,6 +754,7 @@ func _target_definition(id: StringName) -> ClassDefinition:
     definition.max_health = 100.0
     definition.armor = 0.0
     definition.move_speed = 1.0
+    definition.primary_attack = load("res://data/attacks/fighter_cleave.tres") as AttackDefinition
     return definition
 
 func _packet(amount: float, source_team: int) -> DamagePacket:

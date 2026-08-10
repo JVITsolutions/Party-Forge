@@ -1,5 +1,7 @@
 extends RefCounted
 
+const ACTION_ONLY_TAG := &"task10d_action_only"
+
 class CoordinatorProbe extends RefCounted:
     func refresh(_member_id: int, _source: StatModifierSource) -> bool:
         return false
@@ -64,6 +66,8 @@ func run() -> Array[String]:
     _test_unbound_effective_source_collision_invariants(failures)
     _test_foreign_owner_candidate_normalization(failures)
     _test_foreign_owner_source_reuse_is_member_local(failures)
+    _test_unbound_owned_action_overflow_preflight(failures)
+    _test_unbound_finite_action_source_matches_only_owned_action(failures)
     _test_atomic_equipment_source_batch_contract(failures)
     _test_unbound_complete_candidate_equipment_invariants(failures)
     _test_atomic_batch_rejects_corrupted_equipment_prestate(failures)
@@ -203,6 +207,78 @@ func _test_foreign_owner_source_reuse_is_member_local(failures: Array[String]) -
     TestAssertions.truthy(not is_same(member_one_source.modifiers[0], member_two_source.modifiers[0]), "members own independent modifier copies", failures)
     TestAssertions.equal(_modifier_source_document(shared), shared_before, "source reuse preserves exact caller bytes", failures)
     TestAssertions.equal(shared.owner_member_id, 77, "source reuse preserves caller owner", failures)
+    party.free()
+
+func _test_unbound_owned_action_overflow_preflight(failures: Array[String]) -> void:
+    var catalog := GameCatalog.load_defaults()
+    for test_case: Dictionary in [
+        {"label": "add configured damage types", "method": &"add_member_source", "seed": false, "configure_combat": true},
+        {"label": "replace canonical damage fallback", "method": &"replace_member_source", "seed": true, "configure_combat": false},
+    ]:
+        var party := _party_with_action_only_owned_actions(catalog)
+        if bool(test_case["configure_combat"]):
+            party.configure_combat(CombatRng.new(10101), catalog.damage_types)
+        var source_id := StringName("task10r_action_overflow_%s" % String(test_case["method"]))
+        if bool(test_case["seed"]):
+            TestAssertions.truthy(
+                party.add_member_source(1, _finite_action_source(1, source_id, 0.10)),
+                "%s fixture installs replace target" % test_case["label"],
+                failures,
+            )
+        var action_tags := DamageResolver.action_tags_for(party.member_by_id(1).class_definition.primary_attack)
+        var actor_scene := load("res://scenes/characters/leader.tscn") as PackedScene
+        var actor := actor_scene.instantiate() as PartyActor
+        actor.configure(party.member_by_id(1))
+        actor.configure_combat(party)
+        var health := actor.get_node("HealthComponent") as HealthComponent
+        health.apply_damage(40.0)
+        var health_before := Vector2(health.current_health, health.max_health)
+        var sources_before := _member_source_documents(party.member_by_id(1))
+        var base_before := party.stats_for(1)
+        var action_before := party.stats_for_action(1, action_tags)
+        var revision_before := party.stat_revision()
+        var events: Array[int] = []
+        party.stats_changed.connect(func(member_id: int) -> void: events.append(member_id))
+        var candidate := _action_overflow_source(77, source_id)
+        var candidate_before := _modifier_source_document(candidate)
+
+        TestAssertions.truthy(
+            not bool(party.call(test_case["method"], 1, candidate)),
+            "%s rejects matching owned-action overflow" % test_case["label"],
+            failures,
+        )
+        TestAssertions.equal(_member_source_documents(party.member_by_id(1)), sources_before, "%s preserves exact owned source documents" % test_case["label"], failures)
+        TestAssertions.equal(_modifier_source_document(candidate), candidate_before, "%s preserves exact caller source bytes" % test_case["label"], failures)
+        TestAssertions.equal(candidate.owner_member_id, 77, "%s preserves caller owner" % test_case["label"], failures)
+        TestAssertions.equal(party.stat_revision(), revision_before, "%s preserves stat revision" % test_case["label"], failures)
+        TestAssertions.truthy(is_same(party.stats_for(1), base_before), "%s preserves base cache identity" % test_case["label"], failures)
+        TestAssertions.truthy(is_same(party.stats_for_action(1, action_tags), action_before), "%s preserves matching-action cache identity" % test_case["label"], failures)
+        TestAssertions.equal(events, [], "%s emits no stat signal" % test_case["label"], failures)
+        TestAssertions.equal(Vector2(health.current_health, health.max_health), health_before, "%s preserves actor health" % test_case["label"], failures)
+        actor.free()
+        party.free()
+
+func _test_unbound_finite_action_source_matches_only_owned_action(failures: Array[String]) -> void:
+    var catalog := GameCatalog.load_defaults()
+    var party := _party_with_action_only_owned_actions(catalog)
+    var member := party.member_by_id(1)
+    var matching_tags := DamageResolver.action_tags_for(member.class_definition.primary_attack)
+    var other_tags := DamageResolver.action_tags_for(member.class_definition.support_action)
+    var base_before := party.stats_for(1).value(&"damage")
+    var matching_before := party.stats_for_action(1, matching_tags).value(&"damage")
+    var other_before := party.stats_for_action(1, other_tags).value(&"damage")
+    var source := _finite_action_source(77, &"task10r_finite_action", 0.25)
+    var source_before := _modifier_source_document(source)
+
+    TestAssertions.truthy(party.add_member_source(1, source), "finite action-tagged source applies through unbound action preflight", failures)
+    TestAssertions.near(party.stats_for(1).value(&"damage"), base_before, 0.0001, "finite action source leaves base snapshot unchanged", failures)
+    TestAssertions.near(party.stats_for_action(1, matching_tags).value(&"damage"), matching_before * 1.25, 0.0001, "finite action source affects the matching owned action", failures)
+    TestAssertions.near(party.stats_for_action(1, other_tags).value(&"damage"), other_before, 0.0001, "finite action source leaves the other owned action unchanged", failures)
+    var stored := member._owned_modifier_sources().filter(func(candidate: StatModifierSource) -> bool: return candidate.id == source.id)[0] as StatModifierSource
+    TestAssertions.equal(stored.owner_member_id, 1, "finite action source normalizes stored owner", failures)
+    TestAssertions.truthy(not is_same(stored, source) and not is_same(stored.modifiers[0], source.modifiers[0]), "finite action source and modifier are defensive copies", failures)
+    TestAssertions.equal(_modifier_source_document(source), source_before, "finite action success preserves exact caller source bytes", failures)
+    TestAssertions.equal(source.owner_member_id, 77, "finite action success preserves caller owner", failures)
     party.free()
 
 func _test_unbound_complete_candidate_equipment_invariants(failures: Array[String]) -> void:
@@ -648,6 +724,45 @@ func _aggregate_overflow_source(member_id: int, source_id: StringName) -> StatMo
     return StatModifierSource.create(source_id, &"character_growth", "Overflow", member_id, [
         StatModifier.create(&"damage", StatModifier.Operation.INCREASED, 1.0e308, StringName("%s_a" % source_id), "Overflow A"),
         StatModifier.create(&"damage", StatModifier.Operation.INCREASED, 1.0e308, StringName("%s_b" % source_id), "Overflow B"),
+    ])
+
+func _party_with_action_only_owned_actions(catalog: GameCatalog) -> PartyManager:
+    var fighter := catalog.class_by_id(&"fighter").duplicate(true) as ClassDefinition
+    fighter.primary_attack = fighter.primary_attack.duplicate(true) as AttackDefinition
+    fighter.primary_attack.action_tags = fighter.primary_attack.action_tags.duplicate()
+    fighter.primary_attack.action_tags.append(ACTION_ONLY_TAG)
+    fighter.support_action = fighter.primary_attack.duplicate(true) as AttackDefinition
+    fighter.support_action.id = &"task10r_other_owned_action"
+    fighter.support_action.action_tags = fighter.support_action.action_tags.filter(
+        func(tag: StringName) -> bool: return tag != ACTION_ONLY_TAG
+    )
+    var party := PartyManager.new()
+    party.initialize(fighter, catalog.traits)
+    return party
+
+func _action_overflow_source(member_id: int, source_id: StringName) -> StatModifierSource:
+    var modifiers: Array[StatModifier] = []
+    for index: int in 4:
+        modifiers.append(StatModifier.create(
+            &"cooldown_rate",
+            StatModifier.Operation.MORE,
+            1.0e100,
+            StringName("%s_%d" % [source_id, index]),
+            "Task 10R Action Overflow",
+            [ACTION_ONLY_TAG],
+        ))
+    return StatModifierSource.create(source_id, &"character_growth", "Task 10R Action Overflow", member_id, modifiers)
+
+func _finite_action_source(member_id: int, source_id: StringName, increased_damage: float) -> StatModifierSource:
+    return StatModifierSource.create(source_id, &"character_growth", "Task 10R Finite Action", member_id, [
+        StatModifier.create(
+            &"damage",
+            StatModifier.Operation.INCREASED,
+            increased_damage,
+            StringName("%s_damage" % source_id),
+            "Task 10R Finite Action",
+            [ACTION_ONLY_TAG],
+        ),
     ])
 
 func _modifier_source_document(source: StatModifierSource) -> String:

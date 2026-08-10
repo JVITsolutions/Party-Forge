@@ -244,6 +244,7 @@ func _test_authored_upgrade_operation_order(failures: Array[String]) -> void:
 	var definition := ClassDefinition.new()
 	definition.id = &"operation_fixture"
 	definition.base_stat_overrides = {&"damage": 100.0}
+	definition.primary_attack = load("res://data/attacks/fighter_cleave.tres") as AttackDefinition
 	var party := PartyManager.new()
 	var no_traits: Array[TraitDefinition] = []
 	party.initialize(definition, no_traits)

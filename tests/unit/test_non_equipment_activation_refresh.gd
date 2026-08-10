@@ -334,8 +334,8 @@ func _test_action_overflow_refresh_is_rejected_atomically(failures: Array[String
 
 
 func _test_resume_action_overflow_is_rejected_atomically(failures: Array[String]) -> void:
-	var party := _party_with_action_only_tag(2)
-	TestAssertions.truthy(party.add_member_source(1, _action_overflow_source()), "resume overflow fixture installs its preexisting source", failures)
+	var party := _party_with_action_only_tag(2, ResumeOverflowPartyManager.new()) as ResumeOverflowPartyManager
+	TestAssertions.truthy(party.install_source_without_invalidation(1, _action_overflow_source()), "resume overflow fixture installs its preexisting source without public preflight", failures)
 	var owner := "task10d-resume-player"
 	var seed := 10402
 	var containers: Array[ItemSlotContainer] = [
@@ -384,9 +384,9 @@ func _test_resume_action_overflow_is_rejected_atomically(failures: Array[String]
 
 
 func _test_resume_geometry_overflow_is_rejected_atomically(failures: Array[String]) -> void:
-	var party := _party_with_action_only_tag(2)
+	var party := _party_with_action_only_tag(2, ResumeOverflowPartyManager.new()) as ResumeOverflowPartyManager
 	party.member_by_id(1).class_definition.primary_attack.range = 1.0e308
-	TestAssertions.truthy(party.add_member_source(1, _geometry_overflow_source()), "resume geometry fixture installs its finite preexisting source", failures)
+	TestAssertions.truthy(party.install_source_without_invalidation(1, _geometry_overflow_source()), "resume geometry fixture installs its finite preexisting source without public preflight", failures)
 	var owner := "task10j-resume-player"
 	var seed := 10403
 	var containers: Array[ItemSlotContainer] = [
@@ -520,13 +520,13 @@ func _party(member_count: int, catalog: GameCatalog = null, manager: PartyManage
 	return party
 
 
-func _party_with_action_only_tag(member_count: int) -> PartyManager:
+func _party_with_action_only_tag(member_count: int, manager: PartyManager = null) -> PartyManager:
 	var catalog := GameCatalog.load_defaults()
 	var fighter := catalog.class_by_id(&"fighter").duplicate(true) as ClassDefinition
 	fighter.primary_attack = fighter.primary_attack.duplicate(true) as AttackDefinition
 	fighter.primary_attack.action_tags = fighter.primary_attack.action_tags.duplicate()
 	fighter.primary_attack.action_tags.append(ACTION_ONLY_TAG)
-	var party := PartyManager.new()
+	var party := manager if manager != null else PartyManager.new()
 	party.configure_capacity(PartyCapacityPolicy.new(member_count))
 	party.initialize(fighter, catalog.traits)
 	for _index: int in range(1, member_count):

@@ -12,6 +12,7 @@ const PARTY_STAT_IDS: Array[StringName] = [&"max_health", &"damage", &"move_spee
 const DEFAULT_UPGRADE_TUNING: UpgradeTuning = preload("res://data/upgrades/default_upgrades.tres")
 const DEFAULT_ATTRIBUTE_PROJECTION: AttributeProjectionTuning = preload("res://data/stats/default_attribute_projection.tres")
 const STAT_CATALOG: StatCatalog = preload("res://data/stats/core_stats.tres")
+const CANDIDATE_ACTION_VALIDATION := preload("res://scripts/combat/candidate_action_validation_service.gd")
 var members: Array[PartyMemberState] = []
 var class_ranks: Dictionary = {}
 var trait_definitions: Array[TraitDefinition] = []
@@ -368,18 +369,33 @@ func _validate_candidate_member_sources(
     var normalized_candidate_sources: Array[StatModifierSource] = []
     for source: StatModifierSource in candidate_sources:
         normalized_candidate_sources.append(member._normalized_modifier_source_copy(source))
+    var effective_candidate_sources := _sources_for_owned(member, normalized_candidate_sources)
     var resolution := MemberStatResolutionService.resolve(
         member_id,
         STAT_CATALOG,
         member.class_definition.stat_base_values(),
         member.capability_tags,
-        _sources_for_owned(member, normalized_candidate_sources),
+        effective_candidate_sources,
         [],
         _stat_revision,
         DEFAULT_ATTRIBUTE_PROJECTION,
     )
     if not resolution.ok():
         push_error(resolution.error)
+        return false
+    var action_error := CANDIDATE_ACTION_VALIDATION.validate(
+        member.class_definition,
+        member_id,
+        STAT_CATALOG,
+        damage_types if damage_types != null else GameCatalog.DAMAGE_TYPES,
+        member.class_definition.stat_base_values(),
+        member.capability_tags,
+        effective_candidate_sources,
+        _stat_revision,
+        DEFAULT_ATTRIBUTE_PROJECTION,
+    )
+    if not action_error.is_empty():
+        push_error(action_error)
         return false
     return true
 
