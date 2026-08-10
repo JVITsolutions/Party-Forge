@@ -1,7 +1,7 @@
 class_name ItemGenerationService
 extends RefCounted
 
-const GENERATOR_VERSION := 1
+const GENERATOR_VERSION := 2
 
 static func generate(
 	request: ItemGenerationRequest,
@@ -28,6 +28,9 @@ static func generate(
 	var rarity := ItemRaritySelector.select(request, foundation, trace)
 	if rarity == null:
 		return _fail(trace, request, &"rarity", &"no_eligible_rarity", _selector_failure_details(trace, &"rarity"))
+	var base_damage := WeaponBaseDamageRoller.roll(request, base, rarity, trace)
+	if not base_damage.ok():
+		return _fail(trace, request, &"base_damage", &"profile_rejected", {"message": base_damage.error})
 	var pattern := ItemPatternSelector.select(request, rarity, trace)
 	if pattern == null:
 		return _fail(trace, request, &"pattern", &"no_eligible_pattern", _selector_failure_details(trace, &"pattern", {"rarity_id": String(rarity.id)}))
@@ -40,6 +43,7 @@ static func generate(
 	for affix: ItemAffixInstance in assembled.affixes:
 		affix_documents.append(affix.to_dictionary())
 	var generation_provenance := {
+		"base_damage": base_damage.provenance,
 		"generator_version": GENERATOR_VERSION,
 		"domain": String(request.generation_domain),
 		"source_id": String(request.source_id),
@@ -61,7 +65,7 @@ static func generate(
 		{
 			"affixes": affix_documents,
 			"base_definition_id": String(base.id),
-			"base_damage_components": [],
+			"base_damage_components": base_damage.components,
 			"item_level": request.item_level,
 			"rarity_id": String(rarity.id),
 		},

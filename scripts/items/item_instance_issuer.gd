@@ -36,7 +36,7 @@ static func issue(
 			"issuer_namespace": issuer_namespace,
 			"seed": seed,
 			"sequence": int(sequence),
-			"source": source,
+			"source": ItemInstance._json_copy(source),
 		},
 		"rarity_id": data.get("rarity_id"),
 		"schema_version": ItemInstance.SCHEMA_VERSION,

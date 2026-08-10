@@ -21,7 +21,9 @@ func run() -> Array[String]:
 		return failures
 	_test_fixed_seed_items(equipment, foundation, failures)
 	_test_deterministic_sequences(equipment, foundation, failures)
+	_test_damage_profile_does_not_shift_existing_generation(equipment, foundation, failures)
 	_test_structured_failures(equipment, foundation, failures)
+	_test_base_damage_failure_precedes_pattern_affix_and_issuance(equipment, foundation, failures)
 	_test_affix_unlock_gate(equipment, foundation, failures)
 	_test_codec_immutability(equipment, foundation, failures)
 	return failures
@@ -49,7 +51,7 @@ func _test_fixed_seed_items(equipment: EquipmentCatalog, foundation: ItemFoundat
 		origin_keys.sort()
 		TestAssertions.equal(origin_keys, ["issuer_namespace", "seed", "sequence", "source"], "%s origin preserves four top-level fields" % rarity_id, failures)
 		TestAssertions.truthy(not origin.has("generator_version"), "%s generator provenance is not top-level" % rarity_id, failures)
-		TestAssertions.equal(origin["source"]["generation"]["generator_version"], 1, "%s generator version is nested under source" % rarity_id, failures)
+		TestAssertions.equal(origin["source"]["generation"]["generator_version"], 2, "%s generator version is nested under source" % rarity_id, failures)
 		TestAssertions.equal(origin["source"]["generation"]["selected_base_id"], "forge_vanguard_sword", "%s selected base provenance is exact" % rarity_id, failures)
 		TestAssertions.equal(origin["source"]["generation"]["selected_rarity_id"], String(rarity_id), "%s selected rarity provenance is exact" % rarity_id, failures)
 		TestAssertions.equal(origin["source"]["generation"]["forced_base_id"], "forge_vanguard_sword", "%s authorized forced base provenance is exact" % rarity_id, failures)
@@ -76,6 +78,52 @@ func _test_deterministic_sequences(equipment: EquipmentCatalog, foundation: Item
 		TestAssertions.equal(_generation_content(changed.item), CONTENT_SEQUENCE_EIGHT, "sequence eight generation content is exact", failures)
 		TestAssertions.truthy(_generation_content(first.item) != _generation_content(changed.item), "generation sequence changes generated affixes independently of identity and origin", failures)
 	TestAssertions.equal(caller_item_sequence, 401, "successful generation does not mutate caller item sequence", failures)
+
+func _test_damage_profile_does_not_shift_existing_generation(equipment: EquipmentCatalog, foundation: ItemFoundationCatalog, failures: Array[String]) -> void:
+	var request := _request(&"rare")
+	var without_profile := ItemGenerationService.generate(request, ISSUER_NAMESPACE, 501, equipment, foundation)
+	var profiled_equipment := equipment.duplicate(true) as EquipmentCatalog
+	var sword_index := profiled_equipment.definitions.find(profiled_equipment.definition(&"forge_vanguard_sword"))
+	profiled_equipment.definitions[sword_index] = profiled_equipment.definitions[sword_index].duplicate(true) as EquipmentBaseDefinition
+	var profile := WeaponDamageProfile.new()
+	profile.id = &"test_sword_damage"
+	var curve := WeaponDamageComponentCurve.new()
+	curve.damage_type_id = &"physical"
+	curve.minimum_at_level_1 = 10.0
+	curve.maximum_at_level_1 = 20.0
+	curve.minimum_at_level_1000 = 10.0
+	curve.maximum_at_level_1000 = 20.0
+	profile.components = [curve]
+	profiled_equipment.definitions[sword_index].weapon_damage_profile = profile
+	var with_profile := ItemGenerationService.generate(request, ISSUER_NAMESPACE, 501, profiled_equipment, foundation)
+	TestAssertions.truthy(without_profile.ok() and with_profile.ok(), "profile insertion comparison generations succeed", failures)
+	if not without_profile.ok() or not with_profile.ok():
+		return
+	TestAssertions.equal(_generation_content(with_profile.item), _generation_content(without_profile.item), "damage profile does not shift base rarity pattern affix tier or roll selections", failures)
+	TestAssertions.equal(_trace_without_base_damage(with_profile.trace), _trace_without_base_damage(without_profile.trace), "damage profile does not shift any existing deterministic trace stage", failures)
+	TestAssertions.equal(without_profile.item.base_damage_components, [], "base without profile still issues no damage components", failures)
+	TestAssertions.equal(with_profile.item.to_dictionary()["base_damage_components"], [
+		{"damage_type_id": "physical", "minimum_damage": 10.23, "maximum_damage": 20.45},
+	], "profile insertion changes only immutable issued base damage values", failures)
+	var generation := with_profile.item.origin["source"]["generation"] as Dictionary
+	var stored_base_damage := generation.get("base_damage") as Dictionary
+	TestAssertions.equal(_base_damage_provenance_without_random(stored_base_damage), {
+		"profile_id": "test_sword_damage",
+		"item_level": 750,
+		"rarity_multiplier": 1.18,
+		"components": [{
+			"damage_type_id": "physical",
+			"bounds": {"minimum": 10, "maximum": 20},
+			"range": {"minimum": 10.23, "maximum": 20.45},
+		}],
+	}, "issued origin stores the exact canonical base-damage bounds and ranges", failures)
+	var stored_component := (stored_base_damage["components"] as Array)[0] as Dictionary
+	TestAssertions.near(float(stored_component["unit"]), 0.11112670600414, 0.00000000000001, "issued origin stores the fixed base-damage unit", failures)
+	TestAssertions.near(float(stored_component["quality"]), 0.86666900590062, 0.00000000000001, "issued origin stores the fixed base-damage quality", failures)
+	var item_before_profile_mutation := with_profile.item.to_dictionary()
+	profile.quality_minimum = 0.1
+	curve.minimum_at_level_1 = 999.0
+	TestAssertions.equal(with_profile.item.to_dictionary(), item_before_profile_mutation, "issued damage and provenance never recalculate from the live profile", failures)
 
 func _test_structured_failures(equipment: EquipmentCatalog, foundation: ItemFoundationCatalog, failures: Array[String]) -> void:
 	var invalid := ItemGenerationService.generate(null, ISSUER_NAMESPACE, 1, equipment, foundation)
@@ -147,6 +195,31 @@ func _test_structured_failures(equipment: EquipmentCatalog, foundation: ItemFoun
 	TestAssertions.truthy(String(oversized_sequence_failure.failure.details.get("message", "")).contains("field=sequence"), "oversized item sequence preserves issuer diagnostic", failures)
 	TestAssertions.equal(oversized_item_sequence, ItemInstanceCodec.JSON_SAFE_INTEGER_MAX + 1, "oversized caller item sequence remains unchanged", failures)
 
+func _test_base_damage_failure_precedes_pattern_affix_and_issuance(equipment: EquipmentCatalog, foundation: ItemFoundationCatalog, failures: Array[String]) -> void:
+	var gated_equipment := equipment.duplicate(true) as EquipmentCatalog
+	var sword_index := gated_equipment.definitions.find(gated_equipment.definition(&"forge_vanguard_sword"))
+	gated_equipment.definitions[sword_index] = gated_equipment.definitions[sword_index].duplicate(true) as EquipmentBaseDefinition
+	var profile := WeaponDamageProfile.new()
+	profile.id = &"future_sword_damage"
+	profile.minimum_item_level = 751
+	var curve := WeaponDamageComponentCurve.new()
+	curve.damage_type_id = &"physical"
+	curve.minimum_at_level_1 = 10.0
+	curve.maximum_at_level_1 = 20.0
+	curve.minimum_at_level_1000 = 100.0
+	curve.maximum_at_level_1000 = 200.0
+	profile.components = [curve]
+	gated_equipment.definitions[sword_index].weapon_damage_profile = profile
+	var request := _request(&"rare")
+	var caller_item_sequence := 777
+	var result := ItemGenerationService.generate(request, " ", caller_item_sequence, gated_equipment, foundation)
+	_assert_failure(result, request, &"base_damage", &"profile_rejected", failures)
+	TestAssertions.equal(result.failure.details, {
+		"message": "PARTY_FORGE_ITEM_GENERATION_ERROR stage=base_damage profile=future_sword_damage field=item_level value=750 reason=below minimum 751",
+	}, "base-damage service failure preserves the stable roller diagnostic", failures)
+	TestAssertions.equal(result.trace.stages.map(func(stage: Dictionary) -> String: return stage["stage"]), ["base", "rarity", "base_damage"], "base-damage failure happens before pattern or affix assembly", failures)
+	TestAssertions.equal(caller_item_sequence, 777, "base-damage failure never consumes the caller issuance sequence", failures)
+
 func _test_affix_unlock_gate(equipment: EquipmentCatalog, foundation: ItemFoundationCatalog, failures: Array[String]) -> void:
 	var gated_foundation := foundation.duplicate(true) as ItemFoundationCatalog
 	var uncommon_index := gated_foundation.rarities.find(gated_foundation.rarity(&"uncommon"))
@@ -196,7 +269,7 @@ func _assert_failure(result: ItemGenerationResult, request: ItemGenerationReques
 		return
 	TestAssertions.equal(result.failure.stage, stage, "%s failure records stage" % stage, failures)
 	TestAssertions.equal(result.failure.code, code, "%s failure records stable code" % stage, failures)
-	TestAssertions.equal(result.failure.generator_version, 1, "%s failure records generator version" % stage, failures)
+	TestAssertions.equal(result.failure.generator_version, 2, "%s failure records generator version" % stage, failures)
 	if request != null:
 		TestAssertions.equal(result.failure.source_id, request.source_id, "%s failure copies request source" % stage, failures)
 		TestAssertions.equal(result.failure.seed, request.seed, "%s failure copies request seed" % stage, failures)
@@ -210,11 +283,27 @@ func _request(rarity_id: StringName) -> ItemGenerationRequest:
 	return request
 
 func _golden_with_provenance(golden: String, rarity_id: StringName) -> String:
-	var replacement := "\"generation\":{\"domain\":\"ordinary_drop\",\"forced_base_id\":\"forge_vanguard_sword\",\"forced_rarity_id\":\"%s\",\"generator_version\":1,\"item_level\":750,\"request_sequence\":7,\"selected_base_id\":\"forge_vanguard_sword\",\"selected_rarity_id\":\"%s\",\"source_id\":\"ordinary_enemy\"}" % [rarity_id, rarity_id]
+	var rarity_multiplier := WeaponDamageProfile.new().rarity_multiplier(rarity_id)
+	var rarity_multiplier_text := "1" if rarity_multiplier == 1.0 else str(rarity_multiplier)
+	var replacement := "\"generation\":{\"base_damage\":{\"components\":[],\"item_level\":750,\"outcome\":\"no_profile\",\"profile_id\":\"\",\"rarity_multiplier\":%s},\"domain\":\"ordinary_drop\",\"forced_base_id\":\"forge_vanguard_sword\",\"forced_rarity_id\":\"%s\",\"generator_version\":2,\"item_level\":750,\"request_sequence\":7,\"selected_base_id\":\"forge_vanguard_sword\",\"selected_rarity_id\":\"%s\",\"source_id\":\"ordinary_enemy\"}" % [rarity_multiplier_text, rarity_id, rarity_id]
 	return golden \
 		.replace(GENERATION_PROVENANCE_BEFORE, replacement) \
 		.replace("\"base_definition_id\":", "\"base_damage_components\":[],\"base_definition_id\":") \
 		.replace("\"schema_version\":1", "\"schema_version\":2")
+
+func _trace_without_base_damage(trace: ItemGenerationTrace) -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	for stage: Dictionary in trace.stages:
+		if stage["stage"] != "base_damage":
+			result.append(stage)
+	return result
+
+func _base_damage_provenance_without_random(provenance: Dictionary) -> Dictionary:
+	var result := provenance.duplicate(true)
+	for component: Dictionary in result.get("components", []):
+		component.erase("unit")
+		component.erase("quality")
+	return result
 
 func _generation_content(item: ItemInstance) -> String:
 	var affixes: Array[Dictionary] = []

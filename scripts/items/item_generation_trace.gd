@@ -6,20 +6,30 @@ var stages: Array[Dictionary]:
 	get:
 		return _stages.duplicate(true)
 
-func record(stage: StringName, eligible: Array[StringName], rejected: Dictionary, weights: Dictionary, selected: StringName) -> void:
-	if _contains_nonfinite(rejected) or _contains_nonfinite(weights):
+func record(
+	stage: StringName,
+	eligible: Array[StringName],
+	rejected: Dictionary,
+	weights: Dictionary,
+	selected: StringName,
+	details: Dictionary = {}
+) -> void:
+	if _contains_nonfinite(rejected) or _contains_nonfinite(weights) or _contains_nonfinite(details):
 		return
 	var eligible_ids: Array[String] = []
 	for id: StringName in eligible:
 		eligible_ids.append(String(id))
 	eligible_ids.sort()
-	_stages.append({
+	var record_data := {
 		"stage": String(stage),
 		"eligible": eligible_ids,
 		"rejected": _canonical_dictionary(rejected),
 		"weights": _canonical_dictionary(weights),
 		"selected": String(selected),
-	})
+	}
+	if not details.is_empty():
+		record_data["details"] = _canonical_dictionary(details)
+	_stages.append(record_data)
 
 func _canonical_dictionary(source: Dictionary) -> Dictionary:
 	var keys: Array[String] = []
