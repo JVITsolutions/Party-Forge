@@ -6,6 +6,7 @@ const EQUIPMENT_PATH := "res://data/equipment/core_equipment_catalog.tres"
 const STATS_PATH := "res://data/stats/core_stats.tres"
 const DAMAGE_TYPES_PATH := "res://data/damage_types/core_damage_types.tres"
 const ROWS := preload("res://tools/weighted_loot_content_rows.gd")
+const CLASS_ROWS := preload("res://tools/class_equipment_rows.gd")
 const RARITY_PATHS: Array[String] = [
 	"res://data/items/rarities/common.tres",
 	"res://data/items/rarities/uncommon.tres",
@@ -60,10 +61,30 @@ static func build_document_set(
 		return _failed("inputs", "stats", "catalog is missing")
 	if damage_types == null:
 		return _failed("inputs", "damage_types", "catalog is missing")
+	var manifest_result := _canonical_base_manifest()
+	var manifest_error := manifest_result.get("error", {}) as Dictionary
+	if not manifest_error.is_empty():
+		return _failed("base_manifest", String(manifest_error.get("id", "catalog")), String(manifest_error.get("reason", "invalid canonical manifest")))
+	var base_paths := manifest_result["paths"] as Dictionary
+	var loaded_base_error := _validate_loaded_base_manifest(equipment, base_paths)
+	if not loaded_base_error.is_empty():
+		return _failed("base_manifest", String(loaded_base_error.get("id", "catalog")), String(loaded_base_error.get("reason", "loaded catalog does not match canonical manifest")))
+	var source_by_id: Dictionary = {}
+	for source: EquipmentBaseDefinition in equipment.definitions:
+		source_by_id[source.id] = source
+	var base_ids: Array[StringName] = []
+	for id_variant: Variant in base_paths.keys():
+		base_ids.append(StringName(id_variant))
+	base_ids.sort_custom(func(left: StringName, right: StringName) -> bool: return String(left) < String(right))
+	var canonical_sources := EquipmentCatalog.new()
+	var canonical_source_definitions: Array[EquipmentBaseDefinition] = []
+	for base_id: StringName in base_ids:
+		canonical_source_definitions.append(source_by_id[base_id] as EquipmentBaseDefinition)
+	canonical_sources.definitions = canonical_source_definitions
 	var explicit_rows: Array[Dictionary] = ROWS.explicit_rows()
-	var implicit_rows: Array[Dictionary] = ROWS.implicit_rows(equipment)
+	var implicit_rows: Array[Dictionary] = ROWS.implicit_rows(canonical_sources)
 	var profile_rows: Array[Dictionary] = ROWS.weapon_profile_rows()
-	var row_error := _validate_source_rows(explicit_rows, implicit_rows, profile_rows, equipment)
+	var row_error := _validate_source_rows(explicit_rows, implicit_rows, profile_rows, canonical_sources)
 	if not row_error.is_empty():
 		return _failed("rows", String(row_error.get("id", "catalog")), String(row_error.get("reason", "invalid rows")))
 
@@ -90,12 +111,13 @@ static func build_document_set(
 	var implicit_by_base: Dictionary = {}
 	for row: Dictionary in implicit_rows:
 		implicit_by_base[row["base"]] = row["id"]
-	for source: EquipmentBaseDefinition in equipment.definitions:
+	for source: EquipmentBaseDefinition in canonical_sources.definitions:
 		var base := source.duplicate(true) as EquipmentBaseDefinition
 		base.presentation = source.presentation
 		var implicit_ids: Array[StringName] = [implicit_by_base[source.id]]
 		base.implicit_affix_ids = implicit_ids
 		base.weapon_damage_profile = profile_by_base.get(source.id) as WeaponDamageProfile
+		_canonicalize_base_sets(base)
 		production_bases.append(base)
 	production_equipment.definitions = production_bases
 
@@ -119,14 +141,83 @@ static func build_document_set(
 		documents[definition.resource_path] = _affix_document(definition)
 	for profile: WeaponDamageProfile in profiles:
 		documents[profile.resource_path] = _weapon_profile_document(profile)
-	for index: int in equipment.definitions.size():
-		var source := equipment.definitions[index]
+	for index: int in canonical_sources.definitions.size():
+		var source := canonical_sources.definitions[index]
 		var base := production_bases[index]
-		documents[source.resource_path] = _equipment_base_document(source, base)
+		documents[String(base_paths[source.id])] = _equipment_base_document(source, base)
 	documents[FOUNDATION_PATH] = _foundation_document(foundation)
 	if documents.size() != 306:
 		return _failed("documents", "catalog", "document total must equal 306, got %d" % documents.size())
 	return _canonical_documents(documents)
+
+static func _canonical_base_manifest() -> Dictionary:
+	var paths: Dictionary = {}
+	var path_owners: Dictionary = {}
+	if CLASS_ROWS.SET_FOLDERS.size() != CLASS_ROWS.SET_ITEM_IDS.size():
+		return {"error": {"id": "catalog", "reason": "set folder and item registries must have equal size"}}
+	var set_ids: Array = CLASS_ROWS.SET_ITEM_IDS.keys()
+	set_ids.sort_custom(func(left: Variant, right: Variant) -> bool: return String(left) < String(right))
+	for set_id_variant: Variant in set_ids:
+		var set_id := StringName(set_id_variant)
+		if not CLASS_ROWS.SET_FOLDERS.has(set_id):
+			return {"error": {"id": String(set_id), "reason": "canonical set folder is missing"}}
+		var folder := String(CLASS_ROWS.SET_FOLDERS[set_id])
+		if folder.is_empty():
+			return {"error": {"id": String(set_id), "reason": "canonical set folder is empty"}}
+		for base_id_variant: Variant in CLASS_ROWS.SET_ITEM_IDS[set_id]:
+			var base_id := StringName(base_id_variant)
+			if base_id.is_empty():
+				return {"error": {"id": String(set_id), "reason": "canonical base id is empty"}}
+			if paths.has(base_id):
+				return {"error": {"id": String(base_id), "reason": "canonical base id is duplicated"}}
+			var path := "res://data/equipment/bases/%s/%s.tres" % [folder, base_id]
+			if path_owners.has(path):
+				return {"error": {"id": String(base_id), "reason": "canonical base path is duplicated with %s" % path_owners[path]}}
+			paths[base_id] = path
+			path_owners[path] = base_id
+	for set_id_variant: Variant in CLASS_ROWS.SET_FOLDERS.keys():
+		if not CLASS_ROWS.SET_ITEM_IDS.has(StringName(set_id_variant)):
+			return {"error": {"id": String(set_id_variant), "reason": "canonical set folder has no item registry"}}
+	if paths.size() != 99:
+		return {"error": {"id": "catalog", "reason": "canonical base total must equal 99, got %d" % paths.size()}}
+	return {"paths": paths, "error": {}}
+
+static func _validate_loaded_base_manifest(equipment: EquipmentCatalog, base_paths: Dictionary) -> Dictionary:
+	if equipment.definitions.size() != base_paths.size():
+		return {"id": "catalog", "reason": "loaded base total must equal %d, got %d" % [base_paths.size(), equipment.definitions.size()]}
+	var seen: Dictionary = {}
+	for source: EquipmentBaseDefinition in equipment.definitions:
+		if source == null:
+			return {"id": "<null>", "reason": "loaded base is missing"}
+		if source.id.is_empty():
+			return {"id": "<empty>", "reason": "loaded base id is empty"}
+		if seen.has(source.id):
+			return {"id": String(source.id), "reason": "loaded base id is duplicated"}
+		seen[source.id] = true
+		if not base_paths.has(source.id):
+			return {"id": String(source.id), "reason": "loaded base id is not in the canonical manifest"}
+		var expected_path := String(base_paths[source.id])
+		var actual_path := source.resource_path
+		if actual_path != expected_path:
+			return {"id": String(source.id), "reason": "loaded resource path must equal %s, got %s" % [expected_path, actual_path if not actual_path.is_empty() else "<empty>"]}
+	var expected_ids: Array[String] = []
+	for id_variant: Variant in base_paths.keys():
+		expected_ids.append(String(id_variant))
+	expected_ids.sort()
+	for id_text: String in expected_ids:
+		if not seen.has(StringName(id_text)):
+			return {"id": id_text, "reason": "canonical base is missing from the loaded catalog"}
+	return {}
+
+static func _canonicalize_base_sets(base: EquipmentBaseDefinition) -> void:
+	base.compatible_slot_ids = _sorted_string_name_copy(base.compatible_slot_ids)
+	base.required_all_tags = _sorted_string_name_copy(base.required_all_tags)
+	base.required_any_tags = _sorted_string_name_copy(base.required_any_tags)
+	base.excluded_tags = _sorted_string_name_copy(base.excluded_tags)
+	base.generation_tags = _sorted_string_name_copy(base.generation_tags)
+	base.implicit_affix_ids = _sorted_string_name_copy(base.implicit_affix_ids)
+	base.reserved_slot_ids = _sorted_string_name_copy(base.reserved_slot_ids)
+	base.compatible_offhand_item_types = _sorted_string_name_copy(base.compatible_offhand_item_types)
 
 static func _validate_source_rows(
 	explicit_rows: Array[Dictionary],
@@ -450,6 +541,11 @@ static func _sorted_string_names(values: Array) -> Array[StringName]:
 		var tag := StringName(value)
 		if not tag.is_empty() and tag not in result:
 			result.append(tag)
+	result.sort_custom(func(left: StringName, right: StringName) -> bool: return String(left) < String(right))
+	return result
+
+static func _sorted_string_name_copy(values: Array[StringName]) -> Array[StringName]:
+	var result := values.duplicate()
 	result.sort_custom(func(left: StringName, right: StringName) -> bool: return String(left) < String(right))
 	return result
 

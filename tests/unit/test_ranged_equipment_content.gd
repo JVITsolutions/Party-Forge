@@ -93,10 +93,10 @@ func _assert_bow_rules(failures: Array[String]) -> void:
 	var greatbow := load("res://data/equipment/bases/siege_archer/siege_greatbow.tres") as EquipmentBaseDefinition
 	var heavy_quiver := load("res://data/equipment/bases/siege_archer/siege_heavy_quiver.tres") as EquipmentBaseDefinition
 	var shield := load("res://data/equipment/bases/forge_vanguard/forge_vanguard_shield.tres") as EquipmentBaseDefinition
-	_assert_bow(recurve, &"light_bow", [&"ranged", &"bow_light_medium"], failures)
-	_assert_bow(greatbow, &"greatbow", [&"ranged", &"greatbow"], failures)
-	_assert_quiver(light_quiver, &"light_bow", [&"ranged", &"bow_light_medium"], failures)
-	_assert_quiver(heavy_quiver, &"greatbow", [&"ranged", &"greatbow"], failures)
+	_assert_bow(recurve, &"light_bow", [&"bow_light_medium", &"ranged"], failures)
+	_assert_bow(greatbow, &"greatbow", [&"greatbow", &"ranged"], failures)
+	_assert_quiver(light_quiver, &"light_bow", [&"bow_light_medium", &"ranged"], failures)
+	_assert_quiver(heavy_quiver, &"greatbow", [&"greatbow", &"ranged"], failures)
 	TestAssertions.truthy(EquipmentEligibility.validate_equip(recurve, ranger, &"main_hand").is_empty(), "Ranger accepts recurve", failures)
 	TestAssertions.truthy(EquipmentEligibility.validate_equip(light_quiver, ranger, &"off_hand", {&"main_hand": recurve}).is_empty(), "Ranger bow accepts light quiver exception", failures)
 	TestAssertions.truthy(EquipmentEligibility.validate_equip(greatbow, marksman, &"main_hand").is_empty(), "Marksman accepts greatbow", failures)
