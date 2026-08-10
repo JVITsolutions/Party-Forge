@@ -9,11 +9,47 @@ func run() -> Array[String]:
 	if foundation == null:
 		return failures
 	_test_create_and_canonical_document(failures)
+	_test_copy_with_sequence(failures)
 	_test_request_validation(foundation, failures)
 	_test_structured_outcomes(failures)
 	_test_trace_canonicalization(failures)
 	_test_deterministic_random(failures)
 	return failures
+
+func _test_copy_with_sequence(failures: Array[String]) -> void:
+	var request := ItemGenerationRequest.create(991, 4, 250, &"ordinary_enemy", &"ordinary_drop", [&"common", &"uncommon"])
+	request.difficulty_id = &"normal"
+	request.heat = 25.0
+	request.charisma_value = 100.0
+	request.party_archetype_tags = [&"melee"]
+	request.unlock_tags = [&"rarity_rare_unlocked", &"rarity_epic_unlocked", &"rarity_legendary_unlocked"]
+	request.required_base_tags = [&"weapon"]
+	request.excluded_base_tags = [&"caster"]
+	request.required_affix_tags = [&"melee"]
+	request.excluded_affix_tags = [&"ranged"]
+	request.forced_base_id = &"forge_vanguard_sword"
+	request.forced_rarity_id = &"rare"
+	TestAssertions.truthy(request.has_method(&"copy_with_sequence"), "request exposes copy_with_sequence", failures)
+	if not request.has_method(&"copy_with_sequence"):
+		return
+	var copied := request.call(&"copy_with_sequence", 1977) as ItemGenerationRequest
+	TestAssertions.truthy(copied != null and copied != request, "copy_with_sequence returns a distinct request", failures)
+	if copied == null:
+		return
+	var expected := request.canonical_document()
+	expected["generation_sequence"] = 1977
+	TestAssertions.equal(copied.canonical_document(), expected, "copy preserves every scalar and array while replacing only sequence", failures)
+	var array_properties: Array[StringName] = [
+		&"permitted_rarity_ids", &"party_archetype_tags", &"unlock_tags",
+		&"required_base_tags", &"excluded_base_tags", &"required_affix_tags", &"excluded_affix_tags",
+	]
+	for property_name: StringName in array_properties:
+		var original_values := (request.get(property_name) as Array).duplicate()
+		var copied_values := copied.get(property_name) as Array
+		copied_values.append(&"copy_only_mutation")
+		TestAssertions.equal(request.get(property_name), original_values, "%s is defensively copied from source" % property_name, failures)
+		(request.get(property_name) as Array).append(&"source_only_mutation")
+		TestAssertions.truthy(&"source_only_mutation" not in copied_values, "%s copy is isolated from later source mutation" % property_name, failures)
 
 func _test_create_and_canonical_document(failures: Array[String]) -> void:
 	var permitted: Array[StringName] = [&"uncommon", &"common"]

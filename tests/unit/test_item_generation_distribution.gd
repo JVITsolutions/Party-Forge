@@ -10,7 +10,35 @@ func run() -> Array[String]:
 	_test_item_level_tier_direction(failures)
 	_test_charisma_rare_family_direction(failures)
 	_test_party_base_bias_direction(failures)
+	_test_production_weight_bands_and_diminishing_policy(failures)
 	return failures
+
+func _test_production_weight_bands_and_diminishing_policy(failures: Array[String]) -> void:
+	var foundation := load("res://data/items/core_item_foundation_catalog.tres") as ItemFoundationCatalog
+	TestAssertions.truthy(foundation != null, "production weight-band foundation loads", failures)
+	if foundation == null:
+		return
+	var band_counts := {"25": 0, "150": 0, "500": 0, "1000": 0}
+	for definition: ItemAffixDefinition in foundation.affixes:
+		if definition == null or definition.affix_kind == "implicit":
+			continue
+		var key := str(int(definition.base_weight))
+		if band_counts.has(key):
+			band_counts[key] = int(band_counts[key]) + 1
+	var total := 0
+	for count: int in band_counts.values():
+		total += count
+	TestAssertions.equal(total, 96, "all production explicits belong to the four declared weight bands", failures)
+	for key: String in ["25", "150", "500", "1000"]:
+		TestAssertions.truthy(int(band_counts[key]) > 0, "weight band %s is authored" % key, failures)
+	TestAssertions.near(500.0 / 1000.0, 0.5, 0.000001, "specialized focused relative weight is one half", failures)
+	TestAssertions.near(150.0 / 1000.0, 0.15, 0.000001, "standard hybrid relative weight is fifteen percent", failures)
+	TestAssertions.near(25.0 / 1000.0, 0.025, 0.000001, "premium hybrid relative weight is two and one-half percent", failures)
+	var low := ItemGenerationWeightPolicy.diminishing_charisma(0.0)
+	var moderate := ItemGenerationWeightPolicy.diminishing_charisma(100.0)
+	var extreme := ItemGenerationWeightPolicy.diminishing_charisma(1000.0)
+	TestAssertions.truthy(moderate - low > extreme - moderate, "Charisma policy has diminishing marginal gain", failures)
+	TestAssertions.truthy(extreme < 1.0, "finite Charisma never reaches an unbounded modifier", failures)
 
 func _test_live_pipeline_replay_and_hard_gates(failures: Array[String]) -> void:
 	var first := _live_pipeline_batch(failures)

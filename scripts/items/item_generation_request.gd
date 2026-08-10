@@ -39,6 +39,21 @@ static func create(
 	request.permitted_rarity_ids = permitted_rarities.duplicate()
 	return request
 
+func copy_with_sequence(value: int) -> ItemGenerationRequest:
+	var result := ItemGenerationRequest.new()
+	for property_name: StringName in [
+		&"seed", &"item_level", &"source_id", &"generation_domain", &"difficulty_id",
+		&"heat", &"charisma_value", &"forced_base_id", &"forced_rarity_id",
+	]:
+		result.set(property_name, get(property_name))
+	for property_name: StringName in [
+		&"permitted_rarity_ids", &"party_archetype_tags", &"unlock_tags",
+		&"required_base_tags", &"excluded_base_tags", &"required_affix_tags", &"excluded_affix_tags",
+	]:
+		result.set(property_name, (get(property_name) as Array).duplicate())
+	result.generation_sequence = value
+	return result
+
 func validate(foundation: ItemFoundationCatalog) -> String:
 	if foundation == null:
 		return _error("foundation", "manifest missing")
