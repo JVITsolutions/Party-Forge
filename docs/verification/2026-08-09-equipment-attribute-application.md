@@ -2,6 +2,43 @@
 
 Verified 2026-08-09 in the isolated linked worktree on branch **feat/equipment-attribute-application**.
 
+## Task 10O final whole-branch review remediation
+
+Task 10O verified exact functional head **69bec9790a94264ca431731a2c02f61604c6c8c9** after remediating all four findings from the mandatory `00d145d..2efe005` review. The complete approved-design range is now **00d145d7b461dde8d2cf4b01b36d57fb5ee73852..69bec9790a94264ca431731a2c02f61604c6c8c9**, 45 commits after the range start. The authoritative main checkout remained read-only at **39deef45c0b8fd338da74af16e31d67a0f2dcc63**, with its two known tracked overlays unchanged; no integration occurred.
+
+The implementation now validates each complete candidate member-source collection before mutation, requiring one exact owned canonical equipment source at most; uses exact live coordinator ownership as the single stale-context mutation guard; removes only the Warlock's stale `ranged` archetype capability from both generator and canonical resource; and renders unauthoritative raw-roll differences as neutral, explicitly higher/lower, benefit-unknown comparisons. Real regressions cover malformed pre-bind source states and no-drift, released/replaced/reinitialized contexts, all nine actual class archetypes plus the Warlock action snapshot, and larger/smaller fallback rolls for all five modifier operations with accessible neutral semantics.
+
+Strict accepted RED/GREEN evidence was:
+
+| Finding | Accepted RED | Accepted GREEN |
+| --- | --- | --- |
+| Complete source collection | exit `1`, **3.578s**, `FAIL (55 failures)` | exit `0`, **3.462s**, `PASS (0 failures)` |
+| Stale context mutation | exit `1`, **4.440s**, `FAIL (10 failures)` | exit `0`, **4.268s**, `PASS (0 failures)` |
+| Caster-only Warlock | exit `1`, **3.523s**, `FAIL (6 failures)` | exit `0`, **4.615s**, `PASS (0 failures)` |
+| Neutral raw fallback | exit `1`, **0.502s**, `FAIL (49 failures)` with no script error | exit `0`, **0.409s**, `PASS (0 failures)` |
+
+One preliminary comparison RED with test-script errors was rejected. The first full runner was a useful late RED, exit `1` in **129.668s** with two stale fixture expectations: expanded class content still expected Warlock `ranged`, and an unconfigured context expected item-resolution mutation. The fixtures were aligned respectively to the approved caster-only data and a configured current-owner resolution contract; their focused rerun passed in **4.043s**. A later exact-string RED exposed mojibake punctuation in fallback text and expectation; plain ASCII punctuation replaced it, and the comparison/tooltip rerun passed.
+
+### Task 10O gates
+
+| Gate | Exit / duration | Exact result |
+| --- | --- | --- |
+| Isolated import | `0` / **17.366s** | structural and shutdown scan clean |
+| Task 10M empty-runner probe | `0` / **1.640s** | `TASK10M_EMPTY_RUNNER_PROBE_SUMMARY: PASS open=1 list=1 zero=1 focused=1` |
+| Widened 32-suite matrix | `0` / **91.044s** | `TEST_SUMMARY: PASS (0 failures)`; sandbox SHA `c201fd5917d9958da63dacd8201e80d5911c0de51af367977d2a5ee57dd9defe` |
+| Equipment/cache integration | `0` / **1.603s** | `TASK10J_ACTION_CACHE_SUMMARY: PASS members=24 hits=512 usec=1660`; `EQUIPMENT_ATTRIBUTE_APPLICATION_SUMMARY: PASS members=24 untouched=23 items=2` |
+| Progression integration | `0` / **15.056s** | `PROGRESSION_24_MEMBER_ISOLATION_PASS members=24 untouched=23`; `PROGRESSION_24_MEMBER_SUMMARY: PASS` |
+| Final exact-head complete suite | `0` / **128.5s tool wall time** | exactly one `TEST_SUMMARY: PASS (166 suites)` |
+| Isolated startup | `0` / **14.374s** | `PARTY_FORGE_BOOT_OK` once; `PARTY_FORGE_CLASS_SELECTION_READY` once |
+
+The final exact-head full log was 98,074 bytes and had zero FAIL summary, `TEST_FAILURE`, raw `SCRIPT ERROR`, parser/loader failure, ObjectDB/resource/RID/PagedAllocator/orphan leak, fatal, crash, or access-violation marker. Progression retains its established five parent/child dummy-renderer shutdown-notice sets; the complete release gate and startup were clean.
+
+Fresh tracked-only cold import exited `0` in **40.801s**. `migrate_class_expansion_data.gd` then exited expected `1` in **1.057s** on **35** known unrelated starter-loadout capability/tag diagnostics, after writing regenerated resources. Its Warlock output excluded `ranged`, and the cold canonical parity suite exited `0` in **0.454s** with `TEST_SUMMARY: PASS (0 failures)`.
+
+Exact-path cleanup removed 25 initial Task 10O settings/cold/log targets (4,352 files / 85,951,089 logical bytes), followed by the smaller post-check and exact-head settings/log roots. All targets were verified below `.superpowers\sdd`, with zero tracked descendants and zero reparse points; residue was zero. Only the eight exact import-created allowlisted sidecars were removed. The protected manifest returned to **127 files / 2,503 bytes / SHA-256 0a392c6cde37052bb7a87455d77ef9a6cf12a4bb5198e43aa9715952b3c23cd3**. `git diff --check` passed, only the intentional Warlock class resource changed under `data/`, no Godot process targeted the worktree, and main remained untouched.
+
+Physical-controller acceptance and visible GPU-backed/pixel-level manual review remain deferred. The unrelated 35-diagnostic class-expansion validation debt remains explicit rather than being represented as a clean generator exit.
+
 ## Task 10N current-head release-candidate verification
 
 Task 10N verified exact feature head **1d5fdbeb57addd037dd4ddd0b9788db72fffe022** after the Task 10M dead-callback and real list-failure review remediation. The complete approved-design range remains **00d145d7b461dde8d2cf4b01b36d57fb5ee73852..1d5fdbe**, 43 commits after the range start. The isolated feature worktree began with empty tracked and index diffs. The authoritative main checkout was inspected read-only at **39deef45c0b8fd338da74af16e31d67a0f2dcc63** and was not reset, cleaned, stashed, integrated, or otherwise mutated; its two known tracked overlays remain `scripts/party/party_manager.gd` and `scripts/party/party_member_state.gd`.
