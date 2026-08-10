@@ -81,10 +81,16 @@ func configure(
 		errors.append("PARTY_FORGE_RUN_CONTEXT_ERROR field=item_bootstrap reason=required for resumable item run")
 	elif item_bootstrap != null:
 		var encoded_bootstrap := ResumableRunItemCodec.encode(item_bootstrap)
+		var durable_bootstrap := ResumableRunItemCodec.decode(
+			profile.resumable_run if profile != null else {},
+			GameCatalog.EQUIPMENT_CATALOG,
+			GameCatalog.ITEM_FOUNDATION_CATALOG,
+		)
+		var encoded_durable_bootstrap := ResumableRunItemCodec.encode(durable_bootstrap)
 		if (
 			profile == null
 			or encoded_bootstrap.is_empty()
-			or profile.resumable_run != encoded_bootstrap
+			or encoded_durable_bootstrap != encoded_bootstrap
 			or item_bootstrap.run_seed != run_seed_value
 			or item_bootstrap.run_player_id != run_player_id_value
 		):
@@ -139,6 +145,10 @@ func configure(
 				"PARTY_FORGE_RUN_CONTEXT_ERROR field=item_bootstrap reason=%s" % bootstrap_error,
 			])
 		next_item_state = bootstrap_state
+	var next_item_sequence := _next_run_item_sequence(
+		next_item_state,
+		"run:%s:%s:%s" % [owned_profile.profile_id, run_seed_value, run_player_id_value],
+	)
 	var next_item_journal := ItemTransactionJournal.new()
 	var reconstruction := _preview_equipment_reconstruction(next_item_state, manager)
 	if not String(reconstruction["error"]).is_empty():
@@ -185,7 +195,7 @@ func configure(
 	_actor_by_member.clear()
 	_item_journal = next_item_journal
 	_equipment_activation_by_member.clear()
-	_next_item_sequence = 0
+	_next_item_sequence = next_item_sequence
 	_run_id = item_bootstrap.run_id if item_bootstrap != null else &""
 	_item_resolution_transaction_id = ""
 	if not party.member_added.is_connected(member_added_callback):
@@ -469,6 +479,19 @@ func _on_member_added(member: PartyMemberState) -> void:
 
 func _run_equipment_id(member_id: int) -> StringName:
 	return StringName("run-equipment-%03d" % member_id)
+
+
+func _next_run_item_sequence(state: ItemOwnershipState, issuer_namespace: String) -> int:
+	var next_sequence := 0
+	var registry := state.registry() if state != null else null
+	if registry == null:
+		return next_sequence
+	for instance_id: String in registry.ids():
+		var item := registry.item(instance_id)
+		if item == null or String(item.origin.get("issuer_namespace", "")) != issuer_namespace:
+			continue
+		next_sequence = maxi(next_sequence, int(item.origin.get("sequence", -1)) + 1)
+	return next_sequence
 
 func _run_equipment_container(member_id: int, owner_id: String) -> ItemSlotContainer:
 	return ItemSlotContainer.create(

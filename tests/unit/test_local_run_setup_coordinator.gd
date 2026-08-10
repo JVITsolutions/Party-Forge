@@ -216,6 +216,7 @@ var _context_factories: Array[BootstrapContextFactory] = []
 func run() -> Array[String]:
 	var failures: Array[String] = []
 	_test_api_and_participant_defense(failures)
+	_test_disk_reloaded_bootstrap_configures(failures)
 	_test_begin_validation_and_state_atomicity(failures)
 	_test_assignment_guard_fails_closed(failures)
 	_test_cancellation_stale_assignment_and_wrong_decisions(failures)
@@ -230,6 +231,46 @@ func run() -> Array[String]:
 	_parties.clear()
 	_context_factories.clear()
 	return failures
+
+
+func _test_disk_reloaded_bootstrap_configures(failures: Array[String]) -> void:
+	var root := _case_root("disk_reloaded_bootstrap")
+	ProfileTestSupport.remove_tree(root)
+	var profile := ProfileState.new_profile("profile-bootstrap-disk", "Disk Bootstrap", 1000)
+	profile.inventory_columns = 2
+	var owner_id := &"disk_bootstrap_player"
+	var issuer_namespace := "run:%s:%d:%s" % [profile.profile_id, 8181, owner_id]
+	var issued_zero := ItemInstanceIssuer.issue(issuer_namespace, 0, "disk_bootstrap", 8181, {
+		"affixes": [], "base_damage_components": [], "base_definition_id": "forge_vanguard_sword", "item_level": 1, "rarity_id": "common",
+	}, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)
+	TestAssertions.truthy(issued_zero.ok(), "disk bootstrap sequence-zero item issues", failures)
+	var item_state := ItemOwnershipState.create(String(owner_id), ItemRegistry.new([issued_zero.item]), [
+		ItemSlotContainer.create(&"run-inventory", ItemSlotContainer.RUN_INVENTORY, String(owner_id), profile.inventory_columns * 5, {0: issued_zero.item.instance_id}),
+		ItemSlotContainer.create(&"run-equipment-001", ItemSlotContainer.RUN_MEMBER_EQUIPMENT, String(owner_id), EquipmentSlotIndex.capacity()),
+	])
+	var bootstrap := RunItemBootstrap.create(&"disk-bootstrap-run", 8181, owner_id, 1, item_state)
+	profile.resumable_run = ResumableRunItemCodec.encode(bootstrap)
+	var store := ProfileStore.new()
+	TestAssertions.equal(store.save_profile(profile, root), "", "disk bootstrap fixture saves", failures)
+	var loaded := store.load_profile(profile.profile_id, root)
+	TestAssertions.truthy(loaded.ok(), "disk bootstrap fixture reloads", failures)
+	if loaded.ok():
+		var decoded := ResumableRunItemCodec.decode(loaded.profile.resumable_run, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)
+		var catalog := GameCatalog.load_defaults()
+		var party := PartyManager.new()
+		party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
+		var context := PlayerRunContext.new()
+		TestAssertions.equal(context.configure(owner_id, 0, loaded.profile, 8181, party, 100, decoded), PackedStringArray(), "disk-reloaded bootstrap configures semantically despite JSON integer widening", failures)
+		var issued_one := ItemInstanceIssuer.issue(issuer_namespace, 1, "disk_bootstrap", 8182, {
+			"affixes": [], "base_damage_components": [], "base_definition_id": "forge_vanguard_sword", "item_level": 1, "rarity_id": "common",
+		}, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)
+		var created_one := context.apply_item_transaction(
+			ItemTransactionRequest.create("disk-bootstrap-sequence-one", String(owner_id), &"run-inventory", 1, issued_one.item),
+			GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG,
+		)
+		TestAssertions.truthy(created_one.ok(), "disk-reloaded bootstrap resumes issuance at sequence one", failures)
+		party.free()
+	ProfileTestSupport.remove_tree(root)
 
 func _test_api_and_participant_defense(failures: Array[String]) -> void:
 	var participant: Object = _participant("profile-local-alpha", -1, 3, &"fighter")
