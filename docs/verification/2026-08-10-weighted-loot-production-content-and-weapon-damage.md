@@ -8,6 +8,7 @@ Date: 2026-08-10
 - Main merge base: `e4466e180a7c6524590352d1fdcb9a117878fbbf`
 - Exact functional HEAD under test: `bb280feddabadbdb4deabcff6ea9d5fb5fb20efb` (`fix: reject invalid resumed item sequences`)
 - Final integration-test commit: `96a044fe919052cfd25907143e1802a61a2cc4ba` (`test: verify weighted loot integration`)
+- Evidence lineage: `830ff6b10e9c32960faace2abb26e2b0f5d4ff6a` is the documentation-only child of the tested functional HEAD. This corrective documentation/scratch-hygiene commit is a child of `830ff6b10e9c32960faace2abb26e2b0f5d4ff6a`; resolve its immutable hash with `git log -1`. Neither evidence commit is represented as part of the functional bytes tested below.
 - Godot: `4.7.1.stable.mono.official.a13da4feb`
 - No merge to `main`, push, worktree deletion, or branch deletion was performed.
 
@@ -53,12 +54,36 @@ The verified functional history from the merge base through the exact head is:
 | Weighted integration | `& $godot --headless --path . --quit-after 1800 --script res://tests/integration/weighted_loot_production_runner.gd` | `0` / 4.746s | `WEIGHTED_LOOT_PRODUCTION_INTEGRATION: PASS` once |
 | Progression/load | `& $godot --headless --path . --quit-after 1800 --script res://tests/integration/progression_24_member_runner.gd` | `0` / 18.971s | size markers for 1/6/12/24; isolation, weapon-isolation, and summary PASS markers once each |
 | Tooltip responsiveness | `& $godot --headless --path . --quit-after 1200 --script res://tests/integration/item_tooltip_responsive_runner.gd` | `0` / 3.487s | 1280x720 compatibility; 1920x1080, 2560x1440, 3840x2160 size PASS; `ITEM_TOOLTIP_RESPONSIVE_SUMMARY: PASS (3 sizes)` |
-| Preliminary global-user startup | `& $godot --headless --path . --quit-after 600` | `0` / 6.515s | both readiness markers once, but not credited for clean diagnostics because three pre-existing Task 11 sentinel profiles emitted `PROFILE_BOOTSTRAP_ERROR` |
-| Accepted isolated startup | task-local `APPDATA` and `LOCALAPPDATA`; `& $godot --headless --path . --quit-after 600` | `0` / 6.513s | `PARTY_FORGE_BOOT_OK` exactly once; `PARTY_FORGE_CLASS_SELECTION_READY` exactly once; zero script/parse/load/bootstrap/failure diagnostics |
+| Rejected global-user startup | `& $godot --headless --path . --quit-after 600` | `0` / 6.515s | both readiness markers once, but rejected because three pre-existing Task 11 sentinel profiles emitted `PROFILE_BOOTSTRAP_ERROR`; this run is not accepted startup evidence |
+| Accepted isolated startup | exact environment and command reproduced below | `0` / 6.513s | `PARTY_FORGE_BOOT_OK` exactly once; `PARTY_FORGE_CLASS_SELECTION_READY` exactly once; zero script/parse/load/bootstrap/failure diagnostics |
 | Content regeneration | `& $godot --headless --path . --quit-after 900 --script res://tools/build_weighted_loot_content.gd` | `0` / 1.171s | `PARTY_FORGE_WEIGHTED_CONTENT_BUILD_OK documents=306` |
 | Full balance regeneration | `& $godot --headless --path . --quit-after 1800 --script res://tools/export_weighted_loot_balance_report.gd` | `0` / 592.044s | `WEIGHTED_LOOT_BALANCE_REPORT: PASS rows=82 attempts=164000 unique_ids=164000` and expected hashes |
 | Tracked-byte comparison | SHA-256 and size manifest for every `git ls-files` path before versus after both generators; `git diff --quiet`; `git diff --cached --quiet` | `0` / 2.3s | 2,618 rows before and after; zero row differences; both Git diff exits `0` |
 | Final hygiene | exact generated-UID allowlist removal; protected path/hash comparison; `git diff --check` | `0` | 22 generated UIDs removed; exact protected 135 remain; zero protected mismatches |
+
+### Reproducible accepted startup command
+
+The accepted startup used the following literal PowerShell assignments and command from the authoritative worktree. The directories still resolve to the exact retained task-local structure used by the run.
+
+```powershell
+$godot = 'F:\Projects(root)\Game dev\godot\Godot_v4.7.1-stable_mono_win64\Godot_v4.7.1-stable_mono_win64_console.exe'
+$task13UserDataRoot = Join-Path (Get-Location) '.superpowers\sdd\weighted-loot-task13-userdata'
+$task13Roaming = Join-Path $task13UserDataRoot 'roaming'
+$task13Local = Join-Path $task13UserDataRoot 'local'
+New-Item -ItemType Directory -Force -Path $task13Roaming,$task13Local | Out-Null
+$env:APPDATA = $task13Roaming
+$env:LOCALAPPDATA = $task13Local
+$startupLog = '.superpowers\sdd\weighted-loot-startup-isolated.log'
+& $godot --headless --path . --quit-after 600 2>&1 | Tee-Object -LiteralPath $startupLog
+```
+
+The resolved environment paths were:
+
+- `APPDATA`: `F:\Projects(root)\Game dev\Projects\party-forge\.worktrees\weighted-loot-production-content\.superpowers\sdd\weighted-loot-task13-userdata\roaming`
+- `LOCALAPPDATA`: `F:\Projects(root)\Game dev\Projects\party-forge\.worktrees\weighted-loot-production-content\.superpowers\sdd\weighted-loot-task13-userdata\local`
+- Accepted log target: `F:\Projects(root)\Game dev\Projects\party-forge\.worktrees\weighted-loot-production-content\.superpowers\sdd\weighted-loot-startup-isolated.log`
+
+The polluted global-user startup was rejected. Only this task-local isolated invocation is the accepted startup result.
 
 ## Content and balance evidence
 
