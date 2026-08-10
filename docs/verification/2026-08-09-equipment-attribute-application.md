@@ -2,6 +2,30 @@
 
 Verified 2026-08-09 in the isolated linked worktree on branch **feat/equipment-attribute-application**.
 
+## Task 10T transactional recruitment validation
+
+Task 10T verified exact functional head **49c143b0fcc54a802db945632eccb40eca3cc946**. Recruitment now constructs the deterministic candidate member and stages prospective membership, class ranks, and active trait tiers without publishing them. Every prospective member, including the recruit and every existing member, is then validated through the shared normalized effective-source builder, aggregate base resolver, and complete owned-action validator using the staged ranks and tiers. Only a wholly valid party is published; success keeps the established single invalidation and ordered stat, optional trait, then member signals.
+
+Strict regressions cover a caster-only active party upgrade rejecting a future canonical Mage, composition-triggered trait overflow, and a later existing member becoming invalid when a trait tier activates. Rejections preserve exact members/names/IDs, owned sources, class ranks, active tiers, party-upgrade maps and source documents, caller class resources, revision, base/action cache identities, signal streams, capacity results, and actor health. Positive cases prove finite party-upgrade inheritance and exact tier-changing signal order `stats:1`, `stats:2`, `traits`, `member:2`; strict null and capacity rejection behavior remains unchanged.
+
+Accepted TDD produced `FAIL (23 failures)` in **2.339s** followed by `PASS (0 failures)` in **3.271s**. The final required 19-suite matrix passed in **20.762s**. Six preliminary RED iterations were rejected from evidence because they contained parse/helper faults or an invalid later-member fixture.
+
+| Gate | Exit / duration | Exact evidence |
+| --- | --- | --- |
+| Isolated import | `0` / **5.051s** | only eight known cache-created UIDs |
+| Task 10M runner probe | `0` / **1.115s** | `PASS open=1 list=1 zero=1 focused=1` |
+| Final 19-suite matrix | `0` / **20.762s** | `TEST_SUMMARY: PASS (0 failures)` |
+| Equipment/cache | `0` / **2.583s** | `members=24 hits=512`; 23 untouched; two items |
+| Progression | `0` / **15.825s** | all 1/6/12/24 load markers, 24-member isolation, and summary PASS |
+| Exact-head full suite | `0` / **156.724s** | exactly one `TEST_SUMMARY: PASS (166 suites)` |
+| Exact-head startup | `0` / **4.084s** | boot and class-selection markers once each |
+
+The accepted 130,444-byte full log and startup log had zero failure, raw script/parser/loader, shutdown-leak, fatal, crash, or access-violation marker. Focused negative-path runs intentionally emit the asserted resolver errors; Godot retains the established 18 ObjectDB / 5 resource standalone-test shutdown notice. Equipment, progression, full, and startup logs had no such shutdown notice.
+
+Exact `git diff --exit-code 8490610..49c143b -- tools data tests/unit/test_increment2_generator_parity.gd` was empty and focused parity passed, so the prior fresh cold generator proof remains reusable. The eight import-created UIDs were hash-allowlisted for exact-path cleanup; the protected manifest returned to **127 files / 2,503 bytes / SHA-256 0a392c6cde37052bb7a87455d77ef9a6cf12a4bb5198e43aa9715952b3c23cd3**. Task scratch/process/data drift was zero, tracked/index state and `git diff --check` were clean, main remained read-only at **39deef45c0b8fd338da74af16e31d67a0f2dcc63**, and nothing was integrated.
+
+Physical-controller acceptance and visible GPU/pixel review remain deferred.
+
 ## Task 10S transactional party-upgrade validation
 
 Task 10S verified exact functional head **3ef387a3b14dcb262e106ec2a52351f9c8060dde**. Party-upgrade application now stages complete rank, definition, and generated-source maps; validates the union of members affected by previous or prospective eligibility through the same normalized effective base and every-owned-action path; and publishes only after the whole batch succeeds. Rejection never mutates, so it needs no rollback, and no parallel reserved-ID list exists.
