@@ -2,6 +2,30 @@
 
 Verified 2026-08-09 in the isolated linked worktree on branch **feat/equipment-attribute-application**.
 
+## Task 10Q exact ownership preview and complete expansion parity
+
+Task 10Q verified exact functional head **40e3cfdb3bc2b73a4beaebfa02f668fe222b86d6**. Candidate effective-resolution graphs now deep-copy and normalize every incoming member source through the same `PartyMemberState` helper used by commit, while structural equipment ownership validation still sees the raw caller owner. Add/replace regressions prove owner-77 aggregate overflow rejects without owned-document, caller, revision, base/action-cache, signal, or actor-health drift; an ordinary owner-77 source still applies to two members as independent deep copies.
+
+All five expansion rows now exactly equal canonical ordered capabilities and permit every real starter-loadout item. Canonical rows are deterministic generator no-ops, preventing `ResourceSaver` property-order/UID serialization churn; stale rows still save. Functional `data/` drift is zero.
+
+Accepted TDD evidence comprised `FAIL (43 failures)` for ownership/parity, corrected `PASS (0 failures)`, then a byte-preservation `FAIL (1 failure)` / `PASS (0 failures)` cycle after the first semantically correct cold run exposed non-identical hashes.
+
+| Gate | Exit / duration | Exact evidence |
+| --- | --- | --- |
+| Isolated import | `0` / **17.3s** | eight known cache-created UID files; structural/shutdown scan clean |
+| Task 10M runner probe | `0` / **1.2s** | `PASS open=1 list=1 zero=1 focused=1` |
+| Expanded 40-suite matrix | `0` / **90.6s** | `TEST_SUMMARY: PASS (0 failures)` |
+| Equipment/cache | `0` | action-cache PASS for 24 members; equipment PASS with 23 untouched |
+| Progression | `0` | isolation and summary PASS for 24 members |
+| Exact-head full suite | `0` / **128.2s** | exactly one `TEST_SUMMARY: PASS (166 suites)` |
+| Exact-head startup | `0` / **14.6s** | boot and class-selection markers once each |
+
+Fresh current-input tracked-only cold import contained 2,388 files and exited `0` in **40.3s**. Class-expansion generation exited **0** in **1.2s** with zero diagnostics. Paladin, Rogue, Frost Mage, Warlock, and Marksman output hashes each exactly equaled canonical, and the external-root parity/real-eligibility suite exited `0` in **1.1s** with `PASS (0 failures)`.
+
+The 108,864-byte full log had zero failure, script/parser/loader, shutdown-leak, fatal, crash, or access-violation marker. Progression retains its established subprocess notices. Cleanup removed 24 exact Task 10Q targets / 8,670 files / 167,848,066 bytes; only eight hash-allowlisted generated UIDs were removed. Scratch residue was zero and the protected manifest returned to **127 files / 2,503 bytes / SHA-256 0a392c6cde37052bb7a87455d77ef9a6cf12a4bb5198e43aa9715952b3c23cd3**. `git diff --check` passed, no canonical data changed, main remained read-only at **39deef45c0b8fd338da74af16e31d67a0f2dcc63** with its two known overlays, and nothing was integrated.
+
+Physical-controller acceptance and visible GPU/pixel review remain deferred.
+
 ## Task 10P effective-source collision and exact Warlock parity
 
 Task 10P verified exact functional head **399a5de64f7fc8d37f9c001637c6ddc54561ab9d** after closing the two remaining Important findings from the `00d145d..429fc07` re-review. The source validator now builds candidate effective sources through the same seam as runtime and calls the existing two-pass member resolver before mutation. It therefore rejects collisions with class rank, `party_upgrades`, `active_traits`, live dynamic upgrade sources, and the derived `attribute_projection_<member_id>` without a drifting reserved-ID list. Exact add/replace no-drift regressions preserve documents, revision, cache identity, and signals, while legitimate custom and canonical equipment sources remain supported.
