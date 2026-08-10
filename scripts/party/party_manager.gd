@@ -184,10 +184,9 @@ func add_member_source(member_id: int, source: StatModifierSource) -> bool:
         if source.source_type == &"equipment" or not _member_source_refresh_coordinator.is_valid():
             return false
         return bool(_member_source_refresh_coordinator.call(member_id, source))
-    var validation_errors := StatResolver.validate_sources(STAT_CATALOG, [source])
-    if not validation_errors.is_empty():
-        for error: String in validation_errors:
-            push_error(error)
+    var candidate_sources := member.modifier_sources
+    candidate_sources.append(source)
+    if not _validate_candidate_member_sources(member_id, candidate_sources):
         return false
     member._add_modifier_source(source)
     _invalidate_member(member_id)
@@ -201,10 +200,8 @@ func replace_member_source(member_id: int, source: StatModifierSource) -> bool:
         if source.source_type == &"equipment" or not _member_source_refresh_coordinator.is_valid():
             return false
         return bool(_member_source_refresh_coordinator.call(member_id, source))
-    var validation_errors := StatResolver.validate_sources(STAT_CATALOG, [source])
-    if not validation_errors.is_empty():
-        for error: String in validation_errors:
-            push_error(error)
+    var candidate_sources := _sources_after_replace(member.modifier_sources, source)
+    if not _validate_candidate_member_sources(member_id, candidate_sources):
         return false
     member._replace_modifier_source(source)
     _invalidate_member(member_id)
@@ -243,10 +240,8 @@ func replace_member_equipment_sources_atomically(
             or source.owner_member_id != member_id
         ):
             return member_id if member_id > 0 else -1
-        var validation_errors := StatResolver.validate_sources(STAT_CATALOG, [source])
-        if not validation_errors.is_empty():
-            for error: String in validation_errors:
-                push_error(error)
+        var candidate_sources := _sources_after_replace(member.modifier_sources, source)
+        if not _validate_candidate_member_sources(member_id, candidate_sources):
             return member_id
 
     var previous_sources: Dictionary = {}
@@ -282,10 +277,8 @@ func replace_member_equipment_source_atomically(
         or equipment_source.owner_member_id != member_id
     ):
         return false
-    var validation_errors := StatResolver.validate_sources(STAT_CATALOG, [equipment_source])
-    if not validation_errors.is_empty():
-        for error: String in validation_errors:
-            push_error(error)
+    var candidate_sources := _sources_after_replace(member.modifier_sources, equipment_source)
+    if not _validate_candidate_member_sources(member_id, candidate_sources):
         return false
     if not _commit_member_source_without_invalidation(member_id, equipment_source):
         return false
@@ -316,10 +309,9 @@ func replace_member_source_with_equipment_atomically(
         or member_source.id == equipment_source.id
     ):
         return false
-    var validation_errors := StatResolver.validate_sources(STAT_CATALOG, [member_source, equipment_source])
-    if not validation_errors.is_empty():
-        for error: String in validation_errors:
-            push_error(error)
+    var candidate_sources := _sources_after_replace(member.modifier_sources, member_source)
+    candidate_sources = _sources_after_replace(candidate_sources, equipment_source)
+    if not _validate_candidate_member_sources(member_id, candidate_sources):
         return false
     var previous_sources := member.modifier_sources
     if (
@@ -337,6 +329,38 @@ func _commit_member_source_without_invalidation(member_id: int, source: StatModi
         return false
     member._replace_modifier_source(source)
     return true
+
+func _sources_after_replace(
+    current_sources: Array[StatModifierSource],
+    source: StatModifierSource,
+) -> Array[StatModifierSource]:
+    var candidate_sources := current_sources.duplicate()
+    for index: int in candidate_sources.size():
+        var current: StatModifierSource = candidate_sources[index]
+        if current != null and source != null and current.id == source.id:
+            candidate_sources[index] = source
+            return candidate_sources
+    candidate_sources.append(source)
+    return candidate_sources
+
+func _validate_candidate_member_sources(
+    member_id: int,
+    candidate_sources: Array[StatModifierSource],
+) -> bool:
+    var validation_errors := StatResolver.validate_sources(STAT_CATALOG, candidate_sources)
+    if not validation_errors.is_empty():
+        for error: String in validation_errors:
+            push_error(error)
+        return false
+    var equipment_count := 0
+    var canonical_equipment_id := StringName("equipment_member_%d" % member_id)
+    for source: StatModifierSource in candidate_sources:
+        if source.source_type != &"equipment":
+            continue
+        equipment_count += 1
+        if source.id != canonical_equipment_id or source.owner_member_id != member_id:
+            return false
+    return equipment_count <= 1
 
 func _restore_member_sources_without_invalidation(member_id: int, sources: Array[StatModifierSource]) -> void:
     var member := member_by_id(member_id)

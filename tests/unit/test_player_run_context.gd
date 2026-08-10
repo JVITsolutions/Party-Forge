@@ -46,11 +46,204 @@ func run() -> Array[String]:
 	_test_atomic_equipment_commit_and_member_local_cache(failures)
 	_test_direct_equipment_source_bypasses_reject_atomically(failures)
 	_test_equipment_authority_rejections_preserve_runtime(failures)
+	_test_released_and_superseded_context_is_mutation_inactive(failures)
+	_test_reinitialized_party_retires_context_mutation(failures)
 	_test_equipment_source_rejection_rolls_back(failures)
 	_test_configuration_source_batch_is_atomic_and_observable(failures)
+	_test_configure_and_resume_reject_corrupted_equipment_sources(failures)
 	_test_resume_rejects_structurally_invalid_loadouts(failures)
 	_test_resume_reconstructs_equipment_activation(failures)
 	return failures
+
+func _test_released_and_superseded_context_is_mutation_inactive(failures: Array[String]) -> void:
+	var fixture := _configured_fixture(PartyManager.new(), 1)
+	var stale := fixture.context as PlayerRunContext
+	var party := fixture.party as PartyManager
+	var catalog := fixture.catalog as GameCatalog
+	var inventory_item := _issue_stout_helmet(stale, 0, 0, failures)
+	TestAssertions.truthy(stale.award_experience(1, 20).ok(), "stale-context fixture queues a leader level before release", failures)
+	var original_actor := Node3D.new()
+	TestAssertions.truthy(stale.bind_actor(1, original_actor), "stale-context fixture binds its original actor", failures)
+	stale.release_source_refresh_coordinator()
+
+	var replacement := PlayerRunContext.new()
+	var replacement_profile := ProfileState.new_profile("profile-task10o-current", "Task 10O Current", 1000)
+	replacement_profile.inventory_columns = 1
+	TestAssertions.equal(
+		replacement.configure(&"task10o_current", 0, replacement_profile, 9201, party, 100),
+		PackedStringArray(),
+		"replacement context acquires exact coordinator ownership",
+		failures,
+	)
+	TestAssertions.truthy(replacement.owns_source_refresh_coordinator(), "replacement owns the live coordinator", failures)
+	var stale_before_recruit := _context_mutation_document(stale, [1, 2, 3])
+	TestAssertions.truthy(party.recruit(catalog.class_by_id(&"cleric")), "replacement fixture recruits a third member", failures)
+	TestAssertions.equal(_context_mutation_document(stale, [1, 2, 3]), stale_before_recruit, "released context ignores late member-added mutation", failures)
+	TestAssertions.truthy(replacement.progression_for(3) != null and replacement.equipment_for(3) != null, "replacement context alone initializes the recruit", failures)
+
+	var stale_before := _context_mutation_document(stale, [1, 2, 3])
+	var replacement_before := _context_mutation_document(replacement, [1, 2, 3])
+	var party_sources_before := _party_source_documents(party)
+	var revision_before := party.stat_revision()
+	var base_before := party.stats_for(1)
+	var action_tags: Array[StringName] = [&"melee", &"physical"]
+	var action_before := party.stats_for_action(1, action_tags)
+	var events: Array[int] = []
+	party.stats_changed.connect(func(member_id: int) -> void: events.append(member_id))
+	var candidate_item := _unplaced_stout_helmet(stale, 1, failures)
+	var candidate_bytes := JSON.stringify(candidate_item.to_dictionary()) if candidate_item != null else ""
+	var request := ItemTransactionRequest.create("task10o-stale-create", String(stale.run_player_id), &"run-inventory", 1, candidate_item)
+	var rejected_assignment := stale.assign_equipment(1, inventory_item.instance_id, &"helmet", GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)
+	var rejected_transaction := stale.apply_item_transaction(request, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)
+	var rejected_award := stale.award_experience(1, 20)
+	var rejected_actor := Node3D.new()
+	TestAssertions.truthy(not rejected_assignment.ok(), "released context rejects equipment assignment", failures)
+	TestAssertions.equal(rejected_transaction.code, ItemTransactionResult.Code.INVALID_REQUEST, "released context rejects item transaction with stable code", failures)
+	TestAssertions.truthy(not rejected_award.ok(), "released context rejects progression mutation", failures)
+	TestAssertions.truthy(not stale.consume_pending_leader_level(), "released context cannot consume pending levels", failures)
+	TestAssertions.truthy(not stale.bind_actor(1, rejected_actor), "released context cannot register an actor", failures)
+	stale.mark_items_resolved("task10o-stale-resolution")
+	TestAssertions.equal(stale.item_resolution_error("task10o-other-resolution"), "", "released context cannot mark item resolution", failures)
+	var reconfigure_errors := stale.configure(&"stale_reconfigure", 7, replacement_profile, 9202, party, 100)
+	TestAssertions.equal(reconfigure_errors, PackedStringArray(["PARTY_FORGE_RUN_CONTEXT_ERROR field=configuration reason=already configured"]), "released context cannot reconfigure", failures)
+	stale.release_source_refresh_coordinator()
+	TestAssertions.truthy(replacement.owns_source_refresh_coordinator(), "stale late release cannot clear replacement ownership", failures)
+	TestAssertions.equal(_context_mutation_document(stale, [1, 2, 3]), stale_before, "all released-context local documents remain exact", failures)
+	TestAssertions.equal(_context_mutation_document(replacement, [1, 2, 3]), replacement_before, "released mutations preserve replacement context exactly", failures)
+	TestAssertions.equal(_party_source_documents(party), party_sources_before, "released mutations preserve replacement party sources", failures)
+	TestAssertions.equal(party.stat_revision(), revision_before, "released mutations preserve replacement party revision", failures)
+	TestAssertions.truthy(is_same(party.stats_for(1), base_before), "released mutations preserve replacement base cache identity", failures)
+	TestAssertions.truthy(is_same(party.stats_for_action(1, action_tags), action_before), "released mutations preserve replacement action cache identity", failures)
+	TestAssertions.equal(events, [], "released mutations emit no party stat signal", failures)
+	TestAssertions.truthy(not rejected_actor.has_meta("party_forge_run_player_id"), "rejected actor receives no stale ownership metadata", failures)
+	if candidate_item != null:
+		TestAssertions.equal(JSON.stringify(candidate_item.to_dictionary()), candidate_bytes, "released mutations preserve immutable candidate item bytes", failures)
+	replacement.release_source_refresh_coordinator()
+	rejected_actor.free()
+	original_actor.free()
+	party.free()
+
+func _test_reinitialized_party_retires_context_mutation(failures: Array[String]) -> void:
+	var fixture := _configured_fixture(PartyManager.new(), 1)
+	var stale := fixture.context as PlayerRunContext
+	var party := fixture.party as PartyManager
+	var catalog := fixture.catalog as GameCatalog
+	var item := _issue_stout_helmet(stale, 0, 0, failures)
+	party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
+	TestAssertions.truthy(not stale.owns_source_refresh_coordinator(), "party reinitialize supersedes prior context ownership", failures)
+	var stale_before := _context_mutation_document(stale, [1, 2])
+	var party_sources_before := _party_source_documents(party)
+	var revision_before := party.stat_revision()
+	var transaction_item := _unplaced_stout_helmet(stale, 1, failures)
+	var request := ItemTransactionRequest.create("task10o-reinit-create", String(stale.run_player_id), &"run-inventory", 1, transaction_item)
+	TestAssertions.truthy(not stale.award_experience(1, 1).ok(), "reinitialized party rejects stale progression", failures)
+	TestAssertions.equal(stale.apply_item_transaction(request, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG).code, ItemTransactionResult.Code.INVALID_REQUEST, "reinitialized party rejects stale item mutation", failures)
+	TestAssertions.truthy(not stale.assign_equipment(1, item.instance_id, &"helmet", GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG).ok(), "reinitialized party rejects stale equipment mutation", failures)
+	stale.mark_items_resolved("task10o-reinit-resolution")
+	TestAssertions.equal(_context_mutation_document(stale, [1, 2]), stale_before, "reinitialized-party stale context remains exact", failures)
+	TestAssertions.equal(_party_source_documents(party), party_sources_before, "reinitialized party source documents remain exact", failures)
+	TestAssertions.equal(party.stat_revision(), revision_before, "reinitialized party revision remains exact", failures)
+	party.free()
+
+func _context_mutation_document(context: PlayerRunContext, member_ids: Array[int]) -> String:
+	var progression: Dictionary = {}
+	var activations: Dictionary = {}
+	var actors: Dictionary = {}
+	for member_id: int in member_ids:
+		var state := context.progression_for(member_id)
+		progression[str(member_id)] = state.to_snapshot() if state != null else null
+		var activation := context.equipment_activation(member_id)
+		activations[str(member_id)] = {
+			"ok": activation.ok(),
+			"error": activation.error,
+			"active_item_ids": activation.active_item_ids,
+			"source": _source_documents_from_array([activation.source]) if activation.source != null else "",
+		}
+		var actor := context.actor_for(member_id)
+		actors[str(member_id)] = actor.get_instance_id() if actor != null else 0
+	return JSON.stringify({
+		"item_state": context.item_state().to_dictionary() if context.item_state() != null else null,
+		"progression": progression,
+		"activations": activations,
+		"pending": context.pending_leader_levels(),
+		"actors": actors,
+		"next_item_sequence": context.get("_next_item_sequence"),
+		"resolution_transaction": context.get("_item_resolution_transaction_id"),
+	})
+
+func _party_source_documents(party: PartyManager) -> String:
+	var result: Dictionary = {}
+	for member: PartyMemberState in party.members:
+		result[str(member.member_id)] = _source_documents(member)
+	return JSON.stringify(result)
+
+func _unplaced_stout_helmet(context: PlayerRunContext, sequence: int, failures: Array[String]) -> ItemInstance:
+	var issued := ItemInstanceIssuer.issue(
+		"run:%s:%s:%s" % [context.profile_id, context.run_seed, context.run_player_id],
+		sequence,
+		"task_10o_stale",
+		context.run_seed + sequence,
+		{
+			"affixes": [_stout_affix_document()],
+			"base_definition_id": "forge_vanguard_helmet",
+			"item_level": 1,
+			"rarity_id": "common",
+		},
+		GameCatalog.EQUIPMENT_CATALOG,
+		GameCatalog.ITEM_FOUNDATION_CATALOG,
+	)
+	TestAssertions.truthy(issued.ok(), "Task 10O stale candidate item issues", failures)
+	return issued.item if issued.ok() else null
+
+func _test_configure_and_resume_reject_corrupted_equipment_sources(failures: Array[String]) -> void:
+	_assert_corrupted_equipment_source_configuration_rejected("rogue", false, failures)
+	_assert_corrupted_equipment_source_configuration_rejected("duplicate", true, failures)
+
+func _assert_corrupted_equipment_source_configuration_rejected(
+	corruption: String,
+	resume: bool,
+	failures: Array[String],
+) -> void:
+	var catalog := GameCatalog.load_defaults()
+	var party := PartyManager.new()
+	party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
+	var base_before := party.stats_for(1)
+	var action_tags: Array[StringName] = [&"melee", &"physical"]
+	var action_before := party.stats_for_action(1, action_tags)
+	var owned := party.member_by_id(1)._owned_modifier_sources()
+	if corruption == "rogue":
+		owned.append(StatModifierSource.create(&"rogue_equipment", &"equipment", "Rogue", 1, []))
+	else:
+		owned.append(StatModifierSource.create(&"equipment_member_1", &"equipment", "First", 1, []))
+		owned.append(StatModifierSource.create(&"equipment_member_1", &"equipment", "Second", 1, []))
+	var sources_before := _source_documents(party.member_by_id(1))
+	var revision_before := party.stat_revision()
+	var events: Array[int] = []
+	party.stats_changed.connect(func(member_id: int) -> void: events.append(member_id))
+	var player_id := StringName("task10o_%s_%s" % [corruption, "resume" if resume else "configure"])
+	var seed := 9101 if resume else 9100
+	var profile := ProfileState.new_profile("profile-%s" % player_id, "Task 10O", 1000)
+	profile.inventory_columns = 1
+	var bootstrap: RunItemBootstrap = null
+	if resume:
+		var state := ItemOwnershipState.create(String(player_id), ItemRegistry.new(), [
+			ItemSlotContainer.create(&"run-inventory", ItemSlotContainer.RUN_INVENTORY, String(player_id), 5),
+			ItemSlotContainer.create(&"run-equipment-001", ItemSlotContainer.RUN_MEMBER_EQUIPMENT, String(player_id), EquipmentSlotIndex.capacity()),
+		])
+		bootstrap = RunItemBootstrap.create(&"run-task10o-corrupt", seed, player_id, 1, state)
+		profile.resumable_run = ResumableRunItemCodec.encode(bootstrap)
+	var context := PlayerRunContext.new()
+	var errors := context.configure(player_id, 0, profile, seed, party, 100, bootstrap)
+	TestAssertions.equal(errors, PackedStringArray([
+		"PARTY_FORGE_RUN_CONTEXT_ERROR field=equipment_activation member=1 reason=stat source commit rejected",
+	]), "%s %s rejects the corrupted equipment prestate" % [corruption, "resume" if resume else "configure"], failures)
+	_assert_context_unconfigured(context, "%s corrupted %s" % [corruption, "resume" if resume else "configure"], failures)
+	TestAssertions.equal(_source_documents(party.member_by_id(1)), sources_before, "%s rejection preserves exact source documents" % corruption, failures)
+	TestAssertions.equal(party.stat_revision(), revision_before, "%s rejection preserves revision" % corruption, failures)
+	TestAssertions.truthy(is_same(party.stats_for(1), base_before), "%s rejection preserves base cache identity" % corruption, failures)
+	TestAssertions.truthy(is_same(party.stats_for_action(1, action_tags), action_before), "%s rejection preserves action cache identity" % corruption, failures)
+	TestAssertions.equal(events, [], "%s rejection emits no stat signal" % corruption, failures)
+	party.free()
 
 func _test_atomic_equipment_commit_and_member_local_cache(failures: Array[String]) -> void:
 	var fixture := _configured_fixture(PartyManager.new(), 1)

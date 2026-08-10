@@ -52,14 +52,14 @@ func _test_runtime_stat_refresh_clamps_without_healing(failures: Array[String]) 
     health.apply_damage(40.0)
     var current_before := health.current_health
     var base_maximum := health.max_health
-    var source := StatModifierSource.create(&"task6_health_refresh", &"equipment", "Task 6 Health", 1, [
+    var source := StatModifierSource.create(&"equipment_member_1", &"equipment", "Task 6 Health", 1, [
         StatModifier.create(&"max_health", StatModifier.Operation.FLAT, 50.0, &"task6_health_up", "Task 6 Health"),
     ])
     TestAssertions.truthy(party.replace_member_source(1, source), "runtime maximum-health increase commits", failures)
     TestAssertions.near(health.max_health, base_maximum + 50.0, 0.0001, "runtime refresh raises maximum health", failures)
     TestAssertions.near(health.current_health, current_before, 0.0001, "runtime maximum-health increase grants no healing", failures)
     health.current_health = base_maximum + 25.0
-    var reduced := StatModifierSource.create(&"task6_health_refresh", &"equipment", "Task 6 Health", 1, [
+    var reduced := StatModifierSource.create(&"equipment_member_1", &"equipment", "Task 6 Health", 1, [
         StatModifier.create(&"max_health", StatModifier.Operation.FLAT, -50.0, &"task6_health_down", "Task 6 Health"),
     ])
     TestAssertions.truthy(party.replace_member_source(1, reduced), "runtime maximum-health decrease commits", failures)

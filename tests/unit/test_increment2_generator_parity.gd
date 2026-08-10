@@ -19,9 +19,26 @@ const CASTER_ATTACK_IDS: Array[StringName] = [
 func run() -> Array[String]:
 	var failures: Array[String] = []
 	_test_attack_authoring_parity(failures)
+	_test_warlock_caster_metadata_parity(failures)
 	_test_stat_catalog_generator_parity(failures)
 	_test_keyword_catalog_generator_parity(failures)
 	return failures
+
+func _test_warlock_caster_metadata_parity(failures: Array[String]) -> void:
+	var warlock_row: Dictionary = {}
+	for row: Dictionary in ExpansionRows.CLASS_ROWS:
+		if row.get("id", &"") == &"warlock":
+			warlock_row = row
+			break
+	TestAssertions.truthy(not warlock_row.is_empty(), "Warlock generator row exists", failures)
+	var generator_tags: Array[StringName] = []
+	generator_tags.assign(warlock_row.get("tags", []))
+	var canonical := load("res://data/classes/warlock.tres") as ClassDefinition
+	TestAssertions.truthy(canonical != null, "canonical Warlock class loads", failures)
+	if canonical == null or warlock_row.is_empty():
+		return
+	TestAssertions.truthy(&"ranged" not in generator_tags, "Warlock generator row is caster-only", failures)
+	TestAssertions.truthy(&"caster" in canonical.traits and &"ranged" not in canonical.capability_tags, "canonical Warlock metadata is caster-only", failures)
 
 func _test_attack_authoring_parity(failures: Array[String]) -> void:
 	_assert_attack_table(TypedCombatMigration.ROWS, "typed combat migration", failures)

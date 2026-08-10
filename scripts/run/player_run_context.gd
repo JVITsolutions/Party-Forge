@@ -215,6 +215,8 @@ func owns_source_refresh_coordinator() -> bool:
 	)
 
 func release_source_refresh_coordinator() -> void:
+	if not owns_source_refresh_coordinator():
+		return
 	if party != null:
 		party.unbind_member_source_refresh_coordinator(
 			Callable(self, "_replace_non_equipment_source_atomically"),
@@ -247,6 +249,8 @@ func item_resolution_error(transaction_id: String) -> String:
 	return ""
 
 func mark_items_resolved(transaction_id: String) -> void:
+	if not _can_mutate_current_owner():
+		return
 	_item_resolution_transaction_id = transaction_id
 
 func assign_equipment(
@@ -256,6 +260,10 @@ func assign_equipment(
 	equipment: EquipmentCatalog,
 	foundation: ItemFoundationCatalog,
 ) -> EquipmentAssignmentResult:
+	if not _can_mutate_current_owner():
+		return EquipmentAssignmentResult.failure(
+			"PARTY_FORGE_EQUIPMENT_TRANSITION_ERROR member=%d reason=stat source commit rejected" % member_id
+		)
 	var preview := preview_equipment_assignment(
 		member_id,
 		item_id,
@@ -304,7 +312,7 @@ func apply_item_transaction(
 	equipment: EquipmentCatalog,
 	foundation: ItemFoundationCatalog,
 ) -> ItemTransactionResult:
-	if not _configured or _item_state == null or _item_journal == null:
+	if not _can_mutate_current_owner() or _item_state == null or _item_journal == null:
 		return _item_transaction_failure(ItemTransactionResult.Code.INVALID_REQUEST)
 	if request == null or equipment == null or foundation == null:
 		return _item_transaction_failure(ItemTransactionResult.Code.INVALID_REQUEST)
@@ -347,6 +355,8 @@ func progression_for(member_id: int) -> CharacterProgressionState:
 	return state.copy() if state != null else null
 
 func award_experience(member_id: int, amount: int) -> CharacterProgressionAward:
+	if not _can_mutate_current_owner():
+		return CharacterProgressionAward.failure("member=%d unavailable" % member_id)
 	var member := party.member_by_id(member_id) if party != null else null
 	var current := _progression_by_member.get(member_id) as CharacterProgressionState
 	if member == null or current == null or member.class_definition == null:
@@ -388,13 +398,13 @@ func current_pending_level() -> int:
 	return _pending_leader_levels[0] if not _pending_leader_levels.is_empty() else 0
 
 func consume_pending_leader_level() -> bool:
-	if _pending_leader_levels.is_empty():
+	if not _can_mutate_current_owner() or _pending_leader_levels.is_empty():
 		return false
 	_pending_leader_levels.pop_front()
 	return true
 
 func bind_actor(member_id: int, actor: Node3D) -> bool:
-	if party == null or party.member_by_id(member_id) == null or actor == null:
+	if not _can_mutate_current_owner() or party.member_by_id(member_id) == null or actor == null:
 		return false
 	actor.set_meta("party_forge_run_player_id", run_player_id)
 	actor.set_meta("party_forge_member_id", member_id)
@@ -420,7 +430,7 @@ func member_position(member_id: int) -> Dictionary:
 	return {"valid": true, "position": actor.global_position if actor.is_inside_tree() else actor.position}
 
 func _on_member_added(member: PartyMemberState) -> void:
-	if member == null or member.member_id <= 0 or _progression_by_member.has(member.member_id):
+	if not _can_mutate_current_owner() or member == null or member.member_id <= 0 or _progression_by_member.has(member.member_id):
 		return
 	if _item_state == null or _item_state.container(_run_equipment_id(member.member_id)) != null:
 		return
@@ -609,7 +619,7 @@ func _preview_member_equipment_activation_with_sources(
 
 func _replace_non_equipment_source_atomically(member_id: int, source: StatModifierSource) -> bool:
 	if (
-		not _configured
+		not _can_mutate_current_owner()
 		or party == null
 		or _item_state == null
 		or party.member_by_id(member_id) == null
@@ -646,6 +656,9 @@ func _replace_non_equipment_source_atomically(member_id: int, source: StatModifi
 		_equipment_activation_by_member[member_id] = previous_activation
 		return false
 	return true
+
+func _can_mutate_current_owner() -> bool:
+	return owns_source_refresh_coordinator()
 
 func _validate_bootstrap_state(state: ItemOwnershipState, empty_candidate: ItemOwnershipState) -> String:
 	if state == null:

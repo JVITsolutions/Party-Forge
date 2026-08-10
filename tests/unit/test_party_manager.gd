@@ -62,12 +62,112 @@ func run() -> Array[String]:
     _test_resolved_party_stats(failures)
     _test_replace_member_source(failures)
     _test_atomic_equipment_source_batch_contract(failures)
+    _test_unbound_complete_candidate_equipment_invariants(failures)
+    _test_atomic_batch_rejects_corrupted_equipment_prestate(failures)
     _test_coordinated_source_authority_contract(failures)
     _test_member_equipment_source_authority_contract(failures)
     _test_dead_coordinator_binding_fails_closed(failures)
     _test_two_pass_cache_isolation_and_preview_inputs(failures)
     _test_party_actor_stats_signal_lifecycle(failures)
     return failures
+
+func _test_unbound_complete_candidate_equipment_invariants(failures: Array[String]) -> void:
+    var catalog := GameCatalog.load_defaults()
+    var cases: Array[Dictionary] = [
+        {
+            "label": "rogue equipment add",
+            "setup": Callable(),
+            "method": &"add_member_source",
+            "candidate": StatModifierSource.create(&"rogue_equipment", &"equipment", "Rogue", 1, []),
+        },
+        {
+            "label": "mismatched equipment replace",
+            "setup": func(party: PartyManager) -> void: party.add_member_source(1, _equipment_source(1, 2.0)),
+            "method": &"replace_member_source",
+            "candidate": StatModifierSource.create(&"equipment_member_2", &"equipment", "Mismatched", 1, []),
+        },
+        {
+            "label": "wrong-owner equipment replace",
+            "setup": func(party: PartyManager) -> void: party.add_member_source(1, _equipment_source(1, 2.0)),
+            "method": &"replace_member_source",
+            "candidate": StatModifierSource.create(&"equipment_member_1", &"equipment", "Wrong Owner", 2, []),
+        },
+    ]
+    for test_case: Dictionary in cases:
+        var party := PartyManager.new()
+        party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
+        var setup := test_case["setup"] as Callable
+        if setup.is_valid():
+            setup.call(party)
+        var before := _member_source_documents(party.member_by_id(1))
+        var revision := party.stat_revision()
+        var base := party.stats_for(1)
+        var action_tags: Array[StringName] = [&"melee", &"physical"]
+        var action := party.stats_for_action(1, action_tags)
+        var events: Array[int] = []
+        party.stats_changed.connect(func(member_id: int) -> void: events.append(member_id))
+        TestAssertions.truthy(
+            not bool(party.call(test_case["method"], 1, test_case["candidate"])),
+            "%s rejects atomically" % test_case["label"],
+            failures,
+        )
+        TestAssertions.equal(_member_source_documents(party.member_by_id(1)), before, "%s preserves source documents" % test_case["label"], failures)
+        TestAssertions.equal(party.stat_revision(), revision, "%s preserves revision" % test_case["label"], failures)
+        TestAssertions.truthy(is_same(party.stats_for(1), base), "%s preserves base cache identity" % test_case["label"], failures)
+        TestAssertions.truthy(is_same(party.stats_for_action(1, action_tags), action), "%s preserves action cache identity" % test_case["label"], failures)
+        TestAssertions.equal(events, [], "%s emits no stat signal" % test_case["label"], failures)
+        party.free()
+
+    var duplicate_party := PartyManager.new()
+    duplicate_party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
+    TestAssertions.truthy(duplicate_party.add_member_source(1, _equipment_source(1, 2.0)), "unbound canonical equipment initialization remains supported", failures)
+    var duplicate_before := _member_source_documents(duplicate_party.member_by_id(1))
+    var duplicate_revision := duplicate_party.stat_revision()
+    var duplicate_base := duplicate_party.stats_for(1)
+    var duplicate_events: Array[int] = []
+    duplicate_party.stats_changed.connect(func(member_id: int) -> void: duplicate_events.append(member_id))
+    TestAssertions.truthy(not duplicate_party.add_member_source(1, _equipment_source(1, 3.0)), "second canonical equipment source rejects", failures)
+    TestAssertions.equal(_member_source_documents(duplicate_party.member_by_id(1)), duplicate_before, "duplicate canonical rejection preserves source documents", failures)
+    TestAssertions.equal(duplicate_party.stat_revision(), duplicate_revision, "duplicate canonical rejection preserves revision", failures)
+    TestAssertions.truthy(is_same(duplicate_party.stats_for(1), duplicate_base), "duplicate canonical rejection preserves cache identity", failures)
+    TestAssertions.equal(duplicate_events, [], "duplicate canonical rejection emits no signal", failures)
+    duplicate_party.free()
+
+func _test_atomic_batch_rejects_corrupted_equipment_prestate(failures: Array[String]) -> void:
+    var catalog := GameCatalog.load_defaults()
+    for corruption: String in ["rogue", "duplicate"]:
+        var party := PartyManager.new()
+        party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
+        var base := party.stats_for(1)
+        var action_tags: Array[StringName] = [&"melee", &"physical"]
+        var action := party.stats_for_action(1, action_tags)
+        var owned := party.member_by_id(1)._owned_modifier_sources()
+        if corruption == "rogue":
+            owned.append(StatModifierSource.create(&"rogue_equipment", &"equipment", "Rogue", 1, []))
+        else:
+            owned.append(_equipment_source(1, 1.0))
+            owned.append(_equipment_source(1, 2.0))
+        var before := _member_source_documents(party.member_by_id(1))
+        var revision := party.stat_revision()
+        var events: Array[int] = []
+        party.stats_changed.connect(func(member_id: int) -> void: events.append(member_id))
+        var probe := CoordinatorProbe.new()
+        var callback := Callable(probe, "refresh")
+        var authority := party.bind_member_source_refresh_coordinator(callback)
+        TestAssertions.truthy(authority != null, "%s corrupted batch fixture binds authority" % corruption, failures)
+        TestAssertions.equal(
+            party.replace_member_equipment_sources_atomically({1: _equipment_source(1, 5.0)}, authority),
+            1,
+            "%s corrupted prestate rejects the complete candidate batch" % corruption,
+            failures,
+        )
+        TestAssertions.equal(_member_source_documents(party.member_by_id(1)), before, "%s batch rejection preserves source documents" % corruption, failures)
+        TestAssertions.equal(party.stat_revision(), revision, "%s batch rejection preserves revision" % corruption, failures)
+        TestAssertions.truthy(is_same(party.stats_for(1), base), "%s batch rejection preserves base cache" % corruption, failures)
+        TestAssertions.truthy(is_same(party.stats_for_action(1, action_tags), action), "%s batch rejection preserves action cache" % corruption, failures)
+        TestAssertions.equal(events, [], "%s batch rejection emits no signal" % corruption, failures)
+        party.unbind_member_source_refresh_coordinator(callback, authority)
+        party.free()
 
 func _test_effective_capacity(failures: Array[String]) -> void:
     var catalog := GameCatalog.load_defaults()
@@ -577,7 +677,7 @@ func _test_two_pass_cache_isolation_and_preview_inputs(failures: Array[String]) 
     capabilities.append(&"mutated")
     TestAssertions.truthy(&"mutated" not in (party.call(&"member_capabilities", first_id) as Array[StringName]), "member capabilities are defensive", failures)
 
-    var equipment_source := StatModifierSource.create(&"preview_equipment", &"equipment", "Equipment", first_id, [
+    var equipment_source := StatModifierSource.create(&"equipment_member_1", &"equipment", "Equipment", first_id, [
         StatModifier.create(&"strength", StatModifier.Operation.FLAT, 2.0, &"preview_equipment_strength", "Equipment"),
     ])
     TestAssertions.truthy(party.add_member_source(first_id, equipment_source), "equipment preview fixture source is accepted", failures)

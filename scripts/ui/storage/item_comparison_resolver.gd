@@ -55,21 +55,63 @@ static func _delta_lines(inspected: Dictionary, equipped: Dictionary) -> Array[D
 		var delta := float(inspected_totals.get(key, 0.0)) - float(equipped_totals.get(key, 0.0))
 		if is_zero_approx(delta):
 			delta = 0.0
+		var raw_direction := 1 if delta > 0.0 else -1 if delta < 0.0 else 0
 		result.append({
 			"stat_id": stat_id,
 			"operation": operation,
 			"delta": delta,
-			"direction": 1 if delta > 0.0 else -1 if delta < 0.0 else 0,
-			"text": _delta_text(stat_id, operation, delta),
+			"direction": 0,
+			"raw_direction": raw_direction,
+			"text": _raw_delta_text(stat_id, operation, delta, raw_direction),
+			"accessible_text": _raw_delta_accessible_text(stat_id, operation, delta, raw_direction),
 		})
 	return result
 
 
-static func _delta_text(stat_id: String, operation: int, delta: float) -> String:
+static func _raw_delta_text(stat_id: String, operation: int, delta: float, raw_direction: int) -> String:
 	var stat_name := stat_id.replace("_", " ").capitalize()
-	var display_value := delta if operation == StatModifier.Operation.FLAT else delta * 100.0
+	var display_value := absf(delta if operation == StatModifier.Operation.FLAT else delta * 100.0)
 	var suffix := "" if operation == StatModifier.Operation.FLAT else "%"
-	return "%s%s%s %s" % ["+" if display_value > 0.0 else "", _number(display_value), suffix, stat_name]
+	return "- %s raw %s roll: %s%s %s -- benefit unknown" % [
+		stat_name,
+		_operation_name(operation),
+		_number(display_value),
+		suffix,
+		_raw_direction_word(raw_direction),
+	]
+
+
+static func _raw_delta_accessible_text(stat_id: String, operation: int, delta: float, raw_direction: int) -> String:
+	var stat_name := stat_id.replace("_", " ").capitalize()
+	var display_value := absf(delta if operation == StatModifier.Operation.FLAT else delta * 100.0)
+	var suffix := "" if operation == StatModifier.Operation.FLAT else "%"
+	return "%s raw %s roll is %s%s %s; benefit unknown; neutral comparison" % [
+		stat_name,
+		_operation_name(operation),
+		_number(display_value),
+		suffix,
+		_raw_direction_word(raw_direction),
+	]
+
+
+static func _operation_name(operation: int) -> String:
+	match operation:
+		StatModifier.Operation.FLAT:
+			return "flat"
+		StatModifier.Operation.INCREASED:
+			return "increased"
+		StatModifier.Operation.REDUCED:
+			return "reduced"
+		StatModifier.Operation.MORE:
+			return "more"
+		StatModifier.Operation.LESS:
+			return "less"
+		_:
+			return "unknown"
+
+
+static func _raw_direction_word(raw_direction: int) -> String:
+	return "higher" if raw_direction > 0 else "lower" if raw_direction < 0 else "unchanged"
 
 
 static func _number(value: float) -> String:

@@ -66,11 +66,13 @@ func _test_request_is_exact_and_defensive(failures: Array[String]) -> void:
 	TestAssertions.equal(request.ordinary_selections[0].item_id, "item-one", "request getter is defensive", failures)
 
 func _test_context_resolution_marker_contract(failures: Array[String]) -> void:
-	var context := PlayerRunContext.new()
+	var fixture := _fixture("context_marker_contract", 0, [], true)
+	var context := fixture.context as PlayerRunContext
 	TestAssertions.equal(context.item_resolution_error("resolution-a"), "", "unresolved context accepts first transaction", failures)
 	context.mark_items_resolved("resolution-a")
 	TestAssertions.equal(context.item_resolution_error("resolution-a"), "", "resolved context accepts same transaction replay", failures)
 	TestAssertions.truthy(not context.item_resolution_error("resolution-b").is_empty(), "resolved context rejects a different transaction", failures)
+	_cleanup(fixture)
 
 func _test_service_type_exists(failures: Array[String]) -> void:
 	var result := RunResolutionResult.failure("expected")

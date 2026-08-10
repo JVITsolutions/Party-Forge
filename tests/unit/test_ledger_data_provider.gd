@@ -97,7 +97,51 @@ func run() -> Array[String]:
 	_test_combat_estimate_action_discovery(failures)
 	_test_healing_estimate_discovery(failures)
 	_test_archetype_relevance_equipment_attribution_and_action_totals(failures)
+	_test_actual_catalog_archetype_ledger_contract(failures)
 	return failures
+
+func _test_actual_catalog_archetype_ledger_contract(failures: Array[String]) -> void:
+	var catalog := GameCatalog.load_defaults()
+	var expected_by_class := {
+		&"fighter": &"melee_damage",
+		&"ranger": &"ranged_damage",
+		&"mage": &"caster_damage",
+		&"cleric": &"caster_damage",
+		&"paladin": &"melee_damage",
+		&"rogue": &"melee_damage",
+		&"frost_mage": &"caster_damage",
+		&"warlock": &"caster_damage",
+		&"marksman": &"ranged_damage",
+	}
+	var archetype_stat_ids: Array[StringName] = [&"melee_damage", &"ranged_damage", &"caster_damage"]
+	for class_id: StringName in expected_by_class:
+		var definition := catalog.class_by_id(class_id)
+		var expected_stat_id := expected_by_class[class_id] as StringName
+		var expected_tag := StringName(String(expected_stat_id).trim_suffix("_damage"))
+		var party := PartyManager.new()
+		party.initialize(definition, catalog.traits)
+		var capability_archetypes: Array[StringName] = []
+		for tag: StringName in ActionArchetype.PRIMARY_TAGS:
+			if tag in party.member_capabilities(1):
+				capability_archetypes.append(tag)
+		TestAssertions.equal(capability_archetypes, [expected_tag], "%s actual class/trait capability contract has one relevant archetype" % class_id, failures)
+		var action_archetypes: Array[StringName] = []
+		for action: AttackDefinition in definition.owned_actions():
+			if action != null and not action.is_healing():
+				var action_stat_id := ActionArchetype.stat_id(action)
+				if not action_stat_id.is_empty() and action_stat_id not in action_archetypes:
+					action_archetypes.append(action_stat_id)
+		TestAssertions.equal(action_archetypes, [expected_stat_id], "%s actual action contract has the matching archetype" % class_id, failures)
+		var provider := LedgerDataProvider.new()
+		provider.configure(party, catalog, Callable())
+		var visible_archetypes: Array[StringName] = []
+		for row: Dictionary in provider.stat_rows(1):
+			var stat_id := row.get("stat_id", &"") as StringName
+			if stat_id in archetype_stat_ids:
+				visible_archetypes.append(stat_id)
+		TestAssertions.equal(visible_archetypes, [expected_stat_id], "%s ledger exposes only its actual relevant archetype row" % class_id, failures)
+		provider.configure(null, null, Callable())
+		party.free()
 
 func _test_independent_progression_projection_and_core_attributes(failures: Array[String]) -> void:
 	var catalog := GameCatalog.load_defaults()

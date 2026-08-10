@@ -12,6 +12,7 @@ func run() -> Array[String]:
 	_test_normal_and_advanced_layers(card_script, failures)
 	_test_equipped_role_and_deltas(card_script, failures)
 	_test_disabled_status_and_accessible_deltas(card_script, failures)
+	_test_raw_fallback_rows_use_neutral_color(card_script, failures)
 	_test_developer_technical_gate(card_script, failures)
 	return failures
 
@@ -39,6 +40,40 @@ func _test_normal_and_advanced_layers(card_script: Script, failures: Array[Strin
 	TestAssertions.truthy(advanced_text.contains("Range: 15-20%"), "advanced card shows percentage roll range", failures)
 	TestAssertions.truthy(advanced_text.contains("Roll quality: 60%"), "advanced card shows roll position", failures)
 	TestAssertions.truthy(bool(card.call("advanced_visible")), "advanced query matches rendered layer", failures)
+	card.free()
+
+func _test_raw_fallback_rows_use_neutral_color(card_script: Script, failures: Array[String]) -> void:
+	var inspected := {
+		"instance_id": "new-ring",
+		"name": "New Ring",
+		"compatible_slot_ids": ["ring_left"],
+		"modifier_totals": {
+			"damage|2": 0.20,
+			"damage|4": 0.05,
+		},
+	}
+	var equipped := {
+		"instance_id": "old-ring",
+		"name": "Old Ring",
+		"compatible_slot_ids": ["ring_left"],
+		"modifier_totals": {
+			"damage|2": 0.10,
+			"damage|4": 0.10,
+		},
+	}
+	var comparisons := ItemComparisonResolver.resolve(
+		inspected,
+		[{"slot_id": "ring_left", "instance_id": "old-ring"}],
+		{"old-ring": equipped},
+	)
+	var card: Control = card_script.new()
+	card.call("present", _detail(), StringName("equipped:ring_left"), false, comparisons[0]["delta_lines"], false)
+	var delta_box := card.get_node("Layout/ComparisonDeltas") as VBoxContainer
+	TestAssertions.equal(delta_box.get_child_count(), 2, "raw fallback fixture renders both differing operations", failures)
+	for child: Label in delta_box.get_children():
+		TestAssertions.equal(child.get_theme_color("font_color"), Color(0.78, 0.80, 0.84), "raw fallback uses the neutral comparison color", failures)
+		var accessible := child.accessibility_name.to_lower()
+		TestAssertions.truthy("benefit unknown" in accessible and "neutral" in accessible, "raw fallback label exposes accessible neutral meaning", failures)
 	card.free()
 
 

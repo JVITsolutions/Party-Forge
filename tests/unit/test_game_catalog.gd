@@ -16,7 +16,7 @@ const EXPECTED_CAPABILITIES := {
     &"paladin": [&"area", &"block", &"melee", &"physical", &"regeneration", &"armour_heavy", &"one_hand_hammer", &"shield"],
     &"rogue": [&"area", &"crit", &"dodge", &"life_steal", &"melee", &"physical", &"armour_light", &"dagger", &"dual_wield"],
     &"frost_mage": [&"area", &"cold", &"projectile", &"armour_light", &"caster_staff"],
-    &"warlock": [&"chaos", &"life_steal", &"projectile", &"ranged", &"armour_light", &"occult_wand", &"occult_grimoire"],
+    &"warlock": [&"chaos", &"life_steal", &"projectile", &"armour_light", &"occult_wand", &"occult_grimoire"],
     &"marksman": [&"bow", &"crit", &"physical", &"projectile", &"ranged", &"armour_light", &"armour_medium", &"bow_light_medium", &"greatbow"],
 }
 

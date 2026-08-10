@@ -6,6 +6,7 @@ func run() -> Array[String]:
 	_test_critical_chance_matches_runtime_bounds(failures)
 	_test_noncritical_mixed_damage(failures)
 	_test_mixed_caster_runtime_parity(failures)
+	_test_actual_warlock_action_snapshot_is_caster_only(failures)
 	_test_snapshot_estimate_matches_party_estimate(failures)
 	_test_action_geometry_estimate_parity_and_tag_filtering(failures)
 	_test_geometry_only_changes_do_not_invent_dps(failures)
@@ -16,6 +17,26 @@ func run() -> Array[String]:
 	_test_invalid_damage_type_is_unavailable(failures)
 	_test_estimate_invariants_are_contextual(failures)
 	return failures
+
+func _test_actual_warlock_action_snapshot_is_caster_only(failures: Array[String]) -> void:
+	var catalog := GameCatalog.load_defaults()
+	var warlock := catalog.class_by_id(&"warlock")
+	var party := PartyManager.new()
+	party.initialize(warlock, catalog.traits)
+	var ranged_modifier := StatModifier.create(&"damage", StatModifier.Operation.INCREASED, 0.75, &"task10o_ranged_only", "Ranged Only")
+	ranged_modifier.required_capability_tags = [&"ranged"]
+	var caster_modifier := StatModifier.create(&"damage", StatModifier.Operation.INCREASED, 0.25, &"task10o_caster_only", "Caster Only")
+	caster_modifier.required_capability_tags = [&"caster"]
+	var source := StatModifierSource.create(&"task10o_warlock_archetype", &"test", "Warlock Archetype", 1, [ranged_modifier, caster_modifier])
+	TestAssertions.truthy(party.add_member_source(1, source), "actual Warlock archetype source applies", failures)
+	var snapshot := party.stats_for_action(1, warlock.primary_attack.normalized_action_tags())
+	var source_ids: Array[StringName] = []
+	for row: Dictionary in snapshot.breakdown(&"damage"):
+		source_ids.append(row.get("source_id", &"") as StringName)
+	TestAssertions.truthy(&"task10o_caster_only" in source_ids, "actual Warlock caster modifier reaches the caster-bolt snapshot", failures)
+	TestAssertions.truthy(&"task10o_ranged_only" not in source_ids, "actual Warlock ranged-required modifier cannot reach the caster-bolt snapshot", failures)
+	TestAssertions.near(snapshot.value(&"damage"), 1.25, 0.0001, "actual Warlock caster-bolt snapshot applies only caster scaling", failures)
+	party.free()
 
 
 func _test_geometry_only_healing_range_preserves_amount_and_hps(failures: Array[String]) -> void:
