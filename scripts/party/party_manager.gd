@@ -32,13 +32,13 @@ var _capacity_policy := PartyCapacityPolicy.new(MAX_PARTY_SIZE)
 var _identity_seed := 0
 var _fallback_names: CharacterNamePool
 var _stat_revision := 0
+var _member_stat_revision: Dictionary = {}
 var _stat_cache: Dictionary = {}
 var _action_stat_cache: Dictionary = {}
 var _active_weapon_by_member: Dictionary = {}
 var _member_source_refresh_coordinator: Callable
 var _member_source_refresh_authority: RefCounted
 var _equipment_projection_publisher: Callable
-var _equipment_projection_publisher_required := false
 
 func _init() -> void:
     for stat_id: StringName in PARTY_STAT_IDS:
@@ -48,8 +48,10 @@ func initialize(leader_class: ClassDefinition, traits: Array[TraitDefinition], t
     _member_source_refresh_coordinator = Callable()
     _member_source_refresh_authority = null
     _equipment_projection_publisher = Callable()
-    _equipment_projection_publisher_required = false
     _active_weapon_by_member.clear()
+    _member_stat_revision.clear()
+    _stat_cache.clear()
+    _action_stat_cache.clear()
     members.clear(); class_ranks.clear(); active_tiers.clear(); trait_upgrade_ranks.clear(); _party_upgrade_ranks.clear(); _party_upgrade_definitions.clear(); _party_upgrade_sources.clear(); trait_definitions = traits
     upgrade_tuning = tuning if tuning != null else DEFAULT_UPGRADE_TUNING
     for stat_id: StringName in PARTY_STAT_IDS:
@@ -134,19 +136,16 @@ func active_weapon_snapshot(member_id: int) -> ActiveWeaponDamageSnapshot:
     var snapshot := _active_weapon_by_member.get(member_id) as ActiveWeaponDamageSnapshot
     return snapshot.copy() if snapshot != null else null
 
-func bind_member_source_refresh_coordinator(coordinator: Callable) -> RefCounted:
+func bind_member_source_refresh_coordinator(
+    coordinator: Callable,
+    equipment_projection_publisher: Callable = Callable(),
+) -> RefCounted:
     if not coordinator.is_valid():
         return null
     if _member_source_refresh_coordinator.is_valid() or _member_source_refresh_authority != null:
         return null
     _member_source_refresh_coordinator = coordinator
-    var coordinator_owner := coordinator.get_object()
-    if coordinator_owner != null and coordinator_owner.has_method(&"_publish_accepted_equipment_projections"):
-        _equipment_projection_publisher = Callable(coordinator_owner, "_publish_accepted_equipment_projections")
-        _equipment_projection_publisher_required = true
-    else:
-        _equipment_projection_publisher = Callable()
-        _equipment_projection_publisher_required = false
+    _equipment_projection_publisher = equipment_projection_publisher if equipment_projection_publisher.is_valid() else Callable()
     _member_source_refresh_authority = RefCounted.new()
     return _member_source_refresh_authority
 
@@ -159,7 +158,6 @@ func unbind_member_source_refresh_coordinator(coordinator: Callable, authority: 
         _member_source_refresh_coordinator = Callable()
         _member_source_refresh_authority = null
         _equipment_projection_publisher = Callable()
-        _equipment_projection_publisher_required = false
 
 func owns_member_source_refresh_coordinator(coordinator: Callable, authority: RefCounted) -> bool:
     return (
@@ -173,8 +171,12 @@ func stats_for(member_id: int) -> ResolvedStatSnapshot:
     var member := member_by_id(member_id)
     if member == null:
         return null
+    var member_revision := _effective_revision_for_member(member_id)
     if _stat_cache.has(member_id):
-        return _stat_cache[member_id] as ResolvedStatSnapshot
+        var cached := _stat_cache[member_id] as ResolvedStatSnapshot
+        if cached != null and cached.revision == member_revision:
+            return cached
+        _stat_cache.erase(member_id)
     var resolution := MemberStatResolutionService.resolve(
         member_id,
         STAT_CATALOG,
@@ -182,7 +184,7 @@ func stats_for(member_id: int) -> ResolvedStatSnapshot:
         member.capability_tags,
         _sources_for(member),
         [],
-        _stat_revision,
+        member_revision,
         DEFAULT_ATTRIBUTE_PROJECTION,
     )
     if not resolution.ok():
@@ -205,8 +207,12 @@ func stats_for_action(member_id: int, action_tags: Array[StringName]) -> Resolve
     for tag: StringName in normalized:
         parts.append(String(tag))
     var key := "%d|%s" % [member_id, ",".join(parts)]
+    var member_revision := _effective_revision_for_member(member_id)
     if _action_stat_cache.has(key):
-        return _action_stat_cache[key] as ResolvedStatSnapshot
+        var cached := _action_stat_cache[key] as ResolvedStatSnapshot
+        if cached != null and cached.revision == member_revision:
+            return cached
+        _action_stat_cache.erase(key)
     var resolution := MemberStatResolutionService.resolve(
         member_id,
         STAT_CATALOG,
@@ -214,7 +220,7 @@ func stats_for_action(member_id: int, action_tags: Array[StringName]) -> Resolve
         member.capability_tags,
         _sources_for(member),
         normalized,
-        _stat_revision,
+        member_revision,
         DEFAULT_ATTRIBUTE_PROJECTION,
     )
     if not resolution.ok():
@@ -384,7 +390,7 @@ func _equipment_authority_is_valid(authority: RefCounted) -> bool:
         authority != null
         and is_same(authority, _member_source_refresh_authority)
         and _member_source_refresh_coordinator.is_valid()
-        and (not _equipment_projection_publisher_required or _equipment_projection_publisher.is_valid())
+        and _equipment_projection_publisher.is_valid()
     )
 
 func _equipment_projection_is_valid(
@@ -475,8 +481,6 @@ func _restore_equipment_projections(
         )
 
 func _publish_accepted_equipment_projections(member_ids: Array[int]) -> bool:
-    if not _equipment_projection_publisher_required:
-        return true
     return _equipment_projection_publisher.is_valid() and bool(_equipment_projection_publisher.call(member_ids.duplicate()))
 
 func _commit_member_source_without_invalidation(member_id: int, source: StatModifierSource) -> bool:
@@ -661,6 +665,8 @@ func _commit_party_upgrade(definition: UpgradeDefinition, rank: int, source: Sta
 
 func _invalidate_member(member_id: int) -> void:
     _stat_revision += 1
+    _member_stat_revision[member_id] = _stat_revision
+    _restamp_active_weapon(member_id, _stat_revision)
     _stat_cache.erase(member_id)
     var prefix := "%d|" % member_id
     for key: Variant in _action_stat_cache.keys():
@@ -671,6 +677,8 @@ func _invalidate_member(member_id: int) -> void:
 func _invalidate_members(member_ids: Array[int]) -> void:
     _stat_revision += 1
     for member_id: int in member_ids:
+        _member_stat_revision[member_id] = _stat_revision
+        _restamp_active_weapon(member_id, _stat_revision)
         _stat_cache.erase(member_id)
         var prefix := "%d|" % member_id
         for key: Variant in _action_stat_cache.keys():
@@ -684,7 +692,24 @@ func _invalidate_all_members() -> void:
     _stat_cache.clear()
     _action_stat_cache.clear()
     for member: PartyMemberState in members:
+        _member_stat_revision[member.member_id] = _stat_revision
+        _restamp_active_weapon(member.member_id, _stat_revision)
         stats_changed.emit(member.member_id)
+
+func _effective_revision_for_member(member_id: int) -> int:
+    return int(_member_stat_revision.get(member_id, _stat_revision))
+
+func _restamp_active_weapon(member_id: int, revision: int) -> void:
+    var weapon := _active_weapon_by_member.get(member_id) as ActiveWeaponDamageSnapshot
+    if weapon == null or weapon.revision == revision:
+        return
+    _active_weapon_by_member[member_id] = ActiveWeaponDamageSnapshot.create(
+        weapon.member_id,
+        weapon.item_id,
+        weapon.base_id,
+        weapon.components,
+        revision,
+    )
 
 func rank_up(class_id: StringName) -> bool:
     if not class_ranks.has(class_id):

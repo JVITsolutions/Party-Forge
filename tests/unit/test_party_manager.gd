@@ -3,8 +3,34 @@ extends RefCounted
 const ACTION_ONLY_TAG := &"task10d_action_only"
 
 class CoordinatorProbe extends RefCounted:
+    var party: PartyManager
+
     func refresh(_member_id: int, _source: StatModifierSource) -> bool:
         return false
+
+    func validate(member_ids: Array[int]) -> bool:
+        if party == null or member_ids.is_empty():
+            return false
+        var seen: Dictionary = {}
+        for member_id: int in member_ids:
+            if member_id <= 0 or seen.has(member_id):
+                return false
+            seen[member_id] = true
+            var member := party.member_by_id(member_id)
+            if member == null:
+                return false
+            var equipment_sources := member.modifier_sources.filter(func(source: StatModifierSource) -> bool:
+                return source != null and source.source_type == &"equipment"
+            )
+            if equipment_sources.size() != 1:
+                return false
+            var source := equipment_sources[0] as StatModifierSource
+            if source.id != StringName("equipment_member_%d" % member_id) or source.owner_member_id != member_id:
+                return false
+            var weapon := party.active_weapon_snapshot(member_id)
+            if weapon != null and (weapon.member_id != member_id or weapon.revision != party.stat_revision() + 1):
+                return false
+        return true
 
 class NodeCoordinatorProbe extends Node:
     func refresh(_member_id: int, _source: StatModifierSource) -> bool:
@@ -79,8 +105,11 @@ func run() -> Array[String]:
     _test_atomic_batch_rejects_corrupted_equipment_prestate(failures)
     _test_coordinated_source_authority_contract(failures)
     _test_member_equipment_source_authority_contract(failures)
+    _test_equipment_projection_requires_validator(failures)
     _test_atomic_weapon_projection_contract(failures)
     _test_twenty_four_member_weapon_projection_isolation(failures)
+    _test_all_member_invalidations_restamp_equipped_weapons(failures)
+    _test_member_local_revision_is_warm_cold_coherent(failures)
     _test_dead_coordinator_binding_fails_closed(failures)
     _test_two_pass_cache_isolation_and_preview_inputs(failures)
     _test_party_actor_stats_signal_lifecycle(failures)
@@ -377,7 +406,7 @@ func _test_atomic_batch_rejects_corrupted_equipment_prestate(failures: Array[Str
         party.stats_changed.connect(func(member_id: int) -> void: events.append(member_id))
         var probe := CoordinatorProbe.new()
         var callback := Callable(probe, "refresh")
-        var authority := party.bind_member_source_refresh_coordinator(callback)
+        var authority := _bind_equipment_authority(party, callback)
         TestAssertions.truthy(authority != null, "%s corrupted batch fixture binds authority" % corruption, failures)
         TestAssertions.equal(
             party.replace_member_equipment_projections_atomically({1: {"source": _equipment_source(1, 5.0), "weapon": null}}, authority),
@@ -416,7 +445,7 @@ func _test_atomic_equipment_source_batch_contract(failures: Array[String]) -> vo
         return
     var probe := CoordinatorProbe.new()
     var coordinator := Callable(probe, "refresh")
-    var authority_value: Variant = party.bind_member_source_refresh_coordinator(coordinator)
+    var authority_value: Variant = _bind_equipment_authority(party, coordinator)
     var method_argument_count := _method_argument_count(party, &"replace_member_equipment_projections_atomically")
     TestAssertions.equal(method_argument_count, 2, "equipment batch requires explicit authority", failures)
     TestAssertions.truthy(authority_value is RefCounted, "equipment batch fixture receives opaque authority", failures)
@@ -544,7 +573,7 @@ func _test_coordinated_source_authority_contract(failures: Array[String]) -> voi
     TestAssertions.equal(method_argument_count, 5, "coordinated source commit requires a weapon projection and explicit authority", failures)
     var probe := CoordinatorProbe.new()
     var coordinator := Callable(probe, "refresh")
-    var authority_value: Variant = party.bind_member_source_refresh_coordinator(coordinator)
+    var authority_value: Variant = _bind_equipment_authority(party, coordinator)
     TestAssertions.truthy(authority_value is RefCounted, "coordinator binding issues opaque authority", failures)
     var member_source := StatModifierSource.create(&"task10k_authority_growth", &"character_growth", "Authority Growth", 1, [
         StatModifier.create(&"strength", StatModifier.Operation.FLAT, 1.0, &"task10k_authority_strength", "Authority Growth"),
@@ -602,7 +631,7 @@ func _test_member_equipment_source_authority_contract(failures: Array[String]) -
         return
     var probe := CoordinatorProbe.new()
     var coordinator := Callable(probe, "refresh")
-    var authority_value: Variant = party.bind_member_source_refresh_coordinator(coordinator)
+    var authority_value: Variant = _bind_equipment_authority(party, coordinator)
     TestAssertions.truthy(authority_value is RefCounted, "member equipment fixture receives opaque authority", failures)
     if not authority_value is RefCounted:
         party.free()
@@ -641,6 +670,48 @@ func _test_member_equipment_source_authority_contract(failures: Array[String]) -
     party.free()
 
 
+func _test_equipment_projection_requires_validator(failures: Array[String]) -> void:
+    var catalog := GameCatalog.load_defaults()
+    var party := PartyManager.new()
+    party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
+    var probe := CoordinatorProbe.new()
+    var coordinator := Callable(probe, "refresh")
+    var authority := party.bind_member_source_refresh_coordinator(coordinator)
+    TestAssertions.truthy(authority != null, "coordinator-only binding still issues non-equipment authority", failures)
+    var source := _equipment_source(1, 3.0)
+    var growth := _growth_source(1, &"validator_required_growth", 2.0)
+    var sources_before := _member_source_documents(party.member_by_id(1))
+    var base_before := party.stats_for(1)
+    var action_tags: Array[StringName] = [&"melee", &"physical"]
+    var action_before := party.stats_for_action(1, action_tags)
+    var revision_before := party.stat_revision()
+    var events: Array[int] = []
+    party.stats_changed.connect(func(member_id: int) -> void: events.append(member_id))
+    TestAssertions.truthy(
+        not party.replace_member_equipment_projection_atomically(1, source, null, authority),
+        "coordinator-only authority cannot publish one equipment projection",
+        failures,
+    )
+    TestAssertions.equal(
+        party.replace_member_equipment_projections_atomically({1: {"source": source, "weapon": null}}, authority),
+        -1,
+        "coordinator-only authority cannot publish an equipment batch",
+        failures,
+    )
+    TestAssertions.truthy(
+        not party.replace_member_source_with_equipment_atomically(1, growth, source, null, authority),
+        "coordinator-only authority cannot publish a coordinated equipment projection",
+        failures,
+    )
+    TestAssertions.equal(_member_source_documents(party.member_by_id(1)), sources_before, "missing validator preserves exact sources", failures)
+    TestAssertions.equal(party.stat_revision(), revision_before, "missing validator preserves revision", failures)
+    TestAssertions.truthy(is_same(party.stats_for(1), base_before), "missing validator preserves base cache identity", failures)
+    TestAssertions.truthy(is_same(party.stats_for_action(1, action_tags), action_before), "missing validator preserves action cache identity", failures)
+    TestAssertions.equal(events, [], "missing validator emits no stat signal", failures)
+    party.unbind_member_source_refresh_coordinator(coordinator, authority)
+    party.free()
+
+
 func _test_atomic_weapon_projection_contract(failures: Array[String]) -> void:
     var catalog := GameCatalog.load_defaults()
     var party := PartyManager.new()
@@ -652,7 +723,7 @@ func _test_atomic_weapon_projection_contract(failures: Array[String]) -> void:
         return
     var probe := CoordinatorProbe.new()
     var coordinator := Callable(probe, "refresh")
-    var authority := party.bind_member_source_refresh_coordinator(coordinator)
+    var authority := _bind_equipment_authority(party, coordinator)
     var revision_before := party.stat_revision()
     var base_before := party.stats_for(1)
     var action_tags: Array[StringName] = [&"melee", &"physical"]
@@ -732,7 +803,7 @@ func _test_twenty_four_member_weapon_projection_isolation(failures: Array[String
         source_documents[member.member_id] = _member_source_documents(member)
     var probe := CoordinatorProbe.new()
     var coordinator := Callable(probe, "refresh")
-    var authority := party.bind_member_source_refresh_coordinator(coordinator)
+    var authority := _bind_equipment_authority(party, coordinator)
     var revision_before := party.stat_revision()
     var events: Array[int] = []
     party.stats_changed.connect(func(member_id: int) -> void: events.append(member_id))
@@ -755,6 +826,116 @@ func _test_twenty_four_member_weapon_projection_isolation(failures: Array[String
             TestAssertions.truthy(is_same(party.stats_for(member.member_id), caches[member.member_id]), "member %d cache identity remains exact" % member.member_id, failures)
     party.unbind_member_source_refresh_coordinator(coordinator, authority)
     party.free()
+
+func _test_all_member_invalidations_restamp_equipped_weapons(failures: Array[String]) -> void:
+    var fixture := _two_equipped_member_fixture(failures, "all-member")
+    var party := fixture.get("party") as PartyManager
+    if party == null:
+        return
+    var events: Array[int] = []
+    party.stats_changed.connect(func(member_id: int) -> void: events.append(member_id))
+
+    var caches := _warm_party_caches(party)
+    var revision_before := party.stat_revision()
+    TestAssertions.truthy(party.rank_up(&"fighter"), "rank-up revision fixture mutates", failures)
+    _assert_all_member_revision_state(party, revision_before, caches, events, "rank up", failures)
+
+    events.clear()
+    caches = _warm_party_caches(party)
+    revision_before = party.stat_revision()
+    TestAssertions.truthy(party.upgrade_party_stat(&"damage"), "party-stat revision fixture mutates", failures)
+    _assert_all_member_revision_state(party, revision_before, caches, events, "party stat upgrade", failures)
+
+    events.clear()
+    caches = _warm_party_caches(party)
+    revision_before = party.stat_revision()
+    TestAssertions.truthy(party.upgrade_trait(&"vanguard"), "trait-upgrade revision fixture mutates", failures)
+    _assert_all_member_revision_state(party, revision_before, caches, events, "trait upgrade", failures)
+
+    events.clear()
+    caches = _warm_party_caches(party)
+    revision_before = party.stat_revision()
+    var upgrade := _task10t_party_upgrade(&"revision_party_upgrade", [
+        _task10t_effect(&"damage", StatModifier.Operation.INCREASED, 0.05),
+    ])
+    var upgrade_source := StatModifierSource.create(&"upgrade:revision_party_upgrade:party", &"upgrade", "Revision Party Upgrade", 0, [
+        StatModifier.create(&"damage", StatModifier.Operation.INCREASED, 0.05, &"revision_party_upgrade", "Revision Party Upgrade"),
+    ])
+    TestAssertions.truthy(bool(party.call(&"_commit_party_upgrade", upgrade, 1, upgrade_source)), "party-upgrade revision fixture mutates", failures)
+    _assert_all_member_revision_state(party, revision_before, caches, events, "party upgrade commit", failures)
+
+    events.clear()
+    caches = _warm_party_caches(party)
+    revision_before = party.stat_revision()
+    TestAssertions.truthy(party.recruit(GameCatalog.load_defaults().class_by_id(&"fighter")), "ordinary recruit revision fixture mutates", failures)
+    _assert_all_member_revision_state(party, revision_before, caches, events, "recruit without trait-tier change", failures)
+
+    events.clear()
+    caches = _warm_party_caches(party)
+    revision_before = party.stat_revision()
+    TestAssertions.truthy(party.recruit(GameCatalog.load_defaults().class_by_id(&"fighter")), "trait-tier recruit revision fixture mutates", failures)
+    _assert_all_member_revision_state(party, revision_before, caches, events, "recruit with trait-tier change", failures)
+
+    events.clear()
+    party.active_tiers = {}
+    caches = _warm_party_caches(party)
+    revision_before = party.stat_revision()
+    TestAssertions.truthy(bool(party.call(&"_recalculate_traits")), "direct trait recalculation fixture mutates", failures)
+    _assert_all_member_revision_state(party, revision_before, caches, events, "trait recalculation", failures)
+
+    party.unbind_member_source_refresh_coordinator(fixture["coordinator"], fixture["authority"])
+    party.free()
+
+func _test_member_local_revision_is_warm_cold_coherent(failures: Array[String]) -> void:
+    var warm_fixture := _two_equipped_member_fixture(failures, "warm")
+    var cold_fixture := _two_equipped_member_fixture(failures, "cold")
+    var warm_party := warm_fixture.get("party") as PartyManager
+    var cold_party := cold_fixture.get("party") as PartyManager
+    if warm_party == null or cold_party == null:
+        if warm_party != null:
+            warm_party.free()
+        if cold_party != null:
+            cold_party.free()
+        return
+    var action_tags: Array[StringName] = [&"melee", &"physical"]
+    var warm_second_base := warm_party.stats_for(2)
+    var warm_second_action := warm_party.stats_for_action(2, action_tags)
+    var warm_second_weapon_before := _weapon_document(warm_party.active_weapon_snapshot(2))
+    var warm_revision_before := warm_party.stat_revision()
+    var cold_revision_before := cold_party.stat_revision()
+    var warm_events: Array[int] = []
+    var cold_events: Array[int] = []
+    warm_party.stats_changed.connect(func(member_id: int) -> void: warm_events.append(member_id))
+    cold_party.stats_changed.connect(func(member_id: int) -> void: cold_events.append(member_id))
+    TestAssertions.truthy(_commit_member_one_growth(warm_fixture), "warm member-local mutation commits", failures)
+    TestAssertions.truthy(_commit_member_one_growth(cold_fixture), "cold member-local mutation commits", failures)
+    TestAssertions.equal(warm_party.stat_revision(), warm_revision_before + 1, "warm member-local mutation advances global revision once", failures)
+    TestAssertions.equal(cold_party.stat_revision(), cold_revision_before + 1, "cold member-local mutation advances global revision once", failures)
+    TestAssertions.equal(warm_events, [1], "warm member-local mutation signals only member one", failures)
+    TestAssertions.equal(cold_events, [1], "cold member-local mutation signals only member one", failures)
+    TestAssertions.truthy(is_same(warm_party.stats_for(2), warm_second_base), "warm member-two base cache identity remains exact", failures)
+    TestAssertions.truthy(is_same(warm_party.stats_for_action(2, action_tags), warm_second_action), "warm member-two action cache identity remains exact", failures)
+    TestAssertions.equal(_weapon_document(warm_party.active_weapon_snapshot(2)), warm_second_weapon_before, "warm member-two weapon remains byte-equivalent", failures)
+    var cold_second_base := cold_party.stats_for(2)
+    var cold_second_action := cold_party.stats_for_action(2, action_tags)
+    var warm_second_weapon := warm_party.active_weapon_snapshot(2)
+    var cold_second_weapon := cold_party.active_weapon_snapshot(2)
+    TestAssertions.equal(cold_second_base.revision, warm_second_base.revision, "cold member-two base uses the same effective revision as warm cache", failures)
+    TestAssertions.equal(cold_second_action.revision, warm_second_action.revision, "cold member-two action uses the same effective revision as warm cache", failures)
+    TestAssertions.equal(cold_second_base.revision, cold_second_weapon.revision, "cold member-two base and weapon revisions agree", failures)
+    TestAssertions.equal(cold_second_action.revision, cold_second_weapon.revision, "cold member-two action and weapon revisions agree", failures)
+    TestAssertions.equal(_resolved_snapshot_document(cold_second_base), _resolved_snapshot_document(warm_second_base), "cold and warm member-two base snapshots are identical", failures)
+    TestAssertions.equal(_resolved_snapshot_document(cold_second_action), _resolved_snapshot_document(warm_second_action), "cold and warm member-two action snapshots are identical", failures)
+    TestAssertions.equal(_weapon_document(cold_second_weapon), _weapon_document(warm_second_weapon), "cold and warm member-two weapons are identical", failures)
+    for party: PartyManager in [warm_party, cold_party]:
+        var member_one_weapon := party.active_weapon_snapshot(1)
+        TestAssertions.equal(member_one_weapon.revision, party.stat_revision(), "changed member-one weapon is restamped to the new global revision", failures)
+        TestAssertions.equal(party.stats_for(1).revision, member_one_weapon.revision, "changed member-one base and weapon revisions agree", failures)
+        TestAssertions.equal(party.stats_for_action(1, action_tags).revision, member_one_weapon.revision, "changed member-one action and weapon revisions agree", failures)
+    warm_party.unbind_member_source_refresh_coordinator(warm_fixture["coordinator"], warm_fixture["authority"])
+    cold_party.unbind_member_source_refresh_coordinator(cold_fixture["coordinator"], cold_fixture["authority"])
+    warm_party.free()
+    cold_party.free()
 
 func _test_dead_coordinator_binding_fails_closed(failures: Array[String]) -> void:
     _assert_dead_coordinator_rejects_source_mutation(
@@ -834,11 +1015,136 @@ func _assert_dead_coordinator_rejects_source_mutation(
     replacement_probe.free()
     party.free()
 
+func _two_equipped_member_fixture(failures: Array[String], label: String) -> Dictionary:
+    var catalog := GameCatalog.load_defaults()
+    var party := PartyManager.new()
+    party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
+    if not party.recruit(catalog.class_by_id(&"fighter")):
+        TestAssertions.truthy(false, "%s revision fixture recruits member two" % label, failures)
+        party.free()
+        return {}
+    var probe := CoordinatorProbe.new()
+    var coordinator := Callable(probe, "refresh")
+    var authority := _bind_equipment_authority(party, coordinator)
+    var candidate_revision := party.stat_revision() + 1
+    var accepted := party.replace_member_equipment_projections_atomically({
+        1: {
+            "source": _equipment_source(1, 2.0),
+            "weapon": _weapon_snapshot(1, "revision-weapon-1", &"forge_vanguard_sword", candidate_revision),
+        },
+        2: {
+            "source": _equipment_source(2, 3.0),
+            "weapon": _weapon_snapshot(2, "revision-weapon-2", &"forge_vanguard_sword", candidate_revision),
+        },
+    }, authority)
+    TestAssertions.equal(accepted, 0, "%s revision fixture publishes two weapons" % label, failures)
+    if accepted != 0:
+        party.unbind_member_source_refresh_coordinator(coordinator, authority)
+        party.free()
+        return {}
+    return {
+        "party": party,
+        "probe": probe,
+        "coordinator": coordinator,
+        "authority": authority,
+    }
+
+func _warm_party_caches(party: PartyManager) -> Dictionary:
+    var result: Dictionary = {}
+    for member: PartyMemberState in party.members:
+        result[member.member_id] = {
+            "base": party.stats_for(member.member_id),
+            "action": party.stats_for_action(member.member_id, member.class_definition.primary_attack.action_tags),
+        }
+    return result
+
+func _assert_all_member_revision_state(
+    party: PartyManager,
+    revision_before: int,
+    caches_before: Dictionary,
+    events: Array[int],
+    label: String,
+    failures: Array[String],
+) -> void:
+    var expected_revision := revision_before + 1
+    var expected_events: Array[int] = []
+    for member: PartyMemberState in party.members:
+        expected_events.append(member.member_id)
+    TestAssertions.equal(party.stat_revision(), expected_revision, "%s advances the global revision once" % label, failures)
+    TestAssertions.equal(events, expected_events, "%s signals every current member exactly once" % label, failures)
+    for member: PartyMemberState in party.members:
+        var base := party.stats_for(member.member_id)
+        var action := party.stats_for_action(member.member_id, member.class_definition.primary_attack.action_tags)
+        TestAssertions.equal(base.revision, expected_revision, "%s member %d base uses the new member revision" % [label, member.member_id], failures)
+        TestAssertions.equal(action.revision, expected_revision, "%s member %d action uses the new member revision" % [label, member.member_id], failures)
+        if caches_before.has(member.member_id):
+            var previous := caches_before[member.member_id] as Dictionary
+            TestAssertions.truthy(not is_same(base, previous["base"]), "%s member %d base cache is invalidated" % [label, member.member_id], failures)
+            TestAssertions.truthy(not is_same(action, previous["action"]), "%s member %d action cache is invalidated" % [label, member.member_id], failures)
+        var weapon := party.active_weapon_snapshot(member.member_id)
+        if member.member_id <= 2:
+            TestAssertions.truthy(weapon != null, "%s member %d retains an active weapon" % [label, member.member_id], failures)
+            if weapon != null:
+                TestAssertions.equal(weapon.revision, expected_revision, "%s member %d weapon is restamped" % [label, member.member_id], failures)
+
+func _commit_member_one_growth(fixture: Dictionary) -> bool:
+    var party := fixture.get("party") as PartyManager
+    if party == null:
+        return false
+    var equipment_source: StatModifierSource
+    for source: StatModifierSource in party.member_by_id(1).modifier_sources:
+        if source != null and source.source_type == &"equipment":
+            equipment_source = source
+            break
+    var weapon := party.active_weapon_snapshot(1)
+    if equipment_source == null or weapon == null:
+        return false
+    var restamped_weapon := ActiveWeaponDamageSnapshot.create(
+        weapon.member_id,
+        weapon.item_id,
+        weapon.base_id,
+        weapon.components,
+        party.stat_revision() + 1,
+    )
+    return party.replace_member_source_with_equipment_atomically(
+        1,
+        _growth_source(1, &"member_revision_growth", 2.0),
+        equipment_source,
+        restamped_weapon,
+        fixture.get("authority") as RefCounted,
+    )
+
+func _resolved_snapshot_document(snapshot: ResolvedStatSnapshot) -> String:
+    if snapshot == null:
+        return "null"
+    var values: Dictionary = {}
+    var breakdowns: Dictionary = {}
+    for definition: StatDefinition in PartyManager.STAT_CATALOG.all():
+        values[String(definition.id)] = snapshot.value(definition.id)
+        breakdowns[String(definition.id)] = snapshot.breakdown(definition.id)
+    var capabilities := PackedStringArray()
+    for capability: StringName in snapshot.capabilities:
+        capabilities.append(String(capability))
+    capabilities.sort()
+    return JSON.stringify({
+        "revision": snapshot.revision,
+        "capabilities": capabilities,
+        "values": values,
+        "breakdowns": breakdowns,
+    })
+
 func _method_argument_count(instance: Object, method_name: StringName) -> int:
     for method: Dictionary in instance.get_method_list():
         if StringName(method.get("name", "")) == method_name:
             return (method.get("args", []) as Array).size()
     return -1
+
+func _bind_equipment_authority(party: PartyManager, coordinator: Callable) -> RefCounted:
+    var probe := coordinator.get_object() as CoordinatorProbe
+    if probe == null:
+        return null
+    probe.party = party
+    return party.bind_member_source_refresh_coordinator(coordinator, Callable(probe, "validate"))
 
 func _equipment_source(member_id: int, strength: float) -> StatModifierSource:
     var source_id := StringName("equipment_member_%d" % member_id)

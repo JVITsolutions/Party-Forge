@@ -158,7 +158,10 @@ func configure(
 			"weapon": activation.weapon_snapshot(),
 		}
 	var source_refresh_callback := Callable(self, "_replace_non_equipment_source_atomically")
-	var source_refresh_authority := manager.bind_member_source_refresh_coordinator(source_refresh_callback)
+	var source_refresh_authority := manager.bind_member_source_refresh_coordinator(
+		source_refresh_callback,
+		Callable(self, "_publish_accepted_equipment_projections"),
+	)
 	if source_refresh_authority == null:
 		_stage_rejected_registration_identity(run_player_id_value, slot, owned_profile.profile_id, manager)
 		return PackedStringArray([
@@ -700,17 +703,14 @@ func _publish_accepted_equipment_projections(member_ids: Array[int]) -> bool:
 		var member := party.member_by_id(member_id)
 		if activation == null or member == null:
 			return false
-		var has_source := member.modifier_sources.any(func(source: StatModifierSource) -> bool:
-			return (
-				source != null
-				and source.id == activation.source.id
-				and source.source_type == activation.source.source_type
-				and source.owner_member_id == activation.source.owner_member_id
-			)
-		)
+		var committed_source: StatModifierSource
+		for source: StatModifierSource in member.modifier_sources:
+			if source != null and source.id == activation.source.id:
+				committed_source = source
+				break
 		var activation_weapon := activation.weapon_snapshot()
 		if (
-			not has_source
+			not _stat_modifier_sources_match(activation.source, committed_source)
 			or not _weapon_matches_staged_ownership(member_id, activation, activation_weapon)
 			or not _weapon_snapshots_match(activation_weapon, party.active_weapon_snapshot(member_id))
 		):
@@ -722,6 +722,53 @@ func _publish_accepted_equipment_projections(member_ids: Array[int]) -> bool:
 		).copy()
 	_clear_pending_equipment_publication()
 	return true
+
+func _stat_modifier_sources_match(left: StatModifierSource, right: StatModifierSource) -> bool:
+	if left == null or right == null:
+		return left == null and right == null
+	if (
+		left.id != right.id
+		or left.source_type != right.source_type
+		or left.label != right.label
+		or left.owner_member_id != right.owner_member_id
+		or left.modifiers.size() != right.modifiers.size()
+	):
+		return false
+	var left_modifiers: Array[String] = []
+	var right_modifiers: Array[String] = []
+	for modifier: StatModifier in left.modifiers:
+		if modifier == null:
+			return false
+		left_modifiers.append(_canonical_modifier_document(modifier))
+	for modifier: StatModifier in right.modifiers:
+		if modifier == null:
+			return false
+		right_modifiers.append(_canonical_modifier_document(modifier))
+	left_modifiers.sort()
+	right_modifiers.sort()
+	return left_modifiers == right_modifiers
+
+func _canonical_modifier_document(modifier: StatModifier) -> String:
+	return JSON.stringify({
+		"stat_id": String(modifier.stat_id),
+		"operation": modifier.operation,
+		"value": modifier.value,
+		"source_id": String(modifier.source_id),
+		"source_label": modifier.source_label,
+		"required_tags": _sorted_tag_strings(modifier.required_tags),
+		"excluded_tags": _sorted_tag_strings(modifier.excluded_tags),
+		"required_capability_tags": _sorted_tag_strings(modifier.required_capability_tags),
+		"excluded_capability_tags": _sorted_tag_strings(modifier.excluded_capability_tags),
+		"required_action_tags": _sorted_tag_strings(modifier.required_action_tags),
+		"excluded_action_tags": _sorted_tag_strings(modifier.excluded_action_tags),
+	})
+
+func _sorted_tag_strings(tags: Array[StringName]) -> PackedStringArray:
+	var result := PackedStringArray()
+	for tag: StringName in tags:
+		result.append(String(tag))
+	result.sort()
+	return result
 
 func _weapon_matches_staged_ownership(
 	member_id: int,

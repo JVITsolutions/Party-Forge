@@ -3,7 +3,10 @@ extends RefCounted
 var _parties: Array[PartyManager] = []
 
 class CoordinatorRejectingPartyManager extends PartyManager:
-	func bind_member_source_refresh_coordinator(_coordinator: Callable) -> RefCounted:
+	func bind_member_source_refresh_coordinator(
+		_coordinator: Callable,
+		_equipment_projection_publisher: Callable = Callable(),
+	) -> RefCounted:
 		return null
 
 func run() -> Array[String]:

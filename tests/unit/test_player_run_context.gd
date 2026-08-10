@@ -49,6 +49,7 @@ func run() -> Array[String]:
 	_test_direct_equipment_source_bypasses_reject_atomically(failures)
 	_test_equipment_authority_rejections_preserve_runtime(failures)
 	_test_forged_weapon_ownership_rejected_atomically(failures)
+	_test_forged_same_identity_source_rejected_atomically(failures)
 	_test_released_and_superseded_context_is_mutation_inactive(failures)
 	_test_reinitialized_party_retires_context_mutation(failures)
 	_test_equipment_source_rejection_rolls_back(failures)
@@ -588,6 +589,55 @@ func _test_forged_weapon_ownership_rejected_atomically(failures: Array[String]) 
 		failures,
 	)
 	_assert_runtime_integrity_snapshot(before, context, party, health, item, action_tags, events, "forged weapon ownership", failures)
+	context.call(&"_clear_pending_equipment_publication")
+	actor.free()
+	party.free()
+
+func _test_forged_same_identity_source_rejected_atomically(failures: Array[String]) -> void:
+	var fixture := _configured_fixture(PartyManager.new(), 1)
+	var context := fixture.context as PlayerRunContext
+	var party := fixture.party as PartyManager
+	var item := _issue_stout_helmet(context, 0, 0, failures)
+	if item == null:
+		party.free()
+		return
+	var actor := Node3D.new()
+	var health := HealthComponent.new()
+	health.name = "HealthComponent"
+	health.configure(149.0, true, 8.0, 0.5)
+	health.apply_damage(23.0)
+	actor.add_child(health)
+	TestAssertions.truthy(context.bind_actor(1, actor), "forged source fixture attaches a runtime actor", failures)
+	var current := context.equipment_activation(1)
+	var staged_source := StatModifierSource.create(&"equipment_member_1", &"equipment", "Equipment", 1, [
+		StatModifier.create(&"strength", StatModifier.Operation.FLAT, 2.0, &"forged_staged_strength", "Forged Staged"),
+	])
+	var committed_source := StatModifierSource.create(&"equipment_member_1", &"equipment", "Equipment", 1, [
+		StatModifier.create(&"strength", StatModifier.Operation.FLAT, 3.0, &"forged_committed_strength", "Forged Committed"),
+	])
+	var staged_activation := EquipmentActivationResult.success(
+		current.active_item_ids,
+		{},
+		current.raw_attributes,
+		staged_source,
+		current.weapon_snapshot(),
+	)
+	var action_tags: Array[StringName] = [&"melee", &"physical"]
+	var events: Array[int] = []
+	party.stats_changed.connect(func(member_id: int) -> void: events.append(member_id))
+	var before := _runtime_integrity_snapshot(context, party, health, item, action_tags)
+	TestAssertions.truthy(
+		bool(context.call(&"_stage_equipment_publication", context.item_state(), {1: staged_activation})),
+		"adversarial fixture stages a same-identity source with different modifiers",
+		failures,
+	)
+	var authority: Variant = context.get("_source_refresh_authority")
+	TestAssertions.truthy(
+		not party.replace_member_equipment_projection_atomically(1, committed_source, null, authority),
+		"same-identity source with different complete modifier content is rejected",
+		failures,
+	)
+	_assert_runtime_integrity_snapshot(before, context, party, health, item, action_tags, events, "forged same-identity source", failures)
 	context.call(&"_clear_pending_equipment_publication")
 	actor.free()
 	party.free()
