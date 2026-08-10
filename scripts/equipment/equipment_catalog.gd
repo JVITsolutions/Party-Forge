@@ -1,6 +1,8 @@
 class_name EquipmentCatalog
 extends Resource
 
+const DAMAGE_TYPES: DamageTypeCatalog = preload("res://data/damage_types/core_damage_types.tres")
+
 @export var definitions: Array[EquipmentBaseDefinition] = []
 
 func definition(id: StringName) -> EquipmentBaseDefinition:
@@ -20,7 +22,7 @@ func validate() -> PackedStringArray:
 			continue
 		if seen.has(value.id): errors.append("PARTY_FORGE_EQUIPMENT_ERROR item=%s reason=duplicate id" % value.id)
 		seen[value.id] = true
-		for reason: String in value.validate(): errors.append("PARTY_FORGE_EQUIPMENT_ERROR item=%s reason=%s" % [value.id, reason])
+		for reason: String in value.validate(DAMAGE_TYPES): errors.append("PARTY_FORGE_EQUIPMENT_ERROR item=%s reason=%s" % [value.id, reason])
 		if value.presentation != null:
 			for reason: String in value.presentation.validate(): errors.append("PARTY_FORGE_EQUIPMENT_ERROR item=%s reason=%s" % [value.id, reason])
 	return errors

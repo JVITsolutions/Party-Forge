@@ -23,6 +23,7 @@ const REQUIREMENT_ATTRIBUTE_IDS: Array[StringName] = ClassGrowthDefinition.CORE_
 @export var reserved_slot_ids: Array[StringName] = []
 @export var compatible_offhand_item_types: Array[StringName] = []
 @export var weapon_family_id: StringName
+@export var weapon_damage_profile: WeaponDamageProfile
 @export var implicit_family_id: StringName
 @export var presentation: EquipmentVisualDefinition
 
@@ -39,7 +40,7 @@ func normalized_generation_tags() -> Array[StringName]:
 	tags.sort()
 	return tags
 
-func validate() -> PackedStringArray:
+func validate(damage_types: DamageTypeCatalog = null) -> PackedStringArray:
 	var errors := PackedStringArray()
 	if id.is_empty(): errors.append("equipment base id is empty")
 	if display_name.strip_edges().is_empty(): errors.append("equipment %s display name is empty" % id)
@@ -64,6 +65,8 @@ func validate() -> PackedStringArray:
 		if tag in excluded_tags: errors.append("equipment %s generation tag %s is excluded" % [id, tag])
 	if implicit_family_id.is_empty(): errors.append("equipment %s implicit family hook is empty" % id)
 	if presentation == null or presentation.id != id: errors.append("equipment %s presentation link is invalid" % id)
+	if weapon_damage_profile != null:
+		errors.append_array(weapon_damage_profile.validate(damage_types))
 	errors.append_array(validate_attribute_requirements())
 	return errors
 
