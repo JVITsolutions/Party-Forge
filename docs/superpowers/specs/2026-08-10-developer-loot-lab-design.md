@@ -26,7 +26,7 @@ The lab combines a persistent three-pane generation workbench with a dedicated a
 - Retain aggregate statistics plus at most 100 deterministic sample results, not every generated item.
 - Regenerate any sequence on demand from the frozen canonical request.
 - Preserve clearly labelled partial analysis after cancellation while distinguishing it from a completed report.
-- Keep the latest completed report visible until a new job completes successfully.
+- Keep the latest completed report available until a new job completes successfully, with an explicit report selector when a cancelled partial also exists.
 - Let a selected generated preview be explicitly issued into the isolated Developer Item Sandbox.
 - Persist only developer preferences and explicitly issued sandbox items. Batch reports and previews are session-only unless explicitly exported.
 - Provide canonically ordered JSON and human-readable Markdown/text exports.
@@ -81,9 +81,9 @@ The reorganization must preserve the current sandbox's open/close behavior, exac
 The Loot Lab contains two focusable subtabs that share one session controller:
 
 - **Workbench:** persistent request controls on the left, outcomes and deterministic sample gallery in the center, and the selected result's full trace on the right.
-- **Analysis:** expected-versus-observed tables, distribution summaries, conflicts, unreachable/never-eligible definitions, tier gaps, impossible patterns, inactive-rarity violations, failures, and deterministic drilldown.
+- **Analysis:** expected-versus-observed tables, distribution summaries, conflicts, structural reachability, finite-batch eligibility/observation states, tier gaps, impossible patterns, inactive-rarity violations, failures, and deterministic drilldown.
 
-A fixed footer remains visible in both views. It displays state, attempted/target count, progress, elapsed time, throughput, and cancellation when applicable.
+A fixed footer remains visible in both views. It displays state, attempted/target count, progress, elapsed time, throughput, and cancellation when applicable. When both a completed report and a cancelled partial report exist, a focusable report selector identifies which one the Workbench and Analysis views are presenting.
 
 Switching views never restarts a batch or discards its report.
 
@@ -126,7 +126,7 @@ Outcome summary cards show attempted, successful, failed, average tier, rarity m
 For a target count `N`:
 
 - if `N <= 100`, every attempt index is sampled;
-- if `N > 100`, 100 indexes are distributed from index `0` through `N - 1` with both endpoints included;
+- if `N > 100`, sample index `i` is `floor(i * (N - 1) / 99)` for `i` from 0 through 99, distributing 100 indexes across the range with both endpoints included;
 - the sampled generation sequence is `starting_sequence + attempt_index`;
 - a sampled structured failure appears as a failure tile rather than silently disappearing.
 
@@ -158,8 +158,9 @@ Analysis includes:
 - base, rarity, pattern, affix, affix-kind, modifier-family, tier, and weight-band distributions;
 - success and failure totals by stage and stable reason code;
 - expected count, observed count, absolute difference, and percentage deviation;
-- request-scope candidates that were never eligible;
-- candidates that were eligible but not observed;
+- structurally unreachable candidates under the request's hard gates;
+- candidates not encountered as eligible in the finite audited batch;
+- candidates encountered as eligible but not observed;
 - empty pools and zero-total-weight opportunities;
 - aggregated rejection reasons and conflicts;
 - tier-boundary behavior and tier gaps;
@@ -181,7 +182,15 @@ For every selection opportunity with positive finite candidate weights:
 
 This preserves the effects of base tags, item level, rarity ceilings, source, domain, unlocks, Heat, Charisma, archetype bias, patterns, prior affix selections, and family conflicts.
 
-Definitions that never become eligible are distinct from eligible definitions that happen not to be selected. A low-weight candidate receiving zero observations is not falsely labelled unreachable.
+Structural request-scope reachability is evaluated from catalog definitions and hard eligibility gates across the request's allowed base/rarity space. It is not inferred merely from a finite batch. Trace aggregation separately reports candidates that were never encountered as eligible in the audited attempts and candidates that were eligible but not selected.
+
+These three states remain distinct:
+
+- structurally unreachable under the request's hard gates;
+- not encountered as eligible in this finite batch;
+- encountered as eligible but unobserved after weighting.
+
+A low-weight candidate receiving zero observations is never falsely labelled structurally unreachable.
 
 Deviation flags are balancing diagnostics, not brittle statistical pass/fail assertions. Automated tests verify exact deterministic arithmetic on controlled fixtures and broad direction/tolerance on production distributions.
 
@@ -199,6 +208,7 @@ The implementation separates generation state from presentation:
 
 - `LootLabBatchJob` owns one immutable request snapshot, target count, progress, cancellation, and terminal status.
 - `LootLabReportAccumulator` consumes ordered results and produces aggregate/report documents.
+- `LootLabReachabilityAnalyzer` evaluates hard-gate reachability for the frozen request without treating finite sampling as proof of impossibility.
 - `LootLabSessionController` owns the active job, latest completed report, optional cancelled partial report, selected sequence, and regeneration commands.
 - `DeveloperLootLab` presents controller state and forwards user intent.
 - `LootLabExportService` converts a terminal report into canonical JSON and Markdown/text without opening UI in tests.
@@ -232,8 +242,8 @@ Starting a new batch leaves the latest completed report available for inspection
 
 Terminal states are:
 
-- `COMPLETED`: attempted equals target and a complete report replaces the prior completed report;
-- `CANCELLED`: generation stops after the current chunk and a clearly labelled partial report is available without replacing the latest completed report;
+- `COMPLETED`: attempted equals target, a complete report replaces the prior completed report, and any stale partial report is cleared;
+- `CANCELLED`: generation stops after the current chunk and a clearly labelled partial report becomes the selected report without deleting the latest completed report; when both exist, the user can switch between them;
 - `FAILED`: a job-level configuration/catalog failure is reported and the latest completed report remains;
 - individual structured item-generation failures count within a valid running/completed batch and do not become job-level failure.
 
@@ -316,7 +326,7 @@ A terminal report contains a canonical JSON-safe document with at least:
 - bounded diagnostic example sequences;
 - catalog/report metadata required to interpret the result.
 
-JSON export uses recursively canonical key ordering and stable array ordering. Equivalent completed deterministic jobs produce byte-equivalent JSON after excluding or separately labelling nondeterministic timing fields.
+JSON export uses recursively canonical key ordering and stable array ordering. The report contains a deterministic evidence payload plus a separately labelled runtime-metrics envelope. Equivalent completed jobs produce byte-equivalent deterministic evidence payloads; elapsed time and throughput are intentionally runtime observations and are excluded from deterministic byte-parity comparisons.
 
 Markdown/text export presents the same evidence in a human-readable summary. Cancelled reports prominently state `CANCELLED / PARTIAL` and include attempted versus target count.
 
@@ -354,7 +364,7 @@ The UI batch job must not call the current large synchronous report build from a
 - The sample-index algorithm includes both endpoints and never exceeds 100 indexes.
 - Independent identical jobs produce identical ordered results, sample identities, aggregates, diagnostics, and deterministic export payloads.
 - Expected counts sum candidate effective-weight probabilities per opportunity correctly.
-- Never-eligible and eligible-but-unobserved definitions remain distinct.
+- Structurally unreachable, not-encountered-eligible, and encountered-eligible-but-unobserved definitions remain distinct.
 - Diagnostic examples are ordered, reproducible, and capped at 20 per category.
 - Report replacement preserves the last completed report until a successor completes.
 - Export ordering and partial labels are stable.
