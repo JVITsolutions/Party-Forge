@@ -2,6 +2,30 @@
 
 Verified 2026-08-09 in the isolated linked worktree on branch **feat/equipment-attribute-application**.
 
+## Task 10S transactional party-upgrade validation
+
+Task 10S verified exact functional head **3ef387a3b14dcb262e106ec2a52351f9c8060dde**. Party-upgrade application now stages complete rank, definition, and generated-source maps; validates the union of members affected by previous or prospective eligibility through the same normalized effective base and every-owned-action path; and publishes only after the whole batch succeeds. Rejection never mutates, so it needs no rollback, and no parallel reserved-ID list exists.
+
+Strict RED/GREEN regressions cover reverse generated-ID collision, aggregate overflow assembled from finite effects, action-only overflow, later-member batch failure, and legitimate initial/rank-increase behavior. Rejections preserve exact party and member documents, catalog/caller resources, revision, base/action cache identities, signals, and actor health. Successful ranks retain the existing one-revision, one-stat-signal-per-member, and one-upgrade-signal semantics.
+
+Accepted TDD produced `FAIL (30 failures)` in **1.972s** followed by `PASS (0 failures)` in **1.881s**. The final required 19-suite matrix passed in **17.811s**.
+
+| Gate | Exit / duration | Exact evidence |
+| --- | --- | --- |
+| Isolated import | `0` / **17.250s** | only eight known cache-created UIDs |
+| Task 10M runner probe | `0` / **1.122s** | `PASS open=1 list=1 zero=1 focused=1` |
+| Final 19-suite matrix | `0` / **17.811s** | `TEST_SUMMARY: PASS (0 failures)` |
+| Equipment/cache | `0` / **1.597s** | 24-member action-cache and equipment summaries PASS |
+| Progression | `0` / **16.547s** | 24-member isolation and summary PASS |
+| Exact-head full suite | `0` / **131.709s** | exactly one `TEST_SUMMARY: PASS (166 suites)` |
+| Exact-head startup | `0` / **4.004s** | boot and class-selection markers once each |
+
+The accepted 122,198-byte full log and startup log had zero failure, raw script/parser/loader, shutdown-leak, fatal, crash, or access-violation marker. A preliminary full invocation was terminated only by an undersized 120-second shell wrapper and is not credited; the unchanged head received the complete accepted rerun above.
+
+Exact `git diff --exit-code e9c2f17..3ef387a -- tools data tests/unit/test_increment2_generator_parity.gd` was empty and focused parity passed, so Task 10Q's fresh cold generator/hash proof remains reusable. Eight exact import-created UIDs were hash-recorded and removed; the protected manifest returned to **127 files / 2,503 bytes / SHA-256 0a392c6cde37052bb7a87455d77ef9a6cf12a4bb5198e43aa9715952b3c23cd3**. Cleanup removed 21 exact Task 10S targets / 42 files / 4,020,583 bytes. Scratch/process/data drift was zero, tracked/index state and `git diff --check` were clean, main remained read-only at **39deef45c0b8fd338da74af16e31d67a0f2dcc63**, and nothing was integrated.
+
+Physical-controller acceptance and visible GPU/pixel review remain deferred.
+
 ## Task 10R complete unbound owned-action validation
 
 Task 10R verified exact functional head **2f00ec14a224ca0da382141f3153386eb3ac128f**. After normalized effective base resolution, every unbound candidate now passes through the existing `CandidateActionValidationService` for all owned actions. Configured damage types are used when present; an unconfigured manager uses `GameCatalog.DAMAGE_TYPES`. No action enumeration, stat resolution, geometry, cadence, or estimate rule was duplicated.
