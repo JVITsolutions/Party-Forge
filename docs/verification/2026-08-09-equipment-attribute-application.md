@@ -2,6 +2,66 @@
 
 Verified 2026-08-09 in the isolated linked worktree on branch **feat/equipment-attribute-application**.
 
+## Task 10N current-head release-candidate verification
+
+Task 10N verified exact feature head **1d5fdbeb57addd037dd4ddd0b9788db72fffe022** after the Task 10M dead-callback and real list-failure review remediation. The complete approved-design range remains **00d145d7b461dde8d2cf4b01b36d57fb5ee73852..1d5fdbe**, 43 commits after the range start. The isolated feature worktree began with empty tracked and index diffs. The authoritative main checkout was inspected read-only at **39deef45c0b8fd338da74af16e31d67a0f2dcc63** and was not reset, cleaned, stashed, integrated, or otherwise mutated; its two known tracked overlays remain `scripts/party/party_manager.gd` and `scripts/party/party_member_state.gd`.
+
+The protected untracked sidecar baseline was re-derived from 127 sorted normalized paths, byte lengths, and per-file SHA-256 values joined by LF with no trailing LF. It was exactly **127 files / 2,503 bytes / SHA-256 0a392c6cde37052bb7a87455d77ef9a6cf12a4bb5198e43aa9715952b3c23cd3**. Including a trailing LF produces **406771aca63ab52a7fb02ccffabd0a8123c91343de3e5d1e4a49b605d8971d42**; this and Task 10M's older separately serialized path/content hashes are different algorithms, not manifest drift.
+
+All accepted commands used **Godot 4.7.1.stable.mono.official.a13da4feb** from `F:\Projects(root)\Game dev\godot\Godot_v4.7.1-stable_mono_win64\Godot_v4.7.1-stable_mono_win64_console.exe`, sequentially, with isolated Task 10N APPDATA/LOCALAPPDATA roots beneath `.superpowers\sdd`.
+
+### Fresh import and fail-closed harness probes
+
+| Gate | Exit / duration | Exact evidence |
+| --- | --- | --- |
+| Isolated editor import | **0** / **17.320s** | six established missing-UID cache warnings; zero parser, script, loader, shutdown-leak, fatal, crash, or access-violation diagnostic |
+| Logger teardown | **0** / **0.269s** | **TEST_SUMMARY: PASS (0 failures)** |
+| Deliberate script error | expected **1** / **0.268s** | **TEST_SUMMARY: FAIL (1 failures)**; captured `res://tests/support/script_error_capture_probe.gd:6`, function `run` |
+| Intentional asserted `push_error()` | **0** / **0.918s** | **TEST_SUMMARY: PASS (0 failures)** and exactly four `PARTY_FORGE_DAMAGE_ERROR` records; retains its established standalone 18-ObjectDB/five-resource notice |
+| Task 10M external runner probe | **0** / **1.517s** | **TASK10M_EMPTY_RUNNER_PROBE_SUMMARY: PASS open=1 list=1 zero=1 focused=1** |
+| Direct focused runner without arguments | expected **1** / **0.400s** | stable **FOCUSED_TEST_RUNNER_ERROR: no suite path arguments** and **TEST_SUMMARY: FAIL (1 failures)** |
+
+The external probe uses real process boundaries to prove the complete runner exits nonzero for unit-directory open failure, real `list_dir_begin()` failure, and zero discovered suites. The direct current-worktree probe separately proves the argument-free focused runner is nonzero. No runner can credit a zero-suite PASS under these contracts.
+
+### Expanded focused and hardened full gates
+
+The final focused command named **32 nonzero suite files**: the prior 30-suite Task 1-10L matrix plus `test_party_manager.gd` for Task 10M's dead-callback authority rejection and `test_resolved_attack_geometry.gd` for runtime action identity/geometry. It covered aggregate finiteness and profile persistence, action cadence, damage/healing estimates and comparisons, source/cache/state rejection, Stats Ledger, tooltips, sandbox state, catalog parity, and logger teardown. It exited **0** in **80.344s** with **TEST_SUMMARY: PASS (0 failures)** and `DEVELOPER_ITEM_SANDBOX_SHA256: c201fd5917d9958da63dacd8201e80d5911c0de51af367977d2a5ee57dd9defe`. Its 5,107-byte log contained one PASS summary and zero failure, captured/raw script error, parser/loader, ObjectDB/resource/RID/allocator/orphan, fatal, crash, or access-violation diagnostic.
+
+The hardened complete runner exited **0** in **130.960s**. Its 46,732-byte retained log contained exactly:
+
+~~~text
+DEVELOPER_ITEM_SANDBOX_SHA256: c201fd5917d9958da63dacd8201e80d5911c0de51af367977d2a5ee57dd9defe
+ITEM_TRANSACTION_MATRIX: PASS
+TEST_SUMMARY: PASS (166 suites)
+~~~
+
+The PASS marker appeared once. There were zero FAIL summary, `TEST_FAILURE`, captured or raw `SCRIPT ERROR`, parser/loader failure, ObjectDB/resource/RID/PagedAllocator/orphan leak, fatal, crash, or access-violation markers. The log retained exactly **57** established asserted negative-path error markers and **10** documented JSON-store warnings.
+
+### Fresh integrations, startup, and parity provenance
+
+| Gate | Exit / duration | Exact accepted marker(s) | Boundary |
+| --- | --- | --- | --- |
+| Equipment configure/resume and cache | **0** / **1.611s** | **TASK10J_ACTION_CACHE_SUMMARY: PASS members=24 hits=512 usec=1688**; **EQUIPMENT_ATTRIBUTE_APPLICATION_SUMMARY: PASS members=24 untouched=23 items=2** | shutdown clean |
+| Progression/load/isolation | **0** / **15.203s** | **PROGRESSION_24_MEMBER_ISOLATION_PASS members=24 untouched=23**; **PROGRESSION_24_MEMBER_SUMMARY: PASS** | retains the separately documented five parent/child shutdown-notice sets |
+| Cleric Stats Ledger | **0** / **2.769s** | **LEDGER_24_MEMBER_SUMMARY: PASS (3 viewports)** | shutdown clean |
+| Profile/storage | **0** / **8.796s** | **ITEM_STORAGE_PROFILE_ISOLATION_SUMMARY: PASS profiles=2 items=99** | shutdown clean |
+| Responsive tooltip | **0** / **2.582s** | compatibility **1280x720** plus responsive **1920x1080**, **2560x1440**, **3840x2160**; **ITEM_TOOLTIP_RESPONSIVE_SUMMARY: PASS (3 sizes)** | shutdown clean |
+| Isolated startup | **0** / **14.438s** | **PARTY_FORGE_BOOT_OK** once; **PARTY_FORGE_CLASS_SELECTION_READY** once | shutdown clean |
+
+The progression runner's four load-size children and parent each retained the established three dummy-renderer mesh RID allocations, 130 ObjectDB instances, 114 resources, and medium/small PagedAllocator notices. Every other integration/startup log had zero test/script/parser/loader/shutdown-leak/fatal/crash/access-violation diagnostic.
+
+The last accepted fresh cold-parity input remains **51b6f0096e595a9d0370c24e8679629ad55e2291**. An exact `git diff` from that commit through Task 10N input **1d5fdbe** found zero change under the complete `tools/` generator/input tree, complete generated `data/` tree, or `tests/unit/test_increment2_generator_parity.gd`. The in-worktree parity suite passed within the 32-suite gate. The Task 10H isolated cold runs for all five documented generators therefore remain authoritative; no destructive cold generation was rerun.
+
+### Final cleanup and hygiene
+
+Every scratch target was resolved as an exact top-level descendant of this worktree's `.superpowers\sdd`; each had zero tracked descendants and zero reparse points, and no Godot process targeted the worktree. Cleanup removed **24 top-level targets / 41 files / 7,089,808 logical bytes**: four Task 10M logs and its settings root, fourteen Task 10N logs and two settings roots, and three obsolete review diffs. Task briefs/reports/progress and current final-review package `review-ef28190..1d5fdbe.diff` were preserved. The temporary cleanup helpers were removed and the exact residue scan returned zero.
+
+The accepted import/gates created eight task-local sidecars. The six established cache-warning files matched their recorded byte lengths and SHA-256 values. Two Task 10M support-script sidecars were also created at the accepted import timestamp: `tests/support/task10m_list_failure_runner.gd.uid` (20 bytes, SHA-256 `eb858aaf08f4b6f5d8c4cbf4e5b00ccc1e3c9e38c554ec7a32f10b1f7b749da3`) and `tests/support/test_suite_discovery.gd.uid` (20 bytes, SHA-256 `ba309cb99472122b2f84ece719f33be37ef8c941d8b7b27d9cf25d7cc4b6b02c`). Only those eight exact generated files were removed.
+
+The protected manifest then returned exactly to **127 files / 2,503 bytes / SHA-256 0a392c6cde37052bb7a87455d77ef9a6cf12a4bb5198e43aa9715952b3c23cd3**. Final checks found zero worktree-targeting Godot editor/game/import/test/generator process; the 15 unrelated `godot-ai.exe` helpers remained untouched. `git diff --name-only -- data`, the index diff, and tracked drift outside this verification document/report were empty; `git diff --check` passed. The authoritative main checkout retained exactly its captured tracked overlays and was not integrated.
+
+Physical-controller acceptance and visible GPU-backed/pixel-level manual review remain deferred. Headless deterministic evidence is not represented as completing either manual boundary.
+
 ## Task 10L current-head final revalidation
 
 The final feature input was **7eaaf167e3daad42a2484c2da97f1a24d78c1aef** (**fix: show healing equipment comparisons**), based on Task 10K authority head **fafb0bbc2c914c4c4fdbe5e42aacdfaab0dc76b9**. The Task 10H evidence below is retained as the historical cold-generator proof; every runtime gate in this section was rerun from the exact Task 10L feature input with Godot **4.7.1.stable.mono.official.a13da4feb**.
