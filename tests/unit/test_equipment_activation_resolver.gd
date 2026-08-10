@@ -17,6 +17,10 @@ func run() -> Array[String]:
 	TestAssertions.truthy(result_script != null and result_script.can_instantiate(), "equipment activation result script is valid", failures)
 	if _resolver == null or not _resolver.can_instantiate() or result_script == null or not result_script.can_instantiate():
 		return failures
+	var result_probe: Variant = result_script.new()
+	TestAssertions.truthy(result_probe.has_method("weapon_snapshot"), "equipment activation result exposes a defensive weapon snapshot", failures)
+	if not result_probe.has_method("weapon_snapshot"):
+		return failures
 
 	var equipment := _equipment_catalog()
 	var foundation := (load(FOUNDATION_PATH) as ItemFoundationCatalog).duplicate(true) as ItemFoundationCatalog
@@ -34,7 +38,64 @@ func run() -> Array[String]:
 	_test_negative_raw_attribute_fails_monotonic_activation(equipment, foundation, stats, failures)
 	_test_each_fixed_point_pass_must_be_monotonic(equipment, foundation, stats, failures)
 	_test_result_copy_and_inputs_are_defensive(equipment, foundation, stats, failures)
+	_test_weapon_snapshot_composes_with_final_activation(equipment, foundation, stats, failures)
+	_test_weapon_snapshot_failure_fails_complete_activation(equipment, foundation, stats, failures)
 	return failures
+
+func _test_weapon_snapshot_composes_with_final_activation(
+	equipment: EquipmentCatalog,
+	foundation: ItemFoundationCatalog,
+	stats: StatCatalog,
+	failures: Array[String],
+) -> void:
+	var weapon := _item("item-active-weapon", &"forge_vanguard_sword", [], 14, [
+		ItemBaseDamageComponent.create(&"physical", 8.0, 12.0),
+	])
+	var state := _state([weapon], {EquipmentSlotIndex.index_for(&"main_hand"): weapon.instance_id})
+	var result: Variant = _resolve(state, equipment, foundation, stats, {&"strength": 3.0}, 51)
+	TestAssertions.truthy(result != null and result.ok(), "activation composes active weapon snapshot", failures)
+	if result == null or not result.ok():
+		return
+	var snapshot: Variant = result.call("weapon_snapshot")
+	TestAssertions.truthy(snapshot != null, "activation exposes active main-hand snapshot", failures)
+	if snapshot == null:
+		return
+	TestAssertions.equal(int(snapshot.get("member_id")), 1, "activation weapon member matches activation member", failures)
+	TestAssertions.equal(String(snapshot.get("item_id")), weapon.instance_id, "activation weapon item matches active main hand", failures)
+	TestAssertions.equal(StringName(snapshot.get("base_id")), weapon.base_definition_id, "activation weapon base matches item", failures)
+	TestAssertions.equal(int(snapshot.get("revision")), 51, "activation weapon revision matches stat snapshot", failures)
+	var escaped := snapshot.get("components") as Array
+	(escaped[0] as ItemBaseDamageComponent).minimum_damage = 999.0
+	var reread: Variant = result.call("weapon_snapshot")
+	TestAssertions.near((reread.get("components") as Array)[0].minimum_damage, 8.0, 0.0001, "activation weapon getter is defensive", failures)
+	var copied: Variant = result.copy()
+	var copied_snapshot: Variant = copied.call("weapon_snapshot")
+	(copied_snapshot.get("components") as Array)[0].maximum_damage = 777.0
+	TestAssertions.near(((result.call("weapon_snapshot")).get("components") as Array)[0].maximum_damage, 12.0, 0.0001, "activation result copy owns weapon snapshot", failures)
+
+func _test_weapon_snapshot_failure_fails_complete_activation(
+	equipment: EquipmentCatalog,
+	foundation: ItemFoundationCatalog,
+	stats: StatCatalog,
+	failures: Array[String],
+) -> void:
+	var weapon := _item("item-invalid-revision-weapon", &"forge_vanguard_sword", [], 15, [
+		ItemBaseDamageComponent.create(&"physical", 8.0, 12.0),
+	])
+	var state := _state([weapon], {EquipmentSlotIndex.index_for(&"main_hand"): weapon.instance_id})
+	var result: Variant = _resolve(state, equipment, foundation, stats, {&"strength": 3.0}, -1)
+	TestAssertions.truthy(result != null and not result.ok(), "weapon projection failure fails complete activation", failures)
+	if result == null:
+		return
+	TestAssertions.equal(
+		result.error,
+		"PARTY_FORGE_EQUIPMENT_ACTIVATION_ERROR member=1 detail=PARTY_FORGE_ACTIVE_WEAPON_DAMAGE_ERROR member=1 reason=revision must be nonnegative",
+		"weapon projection failure composes under activation error",
+		failures,
+	)
+	TestAssertions.equal(result.raw_attributes, null, "weapon projection failure exposes no partial raw attributes", failures)
+	TestAssertions.equal(result.source, null, "weapon projection failure exposes no partial equipment source", failures)
+	TestAssertions.equal(result.call("weapon_snapshot"), null, "weapon projection failure exposes no partial weapon snapshot", failures)
 
 func _test_support_chain_is_fixed_point_and_deterministic(
 	equipment: EquipmentCatalog,
@@ -387,12 +448,19 @@ func _affix(definition_id: StringName, kind: String, stat_id: StringName, value:
 	affix.rolls = [roll]
 	return affix
 
-func _item(instance_id: String, base_id: StringName, affixes: Array[ItemAffixInstance], sequence: int) -> ItemInstance:
+func _item(
+	instance_id: String,
+	base_id: StringName,
+	affixes: Array[ItemAffixInstance],
+	sequence: int,
+	components: Array[ItemBaseDamageComponent] = [],
+) -> ItemInstance:
 	var item := ItemInstance.new()
 	item.instance_id = instance_id
 	item.base_definition_id = base_id
 	item.item_level = 1
 	item.rarity_id = &"common"
+	item.base_damage_components = components
 	item.affixes = affixes
 	item.origin = {"issuer_namespace": "activation:test", "seed": 505, "sequence": sequence, "source": "task_5"}
 	return item

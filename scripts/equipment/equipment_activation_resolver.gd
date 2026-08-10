@@ -83,11 +83,22 @@ static func resolve(
 		var reasons := EquipmentEligibility.unmet_attribute_requirements(definition, final_attributes)
 		reasons.sort()
 		disabled[item_id] = reasons
+	var weapon_resolution := ActiveWeaponDamageResolver.resolve(
+		member_id,
+		state.container(container_id),
+		state,
+		active_ids,
+		equipment,
+		revision,
+	)
+	if not String(weapon_resolution["error"]).is_empty():
+		return _failure(member_id, String(weapon_resolution["error"]))
 	return EquipmentActivationResult.success(
 		active_ids,
 		disabled,
 		final_raw,
 		final_pass["source"] as StatModifierSource,
+		weapon_resolution["snapshot"] as ActiveWeaponDamageSnapshot,
 	)
 
 static func _project_and_resolve(

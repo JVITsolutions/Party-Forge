@@ -4,6 +4,7 @@ extends RefCounted
 var error := ""
 var raw_attributes: ResolvedStatSnapshot
 var source: StatModifierSource
+var _weapon_snapshot: ActiveWeaponDamageSnapshot
 var _active_item_ids: Array[String] = []
 var _disabled_reasons_by_item: Dictionary = {}
 var active_item_ids: Array[String]:
@@ -15,6 +16,7 @@ static func success(
 	disabled_reasons_by_item: Dictionary,
 	raw: ResolvedStatSnapshot,
 	equipment_source: StatModifierSource,
+	weapon_snapshot: ActiveWeaponDamageSnapshot = null,
 ) -> EquipmentActivationResult:
 	var result := EquipmentActivationResult.new()
 	result._active_item_ids = active_ids.duplicate()
@@ -25,6 +27,7 @@ static func success(
 		result._disabled_reasons_by_item[String(item_id)] = reasons
 	result.raw_attributes = raw
 	result.source = equipment_source
+	result._weapon_snapshot = weapon_snapshot.copy() if weapon_snapshot != null else null
 	return result
 
 static func failure(message: String) -> EquipmentActivationResult:
@@ -41,6 +44,9 @@ func is_active(item_id: String) -> bool:
 func disabled_reasons(item_id: String) -> PackedStringArray:
 	return PackedStringArray(_disabled_reasons_by_item.get(item_id, PackedStringArray()))
 
+func weapon_snapshot() -> ActiveWeaponDamageSnapshot:
+	return _weapon_snapshot.copy() if _weapon_snapshot != null else null
+
 func copy() -> EquipmentActivationResult:
 	if not ok():
 		return EquipmentActivationResult.failure(error)
@@ -52,6 +58,7 @@ func copy() -> EquipmentActivationResult:
 		disabled_copy,
 		_copy_raw_attributes(raw_attributes),
 		source.duplicate(true) as StatModifierSource,
+		_weapon_snapshot,
 	)
 
 static func _copy_raw_attributes(value: ResolvedStatSnapshot) -> ResolvedStatSnapshot:
