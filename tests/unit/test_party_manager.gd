@@ -61,6 +61,7 @@ func run() -> Array[String]:
 
     _test_resolved_party_stats(failures)
     _test_replace_member_source(failures)
+    _test_unbound_effective_source_collision_invariants(failures)
     _test_atomic_equipment_source_batch_contract(failures)
     _test_unbound_complete_candidate_equipment_invariants(failures)
     _test_atomic_batch_rejects_corrupted_equipment_prestate(failures)
@@ -70,6 +71,63 @@ func run() -> Array[String]:
     _test_two_pass_cache_isolation_and_preview_inputs(failures)
     _test_party_actor_stats_signal_lifecycle(failures)
     return failures
+
+func _test_unbound_effective_source_collision_invariants(failures: Array[String]) -> void:
+    var catalog := GameCatalog.load_defaults()
+    var cases: Array[Dictionary] = []
+    for source_id: StringName in [&"class_rank_fighter", &"attribute_projection_1"]:
+        cases.append({"label": "%s add" % source_id, "method": &"add_member_source", "source_id": source_id, "seed_owned": false})
+        cases.append({"label": "%s replace" % source_id, "method": &"replace_member_source", "source_id": source_id, "seed_owned": true})
+    for source_id: StringName in [&"party_upgrades", &"active_traits"]:
+        cases.append({"label": "%s add" % source_id, "method": &"add_member_source", "source_id": source_id, "seed_owned": false})
+    for test_case: Dictionary in cases:
+        var party := PartyManager.new()
+        party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
+        var base := party.stats_for(1)
+        var action_tags: Array[StringName] = [&"melee", &"physical"]
+        var action := party.stats_for_action(1, action_tags)
+        if bool(test_case["seed_owned"]):
+            party.member_by_id(1)._owned_modifier_sources().append(
+                _growth_source(1, test_case["source_id"], 1.0)
+            )
+        var before := _member_source_documents(party.member_by_id(1))
+        var revision := party.stat_revision()
+        var events: Array[int] = []
+        party.stats_changed.connect(func(member_id: int) -> void: events.append(member_id))
+        TestAssertions.truthy(
+            not bool(party.call(test_case["method"], 1, _growth_source(1, test_case["source_id"], 2.0))),
+            "%s rejects effective graph collision" % test_case["label"],
+            failures,
+        )
+        TestAssertions.equal(_member_source_documents(party.member_by_id(1)), before, "%s preserves owned source documents" % test_case["label"], failures)
+        TestAssertions.equal(party.stat_revision(), revision, "%s preserves stat revision" % test_case["label"], failures)
+        TestAssertions.truthy(is_same(party.stats_for(1), base), "%s preserves base cache identity" % test_case["label"], failures)
+        TestAssertions.truthy(is_same(party.stats_for_action(1, action_tags), action), "%s preserves action cache identity" % test_case["label"], failures)
+        TestAssertions.equal(events, [], "%s emits no stat signal" % test_case["label"], failures)
+        party.free()
+
+    var upgraded_party := PartyManager.new()
+    upgraded_party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
+    TestAssertions.truthy(UpgradeApplicationService.apply(&"vanguard_wall", catalog, upgraded_party), "dynamic party-upgrade collision fixture applies a live generated source", failures)
+    var generated_id := &"upgrade:vanguard_wall:party"
+    var upgraded_before := _member_source_documents(upgraded_party.member_by_id(1))
+    var upgraded_revision := upgraded_party.stat_revision()
+    var upgraded_cache := upgraded_party.stats_for(1)
+    var upgraded_events: Array[int] = []
+    upgraded_party.stats_changed.connect(func(member_id: int) -> void: upgraded_events.append(member_id))
+    TestAssertions.truthy(not upgraded_party.add_member_source(1, _growth_source(1, generated_id, 3.0)), "live generated party-upgrade source ID collision rejects", failures)
+    TestAssertions.equal(_member_source_documents(upgraded_party.member_by_id(1)), upgraded_before, "party-upgrade collision preserves source documents", failures)
+    TestAssertions.equal(upgraded_party.stat_revision(), upgraded_revision, "party-upgrade collision preserves revision", failures)
+    TestAssertions.truthy(is_same(upgraded_party.stats_for(1), upgraded_cache), "party-upgrade collision preserves cache identity", failures)
+    TestAssertions.equal(upgraded_events, [], "party-upgrade collision emits no stat signal", failures)
+    upgraded_party.free()
+
+    var legitimate := PartyManager.new()
+    legitimate.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
+    TestAssertions.truthy(legitimate.add_member_source(1, _growth_source(1, &"task10p_custom", 1.0)), "legitimate unbound custom source add succeeds", failures)
+    TestAssertions.truthy(legitimate.replace_member_source(1, _growth_source(1, &"task10p_custom", 2.0)), "legitimate unbound custom source replace succeeds", failures)
+    TestAssertions.truthy(legitimate.add_member_source(1, _equipment_source(1, 2.0)), "legitimate unbound canonical equipment source succeeds", failures)
+    legitimate.free()
 
 func _test_unbound_complete_candidate_equipment_invariants(failures: Array[String]) -> void:
     var catalog := GameCatalog.load_defaults()

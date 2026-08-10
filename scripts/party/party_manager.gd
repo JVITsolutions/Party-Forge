@@ -347,6 +347,9 @@ func _validate_candidate_member_sources(
     member_id: int,
     candidate_sources: Array[StatModifierSource],
 ) -> bool:
+    var member := member_by_id(member_id)
+    if member == null:
+        return false
     var validation_errors := StatResolver.validate_sources(STAT_CATALOG, candidate_sources)
     if not validation_errors.is_empty():
         for error: String in validation_errors:
@@ -360,7 +363,22 @@ func _validate_candidate_member_sources(
         equipment_count += 1
         if source.id != canonical_equipment_id or source.owner_member_id != member_id:
             return false
-    return equipment_count <= 1
+    if equipment_count > 1:
+        return false
+    var resolution := MemberStatResolutionService.resolve(
+        member_id,
+        STAT_CATALOG,
+        member.class_definition.stat_base_values(),
+        member.capability_tags,
+        _sources_for_owned(member, candidate_sources),
+        [],
+        _stat_revision,
+        DEFAULT_ATTRIBUTE_PROJECTION,
+    )
+    if not resolution.ok():
+        push_error(resolution.error)
+        return false
+    return true
 
 func _restore_member_sources_without_invalidation(member_id: int, sources: Array[StatModifierSource]) -> void:
     var member := member_by_id(member_id)
@@ -528,6 +546,12 @@ func incoming_damage_multiplier(target_actor: Node3D) -> float:
     return 1.0
 
 func _sources_for(member: PartyMemberState) -> Array[StatModifierSource]:
+    return _sources_for_owned(member, member._owned_modifier_sources())
+
+func _sources_for_owned(
+    member: PartyMemberState,
+    owned_sources: Array[StatModifierSource],
+) -> Array[StatModifierSource]:
     var sources: Array[StatModifierSource] = []
     var definition := member.class_definition
     var rank_bonus := float(maxi(get_class_rank(definition.id), 1) - 1) * definition.class_rank_power_step
@@ -539,7 +563,7 @@ func _sources_for(member: PartyMemberState) -> Array[StatModifierSource]:
         0,
         [StatModifier.create(&"damage", StatModifier.Operation.INCREASED, rank_bonus, class_rank_id, "%s Rank" % definition.display_name)],
     ))
-    for source: StatModifierSource in member._owned_modifier_sources():
+    for source: StatModifierSource in owned_sources:
         sources.append(source)
 
     for upgrade_id: StringName in _party_upgrade_definitions:

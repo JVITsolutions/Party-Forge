@@ -37,8 +37,23 @@ func _test_warlock_caster_metadata_parity(failures: Array[String]) -> void:
 	TestAssertions.truthy(canonical != null, "canonical Warlock class loads", failures)
 	if canonical == null or warlock_row.is_empty():
 		return
-	TestAssertions.truthy(&"ranged" not in generator_tags, "Warlock generator row is caster-only", failures)
+	TestAssertions.equal(generator_tags, canonical.capability_tags, "Warlock generator capabilities exactly equal canonical equipment compatibility", failures)
 	TestAssertions.truthy(&"caster" in canonical.traits and &"ranged" not in canonical.capability_tags, "canonical Warlock metadata is caster-only", failures)
+	var equipment_cases: Array[Dictionary] = [
+		{"path": "res://data/equipment/bases/grave_covenant/grave_covenant_robe.tres", "slot": &"body_armour", "label": "light armour"},
+		{"path": "res://data/equipment/bases/grave_covenant/grave_covenant_bone_wand.tres", "slot": &"main_hand", "label": "occult wand"},
+		{"path": "res://data/equipment/bases/grave_covenant/grave_covenant_grimoire.tres", "slot": &"off_hand", "label": "occult grimoire"},
+	]
+	for test_case: Dictionary in equipment_cases:
+		var equipment := load(test_case["path"]) as EquipmentBaseDefinition
+		TestAssertions.truthy(equipment != null, "Warlock %s equipment loads" % test_case["label"], failures)
+		if equipment != null:
+			TestAssertions.equal(
+				EquipmentEligibility.validate_structure(equipment, canonical, test_case["slot"]),
+				PackedStringArray(),
+				"Warlock canonical capabilities permit %s" % test_case["label"],
+				failures,
+			)
 
 func _test_attack_authoring_parity(failures: Array[String]) -> void:
 	_assert_attack_table(TypedCombatMigration.ROWS, "typed combat migration", failures)
