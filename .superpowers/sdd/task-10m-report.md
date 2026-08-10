@@ -1,8 +1,10 @@
 # Task 10M report: equipment-source authority and empty-runner hardening
 
-Status: implementation, TDD, affected/integration/full/startup verification, hygiene audit, and scoped feature commit complete.
+Status: implementation, final-review remediation, TDD, affected/integration/full/startup verification, hygiene audit, and scoped commits complete.
 
 Implementation commit: `364cdc59c3e02df4d938071755f7bba81fe69ffd` (`fix: close equipment source authority bypasses`).
+
+Final-review remediation commit: `31c4db12e9f168616e6d06078666fe34fd3cbeb2` (`fix: fail closed on dead source coordinator`).
 
 ## Root causes and remediation
 
@@ -170,3 +172,96 @@ Task-local verification logs and isolated settings roots remain ignored under `.
 ## Remaining concerns
 
 No Task 10M functional concern remains. The ignored task-local verification artifacts are the only cleanup residue. Physical-controller acceptance and visible GPU-backed manual pixel review remain deferred at the wider project level; neither is part of this authority/test-runner remediation.
+
+## Final-review remediation
+
+The final review found that the initial general-seam guard used `Callable.is_valid()` as the definition of a live binding. If the callback target died without exact unbind, the opaque authority remained retained and denied rebinding, but the invalid Callable let general add/replace fall through to direct mutation.
+
+General add/replace now treats the retained opaque authority as the binding ownership state. While that authority exists, equipment mutations always reject. Non-equipment changes call the coordinator only if its Callable is still valid; otherwise they also reject. No direct mutation fallback exists while ownership remains retained. Exact unbind, reset, release, and reinitialize behavior is unchanged.
+
+A real-Node callback regression binds authority, frees the callback target synchronously, proves the Callable is invalid while rebinding remains denied, and separately exercises direct equipment add, duplicate equipment append, equipment replace, non-equipment add, and non-equipment replace. Every rejection preserves exact source documents, stat revision, base/action cache identities, and the empty signal list.
+
+The review also identified that `list_dir_begin()` failure had an implementation branch but no deterministic real-path coverage. Discovery now lives in `tests/support/test_suite_discovery.gd`, which accepts an already-open real `DirAccess`; the actual full runner opens `res://tests/unit` and routes through that helper. The checked-in list-failure runner opens a real task-local directory, removes it, and passes that same invalidated real `DirAccess` to the helper, deterministically exercising `list_dir_begin()` failure. This adds no game-production API, runner test-only method, fake, or mock. The external probe verifies its nonzero exit and stable diagnostic.
+
+### Review-fix RED
+
+An initial RefCounted callback fixture was rejected as evidence because Godot correctly raised script errors when it was explicitly freed. After correcting the fixture to a real `Node`, the accepted authority RED returned:
+
+```text
+TEST_SUMMARY: FAIL (30 failures)
+TASK10M_REVIEW_DEAD_CALLBACK_ACCEPTED_RED_EXIT_CODE=1
+```
+
+There was no harness `SCRIPT ERROR`. The failures showed source/revision/cache/signal drift for all five dead-callback mutation paths. The separate required-marker RED returned exit `1`: the prior probe emitted `TASK10M_EMPTY_RUNNER_PROBE_SUMMARY: PASS open=1 zero=1 focused=1` and therefore lacked real list-failure proof.
+
+### Review-fix GREEN and widened gates
+
+Targeted authority command:
+
+```powershell
+& $godot --headless --path . --quit-after 900 --script res://tests/focused_test_runner.gd -- tests/unit/test_party_manager.gd tests/unit/test_player_run_context.gd tests/unit/test_non_equipment_activation_refresh.gd tests/unit/test_run_context_registry.gd
+```
+
+Result:
+
+```text
+TEST_SUMMARY: PASS (0 failures)
+TASK10M_REVIEW_AUTHORITY_TARGETED_GREEN_EXIT_CODE=0
+```
+
+Real runner probe command and result:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/support/task10m_empty_runner_probe.ps1 -GodotPath $godot
+```
+
+```text
+TASK10M_EMPTY_RUNNER_PROBE_SUMMARY: PASS open=1 list=1 zero=1 focused=1
+TASK10M_REVIEW_RUNNER_PROBE_GREEN_EXIT_CODE=0
+```
+
+The widened 16-suite Task 10I/10J/10K/10L gate returned `TEST_SUMMARY: PASS (0 failures)` and `TASK10M_REVIEW_AFFECTED_EXIT_CODE=0`.
+
+Equipment and progression integrations returned:
+
+```text
+TASK10J_ACTION_CACHE_SUMMARY: PASS members=24 hits=512 usec=1659
+EQUIPMENT_ATTRIBUTE_APPLICATION_SUMMARY: PASS members=24 untouched=23 items=2
+TASK10M_REVIEW_EQUIPMENT_24_EXIT_CODE=0
+PROGRESSION_24_MEMBER_ISOLATION_PASS members=24 untouched=23
+PROGRESSION_24_MEMBER_SUMMARY: PASS
+TASK10M_REVIEW_PROGRESSION_24_EXIT_CODE=0
+```
+
+The fresh hardened full command remained:
+
+```powershell
+& $godot --headless --path . --quit-after 36000 --script res://tests/test_runner.gd
+```
+
+It returned:
+
+```text
+TEST_SUMMARY: PASS (166 suites)
+TASK10M_REVIEW_HARDENED_FULL_EXIT_CODE=0
+TASK10M_REVIEW_HARDENED_FULL_SECONDS=132.7
+TASK10M_REVIEW_HARDENED_FULL_BYTES=94324
+```
+
+The retained review log had zero exact matches for test failure, captured `SCRIPT ERROR`, parse/load failure, ObjectDB/resource/RID/allocator/orphan leaks, fatal, or crash diagnostics. The hardened shutdown scan is clean.
+
+### RED-probe clarification and final scope
+
+The earlier controlled RED command names `tests/unit/test_test_runner_contract.gd`. That file was a temporary first-pass nested-process probe used only to establish RED. Nested Godot execution exposed the sequential redirected-pipe deadlock described above, so the temporary file was removed before the accepted external probe design and was never committed. The durable, reproducible replacement is `tests/support/task10m_empty_runner_probe.ps1` plus the shared discovery helper and real list-failure runner.
+
+The remediation adds or changes only:
+
+- `scripts/party/party_manager.gd`
+- `tests/test_runner.gd`
+- `tests/support/test_suite_discovery.gd`
+- `tests/support/task10m_list_failure_runner.gd`
+- `tests/support/task10m_empty_runner_probe.ps1`
+- `tests/unit/test_party_manager.gd`
+- `.superpowers/sdd/task-10m-report.md`
+
+`git diff --check` passed before the remediation commit. No `.gd.uid` file was staged or committed.
