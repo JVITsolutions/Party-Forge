@@ -348,6 +348,19 @@ func _validate_candidate_member_sources(
     member_id: int,
     candidate_sources: Array[StatModifierSource],
 ) -> bool:
+    return _validate_candidate_member_sources_for_party_upgrades(
+        member_id,
+        candidate_sources,
+        _party_upgrade_definitions,
+        _party_upgrade_sources,
+    )
+
+func _validate_candidate_member_sources_for_party_upgrades(
+    member_id: int,
+    candidate_sources: Array[StatModifierSource],
+    candidate_party_upgrade_definitions: Dictionary,
+    candidate_party_upgrade_sources: Dictionary,
+) -> bool:
     var member := member_by_id(member_id)
     if member == null:
         return false
@@ -369,7 +382,12 @@ func _validate_candidate_member_sources(
     var normalized_candidate_sources: Array[StatModifierSource] = []
     for source: StatModifierSource in candidate_sources:
         normalized_candidate_sources.append(member._normalized_modifier_source_copy(source))
-    var effective_candidate_sources := _sources_for_owned(member, normalized_candidate_sources)
+    var effective_candidate_sources := _sources_for_owned_with_party_upgrades(
+        member,
+        normalized_candidate_sources,
+        candidate_party_upgrade_definitions,
+        candidate_party_upgrade_sources,
+    )
     var resolution := MemberStatResolutionService.resolve(
         member_id,
         STAT_CATALOG,
@@ -432,9 +450,29 @@ func _commit_personal_upgrade(definition: UpgradeDefinition, member_id: int, ran
 func _commit_party_upgrade(definition: UpgradeDefinition, rank: int, source: StatModifierSource) -> bool:
     if definition == null or source == null:
         return false
-    _party_upgrade_ranks[definition.id] = rank
-    _party_upgrade_definitions[definition.id] = definition
-    _party_upgrade_sources[definition.id] = source
+    var candidate_ranks := _party_upgrade_ranks.duplicate()
+    var candidate_definitions := _party_upgrade_definitions.duplicate()
+    var candidate_sources := _party_upgrade_sources.duplicate()
+    candidate_ranks[definition.id] = rank
+    candidate_definitions[definition.id] = definition
+    candidate_sources[definition.id] = source
+
+    var previous_definition := _party_upgrade_definitions.get(definition.id) as UpgradeDefinition
+    for member: PartyMemberState in members:
+        var was_eligible := previous_definition != null and previous_definition.is_member_eligible(member)
+        if not was_eligible and not definition.is_member_eligible(member):
+            continue
+        if not _validate_candidate_member_sources_for_party_upgrades(
+            member.member_id,
+            member.modifier_sources,
+            candidate_definitions,
+            candidate_sources,
+        ):
+            return false
+
+    _party_upgrade_ranks = candidate_ranks
+    _party_upgrade_definitions = candidate_definitions
+    _party_upgrade_sources = candidate_sources
     _invalidate_all_members()
     upgrades_changed.emit()
     return true
@@ -571,6 +609,19 @@ func _sources_for_owned(
     member: PartyMemberState,
     owned_sources: Array[StatModifierSource],
 ) -> Array[StatModifierSource]:
+    return _sources_for_owned_with_party_upgrades(
+        member,
+        owned_sources,
+        _party_upgrade_definitions,
+        _party_upgrade_sources,
+    )
+
+func _sources_for_owned_with_party_upgrades(
+    member: PartyMemberState,
+    owned_sources: Array[StatModifierSource],
+    party_upgrade_definitions_for_graph: Dictionary,
+    party_upgrade_sources_for_graph: Dictionary,
+) -> Array[StatModifierSource]:
     var sources: Array[StatModifierSource] = []
     var definition := member.class_definition
     var rank_bonus := float(maxi(get_class_rank(definition.id), 1) - 1) * definition.class_rank_power_step
@@ -585,10 +636,10 @@ func _sources_for_owned(
     for source: StatModifierSource in owned_sources:
         sources.append(source)
 
-    for upgrade_id: StringName in _party_upgrade_definitions:
-        var upgrade := _party_upgrade_definitions[upgrade_id] as UpgradeDefinition
+    for upgrade_id: StringName in party_upgrade_definitions_for_graph:
+        var upgrade := party_upgrade_definitions_for_graph[upgrade_id] as UpgradeDefinition
         if upgrade != null and upgrade.is_member_eligible(member):
-            sources.append(_party_upgrade_sources[upgrade_id] as StatModifierSource)
+            sources.append(party_upgrade_sources_for_graph[upgrade_id] as StatModifierSource)
 
     var party_modifiers: Array[StatModifier] = []
     for stat_id: StringName in PARTY_STAT_IDS:
