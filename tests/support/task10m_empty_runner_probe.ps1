@@ -21,6 +21,8 @@ function Invoke-ProbeRunner {
     $startInfo.CreateNoWindow = $true
     $startInfo.RedirectStandardOutput = $true
     $startInfo.RedirectStandardError = $true
+    $startInfo.EnvironmentVariables["APPDATA"] = Join-Path $probeRoot "settings\appdata"
+    $startInfo.EnvironmentVariables["LOCALAPPDATA"] = Join-Path $probeRoot "settings\localappdata"
     $process = New-Object System.Diagnostics.Process
     $process.StartInfo = $startInfo
     [void]$process.Start()
@@ -67,10 +69,17 @@ renderer/rendering_method="gl_compatibility"
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot "..\test_runner.gd") -Destination (Join-Path $probeRoot "tests\test_runner.gd")
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot "..\focused_test_runner.gd") -Destination (Join-Path $probeRoot "tests\focused_test_runner.gd")
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot "test_script_error_capture.gd") -Destination (Join-Path $probeRoot "tests\support\test_script_error_capture.gd")
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot "test_suite_discovery.gd") -Destination (Join-Path $probeRoot "tests\support\test_suite_discovery.gd")
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot "task10m_list_failure_runner.gd") -Destination (Join-Path $probeRoot "tests\support\task10m_list_failure_runner.gd")
 
     $openFailure = Invoke-ProbeRunner "res://tests/test_runner.gd"
     if ($openFailure.ExitCode -isnot [int] -or $openFailure.ExitCode -eq 0 -or $openFailure.Output -notmatch "TEST_RUNNER_DISCOVERY_ERROR: cannot open unit suite directory res://tests/unit") {
         throw "Missing-directory runner probe failed contract. exit=$($openFailure.ExitCode) output=$($openFailure.Output)"
+    }
+
+    $listFailure = Invoke-ProbeRunner "res://tests/support/task10m_list_failure_runner.gd"
+    if ($listFailure.ExitCode -ne 1 -or $listFailure.Output -notmatch "TEST_RUNNER_DISCOVERY_ERROR: cannot list unit suite directory res://tests/unit code=\d+") {
+        throw "List-failure runner probe failed contract. exit=$($listFailure.ExitCode) output=$($listFailure.Output)"
     }
 
     New-Item -ItemType Directory -Path (Join-Path $probeRoot "tests\unit") -Force | Out-Null
@@ -84,7 +93,7 @@ renderer/rendering_method="gl_compatibility"
         throw "Argument-free focused-runner probe failed contract. exit=$($focusedFailure.ExitCode) output=$($focusedFailure.Output)"
     }
 
-    Write-Output "TASK10M_EMPTY_RUNNER_PROBE_SUMMARY: PASS open=$($openFailure.ExitCode) zero=$($zeroFailure.ExitCode) focused=$($focusedFailure.ExitCode)"
+    Write-Output "TASK10M_EMPTY_RUNNER_PROBE_SUMMARY: PASS open=$($openFailure.ExitCode) list=$($listFailure.ExitCode) zero=$($zeroFailure.ExitCode) focused=$($focusedFailure.ExitCode)"
 }
 finally {
     if (Test-Path -LiteralPath $probeRoot) {

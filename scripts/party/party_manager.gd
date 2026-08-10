@@ -180,8 +180,8 @@ func add_member_source(member_id: int, source: StatModifierSource) -> bool:
     var member := member_by_id(member_id)
     if member == null or source == null:
         return false
-    if _member_source_refresh_coordinator.is_valid():
-        if source.source_type == &"equipment":
+    if _member_source_refresh_authority != null:
+        if source.source_type == &"equipment" or not _member_source_refresh_coordinator.is_valid():
             return false
         return bool(_member_source_refresh_coordinator.call(member_id, source))
     var validation_errors := StatResolver.validate_sources(STAT_CATALOG, [source])
@@ -197,8 +197,8 @@ func replace_member_source(member_id: int, source: StatModifierSource) -> bool:
     var member := member_by_id(member_id)
     if member == null or source == null:
         return false
-    if _member_source_refresh_coordinator.is_valid():
-        if source.source_type == &"equipment":
+    if _member_source_refresh_authority != null:
+        if source.source_type == &"equipment" or not _member_source_refresh_coordinator.is_valid():
             return false
         return bool(_member_source_refresh_coordinator.call(member_id, source))
     var validation_errors := StatResolver.validate_sources(STAT_CATALOG, [source])

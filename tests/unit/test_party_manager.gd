@@ -4,6 +4,10 @@ class CoordinatorProbe extends RefCounted:
     func refresh(_member_id: int, _source: StatModifierSource) -> bool:
         return false
 
+class NodeCoordinatorProbe extends Node:
+    func refresh(_member_id: int, _source: StatModifierSource) -> bool:
+        return false
+
 func run() -> Array[String]:
     var failures: Array[String] = []
     _test_effective_capacity(failures)
@@ -60,6 +64,7 @@ func run() -> Array[String]:
     _test_atomic_equipment_source_batch_contract(failures)
     _test_coordinated_source_authority_contract(failures)
     _test_member_equipment_source_authority_contract(failures)
+    _test_dead_coordinator_binding_fails_closed(failures)
     _test_two_pass_cache_isolation_and_preview_inputs(failures)
     _test_party_actor_stats_signal_lifecycle(failures)
     return failures
@@ -310,6 +315,84 @@ func _test_member_equipment_source_authority_contract(failures: Array[String]) -
     TestAssertions.equal(events, [], "stale member authority emits no stat signal", failures)
     party.free()
 
+func _test_dead_coordinator_binding_fails_closed(failures: Array[String]) -> void:
+    _assert_dead_coordinator_rejects_source_mutation(
+        &"add_member_source",
+        null,
+        _equipment_source(1, 5.0),
+        "dead coordinator direct equipment add",
+        failures,
+    )
+    _assert_dead_coordinator_rejects_source_mutation(
+        &"add_member_source",
+        _equipment_source(1, 2.0),
+        _equipment_source(1, 5.0),
+        "dead coordinator duplicate equipment append",
+        failures,
+    )
+    _assert_dead_coordinator_rejects_source_mutation(
+        &"replace_member_source",
+        _equipment_source(1, 2.0),
+        _equipment_source(1, 5.0),
+        "dead coordinator direct equipment replace",
+        failures,
+    )
+    _assert_dead_coordinator_rejects_source_mutation(
+        &"add_member_source",
+        null,
+        _growth_source(1, &"dead_callback_growth_add", 3.0),
+        "dead coordinator non-equipment add",
+        failures,
+    )
+    _assert_dead_coordinator_rejects_source_mutation(
+        &"replace_member_source",
+        _growth_source(1, &"dead_callback_growth_replace", 1.0),
+        _growth_source(1, &"dead_callback_growth_replace", 3.0),
+        "dead coordinator non-equipment replace",
+        failures,
+    )
+
+func _assert_dead_coordinator_rejects_source_mutation(
+    method_name: StringName,
+    initial_source: StatModifierSource,
+    candidate: StatModifierSource,
+    label: String,
+    failures: Array[String],
+) -> void:
+    var catalog := GameCatalog.load_defaults()
+    var party := PartyManager.new()
+    party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
+    if initial_source != null:
+        TestAssertions.truthy(party.add_member_source(1, initial_source), "%s fixture installs the initial source" % label, failures)
+    var source_documents := _member_source_documents(party.member_by_id(1))
+    var base_snapshot := party.stats_for(1)
+    var action_tags: Array[StringName] = [&"melee", &"physical"]
+    var action_snapshot := party.stats_for_action(1, action_tags)
+    var revision := party.stat_revision()
+    var events: Array[int] = []
+    party.stats_changed.connect(func(member_id: int) -> void: events.append(member_id))
+    var probe := NodeCoordinatorProbe.new()
+    var coordinator := Callable(probe, "refresh")
+    var authority := party.bind_member_source_refresh_coordinator(coordinator)
+    TestAssertions.truthy(authority != null, "%s fixture binds authority" % label, failures)
+    probe.free()
+    TestAssertions.truthy(not coordinator.is_valid(), "%s fixture invalidates the callback target" % label, failures)
+    var replacement_probe := NodeCoordinatorProbe.new()
+    TestAssertions.truthy(
+        party.bind_member_source_refresh_coordinator(Callable(replacement_probe, "refresh")) == null,
+        "%s retains binding ownership after callback death" % label,
+        failures,
+    )
+
+    TestAssertions.truthy(not bool(party.call(method_name, 1, candidate)), "%s rejects" % label, failures)
+    TestAssertions.equal(_member_source_documents(party.member_by_id(1)), source_documents, "%s preserves exact sources" % label, failures)
+    TestAssertions.equal(party.stat_revision(), revision, "%s preserves revision" % label, failures)
+    TestAssertions.truthy(is_same(party.stats_for(1), base_snapshot), "%s preserves base-cache identity" % label, failures)
+    TestAssertions.truthy(is_same(party.stats_for_action(1, action_tags), action_snapshot), "%s preserves action-cache identity" % label, failures)
+    TestAssertions.equal(events, [], "%s emits no stat signal" % label, failures)
+    replacement_probe.free()
+    party.free()
+
 func _method_argument_count(instance: Object, method_name: StringName) -> int:
     for method: Dictionary in instance.get_method_list():
         if StringName(method.get("name", "")) == method_name:
@@ -320,6 +403,11 @@ func _equipment_source(member_id: int, strength: float) -> StatModifierSource:
     var source_id := StringName("equipment_member_%d" % member_id)
     return StatModifierSource.create(source_id, &"equipment", "Equipment", member_id, [
         StatModifier.create(&"strength", StatModifier.Operation.FLAT, strength, StringName("equipment_strength_%d" % member_id), "Equipment"),
+    ])
+
+func _growth_source(member_id: int, source_id: StringName, strength: float) -> StatModifierSource:
+    return StatModifierSource.create(source_id, &"character_growth", "Growth", member_id, [
+        StatModifier.create(&"strength", StatModifier.Operation.FLAT, strength, source_id, "Growth"),
     ])
 
 func _member_source_documents(member: PartyMemberState) -> String:
