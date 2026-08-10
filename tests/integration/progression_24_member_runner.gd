@@ -74,6 +74,7 @@ func _exercise_size(target_size: int) -> void:
 	var catalog := GameCatalog.load_defaults()
 	if target_size == 24:
 		_exercise_single_party_snapshot_isolation(catalog)
+		_exercise_distinct_weapon_isolation(catalog)
 	var registry := RunContextRegistry.new()
 	var contexts: Array[PlayerRunContext] = []
 	var profiles_before: Array[Dictionary] = []
@@ -312,6 +313,164 @@ func _exercise_single_party_snapshot_isolation(catalog: GameCatalog) -> void:
 	if changed_members == [1]:
 		print("PROGRESSION_24_MEMBER_ISOLATION_PASS members=24 untouched=23")
 	party.free()
+
+
+func _exercise_distinct_weapon_isolation(catalog: GameCatalog) -> void:
+	var party := PartyManager.new()
+	party.configure_capacity(PartyCapacityPolicy.new(24))
+	party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
+	for member_index: int in range(1, 24):
+		_assert(party.recruit(catalog.class_by_id(&"fighter")), "distinct-weapon isolation recruits member %d" % (member_index + 1))
+	var profile := ProfileState.new_profile("profile-progression-weapons", "Progression Weapons", 1000)
+	profile.inventory_columns = 5
+	var context := PlayerRunContext.new()
+	var configure_errors := context.configure(&"progression_weapon_player", 0, profile, 2424, party, 100)
+	_assert(configure_errors.is_empty(), "distinct-weapon isolation context configures")
+	if not configure_errors.is_empty():
+		party.free()
+		return
+	var issuer_namespace := "run:%s:%s:%s" % [profile.profile_id, 2424, context.run_player_id]
+	var item_ids: Array[String] = []
+	for index: int in 24:
+		var request := ItemGenerationRequest.create(2500 + index, index, 20 + index, &"ordinary_enemy", &"ordinary_drop", [&"common"])
+		request.forced_base_id = &"forge_vanguard_sword"
+		request.forced_rarity_id = &"common"
+		var generated := ItemGenerationService.generate(
+			request, issuer_namespace, index,
+			GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG,
+		)
+		_assert(generated.ok(), "distinct-weapon member %d generates through the production service" % (index + 1))
+		if not generated.ok():
+			party.free()
+			return
+		item_ids.append(generated.item.instance_id)
+		var created := context.apply_item_transaction(
+			ItemTransactionRequest.create("progression-weapon-create-%02d" % index, String(context.run_player_id), &"run-inventory", index, generated.item),
+			GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG,
+		)
+		_assert(created.ok(), "distinct-weapon member %d item enters run ownership" % (index + 1))
+		var equipped := context.assign_equipment(index + 1, generated.item.instance_id, &"main_hand", GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)
+		_assert(equipped.ok(), "distinct-weapon member %d equips its main hand" % (index + 1))
+	var distinct: Dictionary = {}
+	for member_id: int in range(1, 25):
+		distinct[context.equipment_for(member_id).item_id_at(EquipmentSlotIndex.index_for(&"main_hand"))] = true
+	_assert(distinct.size() == 24 and not distinct.has(""), "distinct-weapon fixture owns 24 unique nonempty main hands")
+
+	var actors: Array[Node3D] = []
+	var health_by_member: Dictionary = {}
+	for member_id: int in range(1, 25):
+		var actor := Node3D.new()
+		var health := HealthComponent.new()
+		health.name = "HealthComponent"
+		health.configure(party.stats_for(member_id).value(&"max_health", 100.0), true, 8.0, 0.5, true)
+		actor.add_child(health)
+		_assert(context.bind_actor(member_id, actor), "distinct-weapon member %d binds runtime health" % member_id)
+		actors.append(actor)
+		health_by_member[member_id] = health
+
+	var attack := party.member_by_id(1).class_definition.primary_attack
+	var records: Dictionary = {}
+	for member_id: int in range(2, 25):
+		var activation := context.equipment_activation(member_id)
+		var action_tags := DamageResolver.action_tags_for(attack, activation.weapon_snapshot())
+		var base_snapshot := party.stats_for(member_id)
+		var action_snapshot := party.stats_for_action(member_id, action_tags)
+		records[member_id] = {
+			"equipment": context.equipment_for(member_id).to_dictionary(),
+			"activation": _activation_document(activation),
+			"sources": _source_document(party.member_by_id(member_id).modifier_sources),
+			"base": base_snapshot,
+			"base_revision": base_snapshot.revision,
+			"action": action_snapshot,
+			"action_revision": action_snapshot.revision,
+			"estimate": _combat_estimate_document(ActionCombatEstimateService.estimate(attack, member_id, party, GameCatalog.DAMAGE_TYPES)),
+			"health": _health_document(health_by_member[member_id]),
+		}
+	var item_bytes := _ownership_item_bytes(context.item_state())
+	var changed_members: Array[int] = []
+	party.stats_changed.connect(func(member_id: int) -> void: changed_members.append(member_id))
+	var revision_before := party.stat_revision()
+	var transition := context.assign_equipment(1, item_ids[0], &"", GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)
+	_assert(transition.ok(), "distinct-weapon member-one transition succeeds")
+	_assert(changed_members == [1], "distinct-weapon transition signals only member one")
+	_assert(party.stat_revision() == revision_before + 1, "distinct-weapon transition advances one shared revision")
+	_assert(_ownership_item_bytes(context.item_state()) == item_bytes, "distinct-weapon transition preserves every immutable item byte")
+	for member_id: int in range(2, 25):
+		var record := records[member_id] as Dictionary
+		var activation := context.equipment_activation(member_id)
+		var action_tags := DamageResolver.action_tags_for(attack, activation.weapon_snapshot())
+		var base_snapshot := party.stats_for(member_id)
+		var action_snapshot := party.stats_for_action(member_id, action_tags)
+		_assert(context.equipment_for(member_id).to_dictionary() == record["equipment"], "distinct-weapon transition preserves member %d ownership" % member_id)
+		_assert(_activation_document(activation) == record["activation"], "distinct-weapon transition preserves member %d activation" % member_id)
+		_assert(_source_document(party.member_by_id(member_id).modifier_sources) == record["sources"], "distinct-weapon transition preserves member %d sources" % member_id)
+		_assert(is_same(base_snapshot, record["base"]) and base_snapshot.revision == int(record["base_revision"]), "distinct-weapon transition preserves member %d base cache identity/revision" % member_id)
+		_assert(is_same(action_snapshot, record["action"]) and action_snapshot.revision == int(record["action_revision"]), "distinct-weapon transition preserves member %d action cache identity/revision" % member_id)
+		_assert(_combat_estimate_document(ActionCombatEstimateService.estimate(attack, member_id, party, GameCatalog.DAMAGE_TYPES)) == record["estimate"], "distinct-weapon transition preserves member %d estimate" % member_id)
+		_assert(_health_document(health_by_member[member_id]) == record["health"], "distinct-weapon transition preserves member %d health" % member_id)
+
+	var health_before: Dictionary = {}
+	for member_id: int in range(1, 25):
+		health_before[member_id] = _health_document(health_by_member[member_id])
+	var attacker_activation := context.equipment_activation(2)
+	var attacker_stats := party.stats_for_action(2, DamageResolver.action_tags_for(attack, attacker_activation.weapon_snapshot()))
+	var attacker := CombatantAdapter.new(null, &"party:2", 1, health_by_member[2], attacker_stats, true, Callable(), attacker_activation.weapon_snapshot())
+	var target := CombatantAdapter.new(null, &"party:3", 2, health_by_member[3], party.stats_for(3))
+	var packet := DamageResolver.prepare(attack, attacker, CombatRng.new(2601, [0.99, 0.5]), GameCatalog.DAMAGE_TYPES)
+	var damage := DamageResolver.resolve(packet, target, CombatRng.new(2602, [0.99, 0.99]), GameCatalog.DAMAGE_TYPES)
+	_assert(packet.valid and damage.valid and damage.actual_health_removed > 0.0, "distinct-weapon member two attacks member three with its weapon range")
+	for member_id: int in range(1, 25):
+		var health_changed: bool = _health_document(health_by_member[member_id]) != health_before[member_id]
+		_assert(health_changed == (member_id == 3), "distinct-weapon attack isolates health at member %d" % member_id)
+	if changed_members == [1] and distinct.size() == 24:
+		print("PROGRESSION_24_MEMBER_WEAPON_ISOLATION_PASS members=24 untouched=23 distinct_main_hands=24")
+	for actor: Node3D in actors:
+		actor.free()
+	party.free()
+
+
+func _activation_document(activation: EquipmentActivationResult) -> Dictionary:
+	var weapon := activation.weapon_snapshot() if activation != null else null
+	var components: Array[Dictionary] = []
+	if weapon != null:
+		for component: ItemBaseDamageComponent in weapon.components:
+			components.append(component.to_dictionary())
+	return {
+		"error": activation.error if activation != null else "missing",
+		"active": activation.active_item_ids if activation != null else [],
+		"weapon": {} if weapon == null else {"member_id": weapon.member_id, "item_id": weapon.item_id, "base_id": String(weapon.base_id), "revision": weapon.revision, "components": components},
+	}
+
+
+func _source_document(sources: Array[StatModifierSource]) -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	for source: StatModifierSource in sources:
+		var modifiers: Array[Dictionary] = []
+		for modifier: StatModifier in source.modifiers:
+			modifiers.append({"stat_id": String(modifier.stat_id), "operation": modifier.operation, "value": modifier.value, "source_id": String(modifier.source_id), "required_tags": modifier.required_tags})
+		result.append({"id": String(source.id), "type": String(source.source_type), "label": source.label, "owner": source.owner_member_id, "modifiers": modifiers})
+	return result
+
+
+func _combat_estimate_document(estimate: ActionCombatEstimate) -> Dictionary:
+	return {
+		"available": estimate.available, "reason": estimate.unavailable_reason,
+		"normal_hit": estimate.normal_hit, "critical_hit": estimate.critical_hit,
+		"average_hit": estimate.average_hit, "aps": estimate.attacks_per_second,
+		"dps": estimate.estimated_dps, "components": estimate.component_rows.duplicate(true),
+	}
+
+
+func _health_document(health: HealthComponent) -> Vector2:
+	return Vector2(health.current_health, health.max_health)
+
+
+func _ownership_item_bytes(state: ItemOwnershipState) -> Dictionary:
+	var result: Dictionary = {}
+	var registry := state.registry()
+	for item_id: String in registry.ids():
+		result[item_id] = ItemInstanceCodec.encode(registry.item(item_id))
+	return result
 
 
 func _assert(condition: bool, message: String) -> void:
