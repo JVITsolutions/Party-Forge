@@ -16,7 +16,30 @@ func run() -> Array[String]:
 	_test_missing_attack_id_is_unavailable(failures)
 	_test_invalid_damage_type_is_unavailable(failures)
 	_test_estimate_invariants_are_contextual(failures)
+	_test_weapon_midpoint_projection(failures)
 	return failures
+
+func _test_weapon_midpoint_projection(failures: Array[String]) -> void:
+	var attack := GameCatalog.load_defaults().class_by_id(&"fighter").primary_attack.duplicate(true) as AttackDefinition
+	if not _has_property(attack, &"damage_source"):
+		TestAssertions.truthy(false, "weapon estimate requires attack damage source", failures)
+		return
+	attack.set(&"damage_source", 1)
+	attack.set(&"weapon_damage_effectiveness", 1.5)
+	var stats := _snapshot({&"damage": 1.2, &"melee_damage": 1.25, &"physical_damage": 1.4})
+	stats.revision = 9
+	var weapon := ActiveWeaponDamageSnapshot.create(1, "estimate-weapon", &"forge_vanguard_sword", [
+		ItemBaseDamageComponent.create(&"physical", 4.0, 8.0),
+	], 9)
+	var estimate_script := load("res://scripts/ui/ledger/action_combat_estimate_service.gd") as Script
+	var method := estimate_script.get_script_method_list().filter(func(row: Dictionary) -> bool: return row.get("name") == &"estimate_from_snapshot")
+	if method.is_empty() or (method[0].get("args", []) as Array).size() < 4:
+		TestAssertions.truthy(false, "snapshot estimate accepts an optional weapon", failures)
+		return
+	var estimate := estimate_script.call("estimate_from_snapshot", attack, stats, GameCatalog.DAMAGE_TYPES, weapon) as ActionCombatEstimate
+	TestAssertions.truthy(estimate != null and estimate.available, "weapon midpoint estimate is available", failures)
+	if estimate != null:
+		TestAssertions.near(estimate.normal_hit, 18.9, 0.0001, "weapon midpoint applies effectiveness and all scaling once", failures)
 
 func _test_actual_warlock_action_snapshot_is_caster_only(failures: Array[String]) -> void:
 	var catalog := GameCatalog.load_defaults()
@@ -172,7 +195,7 @@ func _test_noncritical_mixed_damage(failures: Array[String]) -> void:
 	TestAssertions.near(estimate.average_hit, 15.0, 0.001, "noncritical average equals normal", failures)
 	TestAssertions.near(estimate.average_hit, _component_total(estimate.component_rows, "average_hit"), 0.001, "average total equals independently readable component rows", failures)
 	TestAssertions.near(estimate.estimated_dps, estimate.average_hit * estimate.attacks_per_second, 0.001, "DPS total is derived from average hit and action rate", failures)
-	TestAssertions.equal(estimate.component_rows.map(func(row: Dictionary) -> StringName: return row.damage_type_id), [&"physical", &"fire"], "component order stays authored", failures)
+	TestAssertions.equal(estimate.component_rows.map(func(row: Dictionary) -> StringName: return row.damage_type_id), [&"fire", &"physical"], "component order uses deterministic damage type order", failures)
 	party.free()
 
 func _test_mixed_caster_runtime_parity(failures: Array[String]) -> void:
@@ -201,8 +224,8 @@ func _test_mixed_caster_runtime_parity(failures: Array[String]) -> void:
 	var estimate := ActionCombatEstimateService.estimate(attack, 1, party, catalog.damage_types)
 	TestAssertions.truthy(packet.valid and estimate.available, "mixed caster runtime and estimate are available", failures)
 	if packet.valid and estimate.available:
-		TestAssertions.near(packet.components[0].typed_scaled, 21.84, 0.0001, "runtime fire component applies global, caster, and fire once", failures)
-		TestAssertions.near(packet.components[1].typed_scaled, 8.58, 0.0001, "runtime cold component applies global, caster, and cold once", failures)
+		TestAssertions.near(packet.components[0].typed_scaled, 8.58, 0.0001, "runtime sorted cold component applies global, caster, and cold once", failures)
+		TestAssertions.near(packet.components[1].typed_scaled, 21.84, 0.0001, "runtime sorted fire component applies global, caster, and fire once", failures)
 		for index: int in packet.components.size():
 			TestAssertions.near(packet.components[index].typed_scaled, float(estimate.component_rows[index].normal_hit), 0.0001, "runtime and ledger component %d share normal projection" % index, failures)
 	party.free()

@@ -620,6 +620,7 @@ func _preview_member_equipment_activation_with_sources(
 		final_sources,
 		candidate_revision,
 		PartyManager.DEFAULT_ATTRIBUTE_PROJECTION,
+		activation.weapon_snapshot(),
 	)
 	if not action_error.is_empty():
 		return EquipmentActivationResult.failure(

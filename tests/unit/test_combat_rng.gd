@@ -2,6 +2,11 @@ extends RefCounted
 
 func run() -> Array[String]:
 	var failures: Array[String] = []
+	var unit_rng := CombatRng.new(76, [0.125])
+	TestAssertions.truthy(unit_rng.has_method(&"unit"), "combat RNG exposes the sole unit draw primitive", failures)
+	if unit_rng.has_method(&"unit"):
+		TestAssertions.near(float(unit_rng.call(&"unit")), 0.125, 0.0001, "unit returns the prescribed draw", failures)
+		TestAssertions.equal(unit_rng.draw_count, 1, "unit consumes exactly one draw", failures)
 	var rng := CombatRng.new(77, [0.20, 0.80])
 	TestAssertions.equal(rng.roll(0.0), {"consumed": false, "draw": -1.0, "success": false}, "zero chance", failures)
 	TestAssertions.equal(rng.roll(1.0), {"consumed": false, "draw": -1.0, "success": true}, "certain chance", failures)

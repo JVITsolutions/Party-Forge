@@ -3,14 +3,20 @@ extends RefCounted
 
 const ACTION_ARCHETYPE := preload("res://scripts/combat/action_archetype.gd")
 const ACTION_DAMAGE_PROJECTION := preload("res://scripts/combat/action_damage_projection.gd")
+const ACTION_DAMAGE_COMPONENT_PROJECTION := preload("res://scripts/combat/action_damage_component_projection.gd")
 
-static func action_tags_for(attack: AttackDefinition) -> Array[StringName]:
+static func action_tags_for(attack: AttackDefinition, weapon: ActiveWeaponDamageSnapshot = null) -> Array[StringName]:
 	var tags: Array[StringName] = []
 	if attack != null:
 		tags = attack.normalized_action_tags()
-		for component: AttackDamageComponent in attack.damage_components:
-			if component != null and not component.damage_type_id.is_empty() and component.damage_type_id not in tags:
-				tags.append(component.damage_type_id)
+		for authored_component: AttackDamageComponent in attack.damage_components:
+			if authored_component != null and not authored_component.damage_type_id.is_empty() and authored_component.damage_type_id not in tags:
+				tags.append(authored_component.damage_type_id)
+		var projection := ACTION_DAMAGE_COMPONENT_PROJECTION.resolve(attack, weapon)
+		if String(projection.get("error", "")).is_empty():
+			for component: ItemBaseDamageComponent in projection.get("components", []):
+				if component != null and not component.damage_type_id.is_empty() and component.damage_type_id not in tags:
+					tags.append(component.damage_type_id)
 	tags.sort_custom(func(left: StringName, right: StringName) -> bool: return String(left) < String(right))
 	return tags
 
@@ -23,8 +29,27 @@ static func prepare(attack: AttackDefinition, source: CombatantAdapter, rng: Com
 	var validation := attack.validate(types)
 	if not validation.is_empty(): return _invalid_packet(String(validation[0]).trim_prefix("PARTY_FORGE_DAMAGE_ERROR "), source, attack.id)
 	if attack.is_healing(): return _invalid_packet("attack=%s source=%s reason=healing cannot create damage packet" % [attack.id, source.combatant_id], source, attack.id)
+	var weapon := source.weapon_snapshot
+	if attack.damage_source == AttackDefinition.DamageSource.ACTIVE_WEAPON and weapon != null:
+		if source.stats == null or weapon.revision != source.stats.revision:
+			return _invalid_packet("attack=%s source=%s reason=active weapon revision does not match action stats" % [attack.id, source.combatant_id], source, attack.id)
+		var source_member_id := _party_member_id(source.combatant_id)
+		if source_member_id > 0 and weapon.member_id != source_member_id:
+			return _invalid_packet("attack=%s source=%s reason=active weapon member does not match source" % [attack.id, source.combatant_id], source, attack.id)
+	var projection := ACTION_DAMAGE_COMPONENT_PROJECTION.resolve(attack, weapon)
+	var projection_error := String(projection.get("error", ""))
+	if not projection_error.is_empty():
+		return _invalid_packet(projection_error.trim_prefix("PARTY_FORGE_DAMAGE_ERROR "), source, attack.id)
+	var projected_components: Array[ItemBaseDamageComponent] = []
+	for component: ItemBaseDamageComponent in projection.get("components", []):
+		if component == null:
+			return _invalid_packet("attack=%s source=%s type=<null> reason=null projected component" % [attack.id, source.combatant_id], source, attack.id)
+		var component_error := component.validate(types)
+		if not component_error.is_empty():
+			return _invalid_packet("attack=%s source=%s type=%s reason=%s" % [attack.id, source.combatant_id, component.damage_type_id, component_error.trim_prefix("PARTY_FORGE_ITEM_BASE_DAMAGE_ERROR ")], source, attack.id)
+		projected_components.append(component)
 
-	var tags := action_tags_for(attack)
+	var tags := action_tags_for(attack, weapon)
 	var crit_chance := source.stat_value(&"crit_chance", 0.0) if attack.can_crit else 0.0
 	var crit_roll := rng.roll(crit_chance)
 	var critical := bool(crit_roll["success"])
@@ -33,14 +58,24 @@ static func prepare(attack: AttackDefinition, source: CombatantAdapter, rng: Com
 	var archetype_stat_id := ACTION_ARCHETYPE.stat_id(attack)
 	var archetype_multiplier := source.stat_value(archetype_stat_id, 1.0)
 	var prepared: Array[PreparedDamageComponent] = []
-	for component: AttackDamageComponent in attack.damage_components:
+	for component: ItemBaseDamageComponent in projected_components:
 		var type_definition := types.definition(component.damage_type_id)
-		var global_scaled := component.base_amount * global_multiplier
-		var typed_scaled := ACTION_DAMAGE_PROJECTION.normal_component(component.base_amount, global_multiplier, archetype_multiplier, source.stat_value(type_definition.offense_stat_id, 1.0))
+		var amount := component.minimum_damage
+		if component.minimum_damage != component.maximum_damage:
+			amount = lerpf(component.minimum_damage, component.maximum_damage, rng.unit())
+		var global_scaled := amount * global_multiplier
+		var typed_scaled := ACTION_DAMAGE_PROJECTION.normal_component(amount, global_multiplier, archetype_multiplier, source.stat_value(type_definition.offense_stat_id, 1.0))
 		var post_crit := typed_scaled * crit_multiplier if critical else typed_scaled
 		if not is_finite(post_crit): return _invalid_packet("attack=%s source=%s type=%s reason=non-finite prepared amount" % [attack.id, source.combatant_id, component.damage_type_id], source, attack.id)
-		prepared.append(PreparedDamageComponent.new(component.damage_type_id, component.base_amount, global_scaled, typed_scaled, post_crit))
+		prepared.append(PreparedDamageComponent.new(component.damage_type_id, amount, global_scaled, typed_scaled, post_crit))
 	return DamagePacket.create(source, attack.id, tags, attack.can_crit, critical, float(crit_roll["draw"]), crit_multiplier, source.stat_value(&"life_steal", 0.0), prepared)
+
+static func _party_member_id(combatant_id: StringName) -> int:
+	var text := String(combatant_id)
+	if not text.begins_with("party:"):
+		return 0
+	var suffix := text.trim_prefix("party:")
+	return suffix.to_int() if suffix.is_valid_int() else 0
 
 static func resolve(packet: DamagePacket, target: CombatantAdapter, rng: CombatRng, types: DamageTypeCatalog) -> DamageResult:
 	var result := _base_result(packet, target)

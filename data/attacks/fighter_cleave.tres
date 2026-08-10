@@ -15,5 +15,6 @@ cooldown = 0.8
 range = 2.2
 area_radius = 1.6
 damage_components = Array[ExtResource("1_bus4n")]([SubResource("Resource_bus4n")])
+damage_source = 1
 action_tags = Array[StringName]([&"melee", &"area"])
 can_crit = true

@@ -16,5 +16,6 @@ cooldown = 0.55
 range = 11.0
 projectile_speed = 16.0
 damage_components = Array[ExtResource("1_s7iwk")]([SubResource("Resource_s7iwk")])
+damage_source = 1
 action_tags = Array[StringName]([&"projectile", &"ranged"])
 can_crit = true

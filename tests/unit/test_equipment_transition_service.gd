@@ -45,7 +45,80 @@ func run() -> Array[String]:
 	_test_healing_projection_validation(failures)
 	_test_multi_action_and_missing_primary_contract(failures)
 	_test_context_commit_rejection_is_atomic(failures)
+	_test_invalid_weapon_action_preserves_published_projection(failures)
 	return failures
+
+func _test_invalid_weapon_action_preserves_published_projection(failures: Array[String]) -> void:
+	var fighter := GameCatalog.load_defaults().class_by_id(&"fighter").duplicate(true) as ClassDefinition
+	fighter.primary_attack = fighter.primary_attack.duplicate(true) as AttackDefinition
+	if not _has_property(fighter.primary_attack, &"damage_source"):
+		TestAssertions.truthy(false, "atomic weapon-action validation requires damage source", failures)
+		return
+	fighter.primary_attack.set(&"damage_source", 1)
+	var party := _party_with_class(PartyManager.new(), fighter)
+	var first := _weapon("published-weapon", 7.0, 12.0)
+	var state := _state(first)
+	var first_preview: Variant = _service.preview(state, 1, first.instance_id, &"main_hand", party, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)
+	TestAssertions.truthy(first_preview != null and first_preview.ok(), "published weapon fixture previews", failures)
+	if first_preview == null or not first_preview.ok():
+		party.free()
+		return
+	var context := PlayerRunContext.new()
+	var profile := ProfileState.new_profile("weapon-action-profile", "Weapon Action", 2001)
+	profile.inventory_columns = 1
+	var configure_errors := context.configure(&"weapon-action-player", 0, profile, 2001, party, 100)
+	TestAssertions.equal(configure_errors, PackedStringArray(), "weapon action context configures", failures)
+	if not configure_errors.is_empty():
+		party.free()
+		return
+	var issued_first := ItemInstanceIssuer.issue("run:weapon-action-profile:2001:weapon-action-player", 0, "task_9", 2001, {
+		"affixes": [],
+		"base_definition_id": "forge_vanguard_sword",
+		"base_damage_components": [{"damage_type_id": "physical", "minimum_damage": 7.0, "maximum_damage": 12.0}],
+		"item_level": 1,
+		"rarity_id": "common",
+	}, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)
+	TestAssertions.truthy(issued_first.ok(), "first weapon issues", failures)
+	if not issued_first.ok():
+		party.free()
+		return
+	var created_first := context.apply_item_transaction(ItemTransactionRequest.create("create-first", "weapon-action-player", &"run-inventory", 0, issued_first.item), GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)
+	TestAssertions.truthy(created_first.ok(), "first weapon enters inventory code=%d" % created_first.code, failures)
+	var equipped_first := context.assign_equipment(1, issued_first.item.instance_id, &"main_hand", GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)
+	TestAssertions.truthy(equipped_first.ok(), "first weapon publishes detail=%s" % equipped_first.error, failures)
+	if not equipped_first.ok():
+		party.free()
+		return
+	var second_doc := {
+		"affixes": [],
+		"base_definition_id": "forge_vanguard_sword",
+		"base_damage_components": [{"damage_type_id": "physical", "minimum_damage": 8.0, "maximum_damage": 13.0}],
+		"item_level": 1,
+		"rarity_id": "common",
+	}
+	var issued_second := ItemInstanceIssuer.issue("run:weapon-action-profile:2001:weapon-action-player", 1, "task_9", 2001, second_doc, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)
+	TestAssertions.truthy(issued_second.ok(), "candidate weapon issues", failures)
+	if not issued_second.ok():
+		party.free()
+		return
+	var created_second := context.apply_item_transaction(ItemTransactionRequest.create("create-second", "weapon-action-player", &"run-inventory", 1, issued_second.item), GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)
+	TestAssertions.truthy(created_second.ok(), "candidate weapon enters inventory", failures)
+	var state_before := _bytes(context.item_state())
+	var source_before := _source_bytes(party.member_by_id(1).modifier_sources)
+	var published_before := party.active_weapon_snapshot(1)
+	var weapon_before: Dictionary = {"item_id": published_before.item_id, "revision": published_before.revision}
+	var revision_before := party.stat_revision()
+	var activation_before := context.equipment_activation(1).active_item_ids
+	fighter.primary_attack.set(&"weapon_damage_effectiveness", INF)
+	var rejected := context.assign_equipment(1, issued_second.item.instance_id, &"main_hand", GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)
+	TestAssertions.truthy(not rejected.ok() and rejected.error.contains("fighter_cleave"), "invalid weapon effectiveness rejects before commit", failures)
+	TestAssertions.equal(_bytes(context.item_state()), state_before, "invalid action preserves ownership state", failures)
+	TestAssertions.equal(_source_bytes(party.member_by_id(1).modifier_sources), source_before, "invalid action preserves published source", failures)
+	var weapon_after := party.active_weapon_snapshot(1)
+	TestAssertions.equal({"item_id": weapon_after.item_id, "revision": weapon_after.revision}, weapon_before, "invalid action preserves published weapon snapshot", failures)
+	TestAssertions.equal(context.equipment_activation(1).active_item_ids, activation_before, "invalid action preserves activation", failures)
+	TestAssertions.equal(party.stat_revision(), revision_before, "invalid action preserves revision", failures)
+	party.free()
 
 func _test_preview_is_pure_and_resolves_final_stats(failures: Array[String]) -> void:
 	var party := _party(PartyManager.new())
@@ -613,3 +686,8 @@ func _source_bytes(sources: Array[StatModifierSource]) -> String:
 			})
 		rows.append({"id": String(source.id), "type": String(source.source_type), "modifiers": modifiers})
 	return JSON.stringify(rows)
+
+func _has_property(object: Object, property_name: StringName) -> bool:
+	return object != null and object.get_property_list().any(func(property: Dictionary) -> bool:
+		return property.get("name") == property_name
+	)

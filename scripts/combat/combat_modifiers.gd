@@ -11,6 +11,12 @@ class Snapshot extends RefCounted:
     var range_multiplier := 1.0
     var area_multiplier := 1.0
     var action_stats: ResolvedStatSnapshot
+    var _weapon_snapshot: ActiveWeaponDamageSnapshot
+    var weapon_snapshot: ActiveWeaponDamageSnapshot:
+        get:
+            return _weapon_snapshot.copy() if _weapon_snapshot != null else null
+        set(value):
+            _weapon_snapshot = value.copy() if value != null else null
     var geometry: ResolvedAttackGeometry
     var cadence: RefCounted
     var member_state: PartyMemberState
@@ -19,10 +25,28 @@ class Snapshot extends RefCounted:
     var error := ""
 
     func ok() -> bool:
-        return error.is_empty() and geometry != null and geometry.ok() and cadence != null and bool(cadence.call("ok"))
+        return (
+            error.is_empty()
+            and action_stats != null
+            and _weapon_matches_action_context()
+            and geometry != null
+            and geometry.ok()
+            and cadence != null
+            and bool(cadence.call("ok"))
+        )
 
     func matches(member: PartyMemberState, manager: PartyManager, attack: AttackDefinition) -> bool:
         return ok() and is_same(member_state, member) and is_same(party_manager, manager) and is_same(attack_definition, attack)
+
+    func _weapon_matches_action_context() -> bool:
+        return (
+            _weapon_snapshot == null
+            or (
+                member_state != null
+                and _weapon_snapshot.member_id == member_state.member_id
+                and _weapon_snapshot.revision == action_stats.revision
+            )
+        )
 
 ## Deprecated cadence-only compatibility path. Geometry multipliers are
 ## intentionally unavailable without exact action tags; use resolve_for_action.
@@ -61,11 +85,13 @@ static func resolve_for_action(member_state: PartyMemberState, party_manager: Pa
     if not is_same(authoritative_member, member_state):
         result.error = "party member state is not authoritative"
         return result
-    var stats := party_manager.stats_for_action(member_state.member_id, DamageResolver.action_tags_for(attack))
+    var weapon := party_manager.active_weapon_snapshot(member_state.member_id)
+    var stats := party_manager.stats_for_action(member_state.member_id, DamageResolver.action_tags_for(attack, weapon))
     if stats == null:
         result.error = "missing resolved action snapshot"
         return result
     result.action_stats = stats
+    result.weapon_snapshot = weapon
     result.member_state = member_state
     result.party_manager = party_manager
     result.attack_definition = attack
@@ -82,6 +108,11 @@ static func resolve_for_action(member_state: PartyMemberState, party_manager: Pa
     result.geometry = ResolvedAttackGeometry.from_snapshot(attack, stats)
     if not result.geometry.ok():
         result.error = result.geometry.error
+    elif result._weapon_snapshot != null and (
+        result._weapon_snapshot.member_id != member_state.member_id
+        or result._weapon_snapshot.revision != stats.revision
+    ):
+        result.error = "active weapon snapshot member or revision mismatch"
     return result
 
 ## Resolves action-tag-aware runtime cadence through the same formula as ledger

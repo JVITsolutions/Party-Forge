@@ -16,5 +16,6 @@ cooldown = 2.2
 range = 16.0
 projectile_speed = 22.0
 damage_components = Array[ExtResource("1_3c2ag")]([SubResource("Resource_3c2ag")])
+damage_source = 1
 action_tags = Array[StringName]([&"bow", &"physical", &"projectile", &"ranged"])
 can_crit = true

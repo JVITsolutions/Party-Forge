@@ -2,6 +2,7 @@ class_name AttackDefinition
 extends Resource
 
 enum Kind { MELEE_CLEAVE, PROJECTILE, AREA_PROJECTILE, HEAL, DIRECT, AREA }
+enum DamageSource { AUTHORED, ACTIVE_WEAPON }
 const DEFAULT_TYPES: DamageTypeCatalog = preload("res://data/damage_types/core_damage_types.tres")
 
 @export var id: StringName
@@ -13,6 +14,8 @@ const DEFAULT_TYPES: DamageTypeCatalog = preload("res://data/damage_types/core_d
 @export var projectile_speed: float = 0.0
 @export var area_radius: float = 0.0
 @export var damage_components: Array[AttackDamageComponent] = []
+@export var damage_source := DamageSource.AUTHORED
+@export var weapon_damage_effectiveness := 1.0
 @export var action_tags: Array[StringName] = []
 @export var can_crit := false
 
@@ -44,6 +47,12 @@ func validate(types: DamageTypeCatalog = null) -> PackedStringArray:
 		errors.append("PARTY_FORGE_DAMAGE_ERROR attack=%s reason=area radius must be finite and nonnegative" % id)
 	if normalized_action_tags().size() != action_tags.size():
 		errors.append("PARTY_FORGE_DAMAGE_ERROR attack=%s reason=empty or duplicate action tag" % id)
+	if int(damage_source) < 0 or int(damage_source) >= DamageSource.size():
+		errors.append("PARTY_FORGE_DAMAGE_ERROR attack=%s reason=invalid damage source" % id)
+	if not is_finite(weapon_damage_effectiveness) or weapon_damage_effectiveness < 0.0:
+		errors.append("PARTY_FORGE_DAMAGE_ERROR attack=%s reason=weapon damage effectiveness must be finite and nonnegative" % id)
+	if damage_source == DamageSource.ACTIVE_WEAPON and damage_components.is_empty():
+		errors.append("PARTY_FORGE_DAMAGE_ERROR attack=%s reason=weapon-based action has no authored fallback" % id)
 	if is_healing():
 		if not is_finite(power) or power <= 0.0:
 			errors.append("PARTY_FORGE_DAMAGE_ERROR attack=%s reason=heal power must be finite and positive" % id)

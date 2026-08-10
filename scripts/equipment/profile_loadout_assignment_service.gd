@@ -199,6 +199,7 @@ func _validate_candidate_projection(
 		sources,
 		0,
 		_attribute_tuning,
+		activation.weapon_snapshot(),
 	)
 
 func _validate_complete_loadout(state: ItemOwnershipState, class_definition: ClassDefinition) -> String:

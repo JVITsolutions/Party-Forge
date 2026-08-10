@@ -27,8 +27,12 @@ func execute(definition: AttackDefinition, target: CombatTarget, presentation: A
     var modifiers: RefCounted = action_context if action_context != null else CombatModifiersScript.resolve_for_action(owner_actor.member_state, party_manager, definition)
     if modifiers == null or not bool(modifiers.call("matches", owner_actor.member_state, party_manager, definition)):
         return
-    var action_tags := DamageResolver.action_tags_for(definition)
-    var source_adapter := owner_actor.get_combat_adapter(action_tags, modifiers.get("action_stats") as ResolvedStatSnapshot)
+    var action_tags := DamageResolver.action_tags_for(definition, modifiers.get("weapon_snapshot") as ActiveWeaponDamageSnapshot)
+    var source_adapter := owner_actor.get_combat_adapter(
+        action_tags,
+        modifiers.get("action_stats") as ResolvedStatSnapshot,
+        modifiers.get("weapon_snapshot") as ActiveWeaponDamageSnapshot,
+    )
     var geometry := modifiers.get("geometry") as ResolvedAttackGeometry
     if definition.kind == AttackDefinition.Kind.HEAL:
         _execute_heal(definition, target, source_adapter, presentation)

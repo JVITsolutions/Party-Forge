@@ -77,8 +77,9 @@ func _test_shared_crit(types: DamageTypeCatalog, failures: Array[String]) -> voi
 	TestAssertions.truthy(packet.valid and packet.critical, "prescribed crit succeeds", failures)
 	TestAssertions.near(packet.crit_draw, 0.20, 0.001, "crit draw evidence", failures)
 	TestAssertions.near(packet.crit_multiplier, 2.0, 0.001, "crit multiplier evidence", failures)
-	TestAssertions.near(packet.components[0].post_crit, 60.0, 0.001, "crit doubles physical component", failures)
-	TestAssertions.near(packet.components[1].post_crit, 40.0, 0.001, "crit doubles fire component", failures)
+	TestAssertions.equal(packet.components.map(func(component: PreparedDamageComponent) -> StringName: return component.damage_type_id), [&"fire", &"physical"], "authored components use deterministic type order", failures)
+	TestAssertions.near(packet.components[0].post_crit, 40.0, 0.001, "crit doubles sorted fire component", failures)
+	TestAssertions.near(packet.components[1].post_crit, 60.0, 0.001, "crit doubles sorted physical component", failures)
 	TestAssertions.equal(rng.draw_count, 1, "one shared crit draw", failures)
 
 func _test_dodge_block_and_incoming(types: DamageTypeCatalog, failures: Array[String]) -> void:

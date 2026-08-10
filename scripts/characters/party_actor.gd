@@ -152,12 +152,12 @@ func advance_combat(delta: float, candidates: Array[CombatTarget]) -> void:
                 _on_attack_requested(support_controller.definition, heal_target, support_context)
     _try_primary_attack(primary, candidates, primary_context)
 
-func get_combat_adapter(tags: Array[StringName], resolved_action_stats: ResolvedStatSnapshot = null) -> CombatantAdapter:
+func get_combat_adapter(tags: Array[StringName], resolved_action_stats: ResolvedStatSnapshot = null, weapon_snapshot: ActiveWeaponDamageSnapshot = null) -> CombatantAdapter:
     var health := _health_component()
     var identity := StringName("party:%d" % member_state.member_id) if member_state != null else &""
     var stats := resolved_action_stats if resolved_action_stats != null else party_manager.stats_for_action(member_state.member_id, tags) if party_manager != null and member_state != null else null
     var available := member_state != null and health != null and not health.is_downed and not health.is_dead
-    return CombatantAdapter.new(self, identity, team_id, health, stats, available, Callable(self, "_incoming_damage_multiplier"))
+    return CombatantAdapter.new(self, identity, team_id, health, stats, available, Callable(self, "_incoming_damage_multiplier"), weapon_snapshot)
 
 func get_combat_target() -> CombatTarget:
     var target_position: Vector3 = global_position if is_inside_tree() else position

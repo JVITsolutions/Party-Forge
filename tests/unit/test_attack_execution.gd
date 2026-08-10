@@ -2,10 +2,15 @@ extends RefCounted
 
 class CountingPartyManager extends PartyManager:
     var action_snapshot_calls := 0
+    var weapon_snapshot_calls := 0
 
     func stats_for_action(member_id: int, action_tags: Array[StringName]) -> ResolvedStatSnapshot:
         action_snapshot_calls += 1
         return super.stats_for_action(member_id, action_tags)
+
+    func active_weapon_snapshot(member_id: int) -> ActiveWeaponDamageSnapshot:
+        weapon_snapshot_calls += 1
+        return super.active_weapon_snapshot(member_id)
 
 const REQUIRED_PATHS: PackedStringArray = [
     "res://scripts/combat/attack_executor.gd",
@@ -48,9 +53,36 @@ func run() -> Array[String]:
     _test_missing_action_context_stops_runtime_healing(failures)
     _test_same_id_foreign_member_stops_runtime_actions(failures)
     _test_action_context_resolves_once_per_actor_tick_and_request(failures)
+    _test_weapon_context_is_captured_once_and_mismatch_fails_closed(failures)
     _test_wisdom_runtime_cadence_matches_estimates(failures)
     _test_cleric_primary_fallback(failures)
     return failures
+
+func _test_weapon_context_is_captured_once_and_mismatch_fails_closed(failures: Array[String]) -> void:
+    var test_root := _new_test_root("WeaponContextCaptureTest")
+    var catalog := GameCatalog.load_defaults()
+    var fighter := catalog.class_by_id(&"fighter")
+    var party := CountingPartyManager.new()
+    test_root.add_child(party)
+    party.initialize(fighter, catalog.traits)
+    party.configure_combat(CombatRng.new(129), catalog.damage_types)
+    var owner := _create_member_actor(test_root, party, party.members[0], 1, Vector3.ZERO)
+    var target := _create_actor(test_root, _target_definition(&"weapon_context_target"), 2, Vector3(1.0, 0.0, 0.0))
+    _set_health(target, 100.0, 100.0)
+    party.weapon_snapshot_calls = 0
+    var modifiers := CombatModifiers.resolve_for_action(party.members[0], party, fighter.primary_attack)
+    TestAssertions.equal(party.weapon_snapshot_calls, 1, "action context captures active weapon exactly once", failures)
+    TestAssertions.truthy(_has_property(modifiers, &"weapon_snapshot"), "action context owns the captured weapon snapshot", failures)
+    if _has_property(modifiers, &"weapon_snapshot"):
+        modifiers.set("weapon_snapshot", ActiveWeaponDamageSnapshot.create(999, "forged", &"forge_vanguard_sword", [ItemBaseDamageComponent.create(&"physical", 1.0, 1.0)], modifiers.get("action_stats").revision))
+        var exposed_weapon := modifiers.get("weapon_snapshot") as ActiveWeaponDamageSnapshot
+        exposed_weapon._components.clear()
+        TestAssertions.equal((modifiers.get("weapon_snapshot") as ActiveWeaponDamageSnapshot).components.size(), 1, "captured weapon snapshot getter is defensive", failures)
+        owner.attack_executor.call("configure", owner, party, test_root, [target] as Array[Node3D])
+        owner.attack_executor.call("execute", fighter.primary_attack, target.get_combat_target(), null, modifiers)
+        TestAssertions.near(_health(target).current_health, 100.0, 0.001, "member-mismatched captured weapon stops execution", failures)
+        TestAssertions.equal(party.weapon_snapshot_calls, 1, "execution never requeries the active weapon", failures)
+    test_root.free()
 
 func _test_animation_event_sequence_execution(failures: Array[String]) -> void:
     var test_root := _new_test_root("AnimationEventSequenceExecutionTest")

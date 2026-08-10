@@ -366,7 +366,7 @@ func replace_member_source_with_equipment_atomically(
     candidate_sources = _sources_after_replace(candidate_sources, equipment_source)
     if (
         not _weapon_snapshot_is_valid(member_id, weapon, candidate_revision)
-        or not _validate_candidate_member_sources(member_id, candidate_sources, candidate_revision)
+        or not _validate_candidate_member_sources(member_id, candidate_sources, candidate_revision, weapon)
     ):
         return false
     var previous_sources := member.modifier_sources
@@ -413,7 +413,7 @@ func _equipment_projection_is_valid(
     var candidate_sources := _sources_after_replace(member.modifier_sources, equipment_source)
     return (
         _weapon_snapshot_is_valid(member_id, weapon, candidate_revision)
-        and _validate_candidate_member_sources(member_id, candidate_sources, candidate_revision)
+        and _validate_candidate_member_sources(member_id, candidate_sources, candidate_revision, weapon)
     )
 
 func _weapon_snapshot_is_valid(
@@ -507,6 +507,7 @@ func _validate_candidate_member_sources(
     member_id: int,
     candidate_sources: Array[StatModifierSource],
     candidate_revision: int = -1,
+    candidate_weapon: Variant = false,
 ) -> bool:
     return _validate_candidate_member_sources_for_party_upgrades(
         member_id,
@@ -514,6 +515,7 @@ func _validate_candidate_member_sources(
         _party_upgrade_definitions,
         _party_upgrade_sources,
         candidate_revision,
+        candidate_weapon,
     )
 
 func _validate_candidate_member_sources_for_party_upgrades(
@@ -522,6 +524,7 @@ func _validate_candidate_member_sources_for_party_upgrades(
     candidate_party_upgrade_definitions: Dictionary,
     candidate_party_upgrade_sources: Dictionary,
     candidate_revision: int = -1,
+    candidate_weapon: Variant = false,
 ) -> bool:
     var member := member_by_id(member_id)
     if member == null:
@@ -534,6 +537,7 @@ func _validate_candidate_member_sources_for_party_upgrades(
         class_ranks,
         active_tiers,
         candidate_revision,
+        candidate_weapon,
     )
 
 func _validate_candidate_member_sources_for_state(
@@ -544,6 +548,7 @@ func _validate_candidate_member_sources_for_state(
     candidate_class_ranks: Dictionary,
     candidate_active_tiers: Dictionary,
     candidate_revision: int = -1,
+    candidate_weapon: Variant = false,
 ) -> bool:
     if member == null:
         return false
@@ -574,6 +579,21 @@ func _validate_candidate_member_sources_for_state(
         candidate_active_tiers,
     )
     var resolution_revision := candidate_revision if candidate_revision >= 0 else _stat_revision
+    var action_weapon: ActiveWeaponDamageSnapshot
+    if candidate_weapon is ActiveWeaponDamageSnapshot:
+        action_weapon = (candidate_weapon as ActiveWeaponDamageSnapshot).copy()
+    elif candidate_weapon == null:
+        action_weapon = null
+    else:
+        action_weapon = active_weapon_snapshot(member.member_id)
+        if action_weapon != null and action_weapon.revision != resolution_revision:
+            action_weapon = ActiveWeaponDamageSnapshot.create(
+                action_weapon.member_id,
+                action_weapon.item_id,
+                action_weapon.base_id,
+                action_weapon.components,
+                resolution_revision,
+            )
     var resolution := MemberStatResolutionService.resolve(
         member.member_id,
         STAT_CATALOG,
@@ -597,6 +617,7 @@ func _validate_candidate_member_sources_for_state(
         effective_candidate_sources,
         resolution_revision,
         DEFAULT_ATTRIBUTE_PROJECTION,
+        action_weapon,
     )
     if not action_error.is_empty():
         push_error(action_error)

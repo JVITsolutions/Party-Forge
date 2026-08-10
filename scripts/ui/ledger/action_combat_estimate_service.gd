@@ -3,6 +3,7 @@ extends RefCounted
 
 const ACTION_ARCHETYPE := preload("res://scripts/combat/action_archetype.gd")
 const ACTION_DAMAGE_PROJECTION := preload("res://scripts/combat/action_damage_projection.gd")
+const ACTION_DAMAGE_COMPONENT_PROJECTION := preload("res://scripts/combat/action_damage_component_projection.gd")
 const ACTION_CADENCE := preload("res://scripts/combat/action_cadence.gd")
 
 static func estimate(attack: AttackDefinition, member_id: int, party: PartyManager, types: DamageTypeCatalog) -> ActionCombatEstimate:
@@ -16,12 +17,15 @@ static func estimate(attack: AttackDefinition, member_id: int, party: PartyManag
 	var validation := attack.validate(types)
 	if not validation.is_empty():
 		return _unavailable(result, String(validation[0]).trim_prefix("PARTY_FORGE_DAMAGE_ERROR "))
-	var action_stats := party.stats_for_action(member_id, DamageResolver.action_tags_for(attack))
+	var weapon := party.active_weapon_snapshot(member_id)
+	var action_stats := party.stats_for_action(member_id, DamageResolver.action_tags_for(attack, weapon))
 	if action_stats == null:
 		return _unavailable(result, "Missing resolved character stats.")
-	return estimate_from_snapshot(attack, action_stats, types)
+	if weapon != null and (weapon.member_id != member_id or weapon.revision != action_stats.revision):
+		return _unavailable(result, "Active weapon member or revision does not match resolved character stats.")
+	return estimate_from_snapshot(attack, action_stats, types, weapon)
 
-static func estimate_from_snapshot(attack: AttackDefinition, action_stats: ResolvedStatSnapshot, types: DamageTypeCatalog) -> ActionCombatEstimate:
+static func estimate_from_snapshot(attack: AttackDefinition, action_stats: ResolvedStatSnapshot, types: DamageTypeCatalog, weapon: ActiveWeaponDamageSnapshot = null) -> ActionCombatEstimate:
 	var result := ActionCombatEstimate.new()
 	if attack == null:
 		return _unavailable(result, "Missing attack definition.")
@@ -59,6 +63,12 @@ static func estimate_from_snapshot(attack: AttackDefinition, action_stats: Resol
 			return _unavailable(result, "Invalid derived healing per second.")
 		result.available = true
 		return result
+	if weapon != null and weapon.revision != action_stats.revision:
+		return _unavailable(result, "Active weapon revision does not match resolved character stats.")
+	var projection := ACTION_DAMAGE_COMPONENT_PROJECTION.resolve(attack, weapon)
+	var projection_error := String(projection.get("error", ""))
+	if not projection_error.is_empty():
+		return _unavailable(result, projection_error.trim_prefix("PARTY_FORGE_DAMAGE_ERROR "))
 	var archetype_validation := ACTION_ARCHETYPE.validate_player_damage_action(attack)
 	if not archetype_validation.is_empty():
 		return _unavailable(result, String(archetype_validation[0]).trim_prefix("PARTY_FORGE_DAMAGE_ERROR "))
@@ -76,11 +86,16 @@ static func estimate_from_snapshot(attack: AttackDefinition, action_stats: Resol
 	var global_multiplier := action_stats.value(&"damage", 1.0)
 	var archetype_stat_id := ACTION_ARCHETYPE.stat_id(attack)
 	var archetype_multiplier := action_stats.value(archetype_stat_id, 1.0)
-	for component: AttackDamageComponent in attack.damage_components:
+	for component: ItemBaseDamageComponent in projection.get("components", []):
 		var type_definition := types.definition(component.damage_type_id)
 		if type_definition == null:
 			return _unavailable(result, "Invalid damage type %s." % component.damage_type_id)
-		var normal := ACTION_DAMAGE_PROJECTION.normal_component(component.base_amount, global_multiplier, archetype_multiplier, action_stats.value(type_definition.offense_stat_id, 1.0))
+		if not component.validate(types).is_empty():
+			return _unavailable(result, "Invalid damage range for %s." % type_definition.display_name)
+		var midpoint := component.minimum_damage + (component.maximum_damage - component.minimum_damage) * 0.5
+		if not _is_finite_nonnegative(midpoint):
+			return _unavailable(result, "Invalid midpoint damage for %s." % type_definition.display_name)
+		var normal := ACTION_DAMAGE_PROJECTION.normal_component(midpoint, global_multiplier, archetype_multiplier, action_stats.value(type_definition.offense_stat_id, 1.0))
 		if not _is_finite_nonnegative(normal):
 			return _unavailable(result, "Invalid derived damage for %s." % type_definition.display_name)
 		var critical := normal * crit_multiplier if result.can_crit else normal

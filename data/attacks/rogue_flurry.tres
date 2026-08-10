@@ -15,5 +15,6 @@ cooldown = 0.32
 range = 2.0
 area_radius = 0.9
 damage_components = Array[ExtResource("1_0bnb6")]([SubResource("Resource_0bnb6")])
+damage_source = 1
 action_tags = Array[StringName]([&"area", &"melee", &"physical", &"skirmisher"])
 can_crit = true

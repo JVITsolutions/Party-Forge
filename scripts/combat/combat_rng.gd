@@ -23,6 +23,10 @@ func roll(chance: float) -> Dictionary:
 	var finalized := clampf(chance, 0.0, 1.0)
 	if finalized <= 0.0: return {"consumed": false, "draw": -1.0, "success": false}
 	if finalized >= 1.0: return {"consumed": false, "draw": -1.0, "success": true}
+	var draw := unit()
+	return {"consumed": true, "draw": draw, "success": draw < finalized}
+
+func unit() -> float:
 	var draw: float = _prescribed.pop_front() if not _prescribed.is_empty() else _rng.randf()
 	draw_count += 1
-	return {"consumed": true, "draw": draw, "success": draw < finalized}
+	return draw

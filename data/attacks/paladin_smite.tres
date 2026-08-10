@@ -15,5 +15,6 @@ cooldown = 1.05
 range = 2.1
 area_radius = 1.4
 damage_components = Array[ExtResource("1_cahva")]([SubResource("Resource_cahva")])
+damage_source = 1
 action_tags = Array[StringName]([&"area", &"melee", &"physical"])
 can_crit = true

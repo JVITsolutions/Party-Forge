@@ -61,6 +61,7 @@ static func preview(
 		final_sources,
 		candidate_revision,
 		PartyManager.DEFAULT_ATTRIBUTE_PROJECTION,
+		activation.weapon_snapshot(),
 	)
 	if not action_error.is_empty():
 		return _failure(member_id, item_id, slot_id, action_error)

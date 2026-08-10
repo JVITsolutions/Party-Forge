@@ -8,8 +8,12 @@ var available := true
 var health: HealthComponent
 var stats: ResolvedStatSnapshot
 var incoming_provider: Callable
+var _weapon_snapshot: ActiveWeaponDamageSnapshot
+var weapon_snapshot: ActiveWeaponDamageSnapshot:
+	get:
+		return _weapon_snapshot.copy() if _weapon_snapshot != null else null
 
-func _init(actor_value: Node3D = null, id_value: StringName = &"", team_value: int = 0, health_value: HealthComponent = null, stats_value: ResolvedStatSnapshot = null, available_value: bool = true, incoming_value: Callable = Callable()) -> void:
+func _init(actor_value: Node3D = null, id_value: StringName = &"", team_value: int = 0, health_value: HealthComponent = null, stats_value: ResolvedStatSnapshot = null, available_value: bool = true, incoming_value: Callable = Callable(), weapon_value: ActiveWeaponDamageSnapshot = null) -> void:
 	actor = actor_value
 	combatant_id = id_value
 	team_id = team_value
@@ -17,6 +21,7 @@ func _init(actor_value: Node3D = null, id_value: StringName = &"", team_value: i
 	stats = stats_value
 	available = available_value
 	incoming_provider = incoming_value
+	_weapon_snapshot = weapon_value.copy() if weapon_value != null else null
 
 func stat_value(stat_id: StringName, fallback: float = 0.0) -> float:
 	return stats.value(stat_id, fallback) if stats != null else fallback
