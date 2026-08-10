@@ -145,10 +145,17 @@ func configure(
 				"PARTY_FORGE_RUN_CONTEXT_ERROR field=item_bootstrap reason=%s" % bootstrap_error,
 			])
 		next_item_state = bootstrap_state
-	var next_item_sequence := _next_run_item_sequence(
+	var sequence_resolution := _resolve_next_run_item_sequence(
 		next_item_state,
 		"run:%s:%s:%s" % [owned_profile.profile_id, run_seed_value, run_player_id_value],
 	)
+	var sequence_error := String(sequence_resolution.get("error", ""))
+	if not sequence_error.is_empty():
+		_reset_unconfigured_fields()
+		return PackedStringArray([
+			"PARTY_FORGE_RUN_CONTEXT_ERROR field=item_bootstrap reason=%s" % sequence_error,
+		])
+	var next_item_sequence := int(sequence_resolution.get("sequence", 0))
 	var next_item_journal := ItemTransactionJournal.new()
 	var reconstruction := _preview_equipment_reconstruction(next_item_state, manager)
 	if not String(reconstruction["error"]).is_empty():
@@ -481,17 +488,30 @@ func _run_equipment_id(member_id: int) -> StringName:
 	return StringName("run-equipment-%03d" % member_id)
 
 
-func _next_run_item_sequence(state: ItemOwnershipState, issuer_namespace: String) -> int:
-	var next_sequence := 0
+func _resolve_next_run_item_sequence(state: ItemOwnershipState, issuer_namespace: String) -> Dictionary:
+	var maximum_sequence := -1
+	var seen_sequences: Dictionary = {}
 	var registry := state.registry() if state != null else null
 	if registry == null:
-		return next_sequence
+		return {"error": "", "sequence": 0}
 	for instance_id: String in registry.ids():
 		var item := registry.item(instance_id)
 		if item == null or String(item.origin.get("issuer_namespace", "")) != issuer_namespace:
 			continue
-		next_sequence = maxi(next_sequence, int(item.origin.get("sequence", -1)) + 1)
-	return next_sequence
+		var sequence_value: Variant = item.origin.get("sequence")
+		if not _is_nonnegative_json_int(sequence_value):
+			return {"error": "invalid run item sequence", "sequence": 0}
+		var sequence := int(sequence_value)
+		if seen_sequences.has(sequence):
+			return {"error": "duplicate run item sequence %d" % sequence, "sequence": 0}
+		seen_sequences[sequence] = true
+		maximum_sequence = maxi(maximum_sequence, sequence)
+	if maximum_sequence == ItemInstanceCodec.JSON_SAFE_INTEGER_MAX:
+		return {
+			"error": "run item sequence exhausted at %d" % ItemInstanceCodec.JSON_SAFE_INTEGER_MAX,
+			"sequence": 0,
+		}
+	return {"error": "", "sequence": maximum_sequence + 1}
 
 func _run_equipment_container(member_id: int, owner_id: String) -> ItemSlotContainer:
 	return ItemSlotContainer.create(

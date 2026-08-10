@@ -217,6 +217,10 @@ func run() -> Array[String]:
 	var failures: Array[String] = []
 	_test_api_and_participant_defense(failures)
 	_test_disk_reloaded_bootstrap_configures(failures)
+	_test_duplicate_resumed_item_sequences_reject_atomically(failures)
+	_test_exhausted_resumed_item_sequence_rejects_atomically(failures)
+	_test_resumed_item_sequence_history_boundaries(failures)
+	_test_malformed_resumed_item_origin_fails_closed(failures)
 	_test_begin_validation_and_state_atomicity(failures)
 	_test_assignment_guard_fails_closed(failures)
 	_test_cancellation_stale_assignment_and_wrong_decisions(failures)
@@ -271,6 +275,164 @@ func _test_disk_reloaded_bootstrap_configures(failures: Array[String]) -> void:
 		TestAssertions.truthy(created_one.ok(), "disk-reloaded bootstrap resumes issuance at sequence one", failures)
 		party.free()
 	ProfileTestSupport.remove_tree(root)
+
+
+func _test_duplicate_resumed_item_sequences_reject_atomically(failures: Array[String]) -> void:
+	var profile_id := "profile-sequence-duplicate"
+	var owner_id := &"sequence_duplicate_player"
+	var run_seed := 8201
+	var issuer_namespace := _run_issuer_namespace(profile_id, run_seed, owner_id)
+	var fixture := _resumed_sequence_fixture(profile_id, owner_id, run_seed, [
+		_sequence_item_document("duplicate-sequence-a", issuer_namespace, 3),
+		_sequence_item_document("duplicate-sequence-b", issuer_namespace, 3),
+	])
+	TestAssertions.equal(String(fixture.get("error", "")), "", "duplicate sequence fixture is canonical", failures)
+	if not String(fixture.get("error", "")).is_empty():
+		return
+	var party := _sequence_party()
+	var context := PlayerRunContext.new()
+	var context_signals: Array[String] = []
+	var party_signals: Array[int] = []
+	context.progression_changed.connect(func(member_id: int) -> void: context_signals.append("progression:%d" % member_id))
+	context.member_level_ready.connect(func(member_id: int, level: int) -> void: context_signals.append("level:%d:%d" % [member_id, level]))
+	party.stats_changed.connect(func(member_id: int) -> void: party_signals.append(member_id))
+	var revision_before := party.stat_revision()
+	var sources_before := party.member_by_id(1).modifier_sources
+	var errors := context.configure(owner_id, 0, fixture["profile"], run_seed, party, 100, fixture["bootstrap"])
+	TestAssertions.equal(errors, PackedStringArray([
+		"PARTY_FORGE_RUN_CONTEXT_ERROR field=item_bootstrap reason=duplicate run item sequence 3",
+	]), "duplicate same-run issuance sequence has a stable diagnostic", failures)
+	_assert_rejected_sequence_configuration_is_atomic(context, party, revision_before, sources_before, context_signals, party_signals, "duplicate sequence", failures)
+	if not context.is_configured():
+		_assert_same_context_recovers_at_sequence_zero(context, fixture["profile"], owner_id, run_seed, party, "duplicate sequence", failures)
+	party.free()
+
+
+func _test_exhausted_resumed_item_sequence_rejects_atomically(failures: Array[String]) -> void:
+	var profile_id := "profile-sequence-exhausted"
+	var owner_id := &"sequence_exhausted_player"
+	var run_seed := 8202
+	var issuer_namespace := _run_issuer_namespace(profile_id, run_seed, owner_id)
+	var fixture := _resumed_sequence_fixture(profile_id, owner_id, run_seed, [
+		_sequence_item_document("exhausted-sequence", issuer_namespace, ItemInstanceCodec.JSON_SAFE_INTEGER_MAX),
+	])
+	TestAssertions.equal(String(fixture.get("error", "")), "", "exhausted sequence fixture is canonical", failures)
+	if not String(fixture.get("error", "")).is_empty():
+		return
+	var party := _sequence_party()
+	var context := PlayerRunContext.new()
+	var context_signals: Array[String] = []
+	var party_signals: Array[int] = []
+	context.progression_changed.connect(func(member_id: int) -> void: context_signals.append("progression:%d" % member_id))
+	context.member_level_ready.connect(func(member_id: int, level: int) -> void: context_signals.append("level:%d:%d" % [member_id, level]))
+	party.stats_changed.connect(func(member_id: int) -> void: party_signals.append(member_id))
+	var revision_before := party.stat_revision()
+	var sources_before := party.member_by_id(1).modifier_sources
+	var errors := context.configure(owner_id, 0, fixture["profile"], run_seed, party, 100, fixture["bootstrap"])
+	TestAssertions.equal(errors, PackedStringArray([
+		"PARTY_FORGE_RUN_CONTEXT_ERROR field=item_bootstrap reason=run item sequence exhausted at %d" % ItemInstanceCodec.JSON_SAFE_INTEGER_MAX,
+	]), "maximum same-run issuance sequence has a stable exhausted diagnostic", failures)
+	_assert_rejected_sequence_configuration_is_atomic(context, party, revision_before, sources_before, context_signals, party_signals, "exhausted sequence", failures)
+	if not context.is_configured():
+		_assert_same_context_recovers_at_sequence_zero(context, fixture["profile"], owner_id, run_seed, party, "exhausted sequence", failures)
+	party.free()
+
+
+func _test_resumed_item_sequence_history_boundaries(failures: Array[String]) -> void:
+	var gap_profile_id := "profile-sequence-gaps"
+	var gap_owner_id := &"sequence_gap_player"
+	var gap_seed := 8203
+	var gap_namespace := _run_issuer_namespace(gap_profile_id, gap_seed, gap_owner_id)
+	var gap_fixture := _resumed_sequence_fixture(gap_profile_id, gap_owner_id, gap_seed, [
+		_sequence_item_document("gap-sequence-two", gap_namespace, 2),
+		_sequence_item_document("gap-sequence-seven", gap_namespace, 7),
+	])
+	TestAssertions.equal(String(gap_fixture.get("error", "")), "", "gapped sequence fixture is canonical", failures)
+	if String(gap_fixture.get("error", "")).is_empty():
+		var gap_party := _sequence_party()
+		var gap_context := PlayerRunContext.new()
+		TestAssertions.equal(gap_context.configure(gap_owner_id, 0, gap_fixture["profile"], gap_seed, gap_party, 100, gap_fixture["bootstrap"]), PackedStringArray(), "gapped nonzero same-run history configures", failures)
+		_assert_sequence_creation(gap_context, gap_profile_id, gap_owner_id, gap_seed, 8, 2, "gapped history advances from maximum plus one", failures)
+		gap_party.free()
+
+	var foreign_profile_id := "profile-sequence-foreign"
+	var foreign_owner_id := &"sequence_foreign_player"
+	var foreign_seed := 8204
+	var foreign_fixture := _resumed_sequence_fixture(foreign_profile_id, foreign_owner_id, foreign_seed, [
+		_sequence_item_document("foreign-duplicate-a", "run:foreign-profile:1:foreign-player", 4),
+		_sequence_item_document("foreign-duplicate-b", "run:foreign-profile:1:foreign-player", 4),
+		_sequence_item_document("foreign-max", "profile:foreign-profile", ItemInstanceCodec.JSON_SAFE_INTEGER_MAX),
+	])
+	TestAssertions.equal(String(foreign_fixture.get("error", "")), "", "foreign sequence fixture is canonical", failures)
+	if String(foreign_fixture.get("error", "")).is_empty():
+		var foreign_party := _sequence_party()
+		var foreign_context := PlayerRunContext.new()
+		TestAssertions.equal(foreign_context.configure(foreign_owner_id, 0, foreign_fixture["profile"], foreign_seed, foreign_party, 100, foreign_fixture["bootstrap"]), PackedStringArray(), "foreign duplicate and maximum sequences do not reject configuration", failures)
+		_assert_sequence_creation(foreign_context, foreign_profile_id, foreign_owner_id, foreign_seed, 0, 3, "foreign origins do not advance same-run sequence", failures)
+		foreign_party.free()
+
+	var legacy_profile_id := "profile-sequence-legacy"
+	var legacy_owner_id := &"sequence_legacy_player"
+	var legacy_seed := 8205
+	var legacy_fixture := _resumed_sequence_fixture(legacy_profile_id, legacy_owner_id, legacy_seed, [
+		_sequence_item_document("legacy-schema-one", "historical-migration", ItemInstanceCodec.JSON_SAFE_INTEGER_MAX, 1),
+	])
+	TestAssertions.equal(String(legacy_fixture.get("error", "")), "", "literal schema-one durable fixture migrates canonically", failures)
+	if String(legacy_fixture.get("error", "")).is_empty():
+		var legacy_party := _sequence_party()
+		var legacy_context := PlayerRunContext.new()
+		TestAssertions.equal(legacy_context.configure(legacy_owner_id, 0, legacy_fixture["profile"], legacy_seed, legacy_party, 100, legacy_fixture["bootstrap"]), PackedStringArray(), "literal schema-one migration history configures", failures)
+		_assert_sequence_creation(legacy_context, legacy_profile_id, legacy_owner_id, legacy_seed, 0, 1, "schema-one foreign origin does not advance same-run sequence", failures)
+		legacy_party.free()
+
+	var empty_profile_id := "profile-sequence-empty"
+	var empty_owner_id := &"sequence_empty_player"
+	var empty_seed := 8206
+	var empty_fixture := _resumed_sequence_fixture(empty_profile_id, empty_owner_id, empty_seed, [])
+	TestAssertions.equal(String(empty_fixture.get("error", "")), "", "empty sequence fixture is canonical", failures)
+	if String(empty_fixture.get("error", "")).is_empty():
+		var empty_party := _sequence_party()
+		var empty_context := PlayerRunContext.new()
+		TestAssertions.equal(empty_context.configure(empty_owner_id, 0, empty_fixture["profile"], empty_seed, empty_party, 100, empty_fixture["bootstrap"]), PackedStringArray(), "empty run-item history configures", failures)
+		_assert_sequence_creation(empty_context, empty_profile_id, empty_owner_id, empty_seed, 0, 0, "empty history begins at sequence zero", failures)
+		empty_party.free()
+
+
+func _test_malformed_resumed_item_origin_fails_closed(failures: Array[String]) -> void:
+	var profile_id := "profile-sequence-malformed"
+	var owner_id := &"sequence_malformed_player"
+	var run_seed := 8207
+	var fixture := _resumed_sequence_fixture(profile_id, owner_id, run_seed, [
+		_sequence_item_document("malformed-origin", _run_issuer_namespace(profile_id, run_seed, owner_id), 0),
+	])
+	TestAssertions.equal(String(fixture.get("error", "")), "", "malformed-origin base fixture begins canonical", failures)
+	if not String(fixture.get("error", "")).is_empty():
+		return
+	var malformed_document := (fixture["durable"] as Dictionary).duplicate(true)
+	var items := malformed_document["item_state"]["registry"]["items"] as Array
+	(items[0]["origin"] as Dictionary).erase("sequence")
+	var validation := ResumableRunItemCodec.validate_document(malformed_document, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)
+	TestAssertions.truthy(validation.contains("origin") and validation.contains("sequence"), "canonical resumable codec rejects malformed origin before context setup", failures)
+	TestAssertions.equal(ResumableRunItemCodec.decode(malformed_document, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG), null, "malformed origin cannot decode into a bootstrap", failures)
+	var profile := fixture["profile"] as ProfileState
+	profile.resumable_run = malformed_document
+	var party := _sequence_party()
+	var context := PlayerRunContext.new()
+	var party_signals: Array[int] = []
+	party.stats_changed.connect(func(member_id: int) -> void: party_signals.append(member_id))
+	var revision_before := party.stat_revision()
+	var errors := context.configure(owner_id, 0, profile, run_seed, party, 100, null)
+	var profile_rejected := false
+	var bootstrap_required := false
+	for error: String in errors:
+		profile_rejected = profile_rejected or error.contains("field=profile")
+		bootstrap_required = bootstrap_required or (error.contains("item_bootstrap") and error.contains("required"))
+	TestAssertions.truthy(profile_rejected, "malformed durable origin invalidates the profile", failures)
+	TestAssertions.truthy(bootstrap_required, "malformed durable origin cannot bypass required bootstrap validation", failures)
+	TestAssertions.truthy(not context.is_configured() and context.item_state() == null and context.party == null, "malformed origin rejection publishes no context state", failures)
+	TestAssertions.equal(party.stat_revision(), revision_before, "malformed origin rejection preserves party revision", failures)
+	TestAssertions.equal(party_signals, [], "malformed origin rejection emits no party publication", failures)
+	party.free()
 
 func _test_api_and_participant_defense(failures: Array[String]) -> void:
 	var participant: Object = _participant("profile-local-alpha", -1, 3, &"fighter")
@@ -933,6 +1095,178 @@ func _operation_count(profile: ProfileState, operation: String) -> int:
 func _canonical_resumable(document: Dictionary) -> Dictionary:
 	var bootstrap := ResumableRunItemCodec.decode(document, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)
 	return ResumableRunItemCodec.encode(bootstrap) if bootstrap != null else {}
+
+
+func _resumed_sequence_fixture(
+	profile_id: String,
+	owner_id: StringName,
+	run_seed: int,
+	item_documents: Array,
+) -> Dictionary:
+	var profile := ProfileState.new_profile(profile_id, "Sequence Fixture", 1000)
+	profile.inventory_columns = 2
+	var items: Array[ItemInstance] = []
+	var inventory_slots: Dictionary = {}
+	for index: int in item_documents.size():
+		var decoded := ItemInstanceCodec.decode(item_documents[index], GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)
+		if not decoded.ok():
+			return {"error": decoded.error}
+		items.append(decoded.item)
+		inventory_slots[index] = decoded.item.instance_id
+	var state := ItemOwnershipState.create(String(owner_id), ItemRegistry.new(items), [
+		ItemSlotContainer.create(&"run-inventory", ItemSlotContainer.RUN_INVENTORY, String(owner_id), profile.inventory_columns * 5, inventory_slots),
+		ItemSlotContainer.create(&"run-equipment-001", ItemSlotContainer.RUN_MEMBER_EQUIPMENT, String(owner_id), EquipmentSlotIndex.capacity()),
+	])
+	var state_error := state.validate(GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)
+	if not state_error.is_empty():
+		return {"error": state_error}
+	var bootstrap := RunItemBootstrap.create(StringName("sequence-run-%s" % profile_id), run_seed, owner_id, 1, state)
+	var durable := ResumableRunItemCodec.encode(bootstrap)
+	(durable["item_state"]["registry"] as Dictionary)["items"] = item_documents.duplicate(true)
+	var durable_error := ResumableRunItemCodec.validate_document(durable, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)
+	if not durable_error.is_empty():
+		return {"error": durable_error}
+	var decoded_bootstrap := ResumableRunItemCodec.decode(durable, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)
+	if decoded_bootstrap == null:
+		return {"error": "canonical durable bootstrap did not decode"}
+	profile.resumable_run = durable.duplicate(true)
+	return {
+		"bootstrap": decoded_bootstrap,
+		"durable": durable.duplicate(true),
+		"error": "",
+		"profile": profile,
+	}
+
+
+func _sequence_item_document(
+	instance_id: String,
+	issuer_namespace: String,
+	sequence: int,
+	schema_version: int = ItemInstance.SCHEMA_VERSION,
+) -> Dictionary:
+	var document := {
+		"affixes": [],
+		"base_definition_id": "forge_vanguard_sword",
+		"instance_id": instance_id,
+		"item_level": 1,
+		"origin": {
+			"issuer_namespace": issuer_namespace,
+			"seed": 9901,
+			"sequence": sequence,
+			"source": "sequence_fixture",
+		},
+		"rarity_id": "common",
+		"schema_version": schema_version,
+	}
+	if schema_version == ItemInstance.SCHEMA_VERSION:
+		document["base_damage_components"] = []
+	return document
+
+
+func _run_issuer_namespace(profile_id: String, run_seed: int, owner_id: StringName) -> String:
+	return "run:%s:%d:%s" % [profile_id, run_seed, owner_id]
+
+
+func _sequence_party() -> PartyManager:
+	var catalog := GameCatalog.load_defaults()
+	var party := PartyManager.new()
+	party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
+	return party
+
+
+func _assert_rejected_sequence_configuration_is_atomic(
+	context: PlayerRunContext,
+	party: PartyManager,
+	revision_before: int,
+	sources_before: Array[StatModifierSource],
+	context_signals: Array[String],
+	party_signals: Array[int],
+	label: String,
+	failures: Array[String],
+) -> void:
+	TestAssertions.truthy(not context.is_configured(), "%s rejection leaves context unconfigured" % label, failures)
+	TestAssertions.equal(context.run_player_id, &"", "%s rejection publishes no run-player identity" % label, failures)
+	TestAssertions.equal(context.player_slot_index, -1, "%s rejection publishes no player slot" % label, failures)
+	TestAssertions.equal(context.profile_id, "", "%s rejection publishes no profile identity" % label, failures)
+	TestAssertions.equal(context.profile_snapshot, null, "%s rejection publishes no profile snapshot" % label, failures)
+	TestAssertions.equal(context.run_seed, 0, "%s rejection publishes no run seed" % label, failures)
+	TestAssertions.equal(context.run_id, &"", "%s rejection publishes no run identity" % label, failures)
+	TestAssertions.equal(context.party, null, "%s rejection publishes no party ownership" % label, failures)
+	TestAssertions.equal(context.item_state(), null, "%s rejection publishes no item registry or ownership" % label, failures)
+	TestAssertions.equal(context.run_inventory(), null, "%s rejection publishes no run inventory" % label, failures)
+	TestAssertions.equal(context.equipment_for(1), null, "%s rejection publishes no member equipment" % label, failures)
+	TestAssertions.truthy(not context.owns_source_refresh_coordinator(), "%s rejection owns no publication authority" % label, failures)
+	TestAssertions.equal(context.pending_leader_levels(), [], "%s rejection publishes no progression state" % label, failures)
+	TestAssertions.equal(context_signals, [], "%s rejection emits no context signals" % label, failures)
+	TestAssertions.equal(party_signals, [], "%s rejection emits no party publication" % label, failures)
+	TestAssertions.equal(party.stat_revision(), revision_before, "%s rejection preserves party revision" % label, failures)
+	TestAssertions.equal(_source_signature(party.member_by_id(1).modifier_sources), _source_signature(sources_before), "%s rejection preserves party sources" % label, failures)
+	TestAssertions.equal(party.active_weapon_snapshot(1), null, "%s rejection preserves active weapon state" % label, failures)
+
+
+func _assert_same_context_recovers_at_sequence_zero(
+	context: PlayerRunContext,
+	profile: ProfileState,
+	owner_id: StringName,
+	run_seed: int,
+	party: PartyManager,
+	label: String,
+	failures: Array[String],
+) -> void:
+	var valid_fixture := _resumed_sequence_fixture(profile.profile_id, owner_id, run_seed, [])
+	TestAssertions.equal(String(valid_fixture.get("error", "")), "", "%s recovery fixture is canonical" % label, failures)
+	if not String(valid_fixture.get("error", "")).is_empty():
+		return
+	TestAssertions.equal(context.configure(owner_id, 0, valid_fixture["profile"], run_seed, party, 100, valid_fixture["bootstrap"]), PackedStringArray(), "%s rejection permits valid same-context configuration" % label, failures)
+	_assert_sequence_creation(context, profile.profile_id, owner_id, run_seed, 0, 0, "%s rejection leaves next sequence at zero" % label, failures)
+
+
+func _assert_sequence_creation(
+	context: PlayerRunContext,
+	profile_id: String,
+	owner_id: StringName,
+	run_seed: int,
+	sequence: int,
+	destination_slot: int,
+	label: String,
+	failures: Array[String],
+) -> void:
+	var issued := ItemInstanceIssuer.issue(
+		_run_issuer_namespace(profile_id, run_seed, owner_id),
+		sequence,
+		"sequence_regression",
+		9902,
+		{
+			"affixes": [],
+			"base_damage_components": [],
+			"base_definition_id": "forge_vanguard_sword",
+			"item_level": 1,
+			"rarity_id": "common",
+		},
+		GameCatalog.EQUIPMENT_CATALOG,
+		GameCatalog.ITEM_FOUNDATION_CATALOG,
+	)
+	TestAssertions.truthy(issued.ok(), "%s item issues" % label, failures)
+	if not issued.ok():
+		return
+	var result := context.apply_item_transaction(
+		ItemTransactionRequest.create("sequence-regression-%s-%d" % [profile_id, sequence], String(owner_id), &"run-inventory", destination_slot, issued.item),
+		GameCatalog.EQUIPMENT_CATALOG,
+		GameCatalog.ITEM_FOUNDATION_CATALOG,
+	)
+	TestAssertions.truthy(result.ok(), label, failures)
+
+
+func _source_signature(sources: Array[StatModifierSource]) -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	for source: StatModifierSource in sources:
+		result.append({
+			"id": String(source.id) if source != null else "",
+			"modifier_count": source.modifiers.size() if source != null else -1,
+			"owner_member_id": source.owner_member_id if source != null else -1,
+			"source_type": String(source.source_type) if source != null else "",
+		})
+	return result
 
 func _stash_occupancy(profile: ProfileState) -> int:
 	var result := 0
