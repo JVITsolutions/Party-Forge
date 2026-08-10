@@ -12,7 +12,9 @@ func run() -> Array[String]:
 	TestAssertions.truthy(foundation != null, "foundation catalog loads for item codec", failures)
 	if equipment == null or foundation == null:
 		return failures
+	_assert_schema_one_migration(equipment, foundation, failures)
 	_assert_immutable_round_trip(equipment, foundation, failures)
+	_assert_retained_fixture_boundaries(equipment, foundation, failures)
 	_assert_multi_effect_codec(equipment, foundation, failures)
 	_assert_attribute_and_typed_damage_records_round_trip(equipment, foundation, failures)
 	_assert_strict_rejections(equipment, foundation, failures)
@@ -25,15 +27,21 @@ func _assert_immutable_round_trip(
 	failures: Array[String]
 ) -> void:
 	var item := _make_item()
-	var encoded := LEGACY_SCHEMA_ONE_ITEM
 	var decode_foundation := foundation.duplicate(true) as ItemFoundationCatalog
-	var decoded := ItemInstanceCodec.decode(JSON.parse_string(encoded), equipment, decode_foundation)
-	TestAssertions.truthy(decoded.ok(), "saved legacy schema-one item round trip succeeds", failures)
+	var document := item.to_dictionary()
+	TestAssertions.equal(document.get("base_damage_components"), [
+		{"damage_type_id": "fire", "minimum_damage": 1.0, "maximum_damage": 2.0},
+		{"damage_type_id": "physical", "minimum_damage": 3.0, "maximum_damage": 5.0},
+	], "base damage components serialize in stable damage-type order", failures)
+	if not document.has("base_damage_components"):
+		return
+	var decoded := ItemInstanceCodec.decode(document, equipment, decode_foundation)
+	TestAssertions.truthy(decoded.ok(), "schema-two item round trip succeeds", failures)
 	if not decoded.ok():
 		failures.append("explicit item round trip error: %s" % decoded.error)
 		return
-	TestAssertions.equal(decoded.item.to_dictionary(), item.to_dictionary(), "saved legacy fixture preserves exact item values", failures)
-	TestAssertions.equal(ItemInstanceCodec.encode(decoded.item), LEGACY_SCHEMA_ONE_ITEM, "saved legacy fixture round trips byte-equivalently", failures)
+	TestAssertions.equal(decoded.item.to_dictionary(), document, "schema-two fixture preserves exact item values", failures)
+	TestAssertions.equal(ItemInstanceCodec.encode(decoded.item), JSON.stringify(document), "schema-two fixture round trips byte-equivalently", failures)
 
 	var stout_index := decode_foundation.affixes.find(decode_foundation.affix(&"stout"))
 	decode_foundation.affixes[stout_index] = decode_foundation.affixes[stout_index].duplicate(true) as ItemAffixDefinition
@@ -44,16 +52,61 @@ func _assert_immutable_round_trip(
 	var copied := decoded.item.copy()
 	copied.affixes[0].rolls[0].value = 2.0
 	copied.affixes[0].rolls[0].required_tags.append(&"copy_only")
+	((copied.get("base_damage_components") as Array)[0] as RefCounted).set("minimum_damage", 999.0)
 	copied.origin["seed"] = "changed"
 	TestAssertions.equal(decoded.item.affixes[0].rolls[0].value, 3.0, "item copy owns nested rolls", failures)
 	TestAssertions.equal(decoded.item.affixes[0].rolls[0].required_tags, [], "item copy owns required tags", failures)
+	TestAssertions.equal(((decoded.item.get("base_damage_components") as Array)[0] as RefCounted).get("minimum_damage"), 1.0, "item copy owns base damage components", failures)
 	TestAssertions.equal(decoded.item.origin["seed"], 4402, "item copy owns origin", failures)
 
-	var document := decoded.item.to_dictionary()
-	(document["affixes"] as Array)[0]["rolls"][0]["value"] = 1.0
-	(document["origin"] as Dictionary)["seed"] = "dictionary-change"
+	var serialized := decoded.item.to_dictionary()
+	(serialized["affixes"] as Array)[0]["rolls"][0]["value"] = 1.0
+	(serialized["base_damage_components"] as Array)[0]["minimum_damage"] = 777.0
+	(serialized["origin"] as Dictionary)["seed"] = "dictionary-change"
 	TestAssertions.equal(decoded.item.affixes[0].rolls[0].value, 3.0, "serialized document owns nested rolls", failures)
+	TestAssertions.equal(((decoded.item.get("base_damage_components") as Array)[0] as RefCounted).get("minimum_damage"), 1.0, "serialized document owns base damage components", failures)
 	TestAssertions.equal(decoded.item.origin["seed"], 4402, "serialized document owns origin", failures)
+
+func _assert_schema_one_migration(
+	equipment: EquipmentCatalog,
+	foundation: ItemFoundationCatalog,
+	failures: Array[String]
+) -> void:
+	var decoded := ItemInstanceCodec.decode(JSON.parse_string(LEGACY_SCHEMA_ONE_ITEM), equipment, foundation)
+	TestAssertions.truthy(decoded.ok(), "literal schema-one item decodes", failures)
+	if not decoded.ok():
+		failures.append("literal schema-one migration error: %s" % decoded.error)
+		return
+	TestAssertions.equal(decoded.item.schema_version, 2, "schema-one item migrates to in-memory schema two", failures)
+	TestAssertions.equal(decoded.item.get("base_damage_components"), [], "schema-one migration invents no base damage", failures)
+	var encoded := JSON.parse_string(ItemInstanceCodec.encode(decoded.item)) as Dictionary
+	TestAssertions.equal(encoded.get("schema_version"), 2, "migrated item re-encodes as schema two", failures)
+	TestAssertions.equal(encoded.get("base_damage_components"), [], "migrated item re-encodes an explicit empty base damage array", failures)
+
+func _assert_retained_fixture_boundaries(
+	equipment: EquipmentCatalog,
+	foundation: ItemFoundationCatalog,
+	failures: Array[String]
+) -> void:
+	var retained: Array[Dictionary] = [
+		{"id": "stout", "kind": "prefix", "stat": "constitution", "operation": StatModifier.Operation.FLAT, "tiers": [[1.0, 3.0], [4.0, 6.0], [7.0, 10.0]]},
+		{"id": "keen", "kind": "prefix", "stat": "dexterity", "operation": StatModifier.Operation.FLAT, "tiers": [[1.0, 3.0], [4.0, 6.0], [7.0, 10.0]]},
+		{"id": "wise", "kind": "prefix", "stat": "wisdom", "operation": StatModifier.Operation.FLAT, "tiers": [[1.0, 3.0], [4.0, 6.0], [7.0, 10.0]]},
+		{"id": "of_embers", "kind": "suffix", "stat": "fire_damage", "operation": StatModifier.Operation.INCREASED, "tiers": [[0.05, 0.1], [0.11, 0.2], [0.21, 0.3]]},
+		{"id": "of_rime", "kind": "suffix", "stat": "cold_damage", "operation": StatModifier.Operation.INCREASED, "tiers": [[0.05, 0.1], [0.11, 0.2], [0.21, 0.3]]},
+		{"id": "of_reach", "kind": "suffix", "stat": "attack_range", "operation": StatModifier.Operation.INCREASED, "tiers": [[0.05, 0.1], [0.11, 0.2], [0.21, 0.3]]},
+		{"id": "tempered_edge", "kind": "implicit", "stat": "physical_damage", "operation": StatModifier.Operation.INCREASED, "tiers": [[0.05, 0.1], [0.11, 0.2], [0.21, 0.3]]},
+	]
+	for fixture: Dictionary in retained:
+		for tier_index: int in 3:
+			var boundaries := fixture["tiers"] as Array
+			for boundary: Variant in boundaries[tier_index] as Array:
+				var document := _literal_schema_one_fixture_document(fixture, tier_index + 1, float(boundary))
+				var decoded := ItemInstanceCodec.decode(document, equipment, foundation)
+				TestAssertions.truthy(decoded.ok(), "%s tier %d historical boundary %s remains accepted" % [fixture["id"], tier_index + 1, boundary], failures)
+				if decoded.ok():
+					TestAssertions.equal(decoded.item.schema_version, 2, "%s tier %d boundary migrates to schema two" % [fixture["id"], tier_index + 1], failures)
+					TestAssertions.equal(decoded.item.get("base_damage_components"), [], "%s tier %d boundary invents no base damage" % [fixture["id"], tier_index + 1], failures)
 
 func _assert_multi_effect_codec(
 	equipment: EquipmentCatalog,
@@ -160,6 +213,39 @@ func _assert_strict_rejections(
 	foundation: ItemFoundationCatalog,
 	failures: Array[String]
 ) -> void:
+	var unsupported_schema := _document()
+	unsupported_schema["schema_version"] = 3
+	_assert_decode_error(
+		unsupported_schema,
+		"PARTY_FORGE_ITEM_ERROR field=schema_version reason=must equal supported schema 1 or 2",
+		equipment,
+		foundation,
+		"unsupported schema three",
+		failures
+	)
+	var duplicate_damage := _document()
+	duplicate_damage["base_damage_components"] = [
+		{"damage_type_id": "physical", "minimum_damage": 3.0, "maximum_damage": 5.0},
+		{"damage_type_id": "physical", "minimum_damage": 7.0, "maximum_damage": 11.0},
+	]
+	_assert_decode_error(
+		duplicate_damage,
+		"PARTY_FORGE_ITEM_ERROR field=base_damage_components[1].damage_type_id reason=duplicate damage type physical",
+		equipment,
+		foundation,
+		"duplicate base damage type",
+		failures
+	)
+	var malformed_damage := _document()
+	malformed_damage["base_damage_components"] = [{"damage_type_id": "physical", "minimum_damage": 3.0}]
+	_assert_decode_error(
+		malformed_damage,
+		"PARTY_FORGE_ITEM_ERROR field=base_damage_components[0] reason=missing fields maximum_damage",
+		equipment,
+		foundation,
+		"malformed base damage component",
+		failures
+	)
 	_assert_decode_error(
 		_mutated_document("instance_id", ""),
 		"PARTY_FORGE_ITEM_ERROR field=instance_id reason=must be a non-empty string",
@@ -401,6 +487,11 @@ func _make_item() -> ItemInstance:
 	item.base_definition_id = &"forge_vanguard_sword"
 	item.item_level = 28
 	item.rarity_id = &"legendary"
+	var component_script := load("res://scripts/items/item_base_damage_component.gd") as Script if ResourceLoader.exists("res://scripts/items/item_base_damage_component.gd") else null
+	if component_script != null:
+		var components := item.get("base_damage_components") as Array
+		components.append(component_script.call("create", &"physical", 3.0, 5.0))
+		components.append(component_script.call("create", &"fire", 1.0, 2.0))
 	item.affixes = [_make_affix(&"stout", "prefix", 1, &"constitution", StatModifier.Operation.FLAT, 3.0), _make_affix(&"of_reach", "suffix", 2, &"attack_range", StatModifier.Operation.INCREASED, 0.2)]
 	item.origin = {"issuer_namespace": "profile:profile-a", "seed": 4402, "sequence": 42, "source": "quest_reward"}
 	return item
@@ -464,6 +555,7 @@ func _task9_item_document(
 			"tier": 1,
 		}],
 		"base_definition_id": base_definition_id,
+		"base_damage_components": [],
 		"instance_id": instance_id,
 		"item_level": 1,
 		"origin": {
@@ -474,4 +566,30 @@ func _task9_item_document(
 		},
 		"rarity_id": "common",
 		"schema_version": ItemInstance.SCHEMA_VERSION,
+	}
+
+func _literal_schema_one_fixture_document(fixture: Dictionary, tier: int, value: float) -> Dictionary:
+	return {
+		"affixes": [{
+			"affix_kind": fixture["kind"],
+			"definition_id": fixture["id"],
+			"rolls": [{
+				"operation": fixture["operation"],
+				"required_tags": [],
+				"stat_id": fixture["stat"],
+				"value": value,
+			}],
+			"tier": tier,
+		}],
+		"base_definition_id": "forge_vanguard_sword",
+		"instance_id": "historical-%s-tier-%d-%s" % [fixture["id"], tier, str(value).replace(".", "-")],
+		"item_level": 1000,
+		"origin": {
+			"issuer_namespace": "historical-fixture-boundary",
+			"seed": 4402,
+			"sequence": tier,
+			"source": "literal_schema_one",
+		},
+		"rarity_id": "legendary",
+		"schema_version": 1,
 	}

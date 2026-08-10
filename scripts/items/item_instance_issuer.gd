@@ -1,7 +1,7 @@
 class_name ItemInstanceIssuer
 extends RefCounted
 
-const ITEM_DATA_FIELDS: Array[String] = ["affixes", "base_definition_id", "item_level", "rarity_id"]
+const ITEM_DATA_FIELDS: Array[String] = ["affixes", "base_damage_components", "base_definition_id", "item_level", "rarity_id"]
 
 static func issue(
 	issuer_namespace: String,
@@ -28,6 +28,7 @@ static func issue(
 		return result
 	var document := {
 		"affixes": data.get("affixes"),
+		"base_damage_components": data.get("base_damage_components"),
 		"base_definition_id": data.get("base_definition_id"),
 		"instance_id": "item-%s-%016d" % [issuer_namespace.sha256_text(), int(sequence)],
 		"item_level": data.get("item_level"),

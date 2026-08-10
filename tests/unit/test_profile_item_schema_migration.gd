@@ -22,6 +22,7 @@ func run() -> Array[String]:
 	_test_json_parsed_schema_one_migrates_to_complete_canonical_document(failures)
 	_test_schema_two_items_and_progression_migrate_losslessly(failures)
 	_test_unsupported_legacy_stash_fails_without_mutation(failures)
+	_test_failed_item_schema_migration_preserves_primary_and_backup_bytes(failures)
 	_test_current_schema_reports_source_metadata(failures)
 	_test_normal_store_is_current_only(failures)
 	return failures
@@ -91,9 +92,10 @@ func _test_schema_two_items_and_progression_migrate_losslessly(failures: Array[S
 		TestAssertions.equal(actual.get("leader_loadout"), _leader_loadout("profile-migrate09"), "schema-two migration adds only the empty leader loadout", failures)
 		TestAssertions.equal(actual.get("leader_loadout_class_id"), "", "migrated empty loadout has no selected class", failures)
 		for field: String in SCHEMA_TWO_FIELDS:
-			if field in ["schema_version", "applied_transactions"]:
+			if field in ["schema_version", "item_records", "applied_transactions"]:
 				continue
 			TestAssertions.equal(JSON.stringify(actual[field]), JSON.stringify(original[field]), "schema-two field %s survives byte-semantically" % field, failures)
+		_assert_item_registry_promoted_to_schema_two(actual["item_records"] as Dictionary, "root item registry", failures)
 		var original_record := (original["applied_transactions"] as Dictionary)["storage-001"] as Dictionary
 		var actual_record := (actual["applied_transactions"] as Dictionary)["storage-001"] as Dictionary
 		for field: String in ["operation", "fingerprint", "committed_at_unix"]:
@@ -101,9 +103,10 @@ func _test_schema_two_items_and_progression_migrate_losslessly(failures: Array[S
 		var original_snapshot := original_record["result_profile"] as Dictionary
 		var actual_snapshot := actual_record["result_profile"] as Dictionary
 		for field: String in SCHEMA_TWO_FIELDS:
-			if field in ["schema_version", "applied_transactions"]:
+			if field in ["schema_version", "item_records", "applied_transactions"]:
 				continue
 			TestAssertions.equal(JSON.stringify(actual_snapshot[field]), JSON.stringify(original_snapshot[field]), "transaction snapshot field %s survives migration" % field, failures)
+		_assert_item_registry_promoted_to_schema_two(actual_snapshot["item_records"] as Dictionary, "transaction snapshot item registry", failures)
 		TestAssertions.equal(actual_snapshot.get("leader_loadout"), _leader_loadout("profile-migrate09"), "transaction snapshot gains the exact empty leader loadout", failures)
 		TestAssertions.equal(actual_snapshot.get("leader_loadout_class_id"), "", "transaction snapshot gains an empty leader class ID", failures)
 	TestAssertions.equal(original, before, "schema-two migration leaves source dictionary unchanged", failures)
@@ -117,6 +120,28 @@ func _test_unsupported_legacy_stash_fails_without_mutation(failures: Array[Strin
 	TestAssertions.equal(migrated.get("error"), "PARTY_FORGE_PROFILE_MIGRATION_ERROR field=stash_tabs reason=unsupported legacy storage", "legacy stash failure is exact", failures)
 	TestAssertions.equal(migrated.get("profile"), null, "failed migration exposes no partial profile", failures)
 	TestAssertions.equal(original, before, "failed migration leaves source unchanged", failures)
+
+func _test_failed_item_schema_migration_preserves_primary_and_backup_bytes(failures: Array[String]) -> void:
+	var profile_id := "profile-itemmig01"
+	var root := "user://tests/profile_item_schema_migration_%d_%d" % [OS.get_process_id(), Time.get_ticks_usec()]
+	ProfileTestSupport.remove_tree(root)
+	var path := ProfileStore.new().profile_path(profile_id, root)
+	var documents := AtomicJsonStore.new()
+	var older := schema_two_document(profile_id)
+	older["gold"] = 80
+	var primary := schema_two_document(profile_id)
+	primary["gold"] = 90
+	var loadable_validator := Callable(ProfileCodec, "validate_loadable_document")
+	TestAssertions.equal(documents.save_document(path, older, loadable_validator), "", "failed item migration fixture writes schema-one-item backup source", failures)
+	TestAssertions.equal(documents.save_document(path, primary, loadable_validator), "", "failed item migration fixture writes schema-one-item primary source", failures)
+	var primary_bytes := FileAccess.get_file_as_bytes(path)
+	var backup_bytes := FileAccess.get_file_as_bytes("%s.bak" % path)
+	var failing_store := ProfileStore.new(AtomicJsonStore.new(func(_temporary: String, _target: String) -> Error: return ERR_CANT_CREATE))
+	var loaded := failing_store.load_profile(profile_id, root)
+	TestAssertions.truthy(not loaded.ok() and loaded.profile == null and loaded.error.contains("stage=promote"), "failed item schema migration exposes no partial profile", failures)
+	TestAssertions.equal(FileAccess.get_file_as_bytes(path), primary_bytes, "failed item schema migration preserves exact primary bytes", failures)
+	TestAssertions.equal(FileAccess.get_file_as_bytes("%s.bak" % path), backup_bytes, "failed item schema migration preserves exact backup bytes", failures)
+	ProfileTestSupport.remove_tree(root)
 
 func _test_current_schema_reports_source_metadata(failures: Array[String]) -> void:
 	var current := ProfileState.new_profile("profile-current02", "Current", 3000)
@@ -295,3 +320,9 @@ static func _item_document(profile_id: String, instance_id: String, base_id: Str
 		"rarity_id": "common",
 		"schema_version": 1,
 	}
+
+static func _assert_item_registry_promoted_to_schema_two(registry: Dictionary, label: String, failures: Array[String]) -> void:
+	for item_value: Variant in registry["items"] as Array:
+		var item := item_value as Dictionary
+		TestAssertions.equal(item.get("schema_version"), 2, "%s item promotes to schema two" % label, failures)
+		TestAssertions.equal(item.get("base_damage_components"), [], "%s schema-one item invents no base damage" % label, failures)

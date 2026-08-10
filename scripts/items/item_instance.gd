@@ -1,13 +1,14 @@
 class_name ItemInstance
 extends RefCounted
 
-const SCHEMA_VERSION := 1
+const SCHEMA_VERSION := 2
 
 var schema_version := SCHEMA_VERSION
 var instance_id: String
 var base_definition_id: StringName
 var item_level: int = 1
 var rarity_id: StringName
+var base_damage_components: Array[ItemBaseDamageComponent] = []
 var affixes: Array[ItemAffixInstance] = []
 var origin: Dictionary = {}
 
@@ -18,17 +19,31 @@ func copy() -> ItemInstance:
 	result.base_definition_id = base_definition_id
 	result.item_level = item_level
 	result.rarity_id = rarity_id
+	for component: ItemBaseDamageComponent in base_damage_components:
+		result.base_damage_components.append(component.copy() if component != null else null)
 	for affix: ItemAffixInstance in affixes:
 		result.affixes.append(affix.copy() if affix != null else null)
 	result.origin = _json_copy(origin) as Dictionary
 	return result
 
 func to_dictionary() -> Dictionary:
+	var sorted_components := base_damage_components.duplicate()
+	sorted_components.sort_custom(func(left: ItemBaseDamageComponent, right: ItemBaseDamageComponent) -> bool:
+		if left == null:
+			return right != null
+		if right == null:
+			return false
+		return String(left.damage_type_id) < String(right.damage_type_id)
+	)
+	var component_documents: Array[Dictionary] = []
+	for component: ItemBaseDamageComponent in sorted_components:
+		component_documents.append(component.to_dictionary() if component != null else {})
 	var affix_documents: Array[Dictionary] = []
 	for affix: ItemAffixInstance in affixes:
 		affix_documents.append(affix.to_dictionary() if affix != null else {})
 	return {
 		"affixes": affix_documents,
+		"base_damage_components": component_documents,
 		"base_definition_id": String(base_definition_id),
 		"instance_id": instance_id,
 		"item_level": item_level,

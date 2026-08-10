@@ -2,7 +2,9 @@ class_name ItemInstanceCodec
 extends RefCounted
 
 const JSON_SAFE_INTEGER_MAX := 9007199254740991
-const ITEM_FIELDS: Array[String] = ["affixes", "base_definition_id", "instance_id", "item_level", "origin", "rarity_id", "schema_version"]
+const ITEM_SCHEMA_ONE_FIELDS: Array[String] = ["affixes", "base_definition_id", "instance_id", "item_level", "origin", "rarity_id", "schema_version"]
+const ITEM_SCHEMA_TWO_FIELDS: Array[String] = ["affixes", "base_damage_components", "base_definition_id", "instance_id", "item_level", "origin", "rarity_id", "schema_version"]
+const BASE_DAMAGE_COMPONENT_FIELDS: Array[String] = ["damage_type_id", "minimum_damage", "maximum_damage"]
 const AFFIX_FIELDS: Array[String] = ["affix_kind", "definition_id", "rolls", "tier"]
 const ROLL_FIELDS: Array[String] = ["operation", "required_tags", "stat_id", "value"]
 const ORIGIN_FIELDS: Array[String] = ["issuer_namespace", "seed", "sequence", "source"]
@@ -23,11 +25,19 @@ static func decode(
 		return result
 	var data := document as Dictionary
 	var item := ItemInstance.new()
-	item.schema_version = int(data["schema_version"])
+	item.schema_version = ItemInstance.SCHEMA_VERSION
 	item.instance_id = data["instance_id"] as String
 	item.base_definition_id = StringName(data["base_definition_id"] as String)
 	item.item_level = int(data["item_level"])
 	item.rarity_id = StringName(data["rarity_id"] as String)
+	if int(data["schema_version"]) == ItemInstance.SCHEMA_VERSION:
+		for component_value: Variant in data["base_damage_components"] as Array:
+			var component_data := component_value as Dictionary
+			item.base_damage_components.append(ItemBaseDamageComponent.create(
+				StringName(component_data["damage_type_id"] as String),
+				float(component_data["minimum_damage"]),
+				float(component_data["maximum_damage"])
+			))
 	for affix_value: Variant in data["affixes"] as Array:
 		var affix_data := affix_value as Dictionary
 		var affix := ItemAffixInstance.new()
@@ -65,11 +75,15 @@ static func _validate_document(
 	if not document is Dictionary:
 		return _field_error("document", "must be a dictionary")
 	var data := document as Dictionary
-	var fields_error := _exact_fields(data, ITEM_FIELDS, "document")
+	if not data.has("schema_version"):
+		return _field_error("document", "missing fields schema_version")
+	if not _is_json_int(data["schema_version"], 1, ItemInstance.SCHEMA_VERSION):
+		return _field_error("schema_version", "must equal supported schema 1 or %d" % ItemInstance.SCHEMA_VERSION)
+	var schema_version := int(data["schema_version"])
+	var expected_fields := ITEM_SCHEMA_ONE_FIELDS if schema_version == 1 else ITEM_SCHEMA_TWO_FIELDS
+	var fields_error := _exact_fields(data, expected_fields, "document")
 	if not fields_error.is_empty():
 		return fields_error
-	if not _is_json_int(data["schema_version"], ItemInstance.SCHEMA_VERSION, ItemInstance.SCHEMA_VERSION):
-		return _field_error("schema_version", "must equal supported schema %d" % ItemInstance.SCHEMA_VERSION)
 	if not _is_nonempty_string(data["instance_id"]):
 		return _field_error("instance_id", "must be a non-empty string")
 	if not _is_nonempty_string(data["base_definition_id"]):
@@ -91,6 +105,10 @@ static func _validate_document(
 		return _field_error("rarity_id", "unknown rarity %s" % rarity_id)
 	if not rarity.instance_supported:
 		return _field_error("rarity_id", "rarity %s does not support item instances" % rarity_id)
+	if schema_version == ItemInstance.SCHEMA_VERSION:
+		var base_damage_error := _validate_base_damage_components(data["base_damage_components"])
+		if not base_damage_error.is_empty():
+			return base_damage_error
 	if not data["affixes"] is Array:
 		return _field_error("affixes", "must be an array")
 	var seen_affixes: Dictionary = {}
@@ -164,7 +182,7 @@ static func _validate_roll(
 	var roll_value := float(data["value"])
 	if not is_finite(roll_value):
 		return _field_error("%s.value" % path, "must be a finite number")
-	if roll_value < bounds.x or roll_value > bounds.y:
+	if (roll_value < bounds.x and not is_equal_approx(roll_value, bounds.x)) or (roll_value > bounds.y and not is_equal_approx(roll_value, bounds.y)):
 		return _field_error("%s.value" % path, "must be within issued bounds %s..%s" % [_number_text(bounds.x), _number_text(bounds.y)])
 	if not data["required_tags"] is Array:
 		return _field_error("%s.required_tags" % path, "must be an array of strings")
@@ -175,6 +193,40 @@ static func _validate_roll(
 		actual_tags.append(StringName(tag_value as String))
 	if actual_tags != effect.required_tags:
 		return _field_error("%s.required_tags" % path, "must match definition required tags")
+	return ""
+
+static func _validate_base_damage_components(value: Variant) -> String:
+	if not value is Array:
+		return _field_error("base_damage_components", "must be an array")
+	var seen_types: Dictionary = {}
+	for index: int in (value as Array).size():
+		var path := "base_damage_components[%d]" % index
+		var component_value: Variant = (value as Array)[index]
+		if not component_value is Dictionary:
+			return _field_error(path, "must be a dictionary")
+		var data := component_value as Dictionary
+		var fields_error := _exact_fields(data, BASE_DAMAGE_COMPONENT_FIELDS, path)
+		if not fields_error.is_empty():
+			return fields_error
+		if typeof(data["damage_type_id"]) != TYPE_STRING:
+			return _field_error("%s.damage_type_id" % path, "must be a non-empty string")
+		for field: String in ["minimum_damage", "maximum_damage"]:
+			if not data[field] is float and not data[field] is int:
+				return _field_error("%s.%s" % [path, field], "must be a finite number")
+		var component := ItemBaseDamageComponent.create(
+			StringName(data["damage_type_id"] as String),
+			float(data["minimum_damage"]),
+			float(data["maximum_damage"])
+		)
+		var component_error := component.validate(GameCatalog.DAMAGE_TYPES)
+		if not component_error.is_empty():
+			return component_error.replace(
+				"PARTY_FORGE_ITEM_BASE_DAMAGE_ERROR field=",
+				"PARTY_FORGE_ITEM_ERROR field=%s." % path
+			)
+		if seen_types.has(component.damage_type_id):
+			return _field_error("%s.damage_type_id" % path, "duplicate damage type %s" % component.damage_type_id)
+		seen_types[component.damage_type_id] = true
 	return ""
 
 static func _validate_origin(value: Variant) -> String:
