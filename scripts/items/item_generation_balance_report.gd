@@ -67,9 +67,12 @@ static func build_bounded(
 static func scenario_identity(request: ItemGenerationRequest) -> String:
 	if request == null:
 		return ""
-	var canonical := request.canonical_document()
+	var canonical := request.canonical_document().duplicate(true)
 	if canonical.is_empty():
 		return ""
+	# Report sampling owns the local 0..N-1 sequence and replaces the caller's
+	# input sequence before generation, so it cannot distinguish sample streams.
+	canonical["generation_sequence"] = 0
 	return JSON.stringify(ItemGenerationTrace.canonical_json_copy(canonical), "", false)
 
 static func percentile_summary(values: Array) -> Dictionary:
@@ -146,6 +149,9 @@ static func production_evidence_errors(report: Dictionary) -> Array[String]:
 		expected_probability_total += float(band.get("expected_effective_selection_proportion", 0.0))
 	if bands.size() != 4 or selected_band_total != 285070:
 		errors.append("the four live weight bands must account for all 285070 explicit-affix selections")
+	for key: String in bands:
+		if int((bands[key] as Dictionary).get("selection_opportunity_denominator", -1)) != selected_band_total:
+			errors.append("weight band %s selection-opportunity denominator must equal the selected explicit-affix count" % key)
 	if not is_equal_approx(expected_probability_total, 1.0):
 		errors.append("live expected weight-band selection proportions must sum to one")
 	var premium_band := bands.get("0025_premium_hybrid", {}) as Dictionary
@@ -187,6 +193,18 @@ static func production_evidence_errors(report: Dictionary) -> Array[String]:
 		if int(party.get("biased_off_count", 0)) <= 0:
 			errors.append("%s party bias must preserve off-archetype outcomes" % archetype)
 	var manifest := report.get("manifest", {}) as Dictionary
+	var manifest_counts := manifest.get("counts", {}) as Dictionary
+	var expected_manifest_counts := {
+		"affixes": 195,
+		"bases": 99,
+		"explicit_affixes": 96,
+		"implicit_affixes": 99,
+		"weapon_profile_bases": 11,
+	}
+	for key: String in expected_manifest_counts:
+		var expected_count := int(expected_manifest_counts[key])
+		if int(manifest_counts.get(key, -1)) != expected_count:
+			errors.append("manifest count %s must equal %d" % [key, expected_count])
 	if not (manifest.get("exclusions", {}) as Dictionary).get("unreachable_affix_ids", []).is_empty():
 		errors.append("every affix definition must remain reachable")
 	for row_value: Variant in manifest.get("reachability", []) as Array:

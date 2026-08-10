@@ -3,6 +3,8 @@ extends RefCounted
 const EQUIPMENT_PATH := "res://data/equipment/core_equipment_catalog.tres"
 const FOUNDATION_PATH := "res://data/items/core_item_foundation_catalog.tres"
 const REPORT_PATH := "res://scripts/items/item_generation_balance_report.gd"
+const EVIDENCE_PATH := "res://docs/validation/evidence/2026-08-10-weighted-loot-production-balance.json"
+
 func run() -> Array[String]:
 	var failures: Array[String] = []
 	var equipment := load(EQUIPMENT_PATH) as EquipmentCatalog
@@ -24,6 +26,7 @@ func run() -> Array[String]:
 	_test_input_validation(report_script, equipment, foundation, failures)
 	_test_percentile_convention(report_script, failures)
 	_test_scenario_identity(report_script, equipment, foundation, failures)
+	_test_production_evidence_validator_regressions(report_script, failures)
 	_test_bounded_repeat_and_unique_ids(report_script, equipment, foundation, failures)
 	_test_live_reachability_and_natural_order(report_script, equipment, foundation, failures)
 	_test_generated_charisma_evidence(report_script, equipment, foundation, failures)
@@ -107,7 +110,7 @@ func _test_scenario_identity(
 	seed_variant.seed += 1
 	variants.append(seed_variant)
 	var sequence_variant := original.copy_with_sequence(original.generation_sequence + 1)
-	variants.append(sequence_variant)
+	TestAssertions.equal(report_script.call(&"scenario_identity", sequence_variant), identities[0], "report-owned sample sequence is normalized out of scenario identity", failures)
 	var level_variant := original.copy_with_sequence(original.generation_sequence)
 	level_variant.item_level += 1
 	variants.append(level_variant)
@@ -158,7 +161,7 @@ func _test_scenario_identity(
 	var unique: Dictionary = {}
 	for identity: String in identities:
 		unique[identity] = true
-	TestAssertions.equal(unique.size(), identities.size(), "identity changes independently for every canonical request field", failures)
+	TestAssertions.equal(unique.size(), identities.size(), "identity changes independently for every canonical request field that affects report generation", failures)
 	var reordered := original.copy_with_sequence(original.generation_sequence)
 	reordered.permitted_rarity_ids = [&"rare", &"uncommon"]
 	var canonical_order := original.copy_with_sequence(original.generation_sequence)
@@ -168,6 +171,54 @@ func _test_scenario_identity(
 	var duplicate_report: Dictionary = report_script.call(&"build_bounded", equipment, foundation, duplicates, 2)
 	TestAssertions.equal(duplicate_report.get("status", ""), "error", "duplicate exact scenario identities are rejected", failures)
 	TestAssertions.truthy(String((duplicate_report.get("errors", []) as Array)[0]).contains("duplicate scenario identity"), "duplicate rejection names canonical identity", failures)
+	var sequence_duplicates: Array[ItemGenerationRequest] = [original, sequence_variant]
+	var sequence_duplicate_report: Dictionary = report_script.call(&"build_bounded", equipment, foundation, sequence_duplicates, 2)
+	TestAssertions.equal(sequence_duplicate_report.get("status", ""), "error", "requests differing only in report-owned input sequence are rejected as duplicate sample streams", failures)
+	var sequence_duplicate_errors := sequence_duplicate_report.get("errors", []) as Array
+	TestAssertions.truthy(not sequence_duplicate_errors.is_empty() and str(sequence_duplicate_errors[0]).contains("duplicate scenario identity"), "sequence-only duplicate rejection names canonical identity", failures)
+
+func _test_production_evidence_validator_regressions(report_script: Script, failures: Array[String]) -> void:
+	var file := FileAccess.open(EVIDENCE_PATH, FileAccess.READ)
+	TestAssertions.truthy(file != null, "committed production evidence opens for validator regressions", failures)
+	if file == null:
+		return
+	var parsed: Variant = JSON.parse_string(file.get_as_text())
+	file.close()
+	TestAssertions.truthy(parsed is Dictionary, "committed production evidence parses for validator regressions", failures)
+	if not parsed is Dictionary:
+		return
+	var report := parsed as Dictionary
+	(report.get("configuration", {}) as Dictionary)["matrix_row_counts"] = {
+		"archetype_party_bias": 8,
+		"charisma_heat": 9,
+		"level_rarity": 65,
+	}
+	var baseline_errors := report_script.call(&"production_evidence_errors", report) as Array
+	TestAssertions.equal(baseline_errors, [], "committed production evidence satisfies the production validator", failures)
+	var bands := (report.get("aggregates", {}) as Dictionary).get("weight_bands", {}) as Dictionary
+	for band_value: Variant in bands.values():
+		(band_value as Dictionary)["selection_opportunity_denominator"] = 285069
+	var partial_errors := report_script.call(&"production_evidence_errors", report) as Array
+	TestAssertions.truthy(_has_error(partial_errors, "selection-opportunity denominator"), "validator rejects partial trace-derived selection-opportunity aggregation", failures)
+	for band_value: Variant in bands.values():
+		(band_value as Dictionary)["selection_opportunity_denominator"] = 285070
+	var expected_counts := {
+		"affixes": 195,
+		"bases": 99,
+		"explicit_affixes": 96,
+		"implicit_affixes": 99,
+		"weapon_profile_bases": 11,
+	}
+	var counts := (report.get("manifest", {}) as Dictionary).get("counts", {}) as Dictionary
+	for key: String in expected_counts:
+		var expected := int(expected_counts[key])
+		counts.erase(key)
+		var omission_errors := report_script.call(&"production_evidence_errors", report) as Array
+		TestAssertions.truthy(_has_error(omission_errors, "manifest count %s" % key), "validator rejects omitted manifest count %s" % key, failures)
+		counts[key] = expected + 1
+		var mismatch_errors := report_script.call(&"production_evidence_errors", report) as Array
+		TestAssertions.truthy(_has_error(mismatch_errors, "manifest count %s" % key), "validator rejects mismatched manifest count %s" % key, failures)
+		counts[key] = expected
 
 func _test_bounded_repeat_and_unique_ids(
 	report_script: Script,
@@ -286,3 +337,9 @@ func _markdown_column_count(line: String) -> int:
 		if backslashes % 2 == 0:
 			separators += 1
 	return maxi(separators - 1, 0)
+
+func _has_error(errors: Array, fragment: String) -> bool:
+	for error: Variant in errors:
+		if str(error).contains(fragment):
+			return true
+	return false
