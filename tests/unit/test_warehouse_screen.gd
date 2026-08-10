@@ -60,6 +60,8 @@ func run() -> Array[String]:
 	compare_button.inspection_started.emit(compare_button)
 	var tooltip := screen.get_node("Overlay/ItemTooltip") as Control
 	TestAssertions.truthy(tooltip.visible, "Warehouse focus or hover opens the shared item tooltip", failures)
+	var inspected_card := tooltip.get_node("Layout/BodyScroll/Cards").get_child(0) as Control
+	TestAssertions.truthy(String(inspected_card.call("rendered_text")).contains("Cold Damage: 4-9"), "Warehouse passes the shared typed base-range detail unchanged", failures)
 	tooltip.call("set_compare_active", true)
 	TestAssertions.equal(int(tooltip.call("card_count")), 3, "Warehouse ring compares against both occupied leader ring slots", failures)
 	tooltip.call("toggle_pin")
@@ -114,6 +116,7 @@ func _button_for_slot(screen: WarehouseScreen, slot: int) -> StorageSlotButton:
 
 func _comparison_storage() -> ProfileStorageProjection:
 	var stash_ring := _item("stash-ring", &"windrunner_band", 0)
+	stash_ring.base_damage_components = [ItemBaseDamageComponent.create(&"cold", 4.0, 9.0)]
 	var left_ring := _item("left-ring", &"storm_ring", 1)
 	var right_ring := _item("right-ring", &"pact_ring", 2)
 	var profile := ProfileState.new_profile("warehouse-comparison", "Warehouse Comparison", 1000)

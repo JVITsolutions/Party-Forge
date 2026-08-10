@@ -2,6 +2,7 @@ class_name EquipmentComparisonProjectionService
 extends RefCounted
 
 const RESOLVED_COMPARISONS := preload("res://scripts/ui/storage/resolved_stat_comparison_service.gd")
+const ITEM_COMPARISONS := preload("res://scripts/ui/storage/item_comparison_resolver.gd")
 
 
 static func compare(
@@ -15,10 +16,45 @@ static func compare(
 	candidate_item_id: String = "",
 	item_labels: Dictionary = {},
 	disabled_requirement_lines_by_item: Dictionary = {},
+	damage_types: DamageTypeCatalog = GameCatalog.DAMAGE_TYPES,
 ) -> Array[Dictionary]:
 	var result := RESOLVED_COMPARISONS.compare(current_stats, candidate_stats, catalog)
+	_append_base_damage_rows(result, current_activation, candidate_activation, damage_types)
 	_append_action_rows(result, current_action_estimates, candidate_action_estimates)
 	_append_activation_rows(result, current_activation, candidate_activation, candidate_item_id, item_labels, disabled_requirement_lines_by_item)
+	return result
+
+
+static func _append_base_damage_rows(
+	result: Array[Dictionary],
+	current_activation: EquipmentActivationResult,
+	candidate_activation: EquipmentActivationResult,
+	damage_types: DamageTypeCatalog,
+) -> void:
+	if current_activation == null or candidate_activation == null or damage_types == null:
+		return
+	var current := _project_weapon_components(current_activation.weapon_snapshot(), damage_types)
+	var candidate := _project_weapon_components(candidate_activation.weapon_snapshot(), damage_types)
+	result.append_array(ITEM_COMPARISONS.base_damage_delta_rows(candidate, current))
+
+
+static func _project_weapon_components(snapshot: ActiveWeaponDamageSnapshot, damage_types: DamageTypeCatalog) -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	if snapshot == null:
+		return result
+	for component: ItemBaseDamageComponent in snapshot.components:
+		if component == null:
+			continue
+		var definition := damage_types.definition(component.damage_type_id)
+		if definition == null:
+			continue
+		result.append({
+			"damage_type_id": String(component.damage_type_id),
+			"display_name": definition.display_name,
+			"presentation_color": definition.presentation_color,
+			"minimum_damage": component.minimum_damage,
+			"maximum_damage": component.maximum_damage,
+		})
 	return result
 
 
@@ -44,7 +80,10 @@ static func _append_action_rows(result: Array[Dictionary], current_values: Array
 			_append_action_row(result, action_id, label, "uses_per_second", "Uses / Second", current.attacks_per_second, candidate.attacks_per_second)
 			_append_action_row(result, action_id, label, "estimated_hps", "Estimated HPS", current.estimated_hps, candidate.estimated_hps)
 		elif not current.is_healing and not candidate.is_healing:
+			_append_action_row(result, action_id, label, "normal_hit", "Normal Hit", current.normal_hit, candidate.normal_hit)
+			_append_action_row(result, action_id, label, "critical_hit", "Critical Hit", current.critical_hit, candidate.critical_hit)
 			_append_action_row(result, action_id, label, "average_hit", "Average Hit", current.average_hit, candidate.average_hit)
+			_append_action_row(result, action_id, label, "attacks_per_second", "Attacks / Second", current.attacks_per_second, candidate.attacks_per_second)
 			_append_action_row(result, action_id, label, "estimated_dps", "DPS", current.estimated_dps, candidate.estimated_dps)
 		_append_action_row(result, action_id, label, "range", "Range", current.range, candidate.range)
 		if current.area_radius > 0.0 or candidate.area_radius > 0.0:

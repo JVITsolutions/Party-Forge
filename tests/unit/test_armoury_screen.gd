@@ -62,6 +62,8 @@ func run() -> Array[String]:
 	compare_button.inspection_started.emit(compare_button)
 	var tooltip := screen.get_node("Overlay/ItemTooltip") as Control
 	TestAssertions.truthy(tooltip.visible, "focus or hover opens the shared item tooltip", failures)
+	var inspected_card := tooltip.get_node("Layout/BodyScroll/Cards").get_child(0) as Control
+	TestAssertions.truthy(String(inspected_card.call("rendered_text")).contains("Fire Damage: 3-7"), "Armoury passes the shared typed base-range detail unchanged", failures)
 	tooltip.call("set_compare_active", true)
 	TestAssertions.equal(int(tooltip.call("card_count")), 3, "stash ring compares against both occupied leader ring slots", failures)
 	tooltip.call("toggle_pin")
@@ -73,6 +75,7 @@ func run() -> Array[String]:
 
 func _comparison_storage() -> ProfileStorageProjection:
 	var stash_ring := _item("stash-ring", &"windrunner_band", 0)
+	stash_ring.base_damage_components = [ItemBaseDamageComponent.create(&"fire", 3.0, 7.0)]
 	var left_ring := _item("left-ring", &"storm_ring", 1)
 	var right_ring := _item("right-ring", &"pact_ring", 2)
 	var profile := ProfileState.new_profile("armoury-comparison", "Armoury Comparison", 1000)

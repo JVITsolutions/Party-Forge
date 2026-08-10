@@ -10,6 +10,8 @@ func run() -> Array[String]:
 		return failures
 	var projector: Script = load(PROJECTOR_PATH)
 	_test_complete_record(projector, failures)
+	_test_typed_base_damage_projection(projector, failures)
+	_test_schema_one_empty_base_damage_projection(projector, failures)
 	_test_missing_affix_omits_bounds(projector, failures)
 	_test_class_warning(projector, failures)
 	_test_malformed_requirements_fail_closed(projector, failures)
@@ -41,6 +43,69 @@ func _test_complete_record(projector: Script, failures: Array[String]) -> void:
 	TestAssertions.equal(roll.get("maximum_roll"), 6.0, "tier maximum projects", failures)
 	TestAssertions.near(float(roll.get("roll_fraction", -1.0)), 0.5, 0.001, "roll position projects", failures)
 	TestAssertions.equal(detail.get("modifier_totals"), {"constitution|0": 5.0}, "comparable modifier totals project", failures)
+
+
+func _test_typed_base_damage_projection(projector: Script, failures: Array[String]) -> void:
+	var item := _item_with_stout_roll(5.0)
+	item.base_damage_components = [
+		ItemBaseDamageComponent.create(&"physical", 32.02, 42.70),
+		ItemBaseDamageComponent.create(&"fire", 10.96, 21.91),
+	]
+	item.origin = {"source": {"generation": {"base_damage": {
+		"profile_id": "hybrid_profile",
+		"rarity_multiplier": 1.18,
+		"components": [
+			{"damage_type_id": "fire", "bounds": {"minimum": 10.0, "maximum": 20.0}, "quality": 0.92844741642475, "range": {"minimum": 10.96, "maximum": 21.91}},
+			{"damage_type_id": "physical", "bounds": {"minimum": 30.0, "maximum": 40.0}, "quality": 0.90460618138313, "range": {"minimum": 32.02, "maximum": 42.70}},
+		],
+	}}}}
+	var before := item.to_dictionary()
+	var detail: Dictionary = projector.call(
+		"project", item, GameCatalog.EQUIPMENT_CATALOG,
+		GameCatalog.ITEM_FOUNDATION_CATALOG, GameCatalog.STAT_CATALOG,
+	)
+	var components: Array = detail.get("base_damage_components", [])
+	TestAssertions.equal(components.size(), 2, "hybrid base damage keeps both typed components separate", failures)
+	if components.size() == 2:
+		TestAssertions.equal(components[0], {
+			"damage_type_id": "fire",
+			"display_name": "Fire",
+			"presentation_color": GameCatalog.DAMAGE_TYPES.definition(&"fire").presentation_color,
+			"minimum_damage": 10.96,
+			"maximum_damage": 21.91,
+		}, "typed base damage is sorted deterministically and resolves only fire presentation", failures)
+		TestAssertions.equal(components[1], {
+			"damage_type_id": "physical",
+			"display_name": "Physical",
+			"presentation_color": GameCatalog.DAMAGE_TYPES.definition(&"physical").presentation_color,
+			"minimum_damage": 32.02,
+			"maximum_damage": 42.70,
+		}, "typed base damage keeps the physical range separate", failures)
+	TestAssertions.equal(PackedStringArray(detail.get("base_damage_lines", PackedStringArray())), PackedStringArray([
+		"Fire Damage: 10.96-21.91",
+		"Physical Damage: 32.02-42.7",
+	]), "base damage lines follow deterministic component order", failures)
+	TestAssertions.equal(PackedStringArray(detail.get("base_damage_advanced_lines", PackedStringArray())), PackedStringArray([
+		"Rarity Multiplier: 1.18",
+		"Fire Quality: 92.84% | Bounds: 10-20 | Exact: 10.96-21.91",
+		"Physical Quality: 90.46% | Bounds: 30-40 | Exact: 32.02-42.7",
+	]), "advanced base damage data comes from immutable issuance provenance", failures)
+	TestAssertions.equal(detail.get("base_damage_profile_id"), "hybrid_profile", "base damage profile id is available for developer-only technical presentation", failures)
+	if not components.is_empty():
+		(components[0] as Dictionary)["minimum_damage"] = -1.0
+	TestAssertions.equal(item.to_dictionary(), before, "projected base damage cannot mutate the immutable item components", failures)
+
+
+func _test_schema_one_empty_base_damage_projection(projector: Script, failures: Array[String]) -> void:
+	var item := _item_with_stout_roll(5.0)
+	item.schema_version = 2
+	item.base_damage_components = []
+	var detail: Dictionary = projector.call(
+		"project", item, GameCatalog.EQUIPMENT_CATALOG,
+		GameCatalog.ITEM_FOUNDATION_CATALOG, GameCatalog.STAT_CATALOG,
+	)
+	TestAssertions.equal(detail.get("base_damage_components"), [] as Array[Dictionary], "migrated schema-1 item projects an explicit empty component array", failures)
+	TestAssertions.equal(detail.get("base_damage_lines"), PackedStringArray(), "migrated schema-1 item projects no base damage lines", failures)
 
 
 func _test_missing_affix_omits_bounds(projector: Script, failures: Array[String]) -> void:

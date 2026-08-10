@@ -33,6 +33,10 @@ static func resolve(
 
 
 static func _delta_lines(inspected: Dictionary, equipped: Dictionary) -> Array[Dictionary]:
+	var result := base_damage_delta_rows(
+		inspected.get("base_damage_components", []) as Array,
+		equipped.get("base_damage_components", []) as Array,
+	)
 	var inspected_totals: Dictionary = (inspected.get("modifier_totals", {}) as Dictionary).duplicate(true)
 	var equipped_totals: Dictionary = (equipped.get("modifier_totals", {}) as Dictionary).duplicate(true)
 	var keys: Array[String] = []
@@ -45,7 +49,6 @@ static func _delta_lines(inspected: Dictionary, equipped: Dictionary) -> Array[D
 		if normalized not in keys:
 			keys.append(normalized)
 	keys.sort()
-	var result: Array[Dictionary] = []
 	for key: String in keys:
 		var parts := key.split("|", false)
 		if parts.size() != 2 or not String(parts[1]).is_valid_int():
@@ -65,6 +68,69 @@ static func _delta_lines(inspected: Dictionary, equipped: Dictionary) -> Array[D
 			"text": _raw_delta_text(stat_id, operation, delta, raw_direction),
 			"accessible_text": _raw_delta_accessible_text(stat_id, operation, delta, raw_direction),
 		})
+	return result
+
+
+static func base_damage_delta_rows(candidate_components: Array, current_components: Array) -> Array[Dictionary]:
+	var candidate_by_type := _base_damage_by_type(candidate_components)
+	var current_by_type := _base_damage_by_type(current_components)
+	var type_ids: Array[String] = []
+	for key: Variant in candidate_by_type:
+		type_ids.append(String(key))
+	for key: Variant in current_by_type:
+		var type_id := String(key)
+		if type_id not in type_ids:
+			type_ids.append(type_id)
+	type_ids.sort()
+	var result: Array[Dictionary] = []
+	for type_id: String in type_ids:
+		var candidate := candidate_by_type.get(type_id, {}) as Dictionary
+		var current := current_by_type.get(type_id, {}) as Dictionary
+		var before_minimum := float(current.get("minimum_damage", 0.0))
+		var before_maximum := float(current.get("maximum_damage", 0.0))
+		var after_minimum := float(candidate.get("minimum_damage", 0.0))
+		var after_maximum := float(candidate.get("maximum_damage", 0.0))
+		if is_equal_approx(before_minimum, after_minimum) and is_equal_approx(before_maximum, after_maximum):
+			continue
+		var before_midpoint := before_minimum + (before_maximum - before_minimum) * 0.5
+		var after_midpoint := after_minimum + (after_maximum - after_minimum) * 0.5
+		var delta := after_midpoint - before_midpoint
+		var direction := 1 if delta > 0.0 else -1 if delta < 0.0 else 0
+		var symbol := "▲" if direction > 0 else "▼" if direction < 0 else "•"
+		var meaning := "improved" if direction > 0 else "reduced" if direction < 0 else "changed"
+		var source := candidate if not candidate.is_empty() else current
+		var label := String(source.get("display_name", type_id.replace("_", " ").capitalize()))
+		var text := "%s %s Base Damage %s-%s -> %s-%s — %s" % [
+			symbol, label,
+			_number(before_minimum), _number(before_maximum),
+			_number(after_minimum), _number(after_maximum), meaning,
+		]
+		result.append({
+			"row_type": "base_damage",
+			"stat_id": StringName("base_damage:%s" % type_id),
+			"damage_type_id": StringName(type_id),
+			"presentation_color": source.get("presentation_color", Color.WHITE),
+			"before_minimum": before_minimum,
+			"before_maximum": before_maximum,
+			"after_minimum": after_minimum,
+			"after_maximum": after_maximum,
+			"delta": delta,
+			"direction": direction,
+			"text": text,
+			"accessible_text": "%s; %s" % [text, meaning],
+		})
+	return result
+
+
+static func _base_damage_by_type(components: Array) -> Dictionary:
+	var result: Dictionary = {}
+	for value: Variant in components:
+		if not value is Dictionary:
+			continue
+		var component := value as Dictionary
+		var type_id := String(component.get("damage_type_id", ""))
+		if not type_id.is_empty():
+			result[type_id] = component.duplicate(true)
 	return result
 
 

@@ -15,6 +15,7 @@ func run() -> Array[String]:
 	_test_empty_and_self_slots_are_skipped(resolver, failures)
 	_test_projected_rows_replace_raw_fallback(resolver, failures)
 	_test_raw_fallback_operation_matrix_is_neutral_and_accessible(resolver, failures)
+	_test_present_only_base_damage_types_have_colored_direction(resolver, failures)
 	_test_results_are_defensive(resolver, failures)
 	return failures
 
@@ -150,10 +151,30 @@ func _test_results_are_defensive(resolver: Script, failures: Array[String]) -> v
 	TestAssertions.equal(records["old-ring"]["name"], "old-ring", "candidate item is a defensive copy", failures)
 
 
-func _detail(instance_id: String, compatible_slots: Array[String], totals: Dictionary) -> Dictionary:
+func _test_present_only_base_damage_types_have_colored_direction(resolver: Script, failures: Array[String]) -> void:
+	var inspected := _detail("new-wand", ["main_hand"], {}, [
+		{"damage_type_id": "fire", "display_name": "Fire", "minimum_damage": 12.0, "maximum_damage": 24.0},
+	])
+	var equipped := _detail("old-wand", ["main_hand"], {}, [
+		{"damage_type_id": "physical", "display_name": "Physical", "minimum_damage": 9.0, "maximum_damage": 15.0},
+	])
+	var leader: Array[Dictionary] = [{"slot_id": "main_hand", "instance_id": "old-wand"}]
+	var candidates: Array = resolver.call("resolve", inspected, leader, {"old-wand": equipped})
+	var rows: Array = candidates[0]["delta_lines"] if not candidates.is_empty() else []
+	var damage_rows := rows.filter(func(row: Dictionary) -> bool: return String(row.get("row_type", "")) == "base_damage")
+	TestAssertions.equal(damage_rows.size(), 2, "types present on only one side each produce a base-range comparison", failures)
+	if damage_rows.size() == 2:
+		TestAssertions.equal([damage_rows[0].get("stat_id"), damage_rows[1].get("stat_id")], [&"base_damage:fire", &"base_damage:physical"], "present-only comparison types use deterministic type order", failures)
+		TestAssertions.equal(damage_rows[0].get("direction"), 1, "candidate-only damage type is improved for green rendering", failures)
+		TestAssertions.equal(damage_rows[1].get("direction"), -1, "equipped-only damage type is reduced for red rendering", failures)
+		TestAssertions.truthy(String(damage_rows[0].get("text", "")).contains("0-0 -> 12-24") and String(damage_rows[1].get("text", "")).contains("9-15 -> 0-0"), "present-only rows preserve before and after typed ranges", failures)
+
+
+func _detail(instance_id: String, compatible_slots: Array[String], totals: Dictionary, base_damage: Array[Dictionary] = []) -> Dictionary:
 	return {
 		"instance_id": instance_id,
 		"name": instance_id,
 		"compatible_slot_ids": compatible_slots,
 		"modifier_totals": totals,
+		"base_damage_components": base_damage.duplicate(true),
 	}

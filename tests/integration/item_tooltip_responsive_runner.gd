@@ -83,6 +83,12 @@ func _exercise_size(viewport: SubViewport, host: Control, viewport_size: Vector2
 		var first_card := panel.get_node("Layout/BodyScroll/Cards").get_child(0) as Control
 		var rendered := String(first_card.call("rendered_text"))
 		_assert(not rendered.contains("inspected-instance-id"), "Player Mode hides technical identifiers at %s" % context)
+		_assert(not rendered.contains("responsive_hybrid_profile"), "Player Mode hides the base profile technical id at %s" % context)
+		_assert(rendered.contains("Fire Damage: 10.96-21.91") and rendered.contains("Physical Damage: 32.02-42.7"), "hybrid base ranges remain visible at %s" % context)
+		var base_box := first_card.get_node_or_null("Layout/BaseDamage") as VBoxContainer
+		_assert(base_box != null and base_box.get_child_count() == 2, "hybrid base components remain separate at %s" % context)
+		if String(case["context"]).ends_with("mode=advanced") or String(case["context"]).ends_with("mode=combined"):
+			_assert(rendered.contains("Rarity Multiplier: 1.18") and rendered.contains("Fire Quality: 92.84%"), "advanced base evidence remains visible at %s" % context)
 		_assert(rendered.contains("Disabled — requirements not met"), "disabled status remains visible at %s" % context)
 		_assert(rendered.contains("Requires Strength 15 (has 10)") and rendered.contains("Requires Dexterity 12 (has 8)"), "all disabled requirements remain visible at %s" % context)
 		panel.free()
@@ -163,6 +169,13 @@ func _detail(name: String, disabled: bool = false) -> Dictionary:
 		"requirement_lines": PackedStringArray(["Requires Dexterity 12"]),
 		"equip_warning_lines": PackedStringArray(),
 		"core_value_lines": PackedStringArray(["12 Armour"]),
+		"base_damage_components": [
+			{"damage_type_id": "fire", "display_name": "Fire", "presentation_color": GameCatalog.DAMAGE_TYPES.definition(&"fire").presentation_color, "minimum_damage": 10.96, "maximum_damage": 21.91},
+			{"damage_type_id": "physical", "display_name": "Physical", "presentation_color": GameCatalog.DAMAGE_TYPES.definition(&"physical").presentation_color, "minimum_damage": 32.02, "maximum_damage": 42.70},
+		],
+		"base_damage_lines": PackedStringArray(["Fire Damage: 10.96-21.91", "Physical Damage: 32.02-42.7"]),
+		"base_damage_advanced_lines": PackedStringArray(["Rarity Multiplier: 1.18", "Fire Quality: 92.84% | Bounds: 10-20 | Exact: 10.96-21.91", "Physical Quality: 90.46% | Bounds: 30-40 | Exact: 32.02-42.7"]),
+		"base_damage_profile_id": "responsive_hybrid_profile",
 		"is_disabled": disabled,
 		"disabled_requirement_lines": PackedStringArray(["Requires Strength 15 (has 10)", "Requires Dexterity 12 (has 8)"]) if disabled else PackedStringArray(),
 		"affixes": affixes,

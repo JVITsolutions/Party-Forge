@@ -5,6 +5,7 @@ const PROFILE_ID := "profile-storage-projection"
 func run() -> Array[String]:
 	var failures: Array[String] = []
 	_test_owned_action_consumer_parity(failures)
+	_test_weapon_aware_estimate_and_comparison(failures)
 	_test_support_range_comparison(failures)
 	_test_healing_profile_preview_apply_parity(failures)
 	_test_disabled_cascade_projection(failures)
@@ -172,6 +173,58 @@ func _test_support_range_comparison(failures: Array[String]) -> void:
 	TestAssertions.truthy(rows.any(func(row_data: Dictionary) -> bool:
 		return String(row_data.get("stat_id", "")) == "action:cleric_heal:range" and is_equal_approx(float(row_data.get("delta", 0.0)), cleric.support_action.range * 0.10)
 	), "support-only range change produces a healing action comparison row", failures)
+
+
+func _test_weapon_aware_estimate_and_comparison(failures: Array[String]) -> void:
+	var fighter := GameCatalog.load_defaults().class_by_id(&"fighter")
+	var sword := _item("weapon-current-sword", &"forge_vanguard_sword", 10)
+	sword.base_damage_components = [ItemBaseDamageComponent.create(&"physical", 10.0, 20.0)]
+	var hammer := _item_with_affix("weapon-candidate-hammer", &"forge_vanguard_hammer", 11, _alacrity(0.06))
+	hammer.base_damage_components = [
+		ItemBaseDamageComponent.create(&"physical", 20.0, 40.0),
+		ItemBaseDamageComponent.create(&"fire", 4.0, 8.0),
+	]
+	var profile := ProfileState.new_profile("weapon-aware-comparison", "Weapon Aware Comparison", 1000)
+	profile.item_records = ItemRegistry.new([sword, hammer] as Array[ItemInstance]).to_dictionary()
+	profile.leader_loadout = ItemSlotContainer.create(
+		&"leader-loadout", ItemSlotContainer.PROFILE_LEADER_EQUIPMENT, profile.profile_id,
+		EquipmentSlotIndex.capacity(), {EquipmentSlotIndex.index_for(&"main_hand"): sword.instance_id},
+	).to_dictionary()
+	profile.leader_loadout_class_id = "fighter"
+	profile.stash_tabs = [ItemSlotContainer.create(
+		&"stash-tab-weapon-aware", ItemSlotContainer.PROFILE_STASH_TAB, profile.profile_id, 100, {0: hammer.instance_id},
+	).to_dictionary()]
+	var projection := ProfileStorageProjection.from_profile(
+		profile, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG,
+		GameCatalog.STAT_CATALOG, fighter,
+	)
+	TestAssertions.truthy(projection.valid, "weapon-aware profile projects error=%s" % projection.error, failures)
+	if not projection.valid:
+		return
+	var activation := projection.get("_current_activation") as EquipmentActivationResult
+	var weapon := activation.weapon_snapshot() if activation != null else null
+	TestAssertions.truthy(weapon != null and weapon.item_id == sword.instance_id, "profile projection retains the current active weapon snapshot", failures)
+	var current := _estimate_by_id(projection, fighter.primary_attack.id)
+	TestAssertions.truthy(current != null and current.available, "profile projection produces the owned weapon action estimate", failures)
+	if current != null:
+		TestAssertions.near(current.normal_hit, 15.0, 0.0001, "profile estimate uses immutable weapon midpoint instead of authored fallback damage", failures)
+	var rows: Array = projection.comparison_lines_by_slot(hammer.instance_id).get("main_hand", [])
+	for required_id: StringName in [
+		&"base_damage:fire",
+		&"base_damage:physical",
+		&"action:fighter_cleave:normal_hit",
+		&"action:fighter_cleave:critical_hit",
+		&"action:fighter_cleave:average_hit",
+		&"action:fighter_cleave:attacks_per_second",
+		&"action:fighter_cleave:estimated_dps",
+	]:
+		var row := _comparison_row(rows, required_id)
+		TestAssertions.truthy(not row.is_empty(), "weapon comparison includes %s from the shared estimate path" % required_id, failures)
+		if not row.is_empty():
+			TestAssertions.equal(int(row.get("direction", 0)), 1, "%s is marked improved for green rendering" % required_id, failures)
+	var normal_row := _comparison_row(rows, &"action:fighter_cleave:normal_hit")
+	if not normal_row.is_empty():
+		TestAssertions.near(float(normal_row.get("delta", 0.0)), 21.0, 0.0001, "normal-hit delta combines the candidate hybrid weapon components through the shared estimator", failures)
 
 
 func _test_healing_profile_preview_apply_parity(failures: Array[String]) -> void:
@@ -392,6 +445,19 @@ func _wise(value: float) -> ItemAffixInstance:
 	result.definition_id = &"wise"
 	result.affix_kind = "prefix"
 	result.tier = 2
+	result.rolls = [roll]
+	return result
+
+
+func _alacrity(value: float) -> ItemAffixInstance:
+	var roll := ItemModifierRoll.new()
+	roll.stat_id = &"attack_speed"
+	roll.operation = StatModifier.Operation.INCREASED
+	roll.value = value
+	var result := ItemAffixInstance.new()
+	result.definition_id = &"of_alacrity"
+	result.affix_kind = "suffix"
+	result.tier = 1
 	result.rolls = [roll]
 	return result
 

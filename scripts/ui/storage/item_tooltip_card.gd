@@ -12,6 +12,7 @@ var _role_label: Label
 var _title_label: Label
 var _rarity_label: Label
 var _classification_label: Label
+var _base_damage_box: VBoxContainer
 var _requirements_label: Label
 var _disabled_label: Label
 var _core_values_label: Label
@@ -19,6 +20,7 @@ var _implicit_label: Label
 var _explicit_label: Label
 var _special_label: Label
 var _warning_label: Label
+var _base_damage_advanced_label: Label
 var _delta_box: VBoxContainer
 var _technical_toggle: Button
 var _technical_details: VBoxContainer
@@ -48,6 +50,12 @@ func present(
 	_rarity_label.add_theme_color_override("font_color", rarity_color)
 	add_theme_stylebox_override("panel", _panel_style(rarity_color))
 	_set_label(_classification_label, _classification_lines())
+	_set_base_damage()
+	_set_label(_core_values_label, _string_lines(_detail.get("core_value_lines", [])))
+	var modifiers := _modifier_lines()
+	_set_label(_implicit_label, modifiers["implicit"])
+	_set_label(_explicit_label, modifiers["explicit"])
+	_set_label(_special_label, modifiers["special"])
 	_set_label(_requirements_label, _string_lines(_detail.get("requirement_lines", [])))
 	var disabled_lines := PackedStringArray()
 	if bool(_detail.get("is_disabled", false)):
@@ -55,13 +63,9 @@ func present(
 		disabled_lines.append_array(_string_lines(_detail.get("disabled_requirement_lines", [])))
 	_set_label(_disabled_label, disabled_lines)
 	_disabled_label.add_theme_color_override("font_color", Color(1.0, 0.42, 0.26))
-	_set_label(_core_values_label, _string_lines(_detail.get("core_value_lines", [])))
-	var modifiers := _modifier_lines()
-	_set_label(_implicit_label, modifiers["implicit"])
-	_set_label(_explicit_label, modifiers["explicit"])
-	_set_label(_special_label, modifiers["special"])
 	_set_label(_warning_label, _string_lines(_detail.get("equip_warning_lines", [])))
 	_warning_label.add_theme_color_override("font_color", Color(1.0, 0.42, 0.34))
+	_set_label(_base_damage_advanced_label, _string_lines(_detail.get("base_damage_advanced_lines", [])) if _advanced else PackedStringArray())
 	_set_delta_lines(delta_lines)
 	_technical_toggle.visible = _developer_mode
 	_technical_toggle.button_pressed = false
@@ -108,13 +112,18 @@ func _ensure_built() -> void:
 	_title_label = _add_label("Title", 22)
 	_rarity_label = _add_label("Rarity", 15)
 	_classification_label = _add_label("Classification", 14)
-	_requirements_label = _add_label("Requirements", 14)
-	_disabled_label = _add_label("DisabledStatus", 15)
+	_base_damage_box = VBoxContainer.new()
+	_base_damage_box.name = "BaseDamage"
+	_base_damage_box.add_theme_constant_override("separation", 2)
+	_layout.add_child(_base_damage_box)
 	_core_values_label = _add_label("CoreValues", 15)
 	_implicit_label = _add_label("ImplicitModifiers", 14)
 	_explicit_label = _add_label("ExplicitModifiers", 14)
 	_special_label = _add_label("SpecialModifiers", 14)
+	_requirements_label = _add_label("Requirements", 14)
+	_disabled_label = _add_label("DisabledStatus", 15)
 	_warning_label = _add_label("EligibilityWarning", 14)
+	_base_damage_advanced_label = _add_label("BaseDamageAdvanced", 13)
 	_delta_box = VBoxContainer.new()
 	_delta_box.name = "ComparisonDeltas"
 	_delta_box.add_theme_constant_override("separation", 3)
@@ -198,6 +207,27 @@ func _modifier_lines() -> Dictionary:
 	return result
 
 
+func _set_base_damage() -> void:
+	for child: Node in _base_damage_box.get_children():
+		child.free()
+	var lines := _string_lines(_detail.get("base_damage_lines", []))
+	var components: Variant = _detail.get("base_damage_components", [])
+	_base_damage_box.visible = not lines.is_empty()
+	for index: int in lines.size():
+		var component := (components as Array)[index] as Dictionary if components is Array and index < (components as Array).size() and (components as Array)[index] is Dictionary else {}
+		var label := Label.new()
+		label.name = "Component_%s" % String(component.get("damage_type_id", index))
+		label.text = "%s%s" % ["Base Damage\n" if index == 0 else "", lines[index]]
+		label.accessibility_name = "Base damage, %s" % lines[index]
+		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		label.add_theme_font_size_override("font_size", 15)
+		var color: Variant = component.get("presentation_color")
+		if color is Color:
+			label.add_theme_color_override("font_color", color as Color)
+		_base_damage_box.add_child(label)
+
+
 func _advanced_suffix(affix: Dictionary, roll: Dictionary) -> String:
 	var parts := PackedStringArray()
 	var display_name := String(affix.get("display_name", "")).strip_edges()
@@ -246,6 +276,7 @@ func _build_technical_details() -> void:
 	_add_technical_line("Base ID", _detail.get("base_definition_id", ""))
 	_add_technical_line("Container", _detail.get("container_id", ""))
 	_add_technical_line("Slot", _detail.get("slot", ""))
+	_add_technical_line("Base Damage Profile", _detail.get("base_damage_profile_id", ""))
 
 
 func _add_technical_line(field_name: String, field_value: Variant) -> void:

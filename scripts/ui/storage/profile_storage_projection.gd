@@ -105,7 +105,7 @@ static func from_profile(
 	var projected_item_records: Dictionary = {}
 	for instance_id: String in registry.ids():
 		var detail: Dictionary = PRESENTATION_PROJECTOR.project(
-			registry.item(instance_id), equipment, foundation, stats, class_definition
+			registry.item(instance_id), equipment, foundation, stats, class_definition, damage_types
 		)
 		if detail.is_empty():
 			result.error = "%s field=item_records instance=%s reason=presentation data is unavailable" % [ERROR_PREFIX, instance_id]
@@ -212,6 +212,7 @@ func comparison_lines_by_slot(instance_id: String) -> Dictionary:
 			instance_id,
 			_item_labels(),
 			_disabled_lines_by_item(candidate_state, candidate_activation),
+			_damage_types,
 		)
 	_comparison_cache_by_item[instance_id] = result.duplicate(true)
 	return result.duplicate(true)
@@ -259,12 +260,13 @@ func _resolve_stats(activation: EquipmentActivationResult, action_tags: Array[St
 
 func _action_estimates(activation: EquipmentActivationResult) -> Array:
 	var result: Array = []
+	var weapon := activation.weapon_snapshot() if activation != null else null
 	for attack: AttackDefinition in _class_definition.owned_actions():
 		if attack == null:
 			continue
-		var action_resolution := _resolve_stats(activation, DamageResolver.action_tags_for(attack))
+		var action_resolution := _resolve_stats(activation, DamageResolver.action_tags_for(attack, weapon))
 		if action_resolution.ok():
-			result.append(ActionCombatEstimateService.estimate_from_snapshot(attack, action_resolution.final_stats, _damage_types))
+			result.append(ActionCombatEstimateService.estimate_from_snapshot(attack, action_resolution.final_stats, _damage_types, weapon))
 	return result
 
 func _location_for(instance_id: String) -> Dictionary:

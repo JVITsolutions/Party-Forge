@@ -248,7 +248,17 @@ func _test_projected_comparison_fixture(sandbox: Variant, stash_grid: GridContai
 	TestAssertions.truthy(source != null, "sandbox fixture offers an inspected item with projected equipped-stat rows", failures)
 	if source == null or tooltip == null:
 		return
+	var typed_detail := source.detail()
+	typed_detail["base_damage_components"] = [{
+		"damage_type_id": "lightning", "display_name": "Lightning",
+		"presentation_color": GameCatalog.DAMAGE_TYPES.definition(&"lightning").presentation_color,
+		"minimum_damage": 5.0, "maximum_damage": 11.0,
+	}]
+	typed_detail["base_damage_lines"] = PackedStringArray(["Lightning Damage: 5-11"])
+	source.bind_item(source.container_id, source.slot, source.item_id, typed_detail)
 	sandbox.call(&"_show_item_tooltip", source)
+	var inspected_text := String(tooltip.get_node("Layout/BodyScroll/Cards").get_child(0).call("rendered_text"))
+	TestAssertions.truthy(inspected_text.contains("Lightning Damage: 5-11"), "sandbox passes shared typed base-range lines into its tooltip unchanged", failures)
 	tooltip.call("set_compare_active", true)
 	TestAssertions.truthy(int(tooltip.call("card_count")) > 1, "sandbox compare mode renders an equipped comparison card", failures)
 	var rendered_delta := false

@@ -8,8 +8,9 @@ static func project(
 	foundation: ItemFoundationCatalog,
 	stats: StatCatalog,
 	class_definition: ClassDefinition = null,
+	damage_types: DamageTypeCatalog = GameCatalog.DAMAGE_TYPES,
 ) -> Dictionary:
-	if item == null or equipment == null or foundation == null or stats == null:
+	if item == null or equipment == null or foundation == null or stats == null or damage_types == null:
 		return {}
 	var base := equipment.definition(item.base_definition_id)
 	var rarity := foundation.rarity(item.rarity_id)
@@ -29,6 +30,13 @@ static func project(
 			affixes.append({})
 			continue
 		affixes.append(_project_affix(instance, foundation, stats, totals))
+	var base_damage := _project_base_damage(item, damage_types)
+	if base_damage.has("error"):
+		return {
+			"error": "PARTY_FORGE_ITEM_PRESENTATION_ERROR item=%s base=%s %s" % [
+				item.instance_id, base.id, String(base_damage["error"]),
+			],
+		}
 	return {
 		"instance_id": item.instance_id,
 		"base_definition_id": String(item.base_definition_id),
@@ -49,10 +57,102 @@ static func project(
 		"is_disabled": false,
 		"disabled_requirement_lines": PackedStringArray(),
 		"core_value_lines": PackedStringArray(),
+		"base_damage_components": base_damage["components"],
+		"base_damage_lines": base_damage["lines"],
+		"base_damage_advanced_lines": base_damage["advanced_lines"],
+		"base_damage_profile_id": base_damage["profile_id"],
 		"affixes": affixes,
 		"modifier_totals": totals,
 		"item": item.to_dictionary(),
 	}
+
+
+static func _project_base_damage(item: ItemInstance, damage_types: DamageTypeCatalog) -> Dictionary:
+	var components: Array[Dictionary] = []
+	var seen_types: Dictionary = {}
+	for component: ItemBaseDamageComponent in item.base_damage_components:
+		if component == null:
+			return {"error": "base_damage component=<null> reason=component is missing"}
+		var validation := component.validate(damage_types)
+		if not validation.is_empty():
+			return {"error": "base_damage type=%s %s" % [component.damage_type_id, validation]}
+		if seen_types.has(component.damage_type_id):
+			return {"error": "base_damage type=%s reason=duplicate damage type" % component.damage_type_id}
+		seen_types[component.damage_type_id] = true
+		var definition := damage_types.definition(component.damage_type_id)
+		components.append({
+			"damage_type_id": String(component.damage_type_id),
+			"display_name": definition.display_name,
+			"presentation_color": definition.presentation_color,
+			"minimum_damage": component.minimum_damage,
+			"maximum_damage": component.maximum_damage,
+		})
+	components.sort_custom(func(left: Dictionary, right: Dictionary) -> bool:
+		return String(left["damage_type_id"]) < String(right["damage_type_id"])
+	)
+	var lines := _base_damage_lines(components)
+	var advanced := _base_damage_advanced(item, components)
+	return {
+		"components": components,
+		"lines": lines,
+		"advanced_lines": advanced["lines"],
+		"profile_id": advanced["profile_id"],
+	}
+
+
+static func _base_damage_lines(components: Array[Dictionary]) -> PackedStringArray:
+	var lines := PackedStringArray()
+	for component: Dictionary in components:
+		lines.append("%s Damage: %s-%s" % [
+			String(component["display_name"]),
+			_number(float(component["minimum_damage"])),
+			_number(float(component["maximum_damage"])),
+		])
+	return lines
+
+
+static func _base_damage_advanced(item: ItemInstance, components: Array[Dictionary]) -> Dictionary:
+	var lines := PackedStringArray()
+	if components.is_empty():
+		return {"lines": lines, "profile_id": ""}
+	var source := _dictionary(item.origin.get("source", {}))
+	var generation := _dictionary(source.get("generation", {}))
+	var provenance := _dictionary(generation.get("base_damage", {}))
+	var profile_id := String(provenance.get("profile_id", ""))
+	var rarity_multiplier: Variant = provenance.get("rarity_multiplier")
+	if rarity_multiplier is float or rarity_multiplier is int:
+		lines.append("Rarity Multiplier: %s" % _number(float(rarity_multiplier)))
+	var evidence_by_type: Dictionary = {}
+	var evidence_values: Variant = provenance.get("components", [])
+	if evidence_values is Array:
+		for value: Variant in evidence_values as Array:
+			if value is Dictionary:
+				var evidence := value as Dictionary
+				var type_id := String(evidence.get("damage_type_id", ""))
+				if not type_id.is_empty():
+					evidence_by_type[type_id] = evidence
+	for component: Dictionary in components:
+		var type_id := String(component["damage_type_id"])
+		var evidence := evidence_by_type.get(type_id, {}) as Dictionary
+		if evidence.is_empty():
+			continue
+		var quality: Variant = evidence.get("quality")
+		var bounds := _dictionary(evidence.get("bounds", {}))
+		if not (quality is float or quality is int) or not bounds.has("minimum") or not bounds.has("maximum"):
+			continue
+		lines.append("%s Quality: %s%% | Bounds: %s-%s | Exact: %s-%s" % [
+			String(component["display_name"]),
+			_number(float(quality) * 100.0),
+			_number(float(bounds["minimum"])),
+			_number(float(bounds["maximum"])),
+			_number(float(component["minimum_damage"])),
+			_number(float(component["maximum_damage"])),
+		])
+	return {"lines": lines, "profile_id": profile_id}
+
+
+static func _dictionary(value: Variant) -> Dictionary:
+	return value as Dictionary if value is Dictionary else {}
 
 
 static func operation_name(operation: int) -> String:

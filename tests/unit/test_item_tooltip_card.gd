@@ -10,6 +10,7 @@ func run() -> Array[String]:
 		return failures
 	var card_script: Script = load(CARD_PATH)
 	_test_normal_and_advanced_layers(card_script, failures)
+	_test_schema_one_empty_damage_has_no_heading(card_script, failures)
 	_test_equipped_role_and_deltas(card_script, failures)
 	_test_disabled_status_and_accessible_deltas(card_script, failures)
 	_test_raw_fallback_rows_use_neutral_color(card_script, failures)
@@ -26,6 +27,13 @@ func _test_normal_and_advanced_layers(card_script: Script, failures: Array[Strin
 	TestAssertions.truthy(normal_text.contains("Rare") and normal_text.contains("Item Level 31"), "normal card shows rarity and item level", failures)
 	TestAssertions.truthy(normal_text.contains("Requires Dexterity 12"), "normal card shows requirements", failures)
 	TestAssertions.truthy(normal_text.contains("18% increased Fire Damage"), "normal card shows player-readable effect", failures)
+	TestAssertions.truthy(normal_text.contains("Fire Damage: 10.96-21.91") and normal_text.contains("Physical Damage: 32.02-42.7"), "normal card shows each typed base range", failures)
+	var base_index := normal_text.find("Fire Damage: 10.96-21.91")
+	var implicit_index := normal_text.find("+2 Armour")
+	var explicit_index := normal_text.find("18% increased Fire Damage")
+	var requirement_index := normal_text.find("Requires Dexterity 12")
+	var warning_index := normal_text.find("Ranger requires Dexterity 12 (has 10)")
+	TestAssertions.truthy(base_index >= 0 and base_index < implicit_index and implicit_index < explicit_index and explicit_index < requirement_index and requirement_index < warning_index, "normal tooltip order is typed base, implicit, explicit, requirements, warning", failures)
 	TestAssertions.truthy(normal_text.contains("Ranger requires Dexterity 12 (has 10)"), "normal card shows equip warning", failures)
 	TestAssertions.truthy(not normal_text.contains("of Embers"), "normal card hides affix identity", failures)
 	TestAssertions.truthy(not normal_text.contains("Suffix"), "normal card hides affix kind", failures)
@@ -39,7 +47,28 @@ func _test_normal_and_advanced_layers(card_script: Script, failures: Array[Strin
 	TestAssertions.truthy(advanced_text.contains("Suffix") and advanced_text.contains("Tier 3"), "advanced card shows classification", failures)
 	TestAssertions.truthy(advanced_text.contains("Range: 15-20%"), "advanced card shows percentage roll range", failures)
 	TestAssertions.truthy(advanced_text.contains("Roll quality: 60%"), "advanced card shows roll position", failures)
+	TestAssertions.truthy(advanced_text.contains("Rarity Multiplier: 1.18") and advanced_text.contains("Fire Quality: 92.84%") and advanced_text.contains("Bounds: 10-20") and advanced_text.contains("Exact: 10.96-21.91"), "advanced card explains exact base damage quality and bounds", failures)
+	TestAssertions.truthy(not advanced_text.contains("hybrid_profile"), "Player Mode advanced view omits the technical base profile id", failures)
 	TestAssertions.truthy(bool(card.call("advanced_visible")), "advanced query matches rendered layer", failures)
+	var base_box := card.get_node_or_null("Layout/BaseDamage") as VBoxContainer
+	TestAssertions.truthy(base_box != null and base_box.get_child_count() == 2, "hybrid tooltip renders separate typed base rows", failures)
+	if base_box != null and base_box.get_child_count() == 2:
+		TestAssertions.equal((base_box.get_child(0) as Label).get_theme_color("font_color"), GameCatalog.DAMAGE_TYPES.definition(&"fire").presentation_color, "fire base range uses canonical damage color", failures)
+		TestAssertions.equal((base_box.get_child(1) as Label).get_theme_color("font_color"), GameCatalog.DAMAGE_TYPES.definition(&"physical").presentation_color, "physical base range uses canonical damage color", failures)
+	card.free()
+
+
+func _test_schema_one_empty_damage_has_no_heading(card_script: Script, failures: Array[String]) -> void:
+	var card: Control = card_script.new()
+	var detail := _detail()
+	detail["base_damage_components"] = [] as Array[Dictionary]
+	detail["base_damage_lines"] = PackedStringArray()
+	detail["base_damage_advanced_lines"] = PackedStringArray()
+	detail["base_damage_profile_id"] = ""
+	card.call("present", detail, &"inspected", false, [] as Array[Dictionary], false)
+	var base_box := card.get_node_or_null("Layout/BaseDamage") as Control
+	TestAssertions.truthy(base_box != null and not base_box.visible, "schema-1 empty components hide the entire base damage section", failures)
+	TestAssertions.truthy(not String(card.call("rendered_text")).contains("Base Damage"), "schema-1 empty components render no blank base damage heading", failures)
 	card.free()
 
 func _test_raw_fallback_rows_use_neutral_color(card_script: Script, failures: Array[String]) -> void:
@@ -130,6 +159,7 @@ func _test_developer_technical_gate(card_script: Script, failures: Array[String]
 	var technical_text := String(card.call("rendered_text"))
 	TestAssertions.truthy(technical_text.contains("item-instance-1"), "developer details show instance id", failures)
 	TestAssertions.truthy(technical_text.contains("windrunner_band"), "developer details show base id", failures)
+	TestAssertions.truthy(technical_text.contains("Base Damage Profile: hybrid_profile"), "developer technical details show the base profile id", failures)
 	card.free()
 
 
@@ -147,7 +177,20 @@ func _detail() -> Dictionary:
 		"requirement_lines": PackedStringArray(["Requires Dexterity 12"]),
 		"equip_warning_lines": PackedStringArray(["Ranger requires Dexterity 12 (has 10)"]),
 		"core_value_lines": PackedStringArray(),
+		"base_damage_components": [
+			{"damage_type_id": "fire", "display_name": "Fire", "presentation_color": GameCatalog.DAMAGE_TYPES.definition(&"fire").presentation_color, "minimum_damage": 10.96, "maximum_damage": 21.91},
+			{"damage_type_id": "physical", "display_name": "Physical", "presentation_color": GameCatalog.DAMAGE_TYPES.definition(&"physical").presentation_color, "minimum_damage": 32.02, "maximum_damage": 42.70},
+		],
+		"base_damage_lines": PackedStringArray(["Fire Damage: 10.96-21.91", "Physical Damage: 32.02-42.7"]),
+		"base_damage_advanced_lines": PackedStringArray(["Rarity Multiplier: 1.18", "Fire Quality: 92.84% | Bounds: 10-20 | Exact: 10.96-21.91"]),
+		"base_damage_profile_id": "hybrid_profile",
 		"affixes": [{
+			"definition_id": "tempered-edge",
+			"display_name": "Tempered Edge",
+			"affix_kind": "implicit",
+			"tier": 2,
+			"rolls": [{"effect_text": "+2 Armour"}],
+		}, {
 			"definition_id": "of-embers",
 			"display_name": "of Embers",
 			"affix_kind": "suffix",
