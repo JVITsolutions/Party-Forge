@@ -62,6 +62,8 @@ func run() -> Array[String]:
     _test_resolved_party_stats(failures)
     _test_replace_member_source(failures)
     _test_unbound_effective_source_collision_invariants(failures)
+    _test_foreign_owner_candidate_normalization(failures)
+    _test_foreign_owner_source_reuse_is_member_local(failures)
     _test_atomic_equipment_source_batch_contract(failures)
     _test_unbound_complete_candidate_equipment_invariants(failures)
     _test_atomic_batch_rejects_corrupted_equipment_prestate(failures)
@@ -128,6 +130,80 @@ func _test_unbound_effective_source_collision_invariants(failures: Array[String]
     TestAssertions.truthy(legitimate.replace_member_source(1, _growth_source(1, &"task10p_custom", 2.0)), "legitimate unbound custom source replace succeeds", failures)
     TestAssertions.truthy(legitimate.add_member_source(1, _equipment_source(1, 2.0)), "legitimate unbound canonical equipment source succeeds", failures)
     legitimate.free()
+
+func _test_foreign_owner_candidate_normalization(failures: Array[String]) -> void:
+    var catalog := GameCatalog.load_defaults()
+    for test_case: Dictionary in [
+        {"label": "add", "method": &"add_member_source", "seed": false},
+        {"label": "replace", "method": &"replace_member_source", "seed": true},
+    ]:
+        var party := PartyManager.new()
+        party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
+        var source_id := StringName("task10q_owner77_overflow_%s" % test_case["label"])
+        if bool(test_case["seed"]):
+            TestAssertions.truthy(
+                party.add_member_source(1, _growth_source(1, source_id, 1.0)),
+                "%s overflow fixture installs replace target" % test_case["label"],
+                failures,
+            )
+        var actor_scene := load("res://scenes/characters/leader.tscn") as PackedScene
+        var actor := actor_scene.instantiate() as PartyActor
+        actor.configure(party.member_by_id(1))
+        actor.configure_combat(party)
+        var health := actor.get_node("HealthComponent") as HealthComponent
+        var health_before := Vector2(health.current_health, health.max_health)
+        var sources_before := _member_source_documents(party.member_by_id(1))
+        var base_before := party.stats_for(1)
+        var action_tags: Array[StringName] = [&"melee", &"physical"]
+        var action_before := party.stats_for_action(1, action_tags)
+        var revision_before := party.stat_revision()
+        var events: Array[int] = []
+        party.stats_changed.connect(func(member_id: int) -> void: events.append(member_id))
+        var candidate := _aggregate_overflow_source(77, source_id)
+        var candidate_before := _modifier_source_document(candidate)
+
+        TestAssertions.truthy(
+            not bool(party.call(test_case["method"], 1, candidate)),
+            "%s normalizes owner 77 before rejecting aggregate overflow" % test_case["label"],
+            failures,
+        )
+        TestAssertions.equal(_modifier_source_document(candidate), candidate_before, "%s preserves exact caller source bytes" % test_case["label"], failures)
+        TestAssertions.equal(candidate.owner_member_id, 77, "%s preserves caller owner" % test_case["label"], failures)
+        TestAssertions.equal(_member_source_documents(party.member_by_id(1)), sources_before, "%s preserves owned source documents" % test_case["label"], failures)
+        TestAssertions.equal(party.stat_revision(), revision_before, "%s preserves stat revision" % test_case["label"], failures)
+        TestAssertions.truthy(is_same(party.stats_for(1), base_before), "%s preserves base cache identity" % test_case["label"], failures)
+        TestAssertions.truthy(is_same(party.stats_for_action(1, action_tags), action_before), "%s preserves action cache identity" % test_case["label"], failures)
+        TestAssertions.equal(events, [], "%s emits no stat signal" % test_case["label"], failures)
+        TestAssertions.equal(Vector2(health.current_health, health.max_health), health_before, "%s preserves actor health" % test_case["label"], failures)
+        actor.free()
+        party.free()
+
+func _test_foreign_owner_source_reuse_is_member_local(failures: Array[String]) -> void:
+    var catalog := GameCatalog.load_defaults()
+    var party := PartyManager.new()
+    party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
+    TestAssertions.truthy(party.recruit(catalog.class_by_id(&"ranger")), "owner-77 reuse fixture recruits member two", failures)
+    var shared := _growth_source(77, &"task10q_shared_owner77", 2.0)
+    var shared_before := _modifier_source_document(shared)
+    TestAssertions.truthy(party.add_member_source(1, shared), "finite owner-77 source applies to member one", failures)
+    TestAssertions.truthy(party.add_member_source(2, shared), "same finite owner-77 source applies to member two", failures)
+    var member_one_source := party.member_by_id(1)._owned_modifier_sources().filter(
+        func(source: StatModifierSource) -> bool: return source.id == shared.id
+    )[0] as StatModifierSource
+    var member_two_source := party.member_by_id(2)._owned_modifier_sources().filter(
+        func(source: StatModifierSource) -> bool: return source.id == shared.id
+    )[0] as StatModifierSource
+    TestAssertions.equal(member_one_source.owner_member_id, 1, "member one receives normalized ownership", failures)
+    TestAssertions.equal(member_two_source.owner_member_id, 2, "member two receives normalized ownership", failures)
+    TestAssertions.truthy(not is_same(member_one_source, shared), "member one stores a defensive source copy", failures)
+    TestAssertions.truthy(not is_same(member_two_source, shared), "member two stores a defensive source copy", failures)
+    TestAssertions.truthy(not is_same(member_one_source, member_two_source), "members own independent source copies", failures)
+    TestAssertions.truthy(not is_same(member_one_source.modifiers[0], shared.modifiers[0]), "member one stores a defensive modifier copy", failures)
+    TestAssertions.truthy(not is_same(member_two_source.modifiers[0], shared.modifiers[0]), "member two stores a defensive modifier copy", failures)
+    TestAssertions.truthy(not is_same(member_one_source.modifiers[0], member_two_source.modifiers[0]), "members own independent modifier copies", failures)
+    TestAssertions.equal(_modifier_source_document(shared), shared_before, "source reuse preserves exact caller bytes", failures)
+    TestAssertions.equal(shared.owner_member_id, 77, "source reuse preserves caller owner", failures)
+    party.free()
 
 func _test_unbound_complete_candidate_equipment_invariants(failures: Array[String]) -> void:
     var catalog := GameCatalog.load_defaults()
@@ -567,6 +643,17 @@ func _growth_source(member_id: int, source_id: StringName, strength: float) -> S
     return StatModifierSource.create(source_id, &"character_growth", "Growth", member_id, [
         StatModifier.create(&"strength", StatModifier.Operation.FLAT, strength, source_id, "Growth"),
     ])
+
+func _aggregate_overflow_source(member_id: int, source_id: StringName) -> StatModifierSource:
+    return StatModifierSource.create(source_id, &"character_growth", "Overflow", member_id, [
+        StatModifier.create(&"damage", StatModifier.Operation.INCREASED, 1.0e308, StringName("%s_a" % source_id), "Overflow A"),
+        StatModifier.create(&"damage", StatModifier.Operation.INCREASED, 1.0e308, StringName("%s_b" % source_id), "Overflow B"),
+    ])
+
+func _modifier_source_document(source: StatModifierSource) -> String:
+    var member := PartyMemberState.new(999, ClassDefinition.new(), false)
+    member._owned_modifier_sources().append(source)
+    return _member_source_documents(member)
 
 func _member_source_documents(member: PartyMemberState) -> String:
     var documents: Array[Dictionary] = []

@@ -6,6 +6,7 @@ const UpgradeRows := preload("res://tools/character_upgrade_content_rows.gd")
 const CharacterUpgradeData := preload("res://tools/create_character_upgrade_data.gd")
 const DefaultData := preload("res://tools/create_default_data.gd")
 const ExpansionRows := preload("res://tools/class_expansion_rows.gd")
+const ExpansionMigration := preload("res://tools/migrate_class_expansion_data.gd")
 
 const CANONICAL_STAT_COUNT := 37
 const CANONICAL_KEYWORD_COUNT := 81
@@ -19,41 +20,46 @@ const CASTER_ATTACK_IDS: Array[StringName] = [
 func run() -> Array[String]:
 	var failures: Array[String] = []
 	_test_attack_authoring_parity(failures)
-	_test_warlock_caster_metadata_parity(failures)
+	_test_expansion_class_capability_parity(failures)
 	_test_stat_catalog_generator_parity(failures)
 	_test_keyword_catalog_generator_parity(failures)
 	return failures
 
-func _test_warlock_caster_metadata_parity(failures: Array[String]) -> void:
-	var warlock_row: Dictionary = {}
+func _test_expansion_class_capability_parity(failures: Array[String]) -> void:
+	TestAssertions.equal(ExpansionRows.CLASS_ROWS.size(), 5, "expansion generator exposes exactly five class rows", failures)
+	var row_matcher := Callable(ExpansionMigration, &"class_matches_row")
+	TestAssertions.truthy(row_matcher.is_valid(), "class expansion generator exposes a deterministic no-op matcher", failures)
 	for row: Dictionary in ExpansionRows.CLASS_ROWS:
-		if row.get("id", &"") == &"warlock":
-			warlock_row = row
-			break
-	TestAssertions.truthy(not warlock_row.is_empty(), "Warlock generator row exists", failures)
-	var generator_tags: Array[StringName] = []
-	generator_tags.assign(warlock_row.get("tags", []))
-	var canonical := load("res://data/classes/warlock.tres") as ClassDefinition
-	TestAssertions.truthy(canonical != null, "canonical Warlock class loads", failures)
-	if canonical == null or warlock_row.is_empty():
-		return
-	TestAssertions.equal(generator_tags, canonical.capability_tags, "Warlock generator capabilities exactly equal canonical equipment compatibility", failures)
-	TestAssertions.truthy(&"caster" in canonical.traits and &"ranged" not in canonical.capability_tags, "canonical Warlock metadata is caster-only", failures)
-	var equipment_cases: Array[Dictionary] = [
-		{"path": "res://data/equipment/bases/grave_covenant/grave_covenant_robe.tres", "slot": &"body_armour", "label": "light armour"},
-		{"path": "res://data/equipment/bases/grave_covenant/grave_covenant_bone_wand.tres", "slot": &"main_hand", "label": "occult wand"},
-		{"path": "res://data/equipment/bases/grave_covenant/grave_covenant_grimoire.tres", "slot": &"off_hand", "label": "occult grimoire"},
-	]
-	for test_case: Dictionary in equipment_cases:
-		var equipment := load(test_case["path"]) as EquipmentBaseDefinition
-		TestAssertions.truthy(equipment != null, "Warlock %s equipment loads" % test_case["label"], failures)
-		if equipment != null:
+		var class_id := StringName(row.get("id", &""))
+		var relative_path := String(row.get("path", "")).trim_prefix("res://")
+		var canonical := load(_canonical_path(relative_path)) as ClassDefinition
+		var persisted := load(String(row.get("path", ""))) as ClassDefinition
+		TestAssertions.truthy(canonical != null, "canonical %s class loads" % class_id, failures)
+		TestAssertions.truthy(persisted != null, "persisted %s class loads" % class_id, failures)
+		if canonical == null or persisted == null:
+			continue
+		var generator_tags: Array[StringName] = []
+		generator_tags.assign(row.get("tags", []))
+		TestAssertions.equal(generator_tags, canonical.capability_tags, "%s generator capabilities exactly equal canonical capabilities" % class_id, failures)
+		TestAssertions.equal(persisted.capability_tags, canonical.capability_tags, "%s persisted capabilities exactly equal canonical capabilities" % class_id, failures)
+		if row_matcher.is_valid():
+			TestAssertions.truthy(bool(row_matcher.call(canonical, row, canonical.primary_attack)), "%s canonical class is a byte-preserving generator no-op" % class_id, failures)
+			var stale_projection := canonical.duplicate(true) as ClassDefinition
+			stale_projection.capability_tags = canonical.capability_tags.slice(0, maxi(0, canonical.capability_tags.size() - 1))
+			TestAssertions.truthy(not bool(row_matcher.call(stale_projection, row, stale_projection.primary_attack)), "%s stale capabilities require generator save" % class_id, failures)
+		var generated_projection := canonical.duplicate(true) as ClassDefinition
+		generated_projection.capability_tags.assign(generator_tags)
+		var loadout: Dictionary = {}
+		for entry: EquipmentLoadoutEntry in generated_projection.visual_profile.default_equipment:
+			if entry == null or entry.item == null:
+				continue
 			TestAssertions.equal(
-				EquipmentEligibility.validate_structure(equipment, canonical, test_case["slot"]),
+				EquipmentEligibility.validate_structure(entry.item, generated_projection, entry.slot_id, loadout),
 				PackedStringArray(),
-				"Warlock canonical capabilities permit %s" % test_case["label"],
+				"%s generated capabilities permit real starter item %s" % [class_id, entry.item.id],
 				failures,
 			)
+			loadout[entry.slot_id] = entry.item
 
 func _test_attack_authoring_parity(failures: Array[String]) -> void:
 	_assert_attack_table(TypedCombatMigration.ROWS, "typed combat migration", failures)

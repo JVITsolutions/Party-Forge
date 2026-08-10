@@ -26,9 +26,7 @@ func _init(id_value: int, definition: ClassDefinition, leader: bool, generated_n
             capability_tags.append(trait_id)
 
 func _add_modifier_source(source: StatModifierSource) -> void:
-    var owned := _copy_source(source)
-    owned.owner_member_id = member_id
-    _modifier_sources.append(owned)
+    _modifier_sources.append(_normalized_modifier_source_copy(source))
 
 func upgrade_rank(upgrade_id: StringName) -> int:
     return int(_upgrade_ranks.get(upgrade_id, 0))
@@ -37,8 +35,7 @@ func _set_upgrade_rank(upgrade_id: StringName, rank: int) -> void:
     _upgrade_ranks[upgrade_id] = rank
 
 func _replace_modifier_source(source: StatModifierSource) -> void:
-    var owned := _copy_source(source)
-    owned.owner_member_id = member_id
+    var owned := _normalized_modifier_source_copy(source)
     for index: int in _modifier_sources.size():
         if _modifier_sources[index].id == owned.id:
             _modifier_sources[index] = owned
@@ -47,6 +44,12 @@ func _replace_modifier_source(source: StatModifierSource) -> void:
 
 func _owned_modifier_sources() -> Array[StatModifierSource]:
     return _modifier_sources
+
+func _normalized_modifier_source_copy(source: StatModifierSource) -> StatModifierSource:
+    var owned := _copy_source(source)
+    if owned != null:
+        owned.owner_member_id = member_id
+    return owned
 
 func _copy_sources(sources: Array[StatModifierSource]) -> Array[StatModifierSource]:
     var copies: Array[StatModifierSource] = []

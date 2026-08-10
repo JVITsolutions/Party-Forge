@@ -49,6 +49,8 @@ func _initialize() -> void:
 
 	for row: Dictionary in ExpansionRows.CLASS_ROWS:
 		var definition := load(row["path"]) as ClassDefinition if ResourceLoader.exists(row["path"]) else ClassDefinition.new()
+		var primary_attack := saved_attacks[row["attack"]] as AttackDefinition
+		var already_canonical := class_matches_row(definition, row, primary_attack)
 		definition.id = row["id"]
 		definition.display_name = row["name"]
 		definition.role = row["role"]
@@ -65,9 +67,10 @@ func _initialize() -> void:
 		definition.preferred_distance = row["preferred"]
 		definition.engagement_distance = row["engagement"]
 		definition.tether_distance = row["tether"]
-		definition.primary_attack = saved_attacks[row["attack"]]
+		definition.primary_attack = primary_attack
 		definition.support_action = null
-		_save_checked(definition, row["path"])
+		if not already_canonical:
+			_save_checked(definition, row["path"])
 	if _failures > 0:
 		_finish()
 		return
@@ -79,6 +82,35 @@ func _initialize() -> void:
 			continue
 		_validate_checked(definition.validate(types), row["path"])
 	_finish()
+
+static func class_matches_row(definition: ClassDefinition, row: Dictionary, primary_attack: AttackDefinition) -> bool:
+	if definition == null or primary_attack == null:
+		return false
+	var row_traits: Array[StringName] = []
+	row_traits.assign(row.get("traits", []))
+	var row_tags: Array[StringName] = []
+	row_tags.assign(row.get("tags", []))
+	return (
+		definition.id == StringName(row.get("id", &""))
+		and definition.display_name == String(row.get("name", ""))
+		and definition.role == int(row.get("role", -1))
+		and definition.color == row.get("color", Color.WHITE)
+		and definition.traits == row_traits
+		and definition.capability_tags == row_tags
+		and definition.base_stat_overrides == row.get("overrides", {})
+		and definition.max_health == float(row.get("health", 0.0))
+		and definition.armor == float(row.get("armor", 0.0))
+		and definition.move_speed == float(row.get("speed", 0.0))
+		and definition.class_rank_power_step == 0.2
+		and definition.revive_delay == 8.0
+		and definition.revive_health_fraction == 0.5
+		and definition.preferred_distance == float(row.get("preferred", 0.0))
+		and definition.engagement_distance == float(row.get("engagement", 0.0))
+		and definition.tether_distance == float(row.get("tether", 0.0))
+		and definition.primary_attack != null
+		and definition.primary_attack.resource_path == primary_attack.resource_path
+		and definition.support_action == null
+	)
 
 func _save_checked(resource: Resource, path: String) -> void:
 	var error := ResourceSaver.save(resource, path)

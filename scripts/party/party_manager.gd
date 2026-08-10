@@ -365,12 +365,15 @@ func _validate_candidate_member_sources(
             return false
     if equipment_count > 1:
         return false
+    var normalized_candidate_sources: Array[StatModifierSource] = []
+    for source: StatModifierSource in candidate_sources:
+        normalized_candidate_sources.append(member._normalized_modifier_source_copy(source))
     var resolution := MemberStatResolutionService.resolve(
         member_id,
         STAT_CATALOG,
         member.class_definition.stat_base_values(),
         member.capability_tags,
-        _sources_for_owned(member, candidate_sources),
+        _sources_for_owned(member, normalized_candidate_sources),
         [],
         _stat_revision,
         DEFAULT_ATTRIBUTE_PROJECTION,
