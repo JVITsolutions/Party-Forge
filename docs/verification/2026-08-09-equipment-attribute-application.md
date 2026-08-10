@@ -2,6 +2,32 @@
 
 Verified 2026-08-09 in the isolated linked worktree on branch **feat/equipment-attribute-application**.
 
+## Task 10P effective-source collision and exact Warlock parity
+
+Task 10P verified exact functional head **399a5de64f7fc8d37f9c001637c6ddc54561ab9d** after closing the two remaining Important findings from the `00d145d..429fc07` re-review. The source validator now builds candidate effective sources through the same seam as runtime and calls the existing two-pass member resolver before mutation. It therefore rejects collisions with class rank, `party_upgrades`, `active_traits`, live dynamic upgrade sources, and the derived `attribute_projection_<member_id>` without a drifting reserved-ID list. Exact add/replace no-drift regressions preserve documents, revision, cache identity, and signals, while legitimate custom and canonical equipment sources remain supported.
+
+The Warlock generator row now exactly matches canonical ordered capabilities: **chaos, life_steal, projectile, armour_light, occult_wand, occult_grimoire**, with `ranged` absent. Exact row/resource equality and real light-armour, occult-wand, and occult-grimoire eligibility are tested. The canonical `data/classes/warlock.tres` was already correct and did not change in Task 10P; functional `data/` drift is zero.
+
+Strict TDD produced accepted RED exit **1** in **2.035s**, `TEST_SUMMARY: FAIL (30 failures)`, then GREEN exit **0** in **1.968s**, `TEST_SUMMARY: PASS (0 failures)`. The RED covered public add/replace collisions for `class_rank_fighter` and `attribute_projection_1`, live generated party-upgrade collision/no-drift, and the exact three-versus-six Warlock row mismatch. The explicit `party_upgrades` and `active_traits` cases also pass after the shared-seam refactor.
+
+| Gate | Exit / duration | Exact evidence |
+| --- | --- | --- |
+| Isolated import | `0` / **17.063s** | eight known cache-created UID files; structural/shutdown scan clean |
+| Task 10M runner probe | `0` / **1.091s** | `TASK10M_EMPTY_RUNNER_PROBE_SUMMARY: PASS open=1 list=1 zero=1 focused=1` |
+| Widened 25-suite matrix | `0` / **18.272s** | `TEST_SUMMARY: PASS (0 failures)` |
+| Equipment/cache | `0` / **1.602s** | `TASK10J_ACTION_CACHE_SUMMARY: PASS members=24 hits=512 usec=1648`; `EQUIPMENT_ATTRIBUTE_APPLICATION_SUMMARY: PASS members=24 untouched=23 items=2` |
+| Progression | `0` / **15.166s** | `PROGRESSION_24_MEMBER_ISOLATION_PASS members=24 untouched=23`; `PROGRESSION_24_MEMBER_SUMMARY: PASS` |
+| Exact-head complete suite | `0` / **128.1s tool wall time** | exactly one `TEST_SUMMARY: PASS (166 suites)` |
+| Exact-head startup | `0` / **14.383s** | boot and class-selection readiness markers once each |
+
+The 106,424-byte exact-head complete log had zero FAIL summary, `TEST_FAILURE`, raw `SCRIPT ERROR`, parser/loader failure, ObjectDB/resource/RID/PagedAllocator/orphan leak, fatal, crash, or access-violation marker. Progression retains its five established parent/child shutdown-notice sets; the complete gate and startup were clean.
+
+Fresh tracked-only cold import of 2,387 current files exited `0` in **46.877s**. Class-expansion generation exited expected `1` in **1.603s** with exactly **28** remaining non-Warlock starter-loadout diagnostics and zero Warlock diagnostic. The regenerated Warlock retained all six exact canonical tags, and cold exact parity plus real equipment eligibility exited `0` in **0.545s** with `TEST_SUMMARY: PASS (0 failures)`.
+
+Cleanup removed 17 initial exact Task 10P targets (4,345 files / 85,751,757 logical bytes), then the exact-head roots, all below `.superpowers\sdd` with zero tracked descendants and zero reparse points. Only eight exact hash-allowlisted generated sidecars were removed. Scratch residue and worktree-targeting Godot process counts were zero. The protected manifest returned to **127 files / 2,503 bytes / SHA-256 0a392c6cde37052bb7a87455d77ef9a6cf12a4bb5198e43aa9715952b3c23cd3**. `git diff --check` passed; main remained read-only at **39deef45c0b8fd338da74af16e31d67a0f2dcc63** with the same two pre-existing overlays, and no integration occurred.
+
+The 28 non-Warlock generator diagnostics, physical-controller review, visible GPU/pixel review, and documented progression subprocess notices remain explicit limitations.
+
 ## Task 10O final whole-branch review remediation
 
 Task 10O verified exact functional head **69bec9790a94264ca431731a2c02f61604c6c8c9** after remediating all four findings from the mandatory `00d145d..2efe005` review. The complete approved-design range is now **00d145d7b461dde8d2cf4b01b36d57fb5ee73852..69bec9790a94264ca431731a2c02f61604c6c8c9**, 45 commits after the range start. The authoritative main checkout remained read-only at **39deef45c0b8fd338da74af16e31d67a0f2dcc63**, with its two known tracked overlays unchanged; no integration occurred.
