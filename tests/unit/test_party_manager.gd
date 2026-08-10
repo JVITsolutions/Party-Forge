@@ -62,6 +62,12 @@ func run() -> Array[String]:
     extended_party.free()
 
     _test_resolved_party_stats(failures)
+    _test_caster_party_upgrade_rejects_future_mage_atomically(failures)
+    _test_composition_trait_overflow_rejects_recruit_atomically(failures)
+    _test_later_existing_member_failure_rejects_recruit_atomically(failures)
+    _test_finite_party_upgrade_reaches_future_recruit(failures)
+    _test_trait_tier_recruit_signal_order_and_single_invalidation(failures)
+    _test_recruit_input_rejections_preserve_state(failures)
     _test_replace_member_source(failures)
     _test_unbound_effective_source_collision_invariants(failures)
     _test_foreign_owner_candidate_normalization(failures)
@@ -854,6 +860,246 @@ func _test_resolved_party_stats(failures: Array[String]) -> void:
     TestAssertions.equal(party.members[0].member_id, leader_id, "recruitment preserves leader identity", failures)
     TestAssertions.equal(party.stats_for(leader_id).value(&"max_health"), 273.0, "recruitment preserves leader snapshot value", failures)
     party.free()
+
+func _test_caster_party_upgrade_rejects_future_mage_atomically(failures: Array[String]) -> void:
+    var catalog := GameCatalog.load_defaults()
+    var definition := _task10t_party_upgrade(&"task10t_caster_overflow", [
+        _task10t_effect(&"damage", StatModifier.Operation.INCREASED, 1.0e308, [&"caster"]),
+        _task10t_effect(&"damage", StatModifier.Operation.INCREASED, 1.0e308, [&"caster"]),
+    ])
+    catalog.upgrades.append(definition)
+    var party := PartyManager.new()
+    party.configure_identity(8181, catalog.generic_name_pool)
+    party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
+    TestAssertions.truthy(UpgradeApplicationService.apply(definition.id, catalog, party), "caster-only overflow upgrade is safe for current Fighter", failures)
+    _assert_recruit_rejected_atomically(party, catalog.class_by_id(&"mage"), "future canonical Mage caster overflow", failures)
+    party.free()
+
+func _test_composition_trait_overflow_rejects_recruit_atomically(failures: Array[String]) -> void:
+    var catalog := GameCatalog.load_defaults()
+    var trait_definition := _task10t_trait(&"task10t_direct_overflow", 1.7e308)
+    var class_definition := _task10t_trait_class(catalog, &"task10t_direct_class", trait_definition.id)
+    class_definition.base_stat_overrides[&"attack_speed"] = 2.0
+    var traits: Array[TraitDefinition] = [trait_definition]
+    var party := PartyManager.new()
+    party.initialize(class_definition, traits)
+    _assert_recruit_rejected_atomically(party, class_definition, "composition-triggered trait overflow", failures)
+    party.free()
+
+func _test_later_existing_member_failure_rejects_recruit_atomically(failures: Array[String]) -> void:
+    var catalog := GameCatalog.load_defaults()
+    var trait_definition := _task10t_trait(&"task10t_later_overflow", 1.0e109)
+    var special := _task10t_trait_class(catalog, &"task10t_later_class", trait_definition.id)
+    var traits: Array[TraitDefinition] = [trait_definition]
+    var party := PartyManager.new()
+    party.initialize(catalog.class_by_id(&"fighter"), traits)
+    TestAssertions.truthy(party.recruit(special), "later-member fixture installs first trait member", failures)
+    var source_id := &"task10t_later_growth"
+    TestAssertions.truthy(party.add_member_source(2, StatModifierSource.create(source_id, &"character_growth", "Later Growth", 2, [
+        StatModifier.create(&"attack_speed", StatModifier.Operation.MORE, 1.0e100, &"task10t_later_growth_a", "Later Growth A"),
+        StatModifier.create(&"attack_speed", StatModifier.Operation.MORE, 1.0e100, &"task10t_later_growth_b", "Later Growth B"),
+    ])), "later existing member holds an individually finite source", failures)
+    _assert_recruit_rejected_atomically(party, special, "later existing-member prospective failure", failures)
+    party.free()
+
+func _test_finite_party_upgrade_reaches_future_recruit(failures: Array[String]) -> void:
+    var catalog := GameCatalog.load_defaults()
+    var fighter := catalog.class_by_id(&"fighter")
+    var party := PartyManager.new()
+    party.initialize(fighter, catalog.traits)
+    TestAssertions.truthy(UpgradeApplicationService.apply(&"vanguard_wall", catalog, party), "finite Vanguard party upgrade applies before recruitment", failures)
+    var revision_before := party.stat_revision()
+    var leader_cache := party.stats_for(1)
+    TestAssertions.truthy(party.recruit(fighter), "future Vanguard recruit passes prospective validation", failures)
+    TestAssertions.equal(party.stat_revision(), revision_before + 1, "future-upgrade recruit advances one revision", failures)
+    TestAssertions.truthy(not is_same(party.stats_for(1), leader_cache), "future-upgrade recruit invalidates the existing cache once", failures)
+    TestAssertions.near(party.stats_for(2).value(&"armor"), fighter.armor + 3.0, 0.001, "future recruit inherits finite flat party effect", failures)
+    TestAssertions.near(party.stats_for(2).value(&"max_health"), fighter.max_health * 1.10, 0.001, "future recruit inherits finite increased party effect", failures)
+    party.free()
+
+func _test_trait_tier_recruit_signal_order_and_single_invalidation(failures: Array[String]) -> void:
+    var catalog := GameCatalog.load_defaults()
+    var fighter := catalog.class_by_id(&"fighter")
+    var party := PartyManager.new()
+    party.initialize(fighter, catalog.traits)
+    var revision_before := party.stat_revision()
+    var events: Array[String] = []
+    party.stats_changed.connect(func(member_id: int) -> void: events.append("stats:%d" % member_id))
+    party.active_traits_changed.connect(func(_tiers: Dictionary) -> void: events.append("traits"))
+    party.member_added.connect(func(member: PartyMemberState) -> void: events.append("member:%d" % member.member_id))
+    TestAssertions.truthy(party.recruit(fighter), "legitimate trait-tier-changing recruit succeeds", failures)
+    TestAssertions.equal(party.stat_revision(), revision_before + 1, "trait-tier recruit performs one shared invalidation", failures)
+    TestAssertions.equal(events, ["stats:1", "stats:2", "traits", "member:2"], "trait-tier recruit preserves exact signal ordering", failures)
+    TestAssertions.equal(party.active_tier(&"martial"), 2, "trait-tier recruit publishes Martial tier two", failures)
+    TestAssertions.equal(party.active_tier(&"vanguard"), 2, "trait-tier recruit publishes Vanguard tier two", failures)
+    party.free()
+
+func _test_recruit_input_rejections_preserve_state(failures: Array[String]) -> void:
+    var catalog := GameCatalog.load_defaults()
+    var invalid_party := PartyManager.new()
+    invalid_party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
+    _assert_recruit_rejected_atomically(invalid_party, null, "null recruit definition", failures)
+    invalid_party.free()
+
+    var capacity_party := PartyManager.new()
+    capacity_party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
+    capacity_party.configure_capacity(PartyCapacityPolicy.new(1))
+    _assert_recruit_rejected_atomically(capacity_party, catalog.class_by_id(&"ranger"), "capacity rejection", failures)
+    capacity_party.free()
+
+func _assert_recruit_rejected_atomically(
+    party: PartyManager,
+    definition: ClassDefinition,
+    label: String,
+    failures: Array[String],
+) -> void:
+    var members_before := _task10t_member_document(party)
+    var class_ranks_before := _task10t_dictionary_document(party.class_ranks)
+    var active_tiers_before := _task10t_dictionary_document(party.active_tiers)
+    var upgrades_before := _task10t_party_upgrade_document(party)
+    var definition_before := _task10t_class_document(definition)
+    var revision_before := party.stat_revision()
+    var capacity_before := party.capacity()
+    var can_recruit_before := party.can_recruit()
+    var base_before: Dictionary = {}
+    var action_before: Dictionary = {}
+    var actors: Dictionary = {}
+    var health_before: Dictionary = {}
+    var member_ids_before: Array[int] = []
+    for member: PartyMemberState in party.members:
+        member_ids_before.append(member.member_id)
+        base_before[member.member_id] = party.stats_for(member.member_id)
+        action_before[member.member_id] = party.stats_for_action(member.member_id, member.class_definition.primary_attack.action_tags)
+        var actor := (load("res://scenes/characters/leader.tscn") as PackedScene).instantiate() as PartyActor
+        actor.configure(member)
+        actor.configure_combat(party)
+        var health := actor.get_node("HealthComponent") as HealthComponent
+        actors[member.member_id] = actor
+        health_before[member.member_id] = Vector2(health.current_health, health.max_health)
+    var events: Array[String] = []
+    party.stats_changed.connect(func(member_id: int) -> void: events.append("stats:%d" % member_id))
+    party.active_traits_changed.connect(func(_tiers: Dictionary) -> void: events.append("traits"))
+    party.member_added.connect(func(member: PartyMemberState) -> void: events.append("member:%d" % member.member_id))
+
+    TestAssertions.truthy(not party.recruit(definition), "%s rejects before publication" % label, failures)
+    TestAssertions.equal(_task10t_member_document(party), members_before, "%s preserves exact members, names, IDs, and sources" % label, failures)
+    TestAssertions.equal(_task10t_dictionary_document(party.class_ranks), class_ranks_before, "%s preserves class ranks" % label, failures)
+    TestAssertions.equal(_task10t_dictionary_document(party.active_tiers), active_tiers_before, "%s preserves active trait tiers" % label, failures)
+    TestAssertions.equal(_task10t_party_upgrade_document(party), upgrades_before, "%s preserves party upgrade state" % label, failures)
+    TestAssertions.equal(_task10t_class_document(definition), definition_before, "%s preserves caller class resource" % label, failures)
+    TestAssertions.equal(party.stat_revision(), revision_before, "%s preserves revision" % label, failures)
+    TestAssertions.equal(party.capacity(), capacity_before, "%s preserves configured capacity" % label, failures)
+    TestAssertions.equal(party.can_recruit(), can_recruit_before, "%s preserves remaining-capacity result" % label, failures)
+    for member_id: int in member_ids_before:
+        var member := party.member_by_id(member_id)
+        TestAssertions.truthy(is_same(party.stats_for(member_id), base_before[member_id]), "%s preserves member %d base cache identity" % [label, member_id], failures)
+        TestAssertions.truthy(is_same(party.stats_for_action(member_id, member.class_definition.primary_attack.action_tags), action_before[member_id]), "%s preserves member %d action cache identity" % [label, member_id], failures)
+        var health := (actors[member_id] as PartyActor).get_node("HealthComponent") as HealthComponent
+        TestAssertions.equal(Vector2(health.current_health, health.max_health), health_before[member_id], "%s preserves member %d actor health" % [label, member_id], failures)
+    TestAssertions.equal(events, [], "%s emits no recruit, trait, or stat signal" % label, failures)
+    for actor_value: Variant in actors.values():
+        (actor_value as PartyActor).free()
+
+func _task10t_party_upgrade(id: StringName, effects: Array[UpgradeEffectDefinition]) -> UpgradeDefinition:
+    var definition := UpgradeDefinition.new()
+    definition.id = id
+    definition.display_name = String(id).capitalize()
+    definition.summary = "Task 10T fixture"
+    definition.description = "Task 10T fixture"
+    definition.scope = UpgradeDefinition.Scope.PARTY
+    definition.max_rank = 1
+    definition.effects = effects
+    return definition
+
+func _task10t_effect(
+    stat_id: StringName,
+    operation: int,
+    value: float,
+    required_capabilities: Array[StringName] = [],
+) -> StatUpgradeEffect:
+    var effect := StatUpgradeEffect.new()
+    effect.stat_id = stat_id
+    effect.operation = operation
+    effect.value_per_rank = value
+    effect.source_label = "Task 10T Fixture"
+    effect.required_capability_tags = required_capabilities
+    return effect
+
+func _task10t_trait(id: StringName, tier_value: float) -> TraitDefinition:
+    var definition := TraitDefinition.new()
+    definition.id = id
+    definition.display_name = String(id).capitalize()
+    definition.stat_id = &"attack_speed"
+    definition.tiers = {2: tier_value}
+    return definition
+
+func _task10t_trait_class(catalog: GameCatalog, id: StringName, trait_id: StringName) -> ClassDefinition:
+    var definition := catalog.class_by_id(&"fighter").duplicate(true) as ClassDefinition
+    definition.id = id
+    definition.display_name = String(id).capitalize()
+    definition.traits = [trait_id]
+    definition.base_stat_overrides = definition.base_stat_overrides.duplicate(true)
+    return definition
+
+func _task10t_member_document(party: PartyManager) -> String:
+    var rows: Array[Dictionary] = []
+    for member: PartyMemberState in party.members:
+        rows.append({
+            "member_id": member.member_id,
+            "character_name": member.character_name,
+            "class_id": String(member.class_definition.id),
+            "is_leader": member.is_leader,
+            "capability_tags": member.capability_tags,
+            "upgrade_ranks": _task10t_dictionary_document(member.upgrade_ranks),
+            "sources": _member_source_documents(member),
+        })
+    return JSON.stringify(rows)
+
+func _task10t_dictionary_document(dictionary: Dictionary) -> String:
+    var keys: Array[String] = []
+    for key_value: Variant in dictionary:
+        keys.append(String(key_value))
+    keys.sort()
+    var rows: Array[Dictionary] = []
+    for key: String in keys:
+        rows.append({"key": key, "value": dictionary[StringName(key)]})
+    return JSON.stringify(rows)
+
+func _task10t_party_upgrade_document(party: PartyManager) -> String:
+    var ranks := party.get("_party_upgrade_ranks") as Dictionary
+    var definitions := party.get("_party_upgrade_definitions") as Dictionary
+    var sources := party.get("_party_upgrade_sources") as Dictionary
+    var ids: Array[String] = []
+    for id_value: Variant in ranks:
+        ids.append(String(id_value))
+    ids.sort()
+    var rows: Array[Dictionary] = []
+    for id: String in ids:
+        var definition := definitions[StringName(id)] as UpgradeDefinition
+        rows.append({
+            "id": id,
+            "rank": int(ranks[StringName(id)]),
+            "definition_instance": definition.get_instance_id(),
+            "source": _modifier_source_document(sources[StringName(id)] as StatModifierSource),
+        })
+    return JSON.stringify(rows)
+
+func _task10t_class_document(definition: ClassDefinition) -> String:
+    if definition == null:
+        return "<null>"
+    return JSON.stringify({
+        "id": String(definition.id),
+        "display_name": definition.display_name,
+        "traits": definition.traits,
+        "capability_tags": definition.capability_tags,
+        "base_stat_overrides": definition.base_stat_overrides,
+        "max_health": definition.max_health,
+        "armor": definition.armor,
+        "move_speed": definition.move_speed,
+        "class_rank_power_step": definition.class_rank_power_step,
+        "primary_attack": definition.primary_attack.get_instance_id() if definition.primary_attack != null else 0,
+        "support_action": definition.support_action.get_instance_id() if definition.support_action != null else 0,
+    })
 
 func _test_replace_member_source(failures: Array[String]) -> void:
     var catalog := GameCatalog.load_defaults()

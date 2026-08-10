@@ -66,7 +66,35 @@ func can_recruit(additional_members: int = 1) -> bool:
 func recruit(definition: ClassDefinition) -> bool:
     if definition == null or not can_recruit():
         return false
-    _append_member(definition, false)
+
+    var candidate_member := _build_member(definition, false)
+    var candidate_members: Array[PartyMemberState] = []
+    candidate_members.assign(members)
+    candidate_members.append(candidate_member)
+    var candidate_class_ranks := class_ranks.duplicate()
+    if not candidate_class_ranks.has(definition.id):
+        candidate_class_ranks[definition.id] = 1
+    var candidate_active_tiers := _trait_tiers_for_members(candidate_members)
+
+    for member: PartyMemberState in candidate_members:
+        if not _validate_candidate_member_sources_for_state(
+            member,
+            member._owned_modifier_sources(),
+            _party_upgrade_definitions,
+            _party_upgrade_sources,
+            candidate_class_ranks,
+            candidate_active_tiers,
+        ):
+            return false
+
+    members.append(candidate_member)
+    class_ranks = candidate_class_ranks
+    var traits_changed := candidate_active_tiers != active_tiers
+    active_tiers = candidate_active_tiers
+    _invalidate_all_members()
+    if traits_changed:
+        active_traits_changed.emit(active_tiers.duplicate())
+    member_added.emit(candidate_member)
     return true
 
 func member_by_id(member_id: int) -> PartyMemberState:
@@ -364,32 +392,53 @@ func _validate_candidate_member_sources_for_party_upgrades(
     var member := member_by_id(member_id)
     if member == null:
         return false
+    return _validate_candidate_member_sources_for_state(
+        member,
+        candidate_sources,
+        candidate_party_upgrade_definitions,
+        candidate_party_upgrade_sources,
+        class_ranks,
+        active_tiers,
+    )
+
+func _validate_candidate_member_sources_for_state(
+    member: PartyMemberState,
+    candidate_sources: Array[StatModifierSource],
+    candidate_party_upgrade_definitions: Dictionary,
+    candidate_party_upgrade_sources: Dictionary,
+    candidate_class_ranks: Dictionary,
+    candidate_active_tiers: Dictionary,
+) -> bool:
+    if member == null:
+        return false
     var validation_errors := StatResolver.validate_sources(STAT_CATALOG, candidate_sources)
     if not validation_errors.is_empty():
         for error: String in validation_errors:
             push_error(error)
         return false
     var equipment_count := 0
-    var canonical_equipment_id := StringName("equipment_member_%d" % member_id)
+    var canonical_equipment_id := StringName("equipment_member_%d" % member.member_id)
     for source: StatModifierSource in candidate_sources:
         if source.source_type != &"equipment":
             continue
         equipment_count += 1
-        if source.id != canonical_equipment_id or source.owner_member_id != member_id:
+        if source.id != canonical_equipment_id or source.owner_member_id != member.member_id:
             return false
     if equipment_count > 1:
         return false
     var normalized_candidate_sources: Array[StatModifierSource] = []
     for source: StatModifierSource in candidate_sources:
         normalized_candidate_sources.append(member._normalized_modifier_source_copy(source))
-    var effective_candidate_sources := _sources_for_owned_with_party_upgrades(
+    var effective_candidate_sources := _sources_for_owned_with_state(
         member,
         normalized_candidate_sources,
         candidate_party_upgrade_definitions,
         candidate_party_upgrade_sources,
+        candidate_class_ranks,
+        candidate_active_tiers,
     )
     var resolution := MemberStatResolutionService.resolve(
-        member_id,
+        member.member_id,
         STAT_CATALOG,
         member.class_definition.stat_base_values(),
         member.capability_tags,
@@ -403,7 +452,7 @@ func _validate_candidate_member_sources_for_party_upgrades(
         return false
     var action_error := CANDIDATE_ACTION_VALIDATION.validate(
         member.class_definition,
-        member_id,
+        member.member_id,
         STAT_CATALOG,
         damage_types if damage_types != null else GameCatalog.DAMAGE_TYPES,
         member.class_definition.stat_base_values(),
@@ -559,8 +608,11 @@ func trait_upgrade_rank(trait_id: StringName) -> int:
     return int(trait_upgrade_ranks.get(trait_id, 0))
 
 func effective_trait_value(trait_id: StringName) -> float:
+    return _effective_trait_value_for_tiers(trait_id, active_tiers)
+
+func _effective_trait_value_for_tiers(trait_id: StringName, tiers: Dictionary) -> float:
     var definition := trait_definition(trait_id)
-    var tier := active_tier(trait_id)
+    var tier := int(tiers.get(trait_id, 0))
     if definition == null or tier <= 0:
         return 0.0
     var base_value := float(definition.tiers.get(tier, 0.0))
@@ -622,9 +674,26 @@ func _sources_for_owned_with_party_upgrades(
     party_upgrade_definitions_for_graph: Dictionary,
     party_upgrade_sources_for_graph: Dictionary,
 ) -> Array[StatModifierSource]:
+    return _sources_for_owned_with_state(
+        member,
+        owned_sources,
+        party_upgrade_definitions_for_graph,
+        party_upgrade_sources_for_graph,
+        class_ranks,
+        active_tiers,
+    )
+
+func _sources_for_owned_with_state(
+    member: PartyMemberState,
+    owned_sources: Array[StatModifierSource],
+    party_upgrade_definitions_for_graph: Dictionary,
+    party_upgrade_sources_for_graph: Dictionary,
+    class_ranks_for_graph: Dictionary,
+    active_tiers_for_graph: Dictionary,
+) -> Array[StatModifierSource]:
     var sources: Array[StatModifierSource] = []
     var definition := member.class_definition
-    var rank_bonus := float(maxi(get_class_rank(definition.id), 1) - 1) * definition.class_rank_power_step
+    var rank_bonus := float(maxi(int(class_ranks_for_graph.get(definition.id, 0)), 1) - 1) * definition.class_rank_power_step
     var class_rank_id := StringName("class_rank_%s" % definition.id)
     sources.append(StatModifierSource.create(
         class_rank_id,
@@ -650,7 +719,7 @@ func _sources_for_owned_with_party_upgrades(
     var trait_modifiers: Array[StatModifier] = []
     for trait_id: StringName in definition.traits:
         var trait_data := trait_definition(trait_id)
-        var active_value := effective_trait_value(trait_id)
+        var active_value := _effective_trait_value_for_tiers(trait_id, active_tiers_for_graph)
         if trait_data == null or active_value <= 0.0:
             continue
         var label := trait_data.display_name
@@ -703,6 +772,14 @@ func _normalized_tags(tags: Array[StringName]) -> Array[StringName]:
     return normalized
 
 func _append_member(definition: ClassDefinition, leader: bool) -> void:
+    var member := _build_member(definition, leader)
+    members.append(member)
+    if not class_ranks.has(definition.id): class_ranks[definition.id] = 1
+    if not _recalculate_traits():
+        _invalidate_all_members()
+    member_added.emit(member)
+
+func _build_member(definition: ClassDefinition, leader: bool) -> PartyMemberState:
     var member_id := members.size() + 1
     var used_names := PackedStringArray()
     for existing_member: PartyMemberState in members:
@@ -711,24 +788,26 @@ func _append_member(definition: ClassDefinition, leader: bool) -> void:
     var generated_name := ""
     if definition.name_pool != null or _fallback_names != null:
         generated_name = CharacterNameService.choose_name(definition.name_pool, _fallback_names, _identity_seed, member_id, used_names)
-    var member := PartyMemberState.new(member_id, definition, leader, generated_name)
-    members.append(member)
-    if not class_ranks.has(definition.id): class_ranks[definition.id] = 1
-    if not _recalculate_traits():
-        _invalidate_all_members()
-    member_added.emit(member)
+    return PartyMemberState.new(member_id, definition, leader, generated_name)
 
 func _recalculate_traits() -> bool:
-    var next: Dictionary = {}
-    for definition: TraitDefinition in trait_definitions:
-        var count: int = trait_count(definition.id)
-        var achieved := 0
-        for threshold: Variant in definition.tiers.keys():
-            if count >= int(threshold): achieved = maxi(achieved, int(threshold))
-        if achieved > 0: next[definition.id] = achieved
+    var next := _trait_tiers_for_members(members)
     if next == active_tiers:
         return false
     active_tiers = next
     _invalidate_all_members()
     active_traits_changed.emit(active_tiers.duplicate())
     return true
+
+func _trait_tiers_for_members(candidate_members: Array[PartyMemberState]) -> Dictionary:
+    var next: Dictionary = {}
+    for definition: TraitDefinition in trait_definitions:
+        var count := 0
+        for member: PartyMemberState in candidate_members:
+            if definition.id in member.class_definition.traits:
+                count += 1
+        var achieved := 0
+        for threshold: Variant in definition.tiers.keys():
+            if count >= int(threshold): achieved = maxi(achieved, int(threshold))
+        if achieved > 0: next[definition.id] = achieved
+    return next
