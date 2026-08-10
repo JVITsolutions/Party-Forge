@@ -2,6 +2,30 @@
 
 Verified 2026-08-09 in the isolated linked worktree on branch **feat/equipment-attribute-application**.
 
+## Task 10R complete unbound owned-action validation
+
+Task 10R verified exact functional head **2f00ec14a224ca0da382141f3153386eb3ac128f**. After normalized effective base resolution, every unbound candidate now passes through the existing `CandidateActionValidationService` for all owned actions. Configured damage types are used when present; an unconfigured manager uses `GameCatalog.DAMAGE_TYPES`. No action enumeration, stat resolution, geometry, cadence, or estimate rule was duplicated.
+
+Owner-77 add/replace regressions use the established four-`MORE 1.0e100` action-only cooldown fixture. Both reject without exact owned-document, caller, revision, base/matching-action cache, signal, or actor-health drift. A finite action-tagged source remains supported and changes only its matching owned action.
+
+Strict TDD produced accepted `FAIL (12 failures)` then `PASS (0 failures)`. A 19-suite late RED found two resume-corruption fixtures using the newly closed public seeding path; their existing no-invalidation subclass now creates historical invalid state, and the final matrix passed. The first full run found two synthetic actionless class fixtures; giving them the canonical Fighter action preserved their unrelated test intent.
+
+| Gate | Exit / duration | Exact evidence |
+| --- | --- | --- |
+| Isolated import | `0` / **17.3s** | structural/shutdown clean |
+| Task 10M runner probe | `0` / **1.2s** | `PASS open=1 list=1 zero=1 focused=1` |
+| Final 19-suite matrix | `0` / **14.1s** | `TEST_SUMMARY: PASS (0 failures)` |
+| Equipment/cache | `0` | 24-member cache and equipment summaries PASS |
+| Progression | `0` | 24-member isolation and summary PASS |
+| Exact-head full suite | `0` / **132.0s** | exactly one `TEST_SUMMARY: PASS (166 suites)` |
+| Exact-head startup | `0` / **14.7s** | boot and class-selection markers once each |
+
+The final 111,602-byte full log was clean of failure, script/parser/loader, shutdown-leak, fatal, crash, and access-violation markers. Exact `git diff --exit-code c340d85..2f00ec1 -- tools data tests/unit/test_increment2_generator_parity.gd` was empty, so Task 10Q remains the current fresh cold generator/hash proof.
+
+Eight hash-allowlisted UIDs were removed; the manifest returned to **127 files / 2,503 bytes / SHA-256 0a392c6cde37052bb7a87455d77ef9a6cf12a4bb5198e43aa9715952b3c23cd3**. Cleanup removed 17 exact Task 10R targets / 41 files / 4,047,706 bytes. Scratch/process/data drift was zero, tracked/index state and `git diff --check` were clean, main remained read-only at **39deef45c0b8fd338da74af16e31d67a0f2dcc63**, and nothing was integrated.
+
+Physical-controller acceptance and visible GPU/pixel review remain deferred.
+
 ## Task 10Q exact ownership preview and complete expansion parity
 
 Task 10Q verified exact functional head **40e3cfdb3bc2b73a4beaebfa02f668fe222b86d6**. Candidate effective-resolution graphs now deep-copy and normalize every incoming member source through the same `PartyMemberState` helper used by commit, while structural equipment ownership validation still sees the raw caller owner. Add/replace regressions prove owner-77 aggregate overflow rejects without owned-document, caller, revision, base/action-cache, signal, or actor-health drift; an ordinary owner-77 source still applies to two members as independent deep copies.
