@@ -8,14 +8,15 @@ class RejectingPartyManager extends PartyManager:
 			return false
 		return super.replace_member_source(member_id, source)
 
-	func replace_member_equipment_source_atomically(
+	func replace_member_equipment_projection_atomically(
 		member_id: int,
 		equipment_source: StatModifierSource,
+		weapon: ActiveWeaponDamageSnapshot,
 		authority: RefCounted = null,
 	) -> bool:
 		if reject_growth_source:
 			return false
-		return super.replace_member_equipment_source_atomically(member_id, equipment_source, authority)
+		return true
 
 class SelectiveEquipmentRejectingPartyManager extends PartyManager:
 	var rejected_member_id := 0
@@ -44,8 +45,10 @@ func run() -> Array[String]:
 	_test_future_recruits_initialize_once(failures)
 	_test_actor_binding_availability_and_position(failures)
 	_test_atomic_equipment_commit_and_member_local_cache(failures)
+	_test_weapon_assignment_replace_and_remove_publish_atomically(failures)
 	_test_direct_equipment_source_bypasses_reject_atomically(failures)
 	_test_equipment_authority_rejections_preserve_runtime(failures)
+	_test_forged_weapon_ownership_rejected_atomically(failures)
 	_test_released_and_superseded_context_is_mutation_inactive(failures)
 	_test_reinitialized_party_retires_context_mutation(failures)
 	_test_equipment_source_rejection_rolls_back(failures)
@@ -53,6 +56,7 @@ func run() -> Array[String]:
 	_test_configure_and_resume_reject_corrupted_equipment_sources(failures)
 	_test_resume_rejects_structurally_invalid_loadouts(failures)
 	_test_resume_reconstructs_equipment_activation(failures)
+	_test_resume_reconstructs_active_weapon_snapshot(failures)
 	return failures
 
 func _test_released_and_superseded_context_is_mutation_inactive(failures: Array[String]) -> void:
@@ -313,6 +317,48 @@ func _test_atomic_equipment_commit_and_member_local_cache(failures: Array[String
 	TestAssertions.equal(party.stats_for_action(2, action_tags), member_two_action_before, "unequip still preserves member two action cache identity", failures)
 	party.free()
 
+
+func _test_weapon_assignment_replace_and_remove_publish_atomically(failures: Array[String]) -> void:
+	var fixture := _configured_fixture(PartyManager.new(), 1)
+	var context := fixture.context as PlayerRunContext
+	var party := fixture.party as PartyManager
+	var first := _issue_weapon(context, 0, 0, "task8-first-sword", 5.0, 9.0, failures)
+	var second := _issue_weapon(context, 1, 1, "task8-second-sword", 8.0, 13.0, failures)
+	if first == null or second == null:
+		party.free()
+		return
+	var member_two_cache := party.stats_for(2)
+	var revision_before := party.stat_revision()
+	var events: Array[int] = []
+	party.stats_changed.connect(func(member_id: int) -> void: events.append(member_id))
+	var first_result := context.assign_equipment(1, first.instance_id, &"main_hand", GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)
+	TestAssertions.truthy(first_result.ok(), "first active weapon equips", failures)
+	var first_snapshot: ActiveWeaponDamageSnapshot = party.call(&"active_weapon_snapshot", 1) if party.has_method(&"active_weapon_snapshot") else null
+	TestAssertions.truthy(first_snapshot != null, "first active weapon publishes a party snapshot", failures)
+	if first_snapshot != null:
+		TestAssertions.equal(first_snapshot.item_id, first.instance_id, "first snapshot owns the equipped item", failures)
+		TestAssertions.equal(first_snapshot.revision, revision_before + 1, "first snapshot matches its publication revision", failures)
+		TestAssertions.near(first_snapshot.components[0].minimum_damage, 5.0, 0.0001, "first snapshot owns minimum damage", failures)
+	TestAssertions.equal(events, [1], "first weapon publication emits once", failures)
+	TestAssertions.truthy(is_same(party.stats_for(2), member_two_cache), "first weapon publication preserves another member cache", failures)
+
+	var second_result := context.assign_equipment(1, second.instance_id, &"main_hand", GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)
+	TestAssertions.truthy(second_result.ok(), "replacement active weapon equips", failures)
+	var second_snapshot: ActiveWeaponDamageSnapshot = party.call(&"active_weapon_snapshot", 1) if party.has_method(&"active_weapon_snapshot") else null
+	TestAssertions.truthy(second_snapshot != null, "replacement publishes a weapon snapshot", failures)
+	if second_snapshot != null:
+		TestAssertions.equal(second_snapshot.item_id, second.instance_id, "replacement snapshot owns the new item", failures)
+		TestAssertions.equal(second_snapshot.revision, party.stat_revision(), "replacement snapshot matches live revision", failures)
+		TestAssertions.near(second_snapshot.components[0].maximum_damage, 13.0, 0.0001, "replacement snapshot owns maximum damage", failures)
+	TestAssertions.equal(events, [1, 1], "replacement weapon publication emits once", failures)
+
+	var remove_result := context.assign_equipment(1, second.instance_id, &"", GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)
+	TestAssertions.truthy(remove_result.ok(), "active weapon removes", failures)
+	TestAssertions.equal(party.call(&"active_weapon_snapshot", 1) if party.has_method(&"active_weapon_snapshot") else null, null, "weapon removal clears party snapshot", failures)
+	TestAssertions.equal(events, [1, 1, 1], "weapon removal emits once", failures)
+	TestAssertions.truthy(is_same(party.stats_for(2), member_two_cache), "weapon lifecycle preserves another member cache identity", failures)
+	party.free()
+
 func _test_direct_equipment_source_bypasses_reject_atomically(failures: Array[String]) -> void:
 	_assert_direct_equipment_source_rejection(&"add_member_source", true, failures)
 	_assert_direct_equipment_source_rejection(&"replace_member_source", false, failures)
@@ -414,6 +460,13 @@ func _test_equipment_authority_rejections_preserve_runtime(failures: Array[Strin
 	var fixture := _configured_fixture(PartyManager.new(), 1)
 	var context := fixture.context as PlayerRunContext
 	var party := fixture.party as PartyManager
+	if (
+		not party.has_method(&"replace_member_equipment_projection_atomically")
+		or not party.has_method(&"replace_member_equipment_projections_atomically")
+	):
+		TestAssertions.truthy(false, "party manager exposes authority-gated equipment projection publication", failures)
+		party.free()
+		return
 	var item := _issue_stout_helmet(context, 0, 0, failures)
 	if item == null:
 		party.free()
@@ -433,19 +486,19 @@ func _test_equipment_authority_rejections_preserve_runtime(failures: Array[Strin
 	var cases: Array[Dictionary] = [
 		{
 			"label": "missing batch authority",
-			"accepted": int(party.call(&"replace_member_equipment_sources_atomically", {1: candidate})) == 0,
+			"accepted": int(party.call(&"replace_member_equipment_projections_atomically", {1: {"source": candidate, "weapon": null}})) == 0,
 		},
 		{
 			"label": "wrong batch authority",
-			"accepted": int(party.call(&"replace_member_equipment_sources_atomically", {1: candidate}, RefCounted.new())) == 0,
+			"accepted": int(party.call(&"replace_member_equipment_projections_atomically", {1: {"source": candidate, "weapon": null}}, RefCounted.new())) == 0,
 		},
 		{
 			"label": "missing member authority",
-			"accepted": bool(party.call(&"replace_member_equipment_source_atomically", 1, candidate)),
+			"accepted": bool(party.call(&"replace_member_equipment_projection_atomically", 1, candidate, null)),
 		},
 		{
 			"label": "wrong member authority",
-			"accepted": bool(party.call(&"replace_member_equipment_source_atomically", 1, candidate, RefCounted.new())),
+			"accepted": bool(party.call(&"replace_member_equipment_projection_atomically", 1, candidate, null, RefCounted.new())),
 		},
 	]
 	for test_case: Dictionary in cases:
@@ -468,18 +521,74 @@ func _test_equipment_authority_rejections_preserve_runtime(failures: Array[Strin
 	var replacement_candidate := replacement.equipment_activation(1).source
 	var replacement_before := _runtime_integrity_snapshot(replacement, party, health, item, action_tags)
 	TestAssertions.truthy(
-		int(party.call(&"replace_member_equipment_sources_atomically", {1: replacement_candidate}, stale_authority)) != 0,
+		int(party.call(&"replace_member_equipment_projections_atomically", {1: {"source": replacement_candidate, "weapon": null}}, stale_authority)) != 0,
 		"stale batch authority cannot mutate replacement binding",
 		failures,
 	)
 	_assert_runtime_integrity_snapshot(replacement_before, replacement, party, health, item, action_tags, events, "stale batch authority", failures)
 	TestAssertions.truthy(
-		not bool(party.call(&"replace_member_equipment_source_atomically", 1, replacement_candidate, stale_authority)),
+		not bool(party.call(&"replace_member_equipment_projection_atomically", 1, replacement_candidate, null, stale_authority)),
 		"stale member authority cannot mutate replacement binding",
 		failures,
 	)
 	_assert_runtime_integrity_snapshot(replacement_before, replacement, party, health, item, action_tags, events, "stale member authority", failures)
 	replacement.release_source_refresh_coordinator()
+	actor.free()
+	party.free()
+
+func _test_forged_weapon_ownership_rejected_atomically(failures: Array[String]) -> void:
+	var fixture := _configured_fixture(PartyManager.new(), 1)
+	var context := fixture.context as PlayerRunContext
+	var party := fixture.party as PartyManager
+	var item := _issue_stout_helmet(context, 0, 0, failures)
+	if item == null:
+		party.free()
+		return
+	var actor := Node3D.new()
+	var health := HealthComponent.new()
+	health.name = "HealthComponent"
+	health.configure(149.0, true, 8.0, 0.5)
+	health.apply_damage(23.0)
+	actor.add_child(health)
+	TestAssertions.truthy(context.bind_actor(1, actor), "forged ownership fixture attaches a runtime actor", failures)
+	var current := context.equipment_activation(1)
+	var forged_weapon := ActiveWeaponDamageSnapshot.create(
+		1,
+		"forged-not-owned",
+		&"forge_vanguard_sword",
+		[ItemBaseDamageComponent.create(&"physical", 3.0, 7.0)],
+		party.stat_revision() + 1,
+	)
+	var forged_activation := EquipmentActivationResult.success(
+		current.active_item_ids,
+		{},
+		current.raw_attributes,
+		current.source,
+		forged_weapon,
+	)
+	var action_tags: Array[StringName] = [&"melee", &"physical"]
+	var events: Array[int] = []
+	party.stats_changed.connect(func(member_id: int) -> void: events.append(member_id))
+	var before := _runtime_integrity_snapshot(context, party, health, item, action_tags)
+	TestAssertions.truthy(
+		bool(context.call(&"_stage_equipment_publication", context.item_state(), {1: forged_activation})),
+		"adversarial fixture stages a structurally valid forged projection",
+		failures,
+	)
+	var authority: Variant = context.get("_source_refresh_authority")
+	TestAssertions.truthy(
+		not bool(party.call(
+			&"replace_member_equipment_projection_atomically",
+			1,
+			current.source,
+			forged_weapon,
+			authority,
+		)),
+		"weapon projection rejects an item/base identity absent from staged ownership",
+		failures,
+	)
+	_assert_runtime_integrity_snapshot(before, context, party, health, item, action_tags, events, "forged weapon ownership", failures)
+	context.call(&"_clear_pending_equipment_publication")
 	actor.free()
 	party.free()
 
@@ -493,6 +602,7 @@ func _runtime_integrity_snapshot(
 	return {
 		"sources": _source_documents(party.member_by_id(1)),
 		"activation": _activation_document(context.equipment_activation(1), [item.instance_id]),
+		"weapon": _weapon_document(party.call(&"active_weapon_snapshot", 1)) if party.has_method(&"active_weapon_snapshot") else "missing",
 		"item_state": JSON.stringify(context.item_state().to_dictionary()),
 		"item": JSON.stringify(item.to_dictionary()),
 		"revision": party.stat_revision(),
@@ -515,6 +625,7 @@ func _assert_runtime_integrity_snapshot(
 ) -> void:
 	TestAssertions.equal(_source_documents(party.member_by_id(1)), before["sources"], "%s preserves canonical sources" % label, failures)
 	TestAssertions.equal(_activation_document(context.equipment_activation(1), [item.instance_id]), before["activation"], "%s preserves equipment activation" % label, failures)
+	TestAssertions.equal(_weapon_document(party.call(&"active_weapon_snapshot", 1)) if party.has_method(&"active_weapon_snapshot") else "missing", before["weapon"], "%s preserves active weapon snapshot" % label, failures)
 	TestAssertions.equal(JSON.stringify(context.item_state().to_dictionary()), before["item_state"], "%s preserves item ownership containers" % label, failures)
 	TestAssertions.equal(JSON.stringify(item.to_dictionary()), before["item"], "%s preserves immutable item bytes" % label, failures)
 	TestAssertions.equal(party.stat_revision(), before["revision"], "%s preserves stat revision" % label, failures)
@@ -729,6 +840,39 @@ func _test_resume_reconstructs_equipment_activation(failures: Array[String]) -> 
 	TestAssertions.equal(JSON.stringify(item.to_dictionary()), item_before, "resume reconstruction leaves immutable item record unchanged", failures)
 	party.free()
 
+
+func _test_resume_reconstructs_active_weapon_snapshot(failures: Array[String]) -> void:
+	var catalog := GameCatalog.load_defaults()
+	var party := PartyManager.new()
+	party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
+	var item := _weapon_record("item-resume-weapon", "profile:profile-resume-weapon", 0, 11.0, 18.0)
+	var item_before := JSON.stringify(item.to_dictionary())
+	var owner_id := "resume_weapon_player"
+	var state := ItemOwnershipState.create(owner_id, ItemRegistry.new([item]), [
+		ItemSlotContainer.create(&"run-inventory", ItemSlotContainer.RUN_INVENTORY, owner_id, 5),
+		ItemSlotContainer.create(&"run-equipment-001", ItemSlotContainer.RUN_MEMBER_EQUIPMENT, owner_id, EquipmentSlotIndex.capacity(), {
+			EquipmentSlotIndex.index_for(&"main_hand"): item.instance_id,
+		}),
+	])
+	var bootstrap := RunItemBootstrap.create(&"run-resume-task8-weapon", 7801, &"resume_weapon_player", 1, state)
+	var profile := ProfileState.new_profile("profile-resume-weapon", "Resume Task 8 Weapon", 1000)
+	profile.inventory_columns = 1
+	profile.resumable_run = ResumableRunItemCodec.encode(bootstrap)
+	var revision_before := party.stat_revision()
+	var context := PlayerRunContext.new()
+	var errors := context.configure(&"resume_weapon_player", 0, profile, 7801, party, 100, bootstrap)
+	TestAssertions.equal(errors, PackedStringArray(), "resume reconstructs active weapon state", failures)
+	if errors.is_empty() and party.has_method(&"active_weapon_snapshot"):
+		var weapon: ActiveWeaponDamageSnapshot = party.call(&"active_weapon_snapshot", 1)
+		TestAssertions.truthy(weapon != null, "resume publishes active weapon snapshot", failures)
+		if weapon != null:
+			TestAssertions.equal(weapon.item_id, item.instance_id, "resume weapon retains item identity", failures)
+			TestAssertions.equal(weapon.base_id, item.base_definition_id, "resume weapon retains base identity", failures)
+			TestAssertions.equal(weapon.revision, revision_before + 1, "resume weapon matches batch publication revision", failures)
+			TestAssertions.near(weapon.components[0].maximum_damage, 18.0, 0.0001, "resume weapon retains issued range", failures)
+	TestAssertions.equal(JSON.stringify(item.to_dictionary()), item_before, "resume weapon reconstruction preserves immutable item bytes", failures)
+	party.free()
+
 func _issue_stout_helmet(context: PlayerRunContext, sequence: int, slot: int, failures: Array[String]) -> ItemInstance:
 	var item_data := {
 		"affixes": [_stout_affix_document()],
@@ -748,6 +892,39 @@ func _issue_stout_helmet(context: PlayerRunContext, sequence: int, slot: int, fa
 	var request := ItemTransactionRequest.create("task6-create-%d" % sequence, String(context.run_player_id), &"run-inventory", slot, issued.item)
 	var result := context.apply_item_transaction(request, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)
 	TestAssertions.equal(result.code, ItemTransactionResult.Code.OK, "Task 6 stout helmet enters run inventory", failures)
+	return issued.item if result.ok() else null
+
+
+func _issue_weapon(
+	context: PlayerRunContext,
+	sequence: int,
+	slot: int,
+	source_id: String,
+	minimum: float,
+	maximum: float,
+	failures: Array[String],
+) -> ItemInstance:
+	var issued := ItemInstanceIssuer.issue(
+		"run:%s:%s:%s" % [context.profile_id, context.run_seed, context.run_player_id],
+		sequence,
+		source_id,
+		context.run_seed + sequence,
+		{
+			"affixes": [],
+			"base_definition_id": "forge_vanguard_sword",
+			"base_damage_components": [{"damage_type_id": "physical", "minimum_damage": minimum, "maximum_damage": maximum}],
+			"item_level": 1,
+			"rarity_id": "common",
+		},
+		GameCatalog.EQUIPMENT_CATALOG,
+		GameCatalog.ITEM_FOUNDATION_CATALOG,
+	)
+	TestAssertions.truthy(issued.ok(), "%s weapon issues" % source_id, failures)
+	if not issued.ok():
+		return null
+	var request := ItemTransactionRequest.create("%s-create" % source_id, String(context.run_player_id), &"run-inventory", slot, issued.item)
+	var result := context.apply_item_transaction(request, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)
+	TestAssertions.equal(result.code, ItemTransactionResult.Code.OK, "%s weapon enters run inventory" % source_id, failures)
 	return issued.item if result.ok() else null
 
 func _stout_helmet_record(instance_id: String, issuer_namespace: String, sequence: int) -> ItemInstance:
@@ -779,6 +956,37 @@ func _plain_item_record(instance_id: String, base_definition_id: StringName, iss
 	var decoded := ItemInstanceCodec.decode(document, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)
 	assert(decoded.ok())
 	return decoded.item
+
+
+func _weapon_record(instance_id: String, issuer_namespace: String, sequence: int, minimum: float, maximum: float) -> ItemInstance:
+	var document := {
+		"schema_version": ItemInstance.SCHEMA_VERSION,
+		"instance_id": instance_id,
+		"base_definition_id": "forge_vanguard_sword",
+		"base_damage_components": [{"damage_type_id": "physical", "minimum_damage": minimum, "maximum_damage": maximum}],
+		"item_level": 1,
+		"rarity_id": "common",
+		"affixes": [],
+		"origin": {"issuer_namespace": issuer_namespace, "seed": 7801, "sequence": sequence, "source": "task_8_resume"},
+	}
+	var decoded := ItemInstanceCodec.decode(document, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)
+	assert(decoded.ok())
+	return decoded.item
+
+
+func _weapon_document(snapshot: ActiveWeaponDamageSnapshot) -> String:
+	if snapshot == null:
+		return "null"
+	var components: Array[Dictionary] = []
+	for component: ItemBaseDamageComponent in snapshot.components:
+		components.append(component.to_dictionary())
+	return JSON.stringify({
+		"member_id": snapshot.member_id,
+		"item_id": snapshot.item_id,
+		"base_id": String(snapshot.base_id),
+		"revision": snapshot.revision,
+		"components": components,
+	})
 
 func _source_documents(member: PartyMemberState) -> String:
 	return _source_documents_from_array(member.modifier_sources)

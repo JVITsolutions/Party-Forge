@@ -24,7 +24,10 @@ static func failure(message: String) -> EquipmentTransitionResult:
 	return result
 
 func ok() -> bool:
-	return error.is_empty() and _state != null and _activation != null and _activation.ok() and _resolution != null and _resolution.ok()
+	if not error.is_empty() or _state == null or _activation == null or not _activation.ok() or _resolution == null or not _resolution.ok():
+		return false
+	var weapon := _activation.weapon_snapshot()
+	return weapon == null or weapon.revision == _resolution.final_stats.revision
 
 func state() -> ItemOwnershipState:
 	return _state.copy() if _state != null else null

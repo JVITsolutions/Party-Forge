@@ -34,8 +34,11 @@ var _fallback_names: CharacterNamePool
 var _stat_revision := 0
 var _stat_cache: Dictionary = {}
 var _action_stat_cache: Dictionary = {}
+var _active_weapon_by_member: Dictionary = {}
 var _member_source_refresh_coordinator: Callable
 var _member_source_refresh_authority: RefCounted
+var _equipment_projection_publisher: Callable
+var _equipment_projection_publisher_required := false
 
 func _init() -> void:
     for stat_id: StringName in PARTY_STAT_IDS:
@@ -44,6 +47,9 @@ func _init() -> void:
 func initialize(leader_class: ClassDefinition, traits: Array[TraitDefinition], tuning: UpgradeTuning = null) -> void:
     _member_source_refresh_coordinator = Callable()
     _member_source_refresh_authority = null
+    _equipment_projection_publisher = Callable()
+    _equipment_projection_publisher_required = false
+    _active_weapon_by_member.clear()
     members.clear(); class_ranks.clear(); active_tiers.clear(); trait_upgrade_ranks.clear(); _party_upgrade_ranks.clear(); _party_upgrade_definitions.clear(); _party_upgrade_sources.clear(); trait_definitions = traits
     upgrade_tuning = tuning if tuning != null else DEFAULT_UPGRADE_TUNING
     for stat_id: StringName in PARTY_STAT_IDS:
@@ -124,12 +130,23 @@ func member_sources_without_equipment(member_id: int) -> Array[StatModifierSourc
 func stat_revision() -> int:
     return _stat_revision
 
+func active_weapon_snapshot(member_id: int) -> ActiveWeaponDamageSnapshot:
+    var snapshot := _active_weapon_by_member.get(member_id) as ActiveWeaponDamageSnapshot
+    return snapshot.copy() if snapshot != null else null
+
 func bind_member_source_refresh_coordinator(coordinator: Callable) -> RefCounted:
     if not coordinator.is_valid():
         return null
     if _member_source_refresh_coordinator.is_valid() or _member_source_refresh_authority != null:
         return null
     _member_source_refresh_coordinator = coordinator
+    var coordinator_owner := coordinator.get_object()
+    if coordinator_owner != null and coordinator_owner.has_method(&"_publish_accepted_equipment_projections"):
+        _equipment_projection_publisher = Callable(coordinator_owner, "_publish_accepted_equipment_projections")
+        _equipment_projection_publisher_required = true
+    else:
+        _equipment_projection_publisher = Callable()
+        _equipment_projection_publisher_required = false
     _member_source_refresh_authority = RefCounted.new()
     return _member_source_refresh_authority
 
@@ -141,6 +158,8 @@ func unbind_member_source_refresh_coordinator(coordinator: Callable, authority: 
     ):
         _member_source_refresh_coordinator = Callable()
         _member_source_refresh_authority = null
+        _equipment_projection_publisher = Callable()
+        _equipment_projection_publisher_required = false
 
 func owns_member_source_refresh_coordinator(coordinator: Callable, authority: RefCounted) -> bool:
     return (
@@ -236,97 +255,95 @@ func replace_member_source(member_id: int, source: StatModifierSource) -> bool:
     _invalidate_member(member_id)
     return true
 
-## Replaces one canonical equipment source per member as a single observable stat-state transition.
+## Replaces one canonical equipment source and weapon snapshot per member as one observable transition.
 ## Returns zero on success, or the rejected member ID. Invalid non-member keys return -1.
-func replace_member_equipment_sources_atomically(
-    sources_by_member: Dictionary,
+func replace_member_equipment_projections_atomically(
+    projections_by_member: Dictionary,
     authority: RefCounted = null,
 ) -> int:
-    if (
-        authority == null
-        or not is_same(authority, _member_source_refresh_authority)
-        or not _member_source_refresh_coordinator.is_valid()
-        or sources_by_member.is_empty()
-    ):
+    if not _equipment_authority_is_valid(authority) or projections_by_member.is_empty():
         return -1
     var member_ids: Array[int] = []
-    for member_id_value: Variant in sources_by_member:
+    for member_id_value: Variant in projections_by_member:
         if typeof(member_id_value) != TYPE_INT:
             return -1
         member_ids.append(int(member_id_value))
     member_ids.sort()
-
+    var candidate_revision := _stat_revision + 1
     for member_id: int in member_ids:
-        var member := member_by_id(member_id)
-        var source_value: Variant = sources_by_member[member_id]
-        if not source_value is StatModifierSource:
+        var projection_value: Variant = projections_by_member[member_id]
+        if not projection_value is Dictionary:
             return member_id if member_id > 0 else -1
-        var source := source_value as StatModifierSource
-        if (
-            member == null
-            or source.source_type != &"equipment"
-            or source.id != StringName("equipment_member_%d" % member_id)
-            or source.owner_member_id != member_id
+        var projection := projection_value as Dictionary
+        if projection.size() != 2 or not projection.has("source") or not projection.has("weapon"):
+            return member_id if member_id > 0 else -1
+        var source_value: Variant = projection["source"]
+        var weapon_value: Variant = projection["weapon"]
+        if not source_value is StatModifierSource or (weapon_value != null and not weapon_value is ActiveWeaponDamageSnapshot):
+            return member_id if member_id > 0 else -1
+        if not _equipment_projection_is_valid(
+            member_id,
+            source_value as StatModifierSource,
+            weapon_value as ActiveWeaponDamageSnapshot,
+            authority,
+            candidate_revision,
         ):
             return member_id if member_id > 0 else -1
-        var candidate_sources := _sources_after_replace(member.modifier_sources, source)
-        if not _validate_candidate_member_sources(member_id, candidate_sources):
-            return member_id
 
     var previous_sources: Dictionary = {}
+    var previous_weapons: Dictionary = {}
     for member_id: int in member_ids:
         previous_sources[member_id] = member_by_id(member_id).modifier_sources
+        previous_weapons[member_id] = active_weapon_snapshot(member_id)
     for member_id: int in member_ids:
-        if not _commit_member_source_without_invalidation(member_id, sources_by_member[member_id] as StatModifierSource):
-            for restore_member_id: int in member_ids:
-                _restore_member_sources_without_invalidation(
-                    restore_member_id,
-                    previous_sources[restore_member_id] as Array[StatModifierSource],
-                )
+        var projection := projections_by_member[member_id] as Dictionary
+        if not _commit_equipment_projection_without_invalidation(
+            member_id,
+            projection["source"] as StatModifierSource,
+            projection["weapon"] as ActiveWeaponDamageSnapshot,
+        ):
+            _restore_equipment_projections(member_ids, previous_sources, previous_weapons)
             return member_id
-
+    if not _publish_accepted_equipment_projections(member_ids):
+        _restore_equipment_projections(member_ids, previous_sources, previous_weapons)
+        return -1
     _invalidate_members(member_ids)
     return 0
 
-## Commits one canonical equipment source as an authorized member-local transition.
-func replace_member_equipment_source_atomically(
+## Commits one canonical equipment source and weapon snapshot as an authorized member-local transition.
+func replace_member_equipment_projection_atomically(
     member_id: int,
     equipment_source: StatModifierSource,
+    weapon: ActiveWeaponDamageSnapshot,
     authority: RefCounted = null,
 ) -> bool:
-    var member := member_by_id(member_id)
-    if (
-        authority == null
-        or not is_same(authority, _member_source_refresh_authority)
-        or not _member_source_refresh_coordinator.is_valid()
-        or member == null
-        or equipment_source == null
-        or equipment_source.source_type != &"equipment"
-        or equipment_source.id != StringName("equipment_member_%d" % member_id)
-        or equipment_source.owner_member_id != member_id
-    ):
+    if not _equipment_projection_is_valid(member_id, equipment_source, weapon, authority, _stat_revision + 1):
         return false
-    var candidate_sources := _sources_after_replace(member.modifier_sources, equipment_source)
-    if not _validate_candidate_member_sources(member_id, candidate_sources):
+    var previous_sources := member_by_id(member_id).modifier_sources
+    var previous_weapon := active_weapon_snapshot(member_id)
+    if not _commit_equipment_projection_without_invalidation(member_id, equipment_source, weapon):
+        _restore_member_sources_without_invalidation(member_id, previous_sources)
+        _restore_weapon_without_invalidation(member_id, previous_weapon)
         return false
-    if not _commit_member_source_without_invalidation(member_id, equipment_source):
+    if not _publish_accepted_equipment_projections([member_id]):
+        _restore_member_sources_without_invalidation(member_id, previous_sources)
+        _restore_weapon_without_invalidation(member_id, previous_weapon)
         return false
     _invalidate_member(member_id)
     return true
 
-## Commits one candidate non-equipment source and its recomputed equipment source
+## Commits one candidate non-equipment source and its recomputed equipment projection
 ## as one observable member-local stat transition.
 func replace_member_source_with_equipment_atomically(
     member_id: int,
     member_source: StatModifierSource,
     equipment_source: StatModifierSource,
+    weapon: ActiveWeaponDamageSnapshot = null,
     authority: RefCounted = null,
 ) -> bool:
     var member := member_by_id(member_id)
     if (
-        authority == null
-        or not is_same(authority, _member_source_refresh_authority)
-        or not _member_source_refresh_coordinator.is_valid()
+        not _equipment_authority_is_valid(authority)
         or member == null
         or member_source == null
         or member_source.source_type == &"equipment"
@@ -338,19 +355,129 @@ func replace_member_source_with_equipment_atomically(
         or member_source.id == equipment_source.id
     ):
         return false
+    var candidate_revision := _stat_revision + 1
     var candidate_sources := _sources_after_replace(member.modifier_sources, member_source)
     candidate_sources = _sources_after_replace(candidate_sources, equipment_source)
-    if not _validate_candidate_member_sources(member_id, candidate_sources):
+    if (
+        not _weapon_snapshot_is_valid(member_id, weapon, candidate_revision)
+        or not _validate_candidate_member_sources(member_id, candidate_sources, candidate_revision)
+    ):
         return false
     var previous_sources := member.modifier_sources
+    var previous_weapon := active_weapon_snapshot(member_id)
     if (
         not _commit_member_source_without_invalidation(member_id, member_source)
-        or not _commit_member_source_without_invalidation(member_id, equipment_source)
+        or not _commit_equipment_projection_without_invalidation(member_id, equipment_source, weapon)
     ):
         _restore_member_sources_without_invalidation(member_id, previous_sources)
+        _restore_weapon_without_invalidation(member_id, previous_weapon)
+        return false
+    if not _publish_accepted_equipment_projections([member_id]):
+        _restore_member_sources_without_invalidation(member_id, previous_sources)
+        _restore_weapon_without_invalidation(member_id, previous_weapon)
         return false
     _invalidate_member(member_id)
     return true
+
+func _equipment_authority_is_valid(authority: RefCounted) -> bool:
+    return (
+        authority != null
+        and is_same(authority, _member_source_refresh_authority)
+        and _member_source_refresh_coordinator.is_valid()
+        and (not _equipment_projection_publisher_required or _equipment_projection_publisher.is_valid())
+    )
+
+func _equipment_projection_is_valid(
+    member_id: int,
+    equipment_source: StatModifierSource,
+    weapon: ActiveWeaponDamageSnapshot,
+    authority: RefCounted,
+    candidate_revision: int,
+) -> bool:
+    var member := member_by_id(member_id)
+    if (
+        not _equipment_authority_is_valid(authority)
+        or member == null
+        or equipment_source == null
+        or equipment_source.source_type != &"equipment"
+        or equipment_source.id != StringName("equipment_member_%d" % member_id)
+        or equipment_source.owner_member_id != member_id
+    ):
+        return false
+    var candidate_sources := _sources_after_replace(member.modifier_sources, equipment_source)
+    return (
+        _weapon_snapshot_is_valid(member_id, weapon, candidate_revision)
+        and _validate_candidate_member_sources(member_id, candidate_sources, candidate_revision)
+    )
+
+func _weapon_snapshot_is_valid(
+    member_id: int,
+    weapon: ActiveWeaponDamageSnapshot,
+    candidate_revision: int,
+) -> bool:
+    if weapon == null:
+        return true
+    if (
+        weapon.member_id != member_id
+        or weapon.revision != candidate_revision
+        or weapon.item_id.strip_edges().is_empty()
+        or weapon.base_id.is_empty()
+        or weapon.components.is_empty()
+    ):
+        return false
+    var base := GameCatalog.EQUIPMENT_CATALOG.definition(weapon.base_id)
+    if base == null or base.weapon_damage_profile == null or &"main_hand" not in base.compatible_slot_ids:
+        return false
+    var seen_types: Dictionary = {}
+    for component: ItemBaseDamageComponent in weapon.components:
+        if component == null or not component.validate(GameCatalog.DAMAGE_TYPES).is_empty() or seen_types.has(component.damage_type_id):
+            return false
+        seen_types[component.damage_type_id] = true
+    return true
+
+func _commit_equipment_projection_without_invalidation(
+    member_id: int,
+    equipment_source: StatModifierSource,
+    weapon: ActiveWeaponDamageSnapshot,
+) -> bool:
+    if not _commit_member_source_without_invalidation(member_id, equipment_source):
+        return false
+    return _commit_weapon_without_invalidation(member_id, weapon)
+
+func _commit_weapon_without_invalidation(member_id: int, weapon: ActiveWeaponDamageSnapshot) -> bool:
+    if member_by_id(member_id) == null:
+        return false
+    if weapon == null:
+        _active_weapon_by_member.erase(member_id)
+    else:
+        _active_weapon_by_member[member_id] = weapon.copy()
+    return true
+
+func _restore_weapon_without_invalidation(member_id: int, weapon: ActiveWeaponDamageSnapshot) -> void:
+    if weapon == null:
+        _active_weapon_by_member.erase(member_id)
+    else:
+        _active_weapon_by_member[member_id] = weapon.copy()
+
+func _restore_equipment_projections(
+    member_ids: Array[int],
+    previous_sources: Dictionary,
+    previous_weapons: Dictionary,
+) -> void:
+    for member_id: int in member_ids:
+        _restore_member_sources_without_invalidation(
+            member_id,
+            previous_sources[member_id] as Array[StatModifierSource],
+        )
+        _restore_weapon_without_invalidation(
+            member_id,
+            previous_weapons[member_id] as ActiveWeaponDamageSnapshot,
+        )
+
+func _publish_accepted_equipment_projections(member_ids: Array[int]) -> bool:
+    if not _equipment_projection_publisher_required:
+        return true
+    return _equipment_projection_publisher.is_valid() and bool(_equipment_projection_publisher.call(member_ids.duplicate()))
 
 func _commit_member_source_without_invalidation(member_id: int, source: StatModifierSource) -> bool:
     var member := member_by_id(member_id)
@@ -375,12 +502,14 @@ func _sources_after_replace(
 func _validate_candidate_member_sources(
     member_id: int,
     candidate_sources: Array[StatModifierSource],
+    candidate_revision: int = -1,
 ) -> bool:
     return _validate_candidate_member_sources_for_party_upgrades(
         member_id,
         candidate_sources,
         _party_upgrade_definitions,
         _party_upgrade_sources,
+        candidate_revision,
     )
 
 func _validate_candidate_member_sources_for_party_upgrades(
@@ -388,6 +517,7 @@ func _validate_candidate_member_sources_for_party_upgrades(
     candidate_sources: Array[StatModifierSource],
     candidate_party_upgrade_definitions: Dictionary,
     candidate_party_upgrade_sources: Dictionary,
+    candidate_revision: int = -1,
 ) -> bool:
     var member := member_by_id(member_id)
     if member == null:
@@ -399,6 +529,7 @@ func _validate_candidate_member_sources_for_party_upgrades(
         candidate_party_upgrade_sources,
         class_ranks,
         active_tiers,
+        candidate_revision,
     )
 
 func _validate_candidate_member_sources_for_state(
@@ -408,6 +539,7 @@ func _validate_candidate_member_sources_for_state(
     candidate_party_upgrade_sources: Dictionary,
     candidate_class_ranks: Dictionary,
     candidate_active_tiers: Dictionary,
+    candidate_revision: int = -1,
 ) -> bool:
     if member == null:
         return false
@@ -437,6 +569,7 @@ func _validate_candidate_member_sources_for_state(
         candidate_class_ranks,
         candidate_active_tiers,
     )
+    var resolution_revision := candidate_revision if candidate_revision >= 0 else _stat_revision
     var resolution := MemberStatResolutionService.resolve(
         member.member_id,
         STAT_CATALOG,
@@ -444,7 +577,7 @@ func _validate_candidate_member_sources_for_state(
         member.capability_tags,
         effective_candidate_sources,
         [],
-        _stat_revision,
+        resolution_revision,
         DEFAULT_ATTRIBUTE_PROJECTION,
     )
     if not resolution.ok():
@@ -458,7 +591,7 @@ func _validate_candidate_member_sources_for_state(
         member.class_definition.stat_base_values(),
         member.capability_tags,
         effective_candidate_sources,
-        _stat_revision,
+        resolution_revision,
         DEFAULT_ATTRIBUTE_PROJECTION,
     )
     if not action_error.is_empty():

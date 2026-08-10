@@ -28,7 +28,8 @@ static func preview(
 	if not assignment.ok():
 		return _failure(member_id, item_id, slot_id, "structural assignment failed detail=%s" % assignment.error)
 	var candidate := assignment.state()
-	var activation := _activation_for(candidate, member_id, party, equipment, foundation)
+	var candidate_revision := party.stat_revision() + 1
+	var activation := _activation_for(candidate, member_id, party, equipment, foundation, candidate_revision)
 	if not activation.ok():
 		return _failure(member_id, item_id, slot_id, "activation failed detail=%s" % activation.error)
 	for newly_equipped_item_id: String in assignment.newly_equipped_item_ids():
@@ -45,7 +46,7 @@ static func preview(
 		party.member_capabilities(member_id),
 		final_sources,
 		[],
-		party.stat_revision(),
+		candidate_revision,
 		PartyManager.DEFAULT_ATTRIBUTE_PROJECTION,
 	)
 	if not resolution.ok():
@@ -58,7 +59,7 @@ static func preview(
 		party.member_base_values(member_id),
 		party.member_capabilities(member_id),
 		final_sources,
-		party.stat_revision(),
+		candidate_revision,
 		PartyManager.DEFAULT_ATTRIBUTE_PROJECTION,
 	)
 	if not action_error.is_empty():
@@ -71,6 +72,7 @@ static func _activation_for(
 	party: PartyManager,
 	equipment: EquipmentCatalog,
 	foundation: ItemFoundationCatalog,
+	candidate_revision: int,
 ) -> EquipmentActivationResult:
 	return EquipmentActivationResolver.resolve(
 		member_id,
@@ -82,7 +84,7 @@ static func _activation_for(
 		party.member_base_values(member_id),
 		party.member_capabilities(member_id),
 		party.member_sources_without_equipment(member_id),
-		party.stat_revision(),
+		candidate_revision,
 	)
 
 static func _failure(member_id: int, item_id: String, slot_id: StringName, detail: String) -> EquipmentTransitionResult:

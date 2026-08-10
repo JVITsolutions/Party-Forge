@@ -34,6 +34,7 @@ func run() -> Array[String]:
 	if _service == null or not _service.can_instantiate() or result_script == null or not result_script.can_instantiate():
 		return failures
 	_test_preview_is_pure_and_resolves_final_stats(failures)
+	_test_preview_stamps_candidate_weapon_revision(failures)
 	_test_newly_placed_disabled_item_is_rejected(failures)
 	_test_projection_failure_is_atomic(failures)
 	_test_non_action_aggregate_overflow_is_rejected_atomically(failures)
@@ -79,6 +80,27 @@ func _test_preview_is_pure_and_resolves_final_stats(failures: Array[String]) -> 
 	TestAssertions.equal(party.stats_for(1), cached_before, "preview leaves the member cache untouched", failures)
 	TestAssertions.equal(party.member_by_id(1).modifier_sources.size(), 0, "preview commits no member source", failures)
 	TestAssertions.equal(changed, [], "preview emits no stat-change signal", failures)
+	party.free()
+
+
+func _test_preview_stamps_candidate_weapon_revision(failures: Array[String]) -> void:
+	var party := _party(PartyManager.new())
+	var item := _weapon("item-transition-weapon", 7.0, 12.0)
+	var state := _state(item)
+	var revision_before := party.stat_revision()
+	var result: Variant = _service.preview(
+		state, 1, item.instance_id, &"main_hand", party,
+		GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG,
+	)
+	TestAssertions.truthy(result != null and result.ok(), "weapon equipment transition preview succeeds", failures)
+	if result != null and result.ok():
+		var weapon: ActiveWeaponDamageSnapshot = result.activation().weapon_snapshot()
+		TestAssertions.truthy(weapon != null, "weapon preview includes an active damage snapshot", failures)
+		if weapon != null:
+			TestAssertions.equal(weapon.revision, revision_before + 1, "weapon preview stamps the candidate publication revision", failures)
+			TestAssertions.equal(weapon.item_id, item.instance_id, "weapon preview retains candidate item identity", failures)
+		TestAssertions.equal(result.resolution().final_stats.revision, revision_before + 1, "final preview stats use the candidate publication revision", failures)
+	TestAssertions.equal(party.stat_revision(), revision_before, "weapon preview remains pure", failures)
 	party.free()
 
 
@@ -435,6 +457,17 @@ func _stout_helmet(instance_id: String, sequence: int) -> ItemInstance:
 	item.rarity_id = &"common"
 	item.affixes = [affix]
 	item.origin = {"issuer_namespace": "transition:test", "seed": 6001, "sequence": sequence, "source": "task_6"}
+	return item
+
+
+func _weapon(instance_id: String, minimum: float, maximum: float) -> ItemInstance:
+	var item := ItemInstance.new()
+	item.instance_id = instance_id
+	item.base_definition_id = &"forge_vanguard_sword"
+	item.item_level = 1
+	item.rarity_id = &"common"
+	item.base_damage_components = [ItemBaseDamageComponent.create(&"physical", minimum, maximum)]
+	item.origin = {"issuer_namespace": "transition:weapon", "seed": 6002, "sequence": 0, "source": "task_8"}
 	return item
 
 func _equipment_with_requirement(base_id: StringName, attribute_id: StringName, minimum: float) -> EquipmentCatalog:

@@ -41,6 +41,8 @@ var _item_state: ItemOwnershipState
 var _item_journal: ItemTransactionJournal
 var _next_item_sequence := 0
 var _equipment_activation_by_member: Dictionary = {}
+var _pending_equipment_activation_by_member: Dictionary = {}
+var _pending_item_state: ItemOwnershipState
 var _source_refresh_authority: RefCounted
 var _configured := false
 var _run_id: StringName = &""
@@ -143,7 +145,7 @@ func configure(
 		_reset_unconfigured_fields()
 		return PackedStringArray([String(reconstruction["error"])])
 	var next_equipment_activations := reconstruction["activations"] as Dictionary
-	var next_equipment_sources: Dictionary = {}
+	var next_equipment_projections: Dictionary = {}
 	for member: PartyMemberState in manager.members:
 		var activation := next_equipment_activations.get(member.member_id) as EquipmentActivationResult
 		if activation == null:
@@ -151,7 +153,10 @@ func configure(
 			return PackedStringArray([
 				"PARTY_FORGE_RUN_CONTEXT_ERROR field=equipment_activation member=%d reason=activation missing" % member.member_id,
 			])
-		next_equipment_sources[member.member_id] = activation.source
+		next_equipment_projections[member.member_id] = {
+			"source": activation.source,
+			"weapon": activation.weapon_snapshot(),
+		}
 	var source_refresh_callback := Callable(self, "_replace_non_equipment_source_atomically")
 	var source_refresh_authority := manager.bind_member_source_refresh_coordinator(source_refresh_callback)
 	if source_refresh_authority == null:
@@ -175,19 +180,21 @@ func configure(
 	_progression_by_member = next_progression
 	_pending_leader_levels.clear()
 	_actor_by_member.clear()
-	_item_state = next_item_state
 	_item_journal = next_item_journal
 	_equipment_activation_by_member.clear()
-	for member_id: Variant in next_equipment_activations:
-		_equipment_activation_by_member[int(member_id)] = (next_equipment_activations[member_id] as EquipmentActivationResult).copy()
 	_next_item_sequence = 0
 	_run_id = item_bootstrap.run_id if item_bootstrap != null else &""
 	_item_resolution_transaction_id = ""
 	if not party.member_added.is_connected(member_added_callback):
 		party.member_added.connect(member_added_callback)
 	_configured = true
-	var rejected_member_id := manager.replace_member_equipment_sources_atomically(
-		next_equipment_sources,
+	if not _stage_equipment_publication(next_item_state, next_equipment_activations):
+		_reset_unconfigured_fields()
+		return PackedStringArray([
+			"PARTY_FORGE_RUN_CONTEXT_ERROR field=equipment_activation reason=publication staging rejected",
+		])
+	var rejected_member_id := manager.replace_member_equipment_projections_atomically(
+		next_equipment_projections,
 		_source_refresh_authority,
 	)
 	if rejected_member_id != 0:
@@ -273,18 +280,18 @@ func assign_equipment(
 	)
 	if not preview.ok():
 		return EquipmentAssignmentResult.failure(preview.error)
-	var previous_state := _item_state
-	var previous_activation := equipment_activation(member_id)
 	var next_activation := preview.activation()
-	_item_state = preview.state()
-	_equipment_activation_by_member[member_id] = next_activation.copy()
-	if party == null or not party.replace_member_equipment_source_atomically(
+	if not _stage_equipment_publication(preview.state(), {member_id: next_activation}):
+		return EquipmentAssignmentResult.failure(
+			"PARTY_FORGE_EQUIPMENT_TRANSITION_ERROR member=%d reason=publication staging rejected" % member_id
+		)
+	if party == null or not party.replace_member_equipment_projection_atomically(
 		member_id,
 		next_activation.source,
+		next_activation.weapon_snapshot(),
 		_source_refresh_authority,
 	):
-		_item_state = previous_state
-		_equipment_activation_by_member[member_id] = previous_activation
+		_clear_pending_equipment_publication()
 		return EquipmentAssignmentResult.failure(
 			"PARTY_FORGE_EQUIPMENT_TRANSITION_ERROR member=%d reason=stat source commit rejected" % member_id
 		)
@@ -445,17 +452,15 @@ func _on_member_added(member: PartyMemberState) -> void:
 	var activation := _preview_member_equipment_activation(next_item_state, member.member_id, party)
 	if not activation.ok():
 		return
-	var previous_state := _item_state
-	var previous_activation := equipment_activation(member.member_id)
-	_item_state = next_item_state
-	_equipment_activation_by_member[member.member_id] = activation.copy()
-	if party == null or not party.replace_member_equipment_source_atomically(
+	if not _stage_equipment_publication(next_item_state, {member.member_id: activation}):
+		return
+	if party == null or not party.replace_member_equipment_projection_atomically(
 		member.member_id,
 		activation.source,
+		activation.weapon_snapshot(),
 		_source_refresh_authority,
 	):
-		_item_state = previous_state
-		_equipment_activation_by_member[member.member_id] = previous_activation
+		_clear_pending_equipment_publication()
 		return
 	_progression_by_member[member.member_id] = next_progression
 
@@ -512,6 +517,7 @@ func _reset_unconfigured_fields() -> void:
 	_item_state = null
 	_item_journal = null
 	_equipment_activation_by_member.clear()
+	_clear_pending_equipment_publication()
 	_next_item_sequence = 0
 	_run_id = &""
 	_item_resolution_transaction_id = ""
@@ -570,6 +576,7 @@ func _preview_member_equipment_activation_with_sources(
 		return EquipmentActivationResult.failure(
 			"PARTY_FORGE_EQUIPMENT_ACTIVATION_ERROR member=%d detail=%s" % [member_id, structure_error]
 		)
+	var candidate_revision := manager.stat_revision() + 1
 	var activation := EquipmentActivationResolver.resolve(
 		member_id,
 		_run_equipment_id(member_id),
@@ -580,7 +587,7 @@ func _preview_member_equipment_activation_with_sources(
 		manager.member_base_values(member_id),
 		manager.member_capabilities(member_id),
 		non_equipment_sources,
-		manager.stat_revision(),
+		candidate_revision,
 	)
 	if not activation.ok():
 		return activation
@@ -593,7 +600,7 @@ func _preview_member_equipment_activation_with_sources(
 		manager.member_capabilities(member_id),
 		final_sources,
 		[],
-		manager.stat_revision(),
+		candidate_revision,
 		PartyManager.DEFAULT_ATTRIBUTE_PROJECTION,
 	)
 	if not resolution.ok():
@@ -608,7 +615,7 @@ func _preview_member_equipment_activation_with_sources(
 		manager.member_base_values(member_id),
 		manager.member_capabilities(member_id),
 		final_sources,
-		manager.stat_revision(),
+		candidate_revision,
 		PartyManager.DEFAULT_ATTRIBUTE_PROJECTION,
 	)
 	if not action_error.is_empty():
@@ -645,17 +652,142 @@ func _replace_non_equipment_source_atomically(member_id: int, source: StatModifi
 	)
 	if not next_activation.ok():
 		return false
-	var previous_activation := equipment_activation(member_id)
-	_equipment_activation_by_member[member_id] = next_activation.copy()
+	if not _stage_equipment_publication(_item_state, {member_id: next_activation}):
+		return false
 	if not party.replace_member_source_with_equipment_atomically(
 		member_id,
 		source,
 		next_activation.source,
+		next_activation.weapon_snapshot(),
 		_source_refresh_authority,
 	):
-		_equipment_activation_by_member[member_id] = previous_activation
+		_clear_pending_equipment_publication()
 		return false
 	return true
+
+func _stage_equipment_publication(
+	candidate_state: ItemOwnershipState,
+	activations_by_member: Dictionary,
+) -> bool:
+	if candidate_state == null or activations_by_member.is_empty() or not _pending_equipment_activation_by_member.is_empty():
+		return false
+	var staged: Dictionary = {}
+	for member_id_value: Variant in activations_by_member:
+		if typeof(member_id_value) != TYPE_INT:
+			return false
+		var member_id := int(member_id_value)
+		var activation := activations_by_member[member_id] as EquipmentActivationResult
+		if member_id <= 0 or activation == null or not activation.ok():
+			return false
+		staged[member_id] = activation.copy()
+	_pending_item_state = candidate_state.copy()
+	_pending_equipment_activation_by_member = staged
+	return true
+
+func _publish_accepted_equipment_projections(member_ids: Array[int]) -> bool:
+	if party == null or _pending_item_state == null or member_ids.is_empty():
+		return false
+	var expected_ids: Array[int] = []
+	for member_id_value: Variant in _pending_equipment_activation_by_member:
+		expected_ids.append(int(member_id_value))
+	expected_ids.sort()
+	var published_ids := member_ids.duplicate()
+	published_ids.sort()
+	if published_ids != expected_ids:
+		return false
+	for member_id: int in published_ids:
+		var activation := _pending_equipment_activation_by_member[member_id] as EquipmentActivationResult
+		var member := party.member_by_id(member_id)
+		if activation == null or member == null:
+			return false
+		var has_source := member.modifier_sources.any(func(source: StatModifierSource) -> bool:
+			return (
+				source != null
+				and source.id == activation.source.id
+				and source.source_type == activation.source.source_type
+				and source.owner_member_id == activation.source.owner_member_id
+			)
+		)
+		var activation_weapon := activation.weapon_snapshot()
+		if (
+			not has_source
+			or not _weapon_matches_staged_ownership(member_id, activation, activation_weapon)
+			or not _weapon_snapshots_match(activation_weapon, party.active_weapon_snapshot(member_id))
+		):
+			return false
+	_item_state = _pending_item_state.copy()
+	for member_id: int in published_ids:
+		_equipment_activation_by_member[member_id] = (
+			_pending_equipment_activation_by_member[member_id] as EquipmentActivationResult
+		).copy()
+	_clear_pending_equipment_publication()
+	return true
+
+func _weapon_matches_staged_ownership(
+	member_id: int,
+	activation: EquipmentActivationResult,
+	weapon: ActiveWeaponDamageSnapshot,
+) -> bool:
+	if _pending_item_state == null or activation == null:
+		return false
+	var equipment := _pending_item_state.container(_run_equipment_id(member_id))
+	var registry := _pending_item_state.registry()
+	var main_hand_slot := EquipmentSlotIndex.index_for(&"main_hand")
+	if equipment == null or registry == null or main_hand_slot < 0:
+		return false
+	var main_hand_item_id := equipment.item_id_at(main_hand_slot)
+	if main_hand_item_id.is_empty():
+		return weapon == null
+	var main_hand_item := registry.item(main_hand_item_id)
+	if main_hand_item == null:
+		return false
+	var expects_weapon := activation.is_active(main_hand_item_id) and not main_hand_item.base_damage_components.is_empty()
+	if not expects_weapon:
+		return weapon == null
+	if weapon == null:
+		return false
+	var owned_weapon := ActiveWeaponDamageSnapshot.create(
+		member_id,
+		main_hand_item.instance_id,
+		main_hand_item.base_definition_id,
+		main_hand_item.base_damage_components,
+		weapon.revision,
+	)
+	return _weapon_snapshots_match(owned_weapon, weapon)
+
+func _weapon_snapshots_match(
+	left: ActiveWeaponDamageSnapshot,
+	right: ActiveWeaponDamageSnapshot,
+) -> bool:
+	if left == null or right == null:
+		return left == null and right == null
+	if (
+		left.member_id != right.member_id
+		or left.item_id != right.item_id
+		or left.base_id != right.base_id
+		or left.revision != right.revision
+	):
+		return false
+	var left_components := left.components
+	var right_components := right.components
+	if left_components.size() != right_components.size():
+		return false
+	for index: int in left_components.size():
+		var left_component := left_components[index]
+		var right_component := right_components[index]
+		if (
+			left_component == null
+			or right_component == null
+			or left_component.damage_type_id != right_component.damage_type_id
+			or left_component.minimum_damage != right_component.minimum_damage
+			or left_component.maximum_damage != right_component.maximum_damage
+		):
+			return false
+	return true
+
+func _clear_pending_equipment_publication() -> void:
+	_pending_item_state = null
+	_pending_equipment_activation_by_member.clear()
 
 func _can_mutate_current_owner() -> bool:
 	return owns_source_refresh_coordinator()
