@@ -42,11 +42,17 @@ func deactivate() -> void:
 
 
 func refresh() -> void:
+	_refresh_page(true)
+
+
+func _refresh_page(refresh_preview: bool) -> void:
 	_tooltip().force_dismiss()
-	_rebuild_equipment()
+	var equipment_rows := _rebuild_equipment()
 	_rebuild_inventory()
 	_render_member_summary()
 	_render_combat_summary()
+	if refresh_preview:
+		_refresh_preview(equipment_rows)
 	_rebuild_focus_graph()
 	_sync_held_styles()
 	call_deferred(&"_position_equipment_slots")
@@ -121,7 +127,7 @@ func _input(event: InputEvent) -> void:
 		_mark_input_handled()
 
 
-func _rebuild_equipment() -> void:
+func _rebuild_equipment() -> Array[Dictionary]:
 	_equipment_buttons.clear()
 	var rows := provider.equipment_rows(context.selected_member_id) if provider != null and context != null else [] as Array[Dictionary]
 	var rows_by_slot: Dictionary = {}
@@ -151,6 +157,22 @@ func _rebuild_equipment() -> void:
 			button.inspection_ended.connect(_release_item_tooltip)
 			_slots().add_child(button)
 		_equipment_buttons[slot_id] = button
+	return rows
+
+
+func _refresh_preview(rows: Array[Dictionary]) -> void:
+	var member := provider.party.member_by_id(context.selected_member_id) if provider != null and provider.party != null and context != null else null
+	if member == null:
+		_preview().call(&"clear")
+		return
+	var preview_rows: Array[Dictionary] = []
+	for row: Dictionary in rows:
+		var preview_row := row.duplicate(true)
+		var detail := row.get("detail", {}) as Dictionary
+		var base_id := StringName(String(detail.get("base_definition_id", "")))
+		preview_row["base_definition"] = provider.equipment_catalog.definition(base_id) if provider.equipment_catalog != null and not base_id.is_empty() else null
+		preview_rows.append(preview_row)
+	_preview().call(&"show_member", member, preview_rows)
 
 
 func _rebuild_inventory() -> void:
@@ -241,7 +263,8 @@ func _handle_drop(
 	if not bool(result.get("accepted", false)):
 		return
 	_clear_held_item()
-	refresh()
+	var equipment_changed := String(source_container_id).begins_with("run-equipment-") or String(destination_container_id).begins_with("run-equipment-")
+	_refresh_page(equipment_changed)
 
 
 func _exact_transition_request(
@@ -433,3 +456,7 @@ func _inventory_grid() -> GridContainer:
 
 func _tooltip() -> ItemTooltipPanel:
 	return get_node("ItemTooltipPanel") as ItemTooltipPanel
+
+
+func _preview() -> Control:
+	return get_node("Layout/Body/EquipmentRegion/Doll/PreviewProtectedCenter/CharacterEquipmentPreview") as Control

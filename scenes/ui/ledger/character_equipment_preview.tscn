@@ -1,0 +1,52 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/ui/ledger/character_equipment_preview.gd" id="1_preview"]
+
+[node name="CharacterEquipmentPreview" type="SubViewportContainer"]
+custom_minimum_size = Vector2(220, 320)
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 0
+stretch = true
+script = ExtResource("1_preview")
+
+[node name="SubViewport" type="SubViewport" parent="."]
+transparent_bg = true
+handle_input_locally = false
+size = Vector2i(512, 512)
+render_target_update_mode = 4
+
+[node name="World" type="Node3D" parent="SubViewport"]
+
+[node name="PreviewRoot" type="Node3D" parent="SubViewport/World"]
+rotation = Vector3(-0.139626, 0, 0)
+
+[node name="Camera3D" type="Camera3D" parent="SubViewport/World"]
+transform = Transform3D(1, 0, 0, 0, 0.996195, 0.0871557, 0, -0.0871557, 0.996195, 0, 1.4, 4.2)
+current = true
+fov = 30.0
+
+[node name="KeyLight" type="DirectionalLight3D" parent="SubViewport/World"]
+rotation_degrees = Vector3(-42, -28, 0)
+light_color = Color(1, 0.91, 0.8, 1)
+light_energy = 1.15
+shadow_enabled = true
+
+[node name="FillLight" type="OmniLight3D" parent="SubViewport/World"]
+position = Vector3(-2.5, 2.2, 2.4)
+light_color = Color(0.55, 0.7, 1, 1)
+light_energy = 0.75
+omni_range = 8.0
+
+[node name="DragSurface" type="Control" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 0

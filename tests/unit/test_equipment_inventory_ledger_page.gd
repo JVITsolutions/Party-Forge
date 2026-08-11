@@ -42,6 +42,12 @@ func _test_page_projection_transactions_tooltip_and_focus(failures: Array[String
 	(Engine.get_main_loop() as SceneTree).root.add_child(page)
 	page.configure(provider, context)
 	page.activate()
+	var preview := page.get_node("Layout/Body/EquipmentRegion/Doll/PreviewProtectedCenter/CharacterEquipmentPreview") as Control
+	TestAssertions.truthy(preview != null, "equipment ledger embeds the reusable character preview", failures)
+	if preview != null:
+		TestAssertions.truthy(preview.get_node_or_null("SubViewport") is SubViewport, "ledger preview owns a SubViewport", failures)
+		TestAssertions.truthy(preview.get_node_or_null("SubViewport/World/Camera3D") is Camera3D, "ledger preview owns its camera", failures)
+		TestAssertions.truthy(preview.get_node_or_null("SubViewport/World/KeyLight") is DirectionalLight3D, "ledger preview owns controlled lighting", failures)
 
 	var expected_positions := {
 		&"helmet": Vector2(0.18, 0.08), &"amulet": Vector2(0.82, 0.06),
@@ -76,6 +82,7 @@ func _test_page_projection_transactions_tooltip_and_focus(failures: Array[String
 	TestAssertions.equal(helmet_twenty_four.item_id, "ledger-helmet-twenty-four", "member 24 selection refreshes equipment", failures)
 	context.selected_member_id = 1
 	page.refresh()
+	var member_one_preview_id := _active_preview_id(preview)
 
 	# Unit-level signal routing swaps inventory cells through the accepted transaction boundary.
 	inventory = page.get_node("Layout/Body/InventoryRegion/InventoryScroll/Grid") as GridContainer
@@ -86,13 +93,17 @@ func _test_page_projection_transactions_tooltip_and_focus(failures: Array[String
 	_drag_drop(ring_one, ring_two, "inventory occupied swap", failures)
 	TestAssertions.equal(run_context.run_inventory().item_id_at(ring_two_source_slot), "ledger-ring-one", "mouse drop accepts an inventory swap", failures)
 	TestAssertions.equal(run_context.run_inventory().item_id_at(ring_one_source_slot), "ledger-ring-two", "mouse swap preserves the displaced item", failures)
+	TestAssertions.equal(_active_preview_id(preview), member_one_preview_id, "accepted inventory-only transaction does not rebuild the equipment preview", failures)
 
 	# Unit-level inventory-to-equipment routing delegates to the accepted equipment assignment.
 	inventory = page.get_node("Layout/Body/InventoryRegion/InventoryScroll/Grid") as GridContainer
 	ring_one = _inventory_item(inventory, "ledger-ring-one")
 	var ring_left := equipment_slots.get_node("Slot_ring_left") as StorageSlotButton
+	var before_equip_preview_id := _active_preview_id(preview)
 	_drag_drop(ring_one, ring_left, "inventory to equipment", failures)
 	TestAssertions.equal(run_context.equipment_for(1).item_id_at(EquipmentSlotIndex.index_for(&"ring_left")), "ledger-ring-one", "mouse drop equips through the accepted transition", failures)
+	TestAssertions.truthy(_active_preview_id(preview) != before_equip_preview_id, "accepted equip refreshes the selected member preview", failures)
+	var accepted_preview_id := _active_preview_id(preview)
 
 	# An invalid equipment target preserves the exact ownership state.
 	var state_before_invalid := run_context.item_state().to_dictionary()
@@ -100,6 +111,7 @@ func _test_page_projection_transactions_tooltip_and_focus(failures: Array[String
 	ring_left = equipment_slots.get_node("Slot_ring_left") as StorageSlotButton
 	_drag_drop(ring_left, body_armour, "invalid equipment target", failures)
 	TestAssertions.equal(run_context.item_state().to_dictionary(), state_before_invalid, "invalid target leaves authoritative ownership unchanged", failures)
+	TestAssertions.equal(_active_preview_id(preview), accepted_preview_id, "rejected equipment transaction leaves the preview unchanged", failures)
 
 	# Shared tooltip layers and pin/dismiss contract stay intact.
 	ring_left = equipment_slots.get_node("Slot_ring_left") as StorageSlotButton
@@ -151,12 +163,19 @@ func _exercise_equipped_to_exact_empty_inventory_slot(failures: Array[String]) -
 	var inventory := page.get_node("Layout/Body/InventoryRegion/InventoryScroll/Grid") as GridContainer
 	var source := equipment.get_node("Slot_helmet") as StorageSlotButton
 	var destination := inventory.get_node("InventorySlot_004") as StorageSlotButton
+	var preview := page.get_node("Layout/Body/EquipmentRegion/Doll/PreviewProtectedCenter/CharacterEquipmentPreview") as Control
+	var before_preview_id := _active_preview_id(preview)
 	var revision_before := party.stat_revision()
 	_drag_drop(source, destination, "equipped item to exact empty inventory cell", failures)
 	TestAssertions.equal(run_context.run_inventory().item_id_at(4), "exact-empty-equipped", "equipped item lands in the exact focused empty cell", failures)
 	TestAssertions.equal(run_context.equipment_for(1).item_id_at(EquipmentSlotIndex.index_for(&"helmet")), "", "exact empty-cell placement clears the equipment source", failures)
 	TestAssertions.truthy(run_context.equipment_activation(1).ok(), "exact empty-cell placement republishes equipment activation", failures)
 	TestAssertions.truthy(party.stat_revision() > revision_before, "exact empty-cell placement republishes member stats", failures)
+	TestAssertions.truthy(_active_preview_id(preview) != before_preview_id, "accepted unequip refreshes the selected member preview", failures)
+	var active := preview.get("active_preview") as CharacterPresentation if preview != null else null
+	var model := active.active_model as ForgeHumanoidModel if active != null else null
+	if model != null:
+		TestAssertions.truthy(not model.equipped_definitions.has(&"helmet"), "accepted unequip clears the helmet visual", failures)
 	_free_transaction_fixture(fixture)
 
 
@@ -303,6 +322,13 @@ func _drag_drop(source: StorageSlotButton, destination: StorageSlotButton, label
 	if source == null or destination == null:
 		return
 	destination.item_dropped.emit(source.container_id, source.slot, source.item_id, destination.container_id, destination.slot)
+
+
+func _active_preview_id(preview: Control) -> int:
+	if preview == null:
+		return 0
+	var active := preview.get("active_preview") as CharacterPresentation
+	return active.get_instance_id() if active != null else 0
 
 
 func _free_fixture(fixture: Dictionary) -> void:
