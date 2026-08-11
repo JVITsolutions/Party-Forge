@@ -7,6 +7,7 @@ const RUNNER_PATHS: Array[String] = [
 	"res://tests/integration/developer_item_sandbox_runner.gd",
 	"res://tests/integration/item_storage_profile_runner.gd",
 	"res://tests/integration/item_storage_performance_runner.gd",
+	"res://tests/integration/developer_loot_lab_runner.gd",
 ]
 
 
@@ -26,10 +27,20 @@ func run() -> Array[String]:
 	if not sandbox.has_method(&"apply_viewport_size"):
 		sandbox.free()
 		return failures
-	var body := sandbox.get_node("Overlay/Frame/Layout/Body") as BoxContainer
+	var body := sandbox.get_node("Overlay/Frame/Layout/Tabs/Equipment/Body") as BoxContainer
 	var frame := sandbox.get_node("Overlay/Frame") as Control
+	var lab := sandbox.get_node("Overlay/Frame/Layout/Tabs/Loot Lab") as DeveloperLootLab
+	var workbench := lab.get_node("Layout/Workbench") as BoxContainer
+	var pane_selectors := lab.get_node("Layout/PaneSelectors") as Control
+	var gallery := lab.get_node("Layout/Workbench/Results/SampleScroll/SampleGrid") as GridContainer
 	sandbox.call(&"apply_viewport_size", Vector2i(1920, 1080))
 	TestAssertions.truthy(not body.vertical, "desktop sandbox body is horizontal", failures)
+	TestAssertions.truthy(not workbench.vertical and not pane_selectors.visible and gallery.columns == 4, "1080p Loot Lab keeps three panes and four sample columns", failures)
+	sandbox.call(&"apply_viewport_size", Vector2i(2560, 1440))
+	TestAssertions.equal(gallery.columns, 6, "1440p Loot Lab adds sample columns without typography scaling", failures)
+	sandbox.call(&"apply_viewport_size", Vector2i(3840, 2160))
+	TestAssertions.equal(gallery.columns, 8, "4K Loot Lab adds sample columns without typography scaling", failures)
+	sandbox.call(&"apply_viewport_size", Vector2i(1920, 1080))
 	TestAssertions.equal(
 		Vector4(frame.offset_left, frame.offset_top, frame.offset_right, frame.offset_bottom),
 		Vector4(48.0, 36.0, -48.0, -36.0),
@@ -38,6 +49,7 @@ func run() -> Array[String]:
 	)
 	sandbox.call(&"apply_viewport_size", Vector2i(1099, 1080))
 	TestAssertions.truthy(body.vertical, "sandbox uses the shared compact width breakpoint", failures)
+	TestAssertions.truthy(workbench.vertical and pane_selectors.visible, "compact Loot Lab switches to one-pane selectors", failures)
 	sandbox.call(&"apply_viewport_size", Vector2i(1920, 649))
 	TestAssertions.truthy(body.vertical, "sandbox uses the shared compact height breakpoint", failures)
 	TestAssertions.equal(

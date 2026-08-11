@@ -264,6 +264,10 @@ func _resume_pending_checkout(committed_profile: ProfileState, definition: Class
 
 
 func _start_leader_class_from_checkout(definition: ClassDefinition, committed_profile: ProfileState, bootstrap: RunItemBootstrap) -> bool:
+	(get_node("DeveloperItemSandbox") as DeveloperItemSandbox).cancel_and_clear()
+	var settings_screen := get_node("SettingsScreen") as SettingsScreen
+	if settings_screen.is_open():
+		settings_screen.close()
 	run_context_registry = RunContextRegistry.new()
 	active_run_context = _run_context_factory.call() as PlayerRunContext
 	if active_run_context == null:
@@ -1061,6 +1065,7 @@ func _on_profiles_changed() -> void:
 
 
 func _on_active_profile_changed(_profile: ProfileState) -> void:
+	(get_node("DeveloperItemSandbox") as DeveloperItemSandbox).cancel_and_clear()
 	var armoury := get_node("ArmouryScreen") as ArmouryScreen
 	var warehouse := get_node("WarehouseScreen") as WarehouseScreen
 	if armoury.is_open(): armoury.close()
@@ -1120,8 +1125,7 @@ func _open_developer_item_sandbox() -> bool:
 	var button := settings.get_node("Overlay/Frame/Layout/Tabs/Additional Settings/Layout/OpenDeveloperItemSandbox") as Control
 	var authoritative := settings_store.load_settings(settings_path) if settings_store != null else PartyForgeSettings.new()
 	if authoritative.mode != PartyForgeSettings.Mode.DEVELOPER_MODE:
-		if modal.is_open():
-			modal.close()
+		modal.cancel_and_clear()
 		settings.open_additional(button)
 		settings.show_route_status(ITEM_SANDBOX_DEVELOPER_REQUIRED_STATUS, button)
 		return false
@@ -1212,8 +1216,11 @@ func _on_city_passive_tree_closed() -> void:
 	if origin == CITY_ORIGIN_MAIN_MENU:
 		(get_node("MainMenuScreen") as MainMenuScreen).open(return_focus)
 
-func _on_settings_applied(settings: PartyForgeSettings) -> void:
-	saved_settings = settings.copy()
+func _on_settings_applied(_settings: PartyForgeSettings) -> void:
+	var authoritative := settings_store.load_settings(settings_path) if settings_store != null else _settings
+	saved_settings = authoritative.copy()
+	if saved_settings.mode != PartyForgeSettings.Mode.DEVELOPER_MODE:
+		(get_node("DeveloperItemSandbox") as DeveloperItemSandbox).cancel_and_clear()
 	_refresh_main_menu_projection()
 
 func _on_level_ready(_level: int) -> void:

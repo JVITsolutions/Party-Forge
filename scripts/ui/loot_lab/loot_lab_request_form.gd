@@ -86,7 +86,7 @@ func focus_controls() -> Array[Control]:
 	var result: Array[Control] = []
 	for key: Variant in _controls:
 		var control := _controls[key] as Control
-		if control != null and control.focus_mode != Control.FOCUS_NONE:
+		if control != null and str(key) != "validation_error":
 			result.append(control)
 	return result
 

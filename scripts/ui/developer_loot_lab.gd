@@ -17,10 +17,13 @@ var _preferences_store := DeveloperLootLabPreferencesStore.new()
 var _pending_large_spec: LootLabBatchSpec
 var _pending_export_format: StringName
 var _wired := false
+var _compact := false
+var _compact_pane := 0
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	_ensure_initialized()
+	apply_viewport_size(Vector2i(get_viewport_rect().size))
 
 func configure(
 	session: LootLabSessionController,
@@ -55,8 +58,37 @@ func cancel_and_clear() -> void:
 	(get_node("CancelCloseConfirmation") as ConfirmationDialog).hide()
 	_progress().value = 0
 	_cancel_button().disabled = true
+	_outcome().text = "No report yet."
+	_gallery().present({})
+	_inspector().present_result(null, {})
+	_analysis().set_report_availability([] as Array[StringName])
+	_analysis().present({})
 	active_job_changed.emit(false)
 	_set_status("CANCELLED_AND_CLEARED")
+
+func cancel_active_job() -> bool:
+	if not has_active_job():
+		return false
+	_on_cancel_active()
+	return true
+
+func apply_viewport_size(size: Vector2i) -> void:
+	var layout_changed := _compact != (size.x < 1100 or size.y < 650)
+	_compact = size.x < 1100 or size.y < 650
+	var workbench := _workbench() as BoxContainer
+	workbench.vertical = _compact
+	_gallery().columns = 8 if size.x >= 3500 else 6 if size.x >= 2400 else 4
+	var request_scroll := get_node("Layout/Workbench/RequestScroll") as Control
+	var results := get_node("Layout/Workbench/Results") as Control
+	var inspector_scroll := get_node("Layout/Workbench/InspectorScroll") as Control
+	request_scroll.custom_minimum_size = Vector2.ZERO if _compact else Vector2(340, 0)
+	results.custom_minimum_size = Vector2.ZERO if _compact else Vector2(420, 0)
+	inspector_scroll.custom_minimum_size = Vector2.ZERO if _compact else Vector2(390, 0)
+	_apply_workbench_visibility()
+	if layout_changed and _wired:
+		for control: Control in _all_local_focus_controls():
+			control.focus_mode = Control.FOCUS_NONE
+		focus_controls_changed.emit()
 
 func focus_controls() -> Array[Control]:
 	_ensure_initialized()
@@ -65,13 +97,20 @@ func focus_controls() -> Array[Control]:
 		get_node("Layout/Header/AnalysisFocusAnchor") as Control,
 	]
 	if _workbench().visible:
-		for control: Control in _form().focus_controls():
-			result.append(control)
-		for control: Control in _gallery().focus_controls():
-			result.append(control)
-		for control: Control in _inspector().focus_controls():
-			result.append(control)
-		result.append(_cancel_button())
+		if _compact:
+			for control: Control in _pane_selector_buttons():
+				result.append(control)
+		if not _compact or _compact_pane == 0:
+			for control: Control in _form().focus_controls():
+				result.append(control)
+		if not _compact or _compact_pane == 1:
+			for control: Control in _gallery().focus_controls():
+				result.append(control)
+		if not _compact or _compact_pane == 2:
+			for control: Control in _inspector().focus_controls():
+				result.append(control)
+		if not _compact or _compact_pane == 1:
+			result.append(_cancel_button())
 	else:
 		for control: Control in _analysis().focus_controls():
 			result.append(control)
@@ -106,6 +145,9 @@ func _ensure_initialized() -> void:
 	_analysis().export_requested.connect(_on_export_requested)
 	(get_node("Layout/Header/WorkbenchFocusAnchor") as Button).pressed.connect(_show_workbench)
 	(get_node("Layout/Header/AnalysisFocusAnchor") as Button).pressed.connect(_show_analysis)
+	(get_node("Layout/PaneSelectors/Request") as Button).pressed.connect(_set_compact_pane.bind(0))
+	(get_node("Layout/PaneSelectors/Results") as Button).pressed.connect(_set_compact_pane.bind(1))
+	(get_node("Layout/PaneSelectors/Inspector") as Button).pressed.connect(_set_compact_pane.bind(2))
 	_cancel_button().pressed.connect(_on_cancel_active)
 	(get_node("BatchConfirmation") as ConfirmationDialog).confirmed.connect(_on_large_batch_confirmed)
 	(get_node("CancelCloseConfirmation") as ConfirmationDialog).confirmed.connect(_on_cancel_close_confirmed)
@@ -184,6 +226,9 @@ func _present_selected_report() -> void:
 	var samples := evidence.get("samples", []) as Array
 	if not samples.is_empty():
 		_on_sequence_selected(int((samples[0] as Dictionary).get("generation_sequence", -1)))
+	for control: Control in _all_local_focus_controls():
+		control.focus_mode = Control.FOCUS_NONE
+	focus_controls_changed.emit()
 	_set_status("REPORT_%s" % String(runtime.get("status", "UNKNOWN")).to_upper())
 
 func _on_sequence_selected(sequence: int) -> void:
@@ -218,6 +263,7 @@ func _show_analysis() -> void:
 func _set_view(show_analysis: bool) -> void:
 	_workbench().visible = not show_analysis
 	_analysis().visible = show_analysis
+	_apply_workbench_visibility()
 	for control: Control in _all_local_focus_controls():
 		control.focus_mode = Control.FOCUS_NONE
 	focus_controls_changed.emit()
@@ -228,6 +274,8 @@ func _all_local_focus_controls() -> Array[Control]:
 		get_node("Layout/Header/AnalysisFocusAnchor") as Control,
 		_cancel_button(),
 	]
+	for control: Control in _pane_selector_buttons():
+		result.append(control)
 	for control: Control in _form().focus_controls():
 		result.append(control)
 	for control: Control in _gallery().focus_controls():
@@ -237,6 +285,31 @@ func _all_local_focus_controls() -> Array[Control]:
 	for control: Control in _analysis().focus_controls():
 		result.append(control)
 	return result
+
+func _set_compact_pane(index: int) -> void:
+	_compact_pane = clampi(index, 0, 2)
+	_apply_workbench_visibility()
+	for control: Control in _all_local_focus_controls():
+		control.focus_mode = Control.FOCUS_NONE
+	focus_controls_changed.emit()
+
+func _apply_workbench_visibility() -> void:
+	var workbench_visible := _workbench().visible
+	var panes: Array[Control] = [
+		get_node("Layout/Workbench/RequestScroll") as Control,
+		get_node("Layout/Workbench/Results") as Control,
+		get_node("Layout/Workbench/InspectorScroll") as Control,
+	]
+	(get_node("Layout/PaneSelectors") as Control).visible = workbench_visible and _compact
+	for index: int in panes.size():
+		panes[index].visible = workbench_visible and (not _compact or index == _compact_pane)
+
+func _pane_selector_buttons() -> Array[Control]:
+	return [
+		get_node("Layout/PaneSelectors/Request") as Control,
+		get_node("Layout/PaneSelectors/Results") as Control,
+		get_node("Layout/PaneSelectors/Inspector") as Control,
+	]
 
 func _on_export_requested(format: StringName) -> void:
 	if _session.selected_report().is_empty():

@@ -45,7 +45,31 @@ layout_mode = 2
 focus_mode = 2
 text = "Analysis"
 
-[node name="Workbench" type="HBoxContainer" parent="Layout"]
+[node name="PaneSelectors" type="HBoxContainer" parent="Layout"]
+visible = false
+layout_mode = 2
+alignment = 1
+theme_override_constants/separation = 8
+
+[node name="Request" type="Button" parent="Layout/PaneSelectors"]
+custom_minimum_size = Vector2(128, 40)
+layout_mode = 2
+focus_mode = 2
+text = "Request"
+
+[node name="Results" type="Button" parent="Layout/PaneSelectors"]
+custom_minimum_size = Vector2(128, 40)
+layout_mode = 2
+focus_mode = 2
+text = "Results"
+
+[node name="Inspector" type="Button" parent="Layout/PaneSelectors"]
+custom_minimum_size = Vector2(128, 40)
+layout_mode = 2
+focus_mode = 2
+text = "Inspector"
+
+[node name="Workbench" type="BoxContainer" parent="Layout"]
 layout_mode = 2
 size_flags_vertical = 3
 theme_override_constants/separation = 10

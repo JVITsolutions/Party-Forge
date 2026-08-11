@@ -90,6 +90,12 @@ func _test_modal_contract(packed: PackedScene, failures: Array[String]) -> void:
 		TestAssertions.truthy(InputMap.action_get_events(&"item_sandbox_pickup").any(func(event: InputEvent) -> bool:
 			return event is InputEventJoypadButton and event.button_index == JOY_BUTTON_X
 		), "west/left controller face button maps to sandbox pickup", failures)
+	for action: StringName in [&"item_sandbox_previous_tab", &"item_sandbox_next_tab", &"item_sandbox_scroll_up", &"item_sandbox_scroll_down"]:
+		TestAssertions.truthy(InputMap.has_action(action), "sandbox registers %s" % action, failures)
+		if InputMap.has_action(action):
+			TestAssertions.truthy(InputMap.action_get_events(action).any(func(event: InputEvent) -> bool:
+				return event.device == -1
+			), "%s accepts every connected controller" % action, failures)
 	for path: NodePath in [
 		^"Overlay/Frame/Layout/Header/Status",
 		^"Overlay/Frame/Layout/Header/Close",
@@ -374,6 +380,20 @@ func _test_main_route_and_profile_isolation(failures: Array[String]) -> void:
 		TestAssertions.truthy(launch.focus_mode != Control.FOCUS_NONE, "sandbox close restores a valid launch-button focus target", failures)
 	TestAssertions.equal(FileAccess.get_file_as_bytes(profile_path), before_bytes, "sandbox open/use/close preserves active profile bytes", failures)
 	TestAssertions.equal(JSON.stringify(main.active_profile().to_dictionary()).sha256_text(), before_hash, "sandbox open/use/close preserves active profile semantic hash", failures)
+	TestAssertions.equal(store.save_settings(developer_settings, settings_path), "", "mode-shutdown fixture restores authoritative Developer Mode", failures)
+	TestAssertions.truthy(bool(main.call(&"_open_developer_item_sandbox")), "mode-shutdown fixture reopens the sandbox", failures)
+	var loot_lab := modal.get_node("Overlay/Frame/Layout/Tabs/Loot Lab") as DeveloperLootLab
+	var loot_form := loot_lab.get_node("Layout/Workbench/RequestScroll/RequestForm") as LootLabRequestForm
+	var batch_preferences := loot_form.preferences_document()
+	batch_preferences["batch_preset"] = 1000
+	loot_form.apply_preferences(batch_preferences)
+	loot_lab.call(&"_on_batch_requested", loot_form.build_batch_spec())
+	TestAssertions.truthy(loot_lab.has_active_job(), "mode-shutdown fixture starts a cancellable Loot Lab job", failures)
+	TestAssertions.equal(store.save_settings(player_settings, settings_path), "", "mode-shutdown fixture persists Player Simulation authoritatively", failures)
+	main.call(&"_on_settings_applied", developer_settings)
+	TestAssertions.truthy(not modal.visible and not loot_lab.has_active_job(), "authoritative Player Mode cancels clears and closes the Loot Lab", failures)
+	TestAssertions.equal((loot_lab.get_node("Layout/Analysis/Layout/ReportSelector") as OptionButton).item_count, 0, "mode shutdown retains no hidden diagnostic report", failures)
+	TestAssertions.equal(FileAccess.get_file_as_bytes(profile_path), before_bytes, "mode shutdown preserves active profile bytes", failures)
 
 	TestAssertions.equal(store.save_settings(player_settings, settings_path), "", "route fixture returns to Player Simulation", failures)
 	main.call(&"_open_developer_item_sandbox")

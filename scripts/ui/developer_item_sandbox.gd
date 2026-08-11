@@ -63,6 +63,7 @@ var _wired := false
 var _presentation_projection_override: Callable
 var _loot_lab_session := LootLabSessionController.new()
 var _current_tab := 1
+var _active_scroll_target: Control
 
 
 func _ready() -> void:
@@ -122,6 +123,17 @@ func close() -> void:
 		return
 	if _loot_lab() != null and not _loot_lab().request_parent_close():
 		return
+	_close_immediately()
+
+
+func cancel_and_clear() -> void:
+	if _loot_lab() != null:
+		_loot_lab().cancel_and_clear()
+	if visible:
+		_close_immediately()
+
+
+func _close_immediately() -> void:
 	_tooltip().call("force_dismiss")
 	_clear_held_item()
 	visible = false
@@ -171,6 +183,7 @@ func apply_viewport_size(size: Vector2i) -> void:
 	inventory_panel.custom_minimum_size = Vector2(0.0, 64.0) if compact else Vector2(220.0, 0.0)
 	stash_panel.custom_minimum_size = Vector2(0.0, 220.0) if compact else Vector2(660.0, 0.0)
 	_inventory_grid().columns = 5 if compact else 1
+	_loot_lab().apply_viewport_size(size)
 
 
 func is_holding_item() -> bool:
@@ -178,7 +191,25 @@ func is_holding_item() -> bool:
 
 
 func _input(event: InputEvent) -> void:
-	if not visible or not is_holding_item() or not event.is_action_pressed(&"ui_accept"):
+	if not visible:
+		return
+	if event.is_action_pressed(&"item_sandbox_previous_tab"):
+		_cycle_tab(-1)
+		_mark_input_handled()
+		return
+	if event.is_action_pressed(&"item_sandbox_next_tab"):
+		_cycle_tab(1)
+		_mark_input_handled()
+		return
+	if event.is_action_pressed(&"item_sandbox_scroll_up"):
+		_scroll_focused(-1.0)
+		_mark_input_handled()
+		return
+	if event.is_action_pressed(&"item_sandbox_scroll_down"):
+		_scroll_focused(1.0)
+		_mark_input_handled()
+		return
+	if not is_holding_item() or not event.is_action_pressed(&"ui_accept"):
 		return
 	var target := _focused_slot_button()
 	if _is_slot_button(target):
@@ -201,6 +232,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		if is_holding_item():
 			_clear_held_item()
 			_set_status("HELD_CANCELLED")
+		elif _current_tab == 2 and _loot_lab().cancel_active_job():
+			_set_status("LOOT_LAB_JOB_CANCELLED")
 		else:
 			close()
 		_mark_input_handled()
@@ -558,6 +591,7 @@ func _wire_controls() -> void:
 	_action_button("IntegrityScan").pressed.connect(_on_integrity_scan)
 	_action_button("Reset").pressed.connect(_on_reset)
 	_tabs().tab_changed.connect(_on_tab_changed)
+	_bind_scroll_targets(self)
 	_current_tab = _tabs().current_tab
 
 
@@ -624,6 +658,60 @@ func _on_tab_changed(tab: int) -> void:
 	_configure_focus_graph()
 	if visible:
 		_focus_first_active_control()
+
+
+func _cycle_tab(direction: int) -> void:
+	var tabs := _tabs()
+	if tabs.get_tab_count() <= 0:
+		return
+	tabs.current_tab = posmod(tabs.current_tab + direction, tabs.get_tab_count())
+
+
+func _bind_scroll_targets(node: Node) -> void:
+	for child: Node in node.get_children():
+		if child is ScrollContainer or child is Tree:
+			var control := child as Control
+			if not control.mouse_entered.is_connected(_set_active_scroll_target.bind(control)):
+				control.mouse_entered.connect(_set_active_scroll_target.bind(control))
+		_bind_scroll_targets(child)
+
+
+func _set_active_scroll_target(control: Control) -> void:
+	_active_scroll_target = control
+
+
+func _scroll_focused(direction: float) -> void:
+	var target := _focused_scroll_target()
+	if target is ScrollContainer:
+		var scroll := target as ScrollContainer
+		scroll.scroll_vertical += roundi(direction * 72.0)
+		return
+	if target is Tree:
+		_scroll_tree(target as Tree, direction)
+
+
+func _focused_scroll_target() -> Control:
+	var viewport := get_viewport()
+	var current: Node = viewport.gui_get_focus_owner() if viewport != null else null
+	while current != null:
+		if current is ScrollContainer or current is Tree:
+			return current as Control
+		current = current.get_parent()
+	return _active_scroll_target if _active_scroll_target != null and is_instance_valid(_active_scroll_target) and _active_scroll_target.is_visible_in_tree() else null
+
+
+func _scroll_tree(tree: Tree, direction: float) -> void:
+	var selected := tree.get_selected()
+	if selected == null:
+		var root_item := tree.get_root()
+		selected = root_item.get_first_child() if root_item != null else null
+	elif direction > 0.0:
+		selected = selected.get_next_visible()
+	else:
+		selected = selected.get_prev_visible()
+	if selected != null:
+		selected.select(0)
+		tree.scroll_to_item(selected, true)
 
 
 func _configure_loot_lab() -> void:
