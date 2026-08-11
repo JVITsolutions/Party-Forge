@@ -98,14 +98,6 @@ func selection_for_owner(run_player_id: StringName) -> StringName:
 	return StringName(_selection_by_owner.get(run_player_id, &""))
 
 
-func select_for_owner(run_player_id: StringName, drop_id: StringName) -> bool:
-	var record := _registry.record(drop_id) if _registry != null else null
-	if record == null or record.run_player_id != run_player_id:
-		return false
-	_apply_selection(run_player_id, drop_id)
-	return true
-
-
 func _unhandled_input(event: InputEvent) -> void:
 	if _modal_input_suppressed() or event == null:
 		return

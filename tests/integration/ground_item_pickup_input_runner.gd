@@ -83,6 +83,7 @@ func _test_real_controller_flow() -> void:
 	camera.current = true
 	var controller := (load("res://scripts/world/ground_item_world_controller.gd") as Script).new() as Node
 	host.add_child(controller)
+	_assert(not controller.has_method(&"select_for_owner"), "production exposes no direct selection bypass")
 	controller.call(&"configure", registry, {}, func(record: GroundItemRecord) -> Dictionary: return _detail(record), camera, chests, tooltip_layer)
 	var controller_owned_index := controller.get("_spatial_index") as RefCounted
 	var replacement_registry := GroundItemRegistry.new()
@@ -131,10 +132,16 @@ func _test_real_controller_flow() -> void:
 	modal[0] = false
 	anchor.gui_input.emit(_mouse_button(0))
 	_assert(forwarded == [[&"p1-near", &"player_1"]], "owning mouse pointer reaches the exact chest")
-	_assert(controller.call(&"select_for_owner", &"player_2", &"p2-out"), "out-of-range owner target can remain selected")
+	controller.call(&"_unhandled_input", _button(1, JOY_BUTTON_DPAD_RIGHT))
+	_assert(controller.call(&"selection_for_owner", &"player_2") == &"p2-out", "real P2 D-pad cycle selects owned visible loot outside pickup range")
 	controller.call(&"_unhandled_input", _button(1, JOY_BUTTON_A))
 	_assert(statuses.has("Move closer"), "out-of-range activation emits exact Move closer status")
 	_assert(controller.call(&"selection_for_owner", &"player_2") == &"p2-out", "out-of-range activation preserves selection")
+	modal[0] = true
+	controller.call(&"_unhandled_input", _button(1, JOY_BUTTON_DPAD_LEFT))
+	_assert(controller.call(&"selection_for_owner", &"player_2") == &"p2-out", "modal input preserves the real out-of-range selection")
+	modal[0] = false
+	_assert(controller.call(&"selection_for_owner", &"player_2") == &"p2-out", "ledger close preserves the real out-of-range selection")
 	var result_script := load("res://scripts/loot/ground_item_pickup_result.gd") as Script
 	var codes := result_script.get_script_constant_map()["Code"] as Dictionary
 	var full_result := pickup.call(&"collect", &"p1-near", &"player_1") as RefCounted
