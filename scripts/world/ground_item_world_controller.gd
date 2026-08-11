@@ -351,8 +351,8 @@ func _release_chest(drop_id: StringName) -> void:
 	var chest := _chest_by_drop.get(drop_id) as Node3D
 	if chest == null:
 		return
-	if _tooltip != null:
-		_tooltip.release_item(_source_id(drop_id))
+	if _tooltip != null and _tooltip.is_current_source(_source_id(drop_id)):
+		_tooltip.force_dismiss()
 	_chest_by_drop.erase(drop_id)
 	_record_by_drop.erase(drop_id)
 	_detail_by_drop.erase(drop_id)

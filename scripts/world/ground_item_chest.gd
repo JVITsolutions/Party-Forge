@@ -24,6 +24,8 @@ func _ready() -> void:
 
 func bind(record: GroundItemRecord, detail: Dictionary, owner_color: Color) -> void:
 	_ensure_tooltip_anchor()
+	set_selected(false)
+	_reset_anchor_interaction_state()
 	if record == null:
 		deactivate()
 		return
@@ -33,7 +35,6 @@ func bind(record: GroundItemRecord, detail: Dictionary, owner_color: Color) -> v
 	_detail = detail.duplicate(true)
 	position = record.world_position
 	visible = true
-	_selected = false
 	var rarity_id := StringName(String(_detail.get("rarity_id", record.rarity_id)))
 	var rarity_color := RARITY_PALETTE.color_for(rarity_id)
 	_rarity_energy = BASE_LIGHT_ENERGY + float(RARITY_PALETTE.intensity_for(rarity_id)) * RARITY_LIGHT_STEP
@@ -100,17 +101,15 @@ func request_pickup(input_owner: StringName) -> void:
 
 
 func deactivate() -> void:
+	set_selected(false)
 	visible = false
-	_selected = false
 	drop_id = &""
 	run_player_id = &""
 	player_number = 0
 	_detail = {}
 	if _tooltip_anchor != null and is_instance_valid(_tooltip_anchor):
+		_reset_anchor_interaction_state()
 		_tooltip_anchor.visible = false
-		_tooltip_anchor.accessibility_description = ""
-		if _tooltip_anchor.is_inside_tree() and _tooltip_anchor.has_focus():
-			_tooltip_anchor.release_focus()
 	var collision := get_node_or_null("PickupTarget/CollisionShape3D") as CollisionShape3D
 	if collision != null:
 		collision.disabled = true
@@ -138,6 +137,15 @@ func _refresh_accessibility(distance_meters: float) -> void:
 	var item_name := String(_detail.get("name", "Unknown Item"))
 	var rarity_name := String(_detail.get("rarity_name", String(_detail.get("rarity_id", "Unknown Rarity")).capitalize()))
 	_tooltip_anchor.accessibility_name = "%s, %s, P%d, %.1f m" % [item_name, rarity_name, player_number, maxf(distance_meters, 0.0)]
+
+
+func _reset_anchor_interaction_state() -> void:
+	_tooltip_anchor.text = ""
+	_tooltip_anchor.tooltip_text = ""
+	_tooltip_anchor.accessibility_name = ""
+	_tooltip_anchor.accessibility_description = ""
+	if _tooltip_anchor.is_inside_tree() and _tooltip_anchor.has_focus():
+		_tooltip_anchor.release_focus()
 
 
 func _missing_optional_visual() -> bool:

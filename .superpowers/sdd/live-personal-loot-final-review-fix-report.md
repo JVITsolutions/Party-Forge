@@ -86,3 +86,25 @@ This follow-up remained inside the approved Main, Developer Mode badge, world co
 
 - `git diff --check` passed. Review found bounded combined work, no duplicate critical/ordinary projection, no injected Boolean diagnostic substitute, no test-only production API, no private-method integration shortcut, and no unrelated production/report edit.
 - Commit message: `fix: prioritize loot interaction state`.
+
+## Pooled selection lifecycle fix
+
+Lifecycle-fix starting head: `58b1a8d9b55b64643359439adeefa71c9066faee`
+
+This final bounded fix changed only the pooled chest/controller lifecycle, the existing actual-input pickup runner, and this unique report.
+
+### Controlled RED and implementation
+
+- The production-lifecycle test selected a chest through real D-pad input, confirmed its ring, selected font/distance style, focus, and shared tooltip, removed the record into the production pool, then added an unselected record and confirmed exact node reuse.
+- Controlled RED failed exactly 3 intended assertions: the reused chest retained its visible ring, selected anchor style, and stale shared-tooltip ownership.
+- `GroundItemChest.bind()` and `deactivate()` now reset selection only through `set_selected(false)`. Both lifecycle boundaries clear anchor text, tooltip text, focus, accessibility name, and accessibility description. A removed chest whose source owns the shared tooltip is dismissed immediately rather than retaining an invalid source during hover grace.
+- GREEN proves the exact pooled node is unselected, its ring is hidden, its font/text are reset, its anchor has no stale focus/accessibility state, and the shared tooltip has no old or new source ownership. The new integration uses normal scene-tree processing and actual input dispatch rather than a private process call.
+
+### Lifecycle-fix verification
+
+- Focused chest/controller/pickup gate: `TEST_SUMMARY: PASS (0 failures)`.
+- Actual viewport/input pickup runner: all mouse, controller, full-inventory, foreign-owner, and overall integration markers passed.
+- Moving-camera regression: `LIVE_LOOT_PERFORMANCE_SUMMARY: PASS` at 2,003 records; peak frame `11.594ms`; peak work `32`; peak pending `1942`; settled in `71` frames; memory marker present.
+- Final isolated full suite: `TEST_SUMMARY: PASS (201 suites)` with no parse/load/leak marker.
+- `git diff --check` passed, no unrelated scope was added, and cold acceptance evidence was not rerun or modified.
+- Commit message: `fix: reset pooled loot selection visuals`.
