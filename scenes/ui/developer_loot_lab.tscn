@@ -1,6 +1,9 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=5 format=3]
 
 [ext_resource type="Script" path="res://scripts/ui/developer_loot_lab.gd" id="1_lab"]
+[ext_resource type="Script" path="res://scripts/ui/loot_lab/loot_lab_request_form.gd" id="2_form"]
+[ext_resource type="Script" path="res://scripts/ui/loot_lab/loot_lab_sample_gallery.gd" id="3_gallery"]
+[ext_resource type="Script" path="res://scripts/ui/loot_lab/loot_lab_trace_inspector.gd" id="4_inspector"]
 
 [node name="Loot Lab" type="Control"]
 layout_mode = 3
@@ -18,23 +21,101 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-alignment = 1
-theme_override_constants/separation = 12
+theme_override_constants/separation = 8
 
-[node name="Title" type="Label" parent="Layout"]
+[node name="Header" type="HBoxContainer" parent="Layout"]
 layout_mode = 2
+
+[node name="Title" type="Label" parent="Layout/Header"]
+layout_mode = 2
+size_flags_horizontal = 3
 theme_override_font_sizes/font_size = 24
-text = "Loot Lab"
-horizontal_alignment = 1
+text = "Deterministic Loot Lab"
 
-[node name="Description" type="Label" parent="Layout"]
+[node name="WorkbenchFocusAnchor" type="Button" parent="Layout/Header"]
+custom_minimum_size = Vector2(132, 40)
 layout_mode = 2
-text = "Deterministic weighted item-generation workbench"
-horizontal_alignment = 1
-
-[node name="WorkbenchFocusAnchor" type="Button" parent="Layout"]
-custom_minimum_size = Vector2(280, 48)
-layout_mode = 2
-size_flags_horizontal = 4
 focus_mode = 2
-text = "Workbench controls ready"
+text = "Workbench"
+
+[node name="Workbench" type="HBoxContainer" parent="Layout"]
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_constants/separation = 10
+
+[node name="RequestScroll" type="ScrollContainer" parent="Layout/Workbench"]
+custom_minimum_size = Vector2(340, 0)
+layout_mode = 2
+size_flags_vertical = 3
+follow_focus = true
+horizontal_scroll_mode = 0
+
+[node name="RequestForm" type="VBoxContainer" parent="Layout/Workbench/RequestScroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+script = ExtResource("2_form")
+
+[node name="Results" type="VBoxContainer" parent="Layout/Workbench"]
+custom_minimum_size = Vector2(420, 0)
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+theme_override_constants/separation = 6
+
+[node name="OutcomeSummary" type="Label" parent="Layout/Workbench/Results"]
+layout_mode = 2
+text = "No report yet."
+horizontal_alignment = 1
+
+[node name="Progress" type="ProgressBar" parent="Layout/Workbench/Results"]
+layout_mode = 2
+show_percentage = false
+
+[node name="Cancel" type="Button" parent="Layout/Workbench/Results"]
+layout_mode = 2
+focus_mode = 2
+text = "Cancel active batch"
+
+[node name="SampleScroll" type="ScrollContainer" parent="Layout/Workbench/Results"]
+layout_mode = 2
+size_flags_vertical = 3
+follow_focus = true
+horizontal_scroll_mode = 0
+
+[node name="SampleGrid" type="GridContainer" parent="Layout/Workbench/Results/SampleScroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+columns = 4
+theme_override_constants/h_separation = 4
+theme_override_constants/v_separation = 4
+script = ExtResource("3_gallery")
+
+[node name="InspectorScroll" type="ScrollContainer" parent="Layout/Workbench"]
+custom_minimum_size = Vector2(390, 0)
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+follow_focus = true
+horizontal_scroll_mode = 0
+
+[node name="TraceInspector" type="VBoxContainer" parent="Layout/Workbench/InspectorScroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+script = ExtResource("4_inspector")
+
+[node name="FooterStatus" type="Label" parent="Layout"]
+custom_minimum_size = Vector2(0, 32)
+layout_mode = 2
+text = "Ready"
+horizontal_alignment = 1
+autowrap_mode = 2
+
+[node name="BatchConfirmation" type="ConfirmationDialog" parent="."]
+title = "Confirm large deterministic batch"
+dialog_text = "Generate 100,000 deterministic attempts? This job is cancellable and advances over multiple frames."
+ok_button_text = "Start 100,000"
+
+[node name="CancelCloseConfirmation" type="ConfirmationDialog" parent="."]
+title = "Cancel active Loot Lab batch?"
+dialog_text = "A deterministic batch is still running. Cancel it and close the sandbox?"
+ok_button_text = "Cancel batch and close"

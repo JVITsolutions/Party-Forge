@@ -234,7 +234,7 @@ func _test_modal_contract(packed: PackedScene, failures: Array[String]) -> void:
 		tabs.current_tab = 2
 		sandbox.call(&"_on_tab_changed", 2)
 		TestAssertions.equal((sandbox.get_node("Overlay/Frame/Layout/Tabs/Fixtures/Actions/Reset") as Control).focus_mode, Control.FOCUS_NONE, "fixture controls are excluded while Loot Lab is visible", failures)
-		TestAssertions.equal((sandbox.get_node("Overlay/Frame/Layout/Tabs/Loot Lab/Layout/WorkbenchFocusAnchor") as Control).focus_mode, Control.FOCUS_ALL, "Loot Lab focus anchor is active on its page", failures)
+		TestAssertions.equal((sandbox.get_node("Overlay/Frame/Layout/Tabs/Loot Lab/Layout/Header/WorkbenchFocusAnchor") as Control).focus_mode, Control.FOCUS_ALL, "Loot Lab focus anchor is active on its page", failures)
 		tabs.current_tab = 1
 		sandbox.call(&"_on_tab_changed", 1)
 

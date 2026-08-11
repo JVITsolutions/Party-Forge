@@ -288,11 +288,12 @@ func _closed_focus_graph(sandbox: DeveloperItemSandbox) -> bool:
 		return false
 
 	tabs.current_tab = 2
-	var loot_controls: Array[Control] = [
-		sandbox.get_node("Overlay/Frame/Layout/Tabs/Loot Lab/Layout/WorkbenchFocusAnchor") as Control,
-		tabs,
-		close,
-	]
+	var loot_controls: Array[Control] = []
+	var loot_lab := sandbox.get_node("Overlay/Frame/Layout/Tabs/Loot Lab") as DeveloperLootLab
+	for control: Control in loot_lab.focus_controls():
+		loot_controls.append(control)
+	loot_controls.append(tabs)
+	loot_controls.append(close)
 	if not _graph_controls_are_closed(loot_controls) or (sandbox.get_node(ACTION_PATHS[4]) as Control).focus_mode != Control.FOCUS_NONE:
 		return false
 	tabs.current_tab = 1

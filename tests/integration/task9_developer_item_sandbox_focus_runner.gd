@@ -47,7 +47,7 @@ func _run() -> void:
 	_assert_focus_reachable(integrity_scan, close_button)
 	tabs.current_tab = 2
 	await _frames(2)
-	var loot_anchor := sandbox.get_node("Overlay/Frame/Layout/Tabs/Loot Lab/Layout/WorkbenchFocusAnchor") as Button
+	var loot_anchor := sandbox.get_node("Overlay/Frame/Layout/Tabs/Loot Lab/Layout/Header/WorkbenchFocusAnchor") as Button
 	_assert(integrity_scan.focus_mode == Control.FOCUS_NONE, "fixture actions leave the focus graph on Loot Lab")
 	_assert(loot_anchor.focus_mode == Control.FOCUS_ALL, "Loot Lab anchor enters the visible focus graph")
 	_assert_focus_reachable(loot_anchor, close_button)

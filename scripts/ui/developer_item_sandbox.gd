@@ -120,6 +120,8 @@ func configure(state: DeveloperItemSandboxState, presentation_projection: Callab
 func close() -> void:
 	if not visible:
 		return
+	if _loot_lab() != null and not _loot_lab().request_parent_close():
+		return
 	_tooltip().call("force_dismiss")
 	_clear_held_item()
 	visible = false
