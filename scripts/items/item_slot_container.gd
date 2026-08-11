@@ -3,6 +3,9 @@ extends RefCounted
 
 const SCHEMA_VERSION := 1
 const RUN_INVENTORY := &"run_inventory"
+const RUN_GROUND_ITEMS := &"run_ground_items"
+const RUN_GROUND_ITEMS_ID := &"run-ground-items"
+const RUN_GROUND_ITEMS_CAPACITY := 2048
 const PROFILE_STASH_TAB := &"profile_stash_tab"
 const PROFILE_LEADER_EQUIPMENT := &"profile_leader_equipment"
 const RUN_MEMBER_EQUIPMENT := &"run_member_equipment"
@@ -112,6 +115,9 @@ func _validation_error(path: String) -> String:
 	if container_kind == RUN_INVENTORY or container_kind == DEVELOPER_INVENTORY:
 		if capacity < 0 or capacity > INVENTORY_CAPACITY_MAX:
 			return _error("%s.capacity" % path, "%s capacity must be in range 0..40" % container_kind)
+	elif container_kind == RUN_GROUND_ITEMS:
+		if capacity != RUN_GROUND_ITEMS_CAPACITY:
+			return _error("%s.capacity" % path, "%s capacity must equal %d" % [container_kind, RUN_GROUND_ITEMS_CAPACITY])
 	elif container_kind == PROFILE_LEADER_EQUIPMENT or container_kind == RUN_MEMBER_EQUIPMENT:
 		if capacity != EquipmentSlotIndex.capacity():
 			return _error("%s.capacity" % path, "%s capacity must equal %d" % [container_kind, EquipmentSlotIndex.capacity()])
@@ -173,6 +179,7 @@ static func _canonical_slot_key(value: String) -> bool:
 static func _known_kind_strings() -> Array[String]:
 	return [
 		String(RUN_INVENTORY),
+		String(RUN_GROUND_ITEMS),
 		String(PROFILE_STASH_TAB),
 		String(PROFILE_LEADER_EQUIPMENT),
 		String(RUN_MEMBER_EQUIPMENT),

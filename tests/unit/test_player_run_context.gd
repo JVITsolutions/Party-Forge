@@ -1105,7 +1105,7 @@ func _test_checked_out_item_bootstrap_identity_and_retry(failures: Array[String]
 	TestAssertions.truthy(not wrong_profile_errors.is_empty() and wrong_profile_errors[0].contains("field=item_bootstrap"), "wrong profile/run pairing is rejected", failures)
 	_assert_context_unconfigured(retry_context, "wrong profile", failures)
 	TestAssertions.equal(retry_context.configure(&"bootstrap_player", 0, profile, 4410, party, 100, bootstrap), PackedStringArray(), "failed bootstrap configuration remains retryable", failures)
-	TestAssertions.equal(retry_context.item_state().to_dictionary(), state.to_dictionary(), "successful retry adopts exact checked-out item state", failures)
+	TestAssertions.equal(retry_context.item_state().to_dictionary(), RunItemBootstrap.with_ground_container(bootstrap.item_state()).to_dictionary(), "successful retry adopts exact checked-out item state with empty ground ownership", failures)
 	var exposed := retry_context.item_state()
 	exposed._clear_slot(&"run-equipment-001", 9)
 	TestAssertions.equal(retry_context.equipment_for(1).item_id_at(9), item.instance_id, "configured bootstrap state is defensive", failures)
@@ -1210,7 +1210,7 @@ func _test_configuration_validation_and_copy_ownership(failures: Array[String]) 
 		var retry_inventory := invalid.call(&"run_inventory") as ItemSlotContainer
 		TestAssertions.truthy(retry_state != null, "valid retry creates one item ownership state", failures)
 		TestAssertions.equal(retry_state.registry().size(), 0, "valid retry creates one empty run registry", failures)
-		TestAssertions.equal(retry_state.containers().size(), 2, "valid retry creates inventory plus leader equipment", failures)
+		TestAssertions.equal(retry_state.containers().size(), 3, "valid retry creates inventory, ground items, and leader equipment", failures)
 		TestAssertions.equal(retry_inventory.capacity, 5, "valid retry derives its unlocked five-slot inventory", failures)
 		var retry_created := invalid.call(
 			&"apply_item_transaction",

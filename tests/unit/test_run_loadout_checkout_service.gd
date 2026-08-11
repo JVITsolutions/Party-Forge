@@ -18,6 +18,16 @@ func run() -> Array[String]:
 	return failures
 
 func _test_profile_codec_rejects_malformed_or_duplicate_strict_run_ownership(failures: Array[String]) -> void:
+	var duplicate_container_state := ItemOwnershipState.create(String(RUN_PLAYER_ID), ItemRegistry.new(), [
+		ItemSlotContainer.create(&"run-inventory", ItemSlotContainer.RUN_INVENTORY, String(RUN_PLAYER_ID), 10),
+		ItemSlotContainer.create(&"run-inventory", ItemSlotContainer.RUN_INVENTORY, String(RUN_PLAYER_ID), 10),
+	])
+	var duplicate_container_bootstrap := RunItemBootstrap.create(RUN_ID, 4402, RUN_PLAYER_ID, LEADER_MEMBER_ID, duplicate_container_state)
+	TestAssertions.truthy(
+		not duplicate_container_bootstrap.item_state().validate(GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG).is_empty(),
+		"ground bootstrap normalization cannot erase prior state construction errors",
+		failures,
+	)
 	var item := _item("item-cross-domain-duplicate", &"forge_vanguard_sword", 0)
 	var profile := _profile_with_loadout([item], {9: item.instance_id}, {}, "fighter")
 	profile.resumable_run = ResumableRunItemCodec.encode(
@@ -103,6 +113,12 @@ func _test_checkout_transfers_exact_instances_once_and_replays_without_writing(f
 		TestAssertions.equal(state.registry().ids(), [shield.instance_id, sword.instance_id], "run registry owns the exact checked-out instances", failures)
 		TestAssertions.equal(state.container(&"run-equipment-001").to_dictionary()["slots"], {"9": sword.instance_id, "10": shield.instance_id}, "leader run equipment preserves exact slot placement", failures)
 		TestAssertions.equal(state.container(&"run-inventory").occupied_slots(), [], "checkout bootstrap begins with an empty run inventory", failures)
+		var ground := state.container(&"run-ground-items")
+		TestAssertions.truthy(ground != null, "checkout bootstrap includes run-ground ownership", failures)
+		if ground != null:
+			TestAssertions.equal(ground.container_kind, &"run_ground_items", "checkout ground kind is exact", failures)
+			TestAssertions.equal(ground.capacity, 2048, "checkout ground capacity is exact", failures)
+			TestAssertions.equal(ground.occupied_slots(), [], "checkout bootstrap begins with empty ground", failures)
 		TestAssertions.equal(state.validate(GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG), "", "checked-out run ownership is strict", failures)
 	var saved_ids: Array[String] = []
 	for item_document: Dictionary in saved.item_records["items"] as Array:
@@ -350,6 +366,7 @@ func _run_state(items: Array[ItemInstance], equipment_slots: Dictionary) -> Item
 	return ItemOwnershipState.create(String(RUN_PLAYER_ID), ItemRegistry.new(items), [
 		ItemSlotContainer.create(&"run-inventory", ItemSlotContainer.RUN_INVENTORY, String(RUN_PLAYER_ID), 10),
 		ItemSlotContainer.create(&"run-equipment-001", ItemSlotContainer.RUN_MEMBER_EQUIPMENT, String(RUN_PLAYER_ID), EquipmentSlotIndex.capacity(), equipment_slots),
+		ItemSlotContainer.create(&"run-ground-items", &"run_ground_items", String(RUN_PLAYER_ID), 2048),
 	])
 
 func _item(instance_id: String, base_id: StringName, sequence: int) -> ItemInstance:

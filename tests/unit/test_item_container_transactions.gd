@@ -17,6 +17,7 @@ func run() -> Array[String]:
 	if equipment == null or foundation == null:
 		return failures
 	var scenario_methods: Array[StringName] = [
+		&"_assert_run_ground_container_contract",
 		&"_assert_request_contract_and_defensive_copy",
 		&"_assert_success_matrix",
 		&"_assert_failure_matrix",
@@ -28,6 +29,7 @@ func run() -> Array[String]:
 	if OS.get_environment("PARTY_FORGE_TRANSACTION_CASE_ORDER") == "reordered":
 		scenario_methods = [
 			&"_assert_result_and_journal_defensive_copies",
+			&"_assert_run_ground_container_contract",
 			&"_assert_failure_matrix",
 			&"_assert_request_contract_and_defensive_copy",
 			&"_assert_validation_precedence",
@@ -40,9 +42,24 @@ func run() -> Array[String]:
 		TestAssertions.truthy(not executed.has(method), "scenario group %s executes once" % method, failures)
 		executed[method] = true
 		call(method, equipment, foundation, failures)
-	TestAssertions.equal(executed.size(), 7, "all transaction scenario groups execute", failures)
+	TestAssertions.equal(executed.size(), 8, "all transaction scenario groups execute", failures)
 	print("ITEM_TRANSACTION_MATRIX: %s" % ("PASS" if failures.is_empty() else "FAIL"))
 	return failures
+
+func _assert_run_ground_container_contract(
+	_equipment: EquipmentCatalog,
+	_foundation: ItemFoundationCatalog,
+	failures: Array[String]
+) -> void:
+	var constants: Dictionary = ItemSlotContainer.new().get_script().get_script_constant_map()
+	TestAssertions.equal(constants.get("RUN_GROUND_ITEMS"), &"run_ground_items", "run-ground container kind is exact", failures)
+	TestAssertions.equal(constants.get("RUN_GROUND_ITEMS_ID"), &"run-ground-items", "run-ground container ID is exact", failures)
+	TestAssertions.equal(constants.get("RUN_GROUND_ITEMS_CAPACITY"), 2048, "run-ground capacity is exact", failures)
+	var valid := ItemSlotContainer.create(&"run-ground-items", &"run_ground_items", OWNER_ID, 2048)
+	TestAssertions.equal(valid._validation_error("ground"), "", "exact run-ground container validates", failures)
+	var wrong_capacity := ItemSlotContainer.create(&"run-ground-items", &"run_ground_items", OWNER_ID, 2047)
+	var capacity_error := wrong_capacity._validation_error("ground")
+	TestAssertions.truthy(capacity_error.contains("ground.capacity") and capacity_error.contains("2048"), "run-ground capacity cannot drift", failures)
 
 func _assert_request_contract_and_defensive_copy(
 	_equipment: EquipmentCatalog,

@@ -40,6 +40,7 @@ var _actor_by_member: Dictionary = {}
 var _item_state: ItemOwnershipState
 var _item_journal: ItemTransactionJournal
 var _next_item_sequence := 0
+var _ground_collection_requests: Dictionary = {}
 var _equipment_activation_by_member: Dictionary = {}
 var _pending_equipment_activation_by_member: Dictionary = {}
 var _pending_item_state: ItemOwnershipState
@@ -119,7 +120,10 @@ func configure(
 		String(run_player_id_value),
 		owned_profile.inventory_columns * 5,
 	)
-	var item_containers: Array[ItemSlotContainer] = [inventory]
+	var item_containers: Array[ItemSlotContainer] = [
+		inventory,
+		RunItemBootstrap.ground_items_container(String(run_player_id_value)),
+	]
 	for member: PartyMemberState in manager.members:
 		item_containers.append(_run_equipment_container(member.member_id, String(run_player_id_value)))
 	var next_item_state := ItemOwnershipState.create(
@@ -138,6 +142,12 @@ func configure(
 		])
 	if item_bootstrap != null:
 		var bootstrap_state := item_bootstrap.item_state()
+		if (
+			bootstrap_state != null
+			and bootstrap_state.container(ItemSlotContainer.RUN_GROUND_ITEMS_ID) == null
+			and bootstrap_state.validate(GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG).is_empty()
+		):
+			bootstrap_state = RunItemBootstrap.with_ground_container(bootstrap_state)
 		var bootstrap_error := _validate_bootstrap_state(bootstrap_state, next_item_state)
 		if not bootstrap_error.is_empty():
 			_reset_unconfigured_fields()
@@ -201,6 +211,7 @@ func configure(
 	_pending_leader_levels.clear()
 	_actor_by_member.clear()
 	_item_journal = next_item_journal
+	_ground_collection_requests.clear()
 	_equipment_activation_by_member.clear()
 	_next_item_sequence = next_item_sequence
 	_run_id = item_bootstrap.run_id if item_bootstrap != null else &""
@@ -256,6 +267,110 @@ func item_state() -> ItemOwnershipState:
 
 func run_inventory() -> ItemSlotContainer:
 	return _item_state.container(&"run-inventory") if _item_state != null else null
+
+func ground_items() -> ItemSlotContainer:
+	return _item_state.container(ItemSlotContainer.RUN_GROUND_ITEMS_ID) if _item_state != null else null
+
+func issue_ground_item(
+	request: ItemGenerationRequest,
+	equipment: EquipmentCatalog,
+	foundation: ItemFoundationCatalog,
+) -> ItemGenerationResult:
+	if not _can_mutate_current_owner() or _item_state == null or _item_journal == null:
+		return _ground_storage_failure(request, ItemGenerationTrace.new(), &"context_unavailable", {})
+	var generated := ItemGenerationService.generate(
+		request,
+		_run_item_issuer_namespace(),
+		_next_item_sequence,
+		equipment,
+		foundation,
+	)
+	if generated == null or not generated.ok():
+		return generated
+	var ground := ground_items()
+	var destination_slot := ground.first_empty_slot() if ground != null else -1
+	if destination_slot < 0:
+		return _ground_storage_failure(request, generated.trace, &"ground_full", {})
+	var transaction := ItemTransactionRequest.create(
+		"issue-ground:%s" % generated.item.instance_id,
+		String(run_player_id),
+		ItemSlotContainer.RUN_GROUND_ITEMS_ID,
+		destination_slot,
+		generated.item,
+	)
+	var stored := apply_item_transaction(transaction, equipment, foundation)
+	if not stored.ok():
+		return _ground_storage_failure(request, generated.trace, &"transaction_rejected", {
+			"transaction_code": int(stored.code),
+		})
+	return generated
+
+func collect_ground_item(
+	item_id: String,
+	transaction_id: String,
+	equipment: EquipmentCatalog,
+	foundation: ItemFoundationCatalog,
+) -> ItemTransactionResult:
+	if (
+		not _can_mutate_current_owner()
+		or _item_state == null
+		or _item_journal == null
+		or item_id.strip_edges().is_empty()
+		or transaction_id.strip_edges().is_empty()
+		or equipment == null
+		or foundation == null
+	):
+		return _item_transaction_failure(ItemTransactionResult.Code.INVALID_REQUEST)
+	if _ground_collection_requests.has(transaction_id):
+		var replay_document := _ground_collection_requests[transaction_id] as Dictionary
+		if String(replay_document.get("item_id", "")) != item_id:
+			return _item_transaction_failure(ItemTransactionResult.Code.TRANSACTION_COLLISION)
+		return apply_item_transaction(
+			ItemTransactionRequest.move(
+				transaction_id,
+				String(run_player_id),
+				ItemSlotContainer.RUN_GROUND_ITEMS_ID,
+				int(replay_document["source_slot"]),
+				item_id,
+				&"run-inventory",
+				int(replay_document["destination_slot"]),
+			),
+			equipment,
+			foundation,
+		)
+	if _item_journal.has(transaction_id):
+		return _item_transaction_failure(ItemTransactionResult.Code.TRANSACTION_COLLISION)
+	var ground := ground_items()
+	var inventory := run_inventory()
+	if ground == null or inventory == null:
+		return _item_transaction_failure(ItemTransactionResult.Code.INVALID_REQUEST)
+	var source_slot := -1
+	for slot: int in ground.occupied_slots():
+		if ground.item_id_at(slot) == item_id:
+			source_slot = slot
+			break
+	if source_slot < 0:
+		return _item_transaction_failure(ItemTransactionResult.Code.SOURCE_MISMATCH)
+	var destination_slot := inventory.first_empty_slot()
+	if destination_slot < 0:
+		return _item_transaction_failure(ItemTransactionResult.Code.DESTINATION_OCCUPIED)
+	var request := ItemTransactionRequest.move(
+		transaction_id,
+		String(run_player_id),
+		ItemSlotContainer.RUN_GROUND_ITEMS_ID,
+		source_slot,
+		item_id,
+		&"run-inventory",
+		destination_slot,
+	)
+	var result := apply_item_transaction(request, equipment, foundation)
+	if result.ok() and not result.duplicate:
+		_ground_collection_requests[transaction_id] = {
+			"item_id": item_id,
+			"source_slot": source_slot,
+			"destination_slot": destination_slot,
+		}
+	return result
 
 func equipment_for(member_id: int) -> ItemSlotContainer:
 	return _item_state.container(_run_equipment_id(member_id)) if _item_state != null else null
@@ -352,10 +467,24 @@ func apply_item_transaction(
 		ItemTransactionRequest.SWAP_OCCUPIED,
 	]:
 		return _item_transaction_failure(ItemTransactionResult.Code.INVALID_REQUEST)
-	if (
-		request.operation != ItemTransactionRequest.CREATE_AND_PLACE
-		and not _container_is_run_inventory(request.source_container_id)
-	) or not _container_is_run_inventory(request.destination_container_id):
+	var source_is_ground := request.source_container_id == String(ItemSlotContainer.RUN_GROUND_ITEMS_ID)
+	var destination_is_ground := request.destination_container_id == String(ItemSlotContainer.RUN_GROUND_ITEMS_ID)
+	var destination_is_inventory := request.destination_container_id == "run-inventory"
+	var source_is_inventory := request.source_container_id == "run-inventory"
+	var allowed := (
+		(request.operation == ItemTransactionRequest.CREATE_AND_PLACE and destination_is_ground)
+		or (request.operation == ItemTransactionRequest.MOVE_TO_EMPTY and source_is_ground and destination_is_inventory)
+		or (
+			not source_is_ground
+			and not destination_is_ground
+			and destination_is_inventory
+			and (
+				request.operation == ItemTransactionRequest.CREATE_AND_PLACE
+				or source_is_inventory
+			)
+		)
+	)
+	if not allowed:
 		return _item_transaction_failure(ItemTransactionResult.Code.INVALID_REQUEST)
 	if request.owner_id != _item_state.owner_id:
 		return service.apply(_item_state, request, _item_journal, equipment, foundation)
@@ -562,6 +691,7 @@ func _reset_unconfigured_fields() -> void:
 	_actor_by_member.clear()
 	_item_state = null
 	_item_journal = null
+	_ground_collection_requests.clear()
 	_equipment_activation_by_member.clear()
 	_clear_pending_equipment_publication()
 	_next_item_sequence = 0
@@ -909,6 +1039,26 @@ func _validate_bootstrap_state(state: ItemOwnershipState, empty_candidate: ItemO
 
 func _item_transaction_failure(code: ItemTransactionResult.Code) -> ItemTransactionResult:
 	return ItemTransactionResult.create(code)
+
+func _ground_storage_failure(
+	request: ItemGenerationRequest,
+	trace: ItemGenerationTrace,
+	code: StringName,
+	details: Dictionary,
+) -> ItemGenerationResult:
+	var failure := ItemGenerationFailure.new()
+	failure.generator_version = ItemGenerationService.GENERATOR_VERSION
+	failure.stage = &"ground_storage"
+	failure.code = code
+	if request != null:
+		failure.source_id = request.source_id
+		failure.seed = request.seed
+		failure.generation_sequence = request.generation_sequence
+	failure.details = details.duplicate(true)
+	return ItemGenerationResult.failed(failure, trace)
+
+func _run_item_issuer_namespace() -> String:
+	return "run:%s:%s:%s" % [profile_id, run_seed, run_player_id]
 
 func _container_is_run_inventory(container_id: String) -> bool:
 	var container := _item_state.container(StringName(container_id))

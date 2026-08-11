@@ -119,6 +119,7 @@ func _apply_checkout(candidate: ProfileState, request: RunLoadoutCheckoutRequest
 			EquipmentSlotIndex.capacity(),
 			equipment_slots,
 		),
+		RunItemBootstrap.ground_items_container(String(request.run_player_id)),
 	])
 	var run_error := run_state.validate(GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)
 	if not run_error.is_empty():

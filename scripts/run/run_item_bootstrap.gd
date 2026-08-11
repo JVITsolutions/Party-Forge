@@ -34,5 +34,22 @@ static func create(
 	result._item_state = item_state_value.copy() if item_state_value != null else null
 	return result
 
+static func ground_items_container(owner_id: String) -> ItemSlotContainer:
+	return ItemSlotContainer.create(
+		ItemSlotContainer.RUN_GROUND_ITEMS_ID,
+		ItemSlotContainer.RUN_GROUND_ITEMS,
+		owner_id,
+		ItemSlotContainer.RUN_GROUND_ITEMS_CAPACITY,
+	)
+
+static func with_ground_container(state: ItemOwnershipState) -> ItemOwnershipState:
+	if state == null:
+		return null
+	if state.container(ItemSlotContainer.RUN_GROUND_ITEMS_ID) != null:
+		return state.copy()
+	var containers := state.containers()
+	containers.append(ground_items_container(state.owner_id))
+	return ItemOwnershipState.create(state.owner_id, state.registry(), containers)
+
 func item_state() -> ItemOwnershipState:
 	return _item_state.copy() if _item_state != null else null
