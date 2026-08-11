@@ -66,11 +66,17 @@ func is_active() -> bool:
 	return _active and _terminal_report.is_empty()
 
 func progress() -> Dictionary:
+	var elapsed_seconds := maxf(float(Time.get_ticks_usec() - _started_usec) / 1000000.0, 0.0) if _started_usec > 0 else 0.0
+	if not _terminal_report.is_empty():
+		elapsed_seconds = float((_terminal_report.get("runtime", {}) as Dictionary).get("elapsed_seconds", elapsed_seconds))
+	var throughput := float(_attempted) / elapsed_seconds if elapsed_seconds > 0.0 else 0.0
 	return {
 		"active": is_active(),
 		"attempted": _attempted,
 		"cancel_requested": _cancel_requested,
+		"elapsed_seconds": elapsed_seconds,
 		"failed": _failed,
+		"items_per_second": throughput,
 		"status": "active" if is_active() else String((_terminal_report.get("runtime", {}) as Dictionary).get("status", "failed")),
 		"succeeded": _succeeded,
 		"target": _spec.target_count if _spec != null else 0,
