@@ -47,10 +47,8 @@ func _exercise_resolution(viewport_size: Vector2i) -> void:
 	var page := ledger.get_node(PAGE_PATH) as CharacterLedgerPage
 	var frame := ledger.get_node("Overlay/Frame") as Control
 	_assert(_inside_safe_margin(frame.get_global_rect(), viewport_size), "frame honors 24px safe margin at %s" % viewport_size)
-	var tooltip := page.get_node("ItemTooltipPanel") as ItemTooltipPanel
-	tooltip.set_compare_active(true)
-	tooltip.set_advanced_active(true)
-	await _layout()
+	var inventory := page.get_node("Layout/Body/InventoryRegion/InventoryScroll/Grid") as GridContainer
+	await _exercise_live_tooltip_layers(page, inventory, viewport_size)
 	_assert_visible_controls_within_safe_margin(page, viewport_size)
 	var doll := page.get_node("Layout/Body/EquipmentRegion/Doll") as Control
 	var protected_center := doll.get_node("PreviewProtectedCenter") as Control
@@ -65,7 +63,6 @@ func _exercise_resolution(viewport_size: Vector2i) -> void:
 		for prior: Rect2 in slot_rects:
 			_assert(not slot.get_global_rect().intersects(prior), "%s does not overlap another equipment slot at %s" % [slot.name, viewport_size])
 		slot_rects.append(slot.get_global_rect())
-	var inventory := page.get_node("Layout/Body/InventoryRegion/InventoryScroll/Grid") as GridContainer
 	_assert(inventory.get_child_count() == run_context.run_inventory().capacity, "inventory exposes full capacity at %s" % viewport_size)
 	_assert((page.initial_focus() as Control) != null, "page provides initial focus at %s" % viewport_size)
 	_assert(ledger.select_member(24), "member 24 selects at %s" % viewport_size)
@@ -96,22 +93,36 @@ func _fixture() -> Dictionary:
 	_assert(errors.is_empty(), "responsive run context configures")
 	if errors.is_empty():
 		for row: Dictionary in [
-			{"id": "responsive-helmet-1", "sequence": 0, "member": 1, "base": &"dawn_bulwark_crown"},
-			{"id": "responsive-helmet-24", "sequence": 1, "member": 24, "base": &"dawn_bulwark_crown"},
-			{"id": "responsive-ring", "sequence": 2, "member": 0, "base": &"windrunner_band"},
+			{"id": "responsive-helmet-1", "sequence": 0, "member": 1, "base": &"dawn_bulwark_crown", "slot": &"helmet"},
+			{"id": "responsive-helmet-24", "sequence": 1, "member": 24, "base": &"dawn_bulwark_crown", "slot": &"helmet"},
+			{"id": "responsive-ring-equipped", "sequence": 2, "member": 1, "base": &"windrunner_band", "slot": &"ring_left"},
+			{"id": "responsive-ring", "sequence": 3, "member": 0, "base": &"windrunner_band", "slot": &"ring_left"},
 		]:
 			var item := _item(run_context, int(row.sequence), String(row.id), row.base as StringName)
 			_assert(run_context.apply_item_transaction(ItemTransactionRequest.create("responsive-create-%s" % row.id, String(run_context.run_player_id), &"run-inventory", int(row.sequence), item), catalog.equipment_catalog, catalog.item_foundation_catalog).ok(), "responsive item %s creates" % row.id)
 			if int(row.member) > 0:
-				_assert(run_context.assign_equipment(int(row.member), item.instance_id, &"helmet", catalog.equipment_catalog, catalog.item_foundation_catalog).ok(), "responsive item %s equips" % row.id)
+				_assert(run_context.assign_equipment(int(row.member), item.instance_id, row.slot as StringName, catalog.equipment_catalog, catalog.item_foundation_catalog).ok(), "responsive item %s equips" % row.id)
 	return {"catalog": catalog, "party": party, "run_context": run_context}
 
 
 func _item(context: PlayerRunContext, sequence: int, instance_id: String, base_id: StringName) -> ItemInstance:
+	var affixes: Array = []
+	if instance_id == "responsive-ring":
+		affixes.append({
+			"definition_id": "stout",
+			"affix_kind": "prefix",
+			"tier": 1,
+			"rolls": [{
+				"stat_id": "constitution",
+				"operation": StatModifier.Operation.FLAT,
+				"value": 3.0,
+				"required_tags": [],
+			}],
+		})
 	var decoded := ItemInstanceCodec.decode({
 		"schema_version": ItemInstance.SCHEMA_VERSION, "instance_id": instance_id,
 		"base_definition_id": String(base_id), "base_damage_components": [], "item_level": 15,
-		"rarity_id": "common", "affixes": [],
+		"rarity_id": "common", "affixes": affixes,
 		"origin": {"issuer_namespace": "run:%s:%d:%s" % [context.profile_id, context.run_seed, context.run_player_id], "seed": context.run_seed + sequence, "sequence": sequence, "source": "task10-responsive"},
 	}, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)
 	assert(decoded.ok())
@@ -127,6 +138,11 @@ func _exercise_controller_and_region_scroll(
 	_assert(ledger.select_member(1), "controller fixture reselects member 1")
 	await _layout()
 	var inventory := page.get_node("Layout/Body/InventoryRegion/InventoryScroll/Grid") as GridContainer
+	var equipment := page.get_node("Layout/Body/EquipmentRegion/Doll/Slots") as Control
+	var helmet := equipment.get_node("Slot_helmet") as StorageSlotButton
+	var empty_destination := inventory.get_node("InventorySlot_004") as StorageSlotButton
+	await _gui_drag_drop(helmet, empty_destination)
+	_assert(run_context.run_inventory().item_id_at(4) == "responsive-helmet-1", "real shared-button drop reaches the exact page transaction")
 	var ring := _button_for_item(inventory, "responsive-ring")
 	_assert(ring != null, "controller fixture exposes the inventory ring")
 	if ring == null:
@@ -135,7 +151,7 @@ func _exercise_controller_and_region_scroll(
 	await _layout()
 	await _parse_action(&"item_sandbox_pickup")
 	_assert(context.held_item_id == "responsive-ring", "controller west holds the focused item")
-	var slots := page.get_node("Layout/Body/EquipmentRegion/Doll/Slots") as Control
+	var slots := equipment
 	var invalid_target := slots.get_node("Slot_body_armour") as StorageSlotButton
 	var before_invalid := run_context.item_state().to_dictionary()
 	invalid_target.grab_focus()
@@ -148,6 +164,7 @@ func _exercise_controller_and_region_scroll(
 	await _layout()
 	await _parse_action(&"ui_accept")
 	_assert(run_context.equipment_for(1).item_id_at(EquipmentSlotIndex.index_for(&"ring_left")) == "responsive-ring", "controller south places into a valid focused target")
+	_assert(run_context.run_inventory().item_id_at(3) == "responsive-ring-equipped", "occupied equipment swap returns the displaced item to the exact inventory source cell")
 	_assert(context.held_item_id.is_empty(), "accepted controller placement releases held state")
 	valid_target = slots.get_node("Slot_ring_left") as StorageSlotButton
 	valid_target.grab_focus()
@@ -179,6 +196,46 @@ func _exercise_controller_and_region_scroll(
 	_assert(party_scroll.scroll_vertical > 0, "right stick scrolls the focused party region")
 
 
+func _exercise_live_tooltip_layers(page: CharacterLedgerPage, inventory: GridContainer, viewport_size: Vector2i) -> void:
+	var source := _button_for_item(inventory, "responsive-ring")
+	_assert(source != null, "tooltip fixture exposes comparison ring at %s" % viewport_size)
+	if source == null:
+		return
+	source.grab_focus()
+	await _layout()
+	var tooltip := page.get_node("ItemTooltipPanel") as ItemTooltipPanel
+	_assert(tooltip.visible, "tooltip is visible before live layer toggles at %s" % viewport_size)
+	var equipped_ring := page.get_node("Layout/Body/EquipmentRegion/Doll/Slots/Slot_ring_left") as StorageSlotButton
+	var comparison_rows: Array[Dictionary] = []
+	for slot_id: StringName in [&"ring_left", &"ring_right"]:
+		comparison_rows.append({
+			"item": equipped_ring.detail(),
+			"slot_id": slot_id,
+			"delta_lines": [],
+		})
+	var regression_anchor := Control.new()
+	regression_anchor.name = "TooltipRegressionAnchor"
+	regression_anchor.size = Vector2(78.0, 78.0)
+	page.add_child(regression_anchor)
+	regression_anchor.global_position = Vector2(viewport_size.x * 0.5 - regression_anchor.size.x * 0.5, viewport_size.y * 0.5)
+	tooltip.force_dismiss()
+	_assert(tooltip.show_item(source.detail(), comparison_rows, regression_anchor, source.source_id()), "shared tooltip accepts a live comparison fixture at %s" % viewport_size)
+	await _layout()
+	page.call("_clamp_tooltip_to_safe_margin", source.source_id())
+	_assert(_inside_safe_margin(tooltip.get_global_rect(), viewport_size), "initial tooltip rect=%s stays inside the 24px safe margin at %s" % [tooltip.get_global_rect(), viewport_size])
+	Input.parse_input_event(_key(KEY_ALT, true))
+	Input.parse_input_event(_key(KEY_SHIFT, true))
+	await _layout()
+	_assert(tooltip.comparison_active() and tooltip.advanced_active(), "Alt and Shift activate live tooltip layers at %s" % viewport_size)
+	_assert(tooltip.card_count() == 3, "live comparison renders the inspected and both equipped ring cards at %s" % viewport_size)
+	_assert(_inside_safe_margin(tooltip.get_global_rect(), viewport_size), "expanded tooltip rect=%s stays inside the 24px safe margin at %s" % [tooltip.get_global_rect(), viewport_size])
+	Input.parse_input_event(_key(KEY_SHIFT, false))
+	Input.parse_input_event(_key(KEY_ALT, false))
+	await _layout()
+	tooltip.force_dismiss()
+	regression_anchor.free()
+
+
 func _button_for_item(grid: GridContainer, item_id: String) -> StorageSlotButton:
 	for child: Node in grid.get_children():
 		var button := child as StorageSlotButton
@@ -199,6 +256,13 @@ func _parse_action(action_name: StringName) -> void:
 	await process_frame
 
 
+func _key(keycode: Key, pressed: bool) -> InputEventKey:
+	var event := InputEventKey.new()
+	event.keycode = keycode
+	event.pressed = pressed
+	return event
+
+
 func _parse_axis(value: float) -> void:
 	var event := InputEventJoypadMotion.new()
 	event.device = 0
@@ -210,6 +274,40 @@ func _parse_axis(value: float) -> void:
 	release.axis_value = 0.0
 	Input.parse_input_event(release)
 	await process_frame
+
+
+func _gui_drag_drop(source: Control, destination: Control) -> void:
+	var source_position := source.get_global_rect().get_center()
+	var destination_position := destination.get_global_rect().get_center()
+	root.push_input(_mouse_motion(source_position, Vector2.ZERO, 0))
+	root.push_input(_mouse_button(source_position, true))
+	await process_frame
+	root.push_input(_mouse_motion(source_position + Vector2(32.0, 0.0), Vector2(32.0, 0.0), MOUSE_BUTTON_MASK_LEFT))
+	await process_frame
+	_assert(root.gui_is_dragging(), "public GUI mouse flow starts a shared-button drag")
+	root.push_input(_mouse_motion(destination_position, destination_position - source_position, MOUSE_BUTTON_MASK_LEFT))
+	await process_frame
+	root.push_input(_mouse_button(destination_position, false))
+	await _layout()
+
+
+func _mouse_motion(position: Vector2, relative: Vector2, button_mask: MouseButtonMask) -> InputEventMouseMotion:
+	var event := InputEventMouseMotion.new()
+	event.position = position
+	event.global_position = position
+	event.relative = relative
+	event.button_mask = button_mask
+	return event
+
+
+func _mouse_button(position: Vector2, pressed: bool) -> InputEventMouseButton:
+	var event := InputEventMouseButton.new()
+	event.position = position
+	event.global_position = position
+	event.button_index = MOUSE_BUTTON_LEFT
+	event.button_mask = MOUSE_BUTTON_MASK_LEFT if pressed else 0
+	event.pressed = pressed
+	return event
 
 
 func _inside_safe_margin(rect: Rect2, viewport_size: Vector2i) -> bool:

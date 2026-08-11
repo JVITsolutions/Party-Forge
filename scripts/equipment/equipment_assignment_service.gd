@@ -83,6 +83,75 @@ func preview(
 			return _failure("slot=%s reason=invalid slot" % slot_id)
 		if source_container_id == equipment_id and source_slot == destination_slot:
 			return _failure("member=%d item=%s slot=%s reason=item already equipped" % [member_id, item_id, slot_id])
+	return _preview_endpoints(
+		state,
+		member_id,
+		item_id,
+		slot_id,
+		source_container_id,
+		source_slot,
+		destination_container_id,
+		destination_slot,
+		equipment,
+		foundation,
+		class_definition,
+	)
+
+func preview_exact(
+	state: ItemOwnershipState,
+	member_id: int,
+	item_id: String,
+	source_container_id: StringName,
+	source_slot: int,
+	destination_container_id: StringName,
+	destination_slot: int,
+	equipment: EquipmentCatalog,
+	foundation: ItemFoundationCatalog,
+	class_definition: ClassDefinition = null,
+	_attributes: Dictionary = {},
+) -> EquipmentAssignmentResult:
+	if state == null or equipment == null or foundation == null or member_id <= 0 or item_id.strip_edges().is_empty():
+		return _failure("reason=invalid exact request")
+	if class_definition == null:
+		return _failure("member=%d reason=class missing" % member_id)
+	var state_error := state.validate(equipment, foundation)
+	if not state_error.is_empty():
+		return _failure("reason=invalid ownership state detail=%s" % state_error)
+	var equipment_id := _equipment_id(member_id)
+	var allowed_endpoints: Array[StringName] = [INVENTORY_ID, equipment_id]
+	if source_container_id not in allowed_endpoints or destination_container_id not in allowed_endpoints:
+		return _failure("member=%d item=%s reason=endpoint belongs outside member ownership" % [member_id, item_id])
+	if source_container_id != equipment_id and destination_container_id != equipment_id:
+		return _failure("member=%d item=%s reason=exact assignment must cross equipment" % [member_id, item_id])
+	var slot_id := EquipmentSlotIndex.slot_for(destination_slot) if destination_container_id == equipment_id else &""
+	return _preview_endpoints(
+		state,
+		member_id,
+		item_id,
+		slot_id,
+		source_container_id,
+		source_slot,
+		destination_container_id,
+		destination_slot,
+		equipment,
+		foundation,
+		class_definition,
+	)
+
+func _preview_endpoints(
+	state: ItemOwnershipState,
+	member_id: int,
+	item_id: String,
+	slot_id: StringName,
+	source_container_id: StringName,
+	source_slot: int,
+	destination_container_id: StringName,
+	destination_slot: int,
+	equipment: EquipmentCatalog,
+	foundation: ItemFoundationCatalog,
+	class_definition: ClassDefinition,
+) -> EquipmentAssignmentResult:
+	var equipment_id := _equipment_id(member_id)
 	var storage_ids: Array[StringName] = [INVENTORY_ID]
 	var planned := EquipmentOwnershipTransitionPlanner.preview(
 		state,

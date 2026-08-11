@@ -279,8 +279,25 @@ func move_or_equip(request: Dictionary) -> Dictionary:
 	var slot_id := StringName(String(request.get("slot_id", "")))
 	if item_id.is_empty():
 		return {"accepted": false, "error": "PARTY_FORGE_LEDGER_ITEM_ERROR reason=invalid request"}
+	var exact_keys: Array[String] = ["source_container_id", "source_slot", "destination_container_id", "destination_slot"]
+	var exact_requested := exact_keys.any(func(key: String) -> bool: return request.has(key))
+	if exact_requested and not exact_keys.all(func(key: String) -> bool: return request.has(key)):
+		return {"accepted": false, "error": "PARTY_FORGE_LEDGER_ITEM_ERROR reason=incomplete exact endpoints"}
 	_suppressed_item_member_id = member_id
-	var assignment := item_context.assign_equipment(member_id, item_id, slot_id, equipment_catalog, item_foundation)
+	var assignment: EquipmentAssignmentResult
+	if exact_requested:
+		assignment = item_context.assign_equipment_exact(
+			member_id,
+			item_id,
+			StringName(String(request.get("source_container_id", ""))),
+			int(request.get("source_slot", -1)),
+			StringName(String(request.get("destination_container_id", ""))),
+			int(request.get("destination_slot", -1)),
+			equipment_catalog,
+			item_foundation,
+		)
+	else:
+		assignment = item_context.assign_equipment(member_id, item_id, slot_id, equipment_catalog, item_foundation)
 	_suppressed_item_member_id = 0
 	var accepted := assignment != null and assignment.ok()
 	if accepted:

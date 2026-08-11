@@ -24,6 +24,12 @@ func _ready() -> void:
 		_doll().resized.connect(_position_equipment_slots)
 
 
+func _process(_delta: float) -> void:
+	var tooltip := _tooltip()
+	if tooltip.visible:
+		_clamp_tooltip_to_safe_margin(tooltip.current_source_id())
+
+
 func activate() -> void:
 	super()
 	call_deferred(&"_position_equipment_slots")
@@ -212,14 +218,22 @@ func _handle_drop(
 		return
 	var result: Dictionary = {"accepted": false}
 	if String(destination_container_id).begins_with("run-equipment-"):
-		result = provider.move_or_equip({
-			"member_id": context.selected_member_id,
-			"item_id": item_id,
-			"slot_id": EquipmentSlotIndex.slot_for(destination_slot),
-		})
+		result = provider.move_or_equip(_exact_transition_request(
+			source_container_id,
+			source_slot,
+			item_id,
+			destination_container_id,
+			destination_slot,
+		))
 	elif destination_container_id == &"run-inventory":
 		if String(source_container_id).begins_with("run-equipment-"):
-			result = provider.move_or_equip({"member_id": context.selected_member_id, "item_id": item_id, "slot_id": &""})
+			result = provider.move_or_equip(_exact_transition_request(
+				source_container_id,
+				source_slot,
+				item_id,
+				destination_container_id,
+				destination_slot,
+			))
 		elif source_container_id == &"run-inventory" and source_slot != destination_slot:
 			var destination := _inventory_button_at(destination_slot)
 			var request := _inventory_request(source_container_id, source_slot, item_id, destination_container_id, destination_slot, destination != null and not destination.item_id.is_empty())
@@ -228,6 +242,23 @@ func _handle_drop(
 		return
 	_clear_held_item()
 	refresh()
+
+
+func _exact_transition_request(
+	source_container_id: StringName,
+	source_slot: int,
+	item_id: String,
+	destination_container_id: StringName,
+	destination_slot: int,
+) -> Dictionary:
+	return {
+		"member_id": context.selected_member_id,
+		"item_id": item_id,
+		"source_container_id": source_container_id,
+		"source_slot": source_slot,
+		"destination_container_id": destination_container_id,
+		"destination_slot": destination_slot,
+	}
 
 
 func _inventory_request(

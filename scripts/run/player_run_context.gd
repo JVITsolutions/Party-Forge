@@ -413,6 +413,35 @@ func assign_equipment(
 		equipment,
 		foundation,
 	)
+	return _commit_equipment_preview(member_id, preview)
+
+func assign_equipment_exact(
+	member_id: int,
+	item_id: String,
+	source_container_id: StringName,
+	source_slot: int,
+	destination_container_id: StringName,
+	destination_slot: int,
+	equipment: EquipmentCatalog,
+	foundation: ItemFoundationCatalog,
+) -> EquipmentAssignmentResult:
+	if not _can_mutate_current_owner():
+		return EquipmentAssignmentResult.failure(
+			"PARTY_FORGE_EQUIPMENT_TRANSITION_ERROR member=%d reason=stat source commit rejected" % member_id
+		)
+	var preview := preview_equipment_assignment_exact(
+		member_id,
+		item_id,
+		source_container_id,
+		source_slot,
+		destination_container_id,
+		destination_slot,
+		equipment,
+		foundation,
+	)
+	return _commit_equipment_preview(member_id, preview)
+
+func _commit_equipment_preview(member_id: int, preview: EquipmentTransitionResult) -> EquipmentAssignmentResult:
 	if not preview.ok():
 		return EquipmentAssignmentResult.failure(preview.error)
 	var next_activation := preview.activation()
@@ -444,6 +473,29 @@ func preview_equipment_assignment(
 		member_id,
 		item_id,
 		slot_id,
+		party,
+		equipment,
+		foundation,
+	)
+
+func preview_equipment_assignment_exact(
+	member_id: int,
+	item_id: String,
+	source_container_id: StringName,
+	source_slot: int,
+	destination_container_id: StringName,
+	destination_slot: int,
+	equipment: EquipmentCatalog,
+	foundation: ItemFoundationCatalog,
+) -> EquipmentTransitionResult:
+	return EquipmentTransitionService.preview_exact(
+		_item_state,
+		member_id,
+		item_id,
+		source_container_id,
+		source_slot,
+		destination_container_id,
+		destination_slot,
 		party,
 		equipment,
 		foundation,

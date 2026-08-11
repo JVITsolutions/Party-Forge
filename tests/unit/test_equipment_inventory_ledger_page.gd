@@ -10,6 +10,7 @@ func run() -> Array[String]:
 	if not ResourceLoader.exists(PAGE_SCENE_PATH):
 		return failures
 	_test_page_projection_transactions_tooltip_and_focus(failures)
+	_test_exact_drag_drop_transactions(failures)
 	return failures
 
 
@@ -76,28 +77,28 @@ func _test_page_projection_transactions_tooltip_and_focus(failures: Array[String
 	context.selected_member_id = 1
 	page.refresh()
 
-	# Mouse-style signal routing swaps inventory cells through the accepted transaction boundary.
+	# Unit-level signal routing swaps inventory cells through the accepted transaction boundary.
 	inventory = page.get_node("Layout/Body/InventoryRegion/InventoryScroll/Grid") as GridContainer
 	var ring_one := _inventory_item(inventory, "ledger-ring-one")
 	var ring_two := _inventory_item(inventory, "ledger-ring-two")
 	var ring_one_source_slot := ring_one.slot
 	var ring_two_source_slot := ring_two.slot
-	ring_two.item_dropped.emit(ring_one.container_id, ring_one.slot, ring_one.item_id, ring_two.container_id, ring_two.slot)
+	_drag_drop(ring_one, ring_two, "inventory occupied swap", failures)
 	TestAssertions.equal(run_context.run_inventory().item_id_at(ring_two_source_slot), "ledger-ring-one", "mouse drop accepts an inventory swap", failures)
 	TestAssertions.equal(run_context.run_inventory().item_id_at(ring_one_source_slot), "ledger-ring-two", "mouse swap preserves the displaced item", failures)
 
-	# Mouse-style inventory-to-equipment routing delegates to the accepted equipment assignment.
+	# Unit-level inventory-to-equipment routing delegates to the accepted equipment assignment.
 	inventory = page.get_node("Layout/Body/InventoryRegion/InventoryScroll/Grid") as GridContainer
 	ring_one = _inventory_item(inventory, "ledger-ring-one")
 	var ring_left := equipment_slots.get_node("Slot_ring_left") as StorageSlotButton
-	ring_left.item_dropped.emit(ring_one.container_id, ring_one.slot, ring_one.item_id, ring_left.container_id, ring_left.slot)
+	_drag_drop(ring_one, ring_left, "inventory to equipment", failures)
 	TestAssertions.equal(run_context.equipment_for(1).item_id_at(EquipmentSlotIndex.index_for(&"ring_left")), "ledger-ring-one", "mouse drop equips through the accepted transition", failures)
 
 	# An invalid equipment target preserves the exact ownership state.
 	var state_before_invalid := run_context.item_state().to_dictionary()
 	var body_armour := equipment_slots.get_node("Slot_body_armour") as StorageSlotButton
 	ring_left = equipment_slots.get_node("Slot_ring_left") as StorageSlotButton
-	body_armour.item_dropped.emit(ring_left.container_id, ring_left.slot, ring_left.item_id, body_armour.container_id, body_armour.slot)
+	_drag_drop(ring_left, body_armour, "invalid equipment target", failures)
 	TestAssertions.equal(run_context.item_state().to_dictionary(), state_before_invalid, "invalid target leaves authoritative ownership unchanged", failures)
 
 	# Shared tooltip layers and pin/dismiss contract stay intact.
@@ -129,6 +130,117 @@ func _test_page_projection_transactions_tooltip_and_focus(failures: Array[String
 		TestAssertions.equal((equipment_slots.get_node("Slot_%s" % slot_id) as StorageSlotButton).get_meta("normalized_position"), expected_positions[slot_id], "compact %s preserves normalized equipment placement" % slot_id, failures)
 
 	page.free()
+	_free_fixture(fixture)
+
+
+func _test_exact_drag_drop_transactions(failures: Array[String]) -> void:
+	_exercise_equipped_to_exact_empty_inventory_slot(failures)
+	_exercise_equipped_to_occupied_inventory_swap(false, failures)
+	_exercise_equipped_to_occupied_inventory_swap(true, failures)
+
+
+func _exercise_equipped_to_exact_empty_inventory_slot(failures: Array[String]) -> void:
+	var fixture := _transaction_fixture("exact-empty", false, false, failures)
+	var page := fixture.get("page") as CharacterLedgerPage
+	var run_context := fixture.get("run_context") as PlayerRunContext
+	var party := fixture.get("party") as PartyManager
+	if page == null or run_context == null or party == null:
+		_free_transaction_fixture(fixture)
+		return
+	var equipment := page.get_node("Layout/Body/EquipmentRegion/Doll/Slots") as Control
+	var inventory := page.get_node("Layout/Body/InventoryRegion/InventoryScroll/Grid") as GridContainer
+	var source := equipment.get_node("Slot_helmet") as StorageSlotButton
+	var destination := inventory.get_node("InventorySlot_004") as StorageSlotButton
+	var revision_before := party.stat_revision()
+	_drag_drop(source, destination, "equipped item to exact empty inventory cell", failures)
+	TestAssertions.equal(run_context.run_inventory().item_id_at(4), "exact-empty-equipped", "equipped item lands in the exact focused empty cell", failures)
+	TestAssertions.equal(run_context.equipment_for(1).item_id_at(EquipmentSlotIndex.index_for(&"helmet")), "", "exact empty-cell placement clears the equipment source", failures)
+	TestAssertions.truthy(run_context.equipment_activation(1).ok(), "exact empty-cell placement republishes equipment activation", failures)
+	TestAssertions.truthy(party.stat_revision() > revision_before, "exact empty-cell placement republishes member stats", failures)
+	_free_transaction_fixture(fixture)
+
+
+func _exercise_equipped_to_occupied_inventory_swap(full_inventory: bool, failures: Array[String]) -> void:
+	var label := "full-swap" if full_inventory else "occupied-swap"
+	var fixture := _transaction_fixture(label, true, full_inventory, failures)
+	var page := fixture.get("page") as CharacterLedgerPage
+	var run_context := fixture.get("run_context") as PlayerRunContext
+	var party := fixture.get("party") as PartyManager
+	if page == null or run_context == null or party == null:
+		_free_transaction_fixture(fixture)
+		return
+	var equipment := page.get_node("Layout/Body/EquipmentRegion/Doll/Slots") as Control
+	var inventory := page.get_node("Layout/Body/InventoryRegion/InventoryScroll/Grid") as GridContainer
+	var source := equipment.get_node("Slot_helmet") as StorageSlotButton
+	var destination := inventory.get_node("InventorySlot_001") as StorageSlotButton
+	var original_source_container_id := source.container_id
+	var original_source_slot := source.slot
+	var original_item_id := source.item_id
+	var revision_before := party.stat_revision()
+	destination.item_dropped.emit(original_source_container_id, original_source_slot, original_item_id, destination.container_id, destination.slot)
+	TestAssertions.equal(run_context.run_inventory().item_id_at(1), "%s-equipped" % label, "%s places the equipped item in the exact occupied inventory cell" % label, failures)
+	TestAssertions.equal(run_context.equipment_for(1).item_id_at(EquipmentSlotIndex.index_for(&"helmet")), "%s-target" % label, "%s equips the displaced compatible item" % label, failures)
+	TestAssertions.truthy(run_context.equipment_activation(1).ok() and run_context.equipment_activation(1).is_active("%s-target" % label), "%s republishes activation for the displaced item" % label, failures)
+	TestAssertions.truthy(party.stat_revision() > revision_before, "%s republishes member stats" % label, failures)
+	if full_inventory:
+		TestAssertions.equal(run_context.run_inventory().occupied_slots().size(), run_context.run_inventory().capacity, "full-inventory occupied swap retains full capacity", failures)
+	var accepted_state := run_context.item_state().to_dictionary()
+	destination.item_dropped.emit(original_source_container_id, original_source_slot, original_item_id, destination.container_id, destination.slot)
+	TestAssertions.equal(run_context.item_state().to_dictionary(), accepted_state, "%s stale duplicate drop is atomic" % label, failures)
+	var invalid_source := equipment.get_node("Slot_helmet") as StorageSlotButton
+	var invalid_target := equipment.get_node("Slot_ring_left") as StorageSlotButton
+	_drag_drop(invalid_source, invalid_target, "%s invalid target" % label, failures)
+	TestAssertions.equal(run_context.item_state().to_dictionary(), accepted_state, "%s invalid target preserves exact ownership state" % label, failures)
+	_free_transaction_fixture(fixture)
+
+
+func _transaction_fixture(label: String, occupied_target: bool, full_inventory: bool, failures: Array[String]) -> Dictionary:
+	var catalog := GameCatalog.load_defaults()
+	var party := PartyManager.new()
+	party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
+	var profile := ProfileState.new_profile("task10-%s-profile" % label, "Task 10 %s" % label, 1000)
+	profile.inventory_columns = 1
+	var run_context := PlayerRunContext.new()
+	var errors := run_context.configure(StringName("task10_%s_owner" % label.replace("-", "_")), 0, profile, 202600 + label.length(), party, 100)
+	TestAssertions.equal(errors, PackedStringArray(), "%s run context configures" % label, failures)
+	if not errors.is_empty():
+		return {"party": party, "catalog": catalog}
+	var sequence := 0
+	_create_fixture_item(run_context, catalog, sequence, 0, "%s-equipped" % label, &"dawn_bulwark_crown", failures)
+	sequence += 1
+	TestAssertions.truthy(run_context.assign_equipment(1, "%s-equipped" % label, &"helmet", catalog.equipment_catalog, catalog.item_foundation_catalog).ok(), "%s source helmet equips" % label, failures)
+	if occupied_target:
+		_create_fixture_item(run_context, catalog, sequence, 1, "%s-target" % label, &"dawn_bulwark_crown", failures)
+		sequence += 1
+	if full_inventory:
+		for slot: int in [0, 2, 3, 4]:
+			_create_fixture_item(run_context, catalog, sequence, slot, "%s-filler-%d" % [label, slot], &"windrunner_band", failures)
+			sequence += 1
+	var provider := LedgerDataProvider.new()
+	provider.configure(party, catalog, Callable(), Callable(), run_context, run_context, catalog.equipment_catalog, catalog.item_foundation_catalog)
+	var context := LedgerPlayerContext.new(0)
+	context.selected_member_id = 1
+	var page := (load(PAGE_SCENE_PATH) as PackedScene).instantiate() as CharacterLedgerPage
+	(Engine.get_main_loop() as SceneTree).root.add_child(page)
+	page.configure(provider, context)
+	page.activate()
+	return {"party": party, "catalog": catalog, "run_context": run_context, "page": page}
+
+
+func _create_fixture_item(context: PlayerRunContext, catalog: GameCatalog, sequence: int, slot: int, instance_id: String, base_id: StringName, failures: Array[String]) -> void:
+	var item := _item(context, sequence, instance_id, base_id)
+	var result := context.apply_item_transaction(
+		ItemTransactionRequest.create("task10-create-%s" % instance_id, String(context.run_player_id), &"run-inventory", slot, item),
+		catalog.equipment_catalog,
+		catalog.item_foundation_catalog,
+	)
+	TestAssertions.truthy(result.ok(), "%s enters inventory slot %d" % [instance_id, slot], failures)
+
+
+func _free_transaction_fixture(fixture: Dictionary) -> void:
+	var page := fixture.get("page") as CharacterLedgerPage
+	if page != null and is_instance_valid(page):
+		page.free()
 	_free_fixture(fixture)
 
 
@@ -184,6 +296,13 @@ func _inventory_item(grid: GridContainer, item_id: String) -> StorageSlotButton:
 		if button != null and button.item_id == item_id:
 			return button
 	return null
+
+
+func _drag_drop(source: StorageSlotButton, destination: StorageSlotButton, label: String, failures: Array[String]) -> void:
+	TestAssertions.truthy(source != null and destination != null, "%s has shared source and destination buttons" % label, failures)
+	if source == null or destination == null:
+		return
+	destination.item_dropped.emit(source.container_id, source.slot, source.item_id, destination.container_id, destination.slot)
 
 
 func _free_fixture(fixture: Dictionary) -> void:
