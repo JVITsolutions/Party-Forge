@@ -108,3 +108,27 @@ This final bounded fix changed only the pooled chest/controller lifecycle, the e
 - Final isolated full suite: `TEST_SUMMARY: PASS (201 suites)` with no parse/load/leak marker.
 - `git diff --check` passed, no unrelated scope was added, and cold acceptance evidence was not rerun or modified.
 - Commit message: `fix: reset pooled loot selection visuals`.
+
+## Owner status lifecycle and integration cleanup
+
+Lifecycle-cleanup starting head: `39cf1996316473f699f5c9331cebcbffda5233a6`
+
+This bounded pass changed only the world controller, the existing pickup/multiplayer/performance integration runners, and this unique report.
+
+### Controlled RED and implementation
+
+- The actual-input pickup flow selected an out-of-range chest, produced and displayed `Move closer`, then reconfigured the controller to a new registry containing the same drop ID.
+- Controlled RED failed exactly one assertion: `_status_by_owner` retained the old owner status after reconfigure. The rebound public anchor and emitted status stream were already free of a stale `Move closer` event.
+- `GroundItemWorldController.configure()` now clears `_status_by_owner` beside `_selection_by_owner`, matching the existing full-clear lifecycle and preventing later production projection from consuming prior-run status.
+- All direct `_process` and `_exit_tree` calls were removed from the final modified integration runners. Process work now advances through `await process_frame`/viewport input, and queued node removal lets SceneTree invoke teardown naturally. Natural teardown assertions verify that active/pooled chests, projected anchors, and the owned tooltip are cleared; the exact same-node pool-reuse assertion remains intact.
+- A final modified-runner scan found no remaining direct framework lifecycle call.
+
+### Lifecycle-cleanup verification
+
+- Focused controller/chest/Main gate: `TEST_SUMMARY: PASS (0 failures)`.
+- Actual input pickup runner: all mouse, controller, full-inventory, foreign-owner, and overall integration markers passed.
+- Multiplayer: `LIVE_PERSONAL_LOOT_MULTIPLAYER_SUMMARY: PASS`.
+- Moving-camera regression: `LIVE_LOOT_PERFORMANCE_SUMMARY: PASS` at 2,003 records; peak frame `0.031ms`; peak work `32`; peak pending `1942`; settled in `71` frames; memory marker present.
+- Final isolated full suite: `TEST_SUMMARY: PASS (201 suites)` with no parse/load/leak marker.
+- Cold acceptance evidence was not rerun or modified.
+- Commit message: `fix: clear world loot owner lifecycle`.

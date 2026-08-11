@@ -61,6 +61,7 @@ func configure(
 	_release_all()
 	_release_shared_tooltip()
 	_selection_by_owner.clear()
+	_status_by_owner.clear()
 	_registry = registry
 	_spatial_index = SPATIAL_INDEX.new(_registry)
 	_targeting_service = TARGETING_SERVICE.new()

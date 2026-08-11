@@ -98,7 +98,7 @@ func _test_real_controller_flow() -> void:
 	var pickup := (load(REQUIRED[2]) as Script).new(registry, contexts, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG, 3.0) as RefCounted
 	var modal := [false]
 	controller.call(&"configure_interaction", index, targeting, pickup, contexts, 200.0, Callable(), func() -> bool: return modal[0])
-	controller.call(&"_process", 0.0)
+	await process_frame
 	await _dispatch(_button(1, JOY_BUTTON_DPAD_RIGHT))
 	_assert(controller.call(&"selection_for_owner", &"player_2") == &"p2-near", "device 1 selects only P2 owned visible nearby loot")
 	_assert(controller.call(&"selection_for_owner", &"player_1") == &"", "device 1 cannot change P1 selection")
@@ -125,7 +125,7 @@ func _test_real_controller_flow() -> void:
 	var chest := _chest_for(chests, &"p1-near")
 	_assert(chest != null, "public chest parent exposes the projected P1 chest")
 	if chest == null:
-		controller.call(&"_exit_tree")
+		await _teardown_controller(controller, chests, tooltip_layer, "real controller early teardown")
 		host.free()
 		contexts.clear()
 		return
@@ -159,13 +159,18 @@ func _test_real_controller_flow() -> void:
 	_assert(registry.record(&"p1-near") != null and controller.call(&"selection_for_owner", &"player_1") == &"p1-near", "failed pickups preserve chest and selection")
 	var replacement_live_registry := GroundItemRegistry.new()
 	replacement_live_registry.add(_record(&"p2-out", &"player_2", Vector3(4.0, 0.0, 0.0), 0))
+	var statuses_before_reconfigure := statuses.size()
 	controller.call(&"configure", replacement_live_registry, {}, func(record: GroundItemRecord) -> Dictionary: return _detail(record), camera, chests, tooltip_layer)
 	var replacement_index := (load(REQUIRED[0]) as Script).new(replacement_live_registry, 4.0) as RefCounted
 	var replacement_targeting := (load(REQUIRED[1]) as Script).new() as RefCounted
 	var replacement_pickup := (load(REQUIRED[2]) as Script).new(replacement_live_registry, contexts, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG, 3.0) as RefCounted
 	controller.call(&"configure_interaction", replacement_index, replacement_targeting, replacement_pickup, contexts, 200.0, Callable(), func() -> bool: return modal[0])
-	controller.call(&"_process", 0.0)
+	await process_frame
 	_assert(controller.call(&"selection_for_owner", &"player_2") == &"", "same-ID registry reconfigure clears the prior owner selection")
+	var rebound_anchor := _chest_for(chests, &"p2-out").call(&"tooltip_anchor") as Button
+	_assert(not rebound_anchor.text.contains("Move closer") and rebound_anchor.accessibility_description.is_empty(), "reconfigured chest exposes no stale public Move closer status")
+	_assert((controller.get("_status_by_owner") as Dictionary).is_empty(), "reconfigure clears the production-consumed owner status state")
+	_assert(not (statuses.slice(statuses_before_reconfigure) as Array).has("Move closer"), "reconfigure emits no stale Move closer status to Main or the badge")
 	var statuses_before_reconfigure_accept := statuses.size()
 	await _dispatch(_button(1, JOY_BUTTON_A))
 	_assert(statuses.size() == statuses_before_reconfigure_accept, "ui_accept cannot collect after reconfigure until a new real selection")
@@ -173,7 +178,7 @@ func _test_real_controller_flow() -> void:
 	_assert(controller.call(&"selection_for_owner", &"player_2") == &"p2-out", "new registry requires and accepts a fresh real D-pad selection")
 	await _dispatch(_button(1, JOY_BUTTON_A))
 	_assert(statuses.size() == statuses_before_reconfigure_accept + 1 and statuses[-1] == "Move closer", "ui_accept routes only after the new registry selection")
-	controller.call(&"_exit_tree")
+	await _teardown_controller(controller, chests, tooltip_layer, "real controller teardown")
 	host.free()
 	contexts.clear()
 	RenderingServer.force_sync()
@@ -212,7 +217,7 @@ func _test_success_advances_selection() -> void:
 	host.add_child(controller)
 	controller.call(&"configure", registry, {}, func(record: GroundItemRecord) -> Dictionary: return _detail(record), camera, chests, tooltip_layer)
 	controller.call(&"configure_interaction", (load(REQUIRED[0]) as Script).new(registry, 4.0), (load(REQUIRED[1]) as Script).new(), (load(REQUIRED[2]) as Script).new(registry, contexts, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG, 3.5), contexts, 20.0)
-	controller.call(&"_process", 0.0)
+	await process_frame
 	await _dispatch(_button(3, JOY_BUTTON_DPAD_RIGHT))
 	_assert(controller.call(&"selection_for_owner", owner.run_player_id) == &"success-0", "nearest owned chest is selected first")
 	await _dispatch(_button(3, JOY_BUTTON_A))
@@ -223,7 +228,7 @@ func _test_success_advances_selection() -> void:
 	await _dispatch(_button(3, JOY_BUTTON_A))
 	_assert(controller.call(&"selection_for_owner", owner.run_player_id) == &"", "collecting the final owned chest clears selection")
 	_assert(registry.all_records().is_empty(), "multi-chest success flow removes all three exact records")
-	controller.call(&"_exit_tree")
+	await _teardown_controller(controller, chests, tooltip_layer, "successful pickup teardown")
 	host.free()
 	contexts.clear()
 	RenderingServer.force_sync()
@@ -274,7 +279,7 @@ func _test_pooled_selection_visual_reset() -> void:
 	_assert(reused_anchor != null and reused_anchor.accessibility_name.contains("pooled-fresh") and not reused_anchor.accessibility_name.contains("pooled-selected"), "reused anchor publishes only the fresh record accessibility name")
 	_assert(controller.call(&"selection_for_owner", owner.run_player_id) == &"", "fresh pooled record remains unselected")
 	_assert(shared_tooltip != null and not shared_tooltip.visible and not shared_tooltip.is_current_source(&"ground-loot:pooled-selected") and not shared_tooltip.is_current_source(&"ground-loot:pooled-fresh"), "reused chest leaks no hover or shared-tooltip ownership")
-	controller.call(&"_exit_tree")
+	await _teardown_controller(controller, chests, tooltip_layer, "pooled chest teardown")
 	host.free()
 	contexts.clear()
 	RenderingServer.force_sync()
@@ -304,7 +309,7 @@ func _test_viewport_resize_projection() -> void:
 	var index := (load(REQUIRED[0]) as Script).new(registry, 4.0) as RefCounted
 	var targeting := (load(REQUIRED[1]) as Script).new() as RefCounted
 	controller.call(&"configure_interaction", index, targeting, null, contexts, 20.0)
-	controller.call(&"_process", 0.0)
+	await process_frame
 	var chest := _chest_for(chests, &"resize-edge")
 	_assert(chest != null, "viewport fixture projects the edge chest")
 	if chest != null:
@@ -312,11 +317,11 @@ func _test_viewport_resize_projection() -> void:
 		var position_before := anchor.position
 		_assert(anchor.visible, "edge chest starts inside the large viewport")
 		viewport.size = Vector2i(80, 60)
-		controller.call(&"_process", 0.0)
+		await process_frame
 		_assert(anchor.position != position_before and not anchor.visible, "viewport resize reprojects and hides the fixed-size offscreen anchor without record dirtiness")
 		await _dispatch(_button(2, JOY_BUTTON_DPAD_RIGHT))
 		_assert(controller.call(&"selection_for_owner", &"resize-owner") == &"", "resized-offscreen chest is excluded from real controller cycling")
-	controller.call(&"_exit_tree")
+	await _teardown_controller(controller, chests, tooltip_layer, "viewport teardown")
 	viewport.free()
 	contexts.clear()
 	RenderingServer.force_sync()
@@ -398,6 +403,12 @@ func _dispatch(event: InputEvent) -> void:
 		released.pressed = false
 		Input.parse_input_event(released)
 		await process_frame
+
+func _teardown_controller(controller: Node, chests: Node3D, tooltip_layer: Control, label: String) -> void:
+	controller.queue_free()
+	await process_frame
+	_assert(chests.get_child_count() == 0, "%s clears every active and pooled chest" % label)
+	_assert(tooltip_layer.get_child_count() == 0, "%s clears projected anchors and the owned shared tooltip" % label)
 
 func _chest_for(parent: Node3D, drop_id: StringName) -> Node3D:
 	for child: Node in parent.get_children():

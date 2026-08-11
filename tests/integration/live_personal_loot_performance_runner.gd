@@ -63,7 +63,7 @@ func _run() -> void:
 	var targeting := TARGETING_SERVICE.new() as RefCounted
 	var pickup := PICKUP_SERVICE.new(registry, _contexts, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG, 3.5) as RefCounted
 	world.configure_interaction(spatial_index, targeting, pickup, _contexts, 30.0)
-	world.call("_process", 0.0)
+	await process_frame
 	_assert((world.get("_chest_by_drop") as Dictionary).size() == RECORD_COUNT + CRITICAL_IDS.size(), "production world controller projects all 2,000 ordinary and three critical chests")
 	var nearby := targeting.call(&"ordered_for_owner", spatial_index, OWNER_IDS[0], Vector3.ZERO, 12.0) as Array
 	_assert(not nearby.is_empty() and nearby.size() < RECORD_COUNT / OWNER_IDS.size(), "owner spatial query remains bounded below the 500-record owner set")

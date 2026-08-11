@@ -96,7 +96,7 @@ func _run() -> void:
 	var world := WORLD_CONTROLLER.new() as Node
 	host.add_child(world)
 	world.configure(registry, identities, Callable(self, "_detail_for"), camera, chests, tooltip_layer)
-	world.call("_process", 0.0)
+	await process_frame
 	_assert((world.get("_chest_by_drop") as Dictionary).size() == 2, "both owners' chests remain simultaneously visible in the production projection")
 	_assert(_projected_chest(world, &"drop:player_1:13001", 1) != null, "P1 chest shows its explicit owner marker")
 	_assert(_projected_chest(world, &"drop:player_2:13001", 2) != null, "foreign P2 chest remains visible with its explicit owner marker")
