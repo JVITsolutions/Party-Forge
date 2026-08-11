@@ -60,10 +60,12 @@ func update_ground_chest_diagnostics(diagnostics: Dictionary) -> void:
 		"LIVE %d | PEAK %d" % [int(diagnostics.get("live", 0)), int(diagnostics.get("peak", 0))],
 		"ROLL SUCCESS %s" % _counts_text(diagnostics.get("successes_by_source", {}) as Dictionary),
 		"ROLL MISS %s" % _counts_text(diagnostics.get("misses_by_source", {}) as Dictionary),
+		"INELIGIBLE %d | REASONS %s | SOURCES %s" % [int(diagnostics.get("ineligible_total", 0)), _counts_text(diagnostics.get("ineligible_by_reason", {}) as Dictionary), _counts_text(diagnostics.get("ineligible_by_source", {}) as Dictionary)],
 		"GENERATION FAILURES %d" % int(diagnostics.get("generation_failures", 0)),
 		"DIAGNOSTIC STAGES %s" % _counts_text(diagnostics.get("diagnostics_by_stage", {}) as Dictionary),
 		"DIAGNOSTIC CODES %s" % _counts_text(diagnostics.get("diagnostics_by_code", {}) as Dictionary),
 		"COLLECTION %s" % _counts_text(diagnostics.get("collection_outcomes", {}) as Dictionary),
+		"PROJECTION pending=%d last=%d peak=%d limit=%d" % [int(diagnostics.get("projection_pending", 0)), int(diagnostics.get("projection_last_work", 0)), int(diagnostics.get("projection_peak_work", 0)), int(diagnostics.get("projection_limit", 0))],
 	])
 	_diagnostics = "\n".join(lines)
 	_sync_label()

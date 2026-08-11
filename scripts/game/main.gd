@@ -425,6 +425,8 @@ func _configure_personal_loot() -> PackedStringArray:
 	var camera := (get_node("LeaderCamera") as LeaderCamera).get_node("Camera3D") as Camera3D
 	if not ground_item_world_controller.status_changed.is_connected(_on_ground_item_status_changed):
 		ground_item_world_controller.status_changed.connect(_on_ground_item_status_changed)
+	if not ground_item_world_controller.projection_diagnostics_changed.is_connected(_on_ground_projection_diagnostics_changed):
+		ground_item_world_controller.projection_diagnostics_changed.connect(_on_ground_projection_diagnostics_changed)
 	ground_item_world_controller.call(&"configure", ground_item_registry, identity_assignment.identities(), Callable(self, "_ground_item_detail"), camera, get_node("GroundItems") as Node3D, get_node("GroundItemTooltipLayer"))
 	ground_item_world_controller.call(&"configure_comparisons", Callable(self, "_ground_item_comparison_entries"))
 	ground_item_world_controller.call(&"configure_interaction",
@@ -447,11 +449,15 @@ func _record_personal_loot_report(report: Dictionary) -> void:
 	for decision: PersonalLootDecision in report.get("decisions", []) as Array:
 		if decision == null:
 			continue
-		var bucket_name := "successes_by_source" if decision.success else "misses_by_source"
-		var bucket := _ground_chest_diagnostics.get(bucket_name, {}) as Dictionary
 		var source := String(decision.source_category)
-		bucket[source] = int(bucket.get(source, 0)) + 1
-		_ground_chest_diagnostics[bucket_name] = bucket
+		if decision.success:
+			_increment_diagnostic_bucket("successes_by_source", source)
+		elif decision.eligible:
+			_increment_diagnostic_bucket("misses_by_source", source)
+		else:
+			_ground_chest_diagnostics["ineligible_total"] = int(_ground_chest_diagnostics.get("ineligible_total", 0)) + 1
+			_increment_diagnostic_bucket("ineligible_by_reason", String(decision.reason))
+			_increment_diagnostic_bucket("ineligible_by_source", source)
 	for value: Variant in report.get("diagnostics", []) as Array:
 		var diagnostic := value as Dictionary
 		var stage := String(diagnostic.get("stage", &"configuration")) if diagnostic != null else "configuration"
@@ -465,6 +471,11 @@ func _record_personal_loot_report(report: Dictionary) -> void:
 		if stage == "generation":
 			_ground_chest_diagnostics["generation_failures"] = int(_ground_chest_diagnostics.get("generation_failures", 0)) + 1
 	_sync_ground_chest_diagnostics()
+
+func _increment_diagnostic_bucket(bucket_name: String, key: String) -> void:
+	var bucket := _ground_chest_diagnostics.get(bucket_name, {}) as Dictionary
+	bucket[key] = int(bucket.get(key, 0)) + 1
+	_ground_chest_diagnostics[bucket_name] = bucket
 
 func _on_ground_record_added(_record: GroundItemRecord) -> void:
 	var live := ground_item_registry.all_records().size() if ground_item_registry != null else 0
@@ -496,16 +507,43 @@ func _on_ground_item_status_changed(status: String) -> void:
 	_ground_chest_diagnostics["collection_outcomes"] = outcomes
 	_sync_ground_chest_diagnostics()
 
+func _on_ground_projection_diagnostics_changed(diagnostics: Dictionary) -> void:
+	if _ground_chest_diagnostics.is_empty():
+		return
+	var next_pending := int(diagnostics.get("pending", 0))
+	var next_last := int(diagnostics.get("last_frame_work", 0))
+	var next_peak := maxi(int(_ground_chest_diagnostics.get("projection_peak_work", 0)), int(diagnostics.get("peak_work", 0)))
+	var next_limit := int(diagnostics.get("limit", 0))
+	if (
+		next_pending == int(_ground_chest_diagnostics.get("projection_pending", 0))
+		and next_last == int(_ground_chest_diagnostics.get("projection_last_work", 0))
+		and next_peak == int(_ground_chest_diagnostics.get("projection_peak_work", 0))
+		and next_limit == int(_ground_chest_diagnostics.get("projection_limit", 0))
+	):
+		return
+	_ground_chest_diagnostics["projection_pending"] = next_pending
+	_ground_chest_diagnostics["projection_last_work"] = next_last
+	_ground_chest_diagnostics["projection_peak_work"] = next_peak
+	_ground_chest_diagnostics["projection_limit"] = next_limit
+	_sync_ground_chest_diagnostics()
+
 func _reset_ground_chest_diagnostics() -> void:
 	_ground_chest_diagnostics = {
 		"live": 0,
 		"peak": 0,
 		"successes_by_source": {},
 		"misses_by_source": {},
+		"ineligible_total": 0,
+		"ineligible_by_reason": {},
+		"ineligible_by_source": {},
 		"generation_failures": 0,
 		"diagnostics_by_stage": {},
 		"diagnostics_by_code": {},
 		"collection_outcomes": {},
+		"projection_pending": 0,
+		"projection_last_work": 0,
+		"projection_peak_work": 0,
+		"projection_limit": 0,
 	}
 	_sync_ground_chest_diagnostics()
 
@@ -636,6 +674,8 @@ func _clear_live_loot() -> void:
 	if spawn_director != null and spawn_director.enemy_defeated.is_connected(defeat_callback):
 		spawn_director.enemy_defeated.disconnect(defeat_callback)
 	if ground_item_world_controller != null:
+		if ground_item_world_controller.projection_diagnostics_changed.is_connected(_on_ground_projection_diagnostics_changed):
+			ground_item_world_controller.projection_diagnostics_changed.disconnect(_on_ground_projection_diagnostics_changed)
 		if ground_item_world_controller.status_changed.is_connected(_on_ground_item_status_changed):
 			ground_item_world_controller.status_changed.disconnect(_on_ground_item_status_changed)
 		ground_item_world_controller.call(&"clear_projection")

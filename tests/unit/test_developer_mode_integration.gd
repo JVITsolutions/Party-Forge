@@ -32,17 +32,26 @@ func _test_badge_personal_loot_summary_and_session_diagnostics(failures: Array[S
 		"peak": 5,
 		"successes_by_source": {"ordinary_melee": 3},
 		"misses_by_source": {"ordinary_specialist": 4},
+		"ineligible_total": 6,
+		"ineligible_by_reason": {"feature_locked": 2, "leader_out_of_range": 3, "leader_unavailable": 1},
+		"ineligible_by_source": {"elite": 1, "ordinary_melee": 2, "ordinary_specialist": 3},
 		"generation_failures": 1,
 		"diagnostics_by_stage": {"configuration": 2, "generation": 1, "ownership": 3, "storage": 4},
 		"diagnostics_by_code": {"ground_full": 4, "invalid_event": 2},
 		"collection_outcomes": {"ok": 2, "inventory_full": 1},
+		"projection_pending": 18,
+		"projection_last_work": 7,
+		"projection_peak_work": 32,
+		"projection_limit": 32,
 	})
 	var diagnostics := String(badge.call("diagnostics_text"))
 	TestAssertions.truthy(diagnostics.begins_with("SESSION LOOT DIAGNOSTICS"), "diagnostics explicitly identify their session-only lifetime", failures)
 	TestAssertions.truthy(diagnostics.contains("LIVE 2 | PEAK 5"), "diagnostics show live and peak chest counts", failures)
 	TestAssertions.truthy(diagnostics.contains("ROLL SUCCESS ordinary_melee=3") and diagnostics.contains("ROLL MISS ordinary_specialist=4"), "diagnostics distinguish successful rolls from ordinary misses", failures)
+	TestAssertions.truthy(diagnostics.contains("INELIGIBLE 6") and diagnostics.contains("REASONS feature_locked=2,leader_out_of_range=3,leader_unavailable=1") and diagnostics.contains("SOURCES elite=1,ordinary_melee=2,ordinary_specialist=3"), "diagnostics separate stable ineligible reasons and sources from roll misses", failures)
 	TestAssertions.truthy(diagnostics.contains("GENERATION FAILURES 1") and diagnostics.contains("DIAGNOSTIC STAGES configuration=2,generation=1,ownership=3,storage=4") and diagnostics.contains("DIAGNOSTIC CODES ground_full=4,invalid_event=2"), "diagnostics separate generation failures from storage, ownership, and configuration stages", failures)
 	TestAssertions.truthy(diagnostics.contains("COLLECTION inventory_full=1,ok=2"), "diagnostics show sorted collection outcomes", failures)
+	TestAssertions.truthy(diagnostics.contains("PROJECTION pending=18 last=7 peak=32 limit=32"), "diagnostics show production runtime bounded projection work", failures)
 	badge.call("configure", null)
 	TestAssertions.equal(badge.call("diagnostics_text"), "", "diagnostics are session-only and clear with the run snapshot", failures)
 	badge.free()
@@ -155,7 +164,7 @@ func _test_main_configures_badge_from_active_run(failures: Array[String]) -> voi
 	TestAssertions.truthy(developer_badge != null and developer_badge.visible, "Developer Mode run shows the configured badge", failures)
 	if developer_badge != null:
 		TestAssertions.equal(developer_badge.call(&"summary_text"), "DEV MODE | UNLOCK ALL | GOD | PARTY 12 | ENEMIES 500% | XP SHARE 18.0m | SQUAD LINK 14.0m", "main passes the active snapshot and reward tuning to the badge", failures)
-		TestAssertions.equal(developer_badge.call(&"diagnostics_text"), "SESSION LOOT DIAGNOSTICS\nLIVE 0 | PEAK 0\nROLL SUCCESS none\nROLL MISS none\nGENERATION FAILURES 0\nDIAGNOSTIC STAGES none\nDIAGNOSTIC CODES none\nCOLLECTION none", "diagnostics-enabled run immediately presents the complete typed zero state", failures)
+		TestAssertions.equal(developer_badge.call(&"diagnostics_text"), "SESSION LOOT DIAGNOSTICS\nLIVE 0 | PEAK 0\nROLL SUCCESS none\nROLL MISS none\nINELIGIBLE 0 | REASONS none | SOURCES none\nGENERATION FAILURES 0\nDIAGNOSTIC STAGES none\nDIAGNOSTIC CODES none\nCOLLECTION none\nPROJECTION pending=0 last=0 peak=0 limit=32", "diagnostics-enabled run immediately presents the complete typed zero state", failures)
 		var saved := developer_main.get("saved_settings") as PartyForgeSettings
 		saved.unlock_all_implemented_content = false
 		saved.god_mode = false

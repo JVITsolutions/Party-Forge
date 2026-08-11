@@ -1,6 +1,7 @@
 extends SceneTree
 
 const RECORD_COUNT := 2000
+const CRITICAL_IDS: Array[StringName] = [&"zz-selected", &"zz-hover", &"zz-focus"]
 const OWNER_IDS: Array[StringName] = [&"scale_p1", &"scale_p2", &"scale_p3", &"scale_p4"]
 const COLOR_IDS: Array[StringName] = [&"red", &"blue", &"yellow", &"green"]
 const FRAME_SAMPLES := 60
@@ -28,13 +29,17 @@ func _run() -> void:
 	var identities := identity_assignment.identities()
 
 	var memory_before := Performance.get_monitor(Performance.MEMORY_STATIC)
-	var registry := GroundItemRegistry.new(RECORD_COUNT)
+	var registry := GroundItemRegistry.new(RECORD_COUNT + CRITICAL_IDS.size())
 	for record_index: int in RECORD_COUNT:
 		var owner_index := record_index % OWNER_IDS.size()
 		_assert(registry.add(_record(record_index, owner_index)), "scale record %d registers" % record_index)
-	_assert(registry.all_records().size() == RECORD_COUNT, "all 2,000 records exist before frame measurement")
+	_assert(registry.add(_critical_record(CRITICAL_IDS[0], 0, Vector3(-12.0, 0.0, -10.5))), "late-sorting selected record registers")
+	_assert(registry.add(_critical_record(CRITICAL_IDS[1], 1, Vector3(0.0, 0.0, 0.0))), "late-sorting hover record registers")
+	_assert(registry.add(_critical_record(CRITICAL_IDS[2], 2, Vector3(8.0, 0.0, 0.0))), "late-sorting focus record registers")
+	(_actors[0] as Node3D).position = Vector3(-12.0, 0.0, -10.5)
+	_assert(registry.all_records().size() == RECORD_COUNT + CRITICAL_IDS.size(), "2,000 ordinary and three critical records exist before frame measurement")
 	for owner_id: StringName in OWNER_IDS:
-		_assert(registry.for_owner(owner_id).size() == RECORD_COUNT / OWNER_IDS.size(), "%s owns exactly 500 records" % owner_id)
+		_assert(registry.for_owner(owner_id).size() >= RECORD_COUNT / OWNER_IDS.size(), "%s retains at least 500 ordinary records" % owner_id)
 
 	var host := Node.new()
 	var viewport := SubViewport.new()
@@ -59,19 +64,51 @@ func _run() -> void:
 	var pickup := PICKUP_SERVICE.new(registry, _contexts, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG, 3.5) as RefCounted
 	world.configure_interaction(spatial_index, targeting, pickup, _contexts, 30.0)
 	world.call("_process", 0.0)
-	_assert((world.get("_chest_by_drop") as Dictionary).size() == RECORD_COUNT, "production world controller projects all 2,000 simultaneous chests")
+	_assert((world.get("_chest_by_drop") as Dictionary).size() == RECORD_COUNT + CRITICAL_IDS.size(), "production world controller projects all 2,000 ordinary and three critical chests")
 	var nearby := targeting.call(&"ordered_for_owner", spatial_index, OWNER_IDS[0], Vector3.ZERO, 12.0) as Array
 	_assert(not nearby.is_empty() and nearby.size() < RECORD_COUNT / OWNER_IDS.size(), "owner spatial query remains bounded below the 500-record owner set")
 	_assert(nearby.all(func(record: GroundItemRecord) -> bool: return record.run_player_id == OWNER_IDS[0]), "bounded spatial query returns only its requested owner")
+	var p1_origin := (_contexts.context_for(OWNER_IDS[0]).member_position(1) as Dictionary).get("position", Vector3.ZERO) as Vector3
+	var p1_targets := targeting.call(&"ordered_for_owner", spatial_index, OWNER_IDS[0], p1_origin, 30.0) as Array
+	_assert(not p1_targets.is_empty() and (p1_targets[0] as GroundItemRecord).drop_id == CRITICAL_IDS[0], "late-sorting selected fixture is the nearest P1 target")
 	var constants := (load("res://scripts/world/ground_item_world_controller.gd") as Script).get_script_constant_map()
 	_assert(int(constants.get("MAX_INACTIVE_CHESTS", 0)) == 64, "production chest pool has the exact bounded inactive limit")
 
 	for _warmup: int in 3:
 		await process_frame
+	await _dispatch(viewport, _button(0, JOY_BUTTON_DPAD_RIGHT))
+	_assert(world.selection_for_owner(OWNER_IDS[0]) == CRITICAL_IDS[0], "actual controller input selects the nearest late-sorting owned record")
+	var selected_anchor := _anchor_for(world, CRITICAL_IDS[0])
+	var hover_anchor := _anchor_for(world, CRITICAL_IDS[1])
+	var focus_anchor := _anchor_for(world, CRITICAL_IDS[2])
+	var ordinary_anchor := _anchor_for(world, &"scale-drop-1999")
+	_assert(selected_anchor != null and hover_anchor != null and focus_anchor != null and ordinary_anchor != null, "critical and ordinary anchors are projected")
+	if hover_anchor != null:
+		hover_anchor.mouse_entered.emit()
+	if focus_anchor != null:
+		focus_anchor.grab_focus()
+	await process_frame
+	var selected_position_before := selected_anchor.position if selected_anchor != null else Vector2.ZERO
+	var hover_position_before := hover_anchor.position if hover_anchor != null else Vector2.ZERO
+	var focus_position_before := focus_anchor.position if focus_anchor != null else Vector2.ZERO
+	var ordinary_position_before := ordinary_anchor.position if ordinary_anchor != null else Vector2.ZERO
+	var selected_distance_before := selected_anchor.accessibility_name if selected_anchor != null else ""
+	var hover_distance_before := hover_anchor.accessibility_name if hover_anchor != null else ""
+	var focus_distance_before := focus_anchor.accessibility_name if focus_anchor != null else ""
+	for actor_index: int in 3:
+		(_actors[actor_index] as Node3D).position.x += 1.0
+	camera.position.x += 7.0
+	viewport.size = Vector2i(2560, 1440)
+	tooltip_layer.size = Vector2(viewport.size)
+	await process_frame
+	_assert(selected_anchor != null and selected_anchor.position != selected_position_before and selected_anchor.accessibility_name != selected_distance_before, "late selected chest refreshes anchor and leader distance in the invalidation frame")
+	_assert(hover_anchor != null and hover_anchor.position != hover_position_before and hover_anchor.accessibility_name != hover_distance_before, "late hovered chest refreshes anchor and leader distance in the invalidation frame")
+	_assert(focus_anchor != null and focus_anchor.position != focus_position_before and focus_anchor.accessibility_name != focus_distance_before, "late focus-inspected chest refreshes anchor and leader distance in the invalidation frame")
+	_assert(ordinary_anchor != null and ordinary_anchor.position == ordinary_position_before, "late ordinary work remains queued after critical same-frame projection")
 	var peak_frame_ms := 0.0
 	var peak_projection_work := 0
 	var peak_pending_projection := 0
-	_assert(world.has_method(&"projection_diagnostics"), "production controller exposes bounded projection diagnostics")
+	_assert(world.has_method(&"projection_diagnostics") and world.has_signal(&"projection_diagnostics_changed"), "production controller publishes bounded runtime projection diagnostics")
 	for sample: int in FRAME_SAMPLES:
 		camera.position.x = sin(float(sample) * 0.37) * 18.0
 		camera.position.z = 80.0 + cos(float(sample) * 0.21) * 12.0
@@ -90,10 +127,12 @@ func _run() -> void:
 			await process_frame
 			settle_frames += 1
 		_assert(int((world.call(&"projection_diagnostics") as Dictionary).get("pending", 0)) == 0, "moving-camera projection reaches eventual correctness after motion stops")
+	_assert(ordinary_anchor != null and ordinary_anchor.position != ordinary_position_before, "late ordinary projection reaches eventual correctness after motion stops")
 	var memory_after := Performance.get_monitor(Performance.MEMORY_STATIC)
 	var memory_peak := Performance.get_monitor(Performance.MEMORY_STATIC_MAX)
 	var projection_limit := int(constants.get("MAX_PROJECTIONS_PER_FRAME", 0))
 	_assert(projection_limit > 0 and peak_projection_work <= projection_limit, "moving camera/viewport projection work stays within the production per-frame bound")
+	_assert(int((world.call(&"projection_diagnostics") as Dictionary).get("peak_work", 0)) >= peak_projection_work, "production runtime diagnostics retain peak critical-plus-ordinary projection work")
 	_assert(peak_pending_projection > 0, "moving camera/viewport leaves observable bounded work pending")
 	_assert(is_finite(peak_frame_ms) and peak_frame_ms >= 0.0, "peak frame observation is finite and nonnegative")
 	_assert(is_finite(memory_before) and is_finite(memory_after) and is_finite(memory_peak), "static memory observations are finite")
@@ -107,7 +146,7 @@ func _run() -> void:
 	print("LIVE_LOOT_MOVING_CAMERA_SUMMARY: records=%d samples=%d peak_frame_ms=%.3f peak_projection_work=%d peak_pending=%d settle_frames=%d memory_peak_bytes=%d" % [
 		registry.all_records().size(), FRAME_SAMPLES, peak_frame_ms, peak_projection_work, peak_pending_projection, settle_frames, int(memory_peak),
 	])
-	var hard_failure := registry.all_records().size() != 2000 or peak_frame_ms > 33.4
+	var hard_failure := registry.all_records().size() < 2000 or peak_frame_ms > 33.4
 
 	world.clear_projection()
 	viewport.free()
@@ -161,6 +200,37 @@ func _record(record_index: int, owner_index: int) -> GroundItemRecord:
 	record.source_id = &"ordinary_enemy"
 	record.ground_slot = owner_record_index
 	return record
+
+
+func _critical_record(drop_id: StringName, owner_index: int, position: Vector3) -> GroundItemRecord:
+	var record := _record(owner_index, owner_index)
+	record.drop_id = drop_id
+	record.item_id = "critical-item-%s" % drop_id
+	record.world_position = position
+	record.ground_slot = 700 + owner_index
+	return record
+
+
+func _anchor_for(world: Node, drop_id: StringName) -> Button:
+	var chest := (world.get("_chest_by_drop") as Dictionary).get(drop_id) as Node3D
+	return chest.call(&"tooltip_anchor") as Button if chest != null else null
+
+
+func _button(device: int, button: JoyButton) -> InputEventJoypadButton:
+	var event := InputEventJoypadButton.new()
+	event.device = device
+	event.button_index = button
+	event.pressed = true
+	return event
+
+
+func _dispatch(viewport: SubViewport, event: InputEventJoypadButton) -> void:
+	viewport.push_input(event)
+	await process_frame
+	var release := event.duplicate() as InputEventJoypadButton
+	release.pressed = false
+	viewport.push_input(release)
+	await process_frame
 
 
 func _detail_for(record: GroundItemRecord) -> Dictionary:

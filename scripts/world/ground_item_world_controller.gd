@@ -3,6 +3,7 @@ extends Node
 
 signal pickup_requested(drop_id: StringName, input_owner: StringName)
 signal status_changed(status: String)
+signal projection_diagnostics_changed(diagnostics: Dictionary)
 
 const CHEST_SCENE := preload("res://scenes/world/ground_item_chest.tscn")
 const TOOLTIP_SCENE := preload("res://scenes/ui/storage/item_tooltip_panel.tscn")
@@ -34,6 +35,7 @@ var _last_camera_signature: Array = []
 var _batch_camera_signature: Array = []
 var _pending_reprojection_ids: Array[StringName] = []
 var _last_projection_work_count := 0
+var _peak_projection_work_count := 0
 var _spatial_index: RefCounted
 var _targeting_service: RefCounted
 var _pickup_service: RefCounted
@@ -74,6 +76,7 @@ func configure(
 	_batch_camera_signature = _last_camera_signature.duplicate(true)
 	_pending_reprojection_ids.clear()
 	_last_projection_work_count = 0
+	_peak_projection_work_count = 0
 	if _registry == null or _chests_parent == null or _tooltip_layer == null or _tooltip == null:
 		status_changed.emit("GROUND_ITEM_WORLD_UNAVAILABLE")
 		return
@@ -82,6 +85,7 @@ func configure(
 	_registry.cleared.connect(_on_registry_cleared)
 	for record: GroundItemRecord in _registry.all_records():
 		_on_record_added(record)
+	_publish_projection_diagnostics()
 	status_changed.emit("GROUND_ITEM_WORLD_READY")
 
 
@@ -126,6 +130,7 @@ func clear_projection() -> void:
 	_batch_camera_signature.clear()
 	_pending_reprojection_ids.clear()
 	_last_projection_work_count = 0
+	_peak_projection_work_count = 0
 	_spatial_index = null
 	_targeting_service = null
 	_pickup_service = null
@@ -192,28 +197,84 @@ func _process(_delta: float) -> void:
 		_last_camera_signature = camera_signature
 		if _pending_reprojection_ids.is_empty():
 			_begin_reprojection_batch(camera_signature)
+	var projected: Dictionary = {}
+	if camera_changed:
+		for drop_id: StringName in _critical_projection_ids():
+			if _last_projection_work_count >= MAX_PROJECTIONS_PER_FRAME:
+				break
+			if not _chest_by_drop.has(drop_id):
+				continue
+			_project_anchor(drop_id)
+			projected[drop_id] = true
+			_dirty_drop_ids.erase(drop_id)
+			_pending_reprojection_ids.erase(drop_id)
+			_last_projection_work_count += 1
 	var dirty := _dirty_drop_ids.keys()
 	_dirty_drop_ids.clear()
 	for drop_value: Variant in dirty:
-		if _last_projection_work_count >= MAX_PROJECTIONS_PER_FRAME:
-			_dirty_drop_ids[StringName(drop_value)] = true
+		var dirty_id := StringName(drop_value)
+		if projected.has(dirty_id):
 			continue
-		_project_anchor(StringName(drop_value))
+		if _last_projection_work_count >= MAX_PROJECTIONS_PER_FRAME:
+			_dirty_drop_ids[dirty_id] = true
+			continue
+		_project_anchor(dirty_id)
+		projected[dirty_id] = true
+		_pending_reprojection_ids.erase(dirty_id)
 		_last_projection_work_count += 1
 	while _last_projection_work_count < MAX_PROJECTIONS_PER_FRAME and not _pending_reprojection_ids.is_empty():
 		var drop_id: StringName = _pending_reprojection_ids.pop_front()
+		if projected.has(drop_id) or not _chest_by_drop.has(drop_id):
+			continue
 		_project_anchor(drop_id)
+		projected[drop_id] = true
 		_last_projection_work_count += 1
 	if _pending_reprojection_ids.is_empty() and _batch_camera_signature != _last_camera_signature:
 		_begin_reprojection_batch(_last_camera_signature)
+	_peak_projection_work_count = maxi(_peak_projection_work_count, _last_projection_work_count)
+	_publish_projection_diagnostics()
 
 
 func projection_diagnostics() -> Dictionary:
 	return {
 		"last_frame_work": _last_projection_work_count,
-		"pending": _pending_reprojection_ids.size() + _dirty_drop_ids.size(),
+		"peak_work": _peak_projection_work_count,
+		"pending": _pending_projection_count(),
 		"limit": MAX_PROJECTIONS_PER_FRAME,
 	}
+
+
+func _publish_projection_diagnostics() -> void:
+	projection_diagnostics_changed.emit(projection_diagnostics())
+
+
+func _pending_projection_count() -> int:
+	var pending: Dictionary = {}
+	for drop_id: StringName in _pending_reprojection_ids:
+		pending[drop_id] = true
+	for value: Variant in _dirty_drop_ids:
+		pending[StringName(value)] = true
+	return pending.size()
+
+
+func _critical_projection_ids() -> Array[StringName]:
+	var result: Array[StringName] = []
+	var seen: Dictionary = {}
+	for source: Dictionary in [_selection_by_owner, _mouse_inside_by_drop, _focus_inside_by_drop]:
+		var ids: Array[StringName] = []
+		if source == _selection_by_owner:
+			for value: Variant in source.values():
+				ids.append(StringName(value))
+		else:
+			for value: Variant in source.keys():
+				ids.append(StringName(value))
+		ids.sort_custom(func(left: StringName, right: StringName) -> bool: return String(left) < String(right))
+		for drop_id: StringName in ids:
+			if drop_id.is_empty() or seen.has(drop_id):
+				continue
+			seen[drop_id] = true
+			result.append(drop_id)
+	return result
 
 
 func _begin_reprojection_batch(signature: Array) -> void:

@@ -489,7 +489,13 @@ func _test_typed_live_loot_diagnostic_accounting(failures: Array[String]) -> voi
     settings.show_ground_chest_diagnostics = true
     var main := _started_main_with_settings(settings)
     main.call(&"_record_personal_loot_report", {
-        "decisions": [],
+        "decisions": [
+            _loot_decision(true, true, &"roll_succeeded", &"ordinary_melee"),
+            _loot_decision(true, false, &"roll_failed", &"ordinary_specialist"),
+            _loot_decision(false, false, &"feature_locked", &"ordinary_melee"),
+            _loot_decision(false, false, &"leader_out_of_range", &"ordinary_specialist"),
+            _loot_decision(false, false, &"leader_unavailable", &"elite"),
+        ],
         "diagnostics": [
             {"stage": &"generation", "code": &"no_candidate"},
             {"stage": &"storage", "code": &"ground_full"},
@@ -501,7 +507,22 @@ func _test_typed_live_loot_diagnostic_accounting(failures: Array[String]) -> voi
     TestAssertions.equal(int(diagnostics.get("generation_failures", -1)), 1, "generation failure count excludes storage, ownership, and configuration diagnostics", failures)
     TestAssertions.equal(diagnostics.get("diagnostics_by_stage", {}), {"configuration": 1, "generation": 1, "ownership": 1, "storage": 1}, "typed diagnostics retain separate stable stage categories", failures)
     TestAssertions.equal(diagnostics.get("diagnostics_by_code", {}), {"context_missing": 1, "ground_full": 1, "invalid_event": 1, "no_candidate": 1}, "typed diagnostics retain separate stable codes", failures)
+    TestAssertions.equal(diagnostics.get("successes_by_source", {}), {"ordinary_melee": 1}, "successful eligible rolls retain their source category", failures)
+    TestAssertions.equal(diagnostics.get("misses_by_source", {}), {"ordinary_specialist": 1}, "ROLL MISS counts only eligible failed rolls", failures)
+    TestAssertions.equal(int(diagnostics.get("ineligible_total", -1)), 3, "ineligible decisions are counted separately from misses", failures)
+    TestAssertions.equal(diagnostics.get("ineligible_by_reason", {}), {"feature_locked": 1, "leader_out_of_range": 1, "leader_unavailable": 1}, "ineligible decisions retain stable reasons", failures)
+    TestAssertions.equal(diagnostics.get("ineligible_by_source", {}), {"elite": 1, "ordinary_melee": 1, "ordinary_specialist": 1}, "ineligible decisions retain source categories", failures)
+    TestAssertions.truthy(int(diagnostics.get("projection_limit", 0)) > 0 and diagnostics.has("projection_pending") and diagnostics.has("projection_last_work") and diagnostics.has("projection_peak_work"), "Main consumes production runtime projection diagnostics", failures)
+    TestAssertions.truthy((main.get_node("DeveloperModeBadge") as DeveloperModeBadge).diagnostics_text().contains("PROJECTION pending="), "Developer badge presents Main-consumed runtime projection diagnostics", failures)
     _cleanup_main(main)
+
+func _loot_decision(eligible: bool, success: bool, reason: StringName, source: StringName) -> PersonalLootDecision:
+    var decision := PersonalLootDecision.new()
+    decision.eligible = eligible
+    decision.success = success
+    decision.reason = reason
+    decision.source_category = source
+    return decision
 
 func _test_main_menu_route_composition(failures: Array[String]) -> void:
     var root := "user://tests/main-wiring-menu-routes_%d_%d" % [OS.get_process_id(), Time.get_ticks_usec()]

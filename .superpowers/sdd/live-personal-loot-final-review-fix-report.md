@@ -52,3 +52,37 @@ Planned production paths are the directly implicated Main, world chest/controlle
 - Generated untracked `.uid` cache artifacts from a diagnostic editor scan were removed before staging.
 - Exact tracked scope is the approved Main/world/ledger/coordinator/ownership/badge files and their directly corresponding unit/integration runners, plus this unique report. Generic reports remain untouched.
 - Commit message: `fix: complete live loot interaction contracts`.
+
+## Second-pass review fixes
+
+Second-pass starting head: `c50a28d931cc03520148f440ea76578302d5583e`
+
+This follow-up remained inside the approved Main, Developer Mode badge, world controller, Character Ledger, and directly corresponding existing runner/test scope. No generic transaction, ownership, equipment, or generic report file changed.
+
+### Controlled RED
+
+- Main/badge RED produced 8 intended failures: ineligible outcomes incorrectly inflated `ROLL MISS`, stable ineligible reason/source categories were absent, and Main/badge had no production projection status.
+- Ledger RED produced 110 intended failures across every region and all 24 roster members because the directional neighbor graph was not closed.
+- Moving-camera RED used 2,000 ordinary records plus late-sorting selected, mouse-hovered, and focus-inspected records. It failed only the intended same-frame critical refresh and absent production signal/peak-work contracts after fixture/input-dispatch corrections.
+
+### Implementation
+
+- Camera/viewport invalidation reserves the existing 32-record frame budget for selected, hovered, and focus-inspected IDs first, removes them from ordinary/dirty queues to avoid duplicates, and spends remaining capacity on queued records. Work remains bounded and late ordinary records still converge.
+- The controller publishes runtime projection diagnostics (`pending`, `last_frame_work`, retained `peak_work`, and `limit`). Main consumes that signal, and the Developer Mode badge presents the live values. The recorded work includes critical and ordinary projections; the runner's `Performance.TIME_PROCESS <= 33.4ms` hard gate remains unchanged.
+- Character Ledger now installs explicit top/bottom/left/right boundary bridges while preserving local roster-grid and equipment/inventory navigation. The directional graph is closed across every visible roster member, every tab, Close, every equipment slot, and every inventory cell.
+- Main records misses only for eligible unsuccessful decisions. Ineligible outcomes have a separate session total plus stable reason and source buckets, all rendered by the session-only badge.
+
+### Second-pass verification
+
+- Focused affected gate (15 suites): `TEST_SUMMARY: PASS (0 failures)` with no parse/load/leak marker.
+- Actual viewport pickup: all mouse, controller, full-inventory, foreign-owner, and overall integration markers passed.
+- Ledger responsive integration: all three resolution markers, member 24, and `TASK10_EQUIPMENT_LEDGER_RESPONSIVE_SUMMARY: PASS (0 failures)` passed. The unit graph check traverses actual `focus_neighbor_top/bottom/left/right` paths from every focusable control to every other focusable control.
+- Lifecycle and multiplayer markers: `LIVE_LOOT_LIFECYCLE_INTEGRATION: PASS` and `LIVE_PERSONAL_LOOT_MULTIPLAYER_SUMMARY: PASS`.
+- Moving-camera/viewport performance: 2,003 total records; late selected/hover/focus anchors and leader-relative distances refreshed in the invalidation frame; late ordinary work converged; peak frame `0.035ms`; peak work `32`; peak pending `1942`; settled in `71` frames; memory marker present; `LIVE_LOOT_PERFORMANCE_SUMMARY: PASS`.
+- Final isolated full suite: `TEST_SUMMARY: PASS (201 suites)` with no parse/load/leak marker.
+- Cold acceptance evidence was not rerun or modified.
+
+### Second-pass self-review and commit
+
+- `git diff --check` passed. Review found bounded combined work, no duplicate critical/ordinary projection, no injected Boolean diagnostic substitute, no test-only production API, no private-method integration shortcut, and no unrelated production/report edit.
+- Commit message: `fix: prioritize loot interaction state`.

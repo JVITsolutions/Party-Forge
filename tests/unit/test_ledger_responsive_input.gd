@@ -37,10 +37,14 @@ func _test_layout_controller_and_pause_edges(failures: Array[String]) -> void:
 	var run := GameRun.new()
 	run.start_run()
 	var context := LedgerPlayerContext.new(0)
+	var profile := ProfileState.new_profile("ledger-focus-profile", "Ledger Focus", 1000)
+	profile.inventory_columns = 1
+	var run_context := PlayerRunContext.new()
+	TestAssertions.truthy(run_context.configure(&"ledger-focus-owner", 0, profile, 47001, party, 100).is_empty(), "directional focus fixture configures real run inventory", failures)
 	var feature_ids: Array[StringName] = [&"stats", &"current_upgrades", &"equipment_inventory"]
 	var unlock_ids: Array[StringName] = [&"equipment_inventory"]
 	var policy := FeatureAccessPolicy.new(false, true, feature_ids, unlock_ids, unlock_ids)
-	ledger.configure(run, party, catalog, Callable(), [context], policy)
+	ledger.configure(run, party, catalog, Callable(), [context], policy, Callable(), run_context)
 
 	TestAssertions.truthy(ledger.has_method("apply_viewport_size"), "ledger exposes deterministic viewport policy", failures)
 	var stats_page := ledger.get_node("Overlay/Frame/Layout/Body/PageHost/StatsLedgerPage") as CharacterLedgerPage
@@ -115,6 +119,19 @@ func _test_layout_controller_and_pause_edges(failures: Array[String]) -> void:
 		var required: Array[Control] = [member_24, stats_tab, close_button, equipment_focus, inventory_focus]
 		for start: Control in required:
 			TestAssertions.truthy(_focus_next_reaches(start, required), "closed focus graph reaches roster, tabs, Close, equipment, and inventory from %s" % start.name, failures)
+		var directional_controls: Array[Control] = []
+		for child: Node in entries.get_children():
+			if child is Button:
+				directional_controls.append(child as Button)
+		for child: Node in ledger.get_node("Overlay/Frame/Layout/Tabs").get_children():
+			if child is Button:
+				directional_controls.append(child as Button)
+		directional_controls.append(close_button)
+		directional_controls.append_array(equipment_page.focus_controls())
+		for control: Control in directional_controls:
+			TestAssertions.truthy(_directional_focus_reaches(control, directional_controls), "D-pad graph reaches every roster, tab, Close, equipment, and inventory control from %s" % control.name, failures)
+			for neighbor_path: NodePath in [control.focus_neighbor_top, control.focus_neighbor_bottom, control.focus_neighbor_left, control.focus_neighbor_right]:
+				TestAssertions.truthy(not neighbor_path.is_empty(), "%s exposes every explicit D-pad neighbor" % control.name, failures)
 	ledger.activate_page(&"stats")
 	ledger.apply_viewport_size(Vector2(960.0, 540.0))
 	ledger.select_member(1)
@@ -270,6 +287,23 @@ func _focus_next_reaches(start: Control, required: Array[Control]) -> bool:
 		if current.focus_next.is_empty():
 			break
 		current = current.get_node_or_null(current.focus_next) as Control
+	return required.all(func(control: Control) -> bool: return control != null and reached.has(control.get_instance_id()))
+
+
+func _directional_focus_reaches(start: Control, required: Array[Control]) -> bool:
+	var reached: Dictionary = {}
+	var pending: Array[Control] = [start]
+	while not pending.is_empty() and reached.size() < 256:
+		var current: Control = pending.pop_front()
+		if current == null or reached.has(current.get_instance_id()):
+			continue
+		reached[current.get_instance_id()] = true
+		for path: NodePath in [current.focus_neighbor_top, current.focus_neighbor_bottom, current.focus_neighbor_left, current.focus_neighbor_right]:
+			if path.is_empty():
+				continue
+			var target := current.get_node_or_null(path) as Control
+			if target != null and not reached.has(target.get_instance_id()):
+				pending.append(target)
 	return required.all(func(control: Control) -> bool: return control != null and reached.has(control.get_instance_id()))
 
 

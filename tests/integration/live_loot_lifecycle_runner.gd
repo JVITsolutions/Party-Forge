@@ -90,7 +90,7 @@ func _diagnostics_text(main: Node) -> String:
 	return String((main.get_node("DeveloperModeBadge") as DeveloperModeBadge).diagnostics_text())
 
 func _zero_diagnostics_text() -> String:
-	return "SESSION LOOT DIAGNOSTICS\nLIVE 0 | PEAK 0\nROLL SUCCESS none\nROLL MISS none\nGENERATION FAILURES 0\nDIAGNOSTIC STAGES none\nDIAGNOSTIC CODES none\nCOLLECTION none"
+	return "SESSION LOOT DIAGNOSTICS\nLIVE 0 | PEAK 0\nROLL SUCCESS none\nROLL MISS none\nINELIGIBLE 0 | REASONS none | SOURCES none\nGENERATION FAILURES 0\nDIAGNOSTIC STAGES none\nDIAGNOSTIC CODES none\nCOLLECTION none\nPROJECTION pending=0 last=0 peak=0 limit=32"
 
 func _cleanup_main(main: Node) -> void:
 	paused = false

@@ -456,29 +456,19 @@ func _wire_roster_page_focus_bridge() -> void:
 	var member_button := _member_buttons.get(context.selected_member_id) as Button
 	var active_page := _active_page()
 	var page_target := active_page.initial_focus() if active_page != null else null
-	if (
-		member_button == null
-		or page_target == null
-	):
-		return
-	_set_neighbor(member_button, &"focus_neighbor_right", page_target)
-	_set_neighbor(page_target, &"focus_neighbor_left", member_button)
-	_set_neighbor(page_target, &"focus_neighbor_top", null)
-	if _responsive_mode != RESPONSIVE_LAYOUT.Mode.COMPACT:
-		return
-	var visible_buttons: Array[Button] = []
-	for child: Node in _party_entries().get_children():
-		var button := child as Button
-		if button != null and button.visible:
-			visible_buttons.append(button)
-	var member_index := visible_buttons.find(member_button)
-	if member_index < 0:
-		return
-	var columns := maxi(_party_entries().columns, 1)
-	var last_row := floori(float(visible_buttons.size() - 1) / float(columns))
-	if floori(float(member_index) / float(columns)) == last_row:
-		_set_neighbor(member_button, &"focus_neighbor_bottom", page_target)
-		_set_neighbor(page_target, &"focus_neighbor_top", member_button)
+	if member_button != null and page_target != null:
+		_set_neighbor(member_button, &"focus_neighbor_right", page_target)
+		_set_neighbor(page_target, &"focus_neighbor_left", member_button)
+		_set_neighbor(page_target, &"focus_neighbor_top", null)
+		if _responsive_mode == RESPONSIVE_LAYOUT.Mode.COMPACT:
+			var visible_buttons := _visible_member_buttons()
+			var member_index := visible_buttons.find(member_button)
+			var columns := maxi(_party_entries().columns, 1)
+			var last_row := floori(float(visible_buttons.size() - 1) / float(columns))
+			if member_index >= 0 and floori(float(member_index) / float(columns)) == last_row:
+				_set_neighbor(member_button, &"focus_neighbor_bottom", page_target)
+				_set_neighbor(page_target, &"focus_neighbor_top", member_button)
+	_wire_directional_focus_graph()
 
 func _wire_closed_focus_cycle() -> void:
 	var controls: Array[Control] = []
@@ -502,6 +492,67 @@ func _wire_closed_focus_cycle() -> void:
 		var current := controls[index]
 		current.focus_previous = current.get_path_to(controls[posmod(index - 1, controls.size())])
 		current.focus_next = current.get_path_to(controls[(index + 1) % controls.size()])
+
+func _wire_directional_focus_graph() -> void:
+	var roster := _visible_member_buttons()
+	var tabs: Array[Button] = []
+	for child: Node in _tabs().get_children():
+		var tab := child as Button
+		if tab != null and tab.visible and tab.focus_mode != Control.FOCUS_NONE:
+			tabs.append(tab)
+	var page_controls: Array[Control] = []
+	var active_page := _active_page()
+	if active_page != null:
+		for control: Control in active_page.focus_controls():
+			if control != null and control.visible and control.focus_mode != Control.FOCUS_NONE:
+				page_controls.append(control)
+	var close_button := _close_button()
+	var first_tab := tabs[0] if not tabs.is_empty() else close_button
+	var last_tab := tabs[-1] if not tabs.is_empty() else close_button
+	var first_page := page_controls[0] if not page_controls.is_empty() else close_button
+	var last_page := page_controls[-1] if not page_controls.is_empty() else close_button
+	var first_roster := roster[0] if not roster.is_empty() else close_button
+	var selected_roster := _member_buttons.get(context.selected_member_id) as Button
+	if selected_roster == null:
+		selected_roster = first_roster
+	for button: Button in roster:
+		if button.focus_neighbor_left.is_empty():
+			_set_neighbor(button, &"focus_neighbor_left", close_button)
+		if button.focus_neighbor_right.is_empty():
+			_set_neighbor(button, &"focus_neighbor_right", first_page)
+		if button.focus_neighbor_top.is_empty():
+			_set_neighbor(button, &"focus_neighbor_top", close_button)
+		if button.focus_neighbor_bottom.is_empty():
+			_set_neighbor(button, &"focus_neighbor_bottom", first_tab)
+	for index: int in tabs.size():
+		var tab := tabs[index]
+		_set_neighbor(tab, &"focus_neighbor_left", tabs[index - 1] if index > 0 else close_button)
+		_set_neighbor(tab, &"focus_neighbor_right", tabs[index + 1] if index + 1 < tabs.size() else close_button)
+		_set_neighbor(tab, &"focus_neighbor_top", selected_roster)
+		_set_neighbor(tab, &"focus_neighbor_bottom", first_page)
+	_set_neighbor(close_button, &"focus_neighbor_left", last_tab)
+	_set_neighbor(close_button, &"focus_neighbor_right", first_roster)
+	_set_neighbor(close_button, &"focus_neighbor_top", last_page)
+	_set_neighbor(close_button, &"focus_neighbor_bottom", first_tab)
+	if not page_controls.is_empty():
+		var active_tab := first_tab
+		for tab: Button in tabs:
+			if StringName(tab.get_meta("page_id", &"")) == _active_page_id:
+				active_tab = tab
+				break
+		if page_controls[0].focus_neighbor_top.is_empty():
+			_set_neighbor(page_controls[0], &"focus_neighbor_top", active_tab)
+		_set_neighbor(page_controls[0], &"focus_neighbor_left", selected_roster)
+		_set_neighbor(page_controls[-1], &"focus_neighbor_bottom", close_button)
+		_set_neighbor(page_controls[-1], &"focus_neighbor_right", close_button)
+
+func _visible_member_buttons() -> Array[Button]:
+	var result: Array[Button] = []
+	for child: Node in _party_entries().get_children():
+		var button := child as Button
+		if button != null and button.visible and button.focus_mode != Control.FOCUS_NONE:
+			result.append(button)
+	return result
 
 func _refresh_member_button(member_id: int) -> void:
 	var button := _member_buttons.get(member_id) as Button
