@@ -54,6 +54,22 @@ The production evidence rebuild first hit 120-second and 300-second shell ceilin
 - The visual developer playtest (normal/advanced/compare tooltips, manual exports, representative equip/stat projection, and 1080p/1440p/4K visual inspection) remains deferred because no Godot editor session was connected to this feature worktree during final verification.
 - An inline revision audit found no critical or important defect across deterministic evidence, migration/replay, atomicity, bounded retention, profile isolation, focus, and responsive layout. It is not an independent reviewer; independent review remains an integration gate because this execution was explicitly kept on the no-subagent path.
 
+## Independent-review corrective pass - 2026-08-11
+
+An independent reviewer inspected the exact `262312e..5d5b5db` range and identified production-analysis, export, controller editing, report-retention, comparison-presentation, and compact-Analysis gaps. The corrective batch now:
+
+- derives base, rarity, pattern, affix, affix-kind, modifier-family, tier, and shared weight-band distributions from real generation traces;
+- ignores informational `base_damage` provenance as a weighted selection opportunity while retaining weighted-stage failures and bounded rejection/conflict sequences;
+- renders expected/observed rows, rejections, reachability, diagnostics, failures, and bounded samples in deterministic Markdown;
+- replaces free-form rarity/tag inputs with catalog-backed controller-operable multi-select menus and moves difficulty IDs into the shared vocabulary;
+- retains cancelled partial reports across confirmed close/reopen while preserving explicit Player Mode/profile/run clear boundaries;
+- uses the shared item card and equipped-comparison provider for generated previews;
+- gives compact Analysis bounded identity/status columns and adds live elapsed/throughput plus terminal rarity/tier/diagnostic summaries.
+
+Accepted RED evidence was recorded before each correction. The corrective GREEN gates passed: the focused analysis/export matrix, the focused request/presentation/retention matrix, the 15-suite Loot Lab matrix, the Loot Lab real-input/responsive integration, and the retained developer-sandbox integration. The exact corrective commit and final independent follow-up verdict are recorded by the integration turn that merges this branch.
+
+The user explicitly chose to perform the physical-controller and visual developer playtest later, so those manual checks remain deferred rather than represented as completed.
+
 ## Reproduction commands
 
 ```powershell

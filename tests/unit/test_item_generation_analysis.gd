@@ -10,8 +10,9 @@ func _test_selection_opportunities(failures: Array[String]) -> void:
 	var trace := ItemGenerationTrace.new()
 	trace.record(&"affix:prefix:0", [&"b", &"a"], {&"z": "blocked"}, {&"a": 1.0, &"b": 3.0}, &"b", {"slot": 0})
 	trace.record(&"affix:prefix:1", [], {}, {}, &"")
+	trace.record(&"base_damage", [&"physical"], {}, {}, &"weapon_profile", {"outcome": "rolled"})
 	var opportunities := ItemGenerationAnalysis.selection_opportunities(trace)
-	TestAssertions.equal(opportunities.size(), 2, "every trace selection row is normalized", failures)
+	TestAssertions.equal(opportunities.size(), 2, "only weighted-selection trace rows are normalized", failures)
 	if opportunities.size() != 2:
 		return
 	var weighted := opportunities[0]

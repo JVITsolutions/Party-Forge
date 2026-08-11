@@ -65,7 +65,7 @@ func validate(foundation: ItemFoundationCatalog) -> String:
 		return _error("source_id", "unknown source %s" % source_id)
 	if generation_domain not in ItemGenerationVocabulary.DOMAINS:
 		return _error("generation_domain", "unknown generation domain %s" % generation_domain)
-	if difficulty_id != &"normal":
+	if difficulty_id not in ItemGenerationVocabulary.DIFFICULTIES:
 		return _error("difficulty_id", "unsupported difficulty %s" % difficulty_id)
 	if not is_finite(heat) or heat < 0.0:
 		return _error("heat", "must be finite and nonnegative")

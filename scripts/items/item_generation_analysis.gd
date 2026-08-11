@@ -22,6 +22,9 @@ static func selection_opportunities(trace: ItemGenerationTrace) -> Array[Diction
 		return result
 	for stage_value: Variant in trace.stages:
 		var stage := stage_value as Dictionary
+		var stage_id := String(stage.get("stage", ""))
+		if not is_weighted_selection_stage(stage_id):
+			continue
 		var weights := (stage.get("weights", {}) as Dictionary).duplicate(true)
 		var expected := _expected(weights)
 		var row: Dictionary = {
@@ -30,7 +33,7 @@ static func selection_opportunities(trace: ItemGenerationTrace) -> Array[Diction
 			"expected": expected,
 			"rejected": ItemGenerationTrace.canonical_json_copy(stage.get("rejected", {})),
 			"selected": String(stage.get("selected", "")),
-			"stage": String(stage.get("stage", "")),
+			"stage": stage_id,
 			"valid": not expected.is_empty(),
 			"weights": weights,
 		}
@@ -38,6 +41,20 @@ static func selection_opportunities(trace: ItemGenerationTrace) -> Array[Diction
 			row["invalid_reason"] = "no_positive_finite_weight"
 		result.append(row)
 	return result
+
+static func is_weighted_selection_stage(stage: String) -> bool:
+	return stage in ["base", "rarity", "pattern"] or stage.begins_with("affix:") or stage.begins_with("tier:")
+
+static func weight_band_key(weight: float) -> String:
+	if is_equal_approx(weight, 25.0):
+		return "0025_premium_hybrid"
+	if is_equal_approx(weight, 150.0):
+		return "0150_standard_hybrid"
+	if is_equal_approx(weight, 500.0):
+		return "0500_specialized_focused"
+	if is_equal_approx(weight, 1000.0):
+		return "1000_core_focused"
+	return "other_%s" % _number(weight)
 
 static func request_reachability(
 	request: ItemGenerationRequest,
@@ -288,6 +305,10 @@ static func _empty_reachability(error: String) -> Dictionary:
 		"structurally_unreachable": [],
 		"tier_rows": [],
 	}
+
+static func _number(value: float) -> String:
+	var rounded := roundf(value)
+	return str(int(rounded)) if is_equal_approx(value, rounded) else ("%.4f" % value).trim_suffix("0").trim_suffix(".")
 
 static func _sorted_bases(values: Array[EquipmentBaseDefinition]) -> Array[EquipmentBaseDefinition]:
 	var result := values.duplicate()

@@ -13,6 +13,17 @@ func run() -> Array[String]:
 	_cleanup(preferences_path)
 	var store := DeveloperLootLabPreferencesStore.new(AtomicJsonStore.new(), preferences_path)
 	form.call(&"configure", GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG, store)
+	var fields := form.get_node("Fields") as GridContainer
+	for field: String in ["permitted_rarity_ids", "party_archetype_tags", "unlock_tags", "required_base_tags", "excluded_base_tags", "required_affix_tags", "excluded_affix_tags"]:
+		var control := fields.get_node(field.to_pascal_case())
+		TestAssertions.truthy(control is MenuButton, "%s uses a controller-operable catalog multi-select" % field, failures)
+		if control is MenuButton:
+			TestAssertions.truthy((control as MenuButton).get_popup().item_count > 0, "%s exposes catalog-backed choices" % field, failures)
+	var difficulty := fields.get_node("DifficultyId") as OptionButton
+	var vocabulary_constants := (load("res://scripts/items/item_generation_vocabulary.gd") as Script).get_script_constant_map()
+	var difficulties := vocabulary_constants.get("DIFFICULTIES", []) as Array
+	TestAssertions.truthy(not difficulties.is_empty(), "shared generation vocabulary declares difficulties", failures)
+	TestAssertions.equal(difficulty.item_count, difficulties.size(), "difficulty options come from shared generation vocabulary", failures)
 	var document := store.defaults()
 	document["seed"] = 90210
 	document["generation_sequence"] = 700

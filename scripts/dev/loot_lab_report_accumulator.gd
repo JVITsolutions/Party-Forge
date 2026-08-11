@@ -77,7 +77,7 @@ func finalize(status: StringName, runtime_metrics: Dictionary) -> Dictionary:
 		"diagnostics": {
 			"categories": _diagnostic_categories,
 			"encountered_unobserved": _encountered_unobserved(),
-			"reachability": _reachability,
+			"reachability": _reachability_diagnostics(),
 			"unencountered_reachable_affixes": _unencountered_reachable_affixes(),
 		},
 		"failures": {"by_stage_code": _failure_counts},
@@ -137,7 +137,7 @@ func _record_failure(result: ItemGenerationResult, sequence: int) -> void:
 func _record_trace(trace: ItemGenerationTrace, sequence: int) -> void:
 	for opportunity: Dictionary in ItemGenerationAnalysis.selection_opportunities(trace):
 		var stage := String(opportunity.get("stage", ""))
-		_record_rejections(stage, opportunity.get("rejected", {}) as Dictionary)
+		_record_rejections(stage, opportunity.get("rejected", {}) as Dictionary, sequence)
 		if not bool(opportunity.get("valid", false)):
 			_record_diagnostic("invalid_opportunity:%s" % stage, sequence)
 			continue
@@ -150,14 +150,51 @@ func _record_trace(trace: ItemGenerationTrace, sequence: int) -> void:
 		var selected := String(opportunity.get("selected", ""))
 		if not selected.is_empty():
 			_increment(_dictionary_row(_observed, stage), selected)
+		_record_normalized_dimensions(stage, opportunity, selected)
 
-func _record_rejections(stage: String, rejected: Dictionary) -> void:
+func _record_rejections(stage: String, rejected: Dictionary, sequence: int) -> void:
 	for candidate: String in rejected:
 		var reason_value: Variant = rejected[candidate]
 		var reason := String(reason_value) if typeof(reason_value) in [TYPE_STRING, TYPE_STRING_NAME] else JSON.stringify(ItemGenerationTrace.canonical_json_copy(reason_value))
 		var stage_row := _dictionary_row(_rejections, stage)
 		var candidate_row := _dictionary_row(stage_row, candidate)
 		_increment(candidate_row, reason)
+		_record_diagnostic("rejection:%s:%s" % [stage, reason], sequence)
+		if reason.contains("blocked") or reason.contains("duplicate") or reason.contains("conflict"):
+			_record_diagnostic("conflict:%s" % reason, sequence)
+
+func _record_normalized_dimensions(stage: String, opportunity: Dictionary, selected: String) -> void:
+	var expected := opportunity.get("expected", {}) as Dictionary
+	if stage.begins_with("affix:"):
+		_record_mapped_dimension("affix", expected, selected, func(candidate: String) -> Array[String]: return [candidate])
+		_record_mapped_dimension("affix_kind", expected, selected, func(candidate: String) -> Array[String]:
+			var definition := _foundation.affix(StringName(candidate))
+			return [definition.affix_kind] if definition != null else [] as Array[String]
+		)
+		_record_mapped_dimension("family", expected, selected, func(candidate: String) -> Array[String]:
+			var definition := _foundation.affix(StringName(candidate))
+			var families: Array[String] = []
+			if definition != null:
+				for family_id: StringName in definition.modifier_family_ids:
+					families.append(String(family_id))
+			return families
+		)
+		_record_mapped_dimension("weight_band", expected, selected, func(candidate: String) -> Array[String]:
+			var definition := _foundation.affix(StringName(candidate))
+			return [ItemGenerationAnalysis.weight_band_key(definition.base_weight)] if definition != null else [] as Array[String]
+		)
+	elif stage.begins_with("tier:"):
+		_record_mapped_dimension("tier", expected, selected, func(candidate: String) -> Array[String]: return ["tier_%s" % candidate])
+
+func _record_mapped_dimension(dimension: String, expected: Dictionary, selected: String, mapper: Callable) -> void:
+	var expected_row := _dictionary_row(_expected, dimension)
+	for candidate: String in expected:
+		for mapped: String in mapper.call(candidate) as Array[String]:
+			_add_float(expected_row, mapped, float(expected[candidate]))
+	if selected.is_empty():
+		return
+	for mapped: String in mapper.call(selected) as Array[String]:
+		_increment(_dictionary_row(_observed, dimension), mapped)
 
 func _record_diagnostic(category: String, sequence: int) -> void:
 	var row := _dictionary_row(_diagnostic_categories, category)
@@ -237,6 +274,43 @@ func _unencountered_reachable_affixes() -> Array[String]:
 			result.append(id)
 	result.sort()
 	return result
+
+func _reachability_diagnostics() -> Dictionary:
+	var result := _reachability.duplicate(true)
+	var impossible_patterns: Array[Dictionary] = []
+	for row_value: Variant in _reachability.get("pattern_rows", []) as Array:
+		var row := row_value as Dictionary
+		if not bool(row.get("viable", false)):
+			impossible_patterns.append(row.duplicate(true))
+	result["impossible_patterns"] = impossible_patterns
+	var inactive_rarities: Array[Dictionary] = []
+	for row_value: Variant in _reachability.get("not_applicable", []) as Array:
+		var row := row_value as Dictionary
+		if String(row.get("kind", "")) == "rarity":
+			inactive_rarities.append(row.duplicate(true))
+	result["inactive_rarities"] = inactive_rarities
+	result["tier_gaps"] = _tier_gap_rows()
+	return result
+
+func _tier_gap_rows() -> Array[Dictionary]:
+	var grouped: Dictionary = {}
+	for row_value: Variant in _reachability.get("tier_rows", []) as Array:
+		var row := row_value as Dictionary
+		var key := "%s|%s" % [String(row.get("affix_id", "")), String(row.get("rarity_id", ""))]
+		if not grouped.has(key):
+			grouped[key] = []
+		(grouped[key] as Array).append(int(row.get("tier", 0)))
+	var gaps: Array[Dictionary] = []
+	for key: String in grouped:
+		var tiers := grouped[key] as Array
+		tiers.sort()
+		if tiers.size() < 2:
+			continue
+		for tier: int in range(int(tiers.front()), int(tiers.back()) + 1):
+			if tier not in tiers:
+				var parts := key.split("|", false)
+				gaps.append({"affix_id": parts[0], "rarity_id": parts[1], "tier": tier})
+	return gaps
 
 func _runtime_document(status: StringName, metrics: Dictionary) -> Dictionary:
 	var elapsed := _finite_nonnegative(metrics.get("elapsed_seconds", 0.0))

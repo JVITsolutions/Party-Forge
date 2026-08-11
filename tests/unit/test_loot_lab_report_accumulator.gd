@@ -42,9 +42,17 @@ func _test_ordered_accounting(
 	TestAssertions.equal((aggregates.get("opportunities", {}) as Dictionary).get("affix:prefix:0", 0), 4, "opportunity denominator is exact", failures)
 	TestAssertions.equal(((evidence.get("failures", {}) as Dictionary).get("by_stage_code", {}) as Dictionary).get("rarity/no_eligible_rarity", 0), 1, "failure stage/code count is exact", failures)
 	var categories := (evidence.get("diagnostics", {}) as Dictionary).get("categories", {}) as Dictionary
+	TestAssertions.truthy(not categories.has("invalid_opportunity:base_damage"), "informational base-damage provenance is not a false invalid selection", failures)
 	var failure_diagnostic := categories.get("generation_failure:rarity/no_eligible_rarity", {}) as Dictionary
 	TestAssertions.equal(failure_diagnostic.get("count", 0), 1, "generation failure diagnostic count is exact", failures)
 	TestAssertions.equal(failure_diagnostic.get("example_sequences", []), [701], "generation failure diagnostic stores the exact sequence", failures)
+	var conflict := categories.get("conflict:blocked_modifier_family", {}) as Dictionary
+	TestAssertions.equal(conflict.get("example_sequences", []), [700, 701, 702, 703], "rejection conflicts retain exact bounded sequences", failures)
+	for dimension: String in ["affix", "affix_kind", "family", "tier", "weight_band"]:
+		TestAssertions.truthy((aggregates.get("expected", {}) as Dictionary).has(dimension), "production report derives %s expected distribution" % dimension, failures)
+		TestAssertions.truthy((aggregates.get("observed", {}) as Dictionary).has(dimension), "production report derives %s observed distribution" % dimension, failures)
+	TestAssertions.near(float(((aggregates.get("expected", {}) as Dictionary).get("weight_band", {}) as Dictionary).get("0150_standard_hybrid", 0.0)), 3.0, 0.000001, "weight-band expectation accumulates shared authored band semantics across attempts", failures)
+	TestAssertions.equal(((aggregates.get("observed", {}) as Dictionary).get("family", {}) as Dictionary).get("family_b", 0), 4, "selected modifier-family distribution comes from production trace selections", failures)
 	TestAssertions.equal(accumulator.record(4, success), "PARTY_FORGE_LOOT_LAB_REPORT_ERROR field=state reason=report already finalized", "finalized accumulator rejects later records", failures)
 
 	var exposed := report.duplicate(true)
@@ -86,6 +94,11 @@ func _success_result() -> ItemGenerationResult:
 	item.base_definition_id = &"base"
 	item.item_level = 20
 	item.rarity_id = &"common"
+	var affix := ItemAffixInstance.new()
+	affix.definition_id = &"b"
+	affix.affix_kind = "prefix"
+	affix.tier = 2
+	item.affixes = [affix]
 	item.origin = {"issuer_namespace": "loot-lab-test", "seed": 77, "sequence": 0, "source": "test"}
 	return ItemGenerationResult.success(item, _trace())
 
@@ -102,7 +115,12 @@ func _failure_result() -> ItemGenerationResult:
 
 func _trace() -> ItemGenerationTrace:
 	var trace := ItemGenerationTrace.new()
-	trace.record(&"affix:prefix:0", [&"a", &"b"], {}, {&"a": 1.0, &"b": 3.0}, &"b")
+	trace.record(&"base", [&"base"], {}, {&"base": 1.0}, &"base")
+	trace.record(&"rarity", [&"common"], {}, {&"common": 1.0}, &"common")
+	trace.record(&"pattern", [&"empty"], {}, {&"empty": 1.0}, &"empty")
+	trace.record(&"base_damage", [&"physical"], {}, {}, &"fixture_profile", {"outcome": "rolled"})
+	trace.record(&"affix:prefix:0", [&"a", &"b"], {&"blocked": "blocked_modifier_family"}, {&"a": 1.0, &"b": 3.0}, &"b")
+	trace.record(&"tier:prefix:0:b", [&"1", &"2"], {}, {&"1": 1.0, &"2": 1.0}, &"2")
 	return trace
 
 func _request() -> ItemGenerationRequest:
@@ -125,5 +143,19 @@ func _fixtures() -> Dictionary:
 	var foundation := ItemFoundationCatalog.new()
 	foundation.known_source_ids = [&"ordinary_enemy"]
 	foundation.known_item_tags = [&"accessory", &"base", &"weapon"]
+	foundation.modifier_family_ids = [&"family_a", &"family_b"]
 	foundation.rarities = [rarity]
+	foundation.affixes = [
+		_affix(&"a", "suffix", 25.0, &"family_a"),
+		_affix(&"b", "prefix", 150.0, &"family_b"),
+	]
 	return {"equipment": equipment, "foundation": foundation}
+
+func _affix(id: StringName, kind: String, weight: float, family: StringName) -> ItemAffixDefinition:
+	var definition := ItemAffixDefinition.new()
+	definition.id = id
+	definition.display_name = String(id).to_upper()
+	definition.affix_kind = kind
+	definition.base_weight = weight
+	definition.modifier_family_ids = [family]
+	return definition

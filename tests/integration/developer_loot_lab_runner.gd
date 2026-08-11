@@ -81,6 +81,7 @@ func _assert_responsive_modes(lab: DeveloperLootLab) -> void:
 	var inspector := lab.get_node("Layout/Workbench/InspectorScroll") as Control
 	var selectors := lab.get_node("Layout/PaneSelectors") as Control
 	var gallery := lab.get_node("Layout/Workbench/Results/SampleScroll/SampleGrid") as GridContainer
+	var analysis_table := lab.get_node("Layout/Analysis/Layout/Table") as Tree
 	for index: int in TARGET_SIZES.size():
 		lab.call(&"apply_viewport_size", TARGET_SIZES[index])
 		_assert(not workbench.vertical, "%s desktop Workbench keeps three horizontal panes" % TARGET_SIZES[index])
@@ -91,6 +92,7 @@ func _assert_responsive_modes(lab: DeveloperLootLab) -> void:
 	_assert(workbench.vertical and selectors.visible, "compact mode exposes pane selectors")
 	_assert(int(request.visible) + int(results.visible) + int(inspector.visible) == 1, "compact mode shows exactly one Workbench pane")
 	_assert((lab.get_node("Layout/FooterStatus") as Control).visible, "compact mode retains the fixed footer")
+	_assert(int((lab.get_node("Layout/Analysis") as LootLabAnalysisView).column_minimum_width(0)) > 0 and int((lab.get_node("Layout/Analysis") as LootLabAnalysisView).column_minimum_width(7)) > 0, "compact Analysis preserves identity and status columns for bounded horizontal scrolling")
 	lab.call(&"apply_viewport_size", TARGET_SIZES[0])
 
 func _exercise_subtab_navigation(viewport: SubViewport, lab: DeveloperLootLab) -> void:
@@ -110,6 +112,17 @@ func _exercise_subtab_navigation(viewport: SubViewport, lab: DeveloperLootLab) -
 
 func _exercise_generation(viewport: SubViewport, sandbox: DeveloperItemSandbox, lab: DeveloperLootLab) -> void:
 	var form := lab.get_node("Layout/Workbench/RequestScroll/RequestForm") as LootLabRequestForm
+	var permitted_rarities := form.get_node("Fields/PermittedRarityIds") as Control
+	var rarities_before_controller := (form.preferences_document().get("permitted_rarity_ids", []) as Array).duplicate()
+	permitted_rarities.grab_focus()
+	await _joy_button(viewport, JOY_BUTTON_A)
+	_assert(permitted_rarities is MenuButton and (permitted_rarities as MenuButton).get_popup().visible, "south face opens the permitted-rarity catalog multi-select")
+	if permitted_rarities is MenuButton:
+		var rarity_popup := (permitted_rarities as MenuButton).get_popup()
+		await _joy_button(viewport, JOY_BUTTON_DPAD_DOWN)
+		await _joy_button(viewport, JOY_BUTTON_A)
+		_assert((form.preferences_document().get("permitted_rarity_ids", []) as Array) != rarities_before_controller, "D-pad and south face mutate the permitted-rarity selection without a mouse")
+		rarity_popup.hide()
 	var one := form.preferences_document()
 	one["batch_preset"] = 1
 	_assert(form.apply_preferences(one).is_empty(), "one-item preset applies")

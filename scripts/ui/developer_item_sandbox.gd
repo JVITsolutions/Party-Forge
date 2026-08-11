@@ -719,6 +719,7 @@ func _configure_loot_lab() -> void:
 	if lab == null:
 		return
 	lab.configure(_loot_lab_session, _state, _tooltip() as ItemTooltipPanel, _presentation_projection_override)
+	lab.set_preview_comparison_provider(Callable(self, "_loot_lab_preview_comparisons"))
 	if not lab.sandbox_item_issued.is_connected(_on_loot_lab_item_issued):
 		lab.sandbox_item_issued.connect(_on_loot_lab_item_issued)
 	if not lab.close_requested.is_connected(close):
@@ -823,6 +824,17 @@ func _show_item_tooltip(source: StorageSlotButton) -> void:
 			projected_by_slot,
 		)
 	_tooltip().call("show_item", detail, comparisons, source, source.source_id(), true)
+
+func _loot_lab_preview_comparisons(detail: Dictionary) -> Array[Dictionary]:
+	if _comparison_projection == null or not _comparison_projection.valid:
+		return []
+	var projected_by_slot := _comparison_projection.comparison_lines_by_slot(String(detail.get("instance_id", "")))
+	return COMPARISON_RESOLVER.resolve(
+		detail,
+		_comparison_projection.leader_slots,
+		_comparison_projection.item_records,
+		projected_by_slot,
+	)
 
 
 func _build_comparison_projection(registry: ItemRegistry) -> ProfileStorageProjection:

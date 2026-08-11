@@ -12,6 +12,7 @@ const EXAMPLE_LIMIT := 20
 
 var _rendered_lines: Array[String] = []
 var _diagnostic_sequences: Dictionary = {}
+var _column_minimums: Dictionary = {}
 var _updating_selector := false
 
 func _init() -> void:
@@ -76,6 +77,22 @@ func rendered_text() -> String:
 
 func focus_controls() -> Array[Control]:
 	return [_selector(), _table(), _json_button(), _markdown_button()]
+
+func apply_viewport_size(size: Vector2i) -> void:
+	var compact := size.x < 1100 or size.y < 650
+	for column: int in COLUMN_TITLES.size():
+		var minimum := 92
+		if column == 0:
+			minimum = 150 if compact else 125
+		elif column == 2:
+			minimum = 170 if compact else 135
+		elif column == COLUMN_TITLES.size() - 1:
+			minimum = 145 if compact else 120
+		_table().set_column_custom_minimum_width(column, minimum)
+		_column_minimums[column] = minimum
+
+func column_minimum_width(column: int) -> int:
+	return int(_column_minimums.get(column, 0))
 
 func _build_view() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)

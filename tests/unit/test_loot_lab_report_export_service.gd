@@ -28,6 +28,8 @@ func _test_markdown_projection(failures: Array[String]) -> void:
 	var completed := LootLabReportExportService.to_markdown(_report(&"completed"))
 	TestAssertions.truthy(completed.begins_with("# Party Forge Loot Lab Report"), "completed Markdown has normal heading", failures)
 	TestAssertions.truthy(completed.contains("Attempts: 40 / 40"), "completed Markdown includes attempted and target accounting", failures)
+	for token: String in ["Expected and observed", "base_a", "Rejections", "blocked_family", "Reachability", "structurally_unreachable", "Diagnostics", "conflict", "Samples", "item-sample"]:
+		TestAssertions.truthy(completed.contains(token), "Markdown exports %s evidence" % token, failures)
 
 	var cancelled_report := _report(&"cancelled")
 	(cancelled_report["evidence"]["summary"] as Dictionary)["attempted"] = 12
@@ -44,13 +46,23 @@ func _test_invalid_reports(failures: Array[String]) -> void:
 func _report(status: StringName) -> Dictionary:
 	return {
 		"evidence": {
-			"aggregates": {"expected": {}, "observed": {}, "opportunities": {}, "rejections": {}},
+			"aggregates": {
+				"expected": {"base": {"base_a": 1.0}},
+				"observed": {"base": {"base_a": 1}},
+				"opportunities": {"base": 1},
+				"rejections": {"affix:prefix:0": {"affix_b": {"blocked_family": 1}}},
+			},
 			"catalog": {"affixes": 3, "bases": 1, "rarities": 1},
-			"diagnostics": {"categories": {}, "encountered_unobserved": [], "reachability": {}},
+			"diagnostics": {
+				"categories": {"conflict:blocked_family": {"count": 1, "example_sequences": [700]}},
+				"encountered_unobserved": [],
+				"reachability": {"structurally_unreachable": [{"kind": "affix", "id": "blocked", "reason": "no_generation_path"}]},
+				"unencountered_reachable_affixes": ["affix_c"],
+			},
 			"failures": {"by_stage_code": {"rarity/no_eligible_rarity": 1}},
 			"generator_version": 2,
 			"request": {"generation_sequence": 700},
-			"samples": [],
+			"samples": [{"attempt_index": 0, "generation_sequence": 700, "status": "succeeded", "item": {"instance_id": "item-sample"}, "trace": []}],
 			"scenario_identity": "fixture",
 			"schema_version": 1,
 			"sequence_range": {"attempted_end": 739, "start": 700, "target_end": 739},

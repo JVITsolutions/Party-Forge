@@ -866,15 +866,7 @@ static func _weight_band_definitions(foundation: ItemFoundationCatalog) -> Dicti
 	return ItemGenerationTrace.canonical_json_copy(rows) as Dictionary
 
 static func _weight_band_key(weight: float) -> String:
-	if is_equal_approx(weight, 25.0):
-		return "0025_premium_hybrid"
-	if is_equal_approx(weight, 150.0):
-		return "0150_standard_hybrid"
-	if is_equal_approx(weight, 500.0):
-		return "0500_specialized_focused"
-	if is_equal_approx(weight, 1000.0):
-		return "1000_core_focused"
-	return "other_%s" % _number(weight)
+	return ItemGenerationAnalysis.weight_band_key(weight)
 
 static func _expected_base_weights(request: ItemGenerationRequest, equipment: EquipmentCatalog) -> Dictionary:
 	var weights: Dictionary = {}

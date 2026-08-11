@@ -3,6 +3,82 @@ extends VBoxContainer
 
 signal batch_requested(spec: LootLabBatchSpec)
 
+class CatalogMultiSelect extends MenuButton:
+	var _values: Array[String] = []
+	var _controller_index := 0
+
+	func configure(values: Array[StringName]) -> void:
+		_values.clear()
+		var popup := get_popup()
+		popup.clear()
+		if not popup.index_pressed.is_connected(_on_index_pressed):
+			popup.index_pressed.connect(_on_index_pressed)
+		if not popup.about_to_popup.is_connected(_on_about_to_popup):
+			popup.about_to_popup.connect(_on_about_to_popup)
+		for value: StringName in values:
+			var id := String(value)
+			if id.is_empty() or id in _values:
+				continue
+			_values.append(id)
+			popup.add_check_item("%s [%s]" % [id.replace("_", " ").capitalize(), id])
+			popup.set_item_metadata(popup.item_count - 1, id)
+		_refresh_text()
+
+	func selected_values() -> Array[String]:
+		var result: Array[String] = []
+		var popup := get_popup()
+		for index: int in popup.item_count:
+			if popup.is_item_checked(index):
+				result.append(String(popup.get_item_metadata(index)))
+		result.sort()
+		return result
+
+	func set_selected_values(values: Array) -> void:
+		var wanted: Dictionary = {}
+		for value: Variant in values:
+			wanted[String(value)] = true
+		var popup := get_popup()
+		for index: int in popup.item_count:
+			popup.set_item_checked(index, wanted.has(String(popup.get_item_metadata(index))))
+		_refresh_text()
+
+	func _on_index_pressed(index: int) -> void:
+		var popup := get_popup()
+		if index < 0 or index >= popup.item_count:
+			return
+		popup.set_item_checked(index, not popup.is_item_checked(index))
+		_refresh_text()
+
+	func _on_about_to_popup() -> void:
+		_controller_index = 0
+		if get_popup().item_count > 0:
+			get_popup().set_focused_item(_controller_index)
+
+	func _input(event: InputEvent) -> void:
+		var button := event as InputEventJoypadButton
+		var popup := get_popup()
+		if button == null or not button.pressed or not popup.visible or popup.item_count == 0:
+			return
+		if button.button_index == JOY_BUTTON_DPAD_DOWN:
+			_controller_index = posmod(_controller_index + 1, popup.item_count)
+			popup.set_focused_item(_controller_index)
+		elif button.button_index == JOY_BUTTON_DPAD_UP:
+			_controller_index = posmod(_controller_index - 1, popup.item_count)
+			popup.set_focused_item(_controller_index)
+		elif button.button_index == JOY_BUTTON_A:
+			_on_index_pressed(_controller_index)
+			popup.hide()
+		elif button.button_index == JOY_BUTTON_B:
+			popup.hide()
+		else:
+			return
+		get_viewport().set_input_as_handled()
+
+	func _refresh_text() -> void:
+		var selected := selected_values()
+		text = "None" if selected.is_empty() else "%s [%s]" % [selected[0].replace("_", " ").capitalize(), selected[0]] if selected.size() == 1 else "%d selected" % selected.size()
+		tooltip_text = ", ".join(selected) if not selected.is_empty() else "No values selected"
+
 const ARRAY_FIELDS: Array[String] = [
 	"permitted_rarity_ids", "party_archetype_tags", "unlock_tags",
 	"required_base_tags", "excluded_base_tags", "required_affix_tags", "excluded_affix_tags",
@@ -58,7 +134,7 @@ func preferences_document() -> Dictionary:
 		var spin := _controls[field] as SpinBox
 		document[field] = int(spin.value) if field in ["seed", "generation_sequence", "item_level", "custom_batch_count"] else spin.value
 	for field: String in ARRAY_FIELDS:
-		document[field] = _parse_names((_controls[field] as LineEdit).text)
+		document[field] = (_controls[field] as CatalogMultiSelect).selected_values()
 	for field: String in ["source_id", "generation_domain", "difficulty_id", "forced_base_id", "forced_rarity_id", "batch_preset"]:
 		document[field] = _selected_value(_controls[field] as OptionButton)
 	document["batch_preset"] = int(document["batch_preset"])
@@ -75,7 +151,7 @@ func apply_preferences(document: Dictionary) -> String:
 	for field: String in NUMERIC_FIELDS:
 		(_controls[field] as SpinBox).value = float(document[field])
 	for field: String in ARRAY_FIELDS:
-		(_controls[field] as LineEdit).text = ", ".join(document[field] as Array)
+		(_controls[field] as CatalogMultiSelect).set_selected_values(document[field] as Array)
 	for field: String in ["source_id", "generation_domain", "difficulty_id", "forced_base_id", "forced_rarity_id", "batch_preset"]:
 		_select_value(_controls[field] as OptionButton, document[field])
 	_set_error("")
@@ -115,7 +191,7 @@ func _ensure_controls() -> void:
 	_add_option(grid, "forced_base_id", "Forced base")
 	_add_option(grid, "forced_rarity_id", "Forced rarity")
 	for field: String in ARRAY_FIELDS:
-		_add_line(grid, field, field.replace("_", " ").capitalize())
+		_add_multi_select(grid, field, field.replace("_", " ").capitalize())
 	_add_option(grid, "batch_preset", "Batch preset")
 	_add_spin(grid, "custom_batch_count", "Custom count", 1.0, float(LootLabBatchSpec.MAX_ATTEMPTS), 1.0)
 	var generate := Button.new()
@@ -136,7 +212,7 @@ func _populate_options() -> void:
 		return
 	_populate(_controls["source_id"] as OptionButton, _foundation.known_source_ids)
 	_populate(_controls["generation_domain"] as OptionButton, ItemGenerationVocabulary.DOMAINS)
-	_populate(_controls["difficulty_id"] as OptionButton, [&"normal"] as Array[StringName])
+	_populate(_controls["difficulty_id"] as OptionButton, ItemGenerationVocabulary.DIFFICULTIES)
 	var base_ids: Array[StringName] = [&""]
 	for definition: EquipmentBaseDefinition in _equipment.definitions:
 		if definition != null:
@@ -145,6 +221,11 @@ func _populate_options() -> void:
 	var rarity_ids: Array[StringName] = [&""]
 	rarity_ids.append_array(_foundation.supported_rarity_ids())
 	_populate(_controls["forced_rarity_id"] as OptionButton, rarity_ids, "Weighted eligible")
+	(_controls["permitted_rarity_ids"] as CatalogMultiSelect).configure(_foundation.supported_rarity_ids())
+	(_controls["party_archetype_tags"] as CatalogMultiSelect).configure(ItemGenerationVocabulary.ARCHETYPES)
+	(_controls["unlock_tags"] as CatalogMultiSelect).configure(_foundation.generation_unlock_tags())
+	for field: String in ["required_base_tags", "excluded_base_tags", "required_affix_tags", "excluded_affix_tags"]:
+		(_controls[field] as CatalogMultiSelect).configure(_foundation.known_item_tags)
 	var preset := _controls["batch_preset"] as OptionButton
 	preset.clear()
 	for value: int in DeveloperLootLabPreferencesStore.BATCH_PRESETS:
@@ -173,14 +254,13 @@ func _add_option(parent: GridContainer, field: String, label: String) -> void:
 	parent.add_child(option)
 	_controls[field] = option
 
-func _add_line(parent: GridContainer, field: String, label: String) -> void:
+func _add_multi_select(parent: GridContainer, field: String, label: String) -> void:
 	_add_label(parent, label)
-	var line := LineEdit.new()
-	line.name = field.to_pascal_case()
-	line.placeholder_text = "comma-separated IDs"
-	line.focus_mode = Control.FOCUS_ALL
-	parent.add_child(line)
-	_controls[field] = line
+	var selector := CatalogMultiSelect.new()
+	selector.name = field.to_pascal_case()
+	selector.focus_mode = Control.FOCUS_ALL
+	parent.add_child(selector)
+	_controls[field] = selector
 
 func _add_label(parent: GridContainer, text: String) -> void:
 	var label := Label.new()
@@ -202,15 +282,6 @@ func _select_value(option: OptionButton, value: Variant) -> void:
 		if option.get_item_metadata(index) == value or str(option.get_item_metadata(index)) == str(value):
 			option.select(index)
 			return
-
-func _parse_names(text: String) -> Array[String]:
-	var result: Array[String] = []
-	for part: String in text.split(",", false):
-		var value := part.strip_edges()
-		if not value.is_empty():
-			result.append(value)
-	result.sort()
-	return result
 
 func _request_from_document(document: Dictionary) -> ItemGenerationRequest:
 	var request := ItemGenerationRequest.create(int(document["seed"]), int(document["generation_sequence"]), int(document["item_level"]), StringName(str(document["source_id"])), StringName(str(document["generation_domain"])), _names(document["permitted_rarity_ids"]))

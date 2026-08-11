@@ -6,10 +6,18 @@ signal issue_requested(item: ItemInstance)
 
 var _result: ItemGenerationResult
 var _request_document: Dictionary = {}
+var _equipment: EquipmentCatalog
+var _foundation: ItemFoundationCatalog
+var _presentation_projection: Callable
 var _built := false
 
 func _ready() -> void:
 	_ensure_controls()
+
+func configure(equipment: EquipmentCatalog, foundation: ItemFoundationCatalog, presentation_projection: Callable = Callable()) -> void:
+	_equipment = equipment
+	_foundation = foundation
+	_presentation_projection = presentation_projection
 
 func present_result(result: ItemGenerationResult, request_document: Dictionary) -> void:
 	_ensure_controls()
@@ -18,11 +26,20 @@ func present_result(result: ItemGenerationResult, request_document: Dictionary) 
 	var sequence := int(_request_document.get("generation_sequence", 0))
 	(get_node("Sequence") as SpinBox).value = sequence
 	var body := get_node("Body") as RichTextLabel
+	var item_card := get_node("ItemPresentation") as ItemTooltipCard
 	if result == null:
+		item_card.visible = false
 		body.text = "No result selected."
 	elif result.ok():
-		body.text = "[b]%s[/b]\n\nRequest\n%s\n\nTrace\n%s" % [result.item.instance_id, JSON.stringify(_request_document, "  "), JSON.stringify(result.trace.stages if result.trace != null else [], "  ")]
+		var fixture_class := GameCatalog.load_defaults().class_by_id(&"fighter")
+		var projected: Variant = _presentation_projection.call(result.item, _equipment, _foundation, GameCatalog.STAT_CATALOG, fixture_class) if _presentation_projection.is_valid() else ItemPresentationProjector.project(result.item, _equipment, _foundation, GameCatalog.STAT_CATALOG, fixture_class)
+		var detail := projected as Dictionary if projected is Dictionary else {}
+		item_card.visible = not detail.is_empty() and not detail.has("error")
+		if item_card.visible:
+			item_card.present(detail, &"inspected", false, [], true)
+		body.text = "[b]Developer request[/b]\n%s\n\n[b]Generation trace[/b]\n%s" % [JSON.stringify(_request_document, "  "), JSON.stringify(result.trace.stages if result.trace != null else [], "  ")]
 	else:
+		item_card.visible = false
 		body.text = "[b]Generation failed[/b]\n\n%s\n\nTrace\n%s" % [JSON.stringify(_failure_document(result.failure), "  "), JSON.stringify(result.trace.stages if result.trace != null else [], "  ")]
 	(get_node("Issue") as Button).disabled = result == null or not result.ok()
 
@@ -41,6 +58,10 @@ func _ensure_controls() -> void:
 	title.text = "Trace Inspector"
 	title.add_theme_font_size_override("font_size", 22)
 	add_child(title)
+	var item_card := ItemTooltipCard.new()
+	item_card.name = "ItemPresentation"
+	item_card.visible = false
+	add_child(item_card)
 	var sequence := SpinBox.new()
 	sequence.name = "Sequence"
 	sequence.min_value = 0

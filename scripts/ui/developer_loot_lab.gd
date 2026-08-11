@@ -13,6 +13,7 @@ var _session: LootLabSessionController
 var _sandbox_state: DeveloperItemSandboxState
 var _tooltip: ItemTooltipPanel
 var _presentation_projection: Callable
+var _preview_comparison_provider: Callable
 var _preferences_store := DeveloperLootLabPreferencesStore.new()
 var _pending_large_spec: LootLabBatchSpec
 var _pending_export_format: StringName
@@ -36,6 +37,9 @@ func configure(
 	_tooltip = tooltip
 	_presentation_projection = presentation_projection
 	_ensure_initialized()
+
+func set_preview_comparison_provider(provider: Callable) -> void:
+	_preview_comparison_provider = provider
 
 func configured() -> bool:
 	return _session != null and _sandbox_state != null and _tooltip != null
@@ -78,6 +82,7 @@ func apply_viewport_size(size: Vector2i) -> void:
 	var workbench := _workbench() as BoxContainer
 	workbench.vertical = _compact
 	_gallery().columns = 8 if size.x >= 3500 else 6 if size.x >= 2400 else 4
+	_analysis().apply_viewport_size(size)
 	var request_scroll := get_node("Layout/Workbench/RequestScroll") as Control
 	var results := get_node("Layout/Workbench/Results") as Control
 	var inspector_scroll := get_node("Layout/Workbench/InspectorScroll") as Control
@@ -131,6 +136,7 @@ func _ensure_initialized() -> void:
 		_session = LootLabSessionController.new()
 	_form().configure(GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG, _preferences_store)
 	_gallery().configure(GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)
+	_inspector().configure(GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG, _presentation_projection)
 	if _wired:
 		return
 	_wired = true
@@ -192,16 +198,21 @@ func _on_cancel_active() -> void:
 	_present_selected_report()
 
 func _on_cancel_close_confirmed() -> void:
-	cancel_and_clear()
+	if has_active_job():
+		_session.cancel()
+		_cancel_button().disabled = true
+		active_job_changed.emit(false)
+		_present_selected_report()
 	close_requested.emit()
 
 func _present_progress() -> void:
 	var progress := _session.progress()
 	_progress().max_value = maxi(int(progress.get("target", 1)), 1)
 	_progress().value = int(progress.get("attempted", 0))
-	_outcome().text = "Attempted: %d / %d\nSucceeded: %d\nFailed: %d" % [
+	_outcome().text = "Attempted: %d / %d\nSucceeded: %d\nFailed: %d\nElapsed: %.2fs\nThroughput: %.1f items/s" % [
 		int(progress.get("attempted", 0)), int(progress.get("target", 0)),
 		int(progress.get("succeeded", 0)), int(progress.get("failed", 0)),
+		float(progress.get("elapsed_seconds", 0.0)), float(progress.get("items_per_second", 0.0)),
 	]
 
 func _present_selected_report() -> void:
@@ -212,10 +223,21 @@ func _present_selected_report() -> void:
 	var evidence := report.get("evidence", {}) as Dictionary
 	var summary := evidence.get("summary", {}) as Dictionary
 	var runtime := report.get("runtime", {}) as Dictionary
-	_outcome().text = "Attempted: %d / %d\nSucceeded: %d\nFailed: %d\nStatus: %s" % [
+	var aggregates := evidence.get("aggregates", {}) as Dictionary
+	var observed := aggregates.get("observed", {}) as Dictionary
+	var rarity_mix := _count_mix(observed.get("rarity", {}) as Dictionary)
+	var average_tier := _average_tier(observed.get("tier", {}) as Dictionary)
+	var diagnostics := (evidence.get("diagnostics", {}) as Dictionary).get("categories", {}) as Dictionary
+	var diagnostic_count := 0
+	for row: Variant in diagnostics.values():
+		if row is Dictionary:
+			diagnostic_count += int((row as Dictionary).get("count", 0))
+	_outcome().text = "Attempted: %d / %d\nSucceeded: %d\nFailed: %d\nStatus: %s\nElapsed: %.2fs\nThroughput: %.1f items/s\nAverage tier: %s\nRarity mix: %s\nDiagnostics: %d" % [
 		int(summary.get("attempted", 0)), int(summary.get("target", 0)),
 		int(summary.get("succeeded", 0)), int(summary.get("failed", 0)),
 		String(runtime.get("status", "unknown")).to_upper(),
+		float(runtime.get("elapsed_seconds", 0.0)), float(runtime.get("items_per_second", 0.0)),
+		average_tier, rarity_mix, diagnostic_count,
 	]
 	_progress().max_value = maxi(int(summary.get("target", 1)), 1)
 	_progress().value = int(summary.get("attempted", 0))
@@ -370,11 +392,42 @@ func _on_issue_requested(item: ItemInstance) -> void:
 
 func _on_preview_inspection_started(detail: Dictionary, source: StorageSlotButton) -> void:
 	if _tooltip != null and not detail.is_empty():
-		_tooltip.show_item(detail, [], source, source.source_id(), true)
+		var comparisons: Array[Dictionary] = []
+		if _preview_comparison_provider.is_valid():
+			var projected: Variant = _preview_comparison_provider.call(detail)
+			if projected is Array:
+				for row: Variant in projected as Array:
+					if row is Dictionary:
+						comparisons.append((row as Dictionary).duplicate(true))
+		_tooltip.show_item(detail, comparisons, source, source.source_id(), true)
 
 func _on_preview_inspection_ended(source_id: String) -> void:
 	if _tooltip != null:
 		_tooltip.release_item(source_id)
+
+func _count_mix(values: Dictionary) -> String:
+	if values.is_empty():
+		return "None"
+	var keys: Array[String] = []
+	for key: Variant in values:
+		keys.append(String(key))
+	keys.sort()
+	var parts: Array[String] = []
+	for key: String in keys:
+		parts.append("%s=%d" % [key, int(values[key])])
+	return ", ".join(parts)
+
+func _average_tier(values: Dictionary) -> String:
+	var weighted := 0.0
+	var count := 0
+	for key: Variant in values:
+		var text := String(key).trim_prefix("tier_")
+		if not text.is_valid_int():
+			continue
+		var occurrences := int(values[key])
+		weighted += float(int(text) * occurrences)
+		count += occurrences
+	return "n/a" if count == 0 else "%.2f" % (weighted / float(count))
 
 func _set_status(value: String) -> void:
 	_status().text = value

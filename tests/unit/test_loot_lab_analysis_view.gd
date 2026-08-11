@@ -27,8 +27,26 @@ func run() -> Array[String]:
 	TestAssertions.truthy(bool(analysis.call(&"select_diagnostic", &"conflict", 701)), "diagnostic example can be selected exactly", failures)
 	TestAssertions.equal(sequences, [701], "diagnostic selection emits exact sequence", failures)
 	TestAssertions.truthy(not bool(analysis.call(&"select_diagnostic", &"conflict", 999)), "unknown diagnostic sequence is rejected", failures)
+	var production_report := _production_report()
+	analysis.call(&"present", production_report)
+	var production_rendered := String(analysis.call(&"rendered_text"))
+	for dimension: String in ["base", "rarity", "pattern", "affix", "affix_kind", "family", "tier", "weight_band"]:
+		TestAssertions.truthy(production_rendered.contains(dimension), "Analysis renders %s from a finalized production report" % dimension, failures)
+	analysis.call(&"apply_viewport_size", Vector2i(960, 540))
+	TestAssertions.truthy(int(analysis.call(&"column_minimum_width", 0)) > 0 and int(analysis.call(&"column_minimum_width", 7)) > 0, "compact Analysis preserves bounded identity and status columns", failures)
 	analysis.free()
 	return failures
+
+func _production_report() -> Dictionary:
+	var request := ItemGenerationRequest.create(445566, 900, 800, &"ordinary_enemy", &"ordinary_drop", [&"rare"] as Array[StringName])
+	request.difficulty_id = &"normal"
+	request.unlock_tags = [&"rarity_rare_unlocked"]
+	var spec := LootLabBatchSpec.create(request, 20, GameCatalog.ITEM_FOUNDATION_CATALOG)
+	var accumulator := LootLabReportAccumulator.create(spec, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)
+	for attempt: int in 20:
+		var attempt_request := spec.request_for_attempt(attempt)
+		accumulator.record(attempt, ItemGenerationService.generate(attempt_request, "loot-lab-analysis-test", attempt_request.generation_sequence, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG))
+	return accumulator.finalize(&"completed", {"elapsed_seconds": 1.0, "items_per_second": 20.0})
 
 func _partial_report() -> Dictionary:
 	return {
