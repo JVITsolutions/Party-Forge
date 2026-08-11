@@ -61,6 +61,8 @@ var _last_focused_slot: Button
 var _slot_buttons: Array[Button] = []
 var _wired := false
 var _presentation_projection_override: Callable
+var _loot_lab_session := LootLabSessionController.new()
+var _current_tab := 1
 
 
 func _ready() -> void:
@@ -75,6 +77,7 @@ func _ready() -> void:
 func _ensure_initialized() -> void:
 	_build_slots()
 	_wire_controls()
+	_configure_loot_lab()
 	_configure_focus_graph()
 	_viewport_size_changed()
 
@@ -94,9 +97,11 @@ func open(return_focus: Control = null) -> bool:
 		_set_status("OPEN")
 	else:
 		_set_status("OPEN", error)
+	_tabs().current_tab = 1
+	_on_tab_changed(1)
 	visible = true
-	if is_inside_tree() and not _slot_buttons.is_empty():
-		_slot_buttons[0].grab_focus()
+	if is_inside_tree():
+		_focus_first_active_control()
 	return true
 
 
@@ -109,6 +114,7 @@ func configure(state: DeveloperItemSandboxState, presentation_projection: Callab
 	_inventory = null
 	_stash = null
 	_projection = {}
+	_configure_loot_lab()
 
 
 func close() -> void:
@@ -151,15 +157,15 @@ func integrity_error() -> String:
 
 func apply_viewport_size(size: Vector2i) -> void:
 	var compact := RESPONSIVE_LAYOUT.mode_for_size(Vector2(size)) == RESPONSIVE_LAYOUT.Mode.COMPACT
-	var body := get_node("Overlay/Frame/Layout/Body") as BoxContainer
+	var body := get_node("Overlay/Frame/Layout/Tabs/Equipment/Body") as BoxContainer
 	body.vertical = compact
 	var frame := get_node("Overlay/Frame") as Control
 	frame.offset_left = 16.0 if compact else 48.0
 	frame.offset_top = 12.0 if compact else 36.0
 	frame.offset_right = -16.0 if compact else -48.0
 	frame.offset_bottom = -12.0 if compact else -36.0
-	var inventory_panel := get_node("Overlay/Frame/Layout/Body/InventoryPanel") as Control
-	var stash_panel := get_node("Overlay/Frame/Layout/Body/StashPanel") as Control
+	var inventory_panel := get_node("Overlay/Frame/Layout/Tabs/Equipment/Body/InventoryPanel") as Control
+	var stash_panel := get_node("Overlay/Frame/Layout/Tabs/Equipment/Body/StashPanel") as Control
 	inventory_panel.custom_minimum_size = Vector2(0.0, 64.0) if compact else Vector2(220.0, 0.0)
 	stash_panel.custom_minimum_size = Vector2(0.0, 220.0) if compact else Vector2(660.0, 0.0)
 	_inventory_grid().columns = 5 if compact else 1
@@ -549,15 +555,14 @@ func _wire_controls() -> void:
 	_action_button("Reload").pressed.connect(_on_reload)
 	_action_button("IntegrityScan").pressed.connect(_on_integrity_scan)
 	_action_button("Reset").pressed.connect(_on_reset)
+	_tabs().tab_changed.connect(_on_tab_changed)
+	_current_tab = _tabs().current_tab
 
 
 func _configure_focus_graph() -> void:
-	var controls: Array[Control] = []
-	for button: Button in _slot_buttons:
-		controls.append(button)
-	for action_name: String in ["FirstEmptyInventory", "FirstEmptyStash", "Save", "Reload", "IntegrityScan", "Reset"]:
-		controls.append(_action_button(action_name))
-	controls.append(_close_button())
+	for control: Control in _all_focus_controls():
+		control.focus_mode = Control.FOCUS_NONE
+	var controls := _active_focus_controls()
 	for index: int in controls.size():
 		var control := controls[index]
 		var next := controls[(index + 1) % controls.size()]
@@ -569,6 +574,70 @@ func _configure_focus_graph() -> void:
 		control.focus_neighbor_bottom = control.get_path_to(next)
 		control.focus_neighbor_left = control.get_path_to(previous)
 		control.focus_neighbor_top = control.get_path_to(previous)
+
+
+func _all_focus_controls() -> Array[Control]:
+	var controls: Array[Control] = []
+	for button: Button in _slot_buttons:
+		controls.append(button)
+	for action_name: String in ["FirstEmptyInventory", "FirstEmptyStash", "Save", "Reload", "IntegrityScan", "Reset"]:
+		controls.append(_action_button(action_name))
+	for control: Control in _loot_lab().focus_controls():
+		controls.append(control)
+	controls.append(_tabs())
+	controls.append(_close_button())
+	return controls
+
+
+func _active_focus_controls() -> Array[Control]:
+	var controls: Array[Control] = []
+	match _current_tab:
+		0:
+			controls.append(_action_button("IntegrityScan"))
+			controls.append(_action_button("Reset"))
+		1:
+			for button: Button in _slot_buttons:
+				controls.append(button)
+			for action_name: String in ["FirstEmptyInventory", "FirstEmptyStash", "Save", "Reload"]:
+				controls.append(_action_button(action_name))
+		2:
+			for control: Control in _loot_lab().focus_controls():
+				controls.append(control)
+	controls.append(_tabs())
+	controls.append(_close_button())
+	return controls
+
+
+func _focus_first_active_control() -> void:
+	var controls := _active_focus_controls()
+	if not controls.is_empty() and controls[0].is_inside_tree() and controls[0].is_visible_in_tree():
+		controls[0].grab_focus()
+
+
+func _on_tab_changed(tab: int) -> void:
+	_tooltip().call("force_dismiss")
+	if _current_tab == 1 and tab != 1:
+		_clear_held_item()
+	_current_tab = tab
+	_configure_focus_graph()
+	if visible:
+		_focus_first_active_control()
+
+
+func _configure_loot_lab() -> void:
+	var lab := _loot_lab()
+	if lab == null:
+		return
+	lab.configure(_loot_lab_session, _state, _tooltip() as ItemTooltipPanel, _presentation_projection_override)
+	if not lab.sandbox_item_issued.is_connected(_on_loot_lab_item_issued):
+		lab.sandbox_item_issued.connect(_on_loot_lab_item_issued)
+	if not lab.close_requested.is_connected(close):
+		lab.close_requested.connect(close)
+
+
+func _on_loot_lab_item_issued() -> void:
+	var error := _refresh_projection()
+	_set_status("LOOT_LAB_ISSUE", error)
 
 
 func _sync_slot_affordances() -> void:
@@ -641,11 +710,11 @@ func _mark_input_handled() -> void:
 
 
 func _inventory_grid() -> GridContainer:
-	return get_node("Overlay/Frame/Layout/Body/InventoryPanel/InventorySlots") as GridContainer
+	return get_node("Overlay/Frame/Layout/Tabs/Equipment/Body/InventoryPanel/InventorySlots") as GridContainer
 
 
 func _stash_grid() -> GridContainer:
-	return get_node("Overlay/Frame/Layout/Body/StashPanel/StashScroll/StashSlots") as GridContainer
+	return get_node("Overlay/Frame/Layout/Tabs/Equipment/Body/StashPanel/StashScroll/StashSlots") as GridContainer
 
 
 func _show_item_tooltip(source: StorageSlotButton) -> void:
@@ -729,4 +798,13 @@ func _close_button() -> Button:
 
 
 func _action_button(button_name: String) -> Button:
-	return get_node("Overlay/Frame/Layout/Actions/%s" % button_name) as Button
+	var page := "Fixtures" if button_name in ["IntegrityScan", "Reset"] else "Equipment"
+	return get_node("Overlay/Frame/Layout/Tabs/%s/Actions/%s" % [page, button_name]) as Button
+
+
+func _tabs() -> TabContainer:
+	return get_node("Overlay/Frame/Layout/Tabs") as TabContainer
+
+
+func _loot_lab() -> DeveloperLootLab:
+	return get_node("Overlay/Frame/Layout/Tabs/Loot Lab") as DeveloperLootLab

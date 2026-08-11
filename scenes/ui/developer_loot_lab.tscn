@@ -1,0 +1,40 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/ui/developer_loot_lab.gd" id="1_lab"]
+
+[node name="Loot Lab" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_lab")
+
+[node name="Layout" type="VBoxContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+alignment = 1
+theme_override_constants/separation = 12
+
+[node name="Title" type="Label" parent="Layout"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 24
+text = "Loot Lab"
+horizontal_alignment = 1
+
+[node name="Description" type="Label" parent="Layout"]
+layout_mode = 2
+text = "Deterministic weighted item-generation workbench"
+horizontal_alignment = 1
+
+[node name="WorkbenchFocusAnchor" type="Button" parent="Layout"]
+custom_minimum_size = Vector2(280, 48)
+layout_mode = 2
+size_flags_horizontal = 4
+focus_mode = 2
+text = "Workbench controls ready"

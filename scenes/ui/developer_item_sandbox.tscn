@@ -1,7 +1,8 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene load_steps=4 format=3]
 
 [ext_resource type="Script" path="res://scripts/ui/developer_item_sandbox.gd" id="1_sandbox"]
 [ext_resource type="PackedScene" path="res://scenes/ui/storage/item_tooltip_panel.tscn" id="2_tooltip"]
+[ext_resource type="PackedScene" path="res://scenes/ui/developer_loot_lab.tscn" id="3_loot_lab"]
 
 [node name="DeveloperItemSandbox" type="CanvasLayer"]
 process_mode = 3
@@ -58,78 +59,109 @@ layout_mode = 2
 focus_mode = 2
 text = "Close"
 
-[node name="ControlHints" type="Label" parent="Overlay/Frame/Layout"]
+[node name="Tabs" type="TabContainer" parent="Overlay/Frame/Layout"]
+layout_mode = 2
+size_flags_vertical = 3
+focus_mode = 2
+current_tab = 1
+
+[node name="Fixtures" type="VBoxContainer" parent="Overlay/Frame/Layout/Tabs"]
+layout_mode = 2
+metadata/_tab_index = 0
+
+[node name="Description" type="Label" parent="Overlay/Frame/Layout/Tabs/Fixtures"]
+layout_mode = 2
+size_flags_vertical = 3
+text = "Reset restores the exact deterministic 99-item fixture. Integrity Scan verifies the persisted sandbox without changing player profiles."
+horizontal_alignment = 1
+vertical_alignment = 1
+autowrap_mode = 2
+
+[node name="Actions" type="HBoxContainer" parent="Overlay/Frame/Layout/Tabs/Fixtures"]
+layout_mode = 2
+alignment = 1
+theme_override_constants/separation = 8
+
+[node name="IntegrityScan" type="Button" parent="Overlay/Frame/Layout/Tabs/Fixtures/Actions"]
+layout_mode = 2
+focus_mode = 2
+text = "Integrity Scan"
+
+[node name="Reset" type="Button" parent="Overlay/Frame/Layout/Tabs/Fixtures/Actions"]
+layout_mode = 2
+focus_mode = 2
+text = "Reset"
+
+[node name="Equipment" type="VBoxContainer" parent="Overlay/Frame/Layout/Tabs"]
+layout_mode = 2
+metadata/_tab_index = 1
+
+[node name="ControlHints" type="Label" parent="Overlay/Frame/Layout/Tabs/Equipment"]
 layout_mode = 2
 text = "Mouse: click/focus inspects; drag a populated slot to move or swap. Controller: X / Square picks up; A / Cross places; B / Circle cancels held item or closes."
 horizontal_alignment = 1
 autowrap_mode = 2
 
-[node name="Body" type="BoxContainer" parent="Overlay/Frame/Layout"]
+[node name="Body" type="BoxContainer" parent="Overlay/Frame/Layout/Tabs/Equipment"]
 layout_mode = 2
 size_flags_vertical = 3
 theme_override_constants/separation = 12
 
-[node name="InventoryPanel" type="PanelContainer" parent="Overlay/Frame/Layout/Body"]
+[node name="InventoryPanel" type="PanelContainer" parent="Overlay/Frame/Layout/Tabs/Equipment/Body"]
 custom_minimum_size = Vector2(220, 0)
 layout_mode = 2
 
-[node name="InventorySlots" type="GridContainer" parent="Overlay/Frame/Layout/Body/InventoryPanel"]
+[node name="InventorySlots" type="GridContainer" parent="Overlay/Frame/Layout/Tabs/Equipment/Body/InventoryPanel"]
 layout_mode = 2
 columns = 1
 theme_override_constants/v_separation = 6
 
-[node name="StashPanel" type="PanelContainer" parent="Overlay/Frame/Layout/Body"]
+[node name="StashPanel" type="PanelContainer" parent="Overlay/Frame/Layout/Tabs/Equipment/Body"]
 custom_minimum_size = Vector2(660, 0)
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="StashScroll" type="ScrollContainer" parent="Overlay/Frame/Layout/Body/StashPanel"]
+[node name="StashScroll" type="ScrollContainer" parent="Overlay/Frame/Layout/Tabs/Equipment/Body/StashPanel"]
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 3
 follow_focus = true
 horizontal_scroll_mode = 0
 
-[node name="StashSlots" type="GridContainer" parent="Overlay/Frame/Layout/Body/StashPanel/StashScroll"]
+[node name="StashSlots" type="GridContainer" parent="Overlay/Frame/Layout/Tabs/Equipment/Body/StashPanel/StashScroll"]
 layout_mode = 2
 size_flags_horizontal = 3
 columns = 10
 theme_override_constants/h_separation = 4
 theme_override_constants/v_separation = 4
 
-[node name="Actions" type="HBoxContainer" parent="Overlay/Frame/Layout"]
+[node name="Actions" type="HBoxContainer" parent="Overlay/Frame/Layout/Tabs/Equipment"]
 layout_mode = 2
 alignment = 1
 theme_override_constants/separation = 8
 
-[node name="FirstEmptyInventory" type="Button" parent="Overlay/Frame/Layout/Actions"]
+[node name="FirstEmptyInventory" type="Button" parent="Overlay/Frame/Layout/Tabs/Equipment/Actions"]
 layout_mode = 2
 focus_mode = 2
 text = "First Empty Inventory"
 
-[node name="FirstEmptyStash" type="Button" parent="Overlay/Frame/Layout/Actions"]
+[node name="FirstEmptyStash" type="Button" parent="Overlay/Frame/Layout/Tabs/Equipment/Actions"]
 layout_mode = 2
 focus_mode = 2
 text = "First Empty Stash"
 
-[node name="Save" type="Button" parent="Overlay/Frame/Layout/Actions"]
+[node name="Save" type="Button" parent="Overlay/Frame/Layout/Tabs/Equipment/Actions"]
 layout_mode = 2
 focus_mode = 2
 text = "Save"
 
-[node name="Reload" type="Button" parent="Overlay/Frame/Layout/Actions"]
+[node name="Reload" type="Button" parent="Overlay/Frame/Layout/Tabs/Equipment/Actions"]
 layout_mode = 2
 focus_mode = 2
 text = "Reload"
 
-[node name="IntegrityScan" type="Button" parent="Overlay/Frame/Layout/Actions"]
+[node name="Loot Lab" parent="Overlay/Frame/Layout/Tabs" instance=ExtResource("3_loot_lab")]
 layout_mode = 2
-focus_mode = 2
-text = "Integrity Scan"
-
-[node name="Reset" type="Button" parent="Overlay/Frame/Layout/Actions"]
-layout_mode = 2
-focus_mode = 2
-text = "Reset"
+metadata/_tab_index = 2
 
 [node name="ItemTooltip" parent="Overlay" instance=ExtResource("2_tooltip")]

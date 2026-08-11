@@ -10,12 +10,12 @@ const TARGET_SIZES: Array[Vector2i] = [
 	Vector2i(3840, 2160),
 ]
 const ACTION_PATHS: Array[NodePath] = [
-	^"Overlay/Frame/Layout/Actions/FirstEmptyInventory",
-	^"Overlay/Frame/Layout/Actions/FirstEmptyStash",
-	^"Overlay/Frame/Layout/Actions/Save",
-	^"Overlay/Frame/Layout/Actions/Reload",
-	^"Overlay/Frame/Layout/Actions/IntegrityScan",
-	^"Overlay/Frame/Layout/Actions/Reset",
+	^"Overlay/Frame/Layout/Tabs/Equipment/Actions/FirstEmptyInventory",
+	^"Overlay/Frame/Layout/Tabs/Equipment/Actions/FirstEmptyStash",
+	^"Overlay/Frame/Layout/Tabs/Equipment/Actions/Save",
+	^"Overlay/Frame/Layout/Tabs/Equipment/Actions/Reload",
+	^"Overlay/Frame/Layout/Tabs/Fixtures/Actions/IntegrityScan",
+	^"Overlay/Frame/Layout/Tabs/Fixtures/Actions/Reset",
 ]
 
 var _failures: Array[String] = []
@@ -81,11 +81,11 @@ func _exercise_resolution(viewport_size: Vector2i) -> void:
 	await _frames(3)
 	var overlay := sandbox.get_node("Overlay") as Control
 	var frame := sandbox.get_node("Overlay/Frame") as Control
-	var body := sandbox.get_node("Overlay/Frame/Layout/Body") as BoxContainer
-	var inventory_panel := sandbox.get_node("Overlay/Frame/Layout/Body/InventoryPanel") as Control
-	var stash_panel := sandbox.get_node("Overlay/Frame/Layout/Body/StashPanel") as Control
-	var stash_scroll := sandbox.get_node("Overlay/Frame/Layout/Body/StashPanel/StashScroll") as ScrollContainer
-	var stash_grid := sandbox.get_node("Overlay/Frame/Layout/Body/StashPanel/StashScroll/StashSlots") as GridContainer
+	var body := sandbox.get_node("Overlay/Frame/Layout/Tabs/Equipment/Body") as BoxContainer
+	var inventory_panel := sandbox.get_node("Overlay/Frame/Layout/Tabs/Equipment/Body/InventoryPanel") as Control
+	var stash_panel := sandbox.get_node("Overlay/Frame/Layout/Tabs/Equipment/Body/StashPanel") as Control
+	var stash_scroll := sandbox.get_node("Overlay/Frame/Layout/Tabs/Equipment/Body/StashPanel/StashScroll") as ScrollContainer
+	var stash_grid := sandbox.get_node("Overlay/Frame/Layout/Tabs/Equipment/Body/StashPanel/StashScroll/StashSlots") as GridContainer
 	var tooltip := sandbox.get_node("Overlay/ItemTooltip") as Control
 	var close_button := sandbox.get_node("Overlay/Frame/Layout/Header/Close") as Button
 	var viewport_rect := Rect2(Vector2.ZERO, Vector2(LOGICAL_SIZE)) if headless_viewport != null else geometry_viewport.get_visible_rect()
@@ -95,11 +95,17 @@ func _exercise_resolution(viewport_size: Vector2i) -> void:
 	for panel: Control in [inventory_panel, stash_panel]:
 		_assert(panel.is_visible_in_tree() and panel.get_global_rect().has_area(), "%s %s is visible with positive geometry" % [label, panel.name])
 		_assert(_contained(frame_rect, panel.get_global_rect()), "%s %s stays inside the safe frame" % [label, panel.name])
-	for action_path: NodePath in ACTION_PATHS:
+	for action_path: NodePath in ACTION_PATHS.slice(0, 4):
 		var action := sandbox.get_node(action_path) as Button
 		_assert(action.is_visible_in_tree() and _contained(frame_rect, action.get_global_rect()), "%s action %s stays visible inside the safe frame" % [label, action.name])
+	var tabs := sandbox.get_node("Overlay/Frame/Layout/Tabs") as TabContainer
+	tabs.current_tab = 0
+	for action_path: NodePath in ACTION_PATHS.slice(4, 6):
+		var action := sandbox.get_node(action_path) as Button
+		_assert(action.is_visible_in_tree() and _contained(frame_rect, action.get_global_rect()), "%s fixture action %s stays visible inside the safe frame" % [label, action.name])
+	tabs.current_tab = 1
 	_assert(close_button.is_visible_in_tree() and _contained(frame_rect, close_button.get_global_rect()), "%s Close stays visible inside the safe frame" % label)
-	_assert(sandbox.get_node_or_null("Overlay/Frame/Layout/Body/InspectorPanel") == null, "%s has no persistent inspector column" % label)
+	_assert(sandbox.get_node_or_null("Overlay/Frame/Layout/Tabs/Equipment/Body/InspectorPanel") == null, "%s has no persistent inspector column" % label)
 	_assert(tooltip != null and not tooltip.visible, "%s shared tooltip starts hidden until item inspection" % label)
 	_assert(int(sandbox.call(&"slot_button_count")) == 105, "%s exact 5 + 100 slot count is reported" % label)
 	_assert(stash_grid.get_child_count() == 100, "%s production stash owns 100 real buttons" % label)
@@ -118,7 +124,7 @@ func _exercise_resolution(viewport_size: Vector2i) -> void:
 	var last_slot := stash_grid.get_child(99) as Button
 	_assert(stash_scroll.scroll_vertical > minimum_scroll, "%s stash scrolling changes the real scroll value" % label)
 	_assert(_intersects(stash_scroll.get_global_rect(), last_slot.get_global_rect()), "%s stash scroll reaches the final slot" % label)
-	_assert(_closed_focus_graph(sandbox), "%s focus traversal covers every slot/action/Close and closes inside the modal" % label)
+	_assert(_closed_focus_graph(sandbox), "%s each visible tab owns a closed focus graph and hidden controls are excluded" % label)
 	_assert(String(sandbox.call(&"integrity_error")).is_empty(), "%s usable sandbox reports no integrity error" % label)
 	if _failures.size() == failures_before:
 		_verified_resolution_sizes.append(viewport_size)
@@ -143,10 +149,10 @@ func _exercise_controller_and_mouse() -> void:
 	sandbox.call(&"apply_viewport_size", LOGICAL_SIZE)
 	_assert(sandbox.open(), "controller fixture opens production sandbox")
 	await _frames(3)
-	var inventory := sandbox.get_node("Overlay/Frame/Layout/Body/InventoryPanel/InventorySlots") as GridContainer
-	var stash := sandbox.get_node("Overlay/Frame/Layout/Body/StashPanel/StashScroll/StashSlots") as GridContainer
-	var save := sandbox.get_node("Overlay/Frame/Layout/Actions/Save") as Button
-	var reset := sandbox.get_node("Overlay/Frame/Layout/Actions/Reset") as Button
+	var inventory := sandbox.get_node("Overlay/Frame/Layout/Tabs/Equipment/Body/InventoryPanel/InventorySlots") as GridContainer
+	var stash := sandbox.get_node("Overlay/Frame/Layout/Tabs/Equipment/Body/StashPanel/StashScroll/StashSlots") as GridContainer
+	var save := sandbox.get_node("Overlay/Frame/Layout/Tabs/Equipment/Actions/Save") as Button
+	var reset := sandbox.get_node("Overlay/Frame/Layout/Tabs/Fixtures/Actions/Reset") as Button
 	var source := stash.get_child(0) as Button
 	var inventory_four := inventory.get_child(4) as Button
 
@@ -253,16 +259,47 @@ func _exercise_controller_and_mouse() -> void:
 
 
 func _closed_focus_graph(sandbox: DeveloperItemSandbox) -> bool:
-	var controls: Array[Control] = []
-	var inventory := sandbox.get_node("Overlay/Frame/Layout/Body/InventoryPanel/InventorySlots") as GridContainer
-	var stash := sandbox.get_node("Overlay/Frame/Layout/Body/StashPanel/StashScroll/StashSlots") as GridContainer
+	var tabs := sandbox.get_node("Overlay/Frame/Layout/Tabs") as TabContainer
+	var inventory := sandbox.get_node("Overlay/Frame/Layout/Tabs/Equipment/Body/InventoryPanel/InventorySlots") as GridContainer
+	var stash := sandbox.get_node("Overlay/Frame/Layout/Tabs/Equipment/Body/StashPanel/StashScroll/StashSlots") as GridContainer
+	var equipment_controls: Array[Control] = []
 	for child: Node in inventory.get_children() + stash.get_children():
-		controls.append(child as Control)
-	for path: NodePath in ACTION_PATHS:
-		controls.append(sandbox.get_node(path) as Control)
-	controls.append(sandbox.get_node("Overlay/Frame/Layout/Header/Close") as Control)
-	if controls.size() != 112:
+		equipment_controls.append(child as Control)
+	for path: NodePath in ACTION_PATHS.slice(0, 4):
+		equipment_controls.append(sandbox.get_node(path) as Control)
+	var close := sandbox.get_node("Overlay/Frame/Layout/Header/Close") as Control
+	equipment_controls.append(tabs)
+	equipment_controls.append(close)
+	tabs.current_tab = 1
+	if equipment_controls.size() != 111 or not _graph_controls_are_closed(equipment_controls):
 		return false
+	for path: NodePath in ACTION_PATHS.slice(4, 6):
+		if (sandbox.get_node(path) as Control).focus_mode != Control.FOCUS_NONE:
+			return false
+
+	tabs.current_tab = 0
+	var fixture_controls: Array[Control] = [
+		sandbox.get_node(ACTION_PATHS[4]) as Control,
+		sandbox.get_node(ACTION_PATHS[5]) as Control,
+		tabs,
+		close,
+	]
+	if not _graph_controls_are_closed(fixture_controls) or (inventory.get_child(0) as Control).focus_mode != Control.FOCUS_NONE:
+		return false
+
+	tabs.current_tab = 2
+	var loot_controls: Array[Control] = [
+		sandbox.get_node("Overlay/Frame/Layout/Tabs/Loot Lab/Layout/WorkbenchFocusAnchor") as Control,
+		tabs,
+		close,
+	]
+	if not _graph_controls_are_closed(loot_controls) or (sandbox.get_node(ACTION_PATHS[4]) as Control).focus_mode != Control.FOCUS_NONE:
+		return false
+	tabs.current_tab = 1
+	return true
+
+
+func _graph_controls_are_closed(controls: Array[Control]) -> bool:
 	var visited: Dictionary = {}
 	var current := controls[0]
 	for _index: int in controls.size():

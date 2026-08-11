@@ -66,15 +66,22 @@ func _test_modal_contract(packed: PackedScene, failures: Array[String]) -> void:
 			var bottom_right := Vector2(viewport_size.x * frame.anchor_right + frame.offset_right, viewport_size.y * frame.anchor_bottom + frame.offset_bottom)
 			TestAssertions.truthy(top_left.x >= 32.0 and top_left.y >= 24.0, "sandbox keeps top-left safe margins at %s" % viewport_size, failures)
 			TestAssertions.truthy(bottom_right.x <= viewport_size.x - 32.0 and bottom_right.y <= viewport_size.y - 24.0, "sandbox keeps bottom-right safe margins at %s" % viewport_size, failures)
-	var inventory_grid := sandbox.get_node_or_null("Overlay/Frame/Layout/Body/InventoryPanel/InventorySlots") as GridContainer
-	var stash_scroll := sandbox.get_node_or_null("Overlay/Frame/Layout/Body/StashPanel/StashScroll") as ScrollContainer
-	var stash_grid := sandbox.get_node_or_null("Overlay/Frame/Layout/Body/StashPanel/StashScroll/StashSlots") as GridContainer
+	var tabs := sandbox.get_node_or_null("Overlay/Frame/Layout/Tabs") as TabContainer
+	var inventory_grid := sandbox.get_node_or_null("Overlay/Frame/Layout/Tabs/Equipment/Body/InventoryPanel/InventorySlots") as GridContainer
+	var stash_scroll := sandbox.get_node_or_null("Overlay/Frame/Layout/Tabs/Equipment/Body/StashPanel/StashScroll") as ScrollContainer
+	var stash_grid := sandbox.get_node_or_null("Overlay/Frame/Layout/Tabs/Equipment/Body/StashPanel/StashScroll/StashSlots") as GridContainer
 	var tooltip := sandbox.get_node_or_null("Overlay/ItemTooltip") as Control
-	var control_hints := sandbox.get_node_or_null("Overlay/Frame/Layout/ControlHints") as Label
+	var control_hints := sandbox.get_node_or_null("Overlay/Frame/Layout/Tabs/Equipment/ControlHints") as Label
+	TestAssertions.truthy(tabs != null and tabs.get_tab_count() == 3, "sandbox exposes exactly three top-level tabs", failures)
+	if tabs != null:
+		TestAssertions.equal(tabs.get_tab_title(0), "Fixtures", "first tab is Fixtures", failures)
+		TestAssertions.equal(tabs.get_tab_title(1), "Equipment", "second tab is Equipment", failures)
+		TestAssertions.equal(tabs.get_tab_title(2), "Loot Lab", "third tab is Loot Lab", failures)
+	TestAssertions.truthy(sandbox.get_node_or_null("Overlay/Frame/Layout/Tabs/Loot Lab") is DeveloperLootLab, "third tab instantiates the bounded Loot Lab presenter", failures)
 	TestAssertions.truthy(inventory_grid != null and inventory_grid.get_child_count() == 5, "sandbox owns exactly five inventory slot buttons", failures)
 	TestAssertions.truthy(stash_grid != null and stash_grid.columns == 10 and stash_grid.get_child_count() == 100, "sandbox owns exactly 100 stash slots in ten columns", failures)
 	TestAssertions.truthy(stash_scroll != null and stash_scroll.follow_focus, "stash grid is scrollable and follows controller focus", failures)
-	TestAssertions.truthy(sandbox.get_node_or_null("Overlay/Frame/Layout/Body/InspectorPanel") == null, "sandbox removes the persistent inspector column", failures)
+	TestAssertions.truthy(sandbox.get_node_or_null("Overlay/Frame/Layout/Tabs/Equipment/Body/InspectorPanel") == null, "sandbox removes the persistent inspector column", failures)
 	TestAssertions.truthy(tooltip != null, "sandbox owns the shared item tooltip overlay", failures)
 	TestAssertions.truthy(control_hints != null and control_hints.text.contains("drag") and control_hints.text.contains("X / Square") and control_hints.text.contains("A / Cross"), "sandbox shows mouse and controller held-item hints", failures)
 	TestAssertions.truthy(sandbox.has_signal(&"held_item_changed"), "sandbox exposes exact held-item state changes", failures)
@@ -86,12 +93,12 @@ func _test_modal_contract(packed: PackedScene, failures: Array[String]) -> void:
 	for path: NodePath in [
 		^"Overlay/Frame/Layout/Header/Status",
 		^"Overlay/Frame/Layout/Header/Close",
-		^"Overlay/Frame/Layout/Actions/FirstEmptyInventory",
-		^"Overlay/Frame/Layout/Actions/FirstEmptyStash",
-		^"Overlay/Frame/Layout/Actions/Save",
-		^"Overlay/Frame/Layout/Actions/Reload",
-		^"Overlay/Frame/Layout/Actions/IntegrityScan",
-		^"Overlay/Frame/Layout/Actions/Reset",
+		^"Overlay/Frame/Layout/Tabs/Equipment/Actions/FirstEmptyInventory",
+		^"Overlay/Frame/Layout/Tabs/Equipment/Actions/FirstEmptyStash",
+		^"Overlay/Frame/Layout/Tabs/Equipment/Actions/Save",
+		^"Overlay/Frame/Layout/Tabs/Equipment/Actions/Reload",
+		^"Overlay/Frame/Layout/Tabs/Fixtures/Actions/IntegrityScan",
+		^"Overlay/Frame/Layout/Tabs/Fixtures/Actions/Reset",
 	]:
 		TestAssertions.truthy(sandbox.get_node_or_null(path) is Control, "sandbox exposes required control %s" % path, failures)
 	if inventory_grid == null or stash_grid == null:
@@ -105,6 +112,8 @@ func _test_modal_contract(packed: PackedScene, failures: Array[String]) -> void:
 
 	TestAssertions.truthy(bool(sandbox.call(&"open", return_focus)), "sandbox opens a usable isolated fixture", failures)
 	TestAssertions.truthy(sandbox.visible, "sandbox open makes only its layer visible", failures)
+	TestAssertions.equal(int(sandbox.get("_current_tab")), 1, "sandbox opens on retained Equipment behavior", failures)
+	TestAssertions.truthy(tabs != null and tabs.tab_changed.is_connected(Callable(sandbox, "_on_tab_changed")), "tab changes rebuild the visible focus graph", failures)
 	_test_projected_comparison_fixture(sandbox, stash_grid, tooltip, failures)
 	var initial_projection: Dictionary = sandbox.call(&"projection")
 	TestAssertions.equal(int(initial_projection.get("schema_version", 0)), 2, "sandbox exposes a defensive schema-two state projection", failures)
@@ -196,24 +205,38 @@ func _test_modal_contract(packed: PackedScene, failures: Array[String]) -> void:
 	TestAssertions.equal(sandbox.call(&"projection"), ordinary_accept_projection, "ordinary south inspection performs no mutation", failures)
 
 	(controller_source as Button).pressed.emit()
-	(sandbox.get_node("Overlay/Frame/Layout/Actions/FirstEmptyInventory") as Button).pressed.emit()
+	(sandbox.get_node("Overlay/Frame/Layout/Tabs/Equipment/Actions/FirstEmptyInventory") as Button).pressed.emit()
 	TestAssertions.truthy((sandbox.get_node("Overlay/Frame/Layout/Header/Status") as Label).text.begins_with("OK FIRST_EMPTY_INVENTORY"), "first-empty inventory reports stable success", failures)
-	(sandbox.get_node("Overlay/Frame/Layout/Actions/FirstEmptyStash") as Button).pressed.emit()
+	(sandbox.get_node("Overlay/Frame/Layout/Tabs/Equipment/Actions/FirstEmptyStash") as Button).pressed.emit()
 	TestAssertions.truthy((sandbox.get_node("Overlay/Frame/Layout/Header/Status") as Label).text.begins_with("OK FIRST_EMPTY_STASH"), "first-empty stash reports stable success", failures)
 	for action_name: String in ["Save", "Reload", "IntegrityScan", "Reset"]:
-		(sandbox.get_node("Overlay/Frame/Layout/Actions/%s" % action_name) as Button).pressed.emit()
+		var page := "Fixtures" if action_name in ["IntegrityScan", "Reset"] else "Equipment"
+		(sandbox.get_node("Overlay/Frame/Layout/Tabs/%s/Actions/%s" % [page, action_name]) as Button).pressed.emit()
 		TestAssertions.truthy((sandbox.get_node("Overlay/Frame/Layout/Header/Status") as Label).text.begins_with("OK "), "%s reports stable success" % action_name, failures)
 
-	var all_focus_controls: Array[Control] = []
+	var equipment_focus_controls: Array[Control] = []
 	for child: Node in inventory_grid.get_children() + stash_grid.get_children():
-		all_focus_controls.append(child as Control)
-	for path: NodePath in [^"Overlay/Frame/Layout/Actions/FirstEmptyInventory", ^"Overlay/Frame/Layout/Actions/FirstEmptyStash", ^"Overlay/Frame/Layout/Actions/Save", ^"Overlay/Frame/Layout/Actions/Reload", ^"Overlay/Frame/Layout/Actions/IntegrityScan", ^"Overlay/Frame/Layout/Actions/Reset", ^"Overlay/Frame/Layout/Header/Close"]:
-		all_focus_controls.append(sandbox.get_node(path) as Control)
-	for control: Control in all_focus_controls:
+		equipment_focus_controls.append(child as Control)
+	for path: NodePath in [^"Overlay/Frame/Layout/Tabs/Equipment/Actions/FirstEmptyInventory", ^"Overlay/Frame/Layout/Tabs/Equipment/Actions/FirstEmptyStash", ^"Overlay/Frame/Layout/Tabs/Equipment/Actions/Save", ^"Overlay/Frame/Layout/Tabs/Equipment/Actions/Reload", ^"Overlay/Frame/Layout/Tabs", ^"Overlay/Frame/Layout/Header/Close"]:
+		equipment_focus_controls.append(sandbox.get_node(path) as Control)
+	for control: Control in equipment_focus_controls:
 		TestAssertions.truthy(control.focus_mode != Control.FOCUS_NONE, "%s is keyboard/controller focusable" % control.name, failures)
 		for property_name: StringName in [&"focus_next", &"focus_previous", &"focus_neighbor_top", &"focus_neighbor_bottom", &"focus_neighbor_left", &"focus_neighbor_right"]:
 			var target_path := control.get(property_name) as NodePath
-			TestAssertions.truthy(not target_path.is_empty() and control.get_node_or_null(target_path) in all_focus_controls, "%s %s stays inside sandbox" % [control.name, property_name], failures)
+			TestAssertions.truthy(not target_path.is_empty() and control.get_node_or_null(target_path) in equipment_focus_controls, "%s %s stays inside visible Equipment tab" % [control.name, property_name], failures)
+	for path: NodePath in [^"Overlay/Frame/Layout/Tabs/Fixtures/Actions/IntegrityScan", ^"Overlay/Frame/Layout/Tabs/Fixtures/Actions/Reset"]:
+		TestAssertions.equal((sandbox.get_node(path) as Control).focus_mode, Control.FOCUS_NONE, "%s is excluded while Fixtures is hidden" % path, failures)
+	if tabs != null:
+		tabs.current_tab = 0
+		sandbox.call(&"_on_tab_changed", 0)
+		TestAssertions.equal(inventory_zero.focus_mode, Control.FOCUS_NONE, "equipment slots are excluded while Fixtures is visible", failures)
+		TestAssertions.equal((sandbox.get_node("Overlay/Frame/Layout/Tabs/Fixtures/Actions/IntegrityScan") as Control).focus_mode, Control.FOCUS_ALL, "visible Integrity Scan is focusable", failures)
+		tabs.current_tab = 2
+		sandbox.call(&"_on_tab_changed", 2)
+		TestAssertions.equal((sandbox.get_node("Overlay/Frame/Layout/Tabs/Fixtures/Actions/Reset") as Control).focus_mode, Control.FOCUS_NONE, "fixture controls are excluded while Loot Lab is visible", failures)
+		TestAssertions.equal((sandbox.get_node("Overlay/Frame/Layout/Tabs/Loot Lab/Layout/WorkbenchFocusAnchor") as Control).focus_mode, Control.FOCUS_ALL, "Loot Lab focus anchor is active on its page", failures)
+		tabs.current_tab = 1
+		sandbox.call(&"_on_tab_changed", 1)
 
 	sandbox.call(&"_unhandled_input", _action_event(&"ui_cancel"))
 	TestAssertions.truthy(not sandbox.visible, "controller cancel closes only the sandbox", failures)
@@ -337,8 +360,8 @@ func _test_main_route_and_profile_isolation(failures: Array[String]) -> void:
 	TestAssertions.equal(main.get_children().filter(func(child: Node) -> bool: return child.name == &"DeveloperItemSandbox").size(), 1, "main owns exactly one sandbox modal", failures)
 	main.call(&"_open_developer_item_sandbox")
 	TestAssertions.equal(main.get_children().filter(func(child: Node) -> bool: return child.name == &"DeveloperItemSandbox").size(), 1, "repeated open is idempotent", failures)
-	var stash_zero := modal.get_node("Overlay/Frame/Layout/Body/StashPanel/StashScroll/StashSlots").get_child(0) as Button
-	var inventory_zero := modal.get_node("Overlay/Frame/Layout/Body/InventoryPanel/InventorySlots").get_child(0) as Button
+	var stash_zero := modal.get_node("Overlay/Frame/Layout/Tabs/Equipment/Body/StashPanel/StashScroll/StashSlots").get_child(0) as Button
+	var inventory_zero := modal.get_node("Overlay/Frame/Layout/Tabs/Equipment/Body/InventoryPanel/InventorySlots").get_child(0) as Button
 	var isolated_drag: Variant = stash_zero.call(&"_get_drag_data", Vector2.ZERO)
 	inventory_zero.call(&"_drop_data", Vector2.ZERO, isolated_drag)
 	TestAssertions.truthy(not String(inventory_zero.get_meta("item_id", "")).is_empty(), "profile-isolation route performs a real sandbox drag mutation", failures)
@@ -356,7 +379,7 @@ func _test_main_route_and_profile_isolation(failures: Array[String]) -> void:
 	main.call(&"_open_developer_item_sandbox")
 	TestAssertions.truthy(not modal.visible, "Player Simulation can never leave sandbox visible", failures)
 	if tree.root.get_viewport() != null:
-		TestAssertions.truthy(tree.root.get_viewport().gui_get_focus_owner() != modal.get_node("Overlay/Frame/Layout/Body/InventoryPanel/InventorySlots").get_child(0), "Player Simulation can never leave sandbox focused", failures)
+		TestAssertions.truthy(tree.root.get_viewport().gui_get_focus_owner() != modal.get_node("Overlay/Frame/Layout/Tabs/Equipment/Body/InventoryPanel/InventorySlots").get_child(0), "Player Simulation can never leave sandbox focused", failures)
 	else:
 		TestAssertions.truthy(not modal.visible, "Player Simulation exposes no focusable sandbox surface", failures)
 	main.free()
@@ -378,8 +401,8 @@ func _test_failure_atomic_ui(packed: PackedScene, failures: Array[String]) -> vo
 	sandbox.call(&"configure", state)
 	sandbox.call(&"_ready")
 	TestAssertions.truthy(bool(sandbox.call(&"open")), "failure-atomic sandbox opens from usable state", failures)
-	var inventory_zero := sandbox.get_node("Overlay/Frame/Layout/Body/InventoryPanel/InventorySlots").get_child(0) as Button
-	var stash_zero := sandbox.get_node("Overlay/Frame/Layout/Body/StashPanel/StashScroll/StashSlots").get_child(0) as Button
+	var inventory_zero := sandbox.get_node("Overlay/Frame/Layout/Tabs/Equipment/Body/InventoryPanel/InventorySlots").get_child(0) as Button
+	var stash_zero := sandbox.get_node("Overlay/Frame/Layout/Tabs/Equipment/Body/StashPanel/StashScroll/StashSlots").get_child(0) as Button
 	var baseline_projection: Dictionary = sandbox.call(&"projection")
 	var baseline_bytes := FileAccess.get_file_as_bytes(DOCUMENT_PATH)
 	var drag_data: Variant = stash_zero.call(&"_get_drag_data", Vector2.ZERO)
@@ -389,7 +412,8 @@ func _test_failure_atomic_ui(packed: PackedScene, failures: Array[String]) -> vo
 	TestAssertions.equal(sandbox.call(&"projection"), baseline_projection, "failed drag move preserves the last usable projection", failures)
 	TestAssertions.equal(FileAccess.get_file_as_bytes(DOCUMENT_PATH), baseline_bytes, "failed drag move preserves persisted bytes", failures)
 	for action_name: String in ["Save", "Reset"]:
-		(sandbox.get_node("Overlay/Frame/Layout/Actions/%s" % action_name) as Button).pressed.emit()
+		var page := "Fixtures" if action_name == "Reset" else "Equipment"
+		(sandbox.get_node("Overlay/Frame/Layout/Tabs/%s/Actions/%s" % [page, action_name]) as Button).pressed.emit()
 		TestAssertions.truthy(status.text.contains("stage=promote"), "failed %s displays the exact atomic error" % action_name, failures)
 		TestAssertions.equal(sandbox.call(&"projection"), baseline_projection, "failed %s preserves the last usable projection" % action_name, failures)
 		TestAssertions.equal(FileAccess.get_file_as_bytes(DOCUMENT_PATH), baseline_bytes, "failed %s preserves persisted bytes" % action_name, failures)
@@ -397,12 +421,12 @@ func _test_failure_atomic_ui(packed: PackedScene, failures: Array[String]) -> vo
 	_write_text("%s.bak" % DOCUMENT_PATH, "{ corrupt task 9 backup")
 	var corrupt_primary := FileAccess.get_file_as_bytes(DOCUMENT_PATH)
 	var corrupt_backup := FileAccess.get_file_as_bytes("%s.bak" % DOCUMENT_PATH)
-	(sandbox.get_node("Overlay/Frame/Layout/Actions/IntegrityScan") as Button).pressed.emit()
+	(sandbox.get_node("Overlay/Frame/Layout/Tabs/Fixtures/Actions/IntegrityScan") as Button).pressed.emit()
 	TestAssertions.truthy(not status.text.begins_with("OK "), "failed integrity scan displays the exact sandbox error", failures)
 	TestAssertions.equal(sandbox.call(&"projection"), baseline_projection, "failed integrity scan preserves the last usable projection", failures)
 	TestAssertions.equal(FileAccess.get_file_as_bytes(DOCUMENT_PATH), corrupt_primary, "failed integrity scan preserves primary bytes", failures)
 	TestAssertions.equal(FileAccess.get_file_as_bytes("%s.bak" % DOCUMENT_PATH), corrupt_backup, "failed integrity scan preserves backup bytes", failures)
-	(sandbox.get_node("Overlay/Frame/Layout/Actions/Reload") as Button).pressed.emit()
+	(sandbox.get_node("Overlay/Frame/Layout/Tabs/Equipment/Actions/Reload") as Button).pressed.emit()
 	TestAssertions.truthy(not status.text.begins_with("OK "), "failed reload displays the exact sandbox error", failures)
 	TestAssertions.equal(sandbox.call(&"projection"), baseline_projection, "failed reload preserves the last usable projection", failures)
 	TestAssertions.equal(FileAccess.get_file_as_bytes(DOCUMENT_PATH), corrupt_primary, "failed reload preserves rejected primary bytes", failures)
@@ -430,8 +454,8 @@ func _test_projection_failure_atomic_ui(packed: PackedScene, failures: Array[Str
 		var sandbox: Variant = packed.instantiate()
 		sandbox.call(&"configure", state, presentation_projection)
 		sandbox.call(&"_ready")
-		var stash_grid := sandbox.get_node("Overlay/Frame/Layout/Body/StashPanel/StashScroll/StashSlots") as GridContainer
-		var inventory_grid := sandbox.get_node("Overlay/Frame/Layout/Body/InventoryPanel/InventorySlots") as GridContainer
+		var stash_grid := sandbox.get_node("Overlay/Frame/Layout/Tabs/Equipment/Body/StashPanel/StashScroll/StashSlots") as GridContainer
+		var inventory_grid := sandbox.get_node("Overlay/Frame/Layout/Tabs/Equipment/Body/InventoryPanel/InventorySlots") as GridContainer
 		if action != "OPEN":
 			TestAssertions.truthy(bool(sandbox.call(&"open")), "%s projection-failure fixture opens valid UI" % action, failures)
 		failure_control["item_id"] = String((stash_grid.get_child(1) as Button).get_meta("item_id", "")) if action != "OPEN" else state.stash().item_id_at(1)

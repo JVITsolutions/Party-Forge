@@ -23,21 +23,34 @@ func _run() -> void:
 	await _frames(2)
 	_assert(sandbox.open(), "sandbox opens in the real tree")
 	await _frames(2)
-	var stash := sandbox.get_node("Overlay/Frame/Layout/Body/StashPanel/StashScroll/StashSlots") as GridContainer
+	var stash := sandbox.get_node("Overlay/Frame/Layout/Tabs/Equipment/Body/StashPanel/StashScroll/StashSlots") as GridContainer
 	var source := stash.get_child(0) as Button
 	var stale_destination := stash.get_child(99) as Button
-	var save := sandbox.get_node("Overlay/Frame/Layout/Actions/Save") as Button
-	var integrity_scan := sandbox.get_node("Overlay/Frame/Layout/Actions/IntegrityScan") as Button
+	var save := sandbox.get_node("Overlay/Frame/Layout/Tabs/Equipment/Actions/Save") as Button
+	var integrity_scan := sandbox.get_node("Overlay/Frame/Layout/Tabs/Fixtures/Actions/IntegrityScan") as Button
+	var reset := sandbox.get_node("Overlay/Frame/Layout/Tabs/Fixtures/Actions/Reset") as Button
+	var tabs := sandbox.get_node("Overlay/Frame/Layout/Tabs") as TabContainer
 	var close_button := sandbox.get_node("Overlay/Frame/Layout/Header/Close") as Button
-	for target: Control in [save, integrity_scan, close_button]:
+	for target: Control in [save, close_button]:
 		await _assert_accept_ignores_stale_slot(sandbox, source, stale_destination, target)
-		(sandbox.get_node("Overlay/Frame/Layout/Actions/Reset") as Button).pressed.emit()
+		reset.pressed.emit()
 		await _frames(2)
-	for target: Control in [save, integrity_scan, close_button]:
+	for target: Control in [save, close_button]:
 		await _assert_pickup_ignores_stale_slot(sandbox, source, target)
 	_assert_focus_reachable(source, save)
-	_assert_focus_reachable(source, integrity_scan)
 	_assert_focus_reachable(source, close_button)
+	tabs.current_tab = 0
+	await _frames(2)
+	_assert(source.focus_mode == Control.FOCUS_NONE, "equipment slots leave the focus graph on Fixtures")
+	_assert(integrity_scan.focus_mode == Control.FOCUS_ALL and reset.focus_mode == Control.FOCUS_ALL, "fixture actions enter the visible focus graph")
+	_assert_focus_reachable(integrity_scan, reset)
+	_assert_focus_reachable(integrity_scan, close_button)
+	tabs.current_tab = 2
+	await _frames(2)
+	var loot_anchor := sandbox.get_node("Overlay/Frame/Layout/Tabs/Loot Lab/Layout/WorkbenchFocusAnchor") as Button
+	_assert(integrity_scan.focus_mode == Control.FOCUS_NONE, "fixture actions leave the focus graph on Loot Lab")
+	_assert(loot_anchor.focus_mode == Control.FOCUS_ALL, "Loot Lab anchor enters the visible focus graph")
+	_assert_focus_reachable(loot_anchor, close_button)
 	sandbox.queue_free()
 	await process_frame
 	_cleanup_sandbox_files()
