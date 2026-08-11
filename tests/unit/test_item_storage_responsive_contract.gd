@@ -8,6 +8,9 @@ const RUNNER_PATHS: Array[String] = [
 	"res://tests/integration/item_storage_profile_runner.gd",
 	"res://tests/integration/item_storage_performance_runner.gd",
 	"res://tests/integration/developer_loot_lab_runner.gd",
+	"res://tests/integration/equipment_ledger_responsive_runner.gd",
+	"res://tests/integration/live_personal_loot_multiplayer_runner.gd",
+	"res://tests/integration/live_personal_loot_performance_runner.gd",
 ]
 
 
@@ -74,6 +77,10 @@ func _assert_review_contracts(failures: Array[String]) -> void:
 	var profile_source := FileAccess.get_file_as_string(RUNNER_PATHS[1])
 	var performance_source := FileAccess.get_file_as_string(RUNNER_PATHS[2])
 	var ui_source := FileAccess.get_file_as_string(RUNNER_PATHS[0])
+	var ledger_source := FileAccess.get_file_as_string(RUNNER_PATHS[4])
+	var multiplayer_source := FileAccess.get_file_as_string(RUNNER_PATHS[5])
+	var live_performance_source := FileAccess.get_file_as_string(RUNNER_PATHS[6])
+	var live_world_source := FileAccess.get_file_as_string("res://scripts/world/ground_item_world_controller.gd")
 	TestAssertions.truthy("profile_root_manifest_before" in profile_source and "profile root recursive manifest remains exact" in profile_source, "profile isolation runner compares an exact recursive root manifest", failures)
 	TestAssertions.truthy("sandbox confinement manifest" in profile_source, "profile isolation runner validates the sandbox confinement manifest", failures)
 	TestAssertions.truthy("root.mode = Window.MODE_WINDOWED" in ui_source and "content_scale_size" in ui_source and "root.size == viewport_size" in ui_source, "sandbox UI runner binds every resolution marker to exact physical window geometry and the logical canvas policy", failures)
@@ -82,6 +89,40 @@ func _assert_review_contracts(failures: Array[String]) -> void:
 	var ui_cleanup_position := ui_source.find("cleanup removes every Task 10 root before summary")
 	var ui_resolution_pass_position := ui_source.find("ITEM_SANDBOX_RESOLUTION_PASS")
 	TestAssertions.truthy(ui_cleanup_position >= 0 and ui_resolution_pass_position > ui_cleanup_position, "sandbox UI defers every resolution PASS marker until after cleanup", failures)
+	TestAssertions.truthy(
+		"Vector2i(1920, 1080)" in ledger_source
+		and "Vector2i(2560, 1440)" in ledger_source
+		and "Vector2i(3840, 2160)" in ledger_source
+		and "TASK10_EQUIPMENT_LEDGER_RESOLUTION_PASS size=%dx%d" in ledger_source
+		and "ledger.select_member(24)" in ledger_source,
+		"equipment ledger runner binds exactly the three target resolutions to geometry and member-24 refresh evidence",
+		failures,
+	)
+	TestAssertions.truthy(
+		"RunContextRegistry.new()" in multiplayer_source
+		and "PlayerRunContext.new()" in multiplayer_source
+		and "resolve(forced_event, true)" in multiplayer_source
+		and "LIVE_PERSONAL_LOOT_MULTIPLAYER_SUMMARY: PASS" in multiplayer_source,
+		"live multiplayer runner uses real run contexts and deterministic forced-success acceptance",
+		failures,
+	)
+	TestAssertions.truthy(
+		"const RECORD_COUNT := 2000" in live_performance_source
+		and "peak_frame_ms > 33.4" in live_performance_source
+		and "LIVE_LOOT_SCALE_SUMMARY: chests=%d owners=%d peak_frame_ms=%.3f" in live_performance_source
+		and "LIVE_LOOT_PERFORMANCE_SUMMARY: PASS" in live_performance_source
+		and not "get_nodes_in_group" in live_performance_source
+		and not "find_children" in live_performance_source,
+		"live performance runner keeps the exact 2,000-chest frame gate on bounded production indexes",
+		failures,
+	)
+	TestAssertions.truthy(
+		not "get_nodes_in_group" in live_world_source
+		and not "find_children" in live_world_source
+		and not "get_tree().get_nodes" in live_world_source,
+		"live ground projection avoids continuing scene-tree scans",
+		failures,
+	)
 
 
 func _assert_manifest_sentinel_detection(failures: Array[String]) -> void:
