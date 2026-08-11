@@ -16,11 +16,15 @@ var _camera: Camera3D
 var _chests_parent: Node3D
 var _tooltip_layer: Node
 var _tooltip: ItemTooltipPanel
+var _owns_tooltip := false
 var _chest_by_drop: Dictionary = {}
 var _inactive_chests: Array[Node3D] = []
+var _record_by_drop: Dictionary = {}
 var _detail_by_drop: Dictionary = {}
-var _comparisons_by_drop: Dictionary = {}
 var _dirty_drop_ids: Dictionary = {}
+var _mouse_inside_by_drop: Dictionary = {}
+var _focus_inside_by_drop: Dictionary = {}
+var _last_camera_signature: Array = []
 
 
 func configure(
@@ -33,6 +37,7 @@ func configure(
 ) -> void:
 	_disconnect_registry()
 	_release_all()
+	_release_shared_tooltip()
 	_registry = registry
 	_identities = identities.duplicate(true)
 	_presentation_projector = presentation_projector
@@ -40,6 +45,8 @@ func configure(
 	_chests_parent = chests_parent
 	_tooltip_layer = tooltip_layer
 	_tooltip = _resolve_shared_tooltip()
+	_reparent_inactive_projections()
+	_last_camera_signature = _camera_signature()
 	if _registry == null or _chests_parent == null or _tooltip_layer == null or _tooltip == null:
 		status_changed.emit("GROUND_ITEM_WORLD_UNAVAILABLE")
 		return
@@ -59,10 +66,31 @@ func set_selected(drop_id: StringName, active: bool) -> void:
 	_dirty_drop_ids[drop_id] = true
 
 
-func _process(_delta: float) -> void:
-	if _dirty_drop_ids.is_empty():
+func invalidate_comparisons(run_player_id: StringName = &"") -> void:
+	if _tooltip == null or not is_instance_valid(_tooltip) or not _tooltip.visible:
 		return
-	var dirty := _dirty_drop_ids.keys()
+	for drop_value: Variant in _chest_by_drop:
+		var drop_id := StringName(drop_value)
+		var chest := _chest_by_drop.get(drop_id) as Node3D
+		if chest == null or (not run_player_id.is_empty() and StringName(chest.get("run_player_id")) != run_player_id):
+			continue
+		if not _tooltip.is_current_source(_source_id(drop_id)):
+			continue
+		var inspection_active := bool(_mouse_inside_by_drop.get(drop_id, false)) or bool(_focus_inside_by_drop.get(drop_id, false))
+		_tooltip.force_dismiss()
+		if inspection_active:
+			_present_tooltip(chest)
+		return
+
+
+func _process(_delta: float) -> void:
+	var camera_signature := _camera_signature()
+	var camera_changed := camera_signature != _last_camera_signature
+	if camera_changed:
+		_last_camera_signature = camera_signature
+	if not camera_changed and _dirty_drop_ids.is_empty():
+		return
+	var dirty := _chest_by_drop.keys() if camera_changed else _dirty_drop_ids.keys()
 	_dirty_drop_ids.clear()
 	for drop_value: Variant in dirty:
 		_project_anchor(StringName(drop_value))
@@ -81,15 +109,13 @@ func _on_record_added(record: GroundItemRecord) -> void:
 		owner_color = PlayerColorPalette.color(record.color_id)
 		status_changed.emit("GROUND_ITEM_WORLD_IDENTITY_FALLBACK drop_id=%s" % record.drop_id)
 	var detail := _detail_for(record)
-	detail["distance_meters"] = _distance_to_camera(record.world_position)
-	detail["owner_player_number"] = int(identity.get("player_number", record.player_number))
-	detail["owner_run_player_id"] = String(record.run_player_id)
+	_decorate_detail(detail, record, identity)
 	var visual_record := record.copy()
 	visual_record.player_number = int(identity.get("player_number", record.player_number))
 	var chest: Node3D = _take_chest()
 	_chest_by_drop[record.drop_id] = chest
+	_record_by_drop[record.drop_id] = record.copy()
 	_detail_by_drop[record.drop_id] = detail.duplicate(true)
-	_comparisons_by_drop[record.drop_id] = _comparisons_for(detail)
 	chest.call(&"bind", visual_record, detail, owner_color as Color)
 	var anchor := chest.call(&"tooltip_anchor") as Control
 	if anchor.get_parent() != _tooltip_layer:
@@ -110,16 +136,15 @@ func _on_registry_cleared() -> void:
 
 func _take_chest() -> Node3D:
 	var chest := _inactive_chests.pop_back() as Node3D if not _inactive_chests.is_empty() else CHEST_SCENE.instantiate() as Node3D
-	if chest.get_parent() == null:
-		_chests_parent.add_child(chest)
+	_reparent_node(chest, _chests_parent)
 	if not chest.is_connected(&"pickup_requested", _on_chest_pickup_requested):
 		chest.connect(&"pickup_requested", _on_chest_pickup_requested)
 	var anchor := chest.call(&"tooltip_anchor") as Control
-	if not anchor.mouse_entered.is_connected(_on_anchor_inspection_started.bind(chest)):
-		anchor.mouse_entered.connect(_on_anchor_inspection_started.bind(chest))
-		anchor.focus_entered.connect(_on_anchor_inspection_started.bind(chest))
-		anchor.mouse_exited.connect(_on_anchor_inspection_ended.bind(chest))
-		anchor.focus_exited.connect(_on_anchor_inspection_ended.bind(chest))
+	if not anchor.mouse_entered.is_connected(_on_anchor_mouse_entered.bind(chest)):
+		anchor.mouse_entered.connect(_on_anchor_mouse_entered.bind(chest))
+		anchor.focus_entered.connect(_on_anchor_focus_entered.bind(chest))
+		anchor.mouse_exited.connect(_on_anchor_mouse_exited.bind(chest))
+		anchor.focus_exited.connect(_on_anchor_focus_exited.bind(chest))
 		anchor.pressed.connect(_on_anchor_pressed.bind(chest))
 	return chest
 
@@ -131,18 +156,16 @@ func _release_chest(drop_id: StringName) -> void:
 	if _tooltip != null:
 		_tooltip.release_item(_source_id(drop_id))
 	_chest_by_drop.erase(drop_id)
+	_record_by_drop.erase(drop_id)
 	_detail_by_drop.erase(drop_id)
-	_comparisons_by_drop.erase(drop_id)
 	_dirty_drop_ids.erase(drop_id)
+	_mouse_inside_by_drop.erase(drop_id)
+	_focus_inside_by_drop.erase(drop_id)
 	chest.call(&"deactivate")
 	if _inactive_chests.size() < MAX_INACTIVE_CHESTS:
 		_inactive_chests.append(chest)
 		return
-	var anchor := chest.call(&"tooltip_anchor") as Control
-	if anchor.get_parent() != null:
-		anchor.get_parent().remove_child(anchor)
-	anchor.queue_free()
-	chest.queue_free()
+	_destroy_chest(chest)
 
 
 func _release_all() -> void:
@@ -203,30 +226,73 @@ func _project_anchor(drop_id: StringName) -> void:
 	if chest == null:
 		return
 	var anchor := chest.call(&"tooltip_anchor") as Control
-	if _camera == null or not is_instance_valid(_camera) or not _camera.is_inside_tree():
+	var world_position := chest.global_position if chest.is_inside_tree() else chest.position
+	var distance := _distance_to_camera(world_position)
+	chest.call(&"_refresh_accessibility", distance)
+	var cached_detail := _detail_by_drop.get(drop_id, {}) as Dictionary
+	if not cached_detail.is_empty():
+		cached_detail["distance_meters"] = distance
+	if _camera == null or not is_instance_valid(_camera):
 		anchor.visible = chest.visible
 		return
-	var world_position: Vector3 = chest.global_position + Vector3.UP * 1.55
-	anchor.position = _camera.unproject_position(world_position) - anchor.size * 0.5
-	anchor.visible = chest.visible and not _camera.is_position_behind(world_position)
+	var elevated_position: Vector3 = world_position + Vector3.UP * 1.55
+	if _camera.is_inside_tree():
+		anchor.position = _camera.unproject_position(elevated_position) - anchor.size * 0.5
+		anchor.visible = chest.visible and not _camera.is_position_behind(elevated_position)
+		return
+	var camera_space := _camera.transform.affine_inverse() * elevated_position
+	var projection_scale := 100.0 / tan(deg_to_rad(_camera.fov) * 0.5) if _camera.projection == Camera3D.PROJECTION_PERSPECTIVE else 200.0 / maxf(_camera.size, 0.001)
+	anchor.position = Vector2(camera_space.x, -camera_space.y) * projection_scale - anchor.size * 0.5
+	anchor.visible = chest.visible and camera_space.z < 0.0
 
 
-func _on_anchor_inspection_started(chest: Node3D) -> void:
+func _on_anchor_mouse_entered(chest: Node3D) -> void:
+	var drop_id := _drop_id_for(chest)
+	if drop_id.is_empty():
+		return
+	_mouse_inside_by_drop[drop_id] = true
+	_present_tooltip(chest)
+
+
+func _on_anchor_focus_entered(chest: Node3D) -> void:
+	var drop_id := _drop_id_for(chest)
+	if drop_id.is_empty():
+		return
+	_focus_inside_by_drop[drop_id] = true
+	_present_tooltip(chest)
+
+
+func _on_anchor_mouse_exited(chest: Node3D) -> void:
+	var drop_id := _drop_id_for(chest)
+	if drop_id.is_empty():
+		return
+	_mouse_inside_by_drop.erase(drop_id)
+	_release_tooltip_if_inactive(drop_id)
+
+
+func _on_anchor_focus_exited(chest: Node3D) -> void:
+	var drop_id := _drop_id_for(chest)
+	if drop_id.is_empty():
+		return
+	_focus_inside_by_drop.erase(drop_id)
+	_release_tooltip_if_inactive(drop_id)
+
+
+func _present_tooltip(chest: Node3D) -> void:
 	if chest == null or _tooltip == null or StringName(chest.get("drop_id")).is_empty():
 		return
 	var chest_drop_id := StringName(chest.get("drop_id"))
-	var detail := _detail_by_drop.get(chest_drop_id, {}) as Dictionary
-	var comparisons: Array[Dictionary] = []
-	for value: Variant in _comparisons_by_drop.get(chest_drop_id, []):
-		if value is Dictionary:
-			comparisons.append((value as Dictionary).duplicate(true))
+	var detail := _refresh_detail(chest_drop_id)
+	var comparisons := _comparisons_for(detail)
 	_tooltip.show_item(detail, comparisons, chest.call(&"tooltip_anchor") as Control, _source_id(chest_drop_id))
 
 
-func _on_anchor_inspection_ended(chest: Node3D) -> void:
-	var chest_drop_id := StringName(chest.get("drop_id")) if chest != null else &""
-	if chest != null and _tooltip != null and not chest_drop_id.is_empty():
-		_tooltip.release_item(_source_id(chest_drop_id))
+func _release_tooltip_if_inactive(drop_id: StringName) -> void:
+	if _tooltip == null or drop_id.is_empty():
+		return
+	if bool(_mouse_inside_by_drop.get(drop_id, false)) or bool(_focus_inside_by_drop.get(drop_id, false)):
+		return
+	_tooltip.release_item(_source_id(drop_id))
 
 
 func _on_anchor_pressed(chest: Node3D) -> void:
@@ -248,10 +314,71 @@ func _resolve_shared_tooltip() -> ItemTooltipPanel:
 		return null
 	for child: Node in _tooltip_layer.get_children():
 		if child is ItemTooltipPanel:
+			_owns_tooltip = false
 			return child as ItemTooltipPanel
 	var tooltip := TOOLTIP_SCENE.instantiate() as ItemTooltipPanel
 	_tooltip_layer.add_child(tooltip)
+	_owns_tooltip = true
 	return tooltip
+
+
+func _release_shared_tooltip() -> void:
+	if _tooltip == null or not is_instance_valid(_tooltip):
+		_tooltip = null
+		_owns_tooltip = false
+		return
+	_tooltip.force_dismiss()
+	if _owns_tooltip:
+		_tooltip.free()
+	_tooltip = null
+	_owns_tooltip = false
+
+
+func _reparent_inactive_projections() -> void:
+	if _chests_parent == null or _tooltip_layer == null:
+		return
+	for chest: Node3D in _inactive_chests:
+		if chest == null or not is_instance_valid(chest):
+			continue
+		_reparent_node(chest, _chests_parent)
+		_reparent_node(chest.call(&"tooltip_anchor") as Control, _tooltip_layer)
+
+
+func _reparent_node(node: Node, parent: Node) -> void:
+	if node == null or parent == null or node.get_parent() == parent:
+		return
+	if node.get_parent() != null:
+		node.get_parent().remove_child(node)
+	parent.add_child(node)
+
+
+func _destroy_chest(chest: Node3D) -> void:
+	if chest == null or not is_instance_valid(chest):
+		return
+	var anchor := chest.call(&"tooltip_anchor") as Control
+	if anchor != null and is_instance_valid(anchor):
+		anchor.free()
+	chest.free()
+
+
+func _destroy_all_projections() -> void:
+	var seen: Dictionary = {}
+	for value: Variant in _chest_by_drop.values():
+		var chest := value as Node3D
+		if chest != null and not seen.has(chest.get_instance_id()):
+			seen[chest.get_instance_id()] = true
+			_destroy_chest(chest)
+	for chest: Node3D in _inactive_chests:
+		if chest != null and is_instance_valid(chest) and not seen.has(chest.get_instance_id()):
+			seen[chest.get_instance_id()] = true
+			_destroy_chest(chest)
+	_chest_by_drop.clear()
+	_inactive_chests.clear()
+	_record_by_drop.clear()
+	_detail_by_drop.clear()
+	_dirty_drop_ids.clear()
+	_mouse_inside_by_drop.clear()
+	_focus_inside_by_drop.clear()
 
 
 func _disconnect_registry() -> void:
@@ -265,11 +392,62 @@ func _disconnect_registry() -> void:
 		_registry.cleared.disconnect(_on_registry_cleared)
 
 
+func _exit_tree() -> void:
+	_disconnect_registry()
+	_destroy_all_projections()
+	_release_shared_tooltip()
+	_registry = null
+	_identities.clear()
+	_presentation_projector = null
+	_camera = null
+	_chests_parent = null
+	_tooltip_layer = null
+	_last_camera_signature.clear()
+
+
 func _distance_to_camera(world_position: Vector3) -> float:
 	if _camera == null or not is_instance_valid(_camera):
 		return world_position.length()
 	var camera_position := _camera.global_position if _camera.is_inside_tree() else _camera.position
 	return camera_position.distance_to(world_position)
+
+
+func _refresh_detail(drop_id: StringName) -> Dictionary:
+	var record := _record_by_drop.get(drop_id) as GroundItemRecord
+	if record == null:
+		return (_detail_by_drop.get(drop_id, {}) as Dictionary).duplicate(true)
+	var detail := _detail_for(record)
+	var identity := _identities.get(record.run_player_id, {}) as Dictionary
+	_decorate_detail(detail, record, identity)
+	_detail_by_drop[drop_id] = detail.duplicate(true)
+	return detail
+
+
+func _decorate_detail(detail: Dictionary, record: GroundItemRecord, identity: Dictionary) -> void:
+	detail["distance_meters"] = _distance_to_camera(record.world_position)
+	detail["owner_player_number"] = int(identity.get("player_number", record.player_number))
+	detail["owner_run_player_id"] = String(record.run_player_id)
+
+
+func _camera_signature() -> Array:
+	if _camera == null or not is_instance_valid(_camera):
+		return []
+	return [
+		_camera.global_transform if _camera.is_inside_tree() else _camera.transform,
+		_camera.projection,
+		_camera.fov,
+		_camera.size,
+		_camera.near,
+		_camera.far,
+		_camera.keep_aspect,
+		_camera.h_offset,
+		_camera.v_offset,
+		_camera.frustum_offset,
+	]
+
+
+func _drop_id_for(chest: Node3D) -> StringName:
+	return StringName(chest.get("drop_id")) if chest != null and is_instance_valid(chest) else &""
 
 
 func _source_id(drop_id: StringName) -> StringName:
