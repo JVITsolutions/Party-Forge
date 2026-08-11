@@ -282,9 +282,24 @@ func _build_pages() -> void:
 		_page_host().add_child(page)
 		_pages[definition.id] = page
 		_available_page_ids.append(definition.id)
+	for error: String in required_page_errors(DEFAULT_PAGE_CATALOG, gate):
+		push_error(error)
+
+static func required_page_errors(catalog: LedgerPageCatalog, gate: LedgerFeatureGate) -> PackedStringArray:
+	var errors := PackedStringArray()
 	for required_id: StringName in REQUIRED_PAGE_IDS:
-		if not _definitions.has(required_id):
-			push_error("PARTY_FORGE_LEDGER_ERROR page=%s reason=required page is missing" % required_id)
+		var definition: LedgerPageDefinition
+		if catalog != null:
+			for candidate: LedgerPageDefinition in catalog.pages:
+				if candidate != null and candidate.id == required_id:
+					definition = candidate
+					break
+		if definition == null or not definition.validate().is_empty():
+			errors.append("PARTY_FORGE_LEDGER_ERROR page=%s reason=required page is missing" % required_id)
+			continue
+		if gate == null or gate.resolve(definition) == LedgerPageDefinition.State.HIDDEN:
+			continue
+	return errors
 
 func _player_simulation_policy() -> FeatureAccessPolicy:
 	return RunRulesSnapshot.from_settings(PartyForgeSettings.new()).feature_policy(_catalog_feature_ids(), _catalog_unlock_ids())

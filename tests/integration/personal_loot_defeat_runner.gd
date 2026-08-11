@@ -70,7 +70,7 @@ func _verify_guardian_victory_and_zero_reward(main: PartyForgeMain) -> void:
 		guardian.defeat()
 		guardian.defeat()
 	_assert(victories[0] == 1 and game_run.current_state() == RunStateMachine.State.VICTORY, "existing Guardian signal reaches exactly one victory")
-	_assert(registry.all_records().size() == before, "Guardian victory creates no zero-chance boss reward")
+	_assert(registry.all_records().is_empty(), "Guardian victory creates no zero-chance boss reward and clears prior run-owned loot")
 
 func _started_main(settings: PartyForgeSettings) -> PartyForgeMain:
 	var main := (load("res://scenes/game/main.tscn") as PackedScene).instantiate() as PartyForgeMain

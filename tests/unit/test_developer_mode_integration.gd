@@ -11,9 +11,37 @@ func run() -> Array[String]:
 	_profile_root = "user://tests/developer_mode_integration-profiles_%d_%d" % [OS.get_process_id(), Time.get_ticks_usec()]
 	ProfileTestSupport.remove_tree(_profile_root)
 	_test_badge_summary_uses_immutable_snapshot(failures)
+	_test_badge_personal_loot_summary_and_session_diagnostics(failures)
 	_test_main_configures_badge_from_active_run(failures)
 	ProfileTestSupport.remove_tree(_profile_root)
 	return failures
+
+func _test_badge_personal_loot_summary_and_session_diagnostics(failures: Array[String]) -> void:
+	var badge := (load(BADGE_SCENE_PATH) as PackedScene).instantiate()
+	var settings := PartyForgeSettings.new()
+	settings.mode = PartyForgeSettings.Mode.DEVELOPER_MODE
+	settings.set("personal_drop_multiplier_percent", 375)
+	settings.set("force_personal_drops", true)
+	settings.set("personal_drop_source_category_override", &"ordinary_specialist")
+	settings.set("personal_drop_item_level_override", 777)
+	settings.set("show_ground_chest_diagnostics", true)
+	badge.call("configure", RunRulesSnapshot.from_settings(settings))
+	TestAssertions.truthy(String(badge.call("summary_text")).contains("DROPS 375% | FORCE DROPS | SOURCE ORDINARY SPECIALIST | ITEM LEVEL 777"), "badge reports immutable active personal-loot overrides", failures)
+	badge.call("update_ground_chest_diagnostics", {
+		"live": 2,
+		"peak": 5,
+		"successes_by_source": {"ordinary_melee": 3},
+		"failures_by_source": {"ordinary_specialist": 4},
+		"generation_failures": 1,
+		"collection_outcomes": {"ok": 2, "inventory_full": 1},
+	})
+	var diagnostics := String(badge.call("diagnostics_text"))
+	TestAssertions.truthy(diagnostics.contains("LIVE 2 | PEAK 5"), "diagnostics show live and peak chest counts", failures)
+	TestAssertions.truthy(diagnostics.contains("SUCCESS ordinary_melee=3") and diagnostics.contains("FAIL ordinary_specialist=4"), "diagnostics show successes and failures by source", failures)
+	TestAssertions.truthy(diagnostics.contains("GENERATION FAILURES 1") and diagnostics.contains("COLLECTION inventory_full=1,ok=2"), "diagnostics show generation failures and sorted collection outcomes", failures)
+	badge.call("configure", null)
+	TestAssertions.equal(badge.call("diagnostics_text"), "", "diagnostics are session-only and clear with the run snapshot", failures)
+	badge.free()
 
 
 func _test_badge_summary_uses_immutable_snapshot(failures: Array[String]) -> void:

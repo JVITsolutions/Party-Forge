@@ -7,6 +7,10 @@ var registry: RunContextRegistry
 var reward_tuning: RewardDistributionTuning
 var loot_tuning: PersonalLootTuning
 var feature_access_provider: Callable
+var force_success := false
+var drop_multiplier := 1.0
+var source_category_override: StringName = &""
+var item_level_override := 0
 
 var _resolved_decisions: Dictionary = {}
 
@@ -15,6 +19,10 @@ func configure(
 	distribution_tuning: RewardDistributionTuning,
 	personal_tuning: PersonalLootTuning,
 	access_provider: Callable,
+	force_success_value: bool = false,
+	drop_multiplier_value: float = 1.0,
+	source_category_override_value: StringName = &"",
+	item_level_override_value: int = 0,
 ) -> PackedStringArray:
 	var errors := PackedStringArray()
 	if context_registry == null:
@@ -32,13 +40,17 @@ func configure(
 		reward_tuning = distribution_tuning
 		loot_tuning = personal_tuning
 		feature_access_provider = access_provider
+		force_success = force_success_value
+		drop_multiplier = clampf(drop_multiplier_value if is_finite(drop_multiplier_value) else 0.0, 0.0, 100.0)
+		source_category_override = source_category_override_value if source_category_override_value in EnemyDefeatEvent.SOURCE_CATEGORIES else &""
+		item_level_override = clampi(item_level_override_value, 0, ItemGenerationRequest.MAX_ITEM_LEVEL)
 		_resolved_decisions.clear()
 	return errors
 
 func resolve(
 	event: EnemyDefeatEvent,
-	force_success: bool = false,
-	drop_multiplier: float = 1.0,
+	force_success_override: bool = false,
+	drop_multiplier_override: float = NAN,
 ) -> Array[PersonalLootDecision]:
 	var decisions: Array[PersonalLootDecision] = []
 	if not _is_configured() or event == null or not event.validate().is_empty():
@@ -53,7 +65,9 @@ func resolve(
 		var replay_key := "%d|%s" % [event.defeat_sequence, context.run_player_id]
 		var resolved := _resolved_decisions.get(replay_key) as PersonalLootDecision
 		if resolved == null:
-			resolved = _resolve_context(context, event, force_success, drop_multiplier)
+			var effective_force := force_success or force_success_override
+			var effective_multiplier := drop_multiplier if is_nan(drop_multiplier_override) else drop_multiplier_override
+			resolved = _resolve_context(context, event, effective_force, effective_multiplier)
 			_resolved_decisions[replay_key] = resolved.copy()
 		decisions.append(resolved.copy())
 	return decisions
@@ -66,7 +80,9 @@ func _resolve_context(
 ) -> PersonalLootDecision:
 	var decision := PersonalLootDecision.new()
 	_copy_identity_and_event_facts(decision, context, event)
-	var base_basis_points := int(loot_tuning.drop_basis_points.get(event.source_category, 0))
+	var effective_source := source_category_override if not source_category_override.is_empty() else event.source_category
+	decision.source_category = effective_source
+	var base_basis_points := int(loot_tuning.drop_basis_points.get(effective_source, 0))
 	var normalized_multiplier := drop_multiplier if is_finite(drop_multiplier) else 0.0
 	normalized_multiplier = clampf(normalized_multiplier, 0.0, 10000.0)
 	decision.basis_points = clampi(roundi(float(base_basis_points) * normalized_multiplier), 0, 10000)
@@ -76,7 +92,10 @@ func _resolve_context(
 	)
 	decision.generation_seed = _generation_seed(event, context.run_player_id)
 	decision.generation_sequence = event.defeat_sequence
-	decision.item_level = EncounterItemLevelPolicy.resolve(event, &"normal", 0.0, loot_tuning)
+	var item_level_event := event
+	if effective_source != event.source_category:
+		item_level_event = EnemyDefeatEvent.create(event.run_seed, event.defeat_sequence, event.enemy_sequence, event.enemy_id, effective_source, event.world_position, event.encounter_seconds)
+	decision.item_level = item_level_override if item_level_override > 0 else EncounterItemLevelPolicy.resolve(item_level_event, &"normal", 0.0, loot_tuning)
 
 	decision.eligible = _resolve_eligibility(context, event, decision)
 	decision.success = decision.eligible and (

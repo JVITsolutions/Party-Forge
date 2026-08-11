@@ -95,6 +95,28 @@ func configure_interaction(
 	_modal_filter = modal_filter
 
 
+func clear_projection() -> void:
+	_disconnect_registry()
+	if _spatial_index != null:
+		_spatial_index.call(&"dispose")
+	_destroy_all_projections()
+	_release_shared_tooltip()
+	_registry = null
+	_identities.clear()
+	_presentation_projector = null
+	_camera = null
+	_chests_parent = null
+	_tooltip_layer = null
+	_last_camera_signature.clear()
+	_spatial_index = null
+	_targeting_service = null
+	_pickup_service = null
+	_context_registry = null
+	_selection_by_owner.clear()
+	_visibility_filter = Callable()
+	_modal_filter = Callable()
+
+
 func selection_for_owner(run_player_id: StringName) -> StringName:
 	return StringName(_selection_by_owner.get(run_player_id, &""))
 
@@ -553,25 +575,7 @@ func _disconnect_registry() -> void:
 
 
 func _exit_tree() -> void:
-	_disconnect_registry()
-	if _spatial_index != null:
-		_spatial_index.call(&"dispose")
-	_destroy_all_projections()
-	_release_shared_tooltip()
-	_registry = null
-	_identities.clear()
-	_presentation_projector = null
-	_camera = null
-	_chests_parent = null
-	_tooltip_layer = null
-	_last_camera_signature.clear()
-	_spatial_index = null
-	_targeting_service = null
-	_pickup_service = null
-	_context_registry = null
-	_selection_by_owner.clear()
-	_visibility_filter = Callable()
-	_modal_filter = Callable()
+	clear_projection()
 
 
 func _distance_to_camera(world_position: Vector3) -> float:

@@ -348,8 +348,8 @@ func _test_personal_loot_defeat_and_guardian_wiring(failures: Array[String]) -> 
     var player_registry := player_main.get("ground_item_registry") as GroundItemRegistry
     TestAssertions.truthy(player_roll != null and player_coordinator != null and player_registry != null, "Player Mode run owns the personal-loot service graph", failures)
     TestAssertions.truthy(
-        player_director.has_signal("enemy_defeated") and player_coordinator != null and player_director.is_connected("enemy_defeated", Callable(player_coordinator, "resolve_defeat")),
-        "main wires director defeats to the run coordinator",
+        player_director.has_signal("enemy_defeated") and player_coordinator != null and player_director.is_connected("enemy_defeated", Callable(player_main, "_on_enemy_defeated_for_personal_loot")),
+		"main wires director defeats through the diagnostic-aware coordinator boundary",
         failures,
     )
     if player_roll != null and player_coordinator != null and player_registry != null:
@@ -388,7 +388,7 @@ func _test_personal_loot_defeat_and_guardian_wiring(failures: Array[String]) -> 
         guardian.defeat()
         guardian.defeat()
     TestAssertions.equal(victories[0], 1, "Forge Guardian preserves the existing exactly-once victory behavior", failures)
-    TestAssertions.equal(developer_registry.all_records().size(), 1, "Guardian defeat adds no boss ground reward", failures)
+    TestAssertions.equal(developer_registry.all_records().size(), 0, "Guardian victory adds no boss reward and clears prior run-owned ground loot", failures)
     _cleanup_main(developer_main)
 
 func _test_main_menu_route_composition(failures: Array[String]) -> void:
