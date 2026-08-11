@@ -7,7 +7,11 @@ signal status_changed(status: String)
 const CHEST_SCENE := preload("res://scenes/world/ground_item_chest.tscn")
 const TOOLTIP_SCENE := preload("res://scenes/ui/storage/item_tooltip_panel.tscn")
 const COMPARISON_PROJECTOR := preload("res://scripts/ui/storage/equipment_comparison_projection_service.gd")
+const SPATIAL_INDEX := preload("res://scripts/loot/ground_item_spatial_index.gd")
+const TARGETING_SERVICE := preload("res://scripts/loot/ground_item_targeting_service.gd")
+const PICKUP_RESULT := preload("res://scripts/loot/ground_item_pickup_result.gd")
 const MAX_INACTIVE_CHESTS := 64
+const DEFAULT_TARGET_RADIUS := 12.0
 
 var _registry: GroundItemRegistry
 var _identities: Dictionary = {}
@@ -25,6 +29,14 @@ var _dirty_drop_ids: Dictionary = {}
 var _mouse_inside_by_drop: Dictionary = {}
 var _focus_inside_by_drop: Dictionary = {}
 var _last_camera_signature: Array = []
+var _spatial_index: RefCounted
+var _targeting_service: RefCounted
+var _pickup_service: RefCounted
+var _context_registry: RunContextRegistry
+var _selection_by_owner: Dictionary = {}
+var _target_radius := DEFAULT_TARGET_RADIUS
+var _visibility_filter := Callable()
+var _modal_filter := Callable()
 
 
 func configure(
@@ -36,9 +48,13 @@ func configure(
 	tooltip_layer: Node,
 ) -> void:
 	_disconnect_registry()
+	if _spatial_index != null:
+		_spatial_index.call(&"dispose")
 	_release_all()
 	_release_shared_tooltip()
 	_registry = registry
+	_spatial_index = SPATIAL_INDEX.new(_registry)
+	_targeting_service = TARGETING_SERVICE.new()
 	_identities = identities.duplicate(true)
 	_presentation_projector = presentation_projector
 	_camera = camera
@@ -56,6 +72,57 @@ func configure(
 	for record: GroundItemRecord in _registry.all_records():
 		_on_record_added(record)
 	status_changed.emit("GROUND_ITEM_WORLD_READY")
+
+
+func configure_interaction(
+	spatial_index: RefCounted,
+	targeting_service: RefCounted,
+	pickup_service: RefCounted,
+	context_registry: RunContextRegistry,
+	target_radius: float = DEFAULT_TARGET_RADIUS,
+	visibility_filter: Callable = Callable(),
+	modal_filter: Callable = Callable(),
+) -> void:
+	if _spatial_index != null and _spatial_index != spatial_index:
+		_spatial_index.call(&"dispose")
+	_spatial_index = spatial_index
+	_targeting_service = targeting_service
+	_pickup_service = pickup_service
+	_context_registry = context_registry
+	_target_radius = maxf(target_radius, 0.0)
+	_visibility_filter = visibility_filter
+	_modal_filter = modal_filter
+
+
+func selection_for_owner(run_player_id: StringName) -> StringName:
+	return StringName(_selection_by_owner.get(run_player_id, &""))
+
+
+func select_for_owner(run_player_id: StringName, drop_id: StringName) -> bool:
+	var record := _registry.record(drop_id) if _registry != null else null
+	if record == null or record.run_player_id != run_player_id:
+		return false
+	_apply_selection(run_player_id, drop_id)
+	return true
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	if _modal_input_suppressed() or event == null:
+		return
+	var direction := 0
+	if event.is_action_pressed(&"world_loot_previous"):
+		direction = -1
+	elif event.is_action_pressed(&"world_loot_next"):
+		direction = 1
+	var owner := _owner_for_event(event)
+	if owner.is_empty():
+		return
+	if direction != 0:
+		_cycle_for_owner(owner, direction)
+		_mark_input_handled()
+	elif event.is_action_pressed(&"ui_accept") and not selection_for_owner(owner).is_empty():
+		_collect_for_owner(selection_for_owner(owner), owner)
+		_mark_input_handled()
 
 
 func set_selected(drop_id: StringName, active: bool) -> void:
@@ -127,10 +194,13 @@ func _on_record_added(record: GroundItemRecord) -> void:
 func _on_record_removed(record: GroundItemRecord) -> void:
 	if record == null:
 		return
+	if selection_for_owner(record.run_player_id) == record.drop_id:
+		_selection_by_owner.erase(record.run_player_id)
 	_release_chest(record.drop_id)
 
 
 func _on_registry_cleared() -> void:
+	_selection_by_owner.clear()
 	_release_all()
 
 
@@ -307,6 +377,95 @@ func _on_chest_pickup_requested(drop_id: StringName, input_owner: StringName) ->
 	if chest == null or StringName(chest.get("run_player_id")) != input_owner:
 		return
 	pickup_requested.emit(drop_id, input_owner)
+	_collect_for_owner(drop_id, input_owner)
+
+
+func _cycle_for_owner(run_player_id: StringName, direction: int) -> void:
+	if _spatial_index == null or _targeting_service == null:
+		return
+	var leader_position := _leader_position_for(run_player_id)
+	if not bool(leader_position.get("valid", false)):
+		return
+	var next := StringName(_targeting_service.call(
+		&"cycle",
+		selection_for_owner(run_player_id), direction, _spatial_index, run_player_id,
+		leader_position.position as Vector3, _target_radius, Callable(self, "_record_visible"),
+	))
+	if not next.is_empty():
+		_apply_selection(run_player_id, next)
+
+
+func _apply_selection(run_player_id: StringName, drop_id: StringName) -> void:
+	var previous := selection_for_owner(run_player_id)
+	if previous == drop_id:
+		return
+	if not previous.is_empty():
+		set_selected(previous, false)
+	_selection_by_owner[run_player_id] = drop_id
+	set_selected(drop_id, true)
+
+
+func _collect_for_owner(drop_id: StringName, run_player_id: StringName) -> void:
+	if _pickup_service == null:
+		return
+	var result := _pickup_service.call(&"collect", drop_id, run_player_id) as RefCounted
+	if result == null:
+		return
+	match result.code:
+		PICKUP_RESULT.Code.MOVE_CLOSER:
+			status_changed.emit("Move closer")
+		PICKUP_RESULT.Code.INVENTORY_FULL:
+			status_changed.emit("Inventory full")
+		PICKUP_RESULT.Code.NOT_OWNER:
+			status_changed.emit("GROUND_ITEM_PICKUP_NOT_OWNER")
+		PICKUP_RESULT.Code.MISSING:
+			status_changed.emit("GROUND_ITEM_PICKUP_MISSING")
+		PICKUP_RESULT.Code.TRANSACTION_REJECTED:
+			status_changed.emit("GROUND_ITEM_PICKUP_TRANSACTION_REJECTED")
+		PICKUP_RESULT.Code.OK:
+			status_changed.emit("GROUND_ITEM_PICKUP_OK")
+
+
+func _owner_for_event(event: InputEvent) -> StringName:
+	if _context_registry == null:
+		return &""
+	var event_device := event.device
+	for context: PlayerRunContext in _context_registry.all_contexts():
+		var owned_device := _context_registry.device_for(context.run_player_id)
+		if event is InputEventJoypadButton or event is InputEventJoypadMotion:
+			if owned_device == event_device:
+				return context.run_player_id
+		elif owned_device == -1:
+			return context.run_player_id
+	return &""
+
+
+func _leader_position_for(run_player_id: StringName) -> Dictionary:
+	var context := _context_registry.context_for(run_player_id) if _context_registry != null else null
+	if context == null or context.party == null or context.party.members.is_empty():
+		return {"valid": false}
+	return context.member_position(context.party.members[0].member_id)
+
+
+func _record_visible(record: GroundItemRecord) -> bool:
+	if record == null:
+		return false
+	if _visibility_filter.is_valid() and not bool(_visibility_filter.call(record.copy())):
+		return false
+	var chest := _chest_by_drop.get(record.drop_id) as Node3D
+	if chest == null or not chest.visible:
+		return false
+	var anchor := chest.call(&"tooltip_anchor") as Control
+	return anchor != null and anchor.visible
+
+
+func _modal_input_suppressed() -> bool:
+	return _modal_filter.is_valid() and bool(_modal_filter.call())
+
+
+func _mark_input_handled() -> void:
+	if is_inside_tree():
+		get_viewport().set_input_as_handled()
 
 
 func _resolve_shared_tooltip() -> ItemTooltipPanel:
@@ -394,6 +553,8 @@ func _disconnect_registry() -> void:
 
 func _exit_tree() -> void:
 	_disconnect_registry()
+	if _spatial_index != null:
+		_spatial_index.call(&"dispose")
 	_destroy_all_projections()
 	_release_shared_tooltip()
 	_registry = null
@@ -403,6 +564,13 @@ func _exit_tree() -> void:
 	_chests_parent = null
 	_tooltip_layer = null
 	_last_camera_signature.clear()
+	_spatial_index = null
+	_targeting_service = null
+	_pickup_service = null
+	_context_registry = null
+	_selection_by_owner.clear()
+	_visibility_filter = Callable()
+	_modal_filter = Callable()
 
 
 func _distance_to_camera(world_position: Vector3) -> float:
