@@ -9,7 +9,130 @@ var active_preview: CharacterPresentation
 var active_member_id := 0
 var diagnostics := PackedStringArray()
 var _dragging := false
-var _active_signature := ""
+var _active_signature: PresentationSignature
+
+
+class EquipmentSignature extends RefCounted:
+	var definition: EquipmentVisualDefinition
+	var presentation_scene: PackedScene
+	var icon_master: Texture2D
+	var icon_runtime: Texture2D
+	var id: StringName
+	var slot_id: StringName
+	var geometry_key: StringName
+	var visual_channels: Array
+	var supported_slot_ids: Array
+	var socket_id: StringName
+	var body_preset_ids: Array
+	var combat_visible: bool
+	var item_colors: Dictionary
+	var wearer_accent_channel: StringName
+	var weapon_animation_family_id: StringName
+	var launch_socket_id: StringName
+	var readability_channels: Array
+	var readability_anchor_name: StringName
+	var action_origin_socket_name: StringName
+	var projectile_launch_socket_name: StringName
+	var attachment_role_id: StringName
+
+	func _init(value: EquipmentVisualDefinition) -> void:
+		definition = value
+		presentation_scene = value.presentation_scene
+		icon_master = value.icon_master
+		icon_runtime = value.icon_runtime
+		id = value.id
+		slot_id = value.slot_id
+		geometry_key = value.geometry_key
+		visual_channels = value.visual_channels.duplicate()
+		supported_slot_ids = value.supported_slot_ids.duplicate()
+		socket_id = value.socket_id
+		body_preset_ids = value.body_preset_ids.duplicate()
+		combat_visible = value.combat_visible
+		item_colors = value.item_colors.duplicate(true)
+		wearer_accent_channel = value.wearer_accent_channel
+		weapon_animation_family_id = value.weapon_animation_family_id
+		launch_socket_id = value.launch_socket_id
+		readability_channels = value.readability_channels.duplicate()
+		readability_anchor_name = value.readability_anchor_name
+		action_origin_socket_name = value.action_origin_socket_name
+		projectile_launch_socket_name = value.projectile_launch_socket_name
+		attachment_role_id = value.attachment_role_id
+
+	func matches(other: EquipmentSignature) -> bool:
+		return other != null \
+			and definition == other.definition \
+			and presentation_scene == other.presentation_scene \
+			and icon_master == other.icon_master \
+			and icon_runtime == other.icon_runtime \
+			and id == other.id \
+			and slot_id == other.slot_id \
+			and geometry_key == other.geometry_key \
+			and visual_channels == other.visual_channels \
+			and supported_slot_ids == other.supported_slot_ids \
+			and socket_id == other.socket_id \
+			and body_preset_ids == other.body_preset_ids \
+			and combat_visible == other.combat_visible \
+			and item_colors == other.item_colors \
+			and wearer_accent_channel == other.wearer_accent_channel \
+			and weapon_animation_family_id == other.weapon_animation_family_id \
+			and launch_socket_id == other.launch_socket_id \
+			and readability_channels == other.readability_channels \
+			and readability_anchor_name == other.readability_anchor_name \
+			and action_origin_socket_name == other.action_origin_socket_name \
+			and projectile_launch_socket_name == other.projectile_launch_socket_name \
+			and attachment_role_id == other.attachment_role_id
+
+
+class PresentationSignature extends RefCounted:
+	var member_id: int
+	var class_definition: ClassDefinition
+	var profile: CharacterVisualProfile
+	var presentation_scene: PackedScene
+	var body_id: StringName
+	var palette_id: StringName
+	var primary_color: Color
+	var idle_action_id: StringName
+	var required_animation_names: Array
+	var visuals_by_slot: Dictionary = {}
+
+	func _init(member: PartyMemberState, visuals: Dictionary) -> void:
+		member_id = member.member_id
+		class_definition = member.class_definition
+		profile = member.class_definition.visual_profile
+		presentation_scene = profile.presentation_scene
+		body_id = profile.default_body_preset
+		palette_id = profile.default_palette_id
+		primary_color = member.class_definition.color
+		idle_action_id = profile.idle_action_id
+		required_animation_names = profile.required_animation_names.duplicate()
+		for slot_id: StringName in EquipmentSlotCatalog.SHEET_SLOT_IDS:
+			if not visuals.has(slot_id):
+				continue
+			var definition := visuals.get(slot_id) as EquipmentVisualDefinition
+			visuals_by_slot[slot_id] = EquipmentSignature.new(definition) if definition != null else null
+
+	func matches(other: PresentationSignature) -> bool:
+		if other == null \
+			or member_id != other.member_id \
+			or class_definition != other.class_definition \
+			or profile != other.profile \
+			or presentation_scene != other.presentation_scene \
+			or body_id != other.body_id \
+			or palette_id != other.palette_id \
+			or primary_color != other.primary_color \
+			or idle_action_id != other.idle_action_id \
+			or required_animation_names != other.required_animation_names:
+			return false
+		for slot_id: StringName in EquipmentSlotCatalog.SHEET_SLOT_IDS:
+			if visuals_by_slot.has(slot_id) != other.visuals_by_slot.has(slot_id):
+				return false
+			if not visuals_by_slot.has(slot_id):
+				continue
+			var current := visuals_by_slot.get(slot_id) as EquipmentSignature
+			var candidate := other.visuals_by_slot.get(slot_id) as EquipmentSignature
+			if (current == null) != (candidate == null) or (current != null and not current.matches(candidate)):
+				return false
+		return true
 
 
 func _ready() -> void:
@@ -25,8 +148,8 @@ func show_member(member: PartyMemberState, equipment_rows: Array[Dictionary]) ->
 		clear()
 		return false
 	var visuals_by_slot := _visuals_by_slot(equipment_rows)
-	var requested_signature := _signature(member, visuals_by_slot)
-	if active_preview != null and is_instance_valid(active_preview) and requested_signature == _active_signature:
+	var requested_signature := PresentationSignature.new(member, visuals_by_slot)
+	if active_preview != null and is_instance_valid(active_preview) and requested_signature.matches(_active_signature):
 		return true
 	_clear_preview()
 	diagnostics.clear()
@@ -79,26 +202,12 @@ func _visuals_by_slot(rows: Array[Dictionary]) -> Dictionary:
 	return result
 
 
-func _signature(member: PartyMemberState, visuals_by_slot: Dictionary) -> String:
-	var profile := member.class_definition.visual_profile
-	var parts := PackedStringArray([
-		str(member.member_id), String(profile.id), String(profile.default_body_preset),
-		String(profile.default_palette_id), member.class_definition.color.to_html(true),
-	])
-	for slot_id: StringName in EquipmentSlotCatalog.SHEET_SLOT_IDS:
-		if not visuals_by_slot.has(slot_id):
-			continue
-		var definition := visuals_by_slot.get(slot_id) as EquipmentVisualDefinition
-		parts.append("%s=%s" % [slot_id, definition.id if definition != null else &"<missing>"])
-	return "|".join(parts)
-
-
 func _clear_preview() -> void:
 	if active_preview != null and is_instance_valid(active_preview):
 		active_preview.free()
 	active_preview = null
 	active_member_id = 0
-	_active_signature = ""
+	_active_signature = null
 
 
 func _preview_root() -> Node3D:

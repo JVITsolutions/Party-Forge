@@ -11,6 +11,9 @@ func run() -> Array[String]:
 	if not ResourceLoader.exists(PREVIEW_SCENE_PATH):
 		return failures
 	_test_member_identity_and_reusable_host(failures)
+	_test_exact_color_change_replaces_preview(failures)
+	_test_same_id_profile_scene_change_replaces_preview(failures)
+	_test_same_id_visual_geometry_change_replaces_preview(failures)
 	_test_preview_rotation_and_live_actor_isolation(failures)
 	_test_visual_resolution_keeps_disabled_items_and_falls_back_once(failures)
 	return failures
@@ -38,6 +41,60 @@ func _test_member_identity_and_reusable_host(failures: Array[String]) -> void:
 	TestAssertions.equal(host.get_child_count(), 1, "member switching reuses one preview host with one model", failures)
 	TestAssertions.truthy(replacement != null and replacement.get_instance_id() != first_instance_id, "member switching replaces the presentation copy", failures)
 	TestAssertions.truthy(not is_instance_id_valid(first_instance_id), "replaced preview model is freed immediately", failures)
+	preview.free()
+
+
+func _test_exact_color_change_replaces_preview(failures: Array[String]) -> void:
+	var preview := (load(PREVIEW_SCENE_PATH) as PackedScene).instantiate() as Control
+	(Engine.get_main_loop() as SceneTree).root.add_child(preview)
+	var first_color := Color(0.50001, 0.25, 0.75, 1.0)
+	var second_color := Color(0.50002, 0.25, 0.75, 1.0)
+	TestAssertions.equal(first_color.to_html(true), second_color.to_html(true), "exact-color fixture collides after HTML quantization", failures)
+	TestAssertions.truthy(first_color != second_color, "exact-color fixture retains distinct typed values", failures)
+	var member := _member(5, &"masculine", &"violet", first_color)
+	TestAssertions.truthy(bool(preview.call(&"show_member", member, [] as Array[Dictionary])), "first exact member color renders", failures)
+	var first_id := _active_preview_id(preview)
+	member.class_definition.color = second_color
+	TestAssertions.truthy(bool(preview.call(&"show_member", member, [] as Array[Dictionary])), "second exact member color renders", failures)
+	TestAssertions.truthy(_active_preview_id(preview) != first_id, "distinct exact colors replace the preview even when HTML values collide", failures)
+	preview.free()
+
+
+func _test_same_id_profile_scene_change_replaces_preview(failures: Array[String]) -> void:
+	var preview := (load(PREVIEW_SCENE_PATH) as PackedScene).instantiate() as Control
+	(Engine.get_main_loop() as SceneTree).root.add_child(preview)
+	var first := _member(6, &"masculine", &"red", Color("d94f4f"))
+	var second := _member(6, &"masculine", &"red", Color("d94f4f"))
+	second.class_definition.visual_profile.presentation_scene = _packed_fake_model(failures)
+	TestAssertions.equal(first.class_definition.visual_profile.id, second.class_definition.visual_profile.id, "profile-scene fixture preserves the same profile ID", failures)
+	TestAssertions.truthy(first.class_definition.visual_profile != second.class_definition.visual_profile, "profile-scene fixture uses distinct profile resources", failures)
+	TestAssertions.truthy(first.class_definition.visual_profile.presentation_scene != second.class_definition.visual_profile.presentation_scene, "profile-scene fixture changes the presentation scene resource", failures)
+	TestAssertions.truthy(bool(preview.call(&"show_member", first, [] as Array[Dictionary])), "first same-ID profile renders", failures)
+	var first_id := _active_preview_id(preview)
+	TestAssertions.truthy(bool(preview.call(&"show_member", second, [] as Array[Dictionary])), "second same-ID profile renders", failures)
+	TestAssertions.truthy(_active_preview_id(preview) != first_id, "same-ID profile with a different presentation scene replaces the preview", failures)
+	preview.free()
+
+
+func _test_same_id_visual_geometry_change_replaces_preview(failures: Array[String]) -> void:
+	var preview := (load(PREVIEW_SCENE_PATH) as PackedScene).instantiate() as Control
+	(Engine.get_main_loop() as SceneTree).root.add_child(preview)
+	var member := _member(7, &"masculine", &"red", Color("d94f4f"))
+	var first_visual := _visual(&"same_visual", &"helmet")
+	var second_visual := _visual(&"same_visual", &"helmet")
+	second_visual.geometry_key = &"changed_geometry"
+	var first_base := EquipmentBaseDefinition.new()
+	first_base.id = &"same_base"
+	first_base.presentation = first_visual
+	var second_base := EquipmentBaseDefinition.new()
+	second_base.id = &"same_base"
+	second_base.presentation = second_visual
+	var first_rows: Array[Dictionary] = [{"slot_id": &"helmet", "item_id": "same-item", "base_definition": first_base}]
+	var second_rows: Array[Dictionary] = [{"slot_id": &"helmet", "item_id": "same-item", "base_definition": second_base}]
+	TestAssertions.truthy(bool(preview.call(&"show_member", member, first_rows)), "first same-ID visual renders", failures)
+	var first_id := _active_preview_id(preview)
+	TestAssertions.truthy(bool(preview.call(&"show_member", member, second_rows)), "second same-ID visual renders", failures)
+	TestAssertions.truthy(_active_preview_id(preview) != first_id, "same-ID visual with changed geometry replaces the preview", failures)
 	preview.free()
 
 
@@ -126,3 +183,16 @@ func _visual(visual_id: StringName, slot_id: StringName) -> EquipmentVisualDefin
 	definition.geometry_key = visual_id
 	definition.visual_channels = [&"geometry"]
 	return definition
+
+
+func _packed_fake_model(failures: Array[String]) -> PackedScene:
+	var scene := PackedScene.new()
+	var model := FakeCharacterModel.new()
+	TestAssertions.equal(scene.pack(model), OK, "distinct profile presentation scene packs", failures)
+	model.free()
+	return scene
+
+
+func _active_preview_id(preview: Control) -> int:
+	var active := preview.get("active_preview") as CharacterPresentation
+	return active.get_instance_id() if active != null else 0
