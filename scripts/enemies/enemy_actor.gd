@@ -24,6 +24,9 @@ var combatant_id: StringName
 var combat_rng: CombatRng
 var damage_types: DamageTypeCatalog
 var recovery_controller: RecoveryController
+var visual_surface_materials: Array[StandardMaterial3D] = []
+var visual_surface_colors: Array[Color] = []
+var visual_surface_uses_vertex_color: Array[bool] = []
 
 func _ready() -> void:
     add_to_group("hostile_actors")
@@ -45,6 +48,7 @@ func configure(enemy_definition: EnemyDefinition) -> void:
     defeat_handled = false
     damage_flash_remaining = 0.0
     last_visual_health = health.current_health
+    _prepare_visual_materials()
     base_visual_color = _current_visual_color()
     _configure_recovery()
 
@@ -157,7 +161,7 @@ func _process(delta: float) -> void:
         return
     damage_flash_remaining = maxf(0.0, damage_flash_remaining - maxf(delta, 0.0))
     if damage_flash_remaining <= 0.0:
-        _set_visual_color(base_visual_color)
+        _restore_visual_colors()
 
 func _configure_recovery() -> void:
     if recovery_controller == null:
@@ -176,23 +180,52 @@ func _incoming_damage_multiplier(_packet: DamagePacket) -> float:
     return 1.0
 
 func _current_visual_color() -> Color:
-    var mesh := get_node_or_null("MeshInstance3D") as MeshInstance3D
-    if mesh == null:
+    if not visual_surface_materials.is_empty():
+        return visual_surface_materials[0].albedo_color
+    var mesh := _visual_mesh()
+    if mesh == null or mesh.mesh == null or mesh.mesh.get_surface_count() == 0:
         return base_visual_color
-    var material := mesh.material_override as StandardMaterial3D
-    if material == null and mesh.mesh != null:
-        material = mesh.mesh.material as StandardMaterial3D
+    var material := mesh.get_active_material(0) as StandardMaterial3D
     return material.albedo_color if material != null else base_visual_color
 
 func _set_visual_color(color: Color) -> void:
-    var mesh := get_node_or_null("MeshInstance3D") as MeshInstance3D
-    if mesh == null:
+    if visual_surface_materials.is_empty():
+        _prepare_visual_materials()
+    if visual_surface_materials.is_empty():
         return
-    var material := mesh.material_override as StandardMaterial3D
-    if material == null and mesh.mesh != null:
-        material = mesh.mesh.material as StandardMaterial3D
-    if material == null:
+    for surface_index: int in range(visual_surface_materials.size()):
+        visual_surface_materials[surface_index].albedo_color = color
+        visual_surface_materials[surface_index].vertex_color_use_as_albedo = false
+
+func _restore_visual_colors() -> void:
+    for surface_index: int in range(visual_surface_materials.size()):
+        visual_surface_materials[surface_index].albedo_color = visual_surface_colors[surface_index]
+        visual_surface_materials[surface_index].vertex_color_use_as_albedo = visual_surface_uses_vertex_color[surface_index]
+
+func _visual_mesh() -> MeshInstance3D:
+    var direct := get_node_or_null("MeshInstance3D") as MeshInstance3D
+    if direct != null:
+        return direct
+    return find_child("MeshInstance3D", true, false) as MeshInstance3D
+
+func _prepare_visual_materials() -> void:
+    visual_surface_materials.clear()
+    visual_surface_colors.clear()
+    visual_surface_uses_vertex_color.clear()
+    var mesh := _visual_mesh()
+    if mesh == null or mesh.mesh == null:
         return
-    material = material.duplicate() as StandardMaterial3D
-    material.albedo_color = color
-    mesh.material_override = material
+    for surface_index: int in range(mesh.mesh.get_surface_count()):
+        var source := mesh.get_surface_override_material(surface_index) as StandardMaterial3D
+        if source == null:
+            source = mesh.mesh.surface_get_material(surface_index) as StandardMaterial3D
+        if source == null:
+            continue
+        var instance_material := source.duplicate() as StandardMaterial3D
+        var surface_color_data: Variant = mesh.mesh.surface_get_arrays(surface_index)[Mesh.ARRAY_COLOR]
+        if surface_color_data is PackedColorArray and not (surface_color_data as PackedColorArray).is_empty():
+            instance_material.vertex_color_use_as_albedo = true
+        mesh.set_surface_override_material(surface_index, instance_material)
+        visual_surface_materials.append(instance_material)
+        visual_surface_colors.append(instance_material.albedo_color)
+        visual_surface_uses_vertex_color.append(instance_material.vertex_color_use_as_albedo)

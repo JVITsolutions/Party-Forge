@@ -1,19 +1,14 @@
-[gd_scene load_steps=5 format=3]
+[gd_scene load_steps=7 format=3]
 
 [ext_resource type="Script" path="res://scripts/enemies/swarmer.gd" id="1_swarmer"]
 [ext_resource type="Resource" path="res://data/enemies/swarmer.tres" id="2_definition"]
 [ext_resource type="Script" path="res://scripts/combat/health_component.gd" id="3_health"]
+[ext_resource type="PackedScene" path="res://assets/models/enemies/swarmer_rat.glb" id="4_rat"]
+[ext_resource type="Script" path="res://scripts/enemies/swarmer_rat_presentation.gd" id="5_presentation"]
 
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_swarmer"]
-albedo_color = Color(0.035, 0.025, 0.02, 1)
-
-[sub_resource type="SphereMesh" id="SphereMesh_swarmer"]
-material = SubResource("StandardMaterial3D_swarmer")
-radius = 0.42
-height = 0.84
-
-[sub_resource type="SphereShape3D" id="SphereShape3D_swarmer"]
-radius = 0.42
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_swarmer"]
+radius = 0.23
+height = 0.85
 
 [node name="Swarmer" type="CharacterBody3D" groups=["hostile_actors"]]
 collision_layer = 4
@@ -24,8 +19,13 @@ definition = ExtResource("2_definition")
 [node name="HealthComponent" type="Node" parent="."]
 script = ExtResource("3_health")
 
-[node name="MeshInstance3D" type="MeshInstance3D" parent="."]
-mesh = SubResource("SphereMesh_swarmer")
+[node name="RatVisual" parent="." instance=ExtResource("4_rat")]
+
+[node name="RatPresentation" type="Node" parent="."]
+script = ExtResource("5_presentation")
+animation_player_path = NodePath("../RatVisual/AnimationPlayer")
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="."]
-shape = SubResource("SphereShape3D_swarmer")
+position = Vector3(0, 0.28, 0.03)
+rotation = Vector3(1.5707963, 0, 0)
+shape = SubResource("CapsuleShape3D_swarmer")

@@ -1093,17 +1093,17 @@ func _test_visual_language(failures: Array[String]) -> void:
     var orb := (load("res://scenes/progression/experience_orb.tscn") as PackedScene).instantiate() as Node3D
     var heal := (load("res://scenes/combat/heal_effect.tscn") as PackedScene).instantiate() as Node3D
     var danger := (load("res://scenes/effects/danger_ring.tscn") as PackedScene).instantiate() as Node3D
+    swarmer.call("configure", swarmer.get("definition"))
     var swarmer_color := _mesh_color(swarmer)
     var spitter_color := _mesh_color(spitter)
     var orb_color := _mesh_color(orb)
     var heal_color := _mesh_color(heal)
     var danger_color := _mesh_color(danger)
-    TestAssertions.truthy(swarmer_color.get_luminance() < 0.18, "Swarmer uses black enemy language", failures)
+    TestAssertions.truthy(swarmer_color.get_luminance() < 0.35, "Swarmer uses dark warm enemy language", failures)
     TestAssertions.truthy(spitter_color.r > spitter_color.g * 1.5 and spitter_color.g > spitter_color.b, "Spitter uses orange enemy language", failures)
     TestAssertions.truthy(orb_color.b > 0.7 and orb_color.g > 0.7, "experience orb is cyan", failures)
     TestAssertions.truthy(heal_color.g > heal_color.r * 2.0, "healing burst is green", failures)
     TestAssertions.truthy(danger_color.r > danger_color.g * 4.0, "danger ring is red", failures)
-    swarmer.call("configure", swarmer.get("definition"))
     (swarmer.get_node("HealthComponent") as HealthComponent).apply_damage(1.0)
     TestAssertions.equal(_mesh_color(swarmer), Color.WHITE, "enemy damage flash is white", failures)
     var health_bar := (load("res://scenes/ui/health_bar_3d.tscn") as PackedScene).instantiate() as Node3D
@@ -1124,10 +1124,19 @@ func _test_catalog_error_format(failures: Array[String]) -> void:
     TestAssertions.equal(main_script.call("format_resource_error", "res://data/test.tres", "broken"), "PARTY_FORGE_RESOURCE_ERROR path=res://data/test.tres reason=broken", "catalog error is grep-friendly", failures)
 
 func _mesh_color(node: Node3D) -> Color:
-    var mesh_instance := node.get_node("MeshInstance3D") as MeshInstance3D
-    var material := mesh_instance.material_override as StandardMaterial3D
-    if material == null and mesh_instance.mesh != null:
-        material = mesh_instance.mesh.material as StandardMaterial3D
+    var mesh_instance := node.get_node_or_null("MeshInstance3D") as MeshInstance3D
+    if mesh_instance == null:
+        mesh_instance = node.find_child("MeshInstance3D", true, false) as MeshInstance3D
+    if mesh_instance == null:
+        return Color.TRANSPARENT
+    var material := mesh_instance.get_active_material(0) as StandardMaterial3D
+    if material != null and material.vertex_color_use_as_albedo and mesh_instance.mesh != null:
+        var colors := mesh_instance.mesh.surface_get_arrays(0)[Mesh.ARRAY_COLOR] as PackedColorArray
+        if not colors.is_empty():
+            var average := Color(0.0, 0.0, 0.0, 0.0)
+            for vertex_color: Color in colors:
+                average += vertex_color
+            return (average / float(colors.size())) * material.albedo_color
     return material.albedo_color if material != null else Color.TRANSPARENT
 
 func _presentation_meshes_are_grayscale(actor: PartyActor) -> bool:
