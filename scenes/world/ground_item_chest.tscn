@@ -1,0 +1,57 @@
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://scripts/world/ground_item_chest.gd" id="1_chest"]
+[ext_resource type="Script" path="res://scripts/world/player_owner_marker_3d.gd" id="2_marker"]
+
+[sub_resource type="BoxMesh" id="BoxMesh_chest"]
+size = Vector3(0.9, 0.55, 0.65)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_target"]
+size = Vector3(1.1, 0.8, 0.9)
+
+[node name="GroundItemChest" type="Node3D"]
+script = ExtResource("1_chest")
+
+[node name="MeshTarget" type="MeshInstance3D" parent="."]
+position = Vector3(0, 0.3, 0)
+mesh = SubResource("BoxMesh_chest")
+
+[node name="PickupTarget" type="Area3D" parent="."]
+collision_layer = 0
+collision_mask = 0
+input_ray_pickable = true
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="PickupTarget"]
+position = Vector3(0, 0.35, 0)
+shape = SubResource("BoxShape3D_target")
+
+[node name="RarityLight" type="OmniLight3D" parent="."]
+position = Vector3(0, 0.2, 0)
+omni_range = 2.6
+shadow_enabled = false
+
+[node name="OwnerMarker" type="Node3D" parent="."]
+position = Vector3(0, 1.05, 0)
+script = ExtResource("2_marker")
+
+[node name="Pennant" type="Label3D" parent="OwnerMarker"]
+position = Vector3(0, 0.28, 0)
+modulate = Color(1, 1, 1, 1)
+outline_modulate = Color(0.04, 0.05, 0.07, 1)
+text = "▼"
+font_size = 72
+outline_size = 14
+billboard = 1
+no_depth_test = true
+fixed_size = true
+
+[node name="OwnerLabel" type="Label3D" parent="OwnerMarker"]
+position = Vector3(0, 0.68, 0)
+modulate = Color(1, 1, 1, 1)
+outline_modulate = Color(0.02, 0.025, 0.035, 1)
+text = "P1"
+font_size = 42
+outline_size = 12
+billboard = 1
+no_depth_test = true
+fixed_size = true
