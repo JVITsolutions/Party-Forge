@@ -14,7 +14,7 @@
 - Work in the isolated Party Forge worktree `F:\Projects(root)\Game dev\Projects\party-forge\.worktrees\swarmer-rat-asset`, created at execution time; do not mutate unrelated user changes.
 - Use Blender 5.2.0 LTS and Blender MCP for all live authoring and viewport review.
 - Reserve `assets/models/enemies/source/swarmer_rat.blend` for editable source and `assets/models/enemies/swarmer_rat.glb` for the game exchange asset.
-- Keep overall nose-to-tail length at `0.91 m` and neutral ear-tip height at `0.61 m`, each within `0.02 m`.
+- Keep overall head-to-tail length at `1.22 m` and neutral ear-tip height at `0.61 m`, each within `0.02 m`.
 - Keep the exported render mesh at or below `3,000` triangles after triangulation; target `2,400-2,700`.
 - Keep feet on Blender `Z = 0`; Godot import must ground the rat at local `Y = 0`.
 - Use the approved Wedge Runner silhouette, warm grey-brown palette, broad dark dorsal stripe, clean chunky fur tufts, amber eyes, incisors, and one nicked ear.
@@ -123,6 +123,7 @@ import bmesh
 import json
 import math
 import sys
+from mathutils import Vector
 
 MESH_NAME = "MeshInstance3D"
 RIG_NAME = "SwarmerRatRig"
@@ -130,7 +131,7 @@ EXPORT_COLLECTION = "PF_RAT_EXPORT"
 REVIEW_COLLECTION = "PF_RAT_REVIEW"
 EXPECTED_ACTIONS = {"idle_sniff", "scurry", "pounce_bite", "hit_react", "death_curl"}
 MAX_TRIANGLES = 3000
-TARGET_LENGTH = 0.91
+TARGET_LENGTH = 1.22
 TARGET_HEIGHT = 0.61
 TOLERANCE = 0.02
 
@@ -152,7 +153,7 @@ if mesh_object is not None and mesh_object.type == 'MESH':
     evaluated_mesh = evaluated.to_mesh()
     evaluated_mesh.calc_loop_triangles()
     triangles = len(evaluated_mesh.loop_triangles)
-    corners = [evaluated.matrix_world @ corner for corner in evaluated.bound_box]
+    corners = [evaluated.matrix_world @ Vector(corner) for corner in evaluated.bound_box]
     xs = [corner.x for corner in corners]
     ys = [corner.y for corner in corners]
     zs = [corner.z for corner in corners]
@@ -224,6 +225,7 @@ git commit -m "test: define swarmer rat asset contract"
 **Files:**
 
 - Modify: `assets/models/enemies/source/swarmer_rat.blend`
+- Modify: `tools/blender/validate_swarmer_rat.py`
 - Create: `assets/models/enemies/swarmer_rat_palette.png`
 
 **Interfaces:**
@@ -231,9 +233,26 @@ git commit -m "test: define swarmer rat asset contract"
 - Consumes: the validator constants and approved Wedge Runner design.
 - Produces: one grounded, manifold `MeshInstance3D` candidate and its two-surface material contract.
 
-- [ ] **Step 1: Build a connected body/head blockout at exact scale**
+- [ ] **Step 1: Change the length contract and prove the current candidate fails**
 
-Use Blender MCP in small `bpy` steps. Build the main form along Blender `-Y` forward from elliptical rings with 12 vertices per ring. Use this exact ring table `(y, center_z, radius_x, radius_z)`:
+In `tools/blender/validate_swarmer_rat.py`, change only the approved length constant:
+
+```python
+TARGET_LENGTH = 1.22
+```
+
+Run:
+
+```powershell
+$blender = 'C:\Program Files\Blender Foundation\Blender 5.2\blender.exe'
+& $blender --factory-startup --background 'assets/models/enemies/source/swarmer_rat.blend' --python 'tools/blender/validate_swarmer_rat.py'
+```
+
+Expected: non-zero exit with `length out of tolerance` for the existing `0.91 m` candidate, plus the five expected missing actions. A pass before rebuilding means the length contract is defective.
+
+- [ ] **Step 2: Rebuild the connected body/head blockout at the approved four-foot scale**
+
+Use Blender MCP in small `bpy` steps. Preserve the approved head and shoulder dimensions while adding the extra foot through the rib cage and abdomen. Build the main form along Blender `-Y` forward from elliptical rings with 12 vertices per ring. Use this exact ring table `(y, center_z, radius_x, radius_z)`:
 
 ```python
 BODY_RINGS = [
@@ -242,31 +261,34 @@ BODY_RINGS = [
     (-0.28, 0.27, 0.115, 0.125),  # skull
     (-0.20, 0.31, 0.145, 0.155),  # neck
     (-0.10, 0.35, 0.185, 0.205),  # raised shoulders
-    ( 0.02, 0.34, 0.180, 0.210),  # rib cage
-    ( 0.14, 0.30, 0.150, 0.175),  # abdomen
-    ( 0.24, 0.27, 0.105, 0.125),  # hips
-    ( 0.26, 0.27, 0.075, 0.085),  # tail base
+    ( 0.08, 0.34, 0.180, 0.210),  # lengthened rib cage
+    ( 0.28, 0.30, 0.150, 0.175),  # lengthened abdomen
+    ( 0.43, 0.28, 0.115, 0.135),  # hips
+    ( 0.53, 0.27, 0.078, 0.088),  # tail base
 ]
 ```
 
 Bridge adjacent rings, cap the nose only, and leave the tail-base ring open for the tail. Bias top vertices on the shoulder and rib-cage rings upward enough to form an arched wedge without exceeding the final `0.61 m` ear-tip height.
 
-- [ ] **Step 2: Add limbs, jaw, ears, tail, and chunky tufts**
+- [ ] **Step 3: Rebuild distinct hind legs, separated paws, tail root, and chunky tufts**
 
-Use six- or eight-sided tapered tubes for limbs and tail. Boolean-union each upper limb deeply into the torso, remove hidden internal faces, and preserve visible elbow/knee bends. Use these neutral contact points:
+Use six- or eight-sided tapered tubes for limbs and tail. Boolean-union each upper limb deeply into the torso and remove hidden internal faces. Keep the forelegs comparatively straight and slim. Build each rear leg as a folded Z silhouette: a large haunch, thigh angled forward to the knee, shin angled back to the hock, and a long rear paw extending forward. Use these neutral contact points:
 
 ```text
-front paws: x = +/-0.15, y = -0.19, z = 0.00
+front paws: x = +/-0.15, center y = -0.205, min z = 0.00
 front elbows: x = +/-0.16, y = -0.11, z = 0.17
-rear paws: x = +/-0.14, y = 0.21, z = 0.00
-rear knees: x = +/-0.18, y = 0.13, z = 0.18
-tail end: x = 0.025, y = 0.53, z = 0.15
+rear hip/haunch centers: x = +/-0.14, y = 0.36, z = 0.30
+rear knees: x = +/-0.20, y = 0.24, z = 0.17
+rear hocks: x = +/-0.15, y = 0.45, z = 0.055
+rear paws: x = +/-0.15, span y = 0.31 through 0.47, min z = 0.00
+tail fur-to-skin transition: x = 0.015, y = 0.61, z = 0.235
+tail end: x = 0.025, y = 0.80, z = 0.16
 ear tips: left/right x near +/-0.10, y near -0.24, z = 0.61
 ```
 
-Make one ear notch part of the silhouette mesh. Keep incisors, eyes, and the movable lower jaw as closed islands inside the same mesh object. Add three to five large cheek/shoulder/spine tufts, then remove any coplanar or unseen overlap. Do not add whisker geometry.
+Make one ear notch part of the silhouette mesh. Keep incisors, eyes, and the movable lower jaw as closed islands inside the same mesh object. Fuse every claw into its paw and sink each lower-leg endpoint into the paw volume. Add a short furred ankle cuff and a narrow dark crease above each dusty-pink paw so the skin color cannot visually merge into the leg. Build the tail as a thick furred root continuing the dorsal stripe through `y = 0.61`, then a smoothly tapered pink section with one restrained upward hook. Add three to five large cheek/shoulder/spine tufts, then remove any coplanar or unseen overlap. Do not add whisker geometry.
 
-- [ ] **Step 3: Create the two-surface palette**
+- [ ] **Step 4: Preserve the two-surface palette with explicit paw and tail transitions**
 
 Create one opaque primary material named `PF_Rat_Primary` and one emissive eye material named `PF_Rat_Eyes`. The primary surface must carry all non-eye colors through one `64 x 64` nearest-filtered palette texture or verified vertex colors:
 
@@ -279,9 +301,9 @@ teeth/claws    #D8CAA8
 eyes           #D89A2B, restrained emission strength 0.6
 ```
 
-Set high roughness, low metallic, full opacity, and no normal map. Paint/map the dorsal stripe broadly from forehead through shoulder ridge to tail base. Save the palette to `assets/models/enemies/swarmer_rat_palette.png` if used.
+Set high roughness, low metallic, full opacity, and no normal map. Paint/map the dorsal stripe broadly from forehead through shoulder ridge and across the furred tail root. Restrict dusty pink on the feet to the paw geometry below each ankle cuff. Save the palette to `assets/models/enemies/swarmer_rat_palette.png` if used.
 
-- [ ] **Step 4: Normalize, triangulate for measurement, and run geometry checks**
+- [ ] **Step 5: Normalize, triangulate for measurement, and run geometry checks**
 
 Join all render islands into `MeshInstance3D`, apply transforms, recalculate outward normals, merge accidental doubles, and use weighted flat/smooth shading that preserves faceted planes. Add a non-destructive Triangulate modifier last. Temporarily create the armature object and modifier so the validator can measure the candidate; create placeholder normalized weights to `root` only, without calling the mesh rigged.
 
@@ -289,21 +311,21 @@ Run:
 
 ```powershell
 $blender = 'C:\Program Files\Blender Foundation\Blender 5.2\blender.exe'
-& $blender --background 'assets/models/enemies/source/swarmer_rat.blend' --python 'tools/blender/validate_swarmer_rat.py'
+& $blender --factory-startup --background 'assets/models/enemies/source/swarmer_rat.blend' --python 'tools/blender/validate_swarmer_rat.py'
 ```
 
 Expected at this stage: geometry, material, scale, grounding, and triangle checks pass; the only failures are the five missing actions until Task 3.
 
-- [ ] **Step 5: Perform the first eight-angle silhouette checkpoint**
+- [ ] **Step 6: Perform the revised eight-angle silhouette checkpoint**
 
-Use the scalable turntable only in `PF_RAT_REVIEW`. Capture front, front-right, right, rear-right, rear, rear-left, left, front-left, and a camera-matched elevated view. Inspect shoulder-to-neck, grip-like limb connections, belly-to-floor clearance, rump-to-tail connection, jaw, ear notch, and dorsal stripe. Show the contact sheet to the user and pause for approval before rigging.
+Use the scalable turntable only in `PF_RAT_REVIEW`. Capture front, front-right, right, rear-right, rear, rear-left, left, front-left, and a camera-matched elevated view. Inspect shoulder-to-neck, grip-like limb connections, belly-to-floor clearance, folded rear-leg readability, ankle-cuff/paw separation, rump-to-tail connection, fur-to-skin tail transition, jaw, ear notch, and dorsal stripe. Include dedicated close-ups of both rear legs and the tail root. Show the contact sheet to the user and pause for approval before rigging.
 
 Expected: the user either approves the mesh/colors or gives concrete revision notes. Apply revisions and repeat all nine views until approved.
 
-- [ ] **Step 6: Save and commit the approved static candidate**
+- [ ] **Step 7: Save and commit the approved static candidate**
 
 ```powershell
-git add assets/models/enemies/source/swarmer_rat.blend assets/models/enemies/swarmer_rat_palette.png
+git add assets/models/enemies/source/swarmer_rat.blend assets/models/enemies/swarmer_rat_palette.png tools/blender/validate_swarmer_rat.py
 git commit -m "art: model approved swarmer rat silhouette"
 ```
 
@@ -726,7 +748,7 @@ Expected: a clean implementation worktree after the final commit. Use `superpowe
 ## Final acceptance checklist
 
 - Blender source remains independently editable and the prior building-kit file is preserved.
-- Rat bounds are `0.91 m` long and `0.61 m` tall within `0.02 m`.
+- Rat bounds are `1.22 m` long and `0.61 m` tall within `0.02 m`.
 - Exported mesh is at or below `3,000` triangles and has at most two rendered surfaces.
 - Mesh is grounded, manifold, outward-facing, clean of duplicate/degenerate/coplanar geometry, and fully weighted.
 - Wedge Runner silhouette, broad dorsal stripe, palette, fur tufts, amber eyes, incisors, and nicked ear match the approved design.
