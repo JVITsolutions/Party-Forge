@@ -107,7 +107,7 @@ func _test_modal_contract(packed: PackedScene, failures: Array[String]) -> void:
 	TestAssertions.truthy(sandbox.visible, "sandbox open makes only its layer visible", failures)
 	_test_projected_comparison_fixture(sandbox, stash_grid, tooltip, failures)
 	var initial_projection: Dictionary = sandbox.call(&"projection")
-	TestAssertions.equal(int(initial_projection.get("schema_version", 0)), 1, "sandbox exposes a defensive state projection", failures)
+	TestAssertions.equal(int(initial_projection.get("schema_version", 0)), 2, "sandbox exposes a defensive schema-two state projection", failures)
 	initial_projection["owner_id"] = "mutated-ui-copy"
 	TestAssertions.equal(String((sandbox.call(&"projection") as Dictionary).get("owner_id", "")), "developer-item-sandbox", "UI projection cannot mutate domain state", failures)
 	var inventory_zero := inventory_grid.get_child(0) as Button

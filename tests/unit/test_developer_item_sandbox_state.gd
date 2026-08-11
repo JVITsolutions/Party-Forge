@@ -3,6 +3,7 @@ extends RefCounted
 const STATE_PATH := "res://scripts/dev/developer_item_sandbox_state.gd"
 const STORE_PATH := "res://scripts/dev/developer_item_sandbox_store.gd"
 const FIXTURE_ISSUER_PATH := "res://scripts/dev/developer_item_fixture_issuer.gd"
+const LOOT_ISSUER_PATH := "res://scripts/dev/developer_loot_lab_item_issuer.gd"
 const DOCUMENT_PATH := "user://developer_item_sandbox/sandbox.json"
 const SANDBOX_ROOT := "user://developer_item_sandbox"
 const OWNER_ID := "developer-item-sandbox"
@@ -15,7 +16,7 @@ var _store_script: Script
 
 func run() -> Array[String]:
 	var failures: Array[String] = []
-	var required_paths: Array[String] = [FIXTURE_ISSUER_PATH, STATE_PATH, STORE_PATH]
+	var required_paths: Array[String] = [FIXTURE_ISSUER_PATH, LOOT_ISSUER_PATH, STATE_PATH, STORE_PATH]
 	for path: String in required_paths:
 		TestAssertions.truthy(ResourceLoader.exists(path), "Task 8 resource exists: %s" % path, failures)
 	if not failures.is_empty():
@@ -29,6 +30,8 @@ func run() -> Array[String]:
 
 	_cleanup_sandbox_files()
 	_assert_deterministic_fixture(failures)
+	_assert_schema_one_migrates_to_schema_two(failures)
+	_assert_schema_two_generated_journal_replays(failures)
 	_assert_explicit_affixes_survive_reload(failures)
 	_assert_movement_replay_collision_and_reset(failures)
 	_assert_public_slot_transactions_and_integrity(failures)
@@ -38,6 +41,85 @@ func run() -> Array[String]:
 	_assert_atomic_save_failure_and_profile_isolation(failures)
 	_cleanup_sandbox_files()
 	return failures
+
+func _assert_schema_one_migrates_to_schema_two(failures: Array[String]) -> void:
+	_cleanup_sandbox_files()
+	var seed: Variant = _state_script.new()
+	TestAssertions.equal(seed.reset(), "", "migration fixture reset succeeds", failures)
+	var schema_one: Dictionary = seed.to_dictionary()
+	var original_ownership: Dictionary = schema_one["ownership_state"].duplicate(true)
+	schema_one["schema_version"] = 1
+	schema_one["issuance_metadata"]["schema_version"] = 1
+	schema_one["issuance_metadata"].erase("next_generated_item_sequence")
+	_write_text(DOCUMENT_PATH, JSON.stringify(schema_one, "\t", false))
+
+	var migrated: Variant = _state_script.new()
+	TestAssertions.equal(migrated.reload(), "", "schema-one sandbox reload migrates atomically", failures)
+	var migrated_document: Dictionary = migrated.to_dictionary()
+	TestAssertions.equal(int(migrated_document.get("schema_version", -1)), 2, "migration publishes schema two", failures)
+	TestAssertions.equal(int(migrated_document["issuance_metadata"].get("next_generated_item_sequence", -1)), 0, "schema one migrates generated sequence zero", failures)
+	TestAssertions.equal(migrated.registry().size(), 99, "migration preserves exact fixture count", failures)
+	TestAssertions.equal(migrated_document["ownership_state"], original_ownership, "migration preserves exact fixture items and placements", failures)
+	var persisted := JSON.parse_string(FileAccess.get_file_as_string(DOCUMENT_PATH)) as Dictionary
+	TestAssertions.equal(int(persisted.get("schema_version", -1)), 2, "migration promotes schema two before publishing state", failures)
+
+func _assert_schema_two_generated_journal_replays(failures: Array[String]) -> void:
+	_cleanup_sandbox_files()
+	var seed: Variant = _state_script.new()
+	TestAssertions.equal(seed.reset(), "", "schema-two generated replay fixture resets", failures)
+	var base_document: Dictionary = seed.to_dictionary()
+	var decoded: Dictionary = (_store_script.new() as DeveloperItemSandboxStore).decode_document(base_document)
+	var candidate := decoded["state"] as ItemOwnershipState
+	var journal := ItemTransactionJournal.new()
+	var preview := _generated_preview(failures)
+	if preview == null:
+		return
+	var issued := DeveloperLootLabItemIssuer.reissue(preview, 0, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)
+	TestAssertions.truthy(issued.ok(), "schema-two replay fixture reissues preview", failures)
+	if not issued.ok():
+		return
+	var transactions := ItemContainerTransactionService.new()
+	var created := transactions.apply(
+		candidate,
+		ItemTransactionRequest.create("sandbox-transaction-%016d" % 0, OWNER_ID, STASH_ID, 99, issued.item),
+		journal,
+		GameCatalog.EQUIPMENT_CATALOG,
+		GameCatalog.ITEM_FOUNDATION_CATALOG
+	)
+	TestAssertions.equal(created.code, ItemTransactionResult.Code.OK, "generated create transaction applies", failures)
+	if created.code != ItemTransactionResult.Code.OK:
+		return
+	candidate = created.next_state
+	var moved := transactions.apply(
+		candidate,
+		ItemTransactionRequest.move("sandbox-transaction-%016d" % 1, OWNER_ID, STASH_ID, 99, issued.item.instance_id, INVENTORY_ID, 0),
+		journal,
+		GameCatalog.EQUIPMENT_CATALOG,
+		GameCatalog.ITEM_FOUNDATION_CATALOG
+	)
+	TestAssertions.equal(moved.code, ItemTransactionResult.Code.OK, "generated move transaction applies", failures)
+	if moved.code != ItemTransactionResult.Code.OK:
+		return
+	var metadata: Dictionary = base_document["issuance_metadata"].duplicate(true)
+	metadata["next_transaction_sequence"] = 2
+	metadata["next_generated_item_sequence"] = 1
+	var store := _store_script.new() as DeveloperItemSandboxStore
+	var document := store.document_for(moved.next_state, metadata, journal)
+	TestAssertions.equal(store.validate_document(document), "", "schema-two create-then-move journal validates exactly", failures)
+	TestAssertions.equal(store.save_document(document), "", "schema-two generated journal saves", failures)
+	var reloaded: Variant = _state_script.new()
+	TestAssertions.equal(reloaded.reload(), "", "schema-two generated journal reloads", failures)
+	TestAssertions.equal(reloaded.inventory().item_id_at(0), issued.item.instance_id, "replay preserves generated item placement", failures)
+	TestAssertions.equal(reloaded.registry().size(), 100, "replay preserves 99 fixtures plus generated item", failures)
+
+func _generated_preview(failures: Array[String]) -> ItemInstance:
+	var request := ItemGenerationRequest.create(101, 4, 500, &"ordinary_enemy", &"ordinary_drop", [&"rare"] as Array[StringName])
+	request.forced_base_id = &"forge_vanguard_sword"
+	request.forced_rarity_id = &"rare"
+	request.unlock_tags = [&"rarity_rare_unlocked"]
+	var generated := ItemGenerationService.generate(request, "loot-lab-preview:test", 4, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)
+	TestAssertions.truthy(generated.ok(), "generated journal preview fixture succeeds", failures)
+	return generated.item if generated.ok() else null
 
 func _assert_deterministic_fixture(failures: Array[String]) -> void:
 	_cleanup_sandbox_files()
@@ -209,7 +291,7 @@ func _assert_movement_replay_collision_and_reset(failures: Array[String]) -> voi
 	TestAssertions.equal(reloaded.to_dictionary(), moved_document, "save/reload preserves exact moved placement and journal", failures)
 
 	var request := ItemTransactionRequest.move(
-		"sandbox-move-%016d" % 2,
+		"sandbox-transaction-%016d" % 2,
 		OWNER_ID,
 		STASH_ID,
 		1,
@@ -227,7 +309,7 @@ func _assert_movement_replay_collision_and_reset(failures: Array[String]) -> voi
 	TestAssertions.equal(reloaded.to_dictionary(), state_after_first, "duplicate replay preserves sandbox state", failures)
 	TestAssertions.equal(FileAccess.get_file_as_bytes(DOCUMENT_PATH), bytes_after_first, "duplicate replay preserves storage bytes", failures)
 	var collision_request := ItemTransactionRequest.move(
-		"sandbox-move-%016d" % 2,
+		"sandbox-transaction-%016d" % 2,
 		OWNER_ID,
 		STASH_ID,
 		2,
@@ -353,7 +435,7 @@ func _assert_forged_journal_documents_fail_atomically(failures: Array[String]) -
 	non_first_empty["ownership_state"] = non_first_state
 	non_first_empty["transaction_journal"][0]["state"] = non_first_state.duplicate(true)
 	non_first_empty["transaction_journal"][0]["fingerprint"] = ItemTransactionRequest.move(
-		"sandbox-move-%016d" % 0,
+		"sandbox-transaction-%016d" % 0,
 		OWNER_ID,
 		STASH_ID,
 		0,
@@ -375,9 +457,9 @@ func _assert_forged_journal_documents_fail_atomically(failures: Array[String]) -
 	swap_document["ownership_state"] = swap_state
 	swap_document["issuance_metadata"]["next_transaction_sequence"] = 2
 	swap_document["transaction_journal"].append({
-		"transaction_id": "sandbox-move-%016d" % 1,
+		"transaction_id": "sandbox-transaction-%016d" % 1,
 		"fingerprint": ItemTransactionRequest.swap(
-			"sandbox-move-%016d" % 1,
+			"sandbox-transaction-%016d" % 1,
 			OWNER_ID,
 			INVENTORY_ID,
 			0,
@@ -493,7 +575,7 @@ func _assert_corrupt_generations_reset_recovery(failures: Array[String]) -> void
 	var first_item_id: String = recovered.stash().item_id_at(0)
 	TestAssertions.equal(recovered.move_to_first_empty_inventory(first_item_id), "", "first move after corrupt reset succeeds", failures)
 	var moved: Dictionary = recovered.to_dictionary()
-	TestAssertions.equal(String(moved["transaction_journal"][0]["transaction_id"]), "sandbox-move-%016d" % 0, "first move after corrupt reset resumes journal sequence zero", failures)
+	TestAssertions.equal(String(moved["transaction_journal"][0]["transaction_id"]), "sandbox-transaction-%016d" % 0, "first move after corrupt reset resumes journal sequence zero", failures)
 	TestAssertions.equal(int(moved["issuance_metadata"]["next_transaction_sequence"]), 1, "first move after corrupt reset advances sequence once", failures)
 	TestAssertions.equal(FileAccess.get_file_as_bytes(profile_sentinel), profile_bytes, "corrupt-primary and corrupt-backup reset preserves active-profile sentinel bytes", failures)
 

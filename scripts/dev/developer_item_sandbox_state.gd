@@ -67,6 +67,7 @@ func reset(candidate_validator: Callable = Callable()) -> String:
 		"issued_count": items.size(),
 		"definition_ids": (issued["definition_ids"] as Array).duplicate(true),
 		"next_transaction_sequence": 0,
+		"next_generated_item_sequence": 0,
 	}
 	var candidate_journal := ItemTransactionJournal.new()
 	var document := _store.document_for(candidate, metadata, candidate_journal)
@@ -103,10 +104,14 @@ func reload(candidate_validator: Callable = Callable()) -> String:
 	var candidate_error := _validate_candidate(
 		candidate_validator,
 		decoded["state"] as ItemOwnershipState,
-		loaded.document,
+		decoded["normalized_document"] as Dictionary,
 	)
 	if not candidate_error.is_empty():
 		return _fail(candidate_error)
+	if bool(decoded.get("migrated", false)):
+		var migration_error := _store.save_document(decoded["normalized_document"] as Dictionary)
+		if not migration_error.is_empty():
+			return _fail(migration_error)
 	_commit(
 		decoded["state"] as ItemOwnershipState,
 		decoded["metadata"] as Dictionary,
@@ -161,7 +166,7 @@ func transfer_slots(
 	if item_id.is_empty():
 		return _fail("PARTY_FORGE_DEVELOPER_ITEM_SANDBOX_ERROR field=source reason=source slot is empty")
 	var sequence := int(_metadata.get("next_transaction_sequence", 0))
-	var transaction_id := "sandbox-move-%016d" % sequence
+	var transaction_id := "sandbox-transaction-%016d" % sequence
 	var request := ItemTransactionRequest.move(
 		transaction_id,
 		OWNER_ID,
@@ -254,7 +259,7 @@ func _move_to_first_empty(item_id: String, destination_id: StringName, candidate
 		return _fail("PARTY_FORGE_DEVELOPER_ITEM_SANDBOX_ERROR field=destination reason=container has no empty slot")
 	var sequence := int(_metadata.get("next_transaction_sequence", 0))
 	var request := ItemTransactionRequest.move(
-		"sandbox-move-%016d" % sequence,
+		"sandbox-transaction-%016d" % sequence,
 		OWNER_ID,
 		source_id,
 		source_slot,
