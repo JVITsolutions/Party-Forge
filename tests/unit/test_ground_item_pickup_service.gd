@@ -14,6 +14,10 @@ func run() -> Array[String]:
 		return failures
 	var result_script := load(RESULT_PATH) as Script
 	var codes := result_script.get_script_constant_map()["Code"] as Dictionary
+	var service_script := load(SERVICE_PATH) as Script
+	var collect_methods := service_script.get_script_method_list().filter(func(method: Dictionary) -> bool: return method.get("name") == &"collect")
+	var return_info := collect_methods[0].get("return", {}) as Dictionary if collect_methods.size() == 1 else {}
+	TestAssertions.equal(return_info.get("class_name", &""), &"GroundItemPickupResult", "collect exposes the exact typed pickup result contract", failures)
 	_test_codes_and_range(codes, failures)
 	_test_full_inventory(codes, failures)
 	_test_success_after_transaction(codes, failures)

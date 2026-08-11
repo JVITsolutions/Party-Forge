@@ -215,7 +215,7 @@ func _take_chest() -> Node3D:
 		anchor.focus_entered.connect(_on_anchor_focus_entered.bind(chest))
 		anchor.mouse_exited.connect(_on_anchor_mouse_exited.bind(chest))
 		anchor.focus_exited.connect(_on_anchor_focus_exited.bind(chest))
-		anchor.pressed.connect(_on_anchor_pressed.bind(chest))
+		anchor.gui_input.connect(_on_anchor_gui_input.bind(chest))
 	return chest
 
 
@@ -307,8 +307,9 @@ func _project_anchor(drop_id: StringName) -> void:
 		return
 	var elevated_position: Vector3 = world_position + Vector3.UP * 1.55
 	if _camera.is_inside_tree():
-		anchor.position = _camera.unproject_position(elevated_position) - anchor.size * 0.5
-		anchor.visible = chest.visible and not _camera.is_position_behind(elevated_position)
+		var projected := _camera.unproject_position(elevated_position)
+		anchor.position = projected - anchor.size * 0.5
+		anchor.visible = chest.visible and not _camera.is_position_behind(elevated_position) and _camera.get_viewport().get_visible_rect().has_point(projected)
 		return
 	var camera_space := _camera.transform.affine_inverse() * elevated_position
 	var projection_scale := 100.0 / tan(deg_to_rad(_camera.fov) * 0.5) if _camera.projection == Camera3D.PROJECTION_PERSPECTIVE else 200.0 / maxf(_camera.size, 0.001)
@@ -365,11 +366,15 @@ func _release_tooltip_if_inactive(drop_id: StringName) -> void:
 	_tooltip.release_item(_source_id(drop_id))
 
 
-func _on_anchor_pressed(chest: Node3D) -> void:
-	if chest != null:
-		var anchor := chest.call(&"tooltip_anchor") as Control
-		var input_owner := StringName(String(anchor.get_meta("input_owner", "")))
-		chest.call(&"request_pickup", input_owner)
+func _on_anchor_gui_input(event: InputEvent, chest: Node3D) -> void:
+	var mouse := event as InputEventMouseButton
+	if mouse == null or not mouse.pressed or mouse.button_index != MOUSE_BUTTON_LEFT or _modal_input_suppressed() or chest == null:
+		return
+	var input_owner := _owner_for_event(mouse)
+	if input_owner.is_empty():
+		return
+	chest.call(&"request_pickup", input_owner)
+	_mark_input_handled()
 
 
 func _on_chest_pickup_requested(drop_id: StringName, input_owner: StringName) -> void:
@@ -432,7 +437,7 @@ func _owner_for_event(event: InputEvent) -> StringName:
 	var event_device := event.device
 	for context: PlayerRunContext in _context_registry.all_contexts():
 		var owned_device := _context_registry.device_for(context.run_player_id)
-		if event is InputEventJoypadButton or event is InputEventJoypadMotion:
+		if event is InputEventJoypadButton or event is InputEventJoypadMotion or (event is InputEventMouseButton and event_device >= 0):
 			if owned_device == event_device:
 				return context.run_player_id
 		elif owned_device == -1:
