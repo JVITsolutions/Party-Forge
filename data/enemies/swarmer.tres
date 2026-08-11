@@ -9,5 +9,6 @@ script = ExtResource("1_l50bk")
 id = &"swarmer"
 max_health = 12.0
 move_speed = 4.8
+loot_source_category = &"ordinary_melee"
 attacks = Array[ExtResource("1_2ljwm")]([ExtResource("2_contact")])
 experience = 2

@@ -11,6 +11,7 @@ id = &"spitter"
 behavior = 1
 max_health = 18.0
 move_speed = 2.8
+loot_source_category = &"ordinary_specialist"
 attacks = Array[ExtResource("1_p8k33")]([ExtResource("2_projectile")])
 projectile_profile = ExtResource("3_profile")
 experience = 4

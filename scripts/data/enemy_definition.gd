@@ -8,6 +8,7 @@ enum Behavior { SWARMER, SPITTER, FORGE_GUARDIAN, BOLTCASTER }
 @export var max_health: float = 20.0
 @export var move_speed: float = 3.0
 @export var stat_overrides: Dictionary[StringName, float] = {}
+@export var loot_source_category: StringName
 @export var attacks: Array[AttackDefinition] = []
 @export var projectile_profile: EnemyProjectileProfile
 @export var experience: int = 1
@@ -22,6 +23,8 @@ func validate(types: DamageTypeCatalog = null, stats: StatCatalog = null) -> Pac
     if id.is_empty(): errors.append("enemy id is empty")
     if max_health <= 0.0: errors.append("enemy %s health must be positive" % id)
     if move_speed <= 0.0: errors.append("enemy %s speed must be positive" % id)
+    if loot_source_category not in EnemyDefeatEvent.SOURCE_CATEGORIES:
+        errors.append("enemy %s loot source category is unknown: %s" % [id, loot_source_category])
     var seen: Dictionary = {}
     for attack: AttackDefinition in attacks:
         if attack == null:

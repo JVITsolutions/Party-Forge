@@ -11,5 +11,6 @@ id = &"forge_guardian"
 behavior = 2
 max_health = 3000.0
 move_speed = 3.3
+loot_source_category = &"boss"
 attacks = Array[ExtResource("1_ij6if")]([ExtResource("2_charge"), ExtResource("3_shockwave")])
 experience = 100
