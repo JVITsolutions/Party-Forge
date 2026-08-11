@@ -30,7 +30,9 @@ func run() -> Array[String]:
 func _test_bounded_primitive_presentation(chest: Node3D, failures: Array[String]) -> void:
 	var meshes := _descendants_of_type(chest, "MeshInstance3D")
 	var collisions := _descendants_of_type(chest, "CollisionShape3D")
-	TestAssertions.equal(meshes.size(), 1, "chest uses exactly one lightweight primitive mesh target", failures)
+	TestAssertions.equal(meshes.size(), 2, "chest uses one primitive target plus one selection-outline primitive", failures)
+	TestAssertions.truthy(chest.get_node_or_null("MeshTarget") is MeshInstance3D, "chest keeps one lightweight primitive body target", failures)
+	TestAssertions.truthy(chest.get_node_or_null("SelectionRing") is MeshInstance3D, "chest provides a non-color-only selection outline shape", failures)
 	TestAssertions.equal(collisions.size(), 1, "chest uses exactly one collision target", failures)
 	TestAssertions.truthy(chest.get_node_or_null("RarityLight") is OmniLight3D, "chest exposes a dedicated rarity light", failures)
 	TestAssertions.truthy(chest.get_node_or_null("OwnerMarker/Pennant") is Label3D, "owner marker has a billboard pennant silhouette", failures)
@@ -64,8 +66,10 @@ func _test_owner_rarity_selection_and_fallback(chest: Node3D, failures: Array[St
 	var energy_before := light.light_energy
 	chest.call(&"set_selected", true)
 	TestAssertions.truthy(light.light_energy > energy_before, "selection is visually distinct from ordinary rarity glow", failures)
+	TestAssertions.truthy((chest.get_node("SelectionRing") as MeshInstance3D).visible, "selection exposes the outline independently of color", failures)
 	TestAssertions.truthy(owner_label.visible, "selection does not gate the always-readable P-number", failures)
 	chest.call(&"set_selected", false)
+	TestAssertions.truthy(not (chest.get_node("SelectionRing") as MeshInstance3D).visible, "clearing selection hides the outline", failures)
 	TestAssertions.near(light.light_energy, energy_before, 0.001, "selection clears back to the bound rarity presentation", failures)
 	var anchor := chest.call(&"tooltip_anchor") as Control
 	TestAssertions.truthy(anchor is Button, "chest exposes one lightweight focusable screen anchor", failures)

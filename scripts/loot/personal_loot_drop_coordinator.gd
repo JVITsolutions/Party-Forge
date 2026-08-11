@@ -58,10 +58,10 @@ func configure(
 func resolve_defeat(event: EnemyDefeatEvent) -> Dictionary:
 	var report := {"decisions": [], "spawned_drop_ids": [], "diagnostics": []}
 	if not _configured:
-		(report.diagnostics as Array).append(_error("configuration", "coordinator is unavailable"))
+		(report.diagnostics as Array).append(_diagnostic(&"configuration", &"coordinator_unavailable", &"", _error("configuration", "coordinator is unavailable")))
 		return report
 	if event == null or not event.validate().is_empty():
-		(report.diagnostics as Array).append(_error("event", "enemy defeat event is invalid"))
+		(report.diagnostics as Array).append(_diagnostic(&"configuration", &"invalid_event", &"", _error("event", "enemy defeat event is invalid")))
 		return report
 	var decisions := roll_service.resolve(event)
 	report["decisions"] = decisions
@@ -70,7 +70,7 @@ func resolve_defeat(event: EnemyDefeatEvent) -> Dictionary:
 			continue
 		var context := contexts.context_for(decision.run_player_id)
 		if context == null:
-			(report.diagnostics as Array).append(_owner_error(decision.run_player_id, "context is unavailable"))
+			(report.diagnostics as Array).append(_diagnostic(&"ownership", &"context_missing", decision.run_player_id, _owner_error(decision.run_player_id, "context is unavailable")))
 			continue
 		var identity := _identities.get(decision.run_player_id) as Dictionary
 		var request := _request_for(decision, context)
@@ -86,7 +86,7 @@ func resolve_defeat(event: EnemyDefeatEvent) -> Dictionary:
 		}
 		var result := _ownership.create_drop(context, request, record_identity, equipment, foundation, registry)
 		if not result.ok():
-			(report.diagnostics as Array).append(_owner_error(decision.run_player_id, result.error))
+			(report.diagnostics as Array).append(_diagnostic(result.diagnostic_stage, result.diagnostic_code, decision.run_player_id, _owner_error(decision.run_player_id, result.error)))
 			continue
 		(report.spawned_drop_ids as Array).append(drop_id)
 	return report
@@ -180,3 +180,11 @@ func _owner_error(run_player_id: StringName, reason: String) -> String:
 
 func _error(field: String, reason: String) -> String:
 	return "PARTY_FORGE_PERSONAL_LOOT_COORDINATOR_ERROR field=%s reason=%s" % [field, reason]
+
+func _diagnostic(stage: StringName, code: StringName, run_player_id: StringName, message: String) -> Dictionary:
+	return {
+		"stage": stage,
+		"code": code,
+		"run_player_id": run_player_id,
+		"message": message,
+	}

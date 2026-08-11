@@ -28,8 +28,9 @@ func _run() -> void:
 	_assert(next.any(func(event: InputEvent) -> bool: return event is InputEventJoypadButton and event.device == -1 and event.button_index == JOY_BUTTON_DPAD_RIGHT), "next uses device-agnostic D-pad right")
 	_assert(accept.any(func(event: InputEvent) -> bool: return event is InputEventJoypadButton and event.device == -1 and event.button_index == JOY_BUTTON_A), "existing ui_accept retains device-agnostic south-face pickup")
 	_test_input_normalization()
-	_test_real_controller_flow()
-	_test_viewport_resize_projection()
+	await _test_real_controller_flow()
+	await _test_success_advances_selection()
+	await _test_viewport_resize_projection()
 	print("GROUND_ITEM_PICKUP_MOUSE: PASS") if _failures.is_empty() else print("GROUND_ITEM_PICKUP_MOUSE: FAIL")
 	print("GROUND_ITEM_PICKUP_CONTROLLER: PASS") if _failures.is_empty() else print("GROUND_ITEM_PICKUP_CONTROLLER: FAIL")
 	print("GROUND_ITEM_PICKUP_FULL_INVENTORY: PASS") if _failures.is_empty() else print("GROUND_ITEM_PICKUP_FULL_INVENTORY: FAIL")
@@ -97,19 +98,22 @@ func _test_real_controller_flow() -> void:
 	var modal := [false]
 	controller.call(&"configure_interaction", index, targeting, pickup, contexts, 200.0, Callable(), func() -> bool: return modal[0])
 	controller.call(&"_process", 0.0)
-	controller.call(&"_unhandled_input", _button(1, JOY_BUTTON_DPAD_RIGHT))
+	await _dispatch(_button(1, JOY_BUTTON_DPAD_RIGHT))
 	_assert(controller.call(&"selection_for_owner", &"player_2") == &"p2-near", "device 1 selects only P2 owned visible nearby loot")
 	_assert(controller.call(&"selection_for_owner", &"player_1") == &"", "device 1 cannot change P1 selection")
-	var enter := InputEventKey.new()
-	enter.keycode = KEY_ENTER
-	enter.pressed = true
-	_assert(controller.call(&"_owner_for_event", enter) == &"keyboard", "keyboard event routes only to the unassigned context")
-	controller.call(&"_unhandled_input", _button(0, JOY_BUTTON_DPAD_RIGHT))
+	await _dispatch(_button(0, JOY_BUTTON_DPAD_RIGHT))
 	_assert(controller.call(&"selection_for_owner", &"player_1") == &"p1-near", "device 0 selects the visible in-viewport P1 entry")
-	controller.call(&"_unhandled_input", _button(0, JOY_BUTTON_DPAD_RIGHT))
+	var selected_chest := _chest_for(chests, &"p1-near")
+	var selected_anchor := selected_chest.call(&"tooltip_anchor") as Button if selected_chest != null else null
+	var shared_tooltip := tooltip_layer.get_children().filter(func(child: Node) -> bool: return child is ItemTooltipPanel).front() as ItemTooltipPanel
+	_assert(selected_anchor != null and selected_anchor.has_focus(), "controller selection focuses the projected chest anchor")
+	_assert(shared_tooltip != null and shared_tooltip.visible and shared_tooltip.is_current_source(&"ground-loot:p1-near"), "controller selection presents the one shared tooltip")
+	_assert(selected_anchor != null and selected_anchor.text.contains("1.0 m"), "selected chest displays leader-relative distance")
+	_assert(selected_chest != null and selected_chest.get_node_or_null("SelectionRing") is MeshInstance3D and (selected_chest.get_node("SelectionRing") as MeshInstance3D).visible, "selected chest exposes a non-color-only ring shape")
+	await _dispatch(_button(0, JOY_BUTTON_DPAD_RIGHT))
 	_assert(controller.call(&"selection_for_owner", &"player_1") == &"p1-near", "in-front but off-viewport P1 entry is excluded without a custom visibility filter")
 	modal[0] = true
-	controller.call(&"_unhandled_input", _button(0, JOY_BUTTON_DPAD_LEFT))
+	await _dispatch(_button(0, JOY_BUTTON_DPAD_LEFT))
 	_assert(controller.call(&"selection_for_owner", &"player_1") == &"p1-near", "modal input suppression preserves selection")
 	modal[0] = false
 	_assert(controller.call(&"selection_for_owner", &"player_1") == &"p1-near", "ledger-close equivalent preserves the prior target")
@@ -133,13 +137,15 @@ func _test_real_controller_flow() -> void:
 	modal[0] = false
 	anchor.gui_input.emit(_mouse_button(0))
 	_assert(forwarded == [[&"p1-near", &"player_1"]], "owning mouse pointer reaches the exact chest")
-	controller.call(&"_unhandled_input", _button(1, JOY_BUTTON_DPAD_RIGHT))
+	await _dispatch(_button(1, JOY_BUTTON_DPAD_RIGHT))
 	_assert(controller.call(&"selection_for_owner", &"player_2") == &"p2-out", "real P2 D-pad cycle selects owned visible loot outside pickup range")
-	controller.call(&"_unhandled_input", _button(1, JOY_BUTTON_A))
+	await _dispatch(_button(1, JOY_BUTTON_A))
 	_assert(statuses.has("Move closer"), "out-of-range activation emits exact Move closer status")
 	_assert(controller.call(&"selection_for_owner", &"player_2") == &"p2-out", "out-of-range activation preserves selection")
+	var p2_out_anchor := (_chest_for(chests, &"p2-out").call(&"tooltip_anchor") as Button)
+	_assert(p2_out_anchor.text.contains("Move closer"), "Move closer remains visible on the retained selection")
 	modal[0] = true
-	controller.call(&"_unhandled_input", _button(1, JOY_BUTTON_DPAD_LEFT))
+	await _dispatch(_button(1, JOY_BUTTON_DPAD_LEFT))
 	_assert(controller.call(&"selection_for_owner", &"player_2") == &"p2-out", "modal input preserves the real out-of-range selection")
 	modal[0] = false
 	_assert(controller.call(&"selection_for_owner", &"player_2") == &"p2-out", "ledger close preserves the real out-of-range selection")
@@ -160,12 +166,62 @@ func _test_real_controller_flow() -> void:
 	controller.call(&"_process", 0.0)
 	_assert(controller.call(&"selection_for_owner", &"player_2") == &"", "same-ID registry reconfigure clears the prior owner selection")
 	var statuses_before_reconfigure_accept := statuses.size()
-	controller.call(&"_unhandled_input", _button(1, JOY_BUTTON_A))
+	await _dispatch(_button(1, JOY_BUTTON_A))
 	_assert(statuses.size() == statuses_before_reconfigure_accept, "ui_accept cannot collect after reconfigure until a new real selection")
-	controller.call(&"_unhandled_input", _button(1, JOY_BUTTON_DPAD_RIGHT))
+	await _dispatch(_button(1, JOY_BUTTON_DPAD_RIGHT))
 	_assert(controller.call(&"selection_for_owner", &"player_2") == &"p2-out", "new registry requires and accepts a fresh real D-pad selection")
-	controller.call(&"_unhandled_input", _button(1, JOY_BUTTON_A))
+	await _dispatch(_button(1, JOY_BUTTON_A))
 	_assert(statuses.size() == statuses_before_reconfigure_accept + 1 and statuses[-1] == "Move closer", "ui_accept routes only after the new registry selection")
+	controller.call(&"_exit_tree")
+	host.free()
+	contexts.clear()
+	RenderingServer.force_sync()
+
+func _test_success_advances_selection() -> void:
+	var contexts := RunContextRegistry.new()
+	var owner := _context(&"success-owner", "profile-success-owner", 0, 3, 1)
+	_assert(contexts.register_context(owner, 3).ok(), "success fixture registers its controller owner")
+	var registry := GroundItemRegistry.new()
+	for index: int in range(3):
+		var request := ItemGenerationRequest.create(7200 + index, index, 10, &"ordinary_enemy", &"ordinary_drop", [&"common"])
+		request.forced_base_id = &"windrunner_band"
+		request.forced_rarity_id = &"common"
+		var generated := owner.issue_ground_item(request, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)
+		_assert(generated != null and generated.ok(), "success fixture issues canonical ground item %d" % index)
+		if generated == null or not generated.ok():
+			continue
+		var record := _record(StringName("success-%d" % index), owner.run_player_id, Vector3(float(index + 1), 0.0, 0.0), index)
+		record.item_id = generated.item.instance_id
+		record.profile_id = owner.profile_id
+		record.player_number = 1
+		record.color_id = &"red"
+		_assert(registry.add(record), "success fixture registers ground record %d" % index)
+	var host := Node.new()
+	var chests := Node3D.new()
+	var tooltip_layer := Control.new()
+	tooltip_layer.size = Vector2(root.size)
+	var camera := Camera3D.new()
+	host.add_child(chests)
+	host.add_child(tooltip_layer)
+	host.add_child(camera)
+	root.add_child(host)
+	camera.look_at_from_position(Vector3(0.0, 10.0, 10.0), Vector3.ZERO)
+	camera.current = true
+	var controller := (load("res://scripts/world/ground_item_world_controller.gd") as Script).new() as Node
+	host.add_child(controller)
+	controller.call(&"configure", registry, {}, func(record: GroundItemRecord) -> Dictionary: return _detail(record), camera, chests, tooltip_layer)
+	controller.call(&"configure_interaction", (load(REQUIRED[0]) as Script).new(registry, 4.0), (load(REQUIRED[1]) as Script).new(), (load(REQUIRED[2]) as Script).new(registry, contexts, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG, 3.5), contexts, 20.0)
+	controller.call(&"_process", 0.0)
+	await _dispatch(_button(3, JOY_BUTTON_DPAD_RIGHT))
+	_assert(controller.call(&"selection_for_owner", owner.run_player_id) == &"success-0", "nearest owned chest is selected first")
+	await _dispatch(_button(3, JOY_BUTTON_A))
+	_assert(registry.record(&"success-0") == null, "successful south-face pickup removes the selected authoritative record")
+	_assert(controller.call(&"selection_for_owner", owner.run_player_id) == &"success-1", "successful removal advances to the nearest remaining visible owned chest")
+	await _dispatch(_button(3, JOY_BUTTON_A))
+	_assert(controller.call(&"selection_for_owner", owner.run_player_id) == &"success-2", "second successful removal advances stably again")
+	await _dispatch(_button(3, JOY_BUTTON_A))
+	_assert(controller.call(&"selection_for_owner", owner.run_player_id) == &"", "collecting the final owned chest clears selection")
+	_assert(registry.all_records().is_empty(), "multi-chest success flow removes all three exact records")
 	controller.call(&"_exit_tree")
 	host.free()
 	contexts.clear()
@@ -206,7 +262,7 @@ func _test_viewport_resize_projection() -> void:
 		viewport.size = Vector2i(80, 60)
 		controller.call(&"_process", 0.0)
 		_assert(anchor.position != position_before and not anchor.visible, "viewport resize reprojects and hides the fixed-size offscreen anchor without record dirtiness")
-		controller.call(&"_unhandled_input", _button(2, JOY_BUTTON_DPAD_RIGHT))
+		await _dispatch(_button(2, JOY_BUTTON_DPAD_RIGHT))
 		_assert(controller.call(&"selection_for_owner", &"resize-owner") == &"", "resized-offscreen chest is excluded from real controller cycling")
 	controller.call(&"_exit_tree")
 	viewport.free()
@@ -281,6 +337,15 @@ func _mouse_button(device: int) -> InputEventMouseButton:
 	event.button_index = MOUSE_BUTTON_LEFT
 	event.pressed = true
 	return event
+
+func _dispatch(event: InputEvent) -> void:
+	Input.parse_input_event(event)
+	await process_frame
+	if event is InputEventJoypadButton:
+		var released := event.duplicate() as InputEventJoypadButton
+		released.pressed = false
+		Input.parse_input_event(released)
+		await process_frame
 
 func _chest_for(parent: Node3D, drop_id: StringName) -> Node3D:
 	for child: Node in parent.get_children():

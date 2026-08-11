@@ -21,6 +21,10 @@ func refresh() -> void:
 func initial_focus() -> Control:
 	return null
 
+func focus_controls() -> Array[Control]:
+	var target := initial_focus()
+	return [target] if target != null else []
+
 func apply_compact(_compact: bool) -> void:
 	pass
 

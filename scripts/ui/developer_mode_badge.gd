@@ -56,10 +56,13 @@ func update_ground_chest_diagnostics(diagnostics: Dictionary) -> void:
 		_sync_label()
 		return
 	var lines := PackedStringArray([
+		"SESSION LOOT DIAGNOSTICS",
 		"LIVE %d | PEAK %d" % [int(diagnostics.get("live", 0)), int(diagnostics.get("peak", 0))],
-		"SUCCESS %s" % _counts_text(diagnostics.get("successes_by_source", {}) as Dictionary),
-		"FAIL %s" % _counts_text(diagnostics.get("failures_by_source", {}) as Dictionary),
+		"ROLL SUCCESS %s" % _counts_text(diagnostics.get("successes_by_source", {}) as Dictionary),
+		"ROLL MISS %s" % _counts_text(diagnostics.get("misses_by_source", {}) as Dictionary),
 		"GENERATION FAILURES %d" % int(diagnostics.get("generation_failures", 0)),
+		"DIAGNOSTIC STAGES %s" % _counts_text(diagnostics.get("diagnostics_by_stage", {}) as Dictionary),
+		"DIAGNOSTIC CODES %s" % _counts_text(diagnostics.get("diagnostics_by_code", {}) as Dictionary),
 		"COLLECTION %s" % _counts_text(diagnostics.get("collection_outcomes", {}) as Dictionary),
 	])
 	_diagnostics = "\n".join(lines)

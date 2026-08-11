@@ -72,6 +72,9 @@ func run() -> Array[String]:
     _test_profile_boot_and_developer_gate(failures)
     _test_active_run_context_graph_and_failure_cleanup(failures)
     _test_personal_loot_defeat_and_guardian_wiring(failures)
+    _test_live_loot_owner_leader_comparison_graph(failures)
+    _test_gameplay_input_blocked_predicate(failures)
+    _test_typed_live_loot_diagnostic_accounting(failures)
     _test_main_menu_route_composition(failures)
     _test_storage_route_policy_and_shared_projection_wiring(failures)
     _test_loadout_warning_preflight_and_transition_wiring(failures)
@@ -390,6 +393,115 @@ func _test_personal_loot_defeat_and_guardian_wiring(failures: Array[String]) -> 
     TestAssertions.equal(victories[0], 1, "Forge Guardian preserves the existing exactly-once victory behavior", failures)
     TestAssertions.equal(developer_registry.all_records().size(), 0, "Guardian victory adds no boss reward and clears prior run-owned ground loot", failures)
     _cleanup_main(developer_main)
+
+func _test_live_loot_owner_leader_comparison_graph(failures: Array[String]) -> void:
+    var settings := PartyForgeSettings.new()
+    settings.mode = PartyForgeSettings.Mode.DEVELOPER_MODE
+    settings.unlock_all_implemented_content = true
+    var main := (load("res://scenes/game/main.tscn") as PackedScene).instantiate()
+    _prepare_main(main)
+    var profile := (main.get("profile_manager") as ProfileManager).active_profile()
+    profile.inventory_columns = 1
+    TestAssertions.equal(ProfileStore.new().save_profile(profile, String(main.get("profile_root"))), "", "comparison fixture persists one production inventory column", failures)
+    TestAssertions.equal((main.get("profile_manager") as ProfileManager).refresh_profile(profile.profile_id), "", "comparison fixture refreshes the authoritative profile", failures)
+    main.set("saved_settings", settings.copy())
+    TestAssertions.truthy(main.call("select_leader_class", &"fighter"), "comparison fixture starts through Main's production run path", failures)
+    var context := main.get("active_run_context") as PlayerRunContext
+    var registry := main.get("ground_item_registry") as GroundItemRegistry
+    var world := main.get("ground_item_world_controller") as Node
+    TestAssertions.truthy(context != null and registry != null and world != null, "Main owns the complete live-loot comparison graph", failures)
+    if context == null or registry == null or world == null:
+        _cleanup_main(main)
+        return
+    var equipped_request := ItemGenerationRequest.create(82001, 0, 20, &"ordinary_enemy", &"ordinary_drop", [&"common"])
+    equipped_request.forced_base_id = &"windrunner_band"
+    equipped_request.forced_rarity_id = &"common"
+    var equipped_generation := context.issue_ground_item(equipped_request, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)
+    var equipped := equipped_generation.item if equipped_generation != null and equipped_generation.ok() else null
+    TestAssertions.truthy(equipped != null, "comparison fixture generates the equipped item through the production issuer", failures)
+    if equipped == null:
+        _cleanup_main(main)
+        return
+    TestAssertions.truthy(context.collect_ground_item(equipped.instance_id, "main-live-collect-equipped", GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG).ok(), "comparison fixture collects the equipped item through the owner transaction boundary", failures)
+    TestAssertions.truthy(context.assign_equipment(1, equipped.instance_id, &"ring_left", GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG).ok(), "comparison fixture equips the leader through the production assignment service", failures)
+    var candidate_request := ItemGenerationRequest.create(82002, 1, 20, &"ordinary_enemy", &"ordinary_drop", [&"common"])
+    candidate_request.forced_base_id = &"windrunner_band"
+    candidate_request.forced_rarity_id = &"common"
+    var candidate_generation := context.issue_ground_item(candidate_request, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)
+    var candidate := candidate_generation.item if candidate_generation != null and candidate_generation.ok() else null
+    TestAssertions.truthy(candidate != null, "comparison fixture creates the candidate in the owner ground container", failures)
+    if candidate == null:
+        _cleanup_main(main)
+        return
+    var record := GroundItemRecord.new()
+    record.drop_id = &"main-live-comparison"
+    record.item_id = candidate.instance_id
+    record.run_player_id = context.run_player_id
+    record.profile_id = context.profile_id
+    record.player_number = 1
+    record.color_id = &"red"
+    record.world_position = main.leader.position + Vector3(1.0, 0.0, 0.0)
+    record.rarity_id = candidate.rarity_id
+    record.source_id = &"ordinary_enemy"
+    record.ground_slot = 0
+    TestAssertions.truthy(registry.add(record), "comparison fixture registers the canonical owner ground record", failures)
+    var details := world.get("_detail_by_drop") as Dictionary
+    TestAssertions.truthy(details.has(record.drop_id) and not (details[record.drop_id] as Dictionary).has("owner_leader_equipment"), "Main item detail has no synthetic test-only equipment field", failures)
+    var chest := (world.get("_chest_by_drop") as Dictionary).get(record.drop_id) as Node3D
+    TestAssertions.truthy(chest != null, "Main projects the owner candidate through its real world controller", failures)
+    if chest != null:
+        (chest.call(&"tooltip_anchor") as Control).mouse_entered.emit()
+        var tooltip := main.get_node("GroundItemTooltipLayer/ItemTooltipPanel") as ItemTooltipPanel
+        tooltip.set_compare_active(true)
+        TestAssertions.equal(tooltip.card_count(), 2, "Main Alt/LT comparison presents one inspected and one applicable equipped card", failures)
+        if tooltip.card_count() >= 2:
+            TestAssertions.equal(String(tooltip.get_node("Layout/BodyScroll/Cards").get_child(1).call(&"displayed_instance_id")), equipped.instance_id, "Main comparison card uses the owner leader's current applicable item", failures)
+    _cleanup_main(main)
+
+func _test_gameplay_input_blocked_predicate(failures: Array[String]) -> void:
+    var main := _started_main()
+    TestAssertions.truthy(main.has_method(&"_gameplay_input_blocked"), "Main exposes one central production gameplay-input blocker", failures)
+    if not main.has_method(&"_gameplay_input_blocked"):
+        _cleanup_main(main)
+        return
+    TestAssertions.truthy(not bool(main.call(&"_gameplay_input_blocked")), "running gameplay accepts world interaction", failures)
+    var ledger := main.get_node("CharacterLedger") as CharacterLedger
+    TestAssertions.truthy(ledger.open_for_player() and bool(main.call(&"_gameplay_input_blocked")), "actual open ledger blocks gameplay input", failures)
+    ledger.close()
+    var pause := main.get_node("RunPauseMenu") as RunPauseMenu
+    TestAssertions.truthy(pause.open() and bool(main.call(&"_gameplay_input_blocked")), "actual pause menu blocks gameplay input", failures)
+    pause.close()
+    var settings := main.get_node("SettingsScreen") as SettingsScreen
+    settings.open()
+    TestAssertions.truthy(bool(main.call(&"_gameplay_input_blocked")), "actual settings screen blocks gameplay input", failures)
+    settings.close()
+    var run := main.get_node("GameRun") as GameRun
+    run.begin_level_up()
+    TestAssertions.truthy(bool(main.call(&"_gameplay_input_blocked")), "actual upgrade-selection run state blocks gameplay input", failures)
+    run.resume_run()
+    TestAssertions.truthy(not bool(main.call(&"_gameplay_input_blocked")), "resumed running state restores world interaction", failures)
+    _cleanup_main(main)
+
+func _test_typed_live_loot_diagnostic_accounting(failures: Array[String]) -> void:
+    var settings := PartyForgeSettings.new()
+    settings.mode = PartyForgeSettings.Mode.DEVELOPER_MODE
+    settings.unlock_all_implemented_content = true
+    settings.show_ground_chest_diagnostics = true
+    var main := _started_main_with_settings(settings)
+    main.call(&"_record_personal_loot_report", {
+        "decisions": [],
+        "diagnostics": [
+            {"stage": &"generation", "code": &"no_candidate"},
+            {"stage": &"storage", "code": &"ground_full"},
+            {"stage": &"ownership", "code": &"context_missing"},
+            {"stage": &"configuration", "code": &"invalid_event"},
+        ],
+    })
+    var diagnostics := main.get("_ground_chest_diagnostics") as Dictionary
+    TestAssertions.equal(int(diagnostics.get("generation_failures", -1)), 1, "generation failure count excludes storage, ownership, and configuration diagnostics", failures)
+    TestAssertions.equal(diagnostics.get("diagnostics_by_stage", {}), {"configuration": 1, "generation": 1, "ownership": 1, "storage": 1}, "typed diagnostics retain separate stable stage categories", failures)
+    TestAssertions.equal(diagnostics.get("diagnostics_by_code", {}), {"context_missing": 1, "ground_full": 1, "invalid_event": 1, "no_candidate": 1}, "typed diagnostics retain separate stable codes", failures)
+    _cleanup_main(main)
 
 func _test_main_menu_route_composition(failures: Array[String]) -> void:
     var root := "user://tests/main-wiring-menu-routes_%d_%d" % [OS.get_process_id(), Time.get_ticks_usec()]

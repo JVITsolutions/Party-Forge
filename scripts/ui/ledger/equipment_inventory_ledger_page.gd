@@ -66,6 +66,14 @@ func initial_focus() -> Control:
 	return _inventory_buttons[0] if not _inventory_buttons.is_empty() else null
 
 
+func focus_controls() -> Array[Control]:
+	var result: Array[Control] = []
+	for button: StorageSlotButton in _all_buttons():
+		if button != null and button.visible and button.focus_mode != Control.FOCUS_NONE:
+			result.append(button)
+	return result
+
+
 func apply_compact(compact: bool) -> void:
 	_compact = compact
 	_body().vertical = compact

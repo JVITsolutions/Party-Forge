@@ -11,11 +11,13 @@ const SPATIAL_INDEX := preload("res://scripts/loot/ground_item_spatial_index.gd"
 const TARGETING_SERVICE := preload("res://scripts/loot/ground_item_targeting_service.gd")
 const PICKUP_RESULT := preload("res://scripts/loot/ground_item_pickup_result.gd")
 const MAX_INACTIVE_CHESTS := 64
+const MAX_PROJECTIONS_PER_FRAME := 32
 const DEFAULT_TARGET_RADIUS := 12.0
 
 var _registry: GroundItemRegistry
 var _identities: Dictionary = {}
 var _presentation_projector: Variant
+var _comparison_projector := Callable()
 var _camera: Camera3D
 var _chests_parent: Node3D
 var _tooltip_layer: Node
@@ -29,11 +31,15 @@ var _dirty_drop_ids: Dictionary = {}
 var _mouse_inside_by_drop: Dictionary = {}
 var _focus_inside_by_drop: Dictionary = {}
 var _last_camera_signature: Array = []
+var _batch_camera_signature: Array = []
+var _pending_reprojection_ids: Array[StringName] = []
+var _last_projection_work_count := 0
 var _spatial_index: RefCounted
 var _targeting_service: RefCounted
 var _pickup_service: RefCounted
 var _context_registry: RunContextRegistry
 var _selection_by_owner: Dictionary = {}
+var _status_by_owner: Dictionary = {}
 var _target_radius := DEFAULT_TARGET_RADIUS
 var _visibility_filter := Callable()
 var _modal_filter := Callable()
@@ -58,12 +64,16 @@ func configure(
 	_targeting_service = TARGETING_SERVICE.new()
 	_identities = identities.duplicate(true)
 	_presentation_projector = presentation_projector
+	_comparison_projector = Callable()
 	_camera = camera
 	_chests_parent = chests_parent
 	_tooltip_layer = tooltip_layer
 	_tooltip = _resolve_shared_tooltip()
 	_reparent_inactive_projections()
 	_last_camera_signature = _camera_signature()
+	_batch_camera_signature = _last_camera_signature.duplicate(true)
+	_pending_reprojection_ids.clear()
+	_last_projection_work_count = 0
 	if _registry == null or _chests_parent == null or _tooltip_layer == null or _tooltip == null:
 		status_changed.emit("GROUND_ITEM_WORLD_UNAVAILABLE")
 		return
@@ -73,6 +83,10 @@ func configure(
 	for record: GroundItemRecord in _registry.all_records():
 		_on_record_added(record)
 	status_changed.emit("GROUND_ITEM_WORLD_READY")
+
+
+func configure_comparisons(projector: Callable) -> void:
+	_comparison_projector = projector
 
 
 func configure_interaction(
@@ -104,15 +118,20 @@ func clear_projection() -> void:
 	_registry = null
 	_identities.clear()
 	_presentation_projector = null
+	_comparison_projector = Callable()
 	_camera = null
 	_chests_parent = null
 	_tooltip_layer = null
 	_last_camera_signature.clear()
+	_batch_camera_signature.clear()
+	_pending_reprojection_ids.clear()
+	_last_projection_work_count = 0
 	_spatial_index = null
 	_targeting_service = null
 	_pickup_service = null
 	_context_registry = null
 	_selection_by_owner.clear()
+	_status_by_owner.clear()
 	_visibility_filter = Callable()
 	_modal_filter = Callable()
 
@@ -121,7 +140,7 @@ func selection_for_owner(run_player_id: StringName) -> StringName:
 	return StringName(_selection_by_owner.get(run_player_id, &""))
 
 
-func _unhandled_input(event: InputEvent) -> void:
+func _input(event: InputEvent) -> void:
 	if _modal_input_suppressed() or event == null:
 		return
 	var direction := 0
@@ -145,7 +164,7 @@ func set_selected(drop_id: StringName, active: bool) -> void:
 	if chest == null:
 		return
 	chest.call(&"set_selected", active)
-	_dirty_drop_ids[drop_id] = true
+	_project_anchor(drop_id)
 
 
 func invalidate_comparisons(run_player_id: StringName = &"") -> void:
@@ -166,16 +185,43 @@ func invalidate_comparisons(run_player_id: StringName = &"") -> void:
 
 
 func _process(_delta: float) -> void:
+	_last_projection_work_count = 0
 	var camera_signature := _camera_signature()
 	var camera_changed := camera_signature != _last_camera_signature
 	if camera_changed:
 		_last_camera_signature = camera_signature
-	if not camera_changed and _dirty_drop_ids.is_empty():
-		return
-	var dirty := _chest_by_drop.keys() if camera_changed else _dirty_drop_ids.keys()
+		if _pending_reprojection_ids.is_empty():
+			_begin_reprojection_batch(camera_signature)
+	var dirty := _dirty_drop_ids.keys()
 	_dirty_drop_ids.clear()
 	for drop_value: Variant in dirty:
+		if _last_projection_work_count >= MAX_PROJECTIONS_PER_FRAME:
+			_dirty_drop_ids[StringName(drop_value)] = true
+			continue
 		_project_anchor(StringName(drop_value))
+		_last_projection_work_count += 1
+	while _last_projection_work_count < MAX_PROJECTIONS_PER_FRAME and not _pending_reprojection_ids.is_empty():
+		var drop_id: StringName = _pending_reprojection_ids.pop_front()
+		_project_anchor(drop_id)
+		_last_projection_work_count += 1
+	if _pending_reprojection_ids.is_empty() and _batch_camera_signature != _last_camera_signature:
+		_begin_reprojection_batch(_last_camera_signature)
+
+
+func projection_diagnostics() -> Dictionary:
+	return {
+		"last_frame_work": _last_projection_work_count,
+		"pending": _pending_reprojection_ids.size() + _dirty_drop_ids.size(),
+		"limit": MAX_PROJECTIONS_PER_FRAME,
+	}
+
+
+func _begin_reprojection_batch(signature: Array) -> void:
+	_pending_reprojection_ids.clear()
+	for value: Variant in _chest_by_drop.keys():
+		_pending_reprojection_ids.append(StringName(value))
+	_pending_reprojection_ids.sort_custom(func(left: StringName, right: StringName) -> bool: return String(left) < String(right))
+	_batch_camera_signature = signature.duplicate(true)
 
 
 func _on_record_added(record: GroundItemRecord) -> void:
@@ -203,19 +249,25 @@ func _on_record_added(record: GroundItemRecord) -> void:
 	if anchor.get_parent() != _tooltip_layer:
 		anchor.get_parent().remove_child(anchor)
 		_tooltip_layer.add_child(anchor)
-	_dirty_drop_ids[record.drop_id] = true
+	_project_anchor(record.drop_id)
 
 
 func _on_record_removed(record: GroundItemRecord) -> void:
 	if record == null:
 		return
-	if selection_for_owner(record.run_player_id) == record.drop_id:
+	var was_selected := selection_for_owner(record.run_player_id) == record.drop_id
+	var next_drop_id := _nearest_remaining_visible(record.run_player_id, record.drop_id) if was_selected else &""
+	if was_selected:
 		_selection_by_owner.erase(record.run_player_id)
+		_status_by_owner.erase(record.run_player_id)
 	_release_chest(record.drop_id)
+	if not next_drop_id.is_empty():
+		_apply_selection(record.run_player_id, next_drop_id)
 
 
 func _on_registry_cleared() -> void:
 	_selection_by_owner.clear()
+	_status_by_owner.clear()
 	_release_all()
 
 
@@ -280,10 +332,12 @@ func _detail_for(record: GroundItemRecord) -> Dictionary:
 	}
 
 
-func _comparisons_for(detail: Dictionary) -> Array[Dictionary]:
+func _comparisons_for(record: GroundItemRecord, detail: Dictionary) -> Array[Dictionary]:
 	var result: Array[Dictionary] = []
+	if record == null or not _comparison_projector.is_valid():
+		return result
 	var compatible: Array = detail.get("compatible_slot_ids", [])
-	var equipment_value: Variant = detail.get("owner_leader_equipment", [])
+	var equipment_value: Variant = _comparison_projector.call(record.copy(), detail.duplicate(true))
 	if not equipment_value is Array:
 		return result
 	for value: Variant in equipment_value as Array:
@@ -312,8 +366,11 @@ func _project_anchor(drop_id: StringName) -> void:
 		return
 	var anchor := chest.call(&"tooltip_anchor") as Control
 	var world_position := chest.global_position if chest.is_inside_tree() else chest.position
-	var distance := _distance_to_camera(world_position)
+	var record := _record_by_drop.get(drop_id) as GroundItemRecord
+	var distance := _distance_for_record(record, world_position)
 	chest.call(&"_refresh_accessibility", distance)
+	if chest.call(&"is_selected"):
+		chest.call(&"set_distance_feedback", distance, String(_status_by_owner.get(StringName(chest.get("run_player_id")), "")))
 	var cached_detail := _detail_by_drop.get(drop_id, {}) as Dictionary
 	if not cached_detail.is_empty():
 		cached_detail["distance_meters"] = distance
@@ -372,7 +429,8 @@ func _present_tooltip(chest: Node3D) -> void:
 		return
 	var chest_drop_id := StringName(chest.get("drop_id"))
 	var detail := _refresh_detail(chest_drop_id)
-	var comparisons := _comparisons_for(detail)
+	var record := _record_by_drop.get(chest_drop_id) as GroundItemRecord
+	var comparisons := _comparisons_for(record, detail)
 	_tooltip.show_item(detail, comparisons, chest.call(&"tooltip_anchor") as Control, _source_id(chest_drop_id))
 
 
@@ -421,11 +479,27 @@ func _cycle_for_owner(run_player_id: StringName, direction: int) -> void:
 func _apply_selection(run_player_id: StringName, drop_id: StringName) -> void:
 	var previous := selection_for_owner(run_player_id)
 	if previous == drop_id:
+		_inspect_selection(run_player_id, drop_id)
 		return
 	if not previous.is_empty():
+		_focus_inside_by_drop.erase(previous)
 		set_selected(previous, false)
 	_selection_by_owner[run_player_id] = drop_id
+	_status_by_owner.erase(run_player_id)
 	set_selected(drop_id, true)
+	_inspect_selection(run_player_id, drop_id)
+
+
+func _inspect_selection(run_player_id: StringName, drop_id: StringName) -> void:
+	var chest := _chest_by_drop.get(drop_id) as Node3D
+	if chest == null or StringName(chest.get("run_player_id")) != run_player_id:
+		return
+	_project_anchor(drop_id)
+	var anchor := chest.call(&"tooltip_anchor") as Control
+	_focus_inside_by_drop[drop_id] = true
+	if anchor != null and anchor.is_inside_tree() and anchor.is_visible_in_tree():
+		anchor.grab_focus()
+	_present_tooltip(chest)
 
 
 func _collect_for_owner(drop_id: StringName, run_player_id: StringName) -> void:
@@ -436,6 +510,8 @@ func _collect_for_owner(drop_id: StringName, run_player_id: StringName) -> void:
 		return
 	match result.code:
 		PICKUP_RESULT.Code.MOVE_CLOSER:
+			_status_by_owner[run_player_id] = "Move closer"
+			_refresh_selection_feedback(run_player_id)
 			status_changed.emit("Move closer")
 		PICKUP_RESULT.Code.INVENTORY_FULL:
 			status_changed.emit("Inventory full")
@@ -446,7 +522,14 @@ func _collect_for_owner(drop_id: StringName, run_player_id: StringName) -> void:
 		PICKUP_RESULT.Code.TRANSACTION_REJECTED:
 			status_changed.emit("GROUND_ITEM_PICKUP_TRANSACTION_REJECTED")
 		PICKUP_RESULT.Code.OK:
+			_status_by_owner.erase(run_player_id)
 			status_changed.emit("GROUND_ITEM_PICKUP_OK")
+
+
+func _refresh_selection_feedback(run_player_id: StringName) -> void:
+	var drop_id := selection_for_owner(run_player_id)
+	if not drop_id.is_empty():
+		_project_anchor(drop_id)
 
 
 func _owner_for_event(event: InputEvent) -> StringName:
@@ -478,8 +561,18 @@ func _record_visible(record: GroundItemRecord) -> bool:
 	var chest := _chest_by_drop.get(record.drop_id) as Node3D
 	if chest == null or not chest.visible:
 		return false
-	var anchor := chest.call(&"tooltip_anchor") as Control
-	return anchor != null and anchor.visible
+	return _world_position_visible(record.world_position + Vector3.UP * 1.55)
+
+
+func _world_position_visible(world_position: Vector3) -> bool:
+	if _camera == null or not is_instance_valid(_camera):
+		return true
+	if not _camera.is_inside_tree():
+		return (_camera.transform.affine_inverse() * world_position).z < 0.0
+	if _camera.is_position_behind(world_position):
+		return false
+	var projected := _camera.unproject_position(world_position)
+	return _camera.get_viewport().get_visible_rect().has_point(projected)
 
 
 func _modal_input_suppressed() -> bool:
@@ -559,6 +652,7 @@ func _destroy_all_projections() -> void:
 	_record_by_drop.clear()
 	_detail_by_drop.clear()
 	_dirty_drop_ids.clear()
+	_pending_reprojection_ids.clear()
 	_mouse_inside_by_drop.clear()
 	_focus_inside_by_drop.clear()
 
@@ -585,6 +679,32 @@ func _distance_to_camera(world_position: Vector3) -> float:
 	return camera_position.distance_to(world_position)
 
 
+func _distance_for_record(record: GroundItemRecord, world_position: Vector3) -> float:
+	if record != null:
+		var leader_position := _leader_position_for(record.run_player_id)
+		if bool(leader_position.get("valid", false)):
+			return (leader_position.position as Vector3).distance_to(world_position)
+	return _distance_to_camera(world_position)
+
+
+func _nearest_remaining_visible(run_player_id: StringName, excluded_drop_id: StringName) -> StringName:
+	var leader_position := _leader_position_for(run_player_id)
+	if not bool(leader_position.get("valid", false)):
+		return &""
+	var origin := leader_position.position as Vector3
+	var best_id: StringName
+	var best_distance := INF
+	for value: Variant in _record_by_drop.values():
+		var record := value as GroundItemRecord
+		if record == null or record.drop_id == excluded_drop_id or record.run_player_id != run_player_id or not _record_visible(record):
+			continue
+		var distance := origin.distance_squared_to(record.world_position)
+		if distance < best_distance or (distance == best_distance and (best_id.is_empty() or String(record.drop_id) < String(best_id))):
+			best_id = record.drop_id
+			best_distance = distance
+	return best_id
+
+
 func _refresh_detail(drop_id: StringName) -> Dictionary:
 	var record := _record_by_drop.get(drop_id) as GroundItemRecord
 	if record == null:
@@ -597,7 +717,7 @@ func _refresh_detail(drop_id: StringName) -> Dictionary:
 
 
 func _decorate_detail(detail: Dictionary, record: GroundItemRecord, identity: Dictionary) -> void:
-	detail["distance_meters"] = _distance_to_camera(record.world_position)
+	detail["distance_meters"] = _distance_for_record(record, record.world_position)
 	detail["owner_player_number"] = int(identity.get("player_number", record.player_number))
 	detail["owner_run_player_id"] = String(record.run_player_id)
 

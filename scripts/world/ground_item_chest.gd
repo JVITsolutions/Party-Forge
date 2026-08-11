@@ -59,12 +59,33 @@ func bind(record: GroundItemRecord, detail: Dictionary, owner_color: Color) -> v
 
 func set_selected(active: bool) -> void:
 	_selected = active
+	var selection_ring := get_node_or_null("SelectionRing") as MeshInstance3D
+	if selection_ring != null:
+		selection_ring.visible = active
 	var light := get_node("RarityLight") as OmniLight3D
 	light.light_energy = _rarity_energy + SELECTED_LIGHT_BONUS if active else _rarity_energy
 	var material := (get_node("MeshTarget") as MeshInstance3D).material_override as StandardMaterial3D
 	if material != null:
 		material.emission_energy_multiplier = 1.35 if active else 0.45
 	_tooltip_anchor.add_theme_color_override("font_color", Color(0.86, 1.0, 0.78) if active else Color.WHITE)
+	if not active:
+		_tooltip_anchor.text = "?" if _missing_optional_visual() else ""
+
+
+func is_selected() -> bool:
+	return _selected
+
+
+func set_distance_feedback(distance_meters: float, status: String = "") -> void:
+	if not _selected:
+		return
+	var distance_text := "%.1f m" % maxf(distance_meters, 0.0)
+	_tooltip_anchor.text = "%s • %s" % [status, distance_text] if not status.is_empty() else distance_text
+	_refresh_accessibility(distance_meters)
+	if not status.is_empty():
+		_tooltip_anchor.accessibility_description = status
+	else:
+		_tooltip_anchor.accessibility_description = "Selected personal loot chest"
 
 
 func tooltip_anchor() -> Control:
@@ -87,6 +108,7 @@ func deactivate() -> void:
 	_detail = {}
 	if _tooltip_anchor != null and is_instance_valid(_tooltip_anchor):
 		_tooltip_anchor.visible = false
+		_tooltip_anchor.accessibility_description = ""
 		if _tooltip_anchor.is_inside_tree() and _tooltip_anchor.has_focus():
 			_tooltip_anchor.release_focus()
 	var collision := get_node_or_null("PickupTarget/CollisionShape3D") as CollisionShape3D

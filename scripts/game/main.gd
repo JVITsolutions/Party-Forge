@@ -426,6 +426,7 @@ func _configure_personal_loot() -> PackedStringArray:
 	if not ground_item_world_controller.status_changed.is_connected(_on_ground_item_status_changed):
 		ground_item_world_controller.status_changed.connect(_on_ground_item_status_changed)
 	ground_item_world_controller.call(&"configure", ground_item_registry, identity_assignment.identities(), Callable(self, "_ground_item_detail"), camera, get_node("GroundItems") as Node3D, get_node("GroundItemTooltipLayer"))
+	ground_item_world_controller.call(&"configure_comparisons", Callable(self, "_ground_item_comparison_entries"))
 	ground_item_world_controller.call(&"configure_interaction",
 		GROUND_ITEM_SPATIAL_INDEX.new(ground_item_registry),
 		GROUND_ITEM_TARGETING_SERVICE.new(),
@@ -433,7 +434,7 @@ func _configure_personal_loot() -> PackedStringArray:
 		run_context_registry,
 		run_tuning.controller_target_query_radius,
 		Callable(),
-		Callable(self, "_ground_item_modal_open"),
+		Callable(self, "_gameplay_input_blocked"),
 	)
 	return errors
 
@@ -446,12 +447,23 @@ func _record_personal_loot_report(report: Dictionary) -> void:
 	for decision: PersonalLootDecision in report.get("decisions", []) as Array:
 		if decision == null:
 			continue
-		var bucket_name := "successes_by_source" if decision.success else "failures_by_source"
+		var bucket_name := "successes_by_source" if decision.success else "misses_by_source"
 		var bucket := _ground_chest_diagnostics.get(bucket_name, {}) as Dictionary
 		var source := String(decision.source_category)
 		bucket[source] = int(bucket.get(source, 0)) + 1
 		_ground_chest_diagnostics[bucket_name] = bucket
-	_ground_chest_diagnostics["generation_failures"] = int(_ground_chest_diagnostics.get("generation_failures", 0)) + (report.get("diagnostics", []) as Array).size()
+	for value: Variant in report.get("diagnostics", []) as Array:
+		var diagnostic := value as Dictionary
+		var stage := String(diagnostic.get("stage", &"configuration")) if diagnostic != null else "configuration"
+		var code := String(diagnostic.get("code", &"legacy_untyped")) if diagnostic != null else "legacy_untyped"
+		var stages := _ground_chest_diagnostics.get("diagnostics_by_stage", {}) as Dictionary
+		stages[stage] = int(stages.get(stage, 0)) + 1
+		_ground_chest_diagnostics["diagnostics_by_stage"] = stages
+		var codes := _ground_chest_diagnostics.get("diagnostics_by_code", {}) as Dictionary
+		codes[code] = int(codes.get(code, 0)) + 1
+		_ground_chest_diagnostics["diagnostics_by_code"] = codes
+		if stage == "generation":
+			_ground_chest_diagnostics["generation_failures"] = int(_ground_chest_diagnostics.get("generation_failures", 0)) + 1
 	_sync_ground_chest_diagnostics()
 
 func _on_ground_record_added(_record: GroundItemRecord) -> void:
@@ -489,8 +501,10 @@ func _reset_ground_chest_diagnostics() -> void:
 		"live": 0,
 		"peak": 0,
 		"successes_by_source": {},
-		"failures_by_source": {},
+		"misses_by_source": {},
 		"generation_failures": 0,
+		"diagnostics_by_stage": {},
+		"diagnostics_by_code": {},
 		"collection_outcomes": {},
 	}
 	_sync_ground_chest_diagnostics()
@@ -511,8 +525,111 @@ func _ground_item_detail(record: GroundItemRecord) -> Dictionary:
 		class_definition = context.party.members[0].class_definition
 	return ItemPresentationProjector.project(item, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG, GameCatalog.STAT_CATALOG, class_definition)
 
+func _ground_item_comparison_entries(record: GroundItemRecord, detail: Dictionary) -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	if record == null or run_context_registry == null:
+		return result
+	var context := run_context_registry.context_for(record.run_player_id)
+	if context == null or context.party == null:
+		return result
+	var leader_id := 0
+	var leader_class: ClassDefinition
+	for member: PartyMemberState in context.party.members:
+		if member != null and member.is_leader:
+			leader_id = member.member_id
+			leader_class = member.class_definition
+			break
+	if leader_id <= 0:
+		return result
+	var staged_state := _comparison_state_with_candidate_in_inventory(context, record)
+	if staged_state == null:
+		return result
+	var current_stats := context.party.stats_for(leader_id)
+	var equipment_container := context.equipment_for(leader_id)
+	var registry := context.item_state().registry()
+	if current_stats == null or equipment_container == null or registry == null:
+		return result
+	for slot_value: Variant in detail.get("compatible_slot_ids", []):
+		var slot_id := StringName(slot_value)
+		var slot_index := EquipmentSlotIndex.index_for(slot_id)
+		if slot_index < 0:
+			continue
+		var equipped_item_id := equipment_container.item_id_at(slot_index)
+		var equipped_item := registry.item(equipped_item_id)
+		if equipped_item == null:
+			continue
+		var preview := EquipmentTransitionService.preview(
+			staged_state,
+			leader_id,
+			record.item_id,
+			slot_id,
+			context.party,
+			GameCatalog.EQUIPMENT_CATALOG,
+			GameCatalog.ITEM_FOUNDATION_CATALOG,
+		)
+		if not preview.ok():
+			continue
+		result.append({
+			"slot_id": String(slot_id),
+			"item": ItemPresentationProjector.project(equipped_item, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG, GameCatalog.STAT_CATALOG, leader_class),
+			"current_stats": current_stats,
+			"candidate_stats": preview.resolution().final_stats,
+		})
+	return result
+
+func _comparison_state_with_candidate_in_inventory(context: PlayerRunContext, record: GroundItemRecord) -> ItemOwnershipState:
+	var state := context.item_state() if context != null else null
+	var ground := state.container(ItemSlotContainer.RUN_GROUND_ITEMS_ID) if state != null else null
+	var inventory := state.container(&"run-inventory") if state != null else null
+	if ground == null or inventory == null or ground.item_id_at(record.ground_slot) != record.item_id or inventory.capacity <= 0:
+		return null
+	var destination_slot := inventory.first_empty_slot()
+	var operation := ItemTransactionRequest.MOVE_TO_EMPTY
+	if destination_slot < 0:
+		destination_slot = 0
+		operation = ItemTransactionRequest.SWAP_OCCUPIED
+	var request := ItemTransactionRequest.move(
+		"world-comparison:%s" % record.drop_id,
+		String(record.run_player_id),
+		ItemSlotContainer.RUN_GROUND_ITEMS_ID,
+		record.ground_slot,
+		record.item_id,
+		&"run-inventory",
+		destination_slot,
+	) if operation == ItemTransactionRequest.MOVE_TO_EMPTY else ItemTransactionRequest.swap(
+		"world-comparison:%s" % record.drop_id,
+		String(record.run_player_id),
+		ItemSlotContainer.RUN_GROUND_ITEMS_ID,
+		record.ground_slot,
+		record.item_id,
+		&"run-inventory",
+		destination_slot,
+	)
+	var transaction := ItemContainerTransactionService.new().apply(state, request, ItemTransactionJournal.new(), GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)
+	return transaction.next_state if transaction.ok() else null
+
+func _gameplay_input_blocked() -> bool:
+	if not run_started or game_run == null or game_run.current_state() not in [RunStateMachine.State.RUNNING, RunStateMachine.State.BOSS]:
+		return true
+	if character_ledger != null and character_ledger.is_open():
+		return true
+	if run_pause_menu != null and run_pause_menu.is_open():
+		return true
+	for path: NodePath in [
+		^"SettingsScreen",
+		^"ArmouryScreen",
+		^"WarehouseScreen",
+		^"PassiveTreeScreen",
+		^"DeveloperItemSandbox",
+		^"LoadoutWarningDialog",
+	]:
+		var modal := get_node_or_null(path)
+		if modal != null and modal.has_method(&"is_open") and bool(modal.call(&"is_open")):
+			return true
+	return false
+
 func _ground_item_modal_open() -> bool:
-	return (character_ledger != null and character_ledger.is_open()) or (run_pause_menu != null and run_pause_menu.is_open())
+	return _gameplay_input_blocked()
 
 func _clear_live_loot() -> void:
 	var defeat_callback := Callable(self, "_on_enemy_defeated_for_personal_loot")

@@ -20,8 +20,6 @@ func _initialize() -> void:
 
 
 func _run() -> void:
-	root.content_scale_size = Vector2i(1920, 1080)
-	root.size = Vector2i(1920, 1080)
 	for slot: int in OWNER_IDS.size():
 		var context := _context(slot)
 		_assert(_contexts.register_context(context, slot).ok(), "scale context P%d registers on device %d" % [slot + 1, slot])
@@ -39,14 +37,18 @@ func _run() -> void:
 		_assert(registry.for_owner(owner_id).size() == RECORD_COUNT / OWNER_IDS.size(), "%s owns exactly 500 records" % owner_id)
 
 	var host := Node.new()
+	var viewport := SubViewport.new()
+	viewport.size = Vector2i(1920, 1080)
+	viewport.render_target_update_mode = SubViewport.UPDATE_DISABLED
 	var chests := Node3D.new()
 	var tooltip_layer := Control.new()
-	tooltip_layer.size = Vector2(root.size)
+	tooltip_layer.size = Vector2(viewport.size)
 	var camera := Camera3D.new()
 	host.add_child(chests)
 	host.add_child(tooltip_layer)
 	host.add_child(camera)
-	root.add_child(host)
+	viewport.add_child(host)
+	root.add_child(viewport)
 	camera.look_at_from_position(Vector3(0.0, 80.0, 80.0), Vector3.ZERO)
 	camera.current = true
 	var world := WORLD_CONTROLLER.new() as Node
@@ -67,11 +69,32 @@ func _run() -> void:
 	for _warmup: int in 3:
 		await process_frame
 	var peak_frame_ms := 0.0
-	for _sample: int in FRAME_SAMPLES:
+	var peak_projection_work := 0
+	var peak_pending_projection := 0
+	_assert(world.has_method(&"projection_diagnostics"), "production controller exposes bounded projection diagnostics")
+	for sample: int in FRAME_SAMPLES:
+		camera.position.x = sin(float(sample) * 0.37) * 18.0
+		camera.position.z = 80.0 + cos(float(sample) * 0.21) * 12.0
+		camera.look_at(Vector3.ZERO)
+		viewport.size = Vector2i(1920, 1080) if sample % 2 == 0 else Vector2i(2560, 1440)
+		tooltip_layer.size = Vector2(viewport.size)
 		await process_frame
 		peak_frame_ms = maxf(peak_frame_ms, Performance.get_monitor(Performance.TIME_PROCESS) * 1000.0)
+		if world.has_method(&"projection_diagnostics"):
+			var projection := world.call(&"projection_diagnostics") as Dictionary
+			peak_projection_work = maxi(peak_projection_work, int(projection.get("last_frame_work", 0)))
+			peak_pending_projection = maxi(peak_pending_projection, int(projection.get("pending", 0)))
+	var settle_frames := 0
+	if world.has_method(&"projection_diagnostics"):
+		while int((world.call(&"projection_diagnostics") as Dictionary).get("pending", 0)) > 0 and settle_frames < 128:
+			await process_frame
+			settle_frames += 1
+		_assert(int((world.call(&"projection_diagnostics") as Dictionary).get("pending", 0)) == 0, "moving-camera projection reaches eventual correctness after motion stops")
 	var memory_after := Performance.get_monitor(Performance.MEMORY_STATIC)
 	var memory_peak := Performance.get_monitor(Performance.MEMORY_STATIC_MAX)
+	var projection_limit := int(constants.get("MAX_PROJECTIONS_PER_FRAME", 0))
+	_assert(projection_limit > 0 and peak_projection_work <= projection_limit, "moving camera/viewport projection work stays within the production per-frame bound")
+	_assert(peak_pending_projection > 0, "moving camera/viewport leaves observable bounded work pending")
 	_assert(is_finite(peak_frame_ms) and peak_frame_ms >= 0.0, "peak frame observation is finite and nonnegative")
 	_assert(is_finite(memory_before) and is_finite(memory_after) and is_finite(memory_peak), "static memory observations are finite")
 	_assert(memory_before >= 0.0 and memory_after >= memory_before and memory_peak >= memory_after, "static memory observations are ordered and nonnegative")
@@ -81,10 +104,13 @@ func _run() -> void:
 		int(constants.get("MAX_INACTIVE_CHESTS", 0)), FRAME_SAMPLES,
 	])
 	print("LIVE_LOOT_SCALE_SUMMARY: chests=%d owners=%d peak_frame_ms=%.3f" % [registry.all_records().size(), 4, peak_frame_ms])
+	print("LIVE_LOOT_MOVING_CAMERA_SUMMARY: records=%d samples=%d peak_frame_ms=%.3f peak_projection_work=%d peak_pending=%d settle_frames=%d memory_peak_bytes=%d" % [
+		registry.all_records().size(), FRAME_SAMPLES, peak_frame_ms, peak_projection_work, peak_pending_projection, settle_frames, int(memory_peak),
+	])
 	var hard_failure := registry.all_records().size() != 2000 or peak_frame_ms > 33.4
 
 	world.clear_projection()
-	host.free()
+	viewport.free()
 	_contexts.clear()
 	for actor: Node3D in _actors:
 		actor.free()

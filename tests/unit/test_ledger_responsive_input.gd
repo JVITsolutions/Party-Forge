@@ -104,6 +104,18 @@ func _test_layout_controller_and_pause_edges(failures: Array[String]) -> void:
 	TestAssertions.equal(selected_member.focus_neighbor_bottom, selected_member.get_path_to(ledger.get_node("Overlay/Frame/Layout/Body/PartyColumn/PartyScroll/PartyEntries/Member_2")), "desktop member 1 moves down to member 2", failures)
 	TestAssertions.equal(member_24.focus_neighbor_right, member_24.get_path_to(stats_focus), "desktop selected member moves right to active page", failures)
 	TestAssertions.equal(stats_focus.focus_neighbor_left, stats_focus.get_path_to(member_24), "desktop active page moves left to selected member", failures)
+	var close_button := ledger.get_node_or_null("Overlay/Frame/Layout/Close") as Button
+	TestAssertions.truthy(close_button != null and close_button.visible and close_button.focus_mode == Control.FOCUS_ALL, "ledger exposes one visible focusable Close control", failures)
+	TestAssertions.truthy(ledger.activate_page(&"equipment_inventory"), "focus-graph fixture activates Equipment and Inventory", failures)
+	var equipment_focus := equipment_page.initial_focus()
+	var inventory_grid := equipment_page.get_node("Layout/Body/InventoryRegion/InventoryScroll/Grid") as GridContainer
+	var inventory_focus := inventory_grid.get_child(0) as Control if inventory_grid.get_child_count() > 0 else null
+	var stats_tab := _tab_for(ledger, &"stats")
+	if close_button != null and equipment_focus != null and inventory_focus != null and stats_tab != null:
+		var required: Array[Control] = [member_24, stats_tab, close_button, equipment_focus, inventory_focus]
+		for start: Control in required:
+			TestAssertions.truthy(_focus_next_reaches(start, required), "closed focus graph reaches roster, tabs, Close, equipment, and inventory from %s" % start.name, failures)
+	ledger.activate_page(&"stats")
 	ledger.apply_viewport_size(Vector2(960.0, 540.0))
 	ledger.select_member(1)
 	TestAssertions.truthy(selected_member.text.begins_with("[Selected] "), "member selection has a non-color text cue", failures)
@@ -188,7 +200,12 @@ func _test_layout_controller_and_pause_edges(failures: Array[String]) -> void:
 	TestAssertions.equal(run.current_state(), RunStateMachine.State.BOSS, "fixture reaches BOSS", failures)
 	TestAssertions.truthy(not tree.paused, "BOSS starts unpaused", failures)
 	TestAssertions.truthy(ledger.open_for_player(), "ledger opens during BOSS", failures)
-	ledger.close()
+	close_button = ledger.get_node_or_null("Overlay/Frame/Layout/Close") as Button
+	if close_button != null:
+		close_button.pressed.emit()
+	else:
+		ledger.close()
+	TestAssertions.truthy(not ledger.is_open(), "visible Close control closes the ledger", failures)
 	TestAssertions.truthy(not tree.paused, "ledger close restores unpaused BOSS", failures)
 	_test_provider_refresh_focus_lifecycle(ledger, party, catalog, failures)
 
@@ -241,6 +258,19 @@ func _tab_for(ledger: CharacterLedger, page_id: StringName) -> Button:
 		if button != null and button.get_meta("page_id", &"") == page_id:
 			return button
 	return null
+
+
+func _focus_next_reaches(start: Control, required: Array[Control]) -> bool:
+	var reached: Dictionary = {}
+	var current := start
+	for _step: int in range(128):
+		if current == null or reached.has(current.get_instance_id()):
+			break
+		reached[current.get_instance_id()] = true
+		if current.focus_next.is_empty():
+			break
+		current = current.get_node_or_null(current.focus_next) as Control
+	return required.all(func(control: Control) -> bool: return control != null and reached.has(control.get_instance_id()))
 
 
 func _action_event(action: StringName) -> InputEventAction:

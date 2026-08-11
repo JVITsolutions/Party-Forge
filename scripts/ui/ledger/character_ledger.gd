@@ -28,10 +28,16 @@ var _member_visibility_request_target_id := 0
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	visible = false
+	_wire_close_control()
 	_observed_viewport = get_viewport()
 	if _observed_viewport != null and not _observed_viewport.size_changed.is_connected(_on_viewport_size_changed):
 		_observed_viewport.size_changed.connect(_on_viewport_size_changed)
 	_on_viewport_size_changed()
+
+func _wire_close_control() -> void:
+	var close_callback := Callable(self, "_on_close_pressed")
+	if not _close_button().pressed.is_connected(close_callback):
+		_close_button().pressed.connect(close_callback)
 
 func _notification(what: int) -> void:
 	if what != NOTIFICATION_PREDELETE:
@@ -57,6 +63,7 @@ func configure(
 	progression_provider: Callable = Callable(),
 	progression_context: PlayerRunContext = null,
 ) -> void:
+	_wire_close_control()
 	_invalidate_member_visibility_requests()
 	if is_open():
 		close()
@@ -445,6 +452,7 @@ func _restore_member_focus_after_refresh(previous_member_id: int) -> void:
 func _wire_roster_page_focus_bridge() -> void:
 	if context == null:
 		return
+	_wire_closed_focus_cycle()
 	var member_button := _member_buttons.get(context.selected_member_id) as Button
 	var active_page := _active_page()
 	var page_target := active_page.initial_focus() if active_page != null else null
@@ -471,6 +479,29 @@ func _wire_roster_page_focus_bridge() -> void:
 	if floori(float(member_index) / float(columns)) == last_row:
 		_set_neighbor(member_button, &"focus_neighbor_bottom", page_target)
 		_set_neighbor(page_target, &"focus_neighbor_top", member_button)
+
+func _wire_closed_focus_cycle() -> void:
+	var controls: Array[Control] = []
+	for child: Node in _party_entries().get_children():
+		var member_button := child as Button
+		if member_button != null and member_button.visible and member_button.focus_mode != Control.FOCUS_NONE:
+			controls.append(member_button)
+	for child: Node in _tabs().get_children():
+		var tab_button := child as Button
+		if tab_button != null and tab_button.visible and tab_button.focus_mode != Control.FOCUS_NONE:
+			controls.append(tab_button)
+	controls.append(_close_button())
+	var active_page := _active_page()
+	if active_page != null:
+		for page_control: Control in active_page.focus_controls():
+			if page_control != null and page_control.visible and page_control.focus_mode != Control.FOCUS_NONE:
+				controls.append(page_control)
+	if controls.size() < 2:
+		return
+	for index: int in controls.size():
+		var current := controls[index]
+		current.focus_previous = current.get_path_to(controls[posmod(index - 1, controls.size())])
+		current.focus_next = current.get_path_to(controls[(index + 1) % controls.size()])
 
 func _refresh_member_button(member_id: int) -> void:
 	var button := _member_buttons.get(member_id) as Button
@@ -516,6 +547,9 @@ func _on_tab_focused(page_id: StringName) -> void:
 func _on_member_pressed(member_id: int) -> void:
 	select_member(member_id)
 
+func _on_close_pressed() -> void:
+	close()
+
 func _on_member_focused(member_id: int) -> void:
 	_request_member_visibility(member_id)
 	_ensure_member_visible(member_id)
@@ -529,6 +563,7 @@ func _on_provider_data_changed(member_id: int) -> void:
 		var active_page := _pages.get(_active_page_id) as CharacterLedgerPage
 		if active_page != null:
 			active_page.refresh()
+			_wire_roster_page_focus_bridge()
 
 func _on_provider_party_changed() -> void:
 	if is_open():
@@ -629,3 +664,6 @@ func _active_page() -> CharacterLedgerPage:
 
 func _status() -> Label:
 	return get_node("Overlay/Frame/Layout/Status") as Label
+
+func _close_button() -> Button:
+	return get_node("Overlay/Frame/Layout/Close") as Button

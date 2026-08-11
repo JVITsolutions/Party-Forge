@@ -12,11 +12,12 @@ func create_drop(
 	var prepared := _preflight(context, request, record_identity, equipment, foundation, registry)
 	var error := String(prepared.get("error", ""))
 	if not error.is_empty():
-		return GroundLootOwnershipResult.failure(error)
+		return GroundLootOwnershipResult.failure(error, null, StringName(prepared.get("stage", &"configuration")), StringName(prepared.get("code", &"invalid_configuration")))
 
 	var generated := context.issue_ground_item(request, equipment, foundation)
 	if generated == null or not generated.ok():
-		return GroundLootOwnershipResult.failure(_generation_error(generated), generated)
+		var generation_code := generated.failure.code if generated != null and generated.failure != null else &"generation_unavailable"
+		return GroundLootOwnershipResult.failure(_generation_error(generated), generated, &"generation", generation_code)
 
 	var record := GroundItemRecord.new()
 	record.drop_id = StringName(record_identity["drop_id"])
@@ -41,25 +42,25 @@ func _preflight(
 	registry: GroundItemRegistry,
 ) -> Dictionary:
 	if context == null or not context.is_configured():
-		return _failed("context", "configured owner context is required")
+		return _failed("context", "configured owner context is required", &"ownership", &"context_invalid")
 	if request == null:
-		return _failed("request", "must not be null")
+		return _failed("request", "must not be null", &"configuration", &"request_missing")
 	if equipment == null:
-		return _failed("equipment", "catalog is required")
+		return _failed("equipment", "catalog is required", &"configuration", &"equipment_catalog_missing")
 	if foundation == null:
-		return _failed("foundation", "catalog is required")
+		return _failed("foundation", "catalog is required", &"configuration", &"foundation_catalog_missing")
 	if registry == null:
-		return _failed("registry", "must not be null")
+		return _failed("registry", "must not be null", &"configuration", &"registry_missing")
 	var request_error := request.validate(foundation)
 	if not request_error.is_empty():
-		return _failed("request", request_error)
+		return _failed("request", request_error, &"configuration", &"request_invalid")
 	var identity_error := _identity_error(context, request, record_identity)
 	if not identity_error.is_empty():
-		return {"error": identity_error}
+		return {"error": identity_error, "stage": &"ownership", "code": &"identity_mismatch"}
 
 	var state := context.item_state()
 	if state == null or state.owner_id != String(context.run_player_id):
-		return _failed("owner", "item state owner does not match run player")
+		return _failed("owner", "item state owner does not match run player", &"ownership", &"item_state_mismatch")
 	var ground := context.ground_items()
 	if (
 		ground == null
@@ -67,22 +68,22 @@ func _preflight(
 		or ground.container_kind != ItemSlotContainer.RUN_GROUND_ITEMS
 		or ground.owner_id != String(context.run_player_id)
 	):
-		return _failed("ground", "owner ground container is invalid")
+		return _failed("ground", "owner ground container is invalid", &"ownership", &"ground_owner_mismatch")
 	var ground_slot := ground.first_empty_slot()
 	if ground_slot < 0:
-		return _failed("ground", "owner ground container is full")
+		return _failed("ground", "owner ground container is full", &"storage", &"ground_full")
 
 	var issuer_namespace := _issuer_namespace(context)
 	var sequence_result := _next_sequence(state.registry(), issuer_namespace)
 	var sequence_error := String(sequence_result.get("error", ""))
 	if not sequence_error.is_empty():
-		return _failed("issuer", sequence_error)
+		return _failed("issuer", sequence_error, &"storage", &"issuer_sequence_invalid")
 	var item_id := "item-%s-%016d" % [issuer_namespace.sha256_text(), int(sequence_result["sequence"])]
 	if state.registry().has(item_id):
-		return _failed("issuer", "predicted item ID already belongs to the owner")
+		return _failed("issuer", "predicted item ID already belongs to the owner", &"storage", &"ground_record_conflict")
 	var registry_error := registry._preflight_identity(StringName(record_identity["drop_id"]), item_id)
 	if not registry_error.is_empty():
-		return {"error": registry_error}
+		return {"error": registry_error, "stage": &"storage", "code": &"ground_record_conflict"}
 	return {"error": "", "ground_slot": ground_slot, "item_id": item_id}
 
 func _identity_error(context: PlayerRunContext, request: ItemGenerationRequest, identity: Dictionary) -> String:
@@ -145,8 +146,8 @@ func _generation_error(generated: ItemGenerationResult) -> String:
 		detail += " message=%s" % message
 	return _error("generation", detail)
 
-func _failed(field: String, reason: String) -> Dictionary:
-	return {"error": _error(field, reason)}
+func _failed(field: String, reason: String, stage: StringName, code: StringName) -> Dictionary:
+	return {"error": _error(field, reason), "stage": stage, "code": code}
 
 func _finite_position(value: Vector3) -> bool:
 	return is_finite(value.x) and is_finite(value.y) and is_finite(value.z)

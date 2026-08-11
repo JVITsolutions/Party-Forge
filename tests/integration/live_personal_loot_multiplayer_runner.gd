@@ -109,7 +109,7 @@ func _run() -> void:
 	var p2_targets := targeting.call(&"ordered_for_owner", spatial_index, &"player_2", Vector3.ZERO, 30.0) as Array
 	_assert(p1_targets.map(func(record: GroundItemRecord) -> StringName: return record.drop_id) == [&"drop:player_1:13001"], "P1 target list excludes the visible foreign chest")
 	_assert(p2_targets.map(func(record: GroundItemRecord) -> StringName: return record.drop_id) == [&"drop:player_2:13001"], "P2 target list excludes the visible P1 chest")
-	world.call("_unhandled_input", _dpad_right(0))
+	await _dispatch(_dpad_right(0))
 	_assert(world.call(&"selection_for_owner", &"player_1") == &"drop:player_1:13001", "device 0 cycles only the P1 chest")
 	_assert(StringName(world.call(&"selection_for_owner", &"player_2")).is_empty(), "device 0 cannot target the foreign P2 chest")
 
@@ -204,6 +204,15 @@ func _dpad_right(device: int) -> InputEventJoypadButton:
 	event.button_index = JOY_BUTTON_DPAD_RIGHT
 	event.pressed = true
 	return event
+
+
+func _dispatch(event: InputEventJoypadButton) -> void:
+	Input.parse_input_event(event)
+	await process_frame
+	var release := event.duplicate() as InputEventJoypadButton
+	release.pressed = false
+	Input.parse_input_event(release)
+	await process_frame
 
 
 func _finish() -> void:

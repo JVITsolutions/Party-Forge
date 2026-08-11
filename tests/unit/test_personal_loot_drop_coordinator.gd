@@ -79,6 +79,12 @@ func _test_one_owner_failure_does_not_block_another(failures: Array[String]) -> 
 	var report := coordinator.call(&"resolve_defeat", event) as Dictionary
 	TestAssertions.equal(report.get("spawned_drop_ids", []), [&"drop:player_2:82"], "one owner preflight failure does not block another owner success", failures)
 	TestAssertions.equal((report.get("diagnostics", []) as Array).size(), 1, "failed owner contributes one diagnostic without replacing decisions", failures)
+	if (report.get("diagnostics", []) as Array).size() == 1:
+		var diagnostic: Variant = (report.get("diagnostics", []) as Array)[0]
+		TestAssertions.truthy(diagnostic is Dictionary, "coordinator diagnostics are typed records rather than parsed strings", failures)
+		if diagnostic is Dictionary:
+			TestAssertions.equal(StringName(diagnostic.get("stage", &"")), &"storage", "duplicate ground identity is classified as a storage diagnostic", failures)
+			TestAssertions.equal(StringName(diagnostic.get("code", &"")), &"ground_record_conflict", "duplicate ground identity exposes a stable diagnostic code", failures)
 	TestAssertions.equal(contexts.context_for(&"player_1").item_state().to_dictionary(), first_before, "failed owner remains byte-equivalent", failures)
 	TestAssertions.equal(contexts.context_for(&"player_2").item_state().registry().size(), 1, "independent successful owner still receives exactly one item", failures)
 

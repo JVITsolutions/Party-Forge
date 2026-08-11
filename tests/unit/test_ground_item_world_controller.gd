@@ -15,6 +15,7 @@ func run() -> Array[String]:
 		return failures
 	_test_main_scene_wiring(failures)
 	_test_projection_pool_tooltip_and_ownership(controller_script, failures)
+	_test_bounded_camera_reprojection(controller_script, failures)
 	return failures
 
 
@@ -52,12 +53,17 @@ func _test_projection_pool_tooltip_and_ownership(controller_script: Script, fail
 	var comparison_state: Array = [[_comparison_entry("equipped-ring-v1", 100.0, 125.0)]]
 	var projector := func(record: GroundItemRecord) -> Dictionary:
 		projection_calls[0] += 1
-		return _detail_for(record, comparison_state[0] as Array)
+		return _detail_for(record)
+	var comparison_projector := func(_record: GroundItemRecord, _detail: Dictionary) -> Array:
+		return comparison_state[0] as Array
 	var identities := {
 		&"player_1": {"player_number": 1, "color_id": &"red", "color": PlayerColorPalette.color(&"red")},
 		&"player_2": {"player_number": 2, "color_id": &"blue", "color": PlayerColorPalette.color(&"blue")},
 	}
 	controller.call(&"configure", registry, identities, projector, camera, chests_parent, tooltip_layer)
+	TestAssertions.truthy(controller.has_method(&"configure_comparisons"), "controller accepts a dedicated production comparison projector", failures)
+	if controller.has_method(&"configure_comparisons"):
+		controller.call(&"configure_comparisons", comparison_projector)
 	TestAssertions.equal(_tooltip_count(tooltip_layer), 1, "configure creates exactly one shared ItemTooltipPanel", failures)
 	var first := _record(&"drop-a", &"player_1", 1, Vector3(3.0, 0.0, -4.0), &"uncommon", &"red")
 	var second := _record(&"drop-b", &"player_2", 2, Vector3(0.0, 0.0, -8.0), &"legendary", &"blue")
@@ -75,6 +81,7 @@ func _test_projection_pool_tooltip_and_ownership(controller_script: Script, fail
 	controller.call(&"_process", 0.016)
 	TestAssertions.equal(projection_calls[0], 2, "ordinary process frames never rebuild cached item detail", failures)
 	var first_chest := active[&"drop-a"] as Node3D
+	TestAssertions.truthy(not (controller.get("_detail_by_drop") as Dictionary)[&"drop-a"].has("owner_leader_equipment"), "cached item detail contains no synthetic comparison-only field", failures)
 	var first_anchor := first_chest.call(&"tooltip_anchor") as Control
 	TestAssertions.equal(first_anchor.get_parent(), tooltip_layer, "3D chest projects to a lightweight screen anchor", failures)
 	var anchor_before_camera_move := first_anchor.position
@@ -165,6 +172,8 @@ func _test_projection_pool_tooltip_and_ownership(controller_script: Script, fail
 	host.add_child(second_chests_parent)
 	host.add_child(second_tooltip_layer)
 	controller.call(&"configure", registry, identities, projector, camera, second_chests_parent, second_tooltip_layer)
+	if controller.has_method(&"configure_comparisons"):
+		controller.call(&"configure_comparisons", comparison_projector)
 	var reconfigured_active := controller.get("_chest_by_drop") as Dictionary
 	TestAssertions.equal(reconfigured_active.size(), 1, "reconfigure preserves exactly one active chest per registry record", failures)
 	var reconfigured_chest := reconfigured_active[&"drop-c"] as Node3D
@@ -192,7 +201,43 @@ func _test_projection_pool_tooltip_and_ownership(controller_script: Script, fail
 	RenderingServer.force_sync()
 
 
-func _detail_for(record: GroundItemRecord, comparison_entries: Array) -> Dictionary:
+func _test_bounded_camera_reprojection(controller_script: Script, failures: Array[String]) -> void:
+	var host := Node.new()
+	var chests_parent := Node3D.new()
+	var tooltip_layer := Control.new()
+	tooltip_layer.size = Vector2(1920.0, 1080.0)
+	var camera := Camera3D.new()
+	host.add_child(chests_parent)
+	host.add_child(tooltip_layer)
+	host.add_child(camera)
+	var controller := Node.new()
+	controller.set_script(controller_script)
+	host.add_child(controller)
+	var registry := GroundItemRegistry.new(256)
+	controller.call(&"configure", registry, {}, func(record: GroundItemRecord) -> Dictionary: return _detail_for(record), camera, chests_parent, tooltip_layer)
+	for index: int in range(160):
+		registry.add(_record(StringName("batch-%03d" % index), &"player_1", 1, Vector3(float(index % 20), 0.0, -float(4 + index / 20)), &"common", &"red"))
+	controller.call(&"_process", 0.0)
+	camera.position.x = 3.0
+	controller.call(&"_process", 0.0)
+	TestAssertions.truthy(controller.has_method(&"projection_diagnostics"), "controller exposes production bounded-projection diagnostics", failures)
+	if controller.has_method(&"projection_diagnostics"):
+		var first_frame := controller.call(&"projection_diagnostics") as Dictionary
+		var limit := int(controller_script.get_script_constant_map().get("MAX_PROJECTIONS_PER_FRAME", 0))
+		TestAssertions.truthy(limit > 0 and int(first_frame.get("last_frame_work", 0)) <= limit, "camera motion reprojects no more than the declared per-frame bound", failures)
+		TestAssertions.truthy(int(first_frame.get("pending", 0)) > 0, "camera motion leaves bounded projection work queued", failures)
+		var guard := 0
+		while int((controller.call(&"projection_diagnostics") as Dictionary).get("pending", 0)) > 0 and guard < 32:
+			controller.call(&"_process", 0.0)
+			guard += 1
+		TestAssertions.equal(int((controller.call(&"projection_diagnostics") as Dictionary).get("pending", 0)), 0, "bounded camera reprojection reaches eventual correctness", failures)
+	controller.call(&"_exit_tree")
+	controller.free()
+	host.free()
+	RenderingServer.force_sync()
+
+
+func _detail_for(record: GroundItemRecord) -> Dictionary:
 	return {
 		"instance_id": record.item_id,
 		"name": "Projected %s" % record.item_id,
@@ -202,7 +247,6 @@ func _detail_for(record: GroundItemRecord, comparison_entries: Array) -> Diction
 		"compatible_slot_ids": ["ring_left"],
 		"affixes": [{"display_name": "Stout", "tier": 2, "rolls": []}],
 		"modifier_totals": {"max_health|0": 25.0},
-		"owner_leader_equipment": comparison_entries.duplicate(true),
 	}
 
 
