@@ -9,6 +9,7 @@ const LevelUpPanelScript := preload("res://scripts/ui/level_up_panel.gd")
 const RunResultPanelScript := preload("res://scripts/ui/run_result_panel.gd")
 const LoadoutWarningDialogScript := preload("res://scripts/ui/loadout_warning/loadout_warning_dialog.gd")
 const REWARD_DISTRIBUTION_TUNING: RewardDistributionTuning = preload("res://data/progression/reward_distribution.tres")
+const PERSONAL_LOOT_TUNING: PersonalLootTuning = preload("res://data/items/personal_loot_tuning.tres")
 const RUN_SEED := 1337
 const CURRENT_STARTING_PARTY_SIZE := 1
 const LEDGER_FEATURE_IDS: Array[StringName] = [&"stats", &"current_upgrades", &"equipment_inventory"]
@@ -35,6 +36,9 @@ var run_context_registry: RunContextRegistry
 var active_run_context: PlayerRunContext
 var reward_distribution_service: RewardDistributionService
 var reward_distribution_tuning: RewardDistributionTuning
+var personal_loot_roll_service: PersonalLootRollService
+var personal_loot_drop_coordinator: PersonalLootDropCoordinator
+var ground_item_registry: GroundItemRegistry
 var game_run: GameRun
 var spawn_director: SpawnDirector
 var party_actor_spawner: PartyActorSpawner
@@ -309,12 +313,18 @@ func _start_leader_class_from_checkout(definition: ClassDefinition, committed_pr
 	var reward_errors := reward_distribution_service.configure(run_context_registry, reward_distribution_tuning)
 	if not reward_errors.is_empty():
 		return _abort_run_start(reward_errors, leader)
+	var personal_loot_errors := _configure_personal_loot()
+	if not personal_loot_errors.is_empty():
+		return _abort_run_start(personal_loot_errors, leader)
 	developer_mode_badge.configure(active_run_rules, reward_distribution_tuning)
 	var camera_rig := get_node("LeaderCamera") as LeaderCamera
 	camera_rig.target = leader
 	var markers := _spawn_markers()
 	var camera := camera_rig.get_node("Camera3D") as Camera3D
 	spawn_director.configure(RUN_SEED, leader, reward_distribution_service, markers, camera, get_node("Enemies"), get_node("Effects"), _pickup_multiplier(), game_run.combat_rng, catalog.damage_types, active_run_rules.enemy_density_percent())
+	var defeat_callback := Callable(personal_loot_drop_coordinator, "resolve_defeat")
+	if not spawn_director.enemy_defeated.is_connected(defeat_callback):
+		spawn_director.enemy_defeated.connect(defeat_callback)
 	spawn_director.process_mode = Node.PROCESS_MODE_INHERIT
 	hud.call("configure", game_run, party_manager, experience_system)
 	hud.call("set_leader", leader)
@@ -356,6 +366,9 @@ func _abort_run_start(diagnostics: PackedStringArray, spawned_leader: PartyActor
 	active_run_context = null
 	reward_distribution_service = null
 	reward_distribution_tuning = null
+	personal_loot_roll_service = null
+	personal_loot_drop_coordinator = null
+	ground_item_registry = null
 	run_started = false
 	developer_mode_badge.configure(null)
 	if _pending_checkout_recovery.is_empty():
@@ -365,6 +378,54 @@ func _abort_run_start(diagnostics: PackedStringArray, spawned_leader: PartyActor
 	if not _pending_checkout_recovery.is_empty():
 		_show_checkout_recovery_error(" | ".join(diagnostics))
 	return false
+
+func _configure_personal_loot() -> PackedStringArray:
+	var errors := PackedStringArray()
+	var identity_assignment := LocalPlayerIdentityService.new().assign(run_context_registry.all_contexts())
+	if not identity_assignment.ok():
+		errors.append(identity_assignment.error)
+		return errors
+	personal_loot_roll_service = PersonalLootRollService.new()
+	var run_tuning := PERSONAL_LOOT_TUNING.duplicate(true) as PersonalLootTuning
+	errors.append_array(personal_loot_roll_service.configure(
+		run_context_registry,
+		reward_distribution_tuning,
+		run_tuning,
+		Callable(self, "_personal_loot_access_for"),
+	))
+	if not errors.is_empty():
+		return errors
+	ground_item_registry = GroundItemRegistry.new()
+	personal_loot_drop_coordinator = PersonalLootDropCoordinator.new()
+	errors.append_array(personal_loot_drop_coordinator.configure(
+		personal_loot_roll_service,
+		run_context_registry,
+		identity_assignment.identities(),
+		GameCatalog.EQUIPMENT_CATALOG,
+		GameCatalog.ITEM_FOUNDATION_CATALOG,
+		ground_item_registry,
+	))
+	return errors
+
+func _personal_loot_access_for(context: PlayerRunContext) -> bool:
+	if context == null or active_run_rules == null:
+		return false
+	var profile := context.profile_snapshot
+	if profile == null:
+		return false
+	var unlocked: Array[StringName] = []
+	for unlock_id: String in profile.permanent_feature_unlocks:
+		unlocked.append(StringName(unlock_id))
+	var policy := active_run_rules.feature_policy(
+		LEDGER_FEATURE_IDS,
+		[&"equipment_inventory"],
+		unlocked,
+	)
+	return policy.resolve(
+		&"equipment_inventory",
+		FeatureAccessPolicy.State.AVAILABLE,
+		&"equipment_inventory",
+	) == FeatureAccessPolicy.State.AVAILABLE
 
 func active_profile() -> ProfileState:
 	return profile_manager.active_profile() if profile_manager != null else null

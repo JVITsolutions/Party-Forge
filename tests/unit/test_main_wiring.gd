@@ -71,6 +71,7 @@ func run() -> Array[String]:
     _test_main_scene_graph(failures)
     _test_profile_boot_and_developer_gate(failures)
     _test_active_run_context_graph_and_failure_cleanup(failures)
+    _test_personal_loot_defeat_and_guardian_wiring(failures)
     _test_main_menu_route_composition(failures)
     _test_storage_route_policy_and_shared_projection_wiring(failures)
     _test_loadout_warning_preflight_and_transition_wiring(failures)
@@ -338,6 +339,57 @@ func _test_active_run_context_graph_and_failure_cleanup(failures: Array[String])
     TestAssertions.truthy(not failure_party.member_added.is_connected(member_callback), "context abort disconnects partial party ownership", failures)
     failure_main.free()
     ProfileTestSupport.remove_tree(failure_root)
+
+func _test_personal_loot_defeat_and_guardian_wiring(failures: Array[String]) -> void:
+    var player_main := _started_main()
+    var player_director := player_main.get_node("SpawnDirector") as SpawnDirector
+    var player_roll := player_main.get("personal_loot_roll_service") as PersonalLootRollService
+    var player_coordinator := player_main.get("personal_loot_drop_coordinator") as PersonalLootDropCoordinator
+    var player_registry := player_main.get("ground_item_registry") as GroundItemRegistry
+    TestAssertions.truthy(player_roll != null and player_coordinator != null and player_registry != null, "Player Mode run owns the personal-loot service graph", failures)
+    TestAssertions.truthy(
+        player_director.has_signal("enemy_defeated") and player_coordinator != null and player_director.is_connected("enemy_defeated", Callable(player_coordinator, "resolve_defeat")),
+        "main wires director defeats to the run coordinator",
+        failures,
+    )
+    if player_roll != null and player_coordinator != null and player_registry != null:
+        player_roll.loot_tuning.drop_basis_points[&"ordinary_melee"] = 10000
+        player_director.call("_on_enemy_defeated", load("res://data/enemies/swarmer.tres") as EnemyDefinition, player_main.leader.position, 1)
+        TestAssertions.equal(player_registry.all_records().size(), 0, "locked Player Mode context fails closed with no personal drop", failures)
+    _cleanup_main(player_main)
+
+    var developer_settings := PartyForgeSettings.new()
+    developer_settings.mode = PartyForgeSettings.Mode.DEVELOPER_MODE
+    developer_settings.unlock_all_implemented_content = true
+    var developer_main := _started_main_with_settings(developer_settings)
+    var developer_director := developer_main.get_node("SpawnDirector") as SpawnDirector
+    var developer_roll := developer_main.get("personal_loot_roll_service") as PersonalLootRollService
+    var developer_coordinator := developer_main.get("personal_loot_drop_coordinator") as PersonalLootDropCoordinator
+    var developer_registry := developer_main.get("ground_item_registry") as GroundItemRegistry
+    TestAssertions.truthy(developer_roll != null and developer_coordinator != null and developer_registry != null, "Developer run owns the personal-loot service graph", failures)
+    if developer_roll == null or developer_coordinator == null or developer_registry == null:
+        _cleanup_main(developer_main)
+        return
+    developer_roll.loot_tuning.drop_basis_points[&"ordinary_melee"] = 10000
+    developer_director.call("_on_enemy_defeated", load("res://data/enemies/swarmer.tres") as EnemyDefinition, developer_main.leader.position, 1)
+    TestAssertions.equal(developer_registry.all_records().size(), 1, "Developer Unlock All grants the independently evaluated personal drop", failures)
+
+    var boss_event := EnemyDefeatEvent.create(1337, 2, 2, &"forge_guardian", &"boss", developer_main.leader.position, 300.0)
+    developer_coordinator.resolve_defeat(boss_event)
+    TestAssertions.equal(developer_registry.all_records().size(), 1, "zero boss basis points create no ground chest", failures)
+
+    var game_run := developer_main.get_node("GameRun") as GameRun
+    var victories: Array[int] = [0]
+    game_run.victory.connect(func() -> void: victories[0] += 1)
+    game_run.advance_run_time(300.0)
+    var guardian := developer_main.get("boss") as ForgeGuardian
+    TestAssertions.truthy(guardian != null, "boss phase still spawns the Forge Guardian", failures)
+    if guardian != null:
+        guardian.defeat()
+        guardian.defeat()
+    TestAssertions.equal(victories[0], 1, "Forge Guardian preserves the existing exactly-once victory behavior", failures)
+    TestAssertions.equal(developer_registry.all_records().size(), 1, "Guardian defeat adds no boss ground reward", failures)
+    _cleanup_main(developer_main)
 
 func _test_main_menu_route_composition(failures: Array[String]) -> void:
     var root := "user://tests/main-wiring-menu-routes_%d_%d" % [OS.get_process_id(), Time.get_ticks_usec()]
