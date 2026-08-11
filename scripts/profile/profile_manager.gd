@@ -1,6 +1,8 @@
 class_name ProfileManager
 extends RefCounted
 
+const PlayerColorPalette := preload("res://scripts/profile/player_color_palette.gd")
+
 signal profiles_changed
 signal active_profile_changed(profile: ProfileState)
 
@@ -76,11 +78,18 @@ func active_profile() -> ProfileState:
 	var profile := _profiles.get(_index.active_profile_id) as ProfileState
 	return profile.copy() if profile != null else null
 
-func create_profile(display_name: String, now_unix: int = -1) -> ProfileOperationResult:
+func create_profile(
+	display_name: String,
+	now_unix: int = -1,
+	preferred_color_id: StringName = PlayerColorPalette.DEFAULT_ID,
+) -> ProfileOperationResult:
 	var result := ProfileOperationResult.new()
 	var clean_name := display_name.strip_edges()
 	if clean_name.is_empty() or clean_name.length() > 32:
 		result.error = "PROFILE_CREATE_ERROR reason=name must contain 1-32 characters"
+		return result
+	if not PlayerColorPalette.is_valid(preferred_color_id):
+		result.error = "PROFILE_CREATE_ERROR field=preferred_player_color_id reason=unsupported player color"
 		return result
 	var normalized := clean_name.to_lower()
 	for profile: ProfileState in _profiles.values():
@@ -89,7 +98,7 @@ func create_profile(display_name: String, now_unix: int = -1) -> ProfileOperatio
 			return result
 	var profile_id := _next_profile_id()
 	var timestamp := now_unix if now_unix >= 0 else int(Time.get_unix_time_from_system())
-	var profile := ProfileState.new_profile(profile_id, clean_name, timestamp)
+	var profile := ProfileState.new_profile(profile_id, clean_name, timestamp, preferred_color_id)
 	var validation_error := ProfileCodec.validate_profile(profile)
 	if not validation_error.is_empty():
 		result.error = validation_error

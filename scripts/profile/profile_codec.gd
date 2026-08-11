@@ -1,9 +1,12 @@
 class_name ProfileCodec
 extends RefCounted
 
+const PlayerColorPalette := preload("res://scripts/profile/player_color_palette.gd")
+
 const JSON_SAFE_INTEGER_MAX := 9007199254740991
 const LEGACY_SCHEMA_VERSION := 1
 const SCHEMA_TWO_VERSION := 2
+const SCHEMA_THREE_VERSION := 3
 const HISTORICAL_FIELDS: Array[String] = [
 	"schema_version",
 	"profile_id",
@@ -58,6 +61,36 @@ const SCHEMA_TWO_FIELDS: Array[String] = [
 	"resumable_run",
 	"applied_transactions",
 ]
+const SCHEMA_THREE_FIELDS: Array[String] = [
+	"schema_version",
+	"profile_id",
+	"display_name",
+	"created_at_unix",
+	"updated_at_unix",
+	"prologue_state",
+	"last_safe_checkpoint",
+	"gold",
+	"passive_points_available",
+	"passive_points_lifetime_earned",
+	"milestones",
+	"permanent_feature_unlocks",
+	"discovered_buildings",
+	"discovered_trees",
+	"tree_allocations",
+	"tree_visibility_progress",
+	"owned_characters",
+	"squad_capacity",
+	"inventory_columns",
+	"item_records",
+	"leader_loadout",
+	"leader_loadout_class_id",
+	"stash_tabs",
+	"next_item_sequence",
+	"extraction_capacity",
+	"run_history",
+	"resumable_run",
+	"applied_transactions",
+]
 const CURRENT_FIELDS: Array[String] = [
 	"schema_version",
 	"profile_id",
@@ -87,6 +120,7 @@ const CURRENT_FIELDS: Array[String] = [
 	"run_history",
 	"resumable_run",
 	"applied_transactions",
+	"preferred_player_color_id",
 ]
 
 static func encode(profile: ProfileState) -> String:
@@ -132,12 +166,17 @@ static func validate_current_document(document: Dictionary) -> String:
 static func validate_schema_two_document(document: Dictionary) -> String:
 	return _validate_document(document, SCHEMA_TWO_VERSION, false)
 
+static func validate_schema_three_document(document: Dictionary) -> String:
+	return _validate_document(document, SCHEMA_THREE_VERSION, false)
+
 static func validate_loadable_document(document: Dictionary) -> String:
 	var schema_value: Variant = document.get("schema_version")
 	if _is_json_int(schema_value, LEGACY_SCHEMA_VERSION, LEGACY_SCHEMA_VERSION):
 		return _validate_document(document, LEGACY_SCHEMA_VERSION, false)
 	if _is_json_int(schema_value, SCHEMA_TWO_VERSION, SCHEMA_TWO_VERSION):
 		return _validate_document(document, SCHEMA_TWO_VERSION, false)
+	if _is_json_int(schema_value, SCHEMA_THREE_VERSION, SCHEMA_THREE_VERSION):
+		return _validate_document(document, SCHEMA_THREE_VERSION, false)
 	if _is_json_int(schema_value, ProfileState.SCHEMA_VERSION, ProfileState.SCHEMA_VERSION):
 		return _validate_document(document, ProfileState.SCHEMA_VERSION, false)
 	return _schema_error(schema_value)
@@ -148,6 +187,8 @@ static func _validate_document(data: Dictionary, expected_schema: int, result_sn
 	var expected_fields := HISTORICAL_FIELDS
 	if expected_schema == SCHEMA_TWO_VERSION:
 		expected_fields = SCHEMA_TWO_FIELDS
+	elif expected_schema == SCHEMA_THREE_VERSION:
+		expected_fields = SCHEMA_THREE_FIELDS
 	elif expected_schema == ProfileState.SCHEMA_VERSION:
 		expected_fields = CURRENT_FIELDS
 	var fields_error := _exact_fields(data, expected_fields)
@@ -163,8 +204,13 @@ static func _validate_document(data: Dictionary, expected_schema: int, result_sn
 		return profile_id_error
 	if display_name.is_empty() or display_name.length() > 32 or display_name != display_name.strip_edges():
 		return _field_error("display_name", "must contain 1-32 trimmed characters")
-	if expected_schema == ProfileState.SCHEMA_VERSION and typeof(data["leader_loadout_class_id"]) != TYPE_STRING:
+	if expected_schema >= SCHEMA_THREE_VERSION and typeof(data["leader_loadout_class_id"]) != TYPE_STRING:
 		return _field_error("leader_loadout_class_id", "must be a string")
+	if expected_schema == ProfileState.SCHEMA_VERSION:
+		if typeof(data["preferred_player_color_id"]) != TYPE_STRING:
+			return _field_error("preferred_player_color_id", "must be a string")
+		if not PlayerColorPalette.is_valid(StringName(data["preferred_player_color_id"] as String)):
+			return _field_error("preferred_player_color_id", "must identify a supported player color")
 	for field: String in ["created_at_unix", "updated_at_unix", "gold", "passive_points_available", "passive_points_lifetime_earned", "extraction_capacity"]:
 		var error := _integer_field(data, field, 0, JSON_SAFE_INTEGER_MAX)
 		if not error.is_empty():
@@ -216,7 +262,7 @@ static func _validate_document(data: Dictionary, expected_schema: int, result_sn
 	for field: String in ["last_safe_checkpoint", "resumable_run"]:
 		if not _is_json_value(data[field]):
 			return _field_error(field, "contains a non-JSON value")
-	if expected_schema == ProfileState.SCHEMA_VERSION and (data["resumable_run"] as Dictionary).has("item_state"):
+	if expected_schema >= SCHEMA_THREE_VERSION and (data["resumable_run"] as Dictionary).has("item_state"):
 		var resumable_error := ResumableRunItemCodec.validate_document(
 			data["resumable_run"],
 			GameCatalog.EQUIPMENT_CATALOG,
@@ -386,7 +432,18 @@ static func _profile_from_current_document(data: Dictionary) -> ProfileState:
 	profile.run_history = _dictionaries(data["run_history"] as Array)
 	profile.resumable_run = (data["resumable_run"] as Dictionary).duplicate(true)
 	profile.applied_transactions = (data["applied_transactions"] as Dictionary).duplicate(true)
+	profile.preferred_player_color_id = StringName(data["preferred_player_color_id"] as String)
 	return profile
+
+static func _canonical_schema_three_document(data: Dictionary) -> Dictionary:
+	var promoted := data.duplicate(true)
+	promoted["schema_version"] = ProfileState.SCHEMA_VERSION
+	promoted["preferred_player_color_id"] = String(PlayerColorPalette.DEFAULT_ID)
+	var profile := _profile_from_current_document(promoted)
+	var result := profile.to_dictionary()
+	result["schema_version"] = SCHEMA_THREE_VERSION
+	result.erase("preferred_player_color_id")
+	return result
 
 static func _exact_fields(data: Dictionary, expected: Array[String]) -> String:
 	var missing: Array[String] = []

@@ -490,7 +490,7 @@ func _test_successful_schema_migration_promotes_and_retains_source(failures: Arr
 	TestAssertions.truthy(loaded.ok() and loaded.migrated and loaded.source_schema_version == 1, "successful migration reports schema-one source", failures)
 	var promoted := JSON.parse_string(FileAccess.get_file_as_string(path)) as Dictionary
 	var retained := JSON.parse_string(FileAccess.get_file_as_string("%s.bak" % path)) as Dictionary
-	TestAssertions.equal(promoted.get("schema_version", -1), 3, "successful migration stores schema-three primary", failures)
+	TestAssertions.equal(promoted.get("schema_version", -1), 4, "successful migration stores schema-four primary", failures)
 	TestAssertions.equal(retained.get("schema_version", -1), 1, "successful migration retains schema-one backup", failures)
 	TestAssertions.equal(FileAccess.get_file_as_bytes("%s.bak" % path), source_primary_bytes, "successful migration backup exactly retains source primary bytes", failures)
 
@@ -580,7 +580,7 @@ func _test_recovered_schema_one_backup_migrates_with_artifact(failures: Array[St
 	TestAssertions.truthy(loaded.ok() and loaded.recovered_from_backup and loaded.migrated and loaded.source_schema_version == 1, "recovered schema-one backup migrates with source metadata", failures)
 	TestAssertions.equal(loaded.profile.gold if loaded.ok() else -1, 10, "recovered migration returns the backup generation", failures)
 	var promoted := JSON.parse_string(FileAccess.get_file_as_string(path)) as Dictionary
-	TestAssertions.equal(promoted.get("schema_version", -1), 3, "recovered migration promotes schema-three primary", failures)
+	TestAssertions.equal(promoted.get("schema_version", -1), 4, "recovered migration promotes schema-four primary", failures)
 	TestAssertions.equal(FileAccess.get_file_as_bytes("%s.bak" % path), backup_bytes, "recovered migration retains schema-one backup bytes", failures)
 	var artifact_path := _corrupt_artifact_path(profile_id, DirAccess.get_files_at(_root))
 	TestAssertions.truthy(not artifact_path.is_empty(), "recovered migration preserves corrupt-primary artifact", failures)

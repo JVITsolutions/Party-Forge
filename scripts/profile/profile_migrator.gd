@@ -1,6 +1,8 @@
 class_name ProfileMigrator
 extends RefCounted
 
+const PlayerColorPalette := preload("res://scripts/profile/player_color_palette.gd")
+
 const EMPTY_ITEM_REGISTRY := {"schema_version": 1, "items": []}
 
 static func migrate_document(document: Dictionary) -> ProfileMigrationResult:
@@ -20,7 +22,14 @@ static func migrate_document(document: Dictionary) -> ProfileMigrationResult:
 		result.error = ProfileCodec.validate_schema_two_document(candidate)
 		if not result.error.is_empty():
 			return result
-	result.error = _migrate_schema_two_document(candidate)
+	if result.source_schema_version <= ProfileCodec.SCHEMA_TWO_VERSION:
+		result.error = _migrate_schema_two_document(candidate)
+		if not result.error.is_empty():
+			return result
+		result.error = ProfileCodec.validate_schema_three_document(candidate)
+		if not result.error.is_empty():
+			return result
+	result.error = _migrate_schema_three_document(candidate)
 	if not result.error.is_empty():
 		return result
 	result.error = ProfileCodec.validate_current_document(candidate)
@@ -67,14 +76,31 @@ static func _migrate_schema_two_document(document: Dictionary) -> String:
 		var snapshot_error := _migrate_schema_two_document(snapshot)
 		if not snapshot_error.is_empty():
 			return snapshot_error
+		snapshot_error = ProfileCodec.validate_schema_three_document(snapshot)
+		if not snapshot_error.is_empty():
+			return snapshot_error
+		record["result_profile"] = ProfileCodec._canonical_schema_three_document(snapshot)
+		record["committed_at_unix"] = int(record["committed_at_unix"])
+	document["schema_version"] = ProfileCodec.SCHEMA_THREE_VERSION
+	document["leader_loadout"] = ProfileState._empty_leader_loadout(String(document["profile_id"]))
+	document["leader_loadout_class_id"] = ""
+	return ""
+
+static func _migrate_schema_three_document(document: Dictionary) -> String:
+	var transactions := document["applied_transactions"] as Dictionary
+	for transaction_id: Variant in transactions:
+		var record := transactions[transaction_id] as Dictionary
+		var snapshot := (record["result_profile"] as Dictionary).duplicate(true)
+		var snapshot_error := _migrate_schema_three_document(snapshot)
+		if not snapshot_error.is_empty():
+			return snapshot_error
 		snapshot_error = ProfileCodec.validate_current_document(snapshot)
 		if not snapshot_error.is_empty():
 			return snapshot_error
 		record["result_profile"] = ProfileCodec._profile_from_current_document(snapshot).to_dictionary()
 		record["committed_at_unix"] = int(record["committed_at_unix"])
 	document["schema_version"] = ProfileState.SCHEMA_VERSION
-	document["leader_loadout"] = ProfileState._empty_leader_loadout(String(document["profile_id"]))
-	document["leader_loadout_class_id"] = ""
+	document["preferred_player_color_id"] = String(PlayerColorPalette.DEFAULT_ID)
 	return ""
 
 static func _source_schema_version(document: Dictionary) -> int:

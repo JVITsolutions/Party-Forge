@@ -1,6 +1,8 @@
 class_name ProfilesSettingsPage
 extends MarginContainer
 
+const PlayerColorPalette := preload("res://scripts/profile/player_color_palette.gd")
+
 signal profile_action_failed(message: String)
 
 var _manager: ProfileManager
@@ -13,6 +15,7 @@ var _action_error_technical := ""
 
 
 func _ready() -> void:
+	_populate_preferred_colors()
 	if not _create_button().pressed.is_connected(_create_profile):
 		_create_button().pressed.connect(_create_profile)
 	if not _activate_button().pressed.is_connected(_activate_profile):
@@ -42,10 +45,17 @@ func refresh() -> void:
 	if _manager != null:
 		statuses = _manager.profile_statuses()
 	var active := _manager.active_profile() if _manager != null else null
+	var profiles_by_id: Dictionary = {}
+	if _manager != null:
+		for profile: ProfileState in _manager.profiles():
+			profiles_by_id[profile.profile_id] = profile
 	_has_selectable_profiles = false
 	for status: ProfileEntryStatus in statuses:
 		var is_active := active != null and active.profile_id == status.profile_id
 		var suffix := ""
+		var profile := profiles_by_id.get(status.profile_id) as ProfileState
+		if profile != null and status.selectable():
+			suffix += "  [Color: %s]" % String(profile.preferred_player_color_id).capitalize()
 		if is_active:
 			suffix += "  [Active]"
 		if status.state == ProfileEntryStatus.State.RECOVERED:
@@ -88,7 +98,7 @@ func _create_profile() -> void:
 	if _manager == null:
 		_show_error("Profile service is unavailable.", "PROFILE_UI_ERROR reason=manager is missing")
 		return
-	var result := _manager.create_profile(_profile_name().text)
+	var result := _manager.create_profile(_profile_name().text, -1, _selected_preferred_color_id())
 	if not result.ok():
 		_show_error(_friendly_error(result.error), result.error)
 		return
@@ -203,7 +213,7 @@ func _configure_focus_order(has_profiles: bool) -> void:
 	var order: Array[Control] = []
 	if has_profiles:
 		order.append(_profile_list())
-	order.append_array([_profile_name(), _create_button()])
+	order.append_array([_profile_name(), _preferred_color(), _create_button()])
 	if has_profiles:
 		order.append(_activate_button())
 	for index: int in range(order.size()):
@@ -223,6 +233,28 @@ func _profile_list() -> ItemList:
 
 func _profile_name() -> LineEdit:
 	return get_node("Layout/CreateRow/ProfileName") as LineEdit
+
+
+func _preferred_color() -> OptionButton:
+	return get_node("Layout/CreateRow/PreferredColor") as OptionButton
+
+
+func _populate_preferred_colors() -> void:
+	var selector := _preferred_color()
+	selector.clear()
+	for entry: Dictionary in PlayerColorPalette.entries():
+		var index := selector.item_count
+		selector.add_item(String(entry["label"]))
+		selector.set_item_metadata(index, entry["id"])
+		selector.set_item_tooltip(index, "%s player marker" % entry["label"])
+	selector.select(PlayerColorPalette.ORDER.find(PlayerColorPalette.DEFAULT_ID))
+
+
+func _selected_preferred_color_id() -> StringName:
+	var selector := _preferred_color()
+	if selector.selected < 0:
+		return PlayerColorPalette.DEFAULT_ID
+	return StringName(selector.get_item_metadata(selector.selected))
 
 
 func _create_button() -> Button:

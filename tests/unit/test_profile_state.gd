@@ -15,7 +15,7 @@ func run() -> Array[String]:
 
 func _test_new_profile_defaults(failures: Array[String]) -> void:
 	var profile := ProfileState.new_profile("profile-12345678", "Jacob", 1000)
-	TestAssertions.equal(ProfileState.SCHEMA_VERSION, 3, "profile schema version is three", failures)
+	TestAssertions.equal(ProfileState.SCHEMA_VERSION, 4, "profile schema version is four", failures)
 	TestAssertions.equal(profile.schema_version, ProfileState.SCHEMA_VERSION, "profile uses current schema", failures)
 	TestAssertions.equal(profile.prologue_state, ProfileState.PrologueState.NOT_STARTED, "prologue starts undiscovered", failures)
 	TestAssertions.equal(profile.gold, 0, "gold starts at zero", failures)
@@ -109,6 +109,7 @@ func _test_exact_historical_and_current_fields_fail_closed(failures: Array[Strin
 	TestAssertions.truthy(not _validate_current(current_extra).is_empty(), "current document rejects an extra field", failures)
 	var historical := current.duplicate(true)
 	historical["schema_version"] = 1
+	historical.erase("preferred_player_color_id")
 	historical.erase("item_records")
 	historical.erase("leader_loadout")
 	historical.erase("leader_loadout_class_id")
@@ -123,6 +124,7 @@ func _test_exact_historical_and_current_fields_fail_closed(failures: Array[Strin
 	TestAssertions.truthy(not _validate_loadable(historical_extra).is_empty(), "historical document rejects an extra field", failures)
 	var schema_two := current.duplicate(true)
 	schema_two["schema_version"] = 2
+	schema_two.erase("preferred_player_color_id")
 	schema_two.erase("leader_loadout")
 	schema_two.erase("leader_loadout_class_id")
 	TestAssertions.equal(_validate_loadable(schema_two), "", "complete schema-two document remains loadable for migration", failures)

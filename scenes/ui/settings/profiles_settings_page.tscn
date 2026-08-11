@@ -44,6 +44,12 @@ focus_mode = 2
 placeholder_text = "Profile name"
 max_length = 32
 
+[node name="PreferredColor" type="OptionButton" parent="Layout/CreateRow"]
+custom_minimum_size = Vector2(128, 0)
+layout_mode = 2
+focus_mode = 2
+tooltip_text = "Preferred local player marker color"
+
 [node name="Create" type="Button" parent="Layout/CreateRow"]
 layout_mode = 2
 focus_mode = 2
