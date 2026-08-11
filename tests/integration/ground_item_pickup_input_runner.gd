@@ -29,6 +29,7 @@ func _run() -> void:
 	_assert(accept.any(func(event: InputEvent) -> bool: return event is InputEventJoypadButton and event.device == -1 and event.button_index == JOY_BUTTON_A), "existing ui_accept retains device-agnostic south-face pickup")
 	_test_input_normalization()
 	_test_real_controller_flow()
+	_test_viewport_resize_projection()
 	print("GROUND_ITEM_PICKUP_MOUSE: PASS") if _failures.is_empty() else print("GROUND_ITEM_PICKUP_MOUSE: FAIL")
 	print("GROUND_ITEM_PICKUP_CONTROLLER: PASS") if _failures.is_empty() else print("GROUND_ITEM_PICKUP_CONTROLLER: FAIL")
 	print("GROUND_ITEM_PICKUP_FULL_INVENTORY: PASS") if _failures.is_empty() else print("GROUND_ITEM_PICKUP_FULL_INVENTORY: FAIL")
@@ -149,8 +150,66 @@ func _test_real_controller_flow() -> void:
 	var foreign_result := pickup.call(&"collect", &"p1-near", &"player_2") as RefCounted
 	_assert(foreign_result.get(&"code") == codes["NOT_OWNER"], "foreign owner rejection is exact")
 	_assert(registry.record(&"p1-near") != null and controller.call(&"selection_for_owner", &"player_1") == &"p1-near", "failed pickups preserve chest and selection")
+	var replacement_live_registry := GroundItemRegistry.new()
+	replacement_live_registry.add(_record(&"p2-out", &"player_2", Vector3(4.0, 0.0, 0.0), 0))
+	controller.call(&"configure", replacement_live_registry, {}, func(record: GroundItemRecord) -> Dictionary: return _detail(record), camera, chests, tooltip_layer)
+	var replacement_index := (load(REQUIRED[0]) as Script).new(replacement_live_registry, 4.0) as RefCounted
+	var replacement_targeting := (load(REQUIRED[1]) as Script).new() as RefCounted
+	var replacement_pickup := (load(REQUIRED[2]) as Script).new(replacement_live_registry, contexts, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG, 3.0) as RefCounted
+	controller.call(&"configure_interaction", replacement_index, replacement_targeting, replacement_pickup, contexts, 200.0, Callable(), func() -> bool: return modal[0])
+	controller.call(&"_process", 0.0)
+	_assert(controller.call(&"selection_for_owner", &"player_2") == &"", "same-ID registry reconfigure clears the prior owner selection")
+	var statuses_before_reconfigure_accept := statuses.size()
+	controller.call(&"_unhandled_input", _button(1, JOY_BUTTON_A))
+	_assert(statuses.size() == statuses_before_reconfigure_accept, "ui_accept cannot collect after reconfigure until a new real selection")
+	controller.call(&"_unhandled_input", _button(1, JOY_BUTTON_DPAD_RIGHT))
+	_assert(controller.call(&"selection_for_owner", &"player_2") == &"p2-out", "new registry requires and accepts a fresh real D-pad selection")
+	controller.call(&"_unhandled_input", _button(1, JOY_BUTTON_A))
+	_assert(statuses.size() == statuses_before_reconfigure_accept + 1 and statuses[-1] == "Move closer", "ui_accept routes only after the new registry selection")
 	controller.call(&"_exit_tree")
 	host.free()
+	contexts.clear()
+	RenderingServer.force_sync()
+
+func _test_viewport_resize_projection() -> void:
+	var contexts := RunContextRegistry.new()
+	var context := _context(&"resize-owner", "profile-resize-owner", 0, 2, 0)
+	_assert(contexts.register_context(context, 2).ok(), "viewport fixture registers device ownership")
+	var registry := GroundItemRegistry.new()
+	registry.add(_record(&"resize-edge", &"resize-owner", Vector3(6.0, 0.0, -10.0), 0))
+	var viewport := SubViewport.new()
+	viewport.size = Vector2i(800, 600)
+	root.add_child(viewport)
+	var host := Node.new()
+	var chests := Node3D.new()
+	var tooltip_layer := Control.new()
+	tooltip_layer.size = Vector2(800.0, 600.0)
+	var camera := Camera3D.new()
+	viewport.add_child(host)
+	host.add_child(chests)
+	host.add_child(tooltip_layer)
+	host.add_child(camera)
+	camera.current = true
+	var controller := (load("res://scripts/world/ground_item_world_controller.gd") as Script).new() as Node
+	host.add_child(controller)
+	controller.call(&"configure", registry, {}, func(record: GroundItemRecord) -> Dictionary: return _detail(record), camera, chests, tooltip_layer)
+	var index := (load(REQUIRED[0]) as Script).new(registry, 4.0) as RefCounted
+	var targeting := (load(REQUIRED[1]) as Script).new() as RefCounted
+	controller.call(&"configure_interaction", index, targeting, null, contexts, 20.0)
+	controller.call(&"_process", 0.0)
+	var chest := _chest_for(chests, &"resize-edge")
+	_assert(chest != null, "viewport fixture projects the edge chest")
+	if chest != null:
+		var anchor := chest.call(&"tooltip_anchor") as Control
+		var position_before := anchor.position
+		_assert(anchor.visible, "edge chest starts inside the large viewport")
+		viewport.size = Vector2i(80, 60)
+		controller.call(&"_process", 0.0)
+		_assert(anchor.position != position_before and not anchor.visible, "viewport resize reprojects and hides the fixed-size offscreen anchor without record dirtiness")
+		controller.call(&"_unhandled_input", _button(2, JOY_BUTTON_DPAD_RIGHT))
+		_assert(controller.call(&"selection_for_owner", &"resize-owner") == &"", "resized-offscreen chest is excluded from real controller cycling")
+	controller.call(&"_exit_tree")
+	viewport.free()
 	contexts.clear()
 	RenderingServer.force_sync()
 

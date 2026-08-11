@@ -52,6 +52,7 @@ func configure(
 		_spatial_index.call(&"dispose")
 	_release_all()
 	_release_shared_tooltip()
+	_selection_by_owner.clear()
 	_registry = registry
 	_spatial_index = SPATIAL_INDEX.new(_registry)
 	_targeting_service = TARGETING_SERVICE.new()
@@ -301,7 +302,10 @@ func _project_anchor(drop_id: StringName) -> void:
 	if _camera.is_inside_tree():
 		var projected := _camera.unproject_position(elevated_position)
 		anchor.position = projected - anchor.size * 0.5
-		anchor.visible = chest.visible and not _camera.is_position_behind(elevated_position) and _camera.get_viewport().get_visible_rect().has_point(projected)
+		var viewport_rect := _camera.get_viewport().get_visible_rect()
+		var inset_size := viewport_rect.size - anchor.size
+		var anchor_fits := inset_size.x >= 0.0 and inset_size.y >= 0.0 and Rect2(viewport_rect.position + anchor.size * 0.5, inset_size).has_point(projected)
+		anchor.visible = chest.visible and not _camera.is_position_behind(elevated_position) and anchor_fits
 		return
 	var camera_space := _camera.transform.affine_inverse() * elevated_position
 	var projection_scale := 100.0 / tan(deg_to_rad(_camera.fov) * 0.5) if _camera.projection == Camera3D.PROJECTION_PERSPECTIVE else 200.0 / maxf(_camera.size, 0.001)
@@ -597,6 +601,7 @@ func _decorate_detail(detail: Dictionary, record: GroundItemRecord, identity: Di
 func _camera_signature() -> Array:
 	if _camera == null or not is_instance_valid(_camera):
 		return []
+	var viewport_rect := _camera.get_viewport().get_visible_rect() if _camera.is_inside_tree() and _camera.get_viewport() != null else Rect2()
 	return [
 		_camera.global_transform if _camera.is_inside_tree() else _camera.transform,
 		_camera.projection,
@@ -608,6 +613,7 @@ func _camera_signature() -> Array:
 		_camera.h_offset,
 		_camera.v_offset,
 		_camera.frustum_offset,
+		viewport_rect,
 	]
 
 
