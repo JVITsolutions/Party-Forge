@@ -319,10 +319,10 @@ func _start_leader_class_from_checkout(definition: ClassDefinition, committed_pr
 	var reward_errors := reward_distribution_service.configure(run_context_registry, reward_distribution_tuning)
 	if not reward_errors.is_empty():
 		return _abort_run_start(reward_errors, leader)
+	developer_mode_badge.configure(active_run_rules, reward_distribution_tuning)
 	var personal_loot_errors := _configure_personal_loot()
 	if not personal_loot_errors.is_empty():
 		return _abort_run_start(personal_loot_errors, leader)
-	developer_mode_badge.configure(active_run_rules, reward_distribution_tuning)
 	var camera_rig := get_node("LeaderCamera") as LeaderCamera
 	camera_rig.target = leader
 	var markers := _spawn_markers()

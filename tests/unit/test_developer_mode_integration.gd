@@ -133,6 +133,7 @@ func _test_main_configures_badge_from_active_run(failures: Array[String]) -> voi
 	TestAssertions.truthy(player_badge != null and not player_badge.visible, "Player Simulation run keeps the badge absent", failures)
 	if player_badge != null:
 		TestAssertions.equal(player_badge.call(&"summary_text"), "", "Player Simulation run has no badge summary", failures)
+		TestAssertions.equal(player_badge.call(&"diagnostics_text"), "", "Player Simulation run has no ground-chest diagnostics", failures)
 	_cleanup_main(player_main)
 
 	var developer_settings := PartyForgeSettings.new()
@@ -141,6 +142,7 @@ func _test_main_configures_badge_from_active_run(failures: Array[String]) -> voi
 	developer_settings.god_mode = true
 	developer_settings.party_capacity_override = 12
 	developer_settings.enemy_density_percent = 500
+	developer_settings.show_ground_chest_diagnostics = true
 	TestAssertions.equal(store.save_settings(developer_settings), "", "Developer Mode end-to-end fixture saves", failures)
 	var developer_main := (load(MAIN_SCENE_PATH) as PackedScene).instantiate()
 	_prepare_main(developer_main, _profile_root.path_join("developer"))
@@ -149,6 +151,7 @@ func _test_main_configures_badge_from_active_run(failures: Array[String]) -> voi
 	TestAssertions.truthy(developer_badge != null and developer_badge.visible, "Developer Mode run shows the configured badge", failures)
 	if developer_badge != null:
 		TestAssertions.equal(developer_badge.call(&"summary_text"), "DEV MODE | UNLOCK ALL | GOD | PARTY 12 | ENEMIES 500% | XP SHARE 18.0m | SQUAD LINK 14.0m", "main passes the active snapshot and reward tuning to the badge", failures)
+		TestAssertions.equal(developer_badge.call(&"diagnostics_text"), "LIVE 0 | PEAK 0\nSUCCESS none\nFAIL none\nGENERATION FAILURES 0\nCOLLECTION none", "diagnostics-enabled run immediately presents the complete zero state", failures)
 		var saved := developer_main.get("saved_settings") as PartyForgeSettings
 		saved.unlock_all_implemented_content = false
 		saved.god_mode = false

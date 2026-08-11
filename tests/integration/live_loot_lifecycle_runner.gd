@@ -18,6 +18,7 @@ func _run() -> void:
 	if subsequent != null:
 		_assert((subsequent.get("ground_item_registry") as GroundItemRegistry).all_records().is_empty(), "subsequent run starts with zero ground records")
 		_assert(_active_chest_count(subsequent) == 0, "subsequent run starts with zero projected chests")
+		_assert(_diagnostics_text(subsequent) == _zero_diagnostics_text(), "subsequent run immediately presents fresh zero diagnostics after prior activity")
 		_cleanup_main(subsequent)
 	ProfileTestSupport.remove_tree(PROFILE_ROOT)
 	_cleanup_settings()
@@ -75,6 +76,7 @@ func _started_main(suffix: String) -> PartyForgeMain:
 		_assert(false, "%s run starts" % suffix)
 		main.free()
 		return null
+	_assert(_diagnostics_text(main) == _zero_diagnostics_text(), "%s run immediately presents complete zero diagnostics" % suffix)
 	var roll := main.personal_loot_roll_service as PersonalLootRollService
 	var decision := roll.resolve(EnemyDefeatEvent.create(1337, 600, 600, &"swarmer", &"ordinary_melee", main.leader.position, 30.0))[0] as PersonalLootDecision
 	_assert(decision.success and decision.source_category == &"ordinary_specialist" and decision.item_level == 777, "%s applies deterministic source and item-level overrides only through the immutable Developer snapshot" % suffix)
@@ -83,6 +85,12 @@ func _started_main(suffix: String) -> PartyForgeMain:
 func _active_chest_count(main: Node) -> int:
 	var controller := main.get_node("GroundItemWorldController") as Node
 	return (controller.get("_chest_by_drop") as Dictionary).size()
+
+func _diagnostics_text(main: Node) -> String:
+	return String((main.get_node("DeveloperModeBadge") as DeveloperModeBadge).diagnostics_text())
+
+func _zero_diagnostics_text() -> String:
+	return "LIVE 0 | PEAK 0\nSUCCESS none\nFAIL none\nGENERATION FAILURES 0\nCOLLECTION none"
 
 func _cleanup_main(main: Node) -> void:
 	paused = false
