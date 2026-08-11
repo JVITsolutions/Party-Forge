@@ -4,6 +4,7 @@ extends Control
 signal sandbox_item_issued
 signal close_requested
 signal active_job_changed(active: bool)
+signal focus_controls_changed
 
 const ATTEMPTS_PER_FRAME := 256
 const TIME_BUDGET_USEC := 4000
@@ -14,6 +15,7 @@ var _tooltip: ItemTooltipPanel
 var _presentation_projection: Callable
 var _preferences_store := DeveloperLootLabPreferencesStore.new()
 var _pending_large_spec: LootLabBatchSpec
+var _pending_export_format: StringName
 var _wired := false
 
 func _ready() -> void:
@@ -58,14 +60,21 @@ func cancel_and_clear() -> void:
 
 func focus_controls() -> Array[Control]:
 	_ensure_initialized()
-	var result: Array[Control] = [get_node("Layout/Header/WorkbenchFocusAnchor") as Control]
-	for control: Control in _form().focus_controls():
-		result.append(control)
-	for control: Control in _gallery().focus_controls():
-		result.append(control)
-	for control: Control in _inspector().focus_controls():
-		result.append(control)
-	result.append(_cancel_button())
+	var result: Array[Control] = [
+		get_node("Layout/Header/WorkbenchFocusAnchor") as Control,
+		get_node("Layout/Header/AnalysisFocusAnchor") as Control,
+	]
+	if _workbench().visible:
+		for control: Control in _form().focus_controls():
+			result.append(control)
+		for control: Control in _gallery().focus_controls():
+			result.append(control)
+		for control: Control in _inspector().focus_controls():
+			result.append(control)
+		result.append(_cancel_button())
+	else:
+		for control: Control in _analysis().focus_controls():
+			result.append(control)
 	return result
 
 func _process(_delta: float) -> void:
@@ -92,10 +101,17 @@ func _ensure_initialized() -> void:
 	_gallery().inspection_ended.connect(_on_preview_inspection_ended)
 	_inspector().regenerate_requested.connect(_on_sequence_selected)
 	_inspector().issue_requested.connect(_on_issue_requested)
+	_analysis().report_kind_selected.connect(_on_report_kind_selected)
+	_analysis().sequence_requested.connect(_on_analysis_sequence_requested)
+	_analysis().export_requested.connect(_on_export_requested)
+	(get_node("Layout/Header/WorkbenchFocusAnchor") as Button).pressed.connect(_show_workbench)
+	(get_node("Layout/Header/AnalysisFocusAnchor") as Button).pressed.connect(_show_analysis)
 	_cancel_button().pressed.connect(_on_cancel_active)
 	(get_node("BatchConfirmation") as ConfirmationDialog).confirmed.connect(_on_large_batch_confirmed)
 	(get_node("CancelCloseConfirmation") as ConfirmationDialog).confirmed.connect(_on_cancel_close_confirmed)
+	(get_node("ReportExportDialog") as FileDialog).file_selected.connect(_on_export_file_selected)
 	_cancel_button().disabled = true
+	_set_view(false)
 
 func _on_batch_requested(spec: LootLabBatchSpec) -> void:
 	if spec == null or not spec.ok():
@@ -162,6 +178,9 @@ func _present_selected_report() -> void:
 	_progress().max_value = maxi(int(summary.get("target", 1)), 1)
 	_progress().value = int(summary.get("attempted", 0))
 	_gallery().present(report)
+	_analysis().set_report_availability(_session.available_report_kinds())
+	_analysis().select_report_kind(_session.selected_report_kind())
+	_analysis().present(report)
 	var samples := evidence.get("samples", []) as Array
 	if not samples.is_empty():
 		_on_sequence_selected(int((samples[0] as Dictionary).get("generation_sequence", -1)))
@@ -176,6 +195,94 @@ func _on_sequence_selected(sequence: int) -> void:
 	var request := ((report.get("evidence", {}) as Dictionary).get("request", {}) as Dictionary).duplicate(true)
 	request["generation_sequence"] = sequence
 	_inspector().present_result(result, request)
+
+func _on_analysis_sequence_requested(sequence: int) -> void:
+	_on_sequence_selected(sequence)
+	_show_workbench()
+
+func _on_report_kind_selected(kind: StringName) -> void:
+	var error := _session.select_report(kind)
+	if not error.is_empty():
+		_set_status(error)
+		return
+	_present_selected_report()
+
+func _show_workbench() -> void:
+	_set_view(false)
+
+func _show_analysis() -> void:
+	_set_view(true)
+	if not _session.selected_report().is_empty():
+		_analysis().present(_session.selected_report())
+
+func _set_view(show_analysis: bool) -> void:
+	_workbench().visible = not show_analysis
+	_analysis().visible = show_analysis
+	for control: Control in _all_local_focus_controls():
+		control.focus_mode = Control.FOCUS_NONE
+	focus_controls_changed.emit()
+
+func _all_local_focus_controls() -> Array[Control]:
+	var result: Array[Control] = [
+		get_node("Layout/Header/WorkbenchFocusAnchor") as Control,
+		get_node("Layout/Header/AnalysisFocusAnchor") as Control,
+		_cancel_button(),
+	]
+	for control: Control in _form().focus_controls():
+		result.append(control)
+	for control: Control in _gallery().focus_controls():
+		result.append(control)
+	for control: Control in _inspector().focus_controls():
+		result.append(control)
+	for control: Control in _analysis().focus_controls():
+		result.append(control)
+	return result
+
+func _on_export_requested(format: StringName) -> void:
+	if _session.selected_report().is_empty():
+		_set_status("EXPORT_FAILED no report")
+		return
+	_pending_export_format = format
+	var dialog := get_node("ReportExportDialog") as FileDialog
+	dialog.filters = PackedStringArray(["*.json ; JSON report"] if format == &"json" else ["*.md ; Markdown report"])
+	dialog.current_file = "party-forge-loot-lab.%s" % ("json" if format == &"json" else "md")
+	if dialog.is_inside_tree():
+		dialog.popup_centered_ratio(0.8)
+	else:
+		dialog.visible = true
+
+func _on_export_file_selected(path: String) -> void:
+	_export_selected_report(path, _pending_export_format)
+
+func _export_selected_report(path: String, format: StringName) -> String:
+	var report := _session.selected_report() if _session != null else {}
+	if report.is_empty():
+		return _export_error("report unavailable")
+	var contents := ""
+	match format:
+		&"json":
+			contents = LootLabReportExportService.to_json(report)
+		&"markdown":
+			contents = LootLabReportExportService.to_markdown(report)
+		_:
+			return _export_error("unknown format %s" % format)
+	if contents.is_empty():
+		return _export_error("report serialization failed")
+	var file := FileAccess.open(path, FileAccess.WRITE)
+	if file == null:
+		return _export_error("open failed %s" % error_string(FileAccess.get_open_error()))
+	file.store_string(contents)
+	var write_error := file.get_error()
+	file.close()
+	if write_error != OK:
+		return _export_error("write failed %s" % error_string(write_error))
+	_set_status("EXPORTED_%s" % String(format).to_upper())
+	return ""
+
+func _export_error(reason: String) -> String:
+	var error := "PARTY_FORGE_LOOT_LAB_EXPORT_ERROR reason=%s" % reason
+	_set_status(error)
+	return error
 
 func _on_issue_requested(item: ItemInstance) -> void:
 	if _sandbox_state == null:
@@ -214,6 +321,12 @@ func _gallery() -> LootLabSampleGallery:
 
 func _inspector() -> LootLabTraceInspector:
 	return get_node("Layout/Workbench/InspectorScroll/TraceInspector") as LootLabTraceInspector
+
+func _analysis() -> Variant:
+	return get_node("Layout/Analysis")
+
+func _workbench() -> Control:
+	return get_node("Layout/Workbench") as Control
 
 func _outcome() -> Label:
 	return get_node("Layout/Workbench/Results/OutcomeSummary") as Label

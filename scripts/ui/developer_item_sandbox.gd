@@ -635,6 +635,8 @@ func _configure_loot_lab() -> void:
 		lab.sandbox_item_issued.connect(_on_loot_lab_item_issued)
 	if not lab.close_requested.is_connected(close):
 		lab.close_requested.connect(close)
+	if not lab.focus_controls_changed.is_connected(_configure_focus_graph):
+		lab.focus_controls_changed.connect(_configure_focus_graph)
 
 
 func _on_loot_lab_item_issued() -> void:

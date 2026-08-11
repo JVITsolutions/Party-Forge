@@ -75,6 +75,23 @@ func select_report(kind: StringName) -> String:
 	_selected_report_kind = kind
 	return ""
 
+func available_report_kinds() -> Array[StringName]:
+	var result: Array[StringName] = []
+	if not _latest_completed_report.is_empty():
+		result.append(&"complete")
+	if not _latest_partial_report.is_empty():
+		result.append(&"partial")
+	return result
+
+func selected_report_kind() -> StringName:
+	if _selected_report_kind == &"partial" and not _latest_partial_report.is_empty():
+		return &"partial"
+	if not _latest_completed_report.is_empty():
+		return &"complete"
+	if not _latest_partial_report.is_empty():
+		return &"partial"
+	return &""
+
 func selected_report() -> Dictionary:
 	if _selected_report_kind == &"partial" and not _latest_partial_report.is_empty():
 		return _latest_partial_report.duplicate(true)

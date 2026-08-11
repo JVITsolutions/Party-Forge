@@ -1,9 +1,10 @@
-[gd_scene load_steps=5 format=3]
+[gd_scene load_steps=6 format=3]
 
 [ext_resource type="Script" path="res://scripts/ui/developer_loot_lab.gd" id="1_lab"]
 [ext_resource type="Script" path="res://scripts/ui/loot_lab/loot_lab_request_form.gd" id="2_form"]
 [ext_resource type="Script" path="res://scripts/ui/loot_lab/loot_lab_sample_gallery.gd" id="3_gallery"]
 [ext_resource type="Script" path="res://scripts/ui/loot_lab/loot_lab_trace_inspector.gd" id="4_inspector"]
+[ext_resource type="Script" path="res://scripts/ui/loot_lab/loot_lab_analysis_view.gd" id="5_analysis"]
 
 [node name="Loot Lab" type="Control"]
 layout_mode = 3
@@ -37,6 +38,12 @@ custom_minimum_size = Vector2(132, 40)
 layout_mode = 2
 focus_mode = 2
 text = "Workbench"
+
+[node name="AnalysisFocusAnchor" type="Button" parent="Layout/Header"]
+custom_minimum_size = Vector2(132, 40)
+layout_mode = 2
+focus_mode = 2
+text = "Analysis"
 
 [node name="Workbench" type="HBoxContainer" parent="Layout"]
 layout_mode = 2
@@ -103,6 +110,12 @@ layout_mode = 2
 size_flags_horizontal = 3
 script = ExtResource("4_inspector")
 
+[node name="Analysis" type="Control" parent="Layout"]
+visible = false
+layout_mode = 2
+size_flags_vertical = 3
+script = ExtResource("5_analysis")
+
 [node name="FooterStatus" type="Label" parent="Layout"]
 custom_minimum_size = Vector2(0, 32)
 layout_mode = 2
@@ -119,3 +132,10 @@ ok_button_text = "Start 100,000"
 title = "Cancel active Loot Lab batch?"
 dialog_text = "A deterministic batch is still running. Cancel it and close the sandbox?"
 ok_button_text = "Cancel batch and close"
+
+[node name="ReportExportDialog" type="FileDialog" parent="."]
+title = "Export Loot Lab report"
+size = Vector2i(900, 620)
+file_mode = 4
+access = 2
+use_native_dialog = false

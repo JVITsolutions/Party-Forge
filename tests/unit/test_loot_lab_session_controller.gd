@@ -22,6 +22,7 @@ func _test_report_lifecycle(
 	TestAssertions.equal(session.advance(3, 0), 3, "session advances first job", failures)
 	TestAssertions.truthy(not session.has_active_job(), "completed session clears active job", failures)
 	var completed := session.selected_report()
+	TestAssertions.equal(session.available_report_kinds(), [&"complete"] as Array[StringName], "completion exposes only the complete report kind", failures)
 	TestAssertions.equal(((completed.get("evidence", {}) as Dictionary).get("summary", {}) as Dictionary).get("attempted", 0), 3, "completion selects completed report", failures)
 	var complete_bytes := LootLabReportExportService.deterministic_json(completed)
 
@@ -40,6 +41,7 @@ func _test_report_lifecycle(
 	TestAssertions.equal(session.advance(2, 0), 2, "successor advances partially", failures)
 	session.cancel()
 	var partial := session.selected_report()
+	TestAssertions.equal(session.available_report_kinds(), [&"complete", &"partial"] as Array[StringName], "cancelled successor retains both report kinds", failures)
 	TestAssertions.equal((partial.get("runtime", {}) as Dictionary).get("status", ""), "cancelled", "cancelled partial becomes selected", failures)
 	TestAssertions.equal(((partial.get("evidence", {}) as Dictionary).get("summary", {}) as Dictionary).get("attempted", 0), 2, "partial report retains exact attempted count", failures)
 	TestAssertions.equal(session.select_report(&"complete"), "", "complete remains selectable beside partial", failures)
