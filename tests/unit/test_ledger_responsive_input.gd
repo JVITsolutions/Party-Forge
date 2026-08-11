@@ -37,12 +37,20 @@ func _test_layout_controller_and_pause_edges(failures: Array[String]) -> void:
 	var run := GameRun.new()
 	run.start_run()
 	var context := LedgerPlayerContext.new(0)
-	ledger.configure(run, party, catalog, Callable(), [context])
+	var feature_ids: Array[StringName] = [&"stats", &"current_upgrades", &"equipment_inventory"]
+	var unlock_ids: Array[StringName] = [&"equipment_inventory"]
+	var policy := FeatureAccessPolicy.new(false, true, feature_ids, unlock_ids, unlock_ids)
+	ledger.configure(run, party, catalog, Callable(), [context], policy)
 
 	TestAssertions.truthy(ledger.has_method("apply_viewport_size"), "ledger exposes deterministic viewport policy", failures)
 	var stats_page := ledger.get_node("Overlay/Frame/Layout/Body/PageHost/StatsLedgerPage") as CharacterLedgerPage
 	var upgrades_page := ledger.get_node("Overlay/Frame/Layout/Body/PageHost/UpgradesLedgerPage") as CharacterLedgerPage
-	for page: CharacterLedgerPage in [stats_page, upgrades_page]:
+	var equipment_page := ledger.get_node_or_null("Overlay/Frame/Layout/Body/PageHost/EquipmentInventoryLedgerPage") as CharacterLedgerPage
+	TestAssertions.truthy(equipment_page != null, "Equipment page instantiates when its completed-content policy is unlocked", failures)
+	if equipment_page == null:
+		_cleanup(ledger, run, party)
+		return
+	for page: CharacterLedgerPage in [stats_page, upgrades_page, equipment_page]:
 		TestAssertions.truthy(page.has_method("apply_compact"), "%s exposes compact contract" % page.name, failures)
 		TestAssertions.truthy(page.has_method("pin_active_detail"), "%s exposes pin contract" % page.name, failures)
 		TestAssertions.truthy(page.has_method("dismiss_pinned_detail"), "%s exposes dismiss contract" % page.name, failures)
@@ -55,6 +63,7 @@ func _test_layout_controller_and_pause_edges(failures: Array[String]) -> void:
 	var entries := ledger.get_node("Overlay/Frame/Layout/Body/PartyColumn/PartyScroll/PartyEntries") as GridContainer
 	var stats_content := stats_page.get_node("Layout/Content") as SplitContainer
 	var upgrades_content := upgrades_page.get_node("Layout/Content") as SplitContainer
+	var equipment_body := equipment_page.get_node("Layout/Body") as BoxContainer
 	var status := ledger.get_node("Overlay/Frame/Layout/Status") as Label
 	var status_font_size := status.get_theme_font_size(&"font_size")
 	TestAssertions.truthy(party_scroll.follow_focus, "party scroll follows keyboard and controller focus", failures)
@@ -63,10 +72,12 @@ func _test_layout_controller_and_pause_edges(failures: Array[String]) -> void:
 	TestAssertions.truthy(not body.vertical, "desktop outer split is horizontal", failures)
 	TestAssertions.equal(entries.columns, 1, "desktop party rail uses one column", failures)
 	TestAssertions.truthy(not stats_content.vertical and not upgrades_content.vertical, "desktop page detail splits are horizontal", failures)
+	TestAssertions.truthy(not equipment_body.vertical, "desktop Equipment page keeps equipment and inventory side by side", failures)
 	ledger.call("apply_viewport_size", Vector2(960.0, 540.0))
 	TestAssertions.truthy(body.vertical, "compact outer split is vertical", failures)
 	TestAssertions.equal(entries.columns, 3, "compact party rail uses three columns", failures)
 	TestAssertions.truthy(stats_content.vertical and upgrades_content.vertical, "compact page detail splits are vertical", failures)
+	TestAssertions.truthy(equipment_body.vertical, "compact Equipment page stacks inventory below equipment", failures)
 	TestAssertions.equal(status.get_theme_font_size(&"font_size"), status_font_size, "responsive policy leaves font size unchanged", failures)
 	TestAssertions.truthy(stats_page.get_node("Layout/Content/DetailPanel") is ScrollContainer, "Stats detail scrolls independently", failures)
 	TestAssertions.truthy(upgrades_page.get_node("Layout/Content/DetailPanel") is ScrollContainer, "Upgrades detail scrolls independently", failures)
@@ -139,20 +150,20 @@ func _test_layout_controller_and_pause_edges(failures: Array[String]) -> void:
 	ledger.call("_unhandled_input", _action_event(&"ledger_next_page"))
 	TestAssertions.truthy(upgrades_page.visible and not stats_page.visible, "next bumper moves Stats to Current Upgrades", failures)
 	ledger.call("_unhandled_input", _action_event(&"ledger_next_page"))
-	TestAssertions.truthy(stats_page.visible and not upgrades_page.visible, "next bumper wraps past Coming Soon back to Stats", failures)
+	TestAssertions.truthy(equipment_page.visible and not stats_page.visible and not upgrades_page.visible, "next bumper reaches Equipment and Inventory", failures)
+	ledger.call("_unhandled_input", _action_event(&"ledger_next_page"))
+	TestAssertions.truthy(stats_page.visible and not upgrades_page.visible and not equipment_page.visible, "next bumper wraps from Equipment to Stats", failures)
 	ledger.call("_unhandled_input", _action_event(&"ledger_previous_page"))
-	TestAssertions.truthy(upgrades_page.visible and not stats_page.visible, "previous bumper skips Coming Soon", failures)
+	TestAssertions.truthy(equipment_page.visible and not stats_page.visible, "previous bumper reaches Equipment and Inventory", failures)
 	ledger.activate_page(&"stats")
 
-	var coming_tab := _tab_for(ledger, &"equipment_inventory")
-	TestAssertions.truthy(coming_tab != null and coming_tab.focus_mode != Control.FOCUS_NONE, "Coming Soon tab remains focusable", failures)
-	if coming_tab != null:
-		coming_tab.focus_entered.emit()
-		TestAssertions.equal(status.text, "Equipment & Inventory: Coming Soon", "Coming Soon explains itself on focus", failures)
-		TestAssertions.truthy(stats_page.visible and not upgrades_page.visible, "Coming Soon focus never activates a page", failures)
-		coming_tab.pressed.emit()
-		TestAssertions.equal(status.text, "Equipment & Inventory: Coming Soon", "Coming Soon activation keeps exact explanation", failures)
-		TestAssertions.truthy(stats_page.visible and not upgrades_page.visible, "Coming Soon activation preserves available page", failures)
+	var equipment_tab := _tab_for(ledger, &"equipment_inventory")
+	TestAssertions.truthy(equipment_tab != null and equipment_tab.focus_mode != Control.FOCUS_NONE, "Equipment tab remains focusable", failures)
+	if equipment_tab != null:
+		equipment_tab.pressed.emit()
+		TestAssertions.equal(status.text, "", "available Equipment activation clears unavailable status", failures)
+		TestAssertions.truthy(equipment_page.visible and not stats_page.visible and not upgrades_page.visible, "Equipment tab activates its implemented page", failures)
+		ledger.activate_page(&"stats")
 
 	var stats_detail := stats_page.get_node("Layout/Content/DetailPanel") as Control
 	TestAssertions.truthy(not stats_detail.visible, "compact detail starts dismissed", failures)

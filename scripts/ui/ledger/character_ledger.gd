@@ -78,7 +78,16 @@ func configure(
 		_contexts[0] = LedgerPlayerContext.new(0)
 	context = _contexts.get(0) as LedgerPlayerContext
 	provider = LedgerDataProvider.new()
-	provider.configure(party, catalog, health_provider, progression_provider, progression_context)
+	provider.configure(
+		party,
+		catalog,
+		health_provider,
+		progression_provider,
+		progression_context,
+		progression_context,
+		catalog.equipment_catalog if catalog != null else null,
+		catalog.item_foundation_catalog if catalog != null else null,
+	)
 	provider.data_changed.connect(_on_provider_data_changed)
 	provider.party_changed.connect(_on_provider_party_changed)
 	_build_pages()
@@ -212,6 +221,12 @@ func _unhandled_input(event: InputEvent) -> void:
 		_mark_input_handled()
 		return
 	if not is_open():
+		return
+	var scroll_axis := event.get_action_strength(&"tooltip_scroll_down") - event.get_action_strength(&"tooltip_scroll_up")
+	var focused := get_viewport().gui_get_focus_owner() as Control if is_inside_tree() else null
+	if absf(scroll_axis) >= 0.15 and focused != null and _party_scroll().is_ancestor_of(focused):
+		_party_scroll().scroll_vertical += int(roundf(scroll_axis * 96.0))
+		_mark_input_handled()
 		return
 	if event.is_action_pressed(&"ui_cancel"):
 		var active_page := _active_page()

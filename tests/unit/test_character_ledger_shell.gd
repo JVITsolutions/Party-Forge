@@ -16,9 +16,12 @@ func run() -> Array[String]:
 	var run := GameRun.new()
 	run.start_run()
 	var player_context := LedgerPlayerContext.new(0)
+	var feature_ids: Array[StringName] = [&"stats", &"current_upgrades", &"equipment_inventory"]
+	var unlock_ids: Array[StringName] = [&"equipment_inventory"]
+	var policy := FeatureAccessPolicy.new(false, true, feature_ids, unlock_ids, unlock_ids)
 	ledger.configure(run, party, catalog, func(_member_id: int) -> Dictionary:
 		return {"current": 260.0, "maximum": 260.0, "is_downed": false, "is_dead": false}
-	, [player_context])
+	, [player_context], policy)
 
 	TestAssertions.truthy(not ledger.open_for_player(99), "ledger rejects an unknown local player context", failures)
 	TestAssertions.truthy(ledger.open_for_player(), "ledger opens during running state", failures)
@@ -29,6 +32,7 @@ func run() -> Array[String]:
 	TestAssertions.equal(party_count.text, "Party Members: 1 / 4", "ledger shows live production occupancy", failures)
 	var stats_page := ledger.get_node("Overlay/Frame/Layout/Body/PageHost/StatsLedgerPage") as Control
 	var upgrades_page := ledger.get_node("Overlay/Frame/Layout/Body/PageHost/UpgradesLedgerPage") as Control
+	var equipment_page := ledger.get_node("Overlay/Frame/Layout/Body/PageHost/EquipmentInventoryLedgerPage") as Control
 	TestAssertions.truthy(stats_page.visible and not upgrades_page.visible, "opening activates only the selected page lifecycle", failures)
 
 	TestAssertions.truthy(party.recruit(catalog.class_by_id(&"fighter")), "provider refresh fixture recruits a member", failures)
@@ -38,18 +42,17 @@ func run() -> Array[String]:
 	TestAssertions.truthy(ledger.activate_page(&"current_upgrades"), "available page activates", failures)
 	TestAssertions.equal(ledger.get("context").selected_member_id, 2, "selected member persists across pages", failures)
 	TestAssertions.truthy(not stats_page.visible and upgrades_page.visible, "page switch deactivates the previous page", failures)
-	TestAssertions.truthy(not ledger.activate_page(&"equipment_inventory"), "Coming Soon page cannot activate", failures)
+	TestAssertions.truthy(ledger.activate_page(&"equipment_inventory"), "completed Equipment page activates when policy unlocks it", failures)
 	var status := ledger.get_node("Overlay/Frame/Layout/Status") as Label
-	TestAssertions.truthy("Coming Soon" in status.text, "Coming Soon activation explains itself", failures)
-	TestAssertions.truthy(status.focus_mode != Control.FOCUS_NONE, "Coming Soon explanation remains focusable", failures)
-	var coming_tab: Button
+	TestAssertions.equal(status.text, "", "available Equipment activation clears unavailable status", failures)
+	var equipment_tab: Button
 	for tab_node: Node in ledger.get_node("Overlay/Frame/Layout/Tabs").get_children():
 		var tab := tab_node as Button
 		if tab != null and tab.get_meta("page_id", &"") == &"equipment_inventory":
-			coming_tab = tab
+			equipment_tab = tab
 			break
-	TestAssertions.truthy(coming_tab != null and not coming_tab.disabled and coming_tab.focus_mode != Control.FOCUS_NONE, "Coming Soon tab stays focusable", failures)
-	TestAssertions.truthy(upgrades_page.visible, "rejected page preserves the active page", failures)
+	TestAssertions.truthy(equipment_tab != null and not equipment_tab.disabled and equipment_tab.focus_mode != Control.FOCUS_NONE, "available Equipment tab stays focusable", failures)
+	TestAssertions.truthy(equipment_page.visible and not upgrades_page.visible, "Equipment activation switches page lifecycle", failures)
 
 	for member_id: int in range(3, 25):
 		party.members.append(PartyMemberState.new(member_id, catalog.class_by_id(&"fighter"), false, "Extra %d" % member_id))

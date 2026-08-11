@@ -73,9 +73,10 @@ func _test_ledger_catalog_policy_and_equipment_boundary(failures: Array[String])
 	var developer_settings := PartyForgeSettings.new()
 	developer_settings.mode = PartyForgeSettings.Mode.DEVELOPER_MODE
 	developer_settings.unlock_all_implemented_content = true
-	var policy := RunRulesSnapshot.from_settings(developer_settings).feature_policy(LEDGER_FEATURES)
-	var gate := LedgerFeatureGate.new(policy, [&"equipment_inventory"])
-	TestAssertions.equal(gate.resolve(equipment), LedgerPageDefinition.State.COMING_SOON, "Unlock All cannot activate Equipment Coming Soon", failures)
+	var known_unlocks: Array[StringName] = [&"equipment_inventory"]
+	var policy := RunRulesSnapshot.from_settings(developer_settings).feature_policy(LEDGER_FEATURES, known_unlocks)
+	var gate := LedgerFeatureGate.new(policy, [&"equipment_inventory"], known_unlocks)
+	TestAssertions.equal(gate.resolve(equipment), LedgerPageDefinition.State.AVAILABLE, "Unlock All activates completed Equipment content", failures)
 
 	var tree := Engine.get_main_loop() as SceneTree
 	var ledger := (load("res://scenes/ui/ledger/character_ledger.tscn") as PackedScene).instantiate() as CharacterLedger
@@ -87,11 +88,11 @@ func _test_ledger_catalog_policy_and_equipment_boundary(failures: Array[String])
 	ledger.configure(run_state, party, catalog, Callable(), [], policy)
 	var pages := ledger.get("_pages") as Dictionary
 	var definitions := ledger.get("_definitions") as Dictionary
-	TestAssertions.truthy(definitions.has(&"equipment_inventory"), "Equipment remains visible as a Coming Soon tab", failures)
-	TestAssertions.truthy(not pages.has(&"equipment_inventory"), "Equipment never instantiates a page scene", failures)
-	TestAssertions.equal((ledger.get_node("Overlay/Frame/Layout/Body/PageHost") as Control).get_child_count(), 2, "only implemented ledger pages instantiate", failures)
-	TestAssertions.truthy(not ledger.activate_page(&"equipment_inventory"), "direct Equipment activation is rejected", failures)
-	TestAssertions.truthy("Coming Soon" in (ledger.get_node("Overlay/Frame/Layout/Status") as Label).text, "direct rejection explains Coming Soon", failures)
+	TestAssertions.truthy(definitions.has(&"equipment_inventory"), "Equipment remains cataloged when completed content is unlocked", failures)
+	TestAssertions.truthy(pages.has(&"equipment_inventory"), "Equipment instantiates its completed page scene", failures)
+	TestAssertions.equal((ledger.get_node("Overlay/Frame/Layout/Body/PageHost") as Control).get_child_count(), 3, "all implemented ledger pages instantiate", failures)
+	TestAssertions.truthy(ledger.activate_page(&"equipment_inventory"), "direct Equipment activation succeeds", failures)
+	TestAssertions.equal((ledger.get_node("Overlay/Frame/Layout/Status") as Label).text, "", "available Equipment activation has no unavailable explanation", failures)
 	ledger.free()
 	run_state.free()
 	party.free()
