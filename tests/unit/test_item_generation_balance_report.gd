@@ -4,6 +4,8 @@ const EQUIPMENT_PATH := "res://data/equipment/core_equipment_catalog.tres"
 const FOUNDATION_PATH := "res://data/items/core_item_foundation_catalog.tres"
 const REPORT_PATH := "res://scripts/items/item_generation_balance_report.gd"
 const EVIDENCE_PATH := "res://docs/validation/evidence/2026-08-10-weighted-loot-production-balance.json"
+const BOUNDED_JSON_SHA256 := "21fee99a15adc1cbfb234350096bdfea83fc00a356cc16cb0dfc5e7d342d53ae"
+const BOUNDED_MARKDOWN_SHA256 := "6a3b94702f124bada5aa3361dfeff3b8e19db0331d5c354c329c5b305a5f5d0a"
 
 func run() -> Array[String]:
 	var failures: Array[String] = []
@@ -231,6 +233,8 @@ func _test_bounded_repeat_and_unique_ids(
 	var second: Dictionary = report_script.call(&"build_bounded", equipment, foundation, requests, 16)
 	TestAssertions.equal(first.get("status", ""), "ok", "bounded report succeeds", failures)
 	TestAssertions.equal(report_script.call(&"to_json", first), report_script.call(&"to_json", second), "independent bounded builds replay byte-identically", failures)
+	TestAssertions.equal(String(report_script.call(&"to_json", first)).sha256_text(), BOUNDED_JSON_SHA256, "shared analysis preserves bounded report JSON bytes", failures)
+	TestAssertions.equal(String(report_script.call(&"to_markdown", first)).sha256_text(), BOUNDED_MARKDOWN_SHA256, "shared analysis preserves bounded report Markdown bytes", failures)
 	var summary := first.get("summary", {}) as Dictionary
 	TestAssertions.equal(summary.get("attempted", 0), 32, "bounded report uses requested sample count", failures)
 	TestAssertions.equal(summary.get("unique_instance_id_count", 0), 32, "bounded report issues unique IDs across scenarios", failures)

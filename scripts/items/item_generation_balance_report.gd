@@ -984,11 +984,12 @@ static func _record_expected_affix_weights(
 ) -> void:
 	if trace == null:
 		return
-	for stage_value: Variant in trace.stages:
-		var stage := stage_value as Dictionary
-		if not String(stage.get("stage", "")).begins_with("affix:"):
+	for opportunity: Dictionary in ItemGenerationAnalysis.selection_opportunities(trace):
+		if not String(opportunity.get("stage", "")).begins_with("affix:"):
 			continue
-		var weights := stage.get("weights", {}) as Dictionary
+		if not bool(opportunity.get("valid", false)):
+			continue
+		var weights := opportunity.get("weights", {}) as Dictionary
 		var total := 0.0
 		var band_sums: Dictionary = {}
 		for affix_id: String in weights:
