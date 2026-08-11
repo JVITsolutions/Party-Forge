@@ -112,7 +112,7 @@ func _test_per_context_eligibility_and_canonical_decisions(failures: Array[Strin
 	for decision: RefCounted in decisions:
 		var run_player_id := StringName(decision.get(&"run_player_id"))
 		var expected_roll := floori(ItemDeterministicRandom.unit(event.run_seed, event.defeat_sequence, StringName("personal_drop:%s" % run_player_id), 0) * 10000.0)
-		var expected_seed := maxi(("%d|%d|%s|item" % [event.run_seed, event.defeat_sequence, run_player_id]).sha256_text().substr(0, 15).hex_to_int(), 1)
+		var expected_seed := maxi(("%d|%d|%s|item" % [event.run_seed, event.defeat_sequence, run_player_id]).sha256_text().substr(0, 13).hex_to_int(), 1)
 		TestAssertions.equal(decision.get(&"basis_points"), 200, "%s uses specialist basis points" % run_player_id, failures)
 		TestAssertions.equal(decision.get(&"roll_basis_points"), expected_roll, "%s draw uses its independent deterministic stage" % run_player_id, failures)
 		TestAssertions.equal(decision.get(&"generation_seed"), expected_seed, "%s generation seed uses the canonical SHA-256 input" % run_player_id, failures)

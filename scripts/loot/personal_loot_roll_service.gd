@@ -1,7 +1,7 @@
 class_name PersonalLootRollService
 extends RefCounted
 
-const GENERATION_SEED_HEX_CHARACTERS := 15
+const GENERATION_SEED_HEX_CHARACTERS := 13
 
 var registry: RunContextRegistry
 var reward_tuning: RewardDistributionTuning
