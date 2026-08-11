@@ -32,6 +32,7 @@ func run() -> Array[String]:
 	_assert_deterministic_fixture(failures)
 	_assert_schema_one_migrates_to_schema_two(failures)
 	_assert_schema_two_generated_journal_replays(failures)
+	_assert_generated_item_issuance_is_failure_atomic(failures)
 	_assert_explicit_affixes_survive_reload(failures)
 	_assert_movement_replay_collision_and_reset(failures)
 	_assert_public_slot_transactions_and_integrity(failures)
@@ -120,6 +121,70 @@ func _generated_preview(failures: Array[String]) -> ItemInstance:
 	var generated := ItemGenerationService.generate(request, "loot-lab-preview:test", 4, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)
 	TestAssertions.truthy(generated.ok(), "generated journal preview fixture succeeds", failures)
 	return generated.item if generated.ok() else null
+
+func _assert_generated_item_issuance_is_failure_atomic(failures: Array[String]) -> void:
+	_cleanup_sandbox_files()
+	var preview := _generated_preview(failures)
+	if preview == null:
+		return
+	var state: Variant = _state_script.new()
+	TestAssertions.equal(state.reset(), "", "generated issuance fixture resets", failures)
+	TestAssertions.equal(state.issue_generated_item(preview, INVENTORY_ID), "", "generated preview issues to first empty inventory slot", failures)
+	var first_document: Dictionary = state.to_dictionary()
+	var first_item_id: String = state.inventory().item_id_at(0)
+	var first_item: ItemInstance = state.registry().item(first_item_id)
+	TestAssertions.truthy(first_item != null and first_item_id != preview.instance_id, "issued item receives a durable instance identity", failures)
+	if first_item != null:
+		TestAssertions.equal(JSON.stringify(first_item.to_dictionary()["affixes"]), JSON.stringify(preview.to_dictionary()["affixes"]), "issued item preserves exact serialized affix rolls", failures)
+		TestAssertions.equal(JSON.stringify(first_item.to_dictionary()["base_damage_components"]), JSON.stringify(preview.to_dictionary()["base_damage_components"]), "issued item preserves exact serialized weapon damage", failures)
+	TestAssertions.equal(int(first_document["issuance_metadata"]["next_generated_item_sequence"]), 1, "first issue consumes one generated-item sequence", failures)
+	TestAssertions.equal(int(first_document["issuance_metadata"]["next_transaction_sequence"]), 1, "first issue consumes one transaction sequence", failures)
+	var before_invalid := var_to_bytes(state.to_dictionary())
+	TestAssertions.truthy(state.issue_generated_item(null, INVENTORY_ID, 1).contains("field=preview"), "missing preview is rejected before issuance", failures)
+	TestAssertions.equal(var_to_bytes(state.to_dictionary()), before_invalid, "invalid preview consumes no item or transaction sequence", failures)
+
+	TestAssertions.equal(state.issue_generated_item(preview, INVENTORY_ID, 1), "", "same preview issues independently to an explicit slot", failures)
+	var second_item_id: String = state.inventory().item_id_at(1)
+	TestAssertions.truthy(not second_item_id.is_empty() and second_item_id != first_item_id, "repeated preview issuance receives a unique ID", failures)
+	TestAssertions.equal(state.registry().size(), 101, "two generated items extend the exact 99-item fixture", failures)
+
+	for slot: int in range(2, 5):
+		TestAssertions.equal(state.issue_generated_item(preview, INVENTORY_ID, slot), "", "inventory fill issuance %d succeeds" % slot, failures)
+	var before_full := var_to_bytes(state.to_dictionary())
+	var no_space_error: String = state.issue_generated_item(preview, INVENTORY_ID)
+	TestAssertions.truthy(not no_space_error.is_empty() and no_space_error.contains("no empty slot"), "full destination rejects issuance", failures)
+	TestAssertions.equal(var_to_bytes(state.to_dictionary()), before_full, "no-space rejection consumes no item or transaction sequence", failures)
+
+	var before_projection := var_to_bytes(state.to_dictionary())
+	var projection_error: String = state.issue_generated_item(
+		preview,
+		STASH_ID,
+		99,
+		func(_candidate: ItemOwnershipState, _document: Dictionary) -> String: return "projection rejected generated item"
+	)
+	TestAssertions.truthy(projection_error.contains("projection rejected"), "projection rejection is reported", failures)
+	TestAssertions.equal(var_to_bytes(state.to_dictionary()), before_projection, "projection rejection preserves exact in-memory bytes", failures)
+
+	_cleanup_sandbox_files()
+	var independent: Variant = _state_script.new()
+	TestAssertions.equal(independent.reset(), "", "independent sequence fixture resets", failures)
+	var fixture_item_id: String = independent.stash().item_id_at(0)
+	TestAssertions.equal(independent.move_to_first_empty_inventory(fixture_item_id), "", "fixture movement consumes transaction only", failures)
+	TestAssertions.equal(independent.issue_generated_item(preview, STASH_ID, 0), "", "issuance after movement succeeds", failures)
+	var independent_document: Dictionary = independent.to_dictionary()
+	TestAssertions.equal(int(independent_document["issuance_metadata"]["next_transaction_sequence"]), 2, "move and issue share chronological transaction sequence", failures)
+	TestAssertions.equal(int(independent_document["issuance_metadata"]["next_generated_item_sequence"]), 1, "move does not consume generated-item sequence", failures)
+	TestAssertions.truthy(independent.stash().item_id_at(0).ends_with("0000000000000000"), "first issued item still uses generated sequence zero", failures)
+
+	var primary_before := FileAccess.get_file_as_bytes(DOCUMENT_PATH)
+	var memory_before := var_to_bytes(independent.to_dictionary())
+	var failing_atomic := AtomicJsonStore.new(func(_temporary: String, _target: String) -> Error: return ERR_CANT_CREATE)
+	var failing_state: Variant = _state_script.new(_store_script.new(failing_atomic))
+	TestAssertions.equal(failing_state.reload(), "", "atomic issuance fixture reloads current state", failures)
+	var save_error: String = failing_state.issue_generated_item(preview, INVENTORY_ID, 1)
+	TestAssertions.truthy(save_error.contains("stage=promote"), "generated issuance reports atomic promotion failure", failures)
+	TestAssertions.equal(var_to_bytes(failing_state.to_dictionary()), memory_before, "failed issuance save preserves exact in-memory state", failures)
+	TestAssertions.equal(FileAccess.get_file_as_bytes(DOCUMENT_PATH), primary_before, "failed issuance save preserves exact primary bytes", failures)
 
 func _assert_deterministic_fixture(failures: Array[String]) -> void:
 	_cleanup_sandbox_files()

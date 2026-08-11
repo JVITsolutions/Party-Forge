@@ -145,6 +145,74 @@ func scan_integrity() -> String:
 	_integrity_error = error
 	return error
 
+func issue_generated_item(
+	preview: ItemInstance,
+	destination_container_id: StringName,
+	destination_slot: int = -1,
+	candidate_validator: Callable = Callable()
+) -> String:
+	if _state == null:
+		return _fail("PARTY_FORGE_DEVELOPER_ITEM_SANDBOX_ERROR field=state reason=must reset or reload before issuing")
+	if destination_container_id not in [INVENTORY_ID, STASH_ID]:
+		return _fail("PARTY_FORGE_DEVELOPER_ITEM_SANDBOX_ERROR field=destination reason=unknown sandbox container %s" % destination_container_id)
+	var destination := _state.container(destination_container_id)
+	if destination == null:
+		return _fail("PARTY_FORGE_DEVELOPER_ITEM_SANDBOX_ERROR field=destination reason=container is missing")
+	var resolved_slot := destination_slot
+	if resolved_slot == -1:
+		resolved_slot = destination.first_empty_slot()
+		if resolved_slot < 0:
+			return _fail("PARTY_FORGE_DEVELOPER_ITEM_SANDBOX_ERROR field=destination reason=container has no empty slot")
+	elif resolved_slot < 0:
+		return _fail("PARTY_FORGE_DEVELOPER_ITEM_SANDBOX_ERROR field=destination_slot reason=slot is out of bounds")
+	elif resolved_slot >= destination.capacity:
+		return _fail("PARTY_FORGE_DEVELOPER_ITEM_SANDBOX_ERROR field=destination_slot reason=slot is out of bounds")
+	elif not destination.item_id_at(resolved_slot).is_empty():
+		return _fail("PARTY_FORGE_DEVELOPER_ITEM_SANDBOX_ERROR field=destination_slot reason=slot is occupied")
+
+	var generated_sequence := int(_metadata.get("next_generated_item_sequence", 0))
+	var transaction_sequence := int(_metadata.get("next_transaction_sequence", 0))
+	if generated_sequence >= ItemInstanceCodec.JSON_SAFE_INTEGER_MAX:
+		return _fail("PARTY_FORGE_DEVELOPER_ITEM_SANDBOX_ERROR field=issuance_metadata.next_generated_item_sequence reason=sequence exhausted")
+	if transaction_sequence >= ItemInstanceCodec.JSON_SAFE_INTEGER_MAX:
+		return _fail("PARTY_FORGE_DEVELOPER_ITEM_SANDBOX_ERROR field=issuance_metadata.next_transaction_sequence reason=sequence exhausted")
+	var issued := DeveloperLootLabItemIssuer.reissue(
+		preview,
+		generated_sequence,
+		GameCatalog.EQUIPMENT_CATALOG,
+		GameCatalog.ITEM_FOUNDATION_CATALOG
+	)
+	if not issued.ok():
+		return _fail(issued.error)
+	var request := ItemTransactionRequest.create(
+		"sandbox-transaction-%016d" % transaction_sequence,
+		OWNER_ID,
+		destination_container_id,
+		resolved_slot,
+		issued.item
+	)
+	var candidate_journal := _journal.copy()
+	var result := _transactions.apply(
+		_state,
+		request,
+		candidate_journal,
+		GameCatalog.EQUIPMENT_CATALOG,
+		GameCatalog.ITEM_FOUNDATION_CATALOG
+	)
+	if result.code != ItemTransactionResult.Code.OK or result.next_state == null:
+		return _fail("PARTY_FORGE_DEVELOPER_ITEM_SANDBOX_ERROR field=transaction reason=code %s" % _code_name(result.code))
+	var candidate_metadata := _metadata.duplicate(true)
+	candidate_metadata["next_generated_item_sequence"] = generated_sequence + 1
+	candidate_metadata["next_transaction_sequence"] = transaction_sequence + 1
+	var document := _store.document_for(result.next_state, candidate_metadata, candidate_journal)
+	var candidate_error := _validate_candidate(candidate_validator, result.next_state, document)
+	if not candidate_error.is_empty():
+		return _fail(candidate_error)
+	var save_error := _store.save_document(document)
+	if not save_error.is_empty():
+		return _fail(save_error)
+	return _commit_saved_document(document)
+
 func transfer_slots(
 	source_container_id: StringName,
 	source_slot: int,
