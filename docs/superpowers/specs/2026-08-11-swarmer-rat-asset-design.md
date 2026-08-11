@@ -15,7 +15,7 @@ The asset is a Wedge Runner: a hunched quadruped with raised shoulders, a low fo
 ## Approved decisions
 
 - The rat replaces the enemy currently identified as `swarmer`; it does not introduce a second enemy type.
-- Total nose-to-tail length is approximately `0.91 m` (3 ft), including the tail.
+- Total head-to-tail length is approximately `1.22 m` (4 ft), including the tail.
 - Neutral-pose height is approximately `0.61 m` (2 ft) to the ear tips.
 - The final exported asset must not exceed `3,000` triangles after triangulation.
 - The preferred working target is `2,400-2,700` triangles, leaving a hard-budget safety margin.
@@ -63,15 +63,19 @@ The neutral pose is a compressed, forward-driving crouch rather than a standing 
 
 Target dimensions in Blender and Godot units:
 
-- overall nose-to-tail length: `0.91 m`, measured with the neutral tail pose;
-- nose-to-rump body length: approximately `0.64 m`;
+- overall head-to-tail length: `1.22 m`, measured with the neutral tail pose;
+- nose-to-rump body length: approximately `0.95 m`;
 - tail contribution beyond the rump: approximately `0.27 m`;
 - ground to ear-tip height: approximately `0.61 m`;
 - maximum torso width: approximately `0.34-0.38 m`;
-- feet rest on local `Y = 0`;
+- feet rest on Blender local `Z = 0` and import onto Godot local `Y = 0`;
 - asset origin is centered beneath the torso at ground level.
 
-The forequarters use larger paws and more mass than the hindquarters. Rear legs remain visibly long but folded beneath the body. The paws receive short readable claws without long needle-like projections. The tail leaves the rump in a mostly straight line with one subtle upward hook; it may not coil into the torso silhouette.
+The additional foot of length belongs to the rib cage and abdomen rather than the head or tail. Shoulder height, head scale, and tail reach remain stable so the longer body reads as a fast giant rat instead of a uniformly stretched model.
+
+The forequarters use straight, comparatively slim load-bearing legs. The rear legs must have visibly larger rounded haunches, a folded thigh-to-hock silhouette, a forward-angled lower segment, and longer rear feet. The hind legs may not reuse the foreleg silhouette. A furred ankle cuff creates a deliberate break before each flatter paw. Dusty pink is restricted to the paw and toes below that cuff; a narrow shadow crease prevents the skin color from visually bleeding into the leg. The paws receive short readable claws without long needle-like projections.
+
+The tail leaves the rump through a thicker furred root that continues the dorsal stripe before transitioning to dusty pink. It tapers smoothly, trails in the direction of travel, and ends with one restrained upward hook. The root may not begin with an abrupt exposed-skin kink, and the tail may not coil into the torso silhouette.
 
 The ears are slightly oversized to maintain rat recognition from above. One ear has a single large notch, implemented as silhouette geometry rather than a transparency mask. Fur tufts are large, sparse, and integral to the body mesh. They may not become thin cards or a noisy saw-tooth outline.
 
@@ -96,7 +100,7 @@ The approved palette is:
 - main coat: warm grey-brown;
 - dorsal stripe: dark charcoal-brown from forehead across the raised spine to the tail base;
 - secondary coat: lighter warm brown on muzzle, cheeks, chest, and belly planes;
-- skin: muted dusty pink on ears, nose, paws, and segmented tail;
+- skin: muted dusty pink on ears, nose, paws below the furred ankle cuffs, and the tail after its furred root;
 - hard details: aged ivory teeth and claws;
 - eyes: amber with low-intensity emission.
 
@@ -221,7 +225,7 @@ The review rejects:
 The asset is accepted only when all of the following are recorded from the final candidate:
 
 1. Blender reports no more than `3,000` triangles for the exported render mesh after triangulation.
-2. Bounds match `0.91 m` total length and `0.61 m` ear-tip height within a practical `0.02 m` tolerance.
+2. Bounds match `1.22 m` total length and `0.61 m` ear-tip height within a practical `0.02 m` tolerance.
 3. Mesh validation finds no non-manifold edges, duplicate faces, degenerate geometry, unintended loose parts, or inverted normals.
 4. The Blender source and exported GLB exist at the reserved reusable paths.
 5. Godot imports the GLB, materials, armature, and all five exactly named animation clips without errors.
