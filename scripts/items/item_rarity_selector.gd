@@ -24,25 +24,11 @@ static func select(
 	for rarity: ItemRarityDefinition in candidates:
 		if rarity == null:
 			continue
-		if not rarity.instance_supported:
-			rejected[rarity.id] = "instance_unsupported"
-			continue
-		if rarity.id not in request.permitted_rarity_ids:
-			rejected[rarity.id] = "not_permitted"
-			continue
-		if not rarity.ordinary_generation_enabled:
-			rejected[rarity.id] = "ordinary_generation_disabled"
-			continue
-		if rarity.required_unlock_tags.any(func(tag: StringName) -> bool: return tag not in request.unlock_tags):
-			rejected[rarity.id] = "missing_unlock_tag"
-			continue
-		if not request.forced_rarity_id.is_empty() and rarity.id != request.forced_rarity_id:
-			rejected[rarity.id] = "forced_rarity_mismatch"
+		var rejection := ItemGenerationEligibility.rarity_rejection(rarity, request)
+		if not rejection.is_empty():
+			rejected[rarity.id] = rejection
 			continue
 		var weight := ItemGenerationWeightPolicy.rarity_weight(rarity, request)
-		if not is_finite(weight) or weight <= 0.0:
-			rejected[rarity.id] = "invalid_weight"
-			continue
 		eligible.append(rarity.id)
 		weights[rarity.id] = weight
 		definitions_by_id[rarity.id] = rarity

@@ -18,11 +18,9 @@ static func select(
 	for pattern: ItemAffixPatternDefinition in candidates:
 		if pattern == null:
 			continue
-		if not pattern.allowed_generation_domains.is_empty() and request.generation_domain not in pattern.allowed_generation_domains:
-			rejected[pattern.id] = "domain_not_allowed"
-			continue
-		if not is_finite(pattern.weight) or pattern.weight <= 0.0:
-			rejected[pattern.id] = "invalid_weight"
+		var rejection := ItemGenerationEligibility.pattern_rejection(pattern, request)
+		if not rejection.is_empty():
+			rejected[pattern.id] = rejection
 			continue
 		eligible.append(pattern.id)
 		weights[pattern.id] = pattern.weight

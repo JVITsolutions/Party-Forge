@@ -16,6 +16,7 @@ const CASTER_ATTACK_IDS: Array[StringName] = [
 	&"frost_shard",
 	&"warlock_bolt",
 ]
+const WEIGHTED_LOOT_COMBINED_SHA256 := "599658e415cd662fec2a4544db763869db4db88fa7001549f0b2c5ef44aa0045"
 
 func run() -> Array[String]:
 	var failures: Array[String] = []
@@ -23,7 +24,26 @@ func run() -> Array[String]:
 	_test_expansion_class_capability_parity(failures)
 	_test_stat_catalog_generator_parity(failures)
 	_test_keyword_catalog_generator_parity(failures)
+	_test_weighted_loot_byte_parity(failures)
 	return failures
+
+func _test_weighted_loot_byte_parity(failures: Array[String]) -> void:
+	var equipment := load("res://data/equipment/core_equipment_catalog.tres") as EquipmentCatalog
+	var foundation := load("res://data/items/core_item_foundation_catalog.tres") as ItemFoundationCatalog
+	TestAssertions.truthy(equipment != null and foundation != null, "weighted loot parity catalogs load", failures)
+	if equipment == null or foundation == null:
+		return
+	var request := ItemGenerationRequest.create(424242, 7, 750, &"ordinary_enemy", &"ordinary_drop", [&"rare"] as Array[StringName])
+	request.forced_base_id = &"forge_vanguard_sword"
+	request.forced_rarity_id = &"rare"
+	request.unlock_tags = [&"rarity_rare_unlocked", &"rarity_epic_unlocked", &"rarity_legendary_unlocked"]
+	var result := ItemGenerationService.generate(request, "generation:test", 103, equipment, foundation)
+	TestAssertions.truthy(result != null and result.ok(), "weighted loot parity generation succeeds", failures)
+	if result == null or not result.ok():
+		return
+	var item_bytes := ItemInstanceCodec.encode(result.item)
+	var trace_bytes := JSON.stringify(result.trace.stages)
+	TestAssertions.equal((item_bytes + "\n" + trace_bytes).sha256_text(), WEIGHTED_LOOT_COMBINED_SHA256, "weighted loot item and trace bytes remain exact", failures)
 
 func _test_expansion_class_capability_parity(failures: Array[String]) -> void:
 	TestAssertions.equal(ExpansionRows.CLASS_ROWS.size(), 5, "expansion generator exposes exactly five class rows", failures)

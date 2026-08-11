@@ -27,17 +27,11 @@ static func select(
 	for base: EquipmentBaseDefinition in candidates:
 		if base == null:
 			continue
-		var tags := base.normalized_generation_tags()
-		if request.required_base_tags.any(func(tag: StringName) -> bool: return tag not in tags):
-			rejected[base.id] = "missing_required_tag"
-			continue
-		if request.excluded_base_tags.any(func(tag: StringName) -> bool: return tag in tags):
-			rejected[base.id] = "excluded_tag"
+		var rejection := ItemGenerationEligibility.base_rejection(base, request)
+		if not rejection.is_empty():
+			rejected[base.id] = rejection
 			continue
 		var weight := ItemGenerationWeightPolicy.base_weight(base, request)
-		if not is_finite(weight) or weight <= 0.0:
-			rejected[base.id] = "invalid_weight"
-			continue
 		eligible.append(base.id)
 		weights[base.id] = weight
 		definitions_by_id[base.id] = base

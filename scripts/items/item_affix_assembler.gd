@@ -24,7 +24,7 @@ static func assemble(
 			return _failure(&"unknown_implicit_affix", {"affix_id": String(implicit_id), "slot": implicit_index})
 		if definition.affix_kind != "implicit":
 			return _failure(&"invalid_implicit_affix", {"affix_id": String(implicit_id), "kind": definition.affix_kind, "slot": implicit_index})
-		var rejection := _definition_rejection(definition, request, base_tags, rarity.id, blocked_ids, blocked_families)
+		var rejection := ItemGenerationEligibility.affix_rejection(definition, request, base_tags, rarity.id, blocked_ids, blocked_families)
 		if not rejection.is_empty():
 			return _failure(&"invalid_implicit_affix", {"affix_id": String(implicit_id), "reason": rejection, "slot": implicit_index})
 		var slot := "implicit:%d" % implicit_index
@@ -86,7 +86,7 @@ static func _fill_explicit_slot(
 			continue
 		if definition.affix_kind != kind:
 			continue
-		var reason := _definition_rejection(definition, request, base_tags, rarity_id, blocked_ids, blocked_families)
+		var reason := ItemGenerationEligibility.affix_rejection(definition, request, base_tags, rarity_id, blocked_ids, blocked_families)
 		if not reason.is_empty():
 			rejected[definition.id] = reason
 			continue
@@ -114,65 +114,6 @@ static func _fill_explicit_slot(
 		return _failure(&"no_eligible_affix", {"kind": kind, "slot": slot_index})
 	return _build_instance(selected, request, rarity_id, slot, trace)
 
-static func _definition_rejection(
-	definition: ItemAffixDefinition,
-	request: ItemGenerationRequest,
-	base_tags: Array[StringName],
-	rarity_id: StringName,
-	blocked_ids: Dictionary,
-	blocked_families: Dictionary
-) -> String:
-	if blocked_ids.has(definition.id):
-		return "duplicate_definition"
-	for family_id: StringName in definition.modifier_family_ids:
-		if blocked_families.has(family_id):
-			return "blocked_family"
-	if definition.required_item_tags.any(func(tag: StringName) -> bool: return tag not in base_tags):
-		return "missing_required_item_tag"
-	if definition.excluded_item_tags.any(func(tag: StringName) -> bool: return tag in base_tags):
-		return "excluded_item_tag"
-	if request.required_affix_tags.any(func(tag: StringName) -> bool: return tag not in base_tags):
-		return "missing_required_request_tag"
-	if request.excluded_affix_tags.any(func(tag: StringName) -> bool: return tag in base_tags):
-		return "excluded_request_tag"
-	if not definition.allowed_generation_domains.is_empty() and request.generation_domain not in definition.allowed_generation_domains:
-		return "domain_not_allowed"
-	if not definition.allowed_source_ids.is_empty() and request.source_id not in definition.allowed_source_ids:
-		return "source_not_allowed"
-	if not definition.allowed_rarity_ids.is_empty() and rarity_id not in definition.allowed_rarity_ids:
-		return "rarity_not_allowed"
-	if definition.required_unlock_tags.any(func(tag: StringName) -> bool: return tag not in request.unlock_tags):
-		return "missing_unlock_tag"
-	if _eligible_tiers(definition, request, rarity_id).is_empty():
-		return "no_eligible_tier"
-	return ""
-
-static func _eligible_tiers(
-	definition: ItemAffixDefinition,
-	request: ItemGenerationRequest,
-	rarity_id: StringName
-) -> Array[ItemAffixTierDefinition]:
-	var eligible: Array[ItemAffixTierDefinition] = []
-	for tier: ItemAffixTierDefinition in definition.tiers:
-		if tier == null:
-			continue
-		if request.item_level < tier.minimum_item_level:
-			continue
-		if not tier.allowed_rarity_ids.is_empty() and rarity_id not in tier.allowed_rarity_ids:
-			continue
-		if not tier.allowed_source_ids.is_empty() and request.source_id not in tier.allowed_source_ids:
-			continue
-		if not tier.allowed_generation_domains.is_empty() and request.generation_domain not in tier.allowed_generation_domains:
-			continue
-		var weight := ItemGenerationWeightPolicy.tier_weight(tier, request)
-		if not is_finite(weight) or weight <= 0.0:
-			continue
-		eligible.append(tier)
-	eligible.sort_custom(func(left: ItemAffixTierDefinition, right: ItemAffixTierDefinition) -> bool:
-		return left.tier < right.tier
-	)
-	return eligible
-
 static func _build_instance(
 	definition: ItemAffixDefinition,
 	request: ItemGenerationRequest,
@@ -180,7 +121,7 @@ static func _build_instance(
 	slot: String,
 	trace: ItemGenerationTrace
 ) -> ItemAffixAssemblyResult:
-	var tiers := _eligible_tiers(definition, request, rarity_id)
+	var tiers := ItemGenerationEligibility.eligible_tiers(definition, request, rarity_id)
 	var eligible_ids: Array[StringName] = []
 	var trace_weights: Dictionary = {}
 	for tier: ItemAffixTierDefinition in tiers:
