@@ -57,12 +57,24 @@ func _test_generation_and_registry_failures_are_atomic(failures: Array[String]) 
 	var invalid_context := _context(&"owner_invalid", "profile-invalid", 1, 9102)
 	var invalid_registry := _registry_script.new() as RefCounted
 	var invalid_request := _request(32)
-	invalid_request.item_level = 0
+	invalid_request.forced_base_id = &"missing_base"
 	var invalid_before := invalid_context.item_state().to_dictionary()
 	var invalid_result := _create_drop(invalid_context, invalid_request, _identity(invalid_context, &"drop:owner_invalid:32", Vector3.ZERO), invalid_registry)
-	TestAssertions.truthy(invalid_result != null and not bool(invalid_result.call(&"ok")), "generation failure is explicit", failures)
-	TestAssertions.equal(invalid_context.item_state().to_dictionary(), invalid_before, "generation failure preserves context ownership", failures)
-	TestAssertions.equal((invalid_registry.call(&"all_records") as Array).size(), 0, "generation failure creates no ground record", failures)
+	TestAssertions.truthy(invalid_result != null and not bool(invalid_result.call(&"ok")), "valid request reaches a real production generation failure", failures)
+	var failed_generation := invalid_result.get(&"generated") as ItemGenerationResult if invalid_result != null else null
+	TestAssertions.truthy(failed_generation != null and not failed_generation.ok(), "ownership result preserves the production generation failure", failures)
+	if failed_generation != null and failed_generation.failure != null:
+		TestAssertions.equal(failed_generation.failure.stage, &"base", "production selection fails after request preflight", failures)
+		TestAssertions.equal(failed_generation.failure.code, &"no_eligible_base", "unknown forced base has the stable production failure code", failures)
+	TestAssertions.equal(invalid_context.item_state().to_dictionary(), invalid_before, "production generation failure preserves context ownership", failures)
+	TestAssertions.equal(invalid_context.ground_items().occupied_slots(), [], "production generation failure creates no authoritative ground placement", failures)
+	TestAssertions.equal((invalid_registry.call(&"all_records") as Array).size(), 0, "production generation failure creates no ground record", failures)
+	var retry_result := _create_drop(invalid_context, _request(32), _identity(invalid_context, &"drop:owner_invalid:32", Vector3.ZERO), invalid_registry)
+	TestAssertions.truthy(retry_result != null and bool(retry_result.call(&"ok")), "valid retry succeeds after production generation failure", failures)
+	if retry_result != null and bool(retry_result.call(&"ok")):
+		var retry_generation := retry_result.get(&"generated") as ItemGenerationResult
+		TestAssertions.equal(retry_generation.item.origin.get("sequence"), 0, "production generation failure consumes no owner issuer sequence", failures)
+		TestAssertions.equal(invalid_context.ground_items().item_id_at(0), retry_generation.item.instance_id, "retry uses the first authoritative ground slot", failures)
 
 	var duplicate_context := _context(&"owner_duplicate", "profile-duplicate", 2, 9103)
 	var duplicate_registry := _registry_script.new() as RefCounted
