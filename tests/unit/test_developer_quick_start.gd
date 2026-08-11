@@ -23,7 +23,7 @@ func _test_player_mode_direct_route_fails_closed(failures: Array[String]) -> voi
 	var created := main.profile_manager.create_profile("Player Route")
 	TestAssertions.truthy(created.ok(), "Player direct-route fixture creates an active profile", failures)
 	var player_settings := PartyForgeSettings.new()
-	main.call("_on_settings_applied", player_settings)
+	_apply_settings(main, player_settings)
 	main.call("_on_main_menu_route_requested", MainMenuViewModel.ROUTE_DEVELOPER_QUICK_START)
 	_assert_failed_route(main, DEVELOPER_REQUIRED_STATUS, "PrimaryAction", "Player Mode direct invocation", failures)
 	_cleanup(main, root)
@@ -32,7 +32,7 @@ func _test_player_mode_direct_route_fails_closed(failures: Array[String]) -> voi
 func _test_missing_profile_fails_closed(failures: Array[String]) -> void:
 	var root := _root("missing-profile")
 	var main := _main(root)
-	main.call("_on_settings_applied", _developer_settings())
+	_apply_settings(main, _developer_settings())
 	main.call("_on_main_menu_route_requested", MainMenuViewModel.ROUTE_DEVELOPER_QUICK_START)
 	_assert_failed_route(main, PROFILE_REQUIRED_STATUS, "PrimaryAction", "missing-profile Developer invocation", failures)
 	_cleanup(main, root)
@@ -77,7 +77,7 @@ func _test_invalid_catalog_and_missing_fighter_fail_closed(failures: Array[Strin
 	var invalid_root := _root("invalid-catalog")
 	var invalid_main := _main(invalid_root)
 	TestAssertions.truthy(invalid_main.profile_manager.create_profile("Invalid Catalog").ok(), "invalid-catalog fixture creates an active profile", failures)
-	invalid_main.call("_on_settings_applied", _developer_settings())
+	_apply_settings(invalid_main, _developer_settings())
 	invalid_main.catalog_valid = false
 	invalid_main.call("_on_main_menu_route_requested", MainMenuViewModel.ROUTE_DEVELOPER_QUICK_START)
 	_assert_failed_route(invalid_main, UNAVAILABLE_STATUS, "DeveloperQuickStart", "invalid catalog", failures)
@@ -86,7 +86,7 @@ func _test_invalid_catalog_and_missing_fighter_fail_closed(failures: Array[Strin
 	var fighter_root := _root("missing-fighter")
 	var fighter_main := _main(fighter_root)
 	TestAssertions.truthy(fighter_main.profile_manager.create_profile("Missing Fighter").ok(), "missing-Fighter fixture creates an active profile", failures)
-	fighter_main.call("_on_settings_applied", _developer_settings())
+	_apply_settings(fighter_main, _developer_settings())
 	fighter_main.catalog.classes = fighter_main.catalog.classes.filter(func(definition: ClassDefinition) -> bool: return definition != null and definition.id != &"fighter")
 	fighter_main.catalog.upgrades = fighter_main.catalog.upgrades.filter(func(definition: UpgradeDefinition) -> bool: return definition != null and &"fighter" not in definition.allowed_class_ids)
 	fighter_main.catalog_valid = true
@@ -107,7 +107,7 @@ func _test_saved_settings_store_authorizes_quick_start(failures: Array[String]) 
 	TestAssertions.equal(store.load_settings().mode, PartyForgeSettings.Mode.PLAYER_SIMULATION, "real store reloads saved Player Mode", failures)
 
 	var draft_root := _root("unsaved-draft")
-	var draft_main := _main(draft_root)
+	var draft_main := _main(draft_root, true)
 	TestAssertions.truthy(draft_main.profile_manager.create_profile("Unsaved Draft").ok(), "unsaved-draft fixture creates an active profile", failures)
 	var settings_screen := draft_main.get_node("SettingsScreen") as SettingsScreen
 	var menu := draft_main.get_node("MainMenuScreen") as MainMenuScreen
@@ -126,7 +126,7 @@ func _test_saved_settings_store_authorizes_quick_start(failures: Array[String]) 
 	TestAssertions.equal(store.save_settings(developer_settings), "", "saved-mode fixture writes Developer Mode through the real store", failures)
 	TestAssertions.equal(store.load_settings().mode, PartyForgeSettings.Mode.DEVELOPER_MODE, "real store reloads saved Developer Mode", failures)
 	var saved_root := _root("saved-developer")
-	var saved_main := _main(saved_root)
+	var saved_main := _main(saved_root, true)
 	TestAssertions.truthy(saved_main.profile_manager.create_profile("Saved Developer").ok(), "saved Developer fixture creates an active profile", failures)
 	TestAssertions.equal(saved_main.saved_settings.mode, PartyForgeSettings.Mode.DEVELOPER_MODE, "main boot consumes the reloaded saved Developer Mode", failures)
 	saved_main.call("_on_main_menu_route_requested", MainMenuViewModel.ROUTE_DEVELOPER_QUICK_START)
@@ -170,7 +170,7 @@ func _test_developer_route_starts_fighter_from_durable_checkout(failures: Array[
 	settings.experience_multiplier_percent = 175
 	settings.level_up_card_count = 6
 	settings.reduced_motion = true
-	main.call("_on_settings_applied", settings)
+	_apply_settings(main, settings)
 	var expected_rules := RunRulesSnapshot.from_settings(settings)
 	var before_profile := store.load_profile(profile_id, root).profile.to_dictionary()
 	var profile_events: Array[int] = [0]
@@ -217,7 +217,7 @@ func _test_incompatible_warning_preserves_quick_start_origin(failures: Array[Str
 	var main := _developer_main_with_profile(root, "Quick Warning", failures)
 	var settings := _developer_settings()
 	settings.unlock_all_implemented_content = true
-	main.call("_on_settings_applied", settings)
+	_apply_settings(main, settings)
 	var profile := main.profile_manager.active_profile()
 	var item := ItemInstance.new()
 	item.instance_id = "item-quick-warning-staff"
@@ -306,7 +306,7 @@ func _developer_settings() -> PartyForgeSettings:
 func _developer_main_with_profile(root: String, display_name: String, failures: Array[String]) -> PartyForgeMain:
 	var main := _main(root)
 	TestAssertions.truthy(main.profile_manager.create_profile(display_name).ok(), "%s fixture creates an active profile" % display_name, failures)
-	main.call("_on_settings_applied", _developer_settings())
+	_apply_settings(main, _developer_settings())
 	return main
 
 
@@ -382,13 +382,22 @@ func _restore_default_settings_artifacts(files: Dictionary) -> void:
 			file.store_buffer(files[path] as PackedByteArray)
 
 
-func _main(root: String) -> PartyForgeMain:
+func _main(root: String, use_default_settings := false) -> PartyForgeMain:
 	ProfileTestSupport.remove_tree(root)
 	var main := (load("res://scenes/game/main.tscn") as PackedScene).instantiate() as PartyForgeMain
 	main.profile_root = root
+	if not use_default_settings:
+		main.settings_path = "%s-settings.cfg" % root
+		_cleanup_settings_artifacts(main.settings_path)
+		PartyForgeSettingsStore.new().save_settings(PartyForgeSettings.new(), main.settings_path)
 	(Engine.get_main_loop() as SceneTree).root.add_child(main)
 	main.call("_ready")
 	return main
+
+
+func _apply_settings(main: PartyForgeMain, settings: PartyForgeSettings) -> void:
+	PartyForgeSettingsStore.new().save_settings(settings, main.settings_path)
+	main.call("_on_settings_applied", settings)
 
 
 func _root(label: String) -> String:
@@ -397,5 +406,13 @@ func _root(label: String) -> String:
 
 func _cleanup(main: PartyForgeMain, root: String) -> void:
 	(Engine.get_main_loop() as SceneTree).paused = false
+	var settings_path := main.settings_path
 	main.free()
 	ProfileTestSupport.remove_tree(root)
+	if settings_path != PartyForgeSettingsStore.DEFAULT_PATH:
+		_cleanup_settings_artifacts(settings_path)
+
+
+func _cleanup_settings_artifacts(path: String) -> void:
+	for candidate: String in [path, "%s.tmp" % path, "%s.bak" % path]:
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(candidate))

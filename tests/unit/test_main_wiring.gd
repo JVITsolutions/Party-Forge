@@ -416,7 +416,7 @@ func _test_passive_tree_route_composition(failures: Array[String]) -> void:
     var player_unlock_all := PartyForgeSettings.new()
     player_unlock_all.mode = PartyForgeSettings.Mode.PLAYER_SIMULATION
     player_unlock_all.unlock_all_implemented_content = true
-    main.call("_on_settings_applied", player_unlock_all)
+    _apply_settings(main, player_unlock_all)
     settings.configure(main.settings_store, player_unlock_all, main.profile_manager)
     main.call("_on_main_menu_route_requested", MainMenuViewModel.ROUTE_CITY_TREE)
     TestAssertions.truthy(not tree_screen.is_open(), "Player Mode Unlock All cannot bypass durable City authorization", failures)
@@ -424,13 +424,13 @@ func _test_passive_tree_route_composition(failures: Array[String]) -> void:
 
     var developer_settings := PartyForgeSettings.new()
     developer_settings.mode = PartyForgeSettings.Mode.DEVELOPER_MODE
-    main.call("_on_settings_applied", developer_settings)
+    _apply_settings(main, developer_settings)
     settings.configure(main.settings_store, developer_settings, main.profile_manager)
     main.call("_on_main_menu_route_requested", MainMenuViewModel.ROUTE_CITY_TREE)
     TestAssertions.truthy(tree_screen.is_open() and not menu.is_open(), "Developer Mode menu preview requires only an active profile and closes the menu", failures)
     TestAssertions.equal(tree_screen.get("_developer_context"), true, "Developer Mode menu route preserves preview context", failures)
     tree_screen.close()
-    main.call("_on_settings_applied", player_unlock_all)
+    _apply_settings(main, player_unlock_all)
     settings.configure(main.settings_store, player_unlock_all, main.profile_manager)
 
     var profile_id := created.profile.profile_id if created.ok() else ""
@@ -460,7 +460,7 @@ func _test_passive_tree_route_composition(failures: Array[String]) -> void:
     main.call("_refresh_main_menu_projection")
     TestAssertions.truthy(menu.projection().city_tree_enabled, "restored complete City runtime re-enables the durable route", failures)
 
-    main.call("_on_settings_applied", developer_settings)
+    _apply_settings(main, developer_settings)
     settings.configure(main.settings_store, developer_settings, main.profile_manager)
     settings.open_additional(menu_settings_button)
     settings.call("_on_city_tree_requested", true)
@@ -475,7 +475,7 @@ func _test_passive_tree_route_composition(failures: Array[String]) -> void:
     TestAssertions.equal((settings.get_node("Overlay/Frame/Layout/Tabs") as TabContainer).get_tab_control((settings.get_node("Overlay/Frame/Layout/Tabs") as TabContainer).current_tab), additional, "closing Developer City preview restores Additional Settings tab", failures)
 
     settings.close()
-    main.call("_on_settings_applied", player_unlock_all)
+    _apply_settings(main, player_unlock_all)
     settings.configure(main.settings_store, player_unlock_all, main.profile_manager)
     settings.open_additional(menu_settings_button)
     mode.selected = PartyForgeSettings.Mode.DEVELOPER_MODE
@@ -485,7 +485,7 @@ func _test_passive_tree_route_composition(failures: Array[String]) -> void:
     TestAssertions.equal((settings.get_node("Overlay/Frame/Layout/Status") as Label).text, CITY_DEVELOPER_REQUIRED_STATUS, "saved-mode denial is player-facing in Settings", failures)
 
     settings.close()
-    main.call("_on_settings_applied", developer_settings)
+    _apply_settings(main, developer_settings)
     settings.configure(main.settings_store, developer_settings, main.profile_manager)
     settings.open_additional(menu_settings_button)
     var original_definition := main.passive_tree_definition
@@ -1160,6 +1160,11 @@ func _started_main_with_settings(settings: PartyForgeSettings) -> Node:
     main.set("saved_settings", settings.copy())
     main.call("select_leader_class", &"fighter")
     return main
+
+func _apply_settings(main: Node, settings: PartyForgeSettings) -> void:
+    var path := String(main.get("settings_path"))
+    PartyForgeSettingsStore.new().save_settings(settings, path)
+    main.call("_on_settings_applied", settings)
 
 func _prepare_main(main: Node, settings_path: String = "") -> void:
     main.set("profile_root", _profile_root)
