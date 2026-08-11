@@ -11,7 +11,11 @@ var catalog: GameCatalog
 var health_provider: Callable
 var progression_provider: Callable
 var progression_context: PlayerRunContext
+var item_context: PlayerRunContext
+var equipment_catalog: EquipmentCatalog
+var item_foundation: ItemFoundationCatalog
 var _health_components: Dictionary = {}
+var _suppressed_item_member_id := 0
 
 func _notification(what: int) -> void:
 	if what != NOTIFICATION_PREDELETE:
@@ -22,6 +26,9 @@ func _notification(what: int) -> void:
 			progression_context.progression_changed.disconnect(callback)
 	progression_context = null
 	progression_provider = Callable()
+	item_context = null
+	equipment_catalog = null
+	item_foundation = null
 
 func configure(
 	manager: PartyManager,
@@ -29,6 +36,9 @@ func configure(
 	runtime_health: Callable,
 	progression_provider: Callable = Callable(),
 	progression_context: PlayerRunContext = null,
+	item_context: PlayerRunContext = null,
+	equipment_catalog: EquipmentCatalog = null,
+	item_foundation: ItemFoundationCatalog = null,
 ) -> void:
 	_disconnect_party()
 	_disconnect_progression_context()
@@ -37,6 +47,9 @@ func configure(
 	health_provider = runtime_health
 	self.progression_provider = progression_provider
 	self.progression_context = progression_context
+	self.item_context = item_context
+	self.equipment_catalog = equipment_catalog
+	self.item_foundation = item_foundation
 	if party != null:
 		party.member_added.connect(_on_member_added)
 		party.stats_changed.connect(_on_stats_changed)
@@ -166,6 +179,202 @@ func upgrade_detail(row: Dictionary) -> Dictionary:
 		"keyword_lines": [],
 	}
 
+func inventory_rows() -> Array[Dictionary]:
+	var rows: Array[Dictionary] = []
+	var state := _owned_item_state()
+	var container := item_context.run_inventory() if state != null else null
+	if container == null or container.owner_id != state.owner_id:
+		return rows
+	for slot: int in container.capacity:
+		var item_id := container.item_id_at(slot)
+		rows.append({
+			"container_id": container.container_id,
+			"slot": slot,
+			"item_id": item_id,
+			"detail": _project_item(item_id, 0),
+		})
+	return rows.duplicate(true)
+
+func equipment_rows(member_id: int) -> Array[Dictionary]:
+	var rows: Array[Dictionary] = []
+	var state := _owned_item_state()
+	var container := item_context.equipment_for(member_id) if state != null else null
+	if container != null and container.owner_id != state.owner_id:
+		container = null
+	for slot_id: StringName in EquipmentSlotCatalog.SHEET_SLOT_IDS:
+		var slot := EquipmentSlotIndex.index_for(slot_id)
+		var item_id := container.item_id_at(slot) if container != null else ""
+		rows.append({
+			"container_id": container.container_id if container != null else StringName("run-equipment-%03d" % member_id),
+			"slot_id": slot_id,
+			"slot": slot,
+			"item_id": item_id,
+			"detail": _project_item(item_id, member_id),
+		})
+	return rows.duplicate(true)
+
+func item_detail(item_id: String, member_id: int) -> Dictionary:
+	return _project_item(item_id, member_id).duplicate(true)
+
+func comparison_rows(item_id: String, member_id: int) -> Array[Dictionary]:
+	var state := _owned_item_state()
+	var item := _owned_item(item_id, state)
+	var member := party.member_by_id(member_id) if party != null else null
+	if item == null or member == null or equipment_catalog == null or item_foundation == null:
+		return []
+	var base := equipment_catalog.definition(item.base_definition_id)
+	if base == null:
+		return []
+	var preview: EquipmentTransitionResult
+	for slot_id: StringName in base.compatible_slot_ids:
+		var candidate := item_context.preview_equipment_assignment(
+			member_id,
+			item_id,
+			slot_id,
+			equipment_catalog,
+			item_foundation,
+		)
+		if candidate.ok():
+			preview = candidate
+			break
+	if preview == null or not preview.ok():
+		return []
+	var current_stats := party.stats_for(member_id)
+	var candidate_resolution := preview.resolution()
+	var current_activation := item_context.equipment_activation(member_id)
+	var candidate_activation := preview.activation()
+	if current_stats == null or candidate_resolution == null or not candidate_resolution.ok() or not current_activation.ok() or not candidate_activation.ok():
+		return []
+	var rows := EquipmentComparisonProjectionService.compare(
+		current_stats,
+		candidate_resolution.final_stats,
+		GameCatalog.STAT_CATALOG,
+		combat_estimate_rows(member_id),
+		[],
+		current_activation,
+		candidate_activation,
+		item_id,
+		_item_labels(state, member_id),
+		_disabled_lines_by_item(preview.state(), candidate_activation),
+		catalog.damage_types if catalog != null else GameCatalog.DAMAGE_TYPES,
+	)
+	return rows.duplicate(true)
+
+func move_or_equip(request: Dictionary) -> Dictionary:
+	var member_id := int(request.get("member_id", 0))
+	if item_context == null or equipment_catalog == null or item_foundation == null or member_id <= 0:
+		return {"accepted": false, "error": "PARTY_FORGE_LEDGER_ITEM_ERROR reason=invalid request"}
+	var transaction := request.get("transaction") as ItemTransactionRequest
+	if transaction != null:
+		var transaction_result := item_context.apply_item_transaction(transaction, equipment_catalog, item_foundation)
+		var accepted := transaction_result != null and transaction_result.ok()
+		if accepted:
+			data_changed.emit(member_id)
+		return {
+			"accepted": accepted,
+			"code": int(transaction_result.code) if transaction_result != null else int(ItemTransactionResult.Code.INVALID_REQUEST),
+			"duplicate": transaction_result.duplicate if transaction_result != null else false,
+		}
+	var item_id := String(request.get("item_id", ""))
+	var slot_id := StringName(String(request.get("slot_id", "")))
+	if item_id.is_empty():
+		return {"accepted": false, "error": "PARTY_FORGE_LEDGER_ITEM_ERROR reason=invalid request"}
+	_suppressed_item_member_id = member_id
+	var assignment := item_context.assign_equipment(member_id, item_id, slot_id, equipment_catalog, item_foundation)
+	_suppressed_item_member_id = 0
+	var accepted := assignment != null and assignment.ok()
+	if accepted:
+		data_changed.emit(member_id)
+	return {
+		"accepted": accepted,
+		"error": assignment.error if assignment != null else "PARTY_FORGE_LEDGER_ITEM_ERROR reason=assignment unavailable",
+	}
+
+func _owned_item_state() -> ItemOwnershipState:
+	if item_context == null or not is_instance_valid(item_context):
+		return null
+	var state := item_context.item_state()
+	if state == null or state.owner_id != String(item_context.run_player_id):
+		return null
+	return state
+
+func _owned_item(item_id: String, state: ItemOwnershipState = null) -> ItemInstance:
+	if item_id.strip_edges().is_empty():
+		return null
+	var owned_state := state if state != null else _owned_item_state()
+	var registry := owned_state.registry() if owned_state != null else null
+	return registry.item(item_id) if registry != null else null
+
+func _project_item(item_id: String, member_id: int) -> Dictionary:
+	var state := _owned_item_state()
+	var item := _owned_item(item_id, state)
+	if item == null or equipment_catalog == null or item_foundation == null:
+		return {}
+	var member := party.member_by_id(member_id) if party != null and member_id > 0 else null
+	var detail := ItemPresentationProjector.project(
+		item,
+		equipment_catalog,
+		item_foundation,
+		GameCatalog.STAT_CATALOG,
+		member.class_definition if member != null else null,
+		catalog.damage_types if catalog != null else GameCatalog.DAMAGE_TYPES,
+	)
+	if detail.is_empty() or detail.has("error") or member_id <= 0:
+		return detail.duplicate(true)
+	var activation := item_context.equipment_activation(member_id)
+	var inactive_reasons := activation.disabled_reasons(item_id) if activation != null and activation.ok() else PackedStringArray()
+	if not inactive_reasons.is_empty():
+		detail["is_disabled"] = true
+		detail["inactive_reasons"] = inactive_reasons.duplicate()
+		var requirement_lines := _disabled_requirement_lines(state, activation, item_id)
+		detail["disabled_requirement_lines"] = requirement_lines if not requirement_lines.is_empty() else inactive_reasons.duplicate()
+	return detail.duplicate(true)
+
+func _item_labels(state: ItemOwnershipState, member_id: int) -> Dictionary:
+	var result: Dictionary = {}
+	var registry := state.registry() if state != null else null
+	if registry == null:
+		return result
+	for item_id: String in registry.ids():
+		result[item_id] = String(_project_item(item_id, member_id).get("name", item_id))
+	return result
+
+func _disabled_lines_by_item(state: ItemOwnershipState, activation: EquipmentActivationResult) -> Dictionary:
+	var result: Dictionary = {}
+	var registry := state.registry() if state != null else null
+	if registry == null or activation == null or not activation.ok():
+		return result
+	for item_id: String in registry.ids():
+		var reasons := activation.disabled_reasons(item_id)
+		if reasons.is_empty():
+			continue
+		var lines := _disabled_requirement_lines(state, activation, item_id)
+		result[item_id] = lines if not lines.is_empty() else reasons
+	return result
+
+func _disabled_requirement_lines(state: ItemOwnershipState, activation: EquipmentActivationResult, item_id: String) -> PackedStringArray:
+	var lines := PackedStringArray()
+	if state == null or activation == null or activation.raw_attributes == null or equipment_catalog == null:
+		return lines
+	var registry := state.registry()
+	var item := registry.item(item_id) if registry != null else null
+	var base := equipment_catalog.definition(item.base_definition_id) if item != null else null
+	if base == null:
+		return lines
+	var attribute_ids: Array[StringName] = []
+	for attribute_id: Variant in base.attribute_requirements:
+		attribute_ids.append(StringName(attribute_id))
+	attribute_ids.sort_custom(func(left: StringName, right: StringName) -> bool: return String(left) < String(right))
+	for attribute_id: StringName in attribute_ids:
+		var required := float(base.attribute_requirements.get(attribute_id, base.attribute_requirements.get(String(attribute_id), 0.0)))
+		var available := activation.raw_attributes.value(attribute_id, 0.0)
+		if available >= required:
+			continue
+		var definition := GameCatalog.STAT_CATALOG.definition(attribute_id)
+		var label := definition.display_name if definition != null else String(attribute_id).replace("_", " ").capitalize()
+		lines.append("Requires %s %s (has %s)" % [label, _number_text(required), _number_text(available)])
+	return lines
+
 func _is_visible(definition: StatDefinition, snapshot: ResolvedStatSnapshot, breakdown: Array[Dictionary]) -> bool:
 	var has_meaningful_modifier := breakdown.any(func(row: Dictionary) -> bool:
 		return int(row.get("operation", -1)) != -1 and not is_zero_approx(float(row.get("value", 0.0)))
@@ -258,6 +467,8 @@ func _on_member_added(member: PartyMemberState) -> void:
 	data_changed.emit(member.member_id)
 
 func _on_stats_changed(member_id: int) -> void:
+	if member_id == _suppressed_item_member_id:
+		return
 	data_changed.emit(member_id)
 
 func _on_upgrades_changed() -> void:

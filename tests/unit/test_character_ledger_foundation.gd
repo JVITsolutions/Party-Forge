@@ -8,18 +8,37 @@ func run() -> Array[String]:
 	_test_pause_lease(failures)
 	_test_input_actions(failures)
 	_test_progression_contract_surface(failures)
+	_test_per_player_held_item_state(failures)
 	return failures
 
 func _test_progression_contract_surface(failures: Array[String]) -> void:
 	var provider := LedgerDataProvider.new()
 	TestAssertions.equal(_method_argument_names(provider, &"configure"), [
 		&"manager", &"game_catalog", &"runtime_health", &"progression_provider", &"progression_context",
-	], "provider configure keeps exact trailing progression arguments", failures)
+		&"item_context", &"equipment_catalog", &"item_foundation",
+	], "provider configure keeps exact optional progression and item arguments", failures)
 	var ledger := CharacterLedger.new()
 	TestAssertions.equal(_method_argument_names(ledger, &"configure"), [
 		&"game_run", &"manager", &"game_catalog", &"health_provider", &"initial_contexts", &"feature_policy", &"progression_provider", &"progression_context",
 	], "ledger configure keeps exact trailing progression arguments", failures)
 	ledger.free()
+
+func _test_per_player_held_item_state(failures: Array[String]) -> void:
+	var first := LedgerPlayerContext.new(0)
+	var second := LedgerPlayerContext.new(1)
+	for property_name: StringName in [&"held_source_container_id", &"held_source_slot", &"held_item_id"]:
+		TestAssertions.truthy(_has_property(first, property_name), "ledger player context stores %s per local player" % property_name, failures)
+	if not [&"held_source_container_id", &"held_source_slot", &"held_item_id"].all(func(property_name: String) -> bool: return _has_property(first, StringName(property_name))):
+		return
+	first.set(&"held_source_container_id", &"run-inventory")
+	first.set(&"held_source_slot", 3)
+	first.set(&"held_item_id", "held-by-first")
+	TestAssertions.equal(second.get(&"held_source_container_id"), &"", "held source container is never global", failures)
+	TestAssertions.equal(second.get(&"held_source_slot"), -1, "held source slot is never global", failures)
+	TestAssertions.equal(second.get(&"held_item_id"), "", "held item ID is never global", failures)
+
+func _has_property(instance: Object, property_name: StringName) -> bool:
+	return instance.get_property_list().any(func(property: Dictionary) -> bool: return StringName(property.get("name", "")) == property_name)
 
 func _method_argument_names(instance: Object, method_name: StringName) -> Array[StringName]:
 	for method: Dictionary in instance.get_method_list():
