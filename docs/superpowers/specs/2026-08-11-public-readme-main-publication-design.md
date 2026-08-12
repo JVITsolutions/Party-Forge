@@ -1,6 +1,6 @@
 # Party Forge Public README and Main Publication Design
 
-**Status:** Approved design pending written-spec review  
+**Status:** Written specification awaiting user review
 **Date:** 2026-08-11
 
 ## Goal
