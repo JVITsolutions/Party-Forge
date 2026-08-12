@@ -39,6 +39,8 @@ When a supported item tooltip is visible, hold `Alt` for equipment comparison an
 
 ## Clone and run
 
+Private-repository collaborators must authenticate with GitHub before cloning, for example through GitHub Desktop or a configured Git credential manager.
+
 ```powershell
 git clone https://github.com/JVITsolutions/Party-Forge.git
 cd Party-Forge
@@ -48,7 +50,7 @@ Open the Godot Project Manager, choose **Import**, select the repository's `proj
 
 ## Run the automated tests
 
-From the repository root, point PowerShell at your Godot 4.7.1 console executable and run the complete test runner:
+From the repository root, point PowerShell at your Godot 4.7.1 console executable and run the complete unit-test suite:
 
 ```powershell
 $godot = 'C:\path\to\Godot_v4.7.1-stable_mono_win64_console.exe'
@@ -56,6 +58,8 @@ $godot = 'C:\path\to\Godot_v4.7.1-stable_mono_win64_console.exe'
 ```
 
 A successful run ends with a `TEST_SUMMARY: PASS` marker. Some negative-path suites intentionally emit structured diagnostic output, so use the final summary and process exit code when judging the run.
+
+Specialized integration and acceptance runners provide additional automated coverage and are not invoked by this command. Their commands and accepted evidence are documented in the [current verification report](docs/verification/2026-08-11-live-personal-loot-and-equipment-ledger.md).
 
 ## Project documentation
 
