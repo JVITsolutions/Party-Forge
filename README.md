@@ -24,7 +24,7 @@ This repository is a working prototype, not a finished game. Its systems, conten
 | Action | Keyboard and mouse | Controller |
 |---|---|---|
 | Move leader | `W`, `A`, `S`, `D` | Left stick |
-| Open or close Character Ledger | `I` or `Tab` | Left shoulder |
+| Open or close Character Ledger | `I` or `Tab` | Back/View button |
 | Pause or resume a run | `Esc` | Menu button |
 | Inspect and pick up ground items | Hover to inspect; left-click to request pickup | D-pad left/right selects; south face button requests pickup |
 | Move equipment or inventory items | Drag and drop between supported slots | West face button picks up or releases the focused item; move focus, then use the south face button to place or confirm |
