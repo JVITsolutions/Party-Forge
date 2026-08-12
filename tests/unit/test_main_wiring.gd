@@ -72,6 +72,7 @@ func run() -> Array[String]:
     _test_profile_boot_and_developer_gate(failures)
     _test_active_run_context_graph_and_failure_cleanup(failures)
     _test_personal_loot_defeat_and_guardian_wiring(failures)
+    _test_invalid_personal_loot_tuning_aborts_main_start(failures)
     _test_live_loot_owner_leader_comparison_graph(failures)
     _test_gameplay_input_blocked_predicate(failures)
     _test_typed_live_loot_diagnostic_accounting(failures)
@@ -344,7 +345,13 @@ func _test_active_run_context_graph_and_failure_cleanup(failures: Array[String])
     ProfileTestSupport.remove_tree(failure_root)
 
 func _test_personal_loot_defeat_and_guardian_wiring(failures: Array[String]) -> void:
-    var player_main := _started_main()
+    var player_main := (load("res://scenes/game/main.tscn") as PackedScene).instantiate()
+    _prepare_main(player_main)
+    var player_profile := player_main.active_profile() as ProfileState
+    player_profile.permanent_feature_unlocks = ["equipment_inventory"]
+    TestAssertions.equal(ProfileStore.new().save_profile(player_profile, String(player_main.get("profile_root"))), "", "zero-column feature fixture persists equipment access only", failures)
+    TestAssertions.equal(player_main.profile_manager.refresh_profile(player_profile.profile_id), "", "zero-column feature fixture refreshes the authoritative profile", failures)
+    TestAssertions.truthy(player_main.call("select_leader_class", &"fighter"), "zero-column feature fixture starts through Main", failures)
     var player_director := player_main.get_node("SpawnDirector") as SpawnDirector
     var player_roll := player_main.get("personal_loot_roll_service") as PersonalLootRollService
     var player_coordinator := player_main.get("personal_loot_drop_coordinator") as PersonalLootDropCoordinator
@@ -352,13 +359,14 @@ func _test_personal_loot_defeat_and_guardian_wiring(failures: Array[String]) -> 
     TestAssertions.truthy(player_roll != null and player_coordinator != null and player_registry != null, "Player Mode run owns the personal-loot service graph", failures)
     TestAssertions.truthy(
         player_director.has_signal("enemy_defeated") and player_coordinator != null and player_director.is_connected("enemy_defeated", Callable(player_main, "_on_enemy_defeated_for_personal_loot")),
-		"main wires director defeats through the diagnostic-aware coordinator boundary",
+        "main wires director defeats through the diagnostic-aware coordinator boundary",
         failures,
     )
     if player_roll != null and player_coordinator != null and player_registry != null:
         player_roll.loot_tuning.drop_basis_points[&"ordinary_melee"] = 10000
         player_director.call("_on_enemy_defeated", load("res://data/enemies/swarmer.tres") as EnemyDefinition, player_main.leader.position, 1)
-        TestAssertions.equal(player_registry.all_records().size(), 0, "locked Player Mode context fails closed with no personal drop", failures)
+        TestAssertions.equal(player_main.active_run_context.run_inventory().capacity, 0, "zero-column Player Mode run has no inventory capacity", failures)
+        TestAssertions.equal(player_registry.all_records().size(), 0, "feature-unlocked zero-column Player Mode context fails closed with no uncollectable drop", failures)
     _cleanup_main(player_main)
 
     var developer_settings := PartyForgeSettings.new()
@@ -373,13 +381,24 @@ func _test_personal_loot_defeat_and_guardian_wiring(failures: Array[String]) -> 
     if developer_roll == null or developer_coordinator == null or developer_registry == null:
         _cleanup_main(developer_main)
         return
+    TestAssertions.equal(developer_main.active_run_context.run_inventory().capacity, 5, "Developer Unlock All receives one explicit run-only inventory column", failures)
+    TestAssertions.equal(developer_main.active_profile().inventory_columns, 0, "Developer run-only inventory does not mutate the profile column count", failures)
     developer_roll.loot_tuning.drop_basis_points[&"ordinary_melee"] = 10000
     developer_director.call("_on_enemy_defeated", load("res://data/enemies/swarmer.tres") as EnemyDefinition, developer_main.leader.position, 1)
     TestAssertions.equal(developer_registry.all_records().size(), 1, "Developer Unlock All grants the independently evaluated personal drop", failures)
+    var developer_world := developer_main.get("ground_item_world_controller") as Node
+    TestAssertions.truthy(developer_world.pickup_feedback.is_connected(Callable(developer_main, "_on_ground_item_pickup_feedback")), "Main routes typed pickup feedback to the HUD", failures)
+    var developer_record := developer_registry.all_records()[0] if developer_registry.all_records().size() == 1 else null
+    var developer_detail := developer_main.call("_ground_item_detail", developer_record) as Dictionary if developer_record != null else {}
+    if developer_record != null:
+        developer_world.call("_on_chest_pickup_requested", developer_record.drop_id, developer_record.run_player_id)
+    var loot_status := developer_main.get_node("HUD/LootStatus") as Label
+    TestAssertions.truthy(loot_status.visible and loot_status.text.contains(String(developer_detail.get("name", ""))) and loot_status.text.contains(String(developer_detail.get("rarity_name", ""))), "successful pickup HUD feedback names the item and rarity", failures)
+    TestAssertions.equal(developer_registry.all_records().size(), 0, "successful HUD pickup removes the collected chest", failures)
 
     var boss_event := EnemyDefeatEvent.create(1337, 2, 2, &"forge_guardian", &"boss", developer_main.leader.position, 300.0)
     developer_coordinator.resolve_defeat(boss_event)
-    TestAssertions.equal(developer_registry.all_records().size(), 1, "zero boss basis points create no ground chest", failures)
+    TestAssertions.equal(developer_registry.all_records().size(), 0, "zero boss basis points create no ground chest", failures)
 
     var game_run := developer_main.get_node("GameRun") as GameRun
     var victories: Array[int] = [0]
@@ -391,8 +410,26 @@ func _test_personal_loot_defeat_and_guardian_wiring(failures: Array[String]) -> 
         guardian.defeat()
         guardian.defeat()
     TestAssertions.equal(victories[0], 1, "Forge Guardian preserves the existing exactly-once victory behavior", failures)
-    TestAssertions.equal(developer_registry.all_records().size(), 0, "Guardian victory adds no boss reward and clears prior run-owned ground loot", failures)
+    TestAssertions.equal(developer_registry.all_records().size(), 0, "Guardian victory adds no boss reward and keeps run-owned ground loot cleared", failures)
     _cleanup_main(developer_main)
+
+func _test_invalid_personal_loot_tuning_aborts_main_start(failures: Array[String]) -> void:
+    var isolated_root := "user://tests/main_wiring-invalid-loot_%d_%d" % [OS.get_process_id(), Time.get_ticks_usec()]
+    ProfileTestSupport.remove_tree(isolated_root)
+    var main := (load("res://scenes/game/main.tscn") as PackedScene).instantiate()
+    main.set("profile_root", isolated_root)
+    main.set("settings_path", _settings_path)
+    main.call("_ready")
+    var created := main.profile_manager.create_profile("Invalid Loot Tuning") as ProfileOperationResult
+    TestAssertions.truthy(created.ok(), "invalid tuning fixture creates an isolated active profile", failures)
+    (main.get_node("SettingsScreen") as SettingsScreen).close()
+    var invalid := PersonalLootTuning.new()
+    invalid.seconds_per_item_level = 0.0
+    main.set("personal_loot_tuning_source", invalid)
+    TestAssertions.truthy(not main.call("select_leader_class", &"fighter"), "Main aborts run start when personal-loot tuning is invalid", failures)
+    TestAssertions.truthy(not main.run_started and main.personal_loot_drop_coordinator == null and main.ground_item_registry == null, "invalid tuning leaves no active loot coordinator, registry, or run", failures)
+    _cleanup_main(main)
+    ProfileTestSupport.remove_tree(isolated_root)
 
 func _test_live_loot_owner_leader_comparison_graph(failures: Array[String]) -> void:
     var settings := PartyForgeSettings.new()
@@ -819,6 +856,7 @@ func _test_hud_contract(failures: Array[String]) -> void:
         "Margin/Status/PartyEntries/Party1", "Margin/Status/PartyEntries/Party2",
         "Margin/Status/PartyEntries/Party3", "Margin/Status/PartyEntries/Party4",
         "Margin/Status/ActiveTraits", "Margin/Status/BossHealth", "BossBanner",
+        "LootStatus",
         "LevelUpPanel", "RunResultPanel", "ClassSelection",
     ]:
         TestAssertions.truthy(hud.get_node_or_null(path) != null, "HUD exposes %s" % path, failures)

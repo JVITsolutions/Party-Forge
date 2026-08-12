@@ -34,6 +34,8 @@ func run() -> Array[String]:
 	if _decision_script == null or _service_script == null:
 		return failures
 	_test_configuration_contract(failures)
+	_test_tuning_validation_fails_closed(failures)
+	_test_authored_difficulty_and_heat_item_level(failures)
 	_test_per_context_eligibility_and_canonical_decisions(failures)
 	_test_multiplier_clamping_and_force_success(failures)
 	_test_replay_is_defensive_and_does_not_reroll(failures)
@@ -70,6 +72,55 @@ func _test_configuration_contract(failures: Array[String]) -> void:
 		"valid personal loot dependencies configure",
 		failures,
 	)
+
+func _test_tuning_validation_fails_closed(failures: Array[String]) -> void:
+	var invalid := PersonalLootTuning.new()
+	invalid.drop_basis_points = {&"ordinary_melee": -1, &"ordinary_specialist": 10001, &"elite": 0, &"boss": 0}
+	invalid.seconds_per_item_level = NAN
+	invalid.specialist_item_level_bonus = 1001
+	invalid.difficulty_item_level_bonus = {&"": 0}
+	invalid.heat_item_levels_per_point = -0.25
+	invalid.pickup_interaction_radius = 0.0
+	invalid.controller_target_query_radius = -1.0
+	var provider := ContextAccessProvider.new([])
+	var service := _new_service()
+	TestAssertions.equal(service.call(&"configure", RunContextRegistry.new(), load(REWARD_TUNING_PATH) as RewardDistributionTuning, PersonalLootTuning.new(), Callable(provider, "resolve")), PackedStringArray(), "fixture service first configures valid tuning", failures)
+	var errors := service.call(
+		&"configure", RunContextRegistry.new(), load(REWARD_TUNING_PATH) as RewardDistributionTuning,
+		invalid, Callable(provider, "resolve"),
+	) as PackedStringArray
+	TestAssertions.equal(errors, PackedStringArray([
+		"PARTY_FORGE_PERSONAL_LOOT_TUNING_ERROR field=drop_basis_points.ordinary_melee reason=must be an integer from 0 to 10000",
+		"PARTY_FORGE_PERSONAL_LOOT_TUNING_ERROR field=drop_basis_points.ordinary_specialist reason=must be an integer from 0 to 10000",
+		"PARTY_FORGE_PERSONAL_LOOT_TUNING_ERROR field=seconds_per_item_level reason=must be finite and greater than zero",
+		"PARTY_FORGE_PERSONAL_LOOT_TUNING_ERROR field=specialist_item_level_bonus reason=must be an integer from -1000 to 1000",
+		"PARTY_FORGE_PERSONAL_LOOT_TUNING_ERROR field=difficulty_item_level_bonus reason=normal is required",
+		"PARTY_FORGE_PERSONAL_LOOT_TUNING_ERROR field=difficulty_item_level_bonus.<empty> reason=key must not be empty",
+		"PARTY_FORGE_PERSONAL_LOOT_TUNING_ERROR field=heat_item_levels_per_point reason=must be finite and nonnegative",
+		"PARTY_FORGE_PERSONAL_LOOT_TUNING_ERROR field=pickup_interaction_radius reason=must be finite and greater than zero",
+		"PARTY_FORGE_PERSONAL_LOOT_TUNING_ERROR field=controller_target_query_radius reason=must be finite and at least pickup_interaction_radius",
+	]), "invalid personal-loot tuning reports stable typed diagnostics", failures)
+	TestAssertions.equal(service.call(&"resolve", EnemyDefeatEvent.create(1, 1, 1, &"swarmer", &"ordinary_melee", Vector3.ZERO, 0.0)), [], "invalid tuning leaves the roll service unavailable with no side effects", failures)
+
+func _test_authored_difficulty_and_heat_item_level(failures: Array[String]) -> void:
+	var registry := RunContextRegistry.new()
+	var fixture := _context_fixture(&"player_challenge", 0, "profile-challenge", Vector3.ZERO, Vector3.ONE)
+	registry.register_context(fixture.context as PlayerRunContext)
+	var tuning := PersonalLootTuning.new()
+	tuning.drop_basis_points = {&"ordinary_melee": 10000, &"ordinary_specialist": 10000, &"elite": 0, &"boss": 0}
+	tuning.difficulty_item_level_bonus = {&"normal": 0, &"test_challenge": 7}
+	tuning.heat_item_levels_per_point = 0.5
+	var provider := ContextAccessProvider.new(["profile-challenge"])
+	var service := _new_service()
+	var errors := service.call(
+		&"configure", registry, load(REWARD_TUNING_PATH) as RewardDistributionTuning,
+		tuning, Callable(provider, "resolve"), false, 1.0, &"", 0, &"test_challenge", 6.0,
+	) as PackedStringArray
+	TestAssertions.equal(errors, PackedStringArray(), "test-authored non-default difficulty and Heat configure", failures)
+	var decisions := service.call(&"resolve", EnemyDefeatEvent.create(7331, 44, 100, &"swarmer", &"ordinary_melee", Vector3.ZERO, 120.0)) as Array
+	TestAssertions.equal(decisions.size(), 1, "non-default context produces one decision", failures)
+	if decisions.size() == 1:
+		TestAssertions.equal(decisions[0].get(&"item_level"), 21, "item-level decision includes encounter 10, authored difficulty 7, and Heat 3", failures)
 
 func _test_per_context_eligibility_and_canonical_decisions(failures: Array[String]) -> void:
 	var registry := RunContextRegistry.new()

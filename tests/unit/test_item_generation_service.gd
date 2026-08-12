@@ -44,6 +44,8 @@ func _test_fixed_seed_items(equipment: EquipmentCatalog, foundation: ItemFoundat
 			continue
 		var exact_document := result.item.to_dictionary()
 		var exact_golden: String = golden_by_rarity[rarity_id]
+		exact_golden = exact_golden.replace("\"domain\":\"ordinary_drop\"", "\"difficulty_id\":\"normal\",\"domain\":\"ordinary_drop\"")
+		exact_golden = exact_golden.replace("\"generator_version\":2", "\"generator_version\":2,\"heat\":0")
 		TestAssertions.equal(ItemInstanceCodec.encode(result.item), exact_golden, "%s fixed request has exact schema-two dictionary" % rarity_id, failures)
 		if rarity_id == &"rare":
 			TestAssertions.equal(JSON.stringify(result.trace.stages).sha256_text(), GOLDEN_RARE_TRACE_SHA256, "rare fixed request has exact trace bytes", failures)
@@ -56,6 +58,8 @@ func _test_fixed_seed_items(equipment: EquipmentCatalog, foundation: ItemFoundat
 		TestAssertions.equal(origin["source"]["generation"]["generator_version"], 2, "%s generator version is nested under source" % rarity_id, failures)
 		TestAssertions.equal(origin["source"]["generation"]["selected_base_id"], "forge_vanguard_sword", "%s selected base provenance is exact" % rarity_id, failures)
 		TestAssertions.equal(origin["source"]["generation"]["selected_rarity_id"], String(rarity_id), "%s selected rarity provenance is exact" % rarity_id, failures)
+		TestAssertions.equal(origin["source"]["generation"]["difficulty_id"], "normal", "%s difficulty provenance is exact" % rarity_id, failures)
+		TestAssertions.near(float(origin["source"]["generation"]["heat"]), 0.0, 0.001, "%s Heat provenance is exact" % rarity_id, failures)
 		TestAssertions.equal(origin["source"]["generation"]["forced_base_id"], "forge_vanguard_sword", "%s authorized forced base provenance is exact" % rarity_id, failures)
 		TestAssertions.equal(origin["source"]["generation"]["forced_rarity_id"], String(rarity_id), "%s authorized forced rarity provenance is exact" % rarity_id, failures)
 		var decoded := ItemInstanceCodec.decode(JSON.parse_string(ItemInstanceCodec.encode(result.item)), equipment, foundation)

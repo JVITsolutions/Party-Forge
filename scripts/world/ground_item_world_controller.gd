@@ -3,6 +3,7 @@ extends Node
 
 signal pickup_requested(drop_id: StringName, input_owner: StringName)
 signal status_changed(status: String)
+signal pickup_feedback(result: GroundItemPickupResult)
 signal projection_diagnostics_changed(diagnostics: Dictionary)
 
 const CHEST_SCENE := preload("res://scenes/world/ground_item_chest.tscn")
@@ -511,14 +512,24 @@ func _on_anchor_gui_input(event: InputEvent, chest: Node3D) -> void:
 	var input_owner := _owner_for_event(mouse)
 	if input_owner.is_empty():
 		return
+	if StringName(chest.get("run_player_id")) != input_owner:
+		_emit_pickup_feedback(GroundItemPickupResult.new(GroundItemPickupResult.Code.NOT_OWNER))
+		status_changed.emit("GROUND_ITEM_PICKUP_NOT_OWNER")
+		_mark_input_handled()
+		return
 	chest.call(&"request_pickup", input_owner)
 	_mark_input_handled()
 
 
 func _on_chest_pickup_requested(drop_id: StringName, input_owner: StringName) -> void:
 	var chest := _chest_by_drop.get(drop_id) as Node3D
-	if chest == null or StringName(chest.get("run_player_id")) != input_owner:
+	if chest == null:
 		return
+	if StringName(chest.get("run_player_id")) != input_owner:
+		_emit_pickup_feedback(GroundItemPickupResult.new(GroundItemPickupResult.Code.NOT_OWNER))
+		status_changed.emit("GROUND_ITEM_PICKUP_NOT_OWNER")
+		return
+	_apply_selection(input_owner, drop_id)
 	pickup_requested.emit(drop_id, input_owner)
 	_collect_for_owner(drop_id, input_owner)
 
@@ -570,6 +581,7 @@ func _collect_for_owner(drop_id: StringName, run_player_id: StringName) -> void:
 	var result := _pickup_service.call(&"collect", drop_id, run_player_id) as RefCounted
 	if result == null:
 		return
+	_emit_pickup_feedback(result as GroundItemPickupResult)
 	match result.code:
 		PICKUP_RESULT.Code.MOVE_CLOSER:
 			_status_by_owner[run_player_id] = "Move closer"
@@ -586,6 +598,21 @@ func _collect_for_owner(drop_id: StringName, run_player_id: StringName) -> void:
 		PICKUP_RESULT.Code.OK:
 			_status_by_owner.erase(run_player_id)
 			status_changed.emit("GROUND_ITEM_PICKUP_OK")
+
+func _emit_pickup_feedback(result: GroundItemPickupResult) -> void:
+	if result == null:
+		return
+	var feedback := result.copy()
+	if feedback.message.strip_edges().is_empty():
+		feedback.message = _fallback_pickup_message(feedback.code)
+	pickup_feedback.emit(feedback)
+
+func _fallback_pickup_message(code: GroundItemPickupResult.Code) -> String:
+	match code:
+		GroundItemPickupResult.Code.NOT_OWNER: return "That item belongs to another player."
+		GroundItemPickupResult.Code.MISSING: return "That item is no longer available."
+		GroundItemPickupResult.Code.TRANSACTION_REJECTED: return "Unable to pick up item."
+		_: return ""
 
 
 func _refresh_selection_feedback(run_player_id: StringName) -> void:

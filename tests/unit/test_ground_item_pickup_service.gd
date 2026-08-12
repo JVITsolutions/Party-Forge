@@ -21,6 +21,7 @@ func run() -> Array[String]:
 	_test_codes_and_range(codes, failures)
 	_test_full_inventory(codes, failures)
 	_test_success_after_transaction(codes, failures)
+	_test_successful_replay_is_idempotent(codes, failures)
 	_cleanup()
 	return failures
 
@@ -61,6 +62,22 @@ func _test_success_after_transaction(codes: Dictionary, failures: Array[String])
 	registry.add(rejected)
 	TestAssertions.equal((fixture.service as RefCounted).call(&"collect", &"drop-reject", &"owner").get(&"code"), codes["TRANSACTION_REJECTED"], "context rejection has exact code", failures)
 	TestAssertions.truthy(registry.record(&"drop-reject") != null, "transaction rejection preserves registry record", failures)
+
+func _test_successful_replay_is_idempotent(codes: Dictionary, failures: Array[String]) -> void:
+	var fixture := _fixture(&"replay-owner", "profile-replay", 1, Vector3.ZERO, Vector3.ZERO, &"drop-replay", 9104)
+	var service := fixture.service as RefCounted
+	var context := fixture.context as PlayerRunContext
+	var first := service.call(&"collect", &"drop-replay", &"replay-owner") as RefCounted
+	var after_first := context.item_state().to_dictionary()
+	var replay := service.call(&"collect", &"drop-replay", &"replay-owner") as RefCounted
+	TestAssertions.equal(first.get(&"code"), codes["OK"], "first replay fixture pickup succeeds", failures)
+	TestAssertions.equal(replay.get(&"code"), codes["OK"], "identical successful retry preserves successful semantics", failures)
+	TestAssertions.truthy(first != replay, "successful retry returns a defensive result instance", failures)
+	TestAssertions.equal(replay.call(&"to_dictionary"), first.call(&"to_dictionary"), "successful retry is semantically identical", failures)
+	TestAssertions.equal(context.item_state().to_dictionary(), after_first, "successful retry performs no duplicate mutation", failures)
+	TestAssertions.equal(service.call(&"collect", &"drop-replay", &"other-owner").get(&"code"), codes["MISSING"], "different owner cannot replay another owner's success", failures)
+	var fresh_service := (load(SERVICE_PATH) as Script).new(fixture.registry, RunContextRegistry.new(), GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG, 3.0) as RefCounted
+	TestAssertions.equal(fresh_service.call(&"collect", &"drop-replay", &"replay-owner").get(&"code"), codes["MISSING"], "new per-run service has no prior success cache", failures)
 
 func _fixture(owner: StringName, profile_id: String, inventory_columns: int, actor_position: Vector3, drop_position: Vector3, drop_id: StringName, seed: int) -> Dictionary:
 	var catalog := GameCatalog.load_defaults()

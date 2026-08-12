@@ -132,11 +132,11 @@ func _test_main_reconfigures_policy_before_run_start(failures: Array[String]) ->
 		var unlocked_ledger := unlocked_main.get_node("CharacterLedger") as CharacterLedger
 		TestAssertions.truthy((unlocked_ledger.get("_definitions") as Dictionary).has(&"equipment_inventory"), "permanent equipment unlock catalogs the completed ledger page", failures)
 		TestAssertions.truthy((unlocked_ledger.get("_pages") as Dictionary).has(&"equipment_inventory"), "permanent equipment unlock instantiates the completed ledger page", failures)
-		TestAssertions.truthy(unlocked_main.call("_personal_loot_access_for", unlocked_main.get("active_run_context")), "permanent equipment unlock enables personal loot", failures)
+		TestAssertions.truthy(unlocked_main.call("_personal_loot_access_for", unlocked_main.get("active_run_context")), "permanent equipment unlock plus Field Pack capacity enable personal loot", failures)
 		var unlocked_roll := unlocked_main.get("personal_loot_roll_service") as PersonalLootRollService
 		unlocked_roll.loot_tuning.drop_basis_points[&"ordinary_melee"] = 10000
 		var unlocked_decisions := unlocked_roll.resolve(_event_at_leader(unlocked_main), true)
-		TestAssertions.truthy((unlocked_decisions[0] as PersonalLootDecision).success, "permanent equipment unlock enables the same per-context roll service", failures)
+		TestAssertions.truthy((unlocked_decisions[0] as PersonalLootDecision).success, "permanent equipment unlock plus Field Pack enable the same per-context roll service", failures)
 		_cleanup_main(unlocked_main)
 
 	var developer_settings := PartyForgeSettings.new()
@@ -161,7 +161,8 @@ func _started_main(root: String, settings: PartyForgeSettings, permanently_unloc
 	if permanently_unlocked:
 		var profile := manager.active_profile()
 		profile.permanent_feature_unlocks = ["equipment_inventory"]
-		TestAssertions.equal(ProfileStore.new().save_profile(profile, root), "", "permanent-unlock fixture saves", failures)
+		profile.inventory_columns = 1
+		TestAssertions.equal(ProfileStore.new().save_profile(profile, root), "", "permanent equipment and Field Pack fixture saves", failures)
 		TestAssertions.equal(manager.refresh_profile(profile.profile_id), "", "permanent-unlock fixture refreshes", failures)
 	(main.get_node("SettingsScreen") as SettingsScreen).close()
 	main.set("saved_settings", settings.copy())

@@ -7,6 +7,7 @@ var experience_system: ExperienceSystem
 var leader: PartyActor
 var boss: Node3D
 var boss_banner_remaining := 0.0
+var loot_status_remaining := 0.0
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -28,12 +29,22 @@ func show_boss_banner() -> void:
 	banner.visible = true
 	boss_banner_remaining = 2.0
 
+func show_loot_status(message: String, duration := 2.5) -> void:
+	var label := get_node("LootStatus") as Label
+	label.text = message
+	label.visible = not message.strip_edges().is_empty()
+	loot_status_remaining = maxf(duration, 0.0)
+
 func _process(delta: float) -> void:
 	_refresh_status()
 	if boss_banner_remaining > 0.0:
 		boss_banner_remaining = maxf(0.0, boss_banner_remaining - maxf(delta, 0.0))
 		if boss_banner_remaining <= 0.0:
 			(get_node("BossBanner") as Control).visible = false
+	if loot_status_remaining > 0.0:
+		loot_status_remaining = maxf(0.0, loot_status_remaining - maxf(delta, 0.0))
+		if loot_status_remaining <= 0.0:
+			(get_node("LootStatus") as Control).visible = false
 
 func _refresh_status() -> void:
 	if leader != null and is_instance_valid(leader):

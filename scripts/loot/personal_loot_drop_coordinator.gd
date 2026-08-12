@@ -34,7 +34,9 @@ func configure(
 		errors.append(_error("foundation", "must not be null"))
 	if ground_registry == null:
 		errors.append(_error("registry", "must not be null"))
-	if difficulty not in ItemGenerationVocabulary.DIFFICULTIES:
+	if personal_roll_service != null and (personal_roll_service.difficulty_id != difficulty or not is_equal_approx(personal_roll_service.heat, heat_value)):
+		errors.append(_error("item_level_context", "roll and generation difficulty/Heat must match"))
+	if personal_roll_service != null and personal_roll_service.loot_tuning != null and not personal_roll_service.loot_tuning.supports_difficulty(difficulty):
 		errors.append(_error("difficulty_id", "unsupported difficulty %s" % difficulty))
 	if not is_finite(heat_value) or heat_value < 0.0:
 		errors.append(_error("heat", "must be finite and nonnegative"))

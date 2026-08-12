@@ -17,6 +17,7 @@ func run() -> Array[String]:
 		return failures
 	_test_two_successes_use_exact_independent_production_requests(failures)
 	_test_one_owner_failure_does_not_block_another(failures)
+	_test_heat_context_matches_decision_request_and_provenance(failures)
 	_cleanup()
 	return failures
 
@@ -87,6 +88,35 @@ func _test_one_owner_failure_does_not_block_another(failures: Array[String]) -> 
 			TestAssertions.equal(StringName(diagnostic.get("code", &"")), &"ground_record_conflict", "duplicate ground identity exposes a stable diagnostic code", failures)
 	TestAssertions.equal(contexts.context_for(&"player_1").item_state().to_dictionary(), first_before, "failed owner remains byte-equivalent", failures)
 	TestAssertions.equal(contexts.context_for(&"player_2").item_state().registry().size(), 1, "independent successful owner still receives exactly one item", failures)
+
+func _test_heat_context_matches_decision_request_and_provenance(failures: Array[String]) -> void:
+	var contexts := RunContextRegistry.new()
+	var context := _context(&"heat_player", "profile-heat", 0, &"red", 54100)
+	assert(contexts.register_context(context).ok())
+	var identities := LocalPlayerIdentityService.new().assign(contexts.all_contexts())
+	var tuning := PersonalLootTuning.new()
+	tuning.drop_basis_points = {&"ordinary_melee": 10000, &"ordinary_specialist": 10000, &"elite": 0, &"boss": 0}
+	tuning.heat_item_levels_per_point = 0.5
+	var roll := PersonalLootRollService.new()
+	assert(roll.configure(contexts, RewardDistributionTuning.new(), tuning, func(_context: PlayerRunContext) -> bool: return true, true, 1.0, &"", 0, &"normal", 8.0).is_empty())
+	var registry := GroundItemRegistry.new()
+	var coordinator := PersonalLootDropCoordinator.new()
+	TestAssertions.equal(coordinator.configure(roll, contexts, identities.identities(), GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG, registry, &"normal", 7.0), PackedStringArray([
+		"PARTY_FORGE_PERSONAL_LOOT_COORDINATOR_ERROR field=item_level_context reason=roll and generation difficulty/Heat must match",
+	]), "coordinator rejects divergent roll and generation item-level context", failures)
+	assert(coordinator.configure(roll, contexts, identities.identities(), GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG, registry, &"normal", 8.0).is_empty())
+	var event := EnemyDefeatEvent.create(54100, 83, 830, &"swarmer", &"ordinary_melee", Vector3.ZERO, 120.0)
+	var report := coordinator.resolve_defeat(event)
+	var decisions := report.get("decisions", []) as Array
+	TestAssertions.equal(decisions.size(), 1, "Heat consistency fixture resolves one decision", failures)
+	var record := registry.record(&"drop:heat_player:83")
+	var item := context.item_state().registry().item(record.item_id) if record != null else null
+	TestAssertions.truthy(item != null, "Heat consistency fixture generates one item", failures)
+	if decisions.size() == 1 and item != null:
+		TestAssertions.equal(decisions[0].item_level, 15, "decision includes the exact non-default Heat contribution", failures)
+		TestAssertions.equal(item.item_level, decisions[0].item_level, "generated request uses the decision item level", failures)
+		TestAssertions.near(float(item.origin["source"]["generation"]["heat"]), 8.0, 0.001, "item provenance records the same Heat", failures)
+		TestAssertions.equal(item.origin["source"]["generation"]["difficulty_id"], "normal", "item provenance records the same difficulty ID", failures)
 
 func _coordinator_fixture(reverse_registration: bool) -> Dictionary:
 	var contexts := RunContextRegistry.new()

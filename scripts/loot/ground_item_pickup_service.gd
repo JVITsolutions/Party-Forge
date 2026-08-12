@@ -8,6 +8,7 @@ var _registry: GroundItemRegistry
 var _contexts: RunContextRegistry
 var _equipment: EquipmentCatalog
 var _foundation: ItemFoundationCatalog
+var _successful_results: Dictionary = {}
 
 func _init(
 	registry: GroundItemRegistry = null,
@@ -23,6 +24,10 @@ func _init(
 	pickup_radius = maxf(pickup_radius_value, 0.0)
 
 func collect(drop_id: StringName, input_run_player_id: StringName) -> GroundItemPickupResult:
+	var replay_key := "%s|%s" % [input_run_player_id, drop_id]
+	var prior := _successful_results.get(replay_key) as GroundItemPickupResult
+	if prior != null:
+		return prior.copy()
 	var record := _registry.record(drop_id) if _registry != null else null
 	if record == null:
 		return GroundItemPickupResult.new(GroundItemPickupResult.Code.MISSING)
@@ -41,8 +46,15 @@ func collect(drop_id: StringName, input_run_player_id: StringName) -> GroundItem
 	if inventory == null or inventory.first_empty_slot() < 0:
 		return GroundItemPickupResult.new(GroundItemPickupResult.Code.INVENTORY_FULL, "Inventory full")
 	var transaction_id := "ground-pickup:%s" % record.drop_id
+	var item := context.item_state().registry().item(record.item_id)
+	var base := _equipment.definition(item.base_definition_id) if _equipment != null and item != null else null
+	var rarity := _foundation.rarity(item.rarity_id) if _foundation != null and item != null else null
+	var item_name := base.display_name if base != null else "Item"
+	var rarity_name := rarity.display_name if rarity != null else String(record.rarity_id).capitalize()
 	var transaction := context.collect_ground_item(record.item_id, transaction_id, _equipment, _foundation)
 	if transaction == null or not transaction.ok():
 		return GroundItemPickupResult.new(GroundItemPickupResult.Code.TRANSACTION_REJECTED)
 	_registry.remove(record.drop_id)
-	return GroundItemPickupResult.new(GroundItemPickupResult.Code.OK)
+	var success := GroundItemPickupResult.new(GroundItemPickupResult.Code.OK, "Picked up %s %s" % [rarity_name, item_name], item_name, rarity_name)
+	_successful_results[replay_key] = success.copy()
+	return success

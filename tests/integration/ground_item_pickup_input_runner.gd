@@ -73,6 +73,7 @@ func _test_real_controller_flow() -> void:
 	registry.add(_record(&"p2-near", &"player_2", Vector3(1.0, 0.0, 0.0), 0))
 	registry.add(_record(&"p2-out", &"player_2", Vector3(4.0, 0.0, 0.0), 1))
 	registry.add(_record(&"keyboard-near", &"keyboard", Vector3(1.0, 0.0, 0.0), 0))
+	registry.add(_record(&"keyboard-out", &"keyboard", Vector3(-4.0, 0.0, 0.0), 1))
 	var host := Node.new()
 	var chests := Node3D.new()
 	var tooltip_layer := Control.new()
@@ -120,8 +121,10 @@ func _test_real_controller_flow() -> void:
 	_assert(controller.call(&"selection_for_owner", &"player_1") == &"p1-near", "ledger-close equivalent preserves the prior target")
 	var forwarded: Array[Array] = []
 	var statuses: Array[String] = []
+	var feedback: Array[GroundItemPickupResult] = []
 	controller.connect(&"pickup_requested", func(drop_id: StringName, owner: StringName) -> void: forwarded.append([drop_id, owner]))
 	controller.connect(&"status_changed", func(status: String) -> void: statuses.append(status))
+	controller.connect(&"pickup_feedback", func(result: GroundItemPickupResult) -> void: feedback.append(result))
 	var chest := _chest_for(chests, &"p1-near")
 	_assert(chest != null, "public chest parent exposes the projected P1 chest")
 	if chest == null:
@@ -132,19 +135,24 @@ func _test_real_controller_flow() -> void:
 	var anchor := chest.call(&"tooltip_anchor") as Control
 	anchor.gui_input.emit(_mouse_button(1))
 	_assert(forwarded.is_empty(), "foreign mouse pointer owner is rejected")
+	_assert(not feedback.is_empty() and feedback[-1].code == GroundItemPickupResult.Code.NOT_OWNER and feedback[-1].message == "That item belongs to another player.", "foreign mouse rejection emits typed player-facing ownership feedback")
 	modal[0] = true
 	anchor.gui_input.emit(_mouse_button(0))
 	_assert(forwarded.is_empty(), "modal suppression blocks the real mouse pickup path")
 	modal[0] = false
 	anchor.gui_input.emit(_mouse_button(0))
 	_assert(forwarded == [[&"p1-near", &"player_1"]], "owning mouse pointer reaches the exact chest")
+	var keyboard_out_anchor := (_chest_for(chests, &"keyboard-out").call(&"tooltip_anchor") as Button)
+	await _dispatch_mouse_click(keyboard_out_anchor, -1)
+	_assert(forwarded.has([&"keyboard-out", &"keyboard"]), "actual viewport-dispatched KB/M click reaches the exact out-of-range owned chest")
+	_assert(controller.call(&"selection_for_owner", &"keyboard") == &"keyboard-out", "out-of-range mouse click establishes the KB/M-owned selection before collection")
+	_assert(statuses.has("Move closer"), "out-of-range mouse activation emits exact Move closer status")
+	_assert(controller.call(&"selection_for_owner", &"keyboard") == &"keyboard-out", "out-of-range mouse activation preserves the KB/M selection")
+	_assert(keyboard_out_anchor.text.contains("Move closer"), "Move closer remains visible on the retained mouse selection")
+	_assert(not feedback.is_empty() and feedback[-1].code == GroundItemPickupResult.Code.MOVE_CLOSER and feedback[-1].message == "Move closer", "out-of-range mouse activation emits typed player-facing feedback")
 	await _dispatch(_button(1, JOY_BUTTON_DPAD_RIGHT))
 	_assert(controller.call(&"selection_for_owner", &"player_2") == &"p2-out", "real P2 D-pad cycle selects owned visible loot outside pickup range")
 	await _dispatch(_button(1, JOY_BUTTON_A))
-	_assert(statuses.has("Move closer"), "out-of-range activation emits exact Move closer status")
-	_assert(controller.call(&"selection_for_owner", &"player_2") == &"p2-out", "out-of-range activation preserves selection")
-	var p2_out_anchor := (_chest_for(chests, &"p2-out").call(&"tooltip_anchor") as Button)
-	_assert(p2_out_anchor.text.contains("Move closer"), "Move closer remains visible on the retained selection")
 	modal[0] = true
 	await _dispatch(_button(1, JOY_BUTTON_DPAD_LEFT))
 	_assert(controller.call(&"selection_for_owner", &"player_2") == &"p2-out", "modal input preserves the real out-of-range selection")
@@ -396,13 +404,24 @@ func _mouse_button(device: int) -> InputEventMouseButton:
 	return event
 
 func _dispatch(event: InputEvent) -> void:
-	Input.parse_input_event(event)
+	root.push_input(event, true)
 	await process_frame
 	if event is InputEventJoypadButton:
 		var released := event.duplicate() as InputEventJoypadButton
 		released.pressed = false
 		Input.parse_input_event(released)
 		await process_frame
+
+func _dispatch_mouse_click(control: Control, device: int) -> void:
+	var event := _mouse_button(device)
+	event.position = control.get_global_rect().get_center()
+	event.global_position = event.position
+	root.push_input(event, true)
+	await process_frame
+	var released := event.duplicate() as InputEventMouseButton
+	released.pressed = false
+	root.push_input(released, true)
+	await process_frame
 
 func _teardown_controller(controller: Node, chests: Node3D, tooltip_layer: Control, label: String) -> void:
 	controller.queue_free()

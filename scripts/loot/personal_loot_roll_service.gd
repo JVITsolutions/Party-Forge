@@ -11,6 +11,8 @@ var force_success := false
 var drop_multiplier := 1.0
 var source_category_override: StringName = &""
 var item_level_override := 0
+var difficulty_id: StringName = &"normal"
+var heat := 0.0
 
 var _resolved_decisions: Dictionary = {}
 
@@ -23,7 +25,10 @@ func configure(
 	drop_multiplier_value: float = 1.0,
 	source_category_override_value: StringName = &"",
 	item_level_override_value: int = 0,
+	difficulty_id_value: StringName = &"normal",
+	heat_value: float = 0.0,
 ) -> PackedStringArray:
+	_clear_configuration()
 	var errors := PackedStringArray()
 	if context_registry == null:
 		errors.append("PARTY_FORGE_PERSONAL_LOOT_ERROR field=registry")
@@ -33,6 +38,13 @@ func configure(
 		errors.append_array(distribution_tuning.validate())
 	if personal_tuning == null:
 		errors.append("PARTY_FORGE_PERSONAL_LOOT_ERROR field=loot_tuning")
+	else:
+		var tuning_errors := personal_tuning.validate()
+		errors.append_array(tuning_errors)
+		if tuning_errors.is_empty() and not personal_tuning.supports_difficulty(difficulty_id_value):
+			errors.append("PARTY_FORGE_PERSONAL_LOOT_ERROR field=difficulty_id reason=unsupported difficulty %s" % difficulty_id_value)
+	if not is_finite(heat_value) or heat_value < 0.0:
+		errors.append("PARTY_FORGE_PERSONAL_LOOT_ERROR field=heat reason=must be finite and nonnegative")
 	if not access_provider.is_valid():
 		errors.append("PARTY_FORGE_PERSONAL_LOOT_ERROR field=feature_access_provider")
 	if errors.is_empty():
@@ -44,6 +56,8 @@ func configure(
 		drop_multiplier = clampf(drop_multiplier_value if is_finite(drop_multiplier_value) else 0.0, 0.0, 100.0)
 		source_category_override = source_category_override_value if source_category_override_value in EnemyDefeatEvent.SOURCE_CATEGORIES else &""
 		item_level_override = clampi(item_level_override_value, 0, ItemGenerationRequest.MAX_ITEM_LEVEL)
+		difficulty_id = difficulty_id_value
+		heat = heat_value
 		_resolved_decisions.clear()
 	return errors
 
@@ -95,7 +109,7 @@ func _resolve_context(
 	var item_level_event := event
 	if effective_source != event.source_category:
 		item_level_event = EnemyDefeatEvent.create(event.run_seed, event.defeat_sequence, event.enemy_sequence, event.enemy_id, effective_source, event.world_position, event.encounter_seconds)
-	decision.item_level = item_level_override if item_level_override > 0 else EncounterItemLevelPolicy.resolve(item_level_event, &"normal", 0.0, loot_tuning)
+	decision.item_level = item_level_override if item_level_override > 0 else EncounterItemLevelPolicy.resolve(item_level_event, difficulty_id, heat, loot_tuning)
 
 	decision.eligible = _resolve_eligibility(context, event, decision)
 	decision.success = decision.eligible and (
@@ -174,3 +188,10 @@ func _is_configured() -> bool:
 		and loot_tuning != null
 		and feature_access_provider.is_valid()
 	)
+
+func _clear_configuration() -> void:
+	registry = null
+	reward_tuning = null
+	loot_tuning = null
+	feature_access_provider = Callable()
+	_resolved_decisions.clear()

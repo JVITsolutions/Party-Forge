@@ -42,6 +42,7 @@ var reward_distribution_service: RewardDistributionService
 var reward_distribution_tuning: RewardDistributionTuning
 var personal_loot_roll_service: PersonalLootRollService
 var personal_loot_drop_coordinator: PersonalLootDropCoordinator
+var personal_loot_tuning_source: PersonalLootTuning = PERSONAL_LOOT_TUNING
 var ground_item_registry: GroundItemRegistry
 var ground_item_world_controller: Node
 var game_run: GameRun
@@ -290,6 +291,7 @@ func _start_leader_class_from_checkout(definition: ClassDefinition, committed_pr
 		party_manager,
 		active_run_rules.experience_multiplier_percent(),
 		bootstrap,
+		active_run_rules.run_inventory_capacity_override(),
 	)
 	if not context_errors.is_empty():
 		return _abort_run_start(context_errors)
@@ -390,7 +392,7 @@ func _configure_personal_loot() -> PackedStringArray:
 		errors.append(identity_assignment.error)
 		return errors
 	personal_loot_roll_service = PersonalLootRollService.new()
-	var run_tuning := PERSONAL_LOOT_TUNING.duplicate(true) as PersonalLootTuning
+	var run_tuning := personal_loot_tuning_source.duplicate(true) as PersonalLootTuning if personal_loot_tuning_source != null else null
 	errors.append_array(personal_loot_roll_service.configure(
 		run_context_registry,
 		reward_distribution_tuning,
@@ -400,6 +402,8 @@ func _configure_personal_loot() -> PackedStringArray:
 		float(active_run_rules.personal_drop_multiplier_percent()) / 100.0,
 		active_run_rules.personal_drop_source_category_override(),
 		active_run_rules.personal_drop_item_level_override(),
+		&"normal",
+		0.0,
 	))
 	if not errors.is_empty():
 		return errors
@@ -412,6 +416,8 @@ func _configure_personal_loot() -> PackedStringArray:
 		GameCatalog.EQUIPMENT_CATALOG,
 		GameCatalog.ITEM_FOUNDATION_CATALOG,
 		ground_item_registry,
+		personal_loot_roll_service.difficulty_id,
+		personal_loot_roll_service.heat,
 	))
 	if not errors.is_empty():
 		return errors
@@ -425,6 +431,8 @@ func _configure_personal_loot() -> PackedStringArray:
 	var camera := (get_node("LeaderCamera") as LeaderCamera).get_node("Camera3D") as Camera3D
 	if not ground_item_world_controller.status_changed.is_connected(_on_ground_item_status_changed):
 		ground_item_world_controller.status_changed.connect(_on_ground_item_status_changed)
+	if not ground_item_world_controller.pickup_feedback.is_connected(_on_ground_item_pickup_feedback):
+		ground_item_world_controller.pickup_feedback.connect(_on_ground_item_pickup_feedback)
 	if not ground_item_world_controller.projection_diagnostics_changed.is_connected(_on_ground_projection_diagnostics_changed):
 		ground_item_world_controller.projection_diagnostics_changed.connect(_on_ground_projection_diagnostics_changed)
 	ground_item_world_controller.call(&"configure", ground_item_registry, identity_assignment.identities(), Callable(self, "_ground_item_detail"), camera, get_node("GroundItems") as Node3D, get_node("GroundItemTooltipLayer"))
@@ -506,6 +514,11 @@ func _on_ground_item_status_changed(status: String) -> void:
 	outcomes[outcome] = int(outcomes.get(outcome, 0)) + 1
 	_ground_chest_diagnostics["collection_outcomes"] = outcomes
 	_sync_ground_chest_diagnostics()
+
+func _on_ground_item_pickup_feedback(result: GroundItemPickupResult) -> void:
+	if result == null or result.message.strip_edges().is_empty() or hud == null:
+		return
+	hud.call(&"show_loot_status", result.message)
 
 func _on_ground_projection_diagnostics_changed(diagnostics: Dictionary) -> void:
 	if _ground_chest_diagnostics.is_empty():
@@ -678,6 +691,8 @@ func _clear_live_loot() -> void:
 			ground_item_world_controller.projection_diagnostics_changed.disconnect(_on_ground_projection_diagnostics_changed)
 		if ground_item_world_controller.status_changed.is_connected(_on_ground_item_status_changed):
 			ground_item_world_controller.status_changed.disconnect(_on_ground_item_status_changed)
+		if ground_item_world_controller.pickup_feedback.is_connected(_on_ground_item_pickup_feedback):
+			ground_item_world_controller.pickup_feedback.disconnect(_on_ground_item_pickup_feedback)
 		ground_item_world_controller.call(&"clear_projection")
 	if ground_item_registry != null:
 		if ground_item_registry.record_added.is_connected(_on_ground_record_added): ground_item_registry.record_added.disconnect(_on_ground_record_added)
@@ -695,6 +710,9 @@ func _personal_loot_access_for(context: PlayerRunContext) -> bool:
 		return false
 	var profile := context.profile_snapshot
 	if profile == null:
+		return false
+	var inventory := context.run_inventory()
+	if inventory == null or inventory.capacity <= 0:
 		return false
 	var policy := active_run_rules.feature_policy(
 		LEDGER_FEATURE_IDS,

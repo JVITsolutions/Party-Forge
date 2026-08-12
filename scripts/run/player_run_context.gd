@@ -60,6 +60,7 @@ func configure(
 	manager: PartyManager,
 	experience_multiplier: int,
 	item_bootstrap: RunItemBootstrap = null,
+	run_inventory_capacity_override: int = -1,
 ) -> PackedStringArray:
 	if _configured:
 		return PackedStringArray(["PARTY_FORGE_RUN_CONTEXT_ERROR field=configuration reason=already configured"])
@@ -77,6 +78,8 @@ func configure(
 	errors.append_array(_party_validation_errors(manager))
 	if experience_multiplier < 100 or experience_multiplier > 1000:
 		errors.append("PARTY_FORGE_RUN_CONTEXT_ERROR field=experience_multiplier")
+	if run_inventory_capacity_override < -1 or run_inventory_capacity_override > 40:
+		errors.append("PARTY_FORGE_RUN_CONTEXT_ERROR field=run_inventory_capacity_override")
 	var strict_resumable := profile != null and profile.resumable_run.has("item_state")
 	if strict_resumable and item_bootstrap == null:
 		errors.append("PARTY_FORGE_RUN_CONTEXT_ERROR field=item_bootstrap reason=required for resumable item run")
@@ -118,7 +121,7 @@ func configure(
 		&"run-inventory",
 		ItemSlotContainer.RUN_INVENTORY,
 		String(run_player_id_value),
-		owned_profile.inventory_columns * 5,
+		run_inventory_capacity_override if run_inventory_capacity_override >= 0 else owned_profile.inventory_columns * 5,
 	)
 	var item_containers: Array[ItemSlotContainer] = [
 		inventory,
@@ -142,6 +145,8 @@ func configure(
 		])
 	if item_bootstrap != null:
 		var bootstrap_state := item_bootstrap.item_state()
+		if run_inventory_capacity_override >= 0:
+			bootstrap_state = RunItemBootstrap.with_run_inventory_capacity(bootstrap_state, run_inventory_capacity_override)
 		if (
 			bootstrap_state != null
 			and bootstrap_state.container(ItemSlotContainer.RUN_GROUND_ITEMS_ID) == null
