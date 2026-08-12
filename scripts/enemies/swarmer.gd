@@ -74,7 +74,9 @@ func defeat() -> void:
     var health := _health_component()
     if health != null and not health.is_dead:
         health.kill()
-    _drop_reward_once()
+    var drop_position := global_position if is_inside_tree() else position
+    _drop_reward_once(drop_position)
+    enemy_defeated.emit(definition, drop_position)
     var collision := get_node_or_null("CollisionShape3D") as CollisionShape3D
     if collision != null:
         collision.disabled = true
