@@ -39,7 +39,7 @@ When a supported item tooltip is visible, hold `Alt` for equipment comparison an
 
 ## Clone and run
 
-Private-repository collaborators must authenticate with GitHub before cloning, for example through GitHub Desktop or a configured Git credential manager.
+Authorized collaborators can clone with GitHub Desktop while signed in to a GitHub account that has repository access. Alternatively, use the PowerShell command below after configuring Git Credential Manager for GitHub.
 
 ```powershell
 git clone https://github.com/JVITsolutions/Party-Forge.git
