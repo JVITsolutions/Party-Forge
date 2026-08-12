@@ -125,6 +125,59 @@ layout_mode = 2
 text = "5"
 horizontal_alignment = 2
 
+[node name="PersonalDropMultiplier" type="HBoxContainer" parent="Layout"]
+layout_mode = 2
+
+[node name="Title" type="Label" parent="Layout/PersonalDropMultiplier"]
+custom_minimum_size = Vector2(180, 0)
+layout_mode = 2
+text = "Personal drop multiplier"
+
+[node name="Value" type="HSlider" parent="Layout/PersonalDropMultiplier"]
+layout_mode = 2
+size_flags_horizontal = 3
+max_value = 10000.0
+step = 1.0
+value = 100.0
+
+[node name="Label" type="Label" parent="Layout/PersonalDropMultiplier"]
+custom_minimum_size = Vector2(72, 0)
+layout_mode = 2
+text = "100%"
+horizontal_alignment = 2
+
+[node name="ForcePersonalDrops" type="CheckButton" parent="Layout"]
+layout_mode = 2
+text = "Force successful personal drops"
+
+[node name="PersonalDropSourceCategory" type="OptionButton" parent="Layout"]
+layout_mode = 2
+tooltip_text = "Automatic uses the defeated enemy's authored source category."
+
+[node name="PersonalDropItemLevel" type="HBoxContainer" parent="Layout"]
+layout_mode = 2
+
+[node name="Title" type="Label" parent="Layout/PersonalDropItemLevel"]
+custom_minimum_size = Vector2(180, 0)
+layout_mode = 2
+text = "Personal drop item level"
+
+[node name="Value" type="HSlider" parent="Layout/PersonalDropItemLevel"]
+layout_mode = 2
+size_flags_horizontal = 3
+max_value = 1000.0
+step = 1.0
+
+[node name="Label" type="Label" parent="Layout/PersonalDropItemLevel"]
+custom_minimum_size = Vector2(72, 0)
+layout_mode = 2
+text = "Automatic"
+horizontal_alignment = 2
+
+[node name="ShowGroundChestDiagnostics" type="CheckButton" parent="Layout"]
+layout_mode = 2
+text = "Show ground-chest diagnostics"
+
 [node name="OpenCityPassiveTree" type="Button" parent="Layout"]
 layout_mode = 2
 text = "Open City Passive Tree"

@@ -1,9 +1,11 @@
 class_name ProfileState
 extends RefCounted
 
+const PlayerColorPalette := preload("res://scripts/profile/player_color_palette.gd")
+
 enum PrologueState { NOT_STARTED, IN_PROGRESS, COMPLETED }
 
-const SCHEMA_VERSION := 3
+const SCHEMA_VERSION := 4
 const MAX_STASH_TABS := 100
 
 var schema_version := SCHEMA_VERSION
@@ -34,13 +36,20 @@ var extraction_capacity := 0
 var run_history: Array[Dictionary] = []
 var resumable_run: Dictionary = {}
 var applied_transactions: Dictionary = {}
+var preferred_player_color_id: StringName = PlayerColorPalette.DEFAULT_ID
 
-static func new_profile(id: String, name: String, now_unix: int) -> ProfileState:
+static func new_profile(
+	id: String,
+	name: String,
+	now_unix: int,
+	preferred_color_id: StringName = PlayerColorPalette.DEFAULT_ID,
+) -> ProfileState:
 	var result := ProfileState.new()
 	result.profile_id = id.strip_edges()
 	result.display_name = name.strip_edges()
 	result.created_at_unix = maxi(0, now_unix)
 	result.updated_at_unix = result.created_at_unix
+	result.preferred_player_color_id = preferred_color_id
 	result.leader_loadout = _empty_leader_loadout(result.profile_id)
 	result.normalize()
 	return result
@@ -63,6 +72,8 @@ func normalize() -> void:
 	extraction_capacity = maxi(0, extraction_capacity)
 	if prologue_state not in [PrologueState.NOT_STARTED, PrologueState.IN_PROGRESS, PrologueState.COMPLETED]:
 		prologue_state = PrologueState.NOT_STARTED
+	if not PlayerColorPalette.is_valid(preferred_player_color_id):
+		preferred_player_color_id = PlayerColorPalette.DEFAULT_ID
 
 func copy() -> ProfileState:
 	return ProfileCodec.decode(ProfileCodec.encode(self)).profile
@@ -97,4 +108,5 @@ func to_dictionary() -> Dictionary:
 		"run_history": run_history.duplicate(true),
 		"resumable_run": resumable_run.duplicate(true),
 		"applied_transactions": applied_transactions.duplicate(true),
+		"preferred_player_color_id": String(preferred_player_color_id),
 	}

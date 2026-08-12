@@ -9,9 +9,14 @@ const LevelUpPanelScript := preload("res://scripts/ui/level_up_panel.gd")
 const RunResultPanelScript := preload("res://scripts/ui/run_result_panel.gd")
 const LoadoutWarningDialogScript := preload("res://scripts/ui/loadout_warning/loadout_warning_dialog.gd")
 const REWARD_DISTRIBUTION_TUNING: RewardDistributionTuning = preload("res://data/progression/reward_distribution.tres")
+const PERSONAL_LOOT_TUNING: PersonalLootTuning = preload("res://data/items/personal_loot_tuning.tres")
+const GROUND_ITEM_SPATIAL_INDEX := preload("res://scripts/loot/ground_item_spatial_index.gd")
+const GROUND_ITEM_TARGETING_SERVICE := preload("res://scripts/loot/ground_item_targeting_service.gd")
+const GROUND_ITEM_PICKUP_SERVICE := preload("res://scripts/loot/ground_item_pickup_service.gd")
 const RUN_SEED := 1337
 const CURRENT_STARTING_PARTY_SIZE := 1
 const LEDGER_FEATURE_IDS: Array[StringName] = [&"stats", &"current_upgrades", &"equipment_inventory"]
+const LEDGER_UNLOCK_IDS: Array[StringName] = [&"equipment_inventory"]
 const CITY_TREE_ID := "party-forge-city-v1"
 const CITY_ORIGIN_MAIN_MENU: StringName = &"main_menu"
 const CITY_ORIGIN_ADDITIONAL_SETTINGS: StringName = &"additional_settings"
@@ -35,6 +40,11 @@ var run_context_registry: RunContextRegistry
 var active_run_context: PlayerRunContext
 var reward_distribution_service: RewardDistributionService
 var reward_distribution_tuning: RewardDistributionTuning
+var personal_loot_roll_service: PersonalLootRollService
+var personal_loot_drop_coordinator: PersonalLootDropCoordinator
+var personal_loot_tuning_source: PersonalLootTuning = PERSONAL_LOOT_TUNING
+var ground_item_registry: GroundItemRegistry
+var ground_item_world_controller: Node
 var game_run: GameRun
 var spawn_director: SpawnDirector
 var party_actor_spawner: PartyActorSpawner
@@ -80,6 +90,7 @@ var _armoury_from_loadout_warning := false
 var _armoury_warning_class_id: StringName
 var _armoury_warning_origin: Control
 var _armoury_warning_origin_mode := LoadoutOrigin.RUN_SETUP
+var _ground_chest_diagnostics: Dictionary = {}
 
 func _ready() -> void:
 	if initialized:
@@ -280,6 +291,7 @@ func _start_leader_class_from_checkout(definition: ClassDefinition, committed_pr
 		party_manager,
 		active_run_rules.experience_multiplier_percent(),
 		bootstrap,
+		active_run_rules.run_inventory_minimum_capacity(),
 	)
 	if not context_errors.is_empty():
 		return _abort_run_start(context_errors)
@@ -310,11 +322,17 @@ func _start_leader_class_from_checkout(definition: ClassDefinition, committed_pr
 	if not reward_errors.is_empty():
 		return _abort_run_start(reward_errors, leader)
 	developer_mode_badge.configure(active_run_rules, reward_distribution_tuning)
+	var personal_loot_errors := _configure_personal_loot()
+	if not personal_loot_errors.is_empty():
+		return _abort_run_start(personal_loot_errors, leader)
 	var camera_rig := get_node("LeaderCamera") as LeaderCamera
 	camera_rig.target = leader
 	var markers := _spawn_markers()
 	var camera := camera_rig.get_node("Camera3D") as Camera3D
 	spawn_director.configure(RUN_SEED, leader, reward_distribution_service, markers, camera, get_node("Enemies"), get_node("Effects"), _pickup_multiplier(), game_run.combat_rng, catalog.damage_types, active_run_rules.enemy_density_percent())
+	var defeat_callback := Callable(self, "_on_enemy_defeated_for_personal_loot")
+	if not spawn_director.enemy_defeated.is_connected(defeat_callback):
+		spawn_director.enemy_defeated.connect(defeat_callback)
 	spawn_director.process_mode = Node.PROCESS_MODE_INHERIT
 	hud.call("configure", game_run, party_manager, experience_system)
 	hud.call("set_leader", leader)
@@ -329,7 +347,7 @@ func _start_leader_class_from_checkout(definition: ClassDefinition, committed_pr
 		catalog,
 		Callable(self, "_ledger_health_for_member"),
 		[],
-		active_run_rules.feature_policy(LEDGER_FEATURE_IDS),
+		active_run_rules.feature_policy(LEDGER_FEATURE_IDS, LEDGER_UNLOCK_IDS, _profile_unlock_ids(active_run_context.profile_snapshot)),
 		Callable(active_run_context, "progression_for"),
 		active_run_context,
 	)
@@ -341,6 +359,7 @@ func _start_leader_class_from_checkout(definition: ClassDefinition, committed_pr
 	return true
 
 func _abort_run_start(diagnostics: PackedStringArray, spawned_leader: PartyActor = null) -> bool:
+	_clear_live_loot()
 	if spawned_leader != null and is_instance_valid(spawned_leader):
 		spawned_leader.free()
 	if leader == spawned_leader:
@@ -365,6 +384,354 @@ func _abort_run_start(diagnostics: PackedStringArray, spawned_leader: PartyActor
 	if not _pending_checkout_recovery.is_empty():
 		_show_checkout_recovery_error(" | ".join(diagnostics))
 	return false
+
+func _configure_personal_loot() -> PackedStringArray:
+	var errors := PackedStringArray()
+	var identity_assignment := LocalPlayerIdentityService.new().assign(run_context_registry.all_contexts())
+	if not identity_assignment.ok():
+		errors.append(identity_assignment.error)
+		return errors
+	personal_loot_roll_service = PersonalLootRollService.new()
+	var run_tuning := personal_loot_tuning_source.duplicate(true) as PersonalLootTuning if personal_loot_tuning_source != null else null
+	errors.append_array(personal_loot_roll_service.configure(
+		run_context_registry,
+		reward_distribution_tuning,
+		run_tuning,
+		Callable(self, "_personal_loot_access_for"),
+		active_run_rules.force_personal_drops(),
+		float(active_run_rules.personal_drop_multiplier_percent()) / 100.0,
+		active_run_rules.personal_drop_source_category_override(),
+		active_run_rules.personal_drop_item_level_override(),
+		&"normal",
+		0.0,
+	))
+	if not errors.is_empty():
+		return errors
+	ground_item_registry = GroundItemRegistry.new()
+	personal_loot_drop_coordinator = PersonalLootDropCoordinator.new()
+	errors.append_array(personal_loot_drop_coordinator.configure(
+		personal_loot_roll_service,
+		run_context_registry,
+		identity_assignment.identities(),
+		GameCatalog.EQUIPMENT_CATALOG,
+		GameCatalog.ITEM_FOUNDATION_CATALOG,
+		ground_item_registry,
+		personal_loot_roll_service.difficulty_id,
+		personal_loot_roll_service.heat,
+	))
+	if not errors.is_empty():
+		return errors
+	_reset_ground_chest_diagnostics()
+	ground_item_registry.record_added.connect(_on_ground_record_added)
+	ground_item_registry.record_removed.connect(_on_ground_record_removed)
+	ground_item_registry.cleared.connect(_on_ground_registry_cleared)
+	if ground_item_world_controller == null:
+		errors.append("PARTY_FORGE_PERSONAL_LOOT_ERROR field=world_controller")
+		return errors
+	var camera := (get_node("LeaderCamera") as LeaderCamera).get_node("Camera3D") as Camera3D
+	if not ground_item_world_controller.status_changed.is_connected(_on_ground_item_status_changed):
+		ground_item_world_controller.status_changed.connect(_on_ground_item_status_changed)
+	if not ground_item_world_controller.pickup_feedback.is_connected(_on_ground_item_pickup_feedback):
+		ground_item_world_controller.pickup_feedback.connect(_on_ground_item_pickup_feedback)
+	if not ground_item_world_controller.projection_diagnostics_changed.is_connected(_on_ground_projection_diagnostics_changed):
+		ground_item_world_controller.projection_diagnostics_changed.connect(_on_ground_projection_diagnostics_changed)
+	ground_item_world_controller.call(&"configure", ground_item_registry, identity_assignment.identities(), Callable(self, "_ground_item_detail"), camera, get_node("GroundItems") as Node3D, get_node("GroundItemTooltipLayer"))
+	ground_item_world_controller.call(&"configure_comparisons", Callable(self, "_ground_item_comparison_entries"))
+	ground_item_world_controller.call(&"configure_interaction",
+		GROUND_ITEM_SPATIAL_INDEX.new(ground_item_registry),
+		GROUND_ITEM_TARGETING_SERVICE.new(),
+		GROUND_ITEM_PICKUP_SERVICE.new(ground_item_registry, run_context_registry, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG, run_tuning.pickup_interaction_radius),
+		run_context_registry,
+		run_tuning.controller_target_query_radius,
+		Callable(),
+		Callable(self, "_gameplay_input_blocked"),
+	)
+	return errors
+
+func _on_enemy_defeated_for_personal_loot(event: EnemyDefeatEvent) -> void:
+	if personal_loot_drop_coordinator == null:
+		return
+	_record_personal_loot_report(personal_loot_drop_coordinator.resolve_defeat(event))
+
+func _record_personal_loot_report(report: Dictionary) -> void:
+	for decision: PersonalLootDecision in report.get("decisions", []) as Array:
+		if decision == null:
+			continue
+		var source := String(decision.source_category)
+		if decision.success:
+			_increment_diagnostic_bucket("successes_by_source", source)
+		elif decision.eligible:
+			_increment_diagnostic_bucket("misses_by_source", source)
+		else:
+			_ground_chest_diagnostics["ineligible_total"] = int(_ground_chest_diagnostics.get("ineligible_total", 0)) + 1
+			_increment_diagnostic_bucket("ineligible_by_reason", String(decision.reason))
+			_increment_diagnostic_bucket("ineligible_by_source", source)
+	for value: Variant in report.get("diagnostics", []) as Array:
+		var diagnostic := value as Dictionary
+		var stage := String(diagnostic.get("stage", &"configuration")) if diagnostic != null else "configuration"
+		var code := String(diagnostic.get("code", &"legacy_untyped")) if diagnostic != null else "legacy_untyped"
+		var stages := _ground_chest_diagnostics.get("diagnostics_by_stage", {}) as Dictionary
+		stages[stage] = int(stages.get(stage, 0)) + 1
+		_ground_chest_diagnostics["diagnostics_by_stage"] = stages
+		var codes := _ground_chest_diagnostics.get("diagnostics_by_code", {}) as Dictionary
+		codes[code] = int(codes.get(code, 0)) + 1
+		_ground_chest_diagnostics["diagnostics_by_code"] = codes
+		if stage == "generation":
+			_ground_chest_diagnostics["generation_failures"] = int(_ground_chest_diagnostics.get("generation_failures", 0)) + 1
+	_sync_ground_chest_diagnostics()
+
+func _increment_diagnostic_bucket(bucket_name: String, key: String) -> void:
+	var bucket := _ground_chest_diagnostics.get(bucket_name, {}) as Dictionary
+	bucket[key] = int(bucket.get(key, 0)) + 1
+	_ground_chest_diagnostics[bucket_name] = bucket
+
+func _on_ground_record_added(_record: GroundItemRecord) -> void:
+	var live := ground_item_registry.all_records().size() if ground_item_registry != null else 0
+	_ground_chest_diagnostics["live"] = live
+	_ground_chest_diagnostics["peak"] = maxi(int(_ground_chest_diagnostics.get("peak", 0)), live)
+	_sync_ground_chest_diagnostics()
+
+func _on_ground_record_removed(_record: GroundItemRecord) -> void:
+	_ground_chest_diagnostics["live"] = ground_item_registry.all_records().size() if ground_item_registry != null else 0
+	_sync_ground_chest_diagnostics()
+
+func _on_ground_registry_cleared() -> void:
+	_ground_chest_diagnostics["live"] = 0
+	_sync_ground_chest_diagnostics()
+
+func _on_ground_item_status_changed(status: String) -> void:
+	var outcome := ""
+	match status:
+		"GROUND_ITEM_PICKUP_OK": outcome = "ok"
+		"GROUND_ITEM_PICKUP_NOT_OWNER": outcome = "not_owner"
+		"GROUND_ITEM_PICKUP_MISSING": outcome = "missing"
+		"GROUND_ITEM_PICKUP_TRANSACTION_REJECTED": outcome = "transaction_rejected"
+		"GROUND_ITEM_PICKUP_INVENTORY_FULL", "Inventory full": outcome = "inventory_full"
+		"Move closer": outcome = "move_closer"
+	if outcome.is_empty():
+		return
+	var outcomes := _ground_chest_diagnostics.get("collection_outcomes", {}) as Dictionary
+	outcomes[outcome] = int(outcomes.get(outcome, 0)) + 1
+	_ground_chest_diagnostics["collection_outcomes"] = outcomes
+	_sync_ground_chest_diagnostics()
+
+func _on_ground_item_pickup_feedback(result: GroundItemPickupResult) -> void:
+	if result == null or result.message.strip_edges().is_empty() or hud == null:
+		return
+	hud.call(&"show_loot_status", result.message)
+
+func _on_ground_projection_diagnostics_changed(diagnostics: Dictionary) -> void:
+	if _ground_chest_diagnostics.is_empty():
+		return
+	var next_pending := int(diagnostics.get("pending", 0))
+	var next_last := int(diagnostics.get("last_frame_work", 0))
+	var next_peak := maxi(int(_ground_chest_diagnostics.get("projection_peak_work", 0)), int(diagnostics.get("peak_work", 0)))
+	var next_limit := int(diagnostics.get("limit", 0))
+	if (
+		next_pending == int(_ground_chest_diagnostics.get("projection_pending", 0))
+		and next_last == int(_ground_chest_diagnostics.get("projection_last_work", 0))
+		and next_peak == int(_ground_chest_diagnostics.get("projection_peak_work", 0))
+		and next_limit == int(_ground_chest_diagnostics.get("projection_limit", 0))
+	):
+		return
+	_ground_chest_diagnostics["projection_pending"] = next_pending
+	_ground_chest_diagnostics["projection_last_work"] = next_last
+	_ground_chest_diagnostics["projection_peak_work"] = next_peak
+	_ground_chest_diagnostics["projection_limit"] = next_limit
+	_sync_ground_chest_diagnostics()
+
+func _reset_ground_chest_diagnostics() -> void:
+	_ground_chest_diagnostics = {
+		"live": 0,
+		"peak": 0,
+		"successes_by_source": {},
+		"misses_by_source": {},
+		"ineligible_total": 0,
+		"ineligible_by_reason": {},
+		"ineligible_by_source": {},
+		"generation_failures": 0,
+		"diagnostics_by_stage": {},
+		"diagnostics_by_code": {},
+		"collection_outcomes": {},
+		"projection_pending": 0,
+		"projection_last_work": 0,
+		"projection_peak_work": 0,
+		"projection_limit": 0,
+	}
+	_sync_ground_chest_diagnostics()
+
+func _sync_ground_chest_diagnostics() -> void:
+	if developer_mode_badge != null:
+		developer_mode_badge.update_ground_chest_diagnostics(_ground_chest_diagnostics)
+
+func _ground_item_detail(record: GroundItemRecord) -> Dictionary:
+	if record == null or run_context_registry == null:
+		return {}
+	var context := run_context_registry.context_for(record.run_player_id)
+	var state := context.item_state() if context != null else null
+	var item_registry := state.registry() if state != null else null
+	var item := item_registry.item(record.item_id) if item_registry != null else null
+	var class_definition: ClassDefinition
+	if context != null and context.party != null and not context.party.members.is_empty():
+		class_definition = context.party.members[0].class_definition
+	return ItemPresentationProjector.project(item, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG, GameCatalog.STAT_CATALOG, class_definition)
+
+func _ground_item_comparison_entries(record: GroundItemRecord, detail: Dictionary) -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	if record == null or run_context_registry == null:
+		return result
+	var context := run_context_registry.context_for(record.run_player_id)
+	if context == null or context.party == null:
+		return result
+	var leader_id := 0
+	var leader_class: ClassDefinition
+	for member: PartyMemberState in context.party.members:
+		if member != null and member.is_leader:
+			leader_id = member.member_id
+			leader_class = member.class_definition
+			break
+	if leader_id <= 0:
+		return result
+	var staged_state := _comparison_state_with_candidate_in_inventory(context, record)
+	if staged_state == null:
+		return result
+	var current_stats := context.party.stats_for(leader_id)
+	var equipment_container := context.equipment_for(leader_id)
+	var registry := context.item_state().registry()
+	if current_stats == null or equipment_container == null or registry == null:
+		return result
+	for slot_value: Variant in detail.get("compatible_slot_ids", []):
+		var slot_id := StringName(slot_value)
+		var slot_index := EquipmentSlotIndex.index_for(slot_id)
+		if slot_index < 0:
+			continue
+		var equipped_item_id := equipment_container.item_id_at(slot_index)
+		var equipped_item := registry.item(equipped_item_id)
+		if equipped_item == null:
+			continue
+		var preview := EquipmentTransitionService.preview(
+			staged_state,
+			leader_id,
+			record.item_id,
+			slot_id,
+			context.party,
+			GameCatalog.EQUIPMENT_CATALOG,
+			GameCatalog.ITEM_FOUNDATION_CATALOG,
+		)
+		if not preview.ok():
+			continue
+		result.append({
+			"slot_id": String(slot_id),
+			"item": ItemPresentationProjector.project(equipped_item, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG, GameCatalog.STAT_CATALOG, leader_class),
+			"current_stats": current_stats,
+			"candidate_stats": preview.resolution().final_stats,
+		})
+	return result
+
+func _comparison_state_with_candidate_in_inventory(context: PlayerRunContext, record: GroundItemRecord) -> ItemOwnershipState:
+	var state := context.item_state() if context != null else null
+	var ground := state.container(ItemSlotContainer.RUN_GROUND_ITEMS_ID) if state != null else null
+	var inventory := state.container(&"run-inventory") if state != null else null
+	if ground == null or inventory == null or ground.item_id_at(record.ground_slot) != record.item_id or inventory.capacity <= 0:
+		return null
+	var destination_slot := inventory.first_empty_slot()
+	var operation := ItemTransactionRequest.MOVE_TO_EMPTY
+	if destination_slot < 0:
+		destination_slot = 0
+		operation = ItemTransactionRequest.SWAP_OCCUPIED
+	var request := ItemTransactionRequest.move(
+		"world-comparison:%s" % record.drop_id,
+		String(record.run_player_id),
+		ItemSlotContainer.RUN_GROUND_ITEMS_ID,
+		record.ground_slot,
+		record.item_id,
+		&"run-inventory",
+		destination_slot,
+	) if operation == ItemTransactionRequest.MOVE_TO_EMPTY else ItemTransactionRequest.swap(
+		"world-comparison:%s" % record.drop_id,
+		String(record.run_player_id),
+		ItemSlotContainer.RUN_GROUND_ITEMS_ID,
+		record.ground_slot,
+		record.item_id,
+		&"run-inventory",
+		destination_slot,
+	)
+	var transaction := ItemContainerTransactionService.new().apply(state, request, ItemTransactionJournal.new(), GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)
+	return transaction.next_state if transaction.ok() else null
+
+func _gameplay_input_blocked() -> bool:
+	if not run_started or game_run == null or game_run.current_state() not in [RunStateMachine.State.RUNNING, RunStateMachine.State.BOSS]:
+		return true
+	if character_ledger != null and character_ledger.is_open():
+		return true
+	if run_pause_menu != null and run_pause_menu.is_open():
+		return true
+	for path: NodePath in [
+		^"SettingsScreen",
+		^"ArmouryScreen",
+		^"WarehouseScreen",
+		^"PassiveTreeScreen",
+		^"DeveloperItemSandbox",
+		^"LoadoutWarningDialog",
+	]:
+		var modal := get_node_or_null(path)
+		if modal != null and modal.has_method(&"is_open") and bool(modal.call(&"is_open")):
+			return true
+	return false
+
+func _ground_item_modal_open() -> bool:
+	return _gameplay_input_blocked()
+
+func _clear_live_loot() -> void:
+	var defeat_callback := Callable(self, "_on_enemy_defeated_for_personal_loot")
+	if spawn_director != null and spawn_director.enemy_defeated.is_connected(defeat_callback):
+		spawn_director.enemy_defeated.disconnect(defeat_callback)
+	if ground_item_world_controller != null:
+		if ground_item_world_controller.projection_diagnostics_changed.is_connected(_on_ground_projection_diagnostics_changed):
+			ground_item_world_controller.projection_diagnostics_changed.disconnect(_on_ground_projection_diagnostics_changed)
+		if ground_item_world_controller.status_changed.is_connected(_on_ground_item_status_changed):
+			ground_item_world_controller.status_changed.disconnect(_on_ground_item_status_changed)
+		if ground_item_world_controller.pickup_feedback.is_connected(_on_ground_item_pickup_feedback):
+			ground_item_world_controller.pickup_feedback.disconnect(_on_ground_item_pickup_feedback)
+		ground_item_world_controller.call(&"clear_projection")
+	if ground_item_registry != null:
+		if ground_item_registry.record_added.is_connected(_on_ground_record_added): ground_item_registry.record_added.disconnect(_on_ground_record_added)
+		if ground_item_registry.record_removed.is_connected(_on_ground_record_removed): ground_item_registry.record_removed.disconnect(_on_ground_record_removed)
+		if ground_item_registry.cleared.is_connected(_on_ground_registry_cleared): ground_item_registry.cleared.disconnect(_on_ground_registry_cleared)
+		ground_item_registry.clear()
+	personal_loot_drop_coordinator = null
+	personal_loot_roll_service = null
+	ground_item_registry = null
+	_ground_chest_diagnostics.clear()
+	_sync_ground_chest_diagnostics()
+
+func _personal_loot_access_for(context: PlayerRunContext) -> bool:
+	if context == null or active_run_rules == null:
+		return false
+	var profile := context.profile_snapshot
+	if profile == null:
+		return false
+	var inventory := context.run_inventory()
+	if inventory == null or inventory.capacity <= 0:
+		return false
+	var policy := active_run_rules.feature_policy(
+		LEDGER_FEATURE_IDS,
+		LEDGER_UNLOCK_IDS,
+		_profile_unlock_ids(profile),
+	)
+	return policy.resolve(
+		&"equipment_inventory",
+		FeatureAccessPolicy.State.AVAILABLE,
+		&"equipment_inventory",
+	) == FeatureAccessPolicy.State.AVAILABLE
+
+func _profile_unlock_ids(profile: ProfileState) -> Array[StringName]:
+	var unlocked: Array[StringName] = []
+	if profile == null:
+		return unlocked
+	for unlock_id: String in profile.permanent_feature_unlocks:
+		unlocked.append(StringName(unlock_id))
+	return unlocked
 
 func active_profile() -> ProfileState:
 	return profile_manager.active_profile() if profile_manager != null else null
@@ -476,6 +843,7 @@ func _cache_nodes() -> void:
 	developer_mode_badge = get_node("DeveloperModeBadge") as DeveloperModeBadge
 	character_ledger = get_node("CharacterLedger") as CharacterLedger
 	run_pause_menu = get_node("RunPauseMenu") as RunPauseMenu
+	ground_item_world_controller = get_node("GroundItemWorldController") as Node
 
 func _validate_catalog(target_catalog: GameCatalog, report_errors: bool = true) -> bool:
 	var errors := target_catalog.validate()
@@ -538,7 +906,7 @@ func _wire_static_ui() -> void:
 	var result := get_node("HUD/RunResultPanel") as Control
 	if not result.is_connected("restart_requested", _restart): result.connect("restart_requested", _restart)
 	if not result.is_connected("quit_requested", _quit): result.connect("quit_requested", _quit)
-	var neutral_ledger_policy := RunRulesSnapshot.from_settings(PartyForgeSettings.new()).feature_policy(LEDGER_FEATURE_IDS)
+	var neutral_ledger_policy := RunRulesSnapshot.from_settings(PartyForgeSettings.new()).feature_policy(LEDGER_FEATURE_IDS, LEDGER_UNLOCK_IDS, _profile_unlock_ids(active_profile()))
 	character_ledger.configure(game_run, party_manager, catalog, Callable(self, "_ledger_health_for_member"), [], neutral_ledger_policy)
 	run_pause_menu.configure(game_run, Callable(character_ledger, "is_open"))
 	if not run_pause_menu.quit_run_confirmed.is_connected(_return_to_front_end):
@@ -1330,10 +1698,12 @@ func _sync_pickup_radius() -> void:
 		spawn_director.set_pickup_radius_multiplier(_pickup_multiplier())
 
 func _show_victory() -> void:
+	_clear_live_loot()
 	_cancel_hostile_effects()
 	get_node("HUD/RunResultPanel").call("show_result", true)
 
 func _show_defeat() -> void:
+	_clear_live_loot()
 	_cancel_hostile_effects()
 	get_node("HUD/RunResultPanel").call("show_result", false)
 
@@ -1345,12 +1715,17 @@ func _cancel_hostile_effects() -> void:
 			effect.queue_free()
 
 func _restart() -> void:
+	_clear_live_loot()
 	get_tree().paused = false
-	get_tree().reload_current_scene()
+	if get_tree().current_scene != null:
+		get_tree().reload_current_scene()
 
 func _return_to_front_end() -> void:
+	_clear_live_loot()
 	get_tree().paused = false
-	get_tree().reload_current_scene()
+	if get_tree().current_scene != null:
+		get_tree().reload_current_scene()
 
 func _quit() -> void:
+	_clear_live_loot()
 	get_tree().quit()

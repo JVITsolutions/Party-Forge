@@ -1,6 +1,7 @@
 extends RefCounted
 
 const INVENTORY_ID := &"run-inventory"
+const GROUND_ID := &"run-ground-items"
 
 var _parties: Array[PartyManager] = []
 
@@ -9,12 +10,17 @@ func run() -> Array[String]:
 	var probe := PlayerRunContext.new()
 	TestAssertions.truthy(probe.has_method(&"item_state"), "run context exposes defensive item state", failures)
 	TestAssertions.truthy(probe.has_method(&"run_inventory"), "run context exposes its fixed inventory projection", failures)
+	TestAssertions.truthy(probe.has_method(&"ground_items"), "run context exposes its defensive ground-item projection", failures)
+	TestAssertions.truthy(probe.has_method(&"issue_ground_item"), "run context exposes authoritative ground issuance", failures)
+	TestAssertions.truthy(probe.has_method(&"collect_ground_item"), "run context exposes authoritative ground collection", failures)
 	TestAssertions.truthy(probe.has_method(&"apply_item_transaction"), "run context exposes its production item transaction boundary", failures)
 	if not failures.is_empty():
 		return failures
 	_test_exact_inventory_capacities(failures)
 	_test_cross_context_state_and_profile_isolation(failures)
 	_test_run_issuance_sequence_and_replay(failures)
+	_test_ground_item_issue_collection_and_failures(failures)
+	_test_ground_storage_failure_preserves_sequence(failures)
 	_test_resumable_attribute_and_typed_damage_records(failures)
 	_test_invalid_inputs_and_operation_policy_are_atomic(failures)
 	_test_generic_transactions_cannot_cross_equipment_boundary(failures)
@@ -23,6 +29,112 @@ func run() -> Array[String]:
 		party.free()
 	_parties.clear()
 	return failures
+
+func _test_ground_item_issue_collection_and_failures(failures: Array[String]) -> void:
+	var context := _context(&"ground_owner", "profile-ground-owner", 1, 8101)
+	var equipment := GameCatalog.EQUIPMENT_CATALOG
+	var foundation := GameCatalog.ITEM_FOUNDATION_CATALOG
+	var ground := _ground_items(context)
+	TestAssertions.truthy(ground != null, "fresh run owns a ground container", failures)
+	if ground == null:
+		return
+	TestAssertions.equal(ground.container_id, GROUND_ID, "ground container ID is stable", failures)
+	TestAssertions.equal(ground.container_kind, &"run_ground_items", "ground container kind is stable", failures)
+	TestAssertions.equal(ground.owner_id, String(context.run_player_id), "ground container belongs to the run owner", failures)
+	TestAssertions.equal(ground.capacity, 2048, "ground container reserves 2048 outstanding slots", failures)
+	TestAssertions.equal(ground.occupied_slots(), [], "fresh run ground starts empty", failures)
+	ground.capacity = 0
+	TestAssertions.equal(_ground_items(context).capacity, 2048, "ground projection is defensive", failures)
+
+	var invalid_request := _generation_request(0)
+	invalid_request.item_level = 0
+	var failed_generation := context.call(&"issue_ground_item", invalid_request, equipment, foundation) as ItemGenerationResult
+	TestAssertions.truthy(failed_generation != null and not failed_generation.ok(), "invalid ground generation fails", failures)
+	if failed_generation != null and failed_generation.failure != null:
+		TestAssertions.equal(failed_generation.failure.stage, &"request", "generation failure preserves generator stage", failures)
+	TestAssertions.equal(_ground_items(context).occupied_slots(), [], "failed generation creates no ground reference", failures)
+
+	var request := _generation_request(0)
+	var first := context.call(&"issue_ground_item", request, equipment, foundation) as ItemGenerationResult
+	TestAssertions.truthy(first != null and first.ok(), "first ground item issues", failures)
+	if first == null or not first.ok():
+		return
+	TestAssertions.equal(first.item.origin["sequence"], 0, "failed generation consumes no run issuance sequence", failures)
+	TestAssertions.equal(_ground_items(context).item_id_at(0), first.item.instance_id, "first ground item occupies the first slot", failures)
+	_assert_valid_item_state(context, "first ground issue", failures)
+
+	var second := context.call(&"issue_ground_item", request.copy_with_sequence(2), equipment, foundation) as ItemGenerationResult
+	TestAssertions.truthy(second != null and second.ok(), "second outstanding ground item issues", failures)
+	if second == null or not second.ok():
+		return
+	TestAssertions.equal(second.item.origin["sequence"], 1, "successful storage consumes exactly one run issuance sequence", failures)
+	TestAssertions.truthy(first.item.instance_id != second.item.instance_id, "outstanding drops reserve unique IDs", failures)
+	TestAssertions.equal(_ground_items(context).item_id_at(1), second.item.instance_id, "second outstanding item uses the next ground slot", failures)
+	_assert_valid_item_state(context, "second ground issue", failures)
+
+	var wrong_owner_request := ItemTransactionRequest.move(
+		"pickup-wrong-owner",
+		"another-run-owner",
+		GROUND_ID,
+		1,
+		second.item.instance_id,
+		INVENTORY_ID,
+		0
+	)
+	_assert_failure_is_atomic(context, wrong_owner_request, equipment, foundation, ItemTransactionResult.Code.UNKNOWN_OWNER, "wrong-owner ground pickup", failures)
+	var before_unknown := _ownership_bytes(context)
+	var unknown := context.call(&"collect_ground_item", "unknown-ground-item", "pickup-unknown", equipment, foundation) as ItemTransactionResult
+	TestAssertions.equal(unknown.code, ItemTransactionResult.Code.SOURCE_MISMATCH, "unknown ground item fails deterministically", failures)
+	TestAssertions.equal(_ownership_bytes(context), before_unknown, "unknown ground item preserves ownership", failures)
+
+	var collected := context.call(&"collect_ground_item", first.item.instance_id, "pickup-001", equipment, foundation) as ItemTransactionResult
+	TestAssertions.truthy(collected.ok(), "ground item moves into inventory", failures)
+	TestAssertions.equal(_ground_items(context).item_id_at(0), "", "ground slot clears", failures)
+	TestAssertions.equal(_run_inventory(context).item_id_at(0), first.item.instance_id, "first empty inventory slot receives the authoritative item", failures)
+	TestAssertions.equal(_item_state(context).registry().size(), 2, "pickup moves rather than copies the item record", failures)
+	_assert_valid_item_state(context, "ground collection", failures)
+	var collected_bytes := _ownership_bytes(context)
+	var replay := context.call(&"collect_ground_item", first.item.instance_id, "pickup-001", equipment, foundation) as ItemTransactionResult
+	TestAssertions.equal(replay.code, ItemTransactionResult.Code.TRANSACTION_REPLAY, "exact pickup replay is idempotent", failures)
+	TestAssertions.truthy(replay.duplicate, "exact pickup replay is marked duplicate", failures)
+	TestAssertions.equal(_ownership_bytes(context), collected_bytes, "pickup replay preserves current ownership", failures)
+	var collision := context.call(&"collect_ground_item", second.item.instance_id, "pickup-001", equipment, foundation) as ItemTransactionResult
+	TestAssertions.equal(collision.code, ItemTransactionResult.Code.TRANSACTION_COLLISION, "pickup transaction ID collision is rejected", failures)
+	TestAssertions.equal(_ownership_bytes(context), collected_bytes, "pickup collision preserves ownership", failures)
+
+	var full_inventory := _context(&"full_inventory_owner", "profile-full-inventory", 0, 8102)
+	var grounded := full_inventory.call(&"issue_ground_item", _generation_request(0), equipment, foundation) as ItemGenerationResult
+	TestAssertions.truthy(grounded != null and grounded.ok(), "zero-capacity inventory can still own a ground item", failures)
+	if grounded != null and grounded.ok():
+		var full_before := _ownership_bytes(full_inventory)
+		var rejected := full_inventory.call(&"collect_ground_item", grounded.item.instance_id, "pickup-full", equipment, foundation) as ItemTransactionResult
+		TestAssertions.equal(rejected.code, ItemTransactionResult.Code.DESTINATION_OCCUPIED, "full inventory rejects pickup", failures)
+		TestAssertions.equal(_ownership_bytes(full_inventory), full_before, "full inventory preserves the ground item exactly", failures)
+		TestAssertions.equal(_ground_items(full_inventory).item_id_at(0), grounded.item.instance_id, "full inventory leaves authoritative ground placement", failures)
+		_assert_valid_item_state(full_inventory, "full inventory rejection", failures)
+
+func _test_ground_storage_failure_preserves_sequence(failures: Array[String]) -> void:
+	var fixture := _full_ground_context(&"full_ground_owner", "profile-full-ground", 8201, failures)
+	var context := fixture.get("context") as PlayerRunContext
+	if context == null:
+		return
+	var equipment := GameCatalog.EQUIPMENT_CATALOG
+	var foundation := GameCatalog.ITEM_FOUNDATION_CATALOG
+	var before := _ownership_bytes(context)
+	var failed := context.call(&"issue_ground_item", _generation_request(0), equipment, foundation) as ItemGenerationResult
+	TestAssertions.truthy(failed != null and not failed.ok(), "full ground storage rejects issuance", failures)
+	if failed != null and failed.failure != null:
+		TestAssertions.equal(failed.failure.stage, &"ground_storage", "storage failure exposes ground_storage stage", failures)
+	TestAssertions.equal(_ownership_bytes(context), before, "failed ground storage preserves ownership", failures)
+	var displaced_id := _ground_items(context).item_id_at(0)
+	var collected := context.call(&"collect_ground_item", displaced_id, "make-ground-space", equipment, foundation) as ItemTransactionResult
+	TestAssertions.truthy(collected.ok(), "fixture can free one ground slot", failures)
+	var retry := context.call(&"issue_ground_item", _generation_request(0), equipment, foundation) as ItemGenerationResult
+	TestAssertions.truthy(retry != null and retry.ok(), "ground issuance retries after storage space opens", failures)
+	if retry != null and retry.ok():
+		TestAssertions.equal(retry.item.origin["sequence"], 2048, "failed storage consumes no run issuance sequence", failures)
+		TestAssertions.equal(_ground_items(context).item_id_at(0), retry.item.instance_id, "retry resolves the first ground slot at call time", failures)
+	_assert_valid_item_state(context, "ground storage retry", failures)
 
 func _test_recruit_adds_equipment_without_resetting_item_state(failures: Array[String]) -> void:
 	var catalog := GameCatalog.load_defaults()
@@ -60,7 +172,7 @@ func _test_recruit_adds_equipment_without_resetting_item_state(failures: Array[S
 		var second_create := ItemTransactionRequest.create("recruit-after-create", String(context.run_player_id), INVENTORY_ID, 1, second_item)
 		TestAssertions.equal(_apply(context, second_create, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG).code, ItemTransactionResult.Code.OK, "recruit preserves next issuance sequence", failures)
 	party.member_added.emit(party.member_by_id(3))
-	TestAssertions.equal(_item_state(context).containers().size(), 4, "repeated member-added signal creates no duplicate container", failures)
+	TestAssertions.equal(_item_state(context).containers().size(), 5, "repeated member-added signal creates no duplicate container", failures)
 
 func _test_exact_inventory_capacities(failures: Array[String]) -> void:
 	for test_case: Dictionary in [
@@ -481,6 +593,54 @@ func _profile(profile_id: String, columns: int, persistent_sequence: int) -> Pro
 	profile.next_item_sequence = persistent_sequence
 	return profile
 
+func _generation_request(sequence: int) -> ItemGenerationRequest:
+	var request := ItemGenerationRequest.create(778899, sequence, 28, &"ordinary_enemy", &"ordinary_drop", [&"common"] as Array[StringName])
+	request.forced_base_id = &"forge_vanguard_sword"
+	request.forced_rarity_id = &"common"
+	return request
+
+func _full_ground_context(run_player_id: StringName, profile_id: String, seed: int, failures: Array[String]) -> Dictionary:
+	var catalog := GameCatalog.load_defaults()
+	var party := PartyManager.new()
+	party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
+	_parties.append(party)
+	var items: Array[ItemInstance] = []
+	var slots: Dictionary = {}
+	var issuer_namespace := "run:%s:%s:%s" % [profile_id, seed, run_player_id]
+	for sequence: int in 2048:
+		var issued := ItemInstanceIssuer.issue(
+			issuer_namespace,
+			sequence,
+			"full_ground_fixture",
+			seed + sequence,
+			{
+				"affixes": [],
+				"base_definition_id": "forge_vanguard_sword",
+				"base_damage_components": [],
+				"item_level": 28,
+				"rarity_id": "common",
+			},
+			GameCatalog.EQUIPMENT_CATALOG,
+			GameCatalog.ITEM_FOUNDATION_CATALOG
+		)
+		if not issued.ok():
+			failures.append("full ground fixture issuance %d failed: %s" % [sequence, issued.error])
+			return {}
+		items.append(issued.item)
+		slots[sequence] = issued.item.instance_id
+	var state := ItemOwnershipState.create(String(run_player_id), ItemRegistry.new(items), [
+		ItemSlotContainer.create(INVENTORY_ID, ItemSlotContainer.RUN_INVENTORY, String(run_player_id), 5),
+		ItemSlotContainer.create(&"run-equipment-001", ItemSlotContainer.RUN_MEMBER_EQUIPMENT, String(run_player_id), EquipmentSlotIndex.capacity()),
+		ItemSlotContainer.create(GROUND_ID, &"run_ground_items", String(run_player_id), 2048, slots),
+	])
+	var bootstrap := RunItemBootstrap.create(&"full-ground-run", seed, run_player_id, 1, state)
+	var profile := _profile(profile_id, 1, 0)
+	profile.resumable_run = ResumableRunItemCodec.encode(bootstrap)
+	var context := PlayerRunContext.new()
+	var errors := context.configure(run_player_id, _parties.size() - 1, profile, seed, party, 100, bootstrap)
+	TestAssertions.equal(errors, PackedStringArray(), "full ground context configures", failures)
+	return {"context": context if errors.is_empty() else null}
+
 func _issued_item(context: PlayerRunContext, sequence: int, source: String, failures: Array[String]) -> ItemInstance:
 	var issuer_namespace := "run:%s:%s:%s" % [context.profile_id, context.run_seed, context.run_player_id]
 	var issued := ItemInstanceIssuer.issue(
@@ -531,6 +691,17 @@ func _item_state(context: PlayerRunContext) -> ItemOwnershipState:
 
 func _run_inventory(context: PlayerRunContext) -> ItemSlotContainer:
 	return context.call(&"run_inventory") as ItemSlotContainer
+
+func _ground_items(context: PlayerRunContext) -> ItemSlotContainer:
+	return context.call(&"ground_items") as ItemSlotContainer
+
+func _assert_valid_item_state(context: PlayerRunContext, label: String, failures: Array[String]) -> void:
+	TestAssertions.equal(
+		_item_state(context).validate(GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG),
+		"",
+		"%s leaves strict item ownership valid" % label,
+		failures
+	)
 
 func _ownership_bytes(context: PlayerRunContext) -> String:
 	return JSON.stringify(_item_state(context).to_dictionary())

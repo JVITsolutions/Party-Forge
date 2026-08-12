@@ -34,5 +34,40 @@ static func create(
 	result._item_state = item_state_value.copy() if item_state_value != null else null
 	return result
 
+static func ground_items_container(owner_id: String) -> ItemSlotContainer:
+	return ItemSlotContainer.create(
+		ItemSlotContainer.RUN_GROUND_ITEMS_ID,
+		ItemSlotContainer.RUN_GROUND_ITEMS,
+		owner_id,
+		ItemSlotContainer.RUN_GROUND_ITEMS_CAPACITY,
+	)
+
+static func with_ground_container(state: ItemOwnershipState) -> ItemOwnershipState:
+	if state == null:
+		return null
+	if state.container(ItemSlotContainer.RUN_GROUND_ITEMS_ID) != null:
+		return state.copy()
+	var containers := state.containers()
+	containers.append(ground_items_container(state.owner_id))
+	return ItemOwnershipState.create(state.owner_id, state.registry(), containers)
+
+static func with_run_inventory_capacity(state: ItemOwnershipState, capacity: int) -> ItemOwnershipState:
+	return with_run_inventory_minimum_capacity(state, capacity)
+
+static func with_run_inventory_minimum_capacity(state: ItemOwnershipState, minimum_capacity: int) -> ItemOwnershipState:
+	if state == null or minimum_capacity < 0:
+		return null
+	var inventory := state.container(&"run-inventory")
+	if inventory == null:
+		return null
+	var resolved_capacity := maxi(inventory.capacity, minimum_capacity)
+	var containers: Array[ItemSlotContainer] = []
+	for container: ItemSlotContainer in state.containers():
+		if container.container_id == &"run-inventory":
+			containers.append(ItemSlotContainer.create(container.container_id, container.container_kind, container.owner_id, resolved_capacity, container.to_dictionary().get("slots", {}) as Dictionary))
+		else:
+			containers.append(container)
+	return ItemOwnershipState.create(state.owner_id, state.registry(), containers)
+
 func item_state() -> ItemOwnershipState:
 	return _item_state.copy() if _item_state != null else null

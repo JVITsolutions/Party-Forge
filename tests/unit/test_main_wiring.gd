@@ -71,6 +71,11 @@ func run() -> Array[String]:
     _test_main_scene_graph(failures)
     _test_profile_boot_and_developer_gate(failures)
     _test_active_run_context_graph_and_failure_cleanup(failures)
+    _test_personal_loot_defeat_and_guardian_wiring(failures)
+    _test_invalid_personal_loot_tuning_aborts_main_start(failures)
+    _test_live_loot_owner_leader_comparison_graph(failures)
+    _test_gameplay_input_blocked_predicate(failures)
+    _test_typed_live_loot_diagnostic_accounting(failures)
     _test_main_menu_route_composition(failures)
     _test_storage_route_policy_and_shared_projection_wiring(failures)
     _test_loadout_warning_preflight_and_transition_wiring(failures)
@@ -338,6 +343,237 @@ func _test_active_run_context_graph_and_failure_cleanup(failures: Array[String])
     TestAssertions.truthy(not failure_party.member_added.is_connected(member_callback), "context abort disconnects partial party ownership", failures)
     failure_main.free()
     ProfileTestSupport.remove_tree(failure_root)
+
+func _test_personal_loot_defeat_and_guardian_wiring(failures: Array[String]) -> void:
+    var defeat_runner_source := FileAccess.get_file_as_string("res://tests/integration/personal_loot_defeat_runner.gd")
+    TestAssertions.truthy(not '.call("_ready")' in defeat_runner_source, "personal-loot defeat integration uses natural SceneTree readiness", failures)
+    var player_main := (load("res://scenes/game/main.tscn") as PackedScene).instantiate()
+    _prepare_main(player_main)
+    var player_profile := player_main.active_profile() as ProfileState
+    player_profile.permanent_feature_unlocks = ["equipment_inventory"]
+    TestAssertions.equal(ProfileStore.new().save_profile(player_profile, String(player_main.get("profile_root"))), "", "zero-column feature fixture persists equipment access only", failures)
+    TestAssertions.equal(player_main.profile_manager.refresh_profile(player_profile.profile_id), "", "zero-column feature fixture refreshes the authoritative profile", failures)
+    TestAssertions.truthy(player_main.call("select_leader_class", &"fighter"), "zero-column feature fixture starts through Main", failures)
+    var player_director := player_main.get_node("SpawnDirector") as SpawnDirector
+    var player_roll := player_main.get("personal_loot_roll_service") as PersonalLootRollService
+    var player_coordinator := player_main.get("personal_loot_drop_coordinator") as PersonalLootDropCoordinator
+    var player_registry := player_main.get("ground_item_registry") as GroundItemRegistry
+    TestAssertions.truthy(player_roll != null and player_coordinator != null and player_registry != null, "Player Mode run owns the personal-loot service graph", failures)
+    TestAssertions.truthy(
+        player_director.has_signal("enemy_defeated") and player_coordinator != null and player_director.is_connected("enemy_defeated", Callable(player_main, "_on_enemy_defeated_for_personal_loot")),
+        "main wires director defeats through the diagnostic-aware coordinator boundary",
+        failures,
+    )
+    if player_roll != null and player_coordinator != null and player_registry != null:
+        player_roll.loot_tuning.drop_basis_points[&"ordinary_melee"] = 10000
+        player_director.call("_on_enemy_defeated", load("res://data/enemies/swarmer.tres") as EnemyDefinition, player_main.leader.position, 1)
+        TestAssertions.equal(player_main.active_run_context.run_inventory().capacity, 0, "zero-column Player Mode run has no inventory capacity", failures)
+        TestAssertions.equal(player_registry.all_records().size(), 0, "feature-unlocked zero-column Player Mode context fails closed with no uncollectable drop", failures)
+    _cleanup_main(player_main)
+
+    var developer_settings := PartyForgeSettings.new()
+    developer_settings.mode = PartyForgeSettings.Mode.DEVELOPER_MODE
+    developer_settings.unlock_all_implemented_content = true
+    var developer_main := _started_main_with_settings(developer_settings)
+    var developer_director := developer_main.get_node("SpawnDirector") as SpawnDirector
+    var developer_roll := developer_main.get("personal_loot_roll_service") as PersonalLootRollService
+    var developer_coordinator := developer_main.get("personal_loot_drop_coordinator") as PersonalLootDropCoordinator
+    var developer_registry := developer_main.get("ground_item_registry") as GroundItemRegistry
+    TestAssertions.truthy(developer_roll != null and developer_coordinator != null and developer_registry != null, "Developer run owns the personal-loot service graph", failures)
+    if developer_roll == null or developer_coordinator == null or developer_registry == null:
+        _cleanup_main(developer_main)
+        return
+    TestAssertions.equal(developer_main.active_run_context.run_inventory().capacity, 5, "Developer Unlock All receives one explicit run-only inventory column", failures)
+    TestAssertions.equal(developer_main.active_profile().inventory_columns, 0, "Developer run-only inventory does not mutate the profile column count", failures)
+    developer_roll.loot_tuning.drop_basis_points[&"ordinary_melee"] = 10000
+    developer_director.call("_on_enemy_defeated", load("res://data/enemies/swarmer.tres") as EnemyDefinition, developer_main.leader.position, 1)
+    TestAssertions.equal(developer_registry.all_records().size(), 1, "Developer Unlock All grants the independently evaluated personal drop", failures)
+    var developer_world := developer_main.get("ground_item_world_controller") as Node
+    TestAssertions.truthy(developer_world.pickup_feedback.is_connected(Callable(developer_main, "_on_ground_item_pickup_feedback")), "Main routes typed pickup feedback to the HUD", failures)
+    var developer_record := developer_registry.all_records()[0] if developer_registry.all_records().size() == 1 else null
+    var developer_detail := developer_main.call("_ground_item_detail", developer_record) as Dictionary if developer_record != null else {}
+    if developer_record != null:
+        developer_world.call("_on_chest_pickup_requested", developer_record.drop_id, developer_record.run_player_id)
+    var loot_status := developer_main.get_node("HUD/LootStatus") as Label
+    TestAssertions.truthy(loot_status.visible and loot_status.text.contains(String(developer_detail.get("name", ""))) and loot_status.text.contains(String(developer_detail.get("rarity_name", ""))), "successful pickup HUD feedback names the item and rarity", failures)
+    TestAssertions.equal(developer_registry.all_records().size(), 0, "successful HUD pickup removes the collected chest", failures)
+
+    var boss_event := EnemyDefeatEvent.create(1337, 2, 2, &"forge_guardian", &"boss", developer_main.leader.position, 300.0)
+    developer_coordinator.resolve_defeat(boss_event)
+    TestAssertions.equal(developer_registry.all_records().size(), 0, "zero boss basis points create no ground chest", failures)
+
+    var game_run := developer_main.get_node("GameRun") as GameRun
+    var victories: Array[int] = [0]
+    game_run.victory.connect(func() -> void: victories[0] += 1)
+    game_run.advance_run_time(300.0)
+    var guardian := developer_main.get("boss") as ForgeGuardian
+    TestAssertions.truthy(guardian != null, "boss phase still spawns the Forge Guardian", failures)
+    if guardian != null:
+        guardian.defeat()
+        guardian.defeat()
+    TestAssertions.equal(victories[0], 1, "Forge Guardian preserves the existing exactly-once victory behavior", failures)
+    TestAssertions.equal(developer_registry.all_records().size(), 0, "Guardian victory adds no boss reward and keeps run-owned ground loot cleared", failures)
+    _cleanup_main(developer_main)
+
+    var expanded_developer_main := (load("res://scenes/game/main.tscn") as PackedScene).instantiate()
+    _prepare_main(expanded_developer_main)
+    var expanded_profile := expanded_developer_main.active_profile() as ProfileState
+    expanded_profile.inventory_columns = 3
+    TestAssertions.equal(ProfileStore.new().save_profile(expanded_profile, String(expanded_developer_main.get("profile_root"))), "", "expanded Developer fixture persists three profile inventory columns", failures)
+    TestAssertions.equal(expanded_developer_main.profile_manager.refresh_profile(expanded_profile.profile_id), "", "expanded Developer fixture refreshes the authoritative profile", failures)
+    expanded_developer_main.saved_settings = developer_settings.copy()
+    TestAssertions.truthy(expanded_developer_main.select_leader_class(&"fighter"), "expanded Developer profile starts through Main", failures)
+    TestAssertions.equal(expanded_developer_main.active_run_context.run_inventory().capacity, 15, "Developer five-slot grant is a minimum and never shrinks a larger profile inventory", failures)
+    TestAssertions.equal(expanded_developer_main.active_profile().inventory_columns, 3, "Developer minimum capacity does not mutate a larger profile column count", failures)
+    _cleanup_main(expanded_developer_main)
+
+func _test_invalid_personal_loot_tuning_aborts_main_start(failures: Array[String]) -> void:
+    var isolated_root := "user://tests/main_wiring-invalid-loot_%d_%d" % [OS.get_process_id(), Time.get_ticks_usec()]
+    ProfileTestSupport.remove_tree(isolated_root)
+    var main := (load("res://scenes/game/main.tscn") as PackedScene).instantiate()
+    main.set("profile_root", isolated_root)
+    main.set("settings_path", _settings_path)
+    main.call("_ready")
+    var created := main.profile_manager.create_profile("Invalid Loot Tuning") as ProfileOperationResult
+    TestAssertions.truthy(created.ok(), "invalid tuning fixture creates an isolated active profile", failures)
+    (main.get_node("SettingsScreen") as SettingsScreen).close()
+    var invalid := PersonalLootTuning.new()
+    invalid.seconds_per_item_level = 0.0
+    main.set("personal_loot_tuning_source", invalid)
+    TestAssertions.truthy(not main.call("select_leader_class", &"fighter"), "Main aborts run start when personal-loot tuning is invalid", failures)
+    TestAssertions.truthy(not main.run_started and main.personal_loot_drop_coordinator == null and main.ground_item_registry == null, "invalid tuning leaves no active loot coordinator, registry, or run", failures)
+    _cleanup_main(main)
+    ProfileTestSupport.remove_tree(isolated_root)
+
+func _test_live_loot_owner_leader_comparison_graph(failures: Array[String]) -> void:
+    var settings := PartyForgeSettings.new()
+    settings.mode = PartyForgeSettings.Mode.DEVELOPER_MODE
+    settings.unlock_all_implemented_content = true
+    var main := (load("res://scenes/game/main.tscn") as PackedScene).instantiate()
+    _prepare_main(main)
+    var profile := (main.get("profile_manager") as ProfileManager).active_profile()
+    profile.inventory_columns = 1
+    TestAssertions.equal(ProfileStore.new().save_profile(profile, String(main.get("profile_root"))), "", "comparison fixture persists one production inventory column", failures)
+    TestAssertions.equal((main.get("profile_manager") as ProfileManager).refresh_profile(profile.profile_id), "", "comparison fixture refreshes the authoritative profile", failures)
+    main.set("saved_settings", settings.copy())
+    TestAssertions.truthy(main.call("select_leader_class", &"fighter"), "comparison fixture starts through Main's production run path", failures)
+    var context := main.get("active_run_context") as PlayerRunContext
+    var registry := main.get("ground_item_registry") as GroundItemRegistry
+    var world := main.get("ground_item_world_controller") as Node
+    TestAssertions.truthy(context != null and registry != null and world != null, "Main owns the complete live-loot comparison graph", failures)
+    if context == null or registry == null or world == null:
+        _cleanup_main(main)
+        return
+    var equipped_request := ItemGenerationRequest.create(82001, 0, 20, &"ordinary_enemy", &"ordinary_drop", [&"common"])
+    equipped_request.forced_base_id = &"windrunner_band"
+    equipped_request.forced_rarity_id = &"common"
+    var equipped_generation := context.issue_ground_item(equipped_request, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)
+    var equipped := equipped_generation.item if equipped_generation != null and equipped_generation.ok() else null
+    TestAssertions.truthy(equipped != null, "comparison fixture generates the equipped item through the production issuer", failures)
+    if equipped == null:
+        _cleanup_main(main)
+        return
+    TestAssertions.truthy(context.collect_ground_item(equipped.instance_id, "main-live-collect-equipped", GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG).ok(), "comparison fixture collects the equipped item through the owner transaction boundary", failures)
+    TestAssertions.truthy(context.assign_equipment(1, equipped.instance_id, &"ring_left", GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG).ok(), "comparison fixture equips the leader through the production assignment service", failures)
+    var candidate_request := ItemGenerationRequest.create(82002, 1, 20, &"ordinary_enemy", &"ordinary_drop", [&"common"])
+    candidate_request.forced_base_id = &"windrunner_band"
+    candidate_request.forced_rarity_id = &"common"
+    var candidate_generation := context.issue_ground_item(candidate_request, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)
+    var candidate := candidate_generation.item if candidate_generation != null and candidate_generation.ok() else null
+    TestAssertions.truthy(candidate != null, "comparison fixture creates the candidate in the owner ground container", failures)
+    if candidate == null:
+        _cleanup_main(main)
+        return
+    var record := GroundItemRecord.new()
+    record.drop_id = &"main-live-comparison"
+    record.item_id = candidate.instance_id
+    record.run_player_id = context.run_player_id
+    record.profile_id = context.profile_id
+    record.player_number = 1
+    record.color_id = &"red"
+    record.world_position = main.leader.position + Vector3(1.0, 0.0, 0.0)
+    record.rarity_id = candidate.rarity_id
+    record.source_id = &"ordinary_enemy"
+    record.ground_slot = 0
+    TestAssertions.truthy(registry.add(record), "comparison fixture registers the canonical owner ground record", failures)
+    var details := world.get("_detail_by_drop") as Dictionary
+    TestAssertions.truthy(details.has(record.drop_id) and not (details[record.drop_id] as Dictionary).has("owner_leader_equipment"), "Main item detail has no synthetic test-only equipment field", failures)
+    var chest := (world.get("_chest_by_drop") as Dictionary).get(record.drop_id) as Node3D
+    TestAssertions.truthy(chest != null, "Main projects the owner candidate through its real world controller", failures)
+    if chest != null:
+        (chest.call(&"tooltip_anchor") as Control).mouse_entered.emit()
+        var tooltip := main.get_node("GroundItemTooltipLayer/ItemTooltipPanel") as ItemTooltipPanel
+        tooltip.set_compare_active(true)
+        TestAssertions.equal(tooltip.card_count(), 2, "Main Alt/LT comparison presents one inspected and one applicable equipped card", failures)
+        if tooltip.card_count() >= 2:
+            TestAssertions.equal(String(tooltip.get_node("Layout/BodyScroll/Cards").get_child(1).call(&"displayed_instance_id")), equipped.instance_id, "Main comparison card uses the owner leader's current applicable item", failures)
+    _cleanup_main(main)
+
+func _test_gameplay_input_blocked_predicate(failures: Array[String]) -> void:
+    var main := _started_main()
+    TestAssertions.truthy(main.has_method(&"_gameplay_input_blocked"), "Main exposes one central production gameplay-input blocker", failures)
+    if not main.has_method(&"_gameplay_input_blocked"):
+        _cleanup_main(main)
+        return
+    TestAssertions.truthy(not bool(main.call(&"_gameplay_input_blocked")), "running gameplay accepts world interaction", failures)
+    var ledger := main.get_node("CharacterLedger") as CharacterLedger
+    TestAssertions.truthy(ledger.open_for_player() and bool(main.call(&"_gameplay_input_blocked")), "actual open ledger blocks gameplay input", failures)
+    ledger.close()
+    var pause := main.get_node("RunPauseMenu") as RunPauseMenu
+    TestAssertions.truthy(pause.open() and bool(main.call(&"_gameplay_input_blocked")), "actual pause menu blocks gameplay input", failures)
+    pause.close()
+    var settings := main.get_node("SettingsScreen") as SettingsScreen
+    settings.open()
+    TestAssertions.truthy(bool(main.call(&"_gameplay_input_blocked")), "actual settings screen blocks gameplay input", failures)
+    settings.close()
+    var run := main.get_node("GameRun") as GameRun
+    run.begin_level_up()
+    TestAssertions.truthy(bool(main.call(&"_gameplay_input_blocked")), "actual upgrade-selection run state blocks gameplay input", failures)
+    run.resume_run()
+    TestAssertions.truthy(not bool(main.call(&"_gameplay_input_blocked")), "resumed running state restores world interaction", failures)
+    _cleanup_main(main)
+
+func _test_typed_live_loot_diagnostic_accounting(failures: Array[String]) -> void:
+    var settings := PartyForgeSettings.new()
+    settings.mode = PartyForgeSettings.Mode.DEVELOPER_MODE
+    settings.unlock_all_implemented_content = true
+    settings.show_ground_chest_diagnostics = true
+    var main := _started_main_with_settings(settings)
+    main.call(&"_record_personal_loot_report", {
+        "decisions": [
+            _loot_decision(true, true, &"roll_succeeded", &"ordinary_melee"),
+            _loot_decision(true, false, &"roll_failed", &"ordinary_specialist"),
+            _loot_decision(false, false, &"feature_locked", &"ordinary_melee"),
+            _loot_decision(false, false, &"leader_out_of_range", &"ordinary_specialist"),
+            _loot_decision(false, false, &"leader_unavailable", &"elite"),
+        ],
+        "diagnostics": [
+            {"stage": &"generation", "code": &"no_candidate"},
+            {"stage": &"storage", "code": &"ground_full"},
+            {"stage": &"ownership", "code": &"context_missing"},
+            {"stage": &"configuration", "code": &"invalid_event"},
+        ],
+    })
+    var diagnostics := main.get("_ground_chest_diagnostics") as Dictionary
+    TestAssertions.equal(int(diagnostics.get("generation_failures", -1)), 1, "generation failure count excludes storage, ownership, and configuration diagnostics", failures)
+    TestAssertions.equal(diagnostics.get("diagnostics_by_stage", {}), {"configuration": 1, "generation": 1, "ownership": 1, "storage": 1}, "typed diagnostics retain separate stable stage categories", failures)
+    TestAssertions.equal(diagnostics.get("diagnostics_by_code", {}), {"context_missing": 1, "ground_full": 1, "invalid_event": 1, "no_candidate": 1}, "typed diagnostics retain separate stable codes", failures)
+    TestAssertions.equal(diagnostics.get("successes_by_source", {}), {"ordinary_melee": 1}, "successful eligible rolls retain their source category", failures)
+    TestAssertions.equal(diagnostics.get("misses_by_source", {}), {"ordinary_specialist": 1}, "ROLL MISS counts only eligible failed rolls", failures)
+    TestAssertions.equal(int(diagnostics.get("ineligible_total", -1)), 3, "ineligible decisions are counted separately from misses", failures)
+    TestAssertions.equal(diagnostics.get("ineligible_by_reason", {}), {"feature_locked": 1, "leader_out_of_range": 1, "leader_unavailable": 1}, "ineligible decisions retain stable reasons", failures)
+    TestAssertions.equal(diagnostics.get("ineligible_by_source", {}), {"elite": 1, "ordinary_melee": 1, "ordinary_specialist": 1}, "ineligible decisions retain source categories", failures)
+    TestAssertions.truthy(int(diagnostics.get("projection_limit", 0)) > 0 and diagnostics.has("projection_pending") and diagnostics.has("projection_last_work") and diagnostics.has("projection_peak_work"), "Main consumes production runtime projection diagnostics", failures)
+    TestAssertions.truthy((main.get_node("DeveloperModeBadge") as DeveloperModeBadge).diagnostics_text().contains("PROJECTION pending="), "Developer badge presents Main-consumed runtime projection diagnostics", failures)
+    _cleanup_main(main)
+
+func _loot_decision(eligible: bool, success: bool, reason: StringName, source: StringName) -> PersonalLootDecision:
+    var decision := PersonalLootDecision.new()
+    decision.eligible = eligible
+    decision.success = success
+    decision.reason = reason
+    decision.source_category = source
+    return decision
 
 func _test_main_menu_route_composition(failures: Array[String]) -> void:
     var root := "user://tests/main-wiring-menu-routes_%d_%d" % [OS.get_process_id(), Time.get_ticks_usec()]
@@ -634,6 +870,7 @@ func _test_hud_contract(failures: Array[String]) -> void:
         "Margin/Status/PartyEntries/Party1", "Margin/Status/PartyEntries/Party2",
         "Margin/Status/PartyEntries/Party3", "Margin/Status/PartyEntries/Party4",
         "Margin/Status/ActiveTraits", "Margin/Status/BossHealth", "BossBanner",
+        "LootStatus",
         "LevelUpPanel", "RunResultPanel", "ClassSelection",
     ]:
         TestAssertions.truthy(hud.get_node_or_null(path) != null, "HUD exposes %s" % path, failures)

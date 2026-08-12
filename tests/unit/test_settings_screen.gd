@@ -224,6 +224,11 @@ func _test_additional_settings_page(failures: Array[String]) -> void:
 	var enemy_density := page.get_node("Layout/EnemyDensity/Value") as HSlider
 	var experience_multiplier := page.get_node("Layout/ExperienceMultiplier/Value") as HSlider
 	var level_up_card_count := page.get_node("Layout/LevelUpCardCount/Value") as HSlider
+	var personal_drop_multiplier := page.get_node_or_null("Layout/PersonalDropMultiplier/Value") as HSlider
+	var force_personal_drops := page.get_node_or_null("Layout/ForcePersonalDrops") as CheckButton
+	var personal_drop_source := page.get_node_or_null("Layout/PersonalDropSourceCategory") as OptionButton
+	var personal_drop_item_level := page.get_node_or_null("Layout/PersonalDropItemLevel/Value") as HSlider
+	var ground_chest_diagnostics := page.get_node_or_null("Layout/ShowGroundChestDiagnostics") as CheckButton
 	var open_city_tree := page.get_node_or_null("Layout/OpenCityPassiveTree") as Button
 	var open_item_sandbox := page.get_node_or_null("Layout/OpenDeveloperItemSandbox") as Button
 	var inactive_status := page.get_node_or_null("Layout/InactiveStatus") as Label
@@ -241,6 +246,11 @@ func _test_additional_settings_page(failures: Array[String]) -> void:
 	TestAssertions.equal(Vector3(enemy_density.min_value, enemy_density.max_value, enemy_density.step), Vector3(0.0, 1000.0, 10.0), "enemy density uses approved range and step", failures)
 	TestAssertions.equal(Vector3(experience_multiplier.min_value, experience_multiplier.max_value, experience_multiplier.step), Vector3(100.0, 1000.0, 10.0), "experience multiplier uses approved range and step", failures)
 	TestAssertions.equal(Vector3(level_up_card_count.min_value, level_up_card_count.max_value, level_up_card_count.step), Vector3(1.0, 8.0, 1.0), "level-up card count uses approved range and step", failures)
+	TestAssertions.truthy(personal_drop_multiplier != null and force_personal_drops != null and personal_drop_source != null and personal_drop_item_level != null and ground_chest_diagnostics != null, "Additional Settings exposes all five personal-loot developer controls", failures)
+	if personal_drop_multiplier != null:
+		TestAssertions.equal(Vector3(personal_drop_multiplier.min_value, personal_drop_multiplier.max_value, personal_drop_multiplier.step), Vector3(0.0, 10000.0, 1.0), "personal-drop multiplier uses the exact bounded range", failures)
+	if personal_drop_item_level != null:
+		TestAssertions.equal(Vector3(personal_drop_item_level.min_value, personal_drop_item_level.max_value, personal_drop_item_level.step), Vector3(0.0, 1000.0, 1.0), "personal-drop item level uses zero as automatic and caps at 1000", failures)
 
 	var saved := PartyForgeSettings.new()
 	saved.mode = PartyForgeSettings.Mode.PLAYER_SIMULATION
@@ -250,9 +260,16 @@ func _test_additional_settings_page(failures: Array[String]) -> void:
 	saved.enemy_density_percent = 650
 	saved.experience_multiplier_percent = 500
 	saved.level_up_card_count = 7
+	saved.set("personal_drop_multiplier_percent", 375)
+	saved.set("force_personal_drops", true)
+	saved.set("personal_drop_source_category_override", &"ordinary_specialist")
+	saved.set("personal_drop_item_level_override", 777)
+	saved.set("show_ground_chest_diagnostics", true)
 	page.call("bind", saved)
 	TestAssertions.truthy(unlock_all.disabled, "Player Simulation disables Unlock All", failures)
 	TestAssertions.truthy(god_mode.disabled and party_capacity.editable == false and enemy_density.editable == false and experience_multiplier.editable == false and level_up_card_count.editable == false, "Player Simulation disables every developer override", failures)
+	if personal_drop_multiplier != null and force_personal_drops != null and personal_drop_source != null and personal_drop_item_level != null and ground_chest_diagnostics != null:
+		TestAssertions.truthy(not personal_drop_multiplier.editable and force_personal_drops.disabled and personal_drop_source.disabled and not personal_drop_item_level.editable and ground_chest_diagnostics.disabled, "Player Simulation disables every personal-loot override", failures)
 	TestAssertions.truthy(inactive_status != null and inactive_status.visible, "Player Simulation shows a non-color inactive explanation", failures)
 	if open_city_tree != null:
 		TestAssertions.truthy(open_city_tree.disabled, "Player Simulation disables City tree preview", failures)
@@ -268,7 +285,9 @@ func _test_additional_settings_page(failures: Array[String]) -> void:
 		TestAssertions.truthy(inactive_status.focus_mode != Control.FOCUS_NONE, "inactive explanation is controller and keyboard focusable", failures)
 		TestAssertions.equal(mode.focus_next, mode.get_path_to(inactive_status), "Player Simulation focus reaches the inactive explanation after Mode", failures)
 		TestAssertions.equal(inactive_status.focus_next, inactive_status.get_path_to(page.get_node("Layout/ResetDeveloperOptions")), "Player Simulation focus continues from the explanation to actions", failures)
-	for control: Control in [unlock_all, god_mode, party_capacity, enemy_density, experience_multiplier, level_up_card_count]:
+	for control: Control in [unlock_all, god_mode, party_capacity, enemy_density, experience_multiplier, level_up_card_count, personal_drop_multiplier, force_personal_drops, personal_drop_source, personal_drop_item_level, ground_chest_diagnostics]:
+		if control == null:
+			continue
 		TestAssertions.truthy(control.tooltip_text.contains("retained") and control.tooltip_text.contains("Developer Mode"), "%s exposes the inactive reason in its tooltip" % control.name, failures)
 	TestAssertions.equal(int(party_capacity.value), 17, "inactive party cap stays visible", failures)
 	TestAssertions.equal(int(enemy_density.value), 650, "inactive density stays visible", failures)
@@ -278,12 +297,17 @@ func _test_additional_settings_page(failures: Array[String]) -> void:
 	page.call("_on_mode_changed", PartyForgeSettings.Mode.DEVELOPER_MODE)
 	TestAssertions.truthy(not unlock_all.disabled, "Developer Mode enables overrides", failures)
 	TestAssertions.truthy(not god_mode.disabled and party_capacity.editable and enemy_density.editable and experience_multiplier.editable and level_up_card_count.editable, "Developer Mode enables every override", failures)
+	if personal_drop_multiplier != null and force_personal_drops != null and personal_drop_source != null and personal_drop_item_level != null and ground_chest_diagnostics != null:
+		TestAssertions.truthy(personal_drop_multiplier.editable and not force_personal_drops.disabled and not personal_drop_source.disabled and personal_drop_item_level.editable and not ground_chest_diagnostics.disabled, "Developer Mode enables every personal-loot override", failures)
+		TestAssertions.equal(int(personal_drop_multiplier.value), 375, "personal-drop multiplier binds retained value", failures)
+		TestAssertions.equal(personal_drop_source.get_item_id(personal_drop_source.selected), 2, "personal-drop source binds specialist override", failures)
+		TestAssertions.equal(int(personal_drop_item_level.value), 777, "personal-drop item level binds retained value", failures)
 	TestAssertions.truthy(inactive_status != null and not inactive_status.visible, "Developer Mode hides the inactive explanation", failures)
 	if open_city_tree != null:
 		TestAssertions.truthy(not open_city_tree.disabled, "Developer Mode enables City tree preview", failures)
 		open_city_tree.pressed.emit()
 		TestAssertions.equal(requests, [true], "Developer City tree preview emits true exactly once", failures)
-		TestAssertions.equal(level_up_card_count.focus_next, level_up_card_count.get_path_to(open_city_tree), "Developer focus order reaches City tree preview", failures)
+		TestAssertions.equal(level_up_card_count.focus_next, level_up_card_count.get_path_to(personal_drop_multiplier), "Developer focus order reaches personal-loot controls", failures)
 	if open_item_sandbox != null:
 		TestAssertions.truthy(not open_item_sandbox.disabled, "Developer Mode enables the item sandbox", failures)
 		open_item_sandbox.pressed.emit()
@@ -316,6 +340,8 @@ func _test_additional_settings_page(failures: Array[String]) -> void:
 	TestAssertions.equal(int(enemy_density.value), 100, "reset restores enemy density", failures)
 	TestAssertions.equal(int(experience_multiplier.value), 100, "reset restores experience multiplier", failures)
 	TestAssertions.equal(int(level_up_card_count.value), 5, "reset restores level-up card count", failures)
+	if personal_drop_multiplier != null and force_personal_drops != null and personal_drop_source != null and personal_drop_item_level != null and ground_chest_diagnostics != null:
+		TestAssertions.equal([int(personal_drop_multiplier.value), force_personal_drops.button_pressed, personal_drop_source.get_item_id(personal_drop_source.selected), int(personal_drop_item_level.value), ground_chest_diagnostics.button_pressed], [100, false, 0, 0, false], "reset restores all personal-loot production defaults", failures)
 	var written := PartyForgeSettings.new()
 	page.call("write_to", written)
 	TestAssertions.equal(written.mode, PartyForgeSettings.Mode.DEVELOPER_MODE, "page writes selected mode", failures)
@@ -481,6 +507,11 @@ func _test_additional_focus_traversal(page: Control, failures: Array[String]) ->
 		page.get_node("Layout/EnemyDensity/Value") as Control,
 		page.get_node("Layout/ExperienceMultiplier/Value") as Control,
 		page.get_node("Layout/LevelUpCardCount/Value") as Control,
+		page.get_node("Layout/PersonalDropMultiplier/Value") as Control,
+		page.get_node("Layout/ForcePersonalDrops") as Control,
+		page.get_node("Layout/PersonalDropSourceCategory") as Control,
+		page.get_node("Layout/PersonalDropItemLevel/Value") as Control,
+		page.get_node("Layout/ShowGroundChestDiagnostics") as Control,
 		page.get_node("Layout/OpenCityPassiveTree") as Control,
 		page.get_node("Layout/ResetDeveloperOptions") as Control,
 		page.get_node("Layout/ApplyAndReturn") as Control,
@@ -488,7 +519,7 @@ func _test_additional_focus_traversal(page: Control, failures: Array[String]) ->
 	]
 	var sandbox_button := page.get_node_or_null("Layout/OpenDeveloperItemSandbox") as Control
 	if sandbox_button != null:
-		ordered.insert(8, sandbox_button)
+		ordered.insert(13, sandbox_button)
 	for index: int in range(ordered.size()):
 		var current := ordered[index]
 		var next := ordered[(index + 1) % ordered.size()]

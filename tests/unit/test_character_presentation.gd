@@ -54,6 +54,8 @@ func run() -> Array[String]:
 	if not ResourceLoader.exists(ADAPTER_SCENE_PATH):
 		return failures
 	_test_profile_application_and_feedback(failures)
+	_test_refresh_equipment_visuals_is_complete_and_idempotent(failures)
+	_test_refresh_equipment_visuals_reports_missing_definition_once(failures)
 	_test_invalid_equipment_slot_is_not_forwarded(failures)
 	_test_invalid_profile_keeps_fallback_visible(failures)
 	_test_incomplete_feedback_api_keeps_fallback_visible(failures)
@@ -77,6 +79,35 @@ func run() -> Array[String]:
 	_test_item_base_presentations_validate_in_each_profile_array(failures)
 	_test_default_item_base_validates_its_own_contract(failures)
 	return failures
+
+func _test_refresh_equipment_visuals_is_complete_and_idempotent(failures: Array[String]) -> void:
+	var root := _new_root("CharacterPresentationEquipmentRefreshTest")
+	var presentation := _new_presentation(root)
+	TestAssertions.truthy(presentation.apply_profile(_valid_profile(), Color.WHITE), "profile applies before complete equipment refresh", failures)
+	var helmet := _legacy_visual(&"test_helmet", &"helmet")
+	var diagnostics: PackedStringArray = presentation.call(&"refresh_equipment_visuals", {&"helmet": helmet})
+	var model := presentation.active_model as FakeCharacterModel
+	TestAssertions.equal(diagnostics, PackedStringArray(), "valid complete refresh has no fallback diagnostics", failures)
+	if model != null:
+		TestAssertions.equal(model.equipped, {&"helmet": &"test_helmet"}, "complete refresh clears every absent slot before applying present definitions", failures)
+	var first_empty: PackedStringArray = presentation.call(&"refresh_equipment_visuals", {})
+	var second_empty: PackedStringArray = presentation.call(&"refresh_equipment_visuals", {})
+	TestAssertions.equal(first_empty, PackedStringArray(), "first all-slot clear has no diagnostics", failures)
+	TestAssertions.equal(second_empty, PackedStringArray(), "repeated all-slot clear is idempotent", failures)
+	if model != null:
+		TestAssertions.equal(model.equipped, {}, "all eleven equipment slots remain clear after repeated refresh", failures)
+	root.free()
+
+func _test_refresh_equipment_visuals_reports_missing_definition_once(failures: Array[String]) -> void:
+	var root := _new_root("CharacterPresentationEquipmentFallbackTest")
+	var presentation := _new_presentation(root)
+	TestAssertions.truthy(presentation.apply_profile(_valid_profile(), Color.WHITE), "profile applies before missing-definition fallback", failures)
+	var diagnostics: PackedStringArray = presentation.call(&"refresh_equipment_visuals", {&"helmet": null})
+	var model := presentation.active_model as FakeCharacterModel
+	TestAssertions.equal(diagnostics, PackedStringArray(["PARTY_FORGE_PRESENTATION_FALLBACK slot=helmet reason=missing_visual_definition fallback=body"]), "missing visual definition emits one deterministic slot-aware fallback diagnostic", failures)
+	if model != null:
+		TestAssertions.truthy(not model.equipped.has(&"helmet"), "missing helmet definition retains the helmet body fallback", failures)
+	root.free()
 
 func _test_profile_application_and_feedback(failures: Array[String]) -> void:
 	var root := _new_root("CharacterPresentationTest")
@@ -520,6 +551,14 @@ func _valid_profile() -> CharacterVisualProfile:
 	profile.required_animation_names = [&"idle", &"walk", &"attack_slash", &"hit_flinch"]
 	profile.attack_animation_by_id = {&"fighter_cleave": &"attack_slash"}
 	return profile
+
+func _legacy_visual(visual_id: StringName, slot_id: StringName) -> EquipmentVisualDefinition:
+	var visual := EquipmentVisualDefinition.new()
+	visual.id = visual_id
+	visual.slot_id = slot_id
+	visual.geometry_key = visual_id
+	visual.visual_channels = [&"geometry"]
+	return visual
 
 func _profile_for_scene(scene: PackedScene, profile_id: StringName) -> CharacterVisualProfile:
 	var profile := CharacterVisualProfile.new()

@@ -6,6 +6,9 @@ var selected_member_id := 0
 var active_page_id: StringName = &"stats"
 var last_focus_path := NodePath()
 var opened_by_player_id := 0
+var held_source_container_id: StringName = &""
+var held_source_slot := -1
+var held_item_id := ""
 
 func _init(player_id := 0) -> void:
 	local_player_id = player_id

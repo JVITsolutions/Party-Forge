@@ -14,6 +14,7 @@ var _actors: Array[Node3D] = []
 func run() -> Array[String]:
 	var failures: Array[String] = []
 	_test_packet_and_tuning_validation(failures)
+	_test_personal_loot_reuses_leader_radius(failures)
 	_test_leader_event_radius_boundaries(failures)
 	_test_follower_link_availability_and_full_award(failures)
 	_test_idempotent_collection_time_resolution(failures)
@@ -21,6 +22,20 @@ func run() -> Array[String]:
 	_test_invalid_requests_mark_no_pairs(failures)
 	_cleanup()
 	return failures
+
+func _test_personal_loot_reuses_leader_radius(failures: Array[String]) -> void:
+	var roll_service_source := FileAccess.get_file_as_string("res://scripts/loot/personal_loot_roll_service.gd")
+	var loot_tuning_source := FileAccess.get_file_as_string("res://scripts/loot/personal_loot_tuning.gd")
+	TestAssertions.truthy(
+		roll_service_source.contains("reward_tuning.leader_event_share_radius"),
+		"personal loot eligibility reuses the authoritative reward leader radius",
+		failures,
+	)
+	TestAssertions.truthy(
+		not loot_tuning_source.contains("leader_event_share_radius"),
+		"personal loot tuning does not duplicate the reward distance contract",
+		failures,
+	)
 
 func _test_packet_and_tuning_validation(failures: Array[String]) -> void:
 	var invalid_packet := RewardPacket.create(&"", -1, Vector3.ZERO)

@@ -37,12 +37,24 @@ func _test_layout_controller_and_pause_edges(failures: Array[String]) -> void:
 	var run := GameRun.new()
 	run.start_run()
 	var context := LedgerPlayerContext.new(0)
-	ledger.configure(run, party, catalog, Callable(), [context])
+	var profile := ProfileState.new_profile("ledger-focus-profile", "Ledger Focus", 1000)
+	profile.inventory_columns = 1
+	var run_context := PlayerRunContext.new()
+	TestAssertions.truthy(run_context.configure(&"ledger-focus-owner", 0, profile, 47001, party, 100).is_empty(), "directional focus fixture configures real run inventory", failures)
+	var feature_ids: Array[StringName] = [&"stats", &"current_upgrades", &"equipment_inventory"]
+	var unlock_ids: Array[StringName] = [&"equipment_inventory"]
+	var policy := FeatureAccessPolicy.new(false, true, feature_ids, unlock_ids, unlock_ids)
+	ledger.configure(run, party, catalog, Callable(), [context], policy, Callable(), run_context)
 
 	TestAssertions.truthy(ledger.has_method("apply_viewport_size"), "ledger exposes deterministic viewport policy", failures)
 	var stats_page := ledger.get_node("Overlay/Frame/Layout/Body/PageHost/StatsLedgerPage") as CharacterLedgerPage
 	var upgrades_page := ledger.get_node("Overlay/Frame/Layout/Body/PageHost/UpgradesLedgerPage") as CharacterLedgerPage
-	for page: CharacterLedgerPage in [stats_page, upgrades_page]:
+	var equipment_page := ledger.get_node_or_null("Overlay/Frame/Layout/Body/PageHost/EquipmentInventoryLedgerPage") as CharacterLedgerPage
+	TestAssertions.truthy(equipment_page != null, "Equipment page instantiates when its completed-content policy is unlocked", failures)
+	if equipment_page == null:
+		_cleanup(ledger, run, party)
+		return
+	for page: CharacterLedgerPage in [stats_page, upgrades_page, equipment_page]:
 		TestAssertions.truthy(page.has_method("apply_compact"), "%s exposes compact contract" % page.name, failures)
 		TestAssertions.truthy(page.has_method("pin_active_detail"), "%s exposes pin contract" % page.name, failures)
 		TestAssertions.truthy(page.has_method("dismiss_pinned_detail"), "%s exposes dismiss contract" % page.name, failures)
@@ -55,6 +67,7 @@ func _test_layout_controller_and_pause_edges(failures: Array[String]) -> void:
 	var entries := ledger.get_node("Overlay/Frame/Layout/Body/PartyColumn/PartyScroll/PartyEntries") as GridContainer
 	var stats_content := stats_page.get_node("Layout/Content") as SplitContainer
 	var upgrades_content := upgrades_page.get_node("Layout/Content") as SplitContainer
+	var equipment_body := equipment_page.get_node("Layout/Body") as BoxContainer
 	var status := ledger.get_node("Overlay/Frame/Layout/Status") as Label
 	var status_font_size := status.get_theme_font_size(&"font_size")
 	TestAssertions.truthy(party_scroll.follow_focus, "party scroll follows keyboard and controller focus", failures)
@@ -63,10 +76,12 @@ func _test_layout_controller_and_pause_edges(failures: Array[String]) -> void:
 	TestAssertions.truthy(not body.vertical, "desktop outer split is horizontal", failures)
 	TestAssertions.equal(entries.columns, 1, "desktop party rail uses one column", failures)
 	TestAssertions.truthy(not stats_content.vertical and not upgrades_content.vertical, "desktop page detail splits are horizontal", failures)
+	TestAssertions.truthy(not equipment_body.vertical, "desktop Equipment page keeps equipment and inventory side by side", failures)
 	ledger.call("apply_viewport_size", Vector2(960.0, 540.0))
 	TestAssertions.truthy(body.vertical, "compact outer split is vertical", failures)
 	TestAssertions.equal(entries.columns, 3, "compact party rail uses three columns", failures)
 	TestAssertions.truthy(stats_content.vertical and upgrades_content.vertical, "compact page detail splits are vertical", failures)
+	TestAssertions.truthy(equipment_body.vertical, "compact Equipment page stacks inventory below equipment", failures)
 	TestAssertions.equal(status.get_theme_font_size(&"font_size"), status_font_size, "responsive policy leaves font size unchanged", failures)
 	TestAssertions.truthy(stats_page.get_node("Layout/Content/DetailPanel") is ScrollContainer, "Stats detail scrolls independently", failures)
 	TestAssertions.truthy(upgrades_page.get_node("Layout/Content/DetailPanel") is ScrollContainer, "Upgrades detail scrolls independently", failures)
@@ -93,6 +108,31 @@ func _test_layout_controller_and_pause_edges(failures: Array[String]) -> void:
 	TestAssertions.equal(selected_member.focus_neighbor_bottom, selected_member.get_path_to(ledger.get_node("Overlay/Frame/Layout/Body/PartyColumn/PartyScroll/PartyEntries/Member_2")), "desktop member 1 moves down to member 2", failures)
 	TestAssertions.equal(member_24.focus_neighbor_right, member_24.get_path_to(stats_focus), "desktop selected member moves right to active page", failures)
 	TestAssertions.equal(stats_focus.focus_neighbor_left, stats_focus.get_path_to(member_24), "desktop active page moves left to selected member", failures)
+	var close_button := ledger.get_node_or_null("Overlay/Frame/Layout/Close") as Button
+	TestAssertions.truthy(close_button != null and close_button.visible and close_button.focus_mode == Control.FOCUS_ALL, "ledger exposes one visible focusable Close control", failures)
+	TestAssertions.truthy(ledger.activate_page(&"equipment_inventory"), "focus-graph fixture activates Equipment and Inventory", failures)
+	var equipment_focus := equipment_page.initial_focus()
+	var inventory_grid := equipment_page.get_node("Layout/Body/InventoryRegion/InventoryScroll/Grid") as GridContainer
+	var inventory_focus := inventory_grid.get_child(0) as Control if inventory_grid.get_child_count() > 0 else null
+	var stats_tab := _tab_for(ledger, &"stats")
+	if close_button != null and equipment_focus != null and inventory_focus != null and stats_tab != null:
+		var required: Array[Control] = [member_24, stats_tab, close_button, equipment_focus, inventory_focus]
+		for start: Control in required:
+			TestAssertions.truthy(_focus_next_reaches(start, required), "closed focus graph reaches roster, tabs, Close, equipment, and inventory from %s" % start.name, failures)
+		var directional_controls: Array[Control] = []
+		for child: Node in entries.get_children():
+			if child is Button:
+				directional_controls.append(child as Button)
+		for child: Node in ledger.get_node("Overlay/Frame/Layout/Tabs").get_children():
+			if child is Button:
+				directional_controls.append(child as Button)
+		directional_controls.append(close_button)
+		directional_controls.append_array(equipment_page.focus_controls())
+		for control: Control in directional_controls:
+			TestAssertions.truthy(_directional_focus_reaches(control, directional_controls), "D-pad graph reaches every roster, tab, Close, equipment, and inventory control from %s" % control.name, failures)
+			for neighbor_path: NodePath in [control.focus_neighbor_top, control.focus_neighbor_bottom, control.focus_neighbor_left, control.focus_neighbor_right]:
+				TestAssertions.truthy(not neighbor_path.is_empty(), "%s exposes every explicit D-pad neighbor" % control.name, failures)
+	ledger.activate_page(&"stats")
 	ledger.apply_viewport_size(Vector2(960.0, 540.0))
 	ledger.select_member(1)
 	TestAssertions.truthy(selected_member.text.begins_with("[Selected] "), "member selection has a non-color text cue", failures)
@@ -139,20 +179,20 @@ func _test_layout_controller_and_pause_edges(failures: Array[String]) -> void:
 	ledger.call("_unhandled_input", _action_event(&"ledger_next_page"))
 	TestAssertions.truthy(upgrades_page.visible and not stats_page.visible, "next bumper moves Stats to Current Upgrades", failures)
 	ledger.call("_unhandled_input", _action_event(&"ledger_next_page"))
-	TestAssertions.truthy(stats_page.visible and not upgrades_page.visible, "next bumper wraps past Coming Soon back to Stats", failures)
+	TestAssertions.truthy(equipment_page.visible and not stats_page.visible and not upgrades_page.visible, "next bumper reaches Equipment and Inventory", failures)
+	ledger.call("_unhandled_input", _action_event(&"ledger_next_page"))
+	TestAssertions.truthy(stats_page.visible and not upgrades_page.visible and not equipment_page.visible, "next bumper wraps from Equipment to Stats", failures)
 	ledger.call("_unhandled_input", _action_event(&"ledger_previous_page"))
-	TestAssertions.truthy(upgrades_page.visible and not stats_page.visible, "previous bumper skips Coming Soon", failures)
+	TestAssertions.truthy(equipment_page.visible and not stats_page.visible, "previous bumper reaches Equipment and Inventory", failures)
 	ledger.activate_page(&"stats")
 
-	var coming_tab := _tab_for(ledger, &"equipment_inventory")
-	TestAssertions.truthy(coming_tab != null and coming_tab.focus_mode != Control.FOCUS_NONE, "Coming Soon tab remains focusable", failures)
-	if coming_tab != null:
-		coming_tab.focus_entered.emit()
-		TestAssertions.equal(status.text, "Equipment & Inventory: Coming Soon", "Coming Soon explains itself on focus", failures)
-		TestAssertions.truthy(stats_page.visible and not upgrades_page.visible, "Coming Soon focus never activates a page", failures)
-		coming_tab.pressed.emit()
-		TestAssertions.equal(status.text, "Equipment & Inventory: Coming Soon", "Coming Soon activation keeps exact explanation", failures)
-		TestAssertions.truthy(stats_page.visible and not upgrades_page.visible, "Coming Soon activation preserves available page", failures)
+	var equipment_tab := _tab_for(ledger, &"equipment_inventory")
+	TestAssertions.truthy(equipment_tab != null and equipment_tab.focus_mode != Control.FOCUS_NONE, "Equipment tab remains focusable", failures)
+	if equipment_tab != null:
+		equipment_tab.pressed.emit()
+		TestAssertions.equal(status.text, "", "available Equipment activation clears unavailable status", failures)
+		TestAssertions.truthy(equipment_page.visible and not stats_page.visible and not upgrades_page.visible, "Equipment tab activates its implemented page", failures)
+		ledger.activate_page(&"stats")
 
 	var stats_detail := stats_page.get_node("Layout/Content/DetailPanel") as Control
 	TestAssertions.truthy(not stats_detail.visible, "compact detail starts dismissed", failures)
@@ -177,7 +217,12 @@ func _test_layout_controller_and_pause_edges(failures: Array[String]) -> void:
 	TestAssertions.equal(run.current_state(), RunStateMachine.State.BOSS, "fixture reaches BOSS", failures)
 	TestAssertions.truthy(not tree.paused, "BOSS starts unpaused", failures)
 	TestAssertions.truthy(ledger.open_for_player(), "ledger opens during BOSS", failures)
-	ledger.close()
+	close_button = ledger.get_node_or_null("Overlay/Frame/Layout/Close") as Button
+	if close_button != null:
+		close_button.pressed.emit()
+	else:
+		ledger.close()
+	TestAssertions.truthy(not ledger.is_open(), "visible Close control closes the ledger", failures)
 	TestAssertions.truthy(not tree.paused, "ledger close restores unpaused BOSS", failures)
 	_test_provider_refresh_focus_lifecycle(ledger, party, catalog, failures)
 
@@ -230,6 +275,36 @@ func _tab_for(ledger: CharacterLedger, page_id: StringName) -> Button:
 		if button != null and button.get_meta("page_id", &"") == page_id:
 			return button
 	return null
+
+
+func _focus_next_reaches(start: Control, required: Array[Control]) -> bool:
+	var reached: Dictionary = {}
+	var current := start
+	for _step: int in range(128):
+		if current == null or reached.has(current.get_instance_id()):
+			break
+		reached[current.get_instance_id()] = true
+		if current.focus_next.is_empty():
+			break
+		current = current.get_node_or_null(current.focus_next) as Control
+	return required.all(func(control: Control) -> bool: return control != null and reached.has(control.get_instance_id()))
+
+
+func _directional_focus_reaches(start: Control, required: Array[Control]) -> bool:
+	var reached: Dictionary = {}
+	var pending: Array[Control] = [start]
+	while not pending.is_empty() and reached.size() < 256:
+		var current: Control = pending.pop_front()
+		if current == null or reached.has(current.get_instance_id()):
+			continue
+		reached[current.get_instance_id()] = true
+		for path: NodePath in [current.focus_neighbor_top, current.focus_neighbor_bottom, current.focus_neighbor_left, current.focus_neighbor_right]:
+			if path.is_empty():
+				continue
+			var target := current.get_node_or_null(path) as Control
+			if target != null and not reached.has(target.get_instance_id()):
+				pending.append(target)
+	return required.all(func(control: Control) -> bool: return control != null and reached.has(control.get_instance_id()))
 
 
 func _action_event(action: StringName) -> InputEventAction:

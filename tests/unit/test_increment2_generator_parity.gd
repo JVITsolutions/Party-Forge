@@ -16,7 +16,7 @@ const CASTER_ATTACK_IDS: Array[StringName] = [
 	&"frost_shard",
 	&"warlock_bolt",
 ]
-const WEIGHTED_LOOT_COMBINED_SHA256 := "599658e415cd662fec2a4544db763869db4db88fa7001549f0b2c5ef44aa0045"
+const WEIGHTED_LOOT_COMBINED_SHA256 := "84a2091b2eeb24a0dc4895ddf110016f3cd243bf943c5b9a7ba3b45097634673"
 
 func run() -> Array[String]:
 	var failures: Array[String] = []

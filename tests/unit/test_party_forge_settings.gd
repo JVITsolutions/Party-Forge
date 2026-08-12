@@ -3,12 +3,78 @@ extends RefCounted
 func run() -> Array[String]:
 	var failures: Array[String] = []
 	_test_defaults_and_normalization(failures)
+	_test_personal_loot_controls(failures)
 	_test_reduced_motion_setting(failures)
 	_test_round_trip_and_inactive_retention(failures)
 	_test_missing_unknown_and_malformed_fields(failures)
 	_test_failed_save_preserves_previous_file(failures)
 	_test_failed_restore_retains_backup(failures)
 	return failures
+
+func _test_personal_loot_controls(failures: Array[String]) -> void:
+	var settings := PartyForgeSettings.new()
+	TestAssertions.equal(settings.get("personal_drop_multiplier_percent"), 100, "personal-drop multiplier defaults to production 100 percent", failures)
+	TestAssertions.equal(settings.get("force_personal_drops"), false, "forced personal drops default off", failures)
+	TestAssertions.equal(settings.get("personal_drop_source_category_override"), &"", "personal-drop source defaults to automatic", failures)
+	TestAssertions.equal(settings.get("personal_drop_item_level_override"), 0, "personal-drop item level defaults to automatic", failures)
+	TestAssertions.equal(settings.get("show_ground_chest_diagnostics"), false, "ground-chest diagnostics default off", failures)
+
+	settings.set("personal_drop_multiplier_percent", 20000)
+	settings.set("personal_drop_item_level_override", 2000)
+	settings.set("personal_drop_source_category_override", &"not_a_source")
+	settings.call("normalize")
+	TestAssertions.equal(settings.get("personal_drop_multiplier_percent"), 10000, "personal-drop multiplier clamps to 10000 percent", failures)
+	TestAssertions.equal(settings.get("personal_drop_item_level_override"), 1000, "personal-drop item level clamps to 1000", failures)
+	TestAssertions.equal(settings.get("personal_drop_source_category_override"), &"", "unknown personal-drop source resets to automatic", failures)
+	settings.set("personal_drop_multiplier_percent", -1)
+	settings.set("personal_drop_item_level_override", -1)
+	settings.call("normalize")
+	TestAssertions.equal(settings.get("personal_drop_multiplier_percent"), 0, "personal-drop multiplier clamps to zero", failures)
+	TestAssertions.equal(settings.get("personal_drop_item_level_override"), 0, "personal-drop item level clamps to automatic", failures)
+
+	var path := "user://party_forge_settings_personal_loot_test.cfg"
+	var stored := PartyForgeSettings.new()
+	stored.mode = PartyForgeSettings.Mode.DEVELOPER_MODE
+	stored.set("personal_drop_multiplier_percent", 375)
+	stored.set("force_personal_drops", true)
+	stored.set("personal_drop_source_category_override", &"ordinary_specialist")
+	stored.set("personal_drop_item_level_override", 777)
+	stored.set("show_ground_chest_diagnostics", true)
+	var store := PartyForgeSettingsStore.new()
+	TestAssertions.equal(store.save_settings(stored, path), "", "personal-loot controls save", failures)
+	var loaded := store.load_settings(path)
+	TestAssertions.equal([
+		loaded.get("personal_drop_multiplier_percent"),
+		loaded.get("force_personal_drops"),
+		loaded.get("personal_drop_source_category_override"),
+		loaded.get("personal_drop_item_level_override"),
+		loaded.get("show_ground_chest_diagnostics"),
+	], [375, true, &"ordinary_specialist", 777, true], "all five personal-loot controls round trip", failures)
+
+	var player_source := loaded.copy()
+	player_source.mode = PartyForgeSettings.Mode.PLAYER_SIMULATION
+	var player_rules := RunRulesSnapshot.from_settings(player_source)
+	TestAssertions.equal([
+		player_rules.call("personal_drop_multiplier_percent"),
+		player_rules.call("force_personal_drops"),
+		player_rules.call("personal_drop_source_category_override"),
+		player_rules.call("personal_drop_item_level_override"),
+		player_rules.call("show_ground_chest_diagnostics"),
+	], [100, false, &"", 0, false], "Player Simulation resets saved developer loot controls to production defaults", failures)
+	var developer_rules := RunRulesSnapshot.from_settings(loaded)
+	loaded.set("personal_drop_multiplier_percent", 1)
+	loaded.set("force_personal_drops", false)
+	loaded.set("personal_drop_source_category_override", &"boss")
+	loaded.set("personal_drop_item_level_override", 1)
+	loaded.set("show_ground_chest_diagnostics", false)
+	TestAssertions.equal([
+		developer_rules.call("personal_drop_multiplier_percent"),
+		developer_rules.call("force_personal_drops"),
+		developer_rules.call("personal_drop_source_category_override"),
+		developer_rules.call("personal_drop_item_level_override"),
+		developer_rules.call("show_ground_chest_diagnostics"),
+	], [375, true, &"ordinary_specialist", 777, true], "Developer Mode snapshot captures immutable normalized loot controls", failures)
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
 
 func _test_reduced_motion_setting(failures: Array[String]) -> void:
 	var settings := PartyForgeSettings.new()
@@ -101,11 +167,12 @@ func _test_missing_unknown_and_malformed_fields(failures: Array[String]) -> void
 	TestAssertions.equal(loaded.level_up_card_count, 5, "missing level-up card count uses default", failures)
 	TestAssertions.equal(loaded.get("reduced_motion"), false, "schema v1 files without reduced motion use the false fallback", failures)
 	file = FileAccess.open(path, FileAccess.WRITE)
-	file.store_string("[settings]\nmode=\"1\"\ngod_mode=\"true\"\n")
+	file.store_string("[settings]\nmode=\"1\"\ngod_mode=\"true\"\npersonal_drop_multiplier_percent=\"500\"\nforce_personal_drops=\"true\"\npersonal_drop_source_category_override=14\npersonal_drop_item_level_override=\"80\"\nshow_ground_chest_diagnostics=\"true\"\n")
 	file.close()
 	loaded = PartyForgeSettingsStore.new().load_settings(path)
 	TestAssertions.equal(loaded.mode, PartyForgeSettings.Mode.PLAYER_SIMULATION, "wrong mode type cannot enable Developer Mode", failures)
 	TestAssertions.truthy(not loaded.god_mode, "wrong Boolean type fails closed", failures)
+	TestAssertions.equal([loaded.get("personal_drop_multiplier_percent"), loaded.get("force_personal_drops"), loaded.get("personal_drop_source_category_override"), loaded.get("personal_drop_item_level_override"), loaded.get("show_ground_chest_diagnostics")], [100, false, &"", 0, false], "malformed personal-loot fields use production defaults", failures)
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
 	var future_path := "user://party_forge_settings_future_test.cfg"
 	var future := ConfigFile.new()

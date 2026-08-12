@@ -1,6 +1,7 @@
-[gd_resource type="Resource" script_class="LedgerPageDefinition" load_steps=2 format=3]
+[gd_resource type="Resource" script_class="LedgerPageDefinition" load_steps=3 format=3]
 
 [ext_resource type="Script" path="res://scripts/ui/ledger/ledger_page_definition.gd" id="1_definition"]
+[ext_resource type="PackedScene" path="res://scenes/ui/ledger/equipment_inventory_ledger_page.tscn" id="2_page"]
 
 [resource]
 script = ExtResource("1_definition")
@@ -8,5 +9,6 @@ id = &"equipment_inventory"
 feature_id = &"equipment_inventory"
 label = "Equipment & Inventory"
 display_order = 30
-unavailable_text = "Coming Soon"
-development_state = 1
+unlock_id = &"equipment_inventory"
+development_state = 3
+page_scene = ExtResource("2_page")

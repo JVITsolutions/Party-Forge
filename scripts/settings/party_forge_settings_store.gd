@@ -39,6 +39,16 @@ func load_settings(path: String = DEFAULT_PATH) -> PartyForgeSettings:
 	result.level_up_card_count = int(cards_value) if typeof(cards_value) == TYPE_INT else 5
 	var reduced_motion_value: Variant = config.get_value(SECTION, "reduced_motion", false)
 	result.reduced_motion = bool(reduced_motion_value) if typeof(reduced_motion_value) == TYPE_BOOL else false
+	var drop_multiplier_value: Variant = config.get_value(SECTION, "personal_drop_multiplier_percent", 100)
+	result.personal_drop_multiplier_percent = int(drop_multiplier_value) if typeof(drop_multiplier_value) == TYPE_INT else 100
+	var force_drops_value: Variant = config.get_value(SECTION, "force_personal_drops", false)
+	result.force_personal_drops = bool(force_drops_value) if typeof(force_drops_value) == TYPE_BOOL else false
+	var source_override_value: Variant = config.get_value(SECTION, "personal_drop_source_category_override", &"")
+	result.personal_drop_source_category_override = StringName(source_override_value) if typeof(source_override_value) in [TYPE_STRING, TYPE_STRING_NAME] else &""
+	var item_level_override_value: Variant = config.get_value(SECTION, "personal_drop_item_level_override", 0)
+	result.personal_drop_item_level_override = int(item_level_override_value) if typeof(item_level_override_value) == TYPE_INT else 0
+	var diagnostics_value: Variant = config.get_value(SECTION, "show_ground_chest_diagnostics", false)
+	result.show_ground_chest_diagnostics = bool(diagnostics_value) if typeof(diagnostics_value) == TYPE_BOOL else false
 	result.normalize()
 	return result
 
@@ -57,6 +67,11 @@ func save_settings(settings: PartyForgeSettings, path: String = DEFAULT_PATH) ->
 	config.set_value(SECTION, "experience_multiplier_percent", normalized.experience_multiplier_percent)
 	config.set_value(SECTION, "level_up_card_count", normalized.level_up_card_count)
 	config.set_value(SECTION, "reduced_motion", normalized.reduced_motion)
+	config.set_value(SECTION, "personal_drop_multiplier_percent", normalized.personal_drop_multiplier_percent)
+	config.set_value(SECTION, "force_personal_drops", normalized.force_personal_drops)
+	config.set_value(SECTION, "personal_drop_source_category_override", normalized.personal_drop_source_category_override)
+	config.set_value(SECTION, "personal_drop_item_level_override", normalized.personal_drop_item_level_override)
+	config.set_value(SECTION, "show_ground_chest_diagnostics", normalized.show_ground_chest_diagnostics)
 	var temporary := "%s.tmp" % path
 	var backup := "%s.bak" % path
 	var save_error := config.save(temporary)

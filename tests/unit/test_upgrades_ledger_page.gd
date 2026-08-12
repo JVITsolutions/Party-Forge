@@ -10,7 +10,7 @@ func run() -> Array[String]:
 	var failures: Array[String] = []
 	_test_current_upgrades_page(failures)
 	_test_member_24_context_across_pages(failures)
-	_test_coming_soon_navigation(failures)
+	_test_equipment_navigation(failures)
 	return failures
 
 
@@ -177,11 +177,11 @@ func _test_member_24_context_across_pages(failures: Array[String]) -> void:
 	party.free()
 
 
-func _test_coming_soon_navigation(failures: Array[String]) -> void:
+func _test_equipment_navigation(failures: Array[String]) -> void:
 	var tree := Engine.get_main_loop() as SceneTree
 	tree.paused = false
 	var ledger_scene := load(LEDGER_SCENE_PATH) as PackedScene
-	TestAssertions.truthy(ledger_scene != null, "ledger scene loads for Coming Soon behavior", failures)
+	TestAssertions.truthy(ledger_scene != null, "ledger scene loads for Equipment navigation", failures)
 	if ledger_scene == null:
 		return
 	var ledger := ledger_scene.instantiate() as CharacterLedger
@@ -193,33 +193,36 @@ func _test_coming_soon_navigation(failures: Array[String]) -> void:
 	run.start_run()
 	var context := LedgerPlayerContext.new(0)
 	context.active_page_id = &"current_upgrades"
-	ledger.configure(run, party, catalog, Callable(), [context])
+	var feature_ids: Array[StringName] = [&"stats", &"current_upgrades", &"equipment_inventory"]
+	var unlock_ids: Array[StringName] = [&"equipment_inventory"]
+	ledger.configure(run, party, catalog, Callable(), [context], FeatureAccessPolicy.new(false, true, feature_ids, unlock_ids, unlock_ids))
 	TestAssertions.truthy(ledger.open_for_player(), "ledger opens directly on Current Upgrades", failures)
 	var page_host := ledger.get_node("Overlay/Frame/Layout/Body/PageHost") as Control
 	var upgrades_page := page_host.get_node("UpgradesLedgerPage") as Control
 	var stats_page := page_host.get_node("StatsLedgerPage") as Control
+	var equipment_page := page_host.get_node("EquipmentInventoryLedgerPage") as Control
 	var initial_page_count := page_host.get_child_count()
-	var coming_tab: Button
+	var equipment_tab: Button
 	for tab_node: Node in ledger.get_node("Overlay/Frame/Layout/Tabs").get_children():
 		var tab := tab_node as Button
 		if tab != null and tab.get_meta("page_id", &"") == &"equipment_inventory":
-			coming_tab = tab
+			equipment_tab = tab
 			break
-	TestAssertions.truthy(coming_tab != null and coming_tab.visible, "Equipment and Inventory has a visible tab", failures)
-	TestAssertions.truthy(coming_tab != null and coming_tab.focus_mode != Control.FOCUS_NONE, "Coming Soon tab remains focusable", failures)
-	TestAssertions.truthy(not ledger.activate_page(&"equipment_inventory"), "Coming Soon direct activation returns false", failures)
+	TestAssertions.truthy(equipment_tab != null and equipment_tab.visible, "Equipment and Inventory has a visible tab", failures)
+	TestAssertions.truthy(equipment_tab != null and equipment_tab.focus_mode != Control.FOCUS_NONE, "Equipment tab remains focusable", failures)
+	TestAssertions.truthy(ledger.activate_page(&"equipment_inventory"), "Equipment direct activation returns true", failures)
 	var status := ledger.get_node("Overlay/Frame/Layout/Status") as Label
-	TestAssertions.equal(status.text, "Equipment & Inventory: Coming Soon", "Coming Soon direct activation uses the exact status", failures)
-	TestAssertions.truthy(upgrades_page.visible and not stats_page.visible, "Coming Soon direct activation preserves Current Upgrades", failures)
-	TestAssertions.equal(page_host.get_child_count(), initial_page_count, "Coming Soon direct activation never instantiates a page", failures)
+	TestAssertions.equal(status.text, "", "Equipment direct activation clears unavailable status", failures)
+	TestAssertions.truthy(equipment_page.visible and not upgrades_page.visible and not stats_page.visible, "Equipment direct activation switches pages", failures)
+	TestAssertions.equal(page_host.get_child_count(), initial_page_count, "Equipment activation reuses its configured page scene", failures)
 
 	ledger._unhandled_input(_action_event(&"ledger_next_page"))
-	TestAssertions.truthy(stats_page.visible and not upgrades_page.visible, "next-page cycle skips Coming Soon", failures)
-	TestAssertions.equal(page_host.get_child_count(), initial_page_count, "next-page cycle never instantiates Coming Soon", failures)
+	TestAssertions.truthy(stats_page.visible and not upgrades_page.visible and not equipment_page.visible, "next-page cycle wraps from Equipment to Stats", failures)
+	TestAssertions.equal(page_host.get_child_count(), initial_page_count, "next-page cycle reuses configured pages", failures)
 	TestAssertions.truthy(ledger.activate_page(&"current_upgrades"), "Current Upgrades reactivates before reverse cycle", failures)
 	ledger._unhandled_input(_action_event(&"ledger_previous_page"))
-	TestAssertions.truthy(stats_page.visible and not upgrades_page.visible, "previous-page cycle skips Coming Soon", failures)
-	TestAssertions.equal(page_host.get_child_count(), initial_page_count, "previous-page cycle never instantiates Coming Soon", failures)
+	TestAssertions.truthy(stats_page.visible and not upgrades_page.visible and not equipment_page.visible, "previous-page cycle reaches Stats", failures)
+	TestAssertions.equal(page_host.get_child_count(), initial_page_count, "previous-page cycle reuses configured pages", failures)
 
 	ledger.close()
 	tree.paused = false

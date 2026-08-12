@@ -1,0 +1,99 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://scripts/ui/ledger/equipment_inventory_ledger_page.gd" id="1_page"]
+[ext_resource type="PackedScene" path="res://scenes/ui/storage/item_tooltip_panel.tscn" id="2_tooltip"]
+[ext_resource type="PackedScene" path="res://scenes/ui/ledger/character_equipment_preview.tscn" id="3_preview"]
+
+[node name="EquipmentInventoryLedgerPage" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_page")
+
+[node name="Layout" type="VBoxContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 10
+
+[node name="MemberSummary" type="Label" parent="Layout"]
+layout_mode = 2
+text = "No party member selected."
+autowrap_mode = 2
+
+[node name="Body" type="BoxContainer" parent="Layout"]
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_constants/separation = 18
+
+[node name="EquipmentRegion" type="VBoxContainer" parent="Layout/Body"]
+custom_minimum_size = Vector2(620, 0)
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+theme_override_constants/separation = 8
+
+[node name="CombatSummary" type="Label" parent="Layout/Body/EquipmentRegion"]
+layout_mode = 2
+text = "Combat Summary"
+autowrap_mode = 2
+
+[node name="Doll" type="Control" parent="Layout/Body/EquipmentRegion"]
+clip_contents = true
+custom_minimum_size = Vector2(540, 540)
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="PreviewProtectedCenter" type="PanelContainer" parent="Layout/Body/EquipmentRegion/Doll"]
+mouse_filter = 2
+layout_mode = 1
+anchor_left = 0.34
+anchor_top = 0.18
+anchor_right = 0.66
+anchor_bottom = 0.82
+grow_horizontal = 2
+grow_vertical = 2
+tooltip_text = "Selected character preview"
+
+[node name="CharacterEquipmentPreview" parent="Layout/Body/EquipmentRegion/Doll/PreviewProtectedCenter" instance=ExtResource("3_preview")]
+
+[node name="Slots" type="Control" parent="Layout/Body/EquipmentRegion/Doll"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="InventoryRegion" type="VBoxContainer" parent="Layout/Body"]
+custom_minimum_size = Vector2(420, 0)
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="InventoryCount" type="Label" parent="Layout/Body/InventoryRegion"]
+layout_mode = 2
+text = "Run Inventory  0 / 0"
+
+[node name="InventoryScroll" type="ScrollContainer" parent="Layout/Body/InventoryRegion"]
+layout_mode = 2
+size_flags_vertical = 3
+follow_focus = true
+horizontal_scroll_mode = 0
+vertical_scroll_mode = 1
+
+[node name="Grid" type="GridContainer" parent="Layout/Body/InventoryRegion/InventoryScroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+columns = 8
+
+[node name="ItemTooltipPanel" parent="." instance=ExtResource("2_tooltip")]
+visible = false

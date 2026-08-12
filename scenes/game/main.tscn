@@ -1,4 +1,4 @@
-[gd_scene load_steps=21 format=3]
+[gd_scene load_steps=23 format=3]
 
 [ext_resource type="Script" path="res://scripts/game/main.gd" id="1_main"]
 [ext_resource type="PackedScene" path="res://scenes/arena/arena.tscn" id="2_arena"]
@@ -19,6 +19,8 @@
 [ext_resource type="PackedScene" path="res://scenes/ui/armoury/armoury_screen.tscn" id="17_armoury"]
 [ext_resource type="PackedScene" path="res://scenes/ui/warehouse/warehouse_screen.tscn" id="18_warehouse"]
 [ext_resource type="PackedScene" path="res://scenes/ui/loadout_warning/loadout_warning_dialog.tscn" id="19_loadout_warning"]
+[ext_resource type="Script" path="res://scripts/world/ground_item_world_controller.gd" id="20_ground_items"]
+[ext_resource type="PackedScene" path="res://scenes/ui/storage/item_tooltip_panel.tscn" id="21_ground_tooltip"]
 
 [node name="Main" type="Node"]
 script = ExtResource("1_main")
@@ -45,8 +47,17 @@ script = ExtResource("8_actor_spawn")
 [node name="Actors" type="Node3D" parent="."]
 [node name="Enemies" type="Node3D" parent="."]
 [node name="Effects" type="Node3D" parent="."]
+[node name="GroundItems" type="Node3D" parent="."]
+
+[node name="GroundItemWorldController" type="Node" parent="."]
+script = ExtResource("20_ground_items")
 
 [node name="LeaderCamera" parent="." instance=ExtResource("3_camera")]
+
+[node name="GroundItemTooltipLayer" type="CanvasLayer" parent="."]
+layer = 15
+
+[node name="ItemTooltipPanel" parent="GroundItemTooltipLayer" instance=ExtResource("21_ground_tooltip")]
 
 [node name="HUD" parent="." instance=ExtResource("9_hud")]
 

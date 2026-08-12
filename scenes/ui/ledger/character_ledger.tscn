@@ -67,6 +67,7 @@ layout_mode = 2
 size_flags_vertical = 3
 follow_focus = true
 horizontal_scroll_mode = 0
+vertical_scroll_mode = 1
 
 [node name="PartyEntries" type="GridContainer" parent="Overlay/Frame/Layout/Body/PartyColumn/PartyScroll"]
 layout_mode = 2
@@ -85,3 +86,8 @@ custom_minimum_size = Vector2(0, 36)
 layout_mode = 2
 focus_mode = 2
 autowrap_mode = 2
+
+[node name="Close" type="Button" parent="Overlay/Frame/Layout"]
+layout_mode = 2
+focus_mode = 2
+text = "Close"

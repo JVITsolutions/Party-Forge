@@ -2,6 +2,7 @@ class_name EnemyActor
 extends CharacterBody3D
 
 signal reward_dropped(experience: int, drop_position: Vector3)
+signal enemy_defeated(definition: EnemyDefinition, drop_position: Vector3)
 
 const HOSTILE_TEAM_ID := 2
 
@@ -93,7 +94,9 @@ func defeat() -> void:
     var health := _health_component()
     if health != null and not health.is_dead:
         health.kill()
-    _drop_reward_once()
+    var drop_position := global_position if is_inside_tree() else position
+    _drop_reward_once(drop_position)
+    enemy_defeated.emit(definition, drop_position)
     queue_free()
 
 func get_combat_target() -> CombatTarget:
@@ -131,12 +134,11 @@ func nearest_living_party_actor(candidates: Array[Node3D] = []) -> Node3D:
             best_distance = distance
     return selected
 
-func _drop_reward_once() -> void:
+func _drop_reward_once(drop_position: Vector3) -> void:
     if reward_was_dropped:
         return
     reward_was_dropped = true
     var reward := definition.experience if definition != null else 0
-    var drop_position := global_position if is_inside_tree() else position
     reward_dropped.emit(reward, drop_position)
 
 func _health_component() -> HealthComponent:

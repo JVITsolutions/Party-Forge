@@ -27,6 +27,7 @@ func run() -> Array[String]:
     TestAssertions.equal(catalog.traits.size(), 13, "thirteen traits", failures)
     TestAssertions.equal(catalog.enemies.size(), 4, "three enemies plus boss", failures)
     TestAssertions.equal(catalog.validate().size(), 0, "catalog validates", failures)
+    _assert_enemy_loot_source_validation(catalog, failures)
     TestAssertions.equal(catalog.class_by_id(&"fighter").traits, [&"martial", &"vanguard"], "fighter traits", failures)
     TestAssertions.equal(catalog.class_by_id(&"cleric").support_action.id, &"cleric_heal", "cleric heal", failures)
     _assert_owned_action_contract(catalog, failures)
@@ -631,10 +632,10 @@ func _assert_generated_values(failures: Array[String]) -> void:
         {"path": "res://data/traits/support.tres", "values": {"id": &"support", "display_name": "Support", "stat_id": &"support_power", "tiers": {2: 0.15, 4: 0.35}}},
     ]
     var enemy_rows: Array[Dictionary] = [
-        {"path": "res://data/enemies/swarmer.tres", "values": {"id": &"swarmer", "behavior": EnemyDefinition.Behavior.SWARMER, "max_health": 12.0, "move_speed": 4.8, "stat_overrides": {}, "experience": 2}, "attacks": [&"swarmer_contact"]},
-        {"path": "res://data/enemies/spitter.tres", "values": {"id": &"spitter", "behavior": EnemyDefinition.Behavior.SPITTER, "max_health": 18.0, "move_speed": 2.8, "stat_overrides": {}, "experience": 4}, "attacks": [&"spitter_projectile"]},
-        {"path": "res://data/enemies/boltcaster.tres", "values": {"id": &"boltcaster", "behavior": EnemyDefinition.Behavior.BOLTCASTER, "max_health": 15.0, "move_speed": 3.1, "stat_overrides": {}, "experience": 3}, "attacks": [&"boltcaster_bolt"]},
-        {"path": "res://data/enemies/forge_guardian.tres", "values": {"id": &"forge_guardian", "behavior": EnemyDefinition.Behavior.FORGE_GUARDIAN, "max_health": 3000.0, "move_speed": 3.3, "stat_overrides": {}, "experience": 100}, "attacks": [&"guardian_charge", &"guardian_shockwave"]},
+        {"path": "res://data/enemies/swarmer.tres", "values": {"id": &"swarmer", "behavior": EnemyDefinition.Behavior.SWARMER, "max_health": 12.0, "move_speed": 4.8, "stat_overrides": {}, "loot_source_category": &"ordinary_melee", "experience": 2}, "attacks": [&"swarmer_contact"]},
+        {"path": "res://data/enemies/spitter.tres", "values": {"id": &"spitter", "behavior": EnemyDefinition.Behavior.SPITTER, "max_health": 18.0, "move_speed": 2.8, "stat_overrides": {}, "loot_source_category": &"ordinary_specialist", "experience": 4}, "attacks": [&"spitter_projectile"]},
+        {"path": "res://data/enemies/boltcaster.tres", "values": {"id": &"boltcaster", "behavior": EnemyDefinition.Behavior.BOLTCASTER, "max_health": 15.0, "move_speed": 3.1, "stat_overrides": {}, "loot_source_category": &"ordinary_specialist", "experience": 3}, "attacks": [&"boltcaster_bolt"]},
+        {"path": "res://data/enemies/forge_guardian.tres", "values": {"id": &"forge_guardian", "behavior": EnemyDefinition.Behavior.FORGE_GUARDIAN, "max_health": 3000.0, "move_speed": 3.3, "stat_overrides": {}, "loot_source_category": &"boss", "experience": 100}, "attacks": [&"guardian_charge", &"guardian_shockwave"]},
     ]
     _assert_resource_table("attack", attack_rows, failures)
     _assert_resource_table("class", class_rows, failures)
@@ -668,3 +669,12 @@ func _assert_resource_table(kind: String, rows: Array[Dictionary], failures: Arr
             for attack: AttackDefinition in enemy.attacks:
                 ids.append(attack.id)
             TestAssertions.equal(ids, row["attacks"], "enemy %s exact attack links" % enemy.id, failures)
+
+func _assert_enemy_loot_source_validation(catalog: GameCatalog, failures: Array[String]) -> void:
+    var malformed := catalog.enemies[0].duplicate(true) as EnemyDefinition
+    malformed.set(&"loot_source_category", &"champion")
+    TestAssertions.truthy(
+        malformed.validate(catalog.damage_types, GameCatalog.STAT_CATALOG).has("enemy swarmer loot source category is unknown: champion"),
+        "enemy definitions reject unknown loot source categories",
+        failures,
+    )

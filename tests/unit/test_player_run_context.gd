@@ -40,6 +40,7 @@ func run() -> Array[String]:
 	_test_configuration_validation_and_copy_ownership(failures)
 	_test_initial_member_equipment_is_owned_and_defensive(failures)
 	_test_checked_out_item_bootstrap_identity_and_retry(failures)
+	_test_developer_minimum_preserves_larger_resumable_inventory(failures)
 	_test_configuration_rejects_invalid_member_growth_atomically(failures)
 	_test_atomic_progression_and_leader_queue(failures)
 	_test_future_recruits_initialize_once(failures)
@@ -1105,10 +1106,37 @@ func _test_checked_out_item_bootstrap_identity_and_retry(failures: Array[String]
 	TestAssertions.truthy(not wrong_profile_errors.is_empty() and wrong_profile_errors[0].contains("field=item_bootstrap"), "wrong profile/run pairing is rejected", failures)
 	_assert_context_unconfigured(retry_context, "wrong profile", failures)
 	TestAssertions.equal(retry_context.configure(&"bootstrap_player", 0, profile, 4410, party, 100, bootstrap), PackedStringArray(), "failed bootstrap configuration remains retryable", failures)
-	TestAssertions.equal(retry_context.item_state().to_dictionary(), state.to_dictionary(), "successful retry adopts exact checked-out item state", failures)
+	TestAssertions.equal(retry_context.item_state().to_dictionary(), RunItemBootstrap.with_ground_container(bootstrap.item_state()).to_dictionary(), "successful retry adopts exact checked-out item state with empty ground ownership", failures)
 	var exposed := retry_context.item_state()
 	exposed._clear_slot(&"run-equipment-001", 9)
 	TestAssertions.equal(retry_context.equipment_for(1).item_id_at(9), item.instance_id, "configured bootstrap state is defensive", failures)
+	party.free()
+
+func _test_developer_minimum_preserves_larger_resumable_inventory(failures: Array[String]) -> void:
+	var catalog := GameCatalog.load_defaults()
+	var party := PartyManager.new()
+	party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
+	var profile := ProfileState.new_profile("profile-resumable-minimum", "Resumable Minimum", 1000)
+	profile.inventory_columns = 0
+	var item := ItemInstance.new()
+	item.instance_id = "item-resumable-high-slot"
+	item.base_definition_id = &"forge_vanguard_sword"
+	item.item_level = 28
+	item.rarity_id = &"common"
+	item.origin = {"issuer_namespace": "profile:profile-resumable-minimum", "seed": 4420, "sequence": 0, "source": "context_bootstrap_minimum_test"}
+	var state := ItemOwnershipState.create("resumable_minimum_player", ItemRegistry.new([item]), [
+		ItemSlotContainer.create(&"run-inventory", ItemSlotContainer.RUN_INVENTORY, "resumable_minimum_player", 10, {7: item.instance_id}),
+		ItemSlotContainer.create(&"run-equipment-001", ItemSlotContainer.RUN_MEMBER_EQUIPMENT, "resumable_minimum_player", EquipmentSlotIndex.capacity()),
+	])
+	var bootstrap := RunItemBootstrap.create(&"run-bootstrap-minimum", 4420, &"resumable_minimum_player", 1, state)
+	profile.resumable_run = ResumableRunItemCodec.encode(bootstrap)
+	var context := PlayerRunContext.new()
+	var errors := context.configure(&"resumable_minimum_player", 0, profile, 4420, party, 100, bootstrap, 5)
+	TestAssertions.equal(errors, PackedStringArray(), "Developer minimum accepts a resumable inventory occupied above slot five", failures)
+	if errors.is_empty():
+		TestAssertions.equal(context.run_inventory().capacity, 10, "Developer minimum preserves the larger resumable inventory capacity", failures)
+		TestAssertions.equal(context.run_inventory().item_id_at(7), item.instance_id, "Developer minimum preserves the resumable high-slot item", failures)
+	TestAssertions.equal(profile.inventory_columns, 0, "Developer resumable minimum leaves ProfileState unchanged", failures)
 	party.free()
 
 func _assert_context_unconfigured(context: PlayerRunContext, label: String, failures: Array[String]) -> void:
@@ -1210,7 +1238,7 @@ func _test_configuration_validation_and_copy_ownership(failures: Array[String]) 
 		var retry_inventory := invalid.call(&"run_inventory") as ItemSlotContainer
 		TestAssertions.truthy(retry_state != null, "valid retry creates one item ownership state", failures)
 		TestAssertions.equal(retry_state.registry().size(), 0, "valid retry creates one empty run registry", failures)
-		TestAssertions.equal(retry_state.containers().size(), 2, "valid retry creates inventory plus leader equipment", failures)
+		TestAssertions.equal(retry_state.containers().size(), 3, "valid retry creates inventory, ground items, and leader equipment", failures)
 		TestAssertions.equal(retry_inventory.capacity, 5, "valid retry derives its unlocked five-slot inventory", failures)
 		var retry_created := invalid.call(
 			&"apply_item_transaction",

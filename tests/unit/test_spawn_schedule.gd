@@ -28,6 +28,7 @@ func run() -> Array[String]:
 
     _test_schedule_boundaries(failures)
     _test_enemy_reward_exactly_once(failures)
+    _test_director_defeat_events_preserve_spawn_facts(failures)
     _test_swarmer_targeting_and_contact_cooldown(failures)
     _test_spitter_spacing_and_projectile_cadence(failures)
     _test_ranged_enemies_only_fire_in_resolved_range(failures)
@@ -59,14 +60,61 @@ func _test_enemy_reward_exactly_once(failures: Array[String]) -> void:
     var enemy: Node3D = (load("res://scenes/enemies/swarmer.tscn") as PackedScene).instantiate() as Node3D
     root.add_child(enemy)
     var rewards: Array = []
+    var defeats: Array = []
     enemy.connect("reward_dropped", func(value: int, drop_position: Vector3) -> void: rewards.append([value, drop_position]))
+    TestAssertions.truthy(enemy.has_signal("enemy_defeated"), "enemy exposes one typed defeat signal beside the XP reward", failures)
+    if enemy.has_signal("enemy_defeated"):
+        enemy.connect("enemy_defeated", func(definition: EnemyDefinition, drop_position: Vector3) -> void: defeats.append([definition, drop_position]))
     var health := enemy.get_node("HealthComponent") as HealthComponent
     health.apply_damage(9999.0)
     health.apply_damage(9999.0)
     enemy.call("defeat")
     TestAssertions.equal(rewards.size(), 1, "enemy emits one reward after repeated lethal calls", failures)
+    TestAssertions.equal(defeats.size(), 1, "enemy emits one typed defeat after repeated lethal calls", failures)
     if rewards.size() == 1:
         TestAssertions.equal(int(rewards[0][0]), 2, "enemy reward uses definition experience", failures)
+    if defeats.size() == 1:
+        TestAssertions.equal((defeats[0][0] as EnemyDefinition).id, &"swarmer", "typed defeat preserves the enemy definition", failures)
+        TestAssertions.equal(defeats[0][1], rewards[0][1], "typed defeat and XP reward use the same drop position", failures)
+    root.free()
+
+func _test_director_defeat_events_preserve_spawn_facts(failures: Array[String]) -> void:
+    var root := _new_root("EnemyDefeatSequenceTest")
+    var leader := _party_actor(root, Vector3.ZERO)
+    var marker := Marker3D.new()
+    marker.position = Vector3(3.0, 0.0, 2.0)
+    root.add_child(marker)
+    var director := (load("res://scripts/game/spawn_director.gd") as Script).new() as SpawnDirector
+    root.add_child(director)
+    var markers: Array[Node3D] = [marker]
+    director.configure(4242, leader, null, markers, null, root, root, 1.0, CombatRng.new(4242), GameCatalog.load_defaults().damage_types)
+    var events: Array[EnemyDefeatEvent] = []
+    TestAssertions.truthy(director.has_signal("enemy_defeated"), "director exposes typed defeat events", failures)
+    if director.has_signal("enemy_defeated"):
+        director.connect("enemy_defeated", func(event: EnemyDefeatEvent) -> void: events.append(event))
+
+    director.elapsed_seconds = 12.5
+    var first := director.spawn_enemy(&"swarmer") as EnemyActor
+    director.elapsed_seconds = 24.25
+    var second := director.spawn_enemy(&"spitter") as EnemyActor
+    TestAssertions.truthy(first != null and second != null, "director spawns both defeat fixtures", failures)
+    if first == null or second == null:
+        root.free()
+        return
+    director.elapsed_seconds = 33.0
+    second.defeat()
+    director.elapsed_seconds = 34.5
+    first.defeat()
+
+    TestAssertions.equal(events.size(), 2, "two kills produce two typed director events", failures)
+    if events.size() == 2:
+        TestAssertions.equal([events[0].defeat_sequence, events[1].defeat_sequence], [1, 2], "defeat sequence increases in kill order", failures)
+        TestAssertions.equal([events[0].enemy_sequence, events[1].enemy_sequence], [2, 1], "events retain immutable original spawn sequence", failures)
+        TestAssertions.equal([events[0].enemy_id, events[1].enemy_id], [&"spitter", &"swarmer"], "kill order does not replace spawned enemy identity", failures)
+        TestAssertions.equal([events[0].source_category, events[1].source_category], [&"ordinary_specialist", &"ordinary_melee"], "source category comes from enemy data", failures)
+        TestAssertions.near(events[0].encounter_seconds, 33.0, 0.001, "first kill captures director elapsed time", failures)
+        TestAssertions.near(events[1].encounter_seconds, 34.5, 0.001, "second kill captures its own director elapsed time", failures)
+        TestAssertions.equal(events[0].run_seed, 4242, "typed event preserves configured run seed", failures)
     root.free()
 
 func _test_swarmer_targeting_and_contact_cooldown(failures: Array[String]) -> void:

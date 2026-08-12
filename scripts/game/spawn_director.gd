@@ -2,6 +2,7 @@ class_name SpawnDirector
 extends Node
 
 signal enemy_spawned(enemy_id: StringName, enemy: Node3D)
+signal enemy_defeated(event: EnemyDefeatEvent)
 
 const SpawnScheduleScript := preload("res://scripts/game/spawn_schedule.gd")
 const SWARMER_SCENE := preload("res://scenes/enemies/swarmer.tscn")
@@ -29,6 +30,7 @@ var pickup_radius_multiplier := 1.0
 var combat_rng: CombatRng
 var damage_types: DamageTypeCatalog
 var _enemy_sequence := 0
+var _defeat_sequence := 0
 var _reward_sequence := 0
 var _enemy_density_percent := 100
 
@@ -46,6 +48,7 @@ func configure(seed_value: int, target_leader: Node3D, target_distributor: Varia
     damage_types = shared_damage_types
     _enemy_density_percent = clampi(density_percent, 0, 1000)
     _enemy_sequence = 0
+    _defeat_sequence = 0
     _reward_sequence = 0
     elapsed_seconds = 0.0
     spawn_cooldown = 0.0
@@ -134,6 +137,8 @@ func spawn_enemy(enemy_id: StringName) -> Node3D:
     if enemy.has_method("configure_target"):
         enemy.call("configure_target", leader, effects_parent)
     enemy.connect("reward_dropped", _on_reward_dropped)
+    var spawn_sequence := _enemy_sequence
+    (enemy as EnemyActor).enemy_defeated.connect(_on_enemy_defeated.bind(spawn_sequence), CONNECT_ONE_SHOT)
     enemy_spawned.emit(enemy_id, enemy)
     return enemy
 
@@ -173,6 +178,19 @@ func _on_reward_dropped(experience: int, drop_position: Vector3) -> void:
     _reward_sequence += 1
     var packet_id := StringName("xp_%d_%d" % [run_seed, _reward_sequence])
     orb.call("configure", experience, packet_id, leader, reward_distributor, pickup_radius_multiplier)
+
+func _on_enemy_defeated(definition: EnemyDefinition, drop_position: Vector3, spawn_sequence: int) -> void:
+    _defeat_sequence += 1
+    var event := EnemyDefeatEvent.create(
+        run_seed,
+        _defeat_sequence,
+        spawn_sequence,
+        definition.id,
+        definition.loot_source_category,
+        drop_position,
+        elapsed_seconds,
+    )
+    enemy_defeated.emit(event)
 
 func _tree_is_paused() -> bool:
     var tree := Engine.get_main_loop() as SceneTree

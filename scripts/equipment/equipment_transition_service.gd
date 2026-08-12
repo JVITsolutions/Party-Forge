@@ -25,6 +25,48 @@ static func preview(
 		foundation,
 		member.class_definition,
 	)
+	return _complete_preview(assignment, member_id, item_id, slot_id, party, equipment, foundation, member)
+
+static func preview_exact(
+	state: ItemOwnershipState,
+	member_id: int,
+	item_id: String,
+	source_container_id: StringName,
+	source_slot: int,
+	destination_container_id: StringName,
+	destination_slot: int,
+	party: PartyManager,
+	equipment: EquipmentCatalog,
+	foundation: ItemFoundationCatalog,
+) -> EquipmentTransitionResult:
+	var member := party.member_by_id(member_id) if party != null else null
+	var slot_id := EquipmentSlotIndex.slot_for(destination_slot) if String(destination_container_id).begins_with("run-equipment-") else &""
+	if party == null or member == null:
+		return _failure(member_id, item_id, slot_id, "member is unavailable")
+	var assignment := EquipmentAssignmentService.new().preview_exact(
+		state,
+		member_id,
+		item_id,
+		source_container_id,
+		source_slot,
+		destination_container_id,
+		destination_slot,
+		equipment,
+		foundation,
+		member.class_definition,
+	)
+	return _complete_preview(assignment, member_id, item_id, slot_id, party, equipment, foundation, member)
+
+static func _complete_preview(
+	assignment: EquipmentAssignmentResult,
+	member_id: int,
+	item_id: String,
+	slot_id: StringName,
+	party: PartyManager,
+	equipment: EquipmentCatalog,
+	foundation: ItemFoundationCatalog,
+	member: PartyMemberState,
+) -> EquipmentTransitionResult:
 	if not assignment.ok():
 		return _failure(member_id, item_id, slot_id, "structural assignment failed detail=%s" % assignment.error)
 	var candidate := assignment.state()

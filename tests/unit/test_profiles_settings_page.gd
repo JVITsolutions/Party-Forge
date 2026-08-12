@@ -18,11 +18,21 @@ func run() -> Array[String]:
 	ProfileTestSupport.remove_tree(root)
 	_test_scene_and_interactions(root, failures)
 	ProfileTestSupport.remove_tree(root)
+	_test_invalid_preferred_color_rejected(root, failures)
+	ProfileTestSupport.remove_tree(root)
 	_test_errors_and_rebinding(root, failures)
 	ProfileTestSupport.remove_tree(root)
 	_test_profile_health_disclosure(root, failures)
 	ProfileTestSupport.remove_tree(root)
 	return failures
+
+
+func _test_invalid_preferred_color_rejected(root: String, failures: Array[String]) -> void:
+	var manager := ProfileManager.new(ProfileStore.new(), ProfileIndexStore.new(), func() -> String: return "profile-invalidcolor")
+	TestAssertions.equal(manager.bootstrap(root), "", "invalid color fixture bootstraps", failures)
+	var result := manager.create_profile("Invalid Color", 1000, &"chartreuse")
+	TestAssertions.truthy(not result.ok() and result.error.contains("field=preferred_player_color_id"), "profile creation rejects an unsupported preferred color", failures)
+	TestAssertions.truthy(manager.profiles().is_empty(), "rejected preferred color creates no profile", failures)
 
 
 func _test_scene_and_interactions(root: String, failures: Array[String]) -> void:
@@ -38,6 +48,7 @@ func _test_scene_and_interactions(root: String, failures: Array[String]) -> void
 	page.bind(manager)
 	var list := page.get_node("Layout/ProfileList") as ItemList
 	var name := page.get_node("Layout/CreateRow/ProfileName") as LineEdit
+	var color := page.get_node_or_null("Layout/CreateRow/PreferredColor") as OptionButton
 	var create := page.get_node("Layout/CreateRow/Create") as Button
 	var activate := page.get_node("Layout/Activate") as Button
 	var empty := page.get_node("Layout/EmptyState") as Label
@@ -46,14 +57,24 @@ func _test_scene_and_interactions(root: String, failures: Array[String]) -> void
 	TestAssertions.equal(empty.text, "Create a profile to begin playing.", "empty copy is approved", failures)
 	TestAssertions.truthy(empty.visible, "empty state begins visible", failures)
 	TestAssertions.equal(name.max_length, 32, "profile name is bounded", failures)
+	TestAssertions.truthy(color != null, "profile creation exposes a preferred color selector", failures)
+	if color != null:
+		TestAssertions.equal(color.item_count, 8, "profile color selector exposes the bounded palette", failures)
+		var color_ids: Array[StringName] = []
+		for index: int in color.item_count:
+			color_ids.append(StringName(color.get_item_metadata(index)))
+		TestAssertions.equal(color_ids, [&"red", &"blue", &"yellow", &"green", &"purple", &"orange", &"cyan", &"white"], "profile color selector uses the fixed palette order", failures)
+		color.select(1)
 	TestAssertions.equal(page.initial_focus(), name, "empty page focuses name", failures)
 	TestAssertions.truthy(explanation.text.contains("immediately"), "Profiles explains immediate persistence", failures)
 	name.text = "Jacob"
 	create.pressed.emit()
 	TestAssertions.equal(list.item_count, 1, "create adds profile row", failures)
 	TestAssertions.equal(manager.active_profile().display_name, "Jacob", "created profile becomes active", failures)
+	TestAssertions.equal(manager.active_profile().get("preferred_player_color_id"), &"blue", "UI-created profile persists the selected preferred color", failures)
 	TestAssertions.equal(page.initial_focus(), list, "populated page focuses list", failures)
 	TestAssertions.truthy(list.get_item_text(0).contains("[Active]"), "active profile has a non-color state label", failures)
+	TestAssertions.truthy(list.get_item_text(0).contains("Blue"), "healthy profile row shows its preferred color", failures)
 	name.text = "Guest"
 	name.text_submitted.emit(name.text)
 	TestAssertions.equal(list.item_count, 2, "submit creates a second profile", failures)
@@ -67,7 +88,10 @@ func _test_scene_and_interactions(root: String, failures: Array[String]) -> void
 	TestAssertions.equal(reloaded.bootstrap(root), "", "created profiles reload", failures)
 	TestAssertions.equal(reloaded.profiles().size(), 2, "both profiles persist", failures)
 	TestAssertions.equal(reloaded.active_profile().profile_id, "profile-aaaaaaaa", "active selection persists", failures)
-	for control: Control in [list, name, create, activate]:
+	var focus_controls: Array[Control] = [list, name, create, activate]
+	if color != null:
+		focus_controls.insert(2, color)
+	for control: Control in focus_controls:
 		TestAssertions.truthy(control.focus_mode != Control.FOCUS_NONE, "%s is focusable" % control.name, failures)
 		TestAssertions.truthy(not control.focus_next.is_empty() and not control.focus_previous.is_empty(), "%s has explicit focus neighbors" % control.name, failures)
 		TestAssertions.truthy(not control.focus_neighbor_top.is_empty() and not control.focus_neighbor_bottom.is_empty(), "%s has controller focus neighbors" % control.name, failures)

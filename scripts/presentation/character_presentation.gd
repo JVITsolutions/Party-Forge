@@ -117,6 +117,24 @@ func clear_equipment_visual(slot_id: StringName) -> bool:
 	var cleared := _call_bool(&"clear_equipment_visual", [slot_id])
 	return cleared and (not active_model.has_method(&"refresh_grounding") or refresh_grounding())
 
+func refresh_equipment_visuals(definitions_by_slot: Dictionary) -> PackedStringArray:
+	var diagnostics := PackedStringArray()
+	if active_model == null:
+		return diagnostics
+	for slot_id: StringName in EquipmentSlotCatalog.SHEET_SLOT_IDS:
+		clear_equipment_visual(slot_id)
+	for slot_id: StringName in EquipmentSlotCatalog.SHEET_SLOT_IDS:
+		if not definitions_by_slot.has(slot_id):
+			continue
+		var definition := definitions_by_slot.get(slot_id) as EquipmentVisualDefinition
+		if definition == null:
+			diagnostics.append("PARTY_FORGE_PRESENTATION_FALLBACK slot=%s reason=missing_visual_definition fallback=body" % slot_id)
+			continue
+		if not apply_equipment_visual(slot_id, definition):
+			clear_equipment_visual(slot_id)
+			diagnostics.append("PARTY_FORGE_PRESENTATION_FALLBACK slot=%s reason=visual_rejected fallback=body" % slot_id)
+	return diagnostics
+
 func refresh_grounding() -> bool:
 	var grounded := active_model != null and active_model.has_method(&"refresh_grounding") and bool(active_model.call(&"refresh_grounding"))
 	if grounded:

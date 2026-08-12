@@ -11,9 +11,50 @@ func run() -> Array[String]:
 	_profile_root = "user://tests/developer_mode_integration-profiles_%d_%d" % [OS.get_process_id(), Time.get_ticks_usec()]
 	ProfileTestSupport.remove_tree(_profile_root)
 	_test_badge_summary_uses_immutable_snapshot(failures)
+	_test_badge_personal_loot_summary_and_session_diagnostics(failures)
 	_test_main_configures_badge_from_active_run(failures)
 	ProfileTestSupport.remove_tree(_profile_root)
 	return failures
+
+func _test_badge_personal_loot_summary_and_session_diagnostics(failures: Array[String]) -> void:
+	var badge := (load(BADGE_SCENE_PATH) as PackedScene).instantiate()
+	var settings := PartyForgeSettings.new()
+	settings.mode = PartyForgeSettings.Mode.DEVELOPER_MODE
+	settings.set("personal_drop_multiplier_percent", 375)
+	settings.set("force_personal_drops", true)
+	settings.set("personal_drop_source_category_override", &"ordinary_specialist")
+	settings.set("personal_drop_item_level_override", 777)
+	settings.set("show_ground_chest_diagnostics", true)
+	badge.call("configure", RunRulesSnapshot.from_settings(settings))
+	TestAssertions.truthy(String(badge.call("summary_text")).contains("DROPS 375% | FORCE DROPS | SOURCE ORDINARY SPECIALIST | ITEM LEVEL 777"), "badge reports immutable active personal-loot overrides", failures)
+	badge.call("update_ground_chest_diagnostics", {
+		"live": 2,
+		"peak": 5,
+		"successes_by_source": {"ordinary_melee": 3},
+		"misses_by_source": {"ordinary_specialist": 4},
+		"ineligible_total": 6,
+		"ineligible_by_reason": {"feature_locked": 2, "leader_out_of_range": 3, "leader_unavailable": 1},
+		"ineligible_by_source": {"elite": 1, "ordinary_melee": 2, "ordinary_specialist": 3},
+		"generation_failures": 1,
+		"diagnostics_by_stage": {"configuration": 2, "generation": 1, "ownership": 3, "storage": 4},
+		"diagnostics_by_code": {"ground_full": 4, "invalid_event": 2},
+		"collection_outcomes": {"ok": 2, "inventory_full": 1},
+		"projection_pending": 18,
+		"projection_last_work": 7,
+		"projection_peak_work": 32,
+		"projection_limit": 32,
+	})
+	var diagnostics := String(badge.call("diagnostics_text"))
+	TestAssertions.truthy(diagnostics.begins_with("SESSION LOOT DIAGNOSTICS"), "diagnostics explicitly identify their session-only lifetime", failures)
+	TestAssertions.truthy(diagnostics.contains("LIVE 2 | PEAK 5"), "diagnostics show live and peak chest counts", failures)
+	TestAssertions.truthy(diagnostics.contains("ROLL SUCCESS ordinary_melee=3") and diagnostics.contains("ROLL MISS ordinary_specialist=4"), "diagnostics distinguish successful rolls from ordinary misses", failures)
+	TestAssertions.truthy(diagnostics.contains("INELIGIBLE 6") and diagnostics.contains("REASONS feature_locked=2,leader_out_of_range=3,leader_unavailable=1") and diagnostics.contains("SOURCES elite=1,ordinary_melee=2,ordinary_specialist=3"), "diagnostics separate stable ineligible reasons and sources from roll misses", failures)
+	TestAssertions.truthy(diagnostics.contains("GENERATION FAILURES 1") and diagnostics.contains("DIAGNOSTIC STAGES configuration=2,generation=1,ownership=3,storage=4") and diagnostics.contains("DIAGNOSTIC CODES ground_full=4,invalid_event=2"), "diagnostics separate generation failures from storage, ownership, and configuration stages", failures)
+	TestAssertions.truthy(diagnostics.contains("COLLECTION inventory_full=1,ok=2"), "diagnostics show sorted collection outcomes", failures)
+	TestAssertions.truthy(diagnostics.contains("PROJECTION pending=18 last=7 peak=32 limit=32"), "diagnostics show production runtime bounded projection work", failures)
+	badge.call("configure", null)
+	TestAssertions.equal(badge.call("diagnostics_text"), "", "diagnostics are session-only and clear with the run snapshot", failures)
+	badge.free()
 
 
 func _test_badge_summary_uses_immutable_snapshot(failures: Array[String]) -> void:
@@ -105,6 +146,7 @@ func _test_main_configures_badge_from_active_run(failures: Array[String]) -> voi
 	TestAssertions.truthy(player_badge != null and not player_badge.visible, "Player Simulation run keeps the badge absent", failures)
 	if player_badge != null:
 		TestAssertions.equal(player_badge.call(&"summary_text"), "", "Player Simulation run has no badge summary", failures)
+		TestAssertions.equal(player_badge.call(&"diagnostics_text"), "", "Player Simulation run has no ground-chest diagnostics", failures)
 	_cleanup_main(player_main)
 
 	var developer_settings := PartyForgeSettings.new()
@@ -113,6 +155,7 @@ func _test_main_configures_badge_from_active_run(failures: Array[String]) -> voi
 	developer_settings.god_mode = true
 	developer_settings.party_capacity_override = 12
 	developer_settings.enemy_density_percent = 500
+	developer_settings.show_ground_chest_diagnostics = true
 	TestAssertions.equal(store.save_settings(developer_settings), "", "Developer Mode end-to-end fixture saves", failures)
 	var developer_main := (load(MAIN_SCENE_PATH) as PackedScene).instantiate()
 	_prepare_main(developer_main, _profile_root.path_join("developer"))
@@ -121,6 +164,7 @@ func _test_main_configures_badge_from_active_run(failures: Array[String]) -> voi
 	TestAssertions.truthy(developer_badge != null and developer_badge.visible, "Developer Mode run shows the configured badge", failures)
 	if developer_badge != null:
 		TestAssertions.equal(developer_badge.call(&"summary_text"), "DEV MODE | UNLOCK ALL | GOD | PARTY 12 | ENEMIES 500% | XP SHARE 18.0m | SQUAD LINK 14.0m", "main passes the active snapshot and reward tuning to the badge", failures)
+		TestAssertions.equal(developer_badge.call(&"diagnostics_text"), "SESSION LOOT DIAGNOSTICS\nLIVE 0 | PEAK 0\nROLL SUCCESS none\nROLL MISS none\nINELIGIBLE 0 | REASONS none | SOURCES none\nGENERATION FAILURES 0\nDIAGNOSTIC STAGES none\nDIAGNOSTIC CODES none\nCOLLECTION none\nPROJECTION pending=0 last=0 peak=0 limit=32", "diagnostics-enabled run immediately presents the complete typed zero state", failures)
 		var saved := developer_main.get("saved_settings") as PartyForgeSettings
 		saved.unlock_all_implemented_content = false
 		saved.god_mode = false

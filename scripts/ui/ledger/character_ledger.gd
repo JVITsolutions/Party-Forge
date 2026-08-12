@@ -28,10 +28,16 @@ var _member_visibility_request_target_id := 0
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	visible = false
+	_wire_close_control()
 	_observed_viewport = get_viewport()
 	if _observed_viewport != null and not _observed_viewport.size_changed.is_connected(_on_viewport_size_changed):
 		_observed_viewport.size_changed.connect(_on_viewport_size_changed)
 	_on_viewport_size_changed()
+
+func _wire_close_control() -> void:
+	var close_callback := Callable(self, "_on_close_pressed")
+	if not _close_button().pressed.is_connected(close_callback):
+		_close_button().pressed.connect(close_callback)
 
 func _notification(what: int) -> void:
 	if what != NOTIFICATION_PREDELETE:
@@ -57,6 +63,7 @@ func configure(
 	progression_provider: Callable = Callable(),
 	progression_context: PlayerRunContext = null,
 ) -> void:
+	_wire_close_control()
 	_invalidate_member_visibility_requests()
 	if is_open():
 		close()
@@ -78,7 +85,16 @@ func configure(
 		_contexts[0] = LedgerPlayerContext.new(0)
 	context = _contexts.get(0) as LedgerPlayerContext
 	provider = LedgerDataProvider.new()
-	provider.configure(party, catalog, health_provider, progression_provider, progression_context)
+	provider.configure(
+		party,
+		catalog,
+		health_provider,
+		progression_provider,
+		progression_context,
+		progression_context,
+		catalog.equipment_catalog if catalog != null else null,
+		catalog.item_foundation_catalog if catalog != null else null,
+	)
 	provider.data_changed.connect(_on_provider_data_changed)
 	provider.party_changed.connect(_on_provider_party_changed)
 	_build_pages()
@@ -213,6 +229,12 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if not is_open():
 		return
+	var scroll_axis := event.get_action_strength(&"tooltip_scroll_down") - event.get_action_strength(&"tooltip_scroll_up")
+	var focused := get_viewport().gui_get_focus_owner() as Control if is_inside_tree() else null
+	if absf(scroll_axis) >= 0.15 and focused != null and _party_scroll().is_ancestor_of(focused):
+		_party_scroll().scroll_vertical += int(roundf(scroll_axis * 96.0))
+		_mark_input_handled()
+		return
 	if event.is_action_pressed(&"ui_cancel"):
 		var active_page := _active_page()
 		if active_page != null and active_page.dismiss_pinned_detail():
@@ -267,9 +289,24 @@ func _build_pages() -> void:
 		_page_host().add_child(page)
 		_pages[definition.id] = page
 		_available_page_ids.append(definition.id)
+	for error: String in required_page_errors(DEFAULT_PAGE_CATALOG, gate):
+		push_error(error)
+
+static func required_page_errors(catalog: LedgerPageCatalog, gate: LedgerFeatureGate) -> PackedStringArray:
+	var errors := PackedStringArray()
 	for required_id: StringName in REQUIRED_PAGE_IDS:
-		if not _definitions.has(required_id):
-			push_error("PARTY_FORGE_LEDGER_ERROR page=%s reason=required page is missing" % required_id)
+		var definition: LedgerPageDefinition
+		if catalog != null:
+			for candidate: LedgerPageDefinition in catalog.pages:
+				if candidate != null and candidate.id == required_id:
+					definition = candidate
+					break
+		if definition == null or not definition.validate().is_empty():
+			errors.append("PARTY_FORGE_LEDGER_ERROR page=%s reason=required page is missing" % required_id)
+			continue
+		if gate == null or gate.resolve(definition) == LedgerPageDefinition.State.HIDDEN:
+			continue
+	return errors
 
 func _player_simulation_policy() -> FeatureAccessPolicy:
 	return RunRulesSnapshot.from_settings(PartyForgeSettings.new()).feature_policy(_catalog_feature_ids(), _catalog_unlock_ids())
@@ -415,32 +452,107 @@ func _restore_member_focus_after_refresh(previous_member_id: int) -> void:
 func _wire_roster_page_focus_bridge() -> void:
 	if context == null:
 		return
+	_wire_closed_focus_cycle()
 	var member_button := _member_buttons.get(context.selected_member_id) as Button
 	var active_page := _active_page()
 	var page_target := active_page.initial_focus() if active_page != null else null
-	if (
-		member_button == null
-		or page_target == null
-	):
+	if member_button != null and page_target != null:
+		_set_neighbor(member_button, &"focus_neighbor_right", page_target)
+		_set_neighbor(page_target, &"focus_neighbor_left", member_button)
+		_set_neighbor(page_target, &"focus_neighbor_top", null)
+		if _responsive_mode == RESPONSIVE_LAYOUT.Mode.COMPACT:
+			var visible_buttons := _visible_member_buttons()
+			var member_index := visible_buttons.find(member_button)
+			var columns := maxi(_party_entries().columns, 1)
+			var last_row := floori(float(visible_buttons.size() - 1) / float(columns))
+			if member_index >= 0 and floori(float(member_index) / float(columns)) == last_row:
+				_set_neighbor(member_button, &"focus_neighbor_bottom", page_target)
+				_set_neighbor(page_target, &"focus_neighbor_top", member_button)
+	_wire_directional_focus_graph()
+
+func _wire_closed_focus_cycle() -> void:
+	var controls: Array[Control] = []
+	for child: Node in _party_entries().get_children():
+		var member_button := child as Button
+		if member_button != null and member_button.visible and member_button.focus_mode != Control.FOCUS_NONE:
+			controls.append(member_button)
+	for child: Node in _tabs().get_children():
+		var tab_button := child as Button
+		if tab_button != null and tab_button.visible and tab_button.focus_mode != Control.FOCUS_NONE:
+			controls.append(tab_button)
+	controls.append(_close_button())
+	var active_page := _active_page()
+	if active_page != null:
+		for page_control: Control in active_page.focus_controls():
+			if page_control != null and page_control.visible and page_control.focus_mode != Control.FOCUS_NONE:
+				controls.append(page_control)
+	if controls.size() < 2:
 		return
-	_set_neighbor(member_button, &"focus_neighbor_right", page_target)
-	_set_neighbor(page_target, &"focus_neighbor_left", member_button)
-	_set_neighbor(page_target, &"focus_neighbor_top", null)
-	if _responsive_mode != RESPONSIVE_LAYOUT.Mode.COMPACT:
-		return
-	var visible_buttons: Array[Button] = []
+	for index: int in controls.size():
+		var current := controls[index]
+		current.focus_previous = current.get_path_to(controls[posmod(index - 1, controls.size())])
+		current.focus_next = current.get_path_to(controls[(index + 1) % controls.size()])
+
+func _wire_directional_focus_graph() -> void:
+	var roster := _visible_member_buttons()
+	var tabs: Array[Button] = []
+	for child: Node in _tabs().get_children():
+		var tab := child as Button
+		if tab != null and tab.visible and tab.focus_mode != Control.FOCUS_NONE:
+			tabs.append(tab)
+	var page_controls: Array[Control] = []
+	var active_page := _active_page()
+	if active_page != null:
+		for control: Control in active_page.focus_controls():
+			if control != null and control.visible and control.focus_mode != Control.FOCUS_NONE:
+				page_controls.append(control)
+	var close_button := _close_button()
+	var first_tab := tabs[0] if not tabs.is_empty() else close_button
+	var last_tab := tabs[-1] if not tabs.is_empty() else close_button
+	var first_page := page_controls[0] if not page_controls.is_empty() else close_button
+	var last_page := page_controls[-1] if not page_controls.is_empty() else close_button
+	var first_roster := roster[0] if not roster.is_empty() else close_button
+	var selected_roster := _member_buttons.get(context.selected_member_id) as Button
+	if selected_roster == null:
+		selected_roster = first_roster
+	for button: Button in roster:
+		if button.focus_neighbor_left.is_empty():
+			_set_neighbor(button, &"focus_neighbor_left", close_button)
+		if button.focus_neighbor_right.is_empty():
+			_set_neighbor(button, &"focus_neighbor_right", first_page)
+		if button.focus_neighbor_top.is_empty():
+			_set_neighbor(button, &"focus_neighbor_top", close_button)
+		if button.focus_neighbor_bottom.is_empty():
+			_set_neighbor(button, &"focus_neighbor_bottom", first_tab)
+	for index: int in tabs.size():
+		var tab := tabs[index]
+		_set_neighbor(tab, &"focus_neighbor_left", tabs[index - 1] if index > 0 else close_button)
+		_set_neighbor(tab, &"focus_neighbor_right", tabs[index + 1] if index + 1 < tabs.size() else close_button)
+		_set_neighbor(tab, &"focus_neighbor_top", selected_roster)
+		_set_neighbor(tab, &"focus_neighbor_bottom", first_page)
+	_set_neighbor(close_button, &"focus_neighbor_left", last_tab)
+	_set_neighbor(close_button, &"focus_neighbor_right", first_roster)
+	_set_neighbor(close_button, &"focus_neighbor_top", last_page)
+	_set_neighbor(close_button, &"focus_neighbor_bottom", first_tab)
+	if not page_controls.is_empty():
+		var active_tab := first_tab
+		for tab: Button in tabs:
+			if StringName(tab.get_meta("page_id", &"")) == _active_page_id:
+				active_tab = tab
+				break
+		if page_controls[0].focus_neighbor_top.is_empty():
+			_set_neighbor(page_controls[0], &"focus_neighbor_top", active_tab)
+		_set_neighbor(page_controls[0], &"focus_neighbor_left", selected_roster)
+		_set_neighbor(page_controls[-1], &"focus_neighbor_bottom", close_button)
+		_set_neighbor(page_controls[-1], &"focus_neighbor_right", close_button)
+
+func _visible_member_buttons() -> Array[Button]:
+	var result: Array[Button] = []
 	for child: Node in _party_entries().get_children():
 		var button := child as Button
-		if button != null and button.visible:
-			visible_buttons.append(button)
-	var member_index := visible_buttons.find(member_button)
-	if member_index < 0:
-		return
-	var columns := maxi(_party_entries().columns, 1)
-	var last_row := floori(float(visible_buttons.size() - 1) / float(columns))
-	if floori(float(member_index) / float(columns)) == last_row:
-		_set_neighbor(member_button, &"focus_neighbor_bottom", page_target)
-		_set_neighbor(page_target, &"focus_neighbor_top", member_button)
+		if button != null and button.visible and button.focus_mode != Control.FOCUS_NONE:
+			result.append(button)
+	return result
 
 func _refresh_member_button(member_id: int) -> void:
 	var button := _member_buttons.get(member_id) as Button
@@ -486,6 +598,9 @@ func _on_tab_focused(page_id: StringName) -> void:
 func _on_member_pressed(member_id: int) -> void:
 	select_member(member_id)
 
+func _on_close_pressed() -> void:
+	close()
+
 func _on_member_focused(member_id: int) -> void:
 	_request_member_visibility(member_id)
 	_ensure_member_visible(member_id)
@@ -499,6 +614,7 @@ func _on_provider_data_changed(member_id: int) -> void:
 		var active_page := _pages.get(_active_page_id) as CharacterLedgerPage
 		if active_page != null:
 			active_page.refresh()
+			_wire_roster_page_focus_bridge()
 
 func _on_provider_party_changed() -> void:
 	if is_open():
@@ -599,3 +715,6 @@ func _active_page() -> CharacterLedgerPage:
 
 func _status() -> Label:
 	return get_node("Overlay/Frame/Layout/Status") as Label
+
+func _close_button() -> Button:
+	return get_node("Overlay/Frame/Layout/Close") as Button

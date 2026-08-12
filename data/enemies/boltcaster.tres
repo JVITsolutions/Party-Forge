@@ -11,6 +11,7 @@ id = &"boltcaster"
 behavior = 3
 max_health = 15.0
 move_speed = 3.1
+loot_source_category = &"ordinary_specialist"
 attacks = Array[ExtResource("2_attack_script")]([ExtResource("3_attack")])
 projectile_profile = ExtResource("4_profile")
 experience = 3

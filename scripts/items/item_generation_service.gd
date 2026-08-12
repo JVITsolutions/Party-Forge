@@ -51,6 +51,8 @@ static func generate(
 		"request_sequence": request.generation_sequence,
 		"selected_base_id": String(base.id),
 		"selected_rarity_id": String(rarity.id),
+		"difficulty_id": String(request.difficulty_id),
+		"heat": request.heat,
 	}
 	if not request.forced_base_id.is_empty():
 		generation_provenance["forced_base_id"] = String(request.forced_base_id)
