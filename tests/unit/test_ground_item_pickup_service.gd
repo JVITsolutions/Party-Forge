@@ -79,6 +79,11 @@ func _test_successful_replay_is_idempotent(codes: Dictionary, failures: Array[St
 	var fresh_service := (load(SERVICE_PATH) as Script).new(fixture.registry, RunContextRegistry.new(), GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG, 3.0) as RefCounted
 	TestAssertions.equal(fresh_service.call(&"collect", &"drop-replay", &"replay-owner").get(&"code"), codes["MISSING"], "new per-run service has no prior success cache", failures)
 
+	var delimiter_fixture := _fixture(&"cache-owner", "profile-cache", 1, Vector3.ZERO, Vector3.ZERO, &"drop|alias", 9105)
+	var delimiter_service := delimiter_fixture.service as RefCounted
+	TestAssertions.equal(delimiter_service.call(&"collect", &"drop|alias", &"cache-owner").get(&"code"), codes["OK"], "delimiter-containing identifiers can complete a real pickup", failures)
+	TestAssertions.equal(delimiter_service.call(&"collect", &"alias", &"cache-owner|drop").get(&"code"), codes["MISSING"], "owner and drop identifiers cannot collide through delimiter concatenation", failures)
+
 func _fixture(owner: StringName, profile_id: String, inventory_columns: int, actor_position: Vector3, drop_position: Vector3, drop_id: StringName, seed: int) -> Dictionary:
 	var catalog := GameCatalog.load_defaults()
 	var party := PartyManager.new()

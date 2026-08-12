@@ -35,7 +35,7 @@ func run() -> Array[String]:
 		return failures
 	_test_configuration_contract(failures)
 	_test_tuning_validation_fails_closed(failures)
-	_test_authored_difficulty_and_heat_item_level(failures)
+	_test_unknown_difficulty_fails_closed(failures)
 	_test_per_context_eligibility_and_canonical_decisions(failures)
 	_test_multiplier_clamping_and_force_success(failures)
 	_test_replay_is_defensive_and_does_not_reroll(failures)
@@ -102,25 +102,28 @@ func _test_tuning_validation_fails_closed(failures: Array[String]) -> void:
 	]), "invalid personal-loot tuning reports stable typed diagnostics", failures)
 	TestAssertions.equal(service.call(&"resolve", EnemyDefeatEvent.create(1, 1, 1, &"swarmer", &"ordinary_melee", Vector3.ZERO, 0.0)), [], "invalid tuning leaves the roll service unavailable with no side effects", failures)
 
-func _test_authored_difficulty_and_heat_item_level(failures: Array[String]) -> void:
+func _test_unknown_difficulty_fails_closed(failures: Array[String]) -> void:
 	var registry := RunContextRegistry.new()
 	var fixture := _context_fixture(&"player_challenge", 0, "profile-challenge", Vector3.ZERO, Vector3.ONE)
 	registry.register_context(fixture.context as PlayerRunContext)
 	var tuning := PersonalLootTuning.new()
 	tuning.drop_basis_points = {&"ordinary_melee": 10000, &"ordinary_specialist": 10000, &"elite": 0, &"boss": 0}
-	tuning.difficulty_item_level_bonus = {&"normal": 0, &"test_challenge": 7}
-	tuning.heat_item_levels_per_point = 0.5
 	var provider := ContextAccessProvider.new(["profile-challenge"])
 	var service := _new_service()
 	var errors := service.call(
 		&"configure", registry, load(REWARD_TUNING_PATH) as RewardDistributionTuning,
 		tuning, Callable(provider, "resolve"), false, 1.0, &"", 0, &"test_challenge", 6.0,
 	) as PackedStringArray
-	TestAssertions.equal(errors, PackedStringArray(), "test-authored non-default difficulty and Heat configure", failures)
-	var decisions := service.call(&"resolve", EnemyDefeatEvent.create(7331, 44, 100, &"swarmer", &"ordinary_melee", Vector3.ZERO, 120.0)) as Array
-	TestAssertions.equal(decisions.size(), 1, "non-default context produces one decision", failures)
-	if decisions.size() == 1:
-		TestAssertions.equal(decisions[0].get(&"item_level"), 21, "item-level decision includes encounter 10, authored difficulty 7, and Heat 3", failures)
+	TestAssertions.equal(errors, PackedStringArray([
+		"PARTY_FORGE_PERSONAL_LOOT_ERROR field=difficulty_id reason=unsupported difficulty test_challenge",
+	]), "unknown production difficulty fails closed with a stable typed diagnostic", failures)
+	TestAssertions.equal(service.call(&"resolve", EnemyDefeatEvent.create(7331, 44, 100, &"swarmer", &"ordinary_melee", Vector3.ZERO, 120.0)), [], "unknown difficulty leaves the roll service unavailable with no roll side effects", failures)
+
+	var authored_unknown := PersonalLootTuning.new()
+	authored_unknown.difficulty_item_level_bonus = {&"normal": 0, &"future_challenge": 7}
+	TestAssertions.equal(authored_unknown.validate(), PackedStringArray([
+		"PARTY_FORGE_PERSONAL_LOOT_TUNING_ERROR field=difficulty_item_level_bonus.future_challenge reason=unsupported difficulty",
+	]), "tuning fails closed on a difficulty not supported by item generation vocabulary", failures)
 
 func _test_per_context_eligibility_and_canonical_decisions(failures: Array[String]) -> void:
 	var registry := RunContextRegistry.new()

@@ -24,8 +24,8 @@ func _init(
 	pickup_radius = maxf(pickup_radius_value, 0.0)
 
 func collect(drop_id: StringName, input_run_player_id: StringName) -> GroundItemPickupResult:
-	var replay_key := "%s|%s" % [input_run_player_id, drop_id]
-	var prior := _successful_results.get(replay_key) as GroundItemPickupResult
+	var owner_results := _successful_results.get(input_run_player_id, {}) as Dictionary
+	var prior := owner_results.get(drop_id) as GroundItemPickupResult
 	if prior != null:
 		return prior.copy()
 	var record := _registry.record(drop_id) if _registry != null else null
@@ -56,5 +56,6 @@ func collect(drop_id: StringName, input_run_player_id: StringName) -> GroundItem
 		return GroundItemPickupResult.new(GroundItemPickupResult.Code.TRANSACTION_REJECTED)
 	_registry.remove(record.drop_id)
 	var success := GroundItemPickupResult.new(GroundItemPickupResult.Code.OK, "Picked up %s %s" % [rarity_name, item_name], item_name, rarity_name)
-	_successful_results[replay_key] = success.copy()
+	owner_results[drop_id] = success.copy()
+	_successful_results[input_run_player_id] = owner_results
 	return success

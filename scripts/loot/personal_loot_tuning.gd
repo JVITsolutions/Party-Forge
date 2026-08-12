@@ -39,6 +39,9 @@ func validate() -> PackedStringArray:
 		if typeof(key) not in [TYPE_STRING, TYPE_STRING_NAME] or label.is_empty():
 			errors.append(_error("difficulty_item_level_bonus.<empty>", "key must not be empty"))
 			continue
+		if StringName(label) not in ItemGenerationVocabulary.DIFFICULTIES:
+			errors.append(_error("difficulty_item_level_bonus.%s" % label, "unsupported difficulty"))
+			continue
 		_validate_bonus("difficulty_item_level_bonus.%s" % label, difficulty_item_level_bonus[key], errors)
 	if not is_finite(heat_item_levels_per_point) or heat_item_levels_per_point < 0.0:
 		errors.append(_error("heat_item_levels_per_point", "must be finite and nonnegative"))
@@ -49,7 +52,7 @@ func validate() -> PackedStringArray:
 	return errors
 
 func supports_difficulty(difficulty_id: StringName) -> bool:
-	return not difficulty_id.is_empty() and difficulty_item_level_bonus.has(difficulty_id)
+	return difficulty_id in ItemGenerationVocabulary.DIFFICULTIES and difficulty_item_level_bonus.has(difficulty_id)
 
 func _validate_bonus(field: String, value: Variant, errors: PackedStringArray) -> void:
 	if typeof(value) != TYPE_INT or int(value) < -ItemGenerationRequest.MAX_ITEM_LEVEL or int(value) > ItemGenerationRequest.MAX_ITEM_LEVEL:

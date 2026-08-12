@@ -101,6 +101,18 @@ func _test_heat_context_matches_decision_request_and_provenance(failures: Array[
 	assert(roll.configure(contexts, RewardDistributionTuning.new(), tuning, func(_context: PlayerRunContext) -> bool: return true, true, 1.0, &"", 0, &"normal", 8.0).is_empty())
 	var registry := GroundItemRegistry.new()
 	var coordinator := PersonalLootDropCoordinator.new()
+	var unknown_registry := GroundItemRegistry.new()
+	var unknown_coordinator := PersonalLootDropCoordinator.new()
+	TestAssertions.equal(unknown_coordinator.configure(roll, contexts, identities.identities(), GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG, unknown_registry, &"test_challenge", 8.0), PackedStringArray([
+		"PARTY_FORGE_PERSONAL_LOOT_COORDINATOR_ERROR field=item_level_context reason=roll and generation difficulty/Heat must match",
+		"PARTY_FORGE_PERSONAL_LOOT_COORDINATOR_ERROR field=difficulty_id reason=unsupported difficulty test_challenge",
+	]), "coordinator reports stable typed diagnostics for an unsupported difficulty", failures)
+	var rejected_report := unknown_coordinator.resolve_defeat(EnemyDefeatEvent.create(54100, 82, 820, &"swarmer", &"ordinary_melee", Vector3.ZERO, 120.0))
+	TestAssertions.equal(rejected_report.get("spawned_drop_ids", []), [], "unsupported difficulty produces no generated ground item", failures)
+	TestAssertions.equal(unknown_registry.all_records().size(), 0, "unsupported difficulty leaves the ground registry unchanged", failures)
+	TestAssertions.equal(coordinator.configure(roll, contexts, identities.identities(), GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG, registry, &"normal", 8.0000001), PackedStringArray([
+		"PARTY_FORGE_PERSONAL_LOOT_COORDINATOR_ERROR field=item_level_context reason=roll and generation difficulty/Heat must match",
+	]), "coordinator rejects near-but-different Heat instead of approximately matching", failures)
 	TestAssertions.equal(coordinator.configure(roll, contexts, identities.identities(), GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG, registry, &"normal", 7.0), PackedStringArray([
 		"PARTY_FORGE_PERSONAL_LOOT_COORDINATOR_ERROR field=item_level_context reason=roll and generation difficulty/Heat must match",
 	]), "coordinator rejects divergent roll and generation item-level context", failures)
@@ -115,8 +127,10 @@ func _test_heat_context_matches_decision_request_and_provenance(failures: Array[
 	if decisions.size() == 1 and item != null:
 		TestAssertions.equal(decisions[0].item_level, 15, "decision includes the exact non-default Heat contribution", failures)
 		TestAssertions.equal(item.item_level, decisions[0].item_level, "generated request uses the decision item level", failures)
-		TestAssertions.near(float(item.origin["source"]["generation"]["heat"]), 8.0, 0.001, "item provenance records the same Heat", failures)
-		TestAssertions.equal(item.origin["source"]["generation"]["difficulty_id"], "normal", "item provenance records the same difficulty ID", failures)
+		var generation := item.origin["source"]["generation"] as Dictionary
+		TestAssertions.equal(generation["item_level"], decisions[0].item_level, "generation provenance records the exact request item level", failures)
+		TestAssertions.equal(float(generation["heat"]), 8.0, "generation request and provenance record exact nonzero Heat", failures)
+		TestAssertions.equal(generation["difficulty_id"], "normal", "generation request and provenance remain on the supported normal difficulty", failures)
 
 func _coordinator_fixture(reverse_registration: bool) -> Dictionary:
 	var contexts := RunContextRegistry.new()
