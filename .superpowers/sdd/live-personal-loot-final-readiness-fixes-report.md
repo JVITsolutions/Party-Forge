@@ -4,7 +4,10 @@ Date: 2026-08-11
 
 Branch: `feat/live-personal-loot`
 
-Implementation/test commit: `af10641cd5398f8e3cdd875ba89da5668d0cc0d6`
+Implementation/test commits:
+
+- `af10641cd5398f8e3cdd875ba89da5668d0cc0d6`
+- `586873dfcdbbfc390bc6a6d6af253f71be57f410` (independent-review corrections)
 
 ## Scope
 
@@ -23,6 +26,14 @@ Initial RED log:
 
 The regression tests failed before implementation because the new difficulty/Heat configuration arguments and pickup-result copy/serialization contract were absent; the coordinator consequently could not load against the expected API.
 
+Independent-review RED log:
+
+`C:\Users\Jacob\AppData\Local\Temp\pf-review-red-e3f0ed07-78f6-4f90-8061-d4af069b5706\red.log`
+
+- `TEST_SUMMARY: FAIL (3 failures)` for the intended regressions: unsupported tuning difficulty accepted, near-different Heat approximately accepted, and delimiter-concatenated pickup IDs colliding.
+- The correction validates difficulty IDs through `ItemGenerationVocabulary.DIFFICULTIES`, so a future vocabulary expansion remains a narrow deliberate change without exposing unsupported content now.
+- Coordinator coverage proves an unsupported difficulty produces stable typed diagnostics, no generated drop IDs, and no ground-registry mutation.
+
 ## Final verification
 
 Focused unit suites:
@@ -31,6 +42,13 @@ Focused unit suites:
 
 - `TEST_SUMMARY: PASS (0 failures)`
 - Covers tuning validation, roll context, coordinator consistency, pickup replay, Main bootstrap/access/HUD wiring, item provenance, feature access, and checkout compatibility.
+
+Final independent-review focused suites:
+
+`C:\Users\Jacob\AppData\Local\Temp\pf-review-final-focused-e47bdc1e-71b6-4bb1-a935-db1231c8105b\focused.log`
+
+- `TEST_SUMMARY: PASS (0 failures)`
+- Covers vocabulary-gated difficulty rejection/no generation, exact nonzero Heat agreement through real generation/provenance, near-different Heat rejection, and collision-free delimiter-bearing pickup replay IDs.
 
 Actual input integration:
 
@@ -42,9 +60,25 @@ Actual input integration:
 - `GROUND_ITEM_PICKUP_FOREIGN_OWNER: PASS`
 - `GROUND_ITEM_PICKUP_INPUT_INTEGRATION: PASS`
 
+Final independent-review actual-input integration:
+
+`C:\Users\Jacob\AppData\Local\Temp\pf-review-input-8e4897de-edf2-443b-a6f9-d805becac9c3\input.log`
+
+- All five pickup input markers passed.
+
 Fresh isolated full unit suite on the committed implementation tree:
 
 `C:\Users\Jacob\AppData\Local\Temp\pf-final-full-fe5b1b47-230c-4e1e-b38d-b7802471e792\full.log`
+
+- Exit code: `0`
+- `TEST_SUMMARY: PASS (201 suites)`
+- `Parse Error`: `0`
+- `SCRIPT ERROR`: `0`
+- `TEST_SUMMARY: FAIL`: `0`
+
+Fresh isolated full suite after independent-review corrections:
+
+`C:\Users\Jacob\AppData\Local\Temp\pf-review-final-full-9694a93c-ed12-4f46-9478-e3d1e3c771c9\full.log`
 
 - Exit code: `0`
 - `TEST_SUMMARY: PASS (201 suites)`
