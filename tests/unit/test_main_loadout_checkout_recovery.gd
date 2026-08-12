@@ -35,7 +35,7 @@ class InjectedContextFailure extends PlayerRunContext:
 		manager: PartyManager,
 		experience_multiplier: int,
 		item_bootstrap: RunItemBootstrap = null,
-		run_inventory_capacity_override: int = -1,
+		run_inventory_minimum_capacity: int = -1,
 	) -> PackedStringArray:
 		return PackedStringArray(["PARTY_FORGE_RUN_CONTEXT_ERROR field=injected reason=post-checkout context failure"])
 

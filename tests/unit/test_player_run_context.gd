@@ -40,6 +40,7 @@ func run() -> Array[String]:
 	_test_configuration_validation_and_copy_ownership(failures)
 	_test_initial_member_equipment_is_owned_and_defensive(failures)
 	_test_checked_out_item_bootstrap_identity_and_retry(failures)
+	_test_developer_minimum_preserves_larger_resumable_inventory(failures)
 	_test_configuration_rejects_invalid_member_growth_atomically(failures)
 	_test_atomic_progression_and_leader_queue(failures)
 	_test_future_recruits_initialize_once(failures)
@@ -1109,6 +1110,33 @@ func _test_checked_out_item_bootstrap_identity_and_retry(failures: Array[String]
 	var exposed := retry_context.item_state()
 	exposed._clear_slot(&"run-equipment-001", 9)
 	TestAssertions.equal(retry_context.equipment_for(1).item_id_at(9), item.instance_id, "configured bootstrap state is defensive", failures)
+	party.free()
+
+func _test_developer_minimum_preserves_larger_resumable_inventory(failures: Array[String]) -> void:
+	var catalog := GameCatalog.load_defaults()
+	var party := PartyManager.new()
+	party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
+	var profile := ProfileState.new_profile("profile-resumable-minimum", "Resumable Minimum", 1000)
+	profile.inventory_columns = 0
+	var item := ItemInstance.new()
+	item.instance_id = "item-resumable-high-slot"
+	item.base_definition_id = &"forge_vanguard_sword"
+	item.item_level = 28
+	item.rarity_id = &"common"
+	item.origin = {"issuer_namespace": "profile:profile-resumable-minimum", "seed": 4420, "sequence": 0, "source": "context_bootstrap_minimum_test"}
+	var state := ItemOwnershipState.create("resumable_minimum_player", ItemRegistry.new([item]), [
+		ItemSlotContainer.create(&"run-inventory", ItemSlotContainer.RUN_INVENTORY, "resumable_minimum_player", 10, {7: item.instance_id}),
+		ItemSlotContainer.create(&"run-equipment-001", ItemSlotContainer.RUN_MEMBER_EQUIPMENT, "resumable_minimum_player", EquipmentSlotIndex.capacity()),
+	])
+	var bootstrap := RunItemBootstrap.create(&"run-bootstrap-minimum", 4420, &"resumable_minimum_player", 1, state)
+	profile.resumable_run = ResumableRunItemCodec.encode(bootstrap)
+	var context := PlayerRunContext.new()
+	var errors := context.configure(&"resumable_minimum_player", 0, profile, 4420, party, 100, bootstrap, 5)
+	TestAssertions.equal(errors, PackedStringArray(), "Developer minimum accepts a resumable inventory occupied above slot five", failures)
+	if errors.is_empty():
+		TestAssertions.equal(context.run_inventory().capacity, 10, "Developer minimum preserves the larger resumable inventory capacity", failures)
+		TestAssertions.equal(context.run_inventory().item_id_at(7), item.instance_id, "Developer minimum preserves the resumable high-slot item", failures)
+	TestAssertions.equal(profile.inventory_columns, 0, "Developer resumable minimum leaves ProfileState unchanged", failures)
 	party.free()
 
 func _assert_context_unconfigured(context: PlayerRunContext, label: String, failures: Array[String]) -> void:

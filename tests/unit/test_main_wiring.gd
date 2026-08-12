@@ -345,6 +345,8 @@ func _test_active_run_context_graph_and_failure_cleanup(failures: Array[String])
     ProfileTestSupport.remove_tree(failure_root)
 
 func _test_personal_loot_defeat_and_guardian_wiring(failures: Array[String]) -> void:
+    var defeat_runner_source := FileAccess.get_file_as_string("res://tests/integration/personal_loot_defeat_runner.gd")
+    TestAssertions.truthy(not '.call("_ready")' in defeat_runner_source, "personal-loot defeat integration uses natural SceneTree readiness", failures)
     var player_main := (load("res://scenes/game/main.tscn") as PackedScene).instantiate()
     _prepare_main(player_main)
     var player_profile := player_main.active_profile() as ProfileState
@@ -412,6 +414,18 @@ func _test_personal_loot_defeat_and_guardian_wiring(failures: Array[String]) -> 
     TestAssertions.equal(victories[0], 1, "Forge Guardian preserves the existing exactly-once victory behavior", failures)
     TestAssertions.equal(developer_registry.all_records().size(), 0, "Guardian victory adds no boss reward and keeps run-owned ground loot cleared", failures)
     _cleanup_main(developer_main)
+
+    var expanded_developer_main := (load("res://scenes/game/main.tscn") as PackedScene).instantiate()
+    _prepare_main(expanded_developer_main)
+    var expanded_profile := expanded_developer_main.active_profile() as ProfileState
+    expanded_profile.inventory_columns = 3
+    TestAssertions.equal(ProfileStore.new().save_profile(expanded_profile, String(expanded_developer_main.get("profile_root"))), "", "expanded Developer fixture persists three profile inventory columns", failures)
+    TestAssertions.equal(expanded_developer_main.profile_manager.refresh_profile(expanded_profile.profile_id), "", "expanded Developer fixture refreshes the authoritative profile", failures)
+    expanded_developer_main.saved_settings = developer_settings.copy()
+    TestAssertions.truthy(expanded_developer_main.select_leader_class(&"fighter"), "expanded Developer profile starts through Main", failures)
+    TestAssertions.equal(expanded_developer_main.active_run_context.run_inventory().capacity, 15, "Developer five-slot grant is a minimum and never shrinks a larger profile inventory", failures)
+    TestAssertions.equal(expanded_developer_main.active_profile().inventory_columns, 3, "Developer minimum capacity does not mutate a larger profile column count", failures)
+    _cleanup_main(expanded_developer_main)
 
 func _test_invalid_personal_loot_tuning_aborts_main_start(failures: Array[String]) -> void:
     var isolated_root := "user://tests/main_wiring-invalid-loot_%d_%d" % [OS.get_process_id(), Time.get_ticks_usec()]

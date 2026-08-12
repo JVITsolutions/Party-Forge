@@ -11,7 +11,7 @@ func _initialize() -> void:
 func _run() -> void:
 	ProfileTestSupport.remove_tree(PROFILE_ROOT)
 	_cleanup_settings()
-	var player := _started_main(PartyForgeSettings.new())
+	var player := await _started_main(PartyForgeSettings.new())
 	_verify_enemy_defeat(player, false)
 	_cleanup_main(player)
 	ProfileTestSupport.remove_tree(PROFILE_ROOT)
@@ -19,7 +19,7 @@ func _run() -> void:
 	var developer_settings := PartyForgeSettings.new()
 	developer_settings.mode = PartyForgeSettings.Mode.DEVELOPER_MODE
 	developer_settings.unlock_all_implemented_content = true
-	var developer := _started_main(developer_settings)
+	var developer := await _started_main(developer_settings)
 	_verify_enemy_defeat(developer, true)
 	_verify_guardian_victory_and_zero_reward(developer)
 	_cleanup_main(developer)
@@ -76,7 +76,8 @@ func _started_main(settings: PartyForgeSettings) -> PartyForgeMain:
 	var main := (load("res://scenes/game/main.tscn") as PackedScene).instantiate() as PartyForgeMain
 	main.profile_root = PROFILE_ROOT
 	main.settings_path = SETTINGS_PATH
-	main.call("_ready")
+	root.add_child(main)
+	await process_frame
 	var manager := main.profile_manager as ProfileManager
 	if manager.active_profile() == null:
 		manager.create_profile("Personal Loot Integration")

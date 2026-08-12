@@ -60,7 +60,7 @@ func configure(
 	manager: PartyManager,
 	experience_multiplier: int,
 	item_bootstrap: RunItemBootstrap = null,
-	run_inventory_capacity_override: int = -1,
+	run_inventory_minimum_capacity: int = -1,
 ) -> PackedStringArray:
 	if _configured:
 		return PackedStringArray(["PARTY_FORGE_RUN_CONTEXT_ERROR field=configuration reason=already configured"])
@@ -78,8 +78,8 @@ func configure(
 	errors.append_array(_party_validation_errors(manager))
 	if experience_multiplier < 100 or experience_multiplier > 1000:
 		errors.append("PARTY_FORGE_RUN_CONTEXT_ERROR field=experience_multiplier")
-	if run_inventory_capacity_override < -1 or run_inventory_capacity_override > 40:
-		errors.append("PARTY_FORGE_RUN_CONTEXT_ERROR field=run_inventory_capacity_override")
+	if run_inventory_minimum_capacity < -1 or run_inventory_minimum_capacity > 40:
+		errors.append("PARTY_FORGE_RUN_CONTEXT_ERROR field=run_inventory_minimum_capacity")
 	var strict_resumable := profile != null and profile.resumable_run.has("item_state")
 	if strict_resumable and item_bootstrap == null:
 		errors.append("PARTY_FORGE_RUN_CONTEXT_ERROR field=item_bootstrap reason=required for resumable item run")
@@ -121,7 +121,7 @@ func configure(
 		&"run-inventory",
 		ItemSlotContainer.RUN_INVENTORY,
 		String(run_player_id_value),
-		run_inventory_capacity_override if run_inventory_capacity_override >= 0 else owned_profile.inventory_columns * 5,
+		maxi(owned_profile.inventory_columns * 5, run_inventory_minimum_capacity) if run_inventory_minimum_capacity >= 0 else owned_profile.inventory_columns * 5,
 	)
 	var item_containers: Array[ItemSlotContainer] = [
 		inventory,
@@ -145,15 +145,15 @@ func configure(
 		])
 	if item_bootstrap != null:
 		var bootstrap_state := item_bootstrap.item_state()
-		if run_inventory_capacity_override >= 0:
-			bootstrap_state = RunItemBootstrap.with_run_inventory_capacity(bootstrap_state, run_inventory_capacity_override)
+		if run_inventory_minimum_capacity >= 0:
+			bootstrap_state = RunItemBootstrap.with_run_inventory_minimum_capacity(bootstrap_state, run_inventory_minimum_capacity)
 		if (
 			bootstrap_state != null
 			and bootstrap_state.container(ItemSlotContainer.RUN_GROUND_ITEMS_ID) == null
 			and bootstrap_state.validate(GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG).is_empty()
 		):
 			bootstrap_state = RunItemBootstrap.with_ground_container(bootstrap_state)
-		var bootstrap_error := _validate_bootstrap_state(bootstrap_state, next_item_state)
+		var bootstrap_error := _validate_bootstrap_state(bootstrap_state, next_item_state, run_inventory_minimum_capacity >= 0)
 		if not bootstrap_error.is_empty():
 			_reset_unconfigured_fields()
 			return PackedStringArray([
@@ -1070,7 +1070,7 @@ func _clear_pending_equipment_publication() -> void:
 func _can_mutate_current_owner() -> bool:
 	return owns_source_refresh_coordinator()
 
-func _validate_bootstrap_state(state: ItemOwnershipState, empty_candidate: ItemOwnershipState) -> String:
+func _validate_bootstrap_state(state: ItemOwnershipState, empty_candidate: ItemOwnershipState, allow_larger_inventory := false) -> String:
 	if state == null:
 		return "item state is missing"
 	var validation := state.validate(GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)
@@ -1089,7 +1089,17 @@ func _validate_bootstrap_state(state: ItemOwnershipState, empty_candidate: ItemO
 		if (
 			actual_container.container_kind != expected_container.container_kind
 			or actual_container.owner_id != expected_container.owner_id
-			or actual_container.capacity != expected_container.capacity
+			or (
+				expected_container.container_id == &"run-inventory"
+				and (
+					actual_container.capacity < expected_container.capacity
+					or (not allow_larger_inventory and actual_container.capacity != expected_container.capacity)
+				)
+			)
+			or (
+				expected_container.container_id != &"run-inventory"
+				and actual_container.capacity != expected_container.capacity
+			)
 		):
 			return "container contract mismatch"
 	return ""

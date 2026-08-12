@@ -52,15 +52,19 @@ static func with_ground_container(state: ItemOwnershipState) -> ItemOwnershipSta
 	return ItemOwnershipState.create(state.owner_id, state.registry(), containers)
 
 static func with_run_inventory_capacity(state: ItemOwnershipState, capacity: int) -> ItemOwnershipState:
-	if state == null or capacity < 0:
+	return with_run_inventory_minimum_capacity(state, capacity)
+
+static func with_run_inventory_minimum_capacity(state: ItemOwnershipState, minimum_capacity: int) -> ItemOwnershipState:
+	if state == null or minimum_capacity < 0:
 		return null
 	var inventory := state.container(&"run-inventory")
-	if inventory == null or inventory.occupied_slots().any(func(slot: int) -> bool: return slot >= capacity):
+	if inventory == null:
 		return null
+	var resolved_capacity := maxi(inventory.capacity, minimum_capacity)
 	var containers: Array[ItemSlotContainer] = []
 	for container: ItemSlotContainer in state.containers():
 		if container.container_id == &"run-inventory":
-			containers.append(ItemSlotContainer.create(container.container_id, container.container_kind, container.owner_id, capacity, container.to_dictionary().get("slots", {}) as Dictionary))
+			containers.append(ItemSlotContainer.create(container.container_id, container.container_kind, container.owner_id, resolved_capacity, container.to_dictionary().get("slots", {}) as Dictionary))
 		else:
 			containers.append(container)
 	return ItemOwnershipState.create(state.owner_id, state.registry(), containers)

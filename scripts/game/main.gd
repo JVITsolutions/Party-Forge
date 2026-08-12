@@ -291,7 +291,7 @@ func _start_leader_class_from_checkout(definition: ClassDefinition, committed_pr
 		party_manager,
 		active_run_rules.experience_multiplier_percent(),
 		bootstrap,
-		active_run_rules.run_inventory_capacity_override(),
+		active_run_rules.run_inventory_minimum_capacity(),
 	)
 	if not context_errors.is_empty():
 		return _abort_run_start(context_errors)

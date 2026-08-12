@@ -53,8 +53,10 @@ func force_personal_drops() -> bool: return _force_personal_drops
 func personal_drop_source_category_override() -> StringName: return _personal_drop_source_category_override
 func personal_drop_item_level_override() -> int: return _personal_drop_item_level_override
 func show_ground_chest_diagnostics() -> bool: return _show_ground_chest_diagnostics
-func run_inventory_capacity_override() -> int:
+func run_inventory_minimum_capacity() -> int:
 	return DEVELOPER_RUN_INVENTORY_CAPACITY if _developer_mode_active and _unlock_all else -1
+func run_inventory_capacity_override() -> int:
+	return run_inventory_minimum_capacity()
 func feature_policy(known_features: Array[StringName] = [], known_unlocks: Array[StringName] = [], unlocked: Array[StringName] = []) -> FeatureAccessPolicy:
 	return FeatureAccessPolicy.new(_developer_mode_active, _unlock_all, known_features, known_unlocks, unlocked)
 func capacity_policy() -> PartyCapacityPolicy: return PartyCapacityPolicy.new(_party_capacity)
