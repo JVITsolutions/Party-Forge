@@ -46,6 +46,8 @@ var _status_by_owner: Dictionary = {}
 var _target_radius := DEFAULT_TARGET_RADIUS
 var _visibility_filter := Callable()
 var _modal_filter := Callable()
+var _modal_suppression_initialized := false
+var _modal_anchors_suppressed := false
 
 
 func configure(
@@ -113,6 +115,7 @@ func configure_interaction(
 	_target_radius = maxf(target_radius, 0.0)
 	_visibility_filter = visibility_filter
 	_modal_filter = modal_filter
+	_sync_modal_anchor_input(true)
 
 
 func clear_projection() -> void:
@@ -141,6 +144,8 @@ func clear_projection() -> void:
 	_status_by_owner.clear()
 	_visibility_filter = Callable()
 	_modal_filter = Callable()
+	_modal_suppression_initialized = false
+	_modal_anchors_suppressed = false
 
 
 func selection_for_owner(run_player_id: StringName) -> StringName:
@@ -192,6 +197,7 @@ func invalidate_comparisons(run_player_id: StringName = &"") -> void:
 
 
 func _process(_delta: float) -> void:
+	_sync_modal_anchor_input()
 	_last_projection_work_count = 0
 	var camera_signature := _camera_signature()
 	var camera_changed := camera_signature != _last_camera_signature
@@ -340,6 +346,7 @@ func _take_chest() -> Node3D:
 	if not chest.is_connected(&"pickup_requested", _on_chest_pickup_requested):
 		chest.connect(&"pickup_requested", _on_chest_pickup_requested)
 	var anchor := chest.call(&"tooltip_anchor") as Control
+	anchor.mouse_filter = Control.MOUSE_FILTER_IGNORE if _modal_anchors_suppressed else Control.MOUSE_FILTER_STOP
 	if not anchor.mouse_entered.is_connected(_on_anchor_mouse_entered.bind(chest)):
 		anchor.mouse_entered.connect(_on_anchor_mouse_entered.bind(chest))
 		anchor.focus_entered.connect(_on_anchor_focus_entered.bind(chest))
@@ -627,9 +634,14 @@ func _owner_for_event(event: InputEvent) -> StringName:
 	if _context_registry == null:
 		return &""
 	var event_device := event.device
+	if event is InputEventMouseButton or event is InputEventMouseMotion:
+		for context: PlayerRunContext in _context_registry.all_contexts():
+			if _context_registry.device_for(context.run_player_id) == -1:
+				return context.run_player_id
+		return &""
 	for context: PlayerRunContext in _context_registry.all_contexts():
 		var owned_device := _context_registry.device_for(context.run_player_id)
-		if event is InputEventJoypadButton or event is InputEventJoypadMotion or (event is InputEventMouseButton and event_device >= 0):
+		if event is InputEventJoypadButton or event is InputEventJoypadMotion:
 			if owned_device == event_device:
 				return context.run_player_id
 		elif owned_device == -1:
@@ -668,6 +680,22 @@ func _world_position_visible(world_position: Vector3) -> bool:
 
 func _modal_input_suppressed() -> bool:
 	return _modal_filter.is_valid() and bool(_modal_filter.call())
+
+
+func _sync_modal_anchor_input(force: bool = false) -> void:
+	var suppressed := _modal_input_suppressed()
+	if not force and _modal_suppression_initialized and suppressed == _modal_anchors_suppressed:
+		return
+	_modal_suppression_initialized = true
+	_modal_anchors_suppressed = suppressed
+	var mouse_filter := Control.MOUSE_FILTER_IGNORE if suppressed else Control.MOUSE_FILTER_STOP
+	for chest_value: Variant in _chest_by_drop.values():
+		var chest := chest_value as Node3D
+		if chest == null:
+			continue
+		var anchor := chest.call(&"tooltip_anchor") as Control
+		if anchor != null:
+			anchor.mouse_filter = mouse_filter
 
 
 func _mark_input_handled() -> void:

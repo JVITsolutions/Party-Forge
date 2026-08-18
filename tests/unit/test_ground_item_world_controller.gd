@@ -16,6 +16,7 @@ func run() -> Array[String]:
 	_test_main_scene_wiring(failures)
 	_test_projection_pool_tooltip_and_ownership(controller_script, failures)
 	_test_bounded_camera_reprojection(controller_script, failures)
+	_test_modal_anchor_transition_bounds(controller_script, failures)
 	return failures
 
 
@@ -225,6 +226,48 @@ func _test_bounded_camera_reprojection(controller_script: Script, failures: Arra
 			controller.call(&"_process", 0.0)
 			guard += 1
 		TestAssertions.equal(int((controller.call(&"projection_diagnostics") as Dictionary).get("pending", 0)), 0, "bounded camera reprojection reaches eventual correctness", failures)
+	controller.call(&"clear_projection")
+	controller.free()
+	host.free()
+	RenderingServer.force_sync()
+
+
+func _test_modal_anchor_transition_bounds(controller_script: Script, failures: Array[String]) -> void:
+	var host := Node.new()
+	var chests_parent := Node3D.new()
+	var tooltip_layer := Control.new()
+	tooltip_layer.size = Vector2(1920.0, 1080.0)
+	var camera := Camera3D.new()
+	host.add_child(chests_parent)
+	host.add_child(tooltip_layer)
+	host.add_child(camera)
+	var controller := Node.new()
+	controller.set_script(controller_script)
+	host.add_child(controller)
+	var registry := GroundItemRegistry.new()
+	registry.add(_record(&"modal-active", &"player_1", 1, Vector3(0.0, 0.0, -3.0), &"common", &"red"))
+	registry.add(_record(&"modal-pooled", &"player_1", 1, Vector3(1.0, 0.0, -3.0), &"common", &"red"))
+	controller.call(&"configure", registry, {}, func(record: GroundItemRecord) -> Dictionary: return _detail_for(record), camera, chests_parent, tooltip_layer)
+	var modal := [false]
+	controller.call(&"configure_interaction", null, null, null, null, 20.0, Callable(), func() -> bool: return modal[0])
+	var active_chest := (controller.get("_chest_by_drop") as Dictionary).get(&"modal-active") as Node3D
+	var pooled_chest := (controller.get("_chest_by_drop") as Dictionary).get(&"modal-pooled") as Node3D
+	var active_anchor := active_chest.call(&"tooltip_anchor") as Control
+	var pooled_anchor := pooled_chest.call(&"tooltip_anchor") as Control
+	TestAssertions.equal(active_anchor.mouse_filter, Control.MOUSE_FILTER_STOP, "ground anchor starts pointer-active while the modal filter is false", failures)
+	registry.remove(&"modal-pooled")
+	pooled_anchor.mouse_filter = Control.MOUSE_FILTER_PASS
+	modal[0] = true
+	controller.call(&"_process", 0.0)
+	TestAssertions.equal(active_anchor.mouse_filter, Control.MOUSE_FILTER_IGNORE, "modal transition suppresses active ground-anchor pointer capture", failures)
+	TestAssertions.equal(pooled_anchor.mouse_filter, Control.MOUSE_FILTER_PASS, "modal transition does not scan or rewrite inactive pooled anchors", failures)
+	active_anchor.mouse_filter = Control.MOUSE_FILTER_PASS
+	controller.call(&"_process", 0.0)
+	TestAssertions.equal(active_anchor.mouse_filter, Control.MOUSE_FILTER_PASS, "stable modal state performs no repeated active-anchor rewrite", failures)
+	modal[0] = false
+	controller.call(&"_process", 0.0)
+	TestAssertions.equal(active_anchor.mouse_filter, Control.MOUSE_FILTER_STOP, "modal close transition restores active ground-anchor pointer capture", failures)
+	TestAssertions.equal(pooled_anchor.mouse_filter, Control.MOUSE_FILTER_PASS, "modal close still leaves inactive pooled anchors untouched", failures)
 	controller.call(&"clear_projection")
 	controller.free()
 	host.free()

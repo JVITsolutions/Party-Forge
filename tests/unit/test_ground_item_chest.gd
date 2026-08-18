@@ -42,12 +42,12 @@ func _test_bounded_primitive_presentation(chest: Node3D, failures: Array[String]
 	if pennant != null:
 		TestAssertions.equal(pennant.billboard, BaseMaterial3D.BILLBOARD_ENABLED, "pennant always faces the arena camera", failures)
 		TestAssertions.truthy(pennant.text in ["▼", "▾", "◆"], "pennant uses a grayscale-readable silhouette rather than color alone", failures)
-		TestAssertions.truthy(pennant.font_size <= 28, "owner pennant stays within compact font budget", failures)
-		TestAssertions.truthy(pennant.outline_size <= 6, "owner pennant outline stays compact", failures)
+		TestAssertions.truthy(pennant.font_size <= 10, "owner pennant stays within the accepted 1080p font budget", failures)
+		TestAssertions.truthy(pennant.outline_size <= 2, "owner pennant stays within the accepted 1080p outline budget", failures)
 	if owner_label != null:
 		TestAssertions.equal(owner_label.billboard, BaseMaterial3D.BILLBOARD_ENABLED, "P-number always faces the arena camera", failures)
-		TestAssertions.truthy(owner_label.font_size <= 18, "owner label stays within compact font budget", failures)
-		TestAssertions.truthy(owner_label.outline_size <= 4, "owner label outline stays compact", failures)
+		TestAssertions.truthy(owner_label.font_size <= 9, "owner label stays within the accepted 1080p font budget", failures)
+		TestAssertions.truthy(owner_label.outline_size <= 2, "owner label stays within the accepted 1080p outline budget", failures)
 	var owner_marker := chest.get_node("OwnerMarker") as PlayerOwnerMarker3D
 	for player_number: int in [1, 2]:
 		var owner_color := PlayerColorPalette.color(&"red" if player_number == 1 else &"blue")
