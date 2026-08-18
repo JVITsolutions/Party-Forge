@@ -104,6 +104,7 @@ func _test_projection_pool_tooltip_and_ownership(controller_script: Script, fail
 	first_anchor.mouse_entered.emit()
 	TestAssertions.truthy(tooltip.visible, "mouse hover opens the shared tooltip", failures)
 	TestAssertions.equal(tooltip.card_count(), 1, "hover renders one inspected item card", failures)
+	TestAssertions.truthy(not tooltip.get_global_rect().intersects(first_anchor.get_global_rect()), "shared tooltip sits beside the projected chest anchor when viewport space permits", failures)
 	first_anchor.focus_entered.emit()
 	first_anchor.mouse_exited.emit()
 	tooltip.call(&"_process", 0.20)
@@ -140,13 +141,6 @@ func _test_projection_pool_tooltip_and_ownership(controller_script: Script, fail
 	TestAssertions.truthy(projection_calls[0] > 2, "tooltip layers rebuild detail only through explicit inspection events", failures)
 	first_anchor.mouse_exited.emit()
 	tooltip.call(&"_process", 0.20)
-	var forwarded: Array[Array] = []
-	controller.connect(&"pickup_requested", func(drop_id: StringName, input_owner: StringName) -> void:
-		forwarded.append([drop_id, input_owner])
-	)
-	first_chest.call(&"request_pickup", &"player_2")
-	first_chest.call(&"request_pickup", &"player_1")
-	TestAssertions.equal(forwarded, [[&"drop-a", &"player_1"]], "controller forwards pickup only for the record owner", failures)
 	var first_instance := first_chest.get_instance_id()
 	var removed := registry.remove(&"drop-a")
 	TestAssertions.truthy(removed != null, "fixture removes one authoritative record", failures)
@@ -189,7 +183,7 @@ func _test_projection_pool_tooltip_and_ownership(controller_script: Script, fail
 	TestAssertions.truthy(int(controller_script.get_script_constant_map().get("MAX_INACTIVE_CHESTS", 0)) > 0, "controller declares an explicit bounded inactive pool", failures)
 	TestAssertions.truthy((controller.get("_inactive_chests") as Array).size() <= int(controller_script.get_script_constant_map().get("MAX_INACTIVE_CHESTS", 0)), "inactive pool stays within its bound", failures)
 
-	controller.call(&"_exit_tree")
+	controller.call(&"clear_projection")
 	controller.free()
 	TestAssertions.equal(second_chests_parent.get_child_count(), 0, "controller teardown destroys every active and pooled chest", failures)
 	TestAssertions.equal(second_tooltip_layer.get_child_count(), 0, "controller teardown destroys detached anchors and its owned shared tooltip", failures)
@@ -231,7 +225,7 @@ func _test_bounded_camera_reprojection(controller_script: Script, failures: Arra
 			controller.call(&"_process", 0.0)
 			guard += 1
 		TestAssertions.equal(int((controller.call(&"projection_diagnostics") as Dictionary).get("pending", 0)), 0, "bounded camera reprojection reaches eventual correctness", failures)
-	controller.call(&"_exit_tree")
+	controller.call(&"clear_projection")
 	controller.free()
 	host.free()
 	RenderingServer.force_sync()

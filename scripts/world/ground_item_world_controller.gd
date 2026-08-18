@@ -588,6 +588,8 @@ func _collect_for_owner(drop_id: StringName, run_player_id: StringName) -> void:
 			_refresh_selection_feedback(run_player_id)
 			status_changed.emit("Move closer")
 		PICKUP_RESULT.Code.INVENTORY_FULL:
+			_status_by_owner[run_player_id] = "Inventory full"
+			_refresh_selection_feedback(run_player_id)
 			status_changed.emit("Inventory full")
 		PICKUP_RESULT.Code.NOT_OWNER:
 			status_changed.emit("GROUND_ITEM_PICKUP_NOT_OWNER")
