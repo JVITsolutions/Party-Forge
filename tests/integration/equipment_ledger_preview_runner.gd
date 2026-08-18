@@ -57,17 +57,24 @@ func _run() -> void:
 	if preview != null:
 		var subviewport := preview.get_node("SubViewport") as SubViewport
 		_assert(subviewport.own_world_3d, "equipment preview owns an isolated World3D")
+		_assert(subviewport.render_target_update_mode == SubViewport.UPDATE_ALWAYS, "active equipment page enables preview rendering")
 		var active := preview.get("active_preview") as CharacterPresentation
 		_assert(active != null and active.active_profile == member.class_definition.visual_profile, "selected member class profile is rendered")
 		_assert(active != leader.get_node("Presentation"), "preview presentation is distinct from the live actor presentation")
 		_assert(active != null and active.get_world_3d() != leader.get_world_3d(), "preview actor world is isolated from the arena world")
 		var model := active.active_model as ForgeHumanoidModel if active != null else null
 		_assert(model != null and model.equipped_definitions.has(&"helmet"), "accepted equipped helmet is rendered")
+		var lifecycle_mount := preview.get_node("SubViewport/World/PreviewRoot") as Node3D
+		var lifecycle_center := preview.get_global_rect().get_center()
+		root.push_input(_mouse_button(lifecycle_center, true))
+		await process_frame
 		var active_id := active.get_instance_id() if active != null else 0
 		page.deactivate()
 		_assert(preview.get("active_preview") == null, "deactivation releases preview actor")
+		_assert(subviewport.render_target_update_mode == SubViewport.UPDATE_DISABLED, "deactivation suspends preview rendering")
 		page.deactivate()
 		_assert(preview.get("active_preview") == null, "repeated deactivation remains idempotent")
+		_assert(subviewport.render_target_update_mode == SubViewport.UPDATE_DISABLED, "repeated deactivation keeps preview rendering suspended")
 		page.activate()
 		await process_frame
 		await process_frame
@@ -76,6 +83,12 @@ func _run() -> void:
 		_assert(reactivated != null and reactivated.get_instance_id() != active_id, "reactivation rebuilds the selected member preview")
 		_assert(active_id == 0 or not is_instance_id_valid(active_id), "deactivation frees the previous preview actor")
 		_assert(reactivated_model != null and reactivated_model.equipped_definitions.has(&"helmet"), "reactivation preserves selected member equipment visuals")
+		_assert(subviewport.render_target_update_mode == SubViewport.UPDATE_ALWAYS, "reactivation resumes preview rendering")
+		var yaw_before_stale_motion := lifecycle_mount.rotation.y
+		root.push_input(_mouse_motion(preview.get_global_rect().get_center() + Vector2(40.0, 0.0), Vector2(40.0, 0.0), MOUSE_BUTTON_MASK_LEFT))
+		await process_frame
+		_assert(is_equal_approx(lifecycle_mount.rotation.y, yaw_before_stale_motion), "deactivation cancels transient preview dragging state")
+		gameplay_probe.mouse_motion_count = 0
 		var before_id := reactivated.get_instance_id() if reactivated != null else 0
 		var helmet := page.get_node("Layout/Body/EquipmentRegion/Doll/Slots/Slot_helmet") as StorageSlotButton
 		var invalid := page.get_node("Layout/Body/EquipmentRegion/Doll/Slots/Slot_body_armour") as StorageSlotButton

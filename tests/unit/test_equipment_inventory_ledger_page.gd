@@ -53,16 +53,20 @@ func _test_page_projection_transactions_tooltip_and_focus(failures: Array[String
 		var initial_active := preview.get("active_preview") as CharacterPresentation
 		var initial_active_id := initial_active.get_instance_id() if initial_active != null else 0
 		TestAssertions.truthy(initial_active != null, "active equipment page renders selected member", failures)
+		TestAssertions.equal(subviewport.render_target_update_mode, SubViewport.UPDATE_ALWAYS, "active equipment page enables preview rendering", failures)
 		page.deactivate()
 		TestAssertions.truthy(preview.get("active_preview") == null, "deactivation releases preview actor", failures)
+		TestAssertions.equal(subviewport.render_target_update_mode, SubViewport.UPDATE_DISABLED, "deactivation suspends preview rendering", failures)
 		page.deactivate()
 		TestAssertions.truthy(preview.get("active_preview") == null, "repeated deactivation keeps preview actor released", failures)
+		TestAssertions.equal(subviewport.render_target_update_mode, SubViewport.UPDATE_DISABLED, "repeated deactivation keeps preview rendering suspended", failures)
 		page.activate()
 		var reactivated := preview.get("active_preview") as CharacterPresentation
 		var reactivated_model := reactivated.active_model as ForgeHumanoidModel if reactivated != null else null
 		TestAssertions.truthy(reactivated != null and reactivated.get_instance_id() != initial_active_id, "reactivation rebuilds the selected member preview", failures)
 		TestAssertions.truthy(initial_active_id == 0 or not is_instance_id_valid(initial_active_id), "deactivation frees the previous preview actor immediately", failures)
 		TestAssertions.truthy(reactivated_model != null and reactivated_model.equipped_definitions.has(&"helmet"), "reactivation preserves selected member equipment visuals", failures)
+		TestAssertions.equal(subviewport.render_target_update_mode, SubViewport.UPDATE_ALWAYS, "reactivation resumes preview rendering", failures)
 
 	var expected_positions := {
 		&"helmet": Vector2(0.18, 0.08), &"amulet": Vector2(0.82, 0.06),

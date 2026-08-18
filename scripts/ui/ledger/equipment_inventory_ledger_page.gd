@@ -38,7 +38,7 @@ func activate() -> void:
 func deactivate() -> void:
 	_tooltip().force_dismiss()
 	_clear_held_item()
-	_preview().call(&"clear")
+	_preview().clear()
 	super()
 
 
@@ -178,7 +178,7 @@ func _rebuild_equipment() -> Array[Dictionary]:
 func _refresh_preview(rows: Array[Dictionary]) -> void:
 	var member := provider.party.member_by_id(context.selected_member_id) if provider != null and provider.party != null and context != null else null
 	if member == null:
-		_preview().call(&"clear")
+		_preview().clear()
 		return
 	var preview_rows: Array[Dictionary] = []
 	for row: Dictionary in rows:
@@ -187,7 +187,7 @@ func _refresh_preview(rows: Array[Dictionary]) -> void:
 		var base_id := StringName(String(detail.get("base_definition_id", "")))
 		preview_row["base_definition"] = provider.equipment_catalog.definition(base_id) if provider.equipment_catalog != null and not base_id.is_empty() else null
 		preview_rows.append(preview_row)
-	_preview().call(&"show_member", member, preview_rows)
+	_preview().show_member(member, preview_rows)
 
 
 func _rebuild_inventory() -> void:
@@ -473,5 +473,5 @@ func _tooltip() -> ItemTooltipPanel:
 	return get_node("ItemTooltipPanel") as ItemTooltipPanel
 
 
-func _preview() -> Control:
-	return get_node("Layout/Body/EquipmentRegion/Doll/PreviewProtectedCenter/CharacterEquipmentPreview") as Control
+func _preview() -> CharacterEquipmentPreview:
+	return get_node("Layout/Body/EquipmentRegion/Doll/PreviewProtectedCenter/CharacterEquipmentPreview") as CharacterEquipmentPreview
