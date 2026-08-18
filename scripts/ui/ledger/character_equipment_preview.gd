@@ -170,6 +170,10 @@ func clear() -> void:
 	diagnostics.clear()
 
 
+func _exit_tree() -> void:
+	clear()
+
+
 func _gui_input(event: InputEvent) -> void:
 	_handle_preview_input(event)
 

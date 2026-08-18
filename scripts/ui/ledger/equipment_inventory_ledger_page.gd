@@ -38,7 +38,14 @@ func activate() -> void:
 func deactivate() -> void:
 	_tooltip().force_dismiss()
 	_clear_held_item()
+	_preview().call(&"clear")
 	super()
+
+
+func _exit_tree() -> void:
+	var preview := get_node_or_null("Layout/Body/EquipmentRegion/Doll/PreviewProtectedCenter/CharacterEquipmentPreview") as CharacterEquipmentPreview
+	if preview != null:
+		preview.clear()
 
 
 func refresh() -> void:
