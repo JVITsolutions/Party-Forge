@@ -39,6 +39,7 @@ func _run() -> void:
 	_assert(accept.any(func(event: InputEvent) -> bool: return event is InputEventJoypadButton and event.device == -1 and event.button_index == JOY_BUTTON_A), "existing ui_accept retains device-agnostic south-face pickup")
 	_test_input_normalization()
 	await _test_real_overlapped_mouse_pickup()
+	await _test_foreign_mouse_tooltip_release_and_retention()
 	await _test_mouse_cannot_impersonate_controller()
 	await _test_modal_click_through_and_restore()
 	await _test_real_controller_flow()
@@ -206,6 +207,97 @@ func _test_real_overlapped_mouse_pickup() -> void:
 	viewport.free()
 	contexts.clear()
 	RenderingServer.force_sync()
+
+func _test_foreign_mouse_tooltip_release_and_retention() -> void:
+	var contexts := RunContextRegistry.new()
+	var keyboard_owner := _context(&"tooltip-keyboard", "profile-tooltip-keyboard", 0, -1, 1)
+	var foreign_owner := _context(&"tooltip-foreign", "profile-tooltip-foreign", 1, 1, 1)
+	_marker_assert([MARKER_MOUSE, MARKER_CONTROLLER, MARKER_FOREIGN_OWNER], contexts.register_context(keyboard_owner, -1).ok(), "tooltip lifecycle fixture registers the KB/M owner")
+	_marker_assert([MARKER_MOUSE, MARKER_CONTROLLER, MARKER_FOREIGN_OWNER], contexts.register_context(foreign_owner, 1).ok(), "tooltip lifecycle fixture registers the foreign P2 controller owner")
+	var request := ItemGenerationRequest.create(7330, 0, 10, &"ordinary_enemy", &"ordinary_drop", [&"common"])
+	request.forced_base_id = &"windrunner_band"
+	request.forced_rarity_id = &"common"
+	var generated := foreign_owner.issue_ground_item(request, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)
+	_marker_assert([MARKER_MOUSE, MARKER_CONTROLLER, MARKER_FOREIGN_OWNER], generated != null and generated.ok(), "tooltip lifecycle fixture issues one canonical P2 ground item")
+	if generated == null or not generated.ok():
+		contexts.clear()
+		return
+	var registry := GroundItemRegistry.new()
+	var record := _record(&"tooltip-p2", foreign_owner.run_player_id, Vector3.ZERO, 0)
+	record.item_id = generated.item.instance_id
+	record.profile_id = foreign_owner.profile_id
+	_marker_assert([MARKER_MOUSE, MARKER_CONTROLLER, MARKER_FOREIGN_OWNER], registry.add(record), "tooltip lifecycle fixture registers its visible foreign P2 chest")
+	var viewport := SubViewport.new()
+	viewport.size = Vector2i(800, 600)
+	viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	root.add_child(viewport)
+	var host := Node.new()
+	var chests := Node3D.new()
+	var tooltip_layer := Control.new()
+	tooltip_layer.size = Vector2(viewport.size)
+	var camera := Camera3D.new()
+	viewport.add_child(host)
+	host.add_child(chests)
+	host.add_child(tooltip_layer)
+	host.add_child(camera)
+	host.add_child(keyboard_owner.actor_for(1))
+	host.add_child(foreign_owner.actor_for(1))
+	camera.look_at_from_position(Vector3(0.0, 0.0, 10.0), Vector3.ZERO)
+	camera.current = true
+	var controller := (load("res://scripts/world/ground_item_world_controller.gd") as Script).new() as Node
+	host.add_child(controller)
+	controller.call(&"configure", registry, {}, func(value: GroundItemRecord) -> Dictionary: return _detail(value), camera, chests, tooltip_layer)
+	var tooltip := tooltip_layer.get_children().filter(func(child: Node) -> bool: return child is ItemTooltipPanel).front() as ItemTooltipPanel
+	controller.call(&"configure_interaction", (load(REQUIRED[0]) as Script).new(registry, 4.0), (load(REQUIRED[1]) as Script).new(), (load(REQUIRED[2]) as Script).new(registry, contexts, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG, 3.5), contexts, 20.0)
+	var feedback: Array[GroundItemPickupResult] = []
+	controller.connect(&"pickup_feedback", func(result: GroundItemPickupResult) -> void: feedback.append(result))
+	await process_frame
+	var chest := _chest_for(chests, record.drop_id)
+	var anchor := chest.call(&"tooltip_anchor") as Button if chest != null else null
+	_marker_assert([MARKER_MOUSE, MARKER_CONTROLLER, MARKER_FOREIGN_OWNER], anchor != null and anchor.visible, "tooltip lifecycle fixture projects the real 44 by 44 P2 anchor")
+	if anchor != null:
+		var anchor_center := anchor.get_global_rect().get_center()
+		var outside := Vector2(4.0, 596.0)
+		var keyboard_inventory_before := keyboard_owner.run_inventory().to_dictionary()
+		var foreign_ground_before := foreign_owner.ground_items().to_dictionary()
+		await _dispatch_viewport_mouse_motion(viewport, anchor_center, 0)
+		_marker_assert([MARKER_MOUSE], tooltip.visible and tooltip.is_current_source(&"ground-loot:tooltip-p2"), "real pointer entry opens the P2 ground tooltip")
+		await _dispatch_viewport_mouse_click(viewport, anchor_center, 0)
+		_marker_assert([MARKER_MOUSE, MARKER_FOREIGN_OWNER], not feedback.is_empty() and feedback[-1].code == GroundItemPickupResult.Code.NOT_OWNER, "real P1 mouse click receives typed foreign-owner rejection")
+		await _dispatch_viewport_mouse_motion(viewport, outside, 0)
+		await _wait_for_tooltip_hidden(tooltip)
+		_marker_assert([MARKER_MOUSE], not anchor.has_focus(), "mouse click leaves no persistent ground-anchor focus after pointer exit")
+		_marker_assert([MARKER_MOUSE], not tooltip.visible and tooltip.current_source_id().is_empty(), "foreign P2 tooltip dismisses after pointer exit and the natural grace window")
+		_marker_assert([MARKER_FOREIGN_OWNER], registry.record(record.drop_id) != null and keyboard_owner.run_inventory().to_dictionary() == keyboard_inventory_before and foreign_owner.ground_items().to_dictionary() == foreign_ground_before, "foreign click changes neither inventory nor authoritative P2 ground ownership")
+
+		await _dispatch_viewport_mouse_motion(viewport, anchor_center, 0)
+		await _dispatch_viewport_key(viewport, KEY_ALT, true)
+		await _dispatch_viewport_mouse_motion(viewport, outside, 0)
+		await _wait_past_tooltip_grace()
+		_marker_assert([MARKER_MOUSE], tooltip.visible and tooltip.is_current_source(&"ground-loot:tooltip-p2"), "Alt retains the ground tooltip after pointer exit")
+		await _dispatch_viewport_key(viewport, KEY_ALT, false)
+		await _wait_for_tooltip_hidden(tooltip)
+		_marker_assert([MARKER_MOUSE], not tooltip.visible and tooltip.current_source_id().is_empty(), "releasing Alt dismisses the inactive ground tooltip")
+
+		await _dispatch_viewport_mouse_motion(viewport, anchor_center, 0)
+		await _dispatch_viewport_button(viewport, 0, JOY_BUTTON_Y)
+		await _dispatch_viewport_mouse_motion(viewport, outside, 0)
+		await _wait_past_tooltip_grace()
+		_marker_assert([MARKER_CONTROLLER], tooltip.visible and tooltip.is_pinned(), "Y or Triangle pins the ground tooltip across pointer exit")
+		await _dispatch_viewport_button(viewport, 0, JOY_BUTTON_Y)
+		await _wait_for_tooltip_hidden(tooltip)
+		_marker_assert([MARKER_CONTROLLER], not tooltip.visible and not tooltip.is_pinned() and tooltip.current_source_id().is_empty(), "unpinned inactive ground tooltip dismisses")
+
+		await _dispatch_viewport_button(viewport, 1, JOY_BUTTON_DPAD_RIGHT)
+		await _dispatch_viewport_mouse_motion(viewport, outside, 0)
+		await _wait_past_tooltip_grace()
+		_marker_assert([MARKER_CONTROLLER], controller.call(&"selection_for_owner", foreign_owner.run_player_id) == record.drop_id and anchor.has_focus(), "P2 D-pad selection keeps real controller focus on its owned anchor")
+		_marker_assert([MARKER_CONTROLLER], tooltip.visible and tooltip.is_current_source(&"ground-loot:tooltip-p2"), "controller-focused ground tooltip remains visible without mouse hover")
+	await _teardown_controller(controller, chests, tooltip_layer, "tooltip lifecycle teardown")
+	viewport.free()
+	contexts.clear()
+	RenderingServer.force_sync()
+
 
 func _test_mouse_cannot_impersonate_controller() -> void:
 	var contexts := RunContextRegistry.new()
@@ -718,6 +810,33 @@ func _dispatch_viewport_mouse_click(viewport: SubViewport, position: Vector2, de
 	var released := event.duplicate() as InputEventMouseButton
 	released.pressed = false
 	viewport.push_input(released, true)
+	await process_frame
+
+func _dispatch_viewport_key(viewport: SubViewport, keycode: Key, pressed: bool) -> void:
+	var event := InputEventKey.new()
+	event.keycode = keycode
+	event.pressed = pressed
+	viewport.push_input(event, true)
+	await process_frame
+
+func _dispatch_viewport_button(viewport: SubViewport, device: int, button: JoyButton) -> void:
+	var event := _button(device, button)
+	viewport.push_input(event, true)
+	await process_frame
+	var released := event.duplicate() as InputEventJoypadButton
+	released.pressed = false
+	viewport.push_input(released, true)
+	await process_frame
+
+func _wait_for_tooltip_hidden(tooltip: ItemTooltipPanel) -> void:
+	for _frame: int in range(120):
+		if not tooltip.visible:
+			return
+		await process_frame
+
+func _wait_past_tooltip_grace() -> void:
+	# The production contract intentionally uses a 0.12-second dismissal grace.
+	await create_timer(0.16).timeout
 	await process_frame
 
 func _inventory_instance_count(context: PlayerRunContext, instance_id: String) -> int:

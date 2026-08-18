@@ -32,6 +32,7 @@ var _detail_by_drop: Dictionary = {}
 var _dirty_drop_ids: Dictionary = {}
 var _mouse_inside_by_drop: Dictionary = {}
 var _focus_inside_by_drop: Dictionary = {}
+var _controller_focus_by_drop: Dictionary = {}
 var _last_camera_signature: Array = []
 var _batch_camera_signature: Array = []
 var _pending_reprojection_ids: Array[StringName] = []
@@ -66,6 +67,7 @@ func configure(
 	_release_shared_tooltip()
 	_selection_by_owner.clear()
 	_status_by_owner.clear()
+	_controller_focus_by_drop.clear()
 	_registry = registry
 	_spatial_index = SPATIAL_INDEX.new(_registry)
 	_targeting_service = TARGETING_SERVICE.new()
@@ -143,6 +145,7 @@ func clear_projection() -> void:
 	_context_registry = null
 	_selection_by_owner.clear()
 	_status_by_owner.clear()
+	_controller_focus_by_drop.clear()
 	_visibility_filter = Callable()
 	_modal_filter = Callable()
 	_modal_suppression_initialized = false
@@ -371,6 +374,7 @@ func _release_chest(drop_id: StringName) -> void:
 	_dirty_drop_ids.erase(drop_id)
 	_mouse_inside_by_drop.erase(drop_id)
 	_focus_inside_by_drop.erase(drop_id)
+	_controller_focus_by_drop.erase(drop_id)
 	chest.call(&"deactivate")
 	if _inactive_chests.size() < MAX_INACTIVE_CHESTS:
 		_inactive_chests.append(chest)
@@ -494,6 +498,7 @@ func _on_anchor_focus_exited(chest: Node3D) -> void:
 	if drop_id.is_empty():
 		return
 	_focus_inside_by_drop.erase(drop_id)
+	_controller_focus_by_drop.erase(drop_id)
 	_release_tooltip_if_inactive(drop_id)
 
 
@@ -519,6 +524,10 @@ func _on_anchor_gui_input(event: InputEvent, chest: Node3D) -> void:
 	var mouse := event as InputEventMouseButton
 	if mouse == null or not mouse.pressed or mouse.button_index != MOUSE_BUTTON_LEFT or _modal_input_suppressed() or chest == null:
 		return
+	var drop_id := _drop_id_for(chest)
+	if drop_id.is_empty():
+		return
+	call_deferred(&"_release_mouse_acquired_focus", drop_id)
 	var input_owner := _owner_for_event(mouse)
 	if input_owner.is_empty():
 		return
@@ -539,7 +548,7 @@ func _on_chest_pickup_requested(drop_id: StringName, input_owner: StringName) ->
 		_emit_pickup_feedback(GroundItemPickupResult.new(GroundItemPickupResult.Code.NOT_OWNER))
 		status_changed.emit("GROUND_ITEM_PICKUP_NOT_OWNER")
 		return
-	_apply_selection(input_owner, drop_id)
+	_apply_selection(input_owner, drop_id, false)
 	pickup_requested.emit(drop_id, input_owner)
 	_collect_for_owner(drop_id, input_owner)
 
@@ -559,30 +568,44 @@ func _cycle_for_owner(run_player_id: StringName, direction: int) -> void:
 		_apply_selection(run_player_id, next)
 
 
-func _apply_selection(run_player_id: StringName, drop_id: StringName) -> void:
+func _apply_selection(run_player_id: StringName, drop_id: StringName, focus_anchor: bool = true) -> void:
 	var previous := selection_for_owner(run_player_id)
 	if previous == drop_id:
-		_inspect_selection(run_player_id, drop_id)
+		_inspect_selection(run_player_id, drop_id, focus_anchor)
 		return
 	if not previous.is_empty():
 		_focus_inside_by_drop.erase(previous)
+		_controller_focus_by_drop.erase(previous)
 		set_selected(previous, false)
 	_selection_by_owner[run_player_id] = drop_id
 	_status_by_owner.erase(run_player_id)
 	set_selected(drop_id, true)
-	_inspect_selection(run_player_id, drop_id)
+	_inspect_selection(run_player_id, drop_id, focus_anchor)
 
 
-func _inspect_selection(run_player_id: StringName, drop_id: StringName) -> void:
+func _inspect_selection(run_player_id: StringName, drop_id: StringName, focus_anchor: bool = true) -> void:
 	var chest := _chest_by_drop.get(drop_id) as Node3D
 	if chest == null or StringName(chest.get("run_player_id")) != run_player_id:
 		return
 	_project_anchor(drop_id)
 	var anchor := chest.call(&"tooltip_anchor") as Control
-	_focus_inside_by_drop[drop_id] = true
-	if anchor != null and anchor.is_inside_tree() and anchor.is_visible_in_tree():
+	if focus_anchor:
+		_controller_focus_by_drop[drop_id] = true
+		_focus_inside_by_drop[drop_id] = true
+	if focus_anchor and anchor != null and anchor.is_inside_tree() and anchor.is_visible_in_tree():
 		anchor.grab_focus()
 	_present_tooltip(chest)
+
+
+func _release_mouse_acquired_focus(drop_id: StringName) -> void:
+	if drop_id.is_empty() or bool(_controller_focus_by_drop.get(drop_id, false)):
+		return
+	var chest := _chest_by_drop.get(drop_id) as Node3D
+	if chest == null:
+		return
+	var anchor := chest.call(&"tooltip_anchor") as Control
+	if anchor != null and anchor.is_inside_tree() and anchor.has_focus():
+		anchor.release_focus()
 
 
 func _collect_for_owner(drop_id: StringName, run_player_id: StringName) -> void:

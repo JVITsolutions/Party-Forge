@@ -62,6 +62,7 @@ func _test_projection_pool_tooltip_and_ownership(controller_script: Script, fail
 		&"player_2": {"player_number": 2, "color_id": &"blue", "color": PlayerColorPalette.color(&"blue")},
 	}
 	controller.call(&"configure", registry, identities, projector, camera, chests_parent, tooltip_layer)
+	TestAssertions.truthy((controller.get("_controller_focus_by_drop") as Dictionary).is_empty(), "configure starts with no retained controller-focus provenance", failures)
 	TestAssertions.truthy(controller.has_method(&"configure_comparisons"), "controller accepts a dedicated production comparison projector", failures)
 	if controller.has_method(&"configure_comparisons"):
 		controller.call(&"configure_comparisons", comparison_projector)
@@ -167,6 +168,7 @@ func _test_projection_pool_tooltip_and_ownership(controller_script: Script, fail
 	host.add_child(second_chests_parent)
 	host.add_child(second_tooltip_layer)
 	controller.call(&"configure", registry, identities, projector, camera, second_chests_parent, second_tooltip_layer)
+	TestAssertions.truthy((controller.get("_controller_focus_by_drop") as Dictionary).is_empty(), "reconfigure clears controller-focus provenance", failures)
 	if controller.has_method(&"configure_comparisons"):
 		controller.call(&"configure_comparisons", comparison_projector)
 	var reconfigured_active := controller.get("_chest_by_drop") as Dictionary
