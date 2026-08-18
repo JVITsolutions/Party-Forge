@@ -5,10 +5,20 @@ const REQUIRED := [
 	"res://scripts/loot/ground_item_targeting_service.gd",
 	"res://scripts/loot/ground_item_pickup_service.gd",
 ]
+const MARKER_MOUSE := &"mouse"
+const MARKER_CONTROLLER := &"controller"
+const MARKER_FULL_INVENTORY := &"full_inventory"
+const MARKER_FOREIGN_OWNER := &"foreign_owner"
 
 var _failures: Array[String] = []
 var _parties: Array[PartyManager] = []
 var _actors: Array[Node3D] = []
+var _marker_failed := {
+	MARKER_MOUSE: false,
+	MARKER_CONTROLLER: false,
+	MARKER_FULL_INVENTORY: false,
+	MARKER_FOREIGN_OWNER: false,
+}
 
 func _initialize() -> void:
 	call_deferred(&"_run")
@@ -33,10 +43,10 @@ func _run() -> void:
 	await _test_success_advances_selection()
 	await _test_pooled_selection_visual_reset()
 	await _test_viewport_resize_projection()
-	print("GROUND_ITEM_PICKUP_MOUSE: PASS") if _failures.is_empty() else print("GROUND_ITEM_PICKUP_MOUSE: FAIL")
-	print("GROUND_ITEM_PICKUP_CONTROLLER: PASS") if _failures.is_empty() else print("GROUND_ITEM_PICKUP_CONTROLLER: FAIL")
-	print("GROUND_ITEM_PICKUP_FULL_INVENTORY: PASS") if _failures.is_empty() else print("GROUND_ITEM_PICKUP_FULL_INVENTORY: FAIL")
-	print("GROUND_ITEM_PICKUP_FOREIGN_OWNER: PASS") if _failures.is_empty() else print("GROUND_ITEM_PICKUP_FOREIGN_OWNER: FAIL")
+	_print_marker("GROUND_ITEM_PICKUP_MOUSE", MARKER_MOUSE)
+	_print_marker("GROUND_ITEM_PICKUP_CONTROLLER", MARKER_CONTROLLER)
+	_print_marker("GROUND_ITEM_PICKUP_FULL_INVENTORY", MARKER_FULL_INVENTORY)
+	_print_marker("GROUND_ITEM_PICKUP_FOREIGN_OWNER", MARKER_FOREIGN_OWNER)
 	_finish()
 
 func _finish() -> void:
@@ -57,20 +67,29 @@ func _finish() -> void:
 	quit(1)
 
 func _assert(condition: bool, message: String) -> void:
+	_marker_assert([MARKER_CONTROLLER], condition, message)
+
+func _marker_assert(markers: Array, condition: bool, message: String) -> void:
 	if not condition:
 		_failures.append(message)
+		for marker: StringName in markers:
+			_marker_failed[marker] = true
+
+func _print_marker(label: String, marker: StringName) -> void:
+	print("%s: %s" % [label, "FAIL" if bool(_marker_failed.get(marker, true)) else "PASS"])
 
 func _test_real_overlapped_mouse_pickup() -> void:
+	var shared_markers: Array = [MARKER_MOUSE, MARKER_FULL_INVENTORY, MARKER_FOREIGN_OWNER]
 	var contexts := RunContextRegistry.new()
 	var context := _context(&"overlap-owner", "profile-overlap-owner", 0, -1, 1)
-	_assert(contexts.register_context(context, -1).ok(), "overlap fixture registers the KB/M owner")
+	_marker_assert(shared_markers, contexts.register_context(context, -1).ok(), "overlap fixture registers the KB/M owner")
 	var actor := context.actor_for(1)
 	actor.position = Vector3(0.0, -2.0, 0.0)
 	var request := ItemGenerationRequest.create(7301, 0, 10, &"ordinary_enemy", &"ordinary_drop", [&"common"])
 	request.forced_base_id = &"windrunner_band"
 	request.forced_rarity_id = &"common"
 	var generated := context.issue_ground_item(request, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)
-	_assert(generated != null and generated.ok(), "overlap fixture issues one canonical owned ground item")
+	_marker_assert(shared_markers, generated != null and generated.ok(), "overlap fixture issues one canonical owned ground item")
 	if generated == null or not generated.ok():
 		contexts.clear()
 		return
@@ -78,7 +97,7 @@ func _test_real_overlapped_mouse_pickup() -> void:
 	var record := _record(&"overlap-owned", context.run_player_id, Vector3(0.0, 3.0, 0.0), 0)
 	record.item_id = generated.item.instance_id
 	record.profile_id = context.profile_id
-	_assert(registry.add(record), "overlap fixture registers the canonical owned ground record")
+	_marker_assert(shared_markers, registry.add(record), "overlap fixture registers the canonical owned ground record")
 	var viewport := SubViewport.new()
 	viewport.size = Vector2i(400, 320)
 	viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
@@ -103,73 +122,80 @@ func _test_real_overlapped_mouse_pickup() -> void:
 	controller.call(&"configure_interaction", (load(REQUIRED[0]) as Script).new(registry, 4.0), (load(REQUIRED[1]) as Script).new(), (load(REQUIRED[2]) as Script).new(registry, contexts, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG, 3.5), contexts, 20.0)
 	var statuses: Array[String] = []
 	var feedback: Array[GroundItemPickupResult] = []
+	var pickup_requests: Array[Array] = []
 	controller.connect(&"status_changed", func(status: String) -> void: statuses.append(status))
 	controller.connect(&"pickup_feedback", func(result: GroundItemPickupResult) -> void: feedback.append(result))
+	controller.connect(&"pickup_requested", func(drop_id: StringName, owner: StringName) -> void: pickup_requests.append([drop_id, owner]))
 	await process_frame
 	var chest := _chest_for(chests, record.drop_id)
 	var anchor := chest.call(&"tooltip_anchor") as Control if chest != null else null
-	_assert(anchor != null and anchor.visible, "overlap fixture projects the real 44 by 44 chest anchor")
+	_marker_assert(shared_markers, anchor != null and anchor.visible, "overlap fixture projects the real 44 by 44 chest anchor")
 	if anchor != null:
 		var hover_position := anchor.get_global_rect().get_center()
 		await _dispatch_viewport_mouse_motion(viewport, hover_position, -1)
 		await process_frame
-		_assert(tooltip.visible, "tooltip is visible before pickup click")
+		_marker_assert([MARKER_MOUSE], tooltip.visible, "tooltip is visible before pickup click")
 		var decorative := tooltip.get_node("Layout/Header/Context") as Control
 		var overlap := anchor.get_global_rect().intersection(decorative.get_global_rect())
-		_assert(overlap.has_area(), "decorative tooltip region geometrically covers part of the projected 44 by 44 anchor")
+		_marker_assert([MARKER_MOUSE], overlap.has_area(), "decorative tooltip region geometrically covers part of the projected 44 by 44 anchor")
 		if overlap.has_area():
 			await _dispatch_viewport_mouse_click(viewport, overlap.get_center(), -1)
-		_assert(registry.record(record.drop_id) != null, "out-of-range real overlapped click leaves the chest")
-		_assert(anchor.text.contains("Move closer") and statuses.has("Move closer"), "out-of-range real overlapped click shows persistent Move closer")
-		_assert(not feedback.is_empty() and feedback[-1].code == GroundItemPickupResult.Code.MOVE_CLOSER, "out-of-range real overlapped click emits typed Move closer feedback")
+		_marker_assert([MARKER_MOUSE], registry.record(record.drop_id) != null, "out-of-range real overlapped click leaves the chest")
+		_marker_assert([MARKER_MOUSE], anchor.text.contains("Move closer") and statuses.has("Move closer"), "out-of-range real overlapped click shows persistent Move closer")
+		_marker_assert([MARKER_MOUSE], not feedback.is_empty() and feedback[-1].code == GroundItemPickupResult.Code.MOVE_CLOSER, "out-of-range real overlapped click emits typed Move closer feedback")
 		actor.position = record.world_position
 		await process_frame
+		_marker_assert([MARKER_MOUSE], tooltip.visible, "tooltip remains visible immediately before eligible retry")
+		var requests_before_retry := pickup_requests.size()
+		var feedback_before_retry := feedback.size()
 		if overlap.has_area():
 			await _dispatch_viewport_mouse_click(viewport, overlap.get_center(), -1)
-		_assert(_inventory_contains(context, generated.item.instance_id), "real overlapped click collects owned item")
-		_assert(registry.record(record.drop_id) == null, "successful pickup consumes only collected chest")
+		_marker_assert([MARKER_MOUSE], pickup_requests.size() == requests_before_retry + 1 and pickup_requests[-1] == [record.drop_id, context.run_player_id], "eligible retry emits exactly one pickup request for the owned chest")
+		_marker_assert([MARKER_MOUSE], feedback.size() == feedback_before_retry + 1 and feedback[-1].code == GroundItemPickupResult.Code.OK and _feedback_code_count(feedback, GroundItemPickupResult.Code.OK) == 1, "eligible retry emits exactly one successful pickup feedback")
+		_marker_assert([MARKER_MOUSE], _inventory_instance_count(context, generated.item.instance_id) == 1, "eligible retry stores exactly one instance in owner inventory")
+		_marker_assert([MARKER_MOUSE], registry.record(record.drop_id) == null, "successful pickup consumes only collected chest")
 		for sequence: int in range(1, 5):
 			var filler_request := ItemGenerationRequest.create(7301 + sequence, sequence, 10, &"ordinary_enemy", &"ordinary_drop", [&"common"])
 			filler_request.forced_base_id = &"windrunner_band"
 			filler_request.forced_rarity_id = &"common"
 			var filler := context.issue_ground_item(filler_request, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)
-			_assert(filler != null and filler.ok(), "full-inventory fixture issues filler %d" % sequence)
+			_marker_assert([MARKER_FULL_INVENTORY], filler != null and filler.ok(), "full-inventory fixture issues filler %d" % sequence)
 			if filler != null and filler.ok():
-				_assert(context.collect_ground_item(filler.item.instance_id, "full-fixture-%d" % sequence, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG).ok(), "full-inventory fixture stores filler %d" % sequence)
+				_marker_assert([MARKER_FULL_INVENTORY], context.collect_ground_item(filler.item.instance_id, "full-fixture-%d" % sequence, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG).ok(), "full-inventory fixture stores filler %d" % sequence)
 		var full_request := ItemGenerationRequest.create(7310, 5, 10, &"ordinary_enemy", &"ordinary_drop", [&"common"])
 		full_request.forced_base_id = &"windrunner_band"
 		full_request.forced_rarity_id = &"common"
 		var full_item := context.issue_ground_item(full_request, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)
-		_assert(full_item != null and full_item.ok(), "full-inventory fixture issues the retained canonical item")
+		_marker_assert([MARKER_FULL_INVENTORY, MARKER_FOREIGN_OWNER], full_item != null and full_item.ok(), "full-inventory fixture issues the retained canonical item")
 		if full_item != null and full_item.ok():
 			var full_record := _record(&"overlap-full", context.run_player_id, record.world_position, 0)
 			full_record.item_id = full_item.item.instance_id
 			full_record.profile_id = context.profile_id
-			_assert(registry.add(full_record), "full-inventory fixture registers the retained record")
+			_marker_assert([MARKER_FULL_INVENTORY, MARKER_FOREIGN_OWNER], registry.add(full_record), "full-inventory fixture registers the retained record")
 			await process_frame
 			var full_chest := _chest_for(chests, full_record.drop_id)
 			var full_anchor := full_chest.call(&"tooltip_anchor") as Control if full_chest != null else null
-			_assert(full_anchor != null, "full-inventory fixture projects its exact chest")
+			_marker_assert([MARKER_FULL_INVENTORY, MARKER_FOREIGN_OWNER], full_anchor != null, "full-inventory fixture projects its exact chest")
 			if full_anchor != null:
 				await _dispatch_viewport_mouse_motion(viewport, Vector2(2.0, 318.0), -1)
 				await _dispatch_viewport_mouse_motion(viewport, full_anchor.get_global_rect().get_center(), -1)
 				await process_frame
 				var full_overlap := full_anchor.get_global_rect().intersection(decorative.get_global_rect())
-				_assert(tooltip.visible and full_overlap.has_area(), "full-inventory click uses the same visible decorative overlap")
+				_marker_assert([MARKER_FULL_INVENTORY, MARKER_FOREIGN_OWNER], tooltip.visible and full_overlap.has_area(), "full-inventory click uses the same visible decorative overlap")
 				if full_overlap.has_area():
 					await _dispatch_viewport_mouse_click(viewport, full_overlap.get_center(), -1)
-				_assert(registry.record(full_record.drop_id) != null, "full-inventory real click leaves the chest")
-				_assert(full_anchor.text.contains("Inventory full") and statuses.has("Inventory full"), "full-inventory real click shows persistent Inventory full")
-				_assert(not feedback.is_empty() and feedback[-1].code == GroundItemPickupResult.Code.INVENTORY_FULL, "full-inventory real click emits typed capacity feedback")
+				_marker_assert([MARKER_FULL_INVENTORY], registry.record(full_record.drop_id) != null, "full-inventory real click leaves the chest")
+				_marker_assert([MARKER_FULL_INVENTORY], full_anchor.text.contains("Inventory full") and statuses.has("Inventory full"), "full-inventory real click shows persistent Inventory full")
+				_marker_assert([MARKER_FULL_INVENTORY], not feedback.is_empty() and feedback[-1].code == GroundItemPickupResult.Code.INVENTORY_FULL, "full-inventory real click emits typed capacity feedback")
 				var foreign_context := _context(&"foreign-input", "profile-foreign-input", 1, 7, 1)
-				_assert(contexts.register_context(foreign_context, 7).ok(), "foreign-owner fixture registers a distinct mouse device")
+				_marker_assert([MARKER_FOREIGN_OWNER], contexts.register_context(foreign_context, 7).ok(), "foreign-owner fixture registers a distinct mouse device")
 				var owner_ground_before := context.ground_items().to_dictionary()
 				var foreign_inventory_before := foreign_context.run_inventory().to_dictionary()
 				if full_overlap.has_area():
 					await _dispatch_viewport_mouse_click(viewport, full_overlap.get_center(), 7)
-				_assert(registry.record(full_record.drop_id) != null, "foreign-owner real click leaves the chest")
-				_assert(context.ground_items().to_dictionary() == owner_ground_before and foreign_context.run_inventory().to_dictionary() == foreign_inventory_before, "foreign-owner real click leaves both ownership states unchanged")
-				_assert(not feedback.is_empty() and feedback[-1].code == GroundItemPickupResult.Code.NOT_OWNER, "foreign-owner real click emits typed ownership feedback")
+				_marker_assert([MARKER_FOREIGN_OWNER], registry.record(full_record.drop_id) != null, "foreign-owner real click leaves the chest")
+				_marker_assert([MARKER_FOREIGN_OWNER], context.ground_items().to_dictionary() == owner_ground_before and foreign_context.run_inventory().to_dictionary() == foreign_inventory_before, "foreign-owner real click leaves both ownership states unchanged")
+				_marker_assert([MARKER_FOREIGN_OWNER], not feedback.is_empty() and feedback[-1].code == GroundItemPickupResult.Code.NOT_OWNER, "foreign-owner real click emits typed ownership feedback")
 	controller.queue_free()
 	await process_frame
 	viewport.free()
@@ -543,9 +569,18 @@ func _dispatch_viewport_mouse_click(viewport: SubViewport, position: Vector2, de
 	viewport.push_input(released, true)
 	await process_frame
 
-func _inventory_contains(context: PlayerRunContext, instance_id: String) -> bool:
+func _inventory_instance_count(context: PlayerRunContext, instance_id: String) -> int:
 	var inventory := context.run_inventory()
-	return inventory != null and inventory.occupied_slots().any(func(slot: int) -> bool: return inventory.item_id_at(slot) == instance_id)
+	if inventory == null:
+		return 0
+	var count := 0
+	for slot: int in inventory.occupied_slots():
+		if inventory.item_id_at(slot) == instance_id:
+			count += 1
+	return count
+
+func _feedback_code_count(feedback: Array[GroundItemPickupResult], code: GroundItemPickupResult.Code) -> int:
+	return feedback.filter(func(result: GroundItemPickupResult) -> bool: return result.code == code).size()
 
 func _teardown_controller(controller: Node, chests: Node3D, tooltip_layer: Control, label: String) -> void:
 	controller.queue_free()
