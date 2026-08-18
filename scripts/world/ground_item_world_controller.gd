@@ -58,6 +58,7 @@ func configure(
 	chests_parent: Node3D,
 	tooltip_layer: Node,
 ) -> void:
+	process_mode = Node.PROCESS_MODE_ALWAYS
 	_disconnect_registry()
 	if _spatial_index != null:
 		_spatial_index.call(&"dispose")
@@ -199,6 +200,8 @@ func invalidate_comparisons(run_player_id: StringName = &"") -> void:
 func _process(_delta: float) -> void:
 	_sync_modal_anchor_input()
 	_last_projection_work_count = 0
+	if is_inside_tree() and get_tree().paused:
+		return
 	var camera_signature := _camera_signature()
 	var camera_changed := camera_signature != _last_camera_signature
 	if camera_changed:

@@ -290,6 +290,7 @@ func _test_modal_click_through_and_restore() -> void:
 	confirmation.name = "ModalConfirmation"
 	confirmation.text = "Confirm"
 	confirmation.size = Vector2(44.0, 44.0)
+	confirmation.process_mode = Node.PROCESS_MODE_ALWAYS
 	var camera := Camera3D.new()
 	viewport.add_child(host)
 	host.add_child(chests)
@@ -302,7 +303,7 @@ func _test_modal_click_through_and_restore() -> void:
 	var controller := (load("res://scripts/world/ground_item_world_controller.gd") as Script).new() as Node
 	host.add_child(controller)
 	controller.call(&"configure", registry, {}, func(value: GroundItemRecord) -> Dictionary: return _detail(value), camera, chests, tooltip_layer)
-	var modal := [true]
+	var modal := [false]
 	controller.call(&"configure_interaction", (load(REQUIRED[0]) as Script).new(registry, 4.0), (load(REQUIRED[1]) as Script).new(), (load(REQUIRED[2]) as Script).new(registry, contexts, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG, 3.5), contexts, 20.0, Callable(), func() -> bool: return modal[0])
 	var confirmations := [0]
 	var pickup_requests: Array[Array] = []
@@ -318,17 +319,31 @@ func _test_modal_click_through_and_restore() -> void:
 		confirmation.position = anchor.position
 		confirmation.size = anchor.size
 		_marker_assert([MARKER_MOUSE], confirmation.get_index() < anchor.get_index(), "modal confirmation is beneath the projected ground anchor at the same point")
+		_marker_assert([MARKER_MOUSE], anchor.mouse_filter == Control.MOUSE_FILTER_STOP, "existing ground anchor starts pointer-active before the pause-driven modal opens")
 		var click_point := anchor.get_global_rect().get_center()
-		await _dispatch_viewport_mouse_click(viewport, click_point, 0)
-		_marker_assert([MARKER_MOUSE], confirmations[0] == 1, "active modal confirmation receives the actual overlapping click")
-		_marker_assert([MARKER_MOUSE], pickup_requests.is_empty() and feedback.is_empty() and registry.record(record.drop_id) != null, "modal click emits no ground pickup request or feedback")
-		modal[0] = false
+		var anchor_position_before_pause := anchor.position
+		camera.position.x += 2.0
+		modal[0] = true
+		paused = true
 		await process_frame
+		_marker_assert([MARKER_MOUSE], controller.process_mode == Node.PROCESS_MODE_ALWAYS, "ground controller continues only its pause-safe synchronization while the SceneTree is paused")
+		_marker_assert([MARKER_MOUSE], anchor.mouse_filter == Control.MOUSE_FILTER_IGNORE, "existing ground anchor releases pointer capture after the pause-driven modal opens")
+		var paused_projection := controller.call(&"projection_diagnostics") as Dictionary
+		_marker_assert([MARKER_MOUSE], int(paused_projection.get("last_frame_work", -1)) == 0 and anchor.position == anchor_position_before_pause, "paused modal synchronization performs zero projection work despite camera motion")
+		await _dispatch_viewport_mouse_click(viewport, click_point, 0)
+		_marker_assert([MARKER_MOUSE], confirmations[0] == 1, "paused active modal confirmation receives the actual overlapping click")
+		_marker_assert([MARKER_MOUSE], pickup_requests.is_empty() and feedback.is_empty() and registry.record(record.drop_id) != null, "paused modal click emits no ground pickup request or feedback")
+		camera.position.x -= 2.0
+		modal[0] = false
+		paused = false
+		await process_frame
+		_marker_assert([MARKER_MOUSE], anchor.mouse_filter == Control.MOUSE_FILTER_STOP, "existing ground anchor restores pointer capture after unpause and modal close")
 		await _dispatch_viewport_mouse_click(viewport, click_point, 0)
 		_marker_assert([MARKER_MOUSE], confirmations[0] == 1, "closed modal no longer receives the overlapping click")
 		_marker_assert([MARKER_MOUSE], pickup_requests == [[record.drop_id, context.run_player_id]], "ground interaction restores exactly one owned request after modal close")
 		_marker_assert([MARKER_MOUSE], feedback.size() == 1 and feedback[0].code == GroundItemPickupResult.Code.OK, "restored ground interaction emits exactly one typed OK result")
 		_marker_assert([MARKER_MOUSE], _inventory_instance_count(context, generated.item.instance_id) == 1 and registry.record(record.drop_id) == null, "restored ground interaction stores one instance and removes the chest")
+	paused = false
 	controller.queue_free()
 	await process_frame
 	viewport.free()
