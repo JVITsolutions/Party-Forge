@@ -1,6 +1,7 @@
 extends RefCounted
 
 const CARD_PATH := "res://scripts/ui/storage/item_tooltip_card.gd"
+const ICON_PATH := "res://assets/ui/equipment/runtime/greenwood/windrunner_band_128.png"
 
 
 func run() -> Array[String]:
@@ -9,6 +10,8 @@ func run() -> Array[String]:
 	if not ResourceLoader.exists(CARD_PATH):
 		return failures
 	var card_script: Script = load(CARD_PATH)
+	_test_icon_header_and_decorative_pointer_filters(card_script, failures)
+	_test_unavailable_icon_uses_stable_placeholder(card_script, failures)
 	_test_normal_and_advanced_layers(card_script, failures)
 	_test_schema_one_empty_damage_has_no_heading(card_script, failures)
 	_test_equipped_role_and_deltas(card_script, failures)
@@ -16,6 +19,43 @@ func run() -> Array[String]:
 	_test_raw_fallback_rows_use_neutral_color(card_script, failures)
 	_test_developer_technical_gate(card_script, failures)
 	return failures
+
+
+func _test_icon_header_and_decorative_pointer_filters(card_script: Script, failures: Array[String]) -> void:
+	var card: Control = card_script.new()
+	card.call("present", _detail(), &"inspected", false, [] as Array[Dictionary], false)
+	var icon := card.get_node_or_null("Layout/Header/Icon") as TextureRect
+	TestAssertions.truthy(icon != null, "shared tooltip card builds an item icon in its header", failures)
+	if icon != null:
+		TestAssertions.truthy(icon.visible and icon.texture != null, "projected item icon is visible", failures)
+		if icon.texture != null:
+			TestAssertions.equal(icon.texture.resource_path, ICON_PATH, "tooltip loads only the projected item icon path", failures)
+		TestAssertions.truthy(icon.accessibility_name.contains("Cinder Band"), "item icon accessibility text names the item", failures)
+		TestAssertions.truthy(icon.custom_minimum_size.x >= 48.0 and icon.custom_minimum_size.y >= 48.0, "item icon preserves a readable 48 by 48 minimum", failures)
+		TestAssertions.equal(icon.mouse_filter, Control.MOUSE_FILTER_IGNORE, "item icon does not intercept tooltip pointer input", failures)
+	var decorative_labels := card.find_children("*", "Label", true, false)
+	TestAssertions.truthy(not decorative_labels.is_empty(), "shared tooltip card exposes decorative labels", failures)
+	for node: Node in decorative_labels:
+		var label := node as Label
+		TestAssertions.equal(label.mouse_filter, Control.MOUSE_FILTER_IGNORE, "%s decorative label ignores pointer input" % label.name, failures)
+	card.free()
+
+
+func _test_unavailable_icon_uses_stable_placeholder(card_script: Script, failures: Array[String]) -> void:
+	var card: Control = card_script.new()
+	var detail := _detail()
+	detail["icon_path"] = "res://missing/tooltip-icon.png"
+	card.call("present", detail, &"inspected", false, [] as Array[Dictionary], false)
+	var icon := card.get_node("Layout/Header/Icon") as TextureRect
+	var placeholder := icon.get_node_or_null("Placeholder") as Label
+	TestAssertions.truthy(icon.texture == null, "unloadable projected icon is rejected", failures)
+	TestAssertions.truthy(placeholder != null and placeholder.visible and placeholder.text == "?", "unavailable item icon uses the established question-mark placeholder", failures)
+	TestAssertions.truthy(icon.custom_minimum_size.x >= 48.0 and icon.custom_minimum_size.y >= 48.0, "unavailable item icon does not collapse the header layout", failures)
+	TestAssertions.truthy(icon.accessibility_name.contains("Cinder Band") and icon.accessibility_name.contains("unavailable"), "unavailable icon remains accessible by item name and state", failures)
+	detail["icon_path"] = ""
+	card.call("present", detail, &"inspected", false, [] as Array[Dictionary], false)
+	TestAssertions.truthy(placeholder != null and placeholder.visible, "empty projected icon path keeps the established placeholder", failures)
+	card.free()
 
 
 func _test_normal_and_advanced_layers(card_script: Script, failures: Array[String]) -> void:
@@ -167,6 +207,7 @@ func _detail() -> Dictionary:
 	return {
 		"instance_id": "item-instance-1",
 		"base_definition_id": "windrunner_band",
+		"icon_path": ICON_PATH,
 		"name": "Cinder Band",
 		"item_type_id": "ring",
 		"rarity_id": "rare",

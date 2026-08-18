@@ -9,6 +9,8 @@ var _developer_mode := false
 var _built := false
 var _layout: VBoxContainer
 var _role_label: Label
+var _icon: TextureRect
+var _icon_placeholder: Label
 var _title_label: Label
 var _rarity_label: Label
 var _classification_label: Label
@@ -44,6 +46,7 @@ func present(
 	_role_label.text = _role_text(role)
 	_role_label.visible = not _role_label.text.is_empty()
 	_title_label.text = String(_detail.get("name", "Unknown Item"))
+	_set_icon()
 	_rarity_label.text = String(_detail.get("rarity_name", "Unknown Rarity"))
 	var rarity_color := RARITY_PALETTE.color_for(StringName(String(_detail.get("rarity_id", ""))))
 	_title_label.add_theme_color_override("font_color", rarity_color)
@@ -109,9 +112,34 @@ func _ensure_built() -> void:
 	_layout.add_theme_constant_override("separation", 7)
 	add_child(_layout)
 	_role_label = _add_label("Role", 16)
-	_title_label = _add_label("Title", 22)
-	_rarity_label = _add_label("Rarity", 15)
-	_classification_label = _add_label("Classification", 14)
+	var header := HBoxContainer.new()
+	header.name = "Header"
+	header.add_theme_constant_override("separation", 10)
+	_layout.add_child(header)
+	_icon = TextureRect.new()
+	_icon.name = "Icon"
+	_icon.custom_minimum_size = Vector2(56.0, 56.0)
+	_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	header.add_child(_icon)
+	_icon_placeholder = Label.new()
+	_icon_placeholder.name = "Placeholder"
+	_icon_placeholder.text = "?"
+	_icon_placeholder.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_icon_placeholder.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_icon_placeholder.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_icon_placeholder.add_theme_font_size_override("font_size", 28)
+	_icon_placeholder.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_icon.add_child(_icon_placeholder)
+	var header_text := VBoxContainer.new()
+	header_text.name = "Text"
+	header_text.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	header_text.add_theme_constant_override("separation", 2)
+	header.add_child(header_text)
+	_title_label = _add_label("Title", 22, header_text)
+	_rarity_label = _add_label("Rarity", 15, header_text)
+	_classification_label = _add_label("Classification", 14, header_text)
 	_base_damage_box = VBoxContainer.new()
 	_base_damage_box.name = "BaseDamage"
 	_base_damage_box.add_theme_constant_override("separation", 2)
@@ -141,14 +169,22 @@ func _ensure_built() -> void:
 	_layout.add_child(_technical_details)
 
 
-func _add_label(node_name: String, font_size: int) -> Label:
+func _add_label(node_name: String, font_size: int, parent: Container = _layout) -> Label:
 	var label := Label.new()
 	label.name = node_name
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	label.add_theme_font_size_override("font_size", font_size)
-	_layout.add_child(label)
+	parent.add_child(label)
 	return label
+
+
+func _set_icon() -> void:
+	var item_name := String(_detail.get("name", "Unknown Item"))
+	var path := String(_detail.get("icon_path", ""))
+	_icon.texture = load(path) as Texture2D if not path.is_empty() and ResourceLoader.exists(path) else null
+	_icon_placeholder.visible = _icon.texture == null
+	_icon.accessibility_name = "%s item icon%s" % [item_name, ", icon unavailable" if _icon.texture == null else ""]
 
 
 func _role_text(role: StringName) -> String:
@@ -328,7 +364,7 @@ func _collect_visible_text(node: Node, ancestors_visible: bool, lines: PackedStr
 
 func _panel_style(rarity_color: Color) -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.025, 0.032, 0.048, 0.98)
+	style.bg_color = Color(0.025, 0.032, 0.048, 0.0)
 	style.border_color = rarity_color
 	style.set_border_width_all(2)
 	style.set_corner_radius_all(7)

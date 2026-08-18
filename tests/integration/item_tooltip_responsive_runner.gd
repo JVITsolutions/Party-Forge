@@ -1,6 +1,7 @@
 extends SceneTree
 
 const PANEL_SCENE := preload("res://scenes/ui/storage/item_tooltip_panel.tscn")
+const ICON_PATH := "res://assets/ui/equipment/runtime/greenwood/windrunner_band_128.png"
 const TARGET_SIZES: Array[Vector2i] = [
 	Vector2i(1920, 1080),
 	Vector2i(2560, 1440),
@@ -81,6 +82,10 @@ func _exercise_size(viewport: SubViewport, host: Control, viewport_size: Vector2
 		_assert(tooltip_rect.grow(0.5).encloses(scrollbar_rect), "scrollbar remains reachable at %s" % context)
 		_assert(viewport_rect.grow(0.5).encloses(scrollbar_rect), "scrollbar remains inside viewport at %s" % context)
 		var first_card := panel.get_node("Layout/BodyScroll/Cards").get_child(0) as Control
+		var icon := first_card.get_node_or_null("Layout/Header/Icon") as TextureRect
+		_assert(icon != null and icon.visible and icon.texture != null and icon.texture.resource_path == ICON_PATH, "projected item icon remains visible at %s" % context)
+		if icon != null:
+			_assert(icon.custom_minimum_size.x >= 48.0 and icon.custom_minimum_size.y >= 48.0, "item icon remains readable at %s" % context)
 		var rendered := String(first_card.call("rendered_text"))
 		_assert(not rendered.contains("inspected-instance-id"), "Player Mode hides technical identifiers at %s" % context)
 		_assert(not rendered.contains("responsive_hybrid_profile"), "Player Mode hides the base profile technical id at %s" % context)
@@ -159,6 +164,7 @@ func _detail(name: String, disabled: bool = false) -> Dictionary:
 	return {
 		"instance_id": "inspected-instance-id" if name == "inspected" else name,
 		"base_definition_id": "windrunner_band",
+		"icon_path": ICON_PATH,
 		"name": name.capitalize(),
 		"item_type_id": "ring",
 		"rarity_id": "rare",
@@ -170,8 +176,8 @@ func _detail(name: String, disabled: bool = false) -> Dictionary:
 		"equip_warning_lines": PackedStringArray(),
 		"core_value_lines": PackedStringArray(["12 Armour"]),
 		"base_damage_components": [
-			{"damage_type_id": "fire", "display_name": "Fire", "presentation_color": GameCatalog.DAMAGE_TYPES.definition(&"fire").presentation_color, "minimum_damage": 10.96, "maximum_damage": 21.91},
-			{"damage_type_id": "physical", "display_name": "Physical", "presentation_color": GameCatalog.DAMAGE_TYPES.definition(&"physical").presentation_color, "minimum_damage": 32.02, "maximum_damage": 42.70},
+			{"damage_type_id": "fire", "display_name": "Fire", "presentation_color": Color(1.0, 0.419608, 0.239216), "minimum_damage": 10.96, "maximum_damage": 21.91},
+			{"damage_type_id": "physical", "display_name": "Physical", "presentation_color": Color(0.847059, 0.823529, 0.768627), "minimum_damage": 32.02, "maximum_damage": 42.70},
 		],
 		"base_damage_lines": PackedStringArray(["Fire Damage: 10.96-21.91", "Physical Damage: 32.02-42.7"]),
 		"base_damage_advanced_lines": PackedStringArray(["Rarity Multiplier: 1.18", "Fire Quality: 92.84% | Bounds: 10-20 | Exact: 10.96-21.91", "Physical Quality: 90.46% | Bounds: 30-40 | Exact: 32.02-42.7"]),
