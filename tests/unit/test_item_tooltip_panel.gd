@@ -67,6 +67,18 @@ func _test_aggregate_transparency_and_pointer_surfaces(scene: PackedScene, failu
 		TestAssertions.truthy(outer_owns_background or inner_owns_background, "tooltip has one 80-88 percent dark background without stacked opacity", failures)
 	var icon := card.get_node_or_null("Layout/Header/Icon") as TextureRect
 	TestAssertions.truthy(icon != null and icon.texture != null and icon.texture.resource_path == ICON_PATH, "first shared panel card renders the projected icon", failures)
+	var decorative_pass_surfaces: Array[Control] = [
+		panel,
+		panel.get_node("Layout") as Control,
+		panel.get_node("Layout/Header") as Control,
+		panel.get_node("Layout/BodyScroll/Cards") as Control,
+		card,
+		card.get_node("Layout") as Control,
+		card.get_node("Layout/Header") as Control,
+		card.get_node("Layout/Header/Text") as Control,
+	]
+	for surface: Control in decorative_pass_surfaces:
+		TestAssertions.equal(surface.mouse_filter, Control.MOUSE_FILTER_PASS, "%s decorative tooltip surface passes pointer input" % surface.name, failures)
 	for label_path: String in ["Layout/Header/Context", "Layout/InputHints"]:
 		var label := panel.get_node(label_path) as Label
 		TestAssertions.equal(label.mouse_filter, Control.MOUSE_FILTER_IGNORE, "%s decorative panel label ignores pointer input" % label.name, failures)

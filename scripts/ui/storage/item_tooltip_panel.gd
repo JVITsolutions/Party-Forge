@@ -19,6 +19,7 @@ var _pending_release_source := &""
 
 func _ready() -> void:
 	super()
+	mouse_filter = Control.MOUSE_FILTER_PASS
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	_input_hints().text = "Alt / LT Compare   Shift / RT Affixes   Y Pin   Right Stick Scroll"
 
