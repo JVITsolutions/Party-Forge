@@ -138,28 +138,41 @@ static func preflight_instance(
 	snapshot: DAMAGE_DEFENSE_SNAPSHOT,
 	target: CombatantAdapter,
 	types: DamageTypeCatalog,
-	authoritative_flags: Array[bool] = []
+	authoritative_flags: Array[bool] = [],
+	maximum_reachable_health: float = NAN
 ) -> Dictionary:
 	var invalid_reason := _instance_resolution_error(packet, instance_index, critical, snapshot, target, null, types, true, true, false, authoritative_flags)
 	if not invalid_reason.is_empty():
-		return {"valid": false, "error_reason": invalid_reason, "maximum_final_damage": 0.0}
+		return {"valid": false, "error_reason": invalid_reason, "minimum_final_damage": 0.0, "maximum_final_damage": 0.0}
+	var health_ceiling := target.health.current_health if is_nan(maximum_reachable_health) else maximum_reachable_health
+	if not _finite_nonnegative(health_ceiling) or health_ceiling < target.health.current_health:
+		var health_range_error := _arithmetic_error(packet, snapshot, instance_index, "preflight", &"", "maximum reachable health must be finite, nonnegative, and not below minimum reachable health")
+		return {"valid": false, "error_reason": health_range_error, "minimum_final_damage": 0.0, "maximum_final_damage": 0.0}
 	if snapshot.dodge_chance >= 1.0:
-		return {"valid": true, "error_reason": "", "maximum_final_damage": 0.0}
+		return {"valid": true, "error_reason": "", "minimum_final_damage": 0.0, "maximum_final_damage": 0.0}
 	var health_before := target.health.current_health
-	var calculation := _calculate_instance(packet, instance_index, critical, snapshot, health_before, true, false, true, true)
+	var calculation := _calculate_instance(packet, instance_index, critical, snapshot, health_before, true, false, true, true, health_ceiling)
 	var calculation_error := String(calculation.get("error", ""))
 	if not calculation_error.is_empty():
-		return {"valid": false, "error_reason": calculation_error, "maximum_final_damage": 0.0}
-	var maximum_final_damage := 0.0
-	if snapshot.block_chance < 1.0:
-		maximum_final_damage = float(calculation["unblocked_damage"])
-	if snapshot.block_chance > 0.0:
-		maximum_final_damage = maxf(maximum_final_damage, float(calculation["blocked_damage"]))
-	if not _finite_nonnegative(maximum_final_damage):
-		return {"valid": false, "error_reason": _arithmetic_error(packet, snapshot, instance_index, "preflight", &"", "maximum final damage must be finite and nonnegative"), "maximum_final_damage": 0.0}
+		return {"valid": false, "error_reason": calculation_error, "minimum_final_damage": 0.0, "maximum_final_damage": 0.0}
+	var unblocked_damage := float(calculation["unblocked_damage"])
+	var blocked_damage := float(calculation["blocked_damage"])
+	var minimum_hit_damage := unblocked_damage
+	var maximum_hit_damage := unblocked_damage
+	if snapshot.block_chance >= 1.0:
+		minimum_hit_damage = blocked_damage
+		maximum_hit_damage = blocked_damage
+	elif snapshot.block_chance > 0.0:
+		minimum_hit_damage = minf(unblocked_damage, blocked_damage)
+		maximum_hit_damage = maxf(unblocked_damage, blocked_damage)
+	var minimum_final_damage := 0.0 if snapshot.dodge_chance > 0.0 else minimum_hit_damage
+	var maximum_final_damage := maximum_hit_damage
+	if not _finite_nonnegative(minimum_final_damage) or not _finite_nonnegative(maximum_final_damage) or minimum_final_damage > maximum_final_damage:
+		return {"valid": false, "error_reason": _arithmetic_error(packet, snapshot, instance_index, "preflight", &"", "reachable final damage range must be finite, nonnegative, and ordered"), "minimum_final_damage": 0.0, "maximum_final_damage": 0.0}
 	return {
 		"valid": true,
 		"error_reason": "",
+		"minimum_final_damage": minimum_final_damage,
 		"maximum_final_damage": maximum_final_damage,
 	}
 
@@ -243,7 +256,8 @@ static func _calculate_instance(
 	target_was_alive: bool,
 	overkill_only: bool,
 	apply_health: bool,
-	allow_life_steal: bool
+	allow_life_steal: bool,
+	life_steal_health_ceiling: float = NAN
 ) -> Dictionary:
 	var component_breakdowns: Array[Dictionary] = []
 	var total_post_mitigation := 0.0
@@ -315,12 +329,13 @@ static func _calculate_instance(
 		reachable_damage.append(unblocked_damage)
 	if block_reachable:
 		reachable_damage.append(blocked_damage)
+	var life_steal_health_before := health_before if is_nan(life_steal_health_ceiling) else life_steal_health_ceiling
 	for possible_damage: float in reachable_damage:
 		var possible_excess := _prospective_excess(possible_damage, health_before, overkill_only)
 		if not _finite_nonnegative(possible_excess):
 			return {"error": _arithmetic_error(packet, snapshot, instance_index, "excess", &"", "excess amount must be finite and nonnegative")}
 		if allow_life_steal and apply_health and target_was_alive and packet.source_is_available_for_life_steal():
-			var possible_removed := minf(possible_damage, health_before)
+			var possible_removed := minf(possible_damage, life_steal_health_before)
 			var possible_life_steal := possible_removed * packet.life_steal_rate
 			if not _finite_nonnegative(possible_life_steal):
 				return {"error": _arithmetic_error(packet, snapshot, instance_index, "life_steal", &"", "life-steal amount must be finite and nonnegative")}

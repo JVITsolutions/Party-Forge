@@ -426,3 +426,55 @@ TASK5_REACHABLE_FINAL_COLD_FULL_EXIT_CODE=1
 The cold full run emitted exactly the declared five Task 6/7 assertions and no additional test, parser, loader, script, ObjectDB, resource-in-use, or RID marker. Its disposable worktree and app-data roots were removed afterward.
 
 Scope remains this report, the resolver/service, and their unit suites. No production routing, persistence, scene, final presentation, progress, or user QA path changed. `git diff --check` remains clean. The five planned Task 6/7 assertions and the unrelated `godot_ai` verbose-autoload teardown list remain the only concerns.
+
+---
+
+# Multi-Crit Task 5 Reachable Health Range Correction
+
+## Strict RED-GREEN evidence
+
+Approval review identified that the preceding scalar remaining-health correction still overstated safety for probabilistic defenses. A fractional first block or dodge can leave more health than the maximum-damage branch, so validating a later life-steal product only against minimum reachable health can miss an overflow on another reachable branch. The exact block review fixture uses `9e307` health, normal plus critical authoritative flags, `4e307` base damage, `2.25` critical multiplier, `3.0` life steal, and `0.5` block chance/effectiveness with the prescribed first block. The analogous fractional-dodge fixture uses `2.0` life steal. Both now require rejection at instance one before any RNG draw, health change, hit/crit/kill result or signal, source healing, or buffer mutation.
+
+The two service regressions and the public resolver range assertions were saved and run before production changes. The accepted RED and corrected focused GREEN were:
+
+```text
+TEST_SUMMARY: FAIL (12 failures)
+TASK5_REACHABLE_RANGE_ACCEPTED_RED_EXIT_CODE=1
+
+TEST_SUMMARY: PASS (0 failures)
+TASK5_REACHABLE_RANGE_GREEN_EXIT_CODE=0
+```
+
+## Corrected branch and health-range contract
+
+- `DamageResolver.preflight_instance()` now returns both `minimum_final_damage` and `maximum_final_damage`. Certain dodge reports `0/0`; fractional dodge reports zero minimum and the maximum reachable hit; no dodge follows the reachable block set. Block chance zero exposes only the unblocked value, block chance one only the blocked value, and fractional block exposes the ordered minimum/maximum of both branches.
+- Preflight accepts an optional maximum reachable health ceiling and validates life-steal arithmetic conservatively against it. The target proxy's current health remains the minimum reachable health used for excess arithmetic. Every published damage pair and every evolving health pair must be finite, nonnegative, and ordered.
+- `CombatResolutionService` now carries `minimum_remaining_health` by subtracting each maximum reachable damage and `maximum_remaining_health` by subtracting each minimum reachable damage. It passes the maximum bound into the next resolver preflight and checked-adds potential overkill only from damage exceeding the minimum bound.
+- Runtime resolution and RNG sequencing are unchanged after preflight succeeds. Deterministic dodge/full block still consume no draw; fractional defenses retain independent prescribed draws. The two-`9e307` finite-overkill fixture, deterministic probability-zero/one acceptance, sequential remaining-health life steal, and genuine aggregate-overflow rejection remain green.
+
+## Final verification and scope
+
+The exact Task 5 focused run was verbose. It passed without a Task 5 proxy/callable/health leak; the only enumerated exit objects were the established `godot_ai` autoload classes/resources described above.
+
+```text
+TEST_SUMMARY: PASS (0 failures)
+TASK5_RANGE_FINAL_EXACT_FOCUSED_EXIT_CODE=0
+
+TEST_SUMMARY: PASS (0 failures)
+TASK5_RANGE_FINAL_COMPAT_EXIT_CODE=0
+
+TEST_SUMMARY: FAIL (5 failures)
+TASK5_RANGE_FINAL_KNOWN_FIVE_EXIT_CODE=1
+```
+
+The first detached cold attempt is explicitly discarded: `--editor --quit-after` aborted the initial scan, so loader noise from incomplete imports was not treated as test evidence. The documented blocking `--import` then completed, and the valid verbose cold full run with isolated `APPDATA` and `LOCALAPPDATA` emitted exactly the five declared Task 6/7 assertions:
+
+```text
+TASK5_RANGE_COLD_COMPLETE_IMPORT_EXIT_CODE=0
+TEST_SUMMARY: FAIL (5 failures)
+TASK5_RANGE_FINAL_COLD_FULL_EXIT_CODE=1
+```
+
+That accepted cold run emitted no additional test, parser, loader, script, ObjectDB, resource-in-use, or RID leak marker. The registered detached worktree was removed. The safety layer blocked recursive removal of the isolated application-state directory, so the disposable verification residue remains only at `C:\Users\Jacob\AppData\Local\Temp\party-forge-task5-app-range-20260823-d`; it is outside the repository and contains no source changes.
+
+This correction is limited to the resolver/service, their two unit suites, and this report. It does not wire Task 6 production paths, change persistence/scenes/final presentation, modify progress, or touch the user-owned QA paths or main editor.

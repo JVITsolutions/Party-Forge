@@ -87,10 +87,11 @@ func _resolve_bundle_guarded(packet: DamagePacket, target: CombatantAdapter) -> 
 	preflight_health.configure(captured_health.max_health, true, 8.0, 0.5, true)
 	preflight_health.current_health = captured_health.current_health
 	var preflight_target := CombatantAdapter.new(null, target_id, captured_team_id, preflight_health, null, true)
-	var remaining_health_upper_bound := captured_health.current_health
+	var minimum_remaining_health := captured_health.current_health
+	var maximum_remaining_health := captured_health.current_health
 	var potential_overkill_upper_bound := 0.0
 	for index: int in critical_flags.size():
-		var preflight := DamageResolver.preflight_instance(packet, index, critical_flags[index], snapshot, preflight_target, _damage_types, critical_flags)
+		var preflight := DamageResolver.preflight_instance(packet, index, critical_flags[index], snapshot, preflight_target, _damage_types, critical_flags, maximum_remaining_health)
 		if not bool(preflight.get("valid", false)):
 			var preflight_diagnostics := _diagnostics_for_roll(roll, 0.0)
 			preflight_diagnostics["processed_before_failure"] = 0
@@ -99,8 +100,19 @@ func _resolve_bundle_guarded(packet: DamagePacket, target: CombatantAdapter) -> 
 			preflight_target.health = null
 			preflight_health.free()
 			return _publish_failure(String(preflight.get("error_reason", "PARTY_FORGE_DAMAGE_ERROR reason=instance preflight failed")), target_id, target_position, [], preflight_diagnostics)
+		var minimum_final_damage := float(preflight["minimum_final_damage"])
 		var maximum_final_damage := float(preflight["maximum_final_damage"])
-		var maximum_health_removal := minf(maximum_final_damage, remaining_health_upper_bound)
+		if not is_finite(minimum_final_damage) or minimum_final_damage < 0.0 or not is_finite(maximum_final_damage) or maximum_final_damage < minimum_final_damage:
+			var range_error := "PARTY_FORGE_DAMAGE_ERROR attack=%s source=%s target=%s instance=%d stage=preflight reason=reachable damage range must be finite, nonnegative, and ordered" % [packet.attack_id, packet.source_id, target_id, index]
+			var range_diagnostics := _diagnostics_for_roll(roll, 0.0)
+			range_diagnostics["processed_before_failure"] = 0
+			range_diagnostics["failed_instance_index"] = index
+			range_diagnostics["preflight_failed"] = true
+			preflight_target.health = null
+			preflight_health.free()
+			return _publish_failure(range_error, target_id, target_position, [], range_diagnostics)
+		var maximum_health_removal := minf(maximum_final_damage, minimum_remaining_health)
+		var minimum_health_removal := minf(minimum_final_damage, maximum_remaining_health)
 		var residual_overkill := maximum_final_damage - maximum_health_removal
 		var next_overkill_upper_bound := potential_overkill_upper_bound + residual_overkill
 		if not is_finite(residual_overkill) or residual_overkill < 0.0 or not is_finite(next_overkill_upper_bound) or next_overkill_upper_bound < 0.0:
@@ -112,9 +124,19 @@ func _resolve_bundle_guarded(packet: DamagePacket, target: CombatantAdapter) -> 
 			preflight_target.health = null
 			preflight_health.free()
 			return _publish_failure(aggregate_error, target_id, target_position, [], aggregate_diagnostics)
-		remaining_health_upper_bound = maxf(0.0, remaining_health_upper_bound - maximum_health_removal)
+		minimum_remaining_health = maxf(0.0, minimum_remaining_health - maximum_health_removal)
+		maximum_remaining_health = maxf(0.0, maximum_remaining_health - minimum_health_removal)
+		if not is_finite(minimum_remaining_health) or minimum_remaining_health < 0.0 or not is_finite(maximum_remaining_health) or minimum_remaining_health > maximum_remaining_health:
+			var health_range_error := "PARTY_FORGE_DAMAGE_ERROR attack=%s source=%s target=%s instance=%d stage=preflight reason=reachable health range must be finite, nonnegative, and ordered" % [packet.attack_id, packet.source_id, target_id, index]
+			var health_range_diagnostics := _diagnostics_for_roll(roll, 0.0)
+			health_range_diagnostics["processed_before_failure"] = 0
+			health_range_diagnostics["failed_instance_index"] = index
+			health_range_diagnostics["preflight_failed"] = true
+			preflight_target.health = null
+			preflight_health.free()
+			return _publish_failure(health_range_error, target_id, target_position, [], health_range_diagnostics)
 		potential_overkill_upper_bound = next_overkill_upper_bound
-		preflight_health.current_health = remaining_health_upper_bound
+		preflight_health.current_health = minimum_remaining_health
 	preflight_target.health = null
 	preflight_health.free()
 

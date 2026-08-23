@@ -156,6 +156,7 @@ func _test_public_instance_preflight(types: DamageTypeCatalog, failures: Array[S
 	var snapshot: Object = resolver_script.call(&"capture_defense", packet, target, types)
 	var preflight := resolver_script.call(&"preflight_instance", packet, 1, true, snapshot, target, types) as Dictionary
 	TestAssertions.truthy(bool(preflight.get("valid", false)), "valid critical instance preflight succeeds", failures)
+	TestAssertions.near(float(preflight.get("minimum_final_damage", -1.0)), 0.0, 0.0001, "fractional dodge exposes zero reachable minimum damage", failures)
 	TestAssertions.near(float(preflight.get("maximum_final_damage", -1.0)), 60.0, 0.0001, "preflight publishes finite worst-case damage", failures)
 	TestAssertions.near(target_health.current_health, 100.0, 0.0001, "preflight never mutates target health", failures)
 
@@ -169,6 +170,7 @@ func _test_reachable_instance_preflight(types: DamageTypeCatalog, failures: Arra
 	var blocked_snapshot: Object = resolver_script.call(&"capture_defense", full_block_packet, blocked_target, types)
 	var blocked_preflight := resolver_script.call(&"preflight_instance", full_block_packet, 0, false, blocked_snapshot, blocked_target, types) as Dictionary
 	TestAssertions.truthy(bool(blocked_preflight.get("valid", false)), "deterministic full block ignores impossible unblocked life-steal overflow", failures)
+	TestAssertions.near(float(blocked_preflight.get("minimum_final_damage", -1.0)), 0.0, 0.0, "deterministic full block reports zero reachable minimum damage", failures)
 	TestAssertions.near(float(blocked_preflight.get("maximum_final_damage", -1.0)), 0.0, 0.0, "deterministic full block reports zero reachable maximum damage", failures)
 	var blocked_rng := CombatRng.new(601)
 	var blocked_result: DamageResult = resolver_script.call(&"resolve_instance", full_block_packet, 0, false, blocked_snapshot, blocked_target, blocked_rng, types, true, true) as DamageResult
@@ -184,12 +186,27 @@ func _test_reachable_instance_preflight(types: DamageTypeCatalog, failures: Arra
 	var dodged_snapshot: Object = resolver_script.call(&"capture_defense", dodge_packet, dodged_target, types)
 	var dodged_preflight := resolver_script.call(&"preflight_instance", dodge_packet, 0, false, dodged_snapshot, dodged_target, types) as Dictionary
 	TestAssertions.truthy(bool(dodged_preflight.get("valid", false)), "deterministic dodge accepts finite authoritative damage evidence", failures)
+	TestAssertions.near(float(dodged_preflight.get("minimum_final_damage", -1.0)), 0.0, 0.0, "deterministic dodge reports zero reachable minimum damage", failures)
 	TestAssertions.near(float(dodged_preflight.get("maximum_final_damage", -1.0)), 0.0, 0.0, "deterministic dodge reports zero reachable maximum damage", failures)
 	var dodge_rng := CombatRng.new(602)
 	var dodged_result: DamageResult = resolver_script.call(&"resolve_instance", dodge_packet, 0, false, dodged_snapshot, dodged_target, dodge_rng, types, true, true) as DamageResult
 	TestAssertions.truthy(dodged_result.valid and dodged_result.dodged, "deterministic-dodge runtime follows the reachable preflight branch", failures)
 	TestAssertions.near(dodged_health.current_health, 9.0e307, 0.0, "deterministic dodge preserves target health", failures)
 	TestAssertions.equal(dodge_rng.draw_count, 0, "deterministic dodge consumes no RNG", failures)
+
+	var branch_packet := _runtime_packet(source, [&"physical"], [30.0], false, 1.0, 0.0)
+	var fractional_block_health := _health(100.0, 100.0)
+	var fractional_block_target := _adapter(&"enemy:fractional_block_range", 2, fractional_block_health, {&"block_chance": 0.5, &"block_effectiveness": 0.5})
+	var fractional_block_snapshot: Object = resolver_script.call(&"capture_defense", branch_packet, fractional_block_target, types)
+	var fractional_block_preflight := resolver_script.call(&"preflight_instance", branch_packet, 0, false, fractional_block_snapshot, fractional_block_target, types) as Dictionary
+	TestAssertions.near(float(fractional_block_preflight.get("minimum_final_damage", -1.0)), 15.0, 0.0001, "fractional block reports the smaller reachable blocked branch", failures)
+	TestAssertions.near(float(fractional_block_preflight.get("maximum_final_damage", -1.0)), 30.0, 0.0001, "fractional block reports the larger reachable unblocked branch", failures)
+	var unblocked_health := _health(100.0, 100.0)
+	var unblocked_target := _adapter(&"enemy:unblocked_range", 2, unblocked_health, {})
+	var unblocked_snapshot: Object = resolver_script.call(&"capture_defense", branch_packet, unblocked_target, types)
+	var unblocked_preflight := resolver_script.call(&"preflight_instance", branch_packet, 0, false, unblocked_snapshot, unblocked_target, types) as Dictionary
+	TestAssertions.near(float(unblocked_preflight.get("minimum_final_damage", -1.0)), 30.0, 0.0001, "zero block chance reports unblocked minimum damage", failures)
+	TestAssertions.near(float(unblocked_preflight.get("maximum_final_damage", -1.0)), 30.0, 0.0001, "zero block chance reports unblocked maximum damage", failures)
 
 func _test_independent_instance_draws(resolver_script: Script, types: DamageTypeCatalog, failures: Array[String]) -> void:
 	var source := _adapter(&"party:instance_draws", 1, null, {&"crit_chance": 3.0, &"crit_multiplier": 2.0})
