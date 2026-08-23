@@ -34,6 +34,16 @@ const REQUIRED_PARENT_BY_ROLE := {
 	&"foot_right": &"lower_leg_right",
 	&"toe_right": &"foot_right",
 }
+const APPROVED_PIVOT_ALIAS_PARTNER := {
+	&"spine": &"chest",
+	&"chest": &"spine",
+	&"neck": &"head",
+	&"head": &"neck",
+	&"foot_left": &"toe_left",
+	&"toe_left": &"foot_left",
+	&"foot_right": &"toe_right",
+	&"toe_right": &"foot_right",
+}
 
 func validate_definition(definition: RigDefinition) -> PackedStringArray:
 	var errors := PackedStringArray()
@@ -45,6 +55,7 @@ func validate_definition(definition: RigDefinition) -> PackedStringArray:
 	_validate_mapping_sizes(definition, errors)
 	var seen_roles: Dictionary = {}
 	var seen_bones: Dictionary = {}
+	var roles_by_pivot_path: Dictionary = {}
 	var safe_count := _safe_mapping_count(definition)
 	for index: int in safe_count:
 		var role: StringName = definition.roles[index]
@@ -66,9 +77,30 @@ func validate_definition(definition: RigDefinition) -> PackedStringArray:
 			seen_bones[bone_name] = true
 		if role in REQUIRED_PARENT_BY_ROLE and parent_role != REQUIRED_PARENT_BY_ROLE[role]:
 			errors.append("humanoid rig role %s parent role must be %s" % [role, REQUIRED_PARENT_BY_ROLE[role]])
-		if pivot_path.is_empty() or pivot_path.is_absolute():
+		var pivot_path_is_safe := not pivot_path.is_empty() and not pivot_path.is_absolute()
+		if not pivot_path_is_safe:
 			errors.append("humanoid rig role %s pivot path must be a non-empty relative NodePath" % role)
+		else:
+			for segment_index: int in pivot_path.get_name_count():
+				var segment := String(pivot_path.get_name(segment_index))
+				if segment == "." or segment == "..":
+					errors.append("humanoid rig role %s pivot path contains unsafe path segment %s" % [role, segment])
+					pivot_path_is_safe = false
+					break
+		if pivot_path_is_safe:
+			var pivot_key := String(pivot_path)
+			if not roles_by_pivot_path.has(pivot_key):
+				roles_by_pivot_path[pivot_key] = []
+			var mapped_roles: Array = roles_by_pivot_path[pivot_key]
+			mapped_roles.append(role)
 		_validate_transform(rest, "humanoid rig role %s rest" % role, errors)
+	for pivot_key: String in roles_by_pivot_path:
+		var mapped_roles: Array = roles_by_pivot_path[pivot_key]
+		if mapped_roles.size() <= 1:
+			continue
+		var approved_pair: bool = mapped_roles.size() == 2 and APPROVED_PIVOT_ALIAS_PARTNER.get(mapped_roles[0], &"") == mapped_roles[1]
+		if not approved_pair:
+			errors.append("humanoid rig pivot alias %s is not an approved exact role pair: %s" % [pivot_key, mapped_roles])
 	for role: StringName in REQUIRED_ROLES:
 		if not seen_roles.has(role):
 			errors.append("humanoid rig is missing role %s" % role)
@@ -146,6 +178,9 @@ func validate_skin(definition: RigDefinition, skin: Skin) -> PackedStringArray:
 		if definition.bone_names.count(bind_name) != 1:
 			errors.append("humanoid rig Skin bind %s must resolve to exactly one canonical bone" % bind_name)
 		_validate_transform(skin.get_bind_pose(bind_index), "humanoid rig Skin bind %s pose" % bind_name, errors)
+	for bone_name: StringName in definition.bone_names:
+		if not seen_names.has(bone_name):
+			errors.append("humanoid rig Skin is missing canonical bone %s" % bone_name)
 	return errors
 
 func topology_signature(definition: RigDefinition) -> String:

@@ -125,6 +125,21 @@ func _assert_quantized_rest_and_topology_changes(failures: Array[String]) -> voi
 
 func _assert_invalid_role_bone_and_pivot_contracts(failures: Array[String]) -> void:
 	var definition := _fixture_definition()
+	var canonical_pivot_paths: Array[NodePath] = definition.get(&"pivot_paths")
+	for approved_pair: Array in [
+		[&"spine", &"chest"],
+		[&"neck", &"head"],
+		[&"foot_left", &"toe_left"],
+		[&"foot_right", &"toe_right"],
+	]:
+		var left_role: StringName = approved_pair[0]
+		var right_role: StringName = approved_pair[1]
+		TestAssertions.equal(
+			canonical_pivot_paths[_role_index(definition, left_role)],
+			canonical_pivot_paths[_role_index(definition, right_role)],
+			"canonical pivot alias %s/%s is preserved" % approved_pair,
+			failures
+		)
 	var missing_role := definition.duplicate(true) as Resource
 	_remove_mapping_at(missing_role, ROLES.size() - 1)
 	TestAssertions.truthy(_contains(_contract.call(&"validate_definition", missing_role), "missing role"), "missing required role rejects", failures)
@@ -148,6 +163,22 @@ func _assert_invalid_role_bone_and_pivot_contracts(failures: Array[String]) -> v
 	rests[0].origin.x = INF
 	non_finite.set(&"canonical_rests", rests)
 	TestAssertions.truthy(_contains(_contract.call(&"validate_definition", non_finite), "finite"), "non-finite rest transform rejects", failures)
+	for unsafe_path: NodePath in [NodePath("HitPivot/./BodyPivot"), NodePath("HitPivot/../BodyPivot")]:
+		var unsafe_definition := definition.duplicate(true) as Resource
+		var unsafe_paths: Array[NodePath] = unsafe_definition.get(&"pivot_paths")
+		unsafe_paths[_role_index(unsafe_definition, &"hips")] = unsafe_path
+		unsafe_definition.set(&"pivot_paths", unsafe_paths)
+		TestAssertions.truthy(_contains(_contract.call(&"validate_definition", unsafe_definition), "path segment"), "pivot path rejects unsafe segment in %s" % unsafe_path, failures)
+	var unapproved_alias := definition.duplicate(true) as Resource
+	var unapproved_paths: Array[NodePath] = unapproved_alias.get(&"pivot_paths")
+	unapproved_paths[_role_index(unapproved_alias, &"hand_left")] = unapproved_paths[_role_index(unapproved_alias, &"hand_right")]
+	unapproved_alias.set(&"pivot_paths", unapproved_paths)
+	TestAssertions.truthy(_contains(_contract.call(&"validate_definition", unapproved_alias), "pivot alias"), "unapproved duplicate pivot alias rejects", failures)
+	var polluted_alias := definition.duplicate(true) as Resource
+	var polluted_paths: Array[NodePath] = polluted_alias.get(&"pivot_paths")
+	polluted_paths[_role_index(polluted_alias, &"upper_arm_left")] = polluted_paths[_role_index(polluted_alias, &"spine")]
+	polluted_alias.set(&"pivot_paths", polluted_paths)
+	TestAssertions.truthy(_contains(_contract.call(&"validate_definition", polluted_alias), "pivot alias"), "approved pivot alias rejects when polluted by a third role", failures)
 	var skeleton := _skeleton_for(definition, ROLES.size() - 1)
 	var pivots := _pivot_fixture()
 	TestAssertions.truthy(_contains(_contract.call(&"validate_rig", definition, skeleton, pivots), "bone count"), "missing canonical bone rejects", failures)
@@ -164,6 +195,13 @@ func _assert_named_skin_bind_contract(failures: Array[String]) -> void:
 	var definition := _fixture_definition()
 	var skin := _named_skin_for(definition)
 	TestAssertions.equal(_contract.call(&"validate_skin", definition, skin), PackedStringArray(), "ordered unique named Skin binds validate", failures)
+	var empty_errors: PackedStringArray = _contract.call(&"validate_skin", definition, Skin.new())
+	_assert_missing_bind_errors(empty_errors, BONES, "empty Skin", failures)
+	var incomplete := Skin.new()
+	incomplete.add_named_bind(BONES[0], skin.get_bind_pose(0))
+	incomplete.add_named_bind(BONES[1], skin.get_bind_pose(1))
+	var incomplete_errors: PackedStringArray = _contract.call(&"validate_skin", definition, incomplete)
+	_assert_missing_bind_errors(incomplete_errors, BONES.slice(2), "incomplete Skin", failures)
 	var signature := String(_contract.call(&"skin_bind_signature", definition, skin))
 	var same_skin := _named_skin_for(definition)
 	var pose := same_skin.get_bind_pose(0)
@@ -335,3 +373,12 @@ func _contains(errors: Variant, fragment: String) -> bool:
 		if error.contains(fragment):
 			return true
 	return false
+
+func _assert_missing_bind_errors(errors: PackedStringArray, missing_bones: Array[StringName], label: String, failures: Array[String]) -> void:
+	var missing_error_count := 0
+	for error: String in errors:
+		if error.contains("missing canonical bone"):
+			missing_error_count += 1
+	TestAssertions.equal(missing_error_count, missing_bones.size(), "%s reports every missing canonical bone exactly once" % label, failures)
+	for bone_name: StringName in missing_bones:
+		TestAssertions.truthy(_contains(errors, "missing canonical bone %s" % bone_name), "%s reports missing canonical bone %s" % [label, bone_name], failures)
