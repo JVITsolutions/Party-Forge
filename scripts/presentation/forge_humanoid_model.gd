@@ -5,6 +5,8 @@ signal action_event(action_id: StringName, event_name: StringName)
 signal action_finished(action_id: StringName)
 
 const BODY_PRESETS: Array[StringName] = [&"masculine", &"feminine"]
+const HumanoidRigContractScript := preload("res://scripts/presentation/humanoid_rig_contract.gd")
+const CANONICAL_RIG := preload("res://data/presentation/humanoid_rigs/pf_humanoid_v1.tres")
 const SLOT_SOCKET_PATHS := {
 	&"helmet": "HitPivot/BodyPivot/HipsPivot/TorsoPivot/HeadPivot/HelmetSocket",
 	&"body_armour": "HitPivot/BodyPivot/HipsPivot/TorsoPivot/BodyArmourSocket",
@@ -40,9 +42,7 @@ const LEGACY_SOCKET_SLOT_BY_NAME := {
 	&"BootsSocket": &"boots",
 	&"AmuletSocket": &"amulet",
 	&"BeltSocket": &"belt",
-	&"MainHandSocket": &"main_hand",
 	&"RightHandSocket": &"main_hand",
-	&"OffHandSocket": &"off_hand",
 	&"LeftHandSocket": &"off_hand",
 }
 const GENERATED_SEMANTIC_ROOT_META: StringName = &"forge_generated_legacy_semantic_root"
@@ -122,7 +122,7 @@ func apply_equipment_visual(slot_id: StringName, definition: EquipmentVisualDefi
 				attachment_nodes.append(attachment)
 	for attachment: Node3D in attachment_nodes:
 		var socket_id := StringName(attachment.get_meta(&"equipment_socket_id", definition.socket_id))
-		var socket := _resolve_socket(socket_id, slot_id, false)
+		var socket := _resolve_socket(socket_id, slot_id, false, attachment.has_meta(&"equipment_socket_id"))
 		if socket == null:
 			candidate_root.free()
 			return false
@@ -393,7 +393,7 @@ func _equipped_node_named(slot_id: StringName, node_name: StringName) -> Node3D:
 			return found
 	return null
 
-func _resolve_socket(socket_id: StringName, slot_id: StringName = &"", include_equipped_anchors: bool = true) -> Node3D:
+func _resolve_socket(socket_id: StringName, slot_id: StringName = &"", include_equipped_anchors: bool = true, allow_owned_hand_pair: bool = false) -> Node3D:
 	if include_equipped_anchors and not String(socket_id).contains("/"):
 		var equipped_slots: Array[StringName] = []
 		if not slot_id.is_empty():
@@ -404,9 +404,11 @@ func _resolve_socket(socket_id: StringName, slot_id: StringName = &"", include_e
 			var equipped_socket := _equipped_node_named(equipped_slot, socket_id)
 			if equipped_socket != null:
 				return equipped_socket
-	var semantic_slot := _semantic_slot_for(socket_id, slot_id)
+	var semantic_slot := &"" if allow_owned_hand_pair and _is_owned_legacy_hand_pair_socket(socket_id) else _semantic_slot_for(socket_id, slot_id)
 	if not semantic_slot.is_empty():
 		var semantic_root := _ensure_semantic_socket_root()
+		if semantic_root == null:
+			return null
 		var semantic_socket := semantic_root.get_node_or_null(NodePath(String(semantic_slot))) as Node3D
 		if semantic_socket is BoneAttachment3D:
 			return semantic_socket if _is_valid_rig_socket(semantic_slot, semantic_socket as BoneAttachment3D) else null
@@ -416,8 +418,7 @@ func _resolve_socket(socket_id: StringName, slot_id: StringName = &"", include_e
 		if fallback_path != String(SLOT_SOCKET_PATHS.get(semantic_slot, "")):
 			return null
 		var semantic_fallback := get_node_or_null(NodePath(fallback_path)) as Node3D
-		if semantic_fallback != null:
-			return semantic_fallback
+		return semantic_fallback
 	var exact_fallback := get_node_or_null(NodePath(String(socket_id))) as Node3D
 	if exact_fallback != null:
 		return exact_fallback
@@ -434,10 +435,17 @@ func _semantic_slot_for(socket_id: StringName, slot_id: StringName) -> StringNam
 		return socket_id
 	return LEGACY_SOCKET_SLOT_BY_NAME.get(leaf_name, &"")
 
+func _is_owned_legacy_hand_pair_socket(socket_id: StringName) -> bool:
+	if String(socket_id).contains("/") or socket_id not in [&"LeftHandSocket", &"RightHandSocket"]:
+		return false
+	var left_socket := get_node_or_null(NodePath("LeftHandSocket")) as Node3D
+	var right_socket := get_node_or_null(NodePath("RightHandSocket")) as Node3D
+	return left_socket != null and right_socket != null and left_socket.get_parent() == self and right_socket.get_parent() == self
+
 func _ensure_semantic_socket_root() -> Node3D:
-	var existing := get_node_or_null(NodePath(String(SEMANTIC_SOCKET_ROOT_NAME))) as Node3D
+	var existing := get_node_or_null(NodePath(String(SEMANTIC_SOCKET_ROOT_NAME)))
 	if existing != null:
-		return existing
+		return existing as Node3D
 	var semantic_root := Node3D.new()
 	semantic_root.name = SEMANTIC_SOCKET_ROOT_NAME
 	semantic_root.set_meta(GENERATED_SEMANTIC_ROOT_META, true)
@@ -465,11 +473,10 @@ func _is_valid_rig_socket(slot_id: StringName, attachment: BoneAttachment3D) -> 
 			cursor = cursor.get_parent()
 	if skeleton == null:
 		return false
-	var matching_bones := 0
-	for bone_index: int in skeleton.get_bone_count():
-		if skeleton.get_bone_name(bone_index) == expected_bone:
-			matching_bones += 1
-	return matching_bones == 1
+	if not is_ancestor_of(skeleton):
+		return false
+	var contract := HumanoidRigContractScript.new() as RefCounted
+	return (contract.call(&"validate_rig", CANONICAL_RIG, skeleton, self) as PackedStringArray).is_empty()
 
 func _equipment_bounds(slot_id: StringName) -> AABB:
 	var bounds := AABB()

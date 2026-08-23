@@ -1,6 +1,7 @@
 extends RefCounted
 
 const HUMANOID_SCENE_PATH := "res://scenes/characters/presentation/forge_humanoid_model.tscn"
+const CANONICAL_RIG_PATH := "res://data/presentation/humanoid_rigs/pf_humanoid_v1.tres"
 const SLOT_IDS: Array[StringName] = [
 	&"helmet", &"body_armour", &"legs", &"gloves", &"boots", &"amulet",
 	&"ring_left", &"ring_right", &"belt", &"main_hand", &"off_hand",
@@ -27,6 +28,10 @@ func run() -> Array[String]:
 	_assert_held_action_and_projectile_anchors_remain_discoverable(failures)
 	_assert_wrong_bone_fails_closed(failures)
 	_assert_missing_mapping_never_searches_imported_names(failures)
+	_assert_external_decoy_skeleton_fails_closed(failures)
+	_assert_in_model_incomplete_and_wrong_rest_rigs_fail_closed(failures)
+	_assert_recognized_direct_name_collisions_fail_closed(failures)
+	_assert_wrong_type_semantic_root_is_stable_and_fails_closed(failures)
 	return failures
 
 func _assert_owned_root_exposes_all_slots(failures: Array[String]) -> void:
@@ -119,18 +124,106 @@ func _assert_missing_mapping_never_searches_imported_names(failures: Array[Strin
 	TestAssertions.equal(tempting_socket.get_child_count(), 0, "imported same-name node never becomes an equipment contract", failures)
 	model.free()
 
-func _rig_fixture(overrides: Dictionary = {}) -> Dictionary:
+func _assert_external_decoy_skeleton_fails_closed(failures: Array[String]) -> void:
+	var container := Node3D.new()
+	container.name = &"ExternalDecoyFixture"
+	var model := ForgeHumanoidModel.new()
+	model.name = &"Model"
+	_add_body(model)
+	container.add_child(model)
+	var decoy := Skeleton3D.new()
+	decoy.name = &"DecoySkeleton"
+	decoy.add_bone(&"Hand.R")
+	container.add_child(decoy)
+	var semantic_root := Node3D.new()
+	semantic_root.name = &"SemanticSockets"
+	model.add_child(semantic_root)
+	var socket := BoneAttachment3D.new()
+	socket.name = &"main_hand"
+	socket.bone_name = &"Hand.R"
+	socket.use_external_skeleton = true
+	socket.external_skeleton = NodePath("../../../DecoySkeleton")
+	semantic_root.add_child(socket)
+	var legacy := _ensure_path(model, ForgeHumanoidModel.SLOT_SOCKET_PATHS[&"main_hand"])
+	_add_to_tree(container)
+	var visual := _visual(&"external_decoy", &"main_hand", StringName(ForgeHumanoidModel.SLOT_SOCKET_PATHS[&"main_hand"]), _anchor_scene(false))
+	TestAssertions.truthy(not model.has_equipment_slot(&"main_hand"), "external one-bone decoy cannot authorize a semantic socket", failures)
+	TestAssertions.truthy(not model.apply_equipment_visual(&"main_hand", visual), "external decoy cannot stage rigid equipment", failures)
+	TestAssertions.equal(socket.get_child_count(), 0, "external decoy socket receives no equipment", failures)
+	TestAssertions.equal(legacy.get_child_count(), 0, "external decoy rejection cannot fall through to legacy path", failures)
+	container.free()
+
+func _assert_in_model_incomplete_and_wrong_rest_rigs_fail_closed(failures: Array[String]) -> void:
+	var incomplete := Skeleton3D.new()
+	incomplete.name = &"CanonicalSkeleton"
+	incomplete.add_bone(&"Hand.R")
+	var incomplete_fixture := _rig_fixture({}, incomplete)
+	_assert_invalid_rig_fixture(incomplete_fixture, &"incomplete_rig", "in-model incomplete rig", failures)
+	var wrong_rest := _canonical_skeleton()
+	var hand_index := wrong_rest.find_bone(&"Hand.R")
+	var changed_rest := wrong_rest.get_bone_rest(hand_index)
+	changed_rest.origin.x += 0.125
+	wrong_rest.set_bone_rest(hand_index, changed_rest)
+	var wrong_rest_fixture := _rig_fixture({}, wrong_rest)
+	_assert_invalid_rig_fixture(wrong_rest_fixture, &"wrong_rest_rig", "in-model wrong-rest rig", failures)
+
+func _assert_invalid_rig_fixture(fixture: Dictionary, visual_id: StringName, label: String, failures: Array[String]) -> void:
+	var model := fixture[&"model"] as ForgeHumanoidModel
+	var socket := fixture[&"sockets"][&"main_hand"] as BoneAttachment3D
+	var legacy := _ensure_path(model, ForgeHumanoidModel.SLOT_SOCKET_PATHS[&"main_hand"])
+	_add_to_tree(model)
+	var visual := _visual(visual_id, &"main_hand", StringName(ForgeHumanoidModel.SLOT_SOCKET_PATHS[&"main_hand"]), _anchor_scene(false))
+	TestAssertions.truthy(not model.has_equipment_slot(&"main_hand"), "%s cannot authorize semantic slot" % label, failures)
+	TestAssertions.truthy(not model.apply_equipment_visual(&"main_hand", visual), "%s cannot stage rigid equipment" % label, failures)
+	TestAssertions.equal(socket.get_child_count(), 0, "%s socket receives no equipment" % label, failures)
+	TestAssertions.equal(legacy.get_child_count(), 0, "%s cannot fall through to legacy path" % label, failures)
+	model.free()
+
+func _assert_recognized_direct_name_collisions_fail_closed(failures: Array[String]) -> void:
+	for description: Dictionary in [
+		{&"id": &"main_hand", &"name": &"main_hand", &"label": "slot ID"},
+		{&"id": &"RightHandSocket", &"name": &"RightHandSocket", &"label": "legacy leaf"},
+	]:
+		var model := ForgeHumanoidModel.new()
+		_add_body(model)
+		var collision := Node3D.new()
+		collision.name = description[&"name"]
+		model.add_child(collision)
+		_add_to_tree(model)
+		var visual := _visual(&"recognized_collision", &"main_hand", description[&"id"], _anchor_scene(false))
+		TestAssertions.truthy(not model.has_equipment_slot(&"main_hand"), "recognized %s collision cannot satisfy missing authorized target" % description[&"label"], failures)
+		TestAssertions.truthy(not model.apply_equipment_visual(&"main_hand", visual), "recognized %s collision cannot stage equipment" % description[&"label"], failures)
+		TestAssertions.equal(collision.get_child_count(), 0, "recognized %s collision remains unused" % description[&"label"], failures)
+		model.free()
+
+func _assert_wrong_type_semantic_root_is_stable_and_fails_closed(failures: Array[String]) -> void:
 	var model := ForgeHumanoidModel.new()
 	_add_body(model)
-	var skeleton := Skeleton3D.new()
+	_ensure_path(model, ForgeHumanoidModel.SLOT_SOCKET_PATHS[&"main_hand"])
+	var wrong_type := Node.new()
+	wrong_type.name = &"SemanticSockets"
+	model.add_child(wrong_type)
+	_add_to_tree(model)
+	var child_count_before := model.get_child_count()
+	TestAssertions.truthy(not model.has_equipment_slot(&"main_hand"), "wrong-type owned root fails closed", failures)
+	TestAssertions.truthy(not model.has_equipment_slot(&"main_hand"), "wrong-type owned root remains fail-closed on repeat", failures)
+	TestAssertions.equal(model.get_child_count(), child_count_before, "wrong-type root resolution creates no duplicate children", failures)
+	var semantic_name_count := 0
+	for child: Node in model.get_children():
+		if child.name == &"SemanticSockets" or String(child.name).begins_with("@Node3D@"):
+			semantic_name_count += 1
+	TestAssertions.equal(semantic_name_count, 1, "wrong-type root resolution creates no renamed SemanticSockets root", failures)
+	model.free()
+
+func _rig_fixture(overrides: Dictionary = {}, skeleton_override: Skeleton3D = null) -> Dictionary:
+	var model := ForgeHumanoidModel.new()
+	_add_body(model)
+	var definition := load(CANONICAL_RIG_PATH) as Resource
+	for pivot_path: NodePath in definition.pivot_paths:
+		_ensure_path(model, pivot_path)
+	var skeleton := skeleton_override if skeleton_override != null else _canonical_skeleton()
 	skeleton.name = &"CanonicalSkeleton"
 	model.add_child(skeleton)
-	var unique_bones: Array[StringName] = []
-	for bone_name: StringName in EXPECTED_BONES.values():
-		if bone_name not in unique_bones:
-			unique_bones.append(bone_name)
-	for bone_name: StringName in unique_bones:
-		skeleton.add_bone(bone_name)
 	var semantic_root := Node3D.new()
 	semantic_root.name = &"SemanticSockets"
 	model.add_child(semantic_root)
@@ -144,6 +237,20 @@ func _rig_fixture(overrides: Dictionary = {}) -> Dictionary:
 		semantic_root.add_child(socket)
 		sockets[slot_id] = socket
 	return {&"model": model, &"skeleton": skeleton, &"sockets": sockets}
+
+func _canonical_skeleton() -> Skeleton3D:
+	var definition := load(CANONICAL_RIG_PATH) as Resource
+	var skeleton := Skeleton3D.new()
+	var bone_index_by_role: Dictionary = {}
+	for index: int in definition.roles.size():
+		skeleton.add_bone(definition.bone_names[index])
+		bone_index_by_role[definition.roles[index]] = index
+	for index: int in definition.roles.size():
+		var parent_role: StringName = definition.parent_roles[index]
+		if not parent_role.is_empty():
+			skeleton.set_bone_parent(index, bone_index_by_role[parent_role])
+		skeleton.set_bone_rest(index, definition.canonical_rests[index])
+	return skeleton
 
 func _add_body(model: ForgeHumanoidModel) -> void:
 	var body := Node3D.new()
