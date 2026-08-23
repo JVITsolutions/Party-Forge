@@ -36,6 +36,7 @@ func run() -> Array[String]:
     _assert_primary_action_estimates(catalog, failures)
     _assert_item_foundation_reachability(catalog, failures)
     _assert_equipment_attribute_policy(catalog, failures)
+    _assert_critical_keywords_and_upgrades(failures)
     var fighter := catalog.class_by_id(&"fighter")
     fighter.growth_definition = null
     TestAssertions.truthy(
@@ -63,6 +64,24 @@ func run() -> Array[String]:
     _assert_generated_values(failures)
     _assert_persisted_attack_damage_path(failures)
     return failures
+
+
+func _assert_critical_keywords_and_upgrades(failures: Array[String]) -> void:
+    var crit_chance := GameCatalog.KEYWORD_CATALOG.definition(&"crit_chance")
+    TestAssertions.equal(
+        crit_chance.explanation,
+        "Each full 100% Critical Strike Chance guarantees another critical damage instance, and the remaining chance is rolled independently.",
+        "critical chance explains guaranteed instances and the independent remainder roll",
+        failures,
+    )
+    var multi_crit := GameCatalog.KEYWORD_CATALOG.definition(&"multi_crit")
+    TestAssertions.truthy(multi_crit != null, "multi-crit keyword exists", failures)
+    if multi_crit != null:
+        TestAssertions.equal(multi_crit.display_name, "Multi-Crit", "multi-crit keyword display name", failures)
+    for upgrade_id: StringName in [&"precision", &"cutthroat_instinct"]:
+        var upgrade := load("res://data/upgrades/cards/%s.tres" % upgrade_id) as UpgradeDefinition
+        TestAssertions.truthy(upgrade.tooltip_keyword_ids.has(&"crit_chance"), "%s tooltip references critical chance" % upgrade_id, failures)
+        TestAssertions.truthy(upgrade.tooltip_keyword_ids.has(&"multi_crit"), "%s tooltip references multi-crit" % upgrade_id, failures)
 
 
 func _assert_equipment_attribute_policy(catalog: GameCatalog, failures: Array[String]) -> void:
@@ -617,9 +636,9 @@ func _assert_generated_values(failures: Array[String]) -> void:
         {"path": "res://data/classes/mage.tres", "values": {"id": &"mage", "display_name": "Mage", "role": ClassDefinition.Role.BACKLINE, "color": Color("9567e8"), "traits": [&"arcane", &"caster", &"fire"], "max_health": 75.0, "armor": 0.0, "move_speed": 6.0, "preferred_distance": 6.5, "engagement_distance": 12.0, "tether_distance": 12.0, "support_action": null}},
         {"path": "res://data/classes/cleric.tres", "values": {"id": &"cleric", "display_name": "Cleric", "role": ClassDefinition.Role.SUPPORT, "color": Color("f0d15b"), "traits": [&"divine", &"support", &"caster"], "max_health": 95.0, "armor": 2.0, "move_speed": 6.0, "preferred_distance": 4.0, "engagement_distance": 10.0, "tether_distance": 10.0}},
         {"path": "res://data/classes/paladin.tres", "values": {"id": &"paladin", "display_name": "Paladin", "role": ClassDefinition.Role.FRONTLINE, "color": Color("e6c85f"), "traits": [&"divine", &"vanguard", &"martial"], "capability_tags": EXPECTED_CAPABILITIES[&"paladin"], "base_stat_overrides": {&"block_chance": 0.18, &"block_effectiveness": 0.55, &"health_regeneration": 1.5}, "max_health": 220.0, "armor": 18.0, "move_speed": 5.6, "preferred_distance": 2.0, "engagement_distance": 4.5, "tether_distance": 8.5, "support_action": null}},
-        {"path": "res://data/classes/rogue.tres", "values": {"id": &"rogue", "display_name": "Rogue", "role": ClassDefinition.Role.MIDLINE, "color": Color("a95be8"), "traits": [&"martial", &"skirmisher"], "capability_tags": EXPECTED_CAPABILITIES[&"rogue"], "base_stat_overrides": {&"crit_chance": 0.20, &"crit_multiplier": 1.75, &"dodge_chance": 0.18, &"life_steal": 0.05}, "max_health": 72.0, "armor": 0.0, "move_speed": 7.4, "preferred_distance": 1.4, "engagement_distance": 3.0, "tether_distance": 8.0, "support_action": null}},
+        {"path": "res://data/classes/rogue.tres", "values": {"id": &"rogue", "display_name": "Rogue", "role": ClassDefinition.Role.MIDLINE, "color": Color("a95be8"), "traits": [&"martial", &"skirmisher"], "capability_tags": EXPECTED_CAPABILITIES[&"rogue"], "base_stat_overrides": {&"crit_chance": 0.10, &"crit_multiplier": 1.75, &"dodge_chance": 0.18, &"life_steal": 0.05}, "max_health": 72.0, "armor": 0.0, "move_speed": 7.4, "preferred_distance": 1.4, "engagement_distance": 3.0, "tether_distance": 8.0, "support_action": null}},
         {"path": "res://data/classes/frost_mage.tres", "values": {"id": &"frost_mage", "display_name": "Frost Mage", "role": ClassDefinition.Role.BACKLINE, "color": Color("70c8ff"), "traits": [&"arcane", &"caster", &"cold"], "capability_tags": EXPECTED_CAPABILITIES[&"frost_mage"], "base_stat_overrides": {}, "max_health": 78.0, "armor": 0.0, "move_speed": 6.0, "preferred_distance": 6.5, "engagement_distance": 12.5, "tether_distance": 12.5, "support_action": null}},
-        {"path": "res://data/classes/warlock.tres", "values": {"id": &"warlock", "display_name": "Warlock", "role": ClassDefinition.Role.BACKLINE, "color": Color("7e4bc4"), "traits": [&"occult", &"caster", &"chaos"], "capability_tags": EXPECTED_CAPABILITIES[&"warlock"], "base_stat_overrides": {&"chaos_damage": 1.10, &"life_steal": 0.12}, "max_health": 82.0, "armor": 1.0, "move_speed": 5.8, "preferred_distance": 6.0, "engagement_distance": 12.5, "tether_distance": 12.5, "support_action": null}},
+        {"path": "res://data/classes/warlock.tres", "values": {"id": &"warlock", "display_name": "Warlock", "role": ClassDefinition.Role.BACKLINE, "color": Color("7e4bc4"), "traits": [&"occult", &"caster", &"chaos"], "capability_tags": EXPECTED_CAPABILITIES[&"warlock"], "base_stat_overrides": {&"crit_chance": 0.10, &"chaos_damage": 1.10, &"life_steal": 0.12}, "max_health": 82.0, "armor": 1.0, "move_speed": 5.8, "preferred_distance": 6.0, "engagement_distance": 12.5, "tether_distance": 12.5, "support_action": null}},
         {"path": "res://data/classes/marksman.tres", "values": {"id": &"marksman", "display_name": "Marksman", "role": ClassDefinition.Role.MIDLINE, "color": Color(0.27579924, 0.36415747, 0.056183092, 1.0), "traits": [&"martial", &"ranged", &"bow"], "capability_tags": EXPECTED_CAPABILITIES[&"marksman"], "base_stat_overrides": {&"crit_chance": 0.10, &"crit_multiplier": 2.0}, "max_health": 80.0, "armor": 2.0, "move_speed": 5.8, "preferred_distance": 8.0, "engagement_distance": 16.0, "tether_distance": 16.0, "support_action": null}},
     ]
     var trait_rows: Array[Dictionary] = [

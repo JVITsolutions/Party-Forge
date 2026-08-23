@@ -9,7 +9,7 @@ const ExpansionRows := preload("res://tools/class_expansion_rows.gd")
 const ExpansionMigration := preload("res://tools/migrate_class_expansion_data.gd")
 
 const CANONICAL_STAT_COUNT := 37
-const CANONICAL_KEYWORD_COUNT := 81
+const CANONICAL_KEYWORD_COUNT := 82
 const CASTER_ATTACK_IDS: Array[StringName] = [
 	&"mage_burst",
 	&"cleric_bolt",

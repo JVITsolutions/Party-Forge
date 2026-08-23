@@ -17,6 +17,7 @@ capability_tags = Array[StringName]([&"chaos", &"life_steal", &"projectile", &"a
 name_pool = ExtResource("1_8b5fo")
 growth_definition = ExtResource("4_growth")
 base_stat_overrides = {
+&"crit_chance": 0.10,
 &"chaos_damage": 1.1,
 &"life_steal": 0.12
 }

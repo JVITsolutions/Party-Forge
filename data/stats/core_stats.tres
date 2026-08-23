@@ -68,9 +68,9 @@ id = &"crit_chance"
 display_name = "Critical Strike Chance"
 ui_group = &"offense"
 value_format = 2
+precision = 0
+default_value = 0.05
 has_minimum = true
-has_maximum = true
-maximum = 0.75
 visibility = 0
 keyword_id = &"crit_chance"
 
