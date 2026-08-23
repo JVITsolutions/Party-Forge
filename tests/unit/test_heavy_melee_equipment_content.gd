@@ -43,7 +43,10 @@ func _assert_item(set_id: StringName, item_id: StringName, base_path: String, fa
 	TestAssertions.truthy(visual.validate().is_empty(), "%s visual validates" % item_id, failures)
 	TestAssertions.equal(visual.body_preset_ids, [&"masculine", &"feminine"], "%s supports both body presets" % item_id, failures)
 	if visual.combat_visible:
-		var scene := visual.presentation_scene
+		if not visual.has_method(&"presentation_scene_for"):
+			TestAssertions.truthy(false, "%s resolves its scene through the body-fit API" % item_id, failures)
+			return
+		var scene: PackedScene = visual.presentation_scene_for(&"masculine")
 		var root := scene.instantiate() as Node3D if scene != null else null
 		TestAssertions.truthy(root != null and _has_visible_mesh(root), "%s has visible independent geometry" % item_id, failures)
 		if root != null:

@@ -45,7 +45,11 @@ func run() -> Array[String]:
 		TestAssertions.truthy(ResourceLoader.exists(visual_path), "%s visual exists" % item_id, failures)
 		TestAssertions.truthy(ResourceLoader.exists(scene_path), "%s independent scene exists" % item_id, failures)
 	for item: EquipmentBaseDefinition in profile.available_equipment:
-		TestAssertions.truthy(item != null and item.presentation != null and item.presentation.presentation_scene != null, "%s has independent scene" % (item.id if item != null else &"<null>"), failures)
+		var visual := item.presentation if item != null else null
+		if visual == null or not visual.has_method(&"presentation_scene_for"):
+			TestAssertions.truthy(false, "%s resolves its independent scene through the body-fit API" % (item.id if item != null else &"<null>"), failures)
+			continue
+		TestAssertions.truthy(visual.presentation_scene_for(&"masculine") != null, "%s has an independent masculine scene" % item.id, failures)
 	TestAssertions.truthy(ResourceLoader.exists("res://scenes/characters/presentation/forge_humanoid_model.tscn"), "shared humanoid exists", failures)
 	TestAssertions.truthy(ResourceLoader.exists("res://scenes/characters/presentation/forge_vanguard_equipment_source.tscn"), "Fighter equipment source exists independently of generated item scenes", failures)
 	var builder_source := FileAccess.get_file_as_string("res://tools/build_equipment_assets.gd")
