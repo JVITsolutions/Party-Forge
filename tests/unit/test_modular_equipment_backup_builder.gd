@@ -17,16 +17,12 @@ var _created_directories: Array[String] = []
 
 
 class FixtureFilesystem extends RefCounted:
-	var alias_roots := {}
 	var read_overrides := {}
 	var create_modes := {}
 	var publish_error := ""
 	var ensure_failure_path := ""
 	var requires_configuration := false
-	var requires_source_configuration := false
 	var configured_output_root := ""
-	var configured_source_identity := ""
-	var identity_overrides := {}
 	var copy_calls := 0
 	var created_files: Array[String] = []
 	var created_directories: Array[String] = []
@@ -34,10 +30,6 @@ class FixtureFilesystem extends RefCounted:
 
 	func probe_path(path: String, require_exists: bool) -> Dictionary:
 		var normalized := path.replace("\\", "/").simplify_path().trim_suffix("/")
-		for alias_root_value: Variant in alias_roots:
-			var alias_root := String(alias_root_value).replace("\\", "/").simplify_path().trim_suffix("/")
-			if normalized == alias_root or normalized.begins_with(alias_root + "/"):
-				return {"error": "physical path contains reparse component: %s" % alias_root, "path": ""}
 		if require_exists and not FileAccess.file_exists(normalized) and not DirAccess.dir_exists_absolute(normalized):
 			return {"error": "physical path does not exist: %s" % normalized, "path": ""}
 		return {"error": "", "path": normalized}
@@ -56,30 +48,8 @@ class FixtureFilesystem extends RefCounted:
 
 
 	func configure_output_root(path: String) -> Dictionary:
-		if requires_source_configuration and configured_source_identity.is_empty():
-			return {"error": "canonical source identity was not configured"}
-		var cursor := path.replace("\\", "/").simplify_path().trim_suffix("/")
-		while not cursor.is_empty():
-			if _identity(cursor) == configured_source_identity and not configured_source_identity.is_empty():
-				return {"error": "physical containment identity collision"}
-			var parent := cursor.get_base_dir()
-			if parent == cursor:
-				break
-			cursor = parent
 		configured_output_root = path
 		return {"error": ""}
-
-
-	func configure_source_root(path: String, git_toplevel: String) -> Dictionary:
-		var source_identity := _identity(path)
-		if source_identity != _identity(git_toplevel):
-			return {"error": "Git top-level canonical identity mismatch"}
-		configured_source_identity = source_identity
-		return {"error": "", "identity": source_identity}
-
-
-	func canonical_identity(path: String) -> Dictionary:
-		return {"error": "", "identity": _identity(path)}
 
 
 	func ensure_directory(path: String) -> Dictionary:
@@ -180,11 +150,6 @@ class FixtureFilesystem extends RefCounted:
 		return hashing.finish().hex_encode()
 
 
-	func _identity(path: String) -> String:
-		var normalized := path.replace("\\", "/").simplify_path().trim_suffix("/").to_lower()
-		return String(identity_overrides.get(normalized, normalized))
-
-
 func run() -> Array[String]:
 	var failures: Array[String] = []
 	if not FileAccess.file_exists(ProjectSettings.globalize_path(BUILDER_PATH)):
@@ -201,8 +166,9 @@ func run() -> Array[String]:
 		return failures
 	TestAssertions.truthy(entry_point.has_method(&"parse_named_args"), "entry point exposes named CLI parsing", failures)
 	TestAssertions.truthy(entry_point.has_method(&"new_service"), "entry point exposes a separately testable service", failures)
-	TestAssertions.truthy(entry_point.has_method(&"new_native_filesystem"), "entry point exposes production helper encoding for inspection", failures)
-	if not entry_point.has_method(&"parse_named_args") or not entry_point.has_method(&"new_service") or not entry_point.has_method(&"new_native_filesystem"):
+	TestAssertions.truthy(entry_point.has_method(&"new_local_filesystem"), "entry point exposes the trusted local filesystem adapter", failures)
+	TestAssertions.truthy(entry_point.has_method(&"validate_local_request_paths"), "entry point validates local path forms before any filesystem or Git probe", failures)
+	if not entry_point.has_method(&"parse_named_args") or not entry_point.has_method(&"new_service") or not entry_point.has_method(&"new_local_filesystem"):
 		entry_point.free()
 		return failures
 
@@ -210,31 +176,72 @@ func run() -> Array[String]:
 	var service := entry_point.call(&"new_service") as RefCounted
 	TestAssertions.truthy(service != null, "pure backup service is available without a subprocess", failures)
 	var has_review_api := service != null and service.has_method(&"build_backup_with_filesystem")
-	TestAssertions.truthy(has_review_api, "backup service requires an injected race-safe filesystem", failures)
+	TestAssertions.truthy(has_review_api, "backup service accepts an injected local filesystem", failures)
 	TestAssertions.truthy(entry_point.has_method(&"validate_git_metadata"), "entry point validates caller Git metadata against an actual probe", failures)
 	if not has_review_api or not entry_point.has_method(&"validate_git_metadata"):
 		_cleanup_fixture(failures)
 		entry_point.free()
 		return failures
 	if service != null:
-		_test_native_helper_argument_encoding(entry_point, failures)
-		_test_native_windows_failure_boundaries(entry_point, failures)
+		_test_local_filesystem_transaction(entry_point, service, failures)
 		_test_named_argument_parsing(entry_point, failures)
 		_test_git_metadata_validation(entry_point, failures)
-		_test_canonical_identity_configuration(service, failures)
+		_test_local_path_form_rejections(service, failures)
+		_test_git_toplevel_configuration(service, failures)
 		_test_request_rejections(service, failures)
-		_test_physical_alias_rejections(service, failures)
 		_test_adversarial_path_configuration(service, failures)
 		_test_successful_byte_exact_backup(service, failures)
 		_test_failure_preservation(service, failures)
 		_test_output_creation_failure_preserves_ownership(service, failures)
 		_test_partial_write_ownership_and_preservation_reporting(service, failures)
 		_test_read_integrity_failures(service, failures)
-		_test_exclusive_create_and_publish_collisions(service, failures)
+		_test_no_overwrite_and_publish_failures(service, failures)
 		_test_inventory_escape_rejection(service, failures)
 	_cleanup_fixture(failures)
 	entry_point.free()
 	return failures
+
+
+func _test_local_filesystem_transaction(entry_point: Object, service: RefCounted, failures: Array[String]) -> void:
+	var local := entry_point.call(&"new_local_filesystem") as RefCounted
+	TestAssertions.truthy(local != null, "trusted local adapter instantiates", failures)
+	if local == null:
+		return
+	TestAssertions.truthy(not local.has_method(&"encoded_invocation") and not local.has_method(&"configure_supervision"), "trusted local adapter has no PowerShell or hostile-process machinery", failures)
+	var output := _test_root.path_join("local-adapter-attempt")
+	var result := service.call(&"build_backup_with_filesystem", _request(output), PackedStringArray(["assets/item.bin"]), _metadata(), local) as Dictionary
+	for path: String in [output.path_join("assets/item.bin"), output.path_join(MANIFEST_NAME), output.path_join(PENDING_MANIFEST_NAME), output.path_join(FAILURE_NAME), output.path_join(PARTIAL_MANIFEST_NAME)]:
+		if FileAccess.file_exists(path):
+			_created_files.append(path)
+	for directory: String in [output, output.path_join("assets")]:
+		if DirAccess.dir_exists_absolute(directory):
+			_created_directories.append(directory)
+	TestAssertions.truthy(bool(result.get("ok", false)), "trusted local adapter completes a tiny deterministic backup transaction", failures)
+	TestAssertions.equal(FileAccess.get_file_as_bytes(output.path_join("assets/item.bin")), FileAccess.get_file_as_bytes(_source_root.path_join("assets/item.bin")), "trusted local adapter preserves copied bytes", failures)
+	TestAssertions.truthy(FileAccess.file_exists(output.path_join(MANIFEST_NAME)) and not FileAccess.file_exists(output.path_join(PENDING_MANIFEST_NAME)), "trusted local adapter publishes manifest last", failures)
+
+
+func _test_local_path_form_rejections(service: RefCounted, failures: Array[String]) -> void:
+	for unsafe_source: String in ["//server/share/project", "\\\\?\\C:\\party-forge", "\\\\.\\C:\\party-forge"]:
+		var request := _request(_test_root.path_join("unsafe-source-%d" % unsafe_source.hash()), unsafe_source)
+		var metadata := _metadata()
+		metadata["toplevel"] = unsafe_source
+		var result := service.call(&"build_backup_with_filesystem", request, PackedStringArray(["assets/item.bin"]), metadata, FixtureFilesystem.new()) as Dictionary
+		TestAssertions.truthy(not bool(result.get("ok", false)) and "source_root reason=must be a local absolute path" in String(result.get("error", "")), "UNC/device source form fails closed: %s" % unsafe_source, failures)
+	for unsafe_output: String in ["//server/share/backup", "\\\\?\\C:\\backup", "\\\\.\\C:\\backup"]:
+		var result := _build(service, _request(unsafe_output), PackedStringArray(["assets/item.bin"]), FixtureFilesystem.new())
+		TestAssertions.truthy(not bool(result.get("ok", false)) and "output reason=must be a local absolute path" in String(result.get("error", "")), "UNC/device output form fails closed: %s" % unsafe_output, failures)
+
+
+func _test_git_toplevel_configuration(service: RefCounted, failures: Array[String]) -> void:
+	var matching := _build(service, _request(_test_root.path_join("toplevel-matching")), PackedStringArray(["assets/item.bin"]), FixtureFilesystem.new())
+	TestAssertions.truthy(bool(matching.get("ok", false)), "matching normalized source and actual Git top-level are accepted", failures)
+	var mismatch_metadata := _metadata()
+	mismatch_metadata["toplevel"] = _test_root
+	var mismatch_output := _test_root.path_join("toplevel-mismatch")
+	var mismatch := service.call(&"build_backup_with_filesystem", _request(mismatch_output), PackedStringArray(["assets/item.bin"]), mismatch_metadata, FixtureFilesystem.new()) as Dictionary
+	TestAssertions.truthy(not bool(mismatch.get("ok", false)) and "actual Git top-level must equal source root" in String(mismatch.get("error", "")), "Git top-level mismatch is rejected before output creation", failures)
+	TestAssertions.truthy(not DirAccess.dir_exists_absolute(mismatch_output), "Git top-level mismatch creates no output", failures)
 
 
 func _prepare_fixture(failures: Array[String]) -> void:
@@ -266,152 +273,9 @@ func _test_named_argument_parsing(entry_point: Object, failures: Array[String]) 
 	TestAssertions.equal(request.get("source_branch", ""), BRANCH, "CLI parser preserves explicit source branch", failures)
 	var missing := entry_point.call(&"parse_named_args", PackedStringArray(["--source-root", _source_root])) as Dictionary
 	TestAssertions.truthy((missing.get("errors", PackedStringArray()) as PackedStringArray).size() == 3, "CLI parser requires every named argument", failures)
-
-
-func _test_native_helper_argument_encoding(entry_point: Object, failures: Array[String]) -> void:
-	var native := entry_point.call(&"new_native_filesystem") as RefCounted
-	var adversarial := "C:/space & $name [x]; 'quoted'/file.bin"
-	var invocation := native.call(&"encoded_invocation", "[Console]::Out.Write($args[0])", PackedStringArray([adversarial])) as PackedStringArray
-	TestAssertions.equal(invocation[0] if not invocation.is_empty() else "", "-EncodedCommand", "PowerShell helper uses one encoded command argument", failures)
-	TestAssertions.truthy(invocation.size() == 2 and adversarial not in invocation[1], "user path is never interpolated into shell source or argv", failures)
-	TestAssertions.truthy(native.has_method(&"encoded_pipe_invocation"), "exclusive content creation exposes a stdin-pipe invocation boundary", failures)
-	TestAssertions.truthy(native.has_method(&"canonical_identity"), "native adapter exposes canonical handle identity", failures)
-	TestAssertions.truthy(native.has_method(&"copy_file_verified"), "native adapter exposes one handle-guarded copy operation", failures)
-	TestAssertions.truthy(native.has_method(&"supervision_contract"), "native adapter exposes bounded helper supervision status", failures)
-	TestAssertions.truthy(native.has_method(&"run_process_bounded"), "Git probes share the bounded subprocess supervisor", failures)
-	if native.has_method(&"supervision_contract"):
-		var contract := native.call(&"supervision_contract") as Dictionary
-		TestAssertions.truthy(bool(contract.get("bounded", false)) and bool(contract.get("termination_confirmed", false)) and bool(contract.get("abnormal_exit_reconciled", false)), "supervision contract includes bounded abnormal-exit ownership reconciliation", failures)
-	if native.has_method(&"run_process_bounded"):
-		var bounded_git := native.call(&"run_process_bounded", "git", PackedStringArray(["--version"])) as Dictionary
-		TestAssertions.equal(bounded_git.get("exit_code", -1), 0, "bounded Git subprocess probe completes", failures)
-		var streaming_native := entry_point.call(&"new_native_filesystem") as RefCounted
-		streaming_native.call(&"configure_supervision", 5000)
-		var large_probe := streaming_native.call(&"run_process_bounded", "powershell.exe", PackedStringArray(["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", "[Console]::Out.Write('x'*100000)"])) as Dictionary
-		TestAssertions.truthy(int(large_probe.get("exit_code", -1)) == 0 and String(large_probe.get("output", "")).length() == 100000, "bounded subprocess supervisor drains a full 100 KB Git-sized status without deadlock", failures)
-	if native.has_method(&"encoded_pipe_invocation"):
-		var pipe_invocation := native.call(&"encoded_pipe_invocation", "[Console]::In.ReadLine()", PackedStringArray([adversarial])) as PackedStringArray
-		var expected_pipe_invocation := native.call(&"encoded_invocation", "[Console]::In.ReadLine()", PackedStringArray([adversarial])) as PackedStringArray
-		TestAssertions.equal(pipe_invocation, expected_pipe_invocation, "stdin-pipe helper retains encoded structured path arguments", failures)
-
-
-func _test_native_windows_failure_boundaries(entry_point: Object, failures: Array[String]) -> void:
-	var native := entry_point.call(&"new_native_filesystem") as RefCounted
-	TestAssertions.truthy(native.has_method(&"configure_supervision"), "native adapter supports bounded supervision injection", failures)
-	TestAssertions.truthy(native.has_method(&"short_path"), "native adapter can inspect 8.3 alias support by handle", failures)
-	if not native.has_method(&"configure_supervision") or not native.has_method(&"short_path"):
-		return
-
-	var source_configuration := native.call(&"configure_source_root", _source_root, _source_root) as Dictionary
-	TestAssertions.equal(source_configuration.get("error", ""), "", "native source handle identity configures on a disposable root", failures)
-	var short_path := native.call(&"short_path", _source_root) as Dictionary
-	if bool(short_path.get("supported", false)):
-		var long_identity := native.call(&"canonical_identity", _source_root) as Dictionary
-		var short_identity := native.call(&"canonical_identity", String(short_path.get("path", ""))) as Dictionary
-		TestAssertions.equal(short_identity.get("identity", ""), long_identity.get("identity", ""), "8.3 alias resolves to the same handle identity", failures)
-	else:
-		TestAssertions.truthy("unavailable" in String(short_path.get("error", "")), "disabled 8.3 aliases fail closed explicitly", failures)
-
-	var unc_probe := native.call(&"canonical_identity", "\\\\localhost\\C$\\party-forge-task3-definitely-missing") as Dictionary
-	TestAssertions.truthy("UNC paths fail closed" in String(unc_probe.get("error", "")), "UNC/local alias paths fail closed", failures)
-
-	var subst_drive := _free_subst_drive()
-	TestAssertions.truthy(not subst_drive.is_empty(), "a disposable SUBST drive letter is available", failures)
-	if not subst_drive.is_empty():
-		var subst_output: Array = []
-		var subst_exit := OS.execute("subst.exe", PackedStringArray([subst_drive, _source_root]), subst_output, true)
-		TestAssertions.equal(subst_exit, 0, "disposable SUBST alias is created", failures)
-		if subst_exit == 0:
-			var source_identity := native.call(&"canonical_identity", _source_root) as Dictionary
-			var subst_identity := native.call(&"canonical_identity", subst_drive + "/") as Dictionary
-			TestAssertions.equal(subst_identity.get("identity", ""), source_identity.get("identity", ""), "SUBST root and source root share canonical handle identity", failures)
-			var alias_configuration := native.call(&"configure_output_root", subst_drive + "/alias-output") as Dictionary
-			TestAssertions.truthy("physical containment identity" in String(alias_configuration.get("error", "")), "SUBST output alias into source is rejected", failures)
-			var unmap_output: Array = []
-			var unmap_exit := OS.execute("subst.exe", PackedStringArray([subst_drive, "/D"]), unmap_output, true)
-			TestAssertions.equal(unmap_exit, 0, "disposable SUBST alias is removed", failures)
-
-	var native_root := _test_root.path_join("native-boundaries")
-	var output_configuration := native.call(&"configure_output_root", native_root) as Dictionary
-	TestAssertions.equal(output_configuration.get("error", ""), "", "native boundary output configures outside source", failures)
-	var directory_result := native.call(&"ensure_directory", native_root) as Dictionary
-	_track_native_directories(directory_result)
-	TestAssertions.equal(directory_result.get("error", ""), "", "native boundary output directory is created", failures)
-	var copied_path := native_root.path_join("copied-item.bin")
-	var copied := native.call(&"copy_file_verified", _source_root.path_join("assets/item.bin"), copied_path) as Dictionary
-	if bool(copied.get("created", false)):
-		_created_files.append(copied_path)
-	TestAssertions.equal(copied.get("error", ""), "", "native copy completes under held source and destination parent handles", failures)
-	TestAssertions.truthy(bool(copied.get("equal", false)), "native copy reports equal full-length SHA-256 verification", failures)
-	TestAssertions.equal(FileAccess.get_file_as_bytes(copied_path), FileAccess.get_file_as_bytes(_source_root.path_join("assets/item.bin")), "native copy preserves exact source bytes", failures)
-
-	var stress_bytes := PackedByteArray()
-	stress_bytes.resize(100 * 1024)
-	for index: int in stress_bytes.size():
-		stress_bytes[index] = index % 251
-	var stress_path := native_root.path_join("streamed-100kb.bin")
-	var stress := native.call(&"create_file_exclusive", stress_path, stress_bytes) as Dictionary
-	if bool(stress.get("created", false)):
-		_created_files.append(stress_path)
-	TestAssertions.truthy(String(stress.get("error", "")).is_empty() and bool(stress.get("verified", false)), "native CreateNew streams and verifies a 100 KB artifact", failures)
-	TestAssertions.equal(FileAccess.get_file_as_bytes(stress_path), stress_bytes, "native streamed CreateNew preserves 100 KB exactly", failures)
-
-	var service := entry_point.call(&"new_service") as RefCounted
-	var native_service := entry_point.call(&"new_native_filesystem") as RefCounted
-	var native_attempt := _test_root.path_join("native-service-attempt")
-	var native_result := service.call(&"build_backup_with_filesystem", _request(native_attempt), PackedStringArray(["assets/item.bin"]), _metadata(), native_service) as Dictionary
-	for owned_file: String in [native_attempt.path_join("assets/item.bin"), native_attempt.path_join(MANIFEST_NAME), native_attempt.path_join(PENDING_MANIFEST_NAME), native_attempt.path_join(FAILURE_NAME), native_attempt.path_join(PARTIAL_MANIFEST_NAME)]:
-		if FileAccess.file_exists(owned_file):
-			_created_files.append(owned_file)
-	for owned_directory: String in [native_attempt, native_attempt.path_join("assets")]:
-		if DirAccess.dir_exists_absolute(owned_directory):
-			_created_directories.append(owned_directory)
-	TestAssertions.truthy(bool(native_result.get("ok", false)), "native service completes copy, verified artifacts, and atomic publication end to end", failures)
-	TestAssertions.truthy(FileAccess.file_exists(native_attempt.path_join(MANIFEST_NAME)) and not FileAccess.file_exists(native_attempt.path_join(PENDING_MANIFEST_NAME)), "native service publishes manifest last with no pending artifact", failures)
-
-	var collision_path := native_root.path_join("collision.bin")
-	_write_bytes(collision_path, "collision-sentinel".to_utf8_buffer(), failures)
-	var collision := native.call(&"create_file_exclusive", collision_path, "replacement".to_utf8_buffer()) as Dictionary
-	TestAssertions.truthy("collision" in String(collision.get("error", "")) and not bool(collision.get("created", true)), "native exclusive create rejects an existing file", failures)
-	TestAssertions.equal(FileAccess.get_file_as_string(collision_path), "collision-sentinel", "native collision preserves sentinel bytes", failures)
-
-	var pending_path := native_root.path_join("pending.json")
-	var pending := native.call(&"create_file_exclusive", pending_path, "pending".to_utf8_buffer()) as Dictionary
-	if bool(pending.get("created", false)):
-		_created_files.append(pending_path)
-	var final_path := native_root.path_join("final.json")
-	_write_bytes(final_path, "foreign-final".to_utf8_buffer(), failures)
-	var publication := native.call(&"publish_no_replace", pending_path, final_path) as Dictionary
-	TestAssertions.truthy("collision" in String(publication.get("error", "")) and not bool(publication.get("published", true)), "native no-replace publication rejects a final collision", failures)
-	TestAssertions.equal(FileAccess.get_file_as_string(final_path), "foreign-final", "native publication collision preserves final sentinel", failures)
-	TestAssertions.equal(FileAccess.get_file_as_string(pending_path), "pending", "native publication collision preserves pending bytes", failures)
-
-	var timeout_native := entry_point.call(&"new_native_filesystem") as RefCounted
-	timeout_native.call(&"configure_supervision", 100, 1000)
-	var timeout_root := _test_root.path_join("native-timeout-owned")
-	var timeout_source := timeout_native.call(&"configure_source_root", _source_root, _source_root) as Dictionary
-	TestAssertions.equal(timeout_source.get("error", ""), "", "timeout adapter source configures", failures)
-	var timeout_output := timeout_native.call(&"configure_output_root", timeout_root) as Dictionary
-	TestAssertions.equal(timeout_output.get("error", ""), "", "timeout adapter output configures", failures)
-	var timeout_result := timeout_native.call(&"ensure_directory", timeout_root) as Dictionary
-	_track_native_directories(timeout_result)
-	TestAssertions.truthy("timed out" in String(timeout_result.get("error", "")), "native helper timeout is bounded", failures)
-	TestAssertions.truthy(bool(timeout_result.get("terminated", false)), "timed-out helper termination is confirmed", failures)
-	TestAssertions.truthy(timeout_root in (timeout_result.get("created_paths", []) as Array) and bool(timeout_result.get("ownership_reconciled", false)), "timed-out directory ownership is recovered by canonical identity", failures)
-
-
-func _free_subst_drive() -> String:
-	for letter: String in ["Z", "Y", "X", "W", "V", "U", "T"]:
-		if not DirAccess.dir_exists_absolute(letter + ":/") and not FileAccess.file_exists(letter + ":/"):
-			return letter + ":"
-	return ""
-
-
-func _track_native_directories(result: Dictionary) -> void:
-	for directory_value: Variant in result.get("created_paths", []):
-		var directory := String(directory_value)
-		if directory not in _created_directories:
-			_created_directories.append(directory)
+	if entry_point.has_method(&"validate_local_request_paths"):
+		var unsafe_request := _request(_test_root.path_join("cli-unsafe"), "\\\\?\\C:\\party-forge")
+		TestAssertions.truthy("source_root reason=must be a local absolute path" in String(entry_point.call(&"validate_local_request_paths", unsafe_request)), "CLI rejects device paths before filesystem and Git probes", failures)
 
 
 func _test_git_metadata_validation(entry_point: Object, failures: Array[String]) -> void:
@@ -425,35 +289,9 @@ func _test_git_metadata_validation(entry_point: Object, failures: Array[String])
 	var missing_toplevel := _metadata()
 	missing_toplevel.erase("toplevel")
 	TestAssertions.truthy("Git top-level" in String(entry_point.call(&"validate_git_metadata", _request(_test_root.path_join("git-toplevel")), missing_toplevel)), "actual Git top-level is required", failures)
-
-
-func _test_canonical_identity_configuration(service: RefCounted, failures: Array[String]) -> void:
-	var matching_output := _test_root.path_join("canonical-matching")
-	var matching_fs := FixtureFilesystem.new()
-	matching_fs.requires_source_configuration = true
-	var matching := _build(service, _request(matching_output), PackedStringArray(["assets/item.bin"]), matching_fs)
-	TestAssertions.truthy(bool(matching.get("ok", false)), "matching source and Git top-level handle identities configure before mutation", failures)
-
-	var alias_parent := _test_root.path_join("canonical-alias-parent")
-	_make_directory(alias_parent, failures)
-	var alias_output := alias_parent.path_join("attempt")
-	var alias_fs := FixtureFilesystem.new()
-	alias_fs.requires_source_configuration = true
-	alias_fs.identity_overrides[_source_root.to_lower()] = "volume-7:file-42"
-	alias_fs.identity_overrides[alias_parent.to_lower()] = "volume-7:file-42"
-	var alias_result := _build(service, _request(alias_output), PackedStringArray(["assets/item.bin"]), alias_fs)
-	TestAssertions.truthy(not bool(alias_result.get("ok", false)) and "physical containment identity" in String(alias_result.get("error", "")), "output alias resolving to source identity is rejected before mutation", failures)
-	TestAssertions.truthy(not DirAccess.dir_exists_absolute(alias_output), "canonical alias rejection creates no output", failures)
-
-	var top_mismatch_metadata := _metadata()
-	top_mismatch_metadata["toplevel"] = _test_root
-	var mismatch_fs := FixtureFilesystem.new()
-	mismatch_fs.requires_source_configuration = true
-	mismatch_fs.identity_overrides[_source_root.to_lower()] = "volume-1:file-1"
-	mismatch_fs.identity_overrides[_test_root.to_lower()] = "volume-1:file-2"
-	var mismatch_result := service.call(&"build_backup_with_filesystem", _request(_test_root.path_join("git-identity-mismatch")), PackedStringArray(["assets/item.bin"]), top_mismatch_metadata, mismatch_fs) as Dictionary
-	TestAssertions.truthy(not bool(mismatch_result.get("ok", false)) and "Git top-level canonical identity mismatch" in String(mismatch_result.get("error", "")), "Git top-level identity mismatch is rejected", failures)
-	TestAssertions.truthy(not DirAccess.dir_exists_absolute(_test_root.path_join("git-identity-mismatch")), "Git identity mismatch occurs before output creation", failures)
+	var wrong_toplevel := _metadata()
+	wrong_toplevel["toplevel"] = _test_root
+	TestAssertions.truthy("actual Git top-level must equal source root" in String(entry_point.call(&"validate_git_metadata", _request(_test_root.path_join("git-wrong-toplevel")), wrong_toplevel)), "CLI Git validation rejects a mismatched actual top-level before inventory or output", failures)
 
 
 func _test_request_rejections(service: RefCounted, failures: Array[String]) -> void:
@@ -489,31 +327,6 @@ func _test_request_rejections(service: RefCounted, failures: Array[String]) -> v
 	TestAssertions.truthy(not bool(wrong_root_result.get("ok", false)) and "source_root reason=project.godot must exist directly under source root" in String(wrong_root_result.get("error", "")), "source must be the exact Party Forge project root", failures)
 
 
-func _test_physical_alias_rejections(service: RefCounted, failures: Array[String]) -> void:
-	var source_alias_output := _test_root.path_join("source-alias-output")
-	var source_alias_fs := FixtureFilesystem.new()
-	source_alias_fs.alias_roots[_source_root] = true
-	var source_alias := _build(service, _request(source_alias_output), _inventory(), source_alias_fs)
-	TestAssertions.truthy(not bool(source_alias.get("ok", false)) and "physical path" in String(source_alias.get("error", "")), "source reparse component fails closed", failures)
-	TestAssertions.truthy(not DirAccess.dir_exists_absolute(source_alias_output), "source alias rejection occurs before output creation", failures)
-
-	var output_parent := _test_root.path_join("aliased-output-parent")
-	_make_directory(output_parent, failures)
-	var output_alias := output_parent.path_join("attempt")
-	var output_alias_fs := FixtureFilesystem.new()
-	output_alias_fs.alias_roots[output_parent] = true
-	var output_alias_result := _build(service, _request(output_alias), _inventory(), output_alias_fs)
-	TestAssertions.truthy(not bool(output_alias_result.get("ok", false)) and "physical path" in String(output_alias_result.get("error", "")), "output nearest existing parent reparse component fails closed", failures)
-	TestAssertions.truthy(not DirAccess.dir_exists_absolute(output_alias), "output-parent alias rejection creates no attempt", failures)
-
-	var inventory_alias_output := _test_root.path_join("inventory-alias-output")
-	var inventory_alias_fs := FixtureFilesystem.new()
-	inventory_alias_fs.alias_roots[_source_root.path_join("assets")] = true
-	var inventory_alias := _build(service, _request(inventory_alias_output), _inventory(), inventory_alias_fs)
-	TestAssertions.truthy(not bool(inventory_alias.get("ok", false)) and "physical path" in String(inventory_alias.get("error", "")), "inventory parent reparse component fails closed", failures)
-	TestAssertions.truthy(not DirAccess.dir_exists_absolute(inventory_alias_output), "inventory alias rejection occurs before output creation", failures)
-
-
 func _test_adversarial_path_configuration(service: RefCounted, failures: Array[String]) -> void:
 	var relative_path := "assets/odd & $name [x];.bin"
 	var source_path := _source_root.path_join(relative_path)
@@ -534,7 +347,7 @@ func _test_successful_byte_exact_backup(service: RefCounted, failures: Array[Str
 	var filesystem := FixtureFilesystem.new()
 	var result := _build(service, _request(output), _inventory(), filesystem)
 	TestAssertions.truthy(bool(result.get("ok", false)), "backup succeeds for a tiny explicit inventory", failures)
-	TestAssertions.equal(filesystem.copy_calls, _inventory().size(), "each inventory file uses the one handle-guarded copy operation", failures)
+	TestAssertions.equal(filesystem.copy_calls, _inventory().size(), "each inventory file uses the verified local copy operation", failures)
 	TestAssertions.truthy(DirAccess.dir_exists_absolute(output), "missing external parent directories are created safely", failures)
 	for relative_path: String in _inventory():
 		TestAssertions.equal(FileAccess.get_file_as_bytes(output.path_join(relative_path)), FileAccess.get_file_as_bytes(_source_root.path_join(relative_path)), "%s copies byte-for-byte" % relative_path, failures)
@@ -650,12 +463,12 @@ func _test_read_integrity_failures(service: RefCounted, failures: Array[String])
 		TestAssertions.truthy(not FileAccess.file_exists(output.path_join(MANIFEST_NAME)), "%s never publishes a final manifest" % test_case["id"], failures)
 
 
-func _test_exclusive_create_and_publish_collisions(service: RefCounted, failures: Array[String]) -> void:
+func _test_no_overwrite_and_publish_failures(service: RefCounted, failures: Array[String]) -> void:
 	var copy_output := _test_root.path_join("copy-collision")
 	var copy_filesystem := FixtureFilesystem.new()
 	copy_filesystem.create_modes[copy_output.path_join("assets/item.bin")] = "collision"
 	var copy_result := _build(service, _request(copy_output), PackedStringArray(["assets/item.bin"]), copy_filesystem)
-	TestAssertions.truthy(not bool(copy_result.get("ok", false)) and "collision" in String(copy_result.get("error", "")), "exclusive copied-file creation rejects a race collision", failures)
+	TestAssertions.truthy(not bool(copy_result.get("ok", false)) and "collision" in String(copy_result.get("error", "")), "copied-file creation never overwrites an existing destination", failures)
 	TestAssertions.equal(FileAccess.get_file_as_string(copy_output.path_join("assets/item.bin")), "collision-sentinel", "collision bytes are never truncated or replaced", failures)
 	var copy_partial := JSON.parse_string(FileAccess.get_file_as_string(copy_output.path_join(PARTIAL_MANIFEST_NAME))) as Dictionary
 	TestAssertions.truthy("assets/item.bin" not in (copy_partial.get("owned_paths", []) as Array), "foreign collision file is not claimed as builder-owned", failures)
