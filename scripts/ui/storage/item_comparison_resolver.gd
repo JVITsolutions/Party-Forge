@@ -145,18 +145,18 @@ static func _base_damage_by_type(components: Array) -> Dictionary:
 
 
 static func _raw_delta_text(stat_id: String, operation: int, delta: float, raw_direction: int) -> String:
-	return "- %s raw %s roll: %s %s -- benefit unknown" % [
+	return "- %s %s: %s %s -- benefit unknown" % [
 		_raw_stat_name(stat_id),
-		_operation_name(operation),
+		_fallback_value_label(stat_id, operation),
 		_raw_display_value(stat_id, operation, delta),
 		_raw_direction_word(raw_direction),
 	]
 
 
 static func _raw_delta_accessible_text(stat_id: String, operation: int, delta: float, raw_direction: int) -> String:
-	return "%s raw %s roll is %s %s; benefit unknown; neutral comparison" % [
+	return "%s %s is %s %s; benefit unknown; neutral comparison" % [
 		_raw_stat_name(stat_id),
-		_operation_name(operation),
+		_fallback_value_label(stat_id, operation),
 		_raw_display_value(stat_id, operation, delta),
 		_raw_direction_word(raw_direction),
 	]
@@ -173,6 +173,13 @@ static func _raw_display_value(stat_id: String, operation: int, delta: float) ->
 		if definition != null:
 			return definition.format_modifier_value(absf(delta))
 	return "%s%s" % [_number(absf(delta if operation == StatModifier.Operation.FLAT else delta * 100.0)), "" if operation == StatModifier.Operation.FLAT else "%"]
+
+
+static func _fallback_value_label(stat_id: String, operation: int) -> String:
+	var definition := GameCatalog.STAT_CATALOG.definition(StringName(stat_id))
+	if operation == StatModifier.Operation.FLAT and definition != null and definition.value_format == StatDefinition.ValueFormat.RATIO_PERCENT:
+		return "item modifier"
+	return "raw %s roll" % _operation_name(operation)
 
 
 static func _operation_name(operation: int) -> String:

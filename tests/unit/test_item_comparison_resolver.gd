@@ -155,9 +155,17 @@ func _test_raw_fallback_uses_stat_definition_formatting(resolver: Script, failur
 	TestAssertions.equal(lines.size(), 2, "definition-aware raw fallback emits both changed stats", failures)
 	if lines.size() != 2:
 		return
-	TestAssertions.equal(lines[0].get("text"), "- Critical Strike Chance raw flat roll: 1% higher -- benefit unknown", "legacy critical raw fallback uses whole percentage points", failures)
-	TestAssertions.equal(lines[0].get("accessible_text"), "Critical Strike Chance raw flat roll is 1% higher; benefit unknown; neutral comparison", "legacy critical raw fallback accessibility uses whole percentage points", failures)
+	TestAssertions.equal(lines[0].get("text"), "- Critical Strike Chance item modifier: 1% higher -- benefit unknown", "legacy critical fallback uses player-facing percentage-point wording", failures)
+	TestAssertions.equal(lines[0].get("accessible_text"), "Critical Strike Chance item modifier is 1% higher; benefit unknown; neutral comparison", "legacy critical fallback accessibility uses player-facing percentage-point wording", failures)
+	TestAssertions.truthy(" raw " not in String(lines[0].get("text", "")) and " flat " not in String(lines[0].get("text", "")), "known percentage-point fallback omits raw and flat jargon", failures)
 	TestAssertions.equal(lines[1].get("text"), "- Health Regeneration raw flat roll: 0.30/s higher -- benefit unknown", "other flat fallback uses its StatDefinition value format", failures)
+	var unknown_rows: Array = resolver.call(
+		"resolve",
+		_detail("new-unknown", ["ring_left"], {"mystery_stat|0": 0.0111}),
+		leader,
+		{"old-ring": _detail("old-ring", ["ring_left"], {})},
+	)
+	TestAssertions.equal(unknown_rows[0]["delta_lines"][0].get("text"), "- Mystery Stat raw flat roll: 0.01 higher -- benefit unknown", "unknown-stat fallback retains generic raw operation semantics", failures)
 
 
 func _test_results_are_defensive(resolver: Script, failures: Array[String]) -> void:

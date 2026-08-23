@@ -199,8 +199,9 @@ func _test_critical_raw_fallback_uses_whole_percent(card_script: Script, failure
 	var card: Control = card_script.new()
 	card.call("present", _detail(), StringName("equipped:ring_left"), false, comparisons[0]["delta_lines"], false)
 	var rendered := String(card.call("rendered_text"))
-	TestAssertions.truthy(rendered.contains("Critical Strike Chance raw flat roll: 1% higher"), "tooltip raw fallback uses whole critical percentage points", failures)
-	TestAssertions.truthy("0.0111" not in rendered and "0.01 higher" not in rendered and "1.11%" not in rendered, "tooltip raw fallback hides legacy critical decimals", failures)
+	TestAssertions.truthy(rendered.contains("Critical Strike Chance item modifier: 1% higher"), "tooltip fallback uses player-facing critical modifier wording", failures)
+	TestAssertions.truthy(" raw " not in rendered and " flat " not in rendered, "tooltip critical fallback omits raw and flat jargon", failures)
+	TestAssertions.truthy("0.0111" not in rendered and "0.01 higher" not in rendered and "1.11%" not in rendered, "tooltip fallback hides legacy critical decimals", failures)
 	card.free()
 
 
