@@ -16,6 +16,9 @@
 
 - Create: `F:\Projects(root)\Game dev\Projects\party-forge-asset-staging\modular-equipment\pilot-0001\README.md`
 - Create directories: `concepts/`, `bodies/`, `equipment/`, `reviews/`, `exports/`, `provenance/`
+- Create a dedicated 3D Gen Studio project workspace at `F:\Projects(root)\Game dev\Projects\party-forge-asset-staging\modular-equipment\pilot-0001\3d_gen_studio\party_forge_modular_equipment_pilot\`
+
+The 3D Gen Studio project is exclusive to this Party Forge pilot. Keep body inputs/candidates, the eleven Sunweld Bastion item inputs/candidates, generation settings and seeds, raw exports, and rejected alternatives inside named subfolders rather than the general Asset Gen workspace. The application project may remain mutable for iteration, but each reviewed generation attempt must also be exported into the immutable `attempt-*` structure used by the broader pilot staging area.
 
 **Step 1: Verify rather than duplicate installations**
 
