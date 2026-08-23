@@ -8,6 +8,7 @@ func run() -> Array[String]:
 	_test_preparation_and_armor(types, failures)
 	_test_resistance_and_mixed_damage(types, failures)
 	_test_shared_crit(types, failures)
+	_test_multi_crit_preparation(types, failures)
 	_test_dodge_block_and_incoming(types, failures)
 	_test_overkill_life_steal(types, failures)
 	_test_invalid_resolution_boundaries(types, failures)
@@ -81,6 +82,33 @@ func _test_shared_crit(types: DamageTypeCatalog, failures: Array[String]) -> voi
 	TestAssertions.near(packet.components[0].post_crit, 40.0, 0.001, "crit doubles sorted fire component", failures)
 	TestAssertions.near(packet.components[1].post_crit, 60.0, 0.001, "crit doubles sorted physical component", failures)
 	TestAssertions.equal(rng.draw_count, 1, "one shared crit draw", failures)
+
+func _test_multi_crit_preparation(types: DamageTypeCatalog, failures: Array[String]) -> void:
+	var source := _adapter(&"party:multi_crit", 1, null, {&"crit_chance": 1.05, &"crit_multiplier": 2.0})
+	var attack := _attack([&"physical", &"fire"], [30.0, 20.0], true)
+	var rng := CombatRng.new(61, [0.04])
+	var packet := DamageResolver.prepare(attack, source, rng, types)
+	TestAssertions.truthy(packet.valid, "105 percent packet prepares", failures)
+	var has_roll := _has_property(packet, &"multi_crit_roll")
+	TestAssertions.truthy(has_roll, "packet exposes authoritative multi-crit roll", failures)
+	if not packet.valid or not has_roll:
+		return
+	var roll: Object = packet.get("multi_crit_roll")
+	TestAssertions.truthy(roll != null, "packet owns authoritative multi-crit metadata", failures)
+	if roll == null:
+		return
+	TestAssertions.equal(roll.get("critical_flags"), [true, true], "105 percent packet records two ordered critical instances", failures)
+	TestAssertions.equal(roll.get("requested_instances"), 2, "105 percent packet requests two potential instances", failures)
+	TestAssertions.equal(roll.get("processed_instances"), 2, "successful 105 percent packet processes two instances", failures)
+	TestAssertions.equal(roll.get("guaranteed_instances"), 1, "105 percent packet records one guaranteed instance", failures)
+	TestAssertions.truthy(packet.critical, "compatibility critical accessor maps to authoritative roll", failures)
+	TestAssertions.near(packet.crit_draw, 0.04, 0.001, "compatibility draw accessor maps to authoritative remainder", failures)
+	TestAssertions.equal(packet.components.size(), 2, "multi-crit preparation creates one base component set", failures)
+	TestAssertions.near(packet.components[0].typed_scaled, 20.0, 0.001, "multi-crit fire base is prepared once", failures)
+	TestAssertions.near(packet.components[1].typed_scaled, 30.0, 0.001, "multi-crit physical base is prepared once", failures)
+	TestAssertions.near(packet.components[0].post_crit, 40.0, 0.001, "compatibility fire amount uses first critical instance", failures)
+	TestAssertions.near(packet.components[1].post_crit, 60.0, 0.001, "compatibility physical amount uses first critical instance", failures)
+	TestAssertions.equal(rng.draw_count, 1, "105 percent preparation consumes only the fractional roll", failures)
 
 func _test_dodge_block_and_incoming(types: DamageTypeCatalog, failures: Array[String]) -> void:
 	var source := _adapter(&"party:1", 1, null, {})
@@ -210,3 +238,8 @@ func _health(maximum: float, current: float) -> HealthComponent:
 	health.current_health = current
 	_health_nodes.append(health)
 	return health
+
+func _has_property(object: Object, property_name: StringName) -> bool:
+	return object.get_property_list().any(func(property: Dictionary) -> bool:
+		return property.get("name") == property_name
+	)

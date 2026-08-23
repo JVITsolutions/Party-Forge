@@ -95,7 +95,7 @@ func _test_runtime_rng_and_estimate_parity(attack: AttackDefinition, _weapon: Ac
 	attack.set(&"damage_source", ACTIVE_WEAPON)
 	attack.set(&"weapon_damage_effectiveness", 1.0)
 	attack.can_crit = true
-	var stats := _stats({&"crit_chance": 0.5, &"crit_multiplier": 2.0})
+	var stats := _stats({&"crit_chance": 1.05, &"crit_multiplier": 2.0})
 	stats.revision = 4
 	var ranged_weapon := ActiveWeaponDamageSnapshot.create(1, "weapon-ranges", &"forge_vanguard_sword", [
 		ItemBaseDamageComponent.create(&"physical", 4.0, 8.0),
@@ -106,16 +106,21 @@ func _test_runtime_rng_and_estimate_parity(attack: AttackDefinition, _weapon: Ac
 	if exposed != null:
 		exposed._components.clear()
 	TestAssertions.equal((adapter.get("weapon_snapshot") as ActiveWeaponDamageSnapshot).components.size(), 2, "adapter weapon snapshot getter is defensive", failures)
-	var rng := CombatRng.new(101, [0.20, 0.25, 0.75])
+	var rng := CombatRng.new(101, [0.04, 0.25, 0.75])
 	var packet := DamageResolver.prepare(attack, adapter, rng, GameCatalog.DAMAGE_TYPES)
-	TestAssertions.truthy(packet.valid and packet.critical, "weapon range runtime packet is valid and critical", failures)
+	TestAssertions.truthy(packet.valid and packet.critical, "weapon range runtime packet is valid and guaranteed critical", failures)
 	if packet.valid:
+		var has_roll := _has_property(packet, &"multi_crit_roll")
+		TestAssertions.truthy(has_roll, "weapon range runtime packet exposes multi-crit metadata", failures)
+		if has_roll:
+			var roll: Object = packet.get("multi_crit_roll")
+			TestAssertions.equal(roll.get("critical_flags"), [true, true], "weapon range runtime records the successful 105 percent roll", failures)
 		TestAssertions.equal(packet.components.map(func(component: PreparedDamageComponent) -> StringName: return component.damage_type_id), [&"fire", &"physical"], "runtime samples components in sorted type order", failures)
 		TestAssertions.near(packet.components[0].authored_amount, 12.5, 0.0001, "first post-crit draw samples fire range", failures)
 		TestAssertions.near(packet.components[1].authored_amount, 7.0, 0.0001, "second post-crit draw samples physical range", failures)
 		TestAssertions.near(packet.components[0].post_crit, 25.0, 0.0001, "shared critical multiplier applies after fire range roll", failures)
 		TestAssertions.near(packet.components[1].post_crit, 14.0, 0.0001, "shared critical multiplier applies after physical range roll", failures)
-	TestAssertions.equal(rng.draw_count, 3, "critical draw occurs first then one draw per sorted non-fixed component", failures)
+	TestAssertions.equal(rng.draw_count, 3, "multi-crit remainder draw occurs first then one draw per sorted non-fixed component", failures)
 
 	var fixed_weapon := ActiveWeaponDamageSnapshot.create(1, "weapon-fixed", &"forge_vanguard_sword", [
 		ItemBaseDamageComponent.create(&"physical", 7.0, 7.0),

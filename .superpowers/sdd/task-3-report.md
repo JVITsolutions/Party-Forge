@@ -108,3 +108,99 @@ The review follow-up is committed separately from the original Task 3 implementa
 - The retained expansion migration still fails its later class validation on existing starter-loadout capability/tag mismatches. This did not prevent its attack rows from being emitted and verified, and is outside the reviewed tag-preservation defect.
 - The focused runner can return exit `0` after a suite-load parse failure, so accepted evidence requires both the expected PASS marker and absence of `TEST_FAILURE`/parse/load failures.
 - The report is a pre-existing tracked coordination artifact and is included in the scoped Task 3 commit.
+
+# Multi-Crit Task 3 addendum: bounded authoritative roll preparation
+
+Date: 2026-08-23
+
+Status: implementation and requested verification complete; scoped commit is this report's commit (`feat: prepare bounded multi-crit rolls`).
+
+## Scope and implementation
+
+- Worktree: `F:\Projects(root)\Game dev\Projects\party-forge\.worktrees\playtest-recovery-loot-ui`
+- Branch: `feat/playtest-recovery-loot-ui`
+- Starting head: `27be0ef848242eb8d547e0e57327d0e07a0a1875`
+- Added `MultiCritRoll` as immutable preparation metadata with copied ordered flags, whole-percentage normalization, uncapped requested/guaranteed counts, a 10,000 processed-instance ceiling, fractional-roll evidence, and explicit truncation evidence.
+- Below 100%, the roll records exactly one normal-or-critical flag. At or above 100%, it records bounded guaranteed critical flags plus a successful remainder only when a processing slot remains.
+- `DamagePacket.multi_crit_roll` is authoritative and defensively copied. Compatibility accessors `critical` and `crit_draw` read the authoritative roll's first outcome and fractional draw.
+- `DamageResolver.prepare()` creates the roll once before component sampling, then prepares one component set exactly once. The existing compatibility `post_crit` amount uses the first/resulting flag; later tasks own iteration and independent defended instance resolution.
+- `PreparedDamageComponent` required no Task 3 change because its existing `typed_scaled` field already preserves the once-prepared normal base needed by later per-instance critical multiplication.
+- No additional projectile, repeated weapon sample, defender dodge/block loop, proc dispatch, presentation staggering, death/overkill processing, or other Task 4+ behavior was added.
+
+## Strict TDD evidence
+
+The pre-change relevant baseline batch (`test_damage_resolver.gd`, `test_action_damage_component_projection.gd`, `test_combat_rng.gd`, and `test_typed_combat_final_fixes.gd`) exited `0` with:
+
+```text
+TEST_SUMMARY: PASS (0 failures)
+```
+
+Tests were then added before production changes. The exact required focused RED command exited `1` with:
+
+```text
+TEST_SUMMARY: FAIL (8 failures)
+```
+
+Accepted RED failures were exactly:
+
+- missing `multi_crit_roll.gd`;
+- missing authoritative packet metadata in the resolver and weapon-projection fixtures;
+- old at-or-above-100% behavior did not consume the processable fractional draw;
+- shifted weapon range values were `10.4` and `5.0` instead of `12.5` and `7.0`;
+- shifted compatibility post-critical values were `20.8` and `10.0` instead of `25.0` and `14.0`;
+- total draw count was `2` instead of `3`.
+
+Two intermediate GREEN attempts were rejected as evidence: one process exited `0` without a `TEST_SUMMARY` after a new-class self-reference compile failure, and one proper test run still exposed floating boundary behavior at the exact `0.05` draw. The implementation was minimally corrected to normalize through integer percentage points so equality at the prescribed boundary fails deterministically.
+
+The exact required focused command then exited `0` with:
+
+```text
+TEST_SUMMARY: PASS (0 failures)
+```
+
+The final focused run after self-review type tightening also exited `0` with the same PASS marker and no parse/load/test failure.
+
+## Boundary and safety coverage
+
+- `0%`: no draw, one normal flag.
+- `5%`: `0.04` critical, `0.05` normal, exactly one draw.
+- `99%`: `0.98` critical, `0.99` normal, exactly one draw.
+- `100%`: no draw, one guaranteed critical flag.
+- `105%`: `0.04` produces two critical flags; `0.05` produces one guaranteed critical flag; exactly one fractional draw.
+- `1150%`: `0.49` produces twelve critical flags; `0.50` produces eleven; exactly one fractional draw.
+- `10000.05` reports `10001` requested potential instances and `10000` processed/guaranteed flags, marks truncation, allocates exactly 10,000 flags, preserves the fractional chance, and consumes no fractional draw because no processable slot remains.
+- Direct metadata mutation attempts and mutation/clearing of an exposed flag array leave the authoritative values and ordered flags unchanged.
+- The runtime `105%` weapon fixture proves end-to-end uncapped resolver behavior, one remainder draw followed by one draw per sorted non-fixed component, and one base component set rather than one set per critical flag.
+
+## Compatibility and repository verification
+
+The post-change legacy compatibility batch (`test_combat_rng.gd` and `test_typed_combat_final_fixes.gd`) exited `0` with:
+
+```text
+TEST_SUMMARY: PASS (0 failures)
+```
+
+The known-stale compatibility batch exited `1` with exactly the five failures declared in the Task 3 brief and no additions:
+
+- `test_attack_execution.gd`: three stale health/RNG expectations;
+- `test_action_combat_estimate_service.gd`: two stale average-hit/DPS expectations.
+
+The repository-wide suite also exited `1` with exactly:
+
+```text
+TEST_SUMMARY: FAIL (5 failures)
+```
+
+Those are the same five pre-existing baseline-migration expectations. No additional suite failed.
+
+`git diff --check` passed before staging. A staged-scope diff check and final focused/compatibility reruns are recorded immediately before commit.
+
+## Self-review and concerns
+
+- Review confirmed the processing ceiling bounds allocation before `resize()` and that an unprocessable remainder consumes no RNG.
+- Review confirmed `requested_instances` represents the uncapped guaranteed count plus a potential fractional slot, while `processed_instances` is the bounded ordered flag count after the fractional result.
+- Review confirmed all public metadata setters ignore writes, flag getters return copies, and packet construction/getters copy the roll so caller-held objects cannot mutate packet authority.
+- Godot cannot resolve a brand-new script's own `class_name` identifier during this worktree's first cold import. Its static factory/copy return annotations therefore use `RefCounted`; packet/resolver fields, accessors, parameters, and locals use the concrete preloaded `MultiCritRoll` script type. This preserves cold-import reliability without weakening external Task 3 contracts.
+- The focused suite continues to print existing intentional negative-path diagnostics and the existing ObjectDB/resource exit markers; accepted PASS evidence requires the explicit summary and absence of parse/load/test failures.
+- The five declared stale full-suite expectations remain for Tasks 6 and 7 as planned. They were not rewritten outside Task 3's contract.
+- The user-owned untracked QA evidence paths remain untouched and unstaged. `.superpowers/sdd/progress.md` was not modified or staged, and the main Godot editor/process was not touched.

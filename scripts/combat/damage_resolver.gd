@@ -4,6 +4,7 @@ extends RefCounted
 const ACTION_ARCHETYPE := preload("res://scripts/combat/action_archetype.gd")
 const ACTION_DAMAGE_PROJECTION := preload("res://scripts/combat/action_damage_projection.gd")
 const ACTION_DAMAGE_COMPONENT_PROJECTION := preload("res://scripts/combat/action_damage_component_projection.gd")
+const MULTI_CRIT_ROLL := preload("res://scripts/combat/multi_crit_roll.gd")
 
 static func action_tags_for(attack: AttackDefinition, weapon: ActiveWeaponDamageSnapshot = null) -> Array[StringName]:
 	var tags: Array[StringName] = []
@@ -51,8 +52,8 @@ static func prepare(attack: AttackDefinition, source: CombatantAdapter, rng: Com
 
 	var tags := action_tags_for(attack, weapon)
 	var crit_chance := source.stat_value(&"crit_chance", 0.0) if attack.can_crit else 0.0
-	var crit_roll := rng.roll(crit_chance)
-	var critical := bool(crit_roll["success"])
+	var crit_roll: MULTI_CRIT_ROLL = MULTI_CRIT_ROLL.create(crit_chance, rng) as MULTI_CRIT_ROLL
+	var critical: bool = bool(crit_roll.call("primary_critical"))
 	var crit_multiplier := maxf(1.0, source.stat_value(&"crit_multiplier", 1.5))
 	var global_multiplier := source.stat_value(&"damage", 1.0)
 	var archetype_stat_id := ACTION_ARCHETYPE.stat_id(attack)
@@ -68,7 +69,7 @@ static func prepare(attack: AttackDefinition, source: CombatantAdapter, rng: Com
 		var post_crit := typed_scaled * crit_multiplier if critical else typed_scaled
 		if not is_finite(post_crit): return _invalid_packet("attack=%s source=%s type=%s reason=non-finite prepared amount" % [attack.id, source.combatant_id, component.damage_type_id], source, attack.id)
 		prepared.append(PreparedDamageComponent.new(component.damage_type_id, amount, global_scaled, typed_scaled, post_crit))
-	return DamagePacket.create(source, attack.id, tags, attack.can_crit, critical, float(crit_roll["draw"]), crit_multiplier, source.stat_value(&"life_steal", 0.0), prepared)
+	return DamagePacket.create(source, attack.id, tags, attack.can_crit, critical, crit_roll.fractional_draw, crit_multiplier, source.stat_value(&"life_steal", 0.0), prepared, crit_roll)
 
 static func _party_member_id(combatant_id: StringName) -> int:
 	var text := String(combatant_id)
