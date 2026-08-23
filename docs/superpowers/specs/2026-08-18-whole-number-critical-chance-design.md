@@ -36,6 +36,7 @@ One attack or projectile impact performs one critical-count roll and produces an
 - At 105%, the result is one guaranteed critical instance plus a 5% chance for a second.
 - At 1150%, the result is eleven guaranteed critical instances plus a 50% chance for a twelfth.
 - Each critical instance uses the attack's complete normal damage calculation and full critical strike multiplier.
+- Every instance performs its own deterministic dodge and block rolls. One instance being dodged or blocked does not decide the outcome of any other instance in the bundle.
 - Each instance that reaches a living target independently triggers on-hit and on-crit processing.
 - On-kill processing occurs once when the target first reaches zero health.
 - No additional projectile, attack animation, cooldown, targeting operation, or attack-level effect is created.
@@ -55,7 +56,7 @@ If an attack requests more than 10,000 instances:
 
 ## Death and Overkill
 
-When an instance kills the target, damage and on-kill behavior resolve once. Every already-rolled instance remaining in the bundle still contributes its full would-be damage to overkill, including the full critical multiplier, but those post-death instances do not trigger on-hit, on-crit, life steal, ailments, or additional on-kill effects.
+When an instance kills the target, damage and on-kill behavior resolve once. Every already-rolled instance remaining in the bundle still performs its independent dodge, mitigation, and block resolution against the target's frozen defensive state. Each successful post-death instance contributes its full resolved would-be damage to overkill, including the full critical multiplier; a dodged or fully prevented instance contributes zero. Post-death instances do not trigger on-hit, on-crit, life steal, ailments, or additional on-kill effects.
 
 Example: a target has 100 health and an attack produces three 60-damage critical instances. The first leaves 40 health, the second kills with 20 excess damage, and the third contributes its full 60 damage. The recorded overkill total is 80.
 
@@ -111,6 +112,7 @@ Automated RED-GREEN coverage must prove:
 - Item effects, advanced ranges, comparisons, stat rows, and source breakdowns never expose raw values such as `0.05`, `0.0111 flat`, or `1.1%`.
 - Boundaries at 0%, 5%, 99%, 100%, 105%, and 1150% produce deterministic instance counts.
 - Values above the 10,000-instance ceiling truncate safely and emit diagnostics without modifying the build.
+- Dodge and block are rolled independently for every instance, including ordered post-death overkill-only resolution; a dodged or fully prevented instance contributes no damage or overkill.
 - Every living-target instance produces its own damage, on-hit, and on-crit processing while creating no extra projectile.
 - On-kill occurs once, post-death proc dispatch stops, and all remaining rolled damage contributes to the two-second overkill record.
 - The overkill record expires after exactly two seconds and is not persisted.
