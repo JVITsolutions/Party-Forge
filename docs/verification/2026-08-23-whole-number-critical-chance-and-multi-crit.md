@@ -2,7 +2,7 @@
 
 Date: 2026-08-23
 Branch: `feat/playtest-recovery-loot-ui`
-Tasks 8-9 scope: live-scene ordering, 10,000-instance ceiling safety, legacy-save compatibility, automated acceptance
+Tasks 8-9 scope: live-scene ordering, 10,000-instance ceiling safety, legacy-save compatibility, automated acceptance, 1080p visual acceptance
 
 ## Acceptance status
 
@@ -13,6 +13,8 @@ The test does not instantiate floating damage labels. Final floating-number, hit
 Task 9 automated acceptance was executed against exact final commit `560dc5f6da7719dde55ac19059047391cf7457e3`. Tasks 1-5, 7, and 8 focused batches passed with exit 0, their required PASS markers, and zero forbidden parser, loader, script, RID, ObjectDB, or resource-leak markers in disposable physical copies with only the Godot AI test-harness autoload/plugin entries disabled. Production `project.godot` was not changed.
 
 Task 6 is not accepted under the zero-forbidden-marker focused gate. Its combined batch passes assertions, but consistently retains exactly two ObjectDB instances and one `res://scripts/stats/stat_modifier.gd` resource. The same retention reproduces at pre-increment parent `a996f28`, proving it predates this multi-crit increment; that provenance is recorded, but the gate is not waived.
+
+Task 9's whole-number critical UI gate also passed in deterministic manual harnesses rendered at an internal 1920x1080 resolution from the untouched cold-copy project. The harnesses instantiated the production character ledger, item tooltip card, item icon, and comparison-row rendering rather than substitute UI controls. They were created only in the disposable cold copy and are not project source.
 
 ## TDD evidence
 
@@ -111,6 +113,18 @@ The controller reviewed the exact implementation range through `560dc5f6da7719dd
 
 The review explicitly confirmed independent per-instance dodge/block rolls; no post-death hit, crit, or life-steal procs; successful resolved damage only in overkill totals; one reward, defeat, loot decision, and projectile delivery; the 10,000-instance processing ceiling without authored-build mutation; generated/source/persisted catalog parity; legacy save compatibility; and no mutation of the pre-existing untracked playtest-recovery evidence.
 
-## Remaining gate
+## Manual 1080p visual acceptance
 
-Task 9 automated execution and independent review are complete at exact final commit `560dc5f6da7719dde55ac19059047391cf7457e3`, subject to the explicitly unwaived pre-existing Task 6 focused-suite retention. Manual 1080p visual acceptance remains pending; no Task 9 screenshots were created. No final floating-label or overkill presentation claim is made here.
+The deterministic visual harnesses rendered the real UI at an internal 1920x1080 resolution and produced the following reviewed evidence:
+
+- `docs/validation/screenshots/multi-crit/fighter-5-percent-1080p.png`: Fighter is selected in the production character ledger and is identified at the expected 5% baseline; the party list simultaneously identifies Rogue, Marksman, and Warlock at their expected 10% baselines.
+- `docs/validation/screenshots/multi-crit/warlock-10-percent-1080p.png`: the selected Warlock's Offense section visibly renders `Critical Strike Chance 10%` and `Critical Strike Multiplier 150%`, with no raw ratio or fractional percentage.
+- `docs/validation/screenshots/multi-crit/critical-ring-tooltip-1080p.png`: the production item tooltip renders a real ring icon, `+5% Critical Strike Chance`, a green `+5%` improvement row, and a red armour-reduction row. No `.1`, `0.05`, or other raw critical ratio is shown.
+
+The production developer equipment sandbox was also opened and inspected before the deterministic tooltip harness. It rendered the icon grid and tooltip as isolated UI without creating an arena character actor. Its random item rolls were not used as evidence for a critical modifier because the inspected rolls did not contain one.
+
+Ground-loot pickup and pointer-leave dismissal remain covered by their focused/integration tests and the earlier playtest-recovery evidence; they were not manually replayed as part of this critical-change visual gate.
+
+## Remaining presentation scope
+
+Task 9 automated execution, independent review, and whole-number critical UI acceptance are complete for exact implementation commit `560dc5f6da7719dde55ac19059047391cf7457e3`, subject to the explicitly unwaived pre-existing Task 6 focused-suite retention. Final floating-number, staggered hit-flash, sound, and distinct overkill presentation remain deliberately outside this increment; no claim is made that those later game-feel assets exist.
