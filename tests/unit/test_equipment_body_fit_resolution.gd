@@ -15,7 +15,10 @@ func run() -> Array[String]:
 	_assert_legacy_fallback(failures)
 	_assert_shared_fit(failures)
 	_assert_variant_fit_requires_both_bodies(failures)
+	_assert_zero_descriptor_variant_rejects(failures)
+	_assert_shared_fit_descriptor_set_is_unambiguous(failures)
 	_assert_shared_scene_roots_do_not_overlap(failures)
+	_assert_shared_scene_alias_roots_do_not_overlap(failures)
 	_assert_attachment_contracts(failures)
 	_assert_unknown_values_reject_independently(failures)
 	_assert_unknown_body_and_icon_only_behavior(failures)
@@ -61,6 +64,26 @@ func _assert_variant_fit_requires_both_bodies(failures: Array[String]) -> void:
 	TestAssertions.equal(visual.presentation_scene_for(FEMININE), scene, "variant feminine resolves its scene", failures)
 	TestAssertions.equal(visual.validate(), PackedStringArray(), "variant fit validates with both body descriptors", failures)
 
+func _assert_zero_descriptor_variant_rejects(failures: Array[String]) -> void:
+	var visual := _visual(_scene_with_roots([&"LegacyMesh"]))
+	visual.fit_policy = &"variant"
+	TestAssertions.truthy(_contains(visual.validate(), "variant fit"), "variant fit rejects a legacy fallback with zero descriptors", failures)
+
+func _assert_shared_fit_descriptor_set_is_unambiguous(failures: Array[String]) -> void:
+	var scene := _scene_with_roots([&"SharedMesh", &"MasculineMesh", &"FeminineMesh"])
+	var visual := _visual(scene)
+	visual.fit_policy = SHARED
+	visual.body_fits = [
+		_fit(MASCULINE, scene, [NodePath("MasculineMesh")]),
+		_fit(FEMININE, scene, [NodePath("FeminineMesh")]),
+	]
+	TestAssertions.truthy(_contains(visual.validate(), "shared fit"), "shared policy rejects masculine and feminine descriptor ambiguity", failures)
+	visual.body_fits = [
+		_fit(SHARED, scene, [NodePath("SharedMesh")]),
+		_fit(MASCULINE, scene, [NodePath("MasculineMesh")]),
+	]
+	TestAssertions.truthy(_contains(visual.validate(), "shared fit"), "shared policy rejects a shared descriptor plus a body-specific descriptor", failures)
+
 func _assert_shared_scene_roots_do_not_overlap(failures: Array[String]) -> void:
 	var scene := _scene_with_roots([&"MasculineMesh", &"FeminineMesh"])
 	var visual := _visual(scene)
@@ -78,6 +101,16 @@ func _assert_shared_scene_roots_do_not_overlap(failures: Array[String]) -> void:
 	var missing_root := _fit(FEMININE, scene, [NodePath("MissingMesh")])
 	visual.body_fits = [_fit(MASCULINE, scene, [NodePath("MasculineMesh")]), missing_root]
 	TestAssertions.truthy(not visual.validate().is_empty(), "descriptor rejects an explicit root absent from its instantiated scene", failures)
+
+func _assert_shared_scene_alias_roots_do_not_overlap(failures: Array[String]) -> void:
+	var scene := _scene_with_roots([&"MasculineMesh", &"AliasStart"])
+	var visual := _visual(scene)
+	visual.fit_policy = &"variant"
+	visual.body_fits = [
+		_fit(MASCULINE, scene, [NodePath("MasculineMesh")]),
+		_fit(FEMININE, scene, [NodePath("AliasStart/../MasculineMesh")]),
+	]
+	TestAssertions.truthy(_contains(visual.validate(), "roots overlap"), "resolved alias paths cannot select the same shared-scene root", failures)
 
 func _assert_attachment_contracts(failures: Array[String]) -> void:
 	var scene := _scene_with_roots([&"SharedMesh"])

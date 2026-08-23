@@ -48,7 +48,10 @@ func presentation_scene_for(body_preset_id: StringName) -> PackedScene:
 
 func mesh_root_paths_for(body_preset_id: StringName) -> Array[NodePath]:
 	var descriptor := body_fit_for(body_preset_id)
-	return descriptor.mesh_root_paths if descriptor != null else []
+	var paths: Array[NodePath] = []
+	if descriptor != null:
+		paths.assign(descriptor.mesh_root_paths)
+	return paths
 
 func validate() -> PackedStringArray:
 	var errors := PackedStringArray()
@@ -86,6 +89,8 @@ func validate() -> PackedStringArray:
 
 func _validate_body_fits(errors: PackedStringArray) -> void:
 	if body_fits.is_empty():
+		if fit_policy == &"variant":
+			errors.append("equipment visual %s variant fit requires masculine and feminine descriptors" % id)
 		return
 	var seen_body_ids: Dictionary = {}
 	for descriptor: EquipmentBodyFitDescriptor in body_fits:
@@ -97,8 +102,8 @@ func _validate_body_fits(errors: PackedStringArray) -> void:
 		seen_body_ids[descriptor.body_preset_id] = true
 		for error: String in descriptor.validate():
 			errors.append("equipment visual %s %s" % [id, error])
-	if fit_policy == &"shared" and not seen_body_ids.has(&"shared"):
-		errors.append("equipment visual %s shared fit requires a shared descriptor" % id)
+	if fit_policy == &"shared" and (body_fits.size() != 1 or not seen_body_ids.has(&"shared")):
+		errors.append("equipment visual %s shared fit requires exactly one shared descriptor" % id)
 	if fit_policy == &"variant":
 		for body_preset: StringName in [&"masculine", &"feminine"]:
 			if not seen_body_ids.has(body_preset):
@@ -114,13 +119,27 @@ func _validate_shared_scene_root_separation(errors: PackedStringArray) -> void:
 			var right := body_fits[right_index]
 			if right == null or right.presentation_scene != left.presentation_scene:
 				continue
-			for left_path: NodePath in left.mesh_root_paths:
-				for right_path: NodePath in right.mesh_root_paths:
-					if _root_paths_overlap(left_path, right_path):
-						errors.append("equipment visual %s shared-scene body fit roots overlap" % id)
-						return
+			if _descriptor_roots_overlap(left, right):
+				errors.append("equipment visual %s shared-scene body fit roots overlap" % id)
+				return
 
-func _root_paths_overlap(left_path: NodePath, right_path: NodePath) -> bool:
-	var left_text := String(left_path)
-	var right_text := String(right_path)
-	return left_text == right_text or left_text == "." or right_text == "." or left_text.begins_with(right_text + "/") or right_text.begins_with(left_text + "/")
+func _descriptor_roots_overlap(left: EquipmentBodyFitDescriptor, right: EquipmentBodyFitDescriptor) -> bool:
+	var scene_root := left.presentation_scene.instantiate()
+	if scene_root == null:
+		return false
+	var overlaps := false
+	for left_path: NodePath in left.mesh_root_paths:
+		var left_root := scene_root.get_node_or_null(left_path)
+		if left_root == null:
+			continue
+		for right_path: NodePath in right.mesh_root_paths:
+			var right_root := scene_root.get_node_or_null(right_path)
+			if right_root == null:
+				continue
+			if left_root == right_root or left_root.is_ancestor_of(right_root) or right_root.is_ancestor_of(left_root):
+				overlaps = true
+				break
+		if overlaps:
+			break
+	scene_root.free()
+	return overlaps

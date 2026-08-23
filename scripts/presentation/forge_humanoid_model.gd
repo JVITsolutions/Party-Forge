@@ -29,6 +29,7 @@ var _primary_color := Color.WHITE
 var _hit_weight := 0.0
 var _is_downed := false
 var _cache_ready := false
+var _active_body_preset: StringName
 
 func _ready() -> void:
 	_ensure_cache()
@@ -43,6 +44,7 @@ func set_body_preset(preset_id: StringName) -> bool:
 	for body_id: StringName in body_nodes:
 		for node: Node3D in body_nodes[body_id]:
 			node.visible = body_id == preset_id
+	_active_body_preset = preset_id
 	return true
 
 func set_palette(palette_id: StringName, primary_color: Color) -> bool:
@@ -64,18 +66,31 @@ func apply_equipment_visual(slot_id: StringName, definition: EquipmentVisualDefi
 		_clear_equipped_node(slot_id)
 		equipped_definitions[slot_id] = definition
 		return true
-	if definition.presentation_scene == null:
+	var presentation_scene := definition.presentation_scene_for(_active_body_preset)
+	var selected_root_paths := definition.mesh_root_paths_for(_active_body_preset)
+	if presentation_scene == null or selected_root_paths.is_empty():
 		return false
-	var candidate_root := definition.presentation_scene.instantiate() as Node3D
+	var candidate_root := presentation_scene.instantiate() as Node3D
 	if candidate_root == null:
 		return false
 	var staged: Array[Dictionary] = []
 	var attachment_nodes: Array[Node3D] = []
-	for node: Node in candidate_root.find_children("*", "Node3D", true, false):
-		if node.has_meta(&"equipment_socket_id"):
-			attachment_nodes.append(node as Node3D)
-	if attachment_nodes.is_empty():
-		attachment_nodes.append(candidate_root)
+	for root_path: NodePath in selected_root_paths:
+		var selected_root := candidate_root.get_node_or_null(root_path) as Node3D
+		if selected_root == null:
+			candidate_root.free()
+			return false
+		var selected_attachments: Array[Node3D] = []
+		if selected_root.has_meta(&"equipment_socket_id"):
+			selected_attachments.append(selected_root)
+		for node: Node in selected_root.find_children("*", "Node3D", true, false):
+			if node.has_meta(&"equipment_socket_id"):
+				selected_attachments.append(node as Node3D)
+		if selected_attachments.is_empty():
+			selected_attachments.append(selected_root)
+		for attachment: Node3D in selected_attachments:
+			if attachment not in attachment_nodes:
+				attachment_nodes.append(attachment)
 	for attachment: Node3D in attachment_nodes:
 		var socket_id := StringName(attachment.get_meta(&"equipment_socket_id", definition.socket_id))
 		var socket := get_node_or_null(NodePath(String(socket_id))) as Node3D
@@ -285,6 +300,14 @@ func _ensure_cache() -> void:
 			var material := (node as MeshInstance3D).material_override as StandardMaterial3D
 			if material != null:
 				base_materials[node] = material.duplicate() as StandardMaterial3D
+	_active_body_preset = &""
+	for body_preset: StringName in BODY_PRESETS:
+		for body_node: Node3D in body_nodes.get(body_preset, []):
+			if body_node.visible:
+				_active_body_preset = body_preset
+				break
+		if not _active_body_preset.is_empty():
+			break
 	_cache_ready = true
 
 func _apply_item_colors(root: Node3D, definition: EquipmentVisualDefinition) -> void:

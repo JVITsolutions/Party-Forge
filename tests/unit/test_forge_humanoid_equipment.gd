@@ -4,6 +4,10 @@ func run() -> Array[String]:
 	var failures: Array[String] = []
 	_test_failed_replacement_and_clear(failures)
 	_test_icon_only_entry(failures)
+	_test_descriptor_only_visual_equips(failures)
+	_test_body_specific_scene_resolution(failures)
+	_test_multi_fit_scene_installs_only_active_body_roots(failures)
+	_test_unknown_active_body_fails_closed(failures)
 	_test_multi_socket_item(failures)
 	_test_item_colors_and_wearer_accent_isolation(failures)
 	_test_palette_refreshes_equipped_accent_without_leaking(failures)
@@ -34,6 +38,60 @@ func _test_icon_only_entry(failures: Array[String]) -> void:
 	icon_only.combat_visible = false
 	TestAssertions.truthy(model.apply_equipment_visual(&"belt", icon_only), "icon-only entry equips without a scene", failures)
 	TestAssertions.equal(model.equipped_item_id(&"belt"), &"cosmetic_badge", "icon-only entry is recorded", failures)
+	_free_model(model)
+
+func _test_descriptor_only_visual_equips(failures: Array[String]) -> void:
+	var model := _model_with_sockets([&"MainHandSocket"])
+	var scene := _named_attachment_scene(&"DescriptorOnlyAttachment")
+	var visual := _visual(&"descriptor_only", &"main_hand", &"MainHandSocket", null)
+	visual.body_fits = [_fit(&"shared", scene, [NodePath(".")])]
+	TestAssertions.truthy(model.apply_equipment_visual(&"main_hand", visual), "descriptor-only visual equips when the legacy scene is null", failures)
+	TestAssertions.truthy(model.has_node("MainHandSocket/DescriptorOnlyAttachment"), "descriptor-only scene is installed through the active body resolver", failures)
+	_free_model(model)
+
+func _test_body_specific_scene_resolution(failures: Array[String]) -> void:
+	var masculine_scene := _named_attachment_scene(&"MasculineAttachment")
+	var feminine_scene := _named_attachment_scene(&"FeminineAttachment")
+	var visual := _visual(&"body_scene_variant", &"main_hand", &"MainHandSocket", null)
+	visual.fit_policy = &"variant"
+	visual.body_fits = [
+		_fit(&"masculine", masculine_scene, [NodePath(".")]),
+		_fit(&"feminine", feminine_scene, [NodePath(".")]),
+	]
+	var model := _model_with_sockets([&"MainHandSocket"])
+	TestAssertions.truthy(model.set_body_preset(&"feminine"), "runtime accepts the feminine active body", failures)
+	TestAssertions.truthy(model.apply_equipment_visual(&"main_hand", visual), "runtime equips the active body's descriptor scene", failures)
+	TestAssertions.truthy(model.has_node("MainHandSocket/FeminineAttachment"), "feminine descriptor scene is installed", failures)
+	TestAssertions.truthy(not model.has_node("MainHandSocket/MasculineAttachment"), "inactive masculine descriptor scene is never installed", failures)
+	_free_model(model)
+
+func _test_multi_fit_scene_installs_only_active_body_roots(failures: Array[String]) -> void:
+	var scene := _multi_fit_attachment_scene()
+	var visual := _visual(&"multi_fit_variant", &"main_hand", &"MainHandSocket", null)
+	visual.fit_policy = &"variant"
+	visual.body_fits = [
+		_fit(&"masculine", scene, [NodePath("MasculineFit")]),
+		_fit(&"feminine", scene, [NodePath("FeminineFit")]),
+	]
+	var masculine_model := _model_with_sockets([&"MainHandSocket"])
+	TestAssertions.truthy(masculine_model.apply_equipment_visual(&"main_hand", visual), "masculine multi-fit item equips", failures)
+	TestAssertions.truthy(masculine_model.has_node("MainHandSocket/MasculineFit"), "masculine root is installed for masculine body", failures)
+	TestAssertions.truthy(not masculine_model.has_node("MainHandSocket/FeminineFit"), "feminine root is not installed for masculine body", failures)
+	_free_model(masculine_model)
+	var feminine_model := _model_with_sockets([&"MainHandSocket"])
+	TestAssertions.truthy(feminine_model.set_body_preset(&"feminine"), "multi-fit runtime accepts feminine body", failures)
+	TestAssertions.truthy(feminine_model.apply_equipment_visual(&"main_hand", visual), "feminine multi-fit item equips", failures)
+	TestAssertions.truthy(feminine_model.has_node("MainHandSocket/FeminineFit"), "feminine root is installed for feminine body", failures)
+	TestAssertions.truthy(not feminine_model.has_node("MainHandSocket/MasculineFit"), "masculine root is not installed for feminine body", failures)
+	_free_model(feminine_model)
+
+func _test_unknown_active_body_fails_closed(failures: Array[String]) -> void:
+	var model := _model_with_sockets([&"MainHandSocket"], &"unknown_body")
+	var scene := _named_attachment_scene(&"ShouldNotInstall")
+	var visual := _visual(&"unknown_body_item", &"main_hand", &"MainHandSocket", scene)
+	visual.body_fits = [_fit(&"shared", scene, [NodePath(".")])]
+	TestAssertions.truthy(not model.apply_equipment_visual(&"main_hand", visual), "runtime rejects equipment when no known body preset is active", failures)
+	TestAssertions.truthy(not model.has_node("MainHandSocket/ShouldNotInstall"), "unknown active body installs no descriptor scene", failures)
 	_free_model(model)
 
 func _test_multi_socket_item(failures: Array[String]) -> void:
@@ -181,11 +239,11 @@ func _test_unmapped_equipment_material_inherits_and_restores_feedback(failures: 
 	TestAssertions.equal((mesh.material_override as StandardMaterial3D).albedo_color, base_color, "cleared downed restores clean unmapped base", failures)
 	_free_model(model)
 
-func _model_with_sockets(socket_ids: Array[StringName]) -> ForgeHumanoidModel:
+func _model_with_sockets(socket_ids: Array[StringName], body_preset_id: StringName = &"masculine") -> ForgeHumanoidModel:
 	var model := ForgeHumanoidModel.new()
 	var body := MeshInstance3D.new()
 	body.name = &"BodyMesh"
-	body.set_meta(&"body_preset", &"masculine")
+	body.set_meta(&"body_preset", body_preset_id)
 	body.set_meta(&"palette_region", &"primary")
 	body.material_override = StandardMaterial3D.new()
 	model.add_child(body)
@@ -216,6 +274,28 @@ func _single_attachment_scene() -> PackedScene:
 	root.add_child(MeshInstance3D.new())
 	root.get_child(0).owner = root
 	return _pack_scene(root)
+
+func _named_attachment_scene(node_name: StringName) -> PackedScene:
+	var root := Node3D.new()
+	root.name = node_name
+	return _pack_scene(root)
+
+func _multi_fit_attachment_scene() -> PackedScene:
+	var root := Node3D.new()
+	root.name = &"MultiFitItem"
+	for fit_name: StringName in [&"MasculineFit", &"FeminineFit"]:
+		var fit_root := Node3D.new()
+		fit_root.name = fit_name
+		root.add_child(fit_root)
+		fit_root.owner = root
+	return _pack_scene(root)
+
+func _fit(body_id: StringName, scene: PackedScene, roots: Array[NodePath]) -> EquipmentBodyFitDescriptor:
+	var descriptor := EquipmentBodyFitDescriptor.new()
+	descriptor.body_preset_id = body_id
+	descriptor.presentation_scene = scene
+	descriptor.mesh_root_paths = roots
+	return descriptor
 
 func _paired_attachment_scene() -> PackedScene:
 	var root := Node3D.new()

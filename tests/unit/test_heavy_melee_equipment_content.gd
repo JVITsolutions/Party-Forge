@@ -46,14 +46,15 @@ func _assert_item(set_id: StringName, item_id: StringName, base_path: String, fa
 		if not visual.has_method(&"presentation_scene_for"):
 			TestAssertions.truthy(false, "%s resolves its scene through the body-fit API" % item_id, failures)
 			return
-		var scene: PackedScene = visual.presentation_scene_for(&"masculine")
-		var root := scene.instantiate() as Node3D if scene != null else null
-		TestAssertions.truthy(root != null and _has_visible_mesh(root), "%s has visible independent geometry" % item_id, failures)
-		if root != null:
-			for child: Node in root.find_children("*", "Node3D", true, false):
-				if child.has_meta(&"equipment_socket_id"):
-					TestAssertions.truthy(not StringName(child.get_meta(&"equipment_socket_id")).is_empty(), "%s declares attachment socket" % item_id, failures)
-			root.free()
+		for active_body: StringName in [&"masculine", &"feminine"]:
+			var scene: PackedScene = visual.presentation_scene_for(active_body)
+			var root := scene.instantiate() as Node3D if scene != null else null
+			TestAssertions.truthy(root != null and _has_visible_mesh(root), "%s has visible independent geometry for %s" % [item_id, active_body], failures)
+			if root != null:
+				for child: Node in root.find_children("*", "Node3D", true, false):
+					if child.has_meta(&"equipment_socket_id"):
+						TestAssertions.truthy(not StringName(child.get_meta(&"equipment_socket_id")).is_empty(), "%s declares attachment socket for %s" % [item_id, active_body], failures)
+				root.free()
 	var model_scene := load("res://scenes/characters/presentation/forge_humanoid_model.tscn") as PackedScene
 	var model := model_scene.instantiate() as ForgeHumanoidModel if model_scene != null else null
 	if model != null and visual.combat_visible:
