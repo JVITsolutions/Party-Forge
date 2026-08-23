@@ -17,6 +17,7 @@ The remaining 88 equipment visuals remain blocked until Jacob approves both bodi
 - Fidelity target is stylized mid-detail: readable at Party Forge's high-angle camera without discarding the detail needed for inventory renders and close inspection.
 - Item icons are rendered from the approved 3D master, not independently painted silhouettes.
 - Blender 5.2 is the canonical cleanup, fitting, rig, render, and approval location. AI 3D Gen Studio produces candidates, not automatically approved masters.
+- 3D Gen Studio auto-rigging may provide initial joints and weights, but generated rigs are candidates that must be retargeted/rebound and validated against `pf_humanoid_v1` before promotion.
 - Existing prototype assets are preserved in a hashed baseline backup. They are not deleted or silently overwritten.
 - Every asset is reviewed from enough views to expose its complete construction, not merely from a flattering hero angle.
 

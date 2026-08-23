@@ -62,7 +62,7 @@ Record exact attempt IDs, source hashes, reviewer, and notes. Do not generate bo
 
 **Step 1: Generate multiple 3D candidates per approved concept**
 
-Preserve raw output, workflow, seed, input image, mesh statistics, and textures. Prefer a candidate with coherent anatomy and surface flow over one whose apparent detail comes from noisy topology.
+Preserve raw output, workflow, seed, input image, mesh statistics, and textures. Prefer a candidate with coherent anatomy and surface flow over one whose apparent detail comes from noisy topology. When 3D Gen Studio's auto-rigging is available, generate and preserve an auto-rigged candidate as well as the raw mesh. Treat its armature and weights as candidate preprocessing—not as Party Forge's canonical skeleton.
 
 **Step 2: Inspect every candidate comprehensively**
 
@@ -74,7 +74,7 @@ Remove duplicate/internal/hidden generator debris, repair topology and normals, 
 
 **Step 4: Bind both meshes to one canonical armature and stable regions**
 
-Create one `pf_humanoid_v1` armature. Bind both meshes without changing bones, parentage, bone lengths, orientation, or rest transforms between bodies. Split each body into exactly seventeen named skinned MeshInstance3D exports using the `BodyRegion__` prefix and the exact design IDs; share no more than four body materials across those nodes. Store topology, 1e-6-quantized canonical-rest, per-Skin named-bind, and region-layout signatures in provenance.
+Create one `pf_humanoid_v1` armature. Use a 3D Gen Studio auto-rig to accelerate initial joint placement and weight transfer when useful, then retarget/rebind it to `pf_humanoid_v1`; never promote the generated armature unchanged. Both approved bodies must use the exact canonical bone names, hierarchy, lengths, orientation, and rest transforms. Split each body into exactly seventeen named skinned MeshInstance3D exports using the `BodyRegion__` prefix and the exact design IDs; share no more than four body materials across those nodes. Store the original auto-rig provenance plus final topology, 1e-6-quantized canonical-rest, per-Skin named-bind, and region-layout signatures.
 
 **Step 5: Deformation review**
 
