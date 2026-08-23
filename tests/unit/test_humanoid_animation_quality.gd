@@ -15,11 +15,48 @@ const MAX_IDLE_HAND_SPAN := 0.85
 const MAX_ATTACK_HAND_BEHIND_Z := 0.18
 const MAX_BOW_DRAW_HAND_BEHIND_Z := 0.26
 const MAX_ATTACK_ELBOW_BEHIND_Z := 0.14
+const EXPECTED_MAIN_ANIMATION_LENGTHS := {
+	&"attack_combo": 0.9,
+	&"attack_slash": 0.55,
+	&"cleric_healing_blessing": 1.08,
+	&"cleric_idle": 1.6,
+	&"cleric_lightning_bolt": 0.62,
+	&"frost_mage_idle": 1.6,
+	&"frost_staff_shard": 0.88,
+	&"hit_flinch": 0.25,
+	&"idle": 1.6,
+	&"mage_fire_burst": 0.76,
+	&"mage_idle": 1.6,
+	&"marksman_heavy_bow_shot": 1.55,
+	&"marksman_idle": 1.6,
+	&"paladin_hammer_smite": 0.86,
+	&"paladin_idle": 1.6,
+	&"ranger_idle": 1.6,
+	&"ranger_quick_bow_shot": 0.42,
+	&"rogue_dagger_flurry": 0.28,
+	&"rogue_idle": 1.6,
+	&"walk": 0.8,
+	&"warlock_chaos_bolt": 1.02,
+	&"warlock_idle": 1.6,
+}
+const EXPECTED_ATTACK_EVENTS := {
+	&"attack_slash": [0.28, &"impact"],
+	&"paladin_hammer_smite": [0.58, &"impact"],
+	&"ranger_quick_bow_shot": [0.18, &"release"],
+	&"marksman_heavy_bow_shot": [1.15, &"release"],
+	&"rogue_dagger_flurry": [0.16, &"impact"],
+	&"mage_fire_burst": [0.46, &"release"],
+	&"frost_staff_shard": [0.52, &"release"],
+	&"cleric_lightning_bolt": [0.34, &"release"],
+	&"cleric_healing_blessing": [0.72, &"release"],
+	&"warlock_chaos_bolt": [0.64, &"release"],
+}
 
 func run() -> Array[String]:
 	var failures: Array[String] = []
 	var model := MODEL_SCENE.instantiate() as ForgeHumanoidModel
 	var player := model.get_node("AnimationPlayer") as AnimationPlayer
+	_assert_animation_library_contract(model, player, failures)
 	for idle_id: StringName in IDLES:
 		var idle := player.get_animation(idle_id)
 		TestAssertions.truthy(idle != null, "%s exists" % idle_id, failures)
@@ -43,6 +80,49 @@ func run() -> Array[String]:
 	_assert_walk_quality(player, failures)
 	model.free()
 	return failures
+
+func _assert_animation_library_contract(model: ForgeHumanoidModel, player: AnimationPlayer, failures: Array[String]) -> void:
+	var actual_ids := PackedStringArray(player.get_animation_list())
+	var expected_ids := PackedStringArray()
+	for animation_id: StringName in EXPECTED_MAIN_ANIMATION_LENGTHS:
+		expected_ids.append(String(animation_id))
+	actual_ids.sort()
+	expected_ids.sort()
+	TestAssertions.equal(actual_ids, expected_ids, "pivot bridge preserves all current main animation IDs", failures)
+	for animation_id: StringName in EXPECTED_MAIN_ANIMATION_LENGTHS:
+		var animation := player.get_animation(animation_id)
+		TestAssertions.truthy(animation != null, "%s remains available" % animation_id, failures)
+		if animation == null:
+			continue
+		TestAssertions.near(animation.length, float(EXPECTED_MAIN_ANIMATION_LENGTHS[animation_id]), 0.000001, "%s preserves its authored length" % animation_id, failures)
+		var expected_loop := Animation.LOOP_LINEAR if animation_id in IDLES or animation_id == &"walk" else Animation.LOOP_NONE
+		TestAssertions.equal(animation.loop_mode, expected_loop, "%s preserves its loop mode" % animation_id, failures)
+		_assert_event_track(animation, animation_id, failures)
+	var feedback := model.get_node("FeedbackAnimationPlayer") as AnimationPlayer
+	TestAssertions.equal(PackedStringArray(feedback.get_animation_list()), PackedStringArray(["hit_flinch"]), "feedback hit animation ID is preserved", failures)
+	var hit := feedback.get_animation(&"hit_flinch")
+	TestAssertions.truthy(hit != null and is_equal_approx(hit.length, 0.25) and hit.loop_mode == Animation.LOOP_NONE, "feedback hit length and non-loop mode are preserved", failures)
+
+func _assert_event_track(animation: Animation, animation_id: StringName, failures: Array[String]) -> void:
+	var method_tracks: Array[int] = []
+	for track_index: int in animation.get_track_count():
+		if animation.track_get_type(track_index) == Animation.TYPE_METHOD:
+			method_tracks.append(track_index)
+	if animation_id not in EXPECTED_ATTACK_EVENTS:
+		TestAssertions.equal(method_tracks.size(), 0, "%s preserves absence of method/event tracks" % animation_id, failures)
+		return
+	TestAssertions.equal(method_tracks.size(), 1, "%s preserves one method/event track" % animation_id, failures)
+	if method_tracks.size() != 1:
+		return
+	var track_index := method_tracks[0]
+	TestAssertions.equal(animation.track_get_key_count(track_index), 1, "%s preserves one authored event" % animation_id, failures)
+	if animation.track_get_key_count(track_index) != 1:
+		return
+	var expected: Array = EXPECTED_ATTACK_EVENTS[animation_id]
+	TestAssertions.near(animation.track_get_key_time(track_index, 0), float(expected[0]), 0.000001, "%s preserves event time" % animation_id, failures)
+	var event := animation.track_get_key_value(track_index, 0) as Dictionary
+	TestAssertions.equal(event.get(&"method"), &"emit_action_event", "%s preserves event callback" % animation_id, failures)
+	TestAssertions.equal(event.get(&"args"), [expected[1]], "%s preserves event payload" % animation_id, failures)
 
 func _assert_runtime_idle_silhouette(model: ForgeHumanoidModel, player: AnimationPlayer, action_id: StringName, body_id: StringName, failures: Array[String]) -> void:
 	for sample_time: float in IDLE_RUNTIME_SAMPLES:
