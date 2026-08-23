@@ -12,12 +12,30 @@ func run() -> Array[String]:
 	if roll_script == null or not roll_script.can_instantiate():
 		return failures
 	_test_boundaries(roll_script, failures)
+	_test_expected_instance_counts(roll_script, failures)
 	_test_percentage_point_snapping(roll_script, failures)
 	_test_processing_ceiling(roll_script, failures)
 	_test_large_finite_chances(roll_script, failures)
 	_test_nonfinite_chances_are_rejected(roll_script, failures)
 	_test_metadata_is_immutable(roll_script, failures)
 	return failures
+
+func _test_expected_instance_counts(roll_script: Script, failures: Array[String]) -> void:
+	TestAssertions.truthy(roll_script.get_script_method_list().any(func(method: Dictionary) -> bool: return method.get("name") == &"expected_critical_instances"), "multi-crit roll exposes shared expected critical count math", failures)
+	TestAssertions.truthy(roll_script.get_script_method_list().any(func(method: Dictionary) -> bool: return method.get("name") == &"expected_damage_instances"), "multi-crit roll exposes shared expected damage count math", failures)
+	if not roll_script.get_script_method_list().any(func(method: Dictionary) -> bool: return method.get("name") == &"expected_critical_instances"):
+		return
+	for row: Dictionary in [
+		{"label": "negative", "chance": -1.0, "critical": 0.0, "damage": 1.0},
+		{"label": "off-grid", "chance": 0.0111, "critical": 0.01, "damage": 1.0},
+		{"label": "below one hundred", "chance": 0.25, "critical": 0.25, "damage": 1.0},
+		{"label": "exactly one hundred", "chance": 1.0, "critical": 1.0, "damage": 1.0},
+		{"label": "one hundred five", "chance": 1.05, "critical": 1.05, "damage": 1.05},
+		{"label": "eleven hundred fifty", "chance": 11.50, "critical": 11.50, "damage": 11.50},
+	]:
+		var label := String(row["label"])
+		TestAssertions.near(float(roll_script.call("expected_critical_instances", float(row["chance"]))), float(row["critical"]), 0.000001, "%s shared expected critical count" % label, failures)
+		TestAssertions.near(float(roll_script.call("expected_damage_instances", float(row["chance"]))), float(row["damage"]), 0.000001, "%s shared expected damage count" % label, failures)
 
 func _test_boundaries(roll_script: Script, failures: Array[String]) -> void:
 	var cases: Array[Dictionary] = [

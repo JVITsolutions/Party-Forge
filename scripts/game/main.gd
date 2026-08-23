@@ -327,6 +327,7 @@ func _start_leader_class_from_checkout(definition: ClassDefinition, committed_pr
 	if not reward_errors.is_empty():
 		return _abort_run_start(reward_errors, leader)
 	developer_mode_badge.configure(active_run_rules, reward_distribution_tuning)
+	_connect_combat_resolution_diagnostics()
 	var personal_loot_errors := _configure_personal_loot()
 	if not personal_loot_errors.is_empty():
 		return _abort_run_start(personal_loot_errors, leader)
@@ -569,6 +570,25 @@ func _sync_ground_chest_diagnostics() -> void:
 	if developer_mode_badge != null:
 		developer_mode_badge.update_ground_chest_diagnostics(_ground_chest_diagnostics)
 
+func _connect_combat_resolution_diagnostics() -> void:
+	if combat_resolution_service == null:
+		return
+	var callback := Callable(self, "_on_combat_resolution_diagnostics_changed")
+	if not combat_resolution_service.diagnostics_changed.is_connected(callback):
+		combat_resolution_service.diagnostics_changed.connect(callback)
+
+func _clear_combat_resolution_diagnostics() -> void:
+	if combat_resolution_service != null:
+		var callback := Callable(self, "_on_combat_resolution_diagnostics_changed")
+		if combat_resolution_service.diagnostics_changed.is_connected(callback):
+			combat_resolution_service.diagnostics_changed.disconnect(callback)
+	if developer_mode_badge != null:
+		developer_mode_badge.update_combat_diagnostics({})
+
+func _on_combat_resolution_diagnostics_changed(diagnostics: Dictionary) -> void:
+	if developer_mode_badge != null:
+		developer_mode_badge.update_combat_diagnostics(diagnostics)
+
 func _ground_item_detail(record: GroundItemRecord) -> Dictionary:
 	if record == null or run_context_registry == null:
 		return {}
@@ -688,6 +708,7 @@ func _ground_item_modal_open() -> bool:
 	return _gameplay_input_blocked()
 
 func _clear_live_loot() -> void:
+	_clear_combat_resolution_diagnostics()
 	var defeat_callback := Callable(self, "_on_enemy_defeated_for_personal_loot")
 	if spawn_director != null and spawn_director.enemy_defeated.is_connected(defeat_callback):
 		spawn_director.enemy_defeated.disconnect(defeat_callback)

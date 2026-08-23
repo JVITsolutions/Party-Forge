@@ -12,6 +12,8 @@ var estimated_hps := 0.0
 var normal_hit := 0.0
 var critical_hit := 0.0
 var average_hit := 0.0
+var expected_critical_instances := 0.0
+var expected_damage_instances := 1.0
 var attacks_per_second := 0.0
 var estimated_dps := 0.0
 @warning_ignore("shadowed_global_identifier")

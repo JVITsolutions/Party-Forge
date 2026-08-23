@@ -2,7 +2,9 @@ class_name DeveloperModeBadge
 extends CanvasLayer
 
 var _summary := ""
-var _diagnostics := ""
+var _ground_chest_diagnostics := ""
+var _combat_diagnostics := ""
+var _developer_mode_active := false
 var _show_ground_chest_diagnostics := false
 
 
@@ -13,12 +15,15 @@ func _ready() -> void:
 
 func configure(snapshot: RunRulesSnapshot, reward_tuning: RewardDistributionTuning = null) -> void:
 	_summary = ""
-	_diagnostics = ""
+	_ground_chest_diagnostics = ""
+	_combat_diagnostics = ""
+	_developer_mode_active = false
 	_show_ground_chest_diagnostics = false
 	if snapshot == null or not snapshot.developer_mode_active():
 		visible = false
 		_sync_label()
 		return
+	_developer_mode_active = true
 	var parts := PackedStringArray(["DEV MODE"])
 	_show_ground_chest_diagnostics = snapshot.show_ground_chest_diagnostics()
 	parts.append_array(snapshot.combat_policy().summary_parts())
@@ -47,11 +52,11 @@ func summary_text() -> String:
 
 
 func diagnostics_text() -> String:
-	return _diagnostics
+	return _composed_diagnostics()
 
 
 func update_ground_chest_diagnostics(diagnostics: Dictionary) -> void:
-	_diagnostics = ""
+	_ground_chest_diagnostics = ""
 	if not _show_ground_chest_diagnostics or diagnostics.is_empty():
 		_sync_label()
 		return
@@ -67,8 +72,49 @@ func update_ground_chest_diagnostics(diagnostics: Dictionary) -> void:
 		"COLLECTION %s" % _counts_text(diagnostics.get("collection_outcomes", {}) as Dictionary),
 		"PROJECTION pending=%d last=%d peak=%d limit=%d" % [int(diagnostics.get("projection_pending", 0)), int(diagnostics.get("projection_last_work", 0)), int(diagnostics.get("projection_peak_work", 0)), int(diagnostics.get("projection_limit", 0))],
 	])
-	_diagnostics = "\n".join(lines)
+	_ground_chest_diagnostics = "\n".join(lines)
 	_sync_label()
+
+
+func update_combat_diagnostics(diagnostics: Dictionary) -> void:
+	_combat_diagnostics = ""
+	if not _developer_mode_active or diagnostics.is_empty():
+		_sync_label()
+		return
+	var remainder_outcome := "NOT_ROLLED"
+	if bool(diagnostics.get("fractional_draw_consumed", false)):
+		remainder_outcome = "SUCCESS" if bool(diagnostics.get("fractional_success", false)) else "MISS"
+	var lines := PackedStringArray([
+		"COMBAT DIAGNOSTICS",
+		"INSTANCES requested=%d processed=%d" % [int(diagnostics.get("requested_instances", 0)), int(diagnostics.get("processed_instances", 0))],
+		"REMAINDER chance=%s draw=%s outcome=%s" % [
+			_percent_text(float(diagnostics.get("fractional_chance", 0.0))),
+			_percent_text(float(diagnostics.get("fractional_draw", -1.0))) if bool(diagnostics.get("fractional_draw_consumed", false)) else "not-consumed",
+			remainder_outcome,
+		],
+		"OVERKILL %s" % _number_text(float(diagnostics.get("total_overkill", 0.0))),
+	])
+	if bool(diagnostics.get("ceiling_truncated", false)):
+		lines.append("TRUNCATED")
+	_combat_diagnostics = "\n".join(lines)
+	_sync_label()
+
+
+func _composed_diagnostics() -> String:
+	var sections := PackedStringArray()
+	if not _ground_chest_diagnostics.is_empty():
+		sections.append(_ground_chest_diagnostics)
+	if not _combat_diagnostics.is_empty():
+		sections.append(_combat_diagnostics)
+	return "\n".join(sections)
+
+
+func _percent_text(value: float) -> String:
+	return "%s%%" % _number_text(value * 100.0)
+
+
+func _number_text(value: float) -> String:
+	return ("%.2f" % value).rstrip("0").rstrip(".")
 
 
 func _counts_text(counts: Dictionary) -> String:
@@ -85,4 +131,5 @@ func _counts_text(counts: Dictionary) -> String:
 func _sync_label() -> void:
 	var label := get_node_or_null("Anchor/Margin/Label") as Label
 	if label != null:
-		label.text = _summary if _diagnostics.is_empty() else "%s\n%s" % [_summary, _diagnostics]
+		var diagnostics := _composed_diagnostics()
+		label.text = _summary if diagnostics.is_empty() else "%s\n%s" % [_summary, diagnostics]

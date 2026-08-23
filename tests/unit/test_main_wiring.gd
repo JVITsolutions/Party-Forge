@@ -105,7 +105,9 @@ func run() -> Array[String]:
     return failures
 
 func _test_run_combat_resolution_service_wiring(failures: Array[String]) -> void:
-    var main := _started_main()
+    var settings := PartyForgeSettings.new()
+    settings.mode = PartyForgeSettings.Mode.DEVELOPER_MODE
+    var main := _started_main_with_settings(settings)
     var service := main.get_node_or_null("CombatResolutionService")
     var party := main.get_node("PartyManager") as PartyManager
     var director := main.get_node("SpawnDirector") as SpawnDirector
@@ -114,11 +116,35 @@ func _test_run_combat_resolution_service_wiring(failures: Array[String]) -> void
         TestAssertions.truthy(main.get("combat_resolution_service") == service, "Main caches the scene combat service", failures)
         TestAssertions.truthy(party.get("combat_resolution_service") == service, "PartyManager receives Main's exact combat service", failures)
         TestAssertions.truthy(director.get("combat_resolution_service") == service, "SpawnDirector receives Main's exact combat service", failures)
+        var diagnostics_callback := Callable(main, "_on_combat_resolution_diagnostics_changed")
+        TestAssertions.truthy(service.diagnostics_changed.is_connected(diagnostics_callback), "Main connects combat diagnostics for the active run", failures)
+        TestAssertions.truthy(main.has_method("_connect_combat_resolution_diagnostics"), "Main exposes an idempotent combat diagnostics connector", failures)
+        if main.has_method("_connect_combat_resolution_diagnostics"):
+            main.call("_connect_combat_resolution_diagnostics")
+        var callback_count: int = service.diagnostics_changed.get_connections().filter(
+            func(connection: Dictionary) -> bool: return connection.get("callable") == diagnostics_callback
+        ).size()
+        TestAssertions.equal(callback_count, 1, "Main connects combat diagnostics exactly once per run", failures)
+        service.diagnostics_changed.emit({
+            "requested_instances": 12,
+            "processed_instances": 12,
+            "fractional_chance": 0.50,
+            "fractional_draw": 0.25,
+            "fractional_success": true,
+            "fractional_draw_consumed": true,
+            "total_overkill": 40.0,
+            "ceiling_truncated": false,
+        })
+        var badge := main.get_node("DeveloperModeBadge") as DeveloperModeBadge
+        TestAssertions.truthy("requested=12 processed=12" in badge.diagnostics_text(), "Main forwards service combat diagnostics to the developer badge", failures)
         var enemy := director.spawn_enemy(&"swarmer")
         TestAssertions.truthy(enemy != null and enemy.get("combat_resolution_service") == service, "ordinary spawned enemies receive Main's exact combat service", failures)
         main.call("_spawn_boss")
         var guardian := main.get("boss") as ForgeGuardian
         TestAssertions.truthy(guardian != null and guardian.get("combat_resolution_service") == service, "boss charge and shockwave receive Main's exact combat service", failures)
+        main.call("_clear_live_loot")
+        TestAssertions.truthy(not service.diagnostics_changed.is_connected(diagnostics_callback), "run teardown disconnects combat diagnostics", failures)
+        TestAssertions.truthy("COMBAT DIAGNOSTICS" not in badge.diagnostics_text(), "run teardown clears combat diagnostics from the badge", failures)
     _cleanup_main(main)
 
 func _test_storage_route_policy_and_shared_projection_wiring(failures: Array[String]) -> void:

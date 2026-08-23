@@ -72,13 +72,9 @@ static func create(chance_value: float, rng: CombatRng) -> RefCounted:
 		result._processed_instances = 0
 		return result
 	var nonnegative_chance := maxf(0.0, chance_value)
-	var normalized_points := 0
 	var uses_percentage_points := nonnegative_chance <= SAFE_PERCENT_POINT_CHANCE
-	if uses_percentage_points:
-		normalized_points = roundi(nonnegative_chance * 100.0)
-		result._crit_chance = float(normalized_points) / 100.0
-	else:
-		result._crit_chance = nonnegative_chance
+	result._crit_chance = expected_critical_instances(nonnegative_chance)
+	var normalized_points := roundi(result._crit_chance * 100.0) if uses_percentage_points else 0
 	if result._crit_chance < 1.0:
 		result._requested_instances = 1
 		result._fractional_chance = result._crit_chance
@@ -115,6 +111,17 @@ static func create(chance_value: float, rng: CombatRng) -> RefCounted:
 	result._processed_instances = result._critical_flags.size()
 	result._ceiling_truncated = result._requested_count_overflow or result._requested_instances > PROCESSING_CEILING
 	return result
+
+static func expected_critical_instances(chance_value: float) -> float:
+	if not is_finite(chance_value):
+		return 0.0
+	var nonnegative_chance := maxf(0.0, chance_value)
+	if nonnegative_chance <= SAFE_PERCENT_POINT_CHANCE:
+		return float(roundi(nonnegative_chance * 100.0)) / 100.0
+	return nonnegative_chance
+
+static func expected_damage_instances(chance_value: float) -> float:
+	return maxf(1.0, expected_critical_instances(chance_value))
 
 static func from_compatibility(critical_value: bool, draw: float) -> RefCounted:
 	var result = (load(SCRIPT_PATH) as Script).new()
