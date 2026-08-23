@@ -6,6 +6,18 @@ const MANIFEST_NAME := "manifest.json"
 const REQUIRED_SOURCE_FIELDS := ["root", "commit", "branch", "worktree_status", "toplevel"]
 
 
+class ErrorText extends RefCounted:
+	static func single_line(value: String) -> String:
+		var result := ""
+		for index: int in value.length():
+			var codepoint := value.unicode_at(index)
+			if codepoint < 32 or (codepoint >= 127 and codepoint <= 159):
+				result += "%%%02X" % codepoint
+			else:
+				result += String.chr(codepoint)
+		return result
+
+
 class ReadOnlyFilesystem extends RefCounted:
 	func read_file(path: String) -> Dictionary:
 		var file := FileAccess.open(path, FileAccess.READ)
@@ -88,6 +100,9 @@ class BackupVerifier extends RefCounted:
 		var manifest_bytes := manifest_read.get("bytes", PackedByteArray()) as PackedByteArray
 		var manifest_sha256 := String(manifest_read.get("sha256", ""))
 
+		if not _is_valid_utf8(manifest_bytes):
+			errors.append("%s stage=manifest reason=invalid UTF-8" % ERROR_PREFIX)
+			return _result(errors, manifest_sha256)
 		var json := JSON.new()
 		if json.parse(manifest_bytes.get_string_from_utf8()) != OK or not (json.data is Dictionary):
 			errors.append("%s stage=manifest reason=malformed JSON" % ERROR_PREFIX)
@@ -204,6 +219,14 @@ class BackupVerifier extends RefCounted:
 					errors.append("%s stage=manifest field=source.%s reason=missing metadata" % [ERROR_PREFIX, field])
 			if source.has("commit") and (not (source["commit"] is String) or not _is_sha40(String(source["commit"]))):
 				errors.append("%s stage=manifest field=source.commit reason=must be 40 hexadecimal characters" % ERROR_PREFIX)
+			var root_valid := source.has("root") and source["root"] is String and _is_normalized_local_absolute(String(source["root"]))
+			var toplevel_valid := source.has("toplevel") and source["toplevel"] is String and _is_normalized_local_absolute(String(source["toplevel"]))
+			if source.has("root") and source["root"] is String and not root_valid:
+				errors.append("%s stage=manifest field=source.root reason=must be a normalized local absolute path" % ERROR_PREFIX)
+			if source.has("toplevel") and source["toplevel"] is String and not toplevel_valid:
+				errors.append("%s stage=manifest field=source.toplevel reason=must be a normalized local absolute path" % ERROR_PREFIX)
+			if root_valid and toplevel_valid and String(source["root"]).to_lower() != String(source["toplevel"]).to_lower():
+				errors.append("%s stage=manifest field=source reason=root and toplevel must identify the same path" % ERROR_PREFIX)
 		var expected_value: Variant = manifest.get("expected_file_count")
 		if not _is_nonnegative_integer_number(expected_value) or int(expected_value) != expected_count:
 			var actual := str(expected_value) if not _is_nonnegative_integer_number(expected_value) else str(int(expected_value))
@@ -237,9 +260,12 @@ class BackupVerifier extends RefCounted:
 
 
 	func _result(errors: Array[String], manifest_sha256: String = "", file_count: int = 0, total_bytes: int = 0) -> Dictionary:
-		errors.sort()
-		var unique_errors := PackedStringArray()
+		var single_line_errors: Array[String] = []
 		for error: String in errors:
+			single_line_errors.append(ErrorText.single_line(error))
+		single_line_errors.sort()
+		var unique_errors := PackedStringArray()
+		for error: String in single_line_errors:
 			if error not in unique_errors:
 				unique_errors.append(error)
 		return {
@@ -259,7 +285,7 @@ class BackupVerifier extends RefCounted:
 
 
 	func _is_normalized_relative(path: String) -> bool:
-		if path.is_empty() or path.is_absolute_path() or path.begins_with("res://") or "\\" in path:
+		if path.is_empty() or path.is_absolute_path() or path.begins_with("res://") or "\\" in path or _has_control_character(path):
 			return false
 		var segments := path.split("/", true)
 		return not segments.has("") and not segments.has(".") and not segments.has("..") and path not in [MANIFEST_NAME, ".manifest.pending.json", "backup.failure.json", "partial-manifest.json"]
@@ -268,6 +294,54 @@ class BackupVerifier extends RefCounted:
 	func _is_unsafe_local_path(path: String) -> bool:
 		var windows_path := path.replace("/", "\\")
 		return windows_path.begins_with("\\\\") or windows_path.begins_with("\\??\\") or windows_path.begins_with("\\\\?\\") or windows_path.begins_with("\\\\.\\")
+
+
+	func _is_normalized_local_absolute(path: String) -> bool:
+		return not path.is_empty() and path.is_absolute_path() and "\\" not in path and not _is_unsafe_local_path(path) and not _has_control_character(path) and path == path.simplify_path() and not path.ends_with("/")
+
+
+	func _has_control_character(value: String) -> bool:
+		for index: int in value.length():
+			var codepoint := value.unicode_at(index)
+			if codepoint < 32 or (codepoint >= 127 and codepoint <= 159):
+				return true
+		return false
+
+
+	func _is_valid_utf8(bytes: PackedByteArray) -> bool:
+		var index := 0
+		while index < bytes.size():
+			var first := int(bytes[index])
+			if first <= 0x7f:
+				index += 1
+				continue
+			if first >= 0xc2 and first <= 0xdf:
+				if index + 1 >= bytes.size() or not _is_continuation_byte(int(bytes[index + 1])):
+					return false
+				index += 2
+				continue
+			if first >= 0xe0 and first <= 0xef:
+				if index + 2 >= bytes.size():
+					return false
+				var second := int(bytes[index + 1])
+				if (first == 0xe0 and (second < 0xa0 or second > 0xbf)) or (first == 0xed and (second < 0x80 or second > 0x9f)) or (first not in [0xe0, 0xed] and not _is_continuation_byte(second)) or not _is_continuation_byte(int(bytes[index + 2])):
+					return false
+				index += 3
+				continue
+			if first >= 0xf0 and first <= 0xf4:
+				if index + 3 >= bytes.size():
+					return false
+				var second := int(bytes[index + 1])
+				if (first == 0xf0 and (second < 0x90 or second > 0xbf)) or (first == 0xf4 and (second < 0x80 or second > 0x8f)) or (first not in [0xf0, 0xf4] and not _is_continuation_byte(second)) or not _is_continuation_byte(int(bytes[index + 2])) or not _is_continuation_byte(int(bytes[index + 3])):
+					return false
+				index += 4
+				continue
+			return false
+		return true
+
+
+	func _is_continuation_byte(value: int) -> bool:
+		return value >= 0x80 and value <= 0xbf
 
 
 	func _is_sha40(value: String) -> bool:
@@ -302,19 +376,21 @@ class BackupVerifier extends RefCounted:
 
 
 func _initialize() -> void:
-	var parsed := parse_named_args(OS.get_cmdline_user_args())
+	quit(run_cli(OS.get_cmdline_user_args(), INVENTORY_SCRIPT.new().expected_paths(), Callable(self, &"_print_line")))
+
+
+func run_cli(arguments: PackedStringArray, expected_paths: PackedStringArray, output: Callable) -> int:
+	var parsed := parse_named_args(arguments)
 	var errors := parsed.get("errors", PackedStringArray()) as PackedStringArray
 	if not errors.is_empty():
-		_print_errors(errors)
-		quit(1)
-		return
-	var result := BackupVerifier.new().verify_backup(String(parsed.get("backup_root", "")), INVENTORY_SCRIPT.new().expected_paths())
+		_emit_lines(errors, output)
+		return 1
+	var result := BackupVerifier.new().verify_backup(String(parsed.get("backup_root", "")), expected_paths)
 	if not bool(result.get("ok", false)):
-		_print_errors(result.get("errors", PackedStringArray()) as PackedStringArray)
-		quit(1)
-		return
-	print("PARTY_FORGE_MODULAR_BACKUP_OK files=%d bytes=%d manifest_sha256=%s" % [int(result.get("file_count", 0)), int(result.get("total_bytes", 0)), String(result.get("manifest_sha256", ""))])
-	quit(0)
+		_emit_lines(result.get("errors", PackedStringArray()) as PackedStringArray, output)
+		return 1
+	output.call("PARTY_FORGE_MODULAR_BACKUP_OK files=%d bytes=%d manifest_sha256=%s" % [int(result.get("file_count", 0)), int(result.get("total_bytes", 0)), String(result.get("manifest_sha256", ""))])
+	return 0
 
 
 func parse_named_args(arguments: PackedStringArray) -> Dictionary:
@@ -343,8 +419,11 @@ func parse_named_args(arguments: PackedStringArray) -> Dictionary:
 		index += 1
 	if backup_root.is_empty():
 		errors.append("%s stage=request argument=--backup-root reason=required" % ERROR_PREFIX)
-	errors.sort()
-	return {"backup_root": backup_root, "errors": errors}
+	var single_line_errors := PackedStringArray()
+	for error: String in errors:
+		single_line_errors.append(ErrorText.single_line(error))
+	single_line_errors.sort()
+	return {"backup_root": backup_root, "errors": single_line_errors}
 
 
 func new_service() -> RefCounted:
@@ -355,6 +434,10 @@ func new_read_only_filesystem() -> RefCounted:
 	return ReadOnlyFilesystem.new()
 
 
-func _print_errors(errors: PackedStringArray) -> void:
+func _emit_lines(errors: PackedStringArray, output: Callable) -> void:
 	for error: String in errors:
-		print(error)
+		output.call(ErrorText.single_line(error))
+
+
+func _print_line(line: String) -> void:
+	print(ErrorText.single_line(line))

@@ -7,6 +7,7 @@ const COMMIT := "0123456789abcdef0123456789abcdef01234567"
 var _test_root := ""
 var _created_files: Array[String] = []
 var _created_directories: Array[String] = []
+var _captured_lines: Array[String] = []
 
 
 func run() -> Array[String]:
@@ -22,6 +23,7 @@ func run() -> Array[String]:
 		return failures
 	var entry_point: Object = validator_script.new()
 	TestAssertions.truthy(entry_point.has_method(&"new_service"), "backup validator exposes an independent service", failures)
+	TestAssertions.truthy(entry_point.has_method(&"run_cli"), "entry point exposes its actual CLI control flow for direct coverage", failures)
 	if not entry_point.has_method(&"new_service"):
 		return failures
 	var service := entry_point.call(&"new_service") as RefCounted
@@ -35,7 +37,13 @@ func run() -> Array[String]:
 	_test_duplicate_and_escaped_paths(service, failures)
 	_test_wrong_expected_count(service, failures)
 	_test_malformed_json_and_absent_source(service, failures)
+	_test_invalid_utf8_manifest(service, failures)
+	_test_source_path_metadata(service, failures)
+	_test_corrupt_manifest_totals(service, failures)
+	_test_single_line_dynamic_errors(service, failures)
 	_test_deterministic_error_order(service, failures)
+	if entry_point.has_method(&"run_cli"):
+		_test_cli_behavior(entry_point, failures)
 	_cleanup_fixture(failures)
 	entry_point.free()
 	return failures
@@ -59,25 +67,25 @@ func _test_valid_backup(service: RefCounted, validator_script: Script, failures:
 func _test_missing_and_extra_files(service: RefCounted, failures: Array[String]) -> void:
 	var missing_root := _make_valid_fixture("missing", failures)
 	_remove_fixture_file(missing_root.path_join("config/info.txt"), failures)
-	var missing := service.call(&"verify_backup", missing_root, PackedStringArray(EXPECTED_PATHS)) as Dictionary
+	var missing := _verify_unchanged(service, missing_root, "missing-file failure is read-only", failures)
 	_assert_has_error(missing, "PARTY_FORGE_MODULAR_BACKUP_ERROR stage=files path=config/info.txt reason=missing", "missing backup file rejects", failures)
 
 	var extra_root := _make_valid_fixture("extra", failures)
 	_make_directory(extra_root.path_join("other"), failures)
 	_write_bytes(extra_root.path_join("other/unlisted.dat"), PackedByteArray([9]), failures)
-	var extra := service.call(&"verify_backup", extra_root, PackedStringArray(EXPECTED_PATHS)) as Dictionary
+	var extra := _verify_unchanged(service, extra_root, "extra-file failure is read-only", failures)
 	_assert_has_error(extra, "PARTY_FORGE_MODULAR_BACKUP_ERROR stage=files path=other/unlisted.dat reason=unexpected", "extra backup file rejects", failures)
 
 
 func _test_size_and_hash_mismatch(service: RefCounted, failures: Array[String]) -> void:
 	var size_root := _make_valid_fixture("size", failures)
 	_write_bytes(size_root.path_join("assets/item.bin"), PackedByteArray([77, 69, 84, 65, 88]), failures)
-	var size_result := service.call(&"verify_backup", size_root, PackedStringArray(EXPECTED_PATHS)) as Dictionary
+	var size_result := _verify_unchanged(service, size_root, "size failure is read-only", failures)
 	_assert_has_error(size_result, "PARTY_FORGE_MODULAR_BACKUP_ERROR stage=content path=assets/item.bin reason=size expected=4 actual=5", "size mismatch rejects", failures)
 
 	var hash_root := _make_valid_fixture("hash", failures)
 	_write_bytes(hash_root.path_join("assets/item.bin"), PackedByteArray([68, 82, 73, 70]), failures)
-	var hash_result := service.call(&"verify_backup", hash_root, PackedStringArray(EXPECTED_PATHS)) as Dictionary
+	var hash_result := _verify_unchanged(service, hash_root, "hash failure is read-only", failures)
 	_assert_has_error(hash_result, "PARTY_FORGE_MODULAR_BACKUP_ERROR stage=content path=assets/item.bin reason=sha256 mismatch", "hash mismatch rejects", failures)
 
 
@@ -86,14 +94,14 @@ func _test_duplicate_and_escaped_paths(service: RefCounted, failures: Array[Stri
 	var duplicate_manifest := _read_manifest(duplicate_root)
 	(duplicate_manifest["files"] as Array).append((duplicate_manifest["files"] as Array)[0].duplicate(true))
 	_write_manifest(duplicate_root, duplicate_manifest, failures)
-	var duplicate := service.call(&"verify_backup", duplicate_root, PackedStringArray(EXPECTED_PATHS)) as Dictionary
+	var duplicate := _verify_unchanged(service, duplicate_root, "duplicate-path failure is read-only", failures)
 	_assert_has_error(duplicate, "PARTY_FORGE_MODULAR_BACKUP_ERROR stage=manifest path=assets/item.bin reason=duplicate", "duplicate manifest path rejects", failures)
 
 	var escaped_root := _make_valid_fixture("escaped", failures)
 	var escaped_manifest := _read_manifest(escaped_root)
 	(escaped_manifest["files"] as Array)[0]["path"] = "../outside.dat"
 	_write_manifest(escaped_root, escaped_manifest, failures)
-	var escaped := service.call(&"verify_backup", escaped_root, PackedStringArray(EXPECTED_PATHS)) as Dictionary
+	var escaped := _verify_unchanged(service, escaped_root, "escaped-path failure is read-only", failures)
 	_assert_has_error(escaped, "PARTY_FORGE_MODULAR_BACKUP_ERROR stage=manifest path=../outside.dat reason=must be normalized and relative", "escaped manifest path rejects before access", failures)
 
 
@@ -102,22 +110,89 @@ func _test_wrong_expected_count(service: RefCounted, failures: Array[String]) ->
 	var manifest := _read_manifest(root)
 	manifest["expected_file_count"] = 3
 	_write_manifest(root, manifest, failures)
-	var result := service.call(&"verify_backup", root, PackedStringArray(EXPECTED_PATHS)) as Dictionary
+	var result := _verify_unchanged(service, root, "expected-count failure is read-only", failures)
 	_assert_has_error(result, "PARTY_FORGE_MODULAR_BACKUP_ERROR stage=manifest field=expected_file_count expected=2 actual=3", "wrong expected count rejects", failures)
 
 
 func _test_malformed_json_and_absent_source(service: RefCounted, failures: Array[String]) -> void:
 	var malformed_root := _make_valid_fixture("malformed", failures)
 	_write_bytes(malformed_root.path_join("manifest.json"), "{not-json".to_utf8_buffer(), failures)
-	var malformed := service.call(&"verify_backup", malformed_root, PackedStringArray(EXPECTED_PATHS)) as Dictionary
+	var malformed := _verify_unchanged(service, malformed_root, "malformed-JSON failure is read-only", failures)
 	_assert_has_error(malformed, "PARTY_FORGE_MODULAR_BACKUP_ERROR stage=manifest reason=malformed JSON", "malformed JSON rejects", failures)
 
 	var source_root := _make_valid_fixture("source", failures)
 	var source_manifest := _read_manifest(source_root)
 	source_manifest.erase("source")
 	_write_manifest(source_root, source_manifest, failures)
-	var absent_source := service.call(&"verify_backup", source_root, PackedStringArray(EXPECTED_PATHS)) as Dictionary
+	var absent_source := _verify_unchanged(service, source_root, "absent-source failure is read-only", failures)
 	_assert_has_error(absent_source, "PARTY_FORGE_MODULAR_BACKUP_ERROR stage=manifest field=source reason=missing metadata", "absent source metadata rejects", failures)
+
+
+func _test_invalid_utf8_manifest(service: RefCounted, failures: Array[String]) -> void:
+	var root := _make_valid_fixture("invalid-utf8", failures)
+	var invalid_bytes := PackedByteArray([123, 34, 120, 34, 58, 34, 195, 40, 34, 125])
+	_write_bytes(root.path_join("manifest.json"), invalid_bytes, failures)
+	var result := _verify_unchanged(service, root, "invalid-UTF-8 failure is read-only", failures)
+	_assert_has_error(result, "PARTY_FORGE_MODULAR_BACKUP_ERROR stage=manifest reason=invalid UTF-8", "invalid UTF-8 rejects before JSON parsing", failures)
+	TestAssertions.equal(result.get("manifest_sha256", ""), _sha256(invalid_bytes), "invalid UTF-8 still reports raw manifest-byte SHA-256", failures)
+
+
+func _test_source_path_metadata(service: RefCounted, failures: Array[String]) -> void:
+	var cases: Array[Dictionary] = [
+		{"id": "relative-root", "field": "root", "value": "relative/source"},
+		{"id": "unnormalized-root", "field": "root", "value": "C:/trusted/../party-forge"},
+		{"id": "unc-root", "field": "root", "value": "//server/share/party-forge"},
+		{"id": "device-root", "field": "root", "value": "//?/C:/trusted/party-forge"},
+		{"id": "relative-toplevel", "field": "toplevel", "value": "relative/source"},
+		{"id": "unc-toplevel", "field": "toplevel", "value": "//server/share/party-forge"},
+	]
+	for test_case: Dictionary in cases:
+		var root := _make_valid_fixture(String(test_case["id"]), failures)
+		var manifest := _read_manifest(root)
+		(manifest["source"] as Dictionary)[test_case["field"]] = test_case["value"]
+		_write_manifest(root, manifest, failures)
+		var result := _verify_unchanged(service, root, "%s source-path failure is read-only" % test_case["id"], failures)
+		_assert_has_error(result, "PARTY_FORGE_MODULAR_BACKUP_ERROR stage=manifest field=source.%s reason=must be a normalized local absolute path" % test_case["field"], "%s source path rejects" % test_case["id"], failures)
+
+	var mismatch_root := _make_valid_fixture("source-mismatch", failures)
+	var mismatch_manifest := _read_manifest(mismatch_root)
+	(mismatch_manifest["source"] as Dictionary)["toplevel"] = "C:/trusted/other-checkout"
+	_write_manifest(mismatch_root, mismatch_manifest, failures)
+	var mismatch := _verify_unchanged(service, mismatch_root, "source identity mismatch is read-only", failures)
+	_assert_has_error(mismatch, "PARTY_FORGE_MODULAR_BACKUP_ERROR stage=manifest field=source reason=root and toplevel must identify the same path", "source root and top-level mismatch rejects", failures)
+
+	var case_root := _make_valid_fixture("source-case", failures)
+	var case_manifest := _read_manifest(case_root)
+	(case_manifest["source"] as Dictionary)["toplevel"] = "c:/TRUSTED/PARTY-FORGE"
+	_write_manifest(case_root, case_manifest, failures)
+	var case_result := service.call(&"verify_backup", case_root, PackedStringArray(EXPECTED_PATHS)) as Dictionary
+	TestAssertions.truthy(bool(case_result.get("ok", false)), "source root and top-level compare case-insensitively", failures)
+
+
+func _test_corrupt_manifest_totals(service: RefCounted, failures: Array[String]) -> void:
+	var count_root := _make_valid_fixture("file-count", failures)
+	var count_manifest := _read_manifest(count_root)
+	count_manifest["file_count"] = 3
+	_write_manifest(count_root, count_manifest, failures)
+	var count_result := _verify_unchanged(service, count_root, "file-count failure is read-only", failures)
+	_assert_has_error(count_result, "PARTY_FORGE_MODULAR_BACKUP_ERROR stage=manifest field=file_count expected=2 actual=3", "corrupt file_count rejects directly", failures)
+
+	var bytes_root := _make_valid_fixture("total-bytes", failures)
+	var bytes_manifest := _read_manifest(bytes_root)
+	bytes_manifest["total_bytes"] = 12
+	_write_manifest(bytes_root, bytes_manifest, failures)
+	var bytes_result := _verify_unchanged(service, bytes_root, "total-bytes failure is read-only", failures)
+	_assert_has_error(bytes_result, "PARTY_FORGE_MODULAR_BACKUP_ERROR stage=manifest field=total_bytes expected=11 actual=12", "corrupt total_bytes rejects directly", failures)
+
+
+func _test_single_line_dynamic_errors(service: RefCounted, failures: Array[String]) -> void:
+	var root := _make_valid_fixture("single-line", failures)
+	var manifest := _read_manifest(root)
+	(manifest["files"] as Array)[0]["path"] = "bad\r\n%s.dat" % String.chr(1)
+	_write_manifest(root, manifest, failures)
+	var result := _verify_unchanged(service, root, "control-character failure is read-only", failures)
+	_assert_has_error(result, "PARTY_FORGE_MODULAR_BACKUP_ERROR stage=manifest path=bad%0D%0A%01.dat reason=must be normalized and relative", "dynamic controls are percent-encoded", failures)
+	_assert_physical_error_lines(result.get("errors", PackedStringArray()) as PackedStringArray, "service errors", failures)
 
 
 func _test_deterministic_error_order(service: RefCounted, failures: Array[String]) -> void:
@@ -128,14 +203,45 @@ func _test_deterministic_error_order(service: RefCounted, failures: Array[String
 	manifest["expected_file_count"] = 9
 	(manifest["files"] as Array).append((manifest["files"] as Array)[0].duplicate(true))
 	_write_manifest(root, manifest, failures)
+	var before := _snapshot(root)
 	var first := service.call(&"verify_backup", root, PackedStringArray(EXPECTED_PATHS)) as Dictionary
 	var second := service.call(&"verify_backup", root, PackedStringArray(EXPECTED_PATHS)) as Dictionary
+	TestAssertions.equal(_snapshot(root), before, "repeated combined-error verification is read-only", failures)
 	var errors := first.get("errors", PackedStringArray()) as PackedStringArray
 	var sorted_errors := errors.duplicate()
 	sorted_errors.sort()
 	TestAssertions.truthy(not errors.is_empty(), "combined invalid fixture produces errors", failures)
 	TestAssertions.equal(errors, sorted_errors, "all errors have stable ordinal ordering", failures)
 	TestAssertions.equal(second.get("errors", PackedStringArray()), errors, "repeated verification returns identical errors", failures)
+
+
+func _test_cli_behavior(entry_point: Object, failures: Array[String]) -> void:
+	var success_root := _make_valid_fixture("cli-success", failures)
+	var success_manifest_bytes := FileAccess.get_file_as_bytes(success_root.path_join("manifest.json"))
+	_captured_lines.clear()
+	var success_exit := int(entry_point.call(&"run_cli", PackedStringArray(["--backup-root", success_root]), PackedStringArray(EXPECTED_PATHS), Callable(self, &"_capture_line")))
+	TestAssertions.equal(success_exit, 0, "actual CLI control flow returns zero for a valid backup", failures)
+	TestAssertions.equal(_captured_lines, ["PARTY_FORGE_MODULAR_BACKUP_OK files=2 bytes=11 manifest_sha256=%s" % _sha256(success_manifest_bytes)], "actual CLI prints success counts and raw manifest SHA", failures)
+
+	_captured_lines.clear()
+	var argument_exit := int(entry_point.call(&"run_cli", PackedStringArray(), PackedStringArray(EXPECTED_PATHS), Callable(self, &"_capture_line")))
+	TestAssertions.equal(argument_exit, 1, "actual CLI control flow returns nonzero for missing arguments", failures)
+	TestAssertions.equal(_captured_lines, ["PARTY_FORGE_MODULAR_BACKUP_ERROR stage=request argument=--backup-root reason=required"], "actual CLI prints the stable missing-argument error", failures)
+
+	var malformed_root := _make_valid_fixture("cli-malformed", failures)
+	_write_bytes(malformed_root.path_join("manifest.json"), "{broken".to_utf8_buffer(), failures)
+	var before := _snapshot(malformed_root)
+	_captured_lines.clear()
+	var malformed_exit := int(entry_point.call(&"run_cli", PackedStringArray(["--backup-root=%s" % malformed_root]), PackedStringArray(EXPECTED_PATHS), Callable(self, &"_capture_line")))
+	TestAssertions.equal(malformed_exit, 1, "actual CLI control flow returns nonzero for invalid backup", failures)
+	TestAssertions.equal(_captured_lines, ["PARTY_FORGE_MODULAR_BACKUP_ERROR stage=manifest reason=malformed JSON"], "actual CLI prints one stable verifier error per problem", failures)
+	TestAssertions.equal(_snapshot(malformed_root), before, "actual failing CLI control flow is read-only", failures)
+
+	_captured_lines.clear()
+	var control_exit := int(entry_point.call(&"run_cli", PackedStringArray(["--bad\r\n%s" % String.chr(2)]), PackedStringArray(EXPECTED_PATHS), Callable(self, &"_capture_line")))
+	TestAssertions.equal(control_exit, 1, "actual CLI rejects unknown control-bearing arguments", failures)
+	_assert_physical_error_lines(PackedStringArray(_captured_lines), "CLI errors", failures)
+	TestAssertions.truthy("argument=--bad%0D%0A%02" in _captured_lines[1 if _captured_lines.size() > 1 else 0], "CLI encodes dynamic argument controls", failures)
 
 
 func _make_valid_fixture(id: String, failures: Array[String]) -> String:
@@ -177,6 +283,32 @@ func _read_manifest(root: String) -> Dictionary:
 
 func _write_manifest(root: String, manifest: Dictionary, failures: Array[String]) -> void:
 	_write_bytes(root.path_join("manifest.json"), JSON.stringify(manifest, "\t", true).to_utf8_buffer(), failures)
+
+
+func _verify_unchanged(service: RefCounted, root: String, label: String, failures: Array[String]) -> Dictionary:
+	var before := _snapshot(root)
+	var result := service.call(&"verify_backup", root, PackedStringArray(EXPECTED_PATHS)) as Dictionary
+	TestAssertions.equal(_snapshot(root), before, label, failures)
+	return result
+
+
+func _capture_line(line: String) -> void:
+	_captured_lines.append(line)
+
+
+func _assert_physical_error_lines(lines: PackedStringArray, label: String, failures: Array[String]) -> void:
+	TestAssertions.truthy(not lines.is_empty(), "%s are present" % label, failures)
+	for line: String in lines:
+		TestAssertions.truthy(line.begins_with("PARTY_FORGE_MODULAR_BACKUP_ERROR "), "%s retain the exact prefix: %s" % [label, line], failures)
+		TestAssertions.truthy(not _has_control_character(line), "%s contain no physical control characters: %s" % [label, line], failures)
+
+
+func _has_control_character(value: String) -> bool:
+	for index: int in value.length():
+		var codepoint := value.unicode_at(index)
+		if codepoint < 32 or (codepoint >= 127 and codepoint <= 159):
+			return true
+	return false
 
 
 func _assert_has_error(result: Dictionary, expected: String, label: String, failures: Array[String]) -> void:
