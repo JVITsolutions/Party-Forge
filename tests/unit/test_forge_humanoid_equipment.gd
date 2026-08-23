@@ -1,5 +1,7 @@
 extends RefCounted
 
+const HUMANOID_RIG_CONTRACT := preload("res://scripts/presentation/humanoid_rig_contract.gd")
+
 func run() -> Array[String]:
 	var failures: Array[String] = []
 	_test_failed_replacement_and_clear(failures)
@@ -17,6 +19,7 @@ func run() -> Array[String]:
 	_test_equipment_inherits_active_feedback(failures)
 	_test_repeated_swap_and_clear_release_item_material_caches(failures)
 	_test_unmapped_equipment_material_inherits_and_restores_feedback(failures)
+	_test_shared_skin_replace_failure_and_clear_restore_regions(failures)
 	return failures
 
 func _test_failed_replacement_and_clear(failures: Array[String]) -> void:
@@ -268,6 +271,121 @@ func _test_unmapped_equipment_material_inherits_and_restores_feedback(failures: 
 	model.set_downed(false)
 	TestAssertions.equal((mesh.material_override as StandardMaterial3D).albedo_color, base_color, "cleared downed restores clean unmapped base", failures)
 	_free_model(model)
+
+func _test_shared_skin_replace_failure_and_clear_restore_regions(failures: Array[String]) -> void:
+	var definition_resource := load("res://data/presentation/humanoid_rigs/pf_humanoid_v1.tres")
+	var model := ForgeHumanoidModel.new()
+	for pivot_path: NodePath in definition_resource.pivot_paths:
+		_ensure_node_path(model, pivot_path)
+	var body := MeshInstance3D.new()
+	body.name = &"MasculineTorso"
+	body.set_meta(&"body_preset", &"masculine")
+	body.set_meta(&"body_region", &"torso")
+	body.visible = true
+	model.add_child(body)
+	var skeleton := Skeleton3D.new()
+	skeleton.name = &"CanonicalSkeleton"
+	var role_to_index: Dictionary = {}
+	for index: int in definition_resource.roles.size():
+		skeleton.add_bone(definition_resource.bone_names[index])
+		role_to_index[definition_resource.roles[index]] = index
+	for index: int in definition_resource.roles.size():
+		var parent_role: StringName = definition_resource.parent_roles[index]
+		if not parent_role.is_empty():
+			skeleton.set_bone_parent(index, role_to_index[parent_role])
+		skeleton.set_bone_rest(index, definition_resource.canonical_rests[index])
+	model.add_child(skeleton)
+	(Engine.get_main_loop() as SceneTree).root.add_child(model)
+	var valid_scene := _integration_shared_skin_scene(definition_resource, false)
+	var valid := _integration_shared_skin_visual(&"valid_armour", valid_scene, definition_resource, false)
+	TestAssertions.truthy(model.apply_equipment_visual(&"body_armour", valid), "shared-skinned equipment equips through separate binding path", failures)
+	var installed := model.find_child("ArmourMesh", true, false) as MeshInstance3D
+	TestAssertions.truthy(installed != null and installed.skeleton == installed.get_path_to(skeleton), "installed equipment binds to actor canonical skeleton", failures)
+	TestAssertions.truthy(not body.visible, "equipped shared skin hides descriptor body region", failures)
+	var invalid_scene := _integration_shared_skin_scene(definition_resource, true)
+	var invalid := _integration_shared_skin_visual(&"invalid_armour", invalid_scene, definition_resource, true)
+	TestAssertions.truthy(not model.apply_equipment_visual(&"body_armour", invalid), "invalid shared skin replacement rejects atomically", failures)
+	TestAssertions.equal(model.equipped_item_id(&"body_armour"), &"valid_armour", "failed shared skin replacement preserves prior definition", failures)
+	TestAssertions.equal(model.find_child("ArmourMesh", true, false), installed, "failed shared skin replacement preserves prior installed mesh", failures)
+	TestAssertions.truthy(not body.visible, "failed shared skin replacement preserves prior hidden region", failures)
+	TestAssertions.truthy(model.clear_equipment_visual(&"body_armour"), "shared-skinned equipment clear succeeds", failures)
+	TestAssertions.truthy(not is_instance_valid(installed), "clear frees installed skinned mesh", failures)
+	TestAssertions.truthy(body.visible, "clear restores hidden body region", failures)
+	_free_model(model)
+
+func _integration_shared_skin_visual(id: StringName, scene: PackedScene, rig: Resource, wrong_signature: bool) -> EquipmentVisualDefinition:
+	var visual := _visual(id, &"body_armour", &"", scene)
+	visual.attachment_mode = &"shared_skin"
+	visual.fit_policy = &"variant"
+	visual.body_fits = [
+		_fit(&"masculine", scene, [NodePath("MasculineRoot")]),
+		_fit(&"feminine", scene, [NodePath("FeminineRoot")]),
+	]
+	visual.body_fits[0].hide_body_regions = [&"torso"]
+	visual.rig_id = rig.rig_id
+	visual.skeleton_topology_signature = rig.topology_signature
+	visual.canonical_rest_signature = rig.canonical_rest_signature
+	visual.skin_bind_signature = "wrong" if wrong_signature else HUMANOID_RIG_CONTRACT.new().skin_bind_signature(rig, _integration_skin(rig))
+	return visual
+
+func _integration_shared_skin_scene(rig: Resource, unweighted: bool) -> PackedScene:
+	var root := Node3D.new()
+	root.name = &"SharedArmourSource"
+	var duplicate_skeleton := Skeleton3D.new()
+	duplicate_skeleton.name = &"DuplicateSkeleton"
+	root.add_child(duplicate_skeleton)
+	duplicate_skeleton.owner = root
+	var player := AnimationPlayer.new()
+	player.name = &"SourceAnimationPlayer"
+	root.add_child(player)
+	player.owner = root
+	for root_name: StringName in [&"MasculineRoot", &"FeminineRoot"]:
+		var fit_root := Node3D.new()
+		fit_root.name = root_name
+		root.add_child(fit_root)
+		fit_root.owner = root
+		var mesh := MeshInstance3D.new()
+		mesh.name = &"ArmourMesh" if root_name == &"MasculineRoot" else &"InactiveArmourMesh"
+		mesh.mesh = _integration_weighted_mesh(unweighted and root_name == &"MasculineRoot")
+		mesh.skin = _integration_skin(rig)
+		mesh.material_override = StandardMaterial3D.new()
+		fit_root.add_child(mesh)
+		mesh.owner = root
+	var scene := PackedScene.new()
+	scene.pack(root)
+	root.free()
+	return scene
+
+func _integration_weighted_mesh(unweighted: bool) -> ArrayMesh:
+	var arrays: Array = []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = PackedVector3Array([Vector3.ZERO, Vector3.RIGHT, Vector3.UP])
+	arrays[Mesh.ARRAY_INDEX] = PackedInt32Array([0, 1, 2])
+	arrays[Mesh.ARRAY_BONES] = PackedInt32Array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
+	arrays[Mesh.ARRAY_WEIGHTS] = PackedFloat32Array([
+		0.0 if unweighted else 1.0, 0.0, 0.0, 0.0,
+		0.0 if unweighted else 1.0, 0.0, 0.0, 0.0,
+		0.0 if unweighted else 1.0, 0.0, 0.0, 0.0,
+	])
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	return mesh
+
+func _integration_skin(rig: Resource) -> Skin:
+	var skin := Skin.new()
+	for index: int in rig.bone_names.size():
+		skin.add_named_bind(rig.bone_names[index], rig.canonical_rests[index].affine_inverse())
+	return skin
+
+func _ensure_node_path(root: Node, path: NodePath) -> void:
+	var cursor := root
+	for component: String in String(path).split("/"):
+		var child := cursor.get_node_or_null(NodePath(component))
+		if child == null:
+			child = Node3D.new()
+			child.name = component
+			cursor.add_child(child)
+		cursor = child
 
 func _model_with_sockets(socket_ids: Array[StringName], body_preset_id: StringName = &"masculine") -> ForgeHumanoidModel:
 	var model := ForgeHumanoidModel.new()

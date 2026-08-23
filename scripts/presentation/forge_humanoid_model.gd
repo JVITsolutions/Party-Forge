@@ -6,6 +6,7 @@ signal action_finished(action_id: StringName)
 
 const BODY_PRESETS: Array[StringName] = [&"masculine", &"feminine"]
 const HumanoidRigContractScript := preload("res://scripts/presentation/humanoid_rig_contract.gd")
+const SkinnedEquipmentBindingScript := preload("res://scripts/presentation/skinned_equipment_binding.gd")
 const CANONICAL_RIG := preload("res://data/presentation/humanoid_rigs/pf_humanoid_v1.tres")
 const SLOT_SOCKET_PATHS := {
 	&"helmet": "HitPivot/BodyPivot/HipsPivot/TorsoPivot/HeadPivot/HelmetSocket",
@@ -53,6 +54,8 @@ var palette_meshes: Dictionary = {}
 var equipped_nodes: Dictionary = {}
 var equipped_definitions: Dictionary = {}
 var base_materials: Dictionary = {}
+var body_region_nodes: Dictionary = {}
+var body_region_base_visibility: Dictionary = {}
 var active_action_id: StringName
 var _primary_color := Color.WHITE
 var _hit_weight := 0.0
@@ -74,6 +77,7 @@ func set_body_preset(preset_id: StringName) -> bool:
 		for node: Node3D in body_nodes[body_id]:
 			node.visible = body_id == preset_id
 	_active_body_preset = preset_id
+	_refresh_hidden_body_regions()
 	return true
 
 func set_palette(palette_id: StringName, primary_color: Color) -> bool:
@@ -94,11 +98,14 @@ func apply_equipment_visual(slot_id: StringName, definition: EquipmentVisualDefi
 	if not definition.combat_visible:
 		_clear_equipped_node(slot_id)
 		equipped_definitions[slot_id] = definition
+		_refresh_hidden_body_regions()
 		return true
 	var presentation_scene := definition.presentation_scene_for(_active_body_preset)
 	var selected_root_paths := definition.mesh_root_paths_for(_active_body_preset)
 	if presentation_scene == null or selected_root_paths.is_empty():
 		return false
+	if definition.attachment_mode == &"shared_skin":
+		return _apply_shared_skin_equipment(slot_id, definition)
 	var candidate_root := presentation_scene.instantiate() as Node3D
 	if candidate_root == null:
 		return false
@@ -149,6 +156,7 @@ func apply_equipment_visual(slot_id: StringName, definition: EquipmentVisualDefi
 		candidate_root.free()
 	equipped_nodes[slot_id] = installed
 	equipped_definitions[slot_id] = definition
+	_refresh_hidden_body_regions()
 	_apply_feedback_colors()
 	return true
 
@@ -157,6 +165,7 @@ func clear_equipment_visual(slot_id: StringName) -> bool:
 		return false
 	_clear_equipped_node(slot_id)
 	equipped_definitions.erase(slot_id)
+	_refresh_hidden_body_regions()
 	return true
 
 func equipped_item_id(slot_id: StringName) -> StringName:
@@ -315,12 +324,21 @@ func _ensure_cache() -> void:
 	body_nodes.clear()
 	palette_meshes.clear()
 	base_materials.clear()
+	body_region_nodes.clear()
+	body_region_base_visibility.clear()
 	for node: Node in find_children("*", "", true, false):
 		if node is Node3D and node.has_meta(&"body_preset"):
 			var preset_id := StringName(node.get_meta(&"body_preset"))
 			if not body_nodes.has(preset_id):
 				body_nodes[preset_id] = []
 			(body_nodes[preset_id] as Array).append(node)
+		if node is Node3D and node.has_meta(&"body_region"):
+			var body_region := StringName(node.get_meta(&"body_region"))
+			if not body_region.is_empty():
+				if not body_region_nodes.has(body_region):
+					body_region_nodes[body_region] = []
+				(body_region_nodes[body_region] as Array).append(node)
+				body_region_base_visibility[node] = (node as Node3D).visible
 		if node is MeshInstance3D:
 			var region := StringName(node.get_meta(&"palette_region", &""))
 			if region.is_empty():
@@ -340,6 +358,58 @@ func _ensure_cache() -> void:
 		if not _active_body_preset.is_empty():
 			break
 	_cache_ready = true
+
+func _apply_shared_skin_equipment(slot_id: StringName, definition: EquipmentVisualDefinition) -> bool:
+	var descriptor := definition.body_fit_for(_active_body_preset)
+	if descriptor == null:
+		return false
+	var skeleton := _canonical_actor_skeleton()
+	if skeleton == null:
+		return false
+	var binding := SkinnedEquipmentBindingScript.new()
+	var result: Dictionary = binding.call(&"stage_candidate", self, skeleton, definition, descriptor)
+	if not bool(result.get(&"ok", false)):
+		return false
+	var candidate := result.get(&"root") as Node3D
+	if candidate == null:
+		return false
+	_apply_item_colors(candidate, definition)
+	_clear_equipped_node(slot_id)
+	candidate.visible = true
+	equipped_nodes[slot_id] = [candidate]
+	equipped_definitions[slot_id] = definition
+	_refresh_hidden_body_regions()
+	_apply_feedback_colors()
+	return true
+
+func _canonical_actor_skeleton() -> Skeleton3D:
+	var contract := HumanoidRigContractScript.new()
+	var matches: Array[Skeleton3D] = []
+	for node: Node in find_children("*", "Skeleton3D", true, false):
+		var skeleton := node as Skeleton3D
+		if (contract.call(&"validate_rig", CANONICAL_RIG, skeleton, self) as PackedStringArray).is_empty():
+			matches.append(skeleton)
+	return matches[0] if matches.size() == 1 else null
+
+func _refresh_hidden_body_regions() -> void:
+	var hidden_regions: Dictionary = {}
+	for slot_id: StringName in equipped_definitions:
+		var definition := equipped_definitions[slot_id] as EquipmentVisualDefinition
+		if definition == null or definition.attachment_mode != &"shared_skin":
+			continue
+		var descriptor := definition.body_fit_for(_active_body_preset)
+		if descriptor == null:
+			continue
+		for region: StringName in descriptor.hide_body_regions:
+			hidden_regions[region] = true
+	for region: StringName in body_region_nodes:
+		for body_node: Node3D in body_region_nodes[region]:
+			if not is_instance_valid(body_node):
+				continue
+			var base_visible := bool(body_region_base_visibility.get(body_node, true))
+			if body_node.has_meta(&"body_preset"):
+				base_visible = StringName(body_node.get_meta(&"body_preset")) == _active_body_preset
+			body_node.visible = base_visible and not hidden_regions.has(region)
 
 func _apply_item_colors(root: Node3D, definition: EquipmentVisualDefinition) -> void:
 	for mesh: MeshInstance3D in _meshes_including_root(root):
