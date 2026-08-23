@@ -3,6 +3,7 @@ extends RefCounted
 const CANONICAL_RIG_PATH := "res://data/presentation/humanoid_rigs/pf_humanoid_v1.tres"
 const CONTRACT_SCRIPT := preload("res://scripts/presentation/humanoid_rig_contract.gd")
 const SLOT_ID: StringName = &"body_armour"
+const CLASS_DIRECTORY := "res://data/classes"
 
 func run() -> Array[String]:
 	var failures: Array[String] = []
@@ -24,7 +25,14 @@ func run() -> Array[String]:
 func _test_equipment_installation_preserves_parent_name_map(failures: Array[String]) -> void:
 	var root := Node3D.new()
 	(Engine.get_main_loop() as SceneTree).root.add_child(root)
-	for definition: ClassDefinition in GameCatalog.load_defaults().classes:
+	var class_files := DirAccess.get_files_at(CLASS_DIRECTORY)
+	class_files.sort()
+	var class_count := 0
+	for class_file: String in class_files:
+		if not class_file.ends_with(".tres"):
+			continue
+		class_count += 1
+		var definition := load("%s/%s" % [CLASS_DIRECTORY, class_file]) as ClassDefinition
 		for body_id: StringName in [&"masculine", &"feminine"]:
 			var actor := (load("res://scenes/characters/leader.tscn") as PackedScene).instantiate() as PartyActor
 			root.add_child(actor)
@@ -35,6 +43,7 @@ func _test_equipment_installation_preserves_parent_name_map(failures: Array[Stri
 			if not consistent:
 				return
 			actor.free()
+	TestAssertions.truthy(class_count > 0, "fixture discovers playable class resources", failures)
 	root.free()
 
 func _child_name_map_is_consistent(root: Node) -> bool:
