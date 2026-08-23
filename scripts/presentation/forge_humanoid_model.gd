@@ -7,6 +7,7 @@ signal action_finished(action_id: StringName)
 const BODY_PRESETS: Array[StringName] = [&"masculine", &"feminine"]
 const HumanoidRigContractScript := preload("res://scripts/presentation/humanoid_rig_contract.gd")
 const SkinnedEquipmentBindingScript := preload("res://scripts/presentation/skinned_equipment_binding.gd")
+const BodyRegionCatalogScript := preload("res://scripts/presentation/body_region_catalog.gd")
 const CANONICAL_RIG := preload("res://data/presentation/humanoid_rigs/pf_humanoid_v1.tres")
 const SLOT_SOCKET_PATHS := {
 	&"helmet": "HitPivot/BodyPivot/HipsPivot/TorsoPivot/HeadPivot/HelmetSocket",
@@ -63,6 +64,7 @@ var _hit_weight := 0.0
 var _is_downed := false
 var _cache_ready := false
 var _active_body_preset: StringName
+var _body_region_contract_valid := true
 
 func _ready() -> void:
 	_ensure_cache()
@@ -72,7 +74,7 @@ func _ready() -> void:
 
 func set_body_preset(preset_id: StringName) -> bool:
 	_ensure_cache()
-	if preset_id not in BODY_PRESETS:
+	if preset_id not in BODY_PRESETS or not _body_region_contract_valid:
 		return false
 	for body_id: StringName in body_nodes:
 		for node: Node3D in body_nodes[body_id]:
@@ -83,7 +85,7 @@ func set_body_preset(preset_id: StringName) -> bool:
 
 func prepare_body_preset_change(preset_id: StringName) -> Dictionary:
 	_ensure_cache()
-	if preset_id not in BODY_PRESETS or (body_nodes.get(preset_id, []) as Array).is_empty():
+	if preset_id not in BODY_PRESETS or not _body_region_contract_valid or (body_nodes.get(preset_id, []) as Array).is_empty():
 		return _body_fit_failure()
 	var candidate := {
 		&"ok": false,
@@ -167,6 +169,9 @@ func apply_equipment_visual(slot_id: StringName, definition: EquipmentVisualDefi
 	_ensure_cache()
 	if definition == null or slot_id not in definition.supported_slot_ids or not EquipmentSlotCatalog.is_valid(slot_id):
 		return false
+	var active_descriptor := definition.body_fit_for(_active_body_preset)
+	if active_descriptor != null and not _hidden_body_regions_are_valid(active_descriptor.hide_body_regions):
+		return false
 	if not definition.combat_visible:
 		_clear_equipped_node(slot_id)
 		equipped_definitions[slot_id] = definition
@@ -211,8 +216,13 @@ func apply_equipment_visual(slot_id: StringName, definition: EquipmentVisualDefi
 			candidate_root.free()
 			return false
 		staged.append({&"node": attachment, &"socket": socket})
+	if not _materials_support_runtime_feedback(candidate_root):
+		candidate_root.free()
+		return false
 	for attachment: Node3D in attachment_nodes:
-		_apply_item_colors(attachment, definition)
+		if not _apply_item_colors(attachment, definition):
+			candidate_root.free()
+			return false
 	_clear_equipped_node(slot_id)
 	var installed: Array[Node3D] = []
 	for part: Dictionary in staged:
@@ -383,6 +393,7 @@ func _clear_equipped_node(slot_id: StringName) -> void:
 				continue
 			erased_meshes[mesh] = true
 			base_materials.erase(mesh)
+		_clear_surface_material_overrides(old as Node3D)
 		(old as Node3D).free()
 	equipped_nodes.erase(slot_id)
 
@@ -395,6 +406,17 @@ func _ensure_cache() -> void:
 	base_materials.clear()
 	body_region_nodes.clear()
 	body_region_base_visibility.clear()
+	_body_region_contract_valid = true
+	var region_catalog := BodyRegionCatalogScript.new()
+	for candidate: Node in find_children("*", "", true, false):
+		if not candidate is Node3D or not candidate.has_meta(&"body_preset") or not region_catalog.call(&"has_imported_regions", candidate):
+			continue
+		if not (region_catalog.call(&"validate_body_root", candidate) as PackedStringArray).is_empty():
+			_body_region_contract_valid = false
+		for region_mesh: MeshInstance3D in region_catalog.call(&"region_nodes", candidate) as Array[MeshInstance3D]:
+			var region_id := StringName(region_catalog.call(&"region_id", region_mesh))
+			if not region_id.is_empty():
+				region_mesh.set_meta(&"body_region", region_id)
 	for node: Node in find_children("*", "", true, false):
 		if node is Node3D and node.has_meta(&"body_preset"):
 			var preset_id := StringName(node.get_meta(&"body_preset"))
@@ -409,15 +431,7 @@ func _ensure_cache() -> void:
 				(body_region_nodes[body_region] as Array).append(node)
 				body_region_base_visibility[node] = (node as Node3D).visible
 		if node is MeshInstance3D:
-			var region := StringName(node.get_meta(&"palette_region", &""))
-			if region.is_empty():
-				continue
-			if not palette_meshes.has(region):
-				palette_meshes[region] = []
-			(palette_meshes[region] as Array).append(node)
-			var material := (node as MeshInstance3D).material_override as StandardMaterial3D
-			if material != null:
-				base_materials[node] = material.duplicate() as StandardMaterial3D
+			_cache_mesh_materials(node as MeshInstance3D)
 	_active_body_preset = &""
 	for body_preset: StringName in BODY_PRESETS:
 		for body_node: Node3D in body_nodes.get(body_preset, []):
@@ -442,7 +456,10 @@ func _apply_shared_skin_equipment(slot_id: StringName, definition: EquipmentVisu
 	var candidate := result.get(&"root") as Node3D
 	if candidate == null:
 		return false
-	_apply_item_colors(candidate, definition)
+	if not _apply_item_colors(candidate, definition):
+		_clear_surface_material_overrides(candidate)
+		candidate.free()
+		return false
 	_clear_equipped_node(slot_id)
 	candidate.visible = true
 	equipped_nodes[slot_id] = [candidate]
@@ -475,7 +492,10 @@ func _stage_shared_skin_body_fit(definition: EquipmentVisualDefinition, descript
 	if candidate == null:
 		return _body_fit_failure()
 	candidate.set_meta(BODY_FIT_CANDIDATE_META, true)
-	_apply_item_colors(candidate, definition, material_bases)
+	if not _apply_item_colors(candidate, definition, material_bases):
+		_clear_surface_material_overrides(candidate)
+		candidate.free()
+		return _body_fit_failure()
 	return {&"ok": true, &"kind": &"shared_skin", &"definition": definition, &"root": candidate, &"attachments": []}
 
 func _stage_rigid_body_fit(slot_id: StringName, definition: EquipmentVisualDefinition, descriptor: EquipmentBodyFitDescriptor, material_bases: Dictionary) -> Dictionary:
@@ -486,6 +506,9 @@ func _stage_rigid_body_fit(slot_id: StringName, definition: EquipmentVisualDefin
 			instance.free()
 		return _body_fit_failure()
 	candidate_root.set_meta(BODY_FIT_CANDIDATE_META, true)
+	if not _materials_support_runtime_feedback(candidate_root):
+		candidate_root.free()
+		return _body_fit_failure()
 	var attachment_nodes: Array[Node3D] = []
 	for root_path: NodePath in descriptor.mesh_root_paths:
 		var selected_root := candidate_root.get_node_or_null(root_path) as Node3D
@@ -516,7 +539,9 @@ func _stage_rigid_body_fit(slot_id: StringName, definition: EquipmentVisualDefin
 			candidate_root.free()
 			return _body_fit_failure()
 		staged.append({&"node": attachment, &"socket": socket})
-		_apply_item_colors(attachment, definition, material_bases)
+		if not _apply_item_colors(attachment, definition, material_bases):
+			candidate_root.free()
+			return _body_fit_failure()
 	return {&"ok": true, &"kind": &"rigid", &"definition": definition, &"root": candidate_root, &"attachments": staged}
 
 func _candidate_visual_bounds(preset_id: StringName, hidden_regions: Dictionary, candidate_equipment: Dictionary) -> AABB:
@@ -683,6 +708,7 @@ func _discard_staged_equipment(candidate_equipment: Dictionary) -> void:
 		var staged := candidate_equipment[slot_id] as Dictionary
 		var root := staged.get(&"root") as Node3D
 		if root != null and is_instance_valid(root):
+			_clear_surface_material_overrides(root)
 			root.free()
 	candidate_equipment.clear()
 
@@ -718,22 +744,121 @@ func _refresh_hidden_body_regions() -> void:
 				base_visible = StringName(body_node.get_meta(&"body_preset")) == _active_body_preset
 			body_node.visible = base_visible and not hidden_regions.has(region)
 
-func _apply_item_colors(root: Node3D, definition: EquipmentVisualDefinition, material_bases: Dictionary = base_materials) -> void:
+func _hidden_body_regions_are_valid(regions: Array[StringName]) -> bool:
+	for region: StringName in regions:
+		if region.is_empty() or not body_region_nodes.has(region):
+			return false
+	return true
+
+func _apply_item_colors(root: Node3D, definition: EquipmentVisualDefinition, material_bases: Dictionary = base_materials) -> bool:
+	if not _materials_support_runtime_feedback(root):
+		return false
 	for mesh: MeshInstance3D in _meshes_including_root(root):
-		var region := StringName(mesh.get_meta(&"palette_region", &""))
-		var material := mesh.material_override as StandardMaterial3D
-		if material == null:
+		if mesh.material_override != null:
+			if not mesh.material_override is StandardMaterial3D:
+				return false
+			var override_material := mesh.material_override as StandardMaterial3D
+			var unique_override := override_material.duplicate(true) as StandardMaterial3D
+			_apply_definition_color(unique_override, _material_region(mesh, override_material), definition)
+			mesh.material_override = unique_override
+			material_bases[mesh] = unique_override.duplicate(true) as StandardMaterial3D
 			continue
-		var color: Variant = null
-		if not definition.wearer_accent_channel.is_empty() and region == definition.wearer_accent_channel:
-			color = _primary_color
-		elif definition.item_colors.has(region):
-			color = definition.item_colors[region]
-		var unique_material := material.duplicate() as StandardMaterial3D
-		if typeof(color) == TYPE_COLOR:
-			unique_material.albedo_color = color as Color
-		mesh.material_override = unique_material
-		material_bases[mesh] = unique_material.duplicate() as StandardMaterial3D
+		if mesh.mesh == null:
+			continue
+		var surface_bases: Array = []
+		surface_bases.resize(mesh.mesh.get_surface_count())
+		var has_material := false
+		for surface_index: int in mesh.mesh.get_surface_count():
+			var active_material := mesh.get_surface_override_material(surface_index)
+			if active_material == null:
+				active_material = mesh.mesh.surface_get_material(surface_index)
+			if active_material == null:
+				continue
+			if not active_material is StandardMaterial3D:
+				return false
+			var unique_surface := active_material.duplicate(true) as StandardMaterial3D
+			_apply_definition_color(unique_surface, _material_region(mesh, active_material), definition)
+			mesh.set_surface_override_material(surface_index, unique_surface)
+			surface_bases[surface_index] = unique_surface.duplicate(true) as StandardMaterial3D
+			has_material = true
+		if has_material:
+			material_bases[mesh] = surface_bases
+	return true
+
+func _materials_support_runtime_feedback(root: Node3D) -> bool:
+	for mesh: MeshInstance3D in _meshes_including_root(root):
+		if mesh.material_override != null:
+			if not mesh.material_override is StandardMaterial3D:
+				return false
+			continue
+		if mesh.mesh == null:
+			continue
+		for surface_index: int in mesh.mesh.get_surface_count():
+			var material := mesh.get_surface_override_material(surface_index)
+			if material == null:
+				material = mesh.mesh.surface_get_material(surface_index)
+			if material != null and not material is StandardMaterial3D:
+				return false
+	return true
+
+func _clear_surface_material_overrides(root: Node3D) -> void:
+	for mesh: MeshInstance3D in _meshes_including_root(root):
+		if mesh.mesh == null or mesh.material_override != null:
+			continue
+		for surface_index: int in mesh.mesh.get_surface_count():
+			if mesh.get_surface_override_material(surface_index) != null:
+				mesh.set_surface_override_material(surface_index, null)
+
+func _apply_definition_color(material: StandardMaterial3D, region: StringName, definition: EquipmentVisualDefinition) -> void:
+	if not definition.wearer_accent_channel.is_empty() and region == definition.wearer_accent_channel:
+		material.albedo_color = _primary_color
+	elif definition.item_colors.has(region) and typeof(definition.item_colors[region]) == TYPE_COLOR:
+		material.albedo_color = definition.item_colors[region] as Color
+
+func _material_region(mesh: MeshInstance3D, material: Material) -> StringName:
+	if material != null and material.has_meta(&"palette_region"):
+		return StringName(material.get_meta(&"palette_region"))
+	return StringName(mesh.get_meta(&"palette_region", &""))
+
+func _cache_mesh_materials(mesh: MeshInstance3D) -> bool:
+	if mesh.material_override != null:
+		if not mesh.material_override is StandardMaterial3D:
+			return false
+		var override_material := mesh.material_override as StandardMaterial3D
+		var unique_override := override_material.duplicate(true) as StandardMaterial3D
+		mesh.material_override = unique_override
+		base_materials[mesh] = unique_override.duplicate(true) as StandardMaterial3D
+		_register_palette_mesh(mesh, _material_region(mesh, override_material))
+		return true
+	if mesh.mesh == null:
+		return true
+	var surface_bases: Array = []
+	surface_bases.resize(mesh.mesh.get_surface_count())
+	var has_material := false
+	for surface_index: int in mesh.mesh.get_surface_count():
+		var source_material := mesh.get_surface_override_material(surface_index)
+		if source_material == null:
+			source_material = mesh.mesh.surface_get_material(surface_index)
+		if source_material == null:
+			continue
+		if not source_material is StandardMaterial3D:
+			return false
+		var unique_surface := source_material.duplicate(true) as StandardMaterial3D
+		mesh.set_surface_override_material(surface_index, unique_surface)
+		surface_bases[surface_index] = unique_surface.duplicate(true) as StandardMaterial3D
+		_register_palette_mesh(mesh, _material_region(mesh, source_material))
+		has_material = true
+	if has_material:
+		base_materials[mesh] = surface_bases
+	return true
+
+func _register_palette_mesh(mesh: MeshInstance3D, region: StringName) -> void:
+	if region.is_empty():
+		return
+	if not palette_meshes.has(region):
+		palette_meshes[region] = []
+	if mesh not in palette_meshes[region]:
+		(palette_meshes[region] as Array).append(mesh)
 
 func _refresh_equipped_wearer_accents() -> void:
 	for slot_id: StringName in equipped_definitions:
@@ -742,15 +867,7 @@ func _refresh_equipped_wearer_accents() -> void:
 			continue
 		for attachment: Node3D in equipped_nodes.get(slot_id, []):
 			for mesh: MeshInstance3D in _meshes_including_root(attachment):
-				if StringName(mesh.get_meta(&"palette_region", &"")) != definition.wearer_accent_channel:
-					continue
-				var material := base_materials.get(mesh, mesh.material_override) as StandardMaterial3D
-				if material == null:
-					continue
-				var unique_material := material.duplicate() as StandardMaterial3D
-				unique_material.albedo_color = _primary_color
-				mesh.material_override = unique_material
-				base_materials[mesh] = unique_material.duplicate() as StandardMaterial3D
+				_rebase_material_region(mesh, definition.wearer_accent_channel, _primary_color)
 
 func _meshes_including_root(root: Node3D) -> Array[MeshInstance3D]:
 	var meshes: Array[MeshInstance3D] = []
@@ -900,32 +1017,60 @@ func _distance_to_aabb(point: Vector3, bounds: AABB) -> float:
 	return point.distance_to(closest)
 
 func _assign_unique_color(mesh: MeshInstance3D, color: Color) -> void:
-	var material := base_materials.get(mesh, mesh.material_override) as StandardMaterial3D
-	if material == null:
+	_rebase_material_region(mesh, &"primary", color)
+
+func _rebase_material_region(mesh: MeshInstance3D, region: StringName, color: Color) -> void:
+	if not base_materials.has(mesh):
 		return
-	var unique_material := material.duplicate() as StandardMaterial3D
-	unique_material.albedo_color = color
-	mesh.material_override = unique_material
-	base_materials[mesh] = unique_material.duplicate() as StandardMaterial3D
+	var state: Variant = base_materials[mesh]
+	if state is StandardMaterial3D:
+		var base_material := state as StandardMaterial3D
+		if _material_region(mesh, base_material) != region:
+			return
+		var unique_material := base_material.duplicate(true) as StandardMaterial3D
+		unique_material.albedo_color = color
+		mesh.material_override = unique_material
+		base_materials[mesh] = unique_material.duplicate(true) as StandardMaterial3D
+		return
+	if not state is Array:
+		return
+	var surface_bases := state as Array
+	for surface_index: int in surface_bases.size():
+		var base_material := surface_bases[surface_index] as StandardMaterial3D
+		if base_material == null or _material_region(mesh, base_material) != region:
+			continue
+		var unique_surface := base_material.duplicate(true) as StandardMaterial3D
+		unique_surface.albedo_color = color
+		mesh.set_surface_override_material(surface_index, unique_surface)
+		surface_bases[surface_index] = unique_surface.duplicate(true) as StandardMaterial3D
+	base_materials[mesh] = surface_bases
 
 func _apply_feedback_colors() -> void:
 	for mesh: MeshInstance3D in _all_meshes():
 		if not base_materials.has(mesh):
 			continue
-		var base_material := base_materials[mesh] as StandardMaterial3D
-		if base_material == null:
-			continue
-		var base := base_material.albedo_color
-		var color := _hit_flash_color(base, _hit_weight)
-		if _is_downed:
-			color = Color(color.get_luminance(), color.get_luminance(), color.get_luminance(), color.a)
-		var unique_material := base_material.duplicate() as StandardMaterial3D
-		unique_material.albedo_color = color
-		if _hit_weight > 0.0:
-			unique_material.emission_enabled = true
-			unique_material.emission = _hit_flash_color(base, _hit_weight)
-			unique_material.emission_energy_multiplier = minf(0.45, maxf(unique_material.emission_energy_multiplier, _hit_weight * 0.45))
-		mesh.material_override = unique_material
+		var state: Variant = base_materials[mesh]
+		if state is StandardMaterial3D:
+			mesh.material_override = _feedback_material(state as StandardMaterial3D)
+		elif state is Array:
+			var surface_bases := state as Array
+			for surface_index: int in surface_bases.size():
+				var surface_base := surface_bases[surface_index] as StandardMaterial3D
+				if surface_base != null:
+					mesh.set_surface_override_material(surface_index, _feedback_material(surface_base))
+
+func _feedback_material(base_material: StandardMaterial3D) -> StandardMaterial3D:
+	var base := base_material.albedo_color
+	var color := _hit_flash_color(base, _hit_weight)
+	if _is_downed:
+		color = Color(color.get_luminance(), color.get_luminance(), color.get_luminance(), color.a)
+	var unique_material := base_material.duplicate(true) as StandardMaterial3D
+	unique_material.albedo_color = color
+	if _hit_weight > 0.0:
+		unique_material.emission_enabled = true
+		unique_material.emission = _hit_flash_color(base, _hit_weight)
+		unique_material.emission_energy_multiplier = minf(0.45, maxf(unique_material.emission_energy_multiplier, _hit_weight * 0.45))
+	return unique_material
 
 func _hit_flash_color(base: Color, weight: float) -> Color:
 	var color := base.lightened(clampf(weight, 0.0, 1.0) * 0.35)
