@@ -4,6 +4,7 @@ extends RefCounted
 const ACTION_ARCHETYPE := preload("res://scripts/combat/action_archetype.gd")
 const ACTION_DAMAGE_PROJECTION := preload("res://scripts/combat/action_damage_projection.gd")
 const ACTION_DAMAGE_COMPONENT_PROJECTION := preload("res://scripts/combat/action_damage_component_projection.gd")
+const DAMAGE_DEFENSE_SNAPSHOT := preload("res://scripts/combat/damage_defense_snapshot.gd")
 const MULTI_CRIT_ROLL := preload("res://scripts/combat/multi_crit_roll.gd")
 
 static func action_tags_for(attack: AttackDefinition, weapon: ActiveWeaponDamageSnapshot = null) -> Array[StringName]:
@@ -87,25 +88,92 @@ static func resolve(packet: DamagePacket, target: CombatantAdapter, rng: CombatR
 		result.error_reason = invalid_reason
 		if packet == null or packet.valid: push_error(invalid_reason)
 		return result
+	var snapshot: DAMAGE_DEFENSE_SNAPSHOT = capture_defense(packet, target, types)
+	if snapshot == null or not snapshot.valid:
+		result.error_reason = snapshot.error_reason if snapshot != null else "PARTY_FORGE_DAMAGE_ERROR attack=%s source=%s target=%s reason=missing defense snapshot" % [packet.attack_id, packet.source_id, target.combatant_id]
+		return result
+	var roll: MULTI_CRIT_ROLL = packet.multi_crit_roll
+	var first_critical := roll != null and not roll.critical_flags.is_empty() and roll.critical_flags[0]
+	return resolve_instance(packet, 0, first_critical, snapshot, target, rng, types, true, true)
+
+static func capture_defense(packet: DamagePacket, target: CombatantAdapter, types: DamageTypeCatalog) -> DAMAGE_DEFENSE_SNAPSHOT:
+	var invalid_reason := _capture_error(packet, target, types)
+	if not invalid_reason.is_empty():
+		if packet == null or packet.valid: push_error(invalid_reason)
+		return DAMAGE_DEFENSE_SNAPSHOT.invalid(invalid_reason) as DAMAGE_DEFENSE_SNAPSHOT
+	var type_defenses: Dictionary = {}
+	for prepared: PreparedDamageComponent in packet.components:
+		if type_defenses.has(prepared.damage_type_id):
+			continue
+		var definition := types.definition(prepared.damage_type_id)
+		type_defenses[prepared.damage_type_id] = {
+			"defense_stat_id": definition.defense_stat_id,
+			"defense_value": target.stat_value(definition.defense_stat_id, 0.0),
+			"mitigation_rule": definition.mitigation_rule,
+		}
+	var snapshot: DAMAGE_DEFENSE_SNAPSHOT = DAMAGE_DEFENSE_SNAPSHOT.create(
+		target.combatant_id,
+		target.team_id,
+		target.stat_value(&"dodge_chance", 0.0),
+		type_defenses,
+		target.incoming_damage_multiplier(packet),
+		target.stat_value(&"block_chance", 0.0),
+		target.stat_value(&"block_effectiveness", 0.5)
+	) as DAMAGE_DEFENSE_SNAPSHOT
+	if snapshot == null:
+		var missing_reason := "PARTY_FORGE_DAMAGE_ERROR attack=%s source=%s target=%s reason=missing defense snapshot" % [packet.attack_id, packet.source_id, target.combatant_id]
+		push_error(missing_reason)
+		return DAMAGE_DEFENSE_SNAPSHOT.invalid(missing_reason) as DAMAGE_DEFENSE_SNAPSHOT
+	if not snapshot.valid:
+		var contextual_reason := _snapshot_context_error(packet, target, snapshot.error_reason)
+		push_error(contextual_reason)
+		return DAMAGE_DEFENSE_SNAPSHOT.invalid(contextual_reason) as DAMAGE_DEFENSE_SNAPSHOT
+	return snapshot
+
+static func resolve_instance(
+	packet: DamagePacket,
+	instance_index: int,
+	critical: bool,
+	snapshot: DAMAGE_DEFENSE_SNAPSHOT,
+	target: CombatantAdapter,
+	rng: CombatRng,
+	types: DamageTypeCatalog,
+	apply_health: bool,
+	allow_life_steal: bool
+) -> DamageResult:
+	var result := _base_result(packet, target)
+	result.instance_index = instance_index
+	result.critical = critical
+	var invalid_reason := _instance_resolution_error(packet, instance_index, critical, snapshot, target, rng, types, apply_health)
+	if not invalid_reason.is_empty():
+		result.error_reason = invalid_reason
+		if packet == null or packet.valid: push_error(invalid_reason)
+		return result
+	result.health_before = maxf(0.0, target.health.current_health)
+	result.target_was_alive = target.available and not target.health.is_dead and not target.health.is_downed and result.health_before > 0.0
+	result.overkill_only = not result.target_was_alive
 	result.valid = true
-	result.dodge_chance = target.stat_value(&"dodge_chance", 0.0)
+	result.dodge_chance = snapshot.dodge_chance
 	var dodge := rng.roll(result.dodge_chance)
 	result.dodge_draw = float(dodge["draw"])
 	result.dodged = bool(dodge["success"])
 	if result.dodged: return result
 
+	var frozen_defenses := snapshot.type_defenses
 	for prepared: PreparedDamageComponent in packet.components:
-		var definition := types.definition(prepared.damage_type_id)
-		var defense := target.stat_value(definition.defense_stat_id, 0.0)
-		var mitigated := prepared.post_crit
-		match definition.mitigation_rule:
+		var defense_row := frozen_defenses[prepared.damage_type_id] as Dictionary
+		var defense := float(defense_row["defense_value"])
+		var mitigation_rule := int(defense_row["mitigation_rule"])
+		var post_crit := prepared.typed_scaled * packet.crit_multiplier if critical else prepared.typed_scaled
+		var mitigated := post_crit
+		match mitigation_rule:
 			DamageTypeDefinition.MitigationRule.ARMOR:
-				mitigated = prepared.post_crit * 100.0 / (100.0 + maxf(0.0, defense))
+				mitigated = post_crit * 100.0 / (100.0 + maxf(0.0, defense))
 			DamageTypeDefinition.MitigationRule.RESISTANCE:
-				mitigated = prepared.post_crit * (1.0 - defense)
+				mitigated = post_crit * (1.0 - defense)
 			_:
 				result.valid = false
-				result.error_reason = _unsupported_mitigation_rule_error(packet, target, prepared.damage_type_id, definition.mitigation_rule)
+				result.error_reason = _unsupported_mitigation_rule_error(packet, target, prepared.damage_type_id, mitigation_rule)
 				push_error(result.error_reason)
 				return result
 		mitigated = maxf(0.0, mitigated)
@@ -115,25 +183,35 @@ static func resolve(packet: DamagePacket, target: CombatantAdapter, rng: CombatR
 			"authored_amount": prepared.authored_amount,
 			"global_scaled": prepared.global_scaled,
 			"typed_scaled": prepared.typed_scaled,
-			"post_crit": prepared.post_crit,
-			"defense_stat_id": definition.defense_stat_id,
+			"post_crit": post_crit,
+			"defense_stat_id": StringName(defense_row["defense_stat_id"]),
 			"defense_value": defense,
 			"post_mitigation": mitigated,
 		})
 
-	result.incoming_multiplier = target.incoming_damage_multiplier(packet)
+	result.incoming_multiplier = snapshot.incoming_multiplier
 	result.damage_before_block = result.total_post_mitigation * result.incoming_multiplier
 	result.incoming_prevented = result.total_post_mitigation - result.damage_before_block
-	result.block_chance = target.stat_value(&"block_chance", 0.0)
+	result.block_chance = snapshot.block_chance
 	var block := rng.roll(result.block_chance)
 	result.block_draw = float(block["draw"])
 	result.blocked = bool(block["success"])
-	result.block_effectiveness = target.stat_value(&"block_effectiveness", 0.5) if result.blocked else 0.0
+	result.block_effectiveness = snapshot.block_effectiveness if result.blocked else 0.0
 	result.final_damage = maxf(0.0, result.damage_before_block * (1.0 - result.block_effectiveness))
 	result.block_prevented = result.damage_before_block - result.final_damage
-	result.actual_health_removed = target.health.apply_damage(result.final_damage)
+	if apply_health and result.target_was_alive:
+		result.actual_health_removed = target.health.apply_damage(result.final_damage)
+	result.killing_blow = result.target_was_alive and result.actual_health_removed > 0.0 and (target.health.is_dead or target.health.is_downed or target.health.current_health <= 0.0)
+	if result.final_damage > 0.0:
+		if result.overkill_only:
+			result.excess_damage = result.final_damage
+		elif apply_health:
+			result.excess_damage = maxf(0.0, result.final_damage - result.actual_health_removed)
+		else:
+			result.excess_damage = maxf(0.0, result.final_damage - result.health_before)
+	result.proc_eligible = result.target_was_alive and result.final_damage > 0.0 and (not apply_health or result.actual_health_removed > 0.0)
 	result.life_steal_rate = packet.life_steal_rate
-	if packet.source_is_available_for_life_steal() and result.actual_health_removed > 0.0:
+	if allow_life_steal and packet.source_is_available_for_life_steal() and result.actual_health_removed > 0.0:
 		result.life_steal_restored = packet.source.health.heal(result.actual_health_removed * packet.life_steal_rate)
 	return result
 
@@ -149,6 +227,65 @@ static func _base_result(packet: DamagePacket, target: CombatantAdapter) -> Dama
 		result.crit_multiplier = packet.crit_multiplier
 	if target != null: result.target_id = target.combatant_id
 	return result
+
+static func _capture_error(packet: DamagePacket, target: CombatantAdapter, types: DamageTypeCatalog) -> String:
+	if packet == null: return "PARTY_FORGE_DAMAGE_ERROR attack=<null> source=<null> target=<unknown> reason=missing packet"
+	if not packet.valid: return packet.error_reason
+	if target == null: return "PARTY_FORGE_DAMAGE_ERROR attack=%s source=%s target=<null> reason=missing target provider" % [packet.attack_id, packet.source_id]
+	if target.combatant_id.is_empty(): return "PARTY_FORGE_DAMAGE_ERROR attack=%s source=%s target=<empty> reason=missing combatant identity" % [packet.attack_id, packet.source_id]
+	if not target.available or target.health == null: return "PARTY_FORGE_DAMAGE_ERROR attack=%s source=%s target=%s reason=target unavailable" % [packet.attack_id, packet.source_id, target.combatant_id]
+	if packet.source_team_id == target.team_id: return "PARTY_FORGE_DAMAGE_ERROR attack=%s source=%s target=%s reason=team-invalid target" % [packet.attack_id, packet.source_id, target.combatant_id]
+	if types == null: return "PARTY_FORGE_DAMAGE_ERROR attack=%s source=%s target=%s reason=missing damage catalog" % [packet.attack_id, packet.source_id, target.combatant_id]
+	for component: PreparedDamageComponent in packet.components:
+		var definition := types.definition(component.damage_type_id)
+		if definition == null: return "PARTY_FORGE_DAMAGE_ERROR attack=%s source=%s target=%s type=%s reason=unknown runtime type" % [packet.attack_id, packet.source_id, target.combatant_id, component.damage_type_id]
+		if definition.mitigation_rule not in [DamageTypeDefinition.MitigationRule.ARMOR, DamageTypeDefinition.MitigationRule.RESISTANCE]: return _unsupported_mitigation_rule_error(packet, target, component.damage_type_id, definition.mitigation_rule)
+		if not is_finite(component.typed_scaled) or component.typed_scaled < 0.0: return "PARTY_FORGE_DAMAGE_ERROR attack=%s source=%s target=%s type=%s reason=invalid runtime amount" % [packet.attack_id, packet.source_id, target.combatant_id, component.damage_type_id]
+	return ""
+
+static func _snapshot_context_error(packet: DamagePacket, target: CombatantAdapter, reason: String) -> String:
+	var detail := reason.trim_prefix("PARTY_FORGE_DAMAGE_ERROR ")
+	return "PARTY_FORGE_DAMAGE_ERROR attack=%s source=%s target=%s snapshot={%s}" % [packet.attack_id, packet.source_id, target.combatant_id, detail]
+
+static func _instance_resolution_error(
+	packet: DamagePacket,
+	instance_index: int,
+	critical: bool,
+	snapshot: DAMAGE_DEFENSE_SNAPSHOT,
+	target: CombatantAdapter,
+	rng: CombatRng,
+	types: DamageTypeCatalog,
+	apply_health: bool
+) -> String:
+	if packet == null: return "PARTY_FORGE_DAMAGE_ERROR attack=<null> source=<null> target=<unknown> reason=missing packet"
+	if not packet.valid: return packet.error_reason
+	if snapshot == null: return "PARTY_FORGE_DAMAGE_ERROR attack=%s source=%s target=<unknown> instance=%d reason=missing defense snapshot" % [packet.attack_id, packet.source_id, instance_index]
+	if not snapshot.valid:
+		return snapshot.error_reason if not snapshot.error_reason.is_empty() else "PARTY_FORGE_DAMAGE_ERROR attack=%s source=%s target=<unknown> instance=%d reason=invalid defense snapshot" % [packet.attack_id, packet.source_id, instance_index]
+	if target == null: return "PARTY_FORGE_DAMAGE_ERROR attack=%s source=%s target=<null> instance=%d reason=missing target provider" % [packet.attack_id, packet.source_id, instance_index]
+	if target.combatant_id.is_empty(): return "PARTY_FORGE_DAMAGE_ERROR attack=%s source=%s target=<empty> instance=%d reason=missing combatant identity" % [packet.attack_id, packet.source_id, instance_index]
+	if target.health == null or (apply_health and not target.available): return "PARTY_FORGE_DAMAGE_ERROR attack=%s source=%s target=%s instance=%d reason=target unavailable" % [packet.attack_id, packet.source_id, target.combatant_id, instance_index]
+	if snapshot.target_id != target.combatant_id or snapshot.target_team_id != target.team_id:
+		return "PARTY_FORGE_DAMAGE_ERROR attack=%s source=%s target=%s snapshot_target=%s instance=%d reason=defense snapshot target mismatch" % [packet.attack_id, packet.source_id, target.combatant_id, snapshot.target_id, instance_index]
+	if packet.source_team_id == snapshot.target_team_id: return "PARTY_FORGE_DAMAGE_ERROR attack=%s source=%s target=%s instance=%d reason=team-invalid target" % [packet.attack_id, packet.source_id, target.combatant_id, instance_index]
+	if rng == null: return "PARTY_FORGE_DAMAGE_ERROR attack=%s source=%s target=%s instance=%d reason=missing combat RNG" % [packet.attack_id, packet.source_id, target.combatant_id, instance_index]
+	if types == null: return "PARTY_FORGE_DAMAGE_ERROR attack=%s source=%s target=%s instance=%d reason=missing damage catalog" % [packet.attack_id, packet.source_id, target.combatant_id, instance_index]
+	var roll: MULTI_CRIT_ROLL = packet.multi_crit_roll
+	var flags: Array[bool] = roll.critical_flags if roll != null else [] as Array[bool]
+	if instance_index < 0 or instance_index >= flags.size():
+		return "PARTY_FORGE_DAMAGE_ERROR attack=%s source=%s target=%s instance=%d processed=%d reason=instance index out of range" % [packet.attack_id, packet.source_id, target.combatant_id, instance_index, flags.size()]
+	if flags[instance_index] != critical:
+		return "PARTY_FORGE_DAMAGE_ERROR attack=%s source=%s target=%s instance=%d reason=critical flag does not match prepared roll" % [packet.attack_id, packet.source_id, target.combatant_id, instance_index]
+	var frozen_defenses := snapshot.type_defenses
+	for component: PreparedDamageComponent in packet.components:
+		if not frozen_defenses.has(component.damage_type_id) or not frozen_defenses[component.damage_type_id] is Dictionary:
+			return "PARTY_FORGE_DAMAGE_ERROR attack=%s source=%s target=%s type=%s instance=%d reason=missing frozen type defense" % [packet.attack_id, packet.source_id, target.combatant_id, component.damage_type_id, instance_index]
+		if not is_finite(component.typed_scaled) or component.typed_scaled < 0.0:
+			return "PARTY_FORGE_DAMAGE_ERROR attack=%s source=%s target=%s type=%s instance=%d reason=invalid runtime amount" % [packet.attack_id, packet.source_id, target.combatant_id, component.damage_type_id, instance_index]
+		var post_crit := component.typed_scaled * packet.crit_multiplier if critical else component.typed_scaled
+		if not is_finite(post_crit) or post_crit < 0.0:
+			return "PARTY_FORGE_DAMAGE_ERROR attack=%s source=%s target=%s type=%s instance=%d reason=invalid derived critical amount" % [packet.attack_id, packet.source_id, target.combatant_id, component.damage_type_id, instance_index]
+	return ""
 
 static func _resolution_error(packet: DamagePacket, target: CombatantAdapter, rng: CombatRng, types: DamageTypeCatalog) -> String:
 	if packet == null: return "PARTY_FORGE_DAMAGE_ERROR attack=<null> source=<null> target=<unknown> reason=missing packet"

@@ -133,3 +133,121 @@ TASK4_TAG_FIX_FULL_SUITE_EXIT_CODE=0
 ```
 
 The failure result asserts `source == null`, the ownership document remains byte-equivalent, and no unrelated production, test, generated, or import file is part of the review fix.
+
+# Multi-Crit Task 4 addendum: independent defended damage instances
+
+Status: Task 4 implementation and required automated verification complete on `feat/playtest-recovery-loot-ui`. Task 5 and Task 6 were not started.
+
+## Scope and contract
+
+- Worktree: `F:\Projects(root)\Game dev\Projects\party-forge\.worktrees\playtest-recovery-loot-ui`.
+- Starting head: `b0f426d35c9fb5721cbfbd137d6c2b3753164c1c` (`fix: harden multi-crit roll bounds`).
+- `DamageDefenseSnapshot` captures target identity/team, dodge chance, per-type defense stat/value/mitigation rule, packet-specific incoming multiplier, block chance, and block effectiveness. Scalars reject writes; nested defense data is copied on construction and on access.
+- `DamageResolver.capture_defense()` reads those live inputs once. Invalid target, packet, catalog, type/rule, non-finite component base, or non-finite frozen defense data returns structured invalid metadata with a stable `PARTY_FORGE_DAMAGE_ERROR` diagnostic.
+- `DamageResolver.resolve_instance()` validates the authoritative instance index/critical flag, independently rolls dodge and then block, derives each normal/critical amount from the once-prepared `typed_scaled` base, applies only frozen mitigation inputs, and separates calculation from optional health/life-steal mutation.
+- `DamageResult` now records `instance_index`, `target_was_alive`, `overkill_only`, `health_before`, `killing_blow`, `excess_damage`, and `proc_eligible`.
+- `DamageResolver.resolve()` remains a compatibility path: it captures once and resolves only authoritative instance index `0`. It does not iterate the multi-crit bundle.
+- No bundle service/iteration, proc dispatcher, presentation event/queue, overkill buffer, projectile/runtime routing, or other Task 5/6 behavior was added.
+
+## Strict TDD evidence
+
+The pre-change focused baseline at exact start head exited `0` with:
+
+```text
+TEST_SUMMARY: PASS (0 failures)
+TASK4_BASELINE_EXIT_CODE=0
+```
+
+Tests were saved before any production edit. Two initial fixture attempts referenced the unregistered `MultiCritRoll` global class and aborted during parse without a `TEST_SUMMARY`; both were rejected as RED evidence. After changing only the test fixture to use the existing preloaded script resource, the exact required focused command produced the accepted RED:
+
+```text
+TEST_FAILURE: defended instance resolution defines an immutable defense snapshot
+TEST_FAILURE: damage resolver captures target defenses once
+TEST_FAILURE: damage resolver resolves one independently defended instance
+TEST_SUMMARY: FAIL (3 failures)
+TASK4_RED_EXIT_CODE=-1073741819
+```
+
+The three failures were exactly the missing Task 4 file and APIs. The Windows native status reflects the process crash after the explicit failure summary; it was not treated as evidence by status alone.
+
+The first minimal implementation run exited `0` with `TEST_SUMMARY: PASS (0 failures)`. Self-review then added a regression for a directly instantiated blank snapshot. Before the correction, the focused runner exited `1` with `TEST_SUMMARY: FAIL (2 failures)`: the empty rejection reason let calculation continue into missing frozen type data, and the test then observed the null result. The narrow fallback now rejects blank snapshots before RNG or health access with `reason=invalid defense snapshot`.
+
+Fresh final Task 4 focused result:
+
+```text
+TEST_SUMMARY: PASS (0 failures)
+TASK4_FOCUSED_GREEN_EXIT_CODE=0
+```
+
+## Required behavior coverage
+
+- A three-critical-instance packet uses prescribed draws in exact order: instance 0 dodges and consumes no block draw; instance 1 misses dodge and blocks; instance 2 misses dodge and block. Total defender RNG consumption is exactly five draws.
+- The blocked and unblocked instances each derive their own `60` critical amount from a `30` `typed_scaled` base at a `2.0` multiplier. A 50% block produces `30`; the unblocked instance produces `60`.
+- A 100%-effective block records zero final/actual damage, preserves health, and sets `proc_eligible == false` after consuming its independent dodge and block opportunities.
+- After capture, the test mutates live dodge, armor, incoming provider, block chance, and block effectiveness and also mutates a caller-exposed defense dictionary. Resolution still uses frozen `0.25` dodge, `100` armor, `0.50` incoming multiplier, `0.50` block chance, and `0.50` effectiveness for exact final damage `25`.
+- Non-finite captured armor and a blank snapshot fail before RNG/health mutation with stable diagnostics.
+- Two living `60`-damage instances against `100` health record health-before values `100` and `40`; the second is the killing blow with `20` excess. Living damage alone is proc-eligible and life steal uses actual health removed.
+- The third instance resolves after death with `apply_health == false` and `allow_life_steal == false`: `target_was_alive == false`, `overkill_only == true`, `final_damage == 60`, `actual_health_removed == 0`, `excess_damage == 60`, `killing_blow == false`, and `proc_eligible == false`. Target/source health remain unchanged.
+- The compatibility wrapper resolves one first authoritative critical flag, applies exactly `40` damage once, records `instance_index == 0`, and leaves the second prepared flag unprocessed.
+
+## Verification
+
+Expanded resolver/multi-crit/RNG/typed-combat compatibility batch:
+
+```text
+tests/unit/test_damage_resolver.gd
+tests/unit/test_multi_crit_roll.gd
+tests/unit/test_combat_rng.gd
+tests/unit/test_typed_combat_final_fixes.gd
+tests/unit/test_action_damage_component_projection.gd
+
+TEST_SUMMARY: PASS (0 failures)
+TASK4_RELATED_COMPAT_EXIT_CODE=0
+```
+
+The declared known-stale batch remained exactly unchanged:
+
+```text
+TEST_SUMMARY: FAIL (5 failures)
+TASK4_KNOWN_FIVE_EXIT_CODE=1
+```
+
+- `test_attack_execution.gd`: three planned Task 6 health/RNG expectations.
+- `test_action_combat_estimate_service.gd`: two planned Task 7 average-damage/DPS expectations.
+
+The fresh complete repository suite also exited `1` with exactly those same five failures:
+
+```text
+TEST_SUMMARY: FAIL (5 failures)
+TASK4_FULL_SUITE_EXIT_CODE=1
+```
+
+No sixth `TEST_FAILURE`, parser failure, load failure, or Task 4 regression appeared. `git diff --check` passed before report/staging review.
+
+## Files and self-review
+
+Task 4 scope is limited to:
+
+- `.superpowers/sdd/task-4-report.md`
+- `scripts/combat/damage_defense_snapshot.gd`
+- `scripts/combat/damage_result.gd`
+- `scripts/combat/damage_resolver.gd`
+- `tests/unit/test_damage_resolver.gd`
+
+Self-review confirmed:
+
+- the snapshot copies nested dictionaries both into and out of its authority;
+- all seven result-evidence defaults fail closed;
+- dodge returns before block, while every non-dodged instance receives its own block opportunity;
+- frozen per-type rule/value data, not the live target/catalog definition, drives mitigation;
+- post-death successful damage is recorded as excess without health, proc, kill, or life-steal mutation;
+- the compatibility wrapper performs no extra critical/base/defender RNG and resolves no additional flags;
+- no generated `.gd.uid`/`.import` sidecar was created;
+- the user-owned untracked playtest-recovery screenshot/report paths remain untouched and unstaged;
+- `.superpowers/sdd/progress.md` was neither modified nor staged.
+
+## Concerns
+
+- The five full-suite failures are the explicitly planned stale Task 6/7 expectations and remain unresolved by design.
+- Focused runs print intentional negative-path `PARTY_FORGE_DAMAGE_ERROR` messages plus the repository's established ObjectDB/resource-exit markers. Accepted evidence requires the explicit summary and absence of unplanned `TEST_FAILURE`/parse/load failures.
+- No open Task 4 production concern is known after the blank-snapshot diagnostic correction.
