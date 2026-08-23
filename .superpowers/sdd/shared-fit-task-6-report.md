@@ -106,3 +106,34 @@ The presentation and full-suite runs emitted their established intentional negat
 ### Review-fix concerns
 
 No blocking or known correctness concern remains from the two Important findings.
+
+## Shared-skin candidate grounding review fix
+
+The remaining review finding against base `5770491` was fixed within `forge_humanoid_model.gd`, its public transaction suite, and this appended report evidence. Shared-skin binding intentionally stages its synthetic candidate root with `visible = false`, while transaction commit exposes that exact root. Candidate bounds had treated the temporary staging flag as authored visibility and omitted all shared-skin meshes, including target-fit geometry below the body.
+
+The minimum candidate-state-aware correction ignores visibility only for the exact shared-skin staging root that commit will expose. All descendant, attachment, socket, body-preset, and body-region visibility checks remain active. The pre-existing public-API invisible rigid-attachment regression continues to prove that genuinely invisible attachment ancestry which remains invisible after commit does not contribute geometry.
+
+### Accepted shared-skin grounding RED
+
+The transaction suite first added a public `CharacterPresentation.set_body_preset()` case whose feminine shared-skin fit extends to `y = -3.0` below the body.
+
+Command:
+
+```powershell
+& $godot --headless --path . --quit-after 300 --script res://tests/focused_test_runner.gd -- tests/unit/test_character_body_fit_transaction.gd
+```
+
+Result before production changes: exit `1`; `TEST_SUMMARY: FAIL (2 failures)`. The committed model position was `0.000` instead of `3.000`, and the exposed shared-skin equipment left `ground_gap = -3.000` instead of `0.000`. The suite loaded normally with no parser or fixture error.
+
+### Shared-skin grounding GREEN and verification
+
+- Focused transaction suite: exit `0`; `TEST_SUMMARY: PASS (0 failures)`.
+- Required eight-suite transaction, body-fit, Forge equipment, shared-skin binding, semantic-socket, grounding/UI, character-presentation, and sandbox matrix: exit `0`; `TEST_SUMMARY: PASS (0 failures)`.
+- Nineteen-suite affected presentation/content matrix: exit `0`; `TEST_SUMMARY: PASS (0 failures)`.
+- Fresh uncontested full suite: exit `0`; `TEST_SUMMARY: PASS (212 suites)`.
+
+The presentation, profile, combat, and full-suite runs emitted their established intentional negative-path diagnostics; no `TEST_FAILURE` line was emitted in any GREEN run.
+
+### Shared-skin grounding concerns
+
+No blocking or known correctness concern remains from this finding. The visibility exception is exact-root and shared-skin-candidate-specific; it does not globally ignore invisible ancestors.

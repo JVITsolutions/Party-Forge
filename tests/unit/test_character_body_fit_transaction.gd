@@ -10,6 +10,7 @@ func run() -> Array[String]:
 	_test_variant_fit_swap_commits(failures)
 	_test_rigid_fit_regions_hide_and_restore(failures)
 	_test_restored_descendant_body_region_drives_candidate_grounding(failures)
+	_test_shared_skin_candidate_drives_grounding(failures)
 	_test_invisible_staged_equipment_ancestor_does_not_drive_grounding(failures)
 	_test_rejection_preserves_state(&"fitted_scene", failures)
 	_test_rejection_preserves_state(&"shared_skin", failures)
@@ -65,6 +66,16 @@ func _test_restored_descendant_body_region_drives_candidate_grounding(failures: 
 	TestAssertions.truthy(presentation.set_body_preset(&"feminine"), "public body API commits a fit that restores a descendant body region", failures)
 	TestAssertions.truthy(target_region.visible, "target fit restores the descendant body region", failures)
 	TestAssertions.near(model.ground_gap(), 0.0, 0.001, "restored descendant body geometry drives candidate grounding", failures)
+	presentation.free()
+
+func _test_shared_skin_candidate_drives_grounding(failures: Array[String]) -> void:
+	var visual := _shared_skin_visual(_shared_skin_scene(false), _shared_skin_scene(false, -3.0), [])
+	var fixture := _fixture(visual)
+	var presentation := fixture.presentation as CharacterPresentation
+	var model := fixture.model as ForgeHumanoidModel
+	TestAssertions.truthy(presentation.set_body_preset(&"feminine"), "public body API commits below-body shared-skin equipment", failures)
+	TestAssertions.near(model.position.y, 3.0, 0.001, "shared-skin geometry exposed by commit determines candidate ground position", failures)
+	TestAssertions.near(model.ground_gap(), 0.0, 0.001, "shared-skin equipment remains grounded after commit exposes its staging root", failures)
 	presentation.free()
 
 func _test_invisible_staged_equipment_ancestor_does_not_drive_grounding(failures: Array[String]) -> void:
@@ -316,7 +327,7 @@ func _non_3d_scene() -> PackedScene:
 	root.free()
 	return scene
 
-func _shared_skin_scene(missing_skin: bool) -> PackedScene:
+func _shared_skin_scene(missing_skin: bool, mesh_y: float = 0.0) -> PackedScene:
 	var root := Node3D.new()
 	root.name = &"SkinSource"
 	var source_skeleton := Skeleton3D.new()
@@ -330,6 +341,7 @@ func _shared_skin_scene(missing_skin: bool) -> PackedScene:
 	var mesh := MeshInstance3D.new()
 	mesh.name = &"FittedMesh"
 	mesh.mesh = _weighted_mesh()
+	mesh.position.y = mesh_y
 	mesh.skin = null if missing_skin else _canonical_skin()
 	mesh.skeleton = NodePath("../../SourceSkeleton")
 	mesh.set_meta(&"palette_region", &"primary")

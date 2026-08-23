@@ -545,7 +545,7 @@ func _candidate_visual_bounds(preset_id: StringName, hidden_regions: Dictionary,
 			var root := staged.get(&"root") as Node3D
 			if root != null:
 				for mesh: MeshInstance3D in _meshes_including_root(root):
-					if not _mesh_visible_for_body_candidate(mesh, preset_id, hidden_regions):
+					if not _mesh_visible_for_body_candidate(mesh, preset_id, hidden_regions, root):
 						continue
 					var transformed := _transform_from_model(mesh) * mesh.get_aabb()
 					bounds = transformed if not has_bounds else bounds.merge(transformed)
@@ -565,12 +565,12 @@ func _candidate_visual_bounds(preset_id: StringName, hidden_regions: Dictionary,
 					has_bounds = true
 	return bounds
 
-func _mesh_visible_for_body_candidate(mesh: MeshInstance3D, preset_id: StringName, hidden_regions: Dictionary) -> bool:
+func _mesh_visible_for_body_candidate(mesh: MeshInstance3D, preset_id: StringName, hidden_regions: Dictionary, commit_visible_root: Node3D = null) -> bool:
 	if mesh.mesh == null:
 		return false
-	return _node_visible_for_body_candidate(mesh, preset_id, hidden_regions)
+	return _node_visible_for_body_candidate(mesh, preset_id, hidden_regions, commit_visible_root)
 
-func _node_visible_for_body_candidate(start: Node3D, preset_id: StringName, hidden_regions: Dictionary) -> bool:
+func _node_visible_for_body_candidate(start: Node3D, preset_id: StringName, hidden_regions: Dictionary, commit_visible_root: Node3D = null) -> bool:
 	var cursor: Node = start
 	while cursor != null and cursor != self:
 		if cursor is Node3D:
@@ -586,7 +586,7 @@ func _node_visible_for_body_candidate(start: Node3D, preset_id: StringName, hidd
 					base_visible = StringName(node.get_meta(&"body_preset")) == preset_id
 				if not base_visible or hidden_regions.has(region):
 					return false
-			elif not has_body_preset and not node.visible:
+			elif not has_body_preset and not node.visible and node != commit_visible_root:
 				return false
 		cursor = cursor.get_parent()
 	return true
