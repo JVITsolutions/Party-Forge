@@ -1,5 +1,7 @@
 extends RefCounted
 
+const COMBAT_RESOLUTION_SERVICE := preload("res://scripts/combat/combat_resolution_service.gd")
+
 const REQUIRED_PATHS: PackedStringArray = [
     "res://scripts/ui/hud.gd",
     "res://scripts/ui/class_selection_panel.gd",
@@ -41,7 +43,7 @@ const REQUIRED_PATHS: PackedStringArray = [
 ]
 
 const REQUIRED_MAIN_NODES: PackedStringArray = [
-    "GameRun", "PartyManager", "ExperienceSystem", "SpawnDirector",
+    "GameRun", "PartyManager", "CombatResolutionService", "ExperienceSystem", "SpawnDirector",
     "PartyActorSpawner", "Arena", "Actors", "Enemies", "Effects", "HUD",
     "DeveloperModeBadge", "CharacterLedger", "RunPauseMenu",
     "MainMenuScreen", "SettingsScreen", "PassiveTreeScreen", "DeveloperItemSandbox", "ArmouryScreen", "WarehouseScreen", "LoadoutWarningDialog",
@@ -69,6 +71,7 @@ func run() -> Array[String]:
     ProfileTestSupport.remove_tree(_profile_root)
     _cleanup_settings_artifacts(_settings_path)
     _test_main_scene_graph(failures)
+    _test_run_combat_resolution_service_wiring(failures)
     _test_profile_boot_and_developer_gate(failures)
     _test_active_run_context_graph_and_failure_cleanup(failures)
     _test_personal_loot_defeat_and_guardian_wiring(failures)
@@ -100,6 +103,23 @@ func run() -> Array[String]:
     ProfileTestSupport.remove_tree(_profile_root)
     _cleanup_settings_artifacts(_settings_path)
     return failures
+
+func _test_run_combat_resolution_service_wiring(failures: Array[String]) -> void:
+    var main := _started_main()
+    var service := main.get_node_or_null("CombatResolutionService")
+    var party := main.get_node("PartyManager") as PartyManager
+    var director := main.get_node("SpawnDirector") as SpawnDirector
+    TestAssertions.truthy(service != null, "Main owns one run-scoped combat resolution service", failures)
+    if service != null:
+        TestAssertions.truthy(main.get("combat_resolution_service") == service, "Main caches the scene combat service", failures)
+        TestAssertions.truthy(party.get("combat_resolution_service") == service, "PartyManager receives Main's exact combat service", failures)
+        TestAssertions.truthy(director.get("combat_resolution_service") == service, "SpawnDirector receives Main's exact combat service", failures)
+        var enemy := director.spawn_enemy(&"swarmer")
+        TestAssertions.truthy(enemy != null and enemy.get("combat_resolution_service") == service, "ordinary spawned enemies receive Main's exact combat service", failures)
+        main.call("_spawn_boss")
+        var guardian := main.get("boss") as ForgeGuardian
+        TestAssertions.truthy(guardian != null and guardian.get("combat_resolution_service") == service, "boss charge and shockwave receive Main's exact combat service", failures)
+    _cleanup_main(main)
 
 func _test_storage_route_policy_and_shared_projection_wiring(failures: Array[String]) -> void:
     var root := "user://tests/main_wiring-storage-routes_%d_%d" % [OS.get_process_id(), Time.get_ticks_usec()]

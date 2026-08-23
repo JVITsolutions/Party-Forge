@@ -1,5 +1,7 @@
 extends RefCounted
 
+const COMBAT_RESOLUTION_SERVICE := preload("res://scripts/combat/combat_resolution_service.gd")
+
 class CountingPartyManager extends PartyManager:
     var action_snapshot_calls := 0
     var weapon_snapshot_calls := 0
@@ -41,6 +43,7 @@ func run() -> Array[String]:
     _test_rogue_range_and_target_centered_cleave(failures)
     _test_zero_area_melee_hits_primary_only(failures)
     _test_projectile_contract(failures)
+    _test_multi_crit_runtime_single_delivery(failures)
     _test_projectile_range_boundary(failures)
     _test_area_impact(failures)
     _test_multi_target_life_steal(failures)
@@ -215,9 +218,9 @@ func _test_defender_resolution_order(failures: Array[String]) -> void:
     var reversed_targets: Array[Node3D] = [second, first]
     owner.attack_executor.call("configure", owner, party, test_root, reversed_targets)
     owner.attack_executor.call("execute", catalog.class_by_id(&"fighter").primary_attack, first.get_combat_target())
-    TestAssertions.near(_health(first).current_health, 100.0, 0.001, "lower combatant ID receives prescribed dodge first", failures)
+    TestAssertions.near(_health(first).current_health, 91.0, 0.001, "lower combatant ID receives prescribed block after the prepared crit draw", failures)
     TestAssertions.near(_health(second).current_health, 91.0, 0.001, "higher combatant ID independently blocks after failed dodge", failures)
-    TestAssertions.equal(combat_rng.draw_count, 3, "independent defender draws follow stable combatant order", failures)
+    TestAssertions.equal(combat_rng.draw_count, 5, "prepared crit and independent defender draws follow stable combatant order", failures)
     test_root.free()
 
 func _test_rogue_range_and_target_centered_cleave(failures: Array[String]) -> void:
@@ -309,6 +312,77 @@ func _test_projectile_contract(failures: Array[String]) -> void:
         TestAssertions.near(float(projectile.get("speed")), 16.0, 0.001, "projectile carries resolved speed", failures)
         TestAssertions.near(float(projectile.get("maximum_range")), 11.0, 0.001, "projectile range is finite", failures)
         TestAssertions.truthy(is_finite(float(projectile.get("lifetime"))) and float(projectile.get("lifetime")) > 0.0, "projectile lifetime is finite", failures)
+    test_root.free()
+
+func _test_multi_crit_runtime_single_delivery(failures: Array[String]) -> void:
+    var test_root := _new_test_root("MultiCritRuntimeSingleDeliveryTest")
+    var catalog := GameCatalog.load_defaults()
+    var party := PartyManager.new()
+    test_root.add_child(party)
+    party.initialize(catalog.class_by_id(&"ranger"), catalog.traits)
+    var service: Node = COMBAT_RESOLUTION_SERVICE.new(CombatRng.new(1150, [0.25]), catalog.damage_types) as Node
+    test_root.add_child(service)
+    if not _method_accepts(party, &"configure_combat", 3):
+        TestAssertions.truthy(false, "PartyManager accepts the shared run combat service", failures)
+        test_root.free()
+        return
+    party.call("configure_combat", service.combat_rng, catalog.damage_types, service)
+    var member_id := party.members[0].member_id
+    var base_crit := party.stats_for(member_id).value(&"crit_chance")
+    var multi_crit := StatModifierSource.create(&"runtime_1150_crit", &"test", "Runtime 1150 Crit", member_id, [
+        StatModifier.create(&"crit_chance", StatModifier.Operation.FLAT, 11.50 - base_crit, &"runtime_1150_crit", "Runtime 1150 Crit"),
+    ])
+    TestAssertions.truthy(party.add_member_source(member_id, multi_crit), "1150% runtime critical source registers", failures)
+    var owner := _create_member_actor(test_root, party, party.members[0], 1, Vector3.ZERO)
+    var target := _create_actor(test_root, _target_definition(&"multi_crit_projectile_target"), 2, Vector3(5.0, 0.0, 0.0))
+    _set_health(target, 10000.0, 10000.0)
+    var effects := Node3D.new()
+    test_root.add_child(effects)
+    var completed: Array[RefCounted] = []
+    service.bundle_completed.connect(func(bundle: RefCounted) -> void: completed.append(bundle))
+    owner.attack_executor.call("configure", owner, party, effects, [target] as Array[Node3D])
+    owner.attack_executor.call("execute", party.members[0].class_definition.primary_attack, target.get_combat_target())
+    var projectile := _first_child_of_type(effects, "PartyProjectile")
+    TestAssertions.equal(_count_children_of_type(effects, "PartyProjectile"), 1, "1150% ranged attack creates exactly one projectile", failures)
+    if projectile != null:
+        TestAssertions.truthy(projectile.get("combat_resolution_service") == service, "party projectile carries the exact run combat service", failures)
+        projectile.call("_process", 1.0)
+    TestAssertions.equal(completed.size(), 1, "one ranged impact resolves exactly one damage bundle", failures)
+    if completed.size() == 1:
+        TestAssertions.equal(completed[0].results.size(), 12, "1150% ranged impact resolves eleven guaranteed plus one successful remainder instance", failures)
+
+    var melee_attack := catalog.class_by_id(&"fighter").primary_attack
+    var before_melee_bundles := completed.size()
+    owner.attack_executor.call("execute", melee_attack, target.get_combat_target())
+    TestAssertions.equal(completed.size(), before_melee_bundles + 1, "melee resolves one ordered bundle without multiplying the attack", failures)
+
+    var melee_packet := DamageResolver.prepare(melee_attack, owner.get_combat_adapter(DamageResolver.action_tags_for(melee_attack)), service.combat_rng, catalog.damage_types)
+    var burst := (load("res://scenes/combat/area_burst.tscn") as PackedScene).instantiate() as AreaBurst
+    test_root.add_child(burst)
+    var before_area_bundles := completed.size()
+    if not _method_accepts(burst, &"configure", 7):
+        TestAssertions.truthy(false, "AreaBurst accepts the shared run combat service", failures)
+    else:
+        burst.position = target.position
+        burst.call("configure", melee_packet, service.combat_rng, catalog.damage_types, 2.0, 0.25, [target] as Array[Node3D], service)
+        TestAssertions.truthy(burst.get("combat_resolution_service") == service, "area burst carries the exact run combat service", failures)
+        TestAssertions.equal(completed.size(), before_area_bundles + 1, "area delivery resolves one ordered bundle per target", failures)
+
+    var defeated_enemy := (load("res://scenes/enemies/swarmer.tscn") as PackedScene).instantiate() as EnemyActor
+    test_root.add_child(defeated_enemy)
+    defeated_enemy.configure(defeated_enemy.definition)
+    defeated_enemy.call("configure_combat", &"multi_crit_reward_target", service.combat_rng, catalog.damage_types, service)
+    var defeated_health := defeated_enemy.get_node("HealthComponent") as HealthComponent
+    defeated_health.current_health = 1.0
+    var reward_count := [0]
+    var defeat_count := [0]
+    defeated_enemy.reward_dropped.connect(func(_experience: int, _position: Vector3) -> void: reward_count[0] += 1)
+    defeated_enemy.enemy_defeated.connect(func(_definition: EnemyDefinition, _position: Vector3) -> void: defeat_count[0] += 1)
+    var lethal_packet := DamageResolver.prepare(melee_attack, owner.get_combat_adapter(DamageResolver.action_tags_for(melee_attack)), service.combat_rng, catalog.damage_types)
+    var lethal_bundle: RefCounted = service.resolve_bundle(lethal_packet, defeated_enemy.get_combat_adapter(lethal_packet.action_tags)) as RefCounted
+    TestAssertions.truthy(bool(lethal_bundle.get("valid")), "lethal multi-crit bundle resolves: %s" % String(lethal_bundle.get("error_reason")), failures)
+    TestAssertions.equal(reward_count[0], 1, "multi-instance lethal bundle drops enemy reward exactly once", failures)
+    TestAssertions.equal(defeat_count[0], 1, "multi-instance lethal bundle reports enemy defeat exactly once", failures)
     test_root.free()
 
 func _test_projectile_range_boundary(failures: Array[String]) -> void:
@@ -407,7 +481,7 @@ func _test_multi_target_life_steal(failures: Array[String]) -> void:
     TestAssertions.near(_health(blocked).current_health, 100.0, 0.001, "fully blocked target contributes no life steal", failures)
     TestAssertions.near(_health(overkilled).current_health, 0.0, 0.001, "remaining target loses only available health", failures)
     TestAssertions.near(_health(owner).current_health, 60.0, 0.001, "multi-target life steal sums actual health removed only", failures)
-    TestAssertions.equal(combat_rng.draw_count, 2, "life-steal targets use prescribed defender draws", failures)
+    TestAssertions.equal(combat_rng.draw_count, 3, "life-steal targets include the prepared crit draw before defender draws", failures)
     test_root.free()
 
 func _test_cleric_healing(failures: Array[String]) -> void:
@@ -820,8 +894,28 @@ func _first_child_of_type(parent: Node, type_name: String) -> Node:
             return child
     return null
 
+func _count_children_of_type(parent: Node, type_name: String) -> int:
+    var count := 0
+    for child: Node in parent.get_children():
+        if child.get_class() == type_name or child.is_class(type_name):
+            count += 1
+            continue
+        var child_script := child.get_script() as Script
+        if child_script != null and String(child_script.get_global_name()) == type_name:
+            count += 1
+    return count
+
 func _has_property(object: Object, property_name: StringName) -> bool:
     for property: Dictionary in object.get_property_list():
         if property["name"] == property_name:
             return true
+    return false
+
+func _method_accepts(object: Object, method_name: StringName, argument_count: int) -> bool:
+    for row: Dictionary in object.get_method_list():
+        if StringName(row.get("name", "")) != method_name:
+            continue
+        var total_arguments := (row.get("args", []) as Array).size()
+        var default_arguments := (row.get("default_args", []) as Array).size()
+        return argument_count >= total_arguments - default_arguments and argument_count <= total_arguments
     return false

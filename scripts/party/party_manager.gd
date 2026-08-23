@@ -13,6 +13,7 @@ const DEFAULT_UPGRADE_TUNING: UpgradeTuning = preload("res://data/upgrades/defau
 const DEFAULT_ATTRIBUTE_PROJECTION: AttributeProjectionTuning = preload("res://data/stats/default_attribute_projection.tres")
 const STAT_CATALOG: StatCatalog = preload("res://data/stats/core_stats.tres")
 const CANDIDATE_ACTION_VALIDATION := preload("res://scripts/combat/candidate_action_validation_service.gd")
+const COMBAT_RESOLUTION_SERVICE := preload("res://scripts/combat/combat_resolution_service.gd")
 var members: Array[PartyMemberState] = []
 var class_ranks: Dictionary = {}
 var trait_definitions: Array[TraitDefinition] = []
@@ -28,6 +29,7 @@ var party_upgrade_ranks: Dictionary:
 var upgrade_tuning: UpgradeTuning = DEFAULT_UPGRADE_TUNING
 var combat_rng: CombatRng
 var damage_types: DamageTypeCatalog
+var combat_resolution_service: Node
 var _capacity_policy := PartyCapacityPolicy.new(MAX_PARTY_SIZE)
 var _identity_seed := 0
 var _fallback_names: CharacterNamePool
@@ -194,9 +196,17 @@ func stats_for(member_id: int) -> ResolvedStatSnapshot:
 	_stat_cache[member_id] = snapshot
 	return snapshot
 
-func configure_combat(rng: CombatRng, types: DamageTypeCatalog) -> void:
+func configure_combat(rng: CombatRng, types: DamageTypeCatalog, resolution_service: Node = null) -> void:
 	combat_rng = rng
 	damage_types = types
+	combat_resolution_service = resolution_service
+	if combat_resolution_service == null:
+		combat_resolution_service = COMBAT_RESOLUTION_SERVICE.new(rng, types) as Node
+		combat_resolution_service.name = "FixtureCombatResolutionService"
+		add_child(combat_resolution_service)
+	elif not bool(combat_resolution_service.call("configured_for", rng, types)):
+		push_error("PARTY_FORGE_DAMAGE_ERROR service=combat_resolution reason=PartyManager dependencies do not match shared service")
+		combat_resolution_service = null
 
 func stats_for_action(member_id: int, action_tags: Array[StringName]) -> ResolvedStatSnapshot:
 	var member := member_by_id(member_id)

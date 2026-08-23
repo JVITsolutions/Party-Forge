@@ -366,13 +366,22 @@ func _test_density_adjusted_schedule(failures: Array[String]) -> void:
         markers.append(marker)
     var director_script := load("res://scripts/game/spawn_director.gd") as Script
     var types := GameCatalog.load_defaults().damage_types
-    var supports_density := false
+    var signature_probe := director_script.new() as Node
+    var configure_arguments: Array = []
     for method: Dictionary in director_script.get_script_method_list():
         if method.get("name", "") == "configure":
-            supports_density = (method.get("args", []) as Array).size() == 11
+            configure_arguments = method.get("args", []) as Array
             break
+    var supports_density := configure_arguments.size() == 12 \
+        and StringName((configure_arguments[10] as Dictionary).get("name", "")) == &"density_percent" \
+        and _method_accepts(signature_probe, &"configure", 11)
+    var supports_service := configure_arguments.size() == 12 \
+        and StringName((configure_arguments[11] as Dictionary).get("name", "")) == &"resolution_service" \
+        and _method_accepts(signature_probe, &"configure", 12)
+    signature_probe.free()
     TestAssertions.truthy(supports_density, "spawn director accepts a final density argument", failures)
-    if not supports_density:
+    TestAssertions.truthy(supports_service, "spawn director accepts an optional combat service after density", failures)
+    if not supports_density or not supports_service:
         root.free()
         return
 

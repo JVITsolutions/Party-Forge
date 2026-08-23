@@ -11,12 +11,14 @@ var owner_actor: PartyActor
 var party_manager: PartyManager
 var effects_parent: Node
 var combatants: Array[Node3D] = []
+var combat_resolution_service: Node
 
-func configure(actor: PartyActor, manager: PartyManager, effect_container: Node, actor_candidates: Array[Node3D] = []) -> void:
+func configure(actor: PartyActor, manager: PartyManager, effect_container: Node, actor_candidates: Array[Node3D] = [], resolution_service: Node = null) -> void:
     owner_actor = actor
     party_manager = manager
     effects_parent = effect_container
     combatants = actor_candidates
+    combat_resolution_service = resolution_service if resolution_service != null else (party_manager.combat_resolution_service if party_manager != null else null)
 
 func execute(definition: AttackDefinition, target: CombatTarget, presentation: AttackPresentationDefinition = null, action_context: RefCounted = null) -> void:
     if owner_actor == null or definition == null or target == null:
@@ -69,8 +71,11 @@ func _execute_melee(packet: DamagePacket, primary_target: CombatTarget, radius: 
         if adapter != null and adapter.available and adapter.team_id != packet.source_team_id:
             targets.append(adapter)
     targets.sort_custom(func(left: CombatantAdapter, right: CombatantAdapter) -> bool: return String(left.combatant_id) < String(right.combatant_id))
+    if combat_resolution_service == null:
+        push_error("PARTY_FORGE_DAMAGE_ERROR attack=%s reason=missing combat resolution service" % packet.attack_id)
+        return
     for adapter: CombatantAdapter in targets:
-        DamageResolver.resolve(packet, adapter, party_manager.combat_rng, party_manager.damage_types)
+        combat_resolution_service.call("resolve_bundle", packet, adapter)
 
 func _spawn_projectile(definition: AttackDefinition, target: CombatTarget, packet: DamagePacket, geometry: ResolvedAttackGeometry, presentation: AttackPresentationDefinition = null) -> void:
     var parent := _effect_parent()
@@ -107,7 +112,7 @@ func _spawn_projectile(definition: AttackDefinition, target: CombatTarget, packe
     var maximum_range: float = geometry.range
     var area_radius: float = geometry.area_radius
     var lifetime: float = clampf(maximum_range / maxf(projectile_speed, 0.01) + 0.5, 0.1, 10.0)
-    projectile.call("configure", packet, party_manager.combat_rng, party_manager.damage_types, projectile_speed, area_radius, maximum_range, lifetime, target, parent, _combatants(), presentation.impact_scene if presentation != null else null, presentation.impact_color if presentation != null else Color.WHITE, visual_scale)
+    projectile.call("configure", packet, party_manager.combat_rng, party_manager.damage_types, projectile_speed, area_radius, maximum_range, lifetime, target, parent, _combatants(), presentation.impact_scene if presentation != null else null, presentation.impact_color if presentation != null else Color.WHITE, visual_scale, combat_resolution_service)
 
 func _execute_heal(definition: AttackDefinition, target: CombatTarget, source_adapter: CombatantAdapter, presentation: AttackPresentationDefinition = null) -> void:
     if target.team_id != owner_actor.team_id or not target.is_available or target.actor == null:

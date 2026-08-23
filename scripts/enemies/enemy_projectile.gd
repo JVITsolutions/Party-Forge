@@ -1,10 +1,13 @@
 class_name EnemyProjectile
 extends Node3D
 
+const COMBAT_RESOLUTION_SERVICE := preload("res://scripts/combat/combat_resolution_service.gd")
+
 var target: Node3D
 var packet: DamagePacket
 var combat_rng: CombatRng
 var damage_types: DamageTypeCatalog
+var combat_resolution_service: Node
 var movement := EnemyProjectileProfile.Movement.LINEAR
 var speed := 0.01
 var maximum_range := 0.01
@@ -22,12 +25,18 @@ func configure(
 	shared_damage_types: DamageTypeCatalog,
 	attack: AttackDefinition,
 	profile: EnemyProjectileProfile,
-	aim_position: Vector3
+	aim_position: Vector3,
+	resolution_service: Node = null
 ) -> void:
 	target = target_actor
 	packet = prepared_packet
 	combat_rng = shared_combat_rng
 	damage_types = shared_damage_types
+	combat_resolution_service = resolution_service
+	if combat_resolution_service == null:
+		combat_resolution_service = COMBAT_RESOLUTION_SERVICE.new(shared_combat_rng, shared_damage_types) as Node
+		combat_resolution_service.name = "FixtureCombatResolutionService"
+		add_child(combat_resolution_service)
 	movement = profile.movement
 	speed = maxf(attack.projectile_speed, 0.01)
 	maximum_range = maxf(attack.range, 0.01)
@@ -130,7 +139,7 @@ func _resolve_impact(hit_actor: Node3D) -> void:
 		else:
 			var adapter := _adapter_for(hit_actor)
 			if adapter != null:
-				DamageResolver.resolve(packet, adapter, combat_rng, damage_types)
+				combat_resolution_service.call("resolve_bundle", packet, adapter)
 	queue_free()
 
 func _resolve_area() -> void:
@@ -147,7 +156,7 @@ func _resolve_area() -> void:
 		if resolved_ids.has(resolution_id):
 			continue
 		resolved_ids[resolution_id] = true
-		DamageResolver.resolve(packet, adapter, combat_rng, damage_types)
+		combat_resolution_service.call("resolve_bundle", packet, adapter)
 
 func _available_party_actors() -> Array[Node3D]:
 	var actors: Array[Node3D] = []

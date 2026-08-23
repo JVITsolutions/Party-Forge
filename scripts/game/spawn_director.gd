@@ -5,6 +5,7 @@ signal enemy_spawned(enemy_id: StringName, enemy: Node3D)
 signal enemy_defeated(event: EnemyDefeatEvent)
 
 const SpawnScheduleScript := preload("res://scripts/game/spawn_schedule.gd")
+const COMBAT_RESOLUTION_SERVICE := preload("res://scripts/combat/combat_resolution_service.gd")
 const SWARMER_SCENE := preload("res://scenes/enemies/swarmer.tscn")
 const BOLTCASTER_SCENE := preload("res://scenes/enemies/boltcaster.tscn")
 const SPITTER_SCENE := preload("res://scenes/enemies/spitter.tscn")
@@ -29,12 +30,13 @@ var effects_parent: Node
 var pickup_radius_multiplier := 1.0
 var combat_rng: CombatRng
 var damage_types: DamageTypeCatalog
+var combat_resolution_service: Node
 var _enemy_sequence := 0
 var _defeat_sequence := 0
 var _reward_sequence := 0
 var _enemy_density_percent := 100
 
-func configure(seed_value: int, target_leader: Node3D, target_distributor: Variant, markers: Array[Node3D], view_camera: Camera3D, enemy_container: Node, effect_container: Node, radius_multiplier: float, shared_combat_rng: CombatRng, shared_damage_types: DamageTypeCatalog, density_percent: int = 100) -> void:
+func configure(seed_value: int, target_leader: Node3D, target_distributor: Variant, markers: Array[Node3D], view_camera: Camera3D, enemy_container: Node, effect_container: Node, radius_multiplier: float, shared_combat_rng: CombatRng, shared_damage_types: DamageTypeCatalog, density_percent: int = 100, resolution_service: Node = null) -> void:
     rng.seed = seed_value
     run_seed = seed_value
     leader = target_leader
@@ -46,6 +48,11 @@ func configure(seed_value: int, target_leader: Node3D, target_distributor: Varia
     pickup_radius_multiplier = maxf(radius_multiplier, 0.0)
     combat_rng = shared_combat_rng
     damage_types = shared_damage_types
+    combat_resolution_service = resolution_service
+    if combat_resolution_service == null:
+        combat_resolution_service = COMBAT_RESOLUTION_SERVICE.new(shared_combat_rng, shared_damage_types) as Node
+        combat_resolution_service.name = "FixtureCombatResolutionService"
+        add_child(combat_resolution_service)
     _enemy_density_percent = clampi(density_percent, 0, 1000)
     _enemy_sequence = 0
     _defeat_sequence = 0
@@ -129,7 +136,7 @@ func spawn_enemy(enemy_id: StringName) -> Node3D:
         return null
     parent.add_child(enemy)
     _enemy_sequence += 1
-    enemy.call("configure_combat", _enemy_sequence, combat_rng, damage_types)
+    enemy.call("configure_combat", _enemy_sequence, combat_rng, damage_types, combat_resolution_service)
     if enemy.is_inside_tree():
         enemy.global_position = spawn_position
     else:

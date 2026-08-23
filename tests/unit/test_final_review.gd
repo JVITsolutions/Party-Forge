@@ -62,13 +62,31 @@ func _test_typed_party_delivery_source_contract(failures: Array[String]) -> void
     var modifiers_source := FileAccess.get_file_as_string("res://scripts/combat/combat_modifiers.gd")
     var party_actor_source := FileAccess.get_file_as_string("res://scripts/characters/party_actor.gd")
     TestAssertions.truthy(not executor_source.contains("_legacy_damage_amount"), "typed executor removes temporary legacy damage bridge", failures)
-    TestAssertions.truthy(executor_source.contains("DamageResolver.resolve"), "typed executor resolves packets", failures)
+    TestAssertions.truthy(executor_source.contains("combat_resolution_service.call(\"resolve_bundle\""), "typed executor resolves packets through the run service", failures)
     TestAssertions.truthy(not projectile_source.contains("var damage :="), "party projectile stores packet instead of scalar damage", failures)
     TestAssertions.truthy(not area_source.contains("var damage :="), "area burst stores packet instead of scalar damage", failures)
     TestAssertions.truthy(not modifiers_source.contains("power_multiplier"), "combat movement facade carries no damaging power", failures)
     var recovery_index := party_actor_source.find("recovery_controller.advance(delta)")
     var attack_index := party_actor_source.find("advance_combat(delta, _collect_combat_targets())")
     TestAssertions.truthy(recovery_index >= 0 and attack_index > recovery_index, "party actor advances recovery before attacks", failures)
+
+    var direct_resolution_allowlist: PackedStringArray = [
+        "res://scripts/combat/combat_resolution_service.gd",
+        "res://scripts/combat/damage_resolver.gd",
+    ]
+    for path: String in [
+        "res://scripts/combat/attack_executor.gd",
+        "res://scripts/combat/projectile.gd",
+        "res://scripts/combat/area_burst.gd",
+        "res://scripts/enemies/enemy_actor.gd",
+        "res://scripts/enemies/enemy_projectile.gd",
+        "res://scripts/enemies/spitter.gd",
+        "res://scripts/enemies/boltcaster.gd",
+        "res://scripts/enemies/forge_guardian.gd",
+    ]:
+        if path in direct_resolution_allowlist:
+            continue
+        TestAssertions.truthy(not FileAccess.get_file_as_string(path).contains("DamageResolver.resolve("), "%s has no direct compatibility resolution" % path, failures)
 
 func _test_party_stat_runtime_effects(failures: Array[String]) -> void:
     var main := _started_main(&"fighter")

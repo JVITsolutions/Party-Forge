@@ -84,7 +84,8 @@ func _fire_projectile() -> void:
 		damage_types,
 		attack,
 		definition.projectile_profile,
-		sampled_aim_position
+		sampled_aim_position,
+		combat_resolution_service
 	)
 
 func _leader_is_living() -> bool:

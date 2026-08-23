@@ -35,6 +35,7 @@ var party_stats: Dictionary = {}
 var trait_upgrade_ranks: Dictionary = {}
 var catalog: GameCatalog
 var party_manager: PartyManager
+var combat_resolution_service: Node
 var experience_system: ExperienceSystem
 var run_context_registry: RunContextRegistry
 var active_run_context: PlayerRunContext
@@ -227,9 +228,13 @@ func _prepare_run_start(definition: ClassDefinition) -> bool:
 		push_error("PARTY_FORGE_STARTING_PARTY_CAPACITY_ERROR selected=%d capacity=%d" % [CURRENT_STARTING_PARTY_SIZE, active_run_rules.party_capacity()])
 		return false
 	game_run.configure_seed(RUN_SEED)
+	var combat_configuration_errors: PackedStringArray = combat_resolution_service.call("configure", game_run.combat_rng, catalog.damage_types) as PackedStringArray
+	if not combat_configuration_errors.is_empty():
+		_show_run_setup_error(combat_configuration_errors[0])
+		return false
 	party_manager.configure_identity(game_run.run_seed, catalog.generic_name_pool)
 	party_manager.initialize(definition, catalog.traits)
-	party_manager.configure_combat(game_run.combat_rng, catalog.damage_types)
+	party_manager.configure_combat(game_run.combat_rng, catalog.damage_types, combat_resolution_service)
 	if party_manager.members.is_empty():
 		_show_run_setup_error("PARTY_FORGE_RUN_LOADOUT_CHECKOUT_ERROR field=leader reason=party initialization failed")
 		return false
@@ -329,7 +334,7 @@ func _start_leader_class_from_checkout(definition: ClassDefinition, committed_pr
 	camera_rig.target = leader
 	var markers := _spawn_markers()
 	var camera := camera_rig.get_node("Camera3D") as Camera3D
-	spawn_director.configure(RUN_SEED, leader, reward_distribution_service, markers, camera, get_node("Enemies"), get_node("Effects"), _pickup_multiplier(), game_run.combat_rng, catalog.damage_types, active_run_rules.enemy_density_percent())
+	spawn_director.configure(RUN_SEED, leader, reward_distribution_service, markers, camera, get_node("Enemies"), get_node("Effects"), _pickup_multiplier(), game_run.combat_rng, catalog.damage_types, active_run_rules.enemy_density_percent(), combat_resolution_service)
 	var defeat_callback := Callable(self, "_on_enemy_defeated_for_personal_loot")
 	if not spawn_director.enemy_defeated.is_connected(defeat_callback):
 		spawn_director.enemy_defeated.connect(defeat_callback)
@@ -833,6 +838,7 @@ static func format_resource_error(path: String, reason: String) -> String:
 
 func _cache_nodes() -> void:
 	party_manager = get_node("PartyManager") as PartyManager
+	combat_resolution_service = get_node("CombatResolutionService")
 	party_stats = party_manager.party_stat_ranks
 	trait_upgrade_ranks = party_manager.trait_upgrade_ranks
 	experience_system = get_node("ExperienceSystem") as ExperienceSystem
@@ -1661,7 +1667,7 @@ func _spawn_boss() -> void:
 		return
 	boss = BOSS_SCENE.instantiate() as Node3D
 	get_node("Enemies").add_child(boss)
-	boss.call("configure_combat", &"boss", game_run.combat_rng, catalog.damage_types)
+	boss.call("configure_combat", &"boss", game_run.combat_rng, catalog.damage_types, combat_resolution_service)
 	var markers := _spawn_markers()
 	boss.position = markers[0].position if not markers.is_empty() else Vector3(12.0, 0.75, 0.0)
 	boss.call("configure_boss", leader, spawn_director, get_node("Effects"))

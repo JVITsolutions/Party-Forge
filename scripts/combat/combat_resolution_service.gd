@@ -36,6 +36,24 @@ func _init(rng_value: CombatRng = null, types_value: DamageTypeCatalog = null) -
 	_combat_rng = rng_value
 	_damage_types = types_value
 
+func configure(rng_value: CombatRng, types_value: DamageTypeCatalog) -> PackedStringArray:
+	var errors := PackedStringArray()
+	if rng_value == null:
+		errors.append("PARTY_FORGE_DAMAGE_ERROR service=combat_resolution reason=missing combat RNG")
+	if types_value == null:
+		errors.append("PARTY_FORGE_DAMAGE_ERROR service=combat_resolution reason=missing damage catalog")
+	if not errors.is_empty():
+		return errors
+	_combat_rng = rng_value
+	_damage_types = types_value
+	_overkill_buffer = OVERKILL_BUFFER.new()
+	_latest_diagnostics.clear()
+	_resolving = false
+	return errors
+
+func configured_for(rng_value: CombatRng, types_value: DamageTypeCatalog) -> bool:
+	return rng_value != null and types_value != null and is_same(_combat_rng, rng_value) and is_same(_damage_types, types_value)
+
 func _process(delta: float) -> void:
 	advance(delta)
 

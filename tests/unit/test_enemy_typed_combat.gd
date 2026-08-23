@@ -1,5 +1,7 @@
 extends RefCounted
 
+const COMBAT_RESOLUTION_SERVICE := preload("res://scripts/combat/combat_resolution_service.gd")
+
 func run() -> Array[String]:
 	var failures: Array[String] = []
 	var catalog := GameCatalog.load_defaults()
@@ -15,6 +17,7 @@ func run() -> Array[String]:
 	_test_enemy_projectile_sweeps_and_resolves_area_once(catalog, failures)
 	_test_enemy_projectile_near_equal_contact_is_order_independent(catalog, failures)
 	_test_enemy_projectile_distinct_contact_prefers_nearer_geometry(catalog, failures)
+	_test_hostile_multi_crit_uses_one_projectile_and_bundle(catalog, failures)
 	return failures
 
 func _test_exact_enemy_attack_links(catalog: GameCatalog, failures: Array[String]) -> void:
@@ -281,6 +284,46 @@ func _test_enemy_projectile_distinct_contact_prefers_nearer_geometry(catalog: Ga
 	TestAssertions.equal(nearer_first, farther_first, "distinct projectile contact winner is independent of party registration order", failures)
 	TestAssertions.near(nearer_first[0], 10.0, 0.001, "distinct projectile contacts select smaller geometric progression", failures)
 	TestAssertions.near(nearer_first[1], 0.0, 0.001, "lower identity cannot override a geometrically nearer non-tie", failures)
+
+func _test_hostile_multi_crit_uses_one_projectile_and_bundle(catalog: GameCatalog, failures: Array[String]) -> void:
+	var root := Node3D.new()
+	(Engine.get_main_loop() as SceneTree).root.add_child(root)
+	var source := (load("res://scenes/enemies/spitter.tscn") as PackedScene).instantiate() as Spitter
+	root.add_child(source)
+	var definition := _enemy(catalog, &"spitter").duplicate(true) as EnemyDefinition
+	definition.stat_overrides = {&"crit_chance": 11.50}
+	var critical_attacks: Array[AttackDefinition] = []
+	for source_attack: AttackDefinition in definition.attacks:
+		critical_attacks.append(source_attack.duplicate(true) as AttackDefinition)
+	critical_attacks[0].can_crit = true
+	definition.attacks = critical_attacks
+	source.configure(definition)
+	var service: Node = COMBAT_RESOLUTION_SERVICE.new(CombatRng.new(2150, [0.25]), catalog.damage_types) as Node
+	root.add_child(service)
+	if not _method_accepts(source, &"configure_combat", 4):
+		TestAssertions.truthy(false, "EnemyActor accepts the shared run combat service", failures)
+		root.free()
+		return
+	source.call("configure_combat", &"hostile_multi_crit", service.combat_rng, catalog.damage_types, service)
+	var target := _party_actor(root, catalog, 7501, Vector3(5.0, 0.0, 0.0))
+	var health := target.get_node("HealthComponent") as HealthComponent
+	health.configure(10000.0, true, 8.0, 0.5)
+	source.configure_target(target, root)
+	var completed: Array[RefCounted] = []
+	service.bundle_completed.connect(func(bundle: RefCounted) -> void: completed.append(bundle))
+	source.call("_fire_projectile")
+	var projectiles: Array[Node] = []
+	for child: Node in root.get_children():
+		if child is EnemyProjectile:
+			projectiles.append(child)
+	TestAssertions.equal(projectiles.size(), 1, "1150% hostile attack creates exactly one projectile", failures)
+	if projectiles.size() == 1:
+		TestAssertions.truthy(projectiles[0].get("combat_resolution_service") == service, "enemy projectile carries the exact run combat service", failures)
+		(projectiles[0] as EnemyProjectile).advance_projectile(1.0)
+	TestAssertions.equal(completed.size(), 1, "one hostile projectile impact resolves exactly one damage bundle", failures)
+	if completed.size() == 1:
+		TestAssertions.equal(completed[0].results.size(), 12, "1150% hostile impact resolves eleven guaranteed plus one successful remainder instance", failures)
+	root.free()
 
 func _ordered_projectile_contact_removals(catalog: GameCatalog, nearer_first: bool, farther_x: float, nearer_id: int, farther_id: int, rng_seed: int) -> Array[float]:
 	var root := Node3D.new()

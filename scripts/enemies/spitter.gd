@@ -62,7 +62,7 @@ func _fire_projectile() -> void:
     else:
         projectile.position = position
     var target_position := leader.global_position if leader.is_inside_tree() else leader.position
-    projectile.call("configure", leader, packet, combat_rng, damage_types, attack, definition.projectile_profile, target_position)
+    projectile.call("configure", leader, packet, combat_rng, damage_types, attack, definition.projectile_profile, target_position, combat_resolution_service)
 
 func _leader_is_living() -> bool:
     if leader == null or not is_instance_valid(leader):
