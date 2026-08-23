@@ -11,7 +11,7 @@ class ErrorText extends RefCounted:
 		var result := ""
 		for index: int in value.length():
 			var codepoint := value.unicode_at(index)
-			if codepoint < 32 or (codepoint >= 127 and codepoint <= 159):
+			if codepoint < 32 or (codepoint >= 127 and codepoint <= 159) or codepoint in [0x2028, 0x2029]:
 				result += "%%%02X" % codepoint
 			else:
 				result += String.chr(codepoint)
@@ -186,7 +186,7 @@ class BackupVerifier extends RefCounted:
 
 
 	func _validate_root(backup_root: String, errors: Array[String]) -> void:
-		if backup_root.is_empty() or not backup_root.is_absolute_path() or _is_unsafe_local_path(backup_root):
+		if not _is_local_drive_absolute(backup_root) or _is_unsafe_local_path(backup_root):
 			errors.append("%s stage=request field=backup_root reason=must be an explicit local absolute path" % ERROR_PREFIX)
 		elif not DirAccess.dir_exists_absolute(backup_root):
 			errors.append("%s stage=request field=backup_root reason=directory does not exist" % ERROR_PREFIX)
@@ -297,7 +297,14 @@ class BackupVerifier extends RefCounted:
 
 
 	func _is_normalized_local_absolute(path: String) -> bool:
-		return not path.is_empty() and path.is_absolute_path() and "\\" not in path and not _is_unsafe_local_path(path) and not _has_control_character(path) and path == path.simplify_path() and not path.ends_with("/")
+		return _is_local_drive_absolute(path) and "\\" not in path and not _is_unsafe_local_path(path) and not _has_control_character(path) and path == path.simplify_path()
+
+
+	func _is_local_drive_absolute(path: String) -> bool:
+		if path.length() < 3 or path[1] != ":" or path[2] != "/":
+			return false
+		var drive_letter := path.unicode_at(0)
+		return (drive_letter >= 65 and drive_letter <= 90) or (drive_letter >= 97 and drive_letter <= 122)
 
 
 	func _has_control_character(value: String) -> bool:

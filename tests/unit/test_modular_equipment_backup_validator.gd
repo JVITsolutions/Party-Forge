@@ -39,8 +39,10 @@ func run() -> Array[String]:
 	_test_malformed_json_and_absent_source(service, failures)
 	_test_invalid_utf8_manifest(service, failures)
 	_test_source_path_metadata(service, failures)
+	_test_virtual_paths_rejected(service, entry_point, failures)
 	_test_corrupt_manifest_totals(service, failures)
 	_test_single_line_dynamic_errors(service, failures)
+	_test_unicode_line_separator_errors(service, entry_point, failures)
 	_test_deterministic_error_order(service, failures)
 	if entry_point.has_method(&"run_cli"):
 		_test_cli_behavior(entry_point, failures)
@@ -169,6 +171,33 @@ func _test_source_path_metadata(service: RefCounted, failures: Array[String]) ->
 	TestAssertions.truthy(bool(case_result.get("ok", false)), "source root and top-level compare case-insensitively", failures)
 
 
+func _test_virtual_paths_rejected(service: RefCounted, entry_point: Object, failures: Array[String]) -> void:
+	var schemes := ["res://", "user://", "custom://backup"]
+	for scheme: String in schemes:
+		var service_result := service.call(&"verify_backup", scheme, PackedStringArray(EXPECTED_PATHS)) as Dictionary
+		_assert_has_error(service_result, "PARTY_FORGE_MODULAR_BACKUP_ERROR stage=request field=backup_root reason=must be an explicit local absolute path", "%s service backup root rejects" % scheme, failures)
+		_captured_lines.clear()
+		var cli_exit := int(entry_point.call(&"run_cli", PackedStringArray(["--backup-root", scheme]), PackedStringArray(EXPECTED_PATHS), Callable(self, &"_capture_line")))
+		TestAssertions.equal(cli_exit, 1, "%s CLI backup root exits nonzero" % scheme, failures)
+		TestAssertions.equal(_captured_lines, ["PARTY_FORGE_MODULAR_BACKUP_ERROR stage=request field=backup_root reason=must be an explicit local absolute path"], "%s CLI backup root rejects as local-drive error" % scheme, failures)
+
+	for field: String in ["root", "toplevel"]:
+		for scheme: String in schemes:
+			var root := _make_valid_fixture("virtual-%s-%s" % [field, scheme.get_slice(":", 0)], failures)
+			var manifest := _read_manifest(root)
+			(manifest["source"] as Dictionary)[field] = scheme
+			_write_manifest(root, manifest, failures)
+			var service_result := _verify_unchanged(service, root, "%s %s service failure is read-only" % [field, scheme], failures)
+			var expected := "PARTY_FORGE_MODULAR_BACKUP_ERROR stage=manifest field=source.%s reason=must be a normalized local absolute path" % field
+			_assert_has_error(service_result, expected, "%s %s service source metadata rejects" % [field, scheme], failures)
+			var before := _snapshot(root)
+			_captured_lines.clear()
+			var cli_exit := int(entry_point.call(&"run_cli", PackedStringArray(["--backup-root", root]), PackedStringArray(EXPECTED_PATHS), Callable(self, &"_capture_line")))
+			TestAssertions.equal(cli_exit, 1, "%s %s CLI source metadata exits nonzero" % [field, scheme], failures)
+			TestAssertions.truthy(expected in _captured_lines, "%s %s CLI source metadata rejects" % [field, scheme], failures)
+			TestAssertions.equal(_snapshot(root), before, "%s %s CLI source failure is read-only" % [field, scheme], failures)
+
+
 func _test_corrupt_manifest_totals(service: RefCounted, failures: Array[String]) -> void:
 	var count_root := _make_valid_fixture("file-count", failures)
 	var count_manifest := _read_manifest(count_root)
@@ -193,6 +222,22 @@ func _test_single_line_dynamic_errors(service: RefCounted, failures: Array[Strin
 	var result := _verify_unchanged(service, root, "control-character failure is read-only", failures)
 	_assert_has_error(result, "PARTY_FORGE_MODULAR_BACKUP_ERROR stage=manifest path=bad%0D%0A%01.dat reason=must be normalized and relative", "dynamic controls are percent-encoded", failures)
 	_assert_physical_error_lines(result.get("errors", PackedStringArray()) as PackedStringArray, "service errors", failures)
+
+
+func _test_unicode_line_separator_errors(service: RefCounted, entry_point: Object, failures: Array[String]) -> void:
+	var root := _make_valid_fixture("unicode-lines", failures)
+	var manifest := _read_manifest(root)
+	(manifest["files"] as Array)[0]["path"] = "bad%svalue%s.dat" % [String.chr(0x2028), String.chr(0x2029)]
+	_write_manifest(root, manifest, failures)
+	var result := _verify_unchanged(service, root, "Unicode-separator service failure is read-only", failures)
+	_assert_has_error(result, "PARTY_FORGE_MODULAR_BACKUP_ERROR stage=manifest path=bad%2028value%2029.dat reason=unexpected", "service encodes Unicode line separators", failures)
+	_assert_physical_error_lines(result.get("errors", PackedStringArray()) as PackedStringArray, "Unicode service errors", failures)
+
+	_captured_lines.clear()
+	var cli_exit := int(entry_point.call(&"run_cli", PackedStringArray(["--bad%svalue%s" % [String.chr(0x2028), String.chr(0x2029)]]), PackedStringArray(EXPECTED_PATHS), Callable(self, &"_capture_line")))
+	TestAssertions.equal(cli_exit, 1, "CLI rejects Unicode-separator argument", failures)
+	_assert_physical_error_lines(PackedStringArray(_captured_lines), "Unicode CLI errors", failures)
+	TestAssertions.truthy("argument=--bad%2028value%2029" in _captured_lines[1 if _captured_lines.size() > 1 else 0], "CLI encodes Unicode line separators", failures)
 
 
 func _test_deterministic_error_order(service: RefCounted, failures: Array[String]) -> void:
@@ -300,13 +345,13 @@ func _assert_physical_error_lines(lines: PackedStringArray, label: String, failu
 	TestAssertions.truthy(not lines.is_empty(), "%s are present" % label, failures)
 	for line: String in lines:
 		TestAssertions.truthy(line.begins_with("PARTY_FORGE_MODULAR_BACKUP_ERROR "), "%s retain the exact prefix: %s" % [label, line], failures)
-		TestAssertions.truthy(not _has_control_character(line), "%s contain no physical control characters: %s" % [label, line], failures)
+		TestAssertions.truthy(not _has_physical_line_separator(line), "%s contain no physical line separators: %s" % [label, line], failures)
 
 
-func _has_control_character(value: String) -> bool:
+func _has_physical_line_separator(value: String) -> bool:
 	for index: int in value.length():
 		var codepoint := value.unicode_at(index)
-		if codepoint < 32 or (codepoint >= 127 and codepoint <= 159):
+		if codepoint < 32 or (codepoint >= 127 and codepoint <= 159) or codepoint in [0x2028, 0x2029]:
 			return true
 	return false
 
