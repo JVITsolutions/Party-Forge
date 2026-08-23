@@ -74,3 +74,35 @@ Result: exit `0`; `TEST_SUMMARY: PASS (212 suites)`. Established negative-path d
 ## Concerns
 
 No blocking or known Task 6 correctness concern remains. Imported auto-rig equipment still must satisfy the existing exact rig/Skin validation before it can participate in this transaction; this task did not modify or promote asset content.
+
+## Important review fixes
+
+The two Important review findings against base `9b46281` were fixed without changing `CharacterPresentation` or any asset/resource content.
+
+- Every resolved target body-fit descriptor now contributes `hide_body_regions` regardless of attachment mode. Unknown rigid-socket regions reject before commit, while valid rigid declarations hide on commit and a target fit that omits them restores authored visibility.
+- Candidate bounds now substitute the exact requested visibility for body-preset and body-region nodes instead of inheriting live visibility that the commit will replace. Staged shared-skin and rigid equipment bounds also require effective ancestor visibility; rigid candidates check both their selected attachment ancestry and destination socket ancestry.
+
+### Accepted review RED
+
+The transaction suite was extended first with public `CharacterPresentation.set_body_preset()` coverage for valid rigid hide/restore, unknown rigid-region atomic rejection, restored descendant-region grounding, and an invisible staged attachment ancestor.
+
+Command:
+
+```powershell
+& $godot --headless --path . --quit-after 300 --script res://tests/focused_test_runner.gd -- tests/unit/test_character_body_fit_transaction.gd
+```
+
+Result before production changes: exit `1`; `TEST_SUMMARY: FAIL (6 failures)`. The precise failures were: the rigid target region remained visible; restored descendant body geometry left `ground_gap = -2.000`; invisible staged equipment produced `ground_gap = 10.500` and `position.y = 10.500`; and the unknown rigid region was accepted, changing the full rollback snapshot. The suite loaded normally with no parser or fixture error.
+
+### Review GREEN and verification
+
+- Focused transaction suite: exit `0`; `TEST_SUMMARY: PASS (0 failures)`.
+- Required eight-suite transaction, body-fit, Forge equipment, shared-skin binding, semantic-socket, grounding/UI, character-presentation, and sandbox matrix: exit `0`; `TEST_SUMMARY: PASS (0 failures)`.
+- Nineteen-suite affected presentation/content matrix: exit `0`; `TEST_SUMMARY: PASS (0 failures)`.
+- Fresh uncontested full suite: exit `0`; `TEST_SUMMARY: PASS (212 suites)`.
+
+The presentation and full-suite runs emitted their established intentional negative-path diagnostics; no `TEST_FAILURE` line was emitted in any GREEN run.
+
+### Review-fix concerns
+
+No blocking or known correctness concern remains from the two Important findings.

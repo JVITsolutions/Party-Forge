@@ -8,10 +8,14 @@ func run() -> Array[String]:
 	var failures: Array[String] = []
 	_test_shared_fit_swap_commits(failures)
 	_test_variant_fit_swap_commits(failures)
+	_test_rigid_fit_regions_hide_and_restore(failures)
+	_test_restored_descendant_body_region_drives_candidate_grounding(failures)
+	_test_invisible_staged_equipment_ancestor_does_not_drive_grounding(failures)
 	_test_rejection_preserves_state(&"fitted_scene", failures)
 	_test_rejection_preserves_state(&"shared_skin", failures)
 	_test_rejection_preserves_state(&"semantic_socket", failures)
 	_test_rejection_preserves_state(&"body_region", failures)
+	_test_rejection_preserves_state(&"rigid_body_region", failures)
 	_test_rejection_preserves_state(&"grounding", failures)
 	return failures
 
@@ -39,6 +43,39 @@ func _test_variant_fit_swap_commits(failures: Array[String]) -> void:
 	TestAssertions.near(model.ground_gap(), 0.0, 0.001, "variant-fit swap commits a grounded candidate", failures)
 	presentation.free()
 
+func _test_rigid_fit_regions_hide_and_restore(failures: Array[String]) -> void:
+	var visual := _rigid_visual(&"variant", _rigid_scene(&"MasculineFit"), _rigid_scene(&"FeminineFit"), [], [&"torso"])
+	var fixture := _fixture(visual)
+	var presentation := fixture.presentation as CharacterPresentation
+	var model := fixture.model as ForgeHumanoidModel
+	TestAssertions.truthy(presentation.set_body_preset(&"feminine"), "public body API commits a rigid fit with a valid hidden region", failures)
+	TestAssertions.truthy(not _body_named(model, &"FeminineTorso").visible, "rigid fit hides its declared body region on commit", failures)
+	TestAssertions.truthy(presentation.set_body_preset(&"masculine"), "public body API commits a rigid fit that omits the prior hidden region", failures)
+	TestAssertions.truthy(_body_named(model, &"MasculineTorso").visible, "rigid fit restores a region omitted by the target fit", failures)
+	TestAssertions.near(model.ground_gap(), 0.0, 0.001, "rigid region restoration keeps the committed candidate grounded", failures)
+	presentation.free()
+
+func _test_restored_descendant_body_region_drives_candidate_grounding(failures: Array[String]) -> void:
+	var visual := _shared_skin_visual(_shared_skin_scene(false), _shared_skin_scene(false), [])
+	var fixture := _nested_body_fixture(visual)
+	var presentation := fixture.presentation as CharacterPresentation
+	var model := fixture.model as ForgeHumanoidModel
+	var target_region := _body_named(model, &"FeminineTorsoRegion")
+	TestAssertions.truthy(not target_region.visible, "current fit hides the descendant region before the target swap", failures)
+	TestAssertions.truthy(presentation.set_body_preset(&"feminine"), "public body API commits a fit that restores a descendant body region", failures)
+	TestAssertions.truthy(target_region.visible, "target fit restores the descendant body region", failures)
+	TestAssertions.near(model.ground_gap(), 0.0, 0.001, "restored descendant body geometry drives candidate grounding", failures)
+	presentation.free()
+
+func _test_invisible_staged_equipment_ancestor_does_not_drive_grounding(failures: Array[String]) -> void:
+	var fixture := _fixture(_rigid_invisible_ancestor_visual())
+	var presentation := fixture.presentation as CharacterPresentation
+	var model := fixture.model as ForgeHumanoidModel
+	TestAssertions.truthy(presentation.set_body_preset(&"feminine"), "public body API commits equipment beneath an invisible staged ancestor", failures)
+	TestAssertions.near(model.ground_gap(), 0.0, 0.001, "invisible staged equipment does not affect committed grounding", failures)
+	TestAssertions.near(model.position.y, 0.0, 0.001, "candidate grounding uses only effectively visible post-commit geometry", failures)
+	presentation.free()
+
 func _test_rejection_preserves_state(invalid_case: StringName, failures: Array[String]) -> void:
 	var visual: EquipmentVisualDefinition
 	var invalid_grounding := invalid_case == &"grounding"
@@ -51,6 +88,8 @@ func _test_rejection_preserves_state(invalid_case: StringName, failures: Array[S
 			visual = _rigid_visual(&"variant", _rigid_scene(&"MasculineFit"), _rigid_scene(&"FeminineFit", &"MissingSocket"))
 		&"body_region":
 			visual = _shared_skin_visual(_shared_skin_scene(false), _shared_skin_scene(false), [&"unknown_region"])
+		&"rigid_body_region":
+			visual = _rigid_visual(&"variant", _rigid_scene(&"MasculineFit"), _rigid_scene(&"FeminineFit"), [], [&"unknown_region"])
 		&"grounding":
 			visual = _icon_only_visual()
 	var fixture := _fixture(visual, invalid_grounding)
@@ -83,6 +122,23 @@ func _fixture(visual: EquipmentVisualDefinition, feminine_without_geometry: bool
 		TestAssertions.truthy(presentation.apply_equipment_visual(SLOT_ID, visual), "fixture equips initial masculine fit", [])
 	TestAssertions.truthy(presentation.refresh_grounding(), "fixture starts grounded", [])
 	model.transform = Transform3D(Basis.from_euler(Vector3(0.0, 0.17, 0.0)), Vector3(0.25, model.position.y, -0.4))
+	return {&"presentation": presentation, &"model": model}
+
+func _nested_body_fixture(visual: EquipmentVisualDefinition) -> Dictionary:
+	var presentation := CharacterPresentation.new()
+	presentation.name = &"Presentation"
+	(Engine.get_main_loop() as SceneTree).root.add_child(presentation)
+	var model := ForgeHumanoidModel.new()
+	model.name = &"Model"
+	presentation.add_child(model)
+	presentation.active_model = model
+	_add_rig_and_sockets(model)
+	_add_nested_body(model, &"MasculineBody", &"MasculineTorsoRegion", &"masculine", true, 1.0)
+	_add_nested_body(model, &"FeminineBody", &"FeminineTorsoRegion", &"feminine", false, -1.0)
+	TestAssertions.truthy(model.set_body_preset(&"masculine"), "nested fixture activates masculine body", [])
+	TestAssertions.truthy(presentation.set_palette(&"ember", Color("d66a42")), "nested fixture applies palette", [])
+	TestAssertions.truthy(presentation.apply_equipment_visual(SLOT_ID, visual), "nested fixture equips initial masculine fit", [])
+	TestAssertions.truthy(presentation.refresh_grounding(), "nested fixture starts grounded", [])
 	return {&"presentation": presentation, &"model": model}
 
 func _add_rig_and_sockets(model: ForgeHumanoidModel) -> void:
@@ -128,7 +184,26 @@ func _add_body(model: ForgeHumanoidModel, node_name: StringName, preset: StringN
 	mesh.material_override = material
 	model.add_child(mesh)
 
-func _rigid_visual(policy: StringName, masculine_scene: PackedScene, feminine_scene: PackedScene) -> EquipmentVisualDefinition:
+func _add_nested_body(model: ForgeHumanoidModel, root_name: StringName, region_name: StringName, preset: StringName, visible: bool, region_y: float) -> void:
+	var body_root := Node3D.new()
+	body_root.name = root_name
+	body_root.set_meta(&"body_preset", preset)
+	body_root.visible = visible
+	model.add_child(body_root)
+	var mesh := MeshInstance3D.new()
+	mesh.name = region_name
+	mesh.set_meta(&"body_region", &"torso")
+	mesh.set_meta(&"palette_region", &"primary")
+	mesh.position.y = region_y
+	var box := BoxMesh.new()
+	box.size = Vector3(0.7, 2.0, 0.45)
+	mesh.mesh = box
+	var material := StandardMaterial3D.new()
+	material.albedo_color = Color("7a8195")
+	mesh.material_override = material
+	body_root.add_child(mesh)
+
+func _rigid_visual(policy: StringName, masculine_scene: PackedScene, feminine_scene: PackedScene, masculine_hidden_regions: Array[StringName] = [], feminine_hidden_regions: Array[StringName] = []) -> EquipmentVisualDefinition:
 	var visual := EquipmentVisualDefinition.new()
 	visual.id = StringName("%s_armour" % policy)
 	visual.slot_id = SLOT_ID
@@ -138,12 +213,27 @@ func _rigid_visual(policy: StringName, masculine_scene: PackedScene, feminine_sc
 	visual.socket_id = SLOT_ID
 	visual.combat_visible = true
 	if policy == &"shared":
-		visual.body_fits = [_fit(&"shared", masculine_scene, [NodePath(".")])]
+		visual.body_fits = [_fit(&"shared", masculine_scene, [NodePath(".")], masculine_hidden_regions)]
 	else:
 		visual.body_fits = [
-			_fit(&"masculine", masculine_scene, [NodePath(".")]),
-			_fit(&"feminine", feminine_scene, [NodePath(".")]),
+			_fit(&"masculine", masculine_scene, [NodePath(".")], masculine_hidden_regions),
+			_fit(&"feminine", feminine_scene, [NodePath(".")], feminine_hidden_regions),
 		]
+	return visual
+
+func _rigid_invisible_ancestor_visual() -> EquipmentVisualDefinition:
+	var visual := EquipmentVisualDefinition.new()
+	visual.id = &"invisible_ancestor_armour"
+	visual.slot_id = SLOT_ID
+	visual.supported_slot_ids = [SLOT_ID]
+	visual.fit_policy = &"variant"
+	visual.attachment_mode = &"rigid_socket"
+	visual.socket_id = SLOT_ID
+	visual.combat_visible = true
+	visual.body_fits = [
+		_fit(&"masculine", _rigid_invisible_ancestor_scene(), [NodePath("Attachment")]),
+		_fit(&"feminine", _rigid_invisible_ancestor_scene(), [NodePath("Attachment")]),
+	]
 	return visual
 
 func _shared_skin_visual(masculine_scene: PackedScene, feminine_scene: PackedScene, feminine_hidden_regions: Array[StringName]) -> EquipmentVisualDefinition:
@@ -192,6 +282,27 @@ func _rigid_scene(root_name: StringName, requested_socket: StringName = &"") -> 
 	var material := StandardMaterial3D.new()
 	material.albedo_color = Color("40526f")
 	root.material_override = material
+	var scene := PackedScene.new()
+	scene.pack(root)
+	root.free()
+	return scene
+
+func _rigid_invisible_ancestor_scene() -> PackedScene:
+	var root := Node3D.new()
+	root.name = &"EquipmentRoot"
+	var attachment := Node3D.new()
+	attachment.name = &"Attachment"
+	attachment.visible = false
+	root.add_child(attachment)
+	attachment.owner = root
+	var mesh := MeshInstance3D.new()
+	mesh.name = &"HiddenLowMesh"
+	mesh.mesh = BoxMesh.new()
+	mesh.position.y = -10.0
+	mesh.set_meta(&"palette_region", &"primary")
+	mesh.material_override = StandardMaterial3D.new()
+	attachment.add_child(mesh)
+	mesh.owner = root
 	var scene := PackedScene.new()
 	scene.pack(root)
 	root.free()

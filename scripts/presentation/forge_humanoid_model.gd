@@ -105,10 +105,7 @@ func prepare_body_preset_change(preset_id: StringName) -> Dictionary:
 			return _body_fit_failure()
 		candidate_equipment[slot_id] = staged
 		var descriptor := definition.body_fit_for(preset_id) if definition != null else null
-		if definition != null and definition.attachment_mode == &"shared_skin":
-			if descriptor == null:
-				_discard_staged_equipment(candidate_equipment)
-				return _body_fit_failure()
+		if descriptor != null:
 			for region: StringName in descriptor.hide_body_regions:
 				if region.is_empty() or not body_region_nodes.has(region):
 					_discard_staged_equipment(candidate_equipment)
@@ -548,7 +545,7 @@ func _candidate_visual_bounds(preset_id: StringName, hidden_regions: Dictionary,
 			var root := staged.get(&"root") as Node3D
 			if root != null:
 				for mesh: MeshInstance3D in _meshes_including_root(root):
-					if not mesh.visible or mesh.mesh == null:
+					if not _mesh_visible_for_body_candidate(mesh, preset_id, hidden_regions):
 						continue
 					var transformed := _transform_from_model(mesh) * mesh.get_aabb()
 					bounds = transformed if not has_bounds else bounds.merge(transformed)
@@ -557,8 +554,10 @@ func _candidate_visual_bounds(preset_id: StringName, hidden_regions: Dictionary,
 			for part: Dictionary in staged.get(&"attachments", []):
 				var attachment := part[&"node"] as Node3D
 				var socket := part[&"socket"] as Node3D
+				if not _node_visible_for_body_candidate(socket, preset_id, hidden_regions):
+					continue
 				for mesh: MeshInstance3D in _meshes_including_root(attachment):
-					if not mesh.visible or mesh.mesh == null:
+					if mesh.mesh == null or not _is_visible_through_root(mesh, attachment):
 						continue
 					var mesh_transform := _transform_from_model(socket) * attachment.transform * _relative_transform(attachment, mesh)
 					var transformed := mesh_transform * mesh.get_aabb()
@@ -569,19 +568,38 @@ func _candidate_visual_bounds(preset_id: StringName, hidden_regions: Dictionary,
 func _mesh_visible_for_body_candidate(mesh: MeshInstance3D, preset_id: StringName, hidden_regions: Dictionary) -> bool:
 	if mesh.mesh == null:
 		return false
-	var cursor: Node = mesh
+	return _node_visible_for_body_candidate(mesh, preset_id, hidden_regions)
+
+func _node_visible_for_body_candidate(start: Node3D, preset_id: StringName, hidden_regions: Dictionary) -> bool:
+	var cursor: Node = start
 	while cursor != null and cursor != self:
 		if cursor is Node3D:
 			var node := cursor as Node3D
+			var has_body_preset := node.has_meta(&"body_preset")
 			if node.has_meta(&"body_preset"):
 				if StringName(node.get_meta(&"body_preset")) != preset_id:
 					return false
-			elif not node.visible:
-				return false
-			if node.has_meta(&"body_region") and hidden_regions.has(StringName(node.get_meta(&"body_region"))):
+			if node.has_meta(&"body_region"):
+				var region := StringName(node.get_meta(&"body_region"))
+				var base_visible := bool(body_region_base_visibility.get(node, node.visible))
+				if has_body_preset:
+					base_visible = StringName(node.get_meta(&"body_preset")) == preset_id
+				if not base_visible or hidden_regions.has(region):
+					return false
+			elif not has_body_preset and not node.visible:
 				return false
 		cursor = cursor.get_parent()
 	return true
+
+func _is_visible_through_root(start: Node3D, root: Node3D) -> bool:
+	var cursor: Node = start
+	while cursor != null:
+		if cursor is Node3D and not (cursor as Node3D).visible:
+			return false
+		if cursor == root:
+			return true
+		cursor = cursor.get_parent()
+	return false
 
 func _relative_transform(root: Node3D, node: Node3D) -> Transform3D:
 	var result := Transform3D.IDENTITY
@@ -682,7 +700,7 @@ func _refresh_hidden_body_regions() -> void:
 	var hidden_regions: Dictionary = {}
 	for slot_id: StringName in equipped_definitions:
 		var definition := equipped_definitions[slot_id] as EquipmentVisualDefinition
-		if definition == null or definition.attachment_mode != &"shared_skin":
+		if definition == null:
 			continue
 		var descriptor := definition.body_fit_for(_active_body_preset)
 		if descriptor == null:
