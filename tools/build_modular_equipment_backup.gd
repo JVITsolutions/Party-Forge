@@ -18,46 +18,212 @@ const ARGUMENT_FIELDS := {
 
 
 class NativeFilesystem extends RefCounted:
-	const PROBE_SCRIPT := "$ErrorActionPreference='Stop'; try { $p=[IO.Path]::GetFullPath($args[0]); $required=$args[1] -eq '1'; $root=[IO.Path]::GetPathRoot($p); $current=$root; $relative=$p.Substring($root.Length); foreach($segment in $relative.Split([IO.Path]::DirectorySeparatorChar,[StringSplitOptions]::RemoveEmptyEntries)) { $current=[IO.Path]::Combine($current,$segment); if([IO.File]::Exists($current) -or [IO.Directory]::Exists($current)) { $item=Get-Item -LiteralPath $current -Force; if(($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { [Console]::Out.Write('reparse component: '+$current); exit 42 } } else { if($required) { [Console]::Out.Write('path does not exist: '+$current); exit 43 }; break } }; [Console]::Out.Write($p) } catch { [Console]::Out.Write($_.Exception.Message); exit 44 }"
-	const CREATE_DIRECTORY_SCRIPT := "$ErrorActionPreference='Stop'; Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public static class Task3DirectoryNative { [DllImport(\"kernel32.dll\", CharSet=CharSet.Unicode, SetLastError=true)] public static extern bool CreateDirectory(string path, IntPtr attributes); }'; function Assert-Safe([string]$path,[string]$anchor) { $p=[IO.Path]::GetFullPath($path); $a=[IO.Path]::GetFullPath($anchor).TrimEnd([IO.Path]::DirectorySeparatorChar); $prefix=$a+[IO.Path]::DirectorySeparatorChar; if(-not ($p.Equals($a,[StringComparison]::OrdinalIgnoreCase) -or $p.StartsWith($prefix,[StringComparison]::OrdinalIgnoreCase))) { throw 'containment failure' }; $root=[IO.Path]::GetPathRoot($p); $current=$root; foreach($segment in $p.Substring($root.Length).Split([IO.Path]::DirectorySeparatorChar,[StringSplitOptions]::RemoveEmptyEntries)) { $current=[IO.Path]::Combine($current,$segment); if([IO.File]::Exists($current) -or [IO.Directory]::Exists($current)) { $item=Get-Item -LiteralPath $current -Force; if(($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw ('reparse component: '+$current) } } else { break } }; return $p }; $created=$false; try { $p=Assert-Safe ($args[0]) ($args[1]); $parent=Assert-Safe ([IO.Path]::GetDirectoryName($p)) ($args[1]); if(-not [IO.Directory]::Exists($parent)) { throw 'parent missing' }; if(-not [Task3DirectoryNative]::CreateDirectory($p,[IntPtr]::Zero)) { throw ('CreateDirectoryW failed code='+[Runtime.InteropServices.Marshal]::GetLastWin32Error()) }; $created=$true; $item=Get-Item -LiteralPath $p -Force; if(($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw 'created directory became reparse point' }; [Console]::Out.Write('created=1'); exit 0 } catch { $flag=if($created){'1'}else{'0'}; [Console]::Out.Write('created='+$flag+';'+$_.Exception.Message); exit 45 }"
-	const CREATE_SCRIPT := "$ErrorActionPreference='Stop'; function Assert-Safe([string]$path,[string]$anchor) { $p=[IO.Path]::GetFullPath($path); $a=[IO.Path]::GetFullPath($anchor).TrimEnd([IO.Path]::DirectorySeparatorChar); $prefix=$a+[IO.Path]::DirectorySeparatorChar; if(-not ($p.Equals($a,[StringComparison]::OrdinalIgnoreCase) -or $p.StartsWith($prefix,[StringComparison]::OrdinalIgnoreCase))) { throw 'containment failure' }; $root=[IO.Path]::GetPathRoot($p); $current=$root; foreach($segment in $p.Substring($root.Length).Split([IO.Path]::DirectorySeparatorChar,[StringSplitOptions]::RemoveEmptyEntries)) { $current=[IO.Path]::Combine($current,$segment); if([IO.File]::Exists($current) -or [IO.Directory]::Exists($current)) { $item=Get-Item -LiteralPath $current -Force; if(($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw ('reparse component: '+$current) } } else { break } }; return $p }; $created=$false; $stream=$null; try { $p=Assert-Safe ($args[0]) ($args[1]); $parent=Assert-Safe ([IO.Path]::GetDirectoryName($p)) ($args[1]); if(-not [IO.Directory]::Exists($parent)) { throw 'parent missing' }; $expected=[long]::Parse($args[2],[Globalization.CultureInfo]::InvariantCulture); $expectedHash=$args[3]; $stream=[IO.File]::Open($p,[IO.FileMode]::CreateNew,[IO.FileAccess]::ReadWrite,[IO.FileShare]::None); $created=$true; while($true) { $line=[Console]::In.ReadLine(); if($null -eq $line) { throw 'content channel closed' }; if($line -eq '.') { break }; $chunk=[Convert]::FromBase64String($line); $stream.Write($chunk,0,$chunk.Length) }; $stream.Flush($true); if($stream.Length -ne $expected) { throw 'short write' }; $stream.Position=0; $sha=[Security.Cryptography.SHA256]::Create(); try { $actualHash=([BitConverter]::ToString($sha.ComputeHash($stream))).Replace('-','').ToLowerInvariant() } finally { $sha.Dispose() }; if($actualHash -ne $expectedHash) { throw 'write hash mismatch' }; $stream.Dispose(); $stream=$null; [Console]::Out.Write('created=1'); exit 0 } catch { if($null -ne $stream) { $stream.Dispose() }; $flag=if($created){'1'}else{'0'}; [Console]::Out.Write('created='+$flag+';'+$_.Exception.Message); exit 46 }"
-	const PUBLISH_SCRIPT := "$ErrorActionPreference='Stop'; function Assert-Safe([string]$path,[string]$anchor) { $p=[IO.Path]::GetFullPath($path); $a=[IO.Path]::GetFullPath($anchor).TrimEnd([IO.Path]::DirectorySeparatorChar); $prefix=$a+[IO.Path]::DirectorySeparatorChar; if(-not ($p.Equals($a,[StringComparison]::OrdinalIgnoreCase) -or $p.StartsWith($prefix,[StringComparison]::OrdinalIgnoreCase))) { throw 'containment failure' }; $root=[IO.Path]::GetPathRoot($p); $current=$root; foreach($segment in $p.Substring($root.Length).Split([IO.Path]::DirectorySeparatorChar,[StringSplitOptions]::RemoveEmptyEntries)) { $current=[IO.Path]::Combine($current,$segment); if([IO.File]::Exists($current) -or [IO.Directory]::Exists($current)) { $item=Get-Item -LiteralPath $current -Force; if(($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw ('reparse component: '+$current) } } else { break } }; return $p }; try { $pending=Assert-Safe ($args[0]) ($args[2]); $final=Assert-Safe ($args[1]) ($args[2]); if(-not [IO.File]::Exists($pending)) { throw 'pending missing' }; if([IO.File]::Exists($final) -or [IO.Directory]::Exists($final)) { throw 'collision' }; [IO.File]::Move($pending,$final); exit 0 } catch { [Console]::Out.Write($_.Exception.Message); exit 47 }"
+	const NATIVE_SOURCE := r"""
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Runtime.InteropServices;
+using System.Security.Cryptography;
+using System.Text;
+using Microsoft.Win32.SafeHandles;
+
+public static class Task3Native {
+ const uint READ_ATTR=0x80, GENERIC_READ=0x80000000, GENERIC_WRITE=0x40000000;
+ const uint SHARE_READ=1, SHARE_WRITE=2, SHARE_DELETE=4, OPEN_EXISTING=3, CREATE_NEW=1;
+ const uint BACKUP=0x02000000, OPEN_REPARSE=0x00200000, ATTR_REPARSE=0x400, ATTR_DIR=0x10;
+ const uint MOVE_WRITE_THROUGH=8;
+ [StructLayout(LayoutKind.Sequential)] struct Info { public uint Attr,CT0,CT1,AT0,AT1,WT0,WT1,Vol,SizeH,SizeL,Links,IndexH,IndexL; }
+ [DllImport("kernel32.dll",CharSet=CharSet.Unicode,SetLastError=true)] static extern SafeFileHandle CreateFileW(string p,uint a,uint s,IntPtr sa,uint d,uint f,IntPtr t);
+ [DllImport("kernel32.dll",SetLastError=true)] static extern bool GetFileInformationByHandle(SafeFileHandle h,out Info i);
+ [DllImport("kernel32.dll",CharSet=CharSet.Unicode,SetLastError=true)] static extern uint GetFinalPathNameByHandleW(SafeFileHandle h,StringBuilder p,uint n,uint f);
+ [DllImport("kernel32.dll",CharSet=CharSet.Unicode,SetLastError=true)] static extern bool CreateDirectoryW(string p,IntPtr a);
+ [DllImport("kernel32.dll",CharSet=CharSet.Unicode,SetLastError=true)] static extern bool MoveFileExW(string a,string b,uint f);
+ [DllImport("kernel32.dll",CharSet=CharSet.Unicode,SetLastError=true)] static extern uint GetShortPathNameW(string p,StringBuilder s,uint n);
+
+ sealed class Held : IDisposable {
+  public string Full; public bool Exists; public string Nearest=""; public string Final=""; public uint Attr;
+  public readonly List<string> Ids=new List<string>(); public readonly List<SafeFileHandle> Handles=new List<SafeFileHandle>();
+  public void Dispose(){ for(int i=Handles.Count-1;i>=0;i--) Handles[i].Dispose(); }
+ }
+ static string B64(string s){ return Convert.ToBase64String(Encoding.UTF8.GetBytes(s)); }
+ static string Hex(byte[] b){ return BitConverter.ToString(b).Replace("-","").ToLowerInvariant(); }
+ static void Out(string s){ Console.Out.WriteLine(s); Console.Out.Flush(); }
+ static void Reject(string p){ if(String.IsNullOrWhiteSpace(p)) throw new IOException("empty path"); if(p.StartsWith("\\\\")) throw new IOException("UNC paths fail closed"); }
+ static SafeFileHandle Open(string p,uint access,uint share,uint disposition){
+  SafeFileHandle h=CreateFileW(p,access,share,IntPtr.Zero,disposition,BACKUP|OPEN_REPARSE,IntPtr.Zero);
+  if(h.IsInvalid){ int e=Marshal.GetLastWin32Error(); h.Dispose(); throw new IOException((e==80||e==183?"collision":"CreateFileW failed code="+e)+" path="+p); }
+  return h;
+ }
+ static Info GetInfo(SafeFileHandle h){ Info i; if(!GetFileInformationByHandle(h,out i)) throw new IOException("GetFileInformationByHandle failed code="+Marshal.GetLastWin32Error()); return i; }
+ static string Id(Info i){ return i.Vol.ToString("x8")+":"+i.IndexH.ToString("x8")+i.IndexL.ToString("x8"); }
+ static string FinalName(SafeFileHandle h){ StringBuilder b=new StringBuilder(32768); uint n=GetFinalPathNameByHandleW(h,b,(uint)b.Capacity,0); if(n==0||n>=b.Capacity) throw new IOException("GetFinalPathNameByHandleW failed code="+Marshal.GetLastWin32Error()); return b.ToString(); }
+ static void Check(Info i,string p){ if((i.Attr&ATTR_REPARSE)!=0) throw new IOException("reparse component: "+p); }
+ static Held Hold(string path,bool allowMissing){
+  Reject(path); Held w=new Held(); w.Full=Path.GetFullPath(path); string root=Path.GetPathRoot(w.Full); if(String.IsNullOrEmpty(root)) throw new IOException("path root missing");
+  string current=root; string tail=w.Full.Substring(root.Length); string[] parts=tail.Split(new[]{Path.DirectorySeparatorChar,Path.AltDirectorySeparatorChar},StringSplitOptions.RemoveEmptyEntries);
+  List<string> paths=new List<string>(); paths.Add(root); foreach(string part in parts){ current=Path.Combine(current,part); paths.Add(current); }
+  try {
+   foreach(string candidate in paths){
+    SafeFileHandle h=CreateFileW(candidate,READ_ATTR,SHARE_READ|SHARE_WRITE,IntPtr.Zero,OPEN_EXISTING,BACKUP|OPEN_REPARSE,IntPtr.Zero);
+    if(h.IsInvalid){ int e=Marshal.GetLastWin32Error(); h.Dispose(); if(allowMissing&&(e==2||e==3)){ w.Exists=false; return w; } throw new IOException("path open failed code="+e+" path="+candidate); }
+    Info info=GetInfo(h); Check(info,candidate); string id=Id(info); w.Handles.Add(h); w.Ids.Add(id); w.Nearest=id; w.Final=id; w.Attr=info.Attr;
+   }
+   w.Exists=true; return w;
+  } catch { w.Dispose(); throw; }
+ }
+ static void Require(Held h,string anchor,string label){ if(String.IsNullOrEmpty(anchor)||!h.Ids.Contains(anchor)) throw new IOException(label+" physical containment identity failure"); }
+ static SafeFileHandle Exact(string p,uint access,uint share,uint disposition,string expected){ SafeFileHandle h=Open(p,access,share,disposition); Info i=GetInfo(h); try { Check(i,p); if(!String.IsNullOrEmpty(expected)&&Id(i)!=expected) throw new IOException("opened object identity changed"); return h; } catch { h.Dispose(); throw; } }
+ static string HashStream(Stream s,out long count){ SHA256 sha=SHA256.Create(); try { byte[] b=new byte[65536]; int n; count=0; while((n=s.Read(b,0,b.Length))>0){ sha.TransformBlock(b,0,n,null,0); count+=n; } sha.TransformFinalBlock(new byte[0],0,0); return Hex(sha.Hash); } finally { sha.Dispose(); } }
+ static void Delay(string value){ int n; if(Int32.TryParse(value,out n)&&n>0) System.Threading.Thread.Sleep(n); }
+ static void Probe(string[] a){ using(Held h=Hold(a[1],a[2]=="0")){ string canon=h.Exists?FinalName(h.Handles[h.Handles.Count-1]):h.Full; Out("OK|PROBE|"+(h.Exists?"1":"0")+"|"+h.Nearest+"|"+h.Final+"|"+B64(canon)+"|"+String.Join(",",h.Ids.ToArray())); } }
+ static void State(string[] a){ using(Held h=Hold(a[1],true)){ if(!h.Exists){ Out("OK|STATE|0|1"); return; } if((h.Attr&ATTR_DIR)==0) throw new IOException("path is a file"); bool empty=Directory.GetFileSystemEntries(h.Full).Length==0; Out("OK|STATE|1|"+(empty?"1":"0")); } }
+ static void Mkdir(string[] a){ string p=Path.GetFullPath(a[1]); using(Held parent=Hold(Path.GetDirectoryName(p),false)){ Require(parent,a[2],"output"); if(!CreateDirectoryW(p,IntPtr.Zero)){ int e=Marshal.GetLastWin32Error(); throw new IOException((e==80||e==183?"collision":"CreateDirectoryW failed code="+e)); } using(SafeFileHandle h=Exact(p,READ_ATTR,SHARE_READ|SHARE_WRITE,OPEN_EXISTING,"")){ string id=Id(GetInfo(h)); Out("OWN|D|"+id+"|"+B64(p)); Delay(a[3]); Out("OK|DIR|"+id); } } }
+ static void Create(string[] a){ string p=Path.GetFullPath(a[1]); long expected=Int64.Parse(a[3]); using(Held parent=Hold(Path.GetDirectoryName(p),false)){ Require(parent,a[2],"output"); using(SafeFileHandle h=Exact(p,GENERIC_READ|GENERIC_WRITE,0,CREATE_NEW,"")){ string id=Id(GetInfo(h)); Out("OWN|F|"+id+"|"+B64(p)); Delay(a[5]); using(FileStream f=new FileStream(h,FileAccess.ReadWrite,65536,false)){ string line; long written=0; while((line=Console.In.ReadLine())!=null&&line!="."){ byte[] b=Convert.FromBase64String(line); f.Write(b,0,b.Length); written+=b.Length; } if(line==null) throw new IOException("content channel closed"); f.Flush(true); if(written!=expected||f.Length!=expected) throw new IOException("short write"); f.Position=0; long count; string hash=HashStream(f,out count); if(count!=expected||hash!=a[4]) throw new IOException("write verification mismatch"); Out("OK|CREATE|"+count+"|"+hash+"|"+id); } } } }
+ static void Copy(string[] a){ string src=Path.GetFullPath(a[1]), dst=Path.GetFullPath(a[3]); using(Held sh=Hold(src,false)) using(Held dp=Hold(Path.GetDirectoryName(dst),false)){ Require(sh,a[2],"source"); Require(dp,a[4],"output"); if((sh.Attr&ATTR_DIR)!=0) throw new IOException("source is a directory"); using(SafeFileHandle si=Exact(src,GENERIC_READ,SHARE_READ|SHARE_WRITE,OPEN_EXISTING,sh.Final)) using(SafeFileHandle di=Exact(dst,GENERIC_READ|GENERIC_WRITE,0,CREATE_NEW,"")){ string id=Id(GetInfo(di)); Out("OWN|F|"+id+"|"+B64(dst)); Delay(a[5]); using(FileStream s=new FileStream(si,FileAccess.Read,65536,false)) using(FileStream d=new FileStream(di,FileAccess.ReadWrite,65536,false)){ long expected=s.Length,read=0; byte[] b=new byte[65536]; SHA256 sha=SHA256.Create(); string srcHash; try { int n; while((n=s.Read(b,0,b.Length))>0){ d.Write(b,0,n); sha.TransformBlock(b,0,n,null,0); read+=n; } sha.TransformFinalBlock(new byte[0],0,0); srcHash=Hex(sha.Hash); } finally { sha.Dispose(); } d.Flush(true); long srcPos=s.Position,dstLen=d.Length; d.Position=0; long dstRead; string dstHash=HashStream(d,out dstRead); if(read!=expected||srcPos!=expected||dstLen!=expected||dstRead!=expected||srcHash!=dstHash) throw new IOException("copy full-length or hash verification failed"); Out("OK|COPY|"+expected+"|"+read+"|"+srcPos+"|"+srcHash+"|"+dstLen+"|"+dstRead+"|"+d.Position+"|"+dstHash+"|"+id); } } } }
+ static void Publish(string[] a){ string pending=Path.GetFullPath(a[1]), final=Path.GetFullPath(a[2]); using(Held pp=Hold(Path.GetDirectoryName(pending),false)) using(Held fp=Hold(Path.GetDirectoryName(final),false)){ Require(pp,a[3],"output"); Require(fp,a[3],"output"); using(Held ph=Hold(pending,false)){ if((ph.Attr&ATTR_DIR)!=0) throw new IOException("pending is a directory"); using(SafeFileHandle exact=Exact(pending,READ_ATTR,SHARE_READ|SHARE_WRITE|SHARE_DELETE,OPEN_EXISTING,ph.Final)){ string id=Id(GetInfo(exact)); Delay(a[4]); if(!MoveFileExW(pending,final,MOVE_WRITE_THROUGH)){ int e=Marshal.GetLastWin32Error(); throw new IOException((e==80||e==183?"collision":"MoveFileExW failed code="+e)); } using(SafeFileHandle check=Exact(final,READ_ATTR,SHARE_READ|SHARE_WRITE,OPEN_EXISTING,id)){ Out("OK|PUBLISH|"+id); } } } } }
+ static void Short(string[] a){ Reject(a[1]); string p=Path.GetFullPath(a[1]); StringBuilder b=new StringBuilder(32768); uint n=GetShortPathNameW(p,b,(uint)b.Capacity); if(n==0||n>=b.Capacity){ Out("OK|SHORT|0|"); return; } Out("OK|SHORT|1|"+B64(b.ToString())); }
+ public static void Run(string[] a){ if(a==null||a.Length==0) throw new IOException("operation missing"); switch(a[0]){ case "probe":Probe(a);break; case "state":State(a);break; case "mkdir":Mkdir(a);break; case "create":Create(a);break; case "copy":Copy(a);break; case "publish":Publish(a);break; case "short":Short(a);break; default:throw new IOException("unknown operation"); } }
+}
+"""
 	var _mutation_anchor := ""
+	var _source_anchor := ""
+	var _helper_timeout_msec := 300000
+	var _post_create_delay_msec := 0
 
 
 	func probe_path(path: String, require_exists: bool) -> Dictionary:
-		var result := _run_powershell(PROBE_SCRIPT, [path, "1" if require_exists else "0"])
-		if int(result.get("exit_code", -1)) != 0:
-			return {"error": "physical path probe failed code=%d detail=%s" % [int(result.get("exit_code", -1)), _bounded_output(String(result.get("output", "")))], "path": ""}
-		return {"error": "", "path": String(result.get("output", "")).strip_edges().replace("\\", "/")}
+		var result := _invoke_native(["probe", path, "1" if require_exists else "0"])
+		if not String(result.get("error", "")).is_empty():
+			return {"error": "physical path probe failed: %s" % result["error"], "path": ""}
+		var fields := result.get("fields", PackedStringArray()) as PackedStringArray
+		if fields.size() < 7 or fields[1] != "PROBE":
+			return {"error": "physical path probe returned invalid status", "path": ""}
+		if require_exists and fields[2] != "1":
+			return {"error": "path does not exist", "path": ""}
+		return {"error": "", "path": _decode(fields[5]).replace("\\", "/"), "exists": fields[2] == "1", "nearest_identity": fields[3], "identity": fields[4], "ancestor_identities": fields[6].split(",", false)}
 
 
 	func directory_state(path: String) -> Dictionary:
-		if FileAccess.file_exists(path):
-			return {"error": "path is a file", "exists": false, "empty": false}
-		if not DirAccess.dir_exists_absolute(path):
-			return {"error": "", "exists": false, "empty": true}
-		return {
-			"error": "",
-			"exists": true,
-			"empty": DirAccess.get_files_at(path).is_empty() and DirAccess.get_directories_at(path).is_empty(),
-		}
+		var result := _invoke_native(["state", path])
+		if not String(result.get("error", "")).is_empty():
+			return {"error": String(result["error"]), "exists": false, "empty": false}
+		var fields := result.get("fields", PackedStringArray()) as PackedStringArray
+		if fields.size() < 4 or fields[1] != "STATE":
+			return {"error": "directory state returned invalid status", "exists": false, "empty": false}
+		return {"error": "", "exists": fields[2] == "1", "empty": fields[3] == "1"}
 
 
 	func configure_output_root(path: String) -> Dictionary:
-		var cursor := path.replace("\\", "/").simplify_path().trim_suffix("/")
-		while not DirAccess.dir_exists_absolute(cursor):
-			if FileAccess.file_exists(cursor):
-				return {"error": "output ancestor is a file: %s" % cursor}
-			var parent := cursor.get_base_dir()
-			if parent == cursor:
-				return {"error": "cannot resolve existing output ancestor"}
-			cursor = parent
-		var probe := probe_path(cursor, true)
+		var probe := probe_path(path, false)
 		if not String(probe.get("error", "")).is_empty():
 			return {"error": String(probe["error"])}
-		_mutation_anchor = String(probe.get("path", ""))
+		var ancestors := probe.get("ancestor_identities", PackedStringArray()) as PackedStringArray
+		if not _source_anchor.is_empty() and _source_anchor in ancestors:
+			return {"error": "output physical containment identity overlaps source"}
+		_mutation_anchor = String(probe.get("nearest_identity", ""))
+		if _mutation_anchor.is_empty():
+			return {"error": "cannot resolve existing output ancestor identity"}
 		return {"error": ""}
+
+
+	func configure_source_root(path: String, git_toplevel: String) -> Dictionary:
+		var source_identity := canonical_identity(path)
+		if not String(source_identity.get("error", "")).is_empty():
+			return source_identity
+		var git_identity := canonical_identity(git_toplevel)
+		if not String(git_identity.get("error", "")).is_empty():
+			return git_identity
+		if String(source_identity.get("identity", "")) != String(git_identity.get("identity", "")):
+			return {"error": "Git top-level canonical identity mismatch"}
+		_source_anchor = String(source_identity.get("identity", ""))
+		return {"error": "", "identity": _source_anchor}
+
+
+	func canonical_identity(path: String) -> Dictionary:
+		var probe := probe_path(path, true)
+		if not String(probe.get("error", "")).is_empty():
+			return {"error": String(probe["error"]), "identity": ""}
+		return {"error": "", "identity": String(probe.get("identity", ""))}
+
+
+	func copy_file_verified(source_path: String, destination_path: String) -> Dictionary:
+		if _source_anchor.is_empty() or _mutation_anchor.is_empty():
+			return {"error": "source and output identities must be configured", "created": false}
+		var result := _invoke_native(["copy", source_path, _source_anchor, destination_path, _mutation_anchor, str(_operation_delay())])
+		var owned := _owned_from_result(result, destination_path)
+		if not String(result.get("error", "")).is_empty():
+			return {"error": String(result["error"]), "created": bool(owned.get("created", false)), "terminated": bool(result.get("terminated", false)), "ownership_reconciled": bool(owned.get("reconciled", false))}
+		var f := result.get("fields", PackedStringArray()) as PackedStringArray
+		if f.size() < 11 or f[1] != "COPY":
+			return {"error": "copy helper returned invalid status", "created": bool(owned.get("created", false))}
+		var source := {"error": "", "expected_length": int(f[2]), "bytes_read": int(f[3]), "position": int(f[4]), "read_error": OK, "sha256": f[5], "bytes_verified": true}
+		var destination := {"error": "", "expected_length": int(f[6]), "bytes_read": int(f[7]), "position": int(f[8]), "read_error": OK, "sha256": f[9], "bytes_verified": true}
+		return {"error": "", "created": true, "source": source, "destination": destination, "equal": f[5] == f[9] and f[2] == f[6]}
+
+
+	func supervision_contract() -> Dictionary:
+		return {"bounded": true, "termination_confirmed": true, "ownership_reconciled": true, "abnormal_exit_reconciled": true}
+
+
+	func run_process_bounded(executable: String, arguments: PackedStringArray) -> Dictionary:
+		var process := OS.execute_with_pipe(executable, arguments, false)
+		var stdio := process.get("stdio") as FileAccess
+		var stderr := process.get("stderr") as FileAccess
+		var pid := int(process.get("pid", -1))
+		if stdio == null or pid <= 0:
+			if stdio != null:
+				stdio.close()
+			if stderr != null:
+				stderr.close()
+			return {"exit_code": -1, "output": "", "error": "subprocess pipe creation failed"}
+		var deadline := Time.get_ticks_msec() + _helper_timeout_msec
+		var output_bytes := PackedByteArray()
+		while OS.is_process_running(pid) and Time.get_ticks_msec() < deadline:
+			_drain_nonblocking(stdio, output_bytes)
+			if output_bytes.size() > 16 * 1024 * 1024:
+				var oversized := _terminate_helper(pid, stdio, stderr, output_bytes, "subprocess output exceeds 16 MiB")
+				return {"exit_code": -1, "output": output_bytes.get_string_from_utf8(), "error": String(oversized.get("error", "subprocess output exceeds 16 MiB")), "terminated": bool(oversized.get("terminated", false))}
+			OS.delay_msec(5)
+		if OS.is_process_running(pid):
+			var killed := _terminate_helper(pid, stdio, stderr, output_bytes, "subprocess timed out")
+			return {"exit_code": -1, "output": output_bytes.get_string_from_utf8(), "error": String(killed.get("error", "subprocess timed out")), "terminated": bool(killed.get("terminated", false))}
+		_drain_nonblocking(stdio, output_bytes)
+		var exit_code := OS.get_process_exit_code(pid)
+		stdio.close()
+		if stderr != null:
+			stderr.close()
+		return {"exit_code": exit_code, "output": output_bytes.get_string_from_utf8(), "error": ""}
+
+
+	func _drain_nonblocking(stdio: FileAccess, output_bytes: PackedByteArray) -> void:
+		while true:
+			var chunk := stdio.get_buffer(8192)
+			if chunk.is_empty():
+				return
+			output_bytes.append_array(chunk)
+			if chunk.size() < 8192:
+				return
+
+
+	func configure_supervision(timeout_msec: int, post_create_delay_msec: int = 0) -> void:
+		_helper_timeout_msec = maxi(timeout_msec, 1)
+		_post_create_delay_msec = maxi(post_create_delay_msec, 0)
+
+
+	func _operation_delay() -> int:
+		if _post_create_delay_msec > _helper_timeout_msec:
+			return maxi(_post_create_delay_msec, 2500)
+		return _post_create_delay_msec
+
+
+	func short_path(path: String) -> Dictionary:
+		var result := _invoke_native(["short", path])
+		if not String(result.get("error", "")).is_empty():
+			return {"error": String(result["error"]), "supported": false, "path": ""}
+		var f := result.get("fields", PackedStringArray()) as PackedStringArray
+		if f.size() < 4 or f[1] != "SHORT" or f[2] != "1":
+			return {"error": "8.3 alias unavailable", "supported": false, "path": ""}
+		return {"error": "", "supported": true, "path": _decode(f[3]).replace("\\", "/")}
 
 
 	func ensure_directory(path: String) -> Dictionary:
@@ -66,9 +232,12 @@ class NativeFilesystem extends RefCounted:
 		var normalized := path.replace("\\", "/").simplify_path().trim_suffix("/")
 		var missing: Array[String] = []
 		var cursor := normalized
-		while not cursor.is_empty() and not DirAccess.dir_exists_absolute(cursor):
-			if FileAccess.file_exists(cursor):
-				return {"error": "directory component is a file: %s" % cursor, "created_paths": []}
+		while not cursor.is_empty():
+			var state := directory_state(cursor)
+			if not String(state.get("error", "")).is_empty() and "path is a file" in String(state["error"]):
+				return {"error": String(state["error"]), "created_paths": []}
+			if bool(state.get("exists", false)):
+				break
 			missing.append(cursor)
 			var parent := cursor.get_base_dir()
 			if parent == cursor:
@@ -76,85 +245,54 @@ class NativeFilesystem extends RefCounted:
 			cursor = parent
 		missing.reverse()
 		var created: Array[String] = []
+		var reconciled := false
 		for directory: String in missing:
-			var parent_probe := probe_path(directory.get_base_dir(), true)
-			if not String(parent_probe.get("error", "")).is_empty():
-				return {"error": String(parent_probe["error"]), "created_paths": created}
-			var create_result := _run_powershell(CREATE_DIRECTORY_SCRIPT, [directory, _mutation_anchor])
-			var helper_output := String(create_result.get("output", ""))
-			var helper_created := helper_output.begins_with("created=1")
-			if helper_created:
+			var create_result := _invoke_native(["mkdir", directory, _mutation_anchor, str(_operation_delay())])
+			var ownership := _owned_from_result(create_result, directory)
+			if bool(ownership.get("created", false)):
 				created.append(directory)
-			if int(create_result.get("exit_code", -1)) != 0:
-				return {"error": "directory exclusive create failed code=%d detail=%s" % [int(create_result.get("exit_code", -1)), _bounded_output(helper_output)], "created_paths": created}
-			if not helper_created:
+			reconciled = reconciled or bool(ownership.get("reconciled", false))
+			if not String(create_result.get("error", "")).is_empty():
+				return {"error": String(create_result["error"]), "created_paths": created, "terminated": bool(create_result.get("terminated", false)), "ownership_reconciled": reconciled}
+			var f := create_result.get("fields", PackedStringArray()) as PackedStringArray
+			if f.size() < 3 or f[1] != "DIR":
 				return {"error": "directory exclusive create returned invalid helper status", "created_paths": created}
-			var created_probe := probe_path(directory, true)
-			if not String(created_probe.get("error", "")).is_empty():
-				return {"error": String(created_probe["error"]), "created_paths": created}
-			if not DirAccess.dir_exists_absolute(directory):
-				return {"error": "created path is not a directory: %s" % directory, "created_paths": created}
-		return {"error": "", "created_paths": created}
+		return {"error": "", "created_paths": created, "ownership_reconciled": reconciled}
 
 
 	func read_file(path: String) -> Dictionary:
-		var probe := probe_path(path, true)
-		if not String(probe.get("error", "")).is_empty():
-			return {"error": String(probe["error"]), "bytes": PackedByteArray(), "expected_length": -1, "bytes_read": 0, "position": 0, "read_error": ERR_FILE_CANT_READ, "sha256": ""}
-		var file := FileAccess.open(path, FileAccess.READ)
-		if file == null:
-			return {"error": "cannot open", "bytes": PackedByteArray(), "expected_length": -1, "bytes_read": 0, "position": 0, "read_error": ERR_CANT_OPEN, "sha256": ""}
-		var expected_length := file.get_length()
-		var bytes := file.get_buffer(expected_length)
-		var position := file.get_position()
-		var read_error := file.get_error()
-		file.close()
-		return {"error": "", "bytes": bytes, "expected_length": expected_length, "bytes_read": bytes.size(), "position": position, "read_error": read_error, "sha256": _hash(bytes)}
+		return {"error": "direct native reads are unavailable; use handle-guarded copy or verified create", "bytes": PackedByteArray(), "expected_length": -1, "bytes_read": 0, "position": 0, "read_error": ERR_FILE_CANT_READ, "sha256": ""}
 
 
 	func create_file_exclusive(path: String, bytes: PackedByteArray) -> Dictionary:
 		if _mutation_anchor.is_empty():
 			return {"error": "output containment root was not configured", "created": false}
-		var parent_probe := probe_path(path.get_base_dir(), true)
-		if not String(parent_probe.get("error", "")).is_empty():
-			return {"error": String(parent_probe["error"]), "created": false}
-		var create_result := _run_powershell_with_input(CREATE_SCRIPT, [path, _mutation_anchor, str(bytes.size()), _hash(bytes)], bytes)
-		var helper_output := String(create_result.get("output", ""))
-		var created := helper_output.begins_with("created=1")
-		if int(create_result.get("exit_code", -1)) != 0:
-			return {"error": "exclusive create failed code=%d detail=%s" % [int(create_result.get("exit_code", -1)), _bounded_output(helper_output)], "created": created}
-		if not created:
+		var create_result := _invoke_native(["create", path, _mutation_anchor, str(bytes.size()), _hash(bytes), str(_operation_delay())], bytes)
+		var ownership := _owned_from_result(create_result, path)
+		if not String(create_result.get("error", "")).is_empty():
+			return {"error": String(create_result["error"]), "created": bool(ownership.get("created", false)), "terminated": bool(create_result.get("terminated", false)), "ownership_reconciled": bool(ownership.get("reconciled", false))}
+		var f := create_result.get("fields", PackedStringArray()) as PackedStringArray
+		if f.size() < 5 or f[1] != "CREATE":
 			return {"error": "exclusive create returned invalid helper status", "created": false}
-		var created_probe := probe_path(path, true)
-		if not String(created_probe.get("error", "")).is_empty():
-			return {"error": String(created_probe["error"]), "created": true}
-		return {"error": "", "created": true}
+		return {"error": "", "created": true, "verified": int(f[2]) == bytes.size() and f[3] == _hash(bytes), "expected_length": int(f[2]), "sha256": f[3]}
 
 
 	func publish_no_replace(pending_path: String, final_path: String) -> Dictionary:
 		if _mutation_anchor.is_empty():
 			return {"error": "output containment root was not configured", "published": false}
-		var pending_probe := probe_path(pending_path, true)
-		if not String(pending_probe.get("error", "")).is_empty():
-			return {"error": String(pending_probe["error"]), "published": false}
-		var parent_probe := probe_path(final_path.get_base_dir(), true)
-		if not String(parent_probe.get("error", "")).is_empty():
-			return {"error": String(parent_probe["error"]), "published": false}
-		var publish_result := _run_powershell(PUBLISH_SCRIPT, [pending_path, final_path, _mutation_anchor])
-		if int(publish_result.get("exit_code", -1)) != 0:
-			return {"error": "atomic no-replace publish failed code=%d detail=%s" % [int(publish_result.get("exit_code", -1)), _bounded_output(String(publish_result.get("output", "")))], "published": false}
+		var publish_result := _invoke_native(["publish", pending_path, final_path, _mutation_anchor, str(_operation_delay())])
+		if not String(publish_result.get("error", "")).is_empty():
+			return {"error": "atomic no-replace publish failed: %s" % publish_result["error"], "published": false}
+		var f := publish_result.get("fields", PackedStringArray()) as PackedStringArray
+		if f.size() < 3 or f[1] != "PUBLISH":
+			return {"error": "atomic no-replace publish returned invalid status", "published": false}
 		return {"error": "", "published": true}
 
 
-	func _run_powershell(script: String, arguments: Array[String]) -> Dictionary:
-		var output: Array = []
-		var process_arguments := PackedStringArray(["-NoLogo", "-NoProfile", "-NonInteractive"])
-		process_arguments.append_array(encoded_invocation(script, PackedStringArray(arguments)))
-		var exit_code := OS.execute("powershell.exe", process_arguments, output, false)
-		return {"exit_code": exit_code, "output": "".join(output)}
-
-
-	func _run_powershell_with_input(script: String, arguments: Array[String], bytes: PackedByteArray) -> Dictionary:
+	func _invoke_native(arguments: Array[String], bytes: PackedByteArray = PackedByteArray(), timeout_override: int = -1) -> Dictionary:
+		var compressed := NATIVE_SOURCE.to_utf8_buffer().compress(FileAccess.COMPRESSION_GZIP)
+		var payload := Marshalls.raw_to_base64(compressed)
+		var script := "$ErrorActionPreference='Stop'; try{$m=New-Object IO.MemoryStream(,[Convert]::FromBase64String('%s'));$z=New-Object IO.Compression.GZipStream($m,[IO.Compression.CompressionMode]::Decompress);$r=New-Object IO.StreamReader($z,[Text.Encoding]::UTF8);Add-Type -TypeDefinition $r.ReadToEnd();[Console]::Out.WriteLine('READY');[Console]::Out.Flush();[Task3Native]::Run([string[]]$args)}catch{$b=[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($_.Exception.Message));[Console]::Out.WriteLine('ERR|'+$b);exit 70}" % payload
 		var process_arguments := PackedStringArray(["-NoLogo", "-NoProfile", "-NonInteractive"])
 		process_arguments.append_array(encoded_pipe_invocation(script, PackedStringArray(arguments)))
 		var process := OS.execute_with_pipe("powershell.exe", process_arguments, false)
@@ -166,44 +304,88 @@ class NativeFilesystem extends RefCounted:
 				stdio.close()
 			if stderr != null:
 				stderr.close()
-			return {"exit_code": -1, "output": "helper pipe creation failed"}
-		var deadline := Time.get_ticks_msec() + 300000
-		var content_line := bytes
+			return {"error": "helper pipe creation failed", "exit_code": -1}
+		var timeout := _helper_timeout_msec if timeout_override < 0 else timeout_override
+		var deadline := Time.get_ticks_msec() + timeout + 2000
+		var output_bytes := PackedByteArray()
 		var offset := 0
-		while offset < content_line.size():
-			var next_offset := mini(offset + 2048, content_line.size())
-			var encoded_chunk := Marshalls.raw_to_base64(content_line.slice(offset, next_offset)) + "\n"
+		while offset < bytes.size():
+			var next_offset := mini(offset + 2048, bytes.size())
+			var encoded_chunk := Marshalls.raw_to_base64(bytes.slice(offset, next_offset)) + "\n"
 			while not stdio.store_string(encoded_chunk):
 				if not OS.is_process_running(pid) or Time.get_ticks_msec() >= deadline:
-					OS.kill(pid)
-					stdio.close()
-					if stderr != null:
-						stderr.close()
-					return {"exit_code": -1, "output": "helper content channel write failed"}
+					return _terminate_helper(pid, stdio, stderr, output_bytes, "helper content channel write timed out")
 				OS.delay_msec(1)
 			offset = next_offset
 		while not stdio.store_string(".\n"):
 			if not OS.is_process_running(pid) or Time.get_ticks_msec() >= deadline:
-				OS.kill(pid)
-				stdio.close()
-				if stderr != null:
-					stderr.close()
-				return {"exit_code": -1, "output": "helper content terminator write failed"}
+				return _terminate_helper(pid, stdio, stderr, output_bytes, "helper content terminator write timed out")
 			OS.delay_msec(1)
-		while OS.is_process_running(pid) and Time.get_ticks_msec() < deadline:
+		while OS.is_process_running(pid):
+			if Time.get_ticks_msec() >= deadline:
+				return _terminate_helper(pid, stdio, stderr, output_bytes, "helper timed out")
 			OS.delay_msec(5)
-		if OS.is_process_running(pid):
-			OS.kill(pid)
-			stdio.close()
-			if stderr != null:
-				stderr.close()
-			return {"exit_code": -1, "output": "helper timed out"}
 		var exit_code := OS.get_process_exit_code(pid)
-		var output := stdio.get_as_text()
+		var tail := stdio.get_as_text().to_utf8_buffer()
+		output_bytes.append_array(tail)
 		stdio.close()
 		if stderr != null:
 			stderr.close()
-		return {"exit_code": exit_code, "output": output}
+		return _parse_helper_result(exit_code, output_bytes.get_string_from_utf8(), false, true)
+
+
+	func _terminate_helper(pid: int, stdio: FileAccess, stderr: FileAccess, output_bytes: PackedByteArray, reason: String) -> Dictionary:
+		OS.kill(pid)
+		var kill_deadline := Time.get_ticks_msec() + 5000
+		while OS.is_process_running(pid) and Time.get_ticks_msec() < kill_deadline:
+			OS.delay_msec(5)
+		var terminated := not OS.is_process_running(pid)
+		if terminated:
+			output_bytes.append_array(stdio.get_as_text().to_utf8_buffer())
+		stdio.close()
+		if stderr != null:
+			stderr.close()
+		var parsed := _parse_helper_result(-1, output_bytes.get_string_from_utf8(), true, terminated)
+		parsed["error"] = "%s%s" % [reason, "" if terminated else "; termination unconfirmed"]
+		return parsed
+
+
+	func _parse_helper_result(exit_code: int, output: String, timed_out: bool, terminated: bool) -> Dictionary:
+		var result := {"exit_code": exit_code, "error": "", "fields": PackedStringArray(), "ownership": {}, "timed_out": timed_out, "terminated": terminated}
+		for raw_line: String in output.replace("\r", "").split("\n", false):
+			var fields := PackedStringArray(raw_line.split("|", true))
+			if fields.is_empty() or fields[0] == "READY":
+				continue
+			if fields[0] == "OWN" and fields.size() >= 4:
+				result["ownership"] = {"kind": fields[1], "identity": fields[2], "path": _decode(fields[3])}
+			elif fields[0] == "OK":
+				result["fields"] = fields
+			elif fields[0] == "ERR" and fields.size() >= 2:
+				result["error"] = _decode(fields[1])
+		if String(result["error"]).is_empty() and exit_code != 0 and not timed_out:
+			result["error"] = "native helper failed code=%d" % exit_code
+		return result
+
+
+	func _decode(value: String) -> String:
+		return Marshalls.base64_to_raw(value).get_string_from_utf8()
+
+
+	func _owned_from_result(result: Dictionary, expected_path: String) -> Dictionary:
+		var ownership := result.get("ownership", {}) as Dictionary
+		if ownership.is_empty() or String(ownership.get("path", "")).replace("\\", "/").to_lower() != expected_path.replace("\\", "/").to_lower():
+			return {"created": false, "reconciled": false}
+		var abnormal := bool(result.get("timed_out", false)) or not String(result.get("error", "")).is_empty()
+		if not abnormal:
+			return {"created": true, "reconciled": false}
+		if not bool(result.get("terminated", false)):
+			return {"created": false, "reconciled": false}
+		var probe_result := _invoke_native(["probe", expected_path, "1"], PackedByteArray(), 10000)
+		if not String(probe_result.get("error", "")).is_empty():
+			return {"created": false, "reconciled": false}
+		var fields := probe_result.get("fields", PackedStringArray()) as PackedStringArray
+		var matches := fields.size() >= 5 and fields[1] == "PROBE" and fields[4] == String(ownership.get("identity", ""))
+		return {"created": matches, "reconciled": matches}
 
 
 	func encoded_invocation(script: String, arguments: PackedStringArray) -> PackedStringArray:
@@ -230,6 +412,13 @@ class NativeFilesystem extends RefCounted:
 
 
 class GitProbe extends RefCounted:
+	var _supervisor: RefCounted
+
+
+	func _init(supervisor: RefCounted = null) -> void:
+		_supervisor = supervisor
+
+
 	func probe(source_root: String) -> Dictionary:
 		var head := _git(source_root, ["rev-parse", "HEAD"])
 		if int(head.get("exit_code", -1)) != 0:
@@ -240,26 +429,32 @@ class GitProbe extends RefCounted:
 		var status := _git(source_root, ["status", "--porcelain=v1", "--untracked-files=all"])
 		if int(status.get("exit_code", -1)) != 0:
 			return {"error": "Git status probe failed code=%d" % int(status.get("exit_code", -1))}
+		var toplevel := _git(source_root, ["rev-parse", "--show-toplevel"])
+		if int(toplevel.get("exit_code", -1)) != 0:
+			return {"error": "Git top-level probe failed code=%d" % int(toplevel.get("exit_code", -1))}
 		return {
 			"error": "",
 			"commit": String(head.get("output", "")).strip_edges(),
 			"branch": String(branch.get("output", "")).strip_edges(),
 			"worktree_status": String(status.get("output", "")),
+			"toplevel": String(toplevel.get("output", "")).strip_edges(),
 		}
 
 
 	func _git(source_root: String, arguments: Array[String]) -> Dictionary:
-		var output: Array = []
 		var git_arguments := PackedStringArray(["-C", source_root])
 		git_arguments.append_array(PackedStringArray(arguments))
-		var exit_code := OS.execute("git", git_arguments, output, true)
-		return {"exit_code": exit_code, "output": "".join(output)}
+		if _supervisor == null or not _supervisor.has_method(&"run_process_bounded"):
+			return {"exit_code": -1, "output": "", "error": "bounded Git supervisor unavailable"}
+		return _supervisor.call(&"run_process_bounded", "git", git_arguments) as Dictionary
 
 
 class BackupService extends RefCounted:
 	func build_backup_with_filesystem(request: Dictionary, inventory_paths: PackedStringArray, source_metadata: Dictionary, filesystem: RefCounted) -> Dictionary:
 		if filesystem == null:
 			return _failed_result("%s field=filesystem reason=race-safe adapter required" % ERROR_PREFIX)
+		if not filesystem.has_method(&"copy_file_verified"):
+			return _failed_result("%s field=filesystem reason=one handle-guarded copy operation is required" % ERROR_PREFIX)
 		var validation_error := _validate_request(request, inventory_paths, source_metadata, filesystem)
 		if not validation_error.is_empty():
 			return _failed_result(validation_error)
@@ -271,9 +466,15 @@ class BackupService extends RefCounted:
 			"commit": String(source_metadata.get("commit", "")),
 			"branch": String(source_metadata.get("branch", "")),
 			"worktree_status": String(source_metadata.get("worktree_status", "")),
+			"toplevel": String(source_metadata.get("toplevel", "")),
 		}
 		var owned_paths: Array[String] = []
 		var owned_external_paths: Array[String] = []
+		if not filesystem.has_method(&"configure_source_root"):
+			return _failed_result("%s field=filesystem reason=canonical source identity configuration is required" % ERROR_PREFIX)
+		var source_configuration := filesystem.call(&"configure_source_root", source_root, String(source_metadata.get("toplevel", ""))) as Dictionary
+		if not String(source_configuration.get("error", "")).is_empty():
+			return _failed_result("%s field=source_root reason=%s" % [ERROR_PREFIX, source_configuration["error"]])
 		if not filesystem.has_method(&"configure_output_root"):
 			return _failed_result("%s field=filesystem reason=output containment configuration is required" % ERROR_PREFIX)
 		var configuration := filesystem.call(&"configure_output_root", output) as Dictionary
@@ -295,27 +496,26 @@ class BackupService extends RefCounted:
 			_register_created(parent_create.get("created_paths", []) as Array, output, owned_paths, owned_external_paths)
 			if not String(parent_create.get("error", "")).is_empty():
 				return _preserve_failure(filesystem, output, metadata, sorted_paths.size(), completed_files, owned_paths, owned_external_paths, "%s stage=copy path=%s reason=%s" % [ERROR_PREFIX, relative_path, parent_create["error"]])
-			var source_read := _validated_read(filesystem, source_path, "source")
-			if not String(source_read.get("error", "")).is_empty():
-				return _preserve_failure(filesystem, output, metadata, sorted_paths.size(), completed_files, owned_paths, owned_external_paths, "%s stage=copy path=%s reason=%s" % [ERROR_PREFIX, relative_path, source_read["error"]])
-			var source_bytes := source_read.get("bytes", PackedByteArray()) as PackedByteArray
-			var create_result := filesystem.call(&"create_file_exclusive", destination_path, source_bytes) as Dictionary
-			if bool(create_result.get("created", false)):
+			var copy_result := filesystem.call(&"copy_file_verified", source_path, destination_path) as Dictionary
+			if bool(copy_result.get("created", false)):
 				_register_owned(destination_path, output, owned_paths, owned_external_paths)
-			if not String(create_result.get("error", "")).is_empty():
-				return _preserve_failure(filesystem, output, metadata, sorted_paths.size(), completed_files, owned_paths, owned_external_paths, "%s stage=copy path=%s reason=%s" % [ERROR_PREFIX, relative_path, create_result["error"]])
-			var destination_read := _validated_read(filesystem, destination_path, "destination")
+			if not String(copy_result.get("error", "")).is_empty():
+				return _preserve_failure(filesystem, output, metadata, sorted_paths.size(), completed_files, owned_paths, owned_external_paths, "%s stage=copy path=%s reason=%s" % [ERROR_PREFIX, relative_path, copy_result["error"]])
+			var source_read := _validated_read_result(copy_result.get("source", {}) as Dictionary, "source")
+			if not String(source_read.get("error", "")).is_empty():
+				return _preserve_failure(filesystem, output, metadata, sorted_paths.size(), completed_files, owned_paths, owned_external_paths, "%s stage=verify path=%s reason=%s" % [ERROR_PREFIX, relative_path, source_read["error"]])
+			var destination_read := _validated_read_result(copy_result.get("destination", {}) as Dictionary, "destination")
 			if not String(destination_read.get("error", "")).is_empty():
 				return _preserve_failure(filesystem, output, metadata, sorted_paths.size(), completed_files, owned_paths, owned_external_paths, "%s stage=verify path=%s reason=%s" % [ERROR_PREFIX, relative_path, destination_read["error"]])
-			if String(source_read.get("sha256", "")) != String(destination_read.get("sha256", "")) or source_bytes != (destination_read.get("bytes", PackedByteArray()) as PackedByteArray):
+			if not bool(copy_result.get("equal", false)) or int(source_read.get("expected_length", -1)) != int(destination_read.get("expected_length", -1)) or String(source_read.get("sha256", "")) != String(destination_read.get("sha256", "")):
 				return _preserve_failure(filesystem, output, metadata, sorted_paths.size(), completed_files, owned_paths, owned_external_paths, "%s stage=verify path=%s reason=source and destination hash mismatch" % [ERROR_PREFIX, relative_path])
 			var row := {
 				"path": relative_path,
-				"size": source_bytes.size(),
+				"size": int(source_read.get("expected_length", -1)),
 				"sha256": String(destination_read.get("sha256", "")),
 			}
 			completed_files.append(row)
-			total_bytes += source_bytes.size()
+			total_bytes += int(source_read.get("expected_length", -1))
 
 		var manifest := {
 			"schema_version": 1,
@@ -356,7 +556,7 @@ class BackupService extends RefCounted:
 		if not String(source_probe.get("error", "")).is_empty():
 			return "%s field=source_root reason=physical path %s" % [ERROR_PREFIX, source_probe["error"]]
 		var project_probe := filesystem.call(&"probe_path", source_root.path_join("project.godot"), true) as Dictionary
-		if not String(project_probe.get("error", "")).is_empty() or not FileAccess.file_exists(source_root.path_join("project.godot")):
+		if not String(project_probe.get("error", "")).is_empty():
 			return "%s field=source_root reason=project.godot must exist directly under source root" % ERROR_PREFIX
 
 		var output_raw := String(request.get("output", ""))
@@ -410,23 +610,30 @@ class BackupService extends RefCounted:
 			return "%s field=source_branch reason=does not match actual Git branch" % ERROR_PREFIX
 		if not source_metadata.has("worktree_status"):
 			return "%s field=worktree_status reason=actual full Git status is missing" % ERROR_PREFIX
+		if String(source_metadata.get("toplevel", "")).is_empty():
+			return "%s field=source_root reason=actual Git top-level is missing" % ERROR_PREFIX
 		return ""
 
 
 	func _validated_read(filesystem: RefCounted, path: String, label: String) -> Dictionary:
 		var read := filesystem.call(&"read_file", path) as Dictionary
+		return _validated_read_result(read, label)
+
+
+	func _validated_read_result(read: Dictionary, label: String) -> Dictionary:
 		if not String(read.get("error", "")).is_empty():
 			return {"error": "%s read failed: %s" % [label, read["error"]]}
 		if int(read.get("read_error", FAILED)) not in [OK, ERR_FILE_EOF]:
 			return {"error": "%s read status code=%d" % [label, int(read.get("read_error", FAILED))]}
 		var expected_length := int(read.get("expected_length", -1))
+		var bytes_verified := bool(read.get("bytes_verified", false))
 		var bytes := read.get("bytes", PackedByteArray()) as PackedByteArray
-		if expected_length < 0 or int(read.get("bytes_read", -1)) != expected_length or int(read.get("position", -1)) != expected_length or bytes.size() != expected_length:
-			return {"error": "%s full-length read failed expected=%d bytes=%d position=%d" % [label, expected_length, bytes.size(), int(read.get("position", -1))]}
+		if expected_length < 0 or int(read.get("bytes_read", -1)) != expected_length or int(read.get("position", -1)) != expected_length or (not bytes_verified and bytes.size() != expected_length):
+			return {"error": "%s full-length read failed expected=%d bytes=%d position=%d" % [label, expected_length, int(read.get("bytes_read", -1)), int(read.get("position", -1))]}
 		var reported_sha := String(read.get("sha256", ""))
 		if not _is_sha256(reported_sha):
 			return {"error": "%s SHA-256 is invalid" % label}
-		if _hash(bytes) != reported_sha:
+		if not bytes_verified and _hash(bytes) != reported_sha:
 			return {"error": "%s SHA-256 does not match read bytes" % label}
 		read["bytes"] = bytes
 		return read
@@ -436,6 +643,10 @@ class BackupService extends RefCounted:
 		var create := filesystem.call(&"create_file_exclusive", path, bytes) as Dictionary
 		if not String(create.get("error", "")).is_empty():
 			return {"error": String(create["error"]), "created": bool(create.get("created", false))}
+		if bool(create.get("verified", false)):
+			if int(create.get("expected_length", -1)) != bytes.size() or String(create.get("sha256", "")) != _hash(bytes):
+				return {"error": "verified artifact metadata differs", "created": bool(create.get("created", false))}
+			return {"error": "", "created": bool(create.get("created", false)), "verified": true}
 		var read := _validated_read(filesystem, path, "written artifact")
 		if not String(read.get("error", "")).is_empty():
 			return {"error": String(read["error"]), "created": bool(create.get("created", false))}
@@ -583,7 +794,7 @@ func _initialize() -> void:
 	if not String(source_probe.get("error", "")).is_empty():
 		_fail("%s field=source_root reason=physical path %s" % [ERROR_PREFIX, source_probe["error"]])
 		return
-	var actual_metadata := GitProbe.new().probe(source_root)
+	var actual_metadata := GitProbe.new(filesystem).probe(source_root)
 	if not String(actual_metadata.get("error", "")).is_empty():
 		_fail("%s field=source_root reason=%s" % [ERROR_PREFIX, actual_metadata["error"]])
 		return
