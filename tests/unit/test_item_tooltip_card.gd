@@ -13,6 +13,7 @@ func run() -> Array[String]:
 	_test_icon_header_and_decorative_pointer_filters(card_script, failures)
 	_test_unavailable_icon_uses_stable_placeholder(card_script, failures)
 	_test_normal_and_advanced_layers(card_script, failures)
+	_test_critical_definition_formatting(card_script, failures)
 	_test_schema_one_empty_damage_has_no_heading(card_script, failures)
 	_test_equipped_role_and_deltas(card_script, failures)
 	_test_disabled_status_and_accessible_deltas(card_script, failures)
@@ -95,6 +96,36 @@ func _test_normal_and_advanced_layers(card_script: Script, failures: Array[Strin
 	if base_box != null and base_box.get_child_count() == 2:
 		TestAssertions.equal((base_box.get_child(0) as Label).get_theme_color("font_color"), GameCatalog.DAMAGE_TYPES.definition(&"fire").presentation_color, "fire base range uses canonical damage color", failures)
 		TestAssertions.equal((base_box.get_child(1) as Label).get_theme_color("font_color"), GameCatalog.DAMAGE_TYPES.definition(&"physical").presentation_color, "physical base range uses canonical damage color", failures)
+	card.free()
+
+
+func _test_critical_definition_formatting(card_script: Script, failures: Array[String]) -> void:
+	var detail := _detail()
+	detail["affixes"] = [{
+		"definition_id": "ring_of_mercy_implicit",
+		"display_name": "Ring Of Mercy Legacy",
+		"affix_kind": "implicit",
+		"tier": 1,
+		"rolls": [{
+			"stat_id": "crit_chance",
+			"stat_name": "Critical Strike Chance",
+			"operation": StatModifier.Operation.FLAT,
+			"value": 0.0111,
+			"formatted_value": "1%",
+			"effect_text": "+1% Critical Strike Chance",
+			"minimum_roll": 0.01,
+			"maximum_roll": 0.02,
+			"formatted_minimum_roll": "1%",
+			"formatted_maximum_roll": "2%",
+			"roll_fraction": 0.11,
+		}],
+	}]
+	var card: Control = card_script.new()
+	card.call("present", detail, &"inspected", true, [] as Array[Dictionary], false)
+	var text := String(card.call("rendered_text"))
+	TestAssertions.truthy(text.contains("+1% Critical Strike Chance"), "critical tooltip uses whole player-facing percentage points", failures)
+	TestAssertions.truthy(text.contains("Range: 1%-2%"), "critical tooltip range uses definition-formatted endpoints", failures)
+	TestAssertions.truthy("0.0111" not in text and "+0.01" not in text and "0.01-0.02" not in text, "critical tooltip never exposes raw ratio decimals", failures)
 	card.free()
 
 

@@ -59,6 +59,26 @@ func run() -> Array[String]:
 	TestAssertions.truthy(&"lightning_damage" in provider.stat_rows(1, true).map(func(row: Dictionary) -> StringName: return row.stat_id), "Show All exposes complete registry", failures)
 	var detail := provider.stat_detail(1, &"fire_damage")
 	TestAssertions.equal(detail.sources.size(), 2, "detail contains base and named source", failures)
+	var critical_source := StatModifierSource.create(
+		&"ring_of_mercy_legacy",
+		&"test",
+		"Ring Of Mercy — Ring Of Mercy Legacy",
+		1,
+		[
+			StatModifier.create(&"crit_chance", StatModifier.Operation.FLAT, 0.0111, &"ring_of_mercy_legacy", "Ring Of Mercy — Ring Of Mercy Legacy"),
+			StatModifier.create(&"crit_multiplier", StatModifier.Operation.FLAT, 0.10, &"ring_of_mercy_multiplier", "Ring Of Mercy — Multiplier"),
+		],
+	)
+	TestAssertions.truthy(party.add_member_source(1, critical_source), "legacy off-grid critical source applies", failures)
+	var critical_detail := provider.stat_detail(1, &"crit_chance")
+	var critical_sources: Array = critical_detail.get("sources", [])
+	TestAssertions.equal(critical_sources.size(), 2, "critical detail contains base and named source", failures)
+	if critical_sources.size() == 2:
+		TestAssertions.equal((critical_sources[0] as Dictionary).get("formatted_value"), "5%", "critical base source carries definition formatting", failures)
+		TestAssertions.equal((critical_sources[1] as Dictionary).get("formatted_value"), "1%", "legacy critical modifier carries definition formatting", failures)
+		TestAssertions.equal((critical_sources[1] as Dictionary).get("formatted_modifier"), "+1%", "legacy critical modifier carries signed player-facing formatting", failures)
+	var multiplier_sources: Array = provider.stat_detail(1, &"crit_multiplier").get("sources", [])
+	TestAssertions.equal((multiplier_sources[1] as Dictionary).get("formatted_modifier"), "+10%", "critical multiplier modifier formatting ignores the absolute one-hundred-percent minimum", failures)
 
 	UpgradeApplicationService.apply(&"vitality", catalog, party, 1)
 	party.upgrade_party_stat(&"damage")

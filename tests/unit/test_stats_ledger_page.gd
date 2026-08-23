@@ -227,6 +227,21 @@ func run() -> Array[String]:
 	var physical_sources := (page.get_node("Layout/Content/DetailPanel/Detail/Sources") as Label).text
 	TestAssertions.truthy(equipment_label in physical_sources, "Stats detail renders the equipment item and affix label", failures)
 
+	var critical_source := StatModifierSource.create(
+		&"ring_of_mercy_legacy",
+		&"test",
+		"Ring Of Mercy — Ring Of Mercy Legacy",
+		1,
+		[StatModifier.create(&"crit_chance", StatModifier.Operation.FLAT, 0.0111, &"ring_of_mercy_legacy", "Ring Of Mercy — Ring Of Mercy Legacy")],
+	)
+	TestAssertions.truthy(party.add_member_source(1, critical_source), "Stats legacy critical source applies", failures)
+	page.refresh()
+	TestAssertions.truthy(page.select_stat(&"crit_chance"), "critical chance detail opens", failures)
+	var critical_sources := (page.get_node("Layout/Content/DetailPanel/Detail/Sources") as Label).text
+	TestAssertions.truthy("Base: 5%" in critical_sources, "critical source detail formats its base as whole percentage points", failures)
+	TestAssertions.truthy("Ring Of Mercy — Ring Of Mercy Legacy: +1%" in critical_sources, "critical source detail formats a legacy off-grid roll as whole percentage points", failures)
+	TestAssertions.truthy("1.1%" not in critical_sources and "0.0111 flat" not in critical_sources, "critical source detail never exposes decimal percentages or raw flat ratios", failures)
+
 	provider.configure(null, null, Callable())
 	page.free()
 	party.free()

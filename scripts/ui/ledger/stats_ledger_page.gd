@@ -304,6 +304,10 @@ func _clear_detail() -> void:
 func _source_line(row: Dictionary) -> String:
 	var operation := int(row.get("operation", -1))
 	var label := str(row.get("source_label", row.get("source_id", "Unknown")))
+	if operation == -1 and row.has("formatted_value"):
+		return "%s: %s" % [label, String(row["formatted_value"])]
+	if operation != -1 and row.has("formatted_modifier"):
+		return "%s: %s" % [label, String(row["formatted_modifier"])]
 	var value := float(row.get("value", 0.0))
 	match operation:
 		-1:

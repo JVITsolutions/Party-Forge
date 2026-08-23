@@ -283,6 +283,8 @@ func _advanced_suffix(affix: Dictionary, roll: Dictionary) -> String:
 
 
 func _range_text(roll: Dictionary) -> String:
+	if roll.has("formatted_minimum_roll") and roll.has("formatted_maximum_roll"):
+		return "%s-%s" % [String(roll["formatted_minimum_roll"]), String(roll["formatted_maximum_roll"])]
 	var minimum := float(roll.get("minimum_roll", 0.0))
 	var maximum := float(roll.get("maximum_roll", 0.0))
 	var operation := int(roll.get("operation", StatModifier.Operation.FLAT))

@@ -8,6 +8,7 @@ func run() -> Array[String]:
 	_test_request_affix_tag_filters(failures)
 	_test_definition_and_family_blocking(failures)
 	_test_tier_order_and_exact_rolls(failures)
+	_test_quantized_critical_rolls(failures)
 	_test_high_level_broadens_without_guaranteeing_top_tier(failures)
 	_test_charisma_improves_roll_quality_within_bounds(failures)
 	_test_nonfinite_aggregate_weights_fail_all_or_nothing(failures)
@@ -236,6 +237,83 @@ func _test_tier_order_and_exact_rolls(failures: Array[String]) -> void:
 		var second_expected := lerpf(second_bounds.x, second_bounds.y, ItemGenerationWeightPolicy.roll_quality(second_unit, request.charisma_value))
 		TestAssertions.equal(first.affixes[0].rolls[1].value, second_expected, "each effect uses its own deterministic roll salt", failures)
 		TestAssertions.equal(first.affixes[0].rolls[1].required_tags, [&"fire"], "each roll copies its matching effect tags", failures)
+
+func _test_quantized_critical_rolls(failures: Array[String]) -> void:
+	var ring_implicit := load("res://data/items/affixes/production/implicits/ring_of_mercy_implicit.tres") as ItemAffixDefinition
+	var precision := load("res://data/items/affixes/production/focused/of_precision.tres") as ItemAffixDefinition
+	TestAssertions.truthy(ring_implicit != null and precision != null, "critical roll production affixes load", failures)
+	if ring_implicit == null or precision == null:
+		return
+
+	var implicit_request := _request(10)
+	implicit_request.seed = 8128
+	implicit_request.generation_sequence = 9
+	var implicit_result := ItemAffixAssembler.assemble(
+		implicit_request,
+		_base([&"accessory", &"ring"], [&"ring_of_mercy_implicit"]),
+		_rarity(&"common", 1),
+		_pattern(0, 0, 0),
+		_foundation([ring_implicit]),
+		ItemGenerationTrace.new(),
+	)
+	_assert_critical_grid(implicit_result, ring_implicit, "Ring Of Mercy", failures)
+
+	var suffix_request := _request(10)
+	suffix_request.seed = 451
+	suffix_request.generation_sequence = 4
+	var suffix_result := ItemAffixAssembler.assemble(
+		suffix_request,
+		_base([&"accessory", &"ring"]),
+		_rarity(&"common", 1),
+		_pattern(0, 1, 0),
+		_foundation([precision]),
+		ItemGenerationTrace.new(),
+	)
+	_assert_critical_grid(suffix_result, precision, "of_precision", failures)
+
+	var boundary_effect := _effect(&"crit_chance", StatModifier.Operation.FLAT)
+	if &"roll_step" not in _property_names(boundary_effect):
+		TestAssertions.truthy(false, "boundary quantization fixture can author a roll step", failures)
+		return
+	boundary_effect.set(&"roll_step", 0.01)
+	var boundary_affix := _affix(
+		&"boundary_critical", "suffix", [&"critical_family"],
+		[_tier(1, 1, 1.0, 0.011, 0.021)], [boundary_effect],
+	)
+	var boundary_result := ItemAffixAssembler.assemble(
+		_request(1), _base([&"ring"]), _rarity(&"common", 1), _pattern(0, 1, 0),
+		_foundation([boundary_affix]), ItemGenerationTrace.new(),
+	)
+	TestAssertions.truthy(boundary_result.ok(), "off-grid boundary range assembles through its legal interior point", failures)
+	if boundary_result.ok():
+		TestAssertions.near(boundary_result.affixes[0].rolls[0].value, 0.02, 0.000001, "off-grid bounds cannot persist a clamped 0.011 roll", failures)
+
+	var no_grid_affix := _affix(
+		&"gridless_critical", "suffix", [&"gridless_critical_family"],
+		[_tier(1, 1, 1.0, 0.011, 0.019)], [boundary_effect],
+	)
+	var no_grid_result := ItemAffixAssembler.assemble(
+		_request(1), _base([&"ring"]), _rarity(&"common", 1), _pattern(0, 1, 0),
+		_foundation([no_grid_affix]), ItemGenerationTrace.new(),
+	)
+	TestAssertions.equal(no_grid_result.error_code, &"invalid_roll_step_range", "gridless range returns a structured generation failure", failures)
+	TestAssertions.equal(no_grid_result.details.get("affix_id"), "gridless_critical", "gridless failure identifies its affix", failures)
+	TestAssertions.equal(no_grid_result.details.get("effect"), 0, "gridless failure identifies its effect", failures)
+
+func _assert_critical_grid(
+	result: ItemAffixAssemblyResult,
+	definition: ItemAffixDefinition,
+	label: String,
+	failures: Array[String],
+) -> void:
+	TestAssertions.truthy(result.ok(), "%s critical roll assembles" % label, failures)
+	if not result.ok():
+		return
+	var instance := result.affixes[0]
+	var roll := instance.rolls[0]
+	var bounds := definition.roll_bounds(instance.tier, 0)
+	TestAssertions.near(fmod(roll.value, 0.01), 0.0, 0.000001, "%s crit roll uses one-point grid" % label, failures)
+	TestAssertions.truthy(roll.value >= bounds.x and roll.value <= bounds.y, "%s quantized roll remains in tier bounds" % label, failures)
 
 func _test_high_level_broadens_without_guaranteeing_top_tier(failures: Array[String]) -> void:
 	var affix := _affix(&"broad", "prefix", [&"broad_family"], [

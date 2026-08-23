@@ -156,10 +156,25 @@ static func _build_instance(
 		var roll_stage := StringName("roll:%s:%s:%d" % [slot, definition.id, effect_index])
 		var unit := ItemDeterministicRandom.unit(request.seed, request.generation_sequence, roll_stage, 0)
 		var quality := ItemGenerationWeightPolicy.roll_quality(unit, request.charisma_value)
+		var value := lerpf(bounds.x, bounds.y, quality)
+		if effect.roll_step > 0.0:
+			var minimum_index := ceili(bounds.x / effect.roll_step)
+			var maximum_index := floori(bounds.y / effect.roll_step)
+			if minimum_index > maximum_index:
+				return _failure(&"invalid_roll_step_range", {
+					"affix_id": String(definition.id),
+					"effect": effect_index,
+					"slot": slot,
+					"minimum": bounds.x,
+					"maximum": bounds.y,
+					"roll_step": effect.roll_step,
+				})
+			var step_index := clampi(roundi(value / effect.roll_step), minimum_index, maximum_index)
+			value = float(step_index) * effect.roll_step
 		var roll := ItemModifierRoll.new()
 		roll.stat_id = effect.stat_id
 		roll.operation = effect.operation
-		roll.value = lerpf(bounds.x, bounds.y, quality)
+		roll.value = value
 		roll.required_tags = effect.required_tags.duplicate()
 		instance.rolls.append(roll)
 

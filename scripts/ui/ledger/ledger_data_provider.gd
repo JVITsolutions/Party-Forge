@@ -125,8 +125,46 @@ func stat_detail(member_id: int, stat_id: StringName) -> Dictionary:
 		"value_text": definition.format_value(snapshot.value(stat_id, definition.default_value)),
 		"description": keyword.explanation if keyword != null else "Missing definition: %s" % definition.keyword_id,
 		"cap_text": _cap_text(definition),
-		"sources": snapshot.breakdown(stat_id),
+		"sources": _formatted_breakdown(definition, snapshot.breakdown(stat_id)),
 	}
+
+func _formatted_breakdown(definition: StatDefinition, rows: Array[Dictionary]) -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	for source: Dictionary in rows:
+		var row := source.duplicate(true)
+		var operation := int(row.get("operation", -1))
+		var value := float(row.get("value", 0.0))
+		if operation == -1:
+			row["formatted_value"] = definition.format_value(value)
+		elif operation == StatModifier.Operation.FLAT:
+			row["formatted_value"] = _format_unbounded_definition_value(definition, absf(value))
+			row["formatted_modifier"] = "%s%s" % ["+" if value >= 0.0 else "-", _format_unbounded_definition_value(definition, absf(value))]
+		else:
+			row["formatted_value"] = _number_text(absf(value) * 100.0) + "%"
+			var operation_label: String = {
+				StatModifier.Operation.INCREASED: "increased",
+				StatModifier.Operation.REDUCED: "reduced",
+				StatModifier.Operation.MORE: "more",
+				StatModifier.Operation.LESS: "less",
+			}.get(operation, "")
+			row["formatted_modifier"] = "%s%s%% %s" % [
+				"+" if value >= 0.0 else "-", _number_text(absf(value) * 100.0), operation_label,
+			]
+		result.append(row)
+	return result
+
+func _format_unbounded_definition_value(definition: StatDefinition, value: float) -> String:
+	match definition.value_format:
+		StatDefinition.ValueFormat.INTEGER:
+			return str(roundi(value))
+		StatDefinition.ValueFormat.RATIO_PERCENT:
+			return "%.*f%%" % [definition.precision, value * 100.0]
+		StatDefinition.ValueFormat.MULTIPLIER:
+			return "%.*fx" % [definition.precision, value]
+		StatDefinition.ValueFormat.PER_SECOND:
+			return "%.*f/s" % [definition.precision, value]
+		_:
+			return "%.*f" % [definition.precision, value]
 
 func combat_estimate_rows(member_id: int) -> Array[ActionCombatEstimate]:
 	var rows: Array[ActionCombatEstimate] = []

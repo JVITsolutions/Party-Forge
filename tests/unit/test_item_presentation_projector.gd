@@ -10,6 +10,7 @@ func run() -> Array[String]:
 		return failures
 	var projector: Script = load(PROJECTOR_PATH)
 	_test_complete_record(projector, failures)
+	_test_legacy_critical_roll_uses_definition_formatting(projector, failures)
 	_test_typed_base_damage_projection(projector, failures)
 	_test_schema_one_empty_base_damage_projection(projector, failures)
 	_test_missing_affix_omits_bounds(projector, failures)
@@ -43,6 +44,50 @@ func _test_complete_record(projector: Script, failures: Array[String]) -> void:
 	TestAssertions.equal(roll.get("maximum_roll"), 6.0, "tier maximum projects", failures)
 	TestAssertions.near(float(roll.get("roll_fraction", -1.0)), 0.5, 0.001, "roll position projects", failures)
 	TestAssertions.equal(detail.get("modifier_totals"), {"constitution|0": 5.0}, "comparable modifier totals project", failures)
+
+
+func _test_legacy_critical_roll_uses_definition_formatting(projector: Script, failures: Array[String]) -> void:
+	var item := ItemInstance.new()
+	item.instance_id = "legacy-critical-ring"
+	item.base_definition_id = &"ring_of_mercy"
+	item.rarity_id = &"common"
+	item.item_level = 1
+	var affix := ItemAffixInstance.new()
+	affix.definition_id = &"ring_of_mercy_implicit"
+	affix.affix_kind = "implicit"
+	affix.tier = 1
+	var roll := ItemModifierRoll.new()
+	roll.stat_id = &"crit_chance"
+	roll.operation = StatModifier.Operation.FLAT
+	roll.value = 0.0111
+	affix.rolls = [roll]
+	item.affixes = [affix]
+	var detail: Dictionary = projector.call(
+		"project", item, GameCatalog.EQUIPMENT_CATALOG,
+		GameCatalog.ITEM_FOUNDATION_CATALOG, GameCatalog.STAT_CATALOG,
+	)
+	var projected := detail.get("affixes", [])[0].get("rolls", [])[0] as Dictionary
+	TestAssertions.equal(projected.get("effect_text"), "+1% Critical Strike Chance", "legacy off-grid critical roll uses whole percentage points", failures)
+	TestAssertions.equal(projected.get("formatted_value"), "1%", "projected critical value carries definition formatting", failures)
+	TestAssertions.equal(projected.get("formatted_minimum_roll"), "1%", "projected critical minimum carries definition formatting", failures)
+	TestAssertions.equal(projected.get("formatted_maximum_roll"), "2%", "projected critical maximum carries definition formatting", failures)
+	TestAssertions.truthy("0.0111" not in String(projected.get("effect_text", "")) and "+0.01" not in String(projected.get("effect_text", "")), "legacy critical effect hides raw ratio decimals", failures)
+	roll.stat_id = &"crit_multiplier"
+	roll.value = 0.10
+	detail = projector.call(
+		"project", item, GameCatalog.EQUIPMENT_CATALOG,
+		GameCatalog.ITEM_FOUNDATION_CATALOG, GameCatalog.STAT_CATALOG,
+	)
+	projected = detail.get("affixes", [])[0].get("rolls", [])[0] as Dictionary
+	TestAssertions.equal(projected.get("effect_text"), "+10% Critical Strike Multiplier", "modifier formatting does not apply the absolute critical multiplier minimum", failures)
+	roll.stat_id = &"crit_chance"
+	roll.value = 0.05
+	detail = projector.call(
+		"project", item, GameCatalog.EQUIPMENT_CATALOG,
+		GameCatalog.ITEM_FOUNDATION_CATALOG, GameCatalog.STAT_CATALOG,
+	)
+	projected = detail.get("affixes", [])[0].get("rolls", [])[0] as Dictionary
+	TestAssertions.equal(projected.get("effect_text"), "+5% Critical Strike Chance", "generated grid-aligned critical roll projects as whole percentage points", failures)
 
 
 func _test_typed_base_damage_projection(projector: Script, failures: Array[String]) -> void:

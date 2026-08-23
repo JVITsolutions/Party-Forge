@@ -80,8 +80,28 @@ func validate(
 	if tiers.is_empty():
 		errors.append("affix %s requires at least one tier" % id)
 	_validate_tiers(tiers, effects.size(), known_domains, known_sources, known_rarities, errors)
+	_validate_roll_steps(errors)
 	_validate_monotonic_core_attribute_ranges(errors)
 	return errors
+
+func _validate_roll_steps(errors: PackedStringArray) -> void:
+	for effect_index: int in effects.size():
+		var effect := effects[effect_index]
+		if effect == null or not is_finite(effect.roll_step) or effect.roll_step <= 0.0:
+			continue
+		for tier: ItemAffixTierDefinition in tiers:
+			if tier == null or effect_index >= tier.minimum_rolls.size() or effect_index >= tier.maximum_rolls.size():
+				continue
+			var minimum := tier.minimum_rolls[effect_index]
+			var maximum := tier.maximum_rolls[effect_index]
+			if not is_finite(minimum) or not is_finite(maximum) or minimum > maximum:
+				continue
+			var minimum_index := ceili(minimum / effect.roll_step)
+			var maximum_index := floori(maximum / effect.roll_step)
+			if minimum_index > maximum_index:
+				errors.append("affix %s tier %d effect %d range %s-%s contains no legal roll grid point for step %s" % [
+					id, tier.tier, effect_index, str(minimum), str(maximum), str(effect.roll_step),
+				])
 
 func _validate_monotonic_core_attribute_ranges(errors: PackedStringArray) -> void:
 	var seen: Dictionary = {}

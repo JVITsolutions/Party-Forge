@@ -4,6 +4,7 @@ extends Resource
 @export var stat_id: StringName
 @export var operation := StatModifier.Operation.FLAT
 @export var required_tags: Array[StringName] = []
+@export var roll_step := 0.0
 
 func validate(stats: StatCatalog) -> PackedStringArray:
 	var errors := PackedStringArray()
@@ -13,4 +14,6 @@ func validate(stats: StatCatalog) -> PackedStringArray:
 		errors.append("unsupported operation %d" % operation)
 	if required_tags.any(func(tag: StringName) -> bool: return tag.is_empty()):
 		errors.append("required tag is empty")
+	if not is_finite(roll_step) or roll_step < 0.0:
+		errors.append("roll step must be finite and nonnegative")
 	return errors
