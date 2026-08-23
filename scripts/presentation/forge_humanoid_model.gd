@@ -120,9 +120,14 @@ func apply_equipment_visual(slot_id: StringName, definition: EquipmentVisualDefi
 		for attachment: Node3D in selected_attachments:
 			if attachment not in attachment_nodes:
 				attachment_nodes.append(attachment)
+	var explicitly_requested_socket_ids: Array[StringName] = []
+	for attachment: Node3D in attachment_nodes:
+		if attachment.has_meta(&"equipment_socket_id"):
+			explicitly_requested_socket_ids.append(StringName(attachment.get_meta(&"equipment_socket_id")))
+	var allow_explicit_owned_hand_pair := &"LeftHandSocket" in explicitly_requested_socket_ids and &"RightHandSocket" in explicitly_requested_socket_ids
 	for attachment: Node3D in attachment_nodes:
 		var socket_id := StringName(attachment.get_meta(&"equipment_socket_id", definition.socket_id))
-		var socket := _resolve_socket(socket_id, slot_id, false, attachment.has_meta(&"equipment_socket_id"))
+		var socket := _resolve_socket(socket_id, slot_id, false, allow_explicit_owned_hand_pair)
 		if socket == null:
 			candidate_root.free()
 			return false
@@ -393,7 +398,7 @@ func _equipped_node_named(slot_id: StringName, node_name: StringName) -> Node3D:
 			return found
 	return null
 
-func _resolve_socket(socket_id: StringName, slot_id: StringName = &"", include_equipped_anchors: bool = true, allow_owned_hand_pair: bool = false) -> Node3D:
+func _resolve_socket(socket_id: StringName, slot_id: StringName = &"", include_equipped_anchors: bool = true, allow_explicit_owned_hand_pair: bool = false) -> Node3D:
 	if include_equipped_anchors and not String(socket_id).contains("/"):
 		var equipped_slots: Array[StringName] = []
 		if not slot_id.is_empty():
@@ -404,7 +409,7 @@ func _resolve_socket(socket_id: StringName, slot_id: StringName = &"", include_e
 			var equipped_socket := _equipped_node_named(equipped_slot, socket_id)
 			if equipped_socket != null:
 				return equipped_socket
-	var semantic_slot := &"" if allow_owned_hand_pair and _is_owned_legacy_hand_pair_socket(socket_id) else _semantic_slot_for(socket_id, slot_id)
+	var semantic_slot := &"" if allow_explicit_owned_hand_pair and _is_owned_legacy_hand_pair_socket(socket_id) else _semantic_slot_for(socket_id, slot_id)
 	if not semantic_slot.is_empty():
 		var semantic_root := _ensure_semantic_socket_root()
 		if semantic_root == null:

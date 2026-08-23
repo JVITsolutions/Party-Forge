@@ -31,6 +31,8 @@ func run() -> Array[String]:
 	_assert_external_decoy_skeleton_fails_closed(failures)
 	_assert_in_model_incomplete_and_wrong_rest_rigs_fail_closed(failures)
 	_assert_recognized_direct_name_collisions_fail_closed(failures)
+	_assert_single_right_hand_wrapper_request_fails_closed(failures)
+	_assert_single_left_hand_wrapper_request_fails_closed(failures)
 	_assert_wrong_type_semantic_root_is_stable_and_fails_closed(failures)
 	return failures
 
@@ -196,6 +198,28 @@ func _assert_recognized_direct_name_collisions_fail_closed(failures: Array[Strin
 		TestAssertions.equal(collision.get_child_count(), 0, "recognized %s collision remains unused" % description[&"label"], failures)
 		model.free()
 
+func _assert_single_right_hand_wrapper_request_fails_closed(failures: Array[String]) -> void:
+	_assert_single_hand_wrapper_request_fails_closed(&"main_hand", &"RightHandSocket", &"LeftHandSocket", "right", failures)
+
+func _assert_single_left_hand_wrapper_request_fails_closed(failures: Array[String]) -> void:
+	_assert_single_hand_wrapper_request_fails_closed(&"off_hand", &"LeftHandSocket", &"RightHandSocket", "left", failures)
+
+func _assert_single_hand_wrapper_request_fails_closed(slot_id: StringName, requested_socket_id: StringName, unrelated_socket_id: StringName, label: String, failures: Array[String]) -> void:
+	var model := ForgeHumanoidModel.new()
+	_add_body(model)
+	var requested_socket := Node3D.new()
+	requested_socket.name = requested_socket_id
+	model.add_child(requested_socket)
+	var unrelated_socket := Node3D.new()
+	unrelated_socket.name = unrelated_socket_id
+	model.add_child(unrelated_socket)
+	_add_to_tree(model)
+	var visual := _visual(&"single_hand_wrapper", slot_id, requested_socket_id, _metadata_attachment_scene(requested_socket_id))
+	TestAssertions.truthy(not model.apply_equipment_visual(slot_id, visual), "single %s legacy hand-wrapper request fails closed despite unrelated opposite sibling" % label, failures)
+	TestAssertions.equal(requested_socket.get_child_count(), 0, "single %s request installs nothing under its direct-name collision" % label, failures)
+	TestAssertions.equal(unrelated_socket.get_child_count(), 0, "single %s request leaves unrelated opposite sibling untouched" % label, failures)
+	model.free()
+
 func _assert_wrong_type_semantic_root_is_stable_and_fails_closed(failures: Array[String]) -> void:
 	var model := ForgeHumanoidModel.new()
 	_add_body(model)
@@ -283,6 +307,19 @@ func _anchor_scene(with_anchors: bool) -> PackedScene:
 			anchor.position = description[&"position"]
 			root.add_child(anchor)
 			anchor.owner = root
+	var scene := PackedScene.new()
+	scene.pack(root)
+	root.free()
+	return scene
+
+func _metadata_attachment_scene(socket_id: StringName) -> PackedScene:
+	var root := Node3D.new()
+	root.name = &"AttachmentRoot"
+	var attachment := Node3D.new()
+	attachment.name = &"Attachment"
+	attachment.set_meta(&"equipment_socket_id", socket_id)
+	root.add_child(attachment)
+	attachment.owner = root
 	var scene := PackedScene.new()
 	scene.pack(root)
 	root.free()
