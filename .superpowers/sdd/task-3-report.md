@@ -1,110 +1,241 @@
-# Task 3 report: primary archetypes and shared damage preparation
+# Task 3 Implementation Report
 
-Status: implementation, verification, and scoped commit complete.
+Status: DONE
 
 ## Scope
 
-- Worktree: `F:\Projects(root)\Game dev\Projects\party-forge\.worktrees\equipment-attribute-application`
-- Branch: `feat/equipment-attribute-application`
-- Starting head: `e27bfc9` (`fix: reject projected source ID collisions`)
-- Task 3 commit: this report's commit (`feat: apply primary archetype damage scaling`); use `git log -1` for the final immutable hash.
-- Added `ActionArchetype` for exact-one playable damage archetype validation and canonical archetype-stat lookup.
-- Added `ActionDamageProjection.normal_component()` as the shared finite, nonnegative normal-component calculation.
-- Routed runtime preparation and ledger estimates through the shared projection using the action snapshot for archetype, type, critical, and action-rate stats.
-- Normalized Mage, Frost Mage, Cleric, and Warlock attacks to sorted caster-primary tags without changing their damage types or other tags.
-- No item, affix, class, or base-equipment Resource is mutated. This task does not alter attribute projection or cache invalidation behavior established by Tasks 1-2.
+- Created `tools/build_modular_equipment_backup.gd`.
+- Created `tests/unit/test_modular_equipment_backup_builder.gd`.
+- No production backup was invoked.
+- No authoritative main checkout, legacy asset, or `scenes/equipment/test_equipment/` file was read for test copying, modified, deleted, or staged.
+- Tests used a two-file explicit inventory under a unique disposable Godot user-data directory and removed only explicitly known files/directories, leaf-first, without recursive deletion.
 
-## TDD RED evidence
+## Implementation
 
-The first direct missing-class run produced parse errors for `ActionArchetype` and `ActionDamageProjection`, but the focused runner incorrectly returned process exit `0` without a `TEST_SUMMARY`. That result was rejected as RED evidence.
+- The `SceneTree` entry point accepts required named `--source-root`, `--output`, `--source-commit`, and `--source-branch` arguments in `--name value` or `--name=value` form.
+- CLI parsing and Git-status collection are separate from the `BackupService` copy/hash API, so tests call the service directly without subprocesses.
+- Request validation requires an absolute existing source root with `project.godot` directly beneath it, an absolute absent-or-empty output outside the source root, a nonempty branch, an exact 40-character hexadecimal commit, and a nonempty normalized unique inventory.
+- The service sorts the explicit inventory, rejects traversal/reserved output names, creates only required external parents, copies bytes through read/write buffers, verifies destination bytes, and hashes the bytes actually copied.
+- The deterministic final `manifest.json` records schema/state, source root, commit, branch, full worktree status, exact expected/file counts, total bytes, and sorted relative path/size/SHA-256 rows.
+- The final manifest is written only after every inventory copy verifies. Copy failure leaves copied bytes in place, omits the final manifest, and writes a bounded `backup.failure.json` plus `partial-manifest.json` containing completed rows and explicit owned paths.
+- The production implementation contains no delete, recursive cleanup, rename, source write, or target-overwrite operation.
 
-The test was adjusted to dynamically load the not-yet-existing services so all assertions could execute. The required focused batch then exited `1` with:
+## TDD evidence
 
-```text
-TEST_SUMMARY: FAIL (13 failures)
+The first attempted RED run exposed a test-only type-inference parse error. That test harness issue was corrected before accepting any RED result; it was not counted as RED.
+
+Accepted RED command:
+
+```powershell
+& 'F:\Projects(root)\Game dev\godot\Godot_v4.7.1-stable_mono_win64\Godot_v4.7.1-stable_mono_win64_console.exe' --headless --path . --quit-after 120 --script res://tests/focused_test_runner.gd -- res://tests/unit/test_modular_equipment_backup_builder.gd
 ```
 
-The failures were limited to the intended missing behavior:
-
-- both new services were absent;
-- runtime melee preparation returned `180` instead of archetype-scaled `234`;
-- mixed caster runtime components returned `16.8` and `6.6` instead of `21.84` and `8.58`;
-- Mage, Cleric, Frost Mage, and Warlock resources lacked their approved caster-primary tags.
-
-## Implementation and coverage
-
-- `ActionArchetype.primary_tag()` returns a primary only when exactly one of melee, ranged, or caster is present.
-- `ActionArchetype.stat_id()` maps a valid primary to `<tag>_damage` and otherwise returns an empty ID.
-- Playable class validation returns the stable diagnostic `PARTY_FORGE_DAMAGE_ERROR attack=<id> reason=expected exactly one primary archetype`; healing actions remain exempt.
-- `ActionDamageProjection.normal_component()` multiplies base, global, archetype, and type scaling once and returns `NAN` for negative, non-finite, or overflowed input.
-- Runtime retains `global_scaled` as global-only evidence and records the shared final normal component in `typed_scaled` before critical scaling.
-- Tests cover missing/conflicting primary tags, healing exemption, all nine live class mappings, invalid projection inputs, melee runtime scaling, and mixed fire/cold caster parity between runtime and ledger.
-
-## Compatibility-test scope exception
-
-The first complete-suite run exited `1` with `TEST_SUMMARY: FAIL (6 failures)`. All six were stale existing test expectations outside the original Task 3 file list:
-
-- `test_attack_damage_data.gd`: old Mage and Cleric tag arrays;
-- `test_expanded_class_content.gd`: old Frost Mage and Warlock tag arrays;
-- `test_typed_combat_final_fixes.gd`: the custom playable `radiant_bolt` fixture had no primary archetype.
-
-The parent explicitly approved a minimal test-only scope expansion. Only those four exact tag arrays were updated, and exactly one `caster` tag was appended to the shared `radiant_bolt` fixture. No unrelated assertion or production behavior changed.
-
-## GREEN verification
-
-Godot: `4.7.1.stable.mono.official.a13da4feb`
-
-Expanded focused batch (the four Task 3 suites plus the three approved compatibility suites):
+Accepted RED result: exit code `1`; `TEST_SUMMARY: FAIL (1 failures)`; genuine assertion:
 
 ```text
-exit 0
-TEST_SUMMARY: PASS (0 failures)
+backup builder implementation exists: expected res://tools/build_modular_equipment_backup.gd
 ```
 
-Fresh complete suite after compatibility updates:
+No production implementation file existed during accepted RED.
 
-```text
-exit 0
-TEST_SUMMARY: PASS (159 suites)
+Initial GREEN command: same focused command.
+
+Initial GREEN result: exit code `0`; `TEST_SUMMARY: PASS (0 failures)`.
+
+## Verification
+
+Task 2 inventory plus Task 3 builder focused command:
+
+```powershell
+& 'F:\Projects(root)\Game dev\godot\Godot_v4.7.1-stable_mono_win64\Godot_v4.7.1-stable_mono_win64_console.exe' --headless --path . --quit-after 180 --script res://tests/focused_test_runner.gd -- res://tests/unit/test_modular_equipment_backup_inventory.gd res://tests/unit/test_modular_equipment_backup_builder.gd
 ```
 
-The focused and complete logs contain existing intentionally asserted negative-path diagnostics. Neither run contains a `TEST_FAILURE` after the final changes.
+Result before staging: exit code `0`; `TEST_SUMMARY: PASS (0 failures)`.
 
-`git diff --check` passed. Godot generated no Task 3 `.gd.uid` or `.import` sidecars. The worktree still contains the same pre-existing untracked generated `.gd.uid` set; none were modified, removed, staged, or included in the Task 3 commit.
+Full suite command:
 
-## Generator-authoring review follow-up
-
-Review found that the checked-in attack Resources were normalized, but retained authoring tables could restore stale tags during regeneration. `tools/create_default_data.gd` still omitted `caster` for Mage and Cleric, while `tools/class_expansion_rows.gd` omitted `caster` for Frost Mage and used conflicting `ranged` for Warlock.
-
-The regression test combines both authoritative attack-row tables, requires exactly one row for each of the four caster attacks, compares the complete sorted tag array, and verifies `ActionArchetype.primary_tag()` resolves `caster`. Its controlled RED run exited `1` with:
-
-```text
-TEST_SUMMARY: FAIL (8 failures)
+```powershell
+& 'F:\Projects(root)\Game dev\godot\Godot_v4.7.1-stable_mono_win64\Godot_v4.7.1-stable_mono_win64_console.exe' --headless --path . --quit-after 600 --script res://tests/test_runner.gd
 ```
 
-After changing only those four authoring rows, the direct generator-row suite exited `0` with `TEST_SUMMARY: PASS (0 failures)`.
+Result: exit code `0`; `TEST_SUMMARY: PASS (205 suites)`. The emitted error/warning diagnostics were established intentional negative-path coverage; no `TEST_FAILURE` summary occurred.
 
-Disposable project snapshots were used so generator execution could not overwrite the authoritative worktree. The default generator exited `0` with `DATA_GENERATION_OK`, and exact post-generation file assertions reported:
+Final staged focused run: exit code `0`; `TEST_SUMMARY: PASS (0 failures)`.
 
-```text
-TASK3_REGEN_TAGS_OK scratch=task-3-generator-default actions=4
-TASK3_REGEN_TAGS_OK scratch=task-3-generator-migration actions=4
+`git diff --cached --check`: exit code `0`, no output.
+
+## Files changed and commit
+
+- `tools/build_modular_equipment_backup.gd`
+- `tests/unit/test_modular_equipment_backup_builder.gd`
+
+Commit:
+
+`866d6d57b32b88ff61c95a2297a4b277516213ce` - `feat: add bounded modular equipment backup builder`
+
+Only the two task files were included in the commit.
+
+## Self-review and concerns
+
+- Coverage exercises named argument parsing, missing arguments, relative output, output inside the source, existing non-empty output, malformed commit, wrong project root, parent creation, byte preservation, source immutability, metadata/hashes, exact inventory confinement, deterministic manifest bytes, failure preservation, bounded failure marker, partial ownership, sibling preservation, and traversal rejection.
+- The service has no dependency on the production 534-file inventory during tests.
+- The CLI itself was deliberately not spawned in tests, as required; its parser and pure service are exercised separately, and loading the tool covers the complete script parser.
+- Concerns: none.
+
+## Safety-review hardening follow-up
+
+Status: DONE
+
+The review findings were addressed only in `tools/build_modular_equipment_backup.gd` and `tests/unit/test_modular_equipment_backup_builder.gd`. No production backup, authoritative-checkout write, legacy-asset mutation, recursive deletion, or production-inventory copy was performed.
+
+### Additional accepted RED evidence
+
+All focused RED/GREEN cycles used:
+
+```powershell
+& 'F:\Projects(root)\Game dev\godot\Godot_v4.7.1-stable_mono_win64\Godot_v4.7.1-stable_mono_win64_console.exe' --headless --path . --quit-after 120 --script res://tests/focused_test_runner.gd -- res://tests/unit/test_modular_equipment_backup_builder.gd
 ```
 
-The expansion migration rewrote and reloaded its attack Resources before its unchanged class-validation phase exited `1` on pre-existing starter-loadout capability/tag diagnostics. The four emitted attack Resources nevertheless matched the exact normalized arrays. `tools/migrate_class_expansion_data.gd` already copies `row["tags"]` directly, so it required no change; broadening this review fix into unrelated class/loadout migration repair was intentionally deferred.
+- Review RED 1: exit `1`, `TEST_SUMMARY: FAIL (2 failures)` for the absent injected race-safe filesystem API and absent actual-Git metadata validation API.
+- Review RED 2: exit `1`, `TEST_SUMMARY: FAIL (3 failures)` for missing exact output-root containment configuration and adversarial metacharacter-path copying.
+- Review RED 3: exit `1`, `TEST_SUMMARY: FAIL (1 failures)` for the missing inspectable native-helper encoding boundary.
+- Review RED 4: exit `1`, `TEST_SUMMARY: FAIL (1 failures)` for the absent stdin-pipe boundary needed to keep content writing inside the same exclusive native create operation.
+- Review RED 5: exit `1`, `TEST_SUMMARY: FAIL (2 failures)` for missing verified failure artifacts and missing `.` ownership when output-root creation failed after mutation.
 
-Final authoritative verification with Godot `4.7.1.stable.official.a13da4feb`:
+Harness-only parse/type-inference failures encountered while authoring RED 5 were corrected and were not accepted as behavioral RED evidence.
 
-```text
-Task 3 focused batch: exit 0, TEST_SUMMARY: PASS (0 failures)
-Complete suite: exit 0, TEST_SUMMARY: PASS (159 suites)
+### Hardened implementation
+
+- The filesystem adapter is injected into the pure service. Production path probes fail closed on any symlink, junction, or other reparse component in the source, output's nearest existing parent, and every inventory path.
+- Production mutations use a bounded encoded PowerShell/.NET adapter. User paths are UTF-8/base64 encoded inside a UTF-16 `-EncodedCommand`; no path or content is interpolated into shell source.
+- Every directory uses atomic `CreateDirectoryW`; every file uses `FileMode.CreateNew`; content is streamed into that still-open exclusive file handle, flushed, length-checked, and SHA-256 checked before close. Non-blocking pipe writes are bounded and retried under back-pressure.
+- Every created directory/file is registered immediately, including partial destination files and the earliest partially created output. Post-mutation failures attempt and read-back verify both the bounded failure marker and partial ownership manifest, and return preservation status plus owned paths.
+- `manifest.json` is never opened for writing. The service exclusively writes and verifies `.manifest.pending.json`, then publishes it with atomic no-replace `File.Move`; publish failure leaves no success manifest.
+- Source and destination reads must report an accepted status, exact expected length, exact bytes read/position, a valid lowercase SHA-256, local hash agreement, and source/destination hash plus byte equality before a manifest row completes.
+- CLI startup probes actual Git HEAD, symbolic branch, and full porcelain status and rejects any caller commit/branch mismatch before inventory construction or output creation.
+
+### Final verification
+
+- Focused Task 3: exit `0`, `TEST_SUMMARY: PASS (0 failures)`.
+- Focused Tasks 2+3: exit `0`, `TEST_SUMMARY: PASS (0 failures)`.
+- Disposable native helper stress: exit `0`; exact `100000` bytes on an output path containing spaces, `&`, `$`, brackets, and `;`; exclusive create and atomic publish both succeeded. The temporary runner and exact disposable root were explicitly removed and verified absent.
+- Full suite: exit `0`, `TEST_SUMMARY: PASS (205 suites)`.
+- `git diff --check`: exit `0`, no output.
+
+### Concerns
+
+- The native helper is Windows-specific by design for this Windows backup workflow and fails closed if PowerShell or required Win32/.NET primitives are unavailable.
+- No production backup was invoked; native behavior was limited to the explicit disposable 100 KB stress artifact.
+
+Hardening commit: `7d571b5` - `fix: harden modular equipment backup safety` (only the two Task 3 code/test files).
+
+## Second safety-review handle hardening
+
+Status: DONE
+
+This follow-up remained confined to `tools/build_modular_equipment_backup.gd` and `tests/unit/test_modular_equipment_backup_builder.gd`. It did not invoke a production backup, write to the authoritative checkout, copy the production inventory, mutate legacy assets, or recursively delete any path.
+
+### Accepted RED evidence
+
+The focused Task 3 command was used for each RED/GREEN cycle:
+
+```powershell
+& 'F:\Projects(root)\Game dev\godot\Godot_v4.7.1-stable_mono_win64\Godot_v4.7.1-stable_mono_win64_console.exe' --headless --path . --quit-after 120 --script res://tests/focused_test_runner.gd -- res://tests/unit/test_modular_equipment_backup_builder.gd
 ```
 
-The review follow-up is committed separately from the original Task 3 implementation. Only the two retained generator tables, their regression test, and this report belong to that follow-up commit.
+- Handle-contract RED: exit `1`, `TEST_SUMMARY: FAIL (7 failures)` for absent canonical identity/source configuration, one-operation guarded copy, supervision contract, required Git top-level, output identity-alias rejection, and Git top-level mismatch rejection.
+- Native API RED: exit `1`, `TEST_SUMMARY: FAIL (2 failures)` for absent bounded supervision injection and 8.3 short-path inspection.
+- Native boundary RED: exit `1`, `TEST_SUMMARY: FAIL (6 failures)` for UNC fail-closed, SUBST identity/containment, bounded timeout, confirmed termination, and ownership recovery.
+- Initial handle-helper RED: exit `1`, `TEST_SUMMARY: FAIL (14 failures)` for a reversed missing-path probe mode that blocked output setup and all dependent native boundaries.
+- Service-routing RED: exit `1`, `TEST_SUMMARY: FAIL (1 failures)` because the service made zero calls to the required one-operation guarded copy API instead of one call per inventory file.
+- Bounded Git supervisor RED: exit `1`, `TEST_SUMMARY: FAIL (1 failures)` for the missing shared bounded subprocess API.
+- Abnormal-exit contract RED: exit `1`, `TEST_SUMMARY: FAIL (1 failures)` for missing abnormal-exit ownership reconciliation.
+- Large-status supervision RED: exit `1`, `TEST_SUMMARY: FAIL (1 failures)` because an undrained 100 KB subprocess output deadlocked until timeout.
 
-## Concerns
+GDScript parse/type errors while assembling the helper and a disposable-cleanup ordering failure were harness defects, not accepted behavioral RED evidence.
 
-- No open Task 3 functional concern is known.
-- The retained expansion migration still fails its later class validation on existing starter-loadout capability/tag mismatches. This did not prevent its attack rows from being emitted and verified, and is outside the reviewed tag-preservation defect.
-- The focused runner can return exit `0` after a suite-load parse failure, so accepted evidence requires both the expected PASS marker and absence of `TEST_FAILURE`/parse/load failures.
-- The report is a pre-existing tracked coordination artifact and is included in the scoped Task 3 commit.
+### Implemented safety boundaries
+
+- A bounded encoded PowerShell/.NET helper opens every existing local path component with `FILE_FLAG_OPEN_REPARSE_POINT`, rejects reparse components and UNC paths, derives canonical volume/file identity with `GetFileInformationByHandle`, and retains component handles without `FILE_SHARE_DELETE` for each complete probe, copy, create, directory-create, and publication operation.
+- The configured source identity must equal the actual Git top-level identity. Each source copy chain must contain that source anchor, and each output mutation chain must contain the separately captured nearest-existing-output-ancestor identity. SUBST and supported 8.3 aliases therefore compare by object identity rather than spelling.
+- Copy uses one helper operation with held source and destination-parent handles, source identity revalidation, destination `CREATE_NEW`, immediate ownership output, full source and destination lengths/positions, valid SHA-256 values, and equality before a manifest row is completed.
+- Every file uses Win32 `CREATE_NEW`; every directory uses `CreateDirectoryW`; no collision truncates or replaces bytes. Artifact bytes are flushed and reread on their still-open exclusive handle. The pending manifest is published last with atomic same-volume `MoveFileExW` and no replace flag.
+- Every created object is announced and flushed before injected delay or subsequent work. Bounded supervision confirms helper termination, then reconciles announced ownership against the object's canonical identity on timeout or other abnormal exit.
+- Git HEAD, symbolic branch, full porcelain status, and top-level probes share the bounded process supervisor. The supervisor continuously drains up to 16 MiB, so a 100 KB status does not deadlock; larger output fails closed.
+- The service remains independently injectable/testable. CLI parsing, actual Git probing, source identity verification, inventory construction, and output mutation remain separate stages, with all Git/caller verification occurring before output creation.
+
+### Native disposable coverage
+
+- UNC/local aliases fail closed.
+- SUBST source aliases resolve to the same identity and cannot be configured as output inside the source.
+- 8.3 aliases compare by identity when supported; disabled aliases report explicit unavailability.
+- Existing-file and final-manifest collisions preserve sentinel and pending bytes.
+- A post-create timeout is killed, termination is confirmed, and the created directory is recovered by identity as owned.
+- A guarded native source copy preserves exact bytes.
+- Native `CREATE_NEW` streams and verifies exactly `102400` bytes.
+- The native service completes copy, verified pending artifact, and manifest-last publication end to end in a disposable directory.
+
+### Verification
+
+- Focused Task 3: exit `0`, `TEST_SUMMARY: PASS (0 failures)`.
+- Focused Tasks 2+3: exit `0`, `TEST_SUMMARY: PASS (0 failures)`.
+- Full suite: exit `0`, `TEST_SUMMARY: PASS (205 suites)`.
+- `git diff --check`: exit `0`, no output.
+
+### Concerns
+
+- The native contract intentionally supports local Windows paths only and fails closed for UNC paths, unavailable handle primitives, helper launch failure, helper timeout, unconfirmed termination, output above the bounded capture limit, or identity mismatch.
+- No production backup was invoked. All native mutation tests used a tiny explicit disposable inventory and explicitly tracked files/directories for non-recursive cleanup.
+
+Second safety-review fix commit: `f2546c8` - `fix: anchor backup safety to native handles` (only the two Task 3 code/test files).
+
+## Trusted-local-workstation simplification
+
+Status: DONE
+
+The user approved trusted-local-workstation option A, recorded in design/plan commit `1490fc2a8c6da8ddfae5756c4f63e8b81cbd9aef`. This supersedes the hostile-filesystem assumptions in the two earlier safety-review sections while preserving their historical RED/GREEN evidence. The implementation remains confined to `tools/build_modular_equipment_backup.gd` and `tests/unit/test_modular_equipment_backup_builder.gd`; no production backup, authoritative-checkout write, production-inventory copy, legacy-asset mutation, or recursive deletion occurred.
+
+### Accepted RED evidence
+
+The focused Task 3 command was used for each cycle:
+
+```powershell
+& 'F:\Projects(root)\Game dev\godot\Godot_v4.7.1-stable_mono_win64\Godot_v4.7.1-stable_mono_win64_console.exe' --headless --path . --quit-after 120 --script res://tests/focused_test_runner.gd -- res://tests/unit/test_modular_equipment_backup_builder.gd
+```
+
+- Local-adapter API RED: exit `1`, `TEST_SUMMARY: FAIL (1 failures)` for the missing trusted local filesystem constructor.
+- Scope-contract RED: exit `1`, `TEST_SUMMARY: FAIL (8 failures)` for retained PowerShell/hostile-process machinery, three unsafe source path forms, three unsafe output path forms, and the required Git top-level mismatch contract.
+- Pre-probe/top-level RED: exit `1`, `TEST_SUMMARY: FAIL (2 failures)` for missing public local-path validation and direct Git top-level mismatch validation.
+
+These were behavioral assertion failures. The implementation was changed only after each RED was observed, and each cycle returned to focused `PASS (0 failures)` before refactoring continued.
+
+### Simplified implementation
+
+- Replaced the embedded PowerShell/.NET/Win32 helper, handle identity model, process supervision, alias probing, and hostile termination reconciliation with a small ordinary-GDScript `LocalFilesystem` adapter appropriate to the approved trusted workstation boundary.
+- The CLI validates explicit local absolute source/output paths and rejects UNC/device forms before any filesystem or Git probe. It then captures actual Git HEAD, symbolic branch, full porcelain status, and top-level, rejecting caller commit/branch or top-level mismatch before inventory construction or output creation.
+- The pure service remains separately injectable and validates the same path and metadata contract. Output must be lexically outside the source and absent or empty; inventory entries must be exact normalized relative paths and cannot name builder-reserved artifacts.
+- Local operations never delete or recursively clean. Existing files are rejected before write, copied files are reread, and source/destination status, full lengths, positions, lowercase SHA-256 values, hashes, and bytes must agree before a manifest row completes.
+- The deterministic success manifest is written to `.manifest.pending.json`, read-back verified, and renamed to `manifest.json` only after all copies complete. Ordinary copy/write/publish failures preserve a bounded failure marker and partial ownership manifest when those artifacts can be created and verified.
+
+### Complexity reduction
+
+Measured against `f2546c8`:
+
+- Production builder: `867` to `625` total lines, `752` to `536` nonblank lines, and `51` to `40` functions.
+- Task 3 tests: `758` to `571` total lines, `651` to `489` nonblank lines, and `40` to `34` functions.
+- Combined: `1625` to `1196` total lines (`429` fewer, `26.4%` reduction), `1403` to `1025` nonblank lines (`378` fewer, `26.9%` reduction), and `91` to `74` functions (`17` fewer, `18.7%` reduction).
+
+### Verification
+
+- Focused Task 3: exit `0`, `TEST_SUMMARY: PASS (0 failures)`.
+- Focused Tasks 2+3: exit `0`, `TEST_SUMMARY: PASS (0 failures)`.
+- Full suite: exit `0`, `TEST_SUMMARY: PASS (205 suites)`.
+- `git diff --check`: exit `0`, no output.
+
+### Concerns
+
+- By approved design, ordinary GDScript check-then-open/check-then-rename operations are not a security boundary against a malicious concurrent local process. That adversarial race model is explicitly out of scope for this trusted workstation transaction.
+- The Git probes are ordinary blocking commands. Nonzero exits fail closed; hostile process termination and maliciously hung Git are outside the approved scope.
+- Local drive-letter paths are supported; UNC and device paths intentionally fail closed.
+
+Trusted-local-workstation simplification commit: `05486bc` - `feat: add bounded modular equipment backup builder` (only the two Task 3 code/test files).

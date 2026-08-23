@@ -1,135 +1,118 @@
-# Task 4 report: immutable item-roll equipment projection
+# Task 4 Report: Independent Backup Verification
 
-Status: implementation and local verification complete on `feat/equipment-attribute-application`. Task 5 was not started.
+## Scope
 
-## Scope and contract
+Task 4 was implemented in the isolated `feat/modular-equipment-pilot` worktree. The implementation adds only the independent read-only verifier and its small disposable-fixture unit suite. It does not invoke the backup builder, repair or normalize backup contents, write or delete backup files, or touch the external staging root.
 
-- Worktree: `F:\Projects(root)\Game dev\Projects\party-forge\.worktrees\equipment-attribute-application`.
-- Starting head: `3372410` (`fix: preserve caster tags during regeneration`).
-- Task 4 commit: this report's commit (`feat: project equipped item rolls into stats`); resolve the immutable hash with `git log -1`.
-- Added `EquipmentModifierProjection`, which exposes only `error`, `source`, and `ok()` plus constructors for atomic success/failure results.
-- Added pure `EquipmentModifierProjector.project(member_id, container_id, state, active_item_ids, equipment, foundation, stats)`.
-- The projector emits exactly one `equipment_member_<member_id>` source, including an empty source for an empty active set.
-- Active item rolls become ordinary `StatModifier` records, preserving all five supported operations and required tags. No parallel stat calculation was added.
-- Detailed IDs encode member, canonical slot, immutable item instance, affix index/definition, and roll index.
-- Labels use the approved actual em dash: `<base display name> — <affix display name>`.
-- Inputs are read through defensive ownership/registry copies. Items, affixes, rolls, equipment bases, foundation definitions, stat definitions, and class Resources are never mutated.
+## Files
 
-## Validation and atomicity
-
-Projection rejects invalid input before exposing a source. Stable diagnostics use:
-
-```text
-PARTY_FORGE_EQUIPMENT_PROJECTION_ERROR member=<id> slot=<slot> item=<item> affix=<affix> roll=<roll> stat=<stat> reason=<reason>
-```
-
-The boundary validates member/container/catalog presence, equipment-container kind, active identity uniqueness and exact-one placement, registry references, base and affix identities, affix kind/tier/roll shape, known stats, supported operations, finite and in-range values, required tags against the foundation vocabulary, materialized-roll/definition parity, detailed modifier identity uniqueness, complete item codec validity, and the final source through `StatResolver.validate_sources()`.
-
-Disabled/inactive items are deliberately skipped before item/roll projection, so none of their implicit, attribute, typed-damage, or tagged rolls can contribute.
+- `tools/validate_modular_equipment_backup.gd`
+- `tests/unit/test_modular_equipment_backup_validator.gd`
 
 ## TDD evidence
 
-### Controlled missing-service RED
-
-Command:
+The test suite was written before the verifier. After correcting a test-only constant-expression parse mistake, the accepted RED command was:
 
 ```powershell
-& $godot --headless --path . --quit-after 300 --script res://tests/focused_test_runner.gd -- tests/unit/test_equipment_modifier_projector.gd
+& 'F:\Projects(root)\Game dev\godot\Godot_v4.7.1-stable_mono_win64\Godot_v4.7.1-stable_mono_win64_console.exe' --headless --path . --quit-after 120 --script res://tests/focused_test_runner.gd -- res://tests/unit/test_modular_equipment_backup_validator.gd
 ```
 
-Exact result before production files existed:
+Accepted RED: exit `1`, `TEST_SUMMARY: FAIL (1 failures)`. The sole assertion failure was `backup validator implementation exists`, proving the missing verifier caused the failure.
 
-```text
-TEST_SUMMARY: FAIL (2 failures)
-TASK4_RED_EXIT_CODE=1
+The implemented service verifies raw `manifest.json` bytes, schema/state, complete source metadata, exact expected and manifest counts, deterministic unique normalized relative paths, exact backup membership, file sizes, file SHA-256 values, and declared totals. It returns sorted unique `PARTY_FORGE_MODULAR_BACKUP_ERROR` strings. The CLI requires `--backup-root`, prints every error line and exits nonzero on failure, or prints verified file/byte counts plus the SHA-256 of the exact manifest bytes on success.
+
+The tests cover valid backup, missing file, extra file, actual-size drift, same-length byte/hash drift, duplicate manifest path, escaped path, wrong expected count, malformed JSON, absent source metadata, deterministic combined-error ordering, repeated-result stability, exact success counts/hash, byte-for-byte nonmutation, and absence of a builder dependency.
+
+## Verification
+
+Focused Task 4 GREEN:
+
+```powershell
+& 'F:\Projects(root)\Game dev\godot\Godot_v4.7.1-stable_mono_win64\Godot_v4.7.1-stable_mono_win64_console.exe' --headless --path . --quit-after 120 --script res://tests/focused_test_runner.gd -- res://tests/unit/test_modular_equipment_backup_validator.gd
 ```
 
-Both failures were the requested missing projector/result scripts. The test suite itself loaded and returned a normal assertion summary; this was not Godot's misleading parser-abort/exit-zero behavior.
+Exit `0`; `TEST_SUMMARY: PASS (0 failures)`; no parse, loader, test-failure, or shutdown-leak diagnostic.
 
-### Registration/import
+Inventory/builder/validator affected matrix:
 
-After implementation and syntax correction, a bounded editor import registered both new global classes:
-
-```text
-[ DONE ] first_scan_filesystem
-[ DONE ] update_scripts_classes
-[ DONE ] loading_editor_layout
-TASK4_IMPORT_EXIT_CODE=0
+```powershell
+& 'F:\Projects(root)\Game dev\godot\Godot_v4.7.1-stable_mono_win64\Godot_v4.7.1-stable_mono_win64_console.exe' --headless --path . --quit-after 180 --script res://tests/focused_test_runner.gd -- res://tests/unit/test_modular_equipment_backup_inventory.gd res://tests/unit/test_modular_equipment_backup_builder.gd res://tests/unit/test_modular_equipment_backup_validator.gd
 ```
 
-### Review regression RED
+Exit `0`; `TEST_SUMMARY: PASS (0 failures)`.
 
-Self-review identified that one item referenced from two equipment slots would otherwise project twice. A test-first duplicate-reference case exited `1` with exactly three assertions: the result incorrectly succeeded, exposed a source, and lacked the required stable error. Counting equipped references before projection made the same case fail closed atomically.
+Full suite:
 
-### Focused GREEN
-
-Fresh focused result after all code/test changes:
-
-```text
-TEST_SUMMARY: PASS (0 failures)
-TASK4_FOCUSED_GREEN_EXIT_CODE=0
+```powershell
+& 'F:\Projects(root)\Game dev\godot\Godot_v4.7.1-stable_mono_win64\Godot_v4.7.1-stable_mono_win64_console.exe' --headless --path . --quit-after 600 --script res://tests/test_runner.gd
 ```
 
-The final focused output contains no parser, load, assertion, or Task 4 warning diagnostic.
+Exit `0`; `TEST_SUMMARY: PASS (206 suites)`. The run retained established assertion-owned negative-path diagnostics and warnings, with no test-failure summary.
 
-## Coverage
+## Scope concerns
 
-- One active item contains an implicit, attribute prefix, typed-damage suffix, and tagged melee roll; all four appear exactly once and in deterministic slot/affix/roll order.
-- A separately equipped inactive item contributes nothing.
-- Exact source metadata, detailed modifier IDs, actual-em-dash labels, values, operations, and required tags are asserted.
-- Repeated identical input produces byte-equivalent source documents.
-- Ownership `to_dictionary()` bytes, caller item dictionaries, and the active-ID array remain unchanged.
-- Empty active sets retain a uniform replaceable source with zero modifiers.
-- Flat, increased, reduced, more, and less operations project without translation.
-- Non-finite values, unsupported operations, unknown stats, empty or unknown tags, duplicate active IDs, unknown active IDs, duplicate equipped references, null ownership, and a null stat catalog all fail with exact stable errors, no partial source, and byte-equivalent ownership.
+- The trusted local-workstation threat model intentionally does not defend against a malicious concurrent process racing filesystem changes during verification.
+- Empty unexpected directories are not payload files and are not reported; every unexpected file is rejected.
+- Task 5 still owns the one-time external authoritative baseline creation and live CLI verification.
 
-## Complete-suite result
+## Commit
 
-Godot: `4.7.1.stable.official.a13da4feb`.
+`faddf10f3be9df8586a621f57dfaa4659940bbde` - `feat: independently verify modular equipment backups`
 
-Fresh complete suite after the final production/test changes:
+The commit contains exactly the two Task 4 files listed above. This report remains intentionally unstaged.
 
-```text
-TEST_SUMMARY: PASS (160 suites)
-TASK4_FULL_SUITE_EXIT_CODE=0
-```
+## Review-fix TDD cycle
 
-This is one suite above Task 3's recorded 159-suite baseline. The runner retains its established intentional negative-path `ERROR`/`WARNING` diagnostics, but no `TEST_FAILURE`, script/parse/load failure, or non-zero exit remained.
+Independent review identified invalid UTF-8 handling, source-path identity validation, one-physical-line error safety, and missing direct coverage around totals, CLI behavior, and failure immutability.
 
-## Files and hygiene
+The accepted assertion RED used the focused Task 4 command above and exited `1` with `TEST_SUMMARY: FAIL (11 failures)`. The failures were the absent production CLI seam, invalid UTF-8 not rejecting, six invalid `source.root`/`source.toplevel` path cases not rejecting, a valid-but-different source identity not rejecting, and two control-character line-safety assertions. The already-present verifier correctly rejected directly corrupted `file_count` and `total_bytes` values, so those new coverage assertions did not add RED failures.
 
-- `.superpowers/sdd/task-4-report.md`
-- `scripts/equipment/equipment_modifier_projection.gd`
-- `scripts/equipment/equipment_modifier_projector.gd`
-- `tests/unit/test_equipment_modifier_projector.gd`
+Minimum GREEN added a strict byte-level UTF-8 check before decoding while retaining SHA-256 over the exact raw manifest bytes; normalized local absolute `source.root`/`source.toplevel` validation with UNC/device rejection and case-insensitive identity comparison; percent encoding for C0/C1 control characters before sorting/deduplicating or printing errors; and a `run_cli` path used directly by `_initialize()`.
 
-The bounded import generated `.gd.uid` sidecars for both new scripts and the new test alongside the worktree's pre-existing untracked generated sidecars. No `.gd.uid`, `.import`, `.godot`, ignored scratch artifact, or unrelated file is staged or included in the Task 4 commit.
+The expanded disposable fixtures directly cover corrupted `file_count`/`total_bytes`, all negative-path byte snapshots, and production CLI decisions for successful output/exit `0`, missing arguments, malformed backup, and control-bearing arguments with exit `1`. No subprocess or builder is invoked; `_initialize()` delegates entirely to the tested CLI control flow.
 
-## Concerns
+Review-fix verification:
 
-- No open Task 4 production concern is known.
-- The complete runner output is not diagnostically pristine because established tests intentionally exercise and log rejection paths. The authoritative summary is `PASS (160 suites)` with exit `0`; focused Task 4 output is clean.
+- Focused validator: exit `0`; `TEST_SUMMARY: PASS (0 failures)`.
+- Inventory/builder/validator affected matrix: exit `0`; `TEST_SUMMARY: PASS (0 failures)`.
+- Full suite: exit `0`; `TEST_SUMMARY: PASS (206 suites)`.
+- `git diff --check`: clean.
 
-## Review follow-up: unknown required-tag vocabulary
+Review-fix commit: `0832091d098c885dcc4351b1235cbf6b1803e2cf` (`fix: harden modular backup verification`). It contains exactly the validator and validator-test files. This report remains intentionally unstaged.
 
-Review found that required tags were checked for empty/duplicate values and exact roll/definition equality, but not for membership in `ItemFoundationCatalog.known_item_tags`. A corrupt definition and immutable roll carrying the same unknown tag could therefore project a valid-looking modifier that never applies.
+## Final review-fix TDD cycle
 
-The regression duplicates the fixture definition and roll with `review_unknown_tag` while leaving that ID outside the foundation vocabulary. Before the fix, the focused suite exited `1` with exactly three failures: the projection incorrectly succeeded, exposed a non-null partial source, and returned no stable diagnostic.
+The final review identified two remaining boundary defects: Godot virtual/URI paths could pass the backup-root or source-path checks, and Unicode line/paragraph separators could split dynamic diagnostics across physical lines.
 
-The narrow fix passes `foundation.known_item_tags` into the existing tag validator and returns the exact contextual error:
+The accepted assertion RED used the focused Task 4 command above and exited `1` with `TEST_SUMMARY: FAIL (14 failures)`. The failures comprised six service/CLI backup-root assertions for `res://`, `user://`, and another URI scheme; four service/CLI source assertions for the other URI scheme in `source.root` and `source.toplevel`; and four service/CLI Unicode separator encoding and physical-line assertions. Existing source checks already rejected `res://` and `user://` in source metadata.
 
-```text
-PARTY_FORGE_EQUIPMENT_PROJECTION_ERROR member=1 slot=main_hand item=item-active affix=melee_focus roll=0 stat=attack_speed reason=unknown required tag review_unknown_tag
-```
+Minimum GREEN now explicitly accepts only normalized local drive-letter absolute paths for backup roots and source metadata. It no longer relies on `String.is_absolute_path()` to distinguish local paths from Godot virtual or other URI paths. `ErrorText.single_line()` now percent-encodes U+2028 and U+2029 in addition to the previously handled C0/C1 control characters before errors are sorted, deduplicated, returned, or printed.
 
-Fresh review verification:
+The expanded tests exercise `res://`, `user://`, and `custom://` through both the service and `run_cli`, exercise U+2028/U+2029 through service and CLI dynamic values, require one physical diagnostic line, and retain byte-for-byte failure snapshots without invoking the builder.
 
-```text
-TEST_SUMMARY: PASS (0 failures)
-TASK4_UNKNOWN_TAG_GREEN_EXIT_CODE=0
+Final review-fix verification:
 
-TEST_SUMMARY: PASS (160 suites)
-TASK4_TAG_FIX_FULL_SUITE_EXIT_CODE=0
-```
+- Focused validator: exit `0`; `TEST_SUMMARY: PASS (0 failures)`.
+- Inventory/builder/validator affected matrix: exit `0`; `TEST_SUMMARY: PASS (0 failures)`.
+- The first full-suite attempt was invalidated by a confirmed concurrent full suite in the `playtest-recovery-loot-ui` worktree using the same `user://developer_item_sandbox`; it reported unrelated atomic-store collisions and byte drift. After condition-waiting for that Godot process to exit, the uncontended rerun exited `0` with `TEST_SUMMARY: PASS (206 suites)`.
+- `git diff --check`: clean.
 
-The failure result asserts `source == null`, the ownership document remains byte-equivalent, and no unrelated production, test, generated, or import file is part of the review fix.
+Final review-fix commit: `07da9ca6a50b413e1910f0e99253d9c55a04ef47` (`fix: reject virtual modular backup paths`). It contains exactly the validator and validator-test files. This report remains intentionally unstaged.
+
+## Final backup-root normalization TDD cycle
+
+The final boundary review found that drive-letter backup roots with dot or parent segments, repeated or trailing separators, later backslashes, or control characters could pass request validation and reach filesystem access.
+
+The accepted assertion RED used the focused Task 4 command above and exited `1` with `TEST_SUMMARY: FAIL (12 failures)`: one service and one `run_cli` assertion for each of the six malformed local-root forms. The observed results reached directory or manifest access instead of returning the stable request-validation error.
+
+Minimum GREEN changes backup-root validation to reuse the same `_is_normalized_local_absolute()` predicate as source metadata. No other production behavior changed. The expanded service and CLI tests prove all six forms reject before access with the exact stable diagnostic.
+
+Final backup-root normalization verification:
+
+- Focused validator: exit `0`; `TEST_SUMMARY: PASS (0 failures)`.
+- Inventory/builder/validator affected matrix: exit `0`; `TEST_SUMMARY: PASS (0 failures)`.
+- A Task 5 cold-review full suite was already running, so the Task 4 gate condition-waited for both Godot processes to exit and rechecked for zero contenders before launch.
+- Uncontended full suite: exit `0`; `TEST_SUMMARY: PASS (206 suites)`.
+- `git diff --check`: clean.
+
+Final backup-root normalization commit: `8cafbc4e0d6dede4158b59aa17ae6cb5012c3ed9` (`fix: require normalized modular backup roots`). It contains exactly the validator and validator-test files. This report remains intentionally unstaged.
