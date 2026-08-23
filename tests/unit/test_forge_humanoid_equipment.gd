@@ -7,6 +7,7 @@ func run() -> Array[String]:
 	_test_descriptor_only_visual_equips(failures)
 	_test_body_specific_scene_resolution(failures)
 	_test_multi_fit_scene_installs_only_active_body_roots(failures)
+	_test_multi_fit_material_cache_tracks_only_selected_roots(failures)
 	_test_unknown_active_body_fails_closed(failures)
 	_test_multi_socket_item(failures)
 	_test_item_colors_and_wearer_accent_isolation(failures)
@@ -84,6 +85,35 @@ func _test_multi_fit_scene_installs_only_active_body_roots(failures: Array[Strin
 	TestAssertions.truthy(feminine_model.has_node("MainHandSocket/FeminineFit"), "feminine root is installed for feminine body", failures)
 	TestAssertions.truthy(not feminine_model.has_node("MainHandSocket/MasculineFit"), "masculine root is not installed for feminine body", failures)
 	_free_model(feminine_model)
+
+func _test_multi_fit_material_cache_tracks_only_selected_roots(failures: Array[String]) -> void:
+	var scene := _multi_fit_colored_scene()
+	var visual := _visual(&"multi_fit_colors", &"main_hand", &"MainHandSocket", null)
+	visual.fit_policy = &"variant"
+	visual.item_colors = {&"metal": Color(0.2, 0.6, 0.9, 1.0)}
+	visual.body_fits = [
+		_fit(&"masculine", scene, [NodePath("MasculineFit")]),
+		_fit(&"feminine", scene, [NodePath("FeminineFit")]),
+	]
+	var model := _model_with_sockets([&"MainHandSocket"])
+	TestAssertions.truthy(model.apply_equipment_visual(&"main_hand", visual), "colored masculine multi-fit item equips", failures)
+	var masculine_mesh := model.get_node_or_null("MainHandSocket/MasculineFit/MasculineMesh") as MeshInstance3D
+	TestAssertions.truthy(masculine_mesh != null, "selected masculine material root is installed", failures)
+	if masculine_mesh != null:
+		TestAssertions.equal((masculine_mesh.material_override as StandardMaterial3D).albedo_color, visual.item_colors[&"metal"], "selected masculine root receives item color", failures)
+		TestAssertions.truthy(model.base_materials.has(masculine_mesh), "selected masculine material remains cached", failures)
+	_assert_material_cache(model, 2, "masculine install", failures)
+	TestAssertions.truthy(model.set_body_preset(&"feminine"), "colored multi-fit runtime accepts feminine body", failures)
+	TestAssertions.truthy(model.apply_equipment_visual(&"main_hand", visual), "colored feminine multi-fit item replaces masculine fit", failures)
+	var feminine_mesh := model.get_node_or_null("MainHandSocket/FeminineFit/FeminineMesh") as MeshInstance3D
+	TestAssertions.truthy(feminine_mesh != null, "selected feminine material root is installed", failures)
+	if feminine_mesh != null:
+		TestAssertions.equal((feminine_mesh.material_override as StandardMaterial3D).albedo_color, visual.item_colors[&"metal"], "selected feminine root receives item color", failures)
+		TestAssertions.truthy(model.base_materials.has(feminine_mesh), "selected feminine material remains cached", failures)
+	_assert_material_cache(model, 2, "feminine replacement", failures)
+	TestAssertions.truthy(model.clear_equipment_visual(&"main_hand"), "colored multi-fit item clears", failures)
+	_assert_material_cache(model, 1, "multi-fit clear", failures)
+	_free_model(model)
 
 func _test_unknown_active_body_fails_closed(failures: Array[String]) -> void:
 	var model := _model_with_sockets([&"MainHandSocket"], &"unknown_body")
@@ -289,6 +319,30 @@ func _multi_fit_attachment_scene() -> PackedScene:
 		root.add_child(fit_root)
 		fit_root.owner = root
 	return _pack_scene(root)
+
+func _multi_fit_colored_scene() -> PackedScene:
+	var root := Node3D.new()
+	root.name = &"MultiFitColoredItem"
+	for description: Dictionary in [
+		{&"fit": &"MasculineFit", &"mesh": &"MasculineMesh"},
+		{&"fit": &"FeminineFit", &"mesh": &"FeminineMesh"},
+	]:
+		var fit_root := Node3D.new()
+		fit_root.name = description[&"fit"]
+		root.add_child(fit_root)
+		fit_root.owner = root
+		var mesh := MeshInstance3D.new()
+		mesh.name = description[&"mesh"]
+		mesh.set_meta(&"palette_region", &"metal")
+		mesh.material_override = StandardMaterial3D.new()
+		fit_root.add_child(mesh)
+		mesh.owner = root
+	return _pack_scene(root)
+
+func _assert_material_cache(model: ForgeHumanoidModel, expected_size: int, label: String, failures: Array[String]) -> void:
+	TestAssertions.equal(model.base_materials.size(), expected_size, "%s caches only body and selected fit materials" % label, failures)
+	var body_mesh := model.get_node_or_null("BodyMesh") as MeshInstance3D
+	TestAssertions.truthy(body_mesh != null and model.base_materials.has(body_mesh), "%s keeps the live body material cached" % label, failures)
 
 func _fit(body_id: StringName, scene: PackedScene, roots: Array[NodePath]) -> EquipmentBodyFitDescriptor:
 	var descriptor := EquipmentBodyFitDescriptor.new()

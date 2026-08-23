@@ -98,7 +98,8 @@ func apply_equipment_visual(slot_id: StringName, definition: EquipmentVisualDefi
 			candidate_root.free()
 			return false
 		staged.append({&"node": attachment, &"socket": socket})
-	_apply_item_colors(candidate_root, definition)
+	for attachment: Node3D in attachment_nodes:
+		_apply_item_colors(attachment, definition)
 	_clear_equipped_node(slot_id)
 	var installed: Array[Node3D] = []
 	for part: Dictionary in staged:
