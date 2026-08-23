@@ -6,6 +6,8 @@ func run() -> Array[String]:
 	var failures: Array[String] = []
 	_test_imported_surfaces_are_isolated_colored_and_restored(failures)
 	_test_unsupported_surface_material_rejects_atomically(failures)
+	_test_direct_rigid_preflight_scopes_to_selected_roots(failures)
+	_test_staged_rigid_preflight_scopes_to_selected_roots(failures)
 	return failures
 
 func _test_imported_surfaces_are_isolated_colored_and_restored(failures: Array[String]) -> void:
@@ -78,15 +80,47 @@ func _test_unsupported_surface_material_rejects_atomically(failures: Array[Strin
 	TestAssertions.equal(model.find_child("ImportedSurfaceMesh", true, false), installed, "unsupported replacement preserves prior installed mesh", failures)
 	_dispose_model(model)
 
+func _test_direct_rigid_preflight_scopes_to_selected_roots(failures: Array[String]) -> void:
+	var model := _model()
+	var selected_valid := _variant_visual(&"selected_valid", StandardMaterial3D.new(), _unsupported_material())
+	TestAssertions.truthy(model.apply_equipment_visual(SLOT_ID, selected_valid), "direct rigid promotion ignores the unselected unsupported feminine root", failures)
+	var installed := model.find_child("MasculineFit", true, false)
+	var selected_unsupported := _variant_visual(&"selected_unsupported", _unsupported_material(), StandardMaterial3D.new())
+	TestAssertions.truthy(not model.apply_equipment_visual(SLOT_ID, selected_unsupported), "direct rigid promotion rejects an unsupported selected masculine root", failures)
+	TestAssertions.equal(model.equipped_item_id(SLOT_ID), &"selected_valid", "direct unsupported selection preserves the prior definition", failures)
+	TestAssertions.equal(model.find_child("MasculineFit", true, false), installed, "direct unsupported selection preserves the prior attachment", failures)
+	_dispose_model(model)
+
+func _test_staged_rigid_preflight_scopes_to_selected_roots(failures: Array[String]) -> void:
+	var model := _model()
+	var scene_with_unused_unsupported := _variant_scene(StandardMaterial3D.new(), StandardMaterial3D.new(), _unsupported_material())
+	var selected_valid := _variant_visual_from_scene(&"staged_selected_valid", scene_with_unused_unsupported)
+	TestAssertions.truthy(model.apply_equipment_visual(SLOT_ID, selected_valid), "direct install accepts valid selected root beside unrelated unsupported scene content", failures)
+	var valid_candidate := model.prepare_body_preset_change(&"feminine")
+	TestAssertions.truthy(bool(valid_candidate.get(&"ok", false)), "staged rigid promotion ignores unrelated unsupported scene content", failures)
+	TestAssertions.truthy(model.commit_body_preset_change(valid_candidate), "valid staged rigid candidate commits", failures)
+
+	var target_unsupported := _variant_visual(&"staged_target_unsupported", _unsupported_material(), StandardMaterial3D.new())
+	TestAssertions.truthy(model.apply_equipment_visual(SLOT_ID, target_unsupported), "current feminine selection installs before inverse staged rejection", failures)
+	var installed := model.find_child("FeminineFit", true, false)
+	var inverse_candidate := model.prepare_body_preset_change(&"masculine")
+	TestAssertions.truthy(not bool(inverse_candidate.get(&"ok", false)), "staged rigid promotion rejects the selected unsupported masculine root", failures)
+	TestAssertions.equal(model.equipped_item_id(SLOT_ID), &"staged_target_unsupported", "failed staged selection preserves the live definition", failures)
+	TestAssertions.equal(model.find_child("FeminineFit", true, false), installed, "failed staged selection preserves the live attachment", failures)
+	TestAssertions.equal(model._active_body_preset, &"feminine", "failed staged selection preserves the live body preset", failures)
+	_dispose_model(model)
+
 func _model() -> ForgeHumanoidModel:
 	var model := ForgeHumanoidModel.new()
-	var body := MeshInstance3D.new()
-	body.name = &"LegacyBody"
-	body.set_meta(&"body_preset", &"masculine")
-	body.set_meta(&"palette_region", &"primary")
-	body.mesh = BoxMesh.new()
-	body.material_override = StandardMaterial3D.new()
-	model.add_child(body)
+	for preset_id: StringName in [&"masculine", &"feminine"]:
+		var body := MeshInstance3D.new()
+		body.name = StringName("%sLegacyBody" % String(preset_id).capitalize())
+		body.set_meta(&"body_preset", preset_id)
+		body.set_meta(&"palette_region", &"primary")
+		body.mesh = BoxMesh.new()
+		body.material_override = StandardMaterial3D.new()
+		body.visible = preset_id == &"masculine"
+		model.add_child(body)
 	var socket := Node3D.new()
 	socket.name = &"ImportedBodySocket"
 	model.add_child(socket)
@@ -102,6 +136,59 @@ func _visual(id: StringName, scene: PackedScene) -> EquipmentVisualDefinition:
 	definition.socket_id = &"ImportedBodySocket"
 	definition.combat_visible = true
 	return definition
+
+func _variant_visual(id: StringName, masculine_material: Material, feminine_material: Material) -> EquipmentVisualDefinition:
+	return _variant_visual_from_scene(id, _variant_scene(masculine_material, feminine_material))
+
+func _variant_visual_from_scene(id: StringName, scene: PackedScene) -> EquipmentVisualDefinition:
+	var masculine := EquipmentBodyFitDescriptor.new()
+	masculine.body_preset_id = &"masculine"
+	masculine.presentation_scene = scene
+	masculine.mesh_root_paths = [NodePath("MasculineFit")]
+	var feminine := EquipmentBodyFitDescriptor.new()
+	feminine.body_preset_id = &"feminine"
+	feminine.presentation_scene = scene
+	feminine.mesh_root_paths = [NodePath("FeminineFit")]
+	var definition := EquipmentVisualDefinition.new()
+	definition.id = id
+	definition.slot_id = SLOT_ID
+	definition.supported_slot_ids = [SLOT_ID]
+	definition.socket_id = &"ImportedBodySocket"
+	definition.fit_policy = &"variant"
+	definition.body_fits = [masculine, feminine]
+	definition.combat_visible = true
+	return definition
+
+func _variant_scene(masculine_material: Material, feminine_material: Material, unused_material: Material = null) -> PackedScene:
+	var root := Node3D.new()
+	root.name = &"VariantEquipment"
+	for entry: Dictionary in [
+		{&"name": &"MasculineFit", &"material": masculine_material},
+		{&"name": &"FeminineFit", &"material": feminine_material},
+	]:
+		var mesh := MeshInstance3D.new()
+		mesh.name = entry[&"name"] as StringName
+		mesh.mesh = BoxMesh.new()
+		mesh.material_override = entry[&"material"] as Material
+		root.add_child(mesh)
+		mesh.owner = root
+	if unused_material != null:
+		var unused := MeshInstance3D.new()
+		unused.name = &"UnusedUnsupportedSibling"
+		unused.mesh = BoxMesh.new()
+		unused.material_override = unused_material
+		root.add_child(unused)
+		unused.owner = root
+	var scene := PackedScene.new()
+	scene.pack(root)
+	root.free()
+	return scene
+
+func _unsupported_material() -> ShaderMaterial:
+	var material := ShaderMaterial.new()
+	material.shader = Shader.new()
+	material.shader.code = "shader_type spatial;"
+	return material
 
 func _imported_scene(materials: Array) -> Dictionary:
 	var root := Node3D.new()

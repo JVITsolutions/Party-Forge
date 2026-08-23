@@ -216,7 +216,7 @@ func apply_equipment_visual(slot_id: StringName, definition: EquipmentVisualDefi
 			candidate_root.free()
 			return false
 		staged.append({&"node": attachment, &"socket": socket})
-	if not _materials_support_runtime_feedback(candidate_root):
+	if not _attachment_materials_support_runtime_feedback(attachment_nodes):
 		candidate_root.free()
 		return false
 	for attachment: Node3D in attachment_nodes:
@@ -506,9 +506,6 @@ func _stage_rigid_body_fit(slot_id: StringName, definition: EquipmentVisualDefin
 			instance.free()
 		return _body_fit_failure()
 	candidate_root.set_meta(BODY_FIT_CANDIDATE_META, true)
-	if not _materials_support_runtime_feedback(candidate_root):
-		candidate_root.free()
-		return _body_fit_failure()
 	var attachment_nodes: Array[Node3D] = []
 	for root_path: NodePath in descriptor.mesh_root_paths:
 		var selected_root := candidate_root.get_node_or_null(root_path) as Node3D
@@ -532,6 +529,9 @@ func _stage_rigid_body_fit(slot_id: StringName, definition: EquipmentVisualDefin
 			explicitly_requested_socket_ids.append(StringName(attachment.get_meta(&"equipment_socket_id")))
 	var allow_explicit_owned_hand_pair := &"LeftHandSocket" in explicitly_requested_socket_ids and &"RightHandSocket" in explicitly_requested_socket_ids
 	var staged: Array[Dictionary] = []
+	if not _attachment_materials_support_runtime_feedback(attachment_nodes):
+		candidate_root.free()
+		return _body_fit_failure()
 	for attachment: Node3D in attachment_nodes:
 		var socket_id := StringName(attachment.get_meta(&"equipment_socket_id", definition.socket_id))
 		var socket := _resolve_socket(socket_id, slot_id, false, allow_explicit_owned_hand_pair)
@@ -799,6 +799,12 @@ func _materials_support_runtime_feedback(root: Node3D) -> bool:
 				material = mesh.mesh.surface_get_material(surface_index)
 			if material != null and not material is StandardMaterial3D:
 				return false
+	return true
+
+func _attachment_materials_support_runtime_feedback(attachments: Array[Node3D]) -> bool:
+	for attachment: Node3D in attachments:
+		if not _materials_support_runtime_feedback(attachment):
+			return false
 	return true
 
 func _clear_surface_material_overrides(root: Node3D) -> void:

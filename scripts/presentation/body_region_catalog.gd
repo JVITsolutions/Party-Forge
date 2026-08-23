@@ -15,7 +15,11 @@ func canonical_region_ids() -> Array[StringName]:
 	return result
 
 func has_imported_regions(body_root: Node) -> bool:
-	return not region_nodes(body_root).is_empty()
+	if body_root == null:
+		return false
+	if String(body_root.name).begins_with(REGION_PREFIX):
+		return true
+	return not body_root.find_children("%s*" % REGION_PREFIX, "", true, false).is_empty()
 
 func region_nodes(body_root: Node) -> Array[MeshInstance3D]:
 	var result: Array[MeshInstance3D] = []

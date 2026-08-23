@@ -103,3 +103,30 @@ The fresh full command was:
 It exited `0` with `TEST_SUMMARY: PASS (215 suites)`. Established assertion-owned negative-path diagnostics remained, and there was no `TEST_FAILURE`, script-unload warning, ObjectDB leak warning, or resource-still-in-use error at shutdown.
 
 The only remaining Task 7 concern is unchanged: actual art assets still require Task 8 import-readiness validation before promotion.
+
+## Important review hardening against base `7351089`
+
+All three Important review findings were corrected with runtime-path regressions before their corresponding implementation changes.
+
+### Imported-body promotion gate
+
+The runtime regression covers wrong-type-only prefix nodes, partial, duplicate, unknown, missing, invalid Skin, and unsupported surface contracts, plus a true legacy body with no `BodyRegion__` node. Its accepted RED exited `1` with `TEST_SUMMARY: FAIL (1 failures)`: `wrong-type-only imported prefix contract rejects on the runtime promotion path`. The catalog had counted only correctly typed region meshes when deciding whether a root was imported-looking, so a prefix-only wrong-type root bypassed imported validation as legacy. Imported detection now considers any direct or descendant prefixed node; the unchanged strict validator then rejects the complete invalid-contract matrix. True legacy roots remain accepted.
+
+### Selected rigid material preflight
+
+Programmatic variant scenes now cover direct and staged rigid paths with valid selected roots beside unsupported unselected masculine/feminine or unrelated sibling roots, followed by the inverse selected-unsupported case with exact live-state preservation. The accepted RED exited `1` with `TEST_SUMMARY: FAIL (6 failures)`: whole-scene preflight rejected both selected-valid direct fixtures, and their dependent install/atomicity assertions consequently had no live item to preserve. Direct and staged rigid paths now complete attachment discovery, then preflight only the selected/promoted attachment roots before any material mutation. Unsupported selected roots still reject atomically. Shared-Skin binding and its preflight path were not changed.
+
+### Focused child shutdown contract
+
+The shutdown regression first extracted its existing narrow exit/PASS/20-ObjectDB/6-resource policy without behavior change. Controlled policy cases then produced the accepted RED `TEST_SUMMARY: FAIL (21 failures)`: nonzero and missing/failed summaries did not surface captured output, while `TEST_FAILURE`, `SCRIPT ERROR`, generic shutdown `ERROR`/`WARNING`, ObjectDB, resource, orphan, leak, and script-unload variants were not broadly rejected. A later contradictory PASS-plus-FAIL summary case produced an additional accepted RED of `TEST_SUMMARY: FAIL (2 failures)`.
+
+The regression now rejects nonzero exit, absent or failed summaries including contradictory summaries, test/script failure markers, generic error/warning lines, and broader case-insensitive shutdown ownership markers. Every rejected child result appends the complete captured output. Explicitly supplied, known assertion-owned diagnostic fragments remain allowlisted, and clean output remains accepted. The subprocess continues to launch the exact direct class-resource-discovery transaction order; `test_character_body_fit_transaction.gd` still enumerates and loads `res://data/classes/*.tres` directly and does not resolve `GameCatalog`.
+
+### Final verification
+
+- Changed three-suite batch: exit `0`; `TEST_SUMMARY: PASS (0 failures)`; pristine lifecycle output.
+- Exact imported-surfaces, body-regions, then transaction order: exit `0`; `TEST_SUMMARY: PASS (0 failures)`; no shutdown diagnostic.
+- Established 22-suite affected matrix: exit `0`; `TEST_SUMMARY: PASS (0 failures)`. Only the nine assertion-owned `PARTY_FORGE_PRESENTATION_ERROR` negative diagnostics appeared.
+- Fresh uncontested full runner: exit `0`; `TEST_SUMMARY: PASS (215 suites)`. Established assertion-owned rejection diagnostics remained; there was no `TEST_FAILURE`, `SCRIPT ERROR`, ObjectDB/resource/orphan/leak, or script-unload shutdown diagnostic.
+
+No blocking correctness concern remains from these three Important findings. Actual art assets remain gated on Task 8 import-readiness validation.

@@ -10,6 +10,7 @@ const EXPECTED_IDS: Array[StringName] = [
 func run() -> Array[String]:
 	var failures: Array[String] = []
 	_test_catalog_contract(failures)
+	_test_runtime_imported_contract_gate(failures)
 	_test_runtime_visibility_transaction(failures)
 	return failures
 
@@ -43,6 +44,65 @@ func _test_catalog_contract(failures: Array[String]) -> void:
 	duplicate.free()
 	unknown.free()
 	too_many_materials.free()
+
+func _test_runtime_imported_contract_gate(failures: Array[String]) -> void:
+	var wrong_type_only := Node3D.new()
+	wrong_type_only.name = &"WrongTypeOnlyImportedBody"
+	wrong_type_only.set_meta(&"body_preset", &"masculine")
+	var wrong_type_region := Node3D.new()
+	wrong_type_region.name = &"BodyRegion__head"
+	wrong_type_only.add_child(wrong_type_region)
+	_assert_runtime_body_rejected(wrong_type_only, "wrong-type-only imported prefix contract", failures)
+
+	var partial := _body_root()
+	partial.get_node("BodyRegion__foot_right").free()
+	_assert_runtime_body_rejected(partial, "partial imported contract", failures)
+
+	var duplicate := _body_root()
+	var duplicate_container := Node3D.new()
+	duplicate_container.name = &"DuplicateRegionContainer"
+	duplicate.add_child(duplicate_container)
+	var duplicate_region := MeshInstance3D.new()
+	duplicate_region.name = &"BodyRegion__head"
+	duplicate_region.mesh = BoxMesh.new()
+	duplicate_region.skin = Skin.new()
+	duplicate_region.material_override = StandardMaterial3D.new()
+	duplicate_container.add_child(duplicate_region)
+	_assert_runtime_body_rejected(duplicate, "duplicate imported contract", failures)
+
+	var unknown := _body_root()
+	unknown.get_node("BodyRegion__foot_right").name = &"BodyRegion__tail"
+	_assert_runtime_body_rejected(unknown, "unknown imported contract", failures)
+
+	var invalid_skin := _body_root()
+	(invalid_skin.get_node("BodyRegion__head") as MeshInstance3D).skin = null
+	_assert_runtime_body_rejected(invalid_skin, "unskinned imported contract", failures)
+
+	var invalid_surface := _body_root()
+	var invalid_surface_mesh := invalid_surface.get_node("BodyRegion__head") as MeshInstance3D
+	var unsupported_material := ShaderMaterial.new()
+	unsupported_material.shader = Shader.new()
+	(invalid_surface_mesh.mesh as BoxMesh).material = unsupported_material
+	_assert_runtime_body_rejected(invalid_surface, "unsupported imported surface contract", failures)
+
+	var legacy := Node3D.new()
+	legacy.name = &"LegacyBody"
+	legacy.set_meta(&"body_preset", &"masculine")
+	_assert_runtime_body_accepted(legacy, "true legacy body without imported prefixes", failures)
+
+func _assert_runtime_body_rejected(body: Node3D, label: String, failures: Array[String]) -> void:
+	var model := ForgeHumanoidModel.new()
+	model.add_child(body)
+	(Engine.get_main_loop() as SceneTree).root.add_child(model)
+	TestAssertions.truthy(not model.set_body_preset(&"masculine"), "%s rejects on the runtime promotion path" % label, failures)
+	model.free()
+
+func _assert_runtime_body_accepted(body: Node3D, label: String, failures: Array[String]) -> void:
+	var model := ForgeHumanoidModel.new()
+	model.add_child(body)
+	(Engine.get_main_loop() as SceneTree).root.add_child(model)
+	TestAssertions.truthy(model.set_body_preset(&"masculine"), "%s remains supported" % label, failures)
+	model.free()
 
 func _test_runtime_visibility_transaction(failures: Array[String]) -> void:
 	var model := ForgeHumanoidModel.new()
