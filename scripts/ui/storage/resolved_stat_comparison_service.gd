@@ -39,14 +39,4 @@ static func compare(
 
 
 static func _format_delta(definition: StatDefinition, value: float) -> String:
-	match definition.value_format:
-		StatDefinition.ValueFormat.INTEGER:
-			return str(roundi(value))
-		StatDefinition.ValueFormat.RATIO_PERCENT:
-			return "%.*f%%" % [definition.precision, value * 100.0]
-		StatDefinition.ValueFormat.MULTIPLIER:
-			return "%.*fx" % [definition.precision, value]
-		StatDefinition.ValueFormat.PER_SECOND:
-			return "%.*f/s" % [definition.precision, value]
-		_:
-			return "%.*f" % [definition.precision, value]
+	return definition.format_modifier_value(value)

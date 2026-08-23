@@ -109,6 +109,12 @@ func run() -> Array[String]:
 	return failures
 
 func _assert_gridless_band_repair(rows: Array, failures: Array[String]) -> void:
+	var manifest := load(MANIFEST_PATH) as Script
+	TestAssertions.truthy(manifest.has_method(&"_apply_roll_step_exception"), "weighted rows expose an explicit narrowly-scoped roll-step exception", failures)
+	if manifest.has_method(&"_apply_roll_step_exception"):
+		var gridless := Vector2(0.011, 0.019)
+		var unrelated: Vector2 = manifest.call(&"_apply_roll_step_exception", &"future_gridless_affix", 3, 0, gridless)
+		TestAssertions.equal(unrelated, gridless, "unrelated future gridless ranges are not silently repaired", failures)
 	var row := _row_by_id(rows, &"of_deadly_precision")
 	var tiers: Array = row.get("tiers", [])
 	TestAssertions.equal(tiers.size(), 12, "of_deadly_precision exposes all tiers for grid repair", failures)

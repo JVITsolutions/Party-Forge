@@ -137,8 +137,8 @@ func _formatted_breakdown(definition: StatDefinition, rows: Array[Dictionary]) -
 		if operation == -1:
 			row["formatted_value"] = definition.format_value(value)
 		elif operation == StatModifier.Operation.FLAT:
-			row["formatted_value"] = _format_unbounded_definition_value(definition, absf(value))
-			row["formatted_modifier"] = "%s%s" % ["+" if value >= 0.0 else "-", _format_unbounded_definition_value(definition, absf(value))]
+			row["formatted_value"] = definition.format_modifier_value(absf(value))
+			row["formatted_modifier"] = "%s%s" % ["+" if value >= 0.0 else "-", definition.format_modifier_value(absf(value))]
 		else:
 			row["formatted_value"] = _number_text(absf(value) * 100.0) + "%"
 			var operation_label: String = {
@@ -152,19 +152,6 @@ func _formatted_breakdown(definition: StatDefinition, rows: Array[Dictionary]) -
 			]
 		result.append(row)
 	return result
-
-func _format_unbounded_definition_value(definition: StatDefinition, value: float) -> String:
-	match definition.value_format:
-		StatDefinition.ValueFormat.INTEGER:
-			return str(roundi(value))
-		StatDefinition.ValueFormat.RATIO_PERCENT:
-			return "%.*f%%" % [definition.precision, value * 100.0]
-		StatDefinition.ValueFormat.MULTIPLIER:
-			return "%.*fx" % [definition.precision, value]
-		StatDefinition.ValueFormat.PER_SECOND:
-			return "%.*f/s" % [definition.precision, value]
-		_:
-			return "%.*f" % [definition.precision, value]
 
 func combat_estimate_rows(member_id: int) -> Array[ActionCombatEstimate]:
 	var rows: Array[ActionCombatEstimate] = []

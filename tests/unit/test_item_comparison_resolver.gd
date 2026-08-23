@@ -15,6 +15,7 @@ func run() -> Array[String]:
 	_test_empty_and_self_slots_are_skipped(resolver, failures)
 	_test_projected_rows_replace_raw_fallback(resolver, failures)
 	_test_raw_fallback_operation_matrix_is_neutral_and_accessible(resolver, failures)
+	_test_raw_fallback_uses_stat_definition_formatting(resolver, failures)
 	_test_present_only_base_damage_types_have_colored_direction(resolver, failures)
 	_test_opposing_base_damage_endpoints_are_neutral(resolver, failures)
 	_test_identical_base_damage_endpoints_are_unchanged(resolver, failures)
@@ -140,6 +141,23 @@ func _test_raw_fallback_operation_matrix_is_neutral_and_accessible(resolver: Scr
 			TestAssertions.truthy(String(line.get("text", "")).contains("raw %s roll" % operation_names[operation]) and String(line.get("text", "")).contains(direction_word), "%s %s fallback names raw operation and direction" % [operation_names[operation], direction_word], failures)
 			var accessible := String(line.get("accessible_text", "")).to_lower()
 			TestAssertions.truthy(direction_word in accessible and "benefit unknown" in accessible and "neutral" in accessible, "%s %s fallback exposes accessible neutral meaning" % [operation_names[operation], direction_word], failures)
+
+
+func _test_raw_fallback_uses_stat_definition_formatting(resolver: Script, failures: Array[String]) -> void:
+	var inspected := _detail("new-ring", ["ring_left"], {
+		"crit_chance|0": 0.0111,
+		"health_regeneration|0": 0.30,
+	})
+	var equipped := _detail("old-ring", ["ring_left"], {})
+	var leader: Array[Dictionary] = [{"slot_id": "ring_left", "instance_id": "old-ring"}]
+	var rows: Array = resolver.call("resolve", inspected, leader, {"old-ring": equipped})
+	var lines: Array = rows[0]["delta_lines"] if not rows.is_empty() else []
+	TestAssertions.equal(lines.size(), 2, "definition-aware raw fallback emits both changed stats", failures)
+	if lines.size() != 2:
+		return
+	TestAssertions.equal(lines[0].get("text"), "- Critical Strike Chance raw flat roll: 1% higher -- benefit unknown", "legacy critical raw fallback uses whole percentage points", failures)
+	TestAssertions.equal(lines[0].get("accessible_text"), "Critical Strike Chance raw flat roll is 1% higher; benefit unknown; neutral comparison", "legacy critical raw fallback accessibility uses whole percentage points", failures)
+	TestAssertions.equal(lines[1].get("text"), "- Health Regeneration raw flat roll: 0.30/s higher -- benefit unknown", "other flat fallback uses its StatDefinition value format", failures)
 
 
 func _test_results_are_defensive(resolver: Script, failures: Array[String]) -> void:

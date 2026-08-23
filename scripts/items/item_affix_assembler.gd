@@ -150,6 +150,13 @@ static func _build_instance(
 		var effect := definition.effects[effect_index]
 		if effect == null:
 			return _failure(&"invalid_affix_effects", {"affix_id": String(definition.id), "effect": effect_index, "slot": slot})
+		if not is_finite(effect.roll_step) or effect.roll_step < 0.0:
+			return _failure(&"invalid_roll_step", {
+				"affix_id": String(definition.id),
+				"effect": effect_index,
+				"slot": slot,
+				"roll_step": effect.roll_step,
+			})
 		var bounds := selected_tier.roll_bounds(effect_index)
 		if not is_finite(bounds.x) or not is_finite(bounds.y) or bounds.x > bounds.y:
 			return _failure(&"invalid_roll_bounds", {"affix_id": String(definition.id), "effect": effect_index, "slot": slot})
@@ -171,6 +178,19 @@ static func _build_instance(
 				})
 			var step_index := clampi(roundi(value / effect.roll_step), minimum_index, maximum_index)
 			value = float(step_index) * effect.roll_step
+		var roll_aligned := true
+		if effect.roll_step > 0.0:
+			roll_aligned = is_equal_approx(value, float(roundi(value / effect.roll_step)) * effect.roll_step)
+		if not is_finite(value) or value < bounds.x or value > bounds.y or not roll_aligned:
+			return _failure(&"invalid_roll_value", {
+				"affix_id": String(definition.id),
+				"effect": effect_index,
+				"slot": slot,
+				"minimum": bounds.x,
+				"maximum": bounds.y,
+				"roll_step": effect.roll_step,
+				"value": value,
+			})
 		var roll := ItemModifierRoll.new()
 		roll.stat_id = effect.stat_id
 		roll.operation = effect.operation

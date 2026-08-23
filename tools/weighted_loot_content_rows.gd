@@ -389,11 +389,7 @@ static func _combined_tiers(id: StringName, effects: Array[Dictionary]) -> Array
 		for effect_index: int in effects.size():
 			var effect := effects[effect_index] as Dictionary
 			var bounds := _component_bounds(id, effect, component_tiers[effect_index], tier_index)
-			bounds = _repair_gridless_bounds(bounds, float(effect.get("roll_step", 0.0)))
-			if tier_index > 0:
-				var previous := result[tier_index - 1] as Dictionary
-				var previous_minimum := float((previous["minimum_rolls"] as Array)[effect_index])
-				bounds.x = maxf(bounds.x, previous_minimum)
+			bounds = _apply_roll_step_exception(id, tier_index, effect_index, bounds)
 			minimum_rolls.append(bounds.x)
 			maximum_rolls.append(bounds.y)
 		result.append({
@@ -405,16 +401,16 @@ static func _combined_tiers(id: StringName, effects: Array[Dictionary]) -> Array
 		})
 	return result
 
-static func _repair_gridless_bounds(bounds: Vector2, roll_step: float) -> Vector2:
-	if roll_step <= 0.0:
+static func _apply_roll_step_exception(id: StringName, tier_index: int, effect_index: int, bounds: Vector2) -> Vector2:
+	if id != &"of_deadly_precision" or effect_index != 0:
 		return bounds
-	var minimum_index := ceili(bounds.x / roll_step)
-	var maximum_index := floori(bounds.y / roll_step)
-	if minimum_index <= maximum_index:
-		return bounds
-	var next_progression_value := float(minimum_index) * roll_step
-	var representable_margin := roll_step * 0.000001
-	return Vector2(next_progression_value - representable_margin, next_progression_value + representable_margin)
+	var fixed_value := 0.02
+	var representable_margin := 0.01 * 0.000001
+	if tier_index == 3:
+		return Vector2(fixed_value - representable_margin, fixed_value + representable_margin)
+	if tier_index == 4:
+		bounds.x = fixed_value - representable_margin
+	return bounds
 
 static func _component_bounds(id: StringName, effect: Dictionary, tiers: Array, tier_index: int) -> Vector2:
 	if not LEGACY_TIER_BOUNDS.has(id):

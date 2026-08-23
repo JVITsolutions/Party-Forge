@@ -19,6 +19,11 @@ func run() -> Array[String]:
 	TestAssertions.near(crit_chance.finalize_value(1.11), 1.11, 0.0001, "crit chance remains uncapped for multi-crit", failures)
 	TestAssertions.near(catalog.definition(&"armor").finalize_value(-12.0), 0.0, 0.0001, "armor clamps at zero", failures)
 	TestAssertions.equal(catalog.definition(&"life_steal").format_value(0.125), "12.5%", "ratio formatting", failures)
+	TestAssertions.truthy(crit_chance.has_method(&"format_modifier_value"), "stat definitions expose unbounded modifier formatting", failures)
+	if crit_chance.has_method(&"format_modifier_value"):
+		TestAssertions.equal(crit_chance.call(&"format_modifier_value", 0.0111), "1%", "critical modifier formatting uses whole percentage points", failures)
+		TestAssertions.equal(catalog.definition(&"crit_multiplier").call(&"format_modifier_value", 0.10), "10%", "modifier formatting ignores absolute stat minimums", failures)
+		TestAssertions.equal(catalog.definition(&"health_regeneration").call(&"format_modifier_value", 0.30), "0.30/s", "modifier formatting preserves other definition value formats", failures)
 	for attribute_id: StringName in ClassGrowthDefinition.CORE_ATTRIBUTE_IDS:
 		var attribute := catalog.definition(attribute_id)
 		TestAssertions.truthy(attribute != null, "%s core attribute exists" % attribute_id, failures)

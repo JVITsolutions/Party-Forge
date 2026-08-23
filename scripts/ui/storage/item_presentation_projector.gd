@@ -309,7 +309,7 @@ static func _effect_text(stat_name: String, operation: int, value: float, format
 
 static func _formatted_effect_value(definition: StatDefinition, operation: int, value: float) -> String:
 	if operation == StatModifier.Operation.FLAT and definition != null:
-		return _format_unbounded_definition_value(definition, absf(value))
+		return definition.format_modifier_value(absf(value))
 	if operation in [
 		StatModifier.Operation.INCREASED,
 		StatModifier.Operation.REDUCED,
@@ -326,20 +326,6 @@ static func _needs_definition_format_fields(definition: StatDefinition, operatio
 		and operation == StatModifier.Operation.FLAT
 		and definition.value_format not in [StatDefinition.ValueFormat.NUMBER, StatDefinition.ValueFormat.INTEGER]
 	)
-
-
-static func _format_unbounded_definition_value(definition: StatDefinition, value: float) -> String:
-	match definition.value_format:
-		StatDefinition.ValueFormat.INTEGER:
-			return str(roundi(value))
-		StatDefinition.ValueFormat.RATIO_PERCENT:
-			return "%.*f%%" % [definition.precision, value * 100.0]
-		StatDefinition.ValueFormat.MULTIPLIER:
-			return "%.*fx" % [definition.precision, value]
-		StatDefinition.ValueFormat.PER_SECOND:
-			return "%.*f/s" % [definition.precision, value]
-		_:
-			return "%.*f" % [definition.precision, value]
 
 
 static func _number(value: float) -> String:

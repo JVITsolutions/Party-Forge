@@ -145,29 +145,34 @@ static func _base_damage_by_type(components: Array) -> Dictionary:
 
 
 static func _raw_delta_text(stat_id: String, operation: int, delta: float, raw_direction: int) -> String:
-	var stat_name := stat_id.replace("_", " ").capitalize()
-	var display_value := absf(delta if operation == StatModifier.Operation.FLAT else delta * 100.0)
-	var suffix := "" if operation == StatModifier.Operation.FLAT else "%"
-	return "- %s raw %s roll: %s%s %s -- benefit unknown" % [
-		stat_name,
+	return "- %s raw %s roll: %s %s -- benefit unknown" % [
+		_raw_stat_name(stat_id),
 		_operation_name(operation),
-		_number(display_value),
-		suffix,
+		_raw_display_value(stat_id, operation, delta),
 		_raw_direction_word(raw_direction),
 	]
 
 
 static func _raw_delta_accessible_text(stat_id: String, operation: int, delta: float, raw_direction: int) -> String:
-	var stat_name := stat_id.replace("_", " ").capitalize()
-	var display_value := absf(delta if operation == StatModifier.Operation.FLAT else delta * 100.0)
-	var suffix := "" if operation == StatModifier.Operation.FLAT else "%"
-	return "%s raw %s roll is %s%s %s; benefit unknown; neutral comparison" % [
-		stat_name,
+	return "%s raw %s roll is %s %s; benefit unknown; neutral comparison" % [
+		_raw_stat_name(stat_id),
 		_operation_name(operation),
-		_number(display_value),
-		suffix,
+		_raw_display_value(stat_id, operation, delta),
 		_raw_direction_word(raw_direction),
 	]
+
+
+static func _raw_stat_name(stat_id: String) -> String:
+	var definition := GameCatalog.STAT_CATALOG.definition(StringName(stat_id))
+	return definition.display_name if definition != null else stat_id.replace("_", " ").capitalize()
+
+
+static func _raw_display_value(stat_id: String, operation: int, delta: float) -> String:
+	if operation == StatModifier.Operation.FLAT:
+		var definition := GameCatalog.STAT_CATALOG.definition(StringName(stat_id))
+		if definition != null:
+			return definition.format_modifier_value(absf(delta))
+	return "%s%s" % [_number(absf(delta if operation == StatModifier.Operation.FLAT else delta * 100.0)), "" if operation == StatModifier.Operation.FLAT else "%"]
 
 
 static func _operation_name(operation: int) -> String:

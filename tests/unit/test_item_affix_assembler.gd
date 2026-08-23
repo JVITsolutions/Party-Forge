@@ -300,6 +300,21 @@ func _test_quantized_critical_rolls(failures: Array[String]) -> void:
 	TestAssertions.equal(no_grid_result.details.get("affix_id"), "gridless_critical", "gridless failure identifies its affix", failures)
 	TestAssertions.equal(no_grid_result.details.get("effect"), 0, "gridless failure identifies its effect", failures)
 
+	for invalid_step: float in [NAN, INF, -0.01]:
+		var invalid_effect := _effect(&"crit_chance", StatModifier.Operation.FLAT)
+		invalid_effect.roll_step = invalid_step
+		var invalid_affix := _affix(
+			&"invalid_step_critical", "suffix", [&"invalid_step_critical_family"],
+			[_tier(1, 1, 1.0, 0.01, 0.02)], [invalid_effect],
+		)
+		var invalid_result := ItemAffixAssembler.assemble(
+			_request(1), _base([&"ring"]), _rarity(&"common", 1), _pattern(0, 1, 0),
+			_foundation([invalid_affix]), ItemGenerationTrace.new(),
+		)
+		TestAssertions.equal(invalid_result.error_code, &"invalid_roll_step", "non-finite or negative roll step returns a structured assembly failure", failures)
+		TestAssertions.equal(invalid_result.details.get("affix_id"), "invalid_step_critical", "invalid roll-step failure identifies its affix", failures)
+		TestAssertions.equal(invalid_result.details.get("effect"), 0, "invalid roll-step failure identifies its effect", failures)
+
 func _assert_critical_grid(
 	result: ItemAffixAssemblyResult,
 	definition: ItemAffixDefinition,
@@ -312,6 +327,7 @@ func _assert_critical_grid(
 	var instance := result.affixes[0]
 	var roll := instance.rolls[0]
 	var bounds := definition.roll_bounds(instance.tier, 0)
+	TestAssertions.truthy(is_finite(roll.value), "%s crit roll is finite" % label, failures)
 	TestAssertions.near(fmod(roll.value, 0.01), 0.0, 0.000001, "%s crit roll uses one-point grid" % label, failures)
 	TestAssertions.truthy(roll.value >= bounds.x and roll.value <= bounds.y, "%s quantized roll remains in tier bounds" % label, failures)
 

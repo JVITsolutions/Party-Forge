@@ -18,6 +18,7 @@ func run() -> Array[String]:
 	_test_equipped_role_and_deltas(card_script, failures)
 	_test_disabled_status_and_accessible_deltas(card_script, failures)
 	_test_raw_fallback_rows_use_neutral_color(card_script, failures)
+	_test_critical_raw_fallback_uses_whole_percent(card_script, failures)
 	_test_developer_technical_gate(card_script, failures)
 	return failures
 
@@ -174,6 +175,32 @@ func _test_raw_fallback_rows_use_neutral_color(card_script: Script, failures: Ar
 		TestAssertions.equal(child.get_theme_color("font_color"), Color(0.78, 0.80, 0.84), "raw fallback uses the neutral comparison color", failures)
 		var accessible := child.accessibility_name.to_lower()
 		TestAssertions.truthy("benefit unknown" in accessible and "neutral" in accessible, "raw fallback label exposes accessible neutral meaning", failures)
+	card.free()
+
+
+func _test_critical_raw_fallback_uses_whole_percent(card_script: Script, failures: Array[String]) -> void:
+	var inspected := {
+		"instance_id": "new-ring",
+		"name": "New Ring",
+		"compatible_slot_ids": ["ring_left"],
+		"modifier_totals": {"crit_chance|0": 0.0111},
+	}
+	var equipped := {
+		"instance_id": "old-ring",
+		"name": "Old Ring",
+		"compatible_slot_ids": ["ring_left"],
+		"modifier_totals": {},
+	}
+	var comparisons := ItemComparisonResolver.resolve(
+		inspected,
+		[{"slot_id": "ring_left", "instance_id": "old-ring"}],
+		{"old-ring": equipped},
+	)
+	var card: Control = card_script.new()
+	card.call("present", _detail(), StringName("equipped:ring_left"), false, comparisons[0]["delta_lines"], false)
+	var rendered := String(card.call("rendered_text"))
+	TestAssertions.truthy(rendered.contains("Critical Strike Chance raw flat roll: 1% higher"), "tooltip raw fallback uses whole critical percentage points", failures)
+	TestAssertions.truthy("0.0111" not in rendered and "0.01 higher" not in rendered and "1.11%" not in rendered, "tooltip raw fallback hides legacy critical decimals", failures)
 	card.free()
 
 
