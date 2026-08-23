@@ -137,3 +137,35 @@ The presentation, profile, combat, and full-suite runs emitted their established
 ### Shared-skin grounding concerns
 
 No blocking or known correctness concern remains from this finding. The visibility exception is exact-root and shared-skin-candidate-specific; it does not globally ignore invisible ancestors.
+
+## Cross-suite equipment child-name corruption fix
+
+The exact focused order `test_character_body_fit_transaction.gd` followed by `test_character_grounding_and_ui.gd` exposed a separate equipment-installation lifecycle defect. Before this fix the runner exited `0` with `TEST_SUMMARY: PASS (0 failures)`, but emitted `Children name does not match parent name in hashtable` and `Condition "data.parent" is true` from `_clear_equipped_node()` while the grounding suite changed a real actor body preset. The grounding suite alone was clean.
+
+Read-only instrumentation immediately before the failing free confirmed the violated invariant. A real actor `RightHandSocket` contained a gloves child and main-hand child both named `@Node3D@11`; name lookup returned only the main-hand node. Freeing the gloves node erased that sole hash entry, so the still-parented main-hand node could not remove itself. Transaction-fixture churn changed Godot's opaque generated-name sequence and made the collision deterministic. Both the initial rigid-equipment path and the staged transaction commit had preserved opaque `@Node3D@N` names while reparenting or adding attachments, so runtime correctness incorrectly depended on global allocation history.
+
+### Accepted child-name invariant RED
+
+The transaction suite was extended before the runtime fix. After its existing transaction churn, the new test configures real leader presentations and checks every model parent for unique immediate child names plus exact `parent.get_node_or_null(child.name) == child` lookup. This detects the corrupt state before `_clear_equipped_node()` relies on it.
+
+Command:
+
+```powershell
+& $godot --headless --path . --quit-after 300 --script res://tests/focused_test_runner.gd -- tests/unit/test_character_body_fit_transaction.gd
+```
+
+Result before the runtime change: exit `1`; `TEST_SUMMARY: FAIL (1 failures)`. The direct assertion was `ranger feminine equipment installation preserves unique parent child-name lookup: expected true`. The RED therefore did not rely only on the previously ignored engine diagnostic.
+
+### Root-cause fix and GREEN evidence
+
+Rigid equipment installation now uses one helper in both the initial apply path and staged transaction commit. It detaches each attachment, adds it to the destination socket with Godot's collision-safe readable-name generation enabled, and restores the unchanged local transform. Authored unique names remain stable; opaque or colliding sibling names become unique before entering the destination parent's child-name map.
+
+- Focused transaction suite: exit `0`; `TEST_SUMMARY: PASS (0 failures)`; pristine output.
+- Exact transaction-then-grounding reproducer: exit `0`; `TEST_SUMMARY: PASS (0 failures)`; no child-name, `data.parent`, leak, or orphan diagnostics.
+- Required eight-suite matrix: exit `0`; `TEST_SUMMARY: PASS (0 failures)`; only established character-presentation negative-path diagnostics.
+- Nineteen-suite affected presentation/content matrix: exit `0`; `TEST_SUMMARY: PASS (0 failures)`; only established character-presentation negative-path diagnostics.
+- Fresh uncontested full suite: exit `0`; `TEST_SUMMARY: PASS (212 suites)`; `0` `TEST_FAILURE` lines, `0` child-name/`data.parent` diagnostics, and `0` exit leak diagnostics across `945` output lines. Established intentional negative-path diagnostics remained.
+
+### Child-name corruption concerns
+
+No blocking or known Task 6 correctness concern remains from the cross-suite child-name corruption.

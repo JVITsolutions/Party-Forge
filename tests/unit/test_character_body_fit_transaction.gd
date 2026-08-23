@@ -18,7 +18,36 @@ func run() -> Array[String]:
 	_test_rejection_preserves_state(&"body_region", failures)
 	_test_rejection_preserves_state(&"rigid_body_region", failures)
 	_test_rejection_preserves_state(&"grounding", failures)
+	_test_equipment_installation_preserves_parent_name_map(failures)
 	return failures
+
+func _test_equipment_installation_preserves_parent_name_map(failures: Array[String]) -> void:
+	var root := Node3D.new()
+	(Engine.get_main_loop() as SceneTree).root.add_child(root)
+	for definition: ClassDefinition in GameCatalog.load_defaults().classes:
+		for body_id: StringName in [&"masculine", &"feminine"]:
+			var actor := (load("res://scenes/characters/leader.tscn") as PackedScene).instantiate() as PartyActor
+			root.add_child(actor)
+			actor.configure(PartyMemberState.new(1, definition, true))
+			var model := actor.get_node("Presentation").active_model as ForgeHumanoidModel
+			var consistent := _child_name_map_is_consistent(model)
+			TestAssertions.truthy(consistent, "%s %s equipment installation preserves unique parent child-name lookup" % [definition.id, body_id], failures)
+			if not consistent:
+				return
+			actor.free()
+	root.free()
+
+func _child_name_map_is_consistent(root: Node) -> bool:
+	var parents: Array[Node] = [root]
+	parents.append_array(root.find_children("*", "", true, false))
+	for parent: Node in parents:
+		var seen_names: Dictionary = {}
+		for child: Node in parent.get_children():
+			var child_name := String(child.name)
+			if seen_names.has(child_name) or parent.get_node_or_null(NodePath(child_name)) != child:
+				return false
+			seen_names[child_name] = true
+	return true
 
 func _test_shared_fit_swap_commits(failures: Array[String]) -> void:
 	var fixture := _fixture(_rigid_visual(&"shared", _rigid_scene(&"SharedFit"), _rigid_scene(&"SharedFit")))

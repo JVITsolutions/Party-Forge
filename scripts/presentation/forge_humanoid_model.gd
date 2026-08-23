@@ -219,10 +219,7 @@ func apply_equipment_visual(slot_id: StringName, definition: EquipmentVisualDefi
 		var attachment := part[&"node"] as Node3D
 		var socket := part[&"socket"] as Node3D
 		attachment.owner = null
-		if attachment != candidate_root:
-			attachment.reparent(socket, false)
-		else:
-			socket.add_child(attachment)
+		_install_equipment_attachment(attachment, socket)
 		installed.append(attachment)
 	if candidate_root not in installed:
 		candidate_root.free()
@@ -655,16 +652,21 @@ func _commit_staged_equipment(slot_id: StringName, staged: Dictionary) -> void:
 		var attachment := part[&"node"] as Node3D
 		var socket := part[&"socket"] as Node3D
 		attachment.owner = null
-		if attachment != root:
-			attachment.reparent(socket, false)
-		else:
-			socket.add_child(attachment)
+		_install_equipment_attachment(attachment, socket)
 		attachment.remove_meta(BODY_FIT_CANDIDATE_META)
 		installed.append(attachment)
 	if root not in installed:
 		root.free()
 	equipped_nodes[slot_id] = installed
 	equipped_definitions[slot_id] = definition
+
+func _install_equipment_attachment(attachment: Node3D, socket: Node3D) -> void:
+	var local_transform := attachment.transform
+	var current_parent := attachment.get_parent()
+	if current_parent != null:
+		current_parent.remove_child(attachment)
+	socket.add_child(attachment, true)
+	attachment.transform = local_transform
 
 func _apply_candidate_region_visibility(preset_id: StringName, hidden_regions: Dictionary) -> void:
 	for region: StringName in body_region_nodes:
