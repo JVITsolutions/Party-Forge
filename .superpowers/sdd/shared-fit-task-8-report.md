@@ -145,3 +145,33 @@ Result: exit `0`; `TEST_SUMMARY: PASS (0 failures)`. Only established assertion-
 ```
 
 Fresh isolated-profile result: exit `0`; `TEST_SUMMARY: PASS (216 suites)`. No suite file was added, so the required threshold remained at least 216. Established assertion-owned negative-path diagnostics remained; there was no Task 8 test failure, parser or script error, subprocess mismatch, orphan, ObjectDB, resource-still-in-use, or validator cleanup diagnostic.
+
+## Final review closure — 2026-08-23
+
+The final review findings against base `093276fff4518dede584060623e6a1b70dc2fadf` were closed test-first without widening Task 8 scope. Imported bodies now reject every `MeshInstance3D` outside the exact seventeen named body regions; no non-body mesh-helper exception exists in this import contract. Shared-item validation checks each selected subtree plus every `Node3D` ancestor through the source scene root before any relative transform can be baked. Typed shared-item rig resources run through `HumanoidRigContract.validate_definition()` and return immediately on malformed parallel arrays or stored signatures. `LegacyPivotSkeletonDriver.influence` must compare exactly equal to `1.0`.
+
+### Accepted final RED
+
+```powershell
+& $godot --headless --path . --quit-after 300 --script res://tests/focused_test_runner.gd -- res://tests/unit/test_humanoid_import_validator.gd
+```
+
+Fresh isolated-profile result: exit `1`; `TEST_SUMMARY: FAIL (11 failures)`. The failures reproduced a visible unprefixed rogue body mesh containing 20,000 triangles, non-finite UV0 data, and unweighted vertices; zero-scale and non-finite intermediate ancestors above a nested selected root; a shortened canonical parent-role array and forged topology signature; and influence `0.999999`. The malformed parallel-array fixture also produced the pre-fix uncontrolled `SCRIPT ERROR` at `_skeleton_matches_rig`, proving the required early contract guard.
+
+### Final focused GREEN
+
+The same focused validator command, with a fresh isolated profile, exited `0` in **1.78s** with `TEST_SUMMARY: PASS (0 failures)`. It emitted no parser, loader, script, test-failure, orphan, or cleanup diagnostic.
+
+### Final 29-suite affected matrix
+
+The fresh affected matrix covered the validator; equipment fit and definition contracts; canonical rig, driver, animation, socket, and shared-Skin contracts; transactional fit, imported surfaces, region visibility, and focused-runner lifecycle; Forge humanoid equipment and bodies; grounding, presentation, sandbox, class presentation, and held readability; the manifest and Fighter modular assets; Forge Vanguard model/animations; caster, heavy-melee, and ranged content; and party-actor, visual-data, and visual-QA contracts.
+
+Result: exit `0` in **10.14s** with `TEST_SUMMARY: PASS (0 failures)`. Only established assertion-owned `PARTY_FORGE_PRESENTATION_ERROR` negative fixtures appeared; there was no validator, parser, loader, script, test-failure, orphan, or cleanup diagnostic.
+
+### Final full regression suite
+
+```powershell
+& $godot --headless --path . --quit-after 1800 --script res://tests/test_runner.gd
+```
+
+Fresh isolated-profile result: exit `0` in approximately **203s** with `TEST_SUMMARY: PASS (216 suites)`. Established assertion-owned negative-path errors and warnings remained. There was no Task 8 test failure, parser error, uncontrolled script error, validator subprocess mismatch, or validator cleanup diagnostic.

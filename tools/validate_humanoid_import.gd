@@ -75,12 +75,16 @@ class ImportReadinessService extends RefCounted:
 
 	func validate_shared_item_scene(scene: PackedScene, rig: Resource, active_roots: Array, expected_bind_signature: String, budgets: Dictionary) -> Dictionary:
 		var errors: Array[String] = []
+		var contract := CONTRACT_SCRIPT.new()
 		if scene == null:
 			errors.append(_error("shared_item reason=scene is missing"))
 		if rig == null:
 			errors.append(_error("shared_item reason=canonical rig resource is missing"))
 		elif not rig is RIG_DEFINITION_SCRIPT:
 			errors.append(_error("shared_item reason=canonical rig resource must be HumanoidRigDefinition"))
+		else:
+			for definition_error: String in contract.validate_definition(rig):
+				errors.append(_error("shared_item reason=%s" % definition_error))
 		if active_roots.is_empty():
 			errors.append(_error("shared_item reason=active roots are empty"))
 		if expected_bind_signature.is_empty():
@@ -125,6 +129,7 @@ class ImportReadinessService extends RefCounted:
 			return _shared_result(errors)
 		for selected_root: Node3D in selected_roots:
 			_validate_shared_transforms(selected_root, errors)
+			_validate_shared_ancestor_transforms(selected_root, root, errors)
 		if not errors.is_empty():
 			root.free()
 			return _shared_result(errors)
@@ -144,7 +149,6 @@ class ImportReadinessService extends RefCounted:
 				errors.append(_error("shared_item root=%s reason=active root contains no MeshInstance3D" % root.get_path_to(selected_root)))
 
 		var aggregate := _empty_metrics()
-		var contract := CONTRACT_SCRIPT.new()
 		for mesh: MeshInstance3D in selected_meshes:
 			var source_skeleton := mesh.get_node_or_null(mesh.skeleton) as Skeleton3D if not mesh.skeleton.is_empty() else null
 			if source_skeleton == null or not _skeleton_matches_rig(source_skeleton, rig):
@@ -182,6 +186,12 @@ class ImportReadinessService extends RefCounted:
 		for region_error: String in region_catalog.validate_body_root(root):
 			errors.append(_error("body_regions asset=%s reason=%s" % [body_id, region_error]))
 		var region_meshes: Array[MeshInstance3D] = region_catalog.region_nodes(root)
+		var region_mesh_set := {}
+		for region_mesh: MeshInstance3D in region_meshes:
+			region_mesh_set[region_mesh] = true
+		for body_mesh: MeshInstance3D in _meshes_including_root(root):
+			if not region_mesh_set.has(body_mesh):
+				errors.append(_error("body_regions asset=%s node=%s reason=MeshInstance3D is outside exact body region contract" % [body_id, body_mesh.name]))
 		var aggregate := _empty_metrics()
 		var contract := CONTRACT_SCRIPT.new()
 		var observed_skin_signatures := {}
@@ -238,7 +248,7 @@ class ImportReadinessService extends RefCounted:
 			errors.append(_error("pivot_driver asset=%s reason=driver must reference the supplied canonical rig resource" % body_id))
 		if driver.get("pivot_root") != root:
 			errors.append(_error("pivot_driver asset=%s reason=pivot root must be the body scene root" % body_id))
-		if not is_equal_approx(float(driver.get("influence")), 1.0):
+		if float(driver.get("influence")) != 1.0:
 			errors.append(_error("pivot_driver asset=%s reason=driver influence must be exactly 1" % body_id))
 
 
@@ -276,6 +286,16 @@ class ImportReadinessService extends RefCounted:
 		for node: Node in _all_nodes(root):
 			if node is Node3D and not _transform_is_usable((node as Node3D).transform):
 				errors.append(_error("shared_item node=%s reason=transform is non-finite or non-invertible" % node.name))
+
+
+	func _validate_shared_ancestor_transforms(selected_root: Node3D, source_root: Node3D, errors: Array[String]) -> void:
+		var cursor := selected_root.get_parent()
+		while cursor != null:
+			if cursor is Node3D and not _transform_is_usable((cursor as Node3D).transform):
+				errors.append(_error("shared_item node=%s reason=transform is non-finite or non-invertible" % cursor.name))
+			if cursor == source_root:
+				return
+			cursor = cursor.get_parent()
 
 
 	func _validate_mesh(mesh_instance: MeshInstance3D, rig: Resource, expected_signature: String, stage: String, asset: String, max_texture_size: int, include_bounds: bool, aggregate: Dictionary, errors: Array[String], contract: RefCounted) -> void:

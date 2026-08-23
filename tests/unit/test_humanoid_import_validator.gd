@@ -147,6 +147,7 @@ func _test_body_contract_failures(service: RefCounted, failures: Array[String]) 
 	_assert_body_error(service, _body_scene(rig, &"masculine", {&"wrong_rest": true}), rig, "canonical_rig asset=masculine reason=humanoid rig bone Hips rest does not match canonical rest", "canonical rest", failures)
 	_assert_body_error(service, _body_scene(rig, &"masculine", {&"missing_driver": true}), rig, "pivot_driver asset=masculine reason=requires exactly one LegacyPivotSkeletonDriver", "missing pivot driver", failures)
 	_assert_body_error(service, _body_scene(rig, &"masculine", {&"wrong_driver_root": true}), rig, "pivot_driver asset=masculine reason=pivot root must be the body scene root", "pivot-driver mapping", failures)
+	_assert_body_error(service, _body_scene(rig, &"masculine", {&"driver_influence": 0.999999}), rig, "pivot_driver asset=masculine reason=driver influence must be exactly 1", "near-one pivot-driver influence", failures)
 	_assert_body_error(service, _body_scene(rig, &"masculine", {&"height": 1.5}), rig, "bounds asset=masculine reason=visible height 1.500000 is outside 1.600000..1.850000", "body height", failures)
 	_assert_body_error(service, _body_scene(rig, &"masculine", {&"ground_y": 0.01}), rig, "bounds asset=masculine reason=ground Y 0.010000 exceeds tolerance 0.001000", "grounding", failures)
 	_assert_body_error(service, _body_scene(rig, &"masculine", {&"nonfinite_transform": true}), rig, "transforms asset=masculine node=BodyRegion__head reason=transform is non-finite or non-invertible", "finite transforms", failures)
@@ -179,6 +180,16 @@ func _test_body_contract_failures(service: RefCounted, failures: Array[String]) 
 	_assert_body_error(service, _body_scene(rig, &"masculine", {&"unnormalized_weights": true}), rig, "skinning asset=masculine node=BodyRegion__head vertex=0 reason=weights total 0.499992 is not normalized", "normalized weights", failures)
 	_assert_body_error(service, _body_scene(rig, &"masculine", {&"eight_weights": true}), rig, "skinning asset=masculine node=BodyRegion__head vertex=0 reason=uses 8 influences; maximum is 4", "four-weight cap", failures)
 	_assert_body_error(service, _body_scene(rig, &"masculine", {&"wrong_skin_bone": true}), rig, "skin asset=masculine node=BodyRegion__head reason=humanoid rig Skin bind AutoRigHips must resolve to exactly one canonical bone", "auto-rig Skin bone names", failures)
+	var rogue_body_scene := _body_scene(rig, &"masculine", {&"rogue_body_mesh": true})
+	var rogue_body_instance := rogue_body_scene.instantiate() as Node3D
+	var rogue_body_mesh := rogue_body_instance.get_node("RogueBodyMesh") as MeshInstance3D
+	var rogue_arrays := rogue_body_mesh.mesh.surface_get_arrays(0)
+	TestAssertions.truthy(rogue_body_mesh.visible and not String(rogue_body_mesh.name).begins_with("BodyRegion__"), "rogue body fixture is visible and outside the exact region namespace", failures)
+	TestAssertions.truthy((rogue_arrays[Mesh.ARRAY_INDEX] as PackedInt32Array).size() / 3 > 10000, "rogue body fixture exceeds the body triangle budget", failures)
+	TestAssertions.truthy(not (rogue_arrays[Mesh.ARRAY_TEX_UV] as PackedVector2Array)[0].is_finite(), "rogue body fixture contains non-finite UV0 data", failures)
+	TestAssertions.equal((rogue_arrays[Mesh.ARRAY_WEIGHTS] as PackedFloat32Array)[0], 0.0, "rogue body fixture contains an unweighted vertex", failures)
+	rogue_body_instance.free()
+	_assert_body_error(service, rogue_body_scene, rig, "body_regions asset=masculine node=RogueBodyMesh reason=MeshInstance3D is outside exact body region contract", "visible rogue body mesh bypass", failures)
 
 	var changed_skin := _body_scene(rig, &"feminine", {&"changed_skin_pose": true})
 	var mismatch := service.call(&"validate_body_pair", valid, changed_skin, rig) as Dictionary
@@ -201,6 +212,8 @@ func _test_shared_item_contracts(service: RefCounted, failures: Array[String]) -
 	_assert_shared_error(service, _shared_item_scene(rig), rig, [NodePath("MasculineRoot"), NodePath("MasculineRoot/Mesh")], expected_signature, budgets, "shared_item reason=active roots overlap", "active roots cannot overlap", failures)
 	_assert_shared_error(service, _shared_item_scene(rig, {&"selected_root_zero_scale": true}), rig, [NodePath("MasculineRoot")], expected_signature, budgets, "shared_item node=MasculineRoot reason=transform is non-finite or non-invertible", "selected root zero scale", failures)
 	_assert_shared_error(service, _shared_item_scene(rig, {&"traversed_nonfinite_transform": true}), rig, [NodePath("MasculineRoot")], expected_signature, budgets, "shared_item node=Mesh reason=transform is non-finite or non-invertible", "traversed content finite transform", failures)
+	_assert_shared_error(service, _shared_item_scene(rig, {&"nested_selected_root": true, &"intermediate_zero_scale": true}), rig, [NodePath("FitContainer/MasculineRoot")], expected_signature, budgets, "shared_item node=FitContainer reason=transform is non-finite or non-invertible", "selected root zero-scale ancestor chain", failures)
+	_assert_shared_error(service, _shared_item_scene(rig, {&"nested_selected_root": true, &"intermediate_nonfinite_transform": true}), rig, [NodePath("FitContainer/MasculineRoot")], expected_signature, budgets, "shared_item node=FitContainer reason=transform is non-finite or non-invertible", "selected root non-finite ancestor chain", failures)
 	_assert_shared_error(service, _shared_item_scene(rig), rig, [NodePath("MasculineRoot")], "wrong", budgets, "shared_item node=Mesh reason=Skin bind signature mismatch", "exact bind signature", failures)
 	_assert_shared_error(service, _shared_item_scene(rig, {&"nested_skeleton": true}), rig, [NodePath("MasculineRoot")], expected_signature, budgets, "shared_item root=MasculineRoot reason=installed active root contains Skeleton3D", "installed duplicate skeleton", failures)
 	_assert_shared_error(service, _shared_item_scene(rig, {&"nested_player": true}), rig, [NodePath("MasculineRoot")], expected_signature, budgets, "shared_item root=MasculineRoot reason=installed active root contains AnimationPlayer", "installed duplicate animation player", failures)
@@ -215,6 +228,14 @@ func _test_shared_item_contracts(service: RefCounted, failures: Array[String]) -
 	_assert_shared_error(service, _shared_item_scene(rig, {&"texture_size": 1025}), rig, [NodePath("MasculineRoot")], expected_signature, {&"max_triangles": 3500, &"max_materials": 4, &"max_texture_size": 1024}, "shared_item reason=texture exceeds 1024px", "shared-item texture budget", failures)
 	var wrong_rig := Resource.new()
 	_assert_shared_error(service, _shared_item_scene(rig), wrong_rig, [NodePath("MasculineRoot")], expected_signature, budgets, "shared_item reason=canonical rig resource must be HumanoidRigDefinition", "shared-item rig resource type", failures)
+	var malformed_rig := rig.duplicate(true) as Resource
+	var malformed_parent_roles: Array[StringName] = malformed_rig.get("parent_roles")
+	malformed_parent_roles.resize(1)
+	malformed_rig.set("parent_roles", malformed_parent_roles)
+	_assert_shared_error(service, _shared_item_scene(rig), malformed_rig, [NodePath("MasculineRoot")], expected_signature, budgets, "shared_item reason=humanoid rig parent roles count must be 19, got 1", "malformed shared-item rig parallel arrays", failures)
+	var malformed_signature_rig := rig.duplicate(true) as Resource
+	malformed_signature_rig.set("topology_signature", "forged")
+	_assert_shared_error(service, _shared_item_scene(rig), malformed_signature_rig, [NodePath("MasculineRoot")], expected_signature, budgets, "shared_item reason=humanoid rig topology signature mismatch; expected %s" % rig.topology_signature, "malformed shared-item rig signature", failures)
 
 
 func _test_cli_contract(entry_point: Object, failures: Array[String]) -> void:
@@ -358,6 +379,7 @@ func _body_scene(rig: Resource, body_id: StringName, options: Dictionary = {}) -
 		skeleton.add_child(driver)
 		driver.owner = root
 		driver.call(&"configure", rig, skeleton if bool(options.get(&"wrong_driver_root", false)) else root)
+		driver.set("influence", float(options.get(&"driver_influence", 1.0)))
 	_add_semantic_sockets(root, skeleton, rig, options)
 
 	var material_count := int(options.get(&"material_count", 1))
@@ -403,6 +425,18 @@ func _body_scene(rig: Resource, body_id: StringName, options: Dictionary = {}) -
 		var unknown := _region_node(rig, &"generator_chunk", 0, height, ground_y, materials[0], options)
 		root.add_child(unknown)
 		unknown.owner = root
+	if bool(options.get(&"rogue_body_mesh", false)):
+		var rogue := MeshInstance3D.new()
+		rogue.name = &"RogueBodyMesh"
+		rogue.mesh = _weighted_mesh(height, ground_y, materials[0], {
+			&"triangle_count": 20000,
+			&"unweighted": true,
+			&"nonfinite_uv": true,
+		})
+		rogue.skin = _canonical_skin(rig)
+		rogue.skeleton = NodePath("../CanonicalSkeleton")
+		root.add_child(rogue)
+		rogue.owner = root
 	var scene := PackedScene.new()
 	scene.pack(root)
 	root.free()
@@ -460,7 +494,18 @@ func _shared_item_scene(rig: Resource, options: Dictionary = {}) -> PackedScene:
 		fit_root.name = fit_name
 		if fit_name == &"MasculineRoot" and bool(options.get(&"selected_root_zero_scale", false)):
 			fit_root.scale = Vector3.ZERO
-		root.add_child(fit_root)
+		var fit_parent: Node3D = root
+		if fit_name == &"MasculineRoot" and bool(options.get(&"nested_selected_root", false)):
+			var intermediate := Node3D.new()
+			intermediate.name = &"FitContainer"
+			if bool(options.get(&"intermediate_zero_scale", false)):
+				intermediate.scale = Vector3.ZERO
+			if bool(options.get(&"intermediate_nonfinite_transform", false)):
+				intermediate.transform.origin.x = INF
+			root.add_child(intermediate)
+			intermediate.owner = root
+			fit_parent = intermediate
+		fit_parent.add_child(fit_root)
 		fit_root.owner = root
 		var material_count := int(options.get(&"material_count", 1)) if fit_name == &"MasculineRoot" else 1
 		for surface_index: int in material_count:
@@ -472,7 +517,7 @@ func _shared_item_scene(rig: Resource, options: Dictionary = {}) -> PackedScene:
 			var mesh_options := options if fit_name == &"MasculineRoot" else {}
 			mesh_instance.mesh = _weighted_mesh(0.4, 0.0, material, mesh_options)
 			mesh_instance.skin = _canonical_skin(rig, bool(mesh_options.get(&"wrong_skin_bone", false)))
-			mesh_instance.skeleton = NodePath("../../SourceSkeleton")
+			mesh_instance.skeleton = NodePath("../../../SourceSkeleton") if fit_parent != root else NodePath("../../SourceSkeleton")
 			if fit_name == &"MasculineRoot" and surface_index == 0 and bool(options.get(&"traversed_nonfinite_transform", false)):
 				mesh_instance.transform.origin.x = INF
 			fit_root.add_child(mesh_instance)
