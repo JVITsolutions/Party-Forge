@@ -8,6 +8,8 @@
 
 **Tech stack:** Godot 4.7.1, typed GDScript, JSON, SHA-256, existing custom test runner.
 
+**Threat model:** Trusted local Windows workstation. Protect against accidental overwrite, deletion, path traversal, destination reuse, partial promotion, incorrect Git metadata, and byte drift. Do not build a security boundary against a malicious concurrent local process racing junctions, aliases, files, or helper termination. Keep the implementation small and fail closed for ordinary validation, I/O, and process errors without recursive cleanup.
+
 ---
 
 ## Task 1: Add the manifest contract with failing tests
@@ -130,6 +132,8 @@ Do not test by copying the full production inventory.
 The SceneTree entry point accepts named `--source-root`, `--output`, `--source-commit`, and `--source-branch` arguments. Validate the source as the exact root of a Party Forge checkout containing `project.godot`, validate the output as an absolute empty directory outside that source, and validate the commit as exactly 40 hexadecimal characters. The builder may read a dirty source and must record its full `git status`; it never writes to the source.
 
 The pure copy/hash service should be separate from CLI parsing so tests do not spawn subprocesses.
+
+Use ordinary local-path containment and exact inventory validation under the trusted-workstation threat model above. Reject UNC/device paths. Tests should cover deterministic accidental-failure behavior; adversarial junction-swap, alias-race, and hostile concurrent-process simulations are explicitly out of scope.
 
 **Step 3: Commit**
 

@@ -133,6 +133,12 @@ The builder reads from the explicit authoritative Party Forge working-tree root,
 
 The untracked `scenes/equipment/test_equipment/` experiment is excluded and left untouched. Failed backup attempts remain immutable with a failure marker; no recursive cleanup is permitted in the external staging root. A validator must prove the backup file count and hashes before any promotion step.
 
+### Backup threat model
+
+This is a trusted local-workstation workflow. The backup must prevent accidental source writes, deletion, overwrite, path traversal, destination reuse, partial-copy promotion, stale Git metadata, and silent byte drift. Source and output must be explicit local absolute paths, the output must be outside the source checkout, every copied path must come from the exact inventory, and existing destination files must never be replaced.
+
+An actively malicious local process changing junctions, drive aliases, filesystem objects, or helper-process state during the backup is out of scope. The builder does not need adversarial race resistance or a security boundary against another process with the user's filesystem permissions. Unexpected ordinary I/O or process failures still fail closed, preserve the bounded attempt when possible, and never trigger recursive cleanup.
+
 ## Icon contract
 
 - Render from the approved 3D master using a fixed orthographic three-quarter camera and fixed neutral key/fill/rim lighting.
