@@ -186,6 +186,15 @@ func _test_approval_rules(contract: RefCounted, failures: Array[String]) -> void
 		{"timestamp": "2026-01-01T23:60:00Z", "label": "invalid minute"},
 		{"timestamp": "2026-01-01T23:59:60Z", "label": "invalid second"},
 		{"timestamp": "2026-02-29T12:00:00Z", "label": "non-leap-year day"},
+		{"timestamp": "+026-01-01T00:00:00Z", "label": "signed year"},
+		{"timestamp": "2026-+1-01T00:00:00Z", "label": "signed month"},
+		{"timestamp": "2026-01-+1T00:00:00Z", "label": "signed day"},
+		{"timestamp": "2026-01-01T+1:00:00Z", "label": "signed hour"},
+		{"timestamp": "2026-01-01T-1:00:00Z", "label": "negative hour"},
+		{"timestamp": "2026-01-01T00:+1:00Z", "label": "signed minute"},
+		{"timestamp": "2026-01-01T00:-1:00Z", "label": "negative minute"},
+		{"timestamp": "2026-01-01T00:00:+1Z", "label": "signed second"},
+		{"timestamp": "2026-01-01T00:00:-1Z", "label": "negative second"},
 	]:
 		var invalid_instant := _valid_document()
 		(invalid_instant["assets"] as Array)[1]["approval"]["reviewed_at_utc"] = case["timestamp"]

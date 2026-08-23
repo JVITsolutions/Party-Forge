@@ -278,12 +278,12 @@ func _is_utc_timestamp(value: String) -> bool:
 	var has_valid_shape := (
 		value[4] == "-" and value[7] == "-" and value[10] == "T"
 		and value[13] == ":" and value[16] == ":"
-		and value.substr(0, 4).is_valid_int()
-		and value.substr(5, 2).is_valid_int()
-		and value.substr(8, 2).is_valid_int()
-		and value.substr(11, 2).is_valid_int()
-		and value.substr(14, 2).is_valid_int()
-		and value.substr(17, 2).is_valid_int()
+		and _is_ascii_digits(value.substr(0, 4))
+		and _is_ascii_digits(value.substr(5, 2))
+		and _is_ascii_digits(value.substr(8, 2))
+		and _is_ascii_digits(value.substr(11, 2))
+		and _is_ascii_digits(value.substr(14, 2))
+		and _is_ascii_digits(value.substr(17, 2))
 	)
 	if not has_valid_shape:
 		return false
@@ -293,7 +293,7 @@ func _is_utc_timestamp(value: String) -> bool:
 	var hour := int(value.substr(11, 2))
 	var minute := int(value.substr(14, 2))
 	var second := int(value.substr(17, 2))
-	if year < 1 or month < 1 or month > 12 or hour > 23 or minute > 59 or second > 59:
+	if year < 1 or month < 1 or month > 12 or hour < 0 or hour > 23 or minute < 0 or minute > 59 or second < 0 or second > 59:
 		return false
 	var days_in_month := [31, 28 + (1 if _is_leap_year(year) else 0), 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
 	return day >= 1 and day <= days_in_month[month - 1]
@@ -301,6 +301,15 @@ func _is_utc_timestamp(value: String) -> bool:
 
 func _is_leap_year(year: int) -> bool:
 	return year % 400 == 0 or (year % 4 == 0 and year % 100 != 0)
+
+
+func _is_ascii_digits(value: String) -> bool:
+	if value.is_empty():
+		return false
+	for character: String in value:
+		if character not in "0123456789":
+			return false
+	return true
 
 
 func _sorted_keys(dictionary: Dictionary) -> Array:
