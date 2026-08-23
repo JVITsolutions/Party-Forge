@@ -27,6 +27,7 @@ func validate_document(document: Dictionary) -> PackedStringArray:
 
 	var seen_ids := {}
 	var canonical_rig_count := 0
+	var canonical_rig_row := {}
 	var assets := assets_value as Array
 	for row_index: int in assets.size():
 		var row_value: Variant = assets[row_index]
@@ -47,6 +48,7 @@ func validate_document(document: Dictionary) -> PackedStringArray:
 			errors.append("%s row=%d field=kind value=%s reason=expected rig, body, or equipment" % [ERROR_PREFIX, row_index, kind])
 		if kind == "rig":
 			canonical_rig_count += 1
+			canonical_rig_row = row
 			_validate_canonical_rig(row, row_index, errors)
 		elif kind == "equipment":
 			_validate_equipment(row, row_index, errors)
@@ -58,6 +60,8 @@ func validate_document(document: Dictionary) -> PackedStringArray:
 
 	if canonical_rig_count != 1:
 		errors.append("%s field=canonical_rig reason=exactly one canonical rig row required" % ERROR_PREFIX)
+	else:
+		_validate_shared_skin_signatures(assets, canonical_rig_row, errors)
 	return errors
 
 
@@ -115,6 +119,21 @@ func _validate_equipment(row: Dictionary, row_index: int, errors: PackedStringAr
 	for body_preset: String in BODY_PRESETS:
 		if not binds.has(body_preset) or _string_value(binds.get(body_preset)).is_empty():
 			errors.append("%s row=%d field=skin_named_bind_sha256.%s reason=required ordered named-bind hash" % [ERROR_PREFIX, row_index, body_preset])
+		elif not _is_sha256(_string_value(binds.get(body_preset))):
+			errors.append("%s row=%d field=skin_named_bind_sha256.%s value=%s reason=must be 64 lowercase hexadecimal characters" % [ERROR_PREFIX, row_index, body_preset, _string_value(binds.get(body_preset))])
+
+
+func _validate_shared_skin_signatures(assets: Array, canonical_rig_row: Dictionary, errors: PackedStringArray) -> void:
+	for row_index: int in assets.size():
+		var row_value: Variant = assets[row_index]
+		if not row_value is Dictionary:
+			continue
+		var row := row_value as Dictionary
+		if _string_value(row.get("kind")) != "equipment" or _string_value(row.get("attachment_mode")) != "shared_skin":
+			continue
+		for signature_field: String in ["topology_sha256", "canonical_rest_sha256"]:
+			if _string_value(row.get(signature_field)) != _string_value(canonical_rig_row.get(signature_field)):
+				errors.append("%s row=%d field=%s reason=does not match canonical rig" % [ERROR_PREFIX, row_index, signature_field])
 
 
 func _validate_runtime_paths(row: Dictionary, row_index: int, errors: PackedStringArray) -> void:
@@ -256,7 +275,7 @@ func _is_absolute_machine_path(value: String) -> bool:
 func _is_utc_timestamp(value: String) -> bool:
 	if value.length() != 20 or not value.ends_with("Z"):
 		return false
-	return (
+	var has_valid_shape := (
 		value[4] == "-" and value[7] == "-" and value[10] == "T"
 		and value[13] == ":" and value[16] == ":"
 		and value.substr(0, 4).is_valid_int()
@@ -266,6 +285,22 @@ func _is_utc_timestamp(value: String) -> bool:
 		and value.substr(14, 2).is_valid_int()
 		and value.substr(17, 2).is_valid_int()
 	)
+	if not has_valid_shape:
+		return false
+	var year := int(value.substr(0, 4))
+	var month := int(value.substr(5, 2))
+	var day := int(value.substr(8, 2))
+	var hour := int(value.substr(11, 2))
+	var minute := int(value.substr(14, 2))
+	var second := int(value.substr(17, 2))
+	if year < 1 or month < 1 or month > 12 or hour > 23 or minute > 59 or second > 59:
+		return false
+	var days_in_month := [31, 28 + (1 if _is_leap_year(year) else 0), 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+	return day >= 1 and day <= days_in_month[month - 1]
+
+
+func _is_leap_year(year: int) -> bool:
+	return year % 400 == 0 or (year % 4 == 0 and year % 100 != 0)
 
 
 func _sorted_keys(dictionary: Dictionary) -> Array:

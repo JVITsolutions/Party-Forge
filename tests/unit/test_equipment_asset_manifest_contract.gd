@@ -24,8 +24,10 @@ func run() -> Array[String]:
 	_test_equipment_rules(contract, failures)
 	_test_canonical_rig_rules(contract, failures)
 	_test_shared_skin_rules(contract, failures)
+	_test_shared_skin_matches_canonical_rig(contract, failures)
 	_test_approval_rules(contract, failures)
 	_test_deterministic_errors_and_immutability(contract, failures)
+	_test_nested_error_ordering(contract, failures)
 	return failures
 
 
@@ -138,6 +140,34 @@ func _test_shared_skin_rules(contract: RefCounted, failures: Array[String]) -> v
 	(incomplete_binds["assets"] as Array)[3]["skin_named_bind_sha256"] = {"masculine": SHA_C}
 	_assert_error_contains(contract, incomplete_binds, "field=skin_named_bind_sha256.feminine", "each approved Skin records ordered named-bind hash", failures)
 
+	for body_preset: String in ["masculine", "feminine"]:
+		for malformed_hash: String in ["abc123", SHA_A.to_upper()]:
+			var malformed_binds := _valid_document()
+			(malformed_binds["assets"] as Array)[3]["skin_named_bind_sha256"][body_preset] = malformed_hash
+			_assert_error_contains(
+				contract,
+				malformed_binds,
+				"field=skin_named_bind_sha256.%s" % body_preset,
+				"%s ordered named-bind hash must be lowercase SHA-256" % body_preset,
+				failures,
+			)
+
+
+func _test_shared_skin_matches_canonical_rig(contract: RefCounted, failures: Array[String]) -> void:
+	for signature_field: String in ["topology_sha256", "canonical_rest_sha256"]:
+		var mismatch := _valid_document()
+		var assets := mismatch["assets"] as Array
+		var rig_row: Variant = assets.pop_front()
+		assets.append(rig_row)
+		(assets[2] as Dictionary)[signature_field] = SHA_A
+		_assert_error_contains(
+			contract,
+			mismatch,
+			"field=%s reason=does not match canonical rig" % signature_field,
+			"shared skin %s matches canonical rig independent of row order" % signature_field,
+			failures,
+		)
+
 
 func _test_approval_rules(contract: RefCounted, failures: Array[String]) -> void:
 	for field: String in ["reviewer", "reviewed_at_utc", "notes"]:
@@ -148,6 +178,22 @@ func _test_approval_rules(contract: RefCounted, failures: Array[String]) -> void
 	var local_timestamp := _valid_document()
 	(local_timestamp["assets"] as Array)[1]["approval"]["reviewed_at_utc"] = "2026-08-23 12:00:00"
 	_assert_error_contains(contract, local_timestamp, "field=approval.reviewed_at_utc", "approval timestamp is UTC ISO-8601", failures)
+
+	for case: Dictionary in [
+		{"timestamp": "2026-13-01T00:00:00Z", "label": "invalid month"},
+		{"timestamp": "2026-04-31T00:00:00Z", "label": "invalid day"},
+		{"timestamp": "2026-01-01T24:00:00Z", "label": "invalid hour"},
+		{"timestamp": "2026-01-01T23:60:00Z", "label": "invalid minute"},
+		{"timestamp": "2026-01-01T23:59:60Z", "label": "invalid second"},
+		{"timestamp": "2026-02-29T12:00:00Z", "label": "non-leap-year day"},
+	]:
+		var invalid_instant := _valid_document()
+		(invalid_instant["assets"] as Array)[1]["approval"]["reviewed_at_utc"] = case["timestamp"]
+		_assert_error_contains(contract, invalid_instant, "field=approval.reviewed_at_utc", "%s rejects" % case["label"], failures)
+
+	var leap_day := _valid_document()
+	(leap_day["assets"] as Array)[1]["approval"]["reviewed_at_utc"] = "2028-02-29T23:59:59Z"
+	TestAssertions.equal(contract.validate_document(leap_day), PackedStringArray(), "real UTC leap-day instant validates", failures)
 
 
 func _test_deterministic_errors_and_immutability(contract: RefCounted, failures: Array[String]) -> void:
@@ -172,6 +218,35 @@ func _test_deterministic_errors_and_immutability(contract: RefCounted, failures:
 	TestAssertions.equal(first, expected, "invalid manifest returns every error in deterministic order", failures)
 	TestAssertions.equal(second, expected, "repeated validation returns identical errors", failures)
 	TestAssertions.equal(var_to_bytes(invalid), source_before, "validation does not mutate source dictionary", failures)
+
+
+func _test_nested_error_ordering(contract: RefCounted, failures: Array[String]) -> void:
+	var invalid := _valid_document()
+	var row := (invalid["assets"] as Array)[1] as Dictionary
+	row["runtime_paths"] = {
+		"zeta": "res://models/../body.glb",
+		"alpha": "F:/exports/body.glb",
+	}
+	row["runtime_sha256"] = "abc123"
+	row["provenance"]["attempt_id"] = "F:/attempts/attempt-0001"
+	row["provenance"]["attempt_sha256"] = SHA_A.to_upper()
+	row["approval"]["reviewer"] = ""
+	row["approval"]["reviewed_at_utc"] = "2026-13-01T24:60:60Z"
+	row["approval"]["notes"] = ""
+	var expected := PackedStringArray([
+		"PARTY_FORGE_EQUIPMENT_MANIFEST_ERROR row=1 field=runtime_paths.alpha value=F:/exports/body.glb reason=must be a res:// path",
+		"PARTY_FORGE_EQUIPMENT_MANIFEST_ERROR row=1 field=runtime_paths.zeta value=res://models/../body.glb reason=path traversal",
+		"PARTY_FORGE_EQUIPMENT_MANIFEST_ERROR row=1 field=provenance.attempt_id value=F:/attempts/attempt-0001 reason=must be an immutable id",
+		"PARTY_FORGE_EQUIPMENT_MANIFEST_ERROR row=1 field=provenance.attempt_id value=F:/attempts/attempt-0001 reason=absolute machine paths are forbidden",
+		"PARTY_FORGE_EQUIPMENT_MANIFEST_ERROR row=1 field=provenance.attempt_sha256 value=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA reason=must be 64 lowercase hexadecimal characters",
+		"PARTY_FORGE_EQUIPMENT_MANIFEST_ERROR row=1 field=runtime_sha256 value=abc123 reason=must be 64 lowercase hexadecimal characters",
+		"PARTY_FORGE_EQUIPMENT_MANIFEST_ERROR row=1 field=approval.reviewer reason=required for approved row",
+		"PARTY_FORGE_EQUIPMENT_MANIFEST_ERROR row=1 field=approval.notes reason=required for approved row",
+		"PARTY_FORGE_EQUIPMENT_MANIFEST_ERROR row=1 field=approval.reviewed_at_utc value=2026-13-01T24:60:60Z reason=must be UTC ISO-8601",
+	])
+	var source_before := var_to_bytes(invalid)
+	TestAssertions.equal(contract.validate_document(invalid), expected, "nested manifest errors have exact deterministic order", failures)
+	TestAssertions.equal(var_to_bytes(invalid), source_before, "nested multi-error validation leaves source immutable", failures)
 
 
 func _assert_error_contains(contract: RefCounted, document: Dictionary, fragment: String, label: String, failures: Array[String]) -> void:
