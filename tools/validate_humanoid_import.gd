@@ -454,7 +454,17 @@ class ImportReadinessService extends RefCounted:
 			var expected_parent := -1
 			var parent_role: StringName = rig.parent_roles[index]
 			if not parent_role.is_empty():
-				expected_parent = rig.roles.find(parent_role)
+				var parent_role_index: int = rig.roles.find(parent_role)
+				if parent_role_index < 0 or parent_role_index >= rig.bone_names.size():
+					return false
+				var parent_bone_name: StringName = rig.bone_names[parent_role_index]
+				var parent_matches: Array[int] = []
+				for parent_bone_index: int in skeleton.get_bone_count():
+					if skeleton.get_bone_name(parent_bone_index) == parent_bone_name:
+						parent_matches.append(parent_bone_index)
+				if parent_matches.size() != 1:
+					return false
+				expected_parent = parent_matches[0]
 			if skeleton.get_bone_parent(actual_index) != expected_parent:
 				return false
 			var contract := CONTRACT_SCRIPT.new()

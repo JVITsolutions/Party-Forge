@@ -205,6 +205,8 @@ func _test_shared_item_contracts(service: RefCounted, failures: Array[String]) -
 	TestAssertions.equal(valid.get(&"active_root_count", -1), 1, "shared-item success reports active-root count", failures)
 	TestAssertions.equal(valid.get(&"mesh_count", -1), 1, "shared-item success reports only selected mesh count", failures)
 	TestAssertions.equal(valid.get(&"skin_bind_signature", ""), expected_signature, "shared-item success reports exact bind signature", failures)
+	var reordered := service.call(&"validate_shared_item_scene", _shared_item_scene(rig, {&"reordered_skeleton_bones": true}), rig, [NodePath("MasculineRoot")], expected_signature, budgets) as Dictionary
+	TestAssertions.truthy(bool(reordered.get(&"ok", false)), "shared-item skeleton validation is independent of actual bone order", failures)
 
 	_assert_shared_error(service, _shared_item_scene(rig), rig, [], expected_signature, budgets, "shared_item reason=active roots are empty", "active roots required", failures)
 	_assert_shared_error(service, _shared_item_scene(rig), rig, [NodePath("MissingRoot")], expected_signature, budgets, "shared_item root=MissingRoot reason=active root is missing", "active root coverage", failures)
@@ -218,6 +220,8 @@ func _test_shared_item_contracts(service: RefCounted, failures: Array[String]) -
 	_assert_shared_error(service, _shared_item_scene(rig, {&"nested_skeleton": true}), rig, [NodePath("MasculineRoot")], expected_signature, budgets, "shared_item root=MasculineRoot reason=installed active root contains Skeleton3D", "installed duplicate skeleton", failures)
 	_assert_shared_error(service, _shared_item_scene(rig, {&"nested_player": true}), rig, [NodePath("MasculineRoot")], expected_signature, budgets, "shared_item root=MasculineRoot reason=installed active root contains AnimationPlayer", "installed duplicate animation player", failures)
 	_assert_shared_error(service, _shared_item_scene(rig, {&"wrong_skeleton_bone": true}), rig, [NodePath("MasculineRoot")], expected_signature, budgets, "shared_item node=Mesh reason=source skeleton does not match canonical rig", "auto-rig source skeleton", failures)
+	_assert_shared_error(service, _shared_item_scene(rig, {&"wrong_skeleton_parent": true}), rig, [NodePath("MasculineRoot")], expected_signature, budgets, "shared_item node=Mesh reason=source skeleton does not match canonical rig", "wrong canonical parent role", failures)
+	_assert_shared_error(service, _shared_item_scene(rig, {&"missing_skeleton_parent": true}), rig, [NodePath("MasculineRoot")], expected_signature, budgets, "shared_item node=Mesh reason=source skeleton does not match canonical rig", "missing canonical parent role", failures)
 	var sub_quantum_rest := service.call(&"validate_shared_item_scene", _shared_item_scene(rig, {&"rest_delta": 0.0000004}), rig, [NodePath("MasculineRoot")], expected_signature, budgets) as Dictionary
 	TestAssertions.truthy(bool(sub_quantum_rest.get(&"ok", false)), "shared-item rest drift below the 1e-6 quantization boundary remains canonical", failures)
 	_assert_shared_error(service, _shared_item_scene(rig, {&"rest_delta": 0.0000006}), rig, [NodePath("MasculineRoot")], expected_signature, budgets, "shared_item node=Mesh reason=source skeleton does not match canonical rig", "shared-item effective quantized rest boundary", failures)
@@ -481,7 +485,15 @@ func _region_node(rig: Resource, region_id: StringName, region_index: int, heigh
 func _shared_item_scene(rig: Resource, options: Dictionary = {}) -> PackedScene:
 	var root := Node3D.new()
 	root.name = &"SharedItemSource"
-	var source_skeleton := _canonical_skeleton(rig, bool(options.get(&"wrong_skeleton_bone", false)), false, float(options.get(&"rest_delta", 0.0)))
+	var source_skeleton := _canonical_skeleton(
+		rig,
+		bool(options.get(&"wrong_skeleton_bone", false)),
+		false,
+		float(options.get(&"rest_delta", 0.0)),
+		bool(options.get(&"reordered_skeleton_bones", false)),
+		bool(options.get(&"wrong_skeleton_parent", false)),
+		bool(options.get(&"missing_skeleton_parent", false)),
+	)
 	source_skeleton.name = &"SourceSkeleton"
 	root.add_child(source_skeleton)
 	source_skeleton.owner = root
@@ -585,23 +597,42 @@ func _weighted_mesh(height: float, ground_y: float, material: StandardMaterial3D
 	return MissingTangentMesh.new(mesh) if bool(options.get(&"missing_tangents", false)) else mesh
 
 
-func _canonical_skeleton(rig: Resource, wrong_bone: bool, wrong_rest: bool, rest_delta: float = 0.0) -> Skeleton3D:
+func _canonical_skeleton(
+	rig: Resource,
+	wrong_bone: bool,
+	wrong_rest: bool,
+	rest_delta: float = 0.0,
+	reordered_bones: bool = false,
+	wrong_parent: bool = false,
+	missing_parent: bool = false,
+) -> Skeleton3D:
 	var skeleton := Skeleton3D.new()
 	var role_indices: Dictionary = {}
+	var rig_indices: Array[int] = []
 	for index: int in rig.roles.size():
+		rig_indices.append(index)
+	if reordered_bones:
+		rig_indices.reverse()
+	for index: int in rig_indices:
 		var bone_name: StringName = &"AutoRigHips" if wrong_bone and index == 0 else rig.bone_names[index]
 		skeleton.add_bone(bone_name)
-		role_indices[rig.roles[index]] = index
-	for index: int in rig.roles.size():
+		role_indices[rig.roles[index]] = skeleton.get_bone_count() - 1
+	for index: int in rig_indices:
+		var actual_index := int(role_indices[rig.roles[index]])
 		var parent_role: StringName = rig.parent_roles[index]
 		if not parent_role.is_empty():
-			skeleton.set_bone_parent(index, int(role_indices[parent_role]))
+			var actual_parent := int(role_indices[parent_role])
+			if missing_parent and index == 1:
+				actual_parent = -1
+			elif wrong_parent and index == 2:
+				actual_parent = int(role_indices[rig.roles[0]])
+			skeleton.set_bone_parent(actual_index, actual_parent)
 		var rest: Transform3D = rig.canonical_rests[index]
 		if wrong_rest and index == 0:
 			rest.origin.x += 0.05
 		if index == 0:
 			rest.origin.x += rest_delta
-		skeleton.set_bone_rest(index, rest)
+		skeleton.set_bone_rest(actual_index, rest)
 	return skeleton
 
 

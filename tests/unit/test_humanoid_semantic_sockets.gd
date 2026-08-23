@@ -33,8 +33,74 @@ func run() -> Array[String]:
 	_assert_recognized_direct_name_collisions_fail_closed(failures)
 	_assert_single_right_hand_wrapper_request_fails_closed(failures)
 	_assert_single_left_hand_wrapper_request_fails_closed(failures)
+	_assert_untrusted_metadata_fallback_paths_fail_closed(failures)
+	_assert_owned_metadata_fallback_paths_remain_supported(failures)
 	_assert_wrong_type_semantic_root_is_stable_and_fails_closed(failures)
 	return failures
+
+
+func _assert_untrusted_metadata_fallback_paths_fail_closed(failures: Array[String]) -> void:
+	for case: Dictionary in [
+		{&"path": &"../../HealthBar3D", &"label": "ancestor escape"},
+		{&"path": &"OwnedSocket:position", &"label": "NodePath subname"},
+		{&"path": &"./OwnedSocket", &"label": "dot segment"},
+		{&"path": &"OwnedContainer/../OwnedSocket", &"label": "parent segment"},
+		{&"path": &"/root/SocketBoundaryActor/HealthBar3D", &"label": "absolute path"},
+	]:
+		var actor := Node3D.new()
+		actor.name = &"SocketBoundaryActor"
+		var presentation := Node3D.new()
+		presentation.name = &"Presentation"
+		actor.add_child(presentation)
+		var model := ForgeHumanoidModel.new()
+		model.name = &"Model"
+		presentation.add_child(model)
+		_add_body(model)
+		var owned_socket := Node3D.new()
+		owned_socket.name = &"OwnedSocket"
+		model.add_child(owned_socket)
+		var owned_container := Node3D.new()
+		owned_container.name = &"OwnedContainer"
+		model.add_child(owned_container)
+		var external_target := Node3D.new()
+		external_target.name = &"HealthBar3D"
+		actor.add_child(external_target)
+		_add_to_tree(actor)
+		model.has_equipment_slot(&"main_hand")
+		var before_tree := _node_tree_snapshot(actor)
+		var visual := _visual(&"untrusted_metadata", &"main_hand", &"UnusedFallback", _metadata_attachment_scene(case[&"path"]))
+		TestAssertions.truthy(not model.apply_equipment_visual(&"main_hand", visual), "%s metadata path fails closed" % case[&"label"], failures)
+		TestAssertions.equal(model.equipped_nodes.get(&"main_hand", []), [], "%s installs no live equipment" % case[&"label"], failures)
+		TestAssertions.equal(external_target.get_child_count(), 0, "%s cannot reparent below external HealthBar3D" % case[&"label"], failures)
+		TestAssertions.equal(_node_tree_snapshot(actor), before_tree, "%s leaves the live actor tree unchanged" % case[&"label"], failures)
+		actor.free()
+
+
+func _assert_owned_metadata_fallback_paths_remain_supported(failures: Array[String]) -> void:
+	for socket_path: StringName in [&"OwnedSocket", &"OwnedContainer/OwnedSocket"]:
+		var model := ForgeHumanoidModel.new()
+		_add_body(model)
+		var target := _ensure_path(model, socket_path)
+		_add_to_tree(model)
+		var visual := _visual(&"owned_metadata_fallback", &"main_hand", &"UnusedFallback", _metadata_attachment_scene(socket_path))
+		TestAssertions.truthy(model.apply_equipment_visual(&"main_hand", visual), "owned normalized metadata path %s remains supported" % socket_path, failures)
+		var installed: Array = model.equipped_nodes.get(&"main_hand", [])
+		TestAssertions.equal(installed.size(), 1, "owned metadata path installs one attachment", failures)
+		if installed.size() == 1:
+			TestAssertions.equal((installed[0] as Node).get_parent(), target, "owned metadata path remains below the model", failures)
+		model.free()
+
+
+func _node_tree_snapshot(root: Node) -> PackedStringArray:
+	var paths := PackedStringArray()
+	_collect_node_tree_paths(root, ".", paths)
+	return paths
+
+
+func _collect_node_tree_paths(node: Node, path: String, paths: PackedStringArray) -> void:
+	paths.append(path)
+	for child: Node in node.get_children():
+		_collect_node_tree_paths(child, "%s/%s" % [path, child.name], paths)
 
 func _assert_owned_root_exposes_all_slots(failures: Array[String]) -> void:
 	var model := (load(HUMANOID_SCENE_PATH) as PackedScene).instantiate() as ForgeHumanoidModel

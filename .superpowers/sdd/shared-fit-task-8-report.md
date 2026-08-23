@@ -175,3 +175,30 @@ Result: exit `0` in **10.14s** with `TEST_SUMMARY: PASS (0 failures)`. Only esta
 ```
 
 Fresh isolated-profile result: exit `0` in approximately **203s** with `TEST_SUMMARY: PASS (216 suites)`. Established assertion-owned negative-path errors and warnings remained. There was no Task 8 test failure, parser error, uncontrolled script error, validator subprocess mismatch, or validator cleanup diagnostic.
+
+## Whole-branch final-review closure — 2026-08-23
+
+The final review wave against base `fa75855` closed the remaining manifest, shared-item skeleton, rigid-socket fallback, and test-harness findings without promoting or rewriting production equipment content.
+
+- Every manifest row now requires non-empty normalized runtime paths, a runtime hash, the complete generator/workflow/model/Blender provenance block, and an approved review block. Body rows additionally require exact one-preset coverage, canonical rig/topology/rest/Skin-bind evidence, hidden-region and dimensions/geometry/material/texture records, and UV/tangent/weight status. Equipment rows require the same production metrics plus master/runtime icon paths and hashes. The document requires exactly one masculine and one feminine body row, and body/shared-Skin topology and rest signatures must match the canonical rig.
+- Shared-item skeleton validation resolves each parent role to the canonical parent bone name and then to one unique actual `Skeleton3D` bone index. A valid skeleton with reversed actual bone order passes; wrong or missing canonical parents still reject.
+- Rigid metadata fallback accepts only non-empty normalized relative `NodePath` values with no absolute root, backslash, empty segment, `.`, `..`, or subname. The resolved socket must remain a descendant of the `ForgeHumanoidModel`. Existing semantic slots, legacy socket paths/names, and normalized owned fallback names/paths remain supported.
+- The real-actor name-map regression now applies the asserted masculine/feminine body before checking parent lookup. Body-fit fixture setup reports failures through the suite array and aborts immediately rather than continuing from invalid setup.
+
+### Accepted RED
+
+The focused manifest/import/socket/transaction command was run after test-only setup corrections and before production fixes. It exited `1` with `TEST_SUMMARY: FAIL (70 failures)` and no parser, loader, script, or fixture error. The failures comprised missing per-row manifest blocks/design fields and body coverage; rejection of a valid reordered skeleton; direct metadata traversal, dot-segment, parent-segment, and subname installation; and transactional `../../HealthBar3D` and subname commits that changed live body/equipment state. Absolute metadata paths already rejected and remained covered. Malformed skeleton parents already rejected and remained covered.
+
+### Focused GREEN and affected matrix
+
+The same four-suite command exited `0` with `TEST_SUMMARY: PASS (0 failures)`. An expanded 32-suite matrix added the prior 29-suite shared-fit foundation matrix plus the modular backup inventory, builder, and verifier suites. It exited `0` with `TEST_SUMMARY: PASS (0 failures)`; only established assertion-owned `PARTY_FORGE_PRESENTATION_ERROR` negative-path diagnostics appeared.
+
+### Uncontested full suite
+
+The full suite started with zero `Godot_v*` engine contenders and ran under new isolated `APPDATA` and `LOCALAPPDATA` roots. A condition-based process monitor followed the target plus three test-spawned engine descendants and observed zero foreign engine PIDs throughout. The target exited `0` with `ITEM_TRANSACTION_MATRIX: PASS` and `TEST_SUMMARY: PASS (216 suites)`.
+
+### Production preservation
+
+The exact 515 production equipment inventory paths were hashed before and after the fix wave. Both inventories produced aggregate SHA-256 `7d9ef44d0c6b4b0892a075d114962507dca4de88e47205a9606a7aee2a1a6819`; `git diff fa75855` across those paths reported zero changed files. No production GLB, icon, equipment scene, base definition, presentation resource, or contact sheet changed.
+
+No blocking correctness concern remains from this final-review wave. Real asset approval and promotion remain separate future gates.

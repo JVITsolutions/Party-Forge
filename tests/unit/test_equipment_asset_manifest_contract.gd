@@ -19,6 +19,8 @@ func run() -> Array[String]:
 	var valid := _valid_document()
 	TestAssertions.equal(contract.validate_document(valid), PackedStringArray(), "complete in-memory manifest validates", failures)
 	_test_identity_and_kind_rules(contract, failures)
+	_test_required_row_blocks(contract, failures)
+	_test_design_required_fields(contract, failures)
 	_test_runtime_path_rules(contract, failures)
 	_test_provenance_and_hash_rules(contract, failures)
 	_test_equipment_rules(contract, failures)
@@ -29,6 +31,47 @@ func run() -> Array[String]:
 	_test_deterministic_errors_and_immutability(contract, failures)
 	_test_nested_error_ordering(contract, failures)
 	return failures
+
+
+func _test_required_row_blocks(contract: RefCounted, failures: Array[String]) -> void:
+	for row_index: int in (_valid_document()["assets"] as Array).size():
+		for block: String in ["runtime_paths", "provenance", "approval"]:
+			var missing := _valid_document()
+			((missing["assets"] as Array)[row_index] as Dictionary).erase(block)
+			_assert_error_contains(contract, missing, "row=%d field=%s" % [row_index, block], "every row, including body row %d, requires %s" % [row_index, block], failures)
+
+
+func _test_design_required_fields(contract: RefCounted, failures: Array[String]) -> void:
+	for field: String in [
+		"generator", "workflow", "prompt_sha256", "seed", "source_image_sha256",
+		"model_name", "model_version", "license_evidence", "attempt_id", "attempt_sha256",
+		"revision_id", "revision_sha256", "blender_version",
+	]:
+		var missing_provenance := _valid_document()
+		((missing_provenance["assets"] as Array)[1]["provenance"] as Dictionary).erase(field)
+		_assert_error_contains(contract, missing_provenance, "field=provenance.%s" % field, "body provenance requires design field %s" % field, failures)
+
+	for field: String in [
+		"body_coverage", "canonical_rig_id", "topology_sha256", "canonical_rest_sha256",
+		"skin_named_bind_sha256", "hidden_body_region_ids", "dimensions_m", "triangle_count",
+		"material_count", "texture_set", "uv_status", "tangent_status", "skin_weight_status",
+	]:
+		var missing_body := _valid_document()
+		((missing_body["assets"] as Array)[1] as Dictionary).erase(field)
+		_assert_error_contains(contract, missing_body, "field=%s" % field, "body row requires design field %s" % field, failures)
+
+	for field: String in [
+		"hidden_body_region_ids", "dimensions_m", "triangle_count", "material_count", "texture_set",
+		"uv_status", "tangent_status", "skin_weight_status", "master_icon_path", "master_icon_sha256",
+		"runtime_icon_path", "runtime_icon_sha256",
+	]:
+		var missing_equipment := _valid_document()
+		((missing_equipment["assets"] as Array)[3] as Dictionary).erase(field)
+		_assert_error_contains(contract, missing_equipment, "field=%s" % field, "equipment row requires design field %s" % field, failures)
+
+	var incomplete_body_coverage := _valid_document()
+	(incomplete_body_coverage["assets"] as Array).remove_at(2)
+	_assert_error_contains(contract, incomplete_body_coverage, "field=body_coverage reason=requires exactly one masculine and one feminine body row", "manifest requires complete body-row coverage", failures)
 
 
 func _test_identity_and_kind_rules(contract: RefCounted, failures: Array[String]) -> void:
@@ -206,13 +249,13 @@ func _test_approval_rules(contract: RefCounted, failures: Array[String]) -> void
 
 
 func _test_deterministic_errors_and_immutability(contract: RefCounted, failures: Array[String]) -> void:
-	var invalid := {
-		"schema_version": 2,
-		"assets": [
-			{"asset_id": "", "kind": "costume"},
-			{"asset_id": "", "kind": "body"},
-		],
-	}
+	var invalid := _valid_document()
+	invalid["schema_version"] = 2
+	var assets := invalid["assets"] as Array
+	assets.resize(3)
+	(assets[0] as Dictionary)["asset_id"] = ""
+	(assets[0] as Dictionary)["kind"] = "costume"
+	(assets[1] as Dictionary)["asset_id"] = ""
 	var source_before := var_to_bytes(invalid)
 	var expected := PackedStringArray([
 		"PARTY_FORGE_EQUIPMENT_MANIFEST_ERROR field=schema_version value=2 reason=expected 1",
@@ -281,8 +324,8 @@ func _valid_document() -> Dictionary:
 				"semantic_roles": {"hand_l": "Hand.L", "hand_r": "Hand.R"},
 				"named_bind_policy": "ordered_named_binds",
 			}, true),
-			_base_row("forge_base_masculine", "body", {"masculine": "res://models/bodies/forge_base_masculine.glb"}, SHA_B),
-			_base_row("forge_base_feminine", "body", {"feminine": "res://models/bodies/forge_base_feminine.glb"}, SHA_C),
+			_base_row("forge_base_masculine", "body", {"masculine": "res://models/bodies/forge_base_masculine.glb"}, SHA_B).merged(_body_fields("masculine", SHA_A), true),
+			_base_row("forge_base_feminine", "body", {"feminine": "res://models/bodies/forge_base_feminine.glb"}, SHA_C).merged(_body_fields("feminine", SHA_B), true),
 			_base_row("sunweld_plate", "equipment", {
 				"masculine": "res://models/equipment/sunweld_plate_masculine.glb",
 				"feminine": "res://models/equipment/sunweld_plate_feminine.glb",
@@ -296,7 +339,7 @@ func _valid_document() -> Dictionary:
 				"topology_sha256": SHA_B,
 				"canonical_rest_sha256": SHA_C,
 				"skin_named_bind_sha256": {"masculine": SHA_A, "feminine": SHA_B},
-			}, true),
+			}, true).merged(_equipment_fields(), true),
 			_base_row("sunweld_crown", "equipment", {
 				"masculine": "res://models/equipment/sunweld_crown.glb",
 				"feminine": "res://models/equipment/sunweld_crown.glb",
@@ -306,7 +349,7 @@ func _valid_document() -> Dictionary:
 				"fit_policy": "shared",
 				"attachment_mode": "rigid_socket",
 				"body_coverage": ["masculine", "feminine"],
-			}, true),
+			}, true).merged(_equipment_fields(), true),
 		],
 	}
 
@@ -318,10 +361,19 @@ func _base_row(asset_id: String, kind: String, runtime_paths: Dictionary, runtim
 		"runtime_paths": runtime_paths,
 		"runtime_sha256": runtime_sha256,
 		"provenance": {
+			"generator": "fixture-generator",
+			"workflow": "fixture-workflow-v1",
+			"prompt_sha256": SHA_C,
+			"seed": 1337,
+			"source_image_sha256": [SHA_A],
+			"model_name": "fixture-model",
+			"model_version": "1.0",
+			"license_evidence": "Fixture-only license evidence.",
 			"attempt_id": "attempt-0001",
 			"attempt_sha256": SHA_A,
 			"revision_id": "revision-0001",
 			"revision_sha256": SHA_B,
+			"blender_version": "5.2.0",
 		},
 		"approval": {
 			"validation_result": "approved",
@@ -329,4 +381,39 @@ func _base_row(asset_id: String, kind: String, runtime_paths: Dictionary, runtim
 			"reviewed_at_utc": "2026-08-23T12:00:00Z",
 			"notes": "Fixture approval only.",
 		},
+	}
+
+
+func _body_fields(body_preset: String, skin_hash: String) -> Dictionary:
+	return {
+		"body_coverage": [body_preset],
+		"canonical_rig_id": "pf_humanoid_v1",
+		"topology_sha256": SHA_B,
+		"canonical_rest_sha256": SHA_C,
+		"skin_named_bind_sha256": {body_preset: skin_hash},
+		"hidden_body_region_ids": [],
+		"dimensions_m": [0.6, 1.75, 0.35],
+		"triangle_count": 1000,
+		"material_count": 2,
+		"texture_set": ["body_base_color"],
+		"uv_status": "approved",
+		"tangent_status": "approved",
+		"skin_weight_status": "approved",
+	}
+
+
+func _equipment_fields() -> Dictionary:
+	return {
+		"hidden_body_region_ids": [],
+		"dimensions_m": [0.5, 0.7, 0.2],
+		"triangle_count": 500,
+		"material_count": 1,
+		"texture_set": ["equipment_base_color"],
+		"uv_status": "approved",
+		"tangent_status": "approved",
+		"skin_weight_status": "approved",
+		"master_icon_path": "res://assets/ui/equipment/master/sunweld_bastion/item.png",
+		"master_icon_sha256": SHA_A,
+		"runtime_icon_path": "res://assets/ui/equipment/runtime/sunweld_bastion/item.png",
+		"runtime_icon_sha256": SHA_B,
 	}

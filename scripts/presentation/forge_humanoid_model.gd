@@ -924,10 +924,21 @@ func _resolve_socket(socket_id: StringName, slot_id: StringName = &"", include_e
 			return null
 		var semantic_fallback := get_node_or_null(NodePath(fallback_path)) as Node3D
 		return semantic_fallback
-	var exact_fallback := get_node_or_null(NodePath(String(socket_id))) as Node3D
-	if exact_fallback != null:
-		return exact_fallback
-	return null
+	return _safe_owned_fallback_socket(String(socket_id))
+
+func _safe_owned_fallback_socket(path_text: String) -> Node3D:
+	if path_text.is_empty() or "\\" in path_text:
+		return null
+	var path := NodePath(path_text)
+	if path.is_absolute() or path.get_subname_count() != 0:
+		return null
+	var segments := path_text.split("/", true)
+	if segments.has("") or segments.has(".") or segments.has(".."):
+		return null
+	var candidate := get_node_or_null(path) as Node3D
+	if candidate == null or not is_ancestor_of(candidate):
+		return null
+	return candidate
 
 func _semantic_slot_for(socket_id: StringName, slot_id: StringName) -> StringName:
 	var socket_text := String(socket_id)

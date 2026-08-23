@@ -18,6 +18,8 @@ func run() -> Array[String]:
 	_test_rejection_preserves_state(&"semantic_socket", failures)
 	_test_rejection_preserves_state(&"body_region", failures)
 	_test_rejection_preserves_state(&"rigid_body_region", failures)
+	_test_rejection_preserves_state(&"socket_escape", failures)
+	_test_rejection_preserves_state(&"socket_subname", failures)
 	_test_rejection_preserves_state(&"grounding", failures)
 	_test_equipment_installation_preserves_parent_name_map(failures)
 	return failures
@@ -37,7 +39,9 @@ func _test_equipment_installation_preserves_parent_name_map(failures: Array[Stri
 			var actor := (load("res://scenes/characters/leader.tscn") as PackedScene).instantiate() as PartyActor
 			root.add_child(actor)
 			actor.configure(PartyMemberState.new(1, definition, true))
-			var model := actor.get_node("Presentation").active_model as ForgeHumanoidModel
+			var presentation := actor.get_node("Presentation") as CharacterPresentation
+			TestAssertions.truthy(presentation.set_body_preset(body_id), "%s %s body activates before name-map validation" % [definition.id, body_id], failures)
+			var model := presentation.active_model as ForgeHumanoidModel
 			var consistent := _child_name_map_is_consistent(model)
 			TestAssertions.truthy(consistent, "%s %s equipment installation preserves unique parent child-name lookup" % [definition.id, body_id], failures)
 			if not consistent:
@@ -59,7 +63,8 @@ func _child_name_map_is_consistent(root: Node) -> bool:
 	return true
 
 func _test_shared_fit_swap_commits(failures: Array[String]) -> void:
-	var fixture := _fixture(_rigid_visual(&"shared", _rigid_scene(&"SharedFit"), _rigid_scene(&"SharedFit")))
+	var fixture := _fixture(_rigid_visual(&"shared", _rigid_scene(&"SharedFit"), _rigid_scene(&"SharedFit")), failures)
+	if fixture.is_empty(): return
 	var presentation := fixture.presentation as CharacterPresentation
 	var model := fixture.model as ForgeHumanoidModel
 	var old_node := _equipped_node(model)
@@ -72,7 +77,8 @@ func _test_shared_fit_swap_commits(failures: Array[String]) -> void:
 	presentation.free()
 
 func _test_variant_fit_swap_commits(failures: Array[String]) -> void:
-	var fixture := _fixture(_rigid_visual(&"variant", _rigid_scene(&"MasculineFit"), _rigid_scene(&"FeminineFit")))
+	var fixture := _fixture(_rigid_visual(&"variant", _rigid_scene(&"MasculineFit"), _rigid_scene(&"FeminineFit")), failures)
+	if fixture.is_empty(): return
 	var presentation := fixture.presentation as CharacterPresentation
 	var model := fixture.model as ForgeHumanoidModel
 	TestAssertions.truthy(presentation.set_body_preset(&"feminine"), "public body API commits a variant-fit swap", failures)
@@ -84,7 +90,8 @@ func _test_variant_fit_swap_commits(failures: Array[String]) -> void:
 
 func _test_rigid_fit_regions_hide_and_restore(failures: Array[String]) -> void:
 	var visual := _rigid_visual(&"variant", _rigid_scene(&"MasculineFit"), _rigid_scene(&"FeminineFit"), [], [&"torso"])
-	var fixture := _fixture(visual)
+	var fixture := _fixture(visual, failures)
+	if fixture.is_empty(): return
 	var presentation := fixture.presentation as CharacterPresentation
 	var model := fixture.model as ForgeHumanoidModel
 	TestAssertions.truthy(presentation.set_body_preset(&"feminine"), "public body API commits a rigid fit with a valid hidden region", failures)
@@ -96,7 +103,8 @@ func _test_rigid_fit_regions_hide_and_restore(failures: Array[String]) -> void:
 
 func _test_restored_descendant_body_region_drives_candidate_grounding(failures: Array[String]) -> void:
 	var visual := _shared_skin_visual(_shared_skin_scene(false), _shared_skin_scene(false), [])
-	var fixture := _nested_body_fixture(visual)
+	var fixture := _nested_body_fixture(visual, failures)
+	if fixture.is_empty(): return
 	var presentation := fixture.presentation as CharacterPresentation
 	var model := fixture.model as ForgeHumanoidModel
 	var target_region := _body_named(model, &"FeminineTorsoRegion")
@@ -108,7 +116,8 @@ func _test_restored_descendant_body_region_drives_candidate_grounding(failures: 
 
 func _test_shared_skin_candidate_drives_grounding(failures: Array[String]) -> void:
 	var visual := _shared_skin_visual(_shared_skin_scene(false), _shared_skin_scene(false, -3.0), [])
-	var fixture := _fixture(visual)
+	var fixture := _fixture(visual, failures)
+	if fixture.is_empty(): return
 	var presentation := fixture.presentation as CharacterPresentation
 	var model := fixture.model as ForgeHumanoidModel
 	TestAssertions.truthy(presentation.set_body_preset(&"feminine"), "public body API commits below-body shared-skin equipment", failures)
@@ -117,7 +126,8 @@ func _test_shared_skin_candidate_drives_grounding(failures: Array[String]) -> vo
 	presentation.free()
 
 func _test_invisible_staged_equipment_ancestor_does_not_drive_grounding(failures: Array[String]) -> void:
-	var fixture := _fixture(_rigid_invisible_ancestor_visual())
+	var fixture := _fixture(_rigid_invisible_ancestor_visual(), failures)
+	if fixture.is_empty(): return
 	var presentation := fixture.presentation as CharacterPresentation
 	var model := fixture.model as ForgeHumanoidModel
 	TestAssertions.truthy(presentation.set_body_preset(&"feminine"), "public body API commits equipment beneath an invisible staged ancestor", failures)
@@ -139,12 +149,23 @@ func _test_rejection_preserves_state(invalid_case: StringName, failures: Array[S
 			visual = _shared_skin_visual(_shared_skin_scene(false), _shared_skin_scene(false), [&"unknown_region"])
 		&"rigid_body_region":
 			visual = _rigid_visual(&"variant", _rigid_scene(&"MasculineFit"), _rigid_scene(&"FeminineFit"), [], [&"unknown_region"])
+		&"socket_escape":
+			visual = _rigid_visual(&"variant", _rigid_scene(&"MasculineFit"), _rigid_scene(&"FeminineFit", &"../../HealthBar3D"))
+		&"socket_subname":
+			visual = _rigid_visual(&"variant", _rigid_scene(&"MasculineFit"), _rigid_scene(&"FeminineFit", &"HitPivot:position"))
 		&"grounding":
 			visual = _icon_only_visual()
-	var fixture := _fixture(visual, invalid_grounding)
+	var fixture := _fixture(visual, failures, invalid_grounding)
+	if fixture.is_empty(): return
 	var presentation := fixture.presentation as CharacterPresentation
 	var model := fixture.model as ForgeHumanoidModel
+	var external_target: Node3D = null
+	if invalid_case == &"socket_escape":
+		external_target = Node3D.new()
+		external_target.name = &"HealthBar3D"
+		(Engine.get_main_loop() as SceneTree).root.add_child(external_target)
 	var before := _snapshot(presentation, model)
+	var external_children_before := external_target.get_child_count() if external_target != null else 0
 	var candidates_before := _candidate_count(model)
 	var orphan_nodes_before := int(Performance.get_monitor(Performance.OBJECT_ORPHAN_NODE_COUNT))
 	TestAssertions.truthy(not presentation.set_body_preset(&"feminine"), "%s rejection is reported by the public body API" % invalid_case, failures)
@@ -152,9 +173,13 @@ func _test_rejection_preserves_state(invalid_case: StringName, failures: Array[S
 	TestAssertions.equal(after, before, "%s rejection preserves body, equipment, materials, regions, palette, preset, transforms, and ground state" % invalid_case, failures)
 	TestAssertions.equal(_candidate_count(model), candidates_before, "%s rejection leaves no additional staged candidate" % invalid_case, failures)
 	TestAssertions.equal(int(Performance.get_monitor(Performance.OBJECT_ORPHAN_NODE_COUNT)), orphan_nodes_before, "%s rejection leaves no orphan candidate nodes" % invalid_case, failures)
+	if external_target != null:
+		TestAssertions.equal(external_target.get_child_count(), external_children_before, "%s rejection never reparents equipment below external HealthBar3D" % invalid_case, failures)
+		external_target.free()
 	presentation.free()
 
-func _fixture(visual: EquipmentVisualDefinition, feminine_without_geometry: bool = false) -> Dictionary:
+func _fixture(visual: EquipmentVisualDefinition, failures: Array[String], feminine_without_geometry: bool = false) -> Dictionary:
+	var failures_before := failures.size()
 	var presentation := CharacterPresentation.new()
 	presentation.name = &"Presentation"
 	(Engine.get_main_loop() as SceneTree).root.add_child(presentation)
@@ -165,15 +190,20 @@ func _fixture(visual: EquipmentVisualDefinition, feminine_without_geometry: bool
 	_add_rig_and_sockets(model)
 	_add_body(model, &"MasculineTorso", &"masculine", true, false)
 	_add_body(model, &"FeminineTorso", &"feminine", false, feminine_without_geometry)
-	TestAssertions.truthy(model.set_body_preset(&"masculine"), "fixture activates masculine body", [])
-	TestAssertions.truthy(presentation.set_palette(&"ember", Color("d66a42")), "fixture applies palette", [])
+	TestAssertions.truthy(model.set_body_preset(&"masculine"), "fixture activates masculine body", failures)
+	if failures.size() != failures_before: presentation.free(); return {}
+	TestAssertions.truthy(presentation.set_palette(&"ember", Color("d66a42")), "fixture applies palette", failures)
+	if failures.size() != failures_before: presentation.free(); return {}
 	if visual != null:
-		TestAssertions.truthy(presentation.apply_equipment_visual(SLOT_ID, visual), "fixture equips initial masculine fit", [])
-	TestAssertions.truthy(presentation.refresh_grounding(), "fixture starts grounded", [])
+		TestAssertions.truthy(presentation.apply_equipment_visual(SLOT_ID, visual), "fixture equips initial masculine fit", failures)
+		if failures.size() != failures_before: presentation.free(); return {}
+	TestAssertions.truthy(presentation.refresh_grounding(), "fixture starts grounded", failures)
+	if failures.size() != failures_before: presentation.free(); return {}
 	model.transform = Transform3D(Basis.from_euler(Vector3(0.0, 0.17, 0.0)), Vector3(0.25, model.position.y, -0.4))
 	return {&"presentation": presentation, &"model": model}
 
-func _nested_body_fixture(visual: EquipmentVisualDefinition) -> Dictionary:
+func _nested_body_fixture(visual: EquipmentVisualDefinition, failures: Array[String]) -> Dictionary:
+	var failures_before := failures.size()
 	var presentation := CharacterPresentation.new()
 	presentation.name = &"Presentation"
 	(Engine.get_main_loop() as SceneTree).root.add_child(presentation)
@@ -184,10 +214,14 @@ func _nested_body_fixture(visual: EquipmentVisualDefinition) -> Dictionary:
 	_add_rig_and_sockets(model)
 	_add_nested_body(model, &"MasculineBody", &"MasculineTorsoRegion", &"masculine", true, 1.0)
 	_add_nested_body(model, &"FeminineBody", &"FeminineTorsoRegion", &"feminine", false, -1.0)
-	TestAssertions.truthy(model.set_body_preset(&"masculine"), "nested fixture activates masculine body", [])
-	TestAssertions.truthy(presentation.set_palette(&"ember", Color("d66a42")), "nested fixture applies palette", [])
-	TestAssertions.truthy(presentation.apply_equipment_visual(SLOT_ID, visual), "nested fixture equips initial masculine fit", [])
-	TestAssertions.truthy(presentation.refresh_grounding(), "nested fixture starts grounded", [])
+	TestAssertions.truthy(model.set_body_preset(&"masculine"), "nested fixture activates masculine body", failures)
+	if failures.size() != failures_before: presentation.free(); return {}
+	TestAssertions.truthy(presentation.set_palette(&"ember", Color("d66a42")), "nested fixture applies palette", failures)
+	if failures.size() != failures_before: presentation.free(); return {}
+	TestAssertions.truthy(presentation.apply_equipment_visual(SLOT_ID, visual), "nested fixture equips initial masculine fit", failures)
+	if failures.size() != failures_before: presentation.free(); return {}
+	TestAssertions.truthy(presentation.refresh_grounding(), "nested fixture starts grounded", failures)
+	if failures.size() != failures_before: presentation.free(); return {}
 	return {&"presentation": presentation, &"model": model}
 
 func _add_rig_and_sockets(model: ForgeHumanoidModel) -> void:
