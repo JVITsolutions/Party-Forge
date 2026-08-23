@@ -18,6 +18,35 @@ const SLOT_SOCKET_PATHS := {
 	&"main_hand": "HitPivot/BodyPivot/HipsPivot/TorsoPivot/RightShoulderPivot/RightElbowPivot/RightHandSocket",
 	&"off_hand": "HitPivot/BodyPivot/HipsPivot/TorsoPivot/LeftShoulderPivot/LeftElbowPivot/LeftHandSocket",
 }
+const SEMANTIC_SOCKET_ROOT_NAME: StringName = &"SemanticSockets"
+const SEMANTIC_SOCKET_BONES := {
+	&"helmet": &"Head",
+	&"body_armour": &"Chest",
+	&"legs": &"Hips",
+	&"gloves": &"Hand.R",
+	&"boots": &"Foot.R",
+	&"amulet": &"Neck",
+	&"ring_left": &"Hand.L",
+	&"ring_right": &"Hand.R",
+	&"belt": &"Hips",
+	&"main_hand": &"Hand.R",
+	&"off_hand": &"Hand.L",
+}
+const LEGACY_SOCKET_SLOT_BY_NAME := {
+	&"HelmetSocket": &"helmet",
+	&"BodyArmourSocket": &"body_armour",
+	&"LegsSocket": &"legs",
+	&"GlovesSocket": &"gloves",
+	&"BootsSocket": &"boots",
+	&"AmuletSocket": &"amulet",
+	&"BeltSocket": &"belt",
+	&"MainHandSocket": &"main_hand",
+	&"RightHandSocket": &"main_hand",
+	&"OffHandSocket": &"off_hand",
+	&"LeftHandSocket": &"off_hand",
+}
+const GENERATED_SEMANTIC_ROOT_META: StringName = &"forge_generated_legacy_semantic_root"
+const FALLBACK_SOCKET_PATH_META: StringName = &"fallback_socket_path"
 
 var body_nodes: Dictionary = {}
 var palette_meshes: Dictionary = {}
@@ -93,7 +122,7 @@ func apply_equipment_visual(slot_id: StringName, definition: EquipmentVisualDefi
 				attachment_nodes.append(attachment)
 	for attachment: Node3D in attachment_nodes:
 		var socket_id := StringName(attachment.get_meta(&"equipment_socket_id", definition.socket_id))
-		var socket := get_node_or_null(NodePath(String(socket_id))) as Node3D
+		var socket := _resolve_socket(socket_id, slot_id, false)
 		if socket == null:
 			candidate_root.free()
 			return false
@@ -134,12 +163,7 @@ func equipped_weapon_family() -> StringName:
 	return main.weapon_animation_family_id if main != null and not main.weapon_animation_family_id.is_empty() else &"unarmed"
 
 func socket_global_transform(socket_id: StringName) -> Transform3D:
-	if not String(socket_id).contains("/"):
-		for slot_id: StringName in [&"main_hand", &"off_hand"]:
-			var equipment_socket := _equipped_node_named(slot_id, socket_id)
-			if equipment_socket != null:
-				return equipment_socket.global_transform if equipment_socket.is_inside_tree() else _transform_without_tree(equipment_socket)
-	var socket := get_node_or_null(NodePath(String(socket_id))) as Node3D
+	var socket := _resolve_socket(socket_id)
 	if socket != null and socket.is_inside_tree():
 		return socket.global_transform
 	if socket != null:
@@ -147,7 +171,7 @@ func socket_global_transform(socket_id: StringName) -> Transform3D:
 	return global_transform if is_inside_tree() else _transform_without_tree(self)
 
 func has_equipment_slot(slot_id: StringName) -> bool:
-	return EquipmentSlotCatalog.is_valid(slot_id) and SLOT_SOCKET_PATHS.has(slot_id) and get_node_or_null(NodePath(String(SLOT_SOCKET_PATHS[slot_id]))) != null
+	return EquipmentSlotCatalog.is_valid(slot_id) and _resolve_socket(slot_id, slot_id, false) != null
 
 func equipped_anchor_names(slot_id: StringName) -> Array[StringName]:
 	var names: Array[StringName] = []
@@ -159,13 +183,13 @@ func equipped_anchor_names(slot_id: StringName) -> Array[StringName]:
 	return names
 
 func equipment_anchor_global_transform(slot_id: StringName, anchor_name: StringName) -> Transform3D:
-	var anchor := _equipped_node_named(slot_id, anchor_name)
+	var anchor := _resolve_socket(anchor_name, slot_id)
 	if anchor == null:
 		return global_transform if is_inside_tree() else _transform_without_tree(self)
 	return anchor.global_transform if anchor.is_inside_tree() else _transform_without_tree(anchor)
 
 func equipment_anchor_clearance(slot_id: StringName, anchor_name: StringName) -> float:
-	var anchor := _equipped_node_named(slot_id, anchor_name)
+	var anchor := _resolve_socket(anchor_name, slot_id)
 	var arm_bounds := _body_arm_bounds()
 	if anchor == null or arm_bounds.is_empty():
 		return -1.0
@@ -280,6 +304,7 @@ func _clear_equipped_node(slot_id: StringName) -> void:
 	equipped_nodes.erase(slot_id)
 
 func _ensure_cache() -> void:
+	_ensure_semantic_socket_root()
 	if _cache_ready:
 		return
 	body_nodes.clear()
@@ -367,6 +392,84 @@ func _equipped_node_named(slot_id: StringName, node_name: StringName) -> Node3D:
 		if found != null:
 			return found
 	return null
+
+func _resolve_socket(socket_id: StringName, slot_id: StringName = &"", include_equipped_anchors: bool = true) -> Node3D:
+	if include_equipped_anchors and not String(socket_id).contains("/"):
+		var equipped_slots: Array[StringName] = []
+		if not slot_id.is_empty():
+			equipped_slots.append(slot_id)
+		else:
+			equipped_slots.assign([&"main_hand", &"off_hand"])
+		for equipped_slot: StringName in equipped_slots:
+			var equipped_socket := _equipped_node_named(equipped_slot, socket_id)
+			if equipped_socket != null:
+				return equipped_socket
+	var semantic_slot := _semantic_slot_for(socket_id, slot_id)
+	if not semantic_slot.is_empty():
+		var semantic_root := _ensure_semantic_socket_root()
+		var semantic_socket := semantic_root.get_node_or_null(NodePath(String(semantic_slot))) as Node3D
+		if semantic_socket is BoneAttachment3D:
+			return semantic_socket if _is_valid_rig_socket(semantic_slot, semantic_socket as BoneAttachment3D) else null
+		if semantic_socket == null or not semantic_root.has_meta(GENERATED_SEMANTIC_ROOT_META):
+			return null
+		var fallback_path := String(semantic_socket.get_meta(FALLBACK_SOCKET_PATH_META, ""))
+		if fallback_path != String(SLOT_SOCKET_PATHS.get(semantic_slot, "")):
+			return null
+		var semantic_fallback := get_node_or_null(NodePath(fallback_path)) as Node3D
+		if semantic_fallback != null:
+			return semantic_fallback
+	var exact_fallback := get_node_or_null(NodePath(String(socket_id))) as Node3D
+	if exact_fallback != null:
+		return exact_fallback
+	return null
+
+func _semantic_slot_for(socket_id: StringName, slot_id: StringName) -> StringName:
+	var socket_text := String(socket_id)
+	var leaf_name := StringName(socket_text.get_file())
+	if SLOT_SOCKET_PATHS.has(slot_id):
+		var slot_path := String(SLOT_SOCKET_PATHS[slot_id])
+		if socket_id == slot_id or socket_text == slot_path or leaf_name == StringName(slot_path.get_file()):
+			return slot_id
+	if SLOT_SOCKET_PATHS.has(socket_id):
+		return socket_id
+	return LEGACY_SOCKET_SLOT_BY_NAME.get(leaf_name, &"")
+
+func _ensure_semantic_socket_root() -> Node3D:
+	var existing := get_node_or_null(NodePath(String(SEMANTIC_SOCKET_ROOT_NAME))) as Node3D
+	if existing != null:
+		return existing
+	var semantic_root := Node3D.new()
+	semantic_root.name = SEMANTIC_SOCKET_ROOT_NAME
+	semantic_root.set_meta(GENERATED_SEMANTIC_ROOT_META, true)
+	add_child(semantic_root)
+	for slot_id: StringName in SLOT_SOCKET_PATHS:
+		var descriptor := Node3D.new()
+		descriptor.name = slot_id
+		descriptor.set_meta(FALLBACK_SOCKET_PATH_META, SLOT_SOCKET_PATHS[slot_id])
+		semantic_root.add_child(descriptor)
+	return semantic_root
+
+func _is_valid_rig_socket(slot_id: StringName, attachment: BoneAttachment3D) -> bool:
+	var expected_bone: StringName = SEMANTIC_SOCKET_BONES.get(slot_id, &"")
+	if expected_bone.is_empty() or attachment.bone_name != expected_bone:
+		return false
+	var skeleton: Skeleton3D
+	if attachment.use_external_skeleton:
+		skeleton = attachment.get_node_or_null(attachment.external_skeleton) as Skeleton3D
+	else:
+		var cursor := attachment.get_parent()
+		while cursor != null and cursor != self:
+			if cursor is Skeleton3D:
+				skeleton = cursor as Skeleton3D
+				break
+			cursor = cursor.get_parent()
+	if skeleton == null:
+		return false
+	var matching_bones := 0
+	for bone_index: int in skeleton.get_bone_count():
+		if skeleton.get_bone_name(bone_index) == expected_bone:
+			matching_bones += 1
+	return matching_bones == 1
 
 func _equipment_bounds(slot_id: StringName) -> AABB:
 	var bounds := AABB()
