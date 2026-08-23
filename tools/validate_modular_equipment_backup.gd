@@ -186,7 +186,7 @@ class BackupVerifier extends RefCounted:
 
 
 	func _validate_root(backup_root: String, errors: Array[String]) -> void:
-		if not _is_local_drive_absolute(backup_root) or _is_unsafe_local_path(backup_root):
+		if not _is_normalized_local_absolute(backup_root):
 			errors.append("%s stage=request field=backup_root reason=must be an explicit local absolute path" % ERROR_PREFIX)
 		elif not DirAccess.dir_exists_absolute(backup_root):
 			errors.append("%s stage=request field=backup_root reason=directory does not exist" % ERROR_PREFIX)

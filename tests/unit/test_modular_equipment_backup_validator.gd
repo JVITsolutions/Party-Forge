@@ -40,6 +40,7 @@ func run() -> Array[String]:
 	_test_invalid_utf8_manifest(service, failures)
 	_test_source_path_metadata(service, failures)
 	_test_virtual_paths_rejected(service, entry_point, failures)
+	_test_malformed_local_backup_roots(service, entry_point, failures)
 	_test_corrupt_manifest_totals(service, failures)
 	_test_single_line_dynamic_errors(service, failures)
 	_test_unicode_line_separator_errors(service, entry_point, failures)
@@ -196,6 +197,27 @@ func _test_virtual_paths_rejected(service: RefCounted, entry_point: Object, fail
 			TestAssertions.equal(cli_exit, 1, "%s %s CLI source metadata exits nonzero" % [field, scheme], failures)
 			TestAssertions.truthy(expected in _captured_lines, "%s %s CLI source metadata rejects" % [field, scheme], failures)
 			TestAssertions.equal(_snapshot(root), before, "%s %s CLI source failure is read-only" % [field, scheme], failures)
+
+
+func _test_malformed_local_backup_roots(service: RefCounted, entry_point: Object, failures: Array[String]) -> void:
+	var cases: Array[Dictionary] = [
+		{"id": "dot-segment", "path": "C:/trusted/./backup"},
+		{"id": "parent-segment", "path": "C:/trusted/../backup"},
+		{"id": "repeated-separator", "path": "C:/trusted//backup"},
+		{"id": "trailing-separator", "path": "C:/trusted/backup/"},
+		{"id": "later-backslash", "path": "C:/trusted\\backup"},
+		{"id": "control-character", "path": "C:/trusted/%sbackup" % String.chr(1)},
+	]
+	var expected := "PARTY_FORGE_MODULAR_BACKUP_ERROR stage=request field=backup_root reason=must be an explicit local absolute path"
+	for test_case: Dictionary in cases:
+		var backup_root := String(test_case["path"])
+		var service_result := service.call(&"verify_backup", backup_root, PackedStringArray(EXPECTED_PATHS)) as Dictionary
+		TestAssertions.equal(service_result.get("errors", PackedStringArray()), PackedStringArray([expected]), "%s service backup root rejects before access" % test_case["id"], failures)
+
+		_captured_lines.clear()
+		var cli_exit := int(entry_point.call(&"run_cli", PackedStringArray(["--backup-root", backup_root]), PackedStringArray(EXPECTED_PATHS), Callable(self, &"_capture_line")))
+		TestAssertions.equal(cli_exit, 1, "%s CLI backup root exits nonzero" % test_case["id"], failures)
+		TestAssertions.equal(_captured_lines, [expected], "%s CLI backup root rejects before access" % test_case["id"], failures)
 
 
 func _test_corrupt_manifest_totals(service: RefCounted, failures: Array[String]) -> void:
