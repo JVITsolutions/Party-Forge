@@ -92,6 +92,16 @@ func apply_profile(profile: CharacterVisualProfile, primary_color: Color) -> boo
 	return true
 
 func set_body_preset(preset_id: StringName) -> bool:
+	if active_model != null and active_model.has_method(&"prepare_body_preset_change") and active_model.has_method(&"commit_body_preset_change") and active_model.has_method(&"discard_body_preset_change"):
+		var candidate: Dictionary = active_model.call(&"prepare_body_preset_change", preset_id)
+		if not bool(candidate.get(&"ok", false)):
+			active_model.call(&"discard_body_preset_change", candidate)
+			return false
+		if not bool(active_model.call(&"commit_body_preset_change", candidate)):
+			active_model.call(&"discard_body_preset_change", candidate)
+			return false
+		_refresh_grounding_dependents()
+		return true
 	var applied := active_model != null and _call_bool(&"set_body_preset", [preset_id])
 	return applied and (not active_model.has_method(&"refresh_grounding") or refresh_grounding())
 
@@ -138,11 +148,14 @@ func refresh_equipment_visuals(definitions_by_slot: Dictionary) -> PackedStringA
 func refresh_grounding() -> bool:
 	var grounded := active_model != null and active_model.has_method(&"refresh_grounding") and bool(active_model.call(&"refresh_grounding"))
 	if grounded:
-		var actor := get_parent()
-		var health_bar := actor.get_node_or_null("HealthBar3D") if actor != null else null
-		if health_bar != null and health_bar.has_method(&"refresh_presentation_anchor"):
-			health_bar.call(&"refresh_presentation_anchor")
+		_refresh_grounding_dependents()
 	return grounded
+
+func _refresh_grounding_dependents() -> void:
+	var actor := get_parent()
+	var health_bar := actor.get_node_or_null("HealthBar3D") if actor != null else null
+	if health_bar != null and health_bar.has_method(&"refresh_presentation_anchor"):
+		health_bar.call(&"refresh_presentation_anchor")
 
 func visual_bounds() -> AABB:
 	if active_model == null or not active_model.has_method(&"visual_bounds"):

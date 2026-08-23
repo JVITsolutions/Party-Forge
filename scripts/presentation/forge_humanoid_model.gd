@@ -48,6 +48,7 @@ const LEGACY_SOCKET_SLOT_BY_NAME := {
 }
 const GENERATED_SEMANTIC_ROOT_META: StringName = &"forge_generated_legacy_semantic_root"
 const FALLBACK_SOCKET_PATH_META: StringName = &"fallback_socket_path"
+const BODY_FIT_CANDIDATE_META: StringName = &"body_fit_candidate"
 
 var body_nodes: Dictionary = {}
 var palette_meshes: Dictionary = {}
@@ -79,6 +80,80 @@ func set_body_preset(preset_id: StringName) -> bool:
 	_active_body_preset = preset_id
 	_refresh_hidden_body_regions()
 	return true
+
+func prepare_body_preset_change(preset_id: StringName) -> Dictionary:
+	_ensure_cache()
+	if preset_id not in BODY_PRESETS or (body_nodes.get(preset_id, []) as Array).is_empty():
+		return _body_fit_failure()
+	var candidate := {
+		&"ok": false,
+		&"model_instance_id": get_instance_id(),
+		&"preset_id": preset_id,
+		&"equipment": {},
+		&"hidden_regions": {},
+		&"material_bases": {},
+		&"ground_y": position.y,
+	}
+	var candidate_equipment := candidate[&"equipment"] as Dictionary
+	var hidden_regions := candidate[&"hidden_regions"] as Dictionary
+	var material_bases := candidate[&"material_bases"] as Dictionary
+	for slot_id: StringName in equipped_definitions:
+		var definition := equipped_definitions[slot_id] as EquipmentVisualDefinition
+		var staged := _stage_body_fit_equipment(slot_id, definition, preset_id, material_bases)
+		if not bool(staged.get(&"ok", false)):
+			_discard_staged_equipment(candidate_equipment)
+			return _body_fit_failure()
+		candidate_equipment[slot_id] = staged
+		var descriptor := definition.body_fit_for(preset_id) if definition != null else null
+		if definition != null and definition.attachment_mode == &"shared_skin":
+			if descriptor == null:
+				_discard_staged_equipment(candidate_equipment)
+				return _body_fit_failure()
+			for region: StringName in descriptor.hide_body_regions:
+				if region.is_empty() or not body_region_nodes.has(region):
+					_discard_staged_equipment(candidate_equipment)
+					return _body_fit_failure()
+				hidden_regions[region] = true
+	var bounds := _candidate_visual_bounds(preset_id, hidden_regions, candidate_equipment)
+	if bounds.size == Vector3.ZERO or not bounds.position.is_finite() or not bounds.size.is_finite():
+		_discard_staged_equipment(candidate_equipment)
+		return _body_fit_failure()
+	var candidate_ground_y := -bounds.position.y
+	if not is_finite(candidate_ground_y) or absf(candidate_ground_y + bounds.position.y) > 0.001:
+		_discard_staged_equipment(candidate_equipment)
+		return _body_fit_failure()
+	candidate[&"ground_y"] = candidate_ground_y
+	candidate[&"ok"] = true
+	return candidate
+
+func commit_body_preset_change(candidate: Dictionary) -> bool:
+	if not _body_fit_candidate_is_committable(candidate):
+		return false
+	var preset_id := StringName(candidate[&"preset_id"])
+	var candidate_equipment := candidate[&"equipment"] as Dictionary
+	for slot_id: StringName in equipped_definitions.keys():
+		_clear_equipped_node(slot_id)
+	for body_id: StringName in body_nodes:
+		for node: Node3D in body_nodes[body_id]:
+			node.visible = body_id == preset_id
+	_active_body_preset = preset_id
+	for slot_id: StringName in candidate_equipment:
+		_commit_staged_equipment(slot_id, candidate_equipment[slot_id] as Dictionary)
+	for mesh: MeshInstance3D in candidate[&"material_bases"] as Dictionary:
+		base_materials[mesh] = (candidate[&"material_bases"] as Dictionary)[mesh]
+	_apply_candidate_region_visibility(preset_id, candidate[&"hidden_regions"] as Dictionary)
+	position.y = float(candidate[&"ground_y"])
+	_apply_feedback_colors()
+	candidate[&"equipment"] = {}
+	candidate[&"ok"] = false
+	return true
+
+func discard_body_preset_change(candidate: Dictionary) -> void:
+	var equipment: Variant = candidate.get(&"equipment", {})
+	if equipment is Dictionary:
+		_discard_staged_equipment(equipment as Dictionary)
+	candidate[&"equipment"] = {}
+	candidate[&"ok"] = false
 
 func set_palette(palette_id: StringName, primary_color: Color) -> bool:
 	_ensure_cache()
@@ -382,6 +457,218 @@ func _apply_shared_skin_equipment(slot_id: StringName, definition: EquipmentVisu
 	_apply_feedback_colors()
 	return true
 
+func _stage_body_fit_equipment(slot_id: StringName, definition: EquipmentVisualDefinition, preset_id: StringName, material_bases: Dictionary) -> Dictionary:
+	if definition == null or slot_id not in definition.supported_slot_ids or not EquipmentSlotCatalog.is_valid(slot_id):
+		return _body_fit_failure()
+	if not definition.combat_visible:
+		return {&"ok": true, &"kind": &"hidden", &"definition": definition, &"root": null, &"attachments": []}
+	var descriptor := definition.body_fit_for(preset_id)
+	if descriptor == null or descriptor.presentation_scene == null or descriptor.mesh_root_paths.is_empty():
+		return _body_fit_failure()
+	if definition.attachment_mode == &"shared_skin":
+		return _stage_shared_skin_body_fit(definition, descriptor, material_bases)
+	return _stage_rigid_body_fit(slot_id, definition, descriptor, material_bases)
+
+func _stage_shared_skin_body_fit(definition: EquipmentVisualDefinition, descriptor: EquipmentBodyFitDescriptor, material_bases: Dictionary) -> Dictionary:
+	var skeleton := _canonical_actor_skeleton()
+	if skeleton == null:
+		return _body_fit_failure()
+	var binding := SkinnedEquipmentBindingScript.new()
+	var result: Dictionary = binding.call(&"stage_candidate", self, skeleton, definition, descriptor)
+	if not bool(result.get(&"ok", false)):
+		return _body_fit_failure()
+	var candidate := result.get(&"root") as Node3D
+	if candidate == null:
+		return _body_fit_failure()
+	candidate.set_meta(BODY_FIT_CANDIDATE_META, true)
+	_apply_item_colors(candidate, definition, material_bases)
+	return {&"ok": true, &"kind": &"shared_skin", &"definition": definition, &"root": candidate, &"attachments": []}
+
+func _stage_rigid_body_fit(slot_id: StringName, definition: EquipmentVisualDefinition, descriptor: EquipmentBodyFitDescriptor, material_bases: Dictionary) -> Dictionary:
+	var instance := descriptor.presentation_scene.instantiate()
+	var candidate_root := instance as Node3D
+	if candidate_root == null:
+		if instance != null:
+			instance.free()
+		return _body_fit_failure()
+	candidate_root.set_meta(BODY_FIT_CANDIDATE_META, true)
+	var attachment_nodes: Array[Node3D] = []
+	for root_path: NodePath in descriptor.mesh_root_paths:
+		var selected_root := candidate_root.get_node_or_null(root_path) as Node3D
+		if selected_root == null:
+			candidate_root.free()
+			return _body_fit_failure()
+		var selected_attachments: Array[Node3D] = []
+		if selected_root.has_meta(&"equipment_socket_id"):
+			selected_attachments.append(selected_root)
+		for node: Node in selected_root.find_children("*", "Node3D", true, false):
+			if node.has_meta(&"equipment_socket_id"):
+				selected_attachments.append(node as Node3D)
+		if selected_attachments.is_empty():
+			selected_attachments.append(selected_root)
+		for attachment: Node3D in selected_attachments:
+			if attachment not in attachment_nodes:
+				attachment_nodes.append(attachment)
+	var explicitly_requested_socket_ids: Array[StringName] = []
+	for attachment: Node3D in attachment_nodes:
+		if attachment.has_meta(&"equipment_socket_id"):
+			explicitly_requested_socket_ids.append(StringName(attachment.get_meta(&"equipment_socket_id")))
+	var allow_explicit_owned_hand_pair := &"LeftHandSocket" in explicitly_requested_socket_ids and &"RightHandSocket" in explicitly_requested_socket_ids
+	var staged: Array[Dictionary] = []
+	for attachment: Node3D in attachment_nodes:
+		var socket_id := StringName(attachment.get_meta(&"equipment_socket_id", definition.socket_id))
+		var socket := _resolve_socket(socket_id, slot_id, false, allow_explicit_owned_hand_pair)
+		if socket == null:
+			candidate_root.free()
+			return _body_fit_failure()
+		staged.append({&"node": attachment, &"socket": socket})
+		_apply_item_colors(attachment, definition, material_bases)
+	return {&"ok": true, &"kind": &"rigid", &"definition": definition, &"root": candidate_root, &"attachments": staged}
+
+func _candidate_visual_bounds(preset_id: StringName, hidden_regions: Dictionary, candidate_equipment: Dictionary) -> AABB:
+	var bounds := AABB()
+	var has_bounds := false
+	var installed_meshes: Dictionary = {}
+	for slot_id: StringName in equipped_nodes:
+		for attachment: Node3D in equipped_nodes[slot_id]:
+			for mesh: MeshInstance3D in _meshes_including_root(attachment):
+				installed_meshes[mesh] = true
+	for mesh: MeshInstance3D in _all_meshes():
+		if installed_meshes.has(mesh) or bool(mesh.get_meta(BODY_FIT_CANDIDATE_META, false)):
+			continue
+		if not _mesh_visible_for_body_candidate(mesh, preset_id, hidden_regions):
+			continue
+		var transformed := _transform_from_model(mesh) * mesh.get_aabb()
+		bounds = transformed if not has_bounds else bounds.merge(transformed)
+		has_bounds = true
+	for slot_id: StringName in candidate_equipment:
+		var staged := candidate_equipment[slot_id] as Dictionary
+		var kind := StringName(staged.get(&"kind", &""))
+		if kind == &"shared_skin":
+			var root := staged.get(&"root") as Node3D
+			if root != null:
+				for mesh: MeshInstance3D in _meshes_including_root(root):
+					if not mesh.visible or mesh.mesh == null:
+						continue
+					var transformed := _transform_from_model(mesh) * mesh.get_aabb()
+					bounds = transformed if not has_bounds else bounds.merge(transformed)
+					has_bounds = true
+		elif kind == &"rigid":
+			for part: Dictionary in staged.get(&"attachments", []):
+				var attachment := part[&"node"] as Node3D
+				var socket := part[&"socket"] as Node3D
+				for mesh: MeshInstance3D in _meshes_including_root(attachment):
+					if not mesh.visible or mesh.mesh == null:
+						continue
+					var mesh_transform := _transform_from_model(socket) * attachment.transform * _relative_transform(attachment, mesh)
+					var transformed := mesh_transform * mesh.get_aabb()
+					bounds = transformed if not has_bounds else bounds.merge(transformed)
+					has_bounds = true
+	return bounds
+
+func _mesh_visible_for_body_candidate(mesh: MeshInstance3D, preset_id: StringName, hidden_regions: Dictionary) -> bool:
+	if mesh.mesh == null:
+		return false
+	var cursor: Node = mesh
+	while cursor != null and cursor != self:
+		if cursor is Node3D:
+			var node := cursor as Node3D
+			if node.has_meta(&"body_preset"):
+				if StringName(node.get_meta(&"body_preset")) != preset_id:
+					return false
+			elif not node.visible:
+				return false
+			if node.has_meta(&"body_region") and hidden_regions.has(StringName(node.get_meta(&"body_region"))):
+				return false
+		cursor = cursor.get_parent()
+	return true
+
+func _relative_transform(root: Node3D, node: Node3D) -> Transform3D:
+	var result := Transform3D.IDENTITY
+	var cursor: Node = node
+	while cursor != null and cursor != root:
+		if cursor is Node3D:
+			result = (cursor as Node3D).transform * result
+		cursor = cursor.get_parent()
+	return result
+
+func _body_fit_candidate_is_committable(candidate: Dictionary) -> bool:
+	if not bool(candidate.get(&"ok", false)) or int(candidate.get(&"model_instance_id", 0)) != get_instance_id():
+		return false
+	var preset_id := StringName(candidate.get(&"preset_id", &""))
+	if preset_id not in BODY_PRESETS or not is_finite(float(candidate.get(&"ground_y", NAN))):
+		return false
+	var equipment: Variant = candidate.get(&"equipment")
+	var hidden_regions: Variant = candidate.get(&"hidden_regions")
+	var material_bases: Variant = candidate.get(&"material_bases")
+	if not equipment is Dictionary or not hidden_regions is Dictionary or not material_bases is Dictionary:
+		return false
+	for slot_id: StringName in equipment as Dictionary:
+		var staged := (equipment as Dictionary)[slot_id] as Dictionary
+		var kind := StringName(staged.get(&"kind", &""))
+		if kind == &"hidden":
+			continue
+		var root := staged.get(&"root") as Node3D
+		if root == null or not is_instance_valid(root):
+			return false
+		if kind == &"rigid":
+			for part: Dictionary in staged.get(&"attachments", []):
+				if not is_instance_valid(part.get(&"node")) or not is_instance_valid(part.get(&"socket")):
+					return false
+		elif kind != &"shared_skin":
+			return false
+	return true
+
+func _commit_staged_equipment(slot_id: StringName, staged: Dictionary) -> void:
+	var definition := staged[&"definition"] as EquipmentVisualDefinition
+	var kind := StringName(staged[&"kind"])
+	if kind == &"hidden":
+		equipped_definitions[slot_id] = definition
+		return
+	var root := staged[&"root"] as Node3D
+	if kind == &"shared_skin":
+		root.remove_meta(BODY_FIT_CANDIDATE_META)
+		root.visible = true
+		equipped_nodes[slot_id] = [root]
+		equipped_definitions[slot_id] = definition
+		return
+	var installed: Array[Node3D] = []
+	for part: Dictionary in staged[&"attachments"]:
+		var attachment := part[&"node"] as Node3D
+		var socket := part[&"socket"] as Node3D
+		attachment.owner = null
+		if attachment != root:
+			attachment.reparent(socket, false)
+		else:
+			socket.add_child(attachment)
+		attachment.remove_meta(BODY_FIT_CANDIDATE_META)
+		installed.append(attachment)
+	if root not in installed:
+		root.free()
+	equipped_nodes[slot_id] = installed
+	equipped_definitions[slot_id] = definition
+
+func _apply_candidate_region_visibility(preset_id: StringName, hidden_regions: Dictionary) -> void:
+	for region: StringName in body_region_nodes:
+		for body_node: Node3D in body_region_nodes[region]:
+			if not is_instance_valid(body_node):
+				continue
+			var base_visible := bool(body_region_base_visibility.get(body_node, true))
+			if body_node.has_meta(&"body_preset"):
+				base_visible = StringName(body_node.get_meta(&"body_preset")) == preset_id
+			body_node.visible = base_visible and not hidden_regions.has(region)
+
+func _discard_staged_equipment(candidate_equipment: Dictionary) -> void:
+	for slot_id: StringName in candidate_equipment:
+		var staged := candidate_equipment[slot_id] as Dictionary
+		var root := staged.get(&"root") as Node3D
+		if root != null and is_instance_valid(root):
+			root.free()
+	candidate_equipment.clear()
+
+func _body_fit_failure() -> Dictionary:
+	return {&"ok": false, &"equipment": {}}
+
 func _canonical_actor_skeleton() -> Skeleton3D:
 	var contract := HumanoidRigContractScript.new()
 	var matches: Array[Skeleton3D] = []
@@ -411,7 +698,7 @@ func _refresh_hidden_body_regions() -> void:
 				base_visible = StringName(body_node.get_meta(&"body_preset")) == _active_body_preset
 			body_node.visible = base_visible and not hidden_regions.has(region)
 
-func _apply_item_colors(root: Node3D, definition: EquipmentVisualDefinition) -> void:
+func _apply_item_colors(root: Node3D, definition: EquipmentVisualDefinition, material_bases: Dictionary = base_materials) -> void:
 	for mesh: MeshInstance3D in _meshes_including_root(root):
 		var region := StringName(mesh.get_meta(&"palette_region", &""))
 		var material := mesh.material_override as StandardMaterial3D
@@ -426,7 +713,7 @@ func _apply_item_colors(root: Node3D, definition: EquipmentVisualDefinition) -> 
 		if typeof(color) == TYPE_COLOR:
 			unique_material.albedo_color = color as Color
 		mesh.material_override = unique_material
-		base_materials[mesh] = unique_material.duplicate() as StandardMaterial3D
+		material_bases[mesh] = unique_material.duplicate() as StandardMaterial3D
 
 func _refresh_equipped_wearer_accents() -> void:
 	for slot_id: StringName in equipped_definitions:
