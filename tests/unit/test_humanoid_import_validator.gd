@@ -5,6 +5,9 @@ const RIG_PATH := "res://data/presentation/humanoid_rigs/pf_humanoid_v1.tres"
 const CONTRACT_SCRIPT := preload("res://scripts/presentation/humanoid_rig_contract.gd")
 const DRIVER_SCRIPT := preload("res://scripts/presentation/legacy_pivot_skeleton_driver.gd")
 const REGION_SCRIPT := preload("res://scripts/presentation/body_region_catalog.gd")
+const CLI_FIXTURE_DIRECTORY := "res://.superpowers/sdd/humanoid-import-cli-fixtures"
+const CLI_MASCULINE_PATH := CLI_FIXTURE_DIRECTORY + "/masculine.tscn"
+const CLI_FEMININE_PATH := CLI_FIXTURE_DIRECTORY + "/feminine.tscn"
 const BODY_PATHS := {
 	&"masculine": "res://tests/fixtures/import/masculine.tscn",
 	&"feminine": "res://tests/fixtures/import/feminine.tscn",
@@ -25,6 +28,63 @@ const SLOT_BONES := {
 
 var _loaded_resources: Dictionary = {}
 var _captured_lines: Array[String] = []
+
+
+class MissingTangentMesh extends Mesh:
+	@export var source: ArrayMesh
+
+	func _init(value: ArrayMesh = null) -> void:
+		source = value
+
+	func _get_aabb() -> AABB:
+		return source.get_aabb()
+
+	func _get_blend_shape_count() -> int:
+		return source.get_blend_shape_count()
+
+	func _get_blend_shape_name(index: int) -> StringName:
+		return source.get_blend_shape_name(index)
+
+	func _get_surface_count() -> int:
+		return source.get_surface_count()
+
+	func _set_blend_shape_name(index: int, name: StringName) -> void:
+		source.set_blend_shape_name(index, name)
+
+	func _surface_get_array_index_len(surface: int) -> int:
+		return source.surface_get_array_index_len(surface)
+
+	func _surface_get_array_len(surface: int) -> int:
+		return source.surface_get_array_len(surface)
+
+	func _surface_get_arrays(surface: int) -> Array:
+		var arrays := source.surface_get_arrays(surface)
+		arrays[Mesh.ARRAY_TANGENT] = null
+		return arrays
+
+	func _surface_get_blend_shape_arrays(surface: int) -> Array:
+		return source.surface_get_blend_shape_arrays(surface)
+
+	func _surface_get_format(surface: int) -> int:
+		return int(source.surface_get_format(surface)) & ~int(Mesh.ARRAY_FORMAT_TANGENT)
+
+	func _surface_get_lods(surface: int) -> Dictionary:
+		return source.surface_get_lods(surface)
+
+	func _surface_get_material(surface: int) -> Material:
+		return source.surface_get_material(surface)
+
+	func _surface_get_primitive_type(surface: int) -> int:
+		return source.surface_get_primitive_type(surface)
+
+	func _surface_set_material(surface: int, material: Material) -> void:
+		source.surface_set_material(surface, material)
+
+	func surface_get_format(surface: int) -> int:
+		return _surface_get_format(surface)
+
+	func surface_get_primitive_type(surface: int) -> int:
+		return _surface_get_primitive_type(surface)
 
 
 func run() -> Array[String]:
@@ -49,6 +109,7 @@ func run() -> Array[String]:
 		_test_body_contract_failures(service, failures)
 		_test_shared_item_contracts(service, failures)
 		_test_cli_contract(entry_point, failures)
+		_test_actual_cli_process(failures)
 	_test_source_is_read_only(failures)
 	entry_point.free()
 	return failures
@@ -96,8 +157,24 @@ func _test_body_contract_failures(service: RefCounted, failures: Array[String]) 
 	_assert_body_error(service, _body_scene(rig, &"masculine", {&"texture_size": 2049}), rig, "materials asset=masculine reason=texture exceeds 2048px", "texture budget", failures)
 	_assert_body_error(service, _body_scene(rig, &"masculine", {&"texture_count": 5}), rig, "materials asset=masculine reason=material uses 5 textures; maximum is 4", "texture-map count budget", failures)
 	_assert_body_error(service, _body_scene(rig, &"masculine", {&"missing_uv": true}), rig, "geometry asset=masculine node=BodyRegion__head surface=0 reason=UV0 is missing", "UV0 coverage", failures)
+	_assert_body_error(service, _body_scene(rig, &"masculine", {&"nonfinite_uv": true}), rig, "geometry asset=masculine node=BodyRegion__head surface=0 reason=UV0 contains non-finite coordinates", "finite UV0 coverage", failures)
 	_assert_body_error(service, _body_scene(rig, &"masculine", {&"missing_normals": true}), rig, "geometry asset=masculine node=BodyRegion__head surface=0 reason=normals are missing or malformed", "normal coverage", failures)
-	_assert_body_error(service, _body_scene(rig, &"masculine", {&"missing_tangents": true}), rig, "geometry asset=masculine node=BodyRegion__head surface=0 reason=tangents are missing or malformed", "tangent coverage", failures)
+	var no_normal_map := service.call(&"validate_body_pair", _body_scene(rig, &"masculine", {&"missing_tangents": true}), _body_scene(rig, &"feminine", {&"missing_tangents": true}), rig) as Dictionary
+	TestAssertions.truthy(bool(no_normal_map.get(&"ok", false)), "missing tangents are allowed when active materials use no normal maps", failures)
+	var normal_mapped_scene := _body_scene(rig, &"masculine", {&"missing_tangents": true, &"normal_map": true})
+	var normal_mapped_instance := normal_mapped_scene.instantiate() as Node3D
+	var normal_mapped_head := normal_mapped_instance.find_child("BodyRegion__head", true, false) as MeshInstance3D
+	var normal_mapped_material := normal_mapped_head.mesh.surface_get_material(0) as StandardMaterial3D
+	TestAssertions.truthy(normal_mapped_material != null and normal_mapped_material.normal_enabled and normal_mapped_material.normal_texture != null, "normal-map tangent fixture has an active normal map", failures)
+	TestAssertions.truthy((normal_mapped_head.mesh.surface_get_format(0) & Mesh.ARRAY_FORMAT_TANGENT) == 0, "normal-map tangent fixture omits the tangent channel", failures)
+	normal_mapped_instance.free()
+	_assert_body_error(service, normal_mapped_scene, rig, "geometry asset=masculine node=BodyRegion__head surface=0 reason=tangents are missing or malformed for active normal map", "normal-mapped tangent coverage", failures)
+	var reused_texture := service.call(&"validate_body_pair", _body_scene(rig, &"masculine", {&"texture_count": 5, &"reuse_texture_slots": true}), _body_scene(rig, &"feminine"), rig) as Dictionary
+	TestAssertions.truthy(bool(reused_texture.get(&"ok", false)), "one packed texture reused across five material slots counts as one map", failures)
+	var reused_metrics := (reused_texture.get(&"bodies", {}) as Dictionary).get(&"masculine", {}) as Dictionary
+	TestAssertions.equal(reused_metrics.get(&"texture_count", -1), 1, "reused packed texture reports one distinct Texture2D identity", failures)
+	_assert_body_error(service, _body_scene(rig, &"masculine", {&"height": 1.5, &"invisible_geometry_height": 1.7}), rig, "bounds asset=masculine reason=visible height 1.500000 is outside 1.600000..1.850000", "own-hidden geometry cannot satisfy visible body height", failures)
+	_assert_body_error(service, _body_scene(rig, &"masculine", {&"height": 1.5, &"ancestor_invisible_geometry_height": 1.7}), rig, "bounds asset=masculine reason=visible height 1.500000 is outside 1.600000..1.850000", "ancestor-hidden geometry cannot satisfy visible body height", failures)
 	_assert_body_error(service, _body_scene(rig, &"masculine", {&"unweighted": true}), rig, "skinning asset=masculine node=BodyRegion__head vertex=0 reason=vertex is unweighted", "zero-weight vertices", failures)
 	_assert_body_error(service, _body_scene(rig, &"masculine", {&"unnormalized_weights": true}), rig, "skinning asset=masculine node=BodyRegion__head vertex=0 reason=weights total 0.499992 is not normalized", "normalized weights", failures)
 	_assert_body_error(service, _body_scene(rig, &"masculine", {&"eight_weights": true}), rig, "skinning asset=masculine node=BodyRegion__head vertex=0 reason=uses 8 influences; maximum is 4", "four-weight cap", failures)
@@ -120,15 +197,24 @@ func _test_shared_item_contracts(service: RefCounted, failures: Array[String]) -
 
 	_assert_shared_error(service, _shared_item_scene(rig), rig, [], expected_signature, budgets, "shared_item reason=active roots are empty", "active roots required", failures)
 	_assert_shared_error(service, _shared_item_scene(rig), rig, [NodePath("MissingRoot")], expected_signature, budgets, "shared_item root=MissingRoot reason=active root is missing", "active root coverage", failures)
+	_assert_shared_error(service, _shared_item_scene(rig), rig, [NodePath("MasculineRoot:position")], expected_signature, budgets, "shared_item root=MasculineRoot:position reason=active root path must be normalized and relative", "active root subnames reject", failures)
 	_assert_shared_error(service, _shared_item_scene(rig), rig, [NodePath("MasculineRoot"), NodePath("MasculineRoot/Mesh")], expected_signature, budgets, "shared_item reason=active roots overlap", "active roots cannot overlap", failures)
+	_assert_shared_error(service, _shared_item_scene(rig, {&"selected_root_zero_scale": true}), rig, [NodePath("MasculineRoot")], expected_signature, budgets, "shared_item node=MasculineRoot reason=transform is non-finite or non-invertible", "selected root zero scale", failures)
+	_assert_shared_error(service, _shared_item_scene(rig, {&"traversed_nonfinite_transform": true}), rig, [NodePath("MasculineRoot")], expected_signature, budgets, "shared_item node=Mesh reason=transform is non-finite or non-invertible", "traversed content finite transform", failures)
 	_assert_shared_error(service, _shared_item_scene(rig), rig, [NodePath("MasculineRoot")], "wrong", budgets, "shared_item node=Mesh reason=Skin bind signature mismatch", "exact bind signature", failures)
 	_assert_shared_error(service, _shared_item_scene(rig, {&"nested_skeleton": true}), rig, [NodePath("MasculineRoot")], expected_signature, budgets, "shared_item root=MasculineRoot reason=installed active root contains Skeleton3D", "installed duplicate skeleton", failures)
 	_assert_shared_error(service, _shared_item_scene(rig, {&"nested_player": true}), rig, [NodePath("MasculineRoot")], expected_signature, budgets, "shared_item root=MasculineRoot reason=installed active root contains AnimationPlayer", "installed duplicate animation player", failures)
 	_assert_shared_error(service, _shared_item_scene(rig, {&"wrong_skeleton_bone": true}), rig, [NodePath("MasculineRoot")], expected_signature, budgets, "shared_item node=Mesh reason=source skeleton does not match canonical rig", "auto-rig source skeleton", failures)
+	var sub_quantum_rest := service.call(&"validate_shared_item_scene", _shared_item_scene(rig, {&"rest_delta": 0.0000004}), rig, [NodePath("MasculineRoot")], expected_signature, budgets) as Dictionary
+	TestAssertions.truthy(bool(sub_quantum_rest.get(&"ok", false)), "shared-item rest drift below the 1e-6 quantization boundary remains canonical", failures)
+	_assert_shared_error(service, _shared_item_scene(rig, {&"rest_delta": 0.0000006}), rig, [NodePath("MasculineRoot")], expected_signature, budgets, "shared_item node=Mesh reason=source skeleton does not match canonical rig", "shared-item effective quantized rest boundary", failures)
+	_assert_shared_error(service, _shared_item_scene(rig, {&"rest_delta": 0.000004}), rig, [NodePath("MasculineRoot")], expected_signature, budgets, "shared_item node=Mesh reason=source skeleton does not match canonical rig", "shared-item approximate rest drift", failures)
 	_assert_shared_error(service, _shared_item_scene(rig, {&"wrong_skin_bone": true}), rig, [NodePath("MasculineRoot")], expected_signature, budgets, "shared_item node=Mesh reason=humanoid rig Skin bind AutoRigHips must resolve to exactly one canonical bone", "auto-rig item Skin", failures)
 	_assert_shared_error(service, _shared_item_scene(rig, {&"unweighted": true}), rig, [NodePath("MasculineRoot")], expected_signature, budgets, "shared_item node=Mesh vertex=0 reason=vertex is unweighted", "shared-item weight contract", failures)
 	_assert_shared_error(service, _shared_item_scene(rig, {&"material_count": 5}), rig, [NodePath("MasculineRoot")], expected_signature, {&"max_triangles": 3500, &"max_materials": 3, &"max_texture_size": 1024}, "shared_item reason=material count 5 exceeds hard cap 3", "shared-item material budget", failures)
 	_assert_shared_error(service, _shared_item_scene(rig, {&"texture_size": 1025}), rig, [NodePath("MasculineRoot")], expected_signature, {&"max_triangles": 3500, &"max_materials": 4, &"max_texture_size": 1024}, "shared_item reason=texture exceeds 1024px", "shared-item texture budget", failures)
+	var wrong_rig := Resource.new()
+	_assert_shared_error(service, _shared_item_scene(rig), wrong_rig, [NodePath("MasculineRoot")], expected_signature, budgets, "shared_item reason=canonical rig resource must be HumanoidRigDefinition", "shared-item rig resource type", failures)
 
 
 func _test_cli_contract(entry_point: Object, failures: Array[String]) -> void:
@@ -168,14 +254,70 @@ func _test_cli_contract(entry_point: Object, failures: Array[String]) -> void:
 	var missing_exit := int(entry_point.call(&"run_cli", args, Callable(self, &"_load_resource"), Callable(self, &"_capture_line")))
 	TestAssertions.equal(missing_exit, 1, "missing resource CLI request exits nonzero", failures)
 	_assert_line_contains(_captured_lines, "resource asset=masculine path=%s reason=missing or unloadable PackedScene" % BODY_PATHS[&"masculine"], "missing resource rejection", failures)
+	_loaded_resources[BODY_PATHS[&"masculine"]] = _body_scene(rig, &"masculine")
+	_loaded_resources[RIG_PATH] = Resource.new()
+	_captured_lines.clear()
+	var wrong_rig_exit := int(entry_point.call(&"run_cli", args, Callable(self, &"_load_resource"), Callable(self, &"_capture_line")))
+	TestAssertions.equal(wrong_rig_exit, 1, "wrong rig resource type CLI request exits nonzero", failures)
+	_assert_line_contains(_captured_lines, "resource asset=rig path=%s reason=must be HumanoidRigDefinition" % RIG_PATH, "wrong rig resource type rejection", failures)
+
+
+func _test_actual_cli_process(failures: Array[String]) -> void:
+	var absolute_directory := ProjectSettings.globalize_path(CLI_FIXTURE_DIRECTORY)
+	var make_error := DirAccess.make_dir_recursive_absolute(absolute_directory)
+	TestAssertions.equal(make_error, OK, "CLI subprocess fixture directory can be prepared", failures)
+	if make_error != OK:
+		return
+	var rig := load(RIG_PATH) as Resource
+	var masculine_save := ResourceSaver.save(_body_scene(rig, &"masculine"), CLI_MASCULINE_PATH)
+	var feminine_save := ResourceSaver.save(_body_scene(rig, &"feminine"), CLI_FEMININE_PATH)
+	TestAssertions.equal(masculine_save, OK, "CLI masculine fixture saves", failures)
+	TestAssertions.equal(feminine_save, OK, "CLI feminine fixture saves", failures)
+	if masculine_save == OK and feminine_save == OK:
+		var good_output: Array = []
+		var good_exit := OS.execute(OS.get_executable_path(), [
+			"--headless", "--path", ProjectSettings.globalize_path("res://"),
+			"--script", VALIDATOR_PATH, "--",
+			"--masculine-scene", CLI_MASCULINE_PATH,
+			"--feminine-scene", CLI_FEMININE_PATH,
+			"--rig", RIG_PATH,
+		], good_output, true)
+		var good_text := "\n".join(good_output)
+		TestAssertions.equal(good_exit, 0, "actual validator _initialize exits zero for good OS arguments; output=%s" % good_text, failures)
+		TestAssertions.truthy("PARTY_FORGE_HUMANOID_IMPORT_OK" in good_text, "actual validator subprocess emits success output", failures)
+	var bad_output: Array = []
+	var bad_exit := OS.execute(OS.get_executable_path(), [
+		"--headless", "--path", ProjectSettings.globalize_path("res://"),
+		"--script", VALIDATOR_PATH, "--", "--write", "res://forbidden.tscn",
+	], bad_output, true)
+	var bad_text := "\n".join(bad_output)
+	TestAssertions.equal(bad_exit, 1, "actual validator _initialize propagates nonzero process exit for bad OS arguments", failures)
+	TestAssertions.truthy("argument=--write reason=unknown; validator is read-only" in bad_text, "actual validator subprocess emits deterministic rejection output", failures)
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(CLI_MASCULINE_PATH))
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(CLI_FEMININE_PATH))
+	DirAccess.remove_absolute(absolute_directory)
 
 
 func _test_source_is_read_only(failures: Array[String]) -> void:
 	var source := FileAccess.get_file_as_string(ProjectSettings.globalize_path(VALIDATOR_PATH))
-	for forbidden: String in ["FileAccess.WRITE", "ResourceSaver", "store_string", "store_buffer", "DirAccess.make_dir", "ProjectSettings.set_setting", "change_import"]:
-		TestAssertions.truthy(forbidden not in source, "validator source contains no write capability %s" % forbidden, failures)
+	TestAssertions.truthy(not _source_exposes_write_capability(source), "validator source imports no filesystem/resource/project-setting write capabilities", failures)
+	for aliased_write_source: String in [
+		"const Writer = FileAccess\nfunc mutate(): Writer.open(path, FileAccess.WRITE)",
+		"const DirectoryWriter = DirAccess\nfunc mutate(): DirectoryWriter.make_dir(path)",
+		"const SaveAlias = ResourceSaver\nfunc mutate(): SaveAlias.save(resource, path)",
+		"const SettingsAlias = ProjectSettings\nfunc mutate(): SettingsAlias.set_setting(key, value)",
+	]:
+		TestAssertions.truthy(_source_exposes_write_capability(aliased_write_source), "read-only capability audit rejects write API aliases", failures)
 	var dependencies := ResourceLoader.get_dependencies(VALIDATOR_PATH)
 	TestAssertions.truthy("res://tools/build_shared_humanoid_scene.gd" not in dependencies, "validator does not invoke the scene builder", failures)
+	for dependency: String in dependencies:
+		TestAssertions.truthy(not dependency.begins_with("res://tools/"), "validator dependency graph contains no write-capable tool scripts: %s" % dependency, failures)
+
+
+func _source_exposes_write_capability(source: String) -> bool:
+	var capability_pattern := RegEx.new()
+	capability_pattern.compile("(^|[^A-Za-z0-9_])(FileAccess|DirAccess|ResourceSaver|ProjectSettings)($|[^A-Za-z0-9_])")
+	return capability_pattern.search(source) != null
 
 
 func _assert_body_error(service: RefCounted, masculine: PackedScene, rig: Resource, fragment: String, label: String, failures: Array[String]) -> void:
@@ -223,7 +365,7 @@ func _body_scene(rig: Resource, body_id: StringName, options: Dictionary = {}) -
 	for index: int in material_count:
 		var material := StandardMaterial3D.new()
 		var texture_size := int(options.get(&"texture_size", 4))
-		_populate_material_textures(material, texture_size, int(options.get(&"texture_count", 1)))
+		_populate_material_textures(material, texture_size, int(options.get(&"texture_count", 1)), bool(options.get(&"reuse_texture_slots", false)), bool(options.get(&"normal_map", false)))
 		materials.append(material)
 	var height := float(options.get(&"height", 1.7))
 	var ground_y := float(options.get(&"ground_y", 0.0))
@@ -231,9 +373,22 @@ func _body_scene(rig: Resource, body_id: StringName, options: Dictionary = {}) -
 	for region_id: StringName in REGION_SCRIPT.REGION_IDS:
 		if options.get(&"missing_region", &"") == region_id:
 			continue
-		var region := _region_node(rig, region_id, region_index, height, ground_y, materials[region_index % materials.size()], options)
-		root.add_child(region)
+		var region_height := float(options.get(&"invisible_geometry_height", height)) if region_id == &"head" and options.has(&"invisible_geometry_height") else height
+		if region_id == &"head" and options.has(&"ancestor_invisible_geometry_height"):
+			region_height = float(options[&"ancestor_invisible_geometry_height"])
+		var region := _region_node(rig, region_id, region_index, region_height, ground_y, materials[region_index % materials.size()], options)
+		var region_parent: Node3D = root
+		if region_id == &"head" and options.has(&"ancestor_invisible_geometry_height"):
+			var hidden_parent := Node3D.new()
+			hidden_parent.name = &"HiddenImportedGeometry"
+			hidden_parent.visible = false
+			root.add_child(hidden_parent)
+			hidden_parent.owner = root
+			region_parent = hidden_parent
+		region_parent.add_child(region)
 		region.owner = root
+		if region_parent != root:
+			region.skeleton = NodePath("../../CanonicalSkeleton")
 		region_index += 1
 	if options.has(&"duplicate_region"):
 		var duplicate_id := options[&"duplicate_region"] as StringName
@@ -254,10 +409,13 @@ func _body_scene(rig: Resource, body_id: StringName, options: Dictionary = {}) -
 	return scene
 
 
-func _populate_material_textures(material: StandardMaterial3D, texture_size: int, texture_count: int) -> void:
+func _populate_material_textures(material: StandardMaterial3D, texture_size: int, texture_count: int, reuse_texture_slots: bool = false, normal_map: bool = false) -> void:
 	var textures: Array[Texture2D] = []
 	for index: int in texture_count:
-		textures.append(ImageTexture.create_from_image(Image.create_empty(texture_size, 1, false, Image.FORMAT_RGBA8)))
+		if reuse_texture_slots and not textures.is_empty():
+			textures.append(textures[0])
+		else:
+			textures.append(ImageTexture.create_from_image(Image.create_empty(texture_size, 1, false, Image.FORMAT_RGBA8)))
 	if texture_count > 0: material.albedo_texture = textures[0]
 	if texture_count > 1: material.metallic_texture = textures[1]
 	if texture_count > 2: material.roughness_texture = textures[2]
@@ -267,6 +425,9 @@ func _populate_material_textures(material: StandardMaterial3D, texture_size: int
 	if texture_count > 4:
 		material.normal_enabled = true
 		material.normal_texture = textures[4]
+	elif normal_map and not textures.is_empty():
+		material.normal_enabled = true
+		material.normal_texture = textures[0]
 
 
 func _region_node(rig: Resource, region_id: StringName, region_index: int, height: float, ground_y: float, material: StandardMaterial3D, options: Dictionary) -> MeshInstance3D:
@@ -278,13 +439,15 @@ func _region_node(rig: Resource, region_id: StringName, region_index: int, heigh
 	mesh_instance.skeleton = NodePath("../CanonicalSkeleton")
 	if bool(local_options.get(&"nonfinite_transform", false)):
 		mesh_instance.transform = Transform3D(Basis(Vector3(INF, 0.0, 0.0), Vector3.UP, Vector3.BACK), Vector3.ZERO)
+	if region_id == &"head" and options.has(&"invisible_geometry_height"):
+		mesh_instance.visible = false
 	return mesh_instance
 
 
 func _shared_item_scene(rig: Resource, options: Dictionary = {}) -> PackedScene:
 	var root := Node3D.new()
 	root.name = &"SharedItemSource"
-	var source_skeleton := _canonical_skeleton(rig, bool(options.get(&"wrong_skeleton_bone", false)), false)
+	var source_skeleton := _canonical_skeleton(rig, bool(options.get(&"wrong_skeleton_bone", false)), false, float(options.get(&"rest_delta", 0.0)))
 	source_skeleton.name = &"SourceSkeleton"
 	root.add_child(source_skeleton)
 	source_skeleton.owner = root
@@ -295,6 +458,8 @@ func _shared_item_scene(rig: Resource, options: Dictionary = {}) -> PackedScene:
 	for fit_name: StringName in [&"MasculineRoot", &"FeminineRoot"]:
 		var fit_root := Node3D.new()
 		fit_root.name = fit_name
+		if fit_name == &"MasculineRoot" and bool(options.get(&"selected_root_zero_scale", false)):
+			fit_root.scale = Vector3.ZERO
 		root.add_child(fit_root)
 		fit_root.owner = root
 		var material_count := int(options.get(&"material_count", 1)) if fit_name == &"MasculineRoot" else 1
@@ -308,6 +473,8 @@ func _shared_item_scene(rig: Resource, options: Dictionary = {}) -> PackedScene:
 			mesh_instance.mesh = _weighted_mesh(0.4, 0.0, material, mesh_options)
 			mesh_instance.skin = _canonical_skin(rig, bool(mesh_options.get(&"wrong_skin_bone", false)))
 			mesh_instance.skeleton = NodePath("../../SourceSkeleton")
+			if fit_name == &"MasculineRoot" and surface_index == 0 and bool(options.get(&"traversed_nonfinite_transform", false)):
+				mesh_instance.transform.origin.x = INF
 			fit_root.add_child(mesh_instance)
 			mesh_instance.owner = root
 		if fit_name == &"MasculineRoot" and bool(options.get(&"nested_skeleton", false)):
@@ -326,10 +493,11 @@ func _shared_item_scene(rig: Resource, options: Dictionary = {}) -> PackedScene:
 	return scene
 
 
-func _weighted_mesh(height: float, ground_y: float, material: StandardMaterial3D, options: Dictionary) -> ArrayMesh:
+func _weighted_mesh(height: float, ground_y: float, material: StandardMaterial3D, options: Dictionary) -> Mesh:
 	var arrays: Array = []
 	arrays.resize(Mesh.ARRAY_MAX)
-	arrays[Mesh.ARRAY_VERTEX] = PackedVector3Array([Vector3(-0.1, ground_y, 0.0), Vector3(0.1, ground_y, 0.0), Vector3(0.0, ground_y + height, 0.0)])
+	var vertices := PackedVector3Array([Vector3(-0.1, ground_y, 0.0), Vector3(0.1, ground_y, 0.0), Vector3(0.0, ground_y + height, 0.0)])
+	arrays[Mesh.ARRAY_VERTEX] = vertices
 	arrays[Mesh.ARRAY_INDEX] = PackedInt32Array([0, 1, 2])
 	var triangle_count := int(options.get(&"triangle_count", 1))
 	if triangle_count > 1:
@@ -340,12 +508,12 @@ func _weighted_mesh(height: float, ground_y: float, material: StandardMaterial3D
 			indices[index * 3 + 1] = 1
 			indices[index * 3 + 2] = 2
 		arrays[Mesh.ARRAY_INDEX] = indices
-	if not bool(options.get(&"missing_normals", false)) and not bool(options.get(&"missing_tangents", false)):
+	if not bool(options.get(&"missing_normals", false)):
 		arrays[Mesh.ARRAY_NORMAL] = PackedVector3Array([Vector3.BACK, Vector3.BACK, Vector3.BACK])
 	if not bool(options.get(&"missing_tangents", false)):
 		arrays[Mesh.ARRAY_TANGENT] = PackedFloat32Array([1.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 1.0])
-	if not bool(options.get(&"missing_uv", false)) and not bool(options.get(&"missing_tangents", false)):
-		arrays[Mesh.ARRAY_TEX_UV] = PackedVector2Array([Vector2.ZERO, Vector2.RIGHT, Vector2.UP])
+	if not bool(options.get(&"missing_uv", false)):
+		arrays[Mesh.ARRAY_TEX_UV] = PackedVector2Array([Vector2(INF, 0.0), Vector2.RIGHT, Vector2.UP]) if bool(options.get(&"nonfinite_uv", false)) else PackedVector2Array([Vector2.ZERO, Vector2.RIGHT, Vector2.UP])
 	var influences := 8 if bool(options.get(&"eight_weights", false)) else 4
 	var bones := PackedInt32Array()
 	var weights := PackedFloat32Array()
@@ -369,10 +537,10 @@ func _weighted_mesh(height: float, ground_y: float, material: StandardMaterial3D
 	var flags := Mesh.ARRAY_FLAG_USE_8_BONE_WEIGHTS if influences == 8 else 0
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays, [], {}, flags)
 	mesh.surface_set_material(0, material)
-	return mesh
+	return MissingTangentMesh.new(mesh) if bool(options.get(&"missing_tangents", false)) else mesh
 
 
-func _canonical_skeleton(rig: Resource, wrong_bone: bool, wrong_rest: bool) -> Skeleton3D:
+func _canonical_skeleton(rig: Resource, wrong_bone: bool, wrong_rest: bool, rest_delta: float = 0.0) -> Skeleton3D:
 	var skeleton := Skeleton3D.new()
 	var role_indices: Dictionary = {}
 	for index: int in rig.roles.size():
@@ -386,6 +554,8 @@ func _canonical_skeleton(rig: Resource, wrong_bone: bool, wrong_rest: bool) -> S
 		var rest: Transform3D = rig.canonical_rests[index]
 		if wrong_rest and index == 0:
 			rest.origin.x += 0.05
+		if index == 0:
+			rest.origin.x += rest_delta
 		skeleton.set_bone_rest(index, rest)
 	return skeleton
 

@@ -1,6 +1,7 @@
 extends SceneTree
 
 const CONTRACT_SCRIPT := preload("res://scripts/presentation/humanoid_rig_contract.gd")
+const RIG_DEFINITION_SCRIPT := preload("res://scripts/presentation/humanoid_rig_definition.gd")
 const DRIVER_SCRIPT := preload("res://scripts/presentation/legacy_pivot_skeleton_driver.gd")
 const REGION_SCRIPT := preload("res://scripts/presentation/body_region_catalog.gd")
 const ERROR_PREFIX := "PARTY_FORGE_HUMANOID_IMPORT_ERROR"
@@ -35,6 +36,9 @@ class ImportReadinessService extends RefCounted:
 		var errors: Array[String] = []
 		if rig == null:
 			errors.append(_error("request asset=rig reason=canonical rig resource is missing"))
+			return _body_result(errors)
+		if not rig is RIG_DEFINITION_SCRIPT:
+			errors.append(_error("request asset=rig reason=canonical rig resource must be HumanoidRigDefinition"))
 			return _body_result(errors)
 		var contract := CONTRACT_SCRIPT.new()
 		for definition_error: String in contract.validate_definition(rig):
@@ -75,6 +79,8 @@ class ImportReadinessService extends RefCounted:
 			errors.append(_error("shared_item reason=scene is missing"))
 		if rig == null:
 			errors.append(_error("shared_item reason=canonical rig resource is missing"))
+		elif not rig is RIG_DEFINITION_SCRIPT:
+			errors.append(_error("shared_item reason=canonical rig resource must be HumanoidRigDefinition"))
 		if active_roots.is_empty():
 			errors.append(_error("shared_item reason=active roots are empty"))
 		if expected_bind_signature.is_empty():
@@ -117,6 +123,11 @@ class ImportReadinessService extends RefCounted:
 		if not errors.is_empty():
 			root.free()
 			return _shared_result(errors)
+		for selected_root: Node3D in selected_roots:
+			_validate_shared_transforms(selected_root, errors)
+		if not errors.is_empty():
+			root.free()
+			return _shared_result(errors)
 
 		var selected_meshes: Array[MeshInstance3D] = []
 		var seen_meshes := {}
@@ -138,7 +149,7 @@ class ImportReadinessService extends RefCounted:
 			var source_skeleton := mesh.get_node_or_null(mesh.skeleton) as Skeleton3D if not mesh.skeleton.is_empty() else null
 			if source_skeleton == null or not _skeleton_matches_rig(source_skeleton, rig):
 				errors.append(_error("shared_item node=%s reason=source skeleton does not match canonical rig" % mesh.name))
-			_validate_mesh(mesh, rig, expected_bind_signature, "shared_item", "", max_texture_size, aggregate, errors, contract)
+			_validate_mesh(mesh, rig, expected_bind_signature, "shared_item", "", max_texture_size, true, aggregate, errors, contract)
 		if int(aggregate[&"triangle_count"]) > max_triangles:
 			errors.append(_error("shared_item reason=triangle count %d exceeds hard cap %d" % [int(aggregate[&"triangle_count"]), max_triangles]))
 		if (aggregate[&"materials"] as Dictionary).size() > max_materials:
@@ -181,7 +192,7 @@ class ImportReadinessService extends RefCounted:
 			if mesh.skin != null:
 				signature = contract.skin_bind_signature(rig, mesh.skin)
 				observed_skin_signatures[signature] = true
-			_validate_mesh(mesh, rig, "", "body", String(body_id), BODY_TEXTURE_SIZE_CAP, aggregate, errors, contract)
+			_validate_mesh(mesh, rig, "", "body", String(body_id), BODY_TEXTURE_SIZE_CAP, _is_effectively_visible(mesh, root), aggregate, errors, contract)
 		if observed_skin_signatures.size() > 1:
 			errors.append(_error("signatures asset=%s reason=body regions do not share one exact Skin bind signature" % body_id))
 		if int(aggregate[&"triangle_count"]) > BODY_TRIANGLE_CAP:
@@ -261,7 +272,13 @@ class ImportReadinessService extends RefCounted:
 				errors.append(_error("transforms asset=%s node=%s reason=transform is non-finite or non-invertible" % [body_id, node.name]))
 
 
-	func _validate_mesh(mesh_instance: MeshInstance3D, rig: Resource, expected_signature: String, stage: String, asset: String, max_texture_size: int, aggregate: Dictionary, errors: Array[String], contract: RefCounted) -> void:
+	func _validate_shared_transforms(root: Node3D, errors: Array[String]) -> void:
+		for node: Node in _all_nodes(root):
+			if node is Node3D and not _transform_is_usable((node as Node3D).transform):
+				errors.append(_error("shared_item node=%s reason=transform is non-finite or non-invertible" % node.name))
+
+
+	func _validate_mesh(mesh_instance: MeshInstance3D, rig: Resource, expected_signature: String, stage: String, asset: String, max_texture_size: int, include_bounds: bool, aggregate: Dictionary, errors: Array[String], contract: RefCounted) -> void:
 		var identity := ""
 		if not asset.is_empty():
 			identity += " asset=%s" % asset
@@ -298,9 +315,10 @@ class ImportReadinessService extends RefCounted:
 				if not transformed.is_finite():
 					errors.append(_error("%s%s reason=vertex position is non-finite" % [_mesh_stage(stage, "geometry"), surface_identity]))
 					continue
-				aggregate[&"has_vertex"] = true
-				aggregate[&"min_y"] = minf(float(aggregate[&"min_y"]), transformed.y)
-				aggregate[&"max_y"] = maxf(float(aggregate[&"max_y"]), transformed.y)
+				if include_bounds:
+					aggregate[&"has_vertex"] = true
+					aggregate[&"min_y"] = minf(float(aggregate[&"min_y"]), transformed.y)
+					aggregate[&"max_y"] = maxf(float(aggregate[&"max_y"]), transformed.y)
 			var normals_value: Variant = arrays[Mesh.ARRAY_NORMAL]
 			var normals: PackedVector3Array = normals_value if normals_value is PackedVector3Array else PackedVector3Array()
 			if normals.size() != vertices.size():
@@ -312,21 +330,28 @@ class ImportReadinessService extends RefCounted:
 						break
 			var tangents_value: Variant = arrays[Mesh.ARRAY_TANGENT]
 			var tangents: PackedFloat32Array = tangents_value if tangents_value is PackedFloat32Array else PackedFloat32Array()
-			if tangents.size() != vertices.size() * 4:
-				errors.append(_error("%s%s reason=tangents are missing or malformed" % [_mesh_stage(stage, "geometry"), surface_identity]))
-			else:
-				for vertex_index: int in vertices.size():
-					var tangent := Vector3(tangents[vertex_index * 4], tangents[vertex_index * 4 + 1], tangents[vertex_index * 4 + 2])
-					var handedness := tangents[vertex_index * 4 + 3]
-					if not tangent.is_finite() or not is_finite(handedness) or tangent.length_squared() <= 0.000000000001:
-						errors.append(_error("%s%s reason=tangents are missing or malformed" % [_mesh_stage(stage, "geometry"), surface_identity]))
-						break
+			var material := _surface_material(mesh_instance, surface_index)
+			if _material_uses_normal_map(material):
+				var has_tangent_channel: bool = (int(mesh.surface_get_format(surface_index)) & int(Mesh.ARRAY_FORMAT_TANGENT)) != 0
+				if not has_tangent_channel or tangents.size() != vertices.size() * 4:
+					errors.append(_error("%s%s reason=tangents are missing or malformed for active normal map" % [_mesh_stage(stage, "geometry"), surface_identity]))
+				else:
+					for vertex_index: int in vertices.size():
+						var tangent := Vector3(tangents[vertex_index * 4], tangents[vertex_index * 4 + 1], tangents[vertex_index * 4 + 2])
+						var handedness := tangents[vertex_index * 4 + 3]
+						if not tangent.is_finite() or not is_finite(handedness) or tangent.length_squared() <= 0.000000000001:
+							errors.append(_error("%s%s reason=tangents are missing or malformed for active normal map" % [_mesh_stage(stage, "geometry"), surface_identity]))
+							break
 			var uv_value: Variant = arrays[Mesh.ARRAY_TEX_UV]
 			var uv: PackedVector2Array = uv_value if uv_value is PackedVector2Array else PackedVector2Array()
 			if uv.size() != vertices.size():
 				errors.append(_error("%s%s reason=UV0 is missing" % [_mesh_stage(stage, "geometry"), surface_identity]))
+			else:
+				for coordinate: Vector2 in uv:
+					if not coordinate.is_finite():
+						errors.append(_error("%s%s reason=UV0 contains non-finite coordinates" % [_mesh_stage(stage, "geometry"), surface_identity]))
+						break
 			_validate_weights(vertices, arrays, mesh_instance, stage, asset, errors)
-			var material := _surface_material(mesh_instance, surface_index)
 			if not material is StandardMaterial3D:
 				errors.append(_error("%s%s reason=surface material must be StandardMaterial3D" % [_mesh_stage(stage, "materials"), surface_identity]))
 				continue
@@ -373,12 +398,12 @@ class ImportReadinessService extends RefCounted:
 
 
 	func _validate_material_textures(material: StandardMaterial3D, stage: String, asset: String, max_texture_size: int, aggregate: Dictionary, errors: Array[String]) -> void:
-		var texture_count := 0
+		var material_textures := {}
 		for texture_slot: int in BaseMaterial3D.TEXTURE_MAX:
 			var texture := material.get_texture(texture_slot as BaseMaterial3D.TextureParam)
 			if texture == null:
 				continue
-			texture_count += 1
+			material_textures[texture.get_instance_id()] = true
 			var textures := aggregate[&"textures"] as Dictionary
 			if textures.has(texture.get_instance_id()):
 				continue
@@ -388,11 +413,11 @@ class ImportReadinessService extends RefCounted:
 				if not asset.is_empty():
 					detail += " asset=%s" % asset
 				errors.append(_error("%s reason=texture exceeds %dpx" % [detail, max_texture_size]))
-		if texture_count > MAX_TEXTURES_PER_MATERIAL:
+		if material_textures.size() > MAX_TEXTURES_PER_MATERIAL:
 			var detail := _mesh_stage(stage, "materials")
 			if not asset.is_empty():
 				detail += " asset=%s" % asset
-			errors.append(_error("%s reason=material uses %d textures; maximum is %d" % [detail, texture_count, MAX_TEXTURES_PER_MATERIAL]))
+			errors.append(_error("%s reason=material uses %d textures; maximum is %d" % [detail, material_textures.size(), MAX_TEXTURES_PER_MATERIAL]))
 
 
 	func _skeleton_matches_rig(skeleton: Skeleton3D, rig: Resource) -> bool:
@@ -412,7 +437,8 @@ class ImportReadinessService extends RefCounted:
 				expected_parent = rig.roles.find(parent_role)
 			if skeleton.get_bone_parent(actual_index) != expected_parent:
 				return false
-			if not skeleton.get_bone_rest(actual_index).is_equal_approx(rig.canonical_rests[index]):
+			var contract := CONTRACT_SCRIPT.new()
+			if String(contract.call(&"_serialize_transform", skeleton.get_bone_rest(actual_index))) != String(contract.call(&"_serialize_transform", rig.canonical_rests[index])):
 				return false
 		return true
 
@@ -478,6 +504,21 @@ class ImportReadinessService extends RefCounted:
 		return mesh.mesh.surface_get_material(surface_index)
 
 
+	func _material_uses_normal_map(material: Material) -> bool:
+		return material is StandardMaterial3D and (material as StandardMaterial3D).normal_enabled and (material as StandardMaterial3D).normal_texture != null
+
+
+	func _is_effectively_visible(node: Node3D, boundary: Node3D) -> bool:
+		var cursor: Node = node
+		while cursor != null:
+			if cursor is Node3D and not (cursor as Node3D).visible:
+				return false
+			if cursor == boundary:
+				return true
+			cursor = cursor.get_parent()
+		return false
+
+
 	func _node_world_transform(node: Node3D) -> Transform3D:
 		var result := Transform3D.IDENTITY
 		var cursor: Node = node
@@ -522,7 +563,7 @@ class ImportReadinessService extends RefCounted:
 
 
 	func _is_safe_relative_node_path(path: NodePath) -> bool:
-		if path.is_empty() or path.is_absolute():
+		if path.is_empty() or path.is_absolute() or path.get_subname_count() > 0:
 			return false
 		for index: int in path.get_name_count():
 			if String(path.get_name(index)) in ["", ".", ".."]:
@@ -571,6 +612,8 @@ func run_cli(arguments: PackedStringArray, loader: Callable, output: Callable) -
 		load_errors.append("%s stage=resource asset=feminine path=%s reason=missing or unloadable PackedScene" % [ERROR_PREFIX, feminine_path])
 	if rig == null:
 		load_errors.append("%s stage=resource asset=rig path=%s reason=missing or unloadable Resource" % [ERROR_PREFIX, rig_path])
+	elif not rig is RIG_DEFINITION_SCRIPT:
+		load_errors.append("%s stage=resource asset=rig path=%s reason=must be HumanoidRigDefinition" % [ERROR_PREFIX, rig_path])
 	if not load_errors.is_empty():
 		_emit(load_errors, output)
 		return 1

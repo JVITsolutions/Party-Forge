@@ -106,3 +106,42 @@ Fresh isolated-profile result: exit `0`; `TEST_SUMMARY: PASS (216 suites)`, grea
 ## Concerns
 
 No blocking or known Task 8 correctness concern remains. Real body/item GLBs intentionally do not exist in this foundation task, so no real asset is claimed ready or promoted. Each future approved body/item export must run through this validator with its design-specified per-item budgets before integration.
+
+## Review repair evidence — 2026-08-23
+
+The follow-up review findings against base `269431c8d69366baaac0b50d08f17ae74bb1383c` were repaired with additional test-first coverage. The validator now:
+
+- validates each selected shared-item root and every traversed `Node3D` transform as finite and invertible before geometry inspection;
+- rejects active-root `NodePath` subnames;
+- requires tangents only when the effective surface material has an enabled normal map, while always requiring finite UV0 coordinates;
+- computes body height and ground metrics from effectively visible meshes only, including ancestor visibility;
+- counts distinct `Texture2D` resource identities per material family while retaining the per-texture size cap;
+- compares shared-item skeleton rests using the exact canonical 1e-6-quantized serialization contract rather than approximate transform equality;
+- guards the rig type as `HumanoidRigDefinition` before any typed contract call; and
+- has a structural read-only capability audit plus real subprocess coverage of `_initialize()`, OS arguments, deterministic output, and process exit codes.
+
+### Accepted review RED
+
+```powershell
+& $godot --headless --path . --quit-after 300 --script res://tests/focused_test_runner.gd -- res://tests/unit/test_humanoid_import_validator.gd
+```
+
+Result: exit `1`; `TEST_SUMMARY: FAIL (22 failures)`. The failures reproduced finite UV0, conditional tangent, reused-map identity, own/ancestor visibility, shared-root subname/transform, quantized-rest, and rig-type findings. The wrong-rig cases also exposed the three uncontrolled typed-call script errors that the deterministic type guard was intended to eliminate.
+
+### Focused review GREEN and real CLI subprocess
+
+The same focused command, from a fresh isolated profile, exited `0` with `TEST_SUMMARY: PASS (0 failures)`. Its suite created disposable packed body scenes, launched `tools/validate_humanoid_import.gd` as the actual child process, verified a valid OS-argument request produced `PARTY_FORGE_HUMANOID_IMPORT_OK` and exit `0`, verified `--write` produced the deterministic read-only rejection and exit `1`, and removed the disposable resources. No fixture resource remained in the worktree.
+
+### Expanded affected foundation matrix
+
+A 29-suite focused matrix covered the validator plus body-fit/equipment contracts, canonical rig, pivot driver, animation quality, semantic sockets, shared-Skin binding, body-fit transaction, imported surfaces, body-region visibility, focused-runner lifecycle, Forge equipment and bodies, presentation/grounding, playable-class presentation, readability, manifest, modular Fighter, Forge Vanguard, caster/heavy-melee/ranged content, party-actor presentation, and visual-data/QA contracts.
+
+Result: exit `0`; `TEST_SUMMARY: PASS (0 failures)`. Only established assertion-owned `PARTY_FORGE_PRESENTATION_ERROR` negative fixtures appeared.
+
+### Full regression suite
+
+```powershell
+& $godot --headless --path . --quit-after 1800 --script res://tests/test_runner.gd
+```
+
+Fresh isolated-profile result: exit `0`; `TEST_SUMMARY: PASS (216 suites)`. No suite file was added, so the required threshold remained at least 216. Established assertion-owned negative-path diagnostics remained; there was no Task 8 test failure, parser or script error, subprocess mismatch, orphan, ObjectDB, resource-still-in-use, or validator cleanup diagnostic.
