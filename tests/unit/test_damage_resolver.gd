@@ -13,6 +13,7 @@ func run() -> Array[String]:
 	_test_multi_crit_preparation(types, failures)
 	_test_nonfinite_crit_preparation_is_rejected(types, failures)
 	_test_frozen_per_instance_resolution(types, failures)
+	_test_public_instance_preflight(types, failures)
 	_test_dodge_block_and_incoming(types, failures)
 	_test_overkill_life_steal(types, failures)
 	_test_invalid_resolution_boundaries(types, failures)
@@ -140,6 +141,22 @@ func _test_frozen_per_instance_resolution(types: DamageTypeCatalog, failures: Ar
 	_test_compatibility_resolve_uses_first_instance(types, failures)
 	_test_snapshot_packet_binding(resolver_script, types, failures)
 	_test_derived_arithmetic_safety(resolver_script, types, failures)
+
+func _test_public_instance_preflight(types: DamageTypeCatalog, failures: Array[String]) -> void:
+	var resolver_script := load("res://scripts/combat/damage_resolver.gd") as Script
+	var has_preflight := resolver_script != null and resolver_script.has_method(&"preflight_instance")
+	TestAssertions.truthy(has_preflight, "damage resolver exposes calculation-only instance preflight", failures)
+	if not has_preflight:
+		return
+	var source := _adapter(&"party:preflight", 1, null, {&"crit_chance": 2.0, &"crit_multiplier": 2.0})
+	var packet := DamageResolver.prepare(_attack([&"physical"], [30.0], true), source, CombatRng.new(600), types)
+	var target_health := _health(100.0, 100.0)
+	var target := _adapter(&"enemy:preflight", 2, target_health, {&"dodge_chance": 0.5, &"block_chance": 0.5, &"block_effectiveness": 0.5})
+	var snapshot: Object = resolver_script.call(&"capture_defense", packet, target, types)
+	var preflight := resolver_script.call(&"preflight_instance", packet, 1, true, snapshot, target, types) as Dictionary
+	TestAssertions.truthy(bool(preflight.get("valid", false)), "valid critical instance preflight succeeds", failures)
+	TestAssertions.near(float(preflight.get("maximum_final_damage", -1.0)), 60.0, 0.0001, "preflight publishes finite worst-case damage", failures)
+	TestAssertions.near(target_health.current_health, 100.0, 0.0001, "preflight never mutates target health", failures)
 
 func _test_independent_instance_draws(resolver_script: Script, types: DamageTypeCatalog, failures: Array[String]) -> void:
 	var source := _adapter(&"party:instance_draws", 1, null, {&"crit_chance": 3.0, &"crit_multiplier": 2.0})

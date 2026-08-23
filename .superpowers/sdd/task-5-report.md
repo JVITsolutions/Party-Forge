@@ -262,3 +262,97 @@ No generated `.gd.uid`, `.import`, `.godot`, QA evidence, or unrelated file is i
 - Production attack paths do not use `CombatResolutionService` until Task 6; this Task 5 commit proves the isolated service contract only.
 - Final floating-number and overkill styling remain deliberately out of scope.
 - The repository's established headless ObjectDB/resource-exit diagnostics remain present; explicit summaries and the absence of any additional failure/load/parser marker are the authoritative evidence.
+
+---
+
+# Multi-Crit Task 5 Review Hardening
+
+## Review RED-GREEN evidence
+
+The review corrections were test-first. The saved blocker/minor matrix initially produced the accepted deterministic RED:
+
+```text
+TEST_SUMMARY: FAIL (39 failures)
+TASK5_REVIEW_HARDENING_ACCEPTED_RED_EXIT_CODE=1
+```
+
+Those assertions covered callback-driven post-kill health deletion, later-instance and aggregate finite overflow, reentry from hit/diagnostics callbacks, non-finite captured position, large-clock replacement, public calculation preflight, and structural 10,000-instance zero-damage behavior. After minimal production changes, the combined focused matrix passed.
+
+The final review checkpoint added a separate incoming-provider callback that frees and clears target health during defense capture. Before the new dynamic-boundary guard it failed only the three intended assertions:
+
+```text
+TEST_SUMMARY: FAIL (3 failures)
+TASK5_CAPTURE_CALLBACK_ACCEPTED_RED_EXIT_CODE=1
+```
+
+After revalidating target availability and living health immediately after defense capture and before preflight construction:
+
+```text
+TEST_SUMMARY: PASS (0 failures)
+TASK5_CAPTURE_CALLBACK_GREEN_EXIT_CODE=0
+```
+
+That failure is now attributed to `stage=defense_capture`, uses `failed_instance_index=-1` and `capture_failed=true`, publishes one finite failed contract/diagnostics snapshot, and consumes no target health, defender RNG, proc/kill/completed signal, or overkill-buffer state.
+
+## Hardened contract
+
+- Every copied authoritative critical flag is calculation-preflighted before health, life steal, defender RNG, or gameplay signals. The preflight exposes a Task 4-safe finite maximum-damage result without mutation, and a checked finite aggregate upper bound rejects known later overflow before the first instance.
+- The killing transition swaps subsequent calculation to an owned frozen dead-health proxy before killing-result callbacks. Freeing the real health object from the killing hit, crit, or kill callback cannot abort already-prepared post-death flags; all three callback variants retain three ordered results, signal counts `2 hit / 2 crit / 1 kill / 1 completed`, and exact total/buffered overkill `80`. The proxy is freed on completed and failed exits.
+- Total overkill is accumulated only through checked finite additions. A buffer record must succeed before completed diagnostics/bundle publication; rejected recording returns one finite failed contract and never publishes completion or `INF`.
+- Same-service synchronous reentry returns a stable copied failed value without recursive signals, diagnostics publication, latest-diagnostics replacement, buffer mutation, or extra target mutation. Hit and diagnostics callback reentry leave the outer bundle authoritative and completing once.
+- Captured `Vector3` components are validated finite before any event or metadata publication. Structured failure substitutes no non-finite position into public state.
+- The buffer tracks each record by a fresh `remaining_seconds=2.000` duration and keeps only a bounded/rebased diagnostic clock. A forced `1.0e16` clock followed by replacement remains present through `1.999` and expires at exactly `2.000`; repeated huge finite deltas cannot overflow elapsed state.
+- A direct valid prepared 10,000-flag, zero-damage bundle remains structurally capped at 10,000 results/events, mutates no health, consumes no RNG, publishes no proc/kill/buffer state, and completes once.
+
+## Final verification matrix
+
+Exact Task 5 focus:
+
+```text
+tests/unit/test_combat_resolution_service.gd
+tests/unit/test_overkill_buffer_service.gd
+tests/unit/test_health_component.gd
+
+TEST_SUMMARY: PASS (0 failures)
+TASK5_REVIEW_FINAL_EXACT_FOCUSED_EXIT_CODE=0
+```
+
+Task 3/4 compatibility:
+
+```text
+tests/unit/test_damage_resolver.gd
+tests/unit/test_multi_crit_roll.gd
+tests/unit/test_combat_rng.gd
+tests/unit/test_typed_combat_final_fixes.gd
+tests/unit/test_action_damage_component_projection.gd
+
+TEST_SUMMARY: PASS (0 failures)
+TASK5_REVIEW_FINAL_COMPAT_EXIT_CODE=0
+```
+
+Declared stale Task 6/7 batch:
+
+```text
+TEST_SUMMARY: FAIL (5 failures)
+TASK5_REVIEW_FINAL_KNOWN_FIVE_EXIT_CODE=1
+```
+
+The exact failures remain the three attack-execution defender-draw/health assertions and the two action-estimate average-hit/DPS assertions.
+
+The first shared-application-data full-suite attempt was discarded: it reported 35 failures, including 30 additional developer-sandbox ownership/state failures and two script-level invalid dictionary-property accesses caused by persisted `user://` sandbox artifacts. An independently imported detached duplicate with fresh isolated `APPDATA` and `LOCALAPPDATA` eliminated every one of those 30 additions:
+
+```text
+TASK5_REVIEW_COLD_IMPORT_EXIT_CODE=0
+PARTY_FORGE_BOOT_OK
+PARTY_FORGE_CLASS_SELECTION_READY
+TEST_SUMMARY: FAIL (5 failures)
+TASK5_REVIEW_FINAL_COLD_FULL_EXIT_CODE=1
+```
+
+The cold suite contained exactly the declared five Task 6/7 failures and no additional test, parser, loader, or script failure. Disposable cold project and app-data directories were removed after verification. Focused Task 5 exit diagnostics were `6 ObjectDB instances` and `3 resources still in use`; compatibility retained the established `18 ObjectDB instances` and `5 resources still in use`. No new Task 5-specific failure/load/parser marker appeared.
+
+## Scope, diff check, and concerns
+
+Review-hardening scope is limited to this report, three combat production files, and their three unit suites. Source scanning still finds `CombatResolutionService` only in its own class file: no Main, PartyManager, projectile, area, enemy, scene, persistence, or final presentation path is wired. `.superpowers/sdd/progress.md`, both user-owned untracked QA paths, and the main editor/process remain untouched. `git diff --check` is clean.
+
+The known five Task 6/7 assertions remain intentionally unresolved. Production routing remains Task 6, and final floating-number/overkill visuals remain outside Task 5. The repository's established headless ObjectDB/resource-exit diagnostics remain a concern but did not increase in the verified focused compatibility batch.

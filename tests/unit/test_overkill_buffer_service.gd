@@ -17,6 +17,7 @@ func run() -> Array[String]:
 	_test_atomic_replacement(service_script, failures)
 	_test_invalid_time_is_ignored(service_script, failures)
 	_test_huge_finite_time_remains_safe(service_script, failures)
+	_test_large_clock_replacement_retains_exact_lifetime(service_script, failures)
 	_test_buffer_is_absent_from_persistence(failures)
 	return failures
 
@@ -83,6 +84,23 @@ func _test_huge_finite_time_remains_safe(service_script: Script, failures: Array
 	TestAssertions.truthy(service.call(&"get_record", &"enemy:after_huge_delta") != null, "post-overflow-probe record remains through 1.999", failures)
 	service.call(&"advance", 0.001)
 	TestAssertions.equal(service.call(&"get_record", &"enemy:after_huge_delta"), null, "post-overflow-probe record expires at exact 2.000", failures)
+
+func _test_large_clock_replacement_retains_exact_lifetime(service_script: Script, failures: Array[String]) -> void:
+	var service: Object = service_script.new()
+	service.set("_elapsed", 1.0e16)
+	TestAssertions.truthy(bool(service.call(&"record", &"enemy:large_clock", 10.0, {"generation": 1})), "large-clock record is accepted", failures)
+	service.call(&"advance", 1.5)
+	service.set("_elapsed", 1.0e16)
+	TestAssertions.truthy(bool(service.call(&"record", &"enemy:large_clock", 25.0, {"generation": 2})), "large-clock replacement is accepted", failures)
+	var replaced: Object = service.call(&"get_record", &"enemy:large_clock")
+	TestAssertions.truthy(replaced != null, "large-clock replacement is immediately readable", failures)
+	if replaced != null:
+		TestAssertions.near(float(replaced.get("amount")), 25.0, 0.0001, "large-clock replacement swaps amount", failures)
+		TestAssertions.equal((replaced.get("metadata") as Dictionary).get("generation"), 2, "large-clock replacement swaps metadata", failures)
+	service.call(&"advance", 1.999)
+	TestAssertions.truthy(service.call(&"get_record", &"enemy:large_clock") != null, "large-clock replacement remains readable through 1.999", failures)
+	service.call(&"advance", 0.001)
+	TestAssertions.equal(service.call(&"get_record", &"enemy:large_clock"), null, "large-clock replacement expires at exact 2.000", failures)
 
 func _test_buffer_is_absent_from_persistence(failures: Array[String]) -> void:
 	var profile_document := ProfileState.new_profile("profile-transient", "Transient", 1000).to_dictionary()

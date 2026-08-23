@@ -131,6 +131,32 @@ static func capture_defense(packet: DamagePacket, target: CombatantAdapter, type
 		return DAMAGE_DEFENSE_SNAPSHOT.invalid(contextual_reason) as DAMAGE_DEFENSE_SNAPSHOT
 	return snapshot
 
+static func preflight_instance(
+	packet: DamagePacket,
+	instance_index: int,
+	critical: bool,
+	snapshot: DAMAGE_DEFENSE_SNAPSHOT,
+	target: CombatantAdapter,
+	types: DamageTypeCatalog,
+	authoritative_flags: Array[bool] = []
+) -> Dictionary:
+	var invalid_reason := _instance_resolution_error(packet, instance_index, critical, snapshot, target, null, types, true, true, false, authoritative_flags)
+	if not invalid_reason.is_empty():
+		return {"valid": false, "error_reason": invalid_reason, "maximum_final_damage": 0.0}
+	var health_before := target.health.current_health
+	var calculation := _calculate_instance(packet, instance_index, critical, snapshot, health_before, true, false, true, true)
+	var calculation_error := String(calculation.get("error", ""))
+	if not calculation_error.is_empty():
+		return {"valid": false, "error_reason": calculation_error, "maximum_final_damage": 0.0}
+	var maximum_final_damage := maxf(float(calculation["unblocked_damage"]), float(calculation["blocked_damage"]))
+	if not _finite_nonnegative(maximum_final_damage):
+		return {"valid": false, "error_reason": _arithmetic_error(packet, snapshot, instance_index, "preflight", &"", "maximum final damage must be finite and nonnegative"), "maximum_final_damage": 0.0}
+	return {
+		"valid": true,
+		"error_reason": "",
+		"maximum_final_damage": maximum_final_damage,
+	}
+
 static func resolve_instance(
 	packet: DamagePacket,
 	instance_index: int,
@@ -140,12 +166,13 @@ static func resolve_instance(
 	rng: CombatRng,
 	types: DamageTypeCatalog,
 	apply_health: bool,
-	allow_life_steal: bool
+	allow_life_steal: bool,
+	authoritative_flags: Array[bool] = []
 ) -> DamageResult:
 	var result := _base_result(packet, target)
 	result.instance_index = instance_index
 	result.critical = critical
-	var invalid_reason := _instance_resolution_error(packet, instance_index, critical, snapshot, target, rng, types, apply_health, allow_life_steal)
+	var invalid_reason := _instance_resolution_error(packet, instance_index, critical, snapshot, target, rng, types, apply_health, allow_life_steal, true, authoritative_flags)
 	if not invalid_reason.is_empty():
 		result.error_reason = invalid_reason
 		if packet == null or packet.valid: push_error(invalid_reason)
@@ -349,7 +376,9 @@ static func _instance_resolution_error(
 	rng: CombatRng,
 	types: DamageTypeCatalog,
 	apply_health: bool,
-	allow_life_steal: bool
+	allow_life_steal: bool,
+	require_rng: bool = true,
+	authoritative_flags: Array[bool] = []
 ) -> String:
 	if packet == null: return "PARTY_FORGE_DAMAGE_ERROR attack=<null> source=<null> target=<unknown> reason=missing packet"
 	if not packet.valid: return packet.error_reason
@@ -365,7 +394,7 @@ static func _instance_resolution_error(
 	if snapshot.target_id != target.combatant_id or snapshot.target_team_id != target.team_id:
 		return "PARTY_FORGE_DAMAGE_ERROR attack=%s source=%s target=%s snapshot_target=%s instance=%d reason=defense snapshot target mismatch" % [packet.attack_id, packet.source_id, target.combatant_id, snapshot.target_id, instance_index]
 	if packet.source_team_id == snapshot.target_team_id: return "PARTY_FORGE_DAMAGE_ERROR attack=%s source=%s target=%s instance=%d reason=team-invalid target" % [packet.attack_id, packet.source_id, target.combatant_id, instance_index]
-	if rng == null: return "PARTY_FORGE_DAMAGE_ERROR attack=%s source=%s target=%s instance=%d reason=missing combat RNG" % [packet.attack_id, packet.source_id, target.combatant_id, instance_index]
+	if require_rng and rng == null: return "PARTY_FORGE_DAMAGE_ERROR attack=%s source=%s target=%s instance=%d reason=missing combat RNG" % [packet.attack_id, packet.source_id, target.combatant_id, instance_index]
 	if types == null: return "PARTY_FORGE_DAMAGE_ERROR attack=%s source=%s target=%s instance=%d reason=missing damage catalog" % [packet.attack_id, packet.source_id, target.combatant_id, instance_index]
 	if not _valid_draw_evidence(packet.crit_draw): return _arithmetic_error(packet, snapshot, instance_index, "critical", &"", "critical draw must be -1 or finite in [0,1)")
 	if not _finite_nonnegative(packet.crit_multiplier): return _arithmetic_error(packet, snapshot, instance_index, "critical", &"", "critical multiplier must be finite and nonnegative")
@@ -373,8 +402,10 @@ static func _instance_resolution_error(
 	if allow_life_steal and packet.source_is_available_for_life_steal():
 		if not _finite_nonnegative(packet.source.health.current_health) or not _finite_nonnegative(packet.source.health.max_health):
 			return _arithmetic_error(packet, snapshot, instance_index, "life_steal", &"", "source health must be finite and nonnegative")
-	var roll: MULTI_CRIT_ROLL = packet.multi_crit_roll
-	var flags: Array[bool] = roll.critical_flags if roll != null else [] as Array[bool]
+	var flags: Array[bool] = authoritative_flags
+	if flags.is_empty():
+		var roll: MULTI_CRIT_ROLL = packet.multi_crit_roll
+		flags = roll.critical_flags if roll != null else [] as Array[bool]
 	if instance_index < 0 or instance_index >= flags.size():
 		return "PARTY_FORGE_DAMAGE_ERROR attack=%s source=%s target=%s instance=%d processed=%d reason=instance index out of range" % [packet.attack_id, packet.source_id, target.combatant_id, instance_index, flags.size()]
 	if flags[instance_index] != critical:
