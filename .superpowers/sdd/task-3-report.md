@@ -204,3 +204,54 @@ Those are the same five pre-existing baseline-migration expectations. No additio
 - The focused suite continues to print existing intentional negative-path diagnostics and the existing ObjectDB/resource exit markers; accepted PASS evidence requires the explicit summary and absence of parse/load/test failures.
 - The five declared stale full-suite expectations remain for Tasks 6 and 7 as planned. They were not rewritten outside Task 3's contract.
 - The user-owned untracked QA evidence paths remain untouched and unstaged. `.superpowers/sdd/progress.md` was not modified or staged, and the main Godot editor/process was not touched.
+
+## Post-review correction: finite-range safety and explicit invalid input
+
+Independent review found that the original integer-percentage normalization multiplied every finite chance by `100.0` before applying the 10,000-instance bound. A finite value such as `1.0e100` therefore reached `roundi()` outside its representable integer range, wrapped to a negative value, and manufactured one normal flag. The same public factory also converted `NAN`/`INF` to valid-looking zero-chance metadata.
+
+### Strict correction RED evidence
+
+Regression tests were saved before changing production. The exact Task 3 focused command exited `1` with:
+
+```text
+TEST_SUMMARY: FAIL (13 failures)
+```
+
+The accepted failures showed `1.0e100` becoming `-92233720368547760.0`, requested/processed counts of `1`, no truncation, one normal flag, absent overflow diagnostics, and absent structured rejection metadata for `NAN`, positive infinity, negative infinity, and resolver preparation.
+
+After the first minimal correction passed, the requested safe-conversion transition probe exposed a second legitimate RED at the old `9.0e16` normalization boundary:
+
+```text
+TEST_FAILURE: tests/unit/test_multi_crit_roll.gd :: below safe-snapping transition preserves requested count: expected 89999999999999984, got 89999999999999985
+TEST_SUMMARY: FAIL (1 failures)
+```
+
+That failure proved the still-large multiply/divide path could invent a fractional requested slot even without integer wrap. It was not accepted as GREEN.
+
+### Corrected model and boundary behavior
+
+- Finite chances stay nonnegative and authoritative. Percentage-point normalization is restricted to `90071992547409.0`, a conservative boundary whose `chance * 100.0` product remains within binary64's exact-integer range. Larger finite values bypass unsafe multiplication and preserve their raw finite value.
+- Normal representable inputs retain the exact integer-percentage boundary behavior. Direct cases cover `0.0111 -> 0.01`, values immediately below/above the half-point rounding boundary, and prescribed RNG draws at the snapped threshold.
+- Bounded processing is selected from the finite floating guaranteed count before integer conversion. No path allocates more than 10,000 flags.
+- `requested_instances` and `guaranteed_instances` saturate at `INT64_MAX`. Read-only `requested_count_overflow` distinguishes saturation from an exact representable count, is retained by `copy()`, and also makes truncation explicit.
+- The requested-count addition uses a prechecked fractional slot (`guaranteed <= INT64_MAX - fractional_slot`) so the addition itself cannot wrap. Binary64 has no fractional resolution immediately below `INT64_MAX`, but the defensive arithmetic remains correct if the representation or source type changes.
+- Public `MultiCritRoll.create()` returns immutable, non-null structured rejection metadata for `NAN` and both infinities: `valid == false`, a stable finite-chance diagnostic, zero counts/flags, and zero RNG consumption. Copies preserve the rejection. `DamageResolver.prepare()` converts it to its established invalid packet form, avoiding any production null-dereference risk.
+- Boundary coverage includes the old `9.0e16` conversion area and adjacent binary64 values, below/at/above the new exact-product transition, the last binary64 step below the signed-64 limit, the signed-64 limit itself, and `1.0e100`. All full-ceiling cases produce exactly 10,000 true flags and consume no remainder draw.
+
+### Final correction verification
+
+The exact required focused batch exited `0` after the final transition and immutability coverage with:
+
+```text
+TEST_SUMMARY: PASS (0 failures)
+```
+
+The standalone pathological multi-crit batch and the legacy `test_combat_rng.gd` plus `test_typed_combat_final_fixes.gd` compatibility batch each exited `0` with the same PASS marker.
+
+The declared stale compatibility batch exited `1` with exactly its known five failures and no additions. The final repository-wide suite also exited `1` with:
+
+```text
+TEST_SUMMARY: FAIL (5 failures)
+```
+
+Those remain the three planned `test_attack_execution.gd` expectations and two planned `test_action_combat_estimate_service.gd` expectations already documented above. No cold import was required because the correction added no new script or public type reference. Final focused rerun, staged-scope review, `git diff --check`, and commit evidence follow this report update.

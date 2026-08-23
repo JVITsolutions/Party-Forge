@@ -9,6 +9,7 @@ func run() -> Array[String]:
 	_test_resistance_and_mixed_damage(types, failures)
 	_test_shared_crit(types, failures)
 	_test_multi_crit_preparation(types, failures)
+	_test_nonfinite_crit_preparation_is_rejected(types, failures)
 	_test_dodge_block_and_incoming(types, failures)
 	_test_overkill_life_steal(types, failures)
 	_test_invalid_resolution_boundaries(types, failures)
@@ -109,6 +110,15 @@ func _test_multi_crit_preparation(types: DamageTypeCatalog, failures: Array[Stri
 	TestAssertions.near(packet.components[0].post_crit, 40.0, 0.001, "compatibility fire amount uses first critical instance", failures)
 	TestAssertions.near(packet.components[1].post_crit, 60.0, 0.001, "compatibility physical amount uses first critical instance", failures)
 	TestAssertions.equal(rng.draw_count, 1, "105 percent preparation consumes only the fractional roll", failures)
+
+func _test_nonfinite_crit_preparation_is_rejected(types: DamageTypeCatalog, failures: Array[String]) -> void:
+	var source := _adapter(&"party:invalid_crit", 1, null, {&"crit_chance": INF})
+	var attack := _attack([&"physical"], [30.0], true)
+	var rng := CombatRng.new(62, [0.04])
+	var packet := DamageResolver.prepare(attack, source, rng, types)
+	TestAssertions.truthy(not packet.valid, "nonfinite critical chance cannot create a valid packet", failures)
+	TestAssertions.truthy(packet.error_reason.contains("critical chance must be finite"), "nonfinite critical chance reports a stable packet diagnostic", failures)
+	TestAssertions.equal(rng.draw_count, 0, "nonfinite critical chance consumes no RNG", failures)
 
 func _test_dodge_block_and_incoming(types: DamageTypeCatalog, failures: Array[String]) -> void:
 	var source := _adapter(&"party:1", 1, null, {})

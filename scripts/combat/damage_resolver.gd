@@ -53,6 +53,8 @@ static func prepare(attack: AttackDefinition, source: CombatantAdapter, rng: Com
 	var tags := action_tags_for(attack, weapon)
 	var crit_chance := source.stat_value(&"crit_chance", 0.0) if attack.can_crit else 0.0
 	var crit_roll: MULTI_CRIT_ROLL = MULTI_CRIT_ROLL.create(crit_chance, rng) as MULTI_CRIT_ROLL
+	if not crit_roll.valid:
+		return _invalid_packet("attack=%s source=%s reason=critical chance must be finite" % [attack.id, source.combatant_id], source, attack.id)
 	var critical: bool = bool(crit_roll.call("primary_critical"))
 	var crit_multiplier := maxf(1.0, source.stat_value(&"crit_multiplier", 1.5))
 	var global_multiplier := source.stat_value(&"damage", 1.0)
