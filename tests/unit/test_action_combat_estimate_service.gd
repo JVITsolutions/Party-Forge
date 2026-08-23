@@ -163,6 +163,9 @@ func _test_multi_crit_expected_value_boundaries(failures: Array[String]) -> void
 		{"label": "exactly one hundred", "chance": 1.0, "critical_instances": 1.0, "damage_instances": 1.0},
 		{"label": "one hundred five", "chance": 1.05, "critical_instances": 1.05, "damage_instances": 1.05},
 		{"label": "eleven hundred fifty", "chance": 11.50, "critical_instances": 11.50, "damage_instances": 11.50},
+		{"label": "below processing ceiling", "chance": 9999.50, "critical_instances": 9999.50, "damage_instances": 9999.50},
+		{"label": "at processing ceiling", "chance": 10000.0, "critical_instances": 10000.0, "damage_instances": 10000.0},
+		{"label": "above processing ceiling", "chance": 10000.50, "critical_instances": 10000.50, "damage_instances": 10000.0},
 	]
 	for row: Dictionary in cases:
 		var chance := float(row["chance"])
@@ -181,10 +184,10 @@ func _test_multi_crit_expected_value_boundaries(failures: Array[String]) -> void
 			TestAssertions.near(float(estimate.get("expected_critical_instances")), float(row["critical_instances"]), 0.0001, "%s preserves expected critical count" % label, failures)
 		if exposes_damage_count:
 			TestAssertions.near(float(estimate.get("expected_damage_instances")), float(row["damage_instances"]), 0.0001, "%s preserves expected damage count" % label, failures)
-		var expected_average := (
+		var expected_average: float = (
 			estimate.normal_hit * (1.0 + chance * (1.5 - 1.0))
 			if chance < 1.0 else
-			estimate.normal_hit * 1.5 * chance
+			estimate.normal_hit * 1.5 * float(row["damage_instances"])
 		)
 		TestAssertions.near(estimate.average_hit, expected_average, 0.0001, "%s uses the runtime multi-crit expected-value boundary" % label, failures)
 		TestAssertions.near(estimate.estimated_dps, expected_average * estimate.attacks_per_second, 0.0001, "%s DPS uses average bundle damage times uses per second" % label, failures)

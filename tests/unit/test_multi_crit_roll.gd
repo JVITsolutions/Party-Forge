@@ -32,6 +32,9 @@ func _test_expected_instance_counts(roll_script: Script, failures: Array[String]
 		{"label": "exactly one hundred", "chance": 1.0, "critical": 1.0, "damage": 1.0},
 		{"label": "one hundred five", "chance": 1.05, "critical": 1.05, "damage": 1.05},
 		{"label": "eleven hundred fifty", "chance": 11.50, "critical": 11.50, "damage": 11.50},
+		{"label": "below processing ceiling", "chance": 9999.50, "critical": 9999.50, "damage": 9999.50},
+		{"label": "at processing ceiling", "chance": 10000.0, "critical": 10000.0, "damage": 10000.0},
+		{"label": "above processing ceiling", "chance": 10000.50, "critical": 10000.50, "damage": 10000.0},
 	]:
 		var label := String(row["label"])
 		TestAssertions.near(float(roll_script.call("expected_critical_instances", float(row["chance"]))), float(row["critical"]), 0.000001, "%s shared expected critical count" % label, failures)

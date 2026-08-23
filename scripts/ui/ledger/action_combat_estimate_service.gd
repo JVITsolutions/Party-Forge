@@ -104,7 +104,7 @@ static func estimate_from_snapshot(attack: AttackDefinition, action_stats: Resol
 		var critical := normal * crit_multiplier if result.can_crit else normal
 		if not _is_finite_nonnegative(critical):
 			return _unavailable(result, "Invalid derived critical damage for %s." % type_definition.display_name)
-		var average := _expected_bundle_damage(normal, critical, crit_chance, result.can_crit)
+		var average := _expected_bundle_damage(normal, critical, crit_chance, result.expected_damage_instances, result.can_crit)
 		if not _is_finite_nonnegative(average):
 			return _unavailable(result, "Invalid derived average damage for %s." % type_definition.display_name)
 		result.normal_hit += normal
@@ -129,12 +129,12 @@ static func estimate_from_snapshot(attack: AttackDefinition, action_stats: Resol
 	result.available = true
 	return result
 
-static func _expected_bundle_damage(normal: float, critical: float, crit_chance: float, can_crit: bool) -> float:
+static func _expected_bundle_damage(normal: float, critical: float, crit_chance: float, expected_damage_instances: float, can_crit: bool) -> float:
 	if not can_crit:
 		return normal
 	if crit_chance < 1.0:
 		return normal * (1.0 - crit_chance) + critical * crit_chance
-	return critical * crit_chance
+	return critical * expected_damage_instances
 
 static func _unavailable(result: ActionCombatEstimate, reason: String) -> ActionCombatEstimate:
 	result.available = false

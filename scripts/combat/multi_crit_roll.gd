@@ -121,7 +121,7 @@ static func expected_critical_instances(chance_value: float) -> float:
 	return nonnegative_chance
 
 static func expected_damage_instances(chance_value: float) -> float:
-	return maxf(1.0, expected_critical_instances(chance_value))
+	return minf(float(PROCESSING_CEILING), maxf(1.0, expected_critical_instances(chance_value)))
 
 static func from_compatibility(critical_value: bool, draw: float) -> RefCounted:
 	var result = (load(SCRIPT_PATH) as Script).new()
