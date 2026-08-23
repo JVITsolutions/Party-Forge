@@ -138,6 +138,8 @@ func _test_frozen_per_instance_resolution(types: DamageTypeCatalog, failures: Ar
 	_test_frozen_snapshot_and_invalid_data(resolver_script, types, failures)
 	_test_post_death_calculation(resolver_script, types, failures)
 	_test_compatibility_resolve_uses_first_instance(types, failures)
+	_test_snapshot_packet_binding(resolver_script, types, failures)
+	_test_derived_arithmetic_safety(resolver_script, types, failures)
 
 func _test_independent_instance_draws(resolver_script: Script, types: DamageTypeCatalog, failures: Array[String]) -> void:
 	var source := _adapter(&"party:instance_draws", 1, null, {&"crit_chance": 3.0, &"crit_multiplier": 2.0})
@@ -292,6 +294,172 @@ func _test_compatibility_resolve_uses_first_instance(types: DamageTypeCatalog, f
 	TestAssertions.equal(result.instance_index, 0, "compatibility resolve reports first instance index", failures)
 	TestAssertions.near(result.final_damage, 40.0, 0.001, "compatibility resolve applies one critical instance", failures)
 	TestAssertions.near(target_health.current_health, 160.0, 0.001, "compatibility resolve does not iterate the remaining bundle", failures)
+
+func _test_snapshot_packet_binding(resolver_script: Script, types: DamageTypeCatalog, failures: Array[String]) -> void:
+	var source := _adapter(&"party:packet_binding", 1, null, {})
+	var packet_a := _packet(source, [&"fire"], [20.0])
+	var packet_b := _packet(source, [&"fire"], [30.0])
+	var target_health := _health(100.0, 100.0)
+	var stats := ResolvedStatSnapshot.new()
+	stats.set_resolved(&"dodge_chance", 0.50, [])
+	stats.set_resolved(&"block_chance", 0.50, [])
+	stats.set_resolved(&"block_effectiveness", 0.50, [])
+	var incoming := func(candidate: DamagePacket) -> float:
+		return 0.50 if candidate == packet_a else 0.25
+	var target := CombatantAdapter.new(null, &"enemy:packet_binding", 2, target_health, stats, true, incoming)
+	var snapshot: Object = resolver_script.call("capture_defense", packet_a, target, types)
+	var copied_snapshot: Object = snapshot.call("copy")
+	TestAssertions.truthy(snapshot != copied_snapshot and bool(copied_snapshot.get("valid")), "defense snapshot copy preserves valid independent metadata", failures)
+	var mismatch_rng := CombatRng.new(82, [0.90, 0.10])
+	var mismatch: DamageResult = resolver_script.call("resolve_instance", packet_b, 0, false, copied_snapshot, target, mismatch_rng, types, false, false) as DamageResult
+	TestAssertions.truthy(not mismatch.valid, "snapshot captured for packet A rejects packet B", failures)
+	TestAssertions.truthy(mismatch.error_reason.contains("snapshot packet mismatch"), "packet mismatch reports structured context", failures)
+	TestAssertions.equal(mismatch_rng.draw_count, 0, "packet mismatch fails before defender RNG", failures)
+	TestAssertions.near(target_health.current_health, 100.0, 0.001, "packet mismatch preserves target health", failures)
+	var match_rng := CombatRng.new(83, [0.90, 0.90])
+	var matched: DamageResult = resolver_script.call("resolve_instance", packet_a, 0, false, copied_snapshot, target, match_rng, types, false, false) as DamageResult
+	TestAssertions.truthy(matched.valid and not matched.dodged and not matched.blocked, "copied snapshot remains bound to its original packet", failures)
+	TestAssertions.near(matched.incoming_multiplier, 0.50, 0.001, "copied binding retains packet-specific incoming multiplier", failures)
+	TestAssertions.near(matched.final_damage, 10.0, 0.001, "matching packet resolves with its captured incoming multiplier", failures)
+
+func _test_derived_arithmetic_safety(resolver_script: Script, types: DamageTypeCatalog, failures: Array[String]) -> void:
+	var critical_source := _adapter(&"party:critical_overflow", 1, null, {})
+	var critical_packet := _runtime_packet(critical_source, [&"fire"], [1.0e308], true, 2.0)
+	_assert_arithmetic_rejection(resolver_script, critical_packet, true, {&"fire_resistance": 0.0}, 1.0, "critical", types, failures)
+	var unused_multiplier_packet := _runtime_packet(critical_source, [&"fire"], [10.0], false, INF)
+	_assert_arithmetic_rejection(resolver_script, unused_multiplier_packet, false, {&"fire_resistance": 0.0}, 1.0, "critical", types, failures)
+	_test_nonfinite_compatibility_draw(resolver_script, critical_source, types, failures)
+
+	var evidence_source := _adapter(&"party:component_evidence", 1, null, {})
+	var evidence_components: Array[PreparedDamageComponent] = [PreparedDamageComponent.new(&"fire", INF, 10.0, 10.0, 10.0)]
+	var evidence_roll: RefCounted = MULTI_CRIT_ROLL.from_compatibility(false, -1.0)
+	var evidence_packet := DamagePacket.create(evidence_source, &"arithmetic_probe", [], false, false, -1.0, 1.0, 0.0, evidence_components, evidence_roll)
+	_assert_arithmetic_rejection(resolver_script, evidence_packet, false, {&"fire_resistance": 0.0}, 1.0, "component", types, failures)
+
+	var armor_source := _adapter(&"party:armor_overflow", 1, null, {})
+	var armor_packet := _runtime_packet(armor_source, [&"physical"], [1.0e308])
+	_assert_safe_armor_extreme(resolver_script, armor_packet, types, failures)
+
+	var resistance_source := _adapter(&"party:resistance_overflow", 1, null, {})
+	var resistance_packet := _runtime_packet(resistance_source, [&"fire"], [1.0e308])
+	_assert_arithmetic_rejection(resolver_script, resistance_packet, false, {&"fire_resistance": -1.0e308}, 1.0, "mitigation", types, failures)
+
+	var accumulation_source := _adapter(&"party:accumulation_overflow", 1, null, {})
+	var accumulation_packet := _runtime_packet(accumulation_source, [&"fire", &"cold"], [9.0e307, 9.0e307])
+	_assert_arithmetic_rejection(resolver_script, accumulation_packet, false, {&"fire_resistance": 0.0, &"cold_resistance": 0.0}, 1.0, "accumulation", types, failures)
+
+	var incoming_source := _adapter(&"party:incoming_overflow", 1, null, {})
+	var incoming_packet := _runtime_packet(incoming_source, [&"fire"], [1.0e308])
+	_assert_arithmetic_rejection(resolver_script, incoming_packet, false, {&"fire_resistance": 0.0}, 2.0, "incoming", types, failures)
+
+	var block_source := _adapter(&"party:block_overflow", 1, null, {})
+	var block_packet := _runtime_packet(block_source, [&"fire"], [1.0e308])
+	_assert_arithmetic_rejection(resolver_script, block_packet, false, {&"fire_resistance": 0.0, &"block_effectiveness": 1.0e308}, 1.0, "block", types, failures)
+
+	var life_source_health := _health(1.0e308, 1.0)
+	var life_source := _adapter(&"party:life_steal_overflow", 1, life_source_health, {})
+	var life_packet := _runtime_packet(life_source, [&"fire"], [1.0e308], false, 1.0, 2.0)
+	var life_target_health := _health(1.0e308, 1.0e308)
+	var life_target := _adapter(&"enemy:life_steal_overflow", 2, life_target_health, {
+		&"fire_resistance": 0.0,
+		&"dodge_chance": 0.50,
+		&"block_chance": 0.50,
+		&"block_effectiveness": 0.0,
+	})
+	var life_snapshot: Object = resolver_script.call("capture_defense", life_packet, life_target, types)
+	var life_rng := CombatRng.new(84, [0.90, 0.90])
+	var life_result: DamageResult = resolver_script.call("resolve_instance", life_packet, 0, false, life_snapshot, life_target, life_rng, types, true, true) as DamageResult
+	TestAssertions.truthy(not life_result.valid and life_result.error_reason.contains("stage=life_steal"), "life-steal overflow fails with stage context", failures)
+	TestAssertions.equal(life_rng.draw_count, 0, "life-steal overflow fails before defender RNG", failures)
+	TestAssertions.near(life_target_health.current_health, 1.0e308, 1.0e294, "life-steal overflow preserves target health", failures)
+	TestAssertions.near(life_source_health.current_health, 1.0, 0.001, "life-steal overflow preserves source health", failures)
+	_assert_finite_damage_evidence(life_result, "life-steal overflow", failures)
+
+	var excess_source := _adapter(&"party:finite_excess", 1, null, {})
+	var excess_packet := _runtime_packet(excess_source, [&"fire"], [1.0e308])
+	var excess_health := _health(10.0, 1.0)
+	var excess_target := _adapter(&"enemy:finite_excess", 2, excess_health, {&"fire_resistance": 0.0})
+	var excess_snapshot: Object = resolver_script.call("capture_defense", excess_packet, excess_target, types)
+	var excess_result: DamageResult = resolver_script.call("resolve_instance", excess_packet, 0, false, excess_snapshot, excess_target, CombatRng.new(85), types, false, false) as DamageResult
+	TestAssertions.truthy(excess_result.valid, "finite maximum-scale excess calculation remains valid", failures)
+	TestAssertions.truthy(is_finite(excess_result.excess_damage) and excess_result.excess_damage >= 0.0, "excess evidence remains finite and nonnegative", failures)
+	TestAssertions.near(excess_health.current_health, 1.0, 0.001, "calculate-only finite excess preserves health", failures)
+
+func _test_nonfinite_compatibility_draw(resolver_script: Script, source: CombatantAdapter, types: DamageTypeCatalog, failures: Array[String]) -> void:
+	var components: Array[PreparedDamageComponent] = [PreparedDamageComponent.new(&"fire", 10.0, 10.0, 10.0, 10.0)]
+	var roll: RefCounted = MULTI_CRIT_ROLL.from_compatibility(false, NAN)
+	var packet := DamagePacket.create(source, &"arithmetic_probe", [], false, false, NAN, 1.0, 0.0, components, roll)
+	var health := _health(100.0, 100.0)
+	var target := _adapter(&"enemy:critical_draw", 2, health, {&"fire_resistance": 0.0, &"dodge_chance": 0.50, &"block_chance": 0.50})
+	var snapshot: Object = resolver_script.call("capture_defense", packet, target, types)
+	var rng := CombatRng.new(850, [0.90, 0.90])
+	var result: DamageResult = resolver_script.call("resolve_instance", packet, 0, false, snapshot, target, rng, types, false, false) as DamageResult
+	TestAssertions.truthy(not result.valid and result.error_reason.contains("stage=critical"), "non-finite compatibility draw is rejected with critical context", failures)
+	TestAssertions.equal(rng.draw_count, 0, "non-finite compatibility draw fails before defender RNG", failures)
+	TestAssertions.truthy(is_finite(result.crit_draw), "non-finite compatibility draw is not published as result evidence", failures)
+	TestAssertions.near(health.current_health, 100.0, 0.001, "non-finite compatibility draw preserves target health", failures)
+
+func _assert_safe_armor_extreme(resolver_script: Script, packet: DamagePacket, types: DamageTypeCatalog, failures: Array[String]) -> void:
+	var health := _health(100.0, 100.0)
+	var target := _adapter(&"enemy:armor_extreme", 2, health, {&"armor": 0.0})
+	var snapshot: Object = resolver_script.call("capture_defense", packet, target, types)
+	var rng := CombatRng.new(851)
+	var result: DamageResult = resolver_script.call("resolve_instance", packet, 0, false, snapshot, target, rng, types, false, false) as DamageResult
+	TestAssertions.truthy(result.valid, "armor mitigation avoids intermediate overflow for a finite result", failures)
+	TestAssertions.truthy(is_finite(result.total_post_mitigation) and result.total_post_mitigation >= 0.0, "armor mitigation result remains finite and nonnegative", failures)
+	TestAssertions.truthy(is_finite(result.final_damage) and result.final_damage >= 0.0, "armor final damage remains finite and nonnegative", failures)
+	TestAssertions.equal(rng.draw_count, 0, "deterministic zero defense chances consume no armor probe RNG", failures)
+	TestAssertions.near(health.current_health, 100.0, 0.001, "calculate-only armor probe preserves health", failures)
+
+func _assert_arithmetic_rejection(
+	resolver_script: Script,
+	packet: DamagePacket,
+	critical: bool,
+	defense_values: Dictionary,
+	incoming_multiplier: float,
+	expected_stage: String,
+	types: DamageTypeCatalog,
+	failures: Array[String]
+) -> void:
+	var values := defense_values.duplicate(true)
+	values[&"dodge_chance"] = 0.50
+	values[&"block_chance"] = 0.50
+	if not values.has(&"block_effectiveness"):
+		values[&"block_effectiveness"] = 0.50
+	var health := _health(100.0, 100.0)
+	var target := _adapter(StringName("enemy:%s_overflow" % expected_stage), 2, health, values, true, incoming_multiplier)
+	var snapshot: Object = resolver_script.call("capture_defense", packet, target, types)
+	var rng := CombatRng.new(86, [0.90, 0.10])
+	var result: DamageResult = resolver_script.call("resolve_instance", packet, 0, critical, snapshot, target, rng, types, false, false) as DamageResult
+	TestAssertions.truthy(not result.valid, "%s overflow is rejected" % expected_stage, failures)
+	TestAssertions.truthy(result.error_reason.contains("stage=%s" % expected_stage), "%s overflow reports calculation stage" % expected_stage, failures)
+	TestAssertions.equal(rng.draw_count, 0, "%s overflow fails before defender RNG" % expected_stage, failures)
+	TestAssertions.near(health.current_health, 100.0, 0.001, "%s overflow preserves target health" % expected_stage, failures)
+	_assert_finite_damage_evidence(result, "%s overflow" % expected_stage, failures)
+
+func _assert_finite_damage_evidence(result: DamageResult, label: String, failures: Array[String]) -> void:
+	for property_name: StringName in [
+		&"crit_multiplier", &"health_before", &"incoming_prevented", &"total_post_mitigation", &"damage_before_block",
+		&"block_prevented", &"final_damage", &"actual_health_removed", &"excess_damage",
+		&"life_steal_rate", &"life_steal_restored",
+	]:
+		var value := float(result.get(property_name))
+		TestAssertions.truthy(is_finite(value) and value >= 0.0, "%s keeps %s finite and nonnegative" % [label, property_name], failures)
+
+func _runtime_packet(
+	source: CombatantAdapter,
+	type_ids: Array[StringName],
+	typed_amounts: Array[float],
+	critical: bool = false,
+	crit_multiplier: float = 1.0,
+	life_steal: float = 0.0
+) -> DamagePacket:
+	var prepared: Array[PreparedDamageComponent] = []
+	for index: int in mini(type_ids.size(), typed_amounts.size()):
+		var amount := typed_amounts[index]
+		prepared.append(PreparedDamageComponent.new(type_ids[index], amount, amount, amount, amount * crit_multiplier if critical else amount))
+	var roll: RefCounted = MULTI_CRIT_ROLL.from_compatibility(critical, -1.0)
+	return DamagePacket.create(source, &"arithmetic_probe", [], critical, critical, -1.0, crit_multiplier, life_steal, prepared, roll)
 
 func _test_dodge_block_and_incoming(types: DamageTypeCatalog, failures: Array[String]) -> void:
 	var source := _adapter(&"party:1", 1, null, {})

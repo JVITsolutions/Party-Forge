@@ -251,3 +251,122 @@ Self-review confirmed:
 - The five full-suite failures are the explicitly planned stale Task 6/7 expectations and remain unresolved by design.
 - Focused runs print intentional negative-path `PARTY_FORGE_DAMAGE_ERROR` messages plus the repository's established ObjectDB/resource-exit markers. Accepted evidence requires the explicit summary and absence of unplanned `TEST_FAILURE`/parse/load failures.
 - No open Task 4 production concern is known after the blank-snapshot diagnostic correction.
+
+# Multi-Crit Task 4 review correction: packet binding and arithmetic safety
+
+Status: both Task 4 review blockers are corrected and locally verified on top of `a8302d225758031b30a9e1220604c25220b09b34`. Task 5 and later behavior remain unimplemented.
+
+## Root cause and correction scope
+
+The original snapshot froze target/type defense values but did not identify the exact `DamagePacket` used when the packet-specific incoming multiplier was captured. A different packet with compatible target/type rows could therefore consume the first packet's snapshot and defender RNG.
+
+The original instance resolver also performed dodge before deterministic damage arithmetic and validated only the critical product. Finite operands could overflow later mitigation, multi-component accumulation, incoming multiplication, blocked-outcome calculation, or life-steal derivation. Those paths could publish valid `INF` evidence; the life-steal case could mutate target health before the non-finite heal request was silently rejected.
+
+The focused correction changes only:
+
+- `.superpowers/sdd/task-4-report.md`
+- `scripts/combat/damage_defense_snapshot.gd`
+- `scripts/combat/damage_resolver.gd`
+- `tests/unit/test_damage_resolver.gd`
+
+`DamageDefenseSnapshot` now retains a strong reference to the exact transient packet. `matches_packet()` uses object identity, the read-only transient instance ID supplies diagnostics, and `copy()` preserves the same binding. `resolve_instance()` rejects any packet/snapshot mismatch before target mutation, defender RNG, or calculation.
+
+Deterministic calculation is now precomputed before dodge while preserving the externally observed RNG order: dodge still rolls first and a non-dodged instance then rolls block. The precompute validates component evidence, critical draw/multiplier/product, per-type mitigation, accumulated mitigation, incoming multiplication, both possible block outcomes, prospective excess, and both possible life-steal bounds. Invalid results retain finite fail-closed defaults and carry attack/source/target/instance/stage/type context.
+
+## Strict TDD evidence
+
+### Review-blocker RED
+
+Tests were saved before production changes. The exact Task 4 focused command produced:
+
+```text
+TEST_SUMMARY: FAIL (45 failures)
+TASK4_REVIEW_RED_EXIT_CODE=-1073741819
+```
+
+Accepted failures proved:
+
+- packet B resolved successfully with packet A's copied snapshot and consumed two defender draws;
+- critical overflow lacked stage context;
+- resistance multiplication, two-component accumulation, incoming multiplication, and blocked-outcome arithmetic remained valid with non-finite evidence and consumed defender RNG;
+- life-steal overflow consumed both defender draws and reduced target health from `1.0e308` to zero before rejection;
+- invalid results exposed non-finite damage evidence.
+
+The Windows native status occurred after the explicit failure summary and was not treated as evidence by exit status alone.
+
+The armor probe initially expected rejection because the old expression overflowed its `post_crit * 100` intermediate. During root-cause analysis, the intended invariant was narrowed correctly: nonnegative armor cannot mathematically increase a finite amount. The implementation now multiplies by the bounded armor factor `100 / (100 + armor)`, and the test requires a valid, finite `1.0e308` result instead of rejecting a mathematically representable outcome.
+
+### Evidence-publication self-review RED
+
+After the first correction GREEN, self-review added direct-construction probes for an unused non-finite critical multiplier and non-finite authored component evidence. Before tightening validation:
+
+```text
+TEST_SUMMARY: FAIL (7 failures)
+TASK4_EVIDENCE_RED_EXIT_CODE=1
+```
+
+Both packets resolved as valid, consumed defender RNG, and the multiplier path published `INF`. The correction rejects these at `stage=critical` or `stage=component`, leaves numeric result defaults finite, and consumes no defender RNG.
+
+### Compatibility-draw self-review RED
+
+A final numeric-field audit found that `MultiCritRoll.from_compatibility()` could carry a non-finite draw into `DamageResult.crit_draw`. The focused regression produced:
+
+```text
+TEST_SUMMARY: FAIL (3 failures)
+TASK4_DRAW_RED_EXIT_CODE=1
+```
+
+The three failures were valid resolution, two consumed defender draws, and published `NAN` draw evidence. The resolver now accepts only `-1` or a finite draw in `[0,1)`, reports `stage=critical`, and keeps the invalid result's draw evidence at its finite `-1` default.
+
+### Final GREEN
+
+Fresh exact focused result after all corrections:
+
+```text
+TEST_SUMMARY: PASS (0 failures)
+TASK4_REVIEW_FINAL_FOCUSED_EXIT_CODE=0
+```
+
+## Binding and arithmetic coverage
+
+- Packet-specific target callback returns `0.50` for packet A and `0.25` for packet B. A copy of A's snapshot rejects B with `reason=snapshot packet mismatch`, zero RNG, and unchanged health; the same copy resolves A with captured multiplier `0.50` and final damage `10`.
+- A finite `1.0e308` typed amount multiplied by critical multiplier `2` rejects before RNG at `stage=critical`.
+- The armor factor ordering preserves a finite `1.0e308` result without intermediate overflow.
+- A finite `1.0e308` fire amount with finite `-1.0e308` resistance rejects at `stage=mitigation` before RNG.
+- Two individually finite `9.0e307` resistance components reject their overflowing sum at `stage=accumulation`.
+- Finite `1.0e308 * 2` incoming scaling rejects at `stage=incoming`.
+- Both block outcomes are calculated before RNG; finite `1.0e308` damage and finite `1.0e308` block effectiveness reject the overflowing blocked outcome at `stage=block`, regardless of the prescribed block result.
+- A finite `1.0e308` actual-removal bound and life-steal rate `2` reject at `stage=life_steal` before defender RNG or target/source mutation.
+- Excess subtraction uses nonnegative finite operands after earlier guards. A maximum-scale successful calculate-only hit records finite, nonnegative excess and preserves health.
+- Invalid results do not publish non-finite critical, health, mitigation, incoming, block, damage, excess, or life-steal evidence.
+
+## Verification
+
+Expanded resolver/multi-crit/RNG/typed-combat compatibility batch:
+
+```text
+TEST_SUMMARY: PASS (0 failures)
+TASK4_REVIEW_RELATED_EXIT_CODE=0
+```
+
+The declared stale batch remains exactly the planned three Task 6 and two Task 7 failures:
+
+```text
+TEST_SUMMARY: FAIL (5 failures)
+TASK4_REVIEW_KNOWN_FIVE_EXIT_CODE=1
+```
+
+The fresh repository-wide suite contains exactly the same five failures and no additional parser/load/test failure:
+
+```text
+TEST_SUMMARY: FAIL (5 failures)
+TASK4_REVIEW_FULL_SUITE_EXIT_CODE=1
+```
+
+`git diff --check` passes. No generated sidecar, Task 5+ contract, bundle iteration, proc dispatch, presentation, overkill buffer, runtime integration, QA evidence, or progress-file change is present.
+
+## Concerns
+
+- The five declared Task 6/7 stale expectations remain intentionally unresolved.
+- Focused negative-path coverage deliberately prints structured `PARTY_FORGE_DAMAGE_ERROR` messages; the authoritative result is the explicit summary.
+- No open Task 4 review concern is known after the packet-binding and arithmetic-evidence audit.

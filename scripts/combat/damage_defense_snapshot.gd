@@ -5,6 +5,7 @@ const SCRIPT_PATH := "res://scripts/combat/damage_defense_snapshot.gd"
 
 var _valid := false
 var _error_reason := ""
+var _packet: DamagePacket
 var _target_id: StringName
 var _target_team_id := 0
 var _dodge_chance := 0.0
@@ -17,6 +18,9 @@ var valid: bool:
 	set(_value): pass
 var error_reason: String:
 	get: return _error_reason
+	set(_value): pass
+var packet_instance_id: int:
+	get: return _packet.get_instance_id() if _packet != null else 0
 	set(_value): pass
 var target_id: StringName:
 	get: return _target_id
@@ -41,6 +45,7 @@ var block_effectiveness: float:
 	set(_value): pass
 
 static func create(
+	packet_value: DamagePacket,
 	target_id_value: StringName,
 	target_team_value: int,
 	dodge_value: float,
@@ -51,6 +56,7 @@ static func create(
 ) -> RefCounted:
 	var snapshot = (load(SCRIPT_PATH) as Script).new()
 	var error := _validation_error(
+		packet_value,
 		target_id_value,
 		dodge_value,
 		defenses_value,
@@ -62,6 +68,7 @@ static func create(
 		snapshot._error_reason = error
 		return snapshot
 	snapshot._valid = true
+	snapshot._packet = packet_value
 	snapshot._target_id = target_id_value
 	snapshot._target_team_id = target_team_value
 	snapshot._dodge_chance = dodge_value
@@ -77,6 +84,7 @@ static func invalid(reason: String) -> RefCounted:
 	return snapshot
 
 static func _validation_error(
+	packet_value: DamagePacket,
 	target_id_value: StringName,
 	dodge_value: float,
 	defenses_value: Dictionary,
@@ -84,16 +92,26 @@ static func _validation_error(
 	block_chance_value: float,
 	block_effectiveness_value: float
 ) -> String:
+	if packet_value == null:
+		return "PARTY_FORGE_DAMAGE_ERROR target=%s reason=missing snapshot packet identity" % target_id_value
 	if target_id_value.is_empty():
 		return "PARTY_FORGE_DAMAGE_ERROR target=<empty> reason=missing snapshot target identity"
 	if not is_finite(dodge_value):
 		return "PARTY_FORGE_DAMAGE_ERROR target=%s reason=dodge chance must be finite" % target_id_value
+	if dodge_value < 0.0:
+		return "PARTY_FORGE_DAMAGE_ERROR target=%s reason=dodge chance must be nonnegative" % target_id_value
 	if not is_finite(incoming_value):
 		return "PARTY_FORGE_DAMAGE_ERROR target=%s reason=incoming multiplier must be finite" % target_id_value
+	if incoming_value < 0.0:
+		return "PARTY_FORGE_DAMAGE_ERROR target=%s reason=incoming multiplier must be nonnegative" % target_id_value
 	if not is_finite(block_chance_value):
 		return "PARTY_FORGE_DAMAGE_ERROR target=%s reason=block chance must be finite" % target_id_value
+	if block_chance_value < 0.0:
+		return "PARTY_FORGE_DAMAGE_ERROR target=%s reason=block chance must be nonnegative" % target_id_value
 	if not is_finite(block_effectiveness_value):
 		return "PARTY_FORGE_DAMAGE_ERROR target=%s reason=block effectiveness must be finite" % target_id_value
+	if block_effectiveness_value < 0.0:
+		return "PARTY_FORGE_DAMAGE_ERROR target=%s reason=block effectiveness must be nonnegative" % target_id_value
 	if defenses_value.is_empty():
 		return "PARTY_FORGE_DAMAGE_ERROR target=%s reason=missing per-type defenses" % target_id_value
 	for type_value: Variant in defenses_value:
@@ -113,10 +131,14 @@ static func _validation_error(
 			return "PARTY_FORGE_DAMAGE_ERROR target=%s type=%s rule=%d reason=unsupported mitigation rule" % [target_id_value, type_id, mitigation_rule]
 	return ""
 
+func matches_packet(candidate: DamagePacket) -> bool:
+	return _valid and _packet != null and _packet == candidate
+
 func copy() -> RefCounted:
 	if not _valid:
 		return invalid(_error_reason)
 	return create(
+		_packet,
 		_target_id,
 		_target_team_id,
 		_dodge_chance,
