@@ -32,6 +32,13 @@ func run() -> Array[String]:
 	if inventory_script == null:
 		return failures
 	var inventory := inventory_script.new() as RefCounted
+	var has_required_methods := true
+	for method_name: StringName in [&"expected_paths", &"validate_category_paths", &"validate_paths"]:
+		var has_method := inventory.has_method(method_name)
+		TestAssertions.truthy(has_method, "inventory implements %s" % method_name, failures)
+		has_required_methods = has_required_methods and has_method
+	if not has_required_methods:
+		return failures
 	var project_root := ProjectSettings.globalize_path("res://").trim_suffix("/").trim_suffix("\\")
 	var result: Dictionary = inventory.call(&"build", project_root)
 	var categories := result.get("categories", {}) as Dictionary
@@ -55,7 +62,10 @@ func run() -> Array[String]:
 	TestAssertions.equal(categories.get("shared_character_scenes", PackedStringArray()), PackedStringArray(EXPECTED_SHARED_SCENES), "shared rig and body scenes are exact", failures)
 	TestAssertions.equal(paths.size(), EXPECTED_TOTAL_PATHS, "complete inventory count is locked", failures)
 	_assert_sorted(paths, "complete inventory paths are sorted ordinally", failures)
+	TestAssertions.equal(inventory.call(&"expected_paths"), paths, "all 534 inventory identities are locked exactly", failures)
 	_assert_path_contract(paths, project_root, failures)
+	_test_same_count_identity_drift(inventory, categories, failures)
+	_test_path_segment_normalization(inventory, failures)
 
 	var repeated: Dictionary = inventory.call(&"build", project_root)
 	TestAssertions.equal(repeated, result, "inventory discovery is deterministic", failures)
@@ -69,6 +79,57 @@ func run() -> Array[String]:
 		failures,
 	)
 	return failures
+
+
+func _test_same_count_identity_drift(inventory: RefCounted, categories: Dictionary, failures: Array[String]) -> void:
+	for test_case: Dictionary in [
+		{
+			"category": "equipment_scenes",
+			"missing": "scenes/equipment/dawn_bulwark/dawn_bulwark_belt.tscn",
+			"unexpected": "scenes/equipment/dawn_bulwark/dawn_bulwark_belt_renamed.tscn",
+		},
+		{
+			"category": "presentation_profiles",
+			"missing": "data/presentation/profiles/cleric.tres",
+			"unexpected": "data/presentation/profiles/cleric_renamed.tres",
+		},
+	]:
+		var drifted_categories := categories.duplicate(true)
+		var category := test_case["category"] as String
+		var drifted_paths := PackedStringArray(drifted_categories[category])
+		drifted_paths.erase(test_case["missing"] as String)
+		drifted_paths.append(test_case["unexpected"] as String)
+		drifted_paths.sort()
+		drifted_categories[category] = drifted_paths
+		var expected_errors := PackedStringArray([
+			"PARTY_FORGE_MODULAR_BACKUP_INVENTORY_ERROR category=%s path=%s reason=missing expected path" % [category, test_case["missing"]],
+			"PARTY_FORGE_MODULAR_BACKUP_INVENTORY_ERROR category=%s path=%s reason=unexpected path" % [category, test_case["unexpected"]],
+		])
+		TestAssertions.equal(
+			inventory.call(&"validate_category_paths", drifted_categories),
+			expected_errors,
+			"%s same-count rename drift fails closed" % category,
+			failures,
+		)
+
+
+func _test_path_segment_normalization(inventory: RefCounted, failures: Array[String]) -> void:
+	var invalid_paths := PackedStringArray([
+		"data//empty_segment.tres",
+		"",
+		"data/./dot_segment.tres",
+	])
+	var expected_errors := PackedStringArray([
+		"PARTY_FORGE_MODULAR_BACKUP_INVENTORY_ERROR path= reason=must be normalized and repo-relative",
+		"PARTY_FORGE_MODULAR_BACKUP_INVENTORY_ERROR path=data/./dot_segment.tres reason=must be normalized and repo-relative",
+		"PARTY_FORGE_MODULAR_BACKUP_INVENTORY_ERROR path=data//empty_segment.tres reason=must be normalized and repo-relative",
+	])
+	TestAssertions.equal(
+		inventory.call(&"validate_paths", invalid_paths, ""),
+		expected_errors,
+		"empty and dot path segments reject in deterministic order",
+		failures,
+	)
 
 
 func _assert_sorted(paths: PackedStringArray, label: String, failures: Array[String]) -> void:
