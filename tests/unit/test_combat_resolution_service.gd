@@ -21,9 +21,12 @@ func run() -> Array[String]:
 	_test_post_death_dodge_and_block(service_script, types, failures)
 	_test_mid_bundle_invalid_boundary(service_script, types, failures)
 	_test_freed_health_invalid_boundary(service_script, types, failures)
-	_test_capture_callback_health_invalidation_fails_before_preflight(service_script, types, failures)
+	var capture_fixture_target := _test_capture_callback_health_invalidation_fails_before_preflight(service_script, types, failures)
+	TestAssertions.equal(capture_fixture_target.get_ref(), null, "capture callback fixture releases its target after teardown", failures)
 	_test_post_kill_callbacks_cannot_abort_prepared_flags(service_script, types, failures)
 	_test_later_critical_overflow_fails_preflight(service_script, types, failures)
+	_test_reachable_large_damage_bundle_uses_residual_overkill_bound(service_script, types, failures)
+	_test_reachable_later_life_steal_uses_remaining_health(service_script, types, failures)
 	_test_aggregate_overkill_overflow_fails_preflight(service_script, types, failures)
 	_test_same_service_reentrancy_is_rejected_without_publication(service_script, types, failures)
 	_test_nonfinite_target_position_fails_before_resolution(service_script, types, failures)
@@ -207,7 +210,7 @@ func _test_freed_health_invalid_boundary(service_script: Script, types: DamageTy
 	TestAssertions.equal(failed_count[0], 1, "freed-health failure publishes one failure bundle", failures)
 	service.free()
 
-func _test_capture_callback_health_invalidation_fails_before_preflight(service_script: Script, types: DamageTypeCatalog, failures: Array[String]) -> void:
+func _test_capture_callback_health_invalidation_fails_before_preflight(service_script: Script, types: DamageTypeCatalog, failures: Array[String]) -> WeakRef:
 	var source := _adapter(&"party:capture_invalid", 1, null, {&"crit_chance": 1.0, &"crit_multiplier": 2.0})
 	var packet := DamageResolver.prepare(_attack(30.0), source, CombatRng.new(535), types)
 	var target_health := _health(100.0, 100.0)
@@ -223,7 +226,10 @@ func _test_capture_callback_health_invalidation_fails_before_preflight(service_s
 	var rng := CombatRng.new(536, [0.9, 0.9])
 	var service: Node = service_script.new(rng, types)
 	var publications := _publication_counts(service)
+	var target_weak: WeakRef = weakref(target)
 	var bundle: Object = service.call(&"resolve_bundle", packet, target)
+	target.incoming_provider = Callable()
+	target = null
 	TestAssertions.truthy(bundle != null and not bool(bundle.get("valid")), "capture callback health invalidation returns a failed bundle", failures)
 	if bundle != null:
 		var diagnostics := bundle.get("diagnostics") as Dictionary
@@ -241,6 +247,7 @@ func _test_capture_callback_health_invalidation_fails_before_preflight(service_s
 	TestAssertions.equal(publications["diagnostics"][0], 1, "capture callback invalidation emits one diagnostics snapshot", failures)
 	TestAssertions.equal(service.get("overkill_buffer").call(&"size"), 0, "capture callback invalidation leaves overkill buffer untouched", failures)
 	service.free()
+	return target_weak
 
 func _test_post_kill_callbacks_cannot_abort_prepared_flags(service_script: Script, types: DamageTypeCatalog, failures: Array[String]) -> void:
 	for freeing_signal: String in ["hit", "crit", "kill"]:
@@ -305,6 +312,53 @@ func _test_later_critical_overflow_fails_preflight(service_script: Script, types
 	var publications := _publication_counts(service)
 	var bundle: Object = service.call(&"resolve_bundle", packet, target)
 	_assert_preflight_failure(bundle, target_health, 1.0e308, rng, publications, 1, "later critical overflow", failures)
+	service.free()
+
+func _test_reachable_large_damage_bundle_uses_residual_overkill_bound(service_script: Script, types: DamageTypeCatalog, failures: Array[String]) -> void:
+	var source := _adapter(&"party:reachable_large_bundle", 1, null, {})
+	var packet := _direct_packet(source, 9.0e307, 1.0, [true, true])
+	var target_health := _health(9.0e307, 9.0e307)
+	var target := _adapter(&"enemy:reachable_large_bundle", 2, target_health, {})
+	var rng := CombatRng.new(5501)
+	var service: Node = service_script.new(rng, types)
+	var publications := _publication_counts(service)
+	var bundle: Object = service.call(&"resolve_bundle", packet, target)
+	TestAssertions.truthy(bundle != null and bool(bundle.get("valid")), "finite reachable overkill is not rejected by overflowing raw damage sum", failures)
+	if bundle != null and bool(bundle.get("valid")):
+		TestAssertions.equal((bundle.get("results") as Array).size(), 2, "reachable large bundle resolves both ordered instances", failures)
+		TestAssertions.near(float(bundle.get("total_overkill")), 9.0e307, 0.0, "reachable large bundle accumulates only finite residual overkill", failures)
+		var record: Object = service.get("overkill_buffer").call(&"get_record", &"enemy:reachable_large_bundle")
+		TestAssertions.truthy(record != null, "reachable large bundle records overkill", failures)
+		if record != null:
+			TestAssertions.near(float(record.get("amount")), 9.0e307, 0.0, "reachable large bundle buffers exact finite residual", failures)
+	TestAssertions.near(target_health.current_health, 0.0, 0.0, "reachable large bundle applies the killing instance", failures)
+	TestAssertions.equal(rng.draw_count, 0, "reachable deterministic bundle preserves zero-draw RNG order", failures)
+	TestAssertions.equal(publications["hit"][0], 1, "reachable large bundle emits one living hit proc", failures)
+	TestAssertions.equal(publications["crit"][0], 1, "reachable large bundle emits one living crit proc", failures)
+	TestAssertions.equal(publications["kill"][0], 1, "reachable large bundle emits one kill", failures)
+	TestAssertions.equal(publications["completed"][0], 1, "reachable large bundle completes exactly once", failures)
+	TestAssertions.equal(publications["failed"][0], 0, "reachable large bundle emits no failed contract", failures)
+	service.free()
+
+func _test_reachable_later_life_steal_uses_remaining_health(service_script: Script, types: DamageTypeCatalog, failures: Array[String]) -> void:
+	var source_health := _health(1.0e308, 1.0)
+	var source := _adapter(&"party:reachable_life_steal", 1, source_health, {})
+	var packet := _direct_packet(source, 4.0e307, 2.25, [false, true], 2.0)
+	var target_health := _health(9.0e307, 9.0e307)
+	var target := _adapter(&"enemy:reachable_life_steal", 2, target_health, {})
+	var rng := CombatRng.new(5502)
+	var service: Node = service_script.new(rng, types)
+	var publications := _publication_counts(service)
+	var bundle: Object = service.call(&"resolve_bundle", packet, target)
+	TestAssertions.truthy(bundle != null and bool(bundle.get("valid")), "later life-steal preflight uses health remaining after prior reachable damage", failures)
+	if bundle != null and bool(bundle.get("valid")):
+		TestAssertions.equal((bundle.get("results") as Array).size(), 2, "reachable life-steal bundle resolves both instances", failures)
+		TestAssertions.near(float(bundle.get("total_overkill")), 4.0e307, 1.0e293, "reachable life-steal bundle retains finite residual overkill", failures)
+	TestAssertions.near(target_health.current_health, 0.0, 0.0, "reachable life-steal bundle consumes remaining target health", failures)
+	TestAssertions.near(source_health.current_health, 1.0e308, 0.0, "reachable later life steal heals only from remaining health and clamps", failures)
+	TestAssertions.equal(rng.draw_count, 0, "reachable life-steal bundle preserves deterministic RNG order", failures)
+	TestAssertions.equal(publications["completed"][0], 1, "reachable life-steal bundle completes exactly once", failures)
+	TestAssertions.equal(publications["failed"][0], 0, "reachable life-steal bundle emits no failed contract", failures)
 	service.free()
 
 func _test_aggregate_overkill_overflow_fails_preflight(service_script: Script, types: DamageTypeCatalog, failures: Array[String]) -> void:
@@ -446,7 +500,7 @@ func _assert_preflight_failure(bundle: Object, health: HealthComponent, expected
 	TestAssertions.equal(publications["completed"][0], 0, "%s emits no completed bundle" % label, failures)
 	TestAssertions.equal(publications["failed"][0], 1, "%s emits one failed contract" % label, failures)
 
-func _direct_packet(source: CombatantAdapter, typed_amount: float, multiplier: float, flags: Array[bool]) -> DamagePacket:
+func _direct_packet(source: CombatantAdapter, typed_amount: float, multiplier: float, flags: Array[bool], life_steal_rate: float = 0.0) -> DamagePacket:
 	var roll: RefCounted = MULTI_CRIT_ROLL.new()
 	roll.set("_crit_chance", float(flags.size()))
 	roll.set("_requested_instances", flags.size())
@@ -454,7 +508,7 @@ func _direct_packet(source: CombatantAdapter, typed_amount: float, multiplier: f
 	roll.set("_guaranteed_instances", flags.count(true))
 	roll.set("_critical_flags", flags.duplicate())
 	var prepared: Array[PreparedDamageComponent] = [PreparedDamageComponent.new(&"physical", typed_amount, typed_amount, typed_amount, typed_amount)]
-	return DamagePacket.create(source, &"task5_preflight", [], true, flags[0], -1.0, multiplier, 0.0, prepared, roll)
+	return DamagePacket.create(source, &"task5_preflight", [], true, flags[0], -1.0, multiplier, life_steal_rate, prepared, roll)
 
 func _attack(base_amount: float) -> AttackDefinition:
 	var attack := AttackDefinition.new()

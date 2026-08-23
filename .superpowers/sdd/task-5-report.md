@@ -356,3 +356,73 @@ The cold suite contained exactly the declared five Task 6/7 failures and no addi
 Review-hardening scope is limited to this report, three combat production files, and their three unit suites. Source scanning still finds `CombatResolutionService` only in its own class file: no Main, PartyManager, projectile, area, enemy, scene, persistence, or final presentation path is wired. `.superpowers/sdd/progress.md`, both user-owned untracked QA paths, and the main editor/process remain untouched. `git diff --check` is clean.
 
 The known five Task 6/7 assertions remain intentionally unresolved. Production routing remains Task 6, and final floating-number/overkill visuals remain outside Task 5. The repository's established headless ObjectDB/resource-exit diagnostics remain a concern but did not increase in the verified focused compatibility batch.
+
+---
+
+# Multi-Crit Task 5 Reachable-Bound Correction
+
+## Strict RED-GREEN evidence
+
+The final review blockers were reproduced before production edits. The accepted saved RED reported:
+
+```text
+TEST_SUMMARY: FAIL (12 failures)
+TASK5_REACHABLE_BRANCH_ACCEPTED_RED_EXIT_CODE=1
+```
+
+The failures proved that deterministic full block rejected an impossible unblocked life-steal overflow, the raw `9e307 + 9e307` sum falsely rejected a bundle whose `9e307` initial health leaves only `9e307` potential overkill, and the capture-callback fixture retained its self-captured target after teardown. Deterministic dodge and full-block runtime assertions also fixed the reachable-branch/RNG contract at probability `1.0`.
+
+The first GREEN attempt retained only two deterministic-dodge failures because that draft probe combined certainty with intrinsically invalid non-finite critical evidence. The test was narrowed to finite authoritative damage so it measures only the required reachable maximum. The corrected resolver/service focused run then reported:
+
+```text
+TEST_SUMMARY: PASS (0 failures)
+TASK5_REACHABLE_BRANCH_GREEN_EXIT_CODE=0
+```
+
+Self-review then exercised sequential life steal: a finite first hit reduces `9e307` health before a larger critical hit, making the later reachable life-steal product finite even though calculating it against the original health would overflow. The saved secondary RED and detached-proxy GREEN were:
+
+```text
+TEST_SUMMARY: FAIL (5 failures)
+TASK5_REMAINING_HEALTH_LIFESTEAL_RED_EXIT_CODE=1
+
+TEST_SUMMARY: PASS (0 failures)
+TASK5_REMAINING_HEALTH_LIFESTEAL_GREEN_EXIT_CODE=0
+```
+
+## Corrected reachable-bound contract
+
+- `DamageResolver.preflight_instance()` reports zero reachable maximum for certain dodge, the blocked result for certain block, the unblocked result for zero block chance, and the larger of blocked/unblocked for fractional block chance. Runtime RNG order is unchanged; probability-zero/one branches still consume no draw.
+- Life-steal and excess arithmetic are validated only for block outcomes with nonzero reachability. A `block_chance=1.0`, `block_effectiveness=1.0` fixture with otherwise overflowing unblocked life steal preflights and resolves as a zero-damage full block with no health/RNG mutation.
+- `CombatResolutionService` walks each reachable maximum against captured initial health using an owned detached calculation-only health proxy. It subtracts possible health removal first, updates the proxy before the next flag so later life-steal validation uses remaining health, and checked-adds only residual potential overkill. Two `9e307` instances against `9e307` health now complete with exact finite `9e307` overkill, while the one-health two-instance fixture still rejects the genuinely unrepresentable potential-overkill sum before RNG, health, signals, or buffering. The proxy clears its adapter reference and is freed on success and both preflight failure exits.
+- The capture invalidation test now holds a `WeakRef`, clears `incoming_provider`, and releases its local target immediately after resolution. The post-function assertion proves the fixture-owned target is gone, breaking the target-to-callable-to-target cycle even when assertions append failures.
+
+## Leak correction and final verification
+
+The previous report sentence that treated the exact focused `6 ObjectDB / 3 resources` marker as generic established noise is superseded. Review identified a Task 5 test-owned callback cycle, and the new WeakRef RED/teardown assertion directly proves its removal.
+
+The final exact Task 5 focus passes. Verbose exit enumeration contains no `CombatantAdapter`, health component/proxy, callable, or other Task 5 `RefCounted` instance. The remaining verbose-only list is thirteen `GDScriptNativeClass` plus five `GDScript` objects, with all five named resources under the pre-existing `res://addons/godot_ai/` autoload; it is not the former Task 5 `6/3` signature.
+
+```text
+TEST_SUMMARY: PASS (0 failures)
+TASK5_REACHABLE_FINAL_EXACT_FOCUSED_EXIT_CODE=0
+
+TEST_SUMMARY: PASS (0 failures)
+TASK5_REACHABLE_FINAL_COMPAT_EXIT_CODE=0
+
+TEST_SUMMARY: FAIL (5 failures)
+TASK5_REACHABLE_FINAL_KNOWN_FIVE_EXIT_CODE=1
+```
+
+An imported detached duplicate with fresh `APPDATA` and `LOCALAPPDATA` provided the final repository-wide evidence:
+
+```text
+TASK5_REACHABLE_COLD_IMPORT_EXIT_CODE=0
+PARTY_FORGE_BOOT_OK
+PARTY_FORGE_CLASS_SELECTION_READY
+TEST_SUMMARY: FAIL (5 failures)
+TASK5_REACHABLE_FINAL_COLD_FULL_EXIT_CODE=1
+```
+
+The cold full run emitted exactly the declared five Task 6/7 assertions and no additional test, parser, loader, script, ObjectDB, resource-in-use, or RID marker. Its disposable worktree and app-data roots were removed afterward.
+
+Scope remains this report, the resolver/service, and their unit suites. No production routing, persistence, scene, final presentation, progress, or user QA path changed. `git diff --check` remains clean. The five planned Task 6/7 assertions and the unrelated `godot_ai` verbose-autoload teardown list remain the only concerns.

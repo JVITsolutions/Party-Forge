@@ -83,8 +83,12 @@ func _resolve_bundle_guarded(packet: DamagePacket, target: CombatantAdapter) -> 
 
 	var captured_health := target.health
 	var captured_team_id := target.team_id
-	var preflight_target := CombatantAdapter.new(null, target_id, captured_team_id, captured_health, null, true)
-	var aggregate_upper_bound := 0.0
+	var preflight_health := HealthComponent.new()
+	preflight_health.configure(captured_health.max_health, true, 8.0, 0.5, true)
+	preflight_health.current_health = captured_health.current_health
+	var preflight_target := CombatantAdapter.new(null, target_id, captured_team_id, preflight_health, null, true)
+	var remaining_health_upper_bound := captured_health.current_health
+	var potential_overkill_upper_bound := 0.0
 	for index: int in critical_flags.size():
 		var preflight := DamageResolver.preflight_instance(packet, index, critical_flags[index], snapshot, preflight_target, _damage_types, critical_flags)
 		if not bool(preflight.get("valid", false)):
@@ -92,17 +96,27 @@ func _resolve_bundle_guarded(packet: DamagePacket, target: CombatantAdapter) -> 
 			preflight_diagnostics["processed_before_failure"] = 0
 			preflight_diagnostics["failed_instance_index"] = index
 			preflight_diagnostics["preflight_failed"] = true
+			preflight_target.health = null
+			preflight_health.free()
 			return _publish_failure(String(preflight.get("error_reason", "PARTY_FORGE_DAMAGE_ERROR reason=instance preflight failed")), target_id, target_position, [], preflight_diagnostics)
 		var maximum_final_damage := float(preflight["maximum_final_damage"])
-		var next_upper_bound := aggregate_upper_bound + maximum_final_damage
-		if not is_finite(next_upper_bound) or next_upper_bound < 0.0:
-			var aggregate_error := "PARTY_FORGE_DAMAGE_ERROR attack=%s source=%s target=%s instance=%d stage=aggregate reason=bundle damage upper bound must be finite and nonnegative" % [packet.attack_id, packet.source_id, target_id, index]
+		var maximum_health_removal := minf(maximum_final_damage, remaining_health_upper_bound)
+		var residual_overkill := maximum_final_damage - maximum_health_removal
+		var next_overkill_upper_bound := potential_overkill_upper_bound + residual_overkill
+		if not is_finite(residual_overkill) or residual_overkill < 0.0 or not is_finite(next_overkill_upper_bound) or next_overkill_upper_bound < 0.0:
+			var aggregate_error := "PARTY_FORGE_DAMAGE_ERROR attack=%s source=%s target=%s instance=%d stage=aggregate reason=bundle potential overkill must be finite and nonnegative" % [packet.attack_id, packet.source_id, target_id, index]
 			var aggregate_diagnostics := _diagnostics_for_roll(roll, 0.0)
 			aggregate_diagnostics["processed_before_failure"] = 0
 			aggregate_diagnostics["failed_instance_index"] = index
 			aggregate_diagnostics["preflight_failed"] = true
+			preflight_target.health = null
+			preflight_health.free()
 			return _publish_failure(aggregate_error, target_id, target_position, [], aggregate_diagnostics)
-		aggregate_upper_bound = next_upper_bound
+		remaining_health_upper_bound = maxf(0.0, remaining_health_upper_bound - maximum_health_removal)
+		potential_overkill_upper_bound = next_overkill_upper_bound
+		preflight_health.current_health = remaining_health_upper_bound
+	preflight_target.health = null
+	preflight_health.free()
 
 	var frozen_dead_health := HealthComponent.new()
 	frozen_dead_health.configure(1.0, true, 8.0, 0.5, true)

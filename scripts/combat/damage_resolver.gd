@@ -143,12 +143,18 @@ static func preflight_instance(
 	var invalid_reason := _instance_resolution_error(packet, instance_index, critical, snapshot, target, null, types, true, true, false, authoritative_flags)
 	if not invalid_reason.is_empty():
 		return {"valid": false, "error_reason": invalid_reason, "maximum_final_damage": 0.0}
+	if snapshot.dodge_chance >= 1.0:
+		return {"valid": true, "error_reason": "", "maximum_final_damage": 0.0}
 	var health_before := target.health.current_health
 	var calculation := _calculate_instance(packet, instance_index, critical, snapshot, health_before, true, false, true, true)
 	var calculation_error := String(calculation.get("error", ""))
 	if not calculation_error.is_empty():
 		return {"valid": false, "error_reason": calculation_error, "maximum_final_damage": 0.0}
-	var maximum_final_damage := maxf(float(calculation["unblocked_damage"]), float(calculation["blocked_damage"]))
+	var maximum_final_damage := 0.0
+	if snapshot.block_chance < 1.0:
+		maximum_final_damage = float(calculation["unblocked_damage"])
+	if snapshot.block_chance > 0.0:
+		maximum_final_damage = maxf(maximum_final_damage, float(calculation["blocked_damage"]))
 	if not _finite_nonnegative(maximum_final_damage):
 		return {"valid": false, "error_reason": _arithmetic_error(packet, snapshot, instance_index, "preflight", &"", "maximum final damage must be finite and nonnegative"), "maximum_final_damage": 0.0}
 	return {
@@ -180,6 +186,13 @@ static func resolve_instance(
 	result.health_before = target.health.current_health
 	result.target_was_alive = target.available and not target.health.is_dead and not target.health.is_downed and result.health_before > 0.0
 	result.overkill_only = not result.target_was_alive
+	result.dodge_chance = snapshot.dodge_chance
+	if result.dodge_chance >= 1.0:
+		result.valid = true
+		var certain_dodge := rng.roll(result.dodge_chance)
+		result.dodge_draw = float(certain_dodge["draw"])
+		result.dodged = bool(certain_dodge["success"])
+		return result
 	var calculation := _calculate_instance(packet, instance_index, critical, snapshot, result.health_before, result.target_was_alive, result.overkill_only, apply_health, allow_life_steal)
 	var calculation_error := String(calculation.get("error", ""))
 	if not calculation_error.is_empty():
@@ -187,7 +200,6 @@ static func resolve_instance(
 		push_error(calculation_error)
 		return result
 	result.valid = true
-	result.dodge_chance = snapshot.dodge_chance
 	var dodge := rng.roll(result.dodge_chance)
 	result.dodge_draw = float(dodge["draw"])
 	result.dodged = bool(dodge["success"])
@@ -283,18 +295,27 @@ static func _calculate_instance(
 	if not is_finite(incoming_prevented):
 		return {"error": _arithmetic_error(packet, snapshot, instance_index, "incoming", &"", "incoming prevention evidence must be finite")}
 	var unblocked_damage := damage_before_block
-	var blocked_raw := damage_before_block * (1.0 - snapshot.block_effectiveness)
-	if not is_finite(blocked_raw):
-		return {"error": _arithmetic_error(packet, snapshot, instance_index, "block", &"", "blocked amount must be finite")}
-	var blocked_damage := maxf(0.0, blocked_raw)
-	if not _finite_nonnegative(blocked_damage):
-		return {"error": _arithmetic_error(packet, snapshot, instance_index, "block", &"", "final blocked amount must be finite and nonnegative")}
+	var block_reachable := snapshot.block_chance > 0.0
+	var unblocked_reachable := snapshot.block_chance < 1.0
+	var blocked_damage := 0.0
+	if block_reachable:
+		var blocked_raw := damage_before_block * (1.0 - snapshot.block_effectiveness)
+		if not is_finite(blocked_raw):
+			return {"error": _arithmetic_error(packet, snapshot, instance_index, "block", &"", "blocked amount must be finite")}
+		blocked_damage = maxf(0.0, blocked_raw)
+		if not _finite_nonnegative(blocked_damage):
+			return {"error": _arithmetic_error(packet, snapshot, instance_index, "block", &"", "final blocked amount must be finite and nonnegative")}
 	var unblocked_prevented := damage_before_block - unblocked_damage
-	var blocked_prevented := damage_before_block - blocked_damage
+	var blocked_prevented := damage_before_block - blocked_damage if block_reachable else 0.0
 	if not is_finite(unblocked_prevented) or not is_finite(blocked_prevented):
 		return {"error": _arithmetic_error(packet, snapshot, instance_index, "block", &"", "block prevention evidence must be finite")}
 
-	for possible_damage: float in [unblocked_damage, blocked_damage]:
+	var reachable_damage: Array[float] = []
+	if unblocked_reachable:
+		reachable_damage.append(unblocked_damage)
+	if block_reachable:
+		reachable_damage.append(blocked_damage)
+	for possible_damage: float in reachable_damage:
 		var possible_excess := _prospective_excess(possible_damage, health_before, overkill_only)
 		if not _finite_nonnegative(possible_excess):
 			return {"error": _arithmetic_error(packet, snapshot, instance_index, "excess", &"", "excess amount must be finite and nonnegative")}
