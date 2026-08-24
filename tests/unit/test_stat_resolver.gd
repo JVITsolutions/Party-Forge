@@ -27,11 +27,16 @@ func run() -> Array[String]:
 	TestAssertions.near(tagged.value(&"projectile_speed"), 1.25, 0.001, "required tag includes matching modifier", failures)
 	TestAssertions.near(excluded.value(&"projectile_speed"), 1.0, 0.001, "excluded tag rejects otherwise matching modifier", failures)
 
-	var capped_source := StatModifierSource.create(&"caps", &"character", "Caps", 7, [
-		StatModifier.create(&"crit_chance", StatModifier.Operation.FLAT, 2.0, &"crit", "Crit"),
-	])
-	var capped := StatResolver.resolve(7, CATALOG, {}, [], [capped_source], [], 6)
-	TestAssertions.near(capped.value(&"crit_chance"), 0.75, 0.001, "definition cap applies after arithmetic", failures)
+	var class_baselines := {
+		&"fighter": 0.05,
+		&"rogue": 0.10,
+		&"marksman": 0.10,
+		&"warlock": 0.10,
+	}
+	for class_id: StringName in class_baselines:
+		var class_definition := load("res://data/classes/%s.tres" % class_id) as ClassDefinition
+		var class_snapshot := StatResolver.resolve(7, CATALOG, class_definition.stat_base_values(), class_definition.capability_tags, [], [], 6)
+		TestAssertions.near(class_snapshot.value(&"crit_chance"), class_baselines[class_id], 0.001, "%s resolves its critical chance baseline" % class_id, failures)
 
 	var mutable_breakdown := projectile.breakdown(&"damage")
 	mutable_breakdown[3]["source_label"] = "Changed"

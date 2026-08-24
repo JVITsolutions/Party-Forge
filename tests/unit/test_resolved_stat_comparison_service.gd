@@ -14,6 +14,7 @@ func run() -> Array[String]:
 	var equipment_service: Script = load(EQUIPMENT_SERVICE_PATH)
 	_test_benefit_direction_and_accessible_text(resolved_service, failures)
 	_test_delta_formatting_ignores_absolute_stat_bounds(resolved_service, failures)
+	_test_critical_delta_uses_whole_percentage_points(resolved_service, failures)
 	_test_attribute_derived_final_stats(resolved_service, failures)
 	_test_action_and_disabled_warning_rows(equipment_service, failures)
 	_test_healing_action_rows(equipment_service, failures)
@@ -48,6 +49,15 @@ func _test_delta_formatting_ignores_absolute_stat_bounds(service: Script, failur
 	var rows: Array = service.call("compare", current, candidate, GameCatalog.STAT_CATALOG)
 	TestAssertions.truthy(String(_row(rows, &"attack_speed").get("text", "")).contains("+0.02x Attack Speed"), "attack-speed delta is formatted without the absolute minimum clamp", failures)
 	TestAssertions.truthy(String(_row(rows, &"crit_multiplier").get("text", "")).contains("+10% Critical Strike Multiplier"), "ratio delta is formatted as a percent without the absolute minimum clamp", failures)
+
+
+func _test_critical_delta_uses_whole_percentage_points(service: Script, failures: Array[String]) -> void:
+	var current := _snapshot({&"crit_chance": 0.05})
+	var candidate := _snapshot({&"crit_chance": 0.10})
+	var rows: Array = service.call("compare", current, candidate, GameCatalog.STAT_CATALOG)
+	var critical := _row(rows, &"crit_chance")
+	TestAssertions.equal(critical.get("text"), "▲ +5% Critical Strike Chance — improved", "critical comparison delta uses whole percentage points", failures)
+	TestAssertions.truthy("5.0%" not in String(critical.get("text", "")), "critical comparison delta has no decimal percent text", failures)
 
 
 func _test_attribute_derived_final_stats(service: Script, failures: Array[String]) -> void:

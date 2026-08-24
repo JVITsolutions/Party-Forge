@@ -4,6 +4,7 @@ func run() -> Array[String]:
 	var failures: Array[String] = []
 	_test_action_aware_critical_estimate(failures)
 	_test_critical_chance_matches_runtime_bounds(failures)
+	_test_multi_crit_expected_value_boundaries(failures)
 	_test_noncritical_mixed_damage(failures)
 	_test_mixed_caster_runtime_parity(failures)
 	_test_actual_warlock_action_snapshot_is_caster_only(failures)
@@ -150,14 +151,54 @@ func _test_action_aware_critical_estimate(failures: Array[String]) -> void:
 	TestAssertions.truthy(estimate.available, "valid Ranger estimate is available", failures)
 	TestAssertions.near(estimate.normal_hit, 19.8, 0.001, "normal hit uses global and physical action modifiers", failures)
 	TestAssertions.near(estimate.critical_hit, 29.7, 0.001, "critical hit uses 1.5 multiplier", failures)
-	TestAssertions.near(estimate.average_hit, 22.275, 0.001, "average hit weights 25 percent crit chance", failures)
+	TestAssertions.near(estimate.average_hit, 22.77, 0.001, "average hit weights the Ranger's total 30 percent crit chance", failures)
 	TestAssertions.near(estimate.attacks_per_second, 2.0, 0.001, "attack speed divides authored cooldown", failures)
-	TestAssertions.near(estimate.estimated_dps, 44.55, 0.001, "DPS uses average hit and attacks per second", failures)
+	TestAssertions.near(estimate.estimated_dps, 45.54, 0.001, "DPS uses average damage per use and attacks per second", failures)
 	party.free()
+
+func _test_multi_crit_expected_value_boundaries(failures: Array[String]) -> void:
+	var attack := GameCatalog.load_defaults().class_by_id(&"ranger").primary_attack
+	var cases: Array[Dictionary] = [
+		{"label": "below one hundred", "chance": 0.25, "critical_instances": 0.25, "damage_instances": 1.0},
+		{"label": "exactly one hundred", "chance": 1.0, "critical_instances": 1.0, "damage_instances": 1.0},
+		{"label": "one hundred five", "chance": 1.05, "critical_instances": 1.05, "damage_instances": 1.05},
+		{"label": "eleven hundred fifty", "chance": 11.50, "critical_instances": 11.50, "damage_instances": 11.50},
+		{"label": "below processing ceiling", "chance": 9999.50, "critical_instances": 9999.50, "damage_instances": 9999.50},
+		{"label": "at processing ceiling", "chance": 10000.0, "critical_instances": 10000.0, "damage_instances": 10000.0},
+		{"label": "above processing ceiling", "chance": 10000.50, "critical_instances": 10000.50, "damage_instances": 10000.0},
+	]
+	for row: Dictionary in cases:
+		var chance := float(row["chance"])
+		var estimate := ActionCombatEstimateService.estimate_from_snapshot(
+			attack,
+			_snapshot({&"crit_chance": chance, &"crit_multiplier": 1.5}),
+			GameCatalog.DAMAGE_TYPES,
+		)
+		var label := String(row["label"])
+		TestAssertions.truthy(estimate.available, "%s estimate is available" % label, failures)
+		var exposes_critical_count := _has_property(estimate, &"expected_critical_instances")
+		var exposes_damage_count := _has_property(estimate, &"expected_damage_instances")
+		TestAssertions.truthy(exposes_critical_count, "%s estimate exposes expected critical instances" % label, failures)
+		TestAssertions.truthy(exposes_damage_count, "%s estimate exposes expected damage instances" % label, failures)
+		if exposes_critical_count:
+			TestAssertions.near(float(estimate.get("expected_critical_instances")), float(row["critical_instances"]), 0.0001, "%s preserves expected critical count" % label, failures)
+		if exposes_damage_count:
+			TestAssertions.near(float(estimate.get("expected_damage_instances")), float(row["damage_instances"]), 0.0001, "%s preserves expected damage count" % label, failures)
+		var expected_average: float = (
+			estimate.normal_hit * (1.0 + chance * (1.5 - 1.0))
+			if chance < 1.0 else
+			estimate.normal_hit * 1.5 * float(row["damage_instances"])
+		)
+		TestAssertions.near(estimate.average_hit, expected_average, 0.0001, "%s uses the runtime multi-crit expected-value boundary" % label, failures)
+		TestAssertions.near(estimate.estimated_dps, expected_average * estimate.attacks_per_second, 0.0001, "%s DPS uses average bundle damage times uses per second" % label, failures)
 
 func _test_critical_chance_matches_runtime_bounds(failures: Array[String]) -> void:
 	var overcapped := _estimate_with_crit_modifier(2.0, &"overcapped_crit", failures)
-	TestAssertions.near(overcapped.average_hit, overcapped.critical_hit, 0.001, "overcapped crit chance averages at a certain critical hit", failures)
+	var exposes_critical_count := _has_property(overcapped, &"expected_critical_instances")
+	TestAssertions.truthy(exposes_critical_count, "overcapped estimate exposes expected critical count", failures)
+	if exposes_critical_count:
+		TestAssertions.near(float(overcapped.get("expected_critical_instances")), 2.05, 0.001, "overcapped crit chance preserves two guaranteed instances plus five percent remainder", failures)
+	TestAssertions.near(overcapped.average_hit, overcapped.critical_hit * 2.05, 0.001, "overcapped crit chance averages the full multi-crit bundle", failures)
 	var negative := _estimate_with_crit_modifier(-1.0, &"negative_crit", failures)
 	TestAssertions.near(negative.average_hit, negative.normal_hit, 0.001, "negative crit chance averages at a normal hit", failures)
 	_test_nonfinite_modifier_is_rejected_atomically(failures)

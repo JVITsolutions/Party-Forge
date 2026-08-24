@@ -2,6 +2,7 @@ class_name CombatSandbox
 extends Node3D
 
 const BOSS_SCENE := preload("res://scenes/enemies/forge_guardian.tscn")
+const COMBAT_RESOLUTION_SERVICE := preload("res://scripts/combat/combat_resolution_service.gd")
 const SANDBOX_SCENE_PATH := "res://scenes/dev/combat_sandbox.tscn"
 
 var catalog: GameCatalog
@@ -13,6 +14,7 @@ var enemies: Node3D
 var effects: Node3D
 var boss: Node3D
 var combat_rng: CombatRng
+var combat_resolution_service: Node
 var initialized := false
 var status_refresh_remaining := 0.0
 
@@ -36,14 +38,21 @@ func _ready() -> void:
         party_manager.configure_capacity(PartyCapacityPolicy.new(24))
     party_manager.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
     combat_rng = CombatRng.new(1337)
-    party_manager.configure_combat(combat_rng, catalog.damage_types)
+    combat_resolution_service = COMBAT_RESOLUTION_SERVICE.new() as Node
+    combat_resolution_service.name = "CombatResolutionService"
+    add_child(combat_resolution_service)
+    var combat_configuration_errors: PackedStringArray = combat_resolution_service.call("configure", combat_rng, catalog.damage_types) as PackedStringArray
+    if not combat_configuration_errors.is_empty():
+        push_error(combat_configuration_errors[0])
+        return
+    party_manager.configure_combat(combat_rng, catalog.damage_types, combat_resolution_service)
     leader.configure(party_manager.members[0])
     leader.configure_combat(party_manager, effects)
     leader.position = (get_node("Arena/PlayerSpawn") as Node3D).position
     actor_spawner.initialize(party_manager, get_node("Actors") as Node3D, leader, effects)
     var camera_rig := get_node("LeaderCamera") as Node3D
     camera_rig.set("target", leader)
-    spawn_director.configure(1337, leader, null, _spawn_markers(), camera_rig.get_node("Camera3D") as Camera3D, enemies, effects, 1.0, combat_rng, catalog.damage_types)
+    spawn_director.configure(1337, leader, null, _spawn_markers(), camera_rig.get_node("Camera3D") as Camera3D, enemies, effects, 1.0, combat_rng, catalog.damage_types, 100, combat_resolution_service)
     _wire_buttons()
     party_manager.member_added.connect(func(_member: PartyMemberState) -> void: refresh_status())
     party_manager.class_rank_changed.connect(func(_class_id: StringName, _rank: int) -> void: refresh_status())
@@ -78,7 +87,7 @@ func spawn_boss() -> Node3D:
         return boss
     boss = BOSS_SCENE.instantiate() as Node3D
     enemies.add_child(boss)
-    boss.call("configure_combat", &"boss", combat_rng, catalog.damage_types)
+    boss.call("configure_combat", &"boss", combat_rng, catalog.damage_types, combat_resolution_service)
     boss.position = Vector3(0.0, 0.75, -8.0)
     boss.call("configure_boss", leader, spawn_director, effects)
     refresh_status()

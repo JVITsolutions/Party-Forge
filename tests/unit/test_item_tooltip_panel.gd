@@ -1,6 +1,7 @@
 extends RefCounted
 
 const PANEL_SCENE_PATH := "res://scenes/ui/storage/item_tooltip_panel.tscn"
+const ICON_PATH := "res://assets/ui/equipment/runtime/greenwood/windrunner_band_128.png"
 
 
 func run() -> Array[String]:
@@ -13,6 +14,7 @@ func run() -> Array[String]:
 	if scene == null:
 		return failures
 	_test_layer_and_pin_lifecycle(scene, failures)
+	_test_aggregate_transparency_and_pointer_surfaces(scene, failures)
 	_test_dismissal_grace(scene, failures)
 	return failures
 
@@ -45,6 +47,43 @@ func _test_layer_and_pin_lifecycle(scene: PackedScene, failures: Array[String]) 
 	TestAssertions.equal(String(panel.call("current_source_id")), "inspected", "rejected replacement preserves pinned source", failures)
 	panel.call("toggle_pin")
 	TestAssertions.truthy(not panel.visible and not bool(panel.call("is_pinned")), "unpinning inactive card dismisses", failures)
+	(fixture["host"] as Control).free()
+
+
+func _test_aggregate_transparency_and_pointer_surfaces(scene: PackedScene, failures: Array[String]) -> void:
+	var fixture := _fixture(scene)
+	var panel: Control = fixture["panel"]
+	var no_comparisons: Array[Dictionary] = []
+	panel.call("show_item", _detail("inspected"), no_comparisons, fixture["anchor"], &"inspected", false)
+	var card := panel.get_node("Layout/BodyScroll/Cards").get_child(0) as Control
+	var panel_style := panel.get_theme_stylebox("panel") as StyleBoxFlat
+	var card_style := card.get_theme_stylebox("panel") as StyleBoxFlat
+	TestAssertions.truthy(panel_style != null and card_style != null, "tooltip panel and card expose inspectable backgrounds", failures)
+	if panel_style != null and card_style != null:
+		var outer_alpha := panel_style.bg_color.a
+		var inner_alpha := card_style.bg_color.a
+		var outer_owns_background := outer_alpha >= 0.80 and outer_alpha <= 0.88 and inner_alpha <= 0.05
+		var inner_owns_background := inner_alpha >= 0.80 and inner_alpha <= 0.88 and outer_alpha <= 0.05
+		TestAssertions.truthy(outer_owns_background or inner_owns_background, "tooltip has one 80-88 percent dark background without stacked opacity", failures)
+	var icon := card.get_node_or_null("Layout/Header/Icon") as TextureRect
+	TestAssertions.truthy(icon != null and icon.texture != null and icon.texture.resource_path == ICON_PATH, "first shared panel card renders the projected icon", failures)
+	var decorative_pass_surfaces: Array[Control] = [
+		panel,
+		panel.get_node("Layout") as Control,
+		panel.get_node("Layout/Header") as Control,
+		panel.get_node("Layout/BodyScroll/Cards") as Control,
+		card,
+		card.get_node("Layout") as Control,
+		card.get_node("Layout/Header") as Control,
+		card.get_node("Layout/Header/Text") as Control,
+	]
+	for surface: Control in decorative_pass_surfaces:
+		TestAssertions.equal(surface.mouse_filter, Control.MOUSE_FILTER_PASS, "%s decorative tooltip surface passes pointer input" % surface.name, failures)
+	for label_path: String in ["Layout/Header/Context", "Layout/InputHints"]:
+		var label := panel.get_node(label_path) as Label
+		TestAssertions.equal(label.mouse_filter, Control.MOUSE_FILTER_IGNORE, "%s decorative panel label ignores pointer input" % label.name, failures)
+	TestAssertions.equal((panel.get_node("Layout/Header/Pin") as Button).mouse_filter, Control.MOUSE_FILTER_STOP, "pin remains a pointer interaction surface", failures)
+	TestAssertions.equal((panel.get_node("Layout/BodyScroll") as ScrollContainer).mouse_filter, Control.MOUSE_FILTER_STOP, "scroll body remains a pointer interaction surface", failures)
 	(fixture["host"] as Control).free()
 
 
@@ -83,6 +122,7 @@ func _detail(instance_id: String) -> Dictionary:
 	return {
 		"instance_id": instance_id,
 		"base_definition_id": "windrunner_band",
+		"icon_path": ICON_PATH,
 		"name": instance_id.capitalize(),
 		"item_type_id": "ring",
 		"rarity_id": "rare",

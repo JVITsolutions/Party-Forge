@@ -13,6 +13,7 @@ func run() -> Array[String]:
 	if equipment == null or foundation == null:
 		return failures
 	_assert_schema_one_migration(equipment, foundation, failures)
+	_assert_legacy_off_grid_critical_compatibility(equipment, foundation, failures)
 	_assert_immutable_round_trip(equipment, foundation, failures)
 	_assert_retained_fixture_boundaries(equipment, foundation, failures)
 	_assert_multi_effect_codec(equipment, foundation, failures)
@@ -20,6 +21,69 @@ func run() -> Array[String]:
 	_assert_strict_rejections(equipment, foundation, failures)
 	_assert_deterministic_issuer(equipment, foundation, failures)
 	return failures
+
+
+func _assert_legacy_off_grid_critical_compatibility(
+	equipment: EquipmentCatalog,
+	foundation: ItemFoundationCatalog,
+	failures: Array[String],
+) -> void:
+	var legacy_document := _legacy_off_grid_critical_document()
+	var legacy_before := JSON.stringify(legacy_document)
+	var decoded := ItemInstanceCodec.decode(legacy_document, equipment, foundation)
+	TestAssertions.truthy(decoded.ok(), "legacy off-grid critical item decodes", failures)
+	if not decoded.ok():
+		failures.append("legacy off-grid critical decode error: %s" % decoded.error)
+		return
+	var item := decoded.item as ItemInstance
+	TestAssertions.equal(item.affixes[0].rolls[0].value, 0.0111, "legacy decode preserves the exact raw off-grid critical roll", failures)
+	var canonical_item_before := JSON.stringify(item.to_dictionary())
+	TestAssertions.equal(item.schema_version, ItemInstance.SCHEMA_VERSION, "legacy off-grid critical item migrates to the current item schema", failures)
+	TestAssertions.truthy(canonical_item_before.contains("\"value\":0.0111"), "migrated item encoding preserves the raw off-grid critical value", failures)
+	TestAssertions.equal(JSON.stringify(legacy_document), legacy_before, "legacy off-grid decode leaves its input document unchanged", failures)
+
+	var owner := "legacy-critical-player"
+	var equipment_id := &"legacy-critical-equipment"
+	var state := ItemOwnershipState.create(owner, ItemRegistry.new([item]), [
+		ItemSlotContainer.create(
+			equipment_id,
+			ItemSlotContainer.RUN_MEMBER_EQUIPMENT,
+			owner,
+			EquipmentSlotIndex.capacity(),
+			{EquipmentSlotIndex.index_for(&"ring_left"): item.instance_id},
+		),
+	])
+	var projection := EquipmentModifierProjector.project(1, equipment_id, state, [item.instance_id], equipment, foundation, GameCatalog.STAT_CATALOG)
+	TestAssertions.truthy(projection.ok(), "legacy off-grid critical equipment projects to a combat stat source", failures)
+	if projection.ok():
+		var sources: Array[StatModifierSource] = [projection.source]
+		var snapshot := StatResolver.resolve(1, GameCatalog.STAT_CATALOG, {}, [], sources, [], 1)
+		TestAssertions.near(snapshot.value(&"crit_chance"), 0.06, 0.000001, "combat stat resolution non-destructively snaps base 5% plus legacy 1.11% to 6%", failures)
+		TestAssertions.equal(GameCatalog.STAT_CATALOG.definition(&"crit_chance").format_value(snapshot.value(&"crit_chance")), "6%", "resolved-stat presentation uses whole critical percentage", failures)
+	TestAssertions.equal(item.affixes[0].rolls[0].value, 0.0111, "combat projection and resolution do not rewrite the saved roll", failures)
+	TestAssertions.equal(JSON.stringify(item.to_dictionary()), canonical_item_before, "combat resolution leaves the migrated legacy item byte-equivalent", failures)
+
+	var detail := ItemPresentationProjector.project(item, equipment, foundation, GameCatalog.STAT_CATALOG)
+	var projected_roll := ((detail.get("affixes", []) as Array)[0].get("rolls", []) as Array)[0] as Dictionary
+	TestAssertions.equal(projected_roll.get("effect_text"), "+1% Critical Strike Chance", "item projection presents the legacy roll as a whole percentage", failures)
+	TestAssertions.equal(projected_roll.get("formatted_value"), "1%", "item projection exposes no fractional critical percentage", failures)
+	var tooltip := ItemTooltipCard.new()
+	tooltip.present(detail, &"equipped:ring_left", true)
+	var tooltip_text := tooltip.rendered_text()
+	TestAssertions.truthy(tooltip_text.contains("+1% Critical Strike Chance") and tooltip_text.contains("Range: 1%-2%"), "tooltip presents legacy critical value and range only as whole percentages", failures)
+	TestAssertions.truthy("0.0111" not in tooltip_text and "1.11%" not in tooltip_text, "tooltip never exposes the raw off-grid legacy ratio", failures)
+	tooltip.free()
+
+	var bootstrap := RunItemBootstrap.create(&"legacy-critical-run", 80823, StringName(owner), 1, state)
+	var resumable_document := ResumableRunItemCodec.encode(bootstrap)
+	var profile := ProfileState.new_profile("legacy-critical-profile", "Legacy Critical", 80823)
+	profile.resumable_run = resumable_document.duplicate(true)
+	var profile_document := JSON.parse_string(ProfileCodec.encode(profile)) as Dictionary
+	var resumable_text := JSON.stringify(resumable_document).to_lower()
+	var profile_text := JSON.stringify(profile_document).to_lower()
+	for transient_name: String in ["overkill", "combat_diagnostics", "damage_bundle", "processed_instances", "presentation_events"]:
+		TestAssertions.truthy(not resumable_text.contains(transient_name), "resumable-run encoding excludes transient %s state" % transient_name, failures)
+		TestAssertions.truthy(not profile_text.contains(transient_name), "profile encoding excludes transient %s state" % transient_name, failures)
 
 func _assert_immutable_round_trip(
 	equipment: EquipmentCatalog,
@@ -591,5 +655,32 @@ func _literal_schema_one_fixture_document(fixture: Dictionary, tier: int, value:
 			"source": "literal_schema_one",
 		},
 		"rarity_id": "legendary",
+		"schema_version": 1,
+	}
+
+
+func _legacy_off_grid_critical_document() -> Dictionary:
+	return {
+		"affixes": [{
+			"affix_kind": "implicit",
+			"definition_id": "ring_of_mercy_implicit",
+			"rolls": [{
+				"operation": StatModifier.Operation.FLAT,
+				"required_tags": [],
+				"stat_id": "crit_chance",
+				"value": 0.0111,
+			}],
+			"tier": 1,
+		}],
+		"base_definition_id": "ring_of_mercy",
+		"instance_id": "legacy-off-grid-critical-ring",
+		"item_level": 1,
+		"origin": {
+			"issuer_namespace": "legacy:critical-save",
+			"seed": 80823,
+			"sequence": 0,
+			"source": "legacy_save",
+		},
+		"rarity_id": "common",
 		"schema_version": 1,
 	}

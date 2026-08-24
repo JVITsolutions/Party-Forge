@@ -30,18 +30,23 @@ func finalize_value(value: float) -> float:
 	return snappedf(result, pow(10.0, -decimal_places))
 
 func format_value(value: float) -> String:
-	var final := finalize_value(value)
+	return _format(finalize_value(value))
+
+func format_modifier_value(value: float) -> String:
+	return _format(value)
+
+func _format(value: float) -> String:
 	match value_format:
 		ValueFormat.INTEGER:
-			return str(roundi(final))
+			return str(roundi(value))
 		ValueFormat.RATIO_PERCENT:
-			return ("%.*f%%" % [precision, final * 100.0])
+			return ("%.*f%%" % [precision, value * 100.0])
 		ValueFormat.MULTIPLIER:
-			return ("%.*fx" % [precision, final])
+			return ("%.*fx" % [precision, value])
 		ValueFormat.PER_SECOND:
-			return ("%.*f/s" % [precision, final])
+			return ("%.*f/s" % [precision, value])
 		_:
-			return ("%.*f" % [precision, final])
+			return ("%.*f" % [precision, value])
 
 func validate() -> PackedStringArray:
 	var errors: PackedStringArray = []

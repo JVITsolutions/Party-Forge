@@ -110,6 +110,8 @@ static func _tooltip_keywords(definition: UpgradeDefinition) -> Array[StringName
 		if effect == null:
 			continue
 		_append_unique(result, effect.stat_id)
+		if effect.stat_id == &"crit_chance":
+			_append_unique(result, &"multi_crit")
 		var operation_keyword := _operation_keyword(effect.operation)
 		_append_unique(result, operation_keyword)
 		for tag: StringName in effect.required_capability_tags + effect.excluded_capability_tags + effect.required_action_tags + effect.excluded_action_tags:

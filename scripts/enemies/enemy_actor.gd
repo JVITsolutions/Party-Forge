@@ -1,6 +1,8 @@
 class_name EnemyActor
 extends CharacterBody3D
 
+const COMBAT_RESOLUTION_SERVICE := preload("res://scripts/combat/combat_resolution_service.gd")
+
 signal reward_dropped(experience: int, drop_position: Vector3)
 signal enemy_defeated(definition: EnemyDefinition, drop_position: Vector3)
 
@@ -24,6 +26,7 @@ var last_visual_health := 0.0
 var combatant_id: StringName
 var combat_rng: CombatRng
 var damage_types: DamageTypeCatalog
+var combat_resolution_service: Node
 var recovery_controller: RecoveryController
 var visual_surface_materials: Array[StandardMaterial3D] = []
 var visual_surface_colors: Array[Color] = []
@@ -53,10 +56,15 @@ func configure(enemy_definition: EnemyDefinition) -> void:
     base_visual_color = _current_visual_color()
     _configure_recovery()
 
-func configure_combat(sequence_id: Variant, rng: CombatRng, types: DamageTypeCatalog) -> void:
+func configure_combat(sequence_id: Variant, rng: CombatRng, types: DamageTypeCatalog, resolution_service: Node = null) -> void:
     combatant_id = StringName("enemy:%s" % sequence_id)
     combat_rng = rng
     damage_types = types
+    combat_resolution_service = resolution_service
+    if combat_resolution_service == null:
+        combat_resolution_service = COMBAT_RESOLUTION_SERVICE.new(rng, types) as Node
+        combat_resolution_service.name = "FixtureCombatResolutionService"
+        add_child(combat_resolution_service)
     _configure_recovery()
 
 func get_combat_adapter(tags: Array[StringName]) -> CombatantAdapter:
@@ -84,7 +92,11 @@ func attack_geometry(attack_id: StringName) -> ResolvedAttackGeometry:
     return ResolvedAttackGeometry.from_attack(attack, range_multiplier, area_multiplier)
 
 func resolve_attack(packet: DamagePacket, target: CombatantAdapter) -> DamageResult:
-    return DamageResolver.resolve(packet, target, combat_rng, damage_types)
+    if combat_resolution_service == null:
+        return DamageResult.new()
+    var bundle: RefCounted = combat_resolution_service.call("resolve_bundle", packet, target) as RefCounted
+    var results: Array[DamageResult] = bundle.get("results") as Array[DamageResult] if bundle != null else []
+    return results[0] if not results.is_empty() else DamageResult.new()
 
 func defeat() -> void:
     if defeat_handled:

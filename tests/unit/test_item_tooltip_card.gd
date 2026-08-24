@@ -1,6 +1,7 @@
 extends RefCounted
 
 const CARD_PATH := "res://scripts/ui/storage/item_tooltip_card.gd"
+const ICON_PATH := "res://assets/ui/equipment/runtime/greenwood/windrunner_band_128.png"
 
 
 func run() -> Array[String]:
@@ -9,13 +10,54 @@ func run() -> Array[String]:
 	if not ResourceLoader.exists(CARD_PATH):
 		return failures
 	var card_script: Script = load(CARD_PATH)
+	_test_icon_header_and_decorative_pointer_filters(card_script, failures)
+	_test_unavailable_icon_uses_stable_placeholder(card_script, failures)
 	_test_normal_and_advanced_layers(card_script, failures)
+	_test_critical_definition_formatting(card_script, failures)
 	_test_schema_one_empty_damage_has_no_heading(card_script, failures)
 	_test_equipped_role_and_deltas(card_script, failures)
 	_test_disabled_status_and_accessible_deltas(card_script, failures)
 	_test_raw_fallback_rows_use_neutral_color(card_script, failures)
+	_test_critical_raw_fallback_uses_whole_percent(card_script, failures)
 	_test_developer_technical_gate(card_script, failures)
 	return failures
+
+
+func _test_icon_header_and_decorative_pointer_filters(card_script: Script, failures: Array[String]) -> void:
+	var card: Control = card_script.new()
+	card.call("present", _detail(), &"inspected", false, [] as Array[Dictionary], false)
+	var icon := card.get_node_or_null("Layout/Header/Icon") as TextureRect
+	TestAssertions.truthy(icon != null, "shared tooltip card builds an item icon in its header", failures)
+	if icon != null:
+		TestAssertions.truthy(icon.visible and icon.texture != null, "projected item icon is visible", failures)
+		if icon.texture != null:
+			TestAssertions.equal(icon.texture.resource_path, ICON_PATH, "tooltip loads only the projected item icon path", failures)
+		TestAssertions.truthy(icon.accessibility_name.contains("Cinder Band"), "item icon accessibility text names the item", failures)
+		TestAssertions.truthy(icon.custom_minimum_size.x >= 48.0 and icon.custom_minimum_size.y >= 48.0, "item icon preserves a readable 48 by 48 minimum", failures)
+		TestAssertions.equal(icon.mouse_filter, Control.MOUSE_FILTER_IGNORE, "item icon does not intercept tooltip pointer input", failures)
+	var decorative_labels := card.find_children("*", "Label", true, false)
+	TestAssertions.truthy(not decorative_labels.is_empty(), "shared tooltip card exposes decorative labels", failures)
+	for node: Node in decorative_labels:
+		var label := node as Label
+		TestAssertions.equal(label.mouse_filter, Control.MOUSE_FILTER_IGNORE, "%s decorative label ignores pointer input" % label.name, failures)
+	card.free()
+
+
+func _test_unavailable_icon_uses_stable_placeholder(card_script: Script, failures: Array[String]) -> void:
+	var card: Control = card_script.new()
+	var detail := _detail()
+	detail["icon_path"] = "res://missing/tooltip-icon.png"
+	card.call("present", detail, &"inspected", false, [] as Array[Dictionary], false)
+	var icon := card.get_node("Layout/Header/Icon") as TextureRect
+	var placeholder := icon.get_node_or_null("Placeholder") as Label
+	TestAssertions.truthy(icon.texture == null, "unloadable projected icon is rejected", failures)
+	TestAssertions.truthy(placeholder != null and placeholder.visible and placeholder.text == "?", "unavailable item icon uses the established question-mark placeholder", failures)
+	TestAssertions.truthy(icon.custom_minimum_size.x >= 48.0 and icon.custom_minimum_size.y >= 48.0, "unavailable item icon does not collapse the header layout", failures)
+	TestAssertions.truthy(icon.accessibility_name.contains("Cinder Band") and icon.accessibility_name.contains("unavailable"), "unavailable icon remains accessible by item name and state", failures)
+	detail["icon_path"] = ""
+	card.call("present", detail, &"inspected", false, [] as Array[Dictionary], false)
+	TestAssertions.truthy(placeholder != null and placeholder.visible, "empty projected icon path keeps the established placeholder", failures)
+	card.free()
 
 
 func _test_normal_and_advanced_layers(card_script: Script, failures: Array[String]) -> void:
@@ -55,6 +97,36 @@ func _test_normal_and_advanced_layers(card_script: Script, failures: Array[Strin
 	if base_box != null and base_box.get_child_count() == 2:
 		TestAssertions.equal((base_box.get_child(0) as Label).get_theme_color("font_color"), GameCatalog.DAMAGE_TYPES.definition(&"fire").presentation_color, "fire base range uses canonical damage color", failures)
 		TestAssertions.equal((base_box.get_child(1) as Label).get_theme_color("font_color"), GameCatalog.DAMAGE_TYPES.definition(&"physical").presentation_color, "physical base range uses canonical damage color", failures)
+	card.free()
+
+
+func _test_critical_definition_formatting(card_script: Script, failures: Array[String]) -> void:
+	var detail := _detail()
+	detail["affixes"] = [{
+		"definition_id": "ring_of_mercy_implicit",
+		"display_name": "Ring Of Mercy Legacy",
+		"affix_kind": "implicit",
+		"tier": 1,
+		"rolls": [{
+			"stat_id": "crit_chance",
+			"stat_name": "Critical Strike Chance",
+			"operation": StatModifier.Operation.FLAT,
+			"value": 0.0111,
+			"formatted_value": "1%",
+			"effect_text": "+1% Critical Strike Chance",
+			"minimum_roll": 0.01,
+			"maximum_roll": 0.02,
+			"formatted_minimum_roll": "1%",
+			"formatted_maximum_roll": "2%",
+			"roll_fraction": 0.11,
+		}],
+	}]
+	var card: Control = card_script.new()
+	card.call("present", detail, &"inspected", true, [] as Array[Dictionary], false)
+	var text := String(card.call("rendered_text"))
+	TestAssertions.truthy(text.contains("+1% Critical Strike Chance"), "critical tooltip uses whole player-facing percentage points", failures)
+	TestAssertions.truthy(text.contains("Range: 1%-2%"), "critical tooltip range uses definition-formatted endpoints", failures)
+	TestAssertions.truthy("0.0111" not in text and "+0.01" not in text and "0.01-0.02" not in text, "critical tooltip never exposes raw ratio decimals", failures)
 	card.free()
 
 
@@ -103,6 +175,33 @@ func _test_raw_fallback_rows_use_neutral_color(card_script: Script, failures: Ar
 		TestAssertions.equal(child.get_theme_color("font_color"), Color(0.78, 0.80, 0.84), "raw fallback uses the neutral comparison color", failures)
 		var accessible := child.accessibility_name.to_lower()
 		TestAssertions.truthy("benefit unknown" in accessible and "neutral" in accessible, "raw fallback label exposes accessible neutral meaning", failures)
+	card.free()
+
+
+func _test_critical_raw_fallback_uses_whole_percent(card_script: Script, failures: Array[String]) -> void:
+	var inspected := {
+		"instance_id": "new-ring",
+		"name": "New Ring",
+		"compatible_slot_ids": ["ring_left"],
+		"modifier_totals": {"crit_chance|0": 0.0111},
+	}
+	var equipped := {
+		"instance_id": "old-ring",
+		"name": "Old Ring",
+		"compatible_slot_ids": ["ring_left"],
+		"modifier_totals": {},
+	}
+	var comparisons := ItemComparisonResolver.resolve(
+		inspected,
+		[{"slot_id": "ring_left", "instance_id": "old-ring"}],
+		{"old-ring": equipped},
+	)
+	var card: Control = card_script.new()
+	card.call("present", _detail(), StringName("equipped:ring_left"), false, comparisons[0]["delta_lines"], false)
+	var rendered := String(card.call("rendered_text"))
+	TestAssertions.truthy(rendered.contains("Critical Strike Chance item modifier: 1% higher"), "tooltip fallback uses player-facing critical modifier wording", failures)
+	TestAssertions.truthy(" raw " not in rendered and " flat " not in rendered, "tooltip critical fallback omits raw and flat jargon", failures)
+	TestAssertions.truthy("0.0111" not in rendered and "0.01 higher" not in rendered and "1.11%" not in rendered, "tooltip fallback hides legacy critical decimals", failures)
 	card.free()
 
 
@@ -167,6 +266,7 @@ func _detail() -> Dictionary:
 	return {
 		"instance_id": "item-instance-1",
 		"base_definition_id": "windrunner_band",
+		"icon_path": ICON_PATH,
 		"name": "Cinder Band",
 		"item_type_id": "ring",
 		"rarity_id": "rare",

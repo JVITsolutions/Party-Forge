@@ -186,15 +186,18 @@ static func _project_affix(
 			continue
 		var stat_definition := stats.definition(roll.stat_id)
 		var stat_name := stat_definition.display_name if stat_definition != null else _title(String(roll.stat_id))
+		var formatted_value := _formatted_effect_value(stat_definition, roll.operation, roll.value)
 		var document := {
 			"stat_id": String(roll.stat_id),
 			"stat_name": stat_name,
 			"operation": roll.operation,
 			"operation_name": operation_name(roll.operation),
 			"value": roll.value,
-			"effect_text": _effect_text(stat_name, roll.operation, roll.value),
+			"effect_text": _effect_text(stat_name, roll.operation, roll.value, formatted_value),
 		}
-		_append_bounds(document, definition, instance.tier, roll_index, roll)
+		if _needs_definition_format_fields(stat_definition, roll.operation):
+			document["formatted_value"] = formatted_value
+		_append_bounds(document, definition, instance.tier, roll_index, roll, stat_definition)
 		rolls.append(document)
 		var total_key := "%s|%d" % [String(roll.stat_id), roll.operation]
 		totals[total_key] = float(totals.get(total_key, 0.0)) + roll.value
@@ -213,6 +216,7 @@ static func _append_bounds(
 	tier: int,
 	effect_index: int,
 	roll: ItemModifierRoll,
+	stat_definition: StatDefinition,
 ) -> void:
 	if definition == null or effect_index < 0 or effect_index >= definition.effects.size():
 		return
@@ -229,6 +233,9 @@ static func _append_bounds(
 		return
 	document["minimum_roll"] = minimum
 	document["maximum_roll"] = maximum
+	if _needs_definition_format_fields(stat_definition, roll.operation):
+		document["formatted_minimum_roll"] = _formatted_effect_value(stat_definition, roll.operation, minimum)
+		document["formatted_maximum_roll"] = _formatted_effect_value(stat_definition, roll.operation, maximum)
 	document["roll_fraction"] = 0.0 if is_equal_approx(minimum, maximum) else clampf((roll.value - minimum) / (maximum - minimum), 0.0, 1.0)
 
 
@@ -284,20 +291,41 @@ static func _equip_warning_lines(
 	return lines
 
 
-static func _effect_text(stat_name: String, operation: int, value: float) -> String:
+static func _effect_text(stat_name: String, operation: int, value: float, formatted_value: String) -> String:
 	match operation:
 		StatModifier.Operation.FLAT:
-			return "%s%s %s" % ["+" if value >= 0.0 else "", _number(value), stat_name]
+			return "%s%s %s" % ["+" if value >= 0.0 else "-", formatted_value, stat_name]
 		StatModifier.Operation.INCREASED:
-			return "%s%% increased %s" % [_number(value * 100.0), stat_name]
+			return "%s increased %s" % [formatted_value, stat_name]
 		StatModifier.Operation.REDUCED:
-			return "%s%% reduced %s" % [_number(value * 100.0), stat_name]
+			return "%s reduced %s" % [formatted_value, stat_name]
 		StatModifier.Operation.MORE:
-			return "%s%% more %s" % [_number(value * 100.0), stat_name]
+			return "%s more %s" % [formatted_value, stat_name]
 		StatModifier.Operation.LESS:
-			return "%s%% less %s" % [_number(value * 100.0), stat_name]
+			return "%s less %s" % [formatted_value, stat_name]
 		_:
-			return "%s %s" % [_number(value), stat_name]
+			return "%s %s" % [formatted_value, stat_name]
+
+
+static func _formatted_effect_value(definition: StatDefinition, operation: int, value: float) -> String:
+	if operation == StatModifier.Operation.FLAT and definition != null:
+		return definition.format_modifier_value(absf(value))
+	if operation in [
+		StatModifier.Operation.INCREASED,
+		StatModifier.Operation.REDUCED,
+		StatModifier.Operation.MORE,
+		StatModifier.Operation.LESS,
+	]:
+		return "%s%%" % _number(absf(value) * 100.0)
+	return _number(absf(value))
+
+
+static func _needs_definition_format_fields(definition: StatDefinition, operation: int) -> bool:
+	return (
+		definition != null
+		and operation == StatModifier.Operation.FLAT
+		and definition.value_format not in [StatDefinition.ValueFormat.NUMBER, StatDefinition.ValueFormat.INTEGER]
+	)
 
 
 static func _number(value: float) -> String:

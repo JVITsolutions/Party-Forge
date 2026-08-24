@@ -62,7 +62,8 @@ func _run() -> void:
 	var spatial_index := SPATIAL_INDEX.new(registry, 8.0) as RefCounted
 	var targeting := TARGETING_SERVICE.new() as RefCounted
 	var pickup := PICKUP_SERVICE.new(registry, _contexts, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG, 3.5) as RefCounted
-	world.configure_interaction(spatial_index, targeting, pickup, _contexts, 30.0)
+	var modal := [false]
+	world.configure_interaction(spatial_index, targeting, pickup, _contexts, 30.0, Callable(), func() -> bool: return modal[0])
 	await process_frame
 	_assert((world.get("_chest_by_drop") as Dictionary).size() == RECORD_COUNT + CRITICAL_IDS.size(), "production world controller projects all 2,000 ordinary and three critical chests")
 	var nearby := targeting.call(&"ordered_for_owner", spatial_index, OWNER_IDS[0], Vector3.ZERO, 12.0) as Array
@@ -83,6 +84,24 @@ func _run() -> void:
 	var focus_anchor := _anchor_for(world, CRITICAL_IDS[2])
 	var ordinary_anchor := _anchor_for(world, &"scale-drop-1999")
 	_assert(selected_anchor != null and hover_anchor != null and focus_anchor != null and ordinary_anchor != null, "critical and ordinary anchors are projected")
+	var selected_position_before_pause := selected_anchor.position if selected_anchor != null else Vector2.ZERO
+	camera.position.x += 5.0
+	modal[0] = true
+	paused = true
+	await process_frame
+	var paused_projection := world.call(&"projection_diagnostics") as Dictionary
+	_assert(world.process_mode == Node.PROCESS_MODE_ALWAYS, "scale world controller remains scheduled for pause-safe modal synchronization")
+	_assert(selected_anchor != null and selected_anchor.mouse_filter == Control.MOUSE_FILTER_IGNORE, "pause-driven modal suppresses an existing scale anchor")
+	_assert(int(paused_projection.get("last_frame_work", -1)) == 0 and selected_anchor != null and selected_anchor.position == selected_position_before_pause, "paused scale controller performs zero projection work despite camera motion")
+	for _paused_sample: int in 3:
+		camera.position.x += 1.0
+		await process_frame
+		_assert(int((world.call(&"projection_diagnostics") as Dictionary).get("last_frame_work", -1)) == 0, "stable paused scale frame performs zero projection work")
+	modal[0] = false
+	paused = false
+	camera.position.x = 0.0
+	await process_frame
+	_assert(selected_anchor != null and selected_anchor.mouse_filter == Control.MOUSE_FILTER_STOP, "unpaused scale controller restores ground-anchor pointer capture")
 	if hover_anchor != null:
 		hover_anchor.mouse_entered.emit()
 	if focus_anchor != null:
@@ -148,6 +167,7 @@ func _run() -> void:
 	])
 	var hard_failure := registry.all_records().size() < 2000 or peak_frame_ms > 33.4
 
+	paused = false
 	world.clear_projection()
 	viewport.free()
 	_contexts.clear()

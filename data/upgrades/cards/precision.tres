@@ -16,6 +16,6 @@ id = &"precision"
 display_name = "Precision"
 summary = "Gain critical strike chance."
 description = "Gain critical strike chance."
-tooltip_keyword_ids = Array[StringName]([&"crit_chance"])
+tooltip_keyword_ids = Array[StringName]([&"crit_chance", &"multi_crit"])
 max_rank = 5
 effects = Array[ExtResource("1_5kguf")]([SubResource("Resource_31d5c")])

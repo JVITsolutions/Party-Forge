@@ -2,6 +2,7 @@ class_name PartyProjectile
 extends Node3D
 
 const AREA_BURST_SCENE := preload("res://scenes/combat/area_burst.tscn")
+const COMBAT_RESOLUTION_SERVICE := preload("res://scripts/combat/combat_resolution_service.gd")
 
 var packet: DamagePacket
 var combat_rng: CombatRng
@@ -19,8 +20,9 @@ var direction := Vector3.FORWARD
 var impact_scene: PackedScene
 var impact_color := Color.WHITE
 var visual_scale := Vector3.ONE
+var combat_resolution_service: Node
 
-func configure(damage_packet: DamagePacket, rng: CombatRng, types: DamageTypeCatalog, projectile_speed: float, impact_radius: float, range_limit: float, duration: float, combat_target: CombatTarget, effect_container: Node, actor_candidates: Array[Node3D] = [], presentation_impact_scene: PackedScene = null, presentation_impact_color: Color = Color.WHITE, presentation_scale: Vector3 = Vector3.ONE) -> void:
+func configure(damage_packet: DamagePacket, rng: CombatRng, types: DamageTypeCatalog, projectile_speed: float, impact_radius: float, range_limit: float, duration: float, combat_target: CombatTarget, effect_container: Node, actor_candidates: Array[Node3D] = [], presentation_impact_scene: PackedScene = null, presentation_impact_color: Color = Color.WHITE, presentation_scale: Vector3 = Vector3.ONE, resolution_service: Node = null) -> void:
     packet = damage_packet
     combat_rng = rng
     damage_types = types
@@ -34,6 +36,11 @@ func configure(damage_packet: DamagePacket, rng: CombatRng, types: DamageTypeCat
     impact_scene = presentation_impact_scene
     impact_color = presentation_impact_color
     visual_scale = presentation_scale if presentation_scale.is_finite() else Vector3.ONE
+    combat_resolution_service = resolution_service
+    if combat_resolution_service == null:
+        combat_resolution_service = COMBAT_RESOLUTION_SERVICE.new(rng, types) as Node
+        combat_resolution_service.name = "FixtureCombatResolutionService"
+        add_child(combat_resolution_service)
     scale = visual_scale
     elapsed = 0.0
     distance_travelled = 0.0
@@ -91,11 +98,11 @@ func _impact() -> void:
                 burst.global_position = global_position
             else:
                 burst.position = position
-            burst.call("configure", packet, combat_rng, damage_types, area_radius, 0.25, combatants)
+            burst.call("configure", packet, combat_rng, damage_types, area_radius, 0.25, combatants, combat_resolution_service)
     elif packet != null and target != null and target.team_id != packet.source_team_id and target.is_available and target.actor != null and target.actor.has_method("get_combat_adapter"):
         var adapter := target.actor.call("get_combat_adapter", packet.action_tags) as CombatantAdapter
         if adapter != null:
-            DamageResolver.resolve(packet, adapter, combat_rng, damage_types)
+            combat_resolution_service.call("resolve_bundle", packet, adapter)
     queue_free()
 
 func _spawn_impact_presentation() -> void:

@@ -7,6 +7,7 @@ func run() -> Array[String]:
 	_test_affix_cross_references(failures)
 	_test_rarity_validation(failures)
 	_test_effect_validation(failures)
+	_test_roll_step_validation(failures)
 	_test_tier_rejections(failures)
 	_test_affix_rejections(failures)
 	_test_generation_vocabulary(failures)
@@ -93,6 +94,43 @@ func _test_effect_validation(failures: Array[String]) -> void:
 	effect.operation = StatModifier.Operation.FLAT
 	effect.required_tags = [&""]
 	TestAssertions.truthy(not effect.validate(stats).is_empty(), "empty effect tag fails", failures)
+
+func _test_roll_step_validation(failures: Array[String]) -> void:
+	var stats := load("res://data/stats/core_stats.tres") as StatCatalog
+	var effect := ItemModifierEffectDefinition.new()
+	effect.stat_id = &"crit_chance"
+	var properties := _property_names(effect)
+	TestAssertions.truthy(&"roll_step" in properties, "modifier effects expose an optional roll step", failures)
+	if &"roll_step" not in properties:
+		return
+	TestAssertions.equal(float(effect.get(&"roll_step")), 0.0, "roll step defaults to continuous rolling", failures)
+	effect.set(&"roll_step", NAN)
+	TestAssertions.truthy(_has_diagnostic(effect.validate(stats), "roll step must be finite and nonnegative"), "nonfinite roll step fails", failures)
+	effect.set(&"roll_step", -0.01)
+	TestAssertions.truthy(_has_diagnostic(effect.validate(stats), "roll step must be finite and nonnegative"), "negative roll step fails", failures)
+
+	var no_grid := _valid_affix()
+	no_grid.effects[0].stat_id = &"crit_chance"
+	no_grid.effects[0].set(&"roll_step", 0.01)
+	no_grid.tiers[0].minimum_rolls = [0.011]
+	no_grid.tiers[0].maximum_rolls = [0.019]
+	TestAssertions.truthy(
+		_has_diagnostic(no_grid.validate(stats, [&"caster_power"], [&"ordinary_drop"], [], [&"rare"], [&"caster"]), "contains no legal roll grid point"),
+		"positive roll step rejects a tier range with no legal grid point",
+		failures,
+	)
+
+	var interior_grid := _valid_affix()
+	interior_grid.effects[0].stat_id = &"crit_chance"
+	interior_grid.effects[0].set(&"roll_step", 0.01)
+	interior_grid.tiers[0].minimum_rolls = [0.011]
+	interior_grid.tiers[0].maximum_rolls = [0.021]
+	TestAssertions.equal(
+		interior_grid.validate(stats, [&"caster_power"], [&"ordinary_drop"], [], [&"rare"], [&"caster"]),
+		PackedStringArray(),
+		"positive roll step accepts an interior grid point when neither bound is on-grid",
+		failures,
+	)
 
 func _test_tier_rejections(failures: Array[String]) -> void:
 	var tier := _valid_tier(1, 1, 1.0, 3.0)
@@ -218,3 +256,9 @@ func _valid_tier(tier_number: int, minimum_level: int, minimum_roll: float, maxi
 
 func _has_diagnostic(errors: PackedStringArray, expected: String) -> bool:
 	return expected in "\n".join(errors)
+
+func _property_names(resource: Resource) -> Array[StringName]:
+	var result: Array[StringName] = []
+	for property: Dictionary in resource.get_property_list():
+		result.append(StringName(property.get("name", "")))
+	return result

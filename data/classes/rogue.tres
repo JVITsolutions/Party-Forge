@@ -17,7 +17,7 @@ capability_tags = Array[StringName]([&"area", &"crit", &"dodge", &"life_steal", 
 name_pool = ExtResource("1_51p68")
 growth_definition = ExtResource("4_growth")
 base_stat_overrides = {
-&"crit_chance": 0.2,
+&"crit_chance": 0.10,
 &"crit_multiplier": 1.75,
 &"dodge_chance": 0.18,
 &"life_steal": 0.05

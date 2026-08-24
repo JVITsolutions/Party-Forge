@@ -309,6 +309,7 @@ static func _affix_from_row(row: Dictionary) -> ItemAffixDefinition:
 		var effect := ItemModifierEffectDefinition.new()
 		effect.stat_id = source["stat_id"]
 		effect.operation = int(source["operation"])
+		effect.roll_step = float(source.get("roll_step", 0.0))
 		effects.append(effect)
 	definition.effects = effects
 	var tiers: Array[ItemAffixTierDefinition] = []
@@ -409,6 +410,8 @@ static func _affix_document(definition: ItemAffixDefinition) -> String:
 		lines.append("script = ExtResource(\"2_effect\")")
 		lines.append("stat_id = %s" % _value_text(effect.stat_id))
 		lines.append("operation = %d" % effect.operation)
+		if effect.roll_step > 0.0:
+			lines.append("roll_step = %s" % _value_text(effect.roll_step))
 		if not effect.required_tags.is_empty():
 			lines.append("required_tags = %s" % _string_name_array_text(effect.required_tags))
 	for tier: ItemAffixTierDefinition in definition.tiers:

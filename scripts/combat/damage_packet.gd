@@ -1,6 +1,8 @@
 class_name DamagePacket
 extends RefCounted
 
+const MULTI_CRIT_ROLL := preload("res://scripts/combat/multi_crit_roll.gd")
+
 var _valid := false
 var _error_reason: String
 var _source: CombatantAdapter
@@ -8,8 +10,7 @@ var _source_id: StringName
 var _source_team_id := 0
 var _attack_id: StringName
 var _can_crit := false
-var _critical := false
-var _crit_draw := -1.0
+var _multi_crit_roll: MULTI_CRIT_ROLL
 var _crit_multiplier := 1.0
 var _life_steal_rate := 0.0
 var _action_tags: Array[StringName] = []
@@ -36,10 +37,13 @@ var can_crit: bool:
 	get: return _can_crit
 	set(_value): pass
 var critical: bool:
-	get: return _critical
+	get: return _multi_crit_roll != null and _multi_crit_roll.primary_critical()
 	set(_value): pass
 var crit_draw: float:
-	get: return _crit_draw
+	get: return _multi_crit_roll.fractional_draw if _multi_crit_roll != null else -1.0
+	set(_value): pass
+var multi_crit_roll: MULTI_CRIT_ROLL:
+	get: return _multi_crit_roll.copy() as MULTI_CRIT_ROLL if _multi_crit_roll != null else null
 	set(_value): pass
 var crit_multiplier: float:
 	get: return _crit_multiplier
@@ -55,7 +59,7 @@ var components: Array[PreparedDamageComponent]:
 		for component: PreparedDamageComponent in _components: result.append(component.copy())
 		return result
 
-static func create(source_value: CombatantAdapter, attack_value: StringName, tags: Array[StringName], crit_allowed: bool, crit_result: bool, draw: float, multiplier: float, steal_rate: float, prepared: Array[PreparedDamageComponent]) -> DamagePacket:
+static func create(source_value: CombatantAdapter, attack_value: StringName, tags: Array[StringName], crit_allowed: bool, crit_result: bool, draw: float, multiplier: float, steal_rate: float, prepared: Array[PreparedDamageComponent], roll: MULTI_CRIT_ROLL = null) -> DamagePacket:
 	var packet := DamagePacket.new()
 	packet._valid = true
 	packet._source = source_value
@@ -63,8 +67,7 @@ static func create(source_value: CombatantAdapter, attack_value: StringName, tag
 	packet._source_team_id = source_value.team_id
 	packet._attack_id = attack_value
 	packet._can_crit = crit_allowed
-	packet._critical = crit_result
-	packet._crit_draw = draw
+	packet._multi_crit_roll = roll.copy() as MULTI_CRIT_ROLL if roll != null else MULTI_CRIT_ROLL.from_compatibility(crit_result, draw) as MULTI_CRIT_ROLL
 	packet._crit_multiplier = multiplier
 	packet._life_steal_rate = steal_rate
 	packet._action_tags = tags.duplicate()

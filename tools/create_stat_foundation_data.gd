@@ -24,7 +24,7 @@ static func build_catalog() -> StatCatalog:
 		_stat(&"move_speed", "Movement Speed", &"utility", 6.0, StatDefinition.ValueFormat.NUMBER, 2, true, 0.1, false, 0.0, StatDefinition.Visibility.UNIVERSAL),
 		_stat(&"damage", "Damage", &"offense", 1.0, StatDefinition.ValueFormat.MULTIPLIER, 2, true, 0.0, false, 0.0, StatDefinition.Visibility.UNIVERSAL),
 		_stat(&"attack_speed", "Attack Speed", &"offense", 1.0, StatDefinition.ValueFormat.MULTIPLIER, 2, true, 0.05, false, 0.0, StatDefinition.Visibility.UNIVERSAL),
-		_stat(&"crit_chance", "Critical Strike Chance", &"offense", 0.0, StatDefinition.ValueFormat.RATIO_PERCENT, 1, true, 0.0, true, 0.75, StatDefinition.Visibility.UNIVERSAL),
+		_stat(&"crit_chance", "Critical Strike Chance", &"offense", 0.05, StatDefinition.ValueFormat.RATIO_PERCENT, 0, true, 0.0, false, 0.0, StatDefinition.Visibility.UNIVERSAL),
 		_stat(&"crit_multiplier", "Critical Strike Multiplier", &"offense", 1.5, StatDefinition.ValueFormat.RATIO_PERCENT, 0, true, 1.0, false, 0.0, StatDefinition.Visibility.UNIVERSAL),
 		_stat(&"attack_range", "Attack Range", &"offense", 1.0, StatDefinition.ValueFormat.MULTIPLIER, 2, true, 0.05, false, 0.0, StatDefinition.Visibility.UNIVERSAL),
 		_stat(&"projectile_speed", "Projectile Speed", &"offense", 1.0, StatDefinition.ValueFormat.MULTIPLIER, 2, true, 0.05, false, 0.0, StatDefinition.Visibility.CAPABILITY, [&"projectile"]),

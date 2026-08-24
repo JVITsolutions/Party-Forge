@@ -8,6 +8,7 @@
 script = ExtResource("2_effect")
 stat_id = &"crit_chance"
 operation = 0
+roll_step = 0.01
 
 [sub_resource type="Resource" id="Effect2"]
 script = ExtResource("2_effect")
@@ -46,8 +47,8 @@ script = ExtResource("3_tier")
 tier = 4
 minimum_item_level = 60
 base_weight = 500.0
-minimum_rolls = Array[float]([0.0109999999404, 0.05299999937415])
-maximum_rolls = Array[float]([0.01899999938905, 0.09600000083447])
+minimum_rolls = Array[float]([0.01999999023974, 0.05299999937415])
+maximum_rolls = Array[float]([0.02000001072884, 0.09600000083447])
 allowed_rarity_ids = Array[StringName]([&"uncommon", &"rare", &"epic", &"legendary"])
 
 [sub_resource type="Resource" id="Tier5"]
@@ -55,7 +56,7 @@ script = ExtResource("3_tier")
 tier = 5
 minimum_item_level = 100
 base_weight = 380.0
-minimum_rolls = Array[float]([0.01400000043213, 0.06800000369549])
+minimum_rolls = Array[float]([0.01999999023974, 0.06800000369549])
 maximum_rolls = Array[float]([0.02400000020862, 0.11800000071526])
 allowed_rarity_ids = Array[StringName]([&"uncommon", &"rare", &"epic", &"legendary"])
 

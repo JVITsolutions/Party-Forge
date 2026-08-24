@@ -11,6 +11,7 @@ func run() -> Array[String]:
 	if not ResourceLoader.exists(PREVIEW_SCENE_PATH):
 		return failures
 	_test_member_identity_and_reusable_host(failures)
+	_test_clear_suspends_rendering_and_show_reenables(failures)
 	_test_exact_color_change_replaces_preview(failures)
 	_test_same_id_profile_scene_change_replaces_preview(failures)
 	_test_same_id_visual_geometry_change_replaces_preview(failures)
@@ -41,6 +42,21 @@ func _test_member_identity_and_reusable_host(failures: Array[String]) -> void:
 	TestAssertions.equal(host.get_child_count(), 1, "member switching reuses one preview host with one model", failures)
 	TestAssertions.truthy(replacement != null and replacement.get_instance_id() != first_instance_id, "member switching replaces the presentation copy", failures)
 	TestAssertions.truthy(not is_instance_id_valid(first_instance_id), "replaced preview model is freed immediately", failures)
+	preview.free()
+
+
+func _test_clear_suspends_rendering_and_show_reenables(failures: Array[String]) -> void:
+	var preview := (load(PREVIEW_SCENE_PATH) as PackedScene).instantiate() as Control
+	(Engine.get_main_loop() as SceneTree).root.add_child(preview)
+	var subviewport := preview.get_node("SubViewport") as SubViewport
+	var member := _member(8, &"feminine", &"blue", Color("3588d4"))
+	TestAssertions.truthy(bool(preview.call(&"show_member", member, [] as Array[Dictionary])), "preview member renders before suspension", failures)
+	TestAssertions.equal(subviewport.render_target_update_mode, SubViewport.UPDATE_ALWAYS, "successful show enables continuous preview rendering", failures)
+	preview.call(&"clear")
+	TestAssertions.equal(subviewport.render_target_update_mode, SubViewport.UPDATE_DISABLED, "clear suspends preview rendering", failures)
+	TestAssertions.truthy(preview.get("active_preview") == null, "clear releases the active presentation while suspended", failures)
+	TestAssertions.truthy(bool(preview.call(&"show_member", member, [] as Array[Dictionary])), "preview member rebuild succeeds after suspension", failures)
+	TestAssertions.equal(subviewport.render_target_update_mode, SubViewport.UPDATE_ALWAYS, "successful rebuild re-enables continuous preview rendering", failures)
 	preview.free()
 
 
@@ -99,9 +115,13 @@ func _test_same_id_visual_geometry_change_replaces_preview(failures: Array[Strin
 
 
 func _test_preview_rotation_and_live_actor_isolation(failures: Array[String]) -> void:
+	var arena_viewport := SubViewport.new()
+	arena_viewport.own_world_3d = true
+	arena_viewport.world_3d = World3D.new()
+	(Engine.get_main_loop() as SceneTree).root.add_child(arena_viewport)
 	var root := Node3D.new()
 	root.name = "CharacterEquipmentPreviewIsolation"
-	(Engine.get_main_loop() as SceneTree).root.add_child(root)
+	arena_viewport.add_child(root)
 	var member := _member(3, &"masculine", &"red", Color("d94f4f"))
 	var leader := (load(LEADER_SCENE_PATH) as PackedScene).instantiate() as PartyActor
 	root.add_child(leader)
@@ -115,17 +135,20 @@ func _test_preview_rotation_and_live_actor_isolation(failures: Array[String]) ->
 	var live_presentation := leader.get_node("Presentation") as CharacterPresentation
 	var preview := (load(PREVIEW_SCENE_PATH) as PackedScene).instantiate() as Control
 	(Engine.get_main_loop() as SceneTree).root.add_child(preview)
+	var subviewport := preview.get_node("SubViewport") as SubViewport
+	TestAssertions.truthy(subviewport.own_world_3d, "equipment preview owns an isolated World3D", failures)
 	TestAssertions.truthy(bool(preview.call(&"show_member", member, [] as Array[Dictionary])), "live member can be shown without using the actor node", failures)
 	var preview_presentation := preview.get("active_preview") as CharacterPresentation
 	TestAssertions.truthy(preview_presentation != live_presentation and preview_presentation.active_model != live_presentation.active_model, "preview creates only presentation copies", failures)
+	TestAssertions.truthy(subviewport.world_3d != arena_viewport.world_3d, "preview viewport does not reuse the arena viewport world", failures)
 	var press := InputEventMouseButton.new()
 	press.button_index = MOUSE_BUTTON_LEFT
 	press.pressed = true
-	preview.call(&"_gui_input", press)
+	(preview.get_node("DragSurface") as Control).gui_input.emit(press)
 	var drag := InputEventMouseMotion.new()
 	drag.button_mask = MOUSE_BUTTON_MASK_LEFT
 	drag.relative = Vector2(100000.0, 4000.0)
-	preview.call(&"_gui_input", drag)
+	(preview.get_node("DragSurface") as Control).gui_input.emit(drag)
 	var mount := preview.get_node("SubViewport/World/PreviewRoot") as Node3D
 	TestAssertions.truthy(mount.rotation.y >= -PI and mount.rotation.y <= PI, "preview drag stays within one full horizontal turn", failures)
 	TestAssertions.near(mount.rotation.x, deg_to_rad(-8.0), 0.0001, "preview vertical angle remains fixed and safe", failures)
@@ -135,6 +158,7 @@ func _test_preview_rotation_and_live_actor_isolation(failures: Array[String]) ->
 	TestAssertions.near(health.current_health, live_health, 0.001, "preview never changes live actor health", failures)
 	preview.free()
 	root.free()
+	arena_viewport.free()
 
 
 func _test_visual_resolution_keeps_disabled_items_and_falls_back_once(failures: Array[String]) -> void:

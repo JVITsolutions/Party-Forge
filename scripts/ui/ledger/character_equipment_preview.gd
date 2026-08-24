@@ -150,9 +150,9 @@ func show_member(member: PartyMemberState, equipment_rows: Array[Dictionary]) ->
 	var visuals_by_slot := _visuals_by_slot(equipment_rows)
 	var requested_signature := PresentationSignature.new(member, visuals_by_slot)
 	if active_preview != null and is_instance_valid(active_preview) and requested_signature.matches(_active_signature):
+		_subviewport().render_target_update_mode = SubViewport.UPDATE_ALWAYS
 		return true
-	_clear_preview()
-	diagnostics.clear()
+	clear()
 	var copy := PRESENTATION_SCENE.instantiate() as CharacterPresentation
 	_preview_root().add_child(copy)
 	if not copy.apply_profile(member.class_definition.visual_profile, member.class_definition.color):
@@ -162,12 +162,19 @@ func show_member(member: PartyMemberState, equipment_rows: Array[Dictionary]) ->
 	active_preview = copy
 	active_member_id = member.member_id
 	_active_signature = requested_signature
+	_subviewport().render_target_update_mode = SubViewport.UPDATE_ALWAYS
 	return true
 
 
 func clear() -> void:
+	_dragging = false
+	_subviewport().render_target_update_mode = SubViewport.UPDATE_DISABLED
 	_clear_preview()
 	diagnostics.clear()
+
+
+func _exit_tree() -> void:
+	clear()
 
 
 func _gui_input(event: InputEvent) -> void:
@@ -212,3 +219,7 @@ func _clear_preview() -> void:
 
 func _preview_root() -> Node3D:
 	return get_node("SubViewport/World/PreviewRoot") as Node3D
+
+
+func _subviewport() -> SubViewport:
+	return get_node("SubViewport") as SubViewport

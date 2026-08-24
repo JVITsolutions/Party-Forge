@@ -203,9 +203,12 @@ func _create_combat_estimate_card(estimate: ActionCombatEstimate) -> PanelContai
 			metric_lines.append("Estimated HPS: %s" % _estimate_number(estimate.estimated_hps))
 		else:
 			var critical_text := _estimate_number(estimate.critical_hit) if estimate.can_crit else "Cannot Crit"
+			var average_label := "Average Damage / Use" if estimate.expected_damage_instances > 1.0 else "Average Hit"
 			metric_lines.append("Normal Hit: %s" % _estimate_number(estimate.normal_hit))
 			metric_lines.append("Critical Hit: %s" % critical_text)
-			metric_lines.append("Average Hit: %s" % _estimate_number(estimate.average_hit))
+			metric_lines.append("%s: %s" % [average_label, _estimate_number(estimate.average_hit)])
+			metric_lines.append("Expected Critical Instances: %s" % _estimate_number(estimate.expected_critical_instances))
+			metric_lines.append("Expected Damage Instances: %s" % _estimate_number(estimate.expected_damage_instances))
 			metric_lines.append("Attacks / Second: %.2f" % estimate.attacks_per_second)
 			metric_lines.append("Estimated DPS: %s" % _estimate_number(estimate.estimated_dps))
 		metric_lines.append("Range: %s" % _estimate_number(estimate.range))
@@ -304,6 +307,10 @@ func _clear_detail() -> void:
 func _source_line(row: Dictionary) -> String:
 	var operation := int(row.get("operation", -1))
 	var label := str(row.get("source_label", row.get("source_id", "Unknown")))
+	if operation == -1 and row.has("formatted_value"):
+		return "%s: %s" % [label, String(row["formatted_value"])]
+	if operation != -1 and row.has("formatted_modifier"):
+		return "%s: %s" % [label, String(row["formatted_modifier"])]
 	var value := float(row.get("value", 0.0))
 	match operation:
 		-1:

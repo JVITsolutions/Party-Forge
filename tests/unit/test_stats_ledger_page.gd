@@ -93,6 +93,22 @@ func run() -> Array[String]:
 		TestAssertions.truthy("Range" in metrics and "Area Radius" in metrics, "nonprojectile area card exposes relevant effective geometry", failures)
 		TestAssertions.truthy("Projectile Speed" not in metrics, "nonprojectile card omits projectile geometry", failures)
 		TestAssertions.truthy("pre-mitigation" in fighter_card.tooltip_text and "per target" in fighter_card.tooltip_text, "card explains estimate boundary", failures)
+	var multi_crit_source := StatModifierSource.create(
+		&"stats_ledger_multi_crit",
+		&"test",
+		"Stats Ledger Multi-Crit",
+		1,
+		[StatModifier.create(&"crit_chance", StatModifier.Operation.FLAT, 1.0, &"stats_ledger_multi_crit", "Stats Ledger Multi-Crit")],
+	)
+	TestAssertions.truthy(party.add_member_source(1, multi_crit_source), "Stats page multi-crit source applies", failures)
+	page.refresh()
+	fighter_card = page.get_node_or_null("Layout/Content/StatSide/StatScroll/Groups/Group_combat_estimates/Action_fighter_cleave") as PanelContainer
+	TestAssertions.truthy(fighter_card != null, "multi-crit Fighter estimate card remains available", failures)
+	if fighter_card != null:
+		var multi_metrics := (fighter_card.get_node("Content/Metrics") as Label).text
+		TestAssertions.truthy("Average Damage / Use" in multi_metrics and "Average Hit" not in multi_metrics, "multi-instance estimate uses truthful per-use label", failures)
+		TestAssertions.truthy("Expected Critical Instances: 1.05" in multi_metrics, "multi-instance estimate exposes expected critical count", failures)
+		TestAssertions.truthy("Expected Damage Instances: 1.05" in multi_metrics, "multi-instance estimate exposes expected damage count", failures)
 	var original_support_action := fighter.support_action
 	fighter.support_action = catalog.class_by_id(&"cleric").support_action
 	page.refresh()
@@ -226,6 +242,21 @@ func run() -> Array[String]:
 	TestAssertions.truthy(page.select_stat(&"physical_damage"), "equipment-modified physical detail opens", failures)
 	var physical_sources := (page.get_node("Layout/Content/DetailPanel/Detail/Sources") as Label).text
 	TestAssertions.truthy(equipment_label in physical_sources, "Stats detail renders the equipment item and affix label", failures)
+
+	var critical_source := StatModifierSource.create(
+		&"ring_of_mercy_legacy",
+		&"test",
+		"Ring Of Mercy — Ring Of Mercy Legacy",
+		1,
+		[StatModifier.create(&"crit_chance", StatModifier.Operation.FLAT, 0.0111, &"ring_of_mercy_legacy", "Ring Of Mercy — Ring Of Mercy Legacy")],
+	)
+	TestAssertions.truthy(party.add_member_source(1, critical_source), "Stats legacy critical source applies", failures)
+	page.refresh()
+	TestAssertions.truthy(page.select_stat(&"crit_chance"), "critical chance detail opens", failures)
+	var critical_sources := (page.get_node("Layout/Content/DetailPanel/Detail/Sources") as Label).text
+	TestAssertions.truthy("Base: 5%" in critical_sources, "critical source detail formats its base as whole percentage points", failures)
+	TestAssertions.truthy("Ring Of Mercy — Ring Of Mercy Legacy: +1%" in critical_sources, "critical source detail formats a legacy off-grid roll as whole percentage points", failures)
+	TestAssertions.truthy("1.1%" not in critical_sources and "0.0111 flat" not in critical_sources, "critical source detail never exposes decimal percentages or raw flat ratios", failures)
 
 	provider.configure(null, null, Callable())
 	page.free()

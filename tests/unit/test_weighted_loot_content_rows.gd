@@ -92,6 +92,7 @@ func run() -> Array[String]:
 	_assert_counts_and_order(rows, failures)
 	_assert_exact_effect_matrix(rows, failures)
 	_assert_metadata_and_tiers(manifest, rows, failures)
+	_assert_gridless_band_repair(rows, failures)
 	TestAssertions.equal(manifest.call(&"explicit_rows"), rows, "Task 4 explicit rows remain deterministic", failures)
 	var equipment := load("res://data/equipment/core_equipment_catalog.tres") as EquipmentCatalog
 	TestAssertions.truthy(equipment != null, "live equipment catalog loads", failures)
@@ -106,6 +107,24 @@ func run() -> Array[String]:
 	if equipment != null and has_weapon_profile_rows and has_support_base_ids:
 		_assert_weapon_profiles_and_classification(manifest, equipment, failures)
 	return failures
+
+func _assert_gridless_band_repair(rows: Array, failures: Array[String]) -> void:
+	var manifest := load(MANIFEST_PATH) as Script
+	TestAssertions.truthy(manifest.has_method(&"_apply_roll_step_exception"), "weighted rows expose an explicit narrowly-scoped roll-step exception", failures)
+	if manifest.has_method(&"_apply_roll_step_exception"):
+		var gridless := Vector2(0.011, 0.019)
+		var unrelated: Vector2 = manifest.call(&"_apply_roll_step_exception", &"future_gridless_affix", 3, 0, gridless)
+		TestAssertions.equal(unrelated, gridless, "unrelated future gridless ranges are not silently repaired", failures)
+	var row := _row_by_id(rows, &"of_deadly_precision")
+	var tiers: Array = row.get("tiers", [])
+	TestAssertions.equal(tiers.size(), 12, "of_deadly_precision exposes all tiers for grid repair", failures)
+	if tiers.size() != 12:
+		return
+	var tier_four := tiers[3] as Dictionary
+	var tier_five := tiers[4] as Dictionary
+	TestAssertions.near(float((tier_four["minimum_rolls"] as Array)[0]), 0.02, 0.000001, "of_deadly_precision T4 repaired minimum is progression-preserving 2%", failures)
+	TestAssertions.near(float((tier_four["maximum_rolls"] as Array)[0]), 0.02, 0.000001, "of_deadly_precision T4 repaired maximum is progression-preserving 2%", failures)
+	TestAssertions.near(float((tier_five["minimum_rolls"] as Array)[0]), 0.02, 0.000001, "of_deadly_precision T5 minimum carries the repaired monotonic floor", failures)
 
 func _assert_implicit_rows(manifest: Script, equipment: EquipmentCatalog, failures: Array[String]) -> void:
 	var rows: Array = manifest.call(&"implicit_rows", equipment)
@@ -159,6 +178,7 @@ func _assert_implicit_rows(manifest: Script, equipment: EquipmentCatalog, failur
 			TestAssertions.equal(effect.get("operation", -1), expected_operation, "%s exact implicit operation" % id, failures)
 			TestAssertions.equal(effect.get("curve_key", &""), _curve_for(expected_stat, expected_operation), "%s exact implicit curve" % id, failures)
 			TestAssertions.equal(effect.get("modifier_family_id", &""), expected_family, "%s effect uses the exact implicit family" % id, failures)
+			TestAssertions.equal(float(effect.get("roll_step", 0.0)), 0.01 if expected_stat == &"crit_chance" else 0.0, "%s implicit uses the exact opt-in roll step" % id, failures)
 		var expected_path := "res://data/items/affixes/fixtures/tempered_edge.tres" if id == &"tempered_edge" else "res://data/items/affixes/production/implicits/%s.tres" % id
 		TestAssertions.equal(row.get("output_path", ""), expected_path, "%s exact implicit output path" % id, failures)
 		_assert_implicit_tiers(manifest, row, expected_stat, failures)
@@ -181,6 +201,14 @@ func _assert_implicit_tiers(manifest: Script, row: Dictionary, stat_id: StringNa
 		TestAssertions.equal(minimums.size(), 1, "%s implicit tier %d minimum arity" % [id, index + 1], failures)
 		TestAssertions.equal(maximums.size(), 1, "%s implicit tier %d maximum arity" % [id, index + 1], failures)
 		if minimums.size() != 1 or maximums.size() != 1: continue
+		var effect := (row.get("effects", []) as Array)[0] as Dictionary
+		var roll_step := float(effect.get("roll_step", 0.0))
+		if roll_step > 0.0:
+			TestAssertions.truthy(
+				ceili(float(minimums[0]) / roll_step) <= floori(float(maximums[0]) / roll_step),
+				"%s implicit tier %d contains a legal roll grid point" % [id, index + 1],
+				failures,
+			)
 		var expected_bounds := Vector2(generated[index]["minimum"], generated[index]["maximum"])
 		if id == &"tempered_edge":
 			if index < 3:
@@ -311,6 +339,7 @@ func _assert_exact_effect_matrix(rows: Array, failures: Array[String]) -> void:
 			TestAssertions.equal(effect.get("operation", -1), expected_operation, "%s effect %d exact operation" % [id, index], failures)
 			TestAssertions.equal(effect.get("curve_key", &""), _curve_for(expected_stat, expected_operation), "%s effect %d exact curve" % [id, index], failures)
 			TestAssertions.equal(effect.get("modifier_family_id", &""), _family_for(expected_stat, expected_operation), "%s effect %d semantic family" % [id, index], failures)
+			TestAssertions.equal(float(effect.get("roll_step", 0.0)), 0.01 if expected_stat == &"crit_chance" else 0.0, "%s effect %d exact opt-in roll step" % [id, index], failures)
 		var expected_tag: StringName = _expected_required_tag(id)
 		TestAssertions.equal(row.get("required_item_tag", &""), expected_tag, "%s exact hard eligibility tag" % id, failures)
 		TestAssertions.truthy(expected_tag in KNOWN_HARD_TAGS, "%s hard tag is known" % id, failures)
@@ -353,6 +382,14 @@ func _assert_metadata_and_tiers(manifest: Script, rows: Array, failures: Array[S
 			TestAssertions.equal(maximums.size(), (row["effects"] as Array).size(), "%s tier %d maximum roll arity" % [id, tier_index + 1], failures)
 			for effect_index: int in mini(minimums.size(), maximums.size()):
 				TestAssertions.truthy(float(minimums[effect_index]) <= float(maximums[effect_index]), "%s tier %d effect %d valid range" % [id, tier_index + 1, effect_index], failures)
+				var effect := (row["effects"] as Array)[effect_index] as Dictionary
+				var roll_step := float(effect.get("roll_step", 0.0))
+				if roll_step > 0.0:
+					TestAssertions.truthy(
+						ceili(float(minimums[effect_index]) / roll_step) <= floori(float(maximums[effect_index]) / roll_step),
+						"%s tier %d effect %d contains a legal roll grid point" % [id, tier_index + 1, effect_index],
+						failures,
+					)
 				if tier_index > 0:
 					var previous := tiers[tier_index - 1] as Dictionary
 					TestAssertions.truthy(float(minimums[effect_index]) >= float((previous["minimum_rolls"] as Array)[effect_index]), "%s effect %d minima are monotonic" % [id, effect_index], failures)

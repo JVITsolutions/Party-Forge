@@ -367,13 +367,16 @@ static func _row(
 	}
 
 static func _effect(stat_id: StringName, operation: int, component_scale: float) -> Dictionary:
-	return {
+	var result := {
 		"stat_id": stat_id,
 		"operation": operation,
 		"modifier_family_id": _family_id(stat_id, operation),
 		"curve_key": _curve_key(stat_id, operation),
 		"component_scale": component_scale,
 	}
+	if stat_id == &"crit_chance":
+		result["roll_step"] = 0.01
+	return result
 
 static func _combined_tiers(id: StringName, effects: Array[Dictionary]) -> Array[Dictionary]:
 	var component_tiers: Array = []
@@ -384,7 +387,9 @@ static func _combined_tiers(id: StringName, effects: Array[Dictionary]) -> Array
 		var minimum_rolls: Array[float] = []
 		var maximum_rolls: Array[float] = []
 		for effect_index: int in effects.size():
-			var bounds := _component_bounds(id, effects[effect_index], component_tiers[effect_index], tier_index)
+			var effect := effects[effect_index] as Dictionary
+			var bounds := _component_bounds(id, effect, component_tiers[effect_index], tier_index)
+			bounds = _apply_roll_step_exception(id, tier_index, effect_index, bounds)
 			minimum_rolls.append(bounds.x)
 			maximum_rolls.append(bounds.y)
 		result.append({
@@ -395,6 +400,17 @@ static func _combined_tiers(id: StringName, effects: Array[Dictionary]) -> Array
 			"maximum_rolls": maximum_rolls,
 		})
 	return result
+
+static func _apply_roll_step_exception(id: StringName, tier_index: int, effect_index: int, bounds: Vector2) -> Vector2:
+	if id != &"of_deadly_precision" or effect_index != 0:
+		return bounds
+	var fixed_value := 0.02
+	var representable_margin := 0.01 * 0.000001
+	if tier_index == 3:
+		return Vector2(fixed_value - representable_margin, fixed_value + representable_margin)
+	if tier_index == 4:
+		bounds.x = fixed_value - representable_margin
+	return bounds
 
 static func _component_bounds(id: StringName, effect: Dictionary, tiers: Array, tier_index: int) -> Vector2:
 	if not LEGACY_TIER_BOUNDS.has(id):
