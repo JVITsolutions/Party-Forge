@@ -1,18 +1,7 @@
 extends RefCounted
 
 const COMBAT_RESOLUTION_SERVICE := preload("res://scripts/combat/combat_resolution_service.gd")
-
-class CountingPartyManager extends PartyManager:
-    var action_snapshot_calls := 0
-    var weapon_snapshot_calls := 0
-
-    func stats_for_action(member_id: int, action_tags: Array[StringName]) -> ResolvedStatSnapshot:
-        action_snapshot_calls += 1
-        return super.stats_for_action(member_id, action_tags)
-
-    func active_weapon_snapshot(member_id: int) -> ActiveWeaponDamageSnapshot:
-        weapon_snapshot_calls += 1
-        return super.active_weapon_snapshot(member_id)
+const COUNTING_PARTY_MANAGER := preload("res://tests/support/counting_party_manager.gd")
 
 const REQUIRED_PATHS: PackedStringArray = [
     "res://scripts/combat/attack_executor.gd",
@@ -65,7 +54,7 @@ func _test_weapon_context_is_captured_once_and_mismatch_fails_closed(failures: A
     var test_root := _new_test_root("WeaponContextCaptureTest")
     var catalog := GameCatalog.load_defaults()
     var fighter := catalog.class_by_id(&"fighter")
-    var party := CountingPartyManager.new()
+    var party := COUNTING_PARTY_MANAGER.new()
     test_root.add_child(party)
     party.initialize(fighter, catalog.traits)
     party.configure_combat(CombatRng.new(129), catalog.damage_types)
@@ -741,7 +730,7 @@ func _test_action_context_resolves_once_per_actor_tick_and_request(failures: Arr
     var test_root := _new_test_root("ActionContextHotPathTest")
     var catalog := GameCatalog.load_defaults()
     var fighter := catalog.class_by_id(&"fighter")
-    var party := CountingPartyManager.new()
+    var party := COUNTING_PARTY_MANAGER.new()
     test_root.add_child(party)
     party.initialize(fighter, catalog.traits)
     party.configure_combat(CombatRng.new(127), catalog.damage_types)
@@ -756,7 +745,7 @@ func _test_action_context_resolves_once_per_actor_tick_and_request(failures: Arr
     test_root.free()
 
     var request_root := _new_test_root("ActionContextRequestReuseTest")
-    var request_party := CountingPartyManager.new()
+    var request_party := COUNTING_PARTY_MANAGER.new()
     request_root.add_child(request_party)
     request_party.initialize(fighter, catalog.traits)
     request_party.configure_combat(CombatRng.new(128), catalog.damage_types)
