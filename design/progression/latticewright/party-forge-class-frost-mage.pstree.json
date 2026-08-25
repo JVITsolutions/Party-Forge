@@ -1,0 +1,418 @@
+{
+  "archetype": "passive-tree",
+  "assets": [],
+  "content": [
+    {
+      "categoryIds": [
+        "start"
+      ],
+      "description": "Establish the permanent Frost Mage identity: backline Arcane cold caster specializing in area, projectiles, and control.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {},
+      "iconAssetId": null,
+      "id": "frost-mage-root",
+      "name": "Winter Adept",
+      "requirements": [],
+      "tagIds": [
+        "class",
+        "frost-mage",
+        "party-forge"
+      ],
+      "typeId": "passive"
+    },
+    {
+      "categoryIds": [
+        "medium"
+      ],
+      "description": "Develop the core practice of the Frost Mage.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {},
+      "iconAssetId": null,
+      "id": "frost-mage-core",
+      "name": "Cold Practice",
+      "requirements": [],
+      "tagIds": [
+        "class",
+        "frost-mage",
+        "party-forge"
+      ],
+      "typeId": "passive"
+    },
+    {
+      "categoryIds": [
+        "small"
+      ],
+      "description": "Rime Focus progression theme for the Frost Mage.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {},
+      "iconAssetId": null,
+      "id": "frost-mage-path-a",
+      "name": "Rime Focus",
+      "requirements": [],
+      "tagIds": [
+        "class",
+        "frost-mage",
+        "party-forge"
+      ],
+      "typeId": "passive"
+    },
+    {
+      "categoryIds": [
+        "small"
+      ],
+      "description": "Shard Geometry progression theme for the Frost Mage.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {},
+      "iconAssetId": null,
+      "id": "frost-mage-path-b",
+      "name": "Shard Geometry",
+      "requirements": [],
+      "tagIds": [
+        "class",
+        "frost-mage",
+        "party-forge"
+      ],
+      "typeId": "passive"
+    },
+    {
+      "categoryIds": [
+        "small"
+      ],
+      "description": "Stillness progression theme for the Frost Mage.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {},
+      "iconAssetId": null,
+      "id": "frost-mage-path-c",
+      "name": "Stillness",
+      "requirements": [],
+      "tagIds": [
+        "class",
+        "frost-mage",
+        "party-forge"
+      ],
+      "typeId": "passive"
+    },
+    {
+      "categoryIds": [
+        "large"
+      ],
+      "description": "Frost Mage mastery and future specialization access.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {},
+      "iconAssetId": null,
+      "id": "frost-mage-mastery",
+      "name": "Winter Thesis",
+      "requirements": [],
+      "tagIds": [
+        "class",
+        "frost-mage",
+        "party-forge"
+      ],
+      "typeId": "passive"
+    }
+  ],
+  "extensions": {
+    "gameplayConsumer": "not-yet-wired",
+    "partyForgeStatus": "authoring-design-data"
+  },
+  "format": "latticewright-progression",
+  "formatVersion": 3,
+  "graphPortals": [
+    {
+      "extensions": {},
+      "id": "frost-mage-return-to-city",
+      "label": "Return to Party Forge City",
+      "role": "return",
+      "sourceGraphId": "frost-mage-passive-tree",
+      "sourcePlacementId": "frost-mage-root",
+      "targetGraphId": "city-passive-tree",
+      "targetProjectId": "party-forge-city"
+    }
+  ],
+  "graphs": [
+    {
+      "connections": [
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "frost-mage-root",
+          "id": "frost-mage-passive-tree-edge-01",
+          "to": "frost-mage-core"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "frost-mage-core",
+          "id": "frost-mage-passive-tree-edge-02",
+          "to": "frost-mage-path-a"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "frost-mage-core",
+          "id": "frost-mage-passive-tree-edge-03",
+          "to": "frost-mage-path-b"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "frost-mage-core",
+          "id": "frost-mage-passive-tree-edge-04",
+          "to": "frost-mage-path-c"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "frost-mage-path-a",
+          "id": "frost-mage-passive-tree-edge-05",
+          "to": "frost-mage-mastery"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "frost-mage-path-b",
+          "id": "frost-mage-passive-tree-edge-06",
+          "to": "frost-mage-mastery"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "frost-mage-path-c",
+          "id": "frost-mage-passive-tree-edge-07",
+          "to": "frost-mage-mastery"
+        }
+      ],
+      "decorations": [],
+      "extensions": {},
+      "groups": [],
+      "id": "frost-mage-passive-tree",
+      "name": "Frost Mage Passive Tree",
+      "placements": [
+        {
+          "contentId": "frost-mage-root",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 0
+          },
+          "id": "frost-mage-root",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "typeId": "start-node"
+        },
+        {
+          "contentId": "frost-mage-core",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "frost-mage-core",
+          "position": {
+            "x": 0,
+            "y": -180
+          },
+          "typeId": "medium-node"
+        },
+        {
+          "contentId": "frost-mage-path-a",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "frost-mage-path-a",
+          "position": {
+            "x": -240,
+            "y": -360
+          },
+          "typeId": "small-node"
+        },
+        {
+          "contentId": "frost-mage-path-b",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "frost-mage-path-b",
+          "position": {
+            "x": 0,
+            "y": -450
+          },
+          "typeId": "small-node"
+        },
+        {
+          "contentId": "frost-mage-path-c",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "frost-mage-path-c",
+          "position": {
+            "x": 240,
+            "y": -360
+          },
+          "typeId": "small-node"
+        },
+        {
+          "contentId": "frost-mage-mastery",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "frost-mage-mastery",
+          "position": {
+            "x": 0,
+            "y": -630
+          },
+          "typeId": "large-node"
+        }
+      ],
+      "startingPlacementIds": [
+        "frost-mage-root"
+      ]
+    }
+  ],
+  "name": "Frost Mage Passive Tree",
+  "projectId": "party-forge-class-frost-mage",
+  "schemas": {
+    "categories": [
+      {
+        "description": "start progression tier.",
+        "id": "start",
+        "name": "Start"
+      },
+      {
+        "description": "small progression tier.",
+        "id": "small",
+        "name": "Small"
+      },
+      {
+        "description": "medium progression tier.",
+        "id": "medium",
+        "name": "Medium"
+      },
+      {
+        "description": "large progression tier.",
+        "id": "large",
+        "name": "Large"
+      }
+    ],
+    "contentTypes": [
+      {
+        "description": "A Party Forge progression design node.",
+        "fieldIds": [],
+        "id": "passive",
+        "name": "Passive"
+      }
+    ],
+    "currencies": [],
+    "effects": [],
+    "fields": [
+      {
+        "id": "node-cost",
+        "minimum": 0,
+        "name": "Point Cost",
+        "owner": "placement",
+        "required": true,
+        "valueType": "number"
+      }
+    ],
+    "placementTypes": [
+      {
+        "description": "start progression placement.",
+        "fieldIds": [
+          "node-cost"
+        ],
+        "id": "start-node",
+        "name": "Start Node",
+        "shape": "start"
+      },
+      {
+        "description": "small progression placement.",
+        "fieldIds": [
+          "node-cost"
+        ],
+        "id": "small-node",
+        "name": "Small Node",
+        "shape": "small"
+      },
+      {
+        "description": "medium progression placement.",
+        "fieldIds": [
+          "node-cost"
+        ],
+        "id": "medium-node",
+        "name": "Medium Node",
+        "shape": "medium"
+      },
+      {
+        "description": "large progression placement.",
+        "fieldIds": [
+          "node-cost"
+        ],
+        "id": "large-node",
+        "name": "Large Node",
+        "shape": "large"
+      }
+    ],
+    "ranks": [],
+    "requirements": [],
+    "tags": [
+      {
+        "description": "Party Forge class design tag.",
+        "id": "class",
+        "name": "Class"
+      },
+      {
+        "description": "Party Forge frost-mage design tag.",
+        "id": "frost-mage",
+        "name": "Frost Mage"
+      },
+      {
+        "description": "Party Forge party-forge design tag.",
+        "id": "party-forge",
+        "name": "Party Forge"
+      }
+    ]
+  },
+  "vocabulary": {
+    "contentPlural": "Passives",
+    "contentSingular": "Passive",
+    "graphPlural": "Passive Trees",
+    "graphSingular": "Passive Tree",
+    "placementPlural": "Nodes",
+    "placementSingular": "Node"
+  }
+}

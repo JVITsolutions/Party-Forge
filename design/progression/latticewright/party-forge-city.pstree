@@ -1,0 +1,1711 @@
+{
+  "archetype": "passive-tree",
+  "assets": [],
+  "content": [
+    {
+      "categoryIds": [
+        "medium"
+      ],
+      "description": "Open Party Forge's future Battle Mode.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {},
+      "iconAssetId": null,
+      "id": "arena-charter",
+      "name": "Arena Charter",
+      "requirements": [],
+      "tagIds": [
+        "city",
+        "medium",
+        "party-forge"
+      ],
+      "typeId": "passive"
+    },
+    {
+      "categoryIds": [
+        "medium"
+      ],
+      "description": "Open the city's crafting service.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {},
+      "iconAssetId": null,
+      "id": "artificers-hall",
+      "name": "Artificers' Hall",
+      "requirements": [],
+      "tagIds": [
+        "city",
+        "medium",
+        "party-forge"
+      ],
+      "typeId": "passive"
+    },
+    {
+      "categoryIds": [
+        "medium"
+      ],
+      "description": "Preserve discovered crafting recipes between runs.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {},
+      "iconAssetId": null,
+      "id": "blueprint-library",
+      "name": "Blueprint Library",
+      "requirements": [],
+      "tagIds": [
+        "city",
+        "medium",
+        "party-forge"
+      ],
+      "typeId": "passive"
+    },
+    {
+      "categoryIds": [
+        "start"
+      ],
+      "description": "The civic center from which Party Forge's persistent city grows.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {},
+      "iconAssetId": null,
+      "id": "city-heart",
+      "name": "City Heart",
+      "requirements": [],
+      "tagIds": [
+        "city",
+        "party-forge",
+        "start"
+      ],
+      "typeId": "passive"
+    },
+    {
+      "categoryIds": [
+        "small"
+      ],
+      "description": "Preserve completed-run history in the selected profile.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {},
+      "iconAssetId": null,
+      "id": "civic-archive",
+      "name": "Civic Archive",
+      "requirements": [],
+      "tagIds": [
+        "city",
+        "party-forge",
+        "small"
+      ],
+      "typeId": "passive"
+    },
+    {
+      "categoryIds": [
+        "medium"
+      ],
+      "description": "Open merchant contracts for profile-wide trade objectives.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {},
+      "iconAssetId": null,
+      "id": "contract-ledger",
+      "name": "Contract Ledger",
+      "requirements": [],
+      "tagIds": [
+        "city",
+        "medium",
+        "party-forge"
+      ],
+      "typeId": "passive"
+    },
+    {
+      "categoryIds": [
+        "large"
+      ],
+      "description": "Open the future endless endgame mode.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {},
+      "iconAssetId": null,
+      "id": "endless-gate",
+      "name": "Endless Gate",
+      "requirements": [],
+      "tagIds": [
+        "city",
+        "large",
+        "party-forge"
+      ],
+      "typeId": "passive"
+    },
+    {
+      "categoryIds": [
+        "small"
+      ],
+      "description": "Open the Equipment and Inventory service for the profile.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {},
+      "iconAssetId": null,
+      "id": "equipment-registry",
+      "name": "Equipment Registry",
+      "requirements": [],
+      "tagIds": [
+        "city",
+        "party-forge",
+        "small"
+      ],
+      "typeId": "passive"
+    },
+    {
+      "categoryIds": [
+        "large"
+      ],
+      "description": "Expanded quarters increase the maximum party size by 1.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {},
+      "iconAssetId": null,
+      "id": "expanded-barracks",
+      "name": "Expanded Barracks",
+      "requirements": [],
+      "tagIds": [
+        "city",
+        "large",
+        "party-forge"
+      ],
+      "typeId": "passive"
+    },
+    {
+      "categoryIds": [
+        "small"
+      ],
+      "description": "Open expeditions and bounties from the city hub.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {},
+      "iconAssetId": null,
+      "id": "expedition-board",
+      "name": "Expedition Board",
+      "requirements": [],
+      "tagIds": [
+        "city",
+        "party-forge",
+        "small"
+      ],
+      "typeId": "passive"
+    },
+    {
+      "categoryIds": [
+        "large"
+      ],
+      "description": "Authorize one item extraction from a completed run.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {},
+      "iconAssetId": null,
+      "id": "extraction-license",
+      "name": "Extraction License",
+      "requirements": [],
+      "tagIds": [
+        "city",
+        "large",
+        "party-forge"
+      ],
+      "typeId": "passive"
+    },
+    {
+      "categoryIds": [
+        "small"
+      ],
+      "description": "Unlock profile inventory and expand its column capacity.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {},
+      "iconAssetId": null,
+      "id": "field-pack",
+      "name": "Field Pack",
+      "requirements": [],
+      "tagIds": [
+        "city",
+        "party-forge",
+        "small"
+      ],
+      "typeId": "passive"
+    },
+    {
+      "categoryIds": [
+        "large"
+      ],
+      "description": "Establish rerolls and regional goods at the city's central exchange.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {},
+      "iconAssetId": null,
+      "id": "grand-exchange",
+      "name": "Grand Exchange",
+      "requirements": [],
+      "tagIds": [
+        "city",
+        "large",
+        "party-forge"
+      ],
+      "typeId": "passive"
+    },
+    {
+      "categoryIds": [
+        "large"
+      ],
+      "description": "Expand the workshop to support advanced crafting tiers.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {},
+      "iconAssetId": null,
+      "id": "grand-workshop",
+      "name": "Grand Workshop",
+      "requirements": [],
+      "tagIds": [
+        "city",
+        "large",
+        "party-forge"
+      ],
+      "typeId": "passive"
+    },
+    {
+      "categoryIds": [
+        "large"
+      ],
+      "description": "Open the profile-wide collection of discovered and recruited heroes.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {},
+      "iconAssetId": null,
+      "id": "hall-of-heroes",
+      "name": "Hall of Heroes",
+      "requirements": [],
+      "tagIds": [
+        "city",
+        "large",
+        "party-forge"
+      ],
+      "typeId": "passive"
+    },
+    {
+      "categoryIds": [
+        "medium"
+      ],
+      "description": "Establish a persistent registry for recruiting and reviewing heroes.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {},
+      "iconAssetId": null,
+      "id": "hero-registry",
+      "name": "Hero Registry",
+      "requirements": [],
+      "tagIds": [
+        "city",
+        "medium",
+        "party-forge"
+      ],
+      "typeId": "passive"
+    },
+    {
+      "categoryIds": [
+        "large"
+      ],
+      "description": "Extract the leader's complete equipped loadout when a run ends successfully.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {},
+      "iconAssetId": null,
+      "id": "leader-loadout-extraction",
+      "name": "Leader Loadout Extraction",
+      "requirements": [],
+      "tagIds": [
+        "city",
+        "large",
+        "party-forge"
+      ],
+      "typeId": "passive"
+    },
+    {
+      "categoryIds": [
+        "small"
+      ],
+      "description": "Add one inventory slot to city vendors.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {},
+      "iconAssetId": null,
+      "id": "merchant-permits",
+      "name": "Merchant Permits",
+      "requirements": [],
+      "tagIds": [
+        "city",
+        "party-forge",
+        "small"
+      ],
+      "typeId": "passive"
+    },
+    {
+      "categoryIds": [
+        "medium"
+      ],
+      "description": "Open the North Road as the city's first external region.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {},
+      "iconAssetId": null,
+      "id": "north-road-charter",
+      "name": "North Road Charter",
+      "requirements": [],
+      "tagIds": [
+        "city",
+        "medium",
+        "party-forge"
+      ],
+      "typeId": "passive"
+    },
+    {
+      "categoryIds": [
+        "small"
+      ],
+      "description": "Invite permanent vendors into the city.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {},
+      "iconAssetId": null,
+      "id": "open-market",
+      "name": "Open Market",
+      "requirements": [],
+      "tagIds": [
+        "city",
+        "party-forge",
+        "small"
+      ],
+      "typeId": "passive"
+    },
+    {
+      "categoryIds": [
+        "large"
+      ],
+      "description": "Authorize expeditions into higher-tier regions.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {},
+      "iconAssetId": null,
+      "id": "pathfinders-charter",
+      "name": "Pathfinder's Charter",
+      "requirements": [],
+      "tagIds": [
+        "city",
+        "large",
+        "party-forge"
+      ],
+      "typeId": "passive"
+    },
+    {
+      "categoryIds": [
+        "medium"
+      ],
+      "description": "Recover useful materials by salvaging unwanted items.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {},
+      "iconAssetId": null,
+      "id": "reclamation-bench",
+      "name": "Reclamation Bench",
+      "requirements": [],
+      "tagIds": [
+        "city",
+        "medium",
+        "party-forge"
+      ],
+      "typeId": "passive"
+    },
+    {
+      "categoryIds": [
+        "large"
+      ],
+      "description": "Permit bringing a secured gear loadout into a run.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {},
+      "iconAssetId": null,
+      "id": "secured-loadout",
+      "name": "Secured Loadout",
+      "requirements": [],
+      "tagIds": [
+        "city",
+        "large",
+        "party-forge"
+      ],
+      "typeId": "passive"
+    },
+    {
+      "categoryIds": [
+        "small"
+      ],
+      "description": "City tutors increase all experience gained during runs by 2%.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {},
+      "iconAssetId": null,
+      "id": "shared-lessons-1",
+      "name": "Shared Lessons I",
+      "requirements": [],
+      "tagIds": [
+        "city",
+        "party-forge",
+        "small"
+      ],
+      "typeId": "passive"
+    },
+    {
+      "categoryIds": [
+        "small"
+      ],
+      "description": "Advanced city tutors increase all experience gained during runs by another 2%.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {},
+      "iconAssetId": null,
+      "id": "shared-lessons-2",
+      "name": "Shared Lessons II",
+      "requirements": [],
+      "tagIds": [
+        "city",
+        "party-forge",
+        "small"
+      ],
+      "typeId": "passive"
+    },
+    {
+      "categoryIds": [
+        "small"
+      ],
+      "description": "Authorize the city smiths to upgrade equipment.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {},
+      "iconAssetId": null,
+      "id": "smiths-guild",
+      "name": "Smiths' Guild",
+      "requirements": [],
+      "tagIds": [
+        "city",
+        "party-forge",
+        "small"
+      ],
+      "typeId": "passive"
+    },
+    {
+      "categoryIds": [
+        "small"
+      ],
+      "description": "Open persistent storage shared across the profile.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {},
+      "iconAssetId": null,
+      "id": "stash-access",
+      "name": "Stash Access",
+      "requirements": [],
+      "tagIds": [
+        "city",
+        "party-forge",
+        "small"
+      ],
+      "typeId": "passive"
+    },
+    {
+      "categoryIds": [
+        "small"
+      ],
+      "description": "Create a world map for planning journeys beyond the city.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {},
+      "iconAssetId": null,
+      "id": "surveyors-office",
+      "name": "Surveyor's Office",
+      "requirements": [],
+      "tagIds": [
+        "city",
+        "party-forge",
+        "small"
+      ],
+      "typeId": "passive"
+    },
+    {
+      "categoryIds": [
+        "small"
+      ],
+      "description": "Open a safe practice mode from the city.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {},
+      "iconAssetId": null,
+      "id": "training-yard",
+      "name": "Training Yard",
+      "requirements": [],
+      "tagIds": [
+        "city",
+        "party-forge",
+        "small"
+      ],
+      "typeId": "passive"
+    },
+    {
+      "categoryIds": [
+        "small"
+      ],
+      "description": "Unlock optional challenge modifiers for future runs.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {},
+      "iconAssetId": null,
+      "id": "trial-monument",
+      "name": "Trial Monument",
+      "requirements": [],
+      "tagIds": [
+        "city",
+        "party-forge",
+        "small"
+      ],
+      "typeId": "passive"
+    },
+    {
+      "categoryIds": [
+        "medium"
+      ],
+      "description": "Connect discovered destinations through fast travel.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {},
+      "iconAssetId": null,
+      "id": "waystone-network",
+      "name": "Waystone Network",
+      "requirements": [],
+      "tagIds": [
+        "city",
+        "medium",
+        "party-forge"
+      ],
+      "typeId": "passive"
+    }
+  ],
+  "exportProfiles": [
+    {
+      "assetMode": "references",
+      "extensions": {},
+      "id": "party-forge-runtime",
+      "name": "Party Forge Runtime v3",
+      "strict": false,
+      "target": "runtime-v3"
+    }
+  ],
+  "extensions": {
+    "gameplayConsumer": "not-yet-wired",
+    "partyForgeStatus": "authoring-design-data"
+  },
+  "graphCollections": [
+    {
+      "graphIds": [
+        "city-passive-tree"
+      ],
+      "id": "primary-progression",
+      "name": "Primary Progression",
+      "parentCollectionId": null
+    }
+  ],
+  "graphPortals": [
+    {
+      "extensions": {},
+      "id": "city-to-apothecary",
+      "label": "Open Hearthward Apothecary",
+      "role": "travel",
+      "sourceGraphId": "city-passive-tree",
+      "sourcePlacementId": "city-heart",
+      "target": {
+        "graphId": "apothecary-passive-tree",
+        "projectId": "party-forge-building-apothecary"
+      }
+    },
+    {
+      "extensions": {},
+      "id": "city-to-cleric",
+      "label": "Open Cleric Passive Tree",
+      "role": "drill-down",
+      "sourceGraphId": "city-passive-tree",
+      "sourcePlacementId": "hero-registry",
+      "target": {
+        "graphId": "cleric-passive-tree",
+        "projectId": "party-forge-class-cleric"
+      }
+    },
+    {
+      "extensions": {},
+      "id": "city-to-fighter",
+      "label": "Open Fighter Passive Tree",
+      "role": "drill-down",
+      "sourceGraphId": "city-passive-tree",
+      "sourcePlacementId": "hero-registry",
+      "target": {
+        "graphId": "fighter-passive-tree",
+        "projectId": "party-forge-class-fighter"
+      }
+    },
+    {
+      "extensions": {},
+      "id": "city-to-frost-mage",
+      "label": "Open Frost Mage Passive Tree",
+      "role": "drill-down",
+      "sourceGraphId": "city-passive-tree",
+      "sourcePlacementId": "hero-registry",
+      "target": {
+        "graphId": "frost-mage-passive-tree",
+        "projectId": "party-forge-class-frost-mage"
+      }
+    },
+    {
+      "extensions": {},
+      "id": "city-to-inn",
+      "label": "Open Wayfarers' Inn",
+      "role": "travel",
+      "sourceGraphId": "city-passive-tree",
+      "sourcePlacementId": "hero-registry",
+      "target": {
+        "graphId": "inn-passive-tree",
+        "projectId": "party-forge-building-inn"
+      }
+    },
+    {
+      "extensions": {},
+      "id": "city-to-mage",
+      "label": "Open Mage Passive Tree",
+      "role": "drill-down",
+      "sourceGraphId": "city-passive-tree",
+      "sourcePlacementId": "hero-registry",
+      "target": {
+        "graphId": "mage-passive-tree",
+        "projectId": "party-forge-class-mage"
+      }
+    },
+    {
+      "extensions": {},
+      "id": "city-to-marksman",
+      "label": "Open Marksman Passive Tree",
+      "role": "drill-down",
+      "sourceGraphId": "city-passive-tree",
+      "sourcePlacementId": "hero-registry",
+      "target": {
+        "graphId": "marksman-passive-tree",
+        "projectId": "party-forge-class-marksman"
+      }
+    },
+    {
+      "extensions": {},
+      "id": "city-to-merchant",
+      "label": "Open Merchant Exchange",
+      "role": "travel",
+      "sourceGraphId": "city-passive-tree",
+      "sourcePlacementId": "open-market",
+      "target": {
+        "graphId": "merchant-passive-tree",
+        "projectId": "party-forge-building-merchant"
+      }
+    },
+    {
+      "extensions": {},
+      "id": "city-to-paladin",
+      "label": "Open Paladin Passive Tree",
+      "role": "drill-down",
+      "sourceGraphId": "city-passive-tree",
+      "sourcePlacementId": "hero-registry",
+      "target": {
+        "graphId": "paladin-passive-tree",
+        "projectId": "party-forge-class-paladin"
+      }
+    },
+    {
+      "extensions": {},
+      "id": "city-to-ranger",
+      "label": "Open Ranger Passive Tree",
+      "role": "drill-down",
+      "sourceGraphId": "city-passive-tree",
+      "sourcePlacementId": "hero-registry",
+      "target": {
+        "graphId": "ranger-passive-tree",
+        "projectId": "party-forge-class-ranger"
+      }
+    },
+    {
+      "extensions": {},
+      "id": "city-to-rogue",
+      "label": "Open Rogue Passive Tree",
+      "role": "drill-down",
+      "sourceGraphId": "city-passive-tree",
+      "sourcePlacementId": "hero-registry",
+      "target": {
+        "graphId": "rogue-passive-tree",
+        "projectId": "party-forge-class-rogue"
+      }
+    },
+    {
+      "extensions": {},
+      "id": "city-to-scholars-archive",
+      "label": "Open Scholar's Archive",
+      "role": "travel",
+      "sourceGraphId": "city-passive-tree",
+      "sourcePlacementId": "city-heart",
+      "target": {
+        "graphId": "scholars-archive-passive-tree",
+        "projectId": "party-forge-building-scholars-archive"
+      }
+    },
+    {
+      "extensions": {},
+      "id": "city-to-smithy",
+      "label": "Open Ember & Anvil Smithy",
+      "role": "travel",
+      "sourceGraphId": "city-passive-tree",
+      "sourcePlacementId": "smiths-guild",
+      "target": {
+        "graphId": "smithy-passive-tree",
+        "projectId": "party-forge-building-smithy"
+      }
+    },
+    {
+      "extensions": {},
+      "id": "city-to-warehouse",
+      "label": "Open Warehouse",
+      "role": "travel",
+      "sourceGraphId": "city-passive-tree",
+      "sourcePlacementId": "stash-access",
+      "target": {
+        "graphId": "warehouse-passive-tree",
+        "projectId": "party-forge-building-warehouse"
+      }
+    },
+    {
+      "extensions": {},
+      "id": "city-to-warlock",
+      "label": "Open Warlock Passive Tree",
+      "role": "drill-down",
+      "sourceGraphId": "city-passive-tree",
+      "sourcePlacementId": "hero-registry",
+      "target": {
+        "graphId": "warlock-passive-tree",
+        "projectId": "party-forge-class-warlock"
+      }
+    }
+  ],
+  "graphs": [
+    {
+      "connections": [
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "city-heart",
+          "id": "city-passive-tree-edge-01",
+          "to": "shared-lessons-1"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "shared-lessons-1",
+          "id": "city-passive-tree-edge-02",
+          "to": "shared-lessons-2"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "shared-lessons-2",
+          "id": "city-passive-tree-edge-03",
+          "to": "expanded-barracks"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "expanded-barracks",
+          "id": "city-passive-tree-edge-04",
+          "to": "hero-registry"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "city-heart",
+          "id": "city-passive-tree-edge-05",
+          "to": "equipment-registry"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "equipment-registry",
+          "id": "city-passive-tree-edge-06",
+          "to": "smiths-guild"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "smiths-guild",
+          "id": "city-passive-tree-edge-07",
+          "to": "reclamation-bench"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "smiths-guild",
+          "id": "city-passive-tree-edge-08",
+          "to": "artificers-hall"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "artificers-hall",
+          "id": "city-passive-tree-edge-09",
+          "to": "grand-workshop"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "city-heart",
+          "id": "city-passive-tree-edge-10",
+          "to": "open-market"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "open-market",
+          "id": "city-passive-tree-edge-11",
+          "to": "merchant-permits"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "merchant-permits",
+          "id": "city-passive-tree-edge-12",
+          "to": "contract-ledger"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "merchant-permits",
+          "id": "city-passive-tree-edge-13",
+          "to": "grand-exchange"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "city-heart",
+          "id": "city-passive-tree-edge-14",
+          "to": "surveyors-office"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "surveyors-office",
+          "id": "city-passive-tree-edge-15",
+          "to": "expedition-board"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "expedition-board",
+          "id": "city-passive-tree-edge-16",
+          "to": "north-road-charter"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "expedition-board",
+          "id": "city-passive-tree-edge-17",
+          "to": "waystone-network"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "waystone-network",
+          "id": "city-passive-tree-edge-18",
+          "to": "pathfinders-charter"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "city-heart",
+          "id": "city-passive-tree-edge-19",
+          "to": "civic-archive"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "civic-archive",
+          "id": "city-passive-tree-edge-20",
+          "to": "stash-access"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "stash-access",
+          "id": "city-passive-tree-edge-21",
+          "to": "blueprint-library"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "stash-access",
+          "id": "city-passive-tree-edge-22",
+          "to": "hall-of-heroes"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "city-heart",
+          "id": "city-passive-tree-edge-23",
+          "to": "training-yard"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "training-yard",
+          "id": "city-passive-tree-edge-24",
+          "to": "trial-monument"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "trial-monument",
+          "id": "city-passive-tree-edge-25",
+          "to": "arena-charter"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "trial-monument",
+          "id": "city-passive-tree-edge-26",
+          "to": "endless-gate"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "equipment-registry",
+          "id": "city-passive-tree-edge-27",
+          "to": "field-pack"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "field-pack",
+          "id": "city-passive-tree-edge-28",
+          "to": "extraction-license"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "stash-access",
+          "id": "city-passive-tree-edge-29",
+          "to": "extraction-license"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "extraction-license",
+          "id": "city-passive-tree-edge-30",
+          "to": "secured-loadout"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "secured-loadout",
+          "id": "city-passive-tree-edge-31",
+          "to": "leader-loadout-extraction"
+        }
+      ],
+      "decorations": [],
+      "extensions": {},
+      "groups": [],
+      "id": "city-passive-tree",
+      "name": "City Passive Tree",
+      "placements": [
+        {
+          "contentId": "arena-charter",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "arena-charter",
+          "position": {
+            "x": -620,
+            "y": -120
+          },
+          "typeId": "medium-node"
+        },
+        {
+          "contentId": "artificers-hall",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "artificers-hall",
+          "position": {
+            "x": 620,
+            "y": -360
+          },
+          "typeId": "medium-node"
+        },
+        {
+          "contentId": "blueprint-library",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "blueprint-library",
+          "position": {
+            "x": -620,
+            "y": 120
+          },
+          "typeId": "medium-node"
+        },
+        {
+          "contentId": "city-heart",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 0
+          },
+          "id": "city-heart",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "typeId": "start-node"
+        },
+        {
+          "contentId": "civic-archive",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "civic-archive",
+          "position": {
+            "x": -260,
+            "y": 120
+          },
+          "typeId": "small-node"
+        },
+        {
+          "contentId": "contract-ledger",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "contract-ledger",
+          "position": {
+            "x": 620,
+            "y": 120
+          },
+          "typeId": "medium-node"
+        },
+        {
+          "contentId": "endless-gate",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "endless-gate",
+          "position": {
+            "x": -820,
+            "y": -360
+          },
+          "typeId": "large-node"
+        },
+        {
+          "contentId": "equipment-registry",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "equipment-registry",
+          "position": {
+            "x": 260,
+            "y": -120
+          },
+          "typeId": "small-node"
+        },
+        {
+          "contentId": "expanded-barracks",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "expanded-barracks",
+          "position": {
+            "x": 0,
+            "y": -540
+          },
+          "typeId": "large-node"
+        },
+        {
+          "contentId": "expedition-board",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "expedition-board",
+          "position": {
+            "x": 0,
+            "y": 360
+          },
+          "typeId": "small-node"
+        },
+        {
+          "contentId": "extraction-license",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "extraction-license",
+          "position": {
+            "x": -140,
+            "y": 440
+          },
+          "typeId": "large-node"
+        },
+        {
+          "contentId": "field-pack",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "field-pack",
+          "position": {
+            "x": 360,
+            "y": -20
+          },
+          "typeId": "small-node"
+        },
+        {
+          "contentId": "grand-exchange",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "grand-exchange",
+          "position": {
+            "x": 820,
+            "y": 300
+          },
+          "typeId": "large-node"
+        },
+        {
+          "contentId": "grand-workshop",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "grand-workshop",
+          "position": {
+            "x": 820,
+            "y": -360
+          },
+          "typeId": "large-node"
+        },
+        {
+          "contentId": "hall-of-heroes",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "hall-of-heroes",
+          "position": {
+            "x": -820,
+            "y": 360
+          },
+          "typeId": "large-node"
+        },
+        {
+          "contentId": "hero-registry",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "hero-registry",
+          "position": {
+            "x": 0,
+            "y": -720
+          },
+          "typeId": "medium-node"
+        },
+        {
+          "contentId": "leader-loadout-extraction",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "leader-loadout-extraction",
+          "position": {
+            "x": -580,
+            "y": 800
+          },
+          "typeId": "large-node"
+        },
+        {
+          "contentId": "merchant-permits",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "merchant-permits",
+          "position": {
+            "x": 440,
+            "y": 240
+          },
+          "typeId": "small-node"
+        },
+        {
+          "contentId": "north-road-charter",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "north-road-charter",
+          "position": {
+            "x": -180,
+            "y": 500
+          },
+          "typeId": "medium-node"
+        },
+        {
+          "contentId": "open-market",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "open-market",
+          "position": {
+            "x": 260,
+            "y": 120
+          },
+          "typeId": "small-node"
+        },
+        {
+          "contentId": "pathfinders-charter",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "pathfinders-charter",
+          "position": {
+            "x": 0,
+            "y": 720
+          },
+          "typeId": "large-node"
+        },
+        {
+          "contentId": "reclamation-bench",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "reclamation-bench",
+          "position": {
+            "x": 620,
+            "y": -120
+          },
+          "typeId": "medium-node"
+        },
+        {
+          "contentId": "secured-loadout",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "secured-loadout",
+          "position": {
+            "x": -380,
+            "y": 620
+          },
+          "typeId": "large-node"
+        },
+        {
+          "contentId": "shared-lessons-1",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "shared-lessons-1",
+          "position": {
+            "x": 0,
+            "y": -180
+          },
+          "typeId": "small-node"
+        },
+        {
+          "contentId": "shared-lessons-2",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "shared-lessons-2",
+          "position": {
+            "x": 0,
+            "y": -360
+          },
+          "typeId": "small-node"
+        },
+        {
+          "contentId": "smiths-guild",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "smiths-guild",
+          "position": {
+            "x": 440,
+            "y": -240
+          },
+          "typeId": "small-node"
+        },
+        {
+          "contentId": "stash-access",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "stash-access",
+          "position": {
+            "x": -440,
+            "y": 240
+          },
+          "typeId": "small-node"
+        },
+        {
+          "contentId": "surveyors-office",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "surveyors-office",
+          "position": {
+            "x": 0,
+            "y": 180
+          },
+          "typeId": "small-node"
+        },
+        {
+          "contentId": "training-yard",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "training-yard",
+          "position": {
+            "x": -260,
+            "y": -120
+          },
+          "typeId": "small-node"
+        },
+        {
+          "contentId": "trial-monument",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "trial-monument",
+          "position": {
+            "x": -440,
+            "y": -240
+          },
+          "typeId": "small-node"
+        },
+        {
+          "contentId": "waystone-network",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "waystone-network",
+          "position": {
+            "x": 0,
+            "y": 540
+          },
+          "typeId": "medium-node"
+        }
+      ],
+      "startingPlacementIds": [
+        "city-heart"
+      ]
+    }
+  ],
+  "name": "Party Forge City",
+  "projectFormat": "latticewright-project",
+  "projectId": "party-forge-city",
+  "projectVersion": 3,
+  "schemas": {
+    "categories": [
+      {
+        "description": "large progression tier.",
+        "id": "large",
+        "name": "Large"
+      },
+      {
+        "description": "medium progression tier.",
+        "id": "medium",
+        "name": "Medium"
+      },
+      {
+        "description": "small progression tier.",
+        "id": "small",
+        "name": "Small"
+      },
+      {
+        "description": "start progression tier.",
+        "id": "start",
+        "name": "Start"
+      }
+    ],
+    "contentTypes": [
+      {
+        "description": "A Party Forge progression design node.",
+        "fieldIds": [],
+        "id": "passive",
+        "name": "Passive"
+      }
+    ],
+    "currencies": [],
+    "effects": [],
+    "fields": [
+      {
+        "defaultValue": 1,
+        "helpText": "Design cost for allocating this placement.",
+        "id": "node-cost",
+        "minimum": 0,
+        "name": "Point Cost",
+        "owner": "placement",
+        "required": true,
+        "valueType": "number"
+      }
+    ],
+    "placementTypes": [
+      {
+        "description": "large progression placement.",
+        "fieldIds": [
+          "node-cost"
+        ],
+        "id": "large-node",
+        "name": "Large Node",
+        "shape": "large"
+      },
+      {
+        "description": "medium progression placement.",
+        "fieldIds": [
+          "node-cost"
+        ],
+        "id": "medium-node",
+        "name": "Medium Node",
+        "shape": "medium"
+      },
+      {
+        "description": "small progression placement.",
+        "fieldIds": [
+          "node-cost"
+        ],
+        "id": "small-node",
+        "name": "Small Node",
+        "shape": "small"
+      },
+      {
+        "description": "start progression placement.",
+        "fieldIds": [
+          "node-cost"
+        ],
+        "id": "start-node",
+        "name": "Start Node",
+        "shape": "start"
+      }
+    ],
+    "ranks": [],
+    "requirements": [],
+    "tags": [
+      {
+        "description": "Party Forge city design tag.",
+        "id": "city",
+        "name": "City"
+      },
+      {
+        "description": "Party Forge large design tag.",
+        "id": "large",
+        "name": "Large"
+      },
+      {
+        "description": "Party Forge medium design tag.",
+        "id": "medium",
+        "name": "Medium"
+      },
+      {
+        "description": "Party Forge party-forge design tag.",
+        "id": "party-forge",
+        "name": "Party Forge"
+      },
+      {
+        "description": "Party Forge small design tag.",
+        "id": "small",
+        "name": "Small"
+      },
+      {
+        "description": "Party Forge start design tag.",
+        "id": "start",
+        "name": "Start"
+      }
+    ]
+  },
+  "vocabulary": {
+    "contentPlural": "Passives",
+    "contentSingular": "Passive",
+    "graphPlural": "Passive Trees",
+    "graphSingular": "Passive Tree",
+    "placementPlural": "Nodes",
+    "placementSingular": "Node"
+  },
+  "workspace": {
+    "activeGraphId": "city-passive-tree",
+    "graphs": {
+      "city-passive-tree": {
+        "camera": {
+          "x": 0,
+          "y": 0,
+          "zoom": 0.8
+        },
+        "grid": {
+          "size": 32,
+          "visible": true
+        },
+        "lockedPlacementIds": [
+          "city-heart"
+        ]
+      }
+    },
+    "notes": "Recreated directly in format 3 from verified Party Forge City facts. The current game still consumes its separate fixed format-1 fixture; this portfolio is design data."
+  }
+}

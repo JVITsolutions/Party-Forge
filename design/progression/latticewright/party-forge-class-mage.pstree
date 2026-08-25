@@ -1,0 +1,462 @@
+{
+  "archetype": "passive-tree",
+  "assets": [],
+  "content": [
+    {
+      "categoryIds": [
+        "medium"
+      ],
+      "description": "Develop the core practice of the Mage.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {},
+      "iconAssetId": null,
+      "id": "mage-core",
+      "name": "Arcane Practice",
+      "requirements": [],
+      "tagIds": [
+        "class",
+        "mage",
+        "party-forge"
+      ],
+      "typeId": "passive"
+    },
+    {
+      "categoryIds": [
+        "large"
+      ],
+      "description": "Mage mastery and future specialization access.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {},
+      "iconAssetId": null,
+      "id": "mage-mastery",
+      "name": "Ember Thesis",
+      "requirements": [],
+      "tagIds": [
+        "class",
+        "mage",
+        "party-forge"
+      ],
+      "typeId": "passive"
+    },
+    {
+      "categoryIds": [
+        "small"
+      ],
+      "description": "Kindled Focus progression theme for the Mage.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {},
+      "iconAssetId": null,
+      "id": "mage-path-a",
+      "name": "Kindled Focus",
+      "requirements": [],
+      "tagIds": [
+        "class",
+        "mage",
+        "party-forge"
+      ],
+      "typeId": "passive"
+    },
+    {
+      "categoryIds": [
+        "small"
+      ],
+      "description": "Burst Geometry progression theme for the Mage.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {},
+      "iconAssetId": null,
+      "id": "mage-path-b",
+      "name": "Burst Geometry",
+      "requirements": [],
+      "tagIds": [
+        "class",
+        "mage",
+        "party-forge"
+      ],
+      "typeId": "passive"
+    },
+    {
+      "categoryIds": [
+        "small"
+      ],
+      "description": "Arcane Reserve progression theme for the Mage.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {},
+      "iconAssetId": null,
+      "id": "mage-path-c",
+      "name": "Arcane Reserve",
+      "requirements": [],
+      "tagIds": [
+        "class",
+        "mage",
+        "party-forge"
+      ],
+      "typeId": "passive"
+    },
+    {
+      "categoryIds": [
+        "start"
+      ],
+      "description": "Establish the permanent Mage identity: backline Arcane fire caster specializing in area and projectile patterns.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {},
+      "iconAssetId": null,
+      "id": "mage-root",
+      "name": "Ember Adept",
+      "requirements": [],
+      "tagIds": [
+        "class",
+        "mage",
+        "party-forge"
+      ],
+      "typeId": "passive"
+    }
+  ],
+  "exportProfiles": [
+    {
+      "assetMode": "references",
+      "extensions": {},
+      "id": "party-forge-runtime",
+      "name": "Party Forge Runtime v3",
+      "strict": false,
+      "target": "runtime-v3"
+    }
+  ],
+  "extensions": {
+    "gameplayConsumer": "not-yet-wired",
+    "partyForgeStatus": "authoring-design-data"
+  },
+  "graphCollections": [
+    {
+      "graphIds": [
+        "mage-passive-tree"
+      ],
+      "id": "primary-progression",
+      "name": "Primary Progression",
+      "parentCollectionId": null
+    }
+  ],
+  "graphPortals": [
+    {
+      "extensions": {},
+      "id": "mage-return-to-city",
+      "label": "Return to Party Forge City",
+      "role": "return",
+      "sourceGraphId": "mage-passive-tree",
+      "sourcePlacementId": "mage-root",
+      "target": {
+        "graphId": "city-passive-tree",
+        "projectId": "party-forge-city"
+      }
+    }
+  ],
+  "graphs": [
+    {
+      "connections": [
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "mage-root",
+          "id": "mage-passive-tree-edge-01",
+          "to": "mage-core"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "mage-core",
+          "id": "mage-passive-tree-edge-02",
+          "to": "mage-path-a"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "mage-core",
+          "id": "mage-passive-tree-edge-03",
+          "to": "mage-path-b"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "mage-core",
+          "id": "mage-passive-tree-edge-04",
+          "to": "mage-path-c"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "mage-path-a",
+          "id": "mage-passive-tree-edge-05",
+          "to": "mage-mastery"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "mage-path-b",
+          "id": "mage-passive-tree-edge-06",
+          "to": "mage-mastery"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "mage-path-c",
+          "id": "mage-passive-tree-edge-07",
+          "to": "mage-mastery"
+        }
+      ],
+      "decorations": [],
+      "extensions": {},
+      "groups": [],
+      "id": "mage-passive-tree",
+      "name": "Mage Passive Tree",
+      "placements": [
+        {
+          "contentId": "mage-core",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "mage-core",
+          "position": {
+            "x": 0,
+            "y": -180
+          },
+          "typeId": "medium-node"
+        },
+        {
+          "contentId": "mage-mastery",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "mage-mastery",
+          "position": {
+            "x": 0,
+            "y": -630
+          },
+          "typeId": "large-node"
+        },
+        {
+          "contentId": "mage-path-a",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "mage-path-a",
+          "position": {
+            "x": -240,
+            "y": -360
+          },
+          "typeId": "small-node"
+        },
+        {
+          "contentId": "mage-path-b",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "mage-path-b",
+          "position": {
+            "x": 0,
+            "y": -450
+          },
+          "typeId": "small-node"
+        },
+        {
+          "contentId": "mage-path-c",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "mage-path-c",
+          "position": {
+            "x": 240,
+            "y": -360
+          },
+          "typeId": "small-node"
+        },
+        {
+          "contentId": "mage-root",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 0
+          },
+          "id": "mage-root",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "typeId": "start-node"
+        }
+      ],
+      "startingPlacementIds": [
+        "mage-root"
+      ]
+    }
+  ],
+  "name": "Mage Passive Tree",
+  "projectFormat": "latticewright-project",
+  "projectId": "party-forge-class-mage",
+  "projectVersion": 3,
+  "schemas": {
+    "categories": [
+      {
+        "description": "large progression tier.",
+        "id": "large",
+        "name": "Large"
+      },
+      {
+        "description": "medium progression tier.",
+        "id": "medium",
+        "name": "Medium"
+      },
+      {
+        "description": "small progression tier.",
+        "id": "small",
+        "name": "Small"
+      },
+      {
+        "description": "start progression tier.",
+        "id": "start",
+        "name": "Start"
+      }
+    ],
+    "contentTypes": [
+      {
+        "description": "A Party Forge progression design node.",
+        "fieldIds": [],
+        "id": "passive",
+        "name": "Passive"
+      }
+    ],
+    "currencies": [],
+    "effects": [],
+    "fields": [
+      {
+        "defaultValue": 1,
+        "helpText": "Design cost for allocating this placement.",
+        "id": "node-cost",
+        "minimum": 0,
+        "name": "Point Cost",
+        "owner": "placement",
+        "required": true,
+        "valueType": "number"
+      }
+    ],
+    "placementTypes": [
+      {
+        "description": "large progression placement.",
+        "fieldIds": [
+          "node-cost"
+        ],
+        "id": "large-node",
+        "name": "Large Node",
+        "shape": "large"
+      },
+      {
+        "description": "medium progression placement.",
+        "fieldIds": [
+          "node-cost"
+        ],
+        "id": "medium-node",
+        "name": "Medium Node",
+        "shape": "medium"
+      },
+      {
+        "description": "small progression placement.",
+        "fieldIds": [
+          "node-cost"
+        ],
+        "id": "small-node",
+        "name": "Small Node",
+        "shape": "small"
+      },
+      {
+        "description": "start progression placement.",
+        "fieldIds": [
+          "node-cost"
+        ],
+        "id": "start-node",
+        "name": "Start Node",
+        "shape": "start"
+      }
+    ],
+    "ranks": [],
+    "requirements": [],
+    "tags": [
+      {
+        "description": "Party Forge class design tag.",
+        "id": "class",
+        "name": "Class"
+      },
+      {
+        "description": "Party Forge mage design tag.",
+        "id": "mage",
+        "name": "Mage"
+      },
+      {
+        "description": "Party Forge party-forge design tag.",
+        "id": "party-forge",
+        "name": "Party Forge"
+      }
+    ]
+  },
+  "vocabulary": {
+    "contentPlural": "Passives",
+    "contentSingular": "Passive",
+    "graphPlural": "Passive Trees",
+    "graphSingular": "Passive Tree",
+    "placementPlural": "Nodes",
+    "placementSingular": "Node"
+  },
+  "workspace": {
+    "activeGraphId": "mage-passive-tree",
+    "graphs": {
+      "mage-passive-tree": {
+        "camera": {
+          "x": 0,
+          "y": 0,
+          "zoom": 0.8
+        },
+        "grid": {
+          "size": 32,
+          "visible": true
+        },
+        "lockedPlacementIds": [
+          "mage-root"
+        ]
+      }
+    },
+    "notes": "Evidence-grounded Mage authoring design. Effects remain intentionally empty until Party Forge owns approved permanent-stat contracts."
+  }
+}
