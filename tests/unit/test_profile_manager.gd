@@ -55,6 +55,20 @@ func run() -> Array[String]:
 	_test_post_commit_index_cleanup_does_not_rollback_create(failures)
 	_reset_root()
 	_test_bootstrap_exposes_profile_health_statuses(failures)
+	_reset_root()
+	var deletion_probe := ProfileManager.new()
+	if not deletion_probe.has_method(&"delete_profile"):
+		failures.append("profile manager exposes permanent deletion")
+	else:
+		_test_delete_active_selects_most_recent_remaining(failures)
+		_reset_root()
+		_test_delete_final_profile_clears_active_state(failures)
+		_reset_root()
+		_test_delete_recovered_and_damaged_rows(failures)
+		_reset_root()
+		_test_delete_precommit_failure_preserves_manager_and_bytes(failures)
+		_reset_root()
+		_test_delete_index_failure_is_committed_cleanup_debt(failures)
 	ProfileTestSupport.remove_tree(_root)
 	return failures
 
@@ -352,6 +366,155 @@ func _test_bootstrap_exposes_profile_health_statuses(failures: Array[String]) ->
 	TestAssertions.truthy(bool(by_id[recovered.profile_id].get("recovered")), "recovered profile retains recovery evidence", failures)
 	TestAssertions.equal(by_id["profile-damaged01"].call(&"state_name"), "damaged", "unrecoverable profile remains visible as damaged", failures)
 	TestAssertions.truthy(not str(by_id["profile-damaged01"].get("error")).is_empty(), "damaged profile retains technical details", failures)
+
+func _test_delete_active_selects_most_recent_remaining(failures: Array[String]) -> void:
+	var store := ProfileStore.new()
+	var oldest := ProfileState.new_profile("profile-delete01", "Oldest", 1000)
+	var recent := ProfileState.new_profile("profile-delete02", "Recent", 3000)
+	var middle := ProfileState.new_profile("profile-delete03", "Middle", 2000)
+	TestAssertions.equal(store.save_profile(oldest, _root), "", "active deletion oldest fixture saves", failures)
+	TestAssertions.equal(store.save_profile(recent, _root), "", "active deletion recent fixture saves", failures)
+	TestAssertions.equal(store.save_profile(middle, _root), "", "active deletion middle fixture saves", failures)
+	var index_store := ProfileIndexStore.new()
+	var manager := _new_manager(store, index_store, Callable(), _new_deletion_service())
+	TestAssertions.equal(manager.call(&"bootstrap", _root), "", "active deletion manager bootstraps", failures)
+	TestAssertions.equal((manager.call(&"active_profile") as ProfileState).profile_id, recent.profile_id, "bootstrap selects the most-recent profile", failures)
+	var events: Array[String] = []
+	manager.connect(&"profiles_changed", func() -> void: events.append("profiles"))
+	manager.connect(&"active_profile_changed", func(profile: ProfileState) -> void: events.append("active:%s" % profile.profile_id))
+	var result: RefCounted = manager.call(&"delete_profile", recent.profile_id)
+	TestAssertions.truthy(bool(result.get("committed")) and bool(result.call(&"ok")), "active profile deletion commits without cleanup debt", failures)
+	TestAssertions.equal(result.get("deleted_profile_id"), recent.profile_id, "manager result identifies deleted active profile", failures)
+	TestAssertions.equal(result.get("next_active_profile_id"), middle.profile_id, "active deletion selects the most-recent remaining profile", failures)
+	var active := manager.call(&"active_profile") as ProfileState
+	TestAssertions.equal(active.profile_id if active != null else "", middle.profile_id, "replacement active profile is updated in memory", failures)
+	var remaining: Array = manager.call(&"profiles")
+	TestAssertions.equal(remaining.size(), 2, "active deletion removes only one in-memory profile", failures)
+	TestAssertions.equal(events, ["profiles", "active:%s" % middle.profile_id], "active deletion emits profile then replacement-active signals", failures)
+	var index := index_store.load_index(_root)
+	TestAssertions.truthy(index.ok(), "active deletion persists a readable index", failures)
+	TestAssertions.equal(index.index.active_profile_id if index.ok() else "", middle.profile_id, "persisted index selects the most-recent replacement", failures)
+	TestAssertions.equal(index.index.entries.size() if index.ok() else -1, 2, "persisted index excludes the deleted profile", failures)
+	TestAssertions.truthy(not FileAccess.file_exists(store.profile_path(recent.profile_id, _root)), "deleted active profile primary is absent", failures)
+
+func _test_delete_final_profile_clears_active_state(failures: Array[String]) -> void:
+	var store := ProfileStore.new()
+	var only := ProfileState.new_profile("profile-delete11", "Only", 4000)
+	TestAssertions.equal(store.save_profile(only, _root), "", "final deletion fixture saves", failures)
+	var index_store := ProfileIndexStore.new()
+	var manager := _new_manager(store, index_store, Callable(), _new_deletion_service())
+	TestAssertions.equal(manager.call(&"bootstrap", _root), "", "final deletion manager bootstraps", failures)
+	var events: Array[String] = []
+	manager.connect(&"profiles_changed", func() -> void: events.append("profiles"))
+	manager.connect(&"active_profile_changed", func(_profile: ProfileState) -> void: events.append("active"))
+	var result: RefCounted = manager.call(&"delete_profile", only.profile_id)
+	TestAssertions.truthy(bool(result.get("committed")) and bool(result.call(&"ok")), "final profile deletion commits", failures)
+	TestAssertions.equal(result.get("next_active_profile_id"), "", "final profile deletion reports empty next active identity", failures)
+	TestAssertions.truthy((manager.call(&"profiles") as Array).is_empty(), "final profile deletion empties manager profiles", failures)
+	TestAssertions.truthy((manager.call(&"profile_statuses") as Array).is_empty(), "final profile deletion removes the discovered row", failures)
+	TestAssertions.truthy(manager.call(&"active_profile") == null, "final profile deletion clears active state", failures)
+	TestAssertions.equal(events, ["profiles"], "final profile deletion emits no null active-profile signal", failures)
+	var index := index_store.load_index(_root)
+	TestAssertions.truthy(index.ok() and index.index.active_profile_id.is_empty() and index.index.entries.is_empty(), "final profile deletion persists an empty index", failures)
+
+func _test_delete_recovered_and_damaged_rows(failures: Array[String]) -> void:
+	var store := ProfileStore.new()
+	var healthy := ProfileState.new_profile("profile-delete21", "Healthy", 9000)
+	var recovered := ProfileState.new_profile("profile-delete22", "Recovered", 8000)
+	TestAssertions.equal(store.save_profile(healthy, _root), "", "row deletion healthy fixture saves", failures)
+	TestAssertions.equal(store.save_profile(recovered, _root), "", "row deletion recovered first generation saves", failures)
+	recovered.updated_at_unix = 8001
+	recovered.gold = 2
+	TestAssertions.equal(store.save_profile(recovered, _root), "", "row deletion recovered backup fixture saves", failures)
+	var recovered_primary := store.profile_path(recovered.profile_id, _root)
+	_write_text(recovered_primary, "corrupt recovered primary")
+	var damaged_id := "profile-delete23"
+	var damaged_primary := store.profile_path(damaged_id, _root)
+	_write_text(damaged_primary, "corrupt damaged primary")
+	var manager := _new_manager(store, ProfileIndexStore.new(), Callable(), _new_deletion_service())
+	var bootstrap_error := str(manager.call(&"bootstrap", _root))
+	TestAssertions.truthy(bootstrap_error.contains("profile=%s" % damaged_id), "damaged row remains a bootstrap diagnostic", failures)
+	var statuses: Array = manager.call(&"profile_statuses")
+	var state_by_id: Dictionary = {}
+	for status: ProfileEntryStatus in statuses:
+		state_by_id[status.profile_id] = status.state_name()
+	TestAssertions.equal(state_by_id.get(recovered.profile_id, ""), "recovered", "recovered row is discovered before deletion", failures)
+	TestAssertions.equal(state_by_id.get(damaged_id, ""), "damaged", "damaged row is discovered before deletion", failures)
+	var recovered_result: RefCounted = manager.call(&"delete_profile", recovered.profile_id)
+	TestAssertions.truthy(bool(recovered_result.get("committed")), "recovered row deletion commits", failures)
+	TestAssertions.truthy(not FileAccess.file_exists(recovered_primary) and not FileAccess.file_exists("%s.bak" % recovered_primary), "recovered row deletion removes primary and backup", failures)
+	TestAssertions.equal((manager.call(&"active_profile") as ProfileState).profile_id, healthy.profile_id, "recovered row deletion preserves the healthy active profile", failures)
+	var damaged_result: RefCounted = manager.call(&"delete_profile", damaged_id)
+	TestAssertions.truthy(bool(damaged_result.get("committed")), "damaged row deletion commits without decoding", failures)
+	TestAssertions.truthy(not FileAccess.file_exists(damaged_primary), "damaged row artifact is absent after deletion", failures)
+	var remaining_statuses: Array = manager.call(&"profile_statuses")
+	TestAssertions.equal(remaining_statuses.size(), 1, "recovered and damaged rows are removed from manager status", failures)
+	TestAssertions.equal((remaining_statuses[0] as ProfileEntryStatus).profile_id if remaining_statuses.size() == 1 else "", healthy.profile_id, "only the healthy row remains", failures)
+
+func _test_delete_precommit_failure_preserves_manager_and_bytes(failures: Array[String]) -> void:
+	var store := ProfileStore.new()
+	var profile := ProfileState.new_profile("profile-delete31", "Retryable", 10000)
+	TestAssertions.equal(store.save_profile(profile, _root), "", "precommit deletion fixture saves", failures)
+	var primary := store.profile_path(profile.profile_id, _root)
+	var primary_bytes := FileAccess.get_file_as_bytes(primary)
+	var remove_calls: Array[String] = []
+	var deletion := _new_deletion_service(func(path: String) -> Error:
+		remove_calls.append(path)
+		return ERR_CANT_CREATE
+	)
+	var manager := _new_manager(store, ProfileIndexStore.new(), Callable(), deletion)
+	TestAssertions.equal(manager.call(&"bootstrap", _root), "", "precommit deletion manager bootstraps", failures)
+	var events: Array[String] = []
+	manager.connect(&"profiles_changed", func() -> void: events.append("profiles"))
+	manager.connect(&"active_profile_changed", func(_profile: ProfileState) -> void: events.append("active"))
+	var result: RefCounted = manager.call(&"delete_profile", profile.profile_id)
+	TestAssertions.truthy(not bool(result.get("committed")) and not bool(result.get("cleanup_debt")) and str(result.get("error")).contains("stage=remove"), "precommit remove failure remains retryable", failures)
+	TestAssertions.equal(remove_calls, [primary], "precommit manager failure calls remover only for the exact primary", failures)
+	TestAssertions.equal(FileAccess.get_file_as_bytes(primary), primary_bytes, "precommit manager failure preserves exact profile bytes", failures)
+	TestAssertions.equal((manager.call(&"profiles") as Array).size(), 1, "precommit manager failure preserves in-memory profile", failures)
+	TestAssertions.equal((manager.call(&"profile_statuses") as Array).size(), 1, "precommit manager failure preserves discovered status", failures)
+	TestAssertions.equal((manager.call(&"active_profile") as ProfileState).profile_id, profile.profile_id, "precommit manager failure preserves active selection", failures)
+	TestAssertions.truthy(events.is_empty(), "precommit manager failure emits no success signals", failures)
+	var undiscovered: RefCounted = manager.call(&"delete_profile", "profile-missing01")
+	TestAssertions.truthy(not bool(undiscovered.get("committed")) and str(undiscovered.get("error")).contains("undiscovered profile"), "manager rejects an undiscovered valid identity", failures)
+	TestAssertions.equal(remove_calls, [primary], "manager undiscovered rejection does not call remover", failures)
+
+func _test_delete_index_failure_is_committed_cleanup_debt(failures: Array[String]) -> void:
+	var store := ProfileStore.new()
+	var profile := ProfileState.new_profile("profile-delete41", "Committed", 11000)
+	TestAssertions.equal(store.save_profile(profile, _root), "", "cleanup debt deletion fixture saves", failures)
+	var index_store := FailingProfileIndexStore.new()
+	var manager := _new_manager(store, index_store, Callable(), _new_deletion_service())
+	TestAssertions.equal(manager.call(&"bootstrap", _root), "", "cleanup debt deletion manager bootstraps", failures)
+	var index_path := _root.path_join(ProfileIndexStore.FILE_NAME)
+	var index_before := FileAccess.get_file_as_bytes(index_path)
+	var events: Array[String] = []
+	manager.connect(&"profiles_changed", func() -> void: events.append("profiles"))
+	manager.connect(&"active_profile_changed", func(_profile: ProfileState) -> void: events.append("active"))
+	index_store.save_error = "PROFILE_INDEX_SAVE_ERROR path=profile_index.json stage=forced"
+	var result: RefCounted = manager.call(&"delete_profile", profile.profile_id)
+	TestAssertions.truthy(bool(result.get("committed")) and bool(result.get("cleanup_debt")) and not bool(result.call(&"ok")), "index failure reports committed cleanup debt", failures)
+	TestAssertions.truthy(str(result.get("error")).contains("PROFILE_DELETE_CLEANUP_DEBT") and str(result.get("error")).contains("committed=true") and str(result.get("error")).contains(index_store.save_error), "cleanup debt retains exact index failure detail", failures)
+	TestAssertions.equal(result.get("deleted_profile_id"), profile.profile_id, "cleanup debt retains deleted identity", failures)
+	TestAssertions.equal(result.get("next_active_profile_id"), "", "cleanup debt retains empty next active identity", failures)
+	TestAssertions.truthy(not FileAccess.file_exists(store.profile_path(profile.profile_id, _root)), "cleanup debt does not reinsert deleted profile bytes", failures)
+	TestAssertions.truthy((manager.call(&"profiles") as Array).is_empty() and (manager.call(&"profile_statuses") as Array).is_empty(), "cleanup debt does not reinsert deleted manager state", failures)
+	TestAssertions.truthy(manager.call(&"active_profile") == null, "cleanup debt retains cleared active state", failures)
+	TestAssertions.equal(FileAccess.get_file_as_bytes(index_path), index_before, "cleanup debt leaves preexisting index bytes for later repair", failures)
+	TestAssertions.equal(events, ["profiles"], "committed cleanup debt still emits the profile change", failures)
+
+func _new_deletion_service(remove_file: Callable = Callable()) -> RefCounted:
+	var script := load("res://scripts/profile/profile_deletion_service.gd") as Script
+	return script.new(remove_file) as RefCounted
+
+func _new_manager(
+	profile_store: ProfileStore,
+	index_store: ProfileIndexStore,
+	id_factory: Callable,
+	deletion: RefCounted,
+) -> RefCounted:
+	var script := load("res://scripts/profile/profile_manager.gd") as Script
+	return script.new(profile_store, index_store, id_factory, deletion) as RefCounted
 
 func _reset_root() -> void:
 	ProfileTestSupport.remove_tree(_root)

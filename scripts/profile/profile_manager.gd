@@ -12,12 +12,19 @@ var _index := ProfileIndex.new()
 var _profile_store: ProfileStore
 var _index_store: ProfileIndexStore
 var _id_factory: Callable
+var _deletion: ProfileDeletionService
 var _root := ProfileStore.DEFAULT_ROOT
 
-func _init(profile_store: ProfileStore = null, index_store: ProfileIndexStore = null, id_factory: Callable = Callable()) -> void:
+func _init(
+	profile_store: ProfileStore = null,
+	index_store: ProfileIndexStore = null,
+	id_factory: Callable = Callable(),
+	deletion: ProfileDeletionService = null,
+) -> void:
 	_profile_store = profile_store if profile_store != null else ProfileStore.new()
 	_index_store = index_store if index_store != null else ProfileIndexStore.new()
 	_id_factory = id_factory
+	_deletion = deletion if deletion != null else ProfileDeletionService.new()
 
 func bootstrap(root: String = ProfileStore.DEFAULT_ROOT) -> String:
 	_root = root
@@ -164,6 +171,36 @@ func refresh_profile(profile_id: String) -> String:
 		return save_error
 	profiles_changed.emit()
 	return ""
+
+func delete_profile(profile_id: String) -> ProfileDeletionResult:
+	if not _profile_statuses.has(profile_id):
+		return _delete_failure("PROFILE_DELETE_ERROR profile=%s reason=undiscovered profile" % profile_id)
+	var discovered := PackedStringArray()
+	for discovered_id: Variant in _profile_statuses:
+		discovered.append(String(discovered_id))
+	var result := _deletion.delete_profile_artifacts(profile_id, discovered, _root)
+	if not result.committed:
+		return result
+	_profiles.erase(profile_id)
+	_profile_statuses.erase(profile_id)
+	if _index.active_profile_id == profile_id:
+		_index.active_profile_id = _most_recent_profile_id()
+	_rebuild_index()
+	result.next_active_profile_id = _index.active_profile_id
+	var index_error := _index_store.save_index(_index, _root)
+	if not index_error.is_empty():
+		result.cleanup_debt = true
+		result.error = "PROFILE_DELETE_CLEANUP_DEBT profile=%s committed=true error=%s" % [profile_id, index_error]
+	profiles_changed.emit()
+	var active := active_profile()
+	if active != null:
+		active_profile_changed.emit(active)
+	return result
+
+func _delete_failure(error: String) -> ProfileDeletionResult:
+	var result := ProfileDeletionResult.new()
+	result.error = error
+	return result
 
 func _rebuild_index() -> void:
 	_index.rebuild(profiles())
