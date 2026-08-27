@@ -23,9 +23,12 @@ func save_generated_document(
 		return "JSON_STORE_GENERATED_ERROR stage=encode reason=encoder-returned-empty-bytes"
 	if not _generated_bytes_validate(candidate, validator).is_empty():
 		return "JSON_STORE_GENERATED_ERROR stage=encode reason=encoder-returned-invalid-document"
-	var invocation := staging_root.path_join("invocation-%d-%d" % [OS.get_process_id(), Time.get_ticks_usec()])
-	var temporary := invocation.path_join("candidate.json")
-	var previous_copy := invocation.path_join("previous.bytes")
+	var staging_paths := _generated_staging_paths(staging_root)
+	if staging_paths.is_empty():
+		return "JSON_STORE_GENERATED_ERROR stage=confinement reason=staging-root-is-not-provable"
+	var invocation := String(staging_paths["invocation"])
+	var temporary := String(staging_paths["temporary"])
+	var previous_copy := String(staging_paths["previous_copy"])
 	var mkdir_error := DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(invocation))
 	if mkdir_error not in [OK, ERR_ALREADY_EXISTS]:
 		return "JSON_STORE_GENERATED_ERROR stage=mkdir code=%d" % mkdir_error
@@ -127,6 +130,31 @@ func _generated_cleanup(invocation: String, paths: Array[String]) -> Error:
 
 func _generated_cleanup_directory(path: String) -> Error:
 	return DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+
+func _generated_staging_paths(staging_root: String) -> Dictionary:
+	if staging_root.is_empty():
+		return {}
+	var canonical_root := staging_root.simplify_path()
+	var absolute_root := ProjectSettings.globalize_path(canonical_root).simplify_path()
+	if absolute_root.is_empty():
+		return {}
+	var invocation := canonical_root.path_join("invocation-%d-%d" % [OS.get_process_id(), Time.get_ticks_usec()]).simplify_path()
+	var temporary := invocation.path_join("candidate.json").simplify_path()
+	var previous_copy := invocation.path_join("previous.bytes").simplify_path()
+	for candidate: String in [invocation, temporary, previous_copy]:
+		var absolute_candidate := ProjectSettings.globalize_path(candidate).simplify_path()
+		if not _generated_is_strict_descendant(absolute_candidate, absolute_root):
+			return {}
+	return {"invocation": invocation, "temporary": temporary, "previous_copy": previous_copy}
+
+func _generated_is_strict_descendant(path: String, ancestor: String) -> bool:
+	var cursor := path.simplify_path()
+	var normalized_ancestor := ancestor.simplify_path()
+	while cursor != cursor.get_base_dir():
+		cursor = cursor.get_base_dir()
+		if cursor == normalized_ancestor:
+			return true
+	return false
 
 func save_document(
 	path: String,

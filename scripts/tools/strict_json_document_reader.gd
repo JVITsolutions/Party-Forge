@@ -30,7 +30,7 @@ static func read(path: String, maximum_bytes: int) -> StrictJsonDocumentResult:
 	if bytes.size() >= 3 and bytes[0] == 0xef and bytes[1] == 0xbb and bytes[2] == 0xbf:
 		return _failure("decode", "UTF-8 BOM is not allowed")
 	var text := bytes.get_string_from_utf8()
-	if text.contains("\uFFFD") or text.to_utf8_buffer() != bytes:
+	if text.to_utf8_buffer() != bytes:
 		return _failure("decode", "source must be strict UTF-8")
 	var scan_error := _JsonTokenScanner.new(text).scan()
 	if not scan_error.is_empty():

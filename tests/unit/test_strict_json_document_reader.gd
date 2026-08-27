@@ -40,6 +40,12 @@ func _test_encoding_and_json_rejections(failures: Array[String]) -> void:
 		var result := Reader.read(path, 64 * 1024 * 1024)
 		TestAssertions.truthy(not result.ok() and result.stage == test_case["stage"], "%s rejects with sanitized stage" % test_case["name"], failures)
 		TestAssertions.truthy(not result.reason.contains(path) and not result.reason.contains("{"), "%s reason omits path and source bytes" % test_case["name"], failures)
+	var replacement_bytes := "{\"value\":\"\uFFFD\"}".to_utf8_buffer()
+	var replacement_path := _root.path_join("literal-replacement-character.json")
+	_write_bytes(replacement_path, replacement_bytes)
+	var replacement := Reader.read(replacement_path, 64 * 1024 * 1024)
+	TestAssertions.truthy(replacement.ok(), "valid literal U+FFFD JSON source is accepted", failures)
+	TestAssertions.equal(replacement.bytes, replacement_bytes, "literal U+FFFD preserves exact bytes", failures)
 
 func _test_duplicate_keys_and_exact_hash(failures: Array[String]) -> void:
 	for source: String in ["{\"id\":1,\"id\":2}", "{\"nested\":{\"id\":1,\"id\":2}}"]:

@@ -680,6 +680,35 @@ func _test_generated_document_boundary(failures: Array[String]) -> void:
 	TestAssertions.truthy(failed.contains("stage=promote"), "generated promotion failure reports its stage", failures)
 	TestAssertions.equal(FileAccess.get_file_as_bytes(target), original, "generated pre-promotion failure preserves exact target bytes", failures)
 	TestAssertions.truthy(promoted_paths.size() == 1 and promoted_paths[0].begins_with(staging_root.path_join("invocation-")), "generated temporary promotion path stays beneath staging root", failures)
+	var traversal_root := staging_root.path_join("nominal/../canonical")
+	var traversal_paths: Array[String] = []
+	var traversal_failure := AtomicJsonStore.new(func(temporary: String, _promoted_target: String) -> Error:
+		traversal_paths.append(temporary)
+		return ERR_CANT_CREATE
+	)
+	var traversal_error := traversal_failure.save_generated_document(target, _generated_document(), Callable(CityAccessSnapshotLoader, "validate_document"), traversal_root, Callable(CityAccessSnapshotCodec, "encode_document"))
+	var canonical_root := ProjectSettings.globalize_path(traversal_root.simplify_path()).simplify_path()
+	var canonical_temporary := ProjectSettings.globalize_path(traversal_paths[0]).simplify_path() if traversal_paths.size() == 1 else ""
+	TestAssertions.truthy(traversal_error.contains("stage=promote"), "canonical traversal fixture reaches the injected promotion boundary", failures)
+	TestAssertions.truthy(traversal_paths.size() == 1 and not traversal_paths[0].contains("..") and _is_strict_descendant(canonical_temporary, canonical_root), "generated staging paths are canonical strict descendants rather than textual prefixes", failures)
+	TestAssertions.equal(FileAccess.get_file_as_bytes(target), original, "canonical traversal failure preserves exact target bytes", failures)
+	var unconfined_promotions := [0]
+	var unconfined := AtomicJsonStore.new(func(_temporary: String, _promoted_target: String) -> Error:
+		unconfined_promotions[0] += 1
+		return ERR_CANT_CREATE
+	)
+	var unconfined_error := unconfined.save_generated_document(target, _generated_document(), Callable(CityAccessSnapshotLoader, "validate_document"), "", Callable(CityAccessSnapshotCodec, "encode_document"))
+	TestAssertions.truthy(unconfined_error.contains("stage=confinement") and unconfined_promotions[0] == 0, "unprovable staging containment rejects before promotion", failures)
+	TestAssertions.equal(FileAccess.get_file_as_bytes(target), original, "unprovable staging containment preserves exact target bytes", failures)
+	var wrong_bytes := "{\"wrong\":true}".to_utf8_buffer()
+	var wrong_promotion := AtomicJsonStore.new(func(temporary: String, promoted_target: String) -> Error:
+		_write_bytes(promoted_target, wrong_bytes)
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(temporary))
+		return ERR_CANT_CREATE
+	)
+	var wrong_error := wrong_promotion.save_generated_document(target, _generated_document(), Callable(CityAccessSnapshotLoader, "validate_document"), staging_root, Callable(CityAccessSnapshotCodec, "encode_document"))
+	TestAssertions.truthy(wrong_error.contains("stage=promote"), "wrong-byte reported promotion failure reports promotion", failures)
+	TestAssertions.equal(FileAccess.get_file_as_bytes(target), original, "wrong-byte reported promotion failure restores exact previous bytes", failures)
 
 	var no_target := _root.path_join("generated-no-target.json")
 	var no_target_failure := AtomicJsonStore.new(func(_temporary: String, _promoted_target: String) -> Error: return ERR_CANT_CREATE)
@@ -704,6 +733,15 @@ func _generated_document() -> Dictionary:
 		"source": {"adapter": "latticewright-runtime-v3-city-access", "format": "latticewright-runtime", "formatVersion": 3, "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"},
 		"locations": [{"id": "city.apothecary", "destinationId": "city.apothecary.interior", "visibleWhen": [{"kind": "always", "value": ""}], "availableWhen": [{"kind": "always", "value": ""}]}],
 	}
+
+func _is_strict_descendant(path: String, ancestor: String) -> bool:
+	var cursor := path.simplify_path()
+	var normalized_ancestor := ancestor.simplify_path()
+	while cursor != cursor.get_base_dir():
+		cursor = cursor.get_base_dir()
+		if cursor == normalized_ancestor:
+			return true
+	return false
 
 func _corrupt_artifact_path(profile_id: String, names: PackedStringArray) -> String:
 	for name: String in names:
