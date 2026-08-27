@@ -380,8 +380,15 @@ No other inference is permitted.
       validator: Callable,
       staging_root: String,
       encoder: Callable,
-  ) -> String
+  ) -> Dictionary
   ```
+
+  The returned dictionary has exact keys `ok`, `committed`, `cleanupDebt`,
+  `stage`, and `reason`. Booleans are used for the first three values; stage
+  and reason are sanitized strings. Rejection before promotion reports
+  `committed=false`; verified promotion reports `committed=true`; cleanup
+  failure after verified promotion reports `ok=true`, `committed=true`, and
+  `cleanupDebt=true`.
 
   Tests must inject write/promote/read/cleanup failures and assert:
 
@@ -441,6 +448,10 @@ No other inference is permitted.
 
 **Files:**
 
+- Modify: `scripts/profile/atomic_json_store.gd`
+- Modify: `scripts/tools/generated_json_document_writer.gd`
+- Modify: `tests/unit/test_atomic_profile_store.gd`
+- Modify: `tests/unit/test_generated_json_document_writer.gd`
 - Create: `scripts/tools/latticewright_runtime_v3_city_access_importer.gd`
 - Create: `scripts/tools/city_access_import_result.gd`
 - Create: `tools/import_latticewright_access_snapshot.gd`
@@ -448,6 +459,15 @@ No other inference is permitted.
 - Create: `tests/unit/test_latticewright_access_import_cli.gd`
 
 **Purpose:** Isolate all Latticewright knowledge in one replaceable development adapter.
+
+- [ ] **Approved prerequisite: preserve generated-write outcome state**
+
+  Update the Task 3 generated-write method and fixed wrapper to return the
+  exact structured result defined above. Preserve ordinary profile-store
+  APIs byte-for-byte. Add direct regression tests for rejection,
+  pre-promotion failure, verified commit, exact rollback, and committed
+  cleanup debt. Commit this prerequisite separately before the remaining
+  Task 4 review fixes.
 
 - [ ] **Step 1: Write a failing exact-source translation test**
 
