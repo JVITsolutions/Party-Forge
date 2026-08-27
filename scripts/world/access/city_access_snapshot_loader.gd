@@ -20,7 +20,9 @@ static func load_bytes(bytes: PackedByteArray) -> CityAccessLoadResult:
 	if text.contains("\uFEFF") or text.contains("\uFFFD") or text.to_utf8_buffer() != bytes: return _failure("document must be strict UTF-8")
 	var parser := JSON.new()
 	if parser.parse(text) != OK or not parser.data is Dictionary: return _failure("document must contain one JSON object")
-	var document := parser.data as Dictionary
+	return validate_document(parser.data as Dictionary)
+
+static func validate_document(document: Dictionary) -> CityAccessLoadResult:
 	if not _keys(document, ROOT_KEYS): return _failure("root keys are invalid")
 	if typeof(document["format"]) != TYPE_STRING or document["format"] != FORMAT: return _failure("root format is invalid")
 	if not _integer(document["version"]) or int(document["version"]) != VERSION: return _failure("root version is invalid")

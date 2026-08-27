@@ -4,6 +4,7 @@ func run() -> Array[String]:
 	var failures: Array[String] = []
 	_test_factories_reject_invalid_inputs(failures)
 	_test_valid_access_snapshot_loads(failures)
+	_test_in_memory_validation_matches_strict_loader(failures)
 	_test_structural_contract(failures)
 	_test_content_and_limit_contract(failures)
 	_test_scalar_primitive_types(failures)
@@ -45,6 +46,21 @@ func _test_valid_access_snapshot_loads(failures: Array[String]) -> void:
 		return
 	TestAssertions.equal(result.snapshot.locations.size(), 7, "all seven locations load", failures)
 	TestAssertions.equal(String(result.snapshot.locations[0].id), "city.apothecary", "locations use ordinal ID order", failures)
+
+
+func _test_in_memory_validation_matches_strict_loader(failures: Array[String]) -> void:
+	var valid := _valid_document()
+	var bytes_result := CityAccessSnapshotLoader.load_bytes(JSON.stringify(valid).to_utf8_buffer())
+	var memory_result := CityAccessSnapshotLoader.validate_document(valid)
+	TestAssertions.truthy(bytes_result.ok() and memory_result.ok(), "in-memory validation accepts the loader's valid document", failures)
+	if memory_result.ok():
+		TestAssertions.equal(memory_result.snapshot.locations.size(), bytes_result.snapshot.locations.size(), "in-memory validation constructs the same complete snapshot", failures)
+	var invalid := _valid_document()
+	invalid["unexpected"] = true
+	var invalid_bytes := CityAccessSnapshotLoader.load_bytes(JSON.stringify(invalid).to_utf8_buffer())
+	var invalid_memory := CityAccessSnapshotLoader.validate_document(invalid)
+	TestAssertions.truthy(not invalid_bytes.ok() and not invalid_memory.ok(), "in-memory validation rejects the loader's invalid structure", failures)
+	TestAssertions.equal(invalid_memory.snapshot, null, "in-memory invalid result exposes no partial snapshot", failures)
 
 
 func _test_structural_contract(failures: Array[String]) -> void:
