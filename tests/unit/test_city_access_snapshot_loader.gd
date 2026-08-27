@@ -22,9 +22,15 @@ func _test_factories_reject_invalid_inputs(failures: Array[String]) -> void:
 	var valid_condition := CityAccessCondition.create(&"always", "")
 	var valid_location := CityAccessLocation.create(&"city.test", &"city.test.destination", [valid_condition], [valid_condition])
 	TestAssertions.truthy(valid_location != null, "factory fixture location constructs", failures)
+	var valid_locations: Array[CityAccessLocation] = [valid_location]
+	var valid_sha := "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+	TestAssertions.equal(CityAccessSnapshot.create(&"wrong", &"runtime", 3, valid_sha, valid_locations), null, "snapshot factory rejects wrong adapter", failures)
+	for source_version: int in [0, 1, 2, 4]:
+		TestAssertions.equal(CityAccessSnapshot.create(&"latticewright-runtime-v3-city-access", &"runtime", source_version, valid_sha, valid_locations), null, "snapshot factory rejects runtime-v3 adapter version %d" % source_version, failures)
+	TestAssertions.equal(CityAccessSnapshot.create(&"latticewright-runtime-v3-city-access", &"runtime", 3, "bad", valid_locations), null, "snapshot factory rejects malformed SHA", failures)
 	var invalid_locations: Array[CityAccessLocation] = []
 	invalid_locations.append(null)
-	TestAssertions.equal(CityAccessSnapshot.create(&"wrong", &"runtime", -1, "bad", invalid_locations), null, "snapshot factory rejects malformed metadata and null location", failures)
+	TestAssertions.equal(CityAccessSnapshot.create(&"latticewright-runtime-v3-city-access", &"runtime", 3, valid_sha, invalid_locations), null, "snapshot factory rejects null location", failures)
 
 
 func _test_valid_access_snapshot_loads(failures: Array[String]) -> void:
@@ -67,6 +73,10 @@ func _test_structural_contract(failures: Array[String]) -> void:
 	var malformed_sha := _valid_document()
 	malformed_sha["source"]["sha256"] = "A".repeat(64)
 	_assert_invalid(malformed_sha, "malformed source SHA rejects", failures)
+	for source_version: int in [0, 1, 2, 4]:
+		var wrong_source_version := _valid_document()
+		wrong_source_version["source"]["formatVersion"] = source_version
+		_assert_invalid(wrong_source_version, "loader rejects runtime-v3 adapter version %d" % source_version, failures)
 
 
 func _test_content_and_limit_contract(failures: Array[String]) -> void:

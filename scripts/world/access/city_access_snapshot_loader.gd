@@ -28,7 +28,7 @@ static func load_bytes(bytes: PackedByteArray) -> CityAccessLoadResult:
 	var source := document["source"] as Dictionary
 	if not _keys(source, SOURCE_KEYS): return _failure("source keys are invalid")
 	if typeof(source["adapter"]) != TYPE_STRING or source["adapter"] != "latticewright-runtime-v3-city-access": return _failure("source adapter is invalid")
-	if not _stable(source["format"]) or not _integer(source["formatVersion"]) or typeof(source["sha256"]) != TYPE_STRING or not _sha(source["sha256"] as String): return _failure("source values are invalid")
+	if not _stable(source["format"]) or not _integer(source["formatVersion"]) or int(source["formatVersion"]) != 3 or typeof(source["sha256"]) != TYPE_STRING or not _sha(source["sha256"] as String): return _failure("source values are invalid")
 	var values := document["locations"] as Array
 	if values.size() > MAX_LOCATIONS: return _failure("location limit exceeded")
 	var locations: Array[CityAccessLocation] = []

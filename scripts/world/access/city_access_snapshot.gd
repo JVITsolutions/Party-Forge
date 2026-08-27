@@ -24,7 +24,7 @@ var locations: Array[CityAccessLocation]:
 	set(_next): pass
 
 static func create(adapter_value: StringName, source_format_value: StringName, source_format_version_value: int, source_sha256_value: String, locations_value: Array[CityAccessLocation]) -> CityAccessSnapshot:
-	if adapter_value != &"latticewright-runtime-v3-city-access" or not _stable(source_format_value) or source_format_version_value < 0 or not _sha(source_sha256_value) or not _locations_are_valid(locations_value):
+	if adapter_value != &"latticewright-runtime-v3-city-access" or not _stable(source_format_value) or source_format_version_value != 3 or not _sha(source_sha256_value) or not _locations_are_valid(locations_value):
 		return null
 	var snapshot := CityAccessSnapshot.new()
 	snapshot._adapter = adapter_value
