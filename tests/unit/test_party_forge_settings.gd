@@ -4,6 +4,7 @@ func run() -> Array[String]:
 	var failures: Array[String] = []
 	_test_defaults_and_normalization(failures)
 	_test_personal_loot_controls(failures)
+	_test_city_access_snapshot_setting(failures)
 	_test_reduced_motion_setting(failures)
 	_test_round_trip_and_inactive_retention(failures)
 	_test_missing_unknown_and_malformed_fields(failures)
@@ -75,6 +76,45 @@ func _test_personal_loot_controls(failures: Array[String]) -> void:
 		developer_rules.call("show_ground_chest_diagnostics"),
 	], [375, true, &"ordinary_specialist", 777, true], "Developer Mode snapshot captures immutable normalized loot controls", failures)
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+
+
+func _test_city_access_snapshot_setting(failures: Array[String]) -> void:
+	var settings := PartyForgeSettings.new()
+	TestAssertions.equal(settings.get("use_city_access_snapshot"), false, "City access snapshot defaults off", failures)
+	settings.set("use_city_access_snapshot", true)
+	var copied := settings.copy()
+	settings.set("use_city_access_snapshot", false)
+	TestAssertions.equal(copied.get("use_city_access_snapshot"), true, "settings copy preserves City access snapshot selection", failures)
+
+	var path := "user://party_forge_settings_city_access_snapshot_test.cfg"
+	var store := PartyForgeSettingsStore.new()
+	TestAssertions.equal(store.save_settings(copied, path), "", "City access snapshot selection saves", failures)
+	TestAssertions.equal(store.load_settings(path).get("use_city_access_snapshot"), true, "City access snapshot selection round trips", failures)
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+
+	var missing_path := "user://party_forge_settings_city_access_snapshot_missing_test.cfg"
+	var missing := ConfigFile.new()
+	missing.set_value("settings", "schema_version", PartyForgeSettings.SCHEMA_VERSION)
+	missing.set_value("settings", "mode", PartyForgeSettings.Mode.DEVELOPER_MODE)
+	missing.save(missing_path)
+	TestAssertions.equal(store.load_settings(missing_path).get("use_city_access_snapshot"), false, "schema v1 files without City access snapshot selection default false", failures)
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(missing_path))
+
+	var malformed_path := "user://party_forge_settings_city_access_snapshot_malformed_test.cfg"
+	var malformed := ConfigFile.new()
+	malformed.set_value("settings", "schema_version", PartyForgeSettings.SCHEMA_VERSION)
+	malformed.set_value("settings", "use_city_access_snapshot", "true")
+	malformed.save(malformed_path)
+	TestAssertions.equal(store.load_settings(malformed_path).get("use_city_access_snapshot"), false, "wrong City access snapshot type fails closed", failures)
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(malformed_path))
+
+	var retained_path := "user://party_forge_settings_city_access_snapshot_retained_test.cfg"
+	var retained := PartyForgeSettings.new()
+	retained.mode = PartyForgeSettings.Mode.PLAYER_SIMULATION
+	retained.set("use_city_access_snapshot", true)
+	TestAssertions.equal(store.save_settings(retained, retained_path), "", "inactive City access snapshot selection saves", failures)
+	TestAssertions.equal(store.load_settings(retained_path).get("use_city_access_snapshot"), true, "Player Simulation retains inactive City access snapshot selection", failures)
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(retained_path))
 
 func _test_reduced_motion_setting(failures: Array[String]) -> void:
 	var settings := PartyForgeSettings.new()

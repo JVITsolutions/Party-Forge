@@ -59,6 +59,7 @@ func bind(settings: PartyForgeSettings) -> void:
 	_select_personal_drop_source(source.personal_drop_source_category_override)
 	_personal_drop_item_level().value = source.personal_drop_item_level_override
 	_show_ground_chest_diagnostics().button_pressed = source.show_ground_chest_diagnostics
+	_use_city_access_snapshot().button_pressed = source.use_city_access_snapshot
 	_refresh_value_labels()
 	_refresh_enabled_state()
 
@@ -78,6 +79,7 @@ func write_to(settings: PartyForgeSettings) -> void:
 	settings.personal_drop_source_category_override = _selected_personal_drop_source()
 	settings.personal_drop_item_level_override = int(_personal_drop_item_level().value)
 	settings.show_ground_chest_diagnostics = _show_ground_chest_diagnostics().button_pressed
+	settings.use_city_access_snapshot = _use_city_access_snapshot().button_pressed
 
 
 func reset_developer_options() -> void:
@@ -92,6 +94,7 @@ func reset_developer_options() -> void:
 	_personal_drop_source().select(_personal_drop_source().get_item_index(0))
 	_personal_drop_item_level().value = 0
 	_show_ground_chest_diagnostics().button_pressed = false
+	_use_city_access_snapshot().button_pressed = false
 	_refresh_value_labels()
 
 
@@ -146,10 +149,11 @@ func _refresh_enabled_state() -> void:
 	_personal_drop_source().disabled = not enabled
 	_personal_drop_item_level().editable = enabled
 	_show_ground_chest_diagnostics().disabled = not enabled
+	_use_city_access_snapshot().disabled = not enabled
 	_open_city_tree().disabled = not enabled
 	_open_item_sandbox().disabled = not enabled
 	_inactive_status().visible = not enabled
-	for control: Control in [_unlock_all(), _god_mode(), _party_capacity(), _enemy_density(), _experience_multiplier(), _level_up_card_count(), _personal_drop_multiplier(), _force_personal_drops(), _personal_drop_source(), _personal_drop_item_level(), _show_ground_chest_diagnostics(), _open_city_tree(), _open_item_sandbox()]:
+	for control: Control in [_unlock_all(), _god_mode(), _party_capacity(), _enemy_density(), _experience_multiplier(), _level_up_card_count(), _personal_drop_multiplier(), _force_personal_drops(), _personal_drop_source(), _personal_drop_item_level(), _show_ground_chest_diagnostics(), _use_city_access_snapshot(), _open_city_tree(), _open_item_sandbox()]:
 		control.tooltip_text = "" if enabled else INACTIVE_EXPLANATION
 	_configure_focus_order(enabled)
 
@@ -239,6 +243,10 @@ func _show_ground_chest_diagnostics() -> CheckButton:
 	return get_node("Layout/ShowGroundChestDiagnostics") as CheckButton
 
 
+func _use_city_access_snapshot() -> CheckButton:
+	return get_node("Layout/UseCityAccessSnapshot") as CheckButton
+
+
 func _select_personal_drop_source(source_category: StringName) -> void:
 	var item_id := 0
 	match source_category:
@@ -269,7 +277,7 @@ func _open_item_sandbox() -> Button:
 func _configure_focus_order(developer_mode_enabled: bool) -> void:
 	var order: Array[Control] = [_mode()]
 	if developer_mode_enabled:
-		order.append_array([_unlock_all(), _god_mode(), _party_capacity(), _enemy_density(), _experience_multiplier(), _level_up_card_count(), _personal_drop_multiplier(), _force_personal_drops(), _personal_drop_source(), _personal_drop_item_level(), _show_ground_chest_diagnostics(), _open_city_tree(), _open_item_sandbox()])
+		order.append_array([_unlock_all(), _god_mode(), _party_capacity(), _enemy_density(), _experience_multiplier(), _level_up_card_count(), _personal_drop_multiplier(), _force_personal_drops(), _personal_drop_source(), _personal_drop_item_level(), _show_ground_chest_diagnostics(), _use_city_access_snapshot(), _open_city_tree(), _open_item_sandbox()])
 	else:
 		order.append(_inactive_status())
 	order.append_array([

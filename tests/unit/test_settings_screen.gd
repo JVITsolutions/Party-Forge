@@ -229,12 +229,16 @@ func _test_additional_settings_page(failures: Array[String]) -> void:
 	var personal_drop_source := page.get_node_or_null("Layout/PersonalDropSourceCategory") as OptionButton
 	var personal_drop_item_level := page.get_node_or_null("Layout/PersonalDropItemLevel/Value") as HSlider
 	var ground_chest_diagnostics := page.get_node_or_null("Layout/ShowGroundChestDiagnostics") as CheckButton
+	var use_city_access_snapshot := page.get_node_or_null("Layout/UseCityAccessSnapshot") as CheckButton
 	var open_city_tree := page.get_node_or_null("Layout/OpenCityPassiveTree") as Button
 	var open_item_sandbox := page.get_node_or_null("Layout/OpenDeveloperItemSandbox") as Button
 	var inactive_status := page.get_node_or_null("Layout/InactiveStatus") as Label
 	var requests: Array[bool] = []
 	var sandbox_requests: Array[int] = []
 	TestAssertions.truthy(open_city_tree != null, "Additional Settings exposes Open City Passive Tree", failures)
+	TestAssertions.truthy(use_city_access_snapshot != null, "Additional Settings exposes the candidate City access snapshot control", failures)
+	if use_city_access_snapshot != null:
+		TestAssertions.equal(use_city_access_snapshot.text, "Use candidate City access snapshot", "candidate City access snapshot control uses approved copy", failures)
 	TestAssertions.truthy(open_item_sandbox != null, "Additional Settings exposes Open Developer Item Sandbox", failures)
 	TestAssertions.truthy(page.has_signal(&"item_sandbox_requested"), "Additional Settings owns the sandbox request signal", failures)
 	if open_item_sandbox != null and page.has_signal(&"item_sandbox_requested"):
@@ -265,11 +269,15 @@ func _test_additional_settings_page(failures: Array[String]) -> void:
 	saved.set("personal_drop_source_category_override", &"ordinary_specialist")
 	saved.set("personal_drop_item_level_override", 777)
 	saved.set("show_ground_chest_diagnostics", true)
+	saved.set("use_city_access_snapshot", true)
 	page.call("bind", saved)
 	TestAssertions.truthy(unlock_all.disabled, "Player Simulation disables Unlock All", failures)
 	TestAssertions.truthy(god_mode.disabled and party_capacity.editable == false and enemy_density.editable == false and experience_multiplier.editable == false and level_up_card_count.editable == false, "Player Simulation disables every developer override", failures)
 	if personal_drop_multiplier != null and force_personal_drops != null and personal_drop_source != null and personal_drop_item_level != null and ground_chest_diagnostics != null:
 		TestAssertions.truthy(not personal_drop_multiplier.editable and force_personal_drops.disabled and personal_drop_source.disabled and not personal_drop_item_level.editable and ground_chest_diagnostics.disabled, "Player Simulation disables every personal-loot override", failures)
+	if use_city_access_snapshot != null:
+		TestAssertions.truthy(use_city_access_snapshot.disabled, "Player Simulation disables candidate City access snapshot selection", failures)
+		TestAssertions.truthy(use_city_access_snapshot.button_pressed, "Player Simulation keeps candidate City access snapshot selection visible", failures)
 	TestAssertions.truthy(inactive_status != null and inactive_status.visible, "Player Simulation shows a non-color inactive explanation", failures)
 	if open_city_tree != null:
 		TestAssertions.truthy(open_city_tree.disabled, "Player Simulation disables City tree preview", failures)
@@ -285,7 +293,7 @@ func _test_additional_settings_page(failures: Array[String]) -> void:
 		TestAssertions.truthy(inactive_status.focus_mode != Control.FOCUS_NONE, "inactive explanation is controller and keyboard focusable", failures)
 		TestAssertions.equal(mode.focus_next, mode.get_path_to(inactive_status), "Player Simulation focus reaches the inactive explanation after Mode", failures)
 		TestAssertions.equal(inactive_status.focus_next, inactive_status.get_path_to(page.get_node("Layout/ResetDeveloperOptions")), "Player Simulation focus continues from the explanation to actions", failures)
-	for control: Control in [unlock_all, god_mode, party_capacity, enemy_density, experience_multiplier, level_up_card_count, personal_drop_multiplier, force_personal_drops, personal_drop_source, personal_drop_item_level, ground_chest_diagnostics]:
+	for control: Control in [unlock_all, god_mode, party_capacity, enemy_density, experience_multiplier, level_up_card_count, personal_drop_multiplier, force_personal_drops, personal_drop_source, personal_drop_item_level, ground_chest_diagnostics, use_city_access_snapshot]:
 		if control == null:
 			continue
 		TestAssertions.truthy(control.tooltip_text.contains("retained") and control.tooltip_text.contains("Developer Mode"), "%s exposes the inactive reason in its tooltip" % control.name, failures)
@@ -302,12 +310,16 @@ func _test_additional_settings_page(failures: Array[String]) -> void:
 		TestAssertions.equal(int(personal_drop_multiplier.value), 375, "personal-drop multiplier binds retained value", failures)
 		TestAssertions.equal(personal_drop_source.get_item_id(personal_drop_source.selected), 2, "personal-drop source binds specialist override", failures)
 		TestAssertions.equal(int(personal_drop_item_level.value), 777, "personal-drop item level binds retained value", failures)
+	if use_city_access_snapshot != null:
+		TestAssertions.truthy(not use_city_access_snapshot.disabled and use_city_access_snapshot.button_pressed, "Developer Mode enables retained candidate City access snapshot selection", failures)
 	TestAssertions.truthy(inactive_status != null and not inactive_status.visible, "Developer Mode hides the inactive explanation", failures)
 	if open_city_tree != null:
 		TestAssertions.truthy(not open_city_tree.disabled, "Developer Mode enables City tree preview", failures)
 		open_city_tree.pressed.emit()
 		TestAssertions.equal(requests, [true], "Developer City tree preview emits true exactly once", failures)
 		TestAssertions.equal(level_up_card_count.focus_next, level_up_card_count.get_path_to(personal_drop_multiplier), "Developer focus order reaches personal-loot controls", failures)
+		if use_city_access_snapshot != null:
+			TestAssertions.equal(use_city_access_snapshot.focus_next, use_city_access_snapshot.get_path_to(open_city_tree), "candidate City access snapshot focus precedes City tree", failures)
 	if open_item_sandbox != null:
 		TestAssertions.truthy(not open_item_sandbox.disabled, "Developer Mode enables the item sandbox", failures)
 		open_item_sandbox.pressed.emit()
@@ -334,12 +346,15 @@ func _test_additional_settings_page(failures: Array[String]) -> void:
 	page.call("write_to", written_override)
 	TestAssertions.equal(written_override.experience_multiplier_percent, 440, "page writes experience multiplier", failures)
 	TestAssertions.equal(written_override.level_up_card_count, 8, "page writes level-up card count", failures)
+	TestAssertions.equal(written_override.get("use_city_access_snapshot"), true, "page writes candidate City access snapshot selection", failures)
 	page.call("reset_developer_options")
 	TestAssertions.truthy(not unlock_all.button_pressed and not god_mode.button_pressed, "reset clears developer toggles", failures)
 	TestAssertions.equal(int(party_capacity.value), 4, "reset restores party capacity", failures)
 	TestAssertions.equal(int(enemy_density.value), 100, "reset restores enemy density", failures)
 	TestAssertions.equal(int(experience_multiplier.value), 100, "reset restores experience multiplier", failures)
 	TestAssertions.equal(int(level_up_card_count.value), 5, "reset restores level-up card count", failures)
+	if use_city_access_snapshot != null:
+		TestAssertions.equal(use_city_access_snapshot.button_pressed, false, "reset clears candidate City access snapshot selection", failures)
 	if personal_drop_multiplier != null and force_personal_drops != null and personal_drop_source != null and personal_drop_item_level != null and ground_chest_diagnostics != null:
 		TestAssertions.equal([int(personal_drop_multiplier.value), force_personal_drops.button_pressed, personal_drop_source.get_item_id(personal_drop_source.selected), int(personal_drop_item_level.value), ground_chest_diagnostics.button_pressed], [100, false, 0, 0, false], "reset restores all personal-loot production defaults", failures)
 	var written := PartyForgeSettings.new()
@@ -499,6 +514,9 @@ func _test_active_page_focus(screen: CanvasLayer, tabs: TabContainer, failures: 
 
 
 func _test_additional_focus_traversal(page: Control, failures: Array[String]) -> void:
+	var use_city_access_snapshot := page.get_node_or_null("Layout/UseCityAccessSnapshot") as Control
+	if use_city_access_snapshot == null:
+		return
 	var ordered: Array[Control] = [
 		page.get_node("Layout/Mode") as Control,
 		page.get_node("Layout/UnlockAll") as Control,
@@ -512,6 +530,7 @@ func _test_additional_focus_traversal(page: Control, failures: Array[String]) ->
 		page.get_node("Layout/PersonalDropSourceCategory") as Control,
 		page.get_node("Layout/PersonalDropItemLevel/Value") as Control,
 		page.get_node("Layout/ShowGroundChestDiagnostics") as Control,
+		use_city_access_snapshot,
 		page.get_node("Layout/OpenCityPassiveTree") as Control,
 		page.get_node("Layout/ResetDeveloperOptions") as Control,
 		page.get_node("Layout/ApplyAndReturn") as Control,
@@ -519,7 +538,7 @@ func _test_additional_focus_traversal(page: Control, failures: Array[String]) ->
 	]
 	var sandbox_button := page.get_node_or_null("Layout/OpenDeveloperItemSandbox") as Control
 	if sandbox_button != null:
-		ordered.insert(13, sandbox_button)
+		ordered.insert(14, sandbox_button)
 	for index: int in range(ordered.size()):
 		var current := ordered[index]
 		var next := ordered[(index + 1) % ordered.size()]

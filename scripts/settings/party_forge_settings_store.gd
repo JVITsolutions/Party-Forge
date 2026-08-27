@@ -49,6 +49,8 @@ func load_settings(path: String = DEFAULT_PATH) -> PartyForgeSettings:
 	result.personal_drop_item_level_override = int(item_level_override_value) if typeof(item_level_override_value) == TYPE_INT else 0
 	var diagnostics_value: Variant = config.get_value(SECTION, "show_ground_chest_diagnostics", false)
 	result.show_ground_chest_diagnostics = bool(diagnostics_value) if typeof(diagnostics_value) == TYPE_BOOL else false
+	var city_access_snapshot_value: Variant = config.get_value(SECTION, "use_city_access_snapshot", false)
+	result.use_city_access_snapshot = bool(city_access_snapshot_value) if typeof(city_access_snapshot_value) == TYPE_BOOL else false
 	result.normalize()
 	return result
 
@@ -72,6 +74,7 @@ func save_settings(settings: PartyForgeSettings, path: String = DEFAULT_PATH) ->
 	config.set_value(SECTION, "personal_drop_source_category_override", normalized.personal_drop_source_category_override)
 	config.set_value(SECTION, "personal_drop_item_level_override", normalized.personal_drop_item_level_override)
 	config.set_value(SECTION, "show_ground_chest_diagnostics", normalized.show_ground_chest_diagnostics)
+	config.set_value(SECTION, "use_city_access_snapshot", normalized.use_city_access_snapshot)
 	var temporary := "%s.tmp" % path
 	var backup := "%s.bak" % path
 	var save_error := config.save(temporary)
