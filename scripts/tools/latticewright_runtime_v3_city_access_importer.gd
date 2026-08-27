@@ -178,23 +178,29 @@ static func _decoration(record: Dictionary, group_ids: Dictionary) -> bool:
 	if not record.has("kind") or not record.has("groupId") or not record.has("opacity") or not record.has("extensions") or not _group_reference(record["groupId"], group_ids) or not _finite(record["opacity"]) or float(record["opacity"]) < 0.0 or float(record["opacity"]) > 1.0 or not _empty_extensions(record["extensions"]): return false
 	match record["kind"]:
 		"ring":
-			return _keys(record, ["id", "kind", "groupId", "center", "radius", "strokeColor", "strokeWidth", "fillColor", "opacity", "extensions"]) and _point(record["center"]) and _nonnegative(record["radius"]) and _color(record["strokeColor"]) and _nonnegative(record["strokeWidth"]) and (record["fillColor"] == null or _color(record["fillColor"]))
+			return _keys(record, ["id", "kind", "groupId", "center", "radius", "strokeColor", "strokeWidth", "fillColor", "opacity", "extensions"]) and _point(record["center"]) and _dimension(record["radius"]) and _color(record["strokeColor"]) and _stroke_width(record["strokeWidth"]) and (record["fillColor"] == null or _color(record["fillColor"]))
 		"label":
-			return _keys(record, ["id", "kind", "groupId", "position", "text", "color", "fontSize", "opacity", "extensions"]) and _point(record["position"]) and typeof(record["text"]) == TYPE_STRING and _color(record["color"]) and _nonnegative(record["fontSize"])
+			return _keys(record, ["id", "kind", "groupId", "position", "text", "color", "fontSize", "opacity", "extensions"]) and _point(record["position"]) and typeof(record["text"]) == TYPE_STRING and _color(record["color"]) and _font_size(record["fontSize"])
 		"region":
-			return _keys(record, ["id", "kind", "groupId", "center", "width", "height", "cornerRadius", "fillColor", "strokeColor", "strokeWidth", "opacity", "extensions"]) and _point(record["center"]) and _nonnegative(record["width"]) and _nonnegative(record["height"]) and _nonnegative(record["cornerRadius"]) and _color(record["fillColor"]) and _color(record["strokeColor"]) and _nonnegative(record["strokeWidth"])
+			return _keys(record, ["id", "kind", "groupId", "center", "width", "height", "cornerRadius", "fillColor", "strokeColor", "strokeWidth", "opacity", "extensions"]) and _point(record["center"]) and _dimension(record["width"]) and _dimension(record["height"]) and _dimension(record["cornerRadius"]) and _color(record["fillColor"]) and _color(record["strokeColor"]) and _stroke_width(record["strokeWidth"])
 	return false
 
 static func _group_reference(value: Variant, group_ids: Dictionary) -> bool:
 	return value == null or (_source_id(value) and group_ids.has(value))
 
-static func _nonnegative(value: Variant) -> bool:
-	return _finite(value) and float(value) >= 0.0
+static func _dimension(value: Variant) -> bool:
+	return _finite(value) and float(value) >= 0.0 and float(value) <= 100000.0
+
+static func _stroke_width(value: Variant) -> bool:
+	return _finite(value) and float(value) >= 0.0 and float(value) <= 64.0
+
+static func _font_size(value: Variant) -> bool:
+	return _finite(value) and float(value) >= 0.0 and float(value) <= 256.0
 
 static func _color(value: Variant) -> bool:
-	if typeof(value) != TYPE_STRING or (value as String).length() != 7 or not (value as String).begins_with("#"): return false
+	if typeof(value) != TYPE_STRING or not (value as String).length() in [7, 9] or not (value as String).begins_with("#"): return false
 	for character: String in (value as String).substr(1):
-		if not (character >= "0" and character <= "9") and not (character >= "a" and character <= "f") and not (character >= "A" and character <= "F"): return false
+		if not (character >= "0" and character <= "9") and not (character >= "a" and character <= "f"): return false
 	return true
 
 static func _candidate(content: Array, source_sha256: String) -> Dictionary:
@@ -232,7 +238,10 @@ static func _empty_dictionary(value: Variant) -> bool:
 	return value is Dictionary and (value as Dictionary).is_empty()
 
 static func _point(value: Variant) -> bool:
-	return value is Dictionary and _keys(value as Dictionary, ["x", "y"]) and _finite((value as Dictionary)["x"]) and _finite((value as Dictionary)["y"])
+	return value is Dictionary and _keys(value as Dictionary, ["x", "y"]) and _coordinate((value as Dictionary)["x"]) and _coordinate((value as Dictionary)["y"])
+
+static func _coordinate(value: Variant) -> bool:
+	return _finite(value) and float(value) >= -1000000.0 and float(value) <= 1000000.0
 
 static func _finite(value: Variant) -> bool:
 	return (typeof(value) == TYPE_INT or typeof(value) == TYPE_FLOAT) and is_finite(float(value))

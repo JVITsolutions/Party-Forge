@@ -6,6 +6,7 @@ func run() -> Array[String]:
 	var failures: Array[String] = []
 	_test_exact_runtime_translation(failures)
 	_test_rejections_and_canonicalization(failures)
+	_test_layout_authoring_boundaries(failures)
 	_test_whitespace_only_provenance(failures)
 	return failures
 
@@ -86,6 +87,65 @@ func _test_rejections_and_canonicalization(failures: Array[String]) -> void:
 		TestAssertions.equal(CityAccessSnapshotCodec.encode_document(first.candidate), CityAccessSnapshotCodec.encode_document(second.candidate), "runtime reorderings produce byte-identical candidates", failures)
 		TestAssertions.truthy(first.candidate["source"]["sha256"] != Importer.translate(_runtime(), "f".repeat(64)).candidate["source"]["sha256"], "source byte hash remains independent provenance", failures)
 
+func _test_layout_authoring_boundaries(failures: Array[String]) -> void:
+	for color_case: Dictionary in [
+		{"value": "#aabbcc", "ok": true, "label": "lowercase rgb"},
+		{"value": "#aabbccdd", "ok": true, "label": "lowercase rgba"},
+		{"value": "#AABBCC", "ok": false, "label": "uppercase rgb"},
+		{"value": "#aabbccDD", "ok": false, "label": "uppercase alpha"},
+		{"value": "#aabbc", "ok": false, "label": "short color"},
+		{"value": "#aabbccdde", "ok": false, "label": "long color"},
+		{"value": "#aabbcg", "ok": false, "label": "nonhex color"},
+	]:
+		var group_document := _runtime()
+		group_document["graphs"][0]["groups"] = [_group("placement-city-apothecary", color_case["value"])]
+		TestAssertions.equal(Importer.translate(group_document, _sha()).ok(), color_case["ok"], "group %s follows portable color rules" % color_case["label"], failures)
+		for kind: String in ["ring", "label", "region"]:
+			var decoration_document := _runtime()
+			decoration_document["graphs"][0]["decorations"] = [_decoration(kind, null, color_case["value"])]
+			TestAssertions.equal(Importer.translate(decoration_document, _sha()).ok(), color_case["ok"], "%s %s follows portable color rules" % [kind, color_case["label"]], failures)
+	for kind: String in ["ring", "label", "region"]:
+		for point_case: Dictionary in [
+			{"value": -1000000, "ok": true, "label": "minimum coordinate"},
+			{"value": 1000000, "ok": true, "label": "maximum coordinate"},
+			{"value": -1000000.1, "ok": false, "label": "below minimum coordinate"},
+			{"value": 1000000.1, "ok": false, "label": "above maximum coordinate"},
+		]:
+			var point_document := _runtime()
+			var point_decoration := _decoration(kind, null)
+			point_decoration["center" if kind in ["ring", "region"] else "position"] = {"x": point_case["value"], "y": point_case["value"]}
+			point_document["graphs"][0]["decorations"] = [point_decoration]
+			TestAssertions.equal(Importer.translate(point_document, _sha()).ok(), point_case["ok"], "%s %s follows coordinate bounds" % [kind, point_case["label"]], failures)
+	var ring_cases := [
+		{"field": "radius", "value": 0, "ok": true, "label": "radius minimum"},
+		{"field": "radius", "value": -0.1, "ok": false, "label": "radius below minimum"},
+		{"field": "radius", "value": 100000, "ok": true, "label": "radius maximum"},
+		{"field": "radius", "value": 100000.1, "ok": false, "label": "radius above maximum"},
+		{"field": "strokeWidth", "value": 0, "ok": true, "label": "stroke minimum"},
+		{"field": "strokeWidth", "value": -0.1, "ok": false, "label": "stroke below minimum"},
+		{"field": "strokeWidth", "value": 64, "ok": true, "label": "stroke maximum"},
+		{"field": "strokeWidth", "value": 64.1, "ok": false, "label": "stroke above maximum"},
+	]
+	for test_case: Dictionary in ring_cases:
+		var ring_document := _runtime()
+		var ring := _decoration("ring", null)
+		ring[test_case["field"]] = test_case["value"]
+		ring_document["graphs"][0]["decorations"] = [ring]
+		TestAssertions.equal(Importer.translate(ring_document, _sha()).ok(), test_case["ok"], "ring %s follows dimension bounds" % test_case["label"], failures)
+	for field: String in ["width", "height", "cornerRadius"]:
+		for dimension_case: Dictionary in [{"value": 0, "ok": true, "label": "minimum"}, {"value": -0.1, "ok": false, "label": "below minimum"}, {"value": 100000, "ok": true, "label": "maximum"}, {"value": 100000.1, "ok": false, "label": "above maximum"}]:
+			var region_document := _runtime()
+			var region := _decoration("region", null)
+			region[field] = dimension_case["value"]
+			region_document["graphs"][0]["decorations"] = [region]
+			TestAssertions.equal(Importer.translate(region_document, _sha()).ok(), dimension_case["ok"], "region %s %s follows dimension bounds" % [field, dimension_case["label"]], failures)
+	for font_case: Dictionary in [{"value": 0, "ok": true, "label": "font minimum"}, {"value": -0.1, "ok": false, "label": "font below minimum"}, {"value": 256, "ok": true, "label": "font maximum"}, {"value": 256.1, "ok": false, "label": "font above maximum"}]:
+		var label_document := _runtime()
+		var label := _decoration("label", null)
+		label["fontSize"] = font_case["value"]
+		label_document["graphs"][0]["decorations"] = [label]
+		TestAssertions.equal(Importer.translate(label_document, _sha()).ok(), font_case["ok"], "label %s follows font bounds" % font_case["label"], failures)
+
 func _test_whitespace_only_provenance(failures: Array[String]) -> void:
 	var root := "user://tests/city-access-provenance-%d" % Time.get_ticks_usec()
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(root))
@@ -142,11 +202,14 @@ func _portal() -> Dictionary:
 func _asset() -> Dictionary:
 	return {"id": "asset", "relativePath": "asset.png", "mediaType": "image", "sha256": _sha(), "extensions": {}}
 
-func _group(member: String = "placement-city-apothecary") -> Dictionary:
-	return {"id": "city-layout", "name": "Layout", "placementIds": [member], "color": "#aabbcc", "extensions": {}}
+func _group(member: String = "placement-city-apothecary", color: String = "#aabbcc") -> Dictionary:
+	return {"id": "city-layout", "name": "Layout", "placementIds": [member], "color": color, "extensions": {}}
 
-func _decoration() -> Dictionary:
-	return {"id": "city-label", "kind": "label", "groupId": "city-layout", "position": {"x": 0, "y": 0}, "text": "City", "color": "#aabbcc", "fontSize": 16, "opacity": 1, "extensions": {}}
+func _decoration(kind: String = "label", group_id: Variant = "city-layout", color: String = "#aabbcc") -> Dictionary:
+	match kind:
+		"ring": return {"id": "city-ring", "kind": "ring", "groupId": group_id, "center": {"x": 0, "y": 0}, "radius": 16, "strokeColor": color, "strokeWidth": 1, "fillColor": color, "opacity": 1, "extensions": {}}
+		"region": return {"id": "city-region", "kind": "region", "groupId": group_id, "center": {"x": 0, "y": 0}, "width": 16, "height": 16, "cornerRadius": 1, "fillColor": color, "strokeColor": color, "strokeWidth": 1, "opacity": 1, "extensions": {}}
+	return {"id": "city-label", "kind": "label", "groupId": group_id, "position": {"x": 0, "y": 0}, "text": "City", "color": color, "fontSize": 16, "opacity": 1, "extensions": {}}
 
 func _location(locations: Array, id: String) -> Dictionary:
 	for location: Dictionary in locations:
