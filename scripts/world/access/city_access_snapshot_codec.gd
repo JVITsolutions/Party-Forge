@@ -8,7 +8,8 @@ static func encode_document(document: Dictionary) -> PackedByteArray:
 	var locations: Array = []
 	for location: CityAccessLocation in snapshot.locations:
 		locations.append({"id": String(location.id), "destinationId": String(location.destination_id), "visibleWhen": _conditions(location.visible_when), "availableWhen": _conditions(location.available_when)})
-	return (JSON.stringify({"format": CityAccessSnapshotLoader.FORMAT, "version": CityAccessSnapshotLoader.VERSION, "source": {"adapter": String(snapshot.adapter), "format": String(snapshot.source_format), "formatVersion": snapshot.source_format_version, "sha256": snapshot.source_sha256}, "locations": locations}, "  ", false) + "\n").to_utf8_buffer()
+	var canonical := (JSON.stringify({"format": CityAccessSnapshotLoader.FORMAT, "version": CityAccessSnapshotLoader.VERSION, "source": {"adapter": String(snapshot.adapter), "format": String(snapshot.source_format), "formatVersion": snapshot.source_format_version, "sha256": snapshot.source_sha256}, "locations": locations}, "  ", false) + "\n").to_utf8_buffer()
+	return canonical if CityAccessSnapshotLoader.load_bytes(canonical).ok() else PackedByteArray()
 
 static func _conditions(values: Array[CityAccessCondition]) -> Array:
 	var result: Array = []

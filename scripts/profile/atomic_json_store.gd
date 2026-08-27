@@ -22,7 +22,9 @@ func save_generated_document(
 	var candidate := encoder.call(document) as PackedByteArray
 	if candidate.is_empty():
 		return _generated_outcome(false, false, false, "encode", "encoder-returned-empty-bytes")
-	if not _generated_bytes_validate(candidate, validator).is_empty():
+	if candidate.size() > CityAccessSnapshotLoader.MAX_BYTES:
+		return _generated_outcome(false, false, false, "encode", "encoder-returned-oversized-bytes")
+	if not CityAccessSnapshotLoader.load_bytes(candidate).ok() or not _generated_bytes_validate(candidate, validator).is_empty():
 		return _generated_outcome(false, false, false, "encode", "encoder-returned-invalid-document")
 	var staging_paths := _generated_staging_paths(staging_root)
 	if staging_paths.is_empty():

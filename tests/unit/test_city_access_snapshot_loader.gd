@@ -13,6 +13,7 @@ func run() -> Array[String]:
 	_test_bytes_paths_and_defensive_copies(failures)
 	_test_load_result_rejects_public_mutation(failures)
 	_test_codec_is_canonical(failures)
+	_test_canonical_byte_ceiling(failures)
 	return failures
 
 
@@ -226,6 +227,12 @@ func _test_bytes_paths_and_defensive_copies(failures: Array[String]) -> void:
 	_assert_invalid_result(CityAccessSnapshotLoader.load_path("user://missing-city-access-snapshot.json"), "missing path rejects", failures)
 	DirAccess.make_dir_absolute(ProjectSettings.globalize_path("user://city-access-directory"))
 	_assert_invalid_result(CityAccessSnapshotLoader.load_path("user://city-access-directory"), "unreadable directory rejects", failures)
+	var oversized_path := "user://oversized-city-access-snapshot.json"
+	var oversized_path_bytes := PackedByteArray()
+	oversized_path_bytes.resize(CityAccessSnapshotLoader.MAX_BYTES + 1)
+	_write_bytes(oversized_path, oversized_path_bytes)
+	_assert_invalid_result(CityAccessSnapshotLoader.load_path(oversized_path), "oversized path rejects", failures)
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(oversized_path))
 	var result := CityAccessSnapshotLoader.load_bytes(valid_bytes)
 	TestAssertions.truthy(result.ok(), "defensive-copy fixture loads", failures)
 	if not result.ok():
@@ -277,6 +284,15 @@ func _test_codec_is_canonical(failures: Array[String]) -> void:
 	TestAssertions.equal(CityAccessSnapshotCodec.encode_document(invalid), PackedByteArray(), "codec rejects invalid documents", failures)
 
 
+func _test_canonical_byte_ceiling(failures: Array[String]) -> void:
+	var document := _maximum_multibyte_document()
+	var compact := JSON.stringify(document).to_utf8_buffer()
+	var canonical := (JSON.stringify(document, "  ", false) + "\n").to_utf8_buffer()
+	TestAssertions.truthy(compact.size() <= CityAccessSnapshotLoader.MAX_BYTES, "maximum multibyte compact JSON stays within byte limit", failures)
+	TestAssertions.truthy(canonical.size() > CityAccessSnapshotLoader.MAX_BYTES, "maximum multibyte canonical JSON exceeds byte limit", failures)
+	TestAssertions.truthy(CityAccessSnapshotCodec.encode_document(document).is_empty(), "codec rejects canonical bytes over production limit", failures)
+
+
 func _valid_document() -> Dictionary:
 	var locations: Array = []
 	for location_id: String in [
@@ -315,6 +331,26 @@ func _document_with_locations(count: int) -> Dictionary:
 	return document
 
 
+func _maximum_multibyte_document() -> Dictionary:
+	var document := _valid_document()
+	var conditions: Array[Dictionary] = []
+	for index: int in CityAccessSnapshotLoader.MAX_CONDITIONS:
+		var unit := "é" if index < 4 else "x"
+		conditions.append({"kind": "permanent_unlock", "value": unit.repeat(CityAccessSnapshotLoader.MAX_TEXT_UNITS)})
+	var locations: Array[Dictionary] = []
+	for index: int in CityAccessSnapshotLoader.MAX_LOCATIONS:
+		var id_prefix := "l%03d" % index
+		var destination_prefix := "d%03d" % index
+		locations.append({
+			"id": id_prefix + "i".repeat(CityAccessSnapshotLoader.MAX_TEXT_UNITS - id_prefix.length()),
+			"destinationId": destination_prefix + "d".repeat(CityAccessSnapshotLoader.MAX_TEXT_UNITS - destination_prefix.length()),
+			"visibleWhen": conditions.duplicate(true),
+			"availableWhen": conditions.duplicate(true),
+		})
+	document["locations"] = locations
+	return document
+
+
 func _unlock_conditions(count: int) -> Array[Dictionary]:
 	var conditions: Array[Dictionary] = []
 	for index: int in count:
@@ -348,6 +384,13 @@ func _assert_invalid_result(result: CityAccessLoadResult, label: String, failure
 	TestAssertions.truthy(not result.ok(), label, failures)
 	TestAssertions.equal(result.snapshot, null, "%s returns no partial snapshot" % label, failures)
 	TestAssertions.truthy(not result.errors.is_empty(), "%s reports an error" % label, failures)
+
+
+func _write_bytes(path: String, bytes: PackedByteArray) -> void:
+	var file := FileAccess.open(path, FileAccess.WRITE)
+	if file != null:
+		file.store_buffer(bytes)
+		file.close()
 
 
 func _ordered(text: String, tokens: Array[String]) -> bool:

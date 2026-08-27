@@ -57,7 +57,14 @@ static func validate_document(document: Dictionary) -> CityAccessLoadResult:
 static func load_path(path: String) -> CityAccessLoadResult:
 	var file := FileAccess.open(path, FileAccess.READ)
 	if file == null: return _failure("could not read snapshot path")
-	var bytes := file.get_buffer(file.get_length()); file.close()
+	var length := file.get_length()
+	if length > MAX_BYTES:
+		file.close()
+		return _failure("document exceeds byte limit")
+	var bytes := file.get_buffer(length)
+	var read_error := file.get_error()
+	file.close()
+	if read_error != OK or bytes.size() != length: return _failure("could not read complete snapshot path")
 	return load_bytes(bytes)
 
 static func _conditions(values: Array) -> Array[CityAccessCondition]:
