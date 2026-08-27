@@ -20,7 +20,7 @@ var available_when: Array[CityAccessCondition]:
 	set(_next): pass
 
 static func create(id_value: StringName, destination_id_value: StringName, visible_value: Array[CityAccessCondition], available_value: Array[CityAccessCondition]) -> CityAccessLocation:
-	if id_value.is_empty() or destination_id_value.is_empty():
+	if not _stable(id_value) or not _stable(destination_id_value) or not _conditions_are_valid(visible_value) or not _conditions_are_valid(available_value):
 		return null
 	var location := CityAccessLocation.new()
 	location._id = id_value
@@ -35,6 +35,21 @@ func copy() -> CityAccessLocation:
 static func _condition_copies(source: Array[CityAccessCondition]) -> Array[CityAccessCondition]:
 	var copies: Array[CityAccessCondition] = []
 	for condition: CityAccessCondition in source:
-		if condition != null:
-			copies.append(condition.copy())
+		copies.append(condition.copy())
 	return copies
+
+static func _stable(value: StringName) -> bool:
+	return not value.is_empty() and String(value).to_utf16_buffer().size() / 2 <= 128
+
+static func _conditions_are_valid(values: Array[CityAccessCondition]) -> bool:
+	if values.size() > 8:
+		return false
+	var has_always := false
+	for condition: CityAccessCondition in values:
+		if condition == null:
+			return false
+		if condition.kind == &"always":
+			has_always = true
+	if has_always and values.size() > 1:
+		return false
+	return true

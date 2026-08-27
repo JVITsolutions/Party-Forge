@@ -2,12 +2,29 @@ extends RefCounted
 
 func run() -> Array[String]:
 	var failures: Array[String] = []
+	_test_factories_reject_invalid_inputs(failures)
 	_test_valid_access_snapshot_loads(failures)
 	_test_structural_contract(failures)
 	_test_content_and_limit_contract(failures)
+	_test_scalar_primitive_types(failures)
+	_test_astral_utf16_bounds(failures)
 	_test_bytes_paths_and_defensive_copies(failures)
 	_test_codec_is_canonical(failures)
 	return failures
+
+
+func _test_factories_reject_invalid_inputs(failures: Array[String]) -> void:
+	TestAssertions.equal(CityAccessCondition.create(&"unsupported", "value"), null, "condition factory rejects unsupported kind", failures)
+	TestAssertions.equal(CityAccessCondition.create(&"always", "value"), null, "condition factory rejects malformed always", failures)
+	var invalid_conditions: Array[CityAccessCondition] = []
+	invalid_conditions.append(null)
+	TestAssertions.equal(CityAccessLocation.create(&"city.test", &"city.test.destination", invalid_conditions, []), null, "location factory rejects null condition", failures)
+	var valid_condition := CityAccessCondition.create(&"always", "")
+	var valid_location := CityAccessLocation.create(&"city.test", &"city.test.destination", [valid_condition], [valid_condition])
+	TestAssertions.truthy(valid_location != null, "factory fixture location constructs", failures)
+	var invalid_locations: Array[CityAccessLocation] = []
+	invalid_locations.append(null)
+	TestAssertions.equal(CityAccessSnapshot.create(&"wrong", &"runtime", -1, "bad", invalid_locations), null, "snapshot factory rejects malformed metadata and null location", failures)
 
 
 func _test_valid_access_snapshot_loads(failures: Array[String]) -> void:
@@ -96,6 +113,45 @@ func _test_content_and_limit_contract(failures: Array[String]) -> void:
 	_assert_invalid(_document_with_locations(CityAccessSnapshotLoader.MAX_LOCATIONS + 1), "plus-one location limit rejects", failures)
 
 
+func _test_scalar_primitive_types(failures: Array[String]) -> void:
+	for replacement: Variant in [1, true, []]:
+		var source_format := _valid_document()
+		source_format["source"]["format"] = replacement
+		_assert_invalid(source_format, "source format scalar type rejects", failures)
+		var source_version := _valid_document()
+		source_version["source"]["formatVersion"] = "3"
+		_assert_invalid(source_version, "source formatVersion scalar type rejects", failures)
+		var source_sha := _valid_document()
+		source_sha["source"]["sha256"] = replacement
+		_assert_invalid(source_sha, "source sha scalar type rejects", failures)
+		var location_id := _valid_document()
+		location_id["locations"][0]["id"] = replacement
+		_assert_invalid(location_id, "location id scalar type rejects", failures)
+		var destination_id := _valid_document()
+		destination_id["locations"][0]["destinationId"] = replacement
+		_assert_invalid(destination_id, "destination ID scalar type rejects", failures)
+		var condition_kind := _valid_document()
+		condition_kind["locations"][0]["visibleWhen"][0]["kind"] = replacement
+		_assert_invalid(condition_kind, "condition kind scalar type rejects", failures)
+		var condition_value := _valid_document()
+		condition_value["locations"][0]["visibleWhen"][0]["value"] = replacement
+		_assert_invalid(condition_value, "condition value scalar type rejects", failures)
+
+
+func _test_astral_utf16_bounds(failures: Array[String]) -> void:
+	var astral := String.chr(0x1F600)
+	var exact := _valid_document()
+	exact["locations"][0]["id"] = astral.repeat(64)
+	exact["locations"][0]["visibleWhen"] = [{"kind": "permanent_unlock", "value": astral.repeat(64)}]
+	TestAssertions.truthy(CityAccessSnapshotLoader.load_bytes(JSON.stringify(exact).to_utf8_buffer()).ok(), "64 astral characters use exactly 128 UTF-16 units", failures)
+	var plus_one := _valid_document()
+	plus_one["locations"][0]["id"] = astral.repeat(65)
+	_assert_invalid(plus_one, "65 astral characters exceed 128 UTF-16 units", failures)
+	var value_plus_one := _valid_document()
+	value_plus_one["locations"][0]["visibleWhen"] = [{"kind": "permanent_unlock", "value": astral.repeat(65)}]
+	_assert_invalid(value_plus_one, "astral condition value plus-one rejects", failures)
+
+
 func _test_bytes_paths_and_defensive_copies(failures: Array[String]) -> void:
 	var valid_bytes := JSON.stringify(_valid_document()).to_utf8_buffer()
 	var exact_bytes := valid_bytes.duplicate()
@@ -135,6 +191,14 @@ func _test_codec_is_canonical(failures: Array[String]) -> void:
 	TestAssertions.equal(first, second, "same logical document encodes identically", failures)
 	TestAssertions.truthy(first.get_string_from_utf8().ends_with("\n"), "canonical document has one final newline", failures)
 	TestAssertions.truthy(first.get_string_from_utf8().find('"id": "city.apothecary"') < first.get_string_from_utf8().find('"id": "city.market"'), "codec sorts locations", failures)
+	var text := first.get_string_from_utf8()
+	TestAssertions.truthy(text.begins_with("{\n  \"format\""), "codec uses two-space root indentation", failures)
+	TestAssertions.truthy(text.find("\n    \"adapter\"") >= 0 and text.find("\n          \"kind\"") >= 0, "codec uses two-space nested indentation", failures)
+	TestAssertions.truthy(_ordered(text, ["\"format\"", "\"version\"", "\"source\"", "\"locations\""]), "codec orders root keys", failures)
+	TestAssertions.truthy(_ordered(text, ["\"adapter\"", "\"format\"", "\"formatVersion\"", "\"sha256\""]), "codec orders source keys", failures)
+	TestAssertions.truthy(_ordered(text, ["\"id\"", "\"destinationId\"", "\"visibleWhen\"", "\"availableWhen\""]), "codec orders location keys", failures)
+	TestAssertions.truthy(_ordered(text, ["\"kind\"", "\"value\""]), "codec orders condition keys", failures)
+	TestAssertions.truthy(text.find('"kind": "discovered_tree"') < text.find('"kind": "permanent_unlock"'), "codec sorts conditions by kind then value", failures)
 	var invalid := _valid_document()
 	invalid["extra"] = true
 	TestAssertions.equal(CityAccessSnapshotCodec.encode_document(invalid), PackedByteArray(), "codec rejects invalid documents", failures)
@@ -211,3 +275,13 @@ func _assert_invalid_result(result: CityAccessLoadResult, label: String, failure
 	TestAssertions.truthy(not result.ok(), label, failures)
 	TestAssertions.equal(result.snapshot, null, "%s returns no partial snapshot" % label, failures)
 	TestAssertions.truthy(not result.errors.is_empty(), "%s reports an error" % label, failures)
+
+
+func _ordered(text: String, tokens: Array[String]) -> bool:
+	var previous := -1
+	for token: String in tokens:
+		var position := text.find(token, previous + 1)
+		if position < 0 or position <= previous:
+			return false
+		previous = position
+	return true
