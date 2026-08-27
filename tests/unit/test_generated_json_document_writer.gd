@@ -9,16 +9,24 @@ func run() -> Array[String]:
 
 func _test_writer_uses_fixed_target_and_canonical_encoder(failures: Array[String]) -> void:
 	var target := GeneratedWriter.TARGET
+	var access_directory := target.get_base_dir()
+	var world_directory := access_directory.get_base_dir()
+	var access_directory_existed := DirAccess.dir_exists_absolute(ProjectSettings.globalize_path(access_directory))
+	var world_directory_existed := DirAccess.dir_exists_absolute(ProjectSettings.globalize_path(world_directory))
 	var before_exists := FileAccess.file_exists(target)
 	var before := FileAccess.get_file_as_bytes(target) if before_exists else PackedByteArray()
-	var result := GeneratedWriter.new().write(_valid_document())
-	TestAssertions.equal(result, "", "fixed generated writer commits a valid canonical document", failures)
+	var result: Variant = GeneratedWriter.new().write(_valid_document())
+	TestAssertions.truthy(result is Dictionary, "fixed generated writer returns a structured outcome", failures)
+	if result is Dictionary:
+		TestAssertions.equal(result as Dictionary, {"ok": true, "committed": true, "cleanupDebt": false, "stage": "verified", "reason": ""}, "fixed generated writer returns its verified structured outcome", failures)
 	TestAssertions.truthy(FileAccess.file_exists(target), "generated writer uses its fixed Party Forge target", failures)
 	TestAssertions.equal(FileAccess.get_file_as_bytes(target), CityAccessSnapshotCodec.encode_document(_valid_document()), "generated writer promotes the codec bytes exactly", failures)
+	_restore_target(target, before_exists, before, access_directory, access_directory_existed, world_directory, world_directory_existed)
+	TestAssertions.equal(FileAccess.file_exists(target), before_exists, "generated writer restores its fixed target existence", failures)
 	if before_exists:
-		_write_bytes(target, before)
-	else:
-		DirAccess.remove_absolute(ProjectSettings.globalize_path(target))
+		TestAssertions.equal(FileAccess.get_file_as_bytes(target), before, "generated writer restores the fixed target bytes", failures)
+	TestAssertions.equal(DirAccess.dir_exists_absolute(ProjectSettings.globalize_path(access_directory)), access_directory_existed, "generated writer restores the fixed target directory", failures)
+	TestAssertions.equal(DirAccess.dir_exists_absolute(ProjectSettings.globalize_path(world_directory)), world_directory_existed, "generated writer restores the fixed target parent directory", failures)
 
 func _valid_document() -> Dictionary:
 	return {
@@ -33,3 +41,13 @@ func _write_bytes(path: String, bytes: PackedByteArray) -> void:
 	if file != null:
 		file.store_buffer(bytes)
 		file.close()
+
+func _restore_target(target: String, existed: bool, bytes: PackedByteArray, access_directory: String, access_directory_existed: bool, world_directory: String, world_directory_existed: bool) -> void:
+	if existed:
+		_write_bytes(target, bytes)
+	else:
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(target))
+	if not access_directory_existed and DirAccess.dir_exists_absolute(ProjectSettings.globalize_path(access_directory)):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(access_directory))
+	if not world_directory_existed and DirAccess.dir_exists_absolute(ProjectSettings.globalize_path(world_directory)):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(world_directory))

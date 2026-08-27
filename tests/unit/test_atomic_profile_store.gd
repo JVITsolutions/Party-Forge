@@ -662,13 +662,13 @@ func _test_generated_document_boundary(failures: Array[String]) -> void:
 	var staging_root := _root.path_join("generated-staging")
 	var original := "{\"original\":true}\n".to_utf8_buffer()
 	_write_bytes(target, original)
-	var rejected := AtomicJsonStore.new().save_generated_document(target, _generated_document(), func(_document: Dictionary): return "rejected", staging_root, Callable(CityAccessSnapshotCodec, "encode_document"))
-	TestAssertions.truthy(rejected.contains("stage=validate"), "generated validation rejects before disk mutation", failures)
+	var rejected: Variant = AtomicJsonStore.new().save_generated_document(target, _generated_document(), func(_document: Dictionary): return "rejected", staging_root, Callable(CityAccessSnapshotCodec, "encode_document"))
+	_assert_generated_outcome(rejected, false, false, false, "validate", "validator-rejected", "generated validation rejects before disk mutation", failures)
 	TestAssertions.equal(FileAccess.get_file_as_bytes(target), original, "rejected generated document preserves exact target bytes", failures)
 	TestAssertions.truthy(not DirAccess.dir_exists_absolute(ProjectSettings.globalize_path(staging_root)), "rejected generated document creates no staging root", failures)
 	var write_failure := GeneratedWriteFailureAtomicJsonStore.new()
-	var write_error := write_failure.save_generated_document(target, _generated_document(), Callable(CityAccessSnapshotLoader, "validate_document"), staging_root, Callable(CityAccessSnapshotCodec, "encode_document"))
-	TestAssertions.truthy(write_error.contains("stage=write"), "generated staged-write failure reports its stage", failures)
+	var write_error: Variant = write_failure.save_generated_document(target, _generated_document(), Callable(CityAccessSnapshotLoader, "validate_document"), staging_root, Callable(CityAccessSnapshotCodec, "encode_document"))
+	_assert_generated_outcome(write_error, false, false, false, "write", "code-%d-cleanup-0" % ERR_CANT_CREATE, "generated staged-write failure reports its stage", failures)
 	TestAssertions.equal(FileAccess.get_file_as_bytes(target), original, "generated staged-write failure preserves exact target bytes", failures)
 
 	var promoted_paths: Array[String] = []
@@ -676,8 +676,8 @@ func _test_generated_document_boundary(failures: Array[String]) -> void:
 		promoted_paths.append(temporary)
 		return ERR_CANT_CREATE
 	)
-	var failed := promote_failure.save_generated_document(target, _generated_document(), Callable(CityAccessSnapshotLoader, "validate_document"), staging_root, Callable(CityAccessSnapshotCodec, "encode_document"))
-	TestAssertions.truthy(failed.contains("stage=promote"), "generated promotion failure reports its stage", failures)
+	var failed: Variant = promote_failure.save_generated_document(target, _generated_document(), Callable(CityAccessSnapshotLoader, "validate_document"), staging_root, Callable(CityAccessSnapshotCodec, "encode_document"))
+	_assert_generated_outcome(failed, false, false, false, "promote", "code-%d-restore-0-cleanup-0" % ERR_CANT_CREATE, "generated promotion failure reports its stage", failures)
 	TestAssertions.equal(FileAccess.get_file_as_bytes(target), original, "generated pre-promotion failure preserves exact target bytes", failures)
 	TestAssertions.truthy(promoted_paths.size() == 1 and promoted_paths[0].begins_with(staging_root.path_join("invocation-")), "generated temporary promotion path stays beneath staging root", failures)
 	var traversal_root := staging_root.path_join("nominal/../canonical")
@@ -686,10 +686,10 @@ func _test_generated_document_boundary(failures: Array[String]) -> void:
 		traversal_paths.append(temporary)
 		return ERR_CANT_CREATE
 	)
-	var traversal_error := traversal_failure.save_generated_document(target, _generated_document(), Callable(CityAccessSnapshotLoader, "validate_document"), traversal_root, Callable(CityAccessSnapshotCodec, "encode_document"))
+	var traversal_error: Variant = traversal_failure.save_generated_document(target, _generated_document(), Callable(CityAccessSnapshotLoader, "validate_document"), traversal_root, Callable(CityAccessSnapshotCodec, "encode_document"))
 	var canonical_root := ProjectSettings.globalize_path(traversal_root.simplify_path()).simplify_path()
 	var canonical_temporary := ProjectSettings.globalize_path(traversal_paths[0]).simplify_path() if traversal_paths.size() == 1 else ""
-	TestAssertions.truthy(traversal_error.contains("stage=promote"), "canonical traversal fixture reaches the injected promotion boundary", failures)
+	TestAssertions.equal(_generated_stage(traversal_error), "promote", "canonical traversal fixture reaches the injected promotion boundary", failures)
 	TestAssertions.truthy(traversal_paths.size() == 1 and not traversal_paths[0].contains("..") and _is_strict_descendant(canonical_temporary, canonical_root), "generated staging paths are canonical strict descendants rather than textual prefixes", failures)
 	TestAssertions.equal(FileAccess.get_file_as_bytes(target), original, "canonical traversal failure preserves exact target bytes", failures)
 	var unconfined_promotions := [0]
@@ -697,8 +697,8 @@ func _test_generated_document_boundary(failures: Array[String]) -> void:
 		unconfined_promotions[0] += 1
 		return ERR_CANT_CREATE
 	)
-	var unconfined_error := unconfined.save_generated_document(target, _generated_document(), Callable(CityAccessSnapshotLoader, "validate_document"), "", Callable(CityAccessSnapshotCodec, "encode_document"))
-	TestAssertions.truthy(unconfined_error.contains("stage=confinement") and unconfined_promotions[0] == 0, "unprovable staging containment rejects before promotion", failures)
+	var unconfined_error: Variant = unconfined.save_generated_document(target, _generated_document(), Callable(CityAccessSnapshotLoader, "validate_document"), "", Callable(CityAccessSnapshotCodec, "encode_document"))
+	TestAssertions.truthy(_generated_stage(unconfined_error) == "confinement" and unconfined_promotions[0] == 0, "unprovable staging containment rejects before promotion", failures)
 	TestAssertions.equal(FileAccess.get_file_as_bytes(target), original, "unprovable staging containment preserves exact target bytes", failures)
 	var wrong_bytes := "{\"wrong\":true}".to_utf8_buffer()
 	var wrong_promotion := AtomicJsonStore.new(func(temporary: String, promoted_target: String) -> Error:
@@ -706,25 +706,33 @@ func _test_generated_document_boundary(failures: Array[String]) -> void:
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(temporary))
 		return ERR_CANT_CREATE
 	)
-	var wrong_error := wrong_promotion.save_generated_document(target, _generated_document(), Callable(CityAccessSnapshotLoader, "validate_document"), staging_root, Callable(CityAccessSnapshotCodec, "encode_document"))
-	TestAssertions.truthy(wrong_error.contains("stage=promote"), "wrong-byte reported promotion failure reports promotion", failures)
+	var wrong_error: Variant = wrong_promotion.save_generated_document(target, _generated_document(), Callable(CityAccessSnapshotLoader, "validate_document"), staging_root, Callable(CityAccessSnapshotCodec, "encode_document"))
+	TestAssertions.equal(_generated_stage(wrong_error), "promote", "wrong-byte reported promotion failure reports promotion", failures)
 	TestAssertions.equal(FileAccess.get_file_as_bytes(target), original, "wrong-byte reported promotion failure restores exact previous bytes", failures)
 
 	var no_target := _root.path_join("generated-no-target.json")
 	var no_target_failure := AtomicJsonStore.new(func(_temporary: String, _promoted_target: String) -> Error: return ERR_CANT_CREATE)
-	var no_target_error := no_target_failure.save_generated_document(no_target, _generated_document(), Callable(CityAccessSnapshotLoader, "validate_document"), staging_root, Callable(CityAccessSnapshotCodec, "encode_document"))
-	TestAssertions.truthy(no_target_error.contains("stage=promote") and not FileAccess.file_exists(no_target), "generated failure without prior target leaves no target", failures)
+	var no_target_error: Variant = no_target_failure.save_generated_document(no_target, _generated_document(), Callable(CityAccessSnapshotLoader, "validate_document"), staging_root, Callable(CityAccessSnapshotCodec, "encode_document"))
+	TestAssertions.truthy(_generated_stage(no_target_error) == "promote" and not FileAccess.file_exists(no_target), "generated failure without prior target leaves no target", failures)
 
 	var read_failure := GeneratedReadFailureAtomicJsonStore.new()
 	read_failure.target = target
-	var read_error := read_failure.save_generated_document(target, _generated_document(), Callable(CityAccessSnapshotLoader, "validate_document"), staging_root, Callable(CityAccessSnapshotCodec, "encode_document"))
-	TestAssertions.truthy(read_error.contains("stage=verify-promoted"), "generated promoted-byte read failure reports verification", failures)
+	var read_error: Variant = read_failure.save_generated_document(target, _generated_document(), Callable(CityAccessSnapshotLoader, "validate_document"), staging_root, Callable(CityAccessSnapshotCodec, "encode_document"))
+	TestAssertions.equal(_generated_stage(read_error), "verify-promoted", "generated promoted-byte read failure reports verification", failures)
 	TestAssertions.equal(FileAccess.get_file_as_bytes(target), original, "generated promoted-byte failure restores exact previous bytes", failures)
 
 	var cleanup_failure := GeneratedCleanupFailureAtomicJsonStore.new()
-	var cleanup_result := cleanup_failure.save_generated_document(target, _generated_document(), Callable(CityAccessSnapshotLoader, "validate_document"), staging_root, Callable(CityAccessSnapshotCodec, "encode_document"))
-	TestAssertions.equal(cleanup_result, "", "generated cleanup debt returns committed success", failures)
+	var cleanup_result: Variant = cleanup_failure.save_generated_document(target, _generated_document(), Callable(CityAccessSnapshotLoader, "validate_document"), staging_root, Callable(CityAccessSnapshotCodec, "encode_document"))
+	_assert_generated_outcome(cleanup_result, true, true, true, "cleanup", "code-%d" % ERR_CANT_CREATE, "generated cleanup debt returns committed success", failures)
 	TestAssertions.equal(FileAccess.get_file_as_bytes(target), CityAccessSnapshotCodec.encode_document(_generated_document()), "generated cleanup debt retains canonical committed bytes", failures)
+
+func _assert_generated_outcome(result: Variant, ok: bool, committed: bool, cleanup_debt: bool, stage: String, reason: String, label: String, failures: Array[String]) -> void:
+	TestAssertions.truthy(result is Dictionary, label, failures)
+	if result is Dictionary:
+		TestAssertions.equal(result as Dictionary, {"ok": ok, "committed": committed, "cleanupDebt": cleanup_debt, "stage": stage, "reason": reason}, label, failures)
+
+func _generated_stage(result: Variant) -> String:
+	return String((result as Dictionary).get("stage", "")) if result is Dictionary else ""
 
 func _generated_document() -> Dictionary:
 	return {

@@ -12,26 +12,27 @@ func save_generated_document(
 	validator: Callable,
 	staging_root: String,
 	encoder: Callable,
-) -> String:
+) -> Dictionary:
+
 	if not validator.is_valid() or not encoder.is_valid():
-		return "JSON_STORE_GENERATED_ERROR stage=validate reason=validator-or-encoder-is-missing"
+		return _generated_outcome(false, false, false, "validate", "validator-or-encoder-is-missing")
 	var validation_reason := _generated_validation_reason(validator.call(document))
 	if not validation_reason.is_empty():
-		return "JSON_STORE_GENERATED_ERROR stage=validate reason=%s" % validation_reason
+		return _generated_outcome(false, false, false, "validate", "validator-rejected")
 	var candidate := encoder.call(document) as PackedByteArray
 	if candidate.is_empty():
-		return "JSON_STORE_GENERATED_ERROR stage=encode reason=encoder-returned-empty-bytes"
+		return _generated_outcome(false, false, false, "encode", "encoder-returned-empty-bytes")
 	if not _generated_bytes_validate(candidate, validator).is_empty():
-		return "JSON_STORE_GENERATED_ERROR stage=encode reason=encoder-returned-invalid-document"
+		return _generated_outcome(false, false, false, "encode", "encoder-returned-invalid-document")
 	var staging_paths := _generated_staging_paths(staging_root)
 	if staging_paths.is_empty():
-		return "JSON_STORE_GENERATED_ERROR stage=confinement reason=staging-root-is-not-provable"
+		return _generated_outcome(false, false, false, "confinement", "staging-root-is-not-provable")
 	var invocation := String(staging_paths["invocation"])
 	var temporary := String(staging_paths["temporary"])
 	var previous_copy := String(staging_paths["previous_copy"])
 	var mkdir_error := DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(invocation))
 	if mkdir_error not in [OK, ERR_ALREADY_EXISTS]:
-		return "JSON_STORE_GENERATED_ERROR stage=mkdir code=%d" % mkdir_error
+		return _generated_outcome(false, false, false, "mkdir", "code-%d" % mkdir_error)
 	var write_error := _generated_write_bytes(temporary, candidate)
 	if write_error != OK:
 		return _generated_rejected("write", write_error, invocation, [temporary, previous_copy])
@@ -61,16 +62,17 @@ func save_generated_document(
 	if promote_error != OK:
 		var restore_error := _restore_generated_target(path, had_previous, previous)
 		var cleanup_error := _generated_cleanup(invocation, [temporary, previous_copy])
-		return "JSON_STORE_GENERATED_ERROR stage=promote code=%d restore_code=%d cleanup_code=%d" % [promote_error, restore_error, cleanup_error]
+		return _generated_outcome(false, false, cleanup_error != OK, "promote", "code-%d-restore-%d-cleanup-%d" % [promote_error, restore_error, cleanup_error])
 	var promoted := _generated_read_bytes(path)
 	if int(promoted["error"]) != OK or promoted["bytes"] != candidate:
 		var restore_error := _restore_generated_target(path, had_previous, previous)
 		var cleanup_error := _generated_cleanup(invocation, [temporary, previous_copy])
-		return "JSON_STORE_GENERATED_ERROR stage=verify-promoted code=%d restore_code=%d cleanup_code=%d" % [int(promoted["error"]), restore_error, cleanup_error]
+		return _generated_outcome(false, false, cleanup_error != OK, "verify-promoted", "code-%d-restore-%d-cleanup-%d" % [int(promoted["error"]), restore_error, cleanup_error])
 	var cleanup_error := _generated_cleanup(invocation, [temporary, previous_copy])
 	if cleanup_error != OK:
 		push_warning("JSON_STORE_GENERATED_CLEANUP_DEBT stage=cleanup code=%d committed=true" % cleanup_error)
-	return ""
+		return _generated_outcome(true, true, true, "cleanup", "code-%d" % cleanup_error)
+	return _generated_outcome(true, true, false, "verified", "")
 
 func _generated_validation_reason(validation: Variant) -> String:
 	if validation is String:
@@ -88,9 +90,12 @@ func _generated_bytes_validate(bytes: PackedByteArray, validator: Callable) -> S
 		return "bytes are not a JSON object"
 	return _generated_validation_reason(validator.call((parser.data as Dictionary).duplicate(true)))
 
-func _generated_rejected(stage: String, code: Error, invocation: String, paths: Array[String]) -> String:
+func _generated_rejected(stage: String, code: Error, invocation: String, paths: Array[String]) -> Dictionary:
 	var cleanup_error := _generated_cleanup(invocation, paths)
-	return "JSON_STORE_GENERATED_ERROR stage=%s code=%d cleanup_code=%d" % [stage, code, cleanup_error]
+	return _generated_outcome(false, false, cleanup_error != OK, stage, "code-%d-cleanup-%d" % [code, cleanup_error])
+
+func _generated_outcome(ok: bool, committed: bool, cleanup_debt: bool, stage: String, reason: String) -> Dictionary:
+	return {"ok": ok, "committed": committed, "cleanupDebt": cleanup_debt, "stage": stage, "reason": reason}
 
 func _restore_generated_target(path: String, had_previous: bool, previous: PackedByteArray) -> Error:
 	if not had_previous:

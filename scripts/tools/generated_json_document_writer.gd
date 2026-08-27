@@ -9,7 +9,7 @@ var _documents: AtomicJsonStore
 func _init(documents: AtomicJsonStore = null) -> void:
 	_documents = documents if documents != null else AtomicJsonStore.new()
 
-func write(document: Dictionary) -> String:
+func write(document: Dictionary) -> Dictionary:
 	return _documents.save_generated_document(
 		TARGET,
 		document,
