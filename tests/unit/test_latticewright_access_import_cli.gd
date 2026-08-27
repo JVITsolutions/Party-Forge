@@ -1,6 +1,7 @@
 extends RefCounted
 
 const Entry = preload("res://tools/import_latticewright_access_snapshot.gd")
+const GeneratedWriter = preload("res://scripts/tools/generated_json_document_writer.gd")
 
 var _lines: Array[String] = []
 var _writes := 0
@@ -10,6 +11,7 @@ func run() -> Array[String]:
 	var failures: Array[String] = []
 	_test_import_and_parity(failures)
 	_test_rejected_paths_do_not_write(failures)
+	_test_production_default_writer_lifetime(failures)
 	return failures
 
 func _test_import_and_parity(failures: Array[String]) -> void:
@@ -74,6 +76,33 @@ func _test_rejected_paths_do_not_write(failures: Array[String]) -> void:
 	TestAssertions.equal(_target, PackedByteArray([9, 8, 7]), "legacy writer return shape restores exact target bytes", failures)
 	TestAssertions.equal(_lines, ["PARTY_FORGE_CITY_ACCESS_IMPORT status=REJECTED adapter=latticewright-runtime-v3-city-access stage=write"], "legacy writer has one write marker", failures)
 
+func _test_production_default_writer_lifetime(failures: Array[String]) -> void:
+	var target := GeneratedWriter.TARGET
+	var access_directory := target.get_base_dir()
+	var world_directory := access_directory.get_base_dir()
+	var staging_directory := GeneratedWriter.STAGING_ROOT
+	var staging_parent := staging_directory.get_base_dir()
+	var target_existed := FileAccess.file_exists(target)
+	var target_bytes := FileAccess.get_file_as_bytes(target) if target_existed else PackedByteArray()
+	var access_existed := DirAccess.dir_exists_absolute(ProjectSettings.globalize_path(access_directory))
+	var world_existed := DirAccess.dir_exists_absolute(ProjectSettings.globalize_path(world_directory))
+	var staging_existed := DirAccess.dir_exists_absolute(ProjectSettings.globalize_path(staging_directory))
+	var staging_parent_existed := DirAccess.dir_exists_absolute(ProjectSettings.globalize_path(staging_parent))
+	_lines.clear()
+	var service: Variant = Entry.new_service({"reader": Callable(self, "_read_success"), "translator": Callable(self, "_translate_success")})
+	var exit_code: Variant = service.run(PackedStringArray(["--source", "fixture.json"]), Callable(self, "_capture"))
+	TestAssertions.equal(exit_code, 0, "production default writer remains callable for the service lifetime", failures)
+	TestAssertions.equal(_lines, ["PARTY_FORGE_CITY_ACCESS_IMPORT status=IMPORTED adapter=latticewright-runtime-v3-city-access stage=verified"], "production default writer emits imported marker", failures)
+	TestAssertions.truthy(FileAccess.file_exists(target), "production default writer writes the fixed target", failures)
+	_restore_production_artifacts(target, target_existed, target_bytes, access_directory, access_existed, world_directory, world_existed, staging_directory, staging_existed, staging_parent, staging_parent_existed)
+	TestAssertions.equal(FileAccess.file_exists(target), target_existed, "production default writer restores fixed target existence", failures)
+	if target_existed:
+		TestAssertions.equal(FileAccess.get_file_as_bytes(target), target_bytes, "production default writer restores fixed target bytes", failures)
+	TestAssertions.equal(DirAccess.dir_exists_absolute(ProjectSettings.globalize_path(access_directory)), access_existed, "production default writer restores target directory", failures)
+	TestAssertions.equal(DirAccess.dir_exists_absolute(ProjectSettings.globalize_path(world_directory)), world_existed, "production default writer restores target parent directory", failures)
+	TestAssertions.equal(DirAccess.dir_exists_absolute(ProjectSettings.globalize_path(staging_directory)), staging_existed, "production default writer restores staging directory", failures)
+	TestAssertions.equal(DirAccess.dir_exists_absolute(ProjectSettings.globalize_path(staging_parent)), staging_parent_existed, "production default writer restores staging parent directory", failures)
+
 func _dependencies(candidate: Dictionary, encoded: PackedByteArray, reader: Callable = Callable(), translator: Callable = Callable(), validator: Callable = Callable(), encoder: Callable = Callable(), writer: Callable = Callable()) -> Dictionary:
 	return {"reader": reader if reader.is_valid() else Callable(self, "_read_success"), "translator": translator if translator.is_valid() else Callable(self, "_translate_success"), "validator": validator if validator.is_valid() else Callable(self, "_validate_success"), "encoder": encoder if encoder.is_valid() else Callable(self, "_encode_success"), "writer": writer if writer.is_valid() else Callable(self, "_write_success"), "target_reader": Callable(self, "_target_reader"), "target_restorer": Callable(self, "_restore_target"), "candidate": candidate, "encoded": encoded}
 
@@ -129,6 +158,23 @@ func _write_legacy_success(_document: Dictionary) -> String:
 func _restore_target(before: Dictionary) -> Dictionary:
 	_target = (before.get("bytes", PackedByteArray()) as PackedByteArray).duplicate()
 	return {"ok": true}
+
+func _restore_production_artifacts(target: String, target_existed: bool, target_bytes: PackedByteArray, access_directory: String, access_existed: bool, world_directory: String, world_existed: bool, staging_directory: String, staging_existed: bool, staging_parent: String, staging_parent_existed: bool) -> void:
+	if target_existed:
+		var file := FileAccess.open(target, FileAccess.WRITE)
+		if file != null:
+			file.store_buffer(target_bytes)
+			file.close()
+	else:
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(target))
+	_remove_if_created(access_directory, access_existed)
+	_remove_if_created(world_directory, world_existed)
+	_remove_if_created(staging_directory, staging_existed)
+	_remove_if_created(staging_parent, staging_parent_existed)
+
+func _remove_if_created(path: String, existed: bool) -> void:
+	if not existed and DirAccess.dir_exists_absolute(ProjectSettings.globalize_path(path)):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
 
 func _target_reader() -> Dictionary:
 	return {"ok": true, "exists": true, "bytes": _target.duplicate()}

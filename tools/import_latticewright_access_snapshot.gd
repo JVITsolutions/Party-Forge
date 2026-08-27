@@ -9,6 +9,7 @@ class CityAccessImportCliService extends RefCounted:
 	var _validator: Callable
 	var _encoder: Callable
 	var _writer: Callable
+	var _default_writer: GeneratedJsonDocumentWriter
 	var _target_reader: Callable
 	var _target_restorer: Callable
 	var last_cleanup_debt := false
@@ -18,7 +19,12 @@ class CityAccessImportCliService extends RefCounted:
 		_translator = dependencies.get("translator", Callable(LatticewrightRuntimeV3CityAccessImporter, "translate")) as Callable
 		_validator = dependencies.get("validator", Callable(CityAccessSnapshotLoader, "validate_document")) as Callable
 		_encoder = dependencies.get("encoder", Callable(CityAccessSnapshotCodec, "encode_document")) as Callable
-		_writer = dependencies.get("writer", Callable(GeneratedJsonDocumentWriter.new(), "write")) as Callable
+		var injected_writer := dependencies.get("writer", Callable()) as Callable
+		if injected_writer.is_valid():
+			_writer = injected_writer
+		else:
+			_default_writer = GeneratedJsonDocumentWriter.new()
+			_writer = Callable(_default_writer, "write")
 		_target_reader = dependencies.get("target_reader", Callable(self, "_default_target_reader")) as Callable
 		_target_restorer = dependencies.get("target_restorer", Callable(self, "_default_target_restore")) as Callable
 
