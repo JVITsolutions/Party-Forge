@@ -73,6 +73,7 @@ static func _migrate_schema_one_document(document: Dictionary) -> String:
 	document["schema_version"] = ProfileCodec.SCHEMA_TWO_VERSION
 	document["item_records"] = EMPTY_ITEM_REGISTRY.duplicate(true)
 	document["next_item_sequence"] = 0
+	document["resumable_run"] = {}
 	return ""
 
 static func _migrate_schema_two_document(document: Dictionary) -> String:
@@ -91,6 +92,7 @@ static func _migrate_schema_two_document(document: Dictionary) -> String:
 	document["schema_version"] = ProfileCodec.SCHEMA_THREE_VERSION
 	document["leader_loadout"] = ProfileState._empty_leader_loadout(String(document["profile_id"]))
 	document["leader_loadout_class_id"] = ""
+	document["resumable_run"] = {}
 	return ""
 
 static func _migrate_schema_three_document(document: Dictionary) -> String:
@@ -108,6 +110,7 @@ static func _migrate_schema_three_document(document: Dictionary) -> String:
 		record["committed_at_unix"] = int(record["committed_at_unix"])
 	document["schema_version"] = ProfileCodec.SCHEMA_FOUR_VERSION
 	document["preferred_player_color_id"] = String(PlayerColorPalette.DEFAULT_ID)
+	document["resumable_run"] = {}
 	return ""
 
 static func _migrate_schema_four_document(document: Dictionary) -> String:

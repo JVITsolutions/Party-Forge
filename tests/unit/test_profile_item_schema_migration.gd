@@ -50,6 +50,7 @@ func _test_complete_schema_one_migrates_recursively(failures: Array[String]) -> 
 	TestAssertions.equal(migrated_profile.get("next_item_sequence") if migrated_profile != null else -1, 0, "issuance starts empty", failures)
 	TestAssertions.equal(migrated_profile.get("leader_loadout") if migrated_profile != null else {}, _leader_loadout("profile-migrate01"), "schema-one migration adds the exact empty leader loadout", failures)
 	TestAssertions.equal(migrated_profile.get("leader_loadout_class_id") if migrated_profile != null else "missing", "", "schema-one migration adds an empty leader class ID", failures)
+	TestAssertions.equal(migrated_profile.resumable_run if migrated_profile != null else {"missing": true}, {}, "schema-one opaque recovery marker is revoked", failures)
 	TestAssertions.truthy(bool(migrated.get("migrated")) and int(migrated.get("source_schema_version")) == 1, "migration reports schema-one source", failures)
 	if migrated_profile != null:
 		var nested := (migrated_profile.applied_transactions["grant-001"] as Dictionary)["result_profile"] as Dictionary
@@ -60,6 +61,7 @@ func _test_complete_schema_one_migrates_recursively(failures: Array[String]) -> 
 		TestAssertions.equal(nested["next_item_sequence"], 0, "nested issuance starts empty", failures)
 		TestAssertions.equal(nested.get("leader_loadout"), _leader_loadout("profile-migrate01"), "nested migration adds the exact leader loadout", failures)
 		TestAssertions.equal(nested.get("leader_loadout_class_id"), "", "nested migration adds an empty leader class ID", failures)
+		TestAssertions.equal(nested.get("resumable_run"), {}, "nested schema-one opaque recovery marker is revoked", failures)
 		TestAssertions.equal(nested["gold"], 55, "nested result values survive migration", failures)
 	TestAssertions.equal(original, before, "migration leaves source dictionary unchanged", failures)
 	TestAssertions.equal(JSON.stringify(original, "\t", false), before_text, "migration leaves source serialization byte-equivalent", failures)
@@ -89,8 +91,12 @@ func _test_json_parsed_schema_one_migrates_to_complete_canonical_document(failur
 
 func _test_schema_two_items_and_progression_migrate_losslessly(failures: Array[String]) -> void:
 	var original := schema_two_document("profile-migrate09")
+	original["resumable_run"] = {"legacy_marker": "schema-two-root"}
+	(((original["applied_transactions"] as Dictionary)["storage-001"] as Dictionary)["result_profile"] as Dictionary)["resumable_run"] = {"legacy_marker": "schema-two-snapshot"}
 	var before := original.duplicate(true)
 	var before_text := JSON.stringify(original, "\t", false)
+	TestAssertions.equal(ProfileCodec.validate_loadable_document(original), "", "schema-two source validation admits opaque recovery for revocation", failures)
+	TestAssertions.truthy(ProfileCodec.validate_schema_two_document(original).contains("field=resumable_run"), "standalone schema-two validation requires revoked recovery", failures)
 	var migrated: Variant = _migrate(original)
 	var profile := migrated.get("profile") as ProfileState
 	TestAssertions.truthy(bool(migrated.call("ok")), "item-bearing schema-two profile migrates", failures)
@@ -105,10 +111,7 @@ func _test_schema_two_items_and_progression_migrate_losslessly(failures: Array[S
 			if field in ["schema_version", "item_records", "resumable_run", "applied_transactions"]:
 				continue
 			TestAssertions.equal(JSON.stringify(actual[field]), JSON.stringify(original[field]), "schema-two field %s survives byte-semantically" % field, failures)
-		var expected_recovery := (original["resumable_run"] as Dictionary).duplicate(true)
-		if not expected_recovery.is_empty():
-			expected_recovery["selected_leader_class_id"] = ""
-		TestAssertions.equal(actual["resumable_run"], expected_recovery, "schema-two recovery gains only the legacy class marker", failures)
+		TestAssertions.equal(actual["resumable_run"], {}, "schema-two opaque recovery is revoked", failures)
 		_assert_item_registry_promoted_to_schema_two(actual["item_records"] as Dictionary, "root item registry", failures)
 		var original_record := (original["applied_transactions"] as Dictionary)["storage-001"] as Dictionary
 		var actual_record := (actual["applied_transactions"] as Dictionary)["storage-001"] as Dictionary
@@ -120,10 +123,7 @@ func _test_schema_two_items_and_progression_migrate_losslessly(failures: Array[S
 			if field in ["schema_version", "item_records", "resumable_run", "applied_transactions"]:
 				continue
 			TestAssertions.equal(JSON.stringify(actual_snapshot[field]), JSON.stringify(original_snapshot[field]), "transaction snapshot field %s survives migration" % field, failures)
-		var expected_snapshot_recovery := (original_snapshot["resumable_run"] as Dictionary).duplicate(true)
-		if not expected_snapshot_recovery.is_empty():
-			expected_snapshot_recovery["selected_leader_class_id"] = ""
-		TestAssertions.equal(actual_snapshot["resumable_run"], expected_snapshot_recovery, "transaction snapshot recovery gains only the legacy class marker", failures)
+		TestAssertions.equal(actual_snapshot["resumable_run"], {}, "schema-two transaction snapshot opaque recovery is revoked", failures)
 		_assert_item_registry_promoted_to_schema_two(actual_snapshot["item_records"] as Dictionary, "transaction snapshot item registry", failures)
 		TestAssertions.equal(actual_snapshot.get("leader_loadout"), _leader_loadout("profile-migrate09"), "transaction snapshot gains the exact empty leader loadout", failures)
 		TestAssertions.equal(actual_snapshot.get("leader_loadout_class_id"), "", "transaction snapshot gains an empty leader class ID", failures)
@@ -136,8 +136,10 @@ func _test_schema_three_adds_preferred_color_recursively(failures: Array[String]
 	snapshot["schema_version"] = 3
 	snapshot.erase("preferred_player_color_id")
 	snapshot["updated_at_unix"] = 1001
+	snapshot["resumable_run"] = {"legacy_marker": "schema-three-snapshot"}
 	var legacy := snapshot.duplicate(true)
 	legacy["updated_at_unix"] = 1002
+	legacy["resumable_run"] = {"legacy_marker": "schema-three-root"}
 	legacy["applied_transactions"] = {
 		"legacy-color": {
 			"operation": "legacy_color_fixture",
@@ -147,14 +149,18 @@ func _test_schema_three_adds_preferred_color_recursively(failures: Array[String]
 		},
 	}
 	var before := legacy.duplicate(true)
+	TestAssertions.equal(ProfileCodec.validate_loadable_document(legacy), "", "schema-three source validation admits opaque recovery for revocation", failures)
+	TestAssertions.truthy(ProfileCodec.validate_schema_three_document(legacy).contains("field=resumable_run"), "standalone schema-three validation requires revoked recovery", failures)
 	var migrated := ProfileCodec.decode_document(legacy)
 	TestAssertions.truthy(migrated.ok(), "schema 3 profile migrates", failures)
 	TestAssertions.equal(migrated.source_schema_version, 3, "schema-three source metadata is preserved", failures)
 	TestAssertions.equal(migrated.profile.get("preferred_player_color_id") if migrated.profile != null else &"", &"red", "legacy profile receives P1 default", failures)
 	if migrated.profile != null:
+		TestAssertions.equal(migrated.profile.resumable_run, {}, "schema-three opaque recovery is revoked", failures)
 		var nested := ((migrated.profile.applied_transactions["legacy-color"] as Dictionary)["result_profile"] as Dictionary)
 		TestAssertions.equal(nested.get("schema_version"), 5, "schema-three transaction snapshot advances to schema five", failures)
 		TestAssertions.equal(nested.get("preferred_player_color_id"), "red", "schema-three transaction snapshot receives the default color", failures)
+		TestAssertions.equal(nested.get("resumable_run"), {}, "schema-three transaction snapshot opaque recovery is revoked", failures)
 	TestAssertions.equal(legacy, before, "schema-three migration leaves source dictionary unchanged", failures)
 
 func _test_schema_four_recovery_migrates_recursively(failures: Array[String]) -> void:
@@ -388,7 +394,7 @@ static func _expected_schema_two_document(legacy: Dictionary) -> Dictionary:
 		"next_item_sequence": 0,
 		"extraction_capacity": int(legacy["extraction_capacity"]),
 		"run_history": (legacy["run_history"] as Array).duplicate(true),
-		"resumable_run": (legacy["resumable_run"] as Dictionary).duplicate(true),
+		"resumable_run": {},
 		"applied_transactions": transactions,
 	}
 
@@ -421,7 +427,7 @@ static func schema_one_document(
 		"stash_tabs": [],
 		"extraction_capacity": 2,
 		"run_history": [{"outcome": "victory", "seed": 4402}],
-		"resumable_run": {},
+		"resumable_run": {"run_id": "run-legacy-01"},
 		"applied_transactions": {},
 	}
 	if include_transaction:

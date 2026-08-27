@@ -208,18 +208,23 @@ static func validate_schema_four_document(document: Dictionary) -> String:
 static func validate_loadable_document(document: Dictionary) -> String:
 	var schema_value: Variant = document.get("schema_version")
 	if _is_json_int(schema_value, LEGACY_SCHEMA_VERSION, LEGACY_SCHEMA_VERSION):
-		return _validate_document(document, LEGACY_SCHEMA_VERSION, false)
+		return _validate_document(document, LEGACY_SCHEMA_VERSION, false, true)
 	if _is_json_int(schema_value, SCHEMA_TWO_VERSION, SCHEMA_TWO_VERSION):
-		return _validate_document(document, SCHEMA_TWO_VERSION, false)
+		return _validate_document(document, SCHEMA_TWO_VERSION, false, true)
 	if _is_json_int(schema_value, SCHEMA_THREE_VERSION, SCHEMA_THREE_VERSION):
-		return _validate_document(document, SCHEMA_THREE_VERSION, false)
+		return _validate_document(document, SCHEMA_THREE_VERSION, false, true)
 	if _is_json_int(schema_value, SCHEMA_FOUR_VERSION, SCHEMA_FOUR_VERSION):
 		return _validate_document(document, SCHEMA_FOUR_VERSION, false)
 	if _is_json_int(schema_value, ProfileState.SCHEMA_VERSION, ProfileState.SCHEMA_VERSION):
 		return _validate_document(document, ProfileState.SCHEMA_VERSION, false)
 	return _schema_error(schema_value)
 
-static func _validate_document(data: Dictionary, expected_schema: int, result_snapshot: bool) -> String:
+static func _validate_document(
+	data: Dictionary,
+	expected_schema: int,
+	result_snapshot: bool,
+	allow_opaque_legacy_recovery: bool = false,
+) -> String:
 	if not _is_json_int(data.get("schema_version"), expected_schema, expected_schema):
 		return _schema_error(data.get("schema_version", "missing"))
 	var expected_fields := HISTORICAL_FIELDS
@@ -303,6 +308,8 @@ static func _validate_document(data: Dictionary, expected_schema: int, result_sn
 		if not _is_json_value(data[field]):
 			return _field_error(field, "contains a non-JSON value")
 	var recovery := data["resumable_run"] as Dictionary
+	if expected_schema <= SCHEMA_THREE_VERSION and not allow_opaque_legacy_recovery and not recovery.is_empty():
+		return _field_error("resumable_run", "must be empty after legacy recovery revocation")
 	if expected_schema >= SCHEMA_FOUR_VERSION and not recovery.is_empty():
 		var resumable_error := _validate_legacy_resumable_run(recovery) \
 			if expected_schema < ProfileState.SCHEMA_VERSION \
@@ -340,7 +347,7 @@ static func _validate_document(data: Dictionary, expected_schema: int, result_sn
 		var record: Variant = transactions[transaction_id]
 		if not record is Dictionary:
 			return _field_error("applied_transactions", "transaction records must be dictionaries")
-		var record_error := _validate_transaction_record(record as Dictionary, expected_schema)
+		var record_error := _validate_transaction_record(record as Dictionary, expected_schema, allow_opaque_legacy_recovery)
 		if not record_error.is_empty():
 			return _field_error("applied_transactions", "transaction=%s %s" % [transaction_id, record_error])
 	return ""
@@ -427,7 +434,11 @@ static func _validate_storage(data: Dictionary, include_leader_loadout: bool) ->
 		return _field_error(field, decoded.error)
 	return ""
 
-static func _validate_transaction_record(record: Dictionary, expected_schema: int) -> String:
+static func _validate_transaction_record(
+	record: Dictionary,
+	expected_schema: int,
+	allow_opaque_legacy_recovery: bool,
+) -> String:
 	var expected := ["operation", "fingerprint", "committed_at_unix", "result_profile"]
 	if record.size() != expected.size() or not expected.all(func(field: String) -> bool: return record.has(field)):
 		return "record fields are invalid"
@@ -439,7 +450,12 @@ static func _validate_transaction_record(record: Dictionary, expected_schema: in
 		return "committed timestamp must be a non-negative integer"
 	if not record["result_profile"] is Dictionary:
 		return "result profile must be a dictionary"
-	var snapshot_error := _validate_document(record["result_profile"] as Dictionary, expected_schema, true)
+	var snapshot_error := _validate_document(
+		record["result_profile"] as Dictionary,
+		expected_schema,
+		true,
+		allow_opaque_legacy_recovery,
+	)
 	if not snapshot_error.is_empty():
 		return "result profile is invalid: %s" % snapshot_error
 	if int((record["result_profile"] as Dictionary)["updated_at_unix"]) != int(record["committed_at_unix"]):
