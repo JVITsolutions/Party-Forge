@@ -9,6 +9,7 @@ func run() -> Array[String]:
 	_test_scalar_primitive_types(failures)
 	_test_astral_utf16_bounds(failures)
 	_test_bytes_paths_and_defensive_copies(failures)
+	_test_load_result_rejects_public_mutation(failures)
 	_test_codec_is_canonical(failures)
 	return failures
 
@@ -190,6 +191,20 @@ func _test_bytes_paths_and_defensive_copies(failures: Array[String]) -> void:
 	var errors := result.errors
 	errors.append("escaped")
 	TestAssertions.equal(result.errors, [], "load-result errors getter is defensive", failures)
+
+
+func _test_load_result_rejects_public_mutation(failures: Array[String]) -> void:
+	var valid_result := CityAccessSnapshotLoader.load_bytes(JSON.stringify(_valid_document()).to_utf8_buffer())
+	TestAssertions.truthy(valid_result.ok(), "load-result mutation fixture loads", failures)
+	if not valid_result.ok():
+		return
+	var failed_result := CityAccessLoadResult.failure("expected failure")
+	var cleared_errors: Array[String] = []
+	failed_result.set(&"errors", cleared_errors)
+	failed_result.set(&"snapshot", valid_result.snapshot)
+	TestAssertions.truthy(not failed_result.ok(), "public load-result mutation cannot convert a failure to ok", failures)
+	TestAssertions.equal(failed_result.snapshot, null, "public load-result mutation cannot set a failure snapshot", failures)
+	TestAssertions.equal(failed_result.errors, ["expected failure"], "public load-result mutation cannot clear failure errors", failures)
 
 
 func _test_codec_is_canonical(failures: Array[String]) -> void:
