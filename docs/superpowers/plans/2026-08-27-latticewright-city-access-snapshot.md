@@ -475,7 +475,9 @@ No other inference is permitted.
   - the exact content/placement/field/requirement definitions from Contract Identities;
   - seven content records, each referenced by exactly one placement;
   - no effects, graph portals, assets, unrelated content types, placement types, fields, or requirements;
-  - empty extensions everywhere the adapter inspects;
+  - root extensions exactly equal
+    `{gameplayConsumer: "not-yet-wired", partyForgeStatus: "authoring-design-data"}`;
+  - empty extensions everywhere else the adapter inspects;
   - unique source record, semantic location, and destination IDs; and
   - requirements only on content, never connection conditions.
 
@@ -497,7 +499,7 @@ No other inference is permitted.
 
 - [ ] **Step 5: Add rejection and canonicalization cases one at a time**
 
-  Cover unsupported format/version, wrong project/graph, duplicate IDs, dangling/duplicate placements, duplicate destinations, missing fields, invalid visibility, unknown requirements, unknown requirement parameters, effects, connection conditions, portals, assets, nonempty inspected extensions, and invalid generated snapshot.
+  Cover unsupported format/version, wrong project/graph, duplicate IDs, dangling/duplicate placements, duplicate destinations, missing fields, invalid visibility, unknown requirements, unknown requirement parameters, effects, connection conditions, portals, assets, missing/extra/mismatched root extension entries, nonempty nested inspected extensions, and invalid generated snapshot.
 
   Prove that reordering content, placements, requirements, and schema arrays produces byte-identical candidate output while changing source whitespace changes only `source.sha256`.
 
