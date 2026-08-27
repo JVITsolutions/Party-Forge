@@ -17,14 +17,15 @@ func save_generated_document(
 	encoder: Callable,
 ) -> Dictionary:
 
-	if not validator.is_valid() or not encoder.is_valid():
-		return _generated_preflight_rejection(path, "validate", "validator-or-encoder-is-missing")
+	var dependencies_valid := validator.is_valid() and encoder.is_valid()
 	var recovery_paths := _generated_recovery_paths(staging_root)
 	if recovery_paths.is_empty():
 		return _generated_preflight_rejection(path, "confinement", "staging-root-is-not-provable")
-	var recovered := _recover_generated_transaction(path, validator, recovery_paths)
+	var recovered := _recover_generated_transaction(path, validator, recovery_paths, dependencies_valid)
 	if not recovered.is_empty():
 		return recovered
+	if not dependencies_valid:
+		return _generated_preflight_rejection(path, "validate", "validator-or-encoder-is-missing")
 	var validation_reason := _generated_validation_reason(validator.call(document))
 	if not validation_reason.is_empty():
 		return _generated_preflight_rejection(path, "validate", "validator-rejected")
@@ -184,7 +185,7 @@ func _restore_generated_target_state(path: String, prior: Dictionary) -> Error:
 	var restored := _generated_read_bytes(path)
 	return OK if int(restored["error"]) == OK and restored["bytes"] == previous else ERR_FILE_CORRUPT
 
-func _recover_generated_transaction(path: String, validator: Callable, recovery_paths: Dictionary) -> Dictionary:
+func _recover_generated_transaction(path: String, validator: Callable, recovery_paths: Dictionary, allow_candidate_commit: bool) -> Dictionary:
 	var recovery_path := String(recovery_paths["recovery"])
 	if not FileAccess.file_exists(recovery_path):
 		return {}
@@ -195,7 +196,7 @@ func _recover_generated_transaction(path: String, validator: Callable, recovery_
 	if record.is_empty():
 		return _generated_outcome("indeterminate", false, "recovery", "invalid-record")
 	var candidate_read := _generated_read_bytes(String(record["candidate"]))
-	var candidate_valid := int(candidate_read["error"]) == OK and _generated_sha256(candidate_read["bytes"] as PackedByteArray) == String(record["candidateSha256"]) and CityAccessSnapshotLoader.load_bytes(candidate_read["bytes"] as PackedByteArray).ok() and _generated_bytes_validate(candidate_read["bytes"] as PackedByteArray, validator).is_empty()
+	var candidate_valid := allow_candidate_commit and int(candidate_read["error"]) == OK and _generated_sha256(candidate_read["bytes"] as PackedByteArray) == String(record["candidateSha256"]) and CityAccessSnapshotLoader.load_bytes(candidate_read["bytes"] as PackedByteArray).ok() and _generated_bytes_validate(candidate_read["bytes"] as PackedByteArray, validator).is_empty()
 	var invocation := String(record["invocation"])
 	var paths: Array[String] = [String(record["candidate"]), invocation.path_join("promotion.json"), String(record["previous"]), invocation.path_join("recovery-record.json")]
 	var target_state := _generated_target_state(path)

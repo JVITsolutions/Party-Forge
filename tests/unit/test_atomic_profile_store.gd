@@ -818,6 +818,41 @@ func _test_generated_document_boundary(failures: Array[String]) -> void:
 	TestAssertions.equal(FileAccess.get_file_as_bytes(target), CityAccessSnapshotCodec.encode_document(alternate_document), "entry recovery restores the exact prior target before new-document validation", failures)
 	TestAssertions.truthy(not FileAccess.file_exists(recovery_record), "entry recovery clears the retained record before new-document validation", failures)
 
+	var missing_validator_target := _root.path_join("generated-missing-validator-target.json")
+	var missing_validator_staging := _root.path_join("generated-missing-validator-staging")
+	var alternate_bytes := CityAccessSnapshotCodec.encode_document(alternate_document)
+	_write_bytes(missing_validator_target, alternate_bytes)
+	var missing_validator_failure := GeneratedRestoreFailureAtomicJsonStore.new(func(temporary: String, promoted_target: String) -> Error:
+		_write_bytes(promoted_target, wrong_bytes)
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(temporary))
+		return ERR_CANT_CREATE
+	)
+	missing_validator_failure.target = missing_validator_target
+	var missing_validator_pending: Variant = missing_validator_failure.save_generated_document(missing_validator_target, _generated_document(), Callable(CityAccessSnapshotLoader, "validate_document"), missing_validator_staging, Callable(CityAccessSnapshotCodec, "encode_document"))
+	TestAssertions.equal(_generated_state(missing_validator_pending), "indeterminate", "missing-validator fixture retains pending recovery", failures)
+	_write_bytes(missing_validator_target, CityAccessSnapshotCodec.encode_document(_generated_document()))
+	var missing_validator_result: Variant = AtomicJsonStore.new().save_generated_document(missing_validator_target, {}, Callable(), missing_validator_staging, Callable(CityAccessSnapshotCodec, "encode_document"))
+	_assert_generated_outcome(missing_validator_result, "rejected", false, "validate", "validator-or-encoder-is-missing", "missing validator rejects only after pending recovery", failures)
+	TestAssertions.equal(FileAccess.get_file_as_bytes(missing_validator_target), alternate_bytes, "missing validator invocation restores exact recorded prior bytes", failures)
+	TestAssertions.truthy(not FileAccess.file_exists(missing_validator_staging.path_join("pending-transaction.json")), "missing validator invocation clears resolved recovery evidence", failures)
+
+	var missing_encoder_target := _root.path_join("generated-missing-encoder-target.json")
+	var missing_encoder_staging := _root.path_join("generated-missing-encoder-staging")
+	_write_bytes(missing_encoder_target, alternate_bytes)
+	var missing_encoder_failure := GeneratedRestoreFailureAtomicJsonStore.new(func(temporary: String, promoted_target: String) -> Error:
+		_write_bytes(promoted_target, wrong_bytes)
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(temporary))
+		return ERR_CANT_CREATE
+	)
+	missing_encoder_failure.target = missing_encoder_target
+	var missing_encoder_pending: Variant = missing_encoder_failure.save_generated_document(missing_encoder_target, _generated_document(), Callable(CityAccessSnapshotLoader, "validate_document"), missing_encoder_staging, Callable(CityAccessSnapshotCodec, "encode_document"))
+	TestAssertions.equal(_generated_state(missing_encoder_pending), "indeterminate", "missing-encoder fixture retains pending recovery", failures)
+	_write_bytes(missing_encoder_target, CityAccessSnapshotCodec.encode_document(_generated_document()))
+	var missing_encoder_result: Variant = AtomicJsonStore.new().save_generated_document(missing_encoder_target, {}, Callable(CityAccessSnapshotLoader, "validate_document"), missing_encoder_staging, Callable())
+	_assert_generated_outcome(missing_encoder_result, "rejected", false, "validate", "validator-or-encoder-is-missing", "missing encoder rejects only after pending recovery", failures)
+	TestAssertions.equal(FileAccess.get_file_as_bytes(missing_encoder_target), alternate_bytes, "missing encoder invocation restores exact recorded prior bytes", failures)
+	TestAssertions.truthy(not FileAccess.file_exists(missing_encoder_staging.path_join("pending-transaction.json")), "missing encoder invocation clears resolved recovery evidence", failures)
+
 	var unchanged: Variant = AtomicJsonStore.new().save_generated_document(target, alternate_document, Callable(CityAccessSnapshotLoader, "validate_document"), staging_root, Callable(CityAccessSnapshotCodec, "encode_document"))
 	_assert_generated_outcome(unchanged, "unchanged", false, "compare", "", "exact target parity returns unchanged without a transaction", failures)
 
