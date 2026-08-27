@@ -5,6 +5,25 @@ const RESULT_PATH := "res://scripts/profile/profile_deletion_result.gd"
 
 var _root := ""
 
+
+class RestoreFailingProfileDeletionService extends ProfileDeletionService:
+	var failure_path := ""
+
+	func _init(remove_file: Callable, injected_failure_path: String) -> void:
+		super(remove_file)
+		failure_path = injected_failure_path
+
+	func _write_snapshot(path: String, bytes: PackedByteArray) -> Error:
+		if path == failure_path:
+			return ERR_CANT_CREATE
+		var file := FileAccess.open(path, FileAccess.WRITE)
+		if file == null:
+			return FileAccess.get_open_error()
+		file.store_buffer(bytes)
+		var write_error := file.get_error()
+		file.close()
+		return write_error
+
 func run() -> Array[String]:
 	var failures: Array[String] = []
 	_root = "user://tests/profile_deletion_service_%d_%d" % [OS.get_process_id(), Time.get_ticks_usec()]
@@ -27,6 +46,8 @@ func run() -> Array[String]:
 	_reset_root()
 	_test_remove_failure_restores_every_snapshot(failures)
 	_reset_root()
+	_test_restore_failure_marks_indeterminate_partial_outcome(failures)
+	_reset_root()
 	_test_absence_verification_failure_restores_every_snapshot(failures)
 	ProfileTestSupport.remove_tree(_root)
 	return failures
@@ -47,6 +68,16 @@ func _test_result_contract(failures: Array[String]) -> void:
 	TestAssertions.truthy(bool(result.call(&"ok")), "committed deletion without cleanup debt is successful", failures)
 	result.set("cleanup_debt", true)
 	TestAssertions.truthy(not bool(result.call(&"ok")), "cleanup debt prevents an ok result", failures)
+	var truth_table: Array[Dictionary] = [
+		{"committed": false, "cleanup_debt": false, "ok": false, "meaning": "fully restored clean noncommit"},
+		{"committed": true, "cleanup_debt": false, "ok": true, "meaning": "fully deleted"},
+		{"committed": true, "cleanup_debt": true, "ok": false, "meaning": "deleted with index cleanup debt"},
+		{"committed": false, "cleanup_debt": true, "ok": false, "meaning": "indeterminate partial rollback failure"},
+	]
+	for row: Dictionary in truth_table:
+		result.set("committed", bool(row["committed"]))
+		result.set("cleanup_debt", bool(row["cleanup_debt"]))
+		TestAssertions.equal(bool(result.call(&"ok")), bool(row["ok"]), "deletion outcome truth table: %s" % String(row["meaning"]), failures)
 
 func _test_rejects_unsafe_and_undiscovered_identity_before_remove(failures: Array[String]) -> void:
 	var sentinel := _root.path_join("profile-a.json")
@@ -225,6 +256,35 @@ func _test_remove_failure_restores_every_snapshot(failures: Array[String]) -> vo
 	for path: String in targets:
 		TestAssertions.equal(FileAccess.get_file_as_bytes(path), snapshots[path], "remove failure restores exact artifact bytes: %s" % path.get_file(), failures)
 	TestAssertions.equal(FileAccess.get_file_as_bytes(neighbor), neighbor_bytes, "remove failure preserves neighboring bytes", failures)
+
+
+func _test_restore_failure_marks_indeterminate_partial_outcome(failures: Array[String]) -> void:
+	var profile_id := "profile-partial01"
+	var primary := ProfileStore.new().profile_path(profile_id, _root)
+	var backup := "%s.bak" % primary
+	var primary_bytes := "partial primary must be restored".to_utf8_buffer()
+	var backup_bytes := "partial backup remains authoritative".to_utf8_buffer()
+	_write_bytes(primary, primary_bytes)
+	_write_bytes(backup, backup_bytes)
+	var remove_calls: Array[String] = []
+	var service := RestoreFailingProfileDeletionService.new(func(path: String) -> Error:
+		remove_calls.append(path)
+		if remove_calls.size() == 1:
+			return DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+		return ERR_CANT_CREATE
+	, primary)
+	var result: RefCounted = service.call(
+		&"delete_profile_artifacts",
+		profile_id,
+		PackedStringArray([profile_id]),
+		_root,
+	)
+	TestAssertions.equal(remove_calls, [primary, backup], "partial rollback fixture removes one artifact before a later remove failure", failures)
+	TestAssertions.truthy(not bool(result.get("committed")) and bool(result.get("cleanup_debt")), "unrestored original bytes use the indeterminate false/true outcome", failures)
+	var technical := str(result.get("error"))
+	TestAssertions.truthy(technical.contains("PROFILE_DELETE_INDETERMINATE") and technical.contains("committed=false") and technical.contains("cleanup_debt=true") and technical.contains("stage=rollback"), "partial rollback exposes a precise technical outcome", failures)
+	TestAssertions.truthy(not FileAccess.file_exists(primary), "partial rollback proof leaves the removed primary unrestored", failures)
+	TestAssertions.equal(FileAccess.get_file_as_bytes(backup), backup_bytes, "partial rollback proof retains the later backup artifact exactly", failures)
 
 func _test_absence_verification_failure_restores_every_snapshot(failures: Array[String]) -> void:
 	var profile_id := "profile-verify01"

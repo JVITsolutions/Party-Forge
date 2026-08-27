@@ -68,6 +68,8 @@ func run() -> Array[String]:
 		_reset_root()
 		_test_delete_precommit_failure_preserves_manager_and_bytes(failures)
 		_reset_root()
+		_test_delete_partial_restore_failure_reconciles_disk_authority(failures)
+		_reset_root()
 		_test_delete_index_failure_is_committed_cleanup_debt(failures)
 	ProfileTestSupport.remove_tree(_root)
 	return failures
@@ -478,6 +480,61 @@ func _test_delete_precommit_failure_preserves_manager_and_bytes(failures: Array[
 	var undiscovered: RefCounted = manager.call(&"delete_profile", "profile-missing01")
 	TestAssertions.truthy(not bool(undiscovered.get("committed")) and str(undiscovered.get("error")).contains("undiscovered profile"), "manager rejects an undiscovered valid identity", failures)
 	TestAssertions.equal(remove_calls, [primary], "manager undiscovered rejection does not call remover", failures)
+
+
+func _test_delete_partial_restore_failure_reconciles_disk_authority(failures: Array[String]) -> void:
+	var store := ProfileStore.new()
+	var target := ProfileState.new_profile("profile-partial31", "Partial Target", 12000)
+	target.gold = 31
+	TestAssertions.equal(store.save_profile(target, _root), "", "partial manager target first generation saves", failures)
+	var backup_state := target.copy()
+	target.gold = 99
+	target.updated_at_unix = 14000
+	TestAssertions.equal(store.save_profile(target, _root), "", "partial manager target second generation creates a verified backup", failures)
+	var neighbor := ProfileState.new_profile("profile-partial32", "Partial Neighbor", 13000)
+	TestAssertions.equal(store.save_profile(neighbor, _root), "", "partial manager neighbor saves", failures)
+	var primary := store.profile_path(target.profile_id, _root)
+	var backup := "%s.bak" % primary
+	var backup_bytes := FileAccess.get_file_as_bytes(backup)
+	var remove_calls: Array[String] = []
+	var deletion := _new_deletion_service(func(path: String) -> Error:
+		remove_calls.append(path)
+		if remove_calls.size() == 1:
+			return DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+		DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(primary))
+		return ERR_CANT_CREATE
+	)
+	var index_store := ProfileIndexStore.new()
+	var manager := _new_manager(store, index_store, Callable(), deletion)
+	TestAssertions.equal(manager.call(&"bootstrap", _root), "", "partial manager fixture bootstraps", failures)
+	TestAssertions.equal((manager.call(&"active_profile") as ProfileState).gold, target.gold, "partial manager starts with the newest primary authority", failures)
+	var events: Array[String] = []
+	manager.connect(&"profiles_changed", func() -> void: events.append("profiles"))
+	manager.connect(&"active_profile_changed", func(profile: ProfileState) -> void: events.append("active:%s" % profile.profile_id))
+	var result: RefCounted = manager.call(&"delete_profile", target.profile_id)
+	TestAssertions.equal(remove_calls, [primary, backup], "partial manager fixture removes primary before backup removal fails", failures)
+	TestAssertions.truthy(not bool(result.get("committed")) and bool(result.get("cleanup_debt")), "partial manager result remains indeterminate after rollback failure", failures)
+	TestAssertions.equal(result.get("next_active_profile_id"), target.profile_id, "partial manager reports the active identity rebuilt from remaining disk artifacts", failures)
+	var technical := str(result.get("error"))
+	TestAssertions.truthy(technical.contains("PROFILE_DELETE_INDETERMINATE") and technical.contains("PROFILE_DELETE_RECONCILIATION") and technical.contains("status=recovered"), "partial manager error includes rollback and reconciliation diagnostics", failures)
+	var active := manager.call(&"active_profile") as ProfileState
+	TestAssertions.truthy(active != null and active.profile_id == target.profile_id and active.gold == backup_state.gold and active.updated_at_unix == backup_state.updated_at_unix, "partial manager replaces stale primary memory with recovered backup authority", failures)
+	var statuses: Array = manager.call(&"profile_statuses")
+	var status_by_id: Dictionary = {}
+	for status: ProfileEntryStatus in statuses:
+		status_by_id[status.profile_id] = status
+	TestAssertions.equal((status_by_id[target.profile_id] as ProfileEntryStatus).state_name() if status_by_id.has(target.profile_id) else "", "recovered", "partial manager rebuilds the target health status from disk", failures)
+	TestAssertions.equal(FileAccess.get_file_as_bytes(backup), backup_bytes, "partial manager reconciliation preserves the remaining exact backup bytes", failures)
+	var persisted := index_store.load_index(_root)
+	TestAssertions.truthy(persisted.ok(), "partial manager reconciliation persists a readable rebuilt index", failures)
+	TestAssertions.equal(persisted.index.active_profile_id if persisted.ok() else "", target.profile_id, "partial manager rebuilt index retains the recovered active profile", failures)
+	var target_entry: Dictionary = {}
+	if persisted.ok():
+		for entry: Dictionary in persisted.index.entries:
+			if String(entry.get("profile_id", "")) == target.profile_id:
+				target_entry = entry
+	TestAssertions.equal(int(target_entry.get("updated_at_unix", -1)), backup_state.updated_at_unix, "partial manager rebuilt index excludes stale primary metadata", failures)
+	TestAssertions.equal(events, ["profiles", "active:%s" % target.profile_id], "partial manager emits coherent profile then active signals after reconciliation", failures)
 
 func _test_delete_index_failure_is_committed_cleanup_debt(failures: Array[String]) -> void:
 	var store := ProfileStore.new()

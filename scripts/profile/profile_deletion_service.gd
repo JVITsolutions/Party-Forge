@@ -39,19 +39,13 @@ func delete_profile_artifacts(
 		if not FileAccess.file_exists(path):
 			continue
 		if not _is_confined_artifact_path(profile_id, root, path):
-			var confinement_restore_error := _restore_snapshots(snapshots)
-			result.error = "PROFILE_DELETE_ERROR profile=%s stage=remove path=%s reason=target lost confinement restore_code=%d" % [profile_id, path, confinement_restore_error]
-			return result
+			return _rollback_result(result, profile_id, "remove", path, "reason=target lost confinement", snapshots)
 		var remove_error: Error = _remove_file.call(path) as Error
 		if remove_error != OK and FileAccess.file_exists(path):
-			var restore_error := _restore_snapshots(snapshots)
-			result.error = "PROFILE_DELETE_ERROR profile=%s stage=remove path=%s code=%d restore_code=%d" % [profile_id, path, remove_error, restore_error]
-			return result
+			return _rollback_result(result, profile_id, "remove", path, "code=%d" % remove_error, snapshots)
 	for path: String in targets:
 		if FileAccess.file_exists(path):
-			var restore_error := _restore_snapshots(snapshots)
-			result.error = "PROFILE_DELETE_ERROR profile=%s stage=verify path=%s restore_code=%d" % [profile_id, path, restore_error]
-			return result
+			return _rollback_result(result, profile_id, "verify", path, "reason=target remains after remove", snapshots)
 	result.committed = true
 	result.deleted_profile_id = profile_id
 	return result
@@ -151,28 +145,59 @@ func _digits_only(value: String) -> bool:
 			return false
 	return true
 
-func _restore_snapshots(snapshots: Dictionary) -> Error:
-	var first_error: Error = OK
-	for path: String in snapshots:
-		var file := FileAccess.open(path, FileAccess.WRITE)
-		if file == null:
-			if first_error == OK:
-				first_error = FileAccess.get_open_error()
+func _rollback_result(
+	result: ProfileDeletionResult,
+	profile_id: String,
+	trigger_stage: String,
+	trigger_path: String,
+	trigger_detail: String,
+	snapshots: Dictionary,
+) -> ProfileDeletionResult:
+	var restore_diagnostic := _restore_snapshots(snapshots)
+	if restore_diagnostic.is_empty():
+		result.error = "PROFILE_DELETE_ERROR profile=%s stage=%s path=%s %s restore_code=0" % [profile_id, trigger_stage, trigger_path, trigger_detail]
+		return result
+	result.cleanup_debt = true
+	result.error = "PROFILE_DELETE_INDETERMINATE profile=%s committed=false cleanup_debt=true stage=rollback trigger_stage=%s trigger_path=%s %s restore=%s" % [profile_id, trigger_stage, trigger_path, trigger_detail, restore_diagnostic]
+	return result
+
+func _restore_snapshots(snapshots: Dictionary) -> String:
+	var paths: Array[String] = []
+	for snapshot_path: String in snapshots:
+		paths.append(snapshot_path)
+	paths.sort()
+	var diagnostics: Array[String] = []
+	for path: String in paths:
+		var expected := snapshots[path] as PackedByteArray
+		if _snapshot_matches(path, expected):
 			continue
-		file.store_buffer(snapshots[path] as PackedByteArray)
-		var write_error := file.get_error()
-		file.close()
-		if first_error == OK and write_error != OK:
-			first_error = write_error
-	for path: String in snapshots:
+		var write_error := _write_snapshot(path, expected)
+		if write_error != OK:
+			diagnostics.append("path=%s write_code=%d" % [path, write_error])
+	for path: String in paths:
+		var expected := snapshots[path] as PackedByteArray
 		if not FileAccess.file_exists(path):
-			if first_error == OK:
-				first_error = ERR_FILE_CORRUPT
+			diagnostics.append("path=%s verify=missing" % path)
 			continue
 		var restored := FileAccess.get_file_as_bytes(path)
 		var read_error := FileAccess.get_open_error()
-		if first_error == OK and read_error != OK:
-			first_error = read_error
-		elif first_error == OK and restored != (snapshots[path] as PackedByteArray):
-			first_error = ERR_FILE_CORRUPT
-	return first_error
+		if read_error != OK:
+			diagnostics.append("path=%s verify_read_code=%d" % [path, read_error])
+		elif restored != expected:
+			diagnostics.append("path=%s verify=byte-mismatch expected_size=%d actual_size=%d" % [path, expected.size(), restored.size()])
+	return "; ".join(diagnostics)
+
+func _snapshot_matches(path: String, expected: PackedByteArray) -> bool:
+	if not FileAccess.file_exists(path):
+		return false
+	var existing := FileAccess.get_file_as_bytes(path)
+	return FileAccess.get_open_error() == OK and existing == expected
+
+func _write_snapshot(path: String, bytes: PackedByteArray) -> Error:
+	var file := FileAccess.open(path, FileAccess.WRITE)
+	if file == null:
+		return FileAccess.get_open_error()
+	file.store_buffer(bytes)
+	var write_error := file.get_error()
+	file.close()
+	return write_error

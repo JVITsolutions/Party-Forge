@@ -112,6 +112,7 @@ func run() -> Array[String]:
 	TestAssertions.truthy(main_script != null, "main recovery fixture script loads", failures)
 	if not failures.is_empty():
 		return failures
+	_test_fixture_settings_paths_are_explicit(failures)
 	_test_durable_retry_reuses_exact_checkout(failures)
 	_test_transition_commit_then_checkout_rejection_retries_without_retransition(failures)
 	_test_durable_route_resumes_without_checkout(failures)
@@ -124,11 +125,22 @@ func run() -> Array[String]:
 	return failures
 
 
+func _test_fixture_settings_paths_are_explicit(failures: Array[String]) -> void:
+	var test_source := FileAccess.get_file_as_string("res://tests/unit/test_main_loadout_checkout_recovery.gd")
+	var instantiation_token := ".instanti" + "ate() as PartyForgeMain"
+	var settings_assignment_token := "main." + "settings_path = root.path_join("
+	var instance_count := test_source.count(instantiation_token)
+	var isolated_settings_count := test_source.count(settings_assignment_token)
+	TestAssertions.truthy(instance_count > 0, "main recovery test audits every production Main fixture", failures)
+	TestAssertions.equal(isolated_settings_count, instance_count, "every Main fixture assigns a unique root-local settings path before entering the tree", failures)
+
+
 func _test_durable_retry_reuses_exact_checkout(failures: Array[String]) -> void:
 	var root := "user://tests/main_checkout_recovery_%d_%d" % [OS.get_process_id(), Time.get_ticks_usec()]
 	ProfileTestSupport.remove_tree(root)
 	var main := (load("res://scenes/game/main.tscn") as PackedScene).instantiate() as PartyForgeMain
 	main.profile_root = root
+	main.settings_path = root.path_join("party_forge_settings.cfg")
 	(Engine.get_main_loop() as SceneTree).root.add_child(main)
 	main.call("_ready")
 	var created := main.profile_manager.create_profile("Checkout Recovery")
@@ -217,6 +229,7 @@ func _test_transition_commit_then_checkout_rejection_retries_without_retransitio
 	ProfileTestSupport.remove_tree(root)
 	var main := (load("res://scenes/game/main.tscn") as PackedScene).instantiate() as PartyForgeMain
 	main.profile_root = root
+	main.settings_path = root.path_join("party_forge_settings.cfg")
 	(Engine.get_main_loop() as SceneTree).root.add_child(main)
 	main.call("_ready")
 	var created := main.profile_manager.create_profile("Transition Retry")
@@ -554,6 +567,7 @@ func _recovery_item(instance_id: String, base_id: StringName) -> ItemInstance:
 func _recovery_main(root: String, checkout: RecoveryCheckoutSpy, recovery: RunRecoveryService) -> PartyForgeMain:
 	var main := (load("res://scenes/game/main.tscn") as PackedScene).instantiate() as PartyForgeMain
 	main.profile_root = root
+	main.settings_path = root.path_join("party_forge_settings.cfg")
 	main.set("_loadout_checkout", checkout)
 	main.set("_run_recovery", recovery)
 	(Engine.get_main_loop() as SceneTree).root.add_child(main)

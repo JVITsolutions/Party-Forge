@@ -29,10 +29,18 @@ func run() -> Array[String]:
 	var failures: Array[String] = []
 	_test_result_contract_and_inspection_are_typed_and_defensive(failures)
 	_test_inspection_rejects_malformed_unknown_and_incompatible_recovery(failures)
+	_test_restart_assertion_targets_restarted_dependency(failures)
 	_test_legacy_binding_is_atomic_durable_and_never_checks_out(failures)
 	_test_binding_persistence_failure_preserves_exact_bytes(failures)
 	_test_forfeit_requires_the_exact_recovered_run(failures)
 	return failures
+
+
+func _test_restart_assertion_targets_restarted_dependency(failures: Array[String]) -> void:
+	var source := FileAccess.get_file_as_string("res://tests/unit/test_run_recovery_service.gd")
+	var restarted_assertion := "restarted_" + "spy.operation_count(RunLoadoutCheckoutService.CHECKOUT_OPERATION)"
+	TestAssertions.truthy(restarted_assertion in source, "restart checkout assertion observes the fresh restarted dependency", failures)
+
 
 func _test_result_contract_and_inspection_are_typed_and_defensive(failures: Array[String]) -> void:
 	var service := RunRecoveryService.new()
@@ -119,11 +127,14 @@ func _test_legacy_binding_is_atomic_durable_and_never_checks_out(failures: Array
 
 	var restarted_manager := ProfileManager.new(ProfileStore.new(), ProfileIndexStore.new())
 	TestAssertions.equal(restarted_manager.bootstrap(root), "", "profile manager restarts from bound recovery", failures)
-	var restarted_service := RunRecoveryService.new()
+	var restarted_store := ProfileStore.new()
+	var restarted_spy := MutationSpy.new(restarted_store)
+	var restarted_checkout := RunLoadoutCheckoutService.new(restarted_spy)
+	var restarted_service := RunRecoveryService.new(restarted_checkout, restarted_spy, restarted_store)
 	var restarted := restarted_service.inspect(restarted_manager.active_profile())
 	TestAssertions.equal(restarted.code, RunRecoveryResult.Code.READY, "disk restart returns directly ready without another class request", failures)
 	TestAssertions.equal(restarted.selected_leader_class_id, &"fighter", "disk restart retains the bound class", failures)
-	TestAssertions.equal(spy.operation_count(RunLoadoutCheckoutService.CHECKOUT_OPERATION), 0, "restart performs no checkout through the recovery mutation spy", failures)
+	TestAssertions.equal(restarted_spy.operation_count(RunLoadoutCheckoutService.CHECKOUT_OPERATION), 0, "restart performs no checkout through the fresh restarted dependency", failures)
 	ProfileTestSupport.remove_tree(root)
 
 func _test_binding_persistence_failure_preserves_exact_bytes(failures: Array[String]) -> void:

@@ -180,6 +180,14 @@ func delete_profile(profile_id: String) -> ProfileDeletionResult:
 		discovered.append(String(discovered_id))
 	var result := _deletion.delete_profile_artifacts(profile_id, discovered, _root)
 	if not result.committed:
+		if result.cleanup_debt:
+			var reconciliation := _reconcile_after_indeterminate_deletion(profile_id)
+			result.next_active_profile_id = _index.active_profile_id
+			result.error = "%s | %s" % [result.error, reconciliation]
+			profiles_changed.emit()
+			var reconciled_active := active_profile()
+			if reconciled_active != null:
+				active_profile_changed.emit(reconciled_active)
 		return result
 	_profiles.erase(profile_id)
 	_profile_statuses.erase(profile_id)
@@ -201,6 +209,22 @@ func _delete_failure(error: String) -> ProfileDeletionResult:
 	var result := ProfileDeletionResult.new()
 	result.error = error
 	return result
+
+func _reconcile_after_indeterminate_deletion(profile_id: String) -> String:
+	var reconciliation_error := bootstrap(_root)
+	var status_name := "absent"
+	var status := _profile_statuses.get(profile_id) as ProfileEntryStatus
+	if status != null:
+		status_name = status.state_name()
+	var diagnostic := reconciliation_error if not reconciliation_error.is_empty() else "ok"
+	return "PROFILE_DELETE_RECONCILIATION profile=%s status=%s active=%s loaded=%d statuses=%d diagnostic=%s" % [
+		profile_id,
+		status_name,
+		_index.active_profile_id,
+		_profiles.size(),
+		_profile_statuses.size(),
+		diagnostic,
+	]
 
 func _rebuild_index() -> void:
 	_index.rebuild(profiles())

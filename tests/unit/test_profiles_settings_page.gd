@@ -23,6 +23,25 @@ class DeletionSpyProfileManager extends ProfileManager:
 		return super.delete_profile(profile_id)
 
 
+class RestoreFailingProfileDeletionService extends ProfileDeletionService:
+	var failure_path := ""
+
+	func _init(remove_file: Callable, injected_failure_path: String) -> void:
+		super(remove_file)
+		failure_path = injected_failure_path
+
+	func _write_snapshot(path: String, bytes: PackedByteArray) -> Error:
+		if path == failure_path:
+			return ERR_CANT_CREATE
+		var file := FileAccess.open(path, FileAccess.WRITE)
+		if file == null:
+			return FileAccess.get_open_error()
+		file.store_buffer(bytes)
+		var write_error := file.get_error()
+		file.close()
+		return write_error
+
+
 func run() -> Array[String]:
 	var failures: Array[String] = []
 	var root := "user://tests/profile_settings_page_%d_%d" % [OS.get_process_id(), Time.get_ticks_usec()]
@@ -32,6 +51,8 @@ func run() -> Array[String]:
 	_test_deletion_confirmation_and_focus(root, failures)
 	ProfileTestSupport.remove_tree(root)
 	_test_cleanup_debt_presentation(root, failures)
+	ProfileTestSupport.remove_tree(root)
+	_test_indeterminate_partial_presentation_and_reconciled_selection(root, failures)
 	ProfileTestSupport.remove_tree(root)
 	_test_invalid_preferred_color_rejected(root, failures)
 	ProfileTestSupport.remove_tree(root)
@@ -246,6 +267,64 @@ func _test_cleanup_debt_presentation(root: String, failures: Array[String]) -> v
 	TestAssertions.truthy(status.text.contains("deleted") and status.text.contains("cleanup"), "cleanup debt shows a safe committed-deletion warning", failures)
 	TestAssertions.truthy(details.text.contains("PROFILE_DELETE_CLEANUP_DEBT") and details.text.contains(index_store.save_error), "cleanup debt preserves the technical result error", failures)
 	TestAssertions.equal(deletion_states, [true, false], "cleanup debt clears the in-progress state", failures)
+	page.free()
+
+
+func _test_indeterminate_partial_presentation_and_reconciled_selection(root: String, failures: Array[String]) -> void:
+	var store := ProfileStore.new()
+	var target := ProfileState.new_profile("profile-partialui", "Partial UI Target", 5000)
+	var neighbor := ProfileState.new_profile("profile-neighborui", "Partial UI Neighbor", 4000)
+	TestAssertions.equal(store.save_profile(target, root), "", "partial UI target saves", failures)
+	TestAssertions.equal(store.save_profile(neighbor, root), "", "partial UI neighbor saves", failures)
+	var primary := store.profile_path(target.profile_id, root)
+	var temporary := "%s.tmp" % primary
+	var temporary_file := FileAccess.open(temporary, FileAccess.WRITE)
+	if temporary_file != null:
+		temporary_file.store_string("remaining partial transaction artifact")
+		temporary_file.close()
+	var remove_calls: Array[String] = []
+	var deletion := RestoreFailingProfileDeletionService.new(func(path: String) -> Error:
+		remove_calls.append(path)
+		if remove_calls.size() == 1:
+			return DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+		return ERR_CANT_CREATE
+	, primary)
+	var manager := ProfileManager.new(store, ProfileIndexStore.new(), Callable(), deletion)
+	TestAssertions.equal(manager.bootstrap(root), "", "partial UI manager bootstraps", failures)
+	var page := (load(SCENE_PATH) as PackedScene).instantiate() as ProfilesSettingsPage
+	(Engine.get_main_loop() as SceneTree).root.add_child(page)
+	page.call("_ready")
+	page.bind(manager)
+	var list := page.get_node("Layout/ProfileList") as ItemList
+	var target_index := -1
+	for index: int in range(list.item_count):
+		if String(list.get_item_metadata(index)) == target.profile_id:
+			target_index = index
+			break
+	TestAssertions.truthy(target_index >= 0, "partial UI target is selectable before deletion", failures)
+	if target_index < 0:
+		page.free()
+		return
+	list.select(target_index)
+	list.item_selected.emit(target_index)
+	var deletion_states: Array[bool] = []
+	var technical_errors: Array[String] = []
+	page.profile_deletion_state_changed.connect(func(in_progress: bool) -> void: deletion_states.append(in_progress))
+	page.profile_action_failed.connect(func(error: String) -> void: technical_errors.append(error))
+	(page.get_node("Layout/DeleteProfile") as Button).pressed.emit()
+	var confirmation := page.get_node("DeleteConfirmation") as ConfirmationDialog
+	confirmation.hide()
+	confirmation.confirmed.emit()
+	TestAssertions.equal(remove_calls, [primary, temporary], "partial UI fixture removes the primary before the later artifact fails", failures)
+	TestAssertions.equal(list.item_count, 1, "partial UI reconciliation removes the absent target row", failures)
+	TestAssertions.equal(_selected_id(list), neighbor.profile_id, "partial UI reconciliation selects the rebuilt active neighbor", failures)
+	TestAssertions.equal(manager.active_profile().profile_id if manager.active_profile() != null else "", neighbor.profile_id, "partial UI manager exposes only reconciled active authority", failures)
+	var status := page.get_node("Layout/Status") as Label
+	var details := page.get_node("Layout/TechnicalDetails") as Label
+	TestAssertions.equal(status.text, "The profile action could not be completed.", "partial UI uses a safe player-facing error", failures)
+	TestAssertions.truthy(details.text.contains("PROFILE_DELETE_INDETERMINATE") and details.text.contains("PROFILE_DELETE_RECONCILIATION") and details.text.contains("status=absent"), "partial UI keeps rollback and reconciliation detail in the technical channel", failures)
+	TestAssertions.truthy(not technical_errors.is_empty() and technical_errors.back() == details.text, "partial UI emits the same technical diagnostic without replacing the safe message", failures)
+	TestAssertions.equal(deletion_states, [true, false], "partial UI always clears the deletion-in-progress state", failures)
 	page.free()
 
 
