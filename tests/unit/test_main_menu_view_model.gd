@@ -7,6 +7,7 @@ func run() -> Array[String]:
 	_test_route_ids_are_stable(failures)
 	_test_no_profile_has_only_first_launch_actions(failures)
 	_test_every_prologue_state_selects_its_route(failures)
+	_test_recovery_overrides_every_profile_progress_route(failures)
 	_test_completed_discovery_exposes_city_tree(failures)
 	_test_player_mode_ignores_developer_overrides(failures)
 	_test_developer_mode_exposes_nonpersistent_tools(failures)
@@ -21,6 +22,7 @@ func _test_route_ids_are_stable(failures: Array[String]) -> void:
 	TestAssertions.equal(MainMenuViewModel.ROUTE_PROLOGUE_START, &"prologue_start", "prologue-start route ID is stable", failures)
 	TestAssertions.equal(MainMenuViewModel.ROUTE_PROLOGUE_RESUME, &"prologue_resume", "prologue-resume route ID is stable", failures)
 	TestAssertions.equal(MainMenuViewModel.ROUTE_RUN_SETUP, &"run_setup", "run-setup route ID is stable", failures)
+	TestAssertions.truthy(_view_model_source().contains("const ROUTE_RUN_RECOVERY: StringName = &\"run_recovery\""), "run-recovery route ID is declared as a stable constant", failures)
 	TestAssertions.equal(MainMenuViewModel.ROUTE_CITY_TREE, &"city_tree", "City-tree route ID is stable", failures)
 	TestAssertions.equal(MainMenuViewModel.ROUTE_ARMOURY, &"armoury", "Armoury route ID is stable", failures)
 	TestAssertions.equal(MainMenuViewModel.ROUTE_WAREHOUSE, &"warehouse", "Warehouse route ID is stable", failures)
@@ -57,6 +59,20 @@ func _test_every_prologue_state_selects_its_route(failures: Array[String]) -> vo
 	TestAssertions.equal(completed.primary_route_id, &"run_setup", "completed profile routes to current run setup", failures)
 	TestAssertions.equal(completed.active_profile_text, "Active Profile: Menu Tester", "active profile text uses the supplied display name", failures)
 	TestAssertions.truthy(not completed.city_tree_visible, "completed profile without discovery does not see City services", failures)
+
+func _test_recovery_overrides_every_profile_progress_route(failures: Array[String]) -> void:
+	var settings := PartyForgeSettings.new()
+	for prologue_state: ProfileState.PrologueState in [
+		ProfileState.PrologueState.NOT_STARTED,
+		ProfileState.PrologueState.IN_PROGRESS,
+		ProfileState.PrologueState.COMPLETED,
+	]:
+		var profile := _profile(prologue_state)
+		profile.resumable_run = {"malformed_but_nonempty": true}
+		var projection := MainMenuViewModel.build(profile, settings, true)
+		TestAssertions.equal(projection.primary_label, "Resume Run", "recovery overrides normal play label for state %d" % prologue_state, failures)
+		TestAssertions.equal(projection.primary_route_id, &"run_recovery", "recovery uses explicit route for state %d" % prologue_state, failures)
+		TestAssertions.equal(projection.status_text, "An interrupted run is ready to recover.", "recovery explains the route for state %d" % prologue_state, failures)
 
 func _test_completed_discovery_exposes_city_tree(failures: Array[String]) -> void:
 	var profile := _profile(ProfileState.PrologueState.COMPLETED)
@@ -152,6 +168,10 @@ func _profile(prologue_state: ProfileState.PrologueState) -> ProfileState:
 	var profile := ProfileState.new_profile("profile-menu-1234", "Menu Tester", 1000)
 	profile.prologue_state = prologue_state
 	return profile
+
+func _view_model_source() -> String:
+	var file := FileAccess.open("res://scripts/ui/main_menu/main_menu_view_model.gd", FileAccess.READ)
+	return file.get_as_text() if file != null else ""
 
 func _test_armoury_and_warehouse_feature_access(failures: Array[String]) -> void:
 	var settings := PartyForgeSettings.new()

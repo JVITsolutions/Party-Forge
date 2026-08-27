@@ -52,17 +52,71 @@ class RejectFirstCheckout extends RunLoadoutCheckoutService:
 		return super.checkout(profile_id, request, root)
 
 
+class RecoveryCheckoutSpy extends RunLoadoutCheckoutService:
+	var checkout_calls := 0
+	var forfeit_calls := 0
+
+	func checkout(profile_id: String, request: RunLoadoutCheckoutRequest, root: String = ProfileStore.DEFAULT_ROOT) -> ProfileMutationResult:
+		checkout_calls += 1
+		return super.checkout(profile_id, request, root)
+
+	func forfeit(profile_id: String, run_id: StringName, root: String = ProfileStore.DEFAULT_ROOT) -> ProfileMutationResult:
+		forfeit_calls += 1
+		return super.forfeit(profile_id, run_id, root)
+
+
+class RecoveryServiceSpy extends RunRecoveryService:
+	var inspect_calls := 0
+	var inspected_class_ids: Array[StringName] = []
+	var bind_calls := 0
+	var forfeit_calls := 0
+
+	func inspect(profile: ProfileState) -> RunRecoveryResult:
+		inspect_calls += 1
+		var result := super.inspect(profile)
+		inspected_class_ids.append(result.selected_leader_class_id)
+		return result
+
+	func bind_legacy_class(profile_id: String, class_id: StringName, root: String = ProfileStore.DEFAULT_ROOT) -> RunRecoveryResult:
+		bind_calls += 1
+		return super.bind_legacy_class(profile_id, class_id, root)
+
+	func forfeit(profile_id: String, run_id: StringName, root: String = ProfileStore.DEFAULT_ROOT) -> ProfileMutationResult:
+		forfeit_calls += 1
+		return super.forfeit(profile_id, run_id, root)
+
+
+class ForfeitFailureRecovery extends RecoveryServiceSpy:
+	func forfeit(_profile_id: String, _run_id: StringName, _root: String = ProfileStore.DEFAULT_ROOT) -> ProfileMutationResult:
+		forfeit_calls += 1
+		var result := ProfileMutationResult.new()
+		result.error = "PARTY_FORGE_RUN_RECOVERY_ERROR field=forfeit reason=injected persistence failure"
+		return result
+
+
+const DURABLE_PROFILE_ID := "profile-main-durable-recovery"
+const DURABLE_RUN_ID := &"run-main-durable-recovery-42"
+const DURABLE_PLAYER_ID := &"run-player-main-recovery"
+const DURABLE_RUN_SEED := 90421
+
+
 func run() -> Array[String]:
 	var failures: Array[String] = []
 	var main_script := load("res://scripts/game/main.gd") as Script
 	var source := FileAccess.get_file_as_string("res://scripts/game/main.gd")
 	TestAssertions.truthy("_pending_checkout_recovery" in source, "main owns explicit same-session checkout recovery state", failures)
 	TestAssertions.truthy("_run_context_factory" in source, "main owns an injectable production context factory", failures)
+	TestAssertions.truthy("_run_recovery" in source, "main owns an injectable durable recovery service", failures)
+	TestAssertions.truthy("func _start_committed_run(" in source, "main owns one shared committed-bootstrap start", failures)
 	TestAssertions.truthy(main_script != null, "main recovery fixture script loads", failures)
 	if not failures.is_empty():
 		return failures
 	_test_durable_retry_reuses_exact_checkout(failures)
 	_test_transition_commit_then_checkout_rejection_retries_without_retransition(failures)
+	_test_durable_route_resumes_without_checkout(failures)
+	_test_legacy_binding_refreshes_reinspects_and_rejects_incompatible_bytes(failures)
+	_test_durable_context_failure_preserves_recovery(failures)
+	_test_strict_abandonment_and_forfeit_failure(failures)
 	return failures
 
 
@@ -217,3 +271,178 @@ func _operation_count(profile: ProfileState, operation: String) -> int:
 		if entry is Dictionary and String((entry as Dictionary).get("operation", "")) == operation:
 			count += 1
 	return count
+
+
+func _test_durable_route_resumes_without_checkout(failures: Array[String]) -> void:
+	var root := _recovery_root("ready_resume")
+	var original_profile := _save_recovery_profile(root, &"fighter")
+	var original := RunRecoveryService.new().inspect(original_profile)
+	TestAssertions.truthy(original.ready(), "durable resume fixture is strictly ready", failures)
+	var checkout_spy := RecoveryCheckoutSpy.new()
+	var recovery_spy := RecoveryServiceSpy.new(checkout_spy)
+	var main := _recovery_main(root, checkout_spy, recovery_spy)
+	var menu := main.get_node("MainMenuScreen") as MainMenuScreen
+	var dialog := main.get_node("RunRecoveryDialog")
+	TestAssertions.equal(menu.projection().primary_route_id, MainMenuViewModel.ROUTE_RUN_RECOVERY, "restart projects the durable recovery route", failures)
+	main.call("_on_main_menu_route_requested", MainMenuViewModel.ROUTE_RUN_RECOVERY)
+	TestAssertions.truthy(dialog.is_open() and not menu.is_open(), "recovery route opens the dedicated dialog", failures)
+	dialog.resume_requested.emit()
+	TestAssertions.equal(checkout_spy.checkout_calls, 0, "durable resume performs zero checkouts", failures)
+	TestAssertions.truthy(main.run_started and main.active_run_context != null, "ready recovery starts gameplay", failures)
+	TestAssertions.equal(main.active_run_context.run_id, original.run_id, "runtime preserves recovered run id", failures)
+	TestAssertions.equal(main.game_run.run_seed, original.bootstrap.run_seed, "runtime preserves recovered seed", failures)
+	TestAssertions.equal(main.spawn_director.run_seed, original.bootstrap.run_seed, "spawn schedule preserves recovered seed", failures)
+	TestAssertions.equal(main.active_run_context.item_state().to_dictionary(), original.bootstrap.item_state().to_dictionary(), "runtime preserves checked-out item state", failures)
+	TestAssertions.equal(recovery_spy.inspect_calls, 1, "ready route inspects durable recovery once", failures)
+	_cleanup_recovery_main(main, root)
+
+
+func _test_legacy_binding_refreshes_reinspects_and_rejects_incompatible_bytes(failures: Array[String]) -> void:
+	var root := _recovery_root("legacy_bind")
+	_save_recovery_profile(root, &"")
+	var checkout_spy := RecoveryCheckoutSpy.new()
+	var recovery_spy := RecoveryServiceSpy.new(checkout_spy)
+	var main := _recovery_main(root, checkout_spy, recovery_spy)
+	var dialog := main.get_node("RunRecoveryDialog")
+	main.call("_on_main_menu_route_requested", MainMenuViewModel.ROUTE_RUN_RECOVERY)
+	dialog.legacy_class_requested.emit(&"fighter")
+	TestAssertions.equal(recovery_spy.bind_calls, 1, "legacy selection binds exactly once", failures)
+	TestAssertions.truthy(recovery_spy.inspect_calls >= 2 and recovery_spy.inspected_class_ids[-1] == &"fighter", "legacy binding reinspects the refreshed bound profile", failures)
+	TestAssertions.equal(main.active_profile().resumable_run.get("selected_leader_class_id", ""), "fighter", "manager refresh observes the bound durable class", failures)
+	TestAssertions.truthy(main.run_started, "legacy binding starts only after READY reinspection", failures)
+	TestAssertions.equal(checkout_spy.checkout_calls, 0, "legacy binding never performs checkout", failures)
+	_cleanup_recovery_main(main, root)
+
+	var incompatible_root := _recovery_root("legacy_incompatible")
+	var vestments := _recovery_item("item-main-incompatible", &"storm_chaplain_vestments")
+	_save_recovery_profile(incompatible_root, &"", [vestments], {1: vestments.instance_id})
+	var path := ProfileStore.new().profile_path(DURABLE_PROFILE_ID, incompatible_root)
+	var before := FileAccess.get_file_as_bytes(path)
+	var incompatible_checkout := RecoveryCheckoutSpy.new()
+	var incompatible_recovery := RecoveryServiceSpy.new(incompatible_checkout)
+	var incompatible_main := _recovery_main(incompatible_root, incompatible_checkout, incompatible_recovery)
+	var incompatible_dialog := incompatible_main.get_node("RunRecoveryDialog")
+	incompatible_main.call("_on_main_menu_route_requested", MainMenuViewModel.ROUTE_RUN_RECOVERY)
+	incompatible_dialog.legacy_class_requested.emit(&"fighter")
+	TestAssertions.equal(FileAccess.get_file_as_bytes(path), before, "incompatible legacy binding preserves exact profile bytes", failures)
+	TestAssertions.equal(incompatible_checkout.checkout_calls, 0, "incompatible legacy binding performs zero checkouts", failures)
+	TestAssertions.truthy(incompatible_dialog.is_open() and not incompatible_main.run_started, "incompatible binding leaves recovery available", failures)
+	TestAssertions.truthy((incompatible_dialog.get_node("Overlay/Frame/Layout/Status") as Label).text == "Unable to bind that leader class.", "incompatible binding uses safe player-facing copy", failures)
+	TestAssertions.truthy((incompatible_dialog.get_node("Overlay/Frame/Layout/TechnicalDetail") as Label).text.contains("ineligible"), "incompatible binding preserves technical diagnostics", failures)
+	_cleanup_recovery_main(incompatible_main, incompatible_root)
+
+
+func _test_durable_context_failure_preserves_recovery(failures: Array[String]) -> void:
+	var root := _recovery_root("context_failure")
+	_save_recovery_profile(root, &"fighter")
+	var path := ProfileStore.new().profile_path(DURABLE_PROFILE_ID, root)
+	var before := FileAccess.get_file_as_bytes(path)
+	var checkout_spy := RecoveryCheckoutSpy.new()
+	var recovery_spy := RecoveryServiceSpy.new(checkout_spy)
+	var main := _recovery_main(root, checkout_spy, recovery_spy)
+	main.set("_run_context_factory", func() -> PlayerRunContext: return InjectedContextFailure.new())
+	var dialog := main.get_node("RunRecoveryDialog")
+	main.call("_on_main_menu_route_requested", MainMenuViewModel.ROUTE_RUN_RECOVERY)
+	dialog.resume_requested.emit()
+	TestAssertions.truthy(not main.run_started and dialog.is_open(), "context failure keeps recovery dialog available", failures)
+	TestAssertions.equal(FileAccess.get_file_as_bytes(path), before, "context failure preserves exact durable recovery bytes", failures)
+	TestAssertions.equal(checkout_spy.checkout_calls, 0, "context failure performs zero checkouts", failures)
+	TestAssertions.equal((dialog.get_node("Overlay/Frame/Layout/Status") as Label).text, "Unable to resume this run.", "context failure uses safe player-facing copy", failures)
+	TestAssertions.truthy((dialog.get_node("Overlay/Frame/Layout/TechnicalDetail") as Label).text.contains("post-checkout context failure"), "context failure exposes technical diagnostics separately", failures)
+	main.set("_run_context_factory", func() -> PlayerRunContext: return PlayerRunContext.new())
+	dialog.resume_requested.emit()
+	TestAssertions.truthy(main.run_started and main.active_run_context != null, "context failure leaves the same durable recovery retryable", failures)
+	TestAssertions.equal(checkout_spy.checkout_calls, 0, "context retry still performs zero checkouts", failures)
+	_cleanup_recovery_main(main, root)
+
+
+func _test_strict_abandonment_and_forfeit_failure(failures: Array[String]) -> void:
+	var root := _recovery_root("forfeit_success")
+	_save_recovery_profile(root, &"fighter")
+	var checkout_spy := RecoveryCheckoutSpy.new()
+	var recovery_spy := RecoveryServiceSpy.new(checkout_spy)
+	var main := _recovery_main(root, checkout_spy, recovery_spy)
+	var dialog := main.get_node("RunRecoveryDialog")
+	main.call("_on_main_menu_route_requested", MainMenuViewModel.ROUTE_RUN_RECOVERY)
+	dialog.abandon_requested.emit(&"run-forged-wrong-id")
+	TestAssertions.equal(recovery_spy.forfeit_calls, 0, "forged abandonment intent cannot call forfeit", failures)
+	TestAssertions.truthy(not ProfileStore.new().load_profile(DURABLE_PROFILE_ID, root).profile.resumable_run.is_empty(), "forged abandonment preserves durable recovery", failures)
+	dialog.abandon_requested.emit(DURABLE_RUN_ID)
+	TestAssertions.equal(recovery_spy.forfeit_calls, 1, "confirmed exact abandonment calls strict forfeit once", failures)
+	TestAssertions.equal(checkout_spy.forfeit_calls, 1, "strict recovery delegates one real forfeit mutation", failures)
+	TestAssertions.truthy(ProfileStore.new().load_profile(DURABLE_PROFILE_ID, root).profile.resumable_run.is_empty(), "successful forfeit clears durable recovery", failures)
+	TestAssertions.truthy(not dialog.is_open() and (main.get_node("MainMenuScreen") as MainMenuScreen).is_open(), "successful forfeit closes recovery and refreshes the menu", failures)
+	_cleanup_recovery_main(main, root)
+
+	var failure_root := _recovery_root("forfeit_failure")
+	_save_recovery_profile(failure_root, &"fighter")
+	var path := ProfileStore.new().profile_path(DURABLE_PROFILE_ID, failure_root)
+	var before := FileAccess.get_file_as_bytes(path)
+	var failure_checkout := RecoveryCheckoutSpy.new()
+	var failure_recovery := ForfeitFailureRecovery.new(failure_checkout)
+	var failure_main := _recovery_main(failure_root, failure_checkout, failure_recovery)
+	var failure_dialog := failure_main.get_node("RunRecoveryDialog")
+	failure_main.call("_on_main_menu_route_requested", MainMenuViewModel.ROUTE_RUN_RECOVERY)
+	failure_dialog.abandon_requested.emit(DURABLE_RUN_ID)
+	TestAssertions.equal(failure_recovery.forfeit_calls, 1, "failed forfeit is attempted exactly once", failures)
+	TestAssertions.equal(FileAccess.get_file_as_bytes(path), before, "failed forfeit preserves exact recovery bytes", failures)
+	TestAssertions.truthy(failure_dialog.is_open() and not failure_main.active_profile().resumable_run.is_empty(), "forfeit error leaves dialog and recovery available", failures)
+	TestAssertions.equal((failure_dialog.get_node("Overlay/Frame/Layout/Status") as Label).text, "Unable to abandon this run.", "forfeit failure uses safe player-facing copy", failures)
+	TestAssertions.truthy((failure_dialog.get_node("Overlay/Frame/Layout/TechnicalDetail") as Label).text.contains("injected persistence failure"), "forfeit failure exposes technical detail separately", failures)
+	_cleanup_recovery_main(failure_main, failure_root)
+
+
+func _save_recovery_profile(
+	root: String,
+	class_id: StringName,
+	items: Array[ItemInstance] = [],
+	equipment_slots: Dictionary = {},
+) -> ProfileState:
+	ProfileTestSupport.remove_tree(root)
+	var profile := ProfileState.new_profile(DURABLE_PROFILE_ID, "Main Recovery Tester", 1000)
+	profile.inventory_columns = 2
+	var state := ItemOwnershipState.create(String(DURABLE_PLAYER_ID), ItemRegistry.new(items), [
+		ItemSlotContainer.create(&"run-inventory", ItemSlotContainer.RUN_INVENTORY, String(DURABLE_PLAYER_ID), 10),
+		ItemSlotContainer.create(&"run-equipment-001", ItemSlotContainer.RUN_MEMBER_EQUIPMENT, String(DURABLE_PLAYER_ID), EquipmentSlotIndex.capacity(), equipment_slots),
+		RunItemBootstrap.ground_items_container(String(DURABLE_PLAYER_ID)),
+	])
+	profile.resumable_run = ResumableRunItemCodec.encode(RunItemBootstrap.create(DURABLE_RUN_ID, DURABLE_RUN_SEED, DURABLE_PLAYER_ID, 1, state, class_id))
+	var error := ProfileStore.new().save_profile(profile, root)
+	assert(error.is_empty(), error)
+	return profile
+
+
+func _recovery_item(instance_id: String, base_id: StringName) -> ItemInstance:
+	var item := ItemInstance.new()
+	item.instance_id = instance_id
+	item.base_definition_id = base_id
+	item.item_level = 28
+	item.rarity_id = &"common"
+	item.origin = {
+		"issuer_namespace": "profile:%s" % DURABLE_PROFILE_ID,
+		"seed": DURABLE_RUN_SEED,
+		"sequence": 0,
+		"source": "main_recovery_test",
+	}
+	return item
+
+
+func _recovery_main(root: String, checkout: RecoveryCheckoutSpy, recovery: RunRecoveryService) -> PartyForgeMain:
+	var main := (load("res://scenes/game/main.tscn") as PackedScene).instantiate() as PartyForgeMain
+	main.profile_root = root
+	main.set("_loadout_checkout", checkout)
+	main.set("_run_recovery", recovery)
+	(Engine.get_main_loop() as SceneTree).root.add_child(main)
+	main.call("_ready")
+	main.get_node("RunRecoveryDialog").call("_ready")
+	return main
+
+
+func _cleanup_recovery_main(main: PartyForgeMain, root: String) -> void:
+	(Engine.get_main_loop() as SceneTree).paused = false
+	main.free()
+	ProfileTestSupport.remove_tree(root)
+
+
+func _recovery_root(label: String) -> String:
+	return "user://tests/main_durable_recovery_%s_%d_%d" % [label, OS.get_process_id(), Time.get_ticks_usec()]

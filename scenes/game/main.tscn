@@ -1,4 +1,4 @@
-[gd_scene load_steps=24 format=3]
+[gd_scene load_steps=25 format=3]
 
 [ext_resource type="Script" path="res://scripts/game/main.gd" id="1_main"]
 [ext_resource type="PackedScene" path="res://scenes/arena/arena.tscn" id="2_arena"]
@@ -22,6 +22,7 @@
 [ext_resource type="Script" path="res://scripts/world/ground_item_world_controller.gd" id="20_ground_items"]
 [ext_resource type="PackedScene" path="res://scenes/ui/storage/item_tooltip_panel.tscn" id="21_ground_tooltip"]
 [ext_resource type="Script" path="res://scripts/combat/combat_resolution_service.gd" id="22_combat_resolution"]
+[ext_resource type="PackedScene" path="res://scenes/ui/run_recovery/run_recovery_dialog.tscn" id="23_run_recovery"]
 
 [node name="Main" type="Node"]
 script = ExtResource("1_main")
@@ -80,6 +81,8 @@ layer = 15
 [node name="WarehouseScreen" parent="." instance=ExtResource("18_warehouse")]
 
 [node name="LoadoutWarningDialog" parent="." instance=ExtResource("19_loadout_warning")]
+
+[node name="RunRecoveryDialog" parent="." instance=ExtResource("23_run_recovery")]
 
 [node name="CharacterLedger" parent="." instance=ExtResource("10_ledger")]
 layer = 20

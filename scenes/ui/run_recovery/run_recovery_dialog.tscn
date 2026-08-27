@@ -1,0 +1,100 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/ui/run_recovery/run_recovery_dialog.gd" id="1"]
+
+[node name="RunRecoveryDialog" type="CanvasLayer"]
+process_mode = 3
+layer = 46
+visible = false
+script = ExtResource("1")
+
+[node name="Overlay" type="ColorRect" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 0
+color = Color(0.01, 0.012, 0.022, 0.96)
+
+[node name="Frame" type="PanelContainer" parent="Overlay"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 96.0
+offset_top = 96.0
+offset_right = -96.0
+offset_bottom = -96.0
+
+[node name="Layout" type="VBoxContainer" parent="Overlay/Frame"]
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="Title" type="Label" parent="Overlay/Frame/Layout"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 34
+text = "Recover Interrupted Run"
+horizontal_alignment = 1
+
+[node name="Status" type="Label" parent="Overlay/Frame/Layout"]
+layout_mode = 2
+text = "Review the interrupted run."
+horizontal_alignment = 1
+autowrap_mode = 2
+
+[node name="TechnicalHeading" type="Label" parent="Overlay/Frame/Layout"]
+visible = false
+layout_mode = 2
+text = "Technical details"
+
+[node name="TechnicalDetail" type="Label" parent="Overlay/Frame/Layout"]
+visible = false
+layout_mode = 2
+theme_override_colors/font_color = Color(0.82, 0.84, 0.9, 1)
+text = "Technical recovery diagnostic"
+autowrap_mode = 2
+selectable = true
+
+[node name="ClassPicker" type="OptionButton" parent="Overlay/Frame/Layout"]
+visible = false
+custom_minimum_size = Vector2(0, 56)
+layout_mode = 2
+focus_mode = 2
+
+[node name="Actions" type="HBoxContainer" parent="Overlay/Frame/Layout"]
+layout_mode = 2
+size_flags_vertical = 10
+alignment = 1
+theme_override_constants/separation = 12
+
+[node name="Resume" type="Button" parent="Overlay/Frame/Layout/Actions"]
+custom_minimum_size = Vector2(180, 56)
+layout_mode = 2
+focus_mode = 2
+text = "Resume Run"
+
+[node name="Bind" type="Button" parent="Overlay/Frame/Layout/Actions"]
+visible = false
+custom_minimum_size = Vector2(180, 56)
+layout_mode = 2
+focus_mode = 2
+text = "Bind Class and Resume"
+
+[node name="Abandon" type="Button" parent="Overlay/Frame/Layout/Actions"]
+custom_minimum_size = Vector2(180, 56)
+layout_mode = 2
+focus_mode = 2
+text = "Abandon Run"
+
+[node name="Cancel" type="Button" parent="Overlay/Frame/Layout/Actions"]
+custom_minimum_size = Vector2(150, 56)
+layout_mode = 2
+focus_mode = 2
+text = "Cancel"
+
+[node name="AbandonConfirmation" type="ConfirmationDialog" parent="."]
+title = "Confirm Run Abandonment"
+initial_position = 1
+size = Vector2i(620, 280)
+ok_button_text = "Abandon Run"
+cancel_button_text = "Keep Run"
+dialog_text = "All run-owned items will be permanently lost."

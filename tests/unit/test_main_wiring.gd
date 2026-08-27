@@ -19,6 +19,8 @@ const REQUIRED_PATHS: PackedStringArray = [
     "res://scripts/run/local_run_setup_coordinator.gd",
     "res://scripts/ui/loadout_warning/loadout_warning_dialog.gd",
     "res://scenes/ui/loadout_warning/loadout_warning_dialog.tscn",
+    "res://scripts/ui/run_recovery/run_recovery_dialog.gd",
+    "res://scenes/ui/run_recovery/run_recovery_dialog.tscn",
     "res://scenes/ui/armoury/armoury_screen.tscn",
     "res://scenes/ui/warehouse/warehouse_screen.tscn",
     "res://scenes/ui/hud.tscn",
@@ -46,7 +48,7 @@ const REQUIRED_MAIN_NODES: PackedStringArray = [
     "GameRun", "PartyManager", "CombatResolutionService", "ExperienceSystem", "SpawnDirector",
     "PartyActorSpawner", "Arena", "Actors", "Enemies", "Effects", "HUD",
     "DeveloperModeBadge", "CharacterLedger", "RunPauseMenu",
-    "MainMenuScreen", "SettingsScreen", "PassiveTreeScreen", "DeveloperItemSandbox", "ArmouryScreen", "WarehouseScreen", "LoadoutWarningDialog",
+    "MainMenuScreen", "SettingsScreen", "PassiveTreeScreen", "DeveloperItemSandbox", "ArmouryScreen", "WarehouseScreen", "LoadoutWarningDialog", "RunRecoveryDialog",
 ]
 
 var _profile_root := ""
@@ -631,12 +633,19 @@ func _test_main_menu_route_composition(failures: Array[String]) -> void:
     var menu := main.get_node_or_null("MainMenuScreen") as MainMenuScreen
     var selector := main.get_node("HUD/ClassSelection") as ClassSelectionPanel
     var settings := main.get_node("SettingsScreen") as SettingsScreen
+    var recovery := main.get_node_or_null("RunRecoveryDialog")
     TestAssertions.truthy(menu != null, "route composition owns MainMenuScreen", failures)
     if menu == null:
         main.free()
         ProfileTestSupport.remove_tree(root)
         return
     TestAssertions.truthy(menu.route_requested.is_connected(Callable(main, "_on_main_menu_route_requested")), "main owns the menu route dispatcher", failures)
+    TestAssertions.truthy(recovery != null, "main composes the dedicated run recovery dialog", failures)
+    if recovery != null:
+        TestAssertions.truthy(recovery.resume_requested.is_connected(Callable(main, "_on_run_recovery_resume_requested")), "main owns durable resume intent", failures)
+        TestAssertions.truthy(recovery.legacy_class_requested.is_connected(Callable(main, "_on_run_recovery_legacy_class_requested")), "main owns legacy class binding intent", failures)
+        TestAssertions.truthy(recovery.abandon_requested.is_connected(Callable(main, "_on_run_recovery_abandon_requested")), "main owns strict abandonment intent", failures)
+        TestAssertions.truthy(recovery.cancelled.is_connected(Callable(main, "_on_run_recovery_cancelled")), "main owns recovery cancellation intent", failures)
     TestAssertions.truthy(main.profile_manager.profiles_changed.is_connected(Callable(main, "_on_profiles_changed")), "profile-list changes refresh the menu projection", failures)
     TestAssertions.truthy(main.profile_manager.active_profile_changed.is_connected(Callable(main, "_on_active_profile_changed")), "active-profile changes refresh the menu projection", failures)
     TestAssertions.truthy(settings.settings_applied.is_connected(Callable(main, "_on_settings_applied")), "applied settings refresh the menu projection", failures)

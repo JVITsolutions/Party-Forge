@@ -80,8 +80,11 @@ var _storage_return_focus: Control
 var _loadout_compatibility := LoadoutCompatibilityService.new()
 var _loadout_transitions := LoadoutTransitionService.new()
 var _loadout_checkout := RunLoadoutCheckoutService.new()
+var _run_recovery := RunRecoveryService.new()
+var _active_run_recovery: RunRecoveryResult
 var _pending_checkout_recovery: Dictionary = {}
 var _run_context_factory: Callable = func() -> PlayerRunContext: return PlayerRunContext.new()
+var _last_run_start_error := ""
 var _pending_loadout_projection: LoadoutCompatibilityProjection
 var _pending_loadout_profile_id := ""
 var _pending_loadout_class_id: StringName
@@ -215,9 +218,8 @@ func _checkout_and_start_leader_class(profile: ProfileState, definition: ClassDe
 	return _resume_pending_checkout(profile_manager.active_profile(), definition)
 
 
-func _prepare_run_start(definition: ClassDefinition) -> bool:
+func _prepare_run_start(definition: ClassDefinition, run_seed: int = RUN_SEED) -> bool:
 	if definition == null:
-		_show_run_setup_error("PARTY_FORGE_RUN_LOADOUT_CHECKOUT_ERROR field=class reason=unavailable")
 		return false
 	active_run_rules = RunRulesSnapshot.from_settings(saved_settings)
 	_level_up_offer_state = LevelUpOfferState.new()
@@ -225,9 +227,9 @@ func _prepare_run_start(definition: ClassDefinition) -> bool:
 	experience_system.configure_multiplier(active_run_rules.experience_multiplier_percent())
 	party_manager.configure_capacity(active_run_rules.capacity_policy())
 	if CURRENT_STARTING_PARTY_SIZE > active_run_rules.party_capacity():
-		push_error("PARTY_FORGE_STARTING_PARTY_CAPACITY_ERROR selected=%d capacity=%d" % [CURRENT_STARTING_PARTY_SIZE, active_run_rules.party_capacity()])
+		_show_run_setup_error("PARTY_FORGE_RUN_RULES_ERROR selected=%d capacity=%d" % [CURRENT_STARTING_PARTY_SIZE, active_run_rules.party_capacity()])
 		return false
-	game_run.configure_seed(RUN_SEED)
+	game_run.configure_seed(run_seed)
 	var combat_configuration_errors: PackedStringArray = combat_resolution_service.call("configure", game_run.combat_rng, catalog.damage_types) as PackedStringArray
 	if not combat_configuration_errors.is_empty():
 		_show_run_setup_error(combat_configuration_errors[0])
@@ -271,10 +273,22 @@ func _resume_pending_checkout(committed_profile: ProfileState, definition: Class
 		_show_run_setup_error("PARTY_FORGE_RUN_LOADOUT_CHECKOUT_ERROR field=bootstrap reason=committed bootstrap canonicalization failed")
 		return false
 	committed_profile.resumable_run = canonical_bootstrap.duplicate(true)
-	if not _prepare_run_start(definition):
+	return _start_committed_run(committed_profile, definition, bootstrap)
+
+
+func _start_committed_run(
+	committed_profile: ProfileState,
+	definition: ClassDefinition,
+	bootstrap: RunItemBootstrap,
+) -> bool:
+	_last_run_start_error = ""
+	if committed_profile == null or bootstrap == null:
+		_show_run_setup_error("PARTY_FORGE_RUN_RECOVERY_ERROR field=bootstrap reason=committed bootstrap unavailable")
+		return false
+	if not _prepare_run_start(definition, bootstrap.run_seed):
 		return false
 	if party_manager.members.is_empty() or party_manager.members[0].member_id != bootstrap.leader_member_id:
-		_show_run_setup_error("PARTY_FORGE_RUN_LOADOUT_CHECKOUT_ERROR field=leader_member_id reason=committed bootstrap mismatch")
+		_show_run_setup_error("PARTY_FORGE_RUN_RECOVERY_ERROR field=leader_member_id reason=deterministic leader mismatch")
 		return false
 	return _start_leader_class_from_checkout(definition, committed_profile, bootstrap)
 
@@ -289,7 +303,7 @@ func _start_leader_class_from_checkout(definition: ClassDefinition, committed_pr
 	if active_run_context == null:
 		return _abort_run_start(PackedStringArray(["PARTY_FORGE_RUN_CONTEXT_ERROR field=factory reason=context unavailable"]))
 	var context_errors := active_run_context.configure(
-		&"player_1",
+		bootstrap.run_player_id,
 		0,
 		committed_profile,
 		game_run.run_seed,
@@ -335,7 +349,7 @@ func _start_leader_class_from_checkout(definition: ClassDefinition, committed_pr
 	camera_rig.target = leader
 	var markers := _spawn_markers()
 	var camera := camera_rig.get_node("Camera3D") as Camera3D
-	spawn_director.configure(RUN_SEED, leader, reward_distribution_service, markers, camera, get_node("Enemies"), get_node("Effects"), _pickup_multiplier(), game_run.combat_rng, catalog.damage_types, active_run_rules.enemy_density_percent(), combat_resolution_service)
+	spawn_director.configure(game_run.run_seed, leader, reward_distribution_service, markers, camera, get_node("Enemies"), get_node("Effects"), _pickup_multiplier(), game_run.combat_rng, catalog.damage_types, active_run_rules.enemy_density_percent(), combat_resolution_service)
 	var defeat_callback := Callable(self, "_on_enemy_defeated_for_personal_loot")
 	if not spawn_director.enemy_defeated.is_connected(defeat_callback):
 		spawn_director.enemy_defeated.connect(defeat_callback)
@@ -365,6 +379,7 @@ func _start_leader_class_from_checkout(definition: ClassDefinition, committed_pr
 	return true
 
 func _abort_run_start(diagnostics: PackedStringArray, spawned_leader: PartyActor = null) -> bool:
+	_last_run_start_error = " | ".join(diagnostics)
 	_clear_live_loot()
 	if spawned_leader != null and is_instance_valid(spawned_leader):
 		spawned_leader.free()
@@ -383,7 +398,7 @@ func _abort_run_start(diagnostics: PackedStringArray, spawned_leader: PartyActor
 	reward_distribution_tuning = null
 	run_started = false
 	developer_mode_badge.configure(null)
-	if _pending_checkout_recovery.is_empty():
+	if _pending_checkout_recovery.is_empty() and not _run_recovery_dialog_open():
 		_present_front_end()
 	for diagnostic: String in diagnostics:
 		push_error(diagnostic)
@@ -918,6 +933,11 @@ func _wire_static_ui() -> void:
 	if not loadout_warning.continue_anyway.is_connected(_on_loadout_continue_anyway): loadout_warning.continue_anyway.connect(_on_loadout_continue_anyway)
 	if not loadout_warning.destroy_confirmed.is_connected(_on_loadout_destroy_confirmed): loadout_warning.destroy_confirmed.connect(_on_loadout_destroy_confirmed)
 	if not loadout_warning.cancelled.is_connected(_on_loadout_cancelled): loadout_warning.cancelled.connect(_on_loadout_cancelled)
+	var recovery_dialog := get_node("RunRecoveryDialog")
+	if not recovery_dialog.resume_requested.is_connected(_on_run_recovery_resume_requested): recovery_dialog.resume_requested.connect(_on_run_recovery_resume_requested)
+	if not recovery_dialog.legacy_class_requested.is_connected(_on_run_recovery_legacy_class_requested): recovery_dialog.legacy_class_requested.connect(_on_run_recovery_legacy_class_requested)
+	if not recovery_dialog.abandon_requested.is_connected(_on_run_recovery_abandon_requested): recovery_dialog.abandon_requested.connect(_on_run_recovery_abandon_requested)
+	if not recovery_dialog.cancelled.is_connected(_on_run_recovery_cancelled): recovery_dialog.cancelled.connect(_on_run_recovery_cancelled)
 	if not profile_manager.profiles_changed.is_connected(_on_profiles_changed):
 		profile_manager.profiles_changed.connect(_on_profiles_changed)
 	if not profile_manager.active_profile_changed.is_connected(_on_active_profile_changed):
@@ -955,6 +975,8 @@ func _on_main_menu_route_requested(route_id: StringName) -> void:
 			_on_prologue_start_requested()
 		MainMenuViewModel.ROUTE_PROLOGUE_RESUME:
 			_on_prologue_resume_requested()
+		MainMenuViewModel.ROUTE_RUN_RECOVERY:
+			_open_run_recovery()
 		MainMenuViewModel.ROUTE_RUN_SETUP:
 			_open_run_setup()
 		MainMenuViewModel.ROUTE_DEVELOPER_QUICK_START:
@@ -979,6 +1001,120 @@ func _on_prologue_start_requested() -> void:
 
 func _on_prologue_resume_requested() -> void:
 	_open_run_setup()
+
+
+func _open_run_recovery() -> void:
+	if run_started or profile_manager == null:
+		return
+	var profile := profile_manager.active_profile()
+	if profile == null:
+		_open_profiles_from_main_menu()
+		return
+	var menu := get_node("MainMenuScreen") as MainMenuScreen
+	var return_focus := menu.route_origin()
+	if return_focus == null:
+		return_focus = menu.get_node("PrimaryAction") as Control
+	var refresh_error := profile_manager.refresh_profile(profile.profile_id)
+	if refresh_error.is_empty():
+		profile = profile_manager.active_profile()
+	var result := _run_recovery.inspect(profile)
+	_active_run_recovery = result
+	menu.close()
+	var dialog := get_node("RunRecoveryDialog")
+	dialog.call("open", result, catalog.classes if catalog != null else [], profile.display_name, return_focus)
+	if not refresh_error.is_empty():
+		_show_run_recovery_failure("Unable to refresh this interrupted run.", refresh_error)
+	elif not result.error.is_empty():
+		_show_run_recovery_failure("This interrupted run cannot be resumed safely.", result.error)
+
+
+func _on_run_recovery_resume_requested() -> void:
+	if _active_run_recovery == null or not _active_run_recovery.ready():
+		_show_run_recovery_failure("Unable to resume this run.", "PARTY_FORGE_RUN_RECOVERY_ERROR field=result reason=ready recovery unavailable")
+		return
+	var definition := catalog.class_by_id(_active_run_recovery.selected_leader_class_id) if catalog != null else null
+	if definition == null:
+		_show_run_recovery_failure("Unable to resume this run.", "PARTY_FORGE_RUN_RECOVERY_ERROR field=selected_leader_class_id reason=unknown leader class")
+		return
+	if not _start_committed_run(_active_run_recovery.profile, definition, _active_run_recovery.bootstrap):
+		var detail := _last_run_start_error if not _last_run_start_error.is_empty() else "PARTY_FORGE_RUN_RECOVERY_ERROR field=start reason=committed bootstrap start failed"
+		_show_run_recovery_failure("Unable to resume this run.", detail)
+		return
+	get_node("RunRecoveryDialog").call("close")
+	_active_run_recovery = null
+
+
+func _on_run_recovery_legacy_class_requested(class_id: StringName) -> void:
+	if (
+		_active_run_recovery == null
+		or _active_run_recovery.code != RunRecoveryResult.Code.CLASS_REQUIRED
+		or _active_run_recovery.profile == null
+		or class_id.is_empty()
+	):
+		return
+	var profile_id := _active_run_recovery.profile.profile_id
+	var bound := _run_recovery.bind_legacy_class(profile_id, class_id, profile_root)
+	if bound.code != RunRecoveryResult.Code.READY:
+		_show_run_recovery_failure("Unable to bind that leader class.", bound.error)
+		return
+	var refresh_error := profile_manager.refresh_profile(profile_id)
+	if not refresh_error.is_empty():
+		_show_run_recovery_failure("Unable to refresh the bound run.", refresh_error)
+		return
+	var refreshed := profile_manager.active_profile()
+	var inspected := _run_recovery.inspect(refreshed)
+	_active_run_recovery = inspected
+	var dialog := get_node("RunRecoveryDialog")
+	dialog.call("open", inspected, catalog.classes if catalog != null else [], refreshed.display_name, (get_node("MainMenuScreen") as MainMenuScreen).get_node("PrimaryAction") as Control)
+	if inspected.code != RunRecoveryResult.Code.READY or not inspected.ready():
+		_show_run_recovery_failure("Unable to resume the bound run.", inspected.error)
+		return
+	_on_run_recovery_resume_requested()
+
+
+func _on_run_recovery_abandon_requested(run_id: StringName) -> void:
+	if (
+		_active_run_recovery == null
+		or not _active_run_recovery.can_forfeit
+		or _active_run_recovery.profile == null
+		or run_id != _active_run_recovery.run_id
+	):
+		return
+	var profile_id := _active_run_recovery.profile.profile_id
+	var result := _run_recovery.forfeit(profile_id, run_id, profile_root)
+	if not result.ok():
+		_show_run_recovery_failure("Unable to abandon this run.", result.error)
+		return
+	var refresh_error := profile_manager.refresh_profile(profile_id)
+	if not refresh_error.is_empty():
+		_show_run_recovery_failure("The run was abandoned, but the profile could not be refreshed.", refresh_error)
+		return
+	_active_run_recovery = null
+	get_node("RunRecoveryDialog").call("close")
+	_refresh_main_menu_projection()
+	var menu := get_node("MainMenuScreen") as MainMenuScreen
+	menu.open(menu.get_node("PrimaryAction") as Control)
+
+
+func _on_run_recovery_cancelled() -> void:
+	_active_run_recovery = null
+	get_node("RunRecoveryDialog").call("close")
+	_refresh_main_menu_projection()
+	var menu := get_node("MainMenuScreen") as MainMenuScreen
+	menu.open(menu.get_node("PrimaryAction") as Control)
+
+
+func _show_run_recovery_failure(safe_message: String, technical_detail: String) -> void:
+	if not technical_detail.is_empty():
+		push_error(technical_detail)
+	var dialog := get_node_or_null("RunRecoveryDialog")
+	if dialog != null:
+		dialog.call("show_failure", safe_message, technical_detail)
+
+
+func _run_recovery_dialog_open() -> bool:
+	var dialog := get_node_or_null("RunRecoveryDialog")
+	return dialog != null and bool(dialog.call("is_open"))
 
 
 func _on_developer_quick_start_requested() -> void:
@@ -1196,6 +1332,7 @@ func _clear_pending_loadout_warning(restore_focus: bool) -> void:
 
 
 func _show_run_setup_error(message: String) -> void:
+	_last_run_start_error = message
 	push_error(message)
 	var warning := get_node_or_null("LoadoutWarningDialog")
 	if warning != null and warning.call("is_open"):
@@ -1270,6 +1407,10 @@ func _open_settings_from_main_menu() -> void:
 
 func _present_front_end(preferred_focus: Control = null) -> void:
 	run_started = false
+	_active_run_recovery = null
+	var recovery_dialog := get_node_or_null("RunRecoveryDialog")
+	if recovery_dialog != null and recovery_dialog.call("is_open"):
+		recovery_dialog.call("close")
 	(get_node("HUD/Margin") as Control).visible = false
 	(get_node("HUD/ClassSelection") as ClassSelectionPanel).close()
 	(get_node("DeveloperItemSandbox") as DeveloperItemSandbox).close()
