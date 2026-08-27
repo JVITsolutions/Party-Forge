@@ -7,6 +7,7 @@ const JSON_SAFE_INTEGER_MAX := 9007199254740991
 const LEGACY_SCHEMA_VERSION := 1
 const SCHEMA_TWO_VERSION := 2
 const SCHEMA_THREE_VERSION := 3
+const SCHEMA_FOUR_VERSION := 4
 const HISTORICAL_FIELDS: Array[String] = [
 	"schema_version",
 	"profile_id",
@@ -122,6 +123,8 @@ const CURRENT_FIELDS: Array[String] = [
 	"applied_transactions",
 	"preferred_player_color_id",
 ]
+const SCHEMA_FOUR_FIELDS: Array[String] = CURRENT_FIELDS
+const LEGACY_RECOVERY_FIELDS: Array[String] = ["item_state", "leader_member_id", "run_id", "run_player_id", "run_seed"]
 
 static func encode(profile: ProfileState) -> String:
 	return JSON.stringify(profile.to_dictionary(), "\t", false)
@@ -169,6 +172,9 @@ static func validate_schema_two_document(document: Dictionary) -> String:
 static func validate_schema_three_document(document: Dictionary) -> String:
 	return _validate_document(document, SCHEMA_THREE_VERSION, false)
 
+static func validate_schema_four_document(document: Dictionary) -> String:
+	return _validate_document(document, SCHEMA_FOUR_VERSION, false)
+
 static func validate_loadable_document(document: Dictionary) -> String:
 	var schema_value: Variant = document.get("schema_version")
 	if _is_json_int(schema_value, LEGACY_SCHEMA_VERSION, LEGACY_SCHEMA_VERSION):
@@ -177,6 +183,8 @@ static func validate_loadable_document(document: Dictionary) -> String:
 		return _validate_document(document, SCHEMA_TWO_VERSION, false)
 	if _is_json_int(schema_value, SCHEMA_THREE_VERSION, SCHEMA_THREE_VERSION):
 		return _validate_document(document, SCHEMA_THREE_VERSION, false)
+	if _is_json_int(schema_value, SCHEMA_FOUR_VERSION, SCHEMA_FOUR_VERSION):
+		return _validate_document(document, SCHEMA_FOUR_VERSION, false)
 	if _is_json_int(schema_value, ProfileState.SCHEMA_VERSION, ProfileState.SCHEMA_VERSION):
 		return _validate_document(document, ProfileState.SCHEMA_VERSION, false)
 	return _schema_error(schema_value)
@@ -189,6 +197,8 @@ static func _validate_document(data: Dictionary, expected_schema: int, result_sn
 		expected_fields = SCHEMA_TWO_FIELDS
 	elif expected_schema == SCHEMA_THREE_VERSION:
 		expected_fields = SCHEMA_THREE_FIELDS
+	elif expected_schema == SCHEMA_FOUR_VERSION:
+		expected_fields = SCHEMA_FOUR_FIELDS
 	elif expected_schema == ProfileState.SCHEMA_VERSION:
 		expected_fields = CURRENT_FIELDS
 	var fields_error := _exact_fields(data, expected_fields)
@@ -206,7 +216,7 @@ static func _validate_document(data: Dictionary, expected_schema: int, result_sn
 		return _field_error("display_name", "must contain 1-32 trimmed characters")
 	if expected_schema >= SCHEMA_THREE_VERSION and typeof(data["leader_loadout_class_id"]) != TYPE_STRING:
 		return _field_error("leader_loadout_class_id", "must be a string")
-	if expected_schema == ProfileState.SCHEMA_VERSION:
+	if expected_schema >= SCHEMA_FOUR_VERSION:
 		if typeof(data["preferred_player_color_id"]) != TYPE_STRING:
 			return _field_error("preferred_player_color_id", "must be a string")
 		if not PlayerColorPalette.is_valid(StringName(data["preferred_player_color_id"] as String)):
@@ -263,11 +273,13 @@ static func _validate_document(data: Dictionary, expected_schema: int, result_sn
 		if not _is_json_value(data[field]):
 			return _field_error(field, "contains a non-JSON value")
 	if expected_schema >= SCHEMA_THREE_VERSION and (data["resumable_run"] as Dictionary).has("item_state"):
-		var resumable_error := ResumableRunItemCodec.validate_document(
-			data["resumable_run"],
-			GameCatalog.EQUIPMENT_CATALOG,
-			GameCatalog.ITEM_FOUNDATION_CATALOG,
-		)
+		var resumable_error := _validate_legacy_resumable_run(data["resumable_run"] as Dictionary) \
+			if expected_schema < ProfileState.SCHEMA_VERSION \
+			else ResumableRunItemCodec.validate_document(
+				data["resumable_run"],
+				GameCatalog.EQUIPMENT_CATALOG,
+				GameCatalog.ITEM_FOUNDATION_CATALOG,
+			)
 		if not resumable_error.is_empty():
 			return _field_error("resumable_run", resumable_error)
 	if expected_schema == LEGACY_SCHEMA_VERSION:
@@ -302,15 +314,33 @@ static func _validate_document(data: Dictionary, expected_schema: int, result_sn
 			return _field_error("applied_transactions", "transaction=%s %s" % [transaction_id, record_error])
 	return ""
 
+static func _validate_legacy_resumable_run(data: Dictionary) -> String:
+	var fields_error := _exact_fields(data, LEGACY_RECOVERY_FIELDS)
+	if not fields_error.is_empty():
+		return fields_error
+	for field: String in ["run_id", "run_player_id"]:
+		if typeof(data[field]) != TYPE_STRING or String(data[field]).strip_edges().is_empty():
+			return "PARTY_FORGE_RESUMABLE_RUN_ERROR field=%s reason=must be a non-empty string" % field
+	if not _is_json_int(data["run_seed"], 1, JSON_SAFE_INTEGER_MAX):
+		return "PARTY_FORGE_RESUMABLE_RUN_ERROR field=run_seed reason=must be a positive JSON-safe integer"
+	if not _is_json_int(data["leader_member_id"], 1, JSON_SAFE_INTEGER_MAX):
+		return "PARTY_FORGE_RESUMABLE_RUN_ERROR field=leader_member_id reason=must be a positive JSON-safe integer"
+	var decoded_state := ItemOwnershipState.decode(data["item_state"], GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)
+	if not decoded_state.ok():
+		return "PARTY_FORGE_RESUMABLE_RUN_ERROR field=item_state reason=%s" % decoded_state.error
+	if decoded_state.state.owner_id != String(data["run_player_id"]):
+		return "PARTY_FORGE_RESUMABLE_RUN_ERROR field=item_state.owner_id reason=must match run_player_id"
+	return ""
+
 static func _validate_distinct_resumable_ownership(data: Dictionary) -> String:
-	var bootstrap := ResumableRunItemCodec.decode(
-		data["resumable_run"],
+	var decoded_state := ItemOwnershipState.decode(
+		(data["resumable_run"] as Dictionary)["item_state"],
 		GameCatalog.EQUIPMENT_CATALOG,
 		GameCatalog.ITEM_FOUNDATION_CATALOG,
 	)
-	if bootstrap == null:
+	if not decoded_state.ok():
 		return _field_error("resumable_run", "strict item bootstrap is invalid")
-	var run_registry := bootstrap.item_state().registry()
+	var run_registry := decoded_state.state.registry()
 	var profile_registry := ItemRegistry._decode(
 		data["item_records"],
 		GameCatalog.EQUIPMENT_CATALOG,

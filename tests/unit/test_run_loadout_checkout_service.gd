@@ -4,6 +4,9 @@ const PROFILE_ID := "profile-checkout01"
 const RUN_ID := &"run-checkout-001"
 const RUN_PLAYER_ID := &"run-player-001"
 const LEADER_MEMBER_ID := 1
+const CURRENT_RECOVERY_FIELDS: Array[String] = [
+	"item_state", "leader_member_id", "run_id", "run_player_id", "run_seed", "selected_leader_class_id",
+]
 
 var _root_counter := 0
 
@@ -60,14 +63,20 @@ func _test_request_bootstrap_and_codec_are_exact_and_defensive(failures: Array[S
 	TestAssertions.equal(request.canonical_document()["run_id"], String(RUN_ID), "canonical request result is defensive", failures)
 
 	var source_state := _run_state([], {})
-	var bootstrap := RunItemBootstrap.create(RUN_ID, 4402, RUN_PLAYER_ID, LEADER_MEMBER_ID, source_state)
+	var bootstrap := RunItemBootstrap.create(RUN_ID, 4402, RUN_PLAYER_ID, LEADER_MEMBER_ID, source_state, &"fighter")
 	source_state.owner_id = "escaped-source"
 	TestAssertions.equal(bootstrap.item_state().owner_id, String(RUN_PLAYER_ID), "bootstrap owns a defensive input state", failures)
+	TestAssertions.equal(bootstrap.selected_leader_class_id, &"fighter", "bootstrap preserves the selected leader class", failures)
 	var exposed := bootstrap.item_state()
 	exposed.owner_id = "escaped-result"
 	TestAssertions.equal(bootstrap.item_state().owner_id, String(RUN_PLAYER_ID), "bootstrap returns a defensive state", failures)
 	var encoded := ResumableRunItemCodec.encode(bootstrap)
-	TestAssertions.equal(encoded.keys(), ["item_state", "leader_member_id", "run_id", "run_player_id", "run_seed"], "resumable codec emits exactly the five contracted fields", failures)
+	var encoded_fields := encoded.keys()
+	encoded_fields.sort()
+	var expected_fields := CURRENT_RECOVERY_FIELDS.duplicate()
+	expected_fields.sort()
+	TestAssertions.equal(encoded_fields, expected_fields, "recovery fields are exact", failures)
+	TestAssertions.equal(encoded.get("selected_leader_class_id", "missing"), "fighter", "recovery persists leader class", failures)
 	var decoded := ResumableRunItemCodec.decode(encoded, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)
 	TestAssertions.truthy(decoded != null, "exact resumable bootstrap decodes", failures)
 	if decoded != null:
@@ -78,6 +87,12 @@ func _test_request_bootstrap_and_codec_are_exact_and_defensive(failures: Array[S
 	var extra := encoded.duplicate(true)
 	extra["profile_id"] = PROFILE_ID
 	TestAssertions.equal(ResumableRunItemCodec.decode(extra, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG), null, "resumable codec rejects an extra profile field", failures)
+	var missing := encoded.duplicate(true)
+	missing.erase("selected_leader_class_id")
+	TestAssertions.equal(ResumableRunItemCodec.decode(missing, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG), null, "resumable codec rejects a missing current field", failures)
+	var non_string_class := encoded.duplicate(true)
+	non_string_class["selected_leader_class_id"] = 7
+	TestAssertions.equal(ResumableRunItemCodec.decode(non_string_class, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG), null, "resumable codec rejects a non-string leader class", failures)
 	var malformed := encoded.duplicate(true)
 	(malformed["item_state"] as Dictionary)["owner_id"] = "wrong-owner"
 	TestAssertions.equal(ResumableRunItemCodec.decode(malformed, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG), null, "resumable codec rejects ownership identity drift", failures)
@@ -95,6 +110,7 @@ func _test_checkout_transfers_exact_instances_once_and_replays_without_writing(f
 	var request_before := request.canonical_document()
 	var committed := service.checkout(PROFILE_ID, request, root)
 	TestAssertions.truthy(committed.ok() and not committed.duplicate, "loadout checkout commits once", failures)
+	TestAssertions.equal(committed.profile.resumable_run.get("selected_leader_class_id", "missing") if committed.profile != null else "missing", String(request.selected_leader_class_id), "checkout persists the authoritative requested leader class", failures)
 	var loaded := store.load_profile(PROFILE_ID, root)
 	TestAssertions.truthy(loaded.ok(), "checked-out profile reloads", failures)
 	if not loaded.ok():
@@ -134,6 +150,7 @@ func _test_checkout_transfers_exact_instances_once_and_replays_without_writing(f
 	TestAssertions.truthy(not store.load_profile(PROFILE_ID, root).profile.resumable_run.is_empty(), "checkout result profile is defensive from disk", failures)
 	var replay := service.checkout(PROFILE_ID, request, root)
 	TestAssertions.truthy(replay.ok() and replay.duplicate, "exact checkout replay returns duplicate success", failures)
+	TestAssertions.equal(replay.profile.resumable_run.get("selected_leader_class_id", "missing") if replay.profile != null else "missing", String(request.selected_leader_class_id), "checkout replay returns the same persisted leader class", failures)
 	TestAssertions.equal(FileAccess.get_file_as_bytes(path), committed_bytes, "checkout replay performs no write", failures)
 	TestAssertions.equal(_file_hash(path), committed_hash, "checkout replay preserves the exact file hash", failures)
 	TestAssertions.truthy(service.bootstrap_from(replay.profile) != null, "checkout replay reconstructs its bootstrap from the committed projection", failures)

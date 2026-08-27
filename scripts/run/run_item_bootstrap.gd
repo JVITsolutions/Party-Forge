@@ -18,6 +18,10 @@ var leader_member_id: int:
 	get:
 		return _leader_member_id
 var _item_state: ItemOwnershipState
+var _selected_leader_class_id: StringName = &""
+var selected_leader_class_id: StringName:
+	get:
+		return _selected_leader_class_id
 
 static func create(
 	run_id_value: StringName,
@@ -25,6 +29,7 @@ static func create(
 	run_player_id_value: StringName,
 	leader_member_id_value: int,
 	item_state_value: ItemOwnershipState,
+	selected_leader_class_id_value: StringName = &"",
 ) -> RunItemBootstrap:
 	var result := RunItemBootstrap.new()
 	result._run_id = run_id_value
@@ -32,6 +37,7 @@ static func create(
 	result._run_player_id = run_player_id_value
 	result._leader_member_id = leader_member_id_value
 	result._item_state = item_state_value.copy() if item_state_value != null else null
+	result._selected_leader_class_id = selected_leader_class_id_value
 	return result
 
 static func ground_items_container(owner_id: String) -> ItemSlotContainer:

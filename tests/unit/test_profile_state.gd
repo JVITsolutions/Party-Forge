@@ -15,7 +15,7 @@ func run() -> Array[String]:
 
 func _test_new_profile_defaults(failures: Array[String]) -> void:
 	var profile := ProfileState.new_profile("profile-12345678", "Jacob", 1000)
-	TestAssertions.equal(ProfileState.SCHEMA_VERSION, 4, "profile schema version is four", failures)
+	TestAssertions.equal(ProfileState.SCHEMA_VERSION, 5, "profile schema version is five", failures)
 	TestAssertions.equal(profile.schema_version, ProfileState.SCHEMA_VERSION, "profile uses current schema", failures)
 	TestAssertions.equal(profile.prologue_state, ProfileState.PrologueState.NOT_STARTED, "prologue starts undiscovered", failures)
 	TestAssertions.equal(profile.gold, 0, "gold starts at zero", failures)

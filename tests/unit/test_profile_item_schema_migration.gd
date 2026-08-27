@@ -8,6 +8,9 @@ const SCHEMA_TWO_FIELDS: Array[String] = [
 	"owned_characters", "squad_capacity", "inventory_columns", "item_records", "stash_tabs",
 	"next_item_sequence", "extraction_capacity", "run_history", "resumable_run", "applied_transactions",
 ]
+const CURRENT_RECOVERY_FIELDS: Array[String] = [
+	"item_state", "leader_member_id", "run_id", "run_player_id", "run_seed", "selected_leader_class_id",
+]
 
 func run() -> Array[String]:
 	var failures: Array[String] = []
@@ -22,7 +25,8 @@ func run() -> Array[String]:
 	_test_json_parsed_schema_one_migrates_to_complete_canonical_document(failures)
 	_test_schema_two_items_and_progression_migrate_losslessly(failures)
 	_test_schema_three_adds_preferred_color_recursively(failures)
-	_test_schema_four_color_round_trip_and_validation(failures)
+	_test_schema_four_recovery_migrates_recursively(failures)
+	_test_schema_five_color_round_trip_and_validation(failures)
 	_test_unsupported_legacy_stash_fails_without_mutation(failures)
 	_test_failed_item_schema_migration_preserves_primary_and_backup_bytes(failures)
 	_test_current_schema_reports_source_metadata(failures)
@@ -36,7 +40,7 @@ func _test_complete_schema_one_migrates_recursively(failures: Array[String]) -> 
 	var migrated: Variant = _migrate(original)
 	var migrated_profile := migrated.get("profile") as ProfileState
 	TestAssertions.truthy(bool(migrated.call("ok")), "complete schema-one profile migrates", failures)
-	TestAssertions.equal(migrated_profile.schema_version if migrated_profile != null else -1, 4, "profile migrates one version at a time through schema four", failures)
+	TestAssertions.equal(migrated_profile.schema_version if migrated_profile != null else -1, 5, "profile migrates one version at a time through schema five", failures)
 	TestAssertions.equal(migrated_profile.get("preferred_player_color_id") if migrated_profile != null else &"", &"red", "legacy profile receives P1 default", failures)
 	TestAssertions.equal(migrated_profile.gold if migrated_profile != null else -1, 77, "gold survives migration", failures)
 	TestAssertions.equal(migrated_profile.tree_allocations if migrated_profile != null else {}, original["tree_allocations"], "allocations survive migration", failures)
@@ -48,7 +52,7 @@ func _test_complete_schema_one_migrates_recursively(failures: Array[String]) -> 
 	TestAssertions.truthy(bool(migrated.get("migrated")) and int(migrated.get("source_schema_version")) == 1, "migration reports schema-one source", failures)
 	if migrated_profile != null:
 		var nested := (migrated_profile.applied_transactions["grant-001"] as Dictionary)["result_profile"] as Dictionary
-		TestAssertions.equal(nested["schema_version"], 4, "nested result snapshot migrates one version at a time through schema four", failures)
+		TestAssertions.equal(nested["schema_version"], 5, "nested result snapshot migrates one version at a time through schema five", failures)
 		TestAssertions.equal(nested.get("preferred_player_color_id"), "red", "nested legacy snapshot receives the default color string", failures)
 		TestAssertions.equal(nested["item_records"], {"schema_version": 1, "items": []}, "nested migration invents no items", failures)
 		TestAssertions.equal(nested["stash_tabs"], [], "nested migration invents no stash", failures)
@@ -69,8 +73,8 @@ func _test_json_parsed_schema_one_migrates_to_complete_canonical_document(failur
 	TestAssertions.truthy(bool(migrated.call("ok")), "JSON-parsed schema-one profile migrates", failures)
 	if migrated_profile != null:
 		var actual := migrated_profile.to_dictionary()
-		var expected := _expected_schema_four_document(original)
-		TestAssertions.equal(actual, expected, "JSON-parsed migration matches the complete canonical schema-four document", failures)
+		var expected := _expected_schema_five_document(original)
+		TestAssertions.equal(actual, expected, "JSON-parsed migration matches the complete canonical schema-five document", failures)
 		TestAssertions.equal(Array(actual.keys()), ProfileCodec.CURRENT_FIELDS, "migrated root uses deterministic current field order", failures)
 		var record := (actual["applied_transactions"] as Dictionary)["grant-001"] as Dictionary
 		var nested := record["result_profile"] as Dictionary
@@ -92,14 +96,17 @@ func _test_schema_two_items_and_progression_migrate_losslessly(failures: Array[S
 	TestAssertions.truthy(bool(migrated.get("migrated")) and int(migrated.get("source_schema_version")) == 2, "schema-two migration reports exact source metadata", failures)
 	if profile != null:
 		var actual := profile.to_dictionary()
-		TestAssertions.equal(actual["schema_version"], 4, "schema-two profile promotes through schema three to schema four", failures)
+		TestAssertions.equal(actual["schema_version"], 5, "schema-two profile promotes through schema three to schema five", failures)
 		TestAssertions.equal(actual.get("preferred_player_color_id"), "red", "schema-two profile receives the default preferred color", failures)
 		TestAssertions.equal(actual.get("leader_loadout"), _leader_loadout("profile-migrate09"), "schema-two migration adds only the empty leader loadout", failures)
 		TestAssertions.equal(actual.get("leader_loadout_class_id"), "", "migrated empty loadout has no selected class", failures)
 		for field: String in SCHEMA_TWO_FIELDS:
-			if field in ["schema_version", "item_records", "applied_transactions"]:
+			if field in ["schema_version", "item_records", "resumable_run", "applied_transactions"]:
 				continue
 			TestAssertions.equal(JSON.stringify(actual[field]), JSON.stringify(original[field]), "schema-two field %s survives byte-semantically" % field, failures)
+		var expected_recovery := (original["resumable_run"] as Dictionary).duplicate(true)
+		expected_recovery["selected_leader_class_id"] = ""
+		TestAssertions.equal(actual["resumable_run"], expected_recovery, "schema-two recovery gains only the legacy class marker", failures)
 		_assert_item_registry_promoted_to_schema_two(actual["item_records"] as Dictionary, "root item registry", failures)
 		var original_record := (original["applied_transactions"] as Dictionary)["storage-001"] as Dictionary
 		var actual_record := (actual["applied_transactions"] as Dictionary)["storage-001"] as Dictionary
@@ -108,9 +115,12 @@ func _test_schema_two_items_and_progression_migrate_losslessly(failures: Array[S
 		var original_snapshot := original_record["result_profile"] as Dictionary
 		var actual_snapshot := actual_record["result_profile"] as Dictionary
 		for field: String in SCHEMA_TWO_FIELDS:
-			if field in ["schema_version", "item_records", "applied_transactions"]:
+			if field in ["schema_version", "item_records", "resumable_run", "applied_transactions"]:
 				continue
 			TestAssertions.equal(JSON.stringify(actual_snapshot[field]), JSON.stringify(original_snapshot[field]), "transaction snapshot field %s survives migration" % field, failures)
+		var expected_snapshot_recovery := (original_snapshot["resumable_run"] as Dictionary).duplicate(true)
+		expected_snapshot_recovery["selected_leader_class_id"] = ""
+		TestAssertions.equal(actual_snapshot["resumable_run"], expected_snapshot_recovery, "transaction snapshot recovery gains only the legacy class marker", failures)
 		_assert_item_registry_promoted_to_schema_two(actual_snapshot["item_records"] as Dictionary, "transaction snapshot item registry", failures)
 		TestAssertions.equal(actual_snapshot.get("leader_loadout"), _leader_loadout("profile-migrate09"), "transaction snapshot gains the exact empty leader loadout", failures)
 		TestAssertions.equal(actual_snapshot.get("leader_loadout_class_id"), "", "transaction snapshot gains an empty leader class ID", failures)
@@ -140,11 +150,68 @@ func _test_schema_three_adds_preferred_color_recursively(failures: Array[String]
 	TestAssertions.equal(migrated.profile.get("preferred_player_color_id") if migrated.profile != null else &"", &"red", "legacy profile receives P1 default", failures)
 	if migrated.profile != null:
 		var nested := ((migrated.profile.applied_transactions["legacy-color"] as Dictionary)["result_profile"] as Dictionary)
-		TestAssertions.equal(nested.get("schema_version"), 4, "schema-three transaction snapshot advances to schema four", failures)
+		TestAssertions.equal(nested.get("schema_version"), 5, "schema-three transaction snapshot advances to schema five", failures)
 		TestAssertions.equal(nested.get("preferred_player_color_id"), "red", "schema-three transaction snapshot receives the default color", failures)
 	TestAssertions.equal(legacy, before, "schema-three migration leaves source dictionary unchanged", failures)
 
-func _test_schema_four_color_round_trip_and_validation(failures: Array[String]) -> void:
+func _test_schema_four_recovery_migrates_recursively(failures: Array[String]) -> void:
+	var profile_id := "profile-migrate11"
+	var state := ItemOwnershipState.create("legacy-run-player", ItemRegistry.new(), [
+		ItemSlotContainer.create(&"run-inventory", ItemSlotContainer.RUN_INVENTORY, "legacy-run-player", 5),
+		ItemSlotContainer.create(&"run-equipment-001", ItemSlotContainer.RUN_MEMBER_EQUIPMENT, "legacy-run-player", EquipmentSlotIndex.capacity()),
+		RunItemBootstrap.ground_items_container("legacy-run-player"),
+	])
+	var current := ProfileState.new_profile(profile_id, "Legacy Recovery", 3000).to_dictionary()
+	var bootstrap := RunItemBootstrap.create(&"run-legacy-recovery", 4402, &"legacy-run-player", 1, state, &"fighter")
+	current["resumable_run"] = ResumableRunItemCodec.encode(bootstrap)
+	var legacy_recovery := (current["resumable_run"] as Dictionary).duplicate(true)
+	legacy_recovery.erase("selected_leader_class_id")
+	var snapshot := current.duplicate(true)
+	snapshot["schema_version"] = 4
+	snapshot["updated_at_unix"] = 3001
+	snapshot["resumable_run"] = legacy_recovery.duplicate(true)
+	snapshot["applied_transactions"] = {}
+	var legacy := snapshot.duplicate(true)
+	legacy["updated_at_unix"] = 3002
+	legacy["applied_transactions"] = {
+		"legacy-recovery": {
+			"operation": "legacy_recovery_fixture",
+			"fingerprint": "d".repeat(64),
+			"committed_at_unix": 3001,
+			"result_profile": snapshot,
+		},
+	}
+	var before := legacy.duplicate(true)
+	var root := "user://tests/profile_schema_four_recovery_%d_%d" % [OS.get_process_id(), Time.get_ticks_usec()]
+	ProfileTestSupport.remove_tree(root)
+	var store := ProfileStore.new()
+	var path := store.profile_path(profile_id, root)
+	var validator := Callable(ProfileCodec, "validate_loadable_document")
+	TestAssertions.equal(AtomicJsonStore.new().save_document(path, legacy, validator), "", "schema-four recovery fixture writes through the loadable validator", failures)
+	var persisted := JSON.parse_string(FileAccess.get_file_as_string(path)) as Dictionary
+	var persisted_recovery := (persisted["resumable_run"] as Dictionary).duplicate(true)
+	var loaded := store.load_profile(profile_id, root)
+	TestAssertions.truthy(loaded.ok() and loaded.migrated and loaded.source_schema_version == 4, "schema-four recovery profile migrates through ProfileStore", failures)
+	if loaded.profile != null:
+		var actual := loaded.profile.to_dictionary()
+		TestAssertions.equal(actual["schema_version"], 5, "schema-four recovery promotes to schema five", failures)
+		var actual_fields := (actual["resumable_run"] as Dictionary).keys()
+		actual_fields.sort()
+		var expected_fields := CURRENT_RECOVERY_FIELDS.duplicate()
+		expected_fields.sort()
+		TestAssertions.equal(actual_fields, expected_fields, "migrated recovery has the exact current fields", failures)
+		TestAssertions.equal((actual["resumable_run"] as Dictionary).get("selected_leader_class_id", "missing"), "", "migrated recovery uses the empty legacy class marker", failures)
+		for field: String in ["item_state", "leader_member_id", "run_id", "run_player_id", "run_seed"]:
+			TestAssertions.equal((actual["resumable_run"] as Dictionary)[field], persisted_recovery[field], "migrated recovery preserves legacy field %s exactly" % field, failures)
+		var nested := ((actual["applied_transactions"] as Dictionary)["legacy-recovery"] as Dictionary)["result_profile"] as Dictionary
+		TestAssertions.equal(nested["schema_version"], 5, "schema-four transaction snapshot promotes recursively", failures)
+		TestAssertions.equal((nested["resumable_run"] as Dictionary).get("selected_leader_class_id", "missing"), "", "nested recovery uses the empty legacy class marker", failures)
+		for field: String in ["item_state", "leader_member_id", "run_id", "run_player_id", "run_seed"]:
+			TestAssertions.equal((nested["resumable_run"] as Dictionary)[field], persisted_recovery[field], "nested recovery preserves legacy field %s exactly" % field, failures)
+	TestAssertions.equal(legacy, before, "schema-four recovery migration leaves source dictionary unchanged", failures)
+	ProfileTestSupport.remove_tree(root)
+
+func _test_schema_five_color_round_trip_and_validation(failures: Array[String]) -> void:
 	var profile := ProfileState.new_profile("profile-color0001", "Blue", 3000)
 	var has_color_property := _has_property(profile, &"preferred_player_color_id")
 	TestAssertions.truthy(has_color_property, "profile state exposes a preferred player color", failures)
@@ -152,11 +219,11 @@ func _test_schema_four_color_round_trip_and_validation(failures: Array[String]) 
 		return
 	profile.set("preferred_player_color_id", &"blue")
 	var document := profile.to_dictionary()
-	TestAssertions.equal(document.get("schema_version"), 4, "preferred colors persist in schema four", failures)
+	TestAssertions.equal(document.get("schema_version"), 5, "preferred colors persist in schema five", failures)
 	TestAssertions.equal(document.get("preferred_player_color_id"), "blue", "profile JSON stores the color id as a string", failures)
 	TestAssertions.equal(typeof(document.get("preferred_player_color_id")), TYPE_STRING, "profile JSON color is not a StringName", failures)
 	var decoded := ProfileCodec.decode_document(document)
-	TestAssertions.truthy(decoded.ok(), "schema-four preferred color round trips", failures)
+	TestAssertions.truthy(decoded.ok(), "schema-five preferred color round trips", failures)
 	TestAssertions.equal(decoded.profile.get("preferred_player_color_id") if decoded.profile != null else &"", &"blue", "decoded preferred color remains a StringName", failures)
 	var copied := profile.copy()
 	TestAssertions.equal(copied.get("preferred_player_color_id") if copied != null else &"", &"blue", "profile copy preserves the preferred color", failures)
@@ -204,7 +271,7 @@ func _test_current_schema_reports_source_metadata(failures: Array[String]) -> vo
 	var decoded := ProfileCodec.decode_document(current.to_dictionary())
 	TestAssertions.truthy(decoded.ok(), "current profile decodes", failures)
 	TestAssertions.truthy(not decoded.migrated, "current profile is not reported migrated", failures)
-	TestAssertions.equal(decoded.source_schema_version, 4, "current profile reports schema-four source", failures)
+	TestAssertions.equal(decoded.source_schema_version, 5, "current profile reports schema-five source", failures)
 
 func _test_normal_store_is_current_only(failures: Array[String]) -> void:
 	var root := "user://tests/profile_schema_store_%d_%d" % [OS.get_process_id(), Time.get_ticks_usec()]
@@ -215,7 +282,7 @@ func _test_normal_store_is_current_only(failures: Array[String]) -> void:
 	var current_bytes := FileAccess.get_file_as_bytes(store.profile_path(current.profile_id, root))
 	var loaded := store.load_profile(current.profile_id, root)
 	TestAssertions.truthy(loaded.ok() and not loaded.migrated, "ordinary current store load is not migrated", failures)
-	TestAssertions.equal(loaded.source_schema_version, 4, "ordinary current store load reports schema-four source", failures)
+	TestAssertions.equal(loaded.source_schema_version, 5, "ordinary current store load reports schema-five source", failures)
 	var legacy_typed_state := current.copy()
 	legacy_typed_state.schema_version = 2
 	var save_error := store.save_profile(legacy_typed_state, root)
@@ -233,8 +300,19 @@ static func _has_property(object: Object, property_name: StringName) -> bool:
 			return true
 	return false
 
-static func _expected_schema_four_document(legacy: Dictionary) -> Dictionary:
-	return _expected_schema_four_from_three(_expected_schema_three_from_two(_expected_schema_two_document(legacy)))
+static func _expected_schema_five_document(legacy: Dictionary) -> Dictionary:
+	return _expected_schema_five_from_four(_expected_schema_four_from_three(_expected_schema_three_from_two(_expected_schema_two_document(legacy))))
+
+static func _expected_schema_five_from_four(schema_four: Dictionary) -> Dictionary:
+	var result := schema_four.duplicate(true)
+	result["schema_version"] = 5
+	if not (result["resumable_run"] as Dictionary).is_empty():
+		(result["resumable_run"] as Dictionary)["selected_leader_class_id"] = ""
+	var transactions := result["applied_transactions"] as Dictionary
+	for transaction_id: Variant in transactions:
+		var record := transactions[transaction_id] as Dictionary
+		record["result_profile"] = _expected_schema_five_from_four(record["result_profile"] as Dictionary)
+	return result
 
 static func _expected_schema_four_from_three(schema_three: Dictionary) -> Dictionary:
 	var result := schema_three.duplicate(true)

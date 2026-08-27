@@ -5,7 +5,7 @@ const PlayerColorPalette := preload("res://scripts/profile/player_color_palette.
 
 enum PrologueState { NOT_STARTED, IN_PROGRESS, COMPLETED }
 
-const SCHEMA_VERSION := 4
+const SCHEMA_VERSION := 5
 const MAX_STASH_TABS := 100
 
 var schema_version := SCHEMA_VERSION

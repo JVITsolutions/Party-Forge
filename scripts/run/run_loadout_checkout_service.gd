@@ -153,6 +153,7 @@ func _apply_checkout(candidate: ProfileState, request: RunLoadoutCheckoutRequest
 		request.run_player_id,
 		request.leader_member_id,
 		run_state,
+		request.selected_leader_class_id,
 	)
 	candidate.resumable_run = ResumableRunItemCodec.encode(bootstrap)
 	return ""

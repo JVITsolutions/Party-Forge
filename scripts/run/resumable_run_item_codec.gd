@@ -1,7 +1,7 @@
 class_name ResumableRunItemCodec
 extends RefCounted
 
-const FIELDS: Array[String] = ["item_state", "leader_member_id", "run_id", "run_player_id", "run_seed"]
+const FIELDS: Array[String] = ["item_state", "leader_member_id", "run_id", "run_player_id", "run_seed", "selected_leader_class_id"]
 
 static func encode(bootstrap: RunItemBootstrap) -> Dictionary:
 	if bootstrap == null or bootstrap.item_state() == null:
@@ -12,6 +12,7 @@ static func encode(bootstrap: RunItemBootstrap) -> Dictionary:
 		"run_id": String(bootstrap.run_id),
 		"run_player_id": String(bootstrap.run_player_id),
 		"run_seed": bootstrap.run_seed,
+		"selected_leader_class_id": String(bootstrap.selected_leader_class_id),
 	}
 
 static func decode(
@@ -29,6 +30,7 @@ static func decode(
 		StringName(data["run_player_id"] as String),
 		int(data["leader_member_id"]),
 		decoded_state.state,
+		StringName(data["selected_leader_class_id"] as String),
 	)
 
 static func validate_document(
@@ -45,6 +47,8 @@ static func validate_document(
 	for field: String in ["run_id", "run_player_id"]:
 		if typeof(data[field]) != TYPE_STRING or String(data[field]).strip_edges().is_empty():
 			return _error(field, "must be a non-empty string")
+	if typeof(data["selected_leader_class_id"]) != TYPE_STRING:
+		return _error("selected_leader_class_id", "must be a string")
 	if not ItemInstanceCodec._is_json_int(data["run_seed"], 1, ItemInstanceCodec.JSON_SAFE_INTEGER_MAX):
 		return _error("run_seed", "must be a positive JSON-safe integer")
 	if not ItemInstanceCodec._is_json_int(data["leader_member_id"], 1, ItemInstanceCodec.JSON_SAFE_INTEGER_MAX):
