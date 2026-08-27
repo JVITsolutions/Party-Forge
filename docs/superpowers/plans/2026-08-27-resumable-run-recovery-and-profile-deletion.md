@@ -19,7 +19,7 @@
 - Abandon permanently forfeits only the matching run and its run-owned items after a second explicit confirmation.
 - Profile deletion is permanent, confined to the exact configured profile root and discovered ID, and disabled only while `run_started` is true.
 - Healthy, recovered, and damaged discovered rows remain selectable for deletion; damaged rows remain ineligible for activation.
-- Never run tests against `ProfileStore.DEFAULT_ROOT`; every test and integration runner uses a unique `user://tests/...` root.
+- Never run tests against `ProfileStore.DEFAULT_ROOT` or `DeveloperItemSandboxStore.DOCUMENT_PATH`; every test and integration runner uses a unique `user://tests/...` root.
 - Do not inspect or remove historical files from the user's live profile root as part of this plan.
 - Preserve safe player-facing errors separately from technical diagnostic strings.
 - Every dialog and new button must have deterministic keyboard/controller focus and cancel without mutation.
@@ -45,31 +45,39 @@
 
 ---
 
-### Task 1: Isolate Existing Profile-Preservation Sentinels
+### Task 1: Isolate Existing Sandbox Documents and Profile-Preservation Sentinels
 
 **Files:**
 
+- Modify: `scripts/dev/developer_item_sandbox_store.gd`
 - Modify: `tests/unit/test_developer_item_sandbox_state.gd`
+- Modify: `tests/unit/test_developer_item_sandbox.gd`
 - Test: `tests/unit/test_developer_item_sandbox_state.gd`
+- Test: `tests/unit/test_developer_item_sandbox.gd`
 
 **Interfaces:**
 
-- Consumes: `ProfileTestSupport.remove_tree(root: String)` and `ProfileStore.profile_path(profile_id: String, root: String)`.
-- Produces: one unique `_test_root` beneath `user://tests/developer_item_sandbox_state/` used by every sentinel fixture in this suite.
+- Consumes: `ProfileTestSupport.remove_tree(root: String)`, `ProfileStore.profile_path(profile_id: String, root: String)`, and the existing optional `AtomicJsonStore` injection.
+- Produces: `DeveloperItemSandboxStore.new(documents, document_path)` while retaining `DOCUMENT_PATH` as the production default.
+- Produces: one unique root beneath `user://tests/developer_item_sandbox/` per suite, used by every sandbox document and profile sentinel fixture.
 
-- [ ] **Step 1: Add the isolated-root assertion and fixture lifecycle**
+- [ ] **Step 1: Write isolated-path failures for both existing suites**
 
-Add one per-suite root and make the existing profile-preservation assertions use it:
+Add a per-suite root and assert that both the sandbox document and profile sentinels are beneath it, begin with `user://tests/`, and do not begin with either production root. Keep a production-default assertion on `DeveloperItemSandboxStore.new()` so runtime behavior cannot drift.
 
 ```gdscript
-const TEST_ROOT_PREFIX := "user://tests/developer_item_sandbox_state"
+const TEST_ROOT_PREFIX := "user://tests/developer_item_sandbox"
 var _test_root := ""
+var _document_path := ""
 
 func _begin_fixture() -> void:
 	_test_root = TEST_ROOT_PREFIX.path_join("%d-%d" % [OS.get_process_id(), Time.get_ticks_usec()])
+	_document_path = _test_root.path_join("sandbox.json")
 	TestAssertions.truthy(
-		_test_root.begins_with("user://tests/") and not _test_root.begins_with(ProfileStore.DEFAULT_ROOT),
-		"sandbox preservation fixtures use isolated profile storage",
+		_document_path.begins_with("user://tests/")
+			and not _document_path.begins_with(ProfileStore.DEFAULT_ROOT)
+			and _document_path != DeveloperItemSandboxStore.DOCUMENT_PATH,
+		"sandbox fixtures use isolated document storage",
 		failures,
 	)
 
@@ -77,36 +85,40 @@ func _end_fixture() -> void:
 	ProfileTestSupport.remove_tree(_test_root)
 ```
 
-Call `_begin_fixture()` before the two sentinel scenarios, construct their paths with `ProfileStore.new().profile_path(profile_id, _test_root)`, and call `_end_fixture()` after all byte-preservation assertions.
+Instantiate sandbox state with an injected `DeveloperItemSandboxStore` at `_document_path`; configure production UI scenes with that state before adding them to the tree. Replace all test cleanup, byte checks, corruption fixtures, and artifact scans that currently use `DOCUMENT_PATH` or `SANDBOX_ROOT` with the unique fixture paths.
 
-- [ ] **Step 2: Run the suite to prove the old paths fail the new assertion**
+- [ ] **Step 2: Run RED before adding document-path injection**
 
 Run:
 
 ```powershell
 $godot = 'F:\Projects(root)\Game dev\godot\Godot_v4.7.1-stable_mono_win64\Godot_v4.7.1-stable_mono_win64_console.exe'
-& $godot --headless --path (Get-Location).Path --quit-after 300 --script res://tests/focused_test_runner.gd -- tests/unit/test_developer_item_sandbox_state.gd
+& $godot --headless --path (Get-Location).Path --quit-after 420 --script res://tests/focused_test_runner.gd -- tests/unit/test_developer_item_sandbox_state.gd tests/unit/test_developer_item_sandbox.gd
 ```
 
-Expected: `TEST_SUMMARY: FAIL` identifies the still-default sentinel paths; no parser or loader error.
+Expected: `TEST_SUMMARY: FAIL` identifies the missing document-path injection or still-default paths; no parser or loader error. Before and after this RED run, verify the SHA-256 hash of the existing production sandbox document and the production profile file count are unchanged.
 
-- [ ] **Step 3: Move both sentinels to `_test_root` and preserve their byte assertions**
+- [ ] **Step 3: Add document-path injection and move every fixture**
 
-Replace each default-root construction with:
+Retain the production constant and add a stored path:
 
 ```gdscript
-var profile_sentinel := ProfileStore.new().profile_path(profile_id, _test_root)
+var _document_path: String
+
+func _init(documents: AtomicJsonStore = null, document_path: String = DOCUMENT_PATH) -> void:
+	_documents = documents if documents != null else AtomicJsonStore.new()
+	_document_path = document_path
 ```
 
-Keep the exact before/after byte comparisons and make teardown remove only `_test_root`.
+Use `_document_path` for every load, save, reset, and existence check in `DeveloperItemSandboxStore`. In both suites, pass the isolated path to every store/state instance. Construct the two profile sentinels with `ProfileStore.new().profile_path(profile_id, _test_root.path_join("profiles"))`. Keep the exact before/after byte comparisons and make teardown remove only `_test_root`. Do not inspect, remove, or rewrite either production location.
 
 - [ ] **Step 4: Run GREEN and commit**
 
-Run the Step 2 command again. Expected: exactly one `TEST_SUMMARY: PASS (0 failures)`.
+Run the Step 2 command again. Expected: exactly one `TEST_SUMMARY: PASS (0 failures)`. After GREEN, re-check the production sandbox SHA-256 hash and production profile file count against the pre-run values.
 
 ```powershell
-git add tests/unit/test_developer_item_sandbox_state.gd
-git commit -m "test: isolate sandbox profile sentinels"
+git add scripts/dev/developer_item_sandbox_store.gd tests/unit/test_developer_item_sandbox_state.gd tests/unit/test_developer_item_sandbox.gd
+git commit -m "test: isolate developer sandbox fixtures"
 ```
 
 ---
