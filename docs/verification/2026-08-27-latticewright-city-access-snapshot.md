@@ -78,6 +78,60 @@ All commands ran in `E:\Projects\Passive Skill Tree Creator\.worktrees\v3-graph-
 | `npm.cmd run typecheck` | exit `0`, `6.621s` |
 | `npm.cmd run lint` | exit `0`, `4.948s` |
 
+## Task 9 hardening refresh
+
+The final audit findings were corrected on the retained Party Forge worktree
+without changing the checked-in authoring, runtime-v3, or snapshot artifacts.
+Fresh qualification ran at these exact revisions:
+
+| Worktree | Branch | HEAD |
+| --- | --- | --- |
+| Party Forge | `feature/latticewright-v3-portfolio` | `1194a362fe1c396dfd41fdd2dcf9d8b04b11fbd4` |
+| Latticewright | `feature/v3-graph-portals-party-forge` | `12408a727b3a49aab62bd8c6a70266abdc445d2e` |
+
+Task 9 made snapshot-v1 producer provenance bounded and opaque at runtime,
+validated the exact canonical bytes against the production 1 MiB boundary,
+checked path length before allocation, and replaced the generated writer's
+delete/promote window with a verified recovery record and truthful
+`unchanged`/`rejected`/`committed`/`indeterminate` states. The fixed writer now
+owns recovery, comparison, replacement, verification, and rollback; the CLI no
+longer performs a second restoration protocol. An independent task review
+approved the complete `3da442b..1194a36` range after the recovery-before-
+dependency-check regression was corrected.
+
+Fresh Party Forge results:
+
+| Gate | Result |
+| --- | --- |
+| Dedicated integration runner | exit `0`, `2.137s`, `CITY_ACCESS_SNAPSHOT_ACCEPTANCE_OK locations=7 profiles=7 rollback=legacy` |
+| Exact 12-suite focused batch | exit `0`, `25.031s`, `TEST_SUMMARY: PASS (0 failures)` |
+| Explicit importer replay | exit `0`, `0.806s`, `UNCHANGED`; snapshot SHA-256 unchanged before/after |
+| Complete Party Forge suite | exit `0`, `382.809s`, exactly one `TEST_SUMMARY: PASS (227 suites)` |
+
+The fresh complete-suite log has SHA-256
+`e6817b404af829fac6302a26df70f86ed0fd64d1348989edd43de241ffd66c12`.
+It contains zero `TEST_SUMMARY: FAIL`, `TEST_FAILURE`, `SCRIPT ERROR`,
+`Parse Error`, `Failed to load script`, and `No loader found` markers. Its 98
+`ERROR:` and 11 `WARNING:` lines are exercised negative-path diagnostics; their
+count is contextual rather than an invariant gate.
+
+Fresh Latticewright producer results:
+
+| Command | Result |
+| --- | --- |
+| `node --test scripts/party-forge/create-party-forge-portfolio.test.mjs` | exit `0`, 5/5 pass, `0.614s` |
+| `npm.cmd test -- tests/party-forge/portfolio.test.ts src/core/project-v3/runtime-codec.test.ts src/core/project-v3/resolve-runtime.test.ts` | exit `0`, 3 files / 20 tests pass, `30.044s` |
+| `npm.cmd run typecheck` | exit `0`, `12.234s` |
+| `npm.cmd run lint` | exit `0`, `23.750s` |
+
+Fresh artifact identity remained:
+
+| Artifact | Bytes | SHA-256 |
+| --- | ---: | --- |
+| `design/progression/latticewright/party-forge-city-access.pstree` | 11,055 | `3c459454210de71e766c80d57d51825977811990678b53579a7d8573299df721` |
+| `design/progression/latticewright/party-forge-city-access.pstree.json` | 9,972 | `bb3abd94d6b86716d3c39840deef460e20596abb858ba6abd4535067d664ff78` |
+| `data/world/access/party-forge-city-access.snapshot.json` | 2,539 | `ca046f55eaaf28ff050c6d7ab240232d5663820d88c1551160a7a2c4476b6a55` |
+
 ## Boundary and audit statement
 
 The candidate stays default-off and Developer Mode-only. No City scene, navigation route, profile schema, `ProfileCodec`, passive allocation behavior, Player Mode activation, or current format-1 City runtime was changed. The format-1 City source is both present and loader-qualified. No merge, push, `main` change, remote/default activation, player-build wiring, or release occurred. This is ready for user review only; merge or activation still requires separate approval.
