@@ -19,6 +19,8 @@ func run() -> Array[String]:
 	_reset_root()
 	_test_rejects_unsafe_and_undiscovered_identity_before_remove(failures)
 	_reset_root()
+	_test_existing_file_root_fails_before_remove(failures)
+	_reset_root()
 	_test_removes_only_exact_allowlisted_artifacts(failures)
 	_reset_root()
 	_test_deletes_backup_only_and_damaged_generations(failures)
@@ -73,6 +75,26 @@ func _test_rejects_unsafe_and_undiscovered_identity_before_remove(failures: Arra
 	TestAssertions.truthy(not bool(undiscovered.get("committed")) and str(undiscovered.get("error")).contains("undiscovered profile"), "valid but undiscovered identity is rejected", failures)
 	TestAssertions.truthy(remove_calls.is_empty(), "identity failures occur before the remover is called", failures)
 	TestAssertions.equal(FileAccess.get_file_as_bytes(sentinel), sentinel_bytes, "identity failures preserve exact sentinel bytes", failures)
+
+func _test_existing_file_root_fails_before_remove(failures: Array[String]) -> void:
+	var file_root := _root.path_join("profiles-as-file")
+	var root_bytes := "root file bytes must remain exact".to_utf8_buffer()
+	_write_bytes(file_root, root_bytes)
+	var remove_calls: Array[String] = []
+	var service := _new_service(func(path: String) -> Error:
+		remove_calls.append(path)
+		return DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+	)
+	var profile_id := "profile-file-root"
+	var result: RefCounted = service.call(
+		&"delete_profile_artifacts",
+		profile_id,
+		PackedStringArray([profile_id]),
+		file_root,
+	)
+	TestAssertions.truthy(not bool(result.get("committed")) and str(result.get("error")).contains("confined artifact targets unavailable"), "an existing file at the configured root fails closed before deletion", failures)
+	TestAssertions.truthy(remove_calls.is_empty(), "an unscannable configured root never invokes the remover", failures)
+	TestAssertions.equal(FileAccess.get_file_as_bytes(file_root), root_bytes, "an existing root file keeps its exact bytes", failures)
 
 func _test_removes_only_exact_allowlisted_artifacts(failures: Array[String]) -> void:
 	var profile_id := "profile-a"

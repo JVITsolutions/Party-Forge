@@ -86,18 +86,33 @@ func _artifact_paths(profile_id: String, root: String) -> Array[String]:
 	for path: String in result:
 		if not _is_confined_artifact_path(profile_id, root, path):
 			return []
-	var directory := DirAccess.open(root)
-	if directory == null:
+	if not DirAccess.dir_exists_absolute(root_absolute):
+		if FileAccess.file_exists(root_absolute):
+			return []
 		result.sort()
 		return result
+	var directory := DirAccess.open(root_absolute)
+	if directory == null:
+		return []
+	var list_error := directory.list_dir_begin()
+	if list_error != OK:
+		return []
 	var basename := primary.get_file()
-	for candidate_name: String in directory.get_files():
+	var candidate_name := directory.get_next()
+	while not candidate_name.is_empty():
+		if directory.current_is_dir():
+			candidate_name = directory.get_next()
+			continue
 		if not _is_dynamic_artifact_name(candidate_name, basename):
+			candidate_name = directory.get_next()
 			continue
 		var candidate := root.path_join(candidate_name)
 		if not _is_confined_artifact_path(profile_id, root, candidate):
+			directory.list_dir_end()
 			return []
 		result.append(candidate)
+		candidate_name = directory.get_next()
+	directory.list_dir_end()
 	result.sort()
 	return result
 
