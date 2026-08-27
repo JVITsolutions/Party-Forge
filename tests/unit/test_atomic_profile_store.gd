@@ -35,6 +35,27 @@ class PreflightArtifactFailureAtomicJsonStore extends AtomicJsonStore:
 			return ERR_CANT_CREATE
 		return super._write_text(path, contents)
 
+class GeneratedReadFailureAtomicJsonStore extends AtomicJsonStore:
+	var target := ""
+	var target_reads := 0
+
+	func _generated_read_bytes(path: String) -> Dictionary:
+		if path == target:
+			target_reads += 1
+			if target_reads == 2:
+				return {"error": ERR_FILE_CORRUPT, "bytes": PackedByteArray()}
+		return super._generated_read_bytes(path)
+
+class GeneratedCleanupFailureAtomicJsonStore extends AtomicJsonStore:
+	func _generated_cleanup_directory(_path: String) -> Error:
+		return ERR_CANT_CREATE
+
+class GeneratedWriteFailureAtomicJsonStore extends AtomicJsonStore:
+	func _generated_write_bytes(path: String, bytes: PackedByteArray) -> Error:
+		if path.ends_with("candidate.json"):
+			return ERR_CANT_CREATE
+		return super._generated_write_bytes(path, bytes)
+
 func run() -> Array[String]:
 	var failures: Array[String] = []
 	_root = "user://tests/profile_store_%d_%d" % [OS.get_process_id(), Time.get_ticks_usec()]
@@ -65,6 +86,7 @@ func run() -> Array[String]:
 	_test_malformed_schema_field_recovers_backup(failures)
 	_test_missing_profile_is_distinct(failures)
 	_test_absent_profile_root_lists_cleanly(failures)
+	_test_generated_document_boundary(failures)
 	_cleanup()
 	return failures
 
@@ -635,6 +657,54 @@ func _test_absent_profile_root_lists_cleanly(failures: Array[String]) -> void:
 	TestAssertions.truthy(ProfileStore.new().profile_ids(absent_root).is_empty(), "absent profile root lists as empty", failures)
 	TestAssertions.truthy(not DirAccess.dir_exists_absolute(ProjectSettings.globalize_path(absent_root)), "listing absent profile root has no filesystem side effect", failures)
 
+func _test_generated_document_boundary(failures: Array[String]) -> void:
+	var target := _root.path_join("generated-target.json")
+	var staging_root := _root.path_join("generated-staging")
+	var original := "{\"original\":true}\n".to_utf8_buffer()
+	_write_bytes(target, original)
+	var rejected := AtomicJsonStore.new().save_generated_document(target, _generated_document(), func(_document: Dictionary): return "rejected", staging_root, Callable(CityAccessSnapshotCodec, "encode_document"))
+	TestAssertions.truthy(rejected.contains("stage=validate"), "generated validation rejects before disk mutation", failures)
+	TestAssertions.equal(FileAccess.get_file_as_bytes(target), original, "rejected generated document preserves exact target bytes", failures)
+	TestAssertions.truthy(not DirAccess.dir_exists_absolute(ProjectSettings.globalize_path(staging_root)), "rejected generated document creates no staging root", failures)
+	var write_failure := GeneratedWriteFailureAtomicJsonStore.new()
+	var write_error := write_failure.save_generated_document(target, _generated_document(), Callable(CityAccessSnapshotLoader, "validate_document"), staging_root, Callable(CityAccessSnapshotCodec, "encode_document"))
+	TestAssertions.truthy(write_error.contains("stage=write"), "generated staged-write failure reports its stage", failures)
+	TestAssertions.equal(FileAccess.get_file_as_bytes(target), original, "generated staged-write failure preserves exact target bytes", failures)
+
+	var promoted_paths: Array[String] = []
+	var promote_failure := AtomicJsonStore.new(func(temporary: String, promoted_target: String) -> Error:
+		promoted_paths.append(temporary)
+		return ERR_CANT_CREATE
+	)
+	var failed := promote_failure.save_generated_document(target, _generated_document(), Callable(CityAccessSnapshotLoader, "validate_document"), staging_root, Callable(CityAccessSnapshotCodec, "encode_document"))
+	TestAssertions.truthy(failed.contains("stage=promote"), "generated promotion failure reports its stage", failures)
+	TestAssertions.equal(FileAccess.get_file_as_bytes(target), original, "generated pre-promotion failure preserves exact target bytes", failures)
+	TestAssertions.truthy(promoted_paths.size() == 1 and promoted_paths[0].begins_with(staging_root.path_join("invocation-")), "generated temporary promotion path stays beneath staging root", failures)
+
+	var no_target := _root.path_join("generated-no-target.json")
+	var no_target_failure := AtomicJsonStore.new(func(_temporary: String, _promoted_target: String) -> Error: return ERR_CANT_CREATE)
+	var no_target_error := no_target_failure.save_generated_document(no_target, _generated_document(), Callable(CityAccessSnapshotLoader, "validate_document"), staging_root, Callable(CityAccessSnapshotCodec, "encode_document"))
+	TestAssertions.truthy(no_target_error.contains("stage=promote") and not FileAccess.file_exists(no_target), "generated failure without prior target leaves no target", failures)
+
+	var read_failure := GeneratedReadFailureAtomicJsonStore.new()
+	read_failure.target = target
+	var read_error := read_failure.save_generated_document(target, _generated_document(), Callable(CityAccessSnapshotLoader, "validate_document"), staging_root, Callable(CityAccessSnapshotCodec, "encode_document"))
+	TestAssertions.truthy(read_error.contains("stage=verify-promoted"), "generated promoted-byte read failure reports verification", failures)
+	TestAssertions.equal(FileAccess.get_file_as_bytes(target), original, "generated promoted-byte failure restores exact previous bytes", failures)
+
+	var cleanup_failure := GeneratedCleanupFailureAtomicJsonStore.new()
+	var cleanup_result := cleanup_failure.save_generated_document(target, _generated_document(), Callable(CityAccessSnapshotLoader, "validate_document"), staging_root, Callable(CityAccessSnapshotCodec, "encode_document"))
+	TestAssertions.equal(cleanup_result, "", "generated cleanup debt returns committed success", failures)
+	TestAssertions.equal(FileAccess.get_file_as_bytes(target), CityAccessSnapshotCodec.encode_document(_generated_document()), "generated cleanup debt retains canonical committed bytes", failures)
+
+func _generated_document() -> Dictionary:
+	return {
+		"format": CityAccessSnapshotLoader.FORMAT,
+		"version": CityAccessSnapshotLoader.VERSION,
+		"source": {"adapter": "latticewright-runtime-v3-city-access", "format": "latticewright-runtime", "formatVersion": 3, "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"},
+		"locations": [{"id": "city.apothecary", "destinationId": "city.apothecary.interior", "visibleWhen": [{"kind": "always", "value": ""}], "availableWhen": [{"kind": "always", "value": ""}]}],
+	}
+
 func _corrupt_artifact_path(profile_id: String, names: PackedStringArray) -> String:
 	for name: String in names:
 		if name.begins_with("%s.json.corrupt-" % profile_id):
@@ -707,6 +777,12 @@ func _write_text(path: String, text: String) -> void:
 	var file := FileAccess.open(path, FileAccess.WRITE)
 	if file != null:
 		file.store_string(text)
+		file.close()
+
+func _write_bytes(path: String, bytes: PackedByteArray) -> void:
+	var file := FileAccess.open(path, FileAccess.WRITE)
+	if file != null:
+		file.store_buffer(bytes)
 		file.close()
 
 func _cleanup() -> void:

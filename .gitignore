@@ -7,3 +7,4 @@
 
 # Blender's automatic rolling backup remains local; the editable .blend is tracked.
 *.blend1
+.party-forge-tools/

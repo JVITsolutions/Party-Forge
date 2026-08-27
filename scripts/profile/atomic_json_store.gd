@@ -6,6 +6,128 @@ var _promote_file: Callable
 func _init(promote_file: Callable = Callable()) -> void:
 	_promote_file = promote_file
 
+func save_generated_document(
+	path: String,
+	document: Dictionary,
+	validator: Callable,
+	staging_root: String,
+	encoder: Callable,
+) -> String:
+	if not validator.is_valid() or not encoder.is_valid():
+		return "JSON_STORE_GENERATED_ERROR stage=validate reason=validator-or-encoder-is-missing"
+	var validation_reason := _generated_validation_reason(validator.call(document))
+	if not validation_reason.is_empty():
+		return "JSON_STORE_GENERATED_ERROR stage=validate reason=%s" % validation_reason
+	var candidate := encoder.call(document) as PackedByteArray
+	if candidate.is_empty():
+		return "JSON_STORE_GENERATED_ERROR stage=encode reason=encoder-returned-empty-bytes"
+	if not _generated_bytes_validate(candidate, validator).is_empty():
+		return "JSON_STORE_GENERATED_ERROR stage=encode reason=encoder-returned-invalid-document"
+	var invocation := staging_root.path_join("invocation-%d-%d" % [OS.get_process_id(), Time.get_ticks_usec()])
+	var temporary := invocation.path_join("candidate.json")
+	var previous_copy := invocation.path_join("previous.bytes")
+	var mkdir_error := DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(invocation))
+	if mkdir_error not in [OK, ERR_ALREADY_EXISTS]:
+		return "JSON_STORE_GENERATED_ERROR stage=mkdir code=%d" % mkdir_error
+	var write_error := _generated_write_bytes(temporary, candidate)
+	if write_error != OK:
+		return _generated_rejected("write", write_error, invocation, [temporary, previous_copy])
+	var staged := _generated_read_bytes(temporary)
+	if int(staged["error"]) != OK or staged["bytes"] != candidate or not _generated_bytes_validate(staged["bytes"] as PackedByteArray, validator).is_empty():
+		return _generated_rejected("verify-temporary", int(staged["error"]), invocation, [temporary, previous_copy])
+	var target_parent_error := DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(path).get_base_dir())
+	if target_parent_error not in [OK, ERR_ALREADY_EXISTS]:
+		return _generated_rejected("mkdir-target", target_parent_error, invocation, [temporary, previous_copy])
+	var had_previous := FileAccess.file_exists(path)
+	var previous := PackedByteArray()
+	if had_previous:
+		var previous_read := _generated_read_bytes(path)
+		if int(previous_read["error"]) != OK:
+			return _generated_rejected("snapshot-target", int(previous_read["error"]), invocation, [temporary, previous_copy])
+		previous = previous_read["bytes"] as PackedByteArray
+		var copy_error := _generated_write_bytes(previous_copy, previous)
+		if copy_error != OK:
+			return _generated_rejected("stage-previous", copy_error, invocation, [temporary, previous_copy])
+		var copied := _generated_read_bytes(previous_copy)
+		if int(copied["error"]) != OK or copied["bytes"] != previous:
+			return _generated_rejected("verify-previous", int(copied["error"]), invocation, [temporary, previous_copy])
+		var remove_target_error := _remove(path)
+		if remove_target_error != OK:
+			return _generated_rejected("replace-target", remove_target_error, invocation, [temporary, previous_copy])
+	var promote_error: Error = _promote_file.call(temporary, path) if _promote_file.is_valid() else _promote(temporary, path)
+	if promote_error != OK:
+		var restore_error := _restore_generated_target(path, had_previous, previous)
+		var cleanup_error := _generated_cleanup(invocation, [temporary, previous_copy])
+		return "JSON_STORE_GENERATED_ERROR stage=promote code=%d restore_code=%d cleanup_code=%d" % [promote_error, restore_error, cleanup_error]
+	var promoted := _generated_read_bytes(path)
+	if int(promoted["error"]) != OK or promoted["bytes"] != candidate:
+		var restore_error := _restore_generated_target(path, had_previous, previous)
+		var cleanup_error := _generated_cleanup(invocation, [temporary, previous_copy])
+		return "JSON_STORE_GENERATED_ERROR stage=verify-promoted code=%d restore_code=%d cleanup_code=%d" % [int(promoted["error"]), restore_error, cleanup_error]
+	var cleanup_error := _generated_cleanup(invocation, [temporary, previous_copy])
+	if cleanup_error != OK:
+		push_warning("JSON_STORE_GENERATED_CLEANUP_DEBT stage=cleanup code=%d committed=true" % cleanup_error)
+	return ""
+
+func _generated_validation_reason(validation: Variant) -> String:
+	if validation is String:
+		return validation as String
+	if validation is Object and validation.has_method("ok"):
+		if bool(validation.call("ok")):
+			return ""
+		var errors: Variant = validation.get("errors")
+		return "validator rejected document" if not errors is Array or (errors as Array).is_empty() else str((errors as Array)[0])
+	return "validator returned unsupported result"
+
+func _generated_bytes_validate(bytes: PackedByteArray, validator: Callable) -> String:
+	var parser := JSON.new()
+	if parser.parse(bytes.get_string_from_utf8()) != OK or not parser.data is Dictionary:
+		return "bytes are not a JSON object"
+	return _generated_validation_reason(validator.call((parser.data as Dictionary).duplicate(true)))
+
+func _generated_rejected(stage: String, code: Error, invocation: String, paths: Array[String]) -> String:
+	var cleanup_error := _generated_cleanup(invocation, paths)
+	return "JSON_STORE_GENERATED_ERROR stage=%s code=%d cleanup_code=%d" % [stage, code, cleanup_error]
+
+func _restore_generated_target(path: String, had_previous: bool, previous: PackedByteArray) -> Error:
+	if not had_previous:
+		return _remove_if_exists(path)
+	return _generated_write_bytes(path, previous)
+
+func _generated_read_bytes(path: String) -> Dictionary:
+	if not FileAccess.file_exists(path):
+		return {"error": ERR_FILE_NOT_FOUND, "bytes": PackedByteArray()}
+	var file := FileAccess.open(path, FileAccess.READ)
+	if file == null:
+		return {"error": FileAccess.get_open_error(), "bytes": PackedByteArray()}
+	var bytes := file.get_buffer(file.get_length())
+	var read_error := file.get_error()
+	file.close()
+	return {"error": read_error, "bytes": bytes}
+
+func _generated_write_bytes(path: String, bytes: PackedByteArray) -> Error:
+	var file := FileAccess.open(path, FileAccess.WRITE)
+	if file == null:
+		return FileAccess.get_open_error()
+	file.store_buffer(bytes)
+	var write_error := file.get_error()
+	file.close()
+	return write_error
+
+func _generated_cleanup(invocation: String, paths: Array[String]) -> Error:
+	var first_error := OK
+	for artifact_path: String in paths:
+		var remove_error := _remove_if_exists(artifact_path)
+		if first_error == OK and remove_error != OK:
+			first_error = remove_error
+	var directory_error := _generated_cleanup_directory(invocation)
+	if first_error == OK and directory_error != OK:
+		first_error = directory_error
+	return first_error
+
+func _generated_cleanup_directory(path: String) -> Error:
+	return DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+
 func save_document(
 	path: String,
 	document: Dictionary,
