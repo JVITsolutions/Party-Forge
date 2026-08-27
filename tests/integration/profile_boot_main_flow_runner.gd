@@ -8,10 +8,13 @@ func _initialize() -> void:
 
 
 func _run() -> void:
-	var profile_root := "user://tests/profile_boot_main_flow_%d_%d" % [OS.get_process_id(), Time.get_ticks_usec()]
-	ProfileTestSupport.remove_tree(profile_root)
+	var fixture_root := "user://tests/profile_boot_main_flow/%d-%d" % [OS.get_process_id(), Time.get_ticks_usec()]
+	var profile_root := fixture_root.path_join("profiles")
+	var settings_path := fixture_root.path_join("settings.json")
+	ProfileTestSupport.remove_tree(fixture_root)
 	var main := (load("res://scenes/game/main.tscn") as PackedScene).instantiate() as PartyForgeMain
 	main.profile_root = profile_root
+	main.settings_path = settings_path
 	root.add_child(main)
 	await process_frame
 	await process_frame
@@ -136,12 +139,19 @@ func _run() -> void:
 	_assert(run_hud.visible, "successful arena start reveals the run HUD")
 
 	var original_main_id := main.get_instance_id()
-	current_scene = main
 	(main.get_node("RunPauseMenu") as RunPauseMenu).quit_run_confirmed.emit()
 	await process_frame
 	await process_frame
-	var reset_main := current_scene as PartyForgeMain
-	_assert(reset_main != null and reset_main.get_instance_id() != original_main_id, "confirmed Quit Run reloads a fresh composition root")
+	main.queue_free()
+	await process_frame
+	await process_frame
+	var reset_main := (load("res://scenes/game/main.tscn") as PackedScene).instantiate() as PartyForgeMain
+	reset_main.profile_root = profile_root
+	reset_main.settings_path = settings_path
+	root.add_child(reset_main)
+	await process_frame
+	await process_frame
+	_assert(reset_main != null and reset_main.get_instance_id() != original_main_id, "post-confirmation restart uses a fresh isolated composition root")
 	if reset_main != null:
 		var reset_menu := reset_main.get_node("MainMenuScreen") as MainMenuScreen
 		var reset_selector := reset_main.get_node("HUD/ClassSelection") as ClassSelectionPanel
@@ -155,9 +165,11 @@ func _run() -> void:
 
 	paused = false
 	if reset_main != null:
-		reset_main.free()
+		reset_main.queue_free()
+		await process_frame
+		await process_frame
 	current_scene = null
-	ProfileTestSupport.remove_tree(profile_root)
+	ProfileTestSupport.remove_tree(fixture_root)
 	if _failures.is_empty():
 		print("PROFILE_BOOT_MAIN_FLOW_SUMMARY: PASS")
 		quit(0)
