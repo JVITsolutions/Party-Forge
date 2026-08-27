@@ -50,10 +50,10 @@ Use these exact identifiers throughout the source, importer, snapshot, and tests
 
 Latticewright schema IDs:
 
-- content type: `party_forge_access_location`
-- placement type: `party_forge_access_location_placement`
-- fields: `party_forge_location_id`, `party_forge_destination_id`, `party_forge_visibility_policy`
-- requirements: `party_forge_prologue_state`, `party_forge_permanent_unlock`
+- content type: `party-forge-access-location`
+- placement type: `party-forge-access-location-placement`
+- fields: `party-forge-location-id`, `party-forge-destination-id`, `party-forge-visibility-policy`
+- requirements: `party-forge-prologue-state`, `party-forge-permanent-unlock`
 - requirement value key: `value`
 - visibility values: `visible`, `hidden_until_available`
 - project ID: `party-forge-city-access`
@@ -470,10 +470,10 @@ No other inference is permitted.
   Translate:
 
   ```text
-  party_forge_prologue_state {value:"completed"}
+  party-forge-prologue-state {value:"completed"}
       -> {kind:"prologue_state", value:"completed"}
 
-  party_forge_permanent_unlock {value:"service:hero_registry"}
+  party-forge-permanent-unlock {value:"service:hero_registry"}
       -> {kind:"permanent_unlock", value:"service:hero_registry"}
   ```
 

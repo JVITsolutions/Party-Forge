@@ -150,16 +150,16 @@ design/progression/latticewright/party-forge-city-access.pstree.json
 The graph uses stable Party Forge semantic IDs. Its location content type has
 these required typed fields:
 
-- `party_forge_location_id`: stable Party Forge location identity;
-- `party_forge_destination_id`: semantic navigation destination owned by
+- `party-forge-location-id`: stable Party Forge location identity;
+- `party-forge-destination-id`: semantic navigation destination owned by
   Party Forge; and
-- `party_forge_visibility_policy`: either `visible` or
+- `party-forge-visibility-policy`: either `visible` or
   `hidden_until_available`.
 
 The first importer recognizes only these typed access requirements:
 
-- `party_forge_prologue_state`, with one exact state value; and
-- `party_forge_permanent_unlock`, with one exact Party Forge unlock ID.
+- `party-forge-prologue-state`, with one exact state value; and
+- `party-forge-permanent-unlock`, with one exact Party Forge unlock ID.
 
 The authoring graph may contain layout and navigation relationships for human
 understanding, but only the approved fields and requirements enter the Party
