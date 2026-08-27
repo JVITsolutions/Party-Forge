@@ -19,6 +19,7 @@
 - The only Latticewright-specific production code belongs to the explicit development importer.
 - Keep the existing 16-project Latticewright portfolio definition intact. The City Access authoring project is a separate seventeenth design artifact, not a new gameplay progression tree.
 - Treat `party-forge-access-snapshot` version 1 as the stable boundary. A future Latticewright format gets a separate adapter.
+- Treat snapshot-v1 `source.adapter`, `source.format`, and `source.formatVersion` as bounded opaque runtime provenance. Exact Latticewright identity/version checks remain in the version-specific development importer.
 - Use test-driven development for every behavior change: write one focused failing assertion, run it and record the expected failure, add the smallest production change, rerun to green, then commit.
 - Before each commit, inspect `git diff --check` and `git status --short`. Stage only paths named by that task.
 - Use this Godot executable for all Party Forge commands:
@@ -249,7 +250,8 @@ No other inference is permitted.
   - require exact source keys `adapter`, `format`, `formatVersion`, `sha256`;
   - require exact location keys `id`, `destinationId`, `visibleWhen`, `availableWhen`;
   - require exact condition keys `kind`, `value`;
-  - require adapter `latticewright-runtime-v3-city-access` for snapshot v1;
+  - require `source.adapter` and `source.format` as nonempty stable strings of at most 128 UTF-16 units;
+  - require `source.formatVersion` as an integer from 1 through 2,147,483,647 without comparing it to a Latticewright version;
   - validate the SHA-256 as 64 lowercase hexadecimal characters;
   - validate nonempty stable IDs/values at no more than 128 UTF-16 code units;
   - reject duplicate location and destination IDs;
@@ -259,7 +261,9 @@ No other inference is permitted.
   - sort locations by ordinal ID and conditions by kind/value; and
   - return no partial snapshot on any error.
 
-  Add `load_path(path)` as a thin byte-reading wrapper for runtime/provider use.
+  Add `load_path(path)` as a byte-reading wrapper for runtime/provider use. It
+  must reject `get_length() > MAX_BYTES` before buffer allocation and reject a
+  short read or file error before calling `load_bytes`.
 
   `CityAccessSnapshotCodec` must rebuild, not mutate, the validated dictionary in this exact insertion order before pretty-printing with two-space indentation and one final newline:
 
@@ -383,22 +387,28 @@ No other inference is permitted.
   ) -> Dictionary
   ```
 
-  The returned dictionary has exact keys `ok`, `committed`, `cleanupDebt`,
-  `stage`, and `reason`. Booleans are used for the first three values; stage
-  and reason are sanitized strings. Rejection before promotion reports
-  `committed=false`; verified promotion reports `committed=true`; cleanup
-  failure after verified promotion reports `ok=true`, `committed=true`, and
+  The returned dictionary has exact keys `ok`, `state`, `cleanupDebt`, `stage`,
+  and `reason`. `ok` and `cleanupDebt` are booleans; `state` is exactly
+  `unchanged`, `rejected`, `committed`, or `indeterminate`; stage and reason are
+  sanitized strings. `unchanged` means the existing target exactly matches the
+  canonical candidate. `rejected` is allowed only after exact prior bytes or
+  prior absence are re-read and verified. `committed` is allowed only after
+  exact canonical candidate bytes are re-read and verified. `indeterminate` is
+  required when neither condition can be established. Cleanup failure after a
+  verified promotion reports `ok=true`, `state=committed`, and
   `cleanupDebt=true`.
 
   Tests must inject write/promote/read/cleanup failures and assert:
 
   - validation occurs before disk mutation;
-  - all temporary, backup, displaced, and cleanup-debt paths are beneath `staging_root`;
+  - all temporary, recovery-record, backup, displaced, and cleanup-debt paths are beneath `staging_root`;
   - pre-promotion failures preserve exact target bytes;
   - promotion and post-promotion verification use the validated canonical candidate;
-  - failed promoted-byte verification restores exact previous bytes;
+  - failed promoted-byte verification restores and re-reads exact previous bytes;
   - no prior target plus failure leaves no target;
-  - cleanup failure returns success with a `committed=true` warning/diagnostic; and
+  - restore failure returns `state=indeterminate`, retains recovery evidence, and never claims ordinary rejection;
+  - an interrupted transaction is resolved from its verified recovery record before a later write begins;
+  - cleanup failure returns success with `state=committed` plus a warning/diagnostic; and
   - ordinary `save_document`, `save_irreversible_document`, and `replace_document` behavior is unchanged.
 
 - [ ] **Step 6: Implement the generated-document method and wrapper**
@@ -406,14 +416,17 @@ No other inference is permitted.
   Keep existing methods byte-for-byte behavior-compatible. The new method should:
 
   1. validate the in-memory dictionary;
-  2. call the required encoder and reject empty or invalid encoded bytes;
+  2. call the required encoder and reject empty, oversized, or invalid encoded bytes by passing the exact returned bytes through `CityAccessSnapshotLoader.load_bytes`;
   3. create a per-invocation directory below `res://.party-forge-tools/latticewright-city-access/`;
   4. stage and re-read the candidate there;
-  5. copy any existing target bytes into that staging directory;
-  6. promote only the verified candidate to the fixed target;
-  7. re-read and compare exact promoted bytes;
-  8. restore the captured prior bytes on verification failure; and
-  9. distinguish rejection from committed cleanup debt.
+  5. resolve any retained interrupted transaction before comparing the current target or beginning a new write;
+  6. return `unchanged` when the current target exactly equals the canonical candidate;
+  7. otherwise copy and verify any existing target bytes in that staging directory, then persist and verify a recovery record before target mutation;
+  8. promote only the verified candidate to the fixed target;
+  9. re-read and compare exact promoted bytes;
+  10. restore and re-read the captured prior state on verification failure;
+  11. retain recovery evidence and report `indeterminate` if restoration cannot be verified; and
+  12. distinguish unchanged, verified rejection, verified commit, indeterminate state, and committed cleanup debt.
 
   `GeneratedJsonDocumentWriter` fixes the root and target so the importer cannot redirect them:
 
@@ -533,22 +546,30 @@ No other inference is permitted.
   - translate in memory;
   - validate through `CityAccessSnapshotLoader`;
   - canonicalize once through `CityAccessSnapshotCodec`;
-  - return `UNCHANGED` without writing on exact target-byte parity;
-  - otherwise call `GeneratedJsonDocumentWriter`;
-  - re-read exact target bytes; and
-  - print exactly one terminal marker:
+  - call `GeneratedJsonDocumentWriter` after translation and canonical validation;
+  - let that writer recover pending transactions, compare exact target bytes,
+    replace, verify, and roll back within one boundary; and
+  - print exactly one terminal marker from the writer's structured state:
 
   ```text
   PARTY_FORGE_CITY_ACCESS_IMPORT status=UNCHANGED adapter=latticewright-runtime-v3-city-access stage=compare
   PARTY_FORGE_CITY_ACCESS_IMPORT status=IMPORTED adapter=latticewright-runtime-v3-city-access stage=verified
   PARTY_FORGE_CITY_ACCESS_IMPORT status=REJECTED adapter=latticewright-runtime-v3-city-access stage=<sanitized-stage>
+  PARTY_FORGE_CITY_ACCESS_IMPORT status=INDETERMINATE adapter=latticewright-runtime-v3-city-access stage=<sanitized-stage>
   ```
 
-  Exit 0 for `UNCHANGED` and `IMPORTED`; exit 1 for `REJECTED`. Do not print arbitrary source content or embed source paths in output JSON.
+  Exit 0 for `UNCHANGED` and `IMPORTED`; exit 1 for `REJECTED` and
+  `INDETERMINATE`. Emit `REJECTED` only after verified rollback/absence. Do not
+  print arbitrary source content or embed source paths in output JSON.
 
 - [ ] **Step 7: Test zero-write outcomes through the CLI seam**
 
-  Inject source reader/importer/writer callables in the CLI service, not in the `SceneTree` wrapper. Assert exact target byte preservation at read, translate, validate, stage, promote, and verify failures. Assert truthful committed cleanup debt.
+  Inject source reader/importer/writer callables in the CLI service, not in the
+  `SceneTree` wrapper. Assert exact target byte preservation at read, translate,
+  validate, stage, promote, and verify failures. Assert truthful unchanged,
+  committed cleanup debt, and indeterminate restore-failure outcomes. The CLI
+  must not implement an independent second restoration path outside the
+  generated writer.
 
 - [ ] **Step 8: Run focused importer qualification**
 
@@ -930,6 +951,107 @@ No other inference is permitted.
 
 ---
 
+### Task 9: Resolve final stable-boundary and generated-write audit findings
+
+**Repository:** Party Forge worktree
+
+**Files:**
+
+- Modify: `scripts/world/access/city_access_snapshot.gd`
+- Modify: `scripts/world/access/city_access_snapshot_loader.gd`
+- Modify: `scripts/world/access/city_access_snapshot_codec.gd`
+- Modify: `scripts/profile/atomic_json_store.gd`
+- Modify: `scripts/tools/generated_json_document_writer.gd`
+- Modify: `tools/import_latticewright_access_snapshot.gd`
+- Modify: `tests/unit/test_city_access_snapshot_loader.gd`
+- Modify: `tests/unit/test_atomic_profile_store.gd`
+- Modify: `tests/unit/test_generated_json_document_writer.gd`
+- Modify: `tests/unit/test_latticewright_access_import_cli.gd`
+- Modify if evidence changes: `docs/verification/2026-08-27-latticewright-city-access-snapshot.md`
+
+**Purpose:** Make snapshot v1 genuinely independent of Latticewright version
+churn, make generated replacement recoverable and truthful under restore
+failure or interruption, and enforce the production byte ceiling on the exact
+canonical artifact.
+
+- [ ] **Step 1: Write the stable-provenance regression first**
+
+  Add failing assertions proving that the runtime loader and value factory
+  accept an alternate bounded adapter/format/positive-version tuple while
+  rejecting empty, over-128-unit, noninteger, zero, negative, and greater than
+  2,147,483,647 provenance values. Retain importer tests proving the runtime-v3
+  development adapter still rejects every unsupported Latticewright source
+  format/version.
+
+- [ ] **Step 2: Implement opaque runtime provenance**
+
+  Remove Latticewright adapter/version comparisons from
+  `CityAccessSnapshotLoader` and `CityAccessSnapshot`. Preserve the exact
+  Party Forge root format/version, source key allowlist, SHA-256 rules, and all
+  location/condition validation.
+
+- [ ] **Step 3: Write exact-canonical-byte and path-read regressions first**
+
+  Add a combined multibyte construction whose compact JSON is within 1 MiB but
+  canonical two-space JSON is over 1 MiB. Assert that encoding/writing rejects
+  it before staging or target mutation. Add path-loading coverage for an
+  oversized file and injected short/error read seam where practical.
+
+- [ ] **Step 4: Enforce the byte contract on the bytes that will commit**
+
+  After rebuilding canonical JSON, pass the exact returned
+  `PackedByteArray` through `CityAccessSnapshotLoader.load_bytes`; return empty
+  when it fails. In `save_generated_document`, reject empty bytes, bytes over
+  `MAX_BYTES`, or exact bytes rejected by the production byte loader before
+  creating an invocation directory. In `load_path`, check length before
+  allocation and verify complete error-free reads.
+
+- [ ] **Step 5: Write recovery-state regressions first**
+
+  Add focused writer and CLI tests for promotion failure after target mutation,
+  promoted-byte mismatch, successful exact rollback, prior absence, restore
+  failure, interrupted-transaction recovery, and cleanup debt. Assert exact
+  result keys and state values. Assert that `REJECTED` is impossible unless
+  prior bytes/absence are verified and that restore failure prints
+  `INDETERMINATE`.
+
+- [ ] **Step 6: Implement a durable generated-write transaction**
+
+  Before target mutation, persist and verify the candidate, exact prior bytes
+  or absence, and a recovery record under the fixed staging root. On entry,
+  resolve any retained record: accept an already verified candidate as a
+  completed commit, otherwise restore and verify the prior state before
+  continuing. Keep recovery evidence until candidate commit or rollback is
+  verified. Resolve recovery before current-target comparison, then return
+  exact structured state `unchanged`, `rejected`, `committed`, or
+  `indeterminate`; never report an unverified rollback as rejected. Preserve
+  the behavior of ordinary `save_document`, `save_irreversible_document`, and
+  `replace_document`.
+
+- [ ] **Step 7: Propagate truthful CLI state**
+
+  Update the CLI result validator for the new exact result contract and remove
+  its duplicate compare/restore protocol. Map writer state `unchanged` to
+  `UNCHANGED`, `committed` to `IMPORTED`, `rejected` to `REJECTED`, and
+  `indeterminate` to `INDETERMINATE`.
+
+- [ ] **Step 8: Run affected red/green gates and commit focused corrections**
+
+  Run the directly affected unit suites after each red/green change. Inspect
+  `git diff --check` and exact staged scope before each focused commit. Do not
+  regenerate the checked-in snapshot unless the canonical bytes actually
+  change.
+
+- [ ] **Step 9: Re-run milestone verification and obtain a fresh audit**
+
+  Run the integration acceptance runner, exact 12-suite focused gate, complete
+  Party Forge suite, importer `UNCHANGED` replay, and Latticewright producer
+  tests/typecheck/lint. Refresh verification evidence only from fresh output,
+  then obtain an independent whole-branch review. Stop before merge, push,
+  activation, format-1 removal, or release.
+
+---
+
 ## Coverage Self-Review
 
 - Approved source artifacts: Task 7.
@@ -943,6 +1065,8 @@ No other inference is permitted.
 - Fixed format-1 rollback: Tasks 6 and 8.
 - Deterministic checked-in artifacts and explicit import: Task 7.
 - Full headless acceptance and truthful verification evidence: Task 8.
+- Opaque provenance, exact canonical byte bounds, durable transaction recovery,
+  and indeterminate-state truthfulness: Task 9.
 - Excluded scene work, save migration, balance/effects, merge, activation, and release: Global Constraints and Task 8 audit.
 
 ## Stop Boundary

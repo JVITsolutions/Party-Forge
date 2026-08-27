@@ -117,6 +117,15 @@ The checked-in snapshot uses Party Forge's own identity and schema version. It
 contains only stable location IDs, destination IDs, visibility and
 availability conditions, and source provenance.
 
+Snapshot version 1 treats the three producer identity fields as bounded opaque
+provenance. `source.adapter` and `source.format` are nonempty stable strings of
+at most 128 UTF-16 code units. `source.formatVersion` is an integer from 1
+through 2,147,483,647. Runtime loading and evaluation retain these values for
+diagnostics but do not interpret them or compare them with a Latticewright
+version. The version-specific development importer remains responsible for
+requiring its exact source format, source version, and adapter identity before
+it emits the snapshot.
+
 It contains no source filesystem paths, Latticewright graph records, editor
 workspace state, arbitrary extensions, display layout, scripts, effects, or
 runtime resource references.
@@ -213,6 +222,8 @@ Its logical shape is:
 - Reimporting identical semantic input produces byte-identical output.
 - Reordering semantically unordered Latticewright input does not alter output.
 - The exact imported source-byte SHA-256 is retained for traceability.
+- The exact pretty-printed UTF-8 byte sequence is validated through the
+  production byte loader before it may be staged or promoted.
 
 ### Bounds
 
@@ -223,6 +234,11 @@ Snapshot version 1 accepts at most:
 - eight visibility conditions per location;
 - eight availability conditions per location; and
 - 128 UTF-16 code units for each stable ID or condition value.
+
+The same 128-unit text bound applies independently to `source.adapter` and
+`source.format`. `source.formatVersion` must be in the positive signed 32-bit
+range. The 1 MiB ceiling applies to the exact canonical bytes written to disk,
+not a smaller compact serialization used during in-memory validation.
 
 These are access-snapshot limits, not Latticewright or Party Forge portfolio
 limits. Larger future domains should use separate snapshots or an explicitly
@@ -294,22 +310,46 @@ The command performs these stages:
 3. Require the exact supported Latticewright runtime-v3 root contract.
 4. Validate the dedicated City Access schema and reject forbidden content.
 5. Translate recognized records into Party Forge snapshot records in memory.
-6. Canonicalize and validate the complete output with the production snapshot
-   loader.
+6. Canonicalize the complete output, then validate the exact canonical bytes
+   with the production snapshot loader, including the 1 MiB ceiling.
 7. Compare candidate bytes with the current checked-in snapshot.
 8. Return success without writing when the bytes are already identical.
-9. Otherwise promote the validated candidate through Party Forge's existing
-   atomic JSON persistence boundary.
+9. Otherwise promote the validated candidate through Party Forge's generated
+   JSON transaction boundary.
 10. Re-read and verify the promoted bytes before reporting success.
 
 Temporary, backup, and cleanup-debt artifacts are confined to a tool-owned
-ignored staging root. They never become runtime inputs. A pre-commit failure
-preserves the exact previous snapshot. A post-promotion cleanup failure reports
-that the new snapshot committed plus retained cleanup debt; it does not claim
-that the import failed or silently roll back valid committed bytes.
+ignored staging root. They never become runtime inputs. Before target mutation,
+the writer persists and verifies a recovery record plus the exact prior
+generation, or a verified record that the target was absent. The recovery
+record remains until either the canonical candidate is verified as committed
+or the prior state is restored and re-read exactly. A later invocation resolves
+an interrupted transaction before starting a new one. A post-commit cleanup
+failure reports that the new snapshot committed plus retained cleanup debt; it
+does not claim that the import failed or silently roll back valid committed
+bytes.
+
+Generated-write results use exact keys `ok`, `state`, `cleanupDebt`, `stage`,
+and `reason`. `state` is one of `unchanged`, `rejected`, `committed`, or
+`indeterminate`:
+
+- `unchanged` means the current target already equals the canonical candidate;
+- `rejected` means the prior bytes, or prior absence, were re-read and verified;
+- `committed` means the exact canonical candidate was re-read and verified; and
+- `indeterminate` means neither state could be verified, so recovery evidence
+  is retained beneath the staging root and the result must not be described as
+  an ordinary rejection.
+
+The generated writer owns interrupted-transaction recovery, current-target
+comparison, replacement, verification, and rollback as one boundary. The CLI
+does not perform an independent second restoration protocol. This ensures every
+invocation resolves a retained recovery record before an `UNCHANGED` comparison
+can bypass the writer.
 
 The command prints one grep-friendly terminal marker describing `UNCHANGED`,
-`IMPORTED`, or `REJECTED`, along with the adapter ID and sanitized stage. It
+`IMPORTED`, `REJECTED`, or `INDETERMINATE`, along with the adapter ID and
+sanitized stage. `REJECTED` is permitted only for a verified prior state;
+`INDETERMINATE` exits nonzero and preserves the recovery evidence. The command
 does not print arbitrary source contents or machine-specific source paths into
 the generated snapshot.
 
@@ -317,10 +357,12 @@ the generated snapshot.
 
 ### `CityAccessSnapshotLoader`
 
-The loader accepts only the exact Party Forge format and version, enforces all
-bounds, rejects unknown keys and condition kinds, validates unique stable IDs,
-and returns either one complete immutable snapshot or a diagnostic. It never
-returns partially usable locations.
+The loader accepts only the exact Party Forge format and version, validates
+bounded opaque source provenance, enforces all bounds, rejects unknown keys and
+condition kinds, validates unique stable IDs, and returns either one complete
+immutable snapshot or a diagnostic. It never returns partially usable
+locations. Path loading checks the file length before allocating its buffer and
+verifies that the requested byte count was read without an I/O error.
 
 ### `CityAccessEvaluator`
 
@@ -361,10 +403,12 @@ No ordinary player build activates the snapshot provider in this milestone.
 - Missing or broken source reference: reject the complete import.
 - Unknown requirement or any effect: reject the complete import.
 - Invalid generated snapshot: reject before promotion.
-- Promotion failure: retain the previous verified snapshot and report the
-  exact sanitized stage.
-- Promoted-byte verification failure: restore through the existing atomic
-  persistence recovery contract and report failure.
+- Canonical generated bytes over 1 MiB: reject before staging or promotion.
+- Promotion failure: restore and verify the prior state before reporting
+  `REJECTED`; otherwise retain recovery evidence and report `INDETERMINATE`.
+- Promoted-byte verification failure: restore and re-read the exact prior state
+  before reporting `REJECTED`; failed or unverifiable restoration reports
+  `INDETERMINATE`.
 - Invalid checked-in snapshot while the developer flag is on: expose no
   candidate access and leave profile/save state unchanged.
 - Unknown runtime location: hidden, unavailable, and diagnostic.
@@ -387,7 +431,15 @@ the new provider, or delete the format-1 fallback.
   generation.
 - Source hash matches the exact imported bytes.
 - Snapshot loader rejects unknown root and nested keys.
+- Snapshot loader accepts bounded non-Latticewright provenance while the
+  runtime-v3 importer still requires its exact Latticewright contract.
 - Snapshot limits accept exact boundaries and reject limit plus one.
+- A combined multibyte maximum construction is rejected when its exact
+  pretty-printed canonical bytes exceed 1 MiB, even if compact JSON fits.
+- Oversized path input is rejected before buffer allocation, and short/error
+  reads are rejected.
+- Interrupted transactions recover on the next invocation; injected restore
+  failures report `indeterminate`/`INDETERMINATE` and retain recovery evidence.
 
 ### Access evaluation
 
