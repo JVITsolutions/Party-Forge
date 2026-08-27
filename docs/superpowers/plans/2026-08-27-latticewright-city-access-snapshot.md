@@ -313,13 +313,29 @@ No other inference is permitted.
 
 - Modify: `.gitignore`
 - Modify: `scripts/profile/atomic_json_store.gd`
+- Modify: `scripts/world/access/city_access_snapshot_loader.gd`
 - Modify: `tests/unit/test_atomic_profile_store.gd`
+- Modify: `tests/unit/test_city_access_snapshot_loader.gd`
 - Create: `scripts/tools/strict_json_document_reader.gd`
 - Create: `scripts/tools/generated_json_document_writer.gd`
 - Create: `tests/unit/test_strict_json_document_reader.gd`
 - Create: `tests/unit/test_generated_json_document_writer.gd`
 
 **Purpose:** Reuse Party Forge's persistence boundary while ensuring importer artifacts never sit beside runtime data.
+
+- [ ] **Approved prerequisite: expose strict in-memory validation**
+
+  Add and independently test:
+
+  ```gdscript
+  CityAccessSnapshotLoader.validate_document(document: Dictionary) -> CityAccessLoadResult
+  ```
+
+  It must apply the same exact structural and semantic rules as `load_bytes()`
+  without reading, encoding, hashing, or mutating disk state. Refactor
+  `load_bytes()` to delegate to it after strict byte/UTF-8/JSON parsing so the
+  two validation paths cannot drift. Commit this prerequisite separately
+  before the remaining Task 3 work.
 
 - [ ] **Step 1: Ignore the fixed tool-owned staging root**
 
