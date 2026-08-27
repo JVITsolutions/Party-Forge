@@ -117,6 +117,7 @@ func run() -> Array[String]:
 	_test_durable_route_resumes_without_checkout(failures)
 	_test_refresh_failure_rejects_cached_ready_recovery(failures)
 	_test_legacy_binding_refreshes_reinspects_and_rejects_incompatible_bytes(failures)
+	_test_bound_recovery_refresh_failure_is_terminal(failures)
 	_test_durable_context_failure_preserves_recovery(failures)
 	_test_strict_abandonment_and_forfeit_failure(failures)
 	_test_committed_forfeit_refresh_failure_is_terminal(failures)
@@ -365,6 +366,48 @@ func _test_legacy_binding_refreshes_reinspects_and_rejects_incompatible_bytes(fa
 	TestAssertions.truthy((incompatible_dialog.get_node("Overlay/Frame/Layout/Status") as Label).text == "Unable to bind that leader class.", "incompatible binding uses safe player-facing copy", failures)
 	TestAssertions.truthy((incompatible_dialog.get_node("Overlay/Frame/Layout/TechnicalDetail") as Label).text.contains("ineligible"), "incompatible binding preserves technical diagnostics", failures)
 	_cleanup_recovery_main(incompatible_main, incompatible_root)
+
+
+func _test_bound_recovery_refresh_failure_is_terminal(failures: Array[String]) -> void:
+	var root := _recovery_root("bound_refresh_failure")
+	_save_recovery_profile(root, &"")
+	var path := ProfileStore.new().profile_path(DURABLE_PROFILE_ID, root)
+	var before := FileAccess.get_file_as_bytes(path)
+	var checkout_spy := RecoveryCheckoutSpy.new()
+	var recovery_spy := RecoveryServiceSpy.new(checkout_spy)
+	var main := _recovery_main(root, checkout_spy, recovery_spy)
+	var manager := RefreshFailureManager.new()
+	manager.fail_on_call = 2
+	manager.failure_reason = "injected post-bind refresh failure"
+	TestAssertions.equal(manager.bootstrap(root), "", "post-bind refresh manager bootstraps legacy recovery", failures)
+	main.profile_manager = manager
+	var context_factory_calls: Array[int] = [0]
+	main.set("_run_context_factory", func() -> PlayerRunContext:
+		context_factory_calls[0] += 1
+		return PlayerRunContext.new()
+	)
+	var dialog := main.get_node("RunRecoveryDialog")
+	main.call("_on_main_menu_route_requested", MainMenuViewModel.ROUTE_RUN_RECOVERY)
+	dialog.legacy_class_requested.emit(&"fighter")
+	TestAssertions.equal(recovery_spy.bind_calls, 1, "legacy class commit calls bind exactly once before refresh failure", failures)
+	var committed_bytes := FileAccess.get_file_as_bytes(path)
+	TestAssertions.truthy(committed_bytes != before, "legacy class commit changes the durable recovery before refresh fails", failures)
+	var durable := ProfileStore.new().load_profile(DURABLE_PROFILE_ID, root).profile
+	var durable_result := RunRecoveryService.new(checkout_spy).inspect(durable)
+	TestAssertions.truthy(durable_result.ready(), "post-bind refresh failure leaves READY recovery committed on disk", failures)
+	TestAssertions.equal(durable_result.selected_leader_class_id, &"fighter", "post-bind refresh failure preserves the committed class", failures)
+	TestAssertions.equal(String(manager.active_profile().resumable_run.get("selected_leader_class_id", "")), "", "failed manager refresh retains stale legacy cache for the regression", failures)
+	TestAssertions.equal(recovery_spy.inspected_class_ids[-1], &"fighter", "refresh failure does not re-inspect stale manager recovery", failures)
+	TestAssertions.equal(main.get("_active_run_recovery"), null, "authoritative bound recovery clears active recovery before failed refresh", failures)
+	_assert_terminal_recovery_dialog(dialog, "Unable to refresh the bound run.", "injected post-bind refresh failure", "post-bind refresh failure", failures)
+	TestAssertions.equal(context_factory_calls[0], 0, "post-bind refresh failure constructs zero runtime contexts", failures)
+	TestAssertions.truthy(not main.run_started and main.active_run_context == null, "post-bind refresh failure leaves runtime stopped", failures)
+	dialog.legacy_class_requested.emit(&"fighter")
+	(dialog.get_node("Overlay/Frame/Layout/Actions/Bind") as Button).pressed.emit()
+	TestAssertions.equal(recovery_spy.bind_calls, 1, "terminal post-bind failure cannot call bind again through signal or action", failures)
+	TestAssertions.equal(FileAccess.get_file_as_bytes(path), committed_bytes, "terminal post-bind failure leaves committed recovery bytes untouched", failures)
+	TestAssertions.equal(checkout_spy.checkout_calls, 0, "post-bind refresh failure performs zero checkouts", failures)
+	_cleanup_recovery_main(main, root)
 
 
 func _test_durable_context_failure_preserves_recovery(failures: Array[String]) -> void:

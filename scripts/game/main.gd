@@ -1063,9 +1063,10 @@ func _on_run_recovery_legacy_class_requested(class_id: StringName) -> void:
 	if bound.code != RunRecoveryResult.Code.READY:
 		_show_run_recovery_failure("Unable to bind that leader class.", bound.error)
 		return
+	_active_run_recovery = null
 	var refresh_error := profile_manager.refresh_profile(profile_id)
 	if not refresh_error.is_empty():
-		_show_run_recovery_failure("Unable to refresh the bound run.", refresh_error)
+		_show_run_recovery_failure("Unable to refresh the bound run.", refresh_error, true)
 		return
 	var refreshed := profile_manager.active_profile()
 	var inspected := _run_recovery.inspect(refreshed)
