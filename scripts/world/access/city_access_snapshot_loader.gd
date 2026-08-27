@@ -7,6 +7,7 @@ const MAX_BYTES := 1024 * 1024
 const MAX_LOCATIONS := 256
 const MAX_CONDITIONS := 8
 const MAX_TEXT_UNITS := 128
+const MAX_PROVENANCE_VERSION := 2147483647
 const CONDITION_KINDS := [&"always", &"prologue_state", &"permanent_unlock", &"discovered_building", &"discovered_tree"]
 const ROOT_KEYS := ["format", "version", "source", "locations"]
 const SOURCE_KEYS := ["adapter", "format", "formatVersion", "sha256"]
@@ -29,8 +30,8 @@ static func validate_document(document: Dictionary) -> CityAccessLoadResult:
 	if not document["source"] is Dictionary or not document["locations"] is Array: return _failure("root types are invalid")
 	var source := document["source"] as Dictionary
 	if not _keys(source, SOURCE_KEYS): return _failure("source keys are invalid")
-	if typeof(source["adapter"]) != TYPE_STRING or source["adapter"] != "latticewright-runtime-v3-city-access": return _failure("source adapter is invalid")
-	if not _stable(source["format"]) or not _integer(source["formatVersion"]) or int(source["formatVersion"]) != 3 or typeof(source["sha256"]) != TYPE_STRING or not _sha(source["sha256"] as String): return _failure("source values are invalid")
+	if not _stable(source["adapter"]): return _failure("source adapter is invalid")
+	if not _stable(source["format"]) or not _provenance_version(source["formatVersion"]) or typeof(source["sha256"]) != TYPE_STRING or not _sha(source["sha256"] as String): return _failure("source values are invalid")
 	var values := document["locations"] as Array
 	if values.size() > MAX_LOCATIONS: return _failure("location limit exceeded")
 	var locations: Array[CityAccessLocation] = []
@@ -90,6 +91,9 @@ static func _stable(value: Variant) -> bool:
 
 static func _integer(value: Variant) -> bool:
 	return typeof(value) == TYPE_INT or (typeof(value) == TYPE_FLOAT and is_finite(value as float) and floorf(value as float) == value)
+
+static func _provenance_version(value: Variant) -> bool:
+	return _integer(value) and int(value) > 0 and int(value) <= MAX_PROVENANCE_VERSION
 
 static func _sha(value: String) -> bool:
 	if value.length() != 64: return false

@@ -4,6 +4,7 @@ func run() -> Array[String]:
 	var failures: Array[String] = []
 	_test_factories_reject_invalid_inputs(failures)
 	_test_valid_access_snapshot_loads(failures)
+	_test_opaque_provenance_contract(failures)
 	_test_in_memory_validation_matches_strict_loader(failures)
 	_test_structural_contract(failures)
 	_test_content_and_limit_contract(failures)
@@ -26,9 +27,7 @@ func _test_factories_reject_invalid_inputs(failures: Array[String]) -> void:
 	TestAssertions.truthy(valid_location != null, "factory fixture location constructs", failures)
 	var valid_locations: Array[CityAccessLocation] = [valid_location]
 	var valid_sha := "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
-	TestAssertions.equal(CityAccessSnapshot.create(&"wrong", &"runtime", 3, valid_sha, valid_locations), null, "snapshot factory rejects wrong adapter", failures)
-	for source_version: int in [0, 1, 2, 4]:
-		TestAssertions.equal(CityAccessSnapshot.create(&"latticewright-runtime-v3-city-access", &"runtime", source_version, valid_sha, valid_locations), null, "snapshot factory rejects runtime-v3 adapter version %d" % source_version, failures)
+	TestAssertions.equal(CityAccessSnapshot.create(&"", &"runtime", 3, valid_sha, valid_locations), null, "snapshot factory rejects empty adapter", failures)
 	TestAssertions.equal(CityAccessSnapshot.create(&"latticewright-runtime-v3-city-access", &"runtime", 3, "bad", valid_locations), null, "snapshot factory rejects malformed SHA", failures)
 	var invalid_locations: Array[CityAccessLocation] = []
 	invalid_locations.append(null)
@@ -41,11 +40,51 @@ func _test_valid_access_snapshot_loads(failures: Array[String]) -> void:
 	if not result is RefCounted:
 		failures.append("valid access snapshot invokes the loader")
 		return
-	TestAssertions.truthy(result.ok(), "valid access snapshot loads atomically", failures)
+	TestAssertions.truthy(result.ok(), "valid access snapshot loads atomically: %s" % [str(result.errors)], failures)
 	if not result.ok():
 		return
 	TestAssertions.equal(result.snapshot.locations.size(), 7, "all seven locations load", failures)
 	TestAssertions.equal(String(result.snapshot.locations[0].id), "city.apothecary", "locations use ordinal ID order", failures)
+
+
+func _test_opaque_provenance_contract(failures: Array[String]) -> void:
+	var alternate := _valid_document()
+	alternate["source"] = {
+		"adapter": "future-adapter",
+		"format": "future-format",
+		"formatVersion": 2147483647,
+		"sha256": alternate["source"]["sha256"],
+	}
+	var loaded := CityAccessSnapshotLoader.validate_document(alternate)
+	TestAssertions.truthy(loaded.ok(), "runtime loader accepts alternate bounded opaque provenance", failures)
+	if loaded.ok():
+		TestAssertions.equal(String(loaded.snapshot.adapter), "future-adapter", "runtime loader retains alternate adapter provenance", failures)
+		TestAssertions.equal(String(loaded.snapshot.source_format), "future-format", "runtime loader retains alternate format provenance", failures)
+		TestAssertions.equal(loaded.snapshot.source_format_version, 2147483647, "runtime loader retains maximum positive source version", failures)
+
+	var valid_condition := CityAccessCondition.create(&"always", "")
+	var valid_location := CityAccessLocation.create(&"city.test", &"city.test.destination", [valid_condition], [valid_condition])
+	var valid_locations: Array[CityAccessLocation] = [valid_location]
+	var valid_sha := "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+	TestAssertions.truthy(CityAccessSnapshot.create(&"future-adapter", &"future-format", 2147483647, valid_sha, valid_locations) != null, "snapshot factory accepts alternate bounded opaque provenance", failures)
+
+	for field: String in ["adapter", "format"]:
+		for invalid_text: String in ["", "x".repeat(CityAccessSnapshotLoader.MAX_TEXT_UNITS + 1)]:
+			var invalid_document := alternate.duplicate(true)
+			invalid_document["source"][field] = invalid_text
+			_assert_invalid(invalid_document, "loader rejects %s provenance text length %d" % [field, invalid_text.length()], failures)
+			var adapter := StringName(invalid_text) if field == "adapter" else &"future-adapter"
+			var source_format := StringName(invalid_text) if field == "format" else &"future-format"
+			TestAssertions.equal(CityAccessSnapshot.create(adapter, source_format, 1, valid_sha, valid_locations), null, "snapshot factory rejects %s provenance text length %d" % [field, invalid_text.length()], failures)
+
+	for invalid_version: Variant in [1.5, 0, -1, 2147483648]:
+		var invalid_document := alternate.duplicate(true)
+		invalid_document["source"]["formatVersion"] = invalid_version
+		_assert_invalid(invalid_document, "loader rejects provenance version %s" % str(invalid_version), failures)
+		TestAssertions.equal(CityAccessSnapshot.create(&"future-adapter", &"future-format", invalid_version, valid_sha, valid_locations), null, "snapshot factory rejects provenance version %s" % str(invalid_version), failures)
+	var nonnumeric_version := alternate.duplicate(true)
+	nonnumeric_version["source"]["formatVersion"] = "1"
+	_assert_invalid(nonnumeric_version, "loader rejects noninteger provenance version", failures)
 
 
 func _test_in_memory_validation_matches_strict_loader(failures: Array[String]) -> void:
@@ -84,16 +123,9 @@ func _test_structural_contract(failures: Array[String]) -> void:
 		var document := _valid_document()
 		document["version"] = replacement
 		_assert_invalid(document, "wrong root version rejects", failures)
-	var wrong_adapter := _valid_document()
-	wrong_adapter["source"]["adapter"] = "other"
-	_assert_invalid(wrong_adapter, "wrong source adapter rejects", failures)
 	var malformed_sha := _valid_document()
 	malformed_sha["source"]["sha256"] = "A".repeat(64)
 	_assert_invalid(malformed_sha, "malformed source SHA rejects", failures)
-	for source_version: int in [0, 1, 2, 4]:
-		var wrong_source_version := _valid_document()
-		wrong_source_version["source"]["formatVersion"] = source_version
-		_assert_invalid(wrong_source_version, "loader rejects runtime-v3 adapter version %d" % source_version, failures)
 
 
 func _test_content_and_limit_contract(failures: Array[String]) -> void:
