@@ -1,0 +1,357 @@
+{
+  "archetype": "custom",
+  "assets": [],
+  "content": [
+    {
+      "categoryIds": [],
+      "description": "City access contract for city.apothecary.",
+      "effects": [],
+      "extensions": {},
+      "fieldValues": {
+        "party-forge-destination-id": "city.apothecary.interior",
+        "party-forge-location-id": "city.apothecary",
+        "party-forge-visibility-policy": "visible"
+      },
+      "iconAssetId": null,
+      "id": "location-city-apothecary",
+      "name": "city.apothecary",
+      "requirements": [],
+      "tagIds": [],
+      "typeId": "party-forge-access-location"
+    },
+    {
+      "categoryIds": [],
+      "description": "City access contract for city.coliseum_road.",
+      "effects": [],
+      "extensions": {},
+      "fieldValues": {
+        "party-forge-destination-id": "city.coliseum_road.route",
+        "party-forge-location-id": "city.coliseum_road",
+        "party-forge-visibility-policy": "visible"
+      },
+      "iconAssetId": null,
+      "id": "location-city-coliseum-road",
+      "name": "city.coliseum_road",
+      "requirements": [],
+      "tagIds": [],
+      "typeId": "party-forge-access-location"
+    },
+    {
+      "categoryIds": [],
+      "description": "City access contract for city.inn.",
+      "effects": [],
+      "extensions": {},
+      "fieldValues": {
+        "party-forge-destination-id": "city.inn.interior",
+        "party-forge-location-id": "city.inn",
+        "party-forge-visibility-policy": "visible"
+      },
+      "iconAssetId": null,
+      "id": "location-city-inn",
+      "name": "city.inn",
+      "requirements": [
+        {
+          "definitionId": "party-forge-permanent-unlock",
+          "values": {
+            "value": "service:hero_registry"
+          }
+        }
+      ],
+      "tagIds": [],
+      "typeId": "party-forge-access-location"
+    },
+    {
+      "categoryIds": [],
+      "description": "City access contract for city.merchant.",
+      "effects": [],
+      "extensions": {},
+      "fieldValues": {
+        "party-forge-destination-id": "city.merchant.interior",
+        "party-forge-location-id": "city.merchant",
+        "party-forge-visibility-policy": "visible"
+      },
+      "iconAssetId": null,
+      "id": "location-city-merchant",
+      "name": "city.merchant",
+      "requirements": [
+        {
+          "definitionId": "party-forge-permanent-unlock",
+          "values": {
+            "value": "service:city_vendors"
+          }
+        }
+      ],
+      "tagIds": [],
+      "typeId": "party-forge-access-location"
+    },
+    {
+      "categoryIds": [],
+      "description": "City access contract for city.scholars_archive.",
+      "effects": [],
+      "extensions": {},
+      "fieldValues": {
+        "party-forge-destination-id": "city.scholars_archive.interior",
+        "party-forge-location-id": "city.scholars_archive",
+        "party-forge-visibility-policy": "hidden_until_available"
+      },
+      "iconAssetId": null,
+      "id": "location-city-scholars-archive",
+      "name": "city.scholars_archive",
+      "requirements": [
+        {
+          "definitionId": "party-forge-prologue-state",
+          "values": {
+            "value": "completed"
+          }
+        }
+      ],
+      "tagIds": [],
+      "typeId": "party-forge-access-location"
+    },
+    {
+      "categoryIds": [],
+      "description": "City access contract for city.smithy.",
+      "effects": [],
+      "extensions": {},
+      "fieldValues": {
+        "party-forge-destination-id": "city.smithy.interior",
+        "party-forge-location-id": "city.smithy",
+        "party-forge-visibility-policy": "visible"
+      },
+      "iconAssetId": null,
+      "id": "location-city-smithy",
+      "name": "city.smithy",
+      "requirements": [
+        {
+          "definitionId": "party-forge-permanent-unlock",
+          "values": {
+            "value": "service:equipment_upgrading"
+          }
+        }
+      ],
+      "tagIds": [],
+      "typeId": "party-forge-access-location"
+    },
+    {
+      "categoryIds": [],
+      "description": "City access contract for city.warehouse.",
+      "effects": [],
+      "extensions": {},
+      "fieldValues": {
+        "party-forge-destination-id": "city.warehouse.interior",
+        "party-forge-location-id": "city.warehouse",
+        "party-forge-visibility-policy": "visible"
+      },
+      "iconAssetId": null,
+      "id": "location-city-warehouse",
+      "name": "city.warehouse",
+      "requirements": [
+        {
+          "definitionId": "party-forge-permanent-unlock",
+          "values": {
+            "value": "stash"
+          }
+        }
+      ],
+      "tagIds": [],
+      "typeId": "party-forge-access-location"
+    }
+  ],
+  "extensions": {
+    "gameplayConsumer": "not-yet-wired",
+    "partyForgeStatus": "authoring-design-data"
+  },
+  "format": "latticewright-progression",
+  "formatVersion": 3,
+  "graphPortals": [],
+  "graphs": [
+    {
+      "connections": [],
+      "decorations": [],
+      "extensions": {},
+      "groups": [],
+      "id": "city-access",
+      "name": "City Access",
+      "placements": [
+        {
+          "contentId": "location-city-apothecary",
+          "extensions": {},
+          "fieldValues": {},
+          "id": "placement-city-apothecary",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "typeId": "party-forge-access-location-placement"
+        },
+        {
+          "contentId": "location-city-coliseum-road",
+          "extensions": {},
+          "fieldValues": {},
+          "id": "placement-city-coliseum-road",
+          "position": {
+            "x": 240,
+            "y": 0
+          },
+          "typeId": "party-forge-access-location-placement"
+        },
+        {
+          "contentId": "location-city-inn",
+          "extensions": {},
+          "fieldValues": {},
+          "id": "placement-city-inn",
+          "position": {
+            "x": 0,
+            "y": 220
+          },
+          "typeId": "party-forge-access-location-placement"
+        },
+        {
+          "contentId": "location-city-merchant",
+          "extensions": {},
+          "fieldValues": {},
+          "id": "placement-city-merchant",
+          "position": {
+            "x": 240,
+            "y": 220
+          },
+          "typeId": "party-forge-access-location-placement"
+        },
+        {
+          "contentId": "location-city-scholars-archive",
+          "extensions": {},
+          "fieldValues": {},
+          "id": "placement-city-scholars-archive",
+          "position": {
+            "x": 480,
+            "y": 0
+          },
+          "typeId": "party-forge-access-location-placement"
+        },
+        {
+          "contentId": "location-city-smithy",
+          "extensions": {},
+          "fieldValues": {},
+          "id": "placement-city-smithy",
+          "position": {
+            "x": 720,
+            "y": 220
+          },
+          "typeId": "party-forge-access-location-placement"
+        },
+        {
+          "contentId": "location-city-warehouse",
+          "extensions": {},
+          "fieldValues": {},
+          "id": "placement-city-warehouse",
+          "position": {
+            "x": 480,
+            "y": 220
+          },
+          "typeId": "party-forge-access-location-placement"
+        }
+      ],
+      "startingPlacementIds": [
+        "placement-city-apothecary"
+      ]
+    }
+  ],
+  "name": "Party Forge City Access",
+  "projectId": "party-forge-city-access",
+  "schemas": {
+    "categories": [],
+    "contentTypes": [
+      {
+        "description": "A City location with visibility and availability contracts.",
+        "fieldIds": [
+          "party-forge-destination-id",
+          "party-forge-location-id",
+          "party-forge-visibility-policy"
+        ],
+        "id": "party-forge-access-location",
+        "name": "Party Forge Access Location"
+      }
+    ],
+    "currencies": [],
+    "effects": [],
+    "fields": [
+      {
+        "id": "party-forge-destination-id",
+        "name": "Party Forge Destination ID",
+        "owner": "content",
+        "required": true,
+        "valueType": "text"
+      },
+      {
+        "id": "party-forge-location-id",
+        "name": "Party Forge Location ID",
+        "owner": "content",
+        "required": true,
+        "valueType": "text"
+      },
+      {
+        "allowedValues": [
+          "hidden_until_available",
+          "visible"
+        ],
+        "id": "party-forge-visibility-policy",
+        "name": "Party Forge Visibility Policy",
+        "owner": "content",
+        "required": true,
+        "valueType": "enum"
+      }
+    ],
+    "placementTypes": [
+      {
+        "description": "Authoring placement for a City access location.",
+        "fieldIds": [],
+        "id": "party-forge-access-location-placement",
+        "name": "Party Forge Access Location Placement",
+        "shape": "custom"
+      }
+    ],
+    "ranks": [],
+    "requirements": [
+      {
+        "description": "Requires one exact Party Forge permanent unlock ID.",
+        "id": "party-forge-permanent-unlock",
+        "name": "Party Forge Permanent Unlock",
+        "parameterDefinitions": [
+          {
+            "id": "value",
+            "name": "Value",
+            "required": true,
+            "valueType": "text"
+          }
+        ]
+      },
+      {
+        "description": "Requires one exact Party Forge prologue state.",
+        "id": "party-forge-prologue-state",
+        "name": "Party Forge Prologue State",
+        "parameterDefinitions": [
+          {
+            "allowedValues": [
+              "completed",
+              "in_progress",
+              "not_started"
+            ],
+            "id": "value",
+            "name": "Value",
+            "required": true,
+            "valueType": "enum"
+          }
+        ]
+      }
+    ],
+    "tags": []
+  },
+  "vocabulary": {
+    "contentPlural": "Locations",
+    "contentSingular": "Location",
+    "graphPlural": "Access",
+    "graphSingular": "Access",
+    "placementPlural": "Locations",
+    "placementSingular": "Location"
+  }
+}
