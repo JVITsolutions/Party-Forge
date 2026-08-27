@@ -2,12 +2,14 @@
 
 Date: 2026-08-27. This record describes a retained-feature-worktree qualification only. It does not activate the candidate, merge either branch, push, alter `main`, or create a release.
 
-## Exact inputs
+## Exact inputs and revision sequence
 
-| Worktree | Branch | HEAD |
+| Worktree | Branch | Qualification-input HEAD |
 | --- | --- | --- |
 | Party Forge | `feature/latticewright-v3-portfolio` | `33dd26ee91c24e2ed93e99cb4bef92fadff6b1d8` |
 | Latticewright | `feature/v3-graph-portals-party-forge` | `12408a727b3a49aab62bd8c6a70266abdc445d2e` |
+
+`33dd26e` is explicitly the pre-Task-8 Party Forge qualification-input HEAD. The initial Task 8 acceptance commit is `2b785270245595079fc8ca9426b00029ebc5bd83` (`test: qualify City access snapshot rollback`). This documentation correction follows that initial acceptance commit, so the input identity must not be read as the branch's final HEAD.
 
 Fresh SHA-256 values:
 
@@ -33,7 +35,7 @@ The dedicated runner was first deliberately RED: exit `1` in `0.293s` with `CITY
 & $godot --headless --path . --quit-after 600 --script res://tests/integration/city_access_snapshot_runner.gd
 ```
 
-It exited `0` in `1.135s` and printed the sole success marker:
+The initial acceptance run exited `0` in `1.135s` and printed the sole success marker:
 
 ```text
 CITY_ACCESS_SNAPSHOT_ACCEPTANCE_OK locations=7 profiles=7 rollback=legacy
@@ -41,11 +43,17 @@ CITY_ACCESS_SNAPSHOT_ACCEPTANCE_OK locations=7 profiles=7 rollback=legacy
 
 In that one process it strictly read and SHA-256 hashed the checked-in runtime-v3 source; translated it with `LatticewrightRuntimeV3CityAccessImporter`; compared canonical candidate bytes with the checked-in snapshot; loaded the production snapshot; and evaluated all seven locations for seven profiles: NOT_STARTED, IN_PROGRESS, COMPLETED, and one profile for each individual permanent unlock. Before/after `ProfileState.to_dictionary()` values and `ProfileCodec.encode()` UTF-8 bytes were equal for every profile. It also proved default flag-off `LEGACY`; Player Mode plus flag-on `LEGACY` with `candidate_requires_developer_mode`; Developer Mode plus flag-on `CANDIDATE`; an injected invalid snapshot result `CANDIDATE_FAILED` with no fallback; immediate flag-off `LEGACY` rollback; and present/loadable format-1 City data through `PassiveTreeLoader` at `data/passive_trees/city/party-forge-city.pstree.json`.
 
-The required focused batch was run exactly as specified and exited `0` in `17.338s`:
+The required focused batch was initially run in `17.338s` and exited `0`. The evidence-correction replay below retained a new capture and reproduced that result in `17.469s`.
+
+```powershell
+& $godot --headless --path . --quit-after 1200 --script res://tests/focused_test_runner.gd -- tests/unit/test_atomic_profile_store.gd tests/unit/test_strict_json_document_reader.gd tests/unit/test_generated_json_document_writer.gd tests/unit/test_city_access_snapshot_loader.gd tests/unit/test_latticewright_runtime_v3_city_access_importer.gd tests/unit/test_latticewright_access_import_cli.gd tests/unit/test_city_access_evaluator.gd tests/unit/test_party_forge_settings.gd tests/unit/test_settings_screen.gd tests/unit/test_city_access_provider.gd tests/unit/test_city_access_generated_artifacts.gd tests/unit/test_passive_tree_loader.gd
+```
 
 ```text
 TEST_SUMMARY: PASS (0 failures)
 ```
+
+The correction replay also ran the dedicated integration command again: exit `0` in `1.138s`, exactly one `CITY_ACCESS_SNAPSHOT_ACCEPTANCE_OK locations=7 profiles=7 rollback=legacy` marker.
 
 The full Party Forge runner was run from this retained worktree:
 
@@ -53,9 +61,11 @@ The full Party Forge runner was run from this retained worktree:
 & $godot --headless --path . --quit-after 2400 --script res://tests/test_runner.gd
 ```
 
-It exited `0` with exactly one `TEST_SUMMARY: PASS (227 suites)` marker; there were zero `TEST_SUMMARY: FAIL`, `TEST_FAILURE`, `SCRIPT ERROR`, `Parse Error`, `Failed to load script`, and `No loader found` markers. The captured-output interval was `236.062s` (from `2026-08-27T06:21:55.6636262-04:00` to the exit marker at `2026-08-27T06:25:51.7253123-04:00`; wrapper launch preceded capture by less than one second).
+The initial capture exited `0` with exactly one `TEST_SUMMARY: PASS (227 suites)` marker and had a `236.062s` captured-output interval (from `2026-08-27T06:21:55.6636262-04:00` to the exit marker at `2026-08-27T06:25:51.7253123-04:00`; wrapper launch preceded capture by less than one second). The evidence-correction replay ran the identical command from the retained worktree, exited `0` in `236.573s`, and retained its command capture.
 
-Expected negative-path evidence in that complete log comprised 97 `ERROR:` lines and 11 `WARNING:` lines. Examples include intentional non-finite-stat rejection (`PARTY_FORGE_STAT_ERROR source=nonfinite_crit`), invalid damage-boundary rejection (`PARTY_FORGE_DAMAGE_ERROR`), and an intentionally mismatched weighted-content base-manifest fixture. They are exercised failure paths, not test-runner failures.
+The diagnostic-line total is expected to vary between replay environments and runs; it is not an invariant gate. The initial capture counted 97 `ERROR:` and 11 `WARNING:` lines. An independent review replay counted 98 `ERROR:` and 11 `WARNING:` lines. The retained correction replay counted 97 `ERROR:` and 11 `WARNING:` lines. The invariant gates were true in every cited full capture: exactly one `TEST_SUMMARY: PASS (227 suites)` and zero `TEST_SUMMARY: FAIL`, `TEST_FAILURE`, `SCRIPT ERROR`, `Parse Error`, `Failed to load script`, and `No loader found` markers.
+
+Expected negative-path examples include intentional non-finite-stat rejection (`PARTY_FORGE_STAT_ERROR source=nonfinite_crit`), invalid damage-boundary rejection (`PARTY_FORGE_DAMAGE_ERROR`), and the exact weighted-content fixture diagnostic (project-relative paths only): `PARTY_FORGE_WEIGHTED_CONTENT_BUILD_ERROR stage=base_manifest id=hawkeye_band reason=loaded resource path must equal res://data/equipment/bases/greenwood/hawkeye_band.tres, got res://data/equipment/bases/greenwood/not_hawkeye_band.tres`. These are exercised failure paths, not test-runner failures.
 
 ## Latticewright source qualification
 
