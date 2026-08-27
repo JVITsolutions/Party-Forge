@@ -53,13 +53,29 @@ func is_open() -> bool:
 	return visible
 
 
-func show_failure(safe_message: String, technical_detail: String) -> void:
+func show_failure(safe_message: String, technical_detail: String, terminal: bool = false) -> void:
+	if terminal:
+		_enter_terminal_failure()
 	_status().text = safe_message
 	_technical_detail().text = technical_detail
 	_technical_detail().visible = not technical_detail.strip_edges().is_empty()
 	_technical_heading().visible = _technical_detail().visible
 	if is_open():
 		_focus_initial_control()
+
+
+func _enter_terminal_failure() -> void:
+	_abandon_confirmation().hide()
+	_code = RunRecoveryResult.Code.INVALID
+	_run_id = &""
+	_can_forfeit = false
+	for control: Control in [_resume_button(), _class_picker(), _bind_button(), _abandon_button()]:
+		control.visible = false
+		control.set("disabled", true)
+	_cancel_button().visible = true
+	_cancel_button().disabled = false
+	_initial_focus = _cancel_button()
+	_rebuild_focus_loop()
 
 
 func _input(event: InputEvent) -> void:

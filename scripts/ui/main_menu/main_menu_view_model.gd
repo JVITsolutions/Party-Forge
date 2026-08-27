@@ -70,7 +70,7 @@ static func build(profile: Variant, settings: Variant, city_tree_available: Vari
 	result.warehouse_visible = developer_mode or warehouse_state == FeatureAccessPolicy.State.AVAILABLE
 	result.warehouse_enabled = result.warehouse_visible
 	result.warehouse_label = "Developer Warehouse Preview" if developer_mode and warehouse_state != FeatureAccessPolicy.State.AVAILABLE else "Warehouse"
-	if result.city_tree_visible and not result.city_tree_enabled:
+	if result.city_tree_visible and not result.city_tree_enabled and result.primary_route_id != ROUTE_RUN_RECOVERY:
 		result.status_text = "City services are temporarily unavailable."
 	return result
 

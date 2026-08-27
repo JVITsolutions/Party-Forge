@@ -8,6 +8,7 @@ func run() -> Array[String]:
 	_test_no_profile_has_only_first_launch_actions(failures)
 	_test_every_prologue_state_selects_its_route(failures)
 	_test_recovery_overrides_every_profile_progress_route(failures)
+	_test_recovery_status_precedes_unavailable_city_status(failures)
 	_test_completed_discovery_exposes_city_tree(failures)
 	_test_player_mode_ignores_developer_overrides(failures)
 	_test_developer_mode_exposes_nonpersistent_tools(failures)
@@ -73,6 +74,16 @@ func _test_recovery_overrides_every_profile_progress_route(failures: Array[Strin
 		TestAssertions.equal(projection.primary_label, "Resume Run", "recovery overrides normal play label for state %d" % prologue_state, failures)
 		TestAssertions.equal(projection.primary_route_id, &"run_recovery", "recovery uses explicit route for state %d" % prologue_state, failures)
 		TestAssertions.equal(projection.status_text, "An interrupted run is ready to recover.", "recovery explains the route for state %d" % prologue_state, failures)
+
+
+func _test_recovery_status_precedes_unavailable_city_status(failures: Array[String]) -> void:
+	var profile := _profile(ProfileState.PrologueState.COMPLETED)
+	profile.resumable_run = {"malformed_but_nonempty": true}
+	profile.discovered_trees.append(CITY_TREE_ID)
+	var projection := MainMenuViewModel.build(profile, PartyForgeSettings.new(), false)
+	TestAssertions.truthy(projection.city_tree_visible and not projection.city_tree_enabled, "recovery fixture retains unavailable City projection", failures)
+	TestAssertions.equal(projection.primary_route_id, MainMenuViewModel.ROUTE_RUN_RECOVERY, "recovery remains the primary route while City is unavailable", failures)
+	TestAssertions.equal(projection.status_text, "An interrupted run is ready to recover.", "recovery status takes precedence over unavailable City status", failures)
 
 func _test_completed_discovery_exposes_city_tree(failures: Array[String]) -> void:
 	var profile := _profile(ProfileState.PrologueState.COMPLETED)

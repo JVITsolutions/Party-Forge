@@ -3,11 +3,12 @@ extends RefCounted
 class RefreshFailureManager extends ProfileManager:
 	var refresh_calls := 0
 	var fail_on_call := 2
+	var failure_reason := "injected post-checkout refresh failure"
 
 	func refresh_profile(profile_id: String) -> String:
 		refresh_calls += 1
 		if refresh_calls == fail_on_call:
-			return "PROFILE_REFRESH_ERROR profile=%s error=injected post-checkout refresh failure" % profile_id
+			return "PROFILE_REFRESH_ERROR profile=%s error=%s" % [profile_id, failure_reason]
 		return super.refresh_profile(profile_id)
 
 
@@ -114,9 +115,11 @@ func run() -> Array[String]:
 	_test_durable_retry_reuses_exact_checkout(failures)
 	_test_transition_commit_then_checkout_rejection_retries_without_retransition(failures)
 	_test_durable_route_resumes_without_checkout(failures)
+	_test_refresh_failure_rejects_cached_ready_recovery(failures)
 	_test_legacy_binding_refreshes_reinspects_and_rejects_incompatible_bytes(failures)
 	_test_durable_context_failure_preserves_recovery(failures)
 	_test_strict_abandonment_and_forfeit_failure(failures)
+	_test_committed_forfeit_refresh_failure_is_terminal(failures)
 	return failures
 
 
@@ -297,6 +300,38 @@ func _test_durable_route_resumes_without_checkout(failures: Array[String]) -> vo
 	_cleanup_recovery_main(main, root)
 
 
+func _test_refresh_failure_rejects_cached_ready_recovery(failures: Array[String]) -> void:
+	var root := _recovery_root("stale_refresh_failure")
+	_save_recovery_profile(root, &"fighter")
+	var checkout_spy := RecoveryCheckoutSpy.new()
+	var recovery_spy := RecoveryServiceSpy.new(checkout_spy)
+	var main := _recovery_main(root, checkout_spy, recovery_spy)
+	var manager := RefreshFailureManager.new()
+	manager.fail_on_call = 1
+	manager.failure_reason = "injected recovery route refresh failure"
+	TestAssertions.equal(manager.bootstrap(root), "", "refresh-failure manager bootstraps cached READY recovery", failures)
+	main.profile_manager = manager
+	var context_factory_calls: Array[int] = [0]
+	main.set("_run_context_factory", func() -> PlayerRunContext:
+		context_factory_calls[0] += 1
+		return PlayerRunContext.new()
+	)
+	var dialog := main.get_node("RunRecoveryDialog")
+	main.call("_on_main_menu_route_requested", MainMenuViewModel.ROUTE_RUN_RECOVERY)
+	TestAssertions.equal(recovery_spy.inspect_calls, 0, "refresh failure never inspects stale cached READY recovery", failures)
+	TestAssertions.equal(main.get("_active_run_recovery"), null, "refresh failure retains no actionable cached recovery", failures)
+	_assert_terminal_recovery_dialog(dialog, "Unable to refresh this interrupted run.", "injected recovery route refresh failure", "route refresh failure", failures)
+	dialog.resume_requested.emit()
+	dialog.legacy_class_requested.emit(&"fighter")
+	dialog.abandon_requested.emit(DURABLE_RUN_ID)
+	TestAssertions.equal(checkout_spy.checkout_calls, 0, "stale recovery refresh failure performs zero checkout mutations", failures)
+	TestAssertions.equal(recovery_spy.bind_calls, 0, "stale recovery refresh failure cannot bind a legacy class", failures)
+	TestAssertions.equal(recovery_spy.forfeit_calls, 0, "stale recovery refresh failure cannot abandon the run", failures)
+	TestAssertions.equal(context_factory_calls[0], 0, "stale recovery refresh failure never attempts runtime start", failures)
+	TestAssertions.truthy(not main.run_started and main.active_run_context == null, "stale recovery refresh failure leaves runtime untouched", failures)
+	_cleanup_recovery_main(main, root)
+
+
 func _test_legacy_binding_refreshes_reinspects_and_rejects_incompatible_bytes(failures: Array[String]) -> void:
 	var root := _recovery_root("legacy_bind")
 	_save_recovery_profile(root, &"")
@@ -390,6 +425,52 @@ func _test_strict_abandonment_and_forfeit_failure(failures: Array[String]) -> vo
 	TestAssertions.equal((failure_dialog.get_node("Overlay/Frame/Layout/Status") as Label).text, "Unable to abandon this run.", "forfeit failure uses safe player-facing copy", failures)
 	TestAssertions.truthy((failure_dialog.get_node("Overlay/Frame/Layout/TechnicalDetail") as Label).text.contains("injected persistence failure"), "forfeit failure exposes technical detail separately", failures)
 	_cleanup_recovery_main(failure_main, failure_root)
+
+
+func _test_committed_forfeit_refresh_failure_is_terminal(failures: Array[String]) -> void:
+	var root := _recovery_root("forfeit_refresh_failure")
+	_save_recovery_profile(root, &"fighter")
+	var checkout_spy := RecoveryCheckoutSpy.new()
+	var recovery_spy := RecoveryServiceSpy.new(checkout_spy)
+	var main := _recovery_main(root, checkout_spy, recovery_spy)
+	var manager := RefreshFailureManager.new()
+	manager.fail_on_call = 2
+	manager.failure_reason = "injected post-forfeit refresh failure"
+	TestAssertions.equal(manager.bootstrap(root), "", "post-forfeit refresh manager bootstraps durable recovery", failures)
+	main.profile_manager = manager
+	var dialog := main.get_node("RunRecoveryDialog")
+	main.call("_on_main_menu_route_requested", MainMenuViewModel.ROUTE_RUN_RECOVERY)
+	dialog.abandon_requested.emit(DURABLE_RUN_ID)
+	TestAssertions.equal(recovery_spy.forfeit_calls, 1, "committed abandonment calls recovery forfeit once before refresh failure", failures)
+	TestAssertions.equal(checkout_spy.forfeit_calls, 1, "committed abandonment performs one durable forfeit mutation", failures)
+	TestAssertions.truthy(ProfileStore.new().load_profile(DURABLE_PROFILE_ID, root).profile.resumable_run.is_empty(), "forfeit remains durably committed when manager refresh fails", failures)
+	TestAssertions.equal(main.get("_active_run_recovery"), null, "committed forfeit clears actionable recovery before refresh", failures)
+	_assert_terminal_recovery_dialog(dialog, "The run was abandoned, but the profile could not be refreshed.", "injected post-forfeit refresh failure", "post-forfeit refresh failure", failures)
+	dialog.abandon_requested.emit(DURABLE_RUN_ID)
+	(dialog.get_node("AbandonConfirmation") as ConfirmationDialog).confirmed.emit()
+	TestAssertions.equal(recovery_spy.forfeit_calls, 1, "terminal post-forfeit failure cannot call recovery forfeit again", failures)
+	TestAssertions.equal(checkout_spy.forfeit_calls, 1, "terminal post-forfeit failure cannot repeat durable mutation", failures)
+	TestAssertions.equal(checkout_spy.checkout_calls, 0, "post-forfeit refresh failure never performs checkout", failures)
+	TestAssertions.truthy(not main.run_started and main.active_run_context == null, "post-forfeit refresh failure leaves runtime stopped", failures)
+	_cleanup_recovery_main(main, root)
+
+
+func _assert_terminal_recovery_dialog(dialog: Node, safe_message: String, technical_detail: String, label: String, failures: Array[String]) -> void:
+	TestAssertions.truthy(dialog.is_open(), "%s keeps recovery failure visible" % label, failures)
+	TestAssertions.equal((dialog.get_node("Overlay/Frame/Layout/Status") as Label).text, safe_message, "%s uses safe player-facing copy" % label, failures)
+	var technical := dialog.get_node("Overlay/Frame/Layout/TechnicalDetail") as Label
+	TestAssertions.truthy(technical.visible and technical.text.contains(technical_detail), "%s exposes technical diagnostics separately" % label, failures)
+	for path: String in [
+		"Overlay/Frame/Layout/Actions/Resume",
+		"Overlay/Frame/Layout/ClassPicker",
+		"Overlay/Frame/Layout/Actions/Bind",
+		"Overlay/Frame/Layout/Actions/Abandon",
+	]:
+		var control := dialog.get_node(path) as Control
+		TestAssertions.truthy(not control.visible and control.get("disabled"), "%s disables and hides %s" % [label, control.name], failures)
+	var cancel := dialog.get_node("Overlay/Frame/Layout/Actions/Cancel") as Button
+	TestAssertions.truthy(cancel.visible and not cancel.disabled, "%s leaves Cancel available" % label, failures)
+	TestAssertions.equal(dialog.get("_initial_focus"), cancel, "%s focuses Cancel deterministically" % label, failures)
 
 
 func _save_recovery_profile(

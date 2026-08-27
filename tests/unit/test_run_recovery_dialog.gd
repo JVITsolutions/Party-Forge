@@ -31,6 +31,7 @@ func run() -> Array[String]:
 		_test_invalid_forfeitable_mode(dialog, return_focus, failures)
 		_test_cancel_is_nonmutating_and_restores_focus(dialog, return_focus, failures)
 		_test_safe_and_technical_failure_copy(dialog, return_focus, failures)
+		_test_terminal_failure_disables_mutating_actions(dialog, return_focus, failures)
 	dialog.call("close")
 	dialog.free()
 	return_focus.free()
@@ -109,6 +110,31 @@ func _test_safe_and_technical_failure_copy(dialog: Node, return_focus: Control, 
 	TestAssertions.truthy(not status.text.contains("PARTY_FORGE"), "safe failure does not expose technical diagnostics", failures)
 	TestAssertions.equal(technical.text, "PARTY_FORGE_RUN_RECOVERY_ERROR field=context reason=injected", "technical disclosure preserves exact diagnostics", failures)
 	TestAssertions.truthy(technical.visible, "technical failure detail remains available", failures)
+	TestAssertions.truthy(_resume_button(dialog).visible and not _resume_button(dialog).disabled, "ordinary recovery failure preserves the same retry action", failures)
+
+
+func _test_terminal_failure_disables_mutating_actions(dialog: Node, return_focus: Control, failures: Array[String]) -> void:
+	dialog.call("close")
+	dialog.call("open", _result(RunRecoveryResult.Code.READY, &"fighter"), _classes(), "Named Recovery", return_focus)
+	var supports_terminal_failure := false
+	for method: Dictionary in dialog.get_method_list():
+		if StringName(method.get("name", &"")) == &"show_failure" and (method.get("args", []) as Array).size() >= 3:
+			supports_terminal_failure = true
+			break
+	if supports_terminal_failure:
+		dialog.call("show_failure", "Unable to refresh this interrupted run.", "PROFILE_REFRESH_ERROR error=injected", true)
+	else:
+		dialog.call("show_failure", "Unable to refresh this interrupted run.", "PROFILE_REFRESH_ERROR error=injected")
+	var status := dialog.get_node("Overlay/Frame/Layout/Status") as Label
+	var technical := dialog.get_node("Overlay/Frame/Layout/TechnicalDetail") as Label
+	TestAssertions.truthy(supports_terminal_failure, "recovery dialog exposes an explicit terminal failure mode", failures)
+	TestAssertions.equal(status.text, "Unable to refresh this interrupted run.", "terminal failure keeps safe player copy separate", failures)
+	TestAssertions.equal(technical.text, "PROFILE_REFRESH_ERROR error=injected", "terminal failure keeps exact technical diagnostics separate", failures)
+	for control: Control in [_resume_button(dialog), _class_picker(dialog), _bind_button(dialog), _abandon_button(dialog)]:
+		TestAssertions.truthy(not control.visible and control.disabled, "terminal failure disables and hides %s" % control.name, failures)
+	TestAssertions.truthy(_cancel_button(dialog).visible and not _cancel_button(dialog).disabled, "terminal failure leaves Cancel available", failures)
+	TestAssertions.equal(dialog.get("_initial_focus"), _cancel_button(dialog), "terminal failure deterministically focuses Cancel", failures)
+	_assert_focus_loop([_cancel_button(dialog)], failures)
 
 
 func _result(code: RunRecoveryResult.Code, class_id: StringName) -> RunRecoveryResult:

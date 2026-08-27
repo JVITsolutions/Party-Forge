@@ -1015,16 +1015,22 @@ func _open_run_recovery() -> void:
 	if return_focus == null:
 		return_focus = menu.get_node("PrimaryAction") as Control
 	var refresh_error := profile_manager.refresh_profile(profile.profile_id)
-	if refresh_error.is_empty():
-		profile = profile_manager.active_profile()
+	if not refresh_error.is_empty():
+		_active_run_recovery = null
+		menu.close()
+		var unavailable := RunRecoveryResult.new()
+		var no_classes: Array[ClassDefinition] = []
+		var failed_dialog := get_node("RunRecoveryDialog")
+		failed_dialog.call("open", unavailable, no_classes, profile.display_name, return_focus)
+		_show_run_recovery_failure("Unable to refresh this interrupted run.", refresh_error, true)
+		return
+	profile = profile_manager.active_profile()
 	var result := _run_recovery.inspect(profile)
 	_active_run_recovery = result
 	menu.close()
 	var dialog := get_node("RunRecoveryDialog")
 	dialog.call("open", result, catalog.classes if catalog != null else [], profile.display_name, return_focus)
-	if not refresh_error.is_empty():
-		_show_run_recovery_failure("Unable to refresh this interrupted run.", refresh_error)
-	elif not result.error.is_empty():
+	if not result.error.is_empty():
 		_show_run_recovery_failure("This interrupted run cannot be resumed safely.", result.error)
 
 
@@ -1085,11 +1091,11 @@ func _on_run_recovery_abandon_requested(run_id: StringName) -> void:
 	if not result.ok():
 		_show_run_recovery_failure("Unable to abandon this run.", result.error)
 		return
+	_active_run_recovery = null
 	var refresh_error := profile_manager.refresh_profile(profile_id)
 	if not refresh_error.is_empty():
-		_show_run_recovery_failure("The run was abandoned, but the profile could not be refreshed.", refresh_error)
+		_show_run_recovery_failure("The run was abandoned, but the profile could not be refreshed.", refresh_error, true)
 		return
-	_active_run_recovery = null
 	get_node("RunRecoveryDialog").call("close")
 	_refresh_main_menu_projection()
 	var menu := get_node("MainMenuScreen") as MainMenuScreen
@@ -1104,12 +1110,14 @@ func _on_run_recovery_cancelled() -> void:
 	menu.open(menu.get_node("PrimaryAction") as Control)
 
 
-func _show_run_recovery_failure(safe_message: String, technical_detail: String) -> void:
+func _show_run_recovery_failure(safe_message: String, technical_detail: String, terminal: bool = false) -> void:
+	if terminal:
+		_active_run_recovery = null
 	if not technical_detail.is_empty():
 		push_error(technical_detail)
 	var dialog := get_node_or_null("RunRecoveryDialog")
 	if dialog != null:
-		dialog.call("show_failure", safe_message, technical_detail)
+		dialog.call("show_failure", safe_message, technical_detail, terminal)
 
 
 func _run_recovery_dialog_open() -> bool:
