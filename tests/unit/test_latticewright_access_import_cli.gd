@@ -6,6 +6,7 @@ const GeneratedWriter = preload("res://scripts/tools/generated_json_document_wri
 var _lines: Array[String] = []
 var _writes := 0
 var _target := PackedByteArray([1, 2, 3])
+var _restore_calls := 0
 
 func run() -> Array[String]:
 	var failures: Array[String] = []
@@ -15,7 +16,7 @@ func run() -> Array[String]:
 	return failures
 
 func _test_import_and_parity(failures: Array[String]) -> void:
-	_target = PackedByteArray([1, 2, 3]); _writes = 0; _lines.clear()
+	_target = PackedByteArray([1, 2, 3]); _writes = 0; _restore_calls = 0; _lines.clear()
 	var candidate := _candidate()
 	var service: Variant = Entry.new_service(_dependencies(candidate, PackedByteArray([4, 5, 6])))
 	var imported: Variant = service.run(PackedStringArray(["--source", "fixture.json"]), Callable(self, "_capture"))
@@ -28,11 +29,14 @@ func _test_import_and_parity(failures: Array[String]) -> void:
 	var debt_service: Variant = Entry.new_service(debt_dependencies)
 	TestAssertions.equal(debt_service.run(PackedStringArray(["--source", "fixture.json"]), Callable(self, "_capture")), 0, "committed cleanup debt remains imported", failures)
 	TestAssertions.truthy(debt_service.last_cleanup_debt is bool and debt_service.last_cleanup_debt == true, "service preserves truthful committed cleanup debt", failures)
-	_target = PackedByteArray([4, 5, 6]); _writes = 0; _lines.clear()
-	var unchanged: Variant = Entry.new_service(_dependencies(candidate, PackedByteArray([4, 5, 6]))).run(PackedStringArray(["--source", "fixture.json"]), Callable(self, "_capture"))
-	TestAssertions.equal(unchanged, 0, "target-byte parity exits zero", failures)
-	TestAssertions.equal(_writes, 0, "target-byte parity does not write", failures)
+	_target = PackedByteArray([1, 2, 3]); _writes = 0; _lines.clear()
+	var unchanged_dependencies := _dependencies(candidate, PackedByteArray([4, 5, 6]))
+	unchanged_dependencies["writer"] = Callable(self, "_write_unchanged")
+	var unchanged: Variant = Entry.new_service(unchanged_dependencies).run(PackedStringArray(["--source", "fixture.json"]), Callable(self, "_capture"))
+	TestAssertions.equal(unchanged, 0, "writer-owned target-byte parity exits zero", failures)
+	TestAssertions.equal(_writes, 0, "writer-owned target-byte parity does not replace", failures)
 	TestAssertions.equal(_lines, ["PARTY_FORGE_CITY_ACCESS_IMPORT status=UNCHANGED adapter=latticewright-runtime-v3-city-access stage=compare"], "service prints one unchanged marker", failures)
+	TestAssertions.equal(_restore_calls, 0, "successful writer states never invoke an independent CLI restore", failures)
 
 func _test_rejected_paths_do_not_write(failures: Array[String]) -> void:
 	for test_case: Dictionary in [
@@ -44,7 +48,7 @@ func _test_rejected_paths_do_not_write(failures: Array[String]) -> void:
 		{"label": "validate failure", "args": PackedStringArray(["--source", "a"]), "dependencies": _dependencies(_candidate(), PackedByteArray([4]), Callable(self, "_read_success"), Callable(self, "_translate_success"), Callable(self, "_validate_failure"))},
 		{"label": "writer failure", "args": PackedStringArray(["--source", "a"]), "dependencies": _dependencies(_candidate(), PackedByteArray([4]), Callable(self, "_read_success"), Callable(self, "_translate_success"), Callable(self, "_validate_success"), Callable(self, "_encode_success"), Callable(self, "_write_failure"))},
 	]:
-		_target = PackedByteArray([9, 8, 7]); _writes = 0; _lines.clear()
+		_target = PackedByteArray([9, 8, 7]); _writes = 0; _restore_calls = 0; _lines.clear()
 		var exit_code: Variant = Entry.new_service(test_case["dependencies"] as Dictionary).run(test_case["args"] as PackedStringArray, Callable(self, "_capture"))
 		TestAssertions.equal(exit_code, 1, "%s exits rejected" % test_case["label"], failures)
 		TestAssertions.equal(_writes, 0, "%s never writes" % test_case["label"], failures)
@@ -52,29 +56,23 @@ func _test_rejected_paths_do_not_write(failures: Array[String]) -> void:
 		TestAssertions.equal(_lines.size(), 1, "%s prints exactly one terminal marker" % test_case["label"], failures)
 		TestAssertions.truthy(_lines[0].begins_with("PARTY_FORGE_CITY_ACCESS_IMPORT status=REJECTED adapter=latticewright-runtime-v3-city-access stage="), "%s has sanitized rejected marker" % test_case["label"], failures)
 		TestAssertions.truthy(not _lines[0].contains("secret"), "%s marker omits source details" % test_case["label"], failures)
-	_target = PackedByteArray([9, 8, 7]); _writes = 0; _lines.clear()
-	var corrupting := _dependencies(_candidate(), PackedByteArray([4, 5, 6]))
-	corrupting["writer"] = Callable(self, "_write_corrupt")
-	corrupting["target_restorer"] = Callable(self, "_restore_target")
-	var verify_exit: Variant = Entry.new_service(corrupting).run(PackedStringArray(["--source", "a"]), Callable(self, "_capture"))
-	TestAssertions.equal(verify_exit, 1, "post-write byte mismatch rejects", failures)
-	TestAssertions.equal(_target, PackedByteArray([9, 8, 7]), "post-write byte mismatch restores exact target bytes", failures)
-	TestAssertions.equal(_lines, ["PARTY_FORGE_CITY_ACCESS_IMPORT status=REJECTED adapter=latticewright-runtime-v3-city-access stage=verified"], "post-write mismatch has one verified marker", failures)
-	_target = PackedByteArray([9, 8, 7]); _writes = 0; _lines.clear()
+		TestAssertions.equal(_restore_calls, 0, "%s never invokes an independent CLI restore" % test_case["label"], failures)
+	_target = PackedByteArray([9, 8, 7]); _writes = 0; _restore_calls = 0; _lines.clear()
 	var failed_commit := _dependencies(_candidate(), PackedByteArray([4, 5, 6]))
 	failed_commit["writer"] = Callable(self, "_write_mutating_failure")
-	failed_commit["target_restorer"] = Callable(self, "_restore_target")
 	var promote_exit: Variant = Entry.new_service(failed_commit).run(PackedStringArray(["--source", "a"]), Callable(self, "_capture"))
-	TestAssertions.equal(promote_exit, 1, "writer failure after mutation rejects", failures)
-	TestAssertions.equal(_target, PackedByteArray([9, 8, 7]), "writer failure after mutation restores exact target bytes", failures)
-	_target = PackedByteArray([9, 8, 7]); _writes = 0; _lines.clear()
+	TestAssertions.equal(promote_exit, 1, "writer indeterminate state exits nonzero", failures)
+	TestAssertions.equal(_target, PackedByteArray([0]), "CLI does not run a second restore protocol after writer indeterminate state", failures)
+	TestAssertions.equal(_restore_calls, 0, "writer indeterminate state never invokes CLI restore", failures)
+	TestAssertions.equal(_lines, ["PARTY_FORGE_CITY_ACCESS_IMPORT status=INDETERMINATE adapter=latticewright-runtime-v3-city-access stage=restore"], "restore failure prints one indeterminate marker", failures)
+	_target = PackedByteArray([9, 8, 7]); _writes = 0; _restore_calls = 0; _lines.clear()
 	var legacy_writer := _dependencies(_candidate(), PackedByteArray([4, 5, 6]))
 	legacy_writer["writer"] = Callable(self, "_write_legacy_success")
-	legacy_writer["target_restorer"] = Callable(self, "_restore_target")
 	var legacy_exit: Variant = Entry.new_service(legacy_writer).run(PackedStringArray(["--source", "a"]), Callable(self, "_capture"))
-	TestAssertions.equal(legacy_exit, 1, "legacy writer return shape rejects", failures)
-	TestAssertions.equal(_target, PackedByteArray([9, 8, 7]), "legacy writer return shape restores exact target bytes", failures)
-	TestAssertions.equal(_lines, ["PARTY_FORGE_CITY_ACCESS_IMPORT status=REJECTED adapter=latticewright-runtime-v3-city-access stage=write"], "legacy writer has one write marker", failures)
+	TestAssertions.equal(legacy_exit, 1, "legacy writer return shape is indeterminate", failures)
+	TestAssertions.equal(_target, PackedByteArray([4, 5, 6]), "invalid writer contract is not independently restored by CLI", failures)
+	TestAssertions.equal(_restore_calls, 0, "invalid writer contract never invokes CLI restore", failures)
+	TestAssertions.equal(_lines, ["PARTY_FORGE_CITY_ACCESS_IMPORT status=INDETERMINATE adapter=latticewright-runtime-v3-city-access stage=write"], "invalid writer contract has one indeterminate marker", failures)
 
 func _test_production_default_writer_lifetime(failures: Array[String]) -> void:
 	var target := GeneratedWriter.TARGET
@@ -130,25 +128,23 @@ func _encode_success(_document: Dictionary) -> PackedByteArray:
 func _write_success(_document: Dictionary) -> Dictionary:
 	_writes += 1
 	_target = PackedByteArray([4, 5, 6])
-	return {"ok": true, "committed": true, "cleanupDebt": false, "stage": "verified", "reason": ""}
+	return {"ok": true, "state": "committed", "cleanupDebt": false, "stage": "verified", "reason": ""}
 
 func _write_failure(_document: Dictionary) -> Dictionary:
-	return {"ok": false, "committed": false, "cleanupDebt": false, "stage": "promote source=secret", "reason": "failed"}
-
-func _write_corrupt(_document: Dictionary) -> Dictionary:
-	_writes += 1
-	_target = PackedByteArray([0])
-	return {"ok": true, "committed": true, "cleanupDebt": false, "stage": "verified", "reason": ""}
+	return {"ok": false, "state": "rejected", "cleanupDebt": false, "stage": "promote source=secret", "reason": "failed"}
 
 func _write_cleanup_debt(_document: Dictionary) -> Dictionary:
 	_writes += 1
 	_target = PackedByteArray([4, 5, 6])
-	return {"ok": true, "committed": true, "cleanupDebt": true, "stage": "cleanup", "reason": "code-20"}
+	return {"ok": true, "state": "committed", "cleanupDebt": true, "stage": "cleanup", "reason": "code-20"}
+
+func _write_unchanged(_document: Dictionary) -> Dictionary:
+	return {"ok": true, "state": "unchanged", "cleanupDebt": false, "stage": "compare", "reason": ""}
 
 func _write_mutating_failure(_document: Dictionary) -> Dictionary:
 	_writes += 1
 	_target = PackedByteArray([0])
-	return {"ok": false, "committed": false, "cleanupDebt": false, "stage": "promote", "reason": "failed"}
+	return {"ok": false, "state": "indeterminate", "cleanupDebt": false, "stage": "restore", "reason": "failed"}
 
 func _write_legacy_success(_document: Dictionary) -> String:
 	_writes += 1
@@ -156,6 +152,7 @@ func _write_legacy_success(_document: Dictionary) -> String:
 	return ""
 
 func _restore_target(before: Dictionary) -> Dictionary:
+	_restore_calls += 1
 	_target = (before.get("bytes", PackedByteArray()) as PackedByteArray).duplicate()
 	return {"ok": true}
 

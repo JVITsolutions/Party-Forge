@@ -18,9 +18,11 @@ func _test_writer_uses_fixed_target_and_canonical_encoder(failures: Array[String
 	var result: Variant = GeneratedWriter.new().write(_valid_document())
 	TestAssertions.truthy(result is Dictionary, "fixed generated writer returns a structured outcome", failures)
 	if result is Dictionary:
-		TestAssertions.equal(result as Dictionary, {"ok": true, "committed": true, "cleanupDebt": false, "stage": "verified", "reason": ""}, "fixed generated writer returns its verified structured outcome", failures)
+		TestAssertions.equal(result as Dictionary, {"ok": true, "state": "committed", "cleanupDebt": false, "stage": "verified", "reason": ""}, "fixed generated writer returns its verified structured outcome", failures)
 	TestAssertions.truthy(FileAccess.file_exists(target), "generated writer uses its fixed Party Forge target", failures)
 	TestAssertions.equal(FileAccess.get_file_as_bytes(target), CityAccessSnapshotCodec.encode_document(_valid_document()), "generated writer promotes the codec bytes exactly", failures)
+	var unchanged: Variant = GeneratedWriter.new().write(_valid_document())
+	TestAssertions.equal(unchanged, {"ok": true, "state": "unchanged", "cleanupDebt": false, "stage": "compare", "reason": ""}, "fixed generated writer owns exact unchanged comparison", failures)
 	_restore_target(target, before_exists, before, access_directory, access_directory_existed, world_directory, world_directory_existed)
 	TestAssertions.equal(FileAccess.file_exists(target), before_exists, "generated writer restores its fixed target existence", failures)
 	if before_exists:

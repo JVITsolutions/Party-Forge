@@ -42,7 +42,7 @@ class GeneratedReadFailureAtomicJsonStore extends AtomicJsonStore:
 	func _generated_read_bytes(path: String) -> Dictionary:
 		if path == target:
 			target_reads += 1
-			if target_reads == 2:
+			if target_reads == 3:
 				return {"error": ERR_FILE_CORRUPT, "bytes": PackedByteArray()}
 		return super._generated_read_bytes(path)
 
@@ -53,6 +53,14 @@ class GeneratedCleanupFailureAtomicJsonStore extends AtomicJsonStore:
 class GeneratedWriteFailureAtomicJsonStore extends AtomicJsonStore:
 	func _generated_write_bytes(path: String, bytes: PackedByteArray) -> Error:
 		if path.ends_with("candidate.json"):
+			return ERR_CANT_CREATE
+		return super._generated_write_bytes(path, bytes)
+
+class GeneratedRestoreFailureAtomicJsonStore extends AtomicJsonStore:
+	var target := ""
+
+	func _generated_write_bytes(path: String, bytes: PackedByteArray) -> Error:
+		if path == target:
 			return ERR_CANT_CREATE
 		return super._generated_write_bytes(path, bytes)
 
@@ -688,12 +696,12 @@ func _test_generated_document_boundary(failures: Array[String]) -> void:
 	ProfileTestSupport.remove_tree(exact_invalid_staging_root)
 	_write_bytes(target, original)
 	var rejected: Variant = AtomicJsonStore.new().save_generated_document(target, _generated_document(), func(_document: Dictionary): return "rejected", staging_root, Callable(CityAccessSnapshotCodec, "encode_document"))
-	_assert_generated_outcome(rejected, false, false, false, "validate", "validator-rejected", "generated validation rejects before disk mutation", failures)
+	_assert_generated_outcome(rejected, "rejected", false, "validate", "validator-rejected", "generated validation rejects before disk mutation", failures)
 	TestAssertions.equal(FileAccess.get_file_as_bytes(target), original, "rejected generated document preserves exact target bytes", failures)
 	TestAssertions.truthy(not DirAccess.dir_exists_absolute(ProjectSettings.globalize_path(staging_root)), "rejected generated document creates no staging root", failures)
 	var write_failure := GeneratedWriteFailureAtomicJsonStore.new()
 	var write_error: Variant = write_failure.save_generated_document(target, _generated_document(), Callable(CityAccessSnapshotLoader, "validate_document"), staging_root, Callable(CityAccessSnapshotCodec, "encode_document"))
-	_assert_generated_outcome(write_error, false, false, false, "write", "code-%d-cleanup-0" % ERR_CANT_CREATE, "generated staged-write failure reports its stage", failures)
+	_assert_generated_outcome(write_error, "rejected", false, "write", "code-%d-cleanup-0" % ERR_CANT_CREATE, "generated staged-write failure reports its stage", failures)
 	TestAssertions.equal(FileAccess.get_file_as_bytes(target), original, "generated staged-write failure preserves exact target bytes", failures)
 
 	var promoted_paths: Array[String] = []
@@ -702,7 +710,7 @@ func _test_generated_document_boundary(failures: Array[String]) -> void:
 		return ERR_CANT_CREATE
 	)
 	var failed: Variant = promote_failure.save_generated_document(target, _generated_document(), Callable(CityAccessSnapshotLoader, "validate_document"), staging_root, Callable(CityAccessSnapshotCodec, "encode_document"))
-	_assert_generated_outcome(failed, false, false, false, "promote", "code-%d-restore-0-cleanup-0" % ERR_CANT_CREATE, "generated promotion failure reports its stage", failures)
+	_assert_generated_outcome(failed, "rejected", false, "promote", "code-%d-restore-0-cleanup-0" % ERR_CANT_CREATE, "generated promotion failure reports its stage", failures)
 	TestAssertions.equal(FileAccess.get_file_as_bytes(target), original, "generated pre-promotion failure preserves exact target bytes", failures)
 	TestAssertions.truthy(promoted_paths.size() == 1 and promoted_paths[0].begins_with(staging_root.path_join("invocation-")), "generated temporary promotion path stays beneath staging root", failures)
 	var traversal_root := staging_root.path_join("nominal/../canonical")
@@ -732,32 +740,117 @@ func _test_generated_document_boundary(failures: Array[String]) -> void:
 		return ERR_CANT_CREATE
 	)
 	var wrong_error: Variant = wrong_promotion.save_generated_document(target, _generated_document(), Callable(CityAccessSnapshotLoader, "validate_document"), staging_root, Callable(CityAccessSnapshotCodec, "encode_document"))
-	TestAssertions.equal(_generated_stage(wrong_error), "promote", "wrong-byte reported promotion failure reports promotion", failures)
+	_assert_generated_outcome(wrong_error, "rejected", false, "promote", "code-%d-restore-0-cleanup-0" % ERR_CANT_CREATE, "wrong-byte reported promotion failure reports verified rejection", failures)
 	TestAssertions.equal(FileAccess.get_file_as_bytes(target), original, "wrong-byte reported promotion failure restores exact previous bytes", failures)
+
+	var mismatching_promotion := AtomicJsonStore.new(func(temporary: String, promoted_target: String) -> Error:
+		_write_bytes(promoted_target, wrong_bytes)
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(temporary))
+		return OK
+	)
+	var mismatch_error: Variant = mismatching_promotion.save_generated_document(target, _generated_document(), Callable(CityAccessSnapshotLoader, "validate_document"), staging_root, Callable(CityAccessSnapshotCodec, "encode_document"))
+	TestAssertions.equal(_generated_state(mismatch_error), "rejected", "promoted-byte mismatch reports verified rejection", failures)
+	TestAssertions.equal(_generated_stage(mismatch_error), "verify-promoted", "promoted-byte mismatch reports verification stage", failures)
+	TestAssertions.equal(FileAccess.get_file_as_bytes(target), original, "promoted-byte mismatch restores exact previous bytes", failures)
+
+	var late_error_promotion := AtomicJsonStore.new(func(temporary: String, promoted_target: String) -> Error:
+		var promote_error := DirAccess.rename_absolute(ProjectSettings.globalize_path(temporary), ProjectSettings.globalize_path(promoted_target))
+		return ERR_CANT_CREATE if promote_error == OK else promote_error
+	)
+	var late_error_result: Variant = late_error_promotion.save_generated_document(target, _generated_document(), Callable(CityAccessSnapshotLoader, "validate_document"), staging_root, Callable(CityAccessSnapshotCodec, "encode_document"))
+	_assert_generated_outcome(late_error_result, "committed", false, "verified", "", "reported promotion failure accepts exact verified candidate", failures)
+	TestAssertions.truthy(FileAccess.get_file_as_bytes(target) == CityAccessSnapshotCodec.encode_document(_generated_document()), "reported promotion failure retains exact committed candidate", failures)
+	_write_bytes(target, original)
 
 	var no_target := _root.path_join("generated-no-target.json")
 	var no_target_failure := AtomicJsonStore.new(func(_temporary: String, _promoted_target: String) -> Error: return ERR_CANT_CREATE)
 	var no_target_error: Variant = no_target_failure.save_generated_document(no_target, _generated_document(), Callable(CityAccessSnapshotLoader, "validate_document"), staging_root, Callable(CityAccessSnapshotCodec, "encode_document"))
-	TestAssertions.truthy(_generated_stage(no_target_error) == "promote" and not FileAccess.file_exists(no_target), "generated failure without prior target leaves no target", failures)
+	TestAssertions.truthy(_generated_state(no_target_error) == "rejected" and _generated_stage(no_target_error) == "promote" and not FileAccess.file_exists(no_target), "generated failure without prior target verifies restored absence", failures)
 
 	var read_failure := GeneratedReadFailureAtomicJsonStore.new()
 	read_failure.target = target
 	var read_error: Variant = read_failure.save_generated_document(target, _generated_document(), Callable(CityAccessSnapshotLoader, "validate_document"), staging_root, Callable(CityAccessSnapshotCodec, "encode_document"))
-	TestAssertions.equal(_generated_stage(read_error), "verify-promoted", "generated promoted-byte read failure reports verification", failures)
+	TestAssertions.truthy(_generated_state(read_error) == "rejected" and _generated_stage(read_error) == "verify-promoted", "generated promoted-byte read failure reports verified rejection: %s" % [str(read_error)], failures)
 	TestAssertions.equal(FileAccess.get_file_as_bytes(target), original, "generated promoted-byte failure restores exact previous bytes", failures)
+
+	var restore_failure := GeneratedRestoreFailureAtomicJsonStore.new(func(temporary: String, promoted_target: String) -> Error:
+		_write_bytes(promoted_target, wrong_bytes)
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(temporary))
+		return ERR_CANT_CREATE
+	)
+	restore_failure.target = target
+	var indeterminate: Variant = restore_failure.save_generated_document(target, _generated_document(), Callable(CityAccessSnapshotLoader, "validate_document"), staging_root, Callable(CityAccessSnapshotCodec, "encode_document"))
+	TestAssertions.equal(indeterminate as Dictionary, {"ok": false, "state": "indeterminate", "cleanupDebt": false, "stage": "restore", "reason": "code-%d" % ERR_CANT_CREATE}, "restore failure reports exact indeterminate contract", failures)
+	TestAssertions.truthy(FileAccess.get_file_as_bytes(target) == wrong_bytes, "restore failure does not claim exact previous bytes", failures)
+	var recovery_record := staging_root.path_join("pending-transaction.json")
+	TestAssertions.truthy(FileAccess.file_exists(recovery_record), "restore failure retains a recovery record", failures)
+	TestAssertions.truthy(_all_files_are_descendants(staging_root), "restore failure keeps all evidence beneath staging root", failures)
+	var recovered: Variant = AtomicJsonStore.new().save_generated_document(target, _generated_document(), Callable(CityAccessSnapshotLoader, "validate_document"), staging_root, Callable(CityAccessSnapshotCodec, "encode_document"))
+	TestAssertions.equal(_generated_state(recovered), "committed", "later invocation resolves interrupted rollback before committing", failures)
+	TestAssertions.equal(FileAccess.get_file_as_bytes(target), CityAccessSnapshotCodec.encode_document(_generated_document()), "interrupted transaction recovery commits exact candidate", failures)
+	TestAssertions.truthy(not FileAccess.file_exists(recovery_record), "successful interrupted recovery clears recovery record", failures)
+
+	var alternate_document := _generated_document()
+	alternate_document["source"]["sha256"] = "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
+	var second_restore_failure := GeneratedRestoreFailureAtomicJsonStore.new(func(temporary: String, promoted_target: String) -> Error:
+		_write_bytes(promoted_target, wrong_bytes)
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(temporary))
+		return ERR_CANT_CREATE
+	)
+	second_restore_failure.target = target
+	var second_indeterminate: Variant = second_restore_failure.save_generated_document(target, alternate_document, Callable(CityAccessSnapshotLoader, "validate_document"), staging_root, Callable(CityAccessSnapshotCodec, "encode_document"))
+	TestAssertions.equal(_generated_state(second_indeterminate), "indeterminate", "second restore failure retains another pending transaction", failures)
+	_write_bytes(target, CityAccessSnapshotCodec.encode_document(alternate_document))
+	var recovered_commit: Variant = AtomicJsonStore.new().save_generated_document(target, alternate_document, Callable(CityAccessSnapshotLoader, "validate_document"), staging_root, Callable(CityAccessSnapshotCodec, "encode_document"))
+	TestAssertions.equal(_generated_state(recovered_commit), "committed", "pending verified candidate resolves as committed before unchanged comparison", failures)
+	TestAssertions.truthy(not FileAccess.file_exists(recovery_record), "recovered committed candidate clears recovery record", failures)
+
+	var entry_recovery_failure := GeneratedRestoreFailureAtomicJsonStore.new(func(temporary: String, promoted_target: String) -> Error:
+		_write_bytes(promoted_target, wrong_bytes)
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(temporary))
+		return ERR_CANT_CREATE
+	)
+	entry_recovery_failure.target = target
+	var entry_indeterminate: Variant = entry_recovery_failure.save_generated_document(target, _generated_document(), Callable(CityAccessSnapshotLoader, "validate_document"), staging_root, Callable(CityAccessSnapshotCodec, "encode_document"))
+	TestAssertions.equal(_generated_state(entry_indeterminate), "indeterminate", "entry-order fixture retains pending recovery", failures)
+	var invalid_after_pending: Variant = AtomicJsonStore.new().save_generated_document(target, {}, Callable(CityAccessSnapshotLoader, "validate_document"), staging_root, Callable(CityAccessSnapshotCodec, "encode_document"))
+	TestAssertions.truthy(_generated_state(invalid_after_pending) == "rejected" and _generated_stage(invalid_after_pending) == "validate", "writer resolves pending recovery before rejecting a new invalid document", failures)
+	TestAssertions.equal(FileAccess.get_file_as_bytes(target), CityAccessSnapshotCodec.encode_document(alternate_document), "entry recovery restores the exact prior target before new-document validation", failures)
+	TestAssertions.truthy(not FileAccess.file_exists(recovery_record), "entry recovery clears the retained record before new-document validation", failures)
+
+	var unchanged: Variant = AtomicJsonStore.new().save_generated_document(target, alternate_document, Callable(CityAccessSnapshotLoader, "validate_document"), staging_root, Callable(CityAccessSnapshotCodec, "encode_document"))
+	_assert_generated_outcome(unchanged, "unchanged", false, "compare", "", "exact target parity returns unchanged without a transaction", failures)
 
 	var cleanup_failure := GeneratedCleanupFailureAtomicJsonStore.new()
 	var cleanup_result: Variant = cleanup_failure.save_generated_document(target, _generated_document(), Callable(CityAccessSnapshotLoader, "validate_document"), staging_root, Callable(CityAccessSnapshotCodec, "encode_document"))
-	_assert_generated_outcome(cleanup_result, true, true, true, "cleanup", "code-%d" % ERR_CANT_CREATE, "generated cleanup debt returns committed success", failures)
+	_assert_generated_outcome(cleanup_result, "committed", true, "cleanup", "code-%d" % ERR_CANT_CREATE, "generated cleanup debt returns committed success", failures)
 	TestAssertions.equal(FileAccess.get_file_as_bytes(target), CityAccessSnapshotCodec.encode_document(_generated_document()), "generated cleanup debt retains canonical committed bytes", failures)
 
-func _assert_generated_outcome(result: Variant, ok: bool, committed: bool, cleanup_debt: bool, stage: String, reason: String, label: String, failures: Array[String]) -> void:
+func _assert_generated_outcome(result: Variant, state: String, cleanup_debt: bool, stage: String, reason: String, label: String, failures: Array[String]) -> void:
 	TestAssertions.truthy(result is Dictionary, label, failures)
 	if result is Dictionary:
-		TestAssertions.equal(result as Dictionary, {"ok": ok, "committed": committed, "cleanupDebt": cleanup_debt, "stage": stage, "reason": reason}, label, failures)
+		TestAssertions.equal(result as Dictionary, {"ok": state in ["unchanged", "committed"], "state": state, "cleanupDebt": cleanup_debt, "stage": stage, "reason": reason}, label, failures)
+
+func _generated_state(result: Variant) -> String:
+	return String((result as Dictionary).get("state", "")) if result is Dictionary else ""
 
 func _generated_stage(result: Variant) -> String:
 	return String((result as Dictionary).get("stage", "")) if result is Dictionary else ""
+
+func _all_files_are_descendants(root: String) -> bool:
+	var absolute_root: String = ProjectSettings.globalize_path(root).simplify_path()
+	var directories: Array[String] = [root]
+	while not directories.is_empty():
+		var directory_path: String = directories.pop_back()
+		var directory: DirAccess = DirAccess.open(directory_path)
+		if directory == null:
+			return false
+		for child: String in directory.get_directories():
+			directories.append(directory_path.path_join(child))
+		for file_name: String in directory.get_files():
+			if not _is_strict_descendant(ProjectSettings.globalize_path(directory_path.path_join(file_name)).simplify_path(), absolute_root):
+				return false
+	return true
 
 func _generated_document() -> Dictionary:
 	return {

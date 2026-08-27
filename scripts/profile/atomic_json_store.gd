@@ -1,6 +1,9 @@
 class_name AtomicJsonStore
 extends RefCounted
 
+const GENERATED_RECOVERY_FILE := "pending-transaction.json"
+const GENERATED_RECOVERY_VERSION := 1
+
 var _promote_file: Callable
 
 func _init(promote_file: Callable = Callable()) -> void:
@@ -15,66 +18,105 @@ func save_generated_document(
 ) -> Dictionary:
 
 	if not validator.is_valid() or not encoder.is_valid():
-		return _generated_outcome(false, false, false, "validate", "validator-or-encoder-is-missing")
+		return _generated_preflight_rejection(path, "validate", "validator-or-encoder-is-missing")
+	var recovery_paths := _generated_recovery_paths(staging_root)
+	if recovery_paths.is_empty():
+		return _generated_preflight_rejection(path, "confinement", "staging-root-is-not-provable")
+	var recovered := _recover_generated_transaction(path, validator, recovery_paths)
+	if not recovered.is_empty():
+		return recovered
 	var validation_reason := _generated_validation_reason(validator.call(document))
 	if not validation_reason.is_empty():
-		return _generated_outcome(false, false, false, "validate", "validator-rejected")
+		return _generated_preflight_rejection(path, "validate", "validator-rejected")
 	var candidate := encoder.call(document) as PackedByteArray
 	if candidate.is_empty():
-		return _generated_outcome(false, false, false, "encode", "encoder-returned-empty-bytes")
+		return _generated_preflight_rejection(path, "encode", "encoder-returned-empty-bytes")
 	if candidate.size() > CityAccessSnapshotLoader.MAX_BYTES:
-		return _generated_outcome(false, false, false, "encode", "encoder-returned-oversized-bytes")
+		return _generated_preflight_rejection(path, "encode", "encoder-returned-oversized-bytes")
 	if not CityAccessSnapshotLoader.load_bytes(candidate).ok() or not _generated_bytes_validate(candidate, validator).is_empty():
-		return _generated_outcome(false, false, false, "encode", "encoder-returned-invalid-document")
+		return _generated_preflight_rejection(path, "encode", "encoder-returned-invalid-document")
+	var compared := _generated_target_state(path)
+	if not bool(compared["ok"]):
+		return _generated_outcome("indeterminate", false, "compare", "code-%d" % int(compared["error"]))
+	if bool(compared["exists"]) and compared["bytes"] == candidate:
+		return _generated_outcome("unchanged", false, "compare", "")
 	var staging_paths := _generated_staging_paths(staging_root)
 	if staging_paths.is_empty():
-		return _generated_outcome(false, false, false, "confinement", "staging-root-is-not-provable")
+		return _generated_preflight_rejection(path, "confinement", "staging-root-is-not-provable")
 	var invocation := String(staging_paths["invocation"])
-	var temporary := String(staging_paths["temporary"])
+	var candidate_copy := String(staging_paths["candidate"])
+	var promotion_copy := String(staging_paths["promotion"])
 	var previous_copy := String(staging_paths["previous_copy"])
+	var recovery_temporary := String(staging_paths["recovery_temporary"])
+	var invocation_artifacts: Array[String] = [candidate_copy, promotion_copy, previous_copy, recovery_temporary]
 	var mkdir_error := DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(invocation))
 	if mkdir_error not in [OK, ERR_ALREADY_EXISTS]:
-		return _generated_outcome(false, false, false, "mkdir", "code-%d" % mkdir_error)
-	var write_error := _generated_write_bytes(temporary, candidate)
+		return _generated_preflight_rejection(path, "mkdir", "code-%d" % mkdir_error)
+	var write_error := _generated_write_bytes(candidate_copy, candidate)
 	if write_error != OK:
-		return _generated_rejected("write", write_error, invocation, [temporary, previous_copy])
-	var staged := _generated_read_bytes(temporary)
-	if int(staged["error"]) != OK or staged["bytes"] != candidate or not _generated_bytes_validate(staged["bytes"] as PackedByteArray, validator).is_empty():
-		return _generated_rejected("verify-temporary", int(staged["error"]), invocation, [temporary, previous_copy])
+		return _generated_abort_before_mutation(path, compared, "write", write_error, invocation, invocation_artifacts)
+	var staged := _generated_read_bytes(candidate_copy)
+	if int(staged["error"]) != OK or staged["bytes"] != candidate or not CityAccessSnapshotLoader.load_bytes(staged["bytes"] as PackedByteArray).ok():
+		return _generated_abort_before_mutation(path, compared, "verify-temporary", int(staged["error"]), invocation, invocation_artifacts)
+	var promotion_write_error := _generated_write_bytes(promotion_copy, candidate)
+	if promotion_write_error != OK:
+		return _generated_abort_before_mutation(path, compared, "write", promotion_write_error, invocation, invocation_artifacts)
+	var staged_promotion := _generated_read_bytes(promotion_copy)
+	if int(staged_promotion["error"]) != OK or staged_promotion["bytes"] != candidate:
+		return _generated_abort_before_mutation(path, compared, "verify-temporary", int(staged_promotion["error"]), invocation, invocation_artifacts)
 	var target_parent_error := DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(path).get_base_dir())
 	if target_parent_error not in [OK, ERR_ALREADY_EXISTS]:
-		return _generated_rejected("mkdir-target", target_parent_error, invocation, [temporary, previous_copy])
-	var had_previous := FileAccess.file_exists(path)
-	var previous := PackedByteArray()
+		return _generated_abort_before_mutation(path, compared, "mkdir-target", target_parent_error, invocation, invocation_artifacts)
+	var prior := _generated_target_state(path)
+	if not bool(prior["ok"]):
+		return _generated_abort_before_mutation(path, compared, "snapshot-target", int(prior["error"]), invocation, invocation_artifacts)
+	if bool(prior["exists"]) and prior["bytes"] == candidate:
+		var parity_cleanup := _generated_cleanup(invocation, invocation_artifacts)
+		return _generated_outcome("unchanged", parity_cleanup != OK, "cleanup" if parity_cleanup != OK else "compare", "code-%d" % parity_cleanup if parity_cleanup != OK else "")
+	var had_previous := bool(prior["exists"])
+	var previous := prior["bytes"] as PackedByteArray
 	if had_previous:
-		var previous_read := _generated_read_bytes(path)
-		if int(previous_read["error"]) != OK:
-			return _generated_rejected("snapshot-target", int(previous_read["error"]), invocation, [temporary, previous_copy])
-		previous = previous_read["bytes"] as PackedByteArray
 		var copy_error := _generated_write_bytes(previous_copy, previous)
 		if copy_error != OK:
-			return _generated_rejected("stage-previous", copy_error, invocation, [temporary, previous_copy])
+			return _generated_abort_before_mutation(path, prior, "stage-previous", copy_error, invocation, invocation_artifacts)
 		var copied := _generated_read_bytes(previous_copy)
 		if int(copied["error"]) != OK or copied["bytes"] != previous:
-			return _generated_rejected("verify-previous", int(copied["error"]), invocation, [temporary, previous_copy])
+			return _generated_abort_before_mutation(path, prior, "verify-previous", int(copied["error"]), invocation, invocation_artifacts)
+	var recovery_record := {
+		"version": GENERATED_RECOVERY_VERSION,
+		"target": path.simplify_path(),
+		"invocation": invocation,
+		"candidate": candidate_copy,
+		"previous": previous_copy if had_previous else "",
+		"hadPrevious": had_previous,
+		"candidateSha256": _generated_sha256(candidate),
+		"previousSha256": _generated_sha256(previous) if had_previous else "",
+	}
+	var recovery_bytes := (JSON.stringify(recovery_record, "\t", false) + "\n").to_utf8_buffer()
+	var recovery_write_error := _generated_write_bytes(recovery_temporary, recovery_bytes)
+	if recovery_write_error != OK:
+		return _generated_abort_before_mutation(path, prior, "record-recovery", recovery_write_error, invocation, invocation_artifacts)
+	var staged_recovery := _generated_read_bytes(recovery_temporary)
+	if int(staged_recovery["error"]) != OK or staged_recovery["bytes"] != recovery_bytes:
+		return _generated_abort_before_mutation(path, prior, "verify-recovery", int(staged_recovery["error"]), invocation, invocation_artifacts)
+	var recovery_path := String(recovery_paths["recovery"])
+	var recovery_promote_error := _promote(recovery_temporary, recovery_path)
+	if recovery_promote_error != OK:
+		return _generated_abort_before_mutation(path, prior, "record-recovery", recovery_promote_error, invocation, invocation_artifacts)
+	var retained_recovery := _generated_read_bytes(recovery_path)
+	if int(retained_recovery["error"]) != OK or retained_recovery["bytes"] != recovery_bytes or _parse_generated_recovery_record(retained_recovery["bytes"] as PackedByteArray, path, recovery_paths).is_empty():
+		return _generated_outcome("indeterminate", false, "verify-recovery", "code-%d" % int(retained_recovery["error"]))
+	if had_previous:
 		var remove_target_error := _remove(path)
 		if remove_target_error != OK:
-			return _generated_rejected("replace-target", remove_target_error, invocation, [temporary, previous_copy])
-	var promote_error: Error = _promote_file.call(temporary, path) if _promote_file.is_valid() else _promote(temporary, path)
-	if promote_error != OK:
-		var restore_error := _restore_generated_target(path, had_previous, previous)
-		var cleanup_error := _generated_cleanup(invocation, [temporary, previous_copy])
-		return _generated_outcome(false, false, cleanup_error != OK, "promote", "code-%d-restore-%d-cleanup-%d" % [promote_error, restore_error, cleanup_error])
+			return _generated_restore_after_failure(path, prior, "replace-target", remove_target_error, recovery_path, invocation, invocation_artifacts)
+	var promote_error: Error = _promote_file.call(promotion_copy, path) if _promote_file.is_valid() else _promote(promotion_copy, path)
 	var promoted := _generated_read_bytes(path)
-	if int(promoted["error"]) != OK or promoted["bytes"] != candidate:
-		var restore_error := _restore_generated_target(path, had_previous, previous)
-		var cleanup_error := _generated_cleanup(invocation, [temporary, previous_copy])
-		return _generated_outcome(false, false, cleanup_error != OK, "verify-promoted", "code-%d-restore-%d-cleanup-%d" % [int(promoted["error"]), restore_error, cleanup_error])
-	var cleanup_error := _generated_cleanup(invocation, [temporary, previous_copy])
-	if cleanup_error != OK:
-		push_warning("JSON_STORE_GENERATED_CLEANUP_DEBT stage=cleanup code=%d committed=true" % cleanup_error)
-		return _generated_outcome(true, true, true, "cleanup", "code-%d" % cleanup_error)
-	return _generated_outcome(true, true, false, "verified", "")
+	if int(promoted["error"]) == OK and promoted["bytes"] == candidate:
+		return _generated_finish_committed(recovery_path, invocation, invocation_artifacts)
+	var failure_stage := "promote" if promote_error != OK else "verify-promoted"
+	var failure_code := promote_error if promote_error != OK else (int(promoted["error"]) if int(promoted["error"]) != OK else ERR_FILE_CORRUPT)
+	return _generated_restore_after_failure(path, prior, failure_stage, failure_code, recovery_path, invocation, invocation_artifacts)
 
 func _generated_validation_reason(validation: Variant) -> String:
 	if validation is String:
@@ -92,17 +134,128 @@ func _generated_bytes_validate(bytes: PackedByteArray, validator: Callable) -> S
 		return "bytes are not a JSON object"
 	return _generated_validation_reason(validator.call((parser.data as Dictionary).duplicate(true)))
 
-func _generated_rejected(stage: String, code: Error, invocation: String, paths: Array[String]) -> Dictionary:
+func _generated_preflight_rejection(path: String, stage: String, reason: String) -> Dictionary:
+	var observed := _generated_target_state(path)
+	if not bool(observed["ok"]) or not _generated_target_matches_state(path, observed):
+		return _generated_outcome("indeterminate", false, stage, reason)
+	return _generated_outcome("rejected", false, stage, reason)
+
+func _generated_abort_before_mutation(path: String, prior: Dictionary, stage: String, code: Error, invocation: String, paths: Array[String]) -> Dictionary:
 	var cleanup_error := _generated_cleanup(invocation, paths)
-	return _generated_outcome(false, false, cleanup_error != OK, stage, "code-%d-cleanup-%d" % [code, cleanup_error])
+	if not _generated_target_matches_state(path, prior):
+		return _generated_outcome("indeterminate", cleanup_error != OK, stage, "code-%d-cleanup-%d" % [code, cleanup_error])
+	return _generated_outcome("rejected", cleanup_error != OK, stage, "code-%d-cleanup-%d" % [code, cleanup_error])
 
-func _generated_outcome(ok: bool, committed: bool, cleanup_debt: bool, stage: String, reason: String) -> Dictionary:
-	return {"ok": ok, "committed": committed, "cleanupDebt": cleanup_debt, "stage": stage, "reason": reason}
+func _generated_restore_after_failure(path: String, prior: Dictionary, stage: String, code: Error, recovery_path: String, invocation: String, paths: Array[String]) -> Dictionary:
+	var restore_error := _restore_generated_target_state(path, prior)
+	if restore_error != OK:
+		return _generated_outcome("indeterminate", false, "restore", "code-%d" % restore_error)
+	var cleanup_error := _generated_cleanup_transaction(recovery_path, invocation, paths)
+	return _generated_outcome("rejected", cleanup_error != OK, stage, "code-%d-restore-0-cleanup-%d" % [code, cleanup_error])
 
-func _restore_generated_target(path: String, had_previous: bool, previous: PackedByteArray) -> Error:
-	if not had_previous:
-		return _remove_if_exists(path)
-	return _generated_write_bytes(path, previous)
+func _generated_finish_committed(recovery_path: String, invocation: String, paths: Array[String]) -> Dictionary:
+	var cleanup_error := _generated_cleanup_transaction(recovery_path, invocation, paths)
+	if cleanup_error != OK:
+		push_warning("JSON_STORE_GENERATED_CLEANUP_DEBT stage=cleanup code=%d committed=true" % cleanup_error)
+		return _generated_outcome("committed", true, "cleanup", "code-%d" % cleanup_error)
+	return _generated_outcome("committed", false, "verified", "")
+
+func _generated_outcome(state: String, cleanup_debt: bool, stage: String, reason: String) -> Dictionary:
+	return {"ok": state in ["unchanged", "committed"], "state": state, "cleanupDebt": cleanup_debt, "stage": stage, "reason": reason}
+
+func _generated_target_state(path: String) -> Dictionary:
+	if not FileAccess.file_exists(path):
+		return {"ok": true, "exists": false, "error": OK, "bytes": PackedByteArray()}
+	var read := _generated_read_bytes(path)
+	return {"ok": int(read["error"]) == OK, "exists": true, "error": int(read["error"]), "bytes": read["bytes"]}
+
+func _generated_target_matches_state(path: String, expected: Dictionary) -> bool:
+	var observed := _generated_target_state(path)
+	return bool(observed["ok"]) and bool(observed["exists"]) == bool(expected["exists"]) and (not bool(observed["exists"]) or observed["bytes"] == expected["bytes"])
+
+func _restore_generated_target_state(path: String, prior: Dictionary) -> Error:
+	if not bool(prior["exists"]):
+		var remove_error := _remove_if_exists(path)
+		return remove_error if remove_error != OK or FileAccess.file_exists(path) else OK
+	var previous := prior["bytes"] as PackedByteArray
+	var restore_error := _generated_write_bytes(path, previous)
+	if restore_error != OK:
+		return restore_error
+	var restored := _generated_read_bytes(path)
+	return OK if int(restored["error"]) == OK and restored["bytes"] == previous else ERR_FILE_CORRUPT
+
+func _recover_generated_transaction(path: String, validator: Callable, recovery_paths: Dictionary) -> Dictionary:
+	var recovery_path := String(recovery_paths["recovery"])
+	if not FileAccess.file_exists(recovery_path):
+		return {}
+	var recovery_read := _generated_read_bytes(recovery_path)
+	if int(recovery_read["error"]) != OK:
+		return _generated_outcome("indeterminate", false, "recovery", "code-%d" % int(recovery_read["error"]))
+	var record := _parse_generated_recovery_record(recovery_read["bytes"] as PackedByteArray, path, recovery_paths)
+	if record.is_empty():
+		return _generated_outcome("indeterminate", false, "recovery", "invalid-record")
+	var candidate_read := _generated_read_bytes(String(record["candidate"]))
+	var candidate_valid := int(candidate_read["error"]) == OK and _generated_sha256(candidate_read["bytes"] as PackedByteArray) == String(record["candidateSha256"]) and CityAccessSnapshotLoader.load_bytes(candidate_read["bytes"] as PackedByteArray).ok() and _generated_bytes_validate(candidate_read["bytes"] as PackedByteArray, validator).is_empty()
+	var invocation := String(record["invocation"])
+	var paths: Array[String] = [String(record["candidate"]), invocation.path_join("promotion.json"), String(record["previous"]), invocation.path_join("recovery-record.json")]
+	var target_state := _generated_target_state(path)
+	if candidate_valid and bool(target_state["ok"]) and bool(target_state["exists"]) and target_state["bytes"] == candidate_read["bytes"]:
+		return _generated_finish_committed(recovery_path, invocation, paths)
+	var prior := {"ok": true, "exists": bool(record["hadPrevious"]), "error": OK, "bytes": PackedByteArray()}
+	if bool(record["hadPrevious"]):
+		var previous_read := _generated_read_bytes(String(record["previous"]))
+		if int(previous_read["error"]) != OK or _generated_sha256(previous_read["bytes"] as PackedByteArray) != String(record["previousSha256"]):
+			return _generated_outcome("indeterminate", false, "recovery", "invalid-previous")
+		prior["bytes"] = previous_read["bytes"]
+	var restore_error := _restore_generated_target_state(path, prior)
+	if restore_error != OK:
+		return _generated_outcome("indeterminate", false, "restore", "code-%d" % restore_error)
+	var cleanup_error := _generated_cleanup_transaction(recovery_path, invocation, paths)
+	if cleanup_error != OK:
+		return _generated_outcome("rejected", true, "cleanup", "code-%d" % cleanup_error)
+	return {}
+
+func _parse_generated_recovery_record(bytes: PackedByteArray, target: String, recovery_paths: Dictionary) -> Dictionary:
+	var text := bytes.get_string_from_utf8()
+	if text.to_utf8_buffer() != bytes:
+		return {}
+	var parser := JSON.new()
+	if parser.parse(text) != OK or not parser.data is Dictionary:
+		return {}
+	var record := parser.data as Dictionary
+	var keys := ["version", "target", "invocation", "candidate", "previous", "hadPrevious", "candidateSha256", "previousSha256"]
+	if record.size() != keys.size() or not record.has_all(keys):
+		return {}
+	if int(record["version"]) != GENERATED_RECOVERY_VERSION or record["target"] != target.simplify_path() or not record["hadPrevious"] is bool:
+		return {}
+	for key: String in ["invocation", "candidate", "previous", "candidateSha256", "previousSha256"]:
+		if not record[key] is String:
+			return {}
+	var invocation := String(record["invocation"]).simplify_path()
+	var candidate := String(record["candidate"]).simplify_path()
+	var previous := String(record["previous"]).simplify_path()
+	var absolute_root := String(recovery_paths["absolute_root"])
+	if not _generated_is_strict_descendant(ProjectSettings.globalize_path(invocation).simplify_path(), absolute_root):
+		return {}
+	if candidate != invocation.path_join("candidate.json").simplify_path() or not _generated_is_strict_descendant(ProjectSettings.globalize_path(candidate).simplify_path(), absolute_root):
+		return {}
+	if bool(record["hadPrevious"]):
+		if previous != invocation.path_join("previous.bytes").simplify_path() or not _generated_is_strict_descendant(ProjectSettings.globalize_path(previous).simplify_path(), absolute_root):
+			return {}
+	elif not previous.is_empty():
+		return {}
+	if String(record["candidateSha256"]).length() != 64 or (bool(record["hadPrevious"]) and String(record["previousSha256"]).length() != 64) or (not bool(record["hadPrevious"]) and not String(record["previousSha256"]).is_empty()):
+		return {}
+	record["invocation"] = invocation
+	record["candidate"] = candidate
+	record["previous"] = previous
+	return record
+
+func _generated_sha256(bytes: PackedByteArray) -> String:
+	var context := HashingContext.new()
+	if context.start(HashingContext.HASH_SHA256) != OK or context.update(bytes) != OK:
+		return ""
+	return context.finish().hex_encode()
 
 func _generated_read_bytes(path: String) -> Dictionary:
 	if not FileAccess.file_exists(path):
@@ -110,16 +263,18 @@ func _generated_read_bytes(path: String) -> Dictionary:
 	var file := FileAccess.open(path, FileAccess.READ)
 	if file == null:
 		return {"error": FileAccess.get_open_error(), "bytes": PackedByteArray()}
-	var bytes := file.get_buffer(file.get_length())
+	var length := file.get_length()
+	var bytes := file.get_buffer(length)
 	var read_error := file.get_error()
 	file.close()
-	return {"error": read_error, "bytes": bytes}
+	return {"error": ERR_FILE_CORRUPT if read_error == OK and bytes.size() != length else read_error, "bytes": bytes}
 
 func _generated_write_bytes(path: String, bytes: PackedByteArray) -> Error:
 	var file := FileAccess.open(path, FileAccess.WRITE)
 	if file == null:
 		return FileAccess.get_open_error()
 	file.store_buffer(bytes)
+	file.flush()
 	var write_error := file.get_error()
 	file.close()
 	return write_error
@@ -135,6 +290,12 @@ func _generated_cleanup(invocation: String, paths: Array[String]) -> Error:
 		first_error = directory_error
 	return first_error
 
+func _generated_cleanup_transaction(recovery_path: String, invocation: String, paths: Array[String]) -> Error:
+	var recovery_remove_error := _remove_if_exists(recovery_path)
+	if recovery_remove_error != OK:
+		return recovery_remove_error
+	return _generated_cleanup(invocation, paths)
+
 func _generated_cleanup_directory(path: String) -> Error:
 	return DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
 
@@ -146,13 +307,27 @@ func _generated_staging_paths(staging_root: String) -> Dictionary:
 	if absolute_root.is_empty():
 		return {}
 	var invocation := canonical_root.path_join("invocation-%d-%d" % [OS.get_process_id(), Time.get_ticks_usec()]).simplify_path()
-	var temporary := invocation.path_join("candidate.json").simplify_path()
+	var candidate := invocation.path_join("candidate.json").simplify_path()
+	var promotion := invocation.path_join("promotion.json").simplify_path()
 	var previous_copy := invocation.path_join("previous.bytes").simplify_path()
-	for candidate: String in [invocation, temporary, previous_copy]:
-		var absolute_candidate := ProjectSettings.globalize_path(candidate).simplify_path()
+	var recovery_temporary := invocation.path_join("recovery-record.json").simplify_path()
+	for artifact: String in [invocation, candidate, promotion, previous_copy, recovery_temporary]:
+		var absolute_candidate := ProjectSettings.globalize_path(artifact).simplify_path()
 		if not _generated_is_strict_descendant(absolute_candidate, absolute_root):
 			return {}
-	return {"invocation": invocation, "temporary": temporary, "previous_copy": previous_copy}
+	return {"invocation": invocation, "candidate": candidate, "promotion": promotion, "previous_copy": previous_copy, "recovery_temporary": recovery_temporary}
+
+func _generated_recovery_paths(staging_root: String) -> Dictionary:
+	if staging_root.is_empty():
+		return {}
+	var canonical_root := staging_root.simplify_path()
+	var absolute_root := ProjectSettings.globalize_path(canonical_root).simplify_path()
+	if absolute_root.is_empty():
+		return {}
+	var recovery := canonical_root.path_join(GENERATED_RECOVERY_FILE).simplify_path()
+	if not _generated_is_strict_descendant(ProjectSettings.globalize_path(recovery).simplify_path(), absolute_root):
+		return {}
+	return {"root": canonical_root, "absolute_root": absolute_root, "recovery": recovery}
 
 func _generated_is_strict_descendant(path: String, ancestor: String) -> bool:
 	var cursor := path.simplify_path()
