@@ -100,3 +100,46 @@ git diff --name-status b7b20200e8c3a24d85f40372cc2632c5f41d0715..HEAD # exit 0
 ```
 
 The merge base was `b7b20200e8c3a24d85f40372cc2632c5f41d0715`. Tracked scope contains implementation, tests, the corrected implementation plan, three approved screenshots, and verification documentation; tracked `.uid` count is `0`. Before this document edit, status contained exactly 21 generated untracked `.uid` files and no other entry. None was staged. No `.godot`, isolated `user://tests` data, unrelated worktree change, or live profile-root file was tracked or accessed by this gate.
+
+## Post-review fix final gate
+
+- Final gate date: 2026-08-27 (America/New_York)
+- Implementation commit under test: `13fd79a11d3dd706c7ced68d26a2e35fe22f8b88`
+- Executable/version preflight: `Godot_v4.7.1-stable_mono_win64_console.exe --version` exited `0` and printed `4.7.1.stable.mono.official.a13da4feb`.
+- Full logs: ignored `.superpowers/sdd/post-fix-final-*.log`.
+
+The exact Task 8 sequence was rerun from the worktree in order:
+
+```powershell
+$godot = 'F:\Projects(root)\Game dev\godot\Godot_v4.7.1-stable_mono_win64\Godot_v4.7.1-stable_mono_win64_console.exe'
+& $godot --headless --editor --path (Get-Location).Path --quit-after 600
+& $godot --headless --path (Get-Location).Path --quit-after 1200 --script res://tests/focused_test_runner.gd -- tests/unit/test_developer_item_sandbox_state.gd tests/unit/test_profile_state.gd tests/unit/test_profile_item_schema_migration.gd tests/unit/test_atomic_profile_store.gd tests/unit/test_run_loadout_checkout_service.gd tests/unit/test_run_recovery_service.gd tests/unit/test_player_run_context.gd tests/unit/test_main_menu_view_model.gd tests/unit/test_run_recovery_dialog.gd tests/unit/test_main_loadout_checkout_recovery.gd tests/unit/test_profile_deletion_service.gd tests/unit/test_profile_manager.gd tests/unit/test_profiles_settings_page.gd tests/unit/test_settings_screen.gd tests/unit/test_main_wiring.gd
+& $godot --headless --path (Get-Location).Path --quit-after 1200 --script res://tests/integration/run_recovery_profile_lifecycle_runner.gd
+& $godot --headless --path (Get-Location).Path --quit-after 600 --script res://tests/integration/profile_boot_main_flow_runner.gd
+& $godot --headless --path (Get-Location).Path --quit-after 600 --script res://tests/integration/settings_profiles_navigation_runner.gd
+& $godot --headless --path (Get-Location).Path --quit-after 2400 --script res://tests/test_runner.gd
+```
+
+| Gate/log | Process exit | Exact measured result |
+| --- | ---: | --- |
+| Cold import / `post-fix-final-cold-import.log` | `0` | parser/loader/missing-resource/script forbidden markers `0` |
+| Exact 15-suite affected batch / `post-fix-final-affected-15.log` | `0` | `TEST_SUMMARY: PASS (0 failures)` x1; forbidden parser/loader/script/crash/RID/ObjectDB/resource-retention markers `0` |
+| Recovery/profile lifecycle / `post-fix-final-integration-lifecycle.log` | `0` | `RUN_RECOVERY_CURRENT: PASS` x1; `RUN_RECOVERY_LEGACY_CLASS: PASS` x1; `RUN_RECOVERY_ABANDON: PASS` x1; `PROFILE_DELETE_LIFECYCLE: PASS` x1; `RUN_RECOVERY_PROFILE_LIFECYCLE: PASS` x1; forbidden markers `0` |
+| Profile boot/main flow / `post-fix-final-integration-profile-boot.log` | `0` | `PROFILE_BOOT_MAIN_FLOW_SUMMARY: PASS` x1; forbidden markers `0` |
+| Settings/Profile navigation / `post-fix-final-integration-settings-navigation.log` | `0` | `SETTINGS_PROFILES_NAVIGATION_SUMMARY: PASS` x1; forbidden markers `0` |
+| Complete unit suite / `post-fix-final-full-unit.log` | `0` | `TEST_SUMMARY: PASS (222 suites)` x1; discovered `tests/unit/*.gd` files `222`; forbidden markers `0` |
+
+The complete suite again emitted 105 expected negative-path `ERROR:` lines and 10 warnings. None matched the forbidden parser, loader, script, crash, RID, ObjectDB, or resource-retention markers. Across the three sequential integration logs, every required accepted marker appeared exactly once and the combined forbidden scan returned `0`.
+
+Repository audit commands and measured process exits:
+
+```powershell
+git diff --check                         # exit 0
+git status --short                      # exit 0
+git log --oneline --decorate -12        # exit 0
+git merge-base main HEAD                # exit 0
+git diff --name-status b7b20200e8c3a24d85f40372cc2632c5f41d0715..HEAD # exit 0
+git diff --name-only b7b20200e8c3a24d85f40372cc2632c5f41d0715..HEAD -- '*.uid' # exit 0
+```
+
+The merge base remained `b7b20200e8c3a24d85f40372cc2632c5f41d0715`. Before this section was appended, tracked and staged working-tree diffs were empty. Branch-scope tracked `.uid` count was `0`; status contained exactly 21 generated untracked `.uid` files and no other entry, and none was staged. The gate used only the worktree project path and isolated test roots; it did not access live profile, settings, or developer-sandbox roots.
