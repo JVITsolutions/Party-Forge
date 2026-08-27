@@ -123,7 +123,37 @@ const CURRENT_FIELDS: Array[String] = [
 	"applied_transactions",
 	"preferred_player_color_id",
 ]
-const SCHEMA_FOUR_FIELDS: Array[String] = CURRENT_FIELDS
+const SCHEMA_FOUR_FIELDS: Array[String] = [
+	"schema_version",
+	"profile_id",
+	"display_name",
+	"created_at_unix",
+	"updated_at_unix",
+	"prologue_state",
+	"last_safe_checkpoint",
+	"gold",
+	"passive_points_available",
+	"passive_points_lifetime_earned",
+	"milestones",
+	"permanent_feature_unlocks",
+	"discovered_buildings",
+	"discovered_trees",
+	"tree_allocations",
+	"tree_visibility_progress",
+	"owned_characters",
+	"squad_capacity",
+	"inventory_columns",
+	"item_records",
+	"leader_loadout",
+	"leader_loadout_class_id",
+	"stash_tabs",
+	"next_item_sequence",
+	"extraction_capacity",
+	"run_history",
+	"resumable_run",
+	"applied_transactions",
+	"preferred_player_color_id",
+]
 const LEGACY_RECOVERY_FIELDS: Array[String] = ["item_state", "leader_member_id", "run_id", "run_player_id", "run_seed"]
 
 static func encode(profile: ProfileState) -> String:
@@ -272,11 +302,12 @@ static func _validate_document(data: Dictionary, expected_schema: int, result_sn
 	for field: String in ["last_safe_checkpoint", "resumable_run"]:
 		if not _is_json_value(data[field]):
 			return _field_error(field, "contains a non-JSON value")
-	if expected_schema >= SCHEMA_THREE_VERSION and (data["resumable_run"] as Dictionary).has("item_state"):
-		var resumable_error := _validate_legacy_resumable_run(data["resumable_run"] as Dictionary) \
+	var recovery := data["resumable_run"] as Dictionary
+	if expected_schema >= SCHEMA_FOUR_VERSION and not recovery.is_empty():
+		var resumable_error := _validate_legacy_resumable_run(recovery) \
 			if expected_schema < ProfileState.SCHEMA_VERSION \
 			else ResumableRunItemCodec.validate_document(
-				data["resumable_run"],
+				recovery,
 				GameCatalog.EQUIPMENT_CATALOG,
 				GameCatalog.ITEM_FOUNDATION_CATALOG,
 			)
@@ -294,7 +325,7 @@ static func _validate_document(data: Dictionary, expected_schema: int, result_sn
 		var storage_error := _validate_current_storage(data)
 		if not storage_error.is_empty():
 			return storage_error
-		if (data["resumable_run"] as Dictionary).has("item_state"):
+		if expected_schema >= SCHEMA_FOUR_VERSION and not recovery.is_empty():
 			var duplicate_error := _validate_distinct_resumable_ownership(data)
 			if not duplicate_error.is_empty():
 				return duplicate_error

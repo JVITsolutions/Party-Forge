@@ -198,8 +198,8 @@ func _test_exact_inventory_capacities(failures: Array[String]) -> void:
 func _test_cross_context_state_and_profile_isolation(failures: Array[String]) -> void:
 	var profile_a := _profile("profile-isolated-a", 1, 73)
 	var profile_b := _profile("profile-isolated-b", 1, 91)
-	profile_a.resumable_run = {"sentinel": {"profile": "a"}}
-	profile_b.resumable_run = {"sentinel": {"profile": "b"}}
+	profile_a.last_safe_checkpoint = {"sentinel": {"profile": "a"}}
+	profile_b.last_safe_checkpoint = {"sentinel": {"profile": "b"}}
 	var profile_a_before := profile_a.to_dictionary()
 	var profile_b_before := profile_b.to_dictionary()
 	var context_a := _context_with_profile(&"isolated_a", profile_a, 2101)
@@ -244,7 +244,7 @@ func _test_cross_context_state_and_profile_isolation(failures: Array[String]) ->
 	exposed_result_item.origin["source"] = "escaped-result-source"
 	var exposed_profile := context_a.profile_snapshot
 	exposed_profile.next_item_sequence = 999
-	exposed_profile.resumable_run["sentinel"]["profile"] = "escaped-profile"
+	exposed_profile.last_safe_checkpoint["sentinel"]["profile"] = "escaped-profile"
 
 	TestAssertions.equal(_item_state(context_a).owner_id, String(context_a.run_player_id), "item-state accessor cannot escape its owner", failures)
 	TestAssertions.equal(_item_state(context_a).registry().item(item_a.instance_id).to_dictionary(), item_a.to_dictionary(), "registry and item projections are defensive", failures)
@@ -257,7 +257,6 @@ func _test_cross_context_state_and_profile_isolation(failures: Array[String]) ->
 
 func _test_run_issuance_sequence_and_replay(failures: Array[String]) -> void:
 	var profile := _profile("profile-sequence", 1, 44)
-	profile.resumable_run = {"existing": "profile-only"}
 	var context := _context_with_profile(&"sequence_player", profile, 3303)
 	var snapshot_before := context.profile_snapshot.to_dictionary()
 	var equipment := GameCatalog.EQUIPMENT_CATALOG
@@ -318,7 +317,7 @@ func _test_run_issuance_sequence_and_replay(failures: Array[String]) -> void:
 		foundation
 	)
 	TestAssertions.equal(created_two.code, ItemTransactionResult.Code.OK, "non-create operation does not consume issuance sequence two", failures)
-	TestAssertions.equal(context.profile_snapshot.to_dictionary(), snapshot_before, "run issuance never changes persistent sequence or resumable-run bytes", failures)
+	TestAssertions.equal(context.profile_snapshot.to_dictionary(), snapshot_before, "run issuance never changes persistent profile bytes", failures)
 
 
 func _test_resumable_attribute_and_typed_damage_records(failures: Array[String]) -> void:

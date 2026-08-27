@@ -26,6 +26,7 @@ func run() -> Array[String]:
 	_test_schema_two_items_and_progression_migrate_losslessly(failures)
 	_test_schema_three_adds_preferred_color_recursively(failures)
 	_test_schema_four_recovery_migrates_recursively(failures)
+	_test_malformed_schema_four_recovery_fails_before_migration(failures)
 	_test_schema_five_color_round_trip_and_validation(failures)
 	_test_unsupported_legacy_stash_fails_without_mutation(failures)
 	_test_failed_item_schema_migration_preserves_primary_and_backup_bytes(failures)
@@ -105,7 +106,8 @@ func _test_schema_two_items_and_progression_migrate_losslessly(failures: Array[S
 				continue
 			TestAssertions.equal(JSON.stringify(actual[field]), JSON.stringify(original[field]), "schema-two field %s survives byte-semantically" % field, failures)
 		var expected_recovery := (original["resumable_run"] as Dictionary).duplicate(true)
-		expected_recovery["selected_leader_class_id"] = ""
+		if not expected_recovery.is_empty():
+			expected_recovery["selected_leader_class_id"] = ""
 		TestAssertions.equal(actual["resumable_run"], expected_recovery, "schema-two recovery gains only the legacy class marker", failures)
 		_assert_item_registry_promoted_to_schema_two(actual["item_records"] as Dictionary, "root item registry", failures)
 		var original_record := (original["applied_transactions"] as Dictionary)["storage-001"] as Dictionary
@@ -119,7 +121,8 @@ func _test_schema_two_items_and_progression_migrate_losslessly(failures: Array[S
 				continue
 			TestAssertions.equal(JSON.stringify(actual_snapshot[field]), JSON.stringify(original_snapshot[field]), "transaction snapshot field %s survives migration" % field, failures)
 		var expected_snapshot_recovery := (original_snapshot["resumable_run"] as Dictionary).duplicate(true)
-		expected_snapshot_recovery["selected_leader_class_id"] = ""
+		if not expected_snapshot_recovery.is_empty():
+			expected_snapshot_recovery["selected_leader_class_id"] = ""
 		TestAssertions.equal(actual_snapshot["resumable_run"], expected_snapshot_recovery, "transaction snapshot recovery gains only the legacy class marker", failures)
 		_assert_item_registry_promoted_to_schema_two(actual_snapshot["item_records"] as Dictionary, "transaction snapshot item registry", failures)
 		TestAssertions.equal(actual_snapshot.get("leader_loadout"), _leader_loadout("profile-migrate09"), "transaction snapshot gains the exact empty leader loadout", failures)
@@ -210,6 +213,18 @@ func _test_schema_four_recovery_migrates_recursively(failures: Array[String]) ->
 			TestAssertions.equal((nested["resumable_run"] as Dictionary)[field], persisted_recovery[field], "nested recovery preserves legacy field %s exactly" % field, failures)
 	TestAssertions.equal(legacy, before, "schema-four recovery migration leaves source dictionary unchanged", failures)
 	ProfileTestSupport.remove_tree(root)
+
+func _test_malformed_schema_four_recovery_fails_before_migration(failures: Array[String]) -> void:
+	var legacy := ProfileState.new_profile("profile-migrate12", "Malformed Recovery", 3000).to_dictionary()
+	legacy["schema_version"] = 4
+	legacy["resumable_run"] = {"run_id": "run-incomplete-legacy"}
+	var before := legacy.duplicate(true)
+	var loaded := ProfileCodec.decode_document(legacy)
+	TestAssertions.truthy(not loaded.ok(), "malformed nonempty schema-four recovery is rejected", failures)
+	TestAssertions.equal(loaded.profile, null, "malformed schema-four recovery exposes no migrated profile", failures)
+	TestAssertions.truthy(not loaded.migrated and loaded.source_schema_version == 4, "malformed schema-four recovery stops before migration", failures)
+	TestAssertions.truthy(loaded.error.contains("field=resumable_run") and loaded.error.contains("missing fields item_state"), "schema-four rejection reports the strict historical recovery shape", failures)
+	TestAssertions.equal(legacy, before, "failed schema-four recovery load leaves its source unchanged", failures)
 
 func _test_schema_five_color_round_trip_and_validation(failures: Array[String]) -> void:
 	var profile := ProfileState.new_profile("profile-color0001", "Blue", 3000)
@@ -406,7 +421,7 @@ static func schema_one_document(
 		"stash_tabs": [],
 		"extraction_capacity": 2,
 		"run_history": [{"outcome": "victory", "seed": 4402}],
-		"resumable_run": {"run_id": "run-legacy-01"},
+		"resumable_run": {},
 		"applied_transactions": {},
 	}
 	if include_transaction:

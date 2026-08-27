@@ -7,6 +7,7 @@ func run() -> Array[String]:
 	_test_malformed_and_future_schema_fail_closed(failures)
 	_test_current_field_types_fail_closed(failures)
 	_test_exact_historical_and_current_fields_fail_closed(failures)
+	_test_nonempty_current_recovery_is_always_strict(failures)
 	_test_current_item_storage_is_strict_and_defensive(failures)
 	_test_current_stash_tab_cap(failures)
 	_test_json_safe_integer_boundaries(failures)
@@ -141,6 +142,29 @@ func _test_exact_historical_and_current_fields_fail_closed(failures: Array[Strin
 	var historical_with_current_snapshot := historical.duplicate(true)
 	historical_with_current_snapshot["applied_transactions"] = {"tx": _transaction_record(current_snapshot)}
 	TestAssertions.truthy(not _validate_loadable(historical_with_current_snapshot).is_empty(), "historical transaction rejects a current result snapshot", failures)
+
+func _test_nonempty_current_recovery_is_always_strict(failures: Array[String]) -> void:
+	var valid_recovery := _valid_current_recovery()
+	var missing_item_state := valid_recovery.duplicate(true)
+	missing_item_state.erase("item_state")
+	var unknown_extra := valid_recovery.duplicate(true)
+	unknown_extra["unexpected"] = true
+	var wrong_class_type := valid_recovery.duplicate(true)
+	wrong_class_type["selected_leader_class_id"] = 7
+	var cases: Array[Dictionary] = [
+		{"label": "missing item state", "recovery": missing_item_state, "detail": "missing fields item_state"},
+		{"label": "unknown extra field", "recovery": unknown_extra, "detail": "unexpected fields unexpected"},
+		{"label": "wrong class type", "recovery": wrong_class_type, "detail": "field=selected_leader_class_id"},
+	]
+	for test_case: Dictionary in cases:
+		var malformed := ProfileState.new_profile("profile-recovery1", "Recovery", 1000).to_dictionary()
+		malformed["resumable_run"] = (test_case["recovery"] as Dictionary).duplicate(true)
+		var decoded := ProfileCodec.decode_document(malformed)
+		TestAssertions.truthy(
+			not decoded.ok() and decoded.profile == null and decoded.error.contains("field=resumable_run") and decoded.error.contains(test_case["detail"]),
+			"nonempty current recovery rejects %s at the profile boundary" % test_case["label"],
+			failures,
+		)
 
 func _test_current_item_storage_is_strict_and_defensive(failures: Array[String]) -> void:
 	var current := ProfileState.new_profile("profile-storage1", "Storage", 1000).to_dictionary()
@@ -339,6 +363,17 @@ func _transaction_record(snapshot: Dictionary) -> Dictionary:
 		"committed_at_unix": int(snapshot["updated_at_unix"]),
 		"result_profile": snapshot,
 	}
+
+func _valid_current_recovery() -> Dictionary:
+	var owner_id := "profile-run-player"
+	var state := ItemOwnershipState.create(owner_id, ItemRegistry.new(), [
+		ItemSlotContainer.create(&"run-inventory", ItemSlotContainer.RUN_INVENTORY, owner_id, 5),
+		ItemSlotContainer.create(&"run-equipment-001", ItemSlotContainer.RUN_MEMBER_EQUIPMENT, owner_id, EquipmentSlotIndex.capacity()),
+		RunItemBootstrap.ground_items_container(owner_id),
+	])
+	return ResumableRunItemCodec.encode(
+		RunItemBootstrap.create(&"run-profile-recovery", 4402, StringName(owner_id), 1, state, &"fighter")
+	)
 
 func _validate_current(document: Dictionary) -> String:
 	var validator := Callable(ProfileCodec, "validate_current_document")
