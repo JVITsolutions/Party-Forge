@@ -1,0 +1,73 @@
+# City Access snapshot acceptance and rollback qualification
+
+Date: 2026-08-27. This record describes a retained-feature-worktree qualification only. It does not activate the candidate, merge either branch, push, alter `main`, or create a release.
+
+## Exact inputs
+
+| Worktree | Branch | HEAD |
+| --- | --- | --- |
+| Party Forge | `feature/latticewright-v3-portfolio` | `33dd26ee91c24e2ed93e99cb4bef92fadff6b1d8` |
+| Latticewright | `feature/v3-graph-portals-party-forge` | `12408a727b3a49aab62bd8c6a70266abdc445d2e` |
+
+Fresh SHA-256 values:
+
+| Artifact | SHA-256 |
+| --- | --- |
+| `design/progression/latticewright/party-forge-city-access.pstree` | `3c459454210de71e766c80d57d51825977811990678b53579a7d8573299df721` |
+| `design/progression/latticewright/party-forge-city-access.pstree.json` runtime-v3 source | `bb3abd94d6b86716d3c39840deef460e20596abb858ba6abd4535067d664ff78` |
+| `data/world/access/party-forge-city-access.snapshot.json` | `ca046f55eaaf28ff050c6d7ab240232d5663820d88c1551160a7a2c4476b6a55` |
+
+The checked-in snapshot is 2,539 bytes. A fresh importer replay exited `0` in `0.389s` and emitted exactly:
+
+```text
+PARTY_FORGE_CITY_ACCESS_IMPORT status=UNCHANGED adapter=latticewright-runtime-v3-city-access stage=compare
+```
+
+This is repeat-import byte parity: the production importer canonically translated the exact runtime-v3 bytes and found no write necessary.
+
+## Party Forge acceptance
+
+The dedicated runner was first deliberately RED: exit `1` in `0.293s` with `CITY_ACCESS_SNAPSHOT_ACCEPTANCE_PENDING`; no production source was changed. The completed runner then executed the whole acceptance flow in one headless process:
+
+```powershell
+& $godot --headless --path . --quit-after 600 --script res://tests/integration/city_access_snapshot_runner.gd
+```
+
+It exited `0` in `1.135s` and printed the sole success marker:
+
+```text
+CITY_ACCESS_SNAPSHOT_ACCEPTANCE_OK locations=7 profiles=7 rollback=legacy
+```
+
+In that one process it strictly read and SHA-256 hashed the checked-in runtime-v3 source; translated it with `LatticewrightRuntimeV3CityAccessImporter`; compared canonical candidate bytes with the checked-in snapshot; loaded the production snapshot; and evaluated all seven locations for seven profiles: NOT_STARTED, IN_PROGRESS, COMPLETED, and one profile for each individual permanent unlock. Before/after `ProfileState.to_dictionary()` values and `ProfileCodec.encode()` UTF-8 bytes were equal for every profile. It also proved default flag-off `LEGACY`; Player Mode plus flag-on `LEGACY` with `candidate_requires_developer_mode`; Developer Mode plus flag-on `CANDIDATE`; an injected invalid snapshot result `CANDIDATE_FAILED` with no fallback; immediate flag-off `LEGACY` rollback; and present/loadable format-1 City data through `PassiveTreeLoader` at `data/passive_trees/city/party-forge-city.pstree.json`.
+
+The required focused batch was run exactly as specified and exited `0` in `17.338s`:
+
+```text
+TEST_SUMMARY: PASS (0 failures)
+```
+
+The full Party Forge runner was run from this retained worktree:
+
+```powershell
+& $godot --headless --path . --quit-after 2400 --script res://tests/test_runner.gd
+```
+
+It exited `0` with exactly one `TEST_SUMMARY: PASS (227 suites)` marker; there were zero `TEST_SUMMARY: FAIL`, `TEST_FAILURE`, `SCRIPT ERROR`, `Parse Error`, `Failed to load script`, and `No loader found` markers. The captured-output interval was `236.062s` (from `2026-08-27T06:21:55.6636262-04:00` to the exit marker at `2026-08-27T06:25:51.7253123-04:00`; wrapper launch preceded capture by less than one second).
+
+Expected negative-path evidence in that complete log comprised 97 `ERROR:` lines and 11 `WARNING:` lines. Examples include intentional non-finite-stat rejection (`PARTY_FORGE_STAT_ERROR source=nonfinite_crit`), invalid damage-boundary rejection (`PARTY_FORGE_DAMAGE_ERROR`), and an intentionally mismatched weighted-content base-manifest fixture. They are exercised failure paths, not test-runner failures.
+
+## Latticewright source qualification
+
+All commands ran in `E:\Projects\Passive Skill Tree Creator\.worktrees\v3-graph-portals-party-forge` with `npm.cmd`:
+
+| Command | Result |
+| --- | --- |
+| `node --test scripts/party-forge/create-party-forge-portfolio.test.mjs` | exit `0`, 5/5 pass, `0.220s` |
+| `npm.cmd test -- tests/party-forge/portfolio.test.ts src/core/project-v3/runtime-codec.test.ts src/core/project-v3/resolve-runtime.test.ts` | exit `0`, 3 files / 20 tests pass, `2.116s` |
+| `npm.cmd run typecheck` | exit `0`, `6.621s` |
+| `npm.cmd run lint` | exit `0`, `4.948s` |
+
+## Boundary and audit statement
+
+The candidate stays default-off and Developer Mode-only. No City scene, navigation route, profile schema, `ProfileCodec`, passive allocation behavior, Player Mode activation, or current format-1 City runtime was changed. The format-1 City source is both present and loader-qualified. No merge, push, `main` change, remote/default activation, player-build wiring, or release occurred. This is ready for user review only; merge or activation still requires separate approval.
