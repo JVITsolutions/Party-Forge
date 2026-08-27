@@ -4,8 +4,7 @@ const STATE_PATH := "res://scripts/dev/developer_item_sandbox_state.gd"
 const STORE_PATH := "res://scripts/dev/developer_item_sandbox_store.gd"
 const FIXTURE_ISSUER_PATH := "res://scripts/dev/developer_item_fixture_issuer.gd"
 const LOOT_ISSUER_PATH := "res://scripts/dev/developer_loot_lab_item_issuer.gd"
-const DOCUMENT_PATH := "user://developer_item_sandbox/sandbox.json"
-const SANDBOX_ROOT := "user://developer_item_sandbox"
+const TEST_ROOT_PREFIX := "user://tests/developer_item_sandbox"
 const OWNER_ID := "developer-item-sandbox"
 const INVENTORY_ID := &"developer-inventory"
 const STASH_ID := &"developer-stash-000"
@@ -13,6 +12,8 @@ const ISSUER_NAMESPACE := "sandbox:developer-item-sandbox"
 
 var _state_script: Script
 var _store_script: Script
+var _test_root := ""
+var _document_path := ""
 
 func run() -> Array[String]:
 	var failures: Array[String] = []
@@ -28,6 +29,10 @@ func run() -> Array[String]:
 	if _state_script == null or _store_script == null:
 		return failures
 
+	_begin_fixture(failures)
+	if not failures.is_empty():
+		_end_fixture()
+		return failures
 	_cleanup_sandbox_files()
 	_assert_deterministic_fixture(failures)
 	_assert_schema_one_migrates_to_schema_two(failures)
@@ -40,36 +45,69 @@ func run() -> Array[String]:
 	_assert_strict_reload_is_failure_atomic(failures)
 	_assert_corrupt_generations_reset_recovery(failures)
 	_assert_atomic_save_failure_and_profile_isolation(failures)
-	_cleanup_sandbox_files()
+	_end_fixture()
 	return failures
+
+
+func _begin_fixture(failures: Array[String]) -> void:
+	_test_root = TEST_ROOT_PREFIX.path_join("%d-%d" % [OS.get_process_id(), Time.get_ticks_usec()])
+	_document_path = _test_root.path_join("sandbox.json")
+	TestAssertions.truthy(
+		_document_path.begins_with("user://tests/")
+			and not _document_path.begins_with(ProfileStore.DEFAULT_ROOT)
+			and _document_path != DeveloperItemSandboxStore.DOCUMENT_PATH,
+		"sandbox fixtures use isolated document storage",
+		failures,
+	)
+	var default_store := _store_script.new() as DeveloperItemSandboxStore
+	var has_document_path := default_store.get_property_list().any(
+		func(property: Dictionary) -> bool: return String(property.get("name", "")) == "_document_path"
+	)
+	TestAssertions.truthy(has_document_path, "sandbox store retains an injectable document path", failures)
+	if has_document_path:
+		TestAssertions.equal(default_store.get("_document_path"), DeveloperItemSandboxStore.DOCUMENT_PATH, "sandbox store default remains the production document path", failures)
+		var injected_store := _new_store()
+		TestAssertions.equal(injected_store.get("_document_path"), _document_path, "sandbox store accepts the isolated document path", failures)
+
+
+func _end_fixture() -> void:
+	ProfileTestSupport.remove_tree(_test_root)
+
+
+func _new_store(documents: AtomicJsonStore = null) -> DeveloperItemSandboxStore:
+	return _store_script.new(documents, _document_path) as DeveloperItemSandboxStore
+
+
+func _new_state(documents: AtomicJsonStore = null) -> Variant:
+	return _state_script.new(_new_store(documents))
 
 func _assert_schema_one_migrates_to_schema_two(failures: Array[String]) -> void:
 	_cleanup_sandbox_files()
-	var seed: Variant = _state_script.new()
+	var seed: Variant = _new_state()
 	TestAssertions.equal(seed.reset(), "", "migration fixture reset succeeds", failures)
 	var schema_one: Dictionary = seed.to_dictionary()
 	var original_ownership: Dictionary = schema_one["ownership_state"].duplicate(true)
 	schema_one["schema_version"] = 1
 	schema_one["issuance_metadata"]["schema_version"] = 1
 	schema_one["issuance_metadata"].erase("next_generated_item_sequence")
-	_write_text(DOCUMENT_PATH, JSON.stringify(schema_one, "\t", false))
+	_write_text(_document_path, JSON.stringify(schema_one, "\t", false))
 
-	var migrated: Variant = _state_script.new()
+	var migrated: Variant = _new_state()
 	TestAssertions.equal(migrated.reload(), "", "schema-one sandbox reload migrates atomically", failures)
 	var migrated_document: Dictionary = migrated.to_dictionary()
 	TestAssertions.equal(int(migrated_document.get("schema_version", -1)), 2, "migration publishes schema two", failures)
 	TestAssertions.equal(int(migrated_document["issuance_metadata"].get("next_generated_item_sequence", -1)), 0, "schema one migrates generated sequence zero", failures)
 	TestAssertions.equal(migrated.registry().size(), 99, "migration preserves exact fixture count", failures)
 	TestAssertions.equal(migrated_document["ownership_state"], original_ownership, "migration preserves exact fixture items and placements", failures)
-	var persisted := JSON.parse_string(FileAccess.get_file_as_string(DOCUMENT_PATH)) as Dictionary
+	var persisted := JSON.parse_string(FileAccess.get_file_as_string(_document_path)) as Dictionary
 	TestAssertions.equal(int(persisted.get("schema_version", -1)), 2, "migration promotes schema two before publishing state", failures)
 
 func _assert_schema_two_generated_journal_replays(failures: Array[String]) -> void:
 	_cleanup_sandbox_files()
-	var seed: Variant = _state_script.new()
+	var seed: Variant = _new_state()
 	TestAssertions.equal(seed.reset(), "", "schema-two generated replay fixture resets", failures)
 	var base_document: Dictionary = seed.to_dictionary()
-	var decoded: Dictionary = (_store_script.new() as DeveloperItemSandboxStore).decode_document(base_document)
+	var decoded: Dictionary = (_new_store() as DeveloperItemSandboxStore).decode_document(base_document)
 	var candidate := decoded["state"] as ItemOwnershipState
 	var journal := ItemTransactionJournal.new()
 	var preview := _generated_preview(failures)
@@ -104,11 +142,11 @@ func _assert_schema_two_generated_journal_replays(failures: Array[String]) -> vo
 	var metadata: Dictionary = base_document["issuance_metadata"].duplicate(true)
 	metadata["next_transaction_sequence"] = 2
 	metadata["next_generated_item_sequence"] = 1
-	var store := _store_script.new() as DeveloperItemSandboxStore
+	var store := _new_store() as DeveloperItemSandboxStore
 	var document := store.document_for(moved.next_state, metadata, journal)
 	TestAssertions.equal(store.validate_document(document), "", "schema-two create-then-move journal validates exactly", failures)
 	TestAssertions.equal(store.save_document(document), "", "schema-two generated journal saves", failures)
-	var reloaded: Variant = _state_script.new()
+	var reloaded: Variant = _new_state()
 	TestAssertions.equal(reloaded.reload(), "", "schema-two generated journal reloads", failures)
 	TestAssertions.equal(reloaded.inventory().item_id_at(0), issued.item.instance_id, "replay preserves generated item placement", failures)
 	TestAssertions.equal(reloaded.registry().size(), 100, "replay preserves 99 fixtures plus generated item", failures)
@@ -127,7 +165,7 @@ func _assert_generated_item_issuance_is_failure_atomic(failures: Array[String]) 
 	var preview := _generated_preview(failures)
 	if preview == null:
 		return
-	var state: Variant = _state_script.new()
+	var state: Variant = _new_state()
 	TestAssertions.equal(state.reset(), "", "generated issuance fixture resets", failures)
 	TestAssertions.equal(state.issue_generated_item(preview, INVENTORY_ID), "", "generated preview issues to first empty inventory slot", failures)
 	var first_document: Dictionary = state.to_dictionary()
@@ -166,7 +204,7 @@ func _assert_generated_item_issuance_is_failure_atomic(failures: Array[String]) 
 	TestAssertions.equal(var_to_bytes(state.to_dictionary()), before_projection, "projection rejection preserves exact in-memory bytes", failures)
 
 	_cleanup_sandbox_files()
-	var independent: Variant = _state_script.new()
+	var independent: Variant = _new_state()
 	TestAssertions.equal(independent.reset(), "", "independent sequence fixture resets", failures)
 	var fixture_item_id: String = independent.stash().item_id_at(0)
 	TestAssertions.equal(independent.move_to_first_empty_inventory(fixture_item_id), "", "fixture movement consumes transaction only", failures)
@@ -176,19 +214,19 @@ func _assert_generated_item_issuance_is_failure_atomic(failures: Array[String]) 
 	TestAssertions.equal(int(independent_document["issuance_metadata"]["next_generated_item_sequence"]), 1, "move does not consume generated-item sequence", failures)
 	TestAssertions.truthy(independent.stash().item_id_at(0).ends_with("0000000000000000"), "first issued item still uses generated sequence zero", failures)
 
-	var primary_before := FileAccess.get_file_as_bytes(DOCUMENT_PATH)
+	var primary_before := FileAccess.get_file_as_bytes(_document_path)
 	var memory_before := var_to_bytes(independent.to_dictionary())
 	var failing_atomic := AtomicJsonStore.new(func(_temporary: String, _target: String) -> Error: return ERR_CANT_CREATE)
-	var failing_state: Variant = _state_script.new(_store_script.new(failing_atomic))
+	var failing_state: Variant = _new_state(failing_atomic)
 	TestAssertions.equal(failing_state.reload(), "", "atomic issuance fixture reloads current state", failures)
 	var save_error: String = failing_state.issue_generated_item(preview, INVENTORY_ID, 1)
 	TestAssertions.truthy(save_error.contains("stage=promote"), "generated issuance reports atomic promotion failure", failures)
 	TestAssertions.equal(var_to_bytes(failing_state.to_dictionary()), memory_before, "failed issuance save preserves exact in-memory state", failures)
-	TestAssertions.equal(FileAccess.get_file_as_bytes(DOCUMENT_PATH), primary_before, "failed issuance save preserves exact primary bytes", failures)
+	TestAssertions.equal(FileAccess.get_file_as_bytes(_document_path), primary_before, "failed issuance save preserves exact primary bytes", failures)
 
 func _assert_deterministic_fixture(failures: Array[String]) -> void:
 	_cleanup_sandbox_files()
-	var first: Variant = _state_script.new()
+	var first: Variant = _new_state()
 	var first_reset_error: String = first.reset()
 	TestAssertions.equal(first_reset_error, "", "first sandbox reset succeeds", failures)
 	if not first_reset_error.is_empty():
@@ -197,7 +235,7 @@ func _assert_deterministic_fixture(failures: Array[String]) -> void:
 	var first_bytes := JSON.stringify(first_document)
 	var first_hash := first_bytes.sha256_text()
 
-	var second: Variant = _state_script.new()
+	var second: Variant = _new_state()
 	var second_reset_error: String = second.reset()
 	TestAssertions.equal(second_reset_error, "", "second independent sandbox reset succeeds", failures)
 	if not second_reset_error.is_empty():
@@ -271,7 +309,7 @@ func _assert_deterministic_fixture(failures: Array[String]) -> void:
 
 func _assert_explicit_affixes_survive_reload(failures: Array[String]) -> void:
 	_cleanup_sandbox_files()
-	var state: Variant = _state_script.new()
+	var state: Variant = _new_state()
 	var reset_error: String = state.reset()
 	TestAssertions.equal(reset_error, "", "affix fixture reset succeeds", failures)
 	if not reset_error.is_empty():
@@ -306,13 +344,13 @@ func _assert_explicit_affixes_survive_reload(failures: Array[String]) -> void:
 				TestAssertions.equal(roll.operation, effect.operation, "fixture roll operation is explicit", failures)
 				TestAssertions.truthy(roll.value >= bounds.x and roll.value <= bounds.y, "fixture roll remains inside authored bounds", failures)
 	TestAssertions.equal(state.save(), "", "explicit fixture saves", failures)
-	var reloaded: Variant = _state_script.new()
+	var reloaded: Variant = _new_state()
 	TestAssertions.equal(reloaded.reload(), "", "explicit fixture reloads", failures)
 	TestAssertions.equal(reloaded.registry().to_dictionary(), registry_before, "reload preserves exact issued affixes without recalculation", failures)
 
 func _assert_movement_replay_collision_and_reset(failures: Array[String]) -> void:
 	_cleanup_sandbox_files()
-	var state: Variant = _state_script.new()
+	var state: Variant = _new_state()
 	var reset_error: String = state.reset()
 	TestAssertions.equal(reset_error, "", "movement fixture reset succeeds", failures)
 	if not reset_error.is_empty():
@@ -326,7 +364,7 @@ func _assert_movement_replay_collision_and_reset(failures: Array[String]) -> voi
 	TestAssertions.equal(state.stash().item_id_at(0), first_item_id, "move back restores exact first empty stash slot", failures)
 	TestAssertions.equal(state.inventory().item_id_at(0), "", "move back clears exact inventory source", failures)
 	var moved_document: Dictionary = state.to_dictionary()
-	var strict_store: Variant = _store_script.new()
+	var strict_store: Variant = _new_store()
 	var sequence_mismatch := moved_document.duplicate(true)
 	sequence_mismatch["issuance_metadata"]["next_transaction_sequence"] = 0
 	TestAssertions.truthy(
@@ -351,7 +389,7 @@ func _assert_movement_replay_collision_and_reset(failures: Array[String]) -> voi
 		failures
 	)
 	TestAssertions.equal(state.save(), "", "moved sandbox saves", failures)
-	var reloaded: Variant = _state_script.new()
+	var reloaded: Variant = _new_state()
 	TestAssertions.equal(reloaded.reload(), "", "moved sandbox reloads", failures)
 	TestAssertions.equal(reloaded.to_dictionary(), moved_document, "save/reload preserves exact moved placement and journal", failures)
 
@@ -367,12 +405,12 @@ func _assert_movement_replay_collision_and_reset(failures: Array[String]) -> voi
 	var first: Variant = reloaded._apply_transaction(request)
 	TestAssertions.equal(first.code, ItemTransactionResult.Code.OK, "explicit sandbox transaction succeeds", failures)
 	var state_after_first: Dictionary = reloaded.to_dictionary()
-	var bytes_after_first: PackedByteArray = FileAccess.get_file_as_bytes(DOCUMENT_PATH)
+	var bytes_after_first: PackedByteArray = FileAccess.get_file_as_bytes(_document_path)
 	var replay: Variant = reloaded._apply_transaction(request)
 	TestAssertions.equal(replay.code, ItemTransactionResult.Code.TRANSACTION_REPLAY, "duplicate sandbox transaction preserves Task 4 replay code", failures)
 	TestAssertions.truthy(replay.duplicate, "duplicate sandbox transaction is marked replay", failures)
 	TestAssertions.equal(reloaded.to_dictionary(), state_after_first, "duplicate replay preserves sandbox state", failures)
-	TestAssertions.equal(FileAccess.get_file_as_bytes(DOCUMENT_PATH), bytes_after_first, "duplicate replay preserves storage bytes", failures)
+	TestAssertions.equal(FileAccess.get_file_as_bytes(_document_path), bytes_after_first, "duplicate replay preserves storage bytes", failures)
 	var collision_request := ItemTransactionRequest.move(
 		"sandbox-transaction-%016d" % 2,
 		OWNER_ID,
@@ -385,7 +423,7 @@ func _assert_movement_replay_collision_and_reset(failures: Array[String]) -> voi
 	var collision: Variant = reloaded._apply_transaction(collision_request)
 	TestAssertions.equal(collision.code, ItemTransactionResult.Code.TRANSACTION_COLLISION, "sandbox transaction id collision preserves Task 4 code", failures)
 	TestAssertions.equal(reloaded.to_dictionary(), state_after_first, "transaction collision preserves sandbox state", failures)
-	TestAssertions.equal(FileAccess.get_file_as_bytes(DOCUMENT_PATH), bytes_after_first, "transaction collision preserves storage bytes", failures)
+	TestAssertions.equal(FileAccess.get_file_as_bytes(_document_path), bytes_after_first, "transaction collision preserves storage bytes", failures)
 
 	TestAssertions.equal(reloaded.reset(), "", "reset after mutations succeeds", failures)
 	TestAssertions.equal(reloaded.to_dictionary(), canonical, "reset after mutations reproduces canonical document", failures)
@@ -393,7 +431,7 @@ func _assert_movement_replay_collision_and_reset(failures: Array[String]) -> voi
 
 func _assert_public_slot_transactions_and_integrity(failures: Array[String]) -> void:
 	_cleanup_sandbox_files()
-	var state: Variant = _state_script.new()
+	var state: Variant = _new_state()
 	TestAssertions.equal(state.reset(), "", "public slot transaction fixture resets", failures)
 	var has_transfer: bool = state.has_method(&"transfer_slots")
 	var has_scan: bool = state.has_method(&"scan_integrity")
@@ -420,21 +458,21 @@ func _assert_public_slot_transactions_and_integrity(failures: Array[String]) -> 
 	TestAssertions.equal(state.inventory().item_id_at(3), second_item_id, "public swap returns the destination item to the source slot", failures)
 	TestAssertions.equal(state.stash().item_id_at(1), first_item_id, "public swap places the source item in the destination slot", failures)
 	var valid_document: Dictionary = state.to_dictionary()
-	var valid_bytes: PackedByteArray = FileAccess.get_file_as_bytes(DOCUMENT_PATH)
-	TestAssertions.equal((_store_script.new()).validate_document(valid_document), "", "strict store accepts exact public move and swap journal entries", failures)
+	var valid_bytes: PackedByteArray = FileAccess.get_file_as_bytes(_document_path)
+	TestAssertions.equal((_new_store()).validate_document(valid_document), "", "strict store accepts exact public move and swap journal entries", failures)
 	TestAssertions.equal(state.call(&"scan_integrity"), "", "read-only integrity scan accepts the usable state", failures)
 	TestAssertions.equal(state.to_dictionary(), valid_document, "integrity scan preserves in-memory state", failures)
-	TestAssertions.equal(FileAccess.get_file_as_bytes(DOCUMENT_PATH), valid_bytes, "integrity scan preserves persisted bytes", failures)
+	TestAssertions.equal(FileAccess.get_file_as_bytes(_document_path), valid_bytes, "integrity scan preserves persisted bytes", failures)
 	var invalid_error: String = state.call(&"transfer_slots", STASH_ID, 99, INVENTORY_ID, 0)
 	TestAssertions.truthy(not invalid_error.is_empty(), "invalid public slot transaction reports an exact domain error", failures)
 	TestAssertions.equal(state.to_dictionary(), valid_document, "failed public slot transaction preserves usable state", failures)
-	TestAssertions.equal(FileAccess.get_file_as_bytes(DOCUMENT_PATH), valid_bytes, "failed public slot transaction preserves persisted bytes", failures)
-	var reloaded: Variant = _state_script.new()
+	TestAssertions.equal(FileAccess.get_file_as_bytes(_document_path), valid_bytes, "failed public slot transaction preserves persisted bytes", failures)
+	var reloaded: Variant = _new_state()
 	TestAssertions.equal(reloaded.reload(), "", "public move and swap journal reloads", failures)
 	TestAssertions.equal(reloaded.to_dictionary(), valid_document, "reload preserves exact public move and swap placement", failures)
 
 func _assert_strict_reload_is_failure_atomic(failures: Array[String]) -> void:
-	var store: Variant = _store_script.new()
+	var store: Variant = _new_store()
 	var unknown := _minimal_unknown_document()
 	TestAssertions.truthy(not String(store.validate_document(unknown)).is_empty(), "unknown sandbox fields fail strict validation", failures)
 	var corrupt := unknown.duplicate(true)
@@ -445,21 +483,21 @@ func _assert_strict_reload_is_failure_atomic(failures: Array[String]) -> void:
 	var malformed_cases: Array[String] = ["{ malformed", JSON.stringify(unknown), JSON.stringify(corrupt)]
 	for index: int in malformed_cases.size():
 		_cleanup_sandbox_files()
-		var state: Variant = _state_script.new()
+		var state: Variant = _new_state()
 		var reset_error: String = state.reset()
 		TestAssertions.equal(reset_error, "", "strict reload fixture reset %d succeeds" % index, failures)
 		if not reset_error.is_empty():
 			continue
 		var before: Dictionary = state.to_dictionary()
-		_write_text(DOCUMENT_PATH, malformed_cases[index])
-		_write_text("%s.bak" % DOCUMENT_PATH, malformed_cases[index])
+		_write_text(_document_path, malformed_cases[index])
+		_write_text("%s.bak" % _document_path, malformed_cases[index])
 		var reload_error: String = state.reload()
 		TestAssertions.truthy(not reload_error.is_empty(), "malformed sandbox document %d is rejected" % index, failures)
 		TestAssertions.equal(state.to_dictionary(), before, "failed reload %d preserves usable in-memory state" % index, failures)
 
 func _assert_forged_journal_documents_fail_atomically(failures: Array[String]) -> void:
 	_cleanup_sandbox_files()
-	var seed_state: Variant = _state_script.new()
+	var seed_state: Variant = _new_state()
 	var reset_error: String = seed_state.reset()
 	TestAssertions.equal(reset_error, "", "forgery fixture reset succeeds", failures)
 	if not reset_error.is_empty():
@@ -490,7 +528,7 @@ func _assert_forged_journal_documents_fail_atomically(failures: Array[String]) -
 		{"label": "mutated item level", "document": forged_item_level},
 		{"label": "missing canonical and extra forged item id", "document": forged_identity},
 	]
-	var store: Variant = _store_script.new()
+	var store: Variant = _new_store()
 	var non_first_empty := valid_moved.duplicate(true)
 	var non_first_state: Dictionary = canonical["ownership_state"].duplicate(true)
 	var non_first_inventory := _container_document(non_first_state, INVENTORY_ID)
@@ -558,39 +596,47 @@ func _assert_forged_journal_documents_fail_atomically(failures: Array[String]) -
 			failures
 		)
 		_cleanup_sandbox_files()
-		var state: Variant = _state_script.new()
+		var state: Variant = _new_state()
 		TestAssertions.equal(state.reset(), "", "%s reload fixture reset succeeds" % label, failures)
 		TestAssertions.equal(state.move_to_first_empty_inventory(state.stash().item_id_at(0)), "", "%s reload fixture move succeeds" % label, failures)
 		var before_memory: Dictionary = state.to_dictionary()
 		var forged_text := JSON.stringify(forged, "\t", false)
-		_write_text(DOCUMENT_PATH, forged_text)
-		_write_text("%s.bak" % DOCUMENT_PATH, forged_text)
-		var before_primary: PackedByteArray = FileAccess.get_file_as_bytes(DOCUMENT_PATH)
-		var before_backup: PackedByteArray = FileAccess.get_file_as_bytes("%s.bak" % DOCUMENT_PATH)
+		_write_text(_document_path, forged_text)
+		_write_text("%s.bak" % _document_path, forged_text)
+		var before_primary: PackedByteArray = FileAccess.get_file_as_bytes(_document_path)
+		var before_backup: PackedByteArray = FileAccess.get_file_as_bytes("%s.bak" % _document_path)
 		var reload_error: String = state.reload()
 		TestAssertions.truthy(not reload_error.is_empty(), "%s reload is rejected" % label, failures)
 		TestAssertions.equal(state.to_dictionary(), before_memory, "%s reload preserves usable in-memory state" % label, failures)
-		TestAssertions.equal(FileAccess.get_file_as_bytes(DOCUMENT_PATH), before_primary, "%s reload preserves primary bytes" % label, failures)
-		TestAssertions.equal(FileAccess.get_file_as_bytes("%s.bak" % DOCUMENT_PATH), before_backup, "%s reload preserves backup bytes" % label, failures)
+		TestAssertions.equal(FileAccess.get_file_as_bytes(_document_path), before_primary, "%s reload preserves primary bytes" % label, failures)
+		TestAssertions.equal(FileAccess.get_file_as_bytes("%s.bak" % _document_path), before_backup, "%s reload preserves backup bytes" % label, failures)
 
 func _assert_atomic_save_failure_and_profile_isolation(failures: Array[String]) -> void:
 	_cleanup_sandbox_files()
-	var profile_sentinel := ProfileStore.DEFAULT_ROOT.path_join(
-		"task-8-isolation-sentinel-%d.json" % OS.get_process_id()
+	var profile_sentinel := ProfileStore.new().profile_path(
+		"task-8-isolation-sentinel-%d" % OS.get_process_id(),
+		_test_root.path_join("profiles"),
+	)
+	TestAssertions.truthy(
+		profile_sentinel.begins_with(_test_root)
+			and profile_sentinel.begins_with("user://tests/")
+			and not profile_sentinel.begins_with(ProfileStore.DEFAULT_ROOT),
+		"profile sentinel uses isolated profile storage",
+		failures,
 	)
 	_write_text(profile_sentinel, "task-8-profile-bytes")
 	var profile_bytes := FileAccess.get_file_as_bytes(profile_sentinel)
-	var healthy: Variant = _state_script.new()
+	var healthy: Variant = _new_state()
 	var reset_error: String = healthy.reset()
 	TestAssertions.equal(reset_error, "", "atomic failure fixture reset succeeds", failures)
 	if not reset_error.is_empty():
 		_remove_file(profile_sentinel)
 		return
 	TestAssertions.equal(FileAccess.get_file_as_bytes(profile_sentinel), profile_bytes, "sandbox reset preserves normal profile bytes", failures)
-	TestAssertions.truthy(not DOCUMENT_PATH.begins_with(ProfileStore.DEFAULT_ROOT), "sandbox path is outside normal profile root", failures)
+	TestAssertions.truthy(not _document_path.begins_with(ProfileStore.DEFAULT_ROOT), "sandbox path is outside normal profile root", failures)
 
 	var failing_atomic := AtomicJsonStore.new(func(_temporary: String, _target: String) -> Error: return ERR_CANT_CREATE)
-	var failing_store: Variant = _store_script.new(failing_atomic)
+	var failing_store: Variant = _new_store(failing_atomic)
 	var failing_state: Variant = _state_script.new(failing_store)
 	var reload_error: String = failing_state.reload()
 	TestAssertions.equal(reload_error, "", "failing-save sandbox first reloads usable state", failures)
@@ -598,13 +644,13 @@ func _assert_atomic_save_failure_and_profile_isolation(failures: Array[String]) 
 		_remove_file(profile_sentinel)
 		return
 	var before_document: Dictionary = failing_state.to_dictionary()
-	var before_bytes: PackedByteArray = FileAccess.get_file_as_bytes(DOCUMENT_PATH)
+	var before_bytes: PackedByteArray = FileAccess.get_file_as_bytes(_document_path)
 	var item_id: String = failing_state.stash().item_id_at(0)
 	var save_error: String = failing_state.move_to_first_empty_inventory(item_id)
 	TestAssertions.truthy(save_error.contains("stage=promote"), "injected atomic save failure reports promotion stage", failures)
 	TestAssertions.equal(failing_state.to_dictionary(), before_document, "failed atomic save preserves placements registry journal and issuance metadata", failures)
-	TestAssertions.equal(FileAccess.get_file_as_bytes(DOCUMENT_PATH), before_bytes, "failed atomic save preserves previous loadable bytes", failures)
-	var recovered: Variant = _state_script.new()
+	TestAssertions.equal(FileAccess.get_file_as_bytes(_document_path), before_bytes, "failed atomic save preserves previous loadable bytes", failures)
+	var recovered: Variant = _new_state()
 	TestAssertions.equal(recovered.reload(), "", "previous sandbox bytes remain loadable after failed save", failures)
 	TestAssertions.equal(recovered.to_dictionary(), before_document, "previous sandbox document remains exact after failed save", failures)
 	TestAssertions.equal(FileAccess.get_file_as_bytes(profile_sentinel), profile_bytes, "failed sandbox save preserves normal profile bytes", failures)
@@ -612,20 +658,28 @@ func _assert_atomic_save_failure_and_profile_isolation(failures: Array[String]) 
 
 func _assert_corrupt_generations_reset_recovery(failures: Array[String]) -> void:
 	_cleanup_sandbox_files()
-	var profile_sentinel := ProfileStore.DEFAULT_ROOT.path_join(
-		"task-11-reset-isolation-sentinel-%d.json" % OS.get_process_id()
+	var profile_sentinel := ProfileStore.new().profile_path(
+		"task-11-reset-isolation-sentinel-%d" % OS.get_process_id(),
+		_test_root.path_join("profiles"),
+	)
+	TestAssertions.truthy(
+		profile_sentinel.begins_with(_test_root)
+			and profile_sentinel.begins_with("user://tests/")
+			and not profile_sentinel.begins_with(ProfileStore.DEFAULT_ROOT),
+		"corrupt-reset profile sentinel uses isolated profile storage",
+		failures,
 	)
 	_write_text(profile_sentinel, "task-11-active-profile-bytes")
 	var profile_bytes := FileAccess.get_file_as_bytes(profile_sentinel)
-	var seed: Variant = _state_script.new()
+	var seed: Variant = _new_state()
 	TestAssertions.equal(seed.reset(), "", "corrupt-reset fixture first creates a canonical sandbox", failures)
 	var canonical: Dictionary = seed.to_dictionary()
 	var corrupt_primary := "task-11 corrupt sandbox primary"
 	var corrupt_backup := "task-11 corrupt sandbox backup"
-	_write_text(DOCUMENT_PATH, corrupt_primary)
-	_write_text("%s.bak" % DOCUMENT_PATH, corrupt_backup)
+	_write_text(_document_path, corrupt_primary)
+	_write_text("%s.bak" % _document_path, corrupt_backup)
 
-	var recovered: Variant = _state_script.new()
+	var recovered: Variant = _new_state()
 	TestAssertions.equal(recovered.reset(), "", "reset replaces corrupt primary and corrupt backup", failures)
 	TestAssertions.equal(recovered.to_dictionary(), canonical, "corrupt-generation reset restores the exact canonical 99-item document", failures)
 	TestAssertions.equal(recovered.registry().size() if recovered.registry() != null else -1, 99, "corrupt-generation reset restores all 99 items", failures)
@@ -635,8 +689,8 @@ func _assert_corrupt_generations_reset_recovery(failures: Array[String]) -> void
 	var quarantined_backup := _sandbox_artifact_with_bytes("sandbox.json.bak.corrupt-", corrupt_backup.to_utf8_buffer())
 	TestAssertions.truthy(not quarantined_primary.is_empty(), "reset quarantines the exact corrupt primary bytes inside the sandbox root", failures)
 	TestAssertions.truthy(not quarantined_backup.is_empty(), "reset quarantines the exact corrupt backup bytes inside the sandbox root", failures)
-	TestAssertions.truthy(not FileAccess.file_exists("%s.tmp" % DOCUMENT_PATH), "successful corrupt reset leaves no temporary generation", failures)
-	TestAssertions.truthy(not FileAccess.file_exists("%s.bak.previous" % DOCUMENT_PATH), "successful corrupt reset leaves no displaced generation", failures)
+	TestAssertions.truthy(not FileAccess.file_exists("%s.tmp" % _document_path), "successful corrupt reset leaves no temporary generation", failures)
+	TestAssertions.truthy(not FileAccess.file_exists("%s.bak.previous" % _document_path), "successful corrupt reset leaves no displaced generation", failures)
 	var first_item_id: String = recovered.stash().item_id_at(0)
 	TestAssertions.equal(recovered.move_to_first_empty_inventory(first_item_id), "", "first move after corrupt reset succeeds", failures)
 	var moved: Dictionary = recovered.to_dictionary()
@@ -645,25 +699,25 @@ func _assert_corrupt_generations_reset_recovery(failures: Array[String]) -> void
 	TestAssertions.equal(FileAccess.get_file_as_bytes(profile_sentinel), profile_bytes, "corrupt-primary and corrupt-backup reset preserves active-profile sentinel bytes", failures)
 
 	_cleanup_sandbox_files()
-	_write_text(DOCUMENT_PATH, corrupt_primary)
-	var missing_backup_recovery: Variant = _state_script.new()
+	_write_text(_document_path, corrupt_primary)
+	var missing_backup_recovery: Variant = _new_state()
 	TestAssertions.equal(missing_backup_recovery.reset(), "", "reset replaces a corrupt primary when backup is missing", failures)
 	TestAssertions.equal(missing_backup_recovery.to_dictionary(), canonical, "missing-backup reset restores the exact canonical 99-item document", failures)
-	TestAssertions.truthy(not FileAccess.file_exists("%s.bak" % DOCUMENT_PATH), "missing-backup reset does not invent a prior backup generation", failures)
+	TestAssertions.truthy(not FileAccess.file_exists("%s.bak" % _document_path), "missing-backup reset does not invent a prior backup generation", failures)
 	TestAssertions.equal(FileAccess.get_file_as_bytes(profile_sentinel), profile_bytes, "corrupt-primary and missing-backup reset preserves active-profile sentinel bytes", failures)
 
 	_cleanup_sandbox_files()
-	_write_text(DOCUMENT_PATH, corrupt_primary)
-	_write_text("%s.bak" % DOCUMENT_PATH, corrupt_backup)
+	_write_text(_document_path, corrupt_primary)
+	_write_text("%s.bak" % _document_path, corrupt_backup)
 	var before_names := _sandbox_file_names()
-	var before_primary_bytes := FileAccess.get_file_as_bytes(DOCUMENT_PATH)
-	var before_backup_bytes := FileAccess.get_file_as_bytes("%s.bak" % DOCUMENT_PATH)
+	var before_primary_bytes := FileAccess.get_file_as_bytes(_document_path)
+	var before_backup_bytes := FileAccess.get_file_as_bytes("%s.bak" % _document_path)
 	var failing_atomic := AtomicJsonStore.new(func(_temporary: String, _target: String) -> Error: return ERR_CANT_CREATE)
-	var failing_state: Variant = _state_script.new(_store_script.new(failing_atomic))
+	var failing_state: Variant = _new_state(failing_atomic)
 	var reset_error: String = failing_state.reset()
 	TestAssertions.truthy(reset_error.contains("stage=promote"), "injected corrupt-reset promotion failure reports the promotion stage", failures)
-	TestAssertions.equal(FileAccess.get_file_as_bytes(DOCUMENT_PATH), before_primary_bytes, "failed corrupt reset restores exact primary bytes", failures)
-	TestAssertions.equal(FileAccess.get_file_as_bytes("%s.bak" % DOCUMENT_PATH), before_backup_bytes, "failed corrupt reset restores exact backup bytes", failures)
+	TestAssertions.equal(FileAccess.get_file_as_bytes(_document_path), before_primary_bytes, "failed corrupt reset restores exact primary bytes", failures)
+	TestAssertions.equal(FileAccess.get_file_as_bytes("%s.bak" % _document_path), before_backup_bytes, "failed corrupt reset restores exact backup bytes", failures)
 	TestAssertions.equal(_sandbox_file_names(), before_names, "failed corrupt reset restores the exact prior sandbox generation set", failures)
 	TestAssertions.equal(FileAccess.get_file_as_bytes(profile_sentinel), profile_bytes, "failed corrupt reset preserves active-profile sentinel bytes", failures)
 	_remove_file(profile_sentinel)
@@ -700,25 +754,25 @@ func _container_document(ownership_document: Dictionary, container_id: StringNam
 	return {}
 
 func _cleanup_sandbox_files() -> void:
-	if DirAccess.dir_exists_absolute(ProjectSettings.globalize_path(SANDBOX_ROOT)):
-		for name: String in DirAccess.get_files_at(SANDBOX_ROOT):
+	if DirAccess.dir_exists_absolute(ProjectSettings.globalize_path(_test_root)):
+		for name: String in DirAccess.get_files_at(_test_root):
 			if name.begins_with("sandbox.json"):
-				_remove_file(SANDBOX_ROOT.path_join(name))
-	var absolute_root := ProjectSettings.globalize_path(SANDBOX_ROOT)
+				_remove_file(_test_root.path_join(name))
+	var absolute_root := ProjectSettings.globalize_path(_test_root)
 	if DirAccess.dir_exists_absolute(absolute_root):
 		DirAccess.remove_absolute(absolute_root)
 
 func _sandbox_file_names() -> PackedStringArray:
-	if not DirAccess.dir_exists_absolute(ProjectSettings.globalize_path(SANDBOX_ROOT)):
+	if not DirAccess.dir_exists_absolute(ProjectSettings.globalize_path(_test_root)):
 		return PackedStringArray()
-	var names := DirAccess.get_files_at(SANDBOX_ROOT)
+	var names := DirAccess.get_files_at(_test_root)
 	names.sort()
 	return names
 
 func _sandbox_artifact_with_bytes(prefix: String, expected: PackedByteArray) -> String:
 	for name: String in _sandbox_file_names():
 		if name.begins_with(prefix):
-			var path := SANDBOX_ROOT.path_join(name)
+			var path := _test_root.path_join(name)
 			if FileAccess.get_file_as_bytes(path) == expected:
 				return path
 	return ""

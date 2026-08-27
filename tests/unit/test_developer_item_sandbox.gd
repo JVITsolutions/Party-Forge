@@ -3,11 +3,15 @@ extends RefCounted
 const SANDBOX_SCRIPT_PATH := "res://scripts/ui/developer_item_sandbox.gd"
 const SANDBOX_SCENE_PATH := "res://scenes/ui/developer_item_sandbox.tscn"
 const MAIN_SCENE_PATH := "res://scenes/game/main.tscn"
-const DOCUMENT_PATH := "user://developer_item_sandbox/sandbox.json"
-const SANDBOX_ROOT := "user://developer_item_sandbox"
+const STORE_PATH := "res://scripts/dev/developer_item_sandbox_store.gd"
+const TEST_ROOT_PREFIX := "user://tests/developer_item_sandbox"
 const INVENTORY_ID := &"developer-inventory"
 const STASH_ID := &"developer-stash-000"
 const PRESENTATION_PROJECTOR := preload("res://scripts/ui/storage/item_presentation_projector.gd")
+
+var _test_root := ""
+var _document_path := ""
+var _store_script: Script
 
 
 func run() -> Array[String]:
@@ -20,6 +24,14 @@ func run() -> Array[String]:
 	TestAssertions.truthy(packed != null, "developer item sandbox scene loads", failures)
 	if packed == null:
 		return failures
+	_store_script = load(STORE_PATH) as Script
+	TestAssertions.truthy(_store_script != null, "sandbox store script loads", failures)
+	if _store_script == null:
+		return failures
+	_begin_fixture(failures)
+	if not failures.is_empty():
+		_end_fixture()
+		return failures
 	_cleanup_sandbox_files()
 	_test_modal_contract(packed, failures)
 	_cleanup_sandbox_files()
@@ -28,8 +40,41 @@ func run() -> Array[String]:
 	_test_failure_atomic_ui(packed, failures)
 	_cleanup_sandbox_files()
 	_test_main_route_and_profile_isolation(failures)
-	_cleanup_sandbox_files()
+	_end_fixture()
 	return failures
+
+
+func _begin_fixture(failures: Array[String]) -> void:
+	_test_root = TEST_ROOT_PREFIX.path_join("%d-%d" % [OS.get_process_id(), Time.get_ticks_usec()])
+	_document_path = _test_root.path_join("sandbox.json")
+	TestAssertions.truthy(
+		_document_path.begins_with("user://tests/")
+			and not _document_path.begins_with(ProfileStore.DEFAULT_ROOT)
+			and _document_path != DeveloperItemSandboxStore.DOCUMENT_PATH,
+		"sandbox fixtures use isolated document storage",
+		failures,
+	)
+	var default_store := _store_script.new() as DeveloperItemSandboxStore
+	var has_document_path := default_store.get_property_list().any(
+		func(property: Dictionary) -> bool: return String(property.get("name", "")) == "_document_path"
+	)
+	TestAssertions.truthy(has_document_path, "sandbox store retains an injectable document path", failures)
+	if has_document_path:
+		TestAssertions.equal(default_store.get("_document_path"), DeveloperItemSandboxStore.DOCUMENT_PATH, "sandbox store default remains the production document path", failures)
+		var injected_store := _new_store()
+		TestAssertions.equal(injected_store.get("_document_path"), _document_path, "sandbox store accepts the isolated document path", failures)
+
+
+func _end_fixture() -> void:
+	ProfileTestSupport.remove_tree(_test_root)
+
+
+func _new_store(documents: AtomicJsonStore = null) -> DeveloperItemSandboxStore:
+	return _store_script.new(documents, _document_path) as DeveloperItemSandboxStore
+
+
+func _new_state(documents: AtomicJsonStore = null) -> DeveloperItemSandboxState:
+	return DeveloperItemSandboxState.new(_new_store(documents))
 
 
 func _test_modal_contract(packed: PackedScene, failures: Array[String]) -> void:
@@ -39,6 +84,9 @@ func _test_modal_contract(packed: PackedScene, failures: Array[String]) -> void:
 		func(method: Dictionary) -> bool: return String(method.get("name", "")) == "configure"
 	).front()
 	TestAssertions.truthy((configure_method.get("args", []) as Array).size() >= 2, "sandbox accepts an injectable presentation boundary for end-to-end failure testing", failures)
+	var state := _new_state()
+	TestAssertions.equal(state.reset(), "", "modal fixture seeds isolated sandbox storage", failures)
+	sandbox.call(&"configure", state)
 	tree.root.add_child(sandbox)
 	var return_focus := Button.new()
 	return_focus.name = "SandboxReturnFocus"
@@ -173,13 +221,13 @@ func _test_modal_contract(packed: PackedScene, failures: Array[String]) -> void:
 	TestAssertions.truthy(held_events.any(func(event: Dictionary) -> bool: return bool(event["held"])) and held_events.any(func(event: Dictionary) -> bool: return not bool(event["held"])), "mouse drag emits held start and clear state", failures)
 
 	var before_cancel_projection: Dictionary = sandbox.call(&"projection")
-	var before_cancel_bytes := FileAccess.get_file_as_bytes(DOCUMENT_PATH)
+	var before_cancel_bytes := FileAccess.get_file_as_bytes(_document_path)
 	var outside_drag: Variant = stash_two.call(&"_get_drag_data", Vector2.ZERO)
 	TestAssertions.truthy(outside_drag is Dictionary and bool(sandbox.call(&"is_holding_item")), "outside-drop fixture begins a real drag", failures)
 	sandbox.call(&"_finish_drag", false)
 	TestAssertions.truthy(not bool(sandbox.call(&"is_holding_item")), "release outside clears held-item mode", failures)
 	TestAssertions.equal(sandbox.call(&"projection"), before_cancel_projection, "release outside preserves the usable projection", failures)
-	TestAssertions.equal(FileAccess.get_file_as_bytes(DOCUMENT_PATH), before_cancel_bytes, "release outside preserves persisted bytes", failures)
+	TestAssertions.equal(FileAccess.get_file_as_bytes(_document_path), before_cancel_bytes, "release outside preserves persisted bytes", failures)
 
 	stash_two.focus_entered.emit()
 	var controller_item_id := String(stash_two.get_meta("item_id", ""))
@@ -198,11 +246,11 @@ func _test_modal_contract(packed: PackedScene, failures: Array[String]) -> void:
 	controller_source.focus_entered.emit()
 	sandbox.call(&"_unhandled_input", pickup)
 	var controller_cancel_projection: Dictionary = sandbox.call(&"projection")
-	var controller_cancel_bytes := FileAccess.get_file_as_bytes(DOCUMENT_PATH)
+	var controller_cancel_bytes := FileAccess.get_file_as_bytes(_document_path)
 	sandbox.call(&"_unhandled_input", _action_event(&"ui_cancel"))
 	TestAssertions.truthy(sandbox.visible and not bool(sandbox.call(&"is_holding_item")), "controller cancel clears held mode before closing the modal", failures)
 	TestAssertions.equal(sandbox.call(&"projection"), controller_cancel_projection, "controller held cancel preserves projection", failures)
-	TestAssertions.equal(FileAccess.get_file_as_bytes(DOCUMENT_PATH), controller_cancel_bytes, "controller held cancel preserves bytes", failures)
+	TestAssertions.equal(FileAccess.get_file_as_bytes(_document_path), controller_cancel_bytes, "controller held cancel preserves bytes", failures)
 	var ordinary_accept_projection: Dictionary = sandbox.call(&"projection")
 	controller_source.focus_entered.emit()
 	sandbox.call(&"_input", _action_event(&"ui_accept"))
@@ -320,8 +368,8 @@ func _test_projected_comparison_fixture(sandbox: Variant, stash_grid: GridContai
 func _test_main_route_and_profile_isolation(failures: Array[String]) -> void:
 	var tree := Engine.get_main_loop() as SceneTree
 	var token := "%d_%d" % [OS.get_process_id(), Time.get_ticks_usec()]
-	var profile_root := "user://tests/task9-profile-%s" % token
-	var settings_path := "user://tests/task9-settings-%s.cfg" % token
+	var profile_root := _test_root.path_join("profiles")
+	var settings_path := _test_root.path_join("settings-%s.cfg" % token)
 	ProfileTestSupport.remove_tree(profile_root)
 	_cleanup_settings_artifacts(settings_path)
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(settings_path.get_base_dir()))
@@ -333,6 +381,10 @@ func _test_main_route_and_profile_isolation(failures: Array[String]) -> void:
 	var main: Variant = (load(MAIN_SCENE_PATH) as PackedScene).instantiate()
 	main.set("profile_root", profile_root)
 	main.set("settings_path", settings_path)
+	var modal: Variant = main.get_node("DeveloperItemSandbox")
+	var sandbox_state := _new_state()
+	TestAssertions.equal(sandbox_state.reset(), "", "main-route fixture seeds isolated sandbox storage", failures)
+	modal.call(&"configure", sandbox_state)
 	tree.root.add_child(main)
 	main.call(&"_ready")
 	var created: Variant = main.profile_manager.create_profile("Task 9 Profile")
@@ -340,7 +392,6 @@ func _test_main_route_and_profile_isolation(failures: Array[String]) -> void:
 	var settings: Variant = main.get_node("SettingsScreen")
 	var additional: Variant = settings.get_node("Overlay/Frame/Layout/Tabs/Additional Settings")
 	var launch := additional.get_node("Layout/OpenDeveloperItemSandbox") as Button
-	var modal: Variant = main.get_node("DeveloperItemSandbox")
 	var forged_cached := PartyForgeSettings.new()
 	forged_cached.mode = PartyForgeSettings.Mode.DEVELOPER_MODE
 	forged_cached.unlock_all_implemented_content = true
@@ -408,10 +459,10 @@ func _test_main_route_and_profile_isolation(failures: Array[String]) -> void:
 
 
 func _test_failure_atomic_ui(packed: PackedScene, failures: Array[String]) -> void:
-	var seed := DeveloperItemSandboxState.new()
+	var seed := _new_state()
 	TestAssertions.equal(seed.reset(), "", "failure-atomic UI fixture seeds usable bytes", failures)
 	var failing_atomic := AtomicJsonStore.new(func(_temporary: String, _target: String) -> Error: return ERR_CANT_CREATE)
-	var state := DeveloperItemSandboxState.new(DeveloperItemSandboxStore.new(failing_atomic))
+	var state := _new_state(failing_atomic)
 	TestAssertions.equal(state.reload(), "", "failure-atomic UI state reloads the usable fixture", failures)
 	var sandbox: Variant = packed.instantiate()
 	TestAssertions.truthy(sandbox.has_method(&"configure"), "sandbox exposes bounded state dependency configuration", failures)
@@ -424,41 +475,41 @@ func _test_failure_atomic_ui(packed: PackedScene, failures: Array[String]) -> vo
 	var inventory_zero := sandbox.get_node("Overlay/Frame/Layout/Tabs/Equipment/Body/InventoryPanel/InventorySlots").get_child(0) as Button
 	var stash_zero := sandbox.get_node("Overlay/Frame/Layout/Tabs/Equipment/Body/StashPanel/StashScroll/StashSlots").get_child(0) as Button
 	var baseline_projection: Dictionary = sandbox.call(&"projection")
-	var baseline_bytes := FileAccess.get_file_as_bytes(DOCUMENT_PATH)
+	var baseline_bytes := FileAccess.get_file_as_bytes(_document_path)
 	var drag_data: Variant = stash_zero.call(&"_get_drag_data", Vector2.ZERO)
 	inventory_zero.call(&"_drop_data", Vector2.ZERO, drag_data)
 	var status := sandbox.get_node("Overlay/Frame/Layout/Header/Status") as Label
 	TestAssertions.truthy(status.text.contains("stage=promote"), "failed drag move displays the exact atomic error", failures)
 	TestAssertions.equal(sandbox.call(&"projection"), baseline_projection, "failed drag move preserves the last usable projection", failures)
-	TestAssertions.equal(FileAccess.get_file_as_bytes(DOCUMENT_PATH), baseline_bytes, "failed drag move preserves persisted bytes", failures)
+	TestAssertions.equal(FileAccess.get_file_as_bytes(_document_path), baseline_bytes, "failed drag move preserves persisted bytes", failures)
 	for action_name: String in ["Save", "Reset"]:
 		var page := "Fixtures" if action_name == "Reset" else "Equipment"
 		(sandbox.get_node("Overlay/Frame/Layout/Tabs/%s/Actions/%s" % [page, action_name]) as Button).pressed.emit()
 		TestAssertions.truthy(status.text.contains("stage=promote"), "failed %s displays the exact atomic error" % action_name, failures)
 		TestAssertions.equal(sandbox.call(&"projection"), baseline_projection, "failed %s preserves the last usable projection" % action_name, failures)
-		TestAssertions.equal(FileAccess.get_file_as_bytes(DOCUMENT_PATH), baseline_bytes, "failed %s preserves persisted bytes" % action_name, failures)
-	_write_text(DOCUMENT_PATH, "{ corrupt task 9 primary")
-	_write_text("%s.bak" % DOCUMENT_PATH, "{ corrupt task 9 backup")
-	var corrupt_primary := FileAccess.get_file_as_bytes(DOCUMENT_PATH)
-	var corrupt_backup := FileAccess.get_file_as_bytes("%s.bak" % DOCUMENT_PATH)
+		TestAssertions.equal(FileAccess.get_file_as_bytes(_document_path), baseline_bytes, "failed %s preserves persisted bytes" % action_name, failures)
+	_write_text(_document_path, "{ corrupt task 9 primary")
+	_write_text("%s.bak" % _document_path, "{ corrupt task 9 backup")
+	var corrupt_primary := FileAccess.get_file_as_bytes(_document_path)
+	var corrupt_backup := FileAccess.get_file_as_bytes("%s.bak" % _document_path)
 	(sandbox.get_node("Overlay/Frame/Layout/Tabs/Fixtures/Actions/IntegrityScan") as Button).pressed.emit()
 	TestAssertions.truthy(not status.text.begins_with("OK "), "failed integrity scan displays the exact sandbox error", failures)
 	TestAssertions.equal(sandbox.call(&"projection"), baseline_projection, "failed integrity scan preserves the last usable projection", failures)
-	TestAssertions.equal(FileAccess.get_file_as_bytes(DOCUMENT_PATH), corrupt_primary, "failed integrity scan preserves primary bytes", failures)
-	TestAssertions.equal(FileAccess.get_file_as_bytes("%s.bak" % DOCUMENT_PATH), corrupt_backup, "failed integrity scan preserves backup bytes", failures)
+	TestAssertions.equal(FileAccess.get_file_as_bytes(_document_path), corrupt_primary, "failed integrity scan preserves primary bytes", failures)
+	TestAssertions.equal(FileAccess.get_file_as_bytes("%s.bak" % _document_path), corrupt_backup, "failed integrity scan preserves backup bytes", failures)
 	(sandbox.get_node("Overlay/Frame/Layout/Tabs/Equipment/Actions/Reload") as Button).pressed.emit()
 	TestAssertions.truthy(not status.text.begins_with("OK "), "failed reload displays the exact sandbox error", failures)
 	TestAssertions.equal(sandbox.call(&"projection"), baseline_projection, "failed reload preserves the last usable projection", failures)
-	TestAssertions.equal(FileAccess.get_file_as_bytes(DOCUMENT_PATH), corrupt_primary, "failed reload preserves rejected primary bytes", failures)
-	TestAssertions.equal(FileAccess.get_file_as_bytes("%s.bak" % DOCUMENT_PATH), corrupt_backup, "failed reload preserves rejected backup bytes", failures)
+	TestAssertions.equal(FileAccess.get_file_as_bytes(_document_path), corrupt_primary, "failed reload preserves rejected primary bytes", failures)
+	TestAssertions.equal(FileAccess.get_file_as_bytes("%s.bak" % _document_path), corrupt_backup, "failed reload preserves rejected backup bytes", failures)
 	sandbox.free()
 
 
 func _test_projection_failure_atomic_ui(packed: PackedScene, failures: Array[String]) -> void:
 	for action: String in ["OPEN", "TRANSFER", "FIRST_EMPTY"]:
-		var seed := DeveloperItemSandboxState.new()
+		var seed := _new_state()
 		TestAssertions.equal(seed.reset(), "", "%s projection-failure fixture seeds usable bytes" % action, failures)
-		var state := DeveloperItemSandboxState.new()
+		var state := _new_state()
 		TestAssertions.equal(state.reload(), "", "%s projection-failure fixture reloads usable state" % action, failures)
 		var failure_control := {"item_id": ""}
 		var presentation_projection := func(
@@ -518,7 +569,7 @@ func _slot_bindings(sandbox: Variant) -> Array[Dictionary]:
 
 func _sandbox_persisted_bytes() -> Dictionary:
 	var result: Dictionary = {}
-	for path: String in [DOCUMENT_PATH, "%s.bak" % DOCUMENT_PATH, "%s.bak.previous" % DOCUMENT_PATH, "%s.tmp" % DOCUMENT_PATH]:
+	for path: String in [_document_path, "%s.bak" % _document_path, "%s.bak.previous" % _document_path, "%s.tmp" % _document_path]:
 		result[path] = FileAccess.get_file_as_bytes(path) if FileAccess.file_exists(path) else null
 	return result
 
@@ -538,10 +589,10 @@ func _action_event(action: StringName) -> InputEventAction:
 
 func _cleanup_sandbox_files() -> void:
 	for suffix: String in ["", ".bak", ".tmp", ".bak.previous"]:
-		var path := "%s%s" % [DOCUMENT_PATH, suffix]
+		var path := "%s%s" % [_document_path, suffix]
 		if FileAccess.file_exists(path):
 			DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
-	var absolute_root := ProjectSettings.globalize_path(SANDBOX_ROOT)
+	var absolute_root := ProjectSettings.globalize_path(_test_root)
 	if DirAccess.dir_exists_absolute(absolute_root):
 		DirAccess.remove_absolute(absolute_root)
 

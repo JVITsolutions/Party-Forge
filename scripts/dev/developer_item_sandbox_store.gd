@@ -33,13 +33,15 @@ const METADATA_FIELDS: Array[String] = [
 const JOURNAL_FIELDS: Array[String] = ["transaction_id", "fingerprint", "code", "state"]
 
 var _documents: AtomicJsonStore
+var _document_path: String
 
-func _init(documents: AtomicJsonStore = null) -> void:
+func _init(documents: AtomicJsonStore = null, document_path: String = DOCUMENT_PATH) -> void:
 	_documents = documents if documents != null else AtomicJsonStore.new()
+	_document_path = document_path
 
 func save_document(document: Dictionary) -> String:
 	return _documents.save_document(
-		DOCUMENT_PATH,
+		_document_path,
 		document,
 		Callable(self, "validate_document"),
 		Callable(self, "validate_loadable_document")
@@ -47,19 +49,19 @@ func save_document(document: Dictionary) -> String:
 
 func reset_document(document: Dictionary) -> String:
 	var loaded := load_document()
-	var has_generation := FileAccess.file_exists(DOCUMENT_PATH) or FileAccess.file_exists("%s.bak" % DOCUMENT_PATH)
+	var has_generation := FileAccess.file_exists(_document_path) or FileAccess.file_exists("%s.bak" % _document_path)
 	if loaded.ok() or not has_generation:
 		return save_document(document)
-	return _documents.replace_document(DOCUMENT_PATH, document, Callable(self, "validate_document"))
+	return _documents.replace_document(_document_path, document, Callable(self, "validate_document"))
 
 func load_document() -> JsonDocumentResult:
-	return _documents.load_document(DOCUMENT_PATH, Callable(self, "validate_loadable_document"))
+	return _documents.load_document(_document_path, Callable(self, "validate_loadable_document"))
 
 func scan_persisted_document() -> String:
-	if not FileAccess.file_exists(DOCUMENT_PATH):
+	if not FileAccess.file_exists(_document_path):
 		return _error("document", "persisted sandbox document is missing")
 	var parser := JSON.new()
-	if parser.parse(FileAccess.get_file_as_string(DOCUMENT_PATH)) != OK:
+	if parser.parse(FileAccess.get_file_as_string(_document_path)) != OK:
 		return _error("document", "persisted sandbox document must be a valid JSON dictionary")
 	var parsed: Variant = parser.data
 	if not parsed is Dictionary:
