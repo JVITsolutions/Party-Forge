@@ -1139,6 +1139,37 @@ func _test_developer_minimum_preserves_larger_resumable_inventory(failures: Arra
 	TestAssertions.equal(profile.inventory_columns, 0, "Developer resumable minimum leaves ProfileState unchanged", failures)
 	party.free()
 
+	var durable_root := "user://tests/player_run_context_developer_recovery_%d_%d" % [OS.get_process_id(), Time.get_ticks_usec()]
+	ProfileTestSupport.remove_tree(durable_root)
+	var store := ProfileStore.new()
+	var durable_profile := ProfileState.new_profile("profile-developer-recovery", "Developer Recovery", 1000)
+	durable_profile.inventory_columns = 0
+	var durable_state := ItemOwnershipState.create("developer_recovery_player", ItemRegistry.new(), [
+		ItemSlotContainer.create(&"run-inventory", ItemSlotContainer.RUN_INVENTORY, "developer_recovery_player", 0),
+		ItemSlotContainer.create(&"run-equipment-001", ItemSlotContainer.RUN_MEMBER_EQUIPMENT, "developer_recovery_player", EquipmentSlotIndex.capacity()),
+		RunItemBootstrap.ground_items_container("developer_recovery_player"),
+	])
+	var durable_bootstrap := RunItemBootstrap.create(&"run-developer-recovery", 4421, &"developer_recovery_player", 1, durable_state, &"fighter")
+	durable_profile.resumable_run = ResumableRunItemCodec.encode(durable_bootstrap)
+	TestAssertions.equal(store.save_profile(durable_profile, durable_root), "", "Developer recovery fixture persists", failures)
+	var durable_path := store.profile_path(durable_profile.profile_id, durable_root)
+	var durable_bytes := FileAccess.get_file_as_bytes(durable_path)
+	var reloaded := store.load_profile(durable_profile.profile_id, durable_root).profile
+	var recovery_document := reloaded.resumable_run.duplicate(true)
+	var reloaded_bootstrap := RunLoadoutCheckoutService.new().bootstrap_from(reloaded)
+	var durable_party := PartyManager.new()
+	durable_party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
+	var durable_context := PlayerRunContext.new()
+	var durable_errors := durable_context.configure(&"developer_recovery_player", 0, reloaded, 4421, durable_party, 100, reloaded_bootstrap, 5)
+	TestAssertions.equal(durable_errors, PackedStringArray(), "Developer Mode minimum expands a zero-capacity recovered inventory", failures)
+	if durable_errors.is_empty():
+		TestAssertions.equal(durable_context.run_inventory().capacity, 5, "Developer Mode minimum expands runtime inventory to five slots", failures)
+	TestAssertions.equal(reloaded.inventory_columns, 0, "Developer Mode expansion preserves the durable inventory column projection", failures)
+	TestAssertions.equal(store.load_profile(durable_profile.profile_id, durable_root).profile.resumable_run, recovery_document, "Developer Mode expansion preserves durable recovery data", failures)
+	TestAssertions.equal(FileAccess.get_file_as_bytes(durable_path), durable_bytes, "Developer Mode expansion preserves exact profile bytes", failures)
+	durable_party.free()
+	ProfileTestSupport.remove_tree(durable_root)
+
 func _assert_context_unconfigured(context: PlayerRunContext, label: String, failures: Array[String]) -> void:
 	TestAssertions.equal(context.run_player_id, &"", "%s leaves run player unconfigured" % label, failures)
 	TestAssertions.equal(context.profile_id, "", "%s leaves profile unconfigured" % label, failures)

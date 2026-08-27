@@ -17,6 +17,7 @@ func run() -> Array[String]:
 	_test_checkout_transfers_exact_instances_once_and_replays_without_writing(failures)
 	_test_checkout_empty_and_without_gear_contracts(failures)
 	_test_checkout_rejections_and_save_failure_preserve_bytes(failures)
+	_test_recovered_class_validation_reuses_checkout_rules_without_mutation(failures)
 	_test_forfeit_is_atomic_replay_safe_and_never_uses_sandbox_remove(failures)
 	return failures
 
@@ -250,6 +251,28 @@ func _test_checkout_rejections_and_save_failure_preserve_bytes(failures: Array[S
 	TestAssertions.equal(FileAccess.get_file_as_bytes(save_path), save_before, "checkout save failure preserves exact bytes", failures)
 	TestAssertions.equal(good_store.load_profile(PROFILE_ID, save_root).profile.resumable_run, {}, "checkout save failure persists no run bootstrap", failures)
 	ProfileTestSupport.remove_tree(save_root)
+
+func _test_recovered_class_validation_reuses_checkout_rules_without_mutation(failures: Array[String]) -> void:
+	var service := RunLoadoutCheckoutService.new()
+	TestAssertions.equal(service.validate_recovered_class(null, &"fighter"), "PARTY_FORGE_RUN_RECOVERY_ERROR field=bootstrap reason=unavailable", "recovered-class validation rejects an unavailable bootstrap exactly", failures)
+	var missing_leader_state := ItemOwnershipState.create(String(RUN_PLAYER_ID), ItemRegistry.new(), [
+		ItemSlotContainer.create(&"run-inventory", ItemSlotContainer.RUN_INVENTORY, String(RUN_PLAYER_ID), 10),
+		RunItemBootstrap.ground_items_container(String(RUN_PLAYER_ID)),
+	])
+	var missing_leader := RunItemBootstrap.create(RUN_ID, 4402, RUN_PLAYER_ID, LEADER_MEMBER_ID, missing_leader_state, &"fighter")
+	TestAssertions.equal(service.validate_recovered_class(missing_leader, &"fighter"), "PARTY_FORGE_RUN_RECOVERY_ERROR field=leader_equipment reason=missing", "recovered-class validation requires the exact leader equipment container", failures)
+
+	var empty := RunItemBootstrap.create(RUN_ID, 4402, RUN_PLAYER_ID, LEADER_MEMBER_ID, _run_state([], {}), &"fighter")
+	var empty_before := empty.item_state().to_dictionary()
+	TestAssertions.equal(service.validate_recovered_class(empty, &"unknown_class"), "PARTY_FORGE_RUN_RECOVERY_ERROR field=selected_leader_class_id reason=unknown leader class", "recovered-class validation reports unknown catalog class exactly", failures)
+	TestAssertions.equal(service.validate_recovered_class(empty, &"fighter"), "", "recovered-class validation accepts an eligible empty loadout", failures)
+	TestAssertions.equal(empty.item_state().to_dictionary(), empty_before, "recovered-class validation leaves bootstrap item state unchanged", failures)
+
+	var vestments := _item("item-recovered-incompatible", &"storm_chaplain_vestments", 0)
+	var incompatible := RunItemBootstrap.create(RUN_ID, 4402, RUN_PLAYER_ID, LEADER_MEMBER_ID, _run_state([vestments], {1: vestments.instance_id}), &"fighter")
+	var incompatibility := service.validate_recovered_class(incompatible, &"fighter")
+	TestAssertions.truthy(incompatibility.begins_with("PARTY_FORGE_RUN_RECOVERY_ERROR") and incompatibility.contains("ineligible"), "recovered-class validation reuses checkout equipment eligibility with recovery prefix", failures)
+	TestAssertions.truthy(not incompatibility.contains("PARTY_FORGE_RUN_LOADOUT_CHECKOUT_ERROR"), "recovered-class validation exposes no checkout-prefixed diagnostic", failures)
 
 func _test_forfeit_is_atomic_replay_safe_and_never_uses_sandbox_remove(failures: Array[String]) -> void:
 	var source_text := FileAccess.get_file_as_string("res://scripts/run/run_loadout_checkout_service.gd")

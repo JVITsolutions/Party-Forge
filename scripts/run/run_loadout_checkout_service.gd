@@ -59,6 +59,16 @@ func bootstrap_from(profile: ProfileState) -> RunItemBootstrap:
 		GameCatalog.ITEM_FOUNDATION_CATALOG,
 	)
 
+func validate_recovered_class(bootstrap: RunItemBootstrap, class_id: StringName) -> String:
+	if bootstrap == null or bootstrap.item_state() == null:
+		return "PARTY_FORGE_RUN_RECOVERY_ERROR field=bootstrap reason=unavailable"
+	var state := bootstrap.item_state()
+	var leader := state.container(StringName("run-equipment-%03d" % bootstrap.leader_member_id))
+	if leader == null or leader.container_kind != ItemSlotContainer.RUN_MEMBER_EQUIPMENT:
+		return "PARTY_FORGE_RUN_RECOVERY_ERROR field=leader_equipment reason=missing"
+	var eligibility := _validate_loadout_eligibility(state, leader, class_id)
+	return eligibility.replace("PARTY_FORGE_RUN_LOADOUT_CHECKOUT_ERROR", "PARTY_FORGE_RUN_RECOVERY_ERROR")
+
 func _validate_request(profile_id: String, request: RunLoadoutCheckoutRequest) -> String:
 	if profile_id != request.profile_id:
 		return "PARTY_FORGE_RUN_LOADOUT_CHECKOUT_ERROR field=profile_id reason=profile identity mismatch"
