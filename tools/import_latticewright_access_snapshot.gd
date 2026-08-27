@@ -11,7 +11,7 @@ class CityAccessImportCliService extends RefCounted:
 	var _writer: Callable
 	var _target_reader: Callable
 	var _target_restorer: Callable
-	var last_cleanup_debt := ""
+	var last_cleanup_debt := false
 
 	func _init(dependencies: Dictionary) -> void:
 		_reader = dependencies.get("reader", Callable(StrictJsonDocumentReader, "read")) as Callable
@@ -23,7 +23,7 @@ class CityAccessImportCliService extends RefCounted:
 		_target_restorer = dependencies.get("target_restorer", Callable(self, "_default_target_restore")) as Callable
 
 	func run(arguments: PackedStringArray, emit: Callable = Callable()) -> int:
-		last_cleanup_debt = ""
+		last_cleanup_debt = false
 		var source_path := _parse_source(arguments)
 		if source_path.is_empty(): return _reject("request", emit)
 		var source: Variant = _reader.call(source_path, MAX_SOURCE_BYTES)
@@ -41,8 +41,10 @@ class CityAccessImportCliService extends RefCounted:
 			_marker("UNCHANGED", "compare", emit)
 			return 0
 		var written: Variant = _writer.call(candidate)
-		if not _write_ok(written): return _reject(_stage(written, "write"), emit)
-		last_cleanup_debt = str(_value(written, "cleanup_debt", ""))
+		if not _write_ok(written):
+			_target_restorer.call(before)
+			return _reject(_stage(written, "write"), emit)
+		last_cleanup_debt = bool(_value(written, "cleanupDebt", false))
 		var verified: Variant = _target_reader.call()
 		if not _ok(verified) or _value(verified, "bytes", PackedByteArray()) != canonical:
 			_target_restorer.call(before)
@@ -68,8 +70,12 @@ class CityAccessImportCliService extends RefCounted:
 		return value != null and value.has_method("ok") and bool(value.call("ok"))
 
 	func _write_ok(value: Variant) -> bool:
-		if value is Dictionary: return bool((value as Dictionary).get("ok", false)) and bool((value as Dictionary).get("committed", false))
-		return typeof(value) == TYPE_STRING and (value as String).is_empty()
+		if not value is Dictionary: return false
+		var outcome := value as Dictionary
+		if outcome.size() != 5 or not outcome.has_all(["ok", "committed", "cleanupDebt", "stage", "reason"]): return false
+		if not outcome["ok"] is bool or not outcome["committed"] is bool or not outcome["cleanupDebt"] is bool: return false
+		if not outcome["stage"] is String or not outcome["reason"] is String: return false
+		return outcome["ok"] and outcome["committed"]
 
 	func _value(value: Variant, key: String, fallback: Variant) -> Variant:
 		if value is Dictionary: return (value as Dictionary).get(key, fallback)

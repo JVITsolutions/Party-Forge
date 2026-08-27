@@ -42,7 +42,7 @@ static func _root(document: Dictionary) -> String:
 		if not _text(value): return "vocabulary values are invalid"
 	for array_key: String in ["content", "graphs", "graphPortals", "assets"]:
 		if not document[array_key] is Array: return "runtime arrays are invalid"
-	if not _empty_extensions(document["extensions"]): return "runtime extensions are invalid"
+	if document["extensions"] != {"gameplayConsumer": "not-yet-wired", "partyForgeStatus": "authoring-design-data"}: return "runtime extensions are invalid"
 	if not (document["graphPortals"] as Array).is_empty() or not (document["assets"] as Array).is_empty(): return "runtime portals or assets are unsupported"
 	return ""
 
@@ -147,7 +147,7 @@ static func _graph(values: Array, content: Array) -> String:
 		if not _source_id(starting) or not placement_ids.has(starting): return "starting placement is invalid"
 	for connection: Variant in graph["connections"] as Array:
 		if not _connection(connection, placement_ids): return "connection record is invalid"
-	if not _layout_records(graph["groups"] as Array, graph["decorations"] as Array): return "layout records are invalid"
+	if not _layout_records(graph["groups"] as Array, graph["decorations"] as Array, placement_ids): return "layout records are invalid"
 	return ""
 
 static func _connection(value: Variant, placement_ids: Dictionary) -> bool:
@@ -155,11 +155,46 @@ static func _connection(value: Variant, placement_ids: Dictionary) -> bool:
 	var record := value as Dictionary
 	return _keys(record, CONNECTION_KEYS) and _source_id(record.get("id")) and placement_ids.has(record.get("from")) and placement_ids.has(record.get("to")) and record["direction"] in ["bidirectional", "forward"] and _finite(record.get("cost")) and record["conditions"] is Array and (record["conditions"] as Array).is_empty() and _empty_extensions(record.get("extensions"))
 
-static func _layout_records(groups: Array, decorations: Array) -> bool:
+static func _layout_records(groups: Array, decorations: Array, placement_ids: Dictionary) -> bool:
+	var group_ids := {}
 	for group: Variant in groups:
-		if not group is Dictionary or not _keys(group as Dictionary, ["id", "name", "placementIds", "color", "extensions"]) or not _source_id((group as Dictionary).get("id")) or not _text((group as Dictionary).get("name")) or not (group as Dictionary)["placementIds"] is Array or not _text((group as Dictionary).get("color")) or not _empty_extensions((group as Dictionary).get("extensions")): return false
+		if not group is Dictionary: return false
+		var record := group as Dictionary
+		if not _keys(record, ["id", "name", "placementIds", "color", "extensions"]) or not _source_id(record.get("id")) or group_ids.has(record["id"]) or not _text(record.get("name")) or not record["placementIds"] is Array or not _color(record.get("color")) or not _empty_extensions(record.get("extensions")): return false
+		var members := {}
+		for member: Variant in record["placementIds"] as Array:
+			if not _source_id(member) or not placement_ids.has(member) or members.has(member): return false
+			members[member] = true
+		group_ids[record["id"]] = true
+	var decoration_ids := {}
 	for decoration: Variant in decorations:
-		if not decoration is Dictionary or not (decoration as Dictionary).has("id") or not _source_id((decoration as Dictionary)["id"]) or not (decoration as Dictionary).has("extensions") or not _empty_extensions((decoration as Dictionary)["extensions"]): return false
+		if not decoration is Dictionary: return false
+		var record := decoration as Dictionary
+		if not _source_id(record.get("id")) or decoration_ids.has(record["id"]) or not _decoration(record, group_ids): return false
+		decoration_ids[record["id"]] = true
+	return true
+
+static func _decoration(record: Dictionary, group_ids: Dictionary) -> bool:
+	if not record.has("kind") or not record.has("groupId") or not record.has("opacity") or not record.has("extensions") or not _group_reference(record["groupId"], group_ids) or not _finite(record["opacity"]) or float(record["opacity"]) < 0.0 or float(record["opacity"]) > 1.0 or not _empty_extensions(record["extensions"]): return false
+	match record["kind"]:
+		"ring":
+			return _keys(record, ["id", "kind", "groupId", "center", "radius", "strokeColor", "strokeWidth", "fillColor", "opacity", "extensions"]) and _point(record["center"]) and _nonnegative(record["radius"]) and _color(record["strokeColor"]) and _nonnegative(record["strokeWidth"]) and (record["fillColor"] == null or _color(record["fillColor"]))
+		"label":
+			return _keys(record, ["id", "kind", "groupId", "position", "text", "color", "fontSize", "opacity", "extensions"]) and _point(record["position"]) and typeof(record["text"]) == TYPE_STRING and _color(record["color"]) and _nonnegative(record["fontSize"])
+		"region":
+			return _keys(record, ["id", "kind", "groupId", "center", "width", "height", "cornerRadius", "fillColor", "strokeColor", "strokeWidth", "opacity", "extensions"]) and _point(record["center"]) and _nonnegative(record["width"]) and _nonnegative(record["height"]) and _nonnegative(record["cornerRadius"]) and _color(record["fillColor"]) and _color(record["strokeColor"]) and _nonnegative(record["strokeWidth"])
+	return false
+
+static func _group_reference(value: Variant, group_ids: Dictionary) -> bool:
+	return value == null or (_source_id(value) and group_ids.has(value))
+
+static func _nonnegative(value: Variant) -> bool:
+	return _finite(value) and float(value) >= 0.0
+
+static func _color(value: Variant) -> bool:
+	if typeof(value) != TYPE_STRING or (value as String).length() != 7 or not (value as String).begins_with("#"): return false
+	for character: String in (value as String).substr(1):
+		if not (character >= "0" and character <= "9") and not (character >= "a" and character <= "f") and not (character >= "A" and character <= "F"): return false
 	return true
 
 static func _candidate(content: Array, source_sha256: String) -> Dictionary:

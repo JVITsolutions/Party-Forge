@@ -20,6 +20,12 @@ func _test_import_and_parity(failures: Array[String]) -> void:
 	TestAssertions.equal(imported, 0, "service imports a changed candidate", failures)
 	TestAssertions.equal(_writes, 1, "changed candidate writes exactly once", failures)
 	TestAssertions.equal(_lines, ["PARTY_FORGE_CITY_ACCESS_IMPORT status=IMPORTED adapter=latticewright-runtime-v3-city-access stage=verified"], "service prints one imported marker", failures)
+	_target = PackedByteArray([1, 2, 3]); _writes = 0; _lines.clear()
+	var debt_dependencies := _dependencies(candidate, PackedByteArray([4, 5, 6]))
+	debt_dependencies["writer"] = Callable(self, "_write_cleanup_debt")
+	var debt_service: Variant = Entry.new_service(debt_dependencies)
+	TestAssertions.equal(debt_service.run(PackedStringArray(["--source", "fixture.json"]), Callable(self, "_capture")), 0, "committed cleanup debt remains imported", failures)
+	TestAssertions.truthy(debt_service.last_cleanup_debt is bool and debt_service.last_cleanup_debt == true, "service preserves truthful committed cleanup debt", failures)
 	_target = PackedByteArray([4, 5, 6]); _writes = 0; _lines.clear()
 	var unchanged: Variant = Entry.new_service(_dependencies(candidate, PackedByteArray([4, 5, 6]))).run(PackedStringArray(["--source", "fixture.json"]), Callable(self, "_capture"))
 	TestAssertions.equal(unchanged, 0, "target-byte parity exits zero", failures)
@@ -52,9 +58,24 @@ func _test_rejected_paths_do_not_write(failures: Array[String]) -> void:
 	TestAssertions.equal(verify_exit, 1, "post-write byte mismatch rejects", failures)
 	TestAssertions.equal(_target, PackedByteArray([9, 8, 7]), "post-write byte mismatch restores exact target bytes", failures)
 	TestAssertions.equal(_lines, ["PARTY_FORGE_CITY_ACCESS_IMPORT status=REJECTED adapter=latticewright-runtime-v3-city-access stage=verified"], "post-write mismatch has one verified marker", failures)
+	_target = PackedByteArray([9, 8, 7]); _writes = 0; _lines.clear()
+	var failed_commit := _dependencies(_candidate(), PackedByteArray([4, 5, 6]))
+	failed_commit["writer"] = Callable(self, "_write_mutating_failure")
+	failed_commit["target_restorer"] = Callable(self, "_restore_target")
+	var promote_exit: Variant = Entry.new_service(failed_commit).run(PackedStringArray(["--source", "a"]), Callable(self, "_capture"))
+	TestAssertions.equal(promote_exit, 1, "writer failure after mutation rejects", failures)
+	TestAssertions.equal(_target, PackedByteArray([9, 8, 7]), "writer failure after mutation restores exact target bytes", failures)
+	_target = PackedByteArray([9, 8, 7]); _writes = 0; _lines.clear()
+	var legacy_writer := _dependencies(_candidate(), PackedByteArray([4, 5, 6]))
+	legacy_writer["writer"] = Callable(self, "_write_legacy_success")
+	legacy_writer["target_restorer"] = Callable(self, "_restore_target")
+	var legacy_exit: Variant = Entry.new_service(legacy_writer).run(PackedStringArray(["--source", "a"]), Callable(self, "_capture"))
+	TestAssertions.equal(legacy_exit, 1, "legacy writer return shape rejects", failures)
+	TestAssertions.equal(_target, PackedByteArray([9, 8, 7]), "legacy writer return shape restores exact target bytes", failures)
+	TestAssertions.equal(_lines, ["PARTY_FORGE_CITY_ACCESS_IMPORT status=REJECTED adapter=latticewright-runtime-v3-city-access stage=write"], "legacy writer has one write marker", failures)
 
 func _dependencies(candidate: Dictionary, encoded: PackedByteArray, reader: Callable = Callable(), translator: Callable = Callable(), validator: Callable = Callable(), encoder: Callable = Callable(), writer: Callable = Callable()) -> Dictionary:
-	return {"reader": reader if reader.is_valid() else Callable(self, "_read_success"), "translator": translator if translator.is_valid() else Callable(self, "_translate_success"), "validator": validator if validator.is_valid() else Callable(self, "_validate_success"), "encoder": encoder if encoder.is_valid() else Callable(self, "_encode_success"), "writer": writer if writer.is_valid() else Callable(self, "_write_success"), "target_reader": Callable(self, "_target_reader"), "candidate": candidate, "encoded": encoded}
+	return {"reader": reader if reader.is_valid() else Callable(self, "_read_success"), "translator": translator if translator.is_valid() else Callable(self, "_translate_success"), "validator": validator if validator.is_valid() else Callable(self, "_validate_success"), "encoder": encoder if encoder.is_valid() else Callable(self, "_encode_success"), "writer": writer if writer.is_valid() else Callable(self, "_write_success"), "target_reader": Callable(self, "_target_reader"), "target_restorer": Callable(self, "_restore_target"), "candidate": candidate, "encoded": encoded}
 
 func _read_success(_path: String, _maximum: int) -> Dictionary:
 	return {"ok": true, "document": {"source": true}, "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"}
@@ -80,15 +101,30 @@ func _encode_success(_document: Dictionary) -> PackedByteArray:
 func _write_success(_document: Dictionary) -> Dictionary:
 	_writes += 1
 	_target = PackedByteArray([4, 5, 6])
-	return {"ok": true, "committed": true, "cleanup_debt": ""}
+	return {"ok": true, "committed": true, "cleanupDebt": false, "stage": "verified", "reason": ""}
 
 func _write_failure(_document: Dictionary) -> Dictionary:
-	return {"ok": false, "stage": "promote source=secret", "committed": false, "cleanup_debt": ""}
+	return {"ok": false, "committed": false, "cleanupDebt": false, "stage": "promote source=secret", "reason": "failed"}
 
 func _write_corrupt(_document: Dictionary) -> Dictionary:
 	_writes += 1
 	_target = PackedByteArray([0])
-	return {"ok": true, "committed": true, "cleanup_debt": ""}
+	return {"ok": true, "committed": true, "cleanupDebt": false, "stage": "verified", "reason": ""}
+
+func _write_cleanup_debt(_document: Dictionary) -> Dictionary:
+	_writes += 1
+	_target = PackedByteArray([4, 5, 6])
+	return {"ok": true, "committed": true, "cleanupDebt": true, "stage": "cleanup", "reason": "code-20"}
+
+func _write_mutating_failure(_document: Dictionary) -> Dictionary:
+	_writes += 1
+	_target = PackedByteArray([0])
+	return {"ok": false, "committed": false, "cleanupDebt": false, "stage": "promote", "reason": "failed"}
+
+func _write_legacy_success(_document: Dictionary) -> String:
+	_writes += 1
+	_target = PackedByteArray([4, 5, 6])
+	return ""
 
 func _restore_target(before: Dictionary) -> Dictionary:
 	_target = (before.get("bytes", PackedByteArray()) as PackedByteArray).duplicate()
