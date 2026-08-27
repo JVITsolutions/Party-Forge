@@ -32,9 +32,18 @@ func run() -> Array[String]:
 		TestAssertions.truthy(prepared.valid, "%s attack prepares" % class_id, failures)
 		actor.free()
 		party.free()
+	var fixture_root := "user://tests/five_class_integration/%d-%d" % [OS.get_process_id(), Time.get_ticks_usec()]
+	var profile_root := fixture_root.path_join("profiles")
+	var settings_path := fixture_root.path_join("party_forge_settings.cfg")
+	ProfileTestSupport.remove_tree(fixture_root)
+	TestAssertions.truthy(profile_root.begins_with("user://tests/") and profile_root != ProfileStore.DEFAULT_ROOT, "main profile fixture uses an isolated root", failures)
+	TestAssertions.truthy(settings_path.begins_with("user://tests/") and settings_path != PartyForgeSettingsStore.DEFAULT_PATH, "main settings fixture uses an isolated path", failures)
 	var main := (load("res://scenes/game/main.tscn") as PackedScene).instantiate()
+	main.set("profile_root", profile_root)
+	main.set("settings_path", settings_path)
 	main.call("_ready")
 	var selector := main.get_node("HUD/ClassSelection") as ClassSelectionPanel
 	TestAssertions.equal(selector.grid.get_child_count(), 9, "main selector owns nine buttons", failures)
 	main.free()
+	ProfileTestSupport.remove_tree(fixture_root)
 	return failures
