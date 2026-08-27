@@ -12,6 +12,7 @@ func run() -> Array[String]:
 	_test_tutorial_matrix_and_profile_immutability(failures)
 	_test_repeated_and_reshuffled_profile_arrays(failures)
 	_test_every_condition_kind_and_invalid_inputs(failures)
+	_test_invalid_public_inputs_fail_closed(failures)
 	return failures
 
 
@@ -109,6 +110,18 @@ func _test_every_condition_kind_and_invalid_inputs(failures: Array[String]) -> v
 	_assert_profile_unchanged(snapshot, profile, "condition-kind profile", failures)
 
 
+func _test_invalid_public_inputs_fail_closed(failures: Array[String]) -> void:
+	if not FileAccess.file_exists(EVALUATOR_PATH):
+		return
+	var snapshot: Variant = _fixture_snapshot(failures)
+	if snapshot == null:
+		return
+	var invalid_prologue := _profile(99)
+	_assert_projection(snapshot, invalid_prologue, &"city.apothecary", HIDDEN, &"invalid_input", &"", "out-of-range profile prologue fails closed before always conditions", failures)
+	for location_id: Variant in [null, 42, "city.apothecary", &""]:
+		_assert_dynamic_projection(snapshot, _profile(ProfileState.PrologueState.NOT_STARTED), location_id, HIDDEN, &"invalid_input", &"", "dynamic invalid location ID fails closed", failures)
+
+
 func _assert_matrix(snapshot: Variant, profile: ProfileState, expected: Dictionary, label: String, failures: Array[String]) -> void:
 	for location_id: StringName in _fixture_location_ids():
 		var row: Array = expected[location_id]
@@ -138,21 +151,33 @@ func _assert_projection(snapshot: Variant, profile: Variant, location_id: String
 		TestAssertions.truthy(not String(projection.diagnostic).is_empty(), "%s includes a diagnostic", failures)
 
 
+func _assert_dynamic_projection(snapshot: Variant, profile: Variant, location_id: Variant, expected_state: int, expected_reason: StringName, expected_destination: StringName, label: String, failures: Array[String]) -> void:
+	var projection: Variant = _evaluate(snapshot, profile, location_id)
+	if projection == null:
+		failures.append("%s returns a projection" % label)
+		return
+	TestAssertions.equal(projection.state, expected_state, "%s state" % label, failures)
+	TestAssertions.equal(projection.reason_id, expected_reason, "%s reason ID" % label, failures)
+	TestAssertions.equal(projection.destination_id, expected_destination, "%s destination" % label, failures)
+
+
 func _assert_profile_unchanged(snapshot: Variant, profile: ProfileState, label: String, failures: Array[String]) -> void:
 	var before_dictionary := profile.to_dictionary()
 	var before_bytes := ProfileCodec.encode(profile).to_utf8_buffer()
 	var before_snapshot := _snapshot_values(snapshot)
+	var before_snapshot_bytes := CityAccessSnapshotCodec.encode_document(_snapshot_document(snapshot))
 	for location_id: StringName in _fixture_location_ids():
 		_evaluate(snapshot, profile, location_id)
 		_evaluate(snapshot, profile, location_id)
 	TestAssertions.equal(profile.to_dictionary(), before_dictionary, "%s evaluation leaves profile dictionary unchanged" % label, failures)
 	TestAssertions.equal(ProfileCodec.encode(profile).to_utf8_buffer(), before_bytes, "%s evaluation leaves encoded profile bytes unchanged" % label, failures)
 	TestAssertions.equal(_snapshot_values(snapshot), before_snapshot, "%s evaluation leaves snapshot unchanged" % label, failures)
+	TestAssertions.equal(CityAccessSnapshotCodec.encode_document(_snapshot_document(snapshot)), before_snapshot_bytes, "%s evaluation leaves canonical snapshot bytes unchanged" % label, failures)
 
 
-func _evaluate(snapshot: Variant, profile: Variant, location_id: StringName) -> Variant:
+func _evaluate(snapshot: Variant, profile: Variant, location_id: Variant) -> Variant:
 	var evaluator: Variant = load(EVALUATOR_PATH)
-	return evaluator.evaluate(snapshot, profile, location_id) if evaluator != null else null
+	return evaluator.call("evaluate", snapshot, profile, location_id) if evaluator != null else null
 
 
 func _fixture_snapshot(failures: Array[String]) -> Variant:
@@ -220,3 +245,21 @@ func _snapshot_values(snapshot: Variant) -> Array:
 			available.append([condition.kind, condition.value])
 		values.append([location.id, location.destination_id, visible, available])
 	return values
+
+
+func _snapshot_document(snapshot: Variant) -> Dictionary:
+	var locations: Array = []
+	for location: CityAccessLocation in snapshot.locations:
+		var visible: Array = []
+		for condition: CityAccessCondition in location.visible_when:
+			visible.append({"kind": String(condition.kind), "value": condition.value})
+		var available: Array = []
+		for condition: CityAccessCondition in location.available_when:
+			available.append({"kind": String(condition.kind), "value": condition.value})
+		locations.append({"id": String(location.id), "destinationId": String(location.destination_id), "visibleWhen": visible, "availableWhen": available})
+	return {
+		"format": "party-forge-access-snapshot",
+		"version": 1,
+		"source": {"adapter": String(snapshot.adapter), "format": String(snapshot.source_format), "formatVersion": snapshot.source_format_version, "sha256": snapshot.source_sha256},
+		"locations": locations,
+	}

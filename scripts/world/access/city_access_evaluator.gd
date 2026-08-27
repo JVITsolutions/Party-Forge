@@ -10,13 +10,16 @@ const REASON_UNKNOWN_LOCATION := &"unknown_location"
 const REASON_INVALID_INPUT := &"invalid_input"
 
 
-static func evaluate(snapshot: Variant, profile: Variant, location_id: StringName) -> Variant:
-	if snapshot == null or profile == null or location_id.is_empty() or not snapshot is CityAccessSnapshot or not profile is ProfileState:
-		return AccessProjection.new(location_id, AccessProjection.State.HIDDEN, REASON_INVALID_INPUT, &"", "city access evaluator received invalid input")
-	var location := _location(snapshot as CityAccessSnapshot, location_id)
-	if location == null:
-		return AccessProjection.new(location_id, AccessProjection.State.HIDDEN, REASON_UNKNOWN_LOCATION, &"", "city access location is unknown")
+static func evaluate(snapshot: Variant, profile: Variant, location_id: Variant) -> Variant:
+	var safe_location_id: StringName = location_id as StringName if typeof(location_id) == TYPE_STRING_NAME else &""
+	if snapshot == null or profile == null or typeof(location_id) != TYPE_STRING_NAME or safe_location_id.is_empty() or not snapshot is CityAccessSnapshot or not profile is ProfileState:
+		return AccessProjection.new(safe_location_id, AccessProjection.State.HIDDEN, REASON_INVALID_INPUT, &"", "city access evaluator received invalid input")
 	var profile_state := profile as ProfileState
+	if not _is_valid_prologue_state(profile_state.prologue_state):
+		return AccessProjection.new(safe_location_id, AccessProjection.State.HIDDEN, REASON_INVALID_INPUT, &"", "city access evaluator received invalid profile prologue state")
+	var location := _location(snapshot as CityAccessSnapshot, safe_location_id)
+	if location == null:
+		return AccessProjection.new(safe_location_id, AccessProjection.State.HIDDEN, REASON_UNKNOWN_LOCATION, &"", "city access location is unknown")
 	var context := {
 		"prologue_state": _prologue_state(profile_state.prologue_state),
 		"permanent_unlocks": _id_set(profile_state.permanent_feature_unlocks),
@@ -68,6 +71,10 @@ static func _prologue_state(value: int) -> StringName:
 		ProfileState.PrologueState.COMPLETED:
 			return &"completed"
 	return &""
+
+
+static func _is_valid_prologue_state(value: int) -> bool:
+	return value in [ProfileState.PrologueState.NOT_STARTED, ProfileState.PrologueState.IN_PROGRESS, ProfileState.PrologueState.COMPLETED]
 
 
 static func _id_set(values: Array[String]) -> Dictionary:
