@@ -96,7 +96,7 @@ $godot = 'F:\Projects(root)\Game dev\godot\Godot_v4.7.1-stable_mono_win64\Godot_
 & $godot --headless --path (Get-Location).Path --quit-after 420 --script res://tests/focused_test_runner.gd -- tests/unit/test_developer_item_sandbox_state.gd tests/unit/test_developer_item_sandbox.gd
 ```
 
-Expected: `TEST_SUMMARY: FAIL` identifies the missing document-path injection or still-default paths; no parser or loader error. Before and after this RED run, verify the SHA-256 hash of the existing production sandbox document and the production profile file count are unchanged.
+Expected: `TEST_SUMMARY: FAIL` identifies the missing document-path injection or still-default paths; no parser or loader error. Before and after this RED run, the production sandbox document SHA-256 may be verified unchanged. Do not enumerate or inspect the live profile root; the isolated test-root assertions for profile sentinels are the profile-safety evidence.
 
 - [ ] **Step 3: Add document-path injection and move every fixture**
 
@@ -114,7 +114,7 @@ Use `_document_path` for every load, save, reset, and existence check in `Develo
 
 - [ ] **Step 4: Run GREEN and commit**
 
-Run the Step 2 command again. Expected: exactly one `TEST_SUMMARY: PASS (0 failures)`. After GREEN, re-check the production sandbox SHA-256 hash and production profile file count against the pre-run values.
+Run the Step 2 command again. Expected: exactly one `TEST_SUMMARY: PASS (0 failures)`. After GREEN, the production sandbox SHA-256 may be re-checked against the pre-run value. Do not enumerate or inspect the live profile root; retain the isolated test-root assertions as the profile-safety evidence.
 
 ```powershell
 git add scripts/dev/developer_item_sandbox_store.gd tests/unit/test_developer_item_sandbox_state.gd tests/unit/test_developer_item_sandbox.gd
