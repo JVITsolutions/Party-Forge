@@ -46,6 +46,7 @@ func run() -> Array[String]:
 	TestAssertions.truthy(screen.has_signal("settings_applied"), "Settings exposes its applied signal", failures)
 	TestAssertions.truthy(screen.has_signal("city_tree_requested"), "Settings exposes its City tree forwarding signal", failures)
 	TestAssertions.truthy(screen.has_signal("item_sandbox_requested"), "Settings exposes its item sandbox forwarding signal", failures)
+	TestAssertions.truthy(screen.has_signal("profile_deletion_state_changed"), "Settings exposes its profile-deletion state forwarding signal", failures)
 
 	var supplied := PartyForgeSettings.new()
 	supplied.mode = PartyForgeSettings.Mode.DEVELOPER_MODE
@@ -54,12 +55,19 @@ func run() -> Array[String]:
 	ProfileTestSupport.remove_tree(profile_root)
 	var profile_manager := ProfileManager.new()
 	TestAssertions.equal(profile_manager.bootstrap(profile_root), "", "Settings profile fixture bootstraps", failures)
+	TestAssertions.truthy(profile_manager.create_profile("Settings Gate", 4000).ok(), "Settings run-gate fixture creates a profile", failures)
 	var save_attempts: Array[String] = []
 	var tracking_store := PartyForgeSettingsStore.new(func(temporary: String, target: String) -> Error:
 		save_attempts.append("%s -> %s" % [temporary, target])
 		return OK
 	)
-	screen.call("configure", tracking_store, supplied, profile_manager)
+	var configure_arguments := _method_argument_count(screen, &"configure")
+	TestAssertions.equal(configure_arguments, 5, "Settings configure accepts an explicit run-active query", failures)
+	var run_active: Array[bool] = [false]
+	if configure_arguments == 5:
+		screen.call("configure", tracking_store, supplied, profile_manager, PartyForgeSettingsStore.DEFAULT_PATH, func() -> bool: return run_active[0])
+	else:
+		screen.call("configure", tracking_store, supplied, profile_manager)
 	supplied.party_capacity_override = 2
 	var draft := screen.call("current_settings") as PartyForgeSettings
 	TestAssertions.equal(draft.party_capacity_override, 12, "Settings drafts a copy of supplied values", failures)
@@ -71,10 +79,20 @@ func run() -> Array[String]:
 	var profiles_page := screen.get_node("Overlay/Frame/Layout/Tabs/Profiles") as ProfilesSettingsPage
 	profiles_page.call("_ready")
 	screen.call("open_profiles", profiles_return_focus)
+	var delete := profiles_page.get_node_or_null("Layout/DeleteProfile") as Button
+	TestAssertions.truthy(delete != null, "configured Settings exposes profile deletion", failures)
+	if delete != null and configure_arguments == 5:
+		TestAssertions.truthy(not delete.disabled, "inactive run allows deletion through Settings", failures)
+		run_active[0] = true
+		screen.call("open_profiles", profiles_return_focus)
+		TestAssertions.truthy(delete.disabled, "opening Settings recomputes active-run deletion gating", failures)
+		run_active[0] = false
+		screen.call("open_profiles", profiles_return_focus)
+		TestAssertions.truthy(not delete.disabled, "opening Settings recomputes deletion after a run ends", failures)
 	TestAssertions.truthy(screen.has_method(&"_tab_index_for_control"), "Settings exposes its control-identity tab resolver", failures)
 	if screen.has_method(&"_tab_index_for_control"):
 		TestAssertions.equal(screen.call("_tab_index_for_control", profiles_page), 4, "open_profiles resolves Profiles by control identity", failures)
-	TestAssertions.equal(profiles_page.initial_focus(), screen.get_node("Overlay/Frame/Layout/Tabs/Profiles/Layout/CreateRow/ProfileName"), "open_profiles uses the page's deterministic initial target", failures)
+	TestAssertions.equal(profiles_page.initial_focus(), screen.get_node("Overlay/Frame/Layout/Tabs/Profiles/Layout/ProfileList"), "open_profiles uses the populated page's deterministic initial target", failures)
 	TestAssertions.equal(screen.get("_return_focus"), profiles_return_focus, "open_profiles preserves return focus", failures)
 	screen.call("close")
 
@@ -175,6 +193,13 @@ func _has_property(object: Object, property_name: StringName) -> bool:
 		if StringName(property.get("name", "")) == property_name:
 			return true
 	return false
+
+
+func _method_argument_count(object: Object, method_name: StringName) -> int:
+	for method: Dictionary in object.get_method_list():
+		if StringName(method.get("name", "")) == method_name:
+			return (method.get("args", []) as Array).size()
+	return -1
 
 
 func _test_game_settings_page(failures: Array[String]) -> void:

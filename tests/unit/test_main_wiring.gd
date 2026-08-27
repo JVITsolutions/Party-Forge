@@ -82,6 +82,7 @@ func run() -> Array[String]:
     _test_gameplay_input_blocked_predicate(failures)
     _test_typed_live_loot_diagnostic_accounting(failures)
     _test_main_menu_route_composition(failures)
+    _test_profile_deletion_and_activation_separation(failures)
     _test_storage_route_policy_and_shared_projection_wiring(failures)
     _test_loadout_warning_preflight_and_transition_wiring(failures)
     _test_passive_tree_route_composition(failures)
@@ -676,6 +677,67 @@ func _test_main_menu_route_composition(failures: Array[String]) -> void:
     TestAssertions.truthy(not main.run_started and main.leader == null, "front-end route traversal never starts gameplay", failures)
     main.free()
     ProfileTestSupport.remove_tree(root)
+
+
+func _test_profile_deletion_and_activation_separation(failures: Array[String]) -> void:
+    var root := "user://tests/main-wiring-profile-deletion_%d_%d" % [OS.get_process_id(), Time.get_ticks_usec()]
+    var settings_path := "user://tests/main-wiring-profile-deletion-settings_%d_%d.cfg" % [OS.get_process_id(), Time.get_ticks_usec()]
+    ProfileTestSupport.remove_tree(root)
+    _cleanup_settings_artifacts(settings_path)
+    var main := (load("res://scenes/game/main.tscn") as PackedScene).instantiate() as PartyForgeMain
+    main.profile_root = root
+    main.settings_path = settings_path
+    (Engine.get_main_loop() as SceneTree).root.add_child(main)
+    main.call("_ready")
+    var manager := main.profile_manager as ProfileManager
+    TestAssertions.truthy(manager.create_profile("Deletion Alpha", 1000).ok(), "Main deletion fixture creates replacement profile", failures)
+    TestAssertions.truthy(manager.create_profile("Deletion Beta", 2000).ok(), "Main deletion fixture creates active profile", failures)
+    var settings := main.get_node("SettingsScreen") as SettingsScreen
+    var profiles := settings.get_node("Overlay/Frame/Layout/Tabs/Profiles") as ProfilesSettingsPage
+    profiles.call("_ready")
+    settings.call("_ready")
+    var list := profiles.get_node("Layout/ProfileList") as ItemList
+    var delete := profiles.get_node("Layout/DeleteProfile") as Button
+    var confirmation := profiles.get_node("DeleteConfirmation") as ConfirmationDialog
+    var return_focus := Button.new()
+    return_focus.text = "Deletion return"
+    main.add_child(return_focus)
+    settings.open_profiles(return_focus)
+    var beta_index := _profile_list_index(list, "Deletion Beta")
+    list.select(beta_index)
+    list.item_selected.emit(beta_index)
+    delete.pressed.emit()
+    confirmation.hide()
+    confirmation.confirmed.emit()
+    TestAssertions.truthy(settings.is_open(), "active profile deletion keeps Settings open", failures)
+    TestAssertions.equal(manager.profiles().size(), 1, "Main deletion regression commits exactly one profile deletion", failures)
+    TestAssertions.equal(manager.active_profile().display_name, "Deletion Alpha", "Main deletion regression activates the replacement profile", failures)
+    TestAssertions.equal(_selected_profile_list_id(list), manager.active_profile().profile_id, "active deletion selects the authoritative replacement profile", failures)
+    TestAssertions.truthy(list.focus_mode != Control.FOCUS_NONE, "active deletion retains a focusable replacement row in Main", failures)
+    TestAssertions.truthy(not bool(main.get("_profile_deletion_in_progress")), "committed Main deletion clears the suppression flag", failures)
+    TestAssertions.truthy(manager.create_profile("Deletion Gamma", 3000).ok(), "Main activation fixture creates another profile", failures)
+    settings.open_profiles(return_focus)
+    var alpha_index := _profile_list_index(list, "Deletion Alpha")
+    list.select(alpha_index)
+    list.item_selected.emit(alpha_index)
+    (profiles.get_node("Layout/Activate") as Button).pressed.emit()
+    TestAssertions.truthy(not settings.is_open(), "explicit Activate retains the existing Settings-close behavior", failures)
+    TestAssertions.equal(manager.active_profile().display_name, "Deletion Alpha", "explicit Activate changes the authoritative active profile", failures)
+    main.free()
+    ProfileTestSupport.remove_tree(root)
+    _cleanup_settings_artifacts(settings_path)
+
+
+func _profile_list_index(list: ItemList, text_fragment: String) -> int:
+    for index: int in range(list.item_count):
+        if list.get_item_text(index).contains(text_fragment):
+            return index
+    return -1
+
+
+func _selected_profile_list_id(list: ItemList) -> String:
+    var selected := list.get_selected_items()
+    return "" if selected.is_empty() else String(list.get_item_metadata(selected[0]))
 
 func _test_passive_tree_route_composition(failures: Array[String]) -> void:
     var root := "user://tests/main_wiring-passive-tree_%d_%d" % [OS.get_process_id(), Time.get_ticks_usec()]

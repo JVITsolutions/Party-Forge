@@ -135,7 +135,9 @@ func _test_mixed_healthy_and_damaged_boot(root: String, failures: Array[String])
 	main.call("_ready")
 	var settings := main.get_node("SettingsScreen") as SettingsScreen
 	var menu := main.get_node_or_null("MainMenuScreen") as MainMenuScreen
-	var list := settings.get_node("Overlay/Frame/Layout/Tabs/Profiles/Layout/ProfileList") as ItemList
+	var profiles := settings.get_node("Overlay/Frame/Layout/Tabs/Profiles") as ProfilesSettingsPage
+	profiles.call("_ready")
+	var list := profiles.get_node("Layout/ProfileList") as ItemList
 	TestAssertions.truthy(menu != null, "mixed boot composes MainMenuScreen", failures)
 	if menu == null:
 		(Engine.get_main_loop() as SceneTree).paused = false
@@ -150,7 +152,12 @@ func _test_mixed_healthy_and_damaged_boot(root: String, failures: Array[String])
 	for index: int in range(list.item_count):
 		if list.get_item_text(index).contains("[Damaged]"):
 			damaged_index = index
-	TestAssertions.truthy(damaged_index >= 0 and list.is_item_disabled(damaged_index), "mixed boot disables the damaged profile row", failures)
+	TestAssertions.truthy(damaged_index >= 0 and not list.is_item_disabled(damaged_index), "mixed boot keeps the damaged profile row selectable for deletion", failures)
+	if damaged_index >= 0:
+		list.select(damaged_index)
+		list.item_selected.emit(damaged_index)
+		TestAssertions.truthy((profiles.get_node("Layout/Activate") as Button).disabled, "mixed boot keeps damaged profile activation disabled", failures)
+		TestAssertions.truthy(not (profiles.get_node("Layout/DeleteProfile") as Button).disabled, "mixed boot keeps damaged profile deletion enabled", failures)
 	(Engine.get_main_loop() as SceneTree).paused = false
 	main.free()
 

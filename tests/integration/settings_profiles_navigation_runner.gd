@@ -71,23 +71,87 @@ func _run() -> void:
 	await _wait_for_layout()
 	_assert(not startup.is_open(), "startup without an open request remains hidden")
 	startup.free()
+
+	_assert(manager.create_profile("Navigation Alpha", 1000).ok(), "deletion navigation creates replacement profile")
+	_assert(manager.create_profile("Navigation Beta", 2000).ok(), "deletion navigation creates active profile")
+	var run_active: Array[bool] = [false]
+	var deletion := _new_settings(viewport, manager, func() -> bool: return run_active[0])
+	viewport.add_child(deletion)
+	deletion.open_profiles(return_focus)
+	await _wait_for_layout()
+	var deletion_profiles := deletion.get_node("Overlay/Frame/Layout/Tabs/Profiles") as ProfilesSettingsPage
+	var deletion_list := deletion_profiles.get_node("Layout/ProfileList") as ItemList
+	var delete := deletion_profiles.get_node("Layout/DeleteProfile") as Button
+	var confirmation := deletion_profiles.get_node("DeleteConfirmation") as ConfirmationDialog
+	_assert(not delete.disabled, "inactive run leaves selected active profile deletable")
+	run_active[0] = true
+	deletion.open_profiles(return_focus)
+	_assert(delete.disabled, "opening Settings recomputes active-run deletion gating")
+	run_active[0] = false
+	deletion.open_profiles(return_focus)
+	delete.pressed.emit()
+	_assert(confirmation.dialog_text.contains("Navigation Beta"), "real Settings confirmation names the active profile")
+	confirmation.hide()
+	confirmation.canceled.emit()
+	_assert(manager.profiles().size() == 2, "confirmation cancellation mutates no profiles")
+	_assert(viewport.gui_get_focus_owner() == delete, "confirmation cancellation returns focus to Delete")
+	delete.pressed.emit()
+	confirmation.hide()
+	confirmation.confirmed.emit()
+	_assert(deletion.is_open(), "active deletion keeps real Settings navigation open")
+	_assert(deletion_list.item_count == 1 and deletion_list.get_item_text(0).contains("Navigation Alpha"), "active deletion refreshes the replacement row")
+	_assert(viewport.gui_get_focus_owner() == deletion_list, "active deletion focuses the replacement row in real Settings navigation")
+	delete.pressed.emit()
+	confirmation.hide()
+	confirmation.confirmed.emit()
+	_assert(deletion_list.item_count == 0 and (deletion_profiles.get_node("Layout/EmptyState") as Label).visible, "final deletion shows the existing empty state")
+	_assert(viewport.gui_get_focus_owner() == deletion_profiles.get_node("Layout/CreateRow/ProfileName"), "final deletion focuses the profile name field")
+	deletion.free()
+
+	var failure_root := "%s_failure" % profile_root
+	ProfileTestSupport.remove_tree(failure_root)
+	var failing_manager := ProfileManager.new(
+		ProfileStore.new(),
+		ProfileIndexStore.new(),
+		func() -> String: return "profile-navigation-failure",
+		ProfileDeletionService.new(func(_path: String) -> Error: return ERR_CANT_CREATE),
+	)
+	_assert(failing_manager.bootstrap(failure_root).is_empty(), "noncommit navigation fixture bootstraps")
+	_assert(failing_manager.create_profile("Navigation Failure", 3000).ok(), "noncommit navigation fixture creates a profile")
+	var noncommit := _new_settings(viewport, failing_manager)
+	viewport.add_child(noncommit)
+	noncommit.open_profiles(return_focus)
+	await _wait_for_layout()
+	var noncommit_profiles := noncommit.get_node("Overlay/Frame/Layout/Tabs/Profiles") as ProfilesSettingsPage
+	var noncommit_list := noncommit_profiles.get_node("Layout/ProfileList") as ItemList
+	var noncommit_delete := noncommit_profiles.get_node("Layout/DeleteProfile") as Button
+	var noncommit_confirmation := noncommit_profiles.get_node("DeleteConfirmation") as ConfirmationDialog
+	var selected_id := String(noncommit_list.get_item_metadata(noncommit_list.get_selected_items()[0]))
+	noncommit_delete.pressed.emit()
+	noncommit_confirmation.hide()
+	noncommit_confirmation.confirmed.emit()
+	_assert(String(noncommit_list.get_item_metadata(noncommit_list.get_selected_items()[0])) == selected_id, "noncommitted deletion retains the selected profile")
+	_assert(viewport.gui_get_focus_owner() == noncommit_delete, "noncommitted deletion returns focus to Delete in real Settings navigation")
+	_assert((noncommit_profiles.get_node("Layout/TechnicalDetails") as Label).text.contains("PROFILE_DELETE_ERROR"), "noncommitted deletion preserves technical detail")
+	noncommit.free()
+	ProfileTestSupport.remove_tree(failure_root)
 	viewport.free()
 	ProfileTestSupport.remove_tree(profile_root)
 
 	if _failures.is_empty():
-		print("PROFILE_SETTINGS_NAVIGATION_SUMMARY: PASS")
+		print("SETTINGS_PROFILES_NAVIGATION_SUMMARY: PASS")
 		quit(0)
 		return
 	for failure: String in _failures:
 		push_error("PROFILE_SETTINGS_NAVIGATION_FAILURE: %s" % failure)
-	print("PROFILE_SETTINGS_NAVIGATION_SUMMARY: FAIL (%d failures)" % _failures.size())
+	print("SETTINGS_PROFILES_NAVIGATION_SUMMARY: FAIL (%d failures)" % _failures.size())
 	quit(1)
 
 
-func _new_settings(viewport: SubViewport, manager: ProfileManager) -> SettingsScreen:
+func _new_settings(viewport: SubViewport, manager: ProfileManager, run_active_query: Callable = Callable()) -> SettingsScreen:
 	var settings := (load("res://scenes/ui/settings/settings_screen.tscn") as PackedScene).instantiate() as SettingsScreen
 	settings.custom_viewport = viewport
-	settings.configure(PartyForgeSettingsStore.new(), PartyForgeSettings.new(), manager)
+	settings.configure(PartyForgeSettingsStore.new(), PartyForgeSettings.new(), manager, PartyForgeSettingsStore.DEFAULT_PATH, run_active_query)
 	return settings
 
 

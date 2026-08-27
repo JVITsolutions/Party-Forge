@@ -4,9 +4,12 @@ extends MarginContainer
 const PlayerColorPalette := preload("res://scripts/profile/player_color_palette.gd")
 
 signal profile_action_failed(message: String)
+signal profile_deletion_state_changed(in_progress: bool)
 
 var _manager: ProfileManager
-var _has_selectable_profiles := false
+var _status_by_id: Dictionary = {}
+var _run_active_query: Callable
+var _pending_delete_profile_id := ""
 var _bootstrap_safe_status := ""
 var _bootstrap_technical_detail := ""
 var _action_error_active := false
@@ -20,16 +23,29 @@ func _ready() -> void:
 		_create_button().pressed.connect(_create_profile)
 	if not _activate_button().pressed.is_connected(_activate_profile):
 		_activate_button().pressed.connect(_activate_profile)
+	if not _delete_button().pressed.is_connected(_request_delete):
+		_delete_button().pressed.connect(_request_delete)
 	if not _profile_name().text_submitted.is_connected(_on_name_submitted):
 		_profile_name().text_submitted.connect(_on_name_submitted)
+	if not _profile_list().item_selected.is_connected(_on_item_selected):
+		_profile_list().item_selected.connect(_on_item_selected)
 	if not _profile_list().item_activated.is_connected(_on_item_activated):
 		_profile_list().item_activated.connect(_on_item_activated)
+	if not _delete_confirmation().confirmed.is_connected(_confirm_delete):
+		_delete_confirmation().confirmed.connect(_confirm_delete)
+	if not _delete_confirmation().canceled.is_connected(_cancel_delete):
+		_delete_confirmation().canceled.connect(_cancel_delete)
+	if not _delete_confirmation().close_requested.is_connected(_cancel_delete):
+		_delete_confirmation().close_requested.connect(_cancel_delete)
+	if not _delete_confirmation().visibility_changed.is_connected(_on_delete_confirmation_visibility_changed):
+		_delete_confirmation().visibility_changed.connect(_on_delete_confirmation_visibility_changed)
 	refresh()
 
 
-func bind(manager: ProfileManager) -> void:
+func bind(manager: ProfileManager, run_active_query: Callable = Callable()) -> void:
 	_disconnect_manager()
 	_manager = manager
+	_run_active_query = run_active_query
 	if _manager != null:
 		if not _manager.profiles_changed.is_connected(refresh):
 			_manager.profiles_changed.connect(refresh)
@@ -38,9 +54,16 @@ func bind(manager: ProfileManager) -> void:
 	refresh()
 
 
+func set_run_active_query(query: Callable) -> void:
+	_run_active_query = query
+	_refresh_action_eligibility()
+
+
 func refresh() -> void:
 	var list := _profile_list()
+	var previous_selected_id := _selected_profile_id()
 	list.clear()
+	_status_by_id.clear()
 	var statuses: Array[ProfileEntryStatus] = []
 	if _manager != null:
 		statuses = _manager.profile_statuses()
@@ -49,8 +72,9 @@ func refresh() -> void:
 	if _manager != null:
 		for profile: ProfileState in _manager.profiles():
 			profiles_by_id[profile.profile_id] = profile
-	_has_selectable_profiles = false
+	var index_by_id: Dictionary = {}
 	for status: ProfileEntryStatus in statuses:
+		_status_by_id[status.profile_id] = status
 		var is_active := active != null and active.profile_id == status.profile_id
 		var suffix := ""
 		var profile := profiles_by_id.get(status.profile_id) as ProfileState
@@ -64,14 +88,17 @@ func refresh() -> void:
 			suffix += "  [Damaged]"
 		var index := list.add_item("%s%s" % [status.display_name, suffix])
 		list.set_item_metadata(index, status.profile_id)
-		list.set_item_disabled(index, not status.selectable())
-		_has_selectable_profiles = _has_selectable_profiles or status.selectable()
-		if is_active:
-			list.select(index)
+		list.set_item_disabled(index, false)
+		index_by_id[status.profile_id] = index
+	var preferred_selection := previous_selected_id
+	if preferred_selection.is_empty() or not index_by_id.has(preferred_selection):
+		preferred_selection = active.profile_id if active != null else ""
+	if index_by_id.has(preferred_selection):
+		list.select(int(index_by_id[preferred_selection]))
 	_empty_state().visible = statuses.is_empty()
 	list.visible = not statuses.is_empty()
-	_activate_button().disabled = not _has_selectable_profiles
-	_configure_focus_order(_has_selectable_profiles)
+	_refresh_action_eligibility()
+	_configure_focus_order(not statuses.is_empty())
 	if _action_error_active:
 		_render_action_error()
 	else:
@@ -89,7 +116,7 @@ func set_bootstrap_diagnostic(safe_status: String, technical_detail: String) -> 
 
 func initial_focus() -> Control:
 	var list := _profile_list()
-	if list.visible and list.item_count > 0 and _has_selectable_profiles:
+	if list.visible and list.item_count > 0:
 		return list
 	return _profile_name()
 
@@ -108,14 +135,18 @@ func _create_profile() -> void:
 
 
 func _activate_profile() -> void:
-	var selected := _profile_list().get_selected_items()
 	if _manager == null:
 		_show_error("Profile service is unavailable.", "PROFILE_UI_ERROR reason=manager is missing")
 		return
-	if selected.is_empty():
+	var status := _selected_status()
+	if status == null:
 		_show_error("Choose a profile first.", "PROFILE_UI_ERROR reason=no profile selected")
 		return
-	var error := _manager.select_profile(str(_profile_list().get_item_metadata(selected[0])))
+	if not status.selectable():
+		_show_error("This profile cannot be activated until it is recovered.", status.error)
+		_refresh_action_eligibility()
+		return
+	var error := _manager.select_profile(status.profile_id)
 	if not error.is_empty():
 		_show_error(_friendly_error(error), error)
 		return
@@ -127,8 +158,71 @@ func _on_name_submitted(_submitted_name: String) -> void:
 	_create_profile()
 
 
+func _on_item_selected(_index: int) -> void:
+	_refresh_action_eligibility()
+
+
 func _on_item_activated(_index: int) -> void:
 	_activate_profile()
+
+
+func _request_delete() -> void:
+	_refresh_action_eligibility()
+	var status := _selected_status()
+	if status == null or _run_is_active():
+		return
+	_pending_delete_profile_id = status.profile_id
+	_delete_confirmation().dialog_text = (
+		"Permanently delete %s? This cannot be undone. Any resumable run and all run-owned items will also be discarded."
+		% status.display_name
+	)
+	if _delete_confirmation().is_inside_tree():
+		_delete_confirmation().popup_centered()
+
+
+func _confirm_delete() -> void:
+	var profile_id := _pending_delete_profile_id
+	_pending_delete_profile_id = ""
+	if _manager == null:
+		_show_error("Profile service is unavailable.", "PROFILE_UI_ERROR reason=manager is missing")
+		_focus_delete_button()
+		return
+	if profile_id.is_empty():
+		_show_error("Choose a profile first.", "PROFILE_UI_ERROR reason=no profile selected for deletion")
+		_focus_delete_button()
+		return
+	if _run_is_active():
+		_show_error("Profiles cannot be deleted while an arena run is active.", "PROFILE_DELETE_BLOCKED reason=active run")
+		_refresh_action_eligibility()
+		if _profile_list().is_inside_tree() and _profile_list().is_visible_in_tree():
+			_profile_list().grab_focus()
+		return
+	profile_deletion_state_changed.emit(true)
+	var result := _manager.delete_profile(profile_id)
+	if not result.committed:
+		_show_error(_friendly_error(result.error), result.error)
+		_refresh_action_eligibility()
+		_focus_delete_button()
+		profile_deletion_state_changed.emit(false)
+		return
+	if result.cleanup_debt:
+		_show_error("The profile was deleted, but some cleanup could not be completed safely.", result.error)
+	else:
+		_clear_error()
+	refresh()
+	_focus_after_committed_deletion(result.next_active_profile_id)
+	profile_deletion_state_changed.emit(false)
+
+
+func _cancel_delete() -> void:
+	_pending_delete_profile_id = ""
+	_refresh_action_eligibility()
+	_focus_delete_button()
+
+
+func _on_delete_confirmation_visibility_changed() -> void:
+	if not _delete_confirmation().visible:
+		_refresh_action_eligibility()
 
 
 func _on_active_profile_changed(_profile: ProfileState) -> void:
@@ -215,7 +309,7 @@ func _configure_focus_order(has_profiles: bool) -> void:
 		order.append(_profile_list())
 	order.append_array([_profile_name(), _preferred_color(), _create_button()])
 	if has_profiles:
-		order.append(_activate_button())
+		order.append_array([_activate_button(), _delete_button()])
 	for index: int in range(order.size()):
 		var control := order[index]
 		var next := order[(index + 1) % order.size()]
@@ -225,6 +319,56 @@ func _configure_focus_order(has_profiles: bool) -> void:
 		control.focus_previous = control.get_path_to(previous)
 		control.focus_neighbor_bottom = control.get_path_to(next)
 		control.focus_neighbor_top = control.get_path_to(previous)
+
+
+func _selected_status() -> ProfileEntryStatus:
+	var selected := _profile_list().get_selected_items()
+	if selected.is_empty():
+		return null
+	return _status_by_id.get(String(_profile_list().get_item_metadata(selected[0]))) as ProfileEntryStatus
+
+
+func _selected_profile_id() -> String:
+	var selected := _profile_list().get_selected_items()
+	if selected.is_empty():
+		return ""
+	return String(_profile_list().get_item_metadata(selected[0]))
+
+
+func _refresh_action_eligibility() -> void:
+	var status := _selected_status()
+	_activate_button().disabled = status == null or not status.selectable()
+	_delete_button().disabled = status == null or _run_is_active()
+
+
+func _run_is_active() -> bool:
+	return _run_active_query.is_valid() and bool(_run_active_query.call())
+
+
+func _focus_after_committed_deletion(next_active_profile_id: String) -> void:
+	var list := _profile_list()
+	if list.item_count == 0:
+		if _profile_name().is_inside_tree() and _profile_name().is_visible_in_tree():
+			_profile_name().grab_focus()
+		return
+	var target_index := -1
+	for index: int in range(list.item_count):
+		if String(list.get_item_metadata(index)) == next_active_profile_id:
+			target_index = index
+			break
+	if target_index < 0:
+		var selected := list.get_selected_items()
+		target_index = selected[0] if not selected.is_empty() else 0
+	list.select(target_index)
+	_refresh_action_eligibility()
+	if list.is_inside_tree() and list.is_visible_in_tree():
+		list.grab_focus()
+
+
+func _focus_delete_button() -> void:
+	var delete := _delete_button()
+	if delete.is_inside_tree() and delete.is_visible_in_tree() and delete.focus_mode != Control.FOCUS_NONE:
+		delete.grab_focus()
 
 
 func _profile_list() -> ItemList:
@@ -263,6 +407,14 @@ func _create_button() -> Button:
 
 func _activate_button() -> Button:
 	return get_node("Layout/Activate") as Button
+
+
+func _delete_button() -> Button:
+	return get_node("Layout/DeleteProfile") as Button
+
+
+func _delete_confirmation() -> ConfirmationDialog:
+	return get_node("DeleteConfirmation") as ConfirmationDialog
 
 
 func _empty_state() -> Label:

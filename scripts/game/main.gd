@@ -56,6 +56,7 @@ var run_pause_menu: RunPauseMenu
 var leader: PartyActor
 var boss: Node3D
 var run_started := false
+var _profile_deletion_in_progress := false
 var initialized := false
 var catalog_valid := false
 var level_refresh_scheduled := false
@@ -108,7 +109,13 @@ func _ready() -> void:
 	if not profile_bootstrap_error.is_empty():
 		push_error(profile_bootstrap_error)
 	var settings_screen := get_node("SettingsScreen") as SettingsScreen
-	settings_screen.configure(settings_store, saved_settings, profile_manager, settings_path)
+	settings_screen.configure(
+		settings_store,
+		saved_settings,
+		profile_manager,
+		settings_path,
+		func() -> bool: return run_started,
+	)
 	_expose_profile_bootstrap_diagnostic()
 	catalog = GameCatalog.load_defaults()
 	catalog_valid = _validate_catalog(catalog)
@@ -913,6 +920,8 @@ func _wire_static_ui() -> void:
 		settings_screen.city_tree_requested.connect(_on_settings_city_tree_requested)
 	if not settings_screen.item_sandbox_requested.is_connected(_open_developer_item_sandbox):
 		settings_screen.item_sandbox_requested.connect(_open_developer_item_sandbox)
+	if not settings_screen.profile_deletion_state_changed.is_connected(_on_profile_deletion_state_changed):
+		settings_screen.profile_deletion_state_changed.connect(_on_profile_deletion_state_changed)
 	var item_sandbox := get_node("DeveloperItemSandbox") as DeveloperItemSandbox
 	if not item_sandbox.closed.is_connected(_on_developer_item_sandbox_closed):
 		item_sandbox.closed.connect(_on_developer_item_sandbox_closed)
@@ -1627,6 +1636,8 @@ func _on_active_profile_changed(_profile: ProfileState) -> void:
 		return
 	if run_started:
 		return
+	if _profile_deletion_in_progress:
+		return
 	var settings_screen := get_node("SettingsScreen") as SettingsScreen
 	if settings_screen.is_open():
 		settings_screen.close()
@@ -1634,6 +1645,10 @@ func _on_active_profile_changed(_profile: ProfileState) -> void:
 	selector.close()
 	var menu := get_node("MainMenuScreen") as MainMenuScreen
 	menu.open(menu.get_node("PrimaryAction") as Control)
+
+
+func _on_profile_deletion_state_changed(in_progress: bool) -> void:
+	_profile_deletion_in_progress = in_progress
 
 
 func _expose_profile_bootstrap_diagnostic() -> void:

@@ -60,6 +60,11 @@ layout_mode = 2
 focus_mode = 2
 text = "Activate Selected Profile"
 
+[node name="DeleteProfile" type="Button" parent="Layout"]
+layout_mode = 2
+focus_mode = 2
+text = "Delete Selected Profile"
+
 [node name="Status" type="Label" parent="Layout"]
 custom_minimum_size = Vector2(0, 36)
 layout_mode = 2
@@ -73,3 +78,7 @@ focus_mode = 2
 text = ""
 autowrap_mode = 2
 selectable = true
+
+[node name="DeleteConfirmation" type="ConfirmationDialog" parent="."]
+title = "Delete Profile"
+ok_button_text = "Delete Permanently"

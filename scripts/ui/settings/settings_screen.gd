@@ -4,6 +4,7 @@ extends CanvasLayer
 signal settings_applied(settings: PartyForgeSettings)
 signal city_tree_requested(developer_preview: bool)
 signal item_sandbox_requested
+signal profile_deletion_state_changed(in_progress: bool)
 
 var _store: PartyForgeSettingsStore
 var _current_settings: PartyForgeSettings = PartyForgeSettings.new()
@@ -24,6 +25,7 @@ func _ready() -> void:
 	visible = should_open
 	_notice().text = "Run-affecting changes apply when the next run starts."
 	_connect_additional_actions()
+	_connect_profile_actions()
 	if not _technical_toggle().pressed.is_connected(_toggle_technical_details):
 		_technical_toggle().pressed.connect(_toggle_technical_details)
 	_clear_save_error_disclosure()
@@ -35,13 +37,19 @@ func _ready() -> void:
 		call_deferred(&"_focus_active_page")
 
 
-func configure(store: PartyForgeSettingsStore, settings: PartyForgeSettings, profile_manager: ProfileManager = null, settings_path: String = PartyForgeSettingsStore.DEFAULT_PATH) -> void:
+func configure(
+	store: PartyForgeSettingsStore,
+	settings: PartyForgeSettings,
+	profile_manager: ProfileManager = null,
+	settings_path: String = PartyForgeSettingsStore.DEFAULT_PATH,
+	run_active_query: Callable = Callable(),
+) -> void:
 	_store = store
 	_current_settings = settings.copy() if settings != null else PartyForgeSettings.new()
 	_draft = _current_settings.copy()
 	_profile_manager = profile_manager
 	_settings_path = settings_path
-	_profiles_page().bind(_profile_manager)
+	_profiles_page().bind(_profile_manager, run_active_query)
 
 
 func open(return_focus: Control = null) -> void:
@@ -53,6 +61,7 @@ func open(return_focus: Control = null) -> void:
 	_status().text = ""
 	_status().tooltip_text = ""
 	_clear_save_error_disclosure()
+	_profiles_page().refresh()
 	visible = true
 	if not is_inside_tree():
 		_pending_open = true
@@ -256,6 +265,16 @@ func _connect_additional_actions() -> void:
 		cancel.pressed.connect(_cancel)
 	if not reset.pressed.is_connected(_reset_developer_options):
 		reset.pressed.connect(_reset_developer_options)
+
+
+func _connect_profile_actions() -> void:
+	var page := _profiles_page()
+	if not page.profile_deletion_state_changed.is_connected(_on_profile_deletion_state_changed):
+		page.profile_deletion_state_changed.connect(_on_profile_deletion_state_changed)
+
+
+func _on_profile_deletion_state_changed(in_progress: bool) -> void:
+	profile_deletion_state_changed.emit(in_progress)
 
 
 func _on_city_tree_requested(developer_preview: bool) -> void:
