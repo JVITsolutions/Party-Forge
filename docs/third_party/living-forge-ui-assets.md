@@ -22,13 +22,13 @@ Every SHA-256 below is calculated from the packaged local file.
 | Family | Original path in pinned source | Local path | SHA-256 |
 | --- | --- | --- | --- |
 | Cinzel 2.000 | `ofl/cinzel/Cinzel[wght].ttf` | `assets/ui/living_forge/fonts/cinzel-2.000/Cinzel[wght].ttf` | `f4d83d34d1f6c741193e4acf4b3dff9531e5a67b6aa65228d00a7db72a4e0f34` |
-| Cinzel 2.000 | `ofl/cinzel/OFL.txt` | `assets/ui/living_forge/fonts/cinzel-2.000/OFL.txt` | `f2b3029aba64c378bf0963b62945eee15e564fe4330b934c8f2eb058282b5e83` |
+| Cinzel 2.000 | `ofl/cinzel/OFL.txt` | `assets/ui/living_forge/fonts/cinzel-2.000/OFL.txt` | `f5a242cf68ad6ebd0603b3359a74c593ca080318a681035be5296ba2c6b04ae6` |
 | Source Sans 3 3.052R | `VF/SourceSans3VF-Upright.ttf` | `assets/ui/living_forge/fonts/source-sans-3.052/SourceSans3VF-Upright.ttf` | `1147db9a3f0edd4956068de77930148acce2742dd76d57f7239b2b1c687ac63f` |
-| Source Sans 3 3.052R | `LICENSE.md` | `assets/ui/living_forge/fonts/source-sans-3.052/LICENSE.md` | `db4728023c37bd1db542fd14ff9e4f3bcc23836b8374f6fe1f2351d38c2996d5` |
+| Source Sans 3 3.052R | `LICENSE.md` | `assets/ui/living_forge/fonts/source-sans-3.052/LICENSE.md` | `937d1985d2d6d003b6efdfa47e098b96c69d55395175f154d7f56410c942f978` |
 | Noto Sans v2.014 | `NotoSans-v2.014.zip!/NotoSans/googlefonts/variable-ttf/NotoSans[wdth,wght].ttf` | `assets/ui/living_forge/fonts/noto-sans-2.014/NotoSans[wdth,wght].ttf` | `90a2b3c1fc4895e0d5f4ada26aab1592c0c52f4255b874734a8ede8c30cbaa29` |
-| Noto Sans v2.014 | `NotoSans-v2.014.zip!/OFL.txt` | `assets/ui/living_forge/fonts/noto-sans-2.014/OFL.txt` | `cee9892f9f0cc8fe882c9e9537ee6a89621d86ee7ceaf70b02e2b2b1c25c061a` |
+| Noto Sans v2.014 | `NotoSans-v2.014.zip!/OFL.txt` | `assets/ui/living_forge/fonts/noto-sans-2.014/OFL.txt` | `e2e177a32561584d4fc13aaa3cd8e53758a12910f013fe9ca125419111722029` |
 | Noto Sans Symbols 2 v2.008 | `NotoSansSymbols2-v2.008.zip!/NotoSansSymbols2/googlefonts/ttf/NotoSansSymbols2-Regular.ttf` | `assets/ui/living_forge/fonts/noto-sans-symbols-2.008/NotoSansSymbols2-Regular.ttf` | `7d5fb73b7ca67a6798101741f5d280a3d016a56a197afcd4199dbb57b4b82a21` |
-| Noto Sans Symbols 2 v2.008 | `NotoSansSymbols2-v2.008.zip!/OFL.txt` | `assets/ui/living_forge/fonts/noto-sans-symbols-2.008/OFL.txt` | `b118dd41337806a5d4797052c77caf3bd096aed783e5eb21b4d11154351e1ac0` |
+| Noto Sans Symbols 2 v2.008 | `NotoSansSymbols2-v2.008.zip!/OFL.txt` | `assets/ui/living_forge/fonts/noto-sans-symbols-2.008/OFL.txt` | `e87c2ed7ff174c637d55fa381939ebb96f43f0415ad94605a37589228f4cbf4f` |
 | Tabler Icons v3.46.0 | `LICENSE` | `assets/ui/living_forge/icons/tabler-3.46.0/LICENSE` | `b740a1d46122672da62833e97f7e7c8a13fa85cbc7445b584b297cc00dde93db` |
 | Tabler Icons v3.46.0 | `icons/outline/alert-triangle.svg` | `assets/ui/living_forge/icons/tabler-3.46.0/alert-triangle.svg` | `fc82f02dc9702293cb8609a8aed3242c0fe5f5b3337d79d341aa9343b4526ad4` |
 | Tabler Icons v3.46.0 | `icons/outline/arrow-left.svg` | `assets/ui/living_forge/icons/tabler-3.46.0/arrow-left.svg` | `058fc4190c178ecce118b6294b74235d4f88c4dfbd17c6159d67210a03222bc0` |
@@ -42,7 +42,7 @@ Every SHA-256 below is calculated from the packaged local file.
 | Tabler Icons v3.46.0 | `icons/outline/shield.svg` | `assets/ui/living_forge/icons/tabler-3.46.0/shield.svg` | `98a7e284db5311c030b1dac736c9300e8c2799980ceb424806cc09894d373a0e` |
 | Tabler Icons v3.46.0 | `icons/outline/user.svg` | `assets/ui/living_forge/icons/tabler-3.46.0/user.svg` | `4aeefe49af9decdd7b348ada73d9ef410b39f3599a2f2d38abb9e9eb3967e272` |
 
-The official Source Sans `LICENSE.md` is CRLF-encoded upstream (SHA-256 `89ad2c4f66dd29127527493e729c31e731f111cf10faf5774c3db9275ed0c22c`). Repository text policy normalizes it to LF without changing the licence text; the packaged LF file hash is recorded in the inventory.
+The official Source Sans `LICENSE.md` is CRLF-encoded upstream (SHA-256 `89ad2c4f66dd29127527493e729c31e731f111cf10faf5774c3db9275ed0c22c`). Repository text policy normalizes licence copies to LF and removes trailing end-of-line whitespace where present, without changing licence wording. The packaged normalized file hashes are recorded in the inventory.
 
 ## Party Forge-owned assets
 
