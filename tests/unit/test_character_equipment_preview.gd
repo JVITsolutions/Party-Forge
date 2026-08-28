@@ -5,6 +5,7 @@ const LEADER_SCENE_PATH := "res://scenes/characters/leader.tscn"
 const FIXTURE_SCENE_PATH := "res://tests/fixtures/fake_character_model.tscn"
 const FIGHTER_DEFINITION := preload("res://data/classes/fighter.tres") as ClassDefinition
 const RANGER_DEFINITION := preload("res://data/classes/ranger.tres") as ClassDefinition
+const FORGE_HUMANOID_MODEL_SCRIPT := preload("res://scripts/presentation/forge_humanoid_model.gd")
 
 
 func run() -> Array[String]:
@@ -20,7 +21,8 @@ func run() -> Array[String]:
 	_test_preview_rotation_and_live_actor_isolation(failures)
 	_test_visual_resolution_keeps_disabled_items_and_falls_back_once(failures)
 	_test_class_preview_uses_production_profile_defaults(failures)
-	_test_class_and_member_modes_are_isolated(failures)
+	_test_class_and_member_mode_signatures_cannot_collide(failures)
+	_test_class_defaults_do_not_inherit_explicit_member_equipment(failures)
 	_test_class_fallback_is_neutral_and_safe(failures)
 	_test_class_preview_lifecycle_and_reduced_motion(failures)
 	return failures
@@ -28,7 +30,7 @@ func run() -> Array[String]:
 
 func _test_member_identity_and_reusable_host(failures: Array[String]) -> void:
 	var preview := (load(PREVIEW_SCENE_PATH) as PackedScene).instantiate() as Control
-	(Engine.get_main_loop() as SceneTree).root.add_child(preview)
+	_attach_preview(preview)
 	var first := _member(1, &"feminine", &"blue", Color("3588d4"))
 	var second := _member(2, &"masculine", &"gold", Color("d6a437"))
 	TestAssertions.truthy(bool(preview.call(&"show_member", first, [] as Array[Dictionary])), "first member creates a presentation-only preview", failures)
@@ -53,7 +55,7 @@ func _test_member_identity_and_reusable_host(failures: Array[String]) -> void:
 
 func _test_clear_suspends_rendering_and_show_reenables(failures: Array[String]) -> void:
 	var preview := (load(PREVIEW_SCENE_PATH) as PackedScene).instantiate() as Control
-	(Engine.get_main_loop() as SceneTree).root.add_child(preview)
+	_attach_preview(preview)
 	var subviewport := preview.get_node("SubViewport") as SubViewport
 	var member := _member(8, &"feminine", &"blue", Color("3588d4"))
 	TestAssertions.truthy(bool(preview.call(&"show_member", member, [] as Array[Dictionary])), "preview member renders before suspension", failures)
@@ -68,7 +70,7 @@ func _test_clear_suspends_rendering_and_show_reenables(failures: Array[String]) 
 
 func _test_exact_color_change_replaces_preview(failures: Array[String]) -> void:
 	var preview := (load(PREVIEW_SCENE_PATH) as PackedScene).instantiate() as Control
-	(Engine.get_main_loop() as SceneTree).root.add_child(preview)
+	_attach_preview(preview)
 	var first_color := Color(0.50001, 0.25, 0.75, 1.0)
 	var second_color := Color(0.50002, 0.25, 0.75, 1.0)
 	TestAssertions.equal(first_color.to_html(true), second_color.to_html(true), "exact-color fixture collides after HTML quantization", failures)
@@ -84,7 +86,7 @@ func _test_exact_color_change_replaces_preview(failures: Array[String]) -> void:
 
 func _test_same_id_profile_scene_change_replaces_preview(failures: Array[String]) -> void:
 	var preview := (load(PREVIEW_SCENE_PATH) as PackedScene).instantiate() as Control
-	(Engine.get_main_loop() as SceneTree).root.add_child(preview)
+	_attach_preview(preview)
 	var first := _member(6, &"masculine", &"red", Color("d94f4f"))
 	var second := _member(6, &"masculine", &"red", Color("d94f4f"))
 	second.class_definition.visual_profile.presentation_scene = _packed_fake_model(failures)
@@ -100,7 +102,7 @@ func _test_same_id_profile_scene_change_replaces_preview(failures: Array[String]
 
 func _test_same_id_visual_geometry_change_replaces_preview(failures: Array[String]) -> void:
 	var preview := (load(PREVIEW_SCENE_PATH) as PackedScene).instantiate() as Control
-	(Engine.get_main_loop() as SceneTree).root.add_child(preview)
+	_attach_preview(preview)
 	var member := _member(7, &"masculine", &"red", Color("d94f4f"))
 	var first_visual := _visual(&"same_visual", &"helmet")
 	var second_visual := _visual(&"same_visual", &"helmet")
@@ -140,7 +142,7 @@ func _test_preview_rotation_and_live_actor_isolation(failures: Array[String]) ->
 	var live_health := health.current_health
 	var live_presentation := leader.get_node("Presentation") as CharacterPresentation
 	var preview := (load(PREVIEW_SCENE_PATH) as PackedScene).instantiate() as Control
-	(Engine.get_main_loop() as SceneTree).root.add_child(preview)
+	_attach_preview(preview)
 	var subviewport := preview.get_node("SubViewport") as SubViewport
 	TestAssertions.truthy(subviewport.own_world_3d, "equipment preview owns an isolated World3D", failures)
 	TestAssertions.truthy(bool(preview.call(&"show_member", member, [] as Array[Dictionary])), "live member can be shown without using the actor node", failures)
@@ -169,7 +171,7 @@ func _test_preview_rotation_and_live_actor_isolation(failures: Array[String]) ->
 
 func _test_visual_resolution_keeps_disabled_items_and_falls_back_once(failures: Array[String]) -> void:
 	var preview := (load(PREVIEW_SCENE_PATH) as PackedScene).instantiate() as Control
-	(Engine.get_main_loop() as SceneTree).root.add_child(preview)
+	_attach_preview(preview)
 	var member := _member(4, &"masculine", &"red", Color("d94f4f"))
 	var helmet_visual := _visual(&"equipped_helmet", &"helmet")
 	var helmet_base := EquipmentBaseDefinition.new()
@@ -196,11 +198,9 @@ func _test_class_preview_uses_production_profile_defaults(failures: Array[String
 	TestAssertions.equal(subviewport.render_target_update_mode, SubViewport.UPDATE_DISABLED, "new preview suspends rendering until a valid presentation is requested", failures)
 	TestAssertions.truthy(_show_class(preview, FIGHTER_DEFINITION, failures), "real Fighter class builds a preview", failures)
 	var active := preview.get("active_preview") as CharacterPresentation
-	var model := active.active_model as ForgeHumanoidModel if active != null else null
 	TestAssertions.truthy(active != null and active.active_profile == FIGHTER_DEFINITION.visual_profile, "class preview applies the production Fighter visual profile", failures)
-	if model != null:
-		TestAssertions.equal(model.equipped_definitions.size(), FIGHTER_DEFINITION.visual_profile.default_equipment.size(), "class preview retains every production default equipment slot", failures)
-		TestAssertions.equal(model.get("_primary_color"), FIGHTER_DEFINITION.color, "class preview applies the exact class color", failures)
+	var model := _assert_exact_fighter_defaults(active, "class preview", failures)
+	TestAssertions.equal(model.get("_primary_color") if model != null else Color.TRANSPARENT, FIGHTER_DEFINITION.color, "class preview applies the exact class color", failures)
 	TestAssertions.equal(subviewport.render_target_update_mode, SubViewport.UPDATE_ALWAYS, "valid class preview enables rendering", failures)
 	var first_id := _active_preview_id(preview)
 	TestAssertions.truthy(_show_class(preview, FIGHTER_DEFINITION, failures), "unchanged class request remains valid", failures)
@@ -208,30 +208,32 @@ func _test_class_preview_uses_production_profile_defaults(failures: Array[String
 	preview.free()
 
 
-func _test_class_and_member_modes_are_isolated(failures: Array[String]) -> void:
+func _test_class_and_member_mode_signatures_cannot_collide(failures: Array[String]) -> void:
 	var preview := _new_preview()
 	TestAssertions.truthy(_show_class(preview, FIGHTER_DEFINITION, failures), "class mode renders before a member request", failures)
 	var class_id := _active_preview_id(preview)
-	var member_definition := ClassDefinition.new()
-	member_definition.id = &"class_mode_collision_fixture"
-	member_definition.color = FIGHTER_DEFINITION.color
-	member_definition.visual_profile = FIGHTER_DEFINITION.visual_profile
-	var member := PartyMemberState.new(0, member_definition, false, "Signature Fixture")
+	var class_active := preview.get("active_preview") as CharacterPresentation
+	var class_model_id := class_active.active_model.get_instance_id() if class_active != null and class_active.active_model != null else 0
+	TestAssertions.truthy(class_id != 0 and class_model_id != 0, "collision fixture has a class presentation and model before switching modes", failures)
+	var member := PartyMemberState.new(0, FIGHTER_DEFINITION, false, "Signature Fixture")
+	TestAssertions.truthy(bool(preview.call(&"show_member", member, [] as Array[Dictionary])), "member mode accepts the same Fighter definition with empty visuals", failures)
+	var member_id := _active_preview_id(preview)
+	TestAssertions.truthy(member_id != class_id, "mode prevents a same-Fighter member signature from reusing class presentation", failures)
+	TestAssertions.truthy(not is_instance_id_valid(class_id) and not is_instance_id_valid(class_model_id), "mode switch frees the previous class presentation and model", failures)
+	TestAssertions.truthy(_show_class(preview, FIGHTER_DEFINITION, failures), "class mode restores after member mode", failures)
+	TestAssertions.truthy(_active_preview_id(preview) != member_id, "switching back to class mode replaces the member presentation", failures)
+	preview.free()
+
+
+func _test_class_defaults_do_not_inherit_explicit_member_equipment(failures: Array[String]) -> void:
+	var preview := _new_preview()
+	var member := PartyMemberState.new(12, FIGHTER_DEFINITION, false, "Explicit Equipment Fixture")
 	var helmet := FIGHTER_DEFINITION.visual_profile.default_equipment[0].item as EquipmentBaseDefinition
 	var member_rows: Array[Dictionary] = [{"slot_id": &"helmet", "item_id": "explicit-helmet", "base_definition": helmet}]
-	TestAssertions.truthy(bool(preview.call(&"show_member", member, member_rows)), "member mode accepts an explicit equipment row", failures)
-	var member_id := _active_preview_id(preview)
-	TestAssertions.truthy(member_id != class_id, "member signature cannot collide with class signature", failures)
-	var member_active := preview.get("active_preview") as CharacterPresentation
-	var member_model := member_active.active_model as ForgeHumanoidModel if member_active != null else null
-	if member_model != null:
-		TestAssertions.equal(member_model.equipped_definitions.size(), 1, "member mode keeps only its explicit equipment rows", failures)
-	TestAssertions.truthy(_show_class(preview, FIGHTER_DEFINITION, failures), "class mode restores after member mode", failures)
-	var restored := preview.get("active_preview") as CharacterPresentation
-	var restored_model := restored.active_model as ForgeHumanoidModel if restored != null else null
-	TestAssertions.truthy(_active_preview_id(preview) != member_id, "switching back to class mode replaces the member presentation", failures)
-	if restored_model != null:
-		TestAssertions.equal(restored_model.equipped_definitions.size(), FIGHTER_DEFINITION.visual_profile.default_equipment.size(), "class defaults do not inherit explicit member equipment", failures)
+	TestAssertions.truthy(bool(preview.call(&"show_member", member, member_rows)), "member mode accepts explicit Fighter equipment", failures)
+	_assert_exact_fighter_member_equipment(preview.get("active_preview") as CharacterPresentation, helmet, failures)
+	TestAssertions.truthy(_show_class(preview, FIGHTER_DEFINITION, failures), "class mode restores after explicit member equipment", failures)
+	_assert_exact_fighter_defaults(preview.get("active_preview") as CharacterPresentation, "restored class preview", failures)
 	preview.free()
 
 
@@ -259,22 +261,34 @@ func _test_class_fallback_is_neutral_and_safe(failures: Array[String]) -> void:
 
 
 func _test_class_preview_lifecycle_and_reduced_motion(failures: Array[String]) -> void:
-	var preview := _new_preview()
+	var fixture := _new_preview_with_ancestor()
+	var preview := fixture.get(&"preview") as Control
+	var ancestor := fixture.get(&"ancestor") as Control
 	var subviewport := preview.get_node("SubViewport") as SubViewport
 	TestAssertions.truthy(_show_class(preview, FIGHTER_DEFINITION, failures), "first class preview is valid", failures)
 	var fighter_id := _active_preview_id(preview)
+	var fighter := preview.get("active_preview") as CharacterPresentation
+	var fighter_model_id := fighter.active_model.get_instance_id() if fighter != null and fighter.active_model != null else 0
+	TestAssertions.truthy(fighter_id != 0 and fighter_model_id != 0, "class lifecycle fixture has a presentation and model before class replacement", failures)
 	TestAssertions.truthy(_show_class(preview, RANGER_DEFINITION, failures), "second production class preview is valid", failures)
 	TestAssertions.truthy(_active_preview_id(preview) != fighter_id, "changing class replaces the active presentation", failures)
-	preview.visible = false
-	TestAssertions.equal(subviewport.render_target_update_mode, SubViewport.UPDATE_DISABLED, "hidden class preview suspends SubViewport rendering", failures)
-	preview.visible = true
-	TestAssertions.truthy(_show_class(preview, RANGER_DEFINITION, failures), "visible class preview can be presented again after suspension", failures)
-	TestAssertions.equal(subviewport.render_target_update_mode, SubViewport.UPDATE_ALWAYS, "re-presented visible class preview resumes SubViewport rendering", failures)
+	TestAssertions.truthy(not is_instance_id_valid(fighter_id) and not is_instance_id_valid(fighter_model_id), "class replacement frees the prior presentation and model", failures)
+	ancestor.visible = false
+	preview.call(&"_sync_rendering")
+	TestAssertions.equal(subviewport.render_target_update_mode, SubViewport.UPDATE_DISABLED, "hidden ancestor suspends an otherwise valid class preview", failures)
+	ancestor.visible = true
+	preview.call(&"_sync_rendering")
+	TestAssertions.equal(subviewport.render_target_update_mode, SubViewport.UPDATE_ALWAYS, "shown ancestor re-enables an otherwise valid class preview", failures)
 	TestAssertions.truthy(_set_reduced_motion(preview, true, failures), "reduced-motion interface is available", failures)
 	TestAssertions.truthy(preview.get("_reduced_motion") == true, "reduced-motion state is retained", failures)
 	TestAssertions.truthy(preview.get_node_or_null("PreviewTransition") == null, "reduced motion avoids ornamental preview transitions", failures)
+	var active_before_clear := preview.get("active_preview") as CharacterPresentation
+	var active_before_clear_id := active_before_clear.get_instance_id() if active_before_clear != null else 0
+	var model_before_clear_id := active_before_clear.active_model.get_instance_id() if active_before_clear != null and active_before_clear.active_model != null else 0
+	TestAssertions.truthy(active_before_clear_id != 0 and model_before_clear_id != 0, "clear lifecycle fixture has a presentation and model before clearing", failures)
 	preview.call(&"clear")
 	TestAssertions.truthy(preview.get("active_preview") == null, "clear removes a class presentation", failures)
+	TestAssertions.truthy(not is_instance_id_valid(active_before_clear_id) and not is_instance_id_valid(model_before_clear_id), "clear frees the active class presentation and model", failures)
 	TestAssertions.equal(subviewport.render_target_update_mode, SubViewport.UPDATE_DISABLED, "clear disables class preview rendering", failures)
 	preview.free()
 
@@ -319,8 +333,51 @@ func _active_preview_id(preview: Control) -> int:
 
 func _new_preview() -> Control:
 	var preview := (load(PREVIEW_SCENE_PATH) as PackedScene).instantiate() as Control
-	(Engine.get_main_loop() as SceneTree).root.add_child(preview)
+	_attach_preview(preview)
 	return preview
+
+
+func _new_preview_with_ancestor() -> Dictionary:
+	var ancestor := Control.new()
+	ancestor.name = "PreviewVisibilityAncestor"
+	var preview := (load(PREVIEW_SCENE_PATH) as PackedScene).instantiate() as Control
+	_attach_preview(preview, ancestor)
+	return {&"preview": preview, &"ancestor": ancestor}
+
+
+func _attach_preview(preview: Control, ancestor: Control = null) -> void:
+	var root_window := (Engine.get_main_loop() as SceneTree).root
+	root_window.visible = true
+	var layer := CanvasLayer.new()
+	layer.visible = true
+	root_window.add_child(layer)
+	var host := ancestor if ancestor != null else Control.new()
+	layer.add_child(host)
+	host.add_child(preview)
+	preview.tree_exited.connect(layer.queue_free)
+
+
+func _assert_exact_fighter_defaults(active: CharacterPresentation, label: String, failures: Array[String]) -> ForgeHumanoidModel:
+	var model := _assert_production_fighter_model(active, label, failures)
+	TestAssertions.equal(model.equipped_definitions.size() if model != null else -1, FIGHTER_DEFINITION.visual_profile.default_equipment.size(), "%s has every Fighter default equipment definition" % label, failures)
+	for entry: EquipmentLoadoutEntry in FIGHTER_DEFINITION.visual_profile.default_equipment:
+		var actual: EquipmentVisualDefinition = model.equipped_definitions.get(entry.slot_id) as EquipmentVisualDefinition if model != null else null
+		TestAssertions.equal(actual, entry.item.presentation, "%s retains exact Fighter default %s" % [label, entry.slot_id], failures)
+	return model
+
+
+func _assert_exact_fighter_member_equipment(active: CharacterPresentation, helmet: EquipmentBaseDefinition, failures: Array[String]) -> ForgeHumanoidModel:
+	var model := _assert_production_fighter_model(active, "explicit member preview", failures)
+	TestAssertions.equal(model.equipped_definitions.size() if model != null else -1, 1, "explicit member preview has exactly one equipment definition", failures)
+	TestAssertions.equal(model.equipped_definitions.get(&"helmet") if model != null else null, helmet.presentation, "explicit member preview retains the exact requested helmet definition", failures)
+	return model
+
+
+func _assert_production_fighter_model(active: CharacterPresentation, label: String, failures: Array[String]) -> ForgeHumanoidModel:
+	var active_model := active.active_model if active != null else null
+	TestAssertions.truthy(active != null and active_model != null, "%s creates an active production model", failures)
+	TestAssertions.equal(active_model.get_script() if active_model != null else null, FORGE_HUMANOID_MODEL_SCRIPT, "%s uses the exact ForgeHumanoidModel script", failures)
+	return active_model as ForgeHumanoidModel
 
 
 func _show_class(preview: Control, definition: ClassDefinition, failures: Array[String]) -> bool:
