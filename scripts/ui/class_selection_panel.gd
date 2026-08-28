@@ -94,6 +94,8 @@ func close() -> void:
 	_pending_initial_focus = null
 	_pending_origin = null
 	_focus_context = null
+	_apply_action_matrix()
+	_rebuild_focus_graph()
 	_compatibility_gate_active = false
 	_compatibility_class_id = &""
 	if _preview() != null:

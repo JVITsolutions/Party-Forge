@@ -82,6 +82,7 @@ func _test_pending_and_error_focus(viewport: Window, panel: ClassSelectionPanel)
 	panel.present(_projection(RunSetupLobbyProjection.State.ERROR, &"fighter", &"fighter", RunSetupClassProjection.Compatibility.UNKNOWN))
 	await _expect_focus(viewport, start, "close lifecycle fixture restores ERROR Start")
 	panel.close()
+	_assert(start.disabled and start.focus_mode == Control.FOCUS_NONE, "close immediately expires recovered disabled Start")
 	await process_frame
 	panel.open()
 	await _expect_focus(viewport, panel.selection_focus(&"fighter"), "reopened ERROR lobby selects a stable actionable focus")
