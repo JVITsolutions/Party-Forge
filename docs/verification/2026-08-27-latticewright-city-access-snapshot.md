@@ -184,6 +184,58 @@ Access project. The generated writer owns recovery before every CLI source
 preflight, and unresolved recovery reports `INDETERMINATE` without source or
 write work.
 
+## Final recovery-contract correction refresh
+
+The complete-branch audit then identified that recovery preflight overloaded
+the final `unchanged` write state for both no pending transaction and verified
+rollback. The user approved a bounded correction: recovery now has a distinct
+`none`/`rolled_back`/`candidate_verified`/`indeterminate` resolution contract.
+The three safe resolutions continue into ordinary source processing and the
+fixed writer, so final `UNCHANGED`, `REJECTED`, or `COMMITTED` status is emitted
+only after actual candidate comparison or promotion. Only an unprovable
+recovery aborts before source work as `INDETERMINATE`.
+
+Implementation revisions qualified here:
+
+| Worktree | Branch | Implementation HEAD |
+| --- | --- | --- |
+| Party Forge | `feature/latticewright-v3-portfolio` | `96c61233f10a215afb58f685e1f5fa19f89301c4` |
+| Latticewright | `feature/v3-graph-portals-party-forge` | `26098c0da6fa5c60597fc414cd2b4db79d0b1114` |
+
+The same correction also declared the City Access builder in the producer's
+TypeScript module surface, clarified the generated README as a retained
+16-project portfolio plus separate City Access pair, removed the test-only
+provider-state inspection API, and moved recovery tests to isolated temporary
+target and staging roots. A fresh independent correction review reported no
+Critical, Important, or Minor findings.
+
+Root reran these gates on 2026-08-28:
+
+| Gate | Result |
+| --- | --- |
+| Latticewright producer tests | exit `0`, 6/6 pass, `0.381s` wall time |
+| Latticewright relevant tests | exit `0`, 3 files / 20 tests pass, `2.501s` wall time |
+| Latticewright typecheck | exit `0`, `7.943s` wall time |
+| Latticewright lint | exit `0`, `6.119s` wall time |
+| Party Forge exact 12-suite batch | exit `0`, `18.590s`, `TEST_SUMMARY: PASS (0 failures)` |
+| Party Forge integration runner | exit `0`, `1.390s`, `CITY_ACCESS_SNAPSHOT_ACCEPTANCE_OK locations=7 profiles=7 rollback=legacy` |
+| Explicit importer replay | exit `0`, `0.585s`, `UNCHANGED` at `stage=compare` |
+| Complete Party Forge suite | exit `0`, `241.850s`, exactly one `TEST_SUMMARY: PASS (227 suites)` |
+
+The complete-suite marker audit contained zero `TEST_SUMMARY: FAIL`,
+`TEST_FAILURE`, `SCRIPT ERROR`, `Parse Error`, `Failed to load script`, and `No
+loader found` markers. The 98 `ERROR:` and 11 `WARNING:` lines were expected
+negative-path diagnostics and are not invariant counts.
+
+After every RED and GREEN recovery run, the fixed staging tree had zero files
+and the protected artifacts retained their exact identity:
+
+| Artifact | Bytes | SHA-256 |
+| --- | ---: | --- |
+| `design/progression/latticewright/party-forge-city-access.pstree` | 11,055 | `49e990eb09720a5cbd590f3bcdc8d732b3b578aa8a61c77a11d7ed118409f10a` |
+| `design/progression/latticewright/party-forge-city-access.pstree.json` | 9,972 | `bb3abd94d6b86716d3c39840deef460e20596abb858ba6abd4535067d664ff78` |
+| `data/world/access/party-forge-city-access.snapshot.json` | 2,539 | `ca046f55eaaf28ff050c6d7ab240232d5663820d88c1551160a7a2c4476b6a55` |
+
 ## Boundary and audit statement
 
 The candidate stays default-off and Developer Mode-only. No City scene, navigation route, profile schema, `ProfileCodec`, passive allocation behavior, Player Mode activation, or current format-1 City runtime was changed. The format-1 City source is both present and loader-qualified. No merge, push, `main` change, remote/default activation, player-build wiring, or release occurred. This is ready for user review only; merge or activation still requires separate approval.
