@@ -23,6 +23,7 @@ func _run() -> void:
 	root.add_child(viewport)
 	var main := (load("res://scenes/game/main.tscn") as PackedScene).instantiate() as PartyForgeMain
 	main.profile_root = _profile_root
+	main.settings_path = _profile_root.path_join("party_forge_settings.cfg")
 	viewport.add_child(main)
 	await _frames(3)
 
@@ -70,9 +71,9 @@ func _run() -> void:
 	_assert(manager.active_profile().tree_visibility_progress == before_visibility, "production open performs no visibility mutation")
 
 	var additional := settings.get_node("Overlay/Frame/Layout/Tabs/Additional Settings") as AdditionalSettingsPage
-	var mode := additional.get_node("Layout/Mode") as OptionButton
-	var capacity := additional.get_node("Layout/PartyCapacity/Value") as HSlider
-	var open_tree := additional.get_node("Layout/OpenCityPassiveTree") as Button
+	var mode := additional.get_node("Layout/Scroll/Fields/Mode") as OptionButton
+	var capacity := additional.get_node("Layout/Scroll/Fields/PartyCapacity/Value") as HSlider
+	var open_tree := additional.get_node("Layout/Scroll/Fields/OpenCityPassiveTree") as Button
 
 	var canvas := screen.get_node("Overlay/Frame/Layout/Body/Canvas") as PassiveTreeCanvas
 	_assert(canvas.selected_node_id() == &"city-heart", "tree opens on the allocated City root")
@@ -168,7 +169,7 @@ func _run() -> void:
 
 	var developer_settings := PartyForgeSettings.new()
 	developer_settings.mode = PartyForgeSettings.Mode.DEVELOPER_MODE
-	main.call("_on_settings_applied", developer_settings)
+	_apply_authoritative_settings(main, developer_settings)
 	settings.configure(main.settings_store, developer_settings, manager)
 	settings_button.pressed.emit()
 	await _frames(2)
@@ -212,7 +213,7 @@ func _run() -> void:
 	var player_unlock_all := PartyForgeSettings.new()
 	player_unlock_all.mode = PartyForgeSettings.Mode.PLAYER_SIMULATION
 	player_unlock_all.unlock_all_implemented_content = true
-	main.call("_on_settings_applied", player_unlock_all)
+	_apply_authoritative_settings(main, player_unlock_all)
 	settings.configure(main.settings_store, player_unlock_all, manager)
 	settings.open_additional(settings_button)
 	await _frames(2)
@@ -230,7 +231,7 @@ func _run() -> void:
 	var invalid := PassiveTreeCatalog.load_path(_invalid_path)
 	_assert(not invalid.ok() and invalid.tree == null, "disposable malformed tree fails closed")
 	main.passive_tree_definition = invalid.tree
-	main.call("_on_settings_applied", developer_settings)
+	_apply_authoritative_settings(main, developer_settings)
 	settings.configure(main.settings_store, developer_settings, manager)
 	settings.open_additional(settings_button)
 	await _frames(2)
@@ -245,6 +246,11 @@ func _run() -> void:
 	settings.close()
 
 	await _finish(viewport)
+
+
+func _apply_authoritative_settings(main: PartyForgeMain, settings: PartyForgeSettings) -> void:
+	_assert(PartyForgeSettingsStore.new().save_settings(settings, main.settings_path).is_empty(), "isolated Settings fixture persists through the authoritative path")
+	main.call("_on_settings_applied", settings)
 
 
 func _frames(count: int) -> void:

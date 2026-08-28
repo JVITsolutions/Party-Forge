@@ -17,36 +17,50 @@ layout_mode = 2
 theme_override_font_sizes/font_size = 24
 text = "Additional Settings"
 
-[node name="ModeLabel" type="Label" parent="Layout"]
+[node name="Scroll" type="ScrollContainer" parent="Layout"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+vertical_scroll_mode = 1
+follow_focus = true
+clip_contents = true
+
+[node name="Fields" type="VBoxContainer" parent="Layout/Scroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 8
+
+[node name="ModeLabel" type="Label" parent="Layout/Scroll/Fields"]
 layout_mode = 2
 text = "Mode"
 
-[node name="Mode" type="OptionButton" parent="Layout"]
+[node name="Mode" type="OptionButton" parent="Layout/Scroll/Fields"]
 layout_mode = 2
 
-[node name="InactiveStatus" type="Label" parent="Layout"]
+[node name="InactiveStatus" type="Label" parent="Layout/Scroll/Fields"]
 layout_mode = 2
 focus_mode = 2
 text = "Developer options are retained but inactive in Player Simulation. Select Developer Mode to use them in the next run."
 autowrap_mode = 2
 
-[node name="UnlockAll" type="CheckButton" parent="Layout"]
+[node name="UnlockAll" type="CheckButton" parent="Layout/Scroll/Fields"]
 layout_mode = 2
 text = "Unlock all implemented content"
 
-[node name="GodMode" type="CheckButton" parent="Layout"]
+[node name="GodMode" type="CheckButton" parent="Layout/Scroll/Fields"]
 layout_mode = 2
 text = "God Mode"
 
-[node name="PartyCapacity" type="HBoxContainer" parent="Layout"]
+[node name="PartyCapacity" type="HBoxContainer" parent="Layout/Scroll/Fields"]
 layout_mode = 2
 
-[node name="Title" type="Label" parent="Layout/PartyCapacity"]
+[node name="Title" type="Label" parent="Layout/Scroll/Fields/PartyCapacity"]
 custom_minimum_size = Vector2(180, 0)
 layout_mode = 2
 text = "Party capacity"
 
-[node name="Value" type="HSlider" parent="Layout/PartyCapacity"]
+[node name="Value" type="HSlider" parent="Layout/Scroll/Fields/PartyCapacity"]
 layout_mode = 2
 size_flags_horizontal = 3
 min_value = 1.0
@@ -54,42 +68,42 @@ max_value = 24.0
 step = 1.0
 value = 4.0
 
-[node name="Label" type="Label" parent="Layout/PartyCapacity"]
+[node name="Label" type="Label" parent="Layout/Scroll/Fields/PartyCapacity"]
 custom_minimum_size = Vector2(48, 0)
 layout_mode = 2
 text = "4"
 horizontal_alignment = 2
 
-[node name="EnemyDensity" type="HBoxContainer" parent="Layout"]
+[node name="EnemyDensity" type="HBoxContainer" parent="Layout/Scroll/Fields"]
 layout_mode = 2
 
-[node name="Title" type="Label" parent="Layout/EnemyDensity"]
+[node name="Title" type="Label" parent="Layout/Scroll/Fields/EnemyDensity"]
 custom_minimum_size = Vector2(180, 0)
 layout_mode = 2
 text = "Enemy density"
 
-[node name="Value" type="HSlider" parent="Layout/EnemyDensity"]
+[node name="Value" type="HSlider" parent="Layout/Scroll/Fields/EnemyDensity"]
 layout_mode = 2
 size_flags_horizontal = 3
 max_value = 1000.0
 step = 10.0
 value = 100.0
 
-[node name="Label" type="Label" parent="Layout/EnemyDensity"]
+[node name="Label" type="Label" parent="Layout/Scroll/Fields/EnemyDensity"]
 custom_minimum_size = Vector2(64, 0)
 layout_mode = 2
 text = "100%"
 horizontal_alignment = 2
 
-[node name="ExperienceMultiplier" type="HBoxContainer" parent="Layout"]
+[node name="ExperienceMultiplier" type="HBoxContainer" parent="Layout/Scroll/Fields"]
 layout_mode = 2
 
-[node name="Title" type="Label" parent="Layout/ExperienceMultiplier"]
+[node name="Title" type="Label" parent="Layout/Scroll/Fields/ExperienceMultiplier"]
 custom_minimum_size = Vector2(180, 0)
 layout_mode = 2
 text = "Experience multiplier"
 
-[node name="Value" type="HSlider" parent="Layout/ExperienceMultiplier"]
+[node name="Value" type="HSlider" parent="Layout/Scroll/Fields/ExperienceMultiplier"]
 layout_mode = 2
 size_flags_horizontal = 3
 min_value = 100.0
@@ -97,21 +111,21 @@ max_value = 1000.0
 step = 10.0
 value = 100.0
 
-[node name="Label" type="Label" parent="Layout/ExperienceMultiplier"]
+[node name="Label" type="Label" parent="Layout/Scroll/Fields/ExperienceMultiplier"]
 custom_minimum_size = Vector2(64, 0)
 layout_mode = 2
 text = "100%"
 horizontal_alignment = 2
 
-[node name="LevelUpCardCount" type="HBoxContainer" parent="Layout"]
+[node name="LevelUpCardCount" type="HBoxContainer" parent="Layout/Scroll/Fields"]
 layout_mode = 2
 
-[node name="Title" type="Label" parent="Layout/LevelUpCardCount"]
+[node name="Title" type="Label" parent="Layout/Scroll/Fields/LevelUpCardCount"]
 custom_minimum_size = Vector2(180, 0)
 layout_mode = 2
 text = "Level-up cards"
 
-[node name="Value" type="HSlider" parent="Layout/LevelUpCardCount"]
+[node name="Value" type="HSlider" parent="Layout/Scroll/Fields/LevelUpCardCount"]
 layout_mode = 2
 size_flags_horizontal = 3
 min_value = 1.0
@@ -119,85 +133,96 @@ max_value = 8.0
 step = 1.0
 value = 5.0
 
-[node name="Label" type="Label" parent="Layout/LevelUpCardCount"]
+[node name="Label" type="Label" parent="Layout/Scroll/Fields/LevelUpCardCount"]
 custom_minimum_size = Vector2(48, 0)
 layout_mode = 2
 text = "5"
 horizontal_alignment = 2
 
-[node name="PersonalDropMultiplier" type="HBoxContainer" parent="Layout"]
+[node name="PersonalDropMultiplier" type="HBoxContainer" parent="Layout/Scroll/Fields"]
 layout_mode = 2
 
-[node name="Title" type="Label" parent="Layout/PersonalDropMultiplier"]
+[node name="Title" type="Label" parent="Layout/Scroll/Fields/PersonalDropMultiplier"]
 custom_minimum_size = Vector2(180, 0)
 layout_mode = 2
 text = "Personal drop multiplier"
 
-[node name="Value" type="HSlider" parent="Layout/PersonalDropMultiplier"]
+[node name="Value" type="HSlider" parent="Layout/Scroll/Fields/PersonalDropMultiplier"]
 layout_mode = 2
 size_flags_horizontal = 3
 max_value = 10000.0
 step = 1.0
 value = 100.0
 
-[node name="Label" type="Label" parent="Layout/PersonalDropMultiplier"]
+[node name="Label" type="Label" parent="Layout/Scroll/Fields/PersonalDropMultiplier"]
 custom_minimum_size = Vector2(72, 0)
 layout_mode = 2
 text = "100%"
 horizontal_alignment = 2
 
-[node name="ForcePersonalDrops" type="CheckButton" parent="Layout"]
+[node name="ForcePersonalDrops" type="CheckButton" parent="Layout/Scroll/Fields"]
 layout_mode = 2
 text = "Force successful personal drops"
 
-[node name="PersonalDropSourceCategory" type="OptionButton" parent="Layout"]
+[node name="PersonalDropSourceCategory" type="OptionButton" parent="Layout/Scroll/Fields"]
 layout_mode = 2
 tooltip_text = "Automatic uses the defeated enemy's authored source category."
 
-[node name="PersonalDropItemLevel" type="HBoxContainer" parent="Layout"]
+[node name="PersonalDropItemLevel" type="HBoxContainer" parent="Layout/Scroll/Fields"]
 layout_mode = 2
 
-[node name="Title" type="Label" parent="Layout/PersonalDropItemLevel"]
+[node name="Title" type="Label" parent="Layout/Scroll/Fields/PersonalDropItemLevel"]
 custom_minimum_size = Vector2(180, 0)
 layout_mode = 2
 text = "Personal drop item level"
 
-[node name="Value" type="HSlider" parent="Layout/PersonalDropItemLevel"]
+[node name="Value" type="HSlider" parent="Layout/Scroll/Fields/PersonalDropItemLevel"]
 layout_mode = 2
 size_flags_horizontal = 3
 max_value = 1000.0
 step = 1.0
 
-[node name="Label" type="Label" parent="Layout/PersonalDropItemLevel"]
+[node name="Label" type="Label" parent="Layout/Scroll/Fields/PersonalDropItemLevel"]
 custom_minimum_size = Vector2(72, 0)
 layout_mode = 2
 text = "Automatic"
 horizontal_alignment = 2
 
-[node name="ShowGroundChestDiagnostics" type="CheckButton" parent="Layout"]
+[node name="ShowGroundChestDiagnostics" type="CheckButton" parent="Layout/Scroll/Fields"]
 layout_mode = 2
 text = "Show ground-chest diagnostics"
 
-[node name="UseCityAccessSnapshot" type="CheckButton" parent="Layout"]
+[node name="UseCityAccessSnapshot" type="CheckButton" parent="Layout/Scroll/Fields"]
 layout_mode = 2
 text = "Use candidate City access snapshot"
 
-[node name="OpenCityPassiveTree" type="Button" parent="Layout"]
+[node name="OpenCityPassiveTree" type="Button" parent="Layout/Scroll/Fields"]
 layout_mode = 2
 text = "Open City Passive Tree"
 
-[node name="OpenDeveloperItemSandbox" type="Button" parent="Layout"]
+[node name="OpenDeveloperItemSandbox" type="Button" parent="Layout/Scroll/Fields"]
 layout_mode = 2
 text = "Open Developer Item Sandbox"
 
-[node name="ResetDeveloperOptions" type="Button" parent="Layout"]
+[node name="Actions" type="HBoxContainer" parent="Layout"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="ResetDeveloperOptions" type="Button" parent="Layout/Actions"]
+custom_minimum_size = Vector2(0, 48)
 layout_mode = 2
 text = "Reset Developer Options"
 
-[node name="ApplyAndReturn" type="Button" parent="Layout"]
+[node name="Spacer" type="Control" parent="Layout/Actions"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="ApplyAndReturn" type="Button" parent="Layout/Actions"]
+custom_minimum_size = Vector2(0, 48)
 layout_mode = 2
 text = "Apply and Return"
 
-[node name="Cancel" type="Button" parent="Layout"]
+[node name="Cancel" type="Button" parent="Layout/Actions"]
+custom_minimum_size = Vector2(0, 48)
 layout_mode = 2
 text = "Cancel"

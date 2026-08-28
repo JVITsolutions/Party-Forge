@@ -391,7 +391,7 @@ func _test_main_route_and_profile_isolation(failures: Array[String]) -> void:
 	TestAssertions.truthy(created.ok(), "profile-isolation fixture creates an active profile", failures)
 	var settings: Variant = main.get_node("SettingsScreen")
 	var additional: Variant = settings.get_node("Overlay/Frame/Layout/Tabs/Additional Settings")
-	var launch := additional.get_node("Layout/OpenDeveloperItemSandbox") as Button
+	var launch := additional.get_node("Layout/Scroll/Fields/OpenDeveloperItemSandbox") as Button
 	var forged_cached := PartyForgeSettings.new()
 	forged_cached.mode = PartyForgeSettings.Mode.DEVELOPER_MODE
 	forged_cached.unlock_all_implemented_content = true

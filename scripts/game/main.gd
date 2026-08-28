@@ -1242,6 +1242,9 @@ func _present_lobby(status_copy: String = "", starting: bool = false) -> void:
 	if presentation_profile != null:
 		presentation_profile.prologue_state = ProfileState.PrologueState.COMPLETED
 	var projection := RunSetupLobbyViewModel.build(presentation_profile, catalog, _selected_lobby_class_id, _previewed_lobby_class_id, _lobby_compatibility, status_copy, starting)
+	if not status_copy.strip_edges().is_empty() and not starting:
+		projection.state = RunSetupLobbyProjection.State.ERROR
+		projection.status_copy = status_copy.strip_edges()
 	projection.set_meta(&"armoury_available", profile != null and _storage_route_allowed(MainMenuViewModel.ROUTE_ARMOURY, profile))
 	projection.set_meta(&"safe_cancellation_available", true)
 	if saved_settings != null:
@@ -1278,6 +1281,8 @@ func _on_lobby_start_requested(class_id: StringName) -> void:
 	_lobby_return_focus = _run_setup_lobby().action_focus(&"start")
 	_present_lobby("", true)
 	if not _select_leader_class(class_id, LoadoutOrigin.RUN_SETUP) and _pending_loadout_projection == null and not run_started:
+		if not _run_setup_lobby().is_open():
+			return
 		var profile := profile_manager.active_profile() if profile_manager != null else null
 		_lobby_compatibility = _project_loadout_compatibility(profile, class_id) if profile != null else null
 		_present_lobby("Unable to start run.")
@@ -1296,7 +1301,6 @@ func _on_lobby_armoury_requested(class_id: StringName) -> void:
 		return
 	_lobby_return_context = LobbyReturnContext.RUN_SETUP
 	_lobby_return_focus = _run_setup_lobby().action_focus(&"armoury")
-	_storage_return_focus = _lobby_return_focus
 	_shared_storage_projection = projection
 	_run_setup_lobby().close()
 	var armoury := get_node("ArmouryScreen") as ArmouryScreen
@@ -1344,7 +1348,6 @@ func _on_loadout_go_to_armoury() -> void:
 	_lobby_return_context = LobbyReturnContext.DEVELOPER_QUICK_START if origin_mode == LoadoutOrigin.DEVELOPER_QUICK_START else LobbyReturnContext.LOADOUT_WARNING
 	_lobby_return_focus = origin
 	_shared_storage_projection = projection
-	_storage_return_focus = origin
 	(get_node("MainMenuScreen") as MainMenuScreen).close()
 	var armoury := get_node("ArmouryScreen") as ArmouryScreen
 	armoury.open(projection, origin, _developer_mode_enabled())
@@ -1589,7 +1592,6 @@ func _open_storage_route(route_id: StringName) -> void:
 		if origin == null: origin = menu.get_node("Armoury") as Control
 		_lobby_return_context = LobbyReturnContext.MAIN_MENU
 		_lobby_return_focus = origin
-		_storage_return_focus = origin
 		menu.close()
 		(get_node("ArmouryScreen") as ArmouryScreen).open(projection, origin, _developer_mode_enabled())
 	else:
@@ -1610,28 +1612,32 @@ func _storage_route_allowed(route_id: StringName, profile: ProfileState) -> bool
 func _on_armoury_closed() -> void:
 	var screen := get_node("ArmouryScreen") as ArmouryScreen
 	screen.close()
-	if _lobby_return_context in [LobbyReturnContext.RUN_SETUP, LobbyReturnContext.LOADOUT_WARNING, LobbyReturnContext.DEVELOPER_QUICK_START]:
-		var origin := _lobby_return_focus
-		var return_context := _lobby_return_context
-		_storage_return_focus = null
-		_shared_storage_projection = null
-		var selector := _run_setup_lobby()
-		if return_context == LobbyReturnContext.DEVELOPER_QUICK_START:
-			selector.close()
-			var menu := get_node("MainMenuScreen") as MainMenuScreen
-			menu.open(origin)
-			_focus_control_if_available(origin)
-		else:
-			_present_lobby()
-			selector.open(origin if return_context == LobbyReturnContext.RUN_SETUP else selector.selection_focus(_selected_lobby_class_id))
-			var class_focus := selector.selection_focus(_selected_lobby_class_id)
-			_focus_control_if_available(origin if return_context == LobbyReturnContext.RUN_SETUP else class_focus)
-		return
-	var menu := get_node("MainMenuScreen") as MainMenuScreen
-	menu.open(_storage_return_focus if _storage_return_focus != null else menu.get_node("Armoury") as Control)
-	_storage_return_focus = null
+	var origin := _lobby_return_focus
+	var return_context := _lobby_return_context
 	_lobby_return_context = LobbyReturnContext.MAIN_MENU
 	_lobby_return_focus = null
+	_shared_storage_projection = null
+	var selector := _run_setup_lobby()
+	var menu := get_node("MainMenuScreen") as MainMenuScreen
+	match return_context:
+		LobbyReturnContext.RUN_SETUP:
+			_present_lobby()
+			selector.open(origin)
+			_focus_control_if_available(origin)
+		LobbyReturnContext.LOADOUT_WARNING:
+			_present_lobby()
+			var class_focus := selector.selection_focus(_selected_lobby_class_id)
+			selector.open(class_focus)
+			_focus_control_if_available(class_focus)
+		LobbyReturnContext.DEVELOPER_QUICK_START:
+			selector.close()
+			menu.open(origin)
+			_focus_control_if_available(origin)
+		_:
+			selector.close()
+			var menu_focus := origin if origin != null else menu.get_node("Armoury") as Control
+			menu.open(menu_focus)
+			_focus_control_if_available(menu_focus)
 
 
 func _on_warehouse_closed() -> void:
@@ -1794,14 +1800,14 @@ func _load_passive_tree_runtime() -> void:
 
 
 func _on_settings_city_tree_requested(developer_preview: bool) -> void:
-	var button := get_node("SettingsScreen/Overlay/Frame/Layout/Tabs/Additional Settings/Layout/OpenCityPassiveTree") as Control
+	var button := get_node("SettingsScreen/Overlay/Frame/Layout/Tabs/Additional Settings/Layout/Scroll/Fields/OpenCityPassiveTree") as Control
 	_open_city_passive_tree(developer_preview, CITY_ORIGIN_ADDITIONAL_SETTINGS, button)
 
 
 func _open_developer_item_sandbox() -> bool:
 	var modal := get_node("DeveloperItemSandbox") as DeveloperItemSandbox
 	var settings := get_node("SettingsScreen") as SettingsScreen
-	var button := settings.get_node("Overlay/Frame/Layout/Tabs/Additional Settings/Layout/OpenDeveloperItemSandbox") as Control
+	var button := settings.get_node("Overlay/Frame/Layout/Tabs/Additional Settings/Layout/Scroll/Fields/OpenDeveloperItemSandbox") as Control
 	var authoritative := settings_store.load_settings(settings_path) if settings_store != null else PartyForgeSettings.new()
 	if authoritative.mode != PartyForgeSettings.Mode.DEVELOPER_MODE:
 		modal.cancel_and_clear()
@@ -1816,7 +1822,7 @@ func _open_developer_item_sandbox() -> bool:
 
 func _on_developer_item_sandbox_closed() -> void:
 	var settings := get_node("SettingsScreen") as SettingsScreen
-	var button := settings.get_node("Overlay/Frame/Layout/Tabs/Additional Settings/Layout/OpenDeveloperItemSandbox") as Control
+	var button := settings.get_node("Overlay/Frame/Layout/Tabs/Additional Settings/Layout/Scroll/Fields/OpenDeveloperItemSandbox") as Control
 	settings.open_additional(button)
 
 

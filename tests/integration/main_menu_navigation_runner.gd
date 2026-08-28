@@ -42,6 +42,7 @@ func _run() -> void:
 	var passive_tree := main.get_node("PassiveTreeScreen") as PassiveTreeScreen
 	var primary := menu.get_node("PrimaryAction") as Button
 	var city := menu.get_node("CityTree") as Button
+	var armoury_route := menu.get_node("Armoury") as Button
 	var quick_start := menu.get_node("DeveloperQuickStart") as Button
 	var menu_settings := menu.get_node("Settings") as Button
 	var profiles := settings.get_node("Overlay/Frame/Layout/Tabs/Profiles") as ProfilesSettingsPage
@@ -139,7 +140,7 @@ func _run() -> void:
 		await _joy_button(viewport, JOY_BUTTON_RIGHT_SHOULDER)
 		shoulder_steps += 1
 	_assert(tabs.get_tab_control(tabs.current_tab) == additional, "shoulder navigation reaches Additional Settings")
-	var mode := additional.get_node("Layout/Mode") as OptionButton
+	var mode := additional.get_node("Layout/Scroll/Fields/Mode") as OptionButton
 	_assert_focus(viewport, mode, "Additional Settings initial Mode focus")
 	await _key(viewport, KEY_ENTER)
 	_assert(mode.get_popup().visible, "keyboard Enter opens the real Mode dropdown")
@@ -147,7 +148,7 @@ func _run() -> void:
 	await _key(viewport, KEY_ENTER)
 	_assert(not mode.get_popup().visible, "keyboard selection closes the real Mode dropdown")
 	_assert(mode.selected == PartyForgeSettings.Mode.DEVELOPER_MODE, "real keyboard input selects Developer Mode")
-	var apply := additional.get_node("Layout/ApplyAndReturn") as Button
+	var apply := additional.get_node("Layout/Actions/ApplyAndReturn") as Button
 	var tab_guard := 0
 	while viewport.gui_get_focus_owner() != apply and tab_guard < 16:
 		await _key(viewport, KEY_TAB)
@@ -160,6 +161,27 @@ func _run() -> void:
 	_assert(PartyForgeSettingsStore.new().load_settings(_settings_path).mode == PartyForgeSettings.Mode.DEVELOPER_MODE, "Developer Mode persists to the disposable settings store")
 	_assert(quick_start.visible and not quick_start.disabled, "saved Developer Mode exposes Quick Start")
 	_assert_focus(viewport, menu_settings, "Developer settings exact Settings return")
+	armoury_route.grab_focus()
+	await _frames(1)
+	_assert_focus(viewport, armoury_route, "main-menu Armoury route origin")
+	await _key(viewport, KEY_ENTER)
+	await _frames(2)
+	var armoury := main.get_node("ArmouryScreen") as ArmouryScreen
+	_assert(armoury.is_open() and not menu.is_open(), "main-menu Armoury opens through the production route")
+	_assert(main.get("_storage_return_focus") == null, "main-menu Armoury leaves Warehouse return state unused")
+	main.call("_on_armoury_closed")
+	await _frames(2)
+	_assert(menu.is_open() and not armoury.is_open(), "main-menu Armoury close returns to menu")
+	_assert_focus(viewport, armoury_route, "main-menu Armoury exact origin return")
+	_assert(main.get("_lobby_return_context") == PartyForgeMain.LobbyReturnContext.MAIN_MENU and main.get("_lobby_return_focus") == null, "main-menu Armoury consumes enum-backed return state")
+	main.set("_lobby_return_context", PartyForgeMain.LobbyReturnContext.DEVELOPER_QUICK_START)
+	main.set("_lobby_return_focus", quick_start)
+	main.call("_on_armoury_closed")
+	await _frames(2)
+	_assert_focus(viewport, quick_start, "Developer Quick Start Armoury exact origin return")
+	_assert(main.get("_lobby_return_context") == PartyForgeMain.LobbyReturnContext.MAIN_MENU and main.get("_lobby_return_focus") == null, "Developer Quick Start Armoury consumes enum-backed return state")
+	await _key(viewport, KEY_DOWN)
+	_assert_focus(viewport, menu_settings, "keyboard returns from Quick Start to Settings before stick traversal")
 	await _joy_motion(viewport, JOY_AXIS_LEFT_Y, -1.0)
 	await _joy_motion(viewport, JOY_AXIS_LEFT_Y, 0.0)
 	_assert_focus(viewport, quick_start, "left stick navigates to Developer Quick Start")

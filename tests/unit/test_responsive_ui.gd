@@ -168,13 +168,16 @@ func _test_settings_and_badge_containment(failures: Array[String]) -> void:
 	var controls_scroll := settings.get_node("Overlay/Frame/Layout/Tabs/Controls/Layout/Scroll") as ScrollContainer
 	var additional := settings.get_node("Overlay/Frame/Layout/Tabs/Additional Settings") as Control
 	var additional_layout := additional.get_node("Layout") as VBoxContainer
-	var experience_row := additional.get_node("Layout/ExperienceMultiplier") as HBoxContainer
-	var experience_value := additional.get_node("Layout/ExperienceMultiplier/Value") as HSlider
-	var cards_row := additional.get_node("Layout/LevelUpCardCount") as HBoxContainer
-	var cards_value := additional.get_node("Layout/LevelUpCardCount/Value") as HSlider
-	var reset := additional.get_node("Layout/ResetDeveloperOptions") as Button
-	var apply := additional.get_node("Layout/ApplyAndReturn") as Button
-	var cancel := additional.get_node("Layout/Cancel") as Button
+	var additional_scroll := additional.get_node("Layout/Scroll") as ScrollContainer
+	var additional_fields := additional.get_node("Layout/Scroll/Fields") as VBoxContainer
+	var additional_actions := additional.get_node("Layout/Actions") as HBoxContainer
+	var experience_row := additional.get_node("Layout/Scroll/Fields/ExperienceMultiplier") as HBoxContainer
+	var experience_value := additional.get_node("Layout/Scroll/Fields/ExperienceMultiplier/Value") as HSlider
+	var cards_row := additional.get_node("Layout/Scroll/Fields/LevelUpCardCount") as HBoxContainer
+	var cards_value := additional.get_node("Layout/Scroll/Fields/LevelUpCardCount/Value") as HSlider
+	var reset := additional.get_node("Layout/Actions/ResetDeveloperOptions") as Button
+	var apply := additional.get_node("Layout/Actions/ApplyAndReturn") as Button
+	var cancel := additional.get_node("Layout/Actions/Cancel") as Button
 	var notice := settings.get_node("Overlay/Frame/Layout/NextRunNotice") as Label
 	var status := settings.get_node("Overlay/Frame/Layout/Status") as Label
 	_assert_full_rect(overlay, "Settings overlay root", failures)
@@ -196,15 +199,20 @@ func _test_settings_and_badge_containment(failures: Array[String]) -> void:
 	TestAssertions.equal(additional_layout.get_parent(), additional, "Additional Settings page owns its VBox layout", failures)
 	TestAssertions.equal(additional.layout_mode, 2, "Additional Settings uses container layout", failures)
 	_assert_expand_fill(additional, true, true, "Additional Settings", failures)
+	TestAssertions.equal(additional_scroll.get_parent(), additional_layout, "Additional Settings VBox owns its scroll region", failures)
+	_assert_expand_fill(additional_scroll, true, true, "Additional Settings scroll", failures)
+	TestAssertions.equal(additional_scroll.horizontal_scroll_mode, ScrollContainer.SCROLL_MODE_DISABLED, "Additional Settings disables horizontal scrolling", failures)
+	TestAssertions.equal(additional_scroll.vertical_scroll_mode, ScrollContainer.SCROLL_MODE_AUTO, "Additional Settings enables vertical overflow scrolling", failures)
+	TestAssertions.truthy(additional_scroll.follow_focus and additional_scroll.clip_contents, "Additional Settings follows focused fields and clips overflow", failures)
 	for row: HBoxContainer in [experience_row, cards_row]:
-		TestAssertions.equal(row.get_parent(), additional_layout, "%s is owned by the Additional Settings VBox" % row.name, failures)
+		TestAssertions.equal(row.get_parent(), additional_fields, "%s is owned by the Additional Settings fields VBox" % row.name, failures)
 		TestAssertions.equal(row.layout_mode, 2, "%s uses container layout" % row.name, failures)
 	for slider: HSlider in [experience_value, cards_value]:
 		_assert_expand_fill(slider, true, false, slider.name, failures)
 	for action: Button in [reset, apply, cancel]:
-		TestAssertions.equal(action.get_parent(), additional_layout, "%s is owned by the Additional Settings VBox" % action.name, failures)
+		TestAssertions.equal(action.get_parent(), additional_actions, "%s is owned by the pinned Additional Settings footer" % action.name, failures)
 		TestAssertions.equal(action.layout_mode, 2, "%s uses container layout" % action.name, failures)
-		TestAssertions.truthy(action.get_combined_minimum_size().x > 0.0 and action.get_combined_minimum_size().y > 0.0, "%s has a measurable minimum size" % action.name, failures)
+		TestAssertions.truthy(action.get_combined_minimum_size().x > 0.0 and action.get_combined_minimum_size().y >= 48.0, "%s preserves a 48px minimum target" % action.name, failures)
 	TestAssertions.equal(notice.get_parent(), layout, "next-run notice is owned by the Settings VBox", failures)
 	TestAssertions.equal(status.get_parent(), layout, "Settings status is owned by the Settings VBox", failures)
 	TestAssertions.equal(notice.layout_mode, 2, "next-run notice uses container layout", failures)

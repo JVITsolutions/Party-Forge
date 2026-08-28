@@ -256,9 +256,9 @@ func _connect_additional_actions() -> void:
 		page.city_tree_requested.connect(_on_city_tree_requested)
 	if not page.item_sandbox_requested.is_connected(_on_item_sandbox_requested):
 		page.item_sandbox_requested.connect(_on_item_sandbox_requested)
-	var apply := page.get_node("Layout/ApplyAndReturn") as Button
-	var cancel := page.get_node("Layout/Cancel") as Button
-	var reset := page.get_node("Layout/ResetDeveloperOptions") as Button
+	var apply := page.get_node("Layout/Actions/ApplyAndReturn") as Button
+	var cancel := page.get_node("Layout/Actions/Cancel") as Button
+	var reset := page.get_node("Layout/Actions/ResetDeveloperOptions") as Button
 	if not apply.pressed.is_connected(_apply_and_return):
 		apply.pressed.connect(_apply_and_return)
 	if not cancel.pressed.is_connected(_cancel):

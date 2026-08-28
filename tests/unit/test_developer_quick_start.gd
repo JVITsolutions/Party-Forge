@@ -112,7 +112,7 @@ func _test_saved_settings_store_authorizes_quick_start(failures: Array[String]) 
 	var settings_screen := draft_main.get_node("SettingsScreen") as SettingsScreen
 	var menu := draft_main.get_node("MainMenuScreen") as MainMenuScreen
 	var additional := settings_screen.get_node("Overlay/Frame/Layout/Tabs/Additional Settings") as AdditionalSettingsPage
-	var mode := additional.get_node("Layout/Mode") as OptionButton
+	var mode := additional.get_node("Layout/Scroll/Fields/Mode") as OptionButton
 	settings_screen.open_additional(menu.get_node("Settings") as Control)
 	mode.selected = PartyForgeSettings.Mode.DEVELOPER_MODE
 	additional.call("_on_mode_changed", PartyForgeSettings.Mode.DEVELOPER_MODE)
