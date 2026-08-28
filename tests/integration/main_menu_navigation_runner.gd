@@ -46,6 +46,7 @@ func _run() -> void:
 	var menu_settings := menu.get_node("Settings") as Button
 	var profiles := settings.get_node("Overlay/Frame/Layout/Tabs/Profiles") as ProfilesSettingsPage
 	var profile_name := profiles.get_node("Layout/CreateRow/ProfileName") as LineEdit
+	var preferred_color := profiles.get_node("Layout/CreateRow/PreferredColor") as OptionButton
 	var profile_create := profiles.get_node("Layout/CreateRow/Create") as Button
 	var tabs := settings.get_node("Overlay/Frame/Layout/Tabs") as TabContainer
 
@@ -56,7 +57,9 @@ func _run() -> void:
 	_assert_focus(viewport, profile_name, "first-boot Profiles name")
 	profile_name.text = "Task 8 Navigation"
 	await _joy_button(viewport, JOY_BUTTON_DPAD_DOWN)
-	_assert_focus(viewport, profile_create, "D-pad moves from profile name to Create")
+	_assert_focus(viewport, preferred_color, "D-pad moves from profile name to Preferred Color")
+	await _joy_button(viewport, JOY_BUTTON_DPAD_DOWN)
+	_assert_focus(viewport, profile_create, "D-pad moves from Preferred Color to Create")
 	await _joy_button(viewport, JOY_BUTTON_A)
 	await _frames(2)
 	_assert(main.active_profile() != null and main.active_profile().display_name == "Task 8 Navigation", "controller activation creates the profile")
