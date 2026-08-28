@@ -38,6 +38,7 @@ const _STYLEBOX_MARGIN_PROPERTIES: Array[StringName] = [
 const _STYLEBOX_INTEGER_PROPERTIES: Array[StringName] = [
 	&"border_width_left", &"border_width_top", &"border_width_right", &"border_width_bottom",
 	&"corner_radius_top_left", &"corner_radius_top_right", &"corner_radius_bottom_right", &"corner_radius_bottom_left",
+	&"shadow_size",
 ]
 static var _cache: Dictionary = {}
 
@@ -80,7 +81,8 @@ static func _scale_owned_styleboxes(theme: Theme, scale_factor: float) -> void:
 		for property: StringName in _STYLEBOX_MARGIN_PROPERTIES:
 			style.set(property, maxf(roundf(float(style.get(property)) * scale_factor), 1.0))
 		for property: StringName in _STYLEBOX_INTEGER_PROPERTIES:
-			style.set(property, maxi(roundi(float(style.get(property)) * scale_factor), 1))
+			var base_value := int(style.get(property))
+			style.set(property, 0 if base_value == 0 else maxi(roundi(float(base_value) * scale_factor), 1))
 
 
 static func _apply_typography_scale(theme: Theme, scale_factor: float) -> void:

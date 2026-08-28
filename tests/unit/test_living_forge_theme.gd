@@ -225,11 +225,23 @@ func _assert_focus_stylebox_contrast(failures: Array[String]) -> void:
 		var theme := load(path) as Theme
 		if theme == null:
 			continue
+		var forged := theme.get_color(&"surface_forged", &"LivingForgeSemantic")
+		var inset := theme.get_color(&"surface_inset", &"LivingForgeSemantic")
+		var semantic_focus := theme.get_color(&"focus_outline", &"LivingForgeSemantic")
 		for variation: StringName in state_names:
 			var focus := theme.get_stylebox(&"focus", variation) as StyleBoxFlat
 			TestAssertions.truthy(focus != null, "%s %s exposes an inspectable focus StyleBoxFlat" % [path, variation], failures)
 			if focus == null:
 				continue
+			if variation == &"LivingForgePrimaryButton":
+				TestAssertions.equal(focus.shadow_color, semantic_focus, "%s Primary uses the semantic bright outer focus outline" % path, failures)
+				TestAssertions.truthy(focus.shadow_color.a >= 1.0, "%s Primary outer focus outline is opaque" % path, failures)
+				TestAssertions.truthy(focus.shadow_size >= 2, "%s Primary outer focus outline has visible expanded thickness" % path, failures)
+				TestAssertions.equal(focus.shadow_offset, Vector2.ZERO, "%s Primary outer focus outline is centered on the control" % path, failures)
+				TestAssertions.truthy(_contrast_ratio(focus.border_color, focus.shadow_color) >= 3.0, "%s Primary inner and outer focus outlines remain visually distinct" % path, failures)
+				for surrounding: Color in [forged, inset]:
+					var outer_ratio := _contrast_ratio(focus.shadow_color, surrounding)
+					TestAssertions.truthy(outer_ratio >= 3.0, "%s Primary outer focus outline contrasts with surrounding forged/inset surface at >=3:1 (actual %.3f)" % [path, outer_ratio], failures)
 			for state: StringName in state_names[variation]:
 				var surface := theme.get_stylebox(state, variation) as StyleBoxFlat
 				TestAssertions.truthy(surface != null, "%s %s exposes %s StyleBoxFlat" % [path, variation, state], failures)
@@ -249,24 +261,28 @@ func _assert_high_contrast_interaction_states(failures: Array[String]) -> void:
 		&"pressed": &"font_pressed_color",
 	}
 	for variation: StringName in [&"LivingForgePrimaryButton", &"LivingForgeSecondaryButton"]:
-		var signatures := {}
+		var border_widths := {}
 		for state: StringName in font_color_items:
 			var style := theme.get_stylebox(state, variation) as StyleBoxFlat
 			if style == null:
 				continue
-			signatures[state] = _style_visual_signature(style)
+			border_widths[state] = _style_border_widths(style)
 			var font_color := theme.get_color(font_color_items[state] as StringName, variation)
 			var ratio := _contrast_ratio(font_color, style.bg_color)
 			TestAssertions.truthy(ratio >= 4.5, "high-contrast %s %s text contrasts at >=4.5:1 (actual %.3f)" % [variation, state, ratio], failures)
-		if signatures.size() == 3:
-			TestAssertions.truthy(signatures[&"normal"] != signatures[&"hover"], "high-contrast %s normal and hover StyleBoxes are visually distinct" % variation, failures)
-			TestAssertions.truthy(signatures[&"normal"] != signatures[&"pressed"], "high-contrast %s normal and pressed StyleBoxes are visually distinct" % variation, failures)
-			TestAssertions.truthy(signatures[&"hover"] != signatures[&"pressed"], "high-contrast %s hover and pressed StyleBoxes are visually distinct" % variation, failures)
+		if border_widths.size() == 3:
+			var normal := border_widths[&"normal"] as Array
+			var hover := border_widths[&"hover"] as Array
+			var pressed := border_widths[&"pressed"] as Array
+			TestAssertions.truthy(hover[3] >= normal[3] + 2, "high-contrast %s hover adds a materially heavier lower edge" % variation, failures)
+			TestAssertions.truthy(hover[3] > hover[1], "high-contrast %s hover border geometry communicates lift without color" % variation, failures)
+			TestAssertions.truthy(pressed[0] >= normal[0] + 2, "high-contrast %s pressed adds a materially heavier left inset edge" % variation, failures)
+			TestAssertions.truthy(pressed[1] >= normal[1] + 2, "high-contrast %s pressed adds a materially heavier top inset edge" % variation, failures)
+			TestAssertions.truthy(pressed[0] > pressed[2] and pressed[1] > pressed[3], "high-contrast %s pressed border geometry communicates inset depth without color" % variation, failures)
 
 
-func _style_visual_signature(style: StyleBoxFlat) -> Array:
+func _style_border_widths(style: StyleBoxFlat) -> Array:
 	return [
-		style.bg_color, style.border_color,
 		style.border_width_left, style.border_width_top, style.border_width_right, style.border_width_bottom,
 	]
 
@@ -403,7 +419,8 @@ func _assert_scaled_style_geometry(base: Dictionary, variant: Theme, ui_percent:
 		var base_geometry := base[slot_key] as Dictionary
 		var actual_geometry := actual[slot_key] as Dictionary
 		for property: StringName in base_geometry:
-			var expected := maxi(roundi(float(base_geometry[property]) * float(ui_percent) / 100.0), 1)
+			var base_value := float(base_geometry[property])
+			var expected := 0 if is_zero_approx(base_value) else maxi(roundi(base_value * float(ui_percent) / 100.0), 1)
 			TestAssertions.equal(int(actual_geometry[property]), expected, "UI scale %d scales %s %s consistently" % [ui_percent, slot_key, property], failures)
 
 
@@ -434,6 +451,7 @@ func _style_geometry_properties() -> Array[StringName]:
 		&"content_margin_left", &"content_margin_top", &"content_margin_right", &"content_margin_bottom",
 		&"border_width_left", &"border_width_top", &"border_width_right", &"border_width_bottom",
 		&"corner_radius_top_left", &"corner_radius_top_right", &"corner_radius_bottom_right", &"corner_radius_bottom_left",
+		&"shadow_size",
 	]
 
 
