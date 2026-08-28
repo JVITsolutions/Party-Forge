@@ -92,6 +92,7 @@ func run() -> Array[String]:
 	_assert_theme_contracts(failures)
 	_assert_focus_stylebox_contrast(failures)
 	_assert_high_contrast_interaction_states(failures)
+	_assert_hover_pressed_contract(failures)
 	_assert_packaged_font_chain(failures)
 	_assert_scaled_variants(failures)
 	return failures
@@ -234,6 +235,7 @@ func _assert_focus_stylebox_contrast(failures: Array[String]) -> void:
 			if focus == null:
 				continue
 			if variation == &"LivingForgePrimaryButton":
+				TestAssertions.truthy(not focus.is_draw_center_enabled(), "%s Primary focus is outline-only and does not fill the shadow interior" % path, failures)
 				TestAssertions.equal(focus.shadow_color, semantic_focus, "%s Primary uses the semantic bright outer focus outline" % path, failures)
 				TestAssertions.truthy(focus.shadow_color.a >= 1.0, "%s Primary outer focus outline is opaque" % path, failures)
 				TestAssertions.truthy(focus.shadow_size >= 2, "%s Primary outer focus outline has visible expanded thickness" % path, failures)
@@ -284,6 +286,36 @@ func _assert_high_contrast_interaction_states(failures: Array[String]) -> void:
 func _style_border_widths(style: StyleBoxFlat) -> Array:
 	return [
 		style.border_width_left, style.border_width_top, style.border_width_right, style.border_width_bottom,
+	]
+
+
+func _assert_hover_pressed_contract(failures: Array[String]) -> void:
+	for path: String in [NORMAL_THEME_PATH, HIGH_CONTRAST_THEME_PATH]:
+		var theme := load(path) as Theme
+		if theme == null:
+			continue
+		for variation: StringName in [&"LivingForgePrimaryButton", &"LivingForgeSecondaryButton"]:
+			TestAssertions.truthy(theme.has_stylebox(&"hover_pressed", variation), "%s %s explicitly defines the combined hover_pressed StyleBox" % [path, variation], failures)
+			TestAssertions.truthy(theme.has_color(&"font_hover_pressed_color", variation), "%s %s explicitly defines the combined hover_pressed font color" % [path, variation], failures)
+			var hover_pressed := theme.get_stylebox(&"hover_pressed", variation) as StyleBoxFlat
+			var pressed := theme.get_stylebox(&"pressed", variation) as StyleBoxFlat
+			TestAssertions.truthy(hover_pressed != null, "%s %s resolves a hover_pressed StyleBoxFlat" % [path, variation], failures)
+			TestAssertions.truthy(pressed != null, "%s %s resolves a pressed StyleBoxFlat" % [path, variation], failures)
+			if hover_pressed == null or pressed == null:
+				continue
+			TestAssertions.equal(_pressed_treatment_signature(hover_pressed), _pressed_treatment_signature(pressed), "%s %s hover_pressed resolves the reviewed pressed treatment" % [path, variation], failures)
+			TestAssertions.equal(_style_border_widths(hover_pressed), _style_border_widths(pressed), "%s %s hover_pressed preserves the non-color pressed border cue" % [path, variation], failures)
+			var font_color := theme.get_color(&"font_hover_pressed_color", variation)
+			var ratio := _contrast_ratio(font_color, hover_pressed.bg_color)
+			TestAssertions.truthy(ratio >= 4.5, "%s %s hover_pressed text contrasts at >=4.5:1 (actual %.3f)" % [path, variation, ratio], failures)
+
+
+func _pressed_treatment_signature(style: StyleBoxFlat) -> Array:
+	return [
+		style.bg_color, style.border_color,
+		style.content_margin_left, style.content_margin_top, style.content_margin_right, style.content_margin_bottom,
+		style.border_width_left, style.border_width_top, style.border_width_right, style.border_width_bottom,
+		style.corner_radius_top_left, style.corner_radius_top_right, style.corner_radius_bottom_right, style.corner_radius_bottom_left,
 	]
 
 
