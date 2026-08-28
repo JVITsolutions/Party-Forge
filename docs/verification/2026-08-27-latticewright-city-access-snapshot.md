@@ -132,6 +132,58 @@ Fresh artifact identity remained:
 | `design/progression/latticewright/party-forge-city-access.pstree.json` | 9,972 | `bb3abd94d6b86716d3c39840deef460e20596abb858ba6abd4535067d664ff78` |
 | `data/world/access/party-forge-city-access.snapshot.json` | 2,539 | `ca046f55eaaf28ff050c6d7ab240232d5663820d88c1551160a7a2c4476b6a55` |
 
+## Final-review compatibility and recovery refresh
+
+The subsequent whole-branch review found that CLI source preflight could bypass
+pending generated-write recovery, that the producer no longer reproduced the
+accepted runtime bytes for 15 retained portfolio projects, and three related
+coverage issues. Those findings were corrected on the retained feature
+worktrees. The only canonical artifact change was separately approved: City
+Access authoring `fieldIds` were reordered to the public Latticewright codec's
+ordinal order. This changed no semantic value or byte count. Runtime-v3 and the
+Party Forge snapshot remained byte-identical.
+
+Implementation revisions qualified here:
+
+| Worktree | Branch | Implementation HEAD |
+| --- | --- | --- |
+| Party Forge | `feature/latticewright-v3-portfolio` | `5e1c46a` |
+| Latticewright | `feature/v3-graph-portals-party-forge` | `575ada0` |
+
+An independent fix review reported no Critical, Important, or Minor findings.
+Root then reran the following fresh gates on 2026-08-28:
+
+| Gate | Result |
+| --- | --- |
+| Latticewright producer tests | exit `0`, 6/6 pass, `0.514s` wall time |
+| Latticewright focused portfolio test | exit `0`, 1 file / 3 tests pass, `2.460s` wall time |
+| Latticewright typecheck | exit `0`, `7.499s` wall time |
+| Latticewright lint | exit `0`, `6.095s` wall time |
+| Party Forge exact 12-suite batch | exit `0`, `18.165s`, `TEST_SUMMARY: PASS (0 failures)` |
+| Party Forge integration runner | exit `0`, `1.351s`, `CITY_ACCESS_SNAPSHOT_ACCEPTANCE_OK locations=7 profiles=7 rollback=legacy` |
+| Explicit importer replay | exit `0`, `0.477s`, `UNCHANGED` |
+| Complete Party Forge suite | exit `0`, `240.806s`, exactly one `TEST_SUMMARY: PASS (227 suites)` |
+
+The complete-suite marker audit contained zero `TEST_SUMMARY: FAIL`,
+`TEST_FAILURE`, `SCRIPT ERROR`, `Parse Error`, `Failed to load script`, and `No
+loader found` markers. Its 98 `ERROR:` and 11 `WARNING:` lines were the expected
+negative-path diagnostics and are not invariant counts.
+
+Final artifact identity for this refresh:
+
+| Artifact | Bytes | SHA-256 |
+| --- | ---: | --- |
+| `design/progression/latticewright/party-forge-city-access.pstree` | 11,055 | `49e990eb09720a5cbd590f3bcdc8d732b3b578aa8a61c77a11d7ed118409f10a` |
+| `design/progression/latticewright/party-forge-city-access.pstree.json` | 9,972 | `bb3abd94d6b86716d3c39840deef460e20596abb858ba6abd4535067d664ff78` |
+| `data/world/access/party-forge-city-access.snapshot.json` | 2,539 | `ca046f55eaaf28ff050c6d7ab240232d5663820d88c1551160a7a2c4476b6a55` |
+
+The producer's fixed-hash regression preserves all 32 accepted authoring and
+runtime files for the retained 16-project portfolio. New runtime requirement
+projection and strict runtime canonicalization apply only to the separate City
+Access project. The generated writer owns recovery before every CLI source
+preflight, and unresolved recovery reports `INDETERMINATE` without source or
+write work.
+
 ## Boundary and audit statement
 
 The candidate stays default-off and Developer Mode-only. No City scene, navigation route, profile schema, `ProfileCodec`, passive allocation behavior, Player Mode activation, or current format-1 City runtime was changed. The format-1 City source is both present and loader-qualified. No merge, push, `main` change, remote/default activation, player-build wiring, or release occurred. This is ready for user review only; merge or activation still requires separate approval.
