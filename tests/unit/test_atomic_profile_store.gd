@@ -803,7 +803,7 @@ func _test_generated_document_boundary(failures: Array[String]) -> void:
 	TestAssertions.equal(_generated_state(second_indeterminate), "indeterminate", "second restore failure retains another pending transaction", failures)
 	_write_bytes(target, CityAccessSnapshotCodec.encode_document(alternate_document))
 	var recovered_commit: Variant = AtomicJsonStore.new().save_generated_document(target, alternate_document, Callable(CityAccessSnapshotLoader, "validate_document"), staging_root, Callable(CityAccessSnapshotCodec, "encode_document"))
-	TestAssertions.equal(_generated_state(recovered_commit), "committed", "pending verified candidate resolves as committed before unchanged comparison", failures)
+	TestAssertions.equal(_generated_state(recovered_commit), "unchanged", "pending verified candidate continues to the current unchanged comparison", failures)
 	TestAssertions.truthy(not FileAccess.file_exists(recovery_record), "recovered committed candidate clears recovery record", failures)
 
 	var entry_recovery_failure := GeneratedRestoreFailureAtomicJsonStore.new(func(temporary: String, promoted_target: String) -> Error:
@@ -867,6 +867,11 @@ func _assert_generated_outcome(result: Variant, state: String, cleanup_debt: boo
 	if result is Dictionary:
 		TestAssertions.equal(result as Dictionary, {"ok": state in ["unchanged", "committed"], "state": state, "cleanupDebt": cleanup_debt, "stage": stage, "reason": reason}, label, failures)
 
+func _assert_generated_recovery(result: Variant, resolution: String, cleanup_debt: bool, stage: String, reason: String, label: String, failures: Array[String]) -> void:
+	TestAssertions.truthy(result is Dictionary, label, failures)
+	if result is Dictionary:
+		TestAssertions.equal(result as Dictionary, {"resolution": resolution, "cleanupDebt": cleanup_debt, "stage": stage, "reason": reason}, label, failures)
+
 func _test_generated_recovery_preflight(failures: Array[String]) -> void:
 	var store := AtomicJsonStore.new()
 	if not store.has_method("recover_generated_document"):
@@ -880,9 +885,9 @@ func _test_generated_recovery_preflight(failures: Array[String]) -> void:
 	var original_bytes := CityAccessSnapshotCodec.encode_document(original)
 	var candidate_bytes := CityAccessSnapshotCodec.encode_document(candidate)
 	_write_bytes(target, original_bytes)
-	_assert_generated_outcome(
+	_assert_generated_recovery(
 		store.call("recover_generated_document", target, Callable(CityAccessSnapshotLoader, "validate_document"), staging_root),
-		"unchanged", false, "recovery", "", "no pending generated transaction is proven safe", failures,
+		"none", false, "recovery", "", "no pending generated transaction is proven safe", failures,
 	)
 
 	var restore_failure := GeneratedRestoreFailureAtomicJsonStore.new(func(temporary: String, promoted_target: String) -> Error:
@@ -893,9 +898,9 @@ func _test_generated_recovery_preflight(failures: Array[String]) -> void:
 	restore_failure.target = target
 	var pending: Variant = restore_failure.save_generated_document(target, candidate, Callable(CityAccessSnapshotLoader, "validate_document"), staging_root, Callable(CityAccessSnapshotCodec, "encode_document"))
 	TestAssertions.equal(_generated_state(pending), "indeterminate", "rollback failure retains recovery evidence for preflight", failures)
-	_assert_generated_outcome(
+	_assert_generated_recovery(
 		store.call("recover_generated_document", target, Callable(CityAccessSnapshotLoader, "validate_document"), staging_root),
-		"unchanged", false, "recovery", "", "recovery preflight restores and verifies the prior target", failures,
+		"rolled_back", false, "recovery", "", "recovery preflight restores and verifies the prior target", failures,
 	)
 	TestAssertions.equal(FileAccess.get_file_as_bytes(target), original_bytes, "recovery preflight restores exact prior bytes", failures)
 	TestAssertions.truthy(not FileAccess.file_exists(staging_root.path_join("pending-transaction.json")), "verified rollback clears pending evidence", failures)
@@ -908,9 +913,9 @@ func _test_generated_recovery_preflight(failures: Array[String]) -> void:
 	candidate_failure.target = target
 	TestAssertions.equal(_generated_state(candidate_failure.save_generated_document(target, candidate, Callable(CityAccessSnapshotLoader, "validate_document"), staging_root, Callable(CityAccessSnapshotCodec, "encode_document"))), "indeterminate", "candidate recovery fixture retains evidence", failures)
 	_write_bytes(target, candidate_bytes)
-	_assert_generated_outcome(
+	_assert_generated_recovery(
 		store.call("recover_generated_document", target, Callable(CityAccessSnapshotLoader, "validate_document"), staging_root),
-		"committed", false, "verified", "", "recovery preflight accepts an already verified candidate", failures,
+		"candidate_verified", false, "verified", "", "recovery preflight accepts an already verified candidate", failures,
 	)
 	TestAssertions.equal(FileAccess.get_file_as_bytes(target), candidate_bytes, "verified candidate recovery preserves candidate bytes", failures)
 
@@ -924,7 +929,7 @@ func _test_generated_recovery_preflight(failures: Array[String]) -> void:
 	TestAssertions.equal(_generated_state(unresolved_fixture.save_generated_document(target, candidate, Callable(CityAccessSnapshotLoader, "validate_document"), staging_root, Callable(CityAccessSnapshotCodec, "encode_document"))), "indeterminate", "unresolved recovery fixture retains evidence", failures)
 	var unresolved_store := GeneratedRestoreFailureAtomicJsonStore.new()
 	unresolved_store.target = target
-	_assert_generated_outcome(
+	_assert_generated_recovery(
 		unresolved_store.call("recover_generated_document", target, Callable(CityAccessSnapshotLoader, "validate_document"), staging_root),
 		"indeterminate", false, "restore", "code-%d" % ERR_CANT_CREATE, "unprovable recovery remains indeterminate", failures,
 	)

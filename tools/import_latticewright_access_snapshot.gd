@@ -35,9 +35,9 @@ class CityAccessImportCliService extends RefCounted:
 	func run(arguments: PackedStringArray, emit: Callable = Callable()) -> int:
 		last_cleanup_debt = false
 		var recovered: Variant = _recovery.call()
-		if not _write_outcome_valid(recovered): return _indeterminate("recovery", emit)
+		if not _recovery_outcome_valid(recovered): return _indeterminate("recovery", emit)
 		last_cleanup_debt = bool(_value(recovered, "cleanupDebt", false))
-		if not bool(_value(recovered, "ok", false)):
+		if str(_value(recovered, "resolution", "")) == "indeterminate":
 			return _indeterminate(_stage(recovered, "recovery"), emit)
 		var source_path := _parse_source(arguments)
 		if source_path.is_empty(): return _reject("request", emit)
@@ -56,7 +56,7 @@ class CityAccessImportCliService extends RefCounted:
 		var state := str(_value(written, "state", ""))
 		var stage := _stage(written, "write")
 		if state == "committed":
-			_marker("IMPORTED", _sanitize_stage(stage), emit)
+			_marker("COMMITTED", _sanitize_stage(stage), emit)
 			return 0
 		if state == "unchanged":
 			_marker("UNCHANGED", _sanitize_stage(stage), emit)
@@ -94,6 +94,14 @@ class CityAccessImportCliService extends RefCounted:
 		var state := outcome["state"] as String
 		if state not in ["unchanged", "rejected", "committed", "indeterminate"]: return false
 		return (outcome["ok"] as bool) == (state in ["unchanged", "committed"])
+
+	func _recovery_outcome_valid(value: Variant) -> bool:
+		if not value is Dictionary: return false
+		var outcome := value as Dictionary
+		if outcome.size() != 4 or not outcome.has_all(["resolution", "cleanupDebt", "stage", "reason"]): return false
+		if not outcome["resolution"] is String or not outcome["cleanupDebt"] is bool: return false
+		if not outcome["stage"] is String or not outcome["reason"] is String: return false
+		return (outcome["resolution"] as String) in ["none", "rolled_back", "candidate_verified", "indeterminate"]
 
 	func _value(value: Variant, key: String, fallback: Variant) -> Variant:
 		if value is Dictionary: return (value as Dictionary).get(key, fallback)

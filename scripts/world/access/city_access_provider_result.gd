@@ -44,10 +44,6 @@ static func _create(mode_value: Mode, snapshot_value: CityAccessSnapshot, diagno
 	return result
 
 
-static func _has_state(result_value: Variant) -> bool:
-	return _state_index(result_value) >= 0
-
-
 static func _state_value(result_value: Variant, key: StringName, fallback: Variant) -> Variant:
 	var index := _state_index(result_value)
 	if index < 0:

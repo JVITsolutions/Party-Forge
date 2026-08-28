@@ -122,13 +122,18 @@ func _test_provider_result_storage_is_opaque_and_released(failures: Array[String
 		property_names.append(property.get("name", ""))
 	for backing_name: String in ["_mode", "_snapshot", "_diagnostic"]:
 		TestAssertions.truthy(not property_names.has(backing_name), "provider result does not expose %s backing state" % backing_name, failures)
-	TestAssertions.truthy(result_script.has_method(&"_has_state"), "provider result storage supports deterministic release cleanup", failures)
-	if not result_script.has_method(&"_has_state"):
-		return
-	TestAssertions.truthy(result_script.call("_has_state", result), "provider result registers opaque state while alive", failures)
+	TestAssertions.truthy(not result_script.has_method(&"_has_state"), "provider result exposes no test-only state inspection API", failures)
+	var released_owner: WeakRef = weakref(result)
 	result = null
-	var survivor = result_script.call("legacy")
-	TestAssertions.truthy(result_script.call("_has_state", survivor), "provider result cleans released opaque state before serving a live result", failures)
+	var survivor: Variant = result_script.call("legacy")
+	TestAssertions.truthy(released_owner.get_ref() == null, "released provider result owner is no longer alive", failures)
+	var entries: Variant = result_script.get("_state_entries")
+	TestAssertions.truthy(entries is Array, "provider result opaque registry remains inspectable as real stored state", failures)
+	if entries is Array:
+		TestAssertions.equal((entries as Array).size(), 1, "provider result sweep removes released opaque state before serving a survivor", failures)
+		if (entries as Array).size() == 1:
+			var owner: Variant = ((entries as Array)[0] as Dictionary).get(&"owner")
+			TestAssertions.truthy(owner is WeakRef and (owner as WeakRef).get_ref() == survivor, "provider result registry retains only the live survivor", failures)
 
 
 func _fixture_snapshot(failures: Array[String]) -> CityAccessSnapshot:

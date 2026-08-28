@@ -16,13 +16,8 @@ func recover_generated_document(
 ) -> Dictionary:
 	var recovery_paths := _generated_recovery_paths(staging_root)
 	if recovery_paths.is_empty():
-		return _generated_outcome("indeterminate", false, "confinement", "staging-root-is-not-provable")
-	var recovered := _recover_generated_transaction(path, validator, recovery_paths, validator.is_valid())
-	if recovered.is_empty():
-		return _generated_outcome("unchanged", false, "recovery", "")
-	if String(recovered.get("state", "")) == "rejected" and String(recovered.get("stage", "")) == "cleanup":
-		return _generated_outcome("unchanged", true, "cleanup", String(recovered.get("reason", "")))
-	return recovered
+		return _generated_recovery_outcome("indeterminate", false, "confinement", "staging-root-is-not-provable")
+	return _recover_generated_transaction(path, validator, recovery_paths, validator.is_valid())
 
 func save_generated_document(
 	path: String,
@@ -31,14 +26,27 @@ func save_generated_document(
 	staging_root: String,
 	encoder: Callable,
 ) -> Dictionary:
-
 	var dependencies_valid := validator.is_valid() and encoder.is_valid()
 	var recovery_paths := _generated_recovery_paths(staging_root)
 	if recovery_paths.is_empty():
 		return _generated_preflight_rejection(path, "confinement", "staging-root-is-not-provable")
 	var recovered := _recover_generated_transaction(path, validator, recovery_paths, dependencies_valid)
-	if not recovered.is_empty():
-		return recovered
+	if String(recovered.get("resolution", "")) == "indeterminate":
+		return _generated_outcome("indeterminate", bool(recovered.get("cleanupDebt", false)), String(recovered.get("stage", "recovery")), String(recovered.get("reason", "")))
+	return _generated_merge_recovery_cleanup(
+		_save_generated_document_after_recovery(path, document, validator, staging_root, encoder, dependencies_valid, recovery_paths),
+		recovered,
+	)
+
+func _save_generated_document_after_recovery(
+	path: String,
+	document: Dictionary,
+	validator: Callable,
+	staging_root: String,
+	encoder: Callable,
+	dependencies_valid: bool,
+	recovery_paths: Dictionary,
+) -> Dictionary:
 	if not dependencies_valid:
 		return _generated_preflight_rejection(path, "validate", "validator-or-encoder-is-missing")
 	var validation_reason := _generated_validation_reason(validator.call(document))
@@ -134,6 +142,13 @@ func save_generated_document(
 	var failure_code := promote_error if promote_error != OK else (int(promoted["error"]) if int(promoted["error"]) != OK else ERR_FILE_CORRUPT)
 	return _generated_restore_after_failure(path, prior, failure_stage, failure_code, recovery_path, invocation, invocation_artifacts)
 
+func _generated_merge_recovery_cleanup(outcome: Dictionary, recovery: Dictionary) -> Dictionary:
+	if not bool(recovery.get("cleanupDebt", false)):
+		return outcome
+	var merged := outcome.duplicate(true)
+	merged["cleanupDebt"] = true
+	return merged
+
 func _generated_validation_reason(validation: Variant) -> String:
 	if validation is String:
 		return validation as String
@@ -179,6 +194,9 @@ func _generated_finish_committed(recovery_path: String, invocation: String, path
 func _generated_outcome(state: String, cleanup_debt: bool, stage: String, reason: String) -> Dictionary:
 	return {"ok": state in ["unchanged", "committed"], "state": state, "cleanupDebt": cleanup_debt, "stage": stage, "reason": reason}
 
+func _generated_recovery_outcome(resolution: String, cleanup_debt: bool, stage: String, reason: String) -> Dictionary:
+	return {"resolution": resolution, "cleanupDebt": cleanup_debt, "stage": stage, "reason": reason}
+
 func _generated_target_state(path: String) -> Dictionary:
 	if not FileAccess.file_exists(path):
 		return {"ok": true, "exists": false, "error": OK, "bytes": PackedByteArray()}
@@ -203,33 +221,42 @@ func _restore_generated_target_state(path: String, prior: Dictionary) -> Error:
 func _recover_generated_transaction(path: String, validator: Callable, recovery_paths: Dictionary, allow_candidate_commit: bool) -> Dictionary:
 	var recovery_path := String(recovery_paths["recovery"])
 	if not FileAccess.file_exists(recovery_path):
-		return {}
+		return _generated_recovery_outcome("none", false, "recovery", "")
 	var recovery_read := _generated_read_bytes(recovery_path)
 	if int(recovery_read["error"]) != OK:
-		return _generated_outcome("indeterminate", false, "recovery", "code-%d" % int(recovery_read["error"]))
+		return _generated_recovery_outcome("indeterminate", false, "recovery", "code-%d" % int(recovery_read["error"]))
 	var record := _parse_generated_recovery_record(recovery_read["bytes"] as PackedByteArray, path, recovery_paths)
 	if record.is_empty():
-		return _generated_outcome("indeterminate", false, "recovery", "invalid-record")
+		return _generated_recovery_outcome("indeterminate", false, "recovery", "invalid-record")
 	var candidate_read := _generated_read_bytes(String(record["candidate"]))
 	var candidate_valid := allow_candidate_commit and int(candidate_read["error"]) == OK and _generated_sha256(candidate_read["bytes"] as PackedByteArray) == String(record["candidateSha256"]) and CityAccessSnapshotLoader.load_bytes(candidate_read["bytes"] as PackedByteArray).ok() and _generated_bytes_validate(candidate_read["bytes"] as PackedByteArray, validator).is_empty()
 	var invocation := String(record["invocation"])
 	var paths: Array[String] = [String(record["candidate"]), invocation.path_join("promotion.json"), String(record["previous"]), invocation.path_join("recovery-record.json")]
 	var target_state := _generated_target_state(path)
 	if candidate_valid and bool(target_state["ok"]) and bool(target_state["exists"]) and target_state["bytes"] == candidate_read["bytes"]:
-		return _generated_finish_committed(recovery_path, invocation, paths)
+		var candidate_cleanup_error := _generated_cleanup_transaction(recovery_path, invocation, paths)
+		return _generated_recovery_outcome(
+			"candidate_verified",
+			candidate_cleanup_error != OK,
+			"cleanup" if candidate_cleanup_error != OK else "verified",
+			"code-%d" % candidate_cleanup_error if candidate_cleanup_error != OK else "",
+		)
 	var prior := {"ok": true, "exists": bool(record["hadPrevious"]), "error": OK, "bytes": PackedByteArray()}
 	if bool(record["hadPrevious"]):
 		var previous_read := _generated_read_bytes(String(record["previous"]))
 		if int(previous_read["error"]) != OK or _generated_sha256(previous_read["bytes"] as PackedByteArray) != String(record["previousSha256"]):
-			return _generated_outcome("indeterminate", false, "recovery", "invalid-previous")
+			return _generated_recovery_outcome("indeterminate", false, "recovery", "invalid-previous")
 		prior["bytes"] = previous_read["bytes"]
 	var restore_error := _restore_generated_target_state(path, prior)
 	if restore_error != OK:
-		return _generated_outcome("indeterminate", false, "restore", "code-%d" % restore_error)
+		return _generated_recovery_outcome("indeterminate", false, "restore", "code-%d" % restore_error)
 	var cleanup_error := _generated_cleanup_transaction(recovery_path, invocation, paths)
-	if cleanup_error != OK:
-		return _generated_outcome("rejected", true, "cleanup", "code-%d" % cleanup_error)
-	return {}
+	return _generated_recovery_outcome(
+		"rolled_back",
+		cleanup_error != OK,
+		"cleanup" if cleanup_error != OK else "recovery",
+		"code-%d" % cleanup_error if cleanup_error != OK else "",
+	)
 
 func _parse_generated_recovery_record(bytes: PackedByteArray, target: String, recovery_paths: Dictionary) -> Dictionary:
 	var text := bytes.get_string_from_utf8()
