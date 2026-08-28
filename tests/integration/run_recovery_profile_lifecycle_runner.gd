@@ -358,7 +358,7 @@ func _active_run_deletion_gate() -> void:
 	await _create_profile(main, "Run Active Target")
 	await _start_class(main, &"fighter")
 	_assert(main.run_started, "active-run deletion fixture starts through the production Fighter button")
-	var selector_settings := main.get_node("HUD/ClassSelection/Content/Actions/Settings") as Button
+	var selector_settings := (main.get_node("HUD/ClassSelection") as ClassSelectionPanel).action_focus(&"settings") as Button
 	selector_settings.pressed.emit()
 	await _frames(2)
 	var settings := main.get_node("SettingsScreen") as SettingsScreen
@@ -604,8 +604,12 @@ func _start_class(main: PartyForgeMain, class_id: StringName) -> void:
 	var menu := main.get_node("MainMenuScreen") as MainMenuScreen
 	(menu.get_node("PrimaryAction") as Button).pressed.emit()
 	await _frames(2)
-	var button := main.get_node("HUD/ClassSelection/Content/Scroll/Grid/Class_%s" % class_id) as Button
+	var lobby := main.get_node("HUD/ClassSelection") as ClassSelectionPanel
+	var button := lobby.selection_focus(class_id) as Button
 	button.pressed.emit()
+	await _frames(1)
+	_assert(not main.run_started and lobby.selected_class_id() == class_id, "%s confirmation is ephemeral before Start Run" % class_id)
+	(lobby.action_focus(&"start") as Button).pressed.emit()
 	await _frames(5)
 
 

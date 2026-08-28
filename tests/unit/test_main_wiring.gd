@@ -54,6 +54,22 @@ const REQUIRED_MAIN_NODES: PackedStringArray = [
 var _profile_root := ""
 var _settings_path := ""
 
+func test_run_setup_lobby_is_the_single_typed_main_seam() -> Array[String]:
+    var failures: Array[String] = []
+    var source := FileAccess.get_file_as_string("res://scripts/game/main.gd")
+    TestAssertions.truthy(source.contains("func _run_setup_lobby() -> ClassSelectionPanel:"), "Main exposes one typed lobby accessor", failures)
+    TestAssertions.equal(source.count("get_node(\"HUD/ClassSelection\")"), 1, "only the typed accessor resolves the stable selector path", failures)
+    TestAssertions.truthy(source.contains("class_preview_requested.connect(_on_lobby_class_preview_requested)"), "Main consumes lobby preview intent", failures)
+    TestAssertions.truthy(source.contains("class_selection_requested.connect(_on_lobby_class_selection_requested)"), "Main consumes lobby selection intent", failures)
+    TestAssertions.truthy(source.contains("start_requested.connect(_on_lobby_start_requested)"), "Main consumes separate Start intent", failures)
+    TestAssertions.truthy(not source.contains("class_selected.connect(" + "select_leader_class)"), "class activation no longer starts a run", failures)
+    TestAssertions.truthy(source.contains("enum LobbyReturnContext"), "lobby return authority is enum-backed", failures)
+    TestAssertions.truthy(not source.contains("_armoury_from_loadout_warning"), "legacy Armoury return boolean is removed", failures)
+    TestAssertions.truthy(source.contains("begin_compatibility_gate(class_id, _lobby_return_focus)"), "warning Cancel retains the exact Start origin", failures)
+    TestAssertions.truthy(source.contains("_run_setup_lobby().open(selected_focus)"), "Choose Another Class restores the selected card", failures)
+    TestAssertions.truthy(source.contains("origin if return_context == LobbyReturnContext.RUN_SETUP else class_focus"), "direct Armoury and warning Armoury returns remain distinct", failures)
+    return failures
+
 const CITY_TREE_ID := "party-forge-city-v1"
 const CITY_UNAVAILABLE_STATUS := "City services are temporarily unavailable."
 const CITY_LOCKED_STATUS := "Complete the prologue to unlock the City passive tree."
@@ -61,6 +77,7 @@ const CITY_DEVELOPER_REQUIRED_STATUS := "Save Developer Mode before opening the 
 
 func run() -> Array[String]:
     var failures: Array[String] = []
+    failures.append_array(test_run_setup_lobby_is_the_single_typed_main_seam())
     var all_exist := true
     for path: String in REQUIRED_PATHS:
         var exists := ResourceLoader.exists(path)
@@ -1030,14 +1047,21 @@ func _test_exact_choice_panel(failures: Array[String]) -> void:
 func _test_class_selection_starts_run_and_applies_choices(failures: Array[String]) -> void:
     var main := (load("res://scenes/game/main.tscn") as PackedScene).instantiate()
     _prepare_main(main)
+    var profile := main.call("active_profile") as ProfileState
+    var prologue := ProfileMutationService.new(ProfileStore.new()).complete_prologue(profile.profile_id, "task-8-main-wiring", _profile_root)
+    TestAssertions.truthy(prologue.ok(), "lobby fixture completes the profile prologue", failures)
+    (main.get("profile_manager") as ProfileManager).refresh_profile(profile.profile_id)
+    main.call("_open_run_setup")
     TestAssertions.equal(main.get("run_started"), false, "run timer waits at class selection", failures)
-    var selector := main.get_node("HUD/ClassSelection")
-    selector.call("configure", GameCatalog.load_defaults().classes)
-    var marksman_button := selector.get_node_or_null("Content/Scroll/Grid/Class_marksman") as Button
+    var selector := main.get_node("HUD/ClassSelection") as ClassSelectionPanel
+    var marksman_button := selector.selection_focus(&"marksman") as Button
     TestAssertions.truthy(marksman_button != null, "catalog selector exposes Marksman button", failures)
     if marksman_button != null:
         marksman_button.pressed.emit()
-    TestAssertions.equal(main.get("run_started"), true, "run marked started after class selection", failures)
+    TestAssertions.equal(main.get("run_started"), false, "class confirmation remains ephemeral", failures)
+    TestAssertions.equal(selector.selected_class_id(), &"marksman", "class confirmation selects exact lobby class", failures)
+    (selector.action_focus(&"start") as Button).pressed.emit()
+    TestAssertions.equal(main.get("run_started"), true, "separate Start Run intent starts the run", failures)
     var game_run: Node = main.get_node("GameRun")
     TestAssertions.equal(game_run.call("current_state"), 1, "class selection starts RUNNING timer state", failures)
     var party_manager := main.get_node("PartyManager") as PartyManager

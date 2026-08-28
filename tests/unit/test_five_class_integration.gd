@@ -43,7 +43,8 @@ func run() -> Array[String]:
 	main.set("settings_path", settings_path)
 	main.call("_ready")
 	var selector := main.get_node("HUD/ClassSelection") as ClassSelectionPanel
-	TestAssertions.equal(selector.grid.get_child_count(), 9, "main selector owns nine buttons", failures)
+	for class_id: StringName in IDS:
+		TestAssertions.truthy(selector.selection_focus(class_id) != null, "main lobby exposes %s through the stable adapter" % class_id, failures)
 	main.free()
 	ProfileTestSupport.remove_tree(fixture_root)
 	return failures

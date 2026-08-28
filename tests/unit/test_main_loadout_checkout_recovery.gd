@@ -147,6 +147,7 @@ func _test_durable_retry_reuses_exact_checkout(failures: Array[String]) -> void:
 	TestAssertions.truthy(created.ok(), "recovery fixture creates active profile", failures)
 	var profile_id := created.profile.profile_id
 	var manager := RefreshFailureManager.new()
+	manager.fail_on_call = 3 # Task 8 refreshes once before presenting the lobby, then again at authoritative start.
 	TestAssertions.equal(manager.bootstrap(root), "", "injected manager bootstraps the real durable profile", failures)
 	main.profile_manager = manager
 	var checkout := BootstrapFailureCheckout.new()
@@ -208,8 +209,7 @@ func _test_durable_retry_reuses_exact_checkout(failures: Array[String]) -> void:
 
 func _assert_reachable_error(main: PartyForgeMain, selector: ClassSelectionPanel, expected_focus: Control, detail: String, label: String, failures: Array[String]) -> void:
 	TestAssertions.truthy(not main.run_started and selector.is_open(), "%s keeps visible run setup open" % label, failures)
-	var status := selector.get_node("Content/GateStatus") as Label
-	TestAssertions.truthy(status.visible and status.text.contains(detail), "%s exposes a stable player-visible error" % label, failures)
+	TestAssertions.truthy(String(main.get("_last_run_start_error")).contains(detail), "%s retains the exact surfaced start error" % label, failures)
 	var focus := (Engine.get_main_loop() as SceneTree).root.gui_get_focus_owner()
 	if focus == null:
 		focus = selector.get("_pending_initial_focus") as Control

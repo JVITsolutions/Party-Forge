@@ -107,7 +107,7 @@ func _run() -> void:
 	_assert_focus(viewport, primary, "keyboard arrow returns to PrimaryAction")
 	await _key(viewport, KEY_SPACE)
 	_assert(selector.is_open() and not menu.is_open(), "keyboard Space activates run setup")
-	var fighter := selector.get_node("Content/Scroll/Grid/Class_fighter") as Button
+	var fighter := selector.selection_focus(&"fighter") as Button
 	_assert_focus(viewport, fighter, "run setup initial Fighter")
 	await _key(viewport, KEY_ESCAPE)
 	_assert(menu.is_open() and not selector.is_open(), "keyboard Escape returns from run setup")
