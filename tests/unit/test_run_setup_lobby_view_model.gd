@@ -5,6 +5,7 @@ func run() -> Array[String]:
 	_test_catalog_truth_and_selected_compatibility(failures)
 	_test_preview_never_invalidates_selected_readiness(failures)
 	_test_all_selected_compatibility_branches(failures)
+	_test_compatibility_copy_whitelists_safe_values(failures)
 	_test_safe_failures_use_handoff_copy_and_hide_technical_detail(failures)
 	return failures
 
@@ -58,18 +59,17 @@ func _test_all_selected_compatibility_branches(failures: Array[String]) -> void:
 	var compatible := RunSetupLobbyViewModel.build(profile, catalog, &"fighter", &"fighter", LoadoutCompatibilityProjection.success(&"fighter", [], [], [], [], "state"), safe_copy, false)
 	TestAssertions.equal(compatible.state, RunSetupLobbyProjection.State.READY, "empty incompatible list is ready", failures)
 	TestAssertions.equal(_class(compatible, &"fighter").compatibility, RunSetupClassProjection.Compatibility.COMPATIBLE, "empty incompatible list is compatible", failures)
-	TestAssertions.equal(_class(compatible, &"fighter").compatibility_copy, {"incompatible_item_count": 0, "incompatible_items": [], "summary": "Ready to begin your run."}, "compatible output copies zero incompatible items", failures)
+	TestAssertions.equal(_class(compatible, &"fighter").compatibility_copy, {"incompatible_item_count": 0, "summary": "Ready to begin your run."}, "compatible output exposes only curated zero-count values", failures)
 	_assert_seat_board(compatible, "compatible", failures)
 
 	var incompatible_items: Array[Dictionary] = [{"instance_id": "item-1", "source_container_id": "leader-loadout", "source_slot": 0, "nested": {"reason": "slot"}}]
 	var needs_attention := RunSetupLobbyViewModel.build(profile, catalog, &"fighter", &"fighter", LoadoutCompatibilityProjection.success(&"fighter", [], incompatible_items, [], [], "state"), safe_copy, false)
 	(incompatible_items[0]["nested"] as Dictionary)["reason"] = "changed source"
 	var copied_detail := _class(needs_attention, &"fighter").compatibility_copy
-	if copied_detail.has("incompatible_items"):
-		((copied_detail["incompatible_items"] as Array)[0]["nested"] as Dictionary)["reason"] = "changed returned"
+	copied_detail["summary"] = "changed returned"
 	TestAssertions.equal(needs_attention.state, RunSetupLobbyProjection.State.NEEDS_ATTENTION, "nonempty incompatible list needs attention", failures)
 	TestAssertions.equal(_class(needs_attention, &"fighter").compatibility, RunSetupClassProjection.Compatibility.NEEDS_ATTENTION, "nonempty incompatible list is needs-attention on selected class", failures)
-	TestAssertions.equal(_class(needs_attention, &"fighter").compatibility_copy, {"incompatible_item_count": 1, "incompatible_items": [{"instance_id": "item-1", "source_container_id": "leader-loadout", "source_slot": 0, "nested": {"reason": "slot"}}], "summary": "Review your equipped items before starting."}, "incompatible item data is deep copied", failures)
+	TestAssertions.equal(_class(needs_attention, &"fighter").compatibility_copy, {"incompatible_item_count": 1, "summary": "Review your equipped items before starting."}, "incompatible data reduces to curated count and summary", failures)
 	_assert_seat_board(needs_attention, "needs attention", failures)
 
 	var mismatch := RunSetupLobbyViewModel.build(profile, catalog, &"fighter", &"fighter", LoadoutCompatibilityProjection.success(&"mage", [], [], [], [], "state"), safe_copy, false)
@@ -79,6 +79,26 @@ func _test_all_selected_compatibility_branches(failures: Array[String]) -> void:
 	TestAssertions.equal(_class(mismatch, &"fighter").compatibility, RunSetupClassProjection.Compatibility.UNKNOWN, "wrong-class compatibility is never applied to selected class", failures)
 	TestAssertions.equal(_class(mismatch, &"fighter").compatibility_copy, {}, "wrong-class compatibility contributes no child data", failures)
 	_assert_seat_board(mismatch, "mismatched compatibility", failures)
+
+func _test_compatibility_copy_whitelists_safe_values(failures: Array[String]) -> void:
+	var catalog := GameCatalog.load_defaults()
+	var profile := _completed_profile()
+	var technical_reason := "PARTY_FORGE_EQUIPMENT_ERROR item=sword reason=source slot is invalid"
+	var mutable_reference := RefCounted.new()
+	var raw_items: Array[Dictionary] = [{
+		"instance_id": "item-private-001",
+		"source_container_id": "leader-loadout-private",
+		"source_slot": 7,
+		"reasons": [technical_reason],
+		"nested": {"arbitrary_key": mutable_reference},
+	}]
+	var compatibility := LoadoutCompatibilityProjection.success(&"fighter", [], raw_items, [], [], "state")
+	var projection := RunSetupLobbyViewModel.build(profile, catalog, &"fighter", &"fighter", compatibility, "Selected loadout needs review.", false)
+	var detail := _class(projection, &"fighter").compatibility_copy
+	TestAssertions.equal(projection.state, RunSetupLobbyProjection.State.NEEDS_ATTENTION, "raw incompatible entries still derive needs-attention from list emptiness", failures)
+	TestAssertions.equal(_class(projection, &"fighter").compatibility, RunSetupClassProjection.Compatibility.NEEDS_ATTENTION, "raw incompatible entries retain selected compatibility state", failures)
+	TestAssertions.equal(detail, {"incompatible_item_count": 1, "summary": "Review your equipped items before starting."}, "compatibility projection is a curated whitelist", failures)
+	_assert_curated_compatibility_value(detail, technical_reason, "compatibility output", failures)
 
 func _test_safe_failures_use_handoff_copy_and_hide_technical_detail(failures: Array[String]) -> void:
 	var catalog := GameCatalog.load_defaults()
@@ -145,3 +165,19 @@ func _assert_no_technical_detail(projection: RunSetupLobbyProjection, technical_
 		TestAssertions.truthy(not class_projection.role_label.contains(technical_detail), "%s class role hides technical detail" % label, failures)
 		TestAssertions.truthy(not class_projection.starting_action_label.contains(technical_detail), "%s action hides technical detail" % label, failures)
 		TestAssertions.truthy(not JSON.stringify(class_projection.compatibility_copy).contains(technical_detail), "%s compatibility copy hides technical detail" % label, failures)
+
+func _assert_curated_compatibility_value(value: Variant, technical_reason: String, label: String, failures: Array[String]) -> void:
+	TestAssertions.truthy(not value is Object, "%s contains no object or reference" % label, failures)
+	if value is String:
+		TestAssertions.truthy(not (value as String).contains(technical_reason), "%s hides technical strings" % label, failures)
+		return
+	if value is Array:
+		for item: Variant in value as Array:
+			_assert_curated_compatibility_value(item, technical_reason, label, failures)
+		return
+	if value is Dictionary:
+		for key: Variant in value as Dictionary:
+			var key_text := String(key)
+			TestAssertions.truthy(key_text in ["incompatible_item_count", "summary"], "%s rejects raw/arbitrary key %s" % [label, key_text], failures)
+			TestAssertions.truthy(key_text not in ["instance_id", "source_container_id", "source_slot", "reasons"], "%s rejects source identity/reason key %s" % [label, key_text], failures)
+			_assert_curated_compatibility_value((value as Dictionary)[key], technical_reason, label, failures)

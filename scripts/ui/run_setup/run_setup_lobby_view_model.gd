@@ -91,7 +91,6 @@ static func _compatibility_copy(compatibility: LoadoutCompatibilityProjection, s
 		return {}
 	return {
 		"incompatible_item_count": compatibility.incompatible_items.size(),
-		"incompatible_items": compatibility.incompatible_items,
 		"summary": READY_COPY if state == RunSetupClassProjection.Compatibility.COMPATIBLE else NEEDS_ATTENTION_COPY,
 	}
 

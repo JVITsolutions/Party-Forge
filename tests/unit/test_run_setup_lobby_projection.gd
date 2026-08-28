@@ -26,20 +26,37 @@ func _test_class_projection_owns_nested_values(failures: Array[String]) -> void:
 	TestAssertions.equal(projection.starting_action_label, "Fighter Cleave", "class projection carries a player-facing starting action label", failures)
 
 func _test_lobby_projection_owns_its_values_and_seats(failures: Array[String]) -> void:
+	var source_traits: Array[String] = ["Martial"]
+	var source_compatibility := {"summary": "Ready", "nested": {"slot": "main_hand"}}
+	var source_seat := RunSetupSeatProjection.active(1, "P1")
+	var source_class := RunSetupClassProjection.create(&"fighter", "Fighter", "Frontline", Color.WHITE, source_traits, "Fighter Cleave", RunSetupClassProjection.Compatibility.COMPATIBLE, source_compatibility)
 	var seats: Array[RunSetupSeatProjection] = [
-		RunSetupSeatProjection.active(1, "P1"),
+		source_seat,
 		RunSetupSeatProjection.coming_soon(2),
 		RunSetupSeatProjection.coming_soon(3),
 		RunSetupSeatProjection.coming_soon(4),
 	]
 	var classes: Array[RunSetupClassProjection] = [
-		RunSetupClassProjection.create(&"fighter", "Fighter", "Frontline", Color.WHITE, ["Martial"], "Fighter Cleave", RunSetupClassProjection.Compatibility.COMPATIBLE, {"summary": "Ready"}),
+		source_class,
 	]
 	var projection := RunSetupLobbyProjection.create(
 		seats, classes, &"fighter", &"mage", RunSetupLobbyProjection.State.READY, "Fighter is ready to begin.",
 	)
+	source_seat.label = "Changed source seat"
+	source_seat.state = RunSetupSeatProjection.State.DISCONNECTED
+	source_seat.focusable = false
+	source_class.display_name = "Changed source class"
+	source_class.starting_action_label = "Changed source action"
+	source_class.compatibility = RunSetupClassProjection.Compatibility.UNAVAILABLE
+	source_class._trait_display_names[0] = "Changed source trait"
+	source_class._compatibility_copy["summary"] = "Changed source summary"
+	(source_class._compatibility_copy["nested"] as Dictionary)["slot"] = "changed_source"
+	source_traits[0] = "Changed construction input"
+	source_compatibility["summary"] = "Changed construction input"
 	seats[0] = RunSetupSeatProjection.coming_soon(1)
-	classes[0].compatibility_copy["summary"] = "external mutation attempt"
+	seats.remove_at(1)
+	classes[0] = RunSetupClassProjection.create(&"mage", "Mage", "Backline", Color.BLUE, ["Arcane"], "Mage Bolt", RunSetupClassProjection.Compatibility.UNKNOWN, {"summary": "Changed"})
+	classes.remove_at(0)
 	var returned_seats := projection.seats
 	var returned_classes := projection.classes
 	var independent_seats := projection.seats
@@ -65,7 +82,11 @@ func _test_lobby_projection_owns_its_values_and_seats(failures: Array[String]) -
 		TestAssertions.truthy(not projection.seats[index].focusable, "seat %d is not focusable" % (index + 1), failures)
 	TestAssertions.equal(projection.selected_class_id, &"fighter", "selection survives an independent preview", failures)
 	TestAssertions.equal(projection.previewed_class_id, &"mage", "preview remains independent from selection", failures)
-	TestAssertions.equal(projection.classes[0].compatibility_copy.get("summary"), "Ready", "lobby projection deep-copies class values", failures)
+	TestAssertions.equal(projection.classes[0].display_name, "Fighter", "lobby projection owns source class scalar values", failures)
+	TestAssertions.equal(projection.classes[0].starting_action_label, "Fighter Cleave", "lobby projection owns source action values", failures)
+	TestAssertions.equal(projection.classes[0].compatibility, RunSetupClassProjection.Compatibility.COMPATIBLE, "lobby projection owns source compatibility state", failures)
+	TestAssertions.equal(projection.classes[0].trait_display_names, ["Martial"], "lobby projection owns source trait values", failures)
+	TestAssertions.equal(projection.classes[0].compatibility_copy, {"summary": "Ready", "nested": {"slot": "main_hand"}}, "lobby projection deep-copies source compatibility dictionaries", failures)
 	TestAssertions.equal(independent_seats.size(), 4, "structurally mutating a returned seat array leaves other copies unchanged", failures)
 	TestAssertions.equal(independent_seats[0].label, "P1", "mutating a returned seat scalar leaves other copies unchanged", failures)
 	TestAssertions.truthy(independent_seats[0].focusable, "mutating a returned seat flag leaves other copies unchanged", failures)
@@ -74,4 +95,4 @@ func _test_lobby_projection_owns_its_values_and_seats(failures: Array[String]) -
 	TestAssertions.equal(independent_classes[0].starting_action_label, "Fighter Cleave", "mutating a returned class action leaves other copies unchanged", failures)
 	TestAssertions.equal(independent_classes[0].compatibility, RunSetupClassProjection.Compatibility.COMPATIBLE, "mutating a returned class state leaves other copies unchanged", failures)
 	TestAssertions.equal(independent_classes[0].trait_display_names, ["Martial"], "mutating every returned trait array leaves other copies unchanged", failures)
-	TestAssertions.equal(independent_classes[0].compatibility_copy, {"summary": "Ready"}, "mutating every returned compatibility dictionary leaves other copies unchanged", failures)
+	TestAssertions.equal(independent_classes[0].compatibility_copy, {"summary": "Ready", "nested": {"slot": "main_hand"}}, "mutating every returned compatibility dictionary leaves other copies unchanged", failures)
