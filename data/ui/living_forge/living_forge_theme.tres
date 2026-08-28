@@ -1,0 +1,307 @@
+[gd_resource type="Theme" load_steps=17 format=3]
+
+[ext_resource type="FontFile" path="res://assets/ui/living_forge/fonts/cinzel-2.000/Cinzel[wght].ttf" id="1_cinzel"]
+[ext_resource type="FontFile" path="res://assets/ui/living_forge/fonts/source-sans-3.052/SourceSans3VF-Upright.ttf" id="2_source"]
+[ext_resource type="FontFile" path="res://assets/ui/living_forge/fonts/noto-sans-2.014/NotoSans[wdth,wght].ttf" id="3_noto"]
+[ext_resource type="FontFile" path="res://assets/ui/living_forge/fonts/noto-sans-symbols-2.008/NotoSansSymbols2-Regular.ttf" id="4_symbols"]
+
+[sub_resource type="FontVariation" id="Font_source_400"]
+base_font = ExtResource("2_source")
+fallbacks = Array[Font]([ExtResource("3_noto"), ExtResource("4_symbols")])
+variation_opentype = {
+&"wght": 400.0
+}
+opentype_features = {
+&"tnum": 1
+}
+
+[sub_resource type="FontVariation" id="Font_source_500"]
+base_font = ExtResource("2_source")
+fallbacks = Array[Font]([ExtResource("3_noto"), ExtResource("4_symbols")])
+variation_opentype = {
+&"wght": 500.0
+}
+opentype_features = {
+&"tnum": 1
+}
+
+[sub_resource type="FontVariation" id="Font_source_600"]
+base_font = ExtResource("2_source")
+fallbacks = Array[Font]([ExtResource("3_noto"), ExtResource("4_symbols")])
+variation_opentype = {
+&"wght": 600.0
+}
+opentype_features = {
+&"tnum": 1
+}
+
+[sub_resource type="FontVariation" id="Font_source_700"]
+base_font = ExtResource("2_source")
+fallbacks = Array[Font]([ExtResource("3_noto"), ExtResource("4_symbols")])
+variation_opentype = {
+&"wght": 700.0
+}
+opentype_features = {
+&"tnum": 1
+}
+
+[sub_resource type="FontVariation" id="Font_cinzel_600"]
+base_font = ExtResource("1_cinzel")
+fallbacks = Array[Font]([SubResource("Font_source_400"), ExtResource("3_noto"), ExtResource("4_symbols")])
+variation_opentype = {
+&"wght": 600.0
+}
+
+[sub_resource type="StyleBoxFlat" id="Style_panel"]
+content_margin_left = 24.0
+content_margin_top = 24.0
+content_margin_right = 24.0
+content_margin_bottom = 24.0
+bg_color = Color(0.06666667, 0.09803922, 0.13725491, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.3372549, 0.39607844, 0.46666667, 1)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+
+[sub_resource type="StyleBoxFlat" id="Style_inset"]
+content_margin_left = 16.0
+content_margin_top = 16.0
+content_margin_right = 16.0
+content_margin_bottom = 16.0
+bg_color = Color(0.03137255, 0.05098039, 0.07058824, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.25490198, 0.30980393, 0.36862746, 1)
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_right = 4
+corner_radius_bottom_left = 4
+
+[sub_resource type="StyleBoxFlat" id="Style_primary"]
+content_margin_left = 24.0
+content_margin_top = 12.0
+content_margin_right = 24.0
+content_margin_bottom = 12.0
+bg_color = Color(0.9411765, 0.7254902, 0.2901961, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(1, 0.84313726, 0.3529412, 1)
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_right = 4
+corner_radius_bottom_left = 4
+
+[sub_resource type="StyleBoxFlat" id="Style_primary_hover"]
+content_margin_left = 24.0
+content_margin_top = 12.0
+content_margin_right = 24.0
+content_margin_bottom = 12.0
+bg_color = Color(1, 0.84313726, 0.3529412, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.972549, 0.9490196, 0.8745098, 1)
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_right = 4
+corner_radius_bottom_left = 4
+
+[sub_resource type="StyleBoxFlat" id="Style_primary_pressed"]
+content_margin_left = 24.0
+content_margin_top = 12.0
+content_margin_right = 24.0
+content_margin_bottom = 12.0
+bg_color = Color(0.73333335, 0.49411765, 0.15294118, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.9411765, 0.7254902, 0.2901961, 1)
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_right = 4
+corner_radius_bottom_left = 4
+
+[sub_resource type="StyleBoxFlat" id="Style_secondary"]
+content_margin_left = 24.0
+content_margin_top = 12.0
+content_margin_right = 24.0
+content_margin_bottom = 12.0
+bg_color = Color(0.03137255, 0.05098039, 0.07058824, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.3372549, 0.39607844, 0.46666667, 1)
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_right = 4
+corner_radius_bottom_left = 4
+
+[sub_resource type="StyleBoxFlat" id="Style_secondary_hover"]
+content_margin_left = 24.0
+content_margin_top = 12.0
+content_margin_right = 24.0
+content_margin_bottom = 12.0
+bg_color = Color(0.105882354, 0.15686275, 0.20392157, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.9411765, 0.7254902, 0.2901961, 1)
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_right = 4
+corner_radius_bottom_left = 4
+
+[sub_resource type="StyleBoxFlat" id="Style_focus"]
+content_margin_left = 24.0
+content_margin_top = 12.0
+content_margin_right = 24.0
+content_margin_bottom = 12.0
+bg_color = Color(0, 0, 0, 0)
+border_width_left = 4
+border_width_top = 4
+border_width_right = 4
+border_width_bottom = 4
+border_color = Color(0.972549, 0.9490196, 0.8745098, 1)
+corner_radius_top_left = 6
+corner_radius_top_right = 6
+corner_radius_bottom_right = 6
+corner_radius_bottom_left = 6
+
+[sub_resource type="StyleBoxFlat" id="Style_unavailable"]
+content_margin_left = 24.0
+content_margin_top = 12.0
+content_margin_right = 24.0
+content_margin_bottom = 12.0
+bg_color = Color(0.06666667, 0.09803922, 0.13725491, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.5411765, 0.5882353, 0.64705884, 1)
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_right = 4
+corner_radius_bottom_left = 4
+
+[sub_resource type="StyleBoxFlat" id="Style_destructive"]
+content_margin_left = 24.0
+content_margin_top = 12.0
+content_margin_right = 24.0
+content_margin_bottom = 12.0
+bg_color = Color(0.25882354, 0.07058824, 0.06666667, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(1, 0.4627451, 0.41960785, 1)
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_right = 4
+corner_radius_bottom_left = 4
+
+[sub_resource type="StyleBoxFlat" id="Style_chip"]
+content_margin_left = 12.0
+content_margin_top = 4.0
+content_margin_right = 12.0
+content_margin_bottom = 4.0
+bg_color = Color(0.105882354, 0.15686275, 0.20392157, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.32941177, 0.83137256, 0.7607843, 1)
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_right = 4
+corner_radius_bottom_left = 4
+
+[resource]
+default_font = SubResource("Font_source_400")
+default_font_size = 18
+Button/colors/font_color = Color(0.9490196, 0.91764706, 0.84705883, 1)
+Button/colors/font_disabled_color = Color(0.5411765, 0.5882353, 0.64705884, 1)
+Button/font_sizes/font_size = 18
+Button/fonts/font = SubResource("Font_source_600")
+Label/colors/font_color = Color(0.9490196, 0.91764706, 0.84705883, 1)
+Label/font_sizes/font_size = 18
+Label/fonts/font = SubResource("Font_source_400")
+LivingForgeCaptionLabel/base_type = &"Label"
+LivingForgeCaptionLabel/colors/font_color = Color(0.7254902, 0.7607843, 0.8, 1)
+LivingForgeCaptionLabel/font_sizes/font_size = 14
+LivingForgeCaptionLabel/fonts/font = SubResource("Font_source_400")
+LivingForgeDestructiveButton/base_type = &"Button"
+LivingForgeDestructiveButton/colors/font_color = Color(0.9490196, 0.91764706, 0.84705883, 1)
+LivingForgeDestructiveButton/font_sizes/font_size = 18
+LivingForgeDestructiveButton/fonts/font = SubResource("Font_source_700")
+LivingForgeDestructiveButton/styles/focus = SubResource("Style_focus")
+LivingForgeDestructiveButton/styles/hover = SubResource("Style_destructive")
+LivingForgeDestructiveButton/styles/normal = SubResource("Style_destructive")
+LivingForgeDestructiveButton/styles/pressed = SubResource("Style_destructive")
+LivingForgeDisplayLabel/base_type = &"Label"
+LivingForgeDisplayLabel/colors/font_color = Color(0.9490196, 0.91764706, 0.84705883, 1)
+LivingForgeDisplayLabel/font_sizes/font_size = 32
+LivingForgeDisplayLabel/fonts/font = SubResource("Font_cinzel_600")
+LivingForgeInsetPanel/base_type = &"Panel"
+LivingForgeInsetPanel/styles/panel = SubResource("Style_inset")
+LivingForgeMetrics/constants/action_minimum = 48
+LivingForgeMetrics/constants/compact_gap = 8
+LivingForgeMetrics/constants/grid = 8
+LivingForgeMetrics/constants/panel_padding = 24
+LivingForgeMetrics/constants/section_gap = 32
+LivingForgeMetrics/constants/standard_gap = 16
+LivingForgeMetrics/constants/status_chip_height = 32
+LivingForgePanel/base_type = &"Panel"
+LivingForgePanel/styles/panel = SubResource("Style_panel")
+LivingForgePrimaryButton/base_type = &"Button"
+LivingForgePrimaryButton/colors/font_color = Color(0.03137255, 0.05098039, 0.07058824, 1)
+LivingForgePrimaryButton/font_sizes/font_size = 18
+LivingForgePrimaryButton/fonts/font = SubResource("Font_source_700")
+LivingForgePrimaryButton/styles/focus = SubResource("Style_focus")
+LivingForgePrimaryButton/styles/hover = SubResource("Style_primary_hover")
+LivingForgePrimaryButton/styles/normal = SubResource("Style_primary")
+LivingForgePrimaryButton/styles/pressed = SubResource("Style_primary_pressed")
+LivingForgeSecondaryButton/base_type = &"Button"
+LivingForgeSecondaryButton/font_sizes/font_size = 18
+LivingForgeSecondaryButton/fonts/font = SubResource("Font_source_600")
+LivingForgeSecondaryButton/styles/focus = SubResource("Style_focus")
+LivingForgeSecondaryButton/styles/hover = SubResource("Style_secondary_hover")
+LivingForgeSecondaryButton/styles/normal = SubResource("Style_secondary")
+LivingForgeSecondaryButton/styles/pressed = SubResource("Style_secondary_hover")
+LivingForgeSectionLabel/base_type = &"Label"
+LivingForgeSectionLabel/font_sizes/font_size = 22
+LivingForgeSectionLabel/fonts/font = SubResource("Font_source_700")
+LivingForgeStatusChip/base_type = &"Label"
+LivingForgeStatusChip/colors/font_color = Color(0.9490196, 0.91764706, 0.84705883, 1)
+LivingForgeStatusChip/font_sizes/font_size = 14
+LivingForgeStatusChip/fonts/font = SubResource("Font_source_600")
+LivingForgeStatusChip/styles/normal = SubResource("Style_chip")
+LivingForgeUnavailableButton/base_type = &"Button"
+LivingForgeUnavailableButton/colors/font_color = Color(0.5411765, 0.5882353, 0.64705884, 1)
+LivingForgeUnavailableButton/colors/font_disabled_color = Color(0.5411765, 0.5882353, 0.64705884, 1)
+LivingForgeUnavailableButton/font_sizes/font_size = 18
+LivingForgeUnavailableButton/fonts/font = SubResource("Font_source_500")
+LivingForgeUnavailableButton/styles/disabled = SubResource("Style_unavailable")
+LivingForgeUnavailableButton/styles/normal = SubResource("Style_unavailable")
+LivingForgeSemantic/colors/disabled = Color(0.5411765, 0.5882353, 0.64705884, 1)
+LivingForgeSemantic/colors/ember_primary = Color(0.9411765, 0.7254902, 0.2901961, 1)
+LivingForgeSemantic/colors/error = Color(1, 0.4627451, 0.41960785, 1)
+LivingForgeSemantic/colors/focus_outline = Color(0.972549, 0.9490196, 0.8745098, 1)
+LivingForgeSemantic/colors/surface_forged = Color(0.06666667, 0.09803922, 0.13725491, 1)
+LivingForgeSemantic/colors/surface_inset = Color(0.03137255, 0.05098039, 0.07058824, 1)
+LivingForgeSemantic/colors/text_muted = Color(0.7254902, 0.7607843, 0.8, 1)
+LivingForgeSemantic/colors/text_primary = Color(0.9490196, 0.91764706, 0.84705883, 1)
+LivingForgeSemantic/colors/valid = Color(0.32941177, 0.83137256, 0.7607843, 1)
+LivingForgeSemantic/colors/warning = Color(1, 0.78431374, 0.34117648, 1)
