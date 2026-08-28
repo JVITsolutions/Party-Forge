@@ -16,6 +16,8 @@ const REQUIRED_VARIATIONS: Array[StringName] = [
 	&"LivingForgeSecondaryButton", &"LivingForgeUnavailableButton",
 	&"LivingForgeDestructiveButton", &"LivingForgeDisplayLabel",
 	&"LivingForgeSectionLabel", &"LivingForgeCaptionLabel", &"LivingForgeStatusChip",
+	&"LivingForgeStatusBadge", &"LivingForgePlayerLabel", &"LivingForgePromptLabel",
+	&"LivingForgeBadgeLabel",
 ]
 const REQUIRED_ASSETS: Array[String] = [
 	"res://assets/ui/living_forge/fonts/cinzel-2.000/Cinzel[wght].ttf",
@@ -93,6 +95,7 @@ func run() -> Array[String]:
 	_assert_focus_stylebox_contrast(failures)
 	_assert_high_contrast_interaction_states(failures)
 	_assert_hover_pressed_contract(failures)
+	_assert_component_typography_contracts(failures)
 	_assert_packaged_font_chain(failures)
 	_assert_scaled_variants(failures)
 	return failures
@@ -308,6 +311,28 @@ func _assert_hover_pressed_contract(failures: Array[String]) -> void:
 			var font_color := theme.get_color(&"font_hover_pressed_color", variation)
 			var ratio := _contrast_ratio(font_color, hover_pressed.bg_color)
 			TestAssertions.truthy(ratio >= 4.5, "%s %s hover_pressed text contrasts at >=4.5:1 (actual %.3f)" % [path, variation, ratio], failures)
+		var secondary_hover := theme.get_stylebox(&"hover", &"LivingForgeSecondaryButton") as StyleBoxFlat
+		var secondary_pressed := theme.get_stylebox(&"pressed", &"LivingForgeSecondaryButton") as StyleBoxFlat
+		var secondary_hover_pressed := theme.get_stylebox(&"hover_pressed", &"LivingForgeSecondaryButton") as StyleBoxFlat
+		TestAssertions.truthy(secondary_hover != secondary_pressed, "%s Secondary pressed uses a distinct StyleBox resource from hover" % path, failures)
+		if secondary_hover != null and secondary_pressed != null:
+			TestAssertions.truthy(_pressed_treatment_signature(secondary_hover) != _pressed_treatment_signature(secondary_pressed), "%s Secondary pressed has a distinct inset treatment from hover" % path, failures)
+		if secondary_pressed != null and secondary_hover_pressed != null:
+			TestAssertions.equal(_pressed_treatment_signature(secondary_hover_pressed), _pressed_treatment_signature(secondary_pressed), "%s Secondary hover_pressed retains the explicit pressed treatment" % path, failures)
+
+
+func _assert_component_typography_contracts(failures: Array[String]) -> void:
+	for path: String in [NORMAL_THEME_PATH, HIGH_CONTRAST_THEME_PATH]:
+		var theme := load(path) as Theme
+		if theme == null:
+			continue
+		TestAssertions.equal(theme.get_type_variation_base(&"LivingForgeStatusBadge"), &"PanelContainer", "%s status badge is a panel-specific variation" % path, failures)
+		TestAssertions.truthy(theme.has_stylebox(&"panel", &"LivingForgeStatusBadge"), "%s status badge owns one outlined panel enclosure" % path, failures)
+		for role: StringName in [&"LivingForgePlayerLabel", &"LivingForgePromptLabel", &"LivingForgeBadgeLabel"]:
+			var font_size := theme.get_font_size(&"font_size", role)
+			TestAssertions.truthy(font_size >= 16 and font_size <= 18, "%s %s stays within the 16-18px player-copy range" % [path, role], failures)
+			var font := theme.get_font(&"font", role) as FontVariation
+			TestAssertions.truthy(font != null and float(font.variation_opentype.get(&"wght", 0.0)) >= 600.0, "%s %s uses medium/semibold player weight" % [path, role], failures)
 
 
 func _pressed_treatment_signature(style: StyleBoxFlat) -> Array:
@@ -519,6 +544,9 @@ func _assert_typography_instances(theme: Theme, cinzel_path: String, source_path
 		&"LivingForgeUnavailableButton": 500.0,
 		&"LivingForgeSecondaryButton": 600.0,
 		&"LivingForgePrimaryButton": 700.0,
+		&"LivingForgePlayerLabel": 600.0,
+		&"LivingForgePromptLabel": 600.0,
+		&"LivingForgeBadgeLabel": 600.0,
 	}
 	for role: StringName in weighted_roles:
 		var body := theme.get_font(&"font", role) as FontVariation

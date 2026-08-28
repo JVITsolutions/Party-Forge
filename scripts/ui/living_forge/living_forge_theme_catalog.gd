@@ -11,7 +11,8 @@ const _FONT_SIZE_TYPES: Array[StringName] = [
 	&"Button", &"Label", &"LivingForgePrimaryButton", &"LivingForgeSecondaryButton",
 	&"LivingForgeUnavailableButton", &"LivingForgeDestructiveButton",
 	&"LivingForgeDisplayLabel", &"LivingForgeSectionLabel", &"LivingForgeCaptionLabel",
-	&"LivingForgeStatusChip",
+	&"LivingForgeStatusChip", &"LivingForgePlayerLabel", &"LivingForgePromptLabel",
+	&"LivingForgeBadgeLabel",
 ]
 const _STYLEBOX_SLOTS: Array[Array] = [
 	[&"LivingForgePanel", &"panel"],
@@ -31,6 +32,7 @@ const _STYLEBOX_SLOTS: Array[Array] = [
 	[&"LivingForgeDestructiveButton", &"pressed"],
 	[&"LivingForgeDestructiveButton", &"focus"],
 	[&"LivingForgeStatusChip", &"normal"],
+	[&"LivingForgeStatusBadge", &"panel"],
 ]
 const _STYLEBOX_MARGIN_PROPERTIES: Array[StringName] = [
 	&"content_margin_left", &"content_margin_top", &"content_margin_right", &"content_margin_bottom",

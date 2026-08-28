@@ -1,0 +1,64 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/ui/living_forge/components/forge_seat_card.gd" id="1_script"]
+[ext_resource type="Texture2D" path="res://assets/ui/living_forge/icons/tabler-3.46.0/lock.svg" id="2_lock"]
+
+[node name="ForgeSeatCard" type="PanelContainer"]
+custom_minimum_size = Vector2(304, 104)
+focus_mode = 0
+mouse_filter = 2
+theme_type_variation = &"LivingForgePanel"
+accessibility_description = "Player seat."
+script = ExtResource("1_script")
+
+[node name="Content" type="VBoxContainer" parent="."]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 8
+
+[node name="Seat" type="Label" parent="Content"]
+layout_mode = 2
+mouse_filter = 2
+theme_type_variation = &"LivingForgeSectionLabel"
+text = "PLAYER 1"
+
+[node name="Identity" type="Label" parent="Content"]
+layout_mode = 2
+mouse_filter = 2
+theme_type_variation = &"LivingForgePlayerLabel"
+text = "Awaiting profile"
+
+[node name="Ready" type="Label" parent="Content"]
+layout_mode = 2
+mouse_filter = 2
+theme_type_variation = &"LivingForgePlayerLabel"
+text = "READY"
+
+[node name="FuturePlate" type="PanelContainer" parent="Content"]
+visible = false
+custom_minimum_size = Vector2(256, 48)
+layout_mode = 2
+mouse_filter = 2
+theme_type_variation = &"LivingForgeStatusBadge"
+
+[node name="Row" type="HBoxContainer" parent="Content/FuturePlate"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 8
+
+[node name="LockShape" type="TextureRect" parent="Content/FuturePlate/Row"]
+custom_minimum_size = Vector2(24, 24)
+layout_mode = 2
+size_flags_vertical = 4
+mouse_filter = 2
+texture = ExtResource("2_lock")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="Availability" type="Label" parent="Content/FuturePlate/Row"]
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+theme_type_variation = &"LivingForgePlayerLabel"
+text = "LOCAL CO-OP - COMING SOON"
+horizontal_alignment = 1

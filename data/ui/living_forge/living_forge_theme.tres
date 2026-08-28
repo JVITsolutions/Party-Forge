@@ -1,4 +1,4 @@
-[gd_resource type="Theme" load_steps=17 format=3]
+[gd_resource type="Theme" load_steps=18 format=3]
 
 [ext_resource type="FontFile" path="res://assets/ui/living_forge/fonts/cinzel-2.000/Cinzel[wght].ttf" id="1_cinzel"]
 [ext_resource type="FontFile" path="res://assets/ui/living_forge/fonts/source-sans-3.052/SourceSans3VF-Upright.ttf" id="2_source"]
@@ -164,6 +164,22 @@ corner_radius_top_right = 4
 corner_radius_bottom_right = 4
 corner_radius_bottom_left = 4
 
+[sub_resource type="StyleBoxFlat" id="Style_secondary_pressed"]
+content_margin_left = 24.0
+content_margin_top = 12.0
+content_margin_right = 24.0
+content_margin_bottom = 12.0
+bg_color = Color(0.078431375, 0.11764706, 0.15686275, 1)
+border_width_left = 4
+border_width_top = 4
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.9411765, 0.7254902, 0.2901961, 1)
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_right = 4
+corner_radius_bottom_left = 4
+
 [sub_resource type="StyleBoxFlat" id="Style_focus"]
 content_margin_left = 24.0
 content_margin_top = 12.0
@@ -285,6 +301,12 @@ LivingForgeMetrics/constants/standard_gap = 16
 LivingForgeMetrics/constants/status_chip_height = 32
 LivingForgePanel/base_type = &"Panel"
 LivingForgePanel/styles/panel = SubResource("Style_panel")
+LivingForgePlayerLabel/base_type = &"Label"
+LivingForgePlayerLabel/font_sizes/font_size = 18
+LivingForgePlayerLabel/fonts/font = SubResource("Font_source_600")
+LivingForgePromptLabel/base_type = &"Label"
+LivingForgePromptLabel/font_sizes/font_size = 18
+LivingForgePromptLabel/fonts/font = SubResource("Font_source_600")
 LivingForgePrimaryButton/base_type = &"Button"
 LivingForgePrimaryButton/colors/font_color = Color(0.03137255, 0.05098039, 0.07058824, 1)
 LivingForgePrimaryButton/colors/font_hover_pressed_color = Color(0.03137255, 0.05098039, 0.07058824, 1)
@@ -301,9 +323,9 @@ LivingForgeSecondaryButton/font_sizes/font_size = 18
 LivingForgeSecondaryButton/fonts/font = SubResource("Font_source_600")
 LivingForgeSecondaryButton/styles/focus = SubResource("Style_focus")
 LivingForgeSecondaryButton/styles/hover = SubResource("Style_secondary_hover")
-LivingForgeSecondaryButton/styles/hover_pressed = SubResource("Style_secondary_hover")
+LivingForgeSecondaryButton/styles/hover_pressed = SubResource("Style_secondary_pressed")
 LivingForgeSecondaryButton/styles/normal = SubResource("Style_secondary")
-LivingForgeSecondaryButton/styles/pressed = SubResource("Style_secondary_hover")
+LivingForgeSecondaryButton/styles/pressed = SubResource("Style_secondary_pressed")
 LivingForgeSectionLabel/base_type = &"Label"
 LivingForgeSectionLabel/font_sizes/font_size = 22
 LivingForgeSectionLabel/fonts/font = SubResource("Font_source_700")
@@ -312,6 +334,11 @@ LivingForgeStatusChip/colors/font_color = Color(0.9490196, 0.91764706, 0.8470588
 LivingForgeStatusChip/font_sizes/font_size = 14
 LivingForgeStatusChip/fonts/font = SubResource("Font_source_600")
 LivingForgeStatusChip/styles/normal = SubResource("Style_chip")
+LivingForgeStatusBadge/base_type = &"PanelContainer"
+LivingForgeStatusBadge/styles/panel = SubResource("Style_chip")
+LivingForgeBadgeLabel/base_type = &"Label"
+LivingForgeBadgeLabel/font_sizes/font_size = 16
+LivingForgeBadgeLabel/fonts/font = SubResource("Font_source_600")
 LivingForgeUnavailableButton/base_type = &"Button"
 LivingForgeUnavailableButton/colors/font_color = Color(0.5411765, 0.5882353, 0.64705884, 1)
 LivingForgeUnavailableButton/colors/font_disabled_color = Color(0.5411765, 0.5882353, 0.64705884, 1)
