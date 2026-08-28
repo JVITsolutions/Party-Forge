@@ -213,7 +213,13 @@ func _test_game_settings_page(failures: Array[String]) -> void:
 	var page := packed.instantiate()
 	(Engine.get_main_loop() as SceneTree).root.add_child(page)
 	var reduced_motion := page.get_node_or_null("Layout/ReducedMotion") as CheckButton
+	var high_contrast := page.get_node_or_null("Layout/HighContrast") as CheckButton
+	var ui_scale := page.get_node_or_null("Layout/UIScale") as OptionButton
+	var text_scale := page.get_node_or_null("Layout/TextScale") as OptionButton
 	TestAssertions.truthy(reduced_motion != null, "Game Settings exposes Layout/ReducedMotion", failures)
+	TestAssertions.truthy(high_contrast != null, "Game Settings exposes Layout/HighContrast", failures)
+	TestAssertions.truthy(ui_scale != null, "Game Settings exposes Layout/UIScale", failures)
+	TestAssertions.truthy(text_scale != null, "Game Settings exposes Layout/TextScale", failures)
 	if reduced_motion != null:
 		TestAssertions.equal(reduced_motion.text, "Reduce motion in interface animations", "reduced-motion control uses approved copy", failures)
 		TestAssertions.truthy(reduced_motion.focus_mode != Control.FOCUS_NONE, "reduced-motion control is keyboard and controller focusable", failures)
@@ -227,6 +233,28 @@ func _test_game_settings_page(failures: Array[String]) -> void:
 		reduced_motion.button_pressed = false
 		page.call("write_to", saved)
 		TestAssertions.equal(saved.get("reduced_motion"), false, "Game Settings writes reduced motion", failures)
+	if high_contrast != null and ui_scale != null and text_scale != null:
+		TestAssertions.equal([high_contrast.text, ui_scale.get_item_count(), text_scale.get_item_count()], ["Use high contrast interface", 6, 6], "Game Settings uses accessible display control labels", failures)
+		var supported_values := [80, 90, 100, 110, 125, 150]
+		var ui_values: Array[int] = []
+		var text_values: Array[int] = []
+		for index: int in range(supported_values.size()):
+			ui_values.append(ui_scale.get_item_id(index))
+			text_values.append(text_scale.get_item_id(index))
+		TestAssertions.equal(ui_values, supported_values, "UI scale OptionButton uses exact supported values", failures)
+		TestAssertions.equal(text_values, supported_values, "text scale OptionButton uses exact supported values", failures)
+		var saved := PartyForgeSettings.new()
+		saved.set("high_contrast", true)
+		saved.set("ui_scale_percent", 90)
+		saved.set("text_scale_percent", 125)
+		page.call("bind", saved)
+		TestAssertions.truthy(high_contrast.button_pressed, "Game Settings binds high contrast", failures)
+		TestAssertions.equal([ui_scale.get_item_id(ui_scale.selected), text_scale.get_item_id(text_scale.selected)], [90, 125], "Game Settings binds independent UI and text scales", failures)
+		high_contrast.button_pressed = false
+		ui_scale.select(ui_scale.get_item_index(150))
+		text_scale.select(text_scale.get_item_index(80))
+		page.call("write_to", saved)
+		TestAssertions.equal([saved.get("high_contrast"), saved.get("ui_scale_percent"), saved.get("text_scale_percent")], [false, 150, 80], "Game Settings writes independent display accessibility controls", failures)
 	page.free()
 
 
@@ -407,31 +435,45 @@ func _test_settings_apply_cancel_and_save_error(failures: Array[String]) -> void
 	saved.mode = PartyForgeSettings.Mode.DEVELOPER_MODE
 	saved.party_capacity_override = 12
 	saved.set("reduced_motion", false)
+	saved.set("high_contrast", false)
+	saved.set("ui_scale_percent", 100)
+	saved.set("text_scale_percent", 100)
 	screen.call("configure", PartyForgeSettingsStore.new(), saved, null, custom_settings_path)
 	screen.call("open")
 	var page := screen.get_node("Overlay/Frame/Layout/Tabs/Additional Settings")
 	var game_page := screen.get_node("Overlay/Frame/Layout/Tabs/Game Settings")
 	var reduced_motion := game_page.get_node_or_null("Layout/ReducedMotion") as CheckButton
-	TestAssertions.truthy(reduced_motion != null, "Settings flow exposes reduced motion", failures)
-	if reduced_motion == null:
+	var high_contrast := game_page.get_node_or_null("Layout/HighContrast") as CheckButton
+	var ui_scale := game_page.get_node_or_null("Layout/UIScale") as OptionButton
+	var text_scale := game_page.get_node_or_null("Layout/TextScale") as OptionButton
+	TestAssertions.truthy(reduced_motion != null and high_contrast != null and ui_scale != null and text_scale != null, "Settings flow exposes display accessibility controls", failures)
+	if reduced_motion == null or high_contrast == null or ui_scale == null or text_scale == null:
 		screen.free()
 		_cleanup_default_settings_artifacts()
 		_restore_default_settings_artifacts(original_files)
 		return
 	(page.get_node("Layout/PartyCapacity/Value") as HSlider).value = 3
 	reduced_motion.button_pressed = true
+	high_contrast.button_pressed = true
+	ui_scale.select(ui_scale.get_item_index(150))
+	text_scale.select(text_scale.get_item_index(80))
 	(page.get_node("Layout/Cancel") as Button).pressed.emit()
 	TestAssertions.truthy(not bool(screen.call("is_open")), "Cancel button closes Settings", failures)
 	TestAssertions.equal((screen.call("current_settings") as PartyForgeSettings).party_capacity_override, 12, "Cancel leaves current settings unchanged", failures)
 	TestAssertions.equal((screen.call("current_settings") as PartyForgeSettings).get("reduced_motion"), false, "Cancel preserves the prior reduced-motion value", failures)
+	TestAssertions.equal([(screen.call("current_settings") as PartyForgeSettings).get("high_contrast"), (screen.call("current_settings") as PartyForgeSettings).get("ui_scale_percent"), (screen.call("current_settings") as PartyForgeSettings).get("text_scale_percent")], [false, 100, 100], "Cancel persists none of the display accessibility settings", failures)
 	screen.call("open")
 	TestAssertions.equal(int((page.get_node("Layout/PartyCapacity/Value") as HSlider).value), 12, "open creates a fresh draft from current settings", failures)
 	TestAssertions.equal(reduced_motion.button_pressed, false, "open restores reduced motion from current settings", failures)
+	TestAssertions.equal([high_contrast.button_pressed, ui_scale.get_item_id(ui_scale.selected), text_scale.get_item_id(text_scale.selected)], [false, 100, 100], "open restores display accessibility settings from current settings", failures)
 	(page.get_node("Layout/PartyCapacity/Value") as HSlider).value = 9
 	(page.get_node("Layout/ResetDeveloperOptions") as Button).pressed.emit()
 	TestAssertions.equal((screen.call("current_settings") as PartyForgeSettings).party_capacity_override, 12, "Reset changes draft controls without changing current settings", failures)
 	(page.get_node("Layout/PartyCapacity/Value") as HSlider).value = 9
 	reduced_motion.button_pressed = true
+	high_contrast.button_pressed = true
+	ui_scale.select(ui_scale.get_item_index(125))
+	text_scale.select(text_scale.get_item_index(90))
 	var applied: Array[PartyForgeSettings] = []
 	screen.connect("settings_applied", func(settings: PartyForgeSettings) -> void: applied.append(settings))
 	(page.get_node("Layout/ApplyAndReturn") as Button).pressed.emit()
@@ -441,6 +483,9 @@ func _test_settings_apply_cancel_and_save_error(failures: Array[String]) -> void
 	TestAssertions.equal(PartyForgeSettingsStore.new().load_settings(custom_settings_path).party_capacity_override, 9, "successful Apply persists through the configured store path", failures)
 	TestAssertions.equal((screen.call("current_settings") as PartyForgeSettings).get("reduced_motion"), true, "successful Apply writes reduced motion", failures)
 	TestAssertions.equal(PartyForgeSettingsStore.new().load_settings(custom_settings_path).get("reduced_motion"), true, "successful Apply persists reduced motion at the configured path", failures)
+	TestAssertions.equal([(screen.call("current_settings") as PartyForgeSettings).get("high_contrast"), (screen.call("current_settings") as PartyForgeSettings).get("ui_scale_percent"), (screen.call("current_settings") as PartyForgeSettings).get("text_scale_percent")], [true, 125, 90], "successful Apply writes every display accessibility setting", failures)
+	var applied_store_settings := PartyForgeSettingsStore.new().load_settings(custom_settings_path)
+	TestAssertions.equal([applied_store_settings.get("high_contrast"), applied_store_settings.get("ui_scale_percent"), applied_store_settings.get("text_scale_percent")], [true, 125, 90], "successful Apply persists every display accessibility setting", failures)
 	if not applied.is_empty():
 		applied[0].party_capacity_override = 2
 	TestAssertions.equal((screen.call("current_settings") as PartyForgeSettings).party_capacity_override, 9, "applied signal receives an isolated copy", failures)

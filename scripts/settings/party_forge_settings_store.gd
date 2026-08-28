@@ -39,6 +39,12 @@ func load_settings(path: String = DEFAULT_PATH) -> PartyForgeSettings:
 	result.level_up_card_count = int(cards_value) if typeof(cards_value) == TYPE_INT else 5
 	var reduced_motion_value: Variant = config.get_value(SECTION, "reduced_motion", false)
 	result.reduced_motion = bool(reduced_motion_value) if typeof(reduced_motion_value) == TYPE_BOOL else false
+	var high_contrast_value: Variant = config.get_value(SECTION, "high_contrast", false)
+	result.high_contrast = bool(high_contrast_value) if typeof(high_contrast_value) == TYPE_BOOL else false
+	var ui_scale_value: Variant = config.get_value(SECTION, "ui_scale_percent", 100)
+	result.ui_scale_percent = int(ui_scale_value) if typeof(ui_scale_value) == TYPE_INT else 100
+	var text_scale_value: Variant = config.get_value(SECTION, "text_scale_percent", 100)
+	result.text_scale_percent = int(text_scale_value) if typeof(text_scale_value) == TYPE_INT else 100
 	var drop_multiplier_value: Variant = config.get_value(SECTION, "personal_drop_multiplier_percent", 100)
 	result.personal_drop_multiplier_percent = int(drop_multiplier_value) if typeof(drop_multiplier_value) == TYPE_INT else 100
 	var force_drops_value: Variant = config.get_value(SECTION, "force_personal_drops", false)
@@ -69,6 +75,9 @@ func save_settings(settings: PartyForgeSettings, path: String = DEFAULT_PATH) ->
 	config.set_value(SECTION, "experience_multiplier_percent", normalized.experience_multiplier_percent)
 	config.set_value(SECTION, "level_up_card_count", normalized.level_up_card_count)
 	config.set_value(SECTION, "reduced_motion", normalized.reduced_motion)
+	config.set_value(SECTION, "high_contrast", normalized.high_contrast)
+	config.set_value(SECTION, "ui_scale_percent", normalized.ui_scale_percent)
+	config.set_value(SECTION, "text_scale_percent", normalized.text_scale_percent)
 	config.set_value(SECTION, "personal_drop_multiplier_percent", normalized.personal_drop_multiplier_percent)
 	config.set_value(SECTION, "force_personal_drops", normalized.force_personal_drops)
 	config.set_value(SECTION, "personal_drop_source_category_override", normalized.personal_drop_source_category_override)

@@ -21,3 +21,26 @@ text = "Game Settings"
 layout_mode = 2
 focus_mode = 2
 text = "Reduce motion in interface animations"
+
+[node name="HighContrast" type="CheckButton" parent="Layout"]
+layout_mode = 2
+focus_mode = 2
+text = "Use high contrast interface"
+
+[node name="UIScaleLabel" type="Label" parent="Layout"]
+layout_mode = 2
+text = "Interface scale"
+
+[node name="UIScale" type="OptionButton" parent="Layout"]
+layout_mode = 2
+focus_mode = 2
+tooltip_text = "Changes interface geometry and spacing."
+
+[node name="TextScaleLabel" type="Label" parent="Layout"]
+layout_mode = 2
+text = "Text scale"
+
+[node name="TextScale" type="OptionButton" parent="Layout"]
+layout_mode = 2
+focus_mode = 2
+tooltip_text = "Changes text size only."
