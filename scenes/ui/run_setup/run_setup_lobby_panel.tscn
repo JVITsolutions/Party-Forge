@@ -29,7 +29,7 @@ corner_radius_top_right = 4
 corner_radius_bottom_right = 4
 corner_radius_bottom_left = 4
 
-[node name="ClassSelection" type="PanelContainer"]
+[node name="ClassSelection" type="Control"]
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
@@ -53,6 +53,7 @@ color = Color(0.01568628, 0.02745098, 0.04313726, 1)
 layout_mode = 1
 anchors_preset = 14
 anchor_left = 0.5
+anchor_top = 0.0
 anchor_right = 0.5
 anchor_bottom = 1.0
 offset_left = -960.0
@@ -98,7 +99,7 @@ size_flags_vertical = 3
 theme_override_constants/separation = 12
 
 [node name="LeftColumn" type="VBoxContainer" parent="Content/Margin/Layout/Body"]
-custom_minimum_size = Vector2(760, 0)
+custom_minimum_size = Vector2(720, 0)
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_constants/separation = 12
@@ -130,7 +131,7 @@ theme_override_constants/h_separation = 8
 theme_override_constants/v_separation = 8
 
 [node name="HeroStage" type="PanelContainer" parent="Content/Margin/Layout/Body"]
-custom_minimum_size = Vector2(420, 520)
+custom_minimum_size = Vector2(400, 520)
 layout_mode = 2
 size_flags_vertical = 3
 theme_override_styles/panel = SubResource("Style_hero")
@@ -139,7 +140,7 @@ theme_override_styles/panel = SubResource("Style_hero")
 layout_mode = 2
 
 [node name="Details" type="ScrollContainer" parent="Content/Margin/Layout/Body"]
-custom_minimum_size = Vector2(380, 0)
+custom_minimum_size = Vector2(400, 0)
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 3

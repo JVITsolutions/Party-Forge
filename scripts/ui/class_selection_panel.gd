@@ -1,5 +1,5 @@
 class_name ClassSelectionPanel
-extends PanelContainer
+extends Control
 
 signal class_preview_requested(class_id: StringName)
 signal class_selection_requested(class_id: StringName)
@@ -27,6 +27,7 @@ var _stable_projection: RunSetupLobbyProjection
 var _previewed_class_id: StringName = &""
 var _pending_initial_focus: Control
 var _pending_origin: Control
+var _focus_context: Control
 var _compatibility_gate_active := false
 var _compatibility_class_id: StringName = &""
 var _options := DEFAULT_OPTIONS.duplicate(true)
@@ -56,7 +57,7 @@ func configure(catalog_value: Variant) -> void:
 				definitions.append(value as ClassDefinition)
 	for definition: ClassDefinition in definitions:
 		if definition != null and not definition.id.is_empty():
-			_definitions_by_id[definition.id] = definition.duplicate(true) as ClassDefinition
+			_definitions_by_id[definition.id] = definition.duplicate_deep(Resource.DEEP_DUPLICATE_ALL) as ClassDefinition
 	if _projection == null or _projection.classes.is_empty():
 		_projection = _catalog_projection(catalog_value, definitions)
 		_previewed_class_id = _projection.previewed_class_id
@@ -67,15 +68,17 @@ func present(next_projection: RunSetupLobbyProjection) -> void:
 	if next_projection == null:
 		return
 	var was_pending := _is_pending_state(_state())
+	var recovery_origin := _pending_origin if was_pending and _pending_origin != null and is_instance_valid(_pending_origin) else null
+	_focus_context = recovery_origin
 	_options = _options_from(next_projection)
 	_projection = next_projection.copy()
 	_previewed_class_id = _resolved_preview_id(_projection.previewed_class_id)
 	if not _is_pending_state(_projection.state):
 		_stable_projection = _projection.copy()
 	_render()
-	if was_pending and _pending_origin != null and is_instance_valid(_pending_origin):
-		_pending_initial_focus = _pending_origin
-		_restore_focus(_pending_origin)
+	if recovery_origin != null:
+		_pending_initial_focus = recovery_origin
+		_restore_focus(recovery_origin)
 		_pending_origin = null
 
 
@@ -90,6 +93,7 @@ func close() -> void:
 	visible = false
 	_pending_initial_focus = null
 	_pending_origin = null
+	_focus_context = null
 	_compatibility_gate_active = false
 	_compatibility_class_id = &""
 	if _preview() != null:
@@ -123,10 +127,12 @@ func action_focus(action_id: StringName) -> Control:
 func set_pending(state: Variant, origin: Control) -> void:
 	var requested_state := _pending_state_from(state)
 	if requested_state < 0:
+		var restore_target := origin if origin != null else _pending_origin
 		if _stable_projection != null:
+			_focus_context = restore_target
 			_projection = _stable_projection.copy()
-		_render()
-		_pending_initial_focus = origin if origin != null else _pending_origin
+			_render()
+		_pending_initial_focus = restore_target
 		_restore_focus(_pending_initial_focus)
 		_pending_origin = null
 		return
@@ -135,6 +141,7 @@ func set_pending(state: Variant, origin: Control) -> void:
 	if not _is_pending_state(_projection.state):
 		_stable_projection = _projection.copy()
 	_pending_origin = origin
+	_focus_context = origin
 	_pending_initial_focus = origin
 	_projection = _projection.copy()
 	_projection.state = requested_state as RunSetupLobbyProjection.State
@@ -159,9 +166,16 @@ func end_compatibility_gate(restore_focus := true) -> void:
 		target = selection_focus(_compatibility_class_id)
 	_compatibility_gate_active = false
 	_compatibility_class_id = &""
-	set_pending(false, target if restore_focus else null)
-	if restore_focus:
-		_pending_initial_focus = target
+	if not restore_focus:
+		_pending_origin = null
+		_pending_initial_focus = null
+		_focus_context = null
+		if _stable_projection != null:
+			_projection = _stable_projection.copy()
+			_render()
+		return
+	set_pending(false, target)
+	_pending_initial_focus = target
 
 
 func compatibility_gate_active() -> bool:
@@ -193,10 +207,11 @@ func apply_viewport_size(viewport_size: Vector2) -> void:
 	content.offset_right = content_width * 0.5
 	var compact := _layout_mode == RunSetupResponsiveLayout.Mode.COMPACT
 	_seat_grid().columns = 4 if compact else 2
+	_seat_grid().add_theme_constant_override(&"h_separation", 4 if compact else 8)
 	_class_grid().columns = 2 if compact else 3
-	_left_column().custom_minimum_size = Vector2(620.0 if compact else 760.0, 0.0)
-	_hero_stage().custom_minimum_size = Vector2(260.0, 340.0) if compact else Vector2(420.0, 520.0)
-	_details().custom_minimum_size = Vector2(260.0 if compact else 380.0, 0.0)
+	_left_column().custom_minimum_size = Vector2(620.0 if compact else 720.0, 0.0)
+	_hero_stage().custom_minimum_size = Vector2(260.0, 340.0) if compact else Vector2(400.0, 520.0)
+	_details().custom_minimum_size = Vector2(260.0 if compact else 400.0, 0.0)
 	for child: Node in _seat_grid().get_children():
 		var seat := child as Control
 		if seat == null:
@@ -331,6 +346,10 @@ func _ensure_action_buttons() -> void:
 		{"id": &"start", "label": "Start Run", "enabled": false, "kind": &"primary", "accessibility_description": "Start with the selected class."},
 	])
 	_action_bar().action_requested.connect(_on_action_requested)
+	for action_id: StringName in [&"back", &"settings", &"armoury", &"select", &"start"]:
+		var button := action_focus(action_id) as Button
+		if button != null:
+			button.focus_exited.connect(_on_action_focus_exited.bind(button))
 	_actions_initialized = true
 
 
@@ -349,7 +368,8 @@ func _set_action_enabled(action_id: StringName, enabled: bool) -> void:
 	var button := action_focus(action_id) as Button
 	if button == null:
 		return
-	button.disabled = not enabled
+	var retains_focus_context := button == _pending_origin or button == _focus_context
+	button.disabled = not enabled and not retains_focus_context
 	button.set_meta(&"action_enabled", enabled)
 	button.theme_type_variation = &"LivingForgeUnavailableButton" if not enabled else (&"LivingForgePrimaryButton" if action_id == &"start" else &"LivingForgeSecondaryButton")
 
@@ -441,8 +461,27 @@ func _can_start() -> bool:
 
 
 func _back_enabled() -> bool:
-	var button := action_focus(&"back") as Button
-	return button != null and not button.disabled
+	return _action_enabled(&"back")
+
+
+func _action_enabled(action_id: StringName) -> bool:
+	var button := action_focus(action_id) as Button
+	return button != null and bool(button.get_meta(&"action_enabled", false))
+
+
+func _on_action_focus_exited(button: Button) -> void:
+	if button == null or button != _focus_context or bool(button.get_meta(&"action_enabled", false)):
+		return
+	call_deferred(&"_expire_focus_context", button)
+
+
+func _expire_focus_context(button: Button) -> void:
+	if button == null or not is_instance_valid(button) or button != _focus_context or button.has_focus():
+		return
+	_focus_context = null
+	button.disabled = true
+	button.focus_mode = Control.FOCUS_NONE
+	_rebuild_focus_graph()
 
 
 func _armoury_target_id() -> StringName:
@@ -465,15 +504,17 @@ func _rebuild_focus_graph() -> void:
 		control.focus_neighbor_right = NodePath()
 		control.focus_neighbor_top = NodePath()
 		control.focus_neighbor_bottom = NodePath()
-		control.focus_mode = Control.FOCUS_NONE
 	var available: Array[Button] = []
 	for control: Button in all_controls:
-		if control.visible and not control.disabled:
+		var action_authority := bool(control.get_meta(&"action_enabled", false)) if control.has_meta(&"action_id") else not control.disabled
+		var retains_focus_context := control == _pending_origin or control == _focus_context
+		if control.visible and (action_authority or retains_focus_context):
+			if retains_focus_context and control.disabled:
+				control.disabled = false
 			control.focus_mode = Control.FOCUS_ALL
 			available.append(control)
-	if _state() == RunSetupLobbyProjection.State.STARTING and _pending_origin is Button and is_instance_valid(_pending_origin) and not available.has(_pending_origin):
-		(_pending_origin as Button).focus_mode = Control.FOCUS_ALL
-		available.append(_pending_origin as Button)
+		else:
+			control.focus_mode = Control.FOCUS_NONE
 	if available.is_empty():
 		return
 	for index: int in available.size():
@@ -500,18 +541,21 @@ func _rebuild_directional_focus() -> void:
 	for index: int in cards.size():
 		var card := cards[index]
 		var column := index % columns
-		if column > 0: _set_neighbor(card, &"focus_neighbor_left", cards[index - 1])
-		if column + 1 < columns and index + 1 < cards.size(): _set_neighbor(card, &"focus_neighbor_right", cards[index + 1])
-		if index >= columns: _set_neighbor(card, &"focus_neighbor_top", cards[index - columns])
+		_set_neighbor(card, &"focus_neighbor_left", cards[index - 1] if column > 0 else card)
+		_set_neighbor(card, &"focus_neighbor_right", cards[index + 1] if column + 1 < columns and index + 1 < cards.size() else card)
+		_set_neighbor(card, &"focus_neighbor_top", cards[index - columns] if index >= columns else card)
 		if index + columns < cards.size():
 			_set_neighbor(card, &"focus_neighbor_bottom", cards[index + columns])
 		elif not actions.is_empty():
 			_set_neighbor(card, &"focus_neighbor_bottom", actions[mini(column, actions.size() - 1)])
+		else:
+			_set_neighbor(card, &"focus_neighbor_bottom", card)
 	for index: int in actions.size():
-		if index > 0: _set_neighbor(actions[index], &"focus_neighbor_left", actions[index - 1])
-		if index + 1 < actions.size(): _set_neighbor(actions[index], &"focus_neighbor_right", actions[index + 1])
+		_set_neighbor(actions[index], &"focus_neighbor_left", actions[index - 1] if index > 0 else actions[index])
+		_set_neighbor(actions[index], &"focus_neighbor_right", actions[index + 1] if index + 1 < actions.size() else actions[index])
 		var target_index := clampi(cards.size() - actions.size() + index, 0, cards.size() - 1)
 		_set_neighbor(actions[index], &"focus_neighbor_top", cards[target_index])
+		_set_neighbor(actions[index], &"focus_neighbor_bottom", actions[index])
 
 
 func _set_neighbor(control: Control, property_name: StringName, target: Control) -> void:
@@ -522,8 +566,6 @@ func _focus_initial(preferred_focus: Control) -> void:
 	var target := preferred_focus if _is_focus_candidate(preferred_focus) else null
 	if target == null:
 		target = selection_focus(selected_class_id())
-	if not _is_focus_candidate(target):
-		target = selection_focus(_previewed_class_id)
 	if not _is_focus_candidate(target):
 		for child: Node in _class_grid().get_children():
 			if _is_focus_candidate(child as Control):
