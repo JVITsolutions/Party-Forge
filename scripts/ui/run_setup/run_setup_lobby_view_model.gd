@@ -14,26 +14,27 @@ static func build(
 	selected_class_id_value: StringName,
 	previewed_class_id_value: StringName,
 	compatibility_value: Variant,
-	_safe_player_copy: Variant,
+	safe_status_copy: String,
 	starting: Variant,
 ) -> RunSetupLobbyProjection:
 	var seats := _seats()
+	var unavailable_copy := _unavailable_copy(safe_status_copy)
 	var profile := profile_value as ProfileState if profile_value is ProfileState else null
 	var catalog := catalog_value as GameCatalog if catalog_value is GameCatalog else null
 	if not _profile_is_completed(profile) or not _catalog_is_usable(catalog):
-		return RunSetupLobbyProjection.create(seats, [], &"", &"", RunSetupLobbyProjection.State.UNAVAILABLE, UNAVAILABLE_COPY)
+		return RunSetupLobbyProjection.create(seats, [], &"", &"", RunSetupLobbyProjection.State.UNAVAILABLE, unavailable_copy)
 	if selected_class_id_value.is_empty():
 		return RunSetupLobbyProjection.create(seats, _class_values(catalog, &"", null), &"", previewed_class_id_value, RunSetupLobbyProjection.State.NO_SELECTION, NO_SELECTION_COPY)
 	var selected_definition := catalog.class_by_id(selected_class_id_value)
-	var previewed_definition := catalog.class_by_id(previewed_class_id_value)
-	if selected_definition == null or previewed_definition == null:
-		return RunSetupLobbyProjection.create(seats, [], &"", &"", RunSetupLobbyProjection.State.UNAVAILABLE, UNAVAILABLE_COPY)
+	if selected_definition == null:
+		return RunSetupLobbyProjection.create(seats, [], &"", &"", RunSetupLobbyProjection.State.UNAVAILABLE, unavailable_copy)
+	var resolved_previewed_class_id := previewed_class_id_value if catalog.class_by_id(previewed_class_id_value) != null else selected_class_id_value
 	var compatibility := compatibility_value as LoadoutCompatibilityProjection if compatibility_value is LoadoutCompatibilityProjection else null
-	if compatibility != null and (not compatibility.valid or compatibility.selected_class_id != selected_class_id_value):
-		return RunSetupLobbyProjection.create(seats, _class_values(catalog, selected_class_id_value, compatibility), selected_class_id_value, previewed_class_id_value, RunSetupLobbyProjection.State.UNAVAILABLE, UNAVAILABLE_COPY)
+	if compatibility != null and compatibility.valid and compatibility.selected_class_id != selected_class_id_value:
+		return RunSetupLobbyProjection.create(seats, _class_values(catalog, selected_class_id_value, null), selected_class_id_value, resolved_previewed_class_id, RunSetupLobbyProjection.State.UNAVAILABLE, unavailable_copy)
 	var class_values := _class_values(catalog, selected_class_id_value, compatibility)
 	var state := _lobby_state(compatibility, starting is bool and starting)
-	return RunSetupLobbyProjection.create(seats, class_values, selected_class_id_value, previewed_class_id_value, state, _status_for(state))
+	return RunSetupLobbyProjection.create(seats, class_values, selected_class_id_value, resolved_previewed_class_id, state, _status_for(state, unavailable_copy))
 
 static func _seats() -> Array[RunSetupSeatProjection]:
 	return [
@@ -90,6 +91,7 @@ static func _compatibility_copy(compatibility: LoadoutCompatibilityProjection, s
 		return {}
 	return {
 		"incompatible_item_count": compatibility.incompatible_items.size(),
+		"incompatible_items": compatibility.incompatible_items,
 		"summary": READY_COPY if state == RunSetupClassProjection.Compatibility.COMPATIBLE else NEEDS_ATTENTION_COPY,
 	}
 
@@ -102,7 +104,7 @@ static func _lobby_state(compatibility: LoadoutCompatibilityProjection, starting
 		return RunSetupLobbyProjection.State.STARTING
 	return RunSetupLobbyProjection.State.READY if compatibility.incompatible_items.is_empty() else RunSetupLobbyProjection.State.NEEDS_ATTENTION
 
-static func _status_for(state: RunSetupLobbyProjection.State) -> String:
+static func _status_for(state: RunSetupLobbyProjection.State, unavailable_copy: String) -> String:
 	match state:
 		RunSetupLobbyProjection.State.CHECKING:
 			return CHECKING_COPY
@@ -113,7 +115,10 @@ static func _status_for(state: RunSetupLobbyProjection.State) -> String:
 		RunSetupLobbyProjection.State.STARTING:
 			return STARTING_COPY
 		_:
-			return UNAVAILABLE_COPY
+			return unavailable_copy
+
+static func _unavailable_copy(safe_status_copy: String) -> String:
+	return safe_status_copy.strip_edges() if not safe_status_copy.strip_edges().is_empty() else UNAVAILABLE_COPY
 
 static func _role_label(role: ClassDefinition.Role) -> String:
 	match role:
