@@ -9,6 +9,13 @@ var _documents: AtomicJsonStore
 func _init(documents: AtomicJsonStore = null) -> void:
 	_documents = documents if documents != null else AtomicJsonStore.new()
 
+func recover() -> Dictionary:
+	return _documents.recover_generated_document(
+		TARGET,
+		Callable(CityAccessSnapshotLoader, "validate_document"),
+		STAGING_ROOT,
+	)
+
 func write(document: Dictionary) -> Dictionary:
 	return _documents.save_generated_document(
 		TARGET,

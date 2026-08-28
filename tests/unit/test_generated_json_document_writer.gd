@@ -4,8 +4,15 @@ const GeneratedWriter = preload("res://scripts/tools/generated_json_document_wri
 
 func run() -> Array[String]:
 	var failures: Array[String] = []
+	_test_writer_owns_recovery_preflight(failures)
 	_test_writer_uses_fixed_target_and_canonical_encoder(failures)
 	return failures
+
+func _test_writer_owns_recovery_preflight(failures: Array[String]) -> void:
+	var writer := GeneratedWriter.new()
+	TestAssertions.truthy(writer.has_method("recover"), "fixed generated writer exposes recovery without target restoration details", failures)
+	if writer.has_method("recover"):
+		TestAssertions.equal(writer.call("recover"), {"ok": true, "state": "unchanged", "cleanupDebt": false, "stage": "recovery", "reason": ""}, "fixed writer proves no-pending recovery state", failures)
 
 func _test_writer_uses_fixed_target_and_canonical_encoder(failures: Array[String]) -> void:
 	var target := GeneratedWriter.TARGET

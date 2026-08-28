@@ -9,6 +9,21 @@ var _promote_file: Callable
 func _init(promote_file: Callable = Callable()) -> void:
 	_promote_file = promote_file
 
+func recover_generated_document(
+	path: String,
+	validator: Callable,
+	staging_root: String,
+) -> Dictionary:
+	var recovery_paths := _generated_recovery_paths(staging_root)
+	if recovery_paths.is_empty():
+		return _generated_outcome("indeterminate", false, "confinement", "staging-root-is-not-provable")
+	var recovered := _recover_generated_transaction(path, validator, recovery_paths, validator.is_valid())
+	if recovered.is_empty():
+		return _generated_outcome("unchanged", false, "recovery", "")
+	if String(recovered.get("state", "")) == "rejected" and String(recovered.get("stage", "")) == "cleanup":
+		return _generated_outcome("unchanged", true, "cleanup", String(recovered.get("reason", "")))
+	return recovered
+
 func save_generated_document(
 	path: String,
 	document: Dictionary,

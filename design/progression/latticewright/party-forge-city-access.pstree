@@ -275,8 +275,8 @@
       {
         "description": "A City location with visibility and availability contracts.",
         "fieldIds": [
-          "party-forge-location-id",
           "party-forge-destination-id",
+          "party-forge-location-id",
           "party-forge-visibility-policy"
         ],
         "id": "party-forge-access-location",
