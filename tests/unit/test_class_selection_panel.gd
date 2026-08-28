@@ -1,152 +1,283 @@
 extends RefCounted
 
+const LOBBY_SCENE_PATH := "res://scenes/ui/run_setup/run_setup_lobby_panel.tscn"
 const SELECTOR_SCRIPT_PATH := "res://scripts/ui/class_selection_panel.gd"
 
 
 func run() -> Array[String]:
 	var failures: Array[String] = []
-	TestAssertions.truthy(ResourceLoader.exists(SELECTOR_SCRIPT_PATH), "selector reusable script exists", failures)
-	var hud := (load("res://scenes/ui/hud.tscn") as PackedScene).instantiate() as CanvasLayer
-	var panel := hud.get_node("ClassSelection")
-	var panel_script := panel.get_script() as Script
-	TestAssertions.equal(panel_script.resource_path if panel_script != null else "", SELECTOR_SCRIPT_PATH, "selector uses reusable script", failures)
-	if panel_script != null and panel_script.resource_path == SELECTOR_SCRIPT_PATH:
-		_test_initial_hud_invariant(panel, hud, failures)
-		var catalog := GameCatalog.load_defaults()
-		panel.call("configure", catalog.classes)
-		_test_scene_and_class_contract(panel, catalog, failures)
-		_test_lifecycle_and_run_hud_contract(panel, hud, failures)
-		_test_back_intent_is_side_effect_free(panel, hud, failures)
-		_test_focus_wiring(panel, failures)
-	hud.free()
+	_test_scene_and_public_seam(failures)
+	if not ResourceLoader.exists(LOBBY_SCENE_PATH):
+		return failures
+	var panel: Variant = (load(LOBBY_SCENE_PATH) as PackedScene).instantiate()
+	if panel == null:
+		failures.append("lobby scene instantiates as ClassSelectionPanel")
+		return failures
+	panel.configure(GameCatalog.load_defaults())
+	_test_projection_ownership_theme_and_lifecycle(panel, failures)
+	_test_preview_selection_and_start_are_orthogonal(panel, failures)
+	_test_complete_action_matrix(panel, failures)
+	_test_focus_graph_and_pending_recovery(panel, failures)
+	panel.free()
 	return failures
 
 
-func _test_initial_hud_invariant(panel: Control, hud: CanvasLayer, failures: Array[String]) -> void:
-	var status_block := hud.get_node("Margin") as Control
-	TestAssertions.truthy(not status_block.visible, "run HUD starts hidden while initial run setup is visible", failures)
-	status_block.visible = true
-	panel.call(&"_ready")
-	TestAssertions.truthy(not status_block.visible, "ready restores the initial run-setup HUD invariant", failures)
-
-
-func _test_scene_and_class_contract(panel: Control, catalog: GameCatalog, failures: Array[String]) -> void:
-	for method: StringName in [&"open", &"close", &"is_open", &"confirm_run_started"]:
-		TestAssertions.truthy(panel.has_method(method), "selector exposes %s lifecycle contract" % method, failures)
-	TestAssertions.truthy(panel.has_signal(&"back_requested"), "selector exposes Back intent", failures)
-	TestAssertions.truthy(panel.has_method(&"begin_compatibility_gate"), "selector exposes explicit compatibility gate entry", failures)
-	TestAssertions.truthy(panel.has_method(&"end_compatibility_gate"), "selector exposes explicit compatibility gate exit", failures)
-	TestAssertions.truthy(panel.has_method(&"selection_focus"), "selector exposes exact selected-class focus origin", failures)
-	var back := panel.get_node_or_null("Content/Actions/Back") as Button
-	TestAssertions.truthy(back != null, "selector keeps stable Back action beside Settings", failures)
-	var grid := panel.get_node("Content/Scroll/Grid") as GridContainer
-	TestAssertions.equal(grid.columns, 3, "selector uses three-column grid", failures)
-	TestAssertions.equal(grid.get_child_count(), 9, "selector renders all nine classes", failures)
-	var selected: Array[StringName] = []
-	panel.connect("class_selected", func(class_id: StringName) -> void: selected.append(class_id))
-	for index: int in range(catalog.classes.size()):
-		var definition := catalog.classes[index]
-		var button := grid.get_child(index) as Button
-		TestAssertions.equal(button.name, "Class_%s" % definition.id, "%s stable button name" % definition.id, failures)
-		TestAssertions.truthy(definition.display_name in button.text, "%s display name shown" % definition.id, failures)
-		button.pressed.emit()
-		TestAssertions.equal(selected[-1], definition.id, "%s emits exact id" % definition.id, failures)
-	TestAssertions.equal(selected.size(), 9, "each button emits once", failures)
-	var settings_requested: Array[int] = [0]
-	panel.connect("settings_requested", func() -> void: settings_requested[0] += 1)
-	var settings := panel.get_node("Content/Actions/Settings") as Button
-	settings.pressed.emit()
-	TestAssertions.equal(settings_requested[0], 1, "Settings emits one request", failures)
-	TestAssertions.equal(settings.name, &"Settings", "Settings keeps its stable return-focus path", failures)
-
-
-func _test_lifecycle_and_run_hud_contract(panel: Control, hud: CanvasLayer, failures: Array[String]) -> void:
-	if not panel.has_method(&"open") or not panel.has_method(&"close") or not panel.has_method(&"is_open"):
+func _test_scene_and_public_seam(failures: Array[String]) -> void:
+	TestAssertions.truthy(ResourceLoader.exists(LOBBY_SCENE_PATH), "full-screen lobby scene exists", failures)
+	var hud := (load("res://scenes/ui/hud.tscn") as PackedScene).instantiate() as CanvasLayer
+	var panel := hud.get_node_or_null("ClassSelection") as ClassSelectionPanel
+	TestAssertions.truthy(panel != null, "stable HUD/ClassSelection seam remains ClassSelectionPanel", failures)
+	if panel == null:
+		hud.free()
 		return
-	var status_block := hud.get_node("Margin") as Control
-	panel.call(&"close")
-	TestAssertions.truthy(not bool(panel.call(&"is_open")), "close hides run setup", failures)
-	status_block.visible = true
-	panel.call(&"open")
-	TestAssertions.truthy(bool(panel.call(&"is_open")), "open reveals run setup", failures)
-	TestAssertions.truthy(not status_block.visible, "open hides the run HUD status block", failures)
-	var grid := panel.get_node("Content/Scroll/Grid") as GridContainer
-	var first_class := grid.get_child(0) as Button
-	TestAssertions.equal(panel.get("_pending_initial_focus"), first_class, "open selects the first eligible class before tree entry", failures)
-	first_class.disabled = true
-	panel.call(&"close")
-	panel.call(&"open")
-	TestAssertions.equal(panel.get("_pending_initial_focus"), grid.get_child(1), "open skips an ineligible initial class", failures)
-	first_class.disabled = false
-	panel.call(&"close")
-	TestAssertions.truthy(not bool(panel.call(&"is_open")), "close is reusable after open", failures)
-	TestAssertions.equal(panel.get("_pending_initial_focus"), null, "close clears pending run-setup focus", failures)
-	TestAssertions.truthy(not status_block.visible, "close does not falsely reveal the run HUD", failures)
-	panel.call(&"open")
-	(grid.get_child(0) as Button).pressed.emit()
-	TestAssertions.truthy(not status_block.visible, "a class selection attempt does not reveal the run HUD", failures)
-	TestAssertions.truthy(bool(panel.call(&"is_open")), "a class selection attempt does not own run-setup closure", failures)
-	if panel.has_method(&"confirm_run_started"):
-		panel.call(&"confirm_run_started")
-		TestAssertions.truthy(not bool(panel.call(&"is_open")), "confirmed run start closes run setup", failures)
-		TestAssertions.truthy(status_block.visible, "confirmed run start reveals the run HUD status block", failures)
+	TestAssertions.equal(panel.scene_file_path, LOBBY_SCENE_PATH, "stable selector seam instances the lobby scene", failures)
+	var panel_script := panel.get_script() as Script
+	TestAssertions.equal(panel_script.resource_path if panel_script != null else "", SELECTOR_SCRIPT_PATH, "selector keeps its public adapter script", failures)
+	for signal_name: StringName in [&"class_preview_requested", &"class_selection_requested", &"start_requested", &"settings_requested", &"armoury_requested", &"back_requested"]:
+		TestAssertions.truthy(panel.has_signal(signal_name), "selector exposes %s" % signal_name, failures)
+	for method_name: StringName in [&"configure", &"present", &"open", &"close", &"is_open", &"selected_class_id", &"previewed_class_id", &"selection_focus", &"action_focus", &"set_pending", &"begin_compatibility_gate", &"end_compatibility_gate", &"show_status", &"clear_status"]:
+		TestAssertions.truthy(panel.has_method(method_name), "selector exposes %s" % method_name, failures)
+	for node_name: String in ["Backdrop", "Header", "Seats", "ClassRoster", "HeroStage", "Details", "ActionBar", "Status"]:
+		TestAssertions.truthy(panel.find_child(node_name, true, false) != null, "lobby owns %s composition" % node_name, failures)
+	var backdrop := panel.find_child("Backdrop", true, false) as ColorRect
+	TestAssertions.truthy(backdrop != null and backdrop.color.a >= 0.999, "lobby backdrop is opaque", failures)
+	var source := FileAccess.get_file_as_string(SELECTOR_SCRIPT_PATH)
+	TestAssertions.truthy(not source.contains("../Margin") and not source.contains("HUD/Margin"), "selector never reaches sideways into run HUD Margin", failures)
+	var run_status := hud.get_node("Margin") as Control
+	panel.confirm_run_started()
+	TestAssertions.truthy(not panel.visible and run_status.visible, "legacy confirmation still closes setup and reveals run HUD through declarative composition", failures)
+	hud.free()
 
 
-func _test_back_intent_is_side_effect_free(panel: Control, hud: CanvasLayer, failures: Array[String]) -> void:
-	var back := panel.get_node_or_null("Content/Actions/Back") as Button
-	if back == null or not panel.has_signal(&"back_requested") or not panel.has_method(&"open"):
-		return
-	var status_block := hud.get_node("Margin") as Control
-	var back_requests: Array[int] = [0]
-	panel.connect(&"back_requested", func() -> void: back_requests[0] += 1)
-	panel.call(&"open")
-	back.pressed.emit()
-	TestAssertions.equal(back_requests[0], 1, "Back button emits one request", failures)
-	TestAssertions.truthy(bool(panel.call(&"is_open")), "Back intent leaves lifecycle ownership to composition", failures)
-	TestAssertions.truthy(not status_block.visible, "Back intent does not reveal or start the run HUD", failures)
-	panel.call(&"_unhandled_input", _action_event(&"ui_cancel"))
-	TestAssertions.equal(back_requests[0], 2, "ui_cancel emits the same Back intent", failures)
-	TestAssertions.truthy(bool(panel.call(&"is_open")), "ui_cancel does not mutate run setup before composition handles Back", failures)
-	TestAssertions.truthy(not status_block.visible, "ui_cancel does not mutate run HUD visibility", failures)
+func _test_projection_ownership_theme_and_lifecycle(panel: Variant, failures: Array[String]) -> void:
+	var default_projection := _projection(RunSetupLobbyProjection.State.READY, &"fighter", &"fighter", RunSetupClassProjection.Compatibility.COMPATIBLE)
+	panel.present(default_projection)
+	TestAssertions.equal(panel.theme, LivingForgeThemeCatalog.resolve(false, 100, 100), "missing accessibility metadata defaults to normal contrast and 100 percent scales", failures)
+	TestAssertions.truthy(not bool((panel.find_child("Preview", true, false) as CharacterEquipmentPreview).get("_reduced_motion")), "missing motion metadata defaults to standard motion", failures)
+	TestAssertions.truthy((panel.action_focus(&"armoury") as Button).disabled, "missing route metadata defaults Armoury unavailable", failures)
+	var projection := _projection(RunSetupLobbyProjection.State.READY, &"fighter", &"fighter", RunSetupClassProjection.Compatibility.COMPATIBLE)
+	projection.set_meta(&"high_contrast", true)
+	projection.set_meta(&"ui_scale_percent", 110)
+	projection.set_meta(&"text_scale_percent", 125)
+	projection.set_meta(&"reduced_motion", true)
+	projection.set_meta(&"armoury_available", true)
+	panel.present(projection)
+	projection.selected_class_id = &"mage"
+	projection.previewed_class_id = &"mage"
+	projection.status_copy = "Mutated outside the lobby"
+	TestAssertions.equal(panel.selected_class_id(), &"fighter", "present takes a defensive selected-class copy", failures)
+	TestAssertions.equal(panel.previewed_class_id(), &"fighter", "present takes a defensive preview copy", failures)
+	TestAssertions.truthy(not (panel.find_child("Status", true, false) as Label).text.contains("Mutated outside"), "present takes a defensive status copy", failures)
+	TestAssertions.equal(panel.theme, LivingForgeThemeCatalog.resolve(true, 110, 125), "projection accessibility metadata selects the owned Living Forge theme", failures)
+	TestAssertions.truthy(bool((panel.selection_focus(&"fighter") as ForgeClassCard).get("_high_contrast")), "high-contrast presentation reaches reused class-card semantic cues", failures)
+	var preview := panel.find_child("Preview", true, false) as CharacterEquipmentPreview
+	TestAssertions.truthy(preview != null, "lobby reuses the shared character preview", failures)
+	panel.open()
+	TestAssertions.truthy(panel.is_open(), "open reveals the lobby", failures)
+	panel.close()
+	TestAssertions.truthy(not panel.is_open(), "close hides the lobby", failures)
+	if preview != null:
+		var viewport := preview.get_node("SubViewport") as SubViewport
+		TestAssertions.equal(viewport.render_target_update_mode, SubViewport.UPDATE_DISABLED, "close disables the shared preview SubViewport", failures)
+	panel.open()
 
 
-func _test_focus_wiring(panel: Control, failures: Array[String]) -> void:
-	var grid := panel.get_node("Content/Scroll/Grid") as GridContainer
-	var settings := panel.get_node("Content/Actions/Settings") as Button
-	var back := panel.get_node_or_null("Content/Actions/Back") as Button
-	if back == null:
-		return
-	var controls: Array[Button] = []
-	for child: Node in grid.get_children():
-		controls.append(child as Button)
-	controls.append(settings)
-	controls.append(back)
-	for index: int in range(controls.size()):
-		var current := controls[index]
-		var next := controls[(index + 1) % controls.size()]
-		var previous := controls[posmod(index - 1, controls.size())]
-		TestAssertions.equal(current.focus_mode, Control.FOCUS_ALL, "%s accepts mouse, keyboard, and controller focus" % current.name, failures)
-		TestAssertions.equal(current.focus_next, current.get_path_to(next), "%s has explicit keyboard-forward focus" % current.name, failures)
-		TestAssertions.equal(current.focus_previous, current.get_path_to(previous), "%s has explicit keyboard-backward focus" % current.name, failures)
-	var class_1 := controls[0]
-	var class_2 := controls[1]
-	var class_5 := controls[4]
-	var class_7 := controls[6]
-	var class_8 := controls[7]
-	var class_9 := controls[8]
-	TestAssertions.equal(class_1.focus_neighbor_right, class_1.get_path_to(class_2), "first class moves right within the grid", failures)
-	TestAssertions.equal(class_2.focus_neighbor_bottom, class_2.get_path_to(class_5), "class grid moves down by one row", failures)
-	TestAssertions.equal(class_7.focus_neighbor_bottom, class_7.get_path_to(settings), "left bottom class reaches Settings", failures)
-	TestAssertions.equal(class_8.focus_neighbor_bottom, class_8.get_path_to(settings), "middle bottom class reaches Settings", failures)
-	TestAssertions.equal(class_9.focus_neighbor_bottom, class_9.get_path_to(back), "right bottom class reaches Back", failures)
-	TestAssertions.equal(settings.focus_neighbor_top, settings.get_path_to(class_8), "Settings returns to the class grid", failures)
-	TestAssertions.equal(settings.focus_neighbor_right, settings.get_path_to(back), "Settings moves right to Back", failures)
-	TestAssertions.equal(back.focus_neighbor_top, back.get_path_to(class_9), "Back returns to the class grid", failures)
-	TestAssertions.equal(back.focus_neighbor_left, back.get_path_to(settings), "Back moves left to Settings", failures)
+func _test_preview_selection_and_start_are_orthogonal(panel: Variant, failures: Array[String]) -> void:
+	var previews: Array[StringName] = []
+	var selections: Array[StringName] = []
+	var starts: Array[StringName] = []
+	panel.class_preview_requested.connect(func(class_id: StringName) -> void: previews.append(class_id))
+	panel.class_selection_requested.connect(func(class_id: StringName) -> void: selections.append(class_id))
+	panel.start_requested.connect(func(class_id: StringName) -> void: starts.append(class_id))
+	panel.present(_projection(RunSetupLobbyProjection.State.NO_SELECTION, &"", &"fighter", RunSetupClassProjection.Compatibility.UNKNOWN))
+	var fighter := panel.selection_focus(&"fighter") as ForgeClassCard
+	var mage := panel.selection_focus(&"mage") as ForgeClassCard
+	fighter.mouse_entered.emit()
+	mage.focus_entered.emit()
+	TestAssertions.equal(previews, [&"fighter", &"mage"] as Array[StringName], "mouse hover and focus each emit exact preview intent", failures)
+	TestAssertions.equal(selections, [] as Array[StringName], "preview never selects a class", failures)
+	fighter.request_selection()
+	TestAssertions.equal(selections, [&"fighter"] as Array[StringName], "class activation emits exact selection intent", failures)
+	TestAssertions.equal(starts, [] as Array[StringName], "class activation never starts a run", failures)
+
+	panel.present(_projection(RunSetupLobbyProjection.State.READY, &"fighter", &"fighter", RunSetupClassProjection.Compatibility.COMPATIBLE))
+	mage = panel.selection_focus(&"mage") as ForgeClassCard
+	mage.request_preview()
+	TestAssertions.equal(panel.selected_class_id(), &"fighter", "preview B preserves selected class A", failures)
+	TestAssertions.equal(panel.previewed_class_id(), &"mage", "preview B updates only preview identity", failures)
+	TestAssertions.truthy((fighter.get_node("SelectionNotch") as Control).visible, "selected styling remains on A", failures)
+	TestAssertions.truthy(not (mage.get_node("SelectionNotch") as Control).visible, "preview B does not gain selected styling", failures)
+	var start := panel.action_focus(&"start") as Button
+	TestAssertions.truthy(start != null and not start.disabled, "Ready selected A keeps Start enabled while previewing B", failures)
+	start.pressed.emit()
+	TestAssertions.equal(starts, [&"fighter"] as Array[StringName], "Start emits exact selected class A, never preview B", failures)
+	TestAssertions.equal(selections, [&"fighter"] as Array[StringName], "Start is separate from selection", failures)
 
 
-func _action_event(action: StringName) -> InputEventAction:
-	var event := InputEventAction.new()
-	event.action = action
-	event.pressed = true
-	return event
+func _test_complete_action_matrix(panel: Variant, failures: Array[String]) -> void:
+	var matrix := [
+		[RunSetupLobbyProjection.State.NO_SELECTION, &"", RunSetupClassProjection.Compatibility.UNKNOWN, true, true, true, true, false],
+		[RunSetupLobbyProjection.State.CHECKING, &"fighter", RunSetupClassProjection.Compatibility.UNKNOWN, true, false, false, false, false],
+		[RunSetupLobbyProjection.State.READY, &"fighter", RunSetupClassProjection.Compatibility.COMPATIBLE, true, true, true, true, true],
+		[RunSetupLobbyProjection.State.NEEDS_ATTENTION, &"fighter", RunSetupClassProjection.Compatibility.NEEDS_ATTENTION, true, true, true, true, true],
+		[RunSetupLobbyProjection.State.UNAVAILABLE, &"fighter", RunSetupClassProjection.Compatibility.UNAVAILABLE, true, true, true, false, false],
+		[RunSetupLobbyProjection.State.STARTING, &"fighter", RunSetupClassProjection.Compatibility.COMPATIBLE, false, false, false, false, false],
+		[RunSetupLobbyProjection.State.ERROR, &"fighter", RunSetupClassProjection.Compatibility.UNKNOWN, true, true, true, true, false],
+	]
+	for row: Array in matrix:
+		var projection := _projection(row[0], row[1], &"fighter", row[2])
+		projection.set_meta(&"armoury_available", true)
+		panel.present(projection)
+		var state_name: String = RunSetupLobbyProjection.State.keys()[row[0]]
+		TestAssertions.equal(not (panel.action_focus(&"back") as Button).disabled, row[3], "%s Back matrix state" % state_name, failures)
+		TestAssertions.equal(not (panel.action_focus(&"settings") as Button).disabled, row[4], "%s Settings matrix state" % state_name, failures)
+		TestAssertions.equal(not (panel.action_focus(&"armoury") as Button).disabled, row[5], "%s Armoury matrix state" % state_name, failures)
+		TestAssertions.equal(not (panel.action_focus(&"select") as Button).disabled, row[6], "%s Select matrix state" % state_name, failures)
+		TestAssertions.equal(not (panel.action_focus(&"start") as Button).disabled, row[7], "%s Start matrix state" % state_name, failures)
+
+	for state: RunSetupLobbyProjection.State in [RunSetupLobbyProjection.State.NO_SELECTION, RunSetupLobbyProjection.State.CHECKING, RunSetupLobbyProjection.State.UNAVAILABLE, RunSetupLobbyProjection.State.STARTING, RunSetupLobbyProjection.State.ERROR]:
+		var selected_id := &"" if state == RunSetupLobbyProjection.State.NO_SELECTION else &"fighter"
+		var projection := _projection(state, selected_id, &"fighter", RunSetupClassProjection.Compatibility.UNKNOWN)
+		projection.set_meta(&"armoury_available", true)
+		panel.present(projection)
+		TestAssertions.truthy((panel.action_focus(&"start") as Button).disabled, "%s disables Start" % RunSetupLobbyProjection.State.keys()[state], failures)
+	var contradictory := _projection(RunSetupLobbyProjection.State.READY, &"fighter", &"fighter", RunSetupClassProjection.Compatibility.UNKNOWN)
+	panel.present(contradictory)
+	TestAssertions.truthy((panel.action_focus(&"start") as Button).disabled, "unknown selected compatibility disables Start even in a contradictory Ready projection", failures)
+
+	var unavailable := _projection(RunSetupLobbyProjection.State.UNAVAILABLE, &"fighter", &"fighter", RunSetupClassProjection.Compatibility.UNAVAILABLE)
+	unavailable.set_meta(&"armoury_available", true)
+	panel.present(unavailable)
+	var requested: Array[StringName] = []
+	panel.class_selection_requested.connect(func(class_id: StringName) -> void: requested.append(class_id))
+	(panel.selection_focus(&"fighter") as ForgeClassCard).request_selection()
+	TestAssertions.equal(requested, [] as Array[StringName], "Unavailable selected class cannot be reselected", failures)
+	(panel.selection_focus(&"mage") as ForgeClassCard).request_preview()
+	TestAssertions.truthy(not (panel.action_focus(&"select") as Button).disabled, "Unavailable allows selecting a different selectable class", failures)
+	(panel.action_focus(&"select") as Button).pressed.emit()
+	TestAssertions.equal(requested, [&"mage"] as Array[StringName], "Unavailable Select emits only the alternate class", failures)
+
+	var starting_cancel := _projection(RunSetupLobbyProjection.State.STARTING, &"fighter", &"fighter", RunSetupClassProjection.Compatibility.COMPATIBLE)
+	starting_cancel.set_meta(&"safe_cancellation_available", true)
+	panel.present(starting_cancel)
+	TestAssertions.truthy(not (panel.action_focus(&"back") as Button).disabled, "Starting exposes Back only for authoritative safe cancellation", failures)
+	TestAssertions.truthy((panel.action_focus(&"settings") as Button).disabled, "safe cancellation never enables unrelated Settings authority", failures)
+
+	var prompt_projection := _projection(RunSetupLobbyProjection.State.READY, &"fighter", &"fighter", RunSetupClassProjection.Compatibility.COMPATIBLE)
+	prompt_projection.set_meta(&"armoury_available", true)
+	prompt_projection.set_meta(&"prompt_mode", &"controller")
+	panel.present(prompt_projection)
+	var controller_matrix := _enabled_action_ids(panel)
+	prompt_projection.set_meta(&"prompt_mode", &"keyboard_mouse")
+	panel.present(prompt_projection)
+	TestAssertions.equal(_enabled_action_ids(panel), controller_matrix, "prompt-mode changes never alter action authority", failures)
+
+	var back_count: Array[int] = [0]
+	var settings_count: Array[int] = [0]
+	var armoury_ids: Array[StringName] = []
+	panel.back_requested.connect(func() -> void: back_count[0] += 1)
+	panel.settings_requested.connect(func() -> void: settings_count[0] += 1)
+	panel.armoury_requested.connect(func(class_id: StringName) -> void: armoury_ids.append(class_id))
+	(panel.action_focus(&"back") as Button).pressed.emit()
+	(panel.action_focus(&"settings") as Button).pressed.emit()
+	(panel.action_focus(&"armoury") as Button).pressed.emit()
+	TestAssertions.equal(back_count[0], 1, "Back action emits once", failures)
+	TestAssertions.equal(settings_count[0], 1, "Settings action emits once", failures)
+	TestAssertions.equal(armoury_ids, [&"fighter"] as Array[StringName], "Armoury action emits the exact selected class", failures)
+
+
+func _test_focus_graph_and_pending_recovery(panel: Variant, failures: Array[String]) -> void:
+	panel.present(_projection(RunSetupLobbyProjection.State.READY, &"fighter", &"mage", RunSetupClassProjection.Compatibility.COMPATIBLE))
+	panel.open()
+	TestAssertions.equal(panel.get("_pending_initial_focus"), panel.selection_focus(&"fighter"), "retained selected class owns initial focus", failures)
+	panel.present(_projection(RunSetupLobbyProjection.State.NO_SELECTION, &"", &"mage", RunSetupClassProjection.Compatibility.UNKNOWN))
+	panel.open()
+	TestAssertions.equal(panel.get("_pending_initial_focus"), panel.selection_focus(&"mage"), "no selection initially focuses first selectable preview card", failures)
+
+	var ready := _projection(RunSetupLobbyProjection.State.READY, &"fighter", &"fighter", RunSetupClassProjection.Compatibility.COMPATIBLE)
+	ready.set_meta(&"armoury_available", true)
+	panel.present(ready)
+	var ordered: Array[Button] = []
+	for class_projection: RunSetupClassProjection in (panel.get("_projection") as RunSetupLobbyProjection).classes:
+		ordered.append(panel.selection_focus(class_projection.id) as Button)
+	for action_id: StringName in [&"back", &"settings", &"armoury", &"select", &"start"]:
+		ordered.append(panel.action_focus(action_id) as Button)
+	for index: int in ordered.size():
+		var current := ordered[index]
+		var next := ordered[(index + 1) % ordered.size()]
+		var previous := ordered[posmod(index - 1, ordered.size())]
+		TestAssertions.equal(current.focus_next, current.get_path_to(next), "%s has exact forward Tab order" % current.name, failures)
+		TestAssertions.equal(current.focus_previous, current.get_path_to(previous), "%s has exact reverse Tab order" % current.name, failures)
+	var first := panel.selection_focus(&"fighter") as Button
+	var second := panel.selection_focus(&"ranger") as Button
+	var fourth := panel.selection_focus(&"cleric") as Button
+	TestAssertions.equal(first.focus_neighbor_right, first.get_path_to(second), "desktop directional focus moves right one class", failures)
+	TestAssertions.equal(first.focus_neighbor_bottom, first.get_path_to(fourth), "desktop directional focus moves down one three-column row", failures)
+	panel.call(&"apply_viewport_size", Vector2(1280.0, 720.0))
+	var third := panel.selection_focus(&"mage") as Button
+	TestAssertions.equal(first.focus_neighbor_bottom, first.get_path_to(third), "compact directional focus moves down one two-column row", failures)
+
+	var seats := panel.find_child("Seats", true, false) as GridContainer
+	for seat: Control in seats.get_children():
+		TestAssertions.equal(seat.focus_mode, Control.FOCUS_NONE, "%s is unreachable" % seat.name, failures)
+		TestAssertions.equal(seat.mouse_filter, Control.MOUSE_FILTER_IGNORE, "%s ignores pointer input" % seat.name, failures)
+
+	var starts: Array[StringName] = []
+	panel.start_requested.connect(func(class_id: StringName) -> void: starts.append(class_id))
+	var start := panel.action_focus(&"start") as Button
+	panel.set_pending(RunSetupLobbyProjection.State.STARTING, start)
+	start.pressed.emit()
+	start.pressed.emit()
+	TestAssertions.equal(starts, [] as Array[StringName], "Starting rejects duplicate activation", failures)
+	TestAssertions.equal(panel.get("_pending_initial_focus"), start, "Starting retains the initiating Start focus", failures)
+	panel.present(_projection(RunSetupLobbyProjection.State.ERROR, &"fighter", &"fighter", RunSetupClassProjection.Compatibility.UNKNOWN))
+	TestAssertions.equal(panel.get("_pending_initial_focus"), start, "failure restores initiating Start focus", failures)
+	TestAssertions.truthy(not (panel.action_focus(&"back") as Button).disabled, "failure restores a stable navigable state", failures)
+
+	var mage := panel.selection_focus(&"mage") as Control
+	TestAssertions.equal(panel.begin_compatibility_gate(&"mage", mage), mage, "compatibility gate retains explicit class origin", failures)
+	TestAssertions.truthy(panel.compatibility_gate_active(), "compatibility gate enters Checking", failures)
+	panel.end_compatibility_gate(true)
+	TestAssertions.truthy(not panel.compatibility_gate_active(), "compatibility gate terminates", failures)
+	TestAssertions.equal(panel.get("_pending_initial_focus"), mage, "compatibility failure/exit restores class origin", failures)
+
+
+func _projection(
+	state: RunSetupLobbyProjection.State,
+	selected_id: StringName,
+	previewed_id: StringName,
+	selected_compatibility: RunSetupClassProjection.Compatibility,
+) -> RunSetupLobbyProjection:
+	var catalog := GameCatalog.load_defaults()
+	var classes: Array[RunSetupClassProjection] = []
+	for definition: ClassDefinition in catalog.classes:
+		classes.append(RunSetupClassProjection.create(
+			definition.id,
+			definition.display_name,
+			_role_label(definition.role),
+			definition.color,
+			[],
+			String(definition.primary_attack.id).capitalize(),
+			selected_compatibility if definition.id == selected_id else RunSetupClassProjection.Compatibility.UNKNOWN,
+			{},
+		))
+	return RunSetupLobbyProjection.create(
+		[RunSetupSeatProjection.active(1, "P1"), RunSetupSeatProjection.coming_soon(2), RunSetupSeatProjection.coming_soon(3), RunSetupSeatProjection.coming_soon(4)],
+		classes,
+		selected_id,
+		previewed_id,
+		state,
+		"Lobby state: %s" % RunSetupLobbyProjection.State.keys()[state],
+	)
+
+
+func _role_label(role: ClassDefinition.Role) -> String:
+	return ClassDefinition.Role.keys()[role].capitalize()
+
+
+func _enabled_action_ids(panel: Variant) -> Array[StringName]:
+	var result: Array[StringName] = []
+	for action_id: StringName in [&"back", &"settings", &"armoury", &"select", &"start"]:
+		if not (panel.action_focus(action_id) as Button).disabled:
+			result.append(action_id)
+	return result

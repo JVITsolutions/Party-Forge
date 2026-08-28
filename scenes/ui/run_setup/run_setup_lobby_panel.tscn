@@ -1,0 +1,204 @@
+[gd_scene load_steps=7 format=3]
+
+[ext_resource type="Script" path="res://scripts/ui/class_selection_panel.gd" id="1_script"]
+[ext_resource type="Theme" path="res://data/ui/living_forge/living_forge_theme.tres" id="2_theme"]
+[ext_resource type="PackedScene" path="res://scenes/ui/ledger/character_equipment_preview.tscn" id="3_preview"]
+[ext_resource type="PackedScene" path="res://scenes/ui/living_forge/components/forge_action_bar.tscn" id="4_actions"]
+
+[sub_resource type="StyleBoxFlat" id="Style_hero"]
+bg_color = Color(0.03137255, 0.05098039, 0.07058824, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.3372549, 0.3960784, 0.4666667, 1)
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_right = 4
+corner_radius_bottom_left = 4
+
+[sub_resource type="StyleBoxFlat" id="Style_roster"]
+bg_color = Color(0.03137255, 0.05098039, 0.07058824, 0.92)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.254902, 0.3098039, 0.3686275, 1)
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_right = 4
+corner_radius_bottom_left = 4
+
+[node name="ClassSelection" type="PanelContainer"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 0
+theme = ExtResource("2_theme")
+script = ExtResource("1_script")
+
+[node name="Backdrop" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0.01568628, 0.02745098, 0.04313726, 1)
+
+[node name="Content" type="Control" parent="."]
+layout_mode = 1
+anchors_preset = 14
+anchor_left = 0.5
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -960.0
+offset_right = 960.0
+grow_horizontal = 2
+
+[node name="Margin" type="MarginContainer" parent="Content"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 24.0
+offset_top = 16.0
+offset_right = -24.0
+offset_bottom = -16.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Layout" type="VBoxContainer" parent="Content/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="Header" type="HBoxContainer" parent="Content/Margin/Layout"]
+custom_minimum_size = Vector2(0, 56)
+layout_mode = 2
+
+[node name="Title" type="Label" parent="Content/Margin/Layout/Header"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"LivingForgeDisplayLabel"
+text = "THE LIVING FORGE"
+vertical_alignment = 1
+
+[node name="Purpose" type="Label" parent="Content/Margin/Layout/Header"]
+layout_mode = 2
+theme_type_variation = &"LivingForgeCaptionLabel"
+text = "CHOOSE A LEADER · REVIEW THE FORGE · START WHEN READY"
+vertical_alignment = 1
+
+[node name="Body" type="HBoxContainer" parent="Content/Margin/Layout"]
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_constants/separation = 12
+
+[node name="LeftColumn" type="VBoxContainer" parent="Content/Margin/Layout/Body"]
+custom_minimum_size = Vector2(760, 0)
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 12
+
+[node name="Seats" type="GridContainer" parent="Content/Margin/Layout/Body/LeftColumn"]
+layout_mode = 2
+columns = 2
+theme_override_constants/h_separation = 8
+theme_override_constants/v_separation = 8
+
+[node name="ClassRoster" type="PanelContainer" parent="Content/Margin/Layout/Body/LeftColumn"]
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_styles/panel = SubResource("Style_roster")
+
+[node name="Scroll" type="ScrollContainer" parent="Content/Margin/Layout/Body/LeftColumn/ClassRoster"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+vertical_scroll_mode = 1
+follow_focus = true
+
+[node name="Grid" type="GridContainer" parent="Content/Margin/Layout/Body/LeftColumn/ClassRoster/Scroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+columns = 3
+theme_override_constants/h_separation = 8
+theme_override_constants/v_separation = 8
+
+[node name="HeroStage" type="PanelContainer" parent="Content/Margin/Layout/Body"]
+custom_minimum_size = Vector2(420, 520)
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_styles/panel = SubResource("Style_hero")
+
+[node name="Preview" parent="Content/Margin/Layout/Body/HeroStage" instance=ExtResource("3_preview")]
+layout_mode = 2
+
+[node name="Details" type="ScrollContainer" parent="Content/Margin/Layout/Body"]
+custom_minimum_size = Vector2(380, 0)
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+vertical_scroll_mode = 1
+
+[node name="DetailContent" type="VBoxContainer" parent="Content/Margin/Layout/Body/Details"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 12
+
+[node name="ClassName" type="Label" parent="Content/Margin/Layout/Body/Details/DetailContent"]
+layout_mode = 2
+theme_type_variation = &"LivingForgeDisplayLabel"
+text = "CHOOSE A CLASS"
+autowrap_mode = 2
+
+[node name="Role" type="Label" parent="Content/Margin/Layout/Body/Details/DetailContent"]
+layout_mode = 2
+theme_type_variation = &"LivingForgeSectionLabel"
+text = "Preview a class to inspect it."
+autowrap_mode = 2
+
+[node name="TraitsTitle" type="Label" parent="Content/Margin/Layout/Body/Details/DetailContent"]
+layout_mode = 2
+theme_type_variation = &"LivingForgeCaptionLabel"
+text = "TRAITS"
+
+[node name="Traits" type="Label" parent="Content/Margin/Layout/Body/Details/DetailContent"]
+layout_mode = 2
+text = "—"
+autowrap_mode = 2
+
+[node name="ActionTitle" type="Label" parent="Content/Margin/Layout/Body/Details/DetailContent"]
+layout_mode = 2
+theme_type_variation = &"LivingForgeCaptionLabel"
+text = "STARTING ACTION"
+
+[node name="StartingAction" type="Label" parent="Content/Margin/Layout/Body/Details/DetailContent"]
+layout_mode = 2
+text = "—"
+autowrap_mode = 2
+
+[node name="Compatibility" type="Label" parent="Content/Margin/Layout/Body/Details/DetailContent"]
+layout_mode = 2
+theme_type_variation = &"LivingForgeStatusChip"
+text = "SELECT A CLASS"
+autowrap_mode = 2
+
+[node name="Status" type="Label" parent="Content/Margin/Layout"]
+custom_minimum_size = Vector2(0, 36)
+layout_mode = 2
+theme_type_variation = &"LivingForgeStatusChip"
+text = "Choose a class to begin your run."
+horizontal_alignment = 1
+vertical_alignment = 1
+autowrap_mode = 2
+
+[node name="ActionBar" parent="Content/Margin/Layout" instance=ExtResource("4_actions")]
+custom_minimum_size = Vector2(0, 56)
+layout_mode = 2
+alignment = 1
