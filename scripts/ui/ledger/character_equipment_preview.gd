@@ -296,21 +296,5 @@ func _set_fallback_visible(should_be_visible: bool) -> void:
 
 
 func _sync_rendering() -> void:
-	var is_effectively_visible := is_visible_in_tree()
-	if not is_inside_tree():
-		is_effectively_visible = _unattached_canvas_ancestors_are_visible()
-	var has_visible_presentation := is_effectively_visible and active_preview != null and is_instance_valid(active_preview)
+	var has_visible_presentation := is_visible_in_tree() and active_preview != null and is_instance_valid(active_preview)
 	_subviewport().render_target_update_mode = SubViewport.UPDATE_ALWAYS if has_visible_presentation else SubViewport.UPDATE_DISABLED
-
-
-func _unattached_canvas_ancestors_are_visible() -> bool:
-	var current: Node = self
-	while current != null:
-		if current is CanvasItem and not (current as CanvasItem).visible:
-			return false
-		if current is CanvasLayer and not (current as CanvasLayer).visible:
-			return false
-		if current is Window and not (current as Window).visible:
-			return false
-		current = current.get_parent()
-	return true

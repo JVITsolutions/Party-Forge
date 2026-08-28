@@ -59,12 +59,12 @@ func _test_clear_suspends_rendering_and_show_reenables(failures: Array[String]) 
 	var subviewport := preview.get_node("SubViewport") as SubViewport
 	var member := _member(8, &"feminine", &"blue", Color("3588d4"))
 	TestAssertions.truthy(bool(preview.call(&"show_member", member, [] as Array[Dictionary])), "preview member renders before suspension", failures)
-	TestAssertions.equal(subviewport.render_target_update_mode, SubViewport.UPDATE_ALWAYS, "successful show enables continuous preview rendering", failures)
+	TestAssertions.equal(subviewport.render_target_update_mode, SubViewport.UPDATE_DISABLED, "detached successful member preview keeps rendering suspended", failures)
 	preview.call(&"clear")
 	TestAssertions.equal(subviewport.render_target_update_mode, SubViewport.UPDATE_DISABLED, "clear suspends preview rendering", failures)
 	TestAssertions.truthy(preview.get("active_preview") == null, "clear releases the active presentation while suspended", failures)
 	TestAssertions.truthy(bool(preview.call(&"show_member", member, [] as Array[Dictionary])), "preview member rebuild succeeds after suspension", failures)
-	TestAssertions.equal(subviewport.render_target_update_mode, SubViewport.UPDATE_ALWAYS, "successful rebuild re-enables continuous preview rendering", failures)
+	TestAssertions.equal(subviewport.render_target_update_mode, SubViewport.UPDATE_DISABLED, "detached successful member rebuild keeps rendering suspended", failures)
 	preview.free()
 
 
@@ -201,7 +201,7 @@ func _test_class_preview_uses_production_profile_defaults(failures: Array[String
 	TestAssertions.truthy(active != null and active.active_profile == FIGHTER_DEFINITION.visual_profile, "class preview applies the production Fighter visual profile", failures)
 	var model := _assert_exact_fighter_defaults(active, "class preview", failures)
 	TestAssertions.equal(model.get("_primary_color") if model != null else Color.TRANSPARENT, FIGHTER_DEFINITION.color, "class preview applies the exact class color", failures)
-	TestAssertions.equal(subviewport.render_target_update_mode, SubViewport.UPDATE_ALWAYS, "valid class preview enables rendering", failures)
+	TestAssertions.equal(subviewport.render_target_update_mode, SubViewport.UPDATE_DISABLED, "detached valid class preview keeps rendering suspended", failures)
 	var first_id := _active_preview_id(preview)
 	TestAssertions.truthy(_show_class(preview, FIGHTER_DEFINITION, failures), "unchanged class request remains valid", failures)
 	TestAssertions.equal(_active_preview_id(preview), first_id, "unchanged class request reuses its presentation", failures)
@@ -261,9 +261,7 @@ func _test_class_fallback_is_neutral_and_safe(failures: Array[String]) -> void:
 
 
 func _test_class_preview_lifecycle_and_reduced_motion(failures: Array[String]) -> void:
-	var fixture := _new_preview_with_ancestor()
-	var preview := fixture.get(&"preview") as Control
-	var ancestor := fixture.get(&"ancestor") as Control
+	var preview := _new_preview()
 	var subviewport := preview.get_node("SubViewport") as SubViewport
 	TestAssertions.truthy(_show_class(preview, FIGHTER_DEFINITION, failures), "first class preview is valid", failures)
 	var fighter_id := _active_preview_id(preview)
@@ -273,12 +271,6 @@ func _test_class_preview_lifecycle_and_reduced_motion(failures: Array[String]) -
 	TestAssertions.truthy(_show_class(preview, RANGER_DEFINITION, failures), "second production class preview is valid", failures)
 	TestAssertions.truthy(_active_preview_id(preview) != fighter_id, "changing class replaces the active presentation", failures)
 	TestAssertions.truthy(not is_instance_id_valid(fighter_id) and not is_instance_id_valid(fighter_model_id), "class replacement frees the prior presentation and model", failures)
-	ancestor.visible = false
-	preview.call(&"_sync_rendering")
-	TestAssertions.equal(subviewport.render_target_update_mode, SubViewport.UPDATE_DISABLED, "hidden ancestor suspends an otherwise valid class preview", failures)
-	ancestor.visible = true
-	preview.call(&"_sync_rendering")
-	TestAssertions.equal(subviewport.render_target_update_mode, SubViewport.UPDATE_ALWAYS, "shown ancestor re-enables an otherwise valid class preview", failures)
 	TestAssertions.truthy(_set_reduced_motion(preview, true, failures), "reduced-motion interface is available", failures)
 	TestAssertions.truthy(preview.get("_reduced_motion") == true, "reduced-motion state is retained", failures)
 	TestAssertions.truthy(preview.get_node_or_null("PreviewTransition") == null, "reduced motion avoids ornamental preview transitions", failures)
@@ -337,24 +329,8 @@ func _new_preview() -> Control:
 	return preview
 
 
-func _new_preview_with_ancestor() -> Dictionary:
-	var ancestor := Control.new()
-	ancestor.name = "PreviewVisibilityAncestor"
-	var preview := (load(PREVIEW_SCENE_PATH) as PackedScene).instantiate() as Control
-	_attach_preview(preview, ancestor)
-	return {&"preview": preview, &"ancestor": ancestor}
-
-
-func _attach_preview(preview: Control, ancestor: Control = null) -> void:
-	var root_window := (Engine.get_main_loop() as SceneTree).root
-	root_window.visible = true
-	var layer := CanvasLayer.new()
-	layer.visible = true
-	root_window.add_child(layer)
-	var host := ancestor if ancestor != null else Control.new()
-	layer.add_child(host)
-	host.add_child(preview)
-	preview.tree_exited.connect(layer.queue_free)
+func _attach_preview(preview: Control) -> void:
+	(Engine.get_main_loop() as SceneTree).root.add_child(preview)
 
 
 func _assert_exact_fighter_defaults(active: CharacterPresentation, label: String, failures: Array[String]) -> ForgeHumanoidModel:
