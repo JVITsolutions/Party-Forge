@@ -32,6 +32,7 @@ var force_personal_drops := false
 var personal_drop_source_category_override: StringName = &""
 var personal_drop_item_level_override := 0
 var show_ground_chest_diagnostics := false
+var use_city_access_snapshot := false
 
 func normalize() -> void:
 	if mode not in [Mode.PLAYER_SIMULATION, Mode.DEVELOPER_MODE]:
@@ -61,4 +62,5 @@ func copy() -> PartyForgeSettings:
 	result.personal_drop_source_category_override = personal_drop_source_category_override
 	result.personal_drop_item_level_override = personal_drop_item_level_override
 	result.show_ground_chest_diagnostics = show_ground_chest_diagnostics
+	result.use_city_access_snapshot = use_city_access_snapshot
 	return result

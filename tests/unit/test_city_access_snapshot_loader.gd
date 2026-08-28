@@ -1,0 +1,403 @@
+extends RefCounted
+
+func run() -> Array[String]:
+	var failures: Array[String] = []
+	_test_factories_reject_invalid_inputs(failures)
+	_test_valid_access_snapshot_loads(failures)
+	_test_opaque_provenance_contract(failures)
+	_test_in_memory_validation_matches_strict_loader(failures)
+	_test_structural_contract(failures)
+	_test_content_and_limit_contract(failures)
+	_test_scalar_primitive_types(failures)
+	_test_astral_utf16_bounds(failures)
+	_test_bytes_paths_and_defensive_copies(failures)
+	_test_load_result_rejects_public_mutation(failures)
+	_test_codec_is_canonical(failures)
+	_test_canonical_byte_ceiling(failures)
+	return failures
+
+
+func _test_factories_reject_invalid_inputs(failures: Array[String]) -> void:
+	TestAssertions.equal(CityAccessCondition.create(&"unsupported", "value"), null, "condition factory rejects unsupported kind", failures)
+	TestAssertions.equal(CityAccessCondition.create(&"always", "value"), null, "condition factory rejects malformed always", failures)
+	var invalid_conditions: Array[CityAccessCondition] = []
+	invalid_conditions.append(null)
+	TestAssertions.equal(CityAccessLocation.create(&"city.test", &"city.test.destination", invalid_conditions, []), null, "location factory rejects null condition", failures)
+	var valid_condition := CityAccessCondition.create(&"always", "")
+	var valid_location := CityAccessLocation.create(&"city.test", &"city.test.destination", [valid_condition], [valid_condition])
+	TestAssertions.truthy(valid_location != null, "factory fixture location constructs", failures)
+	var valid_locations: Array[CityAccessLocation] = [valid_location]
+	var valid_sha := "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+	TestAssertions.equal(CityAccessSnapshot.create(&"", &"runtime", 3, valid_sha, valid_locations), null, "snapshot factory rejects empty adapter", failures)
+	TestAssertions.equal(CityAccessSnapshot.create(&"latticewright-runtime-v3-city-access", &"runtime", 3, "bad", valid_locations), null, "snapshot factory rejects malformed SHA", failures)
+	var invalid_locations: Array[CityAccessLocation] = []
+	invalid_locations.append(null)
+	TestAssertions.equal(CityAccessSnapshot.create(&"latticewright-runtime-v3-city-access", &"runtime", 3, valid_sha, invalid_locations), null, "snapshot factory rejects null location", failures)
+
+
+func _test_valid_access_snapshot_loads(failures: Array[String]) -> void:
+	var document := _valid_document()
+	var result := CityAccessSnapshotLoader.load_bytes(JSON.stringify(document).to_utf8_buffer())
+	if not result is RefCounted:
+		failures.append("valid access snapshot invokes the loader")
+		return
+	TestAssertions.truthy(result.ok(), "valid access snapshot loads atomically: %s" % [str(result.errors)], failures)
+	if not result.ok():
+		return
+	TestAssertions.equal(result.snapshot.locations.size(), 7, "all seven locations load", failures)
+	TestAssertions.equal(String(result.snapshot.locations[0].id), "city.apothecary", "locations use ordinal ID order", failures)
+
+
+func _test_opaque_provenance_contract(failures: Array[String]) -> void:
+	var alternate := _valid_document()
+	alternate["source"] = {
+		"adapter": "future-adapter",
+		"format": "future-format",
+		"formatVersion": 2147483647,
+		"sha256": alternate["source"]["sha256"],
+	}
+	var loaded := CityAccessSnapshotLoader.validate_document(alternate)
+	TestAssertions.truthy(loaded.ok(), "runtime loader accepts alternate bounded opaque provenance", failures)
+	if loaded.ok():
+		TestAssertions.equal(String(loaded.snapshot.adapter), "future-adapter", "runtime loader retains alternate adapter provenance", failures)
+		TestAssertions.equal(String(loaded.snapshot.source_format), "future-format", "runtime loader retains alternate format provenance", failures)
+		TestAssertions.equal(loaded.snapshot.source_format_version, 2147483647, "runtime loader retains maximum positive source version", failures)
+
+	var valid_condition := CityAccessCondition.create(&"always", "")
+	var valid_location := CityAccessLocation.create(&"city.test", &"city.test.destination", [valid_condition], [valid_condition])
+	var valid_locations: Array[CityAccessLocation] = [valid_location]
+	var valid_sha := "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+	TestAssertions.truthy(CityAccessSnapshot.create(&"future-adapter", &"future-format", 2147483647, valid_sha, valid_locations) != null, "snapshot factory accepts alternate bounded opaque provenance", failures)
+
+	for field: String in ["adapter", "format"]:
+		for invalid_text: String in ["", "x".repeat(CityAccessSnapshotLoader.MAX_TEXT_UNITS + 1)]:
+			var invalid_document := alternate.duplicate(true)
+			invalid_document["source"][field] = invalid_text
+			_assert_invalid(invalid_document, "loader rejects %s provenance text length %d" % [field, invalid_text.length()], failures)
+			var adapter := StringName(invalid_text) if field == "adapter" else &"future-adapter"
+			var source_format := StringName(invalid_text) if field == "format" else &"future-format"
+			TestAssertions.equal(CityAccessSnapshot.create(adapter, source_format, 1, valid_sha, valid_locations), null, "snapshot factory rejects %s provenance text length %d" % [field, invalid_text.length()], failures)
+
+	for invalid_version: Variant in [1.5, 0, -1, 2147483648]:
+		var invalid_document := alternate.duplicate(true)
+		invalid_document["source"]["formatVersion"] = invalid_version
+		_assert_invalid(invalid_document, "loader rejects provenance version %s" % str(invalid_version), failures)
+		TestAssertions.equal(CityAccessSnapshot.create(&"future-adapter", &"future-format", invalid_version, valid_sha, valid_locations), null, "snapshot factory rejects provenance version %s" % str(invalid_version), failures)
+	var nonnumeric_version := alternate.duplicate(true)
+	nonnumeric_version["source"]["formatVersion"] = "1"
+	_assert_invalid(nonnumeric_version, "loader rejects noninteger provenance version", failures)
+
+
+func _test_in_memory_validation_matches_strict_loader(failures: Array[String]) -> void:
+	var valid := _valid_document()
+	var bytes_result := CityAccessSnapshotLoader.load_bytes(JSON.stringify(valid).to_utf8_buffer())
+	var memory_result := CityAccessSnapshotLoader.validate_document(valid)
+	TestAssertions.truthy(bytes_result.ok() and memory_result.ok(), "in-memory validation accepts the loader's valid document", failures)
+	if memory_result.ok():
+		TestAssertions.equal(memory_result.snapshot.locations.size(), bytes_result.snapshot.locations.size(), "in-memory validation constructs the same complete snapshot", failures)
+	var invalid := _valid_document()
+	invalid["unexpected"] = true
+	var invalid_bytes := CityAccessSnapshotLoader.load_bytes(JSON.stringify(invalid).to_utf8_buffer())
+	var invalid_memory := CityAccessSnapshotLoader.validate_document(invalid)
+	TestAssertions.truthy(not invalid_bytes.ok() and not invalid_memory.ok(), "in-memory validation rejects the loader's invalid structure", failures)
+	TestAssertions.equal(invalid_memory.snapshot, null, "in-memory invalid result exposes no partial snapshot", failures)
+
+
+func _test_structural_contract(failures: Array[String]) -> void:
+	for path: Array in [["extra"], ["source", "extra"], ["locations", 0, "extra"], ["locations", 0, "visibleWhen", 0, "extra"]]:
+		var document := _valid_document()
+		_set_path(document, path, true)
+		_assert_invalid(document, "unknown key at %s rejects" % [str(path)], failures)
+	for path: Array in [["format"], ["version"], ["source"], ["locations"], ["source", "adapter"], ["source", "format"], ["source", "formatVersion"], ["source", "sha256"], ["locations", 0, "id"], ["locations", 0, "destinationId"], ["locations", 0, "visibleWhen"], ["locations", 0, "availableWhen"], ["locations", 0, "visibleWhen", 0, "kind"], ["locations", 0, "visibleWhen", 0, "value"]]:
+		var missing := _valid_document()
+		_erase_path(missing, path)
+		_assert_invalid(missing, "missing %s rejects" % [str(path)], failures)
+	for replacement: Variant in ["wrong", 2, [], "wrong"]:
+		var document := _valid_document()
+		document["format"] = replacement
+		_assert_invalid(document, "wrong root primitive rejects", failures)
+	for path: Array in [["source"], ["locations"], ["locations", 0], ["locations", 0, "visibleWhen"], ["locations", 0, "visibleWhen", 0]]:
+		var document := _valid_document()
+		_set_path(document, path, {} if path.size() > 1 else "wrong")
+		_assert_invalid(document, "wrong primitive at %s rejects" % [str(path)], failures)
+	for replacement: Variant in ["wrong", 0, 1.5, true]:
+		var document := _valid_document()
+		document["version"] = replacement
+		_assert_invalid(document, "wrong root version rejects", failures)
+	var malformed_sha := _valid_document()
+	malformed_sha["source"]["sha256"] = "A".repeat(64)
+	_assert_invalid(malformed_sha, "malformed source SHA rejects", failures)
+
+
+func _test_content_and_limit_contract(failures: Array[String]) -> void:
+	for path: Array in [["locations", 0, "id"], ["locations", 0, "destinationId"], ["locations", 0, "visibleWhen", 0, "value"]]:
+		var empty := _valid_document()
+		_set_path(empty, path, "")
+		if path[-1] == "value":
+			_set_path(empty, ["locations", 0, "visibleWhen", 0, "kind"], "permanent_unlock")
+		_assert_invalid(empty, "empty stable text at %s rejects" % [str(path)], failures)
+		var too_long := _valid_document()
+		_set_path(too_long, path, "a".repeat(CityAccessSnapshotLoader.MAX_TEXT_UNITS + 1))
+		if path[-1] == "value":
+			_set_path(too_long, ["locations", 0, "visibleWhen", 0, "kind"], "permanent_unlock")
+		_assert_invalid(too_long, "too-long stable text at %s rejects" % [str(path)], failures)
+	var exact_text := _valid_document()
+	exact_text["locations"][0]["id"] = "a".repeat(CityAccessSnapshotLoader.MAX_TEXT_UNITS)
+	exact_text["locations"][0]["destinationId"] = "b".repeat(CityAccessSnapshotLoader.MAX_TEXT_UNITS)
+	exact_text["locations"][0]["visibleWhen"] = [{"kind": "permanent_unlock", "value": "c".repeat(CityAccessSnapshotLoader.MAX_TEXT_UNITS)}]
+	TestAssertions.truthy(CityAccessSnapshotLoader.load_bytes(JSON.stringify(exact_text).to_utf8_buffer()).ok(), "exact text limit loads", failures)
+	var duplicate_location := _valid_document()
+	duplicate_location["locations"].append((duplicate_location["locations"][0] as Dictionary).duplicate(true))
+	_assert_invalid(duplicate_location, "duplicate location ID rejects", failures)
+	var duplicate_destination := _valid_document()
+	duplicate_destination["locations"][1]["destinationId"] = duplicate_destination["locations"][0]["destinationId"]
+	_assert_invalid(duplicate_destination, "duplicate destination ID rejects", failures)
+	for kind: String in ["unknown", "always"]:
+		var invalid_condition := _valid_document()
+		invalid_condition["locations"][0]["visibleWhen"] = [{"kind": kind, "value": "bad"}]
+		_assert_invalid(invalid_condition, "%s condition rejects malformed value" % kind, failures)
+	var mixed_always := _valid_document()
+	mixed_always["locations"][0]["visibleWhen"] = [{"kind": "always", "value": ""}, {"kind": "permanent_unlock", "value": "city-heart"}]
+	_assert_invalid(mixed_always, "always cannot mix with another condition", failures)
+	var wrong_prologue := _valid_document()
+	wrong_prologue["locations"][0]["visibleWhen"] = [{"kind": "prologue_state", "value": "done"}]
+	_assert_invalid(wrong_prologue, "unknown prologue state rejects", failures)
+	var exact_conditions := _valid_document()
+	exact_conditions["locations"][0]["visibleWhen"] = _unlock_conditions(CityAccessSnapshotLoader.MAX_CONDITIONS)
+	TestAssertions.truthy(CityAccessSnapshotLoader.load_bytes(JSON.stringify(exact_conditions).to_utf8_buffer()).ok(), "exact condition limit loads", failures)
+	var too_many_conditions := _valid_document()
+	too_many_conditions["locations"][0]["visibleWhen"] = _unlock_conditions(CityAccessSnapshotLoader.MAX_CONDITIONS + 1)
+	_assert_invalid(too_many_conditions, "plus-one condition limit rejects", failures)
+	var exact_locations := _document_with_locations(CityAccessSnapshotLoader.MAX_LOCATIONS)
+	TestAssertions.truthy(CityAccessSnapshotLoader.load_bytes(JSON.stringify(exact_locations).to_utf8_buffer()).ok(), "exact location limit loads", failures)
+	_assert_invalid(_document_with_locations(CityAccessSnapshotLoader.MAX_LOCATIONS + 1), "plus-one location limit rejects", failures)
+
+
+func _test_scalar_primitive_types(failures: Array[String]) -> void:
+	for replacement: Variant in [1, true, []]:
+		var source_format := _valid_document()
+		source_format["source"]["format"] = replacement
+		_assert_invalid(source_format, "source format scalar type rejects", failures)
+		var source_version := _valid_document()
+		source_version["source"]["formatVersion"] = "3"
+		_assert_invalid(source_version, "source formatVersion scalar type rejects", failures)
+		var source_sha := _valid_document()
+		source_sha["source"]["sha256"] = replacement
+		_assert_invalid(source_sha, "source sha scalar type rejects", failures)
+		var location_id := _valid_document()
+		location_id["locations"][0]["id"] = replacement
+		_assert_invalid(location_id, "location id scalar type rejects", failures)
+		var destination_id := _valid_document()
+		destination_id["locations"][0]["destinationId"] = replacement
+		_assert_invalid(destination_id, "destination ID scalar type rejects", failures)
+		var condition_kind := _valid_document()
+		condition_kind["locations"][0]["visibleWhen"][0]["kind"] = replacement
+		_assert_invalid(condition_kind, "condition kind scalar type rejects", failures)
+		var condition_value := _valid_document()
+		condition_value["locations"][0]["visibleWhen"][0]["value"] = replacement
+		_assert_invalid(condition_value, "condition value scalar type rejects", failures)
+
+
+func _test_astral_utf16_bounds(failures: Array[String]) -> void:
+	var astral := String.chr(0x1F600)
+	var exact := _valid_document()
+	exact["locations"][0]["id"] = astral.repeat(64)
+	exact["locations"][0]["visibleWhen"] = [{"kind": "permanent_unlock", "value": astral.repeat(64)}]
+	TestAssertions.truthy(CityAccessSnapshotLoader.load_bytes(JSON.stringify(exact).to_utf8_buffer()).ok(), "64 astral characters use exactly 128 UTF-16 units", failures)
+	var plus_one := _valid_document()
+	plus_one["locations"][0]["id"] = astral.repeat(65)
+	_assert_invalid(plus_one, "65 astral characters exceed 128 UTF-16 units", failures)
+	var value_plus_one := _valid_document()
+	value_plus_one["locations"][0]["visibleWhen"] = [{"kind": "permanent_unlock", "value": astral.repeat(65)}]
+	_assert_invalid(value_plus_one, "astral condition value plus-one rejects", failures)
+
+
+func _test_bytes_paths_and_defensive_copies(failures: Array[String]) -> void:
+	var valid_bytes := JSON.stringify(_valid_document()).to_utf8_buffer()
+	var exact_bytes := valid_bytes.duplicate()
+	exact_bytes.append_array(" ".repeat(CityAccessSnapshotLoader.MAX_BYTES - exact_bytes.size()).to_utf8_buffer())
+	TestAssertions.truthy(CityAccessSnapshotLoader.load_bytes(exact_bytes).ok(), "exact byte limit loads", failures)
+	var oversized := exact_bytes.duplicate()
+	oversized.append(32)
+	_assert_invalid_bytes(oversized, "plus-one byte limit rejects", failures)
+	_assert_invalid_bytes(PackedByteArray([0xff]), "malformed UTF-8 rejects", failures)
+	var bom := PackedByteArray([0xef, 0xbb, 0xbf])
+	bom.append_array(valid_bytes)
+	_assert_invalid_bytes(bom, "UTF-8 BOM rejects", failures)
+	_assert_invalid_result(CityAccessSnapshotLoader.load_path("user://missing-city-access-snapshot.json"), "missing path rejects", failures)
+	DirAccess.make_dir_absolute(ProjectSettings.globalize_path("user://city-access-directory"))
+	_assert_invalid_result(CityAccessSnapshotLoader.load_path("user://city-access-directory"), "unreadable directory rejects", failures)
+	var oversized_path := "user://oversized-city-access-snapshot.json"
+	var oversized_path_bytes := PackedByteArray()
+	oversized_path_bytes.resize(CityAccessSnapshotLoader.MAX_BYTES + 1)
+	_write_bytes(oversized_path, oversized_path_bytes)
+	_assert_invalid_result(CityAccessSnapshotLoader.load_path(oversized_path), "oversized path rejects", failures)
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(oversized_path))
+	var result := CityAccessSnapshotLoader.load_bytes(valid_bytes)
+	TestAssertions.truthy(result.ok(), "defensive-copy fixture loads", failures)
+	if not result.ok():
+		return
+	var locations := result.snapshot.locations
+	locations.clear()
+	TestAssertions.equal(result.snapshot.locations.size(), 7, "snapshot locations getter is defensive", failures)
+	var conditions := result.snapshot.locations[0].visible_when
+	conditions.clear()
+	TestAssertions.equal(result.snapshot.locations[0].visible_when.size(), 1, "location conditions getter is defensive", failures)
+	var errors := result.errors
+	errors.append("escaped")
+	TestAssertions.equal(result.errors, [], "load-result errors getter is defensive", failures)
+
+
+func _test_load_result_rejects_public_mutation(failures: Array[String]) -> void:
+	var valid_result := CityAccessSnapshotLoader.load_bytes(JSON.stringify(_valid_document()).to_utf8_buffer())
+	TestAssertions.truthy(valid_result.ok(), "load-result mutation fixture loads", failures)
+	if not valid_result.ok():
+		return
+	var failed_result := CityAccessLoadResult.failure("expected failure")
+	var cleared_errors: Array[String] = []
+	failed_result.set(&"errors", cleared_errors)
+	failed_result.set(&"snapshot", valid_result.snapshot)
+	TestAssertions.truthy(not failed_result.ok(), "public load-result mutation cannot convert a failure to ok", failures)
+	TestAssertions.equal(failed_result.snapshot, null, "public load-result mutation cannot set a failure snapshot", failures)
+	TestAssertions.equal(failed_result.errors, ["expected failure"], "public load-result mutation cannot clear failure errors", failures)
+
+
+func _test_codec_is_canonical(failures: Array[String]) -> void:
+	var document := _valid_document()
+	document["locations"].reverse()
+	document["locations"][0]["visibleWhen"] = [{"kind": "permanent_unlock", "value": "z"}, {"kind": "discovered_tree", "value": "a"}]
+	var first := CityAccessSnapshotCodec.encode_document(document)
+	var second := CityAccessSnapshotCodec.encode_document(document)
+	TestAssertions.equal(first, second, "same logical document encodes identically", failures)
+	TestAssertions.truthy(first.get_string_from_utf8().ends_with("\n"), "canonical document has one final newline", failures)
+	TestAssertions.truthy(first.get_string_from_utf8().find('"id": "city.apothecary"') < first.get_string_from_utf8().find('"id": "city.market"'), "codec sorts locations", failures)
+	var text := first.get_string_from_utf8()
+	TestAssertions.truthy(text.begins_with("{\n  \"format\""), "codec uses two-space root indentation", failures)
+	TestAssertions.truthy(text.find("\n    \"adapter\"") >= 0 and text.find("\n          \"kind\"") >= 0, "codec uses two-space nested indentation", failures)
+	TestAssertions.truthy(_ordered(text, ["\"format\"", "\"version\"", "\"source\"", "\"locations\""]), "codec orders root keys", failures)
+	TestAssertions.truthy(_ordered(text, ["\"adapter\"", "\"format\"", "\"formatVersion\"", "\"sha256\""]), "codec orders source keys", failures)
+	TestAssertions.truthy(_ordered(text, ["\"id\"", "\"destinationId\"", "\"visibleWhen\"", "\"availableWhen\""]), "codec orders location keys", failures)
+	TestAssertions.truthy(_ordered(text, ["\"kind\"", "\"value\""]), "codec orders condition keys", failures)
+	TestAssertions.truthy(text.find('"kind": "discovered_tree"') < text.find('"kind": "permanent_unlock"'), "codec sorts conditions by kind then value", failures)
+	var invalid := _valid_document()
+	invalid["extra"] = true
+	TestAssertions.equal(CityAccessSnapshotCodec.encode_document(invalid), PackedByteArray(), "codec rejects invalid documents", failures)
+
+
+func _test_canonical_byte_ceiling(failures: Array[String]) -> void:
+	var document := _maximum_multibyte_document()
+	var compact := JSON.stringify(document).to_utf8_buffer()
+	var canonical := (JSON.stringify(document, "  ", false) + "\n").to_utf8_buffer()
+	TestAssertions.truthy(compact.size() <= CityAccessSnapshotLoader.MAX_BYTES, "maximum multibyte compact JSON stays within byte limit", failures)
+	TestAssertions.truthy(canonical.size() > CityAccessSnapshotLoader.MAX_BYTES, "maximum multibyte canonical JSON exceeds byte limit", failures)
+	TestAssertions.truthy(CityAccessSnapshotCodec.encode_document(document).is_empty(), "codec rejects canonical bytes over production limit", failures)
+
+
+func _valid_document() -> Dictionary:
+	var locations: Array = []
+	for location_id: String in [
+		"city.market", "city.apothecary", "city.guild", "city.harbor", "city.inn", "city.library", "city.watch",
+	]:
+		locations.append({
+			"id": location_id,
+			"destinationId": "%s.destination" % location_id,
+			"visibleWhen": [{"kind": "always", "value": ""}],
+			"availableWhen": [{"kind": "always", "value": ""}],
+		})
+	return {
+		"format": "party-forge-access-snapshot",
+		"version": 1,
+		"source": {
+			"adapter": "latticewright-runtime-v3-city-access",
+			"format": "latticewright-runtime",
+			"formatVersion": 3,
+			"sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+		},
+		"locations": locations,
+	}
+
+
+func _document_with_locations(count: int) -> Dictionary:
+	var document := _valid_document()
+	var locations: Array[Dictionary] = []
+	for index: int in count:
+		locations.append({
+			"id": "city.location.%03d" % index,
+			"destinationId": "city.destination.%03d" % index,
+			"visibleWhen": [{"kind": "always", "value": ""}],
+			"availableWhen": [{"kind": "always", "value": ""}],
+		})
+	document["locations"] = locations
+	return document
+
+
+func _maximum_multibyte_document() -> Dictionary:
+	var document := _valid_document()
+	var conditions: Array[Dictionary] = []
+	for index: int in CityAccessSnapshotLoader.MAX_CONDITIONS:
+		var unit := "é" if index < 4 else "x"
+		conditions.append({"kind": "permanent_unlock", "value": unit.repeat(CityAccessSnapshotLoader.MAX_TEXT_UNITS)})
+	var locations: Array[Dictionary] = []
+	for index: int in CityAccessSnapshotLoader.MAX_LOCATIONS:
+		var id_prefix := "l%03d" % index
+		var destination_prefix := "d%03d" % index
+		locations.append({
+			"id": id_prefix + "i".repeat(CityAccessSnapshotLoader.MAX_TEXT_UNITS - id_prefix.length()),
+			"destinationId": destination_prefix + "d".repeat(CityAccessSnapshotLoader.MAX_TEXT_UNITS - destination_prefix.length()),
+			"visibleWhen": conditions.duplicate(true),
+			"availableWhen": conditions.duplicate(true),
+		})
+	document["locations"] = locations
+	return document
+
+
+func _unlock_conditions(count: int) -> Array[Dictionary]:
+	var conditions: Array[Dictionary] = []
+	for index: int in count:
+		conditions.append({"kind": "permanent_unlock", "value": "unlock.%d" % index})
+	return conditions
+
+
+func _set_path(document: Dictionary, path: Array, value: Variant) -> void:
+	var target: Variant = document
+	for index: int in range(path.size() - 1):
+		target = target[path[index]]
+	target[path[-1]] = value
+
+
+func _erase_path(document: Dictionary, path: Array) -> void:
+	var target: Variant = document
+	for index: int in range(path.size() - 1):
+		target = target[path[index]]
+	(target as Dictionary).erase(path[-1])
+
+
+func _assert_invalid(document: Dictionary, label: String, failures: Array[String]) -> void:
+	_assert_invalid_result(CityAccessSnapshotLoader.load_bytes(JSON.stringify(document).to_utf8_buffer()), label, failures)
+
+
+func _assert_invalid_bytes(bytes: PackedByteArray, label: String, failures: Array[String]) -> void:
+	_assert_invalid_result(CityAccessSnapshotLoader.load_bytes(bytes), label, failures)
+
+
+func _assert_invalid_result(result: CityAccessLoadResult, label: String, failures: Array[String]) -> void:
+	TestAssertions.truthy(not result.ok(), label, failures)
+	TestAssertions.equal(result.snapshot, null, "%s returns no partial snapshot" % label, failures)
+	TestAssertions.truthy(not result.errors.is_empty(), "%s reports an error" % label, failures)
+
+
+func _write_bytes(path: String, bytes: PackedByteArray) -> void:
+	var file := FileAccess.open(path, FileAccess.WRITE)
+	if file != null:
+		file.store_buffer(bytes)
+		file.close()
+
+
+func _ordered(text: String, tokens: Array[String]) -> bool:
+	var previous := -1
+	for token: String in tokens:
+		var position := text.find(token, previous + 1)
+		if position < 0 or position <= previous:
+			return false
+		previous = position
+	return true

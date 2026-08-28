@@ -1,0 +1,473 @@
+{
+  "archetype": "passive-tree",
+  "assets": [],
+  "content": [
+    {
+      "categoryIds": [
+        "small"
+      ],
+      "description": "Recruitment Hall expansion proposal for Wayfarers' Inn.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {},
+      "iconAssetId": null,
+      "id": "inn-branch-a",
+      "name": "Recruitment Hall",
+      "requirements": [],
+      "tagIds": [
+        "building",
+        "city",
+        "inn",
+        "party-forge"
+      ],
+      "typeId": "passive"
+    },
+    {
+      "categoryIds": [
+        "small"
+      ],
+      "description": "Reserve Roster expansion proposal for Wayfarers' Inn.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {},
+      "iconAssetId": null,
+      "id": "inn-branch-b",
+      "name": "Reserve Roster",
+      "requirements": [],
+      "tagIds": [
+        "building",
+        "city",
+        "inn",
+        "party-forge"
+      ],
+      "typeId": "passive"
+    },
+    {
+      "categoryIds": [
+        "small"
+      ],
+      "description": "Restorative Rooms expansion proposal for Wayfarers' Inn.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {},
+      "iconAssetId": null,
+      "id": "inn-branch-c",
+      "name": "Restorative Rooms",
+      "requirements": [],
+      "tagIds": [
+        "building",
+        "city",
+        "inn",
+        "party-forge"
+      ],
+      "typeId": "passive"
+    },
+    {
+      "categoryIds": [
+        "start"
+      ],
+      "description": "Wayfarers' Inn foundation: city recruitment, roster, recovery, and party-training hub.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {},
+      "iconAssetId": null,
+      "id": "inn-foundation",
+      "name": "Wayfarers' Door",
+      "requirements": [],
+      "tagIds": [
+        "building",
+        "city",
+        "inn",
+        "party-forge"
+      ],
+      "typeId": "passive"
+    },
+    {
+      "categoryIds": [
+        "large"
+      ],
+      "description": "Wayfarers' Inn mastery proposal.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {},
+      "iconAssetId": null,
+      "id": "inn-mastery",
+      "name": "Training Hall",
+      "requirements": [],
+      "tagIds": [
+        "building",
+        "city",
+        "inn",
+        "party-forge"
+      ],
+      "typeId": "passive"
+    },
+    {
+      "categoryIds": [
+        "medium"
+      ],
+      "description": "Organize the core services of Wayfarers' Inn.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {},
+      "iconAssetId": null,
+      "id": "inn-service-core",
+      "name": "Guest Ledger",
+      "requirements": [],
+      "tagIds": [
+        "building",
+        "city",
+        "inn",
+        "party-forge"
+      ],
+      "typeId": "passive"
+    }
+  ],
+  "exportProfiles": [
+    {
+      "assetMode": "references",
+      "extensions": {},
+      "id": "party-forge-runtime",
+      "name": "Party Forge Runtime v3",
+      "strict": false,
+      "target": "runtime-v3"
+    }
+  ],
+  "extensions": {
+    "gameplayConsumer": "not-yet-wired",
+    "partyForgeStatus": "authoring-design-data"
+  },
+  "graphCollections": [
+    {
+      "graphIds": [
+        "inn-passive-tree"
+      ],
+      "id": "primary-progression",
+      "name": "Primary Progression",
+      "parentCollectionId": null
+    }
+  ],
+  "graphPortals": [
+    {
+      "extensions": {},
+      "id": "inn-return-to-city",
+      "label": "Return to Party Forge City",
+      "role": "return",
+      "sourceGraphId": "inn-passive-tree",
+      "sourcePlacementId": "inn-foundation",
+      "target": {
+        "graphId": "city-passive-tree",
+        "projectId": "party-forge-city"
+      }
+    }
+  ],
+  "graphs": [
+    {
+      "connections": [
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "inn-foundation",
+          "id": "inn-passive-tree-edge-01",
+          "to": "inn-service-core"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "inn-service-core",
+          "id": "inn-passive-tree-edge-02",
+          "to": "inn-branch-a"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "inn-service-core",
+          "id": "inn-passive-tree-edge-03",
+          "to": "inn-branch-b"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "inn-service-core",
+          "id": "inn-passive-tree-edge-04",
+          "to": "inn-branch-c"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "inn-branch-a",
+          "id": "inn-passive-tree-edge-05",
+          "to": "inn-mastery"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "inn-branch-b",
+          "id": "inn-passive-tree-edge-06",
+          "to": "inn-mastery"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "inn-branch-c",
+          "id": "inn-passive-tree-edge-07",
+          "to": "inn-mastery"
+        }
+      ],
+      "decorations": [],
+      "extensions": {},
+      "groups": [],
+      "id": "inn-passive-tree",
+      "name": "Wayfarers' Inn Passive Tree",
+      "placements": [
+        {
+          "contentId": "inn-branch-a",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "inn-branch-a",
+          "position": {
+            "x": -240,
+            "y": -360
+          },
+          "typeId": "small-node"
+        },
+        {
+          "contentId": "inn-branch-b",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "inn-branch-b",
+          "position": {
+            "x": 0,
+            "y": -450
+          },
+          "typeId": "small-node"
+        },
+        {
+          "contentId": "inn-branch-c",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "inn-branch-c",
+          "position": {
+            "x": 240,
+            "y": -360
+          },
+          "typeId": "small-node"
+        },
+        {
+          "contentId": "inn-foundation",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 0
+          },
+          "id": "inn-foundation",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "typeId": "start-node"
+        },
+        {
+          "contentId": "inn-mastery",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "inn-mastery",
+          "position": {
+            "x": 0,
+            "y": -630
+          },
+          "typeId": "large-node"
+        },
+        {
+          "contentId": "inn-service-core",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "inn-service-core",
+          "position": {
+            "x": 0,
+            "y": -180
+          },
+          "typeId": "medium-node"
+        }
+      ],
+      "startingPlacementIds": [
+        "inn-foundation"
+      ]
+    }
+  ],
+  "name": "Wayfarers' Inn Passive Tree",
+  "projectFormat": "latticewright-project",
+  "projectId": "party-forge-building-inn",
+  "projectVersion": 3,
+  "schemas": {
+    "categories": [
+      {
+        "description": "large progression tier.",
+        "id": "large",
+        "name": "Large"
+      },
+      {
+        "description": "medium progression tier.",
+        "id": "medium",
+        "name": "Medium"
+      },
+      {
+        "description": "small progression tier.",
+        "id": "small",
+        "name": "Small"
+      },
+      {
+        "description": "start progression tier.",
+        "id": "start",
+        "name": "Start"
+      }
+    ],
+    "contentTypes": [
+      {
+        "description": "A Party Forge progression design node.",
+        "fieldIds": [],
+        "id": "passive",
+        "name": "Passive"
+      }
+    ],
+    "currencies": [],
+    "effects": [],
+    "fields": [
+      {
+        "defaultValue": 1,
+        "helpText": "Design cost for allocating this placement.",
+        "id": "node-cost",
+        "minimum": 0,
+        "name": "Point Cost",
+        "owner": "placement",
+        "required": true,
+        "valueType": "number"
+      }
+    ],
+    "placementTypes": [
+      {
+        "description": "large progression placement.",
+        "fieldIds": [
+          "node-cost"
+        ],
+        "id": "large-node",
+        "name": "Large Node",
+        "shape": "large"
+      },
+      {
+        "description": "medium progression placement.",
+        "fieldIds": [
+          "node-cost"
+        ],
+        "id": "medium-node",
+        "name": "Medium Node",
+        "shape": "medium"
+      },
+      {
+        "description": "small progression placement.",
+        "fieldIds": [
+          "node-cost"
+        ],
+        "id": "small-node",
+        "name": "Small Node",
+        "shape": "small"
+      },
+      {
+        "description": "start progression placement.",
+        "fieldIds": [
+          "node-cost"
+        ],
+        "id": "start-node",
+        "name": "Start Node",
+        "shape": "start"
+      }
+    ],
+    "ranks": [],
+    "requirements": [],
+    "tags": [
+      {
+        "description": "Party Forge building design tag.",
+        "id": "building",
+        "name": "Building"
+      },
+      {
+        "description": "Party Forge city design tag.",
+        "id": "city",
+        "name": "City"
+      },
+      {
+        "description": "Party Forge inn design tag.",
+        "id": "inn",
+        "name": "Inn"
+      },
+      {
+        "description": "Party Forge party-forge design tag.",
+        "id": "party-forge",
+        "name": "Party Forge"
+      }
+    ]
+  },
+  "vocabulary": {
+    "contentPlural": "Passives",
+    "contentSingular": "Passive",
+    "graphPlural": "Passive Trees",
+    "graphSingular": "Passive Tree",
+    "placementPlural": "Nodes",
+    "placementSingular": "Node"
+  },
+  "workspace": {
+    "activeGraphId": "inn-passive-tree",
+    "graphs": {
+      "inn-passive-tree": {
+        "camera": {
+          "x": 0,
+          "y": 0,
+          "zoom": 0.8
+        },
+        "grid": {
+          "size": 32,
+          "visible": true
+        },
+        "lockedPlacementIds": [
+          "inn-foundation"
+        ]
+      }
+    },
+    "notes": "Evidence-grounded Wayfarers' Inn authoring design. Proposed upgrades are planning data and do not claim implemented gameplay effects."
+  }
+}

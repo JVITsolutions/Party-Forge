@@ -1,0 +1,418 @@
+{
+  "archetype": "passive-tree",
+  "assets": [],
+  "content": [
+    {
+      "categoryIds": [
+        "start"
+      ],
+      "description": "Establish the permanent Warlock identity: backline Occult chaos caster specializing in projectiles and life-steal.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {},
+      "iconAssetId": null,
+      "id": "warlock-root",
+      "name": "Occult Adept",
+      "requirements": [],
+      "tagIds": [
+        "class",
+        "party-forge",
+        "warlock"
+      ],
+      "typeId": "passive"
+    },
+    {
+      "categoryIds": [
+        "medium"
+      ],
+      "description": "Develop the core practice of the Warlock.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {},
+      "iconAssetId": null,
+      "id": "warlock-core",
+      "name": "Forbidden Practice",
+      "requirements": [],
+      "tagIds": [
+        "class",
+        "party-forge",
+        "warlock"
+      ],
+      "typeId": "passive"
+    },
+    {
+      "categoryIds": [
+        "small"
+      ],
+      "description": "Chaos Focus progression theme for the Warlock.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {},
+      "iconAssetId": null,
+      "id": "warlock-path-a",
+      "name": "Chaos Focus",
+      "requirements": [],
+      "tagIds": [
+        "class",
+        "party-forge",
+        "warlock"
+      ],
+      "typeId": "passive"
+    },
+    {
+      "categoryIds": [
+        "small"
+      ],
+      "description": "Grimoire Bolt progression theme for the Warlock.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {},
+      "iconAssetId": null,
+      "id": "warlock-path-b",
+      "name": "Grimoire Bolt",
+      "requirements": [],
+      "tagIds": [
+        "class",
+        "party-forge",
+        "warlock"
+      ],
+      "typeId": "passive"
+    },
+    {
+      "categoryIds": [
+        "small"
+      ],
+      "description": "Borrowed Vitality progression theme for the Warlock.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {},
+      "iconAssetId": null,
+      "id": "warlock-path-c",
+      "name": "Borrowed Vitality",
+      "requirements": [],
+      "tagIds": [
+        "class",
+        "party-forge",
+        "warlock"
+      ],
+      "typeId": "passive"
+    },
+    {
+      "categoryIds": [
+        "large"
+      ],
+      "description": "Warlock mastery and future specialization access.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {},
+      "iconAssetId": null,
+      "id": "warlock-mastery",
+      "name": "Pact Thesis",
+      "requirements": [],
+      "tagIds": [
+        "class",
+        "party-forge",
+        "warlock"
+      ],
+      "typeId": "passive"
+    }
+  ],
+  "extensions": {
+    "gameplayConsumer": "not-yet-wired",
+    "partyForgeStatus": "authoring-design-data"
+  },
+  "format": "latticewright-progression",
+  "formatVersion": 3,
+  "graphPortals": [
+    {
+      "extensions": {},
+      "id": "warlock-return-to-city",
+      "label": "Return to Party Forge City",
+      "role": "return",
+      "sourceGraphId": "warlock-passive-tree",
+      "sourcePlacementId": "warlock-root",
+      "targetGraphId": "city-passive-tree",
+      "targetProjectId": "party-forge-city"
+    }
+  ],
+  "graphs": [
+    {
+      "connections": [
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "warlock-root",
+          "id": "warlock-passive-tree-edge-01",
+          "to": "warlock-core"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "warlock-core",
+          "id": "warlock-passive-tree-edge-02",
+          "to": "warlock-path-a"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "warlock-core",
+          "id": "warlock-passive-tree-edge-03",
+          "to": "warlock-path-b"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "warlock-core",
+          "id": "warlock-passive-tree-edge-04",
+          "to": "warlock-path-c"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "warlock-path-a",
+          "id": "warlock-passive-tree-edge-05",
+          "to": "warlock-mastery"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "warlock-path-b",
+          "id": "warlock-passive-tree-edge-06",
+          "to": "warlock-mastery"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "warlock-path-c",
+          "id": "warlock-passive-tree-edge-07",
+          "to": "warlock-mastery"
+        }
+      ],
+      "decorations": [],
+      "extensions": {},
+      "groups": [],
+      "id": "warlock-passive-tree",
+      "name": "Warlock Passive Tree",
+      "placements": [
+        {
+          "contentId": "warlock-root",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 0
+          },
+          "id": "warlock-root",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "typeId": "start-node"
+        },
+        {
+          "contentId": "warlock-core",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "warlock-core",
+          "position": {
+            "x": 0,
+            "y": -180
+          },
+          "typeId": "medium-node"
+        },
+        {
+          "contentId": "warlock-path-a",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "warlock-path-a",
+          "position": {
+            "x": -240,
+            "y": -360
+          },
+          "typeId": "small-node"
+        },
+        {
+          "contentId": "warlock-path-b",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "warlock-path-b",
+          "position": {
+            "x": 0,
+            "y": -450
+          },
+          "typeId": "small-node"
+        },
+        {
+          "contentId": "warlock-path-c",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "warlock-path-c",
+          "position": {
+            "x": 240,
+            "y": -360
+          },
+          "typeId": "small-node"
+        },
+        {
+          "contentId": "warlock-mastery",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "warlock-mastery",
+          "position": {
+            "x": 0,
+            "y": -630
+          },
+          "typeId": "large-node"
+        }
+      ],
+      "startingPlacementIds": [
+        "warlock-root"
+      ]
+    }
+  ],
+  "name": "Warlock Passive Tree",
+  "projectId": "party-forge-class-warlock",
+  "schemas": {
+    "categories": [
+      {
+        "description": "start progression tier.",
+        "id": "start",
+        "name": "Start"
+      },
+      {
+        "description": "small progression tier.",
+        "id": "small",
+        "name": "Small"
+      },
+      {
+        "description": "medium progression tier.",
+        "id": "medium",
+        "name": "Medium"
+      },
+      {
+        "description": "large progression tier.",
+        "id": "large",
+        "name": "Large"
+      }
+    ],
+    "contentTypes": [
+      {
+        "description": "A Party Forge progression design node.",
+        "fieldIds": [],
+        "id": "passive",
+        "name": "Passive"
+      }
+    ],
+    "currencies": [],
+    "effects": [],
+    "fields": [
+      {
+        "id": "node-cost",
+        "minimum": 0,
+        "name": "Point Cost",
+        "owner": "placement",
+        "required": true,
+        "valueType": "number"
+      }
+    ],
+    "placementTypes": [
+      {
+        "description": "start progression placement.",
+        "fieldIds": [
+          "node-cost"
+        ],
+        "id": "start-node",
+        "name": "Start Node",
+        "shape": "start"
+      },
+      {
+        "description": "small progression placement.",
+        "fieldIds": [
+          "node-cost"
+        ],
+        "id": "small-node",
+        "name": "Small Node",
+        "shape": "small"
+      },
+      {
+        "description": "medium progression placement.",
+        "fieldIds": [
+          "node-cost"
+        ],
+        "id": "medium-node",
+        "name": "Medium Node",
+        "shape": "medium"
+      },
+      {
+        "description": "large progression placement.",
+        "fieldIds": [
+          "node-cost"
+        ],
+        "id": "large-node",
+        "name": "Large Node",
+        "shape": "large"
+      }
+    ],
+    "ranks": [],
+    "requirements": [],
+    "tags": [
+      {
+        "description": "Party Forge class design tag.",
+        "id": "class",
+        "name": "Class"
+      },
+      {
+        "description": "Party Forge party-forge design tag.",
+        "id": "party-forge",
+        "name": "Party Forge"
+      },
+      {
+        "description": "Party Forge warlock design tag.",
+        "id": "warlock",
+        "name": "Warlock"
+      }
+    ]
+  },
+  "vocabulary": {
+    "contentPlural": "Passives",
+    "contentSingular": "Passive",
+    "graphPlural": "Passive Trees",
+    "graphSingular": "Passive Tree",
+    "placementPlural": "Nodes",
+    "placementSingular": "Node"
+  }
+}

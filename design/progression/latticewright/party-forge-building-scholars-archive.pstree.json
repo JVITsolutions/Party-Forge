@@ -1,0 +1,429 @@
+{
+  "archetype": "passive-tree",
+  "assets": [],
+  "content": [
+    {
+      "categoryIds": [
+        "start"
+      ],
+      "description": "Scholar's Archive foundation: post-tutorial City-tree entry, respec, lore, history, and research service.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {},
+      "iconAssetId": null,
+      "id": "scholars-archive-foundation",
+      "name": "Archive Door",
+      "requirements": [],
+      "tagIds": [
+        "building",
+        "city",
+        "party-forge",
+        "scholars-archive"
+      ],
+      "typeId": "passive"
+    },
+    {
+      "categoryIds": [
+        "medium"
+      ],
+      "description": "Organize the core services of Scholar's Archive.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {},
+      "iconAssetId": null,
+      "id": "scholars-archive-service-core",
+      "name": "Catalog of Needs",
+      "requirements": [],
+      "tagIds": [
+        "building",
+        "city",
+        "party-forge",
+        "scholars-archive"
+      ],
+      "typeId": "passive"
+    },
+    {
+      "categoryIds": [
+        "small"
+      ],
+      "description": "Respec Desk expansion proposal for Scholar's Archive.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {},
+      "iconAssetId": null,
+      "id": "scholars-archive-branch-a",
+      "name": "Respec Desk",
+      "requirements": [],
+      "tagIds": [
+        "building",
+        "city",
+        "party-forge",
+        "scholars-archive"
+      ],
+      "typeId": "passive"
+    },
+    {
+      "categoryIds": [
+        "small"
+      ],
+      "description": "Lore Stacks expansion proposal for Scholar's Archive.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {},
+      "iconAssetId": null,
+      "id": "scholars-archive-branch-b",
+      "name": "Lore Stacks",
+      "requirements": [],
+      "tagIds": [
+        "building",
+        "city",
+        "party-forge",
+        "scholars-archive"
+      ],
+      "typeId": "passive"
+    },
+    {
+      "categoryIds": [
+        "small"
+      ],
+      "description": "Research Annex expansion proposal for Scholar's Archive.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {},
+      "iconAssetId": null,
+      "id": "scholars-archive-branch-c",
+      "name": "Research Annex",
+      "requirements": [],
+      "tagIds": [
+        "building",
+        "city",
+        "party-forge",
+        "scholars-archive"
+      ],
+      "typeId": "passive"
+    },
+    {
+      "categoryIds": [
+        "large"
+      ],
+      "description": "Scholar's Archive mastery proposal.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {},
+      "iconAssetId": null,
+      "id": "scholars-archive-mastery",
+      "name": "Senior Archivist",
+      "requirements": [],
+      "tagIds": [
+        "building",
+        "city",
+        "party-forge",
+        "scholars-archive"
+      ],
+      "typeId": "passive"
+    }
+  ],
+  "extensions": {
+    "gameplayConsumer": "not-yet-wired",
+    "partyForgeStatus": "authoring-design-data"
+  },
+  "format": "latticewright-progression",
+  "formatVersion": 3,
+  "graphPortals": [
+    {
+      "extensions": {},
+      "id": "scholars-archive-return-to-city",
+      "label": "Return to Party Forge City",
+      "role": "return",
+      "sourceGraphId": "scholars-archive-passive-tree",
+      "sourcePlacementId": "scholars-archive-foundation",
+      "targetGraphId": "city-passive-tree",
+      "targetProjectId": "party-forge-city"
+    }
+  ],
+  "graphs": [
+    {
+      "connections": [
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "scholars-archive-foundation",
+          "id": "scholars-archive-passive-tree-edge-01",
+          "to": "scholars-archive-service-core"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "scholars-archive-service-core",
+          "id": "scholars-archive-passive-tree-edge-02",
+          "to": "scholars-archive-branch-a"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "scholars-archive-service-core",
+          "id": "scholars-archive-passive-tree-edge-03",
+          "to": "scholars-archive-branch-b"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "scholars-archive-service-core",
+          "id": "scholars-archive-passive-tree-edge-04",
+          "to": "scholars-archive-branch-c"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "scholars-archive-branch-a",
+          "id": "scholars-archive-passive-tree-edge-05",
+          "to": "scholars-archive-mastery"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "scholars-archive-branch-b",
+          "id": "scholars-archive-passive-tree-edge-06",
+          "to": "scholars-archive-mastery"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "scholars-archive-branch-c",
+          "id": "scholars-archive-passive-tree-edge-07",
+          "to": "scholars-archive-mastery"
+        }
+      ],
+      "decorations": [],
+      "extensions": {},
+      "groups": [],
+      "id": "scholars-archive-passive-tree",
+      "name": "Scholar's Archive Passive Tree",
+      "placements": [
+        {
+          "contentId": "scholars-archive-foundation",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 0
+          },
+          "id": "scholars-archive-foundation",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "typeId": "start-node"
+        },
+        {
+          "contentId": "scholars-archive-service-core",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "scholars-archive-service-core",
+          "position": {
+            "x": 0,
+            "y": -180
+          },
+          "typeId": "medium-node"
+        },
+        {
+          "contentId": "scholars-archive-branch-a",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "scholars-archive-branch-a",
+          "position": {
+            "x": -240,
+            "y": -360
+          },
+          "typeId": "small-node"
+        },
+        {
+          "contentId": "scholars-archive-branch-b",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "scholars-archive-branch-b",
+          "position": {
+            "x": 0,
+            "y": -450
+          },
+          "typeId": "small-node"
+        },
+        {
+          "contentId": "scholars-archive-branch-c",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "scholars-archive-branch-c",
+          "position": {
+            "x": 240,
+            "y": -360
+          },
+          "typeId": "small-node"
+        },
+        {
+          "contentId": "scholars-archive-mastery",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "scholars-archive-mastery",
+          "position": {
+            "x": 0,
+            "y": -630
+          },
+          "typeId": "large-node"
+        }
+      ],
+      "startingPlacementIds": [
+        "scholars-archive-foundation"
+      ]
+    }
+  ],
+  "name": "Scholar's Archive Passive Tree",
+  "projectId": "party-forge-building-scholars-archive",
+  "schemas": {
+    "categories": [
+      {
+        "description": "start progression tier.",
+        "id": "start",
+        "name": "Start"
+      },
+      {
+        "description": "small progression tier.",
+        "id": "small",
+        "name": "Small"
+      },
+      {
+        "description": "medium progression tier.",
+        "id": "medium",
+        "name": "Medium"
+      },
+      {
+        "description": "large progression tier.",
+        "id": "large",
+        "name": "Large"
+      }
+    ],
+    "contentTypes": [
+      {
+        "description": "A Party Forge progression design node.",
+        "fieldIds": [],
+        "id": "passive",
+        "name": "Passive"
+      }
+    ],
+    "currencies": [],
+    "effects": [],
+    "fields": [
+      {
+        "id": "node-cost",
+        "minimum": 0,
+        "name": "Point Cost",
+        "owner": "placement",
+        "required": true,
+        "valueType": "number"
+      }
+    ],
+    "placementTypes": [
+      {
+        "description": "start progression placement.",
+        "fieldIds": [
+          "node-cost"
+        ],
+        "id": "start-node",
+        "name": "Start Node",
+        "shape": "start"
+      },
+      {
+        "description": "small progression placement.",
+        "fieldIds": [
+          "node-cost"
+        ],
+        "id": "small-node",
+        "name": "Small Node",
+        "shape": "small"
+      },
+      {
+        "description": "medium progression placement.",
+        "fieldIds": [
+          "node-cost"
+        ],
+        "id": "medium-node",
+        "name": "Medium Node",
+        "shape": "medium"
+      },
+      {
+        "description": "large progression placement.",
+        "fieldIds": [
+          "node-cost"
+        ],
+        "id": "large-node",
+        "name": "Large Node",
+        "shape": "large"
+      }
+    ],
+    "ranks": [],
+    "requirements": [],
+    "tags": [
+      {
+        "description": "Party Forge building design tag.",
+        "id": "building",
+        "name": "Building"
+      },
+      {
+        "description": "Party Forge city design tag.",
+        "id": "city",
+        "name": "City"
+      },
+      {
+        "description": "Party Forge party-forge design tag.",
+        "id": "party-forge",
+        "name": "Party Forge"
+      },
+      {
+        "description": "Party Forge scholars-archive design tag.",
+        "id": "scholars-archive",
+        "name": "Scholars Archive"
+      }
+    ]
+  },
+  "vocabulary": {
+    "contentPlural": "Passives",
+    "contentSingular": "Passive",
+    "graphPlural": "Passive Trees",
+    "graphSingular": "Passive Tree",
+    "placementPlural": "Nodes",
+    "placementSingular": "Node"
+  }
+}

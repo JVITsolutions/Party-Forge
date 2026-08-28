@@ -1,0 +1,429 @@
+{
+  "archetype": "passive-tree",
+  "assets": [],
+  "content": [
+    {
+      "categoryIds": [
+        "start"
+      ],
+      "description": "Hearthward Apothecary foundation: tutorial sanctuary and city medical service.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {},
+      "iconAssetId": null,
+      "id": "apothecary-foundation",
+      "name": "Hearthward Door",
+      "requirements": [],
+      "tagIds": [
+        "apothecary",
+        "building",
+        "city",
+        "party-forge"
+      ],
+      "typeId": "passive"
+    },
+    {
+      "categoryIds": [
+        "medium"
+      ],
+      "description": "Organize the core services of Hearthward Apothecary.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {},
+      "iconAssetId": null,
+      "id": "apothecary-service-core",
+      "name": "Care Ledger",
+      "requirements": [],
+      "tagIds": [
+        "apothecary",
+        "building",
+        "city",
+        "party-forge"
+      ],
+      "typeId": "passive"
+    },
+    {
+      "categoryIds": [
+        "small"
+      ],
+      "description": "Clinic Wing expansion proposal for Hearthward Apothecary.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {},
+      "iconAssetId": null,
+      "id": "apothecary-branch-a",
+      "name": "Clinic Wing",
+      "requirements": [],
+      "tagIds": [
+        "apothecary",
+        "building",
+        "city",
+        "party-forge"
+      ],
+      "typeId": "passive"
+    },
+    {
+      "categoryIds": [
+        "small"
+      ],
+      "description": "Alchemy Bench expansion proposal for Hearthward Apothecary.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {},
+      "iconAssetId": null,
+      "id": "apothecary-branch-b",
+      "name": "Alchemy Bench",
+      "requirements": [],
+      "tagIds": [
+        "apothecary",
+        "building",
+        "city",
+        "party-forge"
+      ],
+      "typeId": "passive"
+    },
+    {
+      "categoryIds": [
+        "small"
+      ],
+      "description": "Herbarium expansion proposal for Hearthward Apothecary.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {},
+      "iconAssetId": null,
+      "id": "apothecary-branch-c",
+      "name": "Herbarium",
+      "requirements": [],
+      "tagIds": [
+        "apothecary",
+        "building",
+        "city",
+        "party-forge"
+      ],
+      "typeId": "passive"
+    },
+    {
+      "categoryIds": [
+        "large"
+      ],
+      "description": "Hearthward Apothecary mastery proposal.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {},
+      "iconAssetId": null,
+      "id": "apothecary-mastery",
+      "name": "Field Ward",
+      "requirements": [],
+      "tagIds": [
+        "apothecary",
+        "building",
+        "city",
+        "party-forge"
+      ],
+      "typeId": "passive"
+    }
+  ],
+  "extensions": {
+    "gameplayConsumer": "not-yet-wired",
+    "partyForgeStatus": "authoring-design-data"
+  },
+  "format": "latticewright-progression",
+  "formatVersion": 3,
+  "graphPortals": [
+    {
+      "extensions": {},
+      "id": "apothecary-return-to-city",
+      "label": "Return to Party Forge City",
+      "role": "return",
+      "sourceGraphId": "apothecary-passive-tree",
+      "sourcePlacementId": "apothecary-foundation",
+      "targetGraphId": "city-passive-tree",
+      "targetProjectId": "party-forge-city"
+    }
+  ],
+  "graphs": [
+    {
+      "connections": [
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "apothecary-foundation",
+          "id": "apothecary-passive-tree-edge-01",
+          "to": "apothecary-service-core"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "apothecary-service-core",
+          "id": "apothecary-passive-tree-edge-02",
+          "to": "apothecary-branch-a"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "apothecary-service-core",
+          "id": "apothecary-passive-tree-edge-03",
+          "to": "apothecary-branch-b"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "apothecary-service-core",
+          "id": "apothecary-passive-tree-edge-04",
+          "to": "apothecary-branch-c"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "apothecary-branch-a",
+          "id": "apothecary-passive-tree-edge-05",
+          "to": "apothecary-mastery"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "apothecary-branch-b",
+          "id": "apothecary-passive-tree-edge-06",
+          "to": "apothecary-mastery"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "apothecary-branch-c",
+          "id": "apothecary-passive-tree-edge-07",
+          "to": "apothecary-mastery"
+        }
+      ],
+      "decorations": [],
+      "extensions": {},
+      "groups": [],
+      "id": "apothecary-passive-tree",
+      "name": "Hearthward Apothecary Passive Tree",
+      "placements": [
+        {
+          "contentId": "apothecary-foundation",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 0
+          },
+          "id": "apothecary-foundation",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "typeId": "start-node"
+        },
+        {
+          "contentId": "apothecary-service-core",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "apothecary-service-core",
+          "position": {
+            "x": 0,
+            "y": -180
+          },
+          "typeId": "medium-node"
+        },
+        {
+          "contentId": "apothecary-branch-a",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "apothecary-branch-a",
+          "position": {
+            "x": -240,
+            "y": -360
+          },
+          "typeId": "small-node"
+        },
+        {
+          "contentId": "apothecary-branch-b",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "apothecary-branch-b",
+          "position": {
+            "x": 0,
+            "y": -450
+          },
+          "typeId": "small-node"
+        },
+        {
+          "contentId": "apothecary-branch-c",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "apothecary-branch-c",
+          "position": {
+            "x": 240,
+            "y": -360
+          },
+          "typeId": "small-node"
+        },
+        {
+          "contentId": "apothecary-mastery",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "apothecary-mastery",
+          "position": {
+            "x": 0,
+            "y": -630
+          },
+          "typeId": "large-node"
+        }
+      ],
+      "startingPlacementIds": [
+        "apothecary-foundation"
+      ]
+    }
+  ],
+  "name": "Hearthward Apothecary Passive Tree",
+  "projectId": "party-forge-building-apothecary",
+  "schemas": {
+    "categories": [
+      {
+        "description": "start progression tier.",
+        "id": "start",
+        "name": "Start"
+      },
+      {
+        "description": "small progression tier.",
+        "id": "small",
+        "name": "Small"
+      },
+      {
+        "description": "medium progression tier.",
+        "id": "medium",
+        "name": "Medium"
+      },
+      {
+        "description": "large progression tier.",
+        "id": "large",
+        "name": "Large"
+      }
+    ],
+    "contentTypes": [
+      {
+        "description": "A Party Forge progression design node.",
+        "fieldIds": [],
+        "id": "passive",
+        "name": "Passive"
+      }
+    ],
+    "currencies": [],
+    "effects": [],
+    "fields": [
+      {
+        "id": "node-cost",
+        "minimum": 0,
+        "name": "Point Cost",
+        "owner": "placement",
+        "required": true,
+        "valueType": "number"
+      }
+    ],
+    "placementTypes": [
+      {
+        "description": "start progression placement.",
+        "fieldIds": [
+          "node-cost"
+        ],
+        "id": "start-node",
+        "name": "Start Node",
+        "shape": "start"
+      },
+      {
+        "description": "small progression placement.",
+        "fieldIds": [
+          "node-cost"
+        ],
+        "id": "small-node",
+        "name": "Small Node",
+        "shape": "small"
+      },
+      {
+        "description": "medium progression placement.",
+        "fieldIds": [
+          "node-cost"
+        ],
+        "id": "medium-node",
+        "name": "Medium Node",
+        "shape": "medium"
+      },
+      {
+        "description": "large progression placement.",
+        "fieldIds": [
+          "node-cost"
+        ],
+        "id": "large-node",
+        "name": "Large Node",
+        "shape": "large"
+      }
+    ],
+    "ranks": [],
+    "requirements": [],
+    "tags": [
+      {
+        "description": "Party Forge apothecary design tag.",
+        "id": "apothecary",
+        "name": "Apothecary"
+      },
+      {
+        "description": "Party Forge building design tag.",
+        "id": "building",
+        "name": "Building"
+      },
+      {
+        "description": "Party Forge city design tag.",
+        "id": "city",
+        "name": "City"
+      },
+      {
+        "description": "Party Forge party-forge design tag.",
+        "id": "party-forge",
+        "name": "Party Forge"
+      }
+    ]
+  },
+  "vocabulary": {
+    "contentPlural": "Passives",
+    "contentSingular": "Passive",
+    "graphPlural": "Passive Trees",
+    "graphSingular": "Passive Tree",
+    "placementPlural": "Nodes",
+    "placementSingular": "Node"
+  }
+}

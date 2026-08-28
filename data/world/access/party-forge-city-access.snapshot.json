@@ -1,0 +1,124 @@
+{
+  "format": "party-forge-access-snapshot",
+  "version": 1,
+  "source": {
+    "adapter": "latticewright-runtime-v3-city-access",
+    "format": "latticewright-progression",
+    "formatVersion": 3,
+    "sha256": "bb3abd94d6b86716d3c39840deef460e20596abb858ba6abd4535067d664ff78"
+  },
+  "locations": [
+    {
+      "id": "city.apothecary",
+      "destinationId": "city.apothecary.interior",
+      "visibleWhen": [
+        {
+          "kind": "always",
+          "value": ""
+        }
+      ],
+      "availableWhen": [
+        {
+          "kind": "always",
+          "value": ""
+        }
+      ]
+    },
+    {
+      "id": "city.coliseum_road",
+      "destinationId": "city.coliseum_road.route",
+      "visibleWhen": [
+        {
+          "kind": "always",
+          "value": ""
+        }
+      ],
+      "availableWhen": [
+        {
+          "kind": "always",
+          "value": ""
+        }
+      ]
+    },
+    {
+      "id": "city.inn",
+      "destinationId": "city.inn.interior",
+      "visibleWhen": [
+        {
+          "kind": "always",
+          "value": ""
+        }
+      ],
+      "availableWhen": [
+        {
+          "kind": "permanent_unlock",
+          "value": "service:hero_registry"
+        }
+      ]
+    },
+    {
+      "id": "city.merchant",
+      "destinationId": "city.merchant.interior",
+      "visibleWhen": [
+        {
+          "kind": "always",
+          "value": ""
+        }
+      ],
+      "availableWhen": [
+        {
+          "kind": "permanent_unlock",
+          "value": "service:city_vendors"
+        }
+      ]
+    },
+    {
+      "id": "city.scholars_archive",
+      "destinationId": "city.scholars_archive.interior",
+      "visibleWhen": [
+        {
+          "kind": "prologue_state",
+          "value": "completed"
+        }
+      ],
+      "availableWhen": [
+        {
+          "kind": "prologue_state",
+          "value": "completed"
+        }
+      ]
+    },
+    {
+      "id": "city.smithy",
+      "destinationId": "city.smithy.interior",
+      "visibleWhen": [
+        {
+          "kind": "always",
+          "value": ""
+        }
+      ],
+      "availableWhen": [
+        {
+          "kind": "permanent_unlock",
+          "value": "service:equipment_upgrading"
+        }
+      ]
+    },
+    {
+      "id": "city.warehouse",
+      "destinationId": "city.warehouse.interior",
+      "visibleWhen": [
+        {
+          "kind": "always",
+          "value": ""
+        }
+      ],
+      "availableWhen": [
+        {
+          "kind": "permanent_unlock",
+          "value": "stash"
+        }
+      ]
+    }
+  ]
+}

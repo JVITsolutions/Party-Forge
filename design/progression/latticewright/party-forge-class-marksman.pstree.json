@@ -1,0 +1,418 @@
+{
+  "archetype": "passive-tree",
+  "assets": [],
+  "content": [
+    {
+      "categoryIds": [
+        "start"
+      ],
+      "description": "Establish the permanent Marksman identity: midline Martial ranged specialist using physical greatbow projectiles and critical precision.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {},
+      "iconAssetId": null,
+      "id": "marksman-root",
+      "name": "Greatbow Marksman",
+      "requirements": [],
+      "tagIds": [
+        "class",
+        "marksman",
+        "party-forge"
+      ],
+      "typeId": "passive"
+    },
+    {
+      "categoryIds": [
+        "medium"
+      ],
+      "description": "Develop the core practice of the Marksman.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {},
+      "iconAssetId": null,
+      "id": "marksman-core",
+      "name": "Heavy Draw",
+      "requirements": [],
+      "tagIds": [
+        "class",
+        "marksman",
+        "party-forge"
+      ],
+      "typeId": "passive"
+    },
+    {
+      "categoryIds": [
+        "small"
+      ],
+      "description": "Longshot progression theme for the Marksman.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {},
+      "iconAssetId": null,
+      "id": "marksman-path-a",
+      "name": "Longshot",
+      "requirements": [],
+      "tagIds": [
+        "class",
+        "marksman",
+        "party-forge"
+      ],
+      "typeId": "passive"
+    },
+    {
+      "categoryIds": [
+        "small"
+      ],
+      "description": "Sure Impact progression theme for the Marksman.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {},
+      "iconAssetId": null,
+      "id": "marksman-path-b",
+      "name": "Sure Impact",
+      "requirements": [],
+      "tagIds": [
+        "class",
+        "marksman",
+        "party-forge"
+      ],
+      "typeId": "passive"
+    },
+    {
+      "categoryIds": [
+        "small"
+      ],
+      "description": "Patient Aim progression theme for the Marksman.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {},
+      "iconAssetId": null,
+      "id": "marksman-path-c",
+      "name": "Patient Aim",
+      "requirements": [],
+      "tagIds": [
+        "class",
+        "marksman",
+        "party-forge"
+      ],
+      "typeId": "passive"
+    },
+    {
+      "categoryIds": [
+        "large"
+      ],
+      "description": "Marksman mastery and future specialization access.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {},
+      "iconAssetId": null,
+      "id": "marksman-mastery",
+      "name": "Horizon Hunter",
+      "requirements": [],
+      "tagIds": [
+        "class",
+        "marksman",
+        "party-forge"
+      ],
+      "typeId": "passive"
+    }
+  ],
+  "extensions": {
+    "gameplayConsumer": "not-yet-wired",
+    "partyForgeStatus": "authoring-design-data"
+  },
+  "format": "latticewright-progression",
+  "formatVersion": 3,
+  "graphPortals": [
+    {
+      "extensions": {},
+      "id": "marksman-return-to-city",
+      "label": "Return to Party Forge City",
+      "role": "return",
+      "sourceGraphId": "marksman-passive-tree",
+      "sourcePlacementId": "marksman-root",
+      "targetGraphId": "city-passive-tree",
+      "targetProjectId": "party-forge-city"
+    }
+  ],
+  "graphs": [
+    {
+      "connections": [
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "marksman-root",
+          "id": "marksman-passive-tree-edge-01",
+          "to": "marksman-core"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "marksman-core",
+          "id": "marksman-passive-tree-edge-02",
+          "to": "marksman-path-a"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "marksman-core",
+          "id": "marksman-passive-tree-edge-03",
+          "to": "marksman-path-b"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "marksman-core",
+          "id": "marksman-passive-tree-edge-04",
+          "to": "marksman-path-c"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "marksman-path-a",
+          "id": "marksman-passive-tree-edge-05",
+          "to": "marksman-mastery"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "marksman-path-b",
+          "id": "marksman-passive-tree-edge-06",
+          "to": "marksman-mastery"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "marksman-path-c",
+          "id": "marksman-passive-tree-edge-07",
+          "to": "marksman-mastery"
+        }
+      ],
+      "decorations": [],
+      "extensions": {},
+      "groups": [],
+      "id": "marksman-passive-tree",
+      "name": "Marksman Passive Tree",
+      "placements": [
+        {
+          "contentId": "marksman-root",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 0
+          },
+          "id": "marksman-root",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "typeId": "start-node"
+        },
+        {
+          "contentId": "marksman-core",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "marksman-core",
+          "position": {
+            "x": 0,
+            "y": -180
+          },
+          "typeId": "medium-node"
+        },
+        {
+          "contentId": "marksman-path-a",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "marksman-path-a",
+          "position": {
+            "x": -240,
+            "y": -360
+          },
+          "typeId": "small-node"
+        },
+        {
+          "contentId": "marksman-path-b",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "marksman-path-b",
+          "position": {
+            "x": 0,
+            "y": -450
+          },
+          "typeId": "small-node"
+        },
+        {
+          "contentId": "marksman-path-c",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "marksman-path-c",
+          "position": {
+            "x": 240,
+            "y": -360
+          },
+          "typeId": "small-node"
+        },
+        {
+          "contentId": "marksman-mastery",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "marksman-mastery",
+          "position": {
+            "x": 0,
+            "y": -630
+          },
+          "typeId": "large-node"
+        }
+      ],
+      "startingPlacementIds": [
+        "marksman-root"
+      ]
+    }
+  ],
+  "name": "Marksman Passive Tree",
+  "projectId": "party-forge-class-marksman",
+  "schemas": {
+    "categories": [
+      {
+        "description": "start progression tier.",
+        "id": "start",
+        "name": "Start"
+      },
+      {
+        "description": "small progression tier.",
+        "id": "small",
+        "name": "Small"
+      },
+      {
+        "description": "medium progression tier.",
+        "id": "medium",
+        "name": "Medium"
+      },
+      {
+        "description": "large progression tier.",
+        "id": "large",
+        "name": "Large"
+      }
+    ],
+    "contentTypes": [
+      {
+        "description": "A Party Forge progression design node.",
+        "fieldIds": [],
+        "id": "passive",
+        "name": "Passive"
+      }
+    ],
+    "currencies": [],
+    "effects": [],
+    "fields": [
+      {
+        "id": "node-cost",
+        "minimum": 0,
+        "name": "Point Cost",
+        "owner": "placement",
+        "required": true,
+        "valueType": "number"
+      }
+    ],
+    "placementTypes": [
+      {
+        "description": "start progression placement.",
+        "fieldIds": [
+          "node-cost"
+        ],
+        "id": "start-node",
+        "name": "Start Node",
+        "shape": "start"
+      },
+      {
+        "description": "small progression placement.",
+        "fieldIds": [
+          "node-cost"
+        ],
+        "id": "small-node",
+        "name": "Small Node",
+        "shape": "small"
+      },
+      {
+        "description": "medium progression placement.",
+        "fieldIds": [
+          "node-cost"
+        ],
+        "id": "medium-node",
+        "name": "Medium Node",
+        "shape": "medium"
+      },
+      {
+        "description": "large progression placement.",
+        "fieldIds": [
+          "node-cost"
+        ],
+        "id": "large-node",
+        "name": "Large Node",
+        "shape": "large"
+      }
+    ],
+    "ranks": [],
+    "requirements": [],
+    "tags": [
+      {
+        "description": "Party Forge class design tag.",
+        "id": "class",
+        "name": "Class"
+      },
+      {
+        "description": "Party Forge marksman design tag.",
+        "id": "marksman",
+        "name": "Marksman"
+      },
+      {
+        "description": "Party Forge party-forge design tag.",
+        "id": "party-forge",
+        "name": "Party Forge"
+      }
+    ]
+  },
+  "vocabulary": {
+    "contentPlural": "Passives",
+    "contentSingular": "Passive",
+    "graphPlural": "Passive Trees",
+    "graphSingular": "Passive Tree",
+    "placementPlural": "Nodes",
+    "placementSingular": "Node"
+  }
+}
