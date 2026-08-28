@@ -180,6 +180,22 @@ corner_radius_top_right = 6
 corner_radius_bottom_right = 6
 corner_radius_bottom_left = 6
 
+[sub_resource type="StyleBoxFlat" id="Style_primary_focus"]
+content_margin_left = 24.0
+content_margin_top = 12.0
+content_margin_right = 24.0
+content_margin_bottom = 12.0
+bg_color = Color(0, 0, 0, 0)
+border_width_left = 4
+border_width_top = 4
+border_width_right = 4
+border_width_bottom = 4
+border_color = Color(0.03137255, 0.05098039, 0.07058824, 1)
+corner_radius_top_left = 6
+corner_radius_top_right = 6
+corner_radius_bottom_right = 6
+corner_radius_bottom_left = 6
+
 [sub_resource type="StyleBoxFlat" id="Style_unavailable"]
 content_margin_left = 24.0
 content_margin_top = 12.0
@@ -269,7 +285,7 @@ LivingForgePrimaryButton/base_type = &"Button"
 LivingForgePrimaryButton/colors/font_color = Color(0.03137255, 0.05098039, 0.07058824, 1)
 LivingForgePrimaryButton/font_sizes/font_size = 18
 LivingForgePrimaryButton/fonts/font = SubResource("Font_source_700")
-LivingForgePrimaryButton/styles/focus = SubResource("Style_focus")
+LivingForgePrimaryButton/styles/focus = SubResource("Style_primary_focus")
 LivingForgePrimaryButton/styles/hover = SubResource("Style_primary_hover")
 LivingForgePrimaryButton/styles/normal = SubResource("Style_primary")
 LivingForgePrimaryButton/styles/pressed = SubResource("Style_primary_pressed")

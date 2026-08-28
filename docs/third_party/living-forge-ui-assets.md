@@ -1,5 +1,7 @@
 # Living Forge UI Asset Provenance
 
+<!-- living-forge-asset-inventory:v1 -->
+
 **Retrieved:** 2026-08-28
 **Scope:** Packaged fonts, interface icons, and their redistribution licences for the Living Forge UI. Runtime resources reference only these local files; no floating CDN resource is used.
 

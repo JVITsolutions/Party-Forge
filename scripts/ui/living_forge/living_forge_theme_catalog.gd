@@ -13,6 +13,32 @@ const _FONT_SIZE_TYPES: Array[StringName] = [
 	&"LivingForgeDisplayLabel", &"LivingForgeSectionLabel", &"LivingForgeCaptionLabel",
 	&"LivingForgeStatusChip",
 ]
+const _STYLEBOX_SLOTS: Array[Array] = [
+	[&"LivingForgePanel", &"panel"],
+	[&"LivingForgeInsetPanel", &"panel"],
+	[&"LivingForgePrimaryButton", &"normal"],
+	[&"LivingForgePrimaryButton", &"hover"],
+	[&"LivingForgePrimaryButton", &"pressed"],
+	[&"LivingForgePrimaryButton", &"focus"],
+	[&"LivingForgeSecondaryButton", &"normal"],
+	[&"LivingForgeSecondaryButton", &"hover"],
+	[&"LivingForgeSecondaryButton", &"pressed"],
+	[&"LivingForgeSecondaryButton", &"focus"],
+	[&"LivingForgeUnavailableButton", &"normal"],
+	[&"LivingForgeUnavailableButton", &"disabled"],
+	[&"LivingForgeDestructiveButton", &"normal"],
+	[&"LivingForgeDestructiveButton", &"hover"],
+	[&"LivingForgeDestructiveButton", &"pressed"],
+	[&"LivingForgeDestructiveButton", &"focus"],
+	[&"LivingForgeStatusChip", &"normal"],
+]
+const _STYLEBOX_MARGIN_PROPERTIES: Array[StringName] = [
+	&"content_margin_left", &"content_margin_top", &"content_margin_right", &"content_margin_bottom",
+]
+const _STYLEBOX_INTEGER_PROPERTIES: Array[StringName] = [
+	&"border_width_left", &"border_width_top", &"border_width_right", &"border_width_bottom",
+	&"corner_radius_top_left", &"corner_radius_top_right", &"corner_radius_bottom_right", &"corner_radius_bottom_left",
+]
 static var _cache: Dictionary = {}
 
 
@@ -37,7 +63,24 @@ static func _apply_geometry_scale(theme: Theme, scale_factor: float) -> void:
 	for role: StringName in _GEOMETRY_CONSTANTS:
 		if theme.has_constant(role, &"LivingForgeMetrics"):
 			var base_value := theme.get_constant(role, &"LivingForgeMetrics")
-			theme.set_constant(role, &"LivingForgeMetrics", maxi(roundi(float(base_value) * scale_factor), 1))
+			var scaled_value := maxi(roundi(float(base_value) * scale_factor), 1)
+			if role == &"action_minimum":
+				scaled_value = maxi(scaled_value, 48)
+			theme.set_constant(role, &"LivingForgeMetrics", scaled_value)
+	_scale_owned_styleboxes(theme, scale_factor)
+
+
+static func _scale_owned_styleboxes(theme: Theme, scale_factor: float) -> void:
+	var scaled_ids := {}
+	for slot: Array in _STYLEBOX_SLOTS:
+		var style := theme.get_stylebox(slot[1] as StringName, slot[0] as StringName) as StyleBoxFlat
+		if style == null or scaled_ids.has(style.get_instance_id()):
+			continue
+		scaled_ids[style.get_instance_id()] = true
+		for property: StringName in _STYLEBOX_MARGIN_PROPERTIES:
+			style.set(property, maxf(roundf(float(style.get(property)) * scale_factor), 1.0))
+		for property: StringName in _STYLEBOX_INTEGER_PROPERTIES:
+			style.set(property, maxi(roundi(float(style.get(property)) * scale_factor), 1))
 
 
 static func _apply_typography_scale(theme: Theme, scale_factor: float) -> void:
