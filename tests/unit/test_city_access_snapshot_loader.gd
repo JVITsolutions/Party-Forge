@@ -4,6 +4,7 @@ func run() -> Array[String]:
 	var failures: Array[String] = []
 	_test_factories_reject_invalid_inputs(failures)
 	_test_valid_access_snapshot_loads(failures)
+	_test_duplicate_object_keys_reject(failures)
 	_test_opaque_provenance_contract(failures)
 	_test_in_memory_validation_matches_strict_loader(failures)
 	_test_structural_contract(failures)
@@ -46,6 +47,20 @@ func _test_valid_access_snapshot_loads(failures: Array[String]) -> void:
 		return
 	TestAssertions.equal(result.snapshot.locations.size(), 7, "all seven locations load", failures)
 	TestAssertions.equal(String(result.snapshot.locations[0].id), "city.apothecary", "locations use ordinal ID order", failures)
+
+
+func _test_duplicate_object_keys_reject(failures: Array[String]) -> void:
+	var valid_text := JSON.stringify(_valid_document())
+	var duplicate_root := valid_text.replace('"version":1', '"version":1,"version":1')
+	TestAssertions.truthy(duplicate_root != valid_text, "root duplicate-key raw fixture is constructed", failures)
+	_assert_invalid_bytes(duplicate_root.to_utf8_buffer(), "duplicate root JSON object key rejects", failures)
+
+	var duplicate_nested := valid_text.replace(
+		'"destinationId":"city.market.destination"',
+		'"destinationId":"private_source/path","destinationId":"city.market.destination"'
+	)
+	TestAssertions.truthy(duplicate_nested != valid_text, "nested duplicate-key raw fixture is constructed", failures)
+	_assert_invalid_bytes(duplicate_nested.to_utf8_buffer(), "duplicate nested JSON object key rejects", failures)
 
 
 func _test_opaque_provenance_contract(failures: Array[String]) -> void:

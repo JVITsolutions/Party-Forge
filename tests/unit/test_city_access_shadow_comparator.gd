@@ -10,6 +10,7 @@ func run() -> Array[String]:
 	_test_inactive_gates_and_reset(failures)
 	_test_locked_and_unlocked_dimensions(failures)
 	_test_failure_and_destination_sanitization(failures)
+	_test_duplicate_snapshot_bytes_are_sanitized(failures)
 	_test_deduplication_and_input_immutability(failures)
 	return failures
 
@@ -106,6 +107,44 @@ func _test_failure_and_destination_sanitization(failures: Array[String]) -> void
 		"destination": scripts["comparison"].Dimension.DIVERGED,
 		"reason": &"candidate_destination_unmapped",
 	}, "candidate destination mismatch", failures)
+
+
+func _test_duplicate_snapshot_bytes_are_sanitized(failures: Array[String]) -> void:
+	var scripts := _scripts(failures)
+	if scripts.is_empty():
+		return
+	var snapshot_text := FileAccess.get_file_as_string(CityAccessProvider.SNAPSHOT_PATH)
+	var duplicate_text := snapshot_text.replace(
+		'      "destinationId": "city.warehouse.interior",',
+		'      "destinationId": "raw_private_key/private/source.json",\n      "destinationId": "city.warehouse.interior",'
+	)
+	TestAssertions.truthy(duplicate_text != snapshot_text, "provider duplicate-key raw fixture is constructed", failures)
+	var emissions: Array = []
+	var provider := CityAccessProvider.new(func(_path: String) -> Variant:
+		return CityAccessSnapshotLoader.load_bytes(duplicate_text.to_utf8_buffer())
+	)
+	var comparator: Variant = scripts["comparator"].new(provider, Callable(), func(marker: String, warning: bool) -> void:
+		emissions.append([marker, warning])
+	)
+	var comparison: Variant = _observe_immutable(
+		comparator,
+		_settings(true, PartyForgeSettings.Mode.DEVELOPER_MODE),
+		_profile(false),
+		"duplicate candidate snapshot",
+		failures
+	)
+	_assert_comparison(comparison, scripts["comparison"], {
+		"outcome": scripts["comparison"].Outcome.UNAVAILABLE,
+		"access": scripts["comparison"].Dimension.UNAVAILABLE,
+		"visibility": scripts["comparison"].Dimension.UNAVAILABLE,
+		"destination": scripts["comparison"].Dimension.UNAVAILABLE,
+		"reason": &"candidate_snapshot_load_failed",
+	}, "duplicate candidate snapshot", failures)
+	TestAssertions.equal(emissions.size(), 1, "duplicate candidate snapshot emits one sanitized marker", failures)
+	if emissions.size() == 1:
+		var marker := String((emissions[0] as Array)[0])
+		TestAssertions.truthy("candidate_snapshot_load_failed" in marker, "duplicate candidate marker exposes allowlisted reason", failures)
+		TestAssertions.truthy(not "raw_private_key" in marker and not "source.json" in marker and not "/" in marker and not "\\" in marker, "duplicate candidate marker excludes raw key, source, and path text", failures)
 
 
 func _test_deduplication_and_input_immutability(failures: Array[String]) -> void:
