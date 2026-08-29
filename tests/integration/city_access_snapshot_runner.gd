@@ -41,6 +41,7 @@ func _initialize() -> void:
 		_assert(loaded.snapshot.locations.size() == LOCATIONS.size(), "production snapshot has seven locations", failures)
 		_assert_profiles(loaded.snapshot, failures)
 		_assert_provider_modes(loaded.snapshot, failures)
+		_assert_warehouse_shadow_pilot(loaded.snapshot, failures)
 	_assert_legacy_city_data(failures)
 	_finish(failures)
 
@@ -86,6 +87,81 @@ func _assert_provider_modes(snapshot: CityAccessSnapshot, failures: Array[String
 	settings.use_city_access_snapshot = false
 	var rollback_result := provider.resolve(settings, profile)
 	_assert(rollback_result.mode == CityAccessProviderResult.Mode.LEGACY and rollback_result.snapshot == null, "flag-off immediately rolls back to LEGACY", failures)
+
+
+func _assert_warehouse_shadow_pilot(snapshot: CityAccessSnapshot, failures: Array[String]) -> void:
+	var settings := PartyForgeSettings.new()
+	settings.mode = PartyForgeSettings.Mode.DEVELOPER_MODE
+	settings.use_city_access_snapshot = true
+	var emissions: Array = []
+	var provider := CityAccessProvider.new(func(_path: String) -> CityAccessLoadResult: return CityAccessLoadResult.success(snapshot))
+	var comparator := CityAccessShadowComparator.new(provider, Callable(), func(marker: String, warning: bool) -> void:
+		emissions.append([marker, warning])
+	)
+	var locked_profile := ProfileState.new_profile("shadow-locked", "Shadow Locked", 1)
+	var unlocked_profile := ProfileState.new_profile("shadow-unlocked", "Shadow Unlocked", 2)
+	unlocked_profile.permanent_feature_unlocks = ["stash"]
+	var locked_before := ProfileCodec.encode(locked_profile).to_utf8_buffer()
+	var unlocked_before := ProfileCodec.encode(unlocked_profile).to_utf8_buffer()
+	var locked: Variant = comparator.observe(settings, locked_profile)
+	_assert(locked is CityAccessShadowComparison, "locked Developer Mode shadow observation returns a comparison", failures)
+	if locked is CityAccessShadowComparison:
+		var typed_locked := locked as CityAccessShadowComparison
+		_assert(typed_locked.outcome == CityAccessShadowComparison.Outcome.DIVERGED, "locked shadow outcome diverges", failures)
+		_assert(typed_locked.access == CityAccessShadowComparison.Dimension.MATCH, "locked shadow access matches", failures)
+		_assert(typed_locked.visibility == CityAccessShadowComparison.Dimension.DIVERGED, "locked shadow visibility diverges", failures)
+		_assert(typed_locked.destination == CityAccessShadowComparison.Dimension.NOT_APPLICABLE, "locked shadow destination is not applicable", failures)
+	_assert(ProfileCodec.encode(locked_profile).to_utf8_buffer() == locked_before, "locked shadow observation preserves ProfileCodec bytes", failures)
+	var unlocked: Variant = comparator.observe(settings, unlocked_profile)
+	_assert(unlocked is CityAccessShadowComparison, "unlocked Developer Mode shadow observation returns a comparison", failures)
+	if unlocked is CityAccessShadowComparison:
+		var typed_unlocked := unlocked as CityAccessShadowComparison
+		_assert(typed_unlocked.outcome == CityAccessShadowComparison.Outcome.MATCH, "unlocked shadow outcome matches", failures)
+		_assert(typed_unlocked.access == CityAccessShadowComparison.Dimension.MATCH, "unlocked shadow access matches", failures)
+		_assert(typed_unlocked.visibility == CityAccessShadowComparison.Dimension.MATCH, "unlocked shadow visibility matches", failures)
+		_assert(typed_unlocked.destination == CityAccessShadowComparison.Dimension.MATCH, "unlocked shadow destination matches", failures)
+	_assert(ProfileCodec.encode(unlocked_profile).to_utf8_buffer() == unlocked_before, "unlocked shadow observation preserves ProfileCodec bytes", failures)
+	comparator.observe(settings, unlocked_profile)
+	_assert(emissions.size() == 2, "locked and repeated-unlocked observations emit exactly two unique markers", failures)
+	if emissions.size() == 2:
+		var locked_marker := String((emissions[0] as Array)[0])
+		var unlocked_marker := String((emissions[1] as Array)[0])
+		_assert("outcome=DIVERGED access=MATCH visibility=DIVERGED destination=NOT_APPLICABLE" in locked_marker, "captured locked marker records the expected divergence", failures)
+		_assert("outcome=MATCH access=MATCH visibility=MATCH destination=MATCH" in unlocked_marker, "captured unlocked marker records complete parity", failures)
+		_assert(bool((emissions[0] as Array)[1]) and not bool((emissions[1] as Array)[1]), "injected emitter classifies locked divergence without writing warning output", failures)
+	var failure_emissions: Array = []
+	var failure_provider := CityAccessProvider.new(func(_path: String) -> CityAccessLoadResult: return CityAccessLoadResult.failure("raw fixture path must never escape"))
+	var failure_comparator := CityAccessShadowComparator.new(failure_provider, Callable(), func(marker: String, warning: bool) -> void:
+		failure_emissions.append([marker, warning])
+	)
+	var failure_before := ProfileCodec.encode(locked_profile).to_utf8_buffer()
+	var unavailable: Variant = failure_comparator.observe(settings, locked_profile)
+	_assert(unavailable is CityAccessShadowComparison and (unavailable as CityAccessShadowComparison).outcome == CityAccessShadowComparison.Outcome.UNAVAILABLE, "candidate failure returns an unavailable comparison", failures)
+	_assert(ProfileCodec.encode(locked_profile).to_utf8_buffer() == failure_before, "candidate failure preserves ProfileCodec bytes", failures)
+	_assert(failure_emissions.size() == 1, "candidate failure emits one captured marker", failures)
+	if failure_emissions.size() == 1:
+		var failure_marker := String((failure_emissions[0] as Array)[0])
+		_assert("outcome=UNAVAILABLE" in failure_marker and "reason=candidate_snapshot_load_failed" in failure_marker, "captured candidate failure marker is allowlisted", failures)
+		_assert(not "raw fixture" in failure_marker and not "/" in failure_marker and not "\\" in failure_marker, "captured candidate failure marker excludes raw diagnostics and paths", failures)
+		_assert(bool((failure_emissions[0] as Array)[1]), "captured candidate failure is classified as a warning without printing one", failures)
+	var flag_off_loads := 0
+	var flag_off_provider := CityAccessProvider.new(func(_path: String) -> CityAccessLoadResult:
+		flag_off_loads += 1
+		return CityAccessLoadResult.success(snapshot)
+	)
+	var flag_off_comparator := CityAccessShadowComparator.new(flag_off_provider)
+	var flag_off_settings := PartyForgeSettings.new()
+	flag_off_settings.mode = PartyForgeSettings.Mode.DEVELOPER_MODE
+	_assert(flag_off_comparator.observe(flag_off_settings, locked_profile) == null and flag_off_loads == 0, "flag-off uses immediate legacy-only behavior without candidate loading", failures)
+	var developer_preview := MainMenuViewModel.build(locked_profile, settings, true)
+	_assert(developer_preview.warehouse_visible and developer_preview.warehouse_enabled and developer_preview.warehouse_label.contains("Developer"), "Developer Mode keeps the no-stash Warehouse preview visible and enabled", failures)
+	var player_settings := PartyForgeSettings.new()
+	player_settings.mode = PartyForgeSettings.Mode.PLAYER_SIMULATION
+	player_settings.use_city_access_snapshot = true
+	var player_locked := MainMenuViewModel.build(locked_profile, player_settings, true)
+	var player_unlocked := MainMenuViewModel.build(unlocked_profile, player_settings, true)
+	_assert(not player_locked.warehouse_visible and not player_locked.warehouse_enabled and player_locked.warehouse_route_id == MainMenuViewModel.ROUTE_WAREHOUSE, "Player Mode keeps the locked Warehouse route unavailable without stash", failures)
+	_assert(player_unlocked.warehouse_visible and player_unlocked.warehouse_enabled and player_unlocked.warehouse_route_id == MainMenuViewModel.ROUTE_WAREHOUSE, "Player Mode makes the Warehouse route available only with stash", failures)
 
 
 func _assert_legacy_city_data(failures: Array[String]) -> void:
