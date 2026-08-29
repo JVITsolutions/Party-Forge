@@ -84,6 +84,7 @@ func run() -> Array[String]:
     _test_main_menu_route_composition(failures)
     _test_profile_deletion_and_activation_separation(failures)
     _test_storage_route_policy_and_shared_projection_wiring(failures)
+    _test_warehouse_shadow_observer_is_sidecar(failures)
     _test_loadout_warning_preflight_and_transition_wiring(failures)
     _test_passive_tree_route_composition(failures)
     _test_settings_and_next_run_snapshot_wiring(failures)
@@ -215,6 +216,62 @@ func _test_storage_route_policy_and_shared_projection_wiring(failures: Array[Str
     TestAssertions.truthy(menu.is_open() and (menu.get_node("ActiveProfile") as Label).text.contains("Third Storage Profile"), "Armoury profile switch presents the newest profile menu", failures)
     main.free()
     ProfileTestSupport.remove_tree(root)
+
+
+func _test_warehouse_shadow_observer_is_sidecar(failures: Array[String]) -> void:
+    var root := "user://tests/main_wiring-warehouse-shadow_%d_%d" % [OS.get_process_id(), Time.get_ticks_usec()]
+    var settings_path := "user://tests/main_wiring-warehouse-shadow-settings_%d_%d.cfg" % [OS.get_process_id(), Time.get_ticks_usec()]
+    ProfileTestSupport.remove_tree(root)
+    _cleanup_settings_artifacts(settings_path)
+    var fixture_manager := ProfileManager.new()
+    TestAssertions.equal(fixture_manager.bootstrap(root), "", "Warehouse shadow fixture bootstraps an isolated profile root", failures)
+    var created := fixture_manager.create_profile("Warehouse Shadow Tester")
+    TestAssertions.truthy(created.ok(), "Warehouse shadow fixture creates a no-stash profile", failures)
+    var profile_before := fixture_manager.active_profile().to_dictionary()
+    var developer_settings := PartyForgeSettings.new()
+    developer_settings.mode = PartyForgeSettings.Mode.DEVELOPER_MODE
+    developer_settings.use_city_access_snapshot = true
+    TestAssertions.equal(PartyForgeSettingsStore.new().save_settings(developer_settings, settings_path), "", "Warehouse shadow fixture persists Developer Mode snapshot observation", failures)
+    var emissions: Array = []
+    var provider := CityAccessProvider.new(func(_path: String) -> Variant:
+        return CityAccessSnapshotLoader.load_path(CityAccessProvider.SNAPSHOT_PATH)
+    )
+    var comparator := CityAccessShadowComparator.new(provider, Callable(), func(marker: String, warning: bool) -> void:
+        emissions.append([marker, warning])
+    )
+    var main := (load("res://scenes/game/main.tscn") as PackedScene).instantiate()
+    main.set("profile_root", root)
+    main.set("settings_path", settings_path)
+    main.set("city_access_shadow_comparator", comparator)
+    main.call("_ready")
+    var menu := main.get_node("MainMenuScreen") as MainMenuScreen
+    var projection := menu.projection()
+    TestAssertions.equal(emissions.size(), 1, "Main observes one Warehouse shadow marker after presenting the menu", failures)
+    if emissions.size() == 1:
+        var marker := String((emissions[0] as Array)[0])
+        TestAssertions.truthy("access=MATCH" in marker, "Warehouse shadow marker reports matching access", failures)
+        TestAssertions.truthy("visibility=DIVERGED" in marker, "Warehouse shadow marker reports visibility divergence", failures)
+        TestAssertions.truthy("destination=NOT_APPLICABLE" in marker, "Warehouse shadow marker reports destination not applicable", failures)
+    TestAssertions.truthy(projection.warehouse_visible and projection.warehouse_enabled, "Developer Mode keeps the Warehouse menu projection visible and enabled", failures)
+    TestAssertions.truthy((menu.get_node("Warehouse") as Button).visible and not (menu.get_node("Warehouse") as Button).disabled, "Developer Mode keeps the Warehouse menu button visible and enabled", failures)
+    TestAssertions.truthy((menu.get_node("CityWarehouseHotspot") as Button).visible and not (menu.get_node("CityWarehouseHotspot") as Button).disabled, "Developer Mode keeps the City Warehouse menu button visible and enabled", failures)
+    TestAssertions.equal((main.get("profile_manager") as ProfileManager).active_profile().to_dictionary(), profile_before, "Warehouse observation leaves the active profile dictionary unchanged", failures)
+    main.call("_refresh_main_menu_projection")
+    TestAssertions.equal(emissions.size(), 1, "repeated main-menu projection leaves the Warehouse shadow marker deduplicated", failures)
+    var player_settings := PartyForgeSettings.new()
+    player_settings.mode = PartyForgeSettings.Mode.PLAYER_SIMULATION
+    player_settings.use_city_access_snapshot = true
+    TestAssertions.equal(PartyForgeSettingsStore.new().save_settings(player_settings, settings_path), "", "Warehouse shadow fixture persists Player Mode", failures)
+    main.set("saved_settings", player_settings.copy())
+    main.call("_refresh_main_menu_projection")
+    TestAssertions.equal(emissions.size(), 1, "Player Mode emits no additional Warehouse shadow marker", failures)
+    projection = menu.projection()
+    TestAssertions.truthy(not projection.warehouse_visible and not projection.warehouse_enabled, "Player Mode hides and disables the locked Warehouse route", failures)
+    main.call("_on_main_menu_route_requested", MainMenuViewModel.ROUTE_WAREHOUSE)
+    TestAssertions.truthy(menu.is_open() and not (main.get_node("WarehouseScreen") as WarehouseScreen).is_open(), "Player Mode keeps the direct locked Warehouse route blocked", failures)
+    main.free()
+    ProfileTestSupport.remove_tree(root)
+    _cleanup_settings_artifacts(settings_path)
 
 
 func _test_loadout_warning_preflight_and_transition_wiring(failures: Array[String]) -> void:

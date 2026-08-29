@@ -62,6 +62,7 @@ var catalog_valid := false
 var level_refresh_scheduled := false
 var saved_settings: PartyForgeSettings
 var settings_store: PartyForgeSettingsStore
+var city_access_shadow_comparator := CityAccessShadowComparator.new()
 var settings_path := PartyForgeSettingsStore.DEFAULT_PATH
 var profile_root := ProfileStore.DEFAULT_ROOT
 var profile_manager: ProfileManager
@@ -1441,14 +1442,16 @@ func _present_front_end(preferred_focus: Control = null) -> void:
 
 
 func _refresh_main_menu_projection() -> void:
+	var profile := profile_manager.active_profile() if profile_manager != null else null
 	var projection := MainMenuViewModel.build(
-		profile_manager.active_profile() if profile_manager != null else null,
+		profile,
 		saved_settings,
 		_city_runtime_available()
 	)
 	if not profile_bootstrap_error.is_empty():
 		projection.status_text = "Some profile data needs attention. Open Settings > Profiles for details."
 	(get_node("MainMenuScreen") as MainMenuScreen).present(projection)
+	city_access_shadow_comparator.observe(saved_settings, profile)
 
 
 func _open_storage_route(route_id: StringName) -> void:
