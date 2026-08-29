@@ -162,6 +162,47 @@ func _assert_warehouse_shadow_pilot(snapshot: CityAccessSnapshot, failures: Arra
 	var player_unlocked := MainMenuViewModel.build(unlocked_profile, player_settings, true)
 	_assert(not player_locked.warehouse_visible and not player_locked.warehouse_enabled and player_locked.warehouse_route_id == MainMenuViewModel.ROUTE_WAREHOUSE, "Player Mode keeps the locked Warehouse route unavailable without stash", failures)
 	_assert(player_unlocked.warehouse_visible and player_unlocked.warehouse_enabled and player_unlocked.warehouse_route_id == MainMenuViewModel.ROUTE_WAREHOUSE, "Player Mode makes the Warehouse route available only with stash", failures)
+	_assert_production_warehouse_route_authorization(failures)
+
+
+func _assert_production_warehouse_route_authorization(failures: Array[String]) -> void:
+	var root := "user://tests/city-access-snapshot-runner-warehouse-route_%d_%d" % [OS.get_process_id(), Time.get_ticks_usec()]
+	var settings_path := "user://tests/city-access-snapshot-runner-warehouse-route-settings_%d_%d.cfg" % [OS.get_process_id(), Time.get_ticks_usec()]
+	ProfileTestSupport.remove_tree(root)
+	_cleanup_settings_artifacts(settings_path)
+	var player_settings := PartyForgeSettings.new()
+	player_settings.mode = PartyForgeSettings.Mode.PLAYER_SIMULATION
+	player_settings.use_city_access_snapshot = true
+	_assert(PartyForgeSettingsStore.new().save_settings(player_settings, settings_path).is_empty(), "route fixture persists Player Mode settings", failures)
+	var main := (load("res://scenes/game/main.tscn") as PackedScene).instantiate()
+	main.set("profile_root", root)
+	main.set("settings_path", settings_path)
+	main.call("_ready")
+	var manager := main.get("profile_manager") as ProfileManager
+	var created := manager.create_profile("Warehouse Route Acceptance") if manager != null else ProfileOperationResult.new()
+	_assert(created.ok(), "route fixture creates an active locked profile", failures)
+	if created.ok():
+		var locked_profile := manager.active_profile()
+		_assert(not bool(main.call("_storage_route_allowed", MainMenuViewModel.ROUTE_WAREHOUSE, locked_profile)), "production Warehouse authorization seam blocks Player Mode without stash", failures)
+		main.call("_on_main_menu_route_requested", MainMenuViewModel.ROUTE_WAREHOUSE)
+		var menu := main.get_node("MainMenuScreen") as MainMenuScreen
+		var warehouse := main.get_node("WarehouseScreen") as WarehouseScreen
+		_assert(menu.is_open() and not warehouse.is_open(), "production Warehouse dispatcher rejects Player Mode without stash", failures)
+		locked_profile.permanent_feature_unlocks = ["stash"]
+		_assert(ProfileStore.new().save_profile(locked_profile, root).is_empty(), "route fixture persists stash unlock", failures)
+		_assert(manager.refresh_profile(locked_profile.profile_id).is_empty(), "route fixture refreshes the stash-unlocked profile", failures)
+		var unlocked_profile := manager.active_profile()
+		_assert(bool(main.call("_storage_route_allowed", MainMenuViewModel.ROUTE_WAREHOUSE, unlocked_profile)), "production Warehouse authorization seam allows Player Mode with stash", failures)
+		main.call("_on_main_menu_route_requested", MainMenuViewModel.ROUTE_WAREHOUSE)
+		_assert(warehouse.is_open() and not menu.is_open(), "production Warehouse dispatcher opens Player Mode with stash", failures)
+	main.free()
+	ProfileTestSupport.remove_tree(root)
+	_cleanup_settings_artifacts(settings_path)
+
+
+func _cleanup_settings_artifacts(settings_path: String) -> void:
+	for path: String in [settings_path, "%s.tmp" % settings_path, "%s.bak" % settings_path]:
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
 
 
 func _assert_legacy_city_data(failures: Array[String]) -> void:
