@@ -185,6 +185,9 @@ func _view_model_source() -> String:
 	return file.get_as_text() if file != null else ""
 
 func _test_armoury_and_warehouse_feature_access(failures: Array[String]) -> void:
+	var source := _view_model_source()
+	TestAssertions.truthy(source.contains("WarehouseAccessPolicy.resolve(supplied_profile)"), "Warehouse access uses the dedicated policy", failures)
+	TestAssertions.truthy(not source.contains("feature_policy.resolve(&\"warehouse\""), "Warehouse access is not resolved by the Armoury policy", failures)
 	var settings := PartyForgeSettings.new()
 	var profile := _profile(ProfileState.PrologueState.COMPLETED)
 	var locked := MainMenuViewModel.build(profile, settings, true)

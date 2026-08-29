@@ -1,6 +1,8 @@
 class_name MainMenuViewModel
 extends RefCounted
 
+const WarehouseAccessPolicy := preload("res://scripts/world/access/warehouse_access_policy.gd")
+
 const ROUTE_PROFILES: StringName = &"profiles"
 const ROUTE_PROLOGUE_START: StringName = &"prologue_start"
 const ROUTE_PROLOGUE_RESUME: StringName = &"prologue_resume"
@@ -58,18 +60,20 @@ static func build(profile: Variant, settings: Variant, city_tree_available: Vari
 	var feature_policy := FeatureAccessPolicy.new(
 		developer_mode,
 		false,
-		[&"armoury", &"warehouse"],
-		[&"equipment_inventory", &"stash"],
+		[&"armoury"],
+		[&"equipment_inventory"],
 		_to_names(supplied_profile.permanent_feature_unlocks),
 	)
 	var armoury_state := feature_policy.resolve(&"armoury", FeatureAccessPolicy.State.AVAILABLE, &"equipment_inventory")
-	var warehouse_state := feature_policy.resolve(&"warehouse", FeatureAccessPolicy.State.AVAILABLE, &"stash")
+	var warehouse_player_available := (
+		WarehouseAccessPolicy.resolve(supplied_profile) == WarehouseAccessPolicy.State.AVAILABLE
+	)
 	result.armoury_visible = developer_mode or armoury_state == FeatureAccessPolicy.State.AVAILABLE
 	result.armoury_enabled = result.armoury_visible
 	result.armoury_label = "Developer Armoury Preview" if developer_mode and armoury_state != FeatureAccessPolicy.State.AVAILABLE else "Armoury"
-	result.warehouse_visible = developer_mode or warehouse_state == FeatureAccessPolicy.State.AVAILABLE
+	result.warehouse_visible = developer_mode or warehouse_player_available
 	result.warehouse_enabled = result.warehouse_visible
-	result.warehouse_label = "Developer Warehouse Preview" if developer_mode and warehouse_state != FeatureAccessPolicy.State.AVAILABLE else "Warehouse"
+	result.warehouse_label = "Developer Warehouse Preview" if developer_mode and not warehouse_player_available else "Warehouse"
 	if result.city_tree_visible and not result.city_tree_enabled and result.primary_route_id != ROUTE_RUN_RECOVERY:
 		result.status_text = "City services are temporarily unavailable."
 	return result

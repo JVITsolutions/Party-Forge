@@ -1,6 +1,8 @@
 class_name CityAccessSnapshotLoader
 extends RefCounted
 
+const STRICT_JSON_TOKEN_SCANNER := preload("res://scripts/data/strict_json_token_scanner.gd")
+
 const FORMAT := "party-forge-access-snapshot"
 const VERSION := 1
 const MAX_BYTES := 1024 * 1024
@@ -19,6 +21,8 @@ static func load_bytes(bytes: PackedByteArray) -> CityAccessLoadResult:
 	if bytes.size() > MAX_BYTES: return _failure("document exceeds byte limit")
 	var text: String = bytes.get_string_from_utf8()
 	if text.contains("\uFEFF") or text.contains("\uFFFD") or text.to_utf8_buffer() != bytes: return _failure("document must be strict UTF-8")
+	var scan_error := STRICT_JSON_TOKEN_SCANNER.new(text).scan()
+	if not scan_error.is_empty(): return _failure("document contains duplicate object key" if scan_error == "duplicate key" else "document must contain one JSON object")
 	var parser := JSON.new()
 	if parser.parse(text) != OK or not parser.data is Dictionary: return _failure("document must contain one JSON object")
 	return validate_document(parser.data as Dictionary)
