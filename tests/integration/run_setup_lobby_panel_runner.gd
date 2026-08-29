@@ -30,6 +30,7 @@ func _run() -> void:
 	await _test_gate_restore_branches(viewport, panel)
 	await _test_action_matrix_focus(viewport, panel)
 	await _test_real_input_focus_graph(viewport, panel)
+	await _test_prompt_device_switching(viewport, panel)
 	await _test_real_layout(viewport, panel)
 	panel.free()
 	if _failures.is_empty():
@@ -179,6 +180,51 @@ func _test_real_input_focus_graph(viewport: Window, panel: ClassSelectionPanel) 
 	await _expect_focus(viewport, panel.selection_focus(&"mage"), "compact ui_down follows explicit two-column neighbor")
 
 
+func _test_prompt_device_switching(viewport: Window, panel: ClassSelectionPanel) -> void:
+	viewport.size = Vector2i(1920, 1080)
+	panel.apply_viewport_size(Vector2(viewport.size))
+	panel.present(_projection(RunSetupLobbyProjection.State.READY, &"fighter", &"mage", RunSetupClassProjection.Compatibility.COMPATIBLE))
+	panel.open(panel.selection_focus(&"fighter"))
+	await _wait_for_layout(panel, "prompt switching fixture")
+	var fighter := panel.selection_focus(&"fighter")
+	await _give_focus(viewport, fighter, "prompt switching starts from Fighter focus")
+	var prompt := panel.get_node("Content/Margin/Layout/Footer/InputPrompt") as ForgeInputPrompt
+	var p1_ready := panel.get_node("Content/Margin/Layout/Body/LeftColumn/Seats/Seat_1/Content/Ready") as Label
+	var original_actions := _enabled_action_ids(panel)
+	var original_selected := panel.selected_class_id()
+	var original_previewed := panel.previewed_class_id()
+	var original_status := (panel.get_node("Content/Margin/Layout/Status") as Label).text
+	_assert(panel.active_prompt_mode() == &"keyboard_mouse", "lobby starts in keyboard/mouse prompt mode")
+	_assert((prompt.get_node("Content/Label") as Label).text.ends_with("Start Run"), "Ready lobby prompt contextualizes ui_accept as Start Run")
+	_assert(p1_ready.text == "READY · PROMPTS: KEYBOARD + MOUSE", "desktop P1 line names keyboard and mouse prompt style")
+
+	await _send_joy_button(viewport, JOY_BUTTON_LEFT_STICK)
+	_assert(panel.active_prompt_mode() == &"controller", "real controller button switches prompt mode")
+	await _expect_focus(viewport, fighter, "controller prompt switch preserves exact focus")
+	_assert((prompt.get_node("Content/Label") as Label).text.begins_with("A —") and (prompt.get_node("Content/Label") as Label).text.ends_with("Start Run"), "controller prompt uses formatted ui_accept and Start Run context")
+	_assert(p1_ready.text == "READY · PROMPTS: GAMEPAD", "desktop P1 line names gamepad prompt style")
+	_assert(_enabled_action_ids(panel) == original_actions and panel.selected_class_id() == original_selected and panel.previewed_class_id() == original_previewed and (panel.get_node("Content/Margin/Layout/Status") as Label).text == original_status, "controller prompt switch preserves authority, selection, preview, and status")
+
+	await _send_mouse_motion(viewport, Vector2(8.0, 8.0))
+	_assert(panel.active_prompt_mode() == &"keyboard_mouse", "real mouse motion restores keyboard/mouse prompt mode")
+	await _expect_focus(viewport, fighter, "mouse prompt switch preserves exact focus")
+	await _send_joy_button(viewport, JOY_BUTTON_LEFT_STICK)
+	_assert(panel.active_prompt_mode() == &"controller", "controller prompt mode is retained before close")
+	panel.close()
+	await _send_key(viewport, KEY_SHIFT)
+	_assert(panel.active_prompt_mode() == &"controller", "closed lobby ignores keyboard prompt observations")
+	panel.open(fighter)
+	_assert(panel.active_prompt_mode() == &"controller" and p1_ready.text == "READY · PROMPTS: GAMEPAD", "reopened lobby preserves and refreshes the last prompt device")
+	await _send_key(viewport, KEY_SHIFT)
+	_assert(panel.active_prompt_mode() == &"keyboard_mouse", "real keyboard input restores keyboard/mouse prompts after reopen")
+	await _expect_focus(viewport, fighter, "keyboard prompt switch preserves exact focus")
+
+	panel.present(_projection(RunSetupLobbyProjection.State.NO_SELECTION, &"", &"fighter", RunSetupClassProjection.Compatibility.UNKNOWN))
+	_assert((prompt.get_node("Content/Label") as Label).text.ends_with("Select Class"), "no-selection prompt contextualizes ui_accept as Select Class")
+	panel.present(_projection(RunSetupLobbyProjection.State.CHECKING, &"fighter", &"mage", RunSetupClassProjection.Compatibility.COMPATIBLE))
+	_assert((prompt.get_node("Content/Label") as Label).text.ends_with("Confirm"), "Checking prompt falls back to passive Confirm copy")
+
+
 func _test_real_layout(viewport: Window, panel: ClassSelectionPanel) -> void:
 	panel.present(_projection(RunSetupLobbyProjection.State.READY, &"fighter", &"fighter", RunSetupClassProjection.Compatibility.COMPATIBLE))
 	panel.open()
@@ -195,16 +241,20 @@ func _test_real_layout(viewport: Window, panel: ClassSelectionPanel) -> void:
 		var hero := panel.get_node("Content/Margin/Layout/Body/HeroStage") as Control
 		var details := panel.get_node("Content/Margin/Layout/Body/Details") as Control
 		var status := panel.get_node("Content/Margin/Layout/Status") as Control
-		var actions := panel.get_node("Content/Margin/Layout/ActionBar") as Control
+		var actions := panel.get_node("Content/Margin/Layout/Footer") as Control
+		var prompt := panel.get_node("Content/Margin/Layout/Footer/InputPrompt") as Control
+		var action_bar := panel.get_node("Content/Margin/Layout/Footer/ActionBar") as Control
 		var seats := panel.get_node("Content/Margin/Layout/Body/LeftColumn/Seats") as GridContainer
 		var roster := panel.get_node("Content/Margin/Layout/Body/LeftColumn/ClassRoster/Scroll/Grid") as GridContainer
 		var expected_content_width := minf(float(viewport_size.x), RunSetupResponsiveLayout.MAX_CONTENT_WIDTH)
 		var expected_content := Rect2(Vector2((float(viewport_size.x) - expected_content_width) * 0.5, 0.0), Vector2(expected_content_width, float(viewport_size.y)))
 		_assert_rect_near(content.get_global_rect(), expected_content, "content cap", viewport_size)
-		var expected_margin := Rect2(expected_content.position + Vector2(24.0, 16.0), expected_content.size - Vector2(48.0, 32.0))
-		_assert_rect_near(margin.get_global_rect(), expected_margin, "exact 24px side and 16px vertical margins", viewport_size)
+		var compact := viewport_size.x < 1600 or viewport_size.y < 900
+		var vertical_margin := 8.0 if compact else 16.0
+		var expected_margin := Rect2(expected_content.position + Vector2(24.0, vertical_margin), expected_content.size - Vector2(48.0, vertical_margin * 2.0))
+		_assert_rect_near(margin.get_global_rect(), expected_margin, "exact 24px side and responsive vertical margins", viewport_size)
 		_assert_enclosed(viewport_rect, panel, "full-screen panel", viewport_size)
-		_assert_enclosed(content.get_global_rect(), margin, "24px/16px content margin", viewport_size)
+		_assert_enclosed(content.get_global_rect(), margin, "24px side and responsive vertical content margin", viewport_size)
 		_assert_enclosed(margin.get_global_rect(), body, "body within content margins", viewport_size)
 		_assert_enclosed(body.get_global_rect(), left, "left lobby column", viewport_size)
 		_assert_enclosed(body.get_global_rect(), hero, "hero stage", viewport_size)
@@ -214,7 +264,6 @@ func _test_real_layout(viewport: Window, panel: ClassSelectionPanel) -> void:
 		_assert_enclosed(margin.get_global_rect(), status, "status row", viewport_size)
 		_assert_enclosed(margin.get_global_rect(), actions, "fixed action footer", viewport_size)
 		_assert(body.get_global_rect().end.y <= actions.get_global_rect().position.y, "body does not overlap fixed footer at %dx%d" % [viewport_size.x, viewport_size.y])
-		var compact := viewport_size.x < 1600 or viewport_size.y < 900
 		_assert(seats.columns == (4 if compact else 2), "seat columns match mode at %dx%d" % [viewport_size.x, viewport_size.y])
 		_assert(roster.columns == (2 if compact else 3), "roster columns match mode at %dx%d" % [viewport_size.x, viewport_size.y])
 		_assert_seat_mode(seats, compact, viewport_size)
@@ -243,7 +292,7 @@ func _wait_for_layout(panel: ClassSelectionPanel, description: String) -> void:
 
 func _layout_signature(panel: ClassSelectionPanel) -> PackedFloat32Array:
 	var body := panel.get_node_or_null("Content/Margin/Layout/Body") as Control
-	var actions := panel.get_node_or_null("Content/Margin/Layout/ActionBar") as Control
+	var actions := panel.get_node_or_null("Content/Margin/Layout/Footer") as Control
 	if body == null or actions == null:
 		return PackedFloat32Array()
 	var body_rect := body.get_global_rect()
@@ -287,6 +336,48 @@ func _send_ui_action(viewport: Window, action: StringName) -> void:
 	released.pressed = false
 	viewport.push_input(released)
 	await process_frame
+
+
+func _send_key(viewport: Window, keycode: Key) -> void:
+	var pressed := InputEventKey.new()
+	pressed.keycode = keycode
+	pressed.pressed = true
+	viewport.push_input(pressed)
+	await process_frame
+	var released := pressed.duplicate() as InputEventKey
+	released.pressed = false
+	viewport.push_input(released)
+	await process_frame
+
+
+func _send_joy_button(viewport: Window, button: JoyButton) -> void:
+	var pressed := InputEventJoypadButton.new()
+	pressed.device = 0
+	pressed.button_index = button
+	pressed.pressed = true
+	viewport.push_input(pressed)
+	await process_frame
+	var released := pressed.duplicate() as InputEventJoypadButton
+	released.pressed = false
+	viewport.push_input(released)
+	await process_frame
+
+
+func _send_mouse_motion(viewport: Window, position: Vector2) -> void:
+	var event := InputEventMouseMotion.new()
+	event.position = position
+	event.relative = position - viewport.get_mouse_position()
+	viewport.push_input(event)
+	await process_frame
+
+
+func _enabled_action_ids(panel: ClassSelectionPanel) -> Array[StringName]:
+	var result: Array[StringName] = []
+	for action_id: StringName in [&"back", &"settings", &"armoury", &"select", &"start"]:
+		var button := panel.action_focus(action_id) as Button
+		if button != null and bool(button.get_meta(&"action_enabled", false)):
+			result.append(action_id)
+	return result
 
 
 func _assert_seat_mode(seats: GridContainer, compact: bool, viewport_size: Vector2i) -> void:

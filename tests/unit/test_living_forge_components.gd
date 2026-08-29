@@ -20,6 +20,7 @@ func run() -> Array[String]:
 	_test_class_card_compound_layers_and_lifecycle(failures)
 	_test_class_card_intrinsic_and_external_locks(failures)
 	_test_future_seats_are_inert(failures)
+	_test_active_seat_prompt_context(failures)
 	_test_status_badge_shape_and_typography(failures)
 	_test_action_bar_emission_contract(failures)
 	_test_input_prompt_and_active_device_contracts(failures)
@@ -277,6 +278,32 @@ func _test_future_seats_are_inert(failures: Array[String]) -> void:
 		default_seat.free()
 
 
+func _test_active_seat_prompt_context(failures: Array[String]) -> void:
+	var seat := _instantiate(SEAT_CARD_SCENE)
+	if seat == null:
+		return
+	seat.call(&"present", {
+		"seat_number": 1,
+		"available": true,
+		"profile_name": "Input Qualification",
+		"status": "READY",
+		"accessibility_description": "Player 1 seat. Input Qualification. Ready.",
+	})
+	TestAssertions.truthy(seat.has_method(&"present_prompt_device"), "active seat exposes presentation-only prompt device context", failures)
+	if seat.has_method(&"present_prompt_device"):
+		seat.call(&"present_prompt_device", &"controller", false)
+		TestAssertions.equal((seat.get_node("Content/Ready") as Label).text, "READY · PROMPTS: GAMEPAD", "active seat desktop copy identifies gamepad prompts without ownership", failures)
+		TestAssertions.truthy(String(seat.accessibility_description).to_lower().contains("current prompt style is gamepad") and String(seat.accessibility_description).contains("No controller is assigned"), "active seat accessibility explains prompt style without controller assignment", failures)
+		seat.call(&"present_prompt_device", &"keyboard_mouse", false)
+		TestAssertions.equal((seat.get_node("Content/Ready") as Label).text, "READY · PROMPTS: KEYBOARD + MOUSE", "active seat desktop copy identifies keyboard and mouse prompts", failures)
+		seat.call(&"present_prompt_device", &"controller", true)
+		TestAssertions.truthy((seat.get_node("Content/Ready") as Label).text.contains("GAMEPAD"), "active seat compact copy retains gamepad prompt meaning", failures)
+	TestAssertions.equal((seat.get_node("Content/Identity") as Label).text, "Input Qualification", "prompt context preserves active-seat identity", failures)
+	TestAssertions.equal(seat.focus_mode, Control.FOCUS_NONE, "active seat prompt context remains outside focus", failures)
+	TestAssertions.equal(seat.mouse_filter, Control.MOUSE_FILTER_IGNORE, "active seat prompt context remains pointer inert", failures)
+	seat.free()
+
+
 func _test_status_badge_shape_and_typography(failures: Array[String]) -> void:
 	var badge := _instantiate(STATUS_BADGE_SCENE)
 	if badge == null:
@@ -357,7 +384,10 @@ func _test_input_prompt_and_active_device_contracts(failures: Array[String]) -> 
 		var keyboard_label := InputBindingFormatter.events_for_device(InputMap.action_get_events(action_id), false)
 		var controller_label := InputBindingFormatter.events_for_device(InputMap.action_get_events(action_id), true)
 		TestAssertions.truthy(prompt.has_method(&"present"), "input prompt exposes present(action_id, device_kind, label)", failures)
+		TestAssertions.truthy(prompt.has_method(&"present_contextual"), "input prompt extends presentation with contextual player copy", failures)
 		TestAssertions.truthy(prompt.has_method(&"label_for_action"), "input prompt resolves labels from InputMap", failures)
+		TestAssertions.equal(prompt.focus_mode, Control.FOCUS_NONE, "input prompt is outside the focus graph", failures)
+		TestAssertions.equal(prompt.mouse_filter, Control.MOUSE_FILTER_IGNORE, "input prompt ignores pointer input", failures)
 		if prompt.has_method(&"label_for_action"):
 			TestAssertions.equal(prompt.call(&"label_for_action", action_id, &"keyboard_mouse"), keyboard_label, "keyboard prompt uses InputBindingFormatter.events_for_device", failures)
 			TestAssertions.equal(prompt.call(&"label_for_action", action_id, &"controller"), controller_label, "controller prompt uses InputBindingFormatter.events_for_device", failures)
@@ -370,6 +400,9 @@ func _test_input_prompt_and_active_device_contracts(failures: Array[String]) -> 
 			TestAssertions.equal((prompt.get_node("Content/Label") as Label).text, "Enter — Select", "keyboard prompt presents a stable concise binding", failures)
 			prompt.theme = LivingForgeThemeCatalog.resolve(false, 100, 100)
 			TestAssertions.truthy((prompt.get_node("Content/Label") as Label).get_theme_font_size(&"font_size") >= 16, "prompt copy is player-readable", failures)
+		if prompt.has_method(&"present_contextual"):
+			prompt.call(&"present_contextual", &"ui_accept", &"controller", "A", "Start Run")
+			TestAssertions.equal((prompt.get_node("Content/Label") as Label).text, "A — Start Run", "contextual prompt presents the supplied lobby action without changing binding authority", failures)
 		TestAssertions.truthy(not String(prompt.get("accessibility_description")).strip_edges().is_empty(), "input prompt has an accessibility description", failures)
 		InputMap.erase_action(action_id)
 		prompt.free()

@@ -1,9 +1,10 @@
-[gd_scene load_steps=7 format=3]
+[gd_scene load_steps=8 format=3]
 
 [ext_resource type="Script" path="res://scripts/ui/class_selection_panel.gd" id="1_script"]
 [ext_resource type="Theme" path="res://data/ui/living_forge/living_forge_theme.tres" id="2_theme"]
 [ext_resource type="PackedScene" path="res://scenes/ui/ledger/character_equipment_preview.tscn" id="3_preview"]
 [ext_resource type="PackedScene" path="res://scenes/ui/living_forge/components/forge_action_bar.tscn" id="4_actions"]
+[ext_resource type="PackedScene" path="res://scenes/ui/living_forge/components/forge_input_prompt.tscn" id="5_prompt"]
 
 [sub_resource type="StyleBoxFlat" id="Style_hero"]
 bg_color = Color(0.03137255, 0.05098039, 0.07058824, 1)
@@ -199,7 +200,19 @@ horizontal_alignment = 1
 vertical_alignment = 1
 autowrap_mode = 2
 
-[node name="ActionBar" parent="Content/Margin/Layout" instance=ExtResource("4_actions")]
+[node name="Footer" type="HBoxContainer" parent="Content/Margin/Layout"]
 custom_minimum_size = Vector2(0, 56)
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="InputPrompt" parent="Content/Margin/Layout/Footer" instance=ExtResource("5_prompt")]
+layout_mode = 2
+
+[node name="Spacer" type="Control" parent="Content/Margin/Layout/Footer"]
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+
+[node name="ActionBar" parent="Content/Margin/Layout/Footer" instance=ExtResource("4_actions")]
 layout_mode = 2
 alignment = 1

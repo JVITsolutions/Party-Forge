@@ -21,13 +21,21 @@ var _high_contrast := false
 
 
 func present(next_action_id: StringName, next_device_kind: StringName, label: String) -> void:
+	_present_copy(next_action_id, next_device_kind, label, _compact_action_copy(next_action_id))
+
+
+func present_contextual(next_action_id: StringName, next_device_kind: StringName, label: String, action_copy: String) -> void:
+	var contextual_copy := action_copy.strip_edges()
+	_present_copy(next_action_id, next_device_kind, label, contextual_copy if not contextual_copy.is_empty() else _compact_action_copy(next_action_id))
+
+
+func _present_copy(next_action_id: StringName, next_device_kind: StringName, label: String, action_copy: String) -> void:
 	action_id = next_action_id
 	device_kind = next_device_kind
 	raw_binding_label = label
 	var icon := get_node("Content/Icon") as TextureRect
 	icon.texture = load(ICON_ROOT + ("device-gamepad.svg" if device_kind == &"controller" else "keyboard.svg")) as Texture2D
 	_tint_texture(icon, LivingForgeTokens.color(&"focus_outline", _high_contrast))
-	var action_copy := _compact_action_copy(action_id)
 	(get_node("Content/Label") as Label).text = "%s — %s" % [_compact_binding_copy(action_id, device_kind, label), action_copy]
 	(get_node("Content/Action") as Label).text = action_copy
 	tooltip_text = "Full binding: %s" % label

@@ -15,6 +15,8 @@ func run() -> Array[String]:
 		return failures
 	panel.configure(GameCatalog.load_defaults())
 	_test_projection_ownership_theme_and_lifecycle(panel, failures)
+	_test_active_prompt_contract(panel, failures)
+	_test_authoritative_preview_cue_survives_representations(panel, failures)
 	_test_preview_selection_and_start_are_orthogonal(panel, failures)
 	_test_complete_action_matrix(panel, failures)
 	_test_focus_graph_and_pending_recovery(panel, failures)
@@ -35,9 +37,9 @@ func _test_scene_and_public_seam(failures: Array[String]) -> void:
 	TestAssertions.equal(panel_script.resource_path if panel_script != null else "", SELECTOR_SCRIPT_PATH, "selector keeps its public adapter script", failures)
 	for signal_name: StringName in [&"class_preview_requested", &"class_selection_requested", &"start_requested", &"settings_requested", &"armoury_requested", &"back_requested"]:
 		TestAssertions.truthy(panel.has_signal(signal_name), "selector exposes %s" % signal_name, failures)
-	for method_name: StringName in [&"configure", &"present", &"open", &"close", &"is_open", &"selected_class_id", &"previewed_class_id", &"selection_focus", &"action_focus", &"set_pending", &"begin_compatibility_gate", &"end_compatibility_gate", &"show_status", &"clear_status"]:
+	for method_name: StringName in [&"configure", &"present", &"open", &"close", &"is_open", &"selected_class_id", &"previewed_class_id", &"active_prompt_mode", &"selection_focus", &"action_focus", &"set_pending", &"begin_compatibility_gate", &"end_compatibility_gate", &"show_status", &"clear_status"]:
 		TestAssertions.truthy(panel.has_method(method_name), "selector exposes %s" % method_name, failures)
-	for node_name: String in ["Backdrop", "Header", "Seats", "ClassRoster", "HeroStage", "Details", "ActionBar", "Status"]:
+	for node_name: String in ["Backdrop", "Header", "Seats", "ClassRoster", "HeroStage", "Details", "Footer", "InputPrompt", "ActionBar", "Status"]:
 		TestAssertions.truthy(panel.find_child(node_name, true, false) != null, "lobby owns %s composition" % node_name, failures)
 	var backdrop := panel.find_child("Backdrop", true, false) as ColorRect
 	TestAssertions.truthy(backdrop != null and backdrop.color.a >= 0.999, "lobby backdrop is opaque", failures)
@@ -47,6 +49,44 @@ func _test_scene_and_public_seam(failures: Array[String]) -> void:
 	panel.confirm_run_started()
 	TestAssertions.truthy(not panel.visible and run_status.visible, "legacy confirmation still closes setup and reveals run HUD through declarative composition", failures)
 	hud.free()
+
+
+func _test_active_prompt_contract(panel: Variant, failures: Array[String]) -> void:
+	var prompts: Array[Node] = panel.find_children("*", "ForgeInputPrompt", true, false)
+	TestAssertions.equal(prompts.size(), 1, "Play lobby owns exactly one passive input prompt", failures)
+	var prompt := prompts[0] as ForgeInputPrompt if not prompts.is_empty() else null
+	if prompt != null:
+		TestAssertions.equal(prompt.focus_mode, Control.FOCUS_NONE, "lobby prompt is outside the focus graph", failures)
+		TestAssertions.equal(prompt.mouse_filter, Control.MOUSE_FILTER_IGNORE, "lobby prompt ignores pointer input", failures)
+	TestAssertions.truthy(panel.get("_input_tracker") is ActiveInputDevice, "Play lobby owns exactly one ActiveInputDevice tracker", failures)
+	TestAssertions.equal(panel.active_prompt_mode() if panel.has_method(&"active_prompt_mode") else &"missing", &"keyboard_mouse", "Play lobby reports its read-only initial prompt mode", failures)
+
+	var no_selection := _projection(RunSetupLobbyProjection.State.NO_SELECTION, &"", &"fighter", RunSetupClassProjection.Compatibility.UNKNOWN)
+	panel.present(no_selection)
+	var no_selection_actions := _enabled_action_ids(panel)
+	if prompt != null:
+		TestAssertions.truthy((prompt.get_node("Content/Label") as Label).text.ends_with("Select Class"), "no-selection prompt contextualizes ui_accept as Select Class", failures)
+	var ready := _projection(RunSetupLobbyProjection.State.READY, &"fighter", &"mage", RunSetupClassProjection.Compatibility.COMPATIBLE)
+	ready.set_meta(&"armoury_available", true)
+	panel.present(ready)
+	var ready_actions := _enabled_action_ids(panel)
+	if prompt != null:
+		TestAssertions.truthy((prompt.get_node("Content/Label") as Label).text.ends_with("Start Run"), "ready selected lobby contextualizes ui_accept as Start Run", failures)
+	var checking := _projection(RunSetupLobbyProjection.State.CHECKING, &"fighter", &"mage", RunSetupClassProjection.Compatibility.COMPATIBLE)
+	checking.set_meta(&"armoury_available", true)
+	panel.present(checking)
+	if prompt != null:
+		TestAssertions.truthy((prompt.get_node("Content/Label") as Label).text.ends_with("Confirm"), "non-authoritative lobby state falls back to Confirm", failures)
+	TestAssertions.equal(no_selection_actions, [&"back", &"settings", &"select"] as Array[StringName], "prompt rendering preserves no-selection action authority", failures)
+	TestAssertions.equal(ready_actions, [&"back", &"settings", &"armoury", &"select", &"start"] as Array[StringName], "prompt rendering preserves ready action authority", failures)
+
+	var seats := panel.find_child("Seats", true, false) as GridContainer
+	if seats != null and seats.get_child_count() == 4:
+		var active_ready := ((seats.get_child(0) as Control).get_node("Content/Ready") as Label).text
+		TestAssertions.truthy(active_ready.contains("PROMPTS:") and active_ready.contains("KEYBOARD"), "P1 alone displays current keyboard/mouse prompt context", failures)
+		for index: int in range(1, 4):
+			var seat := seats.get_child(index) as Control
+			TestAssertions.equal((seat.get_node("Content/FuturePlate/Row/Availability") as Label).text, "LOCAL CO-OP - COMING SOON", "future seat %d remains exact and inert" % (index + 1), failures)
 
 
 func _test_projection_ownership_theme_and_lifecycle(panel: Variant, failures: Array[String]) -> void:
@@ -127,6 +167,41 @@ func _test_projection_ownership_theme_and_lifecycle(panel: Variant, failures: Ar
 		var viewport := preview.get_node("SubViewport") as SubViewport
 		TestAssertions.equal(viewport.render_target_update_mode, SubViewport.UPDATE_DISABLED, "close disables the shared preview SubViewport", failures)
 	panel.open()
+
+
+func _test_authoritative_preview_cue_survives_representations(panel: Variant, failures: Array[String]) -> void:
+	panel.present(_projection(RunSetupLobbyProjection.State.READY, &"fighter", &"fighter", RunSetupClassProjection.Compatibility.COMPATIBLE))
+	var fighter := panel.selection_focus(&"fighter") as ForgeClassCard
+	var mage := panel.selection_focus(&"mage") as ForgeClassCard
+	# A parked pointer and a later focus transition are both legitimate production inputs.
+	mage.mouse_entered.emit()
+	fighter.focus_entered.emit()
+	var high_contrast := _projection(RunSetupLobbyProjection.State.READY, &"fighter", &"fighter", RunSetupClassProjection.Compatibility.COMPATIBLE)
+	high_contrast.set_meta(&"high_contrast", true)
+	panel.present(high_contrast)
+	_assert_preview_authority(panel, "high-contrast re-presentation", failures)
+	var safe_error := _projection(RunSetupLobbyProjection.State.ERROR, &"fighter", &"fighter", RunSetupClassProjection.Compatibility.COMPATIBLE)
+	panel.present(safe_error)
+	_assert_preview_authority(panel, "safe-error re-presentation", failures)
+	mage.mouse_exited.emit()
+
+
+func _assert_preview_authority(panel: Variant, label: String, failures: Array[String]) -> void:
+	var preview_id: StringName = panel.previewed_class_id()
+	var visible_ids: Array[StringName] = []
+	var roster := panel.find_child("Grid", true, false) as GridContainer
+	for child: Node in roster.get_children():
+		var card := child as ForgeClassCard
+		if card != null and (card.get_node("PreviewIndicator") as Control).visible:
+			visible_ids.append(card.class_id)
+	TestAssertions.equal(visible_ids, [preview_id] as Array[StringName], "%s exposes exactly one Preview cue on the authoritative class" % label, failures)
+	var authoritative_card := panel.selection_focus(preview_id) as ForgeClassCard
+	var authoritative_name := (authoritative_card.get_node("Content/Identity/Name") as Label).text if authoritative_card != null else ""
+	TestAssertions.equal((panel.find_child("ClassName", true, false) as Label).text, authoritative_name, "%s details match preview authority" % label, failures)
+	var preview := panel.find_child("Preview", true, false) as CharacterEquipmentPreview
+	var signature: Variant = preview.get("_active_signature") if preview != null else null
+	var definition: ClassDefinition = signature.get("class_definition") as ClassDefinition if signature != null else null
+	TestAssertions.equal(definition.id if definition != null else &"", preview_id, "%s hero matches preview authority" % label, failures)
 
 
 func _test_preview_selection_and_start_are_orthogonal(panel: Variant, failures: Array[String]) -> void:

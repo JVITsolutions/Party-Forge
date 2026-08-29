@@ -1,0 +1,319 @@
+{
+  "captured_at_utc": "2026-08-28 21:25:19",
+  "entries": [
+    {
+      "file": "living-forge-state-board-normal.png",
+      "height": 1080,
+      "sha256": "c3e7ed84eba6faa81ae3036894cf778a0d9f9d26211ffff867115942457ee344",
+      "state": "state board normal",
+      "width": 1920
+    },
+    {
+      "file": "living-forge-state-board-compound-states.png",
+      "height": 1080,
+      "sha256": "8f82865d4aa35503f264e9917190198d8f29b3a9decb0e79ac866845bf015e79",
+      "state": "state board compound focus selected compatible",
+      "width": 1920
+    },
+    {
+      "file": "living-forge-state-board-action-states-pressed-proof.png",
+      "height": 1080,
+      "sha256": "a65923310d04dc44926ef7fbcae43ea68b225b43bb6bc500fb612f98ed43cc78",
+      "state": "state board pressed and unavailable actions",
+      "width": 1920
+    },
+    {
+      "file": "living-forge-state-board-normal-keyboard-focus.png",
+      "height": 1080,
+      "sha256": "93cf20d301af1d7b7e29e3d1ba183b04cce83341c9ba371fa28292013e99065d",
+      "state": "state board keyboard focus",
+      "width": 1920
+    },
+    {
+      "file": "living-forge-state-board-normal-controller-focus.png",
+      "height": 1080,
+      "sha256": "d4e232b04a5537e87eae3971bec0b0ee4243386083177b88213f39c050c3de13",
+      "state": "state board controller focus",
+      "width": 1920
+    },
+    {
+      "file": "living-forge-state-board-high-contrast.png",
+      "height": 1080,
+      "sha256": "d41bb5a0daff5ad8819ce4658780bc51af756a19f42338cad9e77fb4503d7a93",
+      "state": "state board high contrast",
+      "width": 1920
+    },
+    {
+      "file": "living-forge-state-board-high-contrast-controller-focus.png",
+      "height": 1080,
+      "sha256": "0a74ed024e51591ec63f36c86de2ec0f6f7e48b309e3fa62ef747bcbd8b3e9ce",
+      "state": "state board high contrast controller focus",
+      "width": 1920
+    },
+    {
+      "file": "living-forge-state-board-class-card-hover-preview.png",
+      "height": 1080,
+      "sha256": "adb9621be8f00f2b9aa590127dddaa3b302855b23c5571a8067143441b5fd377",
+      "state": "state board select A preview B",
+      "width": 1920
+    },
+    {
+      "file": "living-forge-state-board-normal-mouse-hover.png",
+      "height": 1080,
+      "sha256": "4d0ea1a312eb714804d22c1fa79e9fb66346d5d872283da61c8232a5f147ccb9",
+      "state": "state board mouse hover",
+      "width": 1920
+    },
+    {
+      "file": "play-lobby-1920x1080-compatible-keyboard.png",
+      "height": 1080,
+      "sha256": "f89f94466bf2c75978ff41d031c8a0245f5d4c47cd27e86c4aec9eb9b2b51ba2",
+      "state": "compatible lobby keyboard and mouse prompts with P1 plus three future seats",
+      "width": 1920
+    },
+    {
+      "file": "play-lobby-1920x1080-checking.png",
+      "height": 1080,
+      "sha256": "8dde137b95533d82b4c168c5419a26060e742902259b05c14b52b1302c20edf8",
+      "state": "Checking pending class compatibility",
+      "width": 1920
+    },
+    {
+      "file": "play-lobby-1920x1080-select-fighter-preview-mage.png",
+      "height": 1080,
+      "sha256": "068e5bd5f86f93cc4c54fe1c7e2c1026ceee276ce182bd7ebf338f9ddee04682",
+      "state": "selected Fighter and previewed Mage",
+      "width": 1920
+    },
+    {
+      "file": "play-lobby-1920x1080-controller-focus.png",
+      "height": 1080,
+      "sha256": "ea9e094832f659bb51dc620f2de6b2fe5cfa9cbf7415905fde24c0d674b7f512",
+      "state": "controller prompts and focus",
+      "width": 1920
+    },
+    {
+      "file": "play-lobby-1920x1080-high-contrast.png",
+      "height": 1080,
+      "sha256": "394fa23a44a3a315b4526d1c44e5553b9f0ab5fa9464dc2cba2c74e841292b46",
+      "state": "high contrast lobby",
+      "width": 1920
+    },
+    {
+      "file": "play-lobby-1920x1080-starting.png",
+      "height": 1080,
+      "sha256": "783d8de78805b21f7007698e2df1b0d3f433e55b0f849d728c53a81af60eda4f",
+      "state": "Starting state",
+      "width": 1920
+    },
+    {
+      "file": "play-lobby-1920x1080-safe-error.png",
+      "height": 1080,
+      "sha256": "1240a34267c52869232de0c63d04d745fc985e7e5261fd3c1a05cac10fdd88d0",
+      "state": "safe run-start error",
+      "width": 1920
+    },
+    {
+      "file": "settings-1920x1080-game-controls.png",
+      "height": 1080,
+      "sha256": "7836ee719b5e91bfaf7eaa396a4d4833b08e1f8918c4dceec3bb085ac4cb7568",
+      "state": "Settings High Contrast UI Scale and Text Scale",
+      "width": 1920
+    },
+    {
+      "file": "play-lobby-1920x1080-settings-return.png",
+      "height": 1080,
+      "sha256": "768f71b9c28c0159cd8cc6f0a68d3bfc7381223dbb2a7a947f3eaa7ec1edc72f",
+      "state": "exact Settings return focus",
+      "width": 1920
+    },
+    {
+      "file": "play-lobby-1920x1080-armoury-return-direct.png",
+      "height": 1080,
+      "sha256": "533d910a4b40ed41d89267d2bcd17f6b9044e6376b9a5e6e4f49ce00249553ce",
+      "state": "direct Armoury exact return",
+      "width": 1920
+    },
+    {
+      "file": "play-lobby-1920x1080-live-hero.png",
+      "height": 1080,
+      "sha256": "c2abcf57c7949a4e25643426c4f96354743371cc541901e81a7fb64cbf3e2266",
+      "state": "live Fighter hero",
+      "width": 1920
+    },
+    {
+      "file": "play-lobby-1920x1080-missing-presentation-fallback.png",
+      "height": 1080,
+      "sha256": "918d12931809e8547534aa90085e30b3a309c398849e8ae92e8d9bf4a3eae967",
+      "state": "missing presentation safe fallback",
+      "width": 1920
+    },
+    {
+      "file": "settings-1920x1080-reduced-motion.png",
+      "height": 1080,
+      "sha256": "31ec58499968a25ccaee747aa4c3e0079d7653d8d968c3e84347588d268a133b",
+      "state": "reduced motion enabled",
+      "width": 1920
+    },
+    {
+      "file": "play-lobby-1280x720-ui100-text100.png",
+      "height": 720,
+      "sha256": "6e0646df138e676ce8ac198b65035785828a7c8ae47319cda8b466ef1a9c1cca",
+      "state": "720p compact lobby pinned footer",
+      "width": 1280
+    },
+    {
+      "file": "play-lobby-1280x720-ui100-text150.png",
+      "height": 720,
+      "sha256": "774c3700d7161cfa60b13f8567fd8236e3af9bcc32bf35f3ca5ac70d7eb2125f",
+      "state": "720p compact lobby text 150 pinned footer",
+      "width": 1280
+    },
+    {
+      "file": "settings-1280x720-text150.png",
+      "height": 720,
+      "sha256": "c587929f2cc9ef6f129b5e6579374ef0e450dbf7e9b3b6b37919baf46b44bdd7",
+      "state": "720p text 150 Additional Settings scrollbar and pinned actions",
+      "width": 1280
+    },
+    {
+      "file": "play-lobby-1280x720-ui150-text80.png",
+      "height": 720,
+      "sha256": "eb514cbb15d255f7125eb74804b8fcb9db730a02db6b486fba572ef2e72fec48",
+      "state": "720p UI 150 text 80 corner",
+      "width": 1280
+    },
+    {
+      "file": "play-lobby-1280x720-ui150-text150.png",
+      "height": 720,
+      "sha256": "46a7b61da1c1b0336449d93d83c365a08df57327f08b7180028e12e1b547e597",
+      "state": "720p UI 150 text 150 corner",
+      "width": 1280
+    },
+    {
+      "file": "play-lobby-2560x1440-ui100-text100.png",
+      "height": 1440,
+      "sha256": "4776fbc5f318920d2ed6709d5742dd3545a2ccc4708c4a5e2f0e1bf0acfcd608",
+      "state": "1440p lobby",
+      "width": 2560
+    },
+    {
+      "file": "play-lobby-3440x1440-ui100-text100.png",
+      "height": 1440,
+      "sha256": "cb6a6e51983a3abaf9694104e9f3dd6fcb365e5bf2fe8f5983b44ef4eb61aa18",
+      "state": "ultrawide bounded lobby",
+      "width": 3440
+    },
+    {
+      "file": "play-lobby-3840x2160-ui100-text100.png",
+      "height": 2160,
+      "sha256": "09b1dcbc1ba744471d8127539b9de80562305239794768ef03b6e213639c8bd9",
+      "state": "4K lobby unchanged information density",
+      "width": 3840
+    },
+    {
+      "file": "settings-3840x2160.png",
+      "height": 2160,
+      "sha256": "626709cfb81ffbea4609f31b5e119f09b90106bf1229f977a731cfce815d7ba0",
+      "state": "4K Settings",
+      "width": 3840
+    },
+    {
+      "file": "play-lobby-1920x1080-needs-attention.png",
+      "height": 1080,
+      "sha256": "7e2547c9d1c92f4f96845d2d81bafe8eb997a8fc96058c578b4b61837a02eb4c",
+      "state": "Needs Attention selected Mage",
+      "width": 1920
+    },
+    {
+      "file": "play-lobby-1920x1080-armoury-return-warning.png",
+      "height": 1080,
+      "sha256": "96edf5999fa9c63ef72286d52a29f728f3cd1aeddb55a5ddbd95b6f33df7d395",
+      "state": "warning Armoury exact return",
+      "width": 1920
+    }
+  ],
+  "renderer": "gl_compatibility",
+  "run_id": "52432-1787952314",
+  "schema_version": 2,
+  "source_head": "f1713a7362f2e2468cafcf0726ae10f230a2697d",
+  "source_tree_fingerprint": {
+    "algorithm": "sha256",
+    "inputs": [
+      {
+        "path": "scenes/ui/run_setup/run_setup_lobby_panel.tscn",
+        "sha256": "2b28b0525ee4065041d07021af3f559e2f27399127673969b52e4a976efe867d",
+        "status": " M"
+      },
+      {
+        "path": "scripts/ui/class_selection_panel.gd",
+        "sha256": "6b47c7447d4d60da9856bb6941c66dd4834ab8740182d8ff8d71d2c550b056a2",
+        "status": " M"
+      },
+      {
+        "path": "scripts/ui/living_forge/components/forge_input_prompt.gd",
+        "sha256": "a75b5e5609191d2039831cfdae480cf934e446fcbeaef9c92ed603557bbc7fe7",
+        "status": " M"
+      },
+      {
+        "path": "scripts/ui/living_forge/components/forge_seat_card.gd",
+        "sha256": "0a1929a510ea6c31bc6b853f44ed2ad860f89c5ea01bf36c97ab15c160ed45d0",
+        "status": " M"
+      },
+      {
+        "path": "tests/integration/living_forge_visual_evidence_runner.gd",
+        "sha256": "cb00b7522910860e5b879a1eb6e4ae450390304c901cbc9d769e5a8549968259",
+        "status": "??"
+      },
+      {
+        "path": "tests/integration/living_forge_visual_evidence_runner.gd.uid",
+        "sha256": "d4e8361e5a37752bbc8200c4b0dd381629f2696ec9276584e7a5a2a0b041113f",
+        "status": "??"
+      },
+      {
+        "path": "tests/integration/play_lobby_input_runner.gd",
+        "sha256": "e092d51d77c1d1370fc5d195e1319849ed4e56282b75eba0408567e90fdf973d",
+        "status": "??"
+      },
+      {
+        "path": "tests/integration/play_lobby_input_runner.gd.uid",
+        "sha256": "408df9dab68819d45e48790eb201cf35fd3900553bdab0bbdac2881a0cadd65d",
+        "status": "??"
+      },
+      {
+        "path": "tests/integration/play_lobby_responsive_runner.gd",
+        "sha256": "2f0d7cfe4d90f7efa732cb79b5087aa55a84941ef8bb3fa9cafcd6ff72111a9b",
+        "status": "??"
+      },
+      {
+        "path": "tests/integration/play_lobby_responsive_runner.gd.uid",
+        "sha256": "ea77c3b8ee18beab390af0f6511b0e956d3a1fa9f1d403ec1fcdd17139a309f4",
+        "status": "??"
+      },
+      {
+        "path": "tests/integration/run_setup_lobby_panel_runner.gd",
+        "sha256": "0343f84f2c87b679556ec4da17e450c278701bbf880637e28963e5a9eefe368f",
+        "status": " M"
+      },
+      {
+        "path": "tests/unit/test_class_selection_panel.gd",
+        "sha256": "c1b5ffa1f3bb60542ea3ec119eff162c253f062e45b188c44c7647c6f57efbdb",
+        "status": " M"
+      },
+      {
+        "path": "tests/unit/test_living_forge_components.gd",
+        "sha256": "b46cfd17d1ee003c0127eda7ddd142eb79de9e76de45c714643d071b129af740",
+        "status": " M"
+      },
+      {
+        "path": "tests/unit/test_responsive_ui.gd",
+        "sha256": "70efd045dac6bc546318ecdb80183b3c1121935e4dfd2bc351602ef155fc4f5e",
+        "status": " M"
+      }
+    ],
+    "method": "Sort git status --porcelain tracked/untracked Task 9 input paths; exclude generated evidence and verification; SHA-256 a length-prefixed status/path/file-SHA record stream.",
+    "path_count": 14,
+    "sha256": "52faea6d86d100b1bd6b7fa52c4bee8d9562f2c5bfd650222873893112038adf"
+  },
+  "window_mode": "windowed"
+}

@@ -40,10 +40,15 @@ func _test_play_lobby_compositions(failures: Array[String]) -> void:
 	var hero := lobby.find_child("HeroStage", true, false) as Control
 	var details := lobby.find_child("Details", true, false) as ScrollContainer
 	var action_bar := lobby.find_child("ActionBar", true, false) as Control
+	var footer := lobby.find_child("Footer", true, false) as HBoxContainer
+	var prompt := lobby.find_child("InputPrompt", true, false) as ForgeInputPrompt
 	var status := lobby.find_child("Status", true, false) as Label
 	TestAssertions.truthy(roster_scroll != null and roster_scroll.vertical_scroll_mode == ScrollContainer.SCROLL_MODE_AUTO, "class roster is vertically scrollable", failures)
 	TestAssertions.truthy(details != null and details.vertical_scroll_mode == ScrollContainer.SCROLL_MODE_AUTO, "details are scrollable", failures)
 	TestAssertions.truthy(action_bar != null and roster_scroll != null and not action_bar.is_ancestor_of(roster_scroll), "fixed footer is outside scrolling content", failures)
+	TestAssertions.truthy(footer != null and footer.custom_minimum_size.y >= 56.0, "fixed footer keeps one 56px-minimum action row", failures)
+	TestAssertions.truthy(footer != null and prompt != null and footer.is_ancestor_of(prompt) and footer.is_ancestor_of(action_bar), "fixed footer composes one prompt left and the existing ActionBar right", failures)
+	TestAssertions.equal(lobby.find_children("*", "ForgeInputPrompt", true, false).size(), 1, "responsive lobby renders exactly one input prompt", failures)
 	TestAssertions.truthy(status != null and status.autowrap_mode != TextServer.AUTOWRAP_OFF, "status copy wraps", failures)
 	if seats == null or roster_grid == null or hero == null:
 		failures.append("responsive lobby composition is complete")

@@ -33,10 +33,12 @@ var _compatibility_class_id: StringName = &""
 var _options := DEFAULT_OPTIONS.duplicate(true)
 var _layout_mode := RunSetupResponsiveLayout.Mode.DESKTOP
 var _actions_initialized := false
+var _input_tracker := ActiveInputDevice.new()
 
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	set_process_input(is_open())
 	_ensure_action_buttons()
 	if _projection == null:
 		_projection = _empty_projection()
@@ -84,13 +86,16 @@ func present(next_projection: RunSetupLobbyProjection) -> void:
 
 func open(preferred_focus: Control = null) -> void:
 	visible = true
+	set_process_input(true)
 	_render_preview_and_details()
 	_rebuild_focus_graph()
+	_refresh_prompt_presentation()
 	_focus_initial(preferred_focus)
 
 
 func close() -> void:
 	visible = false
+	set_process_input(false)
 	_pending_initial_focus = null
 	_pending_origin = null
 	_focus_context = null
@@ -116,6 +121,10 @@ func selected_class_id() -> StringName:
 
 func previewed_class_id() -> StringName:
 	return _previewed_class_id
+
+
+func active_prompt_mode() -> StringName:
+	return _input_tracker.device_kind
 
 
 func selection_focus(class_id: StringName) -> Control:
@@ -208,10 +217,25 @@ func apply_viewport_size(viewport_size: Vector2) -> void:
 	content.offset_left = -content_width * 0.5
 	content.offset_right = content_width * 0.5
 	var compact := _layout_mode == RunSetupResponsiveLayout.Mode.COMPACT
+	var margin := get_node("Content/Margin") as MarginContainer
+	margin.offset_top = 8.0 if compact else 16.0
+	margin.offset_bottom = -8.0 if compact else -16.0
+	var layout := get_node("Content/Margin/Layout") as VBoxContainer
+	layout.add_theme_constant_override(&"separation", 8 if compact else 12)
+	var header := get_node("Content/Margin/Layout/Header") as HBoxContainer
+	header.custom_minimum_size.y = 40.0 if compact else 56.0
+	var title := header.get_node("Title") as Label
+	if compact and int(_options.get(&"text_scale_percent", 100)) > 100:
+		title.add_theme_font_size_override(&"font_size", 32)
+	else:
+		title.remove_theme_font_size_override(&"font_size")
+	_left_column().add_theme_constant_override(&"separation", 4 if compact else 12)
 	_seat_grid().columns = 4 if compact else 2
 	_seat_grid().add_theme_constant_override(&"h_separation", 4 if compact else 8)
-	_class_grid().columns = 2 if compact else 3
-	_left_column().custom_minimum_size = Vector2(620.0 if compact else 720.0, 0.0)
+	var text_scale := int(_options.get(&"text_scale_percent", 100))
+	_class_grid().columns = (1 if compact else 2) if text_scale >= 125 else (2 if compact else 3)
+	var desktop_left_width := minf(840.0, maxf(720.0, content_width - 872.0))
+	_left_column().custom_minimum_size = Vector2(620.0 if compact else desktop_left_width, 0.0)
 	_hero_stage().custom_minimum_size = Vector2(260.0, 340.0) if compact else Vector2(400.0, 520.0)
 	_details().custom_minimum_size = Vector2(260.0 if compact else 400.0, 0.0)
 	for child: Node in _seat_grid().get_children():
@@ -219,15 +243,34 @@ func apply_viewport_size(viewport_size: Vector2) -> void:
 		if seat == null:
 			continue
 		seat.custom_minimum_size = Vector2(144.0, 80.0) if compact else Vector2(300.0, 104.0)
+		if seat.has_method(&"set_compact_presentation"):
+			seat.call(&"set_compact_presentation", compact)
+		_apply_compact_seat_density(seat, compact)
+		var identity := seat.get_node_or_null("Content/Identity") as Label
+		if identity != null:
+			identity.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART if compact else TextServer.AUTOWRAP_OFF
+			identity.custom_minimum_size.x = 88.0 if compact else 0.0
+		var ready := seat.get_node_or_null("Content/Ready") as Label
+		if ready != null:
+			ready.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART if compact else TextServer.AUTOWRAP_OFF
+			ready.custom_minimum_size.x = 88.0 if compact else 0.0
 		var future := seat.get_node_or_null("Content/FuturePlate") as Control
 		if future != null:
-			future.custom_minimum_size.x = 112.0 if compact else 256.0
-		var availability := seat.get_node_or_null("Content/FuturePlate/Row/Availability") as Label
+			future.custom_minimum_size.x = 0.0 if compact else 256.0
+		var availability := seat.find_child("Availability", true, false) as Label
 		if availability != null:
 			availability.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART if compact else TextServer.AUTOWRAP_OFF
+			availability.custom_minimum_size.x = 24.0 if compact else 0.0
 	for child: Node in _class_grid().get_children():
 		_apply_card_geometry(child as ForgeClassCard, compact)
 	_rebuild_focus_graph()
+	_refresh_prompt_presentation()
+
+
+func _input(event: InputEvent) -> void:
+	if not is_open() or not _input_tracker.observe(event):
+		return
+	_refresh_prompt_presentation()
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -265,6 +308,7 @@ func _apply_options() -> void:
 	for node: Node in find_children("*", "", true, false):
 		if node.has_method(&"apply_accessibility_variant"):
 			node.call(&"apply_accessibility_variant", high_contrast)
+	_sync_authoritative_preview_cue()
 
 
 func _sync_seats() -> void:
@@ -331,10 +375,98 @@ func _sync_class_cards() -> void:
 func _apply_card_geometry(card: ForgeClassCard, compact: bool) -> void:
 	if card == null:
 		return
-	card.custom_minimum_size = Vector2(220.0, 104.0) if compact else Vector2(220.0, 128.0)
-	(card.get_node("Content") as Control).offset_right = -8.0
+	var text_scale := int(_options.get(&"text_scale_percent", 100))
+	var scaled_height := maxf(0.0, roundf(float(text_scale - 100) * 0.64))
+	card.custom_minimum_size = Vector2(0.0, (128.0 if compact else 144.0) + scaled_height)
+	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var content := card.get_node("Content") as HBoxContainer
+	content.anchor_top = 0.0
+	content.anchor_bottom = 0.0
+	content.offset_left = 8.0
+	content.offset_top = 4.0
+	var preview := card.get_node("PreviewIndicator") as Control
+	content.offset_right = -148.0 if preview.visible else -8.0
+	content.add_theme_constant_override(&"separation", 4)
+	var portrait := card.get_node("Content/Portrait") as TextureRect
+	portrait.custom_minimum_size = Vector2(24.0, 32.0)
+	var name := card.get_node("Content/Identity/Name") as Label
+	var role := card.get_node("Content/Identity/Role") as Label
+	name.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	role.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	name.custom_minimum_size = Vector2.ZERO
+	role.custom_minimum_size = Vector2.ZERO
+	var identity_band_height := 69.0 + maxf(0.0, roundf(float(text_scale - 100) * 0.7))
+	content.offset_bottom = content.offset_top + identity_band_height
+	_set_card_band(preview, -136.0, 4.0, -8.0, 32.0, Vector2(128.0, 28.0))
+	var bottom_inset := -2.0 if text_scale > 100 else -8.0
+	var selection := card.get_node("SelectionNotch") as Control
+	_set_card_band(selection, 8.0, -32.0, 128.0, bottom_inset, Vector2(120.0, 24.0))
+	var compatibility := card.get_node("CompatibilityBadge") as Control
+	_set_card_band(compatibility, -112.0, -32.0, -8.0, bottom_inset, Vector2(104.0, 24.0))
+	(card.get_node("CompatibilityBadge/Text") as Label).text = "READY"
+	var attention := card.get_node("AttentionBadge") as Control
+	attention.anchor_top = 1.0
+	attention.anchor_bottom = 1.0
+	_set_card_band(attention, -120.0, -32.0, -8.0, bottom_inset, Vector2(112.0, 24.0))
+	(card.get_node("AttentionBadge/Text") as Label).text = "REVIEW"
 	(card.get_node("FocusFrame") as Control).custom_minimum_size = Vector2.ZERO
 	(card.get_node("LockOverlay") as Control).custom_minimum_size = Vector2.ZERO
+
+
+func _set_card_band(control: Control, left: float, top: float, right: float, bottom: float, minimum: Vector2) -> void:
+	control.custom_minimum_size = minimum
+	control.offset_left = left
+	control.offset_top = top
+	control.offset_right = right
+	control.offset_bottom = bottom
+
+
+func _apply_compact_seat_density(seat: Control, compact: bool) -> void:
+	if seat == null or not compact:
+		return
+	var content := seat.get_node_or_null("Content") as VBoxContainer
+	if content != null:
+		content.add_theme_constant_override(&"separation", 4)
+	var seat_panel := seat as PanelContainer
+	if seat_panel != null:
+		var seat_style := seat_panel.get_theme_stylebox(&"panel").duplicate() as StyleBox
+		_set_style_content_margin(seat_style, 4.0)
+		seat_panel.add_theme_stylebox_override(&"panel", seat_style)
+	var future := seat.get_node_or_null("Content/FuturePlate") as PanelContainer
+	if future != null:
+		var future_style := future.get_theme_stylebox(&"panel").duplicate() as StyleBox
+		_set_style_content_margin(future_style, 4.0)
+		future.add_theme_stylebox_override(&"panel", future_style)
+		var stack := future.get_node_or_null("CompactFutureStack") as VBoxContainer
+		if stack != null:
+			stack.add_theme_constant_override(&"separation", 0)
+
+
+func _set_style_content_margin(style: StyleBox, margin: float) -> void:
+	if style == null:
+		return
+	style.content_margin_left = margin
+	style.content_margin_top = margin
+	style.content_margin_right = margin
+	style.content_margin_bottom = margin
+
+
+func _sync_authoritative_preview_cue() -> void:
+	if get_node_or_null("Content") == null:
+		return
+	var preview_description := String((ForgeClassCard.STATE_CUES[&"previewed"] as Dictionary).get("accessibility_description", "Class preview shown."))
+	for child: Node in _class_grid().get_children():
+		var card := child as ForgeClassCard
+		if card == null:
+			continue
+		var authoritative := card.class_id == _previewed_class_id
+		(card.get_node("PreviewIndicator") as Control).visible = authoritative
+		_apply_card_geometry(card, _layout_mode == RunSetupResponsiveLayout.Mode.COMPACT)
+		if authoritative:
+			if not card.accessibility_description.contains(preview_description):
+				card.accessibility_description = "%s %s" % [card.accessibility_description.strip_edges(), preview_description]
+		else:
+			card.accessibility_description = card.accessibility_description.replace(preview_description, "").replace("  ", " ").strip_edges()
 
 
 func _ensure_action_buttons() -> void:
@@ -364,6 +496,20 @@ func _apply_action_matrix() -> void:
 	_set_action_enabled(&"armoury", bool(_options.get(&"armoury_available", false)) and state not in [RunSetupLobbyProjection.State.CHECKING, RunSetupLobbyProjection.State.STARTING])
 	_set_action_enabled(&"select", _can_select(_previewed_class_id))
 	_set_action_enabled(&"start", _can_start())
+	_refresh_prompt_presentation()
+
+
+func _refresh_prompt_presentation() -> void:
+	var prompt := get_node_or_null("Content/Margin/Layout/Footer/InputPrompt") as ForgeInputPrompt
+	if prompt == null:
+		return
+	var device_kind := active_prompt_mode()
+	var binding_label := prompt.label_for_action(&"ui_accept", device_kind)
+	var action_copy := "Start Run" if _action_enabled(&"start") else ("Select Class" if _action_enabled(&"select") else "Confirm")
+	prompt.present_contextual(&"ui_accept", device_kind, binding_label, action_copy)
+	var active_seat := _seat_grid().get_node_or_null("Seat_1") as ForgeSeatCard
+	if active_seat != null:
+		active_seat.present_prompt_device(device_kind, _layout_mode == RunSetupResponsiveLayout.Mode.COMPACT)
 
 
 func _set_action_enabled(action_id: StringName, enabled: bool) -> void:
@@ -418,6 +564,7 @@ func _on_class_preview_requested(class_id: StringName) -> void:
 		var card := child as ForgeClassCard
 		if card != null:
 			card.set_previewed(card.class_id == class_id)
+	_sync_authoritative_preview_cue()
 	_render_preview_and_details()
 	_apply_action_matrix()
 	_rebuild_focus_graph()
@@ -711,7 +858,7 @@ func _preview() -> CharacterEquipmentPreview:
 
 
 func _action_bar() -> ForgeActionBar:
-	return get_node_or_null("Content/Margin/Layout/ActionBar") as ForgeActionBar
+	return get_node_or_null("Content/Margin/Layout/Footer/ActionBar") as ForgeActionBar
 
 
 func _status() -> Label:
