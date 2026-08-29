@@ -30,6 +30,7 @@ const DEVELOPER_QUICK_START_MODE_REQUIRED_STATUS := "Save Developer Mode before 
 const ITEM_SANDBOX_DEVELOPER_REQUIRED_STATUS := "Save Developer Mode before opening the Developer Item Sandbox."
 
 enum LoadoutOrigin { RUN_SETUP, DEVELOPER_QUICK_START }
+enum LobbyReturnContext { MAIN_MENU, RUN_SETUP, LOADOUT_WARNING, DEVELOPER_QUICK_START }
 
 var party_stats: Dictionary = {}
 var trait_upgrade_ranks: Dictionary = {}
@@ -91,10 +92,11 @@ var _pending_loadout_profile_id := ""
 var _pending_loadout_class_id: StringName
 var _pending_loadout_origin := LoadoutOrigin.RUN_SETUP
 var _loadout_transaction_sequence := 0
-var _armoury_from_loadout_warning := false
-var _armoury_warning_class_id: StringName
-var _armoury_warning_origin: Control
-var _armoury_warning_origin_mode := LoadoutOrigin.RUN_SETUP
+var _selected_lobby_class_id: StringName
+var _previewed_lobby_class_id: StringName
+var _lobby_compatibility: LoadoutCompatibilityProjection
+var _lobby_return_context := LobbyReturnContext.MAIN_MENU
+var _lobby_return_focus: Control
 var _ground_chest_diagnostics: Dictionary = {}
 
 func _ready() -> void:
@@ -127,6 +129,10 @@ func _ready() -> void:
 
 func select_leader_class(class_id: StringName) -> bool:
 	return _select_leader_class(class_id, LoadoutOrigin.RUN_SETUP)
+
+
+func _run_setup_lobby() -> ClassSelectionPanel:
+	return get_node("HUD/ClassSelection") as ClassSelectionPanel
 
 
 func _select_leader_class(class_id: StringName, origin_mode: LoadoutOrigin) -> bool:
@@ -172,7 +178,7 @@ func _select_leader_class(class_id: StringName, origin_mode: LoadoutOrigin) -> b
 		if origin_mode == LoadoutOrigin.DEVELOPER_QUICK_START:
 			origin = (get_node("MainMenuScreen") as MainMenuScreen).get_node("DeveloperQuickStart") as Control
 		else:
-			origin = (get_node("HUD/ClassSelection") as ClassSelectionPanel).begin_compatibility_gate(class_id)
+			origin = _run_setup_lobby().begin_compatibility_gate(class_id, _lobby_return_focus)
 		if not get_node("LoadoutWarningDialog").call("open", projection, origin):
 			_clear_pending_loadout_warning(true)
 		return false
@@ -381,7 +387,12 @@ func _start_leader_class_from_checkout(definition: ClassDefinition, committed_pr
 	game_run.start_run()
 	(get_node("MainMenuScreen") as MainMenuScreen).close()
 	_clear_pending_loadout_warning(false)
-	(get_node("HUD/ClassSelection") as ClassSelectionPanel).confirm_run_started()
+	_run_setup_lobby().confirm_run_started()
+	_selected_lobby_class_id = &""
+	_previewed_lobby_class_id = &""
+	_lobby_compatibility = null
+	_lobby_return_focus = null
+	_lobby_return_context = LobbyReturnContext.MAIN_MENU
 	_pending_checkout_recovery = {}
 	return true
 
@@ -902,12 +913,18 @@ func _validate_catalog(target_catalog: GameCatalog, report_errors: bool = true) 
 	return errors.is_empty()
 
 func _wire_static_ui() -> void:
-	var selector := get_node("HUD/ClassSelection") as ClassSelectionPanel
+	var selector := _run_setup_lobby()
 	selector.configure(catalog.classes)
-	if not selector.class_selected.is_connected(select_leader_class):
-		selector.class_selected.connect(select_leader_class)
+	if not selector.class_preview_requested.is_connected(_on_lobby_class_preview_requested):
+		selector.class_preview_requested.connect(_on_lobby_class_preview_requested)
+	if not selector.class_selection_requested.is_connected(_on_lobby_class_selection_requested):
+		selector.class_selection_requested.connect(_on_lobby_class_selection_requested)
+	if not selector.start_requested.is_connected(_on_lobby_start_requested):
+		selector.start_requested.connect(_on_lobby_start_requested)
 	if not selector.settings_requested.is_connected(_open_settings):
 		selector.settings_requested.connect(_open_settings)
+	if not selector.armoury_requested.is_connected(_on_lobby_armoury_requested):
+		selector.armoury_requested.connect(_on_lobby_armoury_requested)
 	if not selector.back_requested.is_connected(_on_run_setup_back_requested):
 		selector.back_requested.connect(_on_run_setup_back_requested)
 	var main_menu := get_node("MainMenuScreen") as MainMenuScreen
@@ -972,7 +989,9 @@ func _wire_static_ui() -> void:
 	if not game_run.defeat.is_connected(_show_defeat): game_run.defeat.connect(_show_defeat)
 
 func _open_settings() -> void:
-	var return_focus := get_node("HUD/ClassSelection/Content/Actions/Settings") as Control
+	var return_focus := _run_setup_lobby().action_focus(&"settings")
+	_lobby_return_context = LobbyReturnContext.RUN_SETUP
+	_lobby_return_focus = return_focus
 	(get_node("SettingsScreen") as SettingsScreen).open(return_focus)
 
 
@@ -1152,7 +1171,7 @@ func _developer_quick_start_surface_active() -> bool:
 	return (
 		(get_node("MainMenuScreen") as MainMenuScreen).is_open()
 		and not run_started
-		and not (get_node("HUD/ClassSelection") as ClassSelectionPanel).is_open()
+		and not _run_setup_lobby().is_open()
 		and not (get_node("SettingsScreen") as SettingsScreen).is_open()
 		and not _city_tree_is_open()
 	)
@@ -1175,7 +1194,7 @@ func _developer_quick_start_denial() -> String:
 
 
 func _fail_developer_quick_start(status_text: String) -> void:
-	(get_node("HUD/ClassSelection") as ClassSelectionPanel).close()
+	_run_setup_lobby().close()
 	var menu := get_node("MainMenuScreen") as MainMenuScreen
 	var quick_start := menu.get_node("DeveloperQuickStart") as Control
 	var return_focus := quick_start if quick_start.visible and not (quick_start as Button).disabled and quick_start.focus_mode != Control.FOCUS_NONE else menu.get_node("PrimaryAction") as Control
@@ -1185,10 +1204,108 @@ func _fail_developer_quick_start(status_text: String) -> void:
 
 
 func _open_run_setup() -> void:
+	var profile := profile_manager.active_profile() if profile_manager != null else null
+	if profile == null:
+		_open_profiles_from_main_menu()
+		return
+	var refresh_error := profile_manager.refresh_profile(profile.profile_id)
+	if not refresh_error.is_empty():
+		_show_run_setup_error(refresh_error)
+		return
+	profile = profile_manager.active_profile()
+	if profile == null:
+		_open_profiles_from_main_menu()
+		return
+	if not profile.resumable_run.is_empty():
+		_open_run_recovery()
+		return
 	(get_node("MainMenuScreen") as MainMenuScreen).close()
-	var selector := get_node("HUD/ClassSelection") as ClassSelectionPanel
-	selector.clear_status()
-	selector.open()
+	_lobby_return_context = LobbyReturnContext.RUN_SETUP
+	_lobby_return_focus = null
+	_selected_lobby_class_id = StringName(profile.leader_loadout_class_id)
+	if catalog == null or catalog.class_by_id(_selected_lobby_class_id) == null:
+		_selected_lobby_class_id = &""
+	_previewed_lobby_class_id = _selected_lobby_class_id
+	if _previewed_lobby_class_id.is_empty() and catalog != null:
+		_previewed_lobby_class_id = &"fighter" if catalog.class_by_id(&"fighter") != null else (catalog.classes[0].id if not catalog.classes.is_empty() else &"")
+	_lobby_compatibility = _project_loadout_compatibility(profile, _selected_lobby_class_id) if not _selected_lobby_class_id.is_empty() else null
+	_present_lobby()
+	_run_setup_lobby().open(_run_setup_lobby().selection_focus(_selected_lobby_class_id))
+
+
+func _present_lobby(status_copy: String = "", starting: bool = false) -> void:
+	var profile := profile_manager.active_profile() if profile_manager != null else null
+	# Prologue Start and Resume already use this same authoritative run-setup route.
+	# The view model's completed-profile guard describes catalog readiness, so present
+	# a copy without mutating the durable prologue lifecycle.
+	var presentation_profile := profile.copy() if profile != null else null
+	if presentation_profile != null:
+		presentation_profile.prologue_state = ProfileState.PrologueState.COMPLETED
+	var projection := RunSetupLobbyViewModel.build(presentation_profile, catalog, _selected_lobby_class_id, _previewed_lobby_class_id, _lobby_compatibility, status_copy, starting)
+	if not status_copy.strip_edges().is_empty() and not starting:
+		projection.state = RunSetupLobbyProjection.State.ERROR
+		projection.status_copy = status_copy.strip_edges()
+	projection.set_meta(&"armoury_available", profile != null and _storage_route_allowed(MainMenuViewModel.ROUTE_ARMOURY, profile))
+	projection.set_meta(&"safe_cancellation_available", true)
+	if saved_settings != null:
+		projection.set_meta(&"high_contrast", saved_settings.high_contrast)
+		projection.set_meta(&"ui_scale_percent", saved_settings.ui_scale_percent)
+		projection.set_meta(&"text_scale_percent", saved_settings.text_scale_percent)
+		projection.set_meta(&"reduced_motion", saved_settings.reduced_motion)
+	_run_setup_lobby().present(projection)
+
+
+func _on_lobby_class_preview_requested(class_id: StringName) -> void:
+	if catalog == null or catalog.class_by_id(class_id) == null:
+		return
+	_previewed_lobby_class_id = class_id
+
+
+func _on_lobby_class_selection_requested(class_id: StringName) -> void:
+	if catalog == null or catalog.class_by_id(class_id) == null or _pending_loadout_projection != null:
+		return
+	var profile := profile_manager.active_profile() if profile_manager != null else null
+	if profile == null:
+		_open_profiles_from_main_menu()
+		return
+	_selected_lobby_class_id = class_id
+	_previewed_lobby_class_id = class_id
+	_lobby_compatibility = _project_loadout_compatibility(profile, class_id)
+	_present_lobby()
+
+
+func _on_lobby_start_requested(class_id: StringName) -> void:
+	if class_id.is_empty() or class_id != _selected_lobby_class_id or _pending_loadout_projection != null or _run_setup_lobby().compatibility_gate_active():
+		return
+	_lobby_return_context = LobbyReturnContext.RUN_SETUP
+	_lobby_return_focus = _run_setup_lobby().action_focus(&"start")
+	_present_lobby("", true)
+	if not _select_leader_class(class_id, LoadoutOrigin.RUN_SETUP) and _pending_loadout_projection == null and not run_started:
+		if not _run_setup_lobby().is_open():
+			return
+		var profile := profile_manager.active_profile() if profile_manager != null else null
+		_lobby_compatibility = _project_loadout_compatibility(profile, class_id) if profile != null else null
+		_present_lobby("Unable to start run.")
+		_run_setup_lobby().open(_lobby_return_focus)
+
+
+func _on_lobby_armoury_requested(class_id: StringName) -> void:
+	if class_id.is_empty() or class_id != _selected_lobby_class_id:
+		return
+	var profile := profile_manager.active_profile() if profile_manager != null else null
+	if profile == null or not _storage_route_allowed(MainMenuViewModel.ROUTE_ARMOURY, profile):
+		return
+	var projection := _profile_storage_projection(profile)
+	if not projection.valid:
+		_show_run_setup_error(projection.error)
+		return
+	_lobby_return_context = LobbyReturnContext.RUN_SETUP
+	_lobby_return_focus = _run_setup_lobby().action_focus(&"armoury")
+	_shared_storage_projection = projection
+	_run_setup_lobby().close()
+	var armoury := get_node("ArmouryScreen") as ArmouryScreen
+	armoury.open(projection, _lobby_return_focus, _developer_mode_enabled())
+	armoury.set_pending_run_class(class_id)
 
 
 func _on_loadout_choose_another_class() -> void:
@@ -1196,7 +1313,10 @@ func _on_loadout_choose_another_class() -> void:
 		_clear_pending_loadout_warning(false)
 		_open_run_setup()
 		return
-	_clear_pending_loadout_warning(true)
+	var selected_focus := _run_setup_lobby().selection_focus(_selected_lobby_class_id)
+	_clear_pending_loadout_warning(false)
+	_run_setup_lobby().open(selected_focus)
+	_focus_control_if_available(selected_focus)
 
 
 func _on_loadout_cancelled() -> void:
@@ -1215,7 +1335,7 @@ func _on_loadout_go_to_armoury() -> void:
 	if not projection.valid:
 		_show_run_setup_error(projection.error)
 		return
-	var selector := get_node("HUD/ClassSelection") as ClassSelectionPanel
+	var selector := _run_setup_lobby()
 	var origin_mode := _pending_loadout_origin
 	var origin := (
 		(get_node("MainMenuScreen") as MainMenuScreen).get_node("DeveloperQuickStart") as Control
@@ -1225,12 +1345,9 @@ func _on_loadout_go_to_armoury() -> void:
 	var display_class := _pending_loadout_class_id
 	_clear_pending_loadout_warning(false)
 	selector.close()
-	_armoury_from_loadout_warning = true
-	_armoury_warning_class_id = display_class
-	_armoury_warning_origin = origin
-	_armoury_warning_origin_mode = origin_mode
+	_lobby_return_context = LobbyReturnContext.DEVELOPER_QUICK_START if origin_mode == LoadoutOrigin.DEVELOPER_QUICK_START else LobbyReturnContext.LOADOUT_WARNING
+	_lobby_return_focus = origin
 	_shared_storage_projection = projection
-	_storage_return_focus = origin
 	(get_node("MainMenuScreen") as MainMenuScreen).close()
 	var armoury := get_node("ArmouryScreen") as ArmouryScreen
 	armoury.open(projection, origin, _developer_mode_enabled())
@@ -1337,7 +1454,7 @@ func _clear_pending_loadout_warning(restore_focus: bool) -> void:
 	_pending_loadout_profile_id = ""
 	_pending_loadout_class_id = &""
 	_pending_loadout_origin = LoadoutOrigin.RUN_SETUP
-	var selector := get_node_or_null("HUD/ClassSelection") as ClassSelectionPanel
+	var selector := _run_setup_lobby() if has_node("HUD/ClassSelection") else null
 	if selector != null and origin_mode == LoadoutOrigin.RUN_SETUP:
 		selector.end_compatibility_gate(restore_focus)
 	elif selector != null and origin_mode == LoadoutOrigin.DEVELOPER_QUICK_START:
@@ -1358,7 +1475,7 @@ func _show_run_setup_error(message: String) -> void:
 	if not _pending_checkout_recovery.is_empty():
 		_show_checkout_recovery_error(message)
 		return
-	var selector := get_node_or_null("HUD/ClassSelection") as ClassSelectionPanel
+	var selector := _run_setup_lobby() if has_node("HUD/ClassSelection") else null
 	if selector != null:
 		selector.show_status("Unable to start run. %s" % message)
 
@@ -1366,7 +1483,7 @@ func _show_run_setup_error(message: String) -> void:
 func _show_loadout_origin_error(message: String, origin_mode: int, class_id: StringName) -> void:
 	if origin_mode == LoadoutOrigin.DEVELOPER_QUICK_START:
 		push_error(message)
-		var selector := get_node("HUD/ClassSelection") as ClassSelectionPanel
+		var selector := _run_setup_lobby()
 		selector.close()
 		var menu := get_node("MainMenuScreen") as MainMenuScreen
 		var quick_start := menu.get_node("DeveloperQuickStart") as Control
@@ -1375,7 +1492,7 @@ func _show_loadout_origin_error(message: String, origin_mode: int, class_id: Str
 		_focus_control_if_available(quick_start)
 		return
 	_show_run_setup_error(message)
-	var selector := get_node("HUD/ClassSelection") as ClassSelectionPanel
+	var selector := _run_setup_lobby()
 	if not selector.is_open():
 		selector.open()
 	selector.show_status("Unable to start run. %s" % message)
@@ -1387,7 +1504,7 @@ func _show_loadout_origin_error(message: String, origin_mode: int, class_id: Str
 func _show_checkout_recovery_error(message: String) -> void:
 	var origin_mode := int(_pending_checkout_recovery.get("origin_mode", LoadoutOrigin.RUN_SETUP))
 	var class_id := StringName(_pending_checkout_recovery.get("class_id", ""))
-	var selector := get_node("HUD/ClassSelection") as ClassSelectionPanel
+	var selector := _run_setup_lobby()
 	var menu := get_node("MainMenuScreen") as MainMenuScreen
 	if origin_mode == LoadoutOrigin.DEVELOPER_QUICK_START:
 		selector.close()
@@ -1405,8 +1522,13 @@ func _show_checkout_recovery_error(message: String) -> void:
 
 
 func _on_run_setup_back_requested() -> void:
-	var selector := get_node("HUD/ClassSelection") as ClassSelectionPanel
+	var selector := _run_setup_lobby()
 	selector.close()
+	_selected_lobby_class_id = &""
+	_previewed_lobby_class_id = &""
+	_lobby_compatibility = null
+	_lobby_return_context = LobbyReturnContext.MAIN_MENU
+	_lobby_return_focus = null
 	var menu := get_node("MainMenuScreen") as MainMenuScreen
 	menu.open(menu.get_node("PrimaryAction") as Control)
 
@@ -1414,12 +1536,14 @@ func _on_run_setup_back_requested() -> void:
 func _open_profiles_from_main_menu() -> void:
 	var menu := get_node("MainMenuScreen") as MainMenuScreen
 	menu.open(menu.get_node("PrimaryAction") as Control)
-	(get_node("HUD/ClassSelection") as ClassSelectionPanel).close()
+	_run_setup_lobby().close()
 	(get_node("SettingsScreen") as SettingsScreen).open_profiles(menu.get_node("PrimaryAction") as Control)
 
 
 func _open_settings_from_main_menu() -> void:
 	var menu := get_node("MainMenuScreen") as MainMenuScreen
+	_lobby_return_context = LobbyReturnContext.MAIN_MENU
+	_lobby_return_focus = menu.get_node("Settings") as Control
 	(get_node("SettingsScreen") as SettingsScreen).open(menu.get_node("Settings") as Control)
 
 
@@ -1430,7 +1554,7 @@ func _present_front_end(preferred_focus: Control = null) -> void:
 	if recovery_dialog != null and recovery_dialog.call("is_open"):
 		recovery_dialog.call("close")
 	(get_node("HUD/Margin") as Control).visible = false
-	(get_node("HUD/ClassSelection") as ClassSelectionPanel).close()
+	_run_setup_lobby().close()
 	(get_node("DeveloperItemSandbox") as DeveloperItemSandbox).close()
 	(get_node("SettingsScreen") as SettingsScreen).close()
 	(get_node("ArmouryScreen") as ArmouryScreen).close()
@@ -1466,7 +1590,8 @@ func _open_storage_route(route_id: StringName) -> void:
 	if route_id == MainMenuViewModel.ROUTE_ARMOURY:
 		var origin := menu.route_origin()
 		if origin == null: origin = menu.get_node("Armoury") as Control
-		_storage_return_focus = origin
+		_lobby_return_context = LobbyReturnContext.MAIN_MENU
+		_lobby_return_focus = origin
 		menu.close()
 		(get_node("ArmouryScreen") as ArmouryScreen).open(projection, origin, _developer_mode_enabled())
 	else:
@@ -1487,30 +1612,32 @@ func _storage_route_allowed(route_id: StringName, profile: ProfileState) -> bool
 func _on_armoury_closed() -> void:
 	var screen := get_node("ArmouryScreen") as ArmouryScreen
 	screen.close()
-	if _armoury_from_loadout_warning:
-		var class_id := _armoury_warning_class_id
-		var origin := _armoury_warning_origin
-		var origin_mode := _armoury_warning_origin_mode
-		_armoury_from_loadout_warning = false
-		_armoury_warning_class_id = &""
-		_armoury_warning_origin = null
-		_armoury_warning_origin_mode = LoadoutOrigin.RUN_SETUP
-		_storage_return_focus = null
-		_shared_storage_projection = null
-		var selector := get_node("HUD/ClassSelection") as ClassSelectionPanel
-		if origin_mode == LoadoutOrigin.DEVELOPER_QUICK_START:
+	var origin := _lobby_return_focus
+	var return_context := _lobby_return_context
+	_lobby_return_context = LobbyReturnContext.MAIN_MENU
+	_lobby_return_focus = null
+	_shared_storage_projection = null
+	var selector := _run_setup_lobby()
+	var menu := get_node("MainMenuScreen") as MainMenuScreen
+	match return_context:
+		LobbyReturnContext.RUN_SETUP:
+			_present_lobby()
+			selector.open(origin)
+			_focus_control_if_available(origin)
+		LobbyReturnContext.LOADOUT_WARNING:
+			_present_lobby()
+			var class_focus := selector.selection_focus(_selected_lobby_class_id)
+			selector.open(class_focus)
+			_focus_control_if_available(class_focus)
+		LobbyReturnContext.DEVELOPER_QUICK_START:
 			selector.close()
-			var menu := get_node("MainMenuScreen") as MainMenuScreen
 			menu.open(origin)
 			_focus_control_if_available(origin)
-		else:
-			selector.open()
-			var class_focus := selector.selection_focus(class_id)
-			_focus_control_if_available(class_focus if class_focus != null else origin)
-		return
-	var menu := get_node("MainMenuScreen") as MainMenuScreen
-	menu.open(_storage_return_focus if _storage_return_focus != null else menu.get_node("Armoury") as Control)
-	_storage_return_focus = null
+		_:
+			selector.close()
+			var menu_focus := origin if origin != null else menu.get_node("Armoury") as Control
+			menu.open(menu_focus)
+			_focus_control_if_available(menu_focus)
 
 
 func _on_warehouse_closed() -> void:
@@ -1626,10 +1753,8 @@ func _on_active_profile_changed(_profile: ProfileState) -> void:
 	if warehouse.is_open(): warehouse.close()
 	_shared_storage_projection = null
 	_storage_return_focus = null
-	_armoury_from_loadout_warning = false
-	_armoury_warning_class_id = &""
-	_armoury_warning_origin = null
-	_armoury_warning_origin_mode = LoadoutOrigin.RUN_SETUP
+	_lobby_return_context = LobbyReturnContext.MAIN_MENU
+	_lobby_return_focus = null
 	_clear_pending_loadout_warning(false)
 	_refresh_main_menu_projection()
 	if _city_tree_is_open():
@@ -1641,7 +1766,7 @@ func _on_active_profile_changed(_profile: ProfileState) -> void:
 	var settings_screen := get_node("SettingsScreen") as SettingsScreen
 	if settings_screen.is_open():
 		settings_screen.close()
-	var selector := get_node("HUD/ClassSelection") as ClassSelectionPanel
+	var selector := _run_setup_lobby()
 	selector.close()
 	var menu := get_node("MainMenuScreen") as MainMenuScreen
 	menu.open(menu.get_node("PrimaryAction") as Control)
@@ -1675,14 +1800,14 @@ func _load_passive_tree_runtime() -> void:
 
 
 func _on_settings_city_tree_requested(developer_preview: bool) -> void:
-	var button := get_node("SettingsScreen/Overlay/Frame/Layout/Tabs/Additional Settings/Layout/OpenCityPassiveTree") as Control
+	var button := get_node("SettingsScreen/Overlay/Frame/Layout/Tabs/Additional Settings/Layout/Scroll/Fields/OpenCityPassiveTree") as Control
 	_open_city_passive_tree(developer_preview, CITY_ORIGIN_ADDITIONAL_SETTINGS, button)
 
 
 func _open_developer_item_sandbox() -> bool:
 	var modal := get_node("DeveloperItemSandbox") as DeveloperItemSandbox
 	var settings := get_node("SettingsScreen") as SettingsScreen
-	var button := settings.get_node("Overlay/Frame/Layout/Tabs/Additional Settings/Layout/OpenDeveloperItemSandbox") as Control
+	var button := settings.get_node("Overlay/Frame/Layout/Tabs/Additional Settings/Layout/Scroll/Fields/OpenDeveloperItemSandbox") as Control
 	var authoritative := settings_store.load_settings(settings_path) if settings_store != null else PartyForgeSettings.new()
 	if authoritative.mode != PartyForgeSettings.Mode.DEVELOPER_MODE:
 		modal.cancel_and_clear()
@@ -1697,7 +1822,7 @@ func _open_developer_item_sandbox() -> bool:
 
 func _on_developer_item_sandbox_closed() -> void:
 	var settings := get_node("SettingsScreen") as SettingsScreen
-	var button := settings.get_node("Overlay/Frame/Layout/Tabs/Additional Settings/Layout/OpenDeveloperItemSandbox") as Control
+	var button := settings.get_node("Overlay/Frame/Layout/Tabs/Additional Settings/Layout/Scroll/Fields/OpenDeveloperItemSandbox") as Control
 	settings.open_additional(button)
 
 
@@ -1782,6 +1907,8 @@ func _on_settings_applied(_settings: PartyForgeSettings) -> void:
 	if saved_settings.mode != PartyForgeSettings.Mode.DEVELOPER_MODE:
 		(get_node("DeveloperItemSandbox") as DeveloperItemSandbox).cancel_and_clear()
 	_refresh_main_menu_projection()
+	if _lobby_return_context == LobbyReturnContext.RUN_SETUP and _run_setup_lobby().is_open():
+		_present_lobby()
 
 func _on_level_ready(_level: int) -> void:
 	if not run_started:

@@ -54,6 +54,19 @@ const REQUIRED_MAIN_NODES: PackedStringArray = [
 var _profile_root := ""
 var _settings_path := ""
 
+func test_run_setup_lobby_is_the_single_typed_main_seam() -> Array[String]:
+    var failures: Array[String] = []
+    var source := FileAccess.get_file_as_string("res://scripts/game/main.gd")
+    TestAssertions.truthy(source.contains("func _run_setup_lobby() -> ClassSelectionPanel:"), "Main exposes one typed lobby accessor", failures)
+    TestAssertions.equal(source.count("get_node(\"HUD/ClassSelection\")"), 1, "only the typed accessor resolves the stable selector path", failures)
+    TestAssertions.truthy(source.contains("class_preview_requested.connect(_on_lobby_class_preview_requested)"), "Main consumes lobby preview intent", failures)
+    TestAssertions.truthy(source.contains("class_selection_requested.connect(_on_lobby_class_selection_requested)"), "Main consumes lobby selection intent", failures)
+    TestAssertions.truthy(source.contains("start_requested.connect(_on_lobby_start_requested)"), "Main consumes separate Start intent", failures)
+    TestAssertions.truthy(not source.contains("class_selected.connect(" + "select_leader_class)"), "class activation no longer starts a run", failures)
+    TestAssertions.truthy(source.contains("enum LobbyReturnContext"), "lobby return authority is enum-backed", failures)
+    TestAssertions.truthy(not source.contains("_armoury_from_loadout_warning"), "legacy Armoury return boolean is removed", failures)
+    return failures
+
 const CITY_TREE_ID := "party-forge-city-v1"
 const CITY_UNAVAILABLE_STATUS := "City services are temporarily unavailable."
 const CITY_LOCKED_STATUS := "Complete the prologue to unlock the City passive tree."
@@ -61,6 +74,7 @@ const CITY_DEVELOPER_REQUIRED_STATUS := "Save Developer Mode before opening the 
 
 func run() -> Array[String]:
     var failures: Array[String] = []
+    failures.append_array(test_run_setup_lobby_is_the_single_typed_main_seam())
     var all_exist := true
     for path: String in REQUIRED_PATHS:
         var exists := ResourceLoader.exists(path)
@@ -82,6 +96,8 @@ func run() -> Array[String]:
     _test_gameplay_input_blocked_predicate(failures)
     _test_typed_live_loot_diagnostic_accounting(failures)
     _test_main_menu_route_composition(failures)
+    _test_lobby_start_failure_routing(failures)
+    _test_armoury_return_authority(failures)
     _test_profile_deletion_and_activation_separation(failures)
     _test_storage_route_policy_and_shared_projection_wiring(failures)
     _test_loadout_warning_preflight_and_transition_wiring(failures)
@@ -248,7 +264,8 @@ func _test_loadout_warning_preflight_and_transition_wiring(failures: Array[Strin
     var profile_path := ProfileStore.new().profile_path(profile.profile_id, root)
     var bytes_before := FileAccess.get_file_as_bytes(profile_path)
     main.call("_open_run_setup")
-    TestAssertions.truthy(not main.select_leader_class(&"mage"), "incompatible selection opens decision gate instead of starting", failures)
+    main.call("_on_lobby_class_selection_requested", &"mage")
+    main.call("_on_lobby_start_requested", &"mage")
     TestAssertions.truthy(warning.call("is_open"), "incompatible selection opens warning", failures)
     TestAssertions.truthy(not bool(main.get("run_started")) and main.get("active_run_context") == null, "warning preflight creates no run context", failures)
     TestAssertions.equal(FileAccess.get_file_as_bytes(profile_path), bytes_before, "warning preflight changes no profile bytes", failures)
@@ -263,17 +280,27 @@ func _test_loadout_warning_preflight_and_transition_wiring(failures: Array[Strin
     main.call("_on_armoury_closed")
     TestAssertions.truthy(selector.is_open() and not bool(main.get("run_started")), "returning from warning Armoury requires fresh class selection", failures)
     TestAssertions.equal(main.get("_pending_loadout_projection"), null, "Armoury return cannot reuse stale approval", failures)
+    TestAssertions.equal(selector.selected_class_id(), &"mage", "warning Armoury preserves the selected class", failures)
+    TestAssertions.equal(main.get("_lobby_return_focus"), null, "warning Armoury consumes its return focus", failures)
 
-    TestAssertions.truthy(not main.select_leader_class(&"mage"), "post-Armoury selection creates another fresh projection", failures)
+    main.call("_on_lobby_start_requested", &"mage")
+    TestAssertions.truthy(warning.call("is_open"), "post-Armoury Start creates another fresh projection", failures)
     (warning.get_node("Overlay/Frame/Layout/Actions/ChooseAnother") as Button).pressed.emit()
     TestAssertions.truthy(not warning.call("is_open") and selector.is_open(), "Choose Another Class returns to run setup", failures)
     TestAssertions.truthy(not selector.compatibility_gate_active(), "Choose Another Class clears the gate", failures)
+    TestAssertions.equal(selector.selected_class_id(), &"mage", "Choose Another Class preserves the selected class", failures)
     TestAssertions.equal(FileAccess.get_file_as_bytes(profile_path), bytes_before, "Choose Another Class mutates no profile bytes", failures)
     main.call("_on_loadout_continue_anyway")
     TestAssertions.truthy(not bool(main.get("run_started")), "direct stale Continue signal cannot start a run", failures)
     TestAssertions.equal(FileAccess.get_file_as_bytes(profile_path), bytes_before, "direct stale Continue signal cannot mutate profile", failures)
 
-    TestAssertions.truthy(not main.select_leader_class(&"mage"), "fresh incompatible selection creates a fresh projection", failures)
+    main.call("_on_lobby_start_requested", &"mage")
+    (warning.get_node("Overlay/Frame/Layout/Actions/Cancel") as Button).pressed.emit()
+    TestAssertions.truthy(not warning.call("is_open") and selector.is_open(), "warning Cancel returns to lobby", failures)
+    var cancel_return := selector.action_focus(&"start")
+    TestAssertions.truthy(cancel_return != null and bool(cancel_return.get_meta("action_enabled", false)), "warning Cancel restores an enabled Start action", failures)
+
+    main.call("_on_lobby_start_requested", &"mage")
     (warning.get_node("Overlay/Frame/Layout/Actions/Continue") as Button).pressed.emit()
     TestAssertions.truthy(bool(main.get("run_started")), "confirmed nonoverflow transition starts after revalidation and checkout", failures)
     TestAssertions.truthy(main.get("active_run_context") != null, "successful transition starts from committed checkout bootstrap", failures)
@@ -679,6 +706,103 @@ func _test_main_menu_route_composition(failures: Array[String]) -> void:
     ProfileTestSupport.remove_tree(root)
 
 
+func _test_lobby_start_failure_routing(failures: Array[String]) -> void:
+    var root := "user://tests/main-wiring-lobby-failure_%d_%d" % [OS.get_process_id(), Time.get_ticks_usec()]
+    var main := (load("res://scenes/game/main.tscn") as PackedScene).instantiate() as PartyForgeMain
+    main.profile_root = root
+    main.settings_path = root.path_join("party_forge_settings.cfg")
+    (Engine.get_main_loop() as SceneTree).root.add_child(main)
+    main.call("_ready")
+    var created := main.profile_manager.create_profile("Lobby Failure")
+    TestAssertions.truthy(created.ok(), "lobby failure fixture creates a profile", failures)
+    main.call("_open_run_setup")
+    var lobby := main.get_node("HUD/ClassSelection") as ClassSelectionPanel
+    main.call("_on_lobby_class_selection_requested", &"fighter")
+    main.set("catalog_valid", false)
+    main.call("_on_lobby_start_requested", &"fighter")
+    var failed_projection := lobby.get("_projection") as RunSetupLobbyProjection
+    TestAssertions.truthy(lobby.is_open(), "ordinary start failure keeps the lobby authoritative", failures)
+    TestAssertions.equal(failed_projection.state, RunSetupLobbyProjection.State.ERROR, "ordinary start failure presents ERROR state", failures)
+    TestAssertions.equal(failed_projection.status_copy, "Unable to start run.", "ordinary start failure presents safe player copy", failures)
+
+    main.set("catalog_valid", true)
+    var profile_id := main.active_profile().profile_id
+    var deleted := main.profile_manager.delete_profile(profile_id)
+    TestAssertions.truthy(deleted.ok(), "stale-selection fixture deletes the final active profile", failures)
+    TestAssertions.equal(main.active_profile(), null, "stale-selection fixture has no active profile", failures)
+    main.set("_selected_lobby_class_id", &"fighter")
+    main.set("_previewed_lobby_class_id", &"fighter")
+    main.call("_on_lobby_start_requested", &"fighter")
+    var settings := main.get_node("SettingsScreen") as SettingsScreen
+    TestAssertions.truthy(settings.is_open(), "no-profile Start reroutes to Profiles", failures)
+    TestAssertions.truthy(not lobby.is_open(), "no-profile Start does not reopen stale lobby over Profiles", failures)
+    main.free()
+    ProfileTestSupport.remove_tree(root)
+
+
+func _test_armoury_return_authority(failures: Array[String]) -> void:
+    var root := "user://tests/main-wiring-armoury-return_%d_%d" % [OS.get_process_id(), Time.get_ticks_usec()]
+    var main := (load("res://scenes/game/main.tscn") as PackedScene).instantiate() as PartyForgeMain
+    main.profile_root = root
+    main.settings_path = root.path_join("party_forge_settings.cfg")
+    (Engine.get_main_loop() as SceneTree).root.add_child(main)
+    main.call("_ready")
+    var created := main.profile_manager.create_profile("Armoury Return")
+    TestAssertions.truthy(created.ok(), "Armoury return fixture creates a profile", failures)
+    var completed := ProfileMutationService.new(ProfileStore.new()).complete_prologue(created.profile.profile_id, "task-8-armoury-return", root)
+    TestAssertions.truthy(completed.ok(), "Armoury return fixture completes prologue", failures)
+    TestAssertions.equal(main.profile_manager.refresh_profile(created.profile.profile_id), "", "Armoury return fixture refreshes profile", failures)
+    var developer_settings := PartyForgeSettings.new()
+    developer_settings.mode = PartyForgeSettings.Mode.DEVELOPER_MODE
+    TestAssertions.equal(PartyForgeSettingsStore.new().save_settings(developer_settings, main.settings_path), "", "Armoury return fixture saves developer route access", failures)
+    main.call("_refresh_main_menu_projection")
+
+    var menu := main.get_node("MainMenuScreen") as MainMenuScreen
+    var menu_origin := menu.get_node("Armoury") as Control
+    menu.set("_last_route_origin", menu_origin)
+    main.call("_open_storage_route", MainMenuViewModel.ROUTE_ARMOURY)
+    TestAssertions.equal(main.get("_storage_return_focus"), null, "Main-menu Armoury does not use Warehouse return authority", failures)
+    TestAssertions.equal(main.get("_lobby_return_focus"), menu_origin, "Main-menu Armoury stores its exact enum-backed origin", failures)
+    main.call("_on_armoury_closed")
+    TestAssertions.truthy(menu.is_open(), "Main-menu Armoury returns to menu", failures)
+    TestAssertions.equal(main.get("_lobby_return_context"), PartyForgeMain.LobbyReturnContext.MAIN_MENU, "Main-menu Armoury clears return context", failures)
+    TestAssertions.equal(main.get("_lobby_return_focus"), null, "Main-menu Armoury clears return focus", failures)
+
+    main.call("_open_run_setup")
+    var lobby := main.get_node("HUD/ClassSelection") as ClassSelectionPanel
+    main.call("_on_lobby_class_selection_requested", &"fighter")
+    var armoury_origin := lobby.action_focus(&"armoury")
+    main.call("_on_lobby_armoury_requested", &"fighter")
+    TestAssertions.equal(main.get("_storage_return_focus"), null, "Lobby Armoury does not use Warehouse return authority", failures)
+    main.call("_on_armoury_closed")
+    TestAssertions.truthy(lobby.is_open(), "Lobby Armoury returns to lobby", failures)
+    var focus := (Engine.get_main_loop() as SceneTree).root.gui_get_focus_owner()
+    if focus == null:
+        focus = lobby.get("_pending_initial_focus") as Control
+    TestAssertions.equal(focus, armoury_origin, "Lobby Armoury restores exact Armoury action", failures)
+    TestAssertions.equal(main.get("_lobby_return_focus"), null, "Lobby Armoury clears return focus", failures)
+
+    var selected_origin := lobby.selection_focus(&"fighter")
+    main.set("_lobby_return_context", PartyForgeMain.LobbyReturnContext.LOADOUT_WARNING)
+    main.set("_lobby_return_focus", selected_origin)
+    main.call("_on_armoury_closed")
+    focus = (Engine.get_main_loop() as SceneTree).root.gui_get_focus_owner()
+    if focus == null:
+        focus = lobby.get("_pending_initial_focus") as Control
+    TestAssertions.equal(focus, selected_origin, "warning Armoury returns to selected card", failures)
+    TestAssertions.equal(main.get("_lobby_return_focus"), null, "warning Armoury clears return focus", failures)
+
+    var quick_start := menu.get_node("DeveloperQuickStart") as Control
+    main.set("_lobby_return_context", PartyForgeMain.LobbyReturnContext.DEVELOPER_QUICK_START)
+    main.set("_lobby_return_focus", quick_start)
+    main.call("_on_armoury_closed")
+    TestAssertions.truthy(menu.is_open() and not lobby.is_open(), "Developer Quick Start Armoury returns to menu", failures)
+    TestAssertions.equal(main.get("_lobby_return_context"), PartyForgeMain.LobbyReturnContext.MAIN_MENU, "Developer Quick Start Armoury clears return context", failures)
+    TestAssertions.equal(main.get("_lobby_return_focus"), null, "Developer Quick Start Armoury clears return focus", failures)
+    main.free()
+    ProfileTestSupport.remove_tree(root)
+
+
 func _test_profile_deletion_and_activation_separation(failures: Array[String]) -> void:
     var root := "user://tests/main-wiring-profile-deletion_%d_%d" % [OS.get_process_id(), Time.get_ticks_usec()]
     var settings_path := "user://tests/main-wiring-profile-deletion-settings_%d_%d.cfg" % [OS.get_process_id(), Time.get_ticks_usec()]
@@ -751,8 +875,8 @@ func _test_passive_tree_route_composition(failures: Array[String]) -> void:
     var city_button := menu.get_node("CityTree") as Button
     var menu_settings_button := menu.get_node("Settings") as Button
     var additional := settings.get_node("Overlay/Frame/Layout/Tabs/Additional Settings") as AdditionalSettingsPage
-    var open_city_button := additional.get_node("Layout/OpenCityPassiveTree") as Button
-    var mode := additional.get_node("Layout/Mode") as OptionButton
+    var open_city_button := additional.get_node("Layout/Scroll/Fields/OpenCityPassiveTree") as Button
+    var mode := additional.get_node("Layout/Scroll/Fields/Mode") as OptionButton
     var tree_screen := main.get_node_or_null("PassiveTreeScreen") as PassiveTreeScreen
     TestAssertions.truthy(tree_screen != null, "main composes the reusable PassiveTreeScreen", failures)
     var has_definition := _has_property(main, &"passive_tree_definition")
@@ -1030,14 +1154,21 @@ func _test_exact_choice_panel(failures: Array[String]) -> void:
 func _test_class_selection_starts_run_and_applies_choices(failures: Array[String]) -> void:
     var main := (load("res://scenes/game/main.tscn") as PackedScene).instantiate()
     _prepare_main(main)
+    var profile := main.call("active_profile") as ProfileState
+    var prologue := ProfileMutationService.new(ProfileStore.new()).complete_prologue(profile.profile_id, "task-8-main-wiring", _profile_root)
+    TestAssertions.truthy(prologue.ok(), "lobby fixture completes the profile prologue", failures)
+    (main.get("profile_manager") as ProfileManager).refresh_profile(profile.profile_id)
+    main.call("_open_run_setup")
     TestAssertions.equal(main.get("run_started"), false, "run timer waits at class selection", failures)
-    var selector := main.get_node("HUD/ClassSelection")
-    selector.call("configure", GameCatalog.load_defaults().classes)
-    var marksman_button := selector.get_node_or_null("Content/Scroll/Grid/Class_marksman") as Button
+    var selector := main.get_node("HUD/ClassSelection") as ClassSelectionPanel
+    var marksman_button := selector.selection_focus(&"marksman") as Button
     TestAssertions.truthy(marksman_button != null, "catalog selector exposes Marksman button", failures)
     if marksman_button != null:
         marksman_button.pressed.emit()
-    TestAssertions.equal(main.get("run_started"), true, "run marked started after class selection", failures)
+    TestAssertions.equal(main.get("run_started"), false, "class confirmation remains ephemeral", failures)
+    TestAssertions.equal(selector.selected_class_id(), &"marksman", "class confirmation selects exact lobby class", failures)
+    (selector.action_focus(&"start") as Button).pressed.emit()
+    TestAssertions.equal(main.get("run_started"), true, "separate Start Run intent starts the run", failures)
     var game_run: Node = main.get_node("GameRun")
     TestAssertions.equal(game_run.call("current_state"), 1, "class selection starts RUNNING timer state", failures)
     var party_manager := main.get_node("PartyManager") as PartyManager

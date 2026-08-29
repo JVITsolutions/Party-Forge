@@ -1,0 +1,299 @@
+[gd_scene load_steps=7 format=3]
+
+[ext_resource type="Script" path="res://scripts/ui/living_forge/components/forge_class_card.gd" id="1_script"]
+[ext_resource type="Texture2D" path="res://assets/ui/living_forge/frames/class_silhouette.svg" id="2_silhouette"]
+[ext_resource type="Texture2D" path="res://assets/ui/living_forge/icons/tabler-3.46.0/check.svg" id="3_check"]
+[ext_resource type="Texture2D" path="res://assets/ui/living_forge/icons/tabler-3.46.0/alert-triangle.svg" id="4_alert"]
+[ext_resource type="Texture2D" path="res://assets/ui/living_forge/icons/tabler-3.46.0/lock.svg" id="5_lock"]
+[ext_resource type="Texture2D" path="res://assets/ui/living_forge/icons/tabler-3.46.0/user.svg" id="6_user"]
+
+[node name="ForgeClassCard" type="Button"]
+custom_minimum_size = Vector2(400, 144)
+focus_mode = 2
+mouse_default_cursor_shape = 2
+theme_type_variation = &"LivingForgeSecondaryButton"
+accessibility_description = "Class card."
+script = ExtResource("1_script")
+
+[node name="Content" type="HBoxContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 16.0
+offset_top = 8.0
+offset_right = -184.0
+offset_bottom = -40.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_override_constants/separation = 16
+
+[node name="Portrait" type="TextureRect" parent="Content"]
+custom_minimum_size = Vector2(56, 72)
+layout_mode = 2
+mouse_filter = 2
+texture = ExtResource("2_silhouette")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="Identity" type="VBoxContainer" parent="Content"]
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+theme_override_constants/separation = 0
+
+[node name="Name" type="Label" parent="Content/Identity"]
+layout_mode = 2
+mouse_filter = 2
+theme_type_variation = &"LivingForgeSectionLabel"
+text = "UNKNOWN CLASS"
+
+[node name="Role" type="Label" parent="Content/Identity"]
+layout_mode = 2
+mouse_filter = 2
+theme_type_variation = &"LivingForgePlayerLabel"
+text = "Role unavailable"
+
+[node name="Playstyle" type="Label" parent="Content/Identity"]
+layout_mode = 2
+mouse_filter = 2
+theme_type_variation = &"LivingForgePlayerLabel"
+text = "Playstyle unavailable"
+
+[node name="FocusFrame" type="Panel" parent="."]
+visible = false
+custom_minimum_size = Vector2(400, 144)
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="PreviewIndicator" type="HBoxContainer" parent="."]
+visible = false
+custom_minimum_size = Vector2(120, 32)
+layout_mode = 1
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -128.0
+offset_top = 8.0
+offset_right = -8.0
+offset_bottom = 40.0
+grow_horizontal = 0
+mouse_filter = 2
+theme_override_constants/separation = 8
+
+[node name="Shape" type="Control" parent="PreviewIndicator"]
+custom_minimum_size = Vector2(14, 14)
+layout_mode = 2
+size_flags_vertical = 4
+mouse_filter = 2
+
+[node name="Geometry" type="Polygon2D" parent="PreviewIndicator/Shape"]
+polygon = PackedVector2Array(7, 0, 14, 7, 7, 14, 0, 7)
+color = Color(0.972549, 0.94902, 0.87451, 1)
+
+[node name="Icon" type="TextureRect" parent="PreviewIndicator"]
+custom_minimum_size = Vector2(16, 16)
+layout_mode = 2
+size_flags_vertical = 4
+mouse_filter = 2
+texture = ExtResource("6_user")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="Text" type="Label" parent="PreviewIndicator"]
+layout_mode = 2
+mouse_filter = 2
+theme_type_variation = &"LivingForgeBadgeLabel"
+text = "PREVIEW"
+
+[node name="SelectionNotch" type="HBoxContainer" parent="."]
+visible = false
+custom_minimum_size = Vector2(128, 24)
+layout_mode = 1
+anchors_preset = 2
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_left = 8.0
+offset_top = -32.0
+offset_right = 136.0
+offset_bottom = -8.0
+grow_vertical = 0
+mouse_filter = 2
+theme_override_constants/separation = 8
+
+[node name="Shape" type="Control" parent="SelectionNotch"]
+custom_minimum_size = Vector2(16, 16)
+layout_mode = 2
+size_flags_vertical = 4
+mouse_filter = 2
+
+[node name="Geometry" type="Polygon2D" parent="SelectionNotch/Shape"]
+polygon = PackedVector2Array(0, 0, 16, 0, 16, 16, 8, 12, 0, 16)
+color = Color(0.941176, 0.72549, 0.290196, 1)
+
+[node name="Icon" type="TextureRect" parent="SelectionNotch"]
+custom_minimum_size = Vector2(16, 16)
+layout_mode = 2
+size_flags_vertical = 4
+mouse_filter = 2
+texture = ExtResource("3_check")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="Text" type="Label" parent="SelectionNotch"]
+layout_mode = 2
+mouse_filter = 2
+theme_type_variation = &"LivingForgeBadgeLabel"
+text = "SELECTED"
+
+[node name="CompatibilityBadge" type="HBoxContainer" parent="."]
+visible = false
+custom_minimum_size = Vector2(152, 24)
+layout_mode = 1
+anchors_preset = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -160.0
+offset_top = -32.0
+offset_right = -8.0
+offset_bottom = -8.0
+grow_horizontal = 0
+grow_vertical = 0
+mouse_filter = 2
+theme_override_constants/separation = 8
+
+[node name="Shape" type="Control" parent="CompatibilityBadge"]
+custom_minimum_size = Vector2(16, 16)
+layout_mode = 2
+size_flags_vertical = 4
+mouse_filter = 2
+
+[node name="Geometry" type="Polygon2D" parent="CompatibilityBadge/Shape"]
+polygon = PackedVector2Array(0, 2, 8, 8, 0, 14, 5, 14, 13, 8, 5, 2)
+color = Color(0.329412, 0.831373, 0.760784, 1)
+
+[node name="Icon" type="TextureRect" parent="CompatibilityBadge"]
+custom_minimum_size = Vector2(16, 16)
+layout_mode = 2
+size_flags_vertical = 4
+mouse_filter = 2
+texture = ExtResource("3_check")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="Text" type="Label" parent="CompatibilityBadge"]
+layout_mode = 2
+mouse_filter = 2
+theme_type_variation = &"LivingForgeBadgeLabel"
+text = "COMPATIBLE"
+
+[node name="AttentionBadge" type="HBoxContainer" parent="."]
+visible = false
+custom_minimum_size = Vector2(168, 32)
+layout_mode = 1
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -176.0
+offset_top = 48.0
+offset_right = -8.0
+offset_bottom = 80.0
+grow_horizontal = 0
+mouse_filter = 2
+theme_override_constants/separation = 8
+
+[node name="Shape" type="Control" parent="AttentionBadge"]
+custom_minimum_size = Vector2(16, 16)
+layout_mode = 2
+size_flags_vertical = 4
+mouse_filter = 2
+
+[node name="Geometry" type="Polygon2D" parent="AttentionBadge/Shape"]
+polygon = PackedVector2Array(8, 0, 16, 16, 0, 16)
+color = Color(1, 0.784314, 0.341176, 1)
+
+[node name="Icon" type="TextureRect" parent="AttentionBadge"]
+custom_minimum_size = Vector2(16, 16)
+layout_mode = 2
+size_flags_vertical = 4
+mouse_filter = 2
+texture = ExtResource("4_alert")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="Text" type="Label" parent="AttentionBadge"]
+layout_mode = 2
+mouse_filter = 2
+theme_type_variation = &"LivingForgeBadgeLabel"
+text = "ATTENTION"
+
+[node name="LockOverlay" type="Control" parent="."]
+visible = false
+custom_minimum_size = Vector2(400, 144)
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="Shade" type="ColorRect" parent="LockOverlay"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0.0313726, 0.0509804, 0.0705882, 0.72)
+
+[node name="Plate" type="PanelContainer" parent="LockOverlay"]
+custom_minimum_size = Vector2(152, 48)
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -76.0
+offset_top = -24.0
+offset_right = 76.0
+offset_bottom = 24.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_type_variation = &"LivingForgeStatusBadge"
+
+[node name="Content" type="HBoxContainer" parent="LockOverlay/Plate"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 8
+
+[node name="Icon" type="TextureRect" parent="LockOverlay/Plate/Content"]
+custom_minimum_size = Vector2(24, 24)
+layout_mode = 2
+mouse_filter = 2
+texture = ExtResource("5_lock")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="Text" type="Label" parent="LockOverlay/Plate/Content"]
+layout_mode = 2
+mouse_filter = 2
+theme_type_variation = &"LivingForgeBadgeLabel"
+text = "LOCKED"
+
+[connection signal="focus_entered" from="." to="." method="_on_focus_entered"]
+[connection signal="focus_exited" from="." to="." method="_on_focus_exited"]
+[connection signal="mouse_entered" from="." to="." method="_on_mouse_entered"]
+[connection signal="mouse_exited" from="." to="." method="_on_mouse_exited"]
+[connection signal="pressed" from="." to="." method="_on_pressed"]

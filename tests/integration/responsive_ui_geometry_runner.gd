@@ -27,9 +27,9 @@ func _run() -> void:
 	viewport.add_child(hud)
 	var run_setup := hud.get_node("ClassSelection") as ClassSelectionPanel
 	run_setup.configure(GameCatalog.load_defaults().classes)
-	var run_setup_actions := run_setup.get_node("Content/Actions") as HBoxContainer
-	var run_setup_settings := run_setup.get_node("Content/Actions/Settings") as Button
-	var run_setup_back := run_setup.get_node("Content/Actions/Back") as Button
+	var run_setup_settings := run_setup.action_focus(&"settings") as Button
+	var run_setup_back := run_setup.action_focus(&"back") as Button
+	var run_setup_actions := run_setup_settings.get_parent() as Control
 	if (hud.get_node("Margin") as Control).visible:
 		_failures.append("run HUD status is visible before a confirmed run start")
 
@@ -72,9 +72,12 @@ func _run() -> void:
 	var profile_create := profiles.get_node("Layout/CreateRow/Create") as Button
 	var profile_activate := profiles.get_node("Layout/Activate") as Button
 	var additional := settings.get_node("Overlay/Frame/Layout/Tabs/Additional Settings") as Control
-	var reset := additional.get_node("Layout/ResetDeveloperOptions") as Button
-	var apply := additional.get_node("Layout/ApplyAndReturn") as Button
-	var cancel := additional.get_node("Layout/Cancel") as Button
+	var additional_scroll := additional.get_node("Layout/Scroll") as ScrollContainer
+	var additional_actions := additional.get_node("Layout/Actions") as HBoxContainer
+	var reset := additional.get_node("Layout/Actions/ResetDeveloperOptions") as Button
+	var apply := additional.get_node("Layout/Actions/ApplyAndReturn") as Button
+	var cancel := additional.get_node("Layout/Actions/Cancel") as Button
+	var offscreen_field := additional.get_node("Layout/Scroll/Fields/OpenDeveloperItemSandbox") as Button
 	var notice := settings.get_node("Overlay/Frame/Layout/NextRunNotice") as Label
 	var status := settings.get_node("Overlay/Frame/Layout/Status") as Label
 	var badge_anchor := badge.get_node("Anchor") as Control
@@ -96,7 +99,7 @@ func _run() -> void:
 		_assert_visible_contained(run_setup_back, actions_rect, "Run setup Back", viewport_size)
 		if not is_equal_approx(run_setup_settings_rect.position.y, run_setup_back_rect.position.y):
 			_failures.append("Run setup Settings and Back do not share a row at %dx%d" % [viewport_size.x, viewport_size.y])
-		if run_setup_settings_rect.end.x > run_setup_back_rect.position.x:
+		if run_setup_settings_rect.intersection(run_setup_back_rect).has_area():
 			_failures.append("Run setup Settings overlaps Back at %dx%d" % [viewport_size.x, viewport_size.y])
 		if _failures.size() == run_setup_failure_count_before:
 			print("RUN_SETUP_ACTIONS_SIZE_PASS size=%dx%d" % [viewport_size.x, viewport_size.y])
@@ -126,10 +129,15 @@ func _run() -> void:
 
 		_select_tab(tabs, additional, "Additional Settings")
 		await _wait_for_layout()
+		_assert_visible_contained(additional_scroll, expected_frame, "Additional Settings Scroll", viewport_size)
+		_assert_visible_contained(additional_actions, expected_frame, "Additional Settings Actions", viewport_size)
 		for action: Button in [reset, apply, cancel]:
 			_assert_visible_contained(action, expected_frame, "Additional Settings %s" % action.name, viewport_size)
+			if action.get_global_rect().size.y < 48.0:
+				_failures.append("Additional Settings %s is below 48px at %dx%d" % [action.name, viewport_size.x, viewport_size.y])
 		_assert_visible_contained(notice, expected_frame, "Settings notice", viewport_size)
 		_assert_visible_contained(status, expected_frame, "Settings status", viewport_size)
+		await _assert_additional_scroll_behavior(viewport, additional_scroll, additional_actions, offscreen_field, viewport_size)
 
 		_assert_rect_near(badge_anchor.get_global_rect(), viewport_rect, "badge anchor", viewport_size)
 		var expected_badge := Rect2(Vector2(float(viewport_size.x) - 720.0, 16.0), Vector2(704.0, 56.0))
@@ -179,8 +187,8 @@ func _assert_settings_focus_input(settings: SettingsScreen, viewport: SubViewpor
 	settings.call(&"_focus_active_page")
 	await process_frame
 	var page := additional
-	var mode := page.get_node("Layout/Mode") as Control
-	var unlock_all := page.get_node("Layout/UnlockAll") as Control
+	var mode := page.get_node("Layout/Scroll/Fields/Mode") as Control
+	var unlock_all := page.get_node("Layout/Scroll/Fields/UnlockAll") as Control
 	_assert_focus(viewport, mode, "Additional Settings initial focus")
 	var tab := InputEventKey.new()
 	tab.keycode = KEY_TAB
@@ -199,7 +207,7 @@ func _assert_settings_focus_input(settings: SettingsScreen, viewport: SubViewpor
 	var failing_store := PartyForgeSettingsStore.new(func(_temporary: String, _target: String) -> Error: return ERR_CANT_CREATE)
 	settings.configure(failing_store, developer_settings)
 	settings.open()
-	var apply := page.get_node("Layout/ApplyAndReturn") as Button
+	var apply := page.get_node("Layout/Actions/ApplyAndReturn") as Button
 	var technical_toggle := settings.get_node("Overlay/Frame/Layout/ShowTechnicalDetails") as Button
 	var technical_details := settings.get_node("Overlay/Frame/Layout/TechnicalDetails") as LineEdit
 	apply.pressed.emit()
@@ -232,6 +240,29 @@ func _assert_settings_focus_input(settings: SettingsScreen, viewport: SubViewpor
 	await process_frame
 	_assert_disclosed_diagnostic(viewport, technical_details, "controller activation")
 	settings.open()
+
+
+func _assert_additional_scroll_behavior(viewport: SubViewport, scroll: ScrollContainer, actions: Control, offscreen_field: Control, viewport_size: Vector2i) -> void:
+	var footer_before := actions.get_global_rect()
+	scroll.scroll_vertical = 0
+	await process_frame
+	offscreen_field.grab_focus()
+	await _wait_for_layout()
+	if viewport_size == Vector2i(1280, 720) and scroll.scroll_vertical <= 0:
+		_failures.append("Additional Settings focus does not auto-scroll an offscreen developer row at 1280x720")
+	scroll.scroll_vertical = 0
+	await process_frame
+	for index: int in range(4):
+		var wheel := InputEventMouseButton.new()
+		wheel.button_index = MOUSE_BUTTON_WHEEL_DOWN
+		wheel.pressed = true
+		wheel.position = scroll.get_global_rect().get_center()
+		viewport.push_input(wheel)
+		await process_frame
+	if viewport_size == Vector2i(1280, 720) and scroll.scroll_vertical <= 0:
+		_failures.append("Additional Settings fields do not scroll with the mouse wheel at 1280x720")
+	if actions.get_global_rect() != footer_before:
+		_failures.append("Additional Settings footer moves with the fields mouse wheel at %dx%d" % [viewport_size.x, viewport_size.y])
 
 
 func _select_tab(tabs: TabContainer, control: Control, label: String) -> void:

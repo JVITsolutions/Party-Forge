@@ -3,7 +3,7 @@
 [ext_resource type="Script" path="res://scripts/ui/hud.gd" id="1"]
 [ext_resource type="PackedScene" path="res://scenes/ui/level_up_panel.tscn" id="2"]
 [ext_resource type="PackedScene" path="res://scenes/ui/run_result_panel.tscn" id="3"]
-[ext_resource type="Script" path="res://scripts/ui/class_selection_panel.gd" id="4"]
+[ext_resource type="PackedScene" path="res://scenes/ui/run_setup/run_setup_lobby_panel.tscn" id="4"]
 
 [node name="HUD" type="CanvasLayer"]
 process_mode = 3
@@ -96,54 +96,9 @@ theme_override_font_sizes/font_size = 28
 horizontal_alignment = 1
 vertical_alignment = 1
 
-[node name="ClassSelection" type="PanelContainer" parent="."]
-anchors_preset = 8
-anchor_left = 0.5
-anchor_top = 0.5
-anchor_right = 0.5
-anchor_bottom = 0.5
-offset_left = -380.0
-offset_top = -220.0
-offset_right = 380.0
-offset_bottom = 220.0
-grow_horizontal = 2
-grow_vertical = 2
-script = ExtResource("4")
-
-[node name="Content" type="VBoxContainer" parent="ClassSelection"]
-layout_mode = 2
-
-[node name="Title" type="Label" parent="ClassSelection/Content"]
-layout_mode = 2
-theme_override_font_sizes/font_size = 34
-text = "Choose Your Leader"
-horizontal_alignment = 1
-
-[node name="Scroll" type="ScrollContainer" parent="ClassSelection/Content"]
-layout_mode = 2
-size_flags_horizontal = 3
-size_flags_vertical = 3
-
-[node name="Grid" type="GridContainer" parent="ClassSelection/Content/Scroll"]
-layout_mode = 2
-size_flags_horizontal = 3
-columns = 3
-
-[node name="Actions" type="HBoxContainer" parent="ClassSelection/Content"]
-layout_mode = 2
-alignment = 1
-
-[node name="Settings" type="Button" parent="ClassSelection/Content/Actions"]
-custom_minimum_size = Vector2(220, 56)
-layout_mode = 2
-focus_mode = 2
-text = "Settings"
-
-[node name="Back" type="Button" parent="ClassSelection/Content/Actions"]
-custom_minimum_size = Vector2(220, 56)
-layout_mode = 2
-focus_mode = 2
-text = "Back"
+[node name="ClassSelection" parent="." instance=ExtResource("4")]
 
 [node name="LevelUpPanel" parent="." instance=ExtResource("2")]
 [node name="RunResultPanel" parent="." instance=ExtResource("3")]
+
+[connection signal="legacy_run_confirmed" from="ClassSelection" to="Margin" method="show"]

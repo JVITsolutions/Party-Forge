@@ -10,6 +10,7 @@ var active_member_id := 0
 var diagnostics := PackedStringArray()
 var _dragging := false
 var _active_signature: PresentationSignature
+var _reduced_motion := false
 
 
 class EquipmentSignature extends RefCounted:
@@ -84,6 +85,9 @@ class EquipmentSignature extends RefCounted:
 
 
 class PresentationSignature extends RefCounted:
+	enum Mode { MEMBER, CLASS }
+
+	var mode := Mode.MEMBER
 	var member_id: int
 	var class_definition: ClassDefinition
 	var profile: CharacterVisualProfile
@@ -95,24 +99,37 @@ class PresentationSignature extends RefCounted:
 	var required_animation_names: Array
 	var visuals_by_slot: Dictionary = {}
 
-	func _init(member: PartyMemberState, visuals: Dictionary) -> void:
+	func _init(member: PartyMemberState = null, visuals: Dictionary = {}) -> void:
+		if member == null:
+			return
+		mode = Mode.MEMBER
 		member_id = member.member_id
-		class_definition = member.class_definition
-		profile = member.class_definition.visual_profile
+		_configure(member.class_definition, member.class_definition.color, visuals)
+
+	static func for_class(definition: ClassDefinition) -> PresentationSignature:
+		var signature := PresentationSignature.new()
+		signature.mode = Mode.CLASS
+		signature._configure(definition, definition.color, {})
+		return signature
+
+	func _configure(definition: ClassDefinition, color: Color, visuals: Dictionary) -> void:
+		class_definition = definition
+		profile = definition.visual_profile
 		presentation_scene = profile.presentation_scene
 		body_id = profile.default_body_preset
 		palette_id = profile.default_palette_id
-		primary_color = member.class_definition.color
+		primary_color = color
 		idle_action_id = profile.idle_action_id
 		required_animation_names = profile.required_animation_names.duplicate()
 		for slot_id: StringName in EquipmentSlotCatalog.SHEET_SLOT_IDS:
 			if not visuals.has(slot_id):
 				continue
-			var definition := visuals.get(slot_id) as EquipmentVisualDefinition
-			visuals_by_slot[slot_id] = EquipmentSignature.new(definition) if definition != null else null
+			var visual_definition := visuals.get(slot_id) as EquipmentVisualDefinition
+			visuals_by_slot[slot_id] = EquipmentSignature.new(visual_definition) if visual_definition != null else null
 
 	func matches(other: PresentationSignature) -> bool:
 		if other == null \
+			or mode != other.mode \
 			or member_id != other.member_id \
 			or class_definition != other.class_definition \
 			or profile != other.profile \
@@ -141,6 +158,9 @@ func _ready() -> void:
 	var drag_surface := get_node("DragSurface") as Control
 	if not drag_surface.gui_input.is_connected(_handle_preview_input):
 		drag_surface.gui_input.connect(_handle_preview_input)
+	if not visibility_changed.is_connected(_sync_rendering):
+		visibility_changed.connect(_sync_rendering)
+	_sync_rendering()
 
 
 func show_member(member: PartyMemberState, equipment_rows: Array[Dictionary]) -> bool:
@@ -150,7 +170,8 @@ func show_member(member: PartyMemberState, equipment_rows: Array[Dictionary]) ->
 	var visuals_by_slot := _visuals_by_slot(equipment_rows)
 	var requested_signature := PresentationSignature.new(member, visuals_by_slot)
 	if active_preview != null and is_instance_valid(active_preview) and requested_signature.matches(_active_signature):
-		_subviewport().render_target_update_mode = SubViewport.UPDATE_ALWAYS
+		_set_fallback_visible(false)
+		_sync_rendering()
 		return true
 	clear()
 	var copy := PRESENTATION_SCENE.instantiate() as CharacterPresentation
@@ -162,15 +183,52 @@ func show_member(member: PartyMemberState, equipment_rows: Array[Dictionary]) ->
 	active_preview = copy
 	active_member_id = member.member_id
 	_active_signature = requested_signature
-	_subviewport().render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	_set_fallback_visible(false)
+	_sync_rendering()
 	return true
+
+
+func show_class(definition: ClassDefinition) -> bool:
+	if definition == null or definition.visual_profile == null or not definition.visual_profile.validate().is_empty():
+		show_fallback(definition.id if definition != null else &"", "Preview unavailable.")
+		return false
+	var requested_signature := PresentationSignature.for_class(definition)
+	if active_preview != null and is_instance_valid(active_preview) and requested_signature.matches(_active_signature):
+		_set_fallback_visible(false)
+		_sync_rendering()
+		return true
+	clear()
+	var copy := PRESENTATION_SCENE.instantiate() as CharacterPresentation
+	_preview_root().add_child(copy)
+	if not copy.apply_profile(definition.visual_profile, definition.color):
+		copy.free()
+		show_fallback(definition.id, "Preview unavailable.")
+		return false
+	active_preview = copy
+	active_member_id = 0
+	_active_signature = requested_signature
+	_set_fallback_visible(false)
+	_sync_rendering()
+	return true
+
+
+func show_fallback(_class_id: StringName, safe_reason: String) -> void:
+	clear()
+	var detail := safe_reason.strip_edges()
+	_fallback_detail().text = detail if not detail.is_empty() else "Preview unavailable."
+	_set_fallback_visible(true)
+
+
+func set_reduced_motion(enabled: bool) -> void:
+	_reduced_motion = enabled
 
 
 func clear() -> void:
 	_dragging = false
-	_subviewport().render_target_update_mode = SubViewport.UPDATE_DISABLED
 	_clear_preview()
 	diagnostics.clear()
+	_set_fallback_visible(false)
+	_sync_rendering()
 
 
 func _exit_tree() -> void:
@@ -223,3 +281,20 @@ func _preview_root() -> Node3D:
 
 func _subviewport() -> SubViewport:
 	return get_node("SubViewport") as SubViewport
+
+
+func _fallback() -> Control:
+	return get_node("Fallback") as Control
+
+
+func _fallback_detail() -> Label:
+	return get_node("Fallback/UnavailableDetail") as Label
+
+
+func _set_fallback_visible(should_be_visible: bool) -> void:
+	_fallback().visible = should_be_visible
+
+
+func _sync_rendering() -> void:
+	var has_visible_presentation := is_visible_in_tree() and active_preview != null and is_instance_valid(active_preview)
+	_subviewport().render_target_update_mode = SubViewport.UPDATE_ALWAYS if has_visible_presentation else SubViewport.UPDATE_DISABLED

@@ -6,6 +6,7 @@ func run() -> Array[String]:
 	_test_personal_loot_controls(failures)
 	_test_city_access_snapshot_setting(failures)
 	_test_reduced_motion_setting(failures)
+	_test_accessibility_display_settings(failures)
 	_test_round_trip_and_inactive_retention(failures)
 	_test_missing_unknown_and_malformed_fields(failures)
 	_test_failed_save_preserves_previous_file(failures)
@@ -145,6 +146,56 @@ func _test_reduced_motion_setting(failures: Array[String]) -> void:
 		TestAssertions.truthy(has_snapshot_value, "run snapshot exposes reduced motion in mode %d" % mode, failures)
 		if has_snapshot_value:
 			TestAssertions.equal(snapshot.call(&"reduced_motion"), true, "run snapshot captures reduced motion in mode %d" % mode, failures)
+
+
+func _test_accessibility_display_settings(failures: Array[String]) -> void:
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path("user://tests/living_forge_settings"))
+	var settings := PartyForgeSettings.new()
+	settings.set("high_contrast", true)
+	settings.set("ui_scale_percent", 85)
+	settings.set("text_scale_percent", 124)
+	settings.call("normalize")
+	TestAssertions.equal(settings.get("ui_scale_percent"), 90, "UI scale tie normalizes upward", failures)
+	TestAssertions.equal(settings.get("text_scale_percent"), 125, "text scale normalizes to a supported value", failures)
+	var copied := settings.copy()
+	TestAssertions.equal(copied.get("high_contrast"), true, "copy preserves high contrast", failures)
+	TestAssertions.equal(copied.get("ui_scale_percent"), 90, "copy preserves UI scale", failures)
+	TestAssertions.equal(copied.get("text_scale_percent"), 125, "copy preserves text scale", failures)
+	settings.set("ui_scale_percent", 1)
+	settings.set("text_scale_percent", 999)
+	settings.call("normalize")
+	TestAssertions.equal(settings.get("ui_scale_percent"), 80, "UI scale clamps to the lowest supported option", failures)
+	TestAssertions.equal(settings.get("text_scale_percent"), 150, "text scale clamps to the highest supported option", failures)
+	settings.set("ui_scale_percent", 110)
+	settings.set("text_scale_percent", 150)
+	settings.call("normalize")
+	TestAssertions.equal([settings.get("ui_scale_percent"), settings.get("text_scale_percent")], [110, 150], "UI and text scale values remain independent", failures)
+
+	var path := "user://tests/living_forge_settings/accessibility_%d_%d.cfg" % [OS.get_process_id(), Time.get_ticks_usec()]
+	var store := PartyForgeSettingsStore.new()
+	TestAssertions.equal(store.save_settings(settings, path), "", "accessibility display settings save", failures)
+	var loaded := store.load_settings(path)
+	TestAssertions.equal([loaded.get("high_contrast"), loaded.get("ui_scale_percent"), loaded.get("text_scale_percent")], [true, 110, 150], "accessibility display settings round trip", failures)
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+
+	var legacy_path := "user://tests/living_forge_settings/accessibility_legacy_%d_%d.cfg" % [OS.get_process_id(), Time.get_ticks_usec()]
+	var legacy := ConfigFile.new()
+	legacy.set_value("settings", "schema_version", PartyForgeSettings.SCHEMA_VERSION)
+	legacy.save(legacy_path)
+	loaded = store.load_settings(legacy_path)
+	TestAssertions.equal([loaded.get("high_contrast"), loaded.get("ui_scale_percent"), loaded.get("text_scale_percent")], [false, 100, 100], "schema v1 files without display accessibility keys use legacy defaults", failures)
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(legacy_path))
+
+	var malformed_path := "user://tests/living_forge_settings/accessibility_malformed_%d_%d.cfg" % [OS.get_process_id(), Time.get_ticks_usec()]
+	var malformed := ConfigFile.new()
+	malformed.set_value("settings", "schema_version", PartyForgeSettings.SCHEMA_VERSION)
+	malformed.set_value("settings", "high_contrast", "true")
+	malformed.set_value("settings", "ui_scale_percent", "110")
+	malformed.set_value("settings", "text_scale_percent", true)
+	malformed.save(malformed_path)
+	loaded = store.load_settings(malformed_path)
+	TestAssertions.equal([loaded.get("high_contrast"), loaded.get("ui_scale_percent"), loaded.get("text_scale_percent")], [false, 100, 100], "wrong display accessibility value types use legacy defaults", failures)
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(malformed_path))
 
 func _test_defaults_and_normalization(failures: Array[String]) -> void:
 	var settings := PartyForgeSettings.new()

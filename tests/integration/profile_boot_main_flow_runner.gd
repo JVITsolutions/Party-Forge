@@ -53,7 +53,7 @@ func _run() -> void:
 	selector.configure(GameCatalog.load_defaults().classes)
 	_assert(root.gui_get_focus_owner() == profile_name, "run-setup configure preserves external ProfileName focus")
 	selector.open()
-	var initial_class_focus := selector.get_node("Content/Scroll/Grid").get_child(0) as Button
+	var initial_class_focus := selector.selection_focus(&"fighter") as Button
 	_assert(root.gui_get_focus_owner() == initial_class_focus, "explicit run-setup open claims eligible class focus")
 	profile_name.grab_focus()
 
@@ -113,25 +113,28 @@ func _run() -> void:
 	await process_frame
 	_assert(selector.is_open() and not menu.is_open(), "profile primary action opens run setup")
 	_assert(main.active_profile().prologue_state == prologue_before, "temporary prologue route makes no durable mutation")
-	var settings_control := main.get_node("HUD/ClassSelection/Content/Actions/Settings") as Control
+	var settings_control := selector.action_focus(&"settings")
 	settings_control.grab_focus()
 	selector.settings_requested.emit()
 	await process_frame
 	settings.close()
 	await process_frame
 	_assert(root.gui_get_focus_owner() == settings_control, "run-setup Settings restores its exact originating control")
-	(selector.get_node("Content/Actions/Back") as Button).pressed.emit()
+	(selector.action_focus(&"back") as Button).pressed.emit()
 	await process_frame
 	_assert(menu.is_open() and not selector.is_open(), "run-setup Back returns to the main menu")
 	_assert(root.gui_get_focus_owner() == primary, "run-setup Back restores PrimaryAction focus")
 	primary.pressed.emit()
 	await process_frame
-	var fighter := main.get_node("HUD/ClassSelection/Content/Scroll/Grid/Class_fighter") as Button
+	var fighter := selector.selection_focus(&"fighter") as Button
 	fighter.pressed.emit()
+	await process_frame
+	_assert(not main.run_started and selector.selected_class_id() == &"fighter", "Fighter confirmation selects without starting")
+	(selector.action_focus(&"start") as Button).pressed.emit()
 	await process_frame
 	var party := main.get_node("PartyManager") as PartyManager
 	var game_run := main.get_node("GameRun") as GameRun
-	_assert(main.run_started, "Fighter button starts the run")
+	_assert(main.run_started, "separate Start Run action starts the run")
 	_assert(main.leader != null and main.leader.get_parent() == main.get_node("Actors"), "Fighter launch creates the arena leader")
 	_assert(party.members.size() == 1 and party.members[0].class_definition.id == &"fighter", "Fighter launch initializes the party")
 	_assert(game_run.current_state() == RunStateMachine.State.RUNNING, "Fighter launch begins the arena flow")

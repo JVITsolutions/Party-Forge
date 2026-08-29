@@ -39,7 +39,7 @@ func run() -> Array[String]:
 	TestAssertions.equal(screen.get_node("Overlay/Frame/Layout/Tabs/Graphics/Content/State").text, "Coming Soon", "Graphics is honest about availability", failures)
 	TestAssertions.equal(screen.get_node("Overlay/Frame/Layout/Tabs/Audio/Content/State").text, "Coming Soon", "Audio is honest about availability", failures)
 	TestAssertions.truthy(screen.get_node_or_null("Overlay/Frame/Layout/Tabs/Profiles") is ProfilesSettingsPage, "Profiles tab contains the functional profile page", failures)
-	TestAssertions.truthy(screen.get_node_or_null("Overlay/Frame/Layout/Tabs/Additional Settings/Layout/Mode") != null, "Additional Settings tab contains functional controls", failures)
+	TestAssertions.truthy(screen.get_node_or_null("Overlay/Frame/Layout/Tabs/Additional Settings/Layout/Scroll/Fields/Mode") != null, "Additional Settings tab contains functional controls", failures)
 	TestAssertions.equal(screen.get_node("Overlay/Frame/Layout/NextRunNotice").text, "Run-affecting changes apply when the next run starts.", "Settings shows the next-run notice", failures)
 	TestAssertions.equal(screen.process_mode, Node.PROCESS_MODE_ALWAYS, "Settings processes while gameplay is paused", failures)
 	TestAssertions.truthy(not bool(screen.call("is_open")), "Settings starts hidden", failures)
@@ -103,14 +103,14 @@ func run() -> Array[String]:
 	TestAssertions.truthy(not bool(screen.call("is_open")), "Cancel closes Settings", failures)
 	TestAssertions.equal(screen.get("_return_focus"), null, "Closing Settings clears the handled return focus", failures)
 
-	var city_button := screen.get_node("Overlay/Frame/Layout/Tabs/Additional Settings/Layout/OpenCityPassiveTree") as Button
+	var city_button := screen.get_node("Overlay/Frame/Layout/Tabs/Additional Settings/Layout/Scroll/Fields/OpenCityPassiveTree") as Button
 	var additional_page := screen.get_node("Overlay/Frame/Layout/Tabs/Additional Settings") as AdditionalSettingsPage
 	var applied_count: Array[int] = [0]
 	screen.settings_applied.connect(func(_settings: PartyForgeSettings) -> void: applied_count[0] += 1)
 	screen.call("open", return_focus)
-	(additional_page.get_node("Layout/Mode") as OptionButton).selected = PartyForgeSettings.Mode.DEVELOPER_MODE
+	(additional_page.get_node("Layout/Scroll/Fields/Mode") as OptionButton).selected = PartyForgeSettings.Mode.DEVELOPER_MODE
 	additional_page.call("_on_mode_changed", PartyForgeSettings.Mode.DEVELOPER_MODE)
-	(additional_page.get_node("Layout/PartyCapacity/Value") as HSlider).value = 19
+	(additional_page.get_node("Layout/Scroll/Fields/PartyCapacity/Value") as HSlider).value = 19
 	city_button.pressed.emit()
 	TestAssertions.truthy(not screen.is_open(), "forwarding City tree request temporarily hides Settings", failures)
 	TestAssertions.truthy(bool(screen.get("_child_resume_pending")), "City tree request records an explicit child-resume sentinel", failures)
@@ -119,8 +119,8 @@ func run() -> Array[String]:
 	TestAssertions.equal(screen.call("_tab_index_for_control", additional_page), 5, "Additional Settings resolves by control identity", failures)
 	TestAssertions.equal(tabs.get_tab_control(tabs.current_tab), additional_page, "open_additional selects Additional Settings", failures)
 	TestAssertions.equal(screen.get("_return_focus"), return_focus, "return from City tree preserves the original external Settings caller", failures)
-	TestAssertions.equal((additional_page.get_node("Layout/Mode") as OptionButton).selected, PartyForgeSettings.Mode.DEVELOPER_MODE, "City tree round trip preserves the unsaved draft mode", failures)
-	TestAssertions.equal(int((additional_page.get_node("Layout/PartyCapacity/Value") as HSlider).value), 19, "City tree round trip preserves another unsaved draft value", failures)
+	TestAssertions.equal((additional_page.get_node("Layout/Scroll/Fields/Mode") as OptionButton).selected, PartyForgeSettings.Mode.DEVELOPER_MODE, "City tree round trip preserves the unsaved draft mode", failures)
+	TestAssertions.equal(int((additional_page.get_node("Layout/Scroll/Fields/PartyCapacity/Value") as HSlider).value), 19, "City tree round trip preserves another unsaved draft value", failures)
 	TestAssertions.equal((screen.call("current_settings") as PartyForgeSettings).party_capacity_override, 12, "City tree round trip leaves current settings unchanged", failures)
 	TestAssertions.equal(applied_count[0], 0, "City tree round trip emits no settings-applied signal", failures)
 	TestAssertions.equal(save_attempts, [], "City tree round trip performs no store save", failures)
@@ -129,7 +129,7 @@ func run() -> Array[String]:
 	var fresh_return := Button.new()
 	fresh_return.name = "FreshSettingsReturn"
 	screen.call("open", return_focus)
-	(additional_page.get_node("Layout/Mode") as OptionButton).selected = PartyForgeSettings.Mode.DEVELOPER_MODE
+	(additional_page.get_node("Layout/Scroll/Fields/Mode") as OptionButton).selected = PartyForgeSettings.Mode.DEVELOPER_MODE
 	additional_page.call("_on_mode_changed", PartyForgeSettings.Mode.DEVELOPER_MODE)
 	city_button.pressed.emit()
 	screen.call("open", fresh_return)
@@ -141,7 +141,7 @@ func run() -> Array[String]:
 	screen.call("close")
 
 	screen.call("open", return_focus)
-	(additional_page.get_node("Layout/Mode") as OptionButton).selected = PartyForgeSettings.Mode.DEVELOPER_MODE
+	(additional_page.get_node("Layout/Scroll/Fields/Mode") as OptionButton).selected = PartyForgeSettings.Mode.DEVELOPER_MODE
 	additional_page.call("_on_mode_changed", PartyForgeSettings.Mode.DEVELOPER_MODE)
 	city_button.pressed.emit()
 	screen.call("close")
@@ -213,7 +213,13 @@ func _test_game_settings_page(failures: Array[String]) -> void:
 	var page := packed.instantiate()
 	(Engine.get_main_loop() as SceneTree).root.add_child(page)
 	var reduced_motion := page.get_node_or_null("Layout/ReducedMotion") as CheckButton
+	var high_contrast := page.get_node_or_null("Layout/HighContrast") as CheckButton
+	var ui_scale := page.get_node_or_null("Layout/UIScale") as OptionButton
+	var text_scale := page.get_node_or_null("Layout/TextScale") as OptionButton
 	TestAssertions.truthy(reduced_motion != null, "Game Settings exposes Layout/ReducedMotion", failures)
+	TestAssertions.truthy(high_contrast != null, "Game Settings exposes Layout/HighContrast", failures)
+	TestAssertions.truthy(ui_scale != null, "Game Settings exposes Layout/UIScale", failures)
+	TestAssertions.truthy(text_scale != null, "Game Settings exposes Layout/TextScale", failures)
 	if reduced_motion != null:
 		TestAssertions.equal(reduced_motion.text, "Reduce motion in interface animations", "reduced-motion control uses approved copy", failures)
 		TestAssertions.truthy(reduced_motion.focus_mode != Control.FOCUS_NONE, "reduced-motion control is keyboard and controller focusable", failures)
@@ -227,6 +233,28 @@ func _test_game_settings_page(failures: Array[String]) -> void:
 		reduced_motion.button_pressed = false
 		page.call("write_to", saved)
 		TestAssertions.equal(saved.get("reduced_motion"), false, "Game Settings writes reduced motion", failures)
+	if high_contrast != null and ui_scale != null and text_scale != null:
+		TestAssertions.equal([high_contrast.text, ui_scale.get_item_count(), text_scale.get_item_count()], ["Use high contrast interface", 6, 6], "Game Settings uses accessible display control labels", failures)
+		var supported_values := [80, 90, 100, 110, 125, 150]
+		var ui_values: Array[int] = []
+		var text_values: Array[int] = []
+		for index: int in range(supported_values.size()):
+			ui_values.append(ui_scale.get_item_id(index))
+			text_values.append(text_scale.get_item_id(index))
+		TestAssertions.equal(ui_values, supported_values, "UI scale OptionButton uses exact supported values", failures)
+		TestAssertions.equal(text_values, supported_values, "text scale OptionButton uses exact supported values", failures)
+		var saved := PartyForgeSettings.new()
+		saved.set("high_contrast", true)
+		saved.set("ui_scale_percent", 90)
+		saved.set("text_scale_percent", 125)
+		page.call("bind", saved)
+		TestAssertions.truthy(high_contrast.button_pressed, "Game Settings binds high contrast", failures)
+		TestAssertions.equal([ui_scale.get_item_id(ui_scale.selected), text_scale.get_item_id(text_scale.selected)], [90, 125], "Game Settings binds independent UI and text scales", failures)
+		high_contrast.button_pressed = false
+		ui_scale.select(ui_scale.get_item_index(150))
+		text_scale.select(text_scale.get_item_index(80))
+		page.call("write_to", saved)
+		TestAssertions.equal([saved.get("high_contrast"), saved.get("ui_scale_percent"), saved.get("text_scale_percent")], [false, 150, 80], "Game Settings writes independent display accessibility controls", failures)
 	page.free()
 
 
@@ -242,22 +270,37 @@ func _test_additional_settings_page(failures: Array[String]) -> void:
 	var tree := Engine.get_main_loop() as SceneTree
 	tree.root.add_child(page)
 	page.call("_ready")
-	var mode := page.get_node("Layout/Mode") as OptionButton
-	var unlock_all := page.get_node("Layout/UnlockAll") as CheckButton
-	var god_mode := page.get_node("Layout/GodMode") as CheckButton
-	var party_capacity := page.get_node("Layout/PartyCapacity/Value") as HSlider
-	var enemy_density := page.get_node("Layout/EnemyDensity/Value") as HSlider
-	var experience_multiplier := page.get_node("Layout/ExperienceMultiplier/Value") as HSlider
-	var level_up_card_count := page.get_node("Layout/LevelUpCardCount/Value") as HSlider
-	var personal_drop_multiplier := page.get_node_or_null("Layout/PersonalDropMultiplier/Value") as HSlider
-	var force_personal_drops := page.get_node_or_null("Layout/ForcePersonalDrops") as CheckButton
-	var personal_drop_source := page.get_node_or_null("Layout/PersonalDropSourceCategory") as OptionButton
-	var personal_drop_item_level := page.get_node_or_null("Layout/PersonalDropItemLevel/Value") as HSlider
-	var ground_chest_diagnostics := page.get_node_or_null("Layout/ShowGroundChestDiagnostics") as CheckButton
-	var use_city_access_snapshot := page.get_node_or_null("Layout/UseCityAccessSnapshot") as CheckButton
-	var open_city_tree := page.get_node_or_null("Layout/OpenCityPassiveTree") as Button
-	var open_item_sandbox := page.get_node_or_null("Layout/OpenDeveloperItemSandbox") as Button
-	var inactive_status := page.get_node_or_null("Layout/InactiveStatus") as Label
+	var scroll := page.get_node_or_null("Layout/Scroll") as ScrollContainer
+	var fields := page.get_node_or_null("Layout/Scroll/Fields") as VBoxContainer
+	var actions := page.get_node_or_null("Layout/Actions") as HBoxContainer
+	var reset := page.get_node_or_null("Layout/Actions/ResetDeveloperOptions") as Button
+	var apply := page.get_node_or_null("Layout/Actions/ApplyAndReturn") as Button
+	var cancel := page.get_node_or_null("Layout/Actions/Cancel") as Button
+	TestAssertions.truthy(scroll != null and fields != null, "Additional Settings owns a clipped vertical fields scroller", failures)
+	TestAssertions.truthy(actions != null and reset != null and apply != null and cancel != null, "Additional Settings owns a pinned three-action footer", failures)
+	if scroll == null or fields == null or actions == null or reset == null or apply == null or cancel == null:
+		page.free()
+		return
+	TestAssertions.equal(scroll.horizontal_scroll_mode, ScrollContainer.SCROLL_MODE_DISABLED, "Additional Settings horizontal scrolling is disabled", failures)
+	TestAssertions.truthy(scroll.follow_focus and scroll.clip_contents, "Additional Settings scroll follows focused offscreen fields and clips them", failures)
+	for action: Button in [reset, apply, cancel]:
+		TestAssertions.truthy(action.custom_minimum_size.y >= 48.0, "%s preserves a 48px minimum target" % action.name, failures)
+	var mode := page.get_node("Layout/Scroll/Fields/Mode") as OptionButton
+	var unlock_all := page.get_node("Layout/Scroll/Fields/UnlockAll") as CheckButton
+	var god_mode := page.get_node("Layout/Scroll/Fields/GodMode") as CheckButton
+	var party_capacity := page.get_node("Layout/Scroll/Fields/PartyCapacity/Value") as HSlider
+	var enemy_density := page.get_node("Layout/Scroll/Fields/EnemyDensity/Value") as HSlider
+	var experience_multiplier := page.get_node("Layout/Scroll/Fields/ExperienceMultiplier/Value") as HSlider
+	var level_up_card_count := page.get_node("Layout/Scroll/Fields/LevelUpCardCount/Value") as HSlider
+	var personal_drop_multiplier := page.get_node_or_null("Layout/Scroll/Fields/PersonalDropMultiplier/Value") as HSlider
+	var force_personal_drops := page.get_node_or_null("Layout/Scroll/Fields/ForcePersonalDrops") as CheckButton
+	var personal_drop_source := page.get_node_or_null("Layout/Scroll/Fields/PersonalDropSourceCategory") as OptionButton
+	var personal_drop_item_level := page.get_node_or_null("Layout/Scroll/Fields/PersonalDropItemLevel/Value") as HSlider
+	var ground_chest_diagnostics := page.get_node_or_null("Layout/Scroll/Fields/ShowGroundChestDiagnostics") as CheckButton
+	var use_city_access_snapshot := page.get_node_or_null("Layout/Scroll/Fields/UseCityAccessSnapshot") as CheckButton
+	var open_city_tree := page.get_node_or_null("Layout/Scroll/Fields/OpenCityPassiveTree") as Button
+	var open_item_sandbox := page.get_node_or_null("Layout/Scroll/Fields/OpenDeveloperItemSandbox") as Button
+	var inactive_status := page.get_node_or_null("Layout/Scroll/Fields/InactiveStatus") as Label
 	var requests: Array[bool] = []
 	var sandbox_requests: Array[int] = []
 	TestAssertions.truthy(open_city_tree != null, "Additional Settings exposes Open City Passive Tree", failures)
@@ -317,7 +360,7 @@ func _test_additional_settings_page(failures: Array[String]) -> void:
 		TestAssertions.truthy(inactive_status.text.contains("retained") and inactive_status.text.contains("Developer Mode"), "inactive explanation states values are retained until Developer Mode", failures)
 		TestAssertions.truthy(inactive_status.focus_mode != Control.FOCUS_NONE, "inactive explanation is controller and keyboard focusable", failures)
 		TestAssertions.equal(mode.focus_next, mode.get_path_to(inactive_status), "Player Simulation focus reaches the inactive explanation after Mode", failures)
-		TestAssertions.equal(inactive_status.focus_next, inactive_status.get_path_to(page.get_node("Layout/ResetDeveloperOptions")), "Player Simulation focus continues from the explanation to actions", failures)
+		TestAssertions.equal(inactive_status.focus_next, inactive_status.get_path_to(page.get_node("Layout/Actions/ResetDeveloperOptions")), "Player Simulation focus continues from the explanation to actions", failures)
 	for control: Control in [unlock_all, god_mode, party_capacity, enemy_density, experience_multiplier, level_up_card_count, personal_drop_multiplier, force_personal_drops, personal_drop_source, personal_drop_item_level, ground_chest_diagnostics, use_city_access_snapshot]:
 		if control == null:
 			continue
@@ -363,10 +406,10 @@ func _test_additional_settings_page(failures: Array[String]) -> void:
 	page.call("_on_enemy_density_changed", enemy_density.value)
 	page.call("_on_experience_multiplier_changed", experience_multiplier.value)
 	page.call("_on_level_up_card_count_changed", level_up_card_count.value)
-	TestAssertions.equal((page.get_node("Layout/PartyCapacity/Label") as Label).text, "9", "party capacity label tracks the slider", failures)
-	TestAssertions.equal((page.get_node("Layout/EnemyDensity/Label") as Label).text, "230%", "enemy density label tracks the slider", failures)
-	TestAssertions.equal((page.get_node("Layout/ExperienceMultiplier/Label") as Label).text, "440%", "experience multiplier label tracks the slider", failures)
-	TestAssertions.equal((page.get_node("Layout/LevelUpCardCount/Label") as Label).text, "8", "level-up card count label tracks the slider", failures)
+	TestAssertions.equal((page.get_node("Layout/Scroll/Fields/PartyCapacity/Label") as Label).text, "9", "party capacity label tracks the slider", failures)
+	TestAssertions.equal((page.get_node("Layout/Scroll/Fields/EnemyDensity/Label") as Label).text, "230%", "enemy density label tracks the slider", failures)
+	TestAssertions.equal((page.get_node("Layout/Scroll/Fields/ExperienceMultiplier/Label") as Label).text, "440%", "experience multiplier label tracks the slider", failures)
+	TestAssertions.equal((page.get_node("Layout/Scroll/Fields/LevelUpCardCount/Label") as Label).text, "8", "level-up card count label tracks the slider", failures)
 	var written_override := PartyForgeSettings.new()
 	page.call("write_to", written_override)
 	TestAssertions.equal(written_override.experience_multiplier_percent, 440, "page writes experience multiplier", failures)
@@ -407,40 +450,57 @@ func _test_settings_apply_cancel_and_save_error(failures: Array[String]) -> void
 	saved.mode = PartyForgeSettings.Mode.DEVELOPER_MODE
 	saved.party_capacity_override = 12
 	saved.set("reduced_motion", false)
+	saved.set("high_contrast", false)
+	saved.set("ui_scale_percent", 100)
+	saved.set("text_scale_percent", 100)
 	screen.call("configure", PartyForgeSettingsStore.new(), saved, null, custom_settings_path)
 	screen.call("open")
 	var page := screen.get_node("Overlay/Frame/Layout/Tabs/Additional Settings")
 	var game_page := screen.get_node("Overlay/Frame/Layout/Tabs/Game Settings")
 	var reduced_motion := game_page.get_node_or_null("Layout/ReducedMotion") as CheckButton
-	TestAssertions.truthy(reduced_motion != null, "Settings flow exposes reduced motion", failures)
-	if reduced_motion == null:
+	var high_contrast := game_page.get_node_or_null("Layout/HighContrast") as CheckButton
+	var ui_scale := game_page.get_node_or_null("Layout/UIScale") as OptionButton
+	var text_scale := game_page.get_node_or_null("Layout/TextScale") as OptionButton
+	TestAssertions.truthy(reduced_motion != null and high_contrast != null and ui_scale != null and text_scale != null, "Settings flow exposes display accessibility controls", failures)
+	if reduced_motion == null or high_contrast == null or ui_scale == null or text_scale == null:
 		screen.free()
 		_cleanup_default_settings_artifacts()
 		_restore_default_settings_artifacts(original_files)
 		return
-	(page.get_node("Layout/PartyCapacity/Value") as HSlider).value = 3
+	(page.get_node("Layout/Scroll/Fields/PartyCapacity/Value") as HSlider).value = 3
 	reduced_motion.button_pressed = true
-	(page.get_node("Layout/Cancel") as Button).pressed.emit()
+	high_contrast.button_pressed = true
+	ui_scale.select(ui_scale.get_item_index(150))
+	text_scale.select(text_scale.get_item_index(80))
+	(page.get_node("Layout/Actions/Cancel") as Button).pressed.emit()
 	TestAssertions.truthy(not bool(screen.call("is_open")), "Cancel button closes Settings", failures)
 	TestAssertions.equal((screen.call("current_settings") as PartyForgeSettings).party_capacity_override, 12, "Cancel leaves current settings unchanged", failures)
 	TestAssertions.equal((screen.call("current_settings") as PartyForgeSettings).get("reduced_motion"), false, "Cancel preserves the prior reduced-motion value", failures)
+	TestAssertions.equal([(screen.call("current_settings") as PartyForgeSettings).get("high_contrast"), (screen.call("current_settings") as PartyForgeSettings).get("ui_scale_percent"), (screen.call("current_settings") as PartyForgeSettings).get("text_scale_percent")], [false, 100, 100], "Cancel persists none of the display accessibility settings", failures)
 	screen.call("open")
-	TestAssertions.equal(int((page.get_node("Layout/PartyCapacity/Value") as HSlider).value), 12, "open creates a fresh draft from current settings", failures)
+	TestAssertions.equal(int((page.get_node("Layout/Scroll/Fields/PartyCapacity/Value") as HSlider).value), 12, "open creates a fresh draft from current settings", failures)
 	TestAssertions.equal(reduced_motion.button_pressed, false, "open restores reduced motion from current settings", failures)
-	(page.get_node("Layout/PartyCapacity/Value") as HSlider).value = 9
-	(page.get_node("Layout/ResetDeveloperOptions") as Button).pressed.emit()
+	TestAssertions.equal([high_contrast.button_pressed, ui_scale.get_item_id(ui_scale.selected), text_scale.get_item_id(text_scale.selected)], [false, 100, 100], "open restores display accessibility settings from current settings", failures)
+	(page.get_node("Layout/Scroll/Fields/PartyCapacity/Value") as HSlider).value = 9
+	(page.get_node("Layout/Actions/ResetDeveloperOptions") as Button).pressed.emit()
 	TestAssertions.equal((screen.call("current_settings") as PartyForgeSettings).party_capacity_override, 12, "Reset changes draft controls without changing current settings", failures)
-	(page.get_node("Layout/PartyCapacity/Value") as HSlider).value = 9
+	(page.get_node("Layout/Scroll/Fields/PartyCapacity/Value") as HSlider).value = 9
 	reduced_motion.button_pressed = true
+	high_contrast.button_pressed = true
+	ui_scale.select(ui_scale.get_item_index(125))
+	text_scale.select(text_scale.get_item_index(90))
 	var applied: Array[PartyForgeSettings] = []
 	screen.connect("settings_applied", func(settings: PartyForgeSettings) -> void: applied.append(settings))
-	(page.get_node("Layout/ApplyAndReturn") as Button).pressed.emit()
+	(page.get_node("Layout/Actions/ApplyAndReturn") as Button).pressed.emit()
 	TestAssertions.truthy(not bool(screen.call("is_open")), "successful Apply closes Settings", failures)
 	TestAssertions.equal(applied.size(), 1, "successful Apply emits once", failures)
 	TestAssertions.equal((screen.call("current_settings") as PartyForgeSettings).party_capacity_override, 9, "successful Apply replaces current settings", failures)
 	TestAssertions.equal(PartyForgeSettingsStore.new().load_settings(custom_settings_path).party_capacity_override, 9, "successful Apply persists through the configured store path", failures)
 	TestAssertions.equal((screen.call("current_settings") as PartyForgeSettings).get("reduced_motion"), true, "successful Apply writes reduced motion", failures)
 	TestAssertions.equal(PartyForgeSettingsStore.new().load_settings(custom_settings_path).get("reduced_motion"), true, "successful Apply persists reduced motion at the configured path", failures)
+	TestAssertions.equal([(screen.call("current_settings") as PartyForgeSettings).get("high_contrast"), (screen.call("current_settings") as PartyForgeSettings).get("ui_scale_percent"), (screen.call("current_settings") as PartyForgeSettings).get("text_scale_percent")], [true, 125, 90], "successful Apply writes every display accessibility setting", failures)
+	var applied_store_settings := PartyForgeSettingsStore.new().load_settings(custom_settings_path)
+	TestAssertions.equal([applied_store_settings.get("high_contrast"), applied_store_settings.get("ui_scale_percent"), applied_store_settings.get("text_scale_percent")], [true, 125, 90], "successful Apply persists every display accessibility setting", failures)
 	if not applied.is_empty():
 		applied[0].party_capacity_override = 2
 	TestAssertions.equal((screen.call("current_settings") as PartyForgeSettings).party_capacity_override, 9, "applied signal receives an isolated copy", failures)
@@ -456,8 +516,8 @@ func _test_settings_apply_cancel_and_save_error(failures: Array[String]) -> void
 	failing_screen.call("configure", failing_store, saved)
 	failing_screen.call("open")
 	var failing_page := failing_screen.get_node("Overlay/Frame/Layout/Tabs/Additional Settings")
-	(failing_page.get_node("Layout/PartyCapacity/Value") as HSlider).value = 8
-	(failing_page.get_node("Layout/ApplyAndReturn") as Button).pressed.emit()
+	(failing_page.get_node("Layout/Scroll/Fields/PartyCapacity/Value") as HSlider).value = 8
+	(failing_page.get_node("Layout/Actions/ApplyAndReturn") as Button).pressed.emit()
 	var expected_error := "PARTY_FORGE_SETTINGS_SAVE_ERROR path=%s code=%d stage=promote" % [PartyForgeSettingsStore.DEFAULT_PATH, ERR_CANT_CREATE]
 	var status := failing_screen.get_node("Overlay/Frame/Layout/Status") as Label
 	var technical_toggle := failing_screen.get_node_or_null("Overlay/Frame/Layout/ShowTechnicalDetails") as Button
@@ -474,11 +534,11 @@ func _test_settings_apply_cancel_and_save_error(failures: Array[String]) -> void
 		TestAssertions.truthy(not technical_details.editable and technical_details.focus_mode != Control.FOCUS_NONE, "revealed details are read-only, selectable, and focusable", failures)
 		failing_screen.call("open")
 		TestAssertions.truthy(not technical_toggle.visible and not technical_details.visible and technical_details.text.is_empty(), "opening Settings resets technical disclosure state", failures)
-		(failing_page.get_node("Layout/ApplyAndReturn") as Button).pressed.emit()
+		(failing_page.get_node("Layout/Actions/ApplyAndReturn") as Button).pressed.emit()
 		technical_toggle.pressed.emit()
 		TestAssertions.truthy(technical_details.visible, "second save failure can disclose details again", failures)
 		failing_screen.call("configure", PartyForgeSettingsStore.new(), saved)
-		(failing_page.get_node("Layout/ApplyAndReturn") as Button).pressed.emit()
+		(failing_page.get_node("Layout/Actions/ApplyAndReturn") as Button).pressed.emit()
 		TestAssertions.truthy(not technical_toggle.visible and not technical_details.visible and technical_details.text.is_empty(), "successful Apply resets technical disclosure state", failures)
 	TestAssertions.equal((failing_screen.call("current_settings") as PartyForgeSettings).party_capacity_override, 12, "failed Apply leaves current settings unchanged", failures)
 	failing_screen.free()
@@ -539,29 +599,29 @@ func _test_active_page_focus(screen: CanvasLayer, tabs: TabContainer, failures: 
 
 
 func _test_additional_focus_traversal(page: Control, failures: Array[String]) -> void:
-	var use_city_access_snapshot := page.get_node_or_null("Layout/UseCityAccessSnapshot") as Control
+	var use_city_access_snapshot := page.get_node_or_null("Layout/Scroll/Fields/UseCityAccessSnapshot") as Control
 	if use_city_access_snapshot == null:
 		return
 	var ordered: Array[Control] = [
-		page.get_node("Layout/Mode") as Control,
-		page.get_node("Layout/UnlockAll") as Control,
-		page.get_node("Layout/GodMode") as Control,
-		page.get_node("Layout/PartyCapacity/Value") as Control,
-		page.get_node("Layout/EnemyDensity/Value") as Control,
-		page.get_node("Layout/ExperienceMultiplier/Value") as Control,
-		page.get_node("Layout/LevelUpCardCount/Value") as Control,
-		page.get_node("Layout/PersonalDropMultiplier/Value") as Control,
-		page.get_node("Layout/ForcePersonalDrops") as Control,
-		page.get_node("Layout/PersonalDropSourceCategory") as Control,
-		page.get_node("Layout/PersonalDropItemLevel/Value") as Control,
-		page.get_node("Layout/ShowGroundChestDiagnostics") as Control,
+		page.get_node("Layout/Scroll/Fields/Mode") as Control,
+		page.get_node("Layout/Scroll/Fields/UnlockAll") as Control,
+		page.get_node("Layout/Scroll/Fields/GodMode") as Control,
+		page.get_node("Layout/Scroll/Fields/PartyCapacity/Value") as Control,
+		page.get_node("Layout/Scroll/Fields/EnemyDensity/Value") as Control,
+		page.get_node("Layout/Scroll/Fields/ExperienceMultiplier/Value") as Control,
+		page.get_node("Layout/Scroll/Fields/LevelUpCardCount/Value") as Control,
+		page.get_node("Layout/Scroll/Fields/PersonalDropMultiplier/Value") as Control,
+		page.get_node("Layout/Scroll/Fields/ForcePersonalDrops") as Control,
+		page.get_node("Layout/Scroll/Fields/PersonalDropSourceCategory") as Control,
+		page.get_node("Layout/Scroll/Fields/PersonalDropItemLevel/Value") as Control,
+		page.get_node("Layout/Scroll/Fields/ShowGroundChestDiagnostics") as Control,
 		use_city_access_snapshot,
-		page.get_node("Layout/OpenCityPassiveTree") as Control,
-		page.get_node("Layout/ResetDeveloperOptions") as Control,
-		page.get_node("Layout/ApplyAndReturn") as Control,
-		page.get_node("Layout/Cancel") as Control,
+		page.get_node("Layout/Scroll/Fields/OpenCityPassiveTree") as Control,
+		page.get_node("Layout/Actions/ResetDeveloperOptions") as Control,
+		page.get_node("Layout/Actions/ApplyAndReturn") as Control,
+		page.get_node("Layout/Actions/Cancel") as Control,
 	]
-	var sandbox_button := page.get_node_or_null("Layout/OpenDeveloperItemSandbox") as Control
+	var sandbox_button := page.get_node_or_null("Layout/Scroll/Fields/OpenDeveloperItemSandbox") as Control
 	if sandbox_button != null:
 		ordered.insert(14, sandbox_button)
 	for index: int in range(ordered.size()):

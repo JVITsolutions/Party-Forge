@@ -168,83 +168,83 @@ func _refresh_value_labels() -> void:
 
 
 func _mode() -> OptionButton:
-	return get_node("Layout/Mode") as OptionButton
+	return get_node("Layout/Scroll/Fields/Mode") as OptionButton
 
 
 func _unlock_all() -> CheckButton:
-	return get_node("Layout/UnlockAll") as CheckButton
+	return get_node("Layout/Scroll/Fields/UnlockAll") as CheckButton
 
 
 func _god_mode() -> CheckButton:
-	return get_node("Layout/GodMode") as CheckButton
+	return get_node("Layout/Scroll/Fields/GodMode") as CheckButton
 
 
 func _party_capacity() -> HSlider:
-	return get_node("Layout/PartyCapacity/Value") as HSlider
+	return get_node("Layout/Scroll/Fields/PartyCapacity/Value") as HSlider
 
 
 func _party_capacity_label() -> Label:
-	return get_node("Layout/PartyCapacity/Label") as Label
+	return get_node("Layout/Scroll/Fields/PartyCapacity/Label") as Label
 
 
 func _enemy_density() -> HSlider:
-	return get_node("Layout/EnemyDensity/Value") as HSlider
+	return get_node("Layout/Scroll/Fields/EnemyDensity/Value") as HSlider
 
 
 func _enemy_density_label() -> Label:
-	return get_node("Layout/EnemyDensity/Label") as Label
+	return get_node("Layout/Scroll/Fields/EnemyDensity/Label") as Label
 
 
 func _experience_multiplier() -> HSlider:
-	return get_node("Layout/ExperienceMultiplier/Value") as HSlider
+	return get_node("Layout/Scroll/Fields/ExperienceMultiplier/Value") as HSlider
 
 
 func _experience_multiplier_label() -> Label:
-	return get_node("Layout/ExperienceMultiplier/Label") as Label
+	return get_node("Layout/Scroll/Fields/ExperienceMultiplier/Label") as Label
 
 
 func _level_up_card_count() -> HSlider:
-	return get_node("Layout/LevelUpCardCount/Value") as HSlider
+	return get_node("Layout/Scroll/Fields/LevelUpCardCount/Value") as HSlider
 
 
 func _level_up_card_count_label() -> Label:
-	return get_node("Layout/LevelUpCardCount/Label") as Label
+	return get_node("Layout/Scroll/Fields/LevelUpCardCount/Label") as Label
 
 
 func _inactive_status() -> Label:
-	return get_node("Layout/InactiveStatus") as Label
+	return get_node("Layout/Scroll/Fields/InactiveStatus") as Label
 
 
 func _personal_drop_multiplier() -> HSlider:
-	return get_node("Layout/PersonalDropMultiplier/Value") as HSlider
+	return get_node("Layout/Scroll/Fields/PersonalDropMultiplier/Value") as HSlider
 
 
 func _personal_drop_multiplier_label() -> Label:
-	return get_node("Layout/PersonalDropMultiplier/Label") as Label
+	return get_node("Layout/Scroll/Fields/PersonalDropMultiplier/Label") as Label
 
 
 func _force_personal_drops() -> CheckButton:
-	return get_node("Layout/ForcePersonalDrops") as CheckButton
+	return get_node("Layout/Scroll/Fields/ForcePersonalDrops") as CheckButton
 
 
 func _personal_drop_source() -> OptionButton:
-	return get_node("Layout/PersonalDropSourceCategory") as OptionButton
+	return get_node("Layout/Scroll/Fields/PersonalDropSourceCategory") as OptionButton
 
 
 func _personal_drop_item_level() -> HSlider:
-	return get_node("Layout/PersonalDropItemLevel/Value") as HSlider
+	return get_node("Layout/Scroll/Fields/PersonalDropItemLevel/Value") as HSlider
 
 
 func _personal_drop_item_level_label() -> Label:
-	return get_node("Layout/PersonalDropItemLevel/Label") as Label
+	return get_node("Layout/Scroll/Fields/PersonalDropItemLevel/Label") as Label
 
 
 func _show_ground_chest_diagnostics() -> CheckButton:
-	return get_node("Layout/ShowGroundChestDiagnostics") as CheckButton
+	return get_node("Layout/Scroll/Fields/ShowGroundChestDiagnostics") as CheckButton
 
 
 func _use_city_access_snapshot() -> CheckButton:
-	return get_node("Layout/UseCityAccessSnapshot") as CheckButton
+	return get_node("Layout/Scroll/Fields/UseCityAccessSnapshot") as CheckButton
 
 
 func _select_personal_drop_source(source_category: StringName) -> void:
@@ -267,11 +267,11 @@ func _selected_personal_drop_source() -> StringName:
 
 
 func _open_city_tree() -> Button:
-	return get_node("Layout/OpenCityPassiveTree") as Button
+	return get_node("Layout/Scroll/Fields/OpenCityPassiveTree") as Button
 
 
 func _open_item_sandbox() -> Button:
-	return get_node("Layout/OpenDeveloperItemSandbox") as Button
+	return get_node("Layout/Scroll/Fields/OpenDeveloperItemSandbox") as Button
 
 
 func _configure_focus_order(developer_mode_enabled: bool) -> void:
@@ -281,9 +281,9 @@ func _configure_focus_order(developer_mode_enabled: bool) -> void:
 	else:
 		order.append(_inactive_status())
 	order.append_array([
-		get_node("Layout/ResetDeveloperOptions") as Control,
-		get_node("Layout/ApplyAndReturn") as Control,
-		get_node("Layout/Cancel") as Control,
+		get_node("Layout/Actions/ResetDeveloperOptions") as Control,
+		get_node("Layout/Actions/ApplyAndReturn") as Control,
+		get_node("Layout/Actions/Cancel") as Control,
 	])
 	for index: int in range(order.size()):
 		var control := order[index]
