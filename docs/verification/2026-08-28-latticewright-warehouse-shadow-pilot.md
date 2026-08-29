@@ -3,7 +3,8 @@
 ## Qualified revision
 
 - Branch: `feat/latticewright-warehouse-shadow-pilot`
-- Tested implementation commit: `4befafc test: qualify Warehouse access shadow pilot`
+- Tested implementation commit: `9e5395a test: cover Warehouse route authorization`
+- Prior qualification commit: `4befafc test: qualify Warehouse access shadow pilot`
 - Parent implementation commits: `8f4140e`, `b7ee46a`, and `6398826`
 - Godot executable: `F:\Projects(root)\Game dev\godot\Godot_v4.7.1-stable_mono_win64\Godot_v4.7.1-stable_mono_win64_console.exe`
 - Godot version: `4.7.1.stable.mono.official.a13da4feb`
@@ -16,13 +17,13 @@ The dedicated integration runner was invoked as follows:
 & $godot --headless --path . --quit-after 600 --script res://tests/integration/city_access_snapshot_runner.gd
 ```
 
-It exited `0` in `1.333` seconds and printed exactly one success marker:
+It exited `0` in `3.288` seconds and printed exactly one success marker:
 
 ```text
 CITY_ACCESS_SNAPSHOT_ACCEPTANCE_OK locations=7 profiles=7 rollback=legacy
 ```
 
-The focused acceptance batch was invoked as follows:
+The mandated comprehensive focused acceptance batch was invoked as follows during the original qualification:
 
 ```powershell
 & $godot --headless --path . --quit-after 1200 --script res://tests/focused_test_runner.gd -- tests/unit/test_atomic_profile_store.gd tests/unit/test_warehouse_access_policy.gd tests/unit/test_strict_json_document_reader.gd tests/unit/test_generated_json_document_writer.gd tests/unit/test_city_access_snapshot_loader.gd tests/unit/test_latticewright_runtime_v3_city_access_importer.gd tests/unit/test_latticewright_access_import_cli.gd tests/unit/test_city_access_evaluator.gd tests/unit/test_city_access_provider.gd tests/unit/test_city_access_shadow_comparator.gd tests/unit/test_party_forge_settings.gd tests/unit/test_settings_screen.gd tests/unit/test_main_menu_view_model.gd tests/unit/test_main_wiring.gd tests/unit/test_city_access_generated_artifacts.gd tests/unit/test_passive_tree_loader.gd
@@ -30,13 +31,21 @@ The focused acceptance batch was invoked as follows:
 
 It exited `0` in `46.407` seconds with `TEST_SUMMARY: PASS (0 failures)`.
 
+The refreshed focused route-regression batch was invoked as follows:
+
+```powershell
+& $godot --headless --path . --quit-after 900 --script res://tests/focused_test_runner.gd -- tests/unit/test_city_access_shadow_comparator.gd tests/unit/test_main_menu_view_model.gd tests/unit/test_main_wiring.gd tests/unit/test_party_forge_settings.gd tests/unit/test_settings_screen.gd
+```
+
+It exited `0` in `26.598` seconds with `TEST_SUMMARY: PASS (0 failures)`.
+
 The importer replay was invoked as follows:
 
 ```powershell
 & $godot --headless --path . --quit-after 600 --script res://tools/import_latticewright_access_snapshot.gd -- --source res://design/progression/latticewright/party-forge-city-access.pstree.json
 ```
 
-It exited `0` in `0.517` seconds and printed:
+It exited `0` in `0.518` seconds and printed:
 
 ```text
 PARTY_FORGE_CITY_ACCESS_IMPORT status=UNCHANGED adapter=latticewright-runtime-v3-city-access stage=compare
@@ -48,7 +57,7 @@ The complete suite was invoked as follows:
 & $godot --headless --path . --quit-after 1200 --script res://tests/test_runner.gd
 ```
 
-It exited `0` in `262.815` seconds with `TEST_SUMMARY: PASS (232 suites)`. Case-sensitive scans of its captured output found zero `FAIL`, `TestFailure`, `ScriptError`, `ParseError`, `FailedLoad`, and `NoLoader` markers. The expected negative-path `ERROR:` and `WARNING:` diagnostics remained contained in passing tests.
+It exited `0` in `266.576` seconds with `TEST_SUMMARY: PASS (232 suites)`. Case-sensitive scans of its captured output found zero `FAIL`, `TestFailure`, `ScriptError`, `ParseError`, `FailedLoad`, and `NoLoader` markers. The expected negative-path `ERROR:` and `WARNING:` diagnostics remained contained in passing tests.
 
 ## Immutable artifact evidence
 
@@ -72,10 +81,10 @@ PARTY_FORGE_CITY_ACCESS_SHADOW location=city.warehouse outcome=UNAVAILABLE acces
 
 The exact `shadow-locked` and `shadow-unlocked` profiles retain byte-identical `ProfileCodec` output around observation. The repeated unlocked observation remains deduplicated. Flag-off performs no candidate load and returns legacy-only behavior.
 
-`MainMenuViewModel` keeps the no-stash Developer Mode Warehouse preview visible and enabled. In Player Mode, the Warehouse projection is unavailable without `stash` and available with `stash`; the focused `test_main_wiring.gd` also exercises and passes the direct locked Warehouse route rejection. Legacy visibility, route authorization, and navigation remain authoritative.
+`MainMenuViewModel` keeps the no-stash Developer Mode Warehouse preview visible and enabled. The refreshed integration runner instantiates production `Main` with isolated persisted Player Mode settings, invokes its `_storage_route_allowed` authorization seam, and dispatches `ROUTE_WAREHOUSE`: no-stash is blocked and leaves Warehouse closed, while a persisted and refreshed `stash` unlock is allowed and opens Warehouse. Legacy visibility, route authorization, and navigation remain authoritative.
 
 ## Repository checks and boundaries
 
-Before this verification record was created, `git status --short` was clean and `git diff --check main...HEAD` exited `0`. The documentation commit below is the only child of the tested implementation commit.
+Before this verification record was created, `git status --short` was clean and `git diff --check main...HEAD` exited `0`. After this documentation commit, final `git status --short` produced no output and final `git diff --check main...HEAD` exited `0`. This documentation commit is the only child of the refreshed tested implementation commit.
 
 This pilot is default-off, Developer Mode-only, Warehouse-only, and local diagnostic-only. It does not add a general router, destination dispatch, other location activation, profile/settings mutation, telemetry, or Latticewright changes. Nothing was pushed, merged, published, reinstalled, or cleaned.
