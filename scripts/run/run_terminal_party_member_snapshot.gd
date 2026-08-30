@@ -32,10 +32,12 @@ static func create(
 ) -> RunTerminalPartyMemberSnapshot:
 	if (
 		member_id_value <= 0
+		or member_id_value > ItemInstanceCodec.JSON_SAFE_INTEGER_MAX
 		or display_name_value.strip_edges().is_empty()
 		or String(class_id_value).strip_edges().is_empty()
 		or class_name_value.strip_edges().is_empty()
 		or final_level_value <= 0
+		or final_level_value > ItemInstanceCodec.JSON_SAFE_INTEGER_MAX
 	):
 		return null
 	var result := RunTerminalPartyMemberSnapshot.new()
