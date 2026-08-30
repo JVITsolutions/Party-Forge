@@ -109,7 +109,7 @@ func _build_members(kind: StringName, row: HBoxContainer, scene: PackedScene) ->
 	for state: StringName in [&"normal", &"critical", &"downed", &"dead"]:
 		var control := scene.instantiate() as Control
 		control.name = "%s_%s" % [String(kind).capitalize(), String(state).capitalize()]
-		control.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		control.size_flags_horizontal = Control.SIZE_EXPAND_FILL if kind == &"rich" else Control.SIZE_SHRINK_BEGIN
 		control.call(&"present", (_member_projections[state] as PartyMemberHudProjection).copy())
 		control.connect(&"activated", _on_activated)
 		control.connect(&"inspect_requested", _on_inspect_requested)

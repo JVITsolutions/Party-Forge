@@ -17,7 +17,7 @@ void fragment() {
 """
 const STATE_CUES := {
 	&"normal": {"text": "READY", "icon": "shield.svg", "owned": false, "color_role": &"valid", "shape": &"hex"},
-	&"critical": {"text": "CRITICAL", "icon": "alert-triangle.svg", "owned": false, "color_role": &"warning", "shape": &"triangle"},
+	&"critical": {"text": "CRITICAL", "icon": "alert-triangle.svg", "owned": false, "color_role": &"error", "shape": &"triangle"},
 	&"downed": {"text": "DOWNED", "icon": "downed.svg", "owned": true, "color_role": &"error", "shape": &"diamond"},
 	&"dead": {"text": "DEAD", "icon": "dead.svg", "owned": true, "color_role": &"error", "shape": &"broken"},
 }
@@ -25,6 +25,7 @@ const STATE_CUES := {
 var _bound_member_id := 0
 var _semantic_state: StringName = &"normal"
 var _high_contrast := false
+var _has_valid_binding := false
 var _interaction_disabled := false
 var _mouse_hovered := false
 var _focused := false
@@ -32,10 +33,9 @@ var _focused := false
 
 func present(member: PartyMemberHudProjection) -> void:
 	if member == null:
-		_bound_member_id = 0
-		_interaction_disabled = true
-		_render_interaction()
+		_clear_binding()
 		return
+	_has_valid_binding = true
 	_bound_member_id = member.member_id
 	_focused = _focused or has_focus()
 	(get_node("Surface/Content/Identity/Name") as Label).text = _format_name(member)
@@ -108,6 +108,8 @@ func _resolve_state(member: PartyMemberHudProjection) -> StringName:
 
 
 func _apply_semantic_state() -> void:
+	if not _has_valid_binding:
+		return
 	if not is_inside_tree() and get_node_or_null("Surface/Content/StateCue") == null:
 		return
 	var cue := STATE_CUES[_semantic_state] as Dictionary
@@ -161,7 +163,7 @@ func _apply_semantic_state() -> void:
 
 
 func _render_interaction() -> void:
-	disabled = _interaction_disabled or _bound_member_id <= 0
+	disabled = _interaction_disabled or not _has_valid_binding or _bound_member_id <= 0
 	focus_mode = Control.FOCUS_NONE if disabled else Control.FOCUS_ALL
 	if disabled and has_focus():
 		release_focus()
@@ -193,10 +195,36 @@ func _render_interaction() -> void:
 	hover_style.corner_radius_bottom_left = 7
 	hover_style.corner_radius_bottom_right = 7
 	(get_node("HoverPlate") as Panel).add_theme_stylebox_override(&"panel", hover_style)
-	if disabled and not accessibility_name.ends_with("Unavailable"):
+	if _has_valid_binding and disabled and not accessibility_name.ends_with("Unavailable"):
 		accessibility_name += ", Unavailable"
-	elif not disabled and accessibility_name.ends_with(", Unavailable"):
+	elif _has_valid_binding and not disabled and accessibility_name.ends_with(", Unavailable"):
 		accessibility_name = accessibility_name.trim_suffix(", Unavailable")
+
+
+func _clear_binding() -> void:
+	_has_valid_binding = false
+	_bound_member_id = 0
+	_semantic_state = &""
+	if has_focus():
+		release_focus()
+	_focused = false
+	_mouse_hovered = false
+	(get_node("Surface/Content/Identity/Name") as Label).text = ""
+	(get_node("Surface/Content/Identity/Class") as Label).text = ""
+	(get_node("Surface/Content/Meta") as Label).text = ""
+	var health := get_node("Surface/Content/Health/Bar") as ProgressBar
+	health.max_value = 1.0
+	health.value = 0.0
+	(get_node("Surface/Content/Health/Value") as Label).text = ""
+	(get_node("Surface/LeaderCue") as Control).visible = false
+	(get_node("Surface/Content/StateCue/StateText") as Label).text = ""
+	(get_node("Surface/Content/StateCue/StateIcon") as TextureRect).texture = null
+	var geometry := get_node("Surface/Content/StateCue/StateShape/Geometry") as Polygon2D
+	geometry.polygon = PackedVector2Array()
+	geometry.color = Color.TRANSPARENT
+	accessibility_name = "Party member unavailable"
+	accessibility_description = "No party member is bound."
+	_render_interaction()
 
 
 func _shape_points(shape: StringName) -> PackedVector2Array:

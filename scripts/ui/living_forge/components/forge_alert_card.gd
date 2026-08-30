@@ -16,7 +16,7 @@ void fragment() {
 }
 """
 const STATE_CUES := {
-	&"critical": {"text": "CRITICAL", "icon": "alert-triangle.svg", "owned": false, "color_role": &"warning", "shape": &"triangle"},
+	&"critical": {"text": "CRITICAL", "icon": "alert-triangle.svg", "owned": false, "color_role": &"error", "shape": &"triangle"},
 	&"downed": {"text": "DOWNED", "icon": "downed.svg", "owned": true, "color_role": &"error", "shape": &"diamond"},
 	&"dead": {"text": "DEAD", "icon": "dead.svg", "owned": true, "color_role": &"error", "shape": &"broken"},
 }
@@ -26,33 +26,38 @@ var _semantic_state: StringName = &"critical"
 var _can_inspect := false
 var _can_open_ledger := false
 var _high_contrast := false
+var _has_valid_binding := false
+var _interaction_disabled := false
 var _mouse_hovered := false
 var _focused := false
 
 
 func present_alert(alert: CombatAlertProjection) -> void:
 	if alert == null:
-		_bound_member_id = 0
-		_can_inspect = false
-		_can_open_ledger = false
-		_render_interaction()
+		_clear_binding()
 		return
+	_has_valid_binding = true
 	_bound_member_id = alert.member_id
 	_can_inspect = alert.can_inspect
 	_can_open_ledger = alert.can_open_ledger
-	_focused = _focused or has_focus()
+	_focused = _focused or has_focus() or _action_has_focus()
 	_semantic_state = _state_for_severity(alert.severity)
 	(get_node("Surface/Content/Summary") as Label).text = alert.summary
 	(get_node("Surface/Content/Detail") as Label).text = alert.detail
+	_apply_semantic_state()
 	var routes: Array[String] = []
 	if _can_inspect:
-		routes.append("INSPECT")
+		routes.append("Inspect")
 	if _can_open_ledger:
-		routes.append("LEDGER")
-	(get_node("Surface/Content/Routes") as Label).text = "  ·  ".join(routes) if not routes.is_empty() else "NO ROUTE AVAILABLE"
-	_apply_semantic_state()
-	accessibility_name = "%s. %s. %s" % [String(_semantic_state).capitalize(), alert.summary, alert.detail]
+		routes.append("Ledger")
+	accessibility_name = "Select alert. %s. %s. %s" % [String(_semantic_state).capitalize(), alert.summary, alert.detail]
 	accessibility_description = "%s Available actions: %s." % [accessibility_name, ", ".join(routes).capitalize() if not routes.is_empty() else "none"]
+	var inspect := get_node("Surface/Content/Actions/Inspect") as Button
+	inspect.accessibility_name = "Inspect %s" % alert.summary
+	inspect.accessibility_description = "Open the combat inspection view for member %d." % alert.member_id
+	var ledger := get_node("Surface/Content/Actions/Ledger") as Button
+	ledger.accessibility_name = "Open ledger for %s" % alert.summary
+	ledger.accessibility_description = "Open the character ledger for member %d." % alert.member_id
 	_render_interaction()
 
 
@@ -74,6 +79,11 @@ func request_ledger() -> void:
 		ledger_requested.emit(_bound_member_id)
 
 
+func set_interaction_disabled(value: bool) -> void:
+	_interaction_disabled = value
+	_render_interaction()
+
+
 func apply_accessibility_variant(high_contrast: bool) -> void:
 	_high_contrast = high_contrast
 	_apply_semantic_state()
@@ -88,6 +98,8 @@ func _state_for_severity(severity: CombatAlertProjection.Severity) -> StringName
 
 
 func _apply_semantic_state() -> void:
+	if not _has_valid_binding:
+		return
 	var cue := STATE_CUES[_semantic_state] as Dictionary
 	var color := LivingForgeTokens.color(StringName(cue["color_role"]), _high_contrast)
 	var icon := get_node("Surface/StateIcon") as TextureRect
@@ -114,11 +126,10 @@ func _apply_semantic_state() -> void:
 	surface.add_theme_stylebox_override(&"panel", surface_style)
 	(get_node("Surface/Content/Summary") as Label).add_theme_color_override(&"font_color", LivingForgeTokens.color(&"text_primary", _high_contrast))
 	(get_node("Surface/Content/Detail") as Label).add_theme_color_override(&"font_color", LivingForgeTokens.color(&"text_muted", _high_contrast))
-	(get_node("Surface/Content/Routes") as Label).add_theme_color_override(&"font_color", LivingForgeTokens.color(&"focus_outline", _high_contrast))
 
 
 func _render_interaction() -> void:
-	disabled = _bound_member_id <= 0 or (not _can_inspect and not _can_open_ledger)
+	disabled = _interaction_disabled or not _has_valid_binding or _bound_member_id <= 0 or (not _can_inspect and not _can_open_ledger)
 	focus_mode = Control.FOCUS_NONE if disabled else Control.FOCUS_ALL
 	if disabled and has_focus():
 		release_focus()
@@ -126,6 +137,10 @@ func _render_interaction() -> void:
 		_focused = false
 	(get_node("FocusFrame") as Control).visible = _focused and not disabled
 	(get_node("HoverPlate") as Control).visible = _mouse_hovered and not disabled
+	var inspect := get_node("Surface/Content/Actions/Inspect") as Button
+	var ledger := get_node("Surface/Content/Actions/Ledger") as Button
+	_configure_action(inspect, _has_valid_binding and not _interaction_disabled and _can_inspect)
+	_configure_action(ledger, _has_valid_binding and not _interaction_disabled and _can_open_ledger)
 	var focus_style := StyleBoxFlat.new()
 	focus_style.draw_center = false
 	for property: StringName in [&"border_width_left", &"border_width_top", &"border_width_right", &"border_width_bottom"]:
@@ -138,8 +153,60 @@ func _render_interaction() -> void:
 		hover_style.set(property, 2)
 	hover_style.border_color = LivingForgeTokens.color(&"text_muted", _high_contrast)
 	(get_node("HoverPlate") as Panel).add_theme_stylebox_override(&"panel", hover_style)
-	if disabled and not accessibility_name.ends_with("Unavailable"):
+	if _has_valid_binding and disabled and not accessibility_name.ends_with("Unavailable"):
 		accessibility_name += ". Unavailable"
+	elif _has_valid_binding and not disabled and accessibility_name.ends_with(". Unavailable"):
+		accessibility_name = accessibility_name.trim_suffix(". Unavailable")
+
+
+func _configure_action(action: Button, available: bool) -> void:
+	action.visible = available
+	action.disabled = not available
+	action.focus_mode = Control.FOCUS_ALL if available else Control.FOCUS_NONE
+	if not available and action.has_focus():
+		action.release_focus()
+	var focus_style := StyleBoxFlat.new()
+	focus_style.draw_center = false
+	for property: StringName in [&"border_width_left", &"border_width_top", &"border_width_right", &"border_width_bottom"]:
+		focus_style.set(property, 4)
+	focus_style.border_color = LivingForgeTokens.color(&"focus_outline", _high_contrast)
+	focus_style.corner_radius_top_left = 4
+	focus_style.corner_radius_top_right = 4
+	focus_style.corner_radius_bottom_left = 4
+	focus_style.corner_radius_bottom_right = 4
+	action.add_theme_stylebox_override(&"focus", focus_style)
+
+
+func _clear_binding() -> void:
+	_has_valid_binding = false
+	_bound_member_id = 0
+	_semantic_state = &""
+	_can_inspect = false
+	_can_open_ledger = false
+	if has_focus():
+		release_focus()
+	for action_name: String in ["Inspect", "Ledger"]:
+		var action := get_node("Surface/Content/Actions/%s" % action_name) as Button
+		if action.has_focus():
+			action.release_focus()
+		action.accessibility_name = "%s unavailable" % action_name
+		action.accessibility_description = "No combat alert is bound."
+	_focused = false
+	_mouse_hovered = false
+	(get_node("Surface/Content/Summary") as Label).text = ""
+	(get_node("Surface/Content/Detail") as Label).text = ""
+	(get_node("Surface/StateText") as Label).text = ""
+	(get_node("Surface/StateIcon") as TextureRect).texture = null
+	var geometry := get_node("Surface/StateShape/Geometry") as Polygon2D
+	geometry.polygon = PackedVector2Array()
+	geometry.color = Color.TRANSPARENT
+	accessibility_name = "Combat alert unavailable"
+	accessibility_description = "No combat alert is bound."
+	_render_interaction()
+
+
+func _action_has_focus() -> bool:
+	return (get_node("Surface/Content/Actions/Inspect") as Button).has_focus() or (get_node("Surface/Content/Actions/Ledger") as Button).has_focus()
 
 
 func _shape_points(shape: StringName) -> PackedVector2Array:
@@ -168,6 +235,26 @@ func _is_actionable() -> bool:
 func _on_pressed() -> void:
 	if _is_actionable():
 		activated.emit(_bound_member_id)
+
+
+func _on_inspect_pressed() -> void:
+	request_inspect()
+
+
+func _on_ledger_pressed() -> void:
+	request_ledger()
+
+
+func _on_action_focus_entered() -> void:
+	if disabled:
+		return
+	_focused = true
+	_render_interaction()
+
+
+func _on_action_focus_exited() -> void:
+	_focused = has_focus() or _action_has_focus()
+	_render_interaction()
 
 
 func _on_focus_entered() -> void:

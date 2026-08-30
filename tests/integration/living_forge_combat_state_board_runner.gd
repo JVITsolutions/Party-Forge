@@ -10,6 +10,7 @@ const EXPECTED_CAPTURE_FILES: Array[String] = [
 	"living-forge-combat-compact-alerts-normal.png",
 	"living-forge-combat-focus-hover-normal.png",
 	"living-forge-combat-all-states-high-contrast.png",
+	"living-forge-combat-focus-hover-high-contrast.png",
 ]
 
 var _failures: Array[String] = []
@@ -52,15 +53,18 @@ func _run() -> void:
 	board.call(&"set_evidence_mode", &"rich")
 	await _frames(4)
 	_assert_header(board)
-	_assert_member_inventory(board, &"rich")
+	_assert_member_inventory(board, &"rich", false)
 	await _capture(EXPECTED_CAPTURE_FILES[0], "normal rich cards: ready, critical, downed, dead")
 
 	board.call(&"set_evidence_mode", &"compact_alerts")
 	await _frames(4)
 	_assert_header(board)
-	_assert_member_inventory(board, &"compact")
-	_assert_alert_inventory(board)
+	_assert_member_inventory(board, &"compact", false)
+	_assert_alert_inventory(board, false)
+	_assert_no_transient_interaction(board, "normal compact/alert overview")
+	var normal_semantics := _semantic_inventory_snapshot(board)
 	await _capture(EXPECTED_CAPTURE_FILES[1], "normal compact markers and critical, downed, dead alerts")
+	await _exercise_alert_routes(board)
 
 	board.call(&"set_evidence_mode", &"interaction")
 	_assert_header(board)
@@ -88,7 +92,7 @@ func _run() -> void:
 		_assert(int(board.call(&"activation_count")) == activation_count + 2, "simulated-controller activation is consumed exactly once")
 		var mouse_target := board.call(&"alert_control", &"critical") as Button
 		if mouse_target != null:
-			await _mouse_click(mouse_target.get_global_rect().get_center())
+			await _mouse_click((mouse_target.get_node("Surface/StateIcon") as Control).get_global_rect().get_center())
 			_assert(int(board.call(&"activation_count")) == activation_count + 3, "mouse activation is consumed exactly once")
 		await _mouse_motion(hovered.get_global_rect().get_center())
 		focused.grab_focus()
@@ -107,20 +111,35 @@ func _run() -> void:
 	board.call(&"set_evidence_mode", &"all")
 	await _frames(4)
 	_assert_header(board)
-	_assert_member_inventory(board, &"rich")
-	_assert_member_inventory(board, &"compact")
-	_assert_alert_inventory(board)
+	_assert_member_inventory(board, &"rich", true)
+	_assert_member_inventory(board, &"compact", true)
+	_assert_alert_inventory(board, true)
 	_assert_all_visible_controls_above_fold(board)
 	var contrast_signature: Array = board.call(&"component_tree_signature")
 	_assert(contrast_signature == normal_signature, "normal and high-contrast variants keep semantic component parity")
+	_assert(_semantic_inventory_snapshot(board) == normal_semantics, "every rich, compact, and alert semantic/action/accessibility field is identical after high-contrast retint")
 	await _capture(EXPECTED_CAPTURE_FILES[3], "high contrast rich, compact, and alert parity")
+
+	var hc_focused_alert := board.call(&"alert_control", &"dead") as Control
+	var hc_focused := hc_focused_alert.get_node_or_null("Surface/Content/Actions/Ledger") as Button if hc_focused_alert != null else null
+	var hc_hovered := board.call(&"member_control", &"compact", &"critical") as Button
+	_assert(hc_focused != null and hc_hovered != null, "high-contrast interaction evidence resolves distinct real controls")
+	if hc_focused != null and hc_hovered != null:
+		hc_focused.grab_focus()
+		await _mouse_motion(hc_hovered.get_global_rect().get_center())
+		await _frames(3)
+		_assert(root.gui_get_focus_owner() == hc_focused and hc_focused.has_focus(), "high-contrast capture has a real focused Ledger action")
+		_assert((hc_hovered.get_node("HoverPlate") as Control).is_visible_in_tree() and not hc_hovered.has_focus(), "high-contrast capture has a distinct real hovered compact marker")
+		var hc_focus_style := hc_focused.get_theme_stylebox(&"focus") as StyleBoxFlat
+		_assert(hc_focus_style != null and hc_focus_style.border_width_left == 4 and hc_focus_style.border_color == LivingForgeTokens.color(&"focus_outline", true), "high-contrast action focus uses the exact 4px focus token")
+	await _capture(EXPECTED_CAPTURE_FILES[4], "high contrast real Ledger focus and distinct compact marker hover proof")
 
 	await _write_and_validate_manifest()
 	board.free()
 	_finish()
 
 
-func _assert_member_inventory(board: Control, kind: StringName) -> void:
+func _assert_member_inventory(board: Control, kind: StringName, high_contrast: bool) -> void:
 	for state: StringName in [&"normal", &"critical", &"downed", &"dead"]:
 		var control := board.call(&"member_control", kind, state) as Control
 		_assert(control != null and control.is_visible_in_tree(), "%s %s member state is visible" % [kind, state])
@@ -134,6 +153,14 @@ func _assert_member_inventory(board: Control, kind: StringName) -> void:
 		_assert(shape.visible and shape.polygon.size() >= 3, "%s %s state has non-color shape geometry" % [kind, state])
 		_assert(not control.accessibility_name.strip_edges().is_empty(), "%s %s state has an accessibility name" % [kind, state])
 		_assert(control.get_global_rect().size.x >= 48.0 and control.get_global_rect().size.y >= 48.0, "%s %s uses a true rendered action rectangle of at least 48px" % [kind, state])
+		if state == &"critical":
+			_assert_member_critical_color_role(control, String(kind), state, high_contrast)
+		if kind == &"compact":
+			_assert(control.get_global_rect().size.is_equal_approx(Vector2(280.0, 84.0)), "compact %s renders at the supported 280x84 basis" % state)
+			_assert((control.get_node("Surface/Content/Identity/Class") as Label).text.contains(" · R"), "compact %s keeps rank visible beside class and level" % state)
+			_assert_compact_internal_geometry(control, state)
+			if state == &"normal":
+				_assert((control.get_node("Surface/LeaderCue") as Control).is_visible_in_tree() and (control.get_node("Surface/LeaderCue/Text") as Label).text == "LEADER", "compact leader keeps a visible crown and LEADER text at minimum size")
 		for signal_name: StringName in [&"activated", &"inspect_requested", &"ledger_requested"]:
 			_assert(not control.get_signal_connection_list(signal_name).is_empty(), "%s %s %s intent has a consumer" % [kind, state, signal_name])
 
@@ -146,7 +173,7 @@ func _assert_header(board: Control) -> void:
 	_assert(not title.get_global_rect().intersects(mode.get_global_rect()) and not mode.get_global_rect().intersects(variant.get_global_rect()), "state-board header labels do not overlap")
 
 
-func _assert_alert_inventory(board: Control) -> void:
+func _assert_alert_inventory(board: Control, high_contrast: bool) -> void:
 	for state: StringName in [&"critical", &"downed", &"dead"]:
 		var alert := board.call(&"alert_control", state) as Control
 		_assert(alert != null and alert.is_visible_in_tree(), "%s alert is visible" % state)
@@ -156,6 +183,18 @@ func _assert_alert_inventory(board: Control) -> void:
 		_assert((alert.get_node("Surface/StateIcon") as TextureRect).texture != null, "%s alert has a visible severity icon" % state)
 		_assert((alert.get_node("Surface/StateShape/Geometry") as Polygon2D).polygon.size() >= 3, "%s alert has non-color shape geometry" % state)
 		_assert(alert.get_global_rect().size.x >= 48.0 and alert.get_global_rect().size.y >= 48.0, "%s alert uses a true rendered action rectangle of at least 48px" % state)
+		if state == &"critical":
+			_assert_alert_critical_color_role(alert, high_contrast)
+		var inspect := alert.get_node_or_null("Surface/Content/Actions/Inspect") as Button
+		var ledger := alert.get_node_or_null("Surface/Content/Actions/Ledger") as Button
+		_assert(inspect != null and ledger != null, "%s alert exposes distinct Inspect and Ledger controls" % state)
+		if inspect != null and ledger != null:
+			for action: Button in [inspect, ledger]:
+				if action.visible and not action.disabled:
+					_assert(action.get_global_rect().size.x >= 48.0 and action.get_global_rect().size.y >= 48.0, "%s %s is an actual rendered 48px+ action target" % [state, action.name])
+					_assert(action.focus_mode == Control.FOCUS_ALL and not action.get_signal_connection_list(&"pressed").is_empty(), "%s %s is focusable, operable, and has a consumer" % [state, action.name])
+				else:
+					_assert(action.disabled and action.focus_mode == Control.FOCUS_NONE and not action.visible, "%s disallowed %s is hidden, disabled, and excluded from focus" % [state, action.name])
 		for signal_name: StringName in [&"activated", &"inspect_requested", &"ledger_requested"]:
 			_assert(not alert.get_signal_connection_list(signal_name).is_empty(), "%s alert %s intent has a consumer" % [state, signal_name])
 
@@ -177,6 +216,164 @@ func _assert_all_visible_controls_above_fold(board: Control) -> void:
 	for left_index: int in controls.size():
 		for right_index: int in range(left_index + 1, controls.size()):
 			_assert(not controls[left_index].get_global_rect().intersects(controls[right_index].get_global_rect()), "%s does not overlap %s" % [controls[left_index].get_path(), controls[right_index].get_path()])
+
+
+func _exercise_alert_routes(board: Control) -> void:
+	var critical := board.call(&"alert_control", &"critical") as Control
+	var downed := board.call(&"alert_control", &"downed") as Control
+	var dead := board.call(&"alert_control", &"dead") as Control
+	var critical_inspect := critical.get_node_or_null("Surface/Content/Actions/Inspect") as Button if critical != null else null
+	var critical_ledger := critical.get_node_or_null("Surface/Content/Actions/Ledger") as Button if critical != null else null
+	var downed_ledger := downed.get_node_or_null("Surface/Content/Actions/Ledger") as Button if downed != null else null
+	var dead_inspect := dead.get_node_or_null("Surface/Content/Actions/Inspect") as Button if dead != null else null
+	_assert(critical_inspect != null and critical_ledger != null and downed_ledger != null and dead_inspect != null, "alert route input proof resolves distinct Inspect and Ledger controls")
+	if critical_inspect == null or critical_ledger == null or downed_ledger == null or dead_inspect == null:
+		return
+	var activation_ids: Array[int] = []
+	var inspect_ids: Array[int] = []
+	var ledger_ids: Array[int] = []
+	for alert: Control in [critical, downed, dead]:
+		alert.connect(&"activated", func(member_id: int) -> void: activation_ids.append(member_id))
+		alert.connect(&"inspect_requested", func(member_id: int) -> void: inspect_ids.append(member_id))
+		alert.connect(&"ledger_requested", func(member_id: int) -> void: ledger_ids.append(member_id))
+	var activation_before := int(board.call(&"activation_count"))
+	var inspect_before := int(board.call(&"inspect_count"))
+	var ledger_before := int(board.call(&"ledger_count"))
+	critical_inspect.grab_focus()
+	await _key_accept()
+	_assert(inspect_ids == [2] and activation_ids.is_empty() and ledger_ids.is_empty(), "keyboard Inspect emits member 2 exactly once and no ambiguous alert activation or Ledger route")
+	_assert(int(board.call(&"inspect_count")) == inspect_before + 1, "keyboard Inspect has one live consumer")
+	downed_ledger.grab_focus()
+	await _controller_accept()
+	_assert(ledger_ids == [3] and activation_ids.is_empty() and inspect_ids == [2], "simulated-controller Ledger emits member 3 exactly once and no other route")
+	_assert(int(board.call(&"ledger_count")) == ledger_before + 1, "simulated-controller Ledger has one live consumer")
+	await _mouse_click(dead_inspect.get_global_rect().get_center())
+	_assert(inspect_ids == [2, 4] and activation_ids.is_empty() and ledger_ids == [3], "mouse Inspect emits member 4 exactly once and no other route")
+	critical_ledger.pressed.emit()
+	await _frames(2)
+	_assert(ledger_ids == [3] and critical_ledger.focus_mode == Control.FOCUS_NONE and root.gui_get_focus_owner() != critical_ledger, "disallowed critical Ledger cannot focus or emit")
+	critical.grab_focus()
+	await _frames(2)
+	_assert(root.gui_get_focus_owner() == critical and (critical.get_node("FocusFrame") as Control).visible, "generic alert root is truly keyboard/controller focusable")
+	await _key_accept()
+	_assert(activation_ids == [2] and inspect_ids == [2, 4] and ledger_ids == [3], "keyboard alert-body activation emits only generic activated(member 2) exactly once")
+	await _mouse_click((critical.get_node("Surface/StateIcon") as Control).get_global_rect().get_center())
+	_assert(activation_ids == [2, 2] and inspect_ids == [2, 4] and ledger_ids == [3], "mouse alert-body activation emits only generic activated(member 2) exactly once")
+	_assert(int(board.call(&"activation_count")) == activation_before + 2, "each generic alert activation has one live consumer")
+
+
+func _assert_no_transient_interaction(board: Control, context: String) -> void:
+	_assert(root.gui_get_focus_owner() == null, "%s has no transient real focus owner" % context)
+	for kind: StringName in [&"rich", &"compact"]:
+		for state: StringName in [&"normal", &"critical", &"downed", &"dead"]:
+			var member := board.call(&"member_control", kind, state) as Control
+			_assert(not (member.get_node("FocusFrame") as Control).visible and not (member.get_node("HoverPlate") as Control).visible, "%s has no transient %s %s focus/hover frame" % [context, kind, state])
+	for state: StringName in [&"critical", &"downed", &"dead"]:
+		var alert := board.call(&"alert_control", state) as Control
+		_assert(not (alert.get_node("FocusFrame") as Control).visible and not (alert.get_node("HoverPlate") as Control).visible, "%s has no transient %s alert focus/hover frame" % [context, state])
+
+
+func _assert_member_critical_color_role(control: Control, kind: String, state: StringName, high_contrast: bool) -> void:
+	var expected := LivingForgeTokens.color(&"error", high_contrast)
+	var icon := control.get_node("Surface/Content/StateCue/StateIcon") as TextureRect
+	var text := control.get_node("Surface/Content/StateCue/StateText") as Label
+	var shape := control.get_node("Surface/Content/StateCue/StateShape/Geometry") as Polygon2D
+	var surface := (control.get_node("Surface") as Panel).get_theme_stylebox(&"panel") as StyleBoxFlat
+	var fill := (control.get_node("Surface/Content/Health/Bar") as ProgressBar).get_theme_stylebox(&"fill") as StyleBoxFlat
+	_assert(_icon_tint(icon) == expected, "%s %s icon uses the exact danger/error token" % [kind, state])
+	_assert(text.get_theme_color(&"font_color") == expected, "%s %s text uses the exact danger/error token" % [kind, state])
+	_assert(shape.color == expected, "%s %s shape uses the exact danger/error token" % [kind, state])
+	_assert(surface != null and surface.border_color == expected, "%s %s edge uses the exact danger/error token" % [kind, state])
+	_assert(fill != null and fill.bg_color == expected, "%s %s health fill uses the exact danger/error token" % [kind, state])
+
+
+func _assert_alert_critical_color_role(alert: Control, high_contrast: bool) -> void:
+	var expected := LivingForgeTokens.color(&"error", high_contrast)
+	var icon := alert.get_node("Surface/StateIcon") as TextureRect
+	var text := alert.get_node("Surface/StateText") as Label
+	var shape := alert.get_node("Surface/StateShape/Geometry") as Polygon2D
+	var surface := (alert.get_node("Surface") as Panel).get_theme_stylebox(&"panel") as StyleBoxFlat
+	_assert(_icon_tint(icon) == expected, "critical alert icon uses the exact danger/error token")
+	_assert(text.get_theme_color(&"font_color") == expected, "critical alert text uses the exact danger/error token")
+	_assert(shape.color == expected, "critical alert shape uses the exact danger/error token")
+	_assert(surface != null and surface.border_color == expected, "critical alert edge uses the exact danger/error token")
+
+
+func _assert_compact_internal_geometry(control: Control, state: StringName) -> void:
+	var control_rect := control.get_global_rect()
+	var identity := control.get_node("Surface/Content/Identity") as Control
+	var health := control.get_node("Surface/Content/Health") as Control
+	var state_cue := control.get_node("Surface/Content/StateCue") as Control
+	for row: Control in [identity, health, state_cue]:
+		_assert(control_rect.encloses(row.get_global_rect()), "compact %s contains %s row at 280x84" % [state, row.name])
+	_assert(not identity.get_global_rect().intersects(health.get_global_rect()), "compact %s identity and health rows do not overlap" % state)
+	_assert(not health.get_global_rect().intersects(state_cue.get_global_rect()), "compact %s health and status rows do not overlap" % state)
+	var name_label := control.get_node("Surface/Content/Identity/Name") as Label
+	var class_label := control.get_node("Surface/Content/Identity/Class") as Label
+	var value_label := control.get_node("Surface/Content/Health/Value") as Label
+	var state_text := control.get_node("Surface/Content/StateCue/StateText") as Label
+	for label: Label in [name_label, class_label, value_label, state_text]:
+		_assert(label.is_visible_in_tree() and not label.text.strip_edges().is_empty() and control_rect.encloses(label.get_global_rect()), "compact %s keeps %s visible and contained" % [state, label.name])
+	_assert(not name_label.get_global_rect().intersects(class_label.get_global_rect()), "compact %s name and class/level/rank do not overlap" % state)
+	var leader := control.get_node("Surface/LeaderCue") as Control
+	if leader.visible:
+		var state_font := state_text.get_theme_font(&"font")
+		var state_font_size := state_text.get_theme_font_size(&"font_size")
+		var rendered_state_size := state_font.get_string_size(state_text.text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, state_font_size)
+		var rendered_state_rect := Rect2(state_text.global_position, Vector2(rendered_state_size.x, state_font.get_height(state_font_size)))
+		_assert(control_rect.encloses(leader.get_global_rect()) and not leader.get_global_rect().intersects(rendered_state_rect), "compact %s leader cue is contained and does not overlap rendered status text" % state)
+
+
+func _semantic_inventory_snapshot(board: Control) -> Dictionary:
+	var result: Dictionary = {}
+	for kind: StringName in [&"rich", &"compact"]:
+		for state: StringName in [&"normal", &"critical", &"downed", &"dead"]:
+			var control := board.call(&"member_control", kind, state) as Control
+			var icon := control.get_node("Surface/Content/StateCue/StateIcon") as TextureRect
+			result["%s:%s" % [kind, state]] = {
+				"state_id": control.call(&"semantic_state_id"),
+				"state_text": (control.get_node("Surface/Content/StateCue/StateText") as Label).text,
+				"icon": icon.texture.resource_path if icon.texture != null else "",
+				"shape": (control.get_node("Surface/Content/StateCue/StateShape/Geometry") as Polygon2D).polygon,
+				"disabled": control.disabled,
+				"focus_mode": control.focus_mode,
+				"leader": (control.get_node("Surface/LeaderCue") as Control).visible,
+				"accessibility_name": control.accessibility_name,
+				"accessibility_description": control.accessibility_description,
+			}
+	for state: StringName in [&"critical", &"downed", &"dead"]:
+		var alert := board.call(&"alert_control", state) as Control
+		var icon := alert.get_node("Surface/StateIcon") as TextureRect
+		var inspect := alert.get_node_or_null("Surface/Content/Actions/Inspect") as Button
+		var ledger := alert.get_node_or_null("Surface/Content/Actions/Ledger") as Button
+		result["alert:%s" % state] = {
+			"state_id": alert.call(&"semantic_state_id"),
+			"state_text": (alert.get_node("Surface/StateText") as Label).text,
+			"icon": icon.texture.resource_path if icon.texture != null else "",
+			"shape": (alert.get_node("Surface/StateShape/Geometry") as Polygon2D).polygon,
+			"disabled": alert.disabled,
+			"focus_mode": alert.focus_mode,
+			"inspect_present": inspect != null,
+			"inspect_visible": inspect.visible if inspect != null else false,
+			"inspect_disabled": inspect.disabled if inspect != null else true,
+			"inspect_focus_mode": inspect.focus_mode if inspect != null else Control.FOCUS_NONE,
+			"inspect_accessibility_name": inspect.accessibility_name if inspect != null else "",
+			"inspect_accessibility_description": inspect.accessibility_description if inspect != null else "",
+			"ledger_present": ledger != null,
+			"ledger_visible": ledger.visible if ledger != null else false,
+			"ledger_disabled": ledger.disabled if ledger != null else true,
+			"ledger_focus_mode": ledger.focus_mode if ledger != null else Control.FOCUS_NONE,
+			"ledger_accessibility_name": ledger.accessibility_name if ledger != null else "",
+			"ledger_accessibility_description": ledger.accessibility_description if ledger != null else "",
+			"accessibility_name": alert.accessibility_name,
+			"accessibility_description": alert.accessibility_description,
+		}
+	return result
+
+
+func _icon_tint(icon: TextureRect) -> Color:
+	var material := icon.material as ShaderMaterial
+	return material.get_shader_parameter(&"icon_color") as Color if material != null else Color.TRANSPARENT
 
 
 func _key_accept() -> void:
@@ -256,11 +453,11 @@ func _write_and_validate_manifest() -> void:
 	for file_name: Variant in _captured.keys():
 		actual_sorted.append(String(file_name))
 	actual_sorted.sort()
-	_assert(actual_sorted == expected_sorted, "current run captures all four exact PNG names")
+	_assert(actual_sorted == expected_sorted, "current run captures all five exact PNG names")
 	var unique_hashes: Dictionary = {}
 	for hash: Variant in _captured.values():
 		unique_hashes[String(hash)] = true
-	_assert(unique_hashes.size() == EXPECTED_CAPTURE_FILES.size(), "all four combat captures have unique hashes")
+	_assert(unique_hashes.size() == EXPECTED_CAPTURE_FILES.size(), "all five combat captures have unique hashes")
 	var manifest := {
 		"schema_version": MANIFEST_SCHEMA_VERSION,
 		"run_id": "%d-%d" % [OS.get_process_id(), _started_unix],
@@ -299,7 +496,7 @@ func _write_and_validate_manifest() -> void:
 			_assert(_sha256(FileAccess.get_file_as_bytes(path)) == String(entry.get("sha256", "")), "manifest hash matches current bytes: %s" % name)
 			_assert(int(FileAccess.get_modified_time(path)) >= _started_unix, "manifest rejects stale evidence: %s" % name)
 	manifest_files.sort()
-	_assert(manifest_files == expected_sorted, "manifest contains exactly the four required entries")
+	_assert(manifest_files == expected_sorted, "manifest contains exactly the five required entries")
 
 
 func _assert_no_extra_pngs() -> void:

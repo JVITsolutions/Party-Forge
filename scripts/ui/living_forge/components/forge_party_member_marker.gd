@@ -7,4 +7,4 @@ func _format_name(member: PartyMemberHudProjection) -> String:
 
 
 func _format_class(member: PartyMemberHudProjection) -> String:
-	return "%s  ·  L%d" % [member.class_label.to_upper(), member.level]
+	return "%s · L%d · R%d" % [member.class_label.to_upper(), member.level, member.rank]
