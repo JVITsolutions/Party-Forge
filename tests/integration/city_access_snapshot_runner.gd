@@ -20,6 +20,10 @@ const GATED_UNLOCKS := {
 
 func _initialize() -> void:
 	var failures: Array[String] = []
+	var runtime_bytes_before := FileAccess.get_file_as_bytes(RUNTIME_PATH)
+	var snapshot_bytes_before := FileAccess.get_file_as_bytes(SNAPSHOT_PATH)
+	var runtime_hash_before := _sha256(runtime_bytes_before)
+	var snapshot_hash_before := _sha256(snapshot_bytes_before)
 	var source := StrictJsonDocumentReader.read(RUNTIME_PATH, MAX_SOURCE_BYTES)
 	_assert(source.ok(), "runtime-v3 source is read and hashed", failures)
 	if not source.ok():
@@ -41,8 +45,14 @@ func _initialize() -> void:
 		_assert(loaded.snapshot.locations.size() == LOCATIONS.size(), "production snapshot has seven locations", failures)
 		_assert_profiles(loaded.snapshot, failures)
 		_assert_provider_modes(loaded.snapshot, failures)
-		_assert_warehouse_shadow_pilot(loaded.snapshot, failures)
+		_assert_warehouse_presentation_activation(loaded.snapshot, failures)
 	_assert_legacy_city_data(failures)
+	var runtime_bytes_after := FileAccess.get_file_as_bytes(RUNTIME_PATH)
+	var snapshot_bytes_after := FileAccess.get_file_as_bytes(SNAPSHOT_PATH)
+	_assert(runtime_bytes_after == runtime_bytes_before, "runtime-v3 checked-in bytes remain exact before and after activation acceptance", failures)
+	_assert(snapshot_bytes_after == snapshot_bytes_before, "checked-in snapshot bytes remain exact before and after activation acceptance", failures)
+	_assert(_sha256(runtime_bytes_after) == runtime_hash_before, "runtime-v3 checked-in hash remains exact before and after activation acceptance", failures)
+	_assert(_sha256(snapshot_bytes_after) == snapshot_hash_before, "checked-in snapshot hash remains exact before and after activation acceptance", failures)
 	_finish(failures)
 
 
@@ -77,7 +87,7 @@ func _assert_provider_modes(snapshot: CityAccessSnapshot, failures: Array[String
 	settings.use_city_access_snapshot = true
 	settings.mode = PartyForgeSettings.Mode.PLAYER_SIMULATION
 	var player_result := provider.resolve(settings, profile)
-	_assert(player_result.mode == CityAccessProviderResult.Mode.LEGACY and player_result.diagnostic == &"candidate_requires_developer_mode", "Player Mode plus flag-on resolves LEGACY with developer-only diagnostic", failures)
+	_assert(player_result.mode == CityAccessProviderResult.Mode.CANDIDATE and player_result.snapshot != null, "Player Mode plus flag-on resolves CANDIDATE", failures)
 	settings.mode = PartyForgeSettings.Mode.DEVELOPER_MODE
 	var candidate_result := provider.resolve(settings, profile)
 	_assert(candidate_result.mode == CityAccessProviderResult.Mode.CANDIDATE and candidate_result.snapshot != null, "Developer Mode plus flag-on resolves CANDIDATE", failures)
@@ -89,7 +99,81 @@ func _assert_provider_modes(snapshot: CityAccessSnapshot, failures: Array[String
 	_assert(rollback_result.mode == CityAccessProviderResult.Mode.LEGACY and rollback_result.snapshot == null, "flag-off immediately rolls back to LEGACY", failures)
 
 
-func _assert_warehouse_shadow_pilot(snapshot: CityAccessSnapshot, failures: Array[String]) -> void:
+func _assert_warehouse_presentation_activation(snapshot: CityAccessSnapshot, failures: Array[String]) -> void:
+	var player_settings := PartyForgeSettings.new()
+	player_settings.mode = PartyForgeSettings.Mode.PLAYER_SIMULATION
+	player_settings.use_city_access_snapshot = true
+	var provider_loads: Array[String] = []
+	var player_provider := CityAccessProvider.new(func(path: String) -> CityAccessLoadResult:
+		provider_loads.append(path)
+		return CityAccessLoadResult.success(snapshot)
+	)
+	var locked_profile := ProfileState.new_profile("activation-locked", "Activation Locked", 1)
+	var unlocked_profile := ProfileState.new_profile("activation-unlocked", "Activation Unlocked", 2)
+	unlocked_profile.permanent_feature_unlocks = ["stash"]
+	var locked_before := ProfileCodec.encode(locked_profile).to_utf8_buffer()
+	var unlocked_before := ProfileCodec.encode(unlocked_profile).to_utf8_buffer()
+	var locked_provider := player_provider.resolve(player_settings, locked_profile)
+	var unlocked_provider := player_provider.resolve(player_settings, unlocked_profile)
+	_assert(provider_loads == [CityAccessProvider.SNAPSHOT_PATH, CityAccessProvider.SNAPSHOT_PATH], "Player Mode loads only the fixed checked-in City access snapshot path", failures)
+	var locked_presentation := WarehousePresentationResolver.resolve(player_settings, locked_profile, WarehouseAccessPolicy.resolve(locked_profile), locked_provider)
+	var unlocked_presentation := WarehousePresentationResolver.resolve(player_settings, unlocked_profile, WarehouseAccessPolicy.resolve(unlocked_profile), unlocked_provider)
+	_assert(locked_presentation.state == WarehousePresentationResult.State.LOCKED and locked_presentation.outcome == WarehousePresentationResult.Outcome.CANDIDATE and locked_presentation.reason == &"candidate_locked", "locked Player Mode resolves the Warehouse to LOCKED candidate presentation", failures)
+	_assert(unlocked_presentation.state == WarehousePresentationResult.State.AVAILABLE and unlocked_presentation.outcome == WarehousePresentationResult.Outcome.CANDIDATE and unlocked_presentation.reason == &"candidate_matches_authority", "unlocked Player Mode resolves the Warehouse to AVAILABLE candidate presentation", failures)
+	_assert(ProfileCodec.encode(locked_profile).to_utf8_buffer() == locked_before, "locked Player Mode Warehouse resolution preserves exact ProfileCodec bytes", failures)
+	_assert(ProfileCodec.encode(unlocked_profile).to_utf8_buffer() == unlocked_before, "unlocked Player Mode Warehouse resolution preserves exact ProfileCodec bytes", failures)
+
+	var flag_off_loads: Array[String] = []
+	var flag_off_provider := CityAccessProvider.new(func(path: String) -> CityAccessLoadResult:
+		flag_off_loads.append(path)
+		return CityAccessLoadResult.success(snapshot)
+	)
+	var flag_off_settings := PartyForgeSettings.new()
+	flag_off_settings.mode = PartyForgeSettings.Mode.PLAYER_SIMULATION
+	var locked_legacy_provider := flag_off_provider.resolve(flag_off_settings, locked_profile)
+	var unlocked_legacy_provider := flag_off_provider.resolve(flag_off_settings, unlocked_profile)
+	var locked_legacy := WarehousePresentationResolver.resolve(flag_off_settings, locked_profile, WarehouseAccessPolicy.resolve(locked_profile), locked_legacy_provider)
+	var unlocked_legacy := WarehousePresentationResolver.resolve(flag_off_settings, unlocked_profile, WarehouseAccessPolicy.resolve(unlocked_profile), unlocked_legacy_provider)
+	_assert(flag_off_loads.is_empty(), "flag-off Player Mode returns legacy Warehouse presentation without loading", failures)
+	_assert(locked_legacy.state == WarehousePresentationResult.State.HIDDEN and locked_legacy.outcome == WarehousePresentationResult.Outcome.LEGACY and locked_legacy.reason == &"legacy_gate", "flag-off locked Player Mode retains legacy hidden presentation", failures)
+	_assert(unlocked_legacy.state == WarehousePresentationResult.State.AVAILABLE and unlocked_legacy.outcome == WarehousePresentationResult.Outcome.LEGACY and unlocked_legacy.reason == &"legacy_gate", "flag-off unlocked Player Mode retains legacy available presentation", failures)
+
+	_assert_invalid_warehouse_candidates(player_settings, locked_profile, unlocked_profile, failures)
+	_assert_warehouse_location_confinement(player_settings, locked_profile, failures)
+	_assert_warehouse_shadow_and_developer_preview(snapshot, failures)
+	_assert_production_warehouse_route_authorization(failures)
+
+
+func _assert_invalid_warehouse_candidates(player_settings: PartyForgeSettings, locked_profile: ProfileState, unlocked_profile: ProfileState, failures: Array[String]) -> void:
+	var malformed := CityAccessSnapshotLoader.load_bytes("{".to_utf8_buffer())
+	var duplicate := CityAccessSnapshotLoader.load_bytes("{\"format\":\"party-forge-access-snapshot\",\"format\":\"party-forge-access-snapshot\"}".to_utf8_buffer())
+	_assert(not malformed.ok(), "malformed snapshot fixture is rejected before presentation", failures)
+	_assert(not duplicate.ok(), "duplicate-key snapshot fixture is rejected before presentation", failures)
+	for row: Array in [["malformed", malformed], ["duplicate-key", duplicate]]:
+		var provider := CityAccessProvider.new(func(_path: String) -> CityAccessLoadResult: return row[1] as CityAccessLoadResult)
+		var provider_result := provider.resolve(player_settings, locked_profile)
+		var presentation := WarehousePresentationResolver.resolve(player_settings, locked_profile, WarehouseAccessPolicy.resolve(locked_profile), provider_result)
+		_assert(presentation.state == WarehousePresentationResult.State.HIDDEN and presentation.outcome == WarehousePresentationResult.Outcome.CANDIDATE_FAILED and presentation.reason == &"candidate_snapshot_load_failed", "%s candidate failure returns locked profile's legacy hidden presentation" % row[0], failures)
+	var unknown_snapshot := _fixture_snapshot(&"city.other", &"city.other.interior", CityAccessProjection.State.AVAILABLE)
+	var unknown := WarehousePresentationResolver.resolve(player_settings, locked_profile, WarehouseAccessPolicy.resolve(locked_profile), CityAccessProviderResult.candidate(unknown_snapshot))
+	_assert(unknown.state == WarehousePresentationResult.State.HIDDEN and unknown.outcome == WarehousePresentationResult.Outcome.CANDIDATE_FAILED and unknown.reason == &"candidate_projection_invalid", "unknown-location candidate returns locked profile's legacy hidden presentation", failures)
+	var wrong_destination_snapshot := _fixture_snapshot(&"city.warehouse", &"city.unexpected", CityAccessProjection.State.AVAILABLE)
+	var wrong_destination := WarehousePresentationResolver.resolve(player_settings, unlocked_profile, WarehouseAccessPolicy.resolve(unlocked_profile), CityAccessProviderResult.candidate(wrong_destination_snapshot))
+	_assert(wrong_destination.state == WarehousePresentationResult.State.AVAILABLE and wrong_destination.outcome == WarehousePresentationResult.Outcome.CANDIDATE_FAILED and wrong_destination.reason == &"candidate_destination_invalid", "wrong-destination candidate returns unlocked profile's legacy available presentation", failures)
+
+
+func _assert_warehouse_location_confinement(player_settings: PartyForgeSettings, locked_profile: ProfileState, failures: Array[String]) -> void:
+	_assert(WarehousePresentationResolver.LOCATION_ID == &"city.warehouse" and WarehousePresentationResolver.EXPECTED_DESTINATION_ID == &"city.warehouse.interior", "presentation resolver is fixed to only the Warehouse City location and destination", failures)
+	var locations: Array[Dictionary] = []
+	for location_id: StringName in LOCATIONS:
+		var state := CityAccessProjection.State.LOCKED if location_id == &"city.warehouse" else CityAccessProjection.State.AVAILABLE
+		locations.append(_fixture_location(location_id, _expected_destination(location_id, CityAccessProjection.State.AVAILABLE), state))
+	var confined_snapshot := _fixture_snapshot_from_locations(locations)
+	var presentation := WarehousePresentationResolver.resolve(player_settings, locked_profile, WarehouseAccessPolicy.resolve(locked_profile), CityAccessProviderResult.candidate(confined_snapshot))
+	_assert(presentation.state == WarehousePresentationResult.State.LOCKED and presentation.reason == &"candidate_locked", "other City location projections cannot influence the Warehouse-only evaluation", failures)
+
+
+func _assert_warehouse_shadow_and_developer_preview(snapshot: CityAccessSnapshot, failures: Array[String]) -> void:
 	var settings := PartyForgeSettings.new()
 	settings.mode = PartyForgeSettings.Mode.DEVELOPER_MODE
 	settings.use_city_access_snapshot = true
@@ -144,25 +228,24 @@ func _assert_warehouse_shadow_pilot(snapshot: CityAccessSnapshot, failures: Arra
 		_assert("outcome=UNAVAILABLE" in failure_marker and "reason=candidate_snapshot_load_failed" in failure_marker, "captured candidate failure marker is allowlisted", failures)
 		_assert(not "raw fixture" in failure_marker and not "/" in failure_marker and not "\\" in failure_marker, "captured candidate failure marker excludes raw diagnostics and paths", failures)
 		_assert(bool((failure_emissions[0] as Array)[1]), "captured candidate failure is classified as a warning without printing one", failures)
-	var flag_off_loads := 0
+	var flag_off_loads: Array[String] = []
 	var flag_off_provider := CityAccessProvider.new(func(_path: String) -> CityAccessLoadResult:
-		flag_off_loads += 1
+		flag_off_loads.append(_path)
 		return CityAccessLoadResult.success(snapshot)
 	)
 	var flag_off_comparator := CityAccessShadowComparator.new(flag_off_provider)
 	var flag_off_settings := PartyForgeSettings.new()
 	flag_off_settings.mode = PartyForgeSettings.Mode.DEVELOPER_MODE
-	_assert(flag_off_comparator.observe(flag_off_settings, locked_profile) == null and flag_off_loads == 0, "flag-off uses immediate legacy-only behavior without candidate loading", failures)
+	_assert(flag_off_comparator.observe(flag_off_settings, locked_profile) == null and flag_off_loads.is_empty(), "flag-off uses immediate legacy-only behavior without candidate loading", failures)
 	var developer_preview := MainMenuViewModel.build(locked_profile, settings, true)
 	_assert(developer_preview.warehouse_visible and developer_preview.warehouse_enabled and developer_preview.warehouse_label.contains("Developer"), "Developer Mode keeps the no-stash Warehouse preview visible and enabled", failures)
 	var player_settings := PartyForgeSettings.new()
 	player_settings.mode = PartyForgeSettings.Mode.PLAYER_SIMULATION
 	player_settings.use_city_access_snapshot = true
-	var player_locked := MainMenuViewModel.build(locked_profile, player_settings, true)
-	var player_unlocked := MainMenuViewModel.build(unlocked_profile, player_settings, true)
-	_assert(not player_locked.warehouse_visible and not player_locked.warehouse_enabled and player_locked.warehouse_route_id == MainMenuViewModel.ROUTE_WAREHOUSE, "Player Mode keeps the locked Warehouse route unavailable without stash", failures)
-	_assert(player_unlocked.warehouse_visible and player_unlocked.warehouse_enabled and player_unlocked.warehouse_route_id == MainMenuViewModel.ROUTE_WAREHOUSE, "Player Mode makes the Warehouse route available only with stash", failures)
-	_assert_production_warehouse_route_authorization(failures)
+	var player_locked := MainMenuViewModel.build(locked_profile, player_settings, true, WarehousePresentationResult.State.LOCKED)
+	var player_unlocked := MainMenuViewModel.build(unlocked_profile, player_settings, true, WarehousePresentationResult.State.AVAILABLE)
+	_assert(player_locked.warehouse_visible and player_locked.warehouse_enabled and player_locked.warehouse_presentation_state == WarehousePresentationResult.State.LOCKED and player_locked.warehouse_route_id == MainMenuViewModel.ROUTE_WAREHOUSE, "Player Mode presents the locked Warehouse route without granting authority", failures)
+	_assert(player_unlocked.warehouse_visible and player_unlocked.warehouse_enabled and player_unlocked.warehouse_presentation_state == WarehousePresentationResult.State.AVAILABLE and player_unlocked.warehouse_route_id == MainMenuViewModel.ROUTE_WAREHOUSE, "Player Mode makes the Warehouse route available only with stash authority", failures)
 
 
 func _assert_production_warehouse_route_authorization(failures: Array[String]) -> void:
@@ -203,6 +286,41 @@ func _assert_production_warehouse_route_authorization(failures: Array[String]) -
 func _cleanup_settings_artifacts(settings_path: String) -> void:
 	for path: String in [settings_path, "%s.tmp" % settings_path, "%s.bak" % settings_path]:
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+
+
+func _fixture_snapshot(location_id: StringName, destination_id: StringName, state: CityAccessProjection.State) -> CityAccessSnapshot:
+	return _fixture_snapshot_from_locations([_fixture_location(location_id, destination_id, state)])
+
+
+func _fixture_snapshot_from_locations(locations: Array[Dictionary]) -> CityAccessSnapshot:
+	var document := {
+		"format": "party-forge-access-snapshot",
+		"version": 1,
+		"source": {
+			"adapter": "latticewright-runtime-v3-city-access",
+			"format": "latticewright-progression",
+			"formatVersion": 3,
+			"sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+		},
+		"locations": locations,
+	}
+	var loaded := CityAccessSnapshotLoader.load_bytes(JSON.stringify(document).to_utf8_buffer())
+	return loaded.snapshot if loaded.ok() else null
+
+
+func _fixture_location(location_id: StringName, destination_id: StringName, state: CityAccessProjection.State) -> Dictionary:
+	var visible_when: Array[Dictionary] = [{"kind": "always", "value": ""}]
+	var available_when: Array[Dictionary] = [{"kind": "always", "value": ""}]
+	if state == CityAccessProjection.State.HIDDEN:
+		visible_when = [{"kind": "prologue_state", "value": "completed"}]
+	elif state == CityAccessProjection.State.LOCKED:
+		available_when = [{"kind": "permanent_unlock", "value": "stash"}]
+	return {
+		"id": String(location_id),
+		"destinationId": String(destination_id),
+		"visibleWhen": visible_when,
+		"availableWhen": available_when,
+	}
 
 
 func _assert_legacy_city_data(failures: Array[String]) -> void:
@@ -264,5 +382,6 @@ func _finish(failures: Array[String]) -> void:
 			push_error("CITY_ACCESS_SNAPSHOT_ACCEPTANCE_FAILURE %s" % failure)
 		quit(1)
 		return
+	print("WAREHOUSE_PRESENTATION_ACTIVATION_OK location=city.warehouse rollback=legacy authority=warehouse_policy")
 	print("CITY_ACCESS_SNAPSHOT_ACCEPTANCE_OK locations=7 profiles=7 rollback=legacy")
 	quit(0)

@@ -17,8 +17,11 @@ func _run() -> void:
 	ProfileTestSupport.remove_tree(_profile_root)
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(_profile_root))
 	_cleanup_settings_fixture()
-	var fixture_error := PartyForgeSettingsStore.new().save_settings(PartyForgeSettings.new(), _settings_path)
-	_assert(fixture_error.is_empty(), "fixture setup: navigation starts from saved Player Mode")
+	var player_settings := PartyForgeSettings.new()
+	player_settings.mode = PartyForgeSettings.Mode.PLAYER_SIMULATION
+	player_settings.use_city_access_snapshot = true
+	var fixture_error := PartyForgeSettingsStore.new().save_settings(player_settings, _settings_path)
+	_assert(fixture_error.is_empty(), "fixture setup: navigation starts from saved Player Mode with City snapshot presentation enabled")
 	if not fixture_error.is_empty():
 		await _finish(null)
 		return
@@ -40,9 +43,17 @@ func _run() -> void:
 	var settings := main.get_node("SettingsScreen") as SettingsScreen
 	var selector := main.get_node("HUD/ClassSelection") as ClassSelectionPanel
 	var passive_tree := main.get_node("PassiveTreeScreen") as PassiveTreeScreen
+	var warehouse_screen := main.get_node("WarehouseScreen") as WarehouseScreen
+	var warehouse_locked := main.get_node("WarehouseLockedDialog") as Node
 	var primary := menu.get_node("PrimaryAction") as Button
 	var city := menu.get_node("CityTree") as Button
 	var armoury_route := menu.get_node("Armoury") as Button
+	var warehouse_route := menu.get_node("Warehouse") as Button
+	var city_warehouse_origin := menu.get_node("CityWarehouseHotspot") as Button
+	var warehouse_lock_badge := menu.get_node("Warehouse/LockBadge") as Label
+	var city_warehouse_lock_badge := menu.get_node("CityWarehouseHotspot/LockBadge") as Label
+	var view_city_tree := warehouse_locked.get_node("Overlay/Frame/Layout/Actions/ViewCityTree") as Button
+	var warehouse_back := warehouse_locked.get_node("Overlay/Frame/Layout/Actions/Back") as Button
 	var quick_start := menu.get_node("DeveloperQuickStart") as Button
 	var menu_settings := menu.get_node("Settings") as Button
 	var profiles := settings.get_node("Overlay/Frame/Layout/Tabs/Profiles") as ProfilesSettingsPage
@@ -73,6 +84,8 @@ func _run() -> void:
 	_assert(_ui_joy_mapping_has_device(&"ui_accept", JOY_BUTTON_A, -1), "ui_accept maps controller south face for any device")
 	_assert(_ui_joy_mapping_has_device(&"ui_cancel", JOY_BUTTON_B, -1), "ui_cancel maps controller B/Circle for any device")
 	await _joy_button(viewport, JOY_BUTTON_DPAD_DOWN, 1)
+	_assert_focus(viewport, warehouse_route, "device-1 D-pad includes the newly presented locked Warehouse")
+	await _joy_button(viewport, JOY_BUTTON_DPAD_DOWN, 1)
 	_assert_focus(viewport, menu_settings, "device-1 D-pad uses standard ui_down")
 	await _joy_button(viewport, JOY_BUTTON_A, 1)
 	_assert(settings.is_open(), "device-1 south face activates main-menu Settings")
@@ -84,8 +97,13 @@ func _run() -> void:
 		await _key(viewport, KEY_ESCAPE)
 	_assert_focus(viewport, menu_settings, "device-1 cancel exact Settings return")
 	await _key(viewport, KEY_UP)
+	_assert_focus(viewport, warehouse_route, "keyboard arrow traverses the newly presented locked Warehouse")
+	await _key(viewport, KEY_UP)
 	_assert_focus(viewport, primary, "alternate-device flow returns to PrimaryAction")
 
+	await _joy_motion(viewport, JOY_AXIS_LEFT_Y, 1.0)
+	await _joy_motion(viewport, JOY_AXIS_LEFT_Y, 0.0)
+	_assert_focus(viewport, warehouse_route, "left stick includes the newly presented locked Warehouse")
 	await _joy_motion(viewport, JOY_AXIS_LEFT_Y, 1.0)
 	await _joy_motion(viewport, JOY_AXIS_LEFT_Y, 0.0)
 	_assert_focus(viewport, menu_settings, "left stick uses standard ui_down on the main menu")
@@ -104,6 +122,8 @@ func _run() -> void:
 		await _key(viewport, KEY_ESCAPE)
 	_assert_focus(viewport, menu_settings, "controller cancel exact Settings return")
 
+	await _key(viewport, KEY_UP)
+	_assert_focus(viewport, warehouse_route, "keyboard arrow returns through locked Warehouse")
 	await _key(viewport, KEY_UP)
 	_assert_focus(viewport, primary, "keyboard arrow returns to PrimaryAction")
 	await _key(viewport, KEY_SPACE)
@@ -129,6 +149,73 @@ func _run() -> void:
 	await _joy_button(viewport, JOY_BUTTON_B)
 	_assert(not passive_tree.is_open() and menu.is_open(), "controller B closes City")
 	_assert_focus(viewport, city, "City cancel exact CityTree return")
+
+	var locked_profile_bytes := ProfileCodec.encode(main.active_profile()).to_utf8_buffer()
+	var locked_profile_document := main.active_profile().to_dictionary()
+	_assert(warehouse_route.visible and not warehouse_route.disabled and warehouse_lock_badge.visible and warehouse_lock_badge.text == "LOCKED", "Player snapshot activation presents the main-menu Warehouse as visibly locked")
+	_assert(city_warehouse_origin.visible and not city_warehouse_origin.disabled and city_warehouse_lock_badge.visible and city_warehouse_lock_badge.text == "LOCKED", "Player snapshot activation presents the City Warehouse hotspot as visibly locked")
+
+	warehouse_route.grab_focus()
+	await _frames(1)
+	_assert_focus(viewport, warehouse_route, "keyboard locked Warehouse origin")
+	await _key(viewport, KEY_ENTER)
+	await _frames(2)
+	_assert(bool(warehouse_locked.call("is_open")) and menu.is_open() and not warehouse_screen.is_open(), "keyboard activation opens locked guidance without dispatching Warehouse storage")
+	_assert_focus(viewport, view_city_tree, "keyboard locked guidance primary action")
+	await _key(viewport, KEY_TAB)
+	_assert_focus(viewport, warehouse_back, "locked dialog traps keyboard Tab on Back")
+	await _key(viewport, KEY_TAB)
+	_assert_focus(viewport, view_city_tree, "locked dialog wraps keyboard Tab to View City Tree")
+	await _key(viewport, KEY_TAB)
+	_assert_focus(viewport, warehouse_back, "locked dialog keeps repeated keyboard traversal inside its actions")
+	await _key(viewport, KEY_ENTER)
+	_assert(not bool(warehouse_locked.call("is_open")) and menu.is_open(), "keyboard Back closes locked guidance")
+	_assert_focus(viewport, warehouse_route, "keyboard Back exact Warehouse origin restore")
+
+	city_warehouse_origin.grab_focus()
+	await _frames(1)
+	_assert_focus(viewport, city_warehouse_origin, "controller locked City Warehouse origin")
+	await _joy_button(viewport, JOY_BUTTON_A)
+	await _frames(2)
+	_assert(bool(warehouse_locked.call("is_open")) and menu.is_open() and not warehouse_screen.is_open(), "controller activation opens locked guidance without dispatching Warehouse storage")
+	_assert_focus(viewport, view_city_tree, "controller locked guidance primary action")
+	await _joy_button(viewport, JOY_BUTTON_B)
+	_assert(not bool(warehouse_locked.call("is_open")) and menu.is_open(), "controller B/Circle Back closes locked guidance")
+	_assert_focus(viewport, city_warehouse_origin, "controller Back exact City Warehouse origin restore")
+
+	warehouse_route.grab_focus()
+	await _frames(1)
+	await _key(viewport, KEY_ENTER)
+	_assert(bool(warehouse_locked.call("is_open")), "Warehouse guidance reopens for City route reuse")
+	_assert_focus(viewport, view_city_tree, "City route CTA starts from deterministic primary focus")
+	await _joy_button(viewport, JOY_BUTTON_A)
+	await _frames(2)
+	_assert(not bool(warehouse_locked.call("is_open")) and passive_tree.is_open() and not menu.is_open(), "View City Tree reuses the existing passive-tree composition")
+	_assert(main.get("_city_tree_return_focus") == warehouse_route, "City route retains the exact locked Warehouse return origin")
+	_assert_focus_is_available(viewport.gui_get_focus_owner(), passive_tree, "Warehouse-guidance City tree")
+
+	# Fixture-only durable mutation: simulate allocating Stash Access while the
+	# existing City tree is open, then let the production close path refresh it.
+	var store := ProfileStore.new()
+	var stored_before := store.load_profile(profile_id, _profile_root)
+	_assert(stored_before.ok(), "stash-allocation fixture reloads the durable locked profile")
+	if stored_before.ok():
+		var allocated := stored_before.profile
+		allocated.permanent_feature_unlocks.append("stash")
+		allocated.permanent_feature_unlocks.sort()
+		var expected_after := locked_profile_document.duplicate(true)
+		expected_after["permanent_feature_unlocks"] = allocated.permanent_feature_unlocks.duplicate()
+		_assert(store.save_profile(allocated, _profile_root).is_empty(), "fixture explicitly persists only the simulated stash allocation")
+		var stored_after := store.load_profile(profile_id, _profile_root)
+		_assert(stored_after.ok() and stored_after.profile.to_dictionary() == expected_after, "durable fixture bytes change only by the explicit stash allocation")
+		_assert(ProfileCodec.encode(main.active_profile()).to_utf8_buffer() == locked_profile_bytes, "open City route leaves the composed profile unchanged until close refresh")
+	await _joy_button(viewport, JOY_BUTTON_B)
+	await _frames(3)
+	_assert(not passive_tree.is_open() and menu.is_open(), "controller closes the reused City tree")
+	_assert_focus(viewport, warehouse_route, "refreshed City close exact Warehouse origin return")
+	_assert(main.active_profile().permanent_feature_unlocks.has("stash"), "City close refreshes the explicit stash allocation into the composed profile")
+	_assert(warehouse_route.visible and not warehouse_route.disabled and not warehouse_lock_badge.visible, "refreshed Warehouse origin becomes available without locked decoration")
+	_assert(city_warehouse_origin.visible and not city_warehouse_origin.disabled and not city_warehouse_lock_badge.visible, "refreshed City Warehouse origin becomes available without locked decoration")
 
 	await _key(viewport, KEY_TAB)
 	_assert_focus(viewport, menu_settings, "keyboard Tab skips hidden Developer Quick Start in Player Mode")
