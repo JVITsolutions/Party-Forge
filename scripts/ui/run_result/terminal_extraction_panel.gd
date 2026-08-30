@@ -223,6 +223,7 @@ func _set_summary_text() -> void:
 	(get_node("Frame/Content/Body/Sections/SummaryLists/LostItems") as Label).text = _names_for_ids(_projection.lost_item_ids)
 
 func _update_availability() -> void:
+	var focus_intent := _capture_availability_focus_intent()
 	var projection_ok := _projection != null and _projection.valid and _projection.player_error.is_empty()
 	var preflight_failed := _preflight_disposition == PreflightDisposition.FAILURE
 	var confirm := get_node("Frame/Content/Actions/Confirm") as Button
@@ -248,11 +249,18 @@ func _update_availability() -> void:
 		_set_base_focus_enabled(false)
 	else:
 		_configure_base_focus_scope()
+		_resolve_availability_focus(focus_intent, projection_ok and not _pending and (not preflight_failed or selection_can_recover))
 
 func _configure_base_focus_scope() -> void:
 	var prior_focus := get_viewport().gui_get_focus_owner() as Control if is_inside_tree() else null
 	var restore_prior := prior_focus != null and (prior_focus == self or is_ancestor_of(prior_focus))
 	_set_base_focus_enabled(false)
+	var controls := _base_focus_ring_controls()
+	_wire_closed_ring(controls)
+	if restore_prior and _control_is_focusable(prior_focus):
+		prior_focus.grab_focus()
+
+func _base_focus_ring_controls() -> Array[Control]:
 	var controls: Array[Control] = []
 	if _projection != null:
 		for item: TerminalExtractionItemProjection in _projection.eligible_items:
@@ -274,9 +282,53 @@ func _configure_base_focus_scope() -> void:
 			var card := _cards_by_id.get(item.item_id) as ForgeExtractionItemCard
 			if card != null:
 				controls.append(card.get_node("Inspect") as Button)
-	_wire_closed_ring(controls)
-	if restore_prior and prior_focus != null and is_instance_valid(prior_focus) and prior_focus.is_visible_in_tree() and prior_focus.focus_mode != Control.FOCUS_NONE:
-		prior_focus.grab_focus()
+	return controls
+
+func _capture_availability_focus_intent() -> Dictionary:
+	if not is_inside_tree():
+		return {}
+	var owner := get_viewport().gui_get_focus_owner() as Control
+	if owner == null or not (owner == self or is_ancestor_of(owner)):
+		return {}
+	var item_id := ""
+	var cursor: Node = owner
+	while cursor != null and cursor != self:
+		if cursor.has_meta(&"item_id"):
+			item_id = String(cursor.get_meta(&"item_id", ""))
+			break
+		cursor = cursor.get_parent()
+	return {"control": owner, "item_id": item_id, "eligible_index": _eligible_index(item_id)}
+
+func _resolve_availability_focus(intent: Dictionary, selection_editable: bool) -> void:
+	var retry := get_node("Frame/Content/Actions/Retry") as Button
+	if _control_is_focusable(retry):
+		retry.grab_focus()
+		return
+	var prior := intent.get("control") as Control
+	if _control_is_focusable(prior):
+		prior.grab_focus()
+		return
+	if selection_editable:
+		var item_id := String(intent.get("item_id", ""))
+		if not item_id.is_empty():
+			var exact := _cards_by_id.get(item_id) as Control
+			if _restore_control_focus(exact):
+				return
+			var eligible := _eligible_card_controls()
+			var prior_index := int(intent.get("eligible_index", -1))
+			if prior_index >= 0 and not eligible.is_empty() and _restore_control_focus(eligible[clampi(prior_index, 0, eligible.size() - 1)]):
+				return
+	var confirm := get_node("Frame/Content/Actions/Confirm") as Button
+	if _restore_control_focus(confirm):
+		return
+	for control: Control in _base_focus_ring_controls():
+		if _restore_control_focus(control):
+			return
+
+func _control_is_focusable(control: Control) -> bool:
+	if control == null or not is_instance_valid(control) or not control.is_inside_tree() or not control.is_visible_in_tree() or control.focus_mode == Control.FOCUS_NONE:
+		return false
+	return not (control is BaseButton and (control as BaseButton).disabled)
 
 func _all_base_controls() -> Array[Control]:
 	var result: Array[Control] = []
@@ -313,13 +365,19 @@ func _disable_focus_descendants(scope: Control) -> void:
 func _ensure_card_visible(card: Control) -> void:
 	if card == null or not is_instance_valid(card):
 		return
+	get_tree().create_timer(0.0, true, false, true).timeout.connect(_ensure_card_visible_now.bind(card.get_instance_id()), CONNECT_ONE_SHOT)
+
+func _ensure_card_visible_now(card_instance_id: int) -> void:
+	var card := instance_from_id(card_instance_id) as Control
+	if card == null or not is_instance_valid(card) or not card.is_inside_tree():
+		return
 	var body_scroll := get_node("Frame/Content/Body") as ScrollContainer
 	var automatic_scroll := get_node("Frame/Content/Body/Sections/Automatic/Scroll") as ScrollContainer
 	if automatic_scroll.is_ancestor_of(card):
-		automatic_scroll.call_deferred(&"ensure_control_visible", card)
-		body_scroll.call_deferred(&"ensure_control_visible", card)
+		automatic_scroll.ensure_control_visible(card)
+		body_scroll.ensure_control_visible(card)
 	elif body_scroll.is_ancestor_of(card):
-		body_scroll.call_deferred(&"ensure_control_visible", card)
+		body_scroll.ensure_control_visible(card)
 
 func _apply_responsive_layout() -> void:
 	var width := 1280.0
@@ -375,11 +433,7 @@ func _eligible_card_controls() -> Array[Control]:
 	return result
 
 func _base_focus_controls_in_order() -> Array[Control]:
-	var result: Array[Control] = []
-	for control: Control in _all_base_controls():
-		if control.is_visible_in_tree() and control.focus_mode != Control.FOCUS_NONE:
-			result.append(control)
-	return result
+	return _base_focus_ring_controls()
 
 func _focused_item_id() -> String:
 	if not is_inside_tree():
@@ -410,7 +464,7 @@ func _restore_item_focus(item_id: String, fallback: Control) -> void:
 	_focus_initial()
 
 func _restore_control_focus(control: Control) -> bool:
-	if control == null or not is_instance_valid(control) or not control.is_inside_tree() or not control.is_visible_in_tree() or control.focus_mode == Control.FOCUS_NONE:
+	if not _control_is_focusable(control):
 		return false
 	control.grab_focus()
 	return true

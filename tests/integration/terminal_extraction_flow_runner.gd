@@ -146,6 +146,7 @@ func _exercise_real_panel_flow(packed: PackedScene, item_type: Script, projectio
 	var reducible := RunResolutionPreflightResult.failure("internal", RunResolutionEvaluation.FailureCategory.STASH_REDUCIBLE, "Selected items need 3 open stash slots; 2 are available. Select fewer ordinary items.")
 	_panel.call(&"show_preflight", reducible)
 	_assert((_panel.get_node("Frame/Content/PlayerError") as Label).text == reducible.player_reason, "reducible stash error uses typed player copy")
+	await _exercise_availability_focus_resolution(item_type, projection_type, underlying)
 	await _exercise_stale_detail_fallback(item_type, projection_type)
 	await _exercise_responsive_settings(item_type, projection_type)
 	await _exercise_hud_focus_ownership(item_type, projection_type)
@@ -217,14 +218,73 @@ func _exercise_focus_scopes(first: Button, underlying: Button) -> void:
 	await _press_joy(JOY_BUTTON_B)
 	_assert(first.has_focus(), "warning Cancel without an initiating control returns to the deterministic first eligible item")
 
+func _exercise_availability_focus_resolution(item_type: Script, projection_type: Script, underlying: Button) -> void:
+	_active_projection = _picker_projection(item_type, projection_type, 6, 2)
+	_panel.call(&"present", _active_projection)
+	var cards := _eligible_cards()
+	var first := cards[0]
+	var first_inspect := first.get_node("Inspect") as Button
+	var confirm := _panel.get_node("Frame/Content/Actions/Confirm") as Button
+	var retry := _panel.get_node("Frame/Content/Actions/Retry") as Button
+	confirm.grab_focus()
+	_panel.call(&"set_pending", true)
+	await _frames(2)
+	_assert(first_inspect.has_focus() and not underlying.has_focus(), "Confirm becoming pending resolves focus to the deterministic first enabled base action")
+	await _press_key(KEY_TAB)
+	_assert(_focus_is_within(_panel) and not underlying.has_focus(), "keyboard traversal after Confirm-to-pending never becomes ownerless or reaches combat")
+	var retryable := RunResolutionPreflightResult.failure("internal", RunResolutionEvaluation.FailureCategory.STASH_AUTOMATIC_ONLY, "Automatic retained items need more destination space. Retry resolution after making space.")
+	_panel.call(&"show_preflight", retryable)
+	_panel.call(&"set_pending", false)
+	await _frames(2)
+	_assert(retry.has_focus() and not underlying.has_focus(), "pending-to-retry-only failure prioritizes the enabled Retry action")
+	await _press_joy(JOY_BUTTON_DPAD_RIGHT)
+	_assert(_focus_is_within(_panel) and not underlying.has_focus(), "controller traversal from retry-only focus remains terminal-owned")
+	_panel.call(&"present", _active_projection)
+	cards = _eligible_cards()
+	var middle := cards[3]
+	middle.grab_focus()
+	var reducible := RunResolutionPreflightResult.failure("internal", RunResolutionEvaluation.FailureCategory.STASH_REDUCIBLE, "Selected items need 3 open stash slots; 2 are available. Select fewer ordinary items.")
+	_panel.call(&"show_preflight", reducible)
+	await _frames(2)
+	_assert(middle.has_focus() and not underlying.has_focus(), "editable reducible failure preserves the still-enabled exact item focus")
+	_panel.call(&"show_preflight", retryable)
+	await _frames(2)
+	_assert(retry.has_focus() and not underlying.has_focus(), "locking the focused item for a retry-only failure resolves focus to Retry")
+	_panel.call(&"present", _active_projection)
+	cards = _eligible_cards()
+	cards[3].grab_focus()
+	var invalid_projection := projection_type.call(&"create", _active_projection.automatic_items, _active_projection.eligible_items, _active_projection.capacity, _active_projection.selected_item_ids, _active_projection.lost_item_ids, [], "Extraction information changed. Review the available actions.", false) as TerminalExtractionProjection
+	_panel.call(&"present", invalid_projection)
+	await _frames(2)
+	first_inspect = (_eligible_cards()[0].get_node("Inspect") as Button)
+	_assert(first_inspect.has_focus() and not underlying.has_focus(), "an invalid projection resolves a disabled item to the deterministic first enabled base action")
+	await _press_joy(JOY_BUTTON_DPAD_DOWN)
+	_assert(_focus_is_within(_panel) and not underlying.has_focus(), "controller traversal after invalid projection remains terminal-owned")
+	_panel.call(&"present", _active_projection)
+	cards = _eligible_cards()
+	first = cards[0]
+	first_inspect = first.get_node("Inspect") as Button
+	first.grab_focus()
+	_panel.call(&"set_pending", true)
+	var success := RunResolutionPreflightResult.new()
+	success._extraction = RunExtractionProjection.create([], [], [], [], 0, [])
+	_panel.call(&"show_preflight", success)
+	await _frames(2)
+	_assert(first_inspect.has_focus() and not underlying.has_focus(), "successful preflight cannot steal deterministic fallback focus while pending dominates")
+	_panel.call(&"set_pending", false)
+	await _frames(2)
+	_assert(first_inspect.has_focus() and not underlying.has_focus(), "clearing pending after success preserves the still-enabled exact item action focus")
+
 func _exercise_stale_detail_fallback(item_type: Script, projection_type: Script) -> void:
 	_active_projection = _picker_projection(item_type, projection_type, 24, 2)
 	_panel.call(&"present", _active_projection)
 	var target := _eligible_cards()[-1]
 	target.grab_focus()
 	await _frames(2)
+	var body_scroll := _panel.get_node("Frame/Content/Body") as ScrollContainer
+	_assert(body_scroll.get_global_rect().encloses(target.get_global_rect()), "stale fixture target is fully visible before authentic mouse Inspect; scroll=%s target=%s owner=%s" % [body_scroll.get_global_rect(), target.get_global_rect(), _focus_owner_path()])
 	await _right_click_mouse(target)
-	_assert((_panel.get_node("ItemTooltipDetail") as Control).visible, "stale fixture opens detail before reconcile")
+	_assert((_panel.get_node("ItemTooltipDetail") as Control).visible, "stale fixture opens detail before reconcile; scroll=%s target=%s owner=%s inspects=%d" % [body_scroll.get_global_rect(), target.get_global_rect(), _focus_owner_path(), _inspects.size()])
 	_active_projection = _picker_projection(item_type, projection_type, 23, 2)
 	_panel.call(&"present", _active_projection)
 	await _frames(2)
