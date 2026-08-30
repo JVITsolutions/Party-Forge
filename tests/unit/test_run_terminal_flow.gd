@@ -349,6 +349,16 @@ func _test_generic_and_terminal_resolution_boundaries(failures: Array[String]) -
 	var cold_resume: Variant = cold.call(&"resume", recovery.get("record"), durable, begun.root)
 	TestAssertions.truthy(_ok(cold_resume), "a crash immediately after resolve cold-resumes the recap: %s" % _error(cold_resume), failures)
 	TestAssertions.equal(int(cold.call(&"state")), STATE_RESOLVED_AWAITING_PROJECTION, "cold resolved resume never re-enters resolution", failures)
+	var changed_source_document: Dictionary = begun.flow.call(&"snapshot").resolution_source.to_dictionary()
+	(changed_source_document["item_state"]["registry"]["items"] as Array)[0]["item_level"] = 29
+	var changed_source := RunResolutionSource.from_dictionary(changed_source_document)
+	TestAssertions.truthy(changed_source.ok(), "terminal duplicate changed-source fixture remains typed and valid", failures)
+	var before_duplicate_bytes := FileAccess.get_file_as_bytes(begun.store.profile_path(PROFILE_ID, begun.root))
+	var duplicate_collision := RunResolutionService.new(ProfileMutationService.new(begun.store)).resolve_terminal_source(
+		PROFILE_ID, changed_source.source, begun.flow.get("_request") as RunResolutionRequest, begun.root,
+	)
+	TestAssertions.truthy(not duplicate_collision.ok(), "same-request terminal duplicate rejects a different typed source", failures)
+	TestAssertions.equal(FileAccess.get_file_as_bytes(begun.store.profile_path(PROFILE_ID, begun.root)), before_duplicate_bytes, "same-request different-source terminal duplicate is write-free", failures)
 	_cleanup_begun(begun)
 
 func _test_protection_and_reducible_interruptions(failures: Array[String]) -> void:
@@ -372,10 +382,24 @@ func _test_protection_and_reducible_interruptions(failures: Array[String]) -> vo
 			(automatic_fixture.store as ProfileStore).load_profile(automatic_id, automatic_fixture.root).profile,
 		)
 		TestAssertions.truthy(not _ok(blocked) and bool(blocked.get("automatic_only_blocked")), "automatic-only blockage exposes the typed displaced-gear interruption", failures)
-		var protected: Variant = automatic_flow.call(&"protect_displaced_gear", automatic_id, automatic_fixture.root)
+		var interrupted_profile: ProfileState = (automatic_fixture.store as ProfileStore).load_profile(automatic_id, automatic_fixture.root).profile
+		var interrupted := RunTerminalRecoveryService.new().inspect(interrupted_profile)
+		var interrupted_record := interrupted.record if interrupted.ok() else null
+		TestAssertions.truthy(interrupted.ok() and interrupted_record.stage == RunTerminalRecoveryRecord.Stage.RESOLUTION_INTERRUPTED, "automatic-only blockage persists the canonical interrupted stage before Protect is exposed", failures)
+		TestAssertions.equal(interrupted_record.transaction_id if interrupted_record != null else "", _expected_transaction(automatic_flow, []), "automatic-only interruption persists the confirmed canonical transaction", failures)
+		TestAssertions.equal(interrupted_record.selected_item_ids if interrupted_record != null else [], _strings([]), "automatic-only interruption persists the confirmed canonical selection", failures)
+		TestAssertions.equal(interrupted_record.interruption_reason if interrupted_record != null else "", String(blocked.get("player_reason")), "automatic-only interruption persists its exact readable reason", failures)
+		var cold_flow: Variant = (load(FLOW_PATH) as Script).new(
+			RunTerminalRecoveryService.new(ProfileMutationService.new(automatic_fixture.store), automatic_fixture.store),
+			RunResolutionService.new(ProfileMutationService.new(automatic_fixture.store)),
+		)
+		var cold_resume: Variant = cold_flow.call(&"resume", interrupted_record, interrupted_profile, automatic_fixture.root) if interrupted_record != null else null
+		TestAssertions.truthy(_ok(cold_resume) and int(cold_flow.call(&"state")) == STATE_RESOLUTION_INTERRUPTED, "cold resume restores the automatic-only interruption", failures)
+		TestAssertions.truthy(bool(cold_flow.get("_last_automatic_only_blocked")), "cold resume restores Protect eligibility only after the same typed automatic-only preflight", failures)
+		var protected: Variant = cold_flow.call(&"protect_displaced_gear", automatic_id, automatic_fixture.root)
 		TestAssertions.truthy(_ok(protected), "confirmed protection commits through recovery authority", failures)
-		TestAssertions.equal(int(automatic_flow.call(&"state")), STATE_CHOOSING_EXTRACTION, "successful protection reruns preflight and returns to extraction", failures)
-		var refreshed: Variant = automatic_flow.call(
+		TestAssertions.equal(int(cold_flow.call(&"state")), STATE_CHOOSING_EXTRACTION, "successful protection reruns preflight and returns to extraction", failures)
+		var refreshed: Variant = cold_flow.call(
 			&"confirm_extraction", _strings([]),
 			(automatic_fixture.store as ProfileStore).load_profile(automatic_id, automatic_fixture.root).profile,
 		)

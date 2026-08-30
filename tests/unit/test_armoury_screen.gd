@@ -7,7 +7,24 @@ func run() -> Array[String]:
 	(Engine.get_main_loop() as SceneTree).root.add_child(screen)
 	TestAssertions.truthy(screen.has_method(&"set_pending_run_class"), "Armoury exposes display-only pending run class", failures)
 	screen.configure_classes(GameCatalog.load_defaults().classes)
+	var visual_settings := PartyForgeSettings.new()
+	visual_settings.high_contrast = true
+	visual_settings.ui_scale_percent = 150
+	visual_settings.text_scale_percent = 80
+	TestAssertions.truthy(screen.has_method(&"configure_visual_settings"), "Armoury accepts the shared Living Forge accessibility settings", failures)
+	if screen.has_method(&"configure_visual_settings"):
+		screen.call("configure_visual_settings", visual_settings)
 	screen.open(storage)
+	var resolved_theme := LivingForgeThemeCatalog.resolve(true, 150, 80)
+	var overlay := screen.get_node("Overlay") as Control
+	TestAssertions.equal(overlay.theme, resolved_theme, "Armoury resolves high contrast with independent UI and text scales on open", failures)
+	var close_button := screen.get_node("Overlay/Frame/Layout/Footer/Close") as Button
+	TestAssertions.truthy(close_button.custom_minimum_size.x >= 48.0 and close_button.custom_minimum_size.y >= 48.0, "Armoury Close enforces a 48px minimum action target", failures)
+	var footer_help := screen.get_node("Overlay/Frame/Layout/Footer/Help") as Label
+	TestAssertions.truthy(footer_help.text.contains("Keyboard") and footer_help.text.contains("D-pad") and footer_help.text.contains("South place"), "Armoury help names the implemented keyboard/controller inspect and place path", failures)
+	overlay.theme = null
+	screen.refresh(storage)
+	TestAssertions.equal(overlay.theme, resolved_theme, "Armoury reapplies accessibility theme and independent scales on refresh", failures)
 	TestAssertions.equal(screen.process_mode, Node.PROCESS_MODE_ALWAYS, "Armoury processes while the game tree is paused", failures)
 	TestAssertions.equal(screen.equipment_button_count(), 11, "Armoury owns exactly eleven leader equipment buttons", failures)
 	TestAssertions.equal(screen.stash_tab_count(), 3, "Armoury directly reaches every unlocked stash tab", failures)
@@ -109,6 +126,7 @@ func _test_real_recovery_overflow_focus_inspect_and_input_parity(screen: Armoury
 	TestAssertions.equal(older_leader_moves, [], "older overflow cannot route directly to leader through storage movement", failures)
 	TestAssertions.equal(older_leader_equips, [], "older overflow cannot expose a direct-equip intent", failures)
 	TestAssertions.equal(screen.call("_locate", item.instance_id), {"container_id": String(ItemSlotContainer.TERMINAL_RECOVERY_OVERFLOW_ID), "slot": 0}, "Armoury locates overflow identity as the real source", failures)
+	_test_recovery_overflow_drop_affordance_policy(screen, profile, item, failures)
 	var protected_profile := profile.copy()
 	protected_profile.terminal_resolution = _terminal_record(protected_profile.profile_id, item.instance_id)
 	var protected_projection := ProfileStorageProjection.from_profile(protected_profile, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG, GameCatalog.STAT_CATALOG, null)
@@ -127,6 +145,10 @@ func _test_real_recovery_overflow_focus_inspect_and_input_parity(screen: Armoury
 	TestAssertions.truthy(tooltip.visible, "protected overflow remains inspectable", failures)
 	var protected_detail := protected_button.detail()
 	TestAssertions.equal(String(protected_detail.get("move_locked_reason", "")), "Available after terminal resolution", "protected card exposes the exact readable lock reason", failures)
+	var protected_status := tooltip.get_node_or_null("Layout/Status") as Label
+	TestAssertions.truthy(protected_status != null and protected_status.visible, "protected focused/activated inspection renders a non-color status line", failures)
+	TestAssertions.equal(protected_status.text if protected_status != null else "", "Available after terminal resolution", "protected inspected status renders exact terminal-resolution copy", failures)
+	TestAssertions.truthy(protected_status != null and protected_status.autowrap_mode != TextServer.AUTOWRAP_OFF, "protected status copy autowraps", failures)
 	TestAssertions.equal(protected_projection.comparison_lines_by_slot(item.instance_id), {}, "overflow item exposes no direct-equip comparison affordance", failures)
 	var protected_moves: Array = []
 	var protected_equips: Array = []
@@ -194,6 +216,50 @@ func _test_real_recovery_overflow_focus_inspect_and_input_parity(screen: Armoury
 	if safe_focus != null and safe_focus.is_inside_tree():
 		TestAssertions.equal((Engine.get_main_loop() as SceneTree).root.gui_get_focus_owner(), safe_focus, "missing item and container give real GUI focus to the deterministic safe control", failures)
 	screen.close()
+
+
+func _test_recovery_overflow_drop_affordance_policy(screen: ArmouryScreen, profile: ProfileState, overflow_item: ItemInstance, failures: Array[String]) -> void:
+	var occupied_item := _item("occupied-stash-ring", &"storm_ring", 1)
+	var affordance_profile := profile.copy()
+	affordance_profile.item_records = ItemRegistry.new([overflow_item, occupied_item]).to_dictionary()
+	(affordance_profile.stash_tabs[0]["slots"] as Dictionary)["5"] = occupied_item.instance_id
+	var affordance_projection := ProfileStorageProjection.from_profile(affordance_profile, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG, GameCatalog.STAT_CATALOG, null)
+	TestAssertions.truthy(affordance_projection.valid, "drop-affordance fixture remains canonical", failures)
+	if not affordance_projection.valid:
+		return
+	screen.open(affordance_projection)
+	var data := {
+		"container_id": String(ItemSlotContainer.TERMINAL_RECOVERY_OVERFLOW_ID),
+		"slot": 0,
+		"item_id": overflow_item.instance_id,
+	}
+	var overflow_target := (screen.get_node("Overlay/Frame/Layout/Body/RecoveryOverflow/Scroll/Grid") as GridContainer).get_child(1) as StorageSlotButton
+	var leader_target := (screen.get_node("Overlay/Frame/Layout/Body/Equipment/Slots") as GridContainer).get_child(6) as StorageSlotButton
+	var empty_stash_target := (screen.get_node("Overlay/Frame/Layout/Body/Stash/Scroll/Grid") as GridContainer).get_child(4) as StorageSlotButton
+	var occupied_stash_target := (screen.get_node("Overlay/Frame/Layout/Body/Stash/Scroll/Grid") as GridContainer).get_child(5) as StorageSlotButton
+	TestAssertions.truthy(not bool(overflow_target.call("_can_drop_data", Vector2.ZERO, data)), "Recovery Overflow rejects positive drop feedback as a destination", failures)
+	TestAssertions.truthy(not bool(leader_target.call("_can_drop_data", Vector2.ZERO, data)), "overflow source rejects leader positive drop feedback", failures)
+	TestAssertions.truthy(bool(empty_stash_target.call("_can_drop_data", Vector2.ZERO, data)), "overflow source exposes positive feedback for an empty ordinary stash slot", failures)
+	TestAssertions.truthy(not bool(occupied_stash_target.call("_can_drop_data", Vector2.ZERO, data)), "overflow source rejects occupied-stash positive drop feedback", failures)
+	TestAssertions.truthy(_four_direction_focus_is_explicit(screen), "Armoury explicitly wires all four focus directions across leader, stash, overflow, and Close", failures)
+	screen.apply_viewport_size(Vector2i(1200, 700))
+	TestAssertions.truthy(_four_direction_focus_is_explicit(screen), "compact Armoury retains explicit four-direction focus traversal", failures)
+
+
+func _four_direction_focus_is_explicit(screen: ArmouryScreen) -> bool:
+	var controls: Array[Control] = []
+	for path: String in [
+		"Overlay/Frame/Layout/Body/Equipment/Slots",
+		"Overlay/Frame/Layout/Body/Stash/Scroll/Grid",
+		"Overlay/Frame/Layout/Body/RecoveryOverflow/Scroll/Grid",
+	]:
+		for child: Node in (screen.get_node(path) as GridContainer).get_children():
+			controls.append(child as Control)
+	controls.append(screen.get_node("Overlay/Frame/Layout/Footer/Close") as Control)
+	for control: Control in controls:
+		if control.focus_neighbor_left.is_empty() or control.focus_neighbor_right.is_empty() or control.focus_neighbor_top.is_empty() or control.focus_neighbor_bottom.is_empty():
+			return false
+	return true
 
 
 func _terminal_record(profile_id: String, protected_id: String) -> Dictionary:

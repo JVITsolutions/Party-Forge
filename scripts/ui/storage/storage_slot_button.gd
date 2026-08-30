@@ -21,6 +21,7 @@ var _focus_inside := false
 var _inspection_active := false
 var _wired := false
 var _disabled_overlay: Label
+var _drop_policy := Callable()
 
 
 func _ready() -> void:
@@ -93,6 +94,10 @@ func detail() -> Dictionary:
 	return _detail.duplicate(true)
 
 
+func set_drop_policy(policy: Callable) -> void:
+	_drop_policy = policy
+
+
 func source_id() -> StringName:
 	return StringName("%s:%d:%s" % [String(container_id), slot, item_id])
 
@@ -140,13 +145,25 @@ func _get_drag_data(_position: Vector2) -> Variant:
 	return {"container_id": String(container_id), "slot": slot, "item_id": item_id}
 
 func _can_drop_data(_position: Vector2, data: Variant) -> bool:
-	return (
-		String(_detail.get("move_locked_reason", "")).is_empty()
-		and data is Dictionary
-		and not String((data as Dictionary).get("item_id", "")).is_empty()
-	)
+	if (
+		not String(_detail.get("move_locked_reason", "")).is_empty()
+		or not data is Dictionary
+		or String((data as Dictionary).get("item_id", "")).is_empty()
+		or not _drop_policy.is_valid()
+	):
+		return false
+	var source := data as Dictionary
+	return bool(_drop_policy.call(
+		StringName(String(source.get("container_id", ""))),
+		int(source.get("slot", -1)),
+		String(source.get("item_id", "")),
+		container_id,
+		slot,
+	))
 
 func _drop_data(_position: Vector2, data: Variant) -> void:
+	if not _can_drop_data(_position, data):
+		return
 	var source := data as Dictionary
 	item_dropped.emit(StringName(String(source["container_id"])), int(source["slot"]), String(source["item_id"]), container_id, slot)
 

@@ -106,7 +106,31 @@ func confirm_extraction(item_ids: Array[String], profile: ProfileState) -> RunRe
 	var preflight := RunResolutionService.new().preflight_source(profile, _snapshot.resolution_source, request)
 	_last_automatic_only_blocked = preflight.automatic_only_blocked
 	if not preflight.ok():
-		_state = State.RESOLUTION_INTERRUPTED if preflight.automatic_only_blocked else State.CHOOSING_EXTRACTION
+		if preflight.automatic_only_blocked:
+			var selected_ids: Array[String] = []
+			for selection: ExtractionSelection in selections:
+				selected_ids.append(selection.item_id)
+			var reason := preflight.player_reason if not preflight.player_reason.strip_edges().is_empty() else preflight.error
+			var interrupted := RunTerminalRecoveryRecord.create(
+				RunTerminalRecoveryRecord.Stage.RESOLUTION_INTERRUPTED,
+				_snapshot, selected_ids, next_transaction, [], reason, null, "",
+			)
+			if not interrupted.ok():
+				_last_automatic_only_blocked = false
+				_state = State.CHOOSING_EXTRACTION
+				return RunResolutionPreflightResult.failure(interrupted.error)
+			var persisted_interruption := _recovery.persist_selection(_snapshot.profile_id, interrupted.record, _profile_root)
+			if not persisted_interruption.ok():
+				_last_automatic_only_blocked = false
+				_state = State.CHOOSING_EXTRACTION
+				return RunResolutionPreflightResult.failure(persisted_interruption.error)
+			_transaction_id = next_transaction
+			_request = request
+			_projection = preflight.extraction
+			_confirmed_preflight = _copy_preflight(preflight)
+			_state = State.RESOLUTION_INTERRUPTED
+		else:
+			_state = State.CHOOSING_EXTRACTION
 		return preflight
 	var record_result := RunTerminalRecoveryRecord.create(RunTerminalRecoveryRecord.Stage.CHOOSING_EXTRACTION, _snapshot, preflight.extraction.selected_item_ids, next_transaction, [], "", null, "")
 	if not record_result.ok():
@@ -161,6 +185,11 @@ func resume(record: RunTerminalRecoveryRecord, profile: ProfileState, _profile_r
 	if not record.transaction_id.is_empty():
 		_request = RunResolutionRequest.create(record.transaction_id, _snapshot.profile_id, _snapshot.run_id, _snapshot.run_seed, _snapshot.run_player_id, _snapshot.leader_member_id, _selections_for_ids(_projection, record.selected_item_ids))
 		_confirmed_preflight = RunResolutionService.new().preflight_source(profile, _snapshot.resolution_source, _request)
+		_last_automatic_only_blocked = (
+			record.stage == RunTerminalRecoveryRecord.Stage.RESOLUTION_INTERRUPTED
+			and _confirmed_preflight.automatic_only_blocked
+			and record.interruption_reason == _confirmed_preflight.player_reason
+		)
 	_state = State.RESOLUTION_INTERRUPTED if record.stage == RunTerminalRecoveryRecord.Stage.RESOLUTION_INTERRUPTED else State.CHOOSING_EXTRACTION
 	return RunTerminalSnapshotResult.success(_snapshot)
 
@@ -176,6 +205,9 @@ func protect_displaced_gear(profile_id: String, profile_root: String) -> Profile
 	var projection_error := _project_from_profile(protected.profile, [])
 	if not projection_error.is_empty(): return _mutation_failure(projection_error)
 	_last_automatic_only_blocked = false
+	_transaction_id = ""
+	_request = null
+	_confirmed_preflight = null
 	_state = State.CHOOSING_EXTRACTION
 	extraction_ready.emit(extraction_projection())
 	return protected

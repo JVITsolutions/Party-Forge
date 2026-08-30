@@ -15,6 +15,7 @@ var _held_item_id := ""
 var _classes: Array[ClassDefinition] = []
 var _pending_run_class_id: StringName
 var _developer_mode := false
+var _visual_settings := PartyForgeSettings.new()
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -24,6 +25,12 @@ func _ready() -> void:
 func configure_classes(classes: Array[ClassDefinition]) -> void:
 	_classes = classes.duplicate()
 
+
+func configure_visual_settings(settings: PartyForgeSettings) -> void:
+	_visual_settings = settings.copy() if settings != null else PartyForgeSettings.new()
+	_apply_visual_settings()
+
+
 func open(storage: ProfileStorageProjection, return_focus: Control = null, developer_mode: bool = false) -> void:
 	_projection = ArmouryProjection.from_storage(storage)
 	_pending_run_class_id = &""
@@ -32,6 +39,7 @@ func open(storage: ProfileStorageProjection, return_focus: Control = null, devel
 	_selected_tab = mini(_selected_tab, maxi(0, _projection.stash_tabs.size() - 1))
 	_held_item_id = ""
 	visible = true
+	_apply_visual_settings()
 	_render_projection()
 	if is_inside_tree():
 		_first_focus().grab_focus()
@@ -40,6 +48,7 @@ func refresh(storage: ProfileStorageProjection) -> void:
 	var focus_descriptor := _focused_storage_descriptor()
 	_tooltip().call("force_dismiss")
 	_projection = ArmouryProjection.from_storage(storage)
+	_apply_visual_settings()
 	_render_projection()
 	_restore_storage_focus(focus_descriptor)
 
@@ -79,6 +88,7 @@ func apply_viewport_size(size: Vector2i) -> void:
 	_frame().offset_top = 12.0 if compact else 36.0
 	_frame().offset_right = -_frame().offset_left
 	_frame().offset_bottom = -_frame().offset_top
+	_rebuild_focus_loop()
 
 func request_drop(source_container_id: StringName, source_slot: int, item_id: String, destination_container_id: StringName, destination_slot: int) -> void:
 	_handle_drop(source_container_id, source_slot, item_id, destination_container_id, destination_slot)
@@ -105,7 +115,10 @@ func _input(event: InputEvent) -> void:
 		var target := get_viewport().gui_get_focus_owner() as StorageSlotButton
 		if target != null:
 			var source := _locate(_held_item_id)
-			_handle_drop(StringName(source.get("container_id", "")), int(source.get("slot", -1)), _held_item_id, target.container_id, target.slot)
+			var source_container_id := StringName(source.get("container_id", ""))
+			var source_slot := int(source.get("slot", -1))
+			if _drop_allowed(source_container_id, source_slot, _held_item_id, target.container_id, target.slot):
+				_handle_drop(source_container_id, source_slot, _held_item_id, target.container_id, target.slot)
 		get_viewport().set_input_as_handled()
 
 func _render_projection() -> void:
@@ -135,6 +148,7 @@ func _rebuild_equipment() -> void:
 		var detail := _projection.item(instance_id)
 		button.name = "LeaderSlot_%02d_%s" % [int(entry["slot"]), String(entry["slot_id"])]
 		button.bind_item(&"leader-loadout", int(entry["slot"]), instance_id, detail, String(entry["slot_id"]).capitalize())
+		button.set_drop_policy(_drop_allowed)
 		button.item_dropped.connect(_handle_drop)
 		button.pressed.connect(_select_item.bind(instance_id))
 		_wire_item_inspection(button)
@@ -157,6 +171,7 @@ func _rebuild_stash() -> void:
 		var button := StorageSlotButton.new()
 		button.name = "StashSlot_%03d" % slot
 		button.bind_item(StringName(tab["container_id"]), slot, item_id, _projection.item(item_id))
+		button.set_drop_policy(_drop_allowed)
 		button.item_dropped.connect(_handle_drop)
 		button.pressed.connect(_select_item.bind(item_id))
 		_wire_item_inspection(button)
@@ -179,24 +194,16 @@ func _rebuild_recovery_overflow() -> void:
 			_projection.item(item_id),
 			"Recovery",
 		)
+		button.set_drop_policy(_drop_allowed)
 		button.item_dropped.connect(_handle_drop)
 		button.pressed.connect(_select_item.bind(item_id))
 		_wire_item_inspection(button)
 		_recovery_overflow_grid().add_child(button)
 
 func _handle_drop(source_container_id: StringName, _source_slot: int, item_id: String, destination_container_id: StringName, destination_slot: int) -> void:
-	if item_id.is_empty():
-		return
-	if destination_container_id == ItemSlotContainer.TERMINAL_RECOVERY_OVERFLOW_ID:
+	if not _drop_allowed(source_container_id, _source_slot, item_id, destination_container_id, destination_slot):
 		return
 	if source_container_id == ItemSlotContainer.TERMINAL_RECOVERY_OVERFLOW_ID:
-		var detail := _projection.item(item_id)
-		if not String(detail.get("move_locked_reason", "")).is_empty():
-			return
-		if destination_container_id == &"leader-loadout" or not _is_ordinary_stash(destination_container_id):
-			return
-		if not _ordinary_stash_slot_is_empty(destination_container_id, destination_slot):
-			return
 		move_requested.emit(item_id, destination_container_id, destination_slot)
 		_held_item_id = ""
 		return
@@ -205,6 +212,22 @@ func _handle_drop(source_container_id: StringName, _source_slot: int, item_id: S
 	else:
 		move_requested.emit(item_id, destination_container_id, destination_slot)
 	_held_item_id = ""
+
+
+func _drop_allowed(source_container_id: StringName, _source_slot: int, item_id: String, destination_container_id: StringName, destination_slot: int) -> bool:
+	if source_container_id.is_empty() or item_id.is_empty():
+		return false
+	if destination_container_id == ItemSlotContainer.TERMINAL_RECOVERY_OVERFLOW_ID:
+		return false
+	if not String(_projection.item(item_id).get("move_locked_reason", "")).is_empty():
+		return false
+	if source_container_id == ItemSlotContainer.TERMINAL_RECOVERY_OVERFLOW_ID:
+		return (
+			destination_container_id != &"leader-loadout"
+			and _is_ordinary_stash(destination_container_id)
+			and _ordinary_stash_slot_is_empty(destination_container_id, destination_slot)
+		)
+	return destination_container_id == &"leader-loadout" or _is_ordinary_stash(destination_container_id)
 
 func _on_class_selected(index: int) -> void:
 	if index < 0 or index >= _class_chooser().item_count:
@@ -229,6 +252,7 @@ func _select_item(item_id: String) -> void:
 func _wire_item_inspection(button: StorageSlotButton) -> void:
 	button.inspection_started.connect(_show_item_tooltip)
 	button.inspection_ended.connect(_release_item_tooltip)
+	button.focus_entered.connect(_ensure_focused_slot_visible.bind(button))
 
 
 func _show_item_tooltip(source: StorageSlotButton) -> void:
@@ -243,6 +267,15 @@ func _show_item_tooltip(source: StorageSlotButton) -> void:
 
 func _release_item_tooltip(source: StorageSlotButton) -> void:
 	_tooltip().call("release_item", source.source_id())
+
+
+func _ensure_focused_slot_visible(button: StorageSlotButton) -> void:
+	var ancestor := button.get_parent()
+	while ancestor != null and ancestor != self:
+		if ancestor is ScrollContainer:
+			(ancestor as ScrollContainer).call_deferred(&"ensure_control_visible", button)
+			return
+		ancestor = ancestor.get_parent()
 
 func _select_projected_class() -> void:
 	if _class_chooser().item_count == 0:
@@ -352,6 +385,20 @@ func _rebuild_focus_loop() -> void:
 		var previous := controls[posmod(index - 1, controls.size())]
 		current.focus_next = current.get_path_to(next)
 		current.focus_previous = current.get_path_to(previous)
+		current.focus_neighbor_left = current.get_path_to(previous)
+		current.focus_neighbor_top = current.get_path_to(previous)
+		current.focus_neighbor_right = current.get_path_to(next)
+		current.focus_neighbor_bottom = current.get_path_to(next)
+
+
+func _apply_visual_settings() -> void:
+	var resolved := _visual_settings if _visual_settings != null else PartyForgeSettings.new()
+	var resolved_theme := LivingForgeThemeCatalog.resolve(resolved.high_contrast, resolved.ui_scale_percent, resolved.text_scale_percent)
+	(get_node("Overlay") as Control).theme = resolved_theme
+	var action_minimum := 48
+	if resolved_theme != null and resolved_theme.has_constant(&"action_minimum", &"LivingForgeMetrics"):
+		action_minimum = maxi(48, resolved_theme.get_constant(&"action_minimum", &"LivingForgeMetrics"))
+	_close_button().custom_minimum_size = Vector2(action_minimum, action_minimum)
 func _clear(parent: Node) -> void:
 	for child: Node in parent.get_children(): child.free()
 func _first_focus() -> Control: return _equipment_grid().get_child(0) as Control if _equipment_grid().get_child_count() > 0 else _close_button()

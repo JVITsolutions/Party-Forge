@@ -87,6 +87,11 @@ func resolve_terminal_source(
 		var decoded := RunTerminalRecoveryCodec.decode(mutation.profile.terminal_resolution)
 		if not decoded.ok() or decoded.record.stage != RunTerminalRecoveryRecord.Stage.RESOLVED_AWAITING_PROJECTION:
 			return RunResolutionResult.failure(_error("field=duplicate.terminal_resolution reason=resolved receipt is unavailable"))
+		if not _valid_terminal_receipt(mutation.receipt, source, request):
+			return RunResolutionResult.failure(_error("field=duplicate.receipt reason=stored terminal receipt does not match exact source and request"))
+		var duplicate_error := _validate_terminal_duplicate(decoded.record, source, request)
+		if not duplicate_error.is_empty():
+			return RunResolutionResult.failure(duplicate_error)
 		accepted = decoded.record.accepted_extraction
 		protected_ids = decoded.record.protected_displaced_item_ids
 	else:
@@ -235,6 +240,45 @@ func _valid_receipt(receipt: Dictionary) -> bool:
 		and _is_lower_hex(String(receipt.get("source_fingerprint", "")), 64)
 		and _is_lower_hex(String(receipt.get("projection_fingerprint", "")), 64)
 	)
+
+func _valid_terminal_receipt(receipt: Dictionary, source: RunResolutionSource, request: RunResolutionRequest) -> bool:
+	return (
+		receipt.size() == 3
+		and (receipt.get("schema_version") is int or receipt.get("schema_version") is float)
+		and float(receipt["schema_version"]) == floor(float(receipt["schema_version"]))
+		and int(receipt["schema_version"]) == 1
+		and String(receipt.get("source_fingerprint", "")) == _document_fingerprint(source.to_dictionary())
+		and String(receipt.get("request_fingerprint", "")) == _document_fingerprint(request.canonical_document())
+	)
+
+func _validate_terminal_duplicate(record: RunTerminalRecoveryRecord, source: RunResolutionSource, request: RunResolutionRequest) -> String:
+	if record.snapshot.resolution_source.to_dictionary() != source.to_dictionary():
+		return _error("field=duplicate.source reason=decoded terminal source does not match the supplied source")
+	if record.transaction_id != request.transaction_id:
+		return _error("field=duplicate.request reason=transaction does not match the resolved terminal record")
+	var wanted: Dictionary = {}
+	for item_id: String in record.selected_item_ids:
+		wanted[item_id] = true
+	var selections: Array[ExtractionSelection] = []
+	var reconstructed_ids: Array[String] = []
+	for selection: ExtractionSelection in record.accepted_extraction.eligible_items:
+		if wanted.has(selection.item_id):
+			selections.append(selection)
+			reconstructed_ids.append(selection.item_id)
+	if reconstructed_ids != record.selected_item_ids:
+		return _error("field=duplicate.request reason=resolved selection order is not canonical")
+	var reconstructed := RunResolutionRequest.create(
+		record.transaction_id,
+		record.snapshot.profile_id,
+		record.snapshot.run_id,
+		record.snapshot.run_seed,
+		record.snapshot.run_player_id,
+		record.snapshot.leader_member_id,
+		selections,
+	)
+	if reconstructed.canonical_document() != request.canonical_document():
+		return _error("field=duplicate.request reason=canonical request does not match the resolved terminal record")
+	return ""
 
 func _is_lower_hex(value: String, length: int) -> bool:
 	if value.length() != length:

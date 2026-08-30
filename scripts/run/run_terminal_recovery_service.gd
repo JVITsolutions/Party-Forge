@@ -22,8 +22,12 @@ func persist_initial(profile_id: String, snapshot: RunTerminalSnapshot, root: St
 		return _failure(profile_id, "terminal-capture", "snapshot identity is invalid")
 	var transaction_id := "terminal-capture:%s" % snapshot.run_id
 	var empty_ids: Array[String] = []
-	var request := {"profile_id": profile_id, "run_id": String(snapshot.run_id)}
-	return _mutations.apply(profile_id, transaction_id, func(candidate: ProfileState) -> String:
+	var request := {
+		"profile_id": profile_id,
+		"run_id": String(snapshot.run_id),
+		"snapshot": snapshot.to_dictionary(),
+	}
+	var mutation := _mutations.apply(profile_id, transaction_id, func(candidate: ProfileState) -> String:
 		var identity_error := _validate_bootstrap_identity(candidate, snapshot, false)
 		if not identity_error.is_empty():
 			return identity_error
@@ -40,6 +44,12 @@ func persist_initial(profile_id: String, snapshot: RunTerminalSnapshot, root: St
 		candidate.terminal_resolution = created.record.to_dictionary()
 		return ""
 	, root, -1, CAPTURE_OPERATION, request)
+	if not mutation.ok():
+		return mutation
+	var projection_error := _validate_initial_projection(mutation.profile, snapshot)
+	if not projection_error.is_empty():
+		return _failure(profile_id, transaction_id, projection_error)
+	return mutation
 
 func persist_selection(profile_id: String, record: RunTerminalRecoveryRecord, root: String = ProfileStore.DEFAULT_ROOT) -> ProfileMutationResult:
 	if record == null or record.snapshot == null or record.snapshot.profile_id != profile_id:
@@ -124,14 +134,12 @@ func complete_terminal(profile_id: String, run_id: StringName, root: String = Pr
 			return _failure(profile_id, transaction_id, decoded_record.error)
 		if decoded_record.record.stage != RunTerminalRecoveryRecord.Stage.RESOLVED_AWAITING_PROJECTION:
 			return _failure(profile_id, transaction_id, "terminal receipt is not resolved")
-		var inspected := inspect(loaded.profile)
-		if not inspected.ok():
-			return _failure(profile_id, transaction_id, inspected.error)
-		var record := inspected.record
+		var safety := RunRecoveryService.new(null, null, _store).verify_terminal_safety(loaded.profile, decoded_record.record.snapshot)
+		if not safety.ok():
+			return _failure(profile_id, transaction_id, safety.error)
+		var record := safety.record
 		if record.snapshot.run_id != run_id:
 			return _failure(profile_id, transaction_id, "run identity does not match resolved receipt")
-		if not loaded.profile.applied_transactions.has(record.applied_transaction_id):
-			return _failure(profile_id, transaction_id, "applied resolution transaction is missing")
 		terminal_ids = record.snapshot.resolution_source.item_state.registry().ids()
 	var request := {"profile_id": profile_id, "run_id": clean_run_id}
 	var complete_mutation := func(candidate: ProfileState) -> String:
@@ -140,8 +148,9 @@ func complete_terminal(profile_id: String, run_id: StringName, root: String = Pr
 		var record := current.record
 		if record.stage != RunTerminalRecoveryRecord.Stage.RESOLVED_AWAITING_PROJECTION or record.snapshot.run_id != run_id:
 			return _error("stage", "exact resolved terminal receipt is required")
-		if not candidate.applied_transactions.has(record.applied_transaction_id):
-			return _error("applied_transaction_id", "resolution transaction is missing")
+		var safety := RunRecoveryService.new(null, null, _store).verify_terminal_safety(candidate, record.snapshot)
+		if not safety.ok():
+			return safety.error
 		candidate.terminal_resolution = {}
 		return ""
 	return _mutations.apply_irreversible_terminal_completion(
@@ -156,16 +165,32 @@ func protect_displaced_gear(profile_id: String, record: RunTerminalRecoveryRecor
 	if not loaded.ok():
 		return _failure(profile_id, "terminal-protect-displaced", loaded.error if not loaded.error.is_empty() else "profile is missing")
 	var prefix := "terminal-protect-displaced:%s:" % record.snapshot.run_id
+	var request := {
+		"profile_id": profile_id,
+		"run_id": String(record.snapshot.run_id),
+		"record": record.to_dictionary(),
+	}
+	var expected_fingerprint := ProfileMutationService._fingerprint(PROTECTION_OPERATION, request)
 	var transaction_id := ""
 	for applied_id: Variant in loaded.profile.applied_transactions:
-		if String(applied_id).begins_with(prefix):
-			transaction_id = String(applied_id)
-			break
-	var request := {"profile_id": profile_id, "run_id": String(record.snapshot.run_id)}
+		if not String(applied_id).begins_with(prefix):
+			continue
+		var applied := loaded.profile.applied_transactions[applied_id] as Dictionary
+		if String(applied.get("operation", "")) != PROTECTION_OPERATION or String(applied.get("fingerprint", "")) != expected_fingerprint:
+			continue
+		if not transaction_id.is_empty():
+			return _failure(profile_id, prefix, "multiple committed protection transactions match the supplied record")
+		transaction_id = String(applied_id)
 	if not transaction_id.is_empty():
-		return _mutations.apply(profile_id, transaction_id, func(_candidate: ProfileState) -> String:
+		var duplicate := _mutations.apply(profile_id, transaction_id, func(_candidate: ProfileState) -> String:
 			return _error("duplicate", "committed protection unexpectedly invoked its mutation")
 		, root, -1, PROTECTION_OPERATION, request)
+		if not duplicate.ok():
+			return duplicate
+		var duplicate_error := _validate_protection_projection(loaded.profile, duplicate.profile, record)
+		if not duplicate_error.is_empty():
+			return _failure(profile_id, transaction_id, duplicate_error)
+		return duplicate
 	var current := RunTerminalRecoveryCodec.decode(loaded.profile.terminal_resolution)
 	if not current.ok() or current.record.to_dictionary() != record.to_dictionary():
 		return _failure(profile_id, "terminal-protect-displaced", current.error if not current.ok() else "record is stale")
@@ -236,6 +261,42 @@ func _validate_bootstrap_identity(profile: ProfileState, snapshot: RunTerminalSn
 		return _error("run_identity", "strict bootstrap and terminal snapshot must match")
 	if require_exact_item_state and run["item_state"] != snapshot.resolution_source.item_state.to_dictionary():
 		return _error("item_state", "strict bootstrap must exactly match captured source")
+	return ""
+
+func _validate_initial_projection(profile: ProfileState, snapshot: RunTerminalSnapshot) -> String:
+	var identity_error := _validate_bootstrap_identity(profile, snapshot, true)
+	if not identity_error.is_empty():
+		return identity_error
+	var decoded := RunTerminalRecoveryCodec.decode(profile.terminal_resolution)
+	if not decoded.ok():
+		return decoded.error
+	var empty_ids: Array[String] = []
+	var expected := RunTerminalRecoveryRecord.create(
+		RunTerminalRecoveryRecord.Stage.CHOOSING_EXTRACTION,
+		snapshot, empty_ids, "", empty_ids, "", null, "",
+	)
+	if not expected.ok() or decoded.record.to_dictionary() != expected.record.to_dictionary():
+		return _error("terminal_resolution", "committed capture result does not match the supplied snapshot")
+	return ""
+
+func _validate_protection_projection(live: ProfileState, committed: ProfileState, supplied: RunTerminalRecoveryRecord) -> String:
+	if live == null or committed == null or supplied == null:
+		return _error("protection", "live, committed, and supplied truth are required")
+	for field: String in ["item_records", "leader_loadout", "terminal_recovery_overflow", "terminal_resolution"]:
+		if live.to_dictionary().get(field) != committed.to_dictionary().get(field):
+			return _error(field, "durable protection result diverges from the committed result")
+	var decoded := RunTerminalRecoveryCodec.decode(committed.terminal_resolution)
+	if not decoded.ok():
+		return decoded.error
+	var durable := decoded.record
+	if (
+		durable.stage != supplied.stage
+		or durable.snapshot.to_dictionary() != supplied.snapshot.to_dictionary()
+		or durable.selected_item_ids != supplied.selected_item_ids
+		or durable.transaction_id != supplied.transaction_id
+		or durable.interruption_reason != supplied.interruption_reason
+	):
+		return _error("record", "committed protection result does not match the supplied record")
 	return ""
 
 func _request_matches_snapshot(request: RunResolutionRequest, snapshot: RunTerminalSnapshot) -> bool:

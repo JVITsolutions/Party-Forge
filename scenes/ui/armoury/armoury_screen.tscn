@@ -34,7 +34,7 @@ layout_mode = 2
 [node name="Title" type="Label" parent="Overlay/Frame/Layout/Header"]
 layout_mode = 2
 size_flags_horizontal = 3
-theme_override_font_sizes/font_size = 32
+theme_type_variation = &"LivingForgeDisplayLabel"
 text = "ARMOURY — Leader Loadout"
 [node name="Class" type="Label" parent="Overlay/Frame/Layout/Header"]
 layout_mode = 2
@@ -69,9 +69,11 @@ custom_minimum_size = Vector2(300, 0)
 layout_mode = 2
 [node name="Title" type="Label" parent="Overlay/Frame/Layout/Body/RecoveryOverflow"]
 layout_mode = 2
+theme_type_variation = &"LivingForgeSectionLabel"
 text = "RECOVERY OVERFLOW — SOURCE ONLY"
 [node name="Help" type="Label" parent="Overlay/Frame/Layout/Body/RecoveryOverflow"]
 layout_mode = 2
+theme_type_variation = &"LivingForgeCaptionLabel"
 text = "Move older recovered items into an empty stash slot."
 autowrap_mode = 2
 [node name="Scroll" type="ScrollContainer" parent="Overlay/Frame/Layout/Body/RecoveryOverflow"]
@@ -86,9 +88,13 @@ layout_mode = 2
 [node name="Help" type="Label" parent="Overlay/Frame/Layout/Footer"]
 layout_mode = 2
 size_flags_horizontal = 3
-text = "Mouse: drag/drop • Controller: West pick up, South place"
+theme_type_variation = &"LivingForgeCaptionLabel"
+text = "Keyboard: arrows inspect, Enter place • Controller: D-pad inspect, West pick up, South place • Mouse: drag/drop"
+autowrap_mode = 2
 [node name="Close" type="Button" parent="Overlay/Frame/Layout/Footer"]
+custom_minimum_size = Vector2(48, 48)
 layout_mode = 2
+theme_type_variation = &"LivingForgeSecondaryButton"
 text = "Close"
 
 [node name="ItemTooltip" parent="Overlay" instance=ExtResource("2_tooltip")]

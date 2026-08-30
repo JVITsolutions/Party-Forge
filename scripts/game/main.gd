@@ -989,6 +989,7 @@ func _wire_static_ui() -> void:
 		passive_screen.tree_closed.connect(_on_city_passive_tree_closed)
 	var armoury := get_node("ArmouryScreen") as ArmouryScreen
 	armoury.configure_classes(catalog.classes)
+	armoury.configure_visual_settings(saved_settings)
 	if not armoury.close_requested.is_connected(_on_armoury_closed): armoury.close_requested.connect(_on_armoury_closed)
 	if not armoury.equip_requested.is_connected(_on_armoury_equip_requested): armoury.equip_requested.connect(_on_armoury_equip_requested)
 	if not armoury.move_requested.is_connected(_on_armoury_move_requested): armoury.move_requested.connect(_on_armoury_move_requested)
@@ -2008,6 +2009,7 @@ func _on_city_passive_tree_closed() -> void:
 func _on_settings_applied(_settings: PartyForgeSettings) -> void:
 	var authoritative := settings_store.load_settings(settings_path) if settings_store != null else _settings
 	saved_settings = authoritative.copy()
+	(get_node("ArmouryScreen") as ArmouryScreen).configure_visual_settings(saved_settings)
 	if saved_settings.mode != PartyForgeSettings.Mode.DEVELOPER_MODE:
 		(get_node("DeveloperItemSandbox") as DeveloperItemSandbox).cancel_and_clear()
 	_refresh_main_menu_projection()

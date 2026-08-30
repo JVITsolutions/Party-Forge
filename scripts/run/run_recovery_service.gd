@@ -116,9 +116,16 @@ func verify_terminal_safety(
 				return _terminal_unsafe("transaction_id", "selection source is unavailable")
 			var wanted: Dictionary = {}
 			for item_id: String in record.selected_item_ids: wanted[item_id] = true
+			var reconstructed_ids: Array[String] = []
 			var selection_documents: Array[Dictionary] = []
 			for selection: ExtractionSelection in base.eligible_items:
-				if wanted.has(selection.item_id): selection_documents.append(selection.to_dictionary())
+				if wanted.has(selection.item_id):
+					reconstructed_ids.append(selection.item_id)
+					selection_documents.append(selection.to_dictionary())
+			if reconstructed_ids.size() != record.selected_item_ids.size():
+				return _terminal_unsafe("selected_item_ids", "persisted selection count does not match canonical policy truth")
+			if reconstructed_ids != record.selected_item_ids:
+				return _terminal_unsafe("selected_item_ids", "persisted selection order does not match canonical policy truth")
 			var expected_transaction := "terminal-resolution:%s:%s" % [snapshot.run_id, JSON.stringify(selection_documents).sha256_text()]
 			if record.transaction_id != expected_transaction:
 				return _terminal_unsafe("transaction_id", "persisted transaction does not match the canonical selection")

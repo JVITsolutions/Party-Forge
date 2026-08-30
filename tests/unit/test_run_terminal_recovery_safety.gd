@@ -34,6 +34,38 @@ class TerminalPrecommitFailStore extends AtomicJsonStore:
 			return ERR_CANT_CREATE
 		return super._write_text(path, contents)
 
+class CompletionInterleavingMutationService extends ProfileMutationService:
+	var test_store: ProfileStore
+	var drift_profile: ProfileState
+	var injected_bytes := PackedByteArray()
+
+	func _init(store_value: ProfileStore, drift_value: ProfileState) -> void:
+		test_store = store_value
+		drift_profile = drift_value
+		super(store_value)
+
+	func apply_irreversible_terminal_completion(
+		profile_id: String,
+		transaction_id: String,
+		terminal_run_id: StringName,
+		terminal_instance_ids: Array[String],
+		mutate: Callable,
+		root: String = ProfileStore.DEFAULT_ROOT,
+		now_unix: int = -1,
+		operation: String = "",
+		request: Dictionary = {},
+	) -> ProfileMutationResult:
+		var injected_error := test_store.save_profile(drift_profile, root)
+		if not injected_error.is_empty():
+			var failure := ProfileMutationResult.new()
+			failure.error = injected_error
+			return failure
+		injected_bytes = FileAccess.get_file_as_bytes(test_store.profile_path(profile_id, root))
+		return super.apply_irreversible_terminal_completion(
+			profile_id, transaction_id, terminal_run_id, terminal_instance_ids,
+			mutate, root, now_unix, operation, request,
+		)
+
 func run() -> Array[String]:
 	var failures: Array[String] = []
 	_test_schema_six_defaults_are_copy_owned(failures)
@@ -44,6 +76,8 @@ func run() -> Array[String]:
 	_test_terminal_persistence_and_typed_safety(failures)
 	_test_pre_resolution_safety_direct_full_matrix(failures)
 	_test_terminal_completion_service_contract(failures)
+	_test_completion_revalidates_complete_resolved_transaction(failures)
+	_test_completion_revalidates_inside_mutation_callback(failures)
 	_test_completion_rejects_missing_or_mismatched_applied_resolution(failures)
 	_test_terminal_completion_invalid_and_storage_failures(failures)
 	_test_resolved_terminal_safety_one_field_matrix(failures)
@@ -241,6 +275,55 @@ func _test_terminal_persistence_and_typed_safety(failures: Array[String]) -> voi
 	var durable := store.load_profile(PROFILE_ID, root).profile
 	TestAssertions.equal(durable.resumable_run.get("item_state"), snapshot.resolution_source.item_state.to_dictionary(), "terminal capture replaces only strict bootstrap item state with captured source truth", failures)
 	TestAssertions.truthy(not durable.terminal_resolution.is_empty(), "terminal capture commits the recovery record in the same write", failures)
+	var altered_cases: Array[Dictionary] = [
+		{"label": "seed", "kind": "seed"},
+		{"label": "player", "kind": "player"},
+		{"label": "leader", "kind": "leader"},
+		{"label": "source", "kind": "source"},
+	]
+	var retry_executed := 0
+	for test_case: Dictionary in altered_cases:
+		var changed_document := snapshot.to_dictionary()
+		match String(test_case.kind):
+			"seed":
+				changed_document["run_seed"] = snapshot.run_seed + 1
+				(changed_document["resolution_source"] as Dictionary)["run_seed"] = snapshot.run_seed + 1
+			"player":
+				changed_document["run_player_id"] = "terminal-safety-player-other"
+				var source_document := changed_document["resolution_source"] as Dictionary
+				source_document["run_player_id"] = "terminal-safety-player-other"
+				var item_state := source_document["item_state"] as Dictionary
+				item_state["owner_id"] = "terminal-safety-player-other"
+				for container: Dictionary in item_state["containers"]:
+					container["owner_id"] = "terminal-safety-player-other"
+			"leader":
+				changed_document["leader_member_id"] = 2
+				(changed_document["members"] as Array)[0]["member_id"] = 2
+				var source_document := changed_document["resolution_source"] as Dictionary
+				source_document["leader_member_id"] = 2
+				(source_document["party_members"] as Array)[0]["member_id"] = 2
+			"source":
+				(changed_document["resolution_source"]["item_state"]["registry"]["items"] as Array)[0]["item_level"] = 21
+		var changed := RunTerminalSnapshot.from_dictionary(changed_document)
+		TestAssertions.truthy(changed.ok(), "%s retry snapshot remains typed and valid: %s" % [test_case.label, changed.error], failures)
+		if not changed.ok():
+			continue
+		var before_bytes := FileAccess.get_file_as_bytes(store.profile_path(PROFILE_ID, root))
+		var rejected: Variant = service.call(&"persist_initial", PROFILE_ID, changed.snapshot, root)
+		TestAssertions.truthy(not _ok(rejected), "committed terminal capture rejects changed %s input" % test_case.label, failures)
+		TestAssertions.equal(FileAccess.get_file_as_bytes(store.profile_path(PROFILE_ID, root)), before_bytes, "changed %s capture retry is write-free" % test_case.label, failures)
+		retry_executed += 1
+	TestAssertions.equal(retry_executed, altered_cases.size(), "every changed terminal-capture retry executes", failures)
+
+	var capture_transaction := "terminal-capture:%s" % snapshot.run_id
+	var stale_result_profile := store.load_profile(PROFILE_ID, root).profile
+	(stale_result_profile.applied_transactions[capture_transaction]["result_profile"] as Dictionary)["terminal_resolution"] = {}
+	TestAssertions.equal(ProfileCodec.validate_profile(stale_result_profile), "", "stale committed capture result fixture remains structurally valid", failures)
+	TestAssertions.equal(store.save_profile(stale_result_profile, root), "", "stale committed capture result fixture saves", failures)
+	var stale_result_bytes := FileAccess.get_file_as_bytes(store.profile_path(PROFILE_ID, root))
+	var stale_result_retry: Variant = service.call(&"persist_initial", PROFILE_ID, snapshot, root)
+	TestAssertions.truthy(not _ok(stale_result_retry), "committed terminal capture validates returned durable truth against the supplied snapshot", failures)
+	TestAssertions.equal(FileAccess.get_file_as_bytes(store.profile_path(PROFILE_ID, root)), stale_result_bytes, "stale committed capture result rejection is write-free", failures)
 	ProfileTestSupport.remove_tree(root)
 
 	var mismatch_root := _case_root("persist_identity")
@@ -281,6 +364,22 @@ func _test_pre_resolution_safety_direct_full_matrix(failures: Array[String]) -> 
 	TestAssertions.truthy(exact.ok(), "direct exact pre-resolution receipt and strict bootstrap pass safety", failures)
 	TestAssertions.equal(profile.to_dictionary(), before_profile, "direct pre-resolution safety preserves profile input", failures)
 	TestAssertions.equal(snapshot.to_dictionary(), before_snapshot, "direct pre-resolution safety preserves snapshot input", failures)
+	var canonical_projection := RunExtractionPolicy.project_source(snapshot.resolution_source, profile, [])
+	var surviving_documents: Array[Dictionary] = []
+	for selection: ExtractionSelection in canonical_projection.eligible_items:
+		if selection.item_id == ITEM_ID:
+			surviving_documents.append(selection.to_dictionary())
+	var stale_ids: Array[String] = [ITEM_ID, "item-stale-terminal-selection"]
+	var stale_transaction := "terminal-resolution:%s:%s" % [snapshot.run_id, JSON.stringify(surviving_documents).sha256_text()]
+	var stale_record := RunTerminalRecoveryRecord.create(
+		RunTerminalRecoveryRecord.Stage.CHOOSING_EXTRACTION,
+		snapshot, stale_ids, stale_transaction, empty_ids, "", null, "",
+	)
+	var stale_profile := profile.copy()
+	stale_profile.terminal_resolution = stale_record.record.to_dictionary() if stale_record.ok() else {}
+	TestAssertions.truthy(stale_record.ok() and ProfileCodec.validate_profile(stale_profile).is_empty(), "stale-selection safety fixture remains structurally valid", failures)
+	var stale_safety := recovery.verify_terminal_safety(stale_profile, snapshot)
+	TestAssertions.truthy(not stale_safety.ok(), "pre-resolution safety rejects a stale selected ID even when the transaction digest is recomputed over the surviving canonical subset", failures)
 	var cases: Array[Dictionary] = [
 		{"label": "profile", "target": "record", "path": ["snapshot", "profile_id"], "value": "profile-other"},
 		{"label": "outcome", "target": "record", "path": ["snapshot", "outcome"], "value": RunTerminalSnapshot.Outcome.DEFEAT},
@@ -423,6 +522,30 @@ func _test_protect_displaced_gear_is_automatic_only_atomic_and_idempotent(failur
 	TestAssertions.truthy(accepted.ok() and accepted.mandatory_stash_slots == 0, "protection rerun preflight is accepted with zero mandatory displaced slots: %s / %s" % [accepted.error, accepted.player_reason], failures)
 	var cold: Variant = recovery.call("inspect", after)
 	TestAssertions.truthy(_ok(cold) and cold.get("record").get("protected_displaced_item_ids") == ["item-preflight-prior-head", "item-preflight-prior-shield"], "cold resume retains overflow and protected IDs", failures)
+	var changed_snapshot_document: Dictionary = inspected.get("record").get("snapshot").to_dictionary()
+	changed_snapshot_document["elapsed_seconds"] = float(changed_snapshot_document["elapsed_seconds"]) + 1.0
+	var changed_snapshot := RunTerminalSnapshot.from_dictionary(changed_snapshot_document)
+	var empty_ids: Array[String] = []
+	var changed_record := RunTerminalRecoveryRecord.create(
+		RunTerminalRecoveryRecord.Stage.CHOOSING_EXTRACTION,
+		changed_snapshot.snapshot if changed_snapshot.ok() else null,
+		empty_ids, "", empty_ids, "", null, "",
+	)
+	TestAssertions.truthy(changed_snapshot.ok() and changed_record.ok(), "changed protection replay record remains typed and valid", failures)
+	var before_changed_record := FileAccess.get_file_as_bytes(store.profile_path(profile.profile_id, fixture.root))
+	var changed_record_replay: Variant = recovery.call("protect_displaced_gear", profile.profile_id, changed_record.record, fixture.root)
+	TestAssertions.truthy(not _ok(changed_record_replay), "committed protection replay rejects a different supplied record", failures)
+	TestAssertions.equal(FileAccess.get_file_as_bytes(store.profile_path(profile.profile_id, fixture.root)), before_changed_record, "changed protection record replay is write-free", failures)
+
+	var drifted_result := store.load_profile(profile.profile_id, fixture.root).profile
+	(drifted_result.terminal_recovery_overflow["slots"] as Dictionary).erase("0")
+	(drifted_result.leader_loadout["slots"] as Dictionary)["0"] = "item-preflight-prior-head"
+	TestAssertions.equal(ProfileCodec.validate_profile(drifted_result), "", "protection durable-result drift fixture remains structurally valid", failures)
+	TestAssertions.equal(store.save_profile(drifted_result, fixture.root), "", "protection durable-result drift fixture saves", failures)
+	var before_result_drift := FileAccess.get_file_as_bytes(store.profile_path(profile.profile_id, fixture.root))
+	var result_drift_replay: Variant = recovery.call("protect_displaced_gear", profile.profile_id, inspected.get("record"), fixture.root)
+	TestAssertions.truthy(not _ok(result_drift_replay), "committed protection replay rejects durable placement drift", failures)
+	TestAssertions.equal(FileAccess.get_file_as_bytes(store.profile_path(profile.profile_id, fixture.root)), before_result_drift, "durable protection result rejection is write-free", failures)
 	preflight_test.call("_cleanup", fixture)
 
 	var full_fixture: Dictionary = preflight_test.call("_fixture", "terminal-protect-full-overflow", 0, unlocks, 1)
@@ -580,6 +703,63 @@ func _test_terminal_completion_service_contract(failures: Array[String]) -> void
 			TestAssertions.equal(result_profile.get("terminal_resolution", null), {}, "zero-item completion leaves no historical terminal receipt", failures)
 	ProfileTestSupport.remove_tree(zero_root)
 	_free_fixture(zero_fixture, "")
+	_free_fixture(fixture, "")
+
+func _test_completion_revalidates_complete_resolved_transaction(failures: Array[String]) -> void:
+	var fixture := _fixture(true)
+	var snapshot := RunTerminalSnapshotBuilder.new().capture(RunTerminalSnapshot.Outcome.VICTORY, 18.0, fixture.context).snapshot
+	var exact := _resolved_profile(fixture.profile, snapshot, true)
+	var applied_id := String(exact.terminal_resolution.get("applied_transaction_id", ""))
+	var cases: Array[Dictionary] = [
+		{"label": "operation", "kind": "path", "path": ["applied_transactions", applied_id, "operation"], "value": "not_run_resolution"},
+		{"label": "fingerprint", "kind": "path", "path": ["applied_transactions", applied_id, "fingerprint"], "value": "a".repeat(64)},
+		{"label": "receipt schema", "kind": "path", "path": ["applied_transactions", applied_id, "receipt", "schema_version"], "value": 2},
+		{"label": "receipt source", "kind": "path", "path": ["applied_transactions", applied_id, "receipt", "source_fingerprint"], "value": "b".repeat(64)},
+		{"label": "receipt request", "kind": "path", "path": ["applied_transactions", applied_id, "receipt", "request_fingerprint"], "value": "c".repeat(64)},
+		{"label": "result snapshot", "kind": "path", "path": ["applied_transactions", applied_id, "result_profile", "item_records", "items", 0, "item_level"], "value": 21},
+		{"label": "durable placement", "kind": "path", "path": ["stash_tabs", 0, "slots"], "value": {"1": ITEM_ID}},
+	]
+	var store := ProfileStore.new()
+	var executed := 0
+	for test_case: Dictionary in cases:
+		var candidate := exact.copy()
+		var document := candidate.to_dictionary()
+		_set_nested_variant(document, test_case.path, test_case.value)
+		var decoded := ProfileCodec.decode_document(document)
+		TestAssertions.truthy(decoded.ok(), "%s completion-drift fixture remains structurally valid: %s" % [test_case.label, decoded.error], failures)
+		if not decoded.ok():
+			continue
+		var root := _case_root("completion_full_transaction_%s" % String(test_case.label).replace(" ", "_"))
+		TestAssertions.equal(store.save_profile(decoded.profile, root), "", "%s completion-drift fixture saves" % test_case.label, failures)
+		var path := store.profile_path(PROFILE_ID, root)
+		var before_bytes := FileAccess.get_file_as_bytes(path)
+		var rejected := RunTerminalRecoveryService.new(ProfileMutationService.new(store), store).complete_terminal(PROFILE_ID, RUN_ID, root)
+		TestAssertions.truthy(not rejected.ok(), "complete_terminal rejects resolved transaction %s drift" % test_case.label, failures)
+		TestAssertions.equal(FileAccess.get_file_as_bytes(path), before_bytes, "%s completion drift is write-free" % test_case.label, failures)
+		executed += 1
+		ProfileTestSupport.remove_tree(root)
+	TestAssertions.equal(executed, cases.size(), "every completion transaction drift mutation executes", failures)
+	_free_fixture(fixture, "")
+
+func _test_completion_revalidates_inside_mutation_callback(failures: Array[String]) -> void:
+	var fixture := _fixture(true)
+	var snapshot := RunTerminalSnapshotBuilder.new().capture(RunTerminalSnapshot.Outcome.VICTORY, 18.25, fixture.context).snapshot
+	var exact := _resolved_profile(fixture.profile, snapshot, true)
+	var applied_id := String(exact.terminal_resolution.get("applied_transaction_id", ""))
+	var drift := exact.copy()
+	(drift.applied_transactions[applied_id] as Dictionary)["operation"] = "not_run_resolution"
+	TestAssertions.equal(ProfileCodec.validate_profile(drift), "", "completion callback drift fixture remains structurally valid", failures)
+	var root := _case_root("completion_callback_revalidation")
+	var store := ProfileStore.new()
+	TestAssertions.equal(store.save_profile(exact, root), "", "completion callback exact fixture saves", failures)
+	var interleaving := CompletionInterleavingMutationService.new(store, drift)
+	var rejected := RunTerminalRecoveryService.new(interleaving, store).complete_terminal(PROFILE_ID, RUN_ID, root)
+	TestAssertions.truthy(not rejected.ok(), "complete_terminal revalidates resolved truth inside the mutation callback", failures)
+	var path := store.profile_path(PROFILE_ID, root)
+	TestAssertions.equal(FileAccess.get_file_as_bytes(path), interleaving.injected_bytes, "callback-time drift rejection adds no completion write", failures)
+	var durable := store.load_profile(PROFILE_ID, root).profile
+	TestAssertions.truthy(not durable.terminal_resolution.is_empty() and not durable.applied_transactions.has("terminal-complete:%s" % RUN_ID), "callback-time drift cannot clear receipt or authorize completion", failures)
+	ProfileTestSupport.remove_tree(root)
 	_free_fixture(fixture, "")
 
 func _test_completion_rejects_missing_or_mismatched_applied_resolution(failures: Array[String]) -> void:

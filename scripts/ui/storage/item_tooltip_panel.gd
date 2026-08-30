@@ -37,10 +37,10 @@ func show_item(
 	_dismiss_grace_remaining = -1.0
 	_pending_release_source = &""
 	_anchor = anchor
+	_detail = detail.duplicate(true)
+	_comparisons = comparisons.duplicate(true)
+	_developer_mode = developer_mode
 	if changed:
-		_detail = detail.duplicate(true)
-		_comparisons = comparisons.duplicate(true)
-		_developer_mode = developer_mode
 		_compare_active = false
 		_advanced_active = false
 	_rebuild_cards()
@@ -148,6 +148,9 @@ func _process(delta: float) -> void:
 
 func _rebuild_cards() -> void:
 	_clear_cards()
+	var move_locked_reason := String(_detail.get("move_locked_reason", ""))
+	_status().text = move_locked_reason
+	_status().visible = not move_locked_reason.is_empty()
 	if _detail.is_empty():
 		return
 	var inspected := CARD_SCRIPT.new() as Control
@@ -234,3 +237,7 @@ func _pin_control() -> Button:
 
 func _input_hints() -> Label:
 	return get_node("Layout/InputHints") as Label
+
+
+func _status() -> Label:
+	return get_node("Layout/Status") as Label

@@ -34,6 +34,31 @@ func _run() -> void:
 		_assert(armoury_tooltip.visible and int(armoury_tooltip.call("card_count")) == 1, "Armoury opens shared item tooltip at %s" % viewport_size, failures)
 		_assert(_inside(root.gui_get_focus_owner(), armoury), "Armoury focus is contained at %s" % viewport_size, failures)
 		_assert(_frame_reachable(armoury.get_node("Overlay/Frame") as Control), "Armoury frame stays on-screen at %s" % viewport_size, failures)
+		var equipment_grid := armoury.get_node("Overlay/Frame/Layout/Body/Equipment/Slots") as GridContainer
+		var stash_grid := armoury.get_node("Overlay/Frame/Layout/Body/Stash/Scroll/Grid") as GridContainer
+		var stash_scroll := armoury.get_node("Overlay/Frame/Layout/Body/Stash/Scroll") as ScrollContainer
+		var last_leader := equipment_grid.get_child(equipment_grid.get_child_count() - 1) as StorageSlotButton
+		last_leader.grab_focus()
+		await process_frame
+		await _parse_action(&"ui_right")
+		_assert(root.gui_get_focus_owner() == stash_grid.get_child(0), "real D-pad Right traverses leader into stash at %s" % viewport_size, failures)
+		var last_stash := stash_grid.get_child(stash_grid.get_child_count() - 1) as StorageSlotButton
+		stash_scroll.scroll_vertical = 0
+		last_stash.grab_focus()
+		await process_frame
+		await process_frame
+		_assert(stash_scroll.scroll_vertical > 0, "focused stash slot scrolls into view at %s" % viewport_size, failures)
+		await _parse_action(&"ui_right")
+		var overflow_grid := armoury.get_node("Overlay/Frame/Layout/Body/RecoveryOverflow/Scroll/Grid") as GridContainer
+		_assert(root.gui_get_focus_owner() == overflow_grid.get_child(0), "real D-pad Right traverses stash into recovery overflow at %s" % viewport_size, failures)
+		var last_overflow := overflow_grid.get_child(overflow_grid.get_child_count() - 1) as StorageSlotButton
+		last_overflow.grab_focus()
+		await process_frame
+		await _parse_action(&"ui_right")
+		var close_button := armoury.get_node("Overlay/Frame/Layout/Footer/Close") as Button
+		_assert(root.gui_get_focus_owner() == close_button, "real D-pad Right traverses recovery overflow into Close at %s" % viewport_size, failures)
+		await _parse_action(&"ui_left")
+		_assert(root.gui_get_focus_owner() == last_overflow, "real D-pad Left returns from Close to recovery overflow at %s" % viewport_size, failures)
 		var tabs := armoury.get_node("Overlay/Frame/Layout/Body/Stash/Tabs") as TabBar
 		for tab: int in tabs.tab_count:
 			tabs.current_tab = tab
