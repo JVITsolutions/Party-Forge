@@ -131,7 +131,7 @@ metadata/label = "LOST"
 [node name="Body" type="ScrollContainer" parent="Frame/Content"]
 layout_mode = 2
 size_flags_vertical = 3
-follow_focus = true
+follow_focus = false
 horizontal_scroll_mode = 0
 
 [node name="Sections" type="VBoxContainer" parent="Frame/Content/Body"]
@@ -263,7 +263,7 @@ grow_vertical = 2
 mouse_filter = 0
 color = Color(0, 0, 0, 0.72)
 
-[node name="Frame" type="PanelContainer" parent="ItemTooltipDetail"]
+[node name="Frame" type="Panel" parent="ItemTooltipDetail"]
 layout_mode = 1
 anchors_preset = 8
 anchor_left = 0.5
@@ -279,19 +279,13 @@ grow_vertical = 2
 theme_override_styles/panel = SubResource("modal_frame")
 
 [node name="Tooltip" parent="ItemTooltipDetail/Frame" instance=ExtResource("2_tooltip")]
-layout_mode = 2
-
-[node name="Close" type="Button" parent="ItemTooltipDetail/Frame"]
-z_index = 101
-custom_minimum_size = Vector2(120, 48)
-layout_mode = 0
-offset_left = 496.0
-offset_top = 12.0
-offset_right = 616.0
-offset_bottom = 60.0
-theme_type_variation = &"LivingForgeSecondaryButton"
-text = "BACK"
-accessibility_name = "Back to extraction"
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+embedded_mode = true
 
 [node name="UnusedCapacityWarning" type="Control" parent="."]
 visible = false

@@ -101,7 +101,7 @@ const CAPTURE_STATES: Array[String] = [
 	"committed active-run Abandon refresh retry only",
 	"valid restart intent preselects prior class",
 	"unresolved restart intent requires explicit class selection",
-	"720p alert HUD at UI 150 and text 150",
+	"720p compact alert HUD at UI 150 and text 150",
 	"targeted level-up confirmation with safe Cancel focused",
 	"pending extraction with item actions excluded and Show Auto focused",
 	"720p extraction detail at UI 150 and text 150",
@@ -112,7 +112,7 @@ const CAPTURE_STATES: Array[String] = [
 const CAPTURE_FOCUS_TARGETS: Array[String] = [
 	"none", "none", "none", "none", "member:24",
 	"alert_tray:close", "alert:inspect", "alert:ledger",
-	"upgrade_card:1", "recipient:24", "extraction:auto_inspect",
+	"upgrade_card:1", "recipient:24", "none",
 	"result:return_to_forge", "result:lost_row", "result:retry_resolution",
 	"result:retry_terminal_save", "result:retry_projection", "confirmation:cancel",
 	"hud:member", "hud:member", "member:24", "none", "hud:overflow",
@@ -311,9 +311,14 @@ func _capture_hud(index: int, count: int, alert_count: int, mode: StringName = &
 	root.add_child(hud)
 	_configure_active_run_hud(hud, fixture)
 	await _frames(6)
+	var expected_metrics := CombatHudResponsiveLayout.resolve(Vector2i(int(metadata.width), int(metadata.height)), int(metadata.ui), int(metadata.text), count)
 	_assert(hud.current_projection != null and hud.current_projection.members.size() == count and hud.current_projection.all_alerts.size() == alert_count, "%s renders exact authoritative party/alert counts" % CAPTURES[index])
-	_assert((hud.get_node("Margin/CombatStatus/PartyRegion/RichRoster") as Control).visible == (count <= 6) and (hud.get_node("Margin/CombatStatus/PartyRegion/CompactRoster") as Control).visible == (count >= 7), "%s renders the exact rich/compact threshold" % CAPTURES[index])
-	_assert((hud.get_node("Margin/CombatStatus/AlertRegion/Overflow") as Button).visible == (alert_count > 3), "%s renders exact overflow availability" % CAPTURES[index])
+	var rich_expected := expected_metrics.mode == CombatHudResponsiveLayout.Mode.RICH
+	_assert((hud.get_node("Margin/CombatStatus/PartyRegion/RichRoster") as Control).visible == rich_expected and (hud.get_node("Margin/CombatStatus/PartyRegion/CompactRoster") as Control).visible == not rich_expected, "%s renders the exact viewport/scale-fit roster mode" % CAPTURES[index])
+	var rendered_alert_count := 0
+	for child: Node in (hud.get_node("Margin/CombatStatus/AlertRegion/ExpandedAlerts") as Container).get_children():
+		if child is Control and (child as Control).visible: rendered_alert_count += 1
+	_assert((hud.get_node("Margin/CombatStatus/AlertRegion/Overflow") as Button).visible == (alert_count > rendered_alert_count), "%s renders exact resolved alert overflow availability" % CAPTURES[index])
 	var controls := _hud_member_controls(hud)
 	if mode == &"final_member":
 		_assert(bool(hud.call(&"_focus_member", count)), "%s focuses the exact final member" % CAPTURES[index])
@@ -423,6 +428,7 @@ func _capture_level_up(index: int, mode: StringName) -> void:
 		for child: Node in (panel.get_node("Frame/Content/Offer/CardsScroll/Cards") as Container).get_children():
 			if child is UpgradeCard and child.is_visible_in_tree(): visible_cards += 1
 		_assert(visible_cards == 5, "%s renders five exact typed offers" % CAPTURES[index])
+		(panel.get_node("TooltipPanel") as UpgradeTooltipPanel).force_dismiss()
 	if mode != &"offers":
 		var card := panel.get_node("Frame/Content/Offer/CardsScroll/Cards/Card1") as UpgradeCard
 		card.activated.emit(card.bound_choice_key())
@@ -480,16 +486,15 @@ func _capture_extraction(index: int, mode: StringName) -> void:
 		if anchor != null:
 			panel.show_detail(projection.eligible_items[-1], anchor)
 			await _frames(3)
-			(panel.get_node("ItemTooltipDetail/Frame/Close") as Button).grab_focus()
+			(panel.get_node("ItemTooltipDetail/Frame/Tooltip/Layout/Header/Close") as Button).grab_focus()
 			_assert((panel.get_node("ItemTooltipDetail") as Control).visible, "%s renders the real extraction detail surface" % CAPTURES[index])
 	else:
-		var automatic_anchor := _extraction_card(panel, "visual-result-automatic")
-		if automatic_anchor != null:
-			(automatic_anchor.get_node("Content/Footer/Inspect") as Button).grab_focus()
-			await _frames(2)
-			(panel.get_node("Frame/Content/Body") as ScrollContainer).scroll_vertical = 0
-			(panel.get_node("Frame/Content/Body/Sections/Automatic/Scroll") as ScrollContainer).scroll_horizontal = 0
-			await _frames(2)
+		var focus_owner := root.gui_get_focus_owner() as Control
+		if focus_owner != null:
+			focus_owner.release_focus()
+		(panel.get_node("Frame/Content/Body") as ScrollContainer).scroll_vertical = 0
+		(panel.get_node("Frame/Content/Body/Sections/Automatic/Scroll") as ScrollContainer).scroll_horizontal = 0
+		await _frames(2)
 	await _capture(index)
 	panel.free()
 	await _frames(2)
@@ -863,7 +868,6 @@ func _assert_declared_focus(index: int) -> void:
 		"alert_tray:close": _assert(owner.name == &"Close" and "CombatAlertTray" in String(owner.get_path()), "%s focuses alert tray Close" % CAPTURES[index])
 		"upgrade_card:1": _assert(owner.name == &"Card1", "%s focuses first real upgrade card" % CAPTURES[index])
 		"recipient:24": _assert(owner.name == &"Member_24", "%s focuses exact recipient 24" % CAPTURES[index])
-		"extraction:auto_inspect": _assert(owner.name == &"Inspect" and _owning_item_id(owner) == "visual-result-automatic", "%s focuses exact automatic-item Inspect action" % CAPTURES[index])
 		"extraction:show_auto": _assert(owner.name == &"AutomaticList", "%s focuses the safe Show Auto summary filter while pending" % CAPTURES[index])
 		"extraction_detail:close": _assert(owner.name == &"Close" and "ItemTooltipDetail" in String(owner.get_path()), "%s focuses extraction detail Close" % CAPTURES[index])
 		"result:return_to_forge": _assert(owner.name == &"ReturnToForge", "%s focuses safe Return to Forge" % CAPTURES[index])
@@ -1099,22 +1103,6 @@ func _eligible_extraction_card(panel: TerminalExtractionPanel, item_id: String) 
 		if String(card.get_meta(&"item_id", "")) == item_id:
 			return card
 	return null
-
-
-func _extraction_card(panel: TerminalExtractionPanel, item_id: String) -> Button:
-	for card: Button in _extraction_cards(panel):
-		if String(card.get_meta(&"item_id", "")) == item_id:
-			return card
-	return null
-
-
-func _owning_item_id(control: Control) -> String:
-	var cursor: Node = control
-	while cursor != null:
-		if cursor.has_meta(&"item_id"):
-			return String(cursor.get_meta(&"item_id", ""))
-		cursor = cursor.get_parent()
-	return ""
 
 
 func _result_rows(panel: RunResultPanel) -> Array[Button]:

@@ -212,7 +212,7 @@ func _test_initial_save_retry_matrix() -> void:
 	await process_frame
 	var panel := _result_panel(main)
 	_assert(recovery.persist_initial_calls == 1, "initial terminal capture attempts exactly one durable save")
-	_assert(_visible_actions(panel) == ["RetryTerminalSave"], "initial-save failure exposes only Retry Save Terminal State")
+	_assert(_visible_actions(panel) == ["RetryTerminalSave"], "initial-save failure exposes only Retry Terminal Save")
 	_assert(_focused_action(panel) == "RetryTerminalSave", "initial-save failure focuses the exact retry-only action")
 	_assert((fixture.store as ProfileStore).load_profile(fixture.profile_id, fixture.root).profile.terminal_resolution.is_empty(), "initial-save failure writes no recovery record")
 	var retry := _action(panel, "RetryTerminalSave")
@@ -242,7 +242,7 @@ func _test_committed_initial_save_refresh_retry() -> void:
 	var panel := _result_panel(main)
 	var actions := _visible_actions(panel)
 	_assert(recovery.persist_initial_calls == 1 and not (fixture.store as ProfileStore).load_profile(fixture.profile_id, fixture.root).profile.terminal_resolution.is_empty(), "initial save commits exactly once before injected refresh failure")
-	_assert(panel.visible and actions.size() == 1 and "RetryTerminalSave" not in actions, "post-commit refresh failure exposes one refresh/rebuild action, never Retry Save Terminal State")
+	_assert(panel.visible and actions.size() == 1 and "RetryTerminalSave" not in actions, "post-commit refresh failure exposes one refresh/rebuild action, never Retry Terminal Save")
 	if actions.size() == 1:
 		_action(panel, actions[0]).pressed.emit()
 		await process_frame

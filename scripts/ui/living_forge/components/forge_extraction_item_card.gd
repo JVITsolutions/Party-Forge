@@ -118,7 +118,7 @@ func _render() -> void:
 	inspect.accessibility_name = "Inspect %s details" % _name
 	accessibility_name = "%s, %s, %s" % [_name, _rarity, _source]
 	accessibility_description = "%s. %s." % [accessibility_name, "Automatic locked" if _automatic else ("Selected" if _selected else "Not selected; will be lost")]
-	tooltip_text = "%s\n%s\n%s" % [_name, _source, state]
+	tooltip_text = ""
 
 func _source_copy(projection: TerminalExtractionItemProjection) -> String:
 	var labels: Array[String] = []

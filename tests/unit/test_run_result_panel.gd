@@ -32,7 +32,7 @@ func run() -> Array[String]:
 
 func _test_exact_labels_and_states(panel: Control, view_model: Variant, fixture: Dictionary, failures: Array[String]) -> void:
 	var labels := {
-		"RetryTerminalSave": "Retry Save Terminal State",
+		"RetryTerminalSave": "Retry Terminal Save",
 		"RetryTerminalRefresh": "Retry Terminal Recovery",
 		"RetryResolution": "Retry Resolution",
 		"RetryProjection": "Retry Results",
@@ -68,7 +68,7 @@ func _test_exact_labels_and_states(panel: Control, view_model: Variant, fixture:
 	TestAssertions.equal(_state_text(panel), "TERMINAL SAVE INTERRUPTED", "terminal-save interruption is visibly distinct", failures)
 	TestAssertions.equal(_visible_action_names(panel), ["RetryTerminalSave"], "terminal-save interruption exposes one exact retry", failures)
 	TestAssertions.equal(_reason(panel).text, "Terminal record could not be saved.", "save interruption presents readable reason", failures)
-	if panel.is_inside_tree(): TestAssertions.truthy(_button(panel, "RetryTerminalSave").has_focus(), "Retry Save Terminal State owns safe initial focus", failures)
+	if panel.is_inside_tree(): TestAssertions.truthy(_button(panel, "RetryTerminalSave").has_focus(), "Retry Terminal Save owns safe initial focus", failures)
 	panel.call(&"present", view_model.call(&"terminal_refresh_interrupted", fixture.snapshot, "Terminal state was saved, but recovery could not refresh.").get("projection"))
 	TestAssertions.equal(_state_text(panel), "TERMINAL REFRESH INTERRUPTED", "post-save refresh interruption is visibly distinct", failures)
 	TestAssertions.equal(_visible_action_names(panel), ["RetryTerminalRefresh"], "post-save refresh interruption exposes one exact refresh-only retry", failures)

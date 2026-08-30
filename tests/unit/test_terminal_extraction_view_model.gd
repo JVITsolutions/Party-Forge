@@ -32,6 +32,7 @@ func run() -> Array[String]:
 			TestAssertions.equal(String(eligible[0].get("source_container_id")), "run-equipment-002", "equipped item carries exact container token", failures)
 			TestAssertions.equal(int(eligible[0].get("source_slot")), 7, "equipped item carries exact source slot", failures)
 			TestAssertions.truthy(String(eligible[0].get("source_heading")).contains("MEMBER 2") and String(eligible[0].get("source_heading")).contains("RANGER"), "same-class members remain distinguishable in source heading", failures)
+			TestAssertions.truthy(not String(eligible[0].get("source_heading")).contains("run-equipment-"), "player-facing source heading omits raw container identity", failures)
 			TestAssertions.truthy(String(eligible[0].get("consequence_label")).contains("run-equipment-002") and String(eligible[0].get("consequence_label")).contains("slot 7"), "consequence identity includes exact source", failures)
 			TestAssertions.equal(int(eligible[1].get("owner_member_id")), 0, "run inventory is distinct from member equipment", failures)
 			TestAssertions.equal(String(eligible[1].get("source_container_id")), "run-inventory", "run inventory carries exact container identity", failures)

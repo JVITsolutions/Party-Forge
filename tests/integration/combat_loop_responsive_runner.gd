@@ -78,13 +78,15 @@ func _exercise_hud(viewport_size: Vector2i, party_count: int, alert_count: int, 
 	var rich := hud.get_node("Margin/CombatStatus/PartyRegion/RichRoster") as Control
 	var compact := hud.get_node("Margin/CombatStatus/PartyRegion/CompactRoster") as Control
 	var overflow := hud.get_node("Margin/CombatStatus/AlertRegion/Overflow") as Button
+	var expected_metrics := CombatHudResponsiveLayout.resolve(viewport_size, ui_scale, text_scale, party_count)
+	var rich_expected := expected_metrics.mode == CombatHudResponsiveLayout.Mode.RICH
 	await _wait_for_stable_layout([shell, leader, party_region, alert_region], context_label)
 	for control: Control in [shell, leader, party_region, alert_region]:
 		_assert_contained(control, viewport_rect, "%s %s" % [context_label, control.name])
 	_assert(not leader.get_global_rect().intersection(alert_region.get_global_rect()).has_area(), "%s leader and alert region do not overlap" % context_label)
 	_assert(not party_region.get_global_rect().intersection(alert_region.get_global_rect()).has_area(), "%s party and alert regions do not overlap" % context_label)
-	_assert(rich.visible == (party_count <= 6), "%s rich mode threshold is exact" % context_label)
-	_assert(compact.visible == (party_count >= 7), "%s compact mode threshold is exact" % context_label)
+	_assert(rich.visible == rich_expected, "%s rich mode follows resolved viewport/scale fit" % context_label)
+	_assert(compact.visible == not rich_expected, "%s compact mode follows resolved viewport/scale fit" % context_label)
 	_assert(int(leader.get_meta(&"member_id", 0)) == 1, "%s stable leader identity is retained" % context_label)
 
 	var projection := hud.current_projection
@@ -93,14 +95,18 @@ func _exercise_hud(viewport_size: Vector2i, party_count: int, alert_count: int, 
 	if projection != null:
 		_assert(projection.visible_alerts.size() == mini(alert_count, 3), "%s renders at most three expanded alerts" % context_label)
 		_assert(projection.overflow_alert_count == maxi(0, alert_count - 3), "%s exposes exact overflow alert count" % context_label)
-	_assert(overflow.visible == (alert_count > 3), "%s overflow action visibility matches alert overflow" % context_label)
-	if alert_count > 3:
-		var overflow_count := alert_count - 3
+	var rendered_alert_count := 0
+	for child: Node in (hud.get_node("Margin/CombatStatus/AlertRegion/ExpandedAlerts") as Container).get_children():
+		if child is Control and (child as Control).visible:
+			rendered_alert_count += 1
+	_assert(overflow.visible == (alert_count > rendered_alert_count), "%s overflow action visibility matches the resolved vertical alert budget" % context_label)
+	if alert_count > rendered_alert_count:
+		var overflow_count := alert_count - rendered_alert_count
 		_assert(overflow.text == "+%d %s" % [overflow_count, "alert" if overflow_count == 1 else "alerts"], "%s overflow action names exact hidden count" % context_label)
 		_assert_target(overflow, "%s overflow action" % context_label)
 
 	var seen_members: Dictionary = {}
-	if party_count <= 6:
+	if rich_expected:
 		seen_members[1] = true
 		var rich_controls := _hud_roster_controls(hud)
 		_assert_control_set_geometry(rich_controls, viewport_rect, "%s rich members" % context_label)
@@ -292,6 +298,7 @@ func _exercise_extraction(viewport_size: Vector2i, ui_scale: int, text_scale: in
 	var frame := panel.get_node("Frame") as Control
 	var header := panel.get_node("Frame/Content/Header") as Control
 	var body := panel.get_node("Frame/Content/Body") as ScrollContainer
+	var automatic_scroll := panel.get_node("Frame/Content/Body/Sections/Automatic/Scroll") as ScrollContainer
 	var actions := panel.get_node("Frame/Content/Actions") as Control
 	var confirm := panel.get_node("Frame/Content/Actions/Confirm") as Button
 	await _wait_until(func() -> bool: return _extraction_cards(panel).size() == 24, "%s 24 eligible extraction cards" % context_label)
@@ -319,6 +326,14 @@ func _exercise_extraction(viewport_size: Vector2i, ui_scale: int, text_scale: in
 		_assert_extraction_grid_fill(cards, context_label)
 	var extraction_actions := _direct_visible_controls(actions, "Button")
 	_assert_control_set_geometry(extraction_actions, frame.get_global_rect(), "%s pinned actions" % context_label)
+	var automatic_cards := _automatic_extraction_cards(panel)
+	if not automatic_cards.is_empty():
+		var automatic_card := automatic_cards[0]
+		var automatic_inspect := automatic_card.get_node("Content/Footer/Inspect") as Button
+		automatic_inspect.grab_focus()
+		await _wait_for_focus(automatic_inspect, "%s first automatic Inspect" % context_label)
+		await _wait_until(func() -> bool: return automatic_scroll.scroll_horizontal == 0 and body.get_global_rect().encloses(automatic_card.get_global_rect()), "%s automatic origin restoration" % context_label)
+		_assert(automatic_scroll.get_global_rect().encloses(automatic_card.get_global_rect()), "%s first automatic card is fully visible with its leading edge" % context_label)
 	if cards.size() == 24:
 		var first_card := cards[0]
 		var first_inspect := first_card.get_node("Content/Footer/Inspect") as Button
@@ -345,12 +360,21 @@ func _exercise_extraction(viewport_size: Vector2i, ui_scale: int, text_scale: in
 		panel.show_detail(projection.eligible_items[-1], final_card)
 		var detail := panel.get_node("ItemTooltipDetail") as Control
 		var detail_frame := panel.get_node("ItemTooltipDetail/Frame") as Control
+		var detail_tooltip := panel.get_node("ItemTooltipDetail/Frame/Tooltip") as ItemTooltipPanel
+		var detail_close := panel.get_node("ItemTooltipDetail/Frame/Tooltip/Layout/Header/Close") as Button
 		await _wait_for_visible(detail, "%s item detail" % context_label)
-		await _wait_for_stable_layout([detail_frame, panel.get_node("ItemTooltipDetail/Frame/Close") as Control], "%s item detail" % context_label)
+		await _wait_for_stable_layout([detail_frame, detail_tooltip, detail_close], "%s item detail" % context_label)
 		_assert(detail.visible, "%s final item detail opens" % context_label)
 		_assert_contained(detail_frame, viewport_rect, "%s item detail" % context_label)
+		_assert_contained(detail_tooltip, detail_frame.get_global_rect(), "%s populated item detail tooltip" % context_label)
+		_assert(detail_tooltip.card_count() > 0, "%s item detail exposes real item content" % context_label)
+		_assert((detail_tooltip.get_node("Layout/Header") as Control).is_visible_in_tree(), "%s item detail keeps its header visible" % context_label)
+		_assert((detail_tooltip.get_node("Layout/InputHints") as Control).is_visible_in_tree(), "%s item detail keeps its input help visible" % context_label)
+		var item_card := detail_tooltip.get_node("Layout/BodyScroll/Cards").get_child(0) as ItemTooltipCard
+		_assert(item_card != null and not item_card.rendered_text().strip_edges().is_empty(), "%s item detail exposes nonempty rendered item text" % context_label)
+		_assert(not detail_close.get_global_rect().intersection((detail_tooltip.get_node("Layout/BodyScroll") as Control).get_global_rect()).has_area(), "%s Back action does not cover the item-detail body" % context_label)
 		_assert((panel.get_node("Frame/Content/Summary/AutomaticList") as Button).focus_mode == Control.FOCUS_NONE, "%s detail excludes background controls from focus" % context_label)
-		(panel.get_node("ItemTooltipDetail/Frame/Close") as Button).pressed.emit()
+		detail_close.pressed.emit()
 		await _wait_for_hidden(detail, "%s item detail" % context_label)
 		await _wait_for_focus(final_card, "%s detail return" % context_label)
 		_assert(final_card.has_focus(), "%s detail restores exact final-item focus" % context_label)
@@ -378,6 +402,10 @@ func _exercise_extraction(viewport_size: Vector2i, ui_scale: int, text_scale: in
 		_assert_contained(frame, viewport_rect, "%s pending frame" % context_label)
 		_assert_contained(header, frame.get_global_rect(), "%s pending header" % context_label)
 		_assert(resting_frame.is_equal_approx(frame.get_global_rect()), "%s pending state preserves the extraction frame geometry" % context_label)
+		_assert(automatic_scroll.scroll_horizontal == 0, "%s pending Show Auto focus restores the automatic leading edge" % context_label)
+		if not automatic_cards.is_empty():
+			_assert(automatic_scroll.get_global_rect().encloses(automatic_cards[0].get_global_rect()), "%s pending state keeps the first automatic card fully visible" % context_label)
+			_assert(body.get_global_rect().encloses(automatic_cards[0].get_global_rect()), "%s pending state reveals the complete first automatic card" % context_label)
 		panel.set_pending(false)
 	_assert_controls_in_parent(_visible_buttons(panel), "%s all visible extraction actions" % context_label)
 	panel.free()
@@ -576,6 +604,14 @@ func _extraction_cards(panel: TerminalExtractionPanel) -> Array[Button]:
 	result.sort_custom(func(left: Button, right: Button) -> bool:
 		return String(left.get_meta(&"item_id", "")) < String(right.get_meta(&"item_id", ""))
 	)
+	return result
+
+
+func _automatic_extraction_cards(panel: TerminalExtractionPanel) -> Array[Button]:
+	var result: Array[Button] = []
+	var scope := panel.get_node("Frame/Content/Body/Sections/Automatic/Scroll/Items") as Control
+	for node: Node in scope.find_children("*", "ForgeExtractionItemCard", true, false):
+		result.append(node as Button)
 	return result
 
 

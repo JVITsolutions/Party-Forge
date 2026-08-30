@@ -227,7 +227,7 @@ func _exercise_extraction(viewport: SubViewport, settings: PartyForgeSettings, l
 	_assert_extraction_semantics(last, "extraction final item", label)
 	await _assert_visible_focus(last, "extraction final item", label)
 	panel.show_detail(projection.eligible_items[-1], last)
-	var detail_close := panel.get_node("ItemTooltipDetail/Frame/Close") as Button
+	var detail_close := panel.get_node("ItemTooltipDetail/Frame/Tooltip/Layout/Header/Close") as Button
 	await _wait_until(func() -> bool: return detail_close.is_visible_in_tree() and detail_close.has_focus(), "extraction detail open focus at %s" % label)
 	_assert_named_action(detail_close, "back", "extraction detail close", label)
 	detail_close.pressed.emit()

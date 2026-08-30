@@ -328,7 +328,9 @@ func _exercise_responsive_settings(item_type: Script, projection_type: Script) -
 		if automatic_card != null:
 			(automatic_card.get_node("Content/Footer/Inspect") as Button).grab_focus()
 			await _frames(3)
-		_assert(automatic_scroll != null and automatic_card != null and body.get_global_rect().encloses(automatic_card.get_global_rect()) and automatic_scroll.get_h_scroll_bar().max_value > automatic_scroll.size.x, "many automatic retained items remain reachable in a bounded horizontal subscroll at %s" % label)
+		var automatic_contained := automatic_scroll != null and automatic_card != null and body.get_global_rect().encloses(automatic_card.get_global_rect())
+		var automatic_overflows := automatic_scroll != null and automatic_scroll.get_h_scroll_bar().max_value > automatic_scroll.size.x
+		_assert(automatic_contained and automatic_overflows, "many automatic retained items remain reachable in a bounded horizontal subscroll at %s; body=%s card=%s scroll_max=%s viewport_width=%s" % [label, body.get_global_rect(), automatic_card.get_global_rect() if automatic_card != null else Rect2(), automatic_scroll.get_h_scroll_bar().max_value if automatic_scroll != null else -1.0, automatic_scroll.size.x if automatic_scroll != null else -1.0])
 		var sections := _panel.get_node_or_null("Frame/Content/Body/Sections/Eligible/Sections") as Container
 		_assert(sections != null and sections.get_child_count() == 5, "source sections remain visible without canonical flattening at %s" % label)
 		if sections != null:

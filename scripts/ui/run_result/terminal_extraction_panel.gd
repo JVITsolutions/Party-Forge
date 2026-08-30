@@ -42,7 +42,7 @@ func _connect_controls() -> void:
 	_controls_connected = true
 	(get_node("Frame/Content/Actions/Confirm") as Button).pressed.connect(_on_confirm)
 	(get_node("Frame/Content/Actions/Retry") as Button).pressed.connect(_on_retry)
-	(get_node("ItemTooltipDetail/Frame/Close") as Button).pressed.connect(_close_detail)
+	(get_node("ItemTooltipDetail/Frame/Tooltip/Layout/Header/Close") as Button).pressed.connect(_close_detail)
 	(get_node("UnusedCapacityWarning/Frame/Actions/Back") as Button).pressed.connect(_close_warning)
 	(get_node("UnusedCapacityWarning/Frame/Actions/Acknowledge") as Button).pressed.connect(_on_warning_acknowledged)
 	for pair: Array in [
@@ -133,7 +133,7 @@ func show_detail(item: TerminalExtractionItemProjection, anchor: Control) -> voi
 	tooltip.force_dismiss()
 	tooltip.show_item(item.detail, item.comparisons, anchor, StringName("terminal-extraction:%s" % item.item_id))
 	_disable_focus_descendants(overlay)
-	var close := get_node("ItemTooltipDetail/Frame/Close") as Button
+	var close := get_node("ItemTooltipDetail/Frame/Tooltip/Layout/Header/Close") as Button
 	_wire_closed_ring([close])
 	close.grab_focus()
 
@@ -254,6 +254,8 @@ func _update_availability() -> void:
 	else:
 		_configure_base_focus_scope()
 		_resolve_availability_focus(focus_intent, projection_ok and not _pending and (not preflight_failed or selection_can_recover))
+		if _pending:
+			call_deferred(&"_restore_automatic_origin")
 
 func _configure_base_focus_scope() -> void:
 	var prior_focus := get_viewport().gui_get_focus_owner() as Control if is_inside_tree() else null
@@ -383,10 +385,23 @@ func _ensure_card_visible_now(card_instance_id: int) -> void:
 	var body_scroll := get_node("Frame/Content/Body") as ScrollContainer
 	var automatic_scroll := get_node("Frame/Content/Body/Sections/Automatic/Scroll") as ScrollContainer
 	if automatic_scroll.is_ancestor_of(card):
-		automatic_scroll.ensure_control_visible(card)
+		if card.get_index() == 0:
+			automatic_scroll.scroll_horizontal = 0
+		else:
+			automatic_scroll.ensure_control_visible(card)
 		body_scroll.ensure_control_visible(card)
 	elif body_scroll.is_ancestor_of(card):
 		body_scroll.ensure_control_visible(card)
+
+func _restore_automatic_origin() -> void:
+	if not is_inside_tree():
+		return
+	var body := get_node("Frame/Content/Body") as ScrollContainer
+	var automatic_scroll := get_node("Frame/Content/Body/Sections/Automatic/Scroll") as ScrollContainer
+	automatic_scroll.scroll_horizontal = 0
+	var items := get_node("Frame/Content/Body/Sections/Automatic/Scroll/Items") as Container
+	if items.get_child_count() > 0:
+		body.ensure_control_visible(items.get_child(0) as Control)
 
 func _apply_responsive_layout() -> void:
 	var width := 1280.0

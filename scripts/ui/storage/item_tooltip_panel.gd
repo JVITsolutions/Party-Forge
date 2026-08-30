@@ -7,6 +7,8 @@ const DISMISS_GRACE_SECONDS := 0.12
 const HORIZONTAL_CHROME := 44.0
 const VERTICAL_CHROME := 140.0
 
+@export var embedded_mode := false
+
 var _detail: Dictionary = {}
 var _comparisons: Array[Dictionary] = []
 var _anchor: Control
@@ -21,7 +23,9 @@ func _ready() -> void:
 	super()
 	mouse_filter = Control.MOUSE_FILTER_PASS
 	process_mode = Node.PROCESS_MODE_ALWAYS
-	_input_hints().text = "Alt / LT Compare   Shift / RT Affixes   Y Pin   Right Stick Scroll"
+	_pin_control().visible = not embedded_mode
+	(get_node("Layout/Header/Close") as Button).visible = embedded_mode
+	_input_hints().text = "Right Stick Scroll" if embedded_mode else "Alt / LT Compare   Shift / RT Affixes   Y Pin   Right Stick Scroll"
 
 
 func show_item(
@@ -188,6 +192,12 @@ func _size_and_position() -> void:
 	_cards().add_theme_constant_override("separation", int(roundf(gap)))
 	for child: Node in _cards().get_children():
 		(child as Control).custom_minimum_size.x = card_width
+	if embedded_mode:
+		custom_minimum_size = Vector2.ZERO
+		size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		size_flags_vertical = Control.SIZE_EXPAND_FILL
+		_body_scroll().custom_minimum_size.y = 0.0
+		return
 	var group_width := card_width * count + gap * (count - 1)
 	var maximum_height := float(metrics["maximum_card_height"])
 	var popup_size := Vector2(group_width + HORIZONTAL_CHROME, maximum_height)

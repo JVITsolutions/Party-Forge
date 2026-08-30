@@ -34,8 +34,8 @@ var source_slot: int:
 var source_heading: String:
 	get:
 		if _owner_member_id > 0:
-			return "MEMBER %d · %s · %s" % [_owner_member_id, _owner_class_label.to_upper(), String(_source_container_id)]
-		return "RUN INVENTORY · %s" % String(_source_container_id)
+			return "MEMBER %d · %s · EQUIPMENT" % [_owner_member_id, _owner_class_label.to_upper()]
+		return "RUN INVENTORY"
 var consequence_label: String:
 	get: return "%s · %s · %s · %s (%s) · slot %d" % [_name, _rarity_name, _owner_label, _container_label, String(_source_container_id), _source_slot]
 var automatic := false
