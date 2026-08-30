@@ -20,6 +20,7 @@ var warehouse_label := ""
 var warehouse_visible := false
 var warehouse_enabled := false
 var warehouse_route_id: StringName = &""
+var warehouse_presentation_state: WarehousePresentationResult.State = WarehousePresentationResult.State.HIDDEN
 
 var developer_quick_start_label := ""
 var developer_quick_start_visible := false
@@ -58,6 +59,7 @@ func copy() -> MainMenuProjection:
 	result.warehouse_visible = warehouse_visible
 	result.warehouse_enabled = warehouse_enabled
 	result.warehouse_route_id = warehouse_route_id
+	result.warehouse_presentation_state = warehouse_presentation_state
 	result.developer_quick_start_label = developer_quick_start_label
 	result.developer_quick_start_visible = developer_quick_start_visible
 	result.developer_quick_start_enabled = developer_quick_start_enabled

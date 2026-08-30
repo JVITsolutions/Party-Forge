@@ -17,7 +17,12 @@ const ROUTE_QUIT: StringName = &"quit"
 
 const CITY_TREE_ID := "party-forge-city-v1"
 
-static func build(profile: Variant, settings: Variant, city_tree_available: Variant) -> MainMenuProjection:
+static func build(
+	profile: Variant,
+	settings: Variant,
+	city_tree_available: Variant,
+	warehouse_presentation_state: Variant = null,
+) -> MainMenuProjection:
 	var result := _safe_projection()
 	var supplied_settings := settings as PartyForgeSettings if settings is PartyForgeSettings else null
 	var settings_valid := _settings_are_valid(supplied_settings)
@@ -71,12 +76,25 @@ static func build(profile: Variant, settings: Variant, city_tree_available: Vari
 	result.armoury_visible = developer_mode or armoury_state == FeatureAccessPolicy.State.AVAILABLE
 	result.armoury_enabled = result.armoury_visible
 	result.armoury_label = "Developer Armoury Preview" if developer_mode and armoury_state != FeatureAccessPolicy.State.AVAILABLE else "Armoury"
-	result.warehouse_visible = developer_mode or warehouse_player_available
+	var resolved_warehouse_state := _warehouse_state(warehouse_presentation_state, warehouse_player_available)
+	if developer_mode:
+		resolved_warehouse_state = WarehousePresentationResult.State.AVAILABLE
+	result.warehouse_presentation_state = resolved_warehouse_state
+	result.warehouse_visible = resolved_warehouse_state != WarehousePresentationResult.State.HIDDEN
 	result.warehouse_enabled = result.warehouse_visible
 	result.warehouse_label = "Developer Warehouse Preview" if developer_mode and not warehouse_player_available else "Warehouse"
 	if result.city_tree_visible and not result.city_tree_enabled and result.primary_route_id != ROUTE_RUN_RECOVERY:
 		result.status_text = "City services are temporarily unavailable."
 	return result
+
+static func _warehouse_state(value: Variant, legacy_available: bool) -> WarehousePresentationResult.State:
+	if typeof(value) == TYPE_INT and int(value) in [
+		WarehousePresentationResult.State.HIDDEN,
+		WarehousePresentationResult.State.LOCKED,
+		WarehousePresentationResult.State.AVAILABLE,
+	]:
+		return int(value) as WarehousePresentationResult.State
+	return WarehousePresentationResult.State.AVAILABLE if legacy_available else WarehousePresentationResult.State.HIDDEN
 
 static func _safe_projection() -> MainMenuProjection:
 	var result := MainMenuProjection.new()

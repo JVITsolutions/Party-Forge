@@ -81,9 +81,9 @@ func _apply_projection() -> void:
 	_configure_action(_primary_action(), _projection.primary_label, _projection.primary_visible, _projection.primary_enabled)
 	_configure_action(_city_tree(), _projection.city_tree_label, _projection.city_tree_visible, _projection.city_tree_enabled)
 	_configure_action(_armoury(), _projection.armoury_label, _projection.armoury_visible, _projection.armoury_enabled)
-	_configure_action(_warehouse(), _projection.warehouse_label, _projection.warehouse_visible, _projection.warehouse_enabled)
+	_configure_warehouse_action(_warehouse(), _projection.warehouse_label, _warehouse_lock_badge())
 	_configure_action(_city_armoury_hotspot(), "City Armoury", _projection.armoury_visible, _projection.armoury_enabled)
-	_configure_action(_city_warehouse_hotspot(), "City Warehouse", _projection.warehouse_visible, _projection.warehouse_enabled)
+	_configure_warehouse_action(_city_warehouse_hotspot(), "City Warehouse", _city_warehouse_lock_badge())
 	_configure_action(
 		_developer_quick_start(),
 		_projection.developer_quick_start_label,
@@ -111,6 +111,20 @@ func _configure_action(button: Button, label: String, should_show: bool, should_
 	button.visible = should_show
 	button.disabled = not should_enable
 	button.focus_mode = Control.FOCUS_ALL if should_show and should_enable else Control.FOCUS_NONE
+
+
+func _configure_warehouse_action(button: Button, label: String, badge: Label) -> void:
+	var state := _projection.warehouse_presentation_state
+	var visible_state := state != WarehousePresentationResult.State.HIDDEN
+	_configure_action(button, label, visible_state, visible_state)
+	var locked := state == WarehousePresentationResult.State.LOCKED
+	badge.visible = visible_state and locked
+	button.accessibility_name = label
+	button.accessibility_description = (
+		"Warehouse locked. Requires Stash Access. Select for unlock guidance."
+		if locked
+		else "Open permanent Warehouse storage."
+	)
 
 
 func _rebuild_focus_loop() -> void:
@@ -226,8 +240,10 @@ func _city_tree() -> Button:
 
 func _armoury() -> Button: return get_node("Armoury") as Button
 func _warehouse() -> Button: return get_node("Warehouse") as Button
+func _warehouse_lock_badge() -> Label: return get_node("Warehouse/LockBadge") as Label
 func _city_armoury_hotspot() -> Button: return get_node("CityArmouryHotspot") as Button
 func _city_warehouse_hotspot() -> Button: return get_node("CityWarehouseHotspot") as Button
+func _city_warehouse_lock_badge() -> Label: return get_node("CityWarehouseHotspot/LockBadge") as Label
 
 
 func _developer_quick_start() -> Button:
