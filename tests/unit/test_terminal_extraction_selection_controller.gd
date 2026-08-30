@@ -11,6 +11,7 @@ func run() -> Array[String]:
 	_test_defaults_and_bounds(controller_type, failures)
 	_test_pending_acknowledgement_and_order(controller_type, failures)
 	_test_exact_reconcile_and_duplicates(controller_type, failures)
+	_test_capacity_drift_reconcile(controller_type, failures)
 	return failures
 
 func _test_defaults_and_bounds(controller_type: Script, failures: Array[String]) -> void:
@@ -76,6 +77,29 @@ func _test_exact_reconcile_and_duplicates(controller_type: Script, failures: Arr
 	changed = controller.call(&"reconcile", _policy(2, [_selection("a", &"run-inventory", 0), _selection("b", &"run-inventory", 1)], ["automatic", "automatic"]))
 	TestAssertions.equal(changed, ["a", "b"], "duplicate automatic IDs make reconcile fail closed", failures)
 	TestAssertions.equal(controller.call(&"selected_item_ids"), [], "duplicate automatic reconcile exposes no ambiguous selection", failures)
+
+func _test_capacity_drift_reconcile(controller_type: Script, failures: Array[String]) -> void:
+	var controller: Variant = controller_type.new()
+	var initial := _policy(3, [
+		_selection("a", &"run-inventory", 0),
+		_selection("b", &"run-inventory", 1),
+		_selection("c", &"run-inventory", 2),
+		_selection("d", &"run-inventory", 3),
+	])
+	controller.call(&"initialize", initial)
+	controller.call(&"toggle", "c")
+	controller.call(&"toggle", "a")
+	controller.call(&"toggle", "b")
+	TestAssertions.equal(controller.call(&"selected_item_ids"), ["a", "b", "c"], "precondition uses canonical selection order", failures)
+	controller.call(&"acknowledge_unused_capacity")
+	var changed: Array = controller.call(&"reconcile", _policy(1, initial.eligible_items))
+	TestAssertions.equal(changed, ["b", "c"], "capacity shrink deterministically reports trailing canonical selections", failures)
+	TestAssertions.equal(controller.call(&"selected_item_ids"), ["a"], "capacity shrink never exposes over-capacity exact tokens", failures)
+	TestAssertions.truthy(not controller.call(&"needs_unused_capacity_acknowledgement"), "full shrunken capacity has no unused-slot acknowledgement", failures)
+	changed = controller.call(&"reconcile", _policy(3, initial.eligible_items))
+	TestAssertions.equal(changed, [], "capacity growth does not invalidate a still-exact selection", failures)
+	TestAssertions.equal(controller.call(&"selected_item_ids"), ["a"], "capacity growth never invents restored selections", failures)
+	TestAssertions.truthy(controller.call(&"needs_unused_capacity_acknowledgement"), "capacity growth resets acknowledgement against current loss", failures)
 
 func _policy(capacity: int, eligible: Array[ExtractionSelection], automatic: Array[String] = []) -> RunExtractionProjection:
 	var lost: Array[String] = []

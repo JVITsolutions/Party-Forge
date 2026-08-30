@@ -52,6 +52,7 @@ func reconcile(next: RunExtractionProjection) -> Array[String]:
 		return changed
 	var next_by_id: Dictionary = {}
 	var next_order: Array[String] = []
+	var changed_set: Dictionary = {}
 	for selection: ExtractionSelection in next.eligible_items:
 		next_by_id[selection.item_id] = selection.copy()
 		next_order.append(selection.item_id)
@@ -62,6 +63,18 @@ func reconcile(next: RunExtractionProjection) -> Array[String]:
 		var prior := _selected[item_id] as ExtractionSelection
 		if exact == null or prior.expected_source_container_id != exact.expected_source_container_id or prior.expected_source_slot != exact.expected_source_slot:
 			_selected.erase(item_id)
+			changed_set[item_id] = true
+	var retained_count := 0
+	for item_id: String in next_order:
+		if not _selected.has(item_id):
+			continue
+		if retained_count < next.capacity:
+			retained_count += 1
+		else:
+			_selected.erase(item_id)
+			changed_set[item_id] = true
+	for item_id: String in _ordered_ids:
+		if changed_set.has(item_id):
 			changed.append(item_id)
 	_policy = _copy_policy(next)
 	_eligible_by_id = next_by_id

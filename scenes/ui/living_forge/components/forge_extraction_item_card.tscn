@@ -1,21 +1,9 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene load_steps=2 format=3]
 
 [ext_resource type="Script" path="res://scripts/ui/living_forge/components/forge_extraction_item_card.gd" id="1_script"]
 
-[sub_resource type="StyleBoxFlat" id="focus_style"]
-bg_color = Color(0, 0, 0, 0)
-border_width_left = 3
-border_width_top = 3
-border_width_right = 3
-border_width_bottom = 3
-border_color = Color(0.96, 0.72, 0.25, 1)
-corner_radius_top_left = 6
-corner_radius_top_right = 6
-corner_radius_bottom_right = 6
-corner_radius_bottom_left = 6
-
 [node name="ForgeExtractionItemCard" type="Button"]
-custom_minimum_size = Vector2(248, 144)
+custom_minimum_size = Vector2(248, 176)
 focus_mode = 2
 mouse_default_cursor_shape = 2
 theme_type_variation = &"LivingForgeSecondaryButton"
@@ -29,7 +17,7 @@ anchor_bottom = 1.0
 offset_left = 16.0
 offset_top = 12.0
 offset_right = -16.0
-offset_bottom = -12.0
+offset_bottom = -60.0
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
@@ -84,4 +72,21 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
-theme_override_styles/panel = SubResource("focus_style")
+
+[node name="Inspect" type="Button" parent="."]
+custom_minimum_size = Vector2(112, 48)
+layout_mode = 0
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -124.0
+offset_top = -56.0
+offset_right = -12.0
+offset_bottom = -8.0
+grow_horizontal = 0
+grow_vertical = 0
+focus_mode = 2
+mouse_default_cursor_shape = 2
+theme_type_variation = &"LivingForgeSecondaryButton"
+text = "INSPECT"

@@ -82,7 +82,7 @@ layout_mode = 2
 theme_type_variation = &"LivingForgeSectionLabel"
 text = "Choose up to 0 items to extract"
 
-[node name="Summary" type="HBoxContainer" parent="Frame/Content"]
+[node name="Summary" type="HFlowContainer" parent="Frame/Content"]
 layout_mode = 2
 theme_override_constants/separation = 8
 
@@ -128,60 +128,71 @@ theme_type_variation = &"LivingForgeSecondaryButton"
 text = "SHOW LOST"
 metadata/label = "LOST"
 
-[node name="SummaryLists" type="VBoxContainer" parent="Frame/Content"]
+[node name="Body" type="ScrollContainer" parent="Frame/Content"]
+layout_mode = 2
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+
+[node name="Sections" type="VBoxContainer" parent="Frame/Content/Body"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 12
+
+[node name="SummaryLists" type="VBoxContainer" parent="Frame/Content/Body/Sections"]
 layout_mode = 2
 theme_override_constants/separation = 4
 
-[node name="AutomaticItems" type="Label" parent="Frame/Content/SummaryLists"]
+[node name="AutomaticItems" type="Label" parent="Frame/Content/Body/Sections/SummaryLists"]
 visible = false
 layout_mode = 2
 theme_type_variation = &"LivingForgeCaptionLabel"
 text = "None"
 autowrap_mode = 2
 
-[node name="SelectedItems" type="Label" parent="Frame/Content/SummaryLists"]
+[node name="SelectedItems" type="Label" parent="Frame/Content/Body/Sections/SummaryLists"]
 visible = false
 layout_mode = 2
 theme_type_variation = &"LivingForgeCaptionLabel"
 text = "None"
 autowrap_mode = 2
 
-[node name="LostItems" type="Label" parent="Frame/Content/SummaryLists"]
+[node name="LostItems" type="Label" parent="Frame/Content/Body/Sections/SummaryLists"]
 visible = false
 layout_mode = 2
 theme_type_variation = &"LivingForgeCaptionLabel"
 text = "None"
 autowrap_mode = 2
 
-[node name="Body" type="VBoxContainer" parent="Frame/Content"]
-layout_mode = 2
-size_flags_vertical = 3
-theme_override_constants/separation = 12
-
-[node name="Automatic" type="VBoxContainer" parent="Frame/Content/Body"]
+[node name="Automatic" type="VBoxContainer" parent="Frame/Content/Body/Sections"]
 layout_mode = 2
 theme_override_constants/separation = 8
 
-[node name="Title" type="Label" parent="Frame/Content/Body/Automatic"]
+[node name="Title" type="Label" parent="Frame/Content/Body/Sections/Automatic"]
 layout_mode = 2
 theme_type_variation = &"LivingForgeSectionLabel"
 text = "AUTOMATIC RETENTION · LOCKED"
 
-[node name="Items" type="HBoxContainer" parent="Frame/Content/Body/Automatic"]
+[node name="Scroll" type="ScrollContainer" parent="Frame/Content/Body/Sections/Automatic"]
+custom_minimum_size = Vector2(0, 192)
+layout_mode = 2
+horizontal_scroll_mode = 2
+vertical_scroll_mode = 0
+
+[node name="Items" type="HBoxContainer" parent="Frame/Content/Body/Sections/Automatic/Scroll"]
 layout_mode = 2
 theme_override_constants/separation = 8
 
-[node name="Eligible" type="VBoxContainer" parent="Frame/Content/Body"]
+[node name="Eligible" type="VBoxContainer" parent="Frame/Content/Body/Sections"]
 layout_mode = 2
 size_flags_vertical = 3
 theme_override_constants/separation = 8
 
-[node name="Title" type="Label" parent="Frame/Content/Body/Eligible"]
+[node name="Title" type="Label" parent="Frame/Content/Body/Sections/Eligible"]
 layout_mode = 2
 theme_type_variation = &"LivingForgeSectionLabel"
 text = "CHOOSE ITEMS"
 
-[node name="Empty" type="Label" parent="Frame/Content/Body/Eligible"]
+[node name="Empty" type="Label" parent="Frame/Content/Body/Sections/Eligible"]
 visible = false
 custom_minimum_size = Vector2(0, 64)
 layout_mode = 2
@@ -189,17 +200,10 @@ theme_type_variation = &"LivingForgePlayerLabel"
 text = "No ordinary items available"
 vertical_alignment = 1
 
-[node name="Scroll" type="ScrollContainer" parent="Frame/Content/Body/Eligible"]
-layout_mode = 2
-size_flags_vertical = 3
-horizontal_scroll_mode = 0
-
-[node name="Grid" type="GridContainer" parent="Frame/Content/Body/Eligible/Scroll"]
+[node name="Sections" type="VBoxContainer" parent="Frame/Content/Body/Sections/Eligible"]
 layout_mode = 2
 size_flags_horizontal = 3
-theme_override_constants/h_separation = 12
-theme_override_constants/v_separation = 12
-columns = 4
+theme_override_constants/separation = 16
 
 [node name="ChangedNotice" type="Label" parent="Frame/Content"]
 visible = false
@@ -219,7 +223,7 @@ layout_mode = 2
 theme_type_variation = &"LivingForgeStatusChip"
 text = "RESOLVING · PLEASE WAIT"
 
-[node name="Actions" type="HBoxContainer" parent="Frame/Content"]
+[node name="Actions" type="HFlowContainer" parent="Frame/Content"]
 layout_mode = 2
 alignment = 2
 theme_override_constants/separation = 12

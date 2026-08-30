@@ -1,6 +1,31 @@
 class_name TerminalExtractionProjection
 extends RefCounted
 
+class SourceSection:
+	extends RefCounted
+	var key := ""
+	var heading := ""
+	var _items: Array[TerminalExtractionItemProjection] = []
+	var items: Array[TerminalExtractionItemProjection]:
+		get: return TerminalExtractionProjection._copy_items(_items)
+
+	static func create(first: TerminalExtractionItemProjection) -> SourceSection:
+		var result := SourceSection.new()
+		result.key = first.source_key()
+		result.heading = first.source_heading
+		result._items.append(first.copy())
+		return result
+
+	func append(item: TerminalExtractionItemProjection) -> void:
+		_items.append(item.copy())
+
+	func copy() -> SourceSection:
+		var result := SourceSection.new()
+		result.key = key
+		result.heading = heading
+		result._items = TerminalExtractionProjection._copy_items(_items)
+		return result
+
 var _automatic_items: Array[TerminalExtractionItemProjection] = []
 var automatic_items: Array[TerminalExtractionItemProjection]:
 	get: return _copy_items(_automatic_items)
@@ -54,6 +79,12 @@ func copy() -> TerminalExtractionProjection:
 	result.pending = pending
 	return result
 
+func automatic_source_sections() -> Array[SourceSection]:
+	return _source_sections(_automatic_items)
+
+func eligible_source_sections() -> Array[SourceSection]:
+	return _source_sections(_eligible_items)
+
 func to_dictionary() -> Dictionary:
 	return {
 		"automatic_items": _item_documents(_automatic_items),
@@ -90,4 +121,13 @@ static func _item_documents(values: Array[TerminalExtractionItemProjection]) -> 
 	var result: Array[Dictionary] = []
 	for value: TerminalExtractionItemProjection in values:
 		result.append(value.to_dictionary())
+	return result
+
+static func _source_sections(values: Array[TerminalExtractionItemProjection]) -> Array[SourceSection]:
+	var result: Array[SourceSection] = []
+	for item: TerminalExtractionItemProjection in values:
+		if result.is_empty() or result[-1].key != item.source_key():
+			result.append(SourceSection.create(item))
+		else:
+			result[-1].append(item)
 	return result

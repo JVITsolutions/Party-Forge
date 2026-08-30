@@ -49,13 +49,18 @@ func _project_item(
 	if detail.is_empty() or detail.has("error"):
 		return null
 	var container: ItemSlotContainer
+	var source_slot := -1
 	if selection != null:
 		container = state.container(selection.expected_source_container_id)
+		source_slot = selection.expected_source_slot
+		if container == null or container.item_id_at(source_slot) != item_id:
+			return null
 	else:
 		for candidate: ItemSlotContainer in state.containers():
 			for occupied_slot: int in candidate.occupied_slots():
 				if candidate.item_id_at(occupied_slot) == item_id:
 					container = candidate
+					source_slot = occupied_slot
 					break
 			if container != null:
 				break
@@ -63,8 +68,10 @@ func _project_item(
 		return null
 	var owner_label := _owner_label(container, source)
 	var container_label := _container_label(container, source)
+	var member_id := _member_id_from_container(container.container_id)
+	var class_label := _member_class_label(member_id, source)
 	var comparisons := _comparisons_for(detail, source, state, registry, class_definition)
-	return TerminalExtractionItemProjection.create(item_id, String(detail.get("name", item_id)), String(detail.get("rarity_name", "Unknown")), StringName(detail.get("rarity_id", &"")), owner_label, container_label, automatic, selected, lost, detail, comparisons)
+	return TerminalExtractionItemProjection.create_with_source(item_id, String(detail.get("name", item_id)), String(detail.get("rarity_name", "Unknown")), StringName(detail.get("rarity_id", &"")), owner_label, container_label, automatic, selected, lost, detail, comparisons, member_id, class_label, container.container_id, source_slot)
 
 func _comparisons_for(detail: Dictionary, source: RunResolutionSource, state: ItemOwnershipState, registry: ItemRegistry, class_definition: ClassDefinition) -> Array[Dictionary]:
 	var leader := state.container(StringName("run-equipment-%03d" % source.leader_member_id))
@@ -88,17 +95,23 @@ func _owner_label(container: ItemSlotContainer, source: RunResolutionSource) -> 
 	if container.container_kind == ItemSlotContainer.RUN_INVENTORY:
 		return "Run Inventory"
 	var member_id := _member_id_from_container(container.container_id)
-	for row: Dictionary in source.party_members:
-		if int(row.get("member_id", 0)) == member_id:
-			var definition := GameCatalog.load_defaults().class_by_id(StringName(row.get("class_id", &"")))
-			return definition.display_name if definition != null else "Party Member %d" % member_id
+	var class_label := _member_class_label(member_id, source)
+	if not class_label.is_empty():
+		return "%s · Member %d" % [class_label, member_id]
 	return "Party Member %d" % member_id
 
 func _container_label(container: ItemSlotContainer, source: RunResolutionSource) -> String:
 	if container.container_kind == ItemSlotContainer.RUN_INVENTORY:
 		return "Run Inventory"
 	var member_id := _member_id_from_container(container.container_id)
-	return "%s Equipment" % _owner_label(container, source) if member_id > 0 else "Run Equipment"
+	return "Member %d Equipment" % member_id if member_id > 0 else "Run Equipment"
+
+func _member_class_label(member_id: int, source: RunResolutionSource) -> String:
+	for row: Dictionary in source.party_members:
+		if int(row.get("member_id", 0)) == member_id:
+			var definition := GameCatalog.load_defaults().class_by_id(StringName(row.get("class_id", &"")))
+			return definition.display_name if definition != null else String(row.get("class_id", "Unknown")).capitalize()
+	return ""
 
 func _member_id_from_container(container_id: StringName) -> int:
 	var value := String(container_id)

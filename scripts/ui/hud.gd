@@ -35,6 +35,9 @@ var _last_viewport_size := Vector2i.ZERO
 var _high_contrast := false
 var _unavailable_reason := ""
 var _deferred_focus_descriptor: Dictionary = {}
+var _terminal_suspended_focus_modes: Array[Dictionary] = []
+var _terminal_prior_focus: Control
+var _terminal_prior_focus_descriptor: Dictionary = {}
 
 
 func _ready() -> void:
@@ -44,16 +47,54 @@ func _ready() -> void:
 
 func show_terminal_extraction(projection: TerminalExtractionProjection) -> void:
 	var panel := get_node("TerminalExtraction") as TerminalExtractionPanel
+	_suspend_non_terminal_focus(panel)
 	panel.apply_visual_settings(settings if settings != null else PartyForgeSettings.new())
 	panel.present(projection)
 
 
 func show_terminal_resolution_pending() -> void:
-	(get_node("TerminalExtraction") as TerminalExtractionPanel).set_pending(true)
+	var panel := get_node("TerminalExtraction") as TerminalExtractionPanel
+	_suspend_non_terminal_focus(panel)
+	panel.set_pending(true)
 
 
 func hide_terminal_extraction() -> void:
 	(get_node("TerminalExtraction") as TerminalExtractionPanel).hide_panel()
+	_restore_non_terminal_focus()
+
+
+func _suspend_non_terminal_focus(panel: TerminalExtractionPanel) -> void:
+	if not _terminal_suspended_focus_modes.is_empty():
+		return
+	var owner := get_viewport().gui_get_focus_owner()
+	_terminal_prior_focus = owner if owner is Control else null
+	_terminal_prior_focus_descriptor = focus_descriptor_for(_terminal_prior_focus)
+	for node: Node in find_children("*", "Control", true, false):
+		var control := node as Control
+		if control == null or control == panel or panel.is_ancestor_of(control):
+			continue
+		if control.focus_mode == Control.FOCUS_NONE:
+			continue
+		_terminal_suspended_focus_modes.append({"control": control, "focus_mode": control.focus_mode})
+		control.focus_mode = Control.FOCUS_NONE
+
+
+func _restore_non_terminal_focus() -> void:
+	for entry: Dictionary in _terminal_suspended_focus_modes:
+		var control := entry.get("control") as Control
+		if control != null and is_instance_valid(control):
+			control.focus_mode = int(entry.get("focus_mode", Control.FOCUS_NONE))
+	_terminal_suspended_focus_modes.clear()
+	var direct := _terminal_prior_focus
+	var descriptor := _terminal_prior_focus_descriptor.duplicate(true)
+	_terminal_prior_focus = null
+	_terminal_prior_focus_descriptor.clear()
+	var direct_disabled := direct is BaseButton and (direct as BaseButton).disabled
+	if direct != null and is_instance_valid(direct) and direct.is_visible_in_tree() and direct.focus_mode != Control.FOCUS_NONE and not direct_disabled:
+		direct.grab_focus()
+		return
+	if not descriptor.is_empty():
+		restore_focus_descriptor(descriptor)
 
 
 func _ensure_control_connections() -> void:

@@ -2,61 +2,58 @@
 
 ## Scope
 
-- Exact base: `54afb374b11bc01d5028e3106ba70ff6be1cff56`.
-- Task: add the typed terminal extraction presentation boundary, exact selection controller, Living Forge extraction card/panel, and stable HUD presentation owner.
-- Excluded: Task 10 terminal orchestration/recovery, run-result or recap work, tactics/gambits, push, merge, and worktree cleanup.
+- Exact original base: `54afb374b11bc01d5028e3106ba70ff6be1cff56`.
+- Review-repair base: `f42a17abc2376647dc9865dff037de5b6da535e1`.
+- Task: repair the typed terminal extraction presentation boundary, exact selection controller, Living Forge extraction card/panel, and stable HUD presentation/focus owner against final UI/UX review.
+- Excluded: Task 10 terminal orchestration/recovery, `Main`, run-result or recap work, tactics/gambits, push, merge, and worktree cleanup.
 - Historical `.superpowers/sdd/task-9-report.md` remains exact git blob `5ca22b51b5b89beb8fc07c31cb6599ec53024f4b`.
 
 ## TDD RED
 
-The three Task 9 unit suites were authored before their production contracts and run with:
+The original Task 9 RED values in the prior revision of this report are historical, reported evidence; this repair does not claim a retained original-run transcript for them.
+
+For the review repair, all expanded unit and real-scene integration assertions were authored before repair production edits. Production paths remained untouched through both RED commands.
 
 ```powershell
 & $godot --headless --path (Get-Location).Path --quit-after 600 --script res://tests/focused_test_runner.gd -- tests/unit/test_terminal_extraction_view_model.gd tests/unit/test_terminal_extraction_selection_controller.gd tests/unit/test_terminal_extraction_panel.gd
 ```
 
 - Exit: `1`.
-- Marker: `TEST_SUMMARY: FAIL (4 failures)`.
-- Classification: only the then-missing typed item/projection, view-model, controller, and panel scene contracts failed; there was no unrelated parser or loader noise.
-
-The integration runner was also authored before production and run with:
+- Exact terminal marker: `TEST_SUMMARY: FAIL (20 failures)`.
+- Classification: 7 ordered-source/exact-identity gaps, 4 reconcile capacity-drift gaps, and 9 composite availability/grouping/high-contrast gaps.
+- There was no parser, script, loader, or harness failure.
 
 ```powershell
-& $godot --headless --path (Get-Location).Path --quit-after 900 --script res://tests/integration/terminal_extraction_flow_runner.gd
+& $godot --headless --path (Get-Location).Path --quit-after 600 --script res://tests/integration/terminal_extraction_flow_runner.gd
 ```
 
 - Exit: `1`.
-- Marker: `TERMINAL_EXTRACTION_FLOW_SUMMARY: FAIL`.
-- Classification: the runner named only the absent Task 9 projection/controller/card/panel surface.
+- Exact terminal marker: `TERMINAL_EXTRACTION_FLOW_SUMMARY: FAIL` with 26 named assertion failures.
+- Classification: the failures were the approved source grouping, order-independent availability, closed focus, responsive settings, authentic input, stale detail, and HUD focus-ownership contracts.
+- There was no parser or script failure.
 
-Final review expanded the test boundary before its corresponding repair. The focused suite produced `TEST_SUMMARY: FAIL (2 failures)` for duplicate automatic identities during stale reconciliation. The real panel integration produced `TERMINAL_EXTRACTION_FLOW_SUMMARY: FAIL` for full item-24 visibility and deterministic reverse footer focus. The minimum repair then added complete duplicate validation, focus-entered scroll visibility, and explicit reverse footer neighbors.
+Final self-review expanded the real integration boundary before its corresponding production repair. It first produced exactly 3 named failures: deterministic warning fallback without an initiating control plus expanded consequence-list containment in both responsive matrices. The minimum repair moved expandable lists into the one bounded body scroll and added canonical first-item fallback. Final UI/UX re-review then identified the automatic Inspect child-anchor edge. Authentic Joy A/B evidence was added first and produced exactly 2 named failures: initiating-anchor mismatch and Cancel-return mismatch. The minimum card repair now emits the actual initiating Inspect child for that action. Both incremental RED runs had clean parser/script execution and were followed by the exact integration GREEN gate.
 
 ## Implemented Contract
 
-- `TerminalExtractionViewModel` builds a value-only, copy-owned picker projection from the Task 7 policy/source boundary. Canonical policy order is retained; names, rarity, detail, and comparison data come from the existing catalog-backed item presentation services. Live and JSON cold-source inputs produce byte-equivalent item detail/comparison documents.
-- `TerminalExtractionSelectionController` privately retains copied exact `ExtractionSelection` tokens. All-fit selects all, constrained and zero-capacity policies select none, automatic items remain locked, capacity cannot be exceeded, returned selections preserve policy order, and duplicate automatic/eligible/cross-group identities fail closed.
-- Unused-capacity acknowledgement exists only when both capacity is unused and ordinary items will be lost. Any selection change or reconcile resets it. Pending state rejects mutation. Reconcile preserves only exact container-and-slot source tokens and reports removed or changed selected IDs in prior canonical order.
-- `ForgeExtractionItemCard` is a real always-processing button whose authority is only a stable item ID. It uses explicit `AUTOMATIC · LOCKED`, `SELECTED`, and `WILL BE LOST` text plus icon/shape/accessibility state, has a 48-pixel-or-larger target, and emits identical stable-ID intent from mouse, keyboard, and controller activation.
-- `TerminalExtractionPanel` is a full-screen always-processing pointer-stopping terminal overlay with no combat route. It presents automatic retention, a 24-item scrollable eligible grid, exact persistent counts and canonical lists, typed player-safe preflight failures, disabled invalid confirmation, local unused-capacity acknowledgement, pending duplicate blocking, and explicit detail/tooltip force-dismiss and exact focus return.
-- The picker owns a closed focus path while paused: real Enter, Space, Joy A, mouse, D-pad traversal through item 24, footer traversal, reverse traversal, Cancel consumption, item-24 scroll visibility, and underlying combat pointer blocking are exercised by the integration runner.
-- Settings use the shared Living Forge theme/accessibility variations for high contrast, UI scale, and text scale. Picker state changes have no required animation. This task makes no Task 14 aesthetic or screenshot acceptance claim, and it does not claim that the pre-existing `ItemTooltipCard` hard-coded font overrides gained new scale behavior.
-- `HUD/TerminalExtraction` is the stable scene owner. `show_terminal_extraction`, `show_terminal_resolution_pending`, and `hide_terminal_extraction` delegate presentation only. Main orchestration remains intentionally deferred to Task 10.
+- `TerminalExtractionViewModel` and its copy-owned item projection now retain exact member ID, member class display, container ID, container label, and slot. Contiguous typed source sections preserve canonical policy-token order without sorting or merging later repeated sources. Section headings, cards, accessibility descriptions, and consequence rows distinguish inventory/equipment, same-class members, and duplicate display names.
+- `TerminalExtractionSelectionController.reconcile` preserves only exact container-and-slot tokens, then deterministically keeps the canonical first selections up to the new capacity. Capacity shrink reports trailing displaced selections in the changed list, growth does not invent selections, and every reconcile resets acknowledgement.
+- `TerminalExtractionPanel` keeps one composite availability truth: copied projection validity/error, persisted structured preflight disposition/category/player reason, and pending state. One update path controls Confirm, Retry, selection mutation, pending presentation, and error copy. Out-of-order success/failure/pending calls cannot re-enable an invalid request or erase a failure.
+- Fresh projections collapse consequence expansions, rebuild stable contiguous source sections, apply pending/lock state immediately, and present exact automatic/selected/lost rows with owner, container ID, and slot. No display text, rendered color, or item ID alone is used as source authority.
+- The base picker has an explicit closed focus ring across eligible toggle and Inspect actions, automatic Inspect actions, summary-list controls, and dynamically available footer actions. Detail and unused-capacity warning surfaces own separate trapped focus rings. Cancel closes only the active child surface; root Cancel is consumed. A stale removed detail item returns to the deterministic nearest canonical eligible item.
+- HUD presentation disables every non-terminal focusable descendant while the terminal is shown and restores each exact prior focus mode plus the prior focus owner/descriptor on hide. Pointer stopping remains full-screen.
+- The pinned header, persistent summary, errors, and footer stay outside the single bounded vertical body scroll. Automatic retention uses a reachable bounded horizontal subscroll; eligible contiguous source sections share the body scroll. At `1280x720`, both high-contrast `150/150` and normal-contrast `80/150` UI/text matrices keep the frame/footer bounded, prevent overlap, reflow eligible sections to at most two columns, retain 48-pixel actions, and make 8 automatic plus 24 eligible items reachable.
+- `ForgeExtractionItemCard` exposes explicit `AUTOMATIC · LOCKED`, `SELECTED`, and `WILL BE LOST` text/icon states, exact source identity, a real Inspect action, pending/lock behavior, and shared semantic high-contrast/focus tokens without the prior hard-coded focus border. Controller activation emits the exact focusable Inspect child as its return anchor, including for inert automatic card roots.
+- Real SubViewport evidence uses actual mouse clicks/right-click, Enter, Space, mapped keyboard Inspect, Joy A/B, and Joy D-pad events. It covers item 24 and reverse footer traversal, summary expansion, exact detail source/content and Cancel return, stale fallback, warning Back/acknowledge, pending duplicate block, base/detail/warning focus containment, underlying pointer blocking, and HUD focus suspension/restoration while paused.
+- The panel applies the shared Living Forge theme to itself and the reused tooltip surface. This task still does not claim that the pre-existing `ItemTooltipCard` hard-coded font overrides gained new 150% typography behavior; Task 14 remains the screenshot/aesthetic acceptance gate.
+- `HUD/TerminalExtraction` remains presentation/delegation only. No Task 10 orchestration or `Main` mutation was added.
 
 ## GREEN Verification
 
-### Exact Task 9 unit gate
+### Exact Task 9 gates
 
-The exact three-suite command above was repeated after the final repair.
-
-- Exit: `0`.
-- Marker: `TEST_SUMMARY: PASS (0 failures)`.
-
-### Exact Task 9 integration gate
-
-The exact integration command above was repeated after the final repair.
-
-- Exit: `0`.
-- Marker: `TERMINAL_EXTRACTION_FLOW_SUMMARY: PASS`.
+- Exact three-suite unit command above: exit `0`, `TEST_SUMMARY: PASS (0 failures)`.
+- Exact integration command above: exit `0`, `TERMINAL_EXTRACTION_FLOW_SUMMARY: PASS`.
 
 ### Retained HUD and Task 7/8 regressions
 
@@ -66,24 +63,25 @@ The exact integration command above was repeated after the final repair.
 
 - Exit: `0`.
 - Marker: `TEST_SUMMARY: PASS (0 failures)`.
-- The emitted HUD unavailable and duplicate-equipment-source diagnostics belong to asserted retained negative-path cases.
+- The emitted HUD-unavailable and duplicate-equipment-source diagnostics are asserted negative-path cases.
+- `combat_hud_input_runner.gd`: exit `0`, `COMBAT_HUD_INPUT_SUMMARY: PASS`.
+- `combat_hud_party_scale_runner.gd`: exit `0`, `COMBAT_HUD_PARTY_SCALE_SUMMARY: PASS`.
 
-The retained real HUD input and party-scale runners both exited `0` with `COMBAT_HUD_INPUT_SUMMARY: PASS` and `COMBAT_HUD_PARTY_SCALE_SUMMARY: PASS`.
-
-### Complete unit regression
+### Complete non-quiet regression
 
 ```powershell
-& $godot --headless --path (Get-Location).Path --quit-after 1800 --script res://tests/test_runner.gd
+& $godot --headless --path (Get-Location).Path --quit-after 2400 --script res://tests/test_runner.gd
 ```
 
 - Exit: `0`.
-- Exact terminal marker after the final production repair: `TEST_SUMMARY: PASS (250 suites)`.
-- The filtered completion stream contained no `SCRIPT ERROR` or `TEST_FAILURE` marker.
+- Exact terminal marker: `TEST_SUMMARY: PASS (250 suites)`.
+- The streamed run contained no `TEST_FAILURE` or `SCRIPT ERROR` marker; expected asserted negative-path diagnostics were present.
 
 ### Import, UID classification, and repository checks
 
-- Headless import completed with exit `0`.
-- Cold import produced 51 unrelated missing cache UID sidecars; all 51 were classified and removed. Exactly the ten intended Task 9 UIDs remain:
+- Headless editor import exited `0`.
+- Import recreated 51 unrelated cache-backed UID sidecars. All 51 were classified as untracked and safely removed inside the worktree.
+- Exactly the ten intended, tracked Task 9 UIDs remain present:
   - `scripts/ui/run_result/terminal_extraction_item_projection.gd.uid`
   - `scripts/ui/run_result/terminal_extraction_projection.gd.uid`
   - `scripts/ui/run_result/terminal_extraction_view_model.gd.uid`
@@ -95,23 +93,25 @@ The retained real HUD input and party-scale runners both exited `0` with `COMBAT
   - `tests/unit/test_terminal_extraction_panel.gd.uid`
   - `tests/integration/terminal_extraction_flow_runner.gd.uid`
 - `git diff --check`: clean.
+- Historical Task 9 report blob: `5ca22b51b5b89beb8fc07c31cb6599ec53024f4b`.
 
 ## Principal SHA-256 Evidence
 
-- `terminal_extraction_item_projection.gd`: `1a50feff2384ec7c6e7f683637efb2dce9a74a8fa736383c4cfb7d7407af38c1`
-- `terminal_extraction_projection.gd`: `cf8a835865586d65c065ea57f0efb86521041d00345f26f90f306de5ba73096a`
-- `terminal_extraction_view_model.gd`: `c72a1a4bdf07b38607fc3346a82b29424870d206d402cd252595369c52f69653`
-- `terminal_extraction_selection_controller.gd`: `449ca82de9d0018d4b92368582d7d1e576c276a194add2239feb1e1fe1cd683f`
-- `terminal_extraction_panel.gd`: `5685c47fa688548bbd18d317a0e1594bda672cec9ee63bcb6c742097861ba8d0`
-- `forge_extraction_item_card.gd`: `3a7d1b279577be53000c9ca0468a40d0359dc515a994f3ee6cc84d053bab5fbe`
-- `terminal_extraction_panel.tscn`: `caa8dd9130ec8259c545f67cb13a7d6d9b6820d255bf86ed1e03ea2d5adb2384`
-- `forge_extraction_item_card.tscn`: `eaf359cedd55c6370ad7133e1e5c5098885e585f97ebf9f38fa9e4eea3ed9328`
-- `test_terminal_extraction_view_model.gd`: `82218dd9e3ece4b91eba12a9eb038e2eede8bc334f9bf2619433ca974b574cac`
-- `test_terminal_extraction_selection_controller.gd`: `ca38d5af68ed790dbe6c0491df85fd561baf21fdafc01e6c5f902e1ec96ca7e0`
-- `test_terminal_extraction_panel.gd`: `e77deaa2e74d627375a0aa8511490cdddac6c98224a8fdd3541613398807d764`
-- `terminal_extraction_flow_runner.gd`: `02f907c6e4e5b45e9eef58001adb60a250e7ef79db7f59acc1a8c29c26801fd5`
+- `terminal_extraction_item_projection.gd`: `f26213493657d64da5d7aa90c3fbee70c21a643416a54743f10ee255dddd8dec`
+- `terminal_extraction_projection.gd`: `ac3fae70b2360cb3297154d3b5fbb02023663e128d8682f2cac2d2f500b0d020`
+- `terminal_extraction_view_model.gd`: `99774ea69a1433fce490e301b0f31f12efa2575229aea0aa4b544cc6e24ac6e1`
+- `terminal_extraction_selection_controller.gd`: `13e06238e9177e73badda26b3641854dedcc9e841057912ef633a18a69f7c315`
+- `terminal_extraction_panel.gd`: `adfcce05821bd1b705e069f4ed903d32bac88b9406d6965bc04d42a23cdf5fb8`
+- `forge_extraction_item_card.gd`: `96e5bce26c087f03e331e51abf0a16aa1fd88c1500b176937520a59d649c2109`
+- `hud.gd`: `fb81400215f803db2bc0d935813a134795a9b6578d9eb260a49f860e6d1ced54`
+- `terminal_extraction_panel.tscn`: `c3bf121311b09077cb477c87cc1660e47e9861e0d70bbb433b020ee6312fc699`
+- `forge_extraction_item_card.tscn`: `c3a106e62cf1203c7f0d3ab2581d21652293f481b630abdff38bbf7ac59de803`
+- `test_terminal_extraction_view_model.gd`: `951974bbf35a743c84d51efb06d6785d0edf08bd74807bf66429cf60e0e3c095`
+- `test_terminal_extraction_selection_controller.gd`: `a6a318e20162acd0abb5dd8cfee90fd4b8e2a5db681a60266cb68d6629a1d4fb`
+- `test_terminal_extraction_panel.gd`: `d0ad28d24e6cc91e5175c2a4d2122fc3d4f0289c6baa566f46a8ebbcc74480bd`
+- `terminal_extraction_flow_runner.gd`: `3239a957a89dc191d54417d233fbf104f03ebd938b4808ea5996bdcd0f13080f`
 
 ## Delivery State
 
-- Task 9 implementation and proportional verification are complete in the isolated worktree.
-- No Task 10 orchestration, result/recap work, tactics, push, merge, or worktree cleanup was performed.
+- Task 9 review repair and proportional verification are complete in the isolated worktree.
+- No Task 10 orchestration, `Main`, result/recap, tactics, push, merge, or worktree cleanup was performed.

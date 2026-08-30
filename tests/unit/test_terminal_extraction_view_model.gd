@@ -21,8 +21,28 @@ func run() -> Array[String]:
 		TestAssertions.equal(projection.selected_count, 0, "constrained picker begins without selection", failures)
 		TestAssertions.equal(projection.lost_count, 2, "loss count is exact", failures)
 		var eligible: Array = projection.eligible_items
-		TestAssertions.equal(eligible[0].owner_label, "Ranger", "equipped item names source member", failures)
+		TestAssertions.equal(eligible[0].owner_label, "Ranger · Member 2", "equipped item names exact stable source member", failures)
 		TestAssertions.equal(eligible[1].container_label, "Run Inventory", "carried item names source container", failures)
+		var source_properties := _property_names(eligible[0])
+		for property_name: String in ["owner_member_id", "owner_class_label", "source_container_id", "source_slot", "source_heading", "consequence_label"]:
+			TestAssertions.truthy(source_properties.has(property_name), "item projection exposes exact %s" % property_name, failures)
+		if source_properties.has("owner_member_id"):
+			TestAssertions.equal(int(eligible[0].get("owner_member_id")), 2, "equipped item carries stable member identity", failures)
+			TestAssertions.equal(String(eligible[0].get("owner_class_label")), "Ranger", "equipped item carries frozen class display", failures)
+			TestAssertions.equal(String(eligible[0].get("source_container_id")), "run-equipment-002", "equipped item carries exact container token", failures)
+			TestAssertions.equal(int(eligible[0].get("source_slot")), 7, "equipped item carries exact source slot", failures)
+			TestAssertions.truthy(String(eligible[0].get("source_heading")).contains("MEMBER 2") and String(eligible[0].get("source_heading")).contains("RANGER"), "same-class members remain distinguishable in source heading", failures)
+			TestAssertions.truthy(String(eligible[0].get("consequence_label")).contains("run-equipment-002") and String(eligible[0].get("consequence_label")).contains("slot 7"), "consequence identity includes exact source", failures)
+			TestAssertions.equal(int(eligible[1].get("owner_member_id")), 0, "run inventory is distinct from member equipment", failures)
+			TestAssertions.equal(String(eligible[1].get("source_container_id")), "run-inventory", "run inventory carries exact container identity", failures)
+			TestAssertions.equal(int(eligible[1].get("source_slot")), 0, "run inventory carries exact slot", failures)
+		TestAssertions.truthy(projection.has_method(&"eligible_source_sections"), "projection exposes ordered contiguous source sections", failures)
+		if projection.has_method(&"eligible_source_sections"):
+			var sections: Array = projection.call(&"eligible_source_sections")
+			TestAssertions.equal(sections.size(), 2, "eligible projection has one canonical section per contiguous source", failures)
+			if sections.size() == 2:
+				TestAssertions.equal(_item_ids(sections[0].items), ["item-follower"], "first source section retains first policy token", failures)
+				TestAssertions.equal(_item_ids(sections[1].items), ["item-inventory"], "second source section retains following policy token", failures)
 		TestAssertions.equal(eligible[0].name, "Windrunner Band", "catalog-backed name is used", failures)
 		TestAssertions.equal(eligible[0].rarity_name, "Common", "catalog-backed rarity is used", failures)
 		TestAssertions.truthy(not eligible[0].detail.is_empty(), "item detail is available", failures)
@@ -87,6 +107,12 @@ func _item_ids(values: Array) -> Array[String]:
 	var result: Array[String] = []
 	for value: Variant in values:
 		result.append(String(value.item_id))
+	return result
+
+func _property_names(value: Object) -> Array[String]:
+	var result: Array[String] = []
+	for property: Dictionary in value.get_property_list():
+		result.append(String(property.get("name", "")))
 	return result
 
 func _cleanup(_fixture: Dictionary) -> void:

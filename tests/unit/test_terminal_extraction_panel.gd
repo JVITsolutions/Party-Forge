@@ -23,13 +23,13 @@ func run() -> Array[String]:
 	TestAssertions.equal((panel.get_node("Frame/Content/Summary/Automatic") as Label).text, "Automatic 1", "automatic count is persistent", failures)
 	TestAssertions.equal((panel.get_node("Frame/Content/Summary/Selected") as Label).text, "Selected 0 / 3", "selected count is persistent", failures)
 	TestAssertions.equal((panel.get_node("Frame/Content/Summary/Lost") as Label).text, "Will be lost 24", "loss count is persistent", failures)
-	var automatic := panel.get_node("Frame/Content/Body/Automatic/Items") as Container
-	var eligible := panel.get_node("Frame/Content/Body/Eligible/Scroll/Grid") as Container
-	TestAssertions.equal(automatic.get_child_count(), 1, "automatic locked group is visible", failures)
-	TestAssertions.equal(eligible.get_child_count(), 24, "all 24 eligible items are reachable in the scroll grid", failures)
-	if eligible.get_child_count() == 24:
-		var first := eligible.get_child(0) as Control
-		var last := eligible.get_child(23) as Control
+	var automatic := panel.get_node_or_null("Frame/Content/Body/Sections/Automatic/Scroll/Items") as Container
+	var eligible := _eligible_cards(panel)
+	TestAssertions.truthy(automatic != null and automatic.get_child_count() == 1, "automatic locked group is visible in its bounded region", failures)
+	TestAssertions.equal(eligible.size(), 24, "all 24 eligible items are reachable in the scroll grid", failures)
+	if eligible.size() == 24:
+		var first := eligible[0] as Control
+		var last := eligible[23] as Control
 		TestAssertions.equal(String(first.get_meta(&"item_id", "")), "eligible-01", "first stable item identity is exact", failures)
 		TestAssertions.equal(String(last.get_meta(&"item_id", "")), "eligible-24", "final stable item identity is reachable", failures)
 		TestAssertions.truthy(first.custom_minimum_size.x >= 48.0 and first.custom_minimum_size.y >= 48.0, "item action target is at least 48 px", failures)
@@ -41,15 +41,96 @@ func run() -> Array[String]:
 	TestAssertions.equal((panel.get_node("Frame/Content/PlayerError") as Label).text, preflight.player_reason, "typed player reason is presented without diagnostic parsing", failures)
 	TestAssertions.truthy((panel.get_node("Frame/Content/Actions/Confirm") as Button).disabled, "invalid confirmation is disabled", failures)
 	TestAssertions.truthy(panel.get_node_or_null("ReturnToCombat") == null, "terminal panel has no combat route", failures)
+	_test_composite_availability(panel, projection, failures)
+	_test_grouped_exact_consequences(panel, failures)
+	_test_high_contrast_semantics(panel, failures)
 	panel.free()
 	return failures
 
+func _test_composite_availability(panel: Control, projection: Variant, failures: Array[String]) -> void:
+	var confirm := panel.get_node("Frame/Content/Actions/Confirm") as Button
+	var retry := panel.get_node("Frame/Content/Actions/Retry") as Button
+	projection.pending = true
+	panel.call(&"present", projection)
+	var first := _card(panel, "eligible-01")
+	TestAssertions.truthy(confirm.disabled, "cold pending projection disables confirmation", failures)
+	TestAssertions.truthy(first != null and first.disabled, "cold pending projection immediately disables newly built cards", failures)
+	var success := RunResolutionPreflightResult.new()
+	success._extraction = RunExtractionProjection.create([], [], [], [], 0, [])
+	panel.call(&"show_preflight", success)
+	TestAssertions.truthy(confirm.disabled, "successful preflight cannot re-enable confirmation while pending", failures)
+	var reducible := RunResolutionPreflightResult.failure("internal", RunResolutionEvaluation.FailureCategory.STASH_REDUCIBLE, "Selected items need 4 open slots; 2 are available. Select fewer ordinary items.")
+	panel.call(&"show_preflight", reducible)
+	panel.call(&"set_pending", false)
+	TestAssertions.truthy(confirm.disabled, "clearing pending cannot erase a failed preflight", failures)
+	TestAssertions.truthy(not retry.visible, "reducible failure keeps retry hidden because selection can recover", failures)
+	projection.pending = false
+	panel.call(&"present", projection)
+	TestAssertions.truthy(not confirm.disabled and not retry.visible, "fresh valid projection resets prior preflight disposition", failures)
+	var automatic := RunResolutionPreflightResult.failure("internal", RunResolutionEvaluation.FailureCategory.STASH_AUTOMATIC_ONLY, "Automatic retained items need more destination space. Retry resolution after making space.")
+	panel.call(&"set_pending", true)
+	panel.call(&"set_pending", false)
+	panel.call(&"show_preflight", automatic)
+	TestAssertions.truthy(confirm.disabled and retry.visible, "failed preflight remains authoritative when delivered after pending clears", failures)
+	panel.call(&"set_pending", true)
+	TestAssertions.truthy(confirm.disabled and retry.disabled, "pending blocks retry interaction without changing failure disposition", failures)
+	panel.call(&"set_pending", false)
+	TestAssertions.truthy(confirm.disabled and retry.visible and not retry.disabled, "clearing pending restores exact failed-preflight recovery action", failures)
+
+func _test_grouped_exact_consequences(panel: Control, failures: Array[String]) -> void:
+	var sections := panel.get_node_or_null("Frame/Content/Body/Sections/Eligible/Sections") as Container
+	TestAssertions.truthy(sections != null, "eligible body exposes ordered source sections", failures)
+	if sections != null:
+		TestAssertions.truthy(sections.get_child_count() >= 2, "canonical inventory/member changes create distinct headings without re-sort", failures)
+	var automatic_list := (panel.get_node("Frame/Content/Body/Sections/SummaryLists/AutomaticItems") as Label).text
+	var lost_list := (panel.get_node("Frame/Content/Body/Sections/SummaryLists/LostItems") as Label).text
+	TestAssertions.truthy(automatic_list.contains("Leader Equipment") and automatic_list.contains("slot"), "automatic consequence list includes exact owner container and slot", failures)
+	TestAssertions.truthy(lost_list.contains("Run Inventory") and lost_list.contains("slot"), "lost consequence list includes exact owner container and slot; actual=%s" % lost_list, failures)
+
+func _test_high_contrast_semantics(panel: Control, failures: Array[String]) -> void:
+	var settings := PartyForgeSettings.new()
+	settings.high_contrast = true
+	settings.ui_scale_percent = 150
+	settings.text_scale_percent = 150
+	panel.call(&"apply_visual_settings", settings)
+	var first := _card(panel, "eligible-01")
+	TestAssertions.truthy(first != null, "high-contrast fixture retains eligible card", failures)
+	if first == null:
+		return
+	first.call(&"apply_accessibility_variant", true)
+	var focus_style := (first.get_node("FocusFrame") as Panel).get_theme_stylebox(&"panel") as StyleBoxFlat
+	TestAssertions.truthy(focus_style != null and focus_style.border_color == LivingForgeTokens.color(&"focus_outline", true), "card focus boundary uses high-contrast semantic token", failures)
+	var state_text := first.get_node("Content/State/StateText") as Label
+	TestAssertions.equal(state_text.get_theme_color(&"font_color"), LivingForgeTokens.color(&"warning", true), "loss state uses high-contrast warning treatment plus explicit copy", failures)
+
+func _card(panel: Control, item_id: String) -> Button:
+	for node: Node in panel.find_children("*", "ForgeExtractionItemCard", true, false):
+		if String(node.get_meta(&"item_id", "")) == item_id:
+			return node as Button
+	return null
+
+func _eligible_cards(panel: Control) -> Array[Button]:
+	var result: Array[Button] = []
+	for node: Node in panel.find_children("*", "ForgeExtractionItemCard", true, false):
+		if String(node.get_meta(&"item_id", "")).begins_with("eligible-"):
+			result.append(node as Button)
+	return result
+
 func _projection(item_type: Script, projection_type: Script, count: int, capacity: int) -> Variant:
-	var automatic: Array = [item_type.call(&"create", "automatic-01", "Forge Vanguard Sword", "Common", &"common", "Asha", "Leader Equipment", true, false, false, {"name": "Forge Vanguard Sword"}, [])]
+	var automatic: Array = [_item(item_type, "automatic-01", "Forge Vanguard Sword", "Common", &"common", "Fighter · Member 1", "Leader Equipment", true, false, false, {"name": "Forge Vanguard Sword"}, [], 1, "Fighter", &"run-equipment-001", 9)]
 	var eligible: Array = []
 	var lost: Array[String] = []
 	for index: int in count:
 		var item_id := "eligible-%02d" % (index + 1)
-		eligible.append(item_type.call(&"create", item_id, "Item %02d" % (index + 1), "Common", &"common", "Run Inventory", "Run Inventory", false, false, true, {"name": "Item %02d" % (index + 1)}, []))
+		var member_id := 2 if index < 8 else 3 if index < 16 else 0
+		var owner := "Ranger · Member %d" % member_id if member_id > 0 else "Run Inventory"
+		var container_id := StringName("run-equipment-%03d" % member_id) if member_id > 0 else &"run-inventory"
+		var container_label := "Ranger Equipment" if member_id > 0 else "Run Inventory"
+		eligible.append(_item(item_type, item_id, "Twin Band", "Common", &"common", owner, container_label, false, false, true, {"name": "Twin Band"}, [], member_id, "Ranger" if member_id > 0 else "", container_id, index))
 		lost.append(item_id)
 	return projection_type.call(&"create", automatic, eligible, capacity, [], lost, [], "", true)
+
+func _item(item_type: Script, item_id: String, item_name: String, rarity: String, rarity_id: StringName, owner: String, container: String, automatic: bool, selected: bool, lost: bool, detail: Dictionary, comparisons: Array, member_id: int, class_label: String, container_id: StringName, slot: int) -> Variant:
+	if item_type.has_method(&"create_with_source"):
+		return item_type.call(&"create_with_source", item_id, item_name, rarity, rarity_id, owner, container, automatic, selected, lost, detail, comparisons, member_id, class_label, container_id, slot)
+	return item_type.call(&"create", item_id, item_name, rarity, rarity_id, owner, container, automatic, selected, lost, detail, comparisons)
