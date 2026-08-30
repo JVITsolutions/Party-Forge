@@ -19,8 +19,11 @@ func _test_activation_matrix(failures: Array[String]) -> void:
 	if scripts.is_empty():
 		return
 	var locked := ProfileState.new_profile("presentation-locked", "Locked", 1)
+	var unlocked := ProfileState.new_profile("presentation-available", "Available", 2)
+	unlocked.permanent_feature_unlocks = ["stash"]
 	var player := _settings(PartyForgeSettings.Mode.PLAYER_SIMULATION, false)
 	_assert_resolution(scripts["resolver"].resolve(player, locked, WarehouseAccessPolicy.State.BLOCKED, CityAccessProviderResult.legacy()), scripts["result"], 0, 0, &"legacy_gate", "flag-off locked profile uses legacy hidden state", failures)
+	_assert_resolution(scripts["resolver"].resolve(player, unlocked, WarehouseAccessPolicy.State.AVAILABLE, CityAccessProviderResult.legacy()), scripts["result"], 2, 0, &"legacy_gate", "flag-off available profile uses legacy available state", failures)
 	player.use_city_access_snapshot = true
 	for row: Array in [
 		[CityAccessProjection.State.HIDDEN, 0, 1, &"candidate_hidden"],
@@ -85,6 +88,8 @@ func _test_marker_fails_closed_after_public_mutation(failures: Array[String]) ->
 	var scripts := _scripts(failures)
 	if scripts.is_empty():
 		return
+	var invalid_constructor = scripts["result"].new(1, 1, &"raw constructor reason must never escape")
+	TestAssertions.equal(invalid_constructor.reason, &"invalid_reason", "constructor rejects unallowlisted raw reason", failures)
 	var result = scripts["result"].new(1, 1, &"candidate_locked")
 	result.state = 99
 	result.outcome = 99
