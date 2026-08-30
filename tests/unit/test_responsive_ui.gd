@@ -1,7 +1,10 @@
 extends RefCounted
 
 const ResponsiveGeometry := preload("res://tests/support/responsive_geometry.gd")
-const VIEWPORT_SIZES := [Vector2(1280.0, 720.0), Vector2(1920.0, 1080.0), Vector2(2560.0, 1440.0), Vector2(3840.0, 2160.0)]
+const VIEWPORT_SIZES := [
+	Vector2(1280.0, 720.0), Vector2(1920.0, 1080.0), Vector2(2560.0, 1440.0),
+	Vector2(3840.0, 2160.0), Vector2(2560.0, 1080.0),
+]
 
 
 func run() -> Array[String]:
@@ -10,6 +13,7 @@ func run() -> Array[String]:
 	_test_play_lobby_compositions(failures)
 	_test_retained_overlay_contracts(failures)
 	_test_level_up_card_layout_contract(failures)
+	_test_terminal_surface_contracts(failures)
 	_test_integrated_overlay_containment(failures)
 	_test_settings_and_badge_containment(failures)
 	return failures
@@ -144,6 +148,46 @@ func _test_level_up_card_layout_contract(failures: Array[String]) -> void:
 		var content := card.get_node("Content") as Control
 		TestAssertions.equal(Vector4(content.offset_left, content.offset_top, content.offset_right, content.offset_bottom), Vector4(14.0, 14.0, -14.0, -14.0), "card %d keeps compact semantic padding" % (index + 1), failures)
 	panel.free()
+
+
+func _test_terminal_surface_contracts(failures: Array[String]) -> void:
+	var result := (load("res://scenes/ui/run_result_panel.tscn") as PackedScene).instantiate() as RunResultPanel
+	var result_frame := result.get_node("Frame") as Control
+	var result_body := result.get_node("Frame/Content/Body") as ScrollContainer
+	var result_footer := result.get_node("Frame/Content/Footer") as Control
+	var result_actions := result.get_node("Frame/Content/Footer/Actions") as Container
+	_assert_center_anchors(result_frame, "result frame", failures)
+	_assert_size(result_frame, Vector2(900.0, 680.0), "result frame", failures)
+	TestAssertions.equal(result_body.vertical_scroll_mode, ScrollContainer.SCROLL_MODE_AUTO, "long result recap owns vertical overflow", failures)
+	TestAssertions.truthy(result_body.follow_focus and result_body.clip_contents, "long result recap follows focused rows inside a clipped viewport", failures)
+	TestAssertions.truthy(not result_body.is_ancestor_of(result_footer), "result footer remains pinned outside recap scrolling", failures)
+	for node: Node in result_actions.get_children():
+		if node is Button:
+			var action := node as Button
+			TestAssertions.truthy(action.custom_minimum_size.x >= 48.0 and action.custom_minimum_size.y >= 48.0, "result action %s retains a 48px minimum target" % action.name, failures)
+	for viewport_size: Vector2 in VIEWPORT_SIZES:
+		_assert_centered(result_frame, viewport_size, "result frame", failures)
+		_assert_contained(result_frame, viewport_size, "result frame", failures)
+	result.free()
+
+	var extraction := (load("res://scenes/ui/run_result/terminal_extraction_panel.tscn") as PackedScene).instantiate() as TerminalExtractionPanel
+	var extraction_frame := extraction.get_node("Frame") as Control
+	var extraction_body := extraction.get_node("Frame/Content/Body") as ScrollContainer
+	var extraction_actions := extraction.get_node("Frame/Content/Actions") as Container
+	var detail_frame := extraction.get_node("ItemTooltipDetail/Frame") as Control
+	var warning_frame := extraction.get_node("UnusedCapacityWarning/Frame") as Control
+	_assert_full_rect(extraction, "terminal extraction root", failures)
+	TestAssertions.equal(extraction_body.vertical_scroll_mode, ScrollContainer.SCROLL_MODE_AUTO, "extraction body owns vertical overflow", failures)
+	TestAssertions.truthy(extraction_body.follow_focus and extraction_body.clip_contents, "extraction body follows focused items inside a clipped viewport", failures)
+	TestAssertions.truthy(not extraction_body.is_ancestor_of(extraction_actions), "extraction actions remain pinned outside item scrolling", failures)
+	for node: Node in extraction.find_children("*", "Button", true, false):
+		var action := node as Button
+		TestAssertions.truthy(action.custom_minimum_size.x >= 48.0 and action.custom_minimum_size.y >= 48.0, "extraction action %s retains a 48px minimum target" % action.name, failures)
+	for viewport_size: Vector2 in VIEWPORT_SIZES:
+		_assert_contained(extraction_frame, viewport_size, "terminal extraction frame", failures)
+		_assert_contained(detail_frame, viewport_size, "extraction detail frame", failures)
+		_assert_contained(warning_frame, viewport_size, "unused-capacity warning frame", failures)
+	extraction.free()
 
 
 func _test_integrated_overlay_containment(failures: Array[String]) -> void:

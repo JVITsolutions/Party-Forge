@@ -115,6 +115,7 @@ visible = false
 custom_minimum_size = Vector2(200, 48)
 layout_mode = 2
 size_flags_horizontal = 4
+focus_mode = 0
 theme_type_variation = &"LivingForgePrimaryButton"
 text = "Retry Offers"
 
@@ -191,12 +192,15 @@ alignment = 1
 [node name="Cancel" type="Button" parent="Frame/Content/Confirmation/Actions"]
 custom_minimum_size = Vector2(200, 48)
 layout_mode = 2
+focus_mode = 0
 theme_type_variation = &"LivingForgeSecondaryButton"
 text = "Back to Offers"
+accessibility_name = "Back to Offers"
 
 [node name="Confirm" type="Button" parent="Frame/Content/Confirmation/Actions"]
 custom_minimum_size = Vector2(200, 48)
 layout_mode = 2
+focus_mode = 0
 theme_type_variation = &"LivingForgePrimaryButton"
 text = "Confirm"
 

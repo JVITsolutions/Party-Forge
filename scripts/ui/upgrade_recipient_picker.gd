@@ -8,12 +8,14 @@ var _choice_key: StringName
 var _recipient_buttons: Dictionary = {}
 var _recipient_visibility_request_revision := 0
 var _recipient_visibility_request_target_id := 0
+var _interaction_enabled := false
 
 
 func _ready() -> void:
 	var cancel := get_node("Content/Cancel") as Button
 	if not cancel.pressed.is_connected(_on_cancelled):
 		cancel.pressed.connect(_on_cancelled)
+	set_interaction_enabled(visible)
 
 
 func show_for(choice_key: StringName, recipient_rows: Array[Dictionary]) -> void:
@@ -39,6 +41,7 @@ func show_for(choice_key: StringName, recipient_rows: Array[Dictionary]) -> void
 		button.set_meta("member_id", member_id)
 		button.set_meta("recipient_row", row)
 		button.text = _row_text(row)
+		button.accessibility_name = button.text.replace("\n", ", ")
 		button.disabled = not bool(row.get("eligible", false))
 		button.focus_mode = Control.FOCUS_NONE if button.disabled else Control.FOCUS_ALL
 		button.tooltip_text = String(row.get("disabled_reason", ""))
@@ -48,6 +51,7 @@ func show_for(choice_key: StringName, recipient_rows: Array[Dictionary]) -> void
 			button.focus_entered.connect(_on_recipient_focused.bind(member_id))
 		rows.add_child(button)
 		_recipient_buttons[member_id] = button
+	set_interaction_enabled(true)
 	var empty_reason := get_node("Content/EmptyReason") as Label
 	empty_reason.visible = enabled_count == 0
 	empty_reason.text = "No eligible party member remains. Return to the offer and choose another upgrade." if enabled_count == 0 else ""
@@ -57,6 +61,20 @@ func show_for(choice_key: StringName, recipient_rows: Array[Dictionary]) -> void
 		initial_focus = get_node("Content/Cancel") as Button
 	if initial_focus.is_inside_tree():
 		initial_focus.grab_focus()
+
+
+func set_interaction_enabled(enabled: bool) -> void:
+	_interaction_enabled = enabled
+	for button: Button in _recipient_buttons.values():
+		_set_button_focus_enabled(button, enabled)
+	_set_button_focus_enabled(get_node("Content/Cancel") as Button, enabled)
+
+
+func _set_button_focus_enabled(button: Button, enabled: bool) -> void:
+	var focusable := enabled and button.visible and not button.disabled
+	if not focusable and button.has_focus():
+		button.release_focus()
+	button.focus_mode = Control.FOCUS_ALL if focusable else Control.FOCUS_NONE
 
 
 func _configure_recipient_focus_neighbors() -> void:

@@ -411,6 +411,40 @@ func _assert_scaled_variants(failures: Array[String]) -> void:
 	TestAssertions.equal(base.get_constant(&"action_minimum", &"LivingForgeMetrics"), base_action_size, "catalog preserves canonical geometry", failures)
 	TestAssertions.equal(base.default_font_size, base_font_size, "catalog preserves canonical typography", failures)
 	_assert_supported_ui_geometry_scaling(catalog, base, failures)
+	_assert_exact_scale_corner_matrix(catalog, failures)
+
+
+func _assert_exact_scale_corner_matrix(catalog: Script, failures: Array[String]) -> void:
+	const SCALE_ROWS: Array[Vector2i] = [
+		Vector2i(100, 100), Vector2i(150, 100), Vector2i(100, 150),
+		Vector2i(150, 150), Vector2i(80, 150),
+	]
+	for high_contrast: bool in [false, true]:
+		var base_path := HIGH_CONTRAST_THEME_PATH if high_contrast else NORMAL_THEME_PATH
+		var canonical := load(base_path) as Theme
+		if canonical == null:
+			continue
+		var canonical_constants := _geometry_constant_snapshot(canonical)
+		var canonical_styles := _style_geometry_snapshot(canonical)
+		var canonical_font_size := canonical.default_font_size
+		for scale_row: Vector2i in SCALE_ROWS:
+			var variant := catalog.call(&"resolve", high_contrast, scale_row.x, scale_row.y) as Theme
+			var cached := catalog.call(&"resolve", high_contrast, scale_row.x, scale_row.y) as Theme
+			var label := "high_contrast=%s ui=%d text=%d" % [high_contrast, scale_row.x, scale_row.y]
+			TestAssertions.truthy(variant != null, "theme resolves exact scale corner %s" % label, failures)
+			if variant == null:
+				continue
+			TestAssertions.equal(variant, cached, "theme caches exact scale corner %s" % label, failures)
+			_assert_scaled_constants(canonical_constants, variant, scale_row.x, failures)
+			_assert_scaled_style_geometry(canonical_styles, variant, scale_row.x, failures)
+			var expected_font_size := maxi(roundi(float(canonical_font_size) * float(scale_row.y) / 100.0), 1)
+			TestAssertions.equal(variant.default_font_size, expected_font_size, "text scale changes typography exactly for %s" % label, failures)
+			TestAssertions.truthy(variant.get_constant(&"action_minimum", &"LivingForgeMetrics") >= 48, "exact scale corner retains 48px action target for %s" % label, failures)
+			for variation: StringName in [&"LivingForgePrimaryButton", &"LivingForgeSecondaryButton", &"LivingForgeDestructiveButton"]:
+				TestAssertions.truthy(variant.get_stylebox(&"focus", variation) is StyleBoxFlat, "%s retains visible focus style for %s" % [label, variation], failures)
+		TestAssertions.equal(_geometry_constant_snapshot(canonical), canonical_constants, "scale matrix preserves canonical geometry for high_contrast=%s" % high_contrast, failures)
+		TestAssertions.equal(_style_geometry_snapshot(canonical), canonical_styles, "scale matrix preserves canonical StyleBox geometry for high_contrast=%s" % high_contrast, failures)
+		TestAssertions.equal(canonical.default_font_size, canonical_font_size, "scale matrix preserves canonical typography for high_contrast=%s" % high_contrast, failures)
 
 
 func _assert_supported_ui_geometry_scaling(catalog: Script, base: Theme, failures: Array[String]) -> void:

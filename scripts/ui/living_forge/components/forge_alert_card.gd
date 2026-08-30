@@ -30,6 +30,23 @@ var _has_valid_binding := false
 var _interaction_disabled := false
 var _mouse_hovered := false
 var _focused := false
+var _baseline_minimum_height := 0.0
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_THEME_CHANGED:
+		call_deferred(&"_refresh_content_minimum")
+
+
+func _refresh_content_minimum() -> void:
+	if not is_inside_tree():
+		return
+	if _baseline_minimum_height <= 0.0:
+		_baseline_minimum_height = custom_minimum_size.y
+	var content := get_node_or_null("Surface/Content") as Control
+	if content == null:
+		return
+	custom_minimum_size.y = maxf(_baseline_minimum_height, content.get_combined_minimum_size().y)
 
 
 func present_alert(alert: CombatAlertProjection) -> void:
@@ -88,6 +105,7 @@ func apply_accessibility_variant(high_contrast: bool) -> void:
 	_high_contrast = high_contrast
 	_apply_semantic_state()
 	_render_interaction()
+	call_deferred(&"_refresh_content_minimum")
 
 
 func _state_for_severity(severity: CombatAlertProjection.Severity) -> StringName:

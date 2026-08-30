@@ -50,6 +50,7 @@ func _ready() -> void:
 	if viewport != null and not viewport.size_changed.is_connected(_on_viewport_size_changed):
 		viewport.size_changed.connect(_on_viewport_size_changed)
 	_apply_card_face_density(_current_viewport_width())
+	_sync_view_focus_modes(&"")
 
 
 func _process(delta: float) -> void:
@@ -229,9 +230,11 @@ func _start_reveal() -> void:
 	cards_scroll.scroll_vertical = int(cards_scroll.get_v_scroll_bar().min_value)
 	if _reveal_controller == null:
 		_state = State.CHOOSING
+		_sync_view_focus_modes(&"offer")
 		_focus_first_enabled_card()
 		return
 	_state = State.REVEALING
+	_sync_view_focus_modes(&"offer")
 	var reveal_cards: Array[UpgradeCard] = []
 	for card_node: Node in get_node("Frame/Content/Offer/CardsScroll/Cards").get_children():
 		if card_node is UpgradeCard and card_node.visible:
@@ -386,12 +389,13 @@ func _show_confirmation(choice: UpgradeChoice, recipient_row: Dictionary) -> voi
 		effect_label.text = projection.effect_text
 	(get_node("Frame/Content/Confirmation/BodyScroll/Body/Scope") as Label).text = projection.scope_text
 	var confirm := get_node("Frame/Content/Confirmation/Actions/Confirm") as Button
+	var cancel := get_node("Frame/Content/Confirmation/Actions/Cancel") as Button
 	confirm.disabled = false
 	confirm.accessibility_name = "Confirm %s" % projection.display_name
 	_state = State.CONFIRMING
 	_show_view(&"confirmation")
-	if confirm.is_inside_tree():
-		confirm.grab_focus()
+	if cancel.is_inside_tree():
+		cancel.grab_focus()
 
 
 func _on_confirm_pressed() -> void:
@@ -409,7 +413,6 @@ func _enter_pending(choice: UpgradeChoice, member_id: int) -> void:
 	_pending_member_id = member_id
 	(get_node("Frame/Content/Pending/Status") as Label).text = "Applying %s..." % choice.label
 	_show_view(&"pending")
-	_focus_choice(_initiating_choice_key)
 	application_requested.emit(choice, member_id)
 
 
@@ -420,6 +423,27 @@ func _show_view(view: StringName) -> void:
 	(get_node("Frame/Content/Recipient") as Control).visible = view == &"recipient"
 	(get_node("Frame/Content/Confirmation") as Control).visible = view == &"confirmation"
 	(get_node("Frame/Content/Pending") as Control).visible = view == &"pending"
+	_sync_view_focus_modes(view)
+
+
+func _sync_view_focus_modes(view: StringName) -> void:
+	var offer_active := view == &"offer" and _state == State.CHOOSING
+	for node: Node in get_node("Frame/Content/Offer/CardsScroll/Cards").get_children():
+		if node is Button:
+			_set_button_focus_enabled(node as Button, offer_active)
+	var retry := get_node("Frame/Content/Offer/RetryOffers") as Button
+	_set_button_focus_enabled(retry, offer_active)
+	(get_node("Frame/Content/Recipient") as UpgradeRecipientPicker).set_interaction_enabled(view == &"recipient")
+	var confirmation_active := view == &"confirmation"
+	_set_button_focus_enabled(get_node("Frame/Content/Confirmation/Actions/Cancel") as Button, confirmation_active)
+	_set_button_focus_enabled(get_node("Frame/Content/Confirmation/Actions/Confirm") as Button, confirmation_active)
+
+
+func _set_button_focus_enabled(button: Button, enabled: bool) -> void:
+	var focusable := enabled and button.visible and not button.disabled
+	if not focusable and button.has_focus():
+		button.release_focus()
+	button.focus_mode = Control.FOCUS_ALL if focusable else Control.FOCUS_NONE
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -443,6 +467,7 @@ func _on_reveal_resolved() -> void:
 	if not visible or _state != State.REVEALING:
 		return
 	_state = State.CHOOSING
+	_sync_view_focus_modes(&"offer")
 	_focus_first_enabled_card()
 
 
@@ -458,6 +483,7 @@ func _start_reveal_after_layout(
 	_reveal_pending = false
 	_reveal_layout_callback = Callable()
 	_reveal_controller.play(reveal_cards, final_projections, preview_projections, reduced_motion)
+	_sync_view_focus_modes(&"offer")
 
 
 func _invalidate_reveal() -> void:

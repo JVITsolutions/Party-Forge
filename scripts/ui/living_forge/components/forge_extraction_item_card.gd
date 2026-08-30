@@ -113,8 +113,8 @@ func _render() -> void:
 	focus_mode = Control.FOCUS_NONE if _automatic else Control.FOCUS_ALL
 	mouse_default_cursor_shape = Control.CURSOR_FORBIDDEN if _automatic else Control.CURSOR_POINTING_HAND
 	var inspect := get_node("Inspect") as Button
-	inspect.disabled = item_id.is_empty()
-	inspect.focus_mode = Control.FOCUS_NONE if item_id.is_empty() else Control.FOCUS_ALL
+	inspect.disabled = _pending or item_id.is_empty()
+	inspect.focus_mode = Control.FOCUS_NONE if inspect.disabled else Control.FOCUS_ALL
 	inspect.accessibility_name = "Inspect %s details" % _name
 	accessibility_name = "%s, %s, %s" % [_name, _rarity, _source]
 	accessibility_description = "%s. %s." % [accessibility_name, "Automatic locked" if _automatic else ("Selected" if _selected else "Not selected; will be lost")]

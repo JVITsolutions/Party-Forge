@@ -131,6 +131,7 @@ metadata/label = "LOST"
 [node name="Body" type="ScrollContainer" parent="Frame/Content"]
 layout_mode = 2
 size_flags_vertical = 3
+follow_focus = true
 horizontal_scroll_mode = 0
 
 [node name="Sections" type="VBoxContainer" parent="Frame/Content/Body"]
@@ -240,6 +241,7 @@ custom_minimum_size = Vector2(224, 48)
 layout_mode = 2
 theme_type_variation = &"LivingForgePrimaryButton"
 text = "CONFIRM EXTRACTION"
+accessibility_name = "Confirm extraction"
 
 [node name="ItemTooltipDetail" type="Control" parent="."]
 visible = false
@@ -290,6 +292,7 @@ offset_right = 616.0
 offset_bottom = 60.0
 theme_type_variation = &"LivingForgeSecondaryButton"
 text = "BACK"
+accessibility_name = "Back to extraction"
 
 [node name="UnusedCapacityWarning" type="Control" parent="."]
 visible = false

@@ -1,0 +1,843 @@
+extends SceneTree
+
+const VIEWPORT_SIZES: Array[Vector2i] = [
+	Vector2i(1280, 720),
+	Vector2i(1920, 1080),
+	Vector2i(2560, 1440),
+	Vector2i(3840, 2160),
+	Vector2i(2560, 1080),
+]
+const PARTY_COUNTS: Array[int] = [1, 6, 7, 12, 20, 24]
+const SCALE_CORNERS: Array[Vector2i] = [
+	Vector2i(150, 100),
+	Vector2i(100, 150),
+	Vector2i(150, 150),
+	Vector2i(80, 150),
+]
+const RESULT_FIXTURE_PATH := "res://tests/unit/test_run_recap_projection.gd"
+const CONDITION_DEADLINE_MS := 2500
+
+
+class TestRun:
+	extends Node
+	var seconds := 125.0
+
+	func elapsed_time() -> float:
+		return seconds
+
+
+var _failures: Array[String] = []
+var _sequence := 13000
+var _active_viewport: SubViewport
+
+
+func _initialize() -> void:
+	call_deferred(&"_run")
+
+
+func _run() -> void:
+	for viewport_size: Vector2i in VIEWPORT_SIZES:
+		if viewport_size == Vector2i(1920, 1080):
+			for party_count: int in PARTY_COUNTS:
+				await _exercise_hud(viewport_size, party_count, 0, 100, 100)
+		else:
+			await _exercise_hud(viewport_size, 6, 0, 100, 100)
+			await _exercise_hud(viewport_size, 24, 6, 100, 100)
+		if viewport_size == Vector2i(1280, 720):
+			for alert_count: int in [1, 3, 4]:
+				await _exercise_hud(viewport_size, 6, alert_count, 100, 100)
+		await _exercise_level_up(viewport_size, 100, 100)
+		await _exercise_extraction(viewport_size, 100, 100)
+		await _exercise_result(viewport_size, 100, 100)
+	for scale_corner: Vector2i in SCALE_CORNERS:
+		await _exercise_hud(Vector2i(1280, 720), 24, 6, scale_corner.x, scale_corner.y)
+		await _exercise_level_up(Vector2i(1280, 720), scale_corner.x, scale_corner.y)
+		await _exercise_extraction(Vector2i(1280, 720), scale_corner.x, scale_corner.y)
+		await _exercise_result(Vector2i(1280, 720), scale_corner.x, scale_corner.y)
+	_finish()
+
+
+func _exercise_hud(viewport_size: Vector2i, party_count: int, alert_count: int, ui_scale: int, text_scale: int) -> void:
+	var viewport := _new_viewport(viewport_size)
+	var context_label := _context("HUD", viewport_size, ui_scale, text_scale, "party=%d alerts=%d" % [party_count, alert_count])
+	var fixture := _hud_fixture(party_count, alert_count, ui_scale, text_scale)
+	var hud := (load("res://scenes/ui/hud.tscn") as PackedScene).instantiate() as HUD
+	hud.custom_viewport = viewport
+	viewport.add_child(hud)
+	hud.configure(fixture.run, fixture.party, fixture.experience, fixture.context, fixture.settings)
+	await _wait_until(func() -> bool:
+		return hud.current_projection != null \
+			and hud.current_projection.members.size() == party_count \
+			and hud.current_projection.all_alerts.size() == alert_count
+	, "%s authoritative HUD projection" % context_label)
+	var viewport_rect := Rect2(Vector2.ZERO, Vector2(viewport_size))
+	var shell := hud.get_node("Margin/CombatStatus") as Control
+	var leader := hud.get_node("Margin/CombatStatus/LeaderCard") as Control
+	var party_region := hud.get_node("Margin/CombatStatus/PartyRegion") as Control
+	var alert_region := hud.get_node("Margin/CombatStatus/AlertRegion") as Control
+	var rich := hud.get_node("Margin/CombatStatus/PartyRegion/RichRoster") as Control
+	var compact := hud.get_node("Margin/CombatStatus/PartyRegion/CompactRoster") as Control
+	var overflow := hud.get_node("Margin/CombatStatus/AlertRegion/Overflow") as Button
+	await _wait_for_stable_layout([shell, leader, party_region, alert_region], context_label)
+	for control: Control in [shell, leader, party_region, alert_region]:
+		_assert_contained(control, viewport_rect, "%s %s" % [context_label, control.name])
+	_assert(not leader.get_global_rect().intersection(alert_region.get_global_rect()).has_area(), "%s leader and alert region do not overlap" % context_label)
+	_assert(not party_region.get_global_rect().intersection(alert_region.get_global_rect()).has_area(), "%s party and alert regions do not overlap" % context_label)
+	_assert(rich.visible == (party_count <= 6), "%s rich mode threshold is exact" % context_label)
+	_assert(compact.visible == (party_count >= 7), "%s compact mode threshold is exact" % context_label)
+	_assert(int(leader.get_meta(&"member_id", 0)) == 1, "%s stable leader identity is retained" % context_label)
+
+	var projection := hud.current_projection
+	_assert(projection != null and projection.members.size() == party_count, "%s projection retains every party member" % context_label)
+	_assert(projection != null and projection.all_alerts.size() == alert_count, "%s projection retains exact alert count" % context_label)
+	if projection != null:
+		_assert(projection.visible_alerts.size() == mini(alert_count, 3), "%s renders at most three expanded alerts" % context_label)
+		_assert(projection.overflow_alert_count == maxi(0, alert_count - 3), "%s exposes exact overflow alert count" % context_label)
+	_assert(overflow.visible == (alert_count > 3), "%s overflow action visibility matches alert overflow" % context_label)
+	if alert_count > 3:
+		var overflow_count := alert_count - 3
+		_assert(overflow.text == "+%d %s" % [overflow_count, "alert" if overflow_count == 1 else "alerts"], "%s overflow action names exact hidden count" % context_label)
+		_assert_target(overflow, "%s overflow action" % context_label)
+
+	var seen_members: Dictionary = {}
+	if party_count <= 6:
+		seen_members[1] = true
+		var rich_controls := _hud_roster_controls(hud)
+		_assert_control_set_geometry(rich_controls, viewport_rect, "%s rich members" % context_label)
+		if rich_controls.size() >= 2:
+			rich_controls[0].grab_focus()
+			await _wait_for_focus(rich_controls[0], "%s first rich member" % context_label)
+			await _push_action(&"ui_right")
+			await _wait_for_focus(rich_controls[1], "%s second rich member" % context_label)
+		for control: Control in rich_controls:
+			var member_id := int(control.get_meta(&"member_id", 0))
+			_assert(not seen_members.has(member_id), "%s renders member %d exactly once" % [context_label, member_id])
+			seen_members[member_id] = true
+			_assert_target(control, "%s rich member %d" % [context_label, member_id])
+	else:
+		var previous := hud.get_node("Margin/CombatStatus/PartyRegion/CompactRoster/PagePrevious") as Button
+		var next := hud.get_node("Margin/CombatStatus/PartyRegion/CompactRoster/PageNext") as Button
+		var page_guard := 0
+		while true:
+			var page_controls := _hud_roster_controls(hud)
+			_assert_control_set_geometry(page_controls, viewport_rect, "%s compact page %d members" % [context_label, page_guard + 1])
+			if page_guard == 0 and page_controls.size() >= 2:
+				page_controls[0].grab_focus()
+				await _wait_for_focus(page_controls[0], "%s first compact member" % context_label)
+				await _push_action(&"ui_right")
+				await _wait_for_focus(page_controls[1], "%s second compact member" % context_label)
+			for control: Control in page_controls:
+				var member_id := int(control.get_meta(&"member_id", 0))
+				_assert(not seen_members.has(member_id), "%s paged member %d appears on exactly one page" % [context_label, member_id])
+				seen_members[member_id] = true
+				_assert_target(control, "%s compact member %d" % [context_label, member_id])
+			if next.disabled:
+				break
+			var prior_page := int(hud.get("_current_page"))
+			var prior_control_ids: Dictionary = {}
+			for control: Control in page_controls:
+				prior_control_ids[control.get_instance_id()] = true
+			if _authentic_stress(viewport_size, ui_scale, text_scale):
+				next.grab_focus()
+				await _wait_for_focus(next, "%s Next page" % context_label)
+				await _activate_focused()
+			else:
+				next.pressed.emit()
+			await _wait_until(func() -> bool:
+				if int(hud.get("_current_page")) != prior_page + 1:
+					return false
+				var replacement_controls := _hud_roster_controls(hud)
+				if replacement_controls.is_empty():
+					return false
+				for replacement: Control in replacement_controls:
+					if prior_control_ids.has(replacement.get_instance_id()):
+						return false
+				return true
+			, "%s page %d fresh control identities" % [context_label, prior_page + 2])
+			await _wait_for_stable_layout(_hud_roster_controls(hud), "%s page %d replacement controls" % [context_label, prior_page + 2])
+			page_guard += 1
+			if page_guard > 24:
+				_assert(false, "%s pagination terminates within 24 pages" % context_label)
+				break
+		var metrics := hud.get("_metrics") as CombatHudResponsiveLayout.Metrics
+		if metrics != null and metrics.page_count > 1:
+			_assert(previous.visible and next.visible, "%s multi-page compact actions remain visible" % context_label)
+			_assert_bounds(previous, "%s previous page" % context_label)
+			_assert_bounds(next, "%s next page" % context_label)
+			_assert(not next.has_focus(), "%s disabled final-page action is excluded from focus" % context_label)
+		else:
+			_assert(not previous.visible and previous.disabled and not previous.has_focus(), "%s one-page compact Previous is hidden, disabled, and excluded from focus" % context_label)
+			_assert(not next.visible and next.disabled and not next.has_focus(), "%s one-page compact Next is hidden, disabled, and excluded from focus" % context_label)
+		var final_control := _hud_member_control(hud, party_count)
+		_assert(final_control != null, "%s final member remains rendered on the final page" % context_label)
+		if final_control != null:
+			final_control.grab_focus()
+			await _wait_for_focus(final_control, "%s final member" % context_label)
+			_assert(final_control.has_focus(), "%s final member is keyboard/controller focusable" % context_label)
+	_assert(seen_members.size() == party_count, "%s reaches all %d stable member identities" % [context_label, party_count])
+	for member_id: int in range(1, party_count + 1):
+		_assert(seen_members.has(member_id), "%s reaches stable member %d" % [context_label, member_id])
+
+	var alert_rects: Array[Rect2] = []
+	for child: Node in (hud.get_node("Margin/CombatStatus/AlertRegion/ExpandedAlerts") as Container).get_children():
+		if not child is Control or not (child as Control).visible:
+			continue
+		var card := child as Control
+		_assert_contained(card, viewport_rect, "%s expanded alert" % context_label)
+		_assert_no_overlap(card.get_global_rect(), alert_rects, "%s expanded alerts" % context_label)
+		alert_rects.append(card.get_global_rect())
+		for action_name: String in ["Inspect", "Ledger"]:
+			var action := card.get_node("Surface/Content/Actions/%s" % action_name) as Button
+			if action.visible:
+				_assert_target(action, "%s alert %s" % [context_label, action_name])
+				_assert(card.get_global_rect().encloses(action.get_global_rect()), "%s alert %s stays inside its card" % [context_label, action_name])
+	var visible_hud_actions := _visible_buttons(hud.get_node("Margin/CombatStatus") as Control)
+	_assert_controls_within_owning_surface(visible_hud_actions, viewport_rect, "%s visible actions" % context_label)
+	hud.free()
+	viewport.free()
+	_active_viewport = null
+	_cleanup_hud_fixture(fixture)
+
+
+func _exercise_level_up(viewport_size: Vector2i, ui_scale: int, text_scale: int) -> void:
+	var viewport := _new_viewport(viewport_size)
+	var context_label := _context("LEVEL_UP", viewport_size, ui_scale, text_scale, "party=24")
+	var catalog := GameCatalog.load_defaults()
+	var party := _party(24, catalog)
+	var panel := (load("res://scenes/ui/level_up_panel.tscn") as PackedScene).instantiate() as LevelUpPanel
+	viewport.add_child(panel)
+	panel.configure(catalog, UpgradeApplicationService.new(), func(_member_id: int) -> Vector2: return Vector2(100.0, 100.0))
+	var settings := _settings(ui_scale, text_scale)
+	settings.reduced_motion = true
+	panel.configure_visual_settings(settings)
+	var choice := UpgradeChoice.authored(catalog.upgrade_by_id(&"vitality"))
+	panel.show_choices([choice], party)
+	var viewport_rect := Rect2(Vector2.ZERO, Vector2(viewport_size))
+	var frame := panel.get_node("Frame") as Control
+	var offer_scroll := panel.get_node("Frame/Content/Offer/CardsScroll") as ScrollContainer
+	var card := panel.get_node("Frame/Content/Offer/CardsScroll/Cards/Card1") as UpgradeCard
+	await _wait_until(func() -> bool: return card.is_visible_in_tree() and card.bound_choice_key() == StringName(choice.key()), "%s offer binding" % context_label)
+	await _wait_for_stable_layout([frame, offer_scroll, card], "%s offer" % context_label)
+	_assert_contained(frame, viewport_rect, "%s frame" % context_label)
+	_assert_contained(offer_scroll, frame.get_global_rect(), "%s offer scroll" % context_label)
+	_assert_target(card, "%s offer card" % context_label)
+	card.activated.emit(card.bound_choice_key())
+	var picker := panel.get_node("Frame/Content/Recipient") as UpgradeRecipientPicker
+	var recipient_scroll := picker.get_node("Content/RecipientsScroll") as ScrollContainer
+	var rows := picker.get_node("Content/RecipientsScroll/Rows") as VBoxContainer
+	await _wait_until(func() -> bool: return picker.is_visible_in_tree() and rows.get_child_count() == 24, "%s 24-recipient picker" % context_label)
+	await _wait_for_stable_layout([frame, picker, recipient_scroll, rows], "%s recipient picker" % context_label)
+	_assert(picker.visible, "%s targeted choice opens recipient picker" % context_label)
+	_assert(rows.get_child_count() == 24, "%s recipient picker renders all 24 members" % context_label)
+	var member_24 := rows.get_node_or_null("Member_24") as Button
+	_assert(member_24 != null, "%s final recipient exists" % context_label)
+	var recipient_rows := _direct_visible_controls(rows, "Button")
+	_assert_controls_contained(recipient_rows, rows.get_global_rect(), "%s recipient rows" % context_label)
+	_assert_sibling_non_overlap(recipient_rows, "%s recipient rows" % context_label)
+	if member_24 != null:
+		if _authentic_stress(viewport_size, ui_scale, text_scale):
+			var first := rows.get_node("Member_1") as Button
+			first.grab_focus()
+			await _wait_for_focus(first, "%s first recipient" % context_label)
+			for _step: int in 23:
+				await _push_action(&"ui_down")
+		else:
+			var first := rows.get_node("Member_1") as Button
+			var second := rows.get_node("Member_2") as Button
+			first.grab_focus()
+			await _wait_for_focus(first, "%s first recipient" % context_label)
+			await _push_action(&"ui_down")
+			await _wait_for_focus(second, "%s second recipient" % context_label)
+			member_24.grab_focus()
+		await _wait_for_focus(member_24, "%s recipient 24" % context_label)
+		await _wait_for_scroll_reveal(recipient_scroll, member_24, "%s recipient 24" % context_label)
+		var cancel_recipient := picker.get_node("Content/Cancel") as Button
+		await _push_action(&"ui_down")
+		await _wait_for_focus(cancel_recipient, "%s recipient endpoint Cancel" % context_label)
+		await _push_action(&"ui_up")
+		await _wait_for_focus(member_24, "%s recipient endpoint return" % context_label)
+		_assert(member_24.has_focus(), "%s authentic spatial traversal reaches recipient 24" % context_label)
+		_assert(_visible_inside(recipient_scroll, member_24), "%s focused recipient 24 is visible in its scroll viewport" % context_label)
+		_assert_target(member_24, "%s recipient 24" % context_label)
+		await _activate_focused()
+	var confirmation := panel.get_node("Frame/Content/Confirmation") as Control
+	var confirmation_body := panel.get_node("Frame/Content/Confirmation/BodyScroll") as ScrollContainer
+	var confirmation_actions := panel.get_node("Frame/Content/Confirmation/Actions") as Control
+	var confirm := panel.get_node("Frame/Content/Confirmation/Actions/Confirm") as Button
+	await _wait_for_visible(confirmation, "%s confirmation" % context_label)
+	await _wait_for_stable_layout([confirmation, confirmation_body, confirmation_actions, confirm], "%s confirmation" % context_label)
+	_assert(confirmation.visible, "%s final recipient opens exact confirmation" % context_label)
+	_assert_contained(confirmation, frame.get_global_rect(), "%s confirmation" % context_label)
+	_assert_contained(confirmation_body, confirmation.get_global_rect(), "%s confirmation body" % context_label)
+	_assert(not confirmation_body.is_ancestor_of(confirmation_actions), "%s confirmation actions stay pinned outside prose" % context_label)
+	_assert_target(confirm, "%s confirmation action" % context_label)
+	var confirmation_buttons := _direct_visible_controls(confirmation_actions, "Button")
+	_assert_control_set_geometry(confirmation_buttons, confirmation.get_global_rect(), "%s confirmation actions" % context_label)
+	_assert_controls_in_parent(_visible_buttons(panel), "%s all visible level-up actions" % context_label)
+	panel.free()
+	viewport.free()
+	_active_viewport = null
+	party.free()
+
+
+func _exercise_extraction(viewport_size: Vector2i, ui_scale: int, text_scale: int) -> void:
+	var viewport := _new_viewport(viewport_size)
+	var context_label := _context("EXTRACTION", viewport_size, ui_scale, text_scale, "items=24")
+	var panel := (load("res://scenes/ui/run_result/terminal_extraction_panel.tscn") as PackedScene).instantiate() as TerminalExtractionPanel
+	viewport.add_child(panel)
+	panel.apply_visual_settings(_settings(ui_scale, text_scale))
+	var projection := _extraction_projection(24, 8, 2)
+	panel.present(projection)
+	var viewport_rect := Rect2(Vector2.ZERO, Vector2(viewport_size))
+	var frame := panel.get_node("Frame") as Control
+	var body := panel.get_node("Frame/Content/Body") as ScrollContainer
+	var actions := panel.get_node("Frame/Content/Actions") as Control
+	var confirm := panel.get_node("Frame/Content/Actions/Confirm") as Button
+	await _wait_until(func() -> bool: return _extraction_cards(panel).size() == 24, "%s 24 eligible extraction cards" % context_label)
+	await _wait_for_stable_layout([frame, body, actions, confirm], context_label)
+	_assert_contained(frame, viewport_rect, "%s frame" % context_label)
+	_assert_contained(body, frame.get_global_rect(), "%s body" % context_label)
+	_assert(not body.is_ancestor_of(actions), "%s actions remain pinned outside item scrolling" % context_label)
+	_assert_target(confirm, "%s confirm action" % context_label)
+	var cards := _extraction_cards(panel)
+	_assert(cards.size() == 24, "%s renders all 24 eligible items" % context_label)
+	var unique_ids: Dictionary = {}
+	for card: Button in cards:
+		var item_id := String(card.get_meta(&"item_id", ""))
+		_assert(not item_id.is_empty() and not unique_ids.has(item_id), "%s renders stable item %s exactly once" % [context_label, item_id])
+		unique_ids[item_id] = true
+		_assert_target(card, "%s item %s" % [context_label, item_id])
+		_assert_contained(card, (card.get_parent() as Control).get_global_rect(), "%s item %s owning grid" % [context_label, item_id])
+		var inspect := card.get_node("Inspect") as Button
+		_assert_target(inspect, "%s item %s Inspect" % [context_label, item_id])
+		_assert_contained(inspect, card.get_global_rect(), "%s item %s Inspect" % [context_label, item_id])
+	_assert_sibling_non_overlap(cards, "%s extraction cards" % context_label)
+	var extraction_actions := _direct_visible_controls(actions, "Button")
+	_assert_control_set_geometry(extraction_actions, frame.get_global_rect(), "%s pinned actions" % context_label)
+	if cards.size() == 24:
+		var first_card := cards[0]
+		var first_inspect := first_card.get_node("Inspect") as Button
+		var second_card := cards[1]
+		first_card.grab_focus()
+		await _wait_for_focus(first_card, "%s first extraction card" % context_label)
+		await _push_action(&"ui_right")
+		await _wait_for_focus(first_inspect, "%s first extraction Inspect" % context_label)
+		await _push_action(&"ui_right")
+		await _wait_for_focus(second_card, "%s second extraction card" % context_label)
+		var final_card := cards[-1]
+		final_card.grab_focus()
+		await _wait_for_focus(final_card, "%s final extraction card" % context_label)
+		await _wait_for_scroll_reveal(body, final_card, "%s final extraction card" % context_label)
+		_assert(final_card.has_focus(), "%s final item is keyboard/controller focusable" % context_label)
+		_assert(_visible_inside(body, final_card), "%s final focused item is visible inside the extraction body" % context_label)
+		var final_inspect := final_card.get_node("Inspect") as Button
+		await _push_action(&"ui_right")
+		await _wait_for_focus(final_inspect, "%s final extraction Inspect" % context_label)
+		await _push_action(&"ui_right")
+		await _wait_for_focus(confirm, "%s extraction endpoint Confirm" % context_label)
+		final_card.grab_focus()
+		await _wait_for_focus(final_card, "%s final extraction card detail return anchor" % context_label)
+		panel.show_detail(projection.eligible_items[-1], final_card)
+		var detail := panel.get_node("ItemTooltipDetail") as Control
+		var detail_frame := panel.get_node("ItemTooltipDetail/Frame") as Control
+		await _wait_for_visible(detail, "%s item detail" % context_label)
+		await _wait_for_stable_layout([detail_frame, panel.get_node("ItemTooltipDetail/Frame/Close") as Control], "%s item detail" % context_label)
+		_assert(detail.visible, "%s final item detail opens" % context_label)
+		_assert_contained(detail_frame, viewport_rect, "%s item detail" % context_label)
+		_assert((panel.get_node("Frame/Content/Summary/AutomaticList") as Button).focus_mode == Control.FOCUS_NONE, "%s detail excludes background controls from focus" % context_label)
+		(panel.get_node("ItemTooltipDetail/Frame/Close") as Button).pressed.emit()
+		await _wait_for_hidden(detail, "%s item detail" % context_label)
+		await _wait_for_focus(final_card, "%s detail return" % context_label)
+		_assert(final_card.has_focus(), "%s detail restores exact final-item focus" % context_label)
+		panel.show_unused_capacity_warning(2, 16, confirm)
+		var warning := panel.get_node("UnusedCapacityWarning") as Control
+		var warning_frame := panel.get_node("UnusedCapacityWarning/Frame") as Control
+		var back := panel.get_node("UnusedCapacityWarning/Frame/Actions/Back") as Button
+		var acknowledge := panel.get_node("UnusedCapacityWarning/Frame/Actions/Acknowledge") as Button
+		await _wait_for_visible(warning, "%s unused-capacity warning" % context_label)
+		await _wait_for_focus(back, "%s warning Back" % context_label)
+		await _wait_for_stable_layout([warning_frame, back, acknowledge], "%s unused-capacity warning" % context_label)
+		_assert(warning.visible and back.has_focus(), "%s unused-capacity warning uses safe Back default" % context_label)
+		_assert_contained(warning_frame, viewport_rect, "%s unused-capacity warning" % context_label)
+		_assert_target(back, "%s warning Back" % context_label)
+		_assert_target(acknowledge, "%s warning Acknowledge" % context_label)
+		_assert_control_set_geometry([back, acknowledge], warning_frame.get_global_rect(), "%s warning actions" % context_label)
+		back.pressed.emit()
+		await _wait_for_hidden(warning, "%s unused-capacity warning" % context_label)
+		await _wait_for_focus(confirm, "%s warning return Confirm" % context_label)
+		_assert(confirm.has_focus(), "%s warning returns exact Confirm focus" % context_label)
+	_assert_controls_in_parent(_visible_buttons(panel), "%s all visible extraction actions" % context_label)
+	panel.free()
+	viewport.free()
+	_active_viewport = null
+
+
+func _exercise_result(viewport_size: Vector2i, ui_scale: int, text_scale: int) -> void:
+	var viewport := _new_viewport(viewport_size)
+	var context_label := _context("RESULT", viewport_size, ui_scale, text_scale, "party=24 loot=30")
+	var fixture_type := load(RESULT_FIXTURE_PATH) as Script
+	var fixtures: Variant = fixture_type.new()
+	var fixture: Dictionary = fixtures.call(&"_fixture", 24, 24, RunTerminalSnapshot.Outcome.VICTORY)
+	var build := RunResultViewModel.new().build(fixture.snapshot, fixture.resolution, fixture.profile, [])
+	_assert(build.ok(), "%s finalized projection builds from durable truth" % context_label)
+	if not build.ok():
+		viewport.free()
+		_active_viewport = null
+		return
+	var projection := build.projection.with_visual_settings(_settings(ui_scale, text_scale))
+	var panel := (load("res://scenes/ui/run_result_panel.tscn") as PackedScene).instantiate() as RunResultPanel
+	viewport.add_child(panel)
+	panel.present(projection)
+	var viewport_rect := Rect2(Vector2.ZERO, Vector2(viewport_size))
+	var frame := panel.get_node("Frame") as Control
+	var body := panel.get_node("Frame/Content/Body") as ScrollContainer
+	var footer := panel.get_node("Frame/Content/Footer") as Control
+	var actions := panel.get_node("Frame/Content/Footer/Actions") as Container
+	await _wait_until(func() -> bool:
+		return _result_rows(panel, &"party").size() == 24 and _result_rows(panel, &"loot").size() == 30
+	, "%s 24-member 30-loot recap" % context_label)
+	await _wait_for_stable_layout([frame, body, footer, actions], context_label)
+	_assert_contained(frame, viewport_rect, "%s frame" % context_label)
+	_assert_contained(body, frame.get_global_rect(), "%s recap body" % context_label)
+	_assert_contained(footer, frame.get_global_rect(), "%s footer" % context_label)
+	_assert(not body.is_ancestor_of(footer), "%s terminal actions remain pinned outside recap scrolling" % context_label)
+	_assert(not body.get_global_rect().intersection(footer.get_global_rect()).has_area(), "%s recap body and pinned footer do not overlap" % context_label)
+	var party_rows := _result_rows(panel, &"party")
+	var loot_rows := _result_rows(panel, &"loot")
+	_assert(party_rows.size() == 24, "%s renders every party member row" % context_label)
+	_assert(loot_rows.size() == 30, "%s renders every current supported loot consequence row" % context_label)
+	var seen_rows: Dictionary = {}
+	for row: Button in party_rows + loot_rows:
+		var stable_row := "%s|%s" % [String(row.get_meta(&"recap_section_id", &"")), row.name]
+		_assert(not seen_rows.has(stable_row), "%s recap row %s appears once" % [context_label, stable_row])
+		seen_rows[stable_row] = true
+		_assert_target(row, "%s recap row %s" % [context_label, stable_row])
+		_assert_contained(row, (row.get_parent() as Control).get_global_rect(), "%s recap row %s owning section" % [context_label, stable_row])
+	_assert_sibling_non_overlap(party_rows + loot_rows, "%s recap rows" % context_label)
+	for node: Node in actions.get_children():
+		if node is Button and (node as Button).visible:
+			_assert_target(node as Button, "%s terminal action %s" % [context_label, node.name])
+	var return_action := panel.get_node("Frame/Content/Footer/Actions/ReturnToForge") as Button
+	var restart_action := panel.get_node("Frame/Content/Footer/Actions/RestartRun") as Button
+	var quit_action := panel.get_node("Frame/Content/Footer/Actions/QuitApplication") as Button
+	var result_actions := _direct_visible_controls(actions, "Button")
+	_assert_control_set_geometry(result_actions, frame.get_global_rect(), "%s terminal actions" % context_label)
+	_assert_controls_in_parent(_visible_buttons(panel), "%s all visible result actions" % context_label)
+	await _wait_for_focus(return_action, "%s safe default" % context_label)
+	_assert(return_action.has_focus(), "%s defaults to safe Return to Forge" % context_label)
+	_assert(not restart_action.has_focus() and not quit_action.has_focus(), "%s destructive/consequence actions are not default-focused" % context_label)
+	if not party_rows.is_empty() and not loot_rows.is_empty():
+		party_rows[0].grab_focus()
+		await _wait_for_focus(party_rows[0], "%s first party row" % context_label)
+		await _push_action(&"ui_down")
+		await _wait_for_focus(party_rows[1], "%s second party row" % context_label)
+		var final_row := loot_rows[-1]
+		if _authentic_stress(viewport_size, ui_scale, text_scale):
+			party_rows[0].grab_focus()
+			await _wait_for_focus(party_rows[0], "%s authentic traversal origin" % context_label)
+			for _step: int in party_rows.size() + loot_rows.size() - 1:
+				await _push_action(&"ui_down")
+		else:
+			final_row.grab_focus()
+		await _wait_for_focus(final_row, "%s final recap row" % context_label)
+		await _wait_for_scroll_reveal(body, final_row, "%s final recap row" % context_label)
+		_assert(final_row.has_focus(), "%s spatial traversal reaches the final current-content recap row" % context_label)
+		_assert(_visible_inside(body, final_row), "%s final recap row remains visible inside the bounded body" % context_label)
+		await _push_action(&"ui_down")
+		await _wait_for_focus(return_action, "%s recap-to-footer bridge" % context_label)
+		_assert(return_action.has_focus(), "%s focus bridge reaches the pinned safe terminal action" % context_label)
+		await _push_action(&"ui_up")
+		await _wait_for_focus(final_row, "%s footer-to-recap bridge" % context_label)
+		_assert(final_row.has_focus(), "%s focus bridge returns to the final recap row" % context_label)
+		if _long_detail_corner(viewport_size, ui_scale, text_scale):
+			await _exercise_long_recap_detail(final_row, body, footer, frame, context_label)
+	panel.free()
+	viewport.free()
+	_active_viewport = null
+
+
+func _hud_fixture(count: int, alert_count: int, ui_scale: int, text_scale: int) -> Dictionary:
+	_sequence += 1
+	var catalog := GameCatalog.load_defaults()
+	var party := _party(count, catalog)
+	party.configure_identity(_sequence, catalog.generic_name_pool)
+	var context := PlayerRunContext.new()
+	assert(context.configure(StringName("responsive-%d" % _sequence), 0, ProfileState.new_profile("responsive-profile-%d" % _sequence, "Responsive", 1000), _sequence, party, 100).is_empty())
+	var experience := ExperienceSystem.new()
+	experience.configure_context(context, 1)
+	var actors: Array[Node3D] = []
+	var health_by_member: Dictionary = {}
+	for member_id: int in range(1, count + 1):
+		var actor := Node3D.new()
+		var health := HealthComponent.new()
+		health.name = "HealthComponent"
+		actor.add_child(health)
+		health.configure(100.0, member_id == 1, 8.0, 0.5, member_id == 1)
+		if member_id <= alert_count:
+			health.apply_damage(80.0)
+		assert(context.bind_actor(member_id, actor))
+		actors.append(actor)
+		health_by_member[member_id] = health
+	return {
+		"party": party,
+		"context": context,
+		"experience": experience,
+		"actors": actors,
+		"health_by_member": health_by_member,
+		"run": TestRun.new(),
+		"settings": _settings(ui_scale, text_scale),
+	}
+
+
+func _party(count: int, catalog: GameCatalog) -> PartyManager:
+	var party := PartyManager.new()
+	party.configure_capacity(PartyCapacityPolicy.new(count))
+	party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
+	party.members[0].character_name = "Member 1"
+	for member_id: int in range(2, count + 1):
+		assert(party.recruit(catalog.class_by_id(&"fighter")))
+		party.members[-1].character_name = "Member %d" % member_id
+	return party
+
+
+func _settings(ui_scale: int, text_scale: int) -> PartyForgeSettings:
+	var result := PartyForgeSettings.new()
+	result.ui_scale_percent = ui_scale
+	result.text_scale_percent = text_scale
+	return result
+
+
+func _extraction_projection(count: int, capacity: int, automatic_count: int) -> TerminalExtractionProjection:
+	var automatic: Array[TerminalExtractionItemProjection] = []
+	for index: int in automatic_count:
+		automatic.append(_extraction_item("automatic-%02d" % (index + 1), true, false, false, 1, index))
+	var eligible: Array[TerminalExtractionItemProjection] = []
+	var lost: Array[String] = []
+	for index: int in count:
+		var item_id := "item-%02d" % (index + 1)
+		eligible.append(_extraction_item(item_id, false, false, true, 0, index))
+		lost.append(item_id)
+	return TerminalExtractionProjection.create(automatic, eligible, capacity, [], lost, [], "", true)
+
+
+func _extraction_item(item_id: String, automatic: bool, selected: bool, lost: bool, member_id: int, slot: int) -> TerminalExtractionItemProjection:
+	return TerminalExtractionItemProjection.create_with_source(
+		item_id,
+		"Forged Relic %02d" % (slot + 1),
+		"Common",
+		&"common",
+		"Fighter · Member %d" % member_id if member_id > 0 else "Run Inventory",
+		"Fighter Equipment" if member_id > 0 else "Run Inventory",
+		automatic,
+		selected,
+		lost,
+		{"name": "Forged Relic %02d" % (slot + 1), "instance_id": item_id},
+		[],
+		member_id,
+		"Fighter" if member_id > 0 else "",
+		StringName("run-equipment-%03d" % member_id) if member_id > 0 else &"run-inventory",
+		slot,
+	)
+
+
+func _hud_roster_controls(hud: HUD) -> Array[Control]:
+	var result: Array[Control] = []
+	for node: Node in hud.get_tree().get_nodes_in_group(&"combat_hud_member"):
+		if node is Control and not node.is_queued_for_deletion() and hud.is_ancestor_of(node):
+			result.append(node as Control)
+	return result
+
+
+func _hud_member_control(hud: HUD, member_id: int) -> Control:
+	for control: Control in _hud_roster_controls(hud):
+		if int(control.get_meta(&"member_id", 0)) == member_id:
+			return control
+	return null
+
+
+func _extraction_cards(panel: TerminalExtractionPanel) -> Array[Button]:
+	var result: Array[Button] = []
+	for node: Node in panel.find_children("*", "ForgeExtractionItemCard", true, false):
+		if String(node.get_meta(&"item_id", "")).begins_with("item-"):
+			result.append(node as Button)
+	result.sort_custom(func(left: Button, right: Button) -> bool:
+		return String(left.get_meta(&"item_id", "")) < String(right.get_meta(&"item_id", ""))
+	)
+	return result
+
+
+func _result_rows(panel: RunResultPanel, section_id: StringName) -> Array[Button]:
+	var result: Array[Button] = []
+	for node: Node in panel.find_children("*", "Button", true, false):
+		if node.get_meta(&"recap_section_id", &"") == section_id:
+			result.append(node as Button)
+	return result
+
+
+func _direct_visible_controls(scope: Node, type_name: String) -> Array[Control]:
+	var result: Array[Control] = []
+	if scope == null:
+		return result
+	for child: Node in scope.get_children():
+		if child is Control and not child.is_queued_for_deletion() and child.is_class(type_name) and (child as Control).is_visible_in_tree():
+			result.append(child as Control)
+	return result
+
+
+func _visible_buttons(scope: Node) -> Array[Control]:
+	var result: Array[Control] = []
+	if scope == null:
+		return result
+	for node: Node in scope.find_children("*", "Button", true, false):
+		if not node.is_queued_for_deletion() and (node as Button).is_visible_in_tree():
+			result.append(node as Control)
+	return result
+
+
+func _assert_controls_contained(controls: Array, outer: Rect2, label: String) -> void:
+	for index: int in controls.size():
+		var control := controls[index] as Control
+		_assert_contained(control, outer, "%s control %d %s" % [label, index + 1, control.name if control != null else "<null>"])
+
+
+func _assert_sibling_non_overlap(controls: Array, label: String) -> void:
+	var rects: Array[Rect2] = []
+	for control_value: Variant in controls:
+		var control := control_value as Control
+		if control == null or not control.is_visible_in_tree():
+			continue
+		_assert_no_overlap(control.get_global_rect(), rects, label)
+		rects.append(control.get_global_rect())
+
+
+func _assert_control_set_geometry(controls: Array, outer: Rect2, label: String) -> void:
+	_assert_controls_contained(controls, outer, label)
+	_assert_sibling_non_overlap(controls, label)
+	for control_value: Variant in controls:
+		var control := control_value as Control
+		if control != null and control.is_visible_in_tree():
+			_assert_bounds(control, "%s %s" % [label, control.name])
+
+
+func _assert_controls_within_owning_surface(controls: Array, outer: Rect2, label: String) -> void:
+	_assert_controls_contained(controls, outer, label)
+	var groups: Dictionary = {}
+	for control_value: Variant in controls:
+		var control := control_value as Control
+		if control == null or not control.is_visible_in_tree():
+			continue
+		var parent_id := control.get_parent().get_instance_id()
+		if not groups.has(parent_id):
+			groups[parent_id] = []
+		(groups[parent_id] as Array).append(control)
+	for sibling_values: Variant in groups.values():
+		_assert_sibling_non_overlap(sibling_values as Array, label)
+
+
+func _assert_controls_in_parent(controls: Array, label: String) -> void:
+	var groups: Dictionary = {}
+	for control_value: Variant in controls:
+		var control := control_value as Control
+		if control == null or not control.is_visible_in_tree():
+			continue
+		var parent := control.get_parent() as Control
+		_assert(parent != null, "%s %s has a Control layout owner" % [label, control.name])
+		if parent == null:
+			continue
+		_assert_contained(control, parent.get_global_rect(), "%s %s parent" % [label, control.name])
+		var parent_id := parent.get_instance_id()
+		if not groups.has(parent_id):
+			groups[parent_id] = []
+		(groups[parent_id] as Array).append(control)
+	for sibling_values: Variant in groups.values():
+		_assert_sibling_non_overlap(sibling_values as Array, label)
+
+
+func _exercise_long_recap_detail(row: Button, body: ScrollContainer, footer: Control, frame: Control, context_label: String) -> void:
+	var detail := row.get_node_or_null("Detail") as Label
+	_assert(detail != null, "%s expanded-detail fixture has a real Detail label" % context_label)
+	if detail == null:
+		return
+	detail.text = ("The forge records a deliberately long consequence with current loot identity, destination, loss, and protection context. ").repeat(4)
+	row.pressed.emit()
+	await _wait_for_visible(detail, "%s long recap detail" % context_label)
+	await _wait_for_stable_layout([row, detail, body, footer], "%s long recap detail" % context_label)
+	row.grab_focus()
+	await _wait_for_focus(row, "%s expanded recap row" % context_label)
+	await _wait_for_scroll_reveal(body, row, "%s expanded recap row" % context_label)
+	var detail_minimum := detail.get_combined_minimum_size()
+	var required_height := detail.position.y + detail_minimum.y
+	_assert(row.get_global_rect().encloses(detail.get_global_rect()), "%s expanded row encloses the deliberately wrapping detail" % context_label)
+	_assert(row.get_global_rect().size.y >= required_height, "%s expanded row height encloses combined-minimum detail: row=%s required=%s" % [context_label, row.get_global_rect().size.y, required_height])
+	_assert(_visible_inside(body, row), "%s focused expanded row remains visible through focus-follow" % context_label)
+	_assert(frame.get_global_rect().encloses(footer.get_global_rect()), "%s expanded detail keeps footer frame-contained" % context_label)
+	_assert(not body.get_global_rect().intersection(footer.get_global_rect()).has_area(), "%s expanded detail keeps footer pinned outside recap scrolling" % context_label)
+
+
+func _assert_contained(control: Control, outer: Rect2, label: String) -> void:
+	if control == null or not control.is_visible_in_tree():
+		_assert(false, "%s is visible for geometry acceptance" % label)
+		return
+	var rect := control.get_global_rect()
+	_assert(rect.size.x > 0.0 and rect.size.y > 0.0, "%s has positive geometry: %s" % [label, rect])
+	_assert(outer.encloses(rect), "%s remains contained: outer=%s inner=%s" % [label, outer, rect])
+
+
+func _assert_no_overlap(rect: Rect2, prior: Array[Rect2], label: String) -> void:
+	for other: Rect2 in prior:
+		_assert(not rect.intersection(other).has_area(), "%s do not overlap: first=%s second=%s" % [label, other, rect])
+
+
+func _assert_target(control: Control, label: String) -> void:
+	_assert_bounds(control, label)
+	if control == null or not control.is_visible_in_tree():
+		return
+	_assert(control.focus_mode != Control.FOCUS_NONE, "%s remains focusable" % label)
+	if control is BaseButton:
+		_assert(not (control as BaseButton).disabled, "%s remains enabled" % label)
+
+
+func _assert_bounds(control: Control, label: String) -> void:
+	if control == null or not control.is_visible_in_tree():
+		_assert(false, "%s is visible" % label)
+		return
+	var size := control.get_global_rect().size
+	_assert(size.x >= 48.0 and size.y >= 48.0, "%s retains actual 48px bounds: %s" % [label, size])
+
+
+func _visible_inside(scroll: ScrollContainer, control: Control) -> bool:
+	if scroll == null or control == null or not control.is_visible_in_tree():
+		return false
+	var viewport_rect := scroll.get_global_rect()
+	var control_rect := control.get_global_rect()
+	var visible := viewport_rect.intersection(control_rect)
+	return visible.size.x >= minf(48.0, control_rect.size.x) and visible.size.y >= minf(48.0, control_rect.size.y)
+
+
+func _push_action(action: StringName) -> void:
+	if _active_viewport == null or not is_instance_valid(_active_viewport):
+		_assert(false, "responsive input requires an active exact-sized viewport")
+		return
+	var press := InputEventAction.new()
+	press.action = action
+	press.pressed = true
+	_active_viewport.push_input(press)
+	await process_frame
+	var release := press.duplicate() as InputEventAction
+	release.pressed = false
+	_active_viewport.push_input(release)
+	await process_frame
+
+
+func _activate_focused() -> void:
+	await _push_action(&"ui_accept")
+
+
+func _wait_until(condition: Callable, label: String, deadline_ms: int = CONDITION_DEADLINE_MS) -> bool:
+	var started := Time.get_ticks_msec()
+	while Time.get_ticks_msec() - started <= deadline_ms:
+		if condition.is_valid() and bool(condition.call()):
+			return true
+		await process_frame
+	_assert(false, "CONDITION_TIMEOUT waiting for %s within %dms" % [label, deadline_ms])
+	return false
+
+
+func _wait_for_stable_layout(controls: Array[Control], label: String) -> bool:
+	var state := {"signature": "", "stable_frames": 0}
+	return await _wait_until(func() -> bool:
+		var parts := PackedStringArray()
+		var valid := true
+		for control: Control in controls:
+			if control == null or not is_instance_valid(control) or not control.is_inside_tree():
+				valid = false
+				break
+			var rect := control.get_global_rect()
+			if rect.size.x <= 0.0 or rect.size.y <= 0.0:
+				valid = false
+				break
+			parts.append("%.2f,%.2f,%.2f,%.2f" % [rect.position.x, rect.position.y, rect.size.x, rect.size.y])
+		var signature := "|".join(parts)
+		if valid and signature == String(state.signature):
+			state.stable_frames = int(state.stable_frames) + 1
+		else:
+			state.signature = signature
+			state.stable_frames = 0
+		return valid and int(state.stable_frames) >= 1
+	, "stable layout: %s" % label)
+
+
+func _wait_for_focus(control: Control, label: String) -> bool:
+	return await _wait_until(func() -> bool:
+		return control != null and is_instance_valid(control) and _active_viewport != null and _active_viewport.gui_get_focus_owner() == control
+	, "focus: %s" % label)
+
+
+func _wait_for_visible(control: Control, label: String) -> bool:
+	return await _wait_until(func() -> bool:
+		return control != null and is_instance_valid(control) and control.is_visible_in_tree()
+	, "visible transition: %s" % label)
+
+
+func _wait_for_hidden(control: Control, label: String) -> bool:
+	return await _wait_until(func() -> bool:
+		return control != null and is_instance_valid(control) and not control.is_visible_in_tree()
+	, "hidden transition: %s" % label)
+
+
+func _wait_for_scroll_reveal(scroll: ScrollContainer, control: Control, label: String) -> bool:
+	return await _wait_until(func() -> bool:
+		return _visible_inside(scroll, control)
+	, "scroll reveal: %s" % label)
+
+
+func _cleanup_hud_fixture(fixture: Dictionary) -> void:
+	var experience := fixture.experience as ExperienceSystem
+	if experience != null:
+		experience.free()
+	var party := fixture.party as PartyManager
+	if party != null:
+		party.free()
+	for actor: Node3D in fixture.actors as Array:
+		actor.free()
+	var run := fixture.run as Node
+	if run != null:
+		run.free()
+
+
+func _context(surface: String, viewport_size: Vector2i, ui_scale: int, text_scale: int, detail: String) -> String:
+	return "%s %dx%d ui=%d text=%d %s" % [surface, viewport_size.x, viewport_size.y, ui_scale, text_scale, detail]
+
+
+func _new_viewport(viewport_size: Vector2i) -> SubViewport:
+	var viewport := SubViewport.new()
+	viewport.disable_3d = true
+	viewport.size = viewport_size
+	viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	root.add_child(viewport)
+	_active_viewport = viewport
+	return viewport
+
+
+func _authentic_stress(viewport_size: Vector2i, ui_scale: int, text_scale: int) -> bool:
+	return viewport_size == Vector2i(1280, 720) and ui_scale == 150 and text_scale == 150
+
+
+func _long_detail_corner(viewport_size: Vector2i, ui_scale: int, text_scale: int) -> bool:
+	return viewport_size == Vector2i(1280, 720) and text_scale == 150 and ui_scale in [80, 150]
+
+
+func _assert(condition: bool, message: String) -> void:
+	if not condition:
+		_failures.append(message)
+
+
+func _finish() -> void:
+	if _failures.is_empty():
+		print("COMBAT_LOOP_RESPONSIVE_SUMMARY: PASS")
+		quit(0)
+		return
+	for failure: String in _failures:
+		push_error("COMBAT_LOOP_RESPONSIVE_FAILURE: %s" % failure)
+	print("COMBAT_LOOP_RESPONSIVE_SUMMARY: FAIL failures=%d" % _failures.size())
+	quit(1)

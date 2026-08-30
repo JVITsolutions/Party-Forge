@@ -70,9 +70,10 @@ theme_type_variation = &"LivingForgeCaptionLabel"
 autowrap_mode = 2
 
 [node name="Body" type="ScrollContainer" parent="Frame/Content"]
-custom_minimum_size = Vector2(0, 360)
+custom_minimum_size = Vector2(0, 280)
 layout_mode = 2
 size_flags_vertical = 3
+follow_focus = true
 horizontal_scroll_mode = 0
 
 [node name="Recap" type="VBoxContainer" parent="Frame/Content/Body"]

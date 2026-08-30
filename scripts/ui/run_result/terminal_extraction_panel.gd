@@ -30,6 +30,9 @@ func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	_connect_controls()
+	_set_base_focus_enabled(false)
+	_disable_focus_descendants(get_node("ItemTooltipDetail") as Control)
+	_disable_focus_descendants(get_node("UnusedCapacityWarning") as Control)
 	if not get_viewport().size_changed.is_connected(_on_viewport_size_changed):
 		get_viewport().size_changed.connect(_on_viewport_size_changed)
 
@@ -151,6 +154,7 @@ func show_unused_capacity_warning(unused_slots: int, lost_count: int, return_foc
 
 func hide_panel() -> void:
 	_force_close_children(false)
+	_set_base_focus_enabled(false)
 	visible = false
 	_projection = null
 	_clear_cards()
@@ -281,7 +285,9 @@ func _base_focus_ring_controls() -> Array[Control]:
 		for item: TerminalExtractionItemProjection in _projection.automatic_items:
 			var card := _cards_by_id.get(item.item_id) as ForgeExtractionItemCard
 			if card != null:
-				controls.append(card.get_node("Inspect") as Button)
+				var inspect := card.get_node("Inspect") as Button
+				if not inspect.disabled:
+					controls.append(inspect)
 	return controls
 
 func _capture_availability_focus_intent() -> Dictionary:
@@ -360,7 +366,10 @@ func _wire_closed_ring(controls: Array[Control]) -> void:
 
 func _disable_focus_descendants(scope: Control) -> void:
 	for node: Node in scope.find_children("*", "Control", true, false):
-		(node as Control).focus_mode = Control.FOCUS_NONE
+		var control := node as Control
+		if control.has_focus():
+			control.release_focus()
+		control.focus_mode = Control.FOCUS_NONE
 
 func _ensure_card_visible(card: Control) -> void:
 	if card == null or not is_instance_valid(card):
@@ -501,7 +510,9 @@ func _close_detail() -> void:
 
 func _close_detail_without_focus() -> void:
 	(get_node("ItemTooltipDetail/Frame/Tooltip") as ItemTooltipPanel).force_dismiss()
-	(get_node("ItemTooltipDetail") as Control).visible = false
+	var overlay := get_node("ItemTooltipDetail") as Control
+	_disable_focus_descendants(overlay)
+	overlay.visible = false
 	_detail_return_item_id = ""
 	_detail_return_focus = null
 
@@ -513,7 +524,9 @@ func _close_warning() -> void:
 		_focus_initial()
 
 func _close_warning_without_focus() -> void:
-	(get_node("UnusedCapacityWarning") as Control).visible = false
+	var warning := get_node("UnusedCapacityWarning") as Control
+	_disable_focus_descendants(warning)
+	warning.visible = false
 	_warning_return_focus = null
 
 func _force_close_children(_restore_focus: bool) -> void:

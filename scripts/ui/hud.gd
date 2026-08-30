@@ -328,8 +328,10 @@ func _rebuild_member_controls() -> void:
 		var next := get_node("Margin/CombatStatus/PartyRegion/CompactRoster/PageNext") as Button
 		previous.visible = false
 		previous.disabled = true
+		previous.focus_mode = Control.FOCUS_NONE
 		next.visible = false
 		next.disabled = true
+		next.focus_mode = Control.FOCUS_NONE
 		_rebuild_rich_followers(members)
 	else:
 		_rebuild_compact_page(members)
@@ -453,8 +455,17 @@ func _present_page_status() -> void:
 	next.disabled = _current_page + 1 >= _metrics.page_count
 	previous.visible = _metrics.page_count > 1
 	next.visible = _metrics.page_count > 1
+	_sync_page_action_focus(previous)
+	_sync_page_action_focus(next)
 	label.text = "PARTY %d OF %d" % [_current_page + 1, _metrics.page_count]
 	label.accessibility_name = "Party page %d of %d" % [_current_page + 1, _metrics.page_count]
+
+
+func _sync_page_action_focus(action: Button) -> void:
+	var eligible := action.visible and not action.disabled
+	action.focus_mode = Control.FOCUS_ALL if eligible else Control.FOCUS_NONE
+	if not eligible and action.has_focus():
+		action.release_focus()
 
 
 func _on_previous_page() -> void:

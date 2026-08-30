@@ -133,17 +133,14 @@ func _reset_presentation() -> void:
 	_body.visible = false
 	_body.scroll_vertical = 0
 	_confirmation.visible = false
-	_cancel_confirmation.disabled = false
-	_confirm_protection.disabled = false
+	_set_button_focus_eligible(_cancel_confirmation, false)
+	_set_button_focus_eligible(_confirm_protection, false)
 	for child: Node in _recap.get_children():
 		child.free()
 	for action_name: String in ACTION_NAMES:
 		var button := _action(action_name)
 		button.visible = false
-		button.disabled = false
-		button.focus_mode = Control.FOCUS_ALL
-		if button.is_inside_tree():
-			button.release_focus()
+		_set_button_focus_eligible(button, false)
 
 func _present_interruption(projection: RunResultProjection) -> void:
 	_reason.visible = true
@@ -173,7 +170,9 @@ func _apply_actions(projection: RunResultProjection) -> void:
 	for action_name: String in ACTION_NAMES:
 		var allowed := bool(visibility[action_name])
 		_allowed_actions[action_name] = allowed
-		_action(action_name).visible = allowed
+		var button := _action(action_name)
+		button.visible = allowed
+		_set_button_focus_eligible(button, allowed)
 	_action("ProtectDisplacedGear").set_meta(&"displaced_gear_count", projection.displaced_gear_count)
 
 func _build_recap(sections: Array[RunRecapSectionProjection]) -> void:
@@ -224,8 +223,12 @@ func _entry_row(section_id: StringName, index: int, entry: RunRecapEntryProjecti
 	detail.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	detail.theme_type_variation = &"LivingForgeCaptionLabel"
 	detail.text = entry.detail
-	detail.position = Vector2(16.0, 44.0)
-	detail.size = Vector2(720.0, 28.0)
+	detail.anchor_right = 1.0
+	detail.anchor_bottom = 1.0
+	detail.offset_left = 16.0
+	detail.offset_top = 44.0
+	detail.offset_right = -16.0
+	detail.offset_bottom = -8.0
 	detail.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	row.add_child(detail)
 	row.pressed.connect(_toggle_detail.bind(row))
@@ -273,13 +276,60 @@ func _finalized_headline(projection: RunResultProjection) -> String:
 
 func _ensure_visible(row: Control) -> void:
 	_body.ensure_control_visible(row)
+	call_deferred(&"_ensure_visible_after_layout", row)
+
+func _ensure_visible_after_layout(row: Control) -> void:
+	if is_instance_valid(row) and row.is_visible_in_tree():
+		_body.ensure_control_visible(row)
+		call_deferred(&"_correct_scroll_visible_clip", row)
+
+func _correct_scroll_visible_clip(row: Control) -> void:
+	if not is_instance_valid(row) or not row.is_visible_in_tree():
+		return
+	var visible_clip := _scroll_visible_global_rect()
+	var row_rect := row.get_global_rect()
+	var correction := 0
+	if row_rect.end.y > visible_clip.end.y:
+		correction = ceili(row_rect.end.y - visible_clip.end.y)
+	elif row_rect.position.y < visible_clip.position.y:
+		correction = floori(row_rect.position.y - visible_clip.position.y)
+	if correction == 0:
+		return
+	var vertical_bar := _body.get_v_scroll_bar()
+	var maximum_scroll := maxi(0, floori(vertical_bar.max_value - vertical_bar.page))
+	_body.scroll_vertical = clampi(_body.scroll_vertical + correction, 0, maximum_scroll)
+
+func _scroll_visible_global_rect() -> Rect2:
+	var visible_clip := _body.get_global_rect()
+	var vertical_bar := _body.get_v_scroll_bar()
+	if vertical_bar != null and vertical_bar.is_visible_in_tree():
+		visible_clip.size.x -= vertical_bar.get_global_rect().size.x
+	var horizontal_bar := _body.get_h_scroll_bar()
+	if horizontal_bar != null and horizontal_bar.is_visible_in_tree():
+		visible_clip.size.y -= horizontal_bar.get_global_rect().size.y
+	var ancestor := _body.get_parent_control()
+	while ancestor != null:
+		if ancestor.clip_contents:
+			visible_clip = visible_clip.intersection(ancestor.get_global_rect())
+		ancestor = ancestor.get_parent_control()
+	return visible_clip
 
 func _toggle_detail(row: Button) -> void:
 	var detail := row.get_node_or_null("Detail") as Label
 	if detail == null or detail.text.strip_edges().is_empty():
 		return
 	detail.visible = not detail.visible
-	row.custom_minimum_size.y = 80.0 if detail.visible else 48.0
+	if detail.visible:
+		call_deferred(&"_fit_expanded_detail", row, detail)
+	else:
+		row.custom_minimum_size.y = 48.0
+	_body.ensure_control_visible(row)
+
+func _fit_expanded_detail(row: Button, detail: Label) -> void:
+	if not is_instance_valid(row) or not is_instance_valid(detail) or not detail.visible:
+		return
+	var required_height := detail.position.y + detail.get_combined_minimum_size().y + 8.0
+	row.custom_minimum_size.y = maxf(48.0, required_height)
 	_body.ensure_control_visible(row)
 
 func _connect_action(action_name: String, callback: Callable) -> void:
@@ -295,7 +345,7 @@ func _begin_action(button: Button) -> bool:
 		return false
 	_action_pending = true
 	for action_name: String in ACTION_NAMES:
-		_action(action_name).disabled = true
+		_set_button_focus_eligible(_action(action_name), false)
 	return true
 
 func _on_retry_terminal_save() -> void:
@@ -349,20 +399,19 @@ func _on_confirm_protection() -> void:
 	if not _confirmation.visible or _action_pending or not is_instance_valid(_protection_return_focus):
 		return
 	_action_pending = true
-	_cancel_confirmation.disabled = true
-	_confirm_protection.disabled = true
+	_set_button_focus_eligible(_cancel_confirmation, false)
+	_set_button_focus_eligible(_confirm_protection, false)
 	protect_displaced_gear_requested.emit(_protection_return_focus)
 
 func _set_confirmation_focus_scope(active: bool) -> void:
 	_set_recap_modal_locked(active)
 	for action_name: String in ACTION_NAMES:
 		var button := _action(action_name)
-		button.disabled = active or _action_pending
-		button.focus_mode = Control.FOCUS_NONE if active else Control.FOCUS_ALL
-	_cancel_confirmation.disabled = false if active else _action_pending
-	_confirm_protection.disabled = false if active else _action_pending
-	_cancel_confirmation.focus_mode = Control.FOCUS_ALL
-	_confirm_protection.focus_mode = Control.FOCUS_ALL
+		var eligible := not active and not _action_pending and bool(_allowed_actions.get(action_name, false))
+		_set_button_focus_eligible(button, eligible)
+	var confirmation_eligible := active and not _action_pending
+	_set_button_focus_eligible(_cancel_confirmation, confirmation_eligible)
+	_set_button_focus_eligible(_confirm_protection, confirmation_eligible)
 	if active:
 		_cancel_confirmation.focus_next = _cancel_confirmation.get_path_to(_confirm_protection)
 		_cancel_confirmation.focus_previous = _cancel_confirmation.get_path_to(_confirm_protection)
@@ -376,6 +425,12 @@ func _set_confirmation_focus_scope(active: bool) -> void:
 		_confirm_protection.focus_neighbor_right = _confirm_protection.get_path_to(_cancel_confirmation)
 		_confirm_protection.focus_neighbor_top = _confirm_protection.get_path_to(_confirm_protection)
 		_confirm_protection.focus_neighbor_bottom = _confirm_protection.get_path_to(_confirm_protection)
+
+func _set_button_focus_eligible(button: Button, eligible: bool) -> void:
+	button.disabled = not eligible
+	button.focus_mode = Control.FOCUS_ALL if eligible else Control.FOCUS_NONE
+	if not eligible and button.has_focus():
+		button.release_focus()
 
 func _set_recap_modal_locked(active: bool) -> void:
 	if active:

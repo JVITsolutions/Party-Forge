@@ -57,5 +57,7 @@ theme_override_constants/separation = 10
 custom_minimum_size = Vector2(180, 48)
 layout_mode = 2
 size_flags_horizontal = 4
+focus_mode = 0
 theme_type_variation = &"LivingForgeSecondaryButton"
 text = "Back to Offers"
+accessibility_name = "Back to Offers"
