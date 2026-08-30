@@ -100,7 +100,7 @@ func _test_high_contrast_semantics(panel: Control, failures: Array[String]) -> v
 	first.call(&"apply_accessibility_variant", true)
 	var focus_style := (first.get_node("FocusFrame") as Panel).get_theme_stylebox(&"panel") as StyleBoxFlat
 	TestAssertions.truthy(focus_style != null and focus_style.border_color == LivingForgeTokens.color(&"focus_outline", true), "card focus boundary uses high-contrast semantic token", failures)
-	var state_text := first.get_node("Content/State/StateText") as Label
+	var state_text := first.get_node("Content/Footer/State/StateText") as Label
 	TestAssertions.equal(state_text.get_theme_color(&"font_color"), LivingForgeTokens.color(&"warning", true), "loss state uses high-contrast warning treatment plus explicit copy", failures)
 
 func _card(panel: Control, item_id: String) -> Button:

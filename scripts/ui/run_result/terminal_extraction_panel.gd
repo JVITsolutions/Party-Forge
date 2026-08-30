@@ -200,7 +200,7 @@ func _build_cards(items: Array[TerminalExtractionItemProjection], parent: Contai
 		card.item_toggle_requested.connect(_on_card_toggle)
 		card.inspect_requested.connect(_on_card_inspect)
 		card.focus_entered.connect(_ensure_card_visible.bind(card))
-		var inspect := card.get_node("Inspect") as Button
+		var inspect := card.get_node("Content/Footer/Inspect") as Button
 		inspect.focus_entered.connect(_ensure_card_visible.bind(card))
 		_cards_by_id[item.item_id] = card
 		_details_by_id[item.item_id] = item.copy()
@@ -241,7 +241,7 @@ func _update_availability() -> void:
 	player_error.visible = not player_error.text.is_empty()
 	player_error.accessibility_name = player_error.text
 	var pending_label := get_node("Frame/Content/Pending") as Label
-	pending_label.visible = _pending
+	pending_label.visible = true
 	pending_label.text = "RESOLVING · PLEASE WAIT" if _pending else ""
 	pending_label.accessibility_name = pending_label.text
 	var selection_can_recover := preflight_failed and _preflight_category == RunResolutionEvaluation.FailureCategory.STASH_REDUCIBLE
@@ -273,7 +273,7 @@ func _base_focus_ring_controls() -> Array[Control]:
 				continue
 			if not card.disabled:
 				controls.append(card)
-			var inspect := card.get_node("Inspect") as Button
+			var inspect := card.get_node("Content/Footer/Inspect") as Button
 			if not inspect.disabled:
 				controls.append(inspect)
 	for control: Control in [get_node("Frame/Content/Actions/Retry") as Button, get_node("Frame/Content/Actions/Confirm") as Button]:
@@ -285,7 +285,7 @@ func _base_focus_ring_controls() -> Array[Control]:
 		for item: TerminalExtractionItemProjection in _projection.automatic_items:
 			var card := _cards_by_id.get(item.item_id) as ForgeExtractionItemCard
 			if card != null:
-				var inspect := card.get_node("Inspect") as Button
+				var inspect := card.get_node("Content/Footer/Inspect") as Button
 				if not inspect.disabled:
 					controls.append(inspect)
 	return controls
@@ -398,7 +398,9 @@ func _apply_responsive_layout() -> void:
 	var card_width := maxf(248.0 * ui_scale, 248.0 + maxf(text_scale - 1.0, 0.0) * 104.0)
 	var card_height := maxf(176.0 * ui_scale, 176.0 + maxf(text_scale - 1.0, 0.0) * 72.0)
 	for card_value: Variant in _cards_by_id.values():
-		(card_value as Control).custom_minimum_size = Vector2(card_width, card_height)
+		var card := card_value as Control
+		card.custom_minimum_size = Vector2(card_width, card_height)
+		card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	for grid_node: Node in (get_node("Frame/Content/Body/Sections/Eligible/Sections") as Control).find_children("Grid", "GridContainer", true, false):
 		(grid_node as GridContainer).columns = columns
 	(get_node("Frame/Content/Body/Sections/Automatic/Scroll") as Control).custom_minimum_size.y = card_height + 16.0

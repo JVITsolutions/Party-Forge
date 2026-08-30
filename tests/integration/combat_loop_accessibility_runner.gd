@@ -450,8 +450,8 @@ func _assert_alert_semantics(card: ForgeAlertCard, surface: String, label: Strin
 
 
 func _assert_extraction_semantics(card: Button, surface: String, label: String) -> void:
-	var state_text := card.get_node("Content/State/StateText") as Label
-	var state_icon := card.get_node("Content/State/StateIcon") as TextureRect
+	var state_text := card.get_node("Content/Footer/State/StateText") as Label
+	var state_icon := card.get_node("Content/Footer/State/StateIcon") as TextureRect
 	_assert(state_text.text == "WILL BE LOST", "%s carries exact consequence text at %s" % [surface, label])
 	_assert(_texture_path(state_icon) == ForgeExtractionItemCard.ICON_ROOT + "alert-triangle.svg", "%s carries the exact lost-consequence icon at %s" % [surface, label])
 	_assert(card.accessibility_description.contains("will be lost"), "%s exposes the same consequence to assistive technology at %s" % [surface, label])
@@ -563,8 +563,8 @@ func _extraction_semantic_signature(card: Button) -> Dictionary:
 	return {
 		"accessibility_name": card.accessibility_name,
 		"accessibility_description": card.accessibility_description,
-		"state_text": (card.get_node("Content/State/StateText") as Label).text,
-		"icon_path": _texture_path(card.get_node("Content/State/StateIcon") as TextureRect),
+		"state_text": (card.get_node("Content/Footer/State/StateText") as Label).text,
+		"icon_path": _texture_path(card.get_node("Content/Footer/State/StateIcon") as TextureRect),
 	}
 
 

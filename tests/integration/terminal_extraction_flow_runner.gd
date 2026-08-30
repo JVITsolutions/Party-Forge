@@ -160,7 +160,7 @@ func _exercise_authentic_inspect(first: Button, third: Button, last: Button) -> 
 	_assert(tooltip.current_source_id() == &"terminal-extraction:item-01" and tooltip.card_count() > 0, "detail surface renders exact item source and content")
 	await _press_joy(JOY_BUTTON_B)
 	_assert(first.has_focus(), "detail controller Cancel returns to exact item")
-	var inspect_action := third.get_node_or_null("Inspect") as Button
+	var inspect_action := third.get_node_or_null("Content/Footer/Inspect") as Button
 	_assert(inspect_action != null and inspect_action.focus_mode == Control.FOCUS_ALL, "eligible card exposes a controller-reachable Inspect action")
 	if inspect_action != null:
 		inspect_action.grab_focus()
@@ -173,7 +173,7 @@ func _exercise_authentic_inspect(first: Button, third: Button, last: Button) -> 
 	_assert(_inspects.size() == 3 and _inspects[-1][0] == "item-24", "mouse right-click Inspect emits exact stable item")
 	await _press_joy(JOY_BUTTON_B)
 	var automatic_card := _card_with_id_prefix("automatic-")
-	var automatic_inspect := automatic_card.get_node_or_null("Inspect") as Button if automatic_card != null else null
+	var automatic_inspect := automatic_card.get_node_or_null("Content/Footer/Inspect") as Button if automatic_card != null else null
 	_assert(automatic_inspect != null and automatic_inspect.focus_mode == Control.FOCUS_ALL, "automatic retained item exposes its real focusable Inspect action")
 	if automatic_inspect != null:
 		automatic_inspect.grab_focus()
@@ -223,13 +223,14 @@ func _exercise_availability_focus_resolution(item_type: Script, projection_type:
 	_panel.call(&"present", _active_projection)
 	var cards := _eligible_cards()
 	var first := cards[0]
-	var first_inspect := first.get_node("Inspect") as Button
+	var first_inspect := first.get_node("Content/Footer/Inspect") as Button
 	var confirm := _panel.get_node("Frame/Content/Actions/Confirm") as Button
 	var retry := _panel.get_node("Frame/Content/Actions/Retry") as Button
+	var automatic_list := _panel.get_node("Frame/Content/Summary/AutomaticList") as Button
 	confirm.grab_focus()
 	_panel.call(&"set_pending", true)
 	await _frames(2)
-	_assert(first_inspect.has_focus() and not underlying.has_focus(), "Confirm becoming pending resolves focus to the deterministic first enabled base action")
+	_assert(automatic_list.has_focus() and not underlying.has_focus(), "Confirm becoming pending resolves focus to the deterministic first enabled summary action")
 	await _press_key(KEY_TAB)
 	_assert(_focus_is_within(_panel) and not underlying.has_focus(), "keyboard traversal after Confirm-to-pending never becomes ownerless or reaches combat")
 	var retryable := RunResolutionPreflightResult.failure("internal", RunResolutionEvaluation.FailureCategory.STASH_AUTOMATIC_ONLY, "Automatic retained items need more destination space. Retry resolution after making space.")
@@ -256,24 +257,24 @@ func _exercise_availability_focus_resolution(item_type: Script, projection_type:
 	var invalid_projection := projection_type.call(&"create", _active_projection.automatic_items, _active_projection.eligible_items, _active_projection.capacity, _active_projection.selected_item_ids, _active_projection.lost_item_ids, [], "Extraction information changed. Review the available actions.", false) as TerminalExtractionProjection
 	_panel.call(&"present", invalid_projection)
 	await _frames(2)
-	first_inspect = (_eligible_cards()[0].get_node("Inspect") as Button)
+	first_inspect = (_eligible_cards()[0].get_node("Content/Footer/Inspect") as Button)
 	_assert(first_inspect.has_focus() and not underlying.has_focus(), "an invalid projection resolves a disabled item to the deterministic first enabled base action")
 	await _press_joy(JOY_BUTTON_DPAD_DOWN)
 	_assert(_focus_is_within(_panel) and not underlying.has_focus(), "controller traversal after invalid projection remains terminal-owned")
 	_panel.call(&"present", _active_projection)
 	cards = _eligible_cards()
 	first = cards[0]
-	first_inspect = first.get_node("Inspect") as Button
+	first_inspect = first.get_node("Content/Footer/Inspect") as Button
 	first.grab_focus()
 	_panel.call(&"set_pending", true)
 	var success := RunResolutionPreflightResult.new()
 	success._extraction = RunExtractionProjection.create([], [], [], [], 0, [])
 	_panel.call(&"show_preflight", success)
 	await _frames(2)
-	_assert(first_inspect.has_focus() and not underlying.has_focus(), "successful preflight cannot steal deterministic fallback focus while pending dominates")
+	_assert(automatic_list.has_focus() and not underlying.has_focus(), "successful preflight cannot steal deterministic fallback focus while pending dominates")
 	_panel.call(&"set_pending", false)
 	await _frames(2)
-	_assert(first_inspect.has_focus() and not underlying.has_focus(), "clearing pending after success preserves the still-enabled exact item action focus")
+	_assert(automatic_list.has_focus() and not underlying.has_focus(), "clearing pending after success preserves the still-enabled exact summary action focus")
 
 func _exercise_stale_detail_fallback(item_type: Script, projection_type: Script) -> void:
 	_active_projection = _picker_projection(item_type, projection_type, 24, 2)
@@ -325,7 +326,7 @@ func _exercise_responsive_settings(item_type: Script, projection_type: Script) -
 		var automatic_scroll := _panel.get_node_or_null("Frame/Content/Body/Sections/Automatic/Scroll") as ScrollContainer
 		var automatic_card := _panel.find_child("ForgeExtractionItemCard", true, false) as Button
 		if automatic_card != null:
-			(automatic_card.get_node("Inspect") as Button).grab_focus()
+			(automatic_card.get_node("Content/Footer/Inspect") as Button).grab_focus()
 			await _frames(3)
 		_assert(automatic_scroll != null and automatic_card != null and body.get_global_rect().encloses(automatic_card.get_global_rect()) and automatic_scroll.get_h_scroll_bar().max_value > automatic_scroll.size.x, "many automatic retained items remain reachable in a bounded horizontal subscroll at %s" % label)
 		var sections := _panel.get_node_or_null("Frame/Content/Body/Sections/Eligible/Sections") as Container

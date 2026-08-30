@@ -112,7 +112,7 @@ const CAPTURE_STATES: Array[String] = [
 const CAPTURE_FOCUS_TARGETS: Array[String] = [
 	"none", "none", "none", "none", "member:24",
 	"alert_tray:close", "alert:inspect", "alert:ledger",
-	"upgrade_card:1", "recipient:24", "extraction:visual-result-selected",
+	"upgrade_card:1", "recipient:24", "extraction:auto_inspect",
 	"result:return_to_forge", "result:lost_row", "result:retry_resolution",
 	"result:retry_terminal_save", "result:retry_projection", "confirmation:cancel",
 	"hud:member", "hud:member", "member:24", "none", "hud:overflow",
@@ -471,7 +471,7 @@ func _capture_extraction(index: int, mode: StringName) -> void:
 		_assert((panel.get_node("Frame/Content/Pending") as Control).visible, "%s renders the production pending operation cue" % CAPTURES[index])
 		var item_action_enabled := false
 		for card: Button in cards:
-			var inspect := card.get_node("Inspect") as Button
+			var inspect := card.get_node("Content/Footer/Inspect") as Button
 			if (card.visible and not card.disabled) or (inspect.visible and not inspect.disabled):
 				item_action_enabled = true
 		_assert(not item_action_enabled, "%s excludes every item-card and Inspect action while pending" % CAPTURES[index])
@@ -483,8 +483,10 @@ func _capture_extraction(index: int, mode: StringName) -> void:
 			(panel.get_node("ItemTooltipDetail/Frame/Close") as Button).grab_focus()
 			_assert((panel.get_node("ItemTooltipDetail") as Control).visible, "%s renders the real extraction detail surface" % CAPTURES[index])
 	else:
-		var selected_anchor := _eligible_extraction_card(panel, "visual-result-selected")
-		if selected_anchor != null: selected_anchor.grab_focus()
+		var automatic_anchor := cards[0] if not cards.is_empty() and String(cards[0].get_meta(&"item_id", "")).begins_with("automatic-") else null
+		if automatic_anchor != null:
+			(automatic_anchor.get_node("Content/Footer/Inspect") as Button).grab_focus()
+			await _frames(2)
 	await _capture(index)
 	panel.free()
 	await _frames(2)
@@ -858,7 +860,7 @@ func _assert_declared_focus(index: int) -> void:
 		"alert_tray:close": _assert(owner.name == &"Close" and "CombatAlertTray" in String(owner.get_path()), "%s focuses alert tray Close" % CAPTURES[index])
 		"upgrade_card:1": _assert(owner.name == &"Card1", "%s focuses first real upgrade card" % CAPTURES[index])
 		"recipient:24": _assert(owner.name == &"Member_24", "%s focuses exact recipient 24" % CAPTURES[index])
-		"extraction:visual-result-selected": _assert(String(owner.get_meta(&"item_id", "")) == "visual-result-selected", "%s focuses exact selected extraction item" % CAPTURES[index])
+		"extraction:auto_inspect": _assert(owner.name == &"Inspect" and String((owner.get_parent().get_parent().get_parent() as Control).get_meta(&"item_id", "")).begins_with("automatic-"), "%s focuses exact automatic-item Inspect action" % CAPTURES[index])
 		"extraction:show_auto": _assert(owner.name == &"AutomaticList", "%s focuses the safe Show Auto summary filter while pending" % CAPTURES[index])
 		"extraction_detail:close": _assert(owner.name == &"Close" and "ItemTooltipDetail" in String(owner.get_path()), "%s focuses extraction detail Close" % CAPTURES[index])
 		"result:return_to_forge": _assert(owner.name == &"ReturnToForge", "%s focuses safe Return to Forge" % CAPTURES[index])

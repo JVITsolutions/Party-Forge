@@ -290,6 +290,7 @@ func _exercise_extraction(viewport_size: Vector2i, ui_scale: int, text_scale: in
 	panel.present(projection)
 	var viewport_rect := Rect2(Vector2.ZERO, Vector2(viewport_size))
 	var frame := panel.get_node("Frame") as Control
+	var header := panel.get_node("Frame/Content/Header") as Control
 	var body := panel.get_node("Frame/Content/Body") as ScrollContainer
 	var actions := panel.get_node("Frame/Content/Actions") as Control
 	var confirm := panel.get_node("Frame/Content/Actions/Confirm") as Button
@@ -308,15 +309,19 @@ func _exercise_extraction(viewport_size: Vector2i, ui_scale: int, text_scale: in
 		unique_ids[item_id] = true
 		_assert_target(card, "%s item %s" % [context_label, item_id])
 		_assert_contained(card, (card.get_parent() as Control).get_global_rect(), "%s item %s owning grid" % [context_label, item_id])
-		var inspect := card.get_node("Inspect") as Button
+		var inspect := card.get_node("Content/Footer/Inspect") as Button
 		_assert_target(inspect, "%s item %s Inspect" % [context_label, item_id])
 		_assert_contained(inspect, card.get_global_rect(), "%s item %s Inspect" % [context_label, item_id])
+		if _extraction_design_corner(viewport_size, ui_scale, text_scale):
+			_assert_extraction_card_layout(card, context_label, item_id)
 	_assert_sibling_non_overlap(cards, "%s extraction cards" % context_label)
+	if _extraction_design_corner(viewport_size, ui_scale, text_scale):
+		_assert_extraction_grid_fill(cards, context_label)
 	var extraction_actions := _direct_visible_controls(actions, "Button")
 	_assert_control_set_geometry(extraction_actions, frame.get_global_rect(), "%s pinned actions" % context_label)
 	if cards.size() == 24:
 		var first_card := cards[0]
-		var first_inspect := first_card.get_node("Inspect") as Button
+		var first_inspect := first_card.get_node("Content/Footer/Inspect") as Button
 		var second_card := cards[1]
 		first_card.grab_focus()
 		await _wait_for_focus(first_card, "%s first extraction card" % context_label)
@@ -330,7 +335,7 @@ func _exercise_extraction(viewport_size: Vector2i, ui_scale: int, text_scale: in
 		await _wait_for_scroll_reveal(body, final_card, "%s final extraction card" % context_label)
 		_assert(final_card.has_focus(), "%s final item is keyboard/controller focusable" % context_label)
 		_assert(_visible_inside(body, final_card), "%s final focused item is visible inside the extraction body" % context_label)
-		var final_inspect := final_card.get_node("Inspect") as Button
+		var final_inspect := final_card.get_node("Content/Footer/Inspect") as Button
 		await _push_action(&"ui_right")
 		await _wait_for_focus(final_inspect, "%s final extraction Inspect" % context_label)
 		await _push_action(&"ui_right")
@@ -366,6 +371,14 @@ func _exercise_extraction(viewport_size: Vector2i, ui_scale: int, text_scale: in
 		await _wait_for_hidden(warning, "%s unused-capacity warning" % context_label)
 		await _wait_for_focus(confirm, "%s warning return Confirm" % context_label)
 		_assert(confirm.has_focus(), "%s warning returns exact Confirm focus" % context_label)
+	if _extraction_design_corner(viewport_size, ui_scale, text_scale):
+		var resting_frame := frame.get_global_rect()
+		panel.set_pending(true)
+		await _wait_for_stable_layout([frame, header, body, actions], "%s pending" % context_label)
+		_assert_contained(frame, viewport_rect, "%s pending frame" % context_label)
+		_assert_contained(header, frame.get_global_rect(), "%s pending header" % context_label)
+		_assert(resting_frame.is_equal_approx(frame.get_global_rect()), "%s pending state preserves the extraction frame geometry" % context_label)
+		panel.set_pending(false)
 	_assert_controls_in_parent(_visible_buttons(panel), "%s all visible extraction actions" % context_label)
 	panel.free()
 	viewport.free()
@@ -821,6 +834,49 @@ func _new_viewport(viewport_size: Vector2i) -> SubViewport:
 
 func _authentic_stress(viewport_size: Vector2i, ui_scale: int, text_scale: int) -> bool:
 	return viewport_size == Vector2i(1280, 720) and ui_scale == 150 and text_scale == 150
+
+
+func _extraction_design_corner(viewport_size: Vector2i, ui_scale: int, text_scale: int) -> bool:
+	return (viewport_size == Vector2i(1920, 1080) and ui_scale == 100 and text_scale == 100) \
+		or (viewport_size == Vector2i(1280, 720) and ui_scale == 150 and text_scale == 150)
+
+
+func _assert_extraction_card_layout(card: Button, context_label: String, item_id: String) -> void:
+	var label := "%s item %s" % [context_label, item_id]
+	var content := card.get_node("Content") as Control
+	var name_label := card.get_node("Content/Name") as Label
+	var rarity := card.get_node("Content/Rarity") as Label
+	var source := card.get_node("Content/Source") as Label
+	var state := card.get_node("Content/Footer/State") as Control
+	var state_text := card.get_node("Content/Footer/State/StateText") as Label
+	var inspect := card.get_node("Content/Footer/Inspect") as Button
+	_assert(content.size.y + 0.5 >= content.get_combined_minimum_size().y, "%s content encloses its combined minimum" % label)
+	for pair: Array in [[name_label, "name"], [rarity, "rarity"], [source, "source"], [state, "state"]]:
+		_assert_contained(pair[0] as Control, content.get_global_rect(), "%s %s" % [label, pair[1]])
+	_assert(content.position.y + name_label.position.y >= 8.0, "%s name clears the focus border" % label)
+	_assert(source.size.y + 0.5 >= source.get_combined_minimum_size().y, "%s source copy is fully visible" % label)
+	_assert(state_text.size.x + 0.5 >= state_text.get_combined_minimum_size().x, "%s semantic state copy is untruncated" % label)
+	_assert(inspect.size.x + 0.5 >= inspect.get_combined_minimum_size().x and inspect.size.y + 0.5 >= inspect.get_combined_minimum_size().y, "%s Inspect encloses its combined minimum" % label)
+	var state_rect := state.get_global_rect()
+	var inspect_rect := inspect.get_global_rect()
+	_assert(not state_rect.intersection(inspect_rect).has_area(), "%s state and Inspect do not overlap" % label)
+	var horizontal_gap := maxf(inspect_rect.position.x - state_rect.end.x, state_rect.position.x - inspect_rect.end.x)
+	var vertical_gap := maxf(inspect_rect.position.y - state_rect.end.y, state_rect.position.y - inspect_rect.end.y)
+	_assert(maxf(horizontal_gap, vertical_gap) >= 8.0, "%s state and Inspect retain an 8px semantic gap" % label)
+
+
+func _assert_extraction_grid_fill(cards: Array[Button], context_label: String) -> void:
+	var seen_grids: Dictionary = {}
+	for card: Button in cards:
+		var grid := card.get_parent() as GridContainer
+		if grid == null or seen_grids.has(grid.get_instance_id()):
+			continue
+		seen_grids[grid.get_instance_id()] = true
+		var separation := float(grid.get_theme_constant(&"h_separation"))
+		var share := (grid.size.x - separation * float(maxi(grid.columns - 1, 0))) / float(maxi(grid.columns, 1))
+		for child: Node in grid.get_children():
+			if child is ForgeExtractionItemCard:
+				_assert((child as Control).size.x + 1.0 >= share, "%s cards fill the responsive column share: actual=%s expected=%s" % [context_label, (child as Control).size.x, share])
 
 
 func _long_detail_corner(viewport_size: Vector2i, ui_scale: int, text_scale: int) -> bool:

@@ -219,10 +219,9 @@ theme_type_variation = &"LivingForgeStatusChip"
 autowrap_mode = 2
 
 [node name="Pending" type="Label" parent="Frame/Content"]
-visible = false
+custom_minimum_size = Vector2(0, 32)
 layout_mode = 2
 theme_type_variation = &"LivingForgeStatusChip"
-text = "RESOLVING · PLEASE WAIT"
 
 [node name="Actions" type="HFlowContainer" parent="Frame/Content"]
 layout_mode = 2

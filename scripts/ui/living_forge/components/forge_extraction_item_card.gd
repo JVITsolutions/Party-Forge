@@ -25,7 +25,7 @@ func _ready() -> void:
 	if not mouse_entered.is_connected(_render): mouse_entered.connect(_render)
 	if not mouse_exited.is_connected(_render): mouse_exited.connect(_render)
 	gui_input.connect(_on_gui_input)
-	var inspect := get_node("Inspect") as Button
+	var inspect := get_node("Content/Footer/Inspect") as Button
 	var inspect_pressed := _request_inspect_from.bind(inspect)
 	if not inspect.pressed.is_connected(inspect_pressed): inspect.pressed.connect(inspect_pressed)
 
@@ -40,7 +40,7 @@ func present(projection: TerminalExtractionItemProjection) -> void:
 	set_meta(&"item_id", item_id)
 	_name = projection.name
 	_rarity = projection.rarity_name
-	_source = "%s · %s (%s) · slot %d" % [projection.owner_label, projection.container_label, String(projection.source_container_id), projection.source_slot]
+	_source = _source_copy(projection)
 	_automatic = projection.automatic
 	_selected = projection.selected
 	_lost = projection.lost
@@ -88,14 +88,14 @@ func _render() -> void:
 	(get_node("Content/Rarity") as Label).text = _rarity
 	(get_node("Content/Source") as Label).text = _source
 	var state := "AUTOMATIC · LOCKED" if _automatic else ("SELECTED" if _selected else "WILL BE LOST")
-	(get_node("Content/State/StateText") as Label).text = state
+	(get_node("Content/Footer/State/StateText") as Label).text = state
 	var icon_name := "lock.svg" if _automatic else ("check.svg" if _selected else "alert-triangle.svg")
 	var semantic_role := &"disabled" if _automatic else (&"valid" if _selected else &"warning")
 	var semantic_color := LivingForgeTokens.color(semantic_role, _high_contrast)
-	var state_icon := get_node("Content/State/StateIcon") as TextureRect
+	var state_icon := get_node("Content/Footer/State/StateIcon") as TextureRect
 	state_icon.texture = load(ICON_ROOT + icon_name) as Texture2D
 	state_icon.self_modulate = semantic_color
-	(get_node("Content/State/StateText") as Label).add_theme_color_override(&"font_color", semantic_color)
+	(get_node("Content/Footer/State/StateText") as Label).add_theme_color_override(&"font_color", semantic_color)
 	(get_node("FocusFrame") as Control).visible = has_focus()
 	var focus_style := StyleBoxFlat.new()
 	focus_style.draw_center = false
@@ -112,10 +112,21 @@ func _render() -> void:
 	disabled = _automatic or _pending or _interaction_locked
 	focus_mode = Control.FOCUS_NONE if _automatic else Control.FOCUS_ALL
 	mouse_default_cursor_shape = Control.CURSOR_FORBIDDEN if _automatic else Control.CURSOR_POINTING_HAND
-	var inspect := get_node("Inspect") as Button
+	var inspect := get_node("Content/Footer/Inspect") as Button
 	inspect.disabled = _pending or item_id.is_empty()
 	inspect.focus_mode = Control.FOCUS_NONE if inspect.disabled else Control.FOCUS_ALL
 	inspect.accessibility_name = "Inspect %s details" % _name
 	accessibility_name = "%s, %s, %s" % [_name, _rarity, _source]
 	accessibility_description = "%s. %s." % [accessibility_name, "Automatic locked" if _automatic else ("Selected" if _selected else "Not selected; will be lost")]
 	tooltip_text = "%s\n%s\n%s" % [_name, _source, state]
+
+func _source_copy(projection: TerminalExtractionItemProjection) -> String:
+	var labels: Array[String] = []
+	var owner := projection.owner_label.strip_edges()
+	var container := projection.container_label.strip_edges()
+	if not owner.is_empty():
+		labels.append(owner)
+	if not container.is_empty() and container != owner:
+		labels.append(container)
+	labels.append("Slot %d" % projection.source_slot)
+	return " · ".join(labels)
