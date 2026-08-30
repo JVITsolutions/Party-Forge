@@ -185,8 +185,20 @@ func _test_task13_defeat_driver_sparse_and_empty_offers(failures: Array[String])
     panel.configure_reduced_motion(true)
     var recovery_count: Array[int] = [0]
     panel.recovery_requested.connect(func() -> void: recovery_count[0] += 1)
+    var allocation_offer: Array[UpgradeChoice] = [
+        UpgradeChoice.new(UpgradeChoice.Kind.PARTY_STAT, &"max_health", "Maximum Health"),
+        UpgradeChoice.new(UpgradeChoice.Kind.PARTY_STAT, &"damage", "Damage"),
+        UpgradeChoice.new(UpgradeChoice.Kind.PARTY_STAT, &"move_speed", "Move Speed"),
+        UpgradeChoice.new(UpgradeChoice.Kind.PARTY_STAT, &"attack_speed", "Attack Speed"),
+        UpgradeChoice.new(UpgradeChoice.Kind.PARTY_STAT, &"pickup_radius", "Pickup Radius"),
+    ]
+    panel.show_choices(allocation_offer, party)
+    var retained_cards: Array[Node] = panel.get_node("Frame/Content/Offer/CardsScroll/Cards").get_children()
+    TestAssertions.equal(retained_cards.filter(func(card: Node) -> bool: return (card as Control).visible).size(), 5, "defeat validator fixture first allocates five visible offer cards", failures)
     var unavailable := UpgradeChoice.new(UpgradeChoice.Kind.PARTY_STAT, &"damage", "Damage")
     panel.show_choices([unavailable], party, {unavailable.key(): "Unavailable for validation."})
+    TestAssertions.truthy((retained_cards[0] as Control).visible, "sparse current offer keeps its one authoritative card visible", failures)
+    TestAssertions.truthy(retained_cards.slice(1).all(func(card: Node) -> bool: return not (card as Control).visible), "sparse current offer hides every extra retained card before driver input", failures)
     driver.call("_handle_level_panel", main)
     TestAssertions.equal(driver.get("choice_log"), [], "defeat validator ignores hidden retained cards when the only current choice is disabled", failures)
     TestAssertions.equal(recovery_count[0], 1, "defeat validator requests recovery when no current choice is selectable", failures)
