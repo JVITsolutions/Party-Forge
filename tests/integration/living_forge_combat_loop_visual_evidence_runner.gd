@@ -907,7 +907,16 @@ func _validate_existing_evidence(require_fresh := false) -> void:
 	var manifest := value as Dictionary if value is Dictionary else {}
 	_assert(int(manifest.get("schema_version", 0)) == MANIFEST_SCHEMA_VERSION, "manifest schema version is exactly 2")
 	_assert(String(manifest.get("source_head", "")) == _source_head(), "manifest source head matches exact candidate Git head")
-	_assert(JSON.stringify(manifest.get("source_tree_fingerprint", {})) == JSON.stringify(_source_fingerprint()), "manifest source fingerprint matches declared current source inputs")
+	var manifest_fingerprint := manifest.get("source_tree_fingerprint", {}) as Dictionary
+	var current_fingerprint := _source_fingerprint()
+	_assert(
+		String(manifest_fingerprint.get("algorithm", "")) == String(current_fingerprint.get("algorithm", ""))
+		and String(manifest_fingerprint.get("method", "")) == String(current_fingerprint.get("method", ""))
+		and int(manifest_fingerprint.get("path_count", -1)) == int(current_fingerprint.get("path_count", -2))
+		and String(manifest_fingerprint.get("sha256", "")) == String(current_fingerprint.get("sha256", ""))
+		and JSON.stringify(manifest_fingerprint.get("inputs", [])) == JSON.stringify(current_fingerprint.get("inputs", [])),
+		"manifest source fingerprint matches declared current source inputs",
+	)
 	_assert(String(manifest.get("capture_contract_sha256", "")) == _capture_contract_sha256(), "manifest capture contract hash matches all 45 exact specifications")
 	_assert(JSON.stringify(manifest.get("renderer", {})) == JSON.stringify(_renderer_metadata()), "manifest renderer metadata matches current renderer")
 	_assert(String(manifest.get("window_mode", "")) == "windowed", "manifest declares windowed capture")
@@ -992,8 +1001,8 @@ func _capture_contract_sha256() -> String:
 	for index: int in CAPTURES.size():
 		var metadata := CAPTURE_METADATA[index]
 		var fields: Array[String] = [
-			CAPTURES[index], CAPTURE_STATES[index], String(metadata.width), String(metadata.height),
-			String(metadata.ui), String(metadata.text), String(metadata.contrast), String(metadata.motion),
+			CAPTURES[index], CAPTURE_STATES[index], str(metadata.width), str(metadata.height),
+			str(metadata.ui), str(metadata.text), str(metadata.contrast), str(metadata.motion),
 			String(metadata.input), CAPTURE_FOCUS_TARGETS[index], _fixture_kind_for(metadata), String(metadata.surface),
 		]
 		var canonical := ""
