@@ -6,7 +6,7 @@
 
 **Architecture:** Separate snapshot loading from consumer mode policy, then resolve one typed Party Forge-owned Warehouse presentation state before building the Main Menu. A dedicated dialog explains the lock and may enter the existing City tree route, while the central Warehouse dispatcher reloads authoritative state and rechecks `WarehouseAccessPolicy` before every open. Candidate failure restores legacy presentation and emits only sanitized, deduplicated local diagnostics.
 
-**Tech Stack:** Godot 4.5.1/GDScript, `.tscn` UI scenes, Party Forge profile/settings stores, checked-in Party Forge City access snapshot, headless focused/unit/integration runners, PowerShell 7.
+**Tech Stack:** Godot 4.7.1 stable mono/GDScript, `.tscn` UI scenes, Party Forge profile/settings stores, checked-in Party Forge City access snapshot, headless focused/unit/integration runners, PowerShell 7.
 
 ## Global Constraints
 
@@ -143,7 +143,7 @@ The test fixture helper must build snapshots through `CityAccessSnapshotLoader.l
 - [ ] **Step 2: Run focused tests and verify RED**
 
 ```powershell
-$partyForgeGodot = 'F:\Projects(root)\Game dev\Engines\Godot_v4.5.1-stable_win64.exe'
+$partyForgeGodot = 'F:\Projects(root)\Game dev\godot\Godot_v4.7.1-stable_mono_win64\Godot_v4.7.1-stable_mono_win64_console.exe'
 & $partyForgeGodot --headless --path . --quit-after 600 --script res://tests/focused_test_runner.gd -- tests/unit/test_city_access_provider.gd tests/unit/test_city_access_shadow_comparator.gd tests/unit/test_warehouse_presentation_resolver.gd
 ```
 
