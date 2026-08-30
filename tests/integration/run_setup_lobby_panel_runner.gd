@@ -33,6 +33,10 @@ func _run() -> void:
 	await _test_prompt_device_switching(viewport, panel)
 	await _test_real_layout(viewport, panel)
 	panel.free()
+	if _restart_intent_runtime_contract_available():
+		await _test_restart_intent_boot_routing()
+	else:
+		_failures.append("Task 12 RunSetupRestartIntent boot routing is unavailable")
 	if _failures.is_empty():
 		print("RUN_SETUP_LOBBY_PANEL_SUMMARY: PASS")
 		quit(0)
@@ -51,6 +55,110 @@ func _test_initial_focus_priority(viewport: Window, panel: ClassSelectionPanel) 
 	panel.present(_projection(RunSetupLobbyProjection.State.READY, &"mage", &"fighter", RunSetupClassProjection.Compatibility.COMPATIBLE))
 	panel.open()
 	await _expect_focus(viewport, panel.selection_focus(&"mage"), "selected Mage takes initial-focus priority over Fighter preview")
+
+
+func _restart_intent_runtime_contract_available() -> bool:
+	var main_source := FileAccess.get_file_as_string("res://scripts/game/main.gd")
+	return (
+		ResourceLoader.exists("res://scripts/ui/run_setup/run_setup_restart_intent.gd")
+		and "RunSetupRestartIntent" in main_source
+		and "func _open_run_setup_from_restart(" in main_source
+		and "set_meta" in main_source
+		and "remove_meta" in main_source
+	)
+
+
+func _test_restart_intent_boot_routing() -> void:
+	const INTENT_PATH := "res://scripts/ui/run_setup/run_setup_restart_intent.gd"
+	const META_KEY := &"party_forge_run_setup_restart_intent"
+	var fixture_root := "user://tests/run_setup_lobby_restart/%d-%d" % [OS.get_process_id(), Time.get_ticks_usec()]
+	var profile_root := fixture_root.path_join("profiles")
+	var settings_path := fixture_root.path_join("settings.json")
+	ProfileTestSupport.remove_tree(fixture_root)
+	var profiles := ProfileManager.new()
+	_assert(profiles.bootstrap(profile_root).is_empty(), "restart-intent fixture bootstraps its profile root")
+	var intended := profiles.create_profile("Restart Intended")
+	var fallback := profiles.create_profile("Restart Fallback")
+	_assert(intended.ok() and fallback.ok(), "restart-intent fixture creates exact intended and fallback profiles")
+	if not intended.ok() or not fallback.ok():
+		ProfileTestSupport.remove_tree(fixture_root)
+		return
+	_assert(profiles.select_profile(fallback.profile.profile_id).is_empty(), "restart-intent fixture makes a different profile active before boot")
+	_assert(ResourceLoader.exists(INTENT_PATH), "RunSetupRestartIntent resource exists for boot routing")
+	if not ResourceLoader.exists(INTENT_PATH):
+		ProfileTestSupport.remove_tree(fixture_root)
+		return
+	var intent_script := load(INTENT_PATH) as GDScript
+	var valid_intent: Variant = intent_script.call(&"create", intended.profile.profile_id, &"mage", "")
+	_assert(valid_intent != null and bool(valid_intent.call(&"valid")), "valid restart intent retains exact profile and class")
+	set_meta(META_KEY, valid_intent)
+	var main := await _new_main(profile_root, settings_path)
+	var lobby := main.get_node("HUD/ClassSelection") as ClassSelectionPanel
+	var start := lobby.action_focus(&"start") as Button
+	_assert(not has_meta(META_KEY), "Main consumes restart metadata exactly once at boot")
+	_assert(main.active_profile() != null and main.active_profile().profile_id == intended.profile.profile_id, "restart boot activates the exact intended profile")
+	_assert(lobby.is_open() and lobby.selected_class_id() == &"mage" and lobby.previewed_class_id() == &"mage", "restart boot opens the lobby with the exact prior class preselected")
+	_assert(not main.run_started and main.active_run_context == null and (main.active_profile() == null or main.active_profile().resumable_run.is_empty()), "restart boot never checks out or auto-starts the selected run")
+	_assert(start != null and not start.disabled, "valid restart intent leaves Start Run available but uninvoked")
+	main.free()
+	await process_frame
+	var ordinary_boot := await _new_main(profile_root, settings_path)
+	_assert(not (ordinary_boot.get_node("HUD/ClassSelection") as ClassSelectionPanel).is_open() and not ordinary_boot.run_started, "consumed restart metadata cannot replay on an ordinary subsequent boot")
+	ordinary_boot.free()
+	await process_frame
+
+	await _assert_invalid_restart_intent(intent_script, profile_root, settings_path, "missing-profile", &"fighter", "Previous profile is unavailable.")
+	await _assert_invalid_restart_intent(intent_script, profile_root, settings_path, intended.profile.profile_id, &"missing_class", "Previous class is unavailable.")
+
+	# A durable terminal record is the authoritative boot truth even when a stale
+	# restart intent is present. The terminal pipeline creates the record from a
+	# real run; this verifies precedence at the actual Main boot boundary.
+	var terminal_main := await _new_main(profile_root, settings_path)
+	terminal_main.profile_manager.select_profile(intended.profile.profile_id)
+	if terminal_main.select_leader_class(&"fighter"):
+		set_meta(META_KEY, intent_script.call(&"create", intended.profile.profile_id, &"mage", ""))
+		terminal_main.call(&"_show_victory")
+		await process_frame
+		await process_frame
+		terminal_main.free()
+		await process_frame
+		var cold_terminal := await _new_main(profile_root, settings_path)
+		var terminal_panel := cold_terminal.get_node_or_null("HUD/TerminalExtraction") as Control
+		_assert(not has_meta(META_KEY), "terminal-precedence boot consumes overlapping restart metadata")
+		_assert(terminal_panel != null and terminal_panel.visible and not (cold_terminal.get_node("HUD/ClassSelection") as ClassSelectionPanel).is_open(), "durable terminal record wins boot precedence over restart-lobby metadata")
+		cold_terminal.free()
+	else:
+		_assert(false, "terminal-precedence fixture starts a real run before writing terminal truth")
+	if has_meta(META_KEY):
+		remove_meta(META_KEY)
+	ProfileTestSupport.remove_tree(fixture_root)
+
+
+func _assert_invalid_restart_intent(intent_script: GDScript, profile_root: String, settings_path: String, profile_id: String, class_id: StringName, reason: String) -> void:
+	const META_KEY := &"party_forge_run_setup_restart_intent"
+	set_meta(META_KEY, intent_script.call(&"create", profile_id, class_id, reason))
+	var main := await _new_main(profile_root, settings_path)
+	var lobby := main.get_node("HUD/ClassSelection") as ClassSelectionPanel
+	var start := lobby.action_focus(&"start") as Button
+	var status := lobby.get_node("Content/Margin/Layout/Status") as Label
+	_assert(not has_meta(META_KEY), "%s restart intent is consumed even when unresolved" % reason)
+	_assert(lobby.is_open() and lobby.selected_class_id().is_empty() and start != null and start.disabled, "%s leaves an explicit unresolved lobby with Start disabled" % reason)
+	_assert(status.text == reason, "%s is shown as the explicit unresolved-selection reason" % reason)
+	_assert(not main.run_started and main.active_run_context == null, "%s cannot check out or auto-start a run" % reason)
+	main.free()
+	await process_frame
+	if has_meta(META_KEY):
+		remove_meta(META_KEY)
+
+
+func _new_main(profile_root: String, settings_path: String) -> PartyForgeMain:
+	var main := (load("res://scenes/game/main.tscn") as PackedScene).instantiate() as PartyForgeMain
+	main.profile_root = profile_root
+	main.settings_path = settings_path
+	root.add_child(main)
+	await process_frame
+	await process_frame
+	return main
 
 
 func _test_pending_and_error_focus(viewport: Window, panel: ClassSelectionPanel) -> void:

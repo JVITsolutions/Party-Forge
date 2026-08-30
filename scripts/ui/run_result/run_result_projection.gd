@@ -2,7 +2,8 @@ class_name RunResultProjection
 extends RefCounted
 
 enum TerminalState { PENDING, INTERRUPTED, FINALIZED }
-enum InterruptionKind { TERMINAL_STATE_SAVE, RESOLUTION, PROJECTION }
+enum InterruptionKind { TERMINAL_STATE_SAVE, TERMINAL_REFRESH, RESOLUTION, PROJECTION }
+enum PendingKind { TERMINAL_STATE_SAVE, TERMINAL_REFRESH, RESOLUTION, PROJECTION, PROTECTION, TERMINAL_COMPLETION }
 
 var _terminal_state := TerminalState.PENDING
 var terminal_state: TerminalState:
@@ -10,6 +11,9 @@ var terminal_state: TerminalState:
 var _interruption_kind := -1
 var interruption_kind: int:
 	get: return _interruption_kind
+var _pending_kind := PendingKind.TERMINAL_STATE_SAVE
+var pending_kind: PendingKind:
+	get: return _pending_kind
 var _readable_reason := ""
 var readable_reason: String:
 	get: return _readable_reason
@@ -32,6 +36,7 @@ var party_members: Array[RunResultPartyMemberProjection]:
 		return result
 
 var retry_terminal_save_allowed := false
+var retry_terminal_refresh_allowed := false
 var retry_resolution_allowed := false
 var retry_projection_allowed := false
 var protect_displaced_gear_allowed := false
@@ -55,11 +60,13 @@ static func create(
 	readable_reason_value: String = "",
 	action_values: Dictionary = {},
 	displaced_count_value: int = 0,
+	pending_kind_value: int = PendingKind.TERMINAL_STATE_SAVE,
 ) -> RunResultProjection:
 	var result := RunResultProjection.new()
 	result._terminal_state = terminal_state_value
 	result._snapshot = snapshot_value.copy() if snapshot_value != null else null
 	result._interruption_kind = interruption_kind_value
+	result._pending_kind = pending_kind_value as PendingKind
 	result._readable_reason = readable_reason_value.strip_edges()
 	for value: Variant in section_values:
 		if value is RunRecapSectionProjection:
@@ -68,6 +75,7 @@ static func create(
 		if value is RunResultPartyMemberProjection:
 			result._party_members.append((value as RunResultPartyMemberProjection).copy())
 	result.retry_terminal_save_allowed = bool(action_values.get("retry_terminal_save", false))
+	result.retry_terminal_refresh_allowed = bool(action_values.get("retry_terminal_refresh", false))
 	result.retry_resolution_allowed = bool(action_values.get("retry_resolution", false))
 	result.retry_projection_allowed = bool(action_values.get("retry_projection", false))
 	result.protect_displaced_gear_allowed = bool(action_values.get("protect_displaced_gear", false))
@@ -99,24 +107,27 @@ func valid() -> bool:
 		return false
 	var actions := _action_count()
 	if _terminal_state == TerminalState.PENDING:
-		return _interruption_kind == -1 and _readable_reason.is_empty() and _sections.is_empty() and _party_members.is_empty() and actions == 0 and displaced_gear_count == 0
+		return _pending_kind in [PendingKind.TERMINAL_STATE_SAVE, PendingKind.TERMINAL_REFRESH, PendingKind.RESOLUTION, PendingKind.PROJECTION, PendingKind.PROTECTION, PendingKind.TERMINAL_COMPLETION] and _interruption_kind == -1 and _readable_reason.is_empty() and _sections.is_empty() and _party_members.is_empty() and actions == 0 and displaced_gear_count == 0
 	if _terminal_state == TerminalState.INTERRUPTED:
-		if _interruption_kind not in [InterruptionKind.TERMINAL_STATE_SAVE, InterruptionKind.RESOLUTION, InterruptionKind.PROJECTION] or _readable_reason.is_empty() or not _sections.is_empty() or not _party_members.is_empty() or restart_run_allowed:
+		if _interruption_kind not in [InterruptionKind.TERMINAL_STATE_SAVE, InterruptionKind.TERMINAL_REFRESH, InterruptionKind.RESOLUTION, InterruptionKind.PROJECTION] or _readable_reason.is_empty() or not _sections.is_empty() or not _party_members.is_empty() or restart_run_allowed:
 			return false
 		if _interruption_kind == InterruptionKind.TERMINAL_STATE_SAVE:
-			return retry_terminal_save_allowed and actions == 1 and displaced_gear_count == 0
+			return retry_terminal_save_allowed and not retry_terminal_refresh_allowed and actions == 1 and displaced_gear_count == 0
+		if _interruption_kind == InterruptionKind.TERMINAL_REFRESH:
+			return retry_terminal_refresh_allowed and not retry_terminal_save_allowed and actions == 1 and displaced_gear_count == 0
 		if _interruption_kind == InterruptionKind.PROJECTION:
 			return retry_projection_allowed and actions == 1 and displaced_gear_count == 0
-		if not retry_resolution_allowed or retry_terminal_save_allowed or retry_projection_allowed:
+		if not retry_resolution_allowed or retry_terminal_save_allowed or retry_terminal_refresh_allowed or retry_projection_allowed:
 			return false
 		if protect_displaced_gear_allowed != (displaced_gear_count > 0):
 			return false
 		return true
-	if _interruption_kind != -1 or not _readable_reason.is_empty() or _sections.is_empty() or _party_members.is_empty():
+	if _interruption_kind != -1 or _sections.is_empty() or _party_members.is_empty():
 		return false
-	if retry_terminal_save_allowed or retry_resolution_allowed or retry_projection_allowed or protect_displaced_gear_allowed or open_armoury_allowed:
+	if retry_terminal_save_allowed or retry_terminal_refresh_allowed or retry_resolution_allowed or retry_projection_allowed or protect_displaced_gear_allowed or open_armoury_allowed:
 		return false
-	if not restart_run_allowed or not return_to_forge_allowed or not quit_application_allowed or displaced_gear_count != 0:
+	var finalized_action_count := int(restart_run_allowed) + int(return_to_forge_allowed) + int(quit_application_allowed)
+	if displaced_gear_count != 0 or (finalized_action_count != 3 and (_readable_reason.is_empty() or finalized_action_count != 1)):
 		return false
 	return _valid_finalized_truth()
 
@@ -184,6 +195,7 @@ func _duration(elapsed_seconds: float) -> String:
 func copy() -> RunResultProjection:
 	var result := create(_terminal_state, _snapshot, _sections, _party_members, _interruption_kind, _readable_reason, {
 		"retry_terminal_save": retry_terminal_save_allowed,
+		"retry_terminal_refresh": retry_terminal_refresh_allowed,
 		"retry_resolution": retry_resolution_allowed,
 		"retry_projection": retry_projection_allowed,
 		"protect_displaced_gear": protect_displaced_gear_allowed,
@@ -191,15 +203,20 @@ func copy() -> RunResultProjection:
 		"restart_run": restart_run_allowed,
 		"return_to_forge": return_to_forge_allowed,
 		"quit_application": quit_application_allowed,
-	}, displaced_gear_count)
+	}, displaced_gear_count, _pending_kind)
 	result.high_contrast = high_contrast
 	result.reduced_motion = reduced_motion
 	result.ui_scale_percent = ui_scale_percent
 	result.text_scale_percent = text_scale_percent
 	return result
 
+func with_readable_reason(reason: String) -> RunResultProjection:
+	var result := copy()
+	result._readable_reason = reason.strip_edges()
+	return result
+
 func _action_count() -> int:
 	var result := 0
-	for allowed: bool in [retry_terminal_save_allowed, retry_resolution_allowed, retry_projection_allowed, protect_displaced_gear_allowed, open_armoury_allowed, restart_run_allowed, return_to_forge_allowed, quit_application_allowed]:
+	for allowed: bool in [retry_terminal_save_allowed, retry_terminal_refresh_allowed, retry_resolution_allowed, retry_projection_allowed, protect_displaced_gear_allowed, open_armoury_allowed, restart_run_allowed, return_to_forge_allowed, quit_application_allowed]:
 		if allowed: result += 1
 	return result

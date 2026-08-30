@@ -28,9 +28,10 @@ const DEVELOPER_QUICK_START_UNAVAILABLE_STATUS := "Developer Quick Start is temp
 const DEVELOPER_QUICK_START_PROFILE_REQUIRED_STATUS := "Choose a profile before using Developer Quick Start."
 const DEVELOPER_QUICK_START_MODE_REQUIRED_STATUS := "Save Developer Mode before using Developer Quick Start."
 const ITEM_SANDBOX_DEVELOPER_REQUIRED_STATUS := "Save Developer Mode before opening the Developer Item Sandbox."
+const TERMINAL_RECEIPT_FIELD := "terminal_resolution"
 
 enum LoadoutOrigin { RUN_SETUP, DEVELOPER_QUICK_START }
-enum LobbyReturnContext { MAIN_MENU, RUN_SETUP, LOADOUT_WARNING, DEVELOPER_QUICK_START }
+enum LobbyReturnContext { MAIN_MENU, RUN_SETUP, LOADOUT_WARNING, DEVELOPER_QUICK_START, TERMINAL_RESULT }
 
 var party_stats: Dictionary = {}
 var trait_upgrade_ranks: Dictionary = {}
@@ -84,6 +85,20 @@ var _loadout_compatibility := LoadoutCompatibilityService.new()
 var _loadout_transitions := LoadoutTransitionService.new()
 var _loadout_checkout := RunLoadoutCheckoutService.new()
 var _run_recovery := RunRecoveryService.new()
+var _terminal_recovery := RunTerminalRecoveryService.new()
+var _terminal_flow := RunTerminalFlow.new()
+var _terminal_result_view_model := RunResultViewModel.new()
+var _terminal_extraction_view_model := TerminalExtractionViewModel.new()
+var _terminal_selection := TerminalExtractionSelectionController.new()
+var _terminal_result_projection: RunResultProjection
+var _terminal_extraction_projection: TerminalExtractionProjection
+var _terminal_reload_route: Callable
+var _terminal_quit_route: Callable
+var _terminal_initial_refresh_profile_id := ""
+var _terminal_completion_refresh_profile_id := ""
+var _terminal_completion_refresh_action: StringName = &""
+var _restart_lobby_intent: RunSetupRestartIntent
+var _abandon_committed_profile_id := ""
 var _active_run_recovery: RunRecoveryResult
 var _pending_checkout_recovery: Dictionary = {}
 var _run_context_factory: Callable = func() -> PlayerRunContext: return PlayerRunContext.new()
@@ -100,6 +115,20 @@ var _lobby_return_context := LobbyReturnContext.MAIN_MENU
 var _lobby_return_focus: Control
 var _ground_chest_diagnostics: Dictionary = {}
 var _level_up_application_in_flight := false
+
+func configure_terminal_lifecycle(
+	flow: RunTerminalFlow,
+	recovery: RunTerminalRecoveryService,
+	reload_route: Callable = Callable(),
+	quit_route: Callable = Callable(),
+) -> bool:
+	if flow == null or recovery == null:
+		return false
+	_terminal_flow = flow
+	_terminal_recovery = recovery
+	_terminal_reload_route = reload_route
+	_terminal_quit_route = quit_route
+	return true
 
 func _ready() -> void:
 	if initialized:
@@ -125,7 +154,12 @@ func _ready() -> void:
 	catalog_valid = _validate_catalog(catalog)
 	_load_passive_tree_runtime()
 	_wire_static_ui()
-	_present_front_end()
+	var restart_intent := _consume_restart_intent()
+	if not _resume_terminal_at_boot():
+		if restart_intent != null:
+			_open_run_setup_from_restart(restart_intent)
+		else:
+			_present_front_end()
 	print("PARTY_FORGE_BOOT_OK")
 	print("PARTY_FORGE_CLASS_SELECTION_READY")
 
@@ -392,6 +426,7 @@ func _start_leader_class_from_checkout(definition: ClassDefinition, committed_pr
 	_selected_lobby_class_id = &""
 	_previewed_lobby_class_id = &""
 	_lobby_compatibility = null
+	_restart_lobby_intent = null
 	_lobby_return_focus = null
 	_lobby_return_context = LobbyReturnContext.MAIN_MENU
 	_pending_checkout_recovery = {}
@@ -1018,14 +1053,29 @@ func _wire_static_ui() -> void:
 		level_panel.application_requested.connect(_on_level_up_application_requested)
 	if not level_panel.recovery_requested.is_connected(_on_level_up_recovery_requested):
 		level_panel.recovery_requested.connect(_on_level_up_recovery_requested)
-	var result := get_node("HUD/RunResultPanel") as Control
-	if not result.is_connected("restart_requested", _restart): result.connect("restart_requested", _restart)
-	if not result.is_connected("quit_requested", _quit): result.connect("quit_requested", _quit)
+	var result := get_node("HUD/RunResultPanel") as RunResultPanel
+	if not result.restart_run_requested.is_connected(_on_restart_run_requested): result.restart_run_requested.connect(_on_restart_run_requested)
+	if not result.return_to_forge_requested.is_connected(_on_return_to_forge_requested): result.return_to_forge_requested.connect(_on_return_to_forge_requested)
+	if not result.open_armoury_requested.is_connected(_on_terminal_open_armoury_requested): result.open_armoury_requested.connect(_on_terminal_open_armoury_requested)
+	if not result.quit_application_requested.is_connected(_on_quit_application_requested): result.quit_application_requested.connect(_on_quit_application_requested)
+	if not result.retry_terminal_save_requested.is_connected(_on_retry_terminal_save_requested): result.retry_terminal_save_requested.connect(_on_retry_terminal_save_requested)
+	if not result.retry_terminal_refresh_requested.is_connected(_on_retry_terminal_refresh_requested): result.retry_terminal_refresh_requested.connect(_on_retry_terminal_refresh_requested)
+	if not result.retry_resolution_requested.is_connected(_on_retry_resolution_requested): result.retry_resolution_requested.connect(_on_retry_resolution_requested)
+	if not result.retry_projection_requested.is_connected(_on_retry_projection_requested): result.retry_projection_requested.connect(_on_retry_projection_requested)
+	if not result.protect_displaced_gear_requested.is_connected(_on_protect_displaced_gear_requested): result.protect_displaced_gear_requested.connect(_on_protect_displaced_gear_requested)
+	var extraction := get_node("HUD/TerminalExtraction") as TerminalExtractionPanel
+	if not extraction.item_toggle_requested.is_connected(_on_terminal_item_toggle_requested): extraction.item_toggle_requested.connect(_on_terminal_item_toggle_requested)
+	if not extraction.inspect_requested.is_connected(_on_terminal_item_inspect_requested): extraction.inspect_requested.connect(_on_terminal_item_inspect_requested)
+	if not extraction.confirm_requested.is_connected(_on_terminal_extraction_confirmed): extraction.confirm_requested.connect(_on_terminal_extraction_confirmed)
+	if not extraction.unused_capacity_acknowledged.is_connected(_on_terminal_unused_capacity_acknowledged): extraction.unused_capacity_acknowledged.connect(_on_terminal_unused_capacity_acknowledged)
+	if not extraction.retry_resolution_requested.is_connected(_on_retry_resolution_requested): extraction.retry_resolution_requested.connect(_on_retry_resolution_requested)
 	var neutral_ledger_policy := RunRulesSnapshot.from_settings(PartyForgeSettings.new()).feature_policy(LEDGER_FEATURE_IDS, LEDGER_UNLOCK_IDS, _profile_unlock_ids(active_profile()))
 	character_ledger.configure(game_run, party_manager, catalog, Callable(self, "_ledger_health_for_member"), [], neutral_ledger_policy)
 	run_pause_menu.configure(game_run, Callable(character_ledger, "is_open"))
-	if not run_pause_menu.quit_run_confirmed.is_connected(_return_to_front_end):
-		run_pause_menu.quit_run_confirmed.connect(_return_to_front_end)
+	if not run_pause_menu.abandon_run_confirmed.is_connected(_on_active_run_abandon_confirmed):
+		run_pause_menu.abandon_run_confirmed.connect(_on_active_run_abandon_confirmed)
+	if not run_pause_menu.retry_abandon_refresh_requested.is_connected(_on_retry_abandon_refresh_requested):
+		run_pause_menu.retry_abandon_refresh_requested.connect(_on_retry_abandon_refresh_requested)
 	if not game_run.boss_requested.is_connected(_spawn_boss): game_run.boss_requested.connect(_spawn_boss)
 	if not game_run.victory.is_connected(_show_victory): game_run.victory.connect(_show_victory)
 	if not game_run.defeat.is_connected(_show_defeat): game_run.defeat.connect(_show_defeat)
@@ -1266,7 +1316,46 @@ func _fail_developer_quick_start(status_text: String) -> void:
 	_focus_control_if_available(return_focus)
 
 
+func _consume_restart_intent() -> RunSetupRestartIntent:
+	if not is_inside_tree():
+		return null
+	var tree := get_tree()
+	if tree == null or not tree.has_meta(RunSetupRestartIntent.META_KEY):
+		return null
+	var value: Variant = tree.get_meta(RunSetupRestartIntent.META_KEY)
+	tree.remove_meta(RunSetupRestartIntent.META_KEY)
+	if not value is RunSetupRestartIntent:
+		return RunSetupRestartIntent.create("", &"", RunSetupLobbyViewModel.RESTART_SELECTION_REQUIRED_COPY)
+	return (value as RunSetupRestartIntent).copy()
+
+
+func _open_run_setup_from_restart(restart_intent: RunSetupRestartIntent) -> void:
+	_restart_lobby_intent = restart_intent.copy() if restart_intent != null else RunSetupRestartIntent.create("", &"", RunSetupLobbyViewModel.RESTART_SELECTION_REQUIRED_COPY)
+	var requested_profile_id := _restart_lobby_intent.profile_id
+	var select_error := profile_manager.select_profile(requested_profile_id) if profile_manager != null and not requested_profile_id.is_empty() else "profile unavailable"
+	var profile := profile_manager.active_profile() if profile_manager != null else null
+	if select_error.is_empty() and profile != null:
+		select_error = profile_manager.refresh_profile(profile.profile_id)
+		profile = profile_manager.active_profile()
+	(get_node("MainMenuScreen") as MainMenuScreen).close()
+	_lobby_return_context = LobbyReturnContext.RUN_SETUP
+	_lobby_return_focus = null
+	_selected_lobby_class_id = &""
+	_previewed_lobby_class_id = &""
+	_lobby_compatibility = null
+	if select_error.is_empty() and profile != null and String(profile.profile_id) == requested_profile_id:
+		var requested_class_id := _restart_lobby_intent.class_id
+		if catalog != null and catalog.class_by_id(requested_class_id) != null:
+			_selected_lobby_class_id = requested_class_id
+			_previewed_lobby_class_id = requested_class_id
+			_lobby_compatibility = _project_loadout_compatibility(profile, requested_class_id)
+	_present_lobby()
+	var initial_focus := _run_setup_lobby().selection_focus(_selected_lobby_class_id)
+	_run_setup_lobby().open(initial_focus)
+
+
 func _open_run_setup() -> void:
+	_restart_lobby_intent = null
 	var profile := profile_manager.active_profile() if profile_manager != null else null
 	if profile == null:
 		_open_profiles_from_main_menu()
@@ -1304,7 +1393,7 @@ func _present_lobby(status_copy: String = "", starting: bool = false) -> void:
 	var presentation_profile := profile.copy() if profile != null else null
 	if presentation_profile != null:
 		presentation_profile.prologue_state = ProfileState.PrologueState.COMPLETED
-	var projection := RunSetupLobbyViewModel.build(presentation_profile, catalog, _selected_lobby_class_id, _previewed_lobby_class_id, _lobby_compatibility, status_copy, starting)
+	var projection := RunSetupLobbyViewModel.build(presentation_profile, catalog, _selected_lobby_class_id, _previewed_lobby_class_id, _lobby_compatibility, status_copy, starting, _restart_lobby_intent)
 	if not status_copy.strip_edges().is_empty() and not starting:
 		projection.state = RunSetupLobbyProjection.State.ERROR
 		projection.status_copy = status_copy.strip_edges()
@@ -1331,6 +1420,7 @@ func _on_lobby_class_selection_requested(class_id: StringName) -> void:
 	if profile == null:
 		_open_profiles_from_main_menu()
 		return
+	_restart_lobby_intent = null
 	_selected_lobby_class_id = class_id
 	_previewed_lobby_class_id = class_id
 	_lobby_compatibility = _project_loadout_compatibility(profile, class_id)
@@ -1590,6 +1680,7 @@ func _on_run_setup_back_requested() -> void:
 	_selected_lobby_class_id = &""
 	_previewed_lobby_class_id = &""
 	_lobby_compatibility = null
+	_restart_lobby_intent = null
 	_lobby_return_context = LobbyReturnContext.MAIN_MENU
 	_lobby_return_focus = null
 	var menu := get_node("MainMenuScreen") as MainMenuScreen
@@ -1617,6 +1708,8 @@ func _present_front_end(preferred_focus: Control = null) -> void:
 	if recovery_dialog != null and recovery_dialog.call("is_open"):
 		recovery_dialog.call("close")
 	(get_node("HUD/Margin") as Control).visible = false
+	(get_node("HUD/TerminalExtraction") as TerminalExtractionPanel).hide_panel()
+	(get_node("HUD/RunResultPanel") as RunResultPanel).visible = false
 	_run_setup_lobby().close()
 	(get_node("DeveloperItemSandbox") as DeveloperItemSandbox).close()
 	(get_node("SettingsScreen") as SettingsScreen).close()
@@ -1685,6 +1778,9 @@ func _on_armoury_closed() -> void:
 	var selector := _run_setup_lobby()
 	var menu := get_node("MainMenuScreen") as MainMenuScreen
 	match return_context:
+		LobbyReturnContext.TERMINAL_RESULT:
+			selector.close()
+			_resume_terminal_after_armoury(origin)
 		LobbyReturnContext.RUN_SETUP:
 			_present_lobby()
 			selector.open(origin)
@@ -2125,15 +2221,512 @@ func _sync_pickup_radius() -> void:
 	if spawn_director != null:
 		spawn_director.set_pickup_radius_multiplier(_pickup_multiplier())
 
-func _show_victory() -> void:
-	_clear_live_loot()
+
+func _resume_terminal_at_boot() -> bool:
+	if not is_inside_tree():
+		return false
+	var profile := profile_manager.active_profile() if profile_manager != null else null
+	if profile == null or profile.terminal_resolution.is_empty():
+		return false
+	var refresh_error := profile_manager.refresh_profile(profile.profile_id)
+	if not refresh_error.is_empty():
+		push_error(refresh_error)
+		return true
+	profile = profile_manager.active_profile()
+	var inspected := _terminal_recovery.inspect(profile)
+	if not inspected.ok():
+		push_error(inspected.error)
+		return true
+	_terminal_flow = _terminal_flow.fresh()
+	var resumed := _terminal_flow.resume(inspected.record, profile, profile_root)
+	if not resumed.ok():
+		push_error(resumed.error)
+		return true
+	(get_node("MainMenuScreen") as MainMenuScreen).close()
+	_run_setup_lobby().close()
+	match inspected.record.stage:
+		RunTerminalRecoveryRecord.Stage.RESOLVED_AWAITING_PROJECTION:
+			_on_terminal_resolution_accepted(_terminal_flow.accepted_result())
+		RunTerminalRecoveryRecord.Stage.RESOLUTION_INTERRUPTED:
+			_present_resolution_interrupted(inspected.record.interruption_reason, _terminal_flow.confirmed_preflight())
+		_:
+			_present_terminal_extraction(profile, true)
+	return true
+
+
+func _on_terminal(outcome: RunTerminalSnapshot.Outcome) -> void:
+	if not _terminal_flow.can_begin() or active_run_context == null:
+		return
 	_cancel_hostile_effects()
-	get_node("HUD/RunResultPanel").call("show_result", true)
+	var profile := active_profile()
+	if profile == null:
+		return
+	var begun := _terminal_flow.begin(outcome, game_run.elapsed_time(), active_run_context, profile, profile_root)
+	if begun.snapshot == null:
+		push_error(begun.error)
+		return
+	(get_node("MainMenuScreen") as MainMenuScreen).close()
+	if not begun.ok():
+		_present_terminal_save_interrupted(begun.error)
+		return
+	_terminal_initial_refresh_profile_id = begun.snapshot.profile_id
+	_refresh_committed_initial_capture()
+
+
+func _present_terminal_save_interrupted(reason: String) -> void:
+	var built := _terminal_result_view_model.terminal_save_interrupted(_terminal_flow.snapshot(), reason)
+	if built.ok():
+		_present_result_projection(built.projection, &"RetryTerminalSave")
+
+
+func _present_terminal_refresh_interrupted(reason: String) -> void:
+	var built := _terminal_result_view_model.terminal_refresh_interrupted(_terminal_flow.snapshot(), reason)
+	if built.ok():
+		_present_result_projection(built.projection, &"RetryTerminalRefresh")
+
+
+func _present_terminal_pending(kind: RunResultProjection.PendingKind) -> void:
+	var built := _terminal_result_view_model.pending(_terminal_flow.snapshot(), kind)
+	if built.ok():
+		_present_result_projection(built.projection)
+
+
+func _present_result_projection(projection: RunResultProjection, preferred_action: StringName = &"") -> void:
+	if projection == null:
+		return
+	_terminal_result_projection = projection.with_visual_settings(saved_settings)
+	(get_node("HUD/TerminalExtraction") as TerminalExtractionPanel).hide_panel()
+	(get_node("HUD/RunResultPanel") as RunResultPanel).present(_terminal_result_projection, preferred_action)
+
+
+func _present_terminal_extraction(profile: ProfileState, initialize_selection: bool, changed_item_ids: Array[String] = []) -> void:
+	var policy := _terminal_flow.extraction_projection()
+	if policy == null or profile == null:
+		return
+	if initialize_selection and not _terminal_selection.initialize(policy):
+		_present_resolution_interrupted("Extraction choices could not be restored safely.", null)
+		return
+	if not initialize_selection:
+		policy = RunExtractionPolicy.project_source(_terminal_flow.snapshot().resolution_source, profile, _terminal_selection.selected_selections())
+	var projection := _terminal_extraction_view_model.build(policy, _terminal_flow.snapshot().resolution_source, profile)
+	if not changed_item_ids.is_empty():
+		projection = TerminalExtractionProjection.create(
+			projection.automatic_items, projection.eligible_items, projection.capacity,
+			projection.selected_item_ids, projection.lost_item_ids, changed_item_ids,
+			projection.player_error, projection.valid,
+		)
+	_terminal_extraction_projection = projection.copy()
+	(get_node("HUD/RunResultPanel") as RunResultPanel).visible = false
+	var panel := get_node("HUD/TerminalExtraction") as TerminalExtractionPanel
+	panel.apply_visual_settings(saved_settings)
+	panel.present(projection)
+
+
+func _on_terminal_item_toggle_requested(item_id: String) -> void:
+	if _terminal_selection.toggle(item_id):
+		_present_terminal_extraction(active_profile(), false)
+
+
+func _on_terminal_item_inspect_requested(item_id: String, anchor: Control) -> void:
+	if _terminal_extraction_projection == null:
+		return
+	var items: Array[TerminalExtractionItemProjection] = _terminal_extraction_projection.automatic_items
+	items.append_array(_terminal_extraction_projection.eligible_items)
+	for item: TerminalExtractionItemProjection in items:
+		if item.item_id == item_id:
+			(get_node("HUD/TerminalExtraction") as TerminalExtractionPanel).show_detail(item, anchor)
+			return
+
+
+func _on_terminal_extraction_confirmed() -> void:
+	var panel := get_node("HUD/TerminalExtraction") as TerminalExtractionPanel
+	if _terminal_selection.pending():
+		return
+	_terminal_selection.set_pending(true)
+	panel.set_pending(true)
+	var snapshot := _terminal_flow.snapshot()
+	var refresh_error := profile_manager.refresh_profile(snapshot.profile_id)
+	if not refresh_error.is_empty():
+		_terminal_selection.set_pending(false)
+		panel.set_pending(false)
+		panel.show_preflight(RunResolutionPreflightResult.failure(refresh_error))
+		return
+	var profile := active_profile()
+	var fresh_policy := RunExtractionPolicy.project_source(snapshot.resolution_source, profile, _terminal_selection.selected_selections())
+	var changed := _terminal_selection.reconcile(fresh_policy)
+	if fresh_policy == null or not fresh_policy.valid:
+		panel.set_pending(false)
+		panel.show_preflight(RunResolutionPreflightResult.failure("Extraction choices could not be refreshed safely."))
+		return
+	if not changed.is_empty():
+		_present_terminal_extraction(profile, false, changed)
+		return
+	if _terminal_selection.needs_unused_capacity_acknowledgement():
+		panel.set_pending(false)
+		var unused := maxi(0, fresh_policy.capacity - _terminal_selection.selected_item_ids().size())
+		var lost := maxi(0, fresh_policy.eligible_items.size() - _terminal_selection.selected_item_ids().size())
+		panel.show_unused_capacity_warning(unused, lost, panel.get_node("Frame/Content/Actions/Confirm") as Control)
+		return
+	_terminal_selection.set_pending(true)
+	var preflight := _terminal_flow.confirm_extraction(_terminal_selection.selected_item_ids(), profile)
+	if not preflight.ok():
+		_terminal_selection.set_pending(false)
+		if preflight.automatic_only_blocked:
+			_present_resolution_interrupted(preflight.player_reason, preflight)
+		else:
+			panel.set_pending(false)
+			panel.show_preflight(preflight)
+		return
+	var resolved := _terminal_flow.resolve(snapshot.profile_id, profile_root)
+	if not resolved.ok():
+		_present_resolution_interrupted(resolved.error, preflight)
+		return
+	_on_terminal_resolution_accepted(resolved)
+
+
+func _on_terminal_unused_capacity_acknowledged() -> void:
+	if _terminal_selection.acknowledge_unused_capacity():
+		_on_terminal_extraction_confirmed()
+
+
+func _present_resolution_interrupted(reason: String, preflight: RunResolutionPreflightResult, preferred_action: StringName = &"") -> void:
+	var snapshot := _terminal_flow.snapshot()
+	var profile := active_profile()
+	var durable := _run_recovery.verify_terminal_safety(profile, snapshot) if profile != null and snapshot != null else RunTerminalRecoverySafetyResult.failure("Terminal recovery truth is unavailable.")
+	var safe_reason := reason.strip_edges() if not reason.strip_edges().is_empty() else "Resolution was interrupted."
+	var built := _terminal_result_view_model.resolution_interrupted(snapshot, safe_reason, durable, preflight)
+	if built.ok():
+		_present_result_projection(built.projection, preferred_action)
+
+
+func _build_terminal_result(snapshot: RunTerminalSnapshot, resolution: RunResolutionResult, refreshed_profile: ProfileState) -> RunResultProjectionResult:
+	var safety := _run_recovery.verify_terminal_safety(refreshed_profile, snapshot)
+	if not safety.ok() or safety.record.stage != RunTerminalRecoveryRecord.Stage.RESOLVED_AWAITING_PROJECTION:
+		return RunResultProjectionResult.failure(safety.error if not safety.error.is_empty() else "Resolved terminal receipt is unavailable.")
+	return _terminal_result_view_model.build(snapshot, resolution, refreshed_profile, [])
+
+
+func _on_terminal_resolution_accepted(resolution: RunResolutionResult) -> void:
+	if resolution == null or not resolution.ok():
+		return
+	var snapshot := _terminal_flow.snapshot()
+	var refresh_error := profile_manager.refresh_profile(snapshot.profile_id)
+	if not refresh_error.is_empty():
+		_present_projection_interrupted(resolution, refresh_error)
+		return
+	var refreshed_profile := active_profile()
+	var built := _build_terminal_result(snapshot, resolution, refreshed_profile)
+	if not built.ok():
+		_present_projection_interrupted(resolution, built.error)
+		return
+	if not _terminal_flow.finalize():
+		_present_projection_interrupted(resolution, "Results could not be finalized.")
+		return
+	_clear_live_loot()
+	_present_result_projection(built.projection)
+
+
+func _present_projection_interrupted(resolution: RunResolutionResult, reason: String) -> void:
+	if resolution == null or not resolution.ok():
+		return
+	_terminal_flow.mark_projection_interrupted(reason)
+	var built := _terminal_result_view_model.projection_interrupted(_terminal_flow.snapshot(), resolution, reason)
+	if built.ok():
+		_present_result_projection(built.projection, &"RetryProjection")
+
+func _on_restart_run_requested() -> void:
+	if not _terminal_is_finalized() or not _complete_terminal_for_action(&"RestartRun"):
+		return
+	var snapshot := _terminal_flow.snapshot()
+	var intent := RunSetupRestartIntent.create(snapshot.profile_id, snapshot.resolution_source.leader_class_id)
+	get_tree().paused = false
+	if get_tree().current_scene != null:
+		get_tree().set_meta(RunSetupRestartIntent.META_KEY, intent.copy())
+		_request_terminal_reload()
+	else:
+		_open_run_setup_from_restart(intent)
+
+func _on_return_to_forge_requested() -> void:
+	if _terminal_is_finalized():
+		if not _complete_terminal_for_action(&"ReturnToForge"):
+			return
+		get_tree().paused = false
+		if get_tree().current_scene != null:
+			_request_terminal_reload()
+		else:
+			_present_front_end()
+		return
+	elif not _pre_resolution_navigation_safe():
+		return
+	get_tree().paused = false
+	if get_tree().current_scene != null:
+		_request_terminal_reload()
+	else:
+		_resume_terminal_at_boot()
+
+func _on_terminal_open_armoury_requested(return_focus: Control) -> void:
+	var safety := _refresh_terminal_safety([
+		RunTerminalRecoveryRecord.Stage.CHOOSING_EXTRACTION,
+		RunTerminalRecoveryRecord.Stage.RESOLUTION_INTERRUPTED,
+	])
+	if not safety.ok():
+		_present_resolution_interrupted(safety.error, _terminal_flow.confirmed_preflight(), &"OpenArmoury")
+		return
+	var projection := _profile_storage_projection(active_profile())
+	if not projection.valid:
+		_present_resolution_interrupted(projection.error, _terminal_flow.confirmed_preflight(), &"OpenArmoury")
+		return
+	_shared_storage_projection = projection
+	_lobby_return_context = LobbyReturnContext.TERMINAL_RESULT
+	_lobby_return_focus = return_focus
+	(get_node("HUD/RunResultPanel") as RunResultPanel).visible = false
+	(get_node("ArmouryScreen") as ArmouryScreen).open(projection, return_focus, _developer_mode_enabled())
+
+func _on_quit_application_requested() -> void:
+	if _terminal_is_finalized():
+		if not _complete_terminal_for_action(&"QuitApplication"):
+			return
+	elif not _pre_resolution_navigation_safe():
+		return
+	_request_terminal_quit()
+
+func _on_retry_terminal_save_requested() -> void:
+	_present_terminal_pending(RunResultProjection.PendingKind.TERMINAL_STATE_SAVE)
+	var retried := _terminal_flow.retry_persist_initial(profile_root)
+	if not retried.ok():
+		_present_terminal_save_interrupted(retried.error)
+		return
+	_terminal_initial_refresh_profile_id = _terminal_flow.snapshot().profile_id
+	_refresh_committed_initial_capture()
+
+
+func _on_retry_terminal_refresh_requested() -> void:
+	if _terminal_initial_refresh_profile_id.is_empty():
+		return
+	_present_terminal_pending(RunResultProjection.PendingKind.TERMINAL_REFRESH)
+	_refresh_committed_initial_capture()
+
+
+func _refresh_committed_initial_capture() -> void:
+	if _terminal_initial_refresh_profile_id.is_empty():
+		return
+	var refresh_error := profile_manager.refresh_profile(_terminal_initial_refresh_profile_id)
+	if not refresh_error.is_empty():
+		_present_terminal_refresh_interrupted("Terminal state was saved, but recovery could not refresh. Retry Terminal Recovery. %s" % refresh_error)
+		return
+	if _terminal_flow.state() != RunTerminalFlow.State.CHOOSING_EXTRACTION and not _rebuild_terminal_flow(active_profile()):
+		_present_terminal_refresh_interrupted("Terminal state was saved, but recovery could not be rebuilt. Retry Terminal Recovery.")
+		return
+	if _terminal_flow.state() != RunTerminalFlow.State.CHOOSING_EXTRACTION:
+		_present_terminal_refresh_interrupted("Terminal state was saved, but recovery could not be rebuilt. Retry Terminal Recovery.")
+		return
+	_terminal_initial_refresh_profile_id = ""
+	_present_terminal_extraction(active_profile(), true)
+
+func _on_retry_resolution_requested() -> void:
+	_present_terminal_pending(RunResultProjection.PendingKind.RESOLUTION)
+	var snapshot := _terminal_flow.snapshot()
+	var refresh_error := profile_manager.refresh_profile(snapshot.profile_id)
+	if not refresh_error.is_empty():
+		_present_resolution_interrupted(refresh_error, _terminal_flow.confirmed_preflight(), &"RetryResolution")
+		return
+	if not _rebuild_terminal_flow(active_profile()):
+		_present_resolution_interrupted("Resolution recovery could not be restored.", null, &"RetryResolution")
+		return
+	var preflight := _terminal_flow.confirmed_preflight()
+	if preflight != null and not preflight.ok() and _terminal_flow.automatic_only_blocked():
+		_present_resolution_interrupted(preflight.player_reason, preflight)
+		return
+	var resolved := _terminal_flow.resolve(snapshot.profile_id, profile_root)
+	if not resolved.ok():
+		_present_resolution_interrupted(resolved.error, preflight, &"RetryResolution")
+		return
+	_on_terminal_resolution_accepted(resolved)
+
+func _on_retry_projection_requested() -> void:
+	_present_terminal_pending(RunResultProjection.PendingKind.PROJECTION)
+	var snapshot := _terminal_flow.snapshot()
+	var refresh_error := profile_manager.refresh_profile(snapshot.profile_id)
+	if not refresh_error.is_empty():
+		_present_projection_interrupted(_terminal_flow.accepted_result(), refresh_error)
+		return
+	var retried := _terminal_flow.retry_projection(active_profile())
+	if not retried.ok():
+		_present_projection_interrupted(_terminal_flow.accepted_result(), retried.error)
+		return
+	_on_terminal_resolution_accepted(retried)
+
+func _on_protect_displaced_gear_requested(_return_focus: Control) -> void:
+	_present_terminal_pending(RunResultProjection.PendingKind.PROTECTION)
+	var protected := _terminal_flow.protect_displaced_gear(_terminal_flow.snapshot().profile_id, profile_root)
+	if not protected.ok():
+		_present_resolution_interrupted(protected.error, _terminal_flow.confirmed_preflight(), &"ProtectDisplacedGear")
+		return
+	var refresh_error := profile_manager.refresh_profile(_terminal_flow.snapshot().profile_id)
+	if not refresh_error.is_empty():
+		_present_resolution_interrupted(refresh_error, null, &"RetryResolution")
+		return
+	_present_terminal_extraction(active_profile(), true)
+
+func _on_active_run_abandon_confirmed() -> void:
+	if active_run_context == null or not _abandon_committed_profile_id.is_empty():
+		return
+	var result := _run_recovery.forfeit(active_run_context.profile_id, active_run_context.run_id, profile_root)
+	if not result.ok():
+		run_pause_menu.reject_abandon(result.error)
+		return
+	_abandon_committed_profile_id = active_run_context.profile_id
+	var refresh_error := profile_manager.refresh_profile(_abandon_committed_profile_id)
+	if not refresh_error.is_empty():
+		run_pause_menu.present_abandon_committed_refresh_error("Run abandoned, but the profile could not refresh. Retry Return to Forge.")
+		return
+	run_pause_menu.complete_abandon_return()
+	_abandon_committed_profile_id = ""
+	_return_to_front_end()
+
+func _on_retry_abandon_refresh_requested() -> void:
+	if _abandon_committed_profile_id.is_empty():
+		return
+	var refresh_error := profile_manager.refresh_profile(_abandon_committed_profile_id)
+	if not refresh_error.is_empty():
+		run_pause_menu.present_abandon_committed_refresh_error("Run abandoned, but the profile could not refresh. Retry Return to Forge.")
+		return
+	run_pause_menu.complete_abandon_return()
+	_abandon_committed_profile_id = ""
+	_return_to_front_end()
+
+func _resume_terminal_after_armoury(origin: Control) -> void:
+	var snapshot := _terminal_flow.snapshot()
+	var refresh_error := profile_manager.refresh_profile(snapshot.profile_id)
+	if not refresh_error.is_empty() or not _rebuild_terminal_flow(active_profile()):
+		_present_resolution_interrupted(refresh_error if not refresh_error.is_empty() else "Terminal recovery could not be restored after Armoury.", null, &"RetryResolution")
+		return
+	match _terminal_flow.state():
+		RunTerminalFlow.State.CHOOSING_EXTRACTION:
+			_present_terminal_extraction(active_profile(), true)
+		RunTerminalFlow.State.RESOLUTION_INTERRUPTED:
+			var inspected := _terminal_recovery.inspect(active_profile())
+			_present_resolution_interrupted(inspected.record.interruption_reason if inspected.ok() else "Resolution was interrupted.", _terminal_flow.confirmed_preflight(), &"OpenArmoury")
+		_:
+			_present_resolution_interrupted("Terminal recovery returned an unexpected state.", null, &"RetryResolution")
+
+
+func _rebuild_terminal_flow(profile: ProfileState) -> bool:
+	var inspected := _terminal_recovery.inspect(profile)
+	if not inspected.ok():
+		return false
+	var rebuilt := _terminal_flow.fresh()
+	var resumed := rebuilt.resume(inspected.record, profile, profile_root)
+	if not resumed.ok():
+		return false
+	_terminal_flow = rebuilt
+	return true
+
+
+func _terminal_is_finalized() -> bool:
+	return _terminal_result_projection != null and _terminal_result_projection.terminal_state == RunResultProjection.TerminalState.FINALIZED and _terminal_flow.state() == RunTerminalFlow.State.FINALIZED
+
+
+func _complete_terminal_for_action(action_name: StringName) -> bool:
+	var finalized := _terminal_result_projection.copy()
+	if not _terminal_completion_refresh_action.is_empty():
+		if action_name != _terminal_completion_refresh_action or _terminal_completion_refresh_profile_id.is_empty():
+			_present_finalized_action_error(finalized, _terminal_completion_refresh_action, "Terminal completion is already durable; retry the pending route.", true)
+			return false
+		_present_terminal_pending(RunResultProjection.PendingKind.TERMINAL_COMPLETION)
+		var retry_refresh_error := profile_manager.refresh_profile(_terminal_completion_refresh_profile_id)
+		if not retry_refresh_error.is_empty():
+			_present_finalized_action_error(finalized, action_name, retry_refresh_error, true)
+			return false
+		_terminal_completion_refresh_action = &""
+		_terminal_completion_refresh_profile_id = ""
+		return true
+	var safety := _refresh_terminal_safety([RunTerminalRecoveryRecord.Stage.RESOLVED_AWAITING_PROJECTION])
+	if not safety.ok():
+		_present_finalized_action_error(finalized, action_name, safety.error)
+		return false
+	_present_terminal_pending(RunResultProjection.PendingKind.TERMINAL_COMPLETION)
+	var snapshot := _terminal_flow.snapshot()
+	var completed := _terminal_recovery.complete_terminal(snapshot.profile_id, snapshot.run_id, profile_root)
+	if completed.ok():
+		_terminal_completion_refresh_action = action_name
+		_terminal_completion_refresh_profile_id = snapshot.profile_id
+		var refresh_error := profile_manager.refresh_profile(snapshot.profile_id)
+		if refresh_error.is_empty():
+			_terminal_completion_refresh_action = &""
+			_terminal_completion_refresh_profile_id = ""
+			return true
+		_present_finalized_action_error(finalized, action_name, refresh_error, true)
+		return false
+	_present_finalized_action_error(finalized, action_name, completed.error)
+	return false
+
+
+func _present_finalized_action_error(finalized: RunResultProjection, action_name: StringName, detail: String, completion_committed: bool = false) -> void:
+	var readable := (
+		"Terminal record is cleared, but the profile could not refresh. Retry %s."
+		if completion_committed
+		else "Terminal record could not be cleared. Retry %s."
+	) % _terminal_action_label(action_name)
+	if not detail.strip_edges().is_empty():
+		readable = "%s %s" % [readable, detail]
+	var rejected := (
+		_terminal_result_view_model.finalized_committed_refresh_interrupted(finalized, readable, action_name)
+		if completion_committed
+		else _terminal_result_view_model.finalized_action_interrupted(finalized, readable)
+	)
+	if rejected.ok():
+		_present_result_projection(rejected.projection, action_name)
+
+
+func _terminal_action_label(action_name: StringName) -> String:
+	match action_name:
+		&"RestartRun": return "Restart Run"
+		&"QuitApplication": return "Quit Application"
+		_: return "Return to Forge"
+
+
+func _pre_resolution_navigation_safe() -> bool:
+	return _refresh_terminal_safety([
+		RunTerminalRecoveryRecord.Stage.CHOOSING_EXTRACTION,
+		RunTerminalRecoveryRecord.Stage.RESOLUTION_INTERRUPTED,
+	]).ok()
+
+
+func _refresh_terminal_safety(allowed_stages: Array[int]) -> RunTerminalRecoverySafetyResult:
+	var snapshot := _terminal_flow.snapshot()
+	if snapshot == null or profile_manager == null:
+		return RunTerminalRecoverySafetyResult.failure("Terminal recovery truth is unavailable.")
+	var refresh_error := profile_manager.refresh_profile(snapshot.profile_id)
+	if not refresh_error.is_empty():
+		return RunTerminalRecoverySafetyResult.failure(refresh_error)
+	var profile := active_profile()
+	var safety := _run_recovery.verify_terminal_safety(profile, snapshot)
+	if not safety.ok():
+		return safety
+	if int(safety.record.stage) not in allowed_stages:
+		return RunTerminalRecoverySafetyResult.failure("Terminal recovery stage changed before this action.")
+	return safety
+
+
+func _request_terminal_reload() -> void:
+	if _terminal_reload_route.is_valid():
+		_terminal_reload_route.call()
+	else:
+		get_tree().reload_current_scene()
+
+
+func _request_terminal_quit() -> void:
+	if _terminal_quit_route.is_valid():
+		_terminal_quit_route.call()
+	else:
+		get_tree().quit()
+
+func _show_victory() -> void:
+	_on_terminal(RunTerminalSnapshot.Outcome.VICTORY)
 
 func _show_defeat() -> void:
-	_clear_live_loot()
-	_cancel_hostile_effects()
-	get_node("HUD/RunResultPanel").call("show_result", false)
+	_on_terminal(RunTerminalSnapshot.Outcome.DEFEAT)
 
 func _cancel_hostile_effects() -> void:
 	if boss != null and is_instance_valid(boss) and boss.has_method("cancel_pending_effects"):
@@ -2142,17 +2735,13 @@ func _cancel_hostile_effects() -> void:
 		for effect: Node in get_tree().get_nodes_in_group(&"hostile_transient_effects"):
 			effect.queue_free()
 
-func _restart() -> void:
-	_clear_live_loot()
-	get_tree().paused = false
-	if get_tree().current_scene != null:
-		get_tree().reload_current_scene()
-
 func _return_to_front_end() -> void:
 	_clear_live_loot()
 	get_tree().paused = false
 	if get_tree().current_scene != null:
 		get_tree().reload_current_scene()
+	else:
+		_present_front_end()
 
 func _quit() -> void:
 	_clear_live_loot()

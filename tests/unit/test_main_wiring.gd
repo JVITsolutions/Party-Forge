@@ -3,8 +3,9 @@ extends RefCounted
 const COMBAT_RESOLUTION_SERVICE := preload("res://scripts/combat/combat_resolution_service.gd")
 
 const REQUIRED_PATHS: PackedStringArray = [
-	"res://scripts/run/run_terminal_flow.gd",
-	"res://scripts/run/run_terminal_recovery_service.gd",
+    "res://scripts/run/run_terminal_flow.gd",
+    "res://scripts/run/run_terminal_recovery_service.gd",
+    "res://scripts/ui/run_setup/run_setup_restart_intent.gd",
     "res://scripts/ui/hud.gd",
     "res://scripts/ui/hud/combat_alert_tray.gd",
     "res://scripts/ui/hud/combat_member_inspect_panel.gd",
@@ -113,6 +114,7 @@ func run() -> Array[String]:
     ProfileTestSupport.remove_tree(_profile_root)
     _cleanup_settings_artifacts(_settings_path)
     _test_main_scene_graph(failures)
+    _test_terminal_cutover_contract(failures)
     _test_run_combat_resolution_service_wiring(failures)
     _test_profile_boot_and_developer_gate(failures)
     _test_active_run_context_graph_and_failure_cleanup(failures)
@@ -902,7 +904,12 @@ func _test_main_menu_route_composition(failures: Array[String]) -> void:
     TestAssertions.truthy(main.has_method("_on_developer_quick_start_requested"), "main exposes one dedicated Developer Quick Start handler", failures)
     TestAssertions.truthy(menu.route_requested.is_connected(Callable(main, "_on_main_menu_route_requested")), "main connects menu routes exactly through composition", failures)
     TestAssertions.truthy(not menu.route_requested.is_connected(Callable(main, "_quit")), "menu route signal does not bypass the route dispatcher", failures)
-    TestAssertions.truthy((main.get_node("HUD/RunResultPanel") as Control).is_connected("quit_requested", Callable(main, "_quit")), "result panel keeps desktop quit ownership", failures)
+    var result_panel := main.get_node("HUD/RunResultPanel") as RunResultPanel
+    TestAssertions.truthy(result_panel.restart_run_requested.is_connected(Callable(main, "_on_restart_run_requested")), "result panel routes Restart Run through its distinct terminal handler", failures)
+    TestAssertions.truthy(result_panel.return_to_forge_requested.is_connected(Callable(main, "_on_return_to_forge_requested")), "result panel routes Return to Forge through its distinct terminal handler", failures)
+    TestAssertions.truthy(result_panel.open_armoury_requested.is_connected(Callable(main, "_on_terminal_open_armoury_requested")), "result panel routes Open Armoury through terminal recovery", failures)
+    TestAssertions.truthy(result_panel.quit_application_requested.is_connected(Callable(main, "_on_quit_application_requested")), "result panel routes Quit Application through its distinct terminal handler", failures)
+    TestAssertions.truthy(result_panel.retry_terminal_refresh_requested.is_connected(Callable(main, "_on_retry_terminal_refresh_requested")), "result panel routes committed initial refresh through its refresh-only handler", failures)
     var created := main.profile_manager.create_profile("Route Tester")
     TestAssertions.truthy(created.ok(), "route fixture creates an active profile", failures)
     var initial_state := main.active_profile().prologue_state
@@ -1322,11 +1329,10 @@ func _test_integrated_overlay_input_and_front_end_seam(failures: Array[String]) 
     TestAssertions.truthy(not ledger.is_open(), "Escape closes the ledger through modal input ordering", failures)
     TestAssertions.truthy(not bool(pause_menu.visible), "same Escape does not open RunPauseMenu behind the ledger", failures)
     TestAssertions.truthy(not tree.paused, "ledger close restores the running tree exactly", failures)
-    var front_end_callable := Callable(main, "_return_to_front_end")
-    TestAssertions.truthy(main.has_method("_return_to_front_end"), "main exposes the front-end routing seam", failures)
-    TestAssertions.truthy(pause_menu.is_connected("quit_run_confirmed", front_end_callable), "confirmed Quit Run routes to the front-end seam", failures)
-    var result := main.get_node("HUD/RunResultPanel")
-    TestAssertions.truthy(result.is_connected("quit_requested", Callable(main, "_quit")), "desktop result-panel Quit keeps its protected route", failures)
+    TestAssertions.truthy(main.has_method("_on_active_run_abandon_confirmed"), "main exposes the authoritative active-run Abandon seam", failures)
+    TestAssertions.truthy(pause_menu.is_connected("abandon_run_confirmed", Callable(main, "_on_active_run_abandon_confirmed")), "confirmed Abandon routes through the authoritative Main handler", failures)
+    var result := main.get_node("HUD/RunResultPanel") as RunResultPanel
+    TestAssertions.truthy(result.quit_application_requested.is_connected(Callable(main, "_on_quit_application_requested")), "terminal Quit Application keeps its receipt-aware route", failures)
     var menu := main.get_node_or_null("MainMenuScreen") as MainMenuScreen
     TestAssertions.truthy(menu != null and menu.route_requested.is_connected(Callable(main, "_on_main_menu_route_requested")), "main-menu Quit intent remains routed through PartyForgeMain", failures)
     tree.paused = false
@@ -1843,17 +1849,50 @@ func _test_catalog_gate_blocks_public_start(failures: Array[String]) -> void:
     main.free()
 
 func _test_result_panel_requests_once(failures: Array[String]) -> void:
-    var panel := (load("res://scenes/ui/run_result_panel.tscn") as PackedScene).instantiate() as Control
-    panel.call("_ready")
-    var restart_count: Array[int] = [0]
-    var quit_count: Array[int] = [0]
-    panel.connect("restart_requested", func() -> void: restart_count[0] += 1)
-    panel.connect("quit_requested", func() -> void: quit_count[0] += 1)
-    (panel.get_node("Panel/Content/Restart") as Button).pressed.emit()
-    (panel.get_node("Panel/Content/Quit") as Button).pressed.emit()
-    TestAssertions.equal(restart_count[0], 1, "restart routes once", failures)
-    TestAssertions.equal(quit_count[0], 1, "quit routes once", failures)
+    var panel := (load("res://scenes/ui/run_result_panel.tscn") as PackedScene).instantiate() as RunResultPanel
+    TestAssertions.truthy(panel.has_signal(&"restart_run_requested"), "result panel exposes exact Restart Run intent", failures)
+    TestAssertions.truthy(panel.has_signal(&"return_to_forge_requested"), "result panel exposes exact Return to Forge intent", failures)
+    TestAssertions.truthy(panel.has_signal(&"open_armoury_requested"), "result panel exposes exact Open Armoury intent", failures)
+    TestAssertions.truthy(panel.has_signal(&"quit_application_requested"), "result panel exposes exact Quit Application intent", failures)
+    TestAssertions.truthy(panel.has_signal(&"protect_displaced_gear_requested"), "result panel exposes exact protected-overflow intent", failures)
+    TestAssertions.truthy(panel.has_signal(&"retry_projection_requested"), "result panel exposes exact Retry Results intent", failures)
+    TestAssertions.truthy(panel.has_signal(&"retry_terminal_refresh_requested"), "result panel exposes exact committed terminal refresh intent", failures)
+    TestAssertions.truthy(not panel.has_signal(&"restart_requested") and not panel.has_signal(&"quit_requested"), "obsolete generic result intents are removed", failures)
     panel.free()
+
+
+func _test_terminal_cutover_contract(failures: Array[String]) -> void:
+    var source := FileAccess.get_file_as_string("res://scripts/game/main.gd")
+    var terminal_body := _function_body(source, "_on_terminal")
+    var accepted_body := _function_body(source, "_on_terminal_resolution_accepted")
+    TestAssertions.truthy("_terminal_flow.begin" in terminal_body and not ("_clear_live_loot" in terminal_body), "terminal entry captures and never clears", failures)
+    var guard_index := terminal_body.find("if not _terminal_flow.can_begin()")
+    var cancellation_index := terminal_body.find("_cancel_hostile_effects()")
+    var begin_index := terminal_body.find("_terminal_flow.begin")
+    TestAssertions.truthy(guard_index >= 0 and cancellation_index > guard_index and cancellation_index < begin_index, "terminal ownership cancels hostile transients after the once-only guard and before capture/presentation", failures)
+    TestAssertions.truthy(not ("_cancel_hostile_effects()" in accepted_body), "accepted tail never relies on or repeats terminal-entry hostile cancellation", failures)
+    TestAssertions.truthy(accepted_body.find("_build_terminal_result") >= 0 and accepted_body.find("_build_terminal_result") < accepted_body.find("_clear_live_loot"), "validated result precedes cleanup", failures)
+    TestAssertions.truthy(accepted_body.find("_terminal_flow.finalize") > accepted_body.find("_build_terminal_result") and accepted_body.find("_terminal_flow.finalize") < accepted_body.find("_clear_live_loot"), "fallible finalize succeeds before cleanup", failures)
+    for required: String in [
+        "_terminal_flow.confirm_extraction", "profile_manager.refresh_profile", "restart_run_requested",
+        "return_to_forge_requested", "open_armoury_requested", "quit_application_requested",
+        "protect_displaced_gear_requested", "retry_projection_requested",
+        "RunTerminalRecoveryService", "complete_terminal", "verify_terminal_safety",
+    ]:
+        TestAssertions.truthy(required in source, "Main terminal cutover includes %s" % required, failures)
+    TestAssertions.truthy(source.find("terminal_resolution") >= 0 and source.find("terminal_resolution") < source.find("resumable_run"), "durable terminal boot recovery precedes ordinary resumable-run recovery", failures)
+    TestAssertions.truthy("RunSetupRestartIntent" in source and "set_meta" in source and "remove_meta" in source, "Restart Run uses one-shot SceneTree intent metadata", failures)
+    TestAssertions.truthy("_run_recovery.forfeit(active_run_context.profile_id, active_run_context.run_id, profile_root)" in source, "active-run Abandon uses the sole authoritative forfeit path", failures)
+    var retry_abandon_body := _function_body(source, "_on_retry_abandon_refresh_requested")
+    TestAssertions.truthy("refresh_profile" in retry_abandon_body and not ("forfeit" in retry_abandon_body), "committed Abandon retry refreshes only and never forfeits twice", failures)
+
+
+func _function_body(source: String, function_name: String) -> String:
+    var start := source.find("func %s(" % function_name)
+    if start < 0:
+        return ""
+    var next := source.find("\nfunc ", start + 1)
+    return source.substr(start) if next < 0 else source.substr(start, next - start)
 
 func _test_visual_language(failures: Array[String]) -> void:
     var swarmer := (load("res://scenes/enemies/swarmer.tscn") as PackedScene).instantiate() as Node3D

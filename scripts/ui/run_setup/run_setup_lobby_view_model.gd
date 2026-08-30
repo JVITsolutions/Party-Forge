@@ -7,6 +7,7 @@ const CHECKING_COPY := "Checking class loadout."
 const READY_COPY := "Ready to begin your run."
 const NEEDS_ATTENTION_COPY := "Review your equipped items before starting."
 const STARTING_COPY := "Starting your run."
+const RESTART_SELECTION_REQUIRED_COPY := "Previous run selection is unavailable. Choose a class to begin your run."
 
 static func build(
 	profile_value: Variant,
@@ -16,6 +17,7 @@ static func build(
 	compatibility_value: Variant,
 	safe_status_copy: String,
 	starting: Variant,
+	restart_intent_value: RunSetupRestartIntent = null,
 ) -> RunSetupLobbyProjection:
 	var seats := _seats()
 	var unavailable_copy := _unavailable_copy(safe_status_copy)
@@ -23,6 +25,14 @@ static func build(
 	var catalog := catalog_value as GameCatalog if catalog_value is GameCatalog else null
 	if not _profile_is_completed(profile) or not _catalog_is_usable(catalog):
 		return RunSetupLobbyProjection.create(seats, [], &"", &"", RunSetupLobbyProjection.State.UNAVAILABLE, unavailable_copy)
+	var restart_intent := restart_intent_value
+	if restart_intent != null:
+		var restart_valid := restart_intent.valid() and restart_intent.profile_id == profile.profile_id and catalog.class_by_id(restart_intent.class_id) != null
+		if not restart_valid:
+			var restart_reason := restart_intent.reason if not restart_intent.reason.is_empty() else RESTART_SELECTION_REQUIRED_COPY
+			return RunSetupLobbyProjection.create(seats, _class_values(catalog, &"", null), &"", &"", RunSetupLobbyProjection.State.NO_SELECTION, restart_reason)
+		selected_class_id_value = restart_intent.class_id
+		previewed_class_id_value = restart_intent.class_id
 	if selected_class_id_value.is_empty():
 		return RunSetupLobbyProjection.create(seats, _class_values(catalog, &"", null), &"", previewed_class_id_value, RunSetupLobbyProjection.State.NO_SELECTION, NO_SELECTION_COPY)
 	var selected_definition := catalog.class_by_id(selected_class_id_value)

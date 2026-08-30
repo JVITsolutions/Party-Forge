@@ -21,6 +21,7 @@ var _transaction_base := ""
 var _transaction_id := ""
 var _request: RunResolutionRequest
 var _confirmed_preflight: RunResolutionPreflightResult
+var _protected_displaced_item_ids: Array[String] = []
 var _initial_persistence_interrupted := false
 var _last_automatic_only_blocked := false
 var _profile_root := ProfileStore.DEFAULT_ROOT
@@ -38,6 +39,9 @@ func snapshot() -> RunTerminalSnapshot: return _snapshot.copy() if _snapshot != 
 func accepted_result() -> RunResolutionResult:
 	if _accepted == null or not _accepted.ok(): return null
 	return RunResolutionResult.success(_accepted.profile, _accepted.duplicate, _accepted.accepted_extraction, _accepted.protected_displaced_item_ids)
+func confirmed_preflight() -> RunResolutionPreflightResult: return _copy_preflight(_confirmed_preflight)
+func automatic_only_blocked() -> bool: return _last_automatic_only_blocked
+func fresh() -> RunTerminalFlow: return RunTerminalFlow.new(_recovery, _resolution)
 
 func begin(outcome: RunTerminalSnapshot.Outcome, elapsed_seconds: float, context: PlayerRunContext, profile: ProfileState, profile_root: String) -> RunTerminalBeginResult:
 	if not can_begin(): return RunTerminalBeginResult.failure(RunTerminalBeginResult.Code.CAPTURE_FAILED, _error("state", "terminal event is already active"))
@@ -53,6 +57,11 @@ func begin(outcome: RunTerminalSnapshot.Outcome, elapsed_seconds: float, context
 		_state = State.RESOLUTION_INTERRUPTED
 		_initial_persistence_interrupted = true
 		return RunTerminalBeginResult.failure(RunTerminalBeginResult.Code.PERSISTENCE_FAILED, persisted.error, _snapshot)
+	var adoption_error := _adopt_durable_initial_snapshot(persisted.profile)
+	if not adoption_error.is_empty():
+		_state = State.RESOLUTION_INTERRUPTED
+		_initial_persistence_interrupted = true
+		return RunTerminalBeginResult.failure(RunTerminalBeginResult.Code.PERSISTENCE_FAILED, adoption_error, _snapshot)
 	var projected_error := _project_from_profile(persisted.profile, [])
 	if not projected_error.is_empty():
 		_state = State.RESOLUTION_INTERRUPTED
@@ -70,6 +79,10 @@ func retry_persist_initial(profile_root: String) -> ProfileMutationResult:
 	if not persisted.ok():
 		_state = State.RESOLUTION_INTERRUPTED
 		return persisted
+	var adoption_error := _adopt_durable_initial_snapshot(persisted.profile)
+	if not adoption_error.is_empty():
+		_state = State.RESOLUTION_INTERRUPTED
+		return _mutation_failure(adoption_error)
 	var projection_error := _project_from_profile(persisted.profile, [])
 	if not projection_error.is_empty():
 		_state = State.RESOLUTION_INTERRUPTED
@@ -103,7 +116,7 @@ func confirm_extraction(item_ids: Array[String], profile: ProfileState) -> RunRe
 		return RunResolutionPreflightResult.failure(_error("state", "a different selection is already confirmed"))
 	var request := RunResolutionRequest.create(next_transaction, _snapshot.profile_id, _snapshot.run_id, _snapshot.run_seed, _snapshot.run_player_id, _snapshot.leader_member_id, selections)
 	_state = State.PREFLIGHTING
-	var preflight := RunResolutionService.new().preflight_source(profile, _snapshot.resolution_source, request)
+	var preflight := _resolution.preflight_source(profile, _snapshot.resolution_source, request)
 	_last_automatic_only_blocked = preflight.automatic_only_blocked
 	if not preflight.ok():
 		if preflight.automatic_only_blocked:
@@ -113,7 +126,7 @@ func confirm_extraction(item_ids: Array[String], profile: ProfileState) -> RunRe
 			var reason := preflight.player_reason if not preflight.player_reason.strip_edges().is_empty() else preflight.error
 			var interrupted := RunTerminalRecoveryRecord.create(
 				RunTerminalRecoveryRecord.Stage.RESOLUTION_INTERRUPTED,
-				_snapshot, selected_ids, next_transaction, [], reason, null, "",
+				_snapshot, selected_ids, next_transaction, _protected_displaced_item_ids, reason, null, "",
 			)
 			if not interrupted.ok():
 				_last_automatic_only_blocked = false
@@ -132,7 +145,7 @@ func confirm_extraction(item_ids: Array[String], profile: ProfileState) -> RunRe
 		else:
 			_state = State.CHOOSING_EXTRACTION
 		return preflight
-	var record_result := RunTerminalRecoveryRecord.create(RunTerminalRecoveryRecord.Stage.CHOOSING_EXTRACTION, _snapshot, preflight.extraction.selected_item_ids, next_transaction, [], "", null, "")
+	var record_result := RunTerminalRecoveryRecord.create(RunTerminalRecoveryRecord.Stage.CHOOSING_EXTRACTION, _snapshot, preflight.extraction.selected_item_ids, next_transaction, _protected_displaced_item_ids, "", null, "")
 	if not record_result.ok():
 		_state = State.CHOOSING_EXTRACTION
 		return RunResolutionPreflightResult.failure(record_result.error)
@@ -154,8 +167,11 @@ func resolve(profile_id: String, profile_root: String) -> RunResolutionResult:
 	resolution_pending.emit()
 	var result := _resolution.resolve_terminal_source(profile_id, _snapshot.resolution_source, _request, profile_root)
 	if not result.ok():
-		var interrupted := RunTerminalRecoveryRecord.create(RunTerminalRecoveryRecord.Stage.RESOLUTION_INTERRUPTED, _snapshot, _projection.selected_item_ids, _transaction_id, [], result.error, null, "")
-		if interrupted.ok(): _recovery.persist_selection(profile_id, interrupted.record, profile_root)
+		var interrupted := RunTerminalRecoveryRecord.create(RunTerminalRecoveryRecord.Stage.RESOLUTION_INTERRUPTED, _snapshot, _projection.selected_item_ids, _transaction_id, _protected_displaced_item_ids, result.error, null, "")
+		if interrupted.ok():
+			var persisted_interruption := _recovery.persist_resolution_interruption(profile_id, interrupted.record, profile_root)
+			if not persisted_interruption.ok():
+				result = RunResolutionResult.failure(persisted_interruption.error)
 		_state = State.RESOLUTION_INTERRUPTED
 		resolution_failed.emit(result.error, true)
 		return result
@@ -171,6 +187,7 @@ func resume(record: RunTerminalRecoveryRecord, profile: ProfileState, _profile_r
 	if not inspected.ok() or inspected.record.to_dictionary() != record.to_dictionary():
 		return RunTerminalSnapshotResult.failure(inspected.error if not inspected.error.is_empty() else _error("record", "durable record changed"))
 	_snapshot = record.snapshot
+	_protected_displaced_item_ids = record.protected_displaced_item_ids.duplicate()
 	self._profile_root = _profile_root
 	_transaction_base = "terminal-resolution:%s" % _snapshot.run_id
 	_transaction_id = record.transaction_id
@@ -184,7 +201,7 @@ func resume(record: RunTerminalRecoveryRecord, profile: ProfileState, _profile_r
 	if not projection_error.is_empty(): return RunTerminalSnapshotResult.failure(projection_error)
 	if not record.transaction_id.is_empty():
 		_request = RunResolutionRequest.create(record.transaction_id, _snapshot.profile_id, _snapshot.run_id, _snapshot.run_seed, _snapshot.run_player_id, _snapshot.leader_member_id, _selections_for_ids(_projection, record.selected_item_ids))
-		_confirmed_preflight = RunResolutionService.new().preflight_source(profile, _snapshot.resolution_source, _request)
+		_confirmed_preflight = _resolution.preflight_source(profile, _snapshot.resolution_source, _request)
 		_last_automatic_only_blocked = (
 			record.stage == RunTerminalRecoveryRecord.Stage.RESOLUTION_INTERRUPTED
 			and _confirmed_preflight.automatic_only_blocked
@@ -193,24 +210,41 @@ func resume(record: RunTerminalRecoveryRecord, profile: ProfileState, _profile_r
 	_state = State.RESOLUTION_INTERRUPTED if record.stage == RunTerminalRecoveryRecord.Stage.RESOLUTION_INTERRUPTED else State.CHOOSING_EXTRACTION
 	return RunTerminalSnapshotResult.success(_snapshot)
 
-func protect_displaced_gear(profile_id: String, profile_root: String) -> ProfileMutationResult:
+func protect_displaced_gear(profile_id: String, profile_root: String) -> RunResolutionPreflightResult:
 	if _state != State.RESOLUTION_INTERRUPTED or not _last_automatic_only_blocked or _snapshot == null:
-		return _mutation_failure("displaced gear protection is unavailable")
+		return RunResolutionPreflightResult.failure(_error("protection", "displaced gear protection is unavailable"))
 	var loaded := ProfileStore.new().load_profile(profile_id, profile_root)
-	if not loaded.ok(): return _mutation_failure(loaded.error)
+	if not loaded.ok(): return RunResolutionPreflightResult.failure(loaded.error)
 	var inspected := _recovery.inspect(loaded.profile)
-	if not inspected.ok(): return _mutation_failure(inspected.error)
+	if not inspected.ok(): return RunResolutionPreflightResult.failure(inspected.error)
+	var selected_ids: Array[String] = inspected.record.selected_item_ids.duplicate()
 	var protected := _recovery.protect_displaced_gear(profile_id, inspected.record, profile_root)
-	if not protected.ok(): return protected
-	var projection_error := _project_from_profile(protected.profile, [])
-	if not projection_error.is_empty(): return _mutation_failure(projection_error)
-	_last_automatic_only_blocked = false
-	_transaction_id = ""
-	_request = null
-	_confirmed_preflight = null
-	_state = State.CHOOSING_EXTRACTION
-	extraction_ready.emit(extraction_projection())
-	return protected
+	if not protected.ok(): return RunResolutionPreflightResult.failure(protected.error)
+	var protected_record_result := _recovery.inspect(protected.profile)
+	if not protected_record_result.ok(): return RunResolutionPreflightResult.failure(protected_record_result.error)
+	_protected_displaced_item_ids = protected_record_result.record.protected_displaced_item_ids.duplicate()
+	var projection_error := _project_from_profile(protected.profile, selected_ids)
+	if not projection_error.is_empty(): return RunResolutionPreflightResult.failure(projection_error)
+	var post_request := RunResolutionRequest.create(
+		inspected.record.transaction_id,
+		_snapshot.profile_id, _snapshot.run_id, _snapshot.run_seed,
+		_snapshot.run_player_id, _snapshot.leader_member_id,
+		_selections_for_ids(_projection, selected_ids),
+	)
+	var post_preflight := _resolution.preflight_source(protected.profile, _snapshot.resolution_source, post_request)
+	_projection = post_preflight.extraction if post_preflight.extraction != null else _projection
+	_last_automatic_only_blocked = post_preflight.automatic_only_blocked
+	_state = State.RESOLUTION_INTERRUPTED if post_preflight.automatic_only_blocked else State.CHOOSING_EXTRACTION
+	if post_preflight.ok():
+		_transaction_id = ""
+		_request = null
+		_confirmed_preflight = null
+		extraction_ready.emit(extraction_projection())
+	else:
+		_transaction_id = inspected.record.transaction_id
+		_request = post_request
+		_confirmed_preflight = _copy_preflight(post_preflight)
+	return _copy_preflight(post_preflight)
 
 func retry_projection(profile: ProfileState) -> RunResolutionResult:
 	if _state not in [State.PROJECTION_INTERRUPTED, State.RESOLVED_AWAITING_PROJECTION] or _snapshot == null:
@@ -250,6 +284,14 @@ func _project_from_profile(profile: ProfileState, selected_ids: Array[String]) -
 	var projected := RunExtractionPolicy.project_source(_snapshot.resolution_source, profile, selections)
 	if projected == null or not projected.valid: return _error("projection", "persisted extraction projection is invalid")
 	_projection = projected
+	return ""
+
+func _adopt_durable_initial_snapshot(profile: ProfileState) -> String:
+	var inspected := _recovery.inspect(profile)
+	if not inspected.ok() or inspected.record.stage != RunTerminalRecoveryRecord.Stage.CHOOSING_EXTRACTION:
+		return inspected.error if not inspected.error.is_empty() else _error("record", "durable terminal capture is unavailable")
+	_snapshot = inspected.record.snapshot
+	_transaction_base = "terminal-resolution:%s" % _snapshot.run_id
 	return ""
 
 func _selections_for_ids(projection: RunExtractionProjection, ids: Array[String]) -> Array[ExtractionSelection]:

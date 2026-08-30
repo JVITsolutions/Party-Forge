@@ -3,10 +3,11 @@ extends RefCounted
 
 const RESERVED_PROVIDER_IDS: Array[StringName] = [&"outcome", &"party", &"loot"]
 
-func pending(snapshot: RunTerminalSnapshot) -> RunResultProjectionResult:
+func pending(snapshot: RunTerminalSnapshot, pending_kind: int = RunResultProjection.PendingKind.TERMINAL_STATE_SAVE) -> RunResultProjectionResult:
 	if snapshot == null:
 		return RunResultProjectionResult.failure("terminal snapshot is unavailable")
-	return RunResultProjectionResult.success(RunResultProjection.create(RunResultProjection.TerminalState.PENDING, snapshot, [], []))
+	var projection := RunResultProjection.create(RunResultProjection.TerminalState.PENDING, snapshot, [], [], -1, "", {}, 0, pending_kind)
+	return RunResultProjectionResult.success(projection) if projection.valid() else RunResultProjectionResult.failure("pending operation kind is invalid")
 
 func terminal_save_interrupted(snapshot: RunTerminalSnapshot, reason: String) -> RunResultProjectionResult:
 	if snapshot == null or reason.strip_edges().is_empty():
@@ -17,19 +18,23 @@ func terminal_save_interrupted(snapshot: RunTerminalSnapshot, reason: String) ->
 		{"retry_terminal_save": true},
 	))
 
-func resolution_interrupted(snapshot: RunTerminalSnapshot, reason: String, recovery_safety: Variant) -> RunResultProjectionResult:
+func terminal_refresh_interrupted(snapshot: RunTerminalSnapshot, reason: String) -> RunResultProjectionResult:
+	if snapshot == null or reason.strip_edges().is_empty():
+		return RunResultProjectionResult.failure("terminal-refresh interruption requires snapshot and readable reason")
+	return RunResultProjectionResult.success(RunResultProjection.create(
+		RunResultProjection.TerminalState.INTERRUPTED, snapshot, [], [],
+		RunResultProjection.InterruptionKind.TERMINAL_REFRESH, reason,
+		{"retry_terminal_refresh": true},
+	))
+
+func resolution_interrupted(
+	snapshot: RunTerminalSnapshot,
+	reason: String,
+	durable: RunTerminalRecoverySafetyResult,
+	preflight: RunResolutionPreflightResult = null,
+) -> RunResultProjectionResult:
 	if snapshot == null or reason.strip_edges().is_empty():
 		return RunResultProjectionResult.failure("resolution interruption requires snapshot and readable reason")
-	var durable: RunTerminalRecoverySafetyResult
-	var preflight: RunResolutionPreflightResult
-	if recovery_safety is Dictionary:
-		var safety_map := recovery_safety as Dictionary
-		if safety_map.get("durable") is RunTerminalRecoverySafetyResult:
-			durable = safety_map.get("durable") as RunTerminalRecoverySafetyResult
-		if safety_map.get("preflight") is RunResolutionPreflightResult:
-			preflight = safety_map.get("preflight") as RunResolutionPreflightResult
-	elif recovery_safety is RunTerminalRecoverySafetyResult:
-		durable = recovery_safety as RunTerminalRecoverySafetyResult
 	var typed_automatic_block := (
 		preflight != null
 		and preflight.automatic_only_blocked
@@ -37,17 +42,8 @@ func resolution_interrupted(snapshot: RunTerminalSnapshot, reason: String, recov
 		and preflight.mandatory_stash_slots_known
 		and preflight.mandatory_stash_slots > 0
 	)
-	var displaced_ids: Array[String] = []
-	if durable != null and durable.ok():
-		displaced_ids.assign(durable.record.protected_displaced_item_ids)
-	var displaced_ids_proven := displaced_ids.size() == preflight.mandatory_stash_slots if typed_automatic_block else false
-	var seen_displaced: Dictionary = {}
-	for item_id: String in displaced_ids:
-		if item_id.strip_edges().is_empty() or seen_displaced.has(item_id):
-			displaced_ids_proven = false
-		seen_displaced[item_id] = true
 	var durable_allowed := durable != null and durable.ok()
-	var protect_allowed := durable_allowed and typed_automatic_block and displaced_ids_proven
+	var protect_allowed := durable_allowed and typed_automatic_block
 	var displaced_count := preflight.mandatory_stash_slots if protect_allowed else 0
 	return RunResultProjectionResult.success(RunResultProjection.create(
 		RunResultProjection.TerminalState.INTERRUPTED, snapshot, [], [],
@@ -72,6 +68,29 @@ func projection_interrupted(snapshot: RunTerminalSnapshot, accepted_resolution: 
 		RunResultProjection.InterruptionKind.PROJECTION, reason,
 		{"retry_projection": true},
 	))
+
+func finalized_action_interrupted(finalized: RunResultProjection, reason: String) -> RunResultProjectionResult:
+	if finalized == null or finalized.terminal_state != RunResultProjection.TerminalState.FINALIZED or not finalized.valid() or reason.strip_edges().is_empty():
+		return RunResultProjectionResult.failure("finalized action interruption requires finalized truth and readable reason")
+	var projection := finalized.with_readable_reason(reason)
+	return RunResultProjectionResult.success(projection) if projection.valid() else RunResultProjectionResult.failure("finalized action interruption is invalid")
+
+func finalized_committed_refresh_interrupted(finalized: RunResultProjection, reason: String, action_name: StringName) -> RunResultProjectionResult:
+	if finalized == null or finalized.terminal_state != RunResultProjection.TerminalState.FINALIZED or not finalized.valid() or reason.strip_edges().is_empty():
+		return RunResultProjectionResult.failure("committed terminal refresh interruption requires finalized truth and readable reason")
+	var actions := {
+		"restart_run": action_name == &"RestartRun",
+		"return_to_forge": action_name == &"ReturnToForge",
+		"quit_application": action_name == &"QuitApplication",
+	}
+	if not bool(actions.restart_run) and not bool(actions.return_to_forge) and not bool(actions.quit_application):
+		return RunResultProjectionResult.failure("committed terminal refresh interruption requires an exact finalized action")
+	var projection := RunResultProjection.create(
+		RunResultProjection.TerminalState.FINALIZED,
+		finalized.snapshot, finalized.sections, finalized.party_members,
+		-1, reason, actions,
+	)
+	return RunResultProjectionResult.success(projection) if projection.valid() else RunResultProjectionResult.failure("committed terminal refresh interruption is invalid")
 
 func build(snapshot: RunTerminalSnapshot, resolution: RunResolutionResult, refreshed_profile: ProfileState, providers: Array) -> RunResultProjectionResult:
 	if snapshot == null or resolution == null or not resolution.ok() or refreshed_profile == null:

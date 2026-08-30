@@ -191,22 +191,34 @@ func _test_typed_state_constructors(view_model: Variant, fixture: Dictionary, fa
 	TestAssertions.equal(int(pending_projection.get("terminal_state")), 0, "pending constructor sets PENDING", failures)
 	TestAssertions.equal(pending_projection.call(&"section_ids"), [], "pending never exposes a partial recap", failures)
 	TestAssertions.truthy(not _any_action_allowed(pending_projection), "pending disables every result action", failures)
+	var projection_source := FileAccess.get_file_as_string("res://scripts/ui/run_result/run_result_projection.gd")
+	var has_typed_pending := "enum PendingKind" in projection_source and "pending_kind" in projection_source
+	TestAssertions.truthy(has_typed_pending, "pending projections carry a typed operation kind", failures)
+	if has_typed_pending:
+		for pending_kind: int in range(6):
+			var typed_pending: Variant = view_model.call(&"pending", fixture.snapshot, pending_kind)
+			TestAssertions.truthy(bool(typed_pending.call(&"ok")), "pending kind %d is typed and valid" % pending_kind, failures)
+			TestAssertions.equal(int(typed_pending.get("projection").get("pending_kind")), pending_kind, "pending kind %d remains operation-accurate" % pending_kind, failures)
 
 	var save_failed: Variant = view_model.call(&"terminal_save_interrupted", fixture.snapshot, "Terminal record could not be saved.")
 	var save_projection: Variant = save_failed.get("projection")
-	TestAssertions.equal(int(save_projection.get("interruption_kind")), 0, "save failure has exact TERMINAL_STATE_SAVE kind", failures)
+	TestAssertions.equal(int(save_projection.get("interruption_kind")), RunResultProjection.InterruptionKind.TERMINAL_STATE_SAVE, "save failure has exact TERMINAL_STATE_SAVE kind", failures)
 	TestAssertions.truthy(bool(save_projection.get("retry_terminal_save_allowed")) and not bool(save_projection.get("retry_resolution_allowed")), "save failure exposes only Retry Save Terminal State", failures)
+	var refresh_failed: Variant = view_model.call(&"terminal_refresh_interrupted", fixture.snapshot, "Terminal state was saved, but recovery could not refresh.")
+	var refresh_projection: Variant = refresh_failed.get("projection")
+	TestAssertions.equal(int(refresh_projection.get("interruption_kind")), RunResultProjection.InterruptionKind.TERMINAL_REFRESH, "post-save refresh failure has exact TERMINAL_REFRESH kind", failures)
+	TestAssertions.truthy(bool(refresh_projection.get("retry_terminal_refresh_allowed")) and not bool(refresh_projection.get("retry_terminal_save_allowed")), "post-save refresh failure exposes refresh-only retry and never retries persistence", failures)
 
 	var unsafe_resolution: Variant = view_model.call(&"resolution_interrupted", fixture.snapshot, "Resolution was interrupted.", null)
 	var unsafe_projection: Variant = unsafe_resolution.get("projection")
-	TestAssertions.equal(int(unsafe_projection.get("interruption_kind")), 1, "resolution failure has exact RESOLUTION kind", failures)
+	TestAssertions.equal(int(unsafe_projection.get("interruption_kind")), RunResultProjection.InterruptionKind.RESOLUTION, "resolution failure has exact RESOLUTION kind", failures)
 	TestAssertions.truthy(bool(unsafe_projection.get("retry_resolution_allowed")) and not bool(unsafe_projection.get("protect_displaced_gear_allowed")), "ordinary resolution failure exposes only stage-accurate retry", failures)
 	TestAssertions.truthy(not bool(unsafe_projection.get("open_armoury_allowed")) and not bool(unsafe_projection.get("return_to_forge_allowed")) and not bool(unsafe_projection.get("quit_application_allowed")), "unsafe interruption exposes no navigation", failures)
 
 	var automatic_evaluation := RunResolutionEvaluation.create(fixture.resolution.accepted_extraction, 2, 0, 0, "automatic-only blocked", RunResolutionEvaluation.FailureCategory.STASH_AUTOMATIC_ONLY, "Automatic retained items need more destination space.")
 	var automatic_preflight := RunResolutionPreflightResult.from_evaluation(automatic_evaluation)
-	var durable := _durable_safety(fixture.snapshot, ["displaced-a", "displaced-b"])
-	var guarded: Variant = view_model.call(&"resolution_interrupted", fixture.snapshot, automatic_preflight.player_reason, {"durable": durable, "preflight": automatic_preflight})
+	var durable := _durable_safety(fixture.snapshot, [])
+	var guarded: Variant = view_model.call(&"resolution_interrupted", fixture.snapshot, automatic_preflight.player_reason, durable, automatic_preflight)
 	var guarded_projection: Variant = guarded.get("projection")
 	TestAssertions.truthy(bool(guarded_projection.get("protect_displaced_gear_allowed")) and int(guarded_projection.get("displaced_gear_count")) == 2, "typed automatic-only preflight exposes exact protection count", failures)
 	TestAssertions.truthy(bool(guarded_projection.get("open_armoury_allowed")) and bool(guarded_projection.get("return_to_forge_allowed")) and bool(guarded_projection.get("quit_application_allowed")), "typed durable safety alone authorizes interrupted navigation", failures)
@@ -215,22 +227,36 @@ func _test_typed_state_constructors(view_model: Variant, fixture: Dictionary, fa
 	var reducible_evaluation := RunResolutionEvaluation.create(fixture.resolution.accepted_extraction, 2, 0, 0, "reducible blocked", RunResolutionEvaluation.FailureCategory.STASH_REDUCIBLE, "Selected extraction can be reduced.")
 	var reducible := RunResolutionPreflightResult.from_evaluation(reducible_evaluation)
 	var negative_safety_cases: Array = [
-		{"name": "non automatic-only category", "safety": {"durable": durable, "preflight": reducible}, "navigation": true},
-		{"name": "malformed recovery dictionary", "safety": {"durable": {"safe": true}, "preflight": {"automatic_only_blocked": true}}, "navigation": false},
-		{"name": "unsafe durable record", "safety": {"durable": RunTerminalRecoverySafetyResult.failure("unsafe"), "preflight": automatic_preflight}, "navigation": false},
-		{"name": "missing displaced IDs", "safety": {"durable": _durable_safety(fixture.snapshot, []), "preflight": automatic_preflight}, "navigation": true},
+		{"name": "non automatic-only category", "durable": durable, "preflight": reducible, "navigation": true},
+		{"name": "unsafe durable record", "durable": RunTerminalRecoverySafetyResult.failure("unsafe"), "preflight": automatic_preflight, "navigation": false},
+		{"name": "unsafe typed count", "durable": durable, "preflight": RunResolutionPreflightResult.from_evaluation(RunResolutionEvaluation.create(fixture.resolution.accepted_extraction, 0, 0, 0, "automatic-only blocked", RunResolutionEvaluation.FailureCategory.STASH_AUTOMATIC_ONLY, "Automatic retained items need more destination space.")), "navigation": true},
 	]
 	for test_case: Dictionary in negative_safety_cases:
-		var denied: Variant = view_model.call(&"resolution_interrupted", fixture.snapshot, automatic_preflight.player_reason, test_case.safety).get("projection")
+		var denied: Variant = view_model.call(&"resolution_interrupted", fixture.snapshot, automatic_preflight.player_reason, test_case.durable, test_case.preflight).get("projection")
 		TestAssertions.truthy(not bool(denied.get("protect_displaced_gear_allowed")), "Protect hides for %s" % test_case.name, failures)
 		var navigation_allowed := bool(denied.get("open_armoury_allowed")) and bool(denied.get("return_to_forge_allowed")) and bool(denied.get("quit_application_allowed"))
 		TestAssertions.equal(navigation_allowed, bool(test_case.navigation), "typed durable navigation is independent from Protect predicate for %s" % test_case.name, failures)
 
 	var projection_failed: Variant = view_model.call(&"projection_interrupted", fixture.snapshot, fixture.resolution, "Results could not be built.")
 	var retry_projection: Variant = projection_failed.get("projection")
-	TestAssertions.equal(int(retry_projection.get("interruption_kind")), 2, "projection failure has exact PROJECTION kind", failures)
+	TestAssertions.equal(int(retry_projection.get("interruption_kind")), RunResultProjection.InterruptionKind.PROJECTION, "projection failure has exact PROJECTION kind", failures)
 	TestAssertions.truthy(bool(retry_projection.get("retry_projection_allowed")) and not bool(retry_projection.get("retry_resolution_allowed")), "projection failure exposes only Retry Results", failures)
 	TestAssertions.equal(retry_projection.call(&"section_ids"), [], "projection interruption never leaks accepted but unvalidated recap claims", failures)
+
+	var has_action_error: bool = view_model.has_method(&"finalized_action_interrupted")
+	TestAssertions.truthy(has_action_error, "view model exposes a typed finalized action-rejection seam", failures)
+	if has_action_error:
+		var finalized: Variant = view_model.call(&"build", fixture.snapshot, fixture.resolution, fixture.profile, []).get("projection")
+		var action_error_result: Variant = view_model.call(&"finalized_action_interrupted", finalized, "Terminal record could not be cleared. Retry Restart Run.")
+		TestAssertions.truthy(bool(action_error_result.call(&"ok")), "finalized action failure remains a typed projection", failures)
+		var action_error: Variant = action_error_result.get("projection")
+		TestAssertions.equal(int(action_error.get("terminal_state")), 2, "receipt-clear failure preserves finalized recap truth", failures)
+		TestAssertions.equal(action_error.get("readable_reason"), "Terminal record could not be cleared. Retry Restart Run.", "receipt-clear failure exposes readable non-claiming action error", failures)
+		TestAssertions.truthy(bool(action_error.get("restart_run_allowed")) and bool(action_error.get("return_to_forge_allowed")) and bool(action_error.get("quit_application_allowed")), "receipt-clear failure keeps exact finalized actions retryable", failures)
+		var committed_refresh_result: Variant = view_model.call(&"finalized_committed_refresh_interrupted", finalized, "Terminal record is cleared, but the profile could not refresh. Retry Return to Forge.", &"ReturnToForge")
+		TestAssertions.truthy(bool(committed_refresh_result.call(&"ok")), "committed completion refresh failure remains a typed finalized projection", failures)
+		var committed_refresh: Variant = committed_refresh_result.get("projection")
+		TestAssertions.truthy(bool(committed_refresh.get("return_to_forge_allowed")) and not bool(committed_refresh.get("restart_run_allowed")) and not bool(committed_refresh.get("quit_application_allowed")), "committed completion refresh exposes only the exact pending finalized route", failures)
 
 func _entry_value(section: Variant, label: String) -> String:
 	for entry: Variant in section.get("entries"):
@@ -291,7 +317,7 @@ func _test_finalized_projection_validation(projection_type: Script, projection: 
 
 func _any_action_allowed(projection: Variant) -> bool:
 	for field: StringName in [
-		&"retry_terminal_save_allowed", &"retry_resolution_allowed", &"retry_projection_allowed",
+		&"retry_terminal_save_allowed", &"retry_terminal_refresh_allowed", &"retry_resolution_allowed", &"retry_projection_allowed",
 		&"protect_displaced_gear_allowed", &"open_armoury_allowed", &"restart_run_allowed",
 		&"return_to_forge_allowed", &"quit_application_allowed",
 	]:

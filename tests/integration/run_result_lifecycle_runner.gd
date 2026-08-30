@@ -58,12 +58,13 @@ func _run() -> void:
 func _exercise_states_and_actions(view_model: Variant, fixture: Dictionary, finalized: Variant) -> void:
 	var pending: Variant = view_model.call(&"pending", fixture.snapshot).get("projection")
 	var save_interrupted: Variant = view_model.call(&"terminal_save_interrupted", fixture.snapshot, "Terminal record could not be saved.").get("projection")
+	var refresh_interrupted: Variant = view_model.call(&"terminal_refresh_interrupted", fixture.snapshot, "Terminal state was saved, but recovery could not refresh.").get("projection")
 	var unsafe: Variant = view_model.call(&"resolution_interrupted", fixture.snapshot, "Resolution was interrupted.", null).get("projection")
 	var projection_interrupted: Variant = view_model.call(&"projection_interrupted", fixture.snapshot, fixture.resolution, "Results could not be built.").get("projection")
 	var automatic_evaluation := RunResolutionEvaluation.create(fixture.resolution.accepted_extraction, 2, 0, 0, "automatic-only blocked", RunResolutionEvaluation.FailureCategory.STASH_AUTOMATIC_ONLY, "Automatic retained items need more destination space.")
 	var preflight := RunResolutionPreflightResult.from_evaluation(automatic_evaluation)
 	var durable := _durable_safety(fixture.snapshot, ["displaced-a", "displaced-b"])
-	var guarded: Variant = view_model.call(&"resolution_interrupted", fixture.snapshot, preflight.player_reason, {"durable": durable, "preflight": preflight}).get("projection")
+	var guarded: Variant = view_model.call(&"resolution_interrupted", fixture.snapshot, preflight.player_reason, durable, preflight).get("projection")
 
 	_panel.call(&"present", pending)
 	await process_frame
@@ -76,11 +77,12 @@ func _exercise_states_and_actions(view_model: Variant, fixture: Dictionary, fina
 	_assert(not _button("RestartRun").visible, "Restart is absent from interrupted truth")
 
 	var counts := {
-		"save": 0, "resolution": 0, "projection": 0, "protect": 0,
+		"save": 0, "refresh": 0, "resolution": 0, "projection": 0, "protect": 0,
 		"armoury": 0, "restart": 0, "return": 0, "quit": 0,
 		"protect_focus": null, "armoury_focus": null,
 	}
 	_panel.retry_terminal_save_requested.connect(func() -> void: counts.save = int(counts.save) + 1)
+	_panel.retry_terminal_refresh_requested.connect(func() -> void: counts.refresh = int(counts.refresh) + 1)
 	_panel.retry_resolution_requested.connect(func() -> void: counts.resolution = int(counts.resolution) + 1)
 	_panel.retry_projection_requested.connect(func() -> void: counts.projection = int(counts.projection) + 1)
 	_panel.protect_displaced_gear_requested.connect(func(return_focus: Control) -> void:
@@ -129,9 +131,9 @@ func _exercise_states_and_actions(view_model: Variant, fixture: Dictionary, fina
 	await _keyboard_activate(synthetic_recap_row)
 	_assert(int(synthetic_presses.count) == 0 and not synthetic_recap_row.has_focus(), "isolated recap row cannot focus or toggle")
 	var background_before := counts.duplicate()
-	for background_action: String in ["RetryTerminalSave", "RetryResolution", "RetryProjection", "ProtectDisplacedGear", "OpenArmoury", "RestartRun", "ReturnToForge", "QuitApplication"]:
+	for background_action: String in ["RetryTerminalSave", "RetryTerminalRefresh", "RetryResolution", "RetryProjection", "ProtectDisplacedGear", "OpenArmoury", "RestartRun", "ReturnToForge", "QuitApplication"]:
 		_button(background_action).pressed.emit()
-	_assert(int(counts.save) == int(background_before.save) and int(counts.resolution) == int(background_before.resolution) and int(counts.projection) == int(background_before.projection) and int(counts.protect) == int(background_before.protect) and int(counts.armoury) == int(background_before.armoury) and int(counts.restart) == int(background_before.restart) and int(counts.return) == int(background_before.return) and int(counts.quit) == int(background_before.quit), "all background action signals stay unchanged while confirmation is open")
+	_assert(int(counts.save) == int(background_before.save) and int(counts.refresh) == int(background_before.refresh) and int(counts.resolution) == int(background_before.resolution) and int(counts.projection) == int(background_before.projection) and int(counts.protect) == int(background_before.protect) and int(counts.armoury) == int(background_before.armoury) and int(counts.restart) == int(background_before.restart) and int(counts.return) == int(background_before.return) and int(counts.quit) == int(background_before.quit), "all background action signals stay unchanged while confirmation is open")
 	_assert(cancel.has_focus(), "isolated confirmation prevents footer focus")
 	var confirm := confirmation.get_node("Content/Actions/Confirm") as Button
 	await _action_input(&"ui_focus_next")
@@ -159,6 +161,7 @@ func _exercise_states_and_actions(view_model: Variant, fixture: Dictionary, fina
 	_assert((_panel.get_node("Frame/Content/Header/OutcomeHeadline") as Label).text == "VICTORY · 01:30", "rendered hierarchy leads with verified outcome and duration")
 
 	await _assert_button_parity(save_interrupted, "RetryTerminalSave", "save", counts)
+	await _assert_button_parity(refresh_interrupted, "RetryTerminalRefresh", "refresh", counts)
 	await _assert_button_parity(unsafe, "RetryResolution", "resolution", counts)
 	await _assert_button_parity(projection_interrupted, "RetryProjection", "projection", counts)
 	await _assert_button_parity(guarded, "OpenArmoury", "armoury", counts)

@@ -33,6 +33,7 @@ func run() -> Array[String]:
 	_test_resolution_failure_retries_the_identical_request_and_mutates_once(failures)
 	_test_pre_resolution_cold_resume_restores_choosing_interrupted_and_selection(failures)
 	_test_protection_and_reducible_interruptions(failures)
+	_test_post_protection_resolution_failure_preserves_recovery(failures)
 	_test_generic_and_terminal_resolution_boundaries(failures)
 	_test_terminal_duplicate_revalidates_live_resolved_truth(failures)
 	_test_projection_retry_uses_durable_truth_without_resolution_or_mutation(failures)
@@ -243,7 +244,7 @@ func _test_resolution_failure_retries_the_identical_request_and_mutates_once(fai
 	TestAssertions.equal(resolution.get("request_documents").size(), 2, "resolution retry delegates exactly twice including the injected interruption", failures)
 	TestAssertions.equal((resolution.get("request_documents") as Array)[1], (resolution.get("request_documents") as Array)[0], "resolution retry reuses the byte-structurally identical canonical request", failures)
 	TestAssertions.equal(int(resolution.get("delegated_calls")), 1, "only the successful retry reaches the real terminal resolver", failures)
-	TestAssertions.equal(int(evaluator_counts["calls"]), 1, "the durable resolution mutation evaluates exactly once", failures)
+	TestAssertions.equal(int(evaluator_counts["calls"]), 2, "one pure preflight plus one durable resolution mutation evaluate exactly once each", failures)
 	var durable := store.load_profile(PROFILE_ID, root)
 	var decoded := ItemRegistry._decode(durable.profile.item_records, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)
 	TestAssertions.truthy(durable.ok() and String(decoded.error).is_empty(), "once-only resolution leaves valid durable ownership", failures)
@@ -253,7 +254,7 @@ func _test_resolution_failure_retries_the_identical_request_and_mutates_once(fai
 	var invalid_post_success: Variant = flow.call(&"resolve", PROFILE_ID, root)
 	TestAssertions.truthy(not _ok(invalid_post_success), "resolved flow rejects a further resolution transition", failures)
 	TestAssertions.equal(int(resolution.get("delegated_calls")), 1, "post-success retry cannot invoke the terminal mutation again", failures)
-	TestAssertions.equal(int(evaluator_counts["calls"]), 1, "post-success retry cannot reevaluate the accepted mutation", failures)
+	TestAssertions.equal(int(evaluator_counts["calls"]), 2, "post-success retry cannot reevaluate either preflight or accepted mutation", failures)
 	TestAssertions.equal(FileAccess.get_sha256(store.profile_path(PROFILE_ID, root)), after_success, "post-success retry performs no write", failures)
 	_free_fixture(fixture, root)
 
@@ -426,9 +427,10 @@ func _test_protection_and_reducible_interruptions(failures: Array[String]) -> vo
 		)
 		var cold_resume: Variant = cold_flow.call(&"resume", interrupted_record, interrupted_profile, automatic_fixture.root) if interrupted_record != null else null
 		TestAssertions.truthy(_ok(cold_resume) and int(cold_flow.call(&"state")) == STATE_RESOLUTION_INTERRUPTED, "cold resume restores the automatic-only interruption", failures)
-		TestAssertions.truthy(bool(cold_flow.get("_last_automatic_only_blocked")), "cold resume restores Protect eligibility only after the same typed automatic-only preflight", failures)
+		TestAssertions.truthy(bool(cold_flow.call(&"automatic_only_blocked")), "cold resume restores Protect eligibility only after the same typed automatic-only preflight", failures)
 		var protected: Variant = cold_flow.call(&"protect_displaced_gear", automatic_id, automatic_fixture.root)
-		TestAssertions.truthy(_ok(protected), "confirmed protection commits through recovery authority", failures)
+		TestAssertions.truthy(protected is RunResolutionPreflightResult and _ok(protected), "confirmed protection returns the immediate typed post-protection preflight", failures)
+		TestAssertions.equal(int(protected.get("mandatory_stash_slots")) if protected is RunResolutionPreflightResult else -1, 0, "post-protection result proves zero mandatory displaced slots before picker presentation", failures)
 		TestAssertions.equal(int(cold_flow.call(&"state")), STATE_CHOOSING_EXTRACTION, "successful protection reruns preflight and returns to extraction", failures)
 		var refreshed: Variant = cold_flow.call(
 			&"confirm_extraction", _strings([]),
@@ -458,6 +460,83 @@ func _test_protection_and_reducible_interruptions(failures: Array[String]) -> vo
 	else:
 		failures.append("reducible preflight interruption body skipped because typed begin remains RED")
 	preflight_test.call("_cleanup", reducible_fixture)
+
+
+func _test_post_protection_resolution_failure_preserves_recovery(failures: Array[String]) -> void:
+	var resolution_script := _fail_first_recording_resolution_script()
+	var preflight_test: Variant = (load("res://tests/unit/test_run_resolution_preflight.gd") as Script).new()
+	if resolution_script == null:
+		failures.append("post-protection interruption behavior could not compile its real service collaborator")
+		return
+	for changed_selection: bool in [false, true]:
+		var disposition := "changed" if changed_selection else "same"
+		var fixture: Dictionary = preflight_test.call(
+			"_fixture", "flow-protected-resolution-%s-%d" % [disposition, Time.get_ticks_usec()], 1,
+			_strings([RunExtractionPolicy.AUTOMATIC_LEADER_UNLOCK]), 1,
+		)
+		preflight_test.call("_seed_prior_loadout", fixture)
+		var store := fixture.store as ProfileStore
+		var profile := store.load_profile(String((fixture.profile as ProfileState).profile_id), fixture.root).profile
+		var profile_id := profile.profile_id
+		var mutations := ProfileMutationService.new(store)
+		var recovery := RunTerminalRecoveryService.new(mutations, store)
+		var resolution: Variant = resolution_script.new(mutations)
+		var flow := RunTerminalFlow.new(recovery, resolution)
+		var begun := flow.begin(RunTerminalSnapshot.Outcome.VICTORY, 43.0, fixture.context, profile, fixture.root)
+		TestAssertions.truthy(begun.ok(), "%s-selection protected interruption fixture begins" % disposition, failures)
+		if not begun.ok():
+			preflight_test.call("_cleanup", fixture)
+			continue
+		var original_selected := flow.extraction_projection().selected_item_ids
+		var automatic := flow.confirm_extraction(original_selected, store.load_profile(profile_id, fixture.root).profile)
+		TestAssertions.truthy(not automatic.ok() and automatic.automatic_only_blocked, "%s-selection fixture reaches automatic-only interruption" % disposition, failures)
+		var interrupted_transaction := flow.transaction_id()
+		var protected := flow.protect_displaced_gear(profile_id, fixture.root)
+		TestAssertions.truthy(protected.ok() and flow.state() == STATE_CHOOSING_EXTRACTION, "%s-selection fixture protects then returns to editable extraction" % disposition, failures)
+		var protected_profile := store.load_profile(profile_id, fixture.root).profile
+		var protected_inspection := recovery.inspect(protected_profile)
+		var protected_ids: Array[String] = protected_inspection.record.protected_displaced_item_ids if protected_inspection.ok() else []
+		TestAssertions.truthy(protected_inspection.ok() and not protected_ids.is_empty(), "%s-selection fixture owns exact protected overflow IDs" % disposition, failures)
+		var next_selected: Array[String] = original_selected.duplicate()
+		if changed_selection:
+			var eligible_ids := _eligible_ids(flow.extraction_projection())
+			if not eligible_ids.is_empty():
+				next_selected.clear()
+				next_selected.append(eligible_ids[0])
+		var reconfirmed := flow.confirm_extraction(next_selected, protected_profile)
+		TestAssertions.truthy(reconfirmed.ok(), "%s-selection fixture confirms after protection" % disposition, failures)
+		var resolution_transaction := flow.transaction_id()
+		TestAssertions.equal(resolution_transaction == interrupted_transaction, not changed_selection, "%s-selection canonical transaction identity is exact" % disposition, failures)
+		var applied_before := store.load_profile(profile_id, fixture.root).profile.applied_transactions.size()
+		var failed := flow.resolve(profile_id, fixture.root)
+		TestAssertions.truthy(not failed.ok() and failed.error.contains("injected first resolution interruption"), "%s-selection resolver failure remains readable" % disposition, failures)
+		var durable_profile := store.load_profile(profile_id, fixture.root).profile
+		var durable := recovery.inspect(durable_profile)
+		TestAssertions.truthy(durable.ok() and durable.record.stage == RunTerminalRecoveryRecord.Stage.RESOLUTION_INTERRUPTED, "%s-selection resolver failure durably owns the interrupted stage" % disposition, failures)
+		if durable.ok():
+			TestAssertions.equal(durable.record.protected_displaced_item_ids, protected_ids, "%s-selection resolver failure retains exact protected IDs" % disposition, failures)
+			TestAssertions.equal(durable.record.interruption_reason, failed.error, "%s-selection durable interruption retains exact resolver reason" % disposition, failures)
+		TestAssertions.equal(durable_profile.applied_transactions.size(), applied_before + 1, "%s-selection resolver failure commits one distinct interruption phase" % disposition, failures)
+		var cold := RunTerminalFlow.new(recovery, RunResolutionService.new(ProfileMutationService.new(store)))
+		TestAssertions.truthy(durable.ok() and cold.resume(durable.record, durable_profile, fixture.root).ok(), "%s-selection protected interruption cold-resumes" % disposition, failures)
+		TestAssertions.equal(cold.state(), STATE_RESOLUTION_INTERRUPTED, "%s-selection cold resume remains resolution-interrupted" % disposition, failures)
+		if not protected_ids.is_empty():
+			var overflow := ItemSlotContainer._decode(durable_profile.terminal_recovery_overflow, "terminal_recovery_overflow")
+			var protected_slot := -1
+			if String(overflow.error).is_empty():
+				for slot: int in (overflow.value as ItemSlotContainer).occupied_slots():
+					if (overflow.value as ItemSlotContainer).item_id_at(slot) == protected_ids[0]:
+						protected_slot = slot
+						break
+			var lock_before := FileAccess.get_sha256(store.profile_path(profile_id, fixture.root))
+			var locked := ProfileItemStorageService.new(ProfileMutationService.new(store)).apply(
+				profile_id,
+				ItemTransactionRequest.move("protected-interruption-lock-%s" % disposition, profile_id, ItemSlotContainer.TERMINAL_RECOVERY_OVERFLOW_ID, protected_slot, protected_ids[0], &"stash-tab-000", 99),
+				fixture.root,
+			)
+			TestAssertions.truthy(not locked.ok() and locked.error.contains("Available after terminal resolution"), "%s-selection cold recovery retains exact protected storage lock" % disposition, failures)
+			TestAssertions.equal(FileAccess.get_sha256(store.profile_path(profile_id, fixture.root)), lock_before, "%s-selection protected storage lock rejection is write-free" % disposition, failures)
+		preflight_test.call("_cleanup", fixture)
 
 func _test_projection_retry_uses_durable_truth_without_resolution_or_mutation(failures: Array[String]) -> void:
 	var mutation_script := _counting_mutation_script()

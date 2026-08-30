@@ -7,7 +7,38 @@ func run() -> Array[String]:
 	_test_all_selected_compatibility_branches(failures)
 	_test_compatibility_copy_whitelists_safe_values(failures)
 	_test_safe_failures_use_handoff_copy_and_hide_technical_detail(failures)
+	_test_restart_intent_preselection_and_unresolved_state(failures)
 	return failures
+
+
+func _test_restart_intent_preselection_and_unresolved_state(failures: Array[String]) -> void:
+	const INTENT_PATH := "res://scripts/ui/run_setup/run_setup_restart_intent.gd"
+	TestAssertions.truthy(ResourceLoader.exists(INTENT_PATH), "restart intent resource exists", failures)
+	var view_model_source := FileAccess.get_file_as_string("res://scripts/ui/run_setup/run_setup_lobby_view_model.gd")
+	var intent_source := FileAccess.get_file_as_string(INTENT_PATH) if FileAccess.file_exists(INTENT_PATH) else ""
+	for contract: String in ["class_name RunSetupRestartIntent", "static func create", "func copy", "func valid"]:
+		TestAssertions.truthy(contract in intent_source, "restart intent exposes %s" % contract, failures)
+	TestAssertions.truthy("restart_intent_value" in view_model_source, "lobby view model accepts typed restart intent", failures)
+	TestAssertions.truthy("RESTART_SELECTION_REQUIRED_COPY" in view_model_source, "lobby owns explicit unresolved restart copy", failures)
+	if not ResourceLoader.exists(INTENT_PATH) or not ("restart_intent_value" in view_model_source):
+		return
+	var intent_script := load(INTENT_PATH) as GDScript
+	var valid_intent: Variant = intent_script.call(&"create", "play-lobby-profile", &"mage", "")
+	TestAssertions.truthy(bool(valid_intent.call(&"valid")), "exact prior profile/class creates a valid restart intent", failures)
+	var valid_copy: Variant = valid_intent.call(&"copy")
+	TestAssertions.truthy(valid_copy != valid_intent and valid_copy.get("profile_id") == "play-lobby-profile" and valid_copy.get("class_id") == &"mage", "restart intent copy preserves exact identity defensively", failures)
+	var profile := _completed_profile()
+	var catalog := GameCatalog.load_defaults()
+	var compatible := LoadoutCompatibilityProjection.success(&"mage", [], [], [], [], "state")
+	var view_model_script := load("res://scripts/ui/run_setup/run_setup_lobby_view_model.gd") as GDScript
+	var selected := view_model_script.callv(&"build", [profile, catalog, &"", &"fighter", compatible, "", false, valid_intent]) as RunSetupLobbyProjection
+	TestAssertions.equal(selected.selected_class_id, &"mage", "valid restart intent preselects exact prior class", failures)
+	TestAssertions.equal(selected.state, RunSetupLobbyProjection.State.READY, "valid restart intent reaches ready lobby without starting", failures)
+	var invalid_intent: Variant = intent_script.call(&"create", "missing-profile", &"missing-class", "Previous run selection is unavailable.")
+	var unresolved := view_model_script.callv(&"build", [profile, catalog, &"fighter", &"fighter", null, "", false, invalid_intent]) as RunSetupLobbyProjection
+	TestAssertions.equal(unresolved.selected_class_id, &"", "invalid restart intent cannot retain an unrelated selected class", failures)
+	TestAssertions.equal(unresolved.state, RunSetupLobbyProjection.State.NO_SELECTION, "invalid restart intent stays in unresolved selection", failures)
+	TestAssertions.equal(unresolved.status_copy, "Previous run selection is unavailable.", "invalid restart intent exposes its explicit safe reason", failures)
 
 func _test_catalog_truth_and_selected_compatibility(failures: Array[String]) -> void:
 	var catalog := GameCatalog.load_defaults()

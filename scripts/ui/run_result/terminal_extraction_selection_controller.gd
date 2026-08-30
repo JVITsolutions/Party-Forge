@@ -25,7 +25,20 @@ func initialize(policy: RunExtractionProjection) -> bool:
 			return false
 		_eligible_by_id[selection.item_id] = selection.copy()
 		_ordered_ids.append(selection.item_id)
-	if _ordered_ids.size() <= policy.capacity:
+	if not policy.selected_item_ids.is_empty():
+		if policy.selected_item_ids.size() > policy.capacity:
+			_clear()
+			return false
+		var durable_selected: Dictionary = {}
+		for item_id: String in policy.selected_item_ids:
+			if item_id.strip_edges().is_empty() or durable_selected.has(item_id) or not _eligible_by_id.has(item_id):
+				_clear()
+				return false
+			durable_selected[item_id] = true
+		for item_id: String in _ordered_ids:
+			if durable_selected.has(item_id):
+				_selected[item_id] = (_eligible_by_id[item_id] as ExtractionSelection).copy()
+	elif _ordered_ids.size() <= policy.capacity:
 		for item_id: String in _ordered_ids:
 			_selected[item_id] = (_eligible_by_id[item_id] as ExtractionSelection).copy()
 	return true
@@ -45,6 +58,7 @@ func toggle(item_id: String) -> bool:
 
 func reconcile(next: RunExtractionProjection) -> Array[String]:
 	var changed: Array[String] = []
+	var acknowledged_signature := _acknowledgement_signature() if _unused_acknowledged else ""
 	if next == null or not next.valid or _has_duplicate_candidates(next):
 		for item_id: String in _ordered_ids:
 			if _selected.has(item_id): changed.append(item_id)
@@ -81,7 +95,7 @@ func reconcile(next: RunExtractionProjection) -> Array[String]:
 	_ordered_ids = next_order
 	_automatic.clear()
 	for automatic_id: String in next.automatic_item_ids: _automatic[automatic_id] = true
-	_unused_acknowledged = false
+	_unused_acknowledged = not acknowledged_signature.is_empty() and acknowledged_signature == _acknowledgement_signature()
 	_pending = false
 	return changed
 
@@ -134,6 +148,20 @@ func _has_duplicate_candidates(policy: RunExtractionProjection) -> bool:
 		if selection == null or selection.item_id.strip_edges().is_empty() or seen.has(selection.item_id): return true
 		seen[selection.item_id] = true
 	return false
+
+func _acknowledgement_signature() -> String:
+	if _policy == null:
+		return ""
+	var eligible: Array[Dictionary] = []
+	for item_id: String in _ordered_ids:
+		eligible.append((_eligible_by_id[item_id] as ExtractionSelection).to_dictionary())
+	return JSON.stringify({
+		"automatic_item_ids": _policy.automatic_item_ids,
+		"capacity": _policy.capacity,
+		"eligible_items": eligible,
+		"lost_item_ids": _policy.lost_item_ids,
+		"selected_item_ids": selected_item_ids(),
+	}, "", true, true)
 
 func _copy_policy(policy: RunExtractionProjection) -> RunExtractionProjection:
 	return RunExtractionProjection.create(policy.automatic_item_ids, policy.eligible_items, policy.selected_item_ids, policy.lost_item_ids, policy.capacity, policy.errors, policy.failure_kind)

@@ -10,8 +10,10 @@ func run() -> Array[String]:
 		return failures
 	_test_defaults_and_bounds(controller_type, failures)
 	_test_pending_acknowledgement_and_order(controller_type, failures)
+	_test_acknowledgement_tracks_exact_reconciled_projection(controller_type, failures)
 	_test_exact_reconcile_and_duplicates(controller_type, failures)
 	_test_capacity_drift_reconcile(controller_type, failures)
+	_test_durable_selection_initialization(controller_type, failures)
 	return failures
 
 func _test_defaults_and_bounds(controller_type: Script, failures: Array[String]) -> void:
@@ -61,6 +63,25 @@ func _test_pending_acknowledgement_and_order(controller_type: Script, failures: 
 	(exact[0] as ExtractionSelection)._item_id = "escaped"
 	TestAssertions.equal(controller.call(&"selected_item_ids"), ["a", "c"], "selected tokens are defensive copies", failures)
 
+func _test_acknowledgement_tracks_exact_reconciled_projection(controller_type: Script, failures: Array[String]) -> void:
+	var controller: Variant = controller_type.new()
+	var exact := _policy(3, [
+		_selection("a", &"run-inventory", 0),
+		_selection("b", &"run-inventory", 1),
+		_selection("c", &"run-inventory", 2),
+		_selection("d", &"run-inventory", 3),
+	])
+	controller.call(&"initialize", exact)
+	controller.call(&"toggle", "a")
+	controller.call(&"toggle", "b")
+	TestAssertions.truthy(controller.call(&"acknowledge_unused_capacity"), "exact projection acknowledgement fixture is accepted", failures)
+	var changed: Array = controller.call(&"reconcile", exact)
+	TestAssertions.equal(changed, [], "unchanged exact projection reconciliation preserves every selection", failures)
+	TestAssertions.truthy(not controller.call(&"needs_unused_capacity_acknowledgement"), "unchanged exact projection preserves its explicit acknowledgement", failures)
+	changed = controller.call(&"reconcile", _policy(4, exact.eligible_items))
+	TestAssertions.equal(changed, [], "capacity drift can change acknowledgement truth without changing selected identities", failures)
+	TestAssertions.truthy(controller.call(&"needs_unused_capacity_acknowledgement"), "changed capacity/loss projection invalidates the prior acknowledgement", failures)
+
 func _test_exact_reconcile_and_duplicates(controller_type: Script, failures: Array[String]) -> void:
 	var controller: Variant = controller_type.new()
 	var initial: RunExtractionProjection = _policy(2, [_selection("a", &"run-inventory", 0), _selection("b", &"run-inventory", 1)])
@@ -101,11 +122,24 @@ func _test_capacity_drift_reconcile(controller_type: Script, failures: Array[Str
 	TestAssertions.equal(controller.call(&"selected_item_ids"), ["a"], "capacity growth never invents restored selections", failures)
 	TestAssertions.truthy(controller.call(&"needs_unused_capacity_acknowledgement"), "capacity growth resets acknowledgement against current loss", failures)
 
-func _policy(capacity: int, eligible: Array[ExtractionSelection], automatic: Array[String] = []) -> RunExtractionProjection:
+func _test_durable_selection_initialization(controller_type: Script, failures: Array[String]) -> void:
+	var controller: Variant = controller_type.new()
+	var durable := _policy(2, [
+		_selection("a", &"run-inventory", 0),
+		_selection("b", &"run-inventory", 1),
+		_selection("c", &"run-inventory", 2),
+	], [], ["b", "c"])
+	TestAssertions.truthy(controller.call(&"initialize", durable), "durable constrained projection initializes", failures)
+	TestAssertions.equal(controller.call(&"selected_item_ids"), ["b", "c"], "cold initialization restores exact durable selections in canonical order", failures)
+	var invalid := _policy(1, durable.eligible_items, [], ["missing"])
+	TestAssertions.truthy(not controller.call(&"initialize", invalid), "unknown durable selected identity fails closed", failures)
+
+func _policy(capacity: int, eligible: Array[ExtractionSelection], automatic: Array[String] = [], selected: Array[String] = []) -> RunExtractionProjection:
 	var lost: Array[String] = []
 	for selection: ExtractionSelection in eligible:
-		lost.append(selection.item_id)
-	return RunExtractionProjection.create(automatic, eligible, [], lost, capacity, [])
+		if selection.item_id not in selected:
+			lost.append(selection.item_id)
+	return RunExtractionProjection.create(automatic, eligible, selected, lost, capacity, [])
 
 func _selection(item_id: String, container_id: StringName, slot: int) -> ExtractionSelection:
 	return ExtractionSelection.create(item_id, container_id, slot)

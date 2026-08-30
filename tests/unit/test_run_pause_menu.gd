@@ -24,10 +24,12 @@ func run() -> Array[String]:
 		^"Overlay/Panel/Content/Title",
 		^"Overlay/Panel/Content/Resume",
 		^"Overlay/Panel/Content/Settings",
-		^"Overlay/Panel/Content/QuitRun",
-		^"Overlay/QuitConfirmation/Panel/Content/Message",
-		^"Overlay/QuitConfirmation/Panel/Content/Confirm",
-		^"Overlay/QuitConfirmation/Panel/Content/Cancel",
+		^"Overlay/Panel/Content/AbandonRun",
+		^"Overlay/AbandonConfirmation/Panel/Content/Message",
+		^"Overlay/AbandonConfirmation/Panel/Content/Confirm",
+		^"Overlay/AbandonConfirmation/Panel/Content/Cancel",
+		^"Overlay/AbandonCommittedError/Panel/Content/Message",
+		^"Overlay/AbandonCommittedError/Panel/Content/RetryReturnToForge",
 	]:
 		TestAssertions.truthy(menu.get_node_or_null(node_path) != null, "pause menu owns %s" % node_path, failures)
 	if not failures.is_empty():
@@ -41,33 +43,72 @@ func run() -> Array[String]:
 	var title := menu.get_node("Overlay/Panel/Content/Title") as Label
 	var resume := menu.get_node("Overlay/Panel/Content/Resume") as Button
 	var settings := menu.get_node("Overlay/Panel/Content/Settings") as Button
-	var quit_run := menu.get_node("Overlay/Panel/Content/QuitRun") as Button
-	var confirmation := menu.get_node("Overlay/QuitConfirmation") as Control
-	var confirm := menu.get_node("Overlay/QuitConfirmation/Panel/Content/Confirm") as Button
-	var cancel := menu.get_node("Overlay/QuitConfirmation/Panel/Content/Cancel") as Button
+	var abandon_run := menu.get_node("Overlay/Panel/Content/AbandonRun") as Button
+	var confirmation := menu.get_node("Overlay/AbandonConfirmation") as Control
+	var confirmation_message := menu.get_node("Overlay/AbandonConfirmation/Panel/Content/Message") as Label
+	var confirm := menu.get_node("Overlay/AbandonConfirmation/Panel/Content/Confirm") as Button
+	var cancel := menu.get_node("Overlay/AbandonConfirmation/Panel/Content/Cancel") as Button
+	var committed_error := menu.get_node("Overlay/AbandonCommittedError") as Control
+	var committed_message := menu.get_node("Overlay/AbandonCommittedError/Panel/Content/Message") as Label
+	var retry_return := menu.get_node("Overlay/AbandonCommittedError/Panel/Content/RetryReturnToForge") as Button
+	TestAssertions.equal(abandon_run.text, "Abandon Run", "active-run destructive action uses exact Abandon Run copy", failures)
+	TestAssertions.equal(confirm.text, "Abandon Run", "confirmation uses exact Abandon Run copy", failures)
 	TestAssertions.truthy(settings.focus_mode != Control.FOCUS_NONE, "Settings remains focusable", failures)
 	TestAssertions.truthy(settings.has_meta("coming_soon") and bool(settings.get_meta("coming_soon")), "Settings is marked Coming Soon", failures)
 	settings.pressed.emit()
 	TestAssertions.equal(title.text, "Settings: Coming Soon", "Settings shows exact Coming Soon status", failures)
 	TestAssertions.truthy(bool(menu.visible) and tree.paused, "Settings performs no navigation or pause release", failures)
 
-	quit_run.pressed.emit()
-	TestAssertions.truthy(confirmation.visible and tree.paused, "Quit Run opens confirmation without releasing pause", failures)
+	abandon_run.pressed.emit()
+	TestAssertions.truthy(confirmation.visible and tree.paused, "Abandon Run opens confirmation without releasing pause", failures)
+	TestAssertions.truthy(confirmation_message.text.contains("forfeit") and confirmation_message.text.contains("run-owned progress/items"), "confirmation explains exact forfeiture consequence", failures)
+	if menu.is_inside_tree():
+		TestAssertions.truthy(tree.root.gui_get_focus_owner() == cancel, "Abandon confirmation defaults safely to Cancel", failures)
 	for property_name: StringName in [&"focus_neighbor_left", &"focus_neighbor_top", &"focus_neighbor_right", &"focus_neighbor_bottom", &"focus_next", &"focus_previous"]:
 		TestAssertions.equal(confirm.get(property_name), confirm.get_path_to(cancel), "Confirm %s stays inside the modal" % property_name, failures)
 		TestAssertions.equal(cancel.get(property_name), cancel.get_path_to(confirm), "Cancel %s stays inside the modal" % property_name, failures)
 	menu.call("_unhandled_input", _action_event(&"ui_cancel"))
 	TestAssertions.truthy(bool(menu.visible) and not confirmation.visible, "Cancel closes only confirmation", failures)
-	TestAssertions.truthy(quit_run.focus_mode != Control.FOCUS_NONE, "Cancel leaves Quit Run as a valid focus-return target", failures)
+	TestAssertions.truthy(abandon_run.focus_mode != Control.FOCUS_NONE, "Cancel leaves Abandon Run as a valid focus-return target", failures)
 
-	quit_run.pressed.emit()
-	var quit_count: Array[int] = [0]
-	menu.connect("quit_run_confirmed", func() -> void: quit_count[0] += 1)
+	abandon_run.pressed.emit()
+	var abandon_count: Array[int] = [0]
+	menu.connect("abandon_run_confirmed", func() -> void: abandon_count[0] += 1)
 	confirm.pressed.emit()
 	confirm.pressed.emit()
-	TestAssertions.equal(quit_count[0], 1, "confirmed Quit Run emits exactly once", failures)
+	TestAssertions.equal(abandon_count[0], 1, "confirmed Abandon emits exactly once", failures)
+	menu.call("reject_abandon", "Unable to abandon this run.")
+	TestAssertions.truthy(menu.visible and tree.paused and not confirmation.visible, "forfeit failure leaves the active-run menu recoverable and paused", failures)
+	abandon_run.pressed.emit()
+	confirm.pressed.emit()
+	TestAssertions.equal(abandon_count[0], 2, "forfeit rejection permits one fresh Abandon attempt", failures)
+	menu.call("present_abandon_committed_refresh_error", "Run abandoned, but the profile could not refresh. Retry Return to Forge.")
+	TestAssertions.truthy(committed_error.visible and committed_message.text == "Run abandoned, but the profile could not refresh. Retry Return to Forge.", "committed refresh error shows exact durable status", failures)
+	TestAssertions.truthy(tree.paused and menu.visible, "committed refresh error keeps the pause lease", failures)
+	TestAssertions.truthy(retry_return.visible and not retry_return.disabled, "Retry Return to Forge is the sole enabled action", failures)
+	if menu.is_inside_tree():
+		TestAssertions.truthy(tree.root.gui_get_focus_owner() == retry_return, "Retry Return to Forge is the only focused action", failures)
+	for blocked: Button in [resume, settings, abandon_run, confirm, cancel]:
+		TestAssertions.truthy(not blocked.visible or blocked.disabled or blocked.focus_mode == Control.FOCUS_NONE, "committed refresh state blocks %s" % blocked.name, failures)
 	menu.call("close")
-	TestAssertions.truthy(not tree.paused, "closing after confirmation releases this menu's lease", failures)
+	TestAssertions.truthy(menu.visible and tree.paused and committed_error.visible, "programmatic close is rejected after committed Abandon", failures)
+	for action: StringName in [&"ui_cancel", &"pause_menu"]:
+		menu.call("_unhandled_input", _action_event(action))
+		TestAssertions.truthy(menu.visible and tree.paused and committed_error.visible, "committed refresh state consumes %s" % action, failures)
+	abandon_run.pressed.emit()
+	confirm.pressed.emit()
+	TestAssertions.equal(abandon_count[0], 2, "committed refresh state cannot emit Abandon again", failures)
+	var retry_count: Array[int] = [0]
+	menu.connect("retry_abandon_refresh_requested", func() -> void: retry_count[0] += 1)
+	retry_return.pressed.emit()
+	retry_return.pressed.emit()
+	TestAssertions.equal(retry_count[0], 1, "committed refresh retry emits exactly once while pending", failures)
+	menu.call("present_abandon_committed_refresh_error", "Run abandoned, but the profile could not refresh. Retry Return to Forge.")
+	TestAssertions.truthy(retry_return.visible and not retry_return.disabled, "retry failure restores the same bounded action", failures)
+	if menu.is_inside_tree():
+		TestAssertions.truthy(tree.root.gui_get_focus_owner() == retry_return, "retry failure restores the same bounded focus", failures)
+	menu.call("complete_abandon_return")
+	TestAssertions.truthy(not menu.visible and not tree.paused, "successful refresh releases the menu for front-end return", failures)
 
 	tree.paused = true
 	TestAssertions.truthy(bool(menu.call("open")), "menu can acquire over a pre-existing pause", failures)

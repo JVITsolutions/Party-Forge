@@ -87,7 +87,7 @@ func _test_retained_overlay_contracts(failures: Array[String]) -> void:
 	var level_up := hud.get_node("LevelUpPanel") as Control
 	var level_frame := hud.get_node("LevelUpPanel/Frame") as Control
 	var result_root := hud.get_node("RunResultPanel") as Control
-	var result_panel := hud.get_node("RunResultPanel/Panel") as Control
+	var result_panel := hud.get_node("RunResultPanel/Frame") as Control
 	_assert_full_rect(level_up, "level-up modal root", failures)
 	_assert_full_rect(status_margin, "combat HUD shell", failures)
 	_assert_full_rect(result_root, "run result overlay", failures)
@@ -115,7 +115,7 @@ func _test_retained_overlay_contracts(failures: Array[String]) -> void:
 		var level_rect := ResponsiveGeometry.control_rect(level_frame, Rect2(Vector2.ZERO, viewport_size))
 		TestAssertions.truthy(level_rect.size.x <= 1200.0 and level_rect.size.y <= 660.0, "level-up frame stays bounded at %s" % viewport_size, failures)
 		TestAssertions.truthy(ResponsiveGeometry.contains(Rect2(Vector2.ZERO, viewport_size), level_rect), "level-up frame remains contained at %s" % viewport_size, failures)
-		_assert_size(result_panel, Vector2(400.0, 260.0), "run result panel", failures)
+		_assert_size(result_panel, Vector2(900.0, 680.0), "run result panel", failures)
 		_assert_contained(boss_banner, viewport_size, "boss banner", failures)
 	hud.free()
 
@@ -153,7 +153,7 @@ func _test_integrated_overlay_containment(failures: Array[String]) -> void:
 	var ledger_frame := ledger.get_node("Overlay/Frame") as Control
 	var pause_overlay := pause_menu.get_node("Overlay") as Control
 	var pause_panel := pause_menu.get_node("Overlay/Panel") as Control
-	var confirmation_panel := pause_menu.get_node("Overlay/QuitConfirmation/Panel") as Control
+	var confirmation_panel := pause_menu.get_node("Overlay/AbandonConfirmation/Panel") as Control
 	_assert_full_rect(ledger_overlay, "ledger overlay root", failures)
 	_assert_full_rect(pause_overlay, "pause overlay root", failures)
 	TestAssertions.truthy(ledger.has_method("apply_viewport_size"), "ledger overlay exposes responsive containment policy", failures)

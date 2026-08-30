@@ -4,6 +4,7 @@ extends RefCounted
 const ERROR_PREFIX := "PARTY_FORGE_RUN_TERMINAL_RECOVERY_ERROR"
 const CAPTURE_OPERATION := "terminal_capture"
 const SELECTION_OPERATION := "terminal_selection"
+const RESOLUTION_INTERRUPTION_OPERATION := "terminal_resolution_interruption"
 const PROTECTION_OPERATION := "terminal_protect_displaced"
 const COMPLETION_OPERATION := "terminal_completion"
 
@@ -52,17 +53,27 @@ func persist_initial(profile_id: String, snapshot: RunTerminalSnapshot, root: St
 	return mutation
 
 func persist_selection(profile_id: String, record: RunTerminalRecoveryRecord, root: String = ProfileStore.DEFAULT_ROOT) -> ProfileMutationResult:
+	var phase := "terminal-interruption" if record != null and record.stage == RunTerminalRecoveryRecord.Stage.RESOLUTION_INTERRUPTED else "terminal-selection"
+	return _persist_pre_resolution_record(profile_id, record, phase, SELECTION_OPERATION, root)
+
+func persist_resolution_interruption(profile_id: String, record: RunTerminalRecoveryRecord, root: String = ProfileStore.DEFAULT_ROOT) -> ProfileMutationResult:
+	if record == null or record.stage != RunTerminalRecoveryRecord.Stage.RESOLUTION_INTERRUPTED or record.interruption_reason.strip_edges().is_empty():
+		return _failure(profile_id, "terminal-resolution-failure", "exact readable resolution interruption is required")
+	return _persist_pre_resolution_record(profile_id, record, "terminal-resolution-failure", RESOLUTION_INTERRUPTION_OPERATION, root)
+
+func _persist_pre_resolution_record(profile_id: String, record: RunTerminalRecoveryRecord, phase: String, operation: String, root: String) -> ProfileMutationResult:
 	if record == null or record.snapshot == null or record.snapshot.profile_id != profile_id:
 		return _failure(profile_id, "terminal-selection", "record identity is invalid")
 	if record.transaction_id.strip_edges().is_empty():
 		return _failure(profile_id, "terminal-selection", "resolution transaction is required")
-	var transaction_id := "%s:%s" % ["terminal-interruption" if record.stage == RunTerminalRecoveryRecord.Stage.RESOLUTION_INTERRUPTED else "terminal-selection", record.transaction_id]
+	var transaction_id := "%s:%s" % [phase, record.transaction_id]
 	var request := {
 		"profile_id": profile_id,
 		"run_id": String(record.snapshot.run_id),
 		"resolution_transaction_id": record.transaction_id,
 		"selected_item_ids": record.selected_item_ids,
 		"stage": int(record.stage),
+		"phase": phase,
 	}
 	return _mutations.apply(profile_id, transaction_id, func(candidate: ProfileState) -> String:
 		var current := inspect(candidate)
@@ -74,7 +85,7 @@ func persist_selection(profile_id: String, record: RunTerminalRecoveryRecord, ro
 			return _error("snapshot", "selection must match durable terminal truth")
 		candidate.terminal_resolution = record.to_dictionary()
 		return ""
-	, root, -1, SELECTION_OPERATION, request)
+	, root, -1, operation, request)
 
 func inspect(profile: ProfileState) -> RunTerminalRecoveryRecordResult:
 	if profile == null:
@@ -161,6 +172,8 @@ func complete_terminal(profile_id: String, run_id: StringName, root: String = Pr
 func protect_displaced_gear(profile_id: String, record: RunTerminalRecoveryRecord, root: String = ProfileStore.DEFAULT_ROOT) -> ProfileMutationResult:
 	if record == null or record.snapshot == null or record.snapshot.profile_id != profile_id:
 		return _failure(profile_id, "terminal-protect-displaced", "record identity is invalid")
+	if record.stage != RunTerminalRecoveryRecord.Stage.RESOLUTION_INTERRUPTED:
+		return _failure(profile_id, "terminal-protect-displaced", "exact resolution-interrupted stage is required")
 	var loaded := _store.load_profile(profile_id, root)
 	if not loaded.ok():
 		return _failure(profile_id, "terminal-protect-displaced", loaded.error if not loaded.error.is_empty() else "profile is missing")
@@ -264,7 +277,11 @@ func _validate_bootstrap_identity(profile: ProfileState, snapshot: RunTerminalSn
 	return ""
 
 func _validate_initial_projection(profile: ProfileState, snapshot: RunTerminalSnapshot) -> String:
-	var identity_error := _validate_bootstrap_identity(profile, snapshot, true)
+	var canonical_document: Variant = JSON.parse_string(JSON.stringify(snapshot.to_dictionary(), "\t", false))
+	var canonical := RunTerminalSnapshot.from_dictionary(canonical_document)
+	if not canonical.ok():
+		return _error("snapshot", "captured terminal truth did not survive the durable JSON boundary")
+	var identity_error := _validate_bootstrap_identity(profile, canonical.snapshot, true)
 	if not identity_error.is_empty():
 		return identity_error
 	var decoded := RunTerminalRecoveryCodec.decode(profile.terminal_resolution)
@@ -273,7 +290,7 @@ func _validate_initial_projection(profile: ProfileState, snapshot: RunTerminalSn
 	var empty_ids: Array[String] = []
 	var expected := RunTerminalRecoveryRecord.create(
 		RunTerminalRecoveryRecord.Stage.CHOOSING_EXTRACTION,
-		snapshot, empty_ids, "", empty_ids, "", null, "",
+		canonical.snapshot, empty_ids, "", empty_ids, "", null, "",
 	)
 	if not expected.ok() or decoded.record.to_dictionary() != expected.record.to_dictionary():
 		return _error("terminal_resolution", "committed capture result does not match the supplied snapshot")

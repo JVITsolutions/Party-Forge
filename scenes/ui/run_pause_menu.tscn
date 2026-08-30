@@ -63,13 +63,13 @@ layout_mode = 2
 focus_mode = 2
 text = "Settings"
 
-[node name="QuitRun" type="Button" parent="Overlay/Panel/Content"]
+[node name="AbandonRun" type="Button" parent="Overlay/Panel/Content"]
 custom_minimum_size = Vector2(0, 56)
 layout_mode = 2
 focus_mode = 2
-text = "Quit Run"
+text = "Abandon Run"
 
-[node name="QuitConfirmation" type="Control" parent="Overlay"]
+[node name="AbandonConfirmation" type="Control" parent="Overlay"]
 visible = false
 layout_mode = 1
 anchors_preset = 15
@@ -79,7 +79,7 @@ grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 0
 
-[node name="Panel" type="PanelContainer" parent="Overlay/QuitConfirmation"]
+[node name="Panel" type="PanelContainer" parent="Overlay/AbandonConfirmation"]
 custom_minimum_size = Vector2(560, 280)
 layout_mode = 1
 anchors_preset = 8
@@ -94,21 +94,21 @@ offset_bottom = 140.0
 grow_horizontal = 2
 grow_vertical = 2
 
-[node name="Content" type="VBoxContainer" parent="Overlay/QuitConfirmation/Panel"]
+[node name="Content" type="VBoxContainer" parent="Overlay/AbandonConfirmation/Panel"]
 layout_mode = 2
 theme_override_constants/separation = 16
 
-[node name="Message" type="Label" parent="Overlay/QuitConfirmation/Panel/Content"]
+[node name="Message" type="Label" parent="Overlay/AbandonConfirmation/Panel/Content"]
 layout_mode = 2
-text = "Quit this run? Unsaved run progress will be lost."
+text = "Abandon this run? This will forfeit run-owned progress/items."
 horizontal_alignment = 1
 autowrap_mode = 2
 
-[node name="Confirm" type="Button" parent="Overlay/QuitConfirmation/Panel/Content"]
+[node name="Confirm" type="Button" parent="Overlay/AbandonConfirmation/Panel/Content"]
 custom_minimum_size = Vector2(0, 56)
 layout_mode = 2
 focus_mode = 2
-text = "Quit Run"
+text = "Abandon Run"
 focus_neighbor_left = NodePath("../Cancel")
 focus_neighbor_top = NodePath("../Cancel")
 focus_neighbor_right = NodePath("../Cancel")
@@ -116,7 +116,7 @@ focus_neighbor_bottom = NodePath("../Cancel")
 focus_next = NodePath("../Cancel")
 focus_previous = NodePath("../Cancel")
 
-[node name="Cancel" type="Button" parent="Overlay/QuitConfirmation/Panel/Content"]
+[node name="Cancel" type="Button" parent="Overlay/AbandonConfirmation/Panel/Content"]
 custom_minimum_size = Vector2(0, 56)
 layout_mode = 2
 focus_mode = 2
@@ -127,3 +127,44 @@ focus_neighbor_right = NodePath("../Confirm")
 focus_neighbor_bottom = NodePath("../Confirm")
 focus_next = NodePath("../Confirm")
 focus_previous = NodePath("../Confirm")
+
+[node name="AbandonCommittedError" type="Control" parent="Overlay"]
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 0
+
+[node name="Panel" type="PanelContainer" parent="Overlay/AbandonCommittedError"]
+custom_minimum_size = Vector2(560, 240)
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -280.0
+offset_top = -120.0
+offset_right = 280.0
+offset_bottom = 120.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Content" type="VBoxContainer" parent="Overlay/AbandonCommittedError/Panel"]
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="Message" type="Label" parent="Overlay/AbandonCommittedError/Panel/Content"]
+layout_mode = 2
+text = "Run abandoned, but the profile could not refresh. Retry Return to Forge."
+horizontal_alignment = 1
+autowrap_mode = 2
+
+[node name="RetryReturnToForge" type="Button" parent="Overlay/AbandonCommittedError/Panel/Content"]
+custom_minimum_size = Vector2(0, 56)
+layout_mode = 2
+focus_mode = 2
+text = "Retry Return to Forge"

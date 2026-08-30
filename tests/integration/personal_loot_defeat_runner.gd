@@ -4,15 +4,25 @@ const PROFILE_ROOT := "user://tests/personal_loot_defeat_profiles"
 const SETTINGS_PATH := "user://tests/personal_loot_defeat_settings.cfg"
 
 var _failures: Array[String] = []
+var _xp_failures := 0
+var _guardian_failures := 0
 
 func _initialize() -> void:
+	if "--check-only" in OS.get_cmdline_args():
+		quit(0)
+		return
 	call_deferred(&"_run")
 
 func _run() -> void:
 	ProfileTestSupport.remove_tree(PROFILE_ROOT)
 	_cleanup_settings()
+	if not _runtime_terminal_contract_available():
+		ProfileTestSupport.remove_tree(PROFILE_ROOT)
+		_cleanup_settings()
+		_finish()
+		return
 	var player := await _started_main(PartyForgeSettings.new())
-	_verify_enemy_defeat(player, false)
+	await _verify_enemy_defeat(player, false)
 	_cleanup_main(player)
 	ProfileTestSupport.remove_tree(PROFILE_ROOT)
 
@@ -20,14 +30,14 @@ func _run() -> void:
 	developer_settings.mode = PartyForgeSettings.Mode.DEVELOPER_MODE
 	developer_settings.unlock_all_implemented_content = true
 	var developer := await _started_main(developer_settings)
-	_verify_enemy_defeat(developer, true)
+	await _verify_enemy_defeat(developer, true)
 	_verify_guardian_victory_and_zero_reward(developer)
 	_cleanup_main(developer)
 	ProfileTestSupport.remove_tree(PROFILE_ROOT)
 	_cleanup_settings()
 	_finish()
 
-func _verify_enemy_defeat(main: PartyForgeMain, expect_drop: bool) -> void:
+func _verify_enemy_defeat(main: Node, expect_drop: bool) -> void:
 	var director := main.get_node("SpawnDirector") as SpawnDirector
 	var roll := main.get("personal_loot_roll_service") as PersonalLootRollService
 	var registry := main.get("ground_item_registry") as GroundItemRegistry
@@ -50,8 +60,16 @@ func _verify_enemy_defeat(main: PartyForgeMain, expect_drop: bool) -> void:
 	enemy.defeat()
 	_assert(_experience_orb_count(main.get_node("Effects")) == orb_count_before + 1, "repeated defeat preserves exactly one XP reward")
 	_assert(registry.all_records().size() == (1 if expect_drop else 0), "feature access produces the expected owner-scoped ground record")
+	if expect_drop:
+		var before_terminal := registry.all_records().size()
+		main.call(&"_show_defeat")
+		await process_frame
+		_assert(registry.all_records().size() == before_terminal, "defeat terminal capture retains live loot while extraction is pending")
+		_assert(_active_chest_count(main) == before_terminal, "defeat terminal capture retains projected loot while extraction is pending")
+		var flow: Variant = main.get("_terminal_flow")
+		_assert(flow != null and int(flow.call(&"state")) == RunTerminalFlow.State.CHOOSING_EXTRACTION, "defeat terminal capture enters typed extraction choice")
 
-func _verify_guardian_victory_and_zero_reward(main: PartyForgeMain) -> void:
+func _verify_guardian_victory_and_zero_reward(main: Node) -> void:
 	var coordinator := main.get("personal_loot_drop_coordinator") as PersonalLootDropCoordinator
 	var registry := main.get("ground_item_registry") as GroundItemRegistry
 	_assert(coordinator != null and registry != null, "Guardian regression uses the configured coordinator")
@@ -70,10 +88,19 @@ func _verify_guardian_victory_and_zero_reward(main: PartyForgeMain) -> void:
 		guardian.defeat()
 		guardian.defeat()
 	_assert(victories[0] == 1 and game_run.current_state() == RunStateMachine.State.VICTORY, "existing Guardian signal reaches exactly one victory")
-	_assert(registry.all_records().is_empty(), "Guardian victory creates no zero-chance boss reward and clears prior run-owned loot")
+	var live_after_victory := registry.all_records().size()
+	_guardian_assert(live_after_victory > 0, "Guardian victory creates no zero-chance boss reward but retains prior run-owned loot")
+	_guardian_assert(_active_chest_count(main) == live_after_victory, "Guardian victory retains every projected prior loot chest until accepted recap")
+	var flow: Variant = main.get("_terminal_flow")
+	_guardian_assert(flow != null and int(flow.call(&"state")) == RunTerminalFlow.State.CHOOSING_EXTRACTION, "Guardian victory enters the typed extraction choice before cleanup")
+	var extraction := main.get_node_or_null("HUD/TerminalExtraction") as TerminalExtractionPanel
+	if flow != null and extraction != null:
+		extraction.confirm_requested.emit()
+		_guardian_assert(int(flow.call(&"state")) == RunTerminalFlow.State.FINALIZED, "Guardian extraction confirmation reaches one accepted durable recap")
+		_guardian_assert(registry.all_records().is_empty(), "Guardian accepted durable recap clears prior run-owned loot exactly once")
 
-func _started_main(settings: PartyForgeSettings) -> PartyForgeMain:
-	var main := (load("res://scenes/game/main.tscn") as PackedScene).instantiate() as PartyForgeMain
+func _started_main(settings: PartyForgeSettings) -> Node:
+	var main := (load("res://scenes/game/main.tscn") as PackedScene).instantiate() as Node
 	main.profile_root = PROFILE_ROOT
 	main.settings_path = SETTINGS_PATH
 	root.add_child(main)
@@ -92,7 +119,38 @@ func _experience_orb_count(parent: Node) -> int:
 			count += 1
 	return count
 
-func _cleanup_main(main: PartyForgeMain) -> void:
+func _active_chest_count(main: Node) -> int:
+	var controller := main.get("ground_item_world_controller") as Node
+	return int((controller.get("_chest_by_drop") as Dictionary).size()) if controller != null else -1
+
+func _runtime_terminal_contract_available() -> bool:
+	# Narrow RED guard for a half-applied Main binding: avoid turning an
+	# expected Task12 failure into parser/leak noise before runtime can load.
+	var main_source := FileAccess.get_file_as_string("res://scripts/game/main.gd")
+	for method_name: String in [
+		"func _on_terminal(", "func _on_terminal_extraction_confirmed(",
+		"func _on_terminal_resolution_accepted(",
+	]:
+		if not main_source.contains(method_name):
+			_guardian_assert(false, "Task12 terminal Main binding includes %s" % method_name)
+			return false
+	var packed := load("res://scenes/game/main.tscn") as PackedScene
+	if packed == null:
+		_guardian_assert(false, "Task12 terminal runtime scene loads")
+		return false
+	var main := packed.instantiate() as Node
+	if main == null:
+		_guardian_assert(false, "Task12 terminal runtime Main instantiates")
+		return false
+	var available := true
+	for method_name: StringName in [&"_on_terminal", &"_on_terminal_extraction_confirmed", &"_on_terminal_resolution_accepted"]:
+		if not main.has_method(method_name):
+			_guardian_assert(false, "Task12 terminal runtime exposes %s" % method_name)
+			available = false
+	main.free()
+	return available
+
+func _cleanup_main(main: Node) -> void:
 	paused = false
 	if main != null:
 		main.free()
@@ -110,8 +168,18 @@ func _finish() -> void:
 		return
 	for failure: String in _failures:
 		push_error("PERSONAL_LOOT_DEFEAT_INTEGRATION: %s" % failure)
+	print("PERSONAL_LOOT_DEFEAT_INTEGRATION: FAIL (%d failures)" % _failures.size())
+	if _xp_failures > 0:
+		print("PERSONAL_LOOT_XP_REGRESSION: FAIL (%d failures)" % _xp_failures)
+	if _guardian_failures > 0:
+		print("FORGE_GUARDIAN_VICTORY_REGRESSION: FAIL (%d failures)" % _guardian_failures)
 	quit(1)
 
 func _assert(condition: bool, message: String) -> void:
 	if not condition:
+		_failures.append(message)
+
+func _guardian_assert(condition: bool, message: String) -> void:
+	if not condition:
+		_guardian_failures += 1
 		_failures.append(message)

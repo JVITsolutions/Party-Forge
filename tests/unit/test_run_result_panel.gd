@@ -33,6 +33,7 @@ func run() -> Array[String]:
 func _test_exact_labels_and_states(panel: Control, view_model: Variant, fixture: Dictionary, failures: Array[String]) -> void:
 	var labels := {
 		"RetryTerminalSave": "Retry Save Terminal State",
+		"RetryTerminalRefresh": "Retry Terminal Recovery",
 		"RetryResolution": "Retry Resolution",
 		"RetryProjection": "Retry Results",
 		"ProtectDisplacedGear": "Protect Displaced Gear",
@@ -54,15 +55,29 @@ func _test_exact_labels_and_states(panel: Control, view_model: Variant, fixture:
 	TestAssertions.truthy(not _headline(panel).text.contains("Victory") and not _headline(panel).text.contains("Defeat"), "pending hierarchy exposes no unverified outcome headline", failures)
 	TestAssertions.truthy(_visible_actions(panel).is_empty(), "pending projection exposes no actions", failures)
 	TestAssertions.truthy(not _body(panel).visible, "pending projection exposes no partial recap", failures)
+	var projection_source := FileAccess.get_file_as_string("res://scripts/ui/run_result/run_result_projection.gd")
+	var has_typed_pending := "enum PendingKind" in projection_source and "pending_kind" in projection_source
+	TestAssertions.truthy(has_typed_pending, "pending presentation receives a typed operation kind", failures)
+	if has_typed_pending:
+		var expected_pending_copy: Array[String] = ["SAVING TERMINAL TRUTH", "REFRESHING TERMINAL RECOVERY", "RESOLVING TERMINAL RUN", "REBUILDING RESULTS", "PROTECTING DISPLACED GEAR", "COMPLETING TERMINAL RECORD"]
+		for pending_kind: int in expected_pending_copy.size():
+			panel.call(&"present", view_model.call(&"pending", fixture.snapshot, pending_kind).get("projection"))
+			TestAssertions.equal(_state_text(panel), expected_pending_copy[pending_kind], "pending kind %d uses operation-accurate copy" % pending_kind, failures)
 
 	panel.call(&"present", view_model.call(&"terminal_save_interrupted", fixture.snapshot, "Terminal record could not be saved.").get("projection"))
 	TestAssertions.equal(_state_text(panel), "TERMINAL SAVE INTERRUPTED", "terminal-save interruption is visibly distinct", failures)
 	TestAssertions.equal(_visible_action_names(panel), ["RetryTerminalSave"], "terminal-save interruption exposes one exact retry", failures)
 	TestAssertions.equal(_reason(panel).text, "Terminal record could not be saved.", "save interruption presents readable reason", failures)
+	if panel.is_inside_tree(): TestAssertions.truthy(_button(panel, "RetryTerminalSave").has_focus(), "Retry Save Terminal State owns safe initial focus", failures)
+	panel.call(&"present", view_model.call(&"terminal_refresh_interrupted", fixture.snapshot, "Terminal state was saved, but recovery could not refresh.").get("projection"))
+	TestAssertions.equal(_state_text(panel), "TERMINAL REFRESH INTERRUPTED", "post-save refresh interruption is visibly distinct", failures)
+	TestAssertions.equal(_visible_action_names(panel), ["RetryTerminalRefresh"], "post-save refresh interruption exposes one exact refresh-only retry", failures)
+	if panel.is_inside_tree(): TestAssertions.truthy(_button(panel, "RetryTerminalRefresh").has_focus(), "Retry Terminal Recovery owns safe initial focus", failures)
 
 	panel.call(&"present", view_model.call(&"resolution_interrupted", fixture.snapshot, "Resolution was interrupted.", null).get("projection"))
 	TestAssertions.equal(_state_text(panel), "RESOLUTION INTERRUPTED", "resolution interruption is visibly distinct", failures)
 	TestAssertions.equal(_visible_action_names(panel), ["RetryResolution"], "resolution interruption exposes one exact retry when unsafe", failures)
+	if panel.is_inside_tree(): TestAssertions.truthy(_button(panel, "RetryResolution").has_focus(), "Retry Resolution owns safe initial focus", failures)
 	TestAssertions.truthy(not _button(panel, "RestartRun").visible, "Restart is absent from interrupted truth", failures)
 
 	panel.call(&"present", view_model.call(&"projection_interrupted", fixture.snapshot, fixture.resolution, "Results could not be built.").get("projection"))
@@ -76,10 +91,18 @@ func _test_exact_labels_and_states(panel: Control, view_model: Variant, fixture:
 	TestAssertions.equal(_state_text(panel), "RUN FINALIZED", "finalized state is visibly distinct", failures)
 	TestAssertions.equal(_headline(panel).text, "VICTORY · 01:30", "finalized hierarchy leads with verified outcome and duration", failures)
 	TestAssertions.equal(_visible_action_names(panel), ["RestartRun", "ReturnToForge", "QuitApplication"], "finalized exposes the exact terminal action set only", failures)
-	for guarded_only: String in ["RetryTerminalSave", "RetryResolution", "RetryProjection", "ProtectDisplacedGear", "OpenArmoury"]:
+	for guarded_only: String in ["RetryTerminalSave", "RetryTerminalRefresh", "RetryResolution", "RetryProjection", "ProtectDisplacedGear", "OpenArmoury"]:
 		TestAssertions.truthy(not _button(panel, guarded_only).visible, "%s is absent from finalized truth" % guarded_only, failures)
 	TestAssertions.truthy(panel.find_child("AbandonRun", true, false) == null, "terminal results never expose Abandon Run", failures)
 	TestAssertions.truthy(not _button(panel, "QuitApplication").has_focus() and not _button(panel, "RestartRun").has_focus(), "destructive/consequence actions never receive default focus", failures)
+	var has_action_error: bool = view_model.has_method(&"finalized_action_interrupted")
+	TestAssertions.truthy(has_action_error, "panel receives a typed finalized action-rejection projection", failures)
+	if has_action_error:
+		var action_error: Variant = view_model.call(&"finalized_action_interrupted", finalized, "Terminal record could not be cleared. Retry Restart Run.").get("projection")
+		panel.call(&"present", action_error, &"RestartRun")
+		TestAssertions.truthy(_reason(panel).visible and _reason(panel).text == "Terminal record could not be cleared. Retry Restart Run.", "finalized receipt-clear failure is readable and non-claiming", failures)
+		TestAssertions.equal(_visible_action_names(panel), ["RestartRun", "ReturnToForge", "QuitApplication"], "receipt-clear failure restores exact finalized actions", failures)
+		if panel.is_inside_tree(): TestAssertions.truthy(_button(panel, "RestartRun").has_focus(), "receipt-clear failure restores exact initiating action focus", failures)
 
 func _test_finalized_truth_scroll_and_accessibility(panel: Control, view_model: Variant, fixture: Dictionary, failures: Array[String]) -> void:
 	var built: Variant = view_model.call(&"build", fixture.snapshot, fixture.resolution, fixture.profile, [])
@@ -116,9 +139,10 @@ func _test_finalized_truth_scroll_and_accessibility(panel: Control, view_model: 
 	TestAssertions.truthy(not panel.has_method(&"_process"), "result presentation does not rebuild providers from a frame loop", failures)
 
 func _test_action_signals_pending_and_focus(panel: Control, view_model: Variant, fixture: Dictionary, failures: Array[String]) -> void:
-	var observed := {"retry_results": 0, "retry_save": 0, "retry_resolution": 0, "protection_emissions": 0, "protection_focus": null, "armoury_focus": null}
+	var observed := {"retry_results": 0, "retry_save": 0, "retry_refresh": 0, "retry_resolution": 0, "protection_emissions": 0, "protection_focus": null, "armoury_focus": null}
 	panel.retry_projection_requested.connect(func() -> void: observed.retry_results = int(observed.retry_results) + 1)
 	panel.retry_terminal_save_requested.connect(func() -> void: observed.retry_save = int(observed.retry_save) + 1)
+	panel.retry_terminal_refresh_requested.connect(func() -> void: observed.retry_refresh = int(observed.retry_refresh) + 1)
 	panel.retry_resolution_requested.connect(func() -> void: observed.retry_resolution = int(observed.retry_resolution) + 1)
 	panel.protect_displaced_gear_requested.connect(func(return_focus: Control) -> void:
 		observed.protection_emissions = int(observed.protection_emissions) + 1
@@ -141,6 +165,11 @@ func _test_action_signals_pending_and_focus(panel: Control, view_model: Variant,
 	_button(panel, "RetryTerminalSave").pressed.emit()
 	_button(panel, "RetryTerminalSave").pressed.emit()
 	TestAssertions.equal(int(observed.retry_save), 1, "initial-save retry suppresses duplicate pending activation", failures)
+	var refresh_failed: Variant = view_model.call(&"terminal_refresh_interrupted", fixture.snapshot, "refresh failed").get("projection")
+	panel.call(&"present", refresh_failed)
+	_button(panel, "RetryTerminalRefresh").pressed.emit()
+	_button(panel, "RetryTerminalRefresh").pressed.emit()
+	TestAssertions.equal(int(observed.retry_refresh), 1, "post-save refresh retry suppresses duplicate pending activation", failures)
 	var resolution_failed: Variant = view_model.call(&"resolution_interrupted", fixture.snapshot, "resolution failed", null).get("projection")
 	panel.call(&"present", resolution_failed)
 	_button(panel, "RetryResolution").pressed.emit()
@@ -149,10 +178,11 @@ func _test_action_signals_pending_and_focus(panel: Control, view_model: Variant,
 
 	var automatic_evaluation := RunResolutionEvaluation.create(fixture.resolution.accepted_extraction, 2, 0, 0, "automatic-only blocked", RunResolutionEvaluation.FailureCategory.STASH_AUTOMATIC_ONLY, "Automatic retained items need more destination space.")
 	var preflight := RunResolutionPreflightResult.from_evaluation(automatic_evaluation)
-	var durable := _durable_safety(fixture.snapshot, ["displaced-a", "displaced-b"])
-	var guarded: Variant = view_model.call(&"resolution_interrupted", fixture.snapshot, preflight.player_reason, {"durable": durable, "preflight": preflight}).get("projection")
+	var durable := _durable_safety(fixture.snapshot, [])
+	var guarded: Variant = view_model.call(&"resolution_interrupted", fixture.snapshot, preflight.player_reason, durable, preflight).get("projection")
 	panel.call(&"present", guarded)
 	TestAssertions.equal(_visible_action_names(panel), ["RetryResolution", "ProtectDisplacedGear", "OpenArmoury", "ReturnToForge", "QuitApplication"], "guarded interruption exposes the exact authorized action set", failures)
+	if panel.is_inside_tree(): TestAssertions.truthy(_button(panel, "ProtectDisplacedGear").has_focus(), "automatic-only interruption defaults to Protect Displaced Gear", failures)
 	TestAssertions.truthy(not _button(panel, "RestartRun").visible, "guarded interruption never exposes Restart", failures)
 	var synthetic_recap_row := Button.new()
 	synthetic_recap_row.name = "SyntheticBackgroundRecapRow"

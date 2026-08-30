@@ -6,13 +6,14 @@ signal return_to_forge_requested
 signal open_armoury_requested(return_focus: Control)
 signal quit_application_requested
 signal retry_terminal_save_requested
+signal retry_terminal_refresh_requested
 signal retry_resolution_requested
 signal retry_projection_requested
 signal protect_displaced_gear_requested(return_focus: Control)
 
 const ACTION_PATH := "Frame/Content/Footer/Actions/"
 const ACTION_NAMES: Array[String] = [
-	"RetryTerminalSave", "RetryResolution", "RetryProjection", "ProtectDisplacedGear",
+	"RetryTerminalSave", "RetryTerminalRefresh", "RetryResolution", "RetryProjection", "ProtectDisplacedGear",
 	"OpenArmoury", "RestartRun", "ReturnToForge", "QuitApplication",
 ]
 
@@ -51,6 +52,7 @@ func _bind_controls() -> void:
 	_cancel_confirmation = get_node("Frame/Content/Confirmation/Content/Actions/Cancel") as Button
 	_confirm_protection = get_node("Frame/Content/Confirmation/Content/Actions/Confirm") as Button
 	_connect_action("RetryTerminalSave", _on_retry_terminal_save)
+	_connect_action("RetryTerminalRefresh", _on_retry_terminal_refresh)
 	_connect_action("RetryResolution", _on_retry_resolution)
 	_connect_action("RetryProjection", _on_retry_projection)
 	_connect_action("ProtectDisplacedGear", _on_protect_displaced_gear)
@@ -63,7 +65,7 @@ func _bind_controls() -> void:
 	if not _confirm_protection.pressed.is_connected(_on_confirm_protection):
 		_confirm_protection.pressed.connect(_on_confirm_protection)
 
-func present(projection: RunResultProjection) -> void:
+func present(projection: RunResultProjection, preferred_action: StringName = &"") -> void:
 	_bind_controls()
 	_reset_presentation()
 	if projection == null or not projection.valid():
@@ -73,20 +75,51 @@ func present(projection: RunResultProjection) -> void:
 	visible = true
 	match projection.terminal_state:
 		RunResultProjection.TerminalState.PENDING:
-			_state.text = "SAVING TERMINAL TRUTH"
+			_state.text = _pending_copy(projection.pending_kind)
 		RunResultProjection.TerminalState.INTERRUPTED:
 			_present_interruption(projection)
 		RunResultProjection.TerminalState.FINALIZED:
 			_state.text = "RUN FINALIZED"
 			_headline.text = _finalized_headline(projection)
+			_reason.visible = not projection.readable_reason.is_empty()
+			_reason.text = projection.readable_reason
 			_body.visible = true
 			_build_recap(projection.sections)
 	_apply_actions(projection)
 	_apply_focus_bridge()
-	if is_inside_tree() and projection.terminal_state == RunResultProjection.TerminalState.INTERRUPTED and projection.interruption_kind == RunResultProjection.InterruptionKind.PROJECTION:
-		_action("RetryProjection").grab_focus()
-	elif is_inside_tree() and projection.terminal_state == RunResultProjection.TerminalState.FINALIZED:
+	_apply_initial_focus(projection, preferred_action)
+
+func _pending_copy(pending_kind: int) -> String:
+	match pending_kind:
+		RunResultProjection.PendingKind.TERMINAL_REFRESH: return "REFRESHING TERMINAL RECOVERY"
+		RunResultProjection.PendingKind.RESOLUTION: return "RESOLVING TERMINAL RUN"
+		RunResultProjection.PendingKind.PROJECTION: return "REBUILDING RESULTS"
+		RunResultProjection.PendingKind.PROTECTION: return "PROTECTING DISPLACED GEAR"
+		RunResultProjection.PendingKind.TERMINAL_COMPLETION: return "COMPLETING TERMINAL RECORD"
+		_: return "SAVING TERMINAL TRUTH"
+
+func _apply_initial_focus(projection: RunResultProjection, preferred_action: StringName) -> void:
+	if not is_inside_tree():
+		return
+	var preferred_name := String(preferred_action)
+	if not preferred_name.is_empty() and bool(_allowed_actions.get(preferred_name, false)):
+		_action(preferred_name).grab_focus()
+		return
+	if projection.terminal_state == RunResultProjection.TerminalState.FINALIZED:
 		_action("ReturnToForge").grab_focus()
+		return
+	if projection.terminal_state != RunResultProjection.TerminalState.INTERRUPTED:
+		return
+	match projection.interruption_kind:
+		RunResultProjection.InterruptionKind.TERMINAL_STATE_SAVE:
+			_action("RetryTerminalSave").grab_focus()
+		RunResultProjection.InterruptionKind.TERMINAL_REFRESH:
+			_action("RetryTerminalRefresh").grab_focus()
+		RunResultProjection.InterruptionKind.PROJECTION:
+			_action("RetryProjection").grab_focus()
+		RunResultProjection.InterruptionKind.RESOLUTION:
+			var action_name := "ProtectDisplacedGear" if projection.protect_displaced_gear_allowed else "RetryResolution"
+			_action(action_name).grab_focus()
 
 func _reset_presentation() -> void:
 	_action_pending = false
@@ -118,6 +151,8 @@ func _present_interruption(projection: RunResultProjection) -> void:
 	match projection.interruption_kind:
 		RunResultProjection.InterruptionKind.TERMINAL_STATE_SAVE:
 			_state.text = "TERMINAL SAVE INTERRUPTED"
+		RunResultProjection.InterruptionKind.TERMINAL_REFRESH:
+			_state.text = "TERMINAL REFRESH INTERRUPTED"
 		RunResultProjection.InterruptionKind.RESOLUTION:
 			_state.text = "RESOLUTION INTERRUPTED"
 		RunResultProjection.InterruptionKind.PROJECTION:
@@ -126,6 +161,7 @@ func _present_interruption(projection: RunResultProjection) -> void:
 func _apply_actions(projection: RunResultProjection) -> void:
 	var visibility := {
 		"RetryTerminalSave": projection.retry_terminal_save_allowed,
+		"RetryTerminalRefresh": projection.retry_terminal_refresh_allowed,
 		"RetryResolution": projection.retry_resolution_allowed,
 		"RetryProjection": projection.retry_projection_allowed,
 		"ProtectDisplacedGear": projection.protect_displaced_gear_allowed,
@@ -264,6 +300,9 @@ func _begin_action(button: Button) -> bool:
 
 func _on_retry_terminal_save() -> void:
 	if _begin_action(_action("RetryTerminalSave")): retry_terminal_save_requested.emit()
+
+func _on_retry_terminal_refresh() -> void:
+	if _begin_action(_action("RetryTerminalRefresh")): retry_terminal_refresh_requested.emit()
 
 func _on_retry_resolution() -> void:
 	if _begin_action(_action("RetryResolution")): retry_resolution_requested.emit()

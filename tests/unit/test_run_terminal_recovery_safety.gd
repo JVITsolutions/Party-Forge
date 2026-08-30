@@ -75,6 +75,7 @@ func run() -> Array[String]:
 	_test_recursive_v5_migration_and_strict_v6_fields(failures)
 	_test_populated_overflow_storage_and_projection_behavior(failures)
 	_test_terminal_persistence_and_typed_safety(failures)
+	_test_terminal_persistence_canonicalizes_high_precision_live_source(failures)
 	_test_pre_resolution_safety_direct_full_matrix(failures)
 	_test_terminal_completion_service_contract(failures)
 	_test_completion_revalidates_complete_resolved_transaction(failures)
@@ -348,6 +349,29 @@ func _test_terminal_persistence_and_typed_safety(failures: Array[String]) -> voi
 	ProfileTestSupport.remove_tree(failure_root)
 	_free_fixture(fixture, "")
 
+func _test_terminal_persistence_canonicalizes_high_precision_live_source(failures: Array[String]) -> void:
+	var fixture := _fixture(true)
+	fixture.context._item_state = _run_state_high_precision()
+	var snapshot := RunTerminalSnapshotBuilder.new().capture(RunTerminalSnapshot.Outcome.VICTORY, 44.5, fixture.context).snapshot
+	var root := _case_root("persist_high_precision")
+	var store := ProfileStore.new()
+	TestAssertions.equal(store.save_profile(fixture.profile, root), "", "high-precision terminal fixture saves older strict bootstrap", failures)
+	var service := RunTerminalRecoveryService.new(ProfileMutationService.new(store), store)
+	var persisted := service.persist_initial(PROFILE_ID, snapshot, root)
+	TestAssertions.truthy(persisted.ok(), "high-precision live affix persists through the canonical durable boundary: %s" % persisted.error, failures)
+	if persisted.ok():
+		var durable := store.load_profile(PROFILE_ID, root).profile
+		var inspected := service.inspect(durable)
+		TestAssertions.truthy(inspected.ok(), "canonical high-precision receipt resumes exactly", failures)
+		if inspected.ok():
+			TestAssertions.equal(durable.resumable_run["item_state"], inspected.record.snapshot.resolution_source.item_state.to_dictionary(), "durable bootstrap and terminal source retain exact canonical identity", failures)
+			var drift_document := inspected.record.snapshot.to_dictionary()
+			(drift_document["resolution_source"]["item_state"]["registry"]["items"][0]["affixes"][0]["rolls"][0] as Dictionary)["value"] = 9.41167032718658
+			var drift := RunTerminalSnapshot.from_dictionary(drift_document)
+			TestAssertions.truthy(drift.ok() and not service.persist_initial(PROFILE_ID, drift.snapshot, root).ok(), "genuine canonical affix drift still rejects duplicate terminal capture", failures)
+	ProfileTestSupport.remove_tree(root)
+	_free_fixture(fixture, "")
+
 func _test_pre_resolution_safety_direct_full_matrix(failures: Array[String]) -> void:
 	var fixture := _fixture(true)
 	var snapshot := RunTerminalSnapshotBuilder.new().capture(RunTerminalSnapshot.Outcome.VICTORY, 45.0, fixture.context).snapshot
@@ -508,15 +532,34 @@ func _test_protect_displaced_gear_is_automatic_only_atomic_and_idempotent(failur
 	var request := RunResolutionRequest.create("terminal-protect-preflight", profile.profile_id, snapshot.run_id, snapshot.run_seed, snapshot.run_player_id, snapshot.leader_member_id, selections)
 	var blocked := RunResolutionService.new().preflight_source(profile, snapshot.resolution_source, request)
 	TestAssertions.truthy(not blocked.ok() and blocked.automatic_only_blocked, "only automatic displaced gear exposes protection", failures)
+	var empty_ids: Array[String] = []
+	var choosing := RunTerminalRecoveryRecord.create(
+		RunTerminalRecoveryRecord.Stage.CHOOSING_EXTRACTION,
+		snapshot, empty_ids, request.transaction_id, empty_ids, "", null, "",
+	)
+	TestAssertions.truthy(choosing.ok(), "confirmed choosing-stage protection authority fixture is valid", failures)
+	profile.terminal_resolution = choosing.record.to_dictionary()
+	TestAssertions.equal(store.save_profile(profile, fixture.root), "", "confirmed choosing-stage protection authority fixture saves", failures)
+	var before_choosing := FileAccess.get_file_as_bytes(store.profile_path(profile.profile_id, fixture.root))
+	var choosing_rejected: Variant = recovery.call("protect_displaced_gear", profile.profile_id, choosing.record, fixture.root)
+	TestAssertions.truthy(not _ok(choosing_rejected) and _error(choosing_rejected).to_lower().contains("stage"), "automatic-only preflight cannot authorize protection before the durable interrupted stage", failures)
+	TestAssertions.equal(FileAccess.get_file_as_bytes(store.profile_path(profile.profile_id, fixture.root)), before_choosing, "choosing-stage protection rejection is write-free", failures)
+	var interrupted := RunTerminalRecoveryRecord.create(
+		RunTerminalRecoveryRecord.Stage.RESOLUTION_INTERRUPTED,
+		snapshot, empty_ids, request.transaction_id, empty_ids, blocked.player_reason, null, "",
+	)
+	TestAssertions.truthy(interrupted.ok(), "automatic-only interrupted protection authority fixture is valid", failures)
+	profile.terminal_resolution = interrupted.record.to_dictionary()
+	TestAssertions.equal(store.save_profile(profile, fixture.root), "", "automatic-only interrupted protection authority fixture saves", failures)
 	var before_registry := profile.item_records.duplicate(true)
-	var protected: Variant = recovery.call("protect_displaced_gear", profile.profile_id, inspected.get("record"), fixture.root)
+	var protected: Variant = recovery.call("protect_displaced_gear", profile.profile_id, interrupted.record, fixture.root)
 	TestAssertions.truthy(_ok(protected), "confirmed automatic-only protection commits", failures)
 	var saved := store.load_profile(profile.profile_id, fixture.root).profile
 	TestAssertions.equal(saved.leader_loadout["slots"], {}, "protection clears every occupied permanent leader slot", failures)
 	TestAssertions.equal(saved.terminal_recovery_overflow["slots"], {"0": "item-preflight-prior-head", "10": "item-preflight-prior-shield"}, "protection moves exact permanent gear to matching overflow slots", failures)
 	TestAssertions.equal(saved.item_records, before_registry, "protection preserves every item registry record byte-structurally", failures)
 	TestAssertions.equal(saved.terminal_resolution.get("protected_displaced_item_ids", []), ["item-preflight-prior-head", "item-preflight-prior-shield"], "protection records the exact stable confirmation copy", failures)
-	var replay: Variant = recovery.call("protect_displaced_gear", profile.profile_id, inspected.get("record"), fixture.root)
+	var replay: Variant = recovery.call("protect_displaced_gear", profile.profile_id, interrupted.record, fixture.root)
 	TestAssertions.truthy(_ok(replay) and bool(replay.get("duplicate")), "same protection request is idempotent", failures)
 	var after := store.load_profile(profile.profile_id, fixture.root).profile
 	TestAssertions.equal(after.to_dictionary(), saved.to_dictionary(), "idempotent protection preserves exact durable truth", failures)
@@ -527,7 +570,6 @@ func _test_protect_displaced_gear_is_automatic_only_atomic_and_idempotent(failur
 	var changed_snapshot_document: Dictionary = inspected.get("record").get("snapshot").to_dictionary()
 	changed_snapshot_document["elapsed_seconds"] = float(changed_snapshot_document["elapsed_seconds"]) + 1.0
 	var changed_snapshot := RunTerminalSnapshot.from_dictionary(changed_snapshot_document)
-	var empty_ids: Array[String] = []
 	var changed_record := RunTerminalRecoveryRecord.create(
 		RunTerminalRecoveryRecord.Stage.CHOOSING_EXTRACTION,
 		changed_snapshot.snapshot if changed_snapshot.ok() else null,
@@ -545,7 +587,7 @@ func _test_protect_displaced_gear_is_automatic_only_atomic_and_idempotent(failur
 	TestAssertions.equal(ProfileCodec.validate_profile(drifted_result), "", "protection durable-result drift fixture remains structurally valid", failures)
 	TestAssertions.equal(store.save_profile(drifted_result, fixture.root), "", "protection durable-result drift fixture saves", failures)
 	var before_result_drift := FileAccess.get_file_as_bytes(store.profile_path(profile.profile_id, fixture.root))
-	var result_drift_replay: Variant = recovery.call("protect_displaced_gear", profile.profile_id, inspected.get("record"), fixture.root)
+	var result_drift_replay: Variant = recovery.call("protect_displaced_gear", profile.profile_id, interrupted.record, fixture.root)
 	TestAssertions.truthy(not _ok(result_drift_replay), "committed protection replay rejects durable placement drift", failures)
 	TestAssertions.equal(FileAccess.get_file_as_bytes(store.profile_path(profile.profile_id, fixture.root)), before_result_drift, "durable protection result rejection is write-free", failures)
 	preflight_test.call("_cleanup", fixture)
@@ -568,6 +610,10 @@ func _test_protect_displaced_gear_is_automatic_only_atomic_and_idempotent(failur
 		full_slots[slot] = filler.instance_id
 	full_profile.item_records = ItemRegistry.new(all_items).to_dictionary()
 	full_profile.terminal_recovery_overflow = ItemSlotContainer.create(ItemSlotContainer.TERMINAL_RECOVERY_OVERFLOW_ID, ItemSlotContainer.PROFILE_TERMINAL_RECOVERY_OVERFLOW, full_profile.profile_id, EquipmentSlotIndex.capacity(), full_slots).to_dictionary()
+	full_profile.terminal_resolution = RunTerminalRecoveryRecord.create(
+		RunTerminalRecoveryRecord.Stage.RESOLUTION_INTERRUPTED, full_snapshot, empty_ids,
+		"terminal-full-overflow-preflight", empty_ids, "Automatic displaced gear is blocked.", null, "",
+	).record.to_dictionary()
 	TestAssertions.equal(full_store.save_profile(full_profile, full_fixture.root), "", "full overflow fixture persists", failures)
 	var full_inspected: Variant = full_recovery.call("inspect", full_profile)
 	var full_hash := FileAccess.get_sha256(full_store.profile_path(full_profile.profile_id, full_fixture.root))
@@ -587,7 +633,8 @@ func _test_protect_displaced_gear_failure_matrix(failures: Array[String]) -> voi
 	var partial_snapshot := RunTerminalSnapshotBuilder.new().capture(RunTerminalSnapshot.Outcome.VICTORY, 14.0, partial_fixture.context).snapshot
 	var empty_ids: Array[String] = []
 	partial_profile.terminal_resolution = RunTerminalRecoveryRecord.create(
-		RunTerminalRecoveryRecord.Stage.CHOOSING_EXTRACTION, partial_snapshot, empty_ids, "", empty_ids, "", null, "",
+		RunTerminalRecoveryRecord.Stage.RESOLUTION_INTERRUPTED, partial_snapshot, empty_ids,
+		"terminal-partial-overflow-preflight", empty_ids, "Automatic displaced gear is blocked.", null, "",
 	).record.to_dictionary()
 	var decoded := ItemRegistry._decode(partial_profile.item_records, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)
 	var items: Array[ItemInstance] = []
@@ -617,7 +664,8 @@ func _test_protect_displaced_gear_failure_matrix(failures: Array[String]) -> voi
 	var reducible_profile := reducible_store.load_profile(reducible_id, reducible_fixture.root).profile
 	var reducible_snapshot := RunTerminalSnapshotBuilder.new().capture(RunTerminalSnapshot.Outcome.VICTORY, 15.0, reducible_fixture.context).snapshot
 	reducible_profile.terminal_resolution = RunTerminalRecoveryRecord.create(
-		RunTerminalRecoveryRecord.Stage.CHOOSING_EXTRACTION, reducible_snapshot, empty_ids, "", empty_ids, "", null, "",
+		RunTerminalRecoveryRecord.Stage.RESOLUTION_INTERRUPTED, reducible_snapshot, empty_ids,
+		"terminal-reducible-preflight", empty_ids, "Resolution was interrupted.", null, "",
 	).record.to_dictionary()
 	TestAssertions.equal(reducible_store.save_profile(reducible_profile, reducible_fixture.root), "", "reducible protection-unavailable fixture saves", failures)
 	var reducible_service := RunTerminalRecoveryService.new(ProfileMutationService.new(reducible_store), reducible_store)
@@ -632,7 +680,8 @@ func _test_protect_displaced_gear_failure_matrix(failures: Array[String]) -> voi
 	var save_profile := good_store.load_profile(save_id, save_fixture.root).profile
 	var save_snapshot := RunTerminalSnapshotBuilder.new().capture(RunTerminalSnapshot.Outcome.VICTORY, 16.0, save_fixture.context).snapshot
 	save_profile.terminal_resolution = RunTerminalRecoveryRecord.create(
-		RunTerminalRecoveryRecord.Stage.CHOOSING_EXTRACTION, save_snapshot, empty_ids, "", empty_ids, "", null, "",
+		RunTerminalRecoveryRecord.Stage.RESOLUTION_INTERRUPTED, save_snapshot, empty_ids,
+		"terminal-save-failure-preflight", empty_ids, "Automatic displaced gear is blocked.", null, "",
 	).record.to_dictionary()
 	TestAssertions.equal(good_store.save_profile(save_profile, save_fixture.root), "", "protection save-failure fixture saves", failures)
 	var save_hash := FileAccess.get_sha256(good_store.profile_path(save_id, save_fixture.root))
@@ -1068,6 +1117,24 @@ func _run_item() -> ItemInstance:
 	var item := _profile_item(ITEM_ID, 0)
 	item.origin["issuer_namespace"] = "run:%s:%d:%s" % [PROFILE_ID, RUN_SEED, RUN_PLAYER_ID]
 	return item
+
+func _run_state_high_precision() -> ItemOwnershipState:
+	var item := _run_item()
+	var roll := ItemModifierRoll.new()
+	roll.stat_id = &"constitution"
+	roll.operation = StatModifier.Operation.FLAT
+	roll.value = 8.411670327186584
+	var affix := ItemAffixInstance.new()
+	affix.definition_id = &"stout"
+	affix.affix_kind = "prefix"
+	affix.tier = 3
+	affix.rolls = [roll]
+	item.affixes = [affix]
+	return ItemOwnershipState.create(String(RUN_PLAYER_ID), ItemRegistry.new([item]), [
+		ItemSlotContainer.create(&"run-inventory", ItemSlotContainer.RUN_INVENTORY, String(RUN_PLAYER_ID), 10, {0: ITEM_ID}),
+		ItemSlotContainer.create(&"run-equipment-001", ItemSlotContainer.RUN_MEMBER_EQUIPMENT, String(RUN_PLAYER_ID), EquipmentSlotIndex.capacity()),
+		RunItemBootstrap.ground_items_container(String(RUN_PLAYER_ID)),
+	])
 
 func _run_item_second() -> ItemInstance:
 	var item := _profile_item(ITEM_ID_SECOND, 1)
