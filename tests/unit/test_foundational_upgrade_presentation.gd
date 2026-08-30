@@ -189,14 +189,14 @@ func _test_level_up_panel_routes_foundational_and_authored_tooltips(failures: Ar
 		UpgradeChoice.new(UpgradeChoice.Kind.PARTY_STAT, &"damage", "Party Damage"),
 	], party)
 
-	var cards := panel.get_node("ContentPanel/OfferView/Content/Cards").get_children()
-	panel.call("_on_card_detail_requested", foundational, cards[0] as Control)
+	var cards := panel.get_node("Frame/Content/Offer/Cards").get_children()
+	panel.call("_on_card_detail_requested", StringName(foundational.key()), cards[0] as Control)
 	var tooltip := panel.get_node("TooltipPanel") as UpgradeTooltipPanel
 	TestAssertions.truthy(tooltip.visible, "foundational detail request opens the shared tooltip", failures)
 	TestAssertions.equal((tooltip.get_node("Content/Header/Title") as Label).text, "Train Fighter", "foundational tooltip uses service content", failures)
-	panel.call("_on_card_detail_dismissed", foundational)
+	panel.call("_on_card_detail_dismissed", StringName(foundational.key()))
 
-	panel.call("_on_card_detail_requested", authored, cards[1] as Control)
+	panel.call("_on_card_detail_requested", StringName(authored.key()), cards[1] as Control)
 	TestAssertions.equal((tooltip.get_node("Content/Header/Title") as Label).text, "Vitality", "authored tooltip routing remains intact", failures)
 	panel.free()
 	party.free()

@@ -110,15 +110,18 @@ func run() -> Array[String]:
     _test_settings_and_next_run_snapshot_wiring(failures)
     _test_integrated_overlay_input_and_front_end_seam(failures)
     _test_hud_contract(failures)
-    _test_exact_choice_panel(failures)
     _test_class_selection_starts_run_and_applies_choices(failures)
-    _test_targeted_confirmation_routes_through_main(failures)
-    _test_stale_target_rejects_without_consuming(failures)
     _test_live_member_health_provider_uses_party_membership(failures)
     _test_ledger_health_provider_is_unbounded_and_complete(failures)
-    _test_capped_stat_is_disabled_without_hiding(failures)
     _test_run_offer_seed_and_snapshot_wiring(failures)
-    _test_queued_levels_show_fresh_production_offers(failures)
+    var task6_contract := _task6_level_up_contract_available()
+    TestAssertions.truthy(task6_contract, "Main and LevelUpPanel expose one unified Task 6 application seam", failures)
+    if task6_contract:
+        _test_exact_choice_panel(failures)
+        _test_targeted_confirmation_routes_through_main(failures)
+        _test_stale_target_rejects_without_consuming(failures)
+        _test_capped_stat_is_disabled_without_hiding(failures)
+        _test_queued_levels_show_fresh_production_offers(failures)
     _test_boss_level_up_resumes_boss(failures)
     _test_catalog_gate_blocks_public_start(failures)
     _test_result_panel_requests_once(failures)
@@ -127,6 +130,22 @@ func run() -> Array[String]:
     ProfileTestSupport.remove_tree(_profile_root)
     _cleanup_settings_artifacts(_settings_path)
     return failures
+
+func _task6_level_up_contract_available() -> bool:
+    var panel := (load("res://scenes/ui/level_up_panel.tscn") as PackedScene).instantiate() as LevelUpPanel
+    var main := (load("res://scenes/game/main.tscn") as PackedScene).instantiate()
+    var available := (
+        panel.has_signal(&"application_requested")
+        and not panel.has_signal(&"choice_selected")
+        and not panel.has_signal(&"confirmation_requested")
+        and panel.has_method(&"accept_application")
+        and panel.has_method(&"reject_application")
+        and panel.get_node_or_null("Frame/Content/Offer/Cards") != null
+        and main.has_method(&"_on_level_up_application_requested")
+    )
+    panel.free()
+    main.free()
+    return available
 
 func _test_run_combat_resolution_service_wiring(failures: Array[String]) -> void:
     var settings := PartyForgeSettings.new()
@@ -1201,7 +1220,7 @@ func _test_hud_contract(failures: Array[String]) -> void:
     hud.free()
 
 func _test_exact_choice_panel(failures: Array[String]) -> void:
-    var panel := (load("res://scenes/ui/level_up_panel.tscn") as PackedScene).instantiate() as Control
+    var panel := (load("res://scenes/ui/level_up_panel.tscn") as PackedScene).instantiate() as LevelUpPanel
     var party := PartyManager.new()
     var catalog := GameCatalog.load_defaults()
     party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
@@ -1211,24 +1230,24 @@ func _test_exact_choice_panel(failures: Array[String]) -> void:
         UpgradeChoice.new(UpgradeChoice.Kind.RECRUIT, &"ranger", "Recruit Ranger"),
     ]
     panel.call("show_choices", choices, party)
-    var pending_label := panel.get_node_or_null("ContentPanel/OfferView/Content/PendingLevels") as Label
+    var pending_label := panel.get_node_or_null("Frame/Content/Offer/PendingLevels") as Label
     TestAssertions.truthy(pending_label != null, "level-up panel scene exposes the pending-level indicator", failures)
-    var buttons := panel.get_node("Choices").get_children()
-    TestAssertions.equal(buttons.size(), 3, "level-up panel owns exactly three choice buttons", failures)
-    TestAssertions.equal((buttons[0] as Button).text, choices[0].label, "first button uses exact first choice", failures)
-    TestAssertions.truthy(not (buttons[0] as Button).disabled, "valid choice enabled", failures)
-    TestAssertions.truthy((buttons[1] as Button).disabled, "invalid choice disabled", failures)
-    var selected: Array[UpgradeChoice] = []
-    var hidden_before_emit: Array[bool] = []
-    panel.connect("choice_selected", func(choice: UpgradeChoice) -> void:
-        selected.append(choice)
-        hidden_before_emit.append(not panel.visible)
+    TestAssertions.truthy(panel.get_node_or_null("Choices") == null, "legacy hidden choice controls are removed", failures)
+    var cards := panel.get_node("Frame/Content/Offer/Cards").get_children()
+    TestAssertions.equal(cards.filter(func(card: Node) -> bool: return (card as Control).visible).size(), 3, "level-up panel owns exactly three visible offer cards", failures)
+    TestAssertions.equal((cards[0] as UpgradeCard).bound_choice_key(), StringName(choices[0].key()), "first card binds the stable first choice key", failures)
+    TestAssertions.truthy(not (cards[0] as Button).disabled, "valid choice enabled", failures)
+    TestAssertions.truthy((cards[1] as Button).disabled, "invalid choice disabled", failures)
+    var selected: Array[Dictionary] = []
+    panel.application_requested.connect(func(choice: UpgradeChoice, member_id: int) -> void:
+        selected.append({"choice": choice, "member_id": member_id})
     )
-    (buttons[0] as Button).pressed.emit()
-    (buttons[0] as Button).pressed.emit()
-    TestAssertions.equal(selected.size(), 1, "level-up selection emits once", failures)
-    TestAssertions.equal(selected[0] if not selected.is_empty() else null, choices[0], "level-up emits exact UpgradeChoice instance", failures)
-    TestAssertions.truthy(not hidden_before_emit.is_empty() and hidden_before_emit[0], "level-up panel hides before selection signal", failures)
+    (cards[0] as UpgradeCard).activated.emit((cards[0] as UpgradeCard).bound_choice_key())
+    (cards[0] as UpgradeCard).activated.emit((cards[0] as UpgradeCard).bound_choice_key())
+    TestAssertions.equal(selected.size(), 1, "direct level-up application emits once", failures)
+    TestAssertions.equal(selected[0].choice if not selected.is_empty() else null, choices[0], "panel privately resolves the exact UpgradeChoice instance", failures)
+    TestAssertions.equal(selected[0].member_id if not selected.is_empty() else -1, 0, "direct level-up application invents no recipient", failures)
+    TestAssertions.truthy(panel.visible and not (panel.get_node("Frame/Content/Confirmation") as Control).visible, "pending direct application stays visible and skips confirmation", failures)
     panel.free()
     party.free()
 
@@ -1295,11 +1314,11 @@ func _test_class_selection_starts_run_and_applies_choices(failures: Array[String
 func _test_targeted_confirmation_routes_through_main(failures: Array[String]) -> void:
     var main := _started_main()
     var panel := main.get_node("HUD/LevelUpPanel") as LevelUpPanel
-    var handler := Callable(main, "_on_choice_confirmation_requested")
+    var handler := Callable(main, "_on_level_up_application_requested")
     TestAssertions.truthy(main.has_method("_apply_choice_for_member"), "main exposes member-targeted central apply", failures)
-    TestAssertions.truthy(main.has_method("_on_choice_confirmation_requested"), "main exposes confirmation request handler", failures)
-    TestAssertions.truthy(panel.is_connected("confirmation_requested", handler), "confirmation request connects to central main handler", failures)
-    TestAssertions.truthy(not panel.is_connected("choice_selected", Callable(main, "_apply_choice")), "legacy choice signal is not a second main application path", failures)
+    TestAssertions.truthy(main.has_method("_on_level_up_application_requested"), "main exposes the unified typed application handler", failures)
+    TestAssertions.truthy(panel.is_connected("application_requested", handler), "unified application request connects to central main handler", failures)
+    TestAssertions.truthy(not panel.has_signal("choice_selected") and not panel.has_signal("confirmation_requested"), "legacy application signals are removed", failures)
     var health_provider: Callable = panel.get("_health_provider")
     TestAssertions.truthy(health_provider.is_valid(), "main configures live recipient health provider", failures)
 
@@ -1315,8 +1334,10 @@ func _test_targeted_confirmation_routes_through_main(failures: Array[String]) ->
         UpgradeChoice.new(UpgradeChoice.Kind.PARTY_STAT, &"move_speed", "Move Speed"),
     ]
     panel.show_choices(choices, party)
-    panel.call("_on_recipient_selected", choice, party.members[0].member_id)
-    var confirm := panel.get_node("ContentPanel/ConfirmationView/Content/Actions/Confirm") as Button
+    var card := panel.get_node("Frame/Content/Offer/Cards/Card1") as UpgradeCard
+    card.activated.emit(card.bound_choice_key())
+    (panel.get_node("Frame/Content/Recipient/Content/RecipientsScroll/Rows/Member_1") as Button).pressed.emit()
+    var confirm := panel.get_node("Frame/Content/Confirmation/Actions/Confirm") as Button
     confirm.pressed.emit()
     confirm.pressed.emit()
     TestAssertions.equal(party.upgrade_rank(&"vitality", party.members[0].member_id), 1, "confirmation applies authored card to exact member once", failures)
@@ -1339,14 +1360,17 @@ func _test_stale_target_rejects_without_consuming(failures: Array[String]) -> vo
         UpgradeChoice.new(UpgradeChoice.Kind.PARTY_STAT, &"damage", "Damage"),
         UpgradeChoice.new(UpgradeChoice.Kind.PARTY_STAT, &"move_speed", "Move Speed"),
     ], party)
-    panel.call("_on_recipient_selected", choice, 999)
-    (panel.get_node("ContentPanel/ConfirmationView/Content/Actions/Confirm") as Button).pressed.emit()
+    var card := panel.get_node("Frame/Content/Offer/Cards/Card1") as UpgradeCard
+    card.activated.emit(card.bound_choice_key())
+    panel.call("_on_recipient_selected", choice.key(), 999)
+    (panel.get_node("Frame/Content/Confirmation/Actions/Confirm") as Button).pressed.emit()
     TestAssertions.equal(party.upgrade_rank(&"vitality", party.members[0].member_id), 0, "stale target applies no authored rank", failures)
     TestAssertions.equal(experience.pending_levels, 1, "stale target consumes no pending level", failures)
     TestAssertions.equal(game_run.current_state(), RunStateMachine.State.LEVEL_UP, "stale target keeps level-up paused", failures)
     TestAssertions.truthy(panel.visible, "stale target keeps selection visible", failures)
-    TestAssertions.truthy((panel.get_node("ContentPanel/ConfirmationView") as Control).visible, "stale target remains on confirmation view", failures)
-    TestAssertions.truthy(not (panel.get_node("ContentPanel/ConfirmationView/Content/Error") as Label).text.is_empty(), "stale target displays rejection reason", failures)
+    TestAssertions.truthy(not (panel.get_node("Frame/Content/Confirmation") as Control).visible, "stale target returns to the offer view", failures)
+    TestAssertions.truthy(not (panel.get_node("Frame/Content/ReadableError") as Label).text.is_empty(), "stale target displays rejection reason", failures)
+    TestAssertions.equal(panel.get("_initial_focus_card"), card, "stale target rejection restores the exact initiating card", failures)
     _cleanup_main(main)
 
 func _test_live_member_health_provider_uses_party_membership(failures: Array[String]) -> void:
@@ -1442,11 +1466,11 @@ func _test_capped_stat_is_disabled_without_hiding(failures: Array[String]) -> vo
         TestAssertions.equal(panel.get("_pending_level_count"), 6, "choice panel stores the pending-level count for presentation", failures)
     else:
         panel.call("show_choices", choices, party, {capped.key(): true})
-    var capped_button := panel.get_node("Choices/Choice1") as Button
+    var capped_button := panel.get_node("Frame/Content/Offer/Cards/Card1") as UpgradeCard
     var emitted: Array[UpgradeChoice] = []
-    panel.connect("choice_selected", func(choice: UpgradeChoice) -> void: emitted.append(choice))
+    panel.application_requested.connect(func(choice: UpgradeChoice, _member_id: int) -> void: emitted.append(choice))
     TestAssertions.truthy(capped_button.disabled, "rank-20 party stat is invalid before selection", failures)
-    capped_button.pressed.emit()
+    capped_button.activated.emit(capped_button.bound_choice_key())
     TestAssertions.truthy(panel.visible, "invalid capped button cannot hide and strand level-up panel", failures)
     TestAssertions.equal(emitted.size(), 0, "invalid capped button cannot emit success", failures)
     var main := _started_main()
@@ -1541,12 +1565,12 @@ func _test_queued_levels_show_fresh_production_offers(failures: Array[String]) -
     var game_run: Node = main.get_node("GameRun")
     var experience := main.get_node("ExperienceSystem") as ExperienceSystem
     var panel := main.get_node("HUD/LevelUpPanel") as LevelUpPanel
-    var cards := panel.get_node("ContentPanel/OfferView/Content/Cards").get_children()
+    var cards := panel.get_node("Frame/Content/Offer/Cards").get_children()
     TestAssertions.equal(cards.size(), 5, "production offer view owns exactly five upgrade cards", failures)
     var card_api_available := cards.size() == 5 and cards.all(
-        func(card: Node) -> bool: return card is UpgradeCard and card.has_method("bound_choice")
+        func(card: Node) -> bool: return card is UpgradeCard and card.has_method("bound_choice_key") and not card.has_method("bound_choice")
     )
-    TestAssertions.truthy(card_api_available, "production cards expose their current binding read-only", failures)
+    TestAssertions.truthy(card_api_available, "production cards expose only stable typed activation keys", failures)
     if not card_api_available:
         _cleanup_main(main)
         return
@@ -1565,17 +1589,13 @@ func _test_queued_levels_show_fresh_production_offers(failures: Array[String]) -
     var party := main.get_node("PartyManager") as PartyManager
     var first_offer_choices := panel.choices
     var first_offer_keys := _choice_keys(first_offer_choices)
-    var first_choices := _bound_production_choices(cards)
-    var first_keys := _choice_keys(first_choices)
-    var first_instance_ids := _choice_instance_ids(first_choices)
+    var first_keys := _bound_production_keys(cards)
+    var first_instance_ids := _choice_instance_ids(first_offer_choices)
     TestAssertions.equal(first_offer_keys.size(), 5, "first production offer stores the snapshotted five choices", failures)
-    TestAssertions.equal(first_keys, first_offer_keys.slice(0, cards.size()), "first visible cards bind the presentation subset in order", failures)
+    TestAssertions.equal(first_keys, first_offer_keys.slice(0, cards.size()), "first visible cards bind stable keys in production order", failures)
 
     var first_card := cards[0] as UpgradeCard
-    first_card.activated.emit(first_choices[0])
-    if first_choices[0].requires_recipient():
-        panel.call("_on_recipient_selected", first_choices[0], party.members[0].member_id)
-    (panel.get_node("ContentPanel/ConfirmationView/Content/Actions/Confirm") as Button).pressed.emit()
+    _submit_bound_offer(panel, first_card, party)
     TestAssertions.equal(experience.pending_levels, 1, "first production confirmation consumes pending 2 to 1 exactly", failures)
     TestAssertions.equal(experience.pending_level_numbers, [3], "first production confirmation leaves only earned level 3 queued", failures)
     TestAssertions.equal(experience.experience, remainder, "first production confirmation loses no excess experience", failures)
@@ -1586,9 +1606,8 @@ func _test_queued_levels_show_fresh_production_offers(failures: Array[String]) -
     main.call("_present_pending_level")
     var second_offer_choices := panel.choices
     var second_offer_keys := _choice_keys(second_offer_choices)
-    var second_choices := _bound_production_choices(cards)
-    var second_keys := _choice_keys(second_choices)
-    var second_instance_ids := _choice_instance_ids(second_choices)
+    var second_keys := _bound_production_keys(cards)
+    var second_instance_ids := _choice_instance_ids(second_offer_choices)
     TestAssertions.truthy(panel.visible, "second queued production offer is visible before confirmation", failures)
     TestAssertions.equal(second_offer_keys.size(), 5, "second production offer stores the snapshotted five choices", failures)
     TestAssertions.equal(second_keys, second_offer_keys.slice(0, cards.size()), "second visible cards bind the presentation subset in order", failures)
@@ -1596,10 +1615,7 @@ func _test_queued_levels_show_fresh_production_offers(failures: Array[String]) -
     TestAssertions.truthy(second_instance_ids.all(func(id: int) -> bool: return id not in first_instance_ids), "second production offer binds freshly generated choice objects", failures)
 
     var second_card := cards[0] as UpgradeCard
-    second_card.activated.emit(second_choices[0])
-    if second_choices[0].requires_recipient():
-        panel.call("_on_recipient_selected", second_choices[0], party.members[0].member_id)
-    (panel.get_node("ContentPanel/ConfirmationView/Content/Actions/Confirm") as Button).pressed.emit()
+    _submit_bound_offer(panel, second_card, party)
     TestAssertions.equal(experience.pending_levels, 0, "second production confirmation consumes pending 1 to 0 exactly", failures)
     TestAssertions.equal(experience.pending_level_numbers, [], "second production confirmation empties the earned-level queue", failures)
     TestAssertions.equal(experience.experience, remainder, "both production confirmations lose no excess experience", failures)
@@ -1791,12 +1807,25 @@ func _escape_key_event() -> InputEventKey:
     event.pressed = true
     return event
 
-func _bound_production_choices(cards: Array[Node]) -> Array[UpgradeChoice]:
-    var result: Array[UpgradeChoice] = []
+func _bound_production_keys(cards: Array[Node]) -> Array[String]:
+    var result: Array[String] = []
     for card_node: Node in cards:
         var card := card_node as UpgradeCard
-        result.append(card.call("bound_choice") as UpgradeChoice)
+        result.append(String(card.call("bound_choice_key")))
     return result
+
+func _submit_bound_offer(panel: LevelUpPanel, card: UpgradeCard, party: PartyManager) -> void:
+    var key: StringName = card.bound_choice_key()
+    var choices_by_key := panel.get("_choices_by_key") as Dictionary
+    var choice := choices_by_key.get(String(key)) as UpgradeChoice
+    card.activated.emit(key)
+    if choice == null:
+        return
+    if choice.application_route() == UpgradeChoice.ApplicationRoute.RECIPIENT_CONFIRMATION:
+        panel.call("_on_recipient_selected", key, party.members[0].member_id)
+        (panel.get_node("Frame/Content/Confirmation/Actions/Confirm") as Button).pressed.emit()
+    elif choice.application_route() == UpgradeChoice.ApplicationRoute.CONTEXT_CONFIRMATION:
+        (panel.get_node("Frame/Content/Confirmation/Actions/Confirm") as Button).pressed.emit()
 
 func _choice_keys(source_choices: Array) -> Array[String]:
     var result: Array[String] = []

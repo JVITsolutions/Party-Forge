@@ -35,6 +35,13 @@ text = "Every party member remains visible. Select an eligible recipient or retu
 horizontal_alignment = 1
 autowrap_mode = 2
 
+[node name="EmptyReason" type="Label" parent="Content"]
+visible = false
+layout_mode = 2
+theme_type_variation = &"LivingForgeCaptionLabel"
+horizontal_alignment = 1
+autowrap_mode = 2
+
 [node name="RecipientsScroll" type="ScrollContainer" parent="Content"]
 layout_mode = 2
 size_flags_vertical = 3
@@ -47,7 +54,8 @@ size_flags_horizontal = 3
 theme_override_constants/separation = 10
 
 [node name="Cancel" type="Button" parent="Content"]
-custom_minimum_size = Vector2(180, 44)
+custom_minimum_size = Vector2(180, 48)
 layout_mode = 2
 size_flags_horizontal = 4
+theme_type_variation = &"LivingForgeSecondaryButton"
 text = "Back to Offers"

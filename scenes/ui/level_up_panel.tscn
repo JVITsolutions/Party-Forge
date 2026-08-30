@@ -1,10 +1,11 @@
-[gd_scene load_steps=6 format=3 uid="uid://c3wcr4a0c428h"]
+[gd_scene load_steps=7 format=3 uid="uid://c3wcr4a0c428h"]
 
 [ext_resource type="Script" path="res://scripts/ui/level_up_panel.gd" id="1_panel"]
 [ext_resource type="PackedScene" path="res://scenes/ui/upgrade_card.tscn" id="2_card"]
 [ext_resource type="PackedScene" path="res://scenes/ui/upgrade_recipient_picker.tscn" id="3_picker"]
 [ext_resource type="PackedScene" path="res://scenes/ui/upgrade_tooltip_panel.tscn" id="4_tooltip"]
 [ext_resource type="Script" path="res://scripts/ui/level_up_reveal_controller.gd" id="5_reveal"]
+[ext_resource type="Theme" path="res://data/ui/living_forge/living_forge_theme.tres" id="6_theme"]
 
 [node name="LevelUpPanel" type="Control"]
 process_mode = 3
@@ -16,6 +17,7 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 0
+theme = ExtResource("6_theme")
 script = ExtResource("1_panel")
 
 [node name="RevealController" type="Node" parent="."]
@@ -29,136 +31,197 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 0
-color = Color(0.015, 0.02, 0.03, 0.82)
+color = Color(0.015, 0.02, 0.03, 0.9)
 
-[node name="ContentPanel" type="PanelContainer" parent="."]
-custom_minimum_size = Vector2(0, 560)
+[node name="Frame" type="PanelContainer" parent="."]
+custom_minimum_size = Vector2(1200, 660)
 layout_mode = 1
-anchor_left = 0.02
-anchor_top = 0.06
-anchor_right = 0.98
-anchor_bottom = 0.94
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -600.0
+offset_top = -330.0
+offset_right = 600.0
+offset_bottom = 330.0
 grow_horizontal = 2
 grow_vertical = 2
+theme_type_variation = &"LivingForgePanel"
 
-[node name="OfferView" type="ScrollContainer" parent="ContentPanel"]
+[node name="Content" type="Control" parent="Frame"]
+custom_minimum_size = Vector2(1160, 620)
 layout_mode = 2
-horizontal_scroll_mode = 1
 
-[node name="Content" type="VBoxContainer" parent="ContentPanel/OfferView"]
-layout_mode = 2
-size_flags_horizontal = 3
-theme_override_constants/separation = 18
+[node name="Offer" type="VBoxContainer" parent="Frame/Content"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_bottom = -58.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 14
 
-[node name="PendingLevels" type="Label" parent="ContentPanel/OfferView/Content"]
+[node name="PendingLevels" type="Label" parent="Frame/Content/Offer"]
 layout_mode = 2
-theme_override_colors/font_color = Color(1, 0.78, 0.18, 1)
-theme_override_font_sizes/font_size = 22
+theme_type_variation = &"LivingForgeBadgeLabel"
+text = "1 upgrade ready"
 horizontal_alignment = 1
 
-[node name="Title" type="Label" parent="ContentPanel/OfferView/Content"]
+[node name="Title" type="Label" parent="Frame/Content/Offer"]
 layout_mode = 2
+theme_type_variation = &"LivingForgeDisplayLabel"
 text = "Choose an Upgrade"
 horizontal_alignment = 1
 
-[node name="Instructions" type="Label" parent="ContentPanel/OfferView/Content"]
+[node name="Instructions" type="Label" parent="Frame/Content/Offer"]
 layout_mode = 2
-text = "Choose one card. Character upgrades will ask you to select a recipient before confirmation."
+text = "Apply direct upgrades now, choose a recipient when required, or review a recruit before committing."
 horizontal_alignment = 1
 autowrap_mode = 2
 
-[node name="Cards" type="HBoxContainer" parent="ContentPanel/OfferView/Content"]
+[node name="Cards" type="HBoxContainer" parent="Frame/Content/Offer"]
 layout_mode = 2
 size_flags_vertical = 3
 theme_override_constants/separation = 16
 alignment = 1
 
-[node name="Card1" parent="ContentPanel/OfferView/Content/Cards" instance=ExtResource("2_card")]
+[node name="Card1" parent="Frame/Content/Offer/Cards" instance=ExtResource("2_card")]
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_stretch_ratio = 1.0
 
-[node name="Card2" parent="ContentPanel/OfferView/Content/Cards" instance=ExtResource("2_card")]
+[node name="Card2" parent="Frame/Content/Offer/Cards" instance=ExtResource("2_card")]
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_stretch_ratio = 1.0
 
-[node name="Card3" parent="ContentPanel/OfferView/Content/Cards" instance=ExtResource("2_card")]
+[node name="Card3" parent="Frame/Content/Offer/Cards" instance=ExtResource("2_card")]
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_stretch_ratio = 1.0
 
-[node name="Card4" parent="ContentPanel/OfferView/Content/Cards" instance=ExtResource("2_card")]
+[node name="Card4" parent="Frame/Content/Offer/Cards" instance=ExtResource("2_card")]
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_stretch_ratio = 1.0
 
-[node name="Card5" parent="ContentPanel/OfferView/Content/Cards" instance=ExtResource("2_card")]
+[node name="Card5" parent="Frame/Content/Offer/Cards" instance=ExtResource("2_card")]
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_stretch_ratio = 1.0
 
-[node name="RecipientView" parent="ContentPanel" instance=ExtResource("3_picker")]
+[node name="RetryOffers" type="Button" parent="Frame/Content/Offer"]
 visible = false
+custom_minimum_size = Vector2(200, 48)
 layout_mode = 2
+size_flags_horizontal = 4
+theme_type_variation = &"LivingForgePrimaryButton"
+text = "Retry Offers"
 
-[node name="ConfirmationView" type="ScrollContainer" parent="ContentPanel"]
+[node name="Recipient" parent="Frame/Content" instance=ExtResource("3_picker")]
 visible = false
-layout_mode = 2
-horizontal_scroll_mode = 0
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_bottom = -58.0
+grow_horizontal = 2
+grow_vertical = 2
 
-[node name="Content" type="VBoxContainer" parent="ContentPanel/ConfirmationView"]
-custom_minimum_size = Vector2(1080, 640)
-layout_mode = 2
-size_flags_horizontal = 3
+[node name="Confirmation" type="VBoxContainer" parent="Frame/Content"]
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 96.0
+offset_top = 72.0
+offset_right = -96.0
+offset_bottom = -110.0
+grow_horizontal = 2
+grow_vertical = 2
 theme_override_constants/separation = 24
 alignment = 1
 
-[node name="Title" type="Label" parent="ContentPanel/ConfirmationView/Content"]
+[node name="Title" type="Label" parent="Frame/Content/Confirmation"]
 layout_mode = 2
+theme_type_variation = &"LivingForgeDisplayLabel"
 text = "Confirm Upgrade"
 horizontal_alignment = 1
 
-[node name="ChoiceName" type="Label" parent="ContentPanel/ConfirmationView/Content"]
+[node name="ChoiceName" type="Label" parent="Frame/Content/Confirmation"]
+layout_mode = 2
+theme_type_variation = &"LivingForgeSectionLabel"
+horizontal_alignment = 1
+autowrap_mode = 2
+
+[node name="Recipient" type="Label" parent="Frame/Content/Confirmation"]
 layout_mode = 2
 horizontal_alignment = 1
 autowrap_mode = 2
 
-[node name="Recipient" type="Label" parent="ContentPanel/ConfirmationView/Content"]
+[node name="Effect" type="Label" parent="Frame/Content/Confirmation"]
 layout_mode = 2
 horizontal_alignment = 1
 autowrap_mode = 2
 
-[node name="Error" type="Label" parent="ContentPanel/ConfirmationView/Content"]
-visible = false
+[node name="Scope" type="Label" parent="Frame/Content/Confirmation"]
 layout_mode = 2
+theme_type_variation = &"LivingForgeCaptionLabel"
 horizontal_alignment = 1
 autowrap_mode = 2
 
-[node name="Actions" type="HBoxContainer" parent="ContentPanel/ConfirmationView/Content"]
+[node name="Actions" type="HBoxContainer" parent="Frame/Content/Confirmation"]
 layout_mode = 2
 theme_override_constants/separation = 16
 alignment = 1
 
-[node name="Cancel" type="Button" parent="ContentPanel/ConfirmationView/Content/Actions"]
-custom_minimum_size = Vector2(180, 52)
+[node name="Cancel" type="Button" parent="Frame/Content/Confirmation/Actions"]
+custom_minimum_size = Vector2(200, 48)
 layout_mode = 2
+theme_type_variation = &"LivingForgeSecondaryButton"
 text = "Back to Offers"
 
-[node name="Confirm" type="Button" parent="ContentPanel/ConfirmationView/Content/Actions"]
-custom_minimum_size = Vector2(180, 52)
+[node name="Confirm" type="Button" parent="Frame/Content/Confirmation/Actions"]
+custom_minimum_size = Vector2(200, 48)
 layout_mode = 2
+theme_type_variation = &"LivingForgePrimaryButton"
 text = "Confirm"
+
+[node name="Pending" type="CenterContainer" parent="Frame/Content"]
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_bottom = -58.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 0
+
+[node name="Status" type="Label" parent="Frame/Content/Pending"]
+layout_mode = 2
+theme_type_variation = &"LivingForgeSectionLabel"
+text = "Applying upgrade..."
+horizontal_alignment = 1
+
+[node name="ReadableError" type="Label" parent="Frame/Content"]
+visible = false
+layout_mode = 1
+anchors_preset = 12
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_top = -52.0
+grow_horizontal = 2
+grow_vertical = 0
+theme_type_variation = &"LivingForgeCaptionLabel"
+horizontal_alignment = 1
+vertical_alignment = 1
+autowrap_mode = 2
+mouse_filter = 2
 
 [node name="TooltipPanel" parent="." instance=ExtResource("4_tooltip")]
 visible = false
 z_index = 100
-
-[node name="Choices" type="HBoxContainer" parent="."]
-visible = false
-
-[node name="Choice1" type="Button" parent="Choices"]
-
-[node name="Choice2" type="Button" parent="Choices"]
-
-[node name="Choice3" type="Button" parent="Choices"]

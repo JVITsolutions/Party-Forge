@@ -2,7 +2,7 @@ extends RefCounted
 
 func run() -> Array[String]:
 	var failures: Array[String] = []
-	_test_card_renders_dictionary_and_emits(failures)
+	_test_card_renders_typed_projection_and_emits_key(failures)
 	_test_hover_focus_share_detail_state(failures)
 	_test_disabled_card_conceals_detail(failures)
 	_test_tooltip_renders_dictionary(failures)
@@ -13,70 +13,78 @@ func run() -> Array[String]:
 	_test_long_content_scene_stays_inside_viewports(failures)
 	return failures
 
-func _test_card_renders_dictionary_and_emits(failures: Array[String]) -> void:
+func _test_card_renders_typed_projection_and_emits_key(failures: Array[String]) -> void:
 	var scene := load("res://scenes/ui/upgrade_card.tscn") as PackedScene
 	TestAssertions.truthy(scene != null, "upgrade card scene loads", failures)
 	if scene == null:
 		return
 	var card := scene.instantiate() as UpgradeCard
 	card.call("_ready")
-	var choice := UpgradeChoice.authored(GameCatalog.load_defaults().upgrade_by_id(&"deadeye"))
-	var presentation := {
-		"name": "Deadeye",
-		"scope_badge": "Marksman Signature",
-		"rank_text": "Rank 0 / 1",
-		"summary": "Trade attack speed for devastating long-range physical shots.",
-		"eligibility_text": "Eligible class: Marksman.",
-		"recipient_text": "Choose one eligible character.",
-		"inheritance_text": "",
-	}
-	card.bind_choice(choice, presentation, "")
-	TestAssertions.equal((card.get_node("Content/Name") as Label).text, "Deadeye", "card renders dictionary name", failures)
-	TestAssertions.equal((card.get_node("Content/Scope") as Label).text, "Marksman Signature", "card renders dictionary scope", failures)
-	TestAssertions.equal((card.get_node("Content/Rank") as Label).text, "Rank 0 / 1", "card renders dictionary rank", failures)
-	TestAssertions.equal((card.get_node("Content/Summary") as Label).text, presentation["summary"], "card renders dictionary summary", failures)
-	var activated: Array[UpgradeChoice] = []
-	card.activated.connect(func(emitted: UpgradeChoice) -> void: activated.append(emitted))
+	var projection := _card_projection("4:deadeye", "Deadeye")
+	projection.scope_text = "Marksman Signature"
+	projection.rank_text = "Rank 0 / 1"
+	projection.effect_text = "Trade attack speed for devastating long-range physical shots."
+	projection.eligibility_text = "Eligible class: Marksman."
+	card.present(projection)
+	TestAssertions.equal((card.get_node("Content/Name") as Label).text, "Deadeye", "card renders typed name", failures)
+	TestAssertions.equal((card.get_node("Content/Scope") as Label).text, "Marksman Signature", "card renders typed scope", failures)
+	TestAssertions.equal((card.get_node("Content/Rank") as Label).text, "Rank 0 / 1", "card renders typed rank", failures)
+	TestAssertions.equal((card.get_node("Content/Summary") as Label).text, projection.effect_text, "card renders typed effect", failures)
+	var activated: Array[StringName] = []
+	card.activated.connect(func(emitted: StringName) -> void: activated.append(emitted))
 	card.pressed.emit()
-	TestAssertions.equal(activated, [choice], "card activation emits bound choice", failures)
+	TestAssertions.equal(activated, [&"4:deadeye"], "card activation emits stable bound key", failures)
 	card.free()
 
 func _test_hover_focus_share_detail_state(failures: Array[String]) -> void:
 	var card := (load("res://scenes/ui/upgrade_card.tscn") as PackedScene).instantiate() as UpgradeCard
 	card.call("_ready")
-	var choice := UpgradeChoice.authored(GameCatalog.load_defaults().upgrade_by_id(&"vitality"))
-	card.bind_choice(choice, {"name": "Vitality"})
-	var requested: Array[UpgradeChoice] = []
-	var dismissed: Array[UpgradeChoice] = []
-	card.detail_requested.connect(func(emitted: UpgradeChoice, _anchor: Control) -> void: requested.append(emitted))
-	card.detail_dismissed.connect(func(emitted: UpgradeChoice) -> void: dismissed.append(emitted))
+	var projection := _card_projection("4:vitality", "Vitality")
+	card.present(projection)
+	var requested: Array[StringName] = []
+	var dismissed: Array[StringName] = []
+	card.detail_requested.connect(func(emitted: StringName, _anchor: Control) -> void: requested.append(emitted))
+	card.detail_dismissed.connect(func(emitted: StringName) -> void: dismissed.append(emitted))
 	card.mouse_entered.emit()
 	card.focus_entered.emit()
 	card.mouse_exited.emit()
-	TestAssertions.equal(requested, [choice], "hover and focus share one detail request", failures)
+	TestAssertions.equal(requested, [&"4:vitality"], "hover and focus share one detail request", failures)
 	TestAssertions.equal(dismissed, [], "mouse exit preserves focused detail", failures)
 	card.focus_exited.emit()
-	TestAssertions.equal(dismissed, [choice], "detail dismisses after hover and focus both end", failures)
+	TestAssertions.equal(dismissed, [&"4:vitality"], "detail dismisses after hover and focus both end", failures)
 	card.focus_entered.emit()
 	card.focus_exited.emit()
-	TestAssertions.equal(requested, [choice, choice], "keyboard focus requests identical bound choice", failures)
-	TestAssertions.equal(dismissed, [choice, choice], "keyboard focus dismissal matches hover behavior", failures)
+	TestAssertions.equal(requested, [&"4:vitality", &"4:vitality"], "keyboard focus requests identical bound key", failures)
+	TestAssertions.equal(dismissed, [&"4:vitality", &"4:vitality"], "keyboard focus dismissal matches hover behavior", failures)
 	card.free()
 
 func _test_disabled_card_conceals_detail(failures: Array[String]) -> void:
 	var card := (load("res://scenes/ui/upgrade_card.tscn") as PackedScene).instantiate() as UpgradeCard
 	card.call("_ready")
-	var choice := UpgradeChoice.authored(GameCatalog.load_defaults().upgrade_by_id(&"vitality"))
-	card.bind_choice(choice, {"name": "Vitality"}, "Revealing.")
-	var requested: Array[UpgradeChoice] = []
-	card.detail_requested.connect(func(emitted: UpgradeChoice, _anchor: Control) -> void: requested.append(emitted))
+	var projection := _card_projection("4:vitality", "Vitality")
+	projection.disabled_reason = "Revealing."
+	card.present(projection)
+	var requested: Array[StringName] = []
+	card.detail_requested.connect(func(emitted: StringName, _anchor: Control) -> void: requested.append(emitted))
 	card.mouse_entered.emit()
 	TestAssertions.equal(requested, [], "disabled card hover conceals its bound final detail", failures)
 	card.mouse_exited.emit()
-	card.bind_choice(choice, {"name": "Vitality"})
+	projection.disabled_reason = ""
+	card.present(projection)
 	card.mouse_entered.emit()
-	TestAssertions.equal(requested, [choice], "enabled card hover restores bound final detail", failures)
+	TestAssertions.equal(requested, [&"4:vitality"], "enabled card hover restores bound final detail", failures)
 	card.free()
+
+func _card_projection(key: String, display_name: String) -> UpgradeOfferProjection:
+	var projection := UpgradeOfferProjection.new()
+	projection.choice_key = key
+	projection.display_name = display_name
+	projection.category_id = &"authored"
+	projection.effect_text = "Typed effect"
+	projection.scope_text = "Personal"
+	projection.rank_text = "Rank 1"
+	projection.eligibility_text = "Eligible"
+	return projection
 
 func _test_tooltip_renders_dictionary(failures: Array[String]) -> void:
 	var scene := load("res://scenes/ui/upgrade_tooltip_panel.tscn") as PackedScene

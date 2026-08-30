@@ -32,14 +32,26 @@ func _run() -> void:
 		UpgradeChoice.authored(catalog.upgrade_by_id(&"tempered_armor")),
 		UpgradeChoice.authored(catalog.upgrade_by_id(&"fleetfoot")),
 	]
+	var probe := panel_scene.instantiate() as LevelUpPanel
+	var typed_contract := probe.get_node_or_null("Frame/Content/Offer/Cards") != null and UpgradeCard.new().has_method(&"bound_choice_key")
+	probe.free()
+	if not typed_contract:
+		_failures.append("Living Forge bounded typed offer geometry is not implemented")
+		viewport.free()
+		party.free()
+		for failure: String in _failures:
+			push_error("LEVEL_UP_FIVE_CARD_FAILURE: %s" % failure)
+		print("LEVEL_UP_FIVE_CARD_SUMMARY: FAIL (%d failures)" % _failures.size())
+		quit(1)
+		return
 	for viewport_size: Vector2i in VIEWPORT_SIZES:
 		var failure_count_before := _failures.size()
 		viewport.size = viewport_size
 		var panel := panel_scene.instantiate() as LevelUpPanel
 		viewport.add_child(panel)
 		panel.configure(catalog, UpgradeApplicationService.new(), func(_member_id: int) -> Vector2: return Vector2(100.0, 100.0))
-		var content_panel := panel.get_node("ContentPanel") as Control
-		var cards_row := panel.get_node("ContentPanel/OfferView/Content/Cards") as HBoxContainer
+		var content_panel := panel.get_node("Frame") as Control
+		var cards_row := panel.get_node("Frame/Content/Offer/Cards") as HBoxContainer
 		var reveal := panel.get_node("RevealController") as LevelUpRevealController
 		var tooltip := panel.get_node("TooltipPanel") as UpgradeTooltipPanel
 		panel.configure_reduced_motion(false)
@@ -54,6 +66,8 @@ func _run() -> void:
 			ResponsiveGeometry.contains(viewport_rect, panel_rect),
 			"panel overflows at %dx%d: viewport=%s panel=%s" % [viewport_size.x, viewport_size.y, viewport_rect, panel_rect]
 		)
+		_assert(panel_rect.size.x <= 1800.0, "stylized modal remains bounded at %dx%d: width=%s" % [viewport_size.x, viewport_size.y, panel_rect.size.x])
+		_assert(absf(panel_rect.get_center().x - viewport_rect.get_center().x) <= 2.0, "stylized modal stays horizontally centered at %dx%d" % [viewport_size.x, viewport_size.y])
 		var visible_cards: Array[UpgradeCard] = []
 		for child: Node in cards_row.get_children():
 			if child is UpgradeCard and child.is_visible_in_tree():
@@ -62,6 +76,8 @@ func _run() -> void:
 		for index: int in visible_cards.size():
 			var card := visible_cards[index]
 			var card_rect := card.get_global_rect()
+			_assert(card_rect.size.x >= 168.0 and card_rect.size.y >= 300.0, "Card%d respects readable minimum geometry at %dx%d" % [index + 1, viewport_size.x, viewport_size.y])
+			_assert(card.custom_minimum_size.y >= 300.0, "Card%d keeps a stable minimum height at %dx%d" % [index + 1, viewport_size.x, viewport_size.y])
 			_assert(
 				ResponsiveGeometry.contains(panel_rect, card_rect),
 				"Card%d overflows panel at %dx%d: panel=%s card=%s" % [index + 1, viewport_size.x, viewport_size.y, panel_rect, card_rect]
@@ -72,12 +88,12 @@ func _run() -> void:
 					not card_rect.intersects(other_rect),
 					"Card%d intersects Card%d at %dx%d: first=%s second=%s" % [index + 1, other_index + 1, viewport_size.x, viewport_size.y, card_rect, other_rect]
 				)
-			var compact := viewport_size.x < 1400
-			for label_name: String in ["Eligibility", "Recipient", "Inheritance"]:
+			for label_name: String in ["Eligibility", "Scope", "Rank", "Summary"]:
 				var label := card.get_node("Content/%s" % label_name) as Label
-				_assert(label.visible != compact, "Card%d %s compact visibility is wrong at %dx%d" % [index + 1, label_name, viewport_size.x, viewport_size.y])
-			for label_name: String in ["Name", "Scope", "Rank", "Summary"]:
-				_assert((card.get_node("Content/%s" % label_name) as Label).visible, "Card%d %s is hidden at %dx%d" % [index + 1, label_name, viewport_size.x, viewport_size.y])
+				_assert(label.visible, "Card%d semantic %s is hidden at %dx%d" % [index + 1, label_name, viewport_size.x, viewport_size.y])
+			_assert(not card.accessibility_name.is_empty(), "Card%d exposes a semantic accessibility name at %dx%d" % [index + 1, viewport_size.x, viewport_size.y])
+			if index > 0:
+				_assert(absf(card_rect.size.x - visible_cards[0].get_global_rect().size.x) <= 2.0, "Card%d matches equal-card width at %dx%d" % [index + 1, viewport_size.x, viewport_size.y])
 		if visible_cards.size() == 5:
 			for index: int in visible_cards.size():
 				_assert(
@@ -101,7 +117,7 @@ func _run() -> void:
 			_assert(viewport.gui_get_focus_owner() == visible_cards[0], "reduced motion focuses Card1 at %dx%d" % [viewport_size.x, viewport_size.y])
 			for index: int in visible_cards.size():
 				_assert(not visible_cards[index].disabled, "reduced motion enables Card%d at %dx%d" % [index + 1, viewport_size.x, viewport_size.y])
-				_assert(visible_cards[index].bound_choice() == choices[index], "reduced motion preserves Card%d outcome at %dx%d" % [index + 1, viewport_size.x, viewport_size.y])
+				_assert(visible_cards[index].bound_choice_key() == StringName(choices[index].key()), "reduced motion preserves Card%d activation identity at %dx%d" % [index + 1, viewport_size.x, viewport_size.y])
 		if _failures.size() == failure_count_before:
 			print("LEVEL_UP_FIVE_CARD_ACCEPTANCE_SIZE_PASS size=%dx%d" % [viewport_size.x, viewport_size.y])
 		panel.free()

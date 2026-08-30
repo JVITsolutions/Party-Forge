@@ -9,8 +9,8 @@ const PREVIEW_INTERVAL := 0.075
 const DROP_OFFSET := -520.0
 
 var _cards: Array[UpgradeCard] = []
-var _final_bindings: Array[Dictionary] = []
-var _preview_presentations: Array[Dictionary] = []
+var _final_projections: Array[UpgradeOfferProjection] = []
+var _preview_projections: Array[UpgradeOfferProjection] = []
 var _base_positions: Array[Vector2] = []
 var _elapsed := 0.0
 var _cycle_index := 0
@@ -20,14 +20,16 @@ var _resolved_emitted := false
 
 func play(
 	cards: Array[UpgradeCard],
-	final_bindings: Array[Dictionary],
-	preview_presentations: Array[Dictionary],
+	final_projections: Array[UpgradeOfferProjection],
+	preview_projections: Array[UpgradeOfferProjection],
 	reduced_motion: bool
 ) -> void:
 	reset()
 	_cards = cards.duplicate()
-	_final_bindings = final_bindings.duplicate(true)
-	_preview_presentations = preview_presentations.duplicate(true)
+	for projection: UpgradeOfferProjection in final_projections:
+		_final_projections.append(projection.copy())
+	for projection: UpgradeOfferProjection in preview_projections:
+		_preview_projections.append(projection.copy())
 	_elapsed = 0.0
 	_cycle_index = 0
 	_resolved_emitted = false
@@ -76,8 +78,8 @@ func reset() -> void:
 		if is_instance_valid(_cards[index]):
 			_cards[index].position = _base_positions[index]
 	_cards.clear()
-	_final_bindings.clear()
-	_preview_presentations.clear()
+	_final_projections.clear()
+	_preview_projections.clear()
 	_base_positions.clear()
 	_elapsed = 0.0
 	_cycle_index = 0
@@ -86,11 +88,11 @@ func reset() -> void:
 
 
 func _bind_cycle_previews() -> void:
-	if _preview_presentations.is_empty():
+	if _preview_projections.is_empty():
 		return
 	for index: int in _cards.size():
-		var preview_index := (_cycle_index + index) % _preview_presentations.size()
-		_cards[index].bind_preview(_preview_presentations[preview_index])
+		var preview_index := (_cycle_index + index) % _preview_projections.size()
+		_cards[index].present_preview(_preview_projections[preview_index])
 
 
 func _resolve() -> void:
@@ -101,13 +103,8 @@ func _resolve() -> void:
 		var card := _cards[index]
 		if index < _base_positions.size():
 			card.position = _base_positions[index]
-		if index >= _final_bindings.size():
+		if index >= _final_projections.size():
 			continue
-		var final_binding := _final_bindings[index]
-		card.bind_choice(
-			final_binding.get("choice") as UpgradeChoice,
-			final_binding.get("presentation", {}) as Dictionary,
-			str(final_binding.get("disabled_reason", ""))
-		)
+		card.present(_final_projections[index])
 	_resolved_emitted = true
 	resolved.emit()

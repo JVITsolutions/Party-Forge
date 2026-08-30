@@ -16,6 +16,16 @@ func _initialize() -> void:
 
 
 func _run() -> void:
+	var probe := PANEL_SCENE.instantiate() as LevelUpPanel
+	var typed_contract := probe.get_node_or_null("Frame/Content/Recipient") != null and probe.has_signal(&"application_requested")
+	probe.free()
+	if not typed_contract:
+		_failures.append("Living Forge typed recipient and confirmation route is not implemented")
+		for failure: String in _failures:
+			push_error("UPGRADE_RECIPIENT_CONTROLLER_SCROLL_FAILURE: %s" % failure)
+		print("UPGRADE_RECIPIENT_CONTROLLER_SCROLL_SUMMARY: FAIL (%d failures, 3 viewports)" % _failures.size())
+		quit(1)
+		return
 	for viewport_size: Vector2i in TARGET_VIEWPORTS:
 		await _exercise_viewport(viewport_size)
 	await _exercise_stale_rebuild_safety()
@@ -55,7 +65,7 @@ func _exercise_viewport(viewport_size: Vector2i) -> void:
 	await _joy_button(JOY_BUTTON_A)
 	await _frames(2)
 
-	var picker := panel.get_node("ContentPanel/RecipientView") as UpgradeRecipientPicker
+	var picker := panel.get_node("Frame/Content/Recipient") as UpgradeRecipientPicker
 	var scroll := picker.get_node("Content/RecipientsScroll") as ScrollContainer
 	var rows := picker.get_node("Content/RecipientsScroll/Rows") as VBoxContainer
 	var cancel := picker.get_node("Content/Cancel") as Button
@@ -98,11 +108,15 @@ func _exercise_viewport(viewport_size: Vector2i) -> void:
 	])
 
 	var selected_member_ids: Array[int] = []
-	picker.recipient_selected.connect(func(_selected_choice: UpgradeChoice, member_id: int) -> void: selected_member_ids.append(member_id))
+	picker.recipient_selected.connect(func(selected_key: StringName, member_id: int) -> void:
+		_assert(selected_key == StringName(choice.key()), "%s recipient emits the stable choice key" % mode)
+		selected_member_ids.append(member_id)
+	)
 	await _joy_button(JOY_BUTTON_A)
 	_assert(selected_member_ids == [24], "%s controller south emits stable member_id 24" % mode)
-	_assert((panel.get_node("ContentPanel/ConfirmationView") as Control).visible, "%s controller recipient selection enters the existing confirmation flow" % mode)
+	_assert((panel.get_node("Frame/Content/Confirmation") as Control).visible, "%s controller recipient selection enters the existing confirmation flow" % mode)
 	_assert(int(panel.get("_pending_member_id")) == 24, "%s confirmation retains member_id 24" % mode)
+	_assert("->" in (panel.get_node("Frame/Content/Confirmation/Effect") as Label).text, "%s confirmation shows exact recipient preview" % mode)
 
 	panel.free()
 	party.free()
@@ -115,11 +129,11 @@ func _exercise_stale_rebuild_safety() -> void:
 	var choice := UpgradeChoice.authored(catalog.upgrade_by_id(&"vitality"))
 	var picker := PICKER_SCENE.instantiate() as UpgradeRecipientPicker
 	root.add_child(picker)
-	picker.show_for(choice, _recipient_rows(1))
+	picker.call(&"show_for", StringName(choice.key()), _recipient_rows(1))
 	await _frames(2)
 	var old_member_24 := picker.get_node("Content/RecipientsScroll/Rows/Member_24") as Button
 	old_member_24.grab_focus()
-	picker.show_for(choice, _recipient_rows(101))
+	picker.call(&"show_for", StringName(choice.key()), _recipient_rows(101))
 	var new_first := picker.get_node("Content/RecipientsScroll/Rows/Member_101") as Button
 	new_first.grab_focus()
 	await _frames(3)

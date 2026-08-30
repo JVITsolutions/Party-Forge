@@ -99,6 +99,7 @@ var _lobby_compatibility: LoadoutCompatibilityProjection
 var _lobby_return_context := LobbyReturnContext.MAIN_MENU
 var _lobby_return_focus: Control
 var _ground_chest_diagnostics: Dictionary = {}
+var _level_up_application_in_flight := false
 
 func _ready() -> void:
 	if initialized:
@@ -237,7 +238,7 @@ func _prepare_run_start(definition: ClassDefinition, run_seed: int = RUN_SEED) -
 		return false
 	active_run_rules = RunRulesSnapshot.from_settings(saved_settings)
 	_level_up_offer_state = LevelUpOfferState.new()
-	(get_node("HUD/LevelUpPanel") as LevelUpPanel).configure_reduced_motion(active_run_rules.reduced_motion())
+	(get_node("HUD/LevelUpPanel") as LevelUpPanel).configure_visual_settings(saved_settings)
 	experience_system.configure_multiplier(active_run_rules.experience_multiplier_percent())
 	party_manager.configure_capacity(active_run_rules.capacity_policy())
 	if CURRENT_STARTING_PARTY_SIZE > active_run_rules.party_capacity():
@@ -840,12 +841,30 @@ func _apply_choice_for_member(choice: UpgradeChoice, recipient_member_id: int, r
 		game_run.resume_run()
 	return true
 
-func _on_choice_confirmation_requested(choice: UpgradeChoice, recipient_member_id: int) -> void:
+func _apply_level_up_choice(choice: UpgradeChoice, recipient_member_id: int) -> LevelUpApplicationResult:
+	var preflight := LevelUpApplicationPolicy.new().evaluate(choice, party_manager, catalog, recipient_member_id)
+	if not preflight.ok():
+		return preflight
+	if not _apply_choice_for_member(choice, preflight.recipient_member_id, false):
+		return LevelUpApplicationResult.rejected(choice.key(), preflight.recipient_member_id, "Selection is no longer available.")
+	return LevelUpApplicationResult.accepted(choice.key(), preflight.recipient_member_id)
+
+func _on_level_up_application_requested(choice: UpgradeChoice, recipient_member_id: int) -> void:
 	var panel := get_node("HUD/LevelUpPanel") as LevelUpPanel
-	if _apply_choice_for_member(choice, recipient_member_id, false):
-		panel.complete_selection()
+	if _level_up_application_in_flight:
+		return
+	_level_up_application_in_flight = true
+	var result := _apply_level_up_choice(choice, recipient_member_id)
+	_level_up_application_in_flight = false
+	if result.ok():
+		panel.accept_application()
 	else:
-		panel.reject_selection("Selection is no longer available.")
+		panel.reject_application(result.reason)
+
+func _on_level_up_recovery_requested() -> void:
+	if experience_system.pending_levels > 0 and not level_refresh_scheduled:
+		level_refresh_scheduled = true
+		call_deferred(&"_present_pending_level")
 
 func _health_for_member(member_id: int) -> Vector2:
 	if party_manager == null or party_manager.member_by_id(member_id) == null:
@@ -976,12 +995,11 @@ func _wire_static_ui() -> void:
 		profile_manager.active_profile_changed.connect(_on_active_profile_changed)
 	var level_panel := get_node("HUD/LevelUpPanel") as LevelUpPanel
 	level_panel.configure(catalog, UpgradeApplicationService.new(), Callable(self, "_health_for_member"))
-	var legacy_apply := Callable(self, "_apply_choice")
-	if level_panel.is_connected("choice_selected", legacy_apply):
-		level_panel.disconnect("choice_selected", legacy_apply)
-	var confirmation_handler := Callable(self, "_on_choice_confirmation_requested")
-	if not level_panel.is_connected("confirmation_requested", confirmation_handler):
-		level_panel.connect("confirmation_requested", confirmation_handler)
+	level_panel.configure_visual_settings(saved_settings)
+	if not level_panel.application_requested.is_connected(_on_level_up_application_requested):
+		level_panel.application_requested.connect(_on_level_up_application_requested)
+	if not level_panel.recovery_requested.is_connected(_on_level_up_recovery_requested):
+		level_panel.recovery_requested.connect(_on_level_up_recovery_requested)
 	var result := get_node("HUD/RunResultPanel") as Control
 	if not result.is_connected("restart_requested", _restart): result.connect("restart_requested", _restart)
 	if not result.is_connected("quit_requested", _quit): result.connect("quit_requested", _quit)
@@ -1972,11 +1990,14 @@ func _present_pending_level() -> void:
 		_level_up_offer_state
 	)
 	_level_up_offer_state.offer_sequence += 1
+	var invalid_choices := _invalid_choice_keys(choices)
+	if choices.is_empty():
+		invalid_choices[&"__empty__"] = "No valid upgrade choices are currently available. Retry Offers to regenerate this pending level."
 	get_node("HUD/LevelUpPanel").call(
 		"show_choices",
 		choices,
 		party_manager,
-		_invalid_choice_keys(choices),
+		invalid_choices,
 		experience_system.pending_levels
 	)
 

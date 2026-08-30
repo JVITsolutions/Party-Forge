@@ -2,49 +2,83 @@
 
 [ext_resource type="Script" uid="uid://c5xmbsowae1m1" path="res://scripts/ui/upgrade_card.gd" id="1_card"]
 
-[node name="UpgradeCard" type="Button" unique_id=316099655]
+[node name="UpgradeCard" type="Button"]
 custom_minimum_size = Vector2(168, 300)
+theme_type_variation = &"LivingForgeSecondaryButton"
 script = ExtResource("1_card")
 
-[node name="Content" type="VBoxContainer" parent="." unique_id=1829703514]
+[node name="Content" type="VBoxContainer" parent="."]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
-offset_left = 10.0
-offset_top = 16.0
-offset_right = -10.0
-offset_bottom = -16.0
+offset_left = 14.0
+offset_top = 14.0
+offset_right = -14.0
+offset_bottom = -14.0
 grow_horizontal = 2
 grow_vertical = 2
+theme_override_constants/separation = 8
 mouse_filter = 2
 
-[node name="Name" type="Label" parent="Content" unique_id=53316520]
+[node name="Identity" type="HBoxContainer" parent="Content"]
 layout_mode = 2
+theme_override_constants/separation = 8
 
-[node name="Scope" type="Label" parent="Content" unique_id=643679207]
+[node name="Icon" type="Label" parent="Content/Identity"]
+custom_minimum_size = Vector2(32, 32)
 layout_mode = 2
+theme_type_variation = &"LivingForgeBadgeLabel"
+text = "◆"
+horizontal_alignment = 1
+vertical_alignment = 1
 
-[node name="Rank" type="Label" parent="Content" unique_id=32840150]
+[node name="Category" type="Label" parent="Content/Identity"]
 layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"LivingForgeCaptionLabel"
+text = "Upgrade"
+vertical_alignment = 1
 
-[node name="Summary" type="Label" parent="Content" unique_id=2078556592]
+[node name="Name" type="Label" parent="Content"]
 layout_mode = 2
+theme_type_variation = &"LivingForgeSectionLabel"
 autowrap_mode = 2
 
-[node name="Eligibility" type="Label" parent="Content" unique_id=1091257725]
-layout_mode = 2
-autowrap_mode = 2
-
-[node name="Recipient" type="Label" parent="Content" unique_id=500504444]
-layout_mode = 2
-autowrap_mode = 2
-
-[node name="Inheritance" type="Label" parent="Content" unique_id=1729175325]
-layout_mode = 2
-autowrap_mode = 2
-
-[node name="DisabledReason" type="Label" parent="Content" unique_id=1471312065]
+[node name="Rarity" type="Label" parent="Content"]
 visible = false
 layout_mode = 2
+theme_type_variation = &"LivingForgeBadgeLabel"
+
+[node name="Scope" type="Label" parent="Content"]
+layout_mode = 2
+theme_type_variation = &"LivingForgeCaptionLabel"
+autowrap_mode = 2
+
+[node name="Rank" type="Label" parent="Content"]
+layout_mode = 2
+theme_type_variation = &"LivingForgeBadgeLabel"
+autowrap_mode = 2
+
+[node name="Summary" type="Label" parent="Content"]
+layout_mode = 2
+size_flags_vertical = 3
+autowrap_mode = 2
+
+[node name="Eligibility" type="Label" parent="Content"]
+layout_mode = 2
+theme_type_variation = &"LivingForgeCaptionLabel"
+autowrap_mode = 2
+
+[node name="Action" type="Label" parent="Content"]
+layout_mode = 2
+theme_type_variation = &"LivingForgePromptLabel"
+text = "Apply"
+horizontal_alignment = 1
+autowrap_mode = 2
+
+[node name="DisabledReason" type="Label" parent="Content"]
+visible = false
+layout_mode = 2
+theme_type_variation = &"LivingForgeCaptionLabel"
 autowrap_mode = 2

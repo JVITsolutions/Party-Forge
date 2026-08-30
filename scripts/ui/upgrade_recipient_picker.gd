@@ -1,10 +1,10 @@
 class_name UpgradeRecipientPicker
 extends Control
 
-signal recipient_selected(choice: UpgradeChoice, member_id: int)
+signal recipient_selected(choice_key: StringName, member_id: int)
 signal cancelled
 
-var _choice: UpgradeChoice
+var _choice_key: StringName
 var _recipient_buttons: Dictionary = {}
 var _recipient_visibility_request_revision := 0
 var _recipient_visibility_request_target_id := 0
@@ -16,9 +16,9 @@ func _ready() -> void:
 		cancel.pressed.connect(_on_cancelled)
 
 
-func show_for(choice: UpgradeChoice, recipient_rows: Array[Dictionary]) -> void:
+func show_for(choice_key: StringName, recipient_rows: Array[Dictionary]) -> void:
 	_invalidate_recipient_visibility_requests()
-	_choice = choice
+	_choice_key = choice_key
 	visible = true
 	var scroll := get_node("Content/RecipientsScroll") as ScrollContainer
 	scroll.scroll_vertical = int(scroll.get_v_scroll_bar().min_value)
@@ -27,6 +27,7 @@ func show_for(choice: UpgradeChoice, recipient_rows: Array[Dictionary]) -> void:
 		rows.remove_child(child)
 		child.free()
 	_recipient_buttons.clear()
+	var enabled_count := 0
 	for row: Dictionary in recipient_rows:
 		var member_id := int(row.get("member_id", 0))
 		var button := Button.new()
@@ -42,11 +43,20 @@ func show_for(choice: UpgradeChoice, recipient_rows: Array[Dictionary]) -> void:
 		button.focus_mode = Control.FOCUS_NONE if button.disabled else Control.FOCUS_ALL
 		button.tooltip_text = String(row.get("disabled_reason", ""))
 		if not button.disabled:
-			button.pressed.connect(_on_recipient_pressed.bind(choice, member_id))
+			enabled_count += 1
+			button.pressed.connect(_on_recipient_pressed.bind(choice_key, member_id))
 			button.focus_entered.connect(_on_recipient_focused.bind(member_id))
 		rows.add_child(button)
 		_recipient_buttons[member_id] = button
+	var empty_reason := get_node("Content/EmptyReason") as Label
+	empty_reason.visible = enabled_count == 0
+	empty_reason.text = "No eligible party member remains. Return to the offer and choose another upgrade." if enabled_count == 0 else ""
 	_configure_recipient_focus_neighbors()
+	var initial_focus := _first_enabled_button()
+	if initial_focus == null:
+		initial_focus = get_node("Content/Cancel") as Button
+	if initial_focus.is_inside_tree():
+		initial_focus.grab_focus()
 
 
 func _configure_recipient_focus_neighbors() -> void:
@@ -58,13 +68,27 @@ func _configure_recipient_focus_neighbors() -> void:
 	var cancel := get_node("Content/Cancel") as Button
 	for index: int in enabled_buttons.size():
 		var button := enabled_buttons[index]
-		_set_focus_neighbor(button, &"focus_neighbor_top", enabled_buttons[index - 1] if index > 0 else null)
+		_set_focus_neighbor(button, &"focus_neighbor_top", enabled_buttons[index - 1] if index > 0 else cancel)
 		_set_focus_neighbor(button, &"focus_neighbor_bottom", enabled_buttons[index + 1] if index + 1 < enabled_buttons.size() else cancel)
 	_set_focus_neighbor(cancel, &"focus_neighbor_top", enabled_buttons[-1] if not enabled_buttons.is_empty() else null)
+	_set_focus_neighbor(cancel, &"focus_neighbor_bottom", enabled_buttons[0] if not enabled_buttons.is_empty() else cancel)
 
 
 func _set_focus_neighbor(control: Control, property_name: StringName, target: Control) -> void:
 	control.set(property_name, control.get_path_to(target) if target != null else NodePath())
+
+
+func recipient_row(member_id: int) -> Dictionary:
+	var button := _recipient_buttons.get(member_id) as Button
+	return (button.get_meta("recipient_row", {}) as Dictionary).duplicate(true) if button != null else {}
+
+
+func _first_enabled_button() -> Button:
+	for child: Node in (get_node("Content/RecipientsScroll/Rows") as VBoxContainer).get_children():
+		var button := child as Button
+		if button != null and not button.disabled:
+			return button
+	return null
 
 
 func _on_recipient_focused(member_id: int) -> void:
@@ -128,9 +152,9 @@ func _value_text(value: float) -> String:
 	return ("%.1f" % value).rstrip("0").rstrip(".")
 
 
-func _on_recipient_pressed(choice: UpgradeChoice, member_id: int) -> void:
-	if choice == _choice:
-		recipient_selected.emit(choice, member_id)
+func _on_recipient_pressed(choice_key: StringName, member_id: int) -> void:
+	if choice_key == _choice_key:
+		recipient_selected.emit(choice_key, member_id)
 
 
 func _on_cancelled() -> void:
