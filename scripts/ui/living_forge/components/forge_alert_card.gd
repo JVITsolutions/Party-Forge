@@ -46,7 +46,10 @@ func _refresh_content_minimum() -> void:
 	var content := get_node_or_null("Surface/Content") as Control
 	if content == null:
 		return
-	custom_minimum_size.y = maxf(_baseline_minimum_height, content.get_combined_minimum_size().y)
+	var content_insets := maxf(content.offset_top, 0.0) + maxf(-content.offset_bottom, 0.0)
+	var required_height := maxf(_baseline_minimum_height, content.get_combined_minimum_size().y + content_insets)
+	if not is_equal_approx(custom_minimum_size.y, required_height):
+		custom_minimum_size.y = required_height
 
 
 func present_alert(alert: CombatAlertProjection) -> void:
@@ -84,6 +87,11 @@ func semantic_state_id() -> StringName:
 
 func semantic_state_inventory() -> Dictionary:
 	return STATE_CUES.duplicate(true)
+
+
+func synchronize_content_minimum() -> Vector2:
+	_refresh_content_minimum()
+	return get_combined_minimum_size()
 
 
 func request_inspect() -> void:

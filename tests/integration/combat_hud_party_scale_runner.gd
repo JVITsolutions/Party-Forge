@@ -24,9 +24,11 @@ func _run() -> void:
 		return
 	for count: int in [1, 6, 7, 12, 20, 24]:
 		await _exercise_party_count(count)
-	for viewport_size: Vector2i in [Vector2i(1920, 1080), Vector2i(1280, 720)]:
-		await _exercise_real_geometry(viewport_size, 6, 150 if viewport_size.x == 1280 else 100)
-		await _exercise_real_geometry(viewport_size, 24, 150 if viewport_size.x == 1280 else 100)
+	await _exercise_real_geometry(Vector2i(1920, 1080), 6, 100, 100)
+	await _exercise_real_geometry(Vector2i(1920, 1080), 24, 100, 100)
+	await _exercise_real_geometry(Vector2i(1280, 720), 6, 100, 150)
+	await _exercise_real_geometry(Vector2i(1280, 720), 6, 150, 150)
+	await _exercise_real_geometry(Vector2i(1280, 720), 24, 150, 150)
 	_finish()
 
 
@@ -79,10 +81,10 @@ func _exercise_party_count(count: int) -> void:
 	_cleanup_fixture(fixture)
 
 
-func _exercise_real_geometry(viewport_size: Vector2i, count: int, text_scale: int) -> void:
+func _exercise_real_geometry(viewport_size: Vector2i, count: int, ui_scale: int, text_scale: int) -> void:
 	var fixture := _fixture(count)
 	fixture.settings.text_scale_percent = text_scale
-	fixture.settings.ui_scale_percent = 125 if viewport_size.x == 1280 else 100
+	fixture.settings.ui_scale_percent = ui_scale
 	fixture.settings.high_contrast = viewport_size.x == 1280
 	for member_id: int in range(2, mini(count + 1, 6)):
 		(fixture.health_by_member[member_id] as HealthComponent).apply_damage(80.0)
@@ -108,11 +110,15 @@ func _exercise_real_geometry(viewport_size: Vector2i, count: int, text_scale: in
 	var party_region := hud.get_node("Margin/CombatStatus/PartyRegion") as Control
 	var alerts := hud.get_node("Margin/CombatStatus/AlertRegion") as Control
 	var overflow := hud.get_node("Margin/CombatStatus/AlertRegion/Overflow") as Button
+	var rich := hud.get_node("Margin/CombatStatus/PartyRegion/RichRoster") as Control
+	var compact := hud.get_node("Margin/CombatStatus/PartyRegion/CompactRoster") as Control
 	for control: Control in [shell, leader, timer, party_region, alerts]:
 		_assert_contained(control, Rect2(Vector2.ZERO, Vector2(viewport_size)), "%s %dx%d party=%d" % [control.name, viewport_size.x, viewport_size.y, count])
 	_assert(not leader.get_global_rect().intersection(timer.get_global_rect()).has_area(), "leader and timer do not collide at %s party=%d" % [viewport_size, count])
 	_assert(not leader.get_global_rect().intersection(alerts.get_global_rect()).has_area(), "leader and alerts do not collide at %s party=%d" % [viewport_size, count])
 	_assert(not party_region.get_global_rect().intersection(alerts.get_global_rect()).has_area(), "party region and alerts do not collide at %s party=%d" % [viewport_size, count])
+	if viewport_size == Vector2i(1280, 720) and text_scale == 150:
+		_assert(not rich.visible and compact.visible, "720p Text150 uses the bounded compact roster for party=%d ui=%d" % [count, ui_scale])
 	if count == 24:
 		var marker_rects: Array[Rect2] = []
 		for marker: Control in _roster_controls(hud):
@@ -122,14 +128,24 @@ func _exercise_real_geometry(viewport_size: Vector2i, count: int, text_scale: in
 			for prior: Rect2 in marker_rects:
 				_assert(not prior.intersection(marker_rect).has_area(), "final-page compact members do not overlap at %s" % viewport_size)
 			marker_rects.append(marker_rect)
-	if viewport_size == Vector2i(1280, 720) and count == 6:
-		var battlefield_gap := alerts.get_global_rect().position.x - party_region.get_global_rect().end.x
-		_assert(battlefield_gap >= 160.0, "1280x720 rich combat keeps a 160px horizontal battlefield opening; actual=%s" % battlefield_gap)
+	if viewport_size == Vector2i(1920, 1080) and count == 6:
+		_assert(rich.visible and not compact.visible, "desktop default retains rich follower cards")
+		for card: Control in _roster_controls(hud):
+			var card_rect := card.get_global_rect()
+			var content := card.get_node("Surface/Content") as Control
+			var name_label := card.get_node("Surface/Content/Identity/Name") as Label
+			_assert(card.custom_minimum_size.x >= 424.0 and card.custom_minimum_size.y >= 184.0, "desktop rich follower preserves canonical 424x184 card minimum")
+			_assert(card_rect.size.x >= card.get_combined_minimum_size().x and card_rect.size.y >= card.get_combined_minimum_size().y, "desktop rich follower is never smaller than its combined minimum")
+			_assert(card_rect.encloses(content.get_global_rect()) and card_rect.encloses(name_label.get_global_rect()), "desktop rich follower name remains inside its forged plate")
 	_assert(overflow.get_global_rect().size.x >= 48.0 and overflow.get_global_rect().size.y >= 48.0, "alert overflow has an actual post-layout 48x48 target")
 	var viewport_rect := Rect2(Vector2.ZERO, Vector2(viewport_size))
+	var rendered_alert_count := 0
 	var previous_alert_rect := Rect2()
 	for alert: Node in (hud.get_node("Margin/CombatStatus/AlertRegion/ExpandedAlerts") as Container).get_children():
 		var alert_control := alert as Control
+		if not alert_control.visible:
+			continue
+		rendered_alert_count += 1
 		var alert_rect := alert_control.get_global_rect()
 		_assert(viewport_rect.encloses(alert_rect), "expanded alert is viewport bounded: %s" % alert_rect)
 		var content_rect := (alert_control.get_node("Surface/Content") as Control).get_global_rect()
@@ -143,6 +159,10 @@ func _exercise_real_geometry(viewport_size: Vector2i, count: int, text_scale: in
 				var action_rect := action.get_global_rect()
 				_assert(action_rect.size.x >= 48.0 and action_rect.size.y >= 48.0, "%s alert action has an actual post-layout 48x48 target" % action_name)
 				_assert(alert_rect.encloses(action_rect), "%s alert action remains inside its card card=%s action=%s" % [action_name, alert_rect, action_rect])
+	var all_alert_count := (hud.get("current_projection") as CombatHudProjection).all_alerts.size()
+	if viewport_size == Vector2i(1280, 720) and ui_scale == 150 and text_scale == 150 and all_alert_count > 0:
+		_assert(rendered_alert_count < mini(CombatHudProjection.MAX_VISIBLE_ALERTS, all_alert_count), "720p Text150 reduces expanded alerts to the vertical content budget")
+		_assert(overflow.visible and overflow.text.begins_with("+%d " % (all_alert_count - rendered_alert_count)), "alert overflow names every alert routed to the tray")
 	if overflow.visible:
 		overflow.pressed.emit()
 		await process_frame

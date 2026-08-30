@@ -6,6 +6,12 @@ enum Mode { RICH, COMPACT }
 const MAX_PARTY_COUNT := 24
 const MIN_COMPACT_ROWS := 1
 const MAX_COMPACT_ROWS := 4
+const RICH_CARD_BASE_SIZE := Vector2(424.0, 184.0)
+const RICH_MAX_COLUMNS := 2
+const RICH_HORIZONTAL_SEPARATION := 12.0
+const RICH_VERTICAL_SEPARATION := 8.0
+const PARTY_REGION_HORIZONTAL_INSET := 24.0
+const PARTY_REGION_VERTICAL_INSET := 312.0
 
 
 class Metrics:
@@ -32,10 +38,34 @@ static func resolve(viewport_size: Vector2i, ui_scale_percent: int, text_scale_p
 	var normalized_ui_scale := _normalized_scale(ui_scale_percent)
 	var normalized_text_scale := _normalized_scale(text_scale_percent)
 	var normalized_party_count := clampi(party_count, 1, MAX_PARTY_COUNT)
-	var rich := normalized_party_count <= 6
+	var rich_card_size := _resolved_rich_card_size(normalized_ui_scale, normalized_text_scale)
+	var rich_columns := _rich_columns(viewport_size, rich_card_size)
+	var rich := normalized_party_count <= 6 and _rich_followers_fit(viewport_size, normalized_party_count - 1, rich_card_size, rich_columns)
 	var visible := normalized_party_count if rich else clampi(_compact_visible_count(viewport_size, normalized_ui_scale, normalized_text_scale), 1, normalized_party_count)
 	var pages := maxi(1, ceili(float(normalized_party_count) / float(visible)))
-	return Metrics.create(Mode.RICH if rich else Mode.COMPACT, visible, _columns(viewport_size, rich), pages)
+	return Metrics.create(Mode.RICH if rich else Mode.COMPACT, visible, rich_columns if rich else _compact_columns(viewport_size), pages)
+
+
+static func _resolved_rich_card_size(ui_scale_percent: int, text_scale_percent: int) -> Vector2:
+	var scale := maxf(float(ui_scale_percent), float(text_scale_percent)) / 100.0
+	return RICH_CARD_BASE_SIZE * scale
+
+
+static func _rich_columns(viewport_size: Vector2i, card_size: Vector2) -> int:
+	var available_width := maxf(1.0, float(viewport_size.x) * 0.5 - PARTY_REGION_HORIZONTAL_INSET)
+	return clampi(floori((available_width + RICH_HORIZONTAL_SEPARATION) / (card_size.x + RICH_HORIZONTAL_SEPARATION)), 1, RICH_MAX_COLUMNS)
+
+
+static func _rich_followers_fit(viewport_size: Vector2i, follower_count: int, card_size: Vector2, columns: int) -> bool:
+	if follower_count <= 0:
+		return true
+	var available_width := maxf(1.0, float(viewport_size.x) * 0.5 - PARTY_REGION_HORIZONTAL_INSET)
+	var available_height := maxf(1.0, float(viewport_size.y) - PARTY_REGION_VERTICAL_INSET)
+	var used_columns := mini(columns, follower_count)
+	var rows := ceili(float(follower_count) / float(columns))
+	var required_width := card_size.x * used_columns + RICH_HORIZONTAL_SEPARATION * maxi(0, used_columns - 1)
+	var required_height := card_size.y * rows + RICH_VERTICAL_SEPARATION * maxi(0, rows - 1)
+	return required_width <= available_width and required_height <= available_height
 
 
 static func _compact_visible_count(viewport_size: Vector2i, ui_scale_percent: int, text_scale_percent: int) -> int:
@@ -45,13 +75,11 @@ static func _compact_visible_count(viewport_size: Vector2i, ui_scale_percent: in
 	var available_height := maxf(1.0, float(viewport_size.y) - 132.0 * ui_scale)
 	var row_height := 84.0 * row_scale
 	var rows := clampi(floori(available_height / row_height), MIN_COMPACT_ROWS, MAX_COMPACT_ROWS)
-	return rows * _columns(viewport_size, false)
+	return rows * _compact_columns(viewport_size)
 
 
-static func _columns(viewport_size: Vector2i, rich: bool) -> int:
-	var minimum_column_width := 440 if rich else 280
-	var maximum_columns := 3 if rich else 2
-	return clampi(viewport_size.x / minimum_column_width, 1, maximum_columns)
+static func _compact_columns(viewport_size: Vector2i) -> int:
+	return clampi(viewport_size.x / 280, 1, 2)
 
 
 static func _normalized_scale(value: int) -> int:

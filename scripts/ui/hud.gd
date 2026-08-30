@@ -38,6 +38,7 @@ var _deferred_focus_descriptor: Dictionary = {}
 var _terminal_suspended_focus_modes: Array[Dictionary] = []
 var _terminal_prior_focus: Control
 var _terminal_prior_focus_descriptor: Dictionary = {}
+var _alert_budget_reflow_queued := false
 
 
 func _ready() -> void:
@@ -340,14 +341,19 @@ func _rebuild_member_controls() -> void:
 
 func _rebuild_rich_followers(members: Array[PartyMemberHudProjection]) -> void:
 	var roster := get_node("Margin/CombatStatus/PartyRegion/RichRoster") as GridContainer
-	roster.columns = 2
+	roster.columns = maxi(1, _metrics.column_count)
 	for member: PartyMemberHudProjection in members:
 		if member.is_leader:
 			continue
 		var card := RICH_MEMBER_SCENE.instantiate() as ForgePartyMemberCard
-		card.custom_minimum_size = Vector2(296.0, 120.0)
-		_bind_member_control(card, member)
 		roster.add_child(card)
+		_bind_member_control(card, member)
+		_synchronize_rich_card_minimum(card)
+
+
+func _synchronize_rich_card_minimum(card: ForgePartyMemberCard) -> void:
+	var content := card.get_node("Surface/Content") as Control
+	card.custom_minimum_size = card.custom_minimum_size.max(content.get_combined_minimum_size() + Vector2(32.0, 32.0))
 
 
 func _rebuild_compact_page(members: Array[PartyMemberHudProjection]) -> void:
@@ -402,8 +408,10 @@ func _present_status() -> void:
 
 
 func _present_alerts() -> void:
+	var stack := get_node("Margin/CombatStatus/AlertRegion/ExpandedAlerts") as VBoxContainer
+	var candidates := current_projection.visible_alerts
 	var wanted: Dictionary = {}
-	for alert: CombatAlertProjection in current_projection.visible_alerts:
+	for alert: CombatAlertProjection in candidates:
 		wanted[alert.stable_id] = true
 	for stable_value: Variant in _alert_controls_by_id.keys():
 		var stable_id := StringName(stable_value)
@@ -412,26 +420,71 @@ func _present_alerts() -> void:
 		var stale := _alert_controls_by_id[stable_id] as Control
 		_alert_controls_by_id.erase(stable_id)
 		stale.free()
-	var stack := get_node("Margin/CombatStatus/AlertRegion/ExpandedAlerts") as VBoxContainer
-	var alerts := current_projection.visible_alerts
-	for index: int in alerts.size():
-		var alert := alerts[index]
+	for index: int in candidates.size():
+		var alert := candidates[index]
 		var card := _alert_controls_by_id.get(alert.stable_id) as ForgeAlertCard
 		if card == null:
 			card = ALERT_CARD_SCENE.instantiate() as ForgeAlertCard
 			card.custom_minimum_size = Vector2(472.0, 172.0)
 			_alert_controls_by_id[alert.stable_id] = card
 			stack.add_child(card)
+			card.minimum_size_changed.connect(_queue_alert_budget_reflow)
 			card.inspect_requested.connect(_on_alert_inspect_requested.bind(card))
 			card.ledger_requested.connect(_on_alert_ledger_requested.bind(card))
 		card.set_meta(&"stable_alert_id", alert.stable_id)
 		card.set_meta(&"member_id", alert.member_id)
 		card.present_alert(alert)
 		card.apply_accessibility_variant(_high_contrast)
+		card.visible = true
 		stack.move_child(card, index)
+	_apply_alert_budget()
+	_queue_alert_budget_reflow()
+
+
+func _queue_alert_budget_reflow() -> void:
+	if _alert_budget_reflow_queued:
+		return
+	_alert_budget_reflow_queued = true
+	call_deferred(&"_apply_deferred_alert_budget")
+
+
+func _apply_deferred_alert_budget() -> void:
+	_alert_budget_reflow_queued = false
+	if current_projection != null:
+		_apply_alert_budget()
+
+
+func _apply_alert_budget() -> void:
+	var stack := get_node("Margin/CombatStatus/AlertRegion/ExpandedAlerts") as VBoxContainer
+	var stack_parent := stack.get_parent_control()
+	var vertical_budget := maxf(
+		stack_parent.size.y * (stack.anchor_bottom - stack.anchor_top) + stack.offset_bottom - stack.offset_top,
+		0.0,
+	)
+	if vertical_budget <= 0.0:
+		vertical_budget = maxf(_hud_viewport().get_visible_rect().size.y - 188.0, 1.0)
+	var separation := float(stack.get_theme_constant(&"separation"))
+	var rendered_count := 0
+	var used_height := 0.0
+	for alert: CombatAlertProjection in current_projection.visible_alerts:
+		var card := _alert_controls_by_id.get(alert.stable_id) as ForgeAlertCard
+		if card == null:
+			continue
+		var card_minimum := card.synchronize_content_minimum()
+		var next_height := used_height + (separation if rendered_count > 0 else 0.0) + card_minimum.y
+		var render_card := rendered_count == 0 or next_height <= vertical_budget
+		card.set_interaction_disabled(not render_card)
+		card.visible = render_card
+		if render_card:
+			used_height = next_height
+			rendered_count += 1
 	var overflow := get_node("Margin/CombatStatus/AlertRegion/Overflow") as Button
-	overflow.visible = current_projection.overflow_alert_count > 0
-	var overflow_count := current_projection.overflow_alert_count
+	var overflow_count := maxi(0, current_projection.all_alerts.size() - rendered_count)
+	overflow.visible = overflow_count > 0
+	overflow.disabled = not overflow.visible
+	overflow.focus_mode = Control.FOCUS_ALL if overflow.visible else Control.FOCUS_NONE
+	if not overflow.visible and overflow.has_focus():
+		overflow.release_focus()
 	overflow.text = "+%d %s" % [overflow_count, "alert" if overflow_count == 1 else "alerts"]
 	overflow.accessibility_name = "Open %d additional combat %s" % [overflow_count, "alert" if overflow_count == 1 else "alerts"]
 	_configure_alert_focus_neighbors()
@@ -708,7 +761,7 @@ func _configure_alert_focus_neighbors() -> void:
 	var controls: Array[Control] = []
 	for alert: CombatAlertProjection in current_projection.visible_alerts:
 		var control := _alert_controls_by_id.get(alert.stable_id) as Control
-		if control != null:
+		if control != null and control.visible:
 			controls.append(control)
 	var overflow := get_node("Margin/CombatStatus/AlertRegion/Overflow") as Button
 	for index: int in controls.size():
