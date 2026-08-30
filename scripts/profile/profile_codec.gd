@@ -440,8 +440,10 @@ static func _validate_transaction_record(
 	allow_opaque_legacy_recovery: bool,
 ) -> String:
 	var expected := ["operation", "fingerprint", "committed_at_unix", "result_profile"]
-	if record.size() != expected.size() or not expected.all(func(field: String) -> bool: return record.has(field)):
+	if record.size() < expected.size() or record.size() > expected.size() + 1 or not expected.all(func(field: String) -> bool: return record.has(field)) or (record.size() == expected.size() + 1 and not record.has("receipt")):
 		return "record fields are invalid"
+	if record.has("receipt") and (not record["receipt"] is Dictionary or not _is_json_value(record["receipt"])):
+		return "receipt must be a JSON dictionary"
 	if typeof(record["operation"]) != TYPE_STRING or (record["operation"] as String).strip_edges().is_empty():
 		return "operation must be a non-empty string"
 	if typeof(record["fingerprint"]) != TYPE_STRING or not _is_lower_hex(record["fingerprint"] as String, 64):

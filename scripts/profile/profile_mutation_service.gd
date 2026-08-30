@@ -7,10 +7,10 @@ func _init(store: ProfileStore = null) -> void:
 	_store = store if store != null else ProfileStore.new()
 
 func apply(profile_id: String, transaction_id: String, mutate: Callable, root: String = ProfileStore.DEFAULT_ROOT, now_unix: int = -1, operation: String = "", request: Dictionary = {}) -> ProfileMutationResult:
-	return _apply_internal(profile_id, transaction_id, mutate, root, now_unix, operation, request, false, [], "")
+	return _apply_internal(profile_id, transaction_id, mutate, root, now_unix, operation, request, false, [], "", {})
 
 func apply_irreversible(profile_id: String, transaction_id: String, mutate: Callable, root: String = ProfileStore.DEFAULT_ROOT, now_unix: int = -1, operation: String = "", request: Dictionary = {}, removed_instance_ids: Array[String] = []) -> ProfileMutationResult:
-	return _apply_internal(profile_id, transaction_id, mutate, root, now_unix, operation, request, true, removed_instance_ids.duplicate(), "")
+	return _apply_internal(profile_id, transaction_id, mutate, root, now_unix, operation, request, true, removed_instance_ids.duplicate(), "", {})
 
 func apply_with_resumable_run_revocation(
 	profile_id: String,
@@ -21,12 +21,13 @@ func apply_with_resumable_run_revocation(
 	now_unix: int = -1,
 	operation: String = "",
 	request: Dictionary = {},
+	receipt: Dictionary = {},
 ) -> ProfileMutationResult:
 	if String(revoked_run_id).strip_edges().is_empty():
 		var result := ProfileMutationResult.new()
 		result.error = "PROFILE_MUTATION_ERROR profile=%s transaction=%s reason=revoked run id is required" % [profile_id, transaction_id]
 		return result
-	return _apply_internal(profile_id, transaction_id, mutate, root, now_unix, operation, request, true, [], String(revoked_run_id))
+	return _apply_internal(profile_id, transaction_id, mutate, root, now_unix, operation, request, true, [], String(revoked_run_id), receipt)
 
 func _apply_internal(
 	profile_id: String,
@@ -39,6 +40,7 @@ func _apply_internal(
 	irreversible: bool,
 	removed_instance_ids: Array[String],
 	revoked_run_id: String,
+	receipt: Dictionary,
 ) -> ProfileMutationResult:
 	var result := ProfileMutationResult.new()
 	if transaction_id.strip_edges().is_empty():
@@ -76,6 +78,7 @@ func _apply_internal(
 			return result
 		result.profile = snapshot.profile
 		result.duplicate = true
+		result._receipt = (record.get("receipt", {}) as Dictionary).duplicate(true)
 		return result
 	var working := loaded.profile.copy()
 	var revoked_instance_ids: Array[String] = []
@@ -94,6 +97,11 @@ func _apply_internal(
 	if not mutation_error.is_empty():
 		result.error = mutation_error
 		return result
+	var receipt_error := _validate_request_value(receipt)
+	if not receipt_error.is_empty():
+		result.error = "PROFILE_MUTATION_ERROR profile=%s transaction=%s reason=invalid receipt %s" % [profile_id, transaction_id, receipt_error]
+		return result
+	var committed_receipt := JSON.parse_string(JSON.stringify(receipt)) as Dictionary
 	var protected_field := ""
 	if working.schema_version != protected_schema_version:
 		protected_field = "schema_version"
@@ -124,12 +132,15 @@ func _apply_internal(
 	working.updated_at_unix = committed_timestamp
 	var result_profile := working.to_dictionary()
 	result_profile["applied_transactions"] = {}
-	working.applied_transactions[transaction_id] = {
+	var transaction_record := {
 		"operation": clean_operation,
 		"fingerprint": fingerprint,
 		"committed_at_unix": committed_timestamp,
 		"result_profile": result_profile,
 	}
+	if not committed_receipt.is_empty():
+		transaction_record["receipt"] = committed_receipt.duplicate(true)
+	working.applied_transactions[transaction_id] = transaction_record
 	var save_error := _store.save_profile_irreversible(working, root) if irreversible else _store.save_profile(working, root)
 	if not save_error.is_empty():
 		result.error = save_error
@@ -137,6 +148,7 @@ func _apply_internal(
 	var committed_projection := working.copy()
 	committed_projection.applied_transactions = {}
 	result.profile = committed_projection
+	result._receipt = committed_receipt.duplicate(true)
 	return result
 
 static func _strict_run_instance_ids(resumable_run: Dictionary, revoked_run_id: String) -> Array[String]:

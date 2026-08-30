@@ -1,6 +1,8 @@
 class_name RunExtractionProjection
 extends RefCounted
 
+enum FailureKind { NONE, SOURCE_INVALID, STALE_SELECTION, OVER_CAPACITY }
+
 var _automatic_item_ids: Array[String] = []
 var automatic_item_ids: Array[String]:
 	get:
@@ -35,6 +37,8 @@ var valid: bool:
 	get:
 		return _errors.is_empty()
 
+var failure_kind := FailureKind.NONE
+
 static func create(
 	automatic_ids: Array[String],
 	eligible_values: Array[ExtractionSelection],
@@ -42,6 +46,7 @@ static func create(
 	lost_ids: Array[String],
 	capacity_value: int,
 	error_values: Array[String],
+	failure_kind_value: FailureKind = FailureKind.NONE,
 ) -> RunExtractionProjection:
 	var result := RunExtractionProjection.new()
 	result._automatic_item_ids = automatic_ids.duplicate()
@@ -50,6 +55,7 @@ static func create(
 	result._lost_item_ids = lost_ids.duplicate()
 	result._capacity = maxi(0, capacity_value)
 	result._errors = error_values.duplicate()
+	result.failure_kind = failure_kind_value
 	return result
 
 func to_dictionary() -> Dictionary:

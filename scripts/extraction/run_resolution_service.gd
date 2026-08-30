@@ -16,10 +16,10 @@ func preflight(
 ) -> RunResolutionPreflightResult:
 	var request_error := _validate_request(profile.profile_id if profile != null else "", context, request)
 	if not request_error.is_empty():
-		return RunResolutionPreflightResult.failure(request_error)
+		return RunResolutionPreflightResult.failure(request_error, RunResolutionEvaluation.FailureCategory.RUN_IDENTITY_MISMATCH, _identity_player_reason())
 	var source_result := RunResolutionSource.from_context(context, request.leader_member_id)
 	if not source_result.ok():
-		return RunResolutionPreflightResult.failure(source_result.error)
+		return RunResolutionPreflightResult.failure(source_result.error, _source_failure_category(source_result.failure_kind), _source_player_reason(source_result.failure_kind))
 	return preflight_source(profile, source_result.source, request)
 
 func preflight_source(
@@ -29,7 +29,7 @@ func preflight_source(
 ) -> RunResolutionPreflightResult:
 	var request_error := _validate_source_request(profile.profile_id if profile != null else "", source, request)
 	if not request_error.is_empty():
-		return RunResolutionPreflightResult.failure(request_error)
+		return RunResolutionPreflightResult.failure(request_error, RunResolutionEvaluation.FailureCategory.RUN_IDENTITY_MISMATCH, _identity_player_reason())
 	var candidate := profile.copy()
 	if candidate == null:
 		return RunResolutionPreflightResult.failure(_error("field=profile reason=defensive copy unavailable"))
@@ -43,13 +43,13 @@ func resolve(
 ) -> RunResolutionResult:
 	var request_error := _validate_request(profile_id, context, request)
 	if not request_error.is_empty():
-		return RunResolutionResult.failure(request_error)
+		return RunResolutionResult.failure(request_error, RunResolutionEvaluation.FailureCategory.RUN_IDENTITY_MISMATCH, _identity_player_reason())
 	var marker_error := context.item_resolution_error(request.transaction_id)
 	if not marker_error.is_empty():
-		return RunResolutionResult.failure(marker_error)
+		return RunResolutionResult.failure(marker_error, RunResolutionEvaluation.FailureCategory.INTERNAL, "This run's items were already resolved with another transaction. Nothing was moved.")
 	var source_result := RunResolutionSource.from_context(context, request.leader_member_id)
 	if not source_result.ok():
-		return RunResolutionResult.failure(source_result.error)
+		return RunResolutionResult.failure(source_result.error, _source_failure_category(source_result.failure_kind), _source_player_reason(source_result.failure_kind))
 	var result := resolve_source(profile_id, source_result.source, request, root)
 	if result.ok():
 		context.mark_items_resolved(request.transaction_id)
@@ -63,30 +63,50 @@ func resolve_source(
 ) -> RunResolutionResult:
 	var request_error := _validate_source_request(profile_id, source, request)
 	if not request_error.is_empty():
-		return RunResolutionResult.failure(request_error)
+		return RunResolutionResult.failure(request_error, RunResolutionEvaluation.FailureCategory.RUN_IDENTITY_MISMATCH, _identity_player_reason())
 	var accepted_holder: Dictionary = {}
+	var evaluation_holder: Dictionary = {}
+	var receipt_holder: Dictionary = {}
+	var source_fingerprint := _document_fingerprint(source.to_dictionary())
 	var mutation := _mutations.apply_with_resumable_run_revocation(
 		profile_id,
 		request.transaction_id,
 		request.run_id,
 		func(candidate: ProfileState) -> String:
 			var evaluation := RunResolutionEvaluator.evaluate(candidate, source, request)
+			evaluation_holder["evaluation"] = evaluation
 			if not evaluation.ok():
 				return evaluation.error
 			accepted_holder["extraction"] = evaluation.extraction
+			receipt_holder["schema_version"] = 1
+			receipt_holder["source_fingerprint"] = source_fingerprint
+			receipt_holder["projection_fingerprint"] = _document_fingerprint(evaluation.extraction.to_dictionary())
 			return "",
 		root,
 		-1,
 		OPERATION,
 		request.canonical_document(),
+		receipt_holder,
 	)
 	if not mutation.ok():
+		var rejected := evaluation_holder.get("evaluation") as RunResolutionEvaluation
+		if rejected != null:
+			return RunResolutionResult.failure(mutation.error, rejected.failure_category, rejected.player_reason)
 		return RunResolutionResult.failure(mutation.error)
 	var accepted_extraction := accepted_holder.get("extraction") as RunExtractionProjection
 	if mutation.duplicate:
+		var receipt := mutation.receipt
+		if receipt.is_empty():
+			return RunResolutionResult.failure(_error("field=duplicate.receipt reason=legacy transaction has no exact source receipt"), RunResolutionEvaluation.FailureCategory.DUPLICATE_RECEIPT_UNAVAILABLE, "This resolution was already committed, but its exact extraction receipt is unavailable. Nothing was moved.")
+		if not _valid_receipt(receipt):
+			return RunResolutionResult.failure(_error("field=duplicate.receipt reason=stored receipt is invalid"), RunResolutionEvaluation.FailureCategory.DUPLICATE_RECEIPT_UNAVAILABLE, "This resolution was already committed, but its exact extraction receipt is unavailable. Nothing was moved.")
+		if String(receipt["source_fingerprint"]) != source_fingerprint:
+			return RunResolutionResult.failure(_error("field=duplicate.source reason=source fingerprint collision"), RunResolutionEvaluation.FailureCategory.DUPLICATE_SOURCE_COLLISION, "This resolution was already committed from different run contents. Nothing was moved.")
 		accepted_extraction = RunExtractionPolicy.project_source(source, mutation.profile, request.ordinary_selections)
 		if accepted_extraction == null or not accepted_extraction.valid:
 			return RunResolutionResult.failure(_error("field=duplicate.extraction reason=stored result cannot be matched to the accepted request"))
+		if _document_fingerprint(accepted_extraction.to_dictionary()) != String(receipt["projection_fingerprint"]):
+			return RunResolutionResult.failure(_error("field=duplicate.extraction reason=accepted projection fingerprint mismatch"), RunResolutionEvaluation.FailureCategory.DUPLICATE_SOURCE_COLLISION, "This resolution was already committed from different run contents. Nothing was moved.")
 	if accepted_extraction == null or not accepted_extraction.valid:
 		return RunResolutionResult.failure(_error("field=extraction reason=accepted projection unavailable"))
 	return RunResolutionResult.success(mutation.profile, mutation.duplicate, accepted_extraction)
@@ -121,3 +141,45 @@ func _validate_request_fields(profile_id: String, request: RunResolutionRequest)
 
 func _error(detail: String) -> String:
 	return "%s %s" % [ERROR_PREFIX, detail]
+
+func _identity_player_reason() -> String:
+	return "This no longer matches the saved run. Return to run recovery."
+
+func _document_fingerprint(document: Dictionary) -> String:
+	return JSON.stringify(document, "", true, true).sha256_text()
+
+func _source_failure_category(kind: RunResolutionSourceResult.FailureKind) -> RunResolutionEvaluation.FailureCategory:
+	match kind:
+		RunResolutionSourceResult.FailureKind.IDENTITY_MISMATCH:
+			return RunResolutionEvaluation.FailureCategory.RUN_IDENTITY_MISMATCH
+		RunResolutionSourceResult.FailureKind.OWNERSHIP_VERIFICATION:
+			return RunResolutionEvaluation.FailureCategory.OWNERSHIP_VERIFICATION
+		_:
+			return RunResolutionEvaluation.FailureCategory.INTERNAL
+
+func _source_player_reason(kind: RunResolutionSourceResult.FailureKind) -> String:
+	match kind:
+		RunResolutionSourceResult.FailureKind.IDENTITY_MISMATCH:
+			return _identity_player_reason()
+		RunResolutionSourceResult.FailureKind.OWNERSHIP_VERIFICATION:
+			return "Item ownership could not be verified. Nothing was moved."
+		_:
+			return "The saved run source is unavailable. Nothing was moved."
+
+func _valid_receipt(receipt: Dictionary) -> bool:
+	return (
+		receipt.size() == 3
+		and (receipt.get("schema_version") is int or receipt.get("schema_version") is float)
+		and float(receipt["schema_version"]) == floor(float(receipt["schema_version"]))
+		and int(receipt["schema_version"]) == 1
+		and _is_lower_hex(String(receipt.get("source_fingerprint", "")), 64)
+		and _is_lower_hex(String(receipt.get("projection_fingerprint", "")), 64)
+	)
+
+func _is_lower_hex(value: String, length: int) -> bool:
+	if value.length() != length:
+		return false
+	for character: String in value:
+		if character not in "0123456789abcdef":
+			return false
+	return true

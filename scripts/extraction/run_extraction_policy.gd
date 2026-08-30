@@ -24,10 +24,16 @@ static func project(
 			leaders.append(member)
 	if leaders.size() != 1:
 		return _failure(capacity, "field=party.leader reason=must contain exactly one leader")
-	var source_result := RunResolutionSource.from_context(context, leaders[0].member_id)
-	if not source_result.ok():
-		return _failure(capacity, "field=context reason=%s" % source_result.error)
-	return project_source(source_result.source, profile, selections)
+	var party_rows: Array[Dictionary] = []
+	for member: PartyMemberState in context.party.members:
+		if member == null:
+			continue
+		party_rows.append({
+			"member_id": member.member_id,
+			"class_id": String(member.class_definition.id) if member.class_definition != null else "",
+			"is_leader": member.is_leader,
+		})
+	return _project_owned(context.profile_id, String(context.run_player_id), context.item_state(), party_rows, profile, selections)
 
 static func project_source(
 	source: RunResolutionSource,
@@ -44,10 +50,24 @@ static func project_source(
 	var state := source.item_state
 	if state == null or state.owner_id != String(source.run_player_id):
 		return _failure(capacity, "field=item_state.owner_id reason=must match resolution source run player")
+	return _project_owned(source.profile_id, String(source.run_player_id), state, source.party_members, profile, selections)
 
+static func _project_owned(
+	profile_id: String,
+	run_player_id: String,
+	state: ItemOwnershipState,
+	party_members: Array[Dictionary],
+	profile: ProfileState,
+	selections: Array[ExtractionSelection],
+) -> RunExtractionProjection:
+	var capacity := maxi(0, profile.extraction_capacity) if profile != null else 0
+	if profile == null or profile.profile_id != profile_id:
+		return _failure(capacity, "field=profile.profile_id reason=must match projection source profile")
+	if state == null or state.owner_id != run_player_id:
+		return _failure(capacity, "field=item_state.owner_id reason=must match projection source run player")
 	var leader_rows: Array[Dictionary] = []
 	var follower_rows: Array[Dictionary] = []
-	for row: Dictionary in source.party_members:
+	for row: Dictionary in party_members:
 		if bool(row["is_leader"]): leader_rows.append(row)
 		else: follower_rows.append(row)
 	if leader_rows.size() != 1:
@@ -95,7 +115,7 @@ static func project_source(
 				continue
 			eligible.append(ExtractionSelection.create(item_id, inventory.container_id, slot))
 	if not structure_errors.is_empty():
-		return RunExtractionProjection.create(automatic_ids, eligible, [], _item_ids(eligible), capacity, structure_errors)
+		return RunExtractionProjection.create(automatic_ids, eligible, [], _item_ids(eligible), capacity, structure_errors, RunExtractionProjection.FailureKind.SOURCE_INVALID)
 
 	var automatic_set: Dictionary = {}
 	for item_id: String in automatic_ids:
@@ -138,8 +158,11 @@ static func project_source(
 			))
 			continue
 		selected_set[selection.item_id] = true
+	var failure_kind := RunExtractionProjection.FailureKind.STALE_SELECTION if not selection_errors.is_empty() else RunExtractionProjection.FailureKind.NONE
 	if selected_set.size() > capacity:
 		selection_errors.append(_error("field=selections reason=%d selected items exceed capacity %d" % [selected_set.size(), capacity]))
+		if failure_kind == RunExtractionProjection.FailureKind.NONE:
+			failure_kind = RunExtractionProjection.FailureKind.OVER_CAPACITY
 
 	var selected_ids: Array[String] = []
 	var lost_ids: Array[String] = []
@@ -155,6 +178,7 @@ static func project_source(
 		lost_ids,
 		capacity,
 		selection_errors,
+		failure_kind,
 	)
 
 static func _context_is_configured(context: PlayerRunContext) -> bool:
@@ -182,7 +206,7 @@ static func _item_ids(values: Array[ExtractionSelection]) -> Array[String]:
 	return result
 
 static func _failure(capacity: int, detail: String) -> RunExtractionProjection:
-	return RunExtractionProjection.create([], [], [], [], capacity, [_error(detail)])
+	return RunExtractionProjection.create([], [], [], [], capacity, [_error(detail)], RunExtractionProjection.FailureKind.SOURCE_INVALID)
 
 static func _error(detail: String) -> String:
 	return "%s %s" % [ERROR_PREFIX, detail]

@@ -11,6 +11,12 @@ const FOLLOWER_ITEM := "item-preflight-follower"
 const INVENTORY_ITEM := "item-preflight-inventory"
 const PRIOR_HEAD := "item-preflight-prior-head"
 const PRIOR_SHIELD := "item-preflight-prior-shield"
+const FAILURE_STALE_SELECTION := 1
+const FAILURE_RUN_IDENTITY_MISMATCH := 2
+const FAILURE_OWNERSHIP_VERIFICATION := 3
+const FAILURE_STASH_REDUCIBLE := 5
+const FAILURE_STASH_AUTOMATIC_ONLY := 6
+const FAILURE_SELECTION_OVER_CAPACITY := 7
 
 func run() -> Array[String]:
 	var failures: Array[String] = []
@@ -25,6 +31,7 @@ func run() -> Array[String]:
 	_test_source_strict_roundtrip(source_type, failures)
 	_test_preflight_capacity_and_purity(failures)
 	_test_failure_matrix(source_type, failures)
+	_test_wrapper_source_failure_categories(failures)
 	_test_evaluator_candidate_isolation(source_type, evaluator_type, failures)
 	return failures
 
@@ -75,13 +82,38 @@ func _test_source_strict_roundtrip(source_type: Script, failures: Array[String])
 			TestAssertions.truthy(not source_type.call(&"from_dictionary", malformed[index]).ok(), "strict source rejects malformed document %d" % index, failures)
 	_cleanup(fixture)
 
+func _test_wrapper_source_failure_categories(failures: Array[String]) -> void:
+	var identity := _fixture("wrapper_identity_failure", 0, [], 1)
+	(identity.context as PlayerRunContext)._profile_snapshot.resumable_run = {}
+	var identity_request := _request("wrapper-identity-failure", [])
+	var identity_service := RunResolutionService.new(ProfileMutationService.new(identity.store))
+	var identity_preflight := identity_service.preflight(identity.profile, identity.context, identity_request)
+	var identity_resolve := identity_service.resolve(PROFILE_ID, identity.context, identity_request, identity.root)
+	TestAssertions.equal(identity_preflight.failure_category, FAILURE_RUN_IDENTITY_MISMATCH, "missing strict durable bootstrap is typed as saved-run identity mismatch", failures)
+	TestAssertions.equal(identity_resolve.failure_category, identity_preflight.failure_category, "wrapper strict-bootstrap identity category has preflight/resolve parity", failures)
+	TestAssertions.truthy(not identity_preflight.player_reason.contains("field=") and identity_preflight.player_reason.contains("saved run"), "wrapper identity copy is player-safe", failures)
+	_cleanup(identity)
+
+	var ownership := _fixture("wrapper_ownership_failure", 0, [], 1)
+	(ownership.context as PlayerRunContext)._item_state._erase_item(INVENTORY_ITEM)
+	var ownership_request := _request("wrapper-ownership-failure", [])
+	var ownership_service := RunResolutionService.new(ProfileMutationService.new(ownership.store))
+	var ownership_preflight := ownership_service.preflight(ownership.profile, ownership.context, ownership_request)
+	var ownership_resolve := ownership_service.resolve(PROFILE_ID, ownership.context, ownership_request, ownership.root)
+	TestAssertions.equal(ownership_preflight.failure_category, FAILURE_OWNERSHIP_VERIFICATION, "invalid ownership with matching owner has typed ownership failure", failures)
+	TestAssertions.equal(ownership_resolve.failure_category, ownership_preflight.failure_category, "wrapper ownership category has preflight/resolve parity", failures)
+	TestAssertions.truthy(ownership_preflight.player_reason.contains("Nothing was moved") and not ownership_preflight.player_reason.contains("PARTY_FORGE"), "wrapper ownership copy is player-safe", failures)
+	_cleanup(ownership)
+
 func _test_preflight_capacity_and_purity(failures: Array[String]) -> void:
 	var cases: Array[Dictionary] = [
 		{"label": "ordinary", "capacity": 1, "unlocks": [], "stash": 3, "prior": false, "selections": [ExtractionSelection.create(INVENTORY_ITEM, &"run-inventory", 0)], "ok": true, "mandatory": 0, "ordinary": 1, "required": 1, "available": 3, "automatic_only": false},
+		{"label": "all-fit", "capacity": 1, "unlocks": [], "stash": 1, "prior": false, "selections": [ExtractionSelection.create(INVENTORY_ITEM, &"run-inventory", 0)], "ok": true, "mandatory": 0, "ordinary": 1, "required": 1, "available": 1, "automatic_only": false},
 		{"label": "constrained", "capacity": 1, "unlocks": [], "stash": 0, "prior": false, "selections": [ExtractionSelection.create(INVENTORY_ITEM, &"run-inventory", 0)], "ok": false, "mandatory": 0, "ordinary": 1, "required": 1, "available": 0, "automatic_only": false},
 		{"label": "zero", "capacity": 0, "unlocks": [], "stash": 0, "prior": false, "selections": [], "ok": true, "mandatory": 0, "ordinary": 0, "required": 0, "available": 0, "automatic_only": false},
 		{"label": "automatic", "capacity": 1, "unlocks": [RunExtractionPolicy.AUTOMATIC_LEADER_UNLOCK], "stash": 3, "prior": true, "selections": [ExtractionSelection.create(FOLLOWER_ITEM, &"run-equipment-002", 7)], "ok": true, "mandatory": 2, "ordinary": 1, "required": 3, "available": 3, "automatic_only": false},
 		{"label": "automatic-only", "capacity": 0, "unlocks": [RunExtractionPolicy.AUTOMATIC_LEADER_UNLOCK], "stash": 1, "prior": true, "selections": [], "ok": false, "mandatory": 2, "ordinary": 0, "required": 2, "available": 1, "automatic_only": true},
+		{"label": "over-capacity", "capacity": 0, "unlocks": [], "stash": 3, "prior": false, "selections": [ExtractionSelection.create(INVENTORY_ITEM, &"run-inventory", 0)], "ok": false, "mandatory": 0, "ordinary": 1, "required": 1, "available": 3, "automatic_only": false},
 	]
 	for test_case: Dictionary in cases:
 		var fixture := _fixture(test_case.label, test_case.capacity, test_case.unlocks, test_case.stash)
@@ -94,7 +126,10 @@ func _test_preflight_capacity_and_purity(failures: Array[String]) -> void:
 		var path := (fixture.store as ProfileStore).profile_path(PROFILE_ID, fixture.root)
 		var before_bytes := FileAccess.get_file_as_bytes(path)
 		var service := RunResolutionService.new(ProfileMutationService.new(fixture.store))
-		var result: Variant = service.call(&"preflight", profile, fixture.context, _request("preflight-%s" % test_case.label, _typed_selections(test_case.selections)))
+		var request := _request("preflight-%s" % test_case.label, _typed_selections(test_case.selections))
+		var request_before := JSON.stringify(request.canonical_document())
+		var source_before := JSON.stringify(RunResolutionSource.from_context(fixture.context, LEADER_ID).source.to_dictionary())
+		var result: Variant = service.call(&"preflight", profile, fixture.context, request)
 		TestAssertions.equal(result.ok(), test_case.ok, "%s preflight disposition is exact" % test_case.label, failures)
 		TestAssertions.equal(result.mandatory_stash_slots, test_case.mandatory, "%s mandatory count is exact" % test_case.label, failures)
 		TestAssertions.equal(result.ordinary_stash_slots, test_case.ordinary, "%s ordinary count is exact" % test_case.label, failures)
@@ -102,14 +137,32 @@ func _test_preflight_capacity_and_purity(failures: Array[String]) -> void:
 		TestAssertions.equal(result.required_stash_slots, test_case.required, "%s required count is exact" % test_case.label, failures)
 		TestAssertions.equal(result.available_stash_slots, test_case.available, "%s available count is exact" % test_case.label, failures)
 		TestAssertions.equal(result.automatic_only_blocked, test_case.automatic_only, "%s automatic-only classification is exact" % test_case.label, failures)
+		TestAssertions.truthy(result.mandatory_stash_slots_known and result.ordinary_stash_slots_known and result.required_stash_slots_known and result.available_stash_slots_known, "%s successful/count-capacity result exposes known counts" % test_case.label, failures)
+		if test_case.label == "constrained":
+			TestAssertions.equal(result.failure_category, FAILURE_STASH_REDUCIBLE, "reducible shortage has a typed category", failures)
+			TestAssertions.truthy(result.player_reason.contains("1 required") and result.player_reason.contains("0 available") and result.player_reason.contains("Deselect at least 1"), "reducible shortage player copy includes auditable action", failures)
+		elif test_case.label == "automatic-only":
+			TestAssertions.equal(result.failure_category, FAILURE_STASH_AUTOMATIC_ONLY, "mandatory shortage has a typed category", failures)
+			TestAssertions.truthy(result.player_reason.contains("2") and result.player_reason.contains("1") and result.player_reason.contains("cannot fix"), "automatic-only player copy explains deselection cannot fix it", failures)
+		elif test_case.label == "over-capacity":
+			TestAssertions.equal(result.failure_category, FAILURE_SELECTION_OVER_CAPACITY, "extraction over-capacity has a typed category", failures)
+		if not result.player_reason.is_empty():
+			TestAssertions.truthy(not result.player_reason.contains("PARTY_FORGE") and not result.player_reason.contains("field="), "%s player copy contains no internal diagnostic tokens" % test_case.label, failures)
 		TestAssertions.equal(JSON.stringify(profile.to_dictionary()), before_profile, "%s preflight preserves profile document" % test_case.label, failures)
 		TestAssertions.equal(JSON.stringify((fixture.context as PlayerRunContext).item_state().to_dictionary()), before_context, "%s preflight preserves context document" % test_case.label, failures)
 		TestAssertions.equal(FileAccess.get_file_as_bytes(path), before_bytes, "%s preflight performs no store write" % test_case.label, failures)
+		TestAssertions.equal(JSON.stringify(request.canonical_document()), request_before, "%s preflight preserves request selections exactly" % test_case.label, failures)
+		TestAssertions.equal(JSON.stringify(RunResolutionSource.from_context(fixture.context, LEADER_ID).source.to_dictionary()), source_before, "%s preflight preserves strict source bytes" % test_case.label, failures)
 		if result.extraction != null:
 			var extraction_document: Dictionary = result.extraction.to_dictionary()
 			var escaped: RunExtractionProjection = result.extraction
 			escaped._selected_item_ids.clear()
 			TestAssertions.equal(result.extraction.to_dictionary(), extraction_document, "%s extraction is copy-owned" % test_case.label, failures)
+		var resolved := service.resolve(PROFILE_ID, fixture.context, request, fixture.root)
+		TestAssertions.equal(resolved.ok(), result.ok(), "%s preflight/resolve disposition parity is exact" % test_case.label, failures)
+		TestAssertions.equal(resolved.failure_category, result.failure_category, "%s preflight/resolve typed category parity is exact" % test_case.label, failures)
+		if resolved.ok():
+			TestAssertions.equal(resolved.accepted_extraction.to_dictionary(), result.extraction.to_dictionary(), "%s accepted preflight/resolve extraction parity is exact" % test_case.label, failures)
 		_cleanup(fixture)
 
 func _test_failure_matrix(source_type: Script, failures: Array[String]) -> void:
@@ -118,22 +171,38 @@ func _test_failure_matrix(source_type: Script, failures: Array[String]) -> void:
 	var profile := fixture.profile as ProfileState
 	var context := fixture.context as PlayerRunContext
 	var cases: Array[Dictionary] = [
-		{"label": "stale", "request": _request("preflight-stale", [ExtractionSelection.create(INVENTORY_ITEM, &"run-inventory", 1)]), "fragment": "source"},
-		{"label": "identity", "request": RunResolutionRequest.create("preflight-identity", PROFILE_ID, &"wrong-run", RUN_SEED, RUN_PLAYER_ID, LEADER_ID, []), "fragment": "identity"},
+		{"label": "stale", "request": _request("preflight-stale", [ExtractionSelection.create(INVENTORY_ITEM, &"run-inventory", 1)]), "category": FAILURE_STALE_SELECTION, "player": "Review the extraction selection again"},
+		{"label": "identity", "request": RunResolutionRequest.create("preflight-identity", PROFILE_ID, &"wrong-run", RUN_SEED, RUN_PLAYER_ID, LEADER_ID, []), "category": FAILURE_RUN_IDENTITY_MISMATCH, "player": "saved run"},
 	]
 	for test_case: Dictionary in cases:
 		var before_profile := JSON.stringify(profile.to_dictionary())
 		var before_context := JSON.stringify(context.item_state().to_dictionary())
 		var result: Variant = service.call(&"preflight", profile, context, test_case.request)
-		TestAssertions.truthy(not result.ok() and result.error.to_lower().contains(test_case.fragment), "%s preflight has a distinct readable reason" % test_case.label, failures)
+		TestAssertions.truthy(not result.ok() and not result.error.is_empty(), "%s preflight retains an internal diagnostic" % test_case.label, failures)
+		TestAssertions.equal(result.failure_category, test_case.category, "%s preflight exposes its typed category" % test_case.label, failures)
+		TestAssertions.truthy(result.player_reason.contains(test_case.player), "%s preflight has distinct player copy" % test_case.label, failures)
+		TestAssertions.truthy(not result.player_reason.contains("PARTY_FORGE") and not result.player_reason.contains("field="), "%s player copy hides raw diagnostics" % test_case.label, failures)
+		if test_case.label == "stale":
+			TestAssertions.truthy(result.mandatory_stash_slots_known and result.available_stash_slots_known, "stale selection retains safely known mandatory and available counts", failures)
+			TestAssertions.truthy(not result.ordinary_stash_slots_known and not result.required_stash_slots_known, "stale selection explicitly marks selection-dependent counts unavailable", failures)
 		TestAssertions.equal(JSON.stringify(profile.to_dictionary()), before_profile, "%s failure preserves profile" % test_case.label, failures)
 		TestAssertions.equal(JSON.stringify(context.item_state().to_dictionary()), before_context, "%s failure preserves context" % test_case.label, failures)
+		var resolved := service.resolve(PROFILE_ID, context, test_case.request, fixture.root)
+		TestAssertions.equal(resolved.ok(), result.ok(), "%s rejected preflight/resolve disposition parity is exact" % test_case.label, failures)
+		TestAssertions.equal(resolved.failure_category, result.failure_category, "%s rejected preflight/resolve category parity is exact" % test_case.label, failures)
 	var source_result: Variant = source_type.call(&"from_context", context, LEADER_ID)
 	TestAssertions.truthy(source_result.ok(), "ownership failure source captures before corruption", failures)
 	if source_result.ok():
 		var document: Dictionary = source_result.source.to_dictionary()
 		document["item_state"]["owner_id"] = "wrong-owner"
 		TestAssertions.truthy(not source_type.call(&"from_dictionary", document).ok(), "strict source rejects mismatched ownership", failures)
+
+	context._item_state.owner_id = "wrong-owner"
+	var ownership: Variant = service.call(&"preflight", profile, context, _request("preflight-ownership", []))
+	TestAssertions.equal(ownership.failure_category, FAILURE_OWNERSHIP_VERIFICATION, "profile ownership rejection has a typed category diagnostic=%s" % ownership.error, failures)
+	TestAssertions.truthy(ownership.player_reason.contains("Nothing was moved") and not ownership.player_reason.contains("field="), "ownership player copy promises atomic no-move behavior", failures)
+	var ownership_resolve := service.resolve(PROFILE_ID, context, _request("preflight-ownership", []), fixture.root)
+	TestAssertions.equal(ownership_resolve.failure_category, ownership.failure_category, "ownership preflight/resolve category parity is exact", failures)
 	_cleanup(fixture)
 
 func _test_evaluator_candidate_isolation(source_type: Script, evaluator_type: Script, failures: Array[String]) -> void:

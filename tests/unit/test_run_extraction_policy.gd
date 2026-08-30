@@ -15,6 +15,8 @@ const INVENTORY_FOUR_ITEM := "item-inventory-4"
 func run() -> Array[String]:
 	var failures: Array[String] = []
 	_test_source_projection_parity(failures)
+	_test_configured_non_strict_context_remains_supported(failures)
+	_test_legacy_wrapper_skips_null_members(failures)
 	_test_unlock_precedence_and_canonical_order(failures)
 	_test_capacity_and_selection_matrix(failures)
 	_test_invalid_selection_matrix(failures)
@@ -22,6 +24,35 @@ func run() -> Array[String]:
 	_test_defensive_and_pure_contract(failures)
 	_test_deterministic_projection(failures)
 	return failures
+
+func _test_configured_non_strict_context_remains_supported(failures: Array[String]) -> void:
+	var catalog := GameCatalog.load_defaults()
+	var party := PartyManager.new()
+	party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
+	var profile := ProfileState.new_profile(PROFILE_ID, "Legacy Extraction Tester", 1000)
+	profile.inventory_columns = 2
+	profile.extraction_capacity = 0
+	var context := PlayerRunContext.new()
+	TestAssertions.equal(context.configure(RUN_PLAYER_ID, 0, profile, RUN_SEED, party, 100), PackedStringArray(), "configured developer context without strict durable run remains valid", failures)
+	var before_profile := JSON.stringify(profile.to_dictionary())
+	var before_context := JSON.stringify(context.item_state().to_dictionary())
+	var projection := RunExtractionPolicy.project(context, profile, [])
+	TestAssertions.truthy(projection.valid, "legacy configured context projects without requiring strict resolution identity", failures)
+	TestAssertions.equal(projection.to_dictionary(), {
+		"automatic_item_ids": [], "eligible_items": [], "selected_item_ids": [], "lost_item_ids": [],
+		"capacity": 0, "valid": true, "errors": [],
+	}, "legacy configured context delegates the shared empty projection", failures)
+	TestAssertions.equal(JSON.stringify(profile.to_dictionary()), before_profile, "legacy projection preserves profile", failures)
+	TestAssertions.equal(JSON.stringify(context.item_state().to_dictionary()), before_context, "legacy projection preserves context", failures)
+	party.free()
+
+func _test_legacy_wrapper_skips_null_members(failures: Array[String]) -> void:
+	var fixture := _fixture(0, [])
+	(fixture.party as PartyManager).members.append(null)
+	var projection := RunExtractionPolicy.project(fixture.context, fixture.profile, [])
+	TestAssertions.truthy(projection.valid, "legacy live wrapper skips null party entries", failures)
+	TestAssertions.equal(_eligible_ids(projection), [LEADER_ITEM, FOLLOWER_TWO_ITEM, FOLLOWER_THREE_ITEM, INVENTORY_ZERO_ITEM, INVENTORY_FOUR_ITEM], "null party entry does not change canonical projection", failures)
+	_free_fixture(fixture)
 
 func _test_source_projection_parity(failures: Array[String]) -> void:
 	var fixture := _fixture(3, ["leader_loadout_extraction"])

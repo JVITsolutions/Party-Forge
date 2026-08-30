@@ -10,18 +10,12 @@ static func evaluate(
 ) -> RunResolutionEvaluation:
 	var identity_error := _validate_identity(candidate, source, request)
 	if not identity_error.is_empty():
-		return RunResolutionEvaluation.create(null, 0, 0, 0, identity_error)
+		return RunResolutionEvaluation.create(null, 0, 0, 0, identity_error, RunResolutionEvaluation.FailureCategory.RUN_IDENTITY_MISMATCH, "This no longer matches the saved run. Return to run recovery.", false, false, false)
 	var projection := RunExtractionPolicy.project_source(source, candidate, request.ordinary_selections)
-	if not projection.valid:
-		return RunResolutionEvaluation.create(projection, 0, 0, _available_stash_slots(candidate), _error("field=extraction reason=%s" % " | ".join(projection.errors)))
-	var live_state := source.item_state
-	var live_validation := live_state.validate(GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)
-	if not live_validation.is_empty():
-		return RunResolutionEvaluation.create(projection, 0, projection.selected_item_ids.size(), _available_stash_slots(candidate), _error("field=source.item_state reason=%s" % live_validation))
-
 	var profile_decode := _profile_ownership(candidate)
 	if not profile_decode.ok():
-		return RunResolutionEvaluation.create(projection, 0, projection.selected_item_ids.size(), 0, _error("field=profile.ownership reason=%s" % profile_decode.error))
+		var ordinary_known := projection != null and (projection.valid or projection.failure_kind == RunExtractionProjection.FailureKind.OVER_CAPACITY)
+		return RunResolutionEvaluation.create(projection, 0, projection.selected_item_ids.size() if ordinary_known else 0, 0, _error("field=profile.ownership reason=%s" % profile_decode.error), RunResolutionEvaluation.FailureCategory.OWNERSHIP_VERIFICATION, "Item ownership could not be verified. Nothing was moved.", false, ordinary_known, false)
 	var profile_state := profile_decode.state
 	var profile_registry := profile_state.registry()
 	var leader_loadout := profile_state.container(&"leader-loadout")
@@ -29,25 +23,46 @@ static func evaluate(
 	for stash_document: Dictionary in candidate.stash_tabs:
 		var container := profile_state.container(StringName(String(stash_document["container_id"])))
 		if container == null or container.container_kind != ItemSlotContainer.PROFILE_STASH_TAB:
-			return RunResolutionEvaluation.create(projection, 0, projection.selected_item_ids.size(), 0, _error("field=profile.stash_tabs reason=stored tab unavailable"))
+			return RunResolutionEvaluation.create(projection, 0, projection.selected_item_ids.size() if projection.valid else 0, 0, _error("field=profile.stash_tabs reason=stored tab unavailable"), RunResolutionEvaluation.FailureCategory.OWNERSHIP_VERIFICATION, "Item ownership could not be verified. Nothing was moved.", false, projection.valid, false)
 		stash_tabs.append(container)
 
 	var automatic_leader := RunExtractionPolicy.AUTOMATIC_LEADER_UNLOCK in candidate.permanent_feature_unlocks
-	var live_registry := live_state.registry()
-	var leader_equipment := live_state.container(StringName("run-equipment-%03d" % request.leader_member_id))
-	if automatic_leader:
-		var eligibility_error := _validate_live_leader_loadout(source, live_registry, leader_equipment)
-		if not eligibility_error.is_empty():
-			return RunResolutionEvaluation.create(projection, 0, projection.selected_item_ids.size(), _empty_stash_slots(stash_tabs), eligibility_error)
 	var displaced_item_ids: Array[String] = []
 	if automatic_leader:
 		for slot: int in leader_loadout.occupied_slots():
 			displaced_item_ids.append(leader_loadout.item_id_at(slot))
 	var mandatory := displaced_item_ids.size()
-	var ordinary := projection.selected_item_ids.size()
 	var available := _empty_stash_slots(stash_tabs)
+	if not projection.valid:
+		var category := RunResolutionEvaluation.FailureCategory.STALE_SELECTION
+		var player_reason := "Review the extraction selection again before resolving the run."
+		var ordinary_known := false
+		if projection.failure_kind == RunExtractionProjection.FailureKind.OVER_CAPACITY:
+			category = RunResolutionEvaluation.FailureCategory.SELECTION_OVER_CAPACITY
+			player_reason = "Too many ordinary items are selected for the current extraction capacity. Deselect items and review again."
+			ordinary_known = true
+		elif projection.failure_kind == RunExtractionProjection.FailureKind.SOURCE_INVALID:
+			category = RunResolutionEvaluation.FailureCategory.OWNERSHIP_VERIFICATION
+			player_reason = "Item ownership could not be verified. Nothing was moved."
+		return RunResolutionEvaluation.create(projection, mandatory, projection.selected_item_ids.size() if ordinary_known else 0, available, _error("field=extraction reason=%s" % " | ".join(projection.errors)), category, player_reason, true, ordinary_known, true)
+
+	var ordinary := projection.selected_item_ids.size()
+	var live_state := source.item_state
+	var live_validation := live_state.validate(GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)
+	if not live_validation.is_empty():
+		return RunResolutionEvaluation.create(projection, mandatory, ordinary, available, _error("field=source.item_state reason=%s" % live_validation), RunResolutionEvaluation.FailureCategory.OWNERSHIP_VERIFICATION, "Item ownership could not be verified. Nothing was moved.")
+	var live_registry := live_state.registry()
+	var leader_equipment := live_state.container(StringName("run-equipment-%03d" % request.leader_member_id))
+	if automatic_leader:
+		var eligibility_error := _validate_live_leader_loadout(source, live_registry, leader_equipment)
+		if not eligibility_error.is_empty():
+			return RunResolutionEvaluation.create(projection, mandatory, ordinary, available, eligibility_error, RunResolutionEvaluation.FailureCategory.ELIGIBILITY_INVALID, "The leader's live equipment is no longer eligible. Review the loadout before resolving.")
 	if available < mandatory + ordinary:
-		return RunResolutionEvaluation.create(projection, mandatory, ordinary, available, _error("field=stash reason=insufficient empty slots required=%d available=%d" % [mandatory + ordinary, available]))
+		var automatic_only := mandatory > available
+		var category := RunResolutionEvaluation.FailureCategory.STASH_AUTOMATIC_ONLY if automatic_only else RunResolutionEvaluation.FailureCategory.STASH_REDUCIBLE
+		var shortage := mandatory + ordinary - available
+		var player_reason := "Automatic leader replacement needs %d stash slots, but %d are available. Deselecting ordinary items cannot fix this." % [mandatory, available] if automatic_only else "Stash space is short: %d required, %d available. Deselect at least %d ordinary item(s) and try again." % [mandatory + ordinary, available, shortage]
+		return RunResolutionEvaluation.create(projection, mandatory, ordinary, available, _error("field=stash reason=insufficient empty slots required=%d available=%d" % [mandatory + ordinary, available]), category, player_reason)
 
 	var next_items: Array[ItemInstance] = []
 	for instance_id: String in profile_registry.ids():
@@ -56,22 +71,22 @@ static func evaluate(
 		for slot: int in leader_loadout.occupied_slots(): leader_loadout._clear_slot(slot)
 		for instance_id: String in displaced_item_ids:
 			var displaced_destination := _first_empty_stash_destination(stash_tabs)
-			if displaced_destination.is_empty(): return RunResolutionEvaluation.create(projection, mandatory, ordinary, available, _error("field=stash reason=insufficient empty slots"))
+			if displaced_destination.is_empty(): return RunResolutionEvaluation.create(projection, mandatory, ordinary, available, _error("field=stash reason=insufficient empty slots"), RunResolutionEvaluation.FailureCategory.INTERNAL, "Stash placement changed unexpectedly. Nothing was moved.")
 			(stash_tabs[displaced_destination[0]] as ItemSlotContainer)._set_item_id(displaced_destination[1], instance_id)
 		for instance_id: String in projection.automatic_item_ids:
-			if profile_registry.has(instance_id): return RunResolutionEvaluation.create(projection, mandatory, ordinary, available, _error("field=item.instance_id reason=already exists in profile %s" % instance_id))
+			if profile_registry.has(instance_id): return RunResolutionEvaluation.create(projection, mandatory, ordinary, available, _error("field=item.instance_id reason=already exists in profile %s" % instance_id), RunResolutionEvaluation.FailureCategory.OWNERSHIP_VERIFICATION, "Item ownership could not be verified. Nothing was moved.")
 			var source_slot := _slot_for_item(leader_equipment, instance_id)
-			if source_slot < 0: return RunResolutionEvaluation.create(projection, mandatory, ordinary, available, _error("field=automatic_item reason=leader source missing %s" % instance_id))
+			if source_slot < 0: return RunResolutionEvaluation.create(projection, mandatory, ordinary, available, _error("field=automatic_item reason=leader source missing %s" % instance_id), RunResolutionEvaluation.FailureCategory.OWNERSHIP_VERIFICATION, "Item ownership could not be verified. Nothing was moved.")
 			var item := live_registry.item(instance_id)
-			if item == null: return RunResolutionEvaluation.create(projection, mandatory, ordinary, available, _error("field=source.item_state.registry reason=missing item %s" % instance_id))
+			if item == null: return RunResolutionEvaluation.create(projection, mandatory, ordinary, available, _error("field=source.item_state.registry reason=missing item %s" % instance_id), RunResolutionEvaluation.FailureCategory.OWNERSHIP_VERIFICATION, "Item ownership could not be verified. Nothing was moved.")
 			next_items.append(item)
 			leader_loadout._set_item_id(source_slot, instance_id)
 	for instance_id: String in projection.selected_item_ids:
-		if profile_registry.has(instance_id): return RunResolutionEvaluation.create(projection, mandatory, ordinary, available, _error("field=item.instance_id reason=already exists in profile %s" % instance_id))
+		if profile_registry.has(instance_id): return RunResolutionEvaluation.create(projection, mandatory, ordinary, available, _error("field=item.instance_id reason=already exists in profile %s" % instance_id), RunResolutionEvaluation.FailureCategory.OWNERSHIP_VERIFICATION, "Item ownership could not be verified. Nothing was moved.")
 		var item := live_registry.item(instance_id)
-		if item == null: return RunResolutionEvaluation.create(projection, mandatory, ordinary, available, _error("field=source.item_state.registry reason=missing item %s" % instance_id))
+		if item == null: return RunResolutionEvaluation.create(projection, mandatory, ordinary, available, _error("field=source.item_state.registry reason=missing item %s" % instance_id), RunResolutionEvaluation.FailureCategory.OWNERSHIP_VERIFICATION, "Item ownership could not be verified. Nothing was moved.")
 		var destination := _first_empty_stash_destination(stash_tabs)
-		if destination.is_empty(): return RunResolutionEvaluation.create(projection, mandatory, ordinary, available, _error("field=stash reason=insufficient empty slots"))
+		if destination.is_empty(): return RunResolutionEvaluation.create(projection, mandatory, ordinary, available, _error("field=stash reason=insufficient empty slots"), RunResolutionEvaluation.FailureCategory.INTERNAL, "Stash placement changed unexpectedly. Nothing was moved.")
 		next_items.append(item)
 		(stash_tabs[destination[0]] as ItemSlotContainer)._set_item_id(destination[1], instance_id)
 
@@ -79,7 +94,7 @@ static func evaluate(
 	containers.append_array(stash_tabs)
 	var resolved_ownership := ItemOwnershipState.create(candidate.profile_id, ItemRegistry.new(next_items), containers)
 	var resolved_error := resolved_ownership.validate(GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)
-	if not resolved_error.is_empty(): return RunResolutionEvaluation.create(projection, mandatory, ordinary, available, _error("field=profile.ownership reason=%s" % resolved_error))
+	if not resolved_error.is_empty(): return RunResolutionEvaluation.create(projection, mandatory, ordinary, available, _error("field=profile.ownership reason=%s" % resolved_error), RunResolutionEvaluation.FailureCategory.OWNERSHIP_VERIFICATION, "Item ownership could not be verified. Nothing was moved.")
 	candidate.item_records = resolved_ownership.registry().to_dictionary()
 	candidate.leader_loadout = resolved_ownership.container(&"leader-loadout").to_dictionary()
 	var resolved_tabs: Array[Dictionary] = []

@@ -13,6 +13,8 @@ const INVENTORY_FOUR := "item-inventory-four"
 const EXISTING_STASH := "item-existing-stash"
 const PRIOR_OVERLAP := "item-prior-overlap"
 const PRIOR_NONOVERLAP := "item-prior-nonoverlap"
+const FAILURE_DUPLICATE_SOURCE_COLLISION := 8
+const FAILURE_DUPLICATE_RECEIPT_UNAVAILABLE := 9
 
 func run() -> Array[String]:
 	var failures: Array[String] = []
@@ -30,6 +32,8 @@ func run() -> Array[String]:
 	_test_failure_atomicity_matrix(failures)
 	_test_preflight_resolve_parity_and_fresh_candidate_revalidation(failures)
 	_test_replay_collision_and_defensive_result(failures)
+	_test_duplicate_source_receipt_binds_automatic_contents(failures)
+	_test_legacy_duplicate_without_receipt_fails_closed(failures)
 	return failures
 
 func _test_request_is_exact_and_defensive(failures: Array[String]) -> void:
@@ -355,9 +359,14 @@ func _test_replay_collision_and_defensive_result(failures: Array[String]) -> voi
 		TestAssertions.equal(committed_extraction.selected_item_ids, [INVENTORY_ZERO], "first resolution exposes the selected item", failures)
 	var path := store.profile_path(PROFILE_ID, fixture.root)
 	var bytes_after := FileAccess.get_file_as_bytes(path)
+	var committed_profile := store.load_profile(PROFILE_ID, fixture.root).profile
+	var receipt: Dictionary = committed_profile.applied_transactions[request.transaction_id].get("receipt", {})
+	TestAssertions.equal(receipt.get("schema_version", 0), 1, "resolution transaction persists a versioned duplicate receipt", failures)
+	TestAssertions.truthy(String(receipt.get("source_fingerprint", "")).length() == 64 and String(receipt.get("projection_fingerprint", "")).length() == 64, "resolution receipt binds source and accepted projection fingerprints", failures)
+	TestAssertions.truthy(not JSON.stringify(receipt).contains(INVENTORY_FOUR), "receipt does not preserve lost run item identifiers", failures)
 	var state_after := context.item_state().to_dictionary()
 	var replay := service.resolve(PROFILE_ID, context, request, fixture.root)
-	TestAssertions.truthy(replay.ok() and replay.duplicate, "same resolution transaction replays as duplicate", failures)
+	TestAssertions.truthy(replay.ok() and replay.duplicate, "same resolution transaction replays as duplicate error=%s" % replay.error, failures)
 	var replay_extraction: Variant = replay.get("accepted_extraction")
 	TestAssertions.truthy(replay_extraction != null, "duplicate replay reconstructs an accepted extraction", failures)
 	if replay_extraction != null and committed_extraction != null:
@@ -376,6 +385,60 @@ func _test_replay_collision_and_defensive_result(failures: Array[String]) -> voi
 	TestAssertions.truthy(not collision.ok() and collision.error.contains("transaction id conflict"), "changed request under same transaction collides", failures)
 	TestAssertions.equal(FileAccess.get_file_as_bytes(path), bytes_after, "transaction collision performs no write", failures)
 	TestAssertions.equal(context.item_state().to_dictionary(), state_after, "transaction collision leaves closed context ownership unchanged", failures)
+	var source_result := RunResolutionSource.from_context(context, LEADER_ID)
+	TestAssertions.truthy(source_result.ok(), "duplicate collision fixture captures strict source", failures)
+	if source_result.ok():
+		for changed_id: String in [INVENTORY_FOUR, INVENTORY_ZERO, FOLLOWER_ITEM]:
+			var divergent := _source_with_changed_item_level(source_result.source, changed_id)
+			var source_collision := service.resolve_source(PROFILE_ID, divergent, request, fixture.root)
+			TestAssertions.truthy(not source_collision.ok(), "duplicate changed source content %s is rejected" % changed_id, failures)
+			TestAssertions.equal(source_collision.failure_category, FAILURE_DUPLICATE_SOURCE_COLLISION, "duplicate changed source content %s uses typed collision" % changed_id, failures)
+			TestAssertions.truthy(source_collision.player_reason.contains("Nothing was moved") and not source_collision.player_reason.contains("PARTY_FORGE") and not source_collision.player_reason.contains("field="), "duplicate source collision has safe player copy", failures)
+			TestAssertions.equal(FileAccess.get_file_as_bytes(path), bytes_after, "duplicate changed source content %s performs no write" % changed_id, failures)
+		var adjacent_float_source := _source_with_adjacent_core_attribute(source_result.source, failures)
+		var adjacent_float_collision := service.resolve_source(PROFILE_ID, adjacent_float_source, request, fixture.root)
+		TestAssertions.equal(adjacent_float_collision.failure_category, FAILURE_DUPLICATE_SOURCE_COLLISION, "duplicate receipt distinguishes adjacent floating-point source truth", failures)
+		TestAssertions.equal(FileAccess.get_file_as_bytes(path), bytes_after, "adjacent floating-point source collision performs no write", failures)
+	_cleanup(fixture)
+
+func _test_duplicate_source_receipt_binds_automatic_contents(failures: Array[String]) -> void:
+	var fixture := _fixture("replay_automatic_source", 0, [RunExtractionPolicy.AUTOMATIC_LEADER_UNLOCK], true)
+	var source_result := RunResolutionSource.from_context(fixture.context, LEADER_ID)
+	TestAssertions.truthy(source_result.ok(), "automatic duplicate source captures", failures)
+	if source_result.ok():
+		var request := _request("resolution-replay-automatic-source", [])
+		var service := RunResolutionService.new(ProfileMutationService.new(fixture.store))
+		var first := service.resolve_source(PROFILE_ID, source_result.source, request, fixture.root)
+		TestAssertions.truthy(first.ok() and not first.duplicate, "automatic duplicate source fixture commits", failures)
+		var path := (fixture.store as ProfileStore).profile_path(PROFILE_ID, fixture.root)
+		var bytes_after := FileAccess.get_file_as_bytes(path)
+		var unchanged := service.resolve_source(PROFILE_ID, source_result.source, request, fixture.root)
+		TestAssertions.truthy(unchanged.ok() and unchanged.duplicate, "unchanged automatic source replays error=%s" % unchanged.error, failures)
+		TestAssertions.equal(unchanged.accepted_extraction.to_dictionary(), first.accepted_extraction.to_dictionary(), "unchanged automatic source returns identical projection", failures)
+		var divergent := _source_with_changed_item_level(source_result.source, LEADER_HEAD)
+		var collision := service.resolve_source(PROFILE_ID, divergent, request, fixture.root)
+		TestAssertions.equal(collision.failure_category, FAILURE_DUPLICATE_SOURCE_COLLISION, "changed automatic contents collide by typed source receipt", failures)
+		TestAssertions.equal(FileAccess.get_file_as_bytes(path), bytes_after, "automatic source collision performs no write", failures)
+	_cleanup(fixture)
+
+func _test_legacy_duplicate_without_receipt_fails_closed(failures: Array[String]) -> void:
+	var fixture := _fixture("replay_legacy_receipt", 1, [], true)
+	var source_result := RunResolutionSource.from_context(fixture.context, LEADER_ID)
+	TestAssertions.truthy(source_result.ok(), "legacy receipt fixture captures source", failures)
+	if source_result.ok():
+		var request := _request("resolution-replay-legacy-receipt", [ExtractionSelection.create(INVENTORY_ZERO, &"run-inventory", 0)])
+		var store := fixture.store as ProfileStore
+		var service := RunResolutionService.new(ProfileMutationService.new(store))
+		TestAssertions.truthy(service.resolve_source(PROFILE_ID, source_result.source, request, fixture.root).ok(), "legacy receipt fixture commits", failures)
+		var profile := store.load_profile(PROFILE_ID, fixture.root).profile
+		profile.applied_transactions[request.transaction_id].erase("receipt")
+		TestAssertions.equal(store.save_profile(profile, fixture.root), "", "legacy four-field transaction remains loadable", failures)
+		var path := store.profile_path(PROFILE_ID, fixture.root)
+		var bytes_before := FileAccess.get_file_as_bytes(path)
+		var replay := service.resolve_source(PROFILE_ID, source_result.source, request, fixture.root)
+		TestAssertions.equal(replay.failure_category, FAILURE_DUPLICATE_RECEIPT_UNAVAILABLE, "legacy duplicate without source receipt fails closed by typed category", failures)
+		TestAssertions.truthy(replay.player_reason.contains("exact extraction receipt is unavailable") and not replay.player_reason.contains("field="), "legacy duplicate has recovery-safe player copy", failures)
+		TestAssertions.equal(FileAccess.get_file_as_bytes(path), bytes_before, "legacy duplicate failure performs no write", failures)
 	_cleanup(fixture)
 
 func _test_preflight_resolve_parity_and_fresh_candidate_revalidation(failures: Array[String]) -> void:
@@ -504,6 +567,33 @@ func _remove_live_leader_equipment(context: PlayerRunContext) -> void:
 	for container: ItemSlotContainer in current.containers():
 		containers.append(ItemSlotContainer.create(container.container_id, container.container_kind, container.owner_id, container.capacity) if container.container_id == &"run-equipment-001" else container)
 	context._item_state = ItemOwnershipState.create(current.owner_id, ItemRegistry.new(items), containers)
+
+func _source_with_changed_item_level(source: RunResolutionSource, instance_id: String) -> RunResolutionSource:
+	var document := source.to_dictionary()
+	for item: Dictionary in document["item_state"]["registry"]["items"]:
+		if String(item.get("instance_id", "")) == instance_id:
+			item["item_level"] = int(item["item_level"]) + 1
+	var decoded := RunResolutionSource.from_dictionary(document)
+	assert(decoded.ok())
+	return decoded.source
+
+func _source_with_adjacent_core_attribute(source: RunResolutionSource, failures: Array[String]) -> RunResolutionSource:
+	var original_document := source.to_dictionary()
+	var document := original_document.duplicate(true)
+	var attribute_id := String(ClassGrowthDefinition.CORE_ATTRIBUTE_IDS[0])
+	var original := float(document["leader_core_attributes"][attribute_id])
+	var delta := absf(original) * 0.0000000000000002220446049250313
+	var changed := pow(2.0, -1074.0) if original == 0.0 else original + delta
+	while changed == original:
+		delta *= 2.0
+		changed = original + delta
+	document["leader_core_attributes"][attribute_id] = changed
+	TestAssertions.truthy(changed != original, "adjacent-float receipt fixture changes exact binary source truth", failures)
+	TestAssertions.equal(JSON.stringify(document), JSON.stringify(original_document), "adjacent-float fixture collides under legacy default-precision JSON", failures)
+	TestAssertions.truthy(JSON.stringify(document, "", true, true) != JSON.stringify(original_document, "", true, true), "full-precision JSON distinguishes adjacent source truth", failures)
+	var decoded := RunResolutionSource.from_dictionary(document)
+	assert(decoded.ok())
+	return decoded.source
 
 func _assert_exact_item(profile: ProfileState, expected: ItemInstance, label: String, failures: Array[String]) -> void:
 	var decoded := ItemRegistry._decode(profile.item_records, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)

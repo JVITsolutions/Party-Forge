@@ -19,6 +19,8 @@ func run() -> Array[String]:
 	ProfileTestSupport.remove_tree(_root)
 	_test_duplicate_transactions_do_not_reapply(failures)
 	_reset_profile(failures)
+	_test_optional_transaction_receipt_is_defensive(failures)
+	_reset_profile(failures)
 	_test_commit_timestamp_is_monotonic(failures)
 	_test_protected_metadata_changes_are_rejected(failures)
 	_reset_profile(failures)
@@ -41,6 +43,27 @@ func run() -> Array[String]:
 	_test_post_commit_cleanup_is_successful_to_caller(failures)
 	ProfileTestSupport.remove_tree(_root)
 	return failures
+
+func _test_optional_transaction_receipt_is_defensive(failures: Array[String]) -> void:
+	var store := ProfileStore.new()
+	var service := ProfileMutationService.new(store)
+	var receipt := {"schema_version": 1, "source_fingerprint": "a".repeat(64), "projection_fingerprint": "b".repeat(64)}
+	var durable_receipt := {"schema_version": 1.0, "source_fingerprint": "a".repeat(64), "projection_fingerprint": "b".repeat(64)}
+	var first := service.apply_with_resumable_run_revocation(ID, "receipt-transaction", &"receipt-run", func(profile: ProfileState) -> String:
+		profile.gold += 1
+		return ""
+	, _root, 2000, "receipt_test", {}, receipt)
+	TestAssertions.truthy(first.ok() and not first.duplicate, "mutation with optional receipt commits", failures)
+	TestAssertions.equal(first.receipt, durable_receipt, "first result exposes exact durable transaction receipt", failures)
+	var escaped := first.receipt
+	escaped["schema_version"] = 999
+	var duplicate := service.apply_with_resumable_run_revocation(ID, "receipt-transaction", &"receipt-run", func(_profile: ProfileState) -> String:
+		return "should not run"
+	, _root, 3000, "receipt_test", {}, {})
+	TestAssertions.truthy(duplicate.ok() and duplicate.duplicate, "receipt transaction replays", failures)
+	TestAssertions.equal(duplicate.receipt, durable_receipt, "duplicate receipt is durable and defensive", failures)
+	var saved := store.load_profile(ID, _root).profile
+	TestAssertions.equal(saved.applied_transactions["receipt-transaction"].get("receipt", {}), durable_receipt, "receipt is copy-owned by transaction journal", failures)
 
 func _test_duplicate_transactions_do_not_reapply(failures: Array[String]) -> void:
 	var store := ProfileStore.new()

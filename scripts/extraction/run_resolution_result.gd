@@ -8,6 +8,8 @@ var profile: ProfileState:
 
 var error := ""
 var duplicate := false
+var failure_category := RunResolutionEvaluation.FailureCategory.NONE
+var player_reason := ""
 var _accepted_extraction: RunExtractionProjection
 var accepted_extraction: RunExtractionProjection:
 	get:
@@ -20,9 +22,11 @@ static func success(profile_value: ProfileState, duplicate_value: bool, accepted
 	result._accepted_extraction = RunResolutionEvaluation._copy_extraction(accepted_extraction_value)
 	return result
 
-static func failure(error_value: String) -> RunResolutionResult:
+static func failure(error_value: String, failure_category_value: RunResolutionEvaluation.FailureCategory = RunResolutionEvaluation.FailureCategory.INTERNAL, player_reason_value: String = "Something changed while resolving the run. Nothing was moved.") -> RunResolutionResult:
 	var result := RunResolutionResult.new()
 	result.error = error_value
+	result.failure_category = failure_category_value
+	result.player_reason = player_reason_value
 	return result
 
 func ok() -> bool:

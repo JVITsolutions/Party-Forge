@@ -40,19 +40,19 @@ var leader_core_attributes: Dictionary:
 
 static func from_context(context: PlayerRunContext, leader_member_id_value: int) -> RunResolutionSourceResult:
 	if context == null or not context.is_configured():
-		return RunResolutionSourceResult.failure(_error("context", "must be configured"))
+		return RunResolutionSourceResult.failure(_error("context", "must be configured"), RunResolutionSourceResult.FailureKind.IDENTITY_MISMATCH)
 	if leader_member_id_value <= 0:
-		return RunResolutionSourceResult.failure(_error("leader_member_id", "must be positive"))
+		return RunResolutionSourceResult.failure(_error("leader_member_id", "must be positive"), RunResolutionSourceResult.FailureKind.IDENTITY_MISMATCH)
 	if context.profile_id.strip_edges().is_empty() or String(context.run_id).strip_edges().is_empty() or context.run_seed <= 0 or String(context.run_player_id).strip_edges().is_empty():
-		return RunResolutionSourceResult.failure(_error("run_identity", "configured run identity is incomplete"))
+		return RunResolutionSourceResult.failure(_error("run_identity", "configured run identity is incomplete"), RunResolutionSourceResult.FailureKind.IDENTITY_MISMATCH)
 	var snapshot := context.profile_snapshot
 	if snapshot == null or snapshot.profile_id != context.profile_id:
-		return RunResolutionSourceResult.failure(_error("profile_snapshot", "profile identity does not match the configured run"))
+		return RunResolutionSourceResult.failure(_error("profile_snapshot", "profile identity does not match the configured run"), RunResolutionSourceResult.FailureKind.IDENTITY_MISMATCH)
 	var durable := ResumableRunItemCodec.decode(snapshot.resumable_run, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)
 	if durable == null:
-		return RunResolutionSourceResult.failure(_error("profile_snapshot", "strict run identity is unavailable"))
+		return RunResolutionSourceResult.failure(_error("profile_snapshot", "strict run identity is unavailable"), RunResolutionSourceResult.FailureKind.IDENTITY_MISMATCH)
 	if durable.run_id != context.run_id or durable.run_seed != context.run_seed or durable.run_player_id != context.run_player_id or durable.leader_member_id != leader_member_id_value:
-		return RunResolutionSourceResult.failure(_error("run_identity", "profile snapshot and configured run must match"))
+		return RunResolutionSourceResult.failure(_error("run_identity", "profile snapshot and configured run must match"), RunResolutionSourceResult.FailureKind.IDENTITY_MISMATCH)
 	if context.party == null:
 		return RunResolutionSourceResult.failure(_error("party", "must be available"))
 	var rows: Array[Dictionary] = []
@@ -62,7 +62,7 @@ static func from_context(context: PlayerRunContext, leader_member_id_value: int)
 		rows.append({"member_id": member.member_id, "class_id": String(member.class_definition.id), "is_leader": member.is_leader})
 	var leader := context.party.member_by_id(leader_member_id_value)
 	if leader == null or not leader.is_leader or leader.class_definition == null:
-		return RunResolutionSourceResult.failure(_error("leader_member_id", "must identify the one live leader"))
+		return RunResolutionSourceResult.failure(_error("leader_member_id", "must identify the one live leader"), RunResolutionSourceResult.FailureKind.IDENTITY_MISMATCH)
 	var stats := context.party.stats_for(leader_member_id_value)
 	if stats == null:
 		return RunResolutionSourceResult.failure(_error("leader_core_attributes", "resolved live attributes are unavailable"))
@@ -71,7 +71,7 @@ static func from_context(context: PlayerRunContext, leader_member_id_value: int)
 		attributes[String(attribute_id)] = stats.value(attribute_id)
 	var state := context.item_state()
 	if state == null:
-		return RunResolutionSourceResult.failure(_error("item_state", "live ownership is unavailable"))
+		return RunResolutionSourceResult.failure(_error("item_state", "live ownership is unavailable"), RunResolutionSourceResult.FailureKind.OWNERSHIP_VERIFICATION)
 	return _create_validated(
 		context.profile_id, context.run_id, context.run_seed, context.run_player_id,
 		leader_member_id_value, rows, state, leader.class_definition.id, attributes,
@@ -100,7 +100,7 @@ static func from_dictionary(document: Variant) -> RunResolutionSourceResult:
 		rows.append((row_value as Dictionary).duplicate(true) if row_value is Dictionary else {})
 	var ownership := ItemOwnershipState.decode(data["item_state"], GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)
 	if not ownership.ok():
-		return RunResolutionSourceResult.failure(_error("item_state", ownership.error))
+		return RunResolutionSourceResult.failure(_error("item_state", ownership.error), RunResolutionSourceResult.FailureKind.OWNERSHIP_VERIFICATION)
 	if not data["leader_core_attributes"] is Dictionary:
 		return RunResolutionSourceResult.failure(_error("leader_core_attributes", "must be a dictionary"))
 	return _create_validated(
@@ -117,14 +117,14 @@ static func _create_validated(
 	leader_class_id_value: StringName, leader_attribute_values: Dictionary,
 ) -> RunResolutionSourceResult:
 	if profile_id_value.strip_edges().is_empty() or String(run_id_value).strip_edges().is_empty() or run_seed_value <= 0 or String(run_player_id_value).strip_edges().is_empty() or leader_member_id_value <= 0:
-		return RunResolutionSourceResult.failure(_error("run_identity", "identity fields must be complete and positive"))
+		return RunResolutionSourceResult.failure(_error("run_identity", "identity fields must be complete and positive"), RunResolutionSourceResult.FailureKind.IDENTITY_MISMATCH)
 	if item_state_value == null:
-		return RunResolutionSourceResult.failure(_error("item_state", "must be available"))
+		return RunResolutionSourceResult.failure(_error("item_state", "must be available"), RunResolutionSourceResult.FailureKind.OWNERSHIP_VERIFICATION)
 	var ownership_error := item_state_value.validate(GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)
 	if not ownership_error.is_empty():
-		return RunResolutionSourceResult.failure(_error("item_state", ownership_error))
+		return RunResolutionSourceResult.failure(_error("item_state", ownership_error), RunResolutionSourceResult.FailureKind.OWNERSHIP_VERIFICATION)
 	if item_state_value.owner_id != String(run_player_id_value):
-		return RunResolutionSourceResult.failure(_error("item_state.owner_id", "must match run_player_id"))
+		return RunResolutionSourceResult.failure(_error("item_state.owner_id", "must match run_player_id"), RunResolutionSourceResult.FailureKind.OWNERSHIP_VERIFICATION)
 	if party_member_values.is_empty():
 		return RunResolutionSourceResult.failure(_error("party_members", "must not be empty"))
 	var seen: Dictionary = {}
@@ -148,12 +148,12 @@ static func _create_validated(
 		if bool(row["is_leader"]):
 			leader_count += 1
 			if member_id != leader_member_id_value:
-				return RunResolutionSourceResult.failure(_error("leader_member_id", "must identify the leader row"))
+				return RunResolutionSourceResult.failure(_error("leader_member_id", "must identify the leader row"), RunResolutionSourceResult.FailureKind.IDENTITY_MISMATCH)
 			resolved_leader_class = String(row["class_id"])
 	if leader_count != 1:
-		return RunResolutionSourceResult.failure(_error("party_members", "must contain exactly one leader"))
+		return RunResolutionSourceResult.failure(_error("party_members", "must contain exactly one leader"), RunResolutionSourceResult.FailureKind.IDENTITY_MISMATCH)
 	if resolved_leader_class != String(leader_class_id_value):
-		return RunResolutionSourceResult.failure(_error("leader_class_id", "must match the leader row"))
+		return RunResolutionSourceResult.failure(_error("leader_class_id", "must match the leader row"), RunResolutionSourceResult.FailureKind.IDENTITY_MISMATCH)
 	var expected_attribute_fields: Array[String] = []
 	for attribute_id: StringName in ClassGrowthDefinition.CORE_ATTRIBUTE_IDS:
 		expected_attribute_fields.append(String(attribute_id))

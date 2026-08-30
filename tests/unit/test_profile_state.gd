@@ -335,6 +335,11 @@ func _test_transaction_record_shapes_fail_closed(failures: Array[String]) -> voi
 		"committed_at_unix": 1000,
 		"result_profile": snapshot,
 	}
+	var with_receipt := valid.duplicate(true)
+	var receipt_record := record.duplicate(true)
+	receipt_record["receipt"] = {"schema_version": 1, "source_fingerprint": "b".repeat(64)}
+	with_receipt["applied_transactions"] = {"tx": receipt_record}
+	TestAssertions.truthy(ProfileCodec.decode(JSON.stringify(with_receipt)).ok(), "optional JSON-safe transaction receipt is backward compatible", failures)
 	var cases: Array[Dictionary] = []
 	var missing_operation := record.duplicate(true)
 	missing_operation.erase("operation")
@@ -350,6 +355,9 @@ func _test_transaction_record_shapes_fail_closed(failures: Array[String]) -> voi
 	recursive_profile["applied_transactions"] = {"nested": record.duplicate(true)}
 	recursive_snapshot["result_profile"] = recursive_profile
 	cases.append(recursive_snapshot)
+	var invalid_receipt := record.duplicate(true)
+	invalid_receipt["receipt"] = Vector2.ONE
+	cases.append(invalid_receipt)
 	for index: int in range(cases.size()):
 		var malformed := valid.duplicate(true)
 		malformed["applied_transactions"] = {"tx": cases[index]}
