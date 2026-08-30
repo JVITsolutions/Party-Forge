@@ -116,7 +116,7 @@ const CAPTURE_FOCUS_TARGETS: Array[String] = [
 	"result:return_to_forge", "result:lost_row", "result:retry_resolution",
 	"result:retry_terminal_save", "result:retry_projection", "confirmation:cancel",
 	"hud:member", "hud:member", "member:24", "none", "hud:overflow",
-	"hud:alert_inspect", "hud:member", "hud:overflow", "hud:member", "hud:hover",
+	"hud:alert_inspect", "none", "hud:overflow", "hud:member", "hud:hover",
 	"none", "none", "none", "none", "none", "none",
 	"result:return_to_forge", "result:return_to_forge", "result:retry_terminal_refresh",
 	"pause:retry_return_to_forge", "lobby:mage", "lobby:first_class",
@@ -281,7 +281,7 @@ func _capture_all() -> void:
 	await _capture_hud(20, 6, 2)
 	await _capture_hud(21, 20, 6, &"overflow")
 	await _capture_hud(22, 6, 3, &"alert_focus")
-	await _capture_hud(23, 7, 2, &"member_focus")
+	await _capture_hud(23, 7, 2)
 	await _capture_hud(24, 12, 4, &"overflow")
 	await _capture_hud(25, 7, 2, &"controller")
 	await _capture_hud(26, 6, 1, &"mouse")
