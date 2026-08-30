@@ -139,7 +139,7 @@ func _assert_warehouse_presentation_activation(snapshot: CityAccessSnapshot, fai
 	_assert(unlocked_legacy.state == WarehousePresentationResult.State.AVAILABLE and unlocked_legacy.outcome == WarehousePresentationResult.Outcome.LEGACY and unlocked_legacy.reason == &"legacy_gate", "flag-off unlocked Player Mode retains legacy available presentation", failures)
 
 	_assert_invalid_warehouse_candidates(player_settings, locked_profile, unlocked_profile, failures)
-	_assert_warehouse_location_confinement(player_settings, locked_profile, failures)
+	_assert_warehouse_location_confinement(player_settings, locked_profile, unlocked_profile, failures)
 	_assert_warehouse_shadow_and_developer_preview(snapshot, failures)
 	_assert_production_warehouse_route_authorization(failures)
 
@@ -162,7 +162,7 @@ func _assert_invalid_warehouse_candidates(player_settings: PartyForgeSettings, l
 	_assert(wrong_destination.state == WarehousePresentationResult.State.AVAILABLE and wrong_destination.outcome == WarehousePresentationResult.Outcome.CANDIDATE_FAILED and wrong_destination.reason == &"candidate_destination_invalid", "wrong-destination candidate returns unlocked profile's legacy available presentation", failures)
 
 
-func _assert_warehouse_location_confinement(player_settings: PartyForgeSettings, locked_profile: ProfileState, failures: Array[String]) -> void:
+func _assert_warehouse_location_confinement(player_settings: PartyForgeSettings, locked_profile: ProfileState, unlocked_profile: ProfileState, failures: Array[String]) -> void:
 	_assert(WarehousePresentationResolver.LOCATION_ID == &"city.warehouse" and WarehousePresentationResolver.EXPECTED_DESTINATION_ID == &"city.warehouse.interior", "presentation resolver is fixed to only the Warehouse City location and destination", failures)
 	var locations: Array[Dictionary] = []
 	for location_id: StringName in LOCATIONS:
@@ -171,6 +171,30 @@ func _assert_warehouse_location_confinement(player_settings: PartyForgeSettings,
 	var confined_snapshot := _fixture_snapshot_from_locations(locations)
 	var presentation := WarehousePresentationResolver.resolve(player_settings, locked_profile, WarehouseAccessPolicy.resolve(locked_profile), CityAccessProviderResult.candidate(confined_snapshot))
 	_assert(presentation.state == WarehousePresentationResult.State.LOCKED and presentation.reason == &"candidate_locked", "other City location projections cannot influence the Warehouse-only evaluation", failures)
+
+	var evaluated_location_ids: Array[StringName] = []
+	var evaluated_destination_ids: Array[StringName] = []
+	var observed_locations: Array[Dictionary] = []
+	for location_id: StringName in LOCATIONS:
+		observed_locations.append(_fixture_location(location_id, _expected_destination(location_id, CityAccessProjection.State.AVAILABLE), CityAccessProjection.State.AVAILABLE))
+	var observed_snapshot := _fixture_snapshot_from_locations(observed_locations)
+	var provider := CityAccessProvider.new(func(_path: String) -> CityAccessLoadResult:
+		return CityAccessLoadResult.success(observed_snapshot)
+	)
+	var comparator := CityAccessShadowComparator.new(provider, func(candidate_snapshot: Variant, profile: Variant, location_id: Variant) -> Variant:
+		evaluated_location_ids.append(location_id as StringName if typeof(location_id) == TYPE_STRING_NAME else &"")
+		var projection: Variant = CityAccessEvaluator.evaluate(candidate_snapshot, profile, location_id)
+		if projection is CityAccessProjection and (projection as CityAccessProjection).state == CityAccessProjection.State.AVAILABLE:
+			evaluated_destination_ids.append((projection as CityAccessProjection).destination_id)
+		return projection
+	, func(_marker: String, _warning: bool) -> void: pass)
+	var developer_settings := PartyForgeSettings.new()
+	developer_settings.mode = PartyForgeSettings.Mode.DEVELOPER_MODE
+	developer_settings.use_city_access_snapshot = true
+	var observed: Variant = comparator.observe(developer_settings, unlocked_profile)
+	_assert(observed is CityAccessShadowComparison, "instrumented production comparator returns a Warehouse comparison", failures)
+	_assert(evaluated_location_ids == [&"city.warehouse"], "instrumented production evaluator receives exactly city.warehouse and no other City location", failures)
+	_assert(evaluated_destination_ids == [&"city.warehouse.interior"], "instrumented production evaluation exposes exactly the Warehouse destination", failures)
 
 
 func _assert_warehouse_shadow_and_developer_preview(snapshot: CityAccessSnapshot, failures: Array[String]) -> void:
@@ -266,18 +290,27 @@ func _assert_production_warehouse_route_authorization(failures: Array[String]) -
 	_assert(created.ok(), "route fixture creates an active locked profile", failures)
 	if created.ok():
 		var locked_profile := manager.active_profile()
-		_assert(not bool(main.call("_storage_route_allowed", MainMenuViewModel.ROUTE_WAREHOUSE, locked_profile)), "production Warehouse authorization seam blocks Player Mode without stash", failures)
-		main.call("_on_main_menu_route_requested", MainMenuViewModel.ROUTE_WAREHOUSE)
 		var menu := main.get_node("MainMenuScreen") as MainMenuScreen
 		var warehouse := main.get_node("WarehouseScreen") as WarehouseScreen
+		var dispatched_route_ids: Array[StringName] = []
+		var opened_storage_targets: Array[StringName] = []
+		menu.route_requested.connect(func(route_id: StringName) -> void:
+			dispatched_route_ids.append(route_id)
+			if warehouse.is_open():
+				opened_storage_targets.append(StringName(warehouse.name))
+		)
+		_assert(not bool(main.call("_storage_route_allowed", MainMenuViewModel.ROUTE_WAREHOUSE, locked_profile)), "production Warehouse authorization seam blocks Player Mode without stash", failures)
+		menu.call("_emit_route", MainMenuViewModel.ROUTE_WAREHOUSE, menu.get_node("Warehouse") as Control)
 		_assert(menu.is_open() and not warehouse.is_open(), "production Warehouse dispatcher rejects Player Mode without stash", failures)
 		locked_profile.permanent_feature_unlocks = ["stash"]
 		_assert(ProfileStore.new().save_profile(locked_profile, root).is_empty(), "route fixture persists stash unlock", failures)
 		_assert(manager.refresh_profile(locked_profile.profile_id).is_empty(), "route fixture refreshes the stash-unlocked profile", failures)
 		var unlocked_profile := manager.active_profile()
 		_assert(bool(main.call("_storage_route_allowed", MainMenuViewModel.ROUTE_WAREHOUSE, unlocked_profile)), "production Warehouse authorization seam allows Player Mode with stash", failures)
-		main.call("_on_main_menu_route_requested", MainMenuViewModel.ROUTE_WAREHOUSE)
+		menu.call("_emit_route", MainMenuViewModel.ROUTE_WAREHOUSE, menu.get_node("Warehouse") as Control)
 		_assert(warehouse.is_open() and not menu.is_open(), "production Warehouse dispatcher opens Player Mode with stash", failures)
+		_assert(dispatched_route_ids == [MainMenuViewModel.ROUTE_WAREHOUSE, MainMenuViewModel.ROUTE_WAREHOUSE], "instrumented menu dispatches exactly the Warehouse route for locked and unlocked activation", failures)
+		_assert(opened_storage_targets == [&"WarehouseScreen"], "instrumented production dispatch opens exactly the Warehouse destination and no other storage target", failures)
 	main.free()
 	ProfileTestSupport.remove_tree(root)
 	_cleanup_settings_artifacts(settings_path)

@@ -166,6 +166,7 @@ func _run() -> void:
 	warehouse.pressed.emit()
 	await _frames(3)
 	_assert_locked_dialog_layout(locked_dialog, Rect2(Vector2.ZERO, Vector2(LOGICAL_SIZE)), 1.0, LOGICAL_SIZE)
+	_assert_high_contrast_dialog_style(locked_dialog)
 	locked_dialog.call("close", true)
 	await _frames(2)
 	_assert_focus(warehouse, "high-contrast/reduced-motion locked flow restores Warehouse focus")
@@ -237,6 +238,38 @@ func _assert_locked_dialog_layout(dialog: Node, logical_rect: Rect2, physical_sc
 	for index: int in range(vertical_controls.size() - 1):
 		_assert(not vertical_controls[index].get_global_rect().intersects(vertical_controls[index + 1].get_global_rect()), "locked-dialog %s and %s do not overlap at %dx%d" % [vertical_controls[index].name, vertical_controls[index + 1].name, window_size.x, window_size.y])
 	_assert_focus(view_city, "locked-dialog deterministic View City Tree focus at %dx%d" % [window_size.x, window_size.y])
+
+
+func _assert_high_contrast_dialog_style(dialog: Node) -> void:
+	var frame := dialog.get_node("Overlay/Frame") as PanelContainer
+	var title := dialog.get_node("Overlay/Frame/Layout/Title") as Label
+	var body := dialog.get_node("Overlay/Frame/Layout/Body") as Label
+	var view_city := dialog.get_node("Overlay/Frame/Layout/Actions/ViewCityTree") as Button
+	var frame_style := frame.get_theme_stylebox(&"panel")
+	var button_style := view_city.get_theme_stylebox(&"normal")
+	_assert(frame_style is StyleBoxFlat, "high-contrast dialog resolves a concrete frame background style")
+	_assert(button_style is StyleBoxFlat, "high-contrast dialog resolves a concrete primary-action background style")
+	if frame_style is StyleBoxFlat:
+		var frame_background := (frame_style as StyleBoxFlat).bg_color
+		_assert(_contrast_ratio(title.get_theme_color(&"font_color"), frame_background) >= 7.0, "high-contrast dialog title has at least 7:1 resolved style contrast")
+		_assert(_contrast_ratio(body.get_theme_color(&"font_color"), frame_background) >= 7.0, "high-contrast dialog body has at least 7:1 resolved style contrast")
+	if button_style is StyleBoxFlat:
+		var button_background := (button_style as StyleBoxFlat).bg_color
+		_assert(_contrast_ratio(view_city.get_theme_color(&"font_color"), button_background) >= 7.0, "high-contrast dialog primary action has at least 7:1 resolved style contrast")
+
+
+func _contrast_ratio(first: Color, second: Color) -> float:
+	var first_luminance := _relative_luminance(first)
+	var second_luminance := _relative_luminance(second)
+	return (maxf(first_luminance, second_luminance) + 0.05) / (minf(first_luminance, second_luminance) + 0.05)
+
+
+func _relative_luminance(color: Color) -> float:
+	return 0.2126 * _linear_channel(color.r) + 0.7152 * _linear_channel(color.g) + 0.0722 * _linear_channel(color.b)
+
+
+func _linear_channel(channel: float) -> float:
+	return channel / 12.92 if channel <= 0.04045 else pow((channel + 0.055) / 1.055, 2.4)
 
 
 func _assert_readable(control: Control, minimum_logical_size: int, physical_scale: float, window_size: Vector2i) -> void:
