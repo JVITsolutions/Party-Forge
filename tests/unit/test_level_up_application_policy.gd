@@ -3,125 +3,161 @@ extends RefCounted
 
 func run() -> Array[String]:
 	var failures: Array[String] = []
-	if not FileAccess.file_exists("res://scripts/progression/level_up_application_result.gd"):
-		failures.append("typed LevelUpApplicationResult script is missing")
-		return failures
-	if not FileAccess.file_exists("res://scripts/progression/level_up_application_policy.gd"):
-		failures.append("LevelUpApplicationPolicy script is missing")
-		return failures
-	_test_routes_validate_without_mutation(failures)
-	_test_targeted_choices_require_current_recipient_authority(failures)
-	_test_recruitment_uses_current_catalog_and_capacity(failures)
-	_test_stale_authored_choice_is_readable(failures)
-	_test_null_and_capped_inputs_are_readable(failures)
-	_test_policy_re_resolves_current_catalog_definition(failures)
+	_test_direct_class_trait_and_party_stat_matrix(failures)
+	_test_targeted_member_matrix_and_readable_reasons(failures)
+	_test_recruitment_matrix(failures)
+	_test_authored_identity_and_cap_matrix(failures)
+	_test_null_authority_matrix(failures)
 	return failures
 
 
-func _test_routes_validate_without_mutation(failures: Array[String]) -> void:
+func _test_direct_class_trait_and_party_stat_matrix(failures: Array[String]) -> void:
 	var catalog := GameCatalog.load_defaults()
-	var party := PartyManager.new()
-	party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
-	var before_members := party.members.size()
-	var before_rank := party.party_stat_rank(&"damage")
-	var choice := UpgradeChoice.new(UpgradeChoice.Kind.PARTY_STAT, &"damage", "Forged visual label")
-	var result: RefCounted = _policy().call("evaluate", choice, party, catalog, 0)
-	TestAssertions.truthy(result.ok(), "valid direct choice is accepted", failures)
-	TestAssertions.equal(result.choice_key, choice.key(), "result retains exact choice identity", failures)
-	TestAssertions.equal(result.recipient_member_id, 0, "direct result has no recipient", failures)
-	TestAssertions.equal(party.members.size(), before_members, "policy does not recruit while evaluating", failures)
-	TestAssertions.equal(party.party_stat_rank(&"damage"), before_rank, "policy does not apply an upgrade while evaluating", failures)
+	var party := _active_vanguard_party(catalog)
+	var policy := LevelUpApplicationPolicy.new()
+	_assert_result(_evaluate_pure(policy, UpgradeChoice.new(UpgradeChoice.Kind.CLASS_RANK, &"fighter", "Train Fighter"), party, catalog, 0, "valid class rank", failures), true, "", "valid class rank", failures)
+	_assert_result(_evaluate_pure(policy, UpgradeChoice.new(UpgradeChoice.Kind.CLASS_RANK, &"ranger", "Train Ranger"), party, catalog, 0, "unrepresented class rank", failures), false, "no longer represented", "unrepresented class rank", failures)
+	_assert_result(_evaluate_pure(policy, UpgradeChoice.new(UpgradeChoice.Kind.CLASS_RANK, &"missing_class", "Missing Class"), party, catalog, 0, "missing class rank", failures), false, "no longer available", "missing class rank", failures)
+	_assert_result(_evaluate_pure(policy, UpgradeChoice.new(UpgradeChoice.Kind.TRAIT, &"vanguard", "Vanguard"), party, catalog, 0, "valid active trait", failures), true, "", "valid active trait", failures)
+	_assert_result(_evaluate_pure(policy, UpgradeChoice.new(UpgradeChoice.Kind.TRAIT, &"arcane", "Arcane"), party, catalog, 0, "inactive trait", failures), false, "no longer active", "inactive trait", failures)
+	_assert_result(_evaluate_pure(policy, UpgradeChoice.new(UpgradeChoice.Kind.TRAIT, &"missing_trait", "Missing Trait"), party, catalog, 0, "missing trait", failures), false, "no longer available", "missing trait", failures)
+	_assert_result(_evaluate_pure(policy, UpgradeChoice.new(UpgradeChoice.Kind.PARTY_STAT, &"damage", "Party Damage"), party, catalog, 0, "valid party stat", failures), true, "", "valid party stat", failures)
+	for _rank: int in range(party.upgrade_tuning.party_stat_max_rank):
+		party.upgrade_party_stat(&"damage")
+	_assert_result(_evaluate_pure(policy, UpgradeChoice.new(UpgradeChoice.Kind.PARTY_STAT, &"damage", "Party Damage"), party, catalog, 0, "capped party stat", failures), false, "maximum rank", "capped party stat", failures)
 	party.free()
 
 
-func _test_targeted_choices_require_current_recipient_authority(failures: Array[String]) -> void:
+func _test_targeted_member_matrix_and_readable_reasons(failures: Array[String]) -> void:
 	var catalog := GameCatalog.load_defaults()
 	var party := PartyManager.new()
 	party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
 	party.recruit(catalog.class_by_id(&"marksman"))
-	var choice := UpgradeChoice.authored(catalog.upgrade_by_id(&"deadeye"))
-	var policy := _policy()
-	var missing: RefCounted = policy.call("evaluate", choice, party, catalog, 0)
-	TestAssertions.truthy(not missing.ok(), "targeted choice requires a member", failures)
-	TestAssertions.truthy("Choose" in missing.reason, "missing-recipient rejection is player-readable", failures)
-	var ineligible: RefCounted = policy.call("evaluate", choice, party, catalog, 1)
-	TestAssertions.truthy(not ineligible.ok(), "targeted choice rejects an ineligible member", failures)
-	TestAssertions.truthy(not ineligible.reason.is_empty(), "ineligible-recipient rejection is readable", failures)
-	var accepted: RefCounted = policy.call("evaluate", choice, party, catalog, 2)
-	TestAssertions.truthy(accepted.ok(), "targeted choice accepts a current eligible member", failures)
-	TestAssertions.equal(accepted.recipient_member_id, 2, "targeted result keeps the stable recipient id", failures)
+	var policy := LevelUpApplicationPolicy.new()
+	var deadeye := UpgradeChoice.authored(catalog.upgrade_by_id(&"deadeye"))
+	_assert_result(_evaluate_pure(policy, deadeye, party, catalog, 0, "missing recipient", failures), false, "Choose an eligible party member.", "missing recipient", failures)
+	_assert_result(_evaluate_pure(policy, deadeye, party, catalog, 999, "vanished recipient", failures), false, "That party member is no longer available.", "vanished recipient", failures)
+	_assert_result(_evaluate_pure(policy, deadeye, party, catalog, 1, "wrong recipient class", failures), false, "Choose a party member from an eligible class.", "wrong recipient class", failures)
+	var accepted := _evaluate_pure(policy, deadeye, party, catalog, 2, "valid recipient", failures)
+	_assert_result(accepted, true, "", "valid recipient", failures)
+	TestAssertions.equal(accepted.recipient_member_id, 2, "valid recipient keeps stable member identity", failures)
 	party.free()
 
 
-func _test_recruitment_uses_current_catalog_and_capacity(failures: Array[String]) -> void:
+func _test_recruitment_matrix(failures: Array[String]) -> void:
 	var catalog := GameCatalog.load_defaults()
 	var party := PartyManager.new()
 	party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
-	var policy := _policy()
-	var recruit := UpgradeChoice.new(UpgradeChoice.Kind.RECRUIT, &"ranger", "Decorative text cannot route")
-	var before_members := party.members.size()
-	TestAssertions.truthy(policy.evaluate(recruit, party, catalog, 0).ok(), "catalog-backed recruit is accepted with capacity", failures)
-	TestAssertions.equal(party.members.size(), before_members, "recruit evaluation is mutation-free", failures)
-	var stale: RefCounted = policy.call("evaluate", UpgradeChoice.new(UpgradeChoice.Kind.RECRUIT, &"retired_class", "Recruit Retired"), party, catalog, 0)
-	TestAssertions.truthy(not stale.ok() and "no longer" in stale.reason, "missing recruit definition has a readable stale reason", failures)
+	var policy := LevelUpApplicationPolicy.new()
+	_assert_result(_evaluate_pure(policy, UpgradeChoice.new(UpgradeChoice.Kind.RECRUIT, &"ranger", "Recruit Ranger"), party, catalog, 0, "valid recruit", failures), true, "", "valid recruit", failures)
+	_assert_result(_evaluate_pure(policy, UpgradeChoice.new(UpgradeChoice.Kind.RECRUIT, &"missing_class", "Missing Recruit"), party, catalog, 0, "missing recruit", failures), false, "no longer available", "missing recruit", failures)
 	party.configure_capacity(PartyCapacityPolicy.new(1))
-	var full: RefCounted = policy.call("evaluate", recruit, party, catalog, 0)
-	TestAssertions.truthy(not full.ok() and "full" in full.reason.to_lower(), "recruit capacity rejection is readable", failures)
+	_assert_result(_evaluate_pure(policy, UpgradeChoice.new(UpgradeChoice.Kind.RECRUIT, &"ranger", "Recruit Ranger"), party, catalog, 0, "full recruit", failures), false, "The party is full.", "full recruit", failures)
 	party.free()
 
 
-func _test_stale_authored_choice_is_readable(failures: Array[String]) -> void:
+func _test_authored_identity_and_cap_matrix(failures: Array[String]) -> void:
 	var catalog := GameCatalog.load_defaults()
 	var party := PartyManager.new()
 	party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
-	var retired := catalog.upgrade_by_id(&"vitality").duplicate(true) as UpgradeDefinition
-	retired.id = &"retired_upgrade"
-	var stale: RefCounted = _policy().call("evaluate", UpgradeChoice.authored(retired), party, catalog, 1)
-	TestAssertions.truthy(not stale.ok(), "stale authored choice is rejected", failures)
-	TestAssertions.truthy("no longer" in stale.reason, "stale authored rejection is player-readable", failures)
-	TestAssertions.truthy(stale.reason.ends_with("."), "stale rejection is a complete sentence", failures)
-	TestAssertions.truthy("PARTY_FORGE_" not in stale.reason and "retired_upgrade" not in stale.reason, "player rejection hides diagnostics and raw ids", failures)
-	TestAssertions.equal(party.members[0].upgrade_rank(retired.id), 0, "stale evaluation does not mutate member ranks", failures)
-	party.free()
-
-
-func _test_null_and_capped_inputs_are_readable(failures: Array[String]) -> void:
-	var catalog := GameCatalog.load_defaults()
-	var party := PartyManager.new()
-	party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
-	var policy := _policy()
-	for result: RefCounted in [
-		policy.call("evaluate", null, party, catalog, 0),
-		policy.call("evaluate", UpgradeChoice.new(UpgradeChoice.Kind.PARTY_STAT, &"damage", "Party Damage"), null, catalog, 0),
-		policy.call("evaluate", UpgradeChoice.new(UpgradeChoice.Kind.PARTY_STAT, &"damage", "Party Damage"), party, null, 0),
-	]:
-		TestAssertions.truthy(not bool(result.call("ok")), "missing authority rejects evaluation", failures)
-		TestAssertions.truthy(not String(result.get("reason")).is_empty() and String(result.get("reason")).ends_with("."), "missing authority has a complete readable reason", failures)
+	party.recruit(catalog.class_by_id(&"marksman"))
+	var policy := LevelUpApplicationPolicy.new()
+	var current := catalog.upgrade_by_id(&"deadeye")
+	var same_id_stale := current.duplicate(true) as UpgradeDefinition
+	var stale_result := _evaluate_pure(policy, UpgradeChoice.authored(same_id_stale), party, catalog, 2, "same-id stale authored", failures)
+	_assert_result(stale_result, false, "This offer is no longer available.", "same-id stale authored", failures)
+	var missing_definition := UpgradeChoice.new(UpgradeChoice.Kind.AUTHORED, current.id, current.display_name)
+	_assert_result(_evaluate_pure(policy, missing_definition, party, catalog, 2, "null authored definition", failures), false, "This offer is no longer available.", "null authored definition", failures)
 
 	var wall := catalog.upgrade_by_id(&"vanguard_wall")
-	TestAssertions.truthy(UpgradeApplicationService.apply(wall.id, catalog, party), "capped policy fixture applies its only rank", failures)
-	var before_rank := party.upgrade_rank(wall.id)
-	var capped: RefCounted = policy.call("evaluate", UpgradeChoice.authored(wall), party, catalog, 0)
-	TestAssertions.truthy(not capped.ok() and "maximum rank" in capped.reason.to_lower(), "capped choice has a readable rejection", failures)
-	TestAssertions.equal(party.upgrade_rank(wall.id), before_rank, "capped evaluation remains mutation-free", failures)
+	UpgradeApplicationService.apply(wall.id, catalog, party)
+	_assert_result(_evaluate_pure(policy, UpgradeChoice.authored(wall), party, catalog, 0, "capped authored", failures), false, "maximum rank", "capped authored", failures)
 	party.free()
 
 
-func _test_policy_re_resolves_current_catalog_definition(failures: Array[String]) -> void:
+func _test_null_authority_matrix(failures: Array[String]) -> void:
 	var catalog := GameCatalog.load_defaults()
 	var party := PartyManager.new()
 	party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
-	party.recruit(catalog.class_by_id(&"marksman"))
-	var stale_definition := catalog.upgrade_by_id(&"deadeye").duplicate(true) as UpgradeDefinition
-	stale_definition.scope = UpgradeDefinition.Scope.PARTY
-	stale_definition.allowed_class_ids = []
-	var stale_choice := UpgradeChoice.authored(stale_definition)
-	TestAssertions.equal(stale_choice.application_route(), 0, "stale fixture itself looks direct", failures)
-	var result: RefCounted = _policy().call("evaluate", stale_choice, party, catalog, 0)
-	TestAssertions.truthy(not result.ok(), "policy rejects missing recipient using current catalog definition", failures)
-	TestAssertions.truthy("Choose" in result.reason, "current targeted authority supplies the readable route reason", failures)
+	var policy := LevelUpApplicationPolicy.new()
+	var direct := UpgradeChoice.new(UpgradeChoice.Kind.PARTY_STAT, &"damage", "Party Damage")
+	_assert_result(_evaluate_pure(policy, null, party, catalog, 0, "null choice", failures), false, "no longer available", "null choice", failures)
+	_assert_result(policy.evaluate(direct, null, catalog, 0), false, "party is no longer available", "null party", failures)
+	_assert_result(_evaluate_pure(policy, direct, party, null, 0, "null catalog", failures), false, "information is no longer available", "null catalog", failures)
 	party.free()
 
 
-func _policy() -> RefCounted:
-	return (load("res://scripts/progression/level_up_application_policy.gd") as Script).new()
+func _evaluate_pure(
+	policy: LevelUpApplicationPolicy,
+	choice: UpgradeChoice,
+	party: PartyManager,
+	catalog: GameCatalog,
+	member_id: int,
+	context: String,
+	failures: Array[String],
+) -> LevelUpApplicationResult:
+	var before := _party_snapshot(party)
+	var signal_counts := _observe_signals(party)
+	var result := policy.evaluate(choice, party, catalog, member_id)
+	TestAssertions.equal(_party_snapshot(party), before, "%s does not mutate the full party document or revisions" % context, failures)
+	TestAssertions.equal(signal_counts, {"member_added": 0, "class_rank_changed": 0, "active_traits_changed": 0, "upgrades_changed": 0, "stats_changed": 0}, "%s emits no mutation signals" % context, failures)
+	return result
+
+
+func _assert_result(result: LevelUpApplicationResult, expected_ok: bool, reason_fragment: String, context: String, failures: Array[String]) -> void:
+	TestAssertions.equal(result.ok(), expected_ok, "%s acceptance" % context, failures)
+	if expected_ok:
+		TestAssertions.equal(result.reason, "", "%s accepted result has no rejection reason" % context, failures)
+		return
+	TestAssertions.truthy(not result.reason.is_empty() and result.reason.ends_with("."), "%s rejection is one complete sentence" % context, failures)
+	TestAssertions.truthy(reason_fragment in result.reason, "%s rejection contains readable reason '%s'" % [context, reason_fragment], failures)
+	TestAssertions.truthy("PARTY_FORGE_" not in result.reason and "_" not in result.reason, "%s rejection hides diagnostics and raw ids" % context, failures)
+
+
+func _observe_signals(party: PartyManager) -> Dictionary:
+	var counts := {"member_added": 0, "class_rank_changed": 0, "active_traits_changed": 0, "upgrades_changed": 0, "stats_changed": 0}
+	party.member_added.connect(func(_member: PartyMemberState) -> void: counts["member_added"] += 1)
+	party.class_rank_changed.connect(func(_class_id: StringName, _rank: int) -> void: counts["class_rank_changed"] += 1)
+	party.active_traits_changed.connect(func(_tiers: Dictionary) -> void: counts["active_traits_changed"] += 1)
+	party.upgrades_changed.connect(func() -> void: counts["upgrades_changed"] += 1)
+	party.stats_changed.connect(func(_member_id: int) -> void: counts["stats_changed"] += 1)
+	return counts
+
+
+func _party_snapshot(party: PartyManager) -> Dictionary:
+	var member_rows: Array[Dictionary] = []
+	for member: PartyMemberState in party.members:
+		var source_rows: Array[Dictionary] = []
+		for source: StatModifierSource in member.modifier_sources:
+			var modifier_rows: Array[Dictionary] = []
+			for modifier: StatModifier in source.modifiers:
+				modifier_rows.append({
+					"stat_id": modifier.stat_id, "operation": modifier.operation, "value": modifier.value,
+					"source_id": modifier.source_id, "source_label": modifier.source_label,
+					"required_tags": modifier.required_tags.duplicate(), "excluded_tags": modifier.excluded_tags.duplicate(),
+					"required_capability_tags": modifier.required_capability_tags.duplicate(), "excluded_capability_tags": modifier.excluded_capability_tags.duplicate(),
+					"required_action_tags": modifier.required_action_tags.duplicate(), "excluded_action_tags": modifier.excluded_action_tags.duplicate(),
+				})
+			source_rows.append({"id": source.id, "source_type": source.source_type, "label": source.label, "owner_member_id": source.owner_member_id, "modifiers": modifier_rows})
+		member_rows.append({
+			"member_id": member.member_id, "character_name": member.character_name,
+			"class_id": member.class_definition.id, "is_leader": member.is_leader,
+			"capability_tags": member.capability_tags.duplicate(), "upgrade_ranks": member.upgrade_ranks,
+			"modifier_sources": source_rows,
+		})
+	return {
+		"capacity": party.capacity(), "members": member_rows,
+		"class_ranks": party.class_ranks.duplicate(true), "active_tiers": party.active_tiers.duplicate(true),
+		"party_stat_ranks": party.party_stat_ranks.duplicate(true), "trait_upgrade_ranks": party.trait_upgrade_ranks.duplicate(true),
+		"party_upgrade_ranks": party.party_upgrade_ranks, "stat_revision": party.get("_stat_revision"),
+		"member_stat_revision": (party.get("_member_stat_revision") as Dictionary).duplicate(true),
+		"stat_cache_keys": (party.get("_stat_cache") as Dictionary).keys(),
+		"action_stat_cache_keys": (party.get("_action_stat_cache") as Dictionary).keys(),
+	}
+
+
+func _active_vanguard_party(catalog: GameCatalog) -> PartyManager:
+	var party := PartyManager.new()
+	party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
+	party.recruit(catalog.class_by_id(&"fighter"))
+	return party

@@ -60,11 +60,10 @@ func _evaluate_authored(
 	member_id: int,
 ) -> LevelUpApplicationResult:
 	var definition := catalog.upgrade_by_id(choice.target_id)
-	if definition == null:
-		return _rejected(choice, member_id, "This upgrade is no longer available.")
-	var authoritative_choice := UpgradeChoice.authored(definition)
-	var recipient_id := member_id if authoritative_choice.application_route() == UpgradeChoice.ApplicationRoute.RECIPIENT_CONFIRMATION else 0
-	if authoritative_choice.application_route() == UpgradeChoice.ApplicationRoute.RECIPIENT_CONFIRMATION and recipient_id <= 0:
+	if choice.definition == null or definition == null or not is_same(choice.definition, definition):
+		return _rejected(choice, member_id, "This offer is no longer available.")
+	var recipient_id := member_id if choice.application_route() == UpgradeChoice.ApplicationRoute.RECIPIENT_CONFIRMATION else 0
+	if choice.application_route() == UpgradeChoice.ApplicationRoute.RECIPIENT_CONFIRMATION and recipient_id <= 0:
 		return _rejected(choice, member_id, "Choose an eligible party member.")
 	var errors := UpgradeApplicationService.validate_application(definition, party, recipient_id)
 	if not errors.is_empty():
@@ -81,13 +80,28 @@ func _readable_application_error(
 	if definition.is_single_recipient():
 		var eligibility := UpgradeApplicationService.eligibility_reason(definition, party, member_id)
 		if not eligibility.is_empty():
-			return eligibility
+			return _readable_eligibility_reason(eligibility)
 	var joined := " ".join(errors).to_lower()
 	if "maximum rank reached" in joined:
 		return "This upgrade has reached its maximum rank."
 	if "no eligible party member" in joined:
 		return "No eligible party member remains."
 	return "This upgrade can no longer be applied."
+
+
+func _readable_eligibility_reason(reason: String) -> String:
+	var normalized := reason.strip_edges()
+	if normalized == "Member is no longer available.":
+		return "That party member is no longer available."
+	if normalized == "Class is not eligible.":
+		return "Choose a party member from an eligible class."
+	if normalized == "Requires one matching eligibility tag.":
+		return "Choose a party member who meets at least one listed requirement."
+	if normalized.begins_with("Requires "):
+		return "Choose a party member who meets every listed requirement."
+	if normalized.begins_with("Excluded by "):
+		return "Choose a party member without an excluded requirement."
+	return "Choose an eligible party member."
 
 
 func _rejected(choice: UpgradeChoice, member_id: int, reason: String) -> LevelUpApplicationResult:

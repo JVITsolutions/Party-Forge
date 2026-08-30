@@ -10,11 +10,15 @@ func build(
 ) -> UpgradeOfferProjection:
 	var result := UpgradeOfferProjection.new()
 	if choice == null:
-		result.disabled_reason = disabled_reason if not disabled_reason.is_empty() else "This upgrade is no longer available."
+		result.disabled_reason = disabled_reason if not disabled_reason.is_empty() else "This offer is no longer available."
 		return result
 	result.choice_key = choice.key()
 	result.target_id = choice.target_id
 	result.disabled_reason = disabled_reason
+	var authority_reason := _authority_reason(choice, party, catalog)
+	if not authority_reason.is_empty():
+		result.disabled_reason = authority_reason
+		return result
 	if choice.kind == UpgradeChoice.Kind.AUTHORED:
 		return _build_authored(result, choice, party, catalog)
 	return _build_foundational(result, choice, party, catalog)
@@ -77,7 +81,7 @@ func _build_foundational(
 	if choice.kind == UpgradeChoice.Kind.RECRUIT:
 		var recruit_definition := catalog.class_by_id(choice.target_id) if catalog != null else null
 		if recruit_definition != null:
-			result.scope_text = "Recruit • %s" % UpgradePresentationService.role_name(recruit_definition.role)
+			result.scope_text = "Adds %s as a new party member after confirmation." % recruit_definition.display_name
 	result.rank_text = str(content.get("rank_text", ""))
 	result.eligibility_text = str(content.get("eligibility_text", ""))
 	result.recipient_tags.assign(content.get("recipient_tags", []))
@@ -94,10 +98,47 @@ func _recruit_effect(choice: UpgradeChoice, catalog: GameCatalog) -> String:
 		var trait_definition := catalog.trait_by_id(trait_id)
 		if trait_definition != null:
 			trait_names.append(trait_definition.display_name)
-	var result := "Recruit a %s %s." % [UpgradePresentationService.role_name(definition.role), definition.display_name]
+	var result := "Recruit %s, a %s class." % [definition.display_name, UpgradePresentationService.role_name(definition.role)]
 	if not trait_names.is_empty():
-		result += " Traits: %s." % ", ".join(trait_names)
+		var trait_text := String(trait_names[0]) if trait_names.size() == 1 else "%s and %s" % [", ".join(trait_names.slice(0, -1)), trait_names[-1]]
+		result = "Recruit %s, a %s class with the %s %s." % [
+			definition.display_name,
+			UpgradePresentationService.role_name(definition.role),
+			trait_text,
+			"trait" if trait_names.size() == 1 else "traits",
+		]
 	return result
+
+
+func _authority_reason(choice: UpgradeChoice, party: PartyManager, catalog: GameCatalog) -> String:
+	if party == null:
+		return "The party is no longer available."
+	if catalog == null:
+		return "Offer information is no longer available."
+	match choice.kind:
+		UpgradeChoice.Kind.RECRUIT:
+			if catalog.class_by_id(choice.target_id) == null:
+				return "This recruit is no longer available."
+		UpgradeChoice.Kind.CLASS_RANK:
+			if catalog.class_by_id(choice.target_id) == null:
+				return "This class is no longer available."
+			if party.get_class_rank(choice.target_id) <= 0:
+				return "This class is no longer represented in the party."
+		UpgradeChoice.Kind.TRAIT:
+			if catalog.trait_by_id(choice.target_id) == null:
+				return "This trait is no longer available."
+			if party.active_tier(choice.target_id) <= 0:
+				return "This trait is no longer active in the party."
+		UpgradeChoice.Kind.PARTY_STAT:
+			if choice.target_id not in PartyManager.PARTY_STAT_IDS or PartyManager.STAT_CATALOG.definition(choice.target_id) == null:
+				return "This party upgrade is no longer available."
+		UpgradeChoice.Kind.AUTHORED:
+			var current := catalog.upgrade_by_id(choice.target_id)
+			if choice.definition == null or current == null or not is_same(choice.definition, current):
+				return "This offer is no longer available."
+		_:
+			return "This offer is no longer available."
+	return ""
 
 
 func _scope_text(content: Dictionary) -> String:
