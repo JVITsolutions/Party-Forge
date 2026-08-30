@@ -12,18 +12,20 @@ const TRAIT_STAT_KEYWORD_IDS := {
 
 static func card(choice: UpgradeChoice, party: PartyManager, catalog: GameCatalog) -> Dictionary:
 	if choice == null or party == null or catalog == null:
-		return _fallback_card(choice)
+		return _with_projection_metadata(_fallback_card(choice), choice, catalog)
+	var content: Dictionary
 	match choice.kind:
 		UpgradeChoice.Kind.CLASS_RANK:
-			return _class_rank_card(choice, party, catalog)
+			content = _class_rank_card(choice, party, catalog)
 		UpgradeChoice.Kind.RECRUIT:
-			return _recruit_card(choice, catalog)
+			content = _recruit_card(choice, catalog)
 		UpgradeChoice.Kind.TRAIT:
-			return _trait_card(choice, party, catalog)
+			content = _trait_card(choice, party, catalog)
 		UpgradeChoice.Kind.PARTY_STAT:
-			return _party_stat_card(choice, party)
+			content = _party_stat_card(choice, party)
 		_:
-			return _fallback_card(choice)
+			content = _fallback_card(choice)
+	return _with_projection_metadata(content, choice, catalog)
 
 
 static func tooltip(choice: UpgradeChoice, party: PartyManager, catalog: GameCatalog) -> Dictionary:
@@ -87,7 +89,7 @@ static func _recruit_card(choice: UpgradeChoice, catalog: GameCatalog) -> Dictio
 	return {
 		"name": "Recruit %s" % definition.display_name,
 		"scope_badge": "Recruit",
-		"rank_text": "New party member",
+		"rank_text": "",
 		"summary": "Add a %s to the party." % definition.display_name,
 		"eligibility_text": "Requires an open party slot.",
 		"recipient_text": "Adds one new %s." % definition.display_name,
@@ -227,3 +229,56 @@ static func _fallback_card(choice: UpgradeChoice) -> Dictionary:
 		"recipient_text": "",
 		"inheritance_text": "",
 	}
+
+
+static func _with_projection_metadata(
+	content: Dictionary,
+	choice: UpgradeChoice,
+	catalog: GameCatalog,
+) -> Dictionary:
+	var result := content.duplicate(true)
+	result["category_id"] = _category_id(choice)
+	result["icon_id"] = &""
+	result["rarity_label"] = ""
+	result["recipient_tags"] = _recipient_tags(choice, catalog)
+	result["class_tags"] = _class_tags(choice, catalog)
+	return result
+
+
+static func _category_id(choice: UpgradeChoice) -> StringName:
+	if choice == null:
+		return &""
+	match choice.kind:
+		UpgradeChoice.Kind.RECRUIT:
+			return &"recruit"
+		UpgradeChoice.Kind.CLASS_RANK:
+			return &"class_rank"
+		UpgradeChoice.Kind.TRAIT:
+			return &"trait"
+		UpgradeChoice.Kind.PARTY_STAT:
+			return &"party_stat"
+	return &""
+
+
+static func _recipient_tags(choice: UpgradeChoice, catalog: GameCatalog) -> Array[StringName]:
+	var result: Array[StringName] = []
+	if choice == null:
+		return result
+	if choice.kind == UpgradeChoice.Kind.TRAIT and catalog != null and catalog.trait_by_id(choice.target_id) != null:
+		result.append(choice.target_id)
+	elif choice.kind == UpgradeChoice.Kind.RECRUIT and catalog != null:
+		var definition := catalog.class_by_id(choice.target_id)
+		if definition != null:
+			for trait_id: StringName in definition.traits:
+				if catalog.trait_by_id(trait_id) != null:
+					result.append(trait_id)
+	return result
+
+
+static func _class_tags(choice: UpgradeChoice, catalog: GameCatalog) -> Array[StringName]:
+	var result: Array[StringName] = []
+	if choice == null or catalog == null:
+		return result
+	if choice.kind in [UpgradeChoice.Kind.RECRUIT, UpgradeChoice.Kind.CLASS_RANK] and catalog.class_by_id(choice.target_id) != null:
+		result.append(choice.target_id)
+	return result

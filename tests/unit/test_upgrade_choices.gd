@@ -12,7 +12,30 @@ func run() -> Array[String]:
 	_test_recipient_independent_key(failures)
 	_test_universal_before_legacy_stat_fallback(failures)
 	_test_effective_capacity_recruit_choices(failures)
+	_test_application_routes_are_authoritative(failures)
 	return failures
+
+func _test_application_routes_are_authoritative(failures: Array[String]) -> void:
+	var catalog := GameCatalog.load_defaults()
+	var simple_choice := UpgradeChoice.new(UpgradeChoice.Kind.PARTY_STAT, &"damage", "Party Damage")
+	var targeted_choice := UpgradeChoice.authored(catalog.upgrade_by_id(&"vitality"))
+	var recruit_choice := UpgradeChoice.new(UpgradeChoice.Kind.RECRUIT, &"ranger", "Recruit Ranger")
+	var shared_choice := UpgradeChoice.authored(catalog.upgrade_by_id(&"vanguard_wall"))
+	var class_choice := UpgradeChoice.new(UpgradeChoice.Kind.CLASS_RANK, &"fighter", "Train Fighter")
+	var trait_choice := UpgradeChoice.new(UpgradeChoice.Kind.TRAIT, &"vanguard", "Strengthen Vanguard")
+	TestAssertions.truthy(simple_choice.has_method(&"application_route"), "choice exposes an authoritative application route", failures)
+	if not simple_choice.has_method(&"application_route"):
+		return
+	var constants := (simple_choice.get_script() as Script).get_script_constant_map()
+	TestAssertions.equal(constants.get("ApplicationRoute", {}), {"DIRECT": 0, "RECIPIENT_CONFIRMATION": 1, "CONTEXT_CONFIRMATION": 2}, "application route enum is exact", failures)
+	TestAssertions.equal(simple_choice.call("application_route"), 0, "whole-party choice is direct", failures)
+	TestAssertions.equal(targeted_choice.call("application_route"), 1, "targeted choice confirms recipient", failures)
+	TestAssertions.equal(recruit_choice.call("application_route"), 2, "recruit confirms context", failures)
+	TestAssertions.equal(shared_choice.call("application_route"), 0, "non-recipient authored choice is direct", failures)
+	TestAssertions.equal(class_choice.call("application_route"), 0, "class rank choice is direct", failures)
+	TestAssertions.equal(trait_choice.call("application_route"), 0, "trait choice is direct", failures)
+	targeted_choice.label = "Recruit-looking visual text"
+	TestAssertions.equal(targeted_choice.call("application_route"), 1, "visual text never determines route", failures)
 
 func _test_effective_capacity_recruit_choices(failures: Array[String]) -> void:
 	var catalog := GameCatalog.load_defaults()

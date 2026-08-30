@@ -2,6 +2,7 @@ class_name UpgradeChoice
 extends RefCounted
 
 enum Kind { RECRUIT, CLASS_RANK, TRAIT, PARTY_STAT, AUTHORED }
+enum ApplicationRoute { DIRECT, RECIPIENT_CONFIRMATION, CONTEXT_CONFIRMATION }
 var kind: Kind
 var target_id: StringName
 var label: String
@@ -20,6 +21,13 @@ static func authored(card: UpgradeDefinition) -> UpgradeChoice:
 
 func requires_recipient() -> bool:
 	return kind == Kind.AUTHORED and definition != null and definition.is_single_recipient()
+
+func application_route() -> ApplicationRoute:
+	if kind == Kind.RECRUIT:
+		return ApplicationRoute.CONTEXT_CONFIRMATION
+	if requires_recipient():
+		return ApplicationRoute.RECIPIENT_CONFIRMATION
+	return ApplicationRoute.DIRECT
 
 func is_valid_for(party: PartyManager) -> bool:
 	if party == null:

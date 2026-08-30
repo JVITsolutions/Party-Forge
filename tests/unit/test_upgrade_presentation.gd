@@ -8,7 +8,21 @@ func run() -> Array[String]:
 	_test_recipient_rows(failures)
 	_test_matching_recipient_rows_use_party_rank(failures)
 	_test_role_names(failures)
+	_test_projection_metadata_is_schema_backed(failures)
 	return failures
+
+func _test_projection_metadata_is_schema_backed(failures: Array[String]) -> void:
+	var catalog := GameCatalog.load_defaults()
+	var party := PartyManager.new()
+	party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
+	var definition := catalog.upgrade_by_id(&"vitality")
+	var card := UpgradePresentationService.card(definition, party)
+	TestAssertions.equal(card.get("category_id", &"missing"), &"character", "authored card exposes its schema scope category", failures)
+	TestAssertions.equal(card.get("icon_id", &"missing"), &"", "authored card leaves unavailable optional icon empty", failures)
+	TestAssertions.equal(card.get("rarity_label", "missing"), "Common", "authored card exposes COMMON rarity", failures)
+	TestAssertions.equal(card.get("recipient_tags", []), definition.required_all_tags + definition.required_any_tags, "authored recipient tags follow eligibility schema", failures)
+	TestAssertions.equal(card.get("class_tags", []), definition.allowed_class_ids, "authored class tags follow eligibility schema", failures)
+	party.free()
 
 func _test_exact_effect_and_keyword_text(failures: Array[String]) -> void:
 	var catalog := GameCatalog.load_defaults()

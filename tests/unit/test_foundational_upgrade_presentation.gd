@@ -8,7 +8,25 @@ func run() -> Array[String]:
 	_test_fractional_trait_percentages(failures)
 	_test_production_trait_keyword_mappings(failures)
 	_test_level_up_panel_routes_foundational_and_authored_tooltips(failures)
+	_test_projection_metadata_omits_unsupported_rarity(failures)
 	return failures
+
+
+func _test_projection_metadata_omits_unsupported_rarity(failures: Array[String]) -> void:
+	var catalog := GameCatalog.load_defaults()
+	var party := PartyManager.new()
+	party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
+	var card := FoundationalUpgradePresentationService.card(
+		UpgradeChoice.new(UpgradeChoice.Kind.TRAIT, &"vanguard", "Strengthen Vanguard"),
+		party,
+		catalog,
+	)
+	TestAssertions.equal(card.get("category_id", &"missing"), &"trait", "foundational card exposes a stable category", failures)
+	TestAssertions.equal(card.get("icon_id", &"missing"), &"", "foundational card leaves unavailable optional icon empty", failures)
+	TestAssertions.equal(card.get("rarity_label", "missing"), "", "foundational card does not invent rarity", failures)
+	TestAssertions.equal(card.get("recipient_tags", []), [&"vanguard"], "foundational trait tags use the catalog trait", failures)
+	TestAssertions.equal(card.get("class_tags", []), [], "foundational trait card does not invent class tags", failures)
+	party.free()
 
 
 func _test_class_rank_uses_definition_step(failures: Array[String]) -> void:

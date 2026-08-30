@@ -8,12 +8,17 @@ static func card(definition: UpgradeDefinition, party: PartyManager) -> Dictiona
 	return {
 		"id": definition.id,
 		"name": definition.display_name,
+		"category_id": _scope_category_id(definition),
+		"icon_id": &"",
+		"rarity_label": _rarity_label(definition.rarity),
 		"scope_badge": _scope_badge(definition),
 		"rank_text": _rank_text(definition, party),
 		"summary": definition.summary,
 		"eligibility_text": _eligibility_text(definition),
 		"recipient_text": _recipient_text(definition),
 		"inheritance_text": _inheritance_text(definition),
+		"recipient_tags": _recipient_tags(definition),
+		"class_tags": definition.allowed_class_ids.duplicate(),
 	}
 
 
@@ -131,6 +136,32 @@ static func role_name(role: ClassDefinition.Role) -> String:
 			return "Support"
 		_:
 			return "Unknown"
+
+
+static func _scope_category_id(definition: UpgradeDefinition) -> StringName:
+	match definition.scope:
+		UpgradeDefinition.Scope.CHARACTER:
+			return &"character"
+		UpgradeDefinition.Scope.CLASS_SPECIFIC:
+			return &"class_specific"
+		UpgradeDefinition.Scope.PARTY:
+			return &"party"
+		UpgradeDefinition.Scope.TRAIT:
+			return &"trait"
+	return &""
+
+
+static func _rarity_label(rarity: UpgradeDefinition.Rarity) -> String:
+	var names := UpgradeDefinition.Rarity.keys()
+	return String(names[rarity]).to_lower().capitalize() if rarity >= 0 and rarity < names.size() else ""
+
+
+static func _recipient_tags(definition: UpgradeDefinition) -> Array[StringName]:
+	var result: Array[StringName] = []
+	for tag: StringName in definition.required_all_tags + definition.required_any_tags:
+		if tag not in result:
+			result.append(tag)
+	return result
 
 
 static func _rank_text(definition: UpgradeDefinition, party: PartyManager) -> String:
