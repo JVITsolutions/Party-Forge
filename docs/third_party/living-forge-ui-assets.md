@@ -54,3 +54,13 @@ These original, project-owned SVGs were authored for this UI slice on an eight-p
 | --- | --- | --- |
 | `assets/ui/living_forge/frames/forge_panel.svg` | Clipped-corner forged panel with one restrained upper notch | `c56ba15c51fc53b213e3088e9fa4202e9dddfb89c80b3923f616013fc1fc667e` |
 | `assets/ui/living_forge/frames/class_silhouette.svg` | Neutral, class-agnostic bust fallback | `73d7f659a0e3d75b43d4932967e99cb225e09a06981fc4e738d61f911406e778` |
+
+## Combat component project-owned assets
+
+The compact combat HUD semantics below use original flat vector geometry rather than 3D icons. Each was produced by `generator=Party Forge authored SVG` under `license=project-owned`; no third-party element is incorporated.
+
+| Local path | Purpose | Generator | Licence | SHA-256 |
+| --- | --- | --- | --- | --- |
+| `assets/ui/living_forge/icons/party-forge/downed.svg` | Downed party-member silhouette | Party Forge authored SVG | project-owned | `daf927351a383bb5b67efbca9ac7ecc5563848ae385770219393576db0628d77` |
+| `assets/ui/living_forge/icons/party-forge/dead.svg` | Dead party-member skull silhouette | Party Forge authored SVG | project-owned | `9dfdb42b80c6c80ce320de4bdbec8c1826114c2d77afa6f589a1e37e76366784` |
+| `assets/ui/living_forge/icons/party-forge/leader-crown.svg` | Leader identity crown | Party Forge authored SVG | project-owned | `e5210e97b6644114be3d4baf5966910ede0812fc566534b15271889e7bb88652` |

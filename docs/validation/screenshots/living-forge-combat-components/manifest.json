@@ -1,0 +1,161 @@
+{
+  "captured_at_utc": "2026-08-30 02:57:18",
+  "entries": [
+    {
+      "file": "living-forge-combat-rich-states-normal.png",
+      "height": 1080,
+      "sha256": "53d0902b9c7aeecd7f7b3004a90bebb68b23e5ebe204ba254bb6aa030645adb1",
+      "state": "normal rich cards: ready, critical, downed, dead",
+      "width": 1920
+    },
+    {
+      "file": "living-forge-combat-compact-alerts-normal.png",
+      "height": 1080,
+      "sha256": "d7e9595f3597eb5fdfafd3b86c772c3be285955c1d17113e082bfaaf0b55e030",
+      "state": "normal compact markers and critical, downed, dead alerts",
+      "width": 1920
+    },
+    {
+      "file": "living-forge-combat-focus-hover-normal.png",
+      "height": 1080,
+      "sha256": "dd6f210cd86611066340af692ba191ee1719f03bf2d466326878d0674e6c71f4",
+      "state": "normal keyboard focus and mouse hover proof",
+      "width": 1920
+    },
+    {
+      "file": "living-forge-combat-all-states-high-contrast.png",
+      "height": 1080,
+      "sha256": "0f6f077ae09322912cbcf0de4d056a15ebc5fc45335b0628165a2d2af9945b77",
+      "state": "high contrast rich, compact, and alert parity",
+      "width": 1920
+    }
+  ],
+  "renderer": "gl_compatibility",
+  "run_id": "60532-1788058636",
+  "schema_version": 2,
+  "source_head": "debfcb2db3658c7670aa9261ff2a943b53bdd0fc",
+  "source_tree_fingerprint": {
+    "algorithm": "sha256",
+    "inputs": [
+      {
+        "path": "assets/ui/living_forge/icons/party-forge/dead.svg",
+        "sha256": "9dfdb42b80c6c80ce320de4bdbec8c1826114c2d77afa6f589a1e37e76366784",
+        "status": "??"
+      },
+      {
+        "path": "assets/ui/living_forge/icons/party-forge/dead.svg.import",
+        "sha256": "e432c4c68f2e9210c10c7ca9c548945d8486f56468190bee77d2336b57d2652b",
+        "status": "??"
+      },
+      {
+        "path": "assets/ui/living_forge/icons/party-forge/downed.svg",
+        "sha256": "daf927351a383bb5b67efbca9ac7ecc5563848ae385770219393576db0628d77",
+        "status": "??"
+      },
+      {
+        "path": "assets/ui/living_forge/icons/party-forge/downed.svg.import",
+        "sha256": "649f8b0b46453efb118f520fdd8ab18c4b0b171cc3f2c905c453529826851813",
+        "status": "??"
+      },
+      {
+        "path": "assets/ui/living_forge/icons/party-forge/leader-crown.svg",
+        "sha256": "e5210e97b6644114be3d4baf5966910ede0812fc566534b15271889e7bb88652",
+        "status": "??"
+      },
+      {
+        "path": "assets/ui/living_forge/icons/party-forge/leader-crown.svg.import",
+        "sha256": "cb69d806f561286e1d98d52444bbd498e0c5e3f0a3955790302d65436739a444",
+        "status": "??"
+      },
+      {
+        "path": "docs/third_party/living-forge-ui-assets.md",
+        "sha256": "9e1cfc76aa6fbe896bd75545f4df85f0e3273ae7cba39b52cac8996f6f853ae6",
+        "status": " M"
+      },
+      {
+        "path": "scenes/dev/living_forge_combat_state_board.tscn",
+        "sha256": "356719f80d8062f74fd5f5b8b0396024a1bc728c1476448a23be208722f299ec",
+        "status": "??"
+      },
+      {
+        "path": "scenes/ui/living_forge/components/forge_alert_card.tscn",
+        "sha256": "f761a9d7ad765581c4d435cdb079192d27977fc69612b626e4daa574ad9a132e",
+        "status": "??"
+      },
+      {
+        "path": "scenes/ui/living_forge/components/forge_party_member_card.tscn",
+        "sha256": "6c013ae623b31594db6e0430bd738ee6c0183d7eb7739f90753d5234e3c8b183",
+        "status": "??"
+      },
+      {
+        "path": "scenes/ui/living_forge/components/forge_party_member_marker.tscn",
+        "sha256": "197ae3495aa3f1771e869450c8f4272445e0224c00c433a04b716ecb018106a7",
+        "status": "??"
+      },
+      {
+        "path": "scripts/dev/living_forge_combat_state_board.gd",
+        "sha256": "62dba25f3e4636af62c2778bfb1fe167537c8782b75b262540e9c3dfe758c659",
+        "status": "??"
+      },
+      {
+        "path": "scripts/dev/living_forge_combat_state_board.gd.uid",
+        "sha256": "ec5d0617a53c218f9d71e78115da6fd1cde9d9b1cde213621d32070a6a3eaa93",
+        "status": "??"
+      },
+      {
+        "path": "scripts/ui/living_forge/components/forge_alert_card.gd",
+        "sha256": "f25385691940901ef2d0822f04102f7d85b4341f175750c35a412c0d47c1149c",
+        "status": "??"
+      },
+      {
+        "path": "scripts/ui/living_forge/components/forge_alert_card.gd.uid",
+        "sha256": "575e1e463a3ef2c6427c02f3298857f22aa8bbeb12670e8f9d5a1f5a0a1bac8f",
+        "status": "??"
+      },
+      {
+        "path": "scripts/ui/living_forge/components/forge_party_member_card.gd",
+        "sha256": "5db8d5196df9cec5cc33e625ae0695a4e45729f75448935bd082f20d23b89c70",
+        "status": "??"
+      },
+      {
+        "path": "scripts/ui/living_forge/components/forge_party_member_card.gd.uid",
+        "sha256": "191575c1ae2db67fae7d9ebd07169834b653aefe9b8246998923e4162c88a28a",
+        "status": "??"
+      },
+      {
+        "path": "scripts/ui/living_forge/components/forge_party_member_marker.gd",
+        "sha256": "4af2a370478e88b1a42cb9c5b7af79483926d0c097323a1045e33342f5a892e6",
+        "status": "??"
+      },
+      {
+        "path": "scripts/ui/living_forge/components/forge_party_member_marker.gd.uid",
+        "sha256": "b4d48c614df767e2d2b3695d66bfcfe17af224cf71312bc9677e313cf01668af",
+        "status": "??"
+      },
+      {
+        "path": "tests/integration/living_forge_combat_state_board_runner.gd",
+        "sha256": "ca7c8ba861ad9d7351d8ef6e4a915c1520a5fd35f495a4a9bfc28bffe5aee3ef",
+        "status": "??"
+      },
+      {
+        "path": "tests/integration/living_forge_combat_state_board_runner.gd.uid",
+        "sha256": "b956fa54e361f019a0779633dffb058fd65e43761f3b99f4548dd5c1bd59166b",
+        "status": "??"
+      },
+      {
+        "path": "tests/unit/test_living_forge_combat_components.gd",
+        "sha256": "887320b31e679766453cd3b5cbbca0b64293f2061d21e6a5d53bc29c17dc15d5",
+        "status": "??"
+      },
+      {
+        "path": "tests/unit/test_living_forge_combat_components.gd.uid",
+        "sha256": "5099ea257bdc8d5e23c7dc76a68d4cede7aa0b411181b9a3513ddf476558b447",
+        "status": "??"
+      }
+    ],
+    "method": "Sort git status --porcelain tracked/untracked Task 3 inputs; exclude generated combat evidence and Task 3 report; hash length-prefixed status/path/file-SHA records.",
+    "path_count": 23,
+    "sha256": "5910d2949287b67580183776d945e7b6da82cd7e40eeaba0bb18c51b56c2bb42"
+  },
+  "window_mode": "windowed"
+}

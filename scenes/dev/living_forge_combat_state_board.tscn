@@ -1,0 +1,128 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/dev/living_forge_combat_state_board.gd" id="1_script"]
+
+[node name="LivingForgeCombatStateBoard" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+accessibility_name = "Living Forge combat component state board"
+accessibility_description = "Rich member cards, compact member markers, combat alerts, focus, hover, and high-contrast proof."
+script = ExtResource("1_script")
+
+[node name="Background" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0.0313726, 0.0509804, 0.0705882, 1)
+
+[node name="Margin" type="MarginContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 32.0
+offset_top = 24.0
+offset_right = -32.0
+offset_bottom = -24.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="Layout" type="VBoxContainer" parent="Margin"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 16
+
+[node name="Header" type="HBoxContainer" parent="Margin/Layout"]
+custom_minimum_size = Vector2(0, 56)
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 24
+
+[node name="Title" type="Label" parent="Margin/Layout/Header"]
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+theme_type_variation = &"LivingForgeDisplayLabel"
+text = "THE LIVING FORGE — COMBAT COMPONENT PROOF"
+
+[node name="Mode" type="Label" parent="Margin/Layout/Header"]
+layout_mode = 2
+mouse_filter = 2
+theme_type_variation = &"LivingForgeCaptionLabel"
+text = "PROOF: ALL"
+
+[node name="Variant" type="Label" parent="Margin/Layout/Header"]
+layout_mode = 2
+mouse_filter = 2
+theme_type_variation = &"LivingForgeBadgeLabel"
+text = "NORMAL CONTRAST"
+
+[node name="RichSection" type="VBoxContainer" parent="Margin/Layout"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 8
+
+[node name="Heading" type="Label" parent="Margin/Layout/RichSection"]
+layout_mode = 2
+mouse_filter = 2
+theme_type_variation = &"LivingForgeSectionLabel"
+text = "RICH PARTY MEMBER CARDS — READY / CRITICAL / DOWNED / DEAD"
+
+[node name="RichRow" type="HBoxContainer" parent="Margin/Layout/RichSection"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 16
+
+[node name="CompactAlertSection" type="VBoxContainer" parent="Margin/Layout"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 8
+
+[node name="CompactHeading" type="Label" parent="Margin/Layout/CompactAlertSection"]
+layout_mode = 2
+mouse_filter = 2
+theme_type_variation = &"LivingForgeSectionLabel"
+text = "COMPACT MARKERS — TRUE 48PX+ ACTION TARGETS"
+
+[node name="CompactRow" type="HBoxContainer" parent="Margin/Layout/CompactAlertSection"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 16
+
+[node name="AlertHeading" type="Label" parent="Margin/Layout/CompactAlertSection"]
+layout_mode = 2
+mouse_filter = 2
+theme_type_variation = &"LivingForgeSectionLabel"
+text = "CURRENT ALERT SEVERITIES — INSPECT / LEDGER ONLY"
+
+[node name="AlertRow" type="HBoxContainer" parent="Margin/Layout/CompactAlertSection"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 16
+
+[node name="Footer" type="HBoxContainer" parent="Margin/Layout"]
+custom_minimum_size = Vector2(0, 40)
+layout_mode = 2
+mouse_filter = 2
+
+[node name="Legend" type="Label" parent="Margin/Layout/Footer"]
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+theme_type_variation = &"LivingForgePromptLabel"
+text = "EMBER GOLD = LEADER  ·  COOL STEEL = FOCUS  ·  RED-ORANGE + ICON + TEXT + EDGE = DANGER"
+
+[node name="Authority" type="Label" parent="Margin/Layout/Footer"]
+layout_mode = 2
+mouse_filter = 2
+theme_type_variation = &"LivingForgeCaptionLabel"
+text = "PRESENTATION ONLY — NO TACTICS OR STATUS AUTHORITY"
