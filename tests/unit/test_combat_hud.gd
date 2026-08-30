@@ -16,6 +16,7 @@ func run() -> Array[String]:
 	_test_scene_contract(failures)
 	_test_party_scale_and_signal_updates(failures)
 	_test_alert_surface_and_complete_tray(failures)
+	_test_fail_closed_status_and_pluralization(failures)
 	_test_pause_safe_inspector_and_ledger_routes(failures)
 	return failures
 
@@ -37,6 +38,7 @@ func _test_scene_contract(failures: Array[String]) -> void:
 		^"Margin/CombatStatus/AlertRegion/ExpandedAlerts",
 		^"Margin/CombatStatus/AlertRegion/Overflow",
 		^"Margin/CombatStatus/BossRegion",
+		^"Margin/CombatStatus/HudUnavailable",
 		^"CombatAlertTray",
 		^"CombatMemberInspectPanel",
 	]:
@@ -105,6 +107,24 @@ func _test_party_scale_and_signal_updates(failures: Array[String]) -> void:
 		_cleanup_hud(late_hud)
 	_cleanup_fixture(late_fixture)
 
+	var rebound_fixture := _fixture(1)
+	var rebound_hud := _configured_hud(rebound_fixture)
+	var leader := rebound_hud.get_node("Margin/CombatStatus/LeaderCard") as Control
+	var leader_instance := leader.get_instance_id()
+	var old_health := rebound_fixture.health_by_member[1] as HealthComponent
+	var replacement := _bind_health_actor(rebound_fixture.context, 1, 240.0)
+	(rebound_fixture.actors as Array).append(replacement)
+	var new_health := replacement.get_node("HealthComponent") as HealthComponent
+	(rebound_fixture.health_by_member as Dictionary)[1] = new_health
+	old_health.apply_damage(80.0)
+	var bar := leader.get_node("Surface/Content/Health/Bar") as Range
+	TestAssertions.equal(leader.get_instance_id(), leader_instance, "actor rebind preserves the leader control instance", failures)
+	TestAssertions.near(bar.value, 240.0, 0.001, "old actor health is disconnected after actor rebind", failures)
+	new_health.apply_damage(40.0)
+	TestAssertions.near(bar.value, 200.0, 0.001, "replacement actor health refreshes the bound control", failures)
+	_cleanup_hud(rebound_hud)
+	_cleanup_fixture(rebound_fixture)
+
 
 func _test_alert_surface_and_complete_tray(failures: Array[String]) -> void:
 	var fixture := _fixture(7)
@@ -149,6 +169,48 @@ func _test_alert_surface_and_complete_tray(failures: Array[String]) -> void:
 	external_pause.release(Engine.get_main_loop() as SceneTree)
 	_cleanup_hud(hud)
 	_cleanup_fixture(fixture)
+
+
+func _test_fail_closed_status_and_pluralization(failures: Array[String]) -> void:
+	var plural_fixture := _fixture(4)
+	for member_id: int in range(1, 5):
+		(plural_fixture.health_by_member[member_id] as HealthComponent).apply_damage(80.0)
+	var plural_hud := _configured_hud(plural_fixture)
+	var overflow := plural_hud.get_node("Margin/CombatStatus/AlertRegion/Overflow") as Button
+	TestAssertions.equal(overflow.text, "+1 alert", "one overflow alert uses singular accessible copy", failures)
+	TestAssertions.equal(overflow.accessibility_name, "Open 1 additional combat alert", "one overflow alert accessibility is singular", failures)
+	_cleanup_hud(plural_hud)
+	_cleanup_fixture(plural_fixture)
+
+	var mismatch := _fixture(1)
+	var foreign := _fixture(1)
+	var mismatch_hud := (load("res://scenes/ui/hud.tscn") as PackedScene).instantiate() as HUD
+	(Engine.get_main_loop() as SceneTree).root.add_child(mismatch_hud)
+	mismatch_hud.configure(mismatch.run, mismatch.party, mismatch.experience, foreign.context, mismatch.settings)
+	_assert_unavailable(mismatch_hud, "party context", "authority mismatch remains visibly fail closed", failures)
+	_cleanup_hud(mismatch_hud)
+	_cleanup_fixture(mismatch)
+	_cleanup_fixture(foreign)
+
+	var invalid_identity := _fixture(1)
+	invalid_identity.party.members[0].member_id = 0
+	var invalid_hud := _configured_hud(invalid_identity)
+	_assert_unavailable(invalid_hud, "identity", "invalid member identity remains visibly fail closed", failures)
+	_cleanup_hud(invalid_hud)
+	_cleanup_fixture(invalid_identity)
+
+	var missing_health := _fixture(1, false)
+	var missing_hud := _configured_hud(missing_health)
+	_assert_unavailable(missing_hud, "health", "missing member health remains visibly fail closed", failures)
+	_cleanup_hud(missing_hud)
+	_cleanup_fixture(missing_health)
+
+
+func _assert_unavailable(hud: HUD, reason_fragment: String, message: String, failures: Array[String]) -> void:
+	var unavailable := hud.get_node_or_null("Margin/CombatStatus/HudUnavailable") as Label
+	TestAssertions.truthy(unavailable != null and unavailable.visible, message, failures)
+	if unavailable != null:
+		TestAssertions.truthy(unavailable.text.begins_with("HUD unavailable:") and reason_fragment in unavailable.text.to_lower(), "%s has a concise reason" % message, failures)
 
 
 func _test_pause_safe_inspector_and_ledger_routes(failures: Array[String]) -> void:

@@ -3,13 +3,14 @@ extends CanvasLayer
 
 signal inspect_requested(member_id: int, return_focus: Control)
 signal ledger_requested(member_id: int, return_focus: Control)
-signal closed(return_focus: Control)
+signal closed(return_focus: Control, focus_descriptor: Dictionary)
 signal alerts_resolved(message: String)
 
 const ALERT_CARD_SCENE := preload("res://scenes/ui/living_forge/components/forge_alert_card.tscn")
 
 var _pause_lease := RunPauseLease.new()
 var _return_focus: WeakRef
+var _return_descriptor: Dictionary = {}
 var _cards_by_id: Dictionary = {}
 var _alerts: Array[CombatAlertProjection] = []
 var _high_contrast := false
@@ -34,6 +35,11 @@ func apply_accessibility_variant(high_contrast: bool) -> void:
 		(card_value as ForgeAlertCard).apply_accessibility_variant(high_contrast)
 
 
+func apply_visual_settings(theme_value: Theme, high_contrast: bool) -> void:
+	(get_node("Overlay") as Control).theme = theme_value
+	apply_accessibility_variant(high_contrast)
+
+
 func open(all_alerts: Array[CombatAlertProjection], return_focus: Control) -> void:
 	var was_open := visible
 	var focused := _focus_descriptor()
@@ -49,13 +55,14 @@ func open(all_alerts: Array[CombatAlertProjection], return_focus: Control) -> vo
 		return
 	if not was_open:
 		_return_focus = weakref(return_focus) if return_focus != null else null
+		_return_descriptor = _descriptor_from_parent(return_focus)
 		_pause_lease.acquire(Engine.get_main_loop() as SceneTree)
 		visible = true
 	_present(next_alerts)
 	if was_open:
 		_restore_refresh_focus(focused, prior_index)
 	else:
-		_focus_card(mini(CombatHudProjection.MAX_VISIBLE_ALERTS, _alerts.size() - 1), &"root")
+		_focus_card(mini(CombatHudProjection.MAX_VISIBLE_ALERTS, _alerts.size() - 1), &"inspect")
 
 
 func close() -> void:
@@ -64,10 +71,12 @@ func close() -> void:
 	visible = false
 	_pause_lease.release(Engine.get_main_loop() as SceneTree)
 	var target := _return_focus.get_ref() as Control if _return_focus != null else null
+	var descriptor := _return_descriptor.duplicate(true)
 	_return_focus = null
+	_return_descriptor.clear()
 	if _focus_is_valid(target):
 		target.grab_focus()
-	closed.emit(target)
+	closed.emit(target, descriptor)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -93,6 +102,7 @@ func _present(next_alerts: Array[CombatAlertProjection]) -> void:
 		var card := _cards_by_id.get(alert.stable_id) as ForgeAlertCard
 		if card == null:
 			card = ALERT_CARD_SCENE.instantiate() as ForgeAlertCard
+			card.custom_minimum_size.y = 172.0
 			_cards_by_id[alert.stable_id] = card
 			list.add_child(card)
 			card.inspect_requested.connect(_on_card_inspect_requested.bind(card))
@@ -115,7 +125,7 @@ func _restore_refresh_focus(descriptor: Dictionary, prior_index: int) -> void:
 		_focus_card(_index_for_stable_id(stable_id), StringName(descriptor.get("action", &"root")))
 		return
 	if not _alerts.is_empty():
-		_focus_card(clampi(prior_index, 0, _alerts.size() - 1), &"root")
+		_focus_card(clampi(prior_index, 0, _alerts.size() - 1), StringName(descriptor.get("action", &"inspect")))
 		return
 	var close_button := get_node("Overlay/Frame/Layout/Close") as Button
 	if close_button.is_inside_tree():
@@ -150,7 +160,7 @@ func _focus_card(index: int, action: StringName) -> void:
 	var card := _cards_by_id.get(alert.stable_id) as ForgeAlertCard
 	if card == null:
 		return
-	var target: Control = card
+	var target: Control
 	if action == &"inspect":
 		var inspect := card.get_node("Surface/Content/Actions/Inspect") as Button
 		if inspect.visible and not inspect.disabled:
@@ -159,6 +169,18 @@ func _focus_card(index: int, action: StringName) -> void:
 		var ledger := card.get_node("Surface/Content/Actions/Ledger") as Button
 		if ledger.visible and not ledger.disabled:
 			target = ledger
+	if target == null:
+		var inspect := card.get_node("Surface/Content/Actions/Inspect") as Button
+		var ledger := card.get_node("Surface/Content/Actions/Ledger") as Button
+		if inspect.visible and not inspect.disabled:
+			target = inspect
+		elif ledger.visible and not ledger.disabled:
+			target = ledger
+	if target == null:
+		var close_button := get_node("Overlay/Frame/Layout/Close") as Button
+		if close_button.is_inside_tree():
+			close_button.grab_focus()
+		return
 	_scroll().ensure_control_visible(card)
 	if target.is_inside_tree():
 		target.grab_focus()
@@ -213,3 +235,10 @@ func _alert_list() -> VBoxContainer:
 
 func _scroll() -> ScrollContainer:
 	return get_node("Overlay/Frame/Layout/Scroll") as ScrollContainer
+
+
+func _descriptor_from_parent(control: Control) -> Dictionary:
+	var hud := get_parent()
+	if hud != null and hud.has_method("focus_descriptor_for"):
+		return hud.call("focus_descriptor_for", control) as Dictionary
+	return {}

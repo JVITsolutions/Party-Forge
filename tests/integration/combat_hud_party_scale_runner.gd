@@ -72,7 +72,9 @@ func _exercise_party_count(count: int) -> void:
 		_assert(reached.size() == count, "compact party %d reaches every member" % count)
 		_assert(reached.has(count), "compact party %d reaches the final member" % count)
 		for control: Control in _roster_controls(hud):
-			_assert(control.custom_minimum_size == Vector2(280.0, 84.0), "compact member %d preserves 280x84 geometry" % int(control.get_meta("member_id", 0)))
+			var marker_rect := control.get_global_rect()
+			_assert(marker_rect.size == Vector2(280.0, 84.0), "compact member %d has actual post-layout 280x84 geometry: %s" % [int(control.get_meta("member_id", 0)), marker_rect])
+			_assert(marker_rect.encloses((control.get_node("Surface/Content") as Control).get_global_rect()), "compact member %d contains its real content" % int(control.get_meta("member_id", 0)))
 	viewport.free()
 	_cleanup_fixture(fixture)
 
@@ -80,6 +82,8 @@ func _exercise_party_count(count: int) -> void:
 func _exercise_real_geometry(viewport_size: Vector2i, count: int, text_scale: int) -> void:
 	var fixture := _fixture(count)
 	fixture.settings.text_scale_percent = text_scale
+	fixture.settings.ui_scale_percent = 125 if viewport_size.x == 1280 else 100
+	fixture.settings.high_contrast = viewport_size.x == 1280
 	for member_id: int in range(2, mini(count + 1, 6)):
 		(fixture.health_by_member[member_id] as HealthComponent).apply_damage(80.0)
 	var viewport := SubViewport.new()
@@ -109,19 +113,69 @@ func _exercise_real_geometry(viewport_size: Vector2i, count: int, text_scale: in
 	_assert(not leader.get_global_rect().intersection(timer.get_global_rect()).has_area(), "leader and timer do not collide at %s party=%d" % [viewport_size, count])
 	_assert(not leader.get_global_rect().intersection(alerts.get_global_rect()).has_area(), "leader and alerts do not collide at %s party=%d" % [viewport_size, count])
 	_assert(not party_region.get_global_rect().intersection(alerts.get_global_rect()).has_area(), "party region and alerts do not collide at %s party=%d" % [viewport_size, count])
-	_assert(overflow.custom_minimum_size.y >= 48.0, "alert overflow retains a 48px target")
+	if count == 24:
+		var marker_rects: Array[Rect2] = []
+		for marker: Control in _roster_controls(hud):
+			var marker_rect := marker.get_global_rect()
+			_assert(marker_rect.size == Vector2(280.0, 84.0), "final-page compact member has actual 280x84 geometry at %s: %s" % [viewport_size, marker_rect])
+			_assert(marker_rect.encloses((marker.get_node("Surface/Content") as Control).get_global_rect()), "final-page compact member contains child content at %s" % viewport_size)
+			for prior: Rect2 in marker_rects:
+				_assert(not prior.intersection(marker_rect).has_area(), "final-page compact members do not overlap at %s" % viewport_size)
+			marker_rects.append(marker_rect)
+	if viewport_size == Vector2i(1280, 720) and count == 6:
+		var battlefield_gap := alerts.get_global_rect().position.x - party_region.get_global_rect().end.x
+		_assert(battlefield_gap >= 160.0, "1280x720 rich combat keeps a 160px horizontal battlefield opening; actual=%s" % battlefield_gap)
+	_assert(overflow.get_global_rect().size.x >= 48.0 and overflow.get_global_rect().size.y >= 48.0, "alert overflow has an actual post-layout 48x48 target")
+	var viewport_rect := Rect2(Vector2.ZERO, Vector2(viewport_size))
+	var previous_alert_rect := Rect2()
 	for alert: Node in (hud.get_node("Margin/CombatStatus/AlertRegion/ExpandedAlerts") as Container).get_children():
+		var alert_control := alert as Control
+		var alert_rect := alert_control.get_global_rect()
+		_assert(viewport_rect.encloses(alert_rect), "expanded alert is viewport bounded: %s" % alert_rect)
+		var content_rect := (alert_control.get_node("Surface/Content") as Control).get_global_rect()
+		_assert(alert_rect.encloses(content_rect), "expanded alert contains its real content card=%s content=%s" % [alert_rect, content_rect])
+		if previous_alert_rect.has_area():
+			_assert(not previous_alert_rect.intersection(alert_rect).has_area(), "expanded alert cards do not overlap")
+		previous_alert_rect = alert_rect
 		for action_name: String in ["Inspect", "Ledger"]:
 			var action := alert.get_node("Surface/Content/Actions/%s" % action_name) as Button
 			if action.visible:
-				_assert(action.custom_minimum_size.x >= 48.0 and action.custom_minimum_size.y >= 48.0, "%s alert action retains 48x48 target" % action_name)
+				var action_rect := action.get_global_rect()
+				_assert(action_rect.size.x >= 48.0 and action_rect.size.y >= 48.0, "%s alert action has an actual post-layout 48x48 target" % action_name)
+				_assert(alert_rect.encloses(action_rect), "%s alert action remains inside its card card=%s action=%s" % [action_name, alert_rect, action_rect])
 	if overflow.visible:
 		overflow.pressed.emit()
 		await process_frame
 		var tray := hud.get_node("CombatAlertTray") as CombatAlertTray
 		_assert(tray.visible, "complete alert tray opens for geometry verification")
 		_assert_contained(tray.get_node("Overlay/Frame") as Control, Rect2(Vector2.ZERO, Vector2(viewport_size)), "complete alert tray frame")
+		_assert((tray.get_node("Overlay") as Control).theme == LivingForgeThemeCatalog.resolve(fixture.settings.high_contrast, fixture.settings.ui_scale_percent, fixture.settings.text_scale_percent), "complete alert tray inherits the resolved high-contrast scaled theme")
+		_assert((tray.get_node("Overlay/Frame") as Control).get_global_rect().encloses((tray.get_node("Overlay/Frame/Layout") as Control).get_global_rect()), "complete alert tray frame contains enlarged child content")
+		for tray_card_node: Node in (tray.get_node("Overlay/Frame/Layout/Scroll/Alerts") as Container).get_children():
+			var tray_card := tray_card_node as Control
+			var tray_card_rect := tray_card.get_global_rect()
+			for action_name: String in ["Inspect", "Ledger"]:
+				var tray_action := tray_card.get_node("Surface/Content/Actions/%s" % action_name) as Button
+				if tray_action.visible:
+					_assert(tray_action.get_global_rect().size.x >= 48.0 and tray_action.get_global_rect().size.y >= 48.0, "visible tray %s action has actual 48x48 target" % action_name)
+					_assert(tray_card_rect.encloses(tray_action.get_global_rect()), "visible tray %s action remains within its card" % action_name)
+			var stable_id := StringName(tray_card.get_meta("stable_alert_id", &""))
+			var semantic_alert: CombatAlertProjection
+			for candidate: CombatAlertProjection in (hud.get("current_projection") as CombatHudProjection).all_alerts:
+				if candidate.stable_id == stable_id:
+					semantic_alert = candidate
+					break
+			_assert(semantic_alert != null and semantic_alert.summary in tray_card.accessibility_name, "scaled tray preserves exact alert accessibility semantics")
 		tray.close()
+	var leader_member_id := int(leader.get_meta("member_id", 0))
+	_assert(bool(hud.call("open_inspector_for_member", leader_member_id, leader)), "inspector opens for modal geometry verification")
+	await process_frame
+	var inspector := hud.get_node("CombatMemberInspectPanel") as CombatMemberInspectPanel
+	_assert((inspector.get_node("Overlay") as Control).theme == LivingForgeThemeCatalog.resolve(fixture.settings.high_contrast, fixture.settings.ui_scale_percent, fixture.settings.text_scale_percent), "member inspector inherits the resolved high-contrast scaled theme")
+	_assert_contained(inspector.get_node("Overlay/Frame") as Control, viewport_rect, "member inspector frame")
+	_assert((inspector.get_node("Overlay/Frame") as Control).get_global_rect().encloses((inspector.get_node("Overlay/Frame/Layout") as Control).get_global_rect()), "member inspector frame contains enlarged child content")
+	_assert("Read only" in (inspector.get_node("Overlay") as Control).accessibility_description and "health" in (inspector.get_node("Overlay") as Control).accessibility_description, "scaled inspector preserves read-only numeric-health semantics")
+	inspector.close()
 	var enemy := (load("res://scenes/enemies/swarmer.tscn") as PackedScene).instantiate() as EnemyActor
 	enemy.configure(load("res://data/enemies/swarmer.tres") as EnemyDefinition)
 	hud.set_boss(enemy)
@@ -138,6 +192,8 @@ func _exercise_real_geometry(viewport_size: Vector2i, count: int, text_scale: in
 	_assert_contained(loot, Rect2(Vector2.ZERO, Vector2(viewport_size)), "loot status")
 	_assert(not banner.get_global_rect().intersection(leader.get_global_rect()).has_area(), "boss banner does not collide with leader banner=%s leader=%s viewport=%s party=%d" % [banner.get_global_rect(), leader.get_global_rect(), viewport_size, count])
 	_assert(not loot.get_global_rect().intersection(party_region.get_global_rect()).has_area(), "loot status does not collide with party region")
+	_assert(not banner.get_global_rect().intersection(alerts.get_global_rect()).has_area(), "boss banner does not collide with alert region")
+	_assert(not loot.get_global_rect().intersection(alerts.get_global_rect()).has_area(), "loot status does not collide with alert region")
 	hud.set_boss(null)
 	_assert(not boss_region.visible, "absent boss hides the whole band")
 	enemy.free()

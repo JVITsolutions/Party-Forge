@@ -195,10 +195,10 @@ anchors_preset = 1
 anchor_left = 1.0
 anchor_right = 1.0
 anchor_bottom = 1.0
-offset_left = -576.0
-offset_top = 152.0
+offset_left = -488.0
+offset_top = 120.0
 offset_right = -16.0
-offset_bottom = -64.0
+offset_bottom = -16.0
 grow_horizontal = 0
 mouse_filter = 2
 
@@ -227,6 +227,19 @@ focus_mode = 2
 text = "+0 alerts"
 accessibility_name = "Open all combat alerts"
 
+[node name="HudUnavailable" type="Label" parent="Margin/CombatStatus"]
+visible = false
+layout_mode = 0
+offset_left = 456.0
+offset_top = 120.0
+offset_right = 824.0
+offset_bottom = 168.0
+theme_type_variation = &"LivingForgeStatusChip"
+text = "HUD unavailable: combat data is unavailable"
+horizontal_alignment = 1
+vertical_alignment = 1
+accessibility_name = "HUD unavailable"
+
 [node name="BossBanner" type="Label" parent="."]
 visible = false
 anchors_preset = 10
@@ -234,7 +247,7 @@ anchor_left = 0.5
 anchor_right = 0.5
 offset_left = -180.0
 offset_top = 120.0
-offset_right = 180.0
+offset_right = 140.0
 offset_bottom = 176.0
 grow_horizontal = 2
 theme_override_font_sizes/font_size = 30
@@ -250,9 +263,9 @@ anchor_left = 0.5
 anchor_top = 1.0
 anchor_right = 0.5
 anchor_bottom = 1.0
-offset_left = -340.0
+offset_left = -140.0
 offset_top = -64.0
-offset_right = 340.0
+offset_right = 140.0
 offset_bottom = -16.0
 grow_horizontal = 2
 grow_vertical = 0

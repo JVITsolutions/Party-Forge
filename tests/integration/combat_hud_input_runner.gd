@@ -11,6 +11,8 @@ var _failures: Array[String] = []
 var _fixture: Dictionary
 var _viewport: SubViewport
 var _hud: HUD
+var _game_run: GameRun
+var _ledger: CharacterLedger
 var _inspect_intents: Array = []
 var _ledger_intents: Array = []
 
@@ -40,6 +42,15 @@ func _run() -> void:
 		_finish()
 		return
 	_hud.call("configure", _fixture.run, _fixture.party, _fixture.experience, _fixture.context, PartyForgeSettings.new())
+	_game_run = GameRun.new()
+	_game_run.configure_seed(9911)
+	root.add_child(_game_run)
+	_game_run.start_run()
+	_ledger = (load("res://scenes/ui/ledger/character_ledger.tscn") as PackedScene).instantiate() as CharacterLedger
+	_ledger.custom_viewport = _viewport
+	_viewport.add_child(_ledger)
+	_ledger.configure(_game_run, _fixture.party, GameCatalog.load_defaults(), _ledger_health, [], null, Callable(_fixture.context, "progression_for"), _fixture.context)
+	_ledger.closed.connect(_on_ledger_closed)
 	_hud.connect("inspect_requested", _on_inspect_requested)
 	_hud.connect("ledger_requested", _on_ledger_requested)
 	await process_frame
@@ -62,6 +73,14 @@ func _exercise_no_focus_theft_and_page_navigation() -> void:
 	(_fixture.health_by_member[7] as HealthComponent).apply_damage(80.0)
 	await process_frame
 	_assert(first.has_focus(), "a newly appearing alert does not steal combat member focus")
+	first.pressed.emit()
+	await process_frame
+	var member_inspector := _hud.get_node("CombatMemberInspectPanel") as CombatMemberInspectPanel
+	_assert(member_inspector.visible, "member activation opens the real read-only inspector")
+	(_fixture.health_by_member[8] as HealthComponent).apply_damage(80.0)
+	await process_frame
+	await _press_controller_cancel()
+	_assert(not member_inspector.visible and first.has_focus(), "member inspector Cancel restores the exact surviving member before alert fallbacks")
 	var dpad_right := InputEventJoypadButton.new()
 	dpad_right.device = 0
 	dpad_right.button_index = JOY_BUTTON_DPAD_RIGHT
@@ -90,9 +109,10 @@ func _exercise_keyboard_mouse_controller_routes() -> void:
 		return
 	var keyboard_card := expanded.get_child(0) as Control
 	var keyboard_inspect := keyboard_card.get_node("Surface/Content/Actions/Inspect") as Button
+	var before_keyboard := _inspect_intents.size()
 	keyboard_inspect.grab_focus()
 	await _press_keyboard(KEY_ENTER)
-	_assert(_inspect_intents.size() == 1 and int(_inspect_intents[0][0]) == int(keyboard_card.get_meta("member_id", 0)), "keyboard Inspect carries exact member identity")
+	_assert(_inspect_intents.size() == before_keyboard + 1 and int(_inspect_intents[-1][0]) == int(keyboard_card.get_meta("member_id", 0)), "keyboard Inspect carries exact member identity")
 	var inspector := _hud.get_node("CombatMemberInspectPanel") as CanvasLayer
 	_assert(inspector.visible and paused, "keyboard Inspect opens the pause-safe read-only child")
 	await _press_keyboard(KEY_ESCAPE)
@@ -111,6 +131,23 @@ func _exercise_keyboard_mouse_controller_routes() -> void:
 	await _press_controller_accept()
 	_assert(_ledger_intents.size() == 1 and int(_ledger_intents[0][0]) == int(controller_card.get_meta("member_id", 0)), "controller Ledger carries exact member identity")
 	_assert(_ledger_intents[0][1] == controller_ledger if not _ledger_intents.is_empty() else false, "controller Ledger carries the initiating action control")
+	_assert(_ledger.visible and paused and _ledger.context.selected_member_id == int(controller_card.get_meta("member_id", 0)) and _ledger.context.active_page_id == &"stats", "controller opens the paused actual Ledger at exact member and stats page")
+	await _press_controller_cancel()
+	_assert(not _ledger.visible and controller_ledger.has_focus(), "controller Cancel closes actual Ledger and restores exact action focus")
+	await _press_controller_accept()
+	var rebound_member_id := int(controller_card.get_meta("member_id", 0))
+	var replacement_actor := Node3D.new()
+	var replacement_health := HealthComponent.new()
+	replacement_health.name = "HealthComponent"
+	replacement_actor.add_child(replacement_health)
+	replacement_health.configure(100.0, false, 8.0, 0.5, false)
+	assert(_fixture.context.bind_actor(rebound_member_id, replacement_actor))
+	(_fixture.actors as Array).append(replacement_actor)
+	(_fixture.health_by_member as Dictionary)[rebound_member_id] = replacement_health
+	await process_frame
+	await _press_controller_cancel()
+	var ledger_fallback := _viewport.gui_get_focus_owner() as Control
+	_assert(not _ledger.visible and ledger_fallback != null and _hud.is_ancestor_of(ledger_fallback), "Ledger close after stale initiating alert uses stable HUD fallback owner=%s" % (ledger_fallback.get_path() if ledger_fallback != null else NodePath("<null>")))
 
 	var mouse_card := expanded.get_child(2) as Control
 	var mouse_inspect := mouse_card.get_node("Surface/Content/Actions/Inspect") as Button
@@ -134,8 +171,20 @@ func _exercise_complete_tray_focus_and_cancel() -> void:
 	_assert(cards.get_child_count() == projection.all_alerts.size(), "tray receives current_projection.all_alerts unchanged")
 	if cards.get_child_count() > 3:
 		var expected := cards.get_child(3) as Control
+		var expected_action := expected.get_node("Surface/Content/Actions/Inspect") as Button
+		if not expected_action.visible or expected_action.disabled:
+			expected_action = expected.get_node("Surface/Content/Actions/Ledger") as Button
 		var focused := _viewport.gui_get_focus_owner() as Control
-		_assert(focused == expected or expected.is_ancestor_of(focused), "tray initially focuses the first non-expanded surviving alert")
+		_assert(focused == expected_action, "tray initially focuses the first non-expanded alert's first real action")
+		await _press_controller_accept()
+		var inspector := _hud.get_node("CombatMemberInspectPanel") as CombatMemberInspectPanel
+		_assert(inspector.visible, "controller activation from initial tray focus opens the real Inspect child")
+		var removed_member_id := int(expected.get_meta("member_id", 0))
+		(_fixture.health_by_member[removed_member_id] as HealthComponent).heal(1000.0)
+		await process_frame
+		await _press_controller_cancel()
+		var restored := _viewport.gui_get_focus_owner() as Control
+		_assert(restored != null and tray.is_ancestor_of(restored) and restored is Button, "closing child after initiating alert removal restores a surviving real tray action")
 	await _press_keyboard(KEY_ESCAPE)
 	_assert(not tray.visible and overflow.has_focus(), "keyboard Cancel closes tray and restores exact overflow focus")
 
@@ -172,17 +221,19 @@ func _exercise_nested_pause_and_resolved_fallback() -> void:
 	var next_focus := _viewport.gui_get_focus_owner() as Control
 	_assert(next_focus != null and next_focus != focused_card and (tray.is_ancestor_of(next_focus) or next_focus == tray.get_node("Overlay/Frame/Layout/Close")), "resolved focused alert falls forward then backward then Close")
 
-	for member_id: int in range(1, 8):
-		var health := _fixture.health_by_member[member_id] as HealthComponent
-		if not health.is_dead and not health.is_downed:
-			health.heal(1000.0)
-	await process_frame
-	# Downed/dead fixtures cannot be healed through production combat behavior; refresh the
-	# tray with an empty authoritative projection to exercise the terminal fallback contract.
-	var no_alerts: Array[CombatAlertProjection] = []
-	tray.open(no_alerts, overflow)
+	for member_id: int in range(1, 13):
+		var healthy_actor := Node3D.new()
+		var healthy := HealthComponent.new()
+		healthy.name = "HealthComponent"
+		healthy_actor.add_child(healthy)
+		healthy.configure(100.0, member_id == 1, 8.0, 0.5, member_id == 1)
+		assert(_fixture.context.bind_actor(member_id, healthy_actor))
+		(_fixture.actors as Array).append(healthy_actor)
+		(_fixture.health_by_member as Dictionary)[member_id] = healthy
 	await process_frame
 	_assert(not tray.visible, "all-alerts-resolved refresh closes the tray")
+	var safe_focus := _viewport.gui_get_focus_owner() as Control
+	_assert(safe_focus != null and (safe_focus.is_in_group(&"combat_hud_member") or safe_focus == _hud.get_node("Margin/CombatStatus/LeaderCard")), "all-alerts-resolved close uses a named current-member fallback owner=%s" % (safe_focus.get_path() if safe_focus != null else NodePath("<null>")))
 	var resolved := _hud.get_node("AlertResolvedMessage") as Label
 	_assert(resolved.visible and resolved.text == "All alerts resolved.", "all-alerts-resolved closure announces concise status")
 
@@ -194,6 +245,18 @@ func _on_inspect_requested(member_id: int, return_focus: Control) -> void:
 
 func _on_ledger_requested(member_id: int, return_focus: Control) -> void:
 	_ledger_intents.append([member_id, return_focus])
+	_ledger.open_for_member(member_id, &"stats", return_focus, _hud.focus_descriptor_for(return_focus))
+
+
+func _on_ledger_closed(_return_focus: Control, descriptor: Dictionary) -> void:
+	_hud.restore_focus_descriptor(descriptor)
+
+
+func _ledger_health(member_id: int) -> Dictionary:
+	var health := _fixture.health_by_member.get(member_id) as HealthComponent
+	if health == null:
+		return {}
+	return {"current": health.current_health, "maximum": health.max_health, "is_downed": health.is_downed, "is_dead": health.is_dead, "component": health}
 
 
 func _make_fixture() -> Dictionary:
@@ -292,6 +355,8 @@ func _cleanup() -> void:
 	paused = false
 	if _viewport != null and is_instance_valid(_viewport):
 		_viewport.free()
+	if _game_run != null and is_instance_valid(_game_run):
+		_game_run.free()
 	if not _fixture.is_empty():
 		var experience := _fixture.experience as ExperienceSystem
 		if experience != null:

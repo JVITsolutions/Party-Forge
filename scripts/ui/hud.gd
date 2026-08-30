@@ -33,6 +33,7 @@ var _boss_health_callback: Callable
 var _boss_state_callback: Callable
 var _last_viewport_size := Vector2i.ZERO
 var _high_contrast := false
+var _unavailable_reason := ""
 
 
 func _ready() -> void:
@@ -51,6 +52,7 @@ func _ensure_control_connections() -> void:
 	if not tray.inspect_requested.is_connected(_on_inspect_route): tray.inspect_requested.connect(_on_inspect_route)
 	if not tray.ledger_requested.is_connected(_on_ledger_route): tray.ledger_requested.connect(_on_ledger_route)
 	if not tray.alerts_resolved.is_connected(_on_alerts_resolved): tray.alerts_resolved.connect(_on_alerts_resolved)
+	if not tray.closed.is_connected(_on_modal_closed): tray.closed.connect(_on_modal_closed)
 	var inspector := get_node("CombatMemberInspectPanel") as CombatMemberInspectPanel
 	if not inspector.closed.is_connected(_on_modal_closed): inspector.closed.connect(_on_modal_closed)
 
@@ -65,8 +67,10 @@ func configure(run: Node, party: PartyManager, experience: ExperienceSystem, con
 	settings = saved_settings if saved_settings != null else PartyForgeSettings.new()
 	_high_contrast = settings.high_contrast
 	var shell := get_node("Margin/CombatStatus") as Control
-	shell.theme = LivingForgeThemeCatalog.resolve(_high_contrast, settings.ui_scale_percent, settings.text_scale_percent)
-	(get_node("CombatAlertTray") as CombatAlertTray).apply_accessibility_variant(_high_contrast)
+	var resolved_theme := LivingForgeThemeCatalog.resolve(_high_contrast, settings.ui_scale_percent, settings.text_scale_percent)
+	shell.theme = resolved_theme
+	(get_node("CombatAlertTray") as CombatAlertTray).apply_visual_settings(resolved_theme, _high_contrast)
+	(get_node("CombatMemberInspectPanel") as CombatMemberInspectPanel).apply_visual_settings(resolved_theme)
 	if party_manager != null:
 		party_manager.member_added.connect(_on_party_structure_changed)
 		party_manager.class_rank_changed.connect(_on_party_value_changed)
@@ -117,7 +121,79 @@ func show_loot_status(message: String, duration := 2.5) -> void:
 
 func open_inspector_for_member(member_id: int, return_focus: Control) -> bool:
 	var member := _member_projection(member_id)
-	return (get_node("CombatMemberInspectPanel") as CombatMemberInspectPanel).open(member, return_focus)
+	return (get_node("CombatMemberInspectPanel") as CombatMemberInspectPanel).open(member, return_focus, focus_descriptor_for(return_focus))
+
+
+func focus_descriptor_for(control: Control) -> Dictionary:
+	if control == null or not is_instance_valid(control):
+		return {}
+	if control == get_node("Margin/CombatStatus/AlertRegion/Overflow"):
+		return {"kind": &"overflow", "named_control": &"alert_overflow"}
+	var cursor: Node = control
+	while cursor != null and cursor != self:
+		if cursor.has_meta(&"stable_alert_id"):
+			var action := &"inspect" if control.name == &"Inspect" else (&"ledger" if control.name == &"Ledger" else &"")
+			return {
+				"kind": &"alert_action",
+				"stable_alert_id": StringName(cursor.get_meta(&"stable_alert_id", &"")),
+				"member_id": int(cursor.get_meta(&"member_id", 0)),
+				"action": action,
+				"order_index": _alert_order_index(StringName(cursor.get_meta(&"stable_alert_id", &""))),
+				"party_index": _party_index_for_member(int(cursor.get_meta(&"member_id", 0))),
+			}
+		if cursor.has_meta(&"member_id") and int(cursor.get_meta(&"member_id", 0)) > 0:
+			var member_id := int(cursor.get_meta(&"member_id", 0))
+			var surface := &"leader_anchor" if cursor == get_node("Margin/CombatStatus/LeaderCard") else &"roster_member"
+			return {"kind": &"member", "member_id": member_id, "party_index": _party_index_for_member(member_id), "surface": surface}
+		cursor = cursor.get_parent()
+	for named: Dictionary in [
+		{"path": ^"Margin/CombatStatus/PartyRegion/CompactRoster/PagePrevious", "name": &"page_previous"},
+		{"path": ^"Margin/CombatStatus/PartyRegion/CompactRoster/PageNext", "name": &"page_next"},
+	]:
+		if control == get_node(named.path):
+			return {"kind": &"named", "named_control": named.name}
+	return {}
+
+
+func restore_focus_descriptor(descriptor: Dictionary) -> bool:
+	if descriptor.is_empty():
+		return _focus_named_safe_control()
+	var kind := StringName(descriptor.get("kind", &""))
+	if kind == &"alert_action":
+		var exact := _alert_action_control(StringName(descriptor.get("stable_alert_id", &"")), StringName(descriptor.get("action", &"inspect")))
+		if _grab_valid_focus(exact):
+			return true
+	elif kind == &"overflow":
+		if _grab_valid_focus(get_node("Margin/CombatStatus/AlertRegion/Overflow") as Control):
+			return true
+	elif kind == &"member":
+		if _focus_member(int(descriptor.get("member_id", 0)), StringName(descriptor.get("surface", &""))):
+			return true
+	elif kind == &"named":
+		if _grab_valid_focus(_named_focus_control(StringName(descriptor.get("named_control", &"")))):
+			return true
+	if kind == &"alert_action":
+		if current_projection != null and not current_projection.all_alerts.is_empty():
+			var index := clampi(int(descriptor.get("order_index", 0)), 0, current_projection.all_alerts.size() - 1)
+			var survivor := current_projection.all_alerts[index]
+			if _grab_valid_focus(_alert_action_control(survivor.stable_id, StringName(descriptor.get("action", &"inspect")))):
+				return true
+	var overflow := get_node("Margin/CombatStatus/AlertRegion/Overflow") as Control
+	if _grab_valid_focus(overflow):
+		return true
+	if current_projection != null:
+		for alert: CombatAlertProjection in current_projection.visible_alerts:
+			if _grab_valid_focus(_alert_action_control(alert.stable_id, &"inspect")):
+				return true
+	var member_id := int(descriptor.get("member_id", 0))
+	if member_id > 0 and _focus_member(member_id):
+		return true
+	var party_index := int(descriptor.get("party_index", 0))
+	if current_projection != null and not current_projection.members.is_empty():
+		var nearest := current_projection.members[clampi(party_index, 0, current_projection.members.size() - 1)]
+		if _focus_member(nearest.member_id):
+			return true
+	return _focus_named_safe_control()
 
 
 func _process(delta: float) -> void:
@@ -140,17 +216,21 @@ func _process(delta: float) -> void:
 
 
 func _refresh_projection(force_structure: bool) -> void:
-	if party_manager == null or run_context == null or experience_system == null or game_run == null:
+	var authority_error := _required_authority_error()
+	if not authority_error.is_empty():
 		current_projection = null
 		_clear_presentation()
+		_show_unavailable(authority_error)
 		return
 	var elapsed := float(game_run.call("elapsed_time")) if game_run.has_method("elapsed_time") else 0.0
 	var projection := _view_model.build(party_manager, run_context, _health_snapshot, experience_system, elapsed, boss)
 	if projection == null:
 		current_projection = null
 		_clear_presentation()
+		_show_unavailable("combat projection is invalid")
 		return
 	current_projection = projection
+	_clear_unavailable()
 	_last_viewport_size = _hud_viewport().get_visible_rect().size.round() as Vector2i
 	_metrics = CombatHudResponsiveLayout.resolve(_last_viewport_size, settings.ui_scale_percent, settings.text_scale_percent, projection.members.size())
 	var next_revision := _view_model.ordered_party_revision(party_manager)
@@ -279,7 +359,7 @@ func _present_alerts() -> void:
 		var card := _alert_controls_by_id.get(alert.stable_id) as ForgeAlertCard
 		if card == null:
 			card = ALERT_CARD_SCENE.instantiate() as ForgeAlertCard
-			card.custom_minimum_size = Vector2(544.0, 116.0)
+			card.custom_minimum_size = Vector2(472.0, 172.0)
 			_alert_controls_by_id[alert.stable_id] = card
 			stack.add_child(card)
 			card.inspect_requested.connect(_on_alert_inspect_requested.bind(card))
@@ -291,8 +371,9 @@ func _present_alerts() -> void:
 		stack.move_child(card, index)
 	var overflow := get_node("Margin/CombatStatus/AlertRegion/Overflow") as Button
 	overflow.visible = current_projection.overflow_alert_count > 0
-	overflow.text = "+%d alerts" % current_projection.overflow_alert_count
-	overflow.accessibility_name = "Open %d additional combat alerts" % current_projection.overflow_alert_count
+	var overflow_count := current_projection.overflow_alert_count
+	overflow.text = "+%d %s" % [overflow_count, "alert" if overflow_count == 1 else "alerts"]
+	overflow.accessibility_name = "Open %d additional combat %s" % [overflow_count, "alert" if overflow_count == 1 else "alerts"]
 	_configure_alert_focus_neighbors()
 
 
@@ -385,8 +466,8 @@ func _on_alerts_resolved(message: String) -> void:
 	resolved_status_remaining = 2.5
 
 
-func _on_modal_closed(_return_focus: Control) -> void:
-	pass
+func _on_modal_closed(_return_focus: Control, focus_descriptor: Dictionary) -> void:
+	restore_focus_descriptor(focus_descriptor)
 
 
 func _on_party_structure_changed(_member: PartyMemberState) -> void:
@@ -566,6 +647,139 @@ func _configure_alert_focus_neighbors() -> void:
 	if overflow.visible and not controls.is_empty():
 		overflow.focus_neighbor_top = overflow.get_path_to(controls[-1])
 		overflow.focus_neighbor_bottom = overflow.get_path_to(controls[0])
+
+
+func _required_authority_error() -> String:
+	if party_manager == null or run_context == null or experience_system == null or game_run == null:
+		return "required combat data is unavailable"
+	if run_context.party != party_manager:
+		return "party context does not match"
+	if experience_system.run_context != run_context:
+		return "experience authority does not match"
+	if not game_run.has_method("elapsed_time"):
+		return "run timer authority is unavailable"
+	var seen: Dictionary = {}
+	var leader_count := 0
+	for member: PartyMemberState in party_manager.members:
+		if member == null or member.member_id <= 0 or member.class_definition == null or seen.has(member.member_id):
+			return "party identity is invalid"
+		seen[member.member_id] = true
+		leader_count += 1 if member.is_leader else 0
+		if _health_snapshot(member.member_id).is_empty():
+			return "member health is unavailable"
+	if party_manager.members.is_empty() or leader_count != 1:
+		return "party identity is invalid"
+	return ""
+
+
+func _show_unavailable(reason: String) -> void:
+	var concise := reason.strip_edges()
+	if concise.is_empty():
+		concise = "combat data is unavailable"
+	var label := get_node("Margin/CombatStatus/HudUnavailable") as Label
+	label.text = "HUD unavailable: %s" % concise
+	label.accessibility_name = label.text
+	label.visible = true
+	if _unavailable_reason != concise:
+		push_error("COMBAT_HUD_UNAVAILABLE reason=%s" % concise)
+	_unavailable_reason = concise
+
+
+func _clear_unavailable() -> void:
+	_unavailable_reason = ""
+	(get_node("Margin/CombatStatus/HudUnavailable") as Control).visible = false
+
+
+func _alert_order_index(stable_id: StringName) -> int:
+	if current_projection == null:
+		return 0
+	for index: int in current_projection.all_alerts.size():
+		if current_projection.all_alerts[index].stable_id == stable_id:
+			return index
+	return 0
+
+
+func _party_index_for_member(member_id: int) -> int:
+	if current_projection == null:
+		return 0
+	for index: int in current_projection.members.size():
+		if current_projection.members[index].member_id == member_id:
+			return index
+	return 0
+
+
+func _alert_action_control(stable_id: StringName, preferred_action: StringName) -> Control:
+	var card: Control
+	var tray := get_node("CombatAlertTray") as CombatAlertTray
+	if tray.visible:
+		for child: Node in (tray.get_node("Overlay/Frame/Layout/Scroll/Alerts") as Container).get_children():
+			if StringName(child.get_meta(&"stable_alert_id", &"")) == stable_id:
+				card = child as Control
+				break
+	if card == null:
+		card = _alert_controls_by_id.get(stable_id) as Control
+	if card == null or not card.is_visible_in_tree():
+		return null
+	for action: StringName in [preferred_action, &"inspect", &"ledger"]:
+		if action.is_empty():
+			continue
+		var title := "Inspect" if action == &"inspect" else "Ledger"
+		var button := card.get_node_or_null("Surface/Content/Actions/%s" % title) as Button
+		if button != null and button.visible and not button.disabled:
+			return button
+	return null
+
+
+func _focus_member(member_id: int, preferred_surface: StringName = &"") -> bool:
+	if current_projection == null or _member_projection(member_id) == null:
+		return false
+	var leader := get_node("Margin/CombatStatus/LeaderCard") as Control
+	if preferred_surface == &"leader_anchor" and int(leader.get_meta(&"member_id", 0)) == member_id:
+		return _grab_valid_focus(leader)
+	var control := _member_controls_by_id.get(member_id) as Control
+	if _grab_valid_focus(control):
+		return true
+	if _metrics != null and _metrics.mode == CombatHudResponsiveLayout.Mode.COMPACT:
+		var index := _party_index_for_member(member_id)
+		_set_page(floori(float(index) / float(maxi(_metrics.visible_member_count, 1))))
+		return _grab_valid_focus(_member_controls_by_id.get(member_id) as Control)
+	if int(leader.get_meta(&"member_id", 0)) == member_id:
+		return _grab_valid_focus(leader)
+	return false
+
+
+func _focus_named_safe_control() -> bool:
+	var leader := get_node("Margin/CombatStatus/LeaderCard") as Control
+	if _grab_valid_focus(leader):
+		return true
+	for path: NodePath in [
+		^"Margin/CombatStatus/PartyRegion/CompactRoster/PagePrevious",
+		^"Margin/CombatStatus/PartyRegion/CompactRoster/PageNext",
+	]:
+		if _grab_valid_focus(get_node(path) as Control):
+			return true
+	return false
+
+
+func _named_focus_control(control_name: StringName) -> Control:
+	match control_name:
+		&"alert_overflow": return get_node("Margin/CombatStatus/AlertRegion/Overflow") as Control
+		&"page_previous": return get_node("Margin/CombatStatus/PartyRegion/CompactRoster/PagePrevious") as Control
+		&"page_next": return get_node("Margin/CombatStatus/PartyRegion/CompactRoster/PageNext") as Control
+	return null
+
+
+func _grab_valid_focus(control: Control) -> bool:
+	if (
+		control == null
+		or not is_instance_valid(control)
+		or not control.is_inside_tree()
+		or not control.is_visible_in_tree()
+		or control.focus_mode == Control.FOCUS_NONE
+	):
+		return false
+	control.grab_focus()
+	return true
 
 
 func _format_time(seconds: float) -> String:

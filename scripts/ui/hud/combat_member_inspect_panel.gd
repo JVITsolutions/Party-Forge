@@ -1,10 +1,11 @@
 class_name CombatMemberInspectPanel
 extends CanvasLayer
 
-signal closed(return_focus: Control)
+signal closed(return_focus: Control, focus_descriptor: Dictionary)
 
 var _pause_lease := RunPauseLease.new()
 var _return_focus: WeakRef
+var _return_descriptor: Dictionary = {}
 
 
 func _ready() -> void:
@@ -20,10 +21,15 @@ func _notification(what: int) -> void:
 		_pause_lease.release(Engine.get_main_loop() as SceneTree)
 
 
-func open(member: PartyMemberHudProjection, return_focus: Control) -> bool:
+func apply_visual_settings(theme_value: Theme) -> void:
+	(get_node("Overlay") as Control).theme = theme_value
+
+
+func open(member: PartyMemberHudProjection, return_focus: Control, focus_descriptor: Dictionary = {}) -> bool:
 	if member == null or not member.validate().is_empty():
 		return false
 	_return_focus = weakref(return_focus) if return_focus != null else null
+	_return_descriptor = focus_descriptor.duplicate(true)
 	(get_node("Overlay/Frame/Layout/Identity") as Label).text = "%s · %s" % [member.display_name, member.class_label]
 	(get_node("Overlay/Frame/Layout/Progression") as Label).text = "Level %d · Rank %d" % [member.level, member.rank]
 	(get_node("Overlay/Frame/Layout/Health") as Label).text = "%s health · %s" % [_health_text(member), _state_text(member)]
@@ -51,10 +57,12 @@ func close() -> void:
 	visible = false
 	_pause_lease.release(Engine.get_main_loop() as SceneTree)
 	var target := _return_focus.get_ref() as Control if _return_focus != null else null
+	var descriptor := _return_descriptor.duplicate(true)
 	_return_focus = null
+	_return_descriptor.clear()
 	if _focus_is_valid(target):
 		target.grab_focus()
-	closed.emit(target)
+	closed.emit(target, descriptor)
 
 
 func _unhandled_input(event: InputEvent) -> void:

@@ -1148,6 +1148,14 @@ func _test_integrated_overlay_input_and_front_end_seam(failures: Array[String]) 
     TestAssertions.truthy(main.call("select_leader_class", &"fighter"), "integration fixture starts an active run", failures)
     var ledger := main.get_node("CharacterLedger") as CharacterLedger
     var pause_menu := main.get_node("RunPauseMenu")
+    var hud := main.get_node("HUD") as HUD
+    var leader_card := hud.get_node("Margin/CombatStatus/LeaderCard") as Control
+    hud.ledger_requested.emit(int(leader_card.get_meta("member_id", 0)), leader_card)
+    TestAssertions.truthy(ledger.is_open() and ledger.context.selected_member_id == int(leader_card.get_meta("member_id", 0)) and ledger.context.active_page_id == &"stats", "real Main HUD signal route opens exact-member stats Ledger", failures)
+    ledger.close()
+    hud.inspect_requested.emit(999999, leader_card)
+    var stale_feedback := hud.get_node("LootStatus") as Label
+    TestAssertions.truthy(stale_feedback.visible and stale_feedback.text == "That party member is no longer available.", "real Main route reports stale-member feedback without opening a child", failures)
     TestAssertions.truthy(ledger.open_for_player(), "integrated ledger opens for the active run", failures)
     var escape := _escape_key_event()
     pause_menu.call("_unhandled_input", escape)
@@ -1188,7 +1196,7 @@ func _test_hud_contract(failures: Array[String]) -> void:
     var main_source := FileAccess.get_file_as_string("res://scripts/game/main.gd")
     TestAssertions.truthy("hud.call(\"configure\", game_run, party_manager, experience_system, active_run_context, saved_settings)" in main_source, "Main uses the typed five-argument HUD composition", failures)
     TestAssertions.truthy("_on_hud_inspect_requested" in main_source and "_on_hud_ledger_requested" in main_source, "Main owns safe HUD child-route handlers", failures)
-    TestAssertions.truthy("open_for_member(member_id, &\"stats\", return_focus)" in main_source, "Main opens Ledger at exact member and stats page", failures)
+    TestAssertions.truthy("open_for_member(member_id, &\"stats\", return_focus, focus_descriptor)" in main_source, "Main opens Ledger at exact member and stats page with stable focus context", failures)
     TestAssertions.truthy("That party member is no longer available." in main_source, "vanished HUD members receive concise safe feedback", failures)
     hud.free()
 

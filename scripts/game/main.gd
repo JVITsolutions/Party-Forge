@@ -917,6 +917,8 @@ func _wire_static_ui() -> void:
 		hud.connect("inspect_requested", _on_hud_inspect_requested)
 	if not hud.is_connected("ledger_requested", _on_hud_ledger_requested):
 		hud.connect("ledger_requested", _on_hud_ledger_requested)
+	if not character_ledger.closed.is_connected(_on_hud_ledger_closed):
+		character_ledger.closed.connect(_on_hud_ledger_closed)
 	var selector := _run_setup_lobby()
 	selector.configure(catalog.classes)
 	if not selector.class_preview_requested.is_connected(_on_lobby_class_preview_requested):
@@ -1005,8 +1007,13 @@ func _on_hud_ledger_requested(member_id: int, return_focus: Control) -> void:
 	if active_run_context == null or active_run_context.party == null or active_run_context.party.member_by_id(member_id) == null:
 		hud.call("show_loot_status", "That party member is no longer available.", 3.0)
 		return
-	if not character_ledger.open_for_member(member_id, &"stats", return_focus):
+	var focus_descriptor := hud.call("focus_descriptor_for", return_focus) as Dictionary
+	if not character_ledger.open_for_member(member_id, &"stats", return_focus, focus_descriptor):
 		hud.call("show_loot_status", "That party member is no longer available.", 3.0)
+
+
+func _on_hud_ledger_closed(_return_focus: Control, focus_descriptor: Dictionary) -> void:
+	hud.call("restore_focus_descriptor", focus_descriptor)
 
 func _open_settings() -> void:
 	var return_focus := _run_setup_lobby().action_focus(&"settings")
