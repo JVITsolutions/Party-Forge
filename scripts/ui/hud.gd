@@ -42,6 +42,20 @@ func _ready() -> void:
 	_ensure_control_connections()
 
 
+func show_terminal_extraction(projection: TerminalExtractionProjection) -> void:
+	var panel := get_node("TerminalExtraction") as TerminalExtractionPanel
+	panel.apply_visual_settings(settings if settings != null else PartyForgeSettings.new())
+	panel.present(projection)
+
+
+func show_terminal_resolution_pending() -> void:
+	(get_node("TerminalExtraction") as TerminalExtractionPanel).set_pending(true)
+
+
+func hide_terminal_extraction() -> void:
+	(get_node("TerminalExtraction") as TerminalExtractionPanel).hide_panel()
+
+
 func _ensure_control_connections() -> void:
 	var previous := get_node("Margin/CombatStatus/PartyRegion/CompactRoster/PagePrevious") as Button
 	var next := get_node("Margin/CombatStatus/PartyRegion/CompactRoster/PageNext") as Button
