@@ -3,11 +3,11 @@
 ## Scope and exact commit
 
 This record qualifies exact implementation commit
-`38e136e86f515181057f276415de3feb844c709c` (`test: strengthen Warehouse
-activation proof`). Every test, integration, rollback, hash, visual, and
+`ba477f25d32c796abe9e6e54bb0c68167d409f17` (`fix: close Warehouse
+activation review findings`). Every test, integration, rollback, hash, visual, and
 repository-boundary check below ran while `HEAD` was exactly that commit and
 tracked status was clean. The commit containing this record is a
-documentation-only direct child of `38e136e`; it does not alter the tested
+documentation-only direct child of `ba477f25`; it does not alter the tested
 implementation.
 
 The approved engine was
@@ -21,6 +21,24 @@ authoritative access decision. The other six City locations --
 `city.apothecary`, `city.coliseum_road`, `city.inn`, `city.merchant`,
 `city.scholars_archive`, and `city.smithy` -- are inert: they are not evaluated
 or dispatched by the Warehouse presentation consumer.
+
+The final whole-branch review's three Important findings are closed at this
+exact implementation commit:
+
+- The resolver validates the exact `city.warehouse` snapshot record and exact
+  `city.warehouse.interior` destination before evaluation can erase a
+  non-available destination. Wrong destinations in candidate `HIDDEN`,
+  `LOCKED`, and `AVAILABLE` states return the authoritative legacy
+  presentation with sanitized `candidate_destination_invalid` evidence.
+- The locked dialog explicitly contains left, up, right, down, next, and
+  previous focus traversal for both two-control and Back-only guidance. Real
+  root-viewport keyboard-arrow and controller-D-pad actions cannot focus or
+  activate the Main Menu underneath it.
+- Responsive evidence is bound to a clean exact Git tip by an ignored manifest
+  containing exact commit, path, dimensions, and SHA-256 for all six PNGs.
+  Windowed OpenGL generation overwrites every capture and publishes the
+  manifest only after all existing direct assertions succeed; headless mode
+  rejects missing, stale-tip, wrong-dimension, or wrong-hash evidence.
 
 ## Default-off and staged-state evidence
 
@@ -56,14 +74,16 @@ coverage supplied the in-process four-state replay above.
 
 ## City access and navigation integration
 
-All three Task 5 runners were rerun after the fresh full suite on the exact
-implementation tip; each had numeric exit `0`:
+All three Task 5 runners and the mounted dialog-focus runner were rerun after
+the fresh full suite on the exact implementation tip; each had numeric exit
+`0`:
 
 | Runner | Exact terminal evidence |
 |---|---|
 | `city_access_snapshot_runner.gd` | `WAREHOUSE_PRESENTATION_ACTIVATION_OK location=city.warehouse rollback=legacy authority=warehouse_policy` and `CITY_ACCESS_SNAPSHOT_ACCEPTANCE_OK locations=7 profiles=7 rollback=legacy` |
 | `main_menu_navigation_runner.gd` | `MAIN_MENU_NAVIGATION_SUMMARY: PASS` |
-| `main_menu_responsive_runner.gd` | `MAIN_MENU_RESPONSIVE_SUMMARY: PASS (3 root-window sizes)` |
+| `main_menu_responsive_runner.gd` | `MAIN_MENU_RESPONSIVE_MANIFEST_OK implementation_commit=ba477f25d32c796abe9e6e54bb0c68167d409f17 captures=6` and `MAIN_MENU_RESPONSIVE_SUMMARY: PASS (3 root-window sizes)` |
+| `warehouse_locked_dialog_focus_runner.gd` | `WAREHOUSE_LOCKED_DIALOG_FOCUS_SUMMARY: PASS (0 failures)` |
 
 The City runner observed the production evaluator receiving exactly
 `city.warehouse`, and the only available destination it exposed was
@@ -72,6 +92,12 @@ Warehouse attempts (locked and authorized), and only the authorized attempt
 opened `WarehouseScreen`. No other City location or destination was evaluated
 or dispatched.
 
+The invalid-candidate acceptance matrix also supplied wrong-destination
+snapshots whose Warehouse projections would otherwise be `HIDDEN`, `LOCKED`,
+and `AVAILABLE`. Every case returned its authoritative legacy state with
+`CANDIDATE_FAILED` and sanitized `candidate_destination_invalid`; candidate
+state and destination were never dispatched.
+
 The navigation runner exercised keyboard and controller activation from both
 locked origins, modal focus trapping, Back focus restoration, the existing City
 tree CTA, and return to the exact Warehouse origin. Its only durable fixture
@@ -79,26 +105,57 @@ change was the explicit `stash` allocation. Before the production close refresh
 and after it, the expected document and `ProfileCodec` bytes were exact; the
 active and durable post-refresh bytes matched.
 
+On the real root viewport, both the two-action and Back-only dialog states
+received all four keyboard arrows and all four controller D-pad actions. Focus
+remained on a visible, enabled control under `WarehouseLockedDialog`, no
+underlying Main Menu route signal was emitted, and `WarehouseScreen` remained
+closed. Tab, `ui_cancel`, Back, CTA, and exact origin restoration remained
+green. The separate mounted-focus runner independently retained deterministic
+initial focus, cancel/Back restoration, and CTA-origin handoff.
+
 ## Responsive visual/input evidence
 
-The direct headless responsive runner revalidated all six ignored real-pixel
-artifacts at 1920x1080, 2560x1440, and 3840x2160. It emitted one
-`MAIN_MENU_RESPONSIVE_SIZE_PASS` per size and the exact three-size terminal PASS
-marker. The six retained PNGs were also reopened for this qualification. Menus
-and dialogs were nonblank and preserved the approved hierarchy, exact locked
-copy, distinct non-overlapping `LOCKED` badges, contained actions, readable
-text, and deterministic primary focus at all three sizes.
+On the clean exact implementation tip, the approved console executable ran the
+responsive generator without `--headless` and with
+`--rendering-method gl_compatibility`. The renderer identified OpenGL 3.3
+Compatibility on NVIDIA GeForce RTX 4070 Ti SUPER. The runner removed the old
+manifest and all six old captures, overwrote every 1920x1080, 2560x1440, and
+3840x2160 menu/dialog PNG, and published the manifest only after all generation
+and accessibility assertions passed. Windowed generation exited `0`, emitted
+one `MAIN_MENU_RESPONSIVE_SIZE_PASS` per size, emitted the exact-tip manifest
+marker, and ended with the exact three-size PASS.
+
+The ignored manifest has schema
+`party-forge-main-menu-responsive-evidence`, version `1`, implementation commit
+`ba477f25d32c796abe9e6e54bb0c68167d409f17`, and exactly six entries containing
+only `path`, `width`, `height`, and `sha256`. Its own SHA-256 is
+`cef9609452d0da0db807d604421c54c24ff3b6307b6d60ed9b67fe1a8445595f`.
+
+| Ignored capture | Dimensions | SHA-256 |
+|---|---:|---|
+| `locked-menu-1920x1080.png` | 1920x1080 | `6c51a259061275421effa8b891537b1d0fbf1f70c6cb7ab3915263e51b498731` |
+| `locked-dialog-1920x1080.png` | 1920x1080 | `ff975b0985680af4d39c8a3c0d58ab729b46802e52e4c39803de34163a94f697` |
+| `locked-menu-2560x1440.png` | 2560x1440 | `09dc52609f1574c5e98b8cc1a723f5b62062f668caa0fdd0d099fee1349a48b8` |
+| `locked-dialog-2560x1440.png` | 2560x1440 | `d7b1fd3834887bbdfe80de042bcd570d598ee3ec1d04162dad216c8cb8125968` |
+| `locked-menu-3840x2160.png` | 3840x2160 | `cf526f1a6b48f09fc0159d1666c38b5440ebe66f0aabcec3b4ff2f09d81c8813` |
+| `locked-dialog-3840x2160.png` | 3840x2160 | `b03ee0638bb40bc1e8b72dca9ce4bd7ab486cffc8c7d08196bee20e9826d2d5f` |
+
+Direct headless validation then reopened the manifest and all six PNGs on the
+same exact implementation tip. It exited `0` only after matching current commit,
+exact paths, dimensions, and file SHA-256 values, while retaining the direct
+nonblank, layout, exact-copy, badge-separation, focus, settings, and profile-byte
+assertions. A stale manifest from the immediately preceding implementation tip
+was deliberately presented once and failed closed on the commit mismatch.
 
 The 1920x1080 accessibility pass reapplied the existing high-contrast and
 reduced-motion settings and required at least 7:1 resolved-style contrast for
-the title, body, and primary action. The fresh runner passed those direct style,
-layout, focus, saved-settings, and profile-byte assertions. Screenshots and logs
-remain ignored and unstaged.
+the title, body, and primary action. Screenshots, manifest, and logs remain
+ignored and unstaged.
 
 ## Full-suite result and prohibited-marker scan
 
 The complete unit runner was executed fresh with `--quit-after 1200` on
-`38e136e`. It exited `0` and its terminal line was exactly
+`ba477f25`. It exited `0` and its terminal line was exactly
 `TEST_SUMMARY: PASS (241 suites)`. This is the suite count discovered by this
 run, not a copied prior result.
 
@@ -129,7 +186,7 @@ regenerated or rewritten.
 ## Mutation and repository-boundary checks
 
 Before this document was created, Party Forge was clean at exact
-`38e136e86f515181057f276415de3feb844c709c`. `git diff --check` exited `0`,
+`ba477f25d32c796abe9e6e54bb0c68167d409f17`. `git diff --check` exited `0`,
 and the before/after artifact byte evidence above matched. No untracked
 `.gd.uid` sidecars appeared, so none required removal.
 
@@ -137,7 +194,7 @@ The read-only Latticewright boundary repository
 `E:\Projects\Passive Skill Tree Creator` was clean on `main` at
 `26098c0da6fa5c60597fc414cd2b4db79d0b1114` both before and after execution.
 No Latticewright files changed, and Task 6 created no state there. No production
-file, snapshot, runtime export, authoring file, screenshot, or log was staged.
+file, snapshot, runtime export, authoring file, screenshot, manifest, or log was staged.
 Nothing was pushed or published.
 
 ## Operational rollback replay
