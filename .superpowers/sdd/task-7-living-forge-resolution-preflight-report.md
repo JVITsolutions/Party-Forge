@@ -50,7 +50,7 @@ Same exact three-suite command as RED:
 
 - Exit: `0`
 - Marker: `TEST_SUMMARY: PASS (0 failures)`
-- Covers strict roundtrip/isolation/malformed source matrix; strict/legacy shared-policy parity including configured non-strict contexts; zero, all-fit, constrained, over-capacity, ordinary, automatic replacement, displaced equipment and automatic-only capacity; `2 + 1 = 3` demand; auditable known/unavailable counts; typed player-safe failure classification; exact profile/context/source/request-selection purity; table-driven accepted/rejected preflight-resolve parity; fresh durable drift; duplicate unchanged/collision/legacy-receipt behavior; changed selected, unselected, lost and automatic source contents; defensive accepted projection; canonical and nonlexical stash behavior.
+- Covers strict roundtrip/isolation/malformed source matrix; strict/legacy shared-policy parity including configured non-strict contexts; zero, true all-fit, constrained, over-capacity, ordinary, automatic replacement, displaced equipment and automatic-only capacity; the all-fit fixture supplies all four eligible ordinary selections in shuffled input order, proves canonical accepted order, `mandatory=0`, `ordinary=required=available=4`, and no loss through copy-owned preflight/resolve parity; `2 + 1 = 3` automatic demand; auditable known/unavailable counts; typed player-safe failure classification; exact profile/context/source/request-selection purity; table-driven accepted/rejected preflight-resolve parity; fresh durable drift; duplicate unchanged/collision/legacy-receipt behavior; changed selected, unselected, lost and automatic source contents; defensive accepted projection; canonical and nonlexical stash behavior.
 
 ### Retained lifecycle
 
@@ -97,7 +97,7 @@ Same exact three-suite command as RED:
 - `run_resolution_source.gd`: `5373fe5abf056380fa011223b90b54116b2b88ee81d1bc0db6b88f5cea60b98e`
 - `run_resolution_evaluator.gd`: `e68dcfb6d774cd00afc725da41e937035a7aa7a7fa9e6f26148b295fb4a105c7`
 - `run_resolution_service.gd`: `edcf7d67bceae75307e6b9ce5d84ff8a1ef9553715a1bf4d1c8c8841125d183b`
-- `test_run_resolution_preflight.gd`: `eb94339e1a1ff1daa0881d7cf5e3c53205467bc95bb92a9336ad4fbbeb432ea1`
+- `test_run_resolution_preflight.gd`: `050546c2c06a24cbd723e2ff84b18ac45ec9e9076cb1e9776689e689fb72d5cd`
 
 ## Delivery State
 

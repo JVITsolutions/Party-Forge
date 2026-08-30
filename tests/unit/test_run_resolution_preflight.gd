@@ -108,7 +108,17 @@ func _test_wrapper_source_failure_categories(failures: Array[String]) -> void:
 func _test_preflight_capacity_and_purity(failures: Array[String]) -> void:
 	var cases: Array[Dictionary] = [
 		{"label": "ordinary", "capacity": 1, "unlocks": [], "stash": 3, "prior": false, "selections": [ExtractionSelection.create(INVENTORY_ITEM, &"run-inventory", 0)], "ok": true, "mandatory": 0, "ordinary": 1, "required": 1, "available": 3, "automatic_only": false},
-		{"label": "all-fit", "capacity": 1, "unlocks": [], "stash": 1, "prior": false, "selections": [ExtractionSelection.create(INVENTORY_ITEM, &"run-inventory", 0)], "ok": true, "mandatory": 0, "ordinary": 1, "required": 1, "available": 1, "automatic_only": false},
+		{
+			"label": "all-fit", "capacity": 4, "unlocks": [], "stash": 4, "prior": false,
+			"selections": [
+				ExtractionSelection.create(INVENTORY_ITEM, &"run-inventory", 0),
+				ExtractionSelection.create(FOLLOWER_ITEM, &"run-equipment-002", 7),
+				ExtractionSelection.create(LEADER_HAND, &"run-equipment-001", 9),
+				ExtractionSelection.create(LEADER_HEAD, &"run-equipment-001", 0),
+			],
+			"ok": true, "mandatory": 0, "ordinary": 4, "required": 4, "available": 4, "automatic_only": false,
+			"selected": [LEADER_HEAD, LEADER_HAND, FOLLOWER_ITEM, INVENTORY_ITEM], "lost": [],
+		},
 		{"label": "constrained", "capacity": 1, "unlocks": [], "stash": 0, "prior": false, "selections": [ExtractionSelection.create(INVENTORY_ITEM, &"run-inventory", 0)], "ok": false, "mandatory": 0, "ordinary": 1, "required": 1, "available": 0, "automatic_only": false},
 		{"label": "zero", "capacity": 0, "unlocks": [], "stash": 0, "prior": false, "selections": [], "ok": true, "mandatory": 0, "ordinary": 0, "required": 0, "available": 0, "automatic_only": false},
 		{"label": "automatic", "capacity": 1, "unlocks": [RunExtractionPolicy.AUTOMATIC_LEADER_UNLOCK], "stash": 3, "prior": true, "selections": [ExtractionSelection.create(FOLLOWER_ITEM, &"run-equipment-002", 7)], "ok": true, "mandatory": 2, "ordinary": 1, "required": 3, "available": 3, "automatic_only": false},
@@ -137,6 +147,9 @@ func _test_preflight_capacity_and_purity(failures: Array[String]) -> void:
 		TestAssertions.equal(result.required_stash_slots, test_case.required, "%s required count is exact" % test_case.label, failures)
 		TestAssertions.equal(result.available_stash_slots, test_case.available, "%s available count is exact" % test_case.label, failures)
 		TestAssertions.equal(result.automatic_only_blocked, test_case.automatic_only, "%s automatic-only classification is exact" % test_case.label, failures)
+		if test_case.has("selected"):
+			TestAssertions.equal(result.extraction.selected_item_ids, test_case.selected, "%s selected items use canonical source order despite shuffled input" % test_case.label, failures)
+			TestAssertions.equal(result.extraction.lost_item_ids, test_case.lost, "%s loses no eligible item" % test_case.label, failures)
 		TestAssertions.truthy(result.mandatory_stash_slots_known and result.ordinary_stash_slots_known and result.required_stash_slots_known and result.available_stash_slots_known, "%s successful/count-capacity result exposes known counts" % test_case.label, failures)
 		if test_case.label == "constrained":
 			TestAssertions.equal(result.failure_category, FAILURE_STASH_REDUCIBLE, "reducible shortage has a typed category", failures)
@@ -163,6 +176,11 @@ func _test_preflight_capacity_and_purity(failures: Array[String]) -> void:
 		TestAssertions.equal(resolved.failure_category, result.failure_category, "%s preflight/resolve typed category parity is exact" % test_case.label, failures)
 		if resolved.ok():
 			TestAssertions.equal(resolved.accepted_extraction.to_dictionary(), result.extraction.to_dictionary(), "%s accepted preflight/resolve extraction parity is exact" % test_case.label, failures)
+			if test_case.has("selected"):
+				var escaped_accepted := resolved.accepted_extraction
+				escaped_accepted._selected_item_ids.clear()
+				TestAssertions.equal(resolved.accepted_extraction.selected_item_ids, test_case.selected, "%s resolve accepted extraction is copy-owned" % test_case.label, failures)
+				TestAssertions.equal(resolved.accepted_extraction.lost_item_ids, test_case.lost, "%s resolve accepts every eligible item without loss" % test_case.label, failures)
 		_cleanup(fixture)
 
 func _test_failure_matrix(source_type: Script, failures: Array[String]) -> void:
