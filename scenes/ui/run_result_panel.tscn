@@ -1,46 +1,191 @@
 [gd_scene load_steps=2 format=3]
 
-[ext_resource type="Script" path="res://scripts/ui/run_result_panel.gd" id="1"]
+[ext_resource type="Script" path="res://scripts/ui/run_result_panel.gd" id="1_script"]
 
 [node name="RunResultPanel" type="Control"]
-process_mode = 3
 visible = false
+process_mode = 3
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-mouse_filter = 1
-script = ExtResource("1")
+mouse_filter = 0
+script = ExtResource("1_script")
 
-[node name="Panel" type="PanelContainer" parent="."]
+[node name="Scrim" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 0
+color = Color(0.005, 0.008, 0.012, 0.94)
+
+[node name="Frame" type="PanelContainer" parent="."]
+custom_minimum_size = Vector2(640, 600)
 layout_mode = 0
 anchors_preset = 8
 anchor_left = 0.5
 anchor_top = 0.5
 anchor_right = 0.5
 anchor_bottom = 0.5
-offset_left = -200.0
-offset_top = -130.0
-offset_right = 200.0
-offset_bottom = 130.0
+offset_left = -450.0
+offset_top = -340.0
+offset_right = 450.0
+offset_bottom = 340.0
 grow_horizontal = 2
 grow_vertical = 2
+theme_type_variation = &"LivingForgePanel"
 
-[node name="Content" type="VBoxContainer" parent="Panel"]
+[node name="Content" type="VBoxContainer" parent="Frame"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="Header" type="VBoxContainer" parent="Frame/Content"]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="Eyebrow" type="Label" parent="Frame/Content/Header"]
+layout_mode = 2
+theme_type_variation = &"LivingForgeDisplayLabel"
+text = "LIVING FORGE // TERMINAL RECORD"
+
+[node name="OutcomeHeadline" type="Label" parent="Frame/Content/Header"]
+layout_mode = 2
+theme_type_variation = &"LivingForgeDisplayLabel"
+text = "TERMINAL RECORD"
+
+[node name="State" type="Label" parent="Frame/Content/Header"]
+layout_mode = 2
+theme_type_variation = &"LivingForgeCaptionLabel"
+text = "SAVING TERMINAL TRUTH"
+
+[node name="ReadableReason" type="Label" parent="Frame/Content/Header"]
+visible = false
+layout_mode = 2
+theme_type_variation = &"LivingForgeCaptionLabel"
+autowrap_mode = 2
+
+[node name="Body" type="ScrollContainer" parent="Frame/Content"]
+custom_minimum_size = Vector2(0, 360)
+layout_mode = 2
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+
+[node name="Recap" type="VBoxContainer" parent="Frame/Content/Body"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 10
+
+[node name="Confirmation" type="PanelContainer" parent="Frame/Content"]
+visible = false
+layout_mode = 2
+theme_type_variation = &"LivingForgeInsetPanel"
+
+[node name="Content" type="VBoxContainer" parent="Frame/Content/Confirmation"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="Copy" type="Label" parent="Frame/Content/Confirmation/Content"]
+layout_mode = 2
+theme_type_variation = &"LivingForgePromptLabel"
+autowrap_mode = 2
+
+[node name="Actions" type="HBoxContainer" parent="Frame/Content/Confirmation/Content"]
+layout_mode = 2
+alignment = 2
+theme_override_constants/separation = 8
+
+[node name="Cancel" type="Button" parent="Frame/Content/Confirmation/Content/Actions"]
+custom_minimum_size = Vector2(120, 48)
+layout_mode = 2
+theme_type_variation = &"LivingForgeSecondaryButton"
+text = "Cancel"
+accessibility_name = "Cancel displaced gear protection"
+
+[node name="Confirm" type="Button" parent="Frame/Content/Confirmation/Content/Actions"]
+custom_minimum_size = Vector2(120, 48)
+layout_mode = 2
+theme_type_variation = &"LivingForgePrimaryButton"
+text = "Confirm"
+accessibility_name = "Confirm displaced gear protection"
+
+[node name="Footer" type="VBoxContainer" parent="Frame/Content"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="Rule" type="HSeparator" parent="Frame/Content/Footer"]
 layout_mode = 2
 
-[node name="Title" type="Label" parent="Panel/Content"]
+[node name="Actions" type="HFlowContainer" parent="Frame/Content/Footer"]
 layout_mode = 2
-theme_override_font_sizes/font_size = 48
-text = "VICTORY"
-horizontal_alignment = 1
+alignment = 2
+theme_override_constants/h_separation = 8
+theme_override_constants/v_separation = 8
 
-[node name="Restart" type="Button" parent="Panel/Content"]
+[node name="RetryTerminalSave" type="Button" parent="Frame/Content/Footer/Actions"]
+visible = false
+custom_minimum_size = Vector2(200, 48)
 layout_mode = 2
-text = "Restart"
+theme_type_variation = &"LivingForgePrimaryButton"
+text = "Retry Save Terminal State"
+accessibility_name = "Retry Save Terminal State"
 
-[node name="Quit" type="Button" parent="Panel/Content"]
+[node name="RetryResolution" type="Button" parent="Frame/Content/Footer/Actions"]
+visible = false
+custom_minimum_size = Vector2(160, 48)
 layout_mode = 2
-text = "Quit"
+theme_type_variation = &"LivingForgePrimaryButton"
+text = "Retry Resolution"
+accessibility_name = "Retry Resolution"
+
+[node name="RetryProjection" type="Button" parent="Frame/Content/Footer/Actions"]
+visible = false
+custom_minimum_size = Vector2(144, 48)
+layout_mode = 2
+theme_type_variation = &"LivingForgePrimaryButton"
+text = "Retry Results"
+accessibility_name = "Retry Results"
+
+[node name="ProtectDisplacedGear" type="Button" parent="Frame/Content/Footer/Actions"]
+visible = false
+custom_minimum_size = Vector2(200, 48)
+layout_mode = 2
+theme_type_variation = &"LivingForgeSecondaryButton"
+text = "Protect Displaced Gear"
+accessibility_name = "Protect Displaced Gear"
+
+[node name="OpenArmoury" type="Button" parent="Frame/Content/Footer/Actions"]
+visible = false
+custom_minimum_size = Vector2(144, 48)
+layout_mode = 2
+theme_type_variation = &"LivingForgeSecondaryButton"
+text = "Open Armoury"
+accessibility_name = "Open Armoury"
+
+[node name="RestartRun" type="Button" parent="Frame/Content/Footer/Actions"]
+visible = false
+custom_minimum_size = Vector2(128, 48)
+layout_mode = 2
+theme_type_variation = &"LivingForgeSecondaryButton"
+text = "Restart Run"
+accessibility_name = "Restart Run"
+
+[node name="ReturnToForge" type="Button" parent="Frame/Content/Footer/Actions"]
+visible = false
+custom_minimum_size = Vector2(152, 48)
+layout_mode = 2
+theme_type_variation = &"LivingForgeSecondaryButton"
+text = "Return to Forge"
+accessibility_name = "Return to Forge"
+
+[node name="QuitApplication" type="Button" parent="Frame/Content/Footer/Actions"]
+visible = false
+custom_minimum_size = Vector2(152, 48)
+layout_mode = 2
+theme_type_variation = &"LivingForgeDestructiveButton"
+text = "Quit Application"
+accessibility_name = "Quit Application"
