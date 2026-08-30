@@ -1357,13 +1357,53 @@ func _test_hud_summary_at_developer_capacity(failures: Array[String]) -> void:
     party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
     for index: int in range(23):
         party.recruit(catalog.class_by_id(&"fighter"))
-    var hud := (load("res://scenes/ui/hud.tscn") as PackedScene).instantiate() as CanvasLayer
-    hud.call("configure", null, party, null)
-    hud.call("_refresh_party")
-    var entries := hud.get_node("Margin/Status/PartyEntries") as VBoxContainer
-    TestAssertions.equal(entries.get_child_count(), 4, "developer party keeps the existing four-entry HUD summary", failures)
-    TestAssertions.truthy(not (entries.get_node("Party4") as Label).text.is_empty(), "fourth HUD summary entry remains readable", failures)
+    var context := PlayerRunContext.new()
+    var profile := ProfileState.new_profile("profile-party-hud-24", "Party HUD", 1000)
+    TestAssertions.equal(context.configure(&"party_hud_24", 0, profile, 82424, party, 100), PackedStringArray(), "developer HUD context configures", failures)
+    var actors: Array[Node3D] = []
+    for member_id: int in range(1, 25):
+        var actor := Node3D.new()
+        var health := HealthComponent.new()
+        health.name = "HealthComponent"
+        actor.add_child(health)
+        health.configure(100.0, member_id == 1, 8.0, 0.5, member_id == 1)
+        TestAssertions.truthy(context.bind_actor(member_id, actor), "developer HUD binds member %d" % member_id, failures)
+        actors.append(actor)
+    var experience := ExperienceSystem.new()
+    experience.configure_context(context, 1)
+    var run := GameRun.new()
+    run.configure_seed(82424)
+    var hud := (load("res://scenes/ui/hud.tscn") as PackedScene).instantiate() as HUD
+    (Engine.get_main_loop() as SceneTree).root.add_child(hud)
+    if hud.get_node_or_null("Margin/CombatStatus") == null:
+        TestAssertions.truthy(false, "developer party uses the responsive combat HUD shell", failures)
+        hud.free()
+        run.free()
+        experience.free()
+        for actor: Node3D in actors:
+            actor.free()
+        party.free()
+        return
+    hud.call("configure", run, party, experience, context, PartyForgeSettings.new())
+    var compact := hud.get_node("Margin/CombatStatus/PartyRegion/CompactRoster") as Control
+    TestAssertions.truthy(compact.visible, "developer party uses the real compact HUD", failures)
+    var reached: Dictionary = {}
+    var next := compact.get_node("PageNext") as Button
+    while true:
+        for node: Node in hud.find_children("*", "Control", true, false):
+            if node.is_in_group(&"combat_hud_member"):
+                reached[int(node.get_meta("member_id", 0))] = true
+        if next.disabled:
+            break
+        next.pressed.emit()
+    TestAssertions.equal(reached.size(), 24, "developer party HUD pages to all twenty-four members", failures)
+    TestAssertions.truthy(reached.has(24), "developer party HUD reaches the final member", failures)
+    TestAssertions.truthy(hud.find_child("Party4", true, false) == null, "obsolete fixed-four summary is absent", failures)
     hud.free()
+    run.free()
+    experience.free()
+    for actor: Node3D in actors:
+        actor.free()
     party.free()
 
 func _test_resolved_party_stats(failures: Array[String]) -> void:

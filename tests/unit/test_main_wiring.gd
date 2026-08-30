@@ -4,6 +4,8 @@ const COMBAT_RESOLUTION_SERVICE := preload("res://scripts/combat/combat_resoluti
 
 const REQUIRED_PATHS: PackedStringArray = [
     "res://scripts/ui/hud.gd",
+    "res://scripts/ui/hud/combat_alert_tray.gd",
+    "res://scripts/ui/hud/combat_member_inspect_panel.gd",
     "res://scripts/ui/class_selection_panel.gd",
     "res://scripts/ui/level_up_panel.gd",
     "res://scripts/ui/run_result_panel.gd",
@@ -24,6 +26,8 @@ const REQUIRED_PATHS: PackedStringArray = [
     "res://scenes/ui/armoury/armoury_screen.tscn",
     "res://scenes/ui/warehouse/warehouse_screen.tscn",
     "res://scenes/ui/hud.tscn",
+    "res://scenes/ui/hud/combat_alert_tray.tscn",
+    "res://scenes/ui/hud/combat_member_inspect_panel.tscn",
     "res://scenes/ui/level_up_panel.tscn",
     "res://scenes/ui/run_result_panel.tscn",
     "res://scenes/ui/health_bar_3d.tscn",
@@ -1164,16 +1168,28 @@ func _test_integrated_overlay_input_and_front_end_seam(failures: Array[String]) 
 func _test_hud_contract(failures: Array[String]) -> void:
     var hud := (load("res://scenes/ui/hud.tscn") as PackedScene).instantiate() as CanvasLayer
     for path: String in [
-        "Margin/Status/LeaderHealth", "Margin/Status/Experience", "Margin/Status/RunTime",
-        "Margin/Status/PartyEntries/Party1", "Margin/Status/PartyEntries/Party2",
-        "Margin/Status/PartyEntries/Party3", "Margin/Status/PartyEntries/Party4",
-        "Margin/Status/ActiveTraits", "Margin/Status/BossHealth", "BossBanner",
+        "Margin/CombatStatus/LeaderCard", "Margin/CombatStatus/Experience", "Margin/CombatStatus/RunTime",
+        "Margin/CombatStatus/PartyRegion/RichRoster",
+        "Margin/CombatStatus/PartyRegion/CompactRoster/MemberWindow",
+        "Margin/CombatStatus/PartyRegion/CompactRoster/PagePrevious",
+        "Margin/CombatStatus/PartyRegion/CompactRoster/PageNext",
+        "Margin/CombatStatus/AlertRegion/ExpandedAlerts",
+        "Margin/CombatStatus/AlertRegion/Overflow",
+        "Margin/CombatStatus/BossRegion", "Margin/CombatStatus/BossRegion/BossHealth", "BossBanner",
         "LootStatus",
-        "LevelUpPanel", "RunResultPanel", "ClassSelection",
+        "CombatAlertTray", "CombatMemberInspectPanel", "LevelUpPanel", "RunResultPanel", "ClassSelection",
     ]:
         TestAssertions.truthy(hud.get_node_or_null(path) != null, "HUD exposes %s" % path, failures)
-    TestAssertions.truthy(not (hud.get_node("Margin/Status/BossHealth") as Control).visible, "boss health starts hidden", failures)
+    for obsolete: String in ["Party1", "Party2", "Party3", "Party4"]:
+        TestAssertions.equal(hud.find_child(obsolete, true, false), null, "fixed HUD node %s is removed" % obsolete, failures)
+    TestAssertions.truthy(not (hud.get_node("Margin/CombatStatus/BossRegion") as Control).visible, "whole boss band starts hidden", failures)
     TestAssertions.truthy(not (hud.get_node("BossBanner") as Control).visible, "boss banner starts hidden", failures)
+    TestAssertions.truthy(hud.has_signal("inspect_requested") and hud.has_signal("ledger_requested"), "HUD emits typed member child-route intents", failures)
+    var main_source := FileAccess.get_file_as_string("res://scripts/game/main.gd")
+    TestAssertions.truthy("hud.call(\"configure\", game_run, party_manager, experience_system, active_run_context, saved_settings)" in main_source, "Main uses the typed five-argument HUD composition", failures)
+    TestAssertions.truthy("_on_hud_inspect_requested" in main_source and "_on_hud_ledger_requested" in main_source, "Main owns safe HUD child-route handlers", failures)
+    TestAssertions.truthy("open_for_member(member_id, &\"stats\", return_focus)" in main_source, "Main opens Ledger at exact member and stats page", failures)
+    TestAssertions.truthy("That party member is no longer available." in main_source, "vanished HUD members receive concise safe feedback", failures)
     hud.free()
 
 func _test_exact_choice_panel(failures: Array[String]) -> void:

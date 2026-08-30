@@ -24,6 +24,7 @@ var _viewport_size := Vector2(1920.0, 1080.0)
 var _observed_viewport: Viewport
 var _member_visibility_request_revision := 0
 var _member_visibility_request_target_id := 0
+var _return_focus: WeakRef
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -101,6 +102,7 @@ func configure(
 	apply_viewport_size(_viewport_size)
 
 func open_for_player(local_player_id: int = 0) -> bool:
+	_return_focus = null
 	if run == null or not is_instance_valid(run) or party == null or not is_instance_valid(party):
 		return false
 	if run.current_state() not in [
@@ -128,6 +130,20 @@ func open_for_player(local_player_id: int = 0) -> bool:
 	_focus_remembered_or_default()
 	return true
 
+func open_for_member(member_id: int, page_id: StringName = &"stats", return_focus: Control = null) -> bool:
+	if party == null or party.member_by_id(member_id) == null or not _pages.has(page_id):
+		return false
+	var definition := _definitions.get(page_id) as LedgerPageDefinition
+	if definition == null or definition.development_state != LedgerPageDefinition.State.AVAILABLE:
+		return false
+	if not open_for_player():
+		return false
+	if not select_member(member_id) or not activate_page(page_id):
+		close()
+		return false
+	_return_focus = weakref(return_focus) if return_focus != null else null
+	return true
+
 func close() -> void:
 	if not is_open():
 		return
@@ -142,6 +158,19 @@ func close() -> void:
 	_pause_lease.release(Engine.get_main_loop() as SceneTree)
 	visible = false
 	_status().text = ""
+	_restore_return_focus()
+
+func _restore_return_focus() -> void:
+	var target := _return_focus.get_ref() as Control if _return_focus != null else null
+	_return_focus = null
+	if (
+		target != null
+		and is_instance_valid(target)
+		and target.is_inside_tree()
+		and target.is_visible_in_tree()
+		and target.focus_mode != Control.FOCUS_NONE
+	):
+		target.grab_focus()
 
 func is_open() -> bool:
 	return visible

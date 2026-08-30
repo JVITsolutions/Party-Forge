@@ -3,6 +3,7 @@ extends RefCounted
 
 signal progression_changed(member_id: int)
 signal member_level_ready(member_id: int, level: int)
+signal actor_bound(member_id: int, actor: Node3D)
 
 const DEFAULT_EXPERIENCE_TUNING: ExperienceTuning = preload("res://data/progression/default_experience.tres")
 const CANDIDATE_ACTION_VALIDATION := preload("res://scripts/combat/candidate_action_validation_service.gd")
@@ -622,6 +623,7 @@ func bind_actor(member_id: int, actor: Node3D) -> bool:
 	actor.set_meta("party_forge_run_player_id", run_player_id)
 	actor.set_meta("party_forge_member_id", member_id)
 	_actor_by_member[member_id] = weakref(actor)
+	actor_bound.emit(member_id, actor)
 	return true
 
 func actor_for(member_id: int) -> Node3D:
