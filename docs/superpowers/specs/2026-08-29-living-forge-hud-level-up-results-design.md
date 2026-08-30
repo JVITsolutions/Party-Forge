@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-29
 
-**Status:** User-approved design; independent UI/UX written-spec review approved; pending user written-spec approval
+**Status:** User-approved design; independent UI/UX written-spec review approved
 
 **Authoritative checkout:** `F:\Projects(root)\Game dev\Projects\party-forge`
 
