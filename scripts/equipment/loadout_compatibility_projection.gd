@@ -110,6 +110,7 @@ static func state_fingerprint_for(
 	item_records: Dictionary,
 	leader_loadout: Dictionary,
 	stash_tabs: Array[Dictionary],
+	terminal_recovery_overflow: Dictionary = {},
 ) -> String:
 	var document := {
 		"item_records": item_records.duplicate(true),
@@ -117,6 +118,7 @@ static func state_fingerprint_for(
 		"leader_loadout_class_id": leader_loadout_class_id,
 		"selected_class_id": String(selected_class_id_value),
 		"stash_tabs": stash_tabs.duplicate(true),
+		"terminal_recovery_overflow": terminal_recovery_overflow.duplicate(true),
 	}
 	return JSON.stringify(_canonicalize(document)).sha256_text()
 

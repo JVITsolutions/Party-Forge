@@ -3,6 +3,8 @@ extends RefCounted
 const COMBAT_RESOLUTION_SERVICE := preload("res://scripts/combat/combat_resolution_service.gd")
 
 const REQUIRED_PATHS: PackedStringArray = [
+	"res://scripts/run/run_terminal_flow.gd",
+	"res://scripts/run/run_terminal_recovery_service.gd",
     "res://scripts/ui/hud.gd",
     "res://scripts/ui/hud/combat_alert_tray.gd",
     "res://scripts/ui/hud/combat_member_inspect_panel.gd",
@@ -58,6 +60,26 @@ const REQUIRED_MAIN_NODES: PackedStringArray = [
 var _profile_root := ""
 var _settings_path := ""
 
+class CountingProfileItemStorage extends ProfileItemStorageService:
+    var calls := 0
+    var last_request: ItemTransactionRequest
+
+    func apply(_profile_id: String, request: ItemTransactionRequest, _root: String = ProfileStore.DEFAULT_ROOT) -> ProfileMutationResult:
+        calls += 1
+        last_request = request
+        var result := ProfileMutationResult.new()
+        result.error = "intent captured"
+        return result
+
+class CountingLoadoutAssignments extends ProfileLoadoutAssignmentService:
+    var calls := 0
+
+    func apply(_profile_id: String, _request: ProfileLoadoutAssignmentRequest, _root: String = ProfileStore.DEFAULT_ROOT) -> ProfileMutationResult:
+        calls += 1
+        var result := ProfileMutationResult.new()
+        result.error = "wrong route captured"
+        return result
+
 func test_run_setup_lobby_is_the_single_typed_main_seam() -> Array[String]:
     var failures: Array[String] = []
     var source := FileAccess.get_file_as_string("res://scripts/game/main.gd")
@@ -104,6 +126,7 @@ func run() -> Array[String]:
     _test_armoury_return_authority(failures)
     _test_profile_deletion_and_activation_separation(failures)
     _test_storage_route_policy_and_shared_projection_wiring(failures)
+    _test_main_routes_real_overflow_source_only_through_storage(failures)
     _test_warehouse_shadow_observer_is_sidecar(failures)
     _test_loadout_warning_preflight_and_transition_wiring(failures)
     _test_passive_tree_route_composition(failures)
@@ -326,6 +349,50 @@ func _test_storage_route_policy_and_shared_projection_wiring(failures: Array[Str
     TestAssertions.equal(main.get("_shared_storage_projection"), null, "Armoury profile switch clears the shared projection", failures)
     TestAssertions.equal(main.get("_storage_return_focus"), null, "Armoury profile switch clears return focus", failures)
     TestAssertions.truthy(menu.is_open() and (menu.get_node("ActiveProfile") as Label).text.contains("Third Storage Profile"), "Armoury profile switch presents the newest profile menu", failures)
+    main.free()
+    ProfileTestSupport.remove_tree(root)
+
+
+func _test_main_routes_real_overflow_source_only_through_storage(failures: Array[String]) -> void:
+    var root := "user://tests/main_wiring-overflow-route_%d_%d" % [OS.get_process_id(), Time.get_ticks_usec()]
+    ProfileTestSupport.remove_tree(root)
+    var main := (load("res://scenes/game/main.tscn") as PackedScene).instantiate()
+    main.set("profile_root", root)
+    main.set("settings_path", _settings_path)
+    main.call("_ready")
+    var manager := main.get("profile_manager") as ProfileManager
+    TestAssertions.truthy(manager.create_profile("Overflow Route").ok(), "Main overflow routing fixture creates an active profile", failures)
+    var profile := manager.active_profile()
+    var item := ItemInstance.new()
+    item.instance_id = "item-main-overflow"
+    item.base_definition_id = &"forge_vanguard_sword"
+    item.item_level = 20
+    item.rarity_id = &"common"
+    item.origin = {"issuer_namespace": "profile:%s" % profile.profile_id, "seed": 88, "sequence": 0, "source": "main_overflow_test"}
+    profile.item_records = ItemRegistry.new([item]).to_dictionary()
+    profile.inventory_columns = 1
+    profile.stash_tabs = [ItemSlotContainer.create(&"stash-tab-main-overflow", ItemSlotContainer.PROFILE_STASH_TAB, profile.profile_id, 100).to_dictionary()]
+    profile.terminal_recovery_overflow = ItemSlotContainer.create(ItemSlotContainer.TERMINAL_RECOVERY_OVERFLOW_ID, ItemSlotContainer.PROFILE_TERMINAL_RECOVERY_OVERFLOW, profile.profile_id, EquipmentSlotIndex.capacity(), {0: item.instance_id}).to_dictionary()
+    TestAssertions.equal(ProfileStore.new().save_profile(profile, root), "", "Main overflow routing fixture persists populated ownership", failures)
+    TestAssertions.equal(manager.refresh_profile(profile.profile_id), "", "Main overflow routing fixture refreshes durable profile", failures)
+    var projection := main.call("_profile_storage_projection", manager.active_profile()) as ProfileStorageProjection
+    TestAssertions.truthy(projection != null and projection.valid, "Main obtains a real populated-overflow storage projection", failures)
+    if projection == null or not projection.valid:
+        main.free()
+        ProfileTestSupport.remove_tree(root)
+        return
+    main.set("_shared_storage_projection", projection)
+    TestAssertions.equal(main.call("_storage_item_location", projection, item.instance_id), {"container_id": String(ItemSlotContainer.TERMINAL_RECOVERY_OVERFLOW_ID), "slot": 0}, "Main resolves the real overflow source identity", failures)
+    TestAssertions.equal(main.call("_storage_item_at", projection, ItemSlotContainer.TERMINAL_RECOVERY_OVERFLOW_ID, 0), item.instance_id, "Main reads exact overflow occupancy", failures)
+    var storage := CountingProfileItemStorage.new()
+    var assignments := CountingLoadoutAssignments.new()
+    main.set("_profile_item_storage", storage)
+    main.set("_profile_loadout_assignments", assignments)
+    main.call("_on_armoury_move_requested", item.instance_id, &"stash-tab-main-overflow", 4)
+    TestAssertions.equal(storage.calls, 1, "Main routes an overflow source through ProfileItemStorageService exactly once", failures)
+    TestAssertions.equal(assignments.calls, 0, "Main never routes an overflow source through ProfileLoadoutAssignmentService", failures)
+    TestAssertions.equal(storage.last_request.source_container_id if storage.last_request != null else "", String(ItemSlotContainer.TERMINAL_RECOVERY_OVERFLOW_ID), "Main preserves the projected overflow source in the storage request", failures)
+    TestAssertions.equal(storage.last_request.operation if storage.last_request != null else "", ItemTransactionRequest.MOVE_TO_EMPTY, "Main emits source-only move-to-empty semantics", failures)
     main.free()
     ProfileTestSupport.remove_tree(root)
 

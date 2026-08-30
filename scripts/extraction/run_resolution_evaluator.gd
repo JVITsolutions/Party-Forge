@@ -19,6 +19,7 @@ static func evaluate(
 	var profile_state := profile_decode.state
 	var profile_registry := profile_state.registry()
 	var leader_loadout := profile_state.container(&"leader-loadout")
+	var recovery_overflow := profile_state.container(ItemSlotContainer.TERMINAL_RECOVERY_OVERFLOW_ID)
 	var stash_tabs: Array[ItemSlotContainer] = []
 	for stash_document: Dictionary in candidate.stash_tabs:
 		var container := profile_state.container(StringName(String(stash_document["container_id"])))
@@ -92,11 +93,13 @@ static func evaluate(
 
 	var containers: Array[ItemSlotContainer] = [leader_loadout]
 	containers.append_array(stash_tabs)
+	containers.append(recovery_overflow)
 	var resolved_ownership := ItemOwnershipState.create(candidate.profile_id, ItemRegistry.new(next_items), containers)
 	var resolved_error := resolved_ownership.validate(GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)
 	if not resolved_error.is_empty(): return RunResolutionEvaluation.create(projection, mandatory, ordinary, available, _error("field=profile.ownership reason=%s" % resolved_error), RunResolutionEvaluation.FailureCategory.OWNERSHIP_VERIFICATION, "Item ownership could not be verified. Nothing was moved.")
 	candidate.item_records = resolved_ownership.registry().to_dictionary()
 	candidate.leader_loadout = resolved_ownership.container(&"leader-loadout").to_dictionary()
+	candidate.terminal_recovery_overflow = resolved_ownership.container(ItemSlotContainer.TERMINAL_RECOVERY_OVERFLOW_ID).to_dictionary()
 	var resolved_tabs: Array[Dictionary] = []
 	for stored_tab: ItemSlotContainer in stash_tabs: resolved_tabs.append(resolved_ownership.container(stored_tab.container_id).to_dictionary())
 	candidate.stash_tabs = resolved_tabs
@@ -115,7 +118,7 @@ static func _validate_identity(candidate: ProfileState, source: RunResolutionSou
 	return ""
 
 static func _profile_ownership(profile: ProfileState) -> ItemOwnershipStateDecodeResult:
-	var containers: Array = [profile.leader_loadout.duplicate(true)]; containers.append_array(profile.stash_tabs.duplicate(true))
+	var containers: Array = [profile.leader_loadout.duplicate(true)]; containers.append_array(profile.stash_tabs.duplicate(true)); containers.append(profile.terminal_recovery_overflow.duplicate(true))
 	return ItemOwnershipState.decode({"schema_version": ItemOwnershipState.SCHEMA_VERSION, "owner_id": profile.profile_id, "registry": profile.item_records.duplicate(true), "containers": containers}, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)
 
 static func _validate_live_leader_loadout(source: RunResolutionSource, registry: ItemRegistry, leader_equipment: ItemSlotContainer) -> String:

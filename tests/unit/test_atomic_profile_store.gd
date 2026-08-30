@@ -66,6 +66,7 @@ class GeneratedRestoreFailureAtomicJsonStore extends AtomicJsonStore:
 
 func run() -> Array[String]:
 	var failures: Array[String] = []
+	TestAssertions.truthy(AtomicJsonStore.new().has_method(&"save_irreversible_document"), "atomic store retains irreversible verified-save authority for terminal completion", failures)
 	_root = "user://tests/profile_store_%d_%d" % [OS.get_process_id(), Time.get_ticks_usec()]
 	_cleanup()
 	_test_round_trip_and_backup_recovery(failures)
@@ -73,7 +74,7 @@ func run() -> Array[String]:
 	_test_irreversible_promotion_order_keeps_a_discoverable_generation(failures)
 	_test_irreversible_save_second_promotion_failure_restores_exact_generations(failures)
 	_test_irreversible_reported_promotion_failure_accepts_verified_commit(failures)
-	_test_irreversible_post_commit_reporting_failure_returns_success(failures)
+	_test_irreversible_post_commit_reporting_failure_blocks_authorization(failures)
 	_test_irreversible_cleanup_debt_is_sanitized(failures)
 	_test_irreversible_preflight_failure_preserves_active_generations(failures)
 	_test_backup_only_is_discoverable(failures)
@@ -219,7 +220,7 @@ func _test_irreversible_reported_promotion_failure_accepts_verified_commit(failu
 	TestAssertions.equal(_decode_file(path).profile.gold, 99, "reported-failure primary retains the verified committed generation", failures)
 	TestAssertions.equal(_decode_file("%s.bak" % path).profile.gold, 99, "reported-failure backup retains the verified committed generation", failures)
 
-func _test_irreversible_post_commit_reporting_failure_returns_success(failures: Array[String]) -> void:
+func _test_irreversible_post_commit_reporting_failure_blocks_authorization(failures: Array[String]) -> void:
 	var documents := PostCommitReportingFailureAtomicJsonStore.new()
 	var store := ProfileStore.new(documents)
 	var profile := ProfileState.new_profile("profile-irrev-committed", "Committed", 1275)
@@ -232,7 +233,7 @@ func _test_irreversible_post_commit_reporting_failure_returns_success(failures: 
 	profile.updated_at_unix = 1277
 	var error := store.save_profile_irreversible(profile, _root)
 	var path := store.profile_path(profile.profile_id, _root)
-	TestAssertions.equal(error, "", "post-commit cleanup and sanitize reporting failures cannot surface an ordinary save failure", failures)
+	TestAssertions.truthy(not error.is_empty() and error.contains("stage=sanitize"), "post-commit cleanup plus sanitation failure blocks irreversible authorization", failures)
 	TestAssertions.equal(_decode_file(path).profile.gold, 99, "post-commit reporting failure leaves sanitized primary active", failures)
 	TestAssertions.equal(_decode_file("%s.bak" % path).profile.gold, 99, "post-commit reporting failure leaves sanitized backup active", failures)
 	for file_name: String in DirAccess.get_files_at(_root):
@@ -521,7 +522,7 @@ func _test_successful_schema_migration_promotes_and_retains_source(failures: Arr
 	TestAssertions.truthy(loaded.ok() and loaded.migrated and loaded.source_schema_version == 1, "successful migration reports schema-one source", failures)
 	var promoted := JSON.parse_string(FileAccess.get_file_as_string(path)) as Dictionary
 	var retained := JSON.parse_string(FileAccess.get_file_as_string("%s.bak" % path)) as Dictionary
-	TestAssertions.equal(promoted.get("schema_version", -1), 5, "successful migration stores schema-five primary", failures)
+	TestAssertions.equal(promoted.get("schema_version", -1), 6, "successful migration stores schema-six primary", failures)
 	TestAssertions.equal(retained.get("schema_version", -1), 1, "successful migration retains schema-one backup", failures)
 	TestAssertions.equal(FileAccess.get_file_as_bytes("%s.bak" % path), source_primary_bytes, "successful migration backup exactly retains source primary bytes", failures)
 
@@ -611,7 +612,7 @@ func _test_recovered_schema_one_backup_migrates_with_artifact(failures: Array[St
 	TestAssertions.truthy(loaded.ok() and loaded.recovered_from_backup and loaded.migrated and loaded.source_schema_version == 1, "recovered schema-one backup migrates with source metadata", failures)
 	TestAssertions.equal(loaded.profile.gold if loaded.ok() else -1, 10, "recovered migration returns the backup generation", failures)
 	var promoted := JSON.parse_string(FileAccess.get_file_as_string(path)) as Dictionary
-	TestAssertions.equal(promoted.get("schema_version", -1), 5, "recovered migration promotes schema-five primary", failures)
+	TestAssertions.equal(promoted.get("schema_version", -1), 6, "recovered migration promotes schema-six primary", failures)
 	TestAssertions.equal(FileAccess.get_file_as_bytes("%s.bak" % path), backup_bytes, "recovered migration retains schema-one backup bytes", failures)
 	var artifact_path := _corrupt_artifact_path(profile_id, DirAccess.get_files_at(_root))
 	TestAssertions.truthy(not artifact_path.is_empty(), "recovered migration preserves corrupt-primary artifact", failures)

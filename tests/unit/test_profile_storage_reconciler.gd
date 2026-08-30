@@ -26,6 +26,14 @@ func run() -> Array[String]:
 	_test_idempotence_monotonicity_and_existing_placement(tree, failures)
 	_test_non_profile_contracts_are_ignored(tree, failures)
 	_test_failures_are_atomic(tree, failures)
+	var profile := _profile(tree.id, ["stash-access"])
+	var item := _item("item-reconcile-overflow", 0)
+	profile.item_records = ItemRegistry.new([item]).to_dictionary()
+	profile.terminal_recovery_overflow = ItemSlotContainer.create(ItemSlotContainer.TERMINAL_RECOVERY_OVERFLOW_ID, ItemSlotContainer.PROFILE_TERMINAL_RECOVERY_OVERFLOW, PROFILE_ID, EquipmentSlotIndex.capacity(), {0: item.instance_id}).to_dictionary()
+	var before := profile.to_dictionary()
+	TestAssertions.equal(ProfileStorageReconciler.new().reconcile(profile, tree, PassiveEffectResolver.new(PassiveEffectRegistry.new())), "", "storage reconciliation decodes populated overflow ownership", failures)
+	TestAssertions.equal(profile.item_records, before["item_records"], "storage reconciliation preserves overflow registry records", failures)
+	TestAssertions.equal(profile.terminal_recovery_overflow, before["terminal_recovery_overflow"], "storage reconciliation preserves populated overflow byte-structurally", failures)
 	return failures
 
 func _test_direct_projection_matrix(tree: PassiveTreeDefinition, failures: Array[String]) -> void:

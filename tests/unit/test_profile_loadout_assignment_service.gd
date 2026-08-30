@@ -15,7 +15,59 @@ func run() -> Array[String]:
 	_test_profile_final_stat_overflow_is_rejected_before_persistence(failures)
 	_test_profile_owned_action_overflow_is_rejected_before_persistence(failures)
 	_test_injected_stat_catalog_is_used_by_assignment_validation(failures)
+	_test_populated_overflow_fingerprint_preview_and_endpoint_rejections(failures)
+	_test_compatibility_rejects_missing_or_malformed_canonical_overflow(failures)
 	return failures
+
+func _test_populated_overflow_fingerprint_preview_and_endpoint_rejections(failures: Array[String]) -> void:
+	var ordinary := _item("item-assignment-ordinary", &"forge_vanguard_sword", 0)
+	var overflow := _item("item-assignment-overflow", &"windrunner_band", 1)
+	var profile := _profile([ordinary, overflow], {}, [{0: ordinary.instance_id}, {}], "fighter")
+	profile.terminal_recovery_overflow = ItemSlotContainer.create(ItemSlotContainer.TERMINAL_RECOVERY_OVERFLOW_ID, ItemSlotContainer.PROFILE_TERMINAL_RECOVERY_OVERFLOW, profile.profile_id, EquipmentSlotIndex.capacity(), {0: overflow.instance_id}).to_dictionary()
+	var fingerprint := ProfileLoadoutAssignmentRequest.fingerprint_for(profile)
+	var changed := profile.copy()
+	changed.terminal_recovery_overflow["slots"] = {1: overflow.instance_id}
+	TestAssertions.truthy(fingerprint.length() == 64 and ProfileLoadoutAssignmentRequest.fingerprint_for(changed) != fingerprint, "assignment fingerprint is stable and overflow-placement sensitive", failures)
+	var before := profile.terminal_recovery_overflow.duplicate(true)
+	var request := _request("overflow-preserving-preview", profile, &"fighter", ordinary.instance_id, &"stash-tab-zeta", 0, &"leader-loadout", 9, "")
+	var preview := ProfileLoadoutAssignmentService.new().preview(profile, request)
+	TestAssertions.truthy(preview.ok(), "ordinary assignment preview decodes populated overflow ownership", failures)
+	if preview.ok():
+		TestAssertions.equal(preview.profile.terminal_recovery_overflow, before, "ordinary assignment preview preserves overflow byte-structurally", failures)
+	for endpoint_request: ProfileLoadoutAssignmentRequest in [
+		_request("overflow-source-rejected", profile, &"fighter", overflow.instance_id, ItemSlotContainer.TERMINAL_RECOVERY_OVERFLOW_ID, 0, &"leader-loadout", 6, ""),
+		_request("overflow-destination-rejected", profile, &"fighter", ordinary.instance_id, &"stash-tab-zeta", 0, ItemSlotContainer.TERMINAL_RECOVERY_OVERFLOW_ID, 1, ""),
+	]:
+		var rejected := ProfileLoadoutAssignmentService.new().preview(profile, endpoint_request)
+		TestAssertions.truthy(not rejected.ok(), "assignment explicitly rejects overflow as either endpoint", failures)
+
+
+func _test_compatibility_rejects_missing_or_malformed_canonical_overflow(failures: Array[String]) -> void:
+	var expected_error := "%s field=terminal_recovery_overflow reason=canonical terminal recovery overflow container is missing" % LoadoutCompatibilityService.ERROR_PREFIX
+	var missing_canonical := _profile([], {}, [{}, {}], "fighter")
+	missing_canonical.terminal_recovery_overflow = ItemSlotContainer.create(
+		&"wrong-terminal-overflow-id",
+		ItemSlotContainer.PROFILE_TERMINAL_RECOVERY_OVERFLOW,
+		PROFILE_ID,
+		EquipmentSlotIndex.capacity(),
+	).to_dictionary()
+	var malformed_canonical := _profile([], {}, [{}, {}], "fighter")
+	malformed_canonical.terminal_recovery_overflow = ItemSlotContainer.create(
+		ItemSlotContainer.TERMINAL_RECOVERY_OVERFLOW_ID,
+		ItemSlotContainer.PROFILE_LEADER_EQUIPMENT,
+		PROFILE_ID,
+		EquipmentSlotIndex.capacity(),
+	).to_dictionary()
+	var fighter := GameCatalog.load_defaults().class_by_id(&"fighter")
+	for fixture: ProfileState in [missing_canonical, malformed_canonical]:
+		var projection := LoadoutCompatibilityService.new().project(
+			fixture,
+			fighter,
+			GameCatalog.EQUIPMENT_CATALOG,
+			GameCatalog.ITEM_FOUNDATION_CATALOG,
+		)
+		TestAssertions.truthy(not projection.valid, "compatibility rejects missing or malformed canonical overflow as typed failure", failures)
+		TestAssertions.equal(projection.error, expected_error, "compatibility reports stable canonical overflow context without dereferencing null", failures)
 
 
 func _test_pure_preview_matches_apply(failures: Array[String]) -> void:

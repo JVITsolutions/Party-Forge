@@ -37,12 +37,16 @@ func project(
 			return _failure("field=stash_tabs[%d] reason=stored profile stash tab is unavailable" % index)
 		stash_tabs.append(tab)
 		stash_documents.append(tab.to_dictionary())
+	var terminal_recovery_overflow := state.container(ItemSlotContainer.TERMINAL_RECOVERY_OVERFLOW_ID)
+	if terminal_recovery_overflow == null or terminal_recovery_overflow.container_kind != ItemSlotContainer.PROFILE_TERMINAL_RECOVERY_OVERFLOW:
+		return _failure("field=terminal_recovery_overflow reason=canonical terminal recovery overflow container is missing")
 	var state_fingerprint := LoadoutCompatibilityProjection.state_fingerprint_for(
 		profile.leader_loadout_class_id,
 		class_definition.id,
 		registry.to_dictionary(),
 		leader.to_dictionary(),
 		stash_documents,
+		terminal_recovery_overflow.to_dictionary(),
 	)
 
 	var attributes := _base_core_attributes(class_definition)
@@ -119,6 +123,7 @@ func _profile_ownership(
 ) -> ItemOwnershipStateDecodeResult:
 	var containers: Array = [profile.leader_loadout.duplicate(true)]
 	containers.append_array(profile.stash_tabs.duplicate(true))
+	containers.append(_canonical_container_document(profile.terminal_recovery_overflow))
 	return ItemOwnershipState.decode({
 		"schema_version": ItemOwnershipState.SCHEMA_VERSION,
 		"owner_id": profile.profile_id,
@@ -139,6 +144,15 @@ func _first_empty_stash_destination(stash_tabs: Array[ItemSlotContainer]) -> Arr
 		if slot >= 0:
 			return [index, slot]
 	return []
+
+static func _canonical_container_document(document: Dictionary) -> Dictionary:
+	var result := document.duplicate(true)
+	var source_slots := result.get("slots", {}) as Dictionary
+	var slots: Dictionary = {}
+	for key: Variant in source_slots:
+		slots[str(key)] = source_slots[key]
+	result["slots"] = slots
+	return result
 
 func _failure(detail: String) -> LoadoutCompatibilityProjection:
 	return LoadoutCompatibilityProjection.failure("%s %s" % [ERROR_PREFIX, detail])

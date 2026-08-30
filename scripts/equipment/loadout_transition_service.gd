@@ -211,6 +211,10 @@ func _apply_candidate(candidate: ProfileState, request: LoadoutTransitionRequest
 			retained_items.append(registry.item(instance_id))
 	var containers: Array[ItemSlotContainer] = [leader]
 	containers.append_array(stash_tabs)
+	var recovery_overflow := state.container(ItemSlotContainer.TERMINAL_RECOVERY_OVERFLOW_ID)
+	if recovery_overflow == null or recovery_overflow.container_kind != ItemSlotContainer.PROFILE_TERMINAL_RECOVERY_OVERFLOW:
+		return _error("field=terminal_recovery_overflow reason=stored recovery overflow unavailable")
+	containers.append(recovery_overflow)
 	var rebuilt := ItemOwnershipState.create(candidate.profile_id, ItemRegistry.new(retained_items), containers)
 	var rebuilt_error := rebuilt.validate(_equipment, _foundation)
 	if not rebuilt_error.is_empty():
@@ -222,12 +226,16 @@ func _apply_candidate(candidate: ProfileState, request: LoadoutTransitionRequest
 	for tab: ItemSlotContainer in stash_tabs:
 		stored_tabs.append(rebuilt.container(tab.container_id).to_dictionary())
 	candidate.stash_tabs = stored_tabs
+	candidate.terminal_recovery_overflow = rebuilt.container(
+		ItemSlotContainer.TERMINAL_RECOVERY_OVERFLOW_ID
+	).to_dictionary()
 	candidate.leader_loadout_class_id = String(request.selected_class_id)
 	return ""
 
 func _profile_ownership(profile: ProfileState) -> ItemOwnershipStateDecodeResult:
 	var containers: Array = [profile.leader_loadout.duplicate(true)]
 	containers.append_array(profile.stash_tabs.duplicate(true))
+	containers.append(profile.terminal_recovery_overflow.duplicate(true))
 	return ItemOwnershipState.decode({
 		"schema_version": ItemOwnershipState.SCHEMA_VERSION,
 		"owner_id": profile.profile_id,

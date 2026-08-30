@@ -19,7 +19,25 @@ func run() -> Array[String]:
 	_test_checkout_rejections_and_save_failure_preserve_bytes(failures)
 	_test_recovered_class_validation_reuses_checkout_rules_without_mutation(failures)
 	_test_forfeit_is_atomic_replay_safe_and_never_uses_sandbox_remove(failures)
+	_test_checkout_preserves_populated_overflow_and_unique_ownership(failures)
 	return failures
+
+func _test_checkout_preserves_populated_overflow_and_unique_ownership(failures: Array[String]) -> void:
+	var equipped := _item("item-checkout-overflow-equipped", &"forge_vanguard_sword", 0)
+	var overflow_item := _item("item-checkout-overflow-held", &"windrunner_band", 1)
+	var profile := _profile_with_loadout([equipped, overflow_item], {9: equipped.instance_id}, {}, "fighter")
+	profile.terminal_recovery_overflow = ItemSlotContainer.create(ItemSlotContainer.TERMINAL_RECOVERY_OVERFLOW_ID, ItemSlotContainer.PROFILE_TERMINAL_RECOVERY_OVERFLOW, PROFILE_ID, EquipmentSlotIndex.capacity(), {0: overflow_item.instance_id}).to_dictionary()
+	var root := "user://tests/run_checkout_overflow_%d_%d" % [OS.get_process_id(), Time.get_ticks_usec()]
+	var store := ProfileStore.new()
+	_save_profile(store, profile, root, "populated overflow checkout fixture", failures)
+	var result := RunLoadoutCheckoutService.new(ProfileMutationService.new(store)).checkout(PROFILE_ID, _request("checkout-preserves-overflow", true), root)
+	TestAssertions.truthy(result.ok(), "checkout decodes populated overflow ownership", failures)
+	if result.ok():
+		TestAssertions.equal(result.profile.terminal_recovery_overflow, profile.terminal_recovery_overflow, "checkout preserves overflow byte-structurally", failures)
+		var serialized := JSON.stringify(result.profile.to_dictionary())
+		TestAssertions.equal(serialized.count(overflow_item.instance_id), 2, "checkout keeps one overflow registry record and one overflow placement", failures)
+		TestAssertions.truthy(not serialized.contains("terminal-recovery-overflow\":{\"0\":\"%s\"" % equipped.instance_id), "checkout never treats overflow as a loadout destination", failures)
+	ProfileTestSupport.remove_tree(root)
 
 func _test_profile_codec_rejects_malformed_or_duplicate_strict_run_ownership(failures: Array[String]) -> void:
 	var duplicate_container_state := ItemOwnershipState.create(String(RUN_PLAYER_ID), ItemRegistry.new(), [

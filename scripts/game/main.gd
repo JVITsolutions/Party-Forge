@@ -1718,6 +1718,31 @@ func _on_armoury_equip_requested(item_id: String, slot_id: StringName, class_id:
 
 func _on_armoury_move_requested(item_id: String, destination_container_id: StringName, destination_slot: int) -> void:
 	var profile := profile_manager.active_profile() if profile_manager != null else null
+	if not _storage_projection_matches_profile(profile): return
+	var source := _storage_item_location(_shared_storage_projection, item_id)
+	if source.is_empty(): return
+	if String(source["container_id"]) == String(ItemSlotContainer.TERMINAL_RECOVERY_OVERFLOW_ID):
+		if (
+			destination_container_id == &"leader-loadout"
+			or destination_container_id == ItemSlotContainer.TERMINAL_RECOVERY_OVERFLOW_ID
+			or not _storage_has_ordinary_stash_slot(_shared_storage_projection, destination_container_id, destination_slot)
+			or not _storage_item_at(_shared_storage_projection, destination_container_id, destination_slot).is_empty()
+		):
+			return
+		_storage_transaction_sequence += 1
+		var request := ItemTransactionRequest.move(
+			"armoury-overflow-%d-%d" % [Time.get_ticks_usec(), _storage_transaction_sequence],
+			profile.profile_id,
+			ItemSlotContainer.TERMINAL_RECOVERY_OVERFLOW_ID,
+			int(source["slot"]),
+			item_id,
+			destination_container_id,
+			destination_slot,
+		)
+		var result := _profile_item_storage.apply(profile.profile_id, request, profile_root)
+		if result.ok(): _reload_storage_projection(profile.profile_id)
+		else: push_error(result.error)
+		return
 	var class_id := StringName(profile.leader_loadout_class_id) if profile != null else &""
 	_apply_armoury_assignment(item_id, destination_container_id, destination_slot, class_id)
 
@@ -1785,6 +1810,11 @@ func _storage_item_location(storage: ProfileStorageProjection, item_id: String) 
 	for tab: Dictionary in storage.stash_tabs:
 		for key: Variant in (tab["slots"] as Dictionary):
 			if String((tab["slots"] as Dictionary)[key]) == item_id: return {"container_id": tab["container_id"], "slot": int(key)}
+	var overflow := storage.terminal_recovery_overflow
+	var overflow_slots := overflow.get("slots", {}) as Dictionary
+	for key: Variant in overflow_slots:
+		if String(overflow_slots[key]) == item_id:
+			return {"container_id": String(ItemSlotContainer.TERMINAL_RECOVERY_OVERFLOW_ID), "slot": int(key)}
 	return {}
 
 
@@ -1793,7 +1823,17 @@ func _storage_item_at(storage: ProfileStorageProjection, container_id: StringNam
 		return String(storage.leader_slots[slot]["instance_id"]) if slot >= 0 and slot < storage.leader_slots.size() else ""
 	for tab: Dictionary in storage.stash_tabs:
 		if String(tab["container_id"]) == String(container_id): return String((tab["slots"] as Dictionary).get(str(slot), (tab["slots"] as Dictionary).get(slot, "")))
+	if container_id == ItemSlotContainer.TERMINAL_RECOVERY_OVERFLOW_ID:
+		var slots := storage.terminal_recovery_overflow.get("slots", {}) as Dictionary
+		return String(slots.get(str(slot), slots.get(slot, "")))
 	return ""
+
+
+func _storage_has_ordinary_stash_slot(storage: ProfileStorageProjection, container_id: StringName, slot: int) -> bool:
+	for tab: Dictionary in storage.stash_tabs:
+		if String(tab.get("container_id", "")) == String(container_id):
+			return slot >= 0 and slot < int(tab.get("capacity", 0))
+	return false
 
 
 func _storage_projection_matches_profile(profile: ProfileState) -> bool:

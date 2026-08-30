@@ -7,10 +7,53 @@ func _init(store: ProfileStore = null) -> void:
 	_store = store if store != null else ProfileStore.new()
 
 func apply(profile_id: String, transaction_id: String, mutate: Callable, root: String = ProfileStore.DEFAULT_ROOT, now_unix: int = -1, operation: String = "", request: Dictionary = {}) -> ProfileMutationResult:
-	return _apply_internal(profile_id, transaction_id, mutate, root, now_unix, operation, request, false, [], "", {})
+	return _apply_internal(profile_id, transaction_id, mutate, root, now_unix, operation, request, false, [], "", {}, false)
 
 func apply_irreversible(profile_id: String, transaction_id: String, mutate: Callable, root: String = ProfileStore.DEFAULT_ROOT, now_unix: int = -1, operation: String = "", request: Dictionary = {}, removed_instance_ids: Array[String] = []) -> ProfileMutationResult:
-	return _apply_internal(profile_id, transaction_id, mutate, root, now_unix, operation, request, true, removed_instance_ids.duplicate(), "", {})
+	return _apply_internal(profile_id, transaction_id, mutate, root, now_unix, operation, request, true, removed_instance_ids.duplicate(), "", {}, false)
+
+func apply_irreversible_terminal_completion(
+	profile_id: String,
+	transaction_id: String,
+	terminal_run_id: StringName,
+	terminal_instance_ids: Array[String],
+	mutate: Callable,
+	root: String = ProfileStore.DEFAULT_ROOT,
+	now_unix: int = -1,
+	operation: String = "",
+	request: Dictionary = {},
+) -> ProfileMutationResult:
+	var result := ProfileMutationResult.new()
+	if transaction_id.strip_edges().is_empty():
+		result.error = "PROFILE_MUTATION_ERROR profile=%s reason=transaction id is required" % profile_id
+		return result
+	var clean_run_id := String(terminal_run_id).strip_edges()
+	if clean_run_id.is_empty():
+		result.error = "PROFILE_MUTATION_ERROR profile=%s transaction=%s reason=terminal run id is required" % [profile_id, transaction_id]
+		return result
+	var seen_instance_ids: Dictionary = {}
+	for instance_id: String in terminal_instance_ids:
+		if instance_id.strip_edges().is_empty():
+			result.error = "PROFILE_MUTATION_ERROR profile=%s transaction=%s reason=terminal instance ids must be non-empty" % [profile_id, transaction_id]
+			return result
+		if seen_instance_ids.has(instance_id):
+			result.error = "PROFILE_MUTATION_ERROR profile=%s transaction=%s reason=terminal instance ids must be unique" % [profile_id, transaction_id]
+			return result
+		seen_instance_ids[instance_id] = true
+	if not mutate.is_valid():
+		result.error = "PROFILE_MUTATION_ERROR profile=%s transaction=%s reason=mutation is missing" % [profile_id, transaction_id]
+		return result
+	if operation.strip_edges().is_empty():
+		result.error = "PROFILE_MUTATION_ERROR profile=%s transaction=%s reason=operation is required" % [profile_id, transaction_id]
+		return result
+	var request_error := _validate_request_value(request)
+	if not request_error.is_empty():
+		result.error = "PROFILE_MUTATION_ERROR profile=%s transaction=%s reason=invalid request %s" % [profile_id, transaction_id, request_error]
+		return result
+	return _apply_internal(
+		profile_id, transaction_id, mutate, root, now_unix, operation, request,
+		true, terminal_instance_ids.duplicate(), clean_run_id, {}, true,
+	)
 
 func apply_with_resumable_run_revocation(
 	profile_id: String,
@@ -27,7 +70,7 @@ func apply_with_resumable_run_revocation(
 		var result := ProfileMutationResult.new()
 		result.error = "PROFILE_MUTATION_ERROR profile=%s transaction=%s reason=revoked run id is required" % [profile_id, transaction_id]
 		return result
-	return _apply_internal(profile_id, transaction_id, mutate, root, now_unix, operation, request, true, [], String(revoked_run_id), receipt)
+	return _apply_internal(profile_id, transaction_id, mutate, root, now_unix, operation, request, true, [], String(revoked_run_id), receipt, false)
 
 func _apply_internal(
 	profile_id: String,
@@ -41,6 +84,7 @@ func _apply_internal(
 	removed_instance_ids: Array[String],
 	revoked_run_id: String,
 	receipt: Dictionary,
+	strict_terminal_completion: bool,
 ) -> ProfileMutationResult:
 	var result := ProfileMutationResult.new()
 	if transaction_id.strip_edges().is_empty():
@@ -71,6 +115,23 @@ func _apply_internal(
 		var record := loaded.profile.applied_transactions[transaction_id] as Dictionary
 		if record["operation"] != clean_operation or record["fingerprint"] != fingerprint:
 			result.error = "PROFILE_MUTATION_ERROR profile=%s transaction=%s reason=transaction id conflict" % [profile_id, transaction_id]
+			return result
+		if strict_terminal_completion:
+			_sanitize_historical_transaction_snapshots(loaded.profile, revoked_run_id, removed_instance_ids, true)
+			var duplicate_validation := ProfileCodec.validate_profile(loaded.profile)
+			if not duplicate_validation.is_empty():
+				result.error = duplicate_validation
+				return result
+			var duplicate_save_error := _store.save_profile_irreversible(loaded.profile, root)
+			if not duplicate_save_error.is_empty():
+				result.error = duplicate_save_error
+				return result
+			record = loaded.profile.applied_transactions[transaction_id] as Dictionary
+			var committed_projection := loaded.profile.copy()
+			committed_projection.applied_transactions = {}
+			result.profile = committed_projection
+			result.duplicate = true
+			result._receipt = (record.get("receipt", {}) as Dictionary).duplicate(true)
 			return result
 		var snapshot := ProfileCodec.decode(JSON.stringify(record["result_profile"]))
 		if not snapshot.ok():
@@ -121,7 +182,7 @@ func _apply_internal(
 		for instance_id: String in revoked_instance_ids:
 			if instance_id not in forbidden_instance_ids:
 				forbidden_instance_ids.append(instance_id)
-		_sanitize_historical_transaction_snapshots(working, revoked_run_id, forbidden_instance_ids)
+		_sanitize_historical_transaction_snapshots(working, revoked_run_id, forbidden_instance_ids, strict_terminal_completion)
 	working.normalize()
 	var validation := ProfileCodec.validate_profile(working)
 	if not validation.is_empty():
@@ -130,7 +191,7 @@ func _apply_internal(
 	var requested_timestamp := now_unix if now_unix >= 0 else int(Time.get_unix_time_from_system())
 	var committed_timestamp := maxi(loaded.profile.updated_at_unix, maxi(working.created_at_unix, requested_timestamp))
 	working.updated_at_unix = committed_timestamp
-	var result_profile := working.to_dictionary()
+	var result_profile := _terminal_sanitized_result_profile(working, revoked_run_id, removed_instance_ids) if strict_terminal_completion else working.to_dictionary()
 	result_profile["applied_transactions"] = {}
 	var transaction_record := {
 		"operation": clean_operation,
@@ -166,19 +227,67 @@ static func _strict_run_instance_ids(resumable_run: Dictionary, revoked_run_id: 
 	result.sort()
 	return result
 
-static func _sanitize_historical_transaction_snapshots(profile: ProfileState, revoked_run_id: String, forbidden_instance_ids: Array[String]) -> void:
+static func _sanitize_historical_transaction_snapshots(
+	profile: ProfileState,
+	revoked_run_id: String,
+	forbidden_instance_ids: Array[String],
+	strip_terminal_instances: bool = false,
+) -> void:
 	var sanitized := profile.to_dictionary()
 	sanitized["applied_transactions"] = {}
+	if strip_terminal_instances:
+		sanitized = _terminal_sanitized_document(sanitized, revoked_run_id, forbidden_instance_ids)
 	for transaction_id: Variant in profile.applied_transactions:
 		var record := (profile.applied_transactions[transaction_id] as Dictionary).duplicate(true)
 		var snapshot := record["result_profile"] as Dictionary
 		var resumable := snapshot["resumable_run"] as Dictionary
 		var owns_revoked_run := resumable.has("item_state") and String(resumable.get("run_id", "")) == revoked_run_id
-		if owns_revoked_run or _contains_any_string(snapshot, forbidden_instance_ids):
+		var terminal := snapshot.get("terminal_resolution", {}) as Dictionary
+		var terminal_snapshot := terminal.get("snapshot", {}) as Dictionary
+		var owns_terminal_run := not revoked_run_id.is_empty() and String(terminal_snapshot.get("run_id", "")) == revoked_run_id
+		if owns_revoked_run or owns_terminal_run or _contains_any_string(snapshot, forbidden_instance_ids):
 			var replacement := sanitized.duplicate(true)
 			replacement["updated_at_unix"] = record["committed_at_unix"]
 			record["result_profile"] = replacement
 			profile.applied_transactions[transaction_id] = record
+
+static func _terminal_sanitized_result_profile(profile: ProfileState, terminal_run_id: String, terminal_instance_ids: Array[String]) -> Dictionary:
+	return _terminal_sanitized_document(profile.to_dictionary(), terminal_run_id, terminal_instance_ids)
+
+static func _terminal_sanitized_document(document: Dictionary, terminal_run_id: String, terminal_instance_ids: Array[String]) -> Dictionary:
+	var result := document.duplicate(true)
+	result["applied_transactions"] = {}
+	var terminal := result.get("terminal_resolution", {}) as Dictionary
+	var terminal_snapshot := terminal.get("snapshot", {}) as Dictionary
+	if terminal.is_empty() or terminal_run_id.is_empty() or String(terminal_snapshot.get("run_id", "")) == terminal_run_id:
+		result["terminal_resolution"] = {}
+	var resumable := result.get("resumable_run", {}) as Dictionary
+	if not terminal_run_id.is_empty() and String(resumable.get("run_id", "")) == terminal_run_id:
+		result["resumable_run"] = {}
+	if terminal_instance_ids.is_empty():
+		return result
+	var records := result.get("item_records", {}) as Dictionary
+	var kept_items: Array = []
+	for item: Variant in records.get("items", []) as Array:
+		if not item is Dictionary or String((item as Dictionary).get("instance_id", "")) not in terminal_instance_ids:
+			kept_items.append((item as Dictionary).duplicate(true) if item is Dictionary else item)
+	records["items"] = kept_items
+	result["item_records"] = records
+	_sanitize_container_slots(result.get("leader_loadout", {}) as Dictionary, terminal_instance_ids)
+	_sanitize_container_slots(result.get("terminal_recovery_overflow", {}) as Dictionary, terminal_instance_ids)
+	for stash: Variant in result.get("stash_tabs", []) as Array:
+		if stash is Dictionary:
+			_sanitize_container_slots(stash as Dictionary, terminal_instance_ids)
+	return result
+
+static func _sanitize_container_slots(container: Dictionary, terminal_instance_ids: Array[String]) -> void:
+	if container.is_empty() or not container.get("slots", {}) is Dictionary:
+		return
+	var slots := container.get("slots", {}) as Dictionary
+	for slot: Variant in slots.keys():
+		if String(slots[slot]) in terminal_instance_ids:
+			slots.erase(slot)
+	container["slots"] = slots
 
 static func _contains_any_string(value: Variant, needles: Array[String]) -> bool:
 	if needles.is_empty():

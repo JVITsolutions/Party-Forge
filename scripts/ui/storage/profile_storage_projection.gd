@@ -12,6 +12,7 @@ var profile_id := ""
 var active_class_id: StringName
 var _leader_slots: Array[Dictionary] = []
 var _stash_tabs: Array[Dictionary] = []
+var _terminal_recovery_overflow: Dictionary = {}
 var _item_records: Dictionary = {}
 var _profile: ProfileState
 var _state: ItemOwnershipState
@@ -28,6 +29,7 @@ var _comparison_cache_by_item: Dictionary = {}
 
 var leader_slots: Array[Dictionary]: get = _get_leader_slots
 var stash_tabs: Array[Dictionary]: get = _get_stash_tabs
+var terminal_recovery_overflow: Dictionary: get = _get_terminal_recovery_overflow
 var item_records: Dictionary: get = _get_item_records
 
 static func from_profile(
@@ -45,6 +47,7 @@ static func from_profile(
 		return result
 	var containers: Array = [profile.leader_loadout.duplicate(true)]
 	containers.append_array(profile.stash_tabs.duplicate(true))
+	containers.append(profile.terminal_recovery_overflow.duplicate(true))
 	var decoded := ItemOwnershipState.decode({
 		"schema_version": ItemOwnershipState.SCHEMA_VERSION,
 		"owner_id": profile.profile_id,
@@ -58,6 +61,10 @@ static func from_profile(
 	var leader := state.container(&"leader-loadout")
 	if leader == null:
 		result.error = "%s field=leader_loadout reason=canonical container is missing" % ERROR_PREFIX
+		return result
+	var recovery_overflow := state.container(ItemSlotContainer.TERMINAL_RECOVERY_OVERFLOW_ID)
+	if recovery_overflow == null or recovery_overflow.container_kind != ItemSlotContainer.PROFILE_TERMINAL_RECOVERY_OVERFLOW:
+		result.error = "%s field=terminal_recovery_overflow reason=canonical container is missing" % ERROR_PREFIX
 		return result
 	result.profile_id = profile.profile_id
 	result.active_class_id = StringName(profile.leader_loadout_class_id)
@@ -101,6 +108,15 @@ static func from_profile(
 			"capacity": tab.capacity,
 			"slots": tab.to_dictionary()["slots"].duplicate(true),
 		})
+	result._terminal_recovery_overflow = {
+		"container_id": String(recovery_overflow.container_id),
+		"capacity": recovery_overflow.capacity,
+		"slots": recovery_overflow.to_dictionary()["slots"].duplicate(true),
+	}
+	var protected_overflow_ids := _protected_overflow_ids(profile)
+	if protected_overflow_ids.has("error"):
+		result.error = "%s field=terminal_resolution reason=%s" % [ERROR_PREFIX, String(protected_overflow_ids["error"])]
+		return result
 	var registry := state.registry()
 	var projected_item_records: Dictionary = {}
 	for instance_id: String in registry.ids():
@@ -116,6 +132,10 @@ static func from_profile(
 		if result._container_has_item(leader, instance_id) and result._current_activation != null:
 			detail["is_disabled"] = not result._current_activation.is_active(instance_id)
 			detail["disabled_requirement_lines"] = result._disabled_requirement_lines(state, result._current_activation, instance_id)
+		if result._container_has_item(recovery_overflow, instance_id):
+			detail["is_recovery_overflow"] = true
+			if protected_overflow_ids.has(instance_id):
+				detail["move_locked_reason"] = "Available after terminal resolution"
 		projected_item_records[instance_id] = detail
 	result._item_records = projected_item_records
 	result.valid = true
@@ -129,6 +149,7 @@ func copy() -> ProfileStorageProjection:
 	result.active_class_id = active_class_id
 	result._leader_slots = _leader_slots.duplicate(true)
 	result._stash_tabs = _stash_tabs.duplicate(true)
+	result._terminal_recovery_overflow = _terminal_recovery_overflow.duplicate(true)
 	result._item_records = _item_records.duplicate(true)
 	result._profile = _profile.copy() if _profile != null else null
 	result._state = _state.copy() if _state != null else null
@@ -162,6 +183,9 @@ func comparison_lines_by_slot(instance_id: String) -> Dictionary:
 	var source := _location_for(instance_id)
 	if source.is_empty():
 		return result
+	if String(source.get("container_id", "")) == String(ItemSlotContainer.TERMINAL_RECOVERY_OVERFLOW_ID):
+		_comparison_cache_by_item[instance_id] = {}
+		return {}
 	var compatible: Array = detail.get("compatible_slot_ids", [])
 	for slot_value: Variant in compatible:
 		var slot_id := String(slot_value)
@@ -279,6 +303,7 @@ func _location_for(instance_id: String) -> Dictionary:
 func _decode_profile_state(profile: ProfileState) -> ItemOwnershipState:
 	var containers: Array = [profile.leader_loadout.duplicate(true)]
 	containers.append_array(profile.stash_tabs.duplicate(true))
+	containers.append(profile.terminal_recovery_overflow.duplicate(true))
 	var decoded := ItemOwnershipState.decode({
 		"schema_version": ItemOwnershipState.SCHEMA_VERSION,
 		"owner_id": profile.profile_id,
@@ -350,6 +375,17 @@ func _container_has_item(container: ItemSlotContainer, instance_id: String) -> b
 			return true
 	return false
 
+static func _protected_overflow_ids(profile: ProfileState) -> Dictionary:
+	var result: Dictionary = {}
+	if profile == null or profile.terminal_resolution.is_empty():
+		return result
+	var decoded := RunTerminalRecoveryCodec.decode(profile.terminal_resolution)
+	if not decoded.ok():
+		return {"error": decoded.error}
+	for instance_id: String in decoded.record.protected_displaced_item_ids:
+		result[instance_id] = true
+	return result
+
 static func inspector_text(detail: Dictionary) -> String:
 	if detail.is_empty():
 		return "Select an item"
@@ -397,4 +433,5 @@ static func operation_name(operation: int) -> String:
 
 func _get_leader_slots() -> Array[Dictionary]: return _leader_slots.duplicate(true)
 func _get_stash_tabs() -> Array[Dictionary]: return _stash_tabs.duplicate(true)
+func _get_terminal_recovery_overflow() -> Dictionary: return _terminal_recovery_overflow.duplicate(true)
 func _get_item_records() -> Dictionary: return _item_records.duplicate(true)

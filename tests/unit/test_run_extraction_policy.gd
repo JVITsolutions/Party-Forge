@@ -14,6 +14,8 @@ const INVENTORY_FOUR_ITEM := "item-inventory-4"
 
 func run() -> Array[String]:
 	var failures: Array[String] = []
+	var empty_profile := ProfileState.new_profile(PROFILE_ID, "Overflow", 1000)
+	TestAssertions.truthy(empty_profile.get("terminal_recovery_overflow") is Dictionary, "extraction policy receives schema-six overflow ownership", failures)
 	_test_source_projection_parity(failures)
 	_test_configured_non_strict_context_remains_supported(failures)
 	_test_legacy_wrapper_skips_null_members(failures)

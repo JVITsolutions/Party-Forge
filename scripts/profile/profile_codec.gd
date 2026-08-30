@@ -8,6 +8,7 @@ const LEGACY_SCHEMA_VERSION := 1
 const SCHEMA_TWO_VERSION := 2
 const SCHEMA_THREE_VERSION := 3
 const SCHEMA_FOUR_VERSION := 4
+const SCHEMA_FIVE_VERSION := 5
 const HISTORICAL_FIELDS: Array[String] = [
 	"schema_version",
 	"profile_id",
@@ -92,7 +93,7 @@ const SCHEMA_THREE_FIELDS: Array[String] = [
 	"resumable_run",
 	"applied_transactions",
 ]
-const CURRENT_FIELDS: Array[String] = [
+const SCHEMA_FIVE_FIELDS: Array[String] = [
 	"schema_version",
 	"profile_id",
 	"display_name",
@@ -123,6 +124,7 @@ const CURRENT_FIELDS: Array[String] = [
 	"applied_transactions",
 	"preferred_player_color_id",
 ]
+const CURRENT_FIELDS: Array[String] = SCHEMA_FIVE_FIELDS + ["terminal_resolution", "terminal_recovery_overflow"]
 const SCHEMA_FOUR_FIELDS: Array[String] = [
 	"schema_version",
 	"profile_id",
@@ -205,6 +207,9 @@ static func validate_schema_three_document(document: Dictionary) -> String:
 static func validate_schema_four_document(document: Dictionary) -> String:
 	return _validate_document(document, SCHEMA_FOUR_VERSION, false)
 
+static func validate_schema_five_document(document: Dictionary) -> String:
+	return _validate_document(document, SCHEMA_FIVE_VERSION, false)
+
 static func validate_loadable_document(document: Dictionary) -> String:
 	var schema_value: Variant = document.get("schema_version")
 	if _is_json_int(schema_value, LEGACY_SCHEMA_VERSION, LEGACY_SCHEMA_VERSION):
@@ -215,6 +220,8 @@ static func validate_loadable_document(document: Dictionary) -> String:
 		return _validate_document(document, SCHEMA_THREE_VERSION, false, true)
 	if _is_json_int(schema_value, SCHEMA_FOUR_VERSION, SCHEMA_FOUR_VERSION):
 		return _validate_document(document, SCHEMA_FOUR_VERSION, false)
+	if _is_json_int(schema_value, SCHEMA_FIVE_VERSION, SCHEMA_FIVE_VERSION):
+		return _validate_document(document, SCHEMA_FIVE_VERSION, false)
 	if _is_json_int(schema_value, ProfileState.SCHEMA_VERSION, ProfileState.SCHEMA_VERSION):
 		return _validate_document(document, ProfileState.SCHEMA_VERSION, false)
 	return _schema_error(schema_value)
@@ -227,13 +234,15 @@ static func _validate_document(
 ) -> String:
 	if not _is_json_int(data.get("schema_version"), expected_schema, expected_schema):
 		return _schema_error(data.get("schema_version", "missing"))
-	var expected_fields := HISTORICAL_FIELDS
+	var expected_fields: Array = HISTORICAL_FIELDS
 	if expected_schema == SCHEMA_TWO_VERSION:
 		expected_fields = SCHEMA_TWO_FIELDS
 	elif expected_schema == SCHEMA_THREE_VERSION:
 		expected_fields = SCHEMA_THREE_FIELDS
 	elif expected_schema == SCHEMA_FOUR_VERSION:
 		expected_fields = SCHEMA_FOUR_FIELDS
+	elif expected_schema == SCHEMA_FIVE_VERSION:
+		expected_fields = SCHEMA_FIVE_FIELDS
 	elif expected_schema == ProfileState.SCHEMA_VERSION:
 		expected_fields = CURRENT_FIELDS
 	var fields_error := _exact_fields(data, expected_fields)
@@ -280,6 +289,13 @@ static func _validate_document(
 	for field: String in ["last_safe_checkpoint", "tree_allocations", "tree_visibility_progress", "owned_characters", "resumable_run", "applied_transactions"]:
 		if not data[field] is Dictionary:
 			return _field_error(field, "must be a dictionary")
+	if expected_schema == ProfileState.SCHEMA_VERSION:
+		for field: String in ["terminal_resolution", "terminal_recovery_overflow"]:
+			if not data[field] is Dictionary:
+				return _field_error(field, "must be a dictionary")
+		var terminal := data["terminal_resolution"] as Dictionary
+		if not terminal.is_empty() and not RunTerminalRecoveryCodec.decode(terminal).ok():
+			return _field_error("terminal_resolution", RunTerminalRecoveryCodec.decode(terminal).error)
 	for field: String in ["milestones", "permanent_feature_unlocks", "discovered_buildings", "discovered_trees", "stash_tabs", "run_history"]:
 		if not data[field] is Array:
 			return _field_error(field, "must be an array")
@@ -312,7 +328,7 @@ static func _validate_document(
 		return _field_error("resumable_run", "must be empty after legacy recovery revocation")
 	if expected_schema >= SCHEMA_FOUR_VERSION and not recovery.is_empty():
 		var resumable_error := _validate_legacy_resumable_run(recovery) \
-			if expected_schema < ProfileState.SCHEMA_VERSION \
+			if expected_schema < SCHEMA_FIVE_VERSION \
 			else ResumableRunItemCodec.validate_document(
 				recovery,
 				GameCatalog.EQUIPMENT_CATALOG,
@@ -418,6 +434,13 @@ static func _validate_storage(data: Dictionary, include_leader_loadout: bool) ->
 			return _field_error("leader_loadout", "container_kind must equal profile_leader_equipment")
 		container_documents.append(leader_document.duplicate(true))
 	container_documents.append_array(stash_documents.duplicate(true))
+	if data.has("terminal_recovery_overflow"):
+		var overflow := data["terminal_recovery_overflow"] as Dictionary
+		if String(overflow.get("container_id", "")) != String(ItemSlotContainer.TERMINAL_RECOVERY_OVERFLOW_ID):
+			return _field_error("terminal_recovery_overflow", "container_id must equal terminal-recovery-overflow")
+		if String(overflow.get("container_kind", "")) != String(ItemSlotContainer.PROFILE_TERMINAL_RECOVERY_OVERFLOW):
+			return _field_error("terminal_recovery_overflow", "container_kind must equal profile_terminal_recovery_overflow")
+		container_documents.append(overflow.duplicate(true))
 	var ownership_document := {
 		"schema_version": ItemOwnershipState.SCHEMA_VERSION,
 		"owner_id": data["profile_id"],
@@ -431,7 +454,9 @@ static func _validate_storage(data: Dictionary, include_leader_loadout: bool) ->
 			field = "leader_loadout"
 		elif decoded.error.contains("containers"):
 			field = "stash_tabs"
-		return _field_error(field, decoded.error)
+		if data.has("terminal_recovery_overflow") and decoded.error.contains(String(ItemSlotContainer.TERMINAL_RECOVERY_OVERFLOW_ID)):
+			field = "terminal_recovery_overflow"
+		return _field_error(field, "profile items must be uniquely owned: %s" % decoded.error)
 	return ""
 
 static func _validate_transaction_record(
@@ -487,6 +512,8 @@ static func _profile_from_current_document(data: Dictionary) -> ProfileState:
 	profile.inventory_columns = int(data["inventory_columns"])
 	var container_documents: Array = [(data["leader_loadout"] as Dictionary).duplicate(true)]
 	container_documents.append_array((data["stash_tabs"] as Array).duplicate(true))
+	if data.has("terminal_recovery_overflow"):
+		container_documents.append((data["terminal_recovery_overflow"] as Dictionary).duplicate(true))
 	var ownership_document := {
 		"schema_version": ItemOwnershipState.SCHEMA_VERSION,
 		"owner_id": data["profile_id"],
@@ -510,8 +537,14 @@ static func _profile_from_current_document(data: Dictionary) -> ProfileState:
 	profile.extraction_capacity = int(data["extraction_capacity"])
 	profile.run_history = _dictionaries(data["run_history"] as Array)
 	profile.resumable_run = (data["resumable_run"] as Dictionary).duplicate(true)
+	if not profile.resumable_run.is_empty():
+		var bootstrap := ResumableRunItemCodec.decode(profile.resumable_run, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)
+		if bootstrap != null:
+			profile.resumable_run = ResumableRunItemCodec.encode(bootstrap)
 	profile.applied_transactions = (data["applied_transactions"] as Dictionary).duplicate(true)
 	profile.preferred_player_color_id = StringName(data["preferred_player_color_id"] as String)
+	profile.terminal_resolution = (data.get("terminal_resolution", {}) as Dictionary).duplicate(true)
+	profile.terminal_recovery_overflow = ownership.container(ItemSlotContainer.TERMINAL_RECOVERY_OVERFLOW_ID).to_dictionary() if data.has("terminal_recovery_overflow") else ProfileState._empty_terminal_recovery_overflow(profile.profile_id)
 	return profile
 
 static func _canonical_schema_three_document(data: Dictionary) -> Dictionary:
@@ -522,9 +555,11 @@ static func _canonical_schema_three_document(data: Dictionary) -> Dictionary:
 	var result := profile.to_dictionary()
 	result["schema_version"] = SCHEMA_THREE_VERSION
 	result.erase("preferred_player_color_id")
+	result.erase("terminal_resolution")
+	result.erase("terminal_recovery_overflow")
 	return result
 
-static func _exact_fields(data: Dictionary, expected: Array[String]) -> String:
+static func _exact_fields(data: Dictionary, expected: Array) -> String:
 	var missing: Array[String] = []
 	for field: String in expected:
 		if not data.has(field):

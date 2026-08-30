@@ -36,9 +36,17 @@ static func migrate_document(document: Dictionary) -> ProfileMigrationResult:
 		result.error = ProfileCodec.validate_schema_four_document(candidate)
 		if not result.error.is_empty():
 			return result
-	result.error = _migrate_schema_four_document(candidate)
-	if not result.error.is_empty():
-		return result
+	if result.source_schema_version <= ProfileCodec.SCHEMA_FOUR_VERSION:
+		result.error = _migrate_schema_four_document(candidate)
+		if not result.error.is_empty():
+			return result
+		result.error = ProfileCodec.validate_schema_five_document(candidate)
+		if not result.error.is_empty():
+			return result
+	if result.source_schema_version <= ProfileCodec.SCHEMA_FIVE_VERSION:
+		result.error = _migrate_schema_five_document(candidate)
+		if not result.error.is_empty():
+			return result
 	result.error = ProfileCodec.validate_current_document(candidate)
 	if not result.error.is_empty():
 		return result
@@ -106,7 +114,10 @@ static func _migrate_schema_three_document(document: Dictionary) -> String:
 		snapshot_error = ProfileCodec.validate_schema_four_document(snapshot)
 		if not snapshot_error.is_empty():
 			return snapshot_error
-		record["result_profile"] = ProfileCodec._profile_from_current_document(snapshot).to_dictionary()
+		var canonical := ProfileCodec._profile_from_current_document(snapshot).to_dictionary()
+		canonical.erase("terminal_resolution")
+		canonical.erase("terminal_recovery_overflow")
+		record["result_profile"] = canonical
 		record["committed_at_unix"] = int(record["committed_at_unix"])
 	document["schema_version"] = ProfileCodec.SCHEMA_FOUR_VERSION
 	document["preferred_player_color_id"] = String(PlayerColorPalette.DEFAULT_ID)
@@ -121,10 +132,23 @@ static func _migrate_schema_four_document(document: Dictionary) -> String:
 		if not snapshot_error.is_empty():
 			return snapshot_error
 		record["result_profile"] = snapshot
-	document["schema_version"] = ProfileState.SCHEMA_VERSION
+	document["schema_version"] = ProfileCodec.SCHEMA_FIVE_VERSION
 	var recovery := document["resumable_run"] as Dictionary
 	if not recovery.is_empty():
 		recovery["selected_leader_class_id"] = ""
+	return ""
+
+static func _migrate_schema_five_document(document: Dictionary) -> String:
+	for transaction_id: Variant in document["applied_transactions"] as Dictionary:
+		var record := (document["applied_transactions"] as Dictionary)[transaction_id] as Dictionary
+		var snapshot := (record["result_profile"] as Dictionary).duplicate(true)
+		var snapshot_error := _migrate_schema_five_document(snapshot)
+		if not snapshot_error.is_empty():
+			return snapshot_error
+		record["result_profile"] = snapshot
+	document["schema_version"] = ProfileState.SCHEMA_VERSION
+	document["terminal_resolution"] = {}
+	document["terminal_recovery_overflow"] = ProfileState._empty_terminal_recovery_overflow(String(document["profile_id"]))
 	return ""
 
 static func _source_schema_version(document: Dictionary) -> int:

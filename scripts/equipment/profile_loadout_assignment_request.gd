@@ -55,6 +55,7 @@ static func fingerprint_for(profile: ProfileState) -> String:
 		return ""
 	var containers: Array = [profile.leader_loadout.duplicate(true)]
 	containers.append_array(profile.stash_tabs.duplicate(true))
+	containers.append(_canonical_container_document(profile.terminal_recovery_overflow))
 	var decoded := ItemOwnershipState.decode({
 		"schema_version": ItemOwnershipState.SCHEMA_VERSION,
 		"owner_id": profile.profile_id,
@@ -117,3 +118,12 @@ static func _canonicalize(value: Variant) -> Variant:
 			result.append(_canonicalize(item))
 		return result
 	return String(value) if value is StringName else value
+
+static func _canonical_container_document(document: Dictionary) -> Dictionary:
+	var result := document.duplicate(true)
+	var source_slots := result.get("slots", {}) as Dictionary
+	var slots: Dictionary = {}
+	for key: Variant in source_slots:
+		slots[str(key)] = source_slots[key]
+	result["slots"] = slots
+	return result

@@ -8,6 +8,8 @@ const RUN_GROUND_ITEMS_ID := &"run-ground-items"
 const RUN_GROUND_ITEMS_CAPACITY := 2048
 const PROFILE_STASH_TAB := &"profile_stash_tab"
 const PROFILE_LEADER_EQUIPMENT := &"profile_leader_equipment"
+const PROFILE_TERMINAL_RECOVERY_OVERFLOW := &"profile_terminal_recovery_overflow"
+const TERMINAL_RECOVERY_OVERFLOW_ID := &"terminal-recovery-overflow"
 const RUN_MEMBER_EQUIPMENT := &"run_member_equipment"
 const DEVELOPER_INVENTORY := &"developer_inventory"
 const DEVELOPER_STASH_TAB := &"developer_stash_tab"
@@ -118,7 +120,7 @@ func _validation_error(path: String) -> String:
 	elif container_kind == RUN_GROUND_ITEMS:
 		if capacity != RUN_GROUND_ITEMS_CAPACITY:
 			return _error("%s.capacity" % path, "%s capacity must equal %d" % [container_kind, RUN_GROUND_ITEMS_CAPACITY])
-	elif container_kind == PROFILE_LEADER_EQUIPMENT or container_kind == RUN_MEMBER_EQUIPMENT:
+	elif container_kind == PROFILE_LEADER_EQUIPMENT or container_kind == RUN_MEMBER_EQUIPMENT or container_kind == PROFILE_TERMINAL_RECOVERY_OVERFLOW:
 		if capacity != EquipmentSlotIndex.capacity():
 			return _error("%s.capacity" % path, "%s capacity must equal %d" % [container_kind, EquipmentSlotIndex.capacity()])
 	elif capacity != STASH_CAPACITY:
@@ -182,6 +184,7 @@ static func _known_kind_strings() -> Array[String]:
 		String(RUN_GROUND_ITEMS),
 		String(PROFILE_STASH_TAB),
 		String(PROFILE_LEADER_EQUIPMENT),
+		String(PROFILE_TERMINAL_RECOVERY_OVERFLOW),
 		String(RUN_MEMBER_EQUIPMENT),
 		String(DEVELOPER_INVENTORY),
 		String(DEVELOPER_STASH_TAB),

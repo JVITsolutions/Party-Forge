@@ -5,7 +5,7 @@ const PlayerColorPalette := preload("res://scripts/profile/player_color_palette.
 
 enum PrologueState { NOT_STARTED, IN_PROGRESS, COMPLETED }
 
-const SCHEMA_VERSION := 5
+const SCHEMA_VERSION := 6
 const MAX_STASH_TABS := 100
 
 var schema_version := SCHEMA_VERSION
@@ -36,6 +36,8 @@ var extraction_capacity := 0
 var run_history: Array[Dictionary] = []
 var resumable_run: Dictionary = {}
 var applied_transactions: Dictionary = {}
+var terminal_resolution: Dictionary = {}
+var terminal_recovery_overflow: Dictionary = {}
 var preferred_player_color_id: StringName = PlayerColorPalette.DEFAULT_ID
 
 static func new_profile(
@@ -51,6 +53,7 @@ static func new_profile(
 	result.updated_at_unix = result.created_at_unix
 	result.preferred_player_color_id = preferred_color_id
 	result.leader_loadout = _empty_leader_loadout(result.profile_id)
+	result.terminal_recovery_overflow = _empty_terminal_recovery_overflow(result.profile_id)
 	result.normalize()
 	return result
 
@@ -58,6 +61,14 @@ static func _empty_leader_loadout(profile_id: String) -> Dictionary:
 	return ItemSlotContainer.create(
 		&"leader-loadout",
 		ItemSlotContainer.PROFILE_LEADER_EQUIPMENT,
+		profile_id,
+		EquipmentSlotIndex.capacity(),
+	).to_dictionary()
+
+static func _empty_terminal_recovery_overflow(profile_id: String) -> Dictionary:
+	return ItemSlotContainer.create(
+		ItemSlotContainer.TERMINAL_RECOVERY_OVERFLOW_ID,
+		ItemSlotContainer.PROFILE_TERMINAL_RECOVERY_OVERFLOW,
 		profile_id,
 		EquipmentSlotIndex.capacity(),
 	).to_dictionary()
@@ -108,5 +119,7 @@ func to_dictionary() -> Dictionary:
 		"run_history": run_history.duplicate(true),
 		"resumable_run": resumable_run.duplicate(true),
 		"applied_transactions": applied_transactions.duplicate(true),
+		"terminal_resolution": terminal_resolution.duplicate(true),
+		"terminal_recovery_overflow": terminal_recovery_overflow.duplicate(true),
 		"preferred_player_color_id": String(preferred_player_color_id),
 	}

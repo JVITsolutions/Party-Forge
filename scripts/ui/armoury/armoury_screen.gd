@@ -37,9 +37,11 @@ func open(storage: ProfileStorageProjection, return_focus: Control = null, devel
 		_first_focus().grab_focus()
 
 func refresh(storage: ProfileStorageProjection) -> void:
+	var focus_descriptor := _focused_storage_descriptor()
 	_tooltip().call("force_dismiss")
 	_projection = ArmouryProjection.from_storage(storage)
 	_render_projection()
+	_restore_storage_focus(focus_descriptor)
 
 func close() -> void:
 	_tooltip().call("force_dismiss")
@@ -88,8 +90,15 @@ func _input(event: InputEvent) -> void:
 		close_requested.emit()
 		get_viewport().set_input_as_handled()
 	elif event.is_action_pressed(&"item_sandbox_pickup"):
-		var focused := get_viewport().gui_get_focus_owner() as StorageSlotButton
-		if focused != null and not focused.item_id.is_empty():
+		var viewport := get_viewport()
+		if viewport == null:
+			return
+		var focused := viewport.gui_get_focus_owner() as StorageSlotButton
+		if (
+			focused != null
+			and not focused.item_id.is_empty()
+			and String(focused.detail().get("move_locked_reason", "")).is_empty()
+		):
 			_held_item_id = focused.item_id
 		get_viewport().set_input_as_handled()
 	elif event.is_action_pressed(&"ui_accept") and not _held_item_id.is_empty():
@@ -110,6 +119,7 @@ func _render_projection() -> void:
 	_rebuild_equipment()
 	_rebuild_tabs()
 	_rebuild_stash()
+	_rebuild_recovery_overflow()
 	_rebuild_focus_loop()
 
 func _render_class_label() -> void:
@@ -152,8 +162,43 @@ func _rebuild_stash() -> void:
 		_wire_item_inspection(button)
 		_stash_grid().add_child(button)
 
-func _handle_drop(_source_container_id: StringName, _source_slot: int, item_id: String, destination_container_id: StringName, destination_slot: int) -> void:
+func _rebuild_recovery_overflow() -> void:
+	_clear(_recovery_overflow_grid())
+	var overflow := _projection.terminal_recovery_overflow
+	if overflow.is_empty():
+		return
+	var slots := overflow.get("slots", {}) as Dictionary
+	for slot: int in int(overflow.get("capacity", 0)):
+		var item_id := String(slots.get(str(slot), slots.get(slot, "")))
+		var button := StorageSlotButton.new()
+		button.name = "RecoveryOverflowSlot_%02d" % slot
+		button.bind_item(
+			ItemSlotContainer.TERMINAL_RECOVERY_OVERFLOW_ID,
+			slot,
+			item_id,
+			_projection.item(item_id),
+			"Recovery",
+		)
+		button.item_dropped.connect(_handle_drop)
+		button.pressed.connect(_select_item.bind(item_id))
+		_wire_item_inspection(button)
+		_recovery_overflow_grid().add_child(button)
+
+func _handle_drop(source_container_id: StringName, _source_slot: int, item_id: String, destination_container_id: StringName, destination_slot: int) -> void:
 	if item_id.is_empty():
+		return
+	if destination_container_id == ItemSlotContainer.TERMINAL_RECOVERY_OVERFLOW_ID:
+		return
+	if source_container_id == ItemSlotContainer.TERMINAL_RECOVERY_OVERFLOW_ID:
+		var detail := _projection.item(item_id)
+		if not String(detail.get("move_locked_reason", "")).is_empty():
+			return
+		if destination_container_id == &"leader-loadout" or not _is_ordinary_stash(destination_container_id):
+			return
+		if not _ordinary_stash_slot_is_empty(destination_container_id, destination_slot):
+			return
+		move_requested.emit(item_id, destination_container_id, destination_slot)
+		_held_item_id = ""
 		return
 	if destination_container_id == &"leader-loadout":
 		equip_requested.emit(item_id, EquipmentSlotIndex.slot_for(destination_slot), _selected_class_id())
@@ -175,6 +220,9 @@ func _selected_class_id() -> StringName:
 	return StringName(_class_chooser().get_item_metadata(index)) if index >= 0 and index < _class_chooser().item_count else _projection.active_class_id
 
 func _select_item(item_id: String) -> void:
+	if not String(_projection.item(item_id).get("move_locked_reason", "")).is_empty():
+		_held_item_id = ""
+		return
 	_held_item_id = item_id
 
 
@@ -213,7 +261,75 @@ func _locate(item_id: String) -> Dictionary:
 	for tab: Dictionary in _projection.stash_tabs:
 		for key: Variant in (tab["slots"] as Dictionary):
 			if String((tab["slots"] as Dictionary)[key]) == item_id: return {"container_id": tab["container_id"], "slot": int(key)}
+	var overflow := _projection.terminal_recovery_overflow
+	var overflow_slots := overflow.get("slots", {}) as Dictionary
+	for key: Variant in overflow_slots:
+		if String(overflow_slots[key]) == item_id:
+			return {"container_id": String(ItemSlotContainer.TERMINAL_RECOVERY_OVERFLOW_ID), "slot": int(key)}
 	return {}
+
+func _is_ordinary_stash(container_id: StringName) -> bool:
+	for tab: Dictionary in _projection.stash_tabs:
+		if String(tab.get("container_id", "")) == String(container_id):
+			return true
+	return false
+
+func _ordinary_stash_slot_is_empty(container_id: StringName, slot: int) -> bool:
+	for tab: Dictionary in _projection.stash_tabs:
+		if String(tab.get("container_id", "")) == String(container_id):
+			if slot < 0 or slot >= int(tab.get("capacity", 0)):
+				return false
+			var slots := tab.get("slots", {}) as Dictionary
+			return String(slots.get(str(slot), slots.get(slot, ""))).is_empty()
+	return false
+
+func _focused_storage_descriptor() -> Dictionary:
+	if not is_inside_tree():
+		return {}
+	var focused := get_viewport().gui_get_focus_owner() as StorageSlotButton
+	if focused == null or not is_ancestor_of(focused):
+		return {}
+	return {
+		"container_id": String(focused.container_id),
+		"slot": focused.slot,
+		"item_id": focused.item_id,
+	}
+
+func _restore_storage_focus(descriptor: Dictionary) -> Control:
+	var item_id := String(descriptor.get("item_id", ""))
+	if not item_id.is_empty():
+		for grid: GridContainer in [_equipment_grid(), _stash_grid(), _recovery_overflow_grid()]:
+			for child: Node in grid.get_children():
+				var item_button := child as StorageSlotButton
+				if item_button != null and item_button.item_id == item_id:
+					if item_button.is_inside_tree():
+						item_button.grab_focus()
+					return item_button
+
+	var prior_container_id := String(descriptor.get("container_id", ""))
+	var prior_slot := int(descriptor.get("slot", -1))
+	var nearest_button: StorageSlotButton
+	var nearest_distance := 2147483647
+	for grid: GridContainer in [_equipment_grid(), _stash_grid(), _recovery_overflow_grid()]:
+		for child: Node in grid.get_children():
+			var button := child as StorageSlotButton
+			if button == null or String(button.container_id) != prior_container_id:
+				continue
+			var distance := absi(button.slot - prior_slot)
+			if nearest_button == null or distance < nearest_distance or (distance == nearest_distance and button.slot < nearest_button.slot):
+				nearest_button = button
+				nearest_distance = distance
+	if nearest_button != null:
+		if nearest_button.is_inside_tree():
+			nearest_button.grab_focus()
+		return nearest_button
+
+	var safe_focus := _first_focus()
+	if safe_focus == null or safe_focus.focus_mode == Control.FOCUS_NONE or not safe_focus.visible:
+		safe_focus = _close_button()
+	if safe_focus != null and safe_focus.is_inside_tree():
+		safe_focus.grab_focus()
+	return safe_focus
 
 func _connect_controls() -> void:
 	if not _close_button().pressed.is_connected(_on_close_pressed): _close_button().pressed.connect(_on_close_pressed)
@@ -228,6 +344,7 @@ func _rebuild_focus_loop() -> void:
 	controls.append(_tab_bar())
 	for child: Node in _equipment_grid().get_children(): controls.append(child as Control)
 	for child: Node in _stash_grid().get_children(): controls.append(child as Control)
+	for child: Node in _recovery_overflow_grid().get_children(): controls.append(child as Control)
 	controls.append(_close_button())
 	for index: int in controls.size():
 		var current := controls[index]
@@ -242,6 +359,7 @@ func _frame() -> Control: return get_node("Overlay/Frame") as Control
 func _body() -> BoxContainer: return get_node("Overlay/Frame/Layout/Body") as BoxContainer
 func _equipment_grid() -> GridContainer: return get_node("Overlay/Frame/Layout/Body/Equipment/Slots") as GridContainer
 func _stash_grid() -> GridContainer: return get_node("Overlay/Frame/Layout/Body/Stash/Scroll/Grid") as GridContainer
+func _recovery_overflow_grid() -> GridContainer: return get_node("Overlay/Frame/Layout/Body/RecoveryOverflow/Scroll/Grid") as GridContainer
 func _tab_bar() -> TabBar: return get_node("Overlay/Frame/Layout/Body/Stash/Tabs") as TabBar
 func _class_label() -> Label: return get_node("Overlay/Frame/Layout/Header/Class") as Label
 func _class_chooser() -> OptionButton: return get_node("Overlay/Frame/Layout/Header/ClassChooser") as OptionButton

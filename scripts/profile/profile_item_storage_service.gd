@@ -40,6 +40,7 @@ func apply(
 		func(profile: ProfileState) -> String:
 			var container_documents: Array = [profile.leader_loadout.duplicate(true)]
 			container_documents.append_array(profile.stash_tabs.duplicate(true))
+			container_documents.append(profile.terminal_recovery_overflow.duplicate(true))
 			var ownership := ItemOwnershipState.decode(
 				{
 					"schema_version": ItemOwnershipState.SCHEMA_VERSION,
@@ -56,6 +57,9 @@ func apply(
 				var create_error := _validate_create(profile, request)
 				if not create_error.is_empty():
 					return create_error
+			var overflow_error := _validate_overflow_request(profile, ownership.state, request)
+			if not overflow_error.is_empty():
+				return overflow_error
 			var transaction_result := _transactions.apply(
 				ownership.state,
 				request,
@@ -75,6 +79,9 @@ func apply(
 			profile.stash_tabs = []
 			for stash_id: StringName in stash_ids:
 				profile.stash_tabs.append(candidate.container(stash_id).to_dictionary())
+			profile.terminal_recovery_overflow = candidate.container(
+				ItemSlotContainer.TERMINAL_RECOVERY_OVERFLOW_ID
+			).to_dictionary()
 			if request.operation == ItemTransactionRequest.CREATE_AND_PLACE:
 				profile.next_item_sequence += 1
 			return ""
@@ -90,6 +97,34 @@ static func _validate_container_domain(request: ItemTransactionRequest) -> Strin
 		return "PARTY_FORGE_PROFILE_ITEM_STORAGE_ERROR field=request.source_container_id reason=leader-loadout is reserved for equipment assignment"
 	if request.destination_container_id == "leader-loadout":
 		return "PARTY_FORGE_PROFILE_ITEM_STORAGE_ERROR field=request.destination_container_id reason=leader-loadout is reserved for equipment assignment"
+	if request.destination_container_id == String(ItemSlotContainer.TERMINAL_RECOVERY_OVERFLOW_ID):
+		return "PARTY_FORGE_PROFILE_ITEM_STORAGE_ERROR field=request.destination_container_id reason=recovery overflow is source only"
+	if request.source_container_id == String(ItemSlotContainer.TERMINAL_RECOVERY_OVERFLOW_ID) and request.operation != ItemTransactionRequest.MOVE_TO_EMPTY:
+		return "PARTY_FORGE_PROFILE_ITEM_STORAGE_ERROR field=request.operation reason=recovery overflow permits only move_to_empty"
+	return ""
+
+func _validate_overflow_request(
+	profile: ProfileState,
+	state: ItemOwnershipState,
+	request: ItemTransactionRequest,
+) -> String:
+	if request.source_container_id != String(ItemSlotContainer.TERMINAL_RECOVERY_OVERFLOW_ID):
+		return ""
+	var source := state.container(ItemSlotContainer.TERMINAL_RECOVERY_OVERFLOW_ID)
+	var destination := state.container(StringName(request.destination_container_id))
+	if source == null or source.container_kind != ItemSlotContainer.PROFILE_TERMINAL_RECOVERY_OVERFLOW:
+		return "PARTY_FORGE_PROFILE_ITEM_STORAGE_ERROR field=request.source_container_id reason=recovery overflow source is unavailable"
+	if destination == null or destination.container_kind != ItemSlotContainer.PROFILE_STASH_TAB:
+		return "PARTY_FORGE_PROFILE_ITEM_STORAGE_ERROR field=request.destination_container_id reason=recovery overflow may move only to ordinary stash"
+	if request.destination_slot < 0 or request.destination_slot >= destination.capacity:
+		return "PARTY_FORGE_PROFILE_ITEM_STORAGE_ERROR field=request.destination_slot reason=out of bounds"
+	if not destination.item_id_at(request.destination_slot).is_empty():
+		return "PARTY_FORGE_PROFILE_ITEM_STORAGE_ERROR field=request.destination_slot reason=recovery overflow requires an empty ordinary stash slot"
+	var terminal := RunTerminalRecoveryCodec.decode(profile.terminal_resolution) if not profile.terminal_resolution.is_empty() else null
+	if not profile.terminal_resolution.is_empty() and (terminal == null or not terminal.ok()):
+		return "PARTY_FORGE_PROFILE_ITEM_STORAGE_ERROR field=terminal_resolution reason=current recovery protection is invalid"
+	if terminal != null and terminal.ok() and request.expected_instance_id in terminal.record.protected_displaced_item_ids:
+		return "PARTY_FORGE_PROFILE_ITEM_STORAGE_ERROR field=request.expected_instance_id reason=Available after terminal resolution"
 	return ""
 
 func _validate_create(profile: ProfileState, request: ItemTransactionRequest) -> String:

@@ -14,12 +14,22 @@ var _accepted_extraction: RunExtractionProjection
 var accepted_extraction: RunExtractionProjection:
 	get:
 		return RunResolutionEvaluation._copy_extraction(_accepted_extraction)
+var _protected_displaced_item_ids: Array[String] = []
+var protected_displaced_item_ids: Array[String]:
+	get:
+		return _protected_displaced_item_ids.duplicate()
 
-static func success(profile_value: ProfileState, duplicate_value: bool, accepted_extraction_value: RunExtractionProjection) -> RunResolutionResult:
+static func success(
+	profile_value: ProfileState,
+	duplicate_value: bool,
+	accepted_extraction_value: RunExtractionProjection,
+	protected_displaced_item_ids_value: Array[String] = [],
+) -> RunResolutionResult:
 	var result := RunResolutionResult.new()
 	result._profile = profile_value.copy() if profile_value != null else null
 	result.duplicate = duplicate_value
 	result._accepted_extraction = RunResolutionEvaluation._copy_extraction(accepted_extraction_value)
+	result._protected_displaced_item_ids = protected_displaced_item_ids_value.duplicate()
 	return result
 
 static func failure(error_value: String, failure_category_value: RunResolutionEvaluation.FailureCategory = RunResolutionEvaluation.FailureCategory.INTERNAL, player_reason_value: String = "Something changed while resolving the run. Nothing was moved.") -> RunResolutionResult:

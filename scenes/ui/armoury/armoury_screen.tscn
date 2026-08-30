@@ -64,6 +64,23 @@ size_flags_vertical = 3
 layout_mode = 2
 size_flags_horizontal = 3
 columns = 5
+[node name="RecoveryOverflow" type="VBoxContainer" parent="Overlay/Frame/Layout/Body"]
+custom_minimum_size = Vector2(300, 0)
+layout_mode = 2
+[node name="Title" type="Label" parent="Overlay/Frame/Layout/Body/RecoveryOverflow"]
+layout_mode = 2
+text = "RECOVERY OVERFLOW — SOURCE ONLY"
+[node name="Help" type="Label" parent="Overlay/Frame/Layout/Body/RecoveryOverflow"]
+layout_mode = 2
+text = "Move older recovered items into an empty stash slot."
+autowrap_mode = 2
+[node name="Scroll" type="ScrollContainer" parent="Overlay/Frame/Layout/Body/RecoveryOverflow"]
+layout_mode = 2
+size_flags_vertical = 3
+[node name="Grid" type="GridContainer" parent="Overlay/Frame/Layout/Body/RecoveryOverflow/Scroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+columns = 2
 [node name="Footer" type="HBoxContainer" parent="Overlay/Frame/Layout"]
 layout_mode = 2
 [node name="Help" type="Label" parent="Overlay/Frame/Layout/Footer"]

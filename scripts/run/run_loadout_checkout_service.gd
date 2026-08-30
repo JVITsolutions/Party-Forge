@@ -184,6 +184,7 @@ func _forfeit_candidate(candidate: ProfileState, run_id: StringName) -> String:
 func _profile_ownership(profile: ProfileState) -> ItemOwnershipStateDecodeResult:
 	var containers: Array = [profile.leader_loadout.duplicate(true)]
 	containers.append_array(profile.stash_tabs.duplicate(true))
+	containers.append(profile.terminal_recovery_overflow.duplicate(true))
 	return ItemOwnershipState.decode(
 		{
 			"schema_version": ItemOwnershipState.SCHEMA_VERSION,

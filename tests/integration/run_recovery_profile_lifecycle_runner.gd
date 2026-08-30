@@ -509,6 +509,8 @@ func _downgrade_document_to_schema_four(document: Dictionary) -> void:
 		if record != null and record.get("result_profile") is Dictionary:
 			_downgrade_document_to_schema_four(record["result_profile"] as Dictionary)
 	document["schema_version"] = ProfileCodec.SCHEMA_FOUR_VERSION
+	document.erase("terminal_resolution")
+	document.erase("terminal_recovery_overflow")
 	var recovery := document.get("resumable_run", {}) as Dictionary
 	if not recovery.is_empty():
 		recovery.erase("selected_leader_class_id")

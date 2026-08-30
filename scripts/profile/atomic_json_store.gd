@@ -578,7 +578,7 @@ func save_irreversible_document(path: String, document: Dictionary, validator: C
 		var sanitize_error := _sanitize_remaining_artifacts(cleanup_candidates, document_text, validator, candidate_canonical)
 		if sanitize_error != OK:
 			push_warning("JSON_STORE_CLEANUP_DEBT path=%s code=%d sanitize_code=%d committed=true active_generations_verified=true" % [path, cleanup_error, sanitize_error])
-			return ""
+			return "JSON_STORE_SAVE_ERROR path=%s stage=sanitize cleanup_code=%d sanitize_code=%d committed=true active_generations_verified=true" % [path, cleanup_error, sanitize_error]
 		push_warning("JSON_STORE_CLEANUP_DEBT path=%s code=%d committed=true sanitized_generations=true" % [path, cleanup_error])
 	return ""
 

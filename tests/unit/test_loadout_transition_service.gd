@@ -19,7 +19,29 @@ func run() -> Array[String]:
 	_test_unrelated_stash_record_change_stales_request(failures)
 	_test_leader_loadout_class_change_stales_request(failures)
 	_test_unrelated_stash_occupancy_change_stales_request(failures)
+	_test_populated_overflow_is_fingerprinted_and_preserved(failures)
 	return failures
+
+func _test_populated_overflow_is_fingerprinted_and_preserved(failures: Array[String]) -> void:
+	var plate := _item("item-transition-overflow-plate", &"dawn_bulwark_plate", 0)
+	var overflow_item := _item("item-transition-overflow-held", &"windrunner_band", 1)
+	var profile := _profile([plate, overflow_item], {1: plate.instance_id}, [_stash(&"stash-tab-000", {})], "fighter")
+	profile.terminal_recovery_overflow = ItemSlotContainer.create(ItemSlotContainer.TERMINAL_RECOVERY_OVERFLOW_ID, ItemSlotContainer.PROFILE_TERMINAL_RECOVERY_OVERFLOW, PROFILE_ID, EquipmentSlotIndex.capacity(), {0: overflow_item.instance_id}).to_dictionary()
+	var projection := _project(profile, &"mage")
+	TestAssertions.truthy(projection.valid, "compatibility projection decodes populated overflow ownership", failures)
+	var original_overflow := profile.terminal_recovery_overflow.duplicate(true)
+	profile.terminal_recovery_overflow["slots"] = {1: overflow_item.instance_id}
+	var changed_fingerprint := _project(profile, &"mage").state_fingerprint
+	profile.terminal_recovery_overflow = original_overflow
+	TestAssertions.truthy(changed_fingerprint != projection.state_fingerprint, "compatibility fingerprint is overflow-placement sensitive", failures)
+	var root := "user://tests/loadout_transition_overflow_%d_%d" % [OS.get_process_id(), Time.get_ticks_usec()]
+	var store := ProfileStore.new()
+	_save_profile(store, profile, root, "populated overflow transition fixture", failures)
+	var result := LoadoutTransitionService.new(ProfileMutationService.new(store)).apply(PROFILE_ID, _request("transition-preserves-overflow", projection), root)
+	TestAssertions.truthy(result.ok(), "valid compatibility transition commits with populated overflow", failures)
+	if result.ok():
+		TestAssertions.equal(result.profile.terminal_recovery_overflow, profile.terminal_recovery_overflow, "transition preserves overflow byte-structurally", failures)
+	ProfileTestSupport.remove_tree(root)
 
 func _test_projection_is_canonical_deterministic_and_defensive(failures: Array[String]) -> void:
 	var items: Array[ItemInstance] = []

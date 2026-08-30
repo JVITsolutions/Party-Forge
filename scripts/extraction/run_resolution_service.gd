@@ -5,9 +5,11 @@ const OPERATION := "run_resolution"
 const ERROR_PREFIX := "PARTY_FORGE_RUN_RESOLUTION_ERROR"
 
 var _mutations: ProfileMutationService
+var _evaluator: Callable
 
-func _init(mutations: ProfileMutationService = null) -> void:
+func _init(mutations: ProfileMutationService = null, evaluator: Callable = Callable()) -> void:
 	_mutations = mutations if mutations != null else ProfileMutationService.new()
+	_evaluator = evaluator if evaluator.is_valid() else Callable(RunResolutionEvaluator, "evaluate")
 
 func preflight(
 	profile: ProfileState,
@@ -33,7 +35,65 @@ func preflight_source(
 	var candidate := profile.copy()
 	if candidate == null:
 		return RunResolutionPreflightResult.failure(_error("field=profile reason=defensive copy unavailable"))
-	return RunResolutionPreflightResult.from_evaluation(RunResolutionEvaluator.evaluate(candidate, source, request))
+	return RunResolutionPreflightResult.from_evaluation(_evaluator.call(candidate, source, request) as RunResolutionEvaluation)
+
+func resolve_terminal_source(
+	profile_id: String,
+	source: RunResolutionSource,
+	request: RunResolutionRequest,
+	root: String = ProfileStore.DEFAULT_ROOT,
+) -> RunResolutionResult:
+	var request_error := _validate_source_request(profile_id, source, request)
+	if not request_error.is_empty():
+		return RunResolutionResult.failure(request_error, RunResolutionEvaluation.FailureCategory.RUN_IDENTITY_MISMATCH, _identity_player_reason())
+	var accepted_holder: Dictionary = {}
+	var evaluation_holder: Dictionary = {}
+	var protected_holder: Dictionary = {}
+	var terminal_recovery := RunTerminalRecoveryService.new()
+	var receipt := {
+		"schema_version": 1,
+		"source_fingerprint": _document_fingerprint(source.to_dictionary()),
+		"request_fingerprint": _document_fingerprint(request.canonical_document()),
+	}
+	var terminal_mutation := func(candidate: ProfileState) -> String:
+		var current := terminal_recovery.inspect(candidate)
+		if not current.ok(): return current.error
+		var record := current.record
+		if record.stage == RunTerminalRecoveryRecord.Stage.RESOLVED_AWAITING_PROJECTION:
+			return _error("field=terminal_resolution.stage reason=must be pre-resolution")
+		if record.snapshot.resolution_source.to_dictionary() != source.to_dictionary():
+			return _error("field=terminal_resolution.source reason=must match persisted terminal source")
+		if record.transaction_id != request.transaction_id:
+			return _error("field=terminal_resolution.transaction_id reason=must match persisted selection")
+		var evaluation := _evaluator.call(candidate, source, request) as RunResolutionEvaluation
+		evaluation_holder["evaluation"] = evaluation
+		if evaluation == null or not evaluation.ok():
+			return evaluation.error if evaluation != null else _error("field=evaluation reason=must be available")
+		accepted_holder["extraction"] = evaluation.extraction
+		protected_holder["ids"] = record.protected_displaced_item_ids
+		return terminal_recovery.mark_resolved_candidate(candidate, request, evaluation.extraction)
+	var mutation := _mutations.apply_with_resumable_run_revocation(
+		profile_id, request.transaction_id, request.run_id, terminal_mutation,
+		root, -1, OPERATION, request.canonical_document(), receipt,
+	)
+	if not mutation.ok():
+		var rejected := evaluation_holder.get("evaluation") as RunResolutionEvaluation
+		if rejected != null:
+			return RunResolutionResult.failure(mutation.error, rejected.failure_category, rejected.player_reason)
+		return RunResolutionResult.failure(mutation.error)
+	var accepted := accepted_holder.get("extraction") as RunExtractionProjection
+	var protected_ids: Array[String] = []
+	if mutation.duplicate:
+		var decoded := RunTerminalRecoveryCodec.decode(mutation.profile.terminal_resolution)
+		if not decoded.ok() or decoded.record.stage != RunTerminalRecoveryRecord.Stage.RESOLVED_AWAITING_PROJECTION:
+			return RunResolutionResult.failure(_error("field=duplicate.terminal_resolution reason=resolved receipt is unavailable"))
+		accepted = decoded.record.accepted_extraction
+		protected_ids = decoded.record.protected_displaced_item_ids
+	else:
+		protected_ids = protected_holder.get("ids", []) as Array[String]
+	if accepted == null or not accepted.valid:
+		return RunResolutionResult.failure(_error("field=accepted_extraction reason=resolved receipt is unavailable"))
+	return RunResolutionResult.success(mutation.profile, mutation.duplicate, accepted, protected_ids)
 
 func resolve(
 	profile_id: String,
@@ -73,7 +133,7 @@ func resolve_source(
 		request.transaction_id,
 		request.run_id,
 		func(candidate: ProfileState) -> String:
-			var evaluation := RunResolutionEvaluator.evaluate(candidate, source, request)
+			var evaluation := _evaluator.call(candidate, source, request) as RunResolutionEvaluation
 			evaluation_holder["evaluation"] = evaluation
 			if not evaluation.ok():
 				return evaluation.error

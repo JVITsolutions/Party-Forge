@@ -33,6 +33,7 @@ func run() -> Array[String]:
 	_test_failure_matrix(source_type, failures)
 	_test_wrapper_source_failure_categories(failures)
 	_test_evaluator_candidate_isolation(source_type, evaluator_type, failures)
+	_test_evaluator_preserves_populated_recovery_overflow(source_type, evaluator_type, failures)
 	return failures
 
 func _test_source_strict_roundtrip(source_type: Script, failures: Array[String]) -> void:
@@ -235,6 +236,51 @@ func _test_evaluator_candidate_isolation(source_type: Script, evaluator_type: Sc
 		TestAssertions.equal(candidate.resumable_run, {}, "evaluator mutates only the caller-owned candidate", failures)
 		TestAssertions.equal(JSON.stringify((fixture.profile as ProfileState).to_dictionary()), authoritative_before, "evaluator preserves authoritative profile input", failures)
 		TestAssertions.truthy(not evaluation.get_property_list().any(func(property: Dictionary) -> bool: return property.name == "candidate"), "evaluation exposes no mutable candidate", failures)
+	_cleanup(fixture)
+
+func _test_evaluator_preserves_populated_recovery_overflow(source_type: Script, evaluator_type: Script, failures: Array[String]) -> void:
+	var fixture := _fixture("evaluator-populated-overflow", 1, [], 2)
+	var candidate := fixture.profile as ProfileState
+	var overflow_item := _profile_item("item-preflight-protected-overflow", 999, &"dawn_bulwark_plate")
+	var decoded_registry := ItemRegistry._decode(candidate.item_records, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)
+	TestAssertions.truthy(String(decoded_registry.error).is_empty(), "populated-overflow evaluator fixture registry decodes", failures)
+	if not String(decoded_registry.error).is_empty():
+		_cleanup(fixture)
+		return
+	var profile_items: Array[ItemInstance] = []
+	for instance_id: String in (decoded_registry.value as ItemRegistry).ids():
+		profile_items.append((decoded_registry.value as ItemRegistry).item(instance_id))
+	profile_items.append(overflow_item)
+	candidate.item_records = ItemRegistry.new(profile_items).to_dictionary()
+	candidate.terminal_recovery_overflow = ItemSlotContainer.create(
+		ItemSlotContainer.TERMINAL_RECOVERY_OVERFLOW_ID,
+		ItemSlotContainer.PROFILE_TERMINAL_RECOVERY_OVERFLOW,
+		candidate.profile_id,
+		EquipmentSlotIndex.capacity(),
+		{0: overflow_item.instance_id},
+	).to_dictionary()
+	var overflow_before := candidate.terminal_recovery_overflow.duplicate(true)
+	var protected_record_before := overflow_item.to_dictionary()
+	var source_result: Variant = source_type.call(&"from_context", fixture.context, LEADER_ID)
+	TestAssertions.truthy(source_result.ok(), "populated-overflow evaluator source captures", failures)
+	if source_result.ok():
+		var evaluation: Variant = evaluator_type.call(&"evaluate", candidate, source_result.source, _request("evaluate-populated-overflow", [ExtractionSelection.create(INVENTORY_ITEM, &"run-inventory", 0)]))
+		TestAssertions.truthy(evaluation.ok(), "terminal evaluation accepts an otherwise-valid profile with populated protected overflow", failures)
+		TestAssertions.equal(int(evaluation.available_stash_slots), 2, "recovery overflow contributes zero slots to ordinary numeric stash capacity", failures)
+		TestAssertions.equal(candidate.terminal_recovery_overflow, overflow_before, "terminal evaluation preserves every protected overflow placement", failures)
+		var all_containers: Array = [candidate.leader_loadout.duplicate(true)]
+		all_containers.append_array(candidate.stash_tabs.duplicate(true))
+		all_containers.append(candidate.terminal_recovery_overflow.duplicate(true))
+		var post_ownership := ItemOwnershipState.decode({
+			"schema_version": ItemOwnershipState.SCHEMA_VERSION,
+			"owner_id": candidate.profile_id,
+			"registry": candidate.item_records.duplicate(true),
+			"containers": all_containers,
+		}, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)
+		TestAssertions.truthy(post_ownership.ok(), "terminal evaluation keeps populated overflow in the single authoritative ownership graph", failures)
+		if post_ownership.ok():
+			TestAssertions.equal(post_ownership.state.registry().item(overflow_item.instance_id).to_dictionary(), protected_record_before, "terminal evaluation preserves the protected overflow item record", failures)
+			TestAssertions.equal(post_ownership.state.container(ItemSlotContainer.TERMINAL_RECOVERY_OVERFLOW_ID).item_id_at(0), overflow_item.instance_id, "terminal evaluation retains the exact protected item in the exact overflow slot", failures)
 	_cleanup(fixture)
 
 func _fixture(label: String, capacity: int, unlocks: Array, stash_capacity: int) -> Dictionary:

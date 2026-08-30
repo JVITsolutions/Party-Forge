@@ -82,6 +82,11 @@ func _validate_request(profile_id: String, request: ProfileLoadoutAssignmentRequ
 		return _error("field=selected_class_id reason=unknown authoritative class")
 	if request.source_container_id == request.destination_container_id and request.source_slot == request.destination_slot:
 		return _error("field=destination reason=source and destination must differ")
+	if (
+		request.source_container_id == ItemSlotContainer.TERMINAL_RECOVERY_OVERFLOW_ID
+		or request.destination_container_id == ItemSlotContainer.TERMINAL_RECOVERY_OVERFLOW_ID
+	):
+		return _error("field=containers reason=recovery overflow cannot be an equipment assignment endpoint")
 	if request.source_container_id != LEADER_ID and request.destination_container_id != LEADER_ID:
 		return _error("field=containers reason=one endpoint must be leader-loadout")
 	if request.source_container_id == LEADER_ID and request.destination_container_id == LEADER_ID:
@@ -235,6 +240,7 @@ func _validate_complete_loadout(state: ItemOwnershipState, class_definition: Cla
 func _profile_ownership(profile: ProfileState) -> ItemOwnershipStateDecodeResult:
 	var containers: Array = [profile.leader_loadout.duplicate(true)]
 	containers.append_array(profile.stash_tabs.duplicate(true))
+	containers.append(profile.terminal_recovery_overflow.duplicate(true))
 	return ItemOwnershipState.decode({
 		"schema_version": ItemOwnershipState.SCHEMA_VERSION,
 		"owner_id": profile.profile_id,

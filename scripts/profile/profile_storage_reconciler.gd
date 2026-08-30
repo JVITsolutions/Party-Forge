@@ -74,6 +74,7 @@ func reconcile(
 
 	var proposed_containers: Array = [profile.leader_loadout.duplicate(true)]
 	proposed_containers.append_array(proposed_tabs.duplicate(true))
+	proposed_containers.append(profile.terminal_recovery_overflow.duplicate(true))
 	var ownership_document := {
 		"schema_version": ItemOwnershipState.SCHEMA_VERSION,
 		"owner_id": profile.profile_id,

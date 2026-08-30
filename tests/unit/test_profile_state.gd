@@ -12,11 +12,20 @@ func run() -> Array[String]:
 	_test_current_stash_tab_cap(failures)
 	_test_json_safe_integer_boundaries(failures)
 	_test_transaction_record_shapes_fail_closed(failures)
+	_test_terminal_schema_defaults(failures)
 	return failures
+
+func _test_terminal_schema_defaults(failures: Array[String]) -> void:
+	var profile := ProfileState.new_profile("profile-terminal-default", "Terminal", 1000)
+	TestAssertions.equal(ProfileState.SCHEMA_VERSION, 6, "profile schema version is six", failures)
+	TestAssertions.equal(profile.get("terminal_resolution"), {}, "terminal resolution starts empty", failures)
+	var overflow: Variant = profile.get("terminal_recovery_overflow")
+	TestAssertions.equal(String((overflow as Dictionary).get("container_id", "")) if overflow is Dictionary else "", "terminal-recovery-overflow", "terminal overflow has stable ID", failures)
+	TestAssertions.equal(String((overflow as Dictionary).get("container_kind", "")) if overflow is Dictionary else "", "profile_terminal_recovery_overflow", "terminal overflow has source-only kind", failures)
 
 func _test_new_profile_defaults(failures: Array[String]) -> void:
 	var profile := ProfileState.new_profile("profile-12345678", "Jacob", 1000)
-	TestAssertions.equal(ProfileState.SCHEMA_VERSION, 5, "profile schema version is five", failures)
+	TestAssertions.equal(ProfileState.SCHEMA_VERSION, 6, "profile schema version is six", failures)
 	TestAssertions.equal(profile.schema_version, ProfileState.SCHEMA_VERSION, "profile uses current schema", failures)
 	TestAssertions.equal(profile.prologue_state, ProfileState.PrologueState.NOT_STARTED, "prologue starts undiscovered", failures)
 	TestAssertions.equal(profile.gold, 0, "gold starts at zero", failures)
@@ -115,6 +124,8 @@ func _test_exact_historical_and_current_fields_fail_closed(failures: Array[Strin
 	historical.erase("leader_loadout")
 	historical.erase("leader_loadout_class_id")
 	historical.erase("next_item_sequence")
+	historical.erase("terminal_resolution")
+	historical.erase("terminal_recovery_overflow")
 	TestAssertions.equal(_validate_loadable(historical), "", "complete historical document remains loadable", failures)
 	TestAssertions.truthy(not _validate_current(historical).is_empty(), "historical document is not current", failures)
 	var historical_missing := historical.duplicate(true)
@@ -128,6 +139,8 @@ func _test_exact_historical_and_current_fields_fail_closed(failures: Array[Strin
 	schema_two.erase("preferred_player_color_id")
 	schema_two.erase("leader_loadout")
 	schema_two.erase("leader_loadout_class_id")
+	schema_two.erase("terminal_resolution")
+	schema_two.erase("terminal_recovery_overflow")
 	TestAssertions.equal(_validate_loadable(schema_two), "", "complete schema-two document remains loadable for migration", failures)
 	var schema_two_extra := schema_two.duplicate(true)
 	schema_two_extra["leader_loadout"] = _leader_loadout_document("profile-12345678", {})

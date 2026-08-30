@@ -67,6 +67,10 @@ func bind_item(
 		accessibility_name = "%s, %s" % [name, rarity]
 		if icon == null:
 			accessibility_name += ", icon unavailable"
+	var move_locked_reason := String(_detail.get("move_locked_reason", ""))
+	if not move_locked_reason.is_empty():
+		accessibility_name += ", %s" % move_locked_reason
+		mouse_default_cursor_shape = Control.CURSOR_FORBIDDEN
 	var is_disabled := not item_id.is_empty() and bool(_detail.get("is_disabled", false))
 	_disabled_overlay.visible = is_disabled
 	if is_disabled:
@@ -115,7 +119,7 @@ func apply_viewport_size(viewport_size: Vector2) -> void:
 
 
 func _get_drag_data(_position: Vector2) -> Variant:
-	if item_id.is_empty():
+	if item_id.is_empty() or not String(_detail.get("move_locked_reason", "")).is_empty():
 		return null
 	var preview: Control
 	if icon != null:
@@ -136,7 +140,11 @@ func _get_drag_data(_position: Vector2) -> Variant:
 	return {"container_id": String(container_id), "slot": slot, "item_id": item_id}
 
 func _can_drop_data(_position: Vector2, data: Variant) -> bool:
-	return data is Dictionary and not String((data as Dictionary).get("item_id", "")).is_empty()
+	return (
+		String(_detail.get("move_locked_reason", "")).is_empty()
+		and data is Dictionary
+		and not String((data as Dictionary).get("item_id", "")).is_empty()
+	)
 
 func _drop_data(_position: Vector2, data: Variant) -> void:
 	var source := data as Dictionary
