@@ -28,6 +28,7 @@ func run() -> Array[String]:
 	_test_live_state_can_advance_past_checkout_snapshot(failures)
 	_test_stash_placement_rolls_over_tabs_deterministically(failures)
 	_test_failure_atomicity_matrix(failures)
+	_test_preflight_resolve_parity_and_fresh_candidate_revalidation(failures)
 	_test_replay_collision_and_defensive_result(failures)
 	return failures
 
@@ -98,7 +99,7 @@ func _test_ordinary_resolution_and_irreversible_loss(failures: Array[String]) ->
 		ExtractionSelection.create(INVENTORY_ZERO, &"run-inventory", 0),
 	])
 	var result := RunResolutionService.new(ProfileMutationService.new(store)).resolve(PROFILE_ID, context, request, fixture.root)
-	TestAssertions.truthy(result.ok() and not result.duplicate, "ordinary successful resolution commits once", failures)
+	TestAssertions.truthy(result.ok() and not result.duplicate, "ordinary successful resolution commits once error=%s" % result.error, failures)
 	var loaded := store.load_profile(PROFILE_ID, fixture.root)
 	TestAssertions.truthy(loaded.ok(), "ordinary resolved profile reloads", failures)
 	if loaded.ok():
@@ -188,7 +189,7 @@ func _test_automatic_leader_and_ordinary_follower_resolution(failures: Array[Str
 		ExtractionSelection.create(FOLLOWER_ITEM, &"run-equipment-002", 7),
 	])
 	var result := RunResolutionService.new(ProfileMutationService.new(store)).resolve(PROFILE_ID, fixture.context, request, fixture.root)
-	TestAssertions.truthy(result.ok(), "automatic leader plus ordinary follower resolves", failures)
+	TestAssertions.truthy(result.ok(), "automatic leader plus ordinary follower resolves error=%s" % result.error, failures)
 	var saved := store.load_profile(PROFILE_ID, fixture.root).profile
 	TestAssertions.equal(saved.leader_loadout["slots"], {"0": LEADER_HEAD, "9": LEADER_HAND}, "automatic leader equipment preserves exact equipment indices", failures)
 	TestAssertions.equal(saved.stash_tabs[0]["slots"], {"0": EXISTING_STASH, "1": FOLLOWER_ITEM}, "automatic equipment consumes no ordinary slot", failures)
@@ -347,17 +348,28 @@ func _test_replay_collision_and_defensive_result(failures: Array[String]) -> voi
 	])
 	var service := RunResolutionService.new(ProfileMutationService.new(store))
 	var committed := service.resolve(PROFILE_ID, context, request, fixture.root)
-	TestAssertions.truthy(committed.ok() and not committed.duplicate, "resolution replay fixture commits", failures)
+	TestAssertions.truthy(committed.ok() and not committed.duplicate, "resolution replay fixture commits error=%s" % committed.error, failures)
+	var committed_extraction: Variant = committed.get("accepted_extraction")
+	TestAssertions.truthy(committed_extraction != null, "first resolution exposes accepted extraction", failures)
+	if committed_extraction != null:
+		TestAssertions.equal(committed_extraction.selected_item_ids, [INVENTORY_ZERO], "first resolution exposes the selected item", failures)
 	var path := store.profile_path(PROFILE_ID, fixture.root)
 	var bytes_after := FileAccess.get_file_as_bytes(path)
 	var state_after := context.item_state().to_dictionary()
 	var replay := service.resolve(PROFILE_ID, context, request, fixture.root)
 	TestAssertions.truthy(replay.ok() and replay.duplicate, "same resolution transaction replays as duplicate", failures)
+	var replay_extraction: Variant = replay.get("accepted_extraction")
+	TestAssertions.truthy(replay_extraction != null, "duplicate replay reconstructs an accepted extraction", failures)
+	if replay_extraction != null and committed_extraction != null:
+		TestAssertions.equal(replay_extraction.to_dictionary(), committed_extraction.to_dictionary(), "duplicate replay reconstructs the exact accepted extraction", failures)
 	TestAssertions.equal(FileAccess.get_file_as_bytes(path), bytes_after, "resolution replay performs no profile write", failures)
 	TestAssertions.equal(context.item_state().to_dictionary(), state_after, "resolution replay performs no second context ownership mutation", failures)
 	var escaped_profile := replay.profile
 	escaped_profile.gold = 999999
 	TestAssertions.truthy(replay.profile.gold != 999999, "resolution result profile is defensive", failures)
+	if replay_extraction != null:
+		replay_extraction._selected_item_ids.clear()
+		TestAssertions.equal((replay.get("accepted_extraction") as RunExtractionProjection).selected_item_ids, [INVENTORY_ZERO], "resolution result extraction is defensive", failures)
 	var collision := service.resolve(PROFILE_ID, context, RunResolutionRequest.create(
 		request.transaction_id, PROFILE_ID, RUN_ID, RUN_SEED, RUN_PLAYER_ID, LEADER_ID, []
 	), fixture.root)
@@ -365,6 +377,55 @@ func _test_replay_collision_and_defensive_result(failures: Array[String]) -> voi
 	TestAssertions.equal(FileAccess.get_file_as_bytes(path), bytes_after, "transaction collision performs no write", failures)
 	TestAssertions.equal(context.item_state().to_dictionary(), state_after, "transaction collision leaves closed context ownership unchanged", failures)
 	_cleanup(fixture)
+
+func _test_preflight_resolve_parity_and_fresh_candidate_revalidation(failures: Array[String]) -> void:
+	var accepted := _fixture("parity_accepted", 1, [], true)
+	var accepted_request := _request("resolution-parity-accepted", [
+		ExtractionSelection.create(INVENTORY_ZERO, &"run-inventory", 0),
+	])
+	var accepted_service := RunResolutionService.new(ProfileMutationService.new(accepted.store))
+	var accepted_preflight: Variant = accepted_service.call(&"preflight", accepted.profile, accepted.context, accepted_request)
+	var accepted_resolve := accepted_service.resolve(PROFILE_ID, accepted.context, accepted_request, accepted.root)
+	TestAssertions.equal(accepted_resolve.ok(), accepted_preflight.ok(), "accepted preflight and resolve agree when durable state is unchanged", failures)
+	if accepted_preflight.ok() and accepted_resolve.ok():
+		TestAssertions.equal((accepted_resolve.get("accepted_extraction") as RunExtractionProjection).to_dictionary(), accepted_preflight.extraction.to_dictionary(), "accepted preflight and resolve return the same extraction", failures)
+	_cleanup(accepted)
+
+	var rejected := _fixture("parity_rejected", 1, [], false)
+	var rejected_request := _request("resolution-parity-rejected", [
+		ExtractionSelection.create(INVENTORY_ZERO, &"run-inventory", 0),
+	])
+	var rejected_service := RunResolutionService.new(ProfileMutationService.new(rejected.store))
+	var rejected_preflight: Variant = rejected_service.call(&"preflight", rejected.profile, rejected.context, rejected_request)
+	var rejected_resolve := rejected_service.resolve(PROFILE_ID, rejected.context, rejected_request, rejected.root)
+	TestAssertions.equal(rejected_resolve.ok(), rejected_preflight.ok(), "rejected preflight and resolve agree when durable state is unchanged", failures)
+	TestAssertions.truthy(not rejected_resolve.ok() and rejected_resolve.error == rejected_preflight.error, "rejected preflight and resolve share the exact evaluator error", failures)
+	_cleanup(rejected)
+
+	var changed := _fixture("parity_changed_candidate", 1, [], true)
+	var changed_request := _request("resolution-parity-changed", [
+		ExtractionSelection.create(INVENTORY_ZERO, &"run-inventory", 0),
+	])
+	var changed_store := changed.store as ProfileStore
+	var changed_service := RunResolutionService.new(ProfileMutationService.new(changed_store))
+	var changed_preflight: Variant = changed_service.call(&"preflight", changed.profile, changed.context, changed_request)
+	TestAssertions.truthy(changed_preflight.ok(), "preflight accepts before durable candidate changes", failures)
+	var durable := changed_store.load_profile(PROFILE_ID, changed.root).profile
+	var filled_items: Array[ItemInstance] = [changed.items[EXISTING_STASH]]
+	var filled_slots: Dictionary = {0: EXISTING_STASH}
+	for slot: int in range(1, 100):
+		var filler := _profile_item("item-parity-stash-filler-%03d" % slot, 300 + slot)
+		filled_items.append(filler)
+		filled_slots[slot] = filler.instance_id
+	durable.item_records = ItemRegistry.new(filled_items).to_dictionary()
+	durable.stash_tabs = [ItemSlotContainer.create(&"stash-tab-000", ItemSlotContainer.PROFILE_STASH_TAB, PROFILE_ID, 100, filled_slots).to_dictionary()]
+	TestAssertions.equal(changed_store.save_profile(durable, changed.root), "", "changed durable capacity fixture saves", failures)
+	var path := changed_store.profile_path(PROFILE_ID, changed.root)
+	var before_bytes := FileAccess.get_file_as_bytes(path)
+	var changed_resolve := changed_service.resolve(PROFILE_ID, changed.context, changed_request, changed.root)
+	TestAssertions.truthy(not changed_resolve.ok() and changed_resolve.error.contains("insufficient empty slots"), "resolve revalidates the fresh durable candidate after accepted preflight", failures)
+	TestAssertions.equal(FileAccess.get_file_as_bytes(path), before_bytes, "fresh durable candidate rejection performs no write", failures)
+	_cleanup(changed)
 
 func _fixture(label: String, capacity: int, unlocks: Array[String], with_stash: bool) -> Dictionary:
 	var root := "user://run_resolution_tests/%s" % label

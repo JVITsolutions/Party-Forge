@@ -8,11 +8,16 @@ var profile: ProfileState:
 
 var error := ""
 var duplicate := false
+var _accepted_extraction: RunExtractionProjection
+var accepted_extraction: RunExtractionProjection:
+	get:
+		return RunResolutionEvaluation._copy_extraction(_accepted_extraction)
 
-static func success(profile_value: ProfileState, duplicate_value: bool) -> RunResolutionResult:
+static func success(profile_value: ProfileState, duplicate_value: bool, accepted_extraction_value: RunExtractionProjection) -> RunResolutionResult:
 	var result := RunResolutionResult.new()
 	result._profile = profile_value.copy() if profile_value != null else null
 	result.duplicate = duplicate_value
+	result._accepted_extraction = RunResolutionEvaluation._copy_extraction(accepted_extraction_value)
 	return result
 
 static func failure(error_value: String) -> RunResolutionResult:
@@ -21,4 +26,4 @@ static func failure(error_value: String) -> RunResolutionResult:
 	return result
 
 func ok() -> bool:
-	return _profile != null and error.is_empty()
+	return _profile != null and _accepted_extraction != null and _accepted_extraction.valid and error.is_empty()

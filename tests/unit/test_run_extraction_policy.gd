@@ -14,6 +14,7 @@ const INVENTORY_FOUR_ITEM := "item-inventory-4"
 
 func run() -> Array[String]:
 	var failures: Array[String] = []
+	_test_source_projection_parity(failures)
 	_test_unlock_precedence_and_canonical_order(failures)
 	_test_capacity_and_selection_matrix(failures)
 	_test_invalid_selection_matrix(failures)
@@ -21,6 +22,26 @@ func run() -> Array[String]:
 	_test_defensive_and_pure_contract(failures)
 	_test_deterministic_projection(failures)
 	return failures
+
+func _test_source_projection_parity(failures: Array[String]) -> void:
+	var fixture := _fixture(3, ["leader_loadout_extraction"])
+	var selections: Array[ExtractionSelection] = [
+		ExtractionSelection.create(FOLLOWER_TWO_ITEM, &"run-equipment-002", 7),
+		ExtractionSelection.create(INVENTORY_FOUR_ITEM, &"run-inventory", 4),
+	]
+	var source_type := load("res://scripts/extraction/run_resolution_source.gd") as Script
+	if source_type == null:
+		failures.append("resolution source type is required")
+		_free_fixture(fixture)
+		return
+	var source_result: Variant = source_type.call(&"from_context", fixture.context, LEADER_ID)
+	TestAssertions.truthy(source_result.ok(), "source projection fixture captures", failures)
+	if source_result.ok():
+		var live := RunExtractionPolicy.project(fixture.context, fixture.profile, selections)
+		var policy_type := load("res://scripts/extraction/run_extraction_policy.gd") as Script
+		var source: Variant = policy_type.call(&"project_source", source_result.source, fixture.profile, selections)
+		TestAssertions.equal(source.to_dictionary(), live.to_dictionary(), "source extraction projection matches live wrapper exactly", failures)
+	_free_fixture(fixture)
 
 func _test_unlock_precedence_and_canonical_order(failures: Array[String]) -> void:
 	var ordinary := _fixture(3, [])

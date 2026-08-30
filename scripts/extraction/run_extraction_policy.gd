@@ -16,35 +16,54 @@ static func project(
 		return _failure(capacity, "field=profile reason=must be provided")
 	if profile.profile_id != context.profile_id:
 		return _failure(capacity, "field=profile.profile_id reason=must match configured context profile")
-
-	var state := context.item_state()
-	if state.owner_id != String(context.run_player_id):
+	if context.item_state().owner_id != String(context.run_player_id):
 		return _failure(capacity, "field=item_state.owner_id reason=must match configured run player")
-
 	var leaders: Array[PartyMemberState] = []
-	var followers: Array[PartyMemberState] = []
 	for member: PartyMemberState in context.party.members:
-		if member == null:
-			continue
-		if member.is_leader:
+		if member != null and member.is_leader:
 			leaders.append(member)
-		else:
-			followers.append(member)
 	if leaders.size() != 1:
 		return _failure(capacity, "field=party.leader reason=must contain exactly one leader")
-	leaders.sort_custom(_member_id_less)
-	followers.sort_custom(_member_id_less)
+	var source_result := RunResolutionSource.from_context(context, leaders[0].member_id)
+	if not source_result.ok():
+		return _failure(capacity, "field=context reason=%s" % source_result.error)
+	return project_source(source_result.source, profile, selections)
 
-	var ordered_members: Array[PartyMemberState] = []
-	ordered_members.append_array(leaders)
-	ordered_members.append_array(followers)
+static func project_source(
+	source: RunResolutionSource,
+	profile: ProfileState,
+	selections: Array[ExtractionSelection],
+) -> RunExtractionProjection:
+	var capacity := maxi(0, profile.extraction_capacity) if profile != null else 0
+	if source == null:
+		return _failure(capacity, "field=source reason=must be provided")
+	if profile == null:
+		return _failure(capacity, "field=profile reason=must be provided")
+	if profile.profile_id != source.profile_id:
+		return _failure(capacity, "field=profile.profile_id reason=must match resolution source profile")
+	var state := source.item_state
+	if state == null or state.owner_id != String(source.run_player_id):
+		return _failure(capacity, "field=item_state.owner_id reason=must match resolution source run player")
+
+	var leader_rows: Array[Dictionary] = []
+	var follower_rows: Array[Dictionary] = []
+	for row: Dictionary in source.party_members:
+		if bool(row["is_leader"]): leader_rows.append(row)
+		else: follower_rows.append(row)
+	if leader_rows.size() != 1:
+		return _failure(capacity, "field=source.party_members reason=must contain exactly one leader")
+	leader_rows.sort_custom(func(left: Dictionary, right: Dictionary) -> bool: return int(left["member_id"]) < int(right["member_id"]))
+	follower_rows.sort_custom(func(left: Dictionary, right: Dictionary) -> bool: return int(left["member_id"]) < int(right["member_id"]))
+	var ordered_members: Array[Dictionary] = []
+	ordered_members.append_array(leader_rows)
+	ordered_members.append_array(follower_rows)
 	var automatic_leader := _has_unlock(profile.permanent_feature_unlocks, AUTOMATIC_LEADER_UNLOCK)
 	var automatic_ids: Array[String] = []
 	var eligible: Array[ExtractionSelection] = []
 	var structure_errors: Array[String] = []
 	var registry := state.registry()
-	for member: PartyMemberState in ordered_members:
-		var container_id := StringName("run-equipment-%03d" % member.member_id)
+	for member: Dictionary in ordered_members:
+		var container_id := StringName("run-equipment-%03d" % int(member["member_id"]))
 		var container := state.container(container_id)
 		if container == null or container.container_kind != ItemSlotContainer.RUN_MEMBER_EQUIPMENT:
 			structure_errors.append(_error("field=item_state.container reason=missing member equipment %s" % container_id))
@@ -58,7 +77,7 @@ static func project(
 				structure_errors.append(_error("field=item_state.registry reason=unknown item %s" % item_id))
 				continue
 			var candidate := ExtractionSelection.create(item_id, container.container_id, slot)
-			if automatic_leader and member.is_leader:
+			if automatic_leader and bool(member["is_leader"]):
 				automatic_ids.append(item_id)
 			else:
 				eligible.append(candidate)
