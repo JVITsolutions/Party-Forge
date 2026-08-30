@@ -52,3 +52,42 @@ The focused unit commands retain their established negative-path `push_error` di
 - `git diff --check` exited `0` before report creation and is repeated after staging.
 - Historical `.superpowers/sdd/task-6-report.md` remains byte-identical at blob `d35c6c18ea8c059310edf258f74022edee1fafb5`.
 - No production test-only diagnostic method was added. Main remains the mutation authority, and Task 6 adds no tactics, terminal, result-screen, or asset-generation behavior.
+
+## Review repair from `f1c5538`
+
+The review repair remained inside Task 6. It added no Task 7 work and did not push or merge.
+
+### Repaired contracts
+
+- `LevelUpPanel` now ignores activation unless the modal is visible, the offer view is active, and the state is `CHOOSING`. A stale card signal after final success therefore cannot reactivate the hidden panel.
+- Main independently requires a pending level, `LEVEL_UP` run state, and the live `PlayerRunContext` source-refresh authority before any upgrade mutation. An accepted mutation consumes exactly one pending level; a lost authority is rejected before mutation and returns a player-readable reason through the unified result seam.
+- Offer cards and long card content now live in a bounded horizontal/vertical `CardsScroll`. Valid 1-, 5-, 7-, and 8-offer presentations remain reachable at `1280x720` with UI/text scales `150/150` and `80/150`. Confirmation prose owns a bounded `BodyScroll`, while Confirm/Cancel remain fixed and reachable.
+- Cards render the approved semantic order and include recipient/class tags, rarity, route action, normalized reviewed icons, and neutral forge fallback only for empty or unknown icon IDs. Accessibility names include rarity, semantic content, tags, and route action.
+- Recipient and recruit confirmation enter a visibly named `PENDING` state with focus moved off the hidden Confirm control to the initiating visible card. Duplicate intent remains blocked.
+- Both Task 13 natural-combat validation scripts were migrated from the deleted `Choices` node to real `UpgradeCard` controls plus the unified recipient and confirmation routes. Their static route assertions are part of `test_main_wiring`, and full editor import parsed both scripts. The long-running evidence-writing Task 13 natural-combat acceptances were not replayed as part of this focused UI repair.
+
+### Repair RED evidence
+
+All repair test changes were authored before repair production changes.
+
+- Main authority and stale Task 13 callers: exit `1`, `TEST_SUMMARY: FAIL (11 failures)`; three failures proved lost-authority mutation/pause/error behavior and eight proved the two legacy Task 13 callers.
+- Responsive retained contract: exit `1`, `TEST_SUMMARY: FAIL (7 failures)` after stale pre-Task-6 paths were migrated; the remaining failures were only the missing offer and confirmation scroll contracts.
+- Upgrade-card semantic/icon contract: exit `1`, `TEST_SUMMARY: FAIL (3 failures)` for semantic order, tags, and normalized icon/fallback behavior.
+- Commit flow: exit `1`, `LEVEL_UP_COMMIT_FLOW_SUMMARY: FAIL (4 failures)` for target/recruit pending focus, hidden stale-card mutation, and stale direct Main intent.
+- Windowed geometry: exit `1`, `LEVEL_UP_FIVE_CARD_SUMMARY: FAIL (1 failures)` for the missing bounded typed offer geometry.
+
+The first GREEN geometry run preserved the minimal failing scaled one-card case and showed that `ScrollContainer` focus-follow retained an invalid horizontal offset after initial focus. Resetting the offer scroll at presentation and reasserting the first focused card after layout was the single production handshake fix. The final geometry runner also dispatches real viewport mouse motion, keyboard Tab focus, and controller D-pad focus to `UpgradeCard`, proving identical tooltip content and real dismissal without direct handler calls.
+
+### Repair verification
+
+- Exact eight-suite Task 6 command: exit `0`, `TEST_SUMMARY: PASS (0 failures)`.
+- Focused Main, responsive, and card/tooltip repair suites: exit `0`, `TEST_SUMMARY: PASS (0 failures)`.
+- Windowed geometry: four size-pass markers and `LEVEL_UP_FIVE_CARD_SUMMARY: PASS (4 sizes)`; exit `0`. The runner also covers valid 1/5/7/8 offers, both extreme scale pairs, real tooltip input parity, and a long recipient-confirmation body with fixed actions.
+- Recipient scrolling: `UPGRADE_RECIPIENT_CONTROLLER_SCROLL_SUMMARY: PASS (0 failures, 3 viewports)`; exit `0`.
+- Unified commit flow: `LEVEL_UP_COMMIT_FLOW_SUMMARY: PASS (0 failures)`; exit `0`.
+- Temporary popup retention: four size-pass markers and `TEMPORARY_POPUP_INPUT_SUMMARY: PASS (4 sizes)`; exit `0`.
+- Related Task 5/progression units, Task 4 HUD/Main/PartyManager units, Task 4 party-scale/input integrations, progression arena immutable-profile smoke, and responsive geometry all retained their exact PASS markers and exit `0`.
+- Full unit suite: terminal `TEST_SUMMARY: PASS (245 suites)`; exit `0`.
+- Full headless editor import: exit `0`; both migrated Task 13 scripts parsed. Import regenerated 51 unrelated missing sidecars, which were classified as previously tracked-script byproducts and removed by exact path.
+- Same-process exact UID classification: `TASK6_UID_CLASSIFIER=PASS intended=1 unexpected=0`; exit `0`.
+- `git diff --check`: exit `0`. Historical `.superpowers/sdd/task-6-report.md` remains blob `d35c6c18ea8c059310edf258f74022edee1fafb5`.

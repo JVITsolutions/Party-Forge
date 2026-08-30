@@ -6,6 +6,17 @@ signal detail_requested(choice_key: StringName, anchor: Control)
 signal detail_dismissed(choice_key: StringName)
 
 const FALLBACK_ICON := "◆"
+const SEMANTIC_ICON_ROOT := "res://assets/ui/living_forge/icons/tabler-3.46.0/"
+const SEMANTIC_ICONS := {
+	&"alert-triangle": "alert-triangle.svg",
+	&"check": "check.svg",
+	&"hourglass": "hourglass.svg",
+	&"lock": "lock.svg",
+	&"player-play": "player-play.svg",
+	&"settings": "settings.svg",
+	&"shield": "shield.svg",
+	&"user": "user.svg",
+}
 
 var _projection: UpgradeOfferProjection
 var _bound_choice_key: StringName
@@ -61,7 +72,7 @@ func set_action_hint(action_text: String) -> void:
 
 
 func _present_copy(projection: UpgradeOfferProjection) -> void:
-	_set_text("Content/Identity/Icon", FALLBACK_ICON)
+	_present_icon(projection.icon_id)
 	_set_text("Content/Identity/Category", _category_text(projection.category_id))
 	_set_text("Content/Name", projection.display_name)
 	_set_text("Content/Rarity", projection.rarity_label)
@@ -69,6 +80,8 @@ func _present_copy(projection: UpgradeOfferProjection) -> void:
 	_set_text("Content/Rank", projection.rank_text)
 	_set_text("Content/Summary", projection.effect_text)
 	_set_text("Content/Eligibility", projection.eligibility_text)
+	_set_text("Content/Tags/RecipientTags", _tag_text("Traits", projection.recipient_tags))
+	_set_text("Content/Tags/ClassTags", _tag_text("Classes", projection.class_tags))
 	_set_text("Content/DisabledReason", projection.disabled_reason)
 	var rarity := get_node_or_null("Content/Rarity") as Label
 	if rarity != null:
@@ -77,6 +90,33 @@ func _present_copy(projection: UpgradeOfferProjection) -> void:
 	if disabled_label != null:
 		disabled_label.visible = not projection.disabled_reason.is_empty()
 	_set_text("Content/Action", _action_hint)
+
+
+func _present_icon(icon_id: StringName) -> void:
+	var icon := get_node_or_null("Content/Identity/Icon") as TextureRect
+	var fallback := get_node_or_null("Content/Identity/FallbackIcon") as Label
+	var normalized := _normalized_icon_id(icon_id)
+	var file_name := String(SEMANTIC_ICONS.get(normalized, ""))
+	var texture := load(SEMANTIC_ICON_ROOT + file_name) as Texture2D if not file_name.is_empty() else null
+	if icon != null:
+		icon.texture = texture
+		icon.visible = texture != null
+	if fallback != null:
+		fallback.text = FALLBACK_ICON
+		fallback.visible = texture == null
+
+
+func _normalized_icon_id(icon_id: StringName) -> StringName:
+	return StringName(String(icon_id).strip_edges().to_lower().replace("_", "-"))
+
+
+func _tag_text(prefix: String, tags: Array[StringName]) -> String:
+	var names := PackedStringArray()
+	for tag: StringName in tags:
+		var value := String(tag).replace("_", " ").replace("-", " ").strip_edges()
+		if not value.is_empty():
+			names.append(value.capitalize())
+	return "" if names.is_empty() else "%s: %s" % [prefix, ", ".join(names)]
 
 
 func _category_text(category_id: StringName) -> String:
@@ -95,14 +135,25 @@ func _update_accessibility() -> void:
 		accessibility_name = "Unavailable upgrade"
 		accessibility_description = "No upgrade is bound."
 		return
-	var parts := PackedStringArray([_projection.display_name, _action_hint])
+	var parts := PackedStringArray([_projection.display_name])
+	if not _projection.rarity_label.strip_edges().is_empty():
+		parts.append(_projection.rarity_label.strip_edges())
 	for value: String in [_projection.effect_text, _projection.scope_text, _projection.rank_text, _projection.eligibility_text]:
 		if not value.strip_edges().is_empty():
 			parts.append(value.strip_edges())
 	if not _projection.disabled_reason.is_empty():
 		parts.append("Unavailable: %s" % _projection.disabled_reason)
+	for tag_text: String in [_tag_text("Traits", _projection.recipient_tags), _tag_text("Classes", _projection.class_tags)]:
+		if not tag_text.is_empty():
+			parts.append(tag_text)
+	parts.append(_action_hint)
 	accessibility_name = ", ".join(parts)
-	accessibility_description = "Neutral forge category symbol. %s" % _category_text(_projection.category_id)
+	var normalized_icon := _normalized_icon_id(_projection.icon_id)
+	accessibility_description = (
+		"%s icon. %s" % [String(normalized_icon).replace("-", " ").capitalize(), _category_text(_projection.category_id)]
+		if SEMANTIC_ICONS.has(normalized_icon)
+		else "Neutral forge category symbol. %s" % _category_text(_projection.category_id)
+	)
 
 
 func _on_pressed() -> void:

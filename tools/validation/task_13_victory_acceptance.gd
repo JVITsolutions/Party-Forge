@@ -82,8 +82,26 @@ func _handle_level_panel(main: Node) -> void:
     var panel := main.get_node("HUD/LevelUpPanel") as Control
     if not panel.visible:
         return
+    var pending := panel.get_node("Frame/Content/Pending") as Control
+    if pending.visible:
+        return
+    var confirmation := panel.get_node("Frame/Content/Confirmation") as Control
+    if confirmation.visible:
+        var confirm := confirmation.get_node("Actions/Confirm") as Button
+        if not confirm.disabled:
+            confirm.pressed.emit()
+        return
+    var recipient := panel.get_node("Frame/Content/Recipient") as Control
+    if recipient.visible:
+        for row: Node in recipient.get_node("Content/RecipientsScroll/Rows").get_children():
+            var recipient_button := row as Button
+            if recipient_button != null and not recipient_button.disabled:
+                recipient_button.pressed.emit()
+                return
+        (recipient.get_node("Content/Cancel") as Button).pressed.emit()
+        return
     var choices: Array = panel.get("choices") as Array
-    var buttons: Array[Node] = panel.get_node("Choices").get_children()
+    var buttons: Array[Node] = panel.get_node("Frame/Content/Offer/CardsScroll/Cards").get_children()
     var selected := -1
     for index: int in range(choices.size()):
         var choice := choices[index] as UpgradeChoice
@@ -137,7 +155,7 @@ func _handle_level_panel(main: Node) -> void:
     if selected >= 0:
         var selected_choice := choices[selected] as UpgradeChoice
         choice_log.append(selected_choice.label)
-        (buttons[selected] as Button).pressed.emit()
+        (buttons[selected] as UpgradeCard).pressed.emit()
 
 func _desired_recruit_needed(main: Node, class_id: StringName) -> bool:
     var desired: Dictionary = {&"ranger": 2, &"mage": 1}

@@ -7,6 +7,7 @@ const VIEWPORT_SIZES: Array[Vector2i] = [
 	Vector2i(2560, 1440),
 	Vector2i(3840, 2160),
 ]
+const SUPPORTED_OFFER_COUNTS: Array[int] = [1, 5, 7, 8]
 
 var _failures: Array[String] = []
 
@@ -33,7 +34,9 @@ func _run() -> void:
 		UpgradeChoice.authored(catalog.upgrade_by_id(&"fleetfoot")),
 	]
 	var probe := panel_scene.instantiate() as LevelUpPanel
-	var typed_contract := probe.get_node_or_null("Frame/Content/Offer/Cards") != null and UpgradeCard.new().has_method(&"bound_choice_key")
+	var card_probe := UpgradeCard.new()
+	var typed_contract := probe.get_node_or_null("Frame/Content/Offer/CardsScroll/Cards") != null and card_probe.has_method(&"bound_choice_key")
+	card_probe.free()
 	probe.free()
 	if not typed_contract:
 		_failures.append("Living Forge bounded typed offer geometry is not implemented")
@@ -51,7 +54,8 @@ func _run() -> void:
 		viewport.add_child(panel)
 		panel.configure(catalog, UpgradeApplicationService.new(), func(_member_id: int) -> Vector2: return Vector2(100.0, 100.0))
 		var content_panel := panel.get_node("Frame") as Control
-		var cards_row := panel.get_node("Frame/Content/Offer/Cards") as HBoxContainer
+		var cards_scroll := panel.get_node("Frame/Content/Offer/CardsScroll") as ScrollContainer
+		var cards_row := panel.get_node("Frame/Content/Offer/CardsScroll/Cards") as HBoxContainer
 		var reveal := panel.get_node("RevealController") as LevelUpRevealController
 		var tooltip := panel.get_node("TooltipPanel") as UpgradeTooltipPanel
 		panel.configure_reduced_motion(false)
@@ -95,6 +99,8 @@ func _run() -> void:
 			if index > 0:
 				_assert(absf(card_rect.size.x - visible_cards[0].get_global_rect().size.x) <= 2.0, "Card%d matches equal-card width at %dx%d" % [index + 1, viewport_size.x, viewport_size.y])
 		if visible_cards.size() == 5:
+			if viewport_size == VIEWPORT_SIZES[0]:
+				await _assert_authentic_tooltip_input_parity(viewport, panel, tooltip, visible_cards[0])
 			for index: int in visible_cards.size():
 				_assert(
 					viewport.gui_get_focus_owner() == visible_cards[index],
@@ -121,6 +127,7 @@ func _run() -> void:
 		if _failures.size() == failure_count_before:
 			print("LEVEL_UP_FIVE_CARD_ACCEPTANCE_SIZE_PASS size=%dx%d" % [viewport_size.x, viewport_size.y])
 		panel.free()
+	await _assert_supported_offer_count_and_scale_geometry(viewport, panel_scene, catalog, party)
 	viewport.free()
 	party.free()
 	if _failures.is_empty():
@@ -160,6 +167,174 @@ func _assert_full_tooltip(tooltip: UpgradeTooltipPanel, choice: UpgradeChoice, v
 	_assert(not (tooltip.get_node("Content/BodyScroll/Body/Effects") as Label).text.is_empty(), "tooltip effects render for %s" % context)
 	_assert(not (tooltip.get_node("Content/BodyScroll/Body/Eligibility") as Label).text.is_empty(), "tooltip eligibility renders for %s" % context)
 	_assert(not (tooltip.get_node("Content/BodyScroll/Body/Keywords") as Label).text.is_empty(), "tooltip keywords render for %s" % context)
+
+
+func _assert_authentic_tooltip_input_parity(
+	viewport: SubViewport,
+	panel: LevelUpPanel,
+	tooltip: UpgradeTooltipPanel,
+	card: UpgradeCard,
+) -> void:
+	var sink := Button.new()
+	sink.name = "TooltipInputSink"
+	sink.position = Vector2(8.0, 8.0)
+	sink.size = Vector2(48.0, 48.0)
+	panel.add_child(sink)
+	sink.focus_next = sink.get_path_to(card)
+	sink.grab_focus()
+	await _push_mouse_motion(viewport, card.get_global_rect().get_center())
+	_assert(card.get("_mouse_inside"), "real mouse motion enters UpgradeCard")
+	_assert(tooltip.visible, "real mouse hover opens the shared tooltip")
+	var mouse_content := _tooltip_content_signature(tooltip)
+	await _push_mouse_motion(viewport, Vector2(2.0, 2.0))
+	_assert(not tooltip.visible, "real mouse motion outside dismisses the shared tooltip")
+
+	sink.grab_focus()
+	await _push_key(viewport, KEY_TAB)
+	_assert(card.has_focus(), "real keyboard focus reaches UpgradeCard")
+	_assert(tooltip.visible and _tooltip_content_signature(tooltip) == mouse_content, "keyboard focus opens identical tooltip content")
+	sink.grab_focus()
+	await process_frame
+	_assert(not tooltip.visible, "keyboard focus exit dismisses the tooltip")
+
+	card.focus_neighbor_left = card.get_path_to(card)
+	card.grab_focus()
+	sink.grab_focus()
+	sink.focus_neighbor_left = sink.get_path_to(card)
+	await _push_joypad_button(viewport, JOY_BUTTON_DPAD_LEFT)
+	_assert(card.has_focus(), "real controller focus reaches UpgradeCard")
+	_assert(tooltip.visible and _tooltip_content_signature(tooltip) == mouse_content, "controller focus opens identical tooltip content")
+	sink.grab_focus()
+	await process_frame
+	_assert(not tooltip.visible, "controller focus exit dismisses the tooltip")
+	sink.queue_free()
+	await process_frame
+	card.grab_focus()
+	await process_frame
+
+
+func _tooltip_content_signature(tooltip: UpgradeTooltipPanel) -> PackedStringArray:
+	return PackedStringArray([
+		(tooltip.get_node("Content/Header/Title") as Label).text,
+		(tooltip.get_node("Content/Rank") as Label).text,
+		(tooltip.get_node("Content/BodyScroll/Body/Description") as Label).text,
+		(tooltip.get_node("Content/BodyScroll/Body/Effects") as Label).text,
+		(tooltip.get_node("Content/BodyScroll/Body/Eligibility") as Label).text,
+		(tooltip.get_node("Content/BodyScroll/Body/Keywords") as Label).text,
+	])
+
+
+func _push_mouse_motion(viewport: SubViewport, position: Vector2) -> void:
+	var motion := InputEventMouseMotion.new()
+	motion.position = position
+	motion.global_position = position
+	viewport.push_input(motion)
+	await process_frame
+	await process_frame
+
+
+func _push_key(viewport: SubViewport, keycode: Key) -> void:
+	var press := InputEventKey.new()
+	press.keycode = keycode
+	press.pressed = true
+	viewport.push_input(press)
+	await process_frame
+	var release := press.duplicate() as InputEventKey
+	release.pressed = false
+	viewport.push_input(release)
+	await process_frame
+
+
+func _push_joypad_button(viewport: SubViewport, button: JoyButton) -> void:
+	var press := InputEventJoypadButton.new()
+	press.button_index = button
+	press.pressed = true
+	viewport.push_input(press)
+	await process_frame
+	var release := press.duplicate() as InputEventJoypadButton
+	release.pressed = false
+	viewport.push_input(release)
+	await process_frame
+
+
+func _assert_supported_offer_count_and_scale_geometry(
+	viewport: SubViewport,
+	panel_scene: PackedScene,
+	catalog: GameCatalog,
+	party: PartyManager,
+) -> void:
+	viewport.size = Vector2i(1280, 720)
+	var all_choices: Array[UpgradeChoice] = [
+		UpgradeChoice.authored(catalog.upgrade_by_id(&"vitality")),
+		UpgradeChoice.authored(catalog.upgrade_by_id(&"vanguard_wall")),
+		UpgradeChoice.authored(catalog.upgrade_by_id(&"precision")),
+		UpgradeChoice.authored(catalog.upgrade_by_id(&"tempered_armor")),
+		UpgradeChoice.authored(catalog.upgrade_by_id(&"fleetfoot")),
+		UpgradeChoice.new(UpgradeChoice.Kind.PARTY_STAT, &"damage", "Damage"),
+		UpgradeChoice.new(UpgradeChoice.Kind.PARTY_STAT, &"move_speed", "Move Speed"),
+		UpgradeChoice.new(UpgradeChoice.Kind.PARTY_STAT, &"pickup_radius", "Pickup Radius"),
+	]
+	for scale_pair: Vector2i in [Vector2i(150, 150), Vector2i(80, 150)]:
+		for offer_count: int in SUPPORTED_OFFER_COUNTS:
+			var panel := panel_scene.instantiate() as LevelUpPanel
+			viewport.add_child(panel)
+			panel.configure(catalog, UpgradeApplicationService.new(), func(_member_id: int) -> Vector2: return Vector2(100.0, 100.0))
+			var settings := PartyForgeSettings.new()
+			settings.ui_scale_percent = scale_pair.x
+			settings.text_scale_percent = scale_pair.y
+			settings.reduced_motion = true
+			panel.configure_visual_settings(settings)
+			var choices: Array[UpgradeChoice] = []
+			choices.assign(all_choices.slice(0, offer_count))
+			panel.show_choices(choices, party)
+			await _wait_for_layout()
+			var frame := panel.get_node("Frame") as Control
+			var scroll := panel.get_node("Frame/Content/Offer/CardsScroll") as ScrollContainer
+			var cards := panel.get_node("Frame/Content/Offer/CardsScroll/Cards") as HBoxContainer
+			var viewport_rect := Rect2(Vector2.ZERO, Vector2(viewport.size))
+			_assert(ResponsiveGeometry.contains(viewport_rect, frame.get_global_rect()), "frame contained for %d offers at ui%d/text%d" % [offer_count, scale_pair.x, scale_pair.y])
+			_assert(ResponsiveGeometry.contains(frame.get_global_rect(), scroll.get_global_rect()), "offer scroll contained for %d offers at ui%d/text%d" % [offer_count, scale_pair.x, scale_pair.y])
+			var visible_cards: Array[UpgradeCard] = []
+			for child: Node in cards.get_children():
+				if child is UpgradeCard and child.visible:
+					visible_cards.append(child as UpgradeCard)
+			_assert(visible_cards.size() == offer_count, "all %d offers render at ui%d/text%d" % [offer_count, scale_pair.x, scale_pair.y])
+			for card: UpgradeCard in visible_cards:
+				card.grab_focus()
+				await _wait_for_layout()
+				_assert(card.has_focus(), "%s remains keyboard/controller reachable at ui%d/text%d" % [card.name, scale_pair.x, scale_pair.y])
+				var visible_slice := scroll.get_global_rect().intersection(card.get_global_rect())
+				_assert(visible_slice.size.x > 0.0 and visible_slice.size.y > 0.0, "%s focus scrolls meaningful content into the bounded offer viewport at ui%d/text%d scroll=%s card=%s h=%d/%s" % [card.name, scale_pair.x, scale_pair.y, scroll.get_global_rect(), card.get_global_rect(), scroll.scroll_horizontal, scroll.get_h_scroll_bar().max_value])
+				scroll.scroll_vertical = int(scroll.get_v_scroll_bar().min_value)
+				await _wait_for_layout()
+				_assert(card.get_global_rect().position.y >= scroll.get_global_rect().position.y - 1.0, "%s top remains reachable at ui%d/text%d" % [card.name, scale_pair.x, scale_pair.y])
+				scroll.scroll_vertical = int(scroll.get_v_scroll_bar().max_value)
+				await _wait_for_layout()
+				_assert(card.get_global_rect().end.y <= scroll.get_global_rect().end.y + 1.0, "%s bottom remains reachable at ui%d/text%d" % [card.name, scale_pair.x, scale_pair.y])
+			if offer_count >= 7:
+				var horizontal := scroll.get_h_scroll_bar()
+				_assert(horizontal.max_value > horizontal.page and scroll.scroll_horizontal > 0, "%d offers expose and traverse horizontal overflow at ui%d/text%d" % [offer_count, scale_pair.x, scale_pair.y])
+			if offer_count == 1:
+				await _assert_scaled_confirmation_containment(panel, choices[0], scale_pair)
+			panel.free()
+
+
+func _assert_scaled_confirmation_containment(panel: LevelUpPanel, choice: UpgradeChoice, scale_pair: Vector2i) -> void:
+	if choice.application_route() == UpgradeChoice.ApplicationRoute.DIRECT:
+		return
+	var card := panel.get_node("Frame/Content/Offer/CardsScroll/Cards").get_child(0) as UpgradeCard
+	card.activated.emit(card.bound_choice_key())
+	if choice.application_route() == UpgradeChoice.ApplicationRoute.RECIPIENT_CONFIRMATION:
+		(panel.get_node("Frame/Content/Recipient/Content/RecipientsScroll/Rows/Member_1") as Button).pressed.emit()
+	var confirmation := panel.get_node("Frame/Content/Confirmation/BodyScroll") as ScrollContainer
+	var effect := panel.get_node("Frame/Content/Confirmation/BodyScroll/Body/Effect") as Label
+	effect.text = (effect.text + " Long semantic consequence remains readable.").repeat(30)
+	var confirm := panel.get_node("Frame/Content/Confirmation/Actions/Confirm") as Button
+	confirm.grab_focus()
+	await _wait_for_layout()
+	_assert(ResponsiveGeometry.contains((panel.get_node("Frame") as Control).get_global_rect(), confirmation.get_global_rect()), "scaled confirmation remains frame-contained at ui%d/text%d" % [scale_pair.x, scale_pair.y])
+	_assert(ResponsiveGeometry.contains((panel.get_node("Frame") as Control).get_global_rect(), confirm.get_global_rect()), "scaled confirmation action remains fixed and reachable at ui%d/text%d" % [scale_pair.x, scale_pair.y])
+	_assert(confirmation.get_v_scroll_bar().max_value > confirmation.get_v_scroll_bar().page, "long scaled confirmation exposes vertical overflow at ui%d/text%d" % [scale_pair.x, scale_pair.y])
 
 
 func _assert(condition: bool, label: String) -> void:

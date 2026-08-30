@@ -3,6 +3,7 @@ extends RefCounted
 func run() -> Array[String]:
 	var failures: Array[String] = []
 	_test_card_renders_typed_projection_and_emits_key(failures)
+	_test_card_hierarchy_tags_icons_and_accessibility(failures)
 	_test_hover_focus_share_detail_state(failures)
 	_test_disabled_card_conceals_detail(failures)
 	_test_tooltip_renders_dictionary(failures)
@@ -34,6 +35,45 @@ func _test_card_renders_typed_projection_and_emits_key(failures: Array[String]) 
 	card.activated.connect(func(emitted: StringName) -> void: activated.append(emitted))
 	card.pressed.emit()
 	TestAssertions.equal(activated, [&"4:deadeye"], "card activation emits stable bound key", failures)
+	card.free()
+
+func _test_card_hierarchy_tags_icons_and_accessibility(failures: Array[String]) -> void:
+	var card := (load("res://scenes/ui/upgrade_card.tscn") as PackedScene).instantiate() as UpgradeCard
+	card.call("_ready")
+	var content := card.get_node("Content") as VBoxContainer
+	var semantic_order := PackedStringArray()
+	for child: Node in content.get_children():
+		semantic_order.append(String(child.name))
+	TestAssertions.equal(
+		semantic_order,
+		PackedStringArray(["Identity", "Name", "Rarity", "Summary", "Scope", "Eligibility", "Tags", "Rank", "Action", "DisabledReason"]),
+		"card semantic order follows icon, identity, effect, scope, eligibility, tags, rank, action",
+		failures,
+	)
+	var tags := card.get_node_or_null("Content/Tags") as Control
+	var icon := card.get_node_or_null("Content/Identity/Icon") as TextureRect
+	var fallback := card.get_node_or_null("Content/Identity/FallbackIcon") as Label
+	TestAssertions.truthy(tags != null, "card exposes recipient and class tag content", failures)
+	TestAssertions.truthy(icon != null and fallback != null, "card exposes semantic texture plus neutral fallback", failures)
+	if tags == null or icon == null or fallback == null:
+		card.free()
+		return
+	var projection := _card_projection("4:shielded", "Shielded")
+	projection.icon_id = &"shield"
+	projection.rarity_label = "Rare"
+	projection.recipient_tags = [&"vanguard", &"martial"]
+	projection.class_tags = [&"fighter"]
+	card.present(projection)
+	card.set_action_hint("Choose Recipient")
+	TestAssertions.truthy(icon.texture != null and icon.texture.resource_path.ends_with("/shield.svg"), "known normalized semantic icon resolves the reviewed shield texture", failures)
+	TestAssertions.truthy(not fallback.visible, "known icon hides the neutral forge fallback", failures)
+	TestAssertions.equal((card.get_node("Content/Tags/RecipientTags") as Label).text, "Traits: Vanguard, Martial", "recipient tags render as semantic names", failures)
+	TestAssertions.equal((card.get_node("Content/Tags/ClassTags") as Label).text, "Classes: Fighter", "class tags render as semantic names", failures)
+	for expected: String in ["Rare", "Vanguard", "Martial", "Fighter", "Choose Recipient"]:
+		TestAssertions.truthy(expected in card.accessibility_name, "accessibility name includes %s" % expected, failures)
+	projection.icon_id = &"unknown-semantic-icon"
+	card.present(projection)
+	TestAssertions.truthy(icon.texture == null and fallback.visible, "unknown icon uses the neutral forge fallback without invented identity", failures)
 	card.free()
 
 func _test_hover_focus_share_detail_state(failures: Array[String]) -> void:

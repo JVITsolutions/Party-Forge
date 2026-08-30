@@ -69,8 +69,8 @@ func _exercise_panel_routes() -> void:
 	var rows := panel.get_node("Frame/Content/Recipient/Content/RecipientsScroll/Rows") as VBoxContainer
 	_assert(rows.get_child_count() == 24, "targeted route keeps all 24 recipients")
 	(rows.get_node("Member_24") as Button).pressed.emit()
-	_assert("Member 24" in (panel.get_node("Frame/Content/Confirmation/Recipient") as Label).text, "targeted confirmation retains exact recipient identity")
-	_assert("->" in (panel.get_node("Frame/Content/Confirmation/Effect") as Label).text, "targeted confirmation retains exact before-to-after effect")
+	_assert("Member 24" in (panel.get_node("Frame/Content/Confirmation/BodyScroll/Body/Recipient") as Label).text, "targeted confirmation retains exact recipient identity")
+	_assert("->" in (panel.get_node("Frame/Content/Confirmation/BodyScroll/Body/Effect") as Label).text, "targeted confirmation retains exact before-to-after effect")
 	(panel.get_node("Frame/Content/Confirmation/Actions/Cancel") as Button).pressed.emit()
 	_assert(targeted_card.has_focus(), "targeted cancel restores initiating card")
 	targeted_card.activated.emit(targeted_card.bound_choice_key())
@@ -78,6 +78,7 @@ func _exercise_panel_routes() -> void:
 	(panel.get_node("Frame/Content/Confirmation/Actions/Confirm") as Button).pressed.emit()
 	(panel.get_node("Frame/Content/Confirmation/Actions/Confirm") as Button).pressed.emit()
 	_assert(intents.size() == 2 and intents[-1].choice == targeted and intents[-1].member_id == 24, "targeted confirmation emits one exact member-24 intent")
+	_assert(targeted_card.has_focus(), "targeted pending moves focus off hidden Confirm to the initiating card")
 	panel.reject_application("Target changed.")
 	_assert(targeted_card.has_focus() and (panel.get_node("Frame/Content/ReadableError") as Label).text == "Target changed.", "targeted failure restores exact card and reason")
 
@@ -90,12 +91,13 @@ func _exercise_panel_routes() -> void:
 	panel.show_choices([recruit], recruit_party)
 	var recruit_card := _card(panel)
 	recruit_card.activated.emit(recruit_card.bound_choice_key())
-	_assert((panel.get_node("Frame/Content/Confirmation") as Control).visible and "Ranger" in (panel.get_node("Frame/Content/Confirmation/Effect") as Label).text, "recruit route presents class-specific context confirmation")
+	_assert((panel.get_node("Frame/Content/Confirmation") as Control).visible and "Ranger" in (panel.get_node("Frame/Content/Confirmation/BodyScroll/Body/Effect") as Label).text, "recruit route presents class-specific context confirmation")
 	(panel.get_node("Frame/Content/Confirmation/Actions/Cancel") as Button).pressed.emit()
 	_assert(recruit_card.has_focus(), "recruit cancel restores initiating card")
 	recruit_card.activated.emit(recruit_card.bound_choice_key())
 	(panel.get_node("Frame/Content/Confirmation/Actions/Confirm") as Button).pressed.emit()
 	_assert(intents.size() == 3 and intents[-1].choice == recruit and intents[-1].member_id == 0, "recruit confirmation emits one exact context intent")
+	_assert(recruit_card.has_focus(), "recruit pending moves focus off hidden Confirm to the initiating card")
 	panel.reject_application("Recruit changed.")
 
 	var vitality := catalog.upgrade_by_id(&"vitality") as UpgradeDefinition
@@ -159,7 +161,8 @@ func _exercise_main_result_and_queued_flow() -> void:
 
 	# Present a deterministic final direct offer through the same unified Main seam.
 	main.set("level_refresh_scheduled", false)
-	panel.show_choices([UpgradeChoice.new(UpgradeChoice.Kind.PARTY_STAT, &"move_speed", "Move Speed")], party, {}, 1)
+	var final_direct := UpgradeChoice.new(UpgradeChoice.Kind.PARTY_STAT, &"move_speed", "Move Speed")
+	panel.show_choices([final_direct], party, {}, 1)
 	card = _card(panel)
 	card.activated.emit(card.bound_choice_key())
 	await process_frame
@@ -174,6 +177,13 @@ func _exercise_main_result_and_queued_flow() -> void:
 			panel.get("_gameplay_return_focus"),
 		]
 	)
+	var accepted_move_speed_rank := party.party_stat_rank(&"move_speed")
+	card.activated.emit(card.bound_choice_key())
+	_assert(party.party_stat_rank(&"move_speed") == accepted_move_speed_rank, "hidden stale final card activation cannot apply a second mutation")
+	_assert(experience.pending_levels == 0 and game_run.current_state() == RunStateMachine.State.RUNNING, "hidden stale final card activation cannot invent or consume a level")
+	panel.application_requested.emit(final_direct, 0)
+	_assert(party.party_stat_rank(&"move_speed") == accepted_move_speed_rank, "Main independently rejects a stale direct intent after final success")
+	_assert(experience.pending_levels == 0 and game_run.current_state() == RunStateMachine.State.RUNNING, "Main stale-intent rejection preserves zero pending levels and running state")
 
 	main.free()
 	paused = false
@@ -189,12 +199,12 @@ func _queue_levels(experience: ExperienceSystem, count: int) -> void:
 
 
 func _card(panel: LevelUpPanel) -> UpgradeCard:
-	return panel.get_node("Frame/Content/Offer/Cards").get_child(0) as UpgradeCard
+	return panel.get_node("Frame/Content/Offer/CardsScroll/Cards").get_child(0) as UpgradeCard
 
 
 func _visible_card_count(panel: LevelUpPanel) -> int:
 	var count := 0
-	for child: Node in panel.get_node("Frame/Content/Offer/Cards").get_children():
+	for child: Node in panel.get_node("Frame/Content/Offer/CardsScroll/Cards").get_children():
 		if child is Control and child.visible:
 			count += 1
 	return count

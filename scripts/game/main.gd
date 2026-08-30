@@ -799,7 +799,21 @@ func active_profile() -> ProfileState:
 func _apply_choice(choice: UpgradeChoice, report_error: bool = true) -> bool:
 	return _apply_choice_for_member(choice, 0, report_error)
 
+func _has_level_up_application_authority() -> bool:
+	return (
+		experience_system != null
+		and experience_system.pending_levels > 0
+		and game_run != null
+		and game_run.current_state() == RunStateMachine.State.LEVEL_UP
+		and active_run_context != null
+		and active_run_context.owns_source_refresh_coordinator()
+	)
+
 func _apply_choice_for_member(choice: UpgradeChoice, recipient_member_id: int, report_error: bool = true) -> bool:
+	if not _has_level_up_application_authority():
+		if report_error:
+			push_error("PARTY_FORGE_LEVEL_UP_AUTHORITY_ERROR reason=level-up application authority unavailable")
+		return false
 	if not _choice_is_valid(choice):
 		if report_error and choice != null:
 			push_error("PARTY_FORGE_INVALID_CHOICE kind=%d target=%s member=%d" % [choice.kind, choice.target_id, recipient_member_id])
@@ -832,7 +846,10 @@ func _apply_choice_for_member(choice: UpgradeChoice, recipient_member_id: int, r
 		if report_error:
 			push_error("PARTY_FORGE_INVALID_CHOICE kind=%d target=%s member=%d" % [choice.kind, choice.target_id, recipient_member_id])
 		return false
-	experience_system.consume_pending_level()
+	if not experience_system.consume_pending_level():
+		if report_error:
+			push_error("PARTY_FORGE_LEVEL_UP_AUTHORITY_ERROR reason=pending level consume rejected")
+		return false
 	if experience_system.pending_levels > 0:
 		level_refresh_scheduled = true
 		call_deferred("_present_pending_level")
@@ -842,6 +859,8 @@ func _apply_choice_for_member(choice: UpgradeChoice, recipient_member_id: int, r
 	return true
 
 func _apply_level_up_choice(choice: UpgradeChoice, recipient_member_id: int) -> LevelUpApplicationResult:
+	if not _has_level_up_application_authority():
+		return LevelUpApplicationResult.rejected(choice.key() if choice != null else &"", recipient_member_id, "This level-up is no longer pending.")
 	var preflight := LevelUpApplicationPolicy.new().evaluate(choice, party_manager, catalog, recipient_member_id)
 	if not preflight.ok():
 		return preflight

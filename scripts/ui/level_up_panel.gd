@@ -183,7 +183,7 @@ func _rebuild_offer_authority() -> void:
 
 func _populate_offer_cards() -> void:
 	_final_projections.clear()
-	var cards := get_node("Frame/Content/Offer/Cards").get_children()
+	var cards := get_node("Frame/Content/Offer/CardsScroll/Cards").get_children()
 	for index: int in cards.size():
 		var card := cards[index] as UpgradeCard
 		if card == null or not card.visible:
@@ -224,19 +224,22 @@ func _disabled_reason(choice: UpgradeChoice) -> String:
 
 func _start_reveal() -> void:
 	_show_view(&"offer")
+	var cards_scroll := get_node("Frame/Content/Offer/CardsScroll") as ScrollContainer
+	cards_scroll.scroll_horizontal = int(cards_scroll.get_h_scroll_bar().min_value)
+	cards_scroll.scroll_vertical = int(cards_scroll.get_v_scroll_bar().min_value)
 	if _reveal_controller == null:
 		_state = State.CHOOSING
 		_focus_first_enabled_card()
 		return
 	_state = State.REVEALING
 	var reveal_cards: Array[UpgradeCard] = []
-	for card_node: Node in get_node("Frame/Content/Offer/Cards").get_children():
+	for card_node: Node in get_node("Frame/Content/Offer/CardsScroll/Cards").get_children():
 		if card_node is UpgradeCard and card_node.visible:
 			reveal_cards.append(card_node as UpgradeCard)
 	var previews: Array[UpgradeOfferProjection] = []
 	for projection: UpgradeOfferProjection in _final_projections:
 		previews.append(projection.copy())
-	var cards_row := get_node("Frame/Content/Offer/Cards") as HBoxContainer
+	var cards_row := get_node("Frame/Content/Offer/CardsScroll/Cards") as HBoxContainer
 	if not cards_row.is_inside_tree():
 		_reveal_controller.play(reveal_cards, _final_projections, previews, _reduced_motion)
 		return
@@ -259,7 +262,7 @@ func _start_reveal() -> void:
 
 
 func _connect_cards() -> void:
-	var cards_node := get_node_or_null("Frame/Content/Offer/Cards")
+	var cards_node := get_node_or_null("Frame/Content/Offer/CardsScroll/Cards")
 	if cards_node == null:
 		return
 	for card_node: Node in cards_node.get_children():
@@ -275,13 +278,12 @@ func _connect_cards() -> void:
 
 
 func _ensure_card_count(count: int) -> void:
-	var cards := get_node("Frame/Content/Offer/Cards") as HBoxContainer
+	var cards := get_node("Frame/Content/Offer/CardsScroll/Cards") as HBoxContainer
 	var needed := clampi(count, 0, 8)
 	while cards.get_child_count() < needed:
 		var card := UPGRADE_CARD_SCENE.instantiate() as UpgradeCard
 		card.name = "Card%d" % (cards.get_child_count() + 1)
-		card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		card.size_flags_stretch_ratio = 1.0
+		card.size_flags_horizontal = Control.SIZE_FILL
 		cards.add_child(card)
 	for index: int in cards.get_child_count():
 		(cards.get_child(index) as Control).visible = index < needed
@@ -291,7 +293,7 @@ func _ensure_card_count(count: int) -> void:
 
 func _configure_card_focus_neighbors() -> void:
 	var visible_cards: Array[Control] = []
-	for child: Node in get_node("Frame/Content/Offer/Cards").get_children():
+	for child: Node in get_node("Frame/Content/Offer/CardsScroll/Cards").get_children():
 		if child is UpgradeCard and child.visible and not (child as UpgradeCard).disabled:
 			visible_cards.append(child as Control)
 	for index: int in visible_cards.size():
@@ -333,7 +335,9 @@ func _connect_confirmation() -> void:
 
 
 func _on_card_activated(choice_key: StringName) -> void:
-	if _state != State.CHOOSING or choice_key.is_empty():
+	if not visible or _state != State.CHOOSING or choice_key.is_empty():
+		return
+	if not (get_node("Frame/Content/Offer") as Control).visible or (get_node("Frame/Content/Pending") as Control).visible:
 		return
 	var choice := _choices_by_key.get(String(choice_key)) as UpgradeChoice
 	var projection := _projections_by_key.get(String(choice_key)) as UpgradeOfferProjection
@@ -368,9 +372,9 @@ func _on_recipient_selected(choice_key: StringName, member_id: int) -> void:
 
 func _show_confirmation(choice: UpgradeChoice, recipient_row: Dictionary) -> void:
 	var projection := _projections_by_key.get(String(choice.key())) as UpgradeOfferProjection
-	(get_node("Frame/Content/Confirmation/ChoiceName") as Label).text = projection.display_name
-	var recipient_label := get_node("Frame/Content/Confirmation/Recipient") as Label
-	var effect_label := get_node("Frame/Content/Confirmation/Effect") as Label
+	(get_node("Frame/Content/Confirmation/BodyScroll/Body/ChoiceName") as Label).text = projection.display_name
+	var recipient_label := get_node("Frame/Content/Confirmation/BodyScroll/Body/Recipient") as Label
+	var effect_label := get_node("Frame/Content/Confirmation/BodyScroll/Body/Effect") as Label
 	if choice.application_route() == UpgradeChoice.ApplicationRoute.RECIPIENT_CONFIRMATION:
 		recipient_label.text = "Recipient: %s [#%d]" % [recipient_row.get("character_name", "Unavailable"), _pending_member_id]
 		var preview_lines := PackedStringArray()
@@ -380,7 +384,7 @@ func _show_confirmation(choice: UpgradeChoice, recipient_row: Dictionary) -> voi
 	else:
 		recipient_label.text = "Recruitment choice"
 		effect_label.text = projection.effect_text
-	(get_node("Frame/Content/Confirmation/Scope") as Label).text = projection.scope_text
+	(get_node("Frame/Content/Confirmation/BodyScroll/Body/Scope") as Label).text = projection.scope_text
 	var confirm := get_node("Frame/Content/Confirmation/Actions/Confirm") as Button
 	confirm.disabled = false
 	confirm.accessibility_name = "Confirm %s" % projection.display_name
@@ -405,6 +409,7 @@ func _enter_pending(choice: UpgradeChoice, member_id: int) -> void:
 	_pending_member_id = member_id
 	(get_node("Frame/Content/Pending/Status") as Label).text = "Applying %s..." % choice.label
 	_show_view(&"pending")
+	_focus_choice(_initiating_choice_key)
 	application_requested.emit(choice, member_id)
 
 
@@ -458,7 +463,7 @@ func _start_reveal_after_layout(
 func _invalidate_reveal() -> void:
 	_reveal_request_id += 1
 	_reveal_pending = false
-	var cards_row := get_node_or_null("Frame/Content/Offer/Cards") as HBoxContainer
+	var cards_row := get_node_or_null("Frame/Content/Offer/CardsScroll/Cards") as HBoxContainer
 	if cards_row != null and _reveal_layout_callback.is_valid() and cards_row.sort_children.is_connected(_reveal_layout_callback):
 		cards_row.sort_children.disconnect(_reveal_layout_callback)
 	_reveal_layout_callback = Callable()
@@ -468,7 +473,7 @@ func _invalidate_reveal() -> void:
 
 func _focus_first_enabled_card() -> void:
 	_initial_focus_card = null
-	for card_node: Node in get_node("Frame/Content/Offer/Cards").get_children():
+	for card_node: Node in get_node("Frame/Content/Offer/CardsScroll/Cards").get_children():
 		var card := card_node as UpgradeCard
 		if card != null and card.visible and not card.disabled:
 			_initial_focus_card = card
@@ -479,7 +484,7 @@ func _focus_first_enabled_card() -> void:
 
 
 func _focus_choice(choice_key: StringName) -> void:
-	for card_node: Node in get_node("Frame/Content/Offer/Cards").get_children():
+	for card_node: Node in get_node("Frame/Content/Offer/CardsScroll/Cards").get_children():
 		var card := card_node as UpgradeCard
 		if card != null and card.visible and card.bound_choice_key() == choice_key and not card.disabled:
 			_initial_focus_card = card
@@ -496,6 +501,11 @@ func _grab_offer_focus_if_active(card: UpgradeCard, choice_key: StringName) -> v
 	if not (get_node("Frame/Content/Offer") as Control).visible or card.bound_choice_key() != choice_key:
 		return
 	card.grab_focus()
+	var cards_scroll := get_node("Frame/Content/Offer/CardsScroll") as ScrollContainer
+	cards_scroll.ensure_control_visible(card)
+	if card == _initial_focus_card:
+		cards_scroll.scroll_horizontal = int(cards_scroll.get_h_scroll_bar().min_value)
+		cards_scroll.scroll_vertical = int(cards_scroll.get_v_scroll_bar().min_value)
 
 
 func _on_card_detail_requested(choice_key: StringName, anchor: Control) -> void:
@@ -603,7 +613,7 @@ func _current_viewport_width() -> float:
 func _apply_card_face_density(_viewport_width: float) -> void:
 	# Compact layouts remove ornamental whitespace, never scope, eligibility, rank,
 	# effect, category, or action meaning.
-	for child: Node in get_node("Frame/Content/Offer/Cards").get_children():
+	for child: Node in get_node("Frame/Content/Offer/CardsScroll/Cards").get_children():
 		if not (child is UpgradeCard):
 			continue
 		for label_name: String in ["Identity", "Name", "Scope", "Rank", "Summary", "Eligibility", "Action"]:

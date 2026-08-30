@@ -116,7 +116,7 @@ func _exercise_viewport(viewport_size: Vector2i) -> void:
 	_assert(selected_member_ids == [24], "%s controller south emits stable member_id 24" % mode)
 	_assert((panel.get_node("Frame/Content/Confirmation") as Control).visible, "%s controller recipient selection enters the existing confirmation flow" % mode)
 	_assert(int(panel.get("_pending_member_id")) == 24, "%s confirmation retains member_id 24" % mode)
-	_assert("->" in (panel.get_node("Frame/Content/Confirmation/Effect") as Label).text, "%s confirmation shows exact recipient preview" % mode)
+	_assert("->" in (panel.get_node("Frame/Content/Confirmation/BodyScroll/Body/Effect") as Label).text, "%s confirmation shows exact recipient preview" % mode)
 
 	panel.free()
 	party.free()

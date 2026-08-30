@@ -81,36 +81,34 @@ text = "Apply direct upgrades now, choose a recipient when required, or review a
 horizontal_alignment = 1
 autowrap_mode = 2
 
-[node name="Cards" type="HBoxContainer" parent="Frame/Content/Offer"]
+[node name="CardsScroll" type="ScrollContainer" parent="Frame/Content/Offer"]
 layout_mode = 2
+size_flags_vertical = 3
+horizontal_scroll_mode = 1
+vertical_scroll_mode = 1
+follow_focus = true
+
+[node name="Cards" type="HBoxContainer" parent="Frame/Content/Offer/CardsScroll"]
+layout_mode = 2
+size_flags_horizontal = 3
 size_flags_vertical = 3
 theme_override_constants/separation = 16
 alignment = 1
 
-[node name="Card1" parent="Frame/Content/Offer/Cards" instance=ExtResource("2_card")]
+[node name="Card1" parent="Frame/Content/Offer/CardsScroll/Cards" instance=ExtResource("2_card")]
 layout_mode = 2
-size_flags_horizontal = 3
-size_flags_stretch_ratio = 1.0
 
-[node name="Card2" parent="Frame/Content/Offer/Cards" instance=ExtResource("2_card")]
+[node name="Card2" parent="Frame/Content/Offer/CardsScroll/Cards" instance=ExtResource("2_card")]
 layout_mode = 2
-size_flags_horizontal = 3
-size_flags_stretch_ratio = 1.0
 
-[node name="Card3" parent="Frame/Content/Offer/Cards" instance=ExtResource("2_card")]
+[node name="Card3" parent="Frame/Content/Offer/CardsScroll/Cards" instance=ExtResource("2_card")]
 layout_mode = 2
-size_flags_horizontal = 3
-size_flags_stretch_ratio = 1.0
 
-[node name="Card4" parent="Frame/Content/Offer/Cards" instance=ExtResource("2_card")]
+[node name="Card4" parent="Frame/Content/Offer/CardsScroll/Cards" instance=ExtResource("2_card")]
 layout_mode = 2
-size_flags_horizontal = 3
-size_flags_stretch_ratio = 1.0
 
-[node name="Card5" parent="Frame/Content/Offer/Cards" instance=ExtResource("2_card")]
+[node name="Card5" parent="Frame/Content/Offer/CardsScroll/Cards" instance=ExtResource("2_card")]
 layout_mode = 2
-size_flags_horizontal = 3
-size_flags_stretch_ratio = 1.0
 
 [node name="RetryOffers" type="Button" parent="Frame/Content/Offer"]
 visible = false
@@ -151,23 +149,35 @@ theme_type_variation = &"LivingForgeDisplayLabel"
 text = "Confirm Upgrade"
 horizontal_alignment = 1
 
-[node name="ChoiceName" type="Label" parent="Frame/Content/Confirmation"]
+[node name="BodyScroll" type="ScrollContainer" parent="Frame/Content/Confirmation"]
+layout_mode = 2
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+vertical_scroll_mode = 1
+follow_focus = true
+
+[node name="Body" type="VBoxContainer" parent="Frame/Content/Confirmation/BodyScroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 18
+
+[node name="ChoiceName" type="Label" parent="Frame/Content/Confirmation/BodyScroll/Body"]
 layout_mode = 2
 theme_type_variation = &"LivingForgeSectionLabel"
 horizontal_alignment = 1
 autowrap_mode = 2
 
-[node name="Recipient" type="Label" parent="Frame/Content/Confirmation"]
+[node name="Recipient" type="Label" parent="Frame/Content/Confirmation/BodyScroll/Body"]
 layout_mode = 2
 horizontal_alignment = 1
 autowrap_mode = 2
 
-[node name="Effect" type="Label" parent="Frame/Content/Confirmation"]
+[node name="Effect" type="Label" parent="Frame/Content/Confirmation/BodyScroll/Body"]
 layout_mode = 2
 horizontal_alignment = 1
 autowrap_mode = 2
 
-[node name="Scope" type="Label" parent="Frame/Content/Confirmation"]
+[node name="Scope" type="Label" parent="Frame/Content/Confirmation/BodyScroll/Body"]
 layout_mode = 2
 theme_type_variation = &"LivingForgeCaptionLabel"
 horizontal_alignment = 1

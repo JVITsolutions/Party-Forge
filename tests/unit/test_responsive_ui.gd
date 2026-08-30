@@ -85,56 +85,64 @@ func _test_retained_overlay_contracts(failures: Array[String]) -> void:
 	var status_margin := hud.get_node("Margin") as Control
 	var boss_banner := hud.get_node("BossBanner") as Control
 	var level_up := hud.get_node("LevelUpPanel") as Control
-	var level_content := hud.get_node("LevelUpPanel/ContentPanel") as Control
+	var level_frame := hud.get_node("LevelUpPanel/Frame") as Control
 	var result_root := hud.get_node("RunResultPanel") as Control
 	var result_panel := hud.get_node("RunResultPanel/Panel") as Control
 	_assert_full_rect(level_up, "level-up modal root", failures)
+	_assert_full_rect(status_margin, "combat HUD shell", failures)
 	_assert_full_rect(result_root, "run result overlay", failures)
 	TestAssertions.equal(level_up.process_mode, Node.PROCESS_MODE_ALWAYS, "level-up modal always processes while paused", failures)
 	TestAssertions.equal(level_up.mouse_filter, Control.MOUSE_FILTER_STOP, "level-up modal blocks pointer input behind it", failures)
-	TestAssertions.equal(Vector4(level_content.anchor_left, level_content.anchor_top, level_content.anchor_right, level_content.anchor_bottom), Vector4(0.02, 0.06, 0.98, 0.94), "level-up content panel uses approved responsive edge anchors", failures)
-	TestAssertions.equal(Vector4(level_content.offset_left, level_content.offset_top, level_content.offset_right, level_content.offset_bottom), Vector4.ZERO, "level-up content panel uses no fixed offsets", failures)
+	_assert_center_anchors(level_frame, "level-up frame", failures)
+	TestAssertions.truthy(level_frame.custom_minimum_size.x <= 1200.0 and level_frame.custom_minimum_size.y <= 660.0, "level-up frame remains bounded for the 1280x720 contract", failures)
 	_assert_center_anchors(result_panel, "run result panel", failures)
 	TestAssertions.equal(Vector4(boss_banner.anchor_left, boss_banner.anchor_top, boss_banner.anchor_right, boss_banner.anchor_bottom), Vector4(0.5, 0.0, 0.5, 0.0), "boss banner keeps center-top anchors", failures)
-	TestAssertions.truthy(level_up.get_node_or_null("ContentPanel/OfferView") is ScrollContainer, "level-up offers remain scrollable", failures)
-	var recipients_scroll := level_up.get_node_or_null("ContentPanel/RecipientView/Content/RecipientsScroll") as ScrollContainer
+	var offers_scroll := level_up.get_node_or_null("Frame/Content/Offer/CardsScroll") as ScrollContainer
+	TestAssertions.truthy(offers_scroll != null, "level-up offers retain a bounded scroll owner", failures)
+	TestAssertions.truthy(offers_scroll != null and offers_scroll.horizontal_scroll_mode == ScrollContainer.SCROLL_MODE_AUTO and offers_scroll.vertical_scroll_mode == ScrollContainer.SCROLL_MODE_AUTO, "offer overflow scrolls horizontally and vertically", failures)
+	TestAssertions.truthy(offers_scroll != null and offers_scroll.follow_focus and offers_scroll.clip_contents, "offer scroll follows keyboard/controller focus and clips overflow", failures)
+	var recipients_scroll := level_up.get_node_or_null("Frame/Content/Recipient/Content/RecipientsScroll") as ScrollContainer
 	TestAssertions.truthy(recipients_scroll != null, "recipient content is scrollable", failures)
 	TestAssertions.truthy(recipients_scroll != null and recipients_scroll.follow_focus, "recipient scroll follows keyboard and controller focus", failures)
-	TestAssertions.truthy(level_up.get_node_or_null("ContentPanel/ConfirmationView") is ScrollContainer, "confirmation content is scrollable", failures)
-	_assert_size(boss_banner, Vector2(500.0, 70.0), "boss banner", failures)
+	var confirmation_scroll := level_up.get_node_or_null("Frame/Content/Confirmation/BodyScroll") as ScrollContainer
+	TestAssertions.truthy(confirmation_scroll != null, "confirmation body is bounded by a stable scroll root", failures)
+	TestAssertions.truthy(confirmation_scroll != null and confirmation_scroll.vertical_scroll_mode == ScrollContainer.SCROLL_MODE_AUTO and confirmation_scroll.follow_focus and confirmation_scroll.clip_contents, "confirmation overflow remains reachable by focus", failures)
+	TestAssertions.truthy(level_up.get_node_or_null("Frame/Content/Confirmation/Actions") is HBoxContainer, "confirmation actions remain pinned outside scrolling prose", failures)
+	_assert_size(boss_banner, Vector2(320.0, 56.0), "boss banner", failures)
 	for viewport_size: Vector2 in VIEWPORT_SIZES:
-		_assert_centered(level_content, viewport_size, "level-up content panel", failures)
+		_assert_centered(level_frame, viewport_size, "level-up frame", failures)
 		_assert_centered(result_panel, viewport_size, "run result panel", failures)
-		var level_rect := ResponsiveGeometry.control_rect(level_content, Rect2(Vector2.ZERO, viewport_size))
-		var expected_level_size := viewport_size * Vector2(0.96, 0.88)
-		TestAssertions.near(level_rect.size.x, expected_level_size.x, 0.01, "level-up content panel width scales at %s" % viewport_size, failures)
-		TestAssertions.near(level_rect.size.y, expected_level_size.y, 0.01, "level-up content panel height scales at %s" % viewport_size, failures)
-		TestAssertions.truthy(ResponsiveGeometry.contains(Rect2(Vector2.ZERO, viewport_size), level_rect), "level-up content panel remains contained at %s" % viewport_size, failures)
+		var level_rect := ResponsiveGeometry.control_rect(level_frame, Rect2(Vector2.ZERO, viewport_size))
+		TestAssertions.truthy(level_rect.size.x <= 1200.0 and level_rect.size.y <= 660.0, "level-up frame stays bounded at %s" % viewport_size, failures)
+		TestAssertions.truthy(ResponsiveGeometry.contains(Rect2(Vector2.ZERO, viewport_size), level_rect), "level-up frame remains contained at %s" % viewport_size, failures)
 		_assert_size(result_panel, Vector2(400.0, 260.0), "run result panel", failures)
-		TestAssertions.near(_rect_center(boss_banner, viewport_size).x, viewport_size.x * 0.5, 0.01, "boss banner is horizontally centered at %s" % viewport_size, failures)
-		TestAssertions.near(_rect_top_left(boss_banner, viewport_size).y, 80.0, 0.01, "boss banner retains top margin at %s" % viewport_size, failures)
-		var status_position := _rect_top_left(status_margin, viewport_size)
-		TestAssertions.near(status_position.x, 16.0, 0.01, "status HUD retains left margin at %s" % viewport_size, failures)
-		TestAssertions.near(status_position.y, 16.0, 0.01, "status HUD retains top margin at %s" % viewport_size, failures)
+		_assert_contained(boss_banner, viewport_size, "boss banner", failures)
 	hud.free()
 
 
 func _test_level_up_card_layout_contract(failures: Array[String]) -> void:
 	var panel := (load("res://scenes/ui/level_up_panel.tscn") as PackedScene).instantiate() as LevelUpPanel
-	var content_panel := panel.get_node("ContentPanel") as Control
-	var offer_view := panel.get_node("ContentPanel/OfferView") as ScrollContainer
-	var cards := panel.get_node("ContentPanel/OfferView/Content/Cards") as HBoxContainer
-	TestAssertions.equal(content_panel.custom_minimum_size, Vector2(0.0, 560.0), "responsive level-up panel keeps only a vertical minimum", failures)
+	var frame := panel.get_node("Frame") as Control
+	var offer_view := panel.get_node_or_null("Frame/Content/Offer/CardsScroll") as ScrollContainer
+	var cards := panel.get_node_or_null("Frame/Content/Offer/CardsScroll/Cards") as HBoxContainer
+	TestAssertions.truthy(frame.custom_minimum_size.x <= 1200.0 and frame.custom_minimum_size.y <= 660.0, "responsive level-up frame keeps the supported 720p bound", failures)
+	TestAssertions.truthy(offer_view != null, "developer card counts own a stable bounded scroll region", failures)
+	TestAssertions.truthy(cards != null, "bounded offer scroll owns the real UpgradeCard row", failures)
+	if offer_view == null or cards == null:
+		panel.free()
+		return
 	TestAssertions.equal(offer_view.horizontal_scroll_mode, ScrollContainer.SCROLL_MODE_AUTO, "developer card counts scroll horizontally without truncation", failures)
+	TestAssertions.equal(offer_view.vertical_scroll_mode, ScrollContainer.SCROLL_MODE_AUTO, "long semantic card content scrolls vertically without clipping", failures)
+	TestAssertions.truthy(offer_view.follow_focus and offer_view.clip_contents, "card scrolling follows focus and clips only decoration outside its viewport", failures)
 	TestAssertions.truthy(cards.get_node_or_null("Card4") is UpgradeCard, "production scene exposes stable Card4 path", failures)
 	TestAssertions.truthy(cards.get_node_or_null("Card5") is UpgradeCard, "production scene exposes stable Card5 path", failures)
 	for index: int in mini(cards.get_child_count(), 5):
 		var card := cards.get_child(index) as UpgradeCard
 		TestAssertions.equal(card.custom_minimum_size, Vector2(168.0, 300.0), "card %d uses approved responsive minimum" % (index + 1), failures)
-		TestAssertions.equal(card.size_flags_horizontal & Control.SIZE_EXPAND_FILL, Control.SIZE_EXPAND_FILL, "card %d expands and fills the row" % (index + 1), failures)
+		TestAssertions.equal(card.size_flags_horizontal, Control.SIZE_FILL, "card %d preserves an equal bounded width inside the scroll row" % (index + 1), failures)
 		TestAssertions.near(card.size_flags_stretch_ratio, 1.0, 0.001, "card %d uses equal stretch" % (index + 1), failures)
 		var content := card.get_node("Content") as Control
-		TestAssertions.equal(Vector4(content.offset_left, content.offset_top, content.offset_right, content.offset_bottom), Vector4(10.0, 16.0, -10.0, -16.0), "card %d uses reduced horizontal padding" % (index + 1), failures)
+		TestAssertions.equal(Vector4(content.offset_left, content.offset_top, content.offset_right, content.offset_bottom), Vector4(14.0, 14.0, -14.0, -14.0), "card %d keeps compact semantic padding" % (index + 1), failures)
 	panel.free()
 
 

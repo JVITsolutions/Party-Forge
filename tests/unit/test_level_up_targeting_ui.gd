@@ -16,7 +16,7 @@ func run() -> Array[String]:
 		and probe.has_method(&"accept_application")
 		and probe.has_method(&"reject_application")
 		and probe.has_method(&"configure_visual_settings")
-		and probe.get_node_or_null("Frame/Content/Offer/Cards") != null
+		and probe.get_node_or_null("Frame/Content/Offer/CardsScroll/Cards") != null
 		and probe.get_node_or_null("Frame/Content/Confirmation") != null
 		and probe.get_node_or_null("Frame/Content/ReadableError") != null
 	)
@@ -81,9 +81,9 @@ func _test_targeted_confirmation_uses_exact_member_and_preview(failures: Array[S
 	member_24.pressed.emit()
 	TestAssertions.equal(panel.get("_state"), CONFIRMING, "recipient choice enters CONFIRMING", failures)
 	TestAssertions.truthy((panel.get_node("Frame/Content/Confirmation") as Control).visible, "targeted confirmation is visible", failures)
-	var exact_effect := (panel.get_node("Frame/Content/Confirmation/Effect") as Label).text
+	var exact_effect := (panel.get_node("Frame/Content/Confirmation/BodyScroll/Body/Effect") as Label).text
 	TestAssertions.truthy("->" in exact_effect, "targeted confirmation shows exact before-to-after preview", failures)
-	TestAssertions.truthy("Member 24" in (panel.get_node("Frame/Content/Confirmation/Recipient") as Label).text, "confirmation names the exact recipient", failures)
+	TestAssertions.truthy("Member 24" in (panel.get_node("Frame/Content/Confirmation/BodyScroll/Body/Recipient") as Label).text, "confirmation names the exact recipient", failures)
 
 	(panel.get_node("Frame/Content/Confirmation/Actions/Cancel") as Button).pressed.emit()
 	TestAssertions.equal(panel.get("_state"), CHOOSING, "confirmation cancel returns to CHOOSING", failures)
@@ -110,7 +110,7 @@ func _test_recruit_context_confirmation_and_cancel(failures: Array[String]) -> v
 	var card := _card(panel, 0)
 	card.activated.emit(card.bound_choice_key())
 	TestAssertions.equal(panel.get("_state"), CONFIRMING, "recruit enters context confirmation directly", failures)
-	TestAssertions.truthy("Ranger" in (panel.get_node("Frame/Content/Confirmation/Effect") as Label).text, "recruit confirmation retains authoritative context", failures)
+	TestAssertions.truthy("Ranger" in (panel.get_node("Frame/Content/Confirmation/BodyScroll/Body/Effect") as Label).text, "recruit confirmation retains authoritative context", failures)
 	(panel.get_node("Frame/Content/Confirmation/Actions/Cancel") as Button).pressed.emit()
 	TestAssertions.equal(panel.get("_state"), CHOOSING, "recruit cancel returns to CHOOSING", failures)
 	TestAssertions.equal(panel.get("_initial_focus_card"), card, "recruit cancel restores exact initiating card", failures)
@@ -160,7 +160,7 @@ func _test_pre_layout_reveal_skip_is_consumed_once(failures: Array[String]) -> v
 	skip.action = &"ui_cancel"
 	skip.pressed = true
 	panel.call(&"_unhandled_input", skip)
-	(panel.get_node("Frame/Content/Offer/Cards") as HBoxContainer).notification(Container.NOTIFICATION_SORT_CHILDREN)
+	(panel.get_node("Frame/Content/Offer/CardsScroll/Cards") as HBoxContainer).notification(Container.NOTIFICATION_SORT_CHILDREN)
 	TestAssertions.equal(panel.get("_state"), CHOOSING, "a pre-layout reveal skip resolves the reveal once layout becomes ready", failures)
 	TestAssertions.truthy(not (panel.get_node("RevealController") as LevelUpRevealController).is_revealing(), "pre-layout skip cannot leave a delayed reveal active", failures)
 	_cleanup(fixture)
@@ -175,7 +175,7 @@ func _test_compact_cards_keep_semantic_content(failures: Array[String]) -> void:
 	]
 	panel.show_choices(choices, fixture.party)
 	panel.call(&"_apply_card_face_density", 1280.0)
-	for card_node: Node in panel.get_node("Frame/Content/Offer/Cards").get_children():
+	for card_node: Node in panel.get_node("Frame/Content/Offer/CardsScroll/Cards").get_children():
 		if not (card_node is UpgradeCard) or not card_node.visible:
 			continue
 		for label_name: String in ["Eligibility", "Scope", "Rank", "Summary"]:
@@ -232,7 +232,7 @@ func _fixture(party_size: int = 1) -> Dictionary:
 
 
 func _card(panel: LevelUpPanel, index: int) -> UpgradeCard:
-	return panel.get_node("Frame/Content/Offer/Cards").get_child(index) as UpgradeCard
+	return panel.get_node("Frame/Content/Offer/CardsScroll/Cards").get_child(index) as UpgradeCard
 
 
 func _cleanup(fixture: Dictionary) -> void:
