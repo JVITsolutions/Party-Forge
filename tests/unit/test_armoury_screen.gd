@@ -21,7 +21,8 @@ func run() -> Array[String]:
 	var close_button := screen.get_node("Overlay/Frame/Layout/Footer/Close") as Button
 	TestAssertions.truthy(close_button.custom_minimum_size.x >= 48.0 and close_button.custom_minimum_size.y >= 48.0, "Armoury Close enforces a 48px minimum action target", failures)
 	var footer_help := screen.get_node("Overlay/Frame/Layout/Footer/Help") as Label
-	TestAssertions.truthy(footer_help.text.contains("Keyboard") and footer_help.text.contains("D-pad") and footer_help.text.contains("South place"), "Armoury help names the implemented keyboard/controller inspect and place path", failures)
+	TestAssertions.truthy(footer_help.text.contains("Keyboard: arrows inspect, X pick up, Enter place"), "Armoury help names the implemented keyboard inspect, pickup, and place path", failures)
+	TestAssertions.truthy(footer_help.text.contains("D-pad") and footer_help.text.contains("South place"), "Armoury help names the implemented controller inspect and place path", failures)
 	overlay.theme = null
 	screen.refresh(storage)
 	TestAssertions.equal(overlay.theme, resolved_theme, "Armoury reapplies accessibility theme and independent scales on refresh", failures)

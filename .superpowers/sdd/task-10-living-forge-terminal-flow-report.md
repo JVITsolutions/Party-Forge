@@ -159,3 +159,11 @@ Final repair verification:
 - Lifecycle command: `& 'F:\Projects(root)\Game dev\godot\Godot_v4.7.1-stable_mono_win64\Godot_v4.7.1-stable_mono_win64_console.exe' --headless --path (Get-Location).Path --quit-after 900 --script res://tests/integration/run_recovery_profile_lifecycle_runner.gd`. It exited `LIFECYCLE_REPAIR_EXIT:0` with `RUN_RECOVERY_CURRENT: PASS`, `RUN_RECOVERY_LEGACY_CLASS: PASS`, `RUN_RECOVERY_ABANDON: PASS`, `PROFILE_DELETE_LIFECYCLE: PASS`, and `RUN_RECOVERY_PROFILE_LIFECYCLE: PASS`.
 - Full-suite command: `& 'F:\Projects(root)\Game dev\godot\Godot_v4.7.1-stable_mono_win64\Godot_v4.7.1-stable_mono_win64_console.exe' --headless --path (Get-Location).Path --quit-after 1800 --script res://tests/test_runner.gd`. Session `86200` ended `ITEM_TRANSACTION_MATRIX: PASS`, `TEST_SUMMARY: PASS (252 suites)`, `FINAL_REPAIR_FULL_SUITE_EXIT:0`. Established assertion-owned negative-path diagnostics and the existing invalid-UTF-8 replacement diagnostic remained; no `TEST_FAILURE` occurred.
 - Integrity audit: `git diff --check` exit `0`; historical report blob remains `95a538c9668fa8e6381166dc8c488b502956cd31`; the base-to-head intended UID list contains exactly `9`, current untracked UID count is `0`, and no changed path crosses into tactics, Task 11 recap/result UI, or Task 12 boot/lifecycle cutover.
+
+## Keyboard pickup help repair
+
+- The Armoury unit assertion was strengthened to require the actual keyboard pickup wording `Keyboard: arrows inspect, X pick up, Enter place`, matching the `item_sandbox_pickup` physical-X binding in `project.godot`.
+- TDD RED: the exact Armoury focused command exited `1` with `TEST_SUMMARY: FAIL (1 failures)` and only the strengthened keyboard-help assertion failed (`ARMOURY_HELP_RED_EXIT:1`).
+- The Armoury footer now reads exactly `Keyboard: arrows inspect, X pick up, Enter place • Controller: D-pad inspect, West pick up, South place • Mouse: drag/drop`.
+- TDD GREEN: the exact Armoury focused command exited `0` with `TEST_SUMMARY: PASS (0 failures)` (`ARMOURY_HELP_GREEN_EXIT:0`).
+- Real D-pad responsive integration exited `0` with `TASK9_STORAGE_RESOLUTION_PASS` at `1920x1080`, `2560x1440`, and `3840x2160`, `TASK9_STORAGE_RESPONSIVE_SUMMARY: PASS (0 failures)`, and `ARMOURY_REAL_DPAD_GREEN_EXIT:0`.

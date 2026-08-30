@@ -89,7 +89,7 @@ layout_mode = 2
 layout_mode = 2
 size_flags_horizontal = 3
 theme_type_variation = &"LivingForgeCaptionLabel"
-text = "Keyboard: arrows inspect, Enter place • Controller: D-pad inspect, West pick up, South place • Mouse: drag/drop"
+text = "Keyboard: arrows inspect, X pick up, Enter place • Controller: D-pad inspect, West pick up, South place • Mouse: drag/drop"
 autowrap_mode = 2
 [node name="Close" type="Button" parent="Overlay/Frame/Layout/Footer"]
 custom_minimum_size = Vector2(48, 48)
