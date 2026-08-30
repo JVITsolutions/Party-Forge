@@ -292,6 +292,8 @@ func _refresh_projection(force_structure: bool) -> void:
 	_clear_unavailable()
 	_last_viewport_size = _hud_viewport().get_visible_rect().size.round() as Vector2i
 	_metrics = CombatHudResponsiveLayout.resolve(_last_viewport_size, settings.ui_scale_percent, settings.text_scale_percent, projection.members.size())
+	var leader_card := get_node("Margin/CombatStatus/LeaderCard") as ForgePartyMemberCard
+	_reflow_leader_region(leader_card.apply_leader_density(_uses_compact_leader_density()))
 	var next_revision := _view_model.ordered_party_revision(party_manager)
 	var structure_changed := force_structure or next_revision != _party_revision
 	_party_revision = next_revision
@@ -303,6 +305,20 @@ func _refresh_projection(force_structure: bool) -> void:
 	_present_status()
 	_present_alerts()
 	_refresh_open_tray()
+
+
+func _uses_compact_leader_density() -> bool:
+	return _last_viewport_size.y <= 720 and settings.text_scale_percent >= 150
+
+
+func _reflow_leader_region(leader_height: float) -> void:
+	var leader := get_node("Margin/CombatStatus/LeaderCard") as Control
+	leader.offset_bottom = leader.offset_top + leader_height
+	var experience := get_node("Margin/CombatStatus/Experience") as Control
+	experience.offset_top = leader.offset_bottom + 4.0
+	experience.offset_bottom = experience.offset_top + maxf(20.0, experience.get_combined_minimum_size().y)
+	var party_region := get_node("Margin/CombatStatus/PartyRegion") as Control
+	party_region.offset_top = experience.offset_bottom + 8.0
 
 
 func _rebuild_member_controls() -> void:

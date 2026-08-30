@@ -178,7 +178,8 @@ func _test_terminal_surface_contracts(failures: Array[String]) -> void:
 	var warning_frame := extraction.get_node("UnusedCapacityWarning/Frame") as Control
 	_assert_full_rect(extraction, "terminal extraction root", failures)
 	TestAssertions.equal(extraction_body.vertical_scroll_mode, ScrollContainer.SCROLL_MODE_AUTO, "extraction body owns vertical overflow", failures)
-	TestAssertions.truthy(extraction_body.follow_focus and extraction_body.clip_contents, "extraction body follows focused items inside a clipped viewport", failures)
+	TestAssertions.truthy(not extraction_body.follow_focus and extraction_body.clip_contents, "extraction body clips overflow while the panel coordinates nested focus visibility", failures)
+	TestAssertions.truthy(extraction.has_method(&"_ensure_card_visible"), "extraction panel owns nested automatic/item focus reveal", failures)
 	TestAssertions.truthy(not extraction_body.is_ancestor_of(extraction_actions), "extraction actions remain pinned outside item scrolling", failures)
 	for node: Node in extraction.find_children("*", "Button", true, false):
 		var action := node as Button

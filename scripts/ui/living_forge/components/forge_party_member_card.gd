@@ -21,6 +21,15 @@ const STATE_CUES := {
 	&"downed": {"text": "DOWNED", "icon": "downed.svg", "owned": true, "color_role": &"error", "shape": &"diamond"},
 	&"dead": {"text": "DEAD", "icon": "dead.svg", "owned": true, "color_role": &"error", "shape": &"broken"},
 }
+const LEADER_TEXT_PATHS: Array[NodePath] = [
+	NodePath("Surface/Content/Identity/Name"),
+	NodePath("Surface/Content/Identity/Class"),
+	NodePath("Surface/Content/Meta"),
+	NodePath("Surface/Content/Health/Value"),
+	NodePath("Surface/Content/StateCue/StateText"),
+	NodePath("Surface/LeaderCue/Text"),
+]
+const BASELINE_CARD_HEIGHT := 184.0
 
 var _bound_member_id := 0
 var _semantic_state: StringName = &"normal"
@@ -71,6 +80,25 @@ func semantic_state_inventory() -> Dictionary:
 func set_interaction_disabled(value: bool) -> void:
 	_interaction_disabled = value
 	_render_interaction()
+
+
+func apply_leader_density(compact: bool) -> float:
+	var content := get_node("Surface/Content") as VBoxContainer
+	content.add_theme_constant_override(&"separation", 0)
+	var inset := 8.0 if compact else 16.0
+	content.offset_left = inset
+	content.offset_top = inset
+	content.offset_right = -inset
+	content.offset_bottom = -inset
+	for path: NodePath in LEADER_TEXT_PATHS:
+		(get_node(path) as Label).remove_theme_font_size_override(&"font_size")
+	(get_node("Surface/Content/Health/Bar") as ProgressBar).custom_minimum_size.y = 14.0 if compact else 16.0
+	(get_node("Surface/Content/Health/Value") as Label).custom_minimum_size.x = 96.0
+	(get_node("Surface/Content/StateCue") as Control).custom_minimum_size.y = 24.0 if compact else 26.0
+	(get_node("Surface/Content/StateCue/StateIcon") as TextureRect).custom_minimum_size = Vector2.ONE * 24.0
+	(get_node("Surface/LeaderCue/Icon") as TextureRect).custom_minimum_size = Vector2.ONE * 24.0
+	custom_minimum_size.y = maxf(BASELINE_CARD_HEIGHT, content.get_combined_minimum_size().y + inset * 2.0)
+	return custom_minimum_size.y
 
 
 func request_inspect() -> void:

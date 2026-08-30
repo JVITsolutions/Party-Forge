@@ -52,8 +52,48 @@ func _run() -> void:
 	_assert(not bool(view_model.call(&"build", victory.snapshot, victory.resolution, victory.profile, [duplicate_a, duplicate_b]).call(&"ok")), "provider collision rejects the complete projection")
 
 	await _exercise_states_and_actions(view_model, victory, victory_result.get("projection"))
+	await _assert_scaled_recap_origin(victory_result.get("projection"))
 	await _exercise_long_reachability(victory_result.get("projection"))
 	_finish()
+
+func _assert_scaled_recap_origin(finalized: RunResultProjection) -> void:
+	var settings := PartyForgeSettings.new()
+	settings.ui_scale_percent = 80
+	settings.text_scale_percent = 150
+	_panel.call(&"present", finalized.with_visual_settings(settings))
+	await process_frame
+	await process_frame
+	var header := _panel.get_node("Frame/Content/Header") as Control
+	var body := _panel.get_node("Frame/Content/Body") as ScrollContainer
+	var first_section := _panel.get_node_or_null("Frame/Content/Body/Recap/Section_outcome") as Control
+	_assert(body.scroll_vertical == 0, "scaled finalized recap resets to its vertical origin after rebuild")
+	_assert(first_section != null, "scaled finalized recap retains its first section")
+	if first_section != null:
+		_assert(first_section.get_global_rect().position.y >= header.get_global_rect().end.y + 8.0, "scaled finalized first recap entry starts fully below the header with an 8 px inset")
+		_assert(first_section.get_global_rect().position.y >= body.get_global_rect().position.y + 8.0, "scaled finalized recap retains an 8 px inset inside the scroll viewport")
+	var rows: Array[Button] = []
+	for node: Node in _panel.find_children("*", "Button", true, false):
+		if node.has_meta(&"recap_section_id"):
+			rows.append(node as Button)
+	if not rows.is_empty():
+		var last_row := rows[-1]
+		last_row.grab_focus()
+		last_row.pressed.emit()
+		for _frame: int in 4:
+			await process_frame
+		var body_rect := body.get_global_rect()
+		var top_visible_row: Button
+		for row: Button in rows:
+			var row_rect := row.get_global_rect()
+			if row_rect.end.y <= body_rect.position.y or row_rect.position.y >= body_rect.end.y:
+				continue
+			if top_visible_row == null or row_rect.position.y < top_visible_row.get_global_rect().position.y:
+				top_visible_row = row
+		var visible_debug: Array[String] = []
+		for row: Button in rows:
+			if row.get_global_rect().end.y > body_rect.position.y and row.get_global_rect().position.y < body_rect.end.y:
+				visible_debug.append("%s@%d-%d" % [row.name, roundi(row.get_global_rect().position.y), roundi(row.get_global_rect().end.y)])
+		_assert(top_visible_row != null and top_visible_row.get_global_rect().position.y >= body_rect.position.y + 4.0, "expanded scaled recap never leaves its first visible entry clipped behind the header (body=%d-%d scroll=%d visible=%s)" % [roundi(body_rect.position.y), roundi(body_rect.end.y), body.scroll_vertical, visible_debug])
 
 func _exercise_states_and_actions(view_model: Variant, fixture: Dictionary, finalized: Variant) -> void:
 	var pending: Variant = view_model.call(&"pending", fixture.snapshot).get("projection")
@@ -214,6 +254,42 @@ func _exercise_long_reachability(finalized: Variant) -> void:
 	_assert(_button("ReturnToForge").has_focus(), "controller crosses explicit focus bridge to footer")
 	await _controller_move_up()
 	_assert(final_loot != null and final_loot.has_focus(), "controller crosses explicit focus bridge back to recap")
+	for upward_step: int in 12:
+		await _keyboard_move_up()
+		for _settle_frame: int in 5:
+			await process_frame
+		var focused := root.gui_get_focus_owner() as Control
+		_assert(focused != null and focused.has_meta(&"recap_section_id"), "upward traversal step %d retains a concrete recap-row focus owner" % upward_step)
+		if focused != null and focused.has_meta(&"recap_section_id"):
+			var visible_rect := scroll.get_global_rect()
+			var vertical_bar := scroll.get_v_scroll_bar()
+			if vertical_bar != null and vertical_bar.is_visible_in_tree():
+				visible_rect.size.x -= vertical_bar.get_global_rect().size.x
+			var horizontal_bar := scroll.get_h_scroll_bar()
+			if horizontal_bar != null and horizontal_bar.is_visible_in_tree():
+				visible_rect.size.y -= horizontal_bar.get_global_rect().size.y
+			_assert(visible_rect.grow(0.5).encloses(focused.get_global_rect()), "upward traversal step %d keeps the focused recap row fully enclosed" % upward_step)
+	if loot_rows.size() > 11:
+		var upward_target := loot_rows[10]
+		var downward_origin := loot_rows[11]
+		upward_target.grab_focus()
+		await process_frame
+		await _keyboard_move_down()
+		_assert(downward_origin.has_focus(), "focused-row eviction fixture first traverses downward to the next recap row")
+		var viewport_top := scroll.get_global_rect().position.y
+		scroll.scroll_vertical += roundi(upward_target.get_global_rect().position.y - viewport_top + 20.0)
+		await process_frame
+		_assert(upward_target.get_global_rect().position.y < viewport_top and upward_target.get_global_rect().end.y > viewport_top, "focused-row eviction fixture leaves the upward target partially visible")
+		_panel.call(&"_snap_scroll_to_complete_row", upward_target)
+		await process_frame
+		_assert(scroll.get_global_rect().grow(0.5).encloses(upward_target.get_global_rect()), "complete-row snap helper preserves the row it was asked to protect")
+		scroll.scroll_vertical += roundi(upward_target.get_global_rect().position.y - viewport_top + 20.0)
+		await process_frame
+		await _keyboard_move_up()
+		for _settle_frame: int in 5:
+			await process_frame
+		_assert(upward_target.has_focus(), "real downward-then-upward traversal restores the intended recap row")
+		_assert(scroll.get_global_rect().grow(0.5).encloses(upward_target.get_global_rect()), "complete-row snapping never evicts the upward-focused recap row")
 
 func _entry_value(projection: Variant, section_id: StringName, label: String) -> String:
 	for section: Variant in projection.get("sections"):

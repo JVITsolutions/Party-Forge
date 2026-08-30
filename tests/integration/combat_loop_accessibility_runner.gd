@@ -551,9 +551,9 @@ func _level_up_semantic_signature(card: UpgradeCard) -> Dictionary:
 		"accessibility_name": card.accessibility_name,
 		"accessibility_description": card.accessibility_description,
 		"name": (card.get_node("Content/Name") as Label).text,
-		"effect": (card.get_node("Content/Summary") as Label).text,
-		"scope": (card.get_node("Content/Scope") as Label).text,
-		"action": (card.get_node("Content/Action") as Label).text,
+		"effect": (card.get_node("Content/DetailsScroll/Body/Summary") as Label).text,
+		"scope": (card.get_node("Content/DetailsScroll/Body/Scope") as Label).text,
+		"action": (card.get_node("Content/Footer/Action") as Label).text,
 		"icon_path": _texture_path(card.get_node("Content/Identity/Icon") as TextureRect),
 		"fallback_icon": (card.get_node("Content/Identity/FallbackIcon") as Label).text,
 	}

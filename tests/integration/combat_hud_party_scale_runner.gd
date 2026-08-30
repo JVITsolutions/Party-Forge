@@ -8,8 +8,19 @@ class TestRun:
 		return seconds
 
 
+const LEADER_TEXT_PATHS: Array[NodePath] = [
+	NodePath("Surface/Content/Identity/Name"),
+	NodePath("Surface/Content/Identity/Class"),
+	NodePath("Surface/Content/Meta"),
+	NodePath("Surface/Content/Health/Value"),
+	NodePath("Surface/Content/StateCue/StateText"),
+	NodePath("Surface/LeaderCue/Text"),
+]
+const READABLE_FONT_FLOOR := 14
+
 var _failures: Array[String] = []
 var _sequence := 8800
+var _leader_text100_font_sizes: Dictionary = {}
 
 
 func _initialize() -> void:
@@ -26,6 +37,9 @@ func _run() -> void:
 		await _exercise_party_count(count)
 	await _exercise_real_geometry(Vector2i(1920, 1080), 6, 100, 100)
 	await _exercise_real_geometry(Vector2i(1920, 1080), 24, 100, 100)
+	await _exercise_real_geometry(Vector2i(1920, 1080), 24, 150, 150)
+	await _exercise_real_geometry(Vector2i(1280, 720), 6, 100, 100)
+	await _exercise_real_geometry(Vector2i(1280, 720), 6, 80, 150)
 	await _exercise_real_geometry(Vector2i(1280, 720), 6, 100, 150)
 	await _exercise_real_geometry(Vector2i(1280, 720), 6, 150, 150)
 	await _exercise_real_geometry(Vector2i(1280, 720), 24, 150, 150)
@@ -100,10 +114,16 @@ func _exercise_real_geometry(viewport_size: Vector2i, count: int, ui_scale: int,
 	await process_frame
 	await process_frame
 	if count == 24:
+		var reached_member_ids: Dictionary = {}
 		var next := hud.get_node("Margin/CombatStatus/PartyRegion/CompactRoster/PageNext") as Button
-		while not next.disabled:
+		while true:
+			for member_id: int in _roster_member_ids(hud):
+				reached_member_ids[member_id] = true
+			if next.disabled:
+				break
 			next.pressed.emit()
 			await process_frame
+		_assert(reached_member_ids.size() == count, "scaled compact paging reaches all %d members at %s ui=%d text=%d" % [count, viewport_size, ui_scale, text_scale])
 	var shell := hud.get_node("Margin/CombatStatus") as Control
 	var leader := hud.get_node("Margin/CombatStatus/LeaderCard") as Control
 	var timer := hud.get_node("Margin/CombatStatus/RunTime") as Control
@@ -112,13 +132,24 @@ func _exercise_real_geometry(viewport_size: Vector2i, count: int, ui_scale: int,
 	var overflow := hud.get_node("Margin/CombatStatus/AlertRegion/Overflow") as Button
 	var rich := hud.get_node("Margin/CombatStatus/PartyRegion/RichRoster") as Control
 	var compact := hud.get_node("Margin/CombatStatus/PartyRegion/CompactRoster") as Control
+	var resolved_metrics := CombatHudResponsiveLayout.resolve(viewport_size, ui_scale, text_scale, count)
+	if resolved_metrics.mode == CombatHudResponsiveLayout.Mode.COMPACT:
+		_assert(_roster_controls(hud).size() == resolved_metrics.visible_member_count, "live compact controls expose the calculated count at %s ui=%d text=%d calculated=%d actual=%d" % [viewport_size, ui_scale, text_scale, resolved_metrics.visible_member_count, _roster_controls(hud).size()])
+	if count == 24 and text_scale == 150 and viewport_size.y <= 720:
+		_assert(resolved_metrics.visible_member_count == 6, "Text150 uses three bounded two-column rows at %s ui=%d actual=%d" % [viewport_size, ui_scale, resolved_metrics.visible_member_count])
+	if count == 24 and text_scale == 150 and viewport_size.y >= 1080:
+		_assert(resolved_metrics.visible_member_count == 8, "Text150 retains four bounded two-column rows at %s ui=%d actual=%d" % [viewport_size, ui_scale, resolved_metrics.visible_member_count])
 	for control: Control in [shell, leader, timer, party_region, alerts]:
 		_assert_contained(control, Rect2(Vector2.ZERO, Vector2(viewport_size)), "%s %dx%d party=%d" % [control.name, viewport_size.x, viewport_size.y, count])
+	_assert_leader_contents_contained(leader, viewport_size, ui_scale, text_scale)
+	_assert_leader_font_scale(leader, viewport_size, ui_scale, text_scale)
 	_assert(not leader.get_global_rect().intersection(timer.get_global_rect()).has_area(), "leader and timer do not collide at %s party=%d" % [viewport_size, count])
 	_assert(not leader.get_global_rect().intersection(alerts.get_global_rect()).has_area(), "leader and alerts do not collide at %s party=%d" % [viewport_size, count])
 	_assert(not party_region.get_global_rect().intersection(alerts.get_global_rect()).has_area(), "party region and alerts do not collide at %s party=%d" % [viewport_size, count])
 	if viewport_size == Vector2i(1280, 720) and text_scale == 150:
 		_assert(not rich.visible and compact.visible, "720p Text150 uses the bounded compact roster for party=%d ui=%d" % [count, ui_scale])
+		for member_control: Control in _roster_controls(hud):
+			_assert(party_region.get_global_rect().encloses(member_control.get_global_rect()), "720p Text150 keeps visible member %d inside the reflowed party region at ui=%d" % [int(member_control.get_meta(&"member_id", 0)), ui_scale])
 	if count == 24:
 		var marker_rects: Array[Rect2] = []
 		for marker: Control in _roster_controls(hud):
@@ -267,6 +298,54 @@ func _assert_contained(control: Control, outer: Rect2, label: String) -> void:
 	var rect := control.get_global_rect()
 	_assert(rect.size.x > 0.0 and rect.size.y > 0.0, "%s has positive geometry" % label)
 	_assert(outer.encloses(rect), "%s remains viewport bounded: %s" % [label, rect])
+
+
+func _assert_leader_contents_contained(leader: Control, viewport_size: Vector2i, ui_scale: int, text_scale: int) -> void:
+	var padded_card := leader.get_global_rect().grow(-8.0)
+	var visible_content_paths: Array[NodePath] = [
+		NodePath("Surface/Content"),
+		NodePath("Surface/Content/Identity/Name"),
+		NodePath("Surface/Content/Identity/Class"),
+		NodePath("Surface/Content/Meta"),
+		NodePath("Surface/Content/Health/Bar"),
+		NodePath("Surface/Content/Health/Value"),
+		NodePath("Surface/Content/StateCue/StateShape"),
+		NodePath("Surface/Content/StateCue/StateIcon"),
+		NodePath("Surface/Content/StateCue/StateText"),
+		NodePath("Surface/LeaderCue/Icon"),
+		NodePath("Surface/LeaderCue/Text"),
+	]
+	for path: NodePath in visible_content_paths:
+		var content := leader.get_node(path) as Control
+		if not content.is_visible_in_tree():
+			continue
+		_assert(
+			padded_card.encloses(content.get_global_rect()),
+			"leader %s stays inside its card with 8px padding at %s ui=%d text=%d card=%s content=%s" % [path, viewport_size, ui_scale, text_scale, padded_card, content.get_global_rect()],
+		)
+
+
+func _assert_leader_font_scale(leader: Control, viewport_size: Vector2i, ui_scale: int, text_scale: int) -> void:
+	if viewport_size != Vector2i(1280, 720):
+		return
+	for path: NodePath in LEADER_TEXT_PATHS:
+		var label := leader.get_node(path) as Label
+		if not label.is_visible_in_tree():
+			continue
+		var effective_size := label.get_theme_font_size(&"font_size")
+		var key := String(path)
+		if text_scale == 100:
+			_leader_text100_font_sizes[key] = effective_size
+			continue
+		if text_scale != 150:
+			continue
+		var text100_size := int(_leader_text100_font_sizes.get(key, 0))
+		_assert(text100_size > 0, "leader %s has a captured Text100 font baseline" % path)
+		var expected_scaled_size := maxi(roundi(float(text100_size) * float(text_scale) / 100.0), READABLE_FONT_FLOOR)
+		_assert(
+			effective_size >= expected_scaled_size,
+			"leader %s Text150 preserves the expected theme scale at ui=%d baseline=%d expected=%d actual=%d" % [path, ui_scale, text100_size, expected_scaled_size, effective_size],
+		)
 
 
 func _cleanup_fixture(fixture: Dictionary) -> void:

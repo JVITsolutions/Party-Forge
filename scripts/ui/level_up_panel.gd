@@ -428,15 +428,22 @@ func _show_view(view: StringName) -> void:
 
 func _sync_view_focus_modes(view: StringName) -> void:
 	var offer_active := view == &"offer" and _state == State.CHOOSING
+	var pending_anchor: UpgradeCard
 	for node: Node in get_node("Frame/Content/Offer/CardsScroll/Cards").get_children():
 		if node is Button:
-			_set_button_focus_enabled(node as Button, offer_active)
+			var card := node as UpgradeCard
+			var anchors_pending := view == &"pending" and card.bound_choice_key() == _initiating_choice_key
+			_set_button_focus_enabled(card, offer_active or anchors_pending)
+			if anchors_pending:
+				pending_anchor = card
 	var retry := get_node("Frame/Content/Offer/RetryOffers") as Button
 	_set_button_focus_enabled(retry, offer_active)
 	(get_node("Frame/Content/Recipient") as UpgradeRecipientPicker).set_interaction_enabled(view == &"recipient")
 	var confirmation_active := view == &"confirmation"
 	_set_button_focus_enabled(get_node("Frame/Content/Confirmation/Actions/Cancel") as Button, confirmation_active)
 	_set_button_focus_enabled(get_node("Frame/Content/Confirmation/Actions/Confirm") as Button, confirmation_active)
+	if pending_anchor != null and pending_anchor.is_inside_tree():
+		pending_anchor.grab_focus()
 
 
 func _set_button_focus_enabled(button: Button, enabled: bool) -> void:
@@ -643,6 +650,6 @@ func _apply_card_face_density(_viewport_width: float) -> void:
 		if not (child is UpgradeCard):
 			continue
 		for label_name: String in ["Identity", "Name", "Scope", "Rank", "Summary", "Eligibility", "Action"]:
-			var semantic := child.get_node_or_null("Content/%s" % label_name) as Control
+			var semantic := child.find_child(label_name, true, false) as Control
 			if semantic != null:
 				semantic.visible = true

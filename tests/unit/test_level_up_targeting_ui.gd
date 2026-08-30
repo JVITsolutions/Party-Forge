@@ -179,7 +179,8 @@ func _test_compact_cards_keep_semantic_content(failures: Array[String]) -> void:
 		if not (card_node is UpgradeCard) or not card_node.visible:
 			continue
 		for label_name: String in ["Eligibility", "Scope", "Rank", "Summary"]:
-			TestAssertions.truthy(card_node.get_node("Content/%s" % label_name).visible, "compact card retains semantic %s" % label_name, failures)
+			var semantic := card_node.find_child(label_name, true, false) as Control
+			TestAssertions.truthy(semantic != null and semantic.visible, "compact card retains semantic %s" % label_name, failures)
 	_cleanup(fixture)
 
 

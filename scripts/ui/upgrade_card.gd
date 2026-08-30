@@ -46,6 +46,8 @@ func present(projection: UpgradeOfferProjection) -> void:
 	_present_copy(_projection)
 	disabled = not _projection.enabled() or _bound_choice_key.is_empty()
 	_update_accessibility()
+	if previous_key != _bound_choice_key:
+		call_deferred(&"_reset_details_scroll_if_bound_to", _bound_choice_key)
 	if _detail_visible and previous_key != _bound_choice_key:
 		if not previous_key.is_empty():
 			detail_dismissed.emit(previous_key)
@@ -65,9 +67,17 @@ func bound_choice_key() -> StringName:
 	return _bound_choice_key
 
 
+func _reset_details_scroll_if_bound_to(expected_choice_key: StringName) -> void:
+	if _bound_choice_key != expected_choice_key:
+		return
+	var details := get_node_or_null("Content/DetailsScroll") as ScrollContainer
+	if details != null:
+		details.scroll_vertical = int(details.get_v_scroll_bar().min_value)
+
+
 func set_action_hint(action_text: String) -> void:
 	_action_hint = action_text.strip_edges() if not action_text.strip_edges().is_empty() else "Apply"
-	_set_text("Content/Action", _action_hint)
+	_set_text("Content/Footer/Action", _action_hint)
 	_update_accessibility()
 
 
@@ -76,20 +86,20 @@ func _present_copy(projection: UpgradeOfferProjection) -> void:
 	_set_text("Content/Identity/Category", _category_text(projection.category_id))
 	_set_text("Content/Name", projection.display_name)
 	_set_text("Content/Rarity", projection.rarity_label)
-	_set_text("Content/Scope", projection.scope_text)
-	_set_text("Content/Rank", projection.rank_text)
-	_set_text("Content/Summary", projection.effect_text)
-	_set_text("Content/Eligibility", projection.eligibility_text)
-	_set_text("Content/Tags/RecipientTags", _tag_text("Traits", projection.recipient_tags))
-	_set_text("Content/Tags/ClassTags", _tag_text("Classes", projection.class_tags))
-	_set_text("Content/DisabledReason", projection.disabled_reason)
+	_set_text("Content/DetailsScroll/Body/Scope", projection.scope_text)
+	_set_text("Content/Footer/Rank", projection.rank_text)
+	_set_text("Content/DetailsScroll/Body/Summary", projection.effect_text)
+	_set_text("Content/DetailsScroll/Body/Eligibility", projection.eligibility_text)
+	_set_text("Content/DetailsScroll/Body/Tags/RecipientTags", _tag_text("Traits", projection.recipient_tags))
+	_set_text("Content/DetailsScroll/Body/Tags/ClassTags", _tag_text("Classes", projection.class_tags))
+	_set_text("Content/Footer/DisabledReason", projection.disabled_reason)
 	var rarity := get_node_or_null("Content/Rarity") as Label
 	if rarity != null:
 		rarity.visible = not projection.rarity_label.is_empty()
-	var disabled_label := get_node_or_null("Content/DisabledReason") as Label
+	var disabled_label := get_node_or_null("Content/Footer/DisabledReason") as Label
 	if disabled_label != null:
 		disabled_label.visible = not projection.disabled_reason.is_empty()
-	_set_text("Content/Action", _action_hint)
+	_set_text("Content/Footer/Action", _action_hint)
 
 
 func _present_icon(icon_id: StringName) -> void:

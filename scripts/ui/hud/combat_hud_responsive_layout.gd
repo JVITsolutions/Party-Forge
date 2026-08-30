@@ -75,6 +75,8 @@ static func _compact_visible_count(viewport_size: Vector2i, ui_scale_percent: in
 	var available_height := maxf(1.0, float(viewport_size.y) - 132.0 * ui_scale)
 	var row_height := 84.0 * row_scale
 	var rows := clampi(floori(available_height / row_height), MIN_COMPACT_ROWS, MAX_COMPACT_ROWS)
+	if viewport_size.y <= 720 and text_scale_percent >= 150:
+		rows = mini(rows, 3)
 	return rows * _compact_columns(viewport_size)
 
 

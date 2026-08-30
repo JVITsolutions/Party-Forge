@@ -60,9 +60,25 @@ func _test_exact_labels_and_states(panel: Control, view_model: Variant, fixture:
 	TestAssertions.truthy(has_typed_pending, "pending presentation receives a typed operation kind", failures)
 	if has_typed_pending:
 		var expected_pending_copy: Array[String] = ["SAVING TERMINAL TRUTH", "REFRESHING TERMINAL RECOVERY", "RESOLVING TERMINAL RUN", "REBUILDING RESULTS", "PROTECTING DISPLACED GEAR", "COMPLETING TERMINAL RECORD"]
+		var expected_progress_copy: Array[String] = ["SECURING TERMINAL TRUTH", "REFRESHING TERMINAL RECOVERY", "RESOLVING TERMINAL RUN", "REBUILDING RESULT PRESENTATION", "PROTECTING DISPLACED GEAR", "COMPLETING TERMINAL RECORD"]
 		for pending_kind: int in expected_pending_copy.size():
 			panel.call(&"present", view_model.call(&"pending", fixture.snapshot, pending_kind).get("projection"))
 			TestAssertions.equal(_state_text(panel), expected_pending_copy[pending_kind], "pending kind %d uses operation-accurate copy" % pending_kind, failures)
+			var progress := panel.get_node_or_null("Frame/Content/PendingProgress") as Control
+			var step := panel.get_node_or_null("Frame/Content/PendingProgress/Content/Step") as Label
+			var status := panel.get_node_or_null("Frame/Content/PendingProgress/Content/Status") as Label
+			TestAssertions.truthy(progress != null and progress.visible, "pending kind %d shows a compact static operation indicator" % pending_kind, failures)
+			TestAssertions.truthy(step != null and step.text == "ACTIVE TERMINAL OPERATION", "pending kind %d uses a non-sequential active-operation indicator" % pending_kind, failures)
+			TestAssertions.truthy(status != null and status.text == "%s · IN PROGRESS · NOT YET FINAL" % expected_progress_copy[pending_kind], "pending kind %d uses truthful non-final progress copy" % pending_kind, failures)
+			TestAssertions.truthy(progress != null and not progress.accessibility_name.strip_edges().is_empty(), "pending kind %d has explicit accessible progress copy" % pending_kind, failures)
+			TestAssertions.truthy(_visible_actions(panel).is_empty() and not _body(panel).visible, "pending kind %d exposes neither actions nor a partial recap" % pending_kind, failures)
+		var reduced_settings := PartyForgeSettings.new()
+		reduced_settings.reduced_motion = true
+		var reduced_pending: RunResultProjection = view_model.call(&"pending", fixture.snapshot, RunResultProjection.PendingKind.PROJECTION).get("projection").with_visual_settings(reduced_settings)
+		panel.call(&"present", reduced_pending)
+		var reduced_progress := panel.get_node("Frame/Content/PendingProgress") as Control
+		TestAssertions.truthy(reduced_progress.visible and (reduced_progress.get_node("Content/Status") as Label).text.ends_with("IN PROGRESS · NOT YET FINAL"), "reduced-motion pending state keeps the same truthful static indicator", failures)
+		TestAssertions.truthy(reduced_progress.find_children("*", "AnimationPlayer", true, false).is_empty(), "pending progress uses no motion-dependent animation", failures)
 
 	panel.call(&"present", view_model.call(&"terminal_save_interrupted", fixture.snapshot, "Terminal record could not be saved.").get("projection"))
 	TestAssertions.equal(_state_text(panel), "TERMINAL SAVE INTERRUPTED", "terminal-save interruption is visibly distinct", failures)

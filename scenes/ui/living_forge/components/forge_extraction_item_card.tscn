@@ -4,7 +4,7 @@
 
 [node name="ForgeExtractionItemCard" type="Button"]
 custom_minimum_size = Vector2(248, 176)
-size_flags_horizontal = 3
+size_flags_horizontal = 1
 focus_mode = 2
 mouse_default_cursor_shape = 2
 theme_type_variation = &"LivingForgeSecondaryButton"

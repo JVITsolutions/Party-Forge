@@ -64,12 +64,14 @@ func _initialize() -> void:
 func _run() -> void:
 	_assert(DisplayServer.get_name().to_lower() != "headless", "performance qualification runs in a real window")
 	_assert(RenderingServer.get_current_rendering_method() == "gl_compatibility", "performance qualification uses OpenGL Compatibility")
+	root.content_scale_size = Vector2i.ZERO
 	root.size = VIEWPORT_SIZE
-	await _wait_until(
-		func() -> bool: return root.size == VIEWPORT_SIZE,
+	var viewport_ready := await _wait_until(
+		func() -> bool: return root.size == VIEWPORT_SIZE and (root.get_visible_rect().size.round() as Vector2i) == VIEWPORT_SIZE,
 		"the window to reach 1280x720",
 		SETTLE_DEADLINE_MS,
 	)
+	_assert(viewport_ready, "performance viewport resolves to the declared 1280x720 geometry")
 	for case: Dictionary in CASES:
 		await _exercise_case(case)
 	_finish()

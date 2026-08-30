@@ -26,6 +26,7 @@ func _run() -> void:
 	panel.configure(GameCatalog.load_defaults())
 	await _wait_for_layout(panel, "initial lobby layout")
 	await _test_initial_focus_priority(viewport, panel)
+	_test_nested_scroll_ancestor_resolution(viewport, panel)
 	await _test_pending_and_error_focus(viewport, panel)
 	await _test_gate_restore_branches(viewport, panel)
 	await _test_action_matrix_focus(viewport, panel)
@@ -55,6 +56,20 @@ func _test_initial_focus_priority(viewport: Window, panel: ClassSelectionPanel) 
 	panel.present(_projection(RunSetupLobbyProjection.State.READY, &"mage", &"fighter", RunSetupClassProjection.Compatibility.COMPATIBLE))
 	panel.open()
 	await _expect_focus(viewport, panel.selection_focus(&"mage"), "selected Mage takes initial-focus priority over Fighter preview")
+
+
+func _test_nested_scroll_ancestor_resolution(viewport: Window, panel: ClassSelectionPanel) -> void:
+	_assert(panel.has_method(&"_nearest_scroll_container"), "focus settlement exposes a nearest-scroll-ancestor resolver")
+	if not panel.has_method(&"_nearest_scroll_container"):
+		return
+	var scroll := ScrollContainer.new()
+	var intermediate := MarginContainer.new()
+	var nested := Control.new()
+	viewport.add_child(scroll)
+	scroll.add_child(intermediate)
+	intermediate.add_child(nested)
+	_assert(panel.call(&"_nearest_scroll_container", nested) == scroll, "focus settlement resolves ScrollContainer through an intermediate layout ancestor")
+	scroll.free()
 
 
 func _restart_intent_runtime_contract_available() -> bool:
@@ -145,6 +160,16 @@ func _assert_invalid_restart_intent(intent_script: GDScript, profile_root: Strin
 	_assert(lobby.is_open() and lobby.selected_class_id().is_empty() and start != null and start.disabled, "%s leaves an explicit unresolved lobby with Start disabled" % reason)
 	_assert(status.text == reason, "%s is shown as the explicit unresolved-selection reason" % reason)
 	_assert(not main.run_started and main.active_run_context == null, "%s cannot check out or auto-start a run" % reason)
+	var fighter := lobby.selection_focus(&"fighter")
+	await _expect_focus(root, fighter, "%s unresolved restart settles focus on Fighter" % reason)
+	await _wait_for_layout(lobby, "%s unresolved restart card layout" % reason)
+	_assert(fighter != null and fighter.clip_contents, "%s focused Fighter clips all card-relative presentation" % reason)
+	if fighter != null:
+		var card_rect := fighter.get_global_rect()
+		for node: Node in fighter.find_children("*", "Label", true, false):
+			var label := node as Label
+			if label.visible and label.is_visible_in_tree():
+				_assert(card_rect.grow(0.5).encloses(label.get_global_rect()), "%s visible Fighter label %s stays inside the focused card" % [reason, label.name])
 	main.free()
 	await process_frame
 	if has_meta(META_KEY):

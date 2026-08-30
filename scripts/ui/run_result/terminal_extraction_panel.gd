@@ -414,8 +414,10 @@ func _apply_responsive_layout() -> void:
 	var card_height := maxf(176.0 * ui_scale, 176.0 + maxf(text_scale - 1.0, 0.0) * 72.0)
 	for card_value: Variant in _cards_by_id.values():
 		var card := card_value as Control
-		card.custom_minimum_size = Vector2(card_width, card_height)
-		card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var content := card.get_node("Content") as Control
+		var contained_width := content.get_combined_minimum_size().x + 32.0
+		card.custom_minimum_size = Vector2(maxf(card_width, contained_width), card_height)
+		card.size_flags_horizontal = Control.SIZE_EXPAND_FILL if card.get_parent() is GridContainer else Control.SIZE_FILL
 	for grid_node: Node in (get_node("Frame/Content/Body/Sections/Eligible/Sections") as Control).find_children("Grid", "GridContainer", true, false):
 		(grid_node as GridContainer).columns = columns
 	(get_node("Frame/Content/Body/Sections/Automatic/Scroll") as Control).custom_minimum_size.y = card_height + 16.0

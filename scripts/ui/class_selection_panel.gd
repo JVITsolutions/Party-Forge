@@ -732,7 +732,28 @@ func _focus_initial(preferred_focus: Control) -> void:
 func _restore_focus(target: Control) -> void:
 	if target != null and is_instance_valid(target) and target.is_inside_tree() and target.is_visible_in_tree() and target.focus_mode != Control.FOCUS_NONE:
 		target.grab_focus()
+		_settle_restored_focus(target)
+		call_deferred(&"_settle_restored_focus", target)
 		_pending_initial_focus = null
+
+
+func _settle_restored_focus(target: Control) -> void:
+	if target == null or not is_instance_valid(target) or not target.is_inside_tree() or not target.is_visible_in_tree():
+		return
+	if get_viewport().gui_get_focus_owner() != target or not _class_grid().is_ancestor_of(target):
+		return
+	var scroll := _nearest_scroll_container(_class_grid())
+	if scroll != null:
+		scroll.ensure_control_visible(target)
+
+
+func _nearest_scroll_container(control: Control) -> ScrollContainer:
+	var ancestor := control.get_parent() if control != null else null
+	while ancestor != null:
+		if ancestor is ScrollContainer:
+			return ancestor as ScrollContainer
+		ancestor = ancestor.get_parent()
+	return null
 
 
 func _is_focus_candidate(control: Control) -> bool:

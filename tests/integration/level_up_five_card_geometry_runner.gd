@@ -93,8 +93,9 @@ func _run() -> void:
 					"Card%d intersects Card%d at %dx%d: first=%s second=%s" % [index + 1, other_index + 1, viewport_size.x, viewport_size.y, card_rect, other_rect]
 				)
 			for label_name: String in ["Eligibility", "Scope", "Rank", "Summary"]:
-				var label := card.get_node("Content/%s" % label_name) as Label
+				var label := card.find_child(label_name, true, false) as Label
 				_assert(label.visible, "Card%d semantic %s is hidden at %dx%d" % [index + 1, label_name, viewport_size.x, viewport_size.y])
+			_assert_offer_card_vertical_bounds(card, cards_scroll, index, viewport_size)
 			_assert(not card.accessibility_name.is_empty(), "Card%d exposes a semantic accessibility name at %dx%d" % [index + 1, viewport_size.x, viewport_size.y])
 			if index > 0:
 				_assert(absf(card_rect.size.x - visible_cards[0].get_global_rect().size.x) <= 2.0, "Card%d matches equal-card width at %dx%d" % [index + 1, viewport_size.x, viewport_size.y])
@@ -106,6 +107,7 @@ func _run() -> void:
 					viewport.gui_get_focus_owner() == visible_cards[index],
 					"Card%d receives sequential focus at %dx%d" % [index + 1, viewport_size.x, viewport_size.y]
 				)
+				_assert_focused_offer_card_and_cta_visible(cards_scroll, visible_cards[index], index, viewport_size)
 				await _assert_full_tooltip(tooltip, choices[index], viewport_size)
 				if index + 1 < visible_cards.size():
 					await _push_action(viewport, &"ui_right")
@@ -127,6 +129,7 @@ func _run() -> void:
 		if _failures.size() == failure_count_before:
 			print("LEVEL_UP_FIVE_CARD_ACCEPTANCE_SIZE_PASS size=%dx%d" % [viewport_size.x, viewport_size.y])
 		panel.free()
+	await _assert_pooled_card_details_scroll_reset(viewport)
 	await _assert_supported_offer_count_and_scale_geometry(viewport, panel_scene, catalog, party)
 	viewport.free()
 	party.free()
@@ -143,6 +146,90 @@ func _run() -> void:
 func _wait_for_layout() -> void:
 	await process_frame
 	await process_frame
+
+
+func _assert_pooled_card_details_scroll_reset(viewport: SubViewport) -> void:
+	viewport.size = Vector2i(1280, 720)
+	var card := (load("res://scenes/ui/upgrade_card.tscn") as PackedScene).instantiate() as UpgradeCard
+	card.position = Vector2(60.0, 60.0)
+	card.size = Vector2(220.0, 340.0)
+	viewport.add_child(card)
+	var first := UpgradeOfferProjection.new()
+	first.choice_key = "pooled:first"
+	first.display_name = "First Pooled Offer"
+	first.effect_text = ("First offer detail remains overflowable after a same-choice refresh. ").repeat(24)
+	first.scope_text = "Party"
+	first.rank_text = "Rank 1"
+	first.eligibility_text = "Eligible"
+	card.present(first)
+	await _wait_for_layout()
+	var details := card.get_node("Content/DetailsScroll") as ScrollContainer
+	_assert(details.get_v_scroll_bar().max_value > details.get_v_scroll_bar().page, "pooled card fixture exposes real inner detail overflow")
+	details.scroll_vertical = int(details.get_v_scroll_bar().max_value)
+	await _wait_for_layout()
+	var retained_offset := details.scroll_vertical
+	_assert(retained_offset > int(details.get_v_scroll_bar().min_value), "pooled card fixture starts below the detail origin")
+	card.present(first.copy())
+	await _wait_for_layout()
+	_assert(details.scroll_vertical == retained_offset, "same-choice card refresh preserves the reader's detail position")
+	var second := first.copy()
+	second.choice_key = "pooled:second"
+	second.display_name = "Second Pooled Offer"
+	second.effect_text = ("Second offer summary must begin at the first visible detail line after rebinding. ").repeat(24)
+	card.present(second)
+	await _wait_for_layout()
+	var origin := int(details.get_v_scroll_bar().min_value)
+	var summary := card.get_node("Content/DetailsScroll/Body/Summary") as Label
+	var details_rect := details.get_global_rect()
+	var summary_rect := summary.get_global_rect()
+	_assert(details.scroll_vertical == origin, "changed pooled choice resets its detail scroll to the minimum origin")
+	_assert(summary_rect.intersects(details_rect) and summary_rect.position.y >= details_rect.position.y - 1.0, "changed pooled choice exposes its summary as the first visible detail content: details=%s summary=%s" % [details_rect, summary_rect])
+	card.free()
+	await process_frame
+
+
+func _assert_offer_card_vertical_bounds(
+	card: UpgradeCard,
+	cards_scroll: ScrollContainer,
+	index: int,
+	viewport_size: Vector2i,
+) -> void:
+	var details_scroll := card.get_node_or_null("Content/DetailsScroll") as ScrollContainer
+	var footer := card.get_node_or_null("Content/Footer") as Control
+	var action := card.find_child("Action", true, false) as Label
+	var context := "Card%d at %dx%d" % [index + 1, viewport_size.x, viewport_size.y]
+	_assert(details_scroll != null, "%s owns a bounded details viewport" % context)
+	_assert(footer != null, "%s owns a pinned footer" % context)
+	_assert(action != null, "%s exposes an action CTA" % context)
+	if details_scroll == null or footer == null or action == null:
+		return
+	var card_rect := card.get_global_rect()
+	var scroll_rect := cards_scroll.get_global_rect()
+	var details_rect := details_scroll.get_global_rect()
+	var footer_rect := footer.get_global_rect()
+	var action_rect := action.get_global_rect()
+	_assert(details_scroll.clip_contents, "%s clips variable body copy inside its details viewport" % context)
+	_assert(ResponsiveGeometry.contains(card_rect, details_rect), "%s details viewport stays inside the card: card=%s details=%s" % [context, card_rect, details_rect])
+	_assert(ResponsiveGeometry.contains(card_rect, footer_rect), "%s pinned footer stays inside the card: card=%s footer=%s" % [context, card_rect, footer_rect])
+	_assert(ResponsiveGeometry.contains(card_rect, action_rect), "%s CTA stays inside the card: card=%s action=%s" % [context, card_rect, action_rect])
+	_assert(details_rect.end.y <= footer_rect.position.y + 1.0, "%s body viewport does not overlap the pinned footer: details=%s footer=%s" % [context, details_rect, footer_rect])
+	_assert(action_rect.position.y >= details_rect.end.y - 1.0, "%s CTA remains below variable body copy: details=%s action=%s" % [context, details_rect, action_rect])
+	_assert(card_rect.position.y >= scroll_rect.position.y - 1.0 and card_rect.end.y <= scroll_rect.end.y + 1.0, "%s full card height stays visible in the offer viewport: offer=%s card=%s" % [context, scroll_rect, card_rect])
+	var expected_action := "Apply" if index == 0 else "Choose Recipient"
+	_assert(action.text == expected_action, "%s shows the expected %s CTA (actual=%s)" % [context, expected_action, action.text])
+
+
+func _assert_focused_offer_card_and_cta_visible(
+	cards_scroll: ScrollContainer,
+	card: UpgradeCard,
+	index: int,
+	viewport_size: Vector2i,
+) -> void:
+	var action := card.find_child("Action", true, false) as Label
+	var context := "focused Card%d at %dx%d" % [index + 1, viewport_size.x, viewport_size.y]
+	_assert(ResponsiveGeometry.contains(cards_scroll.get_global_rect(), card.get_global_rect()), "%s is fully visible in the offer viewport: offer=%s card=%s" % [context, cards_scroll.get_global_rect(), card.get_global_rect()])
+	if action != null:
+		_assert(ResponsiveGeometry.contains(cards_scroll.get_global_rect(), action.get_global_rect()), "%s CTA is fully visible in the offer viewport: offer=%s action=%s" % [context, cards_scroll.get_global_rect(), action.get_global_rect()])
 
 
 func _push_action(viewport: SubViewport, action: StringName) -> void:

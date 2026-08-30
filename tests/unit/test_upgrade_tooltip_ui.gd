@@ -28,9 +28,9 @@ func _test_card_renders_typed_projection_and_emits_key(failures: Array[String]) 
 	projection.eligibility_text = "Eligible class: Marksman."
 	card.present(projection)
 	TestAssertions.equal((card.get_node("Content/Name") as Label).text, "Deadeye", "card renders typed name", failures)
-	TestAssertions.equal((card.get_node("Content/Scope") as Label).text, "Marksman Signature", "card renders typed scope", failures)
-	TestAssertions.equal((card.get_node("Content/Rank") as Label).text, "Rank 0 / 1", "card renders typed rank", failures)
-	TestAssertions.equal((card.get_node("Content/Summary") as Label).text, projection.effect_text, "card renders typed effect", failures)
+	TestAssertions.equal((card.get_node("Content/DetailsScroll/Body/Scope") as Label).text, "Marksman Signature", "card renders typed scope", failures)
+	TestAssertions.equal((card.get_node("Content/Footer/Rank") as Label).text, "Rank 0 / 1", "card renders typed rank", failures)
+	TestAssertions.equal((card.get_node("Content/DetailsScroll/Body/Summary") as Label).text, projection.effect_text, "card renders typed effect", failures)
 	var activated: Array[StringName] = []
 	card.activated.connect(func(emitted: StringName) -> void: activated.append(emitted))
 	card.pressed.emit()
@@ -46,14 +46,18 @@ func _test_card_hierarchy_tags_icons_and_accessibility(failures: Array[String]) 
 		semantic_order.append(String(child.name))
 	TestAssertions.equal(
 		semantic_order,
-		PackedStringArray(["Identity", "Name", "Rarity", "Summary", "Scope", "Eligibility", "Tags", "Rank", "Action", "DisabledReason"]),
-		"card semantic order follows icon, identity, effect, scope, eligibility, tags, rank, action",
+		PackedStringArray(["Identity", "Name", "Rarity", "DetailsScroll", "Footer"]),
+		"card semantic order keeps identity above bounded details and a pinned footer",
 		failures,
 	)
-	var tags := card.get_node_or_null("Content/Tags") as Control
+	var details := card.get_node_or_null("Content/DetailsScroll") as ScrollContainer
+	var footer := card.get_node_or_null("Content/Footer") as Control
+	var tags := card.get_node_or_null("Content/DetailsScroll/Body/Tags") as Control
 	var icon := card.get_node_or_null("Content/Identity/Icon") as TextureRect
 	var fallback := card.get_node_or_null("Content/Identity/FallbackIcon") as Label
 	TestAssertions.truthy(tags != null, "card exposes recipient and class tag content", failures)
+	TestAssertions.truthy(details != null and details.clip_contents, "card bounds variable details in a clipped scroll viewport", failures)
+	TestAssertions.truthy(footer != null, "card pins rank and action in a dedicated footer", failures)
 	TestAssertions.truthy(icon != null and fallback != null, "card exposes semantic texture plus neutral fallback", failures)
 	if tags == null or icon == null or fallback == null:
 		card.free()
@@ -67,8 +71,8 @@ func _test_card_hierarchy_tags_icons_and_accessibility(failures: Array[String]) 
 	card.set_action_hint("Choose Recipient")
 	TestAssertions.truthy(icon.texture != null and icon.texture.resource_path.ends_with("/shield.svg"), "known normalized semantic icon resolves the reviewed shield texture", failures)
 	TestAssertions.truthy(not fallback.visible, "known icon hides the neutral forge fallback", failures)
-	TestAssertions.equal((card.get_node("Content/Tags/RecipientTags") as Label).text, "Traits: Vanguard, Martial", "recipient tags render as semantic names", failures)
-	TestAssertions.equal((card.get_node("Content/Tags/ClassTags") as Label).text, "Classes: Fighter", "class tags render as semantic names", failures)
+	TestAssertions.equal((card.get_node("Content/DetailsScroll/Body/Tags/RecipientTags") as Label).text, "Traits: Vanguard, Martial", "recipient tags render as semantic names", failures)
+	TestAssertions.equal((card.get_node("Content/DetailsScroll/Body/Tags/ClassTags") as Label).text, "Classes: Fighter", "class tags render as semantic names", failures)
 	for expected: String in ["Rare", "Vanguard", "Martial", "Fighter", "Choose Recipient"]:
 		TestAssertions.truthy(expected in card.accessibility_name, "accessibility name includes %s" % expected, failures)
 	projection.icon_id = &"unknown-semantic-icon"

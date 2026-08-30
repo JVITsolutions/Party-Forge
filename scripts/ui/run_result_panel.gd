@@ -24,6 +24,9 @@ var _allowed_actions: Dictionary = {}
 var _state: Label
 var _headline: Label
 var _reason: Label
+var _pending_progress: PanelContainer
+var _pending_step: Label
+var _pending_status: Label
 var _body: ScrollContainer
 var _recap: VBoxContainer
 var _confirmation: PanelContainer
@@ -45,6 +48,9 @@ func _bind_controls() -> void:
 	_state = get_node("Frame/Content/Header/State") as Label
 	_headline = get_node("Frame/Content/Header/OutcomeHeadline") as Label
 	_reason = get_node("Frame/Content/Header/ReadableReason") as Label
+	_pending_progress = get_node("Frame/Content/PendingProgress") as PanelContainer
+	_pending_step = get_node("Frame/Content/PendingProgress/Content/Step") as Label
+	_pending_status = get_node("Frame/Content/PendingProgress/Content/Status") as Label
 	_body = get_node("Frame/Content/Body") as ScrollContainer
 	_recap = get_node("Frame/Content/Body/Recap") as VBoxContainer
 	_confirmation = get_node("Frame/Content/Confirmation") as PanelContainer
@@ -75,7 +81,7 @@ func present(projection: RunResultProjection, preferred_action: StringName = &""
 	visible = true
 	match projection.terminal_state:
 		RunResultProjection.TerminalState.PENDING:
-			_state.text = _pending_copy(projection.pending_kind)
+			_present_pending(projection.pending_kind)
 		RunResultProjection.TerminalState.INTERRUPTED:
 			_present_interruption(projection)
 		RunResultProjection.TerminalState.FINALIZED:
@@ -85,6 +91,7 @@ func present(projection: RunResultProjection, preferred_action: StringName = &""
 			_reason.text = projection.readable_reason
 			_body.visible = true
 			_build_recap(projection.sections)
+			call_deferred(&"_reset_recap_origin_after_layout")
 	_apply_actions(projection)
 	_apply_focus_bridge()
 	_apply_initial_focus(projection, preferred_action)
@@ -97,6 +104,23 @@ func _pending_copy(pending_kind: int) -> String:
 		RunResultProjection.PendingKind.PROTECTION: return "PROTECTING DISPLACED GEAR"
 		RunResultProjection.PendingKind.TERMINAL_COMPLETION: return "COMPLETING TERMINAL RECORD"
 		_: return "SAVING TERMINAL TRUTH"
+
+func _pending_progress_copy(pending_kind: int) -> String:
+	match pending_kind:
+		RunResultProjection.PendingKind.TERMINAL_REFRESH: return "REFRESHING TERMINAL RECOVERY"
+		RunResultProjection.PendingKind.RESOLUTION: return "RESOLVING TERMINAL RUN"
+		RunResultProjection.PendingKind.PROJECTION: return "REBUILDING RESULT PRESENTATION"
+		RunResultProjection.PendingKind.PROTECTION: return "PROTECTING DISPLACED GEAR"
+		RunResultProjection.PendingKind.TERMINAL_COMPLETION: return "COMPLETING TERMINAL RECORD"
+		_: return "SECURING TERMINAL TRUTH"
+
+func _present_pending(pending_kind: int) -> void:
+	var bounded_kind := clampi(pending_kind, RunResultProjection.PendingKind.TERMINAL_STATE_SAVE, RunResultProjection.PendingKind.TERMINAL_COMPLETION)
+	_state.text = _pending_copy(bounded_kind)
+	_pending_step.text = "ACTIVE TERMINAL OPERATION"
+	_pending_status.text = "%s · IN PROGRESS · NOT YET FINAL" % _pending_progress_copy(bounded_kind)
+	_pending_progress.accessibility_name = "%s. %s" % [_pending_step.text, _pending_status.text]
+	_pending_progress.visible = true
 
 func _apply_initial_focus(projection: RunResultProjection, preferred_action: StringName) -> void:
 	if not is_inside_tree():
@@ -130,6 +154,8 @@ func _reset_presentation() -> void:
 	_headline.text = "TERMINAL RECORD"
 	_reason.text = ""
 	_reason.visible = false
+	_pending_progress.visible = false
+	_pending_progress.accessibility_name = ""
 	_body.visible = false
 	_body.scroll_vertical = 0
 	_confirmation.visible = false
@@ -177,6 +203,11 @@ func _apply_actions(projection: RunResultProjection) -> void:
 
 func _build_recap(sections: Array[RunRecapSectionProjection]) -> void:
 	var rows: Array[Button] = []
+	var top_inset := Control.new()
+	top_inset.name = "TopInset"
+	top_inset.custom_minimum_size.y = 8.0
+	top_inset.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_recap.add_child(top_inset)
 	for section: RunRecapSectionProjection in sections:
 		var inset := PanelContainer.new()
 		inset.name = "Section_%s" % section.section_id
@@ -202,8 +233,17 @@ func _build_recap(sections: Array[RunRecapSectionProjection]) -> void:
 			content.add_child(row)
 			rows.append(row)
 			index += 1
+	var bottom_inset := Control.new()
+	bottom_inset.name = "BottomInset"
+	bottom_inset.custom_minimum_size.y = 16.0
+	bottom_inset.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_recap.add_child(bottom_inset)
 	_link_focus(rows)
 	_last_recap_row = rows[-1] if not rows.is_empty() else null
+
+func _reset_recap_origin_after_layout() -> void:
+	if _body != null and _body.visible:
+		_body.scroll_vertical = 0
 
 func _entry_row(section_id: StringName, index: int, entry: RunRecapEntryProjection) -> Button:
 	var row := Button.new()
@@ -293,11 +333,45 @@ func _correct_scroll_visible_clip(row: Control) -> void:
 		correction = ceili(row_rect.end.y - visible_clip.end.y)
 	elif row_rect.position.y < visible_clip.position.y:
 		correction = floori(row_rect.position.y - visible_clip.position.y)
-	if correction == 0:
+	if correction != 0:
+		var vertical_bar := _body.get_v_scroll_bar()
+		var maximum_scroll := maxi(0, floori(vertical_bar.max_value - vertical_bar.page))
+		_body.scroll_vertical = clampi(_body.scroll_vertical + correction, 0, maximum_scroll)
+	_snap_scroll_to_complete_row(row)
+
+func _snap_scroll_to_complete_row(focused_row: Control) -> void:
+	if not is_instance_valid(focused_row) or not focused_row.is_visible_in_tree():
 		return
+	var visible_clip := _scroll_visible_global_rect()
+	# Four pixels preserves the row rhythm while ensuring the preceding row's
+	# four-pixel container separation is fully outside the visible clip.
+	var desired_top := visible_clip.position.y + 4.0
+	var rows: Array[Button] = []
+	for node: Node in _recap.find_children("*", "Button", true, false):
+		if node.has_meta(&"recap_section_id"):
+			rows.append(node as Button)
+	var first_visible_index := -1
+	for index: int in rows.size():
+		var row_rect := rows[index].get_global_rect()
+		if row_rect.end.y > desired_top and row_rect.position.y < visible_clip.end.y:
+			first_visible_index = index
+			break
+	if first_visible_index < 0:
+		return
+	var first_rect := rows[first_visible_index].get_global_rect()
+	if first_rect.position.y >= desired_top - 0.5:
+		return
+	var alignment_row := rows[first_visible_index]
+	if first_visible_index + 1 < rows.size() and rows[first_visible_index + 1].get_global_rect().position.y < visible_clip.end.y:
+		alignment_row = rows[first_visible_index + 1]
+	var delta := roundi(alignment_row.get_global_rect().position.y - desired_top)
+	var focused_rect := focused_row.get_global_rect()
+	var minimum_focused_delta := ceili(focused_rect.end.y - visible_clip.end.y)
+	var maximum_focused_delta := floori(focused_rect.position.y - visible_clip.position.y)
+	delta = clampi(delta, minimum_focused_delta, maximum_focused_delta)
 	var vertical_bar := _body.get_v_scroll_bar()
 	var maximum_scroll := maxi(0, floori(vertical_bar.max_value - vertical_bar.page))
-	_body.scroll_vertical = clampi(_body.scroll_vertical + correction, 0, maximum_scroll)
+	_body.scroll_vertical = clampi(_body.scroll_vertical + delta, 0, maximum_scroll)
 
 func _scroll_visible_global_rect() -> Rect2:
 	var visible_clip := _body.get_global_rect()
@@ -330,7 +404,7 @@ func _fit_expanded_detail(row: Button, detail: Label) -> void:
 		return
 	var required_height := detail.position.y + detail.get_combined_minimum_size().y + 8.0
 	row.custom_minimum_size.y = maxf(48.0, required_height)
-	_body.ensure_control_visible(row)
+	_ensure_visible(row)
 
 func _connect_action(action_name: String, callback: Callable) -> void:
 	var button := _action(action_name)

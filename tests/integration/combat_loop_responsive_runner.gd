@@ -329,6 +329,8 @@ func _exercise_extraction(viewport_size: Vector2i, ui_scale: int, text_scale: in
 	var automatic_cards := _automatic_extraction_cards(panel)
 	if not automatic_cards.is_empty():
 		var automatic_card := automatic_cards[0]
+		if _extraction_design_corner(viewport_size, ui_scale, text_scale):
+			_assert_extraction_card_layout(automatic_card, context_label, String(automatic_card.get_meta(&"item_id", "automatic")))
 		var automatic_inspect := automatic_card.get_node("Content/Footer/Inspect") as Button
 		automatic_inspect.grab_focus()
 		await _wait_for_focus(automatic_inspect, "%s first automatic Inspect" % context_label)
@@ -887,6 +889,7 @@ func _assert_extraction_card_layout(card: Button, context_label: String, item_id
 	var state_text := card.get_node("Content/Footer/State/StateText") as Label
 	var inspect := card.get_node("Content/Footer/Inspect") as Button
 	_assert(content.size.y + 0.5 >= content.get_combined_minimum_size().y, "%s content encloses its combined minimum" % label)
+	_assert(card.get_global_rect().encloses(content.get_global_rect()), "%s card contains its inset content; card=%s content=%s" % [label, card.get_global_rect(), content.get_global_rect()])
 	for pair: Array in [[name_label, "name"], [rarity, "rarity"], [source, "source"], [state, "state"]]:
 		_assert_contained(pair[0] as Control, content.get_global_rect(), "%s %s" % [label, pair[1]])
 	_assert(content.position.y + name_label.position.y >= 8.0, "%s name clears the focus border" % label)
