@@ -34,6 +34,7 @@ var _boss_state_callback: Callable
 var _last_viewport_size := Vector2i.ZERO
 var _high_contrast := false
 var _unavailable_reason := ""
+var _deferred_focus_descriptor: Dictionary = {}
 
 
 func _ready() -> void:
@@ -60,6 +61,7 @@ func _ensure_control_connections() -> void:
 func configure(run: Node, party: PartyManager, experience: ExperienceSystem, context: PlayerRunContext, saved_settings: PartyForgeSettings) -> void:
 	_ensure_control_connections()
 	_disconnect_authorities()
+	_deferred_focus_descriptor.clear()
 	game_run = run
 	party_manager = party
 	experience_system = experience
@@ -156,6 +158,7 @@ func focus_descriptor_for(control: Control) -> Dictionary:
 
 
 func restore_focus_descriptor(descriptor: Dictionary) -> bool:
+	_deferred_focus_descriptor.clear()
 	if descriptor.is_empty():
 		return _focus_named_safe_control()
 	var kind := StringName(descriptor.get("kind", &""))
@@ -467,7 +470,11 @@ func _on_alerts_resolved(message: String) -> void:
 
 
 func _on_modal_closed(_return_focus: Control, focus_descriptor: Dictionary) -> void:
-	restore_focus_descriptor(focus_descriptor)
+	if _child_modal_owns_focus():
+		_deferred_focus_descriptor = focus_descriptor.duplicate(true)
+		return
+	var effective := focus_descriptor if not focus_descriptor.is_empty() else _deferred_focus_descriptor
+	restore_focus_descriptor(effective)
 
 
 func _on_party_structure_changed(_member: PartyMemberState) -> void:
@@ -780,6 +787,19 @@ func _grab_valid_focus(control: Control) -> bool:
 		return false
 	control.grab_focus()
 	return true
+
+
+func _child_modal_owns_focus() -> bool:
+	var inspector := get_node("CombatMemberInspectPanel") as CombatMemberInspectPanel
+	if inspector.visible:
+		return true
+	var owner := _hud_viewport().gui_get_focus_owner() as Control
+	var cursor: Node = owner
+	while cursor != null:
+		if cursor is CharacterLedger and (cursor as CharacterLedger).visible:
+			return true
+		cursor = cursor.get_parent()
+	return false
 
 
 func _format_time(seconds: float) -> String:

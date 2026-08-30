@@ -42,6 +42,8 @@ func apply_visual_settings(theme_value: Theme, high_contrast: bool) -> void:
 
 func open(all_alerts: Array[CombatAlertProjection], return_focus: Control) -> void:
 	var was_open := visible
+	var tray_owned_focus := _owns_current_focus()
+	var external_focus := _external_focus_owner()
 	var focused := _focus_descriptor()
 	var prior_index := _index_for_stable_id(StringName(focused.get("stable_id", &"")))
 	var next_alerts: Array[CombatAlertProjection] = []
@@ -59,8 +61,10 @@ func open(all_alerts: Array[CombatAlertProjection], return_focus: Control) -> vo
 		_pause_lease.acquire(Engine.get_main_loop() as SceneTree)
 		visible = true
 	_present(next_alerts)
-	if was_open:
+	if was_open and tray_owned_focus:
 		_restore_refresh_focus(focused, prior_index)
+	elif was_open and _focus_is_valid(external_focus):
+		external_focus.grab_focus()
 	else:
 		_focus_card(mini(CombatHudProjection.MAX_VISIBLE_ALERTS, _alerts.size() - 1), &"inspect")
 
@@ -68,13 +72,17 @@ func open(all_alerts: Array[CombatAlertProjection], return_focus: Control) -> vo
 func close() -> void:
 	if not visible:
 		return
+	var focus_owned_elsewhere := _focus_owned_elsewhere()
+	var external_focus := _external_focus_owner()
 	visible = false
 	_pause_lease.release(Engine.get_main_loop() as SceneTree)
 	var target := _return_focus.get_ref() as Control if _return_focus != null else null
 	var descriptor := _return_descriptor.duplicate(true)
 	_return_focus = null
 	_return_descriptor.clear()
-	if _focus_is_valid(target):
+	if focus_owned_elsewhere and _focus_is_valid(external_focus):
+		external_focus.grab_focus()
+	elif _focus_is_valid(target):
 		target.grab_focus()
 	closed.emit(target, descriptor)
 
@@ -242,3 +250,24 @@ func _descriptor_from_parent(control: Control) -> Dictionary:
 	if hud != null and hud.has_method("focus_descriptor_for"):
 		return hud.call("focus_descriptor_for", control) as Dictionary
 	return {}
+
+
+func _owns_current_focus() -> bool:
+	if not is_inside_tree():
+		return false
+	var owner := get_viewport().gui_get_focus_owner() as Control
+	return owner != null and is_ancestor_of(owner)
+
+
+func _focus_owned_elsewhere() -> bool:
+	if not is_inside_tree():
+		return false
+	var owner := get_viewport().gui_get_focus_owner() as Control
+	return owner != null and not is_ancestor_of(owner)
+
+
+func _external_focus_owner() -> Control:
+	if not is_inside_tree():
+		return null
+	var owner := get_viewport().gui_get_focus_owner() as Control
+	return owner if owner != null and not is_ancestor_of(owner) else null

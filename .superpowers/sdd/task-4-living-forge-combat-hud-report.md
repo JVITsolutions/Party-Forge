@@ -164,3 +164,69 @@ Focused output includes intentional negative-path diagnostics from HUD authority
 - Scrolled tray cards may be outside the frame's visible rectangle by design; the ScrollContainer/frame/layout are contained, while each card still contains its own post-layout actions and the scroll clips non-visible rows.
 - `COMBAT_HUD_UNAVAILABLE` may appear briefly during an authoritative party mutation before the corresponding actor is bound; this is the required honest fail-closed state and clears on the next valid projection.
 - This remains engineering evidence, not Task 14 aesthetic acceptance or separate human/physical-controller acceptance.
+
+## Final review repair — child-modal focus ownership during alert refresh
+
+### Revision and narrow scope
+
+- Repair base and pre-commit HEAD: `36bc00c9051ada1deb4bdef49f5c073c533018cc` (`fix: repair combat HUD review gaps`). The repair result HEAD is the commit containing this section.
+- Scope is limited to preserving topmost Inspector/real Ledger focus while the underlying alert tray refreshes or auto-closes, the authentic input integration assertions for those routes, and this durable report.
+- No Task 5+, tactics, objective, push, merge, plan, progress-ledger, or unrelated production work was performed.
+- Historical `.superpowers/sdd/task-4-report.md` remained untouched; worktree, current-HEAD, and exact base blobs all hash to `828fd5fab931aa8ef350de041e0f26dcfa147096` before this repair commit.
+
+### Strict RED evidence
+
+Production remained at `36bc00c` until the authentic child-modal assertions were added and run:
+
+`godot --headless --path <worktree> --quit-after 600 --script res://tests/integration/combat_hud_input_runner.gd`
+
+- Marker: `COMBAT_HUD_INPUT_SUMMARY: FAIL failures=4`.
+- Exit marker: `MODAL_REPAIR_RED_INPUT_EXIT=1`.
+- Exact gaps: tray refresh stole focus after the initiating alert was removed while Inspector was topmost; all-alert resolution restored HUD focus behind the still-open Inspector; the same two failures occurred with the actual production Ledger child.
+
+The integration fixture opens each child through a real tray action and controller accept, gives the real child Close control focus, mutates real actor bindings so projection updates remove the initiating alert and then all alerts, and exercises controller Cancel to close the child.
+
+### Root cause and minimal production fix
+
+- A first diagnostic change only suppressed the tray's explicit focus restoration when another control owned focus. That was insufficient: freeing/reordering stale tray cards caused Godot itself to move focus into a surviving tray action; auto-closing the tray could then leave focus null or restore the HUD behind the child.
+- The tray now captures a valid focus owner outside its subtree before presenting refreshed cards or closing. When the tray did not own focus, it actively re-grabs that external child control after mutation and does not restore its own initiating HUD control.
+- HUD modal-close handling now defers the tray's stable focus descriptor while a visible Inspector or focused visible Ledger is the top child. Inspector close consumes its current stable descriptor through the existing HUD callback; the real Ledger/Main close callback supplies its own exact descriptor and clears the deferred tray descriptor. Reconfiguration clears deferred state.
+- Tray, Inspector, and Ledger keep their independent `RunPauseLease` ownership. The repair does not directly assign `SceneTree.paused` and adds no production test-only method.
+
+### GREEN focus, pause, and fallback evidence
+
+Focused authentic input rerun:
+
+- `COMBAT_HUD_INPUT_SUMMARY: PASS`
+- `FINAL_MODAL_INPUT_EXIT=0`
+
+The final fresh rerun also produced `COMBAT_HUD_INPUT_SUMMARY: PASS` and `FINAL_MODAL_INPUT_RERUN_EXIT=0`. The assertions prove for both Inspector and actual Ledger:
+
+- the real child owns focus before projection refresh;
+- removing the initiating alert does not transfer focus into the underlying tray;
+- resolving every alert auto-closes only the underlying tray, leaves the child visible and focused, and leaves the tree paused under the child lease;
+- controller Cancel closes the top child, then resolves its stable descriptor to a current HUD control;
+- after real Ledger close, no pause owner remains in this fixture.
+
+Combined focused Task 1–4 contracts and retained components:
+
+- `TEST_SUMMARY: PASS (0 failures)`
+- `FINAL_MODAL_COMBINED_FOCUSED_EXIT=0`
+
+The command covered combat HUD projection, responsive policy, view model, Task 3 combat components, HUD, Main wiring, PartyManager, Ledger shell, and Ledger foundation.
+
+### Final retained gates
+
+- Party scale/geometry: `COMBAT_HUD_PARTY_SCALE_SUMMARY: PASS`; `FINAL_MODAL_PARTY_EXIT=0`.
+- Input routes: `COMBAT_HUD_INPUT_SUMMARY: PASS`; `FINAL_MODAL_INPUT_RERUN_EXIT=0`.
+- Progression retention: immutable profile marker with `values_equal=true bytes_equal=true`, `PROGRESSION_ARENA_SMOKE_SUMMARY: PASS`; `FINAL_MODAL_PROGRESSION_EXIT=0`.
+- Responsive retention: four size PASS markers, `RESPONSIVE_GEOMETRY_SUMMARY: PASS (4 sizes)`; `FINAL_MODAL_RESPONSIVE_EXIT=0`.
+- The responsive runner retained its established settings-save negative-path diagnostics while still emitting the exact PASS marker and exit `0`. The final Task 4 party/input outputs contained no parse/load, ObjectDB, RID, retained-resource, or allocator diagnostic.
+
+### Import, UID, diff, and historical integrity
+
+- Fresh Godot editor import: `FINAL_MODAL_IMPORT_RERUN_EXIT=0`.
+- The checked-in `Resolve-GeneratedUidState` classifier was redeclared after import in that same PowerShell process and invoked with exactly the five Task 4 UID paths. Result: `FINAL_MODAL_UID_CLASSIFIER: PASS intended=5 tracked=5 unexpected=0`; `FINAL_MODAL_UID_CLASSIFIER_EXIT=0`.
+- An earlier added verification incorrectly required these planned UIDs to remain untracked and reported an empty untracked set after import. The classifier itself had run, but the assumption was obsolete because the prior Task 4 commits already track all five files. The final command retained the checked-in classifier behavior, verified all five intended files are tracked, and verified no unrelated untracked UID remains.
+- `git diff --check` exited `0` before this report update and is repeated after report update and staging.
+- The immutable historical report hash is rechecked after staging and commit. This repair does not claim Task 14 aesthetic acceptance.

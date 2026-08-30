@@ -59,6 +59,7 @@ func _run() -> void:
 	await _exercise_keyboard_mouse_controller_routes()
 	await _exercise_complete_tray_focus_and_cancel()
 	await _exercise_nested_pause_and_resolved_fallback()
+	await _exercise_child_modal_refresh_ownership()
 	_cleanup()
 	_finish()
 
@@ -236,6 +237,84 @@ func _exercise_nested_pause_and_resolved_fallback() -> void:
 	_assert(safe_focus != null and (safe_focus.is_in_group(&"combat_hud_member") or safe_focus == _hud.get_node("Margin/CombatStatus/LeaderCard")), "all-alerts-resolved close uses a named current-member fallback owner=%s" % (safe_focus.get_path() if safe_focus != null else NodePath("<null>")))
 	var resolved := _hud.get_node("AlertResolvedMessage") as Label
 	_assert(resolved.visible and resolved.text == "All alerts resolved.", "all-alerts-resolved closure announces concise status")
+
+
+func _exercise_child_modal_refresh_ownership() -> void:
+	for member_id: int in range(2, 9):
+		(_fixture.health_by_member[member_id] as HealthComponent).apply_damage(80.0)
+	await process_frame
+	var overflow := _hud.get_node("Margin/CombatStatus/AlertRegion/Overflow") as Button
+	var tray := _hud.get_node("CombatAlertTray") as CombatAlertTray
+	overflow.pressed.emit()
+	await process_frame
+	var cards := tray.get_node("Overlay/Frame/Layout/Scroll/Alerts") as Container
+	var inspector_card := cards.get_child(3) as Control
+	var inspect_action := inspector_card.get_node("Surface/Content/Actions/Inspect") as Button
+	inspect_action.grab_focus()
+	await _press_controller_accept()
+	await process_frame
+	var inspector := _hud.get_node("CombatMemberInspectPanel") as CombatMemberInspectPanel
+	(inspector.get_node("Overlay/Frame/Layout/Close") as Button).grab_focus()
+	await process_frame
+	await process_frame
+	_assert((inspector.get_node("Overlay/Frame/Layout/Close") as Button).has_focus(), "Inspector modal owns focus before tray refresh")
+	var inspector_member_id := int(inspector_card.get_meta("member_id", 0))
+	_replace_with_healthy_actor(inspector_member_id)
+	await process_frame
+	var inspector_focus := _viewport.gui_get_focus_owner() as Control
+	_assert(inspector.visible and inspector_focus != null and inspector.is_ancestor_of(inspector_focus), "tray refresh does not steal focus after initiating alert removal while Inspector is topmost owner=%s inspector_visible=%s" % [inspector_focus.get_path() if inspector_focus != null else NodePath("<null>"), inspector.visible])
+	_replace_all_with_healthy_actors()
+	await process_frame
+	inspector_focus = _viewport.gui_get_focus_owner() as Control
+	_assert(not tray.visible and inspector.visible and paused and inspector_focus != null and inspector.is_ancestor_of(inspector_focus), "tray auto-close defers HUD fallback while Inspector owns focus and pause owner=%s tray=%s inspector=%s paused=%s" % [inspector_focus.get_path() if inspector_focus != null else NodePath("<null>"), tray.visible, inspector.visible, paused])
+	await _press_controller_cancel()
+	var inspector_return := _viewport.gui_get_focus_owner() as Control
+	_assert(not inspector.visible and inspector_return != null and _hud.is_ancestor_of(inspector_return), "Inspector close resolves the deferred stable HUD fallback")
+
+	for member_id: int in range(2, 9):
+		(_fixture.health_by_member[member_id] as HealthComponent).apply_damage(1000.0)
+	await process_frame
+	overflow.pressed.emit()
+	await process_frame
+	cards = tray.get_node("Overlay/Frame/Layout/Scroll/Alerts") as Container
+	var ledger_card := cards.get_child(3) as Control
+	var ledger_action := ledger_card.get_node("Surface/Content/Actions/Ledger") as Button
+	_assert(ledger_action.visible and not ledger_action.disabled, "real Ledger modal fixture exposes an available tray action")
+	ledger_action.grab_focus()
+	await _press_controller_accept()
+	await process_frame
+	(_ledger.get_node("Overlay/Frame/Layout/Close") as Button).grab_focus()
+	await process_frame
+	await process_frame
+	_assert((_ledger.get_node("Overlay/Frame/Layout/Close") as Button).has_focus(), "Ledger modal owns focus before tray refresh")
+	var ledger_member_id := int(ledger_card.get_meta("member_id", 0))
+	_replace_with_healthy_actor(ledger_member_id)
+	await process_frame
+	var ledger_focus := _viewport.gui_get_focus_owner() as Control
+	_assert(_ledger.visible and ledger_focus != null and _ledger.is_ancestor_of(ledger_focus), "tray refresh does not steal focus after initiating alert removal while Ledger is topmost owner=%s ledger=%s" % [ledger_focus.get_path() if ledger_focus != null else NodePath("<null>"), _ledger.visible])
+	_replace_all_with_healthy_actors()
+	await process_frame
+	ledger_focus = _viewport.gui_get_focus_owner() as Control
+	_assert(not tray.visible and _ledger.visible and paused and ledger_focus != null and _ledger.is_ancestor_of(ledger_focus), "tray auto-close defers HUD fallback while real Ledger owns focus and pause owner=%s tray=%s ledger=%s paused=%s" % [ledger_focus.get_path() if ledger_focus != null else NodePath("<null>"), tray.visible, _ledger.visible, paused])
+	await _press_controller_cancel()
+	var ledger_return := _viewport.gui_get_focus_owner() as Control
+	_assert(not _ledger.visible and not paused and ledger_return != null and _hud.is_ancestor_of(ledger_return), "Ledger close resolves the deferred stable HUD fallback")
+
+
+func _replace_with_healthy_actor(member_id: int) -> void:
+	var actor := Node3D.new()
+	var health := HealthComponent.new()
+	health.name = "HealthComponent"
+	actor.add_child(health)
+	health.configure(100.0, member_id == 1, 8.0, 0.5, member_id == 1)
+	assert(_fixture.context.bind_actor(member_id, actor))
+	(_fixture.actors as Array).append(actor)
+	(_fixture.health_by_member as Dictionary)[member_id] = health
+
+
+func _replace_all_with_healthy_actors() -> void:
+	for member_id: int in range(1, 13):
+		_replace_with_healthy_actor(member_id)
 
 
 func _on_inspect_requested(member_id: int, return_focus: Control) -> void:
