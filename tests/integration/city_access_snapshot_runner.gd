@@ -283,6 +283,10 @@ func _assert_production_warehouse_route_authorization(failures: Array[String]) -
 	var settings_path := "user://tests/city-access-snapshot-runner-warehouse-route-settings_%d_%d.cfg" % [OS.get_process_id(), Time.get_ticks_usec()]
 	ProfileTestSupport.remove_tree(root)
 	_cleanup_settings_artifacts(settings_path)
+	var settings_directory_error := DirAccess.make_dir_recursive_absolute(
+		ProjectSettings.globalize_path(settings_path.get_base_dir())
+	)
+	_assert(settings_directory_error == OK, "route fixture creates its isolated settings directory", failures)
 	var player_settings := PartyForgeSettings.new()
 	player_settings.mode = PartyForgeSettings.Mode.PLAYER_SIMULATION
 	player_settings.use_city_access_snapshot = true
