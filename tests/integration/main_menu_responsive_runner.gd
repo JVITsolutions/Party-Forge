@@ -7,10 +7,17 @@ const WINDOW_SIZES: Array[Vector2i] = [
 	Vector2i(3840, 2160),
 ]
 const SCREENSHOT_DIR := "res://.superpowers/sdd/warehouse-presentation-activation"
+const MANIFEST_PATH := SCREENSHOT_DIR + "/manifest.json"
+const MANIFEST_SCHEMA := "party-forge-main-menu-responsive-evidence"
+const MANIFEST_VERSION := 1
 
 var _failures: Array[String] = []
 var _profile_root := ""
 var _settings_path := ""
+var _implementation_commit := ""
+var _manifest_entries_by_path: Dictionary = {}
+var _capture_evidence: Array[Dictionary] = []
+var _validated_manifest_paths: Dictionary = {}
 
 
 func _initialize() -> void:
@@ -34,6 +41,10 @@ func _run() -> void:
 	var directory_error := DirAccess.make_dir_recursive_absolute(screenshot_dir_absolute)
 	_assert(directory_error == OK, "fixture setup: screenshot directory is available")
 	if directory_error != OK:
+		await _finish(null)
+		return
+	_prepare_evidence_provenance()
+	if not _failures.is_empty():
 		await _finish(null)
 		return
 	var main_scene := load("res://scenes/game/main.tscn") as PackedScene
@@ -180,11 +191,18 @@ func _capture_root(path: String, expected_size: Vector2i, label: String) -> Imag
 	var absolute_path := ProjectSettings.globalize_path(path)
 	if DisplayServer.get_name() == "headless":
 		var retained := Image.load_from_file(absolute_path) if FileAccess.file_exists(path) else null
-		_assert(retained != null, "%s headless validation loads the freshly rendered evidence at %dx%d" % [label, expected_size.x, expected_size.y])
+		_assert(retained != null, "%s headless validation loads exact-tip manifested evidence at %dx%d" % [label, expected_size.x, expected_size.y])
 		if retained == null:
 			return null
 		_assert(retained.get_size() == expected_size, "%s retained screenshot dimensions match %dx%d actual=%s" % [label, expected_size.x, expected_size.y, retained.get_size()])
 		_assert(_image_is_nonblank(retained), "%s retained screenshot is nonblank at %dx%d" % [label, expected_size.x, expected_size.y])
+		var entry: Dictionary = _manifest_entries_by_path.get(path, {}) as Dictionary
+		_assert(not entry.is_empty(), "%s has an exact manifest entry" % label)
+		if not entry.is_empty():
+			var actual_sha := _sha256(FileAccess.get_file_as_bytes(path))
+			_assert(entry["width"] == expected_size.x and entry["height"] == expected_size.y, "%s manifested dimensions match %dx%d" % [label, expected_size.x, expected_size.y])
+			_assert(entry["sha256"] == actual_sha, "%s exact screenshot SHA-256 matches manifest expected=%s actual=%s" % [label, entry["sha256"], actual_sha])
+			_validated_manifest_paths[path] = true
 		return retained
 	var image := root.get_texture().get_image()
 	_assert(image != null, "%s renderer provides root pixels at %dx%d" % [label, expected_size.x, expected_size.y])
@@ -193,7 +211,173 @@ func _capture_root(path: String, expected_size: Vector2i, label: String) -> Imag
 	_assert(image.get_size() == expected_size, "%s screenshot dimensions match %dx%d actual=%s" % [label, expected_size.x, expected_size.y, image.get_size()])
 	_assert(_image_is_nonblank(image), "%s screenshot is nonblank at %dx%d" % [label, expected_size.x, expected_size.y])
 	_assert(image.save_png(absolute_path) == OK, "%s screenshot saves at %dx%d" % [label, expected_size.x, expected_size.y])
+	if FileAccess.file_exists(path):
+		_capture_evidence.append({
+			"path": path,
+			"width": expected_size.x,
+			"height": expected_size.y,
+			"sha256": _sha256(FileAccess.get_file_as_bytes(path)),
+		})
 	return image
+
+
+func _prepare_evidence_provenance() -> void:
+	_implementation_commit = _current_git_commit()
+	_assert(_implementation_commit.length() == 40 and _is_lower_hex(_implementation_commit), "responsive evidence resolves the current exact Git commit")
+	_assert(_tracked_worktree_is_clean(), "responsive evidence runs from a clean tracked exact-tip worktree")
+	if _implementation_commit.is_empty():
+		return
+	if DisplayServer.get_name() == "headless":
+		_load_manifest()
+		return
+	for path: String in _expected_capture_paths() + [MANIFEST_PATH, MANIFEST_PATH + ".tmp"]:
+		var absolute_path := ProjectSettings.globalize_path(path)
+		if FileAccess.file_exists(path):
+			var remove_error := DirAccess.remove_absolute(absolute_path)
+			_assert(remove_error == OK, "windowed evidence removes the prior artifact before generation: %s" % path)
+	for path: String in _expected_capture_paths():
+		_assert(not FileAccess.file_exists(path), "windowed evidence starts without a retained capture: %s" % path)
+	_assert(not FileAccess.file_exists(MANIFEST_PATH), "windowed evidence starts without a retained manifest")
+
+
+func _load_manifest() -> void:
+	_assert(FileAccess.file_exists(MANIFEST_PATH), "headless evidence requires an ignored exact-tip manifest")
+	if not FileAccess.file_exists(MANIFEST_PATH):
+		return
+	var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(MANIFEST_PATH))
+	_assert(parsed is Dictionary, "responsive evidence manifest decodes to an object")
+	if not parsed is Dictionary:
+		return
+	var manifest := parsed as Dictionary
+	_assert(_has_exact_keys(manifest, ["schema", "version", "implementationCommit", "captures"]), "responsive evidence manifest has the exact schema keys")
+	_assert(manifest.get("schema") == MANIFEST_SCHEMA and manifest.get("version") == MANIFEST_VERSION, "responsive evidence manifest schema and version are supported")
+	_assert(manifest.get("implementationCommit") == _implementation_commit, "responsive evidence manifest implementation commit equals current exact tested tip expected=%s actual=%s" % [_implementation_commit, manifest.get("implementationCommit", "")])
+	var captures: Variant = manifest.get("captures")
+	_assert(captures is Array and (captures as Array).size() == _expected_capture_paths().size(), "responsive evidence manifest contains exactly six captures")
+	if not captures is Array:
+		return
+	var expected_dimensions := _expected_capture_dimensions()
+	for item: Variant in captures as Array:
+		_assert(item is Dictionary, "responsive evidence manifest capture is an object")
+		if not item is Dictionary:
+			continue
+		var entry := item as Dictionary
+		_assert(_has_exact_keys(entry, ["path", "width", "height", "sha256"]), "responsive evidence manifest capture has exact keys")
+		var path: Variant = entry.get("path")
+		_assert(path is String and expected_dimensions.has(path), "responsive evidence manifest capture path is exact and expected")
+		if not path is String or not expected_dimensions.has(path):
+			continue
+		var expected_size := expected_dimensions[path] as Vector2i
+		_assert(_is_exact_integer(entry.get("width"), expected_size.x) and _is_exact_integer(entry.get("height"), expected_size.y), "responsive evidence manifest dimensions match path %s" % path)
+		var sha: Variant = entry.get("sha256")
+		_assert(sha is String and (sha as String).length() == 64 and _is_lower_hex(sha as String), "responsive evidence manifest SHA-256 is lowercase hex for %s" % path)
+		_assert(not _manifest_entries_by_path.has(path), "responsive evidence manifest path is unique: %s" % path)
+		_manifest_entries_by_path[path] = entry
+	for path: String in _expected_capture_paths():
+		_assert(_manifest_entries_by_path.has(path), "responsive evidence manifest includes expected path: %s" % path)
+
+
+func _write_manifest() -> void:
+	var expected_paths := _expected_capture_paths()
+	_assert(_capture_evidence.size() == expected_paths.size(), "windowed evidence generated exactly six captures before manifest publication")
+	var captured_paths: Dictionary = {}
+	for entry: Dictionary in _capture_evidence:
+		captured_paths[entry["path"]] = true
+	for path: String in expected_paths:
+		_assert(captured_paths.has(path), "windowed evidence generated expected capture before manifest publication: %s" % path)
+	if not _failures.is_empty():
+		return
+	var document := {
+		"schema": MANIFEST_SCHEMA,
+		"version": MANIFEST_VERSION,
+		"implementationCommit": _implementation_commit,
+		"captures": _capture_evidence,
+	}
+	var temporary_path := MANIFEST_PATH + ".tmp"
+	var file := FileAccess.open(temporary_path, FileAccess.WRITE)
+	_assert(file != null, "responsive evidence opens a temporary manifest for atomic publication")
+	if file == null:
+		return
+	file.store_string(JSON.stringify(document, "  ", false) + "\n")
+	file.flush()
+	file = null
+	_assert(FileAccess.file_exists(temporary_path) and not FileAccess.get_file_as_bytes(temporary_path).is_empty(), "responsive evidence temporary manifest is nonempty")
+	if not _failures.is_empty():
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(temporary_path))
+		return
+	var rename_error := DirAccess.rename_absolute(ProjectSettings.globalize_path(temporary_path), ProjectSettings.globalize_path(MANIFEST_PATH))
+	_assert(rename_error == OK, "responsive evidence atomically publishes manifest after successful generation")
+	if rename_error == OK:
+		print("MAIN_MENU_RESPONSIVE_MANIFEST_OK implementation_commit=%s captures=%d path=%s" % [_implementation_commit, _capture_evidence.size(), MANIFEST_PATH])
+
+
+func _current_git_commit() -> String:
+	var output: Array = []
+	var project_root := ProjectSettings.globalize_path("res://")
+	var exit_code := OS.execute("git", ["-C", project_root, "rev-parse", "HEAD"], output, true)
+	if exit_code != 0 or output.is_empty():
+		return ""
+	return String(output[0]).strip_edges()
+
+
+func _tracked_worktree_is_clean() -> bool:
+	var output: Array = []
+	var project_root := ProjectSettings.globalize_path("res://")
+	var exit_code := OS.execute("git", ["-C", project_root, "status", "--porcelain=v1", "--untracked-files=no"], output, true)
+	if exit_code != 0:
+		return false
+	var combined := ""
+	for line: Variant in output:
+		combined += String(line)
+	return combined.strip_edges().is_empty()
+
+
+func _expected_capture_paths() -> Array[String]:
+	var paths: Array[String] = []
+	for size: Vector2i in WINDOW_SIZES:
+		paths.append(SCREENSHOT_DIR.path_join("locked-menu-%dx%d.png" % [size.x, size.y]))
+		paths.append(SCREENSHOT_DIR.path_join("locked-dialog-%dx%d.png" % [size.x, size.y]))
+	return paths
+
+
+func _expected_capture_dimensions() -> Dictionary:
+	var dimensions: Dictionary = {}
+	for size: Vector2i in WINDOW_SIZES:
+		dimensions[SCREENSHOT_DIR.path_join("locked-menu-%dx%d.png" % [size.x, size.y])] = size
+		dimensions[SCREENSHOT_DIR.path_join("locked-dialog-%dx%d.png" % [size.x, size.y])] = size
+	return dimensions
+
+
+func _has_exact_keys(dictionary: Dictionary, expected: Array[String]) -> bool:
+	if dictionary.size() != expected.size():
+		return false
+	for key: String in expected:
+		if not dictionary.has(key):
+			return false
+	return true
+
+
+func _sha256(bytes: PackedByteArray) -> String:
+	var context := HashingContext.new()
+	context.start(HashingContext.HASH_SHA256)
+	context.update(bytes)
+	return context.finish().hex_encode()
+
+
+func _is_lower_hex(value: String) -> bool:
+	for character: String in value:
+		if not (character >= "0" and character <= "9") and not (character >= "a" and character <= "f"):
+			return false
+	return not value.is_empty()
+
+
+func _is_exact_integer(value: Variant, expected: int) -> bool:
+	if typeof(value) == TYPE_INT:
+		return value == expected
+	if typeof(value) == TYPE_FLOAT:
+		var numeric := value as float
+		return is_finite(numeric) and numeric == float(expected) and floorf(numeric) == numeric
+	return false
 
 
 func _image_is_nonblank(image: Image) -> bool:
@@ -329,6 +513,13 @@ func _finish(main: PartyForgeMain) -> void:
 	ProfileTestSupport.remove_tree(_profile_root)
 	if DirAccess.dir_exists_absolute(ProjectSettings.globalize_path(_profile_root)):
 		_failures.append("disposable responsive profile root was not removed")
+	if _failures.is_empty():
+		if DisplayServer.get_name() == "headless":
+			_assert(_validated_manifest_paths.size() == _expected_capture_paths().size(), "headless evidence validates all six manifested captures")
+			if _failures.is_empty():
+				print("MAIN_MENU_RESPONSIVE_MANIFEST_OK implementation_commit=%s captures=%d path=%s" % [_implementation_commit, _validated_manifest_paths.size(), MANIFEST_PATH])
+		else:
+			_write_manifest()
 	if _failures.is_empty():
 		print("MAIN_MENU_RESPONSIVE_SUMMARY: PASS (%d root-window sizes)" % WINDOW_SIZES.size())
 		quit(0)

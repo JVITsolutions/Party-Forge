@@ -86,9 +86,15 @@ func _rebuild_focus_loop() -> void:
 		controls.push_front(_view_city_tree())
 	for index: int in controls.size():
 		var control := controls[index]
+		var next := controls[(index + 1) % controls.size()]
+		var previous := controls[posmod(index - 1, controls.size())]
 		control.focus_mode = Control.FOCUS_ALL
-		control.focus_next = control.get_path_to(controls[(index + 1) % controls.size()])
-		control.focus_previous = control.get_path_to(controls[posmod(index - 1, controls.size())])
+		control.focus_next = control.get_path_to(next)
+		control.focus_previous = control.get_path_to(previous)
+		control.focus_neighbor_left = control.get_path_to(previous)
+		control.focus_neighbor_top = control.get_path_to(previous)
+		control.focus_neighbor_right = control.get_path_to(next)
+		control.focus_neighbor_bottom = control.get_path_to(next)
 
 
 func _title() -> Label: return get_node("Overlay/Frame/Layout/Title") as Label

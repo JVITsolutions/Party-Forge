@@ -30,6 +30,11 @@ static func resolve(
 	if provider.mode != CityAccessProviderResult.Mode.CANDIDATE or provider.snapshot == null:
 		var provider_reason := provider.diagnostic if provider.diagnostic in ALLOWED_PROVIDER_FAILURES else &"candidate_provider_unavailable"
 		return _failed(legacy_state, provider_reason)
+	var warehouse_location := _warehouse_location(provider.snapshot)
+	if warehouse_location == null:
+		return _failed(legacy_state, &"candidate_projection_invalid")
+	if warehouse_location.destination_id != EXPECTED_DESTINATION_ID:
+		return _failed(legacy_state, &"candidate_destination_invalid")
 	var projection: Variant = CityAccessEvaluator.evaluate(provider.snapshot, profile, LOCATION_ID)
 	if not projection is CityAccessProjection:
 		return _failed(legacy_state, &"candidate_projection_invalid")
@@ -52,6 +57,13 @@ static func resolve(
 		CityAccessProjection.State.AVAILABLE:
 			return WarehousePresentationResult.new(WarehousePresentationResult.State.LOCKED, WarehousePresentationResult.Outcome.DIVERGED, &"candidate_cannot_grant_authority")
 	return _failed(legacy_state, &"candidate_projection_invalid")
+
+
+static func _warehouse_location(snapshot: CityAccessSnapshot) -> CityAccessLocation:
+	for location: CityAccessLocation in snapshot.locations:
+		if location.id == LOCATION_ID:
+			return location
+	return null
 
 
 static func _legacy(legacy_state: WarehouseAccessPolicy.State, reason: StringName) -> WarehousePresentationResult:

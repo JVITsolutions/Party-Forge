@@ -8,6 +8,7 @@ func run() -> Array[String]:
 	var failures: Array[String] = []
 	_test_activation_matrix(failures)
 	_test_candidate_cannot_grant_or_remove_authority(failures)
+	_test_wrong_destination_fails_closed_for_every_candidate_state(failures)
 	_test_candidate_failure_is_sanitized_legacy(failures)
 	_test_inputs_are_not_mutated(failures)
 	_test_marker_fails_closed_after_public_mutation(failures)
@@ -50,6 +51,32 @@ func _test_candidate_cannot_grant_or_remove_authority(failures: Array[String]) -
 	_assert_resolution(scripts["resolver"].resolve(player, unlocked, WarehouseAccessPolicy.State.AVAILABLE, CityAccessProviderResult.candidate(_snapshot(&"city.warehouse", &"city.warehouse.interior", CityAccessProjection.State.AVAILABLE))), scripts["result"], 2, 1, &"candidate_matches_authority", "available candidate matches unlocked authority", failures)
 	_assert_resolution(scripts["resolver"].resolve(player, locked, WarehouseAccessPolicy.State.BLOCKED, CityAccessProviderResult.candidate(_snapshot(&"city.other", &"city.other.interior", CityAccessProjection.State.AVAILABLE))), scripts["result"], 0, 2, &"candidate_projection_invalid", "wrong location fails to sanitized legacy presentation", failures)
 	_assert_resolution(scripts["resolver"].resolve(player, unlocked, WarehouseAccessPolicy.State.AVAILABLE, CityAccessProviderResult.candidate(_snapshot(&"city.warehouse", &"city.unexpected", CityAccessProjection.State.AVAILABLE))), scripts["result"], 2, 2, &"candidate_destination_invalid", "wrong available destination fails to sanitized legacy presentation", failures)
+
+
+func _test_wrong_destination_fails_closed_for_every_candidate_state(failures: Array[String]) -> void:
+	var scripts := _scripts(failures)
+	if scripts.is_empty():
+		return
+	var player := _settings(PartyForgeSettings.Mode.PLAYER_SIMULATION, true)
+	var hidden_profile := ProfileState.new_profile("presentation-wrong-destination-hidden", "Hidden", 1)
+	var locked_profile := ProfileState.new_profile("presentation-wrong-destination-locked", "Locked", 2)
+	var unlocked_profile := ProfileState.new_profile("presentation-wrong-destination-available", "Available", 3)
+	unlocked_profile.permanent_feature_unlocks = ["stash"]
+	for row: Array in [
+		[hidden_profile, WarehouseAccessPolicy.State.BLOCKED, CityAccessProjection.State.HIDDEN, 0, "hidden"],
+		[locked_profile, WarehouseAccessPolicy.State.BLOCKED, CityAccessProjection.State.LOCKED, 0, "locked"],
+		[unlocked_profile, WarehouseAccessPolicy.State.AVAILABLE, CityAccessProjection.State.AVAILABLE, 2, "available"],
+	]:
+		var candidate := CityAccessProviderResult.candidate(_snapshot(&"city.warehouse", &"city.unexpected", row[2]))
+		_assert_resolution(
+			scripts["resolver"].resolve(player, row[0], row[1], candidate),
+			scripts["result"],
+			row[3],
+			2,
+			&"candidate_destination_invalid",
+			"wrong destination fails closed before %s candidate evaluation" % row[4],
+			failures,
+		)
 
 
 func _test_candidate_failure_is_sanitized_legacy(failures: Array[String]) -> void:

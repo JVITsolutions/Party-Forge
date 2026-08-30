@@ -97,6 +97,14 @@ func _assert_focus_loop(controls: Array[Control], failures: Array[String]) -> vo
 		var expected_previous := controls[posmod(index - 1, controls.size())]
 		TestAssertions.equal(current.get_node(current.focus_next), expected_next, "%s has deterministic next focus" % current.name, failures)
 		TestAssertions.equal(current.get_node(current.focus_previous), expected_previous, "%s has deterministic previous focus" % current.name, failures)
+		TestAssertions.equal(_resolved_neighbor(current, current.focus_neighbor_left), expected_previous, "%s keeps left focus inside guidance" % current.name, failures)
+		TestAssertions.equal(_resolved_neighbor(current, current.focus_neighbor_top), expected_previous, "%s keeps up focus inside guidance" % current.name, failures)
+		TestAssertions.equal(_resolved_neighbor(current, current.focus_neighbor_right), expected_next, "%s keeps right focus inside guidance" % current.name, failures)
+		TestAssertions.equal(_resolved_neighbor(current, current.focus_neighbor_bottom), expected_next, "%s keeps down focus inside guidance" % current.name, failures)
+
+
+func _resolved_neighbor(control: Control, path: NodePath) -> Control:
+	return control.get_node_or_null(path) as Control if not path.is_empty() else null
 
 
 func _assert_initial_focus(dialog: Node, expected: Control, label: String, failures: Array[String]) -> void:

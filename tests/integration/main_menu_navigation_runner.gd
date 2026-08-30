@@ -152,6 +152,8 @@ func _run() -> void:
 
 	var locked_profile_bytes := ProfileCodec.encode(main.active_profile()).to_utf8_buffer()
 	var locked_profile_document := main.active_profile().to_dictionary()
+	var modal_route_requests: Array[StringName] = []
+	menu.route_requested.connect(func(route_id: StringName) -> void: modal_route_requests.append(route_id))
 	_assert(warehouse_route.visible and not warehouse_route.disabled and warehouse_lock_badge.visible and warehouse_lock_badge.text == "LOCKED", "Player snapshot activation presents the main-menu Warehouse as visibly locked")
 	_assert(city_warehouse_origin.visible and not city_warehouse_origin.disabled and city_warehouse_lock_badge.visible and city_warehouse_lock_badge.text == "LOCKED", "Player snapshot activation presents the City Warehouse hotspot as visibly locked")
 
@@ -162,6 +164,17 @@ func _run() -> void:
 	await _frames(2)
 	_assert(bool(warehouse_locked.call("is_open")) and menu.is_open() and not warehouse_screen.is_open(), "keyboard activation opens locked guidance without dispatching Warehouse storage")
 	_assert_focus(viewport, view_city_tree, "keyboard locked guidance primary action")
+	modal_route_requests.clear()
+	for arrow: Key in [KEY_LEFT, KEY_UP, KEY_RIGHT, KEY_DOWN]:
+		await _key(viewport, arrow)
+		_assert_focus_is_available(viewport.gui_get_focus_owner(), warehouse_locked, "keyboard arrow remains inside locked guidance")
+	_assert(modal_route_requests.is_empty() and not warehouse_screen.is_open(), "keyboard arrows cannot activate an underlying Main Menu route")
+	for dpad: JoyButton in [JOY_BUTTON_DPAD_LEFT, JOY_BUTTON_DPAD_UP, JOY_BUTTON_DPAD_RIGHT, JOY_BUTTON_DPAD_DOWN]:
+		await _joy_button(viewport, dpad)
+		_assert_focus_is_available(viewport.gui_get_focus_owner(), warehouse_locked, "controller D-pad remains inside locked guidance")
+	_assert(modal_route_requests.is_empty() and not warehouse_screen.is_open(), "controller D-pad cannot activate an underlying Main Menu route")
+	view_city_tree.grab_focus()
+	await _frames(1)
 	await _key(viewport, KEY_TAB)
 	_assert_focus(viewport, warehouse_back, "locked dialog traps keyboard Tab on Back")
 	await _key(viewport, KEY_TAB)
@@ -171,6 +184,21 @@ func _run() -> void:
 	await _key(viewport, KEY_ENTER)
 	_assert(not bool(warehouse_locked.call("is_open")) and menu.is_open(), "keyboard Back closes locked guidance")
 	_assert_focus(viewport, warehouse_route, "keyboard Back exact Warehouse origin restore")
+
+	warehouse_locked.call("open", 1, warehouse_route)
+	await _frames(1)
+	_assert_focus(viewport, warehouse_back, "one-control locked guidance starts on Back")
+	modal_route_requests.clear()
+	for arrow: Key in [KEY_LEFT, KEY_UP, KEY_RIGHT, KEY_DOWN]:
+		await _key(viewport, arrow)
+		_assert_focus(viewport, warehouse_back, "one-control keyboard arrow remains on Back")
+	for dpad: JoyButton in [JOY_BUTTON_DPAD_LEFT, JOY_BUTTON_DPAD_UP, JOY_BUTTON_DPAD_RIGHT, JOY_BUTTON_DPAD_DOWN]:
+		await _joy_button(viewport, dpad)
+		_assert_focus(viewport, warehouse_back, "one-control controller D-pad remains on Back")
+	_assert(modal_route_requests.is_empty() and not warehouse_screen.is_open(), "one-control directional input cannot activate an underlying Main Menu route")
+	await _key(viewport, KEY_ESCAPE)
+	_assert(not bool(warehouse_locked.call("is_open")), "one-control ui_cancel closes locked guidance")
+	_assert_focus(viewport, warehouse_route, "one-control ui_cancel restores exact Warehouse origin")
 
 	city_warehouse_origin.grab_focus()
 	await _frames(1)

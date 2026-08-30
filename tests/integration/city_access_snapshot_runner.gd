@@ -157,9 +157,15 @@ func _assert_invalid_warehouse_candidates(player_settings: PartyForgeSettings, l
 	var unknown_snapshot := _fixture_snapshot(&"city.other", &"city.other.interior", CityAccessProjection.State.AVAILABLE)
 	var unknown := WarehousePresentationResolver.resolve(player_settings, locked_profile, WarehouseAccessPolicy.resolve(locked_profile), CityAccessProviderResult.candidate(unknown_snapshot))
 	_assert(unknown.state == WarehousePresentationResult.State.HIDDEN and unknown.outcome == WarehousePresentationResult.Outcome.CANDIDATE_FAILED and unknown.reason == &"candidate_projection_invalid", "unknown-location candidate returns locked profile's legacy hidden presentation", failures)
-	var wrong_destination_snapshot := _fixture_snapshot(&"city.warehouse", &"city.unexpected", CityAccessProjection.State.AVAILABLE)
-	var wrong_destination := WarehousePresentationResolver.resolve(player_settings, unlocked_profile, WarehouseAccessPolicy.resolve(unlocked_profile), CityAccessProviderResult.candidate(wrong_destination_snapshot))
-	_assert(wrong_destination.state == WarehousePresentationResult.State.AVAILABLE and wrong_destination.outcome == WarehousePresentationResult.Outcome.CANDIDATE_FAILED and wrong_destination.reason == &"candidate_destination_invalid", "wrong-destination candidate returns unlocked profile's legacy available presentation", failures)
+	var hidden_profile := ProfileState.new_profile("acceptance-wrong-destination-hidden", "Hidden", 3)
+	for row: Array in [
+		[hidden_profile, CityAccessProjection.State.HIDDEN, WarehousePresentationResult.State.HIDDEN, "hidden"],
+		[locked_profile, CityAccessProjection.State.LOCKED, WarehousePresentationResult.State.HIDDEN, "locked"],
+		[unlocked_profile, CityAccessProjection.State.AVAILABLE, WarehousePresentationResult.State.AVAILABLE, "available"],
+	]:
+		var wrong_destination_snapshot := _fixture_snapshot(&"city.warehouse", &"city.unexpected", row[1])
+		var wrong_destination := WarehousePresentationResolver.resolve(player_settings, row[0], WarehouseAccessPolicy.resolve(row[0]), CityAccessProviderResult.candidate(wrong_destination_snapshot))
+		_assert(wrong_destination.state == row[2] and wrong_destination.outcome == WarehousePresentationResult.Outcome.CANDIDATE_FAILED and wrong_destination.reason == &"candidate_destination_invalid", "wrong-destination %s candidate returns the authoritative legacy presentation" % row[3], failures)
 
 
 func _assert_warehouse_location_confinement(player_settings: PartyForgeSettings, locked_profile: ProfileState, unlocked_profile: ProfileState, failures: Array[String]) -> void:
