@@ -21,7 +21,7 @@ The original implementation report recorded the following command and result. No
 - Marker: `TEST_SUMMARY: FAIL (4 failures)`.
 - Reported classification: only the four then-missing Task 8 types failed: `RunTerminalPartyMemberSnapshot`, `RunTerminalSnapshot`, `RunTerminalSnapshotResult`, and `RunTerminalSnapshotBuilder`; production files were reported untouched.
 
-### Repair RED (independently observed)
+### Repair RED (reported by the implementer)
 
 Before any repair production edit, the expanded Task 8 test ran with the same focused command.
 
