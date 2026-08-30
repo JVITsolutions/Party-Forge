@@ -177,3 +177,13 @@ This repair started from committed head `b011084d8723010080f24d89d60dc82cc9228eb
 - The Armoury footer now reads exactly `Keyboard: arrows inspect, X pick up, Enter place • Controller: D-pad inspect, West pick up, South place • Mouse: drag/drop`.
 - TDD GREEN: the exact Armoury focused command exited `0` with `TEST_SUMMARY: PASS (0 failures)` (`ARMOURY_HELP_GREEN_EXIT:0`).
 - Real D-pad responsive integration exited `0` with `TASK9_STORAGE_RESOLUTION_PASS` at `1920x1080`, `2560x1440`, and `3840x2160`, `TASK9_STORAGE_RESPONSIVE_SUMMARY: PASS (0 failures)`, and `ARMOURY_REAL_DPAD_GREEN_EXIT:0`.
+
+## Controller-owned final-head verification
+
+The controller independently verified exact committed head `9a059b113e016f7f31e581d67f2396ae01f0d92f` after both final review repairs.
+
+- Exact 17-suite Task 10 gate: exit `0`, `TEST_SUMMARY: PASS (0 failures)`, `ROOT_TASK10_EXACT17_EXIT:0`.
+- Recovery/profile lifecycle: exit `0`, with `RUN_RECOVERY_CURRENT: PASS`, `RUN_RECOVERY_LEGACY_CLASS: PASS`, `RUN_RECOVERY_ABANDON: PASS`, `PROFILE_DELETE_LIFECYCLE: PASS`, `RUN_RECOVERY_PROFILE_LIFECYCLE: PASS`, and `ROOT_TASK10_LIFECYCLE_EXIT:0`.
+- Complete suite: exit `0`, `ITEM_TRANSACTION_MATRIX: PASS`, `TEST_SUMMARY: PASS (252 suites)`, and `ROOT_TASK10_FULL_EXIT:0`. Established assertion-owned negative-path diagnostics and invalid-UTF-8 replacement diagnostics remained; no `TEST_FAILURE` occurred.
+- Final review status: code/spec former findings for live duplicate replay and canonical resolved selection are fixed; the canonical overflow representation remains the explicit adjudicated container. UI/UX truth re-review reported no Critical, Important, or Minor findings and approved the complete base-to-head UI delta.
+- Integrity: `git diff --check` exited `0`; historical `.superpowers/sdd/task-10-report.md` remained blob `95a538c9668fa8e6381166dc8c488b502956cd31`.
