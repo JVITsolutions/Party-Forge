@@ -103,7 +103,7 @@ const CAPTURE_STATES: Array[String] = [
 	"unresolved restart intent requires explicit class selection",
 	"720p alert HUD at UI 150 and text 150",
 	"targeted level-up confirmation with safe Cancel focused",
-	"pending extraction with interactive focus excluded",
+	"pending extraction with item actions excluded and Show Auto focused",
 	"720p extraction detail at UI 150 and text 150",
 	"720p expanded result detail at UI 150 and text 150",
 	"720p expanded result detail at UI 80 and text 150",
@@ -120,7 +120,7 @@ const CAPTURE_FOCUS_TARGETS: Array[String] = [
 	"none", "none", "none", "none", "none", "none",
 	"result:return_to_forge", "result:return_to_forge", "result:retry_terminal_refresh",
 	"pause:retry_return_to_forge", "lobby:mage", "lobby:first_class",
-	"hud:alert_inspect", "confirmation:cancel", "none",
+	"hud:alert_inspect", "confirmation:cancel", "extraction:show_auto",
 	"extraction_detail:close", "result:expanded_row", "result:expanded_row",
 ]
 
@@ -189,6 +189,7 @@ const SOURCE_INPUT_PATHS: Array[String] = [
 	"scripts/ui/run_result/run_recap_entry_projection.gd", "scripts/ui/run_result/run_recap_section_projection.gd", "scripts/ui/run_result/run_result_party_member_projection.gd",
 	"scenes/ui/run_pause_menu.tscn", "scripts/ui/run_pause_menu.gd",
 	"scenes/ui/run_setup/run_setup_lobby_panel.tscn", "scripts/ui/class_selection_panel.gd", "scripts/ui/run_setup/run_setup_lobby_view_model.gd", "scripts/ui/run_setup/run_setup_restart_intent.gd",
+	"scripts/equipment/loadout_compatibility_service.gd", "scripts/equipment/loadout_compatibility_projection.gd", "data/equipment/core_equipment_catalog.tres", "data/items/core_item_foundation_catalog.tres",
 	"scenes/arena/arena.tscn",
 	"scripts/ui/living_forge/living_forge_theme_catalog.gd", "scripts/ui/living_forge/living_forge_tokens.gd",
 	"data/ui/living_forge/living_forge_theme.tres", "data/ui/living_forge/living_forge_high_contrast_theme.tres",
@@ -308,7 +309,7 @@ func _capture_hud(index: int, count: int, alert_count: int, mode: StringName = &
 	var fixture := _hud_fixture(count, alert_count, _settings_for(metadata))
 	var hud := HUD_SCENE.instantiate() as HUD
 	root.add_child(hud)
-	hud.configure(fixture.run, fixture.party, fixture.experience, fixture.context, fixture.settings)
+	_configure_active_run_hud(hud, fixture)
 	await _frames(6)
 	_assert(hud.current_projection != null and hud.current_projection.members.size() == count and hud.current_projection.all_alerts.size() == alert_count, "%s renders exact authoritative party/alert counts" % CAPTURES[index])
 	_assert((hud.get_node("Margin/CombatStatus/PartyRegion/RichRoster") as Control).visible == (count <= 6) and (hud.get_node("Margin/CombatStatus/PartyRegion/CompactRoster") as Control).visible == (count >= 7), "%s renders the exact rich/compact threshold" % CAPTURES[index])
@@ -354,7 +355,7 @@ func _capture_hud_modal_return(index: int, ledger_route: bool) -> void:
 		(fixture.health_by_member[2] as HealthComponent).apply_damage(1000.0)
 	var hud := HUD_SCENE.instantiate() as HUD
 	root.add_child(hud)
-	hud.configure(fixture.run, fixture.party, fixture.experience, fixture.context, fixture.settings)
+	_configure_active_run_hud(hud, fixture)
 	var game_run := GameRun.new()
 	root.add_child(game_run)
 	game_run.start_run()
@@ -461,25 +462,28 @@ func _capture_extraction(index: int, mode: StringName) -> void:
 	panel.present(projection)
 	await _frames(5)
 	var cards := _extraction_cards(panel)
-	_assert(cards.size() == 24, "%s renders every typed eligible extraction item" % CAPTURES[index])
+	var eligible_cards := _eligible_extraction_cards(panel)
+	_assert(cards.size() == 26, "%s renders the exact 2 automatic plus 24 eligible extraction cards" % CAPTURES[index])
+	_assert(eligible_cards.size() == 24, "%s renders every typed eligible extraction item in the eligible scope" % CAPTURES[index])
 	if mode == &"pending":
 		panel.set_pending(true)
 		await _frames(3)
 		_assert((panel.get_node("Frame/Content/Pending") as Control).visible, "%s renders the production pending operation cue" % CAPTURES[index])
-		var background_action_enabled := false
+		var item_action_enabled := false
 		for card: Button in cards:
-			if card.visible and not card.disabled:
-				background_action_enabled = true
-		_assert(not background_action_enabled, "%s excludes extraction-card interaction while pending" % CAPTURES[index])
+			var inspect := card.get_node("Inspect") as Button
+			if (card.visible and not card.disabled) or (inspect.visible and not inspect.disabled):
+				item_action_enabled = true
+		_assert(not item_action_enabled, "%s excludes every item-card and Inspect action while pending" % CAPTURES[index])
 	elif mode == &"detail":
-		var anchor := cards[-1] if not cards.is_empty() else null
+		var anchor := eligible_cards[-1] if not eligible_cards.is_empty() else null
 		if anchor != null:
 			panel.show_detail(projection.eligible_items[-1], anchor)
 			await _frames(3)
 			(panel.get_node("ItemTooltipDetail/Frame/Close") as Button).grab_focus()
 			_assert((panel.get_node("ItemTooltipDetail") as Control).visible, "%s renders the real extraction detail surface" % CAPTURES[index])
 	else:
-		var selected_anchor := _extraction_card(panel, "visual-result-selected")
+		var selected_anchor := _eligible_extraction_card(panel, "visual-result-selected")
 		if selected_anchor != null: selected_anchor.grab_focus()
 	await _capture(index)
 	panel.free()
@@ -539,7 +543,9 @@ func _capture_result_state(index: int, mode: StringName, pending_kind := 0) -> v
 		_assert(visible_actions == ["RestartRun", "ReturnToForge", "QuitApplication"] and (panel.get_node("Frame/Content/Body") as Control).visible, "%s exposes finalized truth and exact exits" % CAPTURES[index])
 	elif mode == &"save": _assert(visible_actions == ["RetryTerminalSave"], "%s exposes only Retry Terminal Save" % CAPTURES[index])
 	elif mode == &"refresh": _assert(visible_actions == ["RetryTerminalRefresh"], "%s exposes only Retry Terminal Recovery" % CAPTURES[index])
-	elif mode == &"resolution": _assert(visible_actions == ["RetryResolution"], "%s exposes only Retry Resolution" % CAPTURES[index])
+	elif mode == &"resolution":
+		_assert(visible_actions == ["RetryResolution", "OpenArmoury", "ReturnToForge", "QuitApplication"], "%s exposes the exact durable recovery action set" % CAPTURES[index])
+		_assert((panel.get_node("Frame/Content/Footer/Actions/RetryResolution") as Button).has_focus(), "%s retains safe Retry Resolution focus" % CAPTURES[index])
 	elif mode == &"projection": _assert(visible_actions == ["RetryProjection"], "%s exposes only Retry Results" % CAPTURES[index])
 	elif mode == &"receipt_error": _assert(visible_actions == ["RestartRun", "ReturnToForge", "QuitApplication"], "%s preserves all finalized actions because receipt clear did not commit" % CAPTURES[index])
 	if mode == &"automatic":
@@ -572,7 +578,7 @@ func _capture_pause_abandon(index: int) -> void:
 	var fixture := _hud_fixture(6, 3, _settings_for(metadata))
 	var hud := HUD_SCENE.instantiate() as HUD
 	root.add_child(hud)
-	hud.configure(fixture.run, fixture.party, fixture.experience, fixture.context, fixture.settings)
+	_configure_active_run_hud(hud, fixture)
 	var game_run := GameRun.new()
 	root.add_child(game_run)
 	game_run.start_run()
@@ -602,7 +608,11 @@ func _capture_restart_lobby(index: int, valid_intent: bool) -> void:
 	var profile := ProfileState.new_profile("restart-profile", "Restart Review", 1000)
 	profile.prologue_state = ProfileState.PrologueState.COMPLETED
 	var intent := RunSetupRestartIntent.create(profile.profile_id if valid_intent else "missing-profile", &"mage" if valid_intent else &"fighter", "" if valid_intent else "Previous run selection is unavailable. Choose a class to begin your run.")
-	var projection := RunSetupLobbyViewModel.build(profile, catalog, &"", &"", null, "", false, intent)
+	var compatibility: LoadoutCompatibilityProjection
+	if valid_intent:
+		compatibility = LoadoutCompatibilityService.new().project(profile, catalog.class_by_id(&"mage"), GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG)
+		_assert(compatibility != null and compatibility.valid and compatibility.selected_class_id == &"mage" and compatibility.incompatible_items.is_empty(), "%s builds typed compatible Mage loadout truth" % CAPTURES[index])
+	var projection := RunSetupLobbyViewModel.build(profile, catalog, &"", &"", compatibility, "", false, intent)
 	var panel := LOBBY_SCENE.instantiate() as ClassSelectionPanel
 	root.add_child(panel)
 	panel.configure(catalog)
@@ -611,6 +621,10 @@ func _capture_restart_lobby(index: int, valid_intent: bool) -> void:
 	panel.apply_viewport_size(Vector2(int(metadata.width), int(metadata.height)))
 	await _frames(6)
 	_assert(panel.selected_class_id() == (&"mage" if valid_intent else &""), "%s keeps exact restart selection truth" % CAPTURES[index])
+	if valid_intent:
+		var mage := panel.selection_focus(&"mage") as Button
+		var start := panel.action_focus(&"start") as Button
+		_assert(projection.state == RunSetupLobbyProjection.State.READY and mage != null and mage.has_focus() and start != null and not start.disabled, "%s presents stable READY Mage preselection with Start enabled" % CAPTURES[index])
 	await _capture(index)
 	panel.free()
 	await _frames(2)
@@ -643,6 +657,14 @@ func _hud_fixture(count: int, alert_count: int, settings: PartyForgeSettings) ->
 		result.actors.append(actor)
 		result.health_by_member[member_id] = health
 	return result
+
+
+func _configure_active_run_hud(hud: HUD, fixture: HudEvidenceFixture) -> void:
+	var lobby := hud.get_node("ClassSelection") as ClassSelectionPanel
+	lobby.close()
+	hud.configure(fixture.run, fixture.party, fixture.experience, fixture.context, fixture.settings)
+	_assert(not lobby.is_open(), "standalone active-run HUD closes the embedded run-setup lobby")
+	_assert((hud.get_node("Margin") as Control).visible, "standalone active-run HUD exposes the production combat margin")
 
 
 func _party(count: int, catalog: GameCatalog) -> PartyManager:
@@ -837,6 +859,7 @@ func _assert_declared_focus(index: int) -> void:
 		"upgrade_card:1": _assert(owner.name == &"Card1", "%s focuses first real upgrade card" % CAPTURES[index])
 		"recipient:24": _assert(owner.name == &"Member_24", "%s focuses exact recipient 24" % CAPTURES[index])
 		"extraction:visual-result-selected": _assert(String(owner.get_meta(&"item_id", "")) == "visual-result-selected", "%s focuses exact selected extraction item" % CAPTURES[index])
+		"extraction:show_auto": _assert(owner.name == &"AutomaticList", "%s focuses the safe Show Auto summary filter while pending" % CAPTURES[index])
 		"extraction_detail:close": _assert(owner.name == &"Close" and "ItemTooltipDetail" in String(owner.get_path()), "%s focuses extraction detail Close" % CAPTURES[index])
 		"result:return_to_forge": _assert(owner.name == &"ReturnToForge", "%s focuses safe Return to Forge" % CAPTURES[index])
 		"result:lost_row": _assert(owner.get_meta(&"recap_section_id", &"") == &"loot" and String(owner.get_meta(&"recap_entry_label", "")) == "Lost", "%s focuses truthful Lost recap row" % CAPTURES[index])
@@ -1048,8 +1071,17 @@ func _extraction_cards(panel: TerminalExtractionPanel) -> Array[Button]:
 	return result
 
 
-func _extraction_card(panel: TerminalExtractionPanel, item_id: String) -> Button:
-	for card: Button in _extraction_cards(panel):
+func _eligible_extraction_cards(panel: TerminalExtractionPanel) -> Array[Button]:
+	var result: Array[Button] = []
+	var scope := panel.get_node("Frame/Content/Body/Sections/Eligible/Sections") as Control
+	for node: Node in scope.find_children("*", "ForgeExtractionItemCard", true, false):
+		if not String(node.get_meta(&"item_id", "")).is_empty(): result.append(node as Button)
+	result.sort_custom(func(left: Button, right: Button) -> bool: return String(left.get_meta(&"item_id", "")) < String(right.get_meta(&"item_id", "")))
+	return result
+
+
+func _eligible_extraction_card(panel: TerminalExtractionPanel, item_id: String) -> Button:
+	for card: Button in _eligible_extraction_cards(panel):
 		if String(card.get_meta(&"item_id", "")) == item_id:
 			return card
 	return null
