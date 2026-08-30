@@ -29,6 +29,7 @@ func _test_runtime_truth_orders_complete_alert_set_without_truncating_members(fa
 	}
 	var view_model := _new_view_model(failures)
 	if view_model == null:
+		experience.free()
 		party.free()
 		return
 	var projection: CombatHudProjection = view_model.call("build", party, context, Callable(self, "_health_for"), experience, 125.0, null) as CombatHudProjection
@@ -42,6 +43,8 @@ func _test_runtime_truth_orders_complete_alert_set_without_truncating_members(fa
 	TestAssertions.equal(projection.visible_alerts.size(), 3, "only three alerts expand", failures)
 	TestAssertions.equal(projection.overflow_alert_count, projection.all_alerts.size() - 3, "overflow is exact", failures)
 	TestAssertions.truthy(projection.visible_alerts[0].severity in [CombatAlertProjection.Severity.DEAD, CombatAlertProjection.Severity.DOWNED], "downed or dying sorts first", failures)
+	TestAssertions.equal(projection.validate(), PackedStringArray(), "happy-path runtime projection validates", failures)
+	experience.free()
 	party.free()
 
 
@@ -52,23 +55,23 @@ func _test_build_rejects_missing_or_mismatched_runtime_authorities(failures: Arr
 	var missing_health := _two_member_fixture(5101)
 	_health_by_member = {1: {"current": 100.0, "max": 100.0, "downed": false}}
 	TestAssertions.equal(_build(view_model, missing_health), null, "missing health schema fails closed", failures)
-	(missing_health.party as PartyManager).free()
+	_cleanup_fixture(missing_health)
 
 	var malformed_health := _two_member_fixture(5102)
 	_health_by_member = {1: {"current": NAN, "max": 100.0, "downed": false, "dead": false}}
 	TestAssertions.equal(_build(view_model, malformed_health), null, "non-finite health fails closed", failures)
-	(malformed_health.party as PartyManager).free()
+	_cleanup_fixture(malformed_health)
 
 	var missing_member := _two_member_fixture(5103)
 	(missing_member.party as PartyManager).members.append(null)
 	_health_by_member = {}
 	TestAssertions.equal(_build(view_model, missing_member), null, "a null ordered party member fails closed instead of being skipped", failures)
-	(missing_member.party as PartyManager).free()
+	_cleanup_fixture(missing_member)
 
 	var missing_progression := _two_member_fixture(5104)
 	(missing_progression.context as PlayerRunContext).set("_progression_by_member", {})
 	TestAssertions.equal(_build(view_model, missing_progression), null, "missing member progression fails closed", failures)
-	(missing_progression.party as PartyManager).free()
+	_cleanup_fixture(missing_progression)
 
 	var party_mismatch := _two_member_fixture(5105)
 	var unrelated_party := PartyManager.new()
@@ -76,21 +79,42 @@ func _test_build_rejects_missing_or_mismatched_runtime_authorities(failures: Arr
 	unrelated_party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
 	TestAssertions.equal(_build(view_model, party_mismatch, null, unrelated_party), null, "context and party identity mismatch fails closed", failures)
 	unrelated_party.free()
-	(party_mismatch.party as PartyManager).free()
+	_cleanup_fixture(party_mismatch)
 
 	var experience_mismatch := _two_member_fixture(5106)
 	var other_fixture := _two_member_fixture(5107)
 	var other_experience := ExperienceSystem.new()
 	other_experience.configure_context(other_fixture.context as PlayerRunContext, 1)
 	TestAssertions.equal(_build(view_model, experience_mismatch, null, null, other_experience), null, "ExperienceSystem context mismatch fails closed", failures)
-	(experience_mismatch.party as PartyManager).free()
-	(other_fixture.party as PartyManager).free()
+	other_experience.free()
+	_cleanup_fixture(experience_mismatch)
+	_cleanup_fixture(other_fixture)
 
 	var leader_mismatch := _two_member_fixture(5108)
 	var leader_experience := leader_mismatch.experience as ExperienceSystem
 	leader_experience.leader_member_id = 2
 	TestAssertions.equal(_build(view_model, leader_mismatch), null, "ExperienceSystem leader binding mismatch fails closed", failures)
-	(leader_mismatch.party as PartyManager).free()
+	_cleanup_fixture(leader_mismatch)
+
+	var blank_class_id := _two_member_fixture(5109)
+	var blank_id_definition := (blank_class_id.party as PartyManager).members[0].class_definition.duplicate(true) as ClassDefinition
+	blank_id_definition.id = &""
+	(blank_class_id.party as PartyManager).members[0].class_definition = blank_id_definition
+	TestAssertions.equal(_build(view_model, blank_class_id), null, "blank class ID fails closed", failures)
+	_cleanup_fixture(blank_class_id)
+
+	var blank_class_label := _two_member_fixture(5110)
+	var blank_label_definition := (blank_class_label.party as PartyManager).members[0].class_definition.duplicate(true) as ClassDefinition
+	blank_label_definition.display_name = ""
+	(blank_class_label.party as PartyManager).members[0].character_name = ""
+	(blank_class_label.party as PartyManager).members[0].class_definition = blank_label_definition
+	TestAssertions.equal(_build(view_model, blank_class_label), null, "blank resolved member display fails closed", failures)
+	_cleanup_fixture(blank_class_label)
+
+	var missing_rank := _two_member_fixture(5111)
+	(missing_rank.party as PartyManager).class_ranks.erase(&"fighter")
+	TestAssertions.equal(_build(view_model, missing_rank), null, "missing authoritative class rank fails closed instead of clamping", failures)
+	_cleanup_fixture(missing_rank)
 
 
 func _test_boss_projection_uses_live_health_and_rejects_unavailable_bosses(failures: Array[String]) -> void:
@@ -110,8 +134,10 @@ func _test_boss_projection_uses_live_health_and_rejects_unavailable_bosses(failu
 
 	var null_projection := _build(view_model, fixture, null)
 	TestAssertions.equal(null_projection.boss_name, "", "null boss is omitted", failures)
-	var unsupported_projection := _build(view_model, fixture, Node.new())
+	var unsupported_boss := Node.new()
+	var unsupported_projection := _build(view_model, fixture, unsupported_boss)
 	TestAssertions.equal(unsupported_projection.boss_name, "", "unsupported boss node is omitted", failures)
+	unsupported_boss.free()
 	health.kill()
 	var dead_projection := _build(view_model, fixture, enemy)
 	TestAssertions.equal(dead_projection.boss_name, "", "dead boss is omitted", failures)
@@ -123,8 +149,7 @@ func _test_boss_projection_uses_live_health_and_rejects_unavailable_bosses(failu
 	var queued_projection := _build(view_model, fixture, queued_enemy)
 	TestAssertions.equal(queued_projection.boss_name, "", "queued boss is omitted before dereference", failures)
 	queued_enemy.free()
-	var party := fixture.party as PartyManager
-	party.free()
+	_cleanup_fixture(fixture)
 
 
 func _test_ordered_party_revision_ignores_health_and_tracks_static_structure(failures: Array[String]) -> void:
@@ -136,7 +161,7 @@ func _test_ordered_party_revision_ignores_health_and_tracks_static_structure(fai
 	party.members[0].character_name = "Leader"
 	var view_model := _new_view_model(failures)
 	if view_model == null:
-		party.free()
+		_cleanup_fixture(fixture)
 		return
 	var initial_revision: String = String(view_model.call("ordered_party_revision", party))
 	TestAssertions.equal(String(view_model.call("ordered_party_revision", party)), initial_revision, "repeated revision calls are deterministic", failures)
@@ -161,7 +186,7 @@ func _test_ordered_party_revision_ignores_health_and_tracks_static_structure(fai
 	TestAssertions.truthy(class_revision != reordered_revision, "class identity changes ordered party revision", failures)
 	TestAssertions.truthy(party.rank_up(&"fighter"), "revision fixture ranks up an existing class", failures)
 	TestAssertions.truthy(String(view_model.call("ordered_party_revision", party)) != class_revision, "class rank changes ordered party revision", failures)
-	party.free()
+	_cleanup_fixture(fixture)
 
 
 func _twenty_four_member_fixture() -> Dictionary:
@@ -202,6 +227,15 @@ func _build(
 	var party := party_override if party_override != null else fixture.party as PartyManager
 	var experience := experience_override if experience_override != null else fixture.experience as ExperienceSystem
 	return view_model.call("build", party, fixture.context as PlayerRunContext, Callable(self, "_health_for"), experience, 125.0, boss) as CombatHudProjection
+
+
+func _cleanup_fixture(fixture: Dictionary) -> void:
+	var experience := fixture.get("experience") as ExperienceSystem
+	if experience != null and is_instance_valid(experience):
+		experience.free()
+	var party := fixture.get("party") as PartyManager
+	if party != null and is_instance_valid(party):
+		party.free()
 
 
 func _health_for(member_id: int) -> Dictionary:

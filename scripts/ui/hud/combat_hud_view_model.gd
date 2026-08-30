@@ -17,6 +17,7 @@ func build(
 		return null
 	var health_by_member := authorities["health_by_member"] as Dictionary
 	var level_by_member := authorities["level_by_member"] as Dictionary
+	var rank_by_member := authorities["rank_by_member"] as Dictionary
 	var members: Array[PartyMemberHudProjection] = []
 	var alerts: Array[CombatAlertProjection] = []
 	var party_order: Dictionary = {}
@@ -26,25 +27,29 @@ func build(
 			party_order[member.member_id] = index
 			var health := health_by_member[member.member_id] as Dictionary
 			var level := int(level_by_member[member.member_id])
-			members.append(PartyMemberHudProjection.create(
+			var member_projection := PartyMemberHudProjection.create(
 				member.member_id,
 				_display_name_for(member),
 				member.class_definition.id,
 				member.class_definition.display_name,
 				level,
-				maxi(1, party.get_class_rank(member.class_definition.id)),
+				int(rank_by_member[member.member_id]),
 				float(health["current"]),
 				float(health["max"]),
 				member.is_leader,
 				bool(health["downed"]),
 				bool(health["dead"]),
-			))
-			_append_health_alert(alerts, member, health)
+			)
+			if member_projection == null:
+				return null
+			members.append(member_projection)
+			if not _append_health_alert(alerts, member, health):
+				return null
 	alerts.sort_custom(func(left: CombatAlertProjection, right: CombatAlertProjection) -> bool:
 		return _alert_less(left, right, party_order)
 	)
 	var boss_values := _boss_values(boss)
-	return CombatHudProjection.create(
+	var projection := CombatHudProjection.create(
 		members,
 		alerts,
 		elapsed_seconds,
@@ -54,6 +59,7 @@ func build(
 		float(boss_values["health"]),
 		float(boss_values["max_health"]),
 	)
+	return projection if projection != null and projection.validate().is_empty() else null
 
 
 func ordered_party_revision(party: PartyManager) -> String:
@@ -96,10 +102,20 @@ func _runtime_authorities(
 		return {}
 	var health_by_member: Dictionary = {}
 	var level_by_member: Dictionary = {}
+	var rank_by_member: Dictionary = {}
 	var member_ids: Dictionary = {}
 	var leader_member_id := 0
 	for member: PartyMemberState in party.members:
 		if member == null or member.class_definition == null or member.member_id <= 0 or member_ids.has(member.member_id):
+			return {}
+		if (
+			member.class_definition.id.is_empty()
+			or member.class_definition.display_name.strip_edges().is_empty()
+			or _display_name_for(member).strip_edges().is_empty()
+		):
+			return {}
+		var class_rank := party.get_class_rank(member.class_definition.id)
+		if class_rank <= 0:
 			return {}
 		member_ids[member.member_id] = true
 		if member.is_leader:
@@ -114,6 +130,7 @@ func _runtime_authorities(
 			return {}
 		health_by_member[member.member_id] = health
 		level_by_member[member.member_id] = progression.level
+		rank_by_member[member.member_id] = class_rank
 	if leader_member_id == 0 or experience.leader_member_id != leader_member_id:
 		return {}
 	var leader_progression := context.progression_for(leader_member_id)
@@ -123,7 +140,11 @@ func _runtime_authorities(
 		or experience.experience_for_next_level() != leader_progression.experience_required
 	):
 		return {}
-	return {"health_by_member": health_by_member, "level_by_member": level_by_member}
+	return {
+		"health_by_member": health_by_member,
+		"level_by_member": level_by_member,
+		"rank_by_member": rank_by_member,
+	}
 
 
 func _validated_health_for(member_id: int, health_provider: Callable) -> Dictionary:
@@ -161,23 +182,28 @@ func _display_name_for(member: PartyMemberState) -> String:
 	return member.character_name if not member.character_name.strip_edges().is_empty() else member.class_definition.display_name
 
 
-func _append_health_alert(alerts: Array[CombatAlertProjection], member: PartyMemberState, health: Dictionary) -> void:
+func _append_health_alert(alerts: Array[CombatAlertProjection], member: PartyMemberState, health: Dictionary) -> bool:
 	var display_name := _display_name_for(member)
+	var alert: CombatAlertProjection = null
 	if bool(health["dead"]):
-		alerts.append(CombatAlertProjection.create(
+		alert = CombatAlertProjection.create(
 			StringName("dead:%03d" % member.member_id), member.member_id, &"downed_or_dying",
 			"%s is dead" % display_name, "No longer active", CombatAlertProjection.Severity.DEAD, true, true,
-		))
+		)
 	elif bool(health["downed"]):
-		alerts.append(CombatAlertProjection.create(
+		alert = CombatAlertProjection.create(
 			StringName("downed:%03d" % member.member_id), member.member_id, &"downed_or_dying",
 			"%s is downed" % display_name, "Needs revival", CombatAlertProjection.Severity.DOWNED, true, true,
-		))
+		)
 	elif float(health["current"]) / float(health["max"]) <= CRITICAL_HEALTH_RATIO:
-		alerts.append(CombatAlertProjection.create(
+		alert = CombatAlertProjection.create(
 			StringName("critical:%03d" % member.member_id), member.member_id, &"critical_health",
 			"%s is critical" % display_name, "Health is low", CombatAlertProjection.Severity.CRITICAL, true, false,
-		))
+		)
+	if alert == null:
+		return not bool(health["dead"]) and not bool(health["downed"]) and float(health["current"]) / float(health["max"]) > CRITICAL_HEALTH_RATIO
+	alerts.append(alert)
+	return true
 
 
 func _alert_less(left: CombatAlertProjection, right: CombatAlertProjection, party_order: Dictionary) -> bool:
