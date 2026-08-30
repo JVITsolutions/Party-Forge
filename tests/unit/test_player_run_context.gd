@@ -43,6 +43,7 @@ func run() -> Array[String]:
 	_test_developer_minimum_preserves_larger_resumable_inventory(failures)
 	_test_configuration_rejects_invalid_member_growth_atomically(failures)
 	_test_atomic_progression_and_leader_queue(failures)
+	_test_pending_level_application_transaction(failures)
 	_test_future_recruits_initialize_once(failures)
 	_test_actor_binding_availability_and_position(failures)
 	_test_atomic_equipment_commit_and_member_local_cache(failures)
@@ -1570,6 +1571,81 @@ func _test_atomic_progression_and_leader_queue(failures: Array[String]) -> void:
 	TestAssertions.equal(context.current_pending_level(), 0, "empty queue has no current level", failures)
 	TestAssertions.truthy(not context.consume_pending_leader_level(), "empty queue cannot be consumed", failures)
 	party.free()
+
+func _test_pending_level_application_transaction(failures: Array[String]) -> void:
+	var api_probe := PlayerRunContext.new()
+	var has_transaction := api_probe.has_method(&"apply_pending_leader_level_transaction")
+	TestAssertions.truthy(has_transaction, "run context owns one pending-level application transaction boundary", failures)
+	if not has_transaction:
+		return
+
+	var accepted_fixture := _configured_fixture(PartyManager.new())
+	var accepted_context := accepted_fixture.context as PlayerRunContext
+	var accepted_party := accepted_fixture.party as PartyManager
+	TestAssertions.truthy(accepted_context.award_experience(1, 20).ok(), "accepted transaction fixture queues one level", failures)
+	var accepted_calls: Array[int] = [0]
+	var accepted := bool(accepted_context.call(&"apply_pending_leader_level_transaction", func() -> bool:
+		accepted_calls[0] += 1
+		return true
+	))
+	TestAssertions.truthy(accepted, "accepted pending-level transaction reports success", failures)
+	TestAssertions.equal(accepted_calls[0], 1, "accepted pending-level transaction invokes mutation exactly once", failures)
+	TestAssertions.equal(accepted_context.pending_leader_levels(), [], "accepted pending-level transaction consumes exactly one level", failures)
+	var duplicate_calls: Array[int] = [0]
+	TestAssertions.truthy(not bool(accepted_context.call(&"apply_pending_leader_level_transaction", func() -> bool:
+		duplicate_calls[0] += 1
+		return true
+	)), "empty pending-level transaction rejects duplicate application", failures)
+	TestAssertions.equal(duplicate_calls[0], 0, "duplicate transaction never invokes mutation", failures)
+	accepted_context.release_source_refresh_coordinator()
+	accepted_party.free()
+
+	var rejected_fixture := _configured_fixture(PartyManager.new())
+	var rejected_context := rejected_fixture.context as PlayerRunContext
+	var rejected_party := rejected_fixture.party as PartyManager
+	TestAssertions.truthy(rejected_context.award_experience(1, 20).ok(), "rejected transaction fixture queues one level", failures)
+	var rejected_calls: Array[int] = [0]
+	TestAssertions.truthy(not bool(rejected_context.call(&"apply_pending_leader_level_transaction", func() -> bool:
+		rejected_calls[0] += 1
+		return false
+	)), "rejected mutation rejects pending-level transaction", failures)
+	TestAssertions.equal(rejected_calls[0], 1, "rejected pending-level transaction invokes mutation exactly once", failures)
+	TestAssertions.equal(rejected_context.pending_leader_levels(), [2], "rejected mutation leaves pending queue byte-for-byte equivalent", failures)
+	rejected_context.release_source_refresh_coordinator()
+	rejected_party.free()
+
+	var revoked_fixture := _configured_fixture(PartyManager.new())
+	var revoked_context := revoked_fixture.context as PlayerRunContext
+	var revoked_party := revoked_fixture.party as PartyManager
+	TestAssertions.truthy(revoked_context.award_experience(1, 20).ok(), "revoked transaction fixture queues one level", failures)
+	revoked_context.release_source_refresh_coordinator()
+	var revoked_calls: Array[int] = [0]
+	TestAssertions.truthy(not bool(revoked_context.call(&"apply_pending_leader_level_transaction", func() -> bool:
+		revoked_calls[0] += 1
+		return true
+	)), "ownership revoked before transaction rejects application", failures)
+	TestAssertions.equal(revoked_calls[0], 0, "pre-revoked transaction never invokes mutation", failures)
+	TestAssertions.equal(revoked_context.pending_leader_levels(), [2], "pre-revoked transaction preserves pending level", failures)
+	revoked_party.free()
+
+	var synchronous_fixture := _configured_fixture(PartyManager.new())
+	var synchronous_context := synchronous_fixture.context as PlayerRunContext
+	var synchronous_party := synchronous_fixture.party as PartyManager
+	TestAssertions.truthy(synchronous_context.award_experience(1, 20).ok(), "synchronous release fixture queues one level", failures)
+	var nested_consume: Array[bool] = [true]
+	var synchronous_calls: Array[int] = [0]
+	var synchronous_result := bool(synchronous_context.call(&"apply_pending_leader_level_transaction", func() -> bool:
+		synchronous_calls[0] += 1
+		nested_consume[0] = synchronous_context.consume_pending_leader_level()
+		synchronous_context.release_source_refresh_coordinator()
+		return true
+	))
+	TestAssertions.truthy(synchronous_result, "transaction token commits after synchronous ownership release", failures)
+	TestAssertions.equal(synchronous_calls[0], 1, "synchronous release transaction invokes mutation exactly once", failures)
+	TestAssertions.truthy(not nested_consume[0], "active transaction blocks competing pending-level consumption", failures)
+	TestAssertions.equal(synchronous_context.pending_leader_levels(), [], "synchronous release commits exactly one reserved pending level", failures)
+	TestAssertions.truthy(not synchronous_context.owns_source_refresh_coordinator(), "synchronous release remains released after commit", failures)
+	synchronous_party.free()
 
 func _test_future_recruits_initialize_once(failures: Array[String]) -> void:
 	var fixture := _configured_fixture(PartyManager.new())

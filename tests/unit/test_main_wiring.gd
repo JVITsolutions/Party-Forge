@@ -121,6 +121,7 @@ func run() -> Array[String]:
         _test_targeted_confirmation_routes_through_main(failures)
         _test_stale_target_rejects_without_consuming(failures)
         _test_lost_run_authority_rejects_before_mutation(failures)
+        _test_synchronous_authority_release_is_atomic(failures)
         _test_capped_stat_is_disabled_without_hiding(failures)
         _test_queued_levels_show_fresh_production_offers(failures)
         _test_task13_validation_uses_unified_level_up_routes(failures)
@@ -159,6 +160,53 @@ func _test_task13_validation_uses_unified_level_up_routes(failures: Array[String
         TestAssertions.truthy(source.contains("Frame/Content/Offer/CardsScroll/Cards"), "%s selects through real UpgradeCard controls" % path.get_file(), failures)
         TestAssertions.truthy(source.contains("Frame/Content/Recipient"), "%s handles recipient-confirmed offers" % path.get_file(), failures)
         TestAssertions.truthy(source.contains("Frame/Content/Confirmation"), "%s handles recruit and recipient confirmation" % path.get_file(), failures)
+    var defeat_path := "res://tools/validation/task_13_defeat_acceptance.gd"
+    var defeat_source := FileAccess.get_file_as_string(defeat_path)
+    var bounded_iteration := defeat_source.contains("range(choices.size())")
+    TestAssertions.truthy(bounded_iteration, "defeat validator iterates authoritative choices rather than retained card allocation", failures)
+    if bounded_iteration:
+        _test_task13_defeat_driver_sparse_and_empty_offers(failures)
+
+func _test_task13_defeat_driver_sparse_and_empty_offers(failures: Array[String]) -> void:
+    var driver: Variant = (load("res://tools/validation/task_13_defeat_acceptance.gd") as Script).new()
+    var main := Node.new()
+    main.name = "Task13MainFixture"
+    var hud := Node.new()
+    hud.name = "HUD"
+    main.add_child(hud)
+    var panel := (load("res://scenes/ui/level_up_panel.tscn") as PackedScene).instantiate() as LevelUpPanel
+    hud.add_child(panel)
+    (Engine.get_main_loop() as SceneTree).root.add_child(main)
+    panel.call("_ready")
+    var catalog := GameCatalog.load_defaults()
+    var party := PartyManager.new()
+    party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
+    panel.configure(catalog, UpgradeApplicationService.new(), Callable())
+    panel.configure_reduced_motion(true)
+    var recovery_count: Array[int] = [0]
+    panel.recovery_requested.connect(func() -> void: recovery_count[0] += 1)
+    var unavailable := UpgradeChoice.new(UpgradeChoice.Kind.PARTY_STAT, &"damage", "Damage")
+    panel.show_choices([unavailable], party, {unavailable.key(): "Unavailable for validation."})
+    driver.call("_handle_level_panel", main)
+    TestAssertions.equal(driver.get("choice_log"), [], "defeat validator ignores hidden retained cards when the only current choice is disabled", failures)
+    TestAssertions.equal(recovery_count[0], 1, "defeat validator requests recovery when no current choice is selectable", failures)
+    panel.show_choices([], party, {&"__empty__": "No validation choices are available."})
+    var retry := panel.get_node("Frame/Content/Offer/RetryOffers") as Button
+    TestAssertions.truthy(retry.visible and not retry.disabled and panel.choices.is_empty(), "empty-offer fixture exposes enabled recovery", failures)
+    TestAssertions.truthy(retry.pressed.is_connected(Callable(panel, "_on_recovery_pressed")), "empty-offer fixture wires the real recovery action", failures)
+    TestAssertions.truthy(
+        panel.visible
+        and not (panel.get_node("Frame/Content/Pending") as Control).visible
+        and not (panel.get_node("Frame/Content/Confirmation") as Control).visible
+        and not (panel.get_node("Frame/Content/Recipient") as Control).visible,
+        "empty-offer fixture exposes the active offer route",
+        failures,
+    )
+    driver.call("_handle_level_panel", main)
+    TestAssertions.equal(recovery_count[0], 2, "defeat validator activates empty-offer recovery exactly once", failures)
+    main.free()
+    driver.free()
+    party.free()
 
 func _test_run_combat_resolution_service_wiring(failures: Array[String]) -> void:
     var settings := PartyForgeSettings.new()
@@ -1406,6 +1454,30 @@ func _test_lost_run_authority_rejects_before_mutation(failures: Array[String]) -
     TestAssertions.truthy((Engine.get_main_loop() as SceneTree).paused and panel.visible, "failed pending-level authority remains paused in the visible modal", failures)
     TestAssertions.truthy(not (panel.get_node("Frame/Content/ReadableError") as Label).text.is_empty(), "failed pending-level authority shows a readable rejection", failures)
     TestAssertions.equal(panel.get("_initial_focus_card"), card, "failed pending-level authority restores the initiating card", failures)
+    _cleanup_main(main)
+
+func _test_synchronous_authority_release_is_atomic(failures: Array[String]) -> void:
+    var main := _started_main()
+    var panel := main.get_node("HUD/LevelUpPanel") as LevelUpPanel
+    var party := main.get_node("PartyManager") as PartyManager
+    var experience := main.get_node("ExperienceSystem") as ExperienceSystem
+    var game_run := main.get_node("GameRun") as GameRun
+    var context := main.get("active_run_context") as PlayerRunContext
+    _queue_leader_levels(main, 1)
+    game_run.begin_level_up()
+    var direct := UpgradeChoice.new(UpgradeChoice.Kind.PARTY_STAT, &"damage", "Damage")
+    panel.show_choices([direct], party)
+    var rank_before := party.party_stat_rank(&"damage")
+    party.upgrades_changed.connect(func() -> void: context.release_source_refresh_coordinator(), CONNECT_ONE_SHOT)
+    var card := panel.get_node("Frame/Content/Offer/CardsScroll/Cards/Card1") as UpgradeCard
+    card.activated.emit(card.bound_choice_key())
+    TestAssertions.equal(party.party_stat_rank(&"damage"), rank_before + 1, "synchronous authority release preserves the accepted party mutation", failures)
+    TestAssertions.equal(experience.pending_levels, 0, "synchronous authority release consumes exactly one accepted pending level", failures)
+    TestAssertions.equal(game_run.current_state(), RunStateMachine.State.RUNNING, "atomic accepted transaction resumes after synchronous authority release", failures)
+    TestAssertions.truthy(not panel.visible, "atomic accepted transaction cannot be reported rejected after mutation", failures)
+    card.activated.emit(card.bound_choice_key())
+    TestAssertions.equal(party.party_stat_rank(&"damage"), rank_before + 1, "stale duplicate after synchronous release cannot mutate twice", failures)
+    TestAssertions.equal(experience.pending_levels, 0, "stale duplicate after synchronous release cannot consume twice", failures)
     _cleanup_main(main)
 
 func _test_live_member_health_provider_uses_party_membership(failures: Array[String]) -> void:

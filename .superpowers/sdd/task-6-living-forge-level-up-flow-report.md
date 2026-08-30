@@ -91,3 +91,37 @@ The first GREEN geometry run preserved the minimal failing scaled one-card case 
 - Full headless editor import: exit `0`; both migrated Task 13 scripts parsed. Import regenerated 51 unrelated missing sidecars, which were classified as previously tracked-script byproducts and removed by exact path.
 - Same-process exact UID classification: `TASK6_UID_CLASSIFIER=PASS intended=1 unexpected=0`; exit `0`.
 - `git diff --check`: exit `0`. Historical `.superpowers/sdd/task-6-report.md` remains blob `d35c6c18ea8c059310edf258f74022edee1fafb5`.
+
+## Final atomicity repair from `5bc665c`
+
+This repair remained bounded to Task 6. It added no Task 7 work and did not push or merge.
+
+### Atomic application boundary
+
+- The root cause was a split authority boundary: Main applied a party mutation first, that mutation synchronously emitted `upgrades_changed`, an observer could release the `PlayerRunContext` source-refresh coordinator, and the later pending-level consume then failed. The player could therefore receive the upgrade while the UI reported rejection and retained the pending level.
+- `PlayerRunContext.apply_pending_leader_level_transaction(application)` now owns one non-reentrant reservation boundary. It requires the live owner and a nonempty queue, captures and verifies the exact front level, reserves that one level, invokes the mutation once, restores the exact queue on a false/non-boolean result, and commits the reservation on success even if a synchronous mutation observer releases ownership. Ordinary pending-level consumption is blocked while the reservation is active.
+- Main calls that single boundary after its independent run-state, pending-level, ownership, and exact-choice validation. It remains the typed application-result authority and schedules the next offer or resumes gameplay only after the transaction reports success.
+- Authentic coverage connects the real `PartyManager.upgrades_changed` signal to synchronous coordinator release during a party-stat mutation. It proves one mutation plus one level consume succeed together, the run resumes, the panel closes, and a stale card activation cannot mutate or consume again. Unit coverage also proves accepted, rejected, pre-revoked, empty/duplicate, and nested-consume cases.
+- The Task 13 defeat validator now iterates the authoritative current choice count, bounds-checks retained card storage, requires visible enabled typed cards, uses visible empty-offer recovery, and emits recovery when no current choice is selectable. A real `LevelUpPanel` fixture proves a one-disabled-choice offer cannot select a hidden retained card and an empty offer activates recovery without an out-of-range access or stall.
+
+### Final repair RED evidence
+
+Both repair test changes were authored before production edits.
+
+- `test_player_run_context.gd`: exit `1`, `TEST_SUMMARY: FAIL (1 failures)` for the absent transactional pending-level application boundary.
+- `test_main_wiring.gd`: exit `1`, `TEST_SUMMARY: FAIL (5 failures)` for the synchronous authority-release split, retained pending/run/panel state, stale duplicate risk, and unsafe Task 13 defeat iteration.
+- The failures were restricted to the two approved repair findings; production was untouched at the RED checkpoint.
+
+### Final repair verification
+
+- Focused `test_player_run_context.gd` and `test_main_wiring.gd`: exit `0`, `TEST_SUMMARY: PASS (0 failures)`.
+- Exact eight-suite Task 6 command: exit `0`, `TEST_SUMMARY: PASS (0 failures)`.
+- Windowed geometry: four size-pass markers and `LEVEL_UP_FIVE_CARD_SUMMARY: PASS (4 sizes)`; exit `0`.
+- Recipient scrolling: `UPGRADE_RECIPIENT_CONTROLLER_SCROLL_SUMMARY: PASS (0 failures, 3 viewports)`; exit `0`.
+- Unified commit flow: `LEVEL_UP_COMMIT_FLOW_SUMMARY: PASS (0 failures)`; exit `0`.
+- Temporary popup retention: four size-pass markers and `TEMPORARY_POPUP_INPUT_SUMMARY: PASS (4 sizes)`; exit `0`.
+- Related Task 5/progression units, Task 4 HUD/Main/PartyManager units, Task 4 party-scale/input integrations, progression arena immutable-profile smoke, and responsive geometry retained their exact PASS markers and exit `0`.
+- Task 13 defeat and victory validator parse drivers: `TASK_13_DEFEAT_DRIVER_PARSE: PASS` and `TASK_13_VICTORY_DRIVER_PARSE: PASS`; exit `0`.
+- Fresh full unit suite: terminal `TEST_SUMMARY: PASS (245 suites)`; exit `0`.
+- Fresh headless editor import: exit `0`. The checked-in classifier was invoked with exactly `tests/integration/level_up_commit_flow_runner.gd.uid`; after exact cleanup of 51 unrelated tracked-script sidecars it reported `TASK6_UID_CLASSIFIER=PASS intended=1 unexpected=0`; exit `0`.
+- Historical `.superpowers/sdd/task-6-report.md` remains blob `d35c6c18ea8c059310edf258f74022edee1fafb5`.

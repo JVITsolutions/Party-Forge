@@ -818,6 +818,22 @@ func _apply_choice_for_member(choice: UpgradeChoice, recipient_member_id: int, r
 		if report_error and choice != null:
 			push_error("PARTY_FORGE_INVALID_CHOICE kind=%d target=%s member=%d" % [choice.kind, choice.target_id, recipient_member_id])
 		return false
+	var applied := active_run_context.apply_pending_leader_level_transaction(
+		_mutate_level_up_choice.bind(choice, recipient_member_id)
+	)
+	if not applied:
+		if report_error:
+			push_error("PARTY_FORGE_INVALID_CHOICE kind=%d target=%s member=%d" % [choice.kind, choice.target_id, recipient_member_id])
+		return false
+	if experience_system.pending_levels > 0:
+		level_refresh_scheduled = true
+		call_deferred("_present_pending_level")
+	else:
+		level_refresh_scheduled = false
+		game_run.resume_run()
+	return true
+
+func _mutate_level_up_choice(choice: UpgradeChoice, recipient_member_id: int) -> bool:
 	var applied := false
 	match choice.kind:
 		UpgradeChoice.Kind.RECRUIT:
@@ -833,30 +849,12 @@ func _apply_choice_for_member(choice: UpgradeChoice, recipient_member_id: int, r
 		UpgradeChoice.Kind.AUTHORED:
 			var definition := catalog.upgrade_by_id(choice.target_id) if catalog != null else null
 			if definition == null or choice.definition != definition:
-				if report_error:
-					push_error("PARTY_FORGE_INVALID_CHOICE kind=%d target=%s member=%d" % [choice.kind, choice.target_id, recipient_member_id])
 				return false
 			var owner_member_id := recipient_member_id if definition.is_single_recipient() else 0
 			if not UpgradeApplicationService.validate_application(definition, party_manager, owner_member_id).is_empty():
-				if report_error:
-					push_error("PARTY_FORGE_INVALID_CHOICE kind=%d target=%s member=%d" % [choice.kind, choice.target_id, recipient_member_id])
 				return false
 			applied = UpgradeApplicationService.apply(definition.id, catalog, party_manager, owner_member_id)
-	if not applied:
-		if report_error:
-			push_error("PARTY_FORGE_INVALID_CHOICE kind=%d target=%s member=%d" % [choice.kind, choice.target_id, recipient_member_id])
-		return false
-	if not experience_system.consume_pending_level():
-		if report_error:
-			push_error("PARTY_FORGE_LEVEL_UP_AUTHORITY_ERROR reason=pending level consume rejected")
-		return false
-	if experience_system.pending_levels > 0:
-		level_refresh_scheduled = true
-		call_deferred("_present_pending_level")
-	else:
-		level_refresh_scheduled = false
-		game_run.resume_run()
-	return true
+	return applied
 
 func _apply_level_up_choice(choice: UpgradeChoice, recipient_member_id: int) -> LevelUpApplicationResult:
 	if not _has_level_up_application_authority():

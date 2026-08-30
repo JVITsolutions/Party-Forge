@@ -37,6 +37,7 @@ var experience_tuning: ExperienceTuning = DEFAULT_EXPERIENCE_TUNING
 
 var _progression_by_member: Dictionary = {}
 var _pending_leader_levels: Array[int] = []
+var _pending_level_application_active := false
 var _actor_by_member: Dictionary = {}
 var _item_state: ItemOwnershipState
 var _item_journal: ItemTransactionJournal
@@ -215,6 +216,7 @@ func configure(
 	experience_tuning = DEFAULT_EXPERIENCE_TUNING
 	_progression_by_member = next_progression
 	_pending_leader_levels.clear()
+	_pending_level_application_active = false
 	_actor_by_member.clear()
 	_item_journal = next_item_journal
 	_ground_collection_requests.clear()
@@ -612,10 +614,32 @@ func current_pending_level() -> int:
 	return _pending_leader_levels[0] if not _pending_leader_levels.is_empty() else 0
 
 func consume_pending_leader_level() -> bool:
-	if not _can_mutate_current_owner() or _pending_leader_levels.is_empty():
+	if _pending_level_application_active or not _can_mutate_current_owner() or _pending_leader_levels.is_empty():
 		return false
 	_pending_leader_levels.pop_front()
 	return true
+
+func apply_pending_leader_level_transaction(application: Callable) -> bool:
+	if (
+		_pending_level_application_active
+		or not application.is_valid()
+		or not _can_mutate_current_owner()
+		or _pending_leader_levels.is_empty()
+	):
+		return false
+	var queue_before := _pending_leader_levels.duplicate()
+	var reserved_level := _pending_leader_levels[0]
+	_pending_level_application_active = true
+	if _pending_leader_levels.is_empty() or _pending_leader_levels[0] != reserved_level:
+		_pending_level_application_active = false
+		return false
+	_pending_leader_levels.pop_front()
+	var application_result: Variant = application.call()
+	var accepted := application_result is bool and bool(application_result)
+	if not accepted:
+		_pending_leader_levels.assign(queue_before)
+	_pending_level_application_active = false
+	return accepted
 
 func bind_actor(member_id: int, actor: Node3D) -> bool:
 	if not _can_mutate_current_owner() or party.member_by_id(member_id) == null or actor == null:
@@ -747,6 +771,7 @@ func _reset_unconfigured_fields() -> void:
 	experience_tuning = DEFAULT_EXPERIENCE_TUNING
 	_progression_by_member.clear()
 	_pending_leader_levels.clear()
+	_pending_level_application_active = false
 	_actor_by_member.clear()
 	_item_state = null
 	_item_journal = null

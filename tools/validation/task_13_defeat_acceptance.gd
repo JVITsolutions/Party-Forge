@@ -87,7 +87,7 @@ func _run() -> void:
     quit(1)
 
 func _handle_level_panel(main: Node) -> void:
-    var panel := main.get_node("HUD/LevelUpPanel") as Control
+    var panel := main.get_node("HUD/LevelUpPanel") as LevelUpPanel
     if not panel.visible:
         return
     var pending := panel.get_node("Frame/Content/Pending") as Control
@@ -108,13 +108,23 @@ func _handle_level_panel(main: Node) -> void:
                 return
         (recipient.get_node("Content/Cancel") as Button).pressed.emit()
         return
+    var retry := panel.get_node("Frame/Content/Offer/RetryOffers") as Button
+    if retry.visible and not retry.disabled:
+        retry.pressed.emit()
+        return
     var choices: Array = panel.get("choices") as Array
     var buttons: Array[Node] = panel.get_node("Frame/Content/Offer/CardsScroll/Cards").get_children()
-    for index: int in range(buttons.size()):
-        if not (buttons[index] as Button).disabled:
-            choice_log.append((choices[index] as UpgradeChoice).label)
-            (buttons[index] as UpgradeCard).pressed.emit()
-            return
+    for index: int in range(choices.size()):
+        if index >= buttons.size():
+            break
+        var card := buttons[index] as UpgradeCard
+        var choice := choices[index] as UpgradeChoice
+        if card == null or choice == null or not card.visible or card.disabled:
+            continue
+        choice_log.append(choice.label)
+        card.pressed.emit()
+        return
+    panel.recovery_requested.emit()
 
 func _release_input() -> void:
     for action: StringName in [&"move_left", &"move_right", &"move_forward", &"move_back"]:
