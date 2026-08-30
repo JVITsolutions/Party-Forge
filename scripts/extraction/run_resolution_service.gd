@@ -83,10 +83,21 @@ func resolve_terminal_source(
 		return RunResolutionResult.failure(mutation.error)
 	var accepted := accepted_holder.get("extraction") as RunExtractionProjection
 	var protected_ids: Array[String] = []
+	var resolved_profile := mutation.profile
 	if mutation.duplicate:
-		var decoded := RunTerminalRecoveryCodec.decode(mutation.profile.terminal_resolution)
+		var live_load := _mutations.load_current_profile(profile_id, root)
+		if not live_load.ok():
+			return RunResolutionResult.failure(_error("field=duplicate.profile reason=current live profile is unavailable error=%s" % live_load.error))
+		var live_profile := live_load.profile
+		var live_validation := ProfileCodec.validate_profile(live_profile)
+		if not live_validation.is_empty():
+			return RunResolutionResult.failure(_error("field=duplicate.profile reason=current live profile is invalid error=%s" % live_validation))
+		var decoded := RunTerminalRecoveryCodec.decode(live_profile.terminal_resolution)
 		if not decoded.ok() or decoded.record.stage != RunTerminalRecoveryRecord.Stage.RESOLVED_AWAITING_PROJECTION:
 			return RunResolutionResult.failure(_error("field=duplicate.terminal_resolution reason=resolved receipt is unavailable"))
+		var safety := RunRecoveryService.new().verify_terminal_safety(live_profile, decoded.record.snapshot)
+		if not safety.ok():
+			return RunResolutionResult.failure(_error("field=duplicate.terminal_resolution reason=current live resolved truth is unsafe error=%s" % safety.error))
 		if not _valid_terminal_receipt(mutation.receipt, source, request):
 			return RunResolutionResult.failure(_error("field=duplicate.receipt reason=stored terminal receipt does not match exact source and request"))
 		var duplicate_error := _validate_terminal_duplicate(decoded.record, source, request)
@@ -94,11 +105,12 @@ func resolve_terminal_source(
 			return RunResolutionResult.failure(duplicate_error)
 		accepted = decoded.record.accepted_extraction
 		protected_ids = decoded.record.protected_displaced_item_ids
+		resolved_profile = live_profile
 	else:
 		protected_ids = protected_holder.get("ids", []) as Array[String]
 	if accepted == null or not accepted.valid:
 		return RunResolutionResult.failure(_error("field=accepted_extraction reason=resolved receipt is unavailable"))
-	return RunResolutionResult.success(mutation.profile, mutation.duplicate, accepted, protected_ids)
+	return RunResolutionResult.success(resolved_profile, mutation.duplicate, accepted, protected_ids)
 
 func resolve(
 	profile_id: String,

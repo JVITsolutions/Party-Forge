@@ -13,6 +13,7 @@ const RUN_ID := &"run-terminal-safety"
 const RUN_PLAYER_ID := &"terminal-safety-player"
 const RUN_SEED := 9917
 const ITEM_ID := "item-terminal-safety"
+const ITEM_ID_SECOND := "item-terminal-safety-second"
 
 class PostCommitSanitationFailingStore extends AtomicJsonStore:
 	func _cleanup_paths(_paths: Array[String]) -> Error:
@@ -79,6 +80,7 @@ func run() -> Array[String]:
 	_test_completion_revalidates_complete_resolved_transaction(failures)
 	_test_completion_revalidates_inside_mutation_callback(failures)
 	_test_completion_rejects_missing_or_mismatched_applied_resolution(failures)
+	_test_completion_rejects_coordinated_noncanonical_selection_permutation(failures)
 	_test_terminal_completion_invalid_and_storage_failures(failures)
 	_test_resolved_terminal_safety_one_field_matrix(failures)
 	_test_protect_displaced_gear_is_automatic_only_atomic_and_idempotent(failures)
@@ -787,6 +789,23 @@ func _test_completion_rejects_missing_or_mismatched_applied_resolution(failures:
 		ProfileTestSupport.remove_tree(root)
 	_free_fixture(fixture, "")
 
+func _test_completion_rejects_coordinated_noncanonical_selection_permutation(failures: Array[String]) -> void:
+	var fixture := _fixture(true)
+	fixture.context._item_state = _run_state_pair()
+	var snapshot := RunTerminalSnapshotBuilder.new().capture(RunTerminalSnapshot.Outcome.VICTORY, 18.75, fixture.context).snapshot
+	var coordinated_permutation := _resolved_profile_with_coordinated_permutation(fixture.profile, snapshot)
+	TestAssertions.equal(ProfileCodec.validate_profile(coordinated_permutation), "", "coordinated noncanonical selection permutation remains structurally valid", failures)
+	var root := _case_root("completion_coordinated_permutation")
+	var store := ProfileStore.new()
+	TestAssertions.equal(store.save_profile(coordinated_permutation, root), "", "coordinated noncanonical selection permutation saves", failures)
+	var path := store.profile_path(PROFILE_ID, root)
+	var before_bytes := FileAccess.get_file_as_bytes(path)
+	var rejected := RunTerminalRecoveryService.new(ProfileMutationService.new(store), store).complete_terminal(PROFILE_ID, RUN_ID, root)
+	TestAssertions.truthy(not rejected.ok() and _error(rejected).contains("selected_item_ids"), "completion rejects a coordinated noncanonical selected-ID permutation", failures)
+	TestAssertions.equal(FileAccess.get_file_as_bytes(path), before_bytes, "coordinated selection permutation rejection is write-free", failures)
+	ProfileTestSupport.remove_tree(root)
+	_free_fixture(fixture, "")
+
 func _test_terminal_completion_invalid_and_storage_failures(failures: Array[String]) -> void:
 	var fixture := _fixture(true)
 	var snapshot := RunTerminalSnapshotBuilder.new().capture(RunTerminalSnapshot.Outcome.VICTORY, 19.0, fixture.context).snapshot
@@ -962,6 +981,43 @@ func _resolved_profile(profile_value: ProfileState, snapshot: RunTerminalSnapsho
 	}}
 	return profile
 
+func _resolved_profile_with_coordinated_permutation(profile_value: ProfileState, snapshot: RunTerminalSnapshot) -> ProfileState:
+	var profile := profile_value.copy()
+	profile.resumable_run = {}
+	profile.extraction_capacity = 2
+	profile.item_records = ItemRegistry.new([_run_item(), _run_item_second()]).to_dictionary()
+	profile.stash_tabs[0]["slots"] = {"0": ITEM_ID, "1": ITEM_ID_SECOND}
+	var eligible: Array[ExtractionSelection] = [
+		ExtractionSelection.create(ITEM_ID, &"run-inventory", 0),
+		ExtractionSelection.create(ITEM_ID_SECOND, &"run-inventory", 1),
+	]
+	var noncanonical_ids: Array[String] = [ITEM_ID_SECOND, ITEM_ID]
+	var accepted := RunExtractionProjection.create([], eligible, noncanonical_ids, [], profile.extraction_capacity, [])
+	var canonical_documents: Array[Dictionary] = []
+	for selection: ExtractionSelection in eligible:
+		canonical_documents.append(selection.to_dictionary())
+	var transaction := "terminal-resolution:%s:%s" % [snapshot.run_id, JSON.stringify(canonical_documents).sha256_text()]
+	var record := RunTerminalRecoveryRecord.create(
+		RunTerminalRecoveryRecord.Stage.RESOLVED_AWAITING_PROJECTION,
+		snapshot, noncanonical_ids, transaction, [], "", accepted, transaction,
+	)
+	profile.terminal_resolution = record.record.to_dictionary() if record.ok() else {}
+	var request := RunResolutionRequest.create(transaction, snapshot.profile_id, snapshot.run_id, snapshot.run_seed, snapshot.run_player_id, snapshot.leader_member_id, eligible)
+	var result_profile := profile.to_dictionary()
+	result_profile["applied_transactions"] = {}
+	profile.applied_transactions = {transaction: {
+		"operation": "run_resolution",
+		"fingerprint": ProfileMutationService._fingerprint("run_resolution", request.canonical_document()),
+		"committed_at_unix": profile.updated_at_unix,
+		"result_profile": result_profile,
+		"receipt": {
+			"schema_version": 1,
+			"source_fingerprint": JSON.stringify(snapshot.resolution_source.to_dictionary(), "", true, true).sha256_text(),
+			"request_fingerprint": JSON.stringify(request.canonical_document(), "", true, true).sha256_text(),
+		},
+	}}
+	return profile
+
 func _overflow_profile(snapshot: RunTerminalSnapshot, protected: bool) -> ProfileState:
 	var profile := ProfileState.new_profile(PROFILE_ID, "Overflow", 1000)
 	profile.inventory_columns = 1
@@ -1001,8 +1057,20 @@ func _run_state(with_item: bool) -> ItemOwnershipState:
 		RunItemBootstrap.ground_items_container(String(RUN_PLAYER_ID)),
 	])
 
+func _run_state_pair() -> ItemOwnershipState:
+	return ItemOwnershipState.create(String(RUN_PLAYER_ID), ItemRegistry.new([_run_item(), _run_item_second()]), [
+		ItemSlotContainer.create(&"run-inventory", ItemSlotContainer.RUN_INVENTORY, String(RUN_PLAYER_ID), 10, {0: ITEM_ID, 1: ITEM_ID_SECOND}),
+		ItemSlotContainer.create(&"run-equipment-001", ItemSlotContainer.RUN_MEMBER_EQUIPMENT, String(RUN_PLAYER_ID), EquipmentSlotIndex.capacity()),
+		RunItemBootstrap.ground_items_container(String(RUN_PLAYER_ID)),
+	])
+
 func _run_item() -> ItemInstance:
 	var item := _profile_item(ITEM_ID, 0)
+	item.origin["issuer_namespace"] = "run:%s:%d:%s" % [PROFILE_ID, RUN_SEED, RUN_PLAYER_ID]
+	return item
+
+func _run_item_second() -> ItemInstance:
+	var item := _profile_item(ITEM_ID_SECOND, 1)
 	item.origin["issuer_namespace"] = "run:%s:%d:%s" % [PROFILE_ID, RUN_SEED, RUN_PLAYER_ID]
 	return item
 

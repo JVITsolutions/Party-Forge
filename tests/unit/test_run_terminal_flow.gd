@@ -34,6 +34,7 @@ func run() -> Array[String]:
 	_test_pre_resolution_cold_resume_restores_choosing_interrupted_and_selection(failures)
 	_test_protection_and_reducible_interruptions(failures)
 	_test_generic_and_terminal_resolution_boundaries(failures)
+	_test_terminal_duplicate_revalidates_live_resolved_truth(failures)
 	_test_projection_retry_uses_durable_truth_without_resolution_or_mutation(failures)
 	return failures
 
@@ -359,6 +360,36 @@ func _test_generic_and_terminal_resolution_boundaries(failures: Array[String]) -
 	)
 	TestAssertions.truthy(not duplicate_collision.ok(), "same-request terminal duplicate rejects a different typed source", failures)
 	TestAssertions.equal(FileAccess.get_file_as_bytes(begun.store.profile_path(PROFILE_ID, begun.root)), before_duplicate_bytes, "same-request different-source terminal duplicate is write-free", failures)
+	_cleanup_begun(begun)
+
+func _test_terminal_duplicate_revalidates_live_resolved_truth(failures: Array[String]) -> void:
+	var begun := _begun_flow(2, "terminal_duplicate_live_drift", failures)
+	if begun.is_empty(): return
+	var ids := _eligible_ids(begun.flow.call(&"extraction_projection"))
+	TestAssertions.truthy(_ok(begun.flow.call(&"confirm_extraction", _strings([ids[0]]), begun.store.load_profile(PROFILE_ID, begun.root).profile)), "live-drift duplicate fixture confirms", failures)
+	var committed: Variant = begun.flow.call(&"resolve", PROFILE_ID, begun.root)
+	TestAssertions.truthy(_ok(committed) and not bool(committed.get("duplicate")), "live-drift duplicate fixture resolves once", failures)
+	var store := begun.store as ProfileStore
+	var live := store.load_profile(PROFILE_ID, begun.root).profile
+	var applied_id := String(live.terminal_resolution.get("applied_transaction_id", ""))
+	var historical_result := (live.applied_transactions[applied_id]["result_profile"] as Dictionary).duplicate(true)
+	var drifted_terminal := live.terminal_resolution.duplicate(true)
+	(drifted_terminal["snapshot"] as Dictionary)["elapsed_seconds"] = float((drifted_terminal["snapshot"] as Dictionary)["elapsed_seconds"]) + 1.0
+	live.terminal_resolution = drifted_terminal
+	TestAssertions.equal(ProfileCodec.validate_profile(live), "", "live terminal-only drift remains structurally valid", failures)
+	TestAssertions.equal(store.save_profile(live, begun.root), "", "live terminal-only drift saves", failures)
+	var reloaded := store.load_profile(PROFILE_ID, begun.root).profile
+	TestAssertions.equal(reloaded.applied_transactions[applied_id]["result_profile"], historical_result, "live terminal-only drift preserves the historical journal result", failures)
+	var path := store.profile_path(PROFILE_ID, begun.root)
+	var before_bytes := FileAccess.get_file_as_bytes(path)
+	var replay := RunResolutionService.new(ProfileMutationService.new(store)).resolve_terminal_source(
+		PROFILE_ID,
+		begun.flow.call(&"snapshot").resolution_source,
+		begun.flow.get("_request") as RunResolutionRequest,
+		begun.root,
+	)
+	TestAssertions.truthy(not replay.ok(), "ordinary terminal duplicate rejects drift in the current live resolved record", failures)
+	TestAssertions.equal(FileAccess.get_file_as_bytes(path), before_bytes, "live resolved-record drift rejection is write-free", failures)
 	_cleanup_begun(begun)
 
 func _test_protection_and_reducible_interruptions(failures: Array[String]) -> void:

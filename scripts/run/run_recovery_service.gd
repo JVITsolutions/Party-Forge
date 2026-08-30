@@ -136,14 +136,18 @@ func verify_terminal_safety(
 		return _terminal_unsafe("applied_transaction_id", "resolved transaction is missing")
 	var applied_record := profile.applied_transactions[record.applied_transaction_id] as Dictionary
 	var selections: Array[ExtractionSelection] = []
+	var reconstructed_ids: Array[String] = []
 	var wanted: Dictionary = {}
 	for item_id: String in record.selected_item_ids:
 		wanted[item_id] = true
 	for selection: ExtractionSelection in record.accepted_extraction.eligible_items:
 		if wanted.has(selection.item_id):
 			selections.append(selection)
+			reconstructed_ids.append(selection.item_id)
 	if selections.size() != record.selected_item_ids.size():
 		return _terminal_unsafe("accepted_extraction", "resolved selections cannot rebuild the canonical request")
+	if reconstructed_ids != record.selected_item_ids:
+		return _terminal_unsafe("selected_item_ids", "resolved selection order does not match canonical extraction truth")
 	var request := RunResolutionRequest.create(
 		record.transaction_id,
 		snapshot.profile_id,

@@ -6,6 +6,9 @@ var _store: ProfileStore
 func _init(store: ProfileStore = null) -> void:
 	_store = store if store != null else ProfileStore.new()
 
+func load_current_profile(profile_id: String, root: String = ProfileStore.DEFAULT_ROOT) -> ProfileLoadResult:
+	return _store.load_profile(profile_id, root)
+
 func apply(profile_id: String, transaction_id: String, mutate: Callable, root: String = ProfileStore.DEFAULT_ROOT, now_unix: int = -1, operation: String = "", request: Dictionary = {}) -> ProfileMutationResult:
 	return _apply_internal(profile_id, transaction_id, mutate, root, now_unix, operation, request, false, [], "", {}, false)
 
