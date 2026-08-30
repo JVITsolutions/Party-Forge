@@ -93,6 +93,7 @@ func run() -> Array[String]:
     _test_later_existing_member_failure_rejects_recruit_atomically(failures)
     _test_finite_party_upgrade_reaches_future_recruit(failures)
     _test_trait_tier_recruit_signal_order_and_single_invalidation(failures)
+    _test_member_added_remains_the_structural_party_seam(failures)
     _test_recruit_input_rejections_preserve_state(failures)
     _test_replace_member_source(failures)
     _test_unbound_effective_source_collision_invariants(failures)
@@ -1451,6 +1452,16 @@ func _test_trait_tier_recruit_signal_order_and_single_invalidation(failures: Arr
     TestAssertions.equal(events, ["stats:1", "stats:2", "traits", "member:2"], "trait-tier recruit preserves exact signal ordering", failures)
     TestAssertions.equal(party.active_tier(&"martial"), 2, "trait-tier recruit publishes Martial tier two", failures)
     TestAssertions.equal(party.active_tier(&"vanguard"), 2, "trait-tier recruit publishes Vanguard tier two", failures)
+    party.free()
+
+func _test_member_added_remains_the_structural_party_seam(failures: Array[String]) -> void:
+    var catalog := GameCatalog.load_defaults()
+    var party := PartyManager.new()
+    party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
+    var added_ids: Array[int] = []
+    party.member_added.connect(func(member: PartyMemberState) -> void: added_ids.append(member.member_id))
+    TestAssertions.truthy(party.recruit(catalog.class_by_id(&"ranger")), "structural seam fixture recruit succeeds", failures)
+    TestAssertions.equal(added_ids, [2], "member_added publishes the one committed party structure change", failures)
     party.free()
 
 func _test_recruit_input_rejections_preserve_state(failures: Array[String]) -> void:
