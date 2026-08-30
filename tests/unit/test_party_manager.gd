@@ -94,6 +94,7 @@ func run() -> Array[String]:
     _test_finite_party_upgrade_reaches_future_recruit(failures)
     _test_trait_tier_recruit_signal_order_and_single_invalidation(failures)
     _test_member_added_remains_the_structural_party_seam(failures)
+    _test_class_rank_changed_remains_the_presentation_seam(failures)
     _test_recruit_input_rejections_preserve_state(failures)
     _test_replace_member_source(failures)
     _test_unbound_effective_source_collision_invariants(failures)
@@ -1462,6 +1463,18 @@ func _test_member_added_remains_the_structural_party_seam(failures: Array[String
     party.member_added.connect(func(member: PartyMemberState) -> void: added_ids.append(member.member_id))
     TestAssertions.truthy(party.recruit(catalog.class_by_id(&"ranger")), "structural seam fixture recruit succeeds", failures)
     TestAssertions.equal(added_ids, [2], "member_added publishes the one committed party structure change", failures)
+    party.free()
+
+func _test_class_rank_changed_remains_the_presentation_seam(failures: Array[String]) -> void:
+    var catalog := GameCatalog.load_defaults()
+    var party := PartyManager.new()
+    party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
+    var ranks: Array[int] = []
+    party.class_rank_changed.connect(func(class_id: StringName, rank: int) -> void:
+        if class_id == &"fighter": ranks.append(rank)
+    )
+    TestAssertions.truthy(party.rank_up(&"fighter"), "class-rank presentation seam fixture advances the Fighter rank", failures)
+    TestAssertions.equal(ranks, [2], "class_rank_changed publishes the committed presentation rank", failures)
     party.free()
 
 func _test_recruit_input_rejections_preserve_state(failures: Array[String]) -> void:

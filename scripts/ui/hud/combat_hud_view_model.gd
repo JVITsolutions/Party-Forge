@@ -12,17 +12,20 @@ func build(
 	elapsed_seconds: float,
 	boss: Node,
 ) -> CombatHudProjection:
+	var authorities := _runtime_authorities(party, context, health_provider, experience)
+	if authorities.is_empty() or not is_finite(elapsed_seconds) or elapsed_seconds < 0.0:
+		return null
+	var health_by_member := authorities["health_by_member"] as Dictionary
+	var level_by_member := authorities["level_by_member"] as Dictionary
 	var members: Array[PartyMemberHudProjection] = []
 	var alerts: Array[CombatAlertProjection] = []
 	var party_order: Dictionary = {}
 	if party != null:
 		for index: int in party.members.size():
 			var member := party.members[index]
-			if member == null or member.class_definition == null:
-				continue
 			party_order[member.member_id] = index
-			var health := _health_for(member.member_id, health_provider)
-			var level := _level_for(member.member_id, context)
+			var health := health_by_member[member.member_id] as Dictionary
+			var level := int(level_by_member[member.member_id])
 			members.append(PartyMemberHudProjection.create(
 				member.member_id,
 				_display_name_for(member),
@@ -44,9 +47,9 @@ func build(
 	return CombatHudProjection.create(
 		members,
 		alerts,
-		maxf(0.0, elapsed_seconds),
-		experience.experience if experience != null else 0,
-		experience.experience_for_next_level() if experience != null else 0,
+		elapsed_seconds,
+		experience.experience,
+		experience.experience_for_next_level(),
 		String(boss_values["name"]),
 		float(boss_values["health"]),
 		float(boss_values["max_health"]),
@@ -74,21 +77,84 @@ func ordered_party_revision(party: PartyManager) -> String:
 	return JSON.stringify(rows)
 
 
-func _health_for(member_id: int, health_provider: Callable) -> Dictionary:
-	var value: Variant = health_provider.call(member_id) if health_provider.is_valid() else {}
-	var source := value as Dictionary if value is Dictionary else {}
-	var maximum := maxf(1.0, float(source.get("max", source.get("max_health", 1.0))))
+func _runtime_authorities(
+	party: PartyManager,
+	context: PlayerRunContext,
+	health_provider: Callable,
+	experience: ExperienceSystem,
+) -> Dictionary:
+	if (
+		party == null
+		or not is_instance_valid(party)
+		or context == null
+		or context.party != party
+		or not health_provider.is_valid()
+		or experience == null
+		or not is_instance_valid(experience)
+		or experience.run_context != context
+	):
+		return {}
+	var health_by_member: Dictionary = {}
+	var level_by_member: Dictionary = {}
+	var member_ids: Dictionary = {}
+	var leader_member_id := 0
+	for member: PartyMemberState in party.members:
+		if member == null or member.class_definition == null or member.member_id <= 0 or member_ids.has(member.member_id):
+			return {}
+		member_ids[member.member_id] = true
+		if member.is_leader:
+			if leader_member_id != 0:
+				return {}
+			leader_member_id = member.member_id
+		var progression := context.progression_for(member.member_id)
+		if progression == null or progression.member_id != member.member_id or progression.level <= 0:
+			return {}
+		var health := _validated_health_for(member.member_id, health_provider)
+		if health.is_empty():
+			return {}
+		health_by_member[member.member_id] = health
+		level_by_member[member.member_id] = progression.level
+	if leader_member_id == 0 or experience.leader_member_id != leader_member_id:
+		return {}
+	var leader_progression := context.progression_for(leader_member_id)
+	if (
+		leader_progression == null
+		or experience.experience != leader_progression.experience
+		or experience.experience_for_next_level() != leader_progression.experience_required
+	):
+		return {}
+	return {"health_by_member": health_by_member, "level_by_member": level_by_member}
+
+
+func _validated_health_for(member_id: int, health_provider: Callable) -> Dictionary:
+	var value: Variant = health_provider.call(member_id)
+	if not (value is Dictionary):
+		return {}
+	var source := value as Dictionary
+	for key: String in ["current", "max", "downed", "dead"]:
+		if not source.has(key):
+			return {}
+	if (
+		not _is_finite_number(source["current"])
+		or not _is_finite_number(source["max"])
+		or typeof(source["downed"]) != TYPE_BOOL
+		or typeof(source["dead"]) != TYPE_BOOL
+	):
+		return {}
+	var current := float(source["current"])
+	var maximum := float(source["max"])
+	if maximum <= 0.0 or current < 0.0 or current > maximum or (bool(source["downed"]) and bool(source["dead"])):
+		return {}
 	return {
-		"current": clampf(float(source.get("current", maximum)), 0.0, maximum),
+		"current": current,
 		"max": maximum,
-		"downed": bool(source.get("downed", false)),
-		"dead": bool(source.get("dead", false)),
+		"downed": bool(source["downed"]),
+		"dead": bool(source["dead"]),
 	}
 
 
-func _level_for(member_id: int, context: PlayerRunContext) -> int:
-	var progression := context.progression_for(member_id) if context != null else null
-	return maxi(1, progression.level) if progression != null else 1
+func _is_finite_number(value: Variant) -> bool:
+	return (typeof(value) == TYPE_INT or typeof(value) == TYPE_FLOAT) and is_finite(float(value))
 
 
 func _display_name_for(member: PartyMemberState) -> String:
@@ -131,12 +197,26 @@ func _alert_priority(alert: CombatAlertProjection) -> int:
 
 
 func _boss_values(boss: Node) -> Dictionary:
-	if boss is EnemyActor:
-		var enemy := boss as EnemyActor
-		if enemy.definition != null and not enemy.is_dead:
-			return {
-				"name": enemy.definition.display_name,
-				"health": maxf(0.0, enemy.current_health),
-				"max_health": maxf(1.0, enemy.definition.max_health),
-			}
-	return {"name": "", "health": 0.0, "max_health": 0.0}
+	if boss == null or not is_instance_valid(boss) or boss.is_queued_for_deletion() or not boss is EnemyActor:
+		return {"name": "", "health": 0.0, "max_health": 0.0}
+	var enemy := boss as EnemyActor
+	if enemy.definition == null:
+		return {"name": "", "health": 0.0, "max_health": 0.0}
+	var health := enemy.get_node_or_null("HealthComponent") as HealthComponent
+	if (
+		health == null
+		or not is_instance_valid(health)
+		or health.is_queued_for_deletion()
+		or health.is_dead
+		or not is_finite(health.current_health)
+		or not is_finite(health.max_health)
+		or health.max_health <= 0.0
+		or health.current_health < 0.0
+		or health.current_health > health.max_health
+	):
+		return {"name": "", "health": 0.0, "max_health": 0.0}
+	return {
+		"name": String(enemy.definition.id).capitalize(),
+		"health": health.current_health,
+		"max_health": health.max_health,
+	}
