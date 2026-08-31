@@ -17,6 +17,8 @@ const SETTINGS_MATRIX: Array[Dictionary] = [
 	{"label": "text 150", "high_contrast": false, "reduced_motion": false, "ui": 100, "text": 150},
 	{"label": "UI 150 text 150", "high_contrast": false, "reduced_motion": false, "ui": 150, "text": 150},
 	{"label": "UI 80 text 150", "high_contrast": false, "reduced_motion": false, "ui": 80, "text": 150},
+	{"label": "high contrast UI 150 text 150", "high_contrast": true, "reduced_motion": false, "ui": 150, "text": 150},
+	{"label": "high contrast UI 80 text 150", "high_contrast": true, "reduced_motion": false, "ui": 80, "text": 150},
 ]
 
 
@@ -282,6 +284,7 @@ func _exercise_results(viewport: SubViewport, settings: PartyForgeSettings, labe
 	if not recap_rows.is_empty():
 		var last := recap_rows[-1]
 		await _assert_visible_focus(last, "final result recap row", label)
+		_assert_result_overlay_accessibility(panel, last, settings, label)
 		var body := panel.get_node("Frame/Content/Body") as ScrollContainer
 		await _wait_until(func() -> bool: return _scroll_visible_global_rect(body).encloses(last.get_global_rect()), "focused final presented result row fully enclosed by the Frame/Content/Body visible clip at %s" % label)
 
@@ -313,6 +316,33 @@ func _exercise_results(viewport: SubViewport, settings: PartyForgeSettings, labe
 
 	panel.free()
 	await process_frame
+
+
+func _assert_result_overlay_accessibility(panel: RunResultPanel, row: Button, settings: PartyForgeSettings, label: String) -> void:
+	var primary := row.get_node_or_null("Primary") as Control
+	_assert(primary != null and primary.is_visible_in_tree(), "results expose one visible Primary overlay at %s" % label)
+	if primary == null:
+		return
+	var primary_text := String(primary.get("text"))
+	_assert(row.text.is_empty(), "result native Button text is empty so AccessKit receives no appended duplicate text at %s" % label)
+	_assert(row.accessibility_name == primary_text.replace("   ", ": "), "result row owns one exact accessibility name matching the visible Primary at %s" % label)
+	_assert(primary.accessibility_name.strip_edges().is_empty(), "result Primary overlay does not duplicate the row accessibility name at %s" % label)
+	var accessibility_element := primary.get_accessibility_element()
+	if AccessibilityServer.is_supported():
+		_assert(accessibility_element.is_valid() and AccessibilityServer.has_element(accessibility_element), "result Primary participates in the enabled real accessibility tree at %s; valid=%s registered=%s" % [label, accessibility_element.is_valid(), AccessibilityServer.has_element(accessibility_element) if accessibility_element.is_valid() else false])
+	else:
+		_assert(not accessibility_element.is_valid(), "disabled accessibility support publishes no untracked Primary element at %s" % label)
+	_assert(primary is Container and not primary is Label, "result Primary publishes only an ignored ROLE_CONTAINER visual primitive, never ROLE_STATIC_TEXT, at %s" % label)
+	var expected_theme := LivingForgeThemeCatalog.resolve(settings.high_contrast, settings.ui_scale_percent, settings.text_scale_percent)
+	_assert(primary.get_theme_font(&"font") == expected_theme.get_font(&"font", row.theme_type_variation), "result Primary uses the resolved Living Forge Button font at %s" % label)
+	_assert(primary.get_theme_font_size(&"font_size") == expected_theme.get_font_size(&"font_size", row.theme_type_variation), "result Primary uses the resolved Living Forge Button font size at %s" % label)
+	var expected_primary_color := expected_theme.get_color(&"font_color", row.theme_type_variation) if expected_theme.has_color(&"font_color", row.theme_type_variation) else expected_theme.get_color(&"font_color", &"Button")
+	_assert(primary.get_theme_color(&"font_color") == expected_primary_color, "result Primary uses the resolved Living Forge semantic color at %s" % label)
+	_assert(primary.get_theme_color(&"font_color").a > 0.0, "result Primary remains visibly readable at %s" % label)
+	for color_name: StringName in [&"font_color", &"font_hover_color", &"font_pressed_color", &"font_hover_pressed_color", &"font_focus_color", &"font_disabled_color"]:
+		_assert(row.get_theme_color(color_name) == Color.TRANSPARENT, "result native Button %s stays transparent behind the overlay at %s" % [color_name, label])
+	var focus_style := row.get_theme_stylebox(&"focus")
+	_assert(row.has_focus() and focus_style != null and not (focus_style is StyleBoxEmpty), "result row keeps readable focus semantics around its visible overlay at %s" % label)
 
 
 func _settings(row: Dictionary) -> PartyForgeSettings:

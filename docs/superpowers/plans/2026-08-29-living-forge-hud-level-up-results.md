@@ -1435,7 +1435,7 @@ git commit -m "test: qualify the Living Forge combat loop UI"
 
 - [ ] **Step 1: Write the visual-evidence runner and exact manifest test first**
 
-Declare these minimum capture states with deterministic fixtures:
+Jacob authorized expanding the Task 14 evidence contract from 27 to 45 captures on 2026-08-30. Declare this exact canonical capture set with deterministic fixtures:
 
 ```gdscript
 const CAPTURES := [
@@ -1450,6 +1450,15 @@ const CAPTURES := [
 	"combat-loop-720p-ui-80-text-150.png", "combat-loop-1440p.png", "combat-loop-ultrawide.png",
 	"combat-loop-high-contrast.png", "combat-loop-reduced-motion.png",
 	"combat-loop-ui-scale-150.png", "combat-loop-controller-focus.png", "combat-loop-mouse-hover.png",
+	"result-pending-terminal-save.png", "result-pending-terminal-refresh.png",
+	"result-pending-resolution.png", "result-pending-projection.png", "result-pending-protection.png",
+	"result-pending-terminal-completion.png", "result-finalized-receipt-clear-error.png",
+	"result-finalized-committed-refresh-retry-only.png", "result-terminal-refresh-interrupted.png",
+	"pause-abandon-committed-refresh.png", "restart-lobby-valid-preselection.png",
+	"restart-lobby-unresolved-selection.png", "hud-alert-720p-ui-150-text-150.png",
+	"level-up-confirmation-safe-focus.png", "extraction-pending-focus.png",
+	"extraction-detail-720p-ui-150-text-150.png",
+	"result-expanded-detail-ui-150-text-150.png", "result-expanded-detail-ui-80-text-150.png",
 ]
 ```
 
@@ -1480,11 +1489,11 @@ The next capture's manifest records this exact committed candidate head. Do not 
 & $godot --path (Get-Location).Path --rendering-method gl_compatibility --quit-after 1800 --script res://tests/integration/living_forge_combat_loop_visual_evidence_runner.gd
 ```
 
-Expected: `LIVING_FORGE_COMBAT_LOOP_VISUAL_SUMMARY: PASS`, exit `0`, exactly 27 current-run PNGs, 27 unique hashes, and a reproducible schema-2 fingerprint.
+Expected: `LIVING_FORGE_COMBAT_LOOP_VISUAL_SUMMARY: PASS`, exit `0`, exactly 45 current-run PNGs, 45 unique hashes, and a reproducible schema-2 fingerprint.
 
 - [ ] **Step 4: Perform independent UI/UX review and correct findings through RED/GREEN**
 
-Have a UI/UX designer inspect all 27 PNGs at original resolution for Living Forge consistency, battlefield legibility, hierarchy, density, rich/compact mode clarity, alert urgency, distinct terminal-save/resolution/projection retry wording and focus, automatic-only Recovery Overflow explanation/confirmation, level-up decision clarity, extraction consequence clarity, result truth, focus/hover, high contrast, reduced motion, the `2560x1440` desktop composition, ultrawide composition, and both combined 720p scale corners. If the reviewer finds a defect, return it to the exact owning task, add the concrete failing assertion described there, make the smallest bounded correction, rerun that task's GREEN checks, and regenerate the entire evidence set.
+Have a UI/UX designer inspect all 45 PNGs at original resolution for Living Forge consistency, battlefield legibility, hierarchy, density, rich/compact mode clarity, alert urgency, distinct terminal-save/resolution/projection retry wording and focus, automatic-only Recovery Overflow explanation/confirmation, level-up decision clarity, extraction consequence clarity, result truth, focus/hover, high contrast, reduced motion, the `2560x1440` desktop composition, ultrawide composition, both combined 720p scale corners, the expanded result-detail Text150 corners, pending/finalized result lifecycle states, committed-Abandon recovery, restart-lobby selection states, safe confirmation focus, and extraction pending/detail states. If the reviewer finds a defect, return it to the exact owning task, add the concrete failing assertion described there, make the smallest bounded correction, rerun that task's GREEN checks, and regenerate the entire evidence set.
 
 - [ ] **Step 5: Show the screenshots to Jacob and stop at the visual gate**
 

@@ -54,6 +54,8 @@ func _run() -> void:
 		await _exercise_level_up(Vector2i(1280, 720), scale_corner.x, scale_corner.y)
 		await _exercise_extraction(Vector2i(1280, 720), scale_corner.x, scale_corner.y)
 		await _exercise_result(Vector2i(1280, 720), scale_corner.x, scale_corner.y)
+		if _long_detail_corner(Vector2i(1280, 720), scale_corner.x, scale_corner.y):
+			await _exercise_result(Vector2i(1280, 720), scale_corner.x, scale_corner.y, true)
 	_finish()
 
 
@@ -415,9 +417,9 @@ func _exercise_extraction(viewport_size: Vector2i, ui_scale: int, text_scale: in
 	_active_viewport = null
 
 
-func _exercise_result(viewport_size: Vector2i, ui_scale: int, text_scale: int) -> void:
+func _exercise_result(viewport_size: Vector2i, ui_scale: int, text_scale: int, high_contrast := false) -> void:
 	var viewport := _new_viewport(viewport_size)
-	var context_label := _context("RESULT", viewport_size, ui_scale, text_scale, "party=24 loot=30")
+	var context_label := _context("RESULT", viewport_size, ui_scale, text_scale, "party=24 loot=30 high_contrast=%s" % high_contrast)
 	var fixture_type := load(RESULT_FIXTURE_PATH) as Script
 	var fixtures: Variant = fixture_type.new()
 	var fixture: Dictionary = fixtures.call(&"_fixture", 24, 24, RunTerminalSnapshot.Outcome.VICTORY)
@@ -427,7 +429,9 @@ func _exercise_result(viewport_size: Vector2i, ui_scale: int, text_scale: int) -
 		viewport.free()
 		_active_viewport = null
 		return
-	var projection := build.projection.with_visual_settings(_settings(ui_scale, text_scale))
+	var result_settings := _settings(ui_scale, text_scale)
+	result_settings.high_contrast = high_contrast
+	var projection := build.projection.with_visual_settings(result_settings)
 	var panel := (load("res://scenes/ui/run_result_panel.tscn") as PackedScene).instantiate() as RunResultPanel
 	viewport.add_child(panel)
 	panel.present(projection)
@@ -493,7 +497,7 @@ func _exercise_result(viewport_size: Vector2i, ui_scale: int, text_scale: int) -
 		await _wait_for_focus(final_row, "%s footer-to-recap bridge" % context_label)
 		_assert(final_row.has_focus(), "%s focus bridge returns to the final recap row" % context_label)
 		if _long_detail_corner(viewport_size, ui_scale, text_scale):
-			await _exercise_long_recap_detail(final_row, body, footer, frame, context_label)
+			await _exercise_long_recap_detail(final_row, body, footer, frame, panel.theme, context_label)
 	panel.free()
 	viewport.free()
 	_active_viewport = null
@@ -704,25 +708,56 @@ func _assert_controls_in_parent(controls: Array, label: String) -> void:
 		_assert_sibling_non_overlap(sibling_values as Array, label)
 
 
-func _exercise_long_recap_detail(row: Button, body: ScrollContainer, footer: Control, frame: Control, context_label: String) -> void:
+func _exercise_long_recap_detail(row: Button, body: ScrollContainer, footer: Control, frame: Control, expected_theme: Theme, context_label: String) -> void:
+	var primary := row.get_node_or_null("Primary") as Control
 	var detail := row.get_node_or_null("Detail") as Label
+	_assert(primary != null, "%s expanded-detail fixture has a dedicated Primary label" % context_label)
 	_assert(detail != null, "%s expanded-detail fixture has a real Detail label" % context_label)
-	if detail == null:
+	if primary == null or detail == null:
 		return
-	detail.text = ("The forge records a deliberately long consequence with current loot identity, destination, loss, and protection context. ").repeat(4)
+	var primary_text := String(primary.get("text"))
+	_assert(primary_text.begins_with("Protected displaced gear"), "%s expanded-detail Primary visual carries the protected-gear line" % context_label)
+	_assert(detail.text.begins_with("Recovery Overflow · exact item ID"), "%s expanded-detail Detail label carries the Recovery Overflow line" % context_label)
+	_assert(row.text.is_empty(), "%s native Button text stays empty so its effective accessibility name cannot append duplicate visual copy" % context_label)
+	_assert(row.accessibility_name == primary_text.replace("   ", ": "), "%s recap Button owns the one exact protected-gear accessibility name" % context_label)
+	_assert(primary.accessibility_name.strip_edges().is_empty(), "%s visual Primary overlay does not duplicate the Button accessibility name" % context_label)
+	_assert(primary.get_theme_font(&"font") == expected_theme.get_font(&"font", row.theme_type_variation), "%s visible Primary resolves the inherited Living Forge Button font" % context_label)
+	_assert(primary.get_theme_font_size(&"font_size") == expected_theme.get_font_size(&"font_size", row.theme_type_variation), "%s visible Primary resolves the inherited Living Forge Button font size" % context_label)
+	var expected_primary_color := expected_theme.get_color(&"font_color", row.theme_type_variation) if expected_theme.has_color(&"font_color", row.theme_type_variation) else expected_theme.get_color(&"font_color", &"Button")
+	_assert(primary.get_theme_color(&"font_color") == expected_primary_color, "%s visible Primary resolves the inherited Living Forge Button semantic color" % context_label)
+	_assert(primary.get_theme_color(&"font_color").a > 0.0, "%s visible Primary semantic color is readable rather than transparent" % context_label)
+	for color_name: StringName in [&"font_color", &"font_hover_color", &"font_pressed_color", &"font_hover_pressed_color", &"font_focus_color", &"font_disabled_color"]:
+		_assert(row.get_theme_color(color_name) == Color.TRANSPARENT, "%s native Button %s stays transparent behind the one visual Primary overlay" % [context_label, color_name])
 	row.pressed.emit()
 	await _wait_for_visible(detail, "%s long recap detail" % context_label)
-	await _wait_for_stable_layout([row, detail, body, footer], "%s long recap detail" % context_label)
+	await _wait_for_stable_layout([row, primary, detail, body, footer], "%s long recap detail" % context_label)
 	row.grab_focus()
 	await _wait_for_focus(row, "%s expanded recap row" % context_label)
 	await _wait_for_scroll_reveal(body, row, "%s expanded recap row" % context_label)
-	var detail_minimum := detail.get_combined_minimum_size()
-	var required_height := detail.position.y + detail_minimum.y
-	_assert(row.get_global_rect().encloses(detail.get_global_rect()), "%s expanded row encloses the deliberately wrapping detail" % context_label)
-	_assert(row.get_global_rect().size.y >= required_height, "%s expanded row height encloses combined-minimum detail: row=%s required=%s" % [context_label, row.get_global_rect().size.y, required_height])
+	_assert_expanded_result_detail_geometry(row, primary, detail, "%s exact semantic detail" % context_label)
+	row.pressed.emit()
+	await _wait_for_hidden(detail, "%s collapsed exact semantic detail" % context_label)
+	detail.text = ("The forge records a deliberately long consequence with current loot identity, destination, loss, and protection context. ").repeat(4)
+	row.pressed.emit()
+	await _wait_for_visible(detail, "%s wrapping stress detail" % context_label)
+	await _wait_for_stable_layout([row, primary, detail, body, footer], "%s wrapping stress detail" % context_label)
+	_assert(detail.get_line_count() > 1, "%s long stress detail actually wraps across multiple lines" % context_label)
+	_assert_expanded_result_detail_geometry(row, primary, detail, "%s wrapping stress detail" % context_label)
 	_assert(_visible_inside(body, row), "%s focused expanded row remains visible through focus-follow" % context_label)
 	_assert(frame.get_global_rect().encloses(footer.get_global_rect()), "%s expanded detail keeps footer frame-contained" % context_label)
 	_assert(not body.get_global_rect().intersection(footer.get_global_rect()).has_area(), "%s expanded detail keeps footer pinned outside recap scrolling" % context_label)
+
+
+func _assert_expanded_result_detail_geometry(row: Button, primary: Control, detail: Label, context_label: String) -> void:
+	var row_rect := row.get_global_rect()
+	var primary_rect := primary.get_global_rect()
+	var detail_rect := detail.get_global_rect()
+	_assert(row_rect.encloses(primary_rect), "%s row fully contains Primary: row=%s primary=%s" % [context_label, row_rect, primary_rect])
+	_assert(row_rect.encloses(detail_rect), "%s row fully contains Detail: row=%s detail=%s" % [context_label, row_rect, detail_rect])
+	_assert(not primary_rect.intersection(detail_rect).has_area(), "%s Primary and Detail occupy separate non-overlapping rectangles: primary=%s detail=%s" % [context_label, primary_rect, detail_rect])
+	_assert(primary_rect.end.y <= detail_rect.position.y, "%s Primary ends above Detail: primary=%s detail=%s" % [context_label, primary_rect, detail_rect])
+	_assert(primary.size.x + 0.5 >= primary.get_combined_minimum_size().x and primary.size.y + 0.5 >= primary.get_combined_minimum_size().y, "%s Primary remains readable: size=%s minimum=%s" % [context_label, primary.size, primary.get_combined_minimum_size()])
+	_assert(detail.size.x + 0.5 >= detail.get_combined_minimum_size().x and detail.size.y + 0.5 >= detail.get_combined_minimum_size().y, "%s Detail remains readable: size=%s minimum=%s" % [context_label, detail.size, detail.get_combined_minimum_size()])
 
 
 func _assert_contained(control: Control, outer: Rect2, label: String) -> void:

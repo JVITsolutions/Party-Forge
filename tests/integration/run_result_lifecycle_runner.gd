@@ -310,7 +310,8 @@ func _entry_rows(section_id: StringName) -> Array[Button]:
 func _entry_text(section_id: StringName, label: String) -> String:
 	for row: Button in _entry_rows(section_id):
 		if String(row.get_meta(&"recap_entry_label", "")) == label:
-			return row.text
+			var primary := row.get_node_or_null("Primary")
+			return String(primary.get("text")) if primary != null else ""
 	return ""
 
 func _button(name_value: String) -> Button:

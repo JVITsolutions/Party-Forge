@@ -17,6 +17,33 @@ const ACTION_NAMES: Array[String] = [
 	"OpenArmoury", "RestartRun", "ReturnToForge", "QuitApplication",
 ]
 
+class InertPrimaryText:
+	extends Container
+
+	var text := "":
+		set(value):
+			text = value
+			update_minimum_size()
+			queue_redraw()
+
+	func apply_typography(font: Font, font_size: int, font_color: Color) -> void:
+		add_theme_font_override(&"font", font)
+		add_theme_font_size_override(&"font_size", font_size)
+		add_theme_color_override(&"font_color", font_color)
+		update_minimum_size()
+		queue_redraw()
+
+	func _get_minimum_size() -> Vector2:
+		var font := get_theme_font(&"font")
+		var font_size := get_theme_font_size(&"font_size")
+		var text_size := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, font_size)
+		return Vector2(text_size.x, font.get_height(font_size))
+
+	func _draw() -> void:
+		var font := get_theme_font(&"font")
+		var font_size := get_theme_font_size(&"font_size")
+		draw_string(font, Vector2(0.0, font.get_ascent(font_size)), text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, font_size, get_theme_color(&"font_color"))
+
 var _action_pending := false
 var _protection_return_focus: Control
 var _allowed_actions: Dictionary = {}
@@ -231,6 +258,7 @@ func _build_recap(sections: Array[RunRecapSectionProjection]) -> void:
 		for entry: RunRecapEntryProjection in section.entries:
 			var row := _entry_row(section.section_id, index, entry)
 			content.add_child(row)
+			_sync_recap_row_typography(row)
 			rows.append(row)
 			index += 1
 	var bottom_inset := Control.new()
@@ -252,11 +280,21 @@ func _entry_row(section_id: StringName, index: int, entry: RunRecapEntryProjecti
 	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.theme_type_variation = &"LivingForgeSecondaryButton"
 	row.alignment = HORIZONTAL_ALIGNMENT_LEFT
-	row.text = "%s   %s" % [entry.label, entry.value]
+	row.text = ""
 	row.accessibility_name = "%s: %s" % [entry.label, entry.value]
 	row.tooltip_text = entry.detail
 	row.set_meta(&"recap_section_id", section_id)
 	row.set_meta(&"recap_entry_label", entry.label)
+	var primary := InertPrimaryText.new()
+	primary.name = "Primary"
+	primary.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	primary.text = "%s   %s" % [entry.label, entry.value]
+	primary.anchor_right = 1.0
+	primary.offset_left = 16.0
+	primary.offset_top = 8.0
+	primary.offset_right = -16.0
+	primary.offset_bottom = primary.offset_top + primary.get_combined_minimum_size().y
+	row.add_child(primary)
 	var detail := Label.new()
 	detail.name = "Detail"
 	detail.visible = false
@@ -264,16 +302,32 @@ func _entry_row(section_id: StringName, index: int, entry: RunRecapEntryProjecti
 	detail.theme_type_variation = &"LivingForgeCaptionLabel"
 	detail.text = entry.detail
 	detail.anchor_right = 1.0
-	detail.anchor_bottom = 1.0
 	detail.offset_left = 16.0
-	detail.offset_top = 44.0
+	detail.offset_top = primary.offset_bottom + 4.0
 	detail.offset_right = -16.0
-	detail.offset_bottom = -8.0
+	detail.offset_bottom = detail.offset_top + detail.get_combined_minimum_size().y
 	detail.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	row.add_child(detail)
 	row.pressed.connect(_toggle_detail.bind(row))
 	row.focus_entered.connect(_ensure_visible.bind(row))
 	return row
+
+func _sync_recap_row_typography(row: Button) -> void:
+	if not is_instance_valid(row) or not row.is_inside_tree():
+		return
+	var primary := row.get_node_or_null("Primary") as InertPrimaryText
+	var detail := row.get_node_or_null("Detail") as Label
+	if primary == null or detail == null:
+		return
+	primary.apply_typography(row.get_theme_font(&"font"), row.get_theme_font_size(&"font_size"), row.get_theme_color(&"font_color"))
+	for color_name: StringName in [&"font_color", &"font_hover_color", &"font_pressed_color", &"font_hover_pressed_color", &"font_focus_color", &"font_disabled_color"]:
+		row.add_theme_color_override(color_name, Color.TRANSPARENT)
+	primary.offset_bottom = primary.offset_top + primary.get_combined_minimum_size().y
+	detail.offset_top = primary.offset_bottom + 4.0
+	detail.offset_bottom = detail.offset_top + detail.get_combined_minimum_size().y
+	var collapsed_height := maxf(48.0, primary.get_combined_minimum_size().y + row.get_theme_stylebox(&"normal").get_minimum_size().y)
+	row.set_meta(&"collapsed_minimum_height", collapsed_height)
+	row.custom_minimum_size.y = collapsed_height
 
 func _link_focus(rows: Array[Button]) -> void:
 	for index: int in rows.size():
@@ -396,14 +450,19 @@ func _toggle_detail(row: Button) -> void:
 	if detail.visible:
 		call_deferred(&"_fit_expanded_detail", row, detail)
 	else:
-		row.custom_minimum_size.y = 48.0
+		row.custom_minimum_size.y = float(row.get_meta(&"collapsed_minimum_height", 48.0))
 	_body.ensure_control_visible(row)
 
 func _fit_expanded_detail(row: Button, detail: Label) -> void:
 	if not is_instance_valid(row) or not is_instance_valid(detail) or not detail.visible:
 		return
+	var primary := row.get_node_or_null("Primary") as InertPrimaryText
+	if primary != null:
+		primary.offset_bottom = primary.offset_top + primary.get_combined_minimum_size().y
+		detail.offset_top = primary.offset_bottom + 4.0
+		detail.offset_bottom = detail.offset_top + detail.get_combined_minimum_size().y
 	var required_height := detail.position.y + detail.get_combined_minimum_size().y + 8.0
-	row.custom_minimum_size.y = maxf(48.0, required_height)
+	row.custom_minimum_size.y = maxf(float(row.get_meta(&"collapsed_minimum_height", 48.0)), required_height)
 	_ensure_visible(row)
 
 func _connect_action(action_name: String, callback: Callable) -> void:
