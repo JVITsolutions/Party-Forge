@@ -107,6 +107,7 @@ func run() -> Array[String]:
 	empty_available.palette_colors = {&"red": Color.WHITE}
 	empty_available.available_equipment_visuals = []
 	TestAssertions.truthy(not _errors_contain(empty_available.validate(), "available equipment"), "empty available equipment remains valid", failures)
+	_assert_production_head_and_fit_contracts(failures)
 	return failures
 
 func _assert_walk_action_contract(failures: Array[String]) -> void:
@@ -133,6 +134,111 @@ func _assert_walk_action_contract(failures: Array[String]) -> void:
 		"profile rejects an undeclared walk action",
 		failures
 	)
+
+
+func _assert_production_head_and_fit_contracts(failures: Array[String]) -> void:
+	var legacy_profile := _minimal_profile(&"legacy_profile")
+	TestAssertions.equal(legacy_profile.validate(), PackedStringArray(), "legacy profile remains valid without class heads", failures)
+	var profile_properties := _property_names(legacy_profile)
+	TestAssertions.truthy(&"class_heads" in profile_properties, "profile exposes class head mappings", failures)
+	TestAssertions.truthy(legacy_profile.has_method(&"head_for_body"), "profile resolves a head by body preset", failures)
+	if &"class_heads" not in profile_properties or not legacy_profile.has_method(&"head_for_body"):
+		return
+
+	var masculine := _head(&"paladin_masculine_head", &"paladin", &"masculine")
+	var feminine := _head(&"paladin_feminine_head", &"paladin", &"feminine")
+	var profile := _minimal_profile(&"paladin")
+	profile.class_heads = [masculine, feminine]
+	TestAssertions.equal(profile.validate(), PackedStringArray(), "profile accepts one head for each body preset", failures)
+	TestAssertions.equal(profile.call(&"head_for_body", &"masculine"), masculine, "masculine class head resolves", failures)
+	TestAssertions.equal(profile.call(&"head_for_body", &"feminine"), feminine, "feminine class head resolves", failures)
+	TestAssertions.equal(profile.call(&"head_for_body", &"shared"), null, "unsupported body head does not resolve", failures)
+
+	profile.class_heads = [masculine]
+	TestAssertions.truthy(_errors_contain(profile.validate(), "requires exactly one masculine and one feminine head"), "partial head mapping rejects", failures)
+	profile.class_heads = [masculine, masculine]
+	TestAssertions.truthy(_errors_contain(profile.validate(), "requires exactly one masculine and one feminine head"), "duplicate body head mapping rejects", failures)
+	profile.class_heads = [masculine, null]
+	TestAssertions.truthy(_errors_contain(profile.validate(), "has null class head"), "null head mapping rejects", failures)
+
+	var fit := EquipmentBodyFitDescriptor.new()
+	fit.body_preset_id = &"masculine"
+	fit.presentation_scene = _packed_scene()
+	fit.mesh_root_paths = [NodePath(".")]
+	var fit_properties := _property_names(fit)
+	TestAssertions.truthy(&"headwear_fit" in fit_properties, "body fit exposes headwear metadata", failures)
+	TestAssertions.truthy(&"necklace_anchor_paths" in fit_properties, "body fit exposes necklace anchors", failures)
+	var headwear_script := load("res://scripts/presentation/headwear_fit_descriptor.gd") as Script
+	TestAssertions.truthy(headwear_script != null, "headwear contract loads", failures)
+	if &"headwear_fit" not in fit_properties or &"necklace_anchor_paths" not in fit_properties or headwear_script == null:
+		return
+	var headwear: Resource = headwear_script.new()
+	headwear.set(&"category", &"full_helmet")
+	headwear.set(&"compatible_envelope_ids", Array([&"pf_head_masculine_v1"], TYPE_STRING_NAME, "", null))
+	headwear.set(&"hide_head_region_ids", Array([&"scalp", &"hair", &"ears"], TYPE_STRING_NAME, "", null))
+	fit.set(&"headwear_fit", headwear)
+	fit.set(&"necklace_anchor_paths", Array([NodePath("Skeleton3D/NecklaceNeck"), NodePath("Skeleton3D/NecklaceSternum")], TYPE_NODE_PATH, "", null))
+	TestAssertions.equal(fit.validate(), PackedStringArray(), "body fit accepts optional headwear and necklace metadata", failures)
+
+	headwear.set(&"category", &"open_helmet")
+	TestAssertions.truthy(_errors_contain(fit.validate(), "open helmet requires a helmet-safe hair id"), "body fit forwards headwear validation", failures)
+	headwear.set(&"category", &"full_helmet")
+	fit.set(&"necklace_anchor_paths", Array([NodePath("/AbsoluteAnchor")], TYPE_NODE_PATH, "", null))
+	TestAssertions.truthy(_errors_contain(fit.validate(), "necklace anchor path must be relative"), "body fit rejects absolute necklace anchors", failures)
+	fit.set(&"necklace_anchor_paths", Array([NodePath("Neck"), NodePath("Neck")], TYPE_NODE_PATH, "", null))
+	TestAssertions.truthy(_errors_contain(fit.validate(), "duplicate necklace anchor path Neck"), "body fit rejects duplicate necklace anchors", failures)
+
+
+func _minimal_profile(profile_id: StringName) -> CharacterVisualProfile:
+	var profile := CharacterVisualProfile.new()
+	profile.id = profile_id
+	profile.presentation_scene = _packed_scene()
+	profile.default_body_preset = &"masculine"
+	profile.default_palette_id = &"red"
+	profile.palette_colors = {&"red": Color.WHITE}
+	profile.required_animation_names = [&"idle", &"walk"]
+	return profile
+
+
+func _head(head_id: StringName, class_id: StringName, body_preset_id: StringName) -> CharacterHeadVisualDefinition:
+	var head := CharacterHeadVisualDefinition.new()
+	head.id = head_id
+	head.class_id = class_id
+	head.body_preset_id = body_preset_id
+	head.presentation_scene = _packed_scene()
+	head.mesh_root_path = NodePath("HeadMesh")
+	head.neck_interface_id = StringName("pf_neck_%s_v1" % body_preset_id)
+	head.helmet_envelope_id = StringName("pf_head_%s_v1" % body_preset_id)
+	head.left_ear_socket_path = NodePath("Skeleton3D/EarSocketLeft")
+	head.right_ear_socket_path = NodePath("Skeleton3D/EarSocketRight")
+	head.head_region_ids = [&"scalp", &"hair", &"facial_hair", &"ears"]
+	var surface := CharacterSurfaceDefinition.new()
+	surface.source_sha256 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	surface.uv_set_count = 1
+	surface.tangent_status = &"valid"
+	surface.texture_paths = {&"base_color": "res://assets/models/characters/test/head.png"}
+	surface.material_family_ids = [&"skin"]
+	surface.lod_triangle_counts = [1200, 600]
+	head.surface = surface
+	return head
+
+
+func _packed_scene() -> PackedScene:
+	var root := Node3D.new()
+	root.name = "FixtureRoot"
+	var packed := PackedScene.new()
+	packed.pack(root)
+	root.free()
+	return packed
+
+
+func _property_names(resource: Object) -> Array[StringName]:
+	var names: Array[StringName] = []
+	for property: Dictionary in resource.get_property_list():
+		names.append(StringName(property[&"name"]))
+	return names
+
+
 
 func _errors_contain(errors: PackedStringArray, fragment: String) -> bool:
 	for reason: String in errors:

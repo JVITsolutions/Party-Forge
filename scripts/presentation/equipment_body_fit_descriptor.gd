@@ -8,6 +8,8 @@ const SHARED_BODY_PRESET: StringName = &"shared"
 @export var presentation_scene: PackedScene
 @export var mesh_root_paths: Array[NodePath] = []
 @export var hide_body_regions: Array[StringName] = []
+@export var headwear_fit: HeadwearFitDescriptor
+@export var necklace_anchor_paths: Array[NodePath] = []
 
 func validates_for_body(body_preset: StringName, shared_fit: bool) -> bool:
 	if body_preset not in BODY_PRESETS:
@@ -18,6 +20,18 @@ func validate() -> PackedStringArray:
 	var errors := PackedStringArray()
 	if body_preset_id not in BODY_PRESETS and body_preset_id != SHARED_BODY_PRESET:
 		errors.append("equipment body fit body preset %s is invalid" % body_preset_id)
+	if headwear_fit != null:
+		for reason: String in headwear_fit.validate():
+			errors.append(reason)
+	var seen_necklace_paths: Dictionary = {}
+	for anchor_path: NodePath in necklace_anchor_paths:
+		if anchor_path.is_empty():
+			errors.append("equipment body fit necklace anchor path is empty")
+		elif anchor_path.is_absolute():
+			errors.append("equipment body fit necklace anchor path must be relative")
+		elif seen_necklace_paths.has(anchor_path):
+			errors.append("equipment body fit has duplicate necklace anchor path %s" % anchor_path)
+		seen_necklace_paths[anchor_path] = true
 	if presentation_scene == null:
 		errors.append("equipment body fit presentation scene is missing")
 		return errors

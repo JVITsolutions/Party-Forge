@@ -17,6 +17,7 @@ const BODY_PRESETS: Array[StringName] = [&"masculine", &"feminine"]
 @export var required_animation_names: Array[StringName] = [&"idle"]
 @export var attack_animation_by_id: Dictionary = {}
 @export var attack_presentations: Array[AttackPresentationDefinition] = []
+@export var class_heads: Array[CharacterHeadVisualDefinition] = []
 
 func validate() -> PackedStringArray:
 	var errors := PackedStringArray()
@@ -60,7 +61,15 @@ func validate() -> PackedStringArray:
 		attack_presentation_ids[definition.id] = true
 		if not animation_names.has(definition.action_id):
 			errors.append("profile %s attack presentation %s action %s is missing" % [id, definition.id, definition.action_id])
+	_validate_class_heads(errors)
 	return errors
+
+
+func head_for_body(body_preset_id: StringName) -> CharacterHeadVisualDefinition:
+	for head: CharacterHeadVisualDefinition in class_heads:
+		if head != null and head.body_preset_id == body_preset_id:
+			return head
+	return null
 
 func resolve_attack_presentation(attack_id: StringName, weapon_family_id: StringName) -> AttackPresentationDefinition:
 	for value: AttackPresentationDefinition in attack_presentations:
@@ -157,3 +166,19 @@ func _validate_item_presentation(item: EquipmentBaseDefinition, errors: PackedSt
 		return
 	for reason: String in item.presentation.validate():
 		errors.append("profile %s %s" % [id, reason])
+
+
+func _validate_class_heads(errors: PackedStringArray) -> void:
+	if class_heads.is_empty():
+		return
+	var counts := {&"masculine": 0, &"feminine": 0}
+	for head: CharacterHeadVisualDefinition in class_heads:
+		if head == null:
+			errors.append("profile %s has null class head" % id)
+			continue
+		for reason: String in head.validate():
+			errors.append("profile %s %s" % [id, reason])
+		if counts.has(head.body_preset_id):
+			counts[head.body_preset_id] = int(counts[head.body_preset_id]) + 1
+	if int(counts[&"masculine"]) != 1 or int(counts[&"feminine"]) != 1:
+		errors.append("profile %s requires exactly one masculine and one feminine head" % id)

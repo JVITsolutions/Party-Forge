@@ -10,8 +10,8 @@ func run() -> Array[String]:
 	var failures: Array[String] = []
 	var contract := CONTRACT.new()
 	var constants := (CONTRACT as Script).get_script_constant_map()
-	TestAssertions.equal(constants.get("SCHEMA_VERSION"), 1, "manifest schema version is one", failures)
-	TestAssertions.equal(constants.get("ROW_KINDS"), ["rig", "body", "equipment"], "manifest row kinds are closed", failures)
+	TestAssertions.equal(constants.get("SCHEMA_VERSION"), 2, "production manifest schema version is two", failures)
+	TestAssertions.equal(constants.get("ROW_KINDS"), ["rig", "body", "equipment", "head", "hair", "accessory"], "manifest row kinds are closed", failures)
 	TestAssertions.equal(constants.get("BODY_PRESETS"), ["masculine", "feminine"], "manifest body presets are closed", failures)
 	TestAssertions.equal(constants.get("FIT_POLICIES"), ["shared", "variant"], "manifest fit policies are closed", failures)
 	TestAssertions.equal(constants.get("ATTACHMENT_MODES"), ["rigid_socket", "shared_skin"], "manifest attachment modes are closed", failures)
@@ -27,6 +27,10 @@ func run() -> Array[String]:
 	_test_canonical_rig_rules(contract, failures)
 	_test_shared_skin_rules(contract, failures)
 	_test_shared_skin_matches_canonical_rig(contract, failures)
+	_test_schema_one_baseline_read_path(contract, failures)
+	_test_v2_surface_rules(contract, failures)
+	_test_v2_head_hair_and_accessory_rules(contract, failures)
+	_test_v2_headwear_and_necklace_rules(contract, failures)
 	_test_approval_rules(contract, failures)
 	_test_deterministic_errors_and_immutability(contract, failures)
 	_test_nested_error_ordering(contract, failures)
@@ -76,7 +80,7 @@ func _test_design_required_fields(contract: RefCounted, failures: Array[String])
 
 func _test_identity_and_kind_rules(contract: RefCounted, failures: Array[String]) -> void:
 	var wrong_schema := _valid_document()
-	wrong_schema["schema_version"] = 2
+	wrong_schema["schema_version"] = 1
 	_assert_error_contains(contract, wrong_schema, "field=schema_version", "wrong schema version rejects", failures)
 
 	var empty_id := _valid_document()
@@ -212,6 +216,92 @@ func _test_shared_skin_matches_canonical_rig(contract: RefCounted, failures: Arr
 		)
 
 
+func _test_schema_one_baseline_read_path(contract: RefCounted, failures: Array[String]) -> void:
+	TestAssertions.truthy(contract.has_method(&"validate_baseline_document"), "schema-one baseline reader is explicit", failures)
+	if not contract.has_method(&"validate_baseline_document"):
+		return
+	var legacy := _legacy_document()
+	TestAssertions.equal(contract.call(&"validate_baseline_document", legacy), PackedStringArray(), "schema-one baseline remains readable", failures)
+	_assert_error_contains(contract, legacy, "field=schema_version", "production validation rejects schema one", failures)
+	var v2_on_legacy_path: PackedStringArray = contract.call(&"validate_baseline_document", _valid_document())
+	TestAssertions.truthy(_errors_contain(v2_on_legacy_path, "field=schema_version"), "baseline reader rejects schema two", failures)
+	var unsupported_kind := _legacy_document()
+	((unsupported_kind["assets"] as Array)[1] as Dictionary)["kind"] = "head"
+	var unsupported_errors: PackedStringArray = contract.call(&"validate_baseline_document", unsupported_kind)
+	TestAssertions.truthy(_errors_contain(unsupported_errors, "field=kind"), "baseline reader retains schema-one row kinds", failures)
+
+
+func _test_v2_surface_rules(contract: RefCounted, failures: Array[String]) -> void:
+	for row_index: int in [1, 3, 6, 7, 8]:
+		for field: String in ["uv_set_count", "tangent_status", "texture_paths", "material_family_ids", "lod_triangle_counts"]:
+			var missing := _valid_document()
+			((missing["assets"] as Array)[row_index] as Dictionary).erase(field)
+			_assert_error_contains(contract, missing, "row=%d field=%s" % [row_index, field], "v2 surface row %d requires %s" % [row_index, field], failures)
+
+	var no_uvs := _valid_document()
+	(no_uvs["assets"] as Array)[1]["uv_set_count"] = 0
+	_assert_error_contains(contract, no_uvs, "field=uv_set_count", "surface requires UVs", failures)
+
+	var invalid_tangents := _valid_document()
+	(invalid_tangents["assets"] as Array)[1]["tangent_status"] = "approved"
+	_assert_error_contains(contract, invalid_tangents, "field=tangent_status", "surface tangents must be valid", failures)
+
+	var machine_texture := _valid_document()
+	(machine_texture["assets"] as Array)[1]["texture_paths"] = {"base_color": "F:/textures/body.png"}
+	_assert_error_contains(contract, machine_texture, "field=texture_paths.base_color", "surface texture path is portable", failures)
+
+	var duplicate_family := _valid_document()
+	(duplicate_family["assets"] as Array)[1]["material_family_ids"] = ["skin", "skin"]
+	_assert_error_contains(contract, duplicate_family, "field=material_family_ids", "surface families are unique", failures)
+
+	var flat_lods := _valid_document()
+	(flat_lods["assets"] as Array)[1]["lod_triangle_counts"] = [1200, 1200]
+	_assert_error_contains(contract, flat_lods, "field=lod_triangle_counts", "surface LODs strictly decrease", failures)
+
+
+func _test_v2_head_hair_and_accessory_rules(contract: RefCounted, failures: Array[String]) -> void:
+	for field: String in ["class_id", "body_preset_id", "neck_interface_id", "helmet_envelope_id", "left_ear_socket_path", "right_ear_socket_path"]:
+		var missing := _valid_document()
+		((missing["assets"] as Array)[6] as Dictionary).erase(field)
+		_assert_error_contains(contract, missing, "row=6 field=%s" % field, "head requires %s" % field, failures)
+
+	var invalid_body := _valid_document()
+	(invalid_body["assets"] as Array)[6]["body_preset_id"] = "shared"
+	_assert_error_contains(contract, invalid_body, "field=body_preset_id", "head body preset is closed", failures)
+
+	var absolute_ear := _valid_document()
+	(absolute_ear["assets"] as Array)[6]["left_ear_socket_path"] = "/Absolute/Ear"
+	_assert_error_contains(contract, absolute_ear, "field=left_ear_socket_path", "head ear socket is relative", failures)
+
+
+func _test_v2_headwear_and_necklace_rules(contract: RefCounted, failures: Array[String]) -> void:
+	for field: String in ["headwear_category", "compatible_envelope_ids", "hide_head_region_ids", "helmet_safe_hair_id"]:
+		var missing := _valid_document()
+		((missing["assets"] as Array)[4] as Dictionary).erase(field)
+		_assert_error_contains(contract, missing, "row=4 field=%s" % field, "helmet requires %s" % field, failures)
+
+	var invalid_category := _valid_document()
+	(invalid_category["assets"] as Array)[4]["headwear_category"] = "hat"
+	_assert_error_contains(contract, invalid_category, "field=headwear_category", "helmet category is closed", failures)
+
+	var open_without_hair := _valid_document()
+	(open_without_hair["assets"] as Array)[4]["headwear_category"] = "open_helmet"
+	(open_without_hair["assets"] as Array)[4]["helmet_safe_hair_id"] = ""
+	_assert_error_contains(contract, open_without_hair, "field=helmet_safe_hair_id", "open helmet requires safe hair", failures)
+
+	var full_without_hair := _valid_document()
+	(full_without_hair["assets"] as Array)[4]["helmet_safe_hair_id"] = ""
+	TestAssertions.equal(contract.validate_document(full_without_hair), PackedStringArray(), "full helmet may hide hair without a safe variant", failures)
+
+	var missing_anchors := _valid_document()
+	((missing_anchors["assets"] as Array)[5] as Dictionary).erase("necklace_anchor_paths")
+	_assert_error_contains(contract, missing_anchors, "row=5 field=necklace_anchor_paths", "visible amulet requires necklace anchors", failures)
+
+	var absolute_anchor := _valid_document()
+	(absolute_anchor["assets"] as Array)[5]["necklace_anchor_paths"] = ["/Absolute/Neck"]
+	_assert_error_contains(contract, absolute_anchor, "field=necklace_anchor_paths", "necklace anchors are relative", failures)
+
+
 func _test_approval_rules(contract: RefCounted, failures: Array[String]) -> void:
 	for field: String in ["reviewer", "reviewed_at_utc", "notes"]:
 		var missing := _valid_document()
@@ -250,7 +340,7 @@ func _test_approval_rules(contract: RefCounted, failures: Array[String]) -> void
 
 func _test_deterministic_errors_and_immutability(contract: RefCounted, failures: Array[String]) -> void:
 	var invalid := _valid_document()
-	invalid["schema_version"] = 2
+	invalid["schema_version"] = 1
 	var assets := invalid["assets"] as Array
 	assets.resize(3)
 	(assets[0] as Dictionary)["asset_id"] = ""
@@ -258,9 +348,9 @@ func _test_deterministic_errors_and_immutability(contract: RefCounted, failures:
 	(assets[1] as Dictionary)["asset_id"] = ""
 	var source_before := var_to_bytes(invalid)
 	var expected := PackedStringArray([
-		"PARTY_FORGE_EQUIPMENT_MANIFEST_ERROR field=schema_version value=2 reason=expected 1",
+		"PARTY_FORGE_EQUIPMENT_MANIFEST_ERROR field=schema_version value=1 reason=expected 2",
 		"PARTY_FORGE_EQUIPMENT_MANIFEST_ERROR row=0 field=asset_id reason=must be non-empty",
-		"PARTY_FORGE_EQUIPMENT_MANIFEST_ERROR row=0 field=kind value=costume reason=expected rig, body, or equipment",
+		"PARTY_FORGE_EQUIPMENT_MANIFEST_ERROR row=0 field=kind value=costume reason=expected rig, body, equipment, head, hair, or accessory",
 		"PARTY_FORGE_EQUIPMENT_MANIFEST_ERROR row=1 field=asset_id reason=must be non-empty",
 		"PARTY_FORGE_EQUIPMENT_MANIFEST_ERROR row=1 field=asset_id reason=duplicate",
 		"PARTY_FORGE_EQUIPMENT_MANIFEST_ERROR field=canonical_rig reason=exactly one canonical rig row required",
@@ -315,7 +405,7 @@ func _assert_error_contains(contract: RefCounted, document: Dictionary, fragment
 
 func _valid_document() -> Dictionary:
 	return {
-		"schema_version": 1,
+		"schema_version": 2,
 		"assets": [
 			_base_row("pf_humanoid_v1", "rig", {"rig": "res://models/rigs/pf_humanoid_v1.glb"}, SHA_A).merged({
 				"topology_sha256": SHA_B,
@@ -349,7 +439,32 @@ func _valid_document() -> Dictionary:
 				"fit_policy": "shared",
 				"attachment_mode": "rigid_socket",
 				"body_coverage": ["masculine", "feminine"],
+				"headwear_category": "full_helmet",
+				"compatible_envelope_ids": ["pf_head_masculine_v1", "pf_head_feminine_v1"],
+				"hide_head_region_ids": ["scalp", "hair", "ears"],
+				"helmet_safe_hair_id": "",
 			}, true).merged(_equipment_fields(), true),
+			_base_row("sun_oath_amulet", "equipment", {
+				"masculine": "res://models/equipment/sun_oath_amulet.glb",
+				"feminine": "res://models/equipment/sun_oath_amulet.glb",
+			}, SHA_C).merged({
+				"set_id": "sunweld_bastion",
+				"slot_ids": ["amulet"],
+				"fit_policy": "shared",
+				"attachment_mode": "rigid_socket",
+				"body_coverage": ["masculine", "feminine"],
+				"necklace_anchor_paths": ["Skeleton3D/NecklaceNeck", "Skeleton3D/NecklaceSternum"],
+			}, true).merged(_equipment_fields(), true),
+			_base_row("paladin_masculine_head", "head", {"masculine": "res://models/heads/paladin_masculine_head.glb"}, SHA_A).merged({
+				"class_id": "paladin",
+				"body_preset_id": "masculine",
+				"neck_interface_id": "pf_neck_masculine_v1",
+				"helmet_envelope_id": "pf_head_masculine_v1",
+				"left_ear_socket_path": "Skeleton3D/EarSocketLeft",
+				"right_ear_socket_path": "Skeleton3D/EarSocketRight",
+			}, true).merged(_surface_fields("paladin_head"), true),
+			_base_row("paladin_masculine_hair", "hair", {"masculine": "res://models/hair/paladin_masculine_hair.glb"}, SHA_B).merged(_surface_fields("paladin_hair"), true),
+			_base_row("paladin_scar", "accessory", {"masculine": "res://models/accessories/paladin_scar.glb"}, SHA_C).merged(_surface_fields("paladin_scar"), true),
 		],
 	}
 
@@ -397,9 +512,9 @@ func _body_fields(body_preset: String, skin_hash: String) -> Dictionary:
 		"material_count": 2,
 		"texture_set": ["body_base_color"],
 		"uv_status": "approved",
-		"tangent_status": "approved",
+		"tangent_status": "valid",
 		"skin_weight_status": "approved",
-	}
+	}.merged(_surface_fields("body_%s" % body_preset), true)
 
 
 func _equipment_fields() -> Dictionary:
@@ -410,10 +525,42 @@ func _equipment_fields() -> Dictionary:
 		"material_count": 1,
 		"texture_set": ["equipment_base_color"],
 		"uv_status": "approved",
-		"tangent_status": "approved",
+		"tangent_status": "valid",
 		"skin_weight_status": "approved",
 		"master_icon_path": "res://assets/ui/equipment/master/sunweld_bastion/item.png",
 		"master_icon_sha256": SHA_A,
 		"runtime_icon_path": "res://assets/ui/equipment/runtime/sunweld_bastion/item.png",
 		"runtime_icon_sha256": SHA_B,
+	}.merged(_surface_fields("equipment"), true)
+
+
+func _surface_fields(stem: String) -> Dictionary:
+	return {
+		"uv_set_count": 1,
+		"tangent_status": "valid",
+		"texture_paths": {"base_color": "res://assets/models/%s_base_color.png" % stem},
+		"material_family_ids": ["skin" if stem.begins_with("body") or "head" in stem else "equipment"],
+		"lod_triangle_counts": [1200, 600, 240],
 	}
+
+
+func _legacy_document() -> Dictionary:
+	var legacy := _valid_document()
+	legacy["schema_version"] = 1
+	var assets := legacy["assets"] as Array
+	assets.resize(5)
+	for row_index: int in [1, 2, 3, 4]:
+		var row := assets[row_index] as Dictionary
+		for field: String in ["uv_set_count", "texture_paths", "material_family_ids", "lod_triangle_counts"]:
+			row.erase(field)
+	var helmet := assets[4] as Dictionary
+	for field: String in ["headwear_category", "compatible_envelope_ids", "hide_head_region_ids", "helmet_safe_hair_id"]:
+		helmet.erase(field)
+	return legacy
+
+
+func _errors_contain(errors: PackedStringArray, fragment: String) -> bool:
+	for error: String in errors:
+		if fragment in error:
+			return true
+	return false

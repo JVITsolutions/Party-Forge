@@ -1,11 +1,14 @@
 class_name EquipmentAssetManifestContract
 extends RefCounted
 
-const SCHEMA_VERSION := 1
-const ROW_KINDS: Array[String] = ["rig", "body", "equipment"]
+const SCHEMA_VERSION := 2
+const BASELINE_SCHEMA_VERSION := 1
+const ROW_KINDS: Array[String] = ["rig", "body", "equipment", "head", "hair", "accessory"]
+const BASELINE_ROW_KINDS: Array[String] = ["rig", "body", "equipment"]
 const BODY_PRESETS: Array[String] = ["masculine", "feminine"]
 const FIT_POLICIES: Array[String] = ["shared", "variant"]
 const ATTACHMENT_MODES: Array[String] = ["rigid_socket", "shared_skin"]
+const HEADWEAR_CATEGORIES: Array[String] = ["full_helmet", "open_helmet", "circlet"]
 
 const CANONICAL_RIG_ID := "pf_humanoid_v1"
 const CANONICAL_REST_QUANTIZATION := "1e-6"
@@ -14,10 +17,18 @@ const ERROR_PREFIX := "PARTY_FORGE_EQUIPMENT_MANIFEST_ERROR"
 
 
 func validate_document(document: Dictionary) -> PackedStringArray:
+	return _validate_document(document, SCHEMA_VERSION, ROW_KINDS, true)
+
+
+func validate_baseline_document(document: Dictionary) -> PackedStringArray:
+	return _validate_document(document, BASELINE_SCHEMA_VERSION, BASELINE_ROW_KINDS, false)
+
+
+func _validate_document(document: Dictionary, expected_schema: int, allowed_row_kinds: Array[String], require_v2: bool) -> PackedStringArray:
 	var errors := PackedStringArray()
 	var schema_value: Variant = document.get("schema_version")
-	if schema_value != SCHEMA_VERSION:
-		errors.append("%s field=schema_version value=%s reason=expected %d" % [ERROR_PREFIX, str(schema_value), SCHEMA_VERSION])
+	if schema_value != expected_schema:
+		errors.append("%s field=schema_version value=%s reason=expected %d" % [ERROR_PREFIX, str(schema_value), expected_schema])
 
 	var assets_value: Variant = document.get("assets")
 	if not assets_value is Array:
@@ -45,8 +56,8 @@ func validate_document(document: Dictionary) -> PackedStringArray:
 			seen_ids[asset_id] = true
 
 		var kind := _string_value(row.get("kind"))
-		if kind not in ROW_KINDS:
-			errors.append("%s row=%d field=kind value=%s reason=expected rig, body, or equipment" % [ERROR_PREFIX, row_index, kind])
+		if kind not in allowed_row_kinds:
+			errors.append("%s row=%d field=kind value=%s reason=%s" % [ERROR_PREFIX, row_index, kind, _kind_expectation(require_v2)])
 		if kind == "rig":
 			canonical_rig_count += 1
 			canonical_rig_row = row
@@ -56,7 +67,12 @@ func validate_document(document: Dictionary) -> PackedStringArray:
 			for body_preset: String in covered_bodies:
 				body_coverage_counts[body_preset] = int(body_coverage_counts.get(body_preset, 0)) + 1
 		elif kind == "equipment":
-			_validate_equipment(row, row_index, errors)
+			_validate_equipment(row, row_index, require_v2, errors)
+		elif require_v2 and kind == "head":
+			_validate_head(row, row_index, errors)
+
+		if require_v2 and kind in ["body", "equipment", "head", "hair", "accessory"]:
+			_validate_surface(row, row_index, errors)
 
 		_validate_runtime_paths(row, row_index, errors)
 		_require_non_empty_string(row, "runtime_sha256", row_index, errors)
@@ -118,9 +134,9 @@ func _validate_canonical_rig(row: Dictionary, row_index: int, errors: PackedStri
 		errors.append("%s row=%d field=named_bind_policy value=%s reason=expected %s" % [ERROR_PREFIX, row_index, _string_value(row.get("named_bind_policy")), NAMED_BIND_POLICY])
 
 
-func _validate_equipment(row: Dictionary, row_index: int, errors: PackedStringArray) -> void:
+func _validate_equipment(row: Dictionary, row_index: int, require_v2: bool, errors: PackedStringArray) -> void:
 	_require_non_empty_string(row, "set_id", row_index, errors)
-	_validate_string_array(row, "slot_ids", row_index, PackedStringArray(), true, errors)
+	var slot_ids := _validate_string_array(row, "slot_ids", row_index, PackedStringArray(), true, errors)
 
 	var fit_policy := _string_value(row.get("fit_policy"))
 	if fit_policy not in FIT_POLICIES:
@@ -135,6 +151,10 @@ func _validate_equipment(row: Dictionary, row_index: int, errors: PackedStringAr
 		_validate_required_res_path(row, icon_field, row_index, errors)
 	for icon_hash_field: String in ["master_icon_sha256", "runtime_icon_sha256"]:
 		_require_non_empty_string(row, icon_hash_field, row_index, errors)
+	if require_v2 and "helmet" in slot_ids:
+		_validate_headwear_fields(row, row_index, errors)
+	if require_v2 and "amulet" in slot_ids:
+		_validate_relative_path_array(row, "necklace_anchor_paths", row_index, true, errors)
 	if attachment_mode != "shared_skin":
 		return
 	if not body_coverage.has("masculine") or not body_coverage.has("feminine"):
@@ -154,6 +174,61 @@ func _validate_equipment(row: Dictionary, row_index: int, errors: PackedStringAr
 			errors.append("%s row=%d field=skin_named_bind_sha256.%s reason=required ordered named-bind hash" % [ERROR_PREFIX, row_index, body_preset])
 		elif not _is_sha256(_string_value(binds.get(body_preset))):
 			errors.append("%s row=%d field=skin_named_bind_sha256.%s value=%s reason=must be 64 lowercase hexadecimal characters" % [ERROR_PREFIX, row_index, body_preset, _string_value(binds.get(body_preset))])
+
+
+func _validate_head(row: Dictionary, row_index: int, errors: PackedStringArray) -> void:
+	for field: String in ["class_id", "neck_interface_id", "helmet_envelope_id"]:
+		_require_non_empty_string(row, field, row_index, errors)
+	var body_preset_id := _string_value(row.get("body_preset_id"))
+	if body_preset_id not in BODY_PRESETS:
+		errors.append("%s row=%d field=body_preset_id value=%s reason=expected masculine or feminine" % [ERROR_PREFIX, row_index, body_preset_id])
+	for socket_field: String in ["left_ear_socket_path", "right_ear_socket_path"]:
+		_validate_relative_path_string(row, socket_field, row_index, errors)
+
+
+func _validate_headwear_fields(row: Dictionary, row_index: int, errors: PackedStringArray) -> void:
+	var category := _string_value(row.get("headwear_category"))
+	if category not in HEADWEAR_CATEGORIES:
+		errors.append("%s row=%d field=headwear_category value=%s reason=expected full_helmet, open_helmet, or circlet" % [ERROR_PREFIX, row_index, category])
+	_validate_string_array(row, "compatible_envelope_ids", row_index, PackedStringArray(), true, errors)
+	_validate_string_array(row, "hide_head_region_ids", row_index, PackedStringArray(), false, errors)
+	if not row.has("helmet_safe_hair_id") or not (row.get("helmet_safe_hair_id") is String or row.get("helmet_safe_hair_id") is StringName):
+		errors.append("%s row=%d field=helmet_safe_hair_id reason=required string" % [ERROR_PREFIX, row_index])
+	elif category == "open_helmet" and _string_value(row.get("helmet_safe_hair_id")).is_empty():
+		errors.append("%s row=%d field=helmet_safe_hair_id reason=open helmet requires a helmet-safe hair id" % [ERROR_PREFIX, row_index])
+
+
+func _validate_surface(row: Dictionary, row_index: int, errors: PackedStringArray) -> void:
+	var uv_set_count: Variant = row.get("uv_set_count")
+	if not uv_set_count is int or int(uv_set_count) < 1:
+		errors.append("%s row=%d field=uv_set_count reason=must be an integer at least 1" % [ERROR_PREFIX, row_index])
+	if _string_value(row.get("tangent_status")) != "valid":
+		errors.append("%s row=%d field=tangent_status reason=must be valid" % [ERROR_PREFIX, row_index])
+	var texture_paths_value: Variant = row.get("texture_paths")
+	if not texture_paths_value is Dictionary:
+		errors.append("%s row=%d field=texture_paths reason=must be a mapping" % [ERROR_PREFIX, row_index])
+	else:
+		var texture_paths := texture_paths_value as Dictionary
+		for channel: Variant in _sorted_keys(texture_paths):
+			var field := "texture_paths.%s" % str(channel)
+			var path := _string_value(texture_paths[channel])
+			if _string_value(channel).is_empty() or not _is_normalized_res_path(path):
+				errors.append("%s row=%d field=%s value=%s reason=must be a normalized res:// path" % [ERROR_PREFIX, row_index, field, path])
+	_validate_string_array(row, "material_family_ids", row_index, PackedStringArray(), true, errors)
+	var lod_counts_value: Variant = row.get("lod_triangle_counts")
+	if not lod_counts_value is Array:
+		errors.append("%s row=%d field=lod_triangle_counts reason=must be an array" % [ERROR_PREFIX, row_index])
+		return
+	var previous := 2147483647
+	var lod_counts := lod_counts_value as Array
+	if lod_counts.is_empty():
+		errors.append("%s row=%d field=lod_triangle_counts reason=must be non-empty" % [ERROR_PREFIX, row_index])
+		return
+	for count: Variant in lod_counts:
+		if not count is int or int(count) <= 0 or int(count) >= previous:
+			errors.append("%s row=%d field=lod_triangle_counts reason=must contain positive strictly decreasing integers" % [ERROR_PREFIX, row_index])
+			break
+		previous = int(count)
 
 
 func _validate_shared_skin_signatures(assets: Array, canonical_rig_row: Dictionary, errors: PackedStringArray) -> void:
@@ -311,6 +386,26 @@ func _validate_asset_metrics(row: Dictionary, row_index: int, errors: PackedStri
 		_require_non_empty_string(row, status_field, row_index, errors)
 
 
+func _validate_relative_path_array(row: Dictionary, field: String, row_index: int, require_non_empty: bool, errors: PackedStringArray) -> void:
+	var paths := _validate_string_array(row, field, row_index, PackedStringArray(), require_non_empty, errors)
+	for path: String in paths:
+		if not _is_normalized_relative_node_path(path):
+			errors.append("%s row=%d field=%s value=%s reason=must be a normalized relative node path" % [ERROR_PREFIX, row_index, field, path])
+
+
+func _validate_relative_path_string(row: Dictionary, field: String, row_index: int, errors: PackedStringArray) -> void:
+	var path := _string_value(row.get(field))
+	if not _is_normalized_relative_node_path(path):
+		errors.append("%s row=%d field=%s value=%s reason=must be a normalized relative node path" % [ERROR_PREFIX, row_index, field, path])
+
+
+func _is_normalized_relative_node_path(path: String) -> bool:
+	if path.is_empty() or _is_absolute_machine_path(path) or "\\" in path:
+		return false
+	var segments := path.split("/", true)
+	return not segments.has("") and not segments.has(".") and not segments.has("..")
+
+
 func _validate_required_res_path(row: Dictionary, field: String, row_index: int, errors: PackedStringArray) -> void:
 	if not row.has(field):
 		errors.append("%s row=%d field=%s reason=required" % [ERROR_PREFIX, row_index, field])
@@ -410,6 +505,10 @@ func _sorted_keys(dictionary: Dictionary) -> Array:
 	var keys := dictionary.keys()
 	keys.sort_custom(func(left: Variant, right: Variant) -> bool: return str(left) < str(right))
 	return keys
+
+
+func _kind_expectation(require_v2: bool) -> String:
+	return "expected rig, body, equipment, head, hair, or accessory" if require_v2 else "expected rig, body, or equipment"
 
 
 func _string_value(value: Variant) -> String:
