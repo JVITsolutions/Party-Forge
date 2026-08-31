@@ -26,8 +26,9 @@ func _run() -> void:
 	var catalog := GameCatalog.load_defaults()
 	var party := PartyManager.new()
 	party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
+	party.recruit(catalog.class_by_id(&"ranger"))
 	var choices: Array[UpgradeChoice] = [
-		UpgradeChoice.authored(catalog.upgrade_by_id(&"vanguard_wall")),
+		UpgradeChoice.authored(catalog.upgrade_by_id(&"ranged_calibration")),
 		UpgradeChoice.authored(catalog.upgrade_by_id(&"vitality")),
 		UpgradeChoice.authored(catalog.upgrade_by_id(&"precision")),
 		UpgradeChoice.authored(catalog.upgrade_by_id(&"tempered_armor")),
@@ -95,13 +96,14 @@ func _run() -> void:
 			for label_name: String in ["Eligibility", "Scope", "Rank", "Summary"]:
 				var label := card.find_child(label_name, true, false) as Label
 				_assert(label.visible, "Card%d semantic %s is hidden at %dx%d" % [index + 1, label_name, viewport_size.x, viewport_size.y])
-			_assert_offer_card_vertical_bounds(card, cards_scroll, index, viewport_size)
+			_assert_offer_card_vertical_bounds(card, cards_scroll, choices[index], index, viewport_size)
 			_assert(not card.accessibility_name.is_empty(), "Card%d exposes a semantic accessibility name at %dx%d" % [index + 1, viewport_size.x, viewport_size.y])
 			if index > 0:
 				_assert(absf(card_rect.size.x - visible_cards[0].get_global_rect().size.x) <= 2.0, "Card%d matches equal-card width at %dx%d" % [index + 1, viewport_size.x, viewport_size.y])
 		if visible_cards.size() == 5:
 			if viewport_size == VIEWPORT_SIZES[0]:
 				await _assert_authentic_tooltip_input_parity(viewport, panel, tooltip, visible_cards[0])
+				await _assert_first_slot_ranged_calibration_detail(viewport, tooltip, cards_scroll, visible_cards[0], choices[0])
 			for index: int in visible_cards.size():
 				_assert(
 					viewport.gui_get_focus_owner() == visible_cards[index],
@@ -191,6 +193,7 @@ func _assert_pooled_card_details_scroll_reset(viewport: SubViewport) -> void:
 func _assert_offer_card_vertical_bounds(
 	card: UpgradeCard,
 	cards_scroll: ScrollContainer,
+	choice: UpgradeChoice,
 	index: int,
 	viewport_size: Vector2i,
 ) -> void:
@@ -215,7 +218,7 @@ func _assert_offer_card_vertical_bounds(
 	_assert(details_rect.end.y <= footer_rect.position.y + 1.0, "%s body viewport does not overlap the pinned footer: details=%s footer=%s" % [context, details_rect, footer_rect])
 	_assert(action_rect.position.y >= details_rect.end.y - 1.0, "%s CTA remains below variable body copy: details=%s action=%s" % [context, details_rect, action_rect])
 	_assert(card_rect.position.y >= scroll_rect.position.y - 1.0 and card_rect.end.y <= scroll_rect.end.y + 1.0, "%s full card height stays visible in the offer viewport: offer=%s card=%s" % [context, scroll_rect, card_rect])
-	var expected_action := "Apply" if index == 0 else "Choose Recipient"
+	var expected_action := "Apply" if choice.application_route() == UpgradeChoice.ApplicationRoute.DIRECT else "Choose Recipient"
 	_assert(action.text == expected_action, "%s shows the expected %s CTA (actual=%s)" % [context, expected_action, action.text])
 
 
@@ -254,6 +257,26 @@ func _assert_full_tooltip(tooltip: UpgradeTooltipPanel, choice: UpgradeChoice, v
 	_assert(not (tooltip.get_node("Content/BodyScroll/Body/Effects") as Label).text.is_empty(), "tooltip effects render for %s" % context)
 	_assert(not (tooltip.get_node("Content/BodyScroll/Body/Eligibility") as Label).text.is_empty(), "tooltip eligibility renders for %s" % context)
 	_assert(not (tooltip.get_node("Content/BodyScroll/Body/Keywords") as Label).text.is_empty(), "tooltip keywords render for %s" % context)
+
+
+func _assert_first_slot_ranged_calibration_detail(
+	viewport: SubViewport,
+	tooltip: UpgradeTooltipPanel,
+	cards_scroll: ScrollContainer,
+	card: UpgradeCard,
+	choice: UpgradeChoice,
+) -> void:
+	card.grab_focus()
+	await _wait_for_layout()
+	var effects := (tooltip.get_node("Content/BodyScroll/Body/Effects") as Label).text
+	var body_scroll := tooltip.get_node("Content/BodyScroll") as ScrollContainer
+	_assert(card.bound_choice_key() == StringName(choice.key()), "first slot remains bound to Ranged Calibration")
+	_assert(viewport.gui_get_focus_owner() == card, "Ranged Calibration detail retains focus on its source card")
+	_assert(ResponsiveGeometry.contains(cards_scroll.get_global_rect(), card.get_global_rect()), "Ranged Calibration source remains visible in the offer scroll")
+	_assert(tooltip.visible, "Ranged Calibration first-slot detail popup opens")
+	_assert("10% increased Attack Range." in effects, "Ranged Calibration detail shows its +10% Attack Range effect")
+	_assert("10% increased Projectile Speed." in effects, "Ranged Calibration detail shows its +10% Projectile Speed effect")
+	_assert(body_scroll.scroll_vertical == int(body_scroll.get_v_scroll_bar().min_value), "Ranged Calibration detail opens at its scroll origin")
 
 
 func _assert_authentic_tooltip_input_parity(

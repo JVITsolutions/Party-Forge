@@ -262,7 +262,7 @@ static func _effect_line(
 				and stat_definition.value_format == StatDefinition.ValueFormat.RATIO_PERCENT
 				and stat_definition.default_value <= 1.0
 			):
-				return "+%s percentage points %s." % [_number_text(value * 100.0), stat_name]
+				return "+%s%% %s." % [_number_text(value * 100.0), stat_name]
 			return "+%s %s." % [_number_text(value), stat_name]
 		_:
 			return "%s: %s." % [stat_name, _number_text(value)]

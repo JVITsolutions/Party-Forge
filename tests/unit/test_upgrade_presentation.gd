@@ -35,7 +35,7 @@ func _test_exact_effect_and_keyword_text(failures: Array[String]) -> void:
 	TestAssertions.truthy("15% less Attack Speed." in lines, "Deadeye shows its attack-speed trade-off", failures)
 
 	var precision := UpgradePresentationService.tooltip(catalog.upgrade_by_id(&"precision"), 1, PartyManager.STAT_CATALOG, catalog.keywords)
-	TestAssertions.truthy("+3 percentage points Critical Strike Chance." in (precision.get("effect_lines", []) as Array), "flat ratio uses percentage points", failures)
+	TestAssertions.truthy("+3% Critical Strike Chance." in (precision.get("effect_lines", []) as Array), "flat ratio uses the player-facing percent symbol", failures)
 
 	var more_line := "More: A multiplicative modifier applied after increased and reduced values."
 	TestAssertions.truthy(more_line in (content.get("keyword_lines", []) as Array), "tooltip explains More", failures)
@@ -43,6 +43,14 @@ func _test_exact_effect_and_keyword_text(failures: Array[String]) -> void:
 
 	for definition: UpgradeDefinition in catalog.upgrades:
 		var tooltip := UpgradePresentationService.tooltip(definition, 1, PartyManager.STAT_CATALOG, catalog.keywords)
+		var effect_lines: Array = tooltip.get("effect_lines", [])
+		for effect_line: String in effect_lines:
+			var normalized := effect_line.to_lower()
+			TestAssertions.truthy(
+				"percent" not in normalized and "percentage points" not in normalized,
+				"%s player-facing effect text uses the percent symbol: %s" % [definition.id, effect_line],
+				failures,
+			)
 		var keyword_lines: Array = tooltip.get("keyword_lines", [])
 		TestAssertions.equal(keyword_lines.size(), definition.tooltip_keyword_ids.size(), "%s has one explanation per keyword" % definition.id, failures)
 		TestAssertions.truthy(not keyword_lines.any(func(line: String) -> bool: return line.begins_with("Missing definition:")), "%s resolves all known keyword definitions" % definition.id, failures)
