@@ -34,6 +34,7 @@ const BASELINE_CARD_HEIGHT := 184.0
 var _bound_member_id := 0
 var _semantic_state: StringName = &"normal"
 var _high_contrast := false
+var _background_opacity_percent := PartyForgeSettings.DEFAULT_CHARACTER_HUD_BACKGROUND_OPACITY_PERCENT
 var _has_valid_binding := false
 var _interaction_disabled := false
 var _mouse_hovered := false
@@ -117,6 +118,15 @@ func apply_accessibility_variant(high_contrast: bool) -> void:
 	_render_interaction()
 
 
+func apply_background_opacity(opacity_percent: int) -> void:
+	_background_opacity_percent = clampi(
+		opacity_percent,
+		PartyForgeSettings.MIN_CHARACTER_HUD_BACKGROUND_OPACITY_PERCENT,
+		PartyForgeSettings.MAX_CHARACTER_HUD_BACKGROUND_OPACITY_PERCENT,
+	)
+	_apply_semantic_state()
+
+
 func _format_name(member: PartyMemberHudProjection) -> String:
 	return member.display_name
 
@@ -170,7 +180,9 @@ func _apply_semantic_state() -> void:
 	bar.add_theme_stylebox_override(&"fill", fill)
 	var surface := get_node("Surface") as Panel
 	var surface_style := StyleBoxFlat.new()
-	surface_style.bg_color = LivingForgeTokens.color(&"surface_forged", _high_contrast)
+	var surface_color := LivingForgeTokens.color(&"surface_forged", _high_contrast)
+	surface_color.a = 1.0 if _high_contrast else float(_background_opacity_percent) / 100.0
+	surface_style.bg_color = surface_color
 	surface_style.border_width_left = 4
 	surface_style.border_width_top = 1
 	surface_style.border_width_right = 1

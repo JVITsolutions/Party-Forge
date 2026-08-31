@@ -2182,6 +2182,7 @@ func _on_settings_applied(_settings: PartyForgeSettings) -> void:
 	var authoritative := settings_store.load_settings(settings_path) if settings_store != null else _settings
 	saved_settings = authoritative.copy()
 	(get_node("ArmouryScreen") as ArmouryScreen).configure_visual_settings(saved_settings)
+	(get_node("HUD") as HUD).apply_visual_settings(saved_settings)
 	if saved_settings.mode != PartyForgeSettings.Mode.DEVELOPER_MODE:
 		(get_node("DeveloperItemSandbox") as DeveloperItemSandbox).cancel_and_clear()
 	_refresh_main_menu_projection()

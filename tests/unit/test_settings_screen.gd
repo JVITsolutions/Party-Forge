@@ -214,10 +214,13 @@ func _test_game_settings_page(failures: Array[String]) -> void:
 	(Engine.get_main_loop() as SceneTree).root.add_child(page)
 	var reduced_motion := page.get_node_or_null("Layout/ReducedMotion") as CheckButton
 	var high_contrast := page.get_node_or_null("Layout/HighContrast") as CheckButton
+	var hud_opacity := page.get_node_or_null("Layout/HudBackgroundOpacity/Value") as HSlider
+	var hud_opacity_readout := page.get_node_or_null("Layout/HudBackgroundOpacity/Current") as Label
 	var ui_scale := page.get_node_or_null("Layout/UIScale") as OptionButton
 	var text_scale := page.get_node_or_null("Layout/TextScale") as OptionButton
 	TestAssertions.truthy(reduced_motion != null, "Game Settings exposes Layout/ReducedMotion", failures)
 	TestAssertions.truthy(high_contrast != null, "Game Settings exposes Layout/HighContrast", failures)
+	TestAssertions.truthy(hud_opacity != null and hud_opacity_readout != null, "Game Settings exposes the character HUD background opacity control and readout", failures)
 	TestAssertions.truthy(ui_scale != null, "Game Settings exposes Layout/UIScale", failures)
 	TestAssertions.truthy(text_scale != null, "Game Settings exposes Layout/TextScale", failures)
 	if reduced_motion != null:
@@ -233,6 +236,15 @@ func _test_game_settings_page(failures: Array[String]) -> void:
 		reduced_motion.button_pressed = false
 		page.call("write_to", saved)
 		TestAssertions.equal(saved.get("reduced_motion"), false, "Game Settings writes reduced motion", failures)
+	if hud_opacity != null and hud_opacity_readout != null:
+		var saved := PartyForgeSettings.new()
+		saved.set("character_hud_background_opacity_percent", 65)
+		page.call("bind", saved)
+		TestAssertions.equal([int(hud_opacity.value), hud_opacity_readout.text], [65, "65%"], "Game Settings binds the saved HUD opacity and visible value", failures)
+		TestAssertions.equal([int(hud_opacity.min_value), int(hud_opacity.max_value), int(hud_opacity.step)], [0, 100, 5], "Game Settings bounds HUD opacity from zero to 100 in five-point steps", failures)
+		hud_opacity.value = 30
+		page.call("write_to", saved)
+		TestAssertions.equal(saved.get("character_hud_background_opacity_percent"), 30, "Game Settings writes character HUD background opacity", failures)
 	if high_contrast != null and ui_scale != null and text_scale != null:
 		TestAssertions.equal([high_contrast.text, ui_scale.get_item_count(), text_scale.get_item_count()], ["Use high contrast interface", 6, 6], "Game Settings uses accessible display control labels", failures)
 		var supported_values := [80, 90, 100, 110, 125, 150]

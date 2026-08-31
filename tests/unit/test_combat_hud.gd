@@ -15,10 +15,48 @@ func run() -> Array[String]:
 	var failures: Array[String] = []
 	_test_scene_contract(failures)
 	_test_party_scale_and_signal_updates(failures)
+	_test_character_hud_background_opacity(failures)
 	_test_alert_surface_and_complete_tray(failures)
 	_test_fail_closed_status_and_pluralization(failures)
 	_test_pause_safe_inspector_and_ledger_routes(failures)
 	return failures
+
+
+func _test_character_hud_background_opacity(failures: Array[String]) -> void:
+	var fixture := _fixture(6)
+	(fixture.settings as PartyForgeSettings).set("character_hud_background_opacity_percent", 35)
+	var hud := _configured_hud(fixture)
+	TestAssertions.truthy(hud != null, "HUD configures with custom character background opacity", failures)
+	if hud != null:
+		var member_controls: Array[Control] = _member_controls(hud)
+		var leader := hud.get_node("Margin/CombatStatus/LeaderCard") as Control
+		member_controls.append(leader)
+		TestAssertions.equal(member_controls.size(), 6, "opacity regression covers the leader and every rich follower", failures)
+		for control: Control in member_controls:
+			var style := (control.get_node("Surface") as Panel).get_theme_stylebox(&"panel") as StyleBoxFlat
+			TestAssertions.near(style.bg_color.a if style != null else -1.0, 0.35, 0.001, "member %d dark surface uses saved opacity" % int(control.get_meta("member_id", 0)), failures)
+			TestAssertions.near(style.border_color.a if style != null else -1.0, 1.0, 0.001, "member %d semantic border remains opaque" % int(control.get_meta("member_id", 0)), failures)
+			TestAssertions.near((control.get_node("Surface/Content/Identity/Name") as Label).get_theme_color(&"font_color").a, 1.0, 0.001, "member %d text remains opaque" % int(control.get_meta("member_id", 0)), failures)
+		TestAssertions.truthy(hud.has_method(&"apply_visual_settings"), "HUD exposes live visual-settings application", failures)
+		if hud.has_method(&"apply_visual_settings"):
+			var updated := (fixture.settings as PartyForgeSettings).copy()
+			updated.character_hud_background_opacity_percent = 80
+			hud.call(&"apply_visual_settings", updated)
+			for control: Control in _member_controls(hud) + [leader]:
+				var updated_style := (control.get_node("Surface") as Panel).get_theme_stylebox(&"panel") as StyleBoxFlat
+				TestAssertions.near(updated_style.bg_color.a if updated_style != null else -1.0, 0.8, 0.001, "live settings update existing member %d background" % int(control.get_meta("member_id", 0)), failures)
+		_cleanup_hud(hud)
+	_cleanup_fixture(fixture)
+
+	var high_contrast_fixture := _fixture(1)
+	(high_contrast_fixture.settings as PartyForgeSettings).set("character_hud_background_opacity_percent", 0)
+	(high_contrast_fixture.settings as PartyForgeSettings).high_contrast = true
+	var high_contrast_hud := _configured_hud(high_contrast_fixture)
+	var high_contrast_leader := high_contrast_hud.get_node("Margin/CombatStatus/LeaderCard") as Control if high_contrast_hud != null else null
+	var high_contrast_style := (high_contrast_leader.get_node("Surface") as Panel).get_theme_stylebox(&"panel") as StyleBoxFlat if high_contrast_leader != null else null
+	TestAssertions.near(high_contrast_style.bg_color.a if high_contrast_style != null else -1.0, 1.0, 0.001, "high contrast keeps the character HUD surface opaque", failures)
+	_cleanup_hud(high_contrast_hud)
+	_cleanup_fixture(high_contrast_fixture)
 
 
 func _test_scene_contract(failures: Array[String]) -> void:
