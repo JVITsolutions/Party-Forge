@@ -1,6 +1,13 @@
 extends RefCounted
 
 const COMBAT_RESOLUTION_SERVICE := preload("res://scripts/combat/combat_resolution_service.gd")
+const WAREHOUSE_LOCKED_DIALOG := preload("res://scripts/ui/warehouse/warehouse_locked_dialog.gd")
+
+class WarehouseRefreshFailureManager extends ProfileManager:
+    var failure_reason := "injected Warehouse refresh failure"
+
+    func refresh_profile(profile_id: String) -> String:
+        return "PROFILE_REFRESH_ERROR profile=%s error=%s" % [profile_id, failure_reason]
 
 const REQUIRED_PATHS: PackedStringArray = [
     "res://scripts/run/run_terminal_flow.gd",
@@ -24,6 +31,9 @@ const REQUIRED_PATHS: PackedStringArray = [
     "res://scripts/run/local_run_setup_coordinator.gd",
     "res://scripts/ui/loadout_warning/loadout_warning_dialog.gd",
     "res://scenes/ui/loadout_warning/loadout_warning_dialog.tscn",
+    "res://scripts/world/access/warehouse_presentation_reporter.gd",
+    "res://scripts/ui/warehouse/warehouse_locked_dialog.gd",
+    "res://scenes/ui/warehouse/warehouse_locked_dialog.tscn",
     "res://scripts/ui/run_recovery/run_recovery_dialog.gd",
     "res://scenes/ui/run_recovery/run_recovery_dialog.tscn",
     "res://scenes/ui/armoury/armoury_screen.tscn",
@@ -55,7 +65,7 @@ const REQUIRED_MAIN_NODES: PackedStringArray = [
     "GameRun", "PartyManager", "CombatResolutionService", "ExperienceSystem", "SpawnDirector",
     "PartyActorSpawner", "Arena", "Actors", "Enemies", "Effects", "HUD",
     "DeveloperModeBadge", "CharacterLedger", "RunPauseMenu",
-    "MainMenuScreen", "SettingsScreen", "PassiveTreeScreen", "DeveloperItemSandbox", "ArmouryScreen", "WarehouseScreen", "LoadoutWarningDialog", "RunRecoveryDialog",
+    "MainMenuScreen", "SettingsScreen", "PassiveTreeScreen", "DeveloperItemSandbox", "ArmouryScreen", "WarehouseScreen", "WarehouseLockedDialog", "LoadoutWarningDialog", "RunRecoveryDialog",
 ]
 
 var _profile_root := ""
@@ -130,6 +140,8 @@ func run() -> Array[String]:
     _test_storage_route_policy_and_shared_projection_wiring(failures)
     _test_main_routes_real_overflow_source_only_through_storage(failures)
     _test_warehouse_shadow_observer_is_sidecar(failures)
+    _test_warehouse_presentation_activation_wiring(failures)
+    _test_city_return_focus_routing(failures)
     _test_loadout_warning_preflight_and_transition_wiring(failures)
     _test_passive_tree_route_composition(failures)
     _test_settings_and_next_run_snapshot_wiring(failures)
@@ -447,10 +459,209 @@ func _test_warehouse_shadow_observer_is_sidecar(failures: Array[String]) -> void
     main.call("_refresh_main_menu_projection")
     TestAssertions.equal(emissions.size(), 1, "Player Mode emits no additional Warehouse shadow marker", failures)
     projection = menu.projection()
-    TestAssertions.truthy(not projection.warehouse_visible and not projection.warehouse_enabled, "Player Mode hides and disables the locked Warehouse route", failures)
+    TestAssertions.equal(projection.warehouse_presentation_state, WarehousePresentationResult.State.LOCKED, "Player Mode presents the candidate-locked Warehouse route", failures)
     main.call("_on_main_menu_route_requested", MainMenuViewModel.ROUTE_WAREHOUSE)
-    TestAssertions.truthy(menu.is_open() and not (main.get_node("WarehouseScreen") as WarehouseScreen).is_open(), "Player Mode keeps the direct locked Warehouse route blocked", failures)
+    TestAssertions.truthy(main.get_node("WarehouseLockedDialog").call("is_open") and not (main.get_node("WarehouseScreen") as WarehouseScreen).is_open(), "Player Mode keeps the direct locked Warehouse route blocked behind guidance", failures)
     main.free()
+    ProfileTestSupport.remove_tree(root)
+    _cleanup_settings_artifacts(settings_path)
+
+
+func _test_warehouse_presentation_activation_wiring(failures: Array[String]) -> void:
+    var root := "user://tests/main_wiring-warehouse-activation_%d_%d" % [OS.get_process_id(), Time.get_ticks_usec()]
+    var settings_path := "user://tests/main_wiring-warehouse-activation-settings_%d_%d.cfg" % [OS.get_process_id(), Time.get_ticks_usec()]
+    ProfileTestSupport.remove_tree(root)
+    _cleanup_settings_artifacts(settings_path)
+    var fixture_manager := ProfileManager.new()
+    TestAssertions.equal(fixture_manager.bootstrap(root), "", "Warehouse activation fixture bootstraps an isolated profile root", failures)
+    var created := fixture_manager.create_profile("Warehouse Activation Tester", 411)
+    TestAssertions.truthy(created.ok(), "Warehouse activation fixture creates a profile", failures)
+    var player := PartyForgeSettings.new()
+    player.mode = PartyForgeSettings.Mode.PLAYER_SIMULATION
+    player.use_city_access_snapshot = true
+    TestAssertions.equal(PartyForgeSettingsStore.new().save_settings(player, settings_path), "", "Warehouse activation fixture persists Player Mode candidate presentation", failures)
+
+    var report_emissions: Array = []
+    var reporter_script := load("res://scripts/world/access/warehouse_presentation_reporter.gd") as Script
+    var main := (load("res://scenes/game/main.tscn") as PackedScene).instantiate() as PartyForgeMain
+    main.profile_root = root
+    main.settings_path = settings_path
+    if reporter_script != null:
+        main.set("warehouse_presentation_reporter", reporter_script.new(func(marker: String, warning: bool) -> void:
+            var presented := (main.get_node("MainMenuScreen") as MainMenuScreen).projection().warehouse_presentation_state
+            report_emissions.append([marker, warning, presented])
+        ))
+    (Engine.get_main_loop() as SceneTree).root.add_child(main)
+    main.call("_ready")
+    var manager := main.profile_manager as ProfileManager
+    var menu := main.get_node("MainMenuScreen") as MainMenuScreen
+    var warehouse := main.get_node("WarehouseScreen") as WarehouseScreen
+    var locked_dialog: Variant = main.get_node_or_null("WarehouseLockedDialog")
+    TestAssertions.truthy(locked_dialog != null, "Main composes Warehouse guidance", failures)
+    if locked_dialog == null:
+        main.free()
+        ProfileTestSupport.remove_tree(root)
+        _cleanup_settings_artifacts(settings_path)
+        return
+    TestAssertions.truthy(locked_dialog.city_tree_requested.is_connected(Callable(main, "_on_warehouse_locked_city_tree_requested")), "Main routes guidance CTA through one named City handler", failures)
+    var projection := menu.projection()
+    TestAssertions.equal(projection.warehouse_presentation_state, WarehousePresentationResult.State.LOCKED, "flag-on Player Mode presents locked Warehouse", failures)
+    TestAssertions.equal(report_emissions.size(), 1, "authoritative presentation emits one activation diagnostic", failures)
+    if report_emissions.size() == 1:
+        TestAssertions.equal((report_emissions[0] as Array)[2], WarehousePresentationResult.State.LOCKED, "activation diagnostic runs after authoritative menu presentation", failures)
+
+    main.call("_on_main_menu_route_requested", MainMenuViewModel.ROUTE_WAREHOUSE)
+    TestAssertions.truthy(locked_dialog.is_open() and not warehouse.is_open(), "blocked route opens guidance only", failures)
+    TestAssertions.equal((locked_dialog.get_node("Overlay/Frame/Layout/Body") as Label).text, WAREHOUSE_LOCKED_DIALOG.PROLOGUE_BODY, "undiscovered City route selects prologue guidance", failures)
+    locked_dialog.close()
+
+    var warehouse_origin := menu.get_node("Warehouse") as Control
+    menu.call("_emit_route", MainMenuViewModel.ROUTE_WAREHOUSE, warehouse_origin)
+    TestAssertions.equal(locked_dialog.get("_return_focus"), warehouse_origin, "menu Warehouse origin is retained exactly", failures)
+    locked_dialog.close()
+    var hotspot_origin := menu.get_node("CityWarehouseHotspot") as Control
+    menu.call("_emit_route", MainMenuViewModel.ROUTE_WAREHOUSE, hotspot_origin)
+    TestAssertions.equal(locked_dialog.get("_return_focus"), hotspot_origin, "City Warehouse origin is retained exactly", failures)
+    locked_dialog.close()
+
+    var profile_id := manager.active_profile().profile_id
+    var completed := ProfileMutationService.new(ProfileStore.new()).complete_prologue(profile_id, "warehouse-guidance-city", root)
+    TestAssertions.truthy(completed.ok(), "Warehouse guidance fixture durably completes the prologue", failures)
+    TestAssertions.equal(manager.refresh_profile(profile_id), "", "Warehouse guidance fixture refreshes durable City access", failures)
+    main.call("_refresh_main_menu_projection")
+    menu.call("_emit_route", MainMenuViewModel.ROUTE_WAREHOUSE, menu.get_node("Warehouse") as Control)
+    TestAssertions.equal((locked_dialog.get_node("Overlay/Frame/Layout/Body") as Label).text, WAREHOUSE_LOCKED_DIALOG.AVAILABLE_BODY, "durable City access selects available guidance", failures)
+    locked_dialog.close()
+    var mutation_service := main.passive_tree_mutations
+    main.passive_tree_mutations = null
+    main.call("_on_main_menu_route_requested", MainMenuViewModel.ROUTE_WAREHOUSE)
+    TestAssertions.equal((locked_dialog.get_node("Overlay/Frame/Layout/Body") as Label).text, WAREHOUSE_LOCKED_DIALOG.UNAVAILABLE_BODY, "missing City runtime selects temporary-unavailable guidance", failures)
+    locked_dialog.close()
+    main.passive_tree_mutations = mutation_service
+
+    var profile := manager.active_profile()
+    profile.permanent_feature_unlocks = ["stash"]
+    TestAssertions.equal(ProfileStore.new().save_profile(profile, root), "", "fixture persists Stash Access", failures)
+    main.call("_on_main_menu_route_requested", MainMenuViewModel.ROUTE_WAREHOUSE)
+    TestAssertions.truthy(warehouse.is_open() and not locked_dialog.is_open(), "fresh policy recheck opens newly authorized Warehouse", failures)
+    main.call("_on_warehouse_closed")
+
+    profile = manager.active_profile()
+    profile.permanent_feature_unlocks = []
+    TestAssertions.equal(ProfileStore.new().save_profile(profile, root), "", "fixture removes Stash Access for stale-settings checks", failures)
+    TestAssertions.equal(manager.refresh_profile(profile_id), "", "fixture refreshes locked profile", failures)
+    var stale_developer := player.copy()
+    stale_developer.mode = PartyForgeSettings.Mode.DEVELOPER_MODE
+    main.saved_settings = stale_developer
+    main.call("_on_main_menu_route_requested", MainMenuViewModel.ROUTE_WAREHOUSE)
+    TestAssertions.truthy(locked_dialog.is_open() and not warehouse.is_open(), "persisted Player Mode defeats stale cached Developer authorization", failures)
+    locked_dialog.close()
+    var developer := player.copy()
+    developer.mode = PartyForgeSettings.Mode.DEVELOPER_MODE
+    TestAssertions.equal(PartyForgeSettingsStore.new().save_settings(developer, settings_path), "", "fixture persists Developer preview", failures)
+    main.saved_settings = player.copy()
+    main.call("_on_main_menu_route_requested", MainMenuViewModel.ROUTE_WAREHOUSE)
+    TestAssertions.truthy(warehouse.is_open() and not locked_dialog.is_open(), "persisted Developer preview bypasses player Warehouse policy explicitly", failures)
+    main.call("_on_warehouse_closed")
+
+    TestAssertions.equal(PartyForgeSettingsStore.new().save_settings(player, settings_path), "", "fixture restores Player Mode candidate presentation", failures)
+    main.saved_settings = player.copy()
+    main.set("city_access_provider", CityAccessProvider.new(func(_path: String) -> Variant: return null))
+    main.call("_refresh_main_menu_projection")
+    TestAssertions.equal(menu.projection().warehouse_presentation_state, WarehousePresentationResult.State.HIDDEN, "failed candidate restores legacy hidden presentation", failures)
+    var flag_off := player.copy()
+    flag_off.use_city_access_snapshot = false
+    main.saved_settings = flag_off
+    main.call("_refresh_main_menu_projection")
+    TestAssertions.equal(menu.projection().warehouse_presentation_state, WarehousePresentationResult.State.HIDDEN, "setting-off restores legacy hidden presentation", failures)
+    main.set("city_access_provider", CityAccessProvider.new())
+    main.saved_settings = player.copy()
+    main.call("_refresh_main_menu_projection")
+    TestAssertions.equal(menu.projection().warehouse_presentation_state, WarehousePresentationResult.State.LOCKED, "restored candidate returns locked presentation", failures)
+
+    warehouse_origin = menu.get_node("Warehouse") as Control
+    menu.call("_emit_route", MainMenuViewModel.ROUTE_WAREHOUSE, warehouse_origin)
+    locked_dialog.call("_on_view_city_tree")
+    var tree_screen := main.get_node("PassiveTreeScreen") as PassiveTreeScreen
+    TestAssertions.truthy(tree_screen.is_open() and not menu.is_open(), "guidance CTA reuses the existing City route", failures)
+    TestAssertions.equal(main.get("_city_tree_return_focus"), warehouse_origin, "City route retains the exact Warehouse origin", failures)
+    profile = manager.active_profile()
+    profile.permanent_feature_unlocks = ["stash"]
+    TestAssertions.equal(ProfileStore.new().save_profile(profile, root), "", "City allocation fixture persists Stash Access while the tree is open", failures)
+    tree_screen.close()
+    TestAssertions.equal(menu.projection().warehouse_presentation_state, WarehousePresentationResult.State.AVAILABLE, "City return refreshes persisted Stash Access", failures)
+    TestAssertions.truthy(menu.is_open() and bool(menu.call("_is_available_action", warehouse_origin)), "City return preserves the exact still-available Warehouse origin as its return target", failures)
+
+    profile = manager.active_profile()
+    profile.permanent_feature_unlocks = []
+    TestAssertions.equal(ProfileStore.new().save_profile(profile, root), "", "profile-switch fixture restores locked state", failures)
+    TestAssertions.equal(manager.refresh_profile(profile_id), "", "profile-switch fixture refreshes locked state", failures)
+    main.call("_refresh_main_menu_projection")
+    main.call("_on_main_menu_route_requested", MainMenuViewModel.ROUTE_WAREHOUSE)
+    TestAssertions.truthy(locked_dialog.is_open(), "locked dialog opens before profile switch", failures)
+    var switched := manager.create_profile("Warehouse Switch Target", 412)
+    TestAssertions.truthy(switched.ok() and not locked_dialog.is_open(), "active profile switch closes Warehouse guidance", failures)
+
+    var failing_manager := WarehouseRefreshFailureManager.new()
+    TestAssertions.equal(failing_manager.bootstrap(root), "", "refresh-failure fixture bootstraps the authoritative profile bytes", failures)
+    main.profile_manager = failing_manager
+    main.set("_city_tree_origin", &"main_menu")
+    main.set("_city_tree_return_focus", menu.get_node("Warehouse") as Control)
+    main.call("_on_city_passive_tree_closed")
+    var safe_status := "Some profile data needs attention. Open Settings > Profiles for details."
+    TestAssertions.equal((menu.get_node("Status") as Label).text, safe_status, "City return refresh failure reports generic player-safe status", failures)
+    main.call("_on_main_menu_route_requested", MainMenuViewModel.ROUTE_WAREHOUSE)
+    TestAssertions.truthy(not warehouse.is_open() and not locked_dialog.is_open(), "next Warehouse route repeats the required refresh and fails closed", failures)
+    TestAssertions.equal((menu.get_node("Status") as Label).text, safe_status, "route-local refresh failure preserves generic player-safe status", failures)
+
+    main.free()
+    ProfileTestSupport.remove_tree(root)
+    _cleanup_settings_artifacts(settings_path)
+
+
+func _test_city_return_focus_routing(failures: Array[String]) -> void:
+    var root := "user://tests/main_wiring-warehouse-return-focus_%d_%d" % [OS.get_process_id(), Time.get_ticks_usec()]
+    var settings_path := "user://tests/main_wiring-warehouse-return-focus-settings_%d_%d.cfg" % [OS.get_process_id(), Time.get_ticks_usec()]
+    ProfileTestSupport.remove_tree(root)
+    _cleanup_settings_artifacts(settings_path)
+    var fixture_manager := ProfileManager.new()
+    TestAssertions.equal(fixture_manager.bootstrap(root), "", "City return-focus fixture bootstraps an isolated profile root", failures)
+    var created := fixture_manager.create_profile("Warehouse Return Focus Tester", 413)
+    TestAssertions.truthy(created.ok(), "City return-focus fixture creates a profile", failures)
+    var profile := fixture_manager.active_profile()
+    profile.permanent_feature_unlocks = ["stash"]
+    TestAssertions.equal(ProfileStore.new().save_profile(profile, root), "", "City return-focus fixture persists available Warehouse", failures)
+    TestAssertions.equal(fixture_manager.refresh_profile(profile.profile_id), "", "City return-focus fixture refreshes available Warehouse", failures)
+    var player := PartyForgeSettings.new()
+    player.mode = PartyForgeSettings.Mode.PLAYER_SIMULATION
+    player.use_city_access_snapshot = true
+    TestAssertions.equal(PartyForgeSettingsStore.new().save_settings(player, settings_path), "", "City return-focus fixture persists Player Mode candidate presentation", failures)
+
+    var detached_main := (load("res://scenes/game/main.tscn") as PackedScene).instantiate() as PartyForgeMain
+    detached_main.profile_root = root
+    detached_main.settings_path = settings_path
+    detached_main.call("_ready")
+    var menu := detached_main.get_node("MainMenuScreen") as MainMenuScreen
+    var warehouse_origin := menu.get_node("Warehouse") as Control
+    detached_main.set("_city_tree_origin", &"main_menu")
+    detached_main.set("_city_tree_return_focus", warehouse_origin)
+    detached_main.call("_on_city_passive_tree_closed")
+    TestAssertions.equal(menu.get("_pending_preferred_focus"), warehouse_origin, "available City return passes the exact Warehouse origin to the menu", failures)
+
+    profile = detached_main.active_profile()
+    profile.permanent_feature_unlocks = []
+    TestAssertions.equal(ProfileStore.new().save_profile(profile, root), "", "City return-focus fixture removes Warehouse authority", failures)
+    var flag_off := player.copy()
+    flag_off.use_city_access_snapshot = false
+    detached_main.saved_settings = flag_off
+    detached_main.set("_city_tree_origin", &"main_menu")
+    detached_main.set("_city_tree_return_focus", warehouse_origin)
+    detached_main.call("_on_city_passive_tree_closed")
+    TestAssertions.equal(menu.projection().warehouse_presentation_state, WarehousePresentationResult.State.HIDDEN, "hidden return origin stays unavailable after profile refresh", failures)
+    TestAssertions.equal(menu.get("_pending_preferred_focus"), null, "hidden Warehouse origin requests no preferred menu focus", failures)
+    TestAssertions.equal(menu.call("_first_available_action"), menu.get_node("PrimaryAction"), "hidden Warehouse origin falls back to the menu's first available action", failures)
+
+    detached_main.free()
     ProfileTestSupport.remove_tree(root)
     _cleanup_settings_artifacts(settings_path)
 
@@ -824,6 +1035,11 @@ func _test_gameplay_input_blocked_predicate(failures: Array[String]) -> void:
     settings.open()
     TestAssertions.truthy(bool(main.call(&"_gameplay_input_blocked")), "actual settings screen blocks gameplay input", failures)
     settings.close()
+    var warehouse_dialog: Variant = main.get_node("WarehouseLockedDialog")
+    warehouse_dialog.call("open", WAREHOUSE_LOCKED_DIALOG.Guidance.PROLOGUE_REQUIRED, null)
+    TestAssertions.truthy(bool(main.call(&"_gameplay_input_blocked")), "actual Warehouse guidance blocks gameplay input", failures)
+    warehouse_dialog.close()
+    TestAssertions.truthy(not bool(main.call(&"_gameplay_input_blocked")), "closing Warehouse guidance restores world interaction", failures)
     var run := main.get_node("GameRun") as GameRun
     run.begin_level_up()
     TestAssertions.truthy(bool(main.call(&"_gameplay_input_blocked")), "actual upgrade-selection run state blocks gameplay input", failures)

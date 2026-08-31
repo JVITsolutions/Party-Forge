@@ -21,6 +21,7 @@ func run() -> Array[String]:
 	_test_projection_and_lifecycle(screen, failures)
 	_test_action_signals_and_cancel(screen, failures)
 	_test_focus_loop(screen, failures)
+	_test_warehouse_presentation(screen, failures)
 	screen.free()
 	return failures
 
@@ -148,6 +149,42 @@ func _test_focus_loop(screen: CanvasLayer, failures: Array[String]) -> void:
 	screen.call(&"close")
 
 
+func _test_warehouse_presentation(screen: CanvasLayer, failures: Array[String]) -> void:
+	var locked := _warehouse_projection(WarehousePresentationResult.State.LOCKED)
+	screen.call(&"present", locked)
+	var warehouse := screen.get_node("Warehouse") as Button
+	var city_warehouse := screen.get_node("CityWarehouseHotspot") as Button
+	var warehouse_badge := screen.get_node_or_null("Warehouse/LockBadge") as Label
+	var city_warehouse_badge := screen.get_node_or_null("CityWarehouseHotspot/LockBadge") as Label
+	for action: Button in [warehouse, city_warehouse]:
+		TestAssertions.truthy(action.visible and not action.disabled, "%s locked Warehouse action remains enabled" % action.name, failures)
+		TestAssertions.equal(action.focus_mode, Control.FOCUS_ALL, "%s locked Warehouse action remains focusable" % action.name, failures)
+		TestAssertions.truthy(action.accessibility_description.contains("Requires Stash Access"), "%s locked Warehouse action explains its requirement" % action.name, failures)
+	TestAssertions.truthy(warehouse_badge != null and warehouse_badge.visible, "Warehouse locked state shows a visible LockBadge", failures)
+	TestAssertions.truthy(city_warehouse_badge != null and city_warehouse_badge.visible, "City Warehouse locked state shows a visible LockBadge", failures)
+	var routes: Array[StringName] = []
+	screen.route_requested.connect(func(route_id: StringName) -> void: routes.append(route_id))
+	warehouse.pressed.emit()
+	TestAssertions.equal(routes, [MainMenuViewModel.ROUTE_WAREHOUSE], "locked Warehouse menu action emits the Warehouse route", failures)
+	TestAssertions.equal(screen.call(&"route_origin"), warehouse, "locked Warehouse menu action retains its exact route origin", failures)
+	city_warehouse.pressed.emit()
+	TestAssertions.equal(routes, [MainMenuViewModel.ROUTE_WAREHOUSE, MainMenuViewModel.ROUTE_WAREHOUSE], "locked City Warehouse hotspot emits the Warehouse route", failures)
+	TestAssertions.equal(screen.call(&"route_origin"), city_warehouse, "locked City Warehouse hotspot retains its exact route origin", failures)
+
+	var hidden := _warehouse_projection(WarehousePresentationResult.State.HIDDEN)
+	screen.call(&"present", hidden)
+	for action: Button in [warehouse, city_warehouse]:
+		TestAssertions.truthy(not action.visible and action.disabled, "%s hidden Warehouse action has no menu action" % action.name, failures)
+		TestAssertions.equal(action.focus_mode, Control.FOCUS_NONE, "%s hidden Warehouse action has no focus origin" % action.name, failures)
+		TestAssertions.equal(action.focus_next, NodePath(), "%s hidden Warehouse action is removed from the focus loop" % action.name, failures)
+
+	var available := _warehouse_projection(WarehousePresentationResult.State.AVAILABLE)
+	screen.call(&"present", available)
+	TestAssertions.truthy(warehouse.visible and not warehouse.disabled and city_warehouse.visible and not city_warehouse.disabled, "available Warehouse actions remain selectable", failures)
+	TestAssertions.truthy(warehouse_badge != null and not warehouse_badge.visible, "available Warehouse menu action hides its LockBadge", failures)
+	TestAssertions.truthy(city_warehouse_badge != null and not city_warehouse_badge.visible, "available City Warehouse hotspot hides its LockBadge", failures)
+
+
 func _all_actions_projection() -> MainMenuProjection:
 	var result := MainMenuProjection.new()
 	result.primary_label = "Play"
@@ -173,6 +210,12 @@ func _all_actions_projection() -> MainMenuProjection:
 	result.active_profile_text = "Active Profile: Menu Tester"
 	result.status_text = "Ready."
 	return result
+
+
+func _warehouse_projection(state: WarehousePresentationResult.State) -> MainMenuProjection:
+	var profile := ProfileState.new_profile("profile-menu-warehouse", "Warehouse Tester", 1000)
+	profile.prologue_state = ProfileState.PrologueState.COMPLETED
+	return MainMenuViewModel.build(profile, PartyForgeSettings.new(), true, state)
 
 
 func _visible_action_names(screen: CanvasLayer) -> Array[StringName]:

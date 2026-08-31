@@ -15,8 +15,6 @@ func resolve(settings: PartyForgeSettings, _profile: ProfileState) -> CityAccess
 		return CityAccessProviderResult.legacy(&"invalid_settings")
 	if not settings.use_city_access_snapshot:
 		return CityAccessProviderResult.legacy()
-	if settings.mode != PartyForgeSettings.Mode.DEVELOPER_MODE:
-		return CityAccessProviderResult.legacy(&"candidate_requires_developer_mode")
 	var load_result: Variant = _snapshot_loader.call(SNAPSHOT_PATH)
 	if not load_result is CityAccessLoadResult:
 		return CityAccessProviderResult.candidate_failed(&"candidate_snapshot_loader_invalid")

@@ -76,8 +76,10 @@ func _test_provider_selection(failures: Array[String]) -> void:
 	player_settings.mode = PartyForgeSettings.Mode.PLAYER_SIMULATION
 	player_settings.use_city_access_snapshot = true
 	var player_result = player_provider.resolve(player_settings, profile)
-	_assert_result(player_result, LEGACY, null, &"candidate_requires_developer_mode", "Player Simulation rejects candidate selection", failures)
-	TestAssertions.equal(player_calls, [], "Player Simulation does not load candidate snapshot", failures)
+	TestAssertions.equal(player_result.get("mode"), CANDIDATE, "Player Simulation and flag-on select candidate snapshot", failures)
+	TestAssertions.truthy(player_result.get("snapshot") is CityAccessSnapshot, "Player Simulation candidate exposes a validated snapshot", failures)
+	TestAssertions.equal(player_result.get("diagnostic"), &"", "Player Simulation candidate has no diagnostic", failures)
+	TestAssertions.equal(player_calls, [SNAPSHOT_PATH], "Player Simulation candidate provider invokes its fixed snapshot path", failures)
 
 	var source := FileAccess.get_file_as_string(PROVIDER_PATH).to_lower()
 	for forbidden: String in [".pstree", "latticewright", "passive_tree", "profile_store", "router", "scene"]:

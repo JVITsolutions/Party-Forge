@@ -8,6 +8,8 @@ const HUDScript := preload("res://scripts/ui/hud.gd")
 const LevelUpPanelScript := preload("res://scripts/ui/level_up_panel.gd")
 const RunResultPanelScript := preload("res://scripts/ui/run_result_panel.gd")
 const LoadoutWarningDialogScript := preload("res://scripts/ui/loadout_warning/loadout_warning_dialog.gd")
+const WarehouseLockedDialogScript := preload("res://scripts/ui/warehouse/warehouse_locked_dialog.gd")
+const WarehousePresentationReporterScript := preload("res://scripts/world/access/warehouse_presentation_reporter.gd")
 const REWARD_DISTRIBUTION_TUNING: RewardDistributionTuning = preload("res://data/progression/reward_distribution.tres")
 const PERSONAL_LOOT_TUNING: PersonalLootTuning = preload("res://data/items/personal_loot_tuning.tres")
 const GROUND_ITEM_SPATIAL_INDEX := preload("res://scripts/loot/ground_item_spatial_index.gd")
@@ -65,6 +67,8 @@ var level_refresh_scheduled := false
 var saved_settings: PartyForgeSettings
 var settings_store: PartyForgeSettingsStore
 var city_access_shadow_comparator := CityAccessShadowComparator.new()
+var city_access_provider := CityAccessProvider.new()
+var warehouse_presentation_reporter := WarehousePresentationReporterScript.new()
 var settings_path := PartyForgeSettingsStore.DEFAULT_PATH
 var profile_root := ProfileStore.DEFAULT_ROOT
 var profile_manager: ProfileManager
@@ -764,6 +768,7 @@ func _gameplay_input_blocked() -> bool:
 		^"SettingsScreen",
 		^"ArmouryScreen",
 		^"WarehouseScreen",
+		^"WarehouseLockedDialog",
 		^"PassiveTreeScreen",
 		^"DeveloperItemSandbox",
 		^"LoadoutWarningDialog",
@@ -1031,6 +1036,8 @@ func _wire_static_ui() -> void:
 	var warehouse := get_node("WarehouseScreen") as WarehouseScreen
 	if not warehouse.close_requested.is_connected(_on_warehouse_closed): warehouse.close_requested.connect(_on_warehouse_closed)
 	if not warehouse.move_requested.is_connected(_on_warehouse_move_requested): warehouse.move_requested.connect(_on_warehouse_move_requested)
+	var warehouse_locked_dialog := get_node("WarehouseLockedDialog")
+	if not warehouse_locked_dialog.city_tree_requested.is_connected(_on_warehouse_locked_city_tree_requested): warehouse_locked_dialog.city_tree_requested.connect(_on_warehouse_locked_city_tree_requested)
 	var loadout_warning := get_node("LoadoutWarningDialog")
 	if not loadout_warning.go_to_armoury.is_connected(_on_loadout_go_to_armoury): loadout_warning.go_to_armoury.connect(_on_loadout_go_to_armoury)
 	if not loadout_warning.choose_another_class.is_connected(_on_loadout_choose_another_class): loadout_warning.choose_another_class.connect(_on_loadout_choose_another_class)
@@ -1715,6 +1722,7 @@ func _present_front_end(preferred_focus: Control = null) -> void:
 	(get_node("SettingsScreen") as SettingsScreen).close()
 	(get_node("ArmouryScreen") as ArmouryScreen).close()
 	(get_node("WarehouseScreen") as WarehouseScreen).close()
+	get_node("WarehouseLockedDialog").call("close", false)
 	_refresh_main_menu_projection()
 	var menu := get_node("MainMenuScreen") as MainMenuScreen
 	menu.open(preferred_focus if preferred_focus != null else menu.get_node("PrimaryAction") as Control)
@@ -1722,22 +1730,57 @@ func _present_front_end(preferred_focus: Control = null) -> void:
 
 func _refresh_main_menu_projection() -> void:
 	var profile := profile_manager.active_profile() if profile_manager != null else null
+	var presentation := _resolve_warehouse_presentation(profile, saved_settings)
 	var projection := MainMenuViewModel.build(
 		profile,
 		saved_settings,
-		_city_runtime_available()
+		_city_runtime_available(),
+		presentation.state,
 	)
 	if not profile_bootstrap_error.is_empty():
 		projection.status_text = "Some profile data needs attention. Open Settings > Profiles for details."
 	(get_node("MainMenuScreen") as MainMenuScreen).present(projection)
+	warehouse_presentation_reporter.observe(saved_settings, presentation)
 	city_access_shadow_comparator.observe(saved_settings, profile)
+
+
+func _resolve_warehouse_presentation(profile: ProfileState, settings: PartyForgeSettings) -> WarehousePresentationResult:
+	var legacy_state := WarehouseAccessPolicy.resolve(profile)
+	var provider_result := CityAccessProviderResult.legacy()
+	if settings != null and settings.mode == PartyForgeSettings.Mode.PLAYER_SIMULATION and settings.use_city_access_snapshot:
+		provider_result = city_access_provider.resolve(settings, profile) if city_access_provider != null else CityAccessProviderResult.candidate_failed(&"candidate_provider_unavailable")
+	return WarehousePresentationResolver.resolve(settings, profile, legacy_state, provider_result)
 
 
 func _open_storage_route(route_id: StringName) -> void:
 	var authoritative_settings := settings_store.load_settings(settings_path) if settings_store != null else PartyForgeSettings.new()
 	saved_settings = authoritative_settings.copy()
 	var profile := profile_manager.active_profile() if profile_manager != null else null
-	if profile == null or not _storage_route_allowed(route_id, profile):
+	if route_id == MainMenuViewModel.ROUTE_WAREHOUSE and profile != null:
+		var refresh_error := profile_manager.refresh_profile(profile.profile_id)
+		if not refresh_error.is_empty():
+			var failed_menu := get_node("MainMenuScreen") as MainMenuScreen
+			failed_menu.open(failed_menu.route_origin())
+			(failed_menu.get_node("Status") as Label).text = "Some profile data needs attention. Open Settings > Profiles for details."
+			return
+		profile = profile_manager.active_profile()
+	if profile == null:
+		return
+	var warehouse_authorized := (
+		authoritative_settings.mode == PartyForgeSettings.Mode.DEVELOPER_MODE
+		or WarehouseAccessPolicy.resolve(profile) == WarehouseAccessPolicy.State.AVAILABLE
+	)
+	if route_id == MainMenuViewModel.ROUTE_WAREHOUSE and not warehouse_authorized:
+		var presentation := _resolve_warehouse_presentation(profile, authoritative_settings)
+		if presentation.state == WarehousePresentationResult.State.LOCKED:
+			var menu := get_node("MainMenuScreen") as MainMenuScreen
+			var origin := menu.route_origin()
+			if origin == null:
+				origin = menu.get_node("Warehouse") as Control
+			(get_node("WarehouseScreen") as WarehouseScreen).close()
+			get_node("WarehouseLockedDialog").call("open", _warehouse_guidance(profile), origin)
+		return
+	if not _storage_route_allowed(route_id, profile):
 		return
 	var projection := _profile_storage_projection(profile)
 	if not projection.valid:
@@ -1756,6 +1799,7 @@ func _open_storage_route(route_id: StringName) -> void:
 		var origin := menu.route_origin()
 		if origin == null: origin = menu.get_node("Warehouse") as Control
 		_storage_return_focus = origin
+		get_node("WarehouseLockedDialog").call("close", false)
 		menu.close()
 		(get_node("WarehouseScreen") as WarehouseScreen).open(projection, origin, _developer_mode_enabled())
 
@@ -1763,8 +1807,25 @@ func _open_storage_route(route_id: StringName) -> void:
 func _storage_route_allowed(route_id: StringName, profile: ProfileState) -> bool:
 	if route_id not in [MainMenuViewModel.ROUTE_ARMOURY, MainMenuViewModel.ROUTE_WAREHOUSE] or profile == null:
 		return false
+	if route_id == MainMenuViewModel.ROUTE_WAREHOUSE:
+		return _developer_mode_enabled() or WarehouseAccessPolicy.resolve(profile) == WarehouseAccessPolicy.State.AVAILABLE
 	var projection := MainMenuViewModel.build(profile, saved_settings, _city_runtime_available())
-	return projection.armoury_visible and projection.armoury_enabled if route_id == MainMenuViewModel.ROUTE_ARMOURY else projection.warehouse_visible and projection.warehouse_enabled
+	return projection.armoury_visible and projection.armoury_enabled
+
+
+func _warehouse_guidance(profile: ProfileState) -> int:
+	var durable_city_access := (
+		profile != null
+		and profile.prologue_state == ProfileState.PrologueState.COMPLETED
+		and CITY_TREE_ID in profile.discovered_trees
+	)
+	if not durable_city_access:
+		return WarehouseLockedDialogScript.Guidance.PROLOGUE_REQUIRED
+	return WarehouseLockedDialogScript.Guidance.CITY_TREE_AVAILABLE if _city_runtime_available() else WarehouseLockedDialogScript.Guidance.TEMPORARILY_UNAVAILABLE
+
+
+func _on_warehouse_locked_city_tree_requested(return_focus: Control) -> void:
+	_open_city_passive_tree(false, CITY_ORIGIN_MAIN_MENU, return_focus)
 
 
 func _on_armoury_closed() -> void:
@@ -1948,6 +2009,7 @@ func _on_profiles_changed() -> void:
 
 func _on_active_profile_changed(_profile: ProfileState) -> void:
 	(get_node("DeveloperItemSandbox") as DeveloperItemSandbox).cancel_and_clear()
+	get_node("WarehouseLockedDialog").call("close", false)
 	var armoury := get_node("ArmouryScreen") as ArmouryScreen
 	var warehouse := get_node("WarehouseScreen") as WarehouseScreen
 	if armoury.is_open(): armoury.close()
@@ -2095,12 +2157,26 @@ func _on_city_passive_tree_closed() -> void:
 	var return_focus := _city_tree_return_focus
 	_city_tree_origin = &""
 	_city_tree_return_focus = null
+	var refresh_error := ""
+	var profile := profile_manager.active_profile() if profile_manager != null else null
+	if profile != null:
+		refresh_error = profile_manager.refresh_profile(profile.profile_id)
 	_refresh_main_menu_projection()
+	var menu := get_node("MainMenuScreen") as MainMenuScreen
+	if not refresh_error.is_empty():
+		(menu.get_node("Status") as Label).text = "Some profile data needs attention. Open Settings > Profiles for details."
 	if origin == CITY_ORIGIN_ADDITIONAL_SETTINGS:
 		(get_node("SettingsScreen") as SettingsScreen).open_additional(return_focus)
 		return
 	if origin == CITY_ORIGIN_MAIN_MENU:
-		(get_node("MainMenuScreen") as MainMenuScreen).open(return_focus)
+		var return_focus_available := (
+			return_focus != null
+			and is_instance_valid(return_focus)
+			and return_focus.visible
+			and return_focus.focus_mode != Control.FOCUS_NONE
+			and (not return_focus is Button or not (return_focus as Button).disabled)
+		)
+		menu.open(return_focus if return_focus_available else null)
 
 func _on_settings_applied(_settings: PartyForgeSettings) -> void:
 	var authoritative := settings_store.load_settings(settings_path) if settings_store != null else _settings

@@ -19,10 +19,10 @@ func _test_inactive_gates_and_reset(failures: Array[String]) -> void:
 	var scripts := _scripts(failures)
 	if scripts.is_empty():
 		return
-	var loader_calls := 0
+	var loader_calls: Array[String] = []
 	var emissions: Array = []
 	var provider := CityAccessProvider.new(func(_path: String) -> Variant:
-		loader_calls += 1
+		loader_calls.append(_path)
 		return CityAccessSnapshotLoader.load_path(CityAccessProvider.SNAPSHOT_PATH)
 	)
 	var comparator: Variant = scripts["comparator"].new(provider, Callable(), func(marker: String, warning: bool) -> void:
@@ -33,10 +33,11 @@ func _test_inactive_gates_and_reset(failures: Array[String]) -> void:
 	_assert_observe_immutable(comparator, disabled, profile, null, "flag-off gate", failures)
 	var player_mode := _settings(true, PartyForgeSettings.Mode.PLAYER_SIMULATION)
 	_assert_observe_immutable(comparator, player_mode, profile, null, "Player Mode gate", failures)
-	TestAssertions.equal(loader_calls, 0, "inactive gates do not call the provider", failures)
+	TestAssertions.equal(loader_calls, [], "inactive gates do not call the provider", failures)
 	TestAssertions.equal(emissions.size(), 0, "inactive gates do not emit", failures)
 	var enabled := _settings(true, PartyForgeSettings.Mode.DEVELOPER_MODE)
 	_assert_observe_immutable(comparator, enabled, profile, scripts["comparison"], "active observation", failures)
+	TestAssertions.equal(loader_calls, [CityAccessProvider.SNAPSHOT_PATH], "Developer Mode gate calls the provider after inactive modes did not", failures)
 	TestAssertions.equal(emissions.size(), 1, "active observation emits once", failures)
 	_assert_observe_immutable(comparator, disabled, profile, null, "disable resets comparator", failures)
 	_assert_observe_immutable(comparator, enabled, profile, scripts["comparison"], "re-enabled observation", failures)

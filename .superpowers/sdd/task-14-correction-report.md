@@ -104,3 +104,31 @@ Controller verification from the exact pre-commit working tree:
 - `git diff --check`: clean.
 
 Independent code review initially returned changes required for pre-parent theme sampling, weakened long-wrap coverage, high-contrast parity, and duplicate static-text accessibility. Each finding went through a new RED/GREEN pass. Final independent verdict: `APPROVED` with no blocking functional, accessibility, geometry, or test-coverage finding.
+
+## Local-main reconciliation
+
+- Repair parent: `8b4bfdf4a77db7a4c807c18e1dfe5538d9c4cc57`.
+- Local-main parent: `6ef03e3d11829bf04b3631ee1e7ba757932ea962`.
+- Command: `git merge --no-ff --no-commit main`.
+- Result: automatic merge exit `0`, no unresolved entries, and exactly the two pre-authorized shared paths: `scripts/game/main.gd` and `tests/unit/test_main_wiring.gd`.
+- Independent two-parent review: `APPROVED`. All 25 main-only paths match main byte-for-byte; Warehouse/City bodies and tests match main authority; Living Forge level-up, recovery, terminal, result, and tests match the feature parent; combined signal wiring remains singular and guarded.
+- The first focused Warehouse batch failed closed before assertions because this worktree's Godot class cache had not registered main's new `WarehousePresentationResult`. A headless editor import exited `0` and registered the merged classes. The 59 exact untracked legacy `.uid` sidecars created by that import were moved, not deleted, to `C:\Users\Jacob\AppData\Local\Temp\party-forge-task14-import-uids-20260830` before the clean rerun.
+
+Exact reconciliation gate rerun:
+
+- Exact 16-suite Warehouse/City/Main focused batch: exit `0`, `TEST_SUMMARY: PASS (0 failures)`.
+- `city_access_snapshot_runner.gd`: exit `0`, `WAREHOUSE_PRESENTATION_ACTIVATION_OK location=city.warehouse rollback=legacy authority=warehouse_policy`, `CITY_ACCESS_SNAPSHOT_ACCEPTANCE_OK locations=7 profiles=7 rollback=legacy`.
+- `main_menu_navigation_runner.gd`: exit `0`, `MAIN_MENU_NAVIGATION_SUMMARY: PASS`.
+- `warehouse_locked_dialog_focus_runner.gd`: exit `0`, `WAREHOUSE_LOCKED_DIALOG_FOCUS_SUMMARY: PASS (0 failures)`.
+- Windowed OpenGL `combat_loop_responsive_runner.gd`: exit `0`, `COMBAT_LOOP_RESPONSIVE_SUMMARY: PASS`.
+- Forced AccessKit/OpenGL `combat_loop_accessibility_runner.gd`: exit `0`, `COMBAT_LOOP_ACCESSIBILITY_SUMMARY: PASS`.
+- Windowed OpenGL `combat_loop_performance_runner.gd`: exit `0`, `COMBAT_LOOP_PERFORMANCE_SUMMARY: PASS cases=3 frames=900 party=24 items=36`.
+- `run_result_lifecycle_runner.gd`: exit `0`, `RUN_RESULT_LIFECYCLE_SUMMARY: PASS`.
+- `run_terminal_flow_runner.gd`: exit `0`, `RUN_TERMINAL_FLOW_SUMMARY: PASS`.
+- `run_recovery_profile_lifecycle_runner.gd`: exit `0`, `RUN_RECOVERY_PROFILE_LIFECYCLE: PASS`.
+- `profile_boot_main_flow_runner.gd`: exit `0`, `PROFILE_BOOT_MAIN_FLOW_SUMMARY: PASS`.
+- `run_setup_lobby_panel_runner.gd`: exit `0`, `RUN_SETUP_LOBBY_PANEL_SUMMARY: PASS`.
+- `live_loot_lifecycle_runner.gd`: exit `0`, `LIVE_LOOT_LIFECYCLE_INTEGRATION: PASS`.
+- `personal_loot_defeat_runner.gd`: exit `0`, `PERSONAL_LOOT_DEFEAT_INTEGRATION: PASS`.
+- Every accepted rerun had zero `TEST_SUMMARY: FAIL`, `TEST_FAILURE`, `SCRIPT ERROR`, `Parse Error`, failed-resource, or loader markers.
+- Warehouse's separate six-image exact-tip evidence was not regenerated because replacement authority is limited to the Task 14 evidence directory.

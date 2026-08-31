@@ -16,6 +16,7 @@ func run() -> Array[String]:
 	_test_malformed_inputs_return_a_safe_projection(failures)
 	_test_projection_is_copy_owned_and_value_only(failures)
 	_test_armoury_and_warehouse_feature_access(failures)
+	_test_typed_warehouse_presentation_states(failures)
 	return failures
 
 func _test_route_ids_are_stable(failures: Array[String]) -> void:
@@ -204,6 +205,27 @@ func _test_armoury_and_warehouse_feature_access(failures: Array[String]) -> void
 	var preview := MainMenuViewModel.build(profile, settings, true)
 	TestAssertions.truthy(preview.armoury_visible and preview.armoury_enabled and preview.armoury_label.contains("Developer"), "Developer Mode exposes Armoury preview without persistence mutation", failures)
 	TestAssertions.truthy(preview.warehouse_visible and preview.warehouse_enabled and preview.warehouse_label.contains("Developer"), "Developer Mode exposes Warehouse preview without persistence mutation", failures)
+
+func _test_typed_warehouse_presentation_states(failures: Array[String]) -> void:
+	var profile := _profile(ProfileState.PrologueState.COMPLETED)
+	var player_settings := PartyForgeSettings.new()
+	var hidden := MainMenuViewModel.build(profile, player_settings, true, WarehousePresentationResult.State.HIDDEN)
+	var locked := MainMenuViewModel.build(profile, player_settings, true, WarehousePresentationResult.State.LOCKED)
+	profile.permanent_feature_unlocks.append("stash")
+	var available := MainMenuViewModel.build(profile, player_settings, true, WarehousePresentationResult.State.AVAILABLE)
+	TestAssertions.truthy(not hidden.warehouse_visible and not hidden.warehouse_enabled, "hidden Warehouse has no menu action", failures)
+	TestAssertions.truthy(locked.warehouse_visible and locked.warehouse_enabled, "locked Warehouse remains selectable", failures)
+	TestAssertions.equal(locked.warehouse_presentation_state, WarehousePresentationResult.State.LOCKED, "locked state remains typed", failures)
+	TestAssertions.truthy(available.warehouse_visible and available.warehouse_enabled, "available Warehouse remains selectable", failures)
+	TestAssertions.equal(available.warehouse_presentation_state, WarehousePresentationResult.State.AVAILABLE, "available Warehouse remains typed", failures)
+	var invalid := MainMenuViewModel.build(profile, player_settings, true, "locked")
+	var omitted := MainMenuViewModel.build(profile, player_settings, true)
+	TestAssertions.equal(invalid.warehouse_presentation_state, WarehousePresentationResult.State.AVAILABLE, "invalid Warehouse presentation state preserves legacy availability", failures)
+	TestAssertions.equal(omitted.warehouse_presentation_state, WarehousePresentationResult.State.AVAILABLE, "omitted Warehouse presentation state preserves legacy availability", failures)
+	player_settings.mode = PartyForgeSettings.Mode.DEVELOPER_MODE
+	profile.permanent_feature_unlocks.clear()
+	var preview := MainMenuViewModel.build(profile, player_settings, true, WarehousePresentationResult.State.HIDDEN)
+	TestAssertions.equal(preview.warehouse_presentation_state, WarehousePresentationResult.State.AVAILABLE, "Developer Warehouse preview overrides typed hidden state", failures)
 
 func _assert_common_actions(projection: MainMenuProjection, failures: Array[String]) -> void:
 	TestAssertions.equal(projection.settings_label, "Settings", "Settings label is stable", failures)
