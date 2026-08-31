@@ -150,6 +150,7 @@ func run() -> Array[String]:
     _test_class_selection_starts_run_and_applies_choices(failures)
     _test_live_member_health_provider_uses_party_membership(failures)
     _test_ledger_health_provider_is_unbounded_and_complete(failures)
+    _test_fresh_new_run_seed_reaches_committed_runtime(failures)
     _test_run_offer_seed_and_snapshot_wiring(failures)
     var task6_contract := _task6_level_up_contract_available()
     TestAssertions.truthy(task6_contract, "Main and LevelUpPanel expose one unified Task 6 application seam", failures)
@@ -1967,6 +1968,26 @@ func _test_run_offer_seed_and_snapshot_wiring(failures: Array[String]) -> void:
     _cleanup_main(repeat_main)
     _cleanup_main(other_seed_main)
     _cleanup_main(developer_main)
+
+
+func _test_fresh_new_run_seed_reaches_committed_runtime(failures: Array[String]) -> void:
+    const INJECTED_SEED := 55101
+    var main := (load("res://scenes/game/main.tscn") as PackedScene).instantiate()
+    _prepare_main(main)
+    var seed_source: RefCounted = (load("res://scripts/run/run_seed_source.gd") as Script).new(func() -> int: return INJECTED_SEED)
+    main.call(&"configure_new_run_seed_source", seed_source)
+    TestAssertions.truthy(main.call("select_leader_class", &"fighter"), "normal run starts with an injected fresh seed", failures)
+    TestAssertions.equal((main.get_node("GameRun") as GameRun).run_seed, INJECTED_SEED, "fresh seed reaches the active GameRun", failures)
+    var profile := (main.get("profile_manager") as ProfileManager).active_profile()
+    var bootstrap := ResumableRunItemCodec.decode(profile.resumable_run, GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG) if profile != null else null
+    TestAssertions.equal(bootstrap.run_seed if bootstrap != null else 0, INJECTED_SEED, "fresh seed is durably committed for recovery and replay", failures)
+    var catalog := GameCatalog.load_defaults()
+    var expected_party := PartyManager.new()
+    expected_party.configure_identity(INJECTED_SEED, catalog.generic_name_pool)
+    expected_party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
+    TestAssertions.equal((main.get("party_manager") as PartyManager).members[0].character_name, expected_party.members[0].character_name, "fresh seed reaches deterministic character naming", failures)
+    expected_party.free()
+    _cleanup_main(main)
 
 func _test_queued_levels_show_fresh_production_offers(failures: Array[String]) -> void:
     var main := _started_main()
