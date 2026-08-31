@@ -33,6 +33,8 @@ var _boss_health_callback: Callable
 var _boss_state_callback: Callable
 var _last_viewport_size := Vector2i.ZERO
 var _high_contrast := false
+var _actor_binding_refresh_scheduled := false
+var _actor_binding_force_structure := false
 var _unavailable_reason := ""
 var _deferred_focus_descriptor: Dictionary = {}
 var _terminal_suspended_focus_modes: Array[Dictionary] = []
@@ -613,24 +615,24 @@ func _on_modal_closed(_return_focus: Control, focus_descriptor: Dictionary) -> v
 
 
 func _on_party_structure_changed(_member: PartyMemberState) -> void:
-	_refresh_projection(true)
+	_refresh_after_actor_binding(true)
 
 
 func _on_party_value_changed(_class_id: StringName, _rank: int) -> void:
-	_refresh_projection(false)
+	_refresh_after_actor_binding(false)
 
 
 func _on_party_stats_changed(_member_id: int) -> void:
-	_refresh_projection(false)
+	_refresh_after_actor_binding(false)
 
 
 func _on_progression_changed(_member_id: int) -> void:
-	_refresh_projection(false)
+	_refresh_after_actor_binding(false)
 
 
 func _on_actor_bound(member_id: int, actor: Node3D) -> void:
 	_bind_health(member_id, actor)
-	_refresh_projection(false)
+	_refresh_after_actor_binding(false)
 
 
 func _bind_health(member_id: int, actor: Node3D) -> void:
@@ -667,11 +669,37 @@ func _disconnect_health(member_id: int) -> void:
 
 
 func _on_health_changed(_current: float, _maximum: float, _member_id: int) -> void:
-	_refresh_projection(false)
+	_refresh_after_actor_binding(false)
 
 
 func _on_health_state_changed(_member_id: int) -> void:
-	_refresh_projection(false)
+	_refresh_after_actor_binding(false)
+
+
+func _refresh_after_actor_binding(force_structure: bool) -> void:
+	if _has_unbound_party_actor():
+		_actor_binding_force_structure = _actor_binding_force_structure or force_structure
+		if not _actor_binding_refresh_scheduled:
+			_actor_binding_refresh_scheduled = true
+			call_deferred(&"_flush_actor_binding_refresh")
+		return
+	_refresh_projection(force_structure)
+
+
+func _flush_actor_binding_refresh() -> void:
+	var force_structure := _actor_binding_force_structure
+	_actor_binding_refresh_scheduled = false
+	_actor_binding_force_structure = false
+	_refresh_projection(force_structure)
+
+
+func _has_unbound_party_actor() -> bool:
+	if party_manager == null or run_context == null:
+		return false
+	for member: PartyMemberState in party_manager.members:
+		if member != null and run_context.actor_for(member.member_id) == null:
+			return true
+	return false
 
 
 func _health_snapshot(member_id: int) -> Dictionary:

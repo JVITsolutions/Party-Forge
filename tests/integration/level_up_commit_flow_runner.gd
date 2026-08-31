@@ -1,6 +1,8 @@
 extends SceneTree
 
 const PANEL_SCENE := preload("res://scenes/ui/level_up_panel.tscn")
+const SCRIPT_ERROR_CAPTURE := preload("res://tests/support/test_script_error_capture.gd")
+const ERROR_CAPTURE := preload("res://tests/support/test_error_capture.gd")
 
 var _failures: Array[String] = []
 
@@ -185,10 +187,74 @@ func _exercise_main_result_and_queued_flow() -> void:
 	_assert(party.party_stat_rank(&"move_speed") == accepted_move_speed_rank, "Main independently rejects a stale direct intent after final success")
 	_assert(experience.pending_levels == 0 and game_run.current_state() == RunStateMachine.State.RUNNING, "Main stale-intent rejection preserves zero pending levels and running state")
 
+	await _exercise_freed_focus_and_frost_recruitment(main, panel, experience, game_run, party)
+
 	main.free()
 	paused = false
 	ProfileTestSupport.remove_tree(profile_root)
 	await process_frame
+
+
+func _exercise_freed_focus_and_frost_recruitment(
+	main: Node,
+	panel: LevelUpPanel,
+	experience: ExperienceSystem,
+	game_run: GameRun,
+	party: PartyManager,
+) -> void:
+	_queue_levels(experience, 1)
+	game_run.begin_level_up()
+	var freed_focus := Button.new()
+	freed_focus.name = "FreedGameplayFocus"
+	main.get_node("HUD").add_child(freed_focus)
+	freed_focus.grab_focus()
+	var direct := UpgradeChoice.new(UpgradeChoice.Kind.PARTY_STAT, &"damage", "Damage")
+	panel.show_choices([direct], party)
+	var card := _card(panel)
+	freed_focus.free()
+	var script_errors := SCRIPT_ERROR_CAPTURE.new()
+	OS.add_logger(script_errors)
+	card.activated.emit(card.bound_choice_key())
+	await process_frame
+	OS.remove_logger(script_errors)
+	_assert(
+		script_errors.drain_after_detach().is_empty(),
+		"closing a final level-up after its gameplay focus was freed produces no script error",
+	)
+	_assert(game_run.current_state() == RunStateMachine.State.RUNNING and not panel.visible, "freed return focus does not block the accepted level-up")
+
+	_queue_levels(experience, 1)
+	game_run.begin_level_up()
+	var gameplay_focus := Button.new()
+	gameplay_focus.name = "FrostRecruitGameplayFocus"
+	main.get_node("HUD").add_child(gameplay_focus)
+	gameplay_focus.grab_focus()
+	var frost_recruit := UpgradeChoice.new(UpgradeChoice.Kind.RECRUIT, &"frost_mage", "Recruit Frost Mage")
+	panel.show_choices([frost_recruit], party)
+	card = _card(panel)
+	var errors := ERROR_CAPTURE.new()
+	OS.add_logger(errors)
+	card.activated.emit(card.bound_choice_key())
+	(panel.get_node("Frame/Content/Confirmation/Actions/Confirm") as Button).pressed.emit()
+	await process_frame
+	OS.remove_logger(errors)
+	var captured := errors.drain_after_detach()
+	_assert(not _contains_message(captured, "COMBAT_HUD_UNAVAILABLE"), "Frost Mage recruitment never publishes a transient HUD-unavailable state: %s" % captured)
+	_assert(party.members.size() == 2 and party.members[1].class_definition.id == &"frost_mage", "real Main recruitment commits Frost Mage")
+	var context := main.get("active_run_context") as PlayerRunContext
+	var frost_actor := context.actor_for(party.members[1].member_id) if context != null else null
+	var frost_health := frost_actor.get_node_or_null("HealthComponent") as HealthComponent if frost_actor != null else null
+	_assert(frost_actor != null and is_instance_valid(frost_actor), "Frost Mage recruitment completes actor binding")
+	_assert(frost_health != null and frost_health.max_health > 0.0, "Frost Mage recruitment completes health binding")
+	_assert(root.gui_get_focus_owner() == gameplay_focus, "Frost Mage recruitment restores valid gameplay focus")
+	_assert(game_run.current_state() == RunStateMachine.State.RUNNING and not panel.visible, "Frost Mage recruitment closes the final level-up and resumes gameplay")
+
+
+func _contains_message(messages: PackedStringArray, marker: String) -> bool:
+	for message: String in messages:
+		if marker in message:
+			return true
+	return false
 
 
 func _queue_levels(experience: ExperienceSystem, count: int) -> void:
