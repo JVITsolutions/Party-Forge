@@ -20,8 +20,28 @@ func run() -> Array[String]:
 	_test_preview_selection_and_start_are_orthogonal(panel, failures)
 	_test_complete_action_matrix(panel, failures)
 	_test_focus_graph_and_pending_recovery(panel, failures)
+	_test_preview_focus_and_start_treatment(panel, failures)
 	panel.free()
 	return failures
+
+
+func _test_preview_focus_and_start_treatment(panel: Variant, failures: Array[String]) -> void:
+	panel.present(_projection(RunSetupLobbyProjection.State.READY, &"fighter", &"fighter", RunSetupClassProjection.Compatibility.COMPATIBLE))
+	panel.call(&"apply_viewport_size", Vector2(1920.0, 1080.0))
+	var preview := panel.find_child("Preview", true, false) as CharacterEquipmentPreview
+	TestAssertions.equal(preview.focus_mode if preview != null else Control.FOCUS_NONE, Control.FOCUS_ALL, "hero preview participates in keyboard/controller focus", failures)
+	for class_projection: RunSetupClassProjection in (panel.get("_projection") as RunSetupLobbyProjection).classes:
+		var card := panel.selection_focus(class_projection.id) as Button
+		card.focus_entered.emit()
+		TestAssertions.equal(card.focus_neighbor_right, card.get_path_to(preview), "%s transfers right focus to its own preview" % class_projection.id, failures)
+	var frost := panel.selection_focus(&"frost_mage") as ForgeClassCard
+	var frost_name := frost.get_node("Content/Identity/Name") as Label
+	TestAssertions.truthy(not frost_name.clip_text and frost_name.autowrap_mode != TextServer.AUTOWRAP_OFF, "Frost Mage title wraps without clipping", failures)
+	var start := panel.action_focus(&"start") as Button
+	TestAssertions.equal(start.theme_type_variation, &"LivingForgeStartButton", "Start Run uses its explicit accessible focus treatment", failures)
+	var focus_style := panel.theme.get_stylebox(&"focus", &"LivingForgeStartButton") as StyleBoxFlat
+	TestAssertions.truthy(focus_style != null and focus_style.draw_center and focus_style.border_width_left >= 3, "Start Run focus owns a filled background and strong ring", failures)
+	TestAssertions.truthy(panel.theme.has_color(&"font_focus_color", &"LivingForgeStartButton"), "Start Run focus owns an explicit foreground", failures)
 
 
 func _test_scene_and_public_seam(failures: Array[String]) -> void:
@@ -381,7 +401,8 @@ func _test_focus_graph_and_pending_recovery(panel: Variant, failures: Array[Stri
 	var first := panel.selection_focus(&"fighter") as Button
 	var second := panel.selection_focus(&"ranger") as Button
 	var fourth := panel.selection_focus(&"cleric") as Button
-	TestAssertions.equal(first.focus_neighbor_right, first.get_path_to(second), "desktop directional focus moves right one class", failures)
+	var hero_preview := panel.find_child("Preview", true, false) as CharacterEquipmentPreview
+	TestAssertions.equal(first.focus_neighbor_right, first.get_path_to(hero_preview), "desktop directional focus transfers the class to its hero preview", failures)
 	TestAssertions.equal(first.focus_neighbor_bottom, first.get_path_to(fourth), "desktop directional focus moves down one three-column row", failures)
 	var desktop_cards: Array[Button] = ordered.slice(0, (panel.get("_projection") as RunSetupLobbyProjection).classes.size())
 	var desktop_actions: Array[Button] = ordered.slice(desktop_cards.size())

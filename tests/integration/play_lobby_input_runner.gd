@@ -53,6 +53,7 @@ func _test_preview_select_start_returns_and_recovery() -> void:
 	var settings_button := lobby.action_focus(&"settings") as Button
 	var armoury_button := lobby.action_focus(&"armoury") as Button
 	var start_button := lobby.action_focus(&"start") as Button
+	var preview := lobby.find_child("Preview", true, false) as CharacterEquipmentPreview
 	var prompt := lobby.get_node("Content/Margin/Layout/Footer/InputPrompt") as ForgeInputPrompt
 	var axis_selection := lobby.selected_class_id()
 	var axis_actions := _enabled_action_ids(lobby)
@@ -60,11 +61,36 @@ func _test_preview_select_start_returns_and_recovery() -> void:
 	fighter.grab_focus()
 	await _joy_axis(JOY_AXIS_LEFT_X, 1.0)
 	_assert(lobby.active_prompt_mode() == &"controller", "real joypad-axis motion switches the active lobby prompt")
-	_assert_focus(lobby.selection_focus(&"ranger"), "real joypad-axis motion navigates the production roster")
-	_assert(lobby.previewed_class_id() == &"ranger", "axis navigation previews the newly focused class")
+	_assert_focus(preview, "real joypad-axis motion transfers the focused class to its hero preview")
+	_assert(lobby.previewed_class_id() == &"fighter", "preview focus transfer preserves the source class")
 	_assert(lobby.selected_class_id() == axis_selection and _enabled_action_ids(lobby) == axis_actions and (lobby.get_node("Content/Margin/Layout/Status") as Label).text == axis_status, "axis navigation preserves selection, action authority, and status")
+	var preview_mount := preview.get_node("SubViewport/World/PreviewRoot") as Node3D
+	var yaw_before := preview_mount.rotation.y
+	await _joy_axis(JOY_AXIS_LEFT_X, 1.0)
+	_assert_focus(preview, "controller rotation retains hero-preview focus")
+	_assert(not is_equal_approx(preview_mount.rotation.y, yaw_before), "controller direction rotates the previewed model")
 	await _joy_axis(JOY_AXIS_LEFT_X, -1.0)
-	_assert_focus(fighter, "reverse joypad-axis motion returns to the exact class")
+	_assert_focus(preview, "reverse preview rotation does not select a right-column class")
+	_assert(lobby.previewed_class_id() == &"fighter", "preview rotation never changes preview identity")
+	fighter.grab_focus()
+	await process_frame
+	for child: Node in lobby.find_child("Grid", true, false).get_children():
+		var class_card := child as ForgeClassCard
+		if class_card == null:
+			continue
+		class_card.grab_focus()
+		await process_frame
+		var source_id := class_card.class_id
+		await _key(KEY_RIGHT)
+		_assert_focus(preview, "%s keyboard direction transfers to preview" % source_id)
+		_assert(lobby.previewed_class_id() == source_id, "%s focus transfer keeps its exact preview identity" % source_id)
+		yaw_before = preview_mount.rotation.y
+		await _joy_button(JOY_BUTTON_DPAD_RIGHT)
+		_assert_focus(preview, "%s controller rotation keeps preview focus" % source_id)
+		_assert(not is_equal_approx(preview_mount.rotation.y, yaw_before), "%s controller direction rotates its preview" % source_id)
+		_assert(lobby.previewed_class_id() == source_id and lobby.selected_class_id() == axis_selection, "%s preview traversal never selects another class" % source_id)
+	fighter.grab_focus()
+	await process_frame
 	var prompt_focus := root.gui_get_focus_owner()
 	await _joy_button(JOY_BUTTON_LEFT_STICK)
 	_assert(lobby.active_prompt_mode() == &"controller", "simulated controller switches the active lobby prompt")

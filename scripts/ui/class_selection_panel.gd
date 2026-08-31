@@ -376,15 +376,15 @@ func _apply_card_geometry(card: ForgeClassCard, compact: bool) -> void:
 	if card == null:
 		return
 	var text_scale := int(_options.get(&"text_scale_percent", 100))
-	var scaled_height := maxf(0.0, roundf(float(text_scale - 100) * 0.64))
+	var scaled_height := maxf(0.0, roundf(float(text_scale - 100) * 0.9))
 	card.custom_minimum_size = Vector2(0.0, (128.0 if compact else 144.0) + scaled_height)
 	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var content := card.get_node("Content") as HBoxContainer
+	var preview := card.get_node("PreviewIndicator") as Control
 	content.anchor_top = 0.0
 	content.anchor_bottom = 0.0
 	content.offset_left = 8.0
 	content.offset_top = 4.0
-	var preview := card.get_node("PreviewIndicator") as Control
 	content.offset_right = -148.0 if preview.visible else -8.0
 	content.add_theme_constant_override(&"separation", 4)
 	var portrait := card.get_node("Content/Portrait") as TextureRect
@@ -393,9 +393,11 @@ func _apply_card_geometry(card: ForgeClassCard, compact: bool) -> void:
 	var role := card.get_node("Content/Identity/Role") as Label
 	name.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	role.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	name.clip_text = false
+	name.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
 	name.custom_minimum_size = Vector2.ZERO
 	role.custom_minimum_size = Vector2.ZERO
-	var identity_band_height := 69.0 + maxf(0.0, roundf(float(text_scale - 100) * 0.7))
+	var identity_band_height := 76.0 + maxf(0.0, roundf(float(text_scale - 100) * 0.86))
 	content.offset_bottom = content.offset_top + identity_band_height
 	_set_card_band(preview, -136.0, 4.0, -8.0, 32.0, Vector2(128.0, 28.0))
 	var bottom_inset := -2.0 if text_scale > 100 else -8.0
@@ -519,7 +521,7 @@ func _set_action_enabled(action_id: StringName, enabled: bool) -> void:
 	var retains_focus_context := button == _pending_origin or button == _focus_context
 	button.disabled = not enabled and not retains_focus_context
 	button.set_meta(&"action_enabled", enabled)
-	button.theme_type_variation = &"LivingForgeUnavailableButton" if not enabled else (&"LivingForgePrimaryButton" if action_id == &"start" else &"LivingForgeSecondaryButton")
+	button.theme_type_variation = &"LivingForgeUnavailableButton" if not enabled else (&"LivingForgeStartButton" if action_id == &"start" else &"LivingForgeSecondaryButton")
 
 
 func _render_preview_and_details() -> void:
@@ -686,12 +688,17 @@ func _rebuild_directional_focus() -> void:
 			actions.append(action)
 	if cards.is_empty():
 		return
+	var preview := _preview()
+	if preview != null:
+		preview.focus_mode = Control.FOCUS_ALL
+		preview.focus_neighbor_left = preview.get_path_to(preview)
+		preview.focus_neighbor_right = preview.get_path_to(preview)
 	var columns := maxi(_class_grid().columns, 1)
 	for index: int in cards.size():
 		var card := cards[index]
 		var column := index % columns
 		_set_neighbor(card, &"focus_neighbor_left", cards[index - 1] if column > 0 else card)
-		_set_neighbor(card, &"focus_neighbor_right", cards[index + 1] if column + 1 < columns and index + 1 < cards.size() else card)
+		_set_neighbor(card, &"focus_neighbor_right", preview if preview != null else card)
 		_set_neighbor(card, &"focus_neighbor_top", cards[index - columns] if index >= columns else card)
 		if index + columns < cards.size():
 			_set_neighbor(card, &"focus_neighbor_bottom", cards[index + columns])
@@ -699,6 +706,10 @@ func _rebuild_directional_focus() -> void:
 			_set_neighbor(card, &"focus_neighbor_bottom", actions[mini(column, actions.size() - 1)])
 		else:
 			_set_neighbor(card, &"focus_neighbor_bottom", card)
+	if preview != null:
+		var preview_card := selection_focus(_previewed_class_id)
+		_set_neighbor(preview, &"focus_neighbor_top", preview_card if preview_card != null else cards[0])
+		_set_neighbor(preview, &"focus_neighbor_bottom", actions[0] if not actions.is_empty() else (preview_card if preview_card != null else cards[0]))
 	for index: int in actions.size():
 		_set_neighbor(actions[index], &"focus_neighbor_left", actions[index - 1] if index > 0 else actions[index])
 		_set_neighbor(actions[index], &"focus_neighbor_right", actions[index + 1] if index + 1 < actions.size() else actions[index])
