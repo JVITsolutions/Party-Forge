@@ -207,6 +207,8 @@ func _assert_class_card_bands(card: ForgeClassCard, label: String, text_scale: i
 	_assert(card.size.y >= expected_height, "%s card uses deterministic text-scale height %s expected>=%.0f actual=%.0f" % [card.name, label, expected_height, card.size.y])
 	_assert(card_rect.encloses(content.get_global_rect()) and card_rect.encloses(portrait.get_global_rect()) and card_rect.encloses(identity.get_global_rect()), "%s portrait and identity remain inside card bounds %s" % [card.name, label])
 	_assert(not portrait.get_global_rect().intersects(identity.get_global_rect()), "%s portrait and identity never intersect %s" % [card.name, label])
+	_assert(not name.clip_text and name.autowrap_mode != TextServer.AUTOWRAP_OFF, "%s title never clips or escapes its card %s" % [card.name, label])
+	_assert(card_rect.encloses(name.get_global_rect()), "%s title rectangle stays contained %s" % [card.name, label])
 	for layer_name: String in ["PreviewIndicator", "SelectionNotch", "CompatibilityBadge", "AttentionBadge"]:
 		var layer := card.get_node(layer_name) as Control
 		if layer.is_visible_in_tree():
@@ -218,7 +220,7 @@ func _assert_class_card_bands(card: ForgeClassCard, label: String, text_scale: i
 	if preview.is_visible_in_tree():
 		var content_rect := (card.get_node("Content") as Control).get_global_rect()
 		_assert(not content_rect.intersects(preview.get_global_rect()), "%s identity and Preview bands never intersect %s" % [card.name, label])
-		_assert(preview.get_global_rect().position.x - content_rect.end.x >= 8.0, "%s identity and Preview bands keep an 8px gutter %s" % [card.name, label])
+		_assert(preview.get_global_rect().position.x - content_rect.end.x >= 8.0, "%s identity and Preview bands keep an 8px horizontal gutter %s" % [card.name, label])
 	var selection := card.get_node("SelectionNotch") as Control
 	for state_name: String in ["CompatibilityBadge", "AttentionBadge"]:
 		var state := card.get_node(state_name) as Control

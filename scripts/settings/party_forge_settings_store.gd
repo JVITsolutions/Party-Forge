@@ -19,10 +19,10 @@ func load_settings(path: String = DEFAULT_PATH) -> PartyForgeSettings:
 		return result
 	var version_value: Variant = config.get_value(SECTION, "schema_version", PartyForgeSettings.SCHEMA_VERSION)
 	var loaded_version := int(version_value) if typeof(version_value) == TYPE_INT else -1
-	if loaded_version != PartyForgeSettings.SCHEMA_VERSION:
+	if loaded_version not in [PartyForgeSettings.LEGACY_SCHEMA_VERSION, PartyForgeSettings.SCHEMA_VERSION]:
 		push_error("PARTY_FORGE_SETTINGS_VERSION_ERROR path=%s version=%d supported=%d" % [path, loaded_version, PartyForgeSettings.SCHEMA_VERSION])
 		return result
-	result.schema_version = loaded_version
+	result.schema_version = PartyForgeSettings.SCHEMA_VERSION
 	var mode_value: Variant = config.get_value(SECTION, "mode", PartyForgeSettings.Mode.PLAYER_SIMULATION)
 	result.mode = int(mode_value) as PartyForgeSettings.Mode if typeof(mode_value) == TYPE_INT else PartyForgeSettings.Mode.PLAYER_SIMULATION
 	var unlock_value: Variant = config.get_value(SECTION, "unlock_all_implemented_content", false)
@@ -45,6 +45,9 @@ func load_settings(path: String = DEFAULT_PATH) -> PartyForgeSettings:
 	result.ui_scale_percent = int(ui_scale_value) if typeof(ui_scale_value) == TYPE_INT else 100
 	var text_scale_value: Variant = config.get_value(SECTION, "text_scale_percent", 100)
 	result.text_scale_percent = int(text_scale_value) if typeof(text_scale_value) == TYPE_INT else 100
+	if loaded_version >= 2:
+		var hud_opacity_value: Variant = config.get_value(SECTION, "character_hud_background_opacity_percent", PartyForgeSettings.DEFAULT_CHARACTER_HUD_BACKGROUND_OPACITY_PERCENT)
+		result.character_hud_background_opacity_percent = int(hud_opacity_value) if typeof(hud_opacity_value) == TYPE_INT else PartyForgeSettings.DEFAULT_CHARACTER_HUD_BACKGROUND_OPACITY_PERCENT
 	var drop_multiplier_value: Variant = config.get_value(SECTION, "personal_drop_multiplier_percent", 100)
 	result.personal_drop_multiplier_percent = int(drop_multiplier_value) if typeof(drop_multiplier_value) == TYPE_INT else 100
 	var force_drops_value: Variant = config.get_value(SECTION, "force_personal_drops", false)
@@ -78,6 +81,7 @@ func save_settings(settings: PartyForgeSettings, path: String = DEFAULT_PATH) ->
 	config.set_value(SECTION, "high_contrast", normalized.high_contrast)
 	config.set_value(SECTION, "ui_scale_percent", normalized.ui_scale_percent)
 	config.set_value(SECTION, "text_scale_percent", normalized.text_scale_percent)
+	config.set_value(SECTION, "character_hud_background_opacity_percent", normalized.character_hud_background_opacity_percent)
 	config.set_value(SECTION, "personal_drop_multiplier_percent", normalized.personal_drop_multiplier_percent)
 	config.set_value(SECTION, "force_personal_drops", normalized.force_personal_drops)
 	config.set_value(SECTION, "personal_drop_source_category_override", normalized.personal_drop_source_category_override)

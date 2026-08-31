@@ -15,7 +15,8 @@ const PERSONAL_LOOT_TUNING: PersonalLootTuning = preload("res://data/items/perso
 const GROUND_ITEM_SPATIAL_INDEX := preload("res://scripts/loot/ground_item_spatial_index.gd")
 const GROUND_ITEM_TARGETING_SERVICE := preload("res://scripts/loot/ground_item_targeting_service.gd")
 const GROUND_ITEM_PICKUP_SERVICE := preload("res://scripts/loot/ground_item_pickup_service.gd")
-const RUN_SEED := 1337
+const RUN_SEED_SOURCE := preload("res://scripts/run/run_seed_source.gd")
+const DEVELOPER_QUICK_START_RUN_SEED := 1337
 const CURRENT_STARTING_PARTY_SIZE := 1
 const LEDGER_FEATURE_IDS: Array[StringName] = [&"stats", &"current_upgrades", &"equipment_inventory"]
 const LEDGER_UNLOCK_IDS: Array[StringName] = [&"equipment_inventory"]
@@ -106,6 +107,7 @@ var _abandon_committed_profile_id := ""
 var _active_run_recovery: RunRecoveryResult
 var _pending_checkout_recovery: Dictionary = {}
 var _run_context_factory: Callable = func() -> PlayerRunContext: return PlayerRunContext.new()
+var _new_run_seed_source: RefCounted = RUN_SEED_SOURCE.new()
 var _last_run_start_error := ""
 var _pending_loadout_projection: LoadoutCompatibilityProjection
 var _pending_loadout_profile_id := ""
@@ -171,6 +173,14 @@ func select_leader_class(class_id: StringName) -> bool:
 	return _select_leader_class(class_id, LoadoutOrigin.RUN_SETUP)
 
 
+func configure_new_run_seed_source(source: RefCounted) -> void:
+	_new_run_seed_source = source if source != null and source.has_method(&"next_seed") else RUN_SEED_SOURCE.new()
+
+
+func _next_new_run_seed() -> int:
+	return int(_new_run_seed_source.call(&"next_seed"))
+
+
 func _run_setup_lobby() -> ClassSelectionPanel:
 	return get_node("HUD/ClassSelection") as ClassSelectionPanel
 
@@ -234,7 +244,8 @@ func _checkout_and_start_leader_class(profile: ProfileState, definition: ClassDe
 	if profile == null or definition == null or profile.profile_id != active_profile().profile_id:
 		_show_run_setup_error("PARTY_FORGE_RUN_LOADOUT_CHECKOUT_ERROR field=profile_id reason=active profile changed")
 		return false
-	if not _prepare_run_start(definition):
+	var run_seed := DEVELOPER_QUICK_START_RUN_SEED if origin_mode == LoadoutOrigin.DEVELOPER_QUICK_START else _next_new_run_seed()
+	if not _prepare_run_start(definition, run_seed):
 		return false
 	_loadout_transaction_sequence += 1
 	var leader_member_id := party_manager.members[0].member_id
@@ -271,7 +282,7 @@ func _checkout_and_start_leader_class(profile: ProfileState, definition: ClassDe
 	return _resume_pending_checkout(profile_manager.active_profile(), definition)
 
 
-func _prepare_run_start(definition: ClassDefinition, run_seed: int = RUN_SEED) -> bool:
+func _prepare_run_start(definition: ClassDefinition, run_seed: int) -> bool:
 	if definition == null:
 		return false
 	active_run_rules = RunRulesSnapshot.from_settings(saved_settings)
@@ -2182,6 +2193,7 @@ func _on_settings_applied(_settings: PartyForgeSettings) -> void:
 	var authoritative := settings_store.load_settings(settings_path) if settings_store != null else _settings
 	saved_settings = authoritative.copy()
 	(get_node("ArmouryScreen") as ArmouryScreen).configure_visual_settings(saved_settings)
+	(get_node("HUD") as HUD).apply_visual_settings(saved_settings)
 	if saved_settings.mode != PartyForgeSettings.Mode.DEVELOPER_MODE:
 		(get_node("DeveloperItemSandbox") as DeveloperItemSandbox).cancel_and_clear()
 	_refresh_main_menu_projection()

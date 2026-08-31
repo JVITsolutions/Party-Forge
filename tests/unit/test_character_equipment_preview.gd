@@ -25,6 +25,7 @@ func run() -> Array[String]:
 	_test_class_defaults_do_not_inherit_explicit_member_equipment(failures)
 	_test_class_fallback_is_neutral_and_safe(failures)
 	_test_class_preview_lifecycle_and_reduced_motion(failures)
+	_test_all_class_previews_share_centered_frame_and_action_rotation(failures)
 	return failures
 
 
@@ -282,6 +283,27 @@ func _test_class_preview_lifecycle_and_reduced_motion(failures: Array[String]) -
 	TestAssertions.truthy(preview.get("active_preview") == null, "clear removes a class presentation", failures)
 	TestAssertions.truthy(not is_instance_id_valid(active_before_clear_id) and not is_instance_id_valid(model_before_clear_id), "clear frees the active class presentation and model", failures)
 	TestAssertions.equal(subviewport.render_target_update_mode, SubViewport.UPDATE_DISABLED, "clear disables class preview rendering", failures)
+	preview.free()
+
+
+func _test_all_class_previews_share_centered_frame_and_action_rotation(failures: Array[String]) -> void:
+	var preview := _new_preview()
+	var expected_center_y := NAN
+	for definition: ClassDefinition in GameCatalog.load_defaults().classes:
+		TestAssertions.truthy(_show_class(preview, definition, failures), "%s class preview renders for framing" % definition.id, failures)
+		var active := preview.get("active_preview") as CharacterPresentation
+		var bounds := active.visual_bounds() if active != null else AABB()
+		var framed_center := bounds.get_center() + (active.position if active != null else Vector3.ZERO)
+		if is_nan(expected_center_y):
+			expected_center_y = framed_center.y
+		TestAssertions.near(framed_center.x, 0.0, 0.001, "%s preview is horizontally centered" % definition.id, failures)
+		TestAssertions.near(framed_center.z, 0.0, 0.001, "%s preview rotation pivot is depth-centered" % definition.id, failures)
+		TestAssertions.near(framed_center.y, expected_center_y, 0.001, "%s preview shares the canonical vertical framing center" % definition.id, failures)
+	TestAssertions.equal(preview.focus_mode, Control.FOCUS_ALL, "class preview is keyboard/controller focusable", failures)
+	var mount := preview.get_node("SubViewport/World/PreviewRoot") as Node3D
+	var before := mount.rotation.y
+	preview.call(&"_rotate_from_action", 1.0)
+	TestAssertions.truthy(not is_equal_approx(mount.rotation.y, before), "class preview exposes deterministic directional rotation", failures)
 	preview.free()
 
 

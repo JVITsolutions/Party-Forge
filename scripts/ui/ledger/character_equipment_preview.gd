@@ -4,6 +4,8 @@ extends SubViewportContainer
 const PRESENTATION_SCENE := preload("res://scenes/characters/presentation/character_presentation.tscn")
 const DRAG_RADIANS_PER_PIXEL := 0.012
 const SAFE_VERTICAL_ANGLE := -8.0
+const ACTION_ROTATION_RADIANS := TAU / 24.0
+const CLASS_FRAME_CENTER := Vector3(0.0, 1.05, 0.0)
 
 var active_preview: CharacterPresentation
 var active_member_id := 0
@@ -154,12 +156,19 @@ class PresentationSignature extends RefCounted:
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_STOP
+	focus_mode = Control.FOCUS_ALL
+	accessibility_name = "Character preview"
+	accessibility_description = "Focused preview. Use left and right to rotate the character model."
 	_preview_root().rotation.x = deg_to_rad(SAFE_VERTICAL_ANGLE)
 	var drag_surface := get_node("DragSurface") as Control
 	if not drag_surface.gui_input.is_connected(_handle_preview_input):
 		drag_surface.gui_input.connect(_handle_preview_input)
 	if not visibility_changed.is_connected(_sync_rendering):
 		visibility_changed.connect(_sync_rendering)
+	if not focus_entered.is_connected(queue_redraw):
+		focus_entered.connect(queue_redraw)
+	if not focus_exited.is_connected(queue_redraw):
+		focus_exited.connect(queue_redraw)
 	_sync_rendering()
 
 
@@ -207,6 +216,7 @@ func show_class(definition: ClassDefinition) -> bool:
 	active_preview = copy
 	active_member_id = 0
 	_active_signature = requested_signature
+	_frame_class_preview()
 	_set_fallback_visible(false)
 	_sync_rendering()
 	return true
@@ -240,6 +250,14 @@ func _gui_input(event: InputEvent) -> void:
 
 
 func _handle_preview_input(event: InputEvent) -> void:
+	if has_focus() and event.is_action_pressed(&"ui_left", true):
+		_rotate_from_action(-1.0)
+		accept_event()
+		return
+	if has_focus() and event.is_action_pressed(&"ui_right", true):
+		_rotate_from_action(1.0)
+		accept_event()
+		return
 	if event is InputEventMouseButton and (event as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT:
 		_dragging = (event as InputEventMouseButton).pressed
 		accept_event()
@@ -249,6 +267,29 @@ func _handle_preview_input(event: InputEvent) -> void:
 		mount.rotation.y = wrapf(mount.rotation.y - (event as InputEventMouseMotion).relative.x * DRAG_RADIANS_PER_PIXEL, -PI, PI)
 		mount.rotation.x = deg_to_rad(SAFE_VERTICAL_ANGLE)
 		accept_event()
+
+
+func _rotate_from_action(direction: float) -> void:
+	var mount := _preview_root()
+	mount.rotation.y = wrapf(mount.rotation.y - signf(direction) * ACTION_ROTATION_RADIANS, -PI, PI)
+	mount.rotation.x = deg_to_rad(SAFE_VERTICAL_ANGLE)
+
+
+func _frame_class_preview() -> void:
+	if active_preview == null or not is_instance_valid(active_preview):
+		return
+	active_preview.position = Vector3.ZERO
+	var bounds := active_preview.visual_bounds()
+	if bounds.size.is_zero_approx():
+		return
+	active_preview.position = CLASS_FRAME_CENTER - bounds.get_center()
+
+
+func _draw() -> void:
+	if not has_focus():
+		return
+	var ring := LivingForgeTokens.color(&"focus_outline")
+	draw_rect(Rect2(Vector2(2.0, 2.0), size - Vector2(4.0, 4.0)), ring, false, 4.0)
 
 
 func _notification(what: int) -> void:

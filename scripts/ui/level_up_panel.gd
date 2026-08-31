@@ -629,8 +629,11 @@ func _capture_gameplay_focus() -> void:
 
 
 func _restore_gameplay_focus() -> void:
+	if not is_instance_valid(_gameplay_return_focus):
+		_gameplay_return_focus = null
+		return
 	var disabled := _gameplay_return_focus is BaseButton and (_gameplay_return_focus as BaseButton).disabled
-	if is_instance_valid(_gameplay_return_focus) and _gameplay_return_focus.is_inside_tree() and _gameplay_return_focus.visible and not disabled:
+	if _gameplay_return_focus.is_inside_tree() and _gameplay_return_focus.visible and not disabled:
 		_gameplay_return_focus.grab_focus()
 	_gameplay_return_focus = null
 

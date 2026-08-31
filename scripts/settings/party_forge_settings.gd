@@ -3,7 +3,8 @@ extends RefCounted
 
 enum Mode { PLAYER_SIMULATION, DEVELOPER_MODE }
 
-const SCHEMA_VERSION := 1
+const SCHEMA_VERSION := 2
+const LEGACY_SCHEMA_VERSION := 1
 const MIN_PARTY_CAPACITY := 1
 const MAX_PARTY_CAPACITY := 24
 const MIN_ENEMY_DENSITY := 0
@@ -13,6 +14,9 @@ const MAX_EXPERIENCE_MULTIPLIER := 1000
 const MIN_LEVEL_UP_CARD_COUNT := 1
 const MAX_LEVEL_UP_CARD_COUNT := 8
 const UI_SCALE_OPTIONS: Array[int] = [80, 90, 100, 110, 125, 150]
+const MIN_CHARACTER_HUD_BACKGROUND_OPACITY_PERCENT := 0
+const MAX_CHARACTER_HUD_BACKGROUND_OPACITY_PERCENT := 100
+const DEFAULT_CHARACTER_HUD_BACKGROUND_OPACITY_PERCENT := 50
 const MIN_PERSONAL_DROP_MULTIPLIER_PERCENT := 0
 const MAX_PERSONAL_DROP_MULTIPLIER_PERCENT := 10000
 const MIN_PERSONAL_DROP_ITEM_LEVEL_OVERRIDE := 0
@@ -31,6 +35,7 @@ var reduced_motion := false
 var high_contrast := false
 var ui_scale_percent := 100
 var text_scale_percent := 100
+var character_hud_background_opacity_percent := DEFAULT_CHARACTER_HUD_BACKGROUND_OPACITY_PERCENT
 var personal_drop_multiplier_percent := 100
 var force_personal_drops := false
 var personal_drop_source_category_override: StringName = &""
@@ -47,6 +52,7 @@ func normalize() -> void:
 	level_up_card_count = clampi(level_up_card_count, MIN_LEVEL_UP_CARD_COUNT, MAX_LEVEL_UP_CARD_COUNT)
 	ui_scale_percent = _nearest_ui_scale_option(ui_scale_percent)
 	text_scale_percent = _nearest_ui_scale_option(text_scale_percent)
+	character_hud_background_opacity_percent = clampi(character_hud_background_opacity_percent, MIN_CHARACTER_HUD_BACKGROUND_OPACITY_PERCENT, MAX_CHARACTER_HUD_BACKGROUND_OPACITY_PERCENT)
 	personal_drop_multiplier_percent = clampi(personal_drop_multiplier_percent, MIN_PERSONAL_DROP_MULTIPLIER_PERCENT, MAX_PERSONAL_DROP_MULTIPLIER_PERCENT)
 	personal_drop_item_level_override = clampi(personal_drop_item_level_override, MIN_PERSONAL_DROP_ITEM_LEVEL_OVERRIDE, MAX_PERSONAL_DROP_ITEM_LEVEL_OVERRIDE)
 	if not personal_drop_source_category_override.is_empty() and personal_drop_source_category_override not in PERSONAL_DROP_SOURCE_CATEGORIES:
@@ -66,6 +72,7 @@ func copy() -> PartyForgeSettings:
 	result.high_contrast = high_contrast
 	result.ui_scale_percent = ui_scale_percent
 	result.text_scale_percent = text_scale_percent
+	result.character_hud_background_opacity_percent = character_hud_background_opacity_percent
 	result.personal_drop_multiplier_percent = personal_drop_multiplier_percent
 	result.force_personal_drops = force_personal_drops
 	result.personal_drop_source_category_override = personal_drop_source_category_override

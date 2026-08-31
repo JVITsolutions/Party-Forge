@@ -27,6 +27,32 @@ layout_mode = 2
 focus_mode = 2
 text = "Use high contrast interface"
 
+[node name="HudBackgroundOpacityLabel" type="Label" parent="Layout"]
+layout_mode = 2
+text = "Character HUD background opacity"
+
+[node name="HudBackgroundOpacity" type="HBoxContainer" parent="Layout"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="Value" type="HSlider" parent="Layout/HudBackgroundOpacity"]
+custom_minimum_size = Vector2(240, 0)
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 2
+max_value = 100.0
+step = 5.0
+value = 50.0
+tooltip_text = "Adjusts only the dark backgrounds behind the top-left character HUD. High contrast keeps these backgrounds opaque."
+accessibility_name = "Character HUD background opacity"
+
+[node name="Current" type="Label" parent="Layout/HudBackgroundOpacity"]
+custom_minimum_size = Vector2(56, 0)
+layout_mode = 2
+text = "50%"
+horizontal_alignment = 2
+vertical_alignment = 1
+
 [node name="UIScaleLabel" type="Label" parent="Layout"]
 layout_mode = 2
 text = "Interface scale"

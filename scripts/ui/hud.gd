@@ -33,6 +33,9 @@ var _boss_health_callback: Callable
 var _boss_state_callback: Callable
 var _last_viewport_size := Vector2i.ZERO
 var _high_contrast := false
+var _character_hud_background_opacity_percent := PartyForgeSettings.DEFAULT_CHARACTER_HUD_BACKGROUND_OPACITY_PERCENT
+var _actor_binding_refresh_scheduled := false
+var _actor_binding_force_structure := false
 var _unavailable_reason := ""
 var _deferred_focus_descriptor: Dictionary = {}
 var _terminal_suspended_focus_modes: Array[Dictionary] = []
@@ -123,12 +126,7 @@ func configure(run: Node, party: PartyManager, experience: ExperienceSystem, con
 	experience_system = experience
 	run_context = context
 	settings = saved_settings if saved_settings != null else PartyForgeSettings.new()
-	_high_contrast = settings.high_contrast
-	var shell := get_node("Margin/CombatStatus") as Control
-	var resolved_theme := LivingForgeThemeCatalog.resolve(_high_contrast, settings.ui_scale_percent, settings.text_scale_percent)
-	shell.theme = resolved_theme
-	(get_node("CombatAlertTray") as CombatAlertTray).apply_visual_settings(resolved_theme, _high_contrast)
-	(get_node("CombatMemberInspectPanel") as CombatMemberInspectPanel).apply_visual_settings(resolved_theme)
+	_apply_visual_settings_to_surfaces()
 	if party_manager != null:
 		party_manager.member_added.connect(_on_party_structure_changed)
 		party_manager.class_rank_changed.connect(_on_party_value_changed)
@@ -144,6 +142,27 @@ func configure(run: Node, party: PartyManager, experience: ExperienceSystem, con
 	_current_page = 0
 	(get_node("Margin") as Control).visible = true
 	_refresh_projection(true)
+
+
+func apply_visual_settings(saved_settings: PartyForgeSettings) -> void:
+	settings = saved_settings if saved_settings != null else PartyForgeSettings.new()
+	_apply_visual_settings_to_surfaces()
+	if current_projection != null:
+		_refresh_projection(true)
+
+
+func _apply_visual_settings_to_surfaces() -> void:
+	_high_contrast = settings.high_contrast
+	_character_hud_background_opacity_percent = clampi(
+		settings.character_hud_background_opacity_percent,
+		PartyForgeSettings.MIN_CHARACTER_HUD_BACKGROUND_OPACITY_PERCENT,
+		PartyForgeSettings.MAX_CHARACTER_HUD_BACKGROUND_OPACITY_PERCENT,
+	)
+	var shell := get_node("Margin/CombatStatus") as Control
+	var resolved_theme := LivingForgeThemeCatalog.resolve(_high_contrast, settings.ui_scale_percent, settings.text_scale_percent)
+	shell.theme = resolved_theme
+	(get_node("CombatAlertTray") as CombatAlertTray).apply_visual_settings(resolved_theme, _high_contrast)
+	(get_node("CombatMemberInspectPanel") as CombatMemberInspectPanel).apply_visual_settings(resolved_theme)
 
 
 func set_leader(_actor: PartyActor) -> void:
@@ -330,6 +349,7 @@ func _rebuild_member_controls() -> void:
 	var leader_card := get_node("Margin/CombatStatus/LeaderCard") as ForgePartyMemberCard
 	leader_card.present(leader)
 	leader_card.apply_accessibility_variant(_high_contrast)
+	leader_card.apply_background_opacity(_character_hud_background_opacity_percent)
 	leader_card.set_meta(&"member_id", leader.member_id)
 	if not leader_card.activated.is_connected(_on_member_activated):
 		leader_card.activated.connect(_on_member_activated.bind(leader_card))
@@ -387,6 +407,7 @@ func _rebuild_compact_page(members: Array[PartyMemberHudProjection]) -> void:
 func _bind_member_control(control: ForgePartyMemberCard, member: PartyMemberHudProjection) -> void:
 	control.present(member)
 	control.apply_accessibility_variant(_high_contrast)
+	control.apply_background_opacity(_character_hud_background_opacity_percent)
 	control.set_meta(&"member_id", member.member_id)
 	control.add_to_group(&"combat_hud_member")
 	control.activated.connect(_on_member_activated.bind(control))
@@ -613,24 +634,24 @@ func _on_modal_closed(_return_focus: Control, focus_descriptor: Dictionary) -> v
 
 
 func _on_party_structure_changed(_member: PartyMemberState) -> void:
-	_refresh_projection(true)
+	_refresh_after_actor_binding(true)
 
 
 func _on_party_value_changed(_class_id: StringName, _rank: int) -> void:
-	_refresh_projection(false)
+	_refresh_after_actor_binding(false)
 
 
 func _on_party_stats_changed(_member_id: int) -> void:
-	_refresh_projection(false)
+	_refresh_after_actor_binding(false)
 
 
 func _on_progression_changed(_member_id: int) -> void:
-	_refresh_projection(false)
+	_refresh_after_actor_binding(false)
 
 
 func _on_actor_bound(member_id: int, actor: Node3D) -> void:
 	_bind_health(member_id, actor)
-	_refresh_projection(false)
+	_refresh_after_actor_binding(false)
 
 
 func _bind_health(member_id: int, actor: Node3D) -> void:
@@ -667,11 +688,37 @@ func _disconnect_health(member_id: int) -> void:
 
 
 func _on_health_changed(_current: float, _maximum: float, _member_id: int) -> void:
-	_refresh_projection(false)
+	_refresh_after_actor_binding(false)
 
 
 func _on_health_state_changed(_member_id: int) -> void:
-	_refresh_projection(false)
+	_refresh_after_actor_binding(false)
+
+
+func _refresh_after_actor_binding(force_structure: bool) -> void:
+	if _has_unbound_party_actor():
+		_actor_binding_force_structure = _actor_binding_force_structure or force_structure
+		if not _actor_binding_refresh_scheduled:
+			_actor_binding_refresh_scheduled = true
+			call_deferred(&"_flush_actor_binding_refresh")
+		return
+	_refresh_projection(force_structure)
+
+
+func _flush_actor_binding_refresh() -> void:
+	var force_structure := _actor_binding_force_structure
+	_actor_binding_refresh_scheduled = false
+	_actor_binding_force_structure = false
+	_refresh_projection(force_structure)
+
+
+func _has_unbound_party_actor() -> bool:
+	if party_manager == null or run_context == null:
+		return false
+	for member: PartyMemberState in party_manager.members:
+		if member != null and run_context.actor_for(member.member_id) == null:
+			return true
+	return false
 
 
 func _health_snapshot(member_id: int) -> Dictionary:

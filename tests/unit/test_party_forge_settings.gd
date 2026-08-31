@@ -7,11 +7,55 @@ func run() -> Array[String]:
 	_test_city_access_snapshot_setting(failures)
 	_test_reduced_motion_setting(failures)
 	_test_accessibility_display_settings(failures)
+	_test_character_hud_background_opacity(failures)
 	_test_round_trip_and_inactive_retention(failures)
 	_test_missing_unknown_and_malformed_fields(failures)
 	_test_failed_save_preserves_previous_file(failures)
 	_test_failed_restore_retains_backup(failures)
 	return failures
+
+
+func _test_character_hud_background_opacity(failures: Array[String]) -> void:
+	var settings := PartyForgeSettings.new()
+	TestAssertions.equal(settings.get("character_hud_background_opacity_percent"), 50, "character HUD background defaults to 50 percent opacity", failures)
+	settings.set("character_hud_background_opacity_percent", -25)
+	settings.call("normalize")
+	TestAssertions.equal(settings.get("character_hud_background_opacity_percent"), 0, "character HUD background opacity clamps at zero", failures)
+	settings.set("character_hud_background_opacity_percent", 140)
+	settings.call("normalize")
+	TestAssertions.equal(settings.get("character_hud_background_opacity_percent"), 100, "character HUD background opacity clamps at 100", failures)
+	var copied := settings.copy()
+	settings.set("character_hud_background_opacity_percent", 50)
+	TestAssertions.equal(copied.get("character_hud_background_opacity_percent"), 100, "settings copy preserves character HUD background opacity", failures)
+
+	var path := "user://party_forge_settings_character_hud_opacity_test.cfg"
+	var store := PartyForgeSettingsStore.new()
+	copied.set("character_hud_background_opacity_percent", 35)
+	TestAssertions.equal(store.save_settings(copied, path), "", "character HUD background opacity saves", failures)
+	var loaded := store.load_settings(path)
+	TestAssertions.equal(loaded.get("character_hud_background_opacity_percent"), 35, "character HUD background opacity round trips", failures)
+	var persisted := ConfigFile.new()
+	TestAssertions.equal(persisted.load(path), OK, "character HUD settings file remains readable", failures)
+	TestAssertions.equal(int(persisted.get_value("settings", "schema_version", -1)), 2, "character HUD setting persists under schema two", failures)
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+
+	var legacy_path := "user://party_forge_settings_character_hud_opacity_legacy.cfg"
+	var legacy := ConfigFile.new()
+	legacy.set_value("settings", "schema_version", 1)
+	legacy.set_value("settings", "mode", PartyForgeSettings.Mode.PLAYER_SIMULATION)
+	legacy.save(legacy_path)
+	loaded = store.load_settings(legacy_path)
+	TestAssertions.equal(loaded.schema_version, 2, "schema-one settings migrate to schema two in memory", failures)
+	TestAssertions.equal(loaded.get("character_hud_background_opacity_percent"), 50, "schema-one settings migrate to the 50 percent character HUD default", failures)
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(legacy_path))
+
+	var malformed_path := "user://party_forge_settings_character_hud_opacity_malformed.cfg"
+	var malformed := ConfigFile.new()
+	malformed.set_value("settings", "schema_version", 2)
+	malformed.set_value("settings", "character_hud_background_opacity_percent", "35")
+	malformed.save(malformed_path)
+	TestAssertions.equal(store.load_settings(malformed_path).get("character_hud_background_opacity_percent"), 50, "malformed character HUD opacity fails to its safe default", failures)
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(malformed_path))
 
 func _test_personal_loot_controls(failures: Array[String]) -> void:
 	var settings := PartyForgeSettings.new()
@@ -98,7 +142,7 @@ func _test_city_access_snapshot_setting(failures: Array[String]) -> void:
 	missing.set_value("settings", "schema_version", PartyForgeSettings.SCHEMA_VERSION)
 	missing.set_value("settings", "mode", PartyForgeSettings.Mode.DEVELOPER_MODE)
 	missing.save(missing_path)
-	TestAssertions.equal(store.load_settings(missing_path).get("use_city_access_snapshot"), false, "schema v1 files without City access snapshot selection default false", failures)
+	TestAssertions.equal(store.load_settings(missing_path).get("use_city_access_snapshot"), false, "current-schema files without City access snapshot selection default false", failures)
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(missing_path))
 
 	var malformed_path := "user://party_forge_settings_city_access_snapshot_malformed_test.cfg"
@@ -183,7 +227,7 @@ func _test_accessibility_display_settings(failures: Array[String]) -> void:
 	legacy.set_value("settings", "schema_version", PartyForgeSettings.SCHEMA_VERSION)
 	legacy.save(legacy_path)
 	loaded = store.load_settings(legacy_path)
-	TestAssertions.equal([loaded.get("high_contrast"), loaded.get("ui_scale_percent"), loaded.get("text_scale_percent")], [false, 100, 100], "schema v1 files without display accessibility keys use legacy defaults", failures)
+	TestAssertions.equal([loaded.get("high_contrast"), loaded.get("ui_scale_percent"), loaded.get("text_scale_percent")], [false, 100, 100], "current-schema files without display accessibility keys use safe defaults", failures)
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(legacy_path))
 
 	var malformed_path := "user://tests/living_forge_settings/accessibility_malformed_%d_%d.cfg" % [OS.get_process_id(), Time.get_ticks_usec()]
@@ -256,7 +300,7 @@ func _test_missing_unknown_and_malformed_fields(failures: Array[String]) -> void
 	TestAssertions.equal(loaded.enemy_density_percent, 100, "missing density uses default", failures)
 	TestAssertions.equal(loaded.experience_multiplier_percent, 100, "missing experience multiplier uses default", failures)
 	TestAssertions.equal(loaded.level_up_card_count, 5, "missing level-up card count uses default", failures)
-	TestAssertions.equal(loaded.get("reduced_motion"), false, "schema v1 files without reduced motion use the false fallback", failures)
+	TestAssertions.equal(loaded.get("reduced_motion"), false, "unversioned files without reduced motion use the false fallback", failures)
 	file = FileAccess.open(path, FileAccess.WRITE)
 	file.store_string("[settings]\nmode=\"1\"\ngod_mode=\"true\"\npersonal_drop_multiplier_percent=\"500\"\nforce_personal_drops=\"true\"\npersonal_drop_source_category_override=14\npersonal_drop_item_level_override=\"80\"\nshow_ground_chest_diagnostics=\"true\"\n")
 	file.close()
