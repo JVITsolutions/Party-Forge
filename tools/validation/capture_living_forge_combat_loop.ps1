@@ -236,9 +236,9 @@ if ($LASTEXITCODE -eq 0) {
     throw "CANONICAL_CAPTURE_CLONE_NOT_DETACHED ref=$symbolic"
 }
 
-$trackedBefore = Get-Lines (Invoke-CheckedProcess -Executable 'git.exe' -Arguments @('-C', $cloneRoot, 'status', '--porcelain=v1', '--untracked-files=no') -Label 'pre-import-tracked')
-$untrackedBefore = Get-Lines (Invoke-CheckedProcess -Executable 'git.exe' -Arguments @('-C', $cloneRoot, 'ls-files', '--others', '--exclude-standard', '--') -Label 'pre-import-untracked')
-$ignoredBefore = Get-Lines (Invoke-CheckedProcess -Executable 'git.exe' -Arguments @('-C', $cloneRoot, 'ls-files', '--others', '--ignored', '--exclude-standard', '--') -Label 'pre-import-ignored')
+$trackedBefore = @(Get-Lines (Invoke-CheckedProcess -Executable 'git.exe' -Arguments @('-C', $cloneRoot, 'status', '--porcelain=v1', '--untracked-files=no') -Label 'pre-import-tracked'))
+$untrackedBefore = @(Get-Lines (Invoke-CheckedProcess -Executable 'git.exe' -Arguments @('-C', $cloneRoot, 'ls-files', '--others', '--exclude-standard', '--') -Label 'pre-import-untracked'))
+$ignoredBefore = @(Get-Lines (Invoke-CheckedProcess -Executable 'git.exe' -Arguments @('-C', $cloneRoot, 'ls-files', '--others', '--ignored', '--exclude-standard', '--') -Label 'pre-import-ignored'))
 if ($trackedBefore.Count -ne 0 -or $untrackedBefore.Count -ne 0 -or $ignoredBefore.Count -ne 0) {
     throw "CANONICAL_CAPTURE_PREIMPORT_NOT_CLEAN tracked=$($trackedBefore.Count) untracked=$($untrackedBefore.Count) ignored=$($ignoredBefore.Count)"
 }
