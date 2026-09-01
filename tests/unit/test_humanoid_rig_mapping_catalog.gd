@@ -6,6 +6,7 @@ const RESOLUTION_PATH := "res://scripts/presentation/humanoid_rig_mapping_resolu
 const LOADER_PATH := "res://scripts/presentation/humanoid_rig_mapping_loader.gd"
 const MASCULINE_PATH := "res://data/presentation/humanoid_rigs/pf_humanoid_v1_mixamo52_masculine.tres"
 const FEMININE_PATH := "res://data/presentation/humanoid_rigs/pf_humanoid_v1_mixamo52_feminine.tres"
+const SHARED_PATH := "res://data/presentation/humanoid_rigs/pf_humanoid_v1_mixamo52.tres"
 const MASCULINE_ID := &"pf_humanoid_v1_mixamo52_masculine"
 const FEMININE_ID := &"pf_humanoid_v1_mixamo52_feminine"
 const MASCULINE_SHA := "8f589e35f16f02fe4aa0f45b5f2c85377a41f9ecc188670bf59159518e6cdbe4"
@@ -193,42 +194,208 @@ func run() -> Array[String]:
 	TestAssertions.equal(recorder.existence_calls, PackedStringArray([MASCULINE_PATH, FEMININE_PATH]), "loader never substitutes existence path", failures)
 	TestAssertions.equal(recorder.load_calls, PackedStringArray([MASCULINE_PATH, FEMININE_PATH]), "loader never substitutes load path", failures)
 
+	var resolve_argument_count := _method_argument_count(_catalog_script, &"resolve")
+	var resolve_return_class := _method_return_class_name(_catalog_script, &"resolve")
+	TestAssertions.truthy(resolve_argument_count == 2 and resolve_return_class == &"RefCounted", "catalog exposes per-call exact-path structured resolve", failures)
+	if resolve_argument_count != 2 or resolve_return_class != &"RefCounted":
+		return failures
+
+	var catalog := _catalog_script.new() as RefCounted
+	var all_recorders: Array[LoaderRecorder] = []
+
+	var unknown_recorder := LoaderRecorder.new()
+	all_recorders.append(unknown_recorder)
+	var unknown_loader: RefCounted = _loader_script.new(Callable(unknown_recorder, &"exists_exact"), Callable(unknown_recorder, &"load_exact"))
+	var unknown_result: RefCounted = catalog.call(&"resolve", &"unknown", unknown_loader)
+	TestAssertions.equal(_resolution_snapshot(unknown_result, unknown_recorder), {
+		&"preset": &"unknown",
+		&"path": "",
+		&"mapping": null,
+		&"categories": [&"unknown_body_preset"],
+		&"messages": PackedStringArray(["humanoid rig mapping catalog body preset unknown is unknown"]),
+		&"success": false,
+		&"existence_calls": PackedStringArray(),
+		&"load_calls": PackedStringArray(),
+	}, "unknown preset avoids loader and returns exact failure", failures)
+
+	var missing_recorder := LoaderRecorder.new()
+	all_recorders.append(missing_recorder)
+	var missing_loader: RefCounted = _loader_script.new(Callable(missing_recorder, &"exists_exact"), Callable(missing_recorder, &"load_exact"))
+	var missing_result: RefCounted = catalog.call(&"resolve", &"masculine", missing_loader)
+	TestAssertions.equal(_resolution_snapshot(missing_result, missing_recorder), {
+		&"preset": &"masculine",
+		&"path": MASCULINE_PATH,
+		&"mapping": null,
+		&"categories": [&"missing_resource"],
+		&"messages": PackedStringArray(["humanoid rig mapping catalog body preset masculine resource %s does not exist" % MASCULINE_PATH]),
+		&"success": false,
+		&"existence_calls": PackedStringArray([MASCULINE_PATH]),
+		&"load_calls": PackedStringArray(),
+	}, "missing resource outcome is exact", failures)
+
+	var default_missing_result: RefCounted = catalog.call(&"resolve", &"masculine")
+	TestAssertions.equal(_resolution_snapshot(default_missing_result), {
+		&"preset": &"masculine",
+		&"path": MASCULINE_PATH,
+		&"mapping": null,
+		&"categories": [&"missing_resource"],
+		&"messages": PackedStringArray(["humanoid rig mapping catalog body preset masculine resource %s does not exist" % MASCULINE_PATH]),
+		&"success": false,
+		&"existence_calls": PackedStringArray(),
+		&"load_calls": PackedStringArray(),
+	}, "default production loader reports exact missing resource", failures)
+
+	var failed_load_recorder := LoaderRecorder.new()
+	failed_load_recorder.existing_paths[MASCULINE_PATH] = true
+	all_recorders.append(failed_load_recorder)
+	var failed_load_loader: RefCounted = _loader_script.new(Callable(failed_load_recorder, &"exists_exact"), Callable(failed_load_recorder, &"load_exact"))
+	var failed_load_result: RefCounted = catalog.call(&"resolve", &"masculine", failed_load_loader)
+	TestAssertions.equal(_resolution_snapshot(failed_load_result, failed_load_recorder), {
+		&"preset": &"masculine",
+		&"path": MASCULINE_PATH,
+		&"mapping": null,
+		&"categories": [&"resource_load_failed"],
+		&"messages": PackedStringArray(["humanoid rig mapping catalog body preset masculine resource %s could not be loaded" % MASCULINE_PATH]),
+		&"success": false,
+		&"existence_calls": PackedStringArray([MASCULINE_PATH]),
+		&"load_calls": PackedStringArray([MASCULINE_PATH]),
+	}, "failed load outcome is exact", failures)
+
+	var wrong_type_recorder := LoaderRecorder.new()
+	wrong_type_recorder.existing_paths[MASCULINE_PATH] = true
+	wrong_type_recorder.values_by_path[MASCULINE_PATH] = Resource.new()
+	all_recorders.append(wrong_type_recorder)
+	var wrong_type_loader: RefCounted = _loader_script.new(Callable(wrong_type_recorder, &"exists_exact"), Callable(wrong_type_recorder, &"load_exact"))
+	var wrong_type_result: RefCounted = catalog.call(&"resolve", &"masculine", wrong_type_loader)
+	TestAssertions.equal(_resolution_snapshot(wrong_type_result, wrong_type_recorder), {
+		&"preset": &"masculine",
+		&"path": MASCULINE_PATH,
+		&"mapping": null,
+		&"categories": [&"wrong_resource_type"],
+		&"messages": PackedStringArray(["humanoid rig mapping catalog body preset masculine resource %s must be HumanoidRigMapping, got Resource" % MASCULINE_PATH]),
+		&"success": false,
+		&"existence_calls": PackedStringArray([MASCULINE_PATH]),
+		&"load_calls": PackedStringArray([MASCULINE_PATH]),
+	}, "wrong resource type outcome is exact", failures)
+
+	var identity_mapping := _mapping(&"wrong", FEMININE_SHA, FEMININE_REST)
+	identity_mapping.set(&"canonical_rig_id", &"wrong")
+	var identity_recorder := LoaderRecorder.new()
+	identity_recorder.existing_paths[MASCULINE_PATH] = true
+	identity_recorder.values_by_path[MASCULINE_PATH] = identity_mapping
+	all_recorders.append(identity_recorder)
+	var identity_loader: RefCounted = _loader_script.new(Callable(identity_recorder, &"exists_exact"), Callable(identity_recorder, &"load_exact"))
+	var identity_result: RefCounted = catalog.call(&"resolve", &"masculine", identity_loader)
+	TestAssertions.equal(_resolution_snapshot(identity_result, identity_recorder), {
+		&"preset": &"masculine",
+		&"path": MASCULINE_PATH,
+		&"mapping": null,
+		&"categories": [&"wrong_mapping_id", &"wrong_canonical_rig_id", &"wrong_source_hash", &"wrong_rest_signature"],
+		&"messages": PackedStringArray([
+			"humanoid rig mapping catalog body preset masculine mapping id must be %s, got wrong" % MASCULINE_ID,
+			"humanoid rig mapping catalog body preset masculine canonical rig id must be pf_humanoid_v1, got wrong",
+			"humanoid rig mapping catalog body preset masculine source skeleton hash must be %s, got %s" % [MASCULINE_SHA, FEMININE_SHA],
+			"humanoid rig mapping catalog body preset masculine source rest signature must be %s, got %s" % [MASCULINE_REST, FEMININE_REST],
+		]),
+		&"success": false,
+		&"existence_calls": PackedStringArray([MASCULINE_PATH]),
+		&"load_calls": PackedStringArray([MASCULINE_PATH]),
+	}, "identity mismatch categories and messages are ordered", failures)
+
 	var masculine := _mapping(MASCULINE_ID, MASCULINE_SHA, MASCULINE_REST)
+	var masculine_recorder := LoaderRecorder.new()
+	masculine_recorder.existing_paths[MASCULINE_PATH] = true
+	masculine_recorder.values_by_path[MASCULINE_PATH] = masculine
+	all_recorders.append(masculine_recorder)
+	var masculine_loader: RefCounted = _loader_script.new(Callable(masculine_recorder, &"exists_exact"), Callable(masculine_recorder, &"load_exact"))
+	var masculine_result: RefCounted = catalog.call(&"resolve", &"masculine", masculine_loader)
+	TestAssertions.equal(_resolution_snapshot(masculine_result, masculine_recorder), {
+		&"preset": &"masculine",
+		&"path": MASCULINE_PATH,
+		&"mapping": masculine,
+		&"categories": [],
+		&"messages": PackedStringArray(),
+		&"success": true,
+		&"existence_calls": PackedStringArray([MASCULINE_PATH]),
+		&"load_calls": PackedStringArray([MASCULINE_PATH]),
+	}, "masculine exact path resolution succeeds", failures)
+
 	var feminine := _mapping(FEMININE_ID, FEMININE_SHA, FEMININE_REST)
-	var injected := {&"masculine": masculine, &"feminine": feminine}
-	var catalog := _catalog_script.new(injected) as RefCounted
+	var feminine_recorder := LoaderRecorder.new()
+	feminine_recorder.existing_paths[FEMININE_PATH] = true
+	feminine_recorder.values_by_path[FEMININE_PATH] = feminine
+	all_recorders.append(feminine_recorder)
+	var feminine_loader: RefCounted = _loader_script.new(Callable(feminine_recorder, &"exists_exact"), Callable(feminine_recorder, &"load_exact"))
+	var feminine_result: RefCounted = catalog.call(&"resolve", &"feminine", feminine_loader)
+	TestAssertions.equal(_resolution_snapshot(feminine_result, feminine_recorder), {
+		&"preset": &"feminine",
+		&"path": FEMININE_PATH,
+		&"mapping": feminine,
+		&"categories": [],
+		&"messages": PackedStringArray(),
+		&"success": true,
+		&"existence_calls": PackedStringArray([FEMININE_PATH]),
+		&"load_calls": PackedStringArray([FEMININE_PATH]),
+	}, "feminine exact path resolution succeeds", failures)
 
-	TestAssertions.equal(catalog.call(&"resolve", &"masculine"), masculine, "masculine resolves only its exact injected mapping", failures)
-	TestAssertions.equal(catalog.call(&"resolve", &"feminine"), feminine, "feminine resolves only its exact injected mapping", failures)
+	var cross_body_recorder := LoaderRecorder.new()
+	cross_body_recorder.existing_paths[MASCULINE_PATH] = true
+	cross_body_recorder.values_by_path[MASCULINE_PATH] = feminine
+	all_recorders.append(cross_body_recorder)
+	var cross_body_loader: RefCounted = _loader_script.new(Callable(cross_body_recorder, &"exists_exact"), Callable(cross_body_recorder, &"load_exact"))
+	var cross_body_result: RefCounted = catalog.call(&"resolve", &"masculine", cross_body_loader)
+	TestAssertions.equal(_resolution_snapshot(cross_body_result, cross_body_recorder), {
+		&"preset": &"masculine",
+		&"path": MASCULINE_PATH,
+		&"mapping": null,
+		&"categories": [&"wrong_mapping_id", &"wrong_source_hash", &"wrong_rest_signature"],
+		&"messages": PackedStringArray([
+			"humanoid rig mapping catalog body preset masculine mapping id must be %s, got %s" % [MASCULINE_ID, FEMININE_ID],
+			"humanoid rig mapping catalog body preset masculine source skeleton hash must be %s, got %s" % [MASCULINE_SHA, FEMININE_SHA],
+			"humanoid rig mapping catalog body preset masculine source rest signature must be %s, got %s" % [MASCULINE_REST, FEMININE_REST],
+		]),
+		&"success": false,
+		&"existence_calls": PackedStringArray([MASCULINE_PATH]),
+		&"load_calls": PackedStringArray([MASCULINE_PATH]),
+	}, "cross-body mapping fails without fallback", failures)
 
-	var active_mapping := masculine
-	active_mapping = _activate_if_resolved(catalog, &"unknown", active_mapping)
-	TestAssertions.equal(active_mapping, masculine, "failed unknown selection leaves active mapping unchanged", failures)
+	var retained_mapping := _mapping(MASCULINE_ID, MASCULINE_SHA, MASCULINE_REST)
+	var retained_recorder := LoaderRecorder.new()
+	retained_recorder.existing_paths[MASCULINE_PATH] = true
+	retained_recorder.values_by_path[MASCULINE_PATH] = retained_mapping
+	all_recorders.append(retained_recorder)
+	var retained_loader: RefCounted = _loader_script.new(Callable(retained_recorder, &"exists_exact"), Callable(retained_recorder, &"load_exact"))
+	var retained_success: RefCounted = catalog.call(&"resolve", &"masculine", retained_loader)
+	var later_failure_recorder := LoaderRecorder.new()
+	all_recorders.append(later_failure_recorder)
+	var later_failure_loader: RefCounted = _loader_script.new(Callable(later_failure_recorder, &"exists_exact"), Callable(later_failure_recorder, &"load_exact"))
+	catalog.call(&"resolve", &"unknown", later_failure_loader)
+	TestAssertions.equal(_resolution_snapshot(retained_success), {
+		&"preset": &"masculine",
+		&"path": MASCULINE_PATH,
+		&"mapping": retained_mapping,
+		&"categories": [],
+		&"messages": PackedStringArray(),
+		&"success": true,
+		&"existence_calls": PackedStringArray(),
+		&"load_calls": PackedStringArray(),
+	}, "later catalog failure does not mutate prior success", failures)
 
-	var crossed_catalog := _catalog_script.new({&"masculine": feminine, &"feminine": masculine}) as RefCounted
-	active_mapping = _activate_if_resolved(crossed_catalog, &"masculine", active_mapping)
-	TestAssertions.equal(active_mapping, masculine, "failed cross-body masculine selection leaves active mapping unchanged", failures)
-	TestAssertions.equal(crossed_catalog.call(&"resolve", &"feminine"), null, "cross-body feminine selection fails", failures)
-
-	var wrong_canonical := _mapping(MASCULINE_ID, MASCULINE_SHA, MASCULINE_REST)
-	wrong_canonical.set(&"canonical_rig_id", &"wrong")
-	var wrong_canonical_catalog := _catalog_script.new({&"masculine": wrong_canonical}) as RefCounted
-	TestAssertions.equal(wrong_canonical_catalog.call(&"resolve", &"masculine"), null, "wrong canonical identity rejects", failures)
-
-	var wrong_id := _mapping(&"wrong", MASCULINE_SHA, MASCULINE_REST)
-	var wrong_id_catalog := _catalog_script.new({&"masculine": wrong_id}) as RefCounted
-	TestAssertions.equal(wrong_id_catalog.call(&"resolve", &"masculine"), null, "wrong mapping id rejects", failures)
-
-	var wrong_source := _mapping(MASCULINE_ID, FEMININE_SHA, MASCULINE_REST)
-	var wrong_source_catalog := _catalog_script.new({&"masculine": wrong_source}) as RefCounted
-	TestAssertions.equal(wrong_source_catalog.call(&"resolve", &"masculine"), null, "wrong source hash rejects", failures)
-
-	var wrong_rest := _mapping(MASCULINE_ID, MASCULINE_SHA, FEMININE_REST)
-	var wrong_rest_catalog := _catalog_script.new({&"masculine": wrong_rest}) as RefCounted
-	TestAssertions.equal(wrong_rest_catalog.call(&"resolve", &"masculine"), null, "wrong source rest signature rejects", failures)
-
-	injected[&"masculine"] = feminine
-	TestAssertions.equal(catalog.call(&"resolve", &"masculine"), masculine, "constructor duplicates injected dictionary", failures)
+	var all_loader_calls := PackedStringArray()
+	for case_recorder: LoaderRecorder in all_recorders:
+		all_loader_calls.append_array(case_recorder.existence_calls)
+		all_loader_calls.append_array(case_recorder.load_calls)
+	TestAssertions.truthy(SHARED_PATH not in all_loader_calls, "catalog never requests shared mapping resource", failures)
+	var catalog_property_names := PackedStringArray()
+	for catalog_property: Dictionary in catalog.get_property_list():
+		catalog_property_names.append(String(catalog_property.get("name", "")))
+	var forbidden_state_property_found := false
+	for catalog_property_name: String in catalog_property_names:
+		var normalized_property_name := catalog_property_name.to_lower()
+		if "active" in normalized_property_name or "result" in normalized_property_name or "error" in normalized_property_name:
+			forbidden_state_property_found = true
+			break
+	TestAssertions.truthy(not forbidden_state_property_found, "catalog exposes no active result or error state", failures)
 
 	var script_constants := _catalog_script.get_script_constant_map()
 	var resource_paths := script_constants.get("RESOURCE_PATH_BY_BODY_PRESET", {}) as Dictionary
@@ -244,6 +411,7 @@ func run() -> Array[String]:
 		"feminine future resource path is exact",
 		failures
 	)
+	TestAssertions.truthy(not resource_paths.has(&"shared") and SHARED_PATH not in resource_paths.values(), "catalog path table has no shared fallback", failures)
 	var resolution_resource_paths := _resolution_script.get_script_constant_map().get("_RESOURCE_PATH_BY_BODY_PRESET", {}) as Dictionary
 	TestAssertions.equal(resolution_resource_paths, resource_paths, "catalog and resolution path tables are identical", failures)
 	return failures
@@ -256,9 +424,17 @@ func _mapping(mapping_id: StringName, source_sha: String, rest_signature: String
 	mapping.set(&"source_rest_signature", rest_signature)
 	return mapping
 
-func _activate_if_resolved(catalog: RefCounted, body_preset_id: StringName, active_mapping: Resource) -> Resource:
-	var resolved := catalog.call(&"resolve", body_preset_id) as Resource
-	return resolved if resolved != null else active_mapping
+func _resolution_snapshot(result: RefCounted, recorder: LoaderRecorder = null) -> Dictionary:
+	return {
+		&"preset": result.call(&"get_requested_body_preset"),
+		&"path": result.call(&"get_selected_resource_path"),
+		&"mapping": result.call(&"get_mapping"),
+		&"categories": result.call(&"get_failure_categories"),
+		&"messages": result.call(&"get_error_messages"),
+		&"success": bool(result.call(&"is_success")),
+		&"existence_calls": recorder.existence_calls.duplicate() if recorder != null else PackedStringArray(),
+		&"load_calls": recorder.load_calls.duplicate() if recorder != null else PackedStringArray(),
+	}
 
 func _method_argument_count(script: Script, method_name: StringName) -> int:
 	for method_value: Variant in script.get_script_method_list():
