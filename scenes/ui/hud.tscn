@@ -62,8 +62,9 @@ anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
-grow_vertical = 2
+grow_vertical = 1
 mouse_filter = 2
+theme_override_constants/separation = 4
 
 [node name="DisclosureGlyph" type="Label" parent="Margin/CombatStatus/PartyHeader/Content"]
 layout_mode = 2
@@ -74,7 +75,8 @@ mouse_filter = 2
 visible = false
 custom_minimum_size = Vector2(24, 24)
 layout_mode = 2
-expand_mode = 3
+size_flags_vertical = 4
+expand_mode = 1
 stretch_mode = 5
 mouse_filter = 2
 
@@ -85,6 +87,7 @@ text = "✓"
 mouse_filter = 2
 
 [node name="Summary" type="Label" parent="Margin/CombatStatus/PartyHeader/Content"]
+custom_minimum_size = Vector2(0, 0)
 layout_mode = 2
 size_flags_horizontal = 3
 text = "PARTY"
@@ -291,8 +294,9 @@ anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
-grow_vertical = 2
+grow_vertical = 1
 mouse_filter = 2
+theme_override_constants/separation = 4
 
 [node name="DisclosureGlyph" type="Label" parent="Margin/CombatStatus/AlertRegion/Header/Content"]
 layout_mode = 2
@@ -303,7 +307,8 @@ mouse_filter = 2
 visible = false
 custom_minimum_size = Vector2(24, 24)
 layout_mode = 2
-expand_mode = 3
+size_flags_vertical = 4
+expand_mode = 1
 stretch_mode = 5
 mouse_filter = 2
 
@@ -314,6 +319,7 @@ text = "✓"
 mouse_filter = 2
 
 [node name="Summary" type="Label" parent="Margin/CombatStatus/AlertRegion/Header/Content"]
+custom_minimum_size = Vector2(0, 0)
 layout_mode = 2
 size_flags_horizontal = 3
 text = "ALERTS · ALL CLEAR"
@@ -328,7 +334,7 @@ anchor_bottom = 1.0
 offset_top = 52.0
 offset_bottom = -52.0
 grow_horizontal = 2
-grow_vertical = 2
+grow_vertical = 1
 theme_override_constants/separation = 4
 
 [node name="Overflow" type="Button" parent="Margin/CombatStatus/AlertRegion"]

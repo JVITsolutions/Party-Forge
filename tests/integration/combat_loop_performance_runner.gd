@@ -101,7 +101,8 @@ func _exercise_case(case: Dictionary) -> void:
 	var hud := (load("res://scenes/ui/hud.tscn") as PackedScene).instantiate() as HUD
 	root.add_child(hud)
 	hud.configure(run, party, experience, fixture.context as PlayerRunContext, settings)
-	var metrics := CombatHudResponsiveLayout.resolve(VIEWPORT_SIZE, settings.ui_scale_percent, settings.text_scale_percent, PARTY_COUNT)
+	var party_header := hud.get_node("Margin/CombatStatus/PartyHeader") as Button
+	var metrics := CombatHudResponsiveLayout.resolve(VIEWPORT_SIZE, settings.ui_scale_percent, settings.text_scale_percent, PARTY_COUNT, party_header.get_global_rect().size.y)
 	var hud_ready := await _wait_until(
 		func() -> bool:
 			return (
@@ -109,12 +110,14 @@ func _exercise_case(case: Dictionary) -> void:
 				and hud.current_projection.members.size() == PARTY_COUNT
 				and hud.current_projection.all_alerts.size() == PARTY_COUNT
 				and _member_control_ids(hud).size() == metrics.visible_member_count
+				and _compact_controls_within_bounds(hud)
 				and (hud.get_node("Margin/CombatStatus/AlertRegion/Overflow") as Button).visible
 			),
 		"%s HUD projection, compact controls, and overflow alerts" % case_id,
 		_remaining_case_wait_ms(case_deadline_usec),
 	)
 	_assert(hud_ready, "%s reaches its complete 24-member HUD state before the deadline" % case_id)
+	_assert(_member_control_ids(hud).size() == metrics.visible_member_count and _compact_controls_within_bounds(hud), "%s measured Party-header reservation matches the contained real compact rows" % case_id)
 
 	var extraction := _long_extraction_projection()
 	hud.show_terminal_extraction(extraction)

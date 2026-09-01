@@ -47,7 +47,6 @@ var _deferred_focus_descriptor: Dictionary = {}
 var _terminal_suspended_focus_modes: Array[Dictionary] = []
 var _terminal_prior_focus: Control
 var _terminal_prior_focus_descriptor: Dictionary = {}
-var _alert_budget_reflow_queued := false
 var _party_collapsed := false
 var _alerts_collapsed := false
 var _collapsed_focus_descriptors := {REGION_PARTY: {}, REGION_ALERTS: {}}
@@ -227,9 +226,11 @@ func _set_party_collapsed(value: bool, user_initiated: bool) -> void:
 	_party_collapsed = value
 	for path: NodePath in [^"Margin/CombatStatus/LeaderCard", ^"Margin/CombatStatus/Experience", ^"Margin/CombatStatus/PartyRegion"]:
 		(get_node(path) as Control).visible = not value
+	_present_region_headers()
+	if current_projection != null:
+		_refresh_projection(true)
 	if not value:
 		_finish_region_expand(REGION_PARTY, user_initiated)
-	_present_region_headers()
 	if user_initiated:
 		collapse_preferences_changed.emit(_party_collapsed, _alerts_collapsed)
 
@@ -247,11 +248,13 @@ func _set_alerts_collapsed(value: bool, user_initiated: bool) -> void:
 		overflow.visible = false
 		overflow.disabled = true
 		_set_presentation_focus_mode(overflow, Control.FOCUS_NONE)
-	elif current_projection != null:
+	_present_region_headers()
+	if not value and current_projection != null:
 		_apply_alert_budget()
+	else:
+		_reflow_alert_rows(false)
 	if not value:
 		_finish_region_expand(REGION_ALERTS, user_initiated)
-	_present_region_headers()
 	if user_initiated:
 		collapse_preferences_changed.emit(_party_collapsed, _alerts_collapsed)
 
@@ -584,14 +587,17 @@ func _present_region_headers() -> void:
 	var downed := current_projection.alert_count_for(CombatAlertProjection.Severity.DOWNED)
 	var critical := current_projection.alert_count_for(CombatAlertProjection.Severity.CRITICAL)
 	if leader != null:
-		party_summary.text = "PARTY · %d MEMBERS · LEADER %s · STATE %s · DEAD %d · DOWNED %d · CRITICAL %d" % [
-			current_projection.members.size(),
-			leader.display_name.to_upper(),
-			_severity_label(highest_severity),
-			dead,
-			downed,
-			critical,
-		]
+		if _party_collapsed:
+			party_summary.text = "PARTY · %d MEMBERS · LEADER %s · STATE %s · DEAD %d · DOWNED %d · CRITICAL %d" % [
+				current_projection.members.size(),
+				leader.display_name.to_upper(),
+				_severity_label(highest_severity),
+				dead,
+				downed,
+				critical,
+			]
+		else:
+			party_summary.text = "PARTY · %d MEMBERS" % current_projection.members.size()
 		party_health.max_value = leader.max_health
 		party_health.value = leader.health
 		party_health.visible = _party_collapsed
@@ -599,6 +605,8 @@ func _present_region_headers() -> void:
 	var highest := current_projection.highest_severity_alert()
 	if highest == null:
 		alerts_summary.text = "ALERTS · ALL CLEAR"
+	elif not _alerts_collapsed:
+		alerts_summary.text = "ALERTS · %d" % current_projection.all_alerts.size()
 	else:
 		alerts_summary.text = "ALERTS %d · %s · %s" % [current_projection.all_alerts.size(), _severity_label(highest.severity), highest.summary]
 	alerts_header.accessibility_name = _alerts_accessibility_name()
@@ -827,7 +835,9 @@ func _refresh_projection(force_structure: bool) -> void:
 	current_projection = projection
 	_clear_unavailable()
 	_last_viewport_size = _hud_viewport().get_visible_rect().size.round() as Vector2i
-	_metrics = CombatHudResponsiveLayout.resolve(_last_viewport_size, settings.ui_scale_percent, settings.text_scale_percent, projection.members.size())
+	_present_region_headers()
+	var party_header_height := _reflow_party_header()
+	_metrics = CombatHudResponsiveLayout.resolve(_last_viewport_size, settings.ui_scale_percent, settings.text_scale_percent, projection.members.size(), party_header_height)
 	var leader_card := get_node("Margin/CombatStatus/LeaderCard") as ForgePartyMemberCard
 	_reflow_leader_region(leader_card.apply_leader_density(_uses_compact_leader_density()))
 	var next_revision := _view_model.ordered_party_revision(party_manager)
@@ -849,13 +859,50 @@ func _uses_compact_leader_density() -> bool:
 
 
 func _reflow_leader_region(leader_height: float) -> void:
+	var party_header := get_node("Margin/CombatStatus/PartyHeader") as Control
 	var leader := get_node("Margin/CombatStatus/LeaderCard") as Control
+	leader.offset_top = party_header.offset_bottom + float(LivingForgeTokens.spacing(&"standard"))
 	leader.offset_bottom = leader.offset_top + leader_height
 	var experience := get_node("Margin/CombatStatus/Experience") as Control
 	experience.offset_top = leader.offset_bottom + 4.0
 	experience.offset_bottom = experience.offset_top + maxf(20.0, experience.get_combined_minimum_size().y)
 	var party_region := get_node("Margin/CombatStatus/PartyRegion") as Control
 	party_region.offset_top = experience.offset_bottom + 8.0
+
+
+func _reflow_party_header() -> float:
+	var header := get_node("Margin/CombatStatus/PartyHeader") as Button
+	var summary := get_node("Margin/CombatStatus/PartyHeader/Content/Summary") as Label
+	var scale := maxf(float(settings.ui_scale_percent), float(settings.text_scale_percent)) / 100.0
+	var maximum_height := maxf(48.0 * scale, _hud_viewport().get_visible_rect().size.y - header.position.y - 16.0)
+	var semantic_height := _measure_header_summary_height(header, summary, maximum_height)
+	var header_height := clampf(maxf(header.get_combined_minimum_size().y, 48.0 * scale), semantic_height, maximum_height)
+	_set_bottom_offset_if_changed(header, header.offset_top + header_height)
+	return header_height
+
+
+func _measure_header_summary_height(header: Button, summary: Label, maximum_height: float) -> float:
+	var content := summary.get_parent() as HBoxContainer
+	var separation := float(content.get_theme_constant(&"separation"))
+	var visible_sibling_count := 0
+	var reserved_width := 0.0
+	for child: Node in content.get_children():
+		if not child is Control or child == summary or not (child as Control).visible:
+			continue
+		visible_sibling_count += 1
+		reserved_width += (child as Control).get_combined_minimum_size().x
+	var available_width := clampf(
+		maxf(header.size.x, header.custom_minimum_size.x) - reserved_width - separation * float(visible_sibling_count),
+		1.0,
+		maxf(header.size.x, header.custom_minimum_size.x),
+	)
+	var font := summary.get_theme_font(&"font")
+	var font_size := summary.get_theme_font_size(&"font_size")
+	var measured := font.get_multiline_string_size(summary.text, summary.horizontal_alignment, available_width, font_size)
+	var line_height := maxf(font.get_height(font_size), 1.0)
+	var measured_height := clampf(ceilf(measured.y + line_height + 8.0), line_height, maximum_height)
+	summary.custom_minimum_size = Vector2(0.0, measured_height)
+	return measured_height
 
 
 func _rebuild_member_controls() -> void:
@@ -997,7 +1044,6 @@ func _present_alerts() -> void:
 			card.custom_minimum_size = Vector2(472.0, 172.0)
 			_alert_controls_by_id[alert.stable_id] = card
 			stack.add_child(card)
-			card.minimum_size_changed.connect(_queue_alert_budget_reflow)
 			card.inspect_requested.connect(_on_alert_inspect_requested.bind(card))
 			card.ledger_requested.connect(_on_alert_ledger_requested.bind(card))
 		card.set_meta(&"stable_alert_id", alert.stable_id)
@@ -1007,23 +1053,8 @@ func _present_alerts() -> void:
 		card.visible = true
 		stack.move_child(card, index)
 	_apply_alert_budget()
-	_queue_alert_budget_reflow()
 	if _alerts_collapsed:
 		_suspend_region_focus(REGION_ALERTS)
-	_reconcile_terminal_focus_suspension()
-
-
-func _queue_alert_budget_reflow() -> void:
-	if _alert_budget_reflow_queued:
-		return
-	_alert_budget_reflow_queued = true
-	call_deferred(&"_apply_deferred_alert_budget")
-
-
-func _apply_deferred_alert_budget() -> void:
-	_alert_budget_reflow_queued = false
-	if current_projection != null:
-		_apply_alert_budget()
 	_reconcile_terminal_focus_suspension()
 
 
@@ -1037,22 +1068,30 @@ func _apply_alert_budget() -> void:
 		_set_presentation_focus_mode(overflow, Control.FOCUS_NONE)
 		if overflow.has_focus():
 			overflow.release_focus()
+		_reflow_alert_rows(false)
 		return
-	var stack_parent := stack.get_parent_control()
-	var vertical_budget := maxf(
-		stack_parent.size.y * (stack.anchor_bottom - stack.anchor_top) + stack.offset_bottom - stack.offset_top,
-		0.0,
-	)
-	if vertical_budget <= 0.0:
-		vertical_budget = maxf(_hud_viewport().get_visible_rect().size.y - 188.0, 1.0)
+	_reflow_alert_rows(false)
 	var separation := float(stack.get_theme_constant(&"separation"))
+	var visible_alerts := current_projection.visible_alerts
+	var required_height := 0.0
+	var card_minimums: Dictionary = {}
+	for index: int in visible_alerts.size():
+		var candidate := visible_alerts[index]
+		var candidate_card := _alert_controls_by_id.get(candidate.stable_id) as ForgeAlertCard
+		if candidate_card != null:
+			var candidate_minimum := candidate_card.synchronize_content_minimum()
+			card_minimums[candidate.stable_id] = candidate_minimum
+			required_height += candidate_minimum.y + (separation if index > 0 else 0.0)
+	var reserve_overflow := current_projection.all_alerts.size() > visible_alerts.size() or required_height > _alert_stack_vertical_budget(stack)
+	_reflow_alert_rows(reserve_overflow)
+	var vertical_budget := _alert_stack_vertical_budget(stack)
 	var rendered_count := 0
 	var used_height := 0.0
-	for alert: CombatAlertProjection in current_projection.visible_alerts:
+	for alert: CombatAlertProjection in visible_alerts:
 		var card := _alert_controls_by_id.get(alert.stable_id) as ForgeAlertCard
 		if card == null:
 			continue
-		var card_minimum := card.synchronize_content_minimum()
+		var card_minimum := card_minimums.get(alert.stable_id, card.get_combined_minimum_size()) as Vector2
 		var next_height := used_height + (separation if rendered_count > 0 else 0.0) + card_minimum.y
 		var render_card := rendered_count == 0 or next_height <= vertical_budget
 		card.set_interaction_disabled(not render_card)
@@ -1068,7 +1107,72 @@ func _apply_alert_budget() -> void:
 		overflow.release_focus()
 	overflow.text = "+%d %s" % [overflow_count, "alert" if overflow_count == 1 else "alerts"]
 	overflow.accessibility_name = "Open %d additional combat %s" % [overflow_count, "alert" if overflow_count == 1 else "alerts"]
+	_reflow_alert_rows(overflow.visible)
 	_configure_alert_focus_neighbors()
+
+
+func _alert_stack_vertical_budget(stack: Control) -> float:
+	var stack_parent := stack.get_parent_control()
+	var budget := maxf(
+		stack_parent.size.y * (stack.anchor_bottom - stack.anchor_top) + stack.offset_bottom - stack.offset_top,
+		0.0,
+	)
+	if budget <= 0.0:
+		return maxf(_hud_viewport().get_visible_rect().size.y - 188.0, 1.0)
+	return budget
+
+
+func _reflow_alert_rows(reserve_overflow: bool) -> void:
+	var region := get_node("Margin/CombatStatus/AlertRegion") as Control
+	var header := get_node("Margin/CombatStatus/AlertRegion/Header") as Button
+	var stack := get_node("Margin/CombatStatus/AlertRegion/ExpandedAlerts") as Control
+	var overflow := get_node("Margin/CombatStatus/AlertRegion/Overflow") as Button
+	var tray_action := get_node("Margin/CombatStatus/AlertRegion/AlertsTrayAction") as Button
+	var compact_gap := float(LivingForgeTokens.spacing(&"compact"))
+	var summary := get_node("Margin/CombatStatus/AlertRegion/Header/Content/Summary") as Label
+	var scale := maxf(float(settings.ui_scale_percent), float(settings.text_scale_percent)) / 100.0
+	var tray_height := maxf(48.0, tray_action.get_combined_minimum_size().y)
+	var maximum_header_height := maxf(48.0 * scale, region.size.y - (tray_height + compact_gap if tray_action.visible else 0.0))
+	var semantic_height := _measure_header_summary_height(header, summary, maximum_header_height)
+	var header_height := clampf(maxf(header.get_combined_minimum_size().y, 48.0 * scale), semantic_height, maximum_header_height)
+	_set_bottom_offset_if_changed(header, header.offset_top + header_height)
+	var tray_width := maxf(192.0, tray_action.get_combined_minimum_size().x)
+	_set_offsets_if_changed(tray_action, -tray_width, -tray_height, tray_action.offset_right, 0.0)
+	var reserved_bottom := 0.0
+	if tray_action.visible:
+		reserved_bottom = tray_height + compact_gap
+	var overflow_height := maxf(48.0, overflow.get_combined_minimum_size().y)
+	if reserve_overflow:
+		_set_vertical_offsets_if_changed(overflow, -(reserved_bottom + overflow_height), -reserved_bottom)
+		reserved_bottom += overflow_height + compact_gap
+	var stack_top := header.offset_bottom + compact_gap
+	var stack_bottom := -reserved_bottom
+	if region.size.y > 0.0 and stack_top > region.size.y + stack_bottom:
+		stack_bottom = stack_top - region.size.y
+	_set_vertical_offsets_if_changed(stack, stack_top, stack_bottom)
+
+
+func _set_bottom_offset_if_changed(control: Control, value: float) -> void:
+	if not is_equal_approx(control.offset_bottom, value):
+		control.offset_bottom = value
+
+
+func _set_vertical_offsets_if_changed(control: Control, top: float, bottom: float) -> void:
+	if not is_equal_approx(control.offset_top, top):
+		control.offset_top = top
+	if not is_equal_approx(control.offset_bottom, bottom):
+		control.offset_bottom = bottom
+
+
+func _set_offsets_if_changed(control: Control, left: float, top: float, right: float, bottom: float) -> void:
+	if not is_equal_approx(control.offset_left, left):
+		control.offset_left = left
+	if not is_equal_approx(control.offset_top, top):
+		control.offset_top = top
+	if not is_equal_approx(control.offset_right, right):
+		control.offset_right = right
+	if not is_equal_approx(control.offset_bottom, bottom):
+		control.offset_bottom = bottom
 
 
 func _refresh_runtime_text() -> void:

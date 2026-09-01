@@ -6,6 +6,7 @@ const VIEWPORT_SIZES: Array[Vector2i] = [
 	Vector2i(2560, 1440),
 	Vector2i(3840, 2160),
 	Vector2i(2560, 1080),
+	Vector2i(3440, 1440),
 ]
 const PARTY_COUNTS: Array[int] = [1, 6, 7, 12, 20, 24]
 const SCALE_CORNERS: Array[Vector2i] = [
@@ -13,6 +14,12 @@ const SCALE_CORNERS: Array[Vector2i] = [
 	Vector2i(100, 150),
 	Vector2i(150, 150),
 	Vector2i(80, 150),
+]
+const COLLAPSE_STATES: Array[Vector2i] = [
+	Vector2i(1, 0),
+	Vector2i(0, 1),
+	Vector2i(1, 1),
+	Vector2i(0, 0),
 ]
 const RESULT_FIXTURE_PATH := "res://tests/unit/test_run_recap_projection.gd"
 const CONDITION_DEADLINE_MS := 2500
@@ -42,7 +49,7 @@ func _run() -> void:
 				await _exercise_hud(viewport_size, party_count, 0, 100, 100)
 		else:
 			await _exercise_hud(viewport_size, 6, 0, 100, 100)
-			await _exercise_hud(viewport_size, 24, 6, 100, 100)
+			await _exercise_hud(viewport_size, 24, 7, 100, 100)
 		if viewport_size == Vector2i(1280, 720):
 			for alert_count: int in [1, 3, 4]:
 				await _exercise_hud(viewport_size, 6, alert_count, 100, 100)
@@ -50,13 +57,84 @@ func _run() -> void:
 		await _exercise_extraction(viewport_size, 100, 100)
 		await _exercise_result(viewport_size, 100, 100)
 	for scale_corner: Vector2i in SCALE_CORNERS:
-		await _exercise_hud(Vector2i(1280, 720), 24, 6, scale_corner.x, scale_corner.y)
+		await _exercise_hud(Vector2i(1280, 720), 24, 7, scale_corner.x, scale_corner.y)
 		await _exercise_level_up(Vector2i(1280, 720), scale_corner.x, scale_corner.y)
 		await _exercise_extraction(Vector2i(1280, 720), scale_corner.x, scale_corner.y)
 		await _exercise_result(Vector2i(1280, 720), scale_corner.x, scale_corner.y)
 		if _long_detail_corner(Vector2i(1280, 720), scale_corner.x, scale_corner.y):
 			await _exercise_result(Vector2i(1280, 720), scale_corner.x, scale_corner.y, true)
 	_finish()
+
+
+func _assert_hud_collapse_geometry(hud: HUD, viewport_rect: Rect2, party_count: int, alert_count: int, party_collapsed: bool, alerts_collapsed: bool, text_scale: int, context_label: String) -> void:
+	var party_header := hud.get_node("Margin/CombatStatus/PartyHeader") as Button
+	var party_summary := hud.get_node("Margin/CombatStatus/PartyHeader/Content/Summary") as Label
+	var party_health := hud.get_node("Margin/CombatStatus/PartyHeader/Content/LeaderHealth") as ProgressBar
+	var leader := hud.get_node("Margin/CombatStatus/LeaderCard") as Control
+	var experience := hud.get_node("Margin/CombatStatus/Experience") as Control
+	var party_region := hud.get_node("Margin/CombatStatus/PartyRegion") as Control
+	var timer := hud.get_node("Margin/CombatStatus/RunTime") as Control
+	var alert_region := hud.get_node("Margin/CombatStatus/AlertRegion") as Control
+	var alerts_header := hud.get_node("Margin/CombatStatus/AlertRegion/Header") as Button
+	var alerts_summary := hud.get_node("Margin/CombatStatus/AlertRegion/Header/Content/Summary") as Label
+	var alerts_stack := hud.get_node("Margin/CombatStatus/AlertRegion/ExpandedAlerts") as VBoxContainer
+	var overflow := hud.get_node("Margin/CombatStatus/AlertRegion/Overflow") as Button
+	var tray_action := hud.get_node("Margin/CombatStatus/AlertRegion/AlertsTrayAction") as Button
+	for header: Button in [party_header, alerts_header]:
+		_assert_contained(header, viewport_rect, "%s %s" % [context_label, header.name])
+		_assert(header.get_global_rect().size.x >= 48.0 and header.get_global_rect().size.y >= 48.0, "%s %s keeps a real 48x48 target" % [context_label, header.name])
+	_assert(party_header.get_global_rect().encloses(party_summary.get_global_rect()), "%s Party summary remains inside its header header=%s summary=%s" % [context_label, party_header.get_global_rect(), party_summary.get_global_rect()])
+	_assert(alerts_header.get_global_rect().encloses(alerts_summary.get_global_rect()), "%s Alerts summary remains inside its header header=%s summary=%s" % [context_label, alerts_header.get_global_rect(), alerts_summary.get_global_rect()])
+	_assert(party_health.visible == party_collapsed, "%s compact leader health visibility follows Party collapse" % context_label)
+	if party_health.visible:
+		_assert(party_header.get_global_rect().encloses(party_health.get_global_rect()), "%s compact leader health remains inside Party header header=%s health=%s" % [context_label, party_header.get_global_rect(), party_health.get_global_rect()])
+	if text_scale == 150:
+		for summary: Label in [party_summary, alerts_summary]:
+			_assert(summary.autowrap_mode != TextServer.AUTOWRAP_OFF, "%s %s uses wrapping at Text150" % [context_label, summary.name])
+			_assert(summary.get_visible_line_count() == summary.get_line_count(), "%s %s exposes every wrapped line at Text150" % [context_label, summary.name])
+	var party_chain: Array[Control] = [party_header]
+	if not party_collapsed:
+		party_chain.append_array([leader, experience, party_region])
+		_assert(leader.visible and experience.visible and party_region.visible, "%s expanded Party exposes leader, XP, and roster" % context_label)
+	else:
+		_assert(not leader.visible and not experience.visible and not party_region.visible, "%s collapsed Party hides leader, XP, and roster" % context_label)
+	var party_rects: Array[Rect2] = []
+	for control: Control in party_chain:
+		_assert_contained(control, viewport_rect, "%s %s" % [context_label, control.name])
+		_assert_no_overlap(control.get_global_rect(), party_rects, "%s Party header/leader/XP/roster chain" % context_label)
+		party_rects.append(control.get_global_rect())
+		_assert(not control.get_global_rect().intersection(timer.get_global_rect()).has_area(), "%s %s does not overlap timer" % [context_label, control.name])
+		_assert(not control.get_global_rect().intersection(alert_region.get_global_rect()).has_area(), "%s %s does not overlap Alerts" % [context_label, control.name])
+	_assert_contained(alert_region, viewport_rect, "%s AlertRegion" % context_label)
+	var alert_controls: Array[Control] = [alerts_header]
+	var rendered_count := 0
+	for child: Node in alerts_stack.get_children():
+		if child is Control and (child as Control).is_visible_in_tree():
+			rendered_count += 1
+			alert_controls.append(child as Control)
+	if overflow.visible:
+		alert_controls.append(overflow)
+	if tray_action.visible:
+		alert_controls.append(tray_action)
+	var alert_rects: Array[Rect2] = []
+	for control: Control in alert_controls:
+		_assert_contained(control, alert_region.get_global_rect(), "%s %s" % [context_label, control.name])
+		_assert_no_overlap(control.get_global_rect(), alert_rects, "%s Alerts header/cards/overflow/tray" % context_label)
+		alert_rects.append(control.get_global_rect())
+	if tray_action.visible:
+		_assert(tray_action.get_global_rect().size.x >= 48.0 and tray_action.get_global_rect().size.y >= 48.0, "%s tray action keeps a real 48x48 target" % context_label)
+	_assert(tray_action.visible == (alert_count > 0), "%s persistent tray availability matches exact alert truth" % context_label)
+	_assert(rendered_count == 0 if alerts_collapsed else rendered_count <= mini(alert_count, CombatHudProjection.MAX_VISIBLE_ALERTS), "%s expanded card count respects collapsed state and projection cap" % context_label)
+	var hidden_count := alert_count - rendered_count
+	_assert(overflow.visible == (not alerts_collapsed and hidden_count > 0), "%s overflow visibility matches exact rendered budget" % context_label)
+	if overflow.visible:
+		_assert(overflow.get_global_rect().size.x >= 48.0 and overflow.get_global_rect().size.y >= 48.0, "%s overflow keeps a real 48x48 target" % context_label)
+		_assert(overflow.text == "+%d %s" % [hidden_count, "alert" if hidden_count == 1 else "alerts"], "%s overflow names the exact hidden alert count" % context_label)
+	var metrics := hud.get("_metrics") as CombatHudResponsiveLayout.Metrics
+	_assert(metrics != null and metrics.visible_member_count >= 1, "%s paging keeps at least one visible member" % context_label)
+	if metrics != null:
+		_assert(metrics.page_count == maxi(1, ceili(float(party_count) / float(metrics.visible_member_count))), "%s paging count matches the exact visible window" % context_label)
+		_assert(metrics.clamped_page(metrics.page_count - 1) == metrics.page_count - 1, "%s final compact page remains reachable" % context_label)
 
 
 func _exercise_hud(viewport_size: Vector2i, party_count: int, alert_count: int, ui_scale: int, text_scale: int) -> void:
@@ -83,6 +161,21 @@ func _exercise_hud(viewport_size: Vector2i, party_count: int, alert_count: int, 
 	var expected_metrics := CombatHudResponsiveLayout.resolve(viewport_size, ui_scale, text_scale, party_count)
 	var rich_expected := expected_metrics.mode == CombatHudResponsiveLayout.Mode.RICH
 	await _wait_for_stable_layout([shell, leader, party_region, alert_region], context_label)
+	for state: Vector2i in COLLAPSE_STATES:
+		hud.apply_collapse_preferences(state.x == 1, state.y == 1)
+		await process_frame
+		await process_frame
+		var collapse_context := _context(
+			"HUD_COLLAPSE",
+			viewport_size,
+			ui_scale,
+			text_scale,
+			"party=%d alerts=%d party_collapsed=%s alerts_collapsed=%s" % [party_count, alert_count, state.x == 1, state.y == 1],
+		)
+		_assert_hud_collapse_geometry(hud, viewport_rect, party_count, alert_count, state.x == 1, state.y == 1, text_scale, collapse_context)
+	var measured_party_header := (hud.get_node("Margin/CombatStatus/PartyHeader") as Button).size.y
+	expected_metrics = CombatHudResponsiveLayout.resolve(viewport_size, ui_scale, text_scale, party_count, measured_party_header)
+	rich_expected = expected_metrics.mode == CombatHudResponsiveLayout.Mode.RICH
 	for control: Control in [shell, leader, party_region, alert_region]:
 		_assert_contained(control, viewport_rect, "%s %s" % [context_label, control.name])
 	_assert(not leader.get_global_rect().intersection(alert_region.get_global_rect()).has_area(), "%s leader and alert region do not overlap" % context_label)

@@ -69,6 +69,7 @@ func _exercise_party_count(count: int) -> void:
 	_assert(rich.visible == (count <= 6), "party %d rich threshold" % count)
 	_assert(compact.visible == (count >= 7), "party %d compact threshold" % count)
 	var leader := hud.get_node("Margin/CombatStatus/LeaderCard") as Control
+	var experience := hud.get_node("Margin/CombatStatus/Experience") as Control
 	_assert(int(leader.get_meta("member_id", 0)) == 1, "party %d leader anchor identity" % count)
 	if count <= 6:
 		_assert(not leader.is_in_group(&"combat_hud_member"), "rich leader anchor is not duplicated in roster navigation")
@@ -125,6 +126,8 @@ func _exercise_real_geometry(viewport_size: Vector2i, count: int, ui_scale: int,
 			await process_frame
 		_assert(reached_member_ids.size() == count, "scaled compact paging reaches all %d members at %s ui=%d text=%d" % [count, viewport_size, ui_scale, text_scale])
 	var shell := hud.get_node("Margin/CombatStatus") as Control
+	var party_header := hud.get_node("Margin/CombatStatus/PartyHeader") as Button
+	var party_summary := hud.get_node("Margin/CombatStatus/PartyHeader/Content/Summary") as Label
 	var leader := hud.get_node("Margin/CombatStatus/LeaderCard") as Control
 	var timer := hud.get_node("Margin/CombatStatus/RunTime") as Control
 	var party_region := hud.get_node("Margin/CombatStatus/PartyRegion") as Control
@@ -132,15 +135,18 @@ func _exercise_real_geometry(viewport_size: Vector2i, count: int, ui_scale: int,
 	var overflow := hud.get_node("Margin/CombatStatus/AlertRegion/Overflow") as Button
 	var rich := hud.get_node("Margin/CombatStatus/PartyRegion/RichRoster") as Control
 	var compact := hud.get_node("Margin/CombatStatus/PartyRegion/CompactRoster") as Control
-	var resolved_metrics := CombatHudResponsiveLayout.resolve(viewport_size, ui_scale, text_scale, count)
+	var resolved_metrics := CombatHudResponsiveLayout.resolve(viewport_size, ui_scale, text_scale, count, party_header.get_global_rect().size.y)
 	if resolved_metrics.mode == CombatHudResponsiveLayout.Mode.COMPACT:
 		_assert(_roster_controls(hud).size() == resolved_metrics.visible_member_count, "live compact controls expose the calculated count at %s ui=%d text=%d calculated=%d actual=%d" % [viewport_size, ui_scale, text_scale, resolved_metrics.visible_member_count, _roster_controls(hud).size()])
 	if count == 24 and text_scale == 150 and viewport_size.y <= 720:
-		_assert(resolved_metrics.visible_member_count == 6, "Text150 uses three bounded two-column rows at %s ui=%d actual=%d" % [viewport_size, ui_scale, resolved_metrics.visible_member_count])
+		_assert(resolved_metrics.visible_member_count == 4, "Text150 with measured Party header uses two bounded two-column rows at %s ui=%d actual=%d" % [viewport_size, ui_scale, resolved_metrics.visible_member_count])
 	if count == 24 and text_scale == 150 and viewport_size.y >= 1080:
 		_assert(resolved_metrics.visible_member_count == 8, "Text150 retains four bounded two-column rows at %s ui=%d actual=%d" % [viewport_size, ui_scale, resolved_metrics.visible_member_count])
-	for control: Control in [shell, leader, timer, party_region, alerts]:
+	for control: Control in [shell, party_header, leader, timer, party_region, alerts]:
 		_assert_contained(control, Rect2(Vector2.ZERO, Vector2(viewport_size)), "%s %dx%d party=%d" % [control.name, viewport_size.x, viewport_size.y, count])
+	_assert(party_header.get_global_rect().size.x >= 48.0 and party_header.get_global_rect().size.y >= 48.0, "Party header has a real post-layout 48x48 target")
+	_assert(party_header.get_global_rect().encloses(party_summary.get_global_rect()), "Party summary remains enclosed after responsive layout header=%s summary=%s" % [party_header.get_global_rect(), party_summary.get_global_rect()])
+	_assert(not party_header.get_global_rect().intersection(leader.get_global_rect()).has_area(), "Party header and leader do not overlap at %s party=%d" % [viewport_size, count])
 	_assert_leader_contents_contained(leader, viewport_size, ui_scale, text_scale)
 	_assert_leader_font_scale(leader, viewport_size, ui_scale, text_scale)
 	_assert(not leader.get_global_rect().intersection(timer.get_global_rect()).has_area(), "leader and timer do not collide at %s party=%d" % [viewport_size, count])
@@ -149,7 +155,7 @@ func _exercise_real_geometry(viewport_size: Vector2i, count: int, ui_scale: int,
 	if viewport_size == Vector2i(1280, 720) and text_scale == 150:
 		_assert(not rich.visible and compact.visible, "720p Text150 uses the bounded compact roster for party=%d ui=%d" % [count, ui_scale])
 		for member_control: Control in _roster_controls(hud):
-			_assert(party_region.get_global_rect().encloses(member_control.get_global_rect()), "720p Text150 keeps visible member %d inside the reflowed party region at ui=%d" % [int(member_control.get_meta(&"member_id", 0)), ui_scale])
+			_assert(party_region.get_global_rect().encloses(member_control.get_global_rect()), "720p Text150 keeps visible member %d inside the reflowed party region at ui=%d region=%s member=%s" % [int(member_control.get_meta(&"member_id", 0)), ui_scale, party_region.get_global_rect(), member_control.get_global_rect()])
 	if count == 24:
 		var marker_rects: Array[Rect2] = []
 		for marker: Control in _roster_controls(hud):
