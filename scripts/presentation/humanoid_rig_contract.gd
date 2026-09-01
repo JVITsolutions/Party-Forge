@@ -170,13 +170,7 @@ static func validate_mapped_rig(definition: RigDefinition, mapping: RigMapping, 
 	if skin == null:
 		errors.append("mapped humanoid Skin is missing")
 		return errors
-	var bind_names: Dictionary = {}
-	for bind_index: int in skin.get_bind_count():
-		var bind_name := skin.get_bind_name(bind_index)
-		if bind_name.is_empty() or bind_names.has(bind_name):
-			errors.append("mapped humanoid Skin has empty or duplicate bind %s" % bind_name)
-		bind_names[bind_name] = true
-		_validate_transform(skin.get_bind_pose(bind_index), "mapped humanoid Skin bind %s" % bind_name, errors)
+	var bind_index_by_bone_index := _resolve_mapped_skin_binds(skeleton, skin, errors)
 	for role: StringName in REQUIRED_ROLES:
 		if not mapping.role_to_bone.has(role):
 			continue
@@ -187,7 +181,7 @@ static func validate_mapped_rig(definition: RigDefinition, mapping: RigMapping, 
 			continue
 		var bone_index: int = matches[0]
 		_validate_transform(skeleton.get_bone_rest(bone_index), "mapped humanoid bone %s rest" % bone_name, errors)
-		if not bind_names.has(bone_name):
+		if not bind_index_by_bone_index.has(bone_index):
 			errors.append("mapped humanoid Skin is missing bone %s" % bone_name)
 		var parent_role := StringName(REQUIRED_PARENT_BY_ROLE[role])
 		if parent_role.is_empty() or not mapping.role_to_bone.has(parent_role):
@@ -196,6 +190,58 @@ static func validate_mapped_rig(definition: RigDefinition, mapping: RigMapping, 
 		if parent_matches.size() == 1 and not _bone_is_ancestor(skeleton, parent_matches[0], bone_index):
 			errors.append("mapped humanoid role %s does not descend from parent role %s" % [role, parent_role])
 	return errors
+
+static func _resolve_mapped_skin_binds(
+		skeleton: Skeleton3D,
+		skin: Skin,
+		errors: PackedStringArray
+	) -> Dictionary:
+	var bind_index_by_bone_index: Dictionary = {}
+	var bone_names: Array[StringName] = []
+	for bone_index: int in skeleton.get_bone_count():
+		bone_names.append(skeleton.get_bone_name(bone_index))
+	for bind_index: int in skin.get_bind_count():
+		_validate_transform(
+			skin.get_bind_pose(bind_index),
+			"mapped humanoid Skin bind %d pose" % bind_index,
+			errors
+		)
+		var bone_index := skin.get_bind_bone(bind_index)
+		if bone_index < 0 or bone_index >= skeleton.get_bone_count():
+			errors.append("mapped humanoid Skin bind %d bone index %d is out of range" % [bind_index, bone_index])
+			continue
+		if bind_index_by_bone_index.has(bone_index):
+			errors.append("mapped humanoid Skin bind %d duplicates skeleton bone %d" % [bind_index, bone_index])
+		else:
+			bind_index_by_bone_index[bone_index] = bind_index
+		var bind_name := skin.get_bind_name(bind_index)
+		if bind_name.is_empty():
+			continue
+		var matching_bones := _matching_name_indices(bone_names, bind_name)
+		if matching_bones.size() != 1:
+			errors.append("mapped humanoid Skin bind %d name %s must resolve exactly once" % [bind_index, bind_name])
+		elif matching_bones[0] != bone_index:
+			errors.append(
+				"mapped humanoid Skin bind %d name %s resolves to bone %d but numeric index is %d"
+				% [bind_index, bind_name, matching_bones[0], bone_index]
+			)
+	for bone_index: int in skeleton.get_bone_count():
+		if not bind_index_by_bone_index.has(bone_index):
+			errors.append(
+				"mapped humanoid Skin is missing skeleton bone %s at index %d"
+				% [skeleton.get_bone_name(bone_index), bone_index]
+			)
+	return bind_index_by_bone_index
+
+static func _matching_name_indices(
+		bone_names: Array[StringName],
+		target_name: StringName
+	) -> PackedInt32Array:
+	var matching_indices := PackedInt32Array()
+	for bone_index: int in bone_names.size():
+		if bone_names[bone_index] == target_name:
+			matching_indices.append(bone_index)
+	return matching_indices
 
 static func _bone_is_ancestor(skeleton: Skeleton3D, ancestor_index: int, child_index: int) -> bool:
 	var cursor := skeleton.get_bone_parent(child_index)

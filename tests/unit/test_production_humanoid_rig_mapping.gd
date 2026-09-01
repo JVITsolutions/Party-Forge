@@ -56,6 +56,7 @@ func run() -> Array[String]:
 		return failures
 	_assert_mapping_resource_contract(failures)
 	_assert_superset_validation(failures)
+	_assert_numeric_bind_resolution(failures)
 	_assert_mapped_bone_and_hierarchy_failures(failures)
 	_assert_rest_and_skin_failures(failures)
 	return failures
@@ -102,6 +103,101 @@ func _assert_superset_validation(failures: Array[String]) -> void:
 		failures
 	)
 	legacy_pivots.free()
+	skeleton.free()
+
+func _assert_numeric_bind_resolution(failures: Array[String]) -> void:
+	var mapping := _mapping()
+	var skeleton := _superset_skeleton(mapping)
+	var duplicate_name_snapshot: Array[StringName] = [&"PresentationRoot", &"DuplicateName", &"DuplicateName"]
+	var has_name_list_helper := _contract.has_method(&"_matching_name_indices")
+	TestAssertions.truthy(has_name_list_helper, "mapped-production duplicate-name resolver exists", failures)
+	if has_name_list_helper:
+		TestAssertions.equal(
+			_contract.call(&"_matching_name_indices", duplicate_name_snapshot, &"DuplicateName"),
+			PackedInt32Array([1, 2]),
+			"mapped-production duplicate-name resolver returns every matching index deterministically",
+			failures
+		)
+
+	var numeric_only := _skin_for(skeleton, &"", false)
+	TestAssertions.equal(
+		_contract.call(&"validate_mapped_rig", _definition, mapping, skeleton, numeric_only),
+		PackedStringArray(),
+		"complete unique numeric-only Skin binds validate",
+		failures
+	)
+
+	var named_numeric := _skin_for(skeleton)
+	TestAssertions.equal(
+		_contract.call(&"validate_mapped_rig", _definition, mapping, skeleton, named_numeric),
+		PackedStringArray(),
+		"present names that agree with numeric indices validate",
+		failures
+	)
+
+	var negative := _skin_for(skeleton, &"", false)
+	negative.set_bind_bone(0, -1)
+	TestAssertions.truthy(
+		_contains(_contract.call(&"validate_mapped_rig", _definition, mapping, skeleton, negative), "bind 0 bone index -1 is out of range"),
+		"negative numeric bind rejects",
+		failures
+	)
+
+	var out_of_range := _skin_for(skeleton, &"", false)
+	out_of_range.set_bind_bone(0, skeleton.get_bone_count())
+	TestAssertions.truthy(
+		_contains(_contract.call(&"validate_mapped_rig", _definition, mapping, skeleton, out_of_range), "bind 0 bone index %d is out of range" % skeleton.get_bone_count()),
+		"out-of-range numeric bind rejects",
+		failures
+	)
+
+	var duplicate := _skin_for(skeleton, &"", false)
+	var final_bind := duplicate.get_bind_count() - 1
+	duplicate.set_bind_bone(final_bind, 0)
+	var duplicate_errors: PackedStringArray = _contract.call(&"validate_mapped_rig", _definition, mapping, skeleton, duplicate)
+	TestAssertions.truthy(_contains(duplicate_errors, "bind %d duplicates skeleton bone 0" % final_bind), "duplicate numeric coverage rejects", failures)
+	TestAssertions.truthy(_contains(duplicate_errors, "missing skeleton bone WeaponSocketDriver"), "duplicate coverage also reports the uncovered bone", failures)
+
+	var incomplete := _skin_for(skeleton, &"WeaponSocketDriver", false)
+	TestAssertions.truthy(
+		_contains(_contract.call(&"validate_mapped_rig", _definition, mapping, skeleton, incomplete), "missing skeleton bone WeaponSocketDriver"),
+		"incomplete full-skeleton coverage rejects",
+		failures
+	)
+
+	var missing_name := _skin_for(skeleton)
+	missing_name.set_bind_name(0, &"MissingProductionBone")
+	TestAssertions.truthy(
+		_contains(_contract.call(&"validate_mapped_rig", _definition, mapping, skeleton, missing_name), "bind 0 name MissingProductionBone must resolve exactly once"),
+		"present bind name with no skeleton match rejects",
+		failures
+	)
+
+	var name_conflict := _skin_for(skeleton)
+	name_conflict.set_bind_name(0, skeleton.get_bone_name(1))
+	TestAssertions.truthy(
+		_contains(_contract.call(&"validate_mapped_rig", _definition, mapping, skeleton, name_conflict), "bind 0 name %s resolves to bone 1 but numeric index is 0" % skeleton.get_bone_name(1)),
+		"present name/index conflict rejects",
+		failures
+	)
+
+	var singular_bind := _skin_for(skeleton, &"", false)
+	singular_bind.set_bind_pose(0, Transform3D(Basis(Vector3.ZERO, Vector3.ZERO, Vector3.ZERO), Vector3.ZERO))
+	TestAssertions.truthy(
+		_contains(_contract.call(&"validate_mapped_rig", _definition, mapping, skeleton, singular_bind), "bind 0 pose must be invertible"),
+		"singular numeric bind pose rejects",
+		failures
+	)
+
+	var non_finite_bind := _skin_for(skeleton, &"", false)
+	var invalid_pose := non_finite_bind.get_bind_pose(0)
+	invalid_pose.origin.x = INF
+	non_finite_bind.set_bind_pose(0, invalid_pose)
+	non_finite_bind.set_bind_bone(0, -1)
+	var ordered_errors: PackedStringArray = _contract.call(&"validate_mapped_rig", _definition, mapping, skeleton, non_finite_bind)
+	TestAssertions.equal(ordered_errors[0], "mapped humanoid Skin bind 0 pose must be finite", "bind-pose errors lead slot-local resolution errors", failures)
+	TestAssertions.equal(ordered_errors[1], "mapped humanoid Skin bind 0 bone index -1 is out of range", "numeric range error follows pose error deterministically", failures)
+
 	skeleton.free()
 
 func _assert_mapped_bone_and_hierarchy_failures(failures: Array[String]) -> void:
@@ -160,8 +256,34 @@ func _assert_rest_and_skin_failures(failures: Array[String]) -> void:
 	invalid_bind.origin.y = INF
 	skin.set_bind_pose(bind_index, invalid_bind)
 	TestAssertions.truthy(
-		_contains(_contract.call(&"validate_mapped_rig", _definition, mapping, skeleton, skin), "bind %s must be finite" % _bone_for(mapping, &"head")),
+		_contains(
+			_contract.call(&"validate_mapped_rig", _definition, mapping, skeleton, skin),
+			"mapped humanoid Skin bind %d pose must be finite" % bind_index
+		),
 		"non-finite named Skin bind rejects",
+		failures
+	)
+	skeleton.free()
+
+	skeleton = _superset_skeleton(mapping)
+	skin = _skin_for(skeleton, &"", false)
+	var singular_rest_index := skeleton.find_bone(_bone_for(mapping, &"head"))
+	skeleton.set_bone_rest(
+		singular_rest_index,
+		Transform3D(Basis(Vector3.ZERO, Vector3.ZERO, Vector3.ZERO), Vector3.ZERO)
+	)
+	TestAssertions.truthy(
+		_contains(_contract.call(&"validate_mapped_rig", _definition, mapping, skeleton, skin), "mapped humanoid bone %s rest must be invertible" % _bone_for(mapping, &"head")),
+		"singular mapped rest rejects",
+		failures
+	)
+	skeleton.free()
+
+	skeleton = _superset_skeleton(mapping)
+	skin = _skin_for(skeleton, _bone_for(mapping, &"hand_right"), false)
+	TestAssertions.truthy(
+		_contains(_contract.call(&"validate_mapped_rig", _definition, mapping, skeleton, skin), "mapped humanoid Skin is missing bone %s" % _bone_for(mapping, &"hand_right")),
+		"complete skeleton coverage includes every semantic mapped bone",
 		failures
 	)
 	skeleton.free()
@@ -209,13 +331,19 @@ func _superset_skeleton(mapping: Resource) -> Skeleton3D:
 	skeleton.set_bone_rest(weapon_driver_index, Transform3D.IDENTITY)
 	return skeleton
 
-func _skin_for(skeleton: Skeleton3D, omitted_bone: StringName = &"") -> Skin:
+func _skin_for(
+		skeleton: Skeleton3D,
+		omitted_bone: StringName = &"",
+		include_names: bool = true
+	) -> Skin:
 	var skin := Skin.new()
 	for bone_index: int in skeleton.get_bone_count():
 		var bone_name := skeleton.get_bone_name(bone_index)
 		if bone_name == omitted_bone:
 			continue
-		skin.add_named_bind(bone_name, skeleton.get_bone_rest(bone_index).affine_inverse())
+		skin.add_bind(bone_index, skeleton.get_bone_rest(bone_index).affine_inverse())
+		if include_names:
+			skin.set_bind_name(skin.get_bind_count() - 1, bone_name)
 	return skin
 
 func _bind_index(skin: Skin, bone_name: StringName) -> int:
