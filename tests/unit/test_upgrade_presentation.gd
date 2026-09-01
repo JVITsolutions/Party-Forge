@@ -36,6 +36,21 @@ func _test_exact_effect_and_keyword_text(failures: Array[String]) -> void:
 
 	var precision := UpgradePresentationService.tooltip(catalog.upgrade_by_id(&"precision"), 1, PartyManager.STAT_CATALOG, catalog.keywords)
 	TestAssertions.truthy("+3% Critical Strike Chance." in (precision.get("effect_lines", []) as Array), "flat ratio uses the player-facing percent symbol", failures)
+	var bulwark := UpgradePresentationService.tooltip(catalog.upgrade_by_id(&"consecrated_bulwark"), 1, PartyManager.STAT_CATALOG, catalog.keywords)
+	TestAssertions.truthy("+10% Block Chance." in (bulwark.get("effect_lines", []) as Array), "Consecrated Bulwark uses the shared flat ratio-percent format", failures)
+
+	var ranged_definition := catalog.upgrade_by_id(&"ranged_calibration")
+	var presentation_party := PartyManager.new()
+	var ranged_card := UpgradePresentationService.card(ranged_definition, presentation_party)
+	var ranged_tooltip := UpgradePresentationService.tooltip(ranged_definition, 1, PartyManager.STAT_CATALOG, catalog.keywords)
+	TestAssertions.equal(ranged_card.get("summary", ""), "Extend range and accelerate projectiles.", "Ranged Calibration card face preserves its nonnumeric summary", failures)
+	TestAssertions.equal(
+		ranged_tooltip.get("effect_lines", []),
+		["10% increased Attack Range.", "10% increased Projectile Speed."],
+		"Ranged Calibration tooltip derives both numeric rank-one effects from authoritative effect data",
+		failures,
+	)
+	presentation_party.free()
 
 	var more_line := "More: A multiplicative modifier applied after increased and reduced values."
 	TestAssertions.truthy(more_line in (content.get("keyword_lines", []) as Array), "tooltip explains More", failures)

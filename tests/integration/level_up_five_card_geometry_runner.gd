@@ -102,7 +102,8 @@ func _run() -> void:
 				_assert(absf(card_rect.size.x - visible_cards[0].get_global_rect().size.x) <= 2.0, "Card%d matches equal-card width at %dx%d" % [index + 1, viewport_size.x, viewport_size.y])
 		if visible_cards.size() == 5:
 			if viewport_size == VIEWPORT_SIZES[0]:
-				await _assert_authentic_tooltip_input_parity(viewport, panel, tooltip, visible_cards[0])
+				await _assert_authentic_tooltip_input_parity(viewport, panel, tooltip, visible_cards[0], choices[0])
+				await _assert_disabled_to_enabled_ranged_detail(viewport, panel, tooltip, visible_cards[0], choices[0])
 				await _assert_first_slot_ranged_calibration_detail(viewport, tooltip, cards_scroll, visible_cards[0], choices[0])
 			for index: int in visible_cards.size():
 				_assert(
@@ -125,6 +126,8 @@ func _run() -> void:
 		await _wait_for_layout()
 		if visible_cards.size() == 5:
 			_assert(viewport.gui_get_focus_owner() == visible_cards[0], "reduced motion focuses Card1 at %dx%d" % [viewport_size.x, viewport_size.y])
+			if viewport_size == VIEWPORT_SIZES[0]:
+				_assert_ranged_calibration_tooltip_identity(tooltip, choices[0], "reduced-motion focus")
 			for index: int in visible_cards.size():
 				_assert(not visible_cards[index].disabled, "reduced motion enables Card%d at %dx%d" % [index + 1, viewport_size.x, viewport_size.y])
 				_assert(visible_cards[index].bound_choice_key() == StringName(choices[index].key()), "reduced motion preserves Card%d activation identity at %dx%d" % [index + 1, viewport_size.x, viewport_size.y])
@@ -273,10 +276,50 @@ func _assert_first_slot_ranged_calibration_detail(
 	_assert(card.bound_choice_key() == StringName(choice.key()), "first slot remains bound to Ranged Calibration")
 	_assert(viewport.gui_get_focus_owner() == card, "Ranged Calibration detail retains focus on its source card")
 	_assert(ResponsiveGeometry.contains(cards_scroll.get_global_rect(), card.get_global_rect()), "Ranged Calibration source remains visible in the offer scroll")
-	_assert(tooltip.visible, "Ranged Calibration first-slot detail popup opens")
+	_assert_ranged_calibration_tooltip_identity(tooltip, choice, "first-slot focus")
 	_assert("10% increased Attack Range." in effects, "Ranged Calibration detail shows its +10% Attack Range effect")
 	_assert("10% increased Projectile Speed." in effects, "Ranged Calibration detail shows its +10% Projectile Speed effect")
 	_assert(body_scroll.scroll_vertical == int(body_scroll.get_v_scroll_bar().min_value), "Ranged Calibration detail opens at its scroll origin")
+
+
+func _assert_disabled_to_enabled_ranged_detail(
+	viewport: SubViewport,
+	panel: LevelUpPanel,
+	tooltip: UpgradeTooltipPanel,
+	card: UpgradeCard,
+	choice: UpgradeChoice,
+) -> void:
+	var sink := Button.new()
+	sink.name = "DisabledTransitionSink"
+	sink.position = Vector2(8.0, 8.0)
+	sink.size = Vector2(48.0, 48.0)
+	panel.add_child(sink)
+	await _push_mouse_motion(viewport, Vector2(2.0, 2.0))
+	sink.grab_focus()
+	await _wait_for_layout()
+	tooltip.force_dismiss()
+
+	var enabled_projection := (card.get("_projection") as UpgradeOfferProjection).copy()
+	var disabled_projection := enabled_projection.copy()
+	disabled_projection.disabled_reason = "Revealing."
+	card.present(disabled_projection)
+	await _wait_for_layout()
+	var requests: Array[StringName] = []
+	card.detail_requested.connect(func(choice_key: StringName, _anchor: Control) -> void: requests.append(choice_key))
+	await _push_mouse_motion(viewport, card.get_global_rect().get_center())
+	_assert(bool(card.get("_mouse_inside")), "Ranged Calibration pointer remains inside while the card is disabled")
+	_assert(not tooltip.visible, "disabled Ranged Calibration card conceals its tooltip")
+	card.present(enabled_projection)
+	await _wait_for_layout()
+	_assert(requests == [StringName(choice.key())], "disabled-to-enabled hovered Ranged Calibration emits exactly one current detail request")
+	_assert_ranged_calibration_tooltip_identity(tooltip, choice, "disabled-to-enabled hover")
+	card.present(enabled_projection.copy())
+	await _wait_for_layout()
+	_assert(requests.size() == 1, "unchanged enabled Ranged Calibration refresh does not duplicate its detail request")
+	await _push_mouse_motion(viewport, Vector2(2.0, 2.0))
+	_assert(not tooltip.visible, "normal pointer navigation dismisses the reconciled Ranged Calibration tooltip")
+	sink.queue_free()
+	await process_frame
 
 
 func _assert_authentic_tooltip_input_parity(
@@ -284,6 +327,7 @@ func _assert_authentic_tooltip_input_parity(
 	panel: LevelUpPanel,
 	tooltip: UpgradeTooltipPanel,
 	card: UpgradeCard,
+	choice: UpgradeChoice,
 ) -> void:
 	var sink := Button.new()
 	sink.name = "TooltipInputSink"
@@ -295,6 +339,7 @@ func _assert_authentic_tooltip_input_parity(
 	await _push_mouse_motion(viewport, card.get_global_rect().get_center())
 	_assert(card.get("_mouse_inside"), "real mouse motion enters UpgradeCard")
 	_assert(tooltip.visible, "real mouse hover opens the shared tooltip")
+	_assert_ranged_calibration_tooltip_identity(tooltip, choice, "real mouse hover")
 	var mouse_content := _tooltip_content_signature(tooltip)
 	await _push_mouse_motion(viewport, Vector2(2.0, 2.0))
 	_assert(not tooltip.visible, "real mouse motion outside dismisses the shared tooltip")
@@ -303,6 +348,7 @@ func _assert_authentic_tooltip_input_parity(
 	await _push_key(viewport, KEY_TAB)
 	_assert(card.has_focus(), "real keyboard focus reaches UpgradeCard")
 	_assert(tooltip.visible and _tooltip_content_signature(tooltip) == mouse_content, "keyboard focus opens identical tooltip content")
+	_assert_ranged_calibration_tooltip_identity(tooltip, choice, "real keyboard focus")
 	sink.grab_focus()
 	await process_frame
 	_assert(not tooltip.visible, "keyboard focus exit dismisses the tooltip")
@@ -314,6 +360,7 @@ func _assert_authentic_tooltip_input_parity(
 	await _push_joypad_button(viewport, JOY_BUTTON_DPAD_LEFT)
 	_assert(card.has_focus(), "real controller focus reaches UpgradeCard")
 	_assert(tooltip.visible and _tooltip_content_signature(tooltip) == mouse_content, "controller focus opens identical tooltip content")
+	_assert_ranged_calibration_tooltip_identity(tooltip, choice, "real controller focus")
 	sink.grab_focus()
 	await process_frame
 	_assert(not tooltip.visible, "controller focus exit dismisses the tooltip")
@@ -321,6 +368,20 @@ func _assert_authentic_tooltip_input_parity(
 	await process_frame
 	card.grab_focus()
 	await process_frame
+
+
+func _assert_ranged_calibration_tooltip_identity(
+	tooltip: UpgradeTooltipPanel,
+	choice: UpgradeChoice,
+	input_context: String,
+) -> void:
+	var expected_source := StringName(choice.key())
+	var title := (tooltip.get_node("Content/Header/Title") as Label).text
+	var effects := (tooltip.get_node("Content/BodyScroll/Body/Effects") as Label).text
+	_assert(tooltip.visible, "%s opens the Ranged Calibration detail popup" % input_context)
+	_assert(tooltip.current_source_id() == expected_source, "%s retains the exact Ranged Calibration source key" % input_context)
+	_assert(title == "Ranged Calibration", "%s renders the exact Ranged Calibration title" % input_context)
+	_assert(effects == "10% increased Attack Range.\n10% increased Projectile Speed.", "%s renders only the authoritative rank-one Ranged Calibration effects" % input_context)
 
 
 func _tooltip_content_signature(tooltip: UpgradeTooltipPanel) -> PackedStringArray:

@@ -5,7 +5,7 @@ func run() -> Array[String]:
 	_test_card_renders_typed_projection_and_emits_key(failures)
 	_test_card_hierarchy_tags_icons_and_accessibility(failures)
 	_test_hover_focus_share_detail_state(failures)
-	_test_disabled_card_conceals_detail(failures)
+	_test_disabled_to_enabled_card_reconciles_active_detail(failures)
 	_test_tooltip_renders_dictionary(failures)
 	_test_interactive_pin_shell_and_inputs(failures)
 	_test_input_configurator_preserves_existing_action(failures)
@@ -102,21 +102,43 @@ func _test_hover_focus_share_detail_state(failures: Array[String]) -> void:
 	TestAssertions.equal(dismissed, [&"4:vitality", &"4:vitality"], "keyboard focus dismissal matches hover behavior", failures)
 	card.free()
 
-func _test_disabled_card_conceals_detail(failures: Array[String]) -> void:
+func _test_disabled_to_enabled_card_reconciles_active_detail(failures: Array[String]) -> void:
 	var card := (load("res://scenes/ui/upgrade_card.tscn") as PackedScene).instantiate() as UpgradeCard
 	card.call("_ready")
 	var projection := _card_projection("4:vitality", "Vitality")
 	projection.disabled_reason = "Revealing."
 	card.present(projection)
 	var requested: Array[StringName] = []
+	var dismissed: Array[StringName] = []
 	card.detail_requested.connect(func(emitted: StringName, _anchor: Control) -> void: requested.append(emitted))
+	card.detail_dismissed.connect(func(emitted: StringName) -> void: dismissed.append(emitted))
 	card.mouse_entered.emit()
 	TestAssertions.equal(requested, [], "disabled card hover conceals its bound final detail", failures)
-	card.mouse_exited.emit()
 	projection.disabled_reason = ""
 	card.present(projection)
-	card.mouse_entered.emit()
-	TestAssertions.equal(requested, [&"4:vitality"], "enabled card hover restores bound final detail", failures)
+	TestAssertions.equal(requested, [&"4:vitality"], "disabled-to-enabled card restores an already-hovered detail exactly once", failures)
+	card.present(projection.copy())
+	TestAssertions.equal(requested, [&"4:vitality"], "unchanged enabled refresh does not duplicate an active detail request", failures)
+
+	var rebound := _card_projection("4:ranged_calibration", "Ranged Calibration")
+	card.present(rebound)
+	TestAssertions.equal(dismissed, [&"4:vitality"], "active rebind dismisses the prior detail source", failures)
+	TestAssertions.equal(requested, [&"4:vitality", &"4:ranged_calibration"], "active rebind requests the new detail source exactly once", failures)
+	card.mouse_exited.emit()
+	TestAssertions.equal(dismissed, [&"4:vitality", &"4:ranged_calibration"], "hover exit dismisses the rebound detail source", failures)
+
+	var focused_disabled := _card_projection("4:precision", "Precision")
+	focused_disabled.disabled_reason = "Revealing."
+	card.present(focused_disabled)
+	card.focus_entered.emit()
+	TestAssertions.equal(requested.size(), 2, "disabled keyboard/controller focus does not request detail", failures)
+	focused_disabled.disabled_reason = ""
+	card.present(focused_disabled)
+	TestAssertions.equal(requested, [&"4:vitality", &"4:ranged_calibration", &"4:precision"], "disabled-to-enabled focused card requests its current detail exactly once", failures)
+	card.present(focused_disabled.copy())
+	TestAssertions.equal(requested.size(), 3, "unchanged focused refresh does not duplicate its detail request", failures)
+	card.focus_exited.emit()
+	TestAssertions.equal(dismissed, [&"4:vitality", &"4:ranged_calibration", &"4:precision"], "focus exit dismisses the current focused detail source", failures)
 	card.free()
 
 func _card_projection(key: String, display_name: String) -> UpgradeOfferProjection:
