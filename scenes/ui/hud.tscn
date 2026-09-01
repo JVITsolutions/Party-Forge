@@ -44,19 +44,59 @@ grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
 
-[node name="LeaderCard" parent="Margin/CombatStatus" instance=ExtResource("5")]
+[node name="PartyHeader" type="Button" parent="Margin/CombatStatus"]
+custom_minimum_size = Vector2(424, 48)
 layout_mode = 0
 offset_left = 16.0
 offset_top = 16.0
 offset_right = 440.0
-offset_bottom = 200.0
+offset_bottom = 64.0
+focus_mode = 2
+theme_type_variation = &"LivingForgeSecondaryButton"
+text = ""
+accessibility_name = "Party expanded"
+
+[node name="Content" type="HBoxContainer" parent="Margin/CombatStatus/PartyHeader"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="DisclosureGlyph" type="Label" parent="Margin/CombatStatus/PartyHeader/Content"]
+layout_mode = 2
+text = "▾"
+mouse_filter = 2
+
+[node name="Summary" type="Label" parent="Margin/CombatStatus/PartyHeader/Content"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "PARTY"
+autowrap_mode = 2
+mouse_filter = 2
+
+[node name="LeaderHealth" type="ProgressBar" parent="Margin/CombatStatus/PartyHeader/Content"]
+visible = false
+custom_minimum_size = Vector2(96, 16)
+layout_mode = 2
+show_percentage = false
+mouse_filter = 2
+
+[node name="LeaderCard" parent="Margin/CombatStatus" instance=ExtResource("5")]
+layout_mode = 0
+offset_left = 16.0
+offset_top = 68.0
+offset_right = 440.0
+offset_bottom = 252.0
 
 [node name="Experience" type="ProgressBar" parent="Margin/CombatStatus"]
 layout_mode = 0
 offset_left = 16.0
-offset_top = 204.0
+offset_top = 256.0
 offset_right = 440.0
-offset_bottom = 224.0
+offset_bottom = 276.0
 show_percentage = false
 accessibility_name = "Leader experience"
 
@@ -112,7 +152,7 @@ anchors_preset = 0
 anchor_right = 0.5
 anchor_bottom = 1.0
 offset_left = 16.0
-offset_top = 232.0
+offset_top = 284.0
 offset_right = -8.0
 offset_bottom = -80.0
 mouse_filter = 2
@@ -203,11 +243,52 @@ offset_bottom = -16.0
 grow_horizontal = 0
 mouse_filter = 2
 
+[node name="Header" type="Button" parent="Margin/CombatStatus/AlertRegion"]
+custom_minimum_size = Vector2(272, 48)
+layout_mode = 0
+offset_right = 472.0
+offset_bottom = 48.0
+focus_mode = 2
+theme_type_variation = &"LivingForgeSecondaryButton"
+text = ""
+accessibility_name = "Alerts expanded"
+
+[node name="AlertsTrayAction" type="Button" parent="Margin/CombatStatus/AlertRegion"]
+visible = false
+custom_minimum_size = Vector2(192, 48)
+layout_mode = 0
+focus_mode = 0
+theme_type_variation = &"LivingForgeSecondaryButton"
+text = "VIEW ALL ALERTS (0)"
+accessibility_name = "View all combat alerts"
+
+[node name="Content" type="HBoxContainer" parent="Margin/CombatStatus/AlertRegion/Header"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="DisclosureGlyph" type="Label" parent="Margin/CombatStatus/AlertRegion/Header/Content"]
+layout_mode = 2
+text = "▾"
+mouse_filter = 2
+
+[node name="Summary" type="Label" parent="Margin/CombatStatus/AlertRegion/Header/Content"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "ALERTS · ALL CLEAR"
+autowrap_mode = 2
+mouse_filter = 2
+
 [node name="ExpandedAlerts" type="VBoxContainer" parent="Margin/CombatStatus/AlertRegion"]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
+offset_top = 52.0
 offset_bottom = -52.0
 grow_horizontal = 2
 grow_vertical = 2

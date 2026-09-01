@@ -3,6 +3,7 @@ extends CanvasLayer
 
 signal inspect_requested(member_id: int, return_focus: Control)
 signal ledger_requested(member_id: int, return_focus: Control)
+signal collapse_preferences_changed(party_collapsed: bool, alerts_collapsed: bool)
 
 const RICH_MEMBER_SCENE := preload("res://scenes/ui/living_forge/components/forge_party_member_card.tscn")
 const COMPACT_MEMBER_SCENE := preload("res://scenes/ui/living_forge/components/forge_party_member_marker.tscn")
@@ -42,6 +43,8 @@ var _terminal_suspended_focus_modes: Array[Dictionary] = []
 var _terminal_prior_focus: Control
 var _terminal_prior_focus_descriptor: Dictionary = {}
 var _alert_budget_reflow_queued := false
+var _party_collapsed := false
+var _alerts_collapsed := false
 
 
 func _ready() -> void:
@@ -102,9 +105,13 @@ func _restore_non_terminal_focus() -> void:
 
 
 func _ensure_control_connections() -> void:
+	var party_header := get_node("Margin/CombatStatus/PartyHeader") as Button
+	var alerts_header := get_node("Margin/CombatStatus/AlertRegion/Header") as Button
 	var previous := get_node("Margin/CombatStatus/PartyRegion/CompactRoster/PagePrevious") as Button
 	var next := get_node("Margin/CombatStatus/PartyRegion/CompactRoster/PageNext") as Button
 	var overflow := get_node("Margin/CombatStatus/AlertRegion/Overflow") as Button
+	if not party_header.pressed.is_connected(_on_party_header_pressed): party_header.pressed.connect(_on_party_header_pressed)
+	if not alerts_header.pressed.is_connected(_on_alerts_header_pressed): alerts_header.pressed.connect(_on_alerts_header_pressed)
 	if not previous.pressed.is_connected(_on_previous_page): previous.pressed.connect(_on_previous_page)
 	if not next.pressed.is_connected(_on_next_page): next.pressed.connect(_on_next_page)
 	if not overflow.pressed.is_connected(_on_overflow_pressed): overflow.pressed.connect(_on_overflow_pressed)
@@ -127,6 +134,7 @@ func configure(run: Node, party: PartyManager, experience: ExperienceSystem, con
 	run_context = context
 	settings = saved_settings if saved_settings != null else PartyForgeSettings.new()
 	_apply_visual_settings_to_surfaces()
+	apply_collapse_preferences(settings.hud_party_collapsed, settings.hud_alerts_collapsed)
 	if party_manager != null:
 		party_manager.member_added.connect(_on_party_structure_changed)
 		party_manager.class_rank_changed.connect(_on_party_value_changed)
@@ -147,6 +155,7 @@ func configure(run: Node, party: PartyManager, experience: ExperienceSystem, con
 func apply_visual_settings(saved_settings: PartyForgeSettings) -> void:
 	settings = saved_settings if saved_settings != null else PartyForgeSettings.new()
 	_apply_visual_settings_to_surfaces()
+	apply_collapse_preferences(settings.hud_party_collapsed, settings.hud_alerts_collapsed)
 	if current_projection != null:
 		_refresh_projection(true)
 
@@ -163,6 +172,64 @@ func _apply_visual_settings_to_surfaces() -> void:
 	shell.theme = resolved_theme
 	(get_node("CombatAlertTray") as CombatAlertTray).apply_visual_settings(resolved_theme, _high_contrast)
 	(get_node("CombatMemberInspectPanel") as CombatMemberInspectPanel).apply_visual_settings(resolved_theme)
+
+
+func party_collapsed() -> bool:
+	return _party_collapsed
+
+
+func alerts_collapsed() -> bool:
+	return _alerts_collapsed
+
+
+func apply_collapse_preferences(party_value: bool, alerts_value: bool) -> void:
+	_set_party_collapsed(party_value, false)
+	_set_alerts_collapsed(alerts_value, false)
+	_present_region_headers()
+
+
+func _set_party_collapsed(value: bool, user_initiated: bool) -> void:
+	if _party_collapsed == value:
+		return
+	_party_collapsed = value
+	for path: NodePath in [^"Margin/CombatStatus/LeaderCard", ^"Margin/CombatStatus/Experience", ^"Margin/CombatStatus/PartyRegion"]:
+		(get_node(path) as Control).visible = not value
+	_present_region_headers()
+	if user_initiated:
+		collapse_preferences_changed.emit(_party_collapsed, _alerts_collapsed)
+
+
+func _set_alerts_collapsed(value: bool, user_initiated: bool) -> void:
+	if _alerts_collapsed == value:
+		return
+	_alerts_collapsed = value
+	var expanded := get_node("Margin/CombatStatus/AlertRegion/ExpandedAlerts") as Control
+	var overflow := get_node("Margin/CombatStatus/AlertRegion/Overflow") as BaseButton
+	expanded.visible = not value
+	if value:
+		overflow.visible = false
+		overflow.disabled = true
+		overflow.focus_mode = Control.FOCUS_NONE
+	elif current_projection != null:
+		_apply_alert_budget()
+	_present_region_headers()
+	if user_initiated:
+		collapse_preferences_changed.emit(_party_collapsed, _alerts_collapsed)
+
+
+func _present_region_headers() -> void:
+	var party_header := get_node("Margin/CombatStatus/PartyHeader") as Button
+	var party_glyph := get_node("Margin/CombatStatus/PartyHeader/Content/DisclosureGlyph") as Label
+	var party_summary := get_node("Margin/CombatStatus/PartyHeader/Content/Summary") as Label
+	party_glyph.text = "▸" if _party_collapsed else "▾"
+	party_summary.text = "PARTY · COLLAPSED" if _party_collapsed else "PARTY"
+	party_header.accessibility_name = "Party collapsed" if _party_collapsed else "Party expanded"
+	var alerts_header := get_node("Margin/CombatStatus/AlertRegion/Header") as Button
+	var alerts_glyph := get_node("Margin/CombatStatus/AlertRegion/Header/Content/DisclosureGlyph") as Label
+	var alerts_summary := get_node("Margin/CombatStatus/AlertRegion/Header/Content/Summary") as Label
+	alerts_glyph.text = "▸" if _alerts_collapsed else "▾"
+	alerts_summary.text = "ALERTS · COLLAPSED" if _alerts_collapsed else "ALERTS"
+	alerts_header.accessibility_name = "Alerts collapsed" if _alerts_collapsed else "Alerts expanded"
 
 
 func set_leader(_actor: PartyActor) -> void:
@@ -493,6 +560,15 @@ func _apply_deferred_alert_budget() -> void:
 
 func _apply_alert_budget() -> void:
 	var stack := get_node("Margin/CombatStatus/AlertRegion/ExpandedAlerts") as VBoxContainer
+	var overflow := get_node("Margin/CombatStatus/AlertRegion/Overflow") as Button
+	if _alerts_collapsed:
+		stack.visible = false
+		overflow.visible = false
+		overflow.disabled = true
+		overflow.focus_mode = Control.FOCUS_NONE
+		if overflow.has_focus():
+			overflow.release_focus()
+		return
 	var stack_parent := stack.get_parent_control()
 	var vertical_budget := maxf(
 		stack_parent.size.y * (stack.anchor_bottom - stack.anchor_top) + stack.offset_bottom - stack.offset_top,
@@ -515,7 +591,6 @@ func _apply_alert_budget() -> void:
 		if render_card:
 			used_height = next_height
 			rendered_count += 1
-	var overflow := get_node("Margin/CombatStatus/AlertRegion/Overflow") as Button
 	var overflow_count := maxi(0, current_projection.all_alerts.size() - rendered_count)
 	overflow.visible = overflow_count > 0
 	overflow.disabled = not overflow.visible
@@ -564,6 +639,14 @@ func _on_previous_page() -> void:
 
 func _on_next_page() -> void:
 	_set_page(_current_page + 1)
+
+
+func _on_party_header_pressed() -> void:
+	_set_party_collapsed(not _party_collapsed, true)
+
+
+func _on_alerts_header_pressed() -> void:
+	_set_alerts_collapsed(not _alerts_collapsed, true)
 
 
 func _set_page(page: int) -> void:

@@ -16,6 +16,7 @@ func run() -> Array[String]:
 	_test_scene_contract(failures)
 	_test_party_scale_and_signal_updates(failures)
 	_test_character_hud_background_opacity(failures)
+	_test_collapse_headers_and_independent_state(failures)
 	_test_alert_surface_and_complete_tray(failures)
 	_test_fail_closed_status_and_pluralization(failures)
 	_test_pause_safe_inspector_and_ledger_routes(failures)
@@ -57,6 +58,70 @@ func _test_character_hud_background_opacity(failures: Array[String]) -> void:
 	TestAssertions.near(high_contrast_style.bg_color.a if high_contrast_style != null else -1.0, 1.0, 0.001, "high contrast keeps the character HUD surface opaque", failures)
 	_cleanup_hud(high_contrast_hud)
 	_cleanup_fixture(high_contrast_fixture)
+
+
+func _test_collapse_headers_and_independent_state(failures: Array[String]) -> void:
+	var fixture := _fixture(6)
+	var hud := _configured_hud(fixture)
+	TestAssertions.truthy(hud != null, "collapse-header HUD configures", failures)
+	if hud != null:
+		var party_header := hud.get_node_or_null("Margin/CombatStatus/PartyHeader") as Button
+		var alerts_header := hud.get_node_or_null("Margin/CombatStatus/AlertRegion/Header") as Button
+		var tray_action := hud.get_node_or_null("Margin/CombatStatus/AlertRegion/AlertsTrayAction") as Button
+		TestAssertions.truthy(party_header != null and alerts_header != null and tray_action != null, "HUD exposes both headers and persistent tray action", failures)
+		TestAssertions.truthy(party_header != null and party_header.focus_mode == Control.FOCUS_ALL and alerts_header != null and alerts_header.focus_mode == Control.FOCUS_ALL, "both headers are focusable", failures)
+		TestAssertions.truthy(hud.has_signal(&"collapse_preferences_changed"), "HUD exposes collapse preference intent signal", failures)
+		var collapse_api := hud.has_method(&"apply_collapse_preferences") and hud.has_method(&"party_collapsed") and hud.has_method(&"alerts_collapsed")
+		TestAssertions.truthy(collapse_api, "HUD exposes independent collapse state API", failures)
+		if collapse_api:
+			var collapse_intents: Array = []
+			if party_header != null and alerts_header != null:
+				hud.collapse_preferences_changed.connect(func(party_value: bool, alerts_value: bool) -> void: collapse_intents.append([party_value, alerts_value]))
+			hud.call(&"apply_collapse_preferences", true, false)
+			TestAssertions.equal([hud.call(&"party_collapsed"), hud.call(&"alerts_collapsed")], [true, false], "Party collapses independently", failures)
+			TestAssertions.equal(collapse_intents, [], "saved collapse hydration does not emit persistence intent", failures)
+			TestAssertions.truthy(not (hud.get_node("Margin/CombatStatus/LeaderCard") as Control).visible, "Party collapse hides leader", failures)
+			TestAssertions.truthy(not (hud.get_node("Margin/CombatStatus/Experience") as Control).visible, "Party collapse hides XP", failures)
+			TestAssertions.truthy(not (hud.get_node("Margin/CombatStatus/PartyRegion") as Control).visible, "Party collapse hides roster", failures)
+			TestAssertions.truthy((hud.get_node("Margin/CombatStatus/AlertRegion/ExpandedAlerts") as Control).visible, "Party collapse leaves Alerts expanded", failures)
+			if party_header != null and alerts_header != null:
+				party_header.pressed.emit()
+				TestAssertions.equal([hud.call(&"party_collapsed"), hud.call(&"alerts_collapsed")], [false, false], "Party header toggles only Party state", failures)
+				TestAssertions.equal(collapse_intents, [[false, false]], "Party header emits the exact updated persistence intent", failures)
+				alerts_header.pressed.emit()
+				TestAssertions.equal([hud.call(&"party_collapsed"), hud.call(&"alerts_collapsed")], [false, true], "Alerts header toggles only Alerts state", failures)
+				TestAssertions.equal(collapse_intents, [[false, false], [false, true]], "Alerts header emits the exact updated persistence intent", failures)
+		_cleanup_hud(hud)
+	_cleanup_fixture(fixture)
+
+	var alerts_fixture := _fixture(4)
+	(alerts_fixture.settings as PartyForgeSettings).hud_party_collapsed = false
+	(alerts_fixture.settings as PartyForgeSettings).hud_alerts_collapsed = true
+	for member_id: int in range(1, 5):
+		(alerts_fixture.health_by_member[member_id] as HealthComponent).apply_damage(80.0)
+	var alerts_hud := _configured_hud(alerts_fixture)
+	TestAssertions.truthy(alerts_hud != null, "saved alert-collapse HUD configures", failures)
+	if alerts_hud != null:
+		var collapse_api := alerts_hud.has_method(&"apply_collapse_preferences") and alerts_hud.has_method(&"party_collapsed") and alerts_hud.has_method(&"alerts_collapsed")
+		TestAssertions.truthy(collapse_api, "saved settings can apply independent collapse state", failures)
+		if collapse_api:
+			TestAssertions.equal([alerts_hud.call(&"party_collapsed"), alerts_hud.call(&"alerts_collapsed")], [false, true], "saved alert preference leaves Party expanded", failures)
+			TestAssertions.truthy((alerts_hud.get_node("Margin/CombatStatus/LeaderCard") as Control).visible, "saved alert collapse leaves leader visible", failures)
+			TestAssertions.truthy((alerts_hud.get_node("Margin/CombatStatus/Experience") as Control).visible, "saved alert collapse leaves XP visible", failures)
+			TestAssertions.truthy((alerts_hud.get_node("Margin/CombatStatus/PartyRegion") as Control).visible, "saved alert collapse leaves roster visible", failures)
+			TestAssertions.truthy(not (alerts_hud.get_node("Margin/CombatStatus/AlertRegion/ExpandedAlerts") as Control).visible, "saved alert collapse hides alert cards", failures)
+			var overflow := alerts_hud.get_node("Margin/CombatStatus/AlertRegion/Overflow") as Button
+			TestAssertions.truthy(not overflow.visible, "saved alert collapse hides overflow", failures)
+			TestAssertions.truthy(overflow.disabled and overflow.focus_mode == Control.FOCUS_NONE, "saved alert collapse disables overflow interaction", failures)
+		var leader := alerts_hud.get_node("Margin/CombatStatus/LeaderCard") as Control
+		var initial_style := (leader.get_node("Surface") as Panel).get_theme_stylebox(&"panel") as StyleBoxFlat
+		TestAssertions.near(initial_style.bg_color.a if initial_style != null else -1.0, 0.5, 0.001, "collapse setup keeps the default member background opacity", failures)
+		if alerts_hud.has_method(&"apply_visual_settings"):
+			alerts_hud.call(&"apply_visual_settings", (alerts_fixture.settings as PartyForgeSettings).copy())
+		var refreshed_style := (leader.get_node("Surface") as Panel).get_theme_stylebox(&"panel") as StyleBoxFlat
+		TestAssertions.near(refreshed_style.bg_color.a if refreshed_style != null else -1.0, 0.5, 0.001, "live visual settings preserve the default member background opacity", failures)
+		_cleanup_hud(alerts_hud)
+	_cleanup_fixture(alerts_fixture)
 
 
 func _test_scene_contract(failures: Array[String]) -> void:
