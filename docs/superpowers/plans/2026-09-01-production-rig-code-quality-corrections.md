@@ -449,7 +449,7 @@ Require the commit parent to equal `$codeQualityCorrectionBase`, exact two-path 
 
 **Interfaces:**
 - Consumes: public `validate_mapped_bind_identity()` and the existing mapped-rig regression suite.
-- Produces: zero `_matching_name_indices` references with identical public behavior.
+- Produces: zero `_matching_name_indices` references in GDScript source/test files with identical public behavior; documentation references remain valid provenance.
 
 - [ ] **Step 1: Run the pre-removal characterization gate**
 
@@ -501,13 +501,17 @@ Do not change the public validator, `_resolve_mapped_skin_binds()`, legacy valid
 Run:
 
 ```powershell
-$helperHits = @(rg -n --fixed-strings '_matching_name_indices' $project)
-if ($helperHits.Count -ne 0) { throw "obsolete helper remains: $($helperHits -join '; ')" }
+$helperHits = @(rg -n --fixed-strings --glob '*.gd' '_matching_name_indices' $project)
+$helperSearchExit = $LASTEXITCODE
+if ($helperSearchExit -gt 1) { throw "GDScript helper audit failed with exit $helperSearchExit" }
+if ($helperSearchExit -eq 0 -and $helperHits.Count -eq 0) { throw 'GDScript helper audit reported success without captured records' }
+if ($helperSearchExit -eq 1 -and $helperHits.Count -ne 0) { throw 'GDScript helper audit reported no matches with captured records' }
+if ($helperSearchExit -ne 1 -or $helperHits.Count -ne 0) { throw "obsolete GDScript helper remains: $($helperHits -join '; ')" }
 git -C $project diff --check
 git -C $project diff --name-only
 ```
 
-Require the working scope to contain exactly the rig contract and mapped-rig test. Compare the `validate_mapped_bind_identity()`, `_resolve_mapped_skin_binds()`, `validate_rig()`, `validate_skin()`, `_serialize_transform()`, and `_quantized()` blobs byte-for-byte against `$constructionCommit`.
+Require `rg` exit `1` with zero captured `.gd` matches; exit `0` means at least one obsolete GDScript reference remains, and exit `2` or greater is an audit failure. Require the working scope to contain exactly the rig contract and mapped-rig test. Compare the `validate_mapped_bind_identity()`, `_resolve_mapped_skin_binds()`, `validate_rig()`, `validate_skin()`, `_serialize_transform()`, and `_quantized()` blobs byte-for-byte against `$constructionCommit`.
 
 - [ ] **Step 4: Run the post-removal characterization gate**
 
@@ -814,7 +818,7 @@ Only after requirements PASS, dispatch a different fresh read-only reviewer with
 
 ```powershell
 $qualityBrief = @"
-Review Party Forge production-rig code-quality corrections for code quality only. Do not edit any file and do not repeat the requirements checklist. Baseline is $codeQualityCorrectionBase; implementation commits are $constructionCommit then $helperRemovalCommit; evidence root is $evidenceRoot. Inspect exactly the four-path diff. Return PASS or FAIL with exact file:line and evidence support for: runtime guard dominance in debug and release; exact one-error inert behavior; zero assert-only authorization; no partial valid state; construction-validity assignment last; is_success validity gating; unchanged factory single-load allocation and cold-safe RefCounted API; no global-class downcast, nested replacement, test-only production seam, mutable error channel, or writable public state; defensive-copy correctness and Resource-reference semantics; direct-constructor probe quality and isolation; no reuse of consumed invalid_success/invalid_failure probes as post-change proof; zero _matching_name_indices references; public bind validator remains the sole production name scan; no mock-behavior test or impossible duplicate Skeleton3D fixture; exact deletion-only helper commit; commit-based rollback; new tracked-archive cold import/full suite and byte-identical diagnostic-family evidence; and containment. Treat any release-only bypass, caller-state exposure, diagnostic waiver, dead duplicate logic, broader scope, or inadequate proof as FAIL. Do not propose edits or modify the worktree.
+Review Party Forge production-rig code-quality corrections for code quality only. Do not edit any file and do not repeat the requirements checklist. Baseline is $codeQualityCorrectionBase; implementation commits are $constructionCommit then $helperRemovalCommit; evidence root is $evidenceRoot. Inspect exactly the four-path diff. Return PASS or FAIL with exact file:line and evidence support for: runtime guard dominance in debug and release; exact one-error inert behavior; zero assert-only authorization; no partial valid state; construction-validity assignment last; is_success validity gating; unchanged factory single-load allocation and cold-safe RefCounted API; no global-class downcast, nested replacement, test-only production seam, mutable error channel, or writable public state; defensive-copy correctness and Resource-reference semantics; direct-constructor probe quality and isolation; no reuse of consumed invalid_success/invalid_failure probes as post-change proof; zero _matching_name_indices references in `.gd` source/test files while documentation provenance remains legitimate; public bind validator remains the sole production name scan; no mock-behavior test or impossible duplicate Skeleton3D fixture; exact deletion-only helper commit; commit-based rollback; new tracked-archive cold import/full suite and byte-identical diagnostic-family evidence; and containment. Treat any release-only bypass, caller-state exposure, diagnostic waiver, dead duplicate logic, broader scope, or inadequate proof as FAIL. Do not propose edits or modify the worktree.
 "@
 ```
 
@@ -859,7 +863,7 @@ Do not create masculine, feminine, or shared mapping `.tres` resources. Do not s
 | Private validity bit set last and validity-aware success | Task A implementation and source-order audit. |
 | Cold-safe factories and runtime identity unchanged | Task A normal catalog GREEN, exact factory-blob comparison, and both reviewers. |
 | No source mutation, test-only production seam, global-class dependency, nested wrapper, mutable last error, or public writable state | Task A exact scope/audit and code-quality review. |
-| Dead helper and only its direct test logic removed | Task B deletion blocks, zero-reference search, and exact deletion-only commit. |
+| Dead helper and only its direct test logic removed | Task B deletion blocks, zero-GDScript-reference search, and exact deletion-only commit. |
 | Public bind-identity behavior remains complete | Task B before/after characterization and retained assertion audit. |
 | Two independently reviewable commits and exact four-path union | Task A/Task B commit gates and Task C history audit. |
 | Fresh post-change runtime qualification | Task C focused gate, new tracked archive, disposable cold import, full suite, normalized family comparison, and independent verifier. |
