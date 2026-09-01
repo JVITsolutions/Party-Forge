@@ -2,6 +2,7 @@ class_name HumanoidRigContract
 extends RefCounted
 
 const RigDefinition := preload("res://scripts/presentation/humanoid_rig_definition.gd")
+const RigMapping := preload("res://scripts/presentation/humanoid_rig_mapping.gd")
 const CANONICAL_RIG_ID: StringName = &"pf_humanoid_v1"
 const QUANTIZATION := 0.000001
 const MIN_INVERTIBLE_DETERMINANT := 0.000000000001
@@ -157,6 +158,53 @@ func validate_rig(definition: RigDefinition, skeleton: Skeleton3D, pivot_root: N
 			errors.append("humanoid rig role %s pivot %s must exist exactly once as Node3D" % [role, definition.pivot_paths[mapping_index]])
 	return errors
 
+static func validate_mapped_rig(definition: RigDefinition, mapping: RigMapping, skeleton: Skeleton3D, skin: Skin) -> PackedStringArray:
+	var errors := PackedStringArray()
+	if mapping == null:
+		errors.append("humanoid rig mapping is missing")
+		return errors
+	errors.append_array(mapping.validate(definition))
+	if skeleton == null:
+		errors.append("mapped humanoid Skeleton3D is missing")
+		return errors
+	if skin == null:
+		errors.append("mapped humanoid Skin is missing")
+		return errors
+	var bind_names: Dictionary = {}
+	for bind_index: int in skin.get_bind_count():
+		var bind_name := skin.get_bind_name(bind_index)
+		if bind_name.is_empty() or bind_names.has(bind_name):
+			errors.append("mapped humanoid Skin has empty or duplicate bind %s" % bind_name)
+		bind_names[bind_name] = true
+		_validate_transform(skin.get_bind_pose(bind_index), "mapped humanoid Skin bind %s" % bind_name, errors)
+	for role: StringName in REQUIRED_ROLES:
+		if not mapping.role_to_bone.has(role):
+			continue
+		var bone_name := StringName(mapping.role_to_bone[role])
+		var matches := _bone_indices_named(skeleton, bone_name)
+		if matches.size() != 1:
+			errors.append("mapped humanoid role %s bone %s must exist exactly once" % [role, bone_name])
+			continue
+		var bone_index: int = matches[0]
+		_validate_transform(skeleton.get_bone_rest(bone_index), "mapped humanoid bone %s rest" % bone_name, errors)
+		if not bind_names.has(bone_name):
+			errors.append("mapped humanoid Skin is missing bone %s" % bone_name)
+		var parent_role := StringName(REQUIRED_PARENT_BY_ROLE[role])
+		if parent_role.is_empty() or not mapping.role_to_bone.has(parent_role):
+			continue
+		var parent_matches := _bone_indices_named(skeleton, StringName(mapping.role_to_bone[parent_role]))
+		if parent_matches.size() == 1 and not _bone_is_ancestor(skeleton, parent_matches[0], bone_index):
+			errors.append("mapped humanoid role %s does not descend from parent role %s" % [role, parent_role])
+	return errors
+
+static func _bone_is_ancestor(skeleton: Skeleton3D, ancestor_index: int, child_index: int) -> bool:
+	var cursor := skeleton.get_bone_parent(child_index)
+	while cursor >= 0:
+		if cursor == ancestor_index:
+			return true
+		cursor = skeleton.get_bone_parent(cursor)
+	return false
+
 func validate_skin(definition: RigDefinition, skin: Skin) -> PackedStringArray:
 	var errors := PackedStringArray()
 	if definition == null:
@@ -253,21 +301,21 @@ func _validate_mapping_sizes(definition: RigDefinition, errors: PackedStringArra
 func _safe_mapping_count(definition: RigDefinition) -> int:
 	return mini(definition.roles.size(), mini(definition.bone_names.size(), mini(definition.parent_roles.size(), mini(definition.pivot_paths.size(), definition.canonical_rests.size()))))
 
-func _bone_indices_named(skeleton: Skeleton3D, bone_name: StringName) -> Array[int]:
+static func _bone_indices_named(skeleton: Skeleton3D, bone_name: StringName) -> Array[int]:
 	var matches: Array[int] = []
 	for bone_index: int in skeleton.get_bone_count():
 		if skeleton.get_bone_name(bone_index) == bone_name:
 			matches.append(bone_index)
 	return matches
 
-func _validate_transform(transform: Transform3D, label: String, errors: PackedStringArray) -> void:
+static func _validate_transform(transform: Transform3D, label: String, errors: PackedStringArray) -> void:
 	if not _transform_is_finite(transform):
 		errors.append("%s must be finite" % label)
 		return
 	if absf(transform.basis.determinant()) <= MIN_INVERTIBLE_DETERMINANT:
 		errors.append("%s must be invertible" % label)
 
-func _transform_is_finite(transform: Transform3D) -> bool:
+static func _transform_is_finite(transform: Transform3D) -> bool:
 	return (
 		_vector_is_finite(transform.basis.x)
 		and _vector_is_finite(transform.basis.y)
@@ -275,7 +323,7 @@ func _transform_is_finite(transform: Transform3D) -> bool:
 		and _vector_is_finite(transform.origin)
 	)
 
-func _vector_is_finite(vector: Vector3) -> bool:
+static func _vector_is_finite(vector: Vector3) -> bool:
 	return is_finite(vector.x) and is_finite(vector.y) and is_finite(vector.z)
 
 func _serialize_transform(transform: Transform3D) -> String:

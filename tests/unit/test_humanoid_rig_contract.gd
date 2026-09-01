@@ -69,6 +69,7 @@ func run() -> Array[String]:
 	_assert_invalid_role_bone_and_pivot_contracts(failures)
 	_assert_named_skin_bind_contract(failures)
 	_assert_canonical_resource_matches_current_pivots(failures)
+	_assert_legacy_validator_rejects_superset_skeleton(failures)
 	return failures
 
 func _assert_definition_and_fixture_validation(failures: Array[String]) -> void:
@@ -239,6 +240,22 @@ func _assert_canonical_resource_matches_current_pivots(failures: Array[String]) 
 	TestAssertions.equal(_contract.call(&"validate_rig", definition, skeleton, scene), PackedStringArray(), "canonical resource maps every bone to the current pivot hierarchy", failures)
 	skeleton.free()
 	scene.free()
+
+func _assert_legacy_validator_rejects_superset_skeleton(failures: Array[String]) -> void:
+	var definition := _fixture_definition()
+	var skeleton := _skeleton_for(definition)
+	for extra_bone: StringName in [&"PresentationRoot", &"ShoulderDriver", &"WeaponSocketDriver"]:
+		skeleton.add_bone(extra_bone)
+		skeleton.set_bone_rest(skeleton.get_bone_count() - 1, Transform3D.IDENTITY)
+	var pivots := _pivot_fixture()
+	var errors: PackedStringArray = _contract.call(&"validate_rig", definition, skeleton, pivots)
+	TestAssertions.truthy(
+		_contains(errors, "bone count must be 19, got 22"),
+		"legacy exact validator continues rejecting superset skeletons",
+		failures
+	)
+	skeleton.free()
+	pivots.free()
 
 func _fixture_definition() -> Resource:
 	var definition := _definition_script.new() as Resource
