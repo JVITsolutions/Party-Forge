@@ -9,7 +9,7 @@ if (-not (Test-Path -LiteralPath $orchestrator -PathType Leaf)) {
 }
 
 $source = [IO.File]::ReadAllText($orchestrator)
-foreach ($required in @("'clone', '--local', '--no-hardlinks'", 'Assert-DirectoryBoundary', 'CANONICAL_CAPTURE_PREIMPORT_NOT_CLEAN', 'CANONICAL_CAPTURE_COPY_HASH_MISMATCH')) {
+foreach ($required in @("'clone', '--local', '--no-hardlinks'", 'Assert-DirectoryBoundary', 'CANONICAL_CAPTURE_PREIMPORT_NOT_CLEAN', 'CANONICAL_CAPTURE_COPY_HASH_MISMATCH', 'launcher_sha256', 'engine_sha256')) {
     if (-not $source.Contains($required)) {
         throw "ORCHESTRATOR_CONTRACT_REQUIRED_TEXT_MISSING text=$required"
     }

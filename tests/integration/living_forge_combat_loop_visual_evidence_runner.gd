@@ -1305,7 +1305,13 @@ func _validate_capture_provenance(envelope: Dictionary) -> void:
 	var engine_version := Engine.get_version_info()
 	_assert(int(engine_version.get("major", 0)) == 4 and int(engine_version.get("minor", 0)) == 7 and int(engine_version.get("patch", 0)) == 1, "capture runtime Godot semantic version is exact")
 	_assert(String(engine_version.get("status", "")) == "stable" and String(engine_version.get("hash", "")).begins_with("a13da4feb"), "capture runtime Godot build identity is exact")
-	_assert(String(godot.get("binary_sha256", "")) == _sha256_file(OS.get_executable_path()), "capture provenance Godot binary hash matches running executable")
+	var engine_path := OS.get_executable_path()
+	_assert(String(godot.get("engine_sha256", "")) == _sha256_file(engine_path), "capture provenance Godot engine hash matches running executable")
+	var launcher_filename := String(godot.get("launcher_filename", ""))
+	_assert(not launcher_filename.is_empty() and launcher_filename.get_file() == launcher_filename, "capture provenance Godot launcher filename is bounded")
+	var launcher_path := engine_path.get_base_dir().path_join(launcher_filename)
+	_assert(FileAccess.file_exists(launcher_path), "capture provenance Godot launcher exists beside running executable")
+	_assert(String(godot.get("launcher_sha256", "")) == _sha256_file(launcher_path), "capture provenance Godot launcher hash matches invoked binary")
 
 	var pre_import := payload.get("pre_import", {}) as Dictionary
 	_assert(bool(pre_import.get("verified", false)), "capture provenance proves pre-import cleanliness")

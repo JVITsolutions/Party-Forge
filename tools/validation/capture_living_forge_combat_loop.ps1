@@ -218,7 +218,13 @@ $godotVersion = (Invoke-CheckedProcess -Executable $godot -Arguments @('--versio
 if ($godotVersion -ne $script:ExpectedGodotVersion) {
     throw "CANONICAL_CAPTURE_GODOT_VERSION_MISMATCH expected=$script:ExpectedGodotVersion actual=$godotVersion"
 }
-$godotSha = (Get-FileHash -Algorithm SHA256 -LiteralPath $godot).Hash.ToLowerInvariant()
+$godotEngine = $godot
+if ([IO.Path]::GetFileName($godot).EndsWith('_console.exe', [StringComparison]::OrdinalIgnoreCase)) {
+    $engineCandidate = $godot.Substring(0, $godot.Length - '_console.exe'.Length) + '.exe'
+    $godotEngine = Get-ResolvedExistingPath -Path $engineCandidate -Label 'godot-engine-binary'
+}
+$godotLauncherSha = (Get-FileHash -Algorithm SHA256 -LiteralPath $godot).Hash.ToLowerInvariant()
+$godotEngineSha = (Get-FileHash -Algorithm SHA256 -LiteralPath $godotEngine).Hash.ToLowerInvariant()
 
 $tempBase = [IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd('\')
 $runRoot = Join-Path $tempBase ("party-forge-canonical-capture-{0}-{1}" -f $head.Substring(0, 8), [guid]::NewGuid().ToString('N'))
@@ -282,7 +288,9 @@ try {
         }
         godot = [pscustomobject][ordered]@{
             version = $godotVersion
-            binary_sha256 = $godotSha
+            launcher_filename = [IO.Path]::GetFileName($godot)
+            launcher_sha256 = $godotLauncherSha
+            engine_sha256 = $godotEngineSha
         }
         pre_import = $preImport
         generated_uids = $uidInventory
