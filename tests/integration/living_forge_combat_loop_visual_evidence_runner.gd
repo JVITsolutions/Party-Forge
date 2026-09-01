@@ -217,7 +217,9 @@ const CAPTURE_METADATA: Array[Dictionary] = [
 
 const SOURCE_INPUT_PATHS: Array[String] = [
 	RUNNER_PATH,
-	"scenes/ui/hud.tscn", "scripts/ui/hud.gd", "scripts/ui/hud/combat_hud_view_model.gd", "scripts/ui/hud/combat_hud_responsive_layout.gd",
+	"scripts/game/main.gd", "scripts/settings/party_forge_settings.gd", "scripts/settings/party_forge_settings_store.gd",
+	"scenes/ui/hud.tscn", "scripts/ui/hud.gd", "scripts/ui/hud/combat_hud_projection.gd", "scripts/ui/hud/combat_hud_view_model.gd", "scripts/ui/hud/combat_hud_responsive_layout.gd",
+	"assets/ui/living_forge/icons/tabler-3.46.0/alert-triangle.svg", "assets/ui/living_forge/icons/party-forge/downed.svg", "assets/ui/living_forge/icons/party-forge/dead.svg",
 	"scripts/ui/hud/combat_alert_tray.gd", "scripts/ui/hud/combat_member_inspect_panel.gd",
 	"scenes/ui/hud/combat_alert_tray.tscn", "scenes/ui/hud/combat_member_inspect_panel.tscn",
 	"scenes/ui/living_forge/components/forge_party_member_card.tscn", "scripts/ui/living_forge/components/forge_party_member_card.gd",
@@ -235,6 +237,22 @@ const SOURCE_INPUT_PATHS: Array[String] = [
 	"scenes/arena/arena.tscn",
 	"scripts/ui/living_forge/living_forge_theme_catalog.gd", "scripts/ui/living_forge/living_forge_tokens.gd",
 	"data/ui/living_forge/living_forge_theme.tres", "data/ui/living_forge/living_forge_high_contrast_theme.tres",
+	"assets/ui/living_forge/fonts/cinzel-2.000/Cinzel[wght].ttf", "assets/ui/living_forge/fonts/source-sans-3.052/SourceSans3VF-Upright.ttf",
+	"assets/ui/living_forge/fonts/noto-sans-2.014/NotoSans[wdth,wght].ttf", "assets/ui/living_forge/fonts/noto-sans-symbols-2.008/NotoSansSymbols2-Regular.ttf",
+]
+
+const REQUIRED_BATCH_SOURCE_INPUT_PATHS: Array[String] = [
+	"scripts/game/main.gd",
+	"scripts/settings/party_forge_settings.gd",
+	"scripts/settings/party_forge_settings_store.gd",
+	"scripts/ui/hud/combat_hud_projection.gd",
+	"assets/ui/living_forge/icons/tabler-3.46.0/alert-triangle.svg",
+	"assets/ui/living_forge/icons/party-forge/downed.svg",
+	"assets/ui/living_forge/icons/party-forge/dead.svg",
+	"assets/ui/living_forge/fonts/cinzel-2.000/Cinzel[wght].ttf",
+	"assets/ui/living_forge/fonts/source-sans-3.052/SourceSans3VF-Upright.ttf",
+	"assets/ui/living_forge/fonts/noto-sans-2.014/NotoSans[wdth,wght].ttf",
+	"assets/ui/living_forge/fonts/noto-sans-symbols-2.008/NotoSansSymbols2-Regular.ttf",
 ]
 
 class EvidenceRun:
@@ -275,14 +293,24 @@ func _run() -> void:
 	_assert(CAPTURE_METADATA.size() == CAPTURES.size(), "every capture has exact viewport/settings metadata")
 	_assert(CAPTURE_STATES.size() == CAPTURES.size() and CAPTURE_FOCUS_TARGETS.size() == CAPTURES.size(), "every capture has exact state and focus metadata")
 	_assert(_unique_strings(CAPTURES).size() == CAPTURES.size(), "capture names are globally unique")
+	_assert(_unique_strings(SOURCE_INPUT_PATHS).size() == SOURCE_INPUT_PATHS.size(), "source input contract paths are globally unique")
+	for required_path: String in REQUIRED_BATCH_SOURCE_INPUT_PATHS:
+		_assert(required_path in SOURCE_INPUT_PATHS, "source input contract includes required batch dependency: %s" % required_path)
 	if "--validate-only" in OS.get_cmdline_user_args():
+		_assert(has_method(&"_validate_only_source_inputs_match_exact_head"), "validate-only source-input exact-head cleanliness check exists")
+		if not _failures.is_empty():
+			_finish()
+			return
+		if not _validate_only_source_inputs_match_exact_head():
+			_finish()
+			return
 		_validate_existing_evidence()
 		_finish()
 		return
 	root.mode = Window.MODE_WINDOWED
 	root.content_scale_size = Vector2i.ZERO
 	_assert(RenderingServer.get_current_rendering_method() == "gl_compatibility", "capture uses OpenGL Compatibility")
-	_assert(_capture_source_is_clean(), "capture source is the exact clean committed harness head except generated evidence output")
+	_assert(_validate_only_source_inputs_match_exact_head(), "capture source inputs match the exact committed harness head")
 	if not _failures.is_empty():
 		_finish()
 		return
@@ -1204,24 +1232,31 @@ func _fixture_kind_for(metadata: Dictionary) -> String:
 	return "production_arena" if String(metadata.surface).begins_with("hud") or String(metadata.surface) == "pause" else "production_scene"
 
 
-func _capture_source_is_clean() -> bool:
-	var output: Array = []
+func _validate_only_source_inputs_match_exact_head() -> bool:
 	var repository_root := ProjectSettings.globalize_path("res://")
-	var tracked_output: Array = []
-	var tracked_code := OS.execute("git", PackedStringArray(["-C",repository_root,"ls-files","--error-unmatch",RUNNER_PATH]), tracked_output, true)
-	if tracked_code != 0: return false
-	var diff_code := OS.execute("git", PackedStringArray(["-C",repository_root,"diff","--quiet","HEAD","--",RUNNER_PATH]), [], true)
-	if diff_code != 0: return false
-	var code := OS.execute("git", PackedStringArray(["-C",repository_root,"status","--porcelain=v1","--untracked-files=all"]), output, true)
-	if code != 0: return false
-	for raw_line: String in String("".join(output)).split("\n", false):
-		if raw_line.length() < 4: continue
-		var path := raw_line.substr(3).strip_edges().replace("\\", "/")
-		if " -> " in path: path = path.get_slice(" -> ", 1)
-		if path.begins_with("docs/validation/screenshots/living-forge-combat-loop/"): continue
-		if raw_line.begins_with("?? ") and path.ends_with(".gd.uid"): continue
-		return false
-	return true
+	var exact := true
+	for relative_path: String in SOURCE_INPUT_PATHS:
+		var absolute_path := repository_root.path_join(relative_path)
+		if not FileAccess.file_exists(absolute_path):
+			_assert(false, "validate-only source input is missing: %s" % relative_path)
+			exact = false
+			continue
+		var head_output: Array = []
+		var head_code := OS.execute("git", PackedStringArray(["-C",repository_root,"rev-parse","--verify","HEAD:%s" % relative_path]), head_output, true)
+		if head_code != 0 or head_output.is_empty():
+			_assert(false, "validate-only source input is not tracked at exact HEAD: %s" % relative_path)
+			exact = false
+			continue
+		var current_output: Array = []
+		var current_code := OS.execute("git", PackedStringArray(["-C",repository_root,"hash-object","--no-filters",absolute_path]), current_output, true)
+		var head_hash := String("".join(head_output)).strip_edges()
+		var current_hash := String("".join(current_output)).strip_edges()
+		if current_code != 0 or current_output.is_empty() or current_hash != head_hash:
+			_assert(false, "validate-only source input differs from exact HEAD: %s" % relative_path)
+			exact = false
+	if exact:
+		print("LIVING_FORGE_COMBAT_LOOP_VISUAL_SOURCE_INPUTS: PASS count=%d" % SOURCE_INPUT_PATHS.size())
+	return exact
 
 
 func _battlefield_backdrop() -> Node3D:
