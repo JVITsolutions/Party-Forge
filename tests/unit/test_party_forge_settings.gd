@@ -82,6 +82,32 @@ func _test_hud_collapse_preferences(failures: Array[String]) -> void:
 	TestAssertions.equal([loaded.schema_version, loaded.hud_party_collapsed, loaded.hud_alerts_collapsed], [3, true, true], "schema-three HUD preferences round trip", failures)
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
 
+	path = "user://party_forge_settings_hud_collapse_v3_missing.cfg"
+	var missing := ConfigFile.new()
+	missing.set_value("settings", "schema_version", 3)
+	missing.save(path)
+	loaded = store.load_settings(path)
+	TestAssertions.equal([loaded.hud_party_collapsed, loaded.hud_alerts_collapsed], [false, false], "schema-three missing HUD collapse preferences default expanded", failures)
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+
+	path = "user://party_forge_settings_hud_collapse_v3_party_missing.cfg"
+	var party_missing := ConfigFile.new()
+	party_missing.set_value("settings", "schema_version", 3)
+	party_missing.set_value("settings", "hud_alerts_collapsed", true)
+	party_missing.save(path)
+	loaded = store.load_settings(path)
+	TestAssertions.equal([loaded.hud_party_collapsed, loaded.hud_alerts_collapsed], [false, true], "schema-three missing party collapse preference defaults expanded", failures)
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+
+	path = "user://party_forge_settings_hud_collapse_v3_alerts_missing.cfg"
+	var alerts_missing := ConfigFile.new()
+	alerts_missing.set_value("settings", "schema_version", 3)
+	alerts_missing.set_value("settings", "hud_party_collapsed", true)
+	alerts_missing.save(path)
+	loaded = store.load_settings(path)
+	TestAssertions.equal([loaded.hud_party_collapsed, loaded.hud_alerts_collapsed], [true, false], "schema-three missing alerts collapse preference defaults expanded", failures)
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+
 	for version: int in [1, 2]:
 		path = "user://party_forge_settings_hud_collapse_v%d.cfg" % version
 		var legacy := ConfigFile.new()
