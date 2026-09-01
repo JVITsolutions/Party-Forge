@@ -1103,7 +1103,7 @@ This plan's Task 4 is verification-only and is unrelated to the original product
 - Read-only audit scope: all eight tracked paths listed in the File Responsibility Map.
 
 **Interfaces:**
-- Consumes: the three independently committed Task 1-3 implementation deliverables plus the five separately audited Task 2 sequencing, Task 3 RED, Task 3 cold type-resolution, Task 4 cold-import qualification, and Task 4 PNG-import-metadata classification plan corrections.
+- Consumes: the three independently committed Task 1-3 implementation deliverables plus the six separately audited Task 2 sequencing, Task 3 RED, Task 3 cold type-resolution, Task 4 cold-import qualification, Task 4 PNG-import-metadata classification, and Task 4 asynchronous-controller qualification plan corrections.
 - Produces: task-owned disposable import products, verification evidence, and a stop-gate report only; it does not create an authoritative-repository artifact, mapping resource, asset, import product, or integration commit.
 
 **Verified reason for this correction:**
@@ -1114,6 +1114,8 @@ This plan's Task 4 is verification-only and is unrelated to the original product
 - The successful cold import is preserved under `C:\Users\Jacob\AppData\Local\Temp\pf-body-rig-cold-import-20260901T061311Z-e3234542`. Its `evidence/import-delta-classification.json` SHA-256 is `00b83462494e50a63146ac0c0e47d2f0bc482115f29a0e0fab044a84dd3c3986`. The import exited 0 with no error, warning, or prohibited diagnostic; no pre-import file changed or disappeared. The original strict classifier accepted 1,428 `.godot` entries and 73 source-adjacent `*.gd.uid` files, then stopped on exactly 682 otherwise-unclassified additions.
 - Independent evidence review established that all 682 additions are regular `*.png.import` files, every exact PNG sibling existed as a regular pre-import file, each sidecar's single `[deps]` `source_file` equals that sibling's `res://` URI, every declared `[remap]` path and `[deps]` `dest_files` target is normalized beneath `res://.godot/imported/`, and every target exists in the post-import inventory. It found zero missing, unsafe, mismatched, absolute, external, traversal, or unexplained resource reference. The matching ignored sidecars already present in the authoritative worktree are byte-identical to the disposable outputs, and `.gitignore` contains `*.png.import`; those two facts are repository-hygiene observations only and are not acceptance inputs for this checkpoint.
 - Preserve every existing file in that successful evidence root byte-for-byte. The already preserved Step 1 focused gate remains valid while authoritative HEAD and tracked implementation scope remain unchanged. Resume at Step 3A; do not rerun Steps 1-3 or run another cold import.
+- The consumed Step 4 harness failure is preserved under `C:\Users\Jacob\AppData\Local\Temp\pf-body-rig-full-suite-20260901T064809Z-1abffd81`. Its `step4-final-result.json` SHA-256 is `b65752274e8540be52cf007916df29368227f878fd359b5ea72210e2853a574e`, and its `wrapper-result.json` SHA-256 is `a56bec20cda850776d521b48159f4eb37b8284d0897d694009ede63f6acbd0bb`. The controller failed before ancestry capture because local `$pid` collided case-insensitively with PowerShell's read-only automatic `$PID`; the nested wrapper then promoted an intentional Godot stderr line to a terminating exception because `ErrorActionPreference=Stop` surrounded the native direct call. The sentinel `97`, zero terminal markers, and incomplete ancestry are an untrustworthy harness result, never a Party Forge suite verdict. Preserve this entire evidence root byte-for-byte and never patch or rerun its wrapper.
+- The known passing full suite at `C:\Users\Jacob\AppData\Local\Temp\pf-character-task2-reconcile-gate-0001` exited 0 after 381.11 seconds with exactly `TEST_SUMMARY: PASS (262 suites)`, while its captured stderr contained 112 intentional `ERROR:` lines and 18 intentional `WARNING:` lines, including exactly one `ERROR: PARTY_FORGE_STAT_ERROR source=nonfinite_crit stat=crit_chance reason=non-finite value`. Generic `ERROR:` and `WARNING:` prefixes are test data and must never be promoted to controller exceptions or treated as prohibited diagnostics by themselves.
 
 - [ ] **Step 1: Re-run the complete focused checkpoint gate**
 
@@ -1207,21 +1209,85 @@ Sort accepted records by case-sensitive ordinal `relative_path`. Serialize one c
 
 The byte-identical ignored `*.png.import` counterparts in the authoritative worktree remain an observation only. Do not copy from them, write them, stage them, commit them, modify `.gitignore`, or broaden this checkpoint into repository import-metadata policy.
 
-- [ ] **Step 4: Run the unchanged full suite in the freshly imported disposable project**
+- [ ] **Step 4A: Qualify one asynchronous native-process controller without Godot**
 
-Only after a fresh Step 3 classification is pristine or the preserved evidence's Step 3A overlay is pristine, create a second syntax-validated task-owned wrapper. For the preserved evidence root, require `$verifyRoot\suite-appdata` and `$verifyRoot\suite-localappdata` to be absent or empty, create either missing directory, and require both to be empty immediately before launch. Set the wrapper's APPDATA and LOCALAPPDATA to those two fresh directories, then run the unchanged direct command:
+Create the controller, its synthetic fixtures, and all qualification evidence only under a brand-new task-owned directory beneath `C:\Users\Jacob\AppData\Local\Temp`. Do not write the repository or the preserved cold-import/evidence root. Require PowerShell 7 or newer and fail before launch unless `System.Diagnostics.ProcessStartInfo.ArgumentList`, `System.Diagnostics.ProcessStartInfo.Environment`, `System.Diagnostics.Process.WaitForExitAsync()`, and `System.Diagnostics.Process.Kill(Boolean)` are available.
+
+The controller interface is exact:
 
 ~~~powershell
-& $godot --headless --path $trackedProject --script res://tests/test_runner.gd
+param(
+    [Parameter(Mandatory = $true)][string]$ExecutablePath,
+    [Parameter(Mandatory = $true)][string[]]$ArgumentVector,
+    [Parameter(Mandatory = $true)][string]$AppDataPath,
+    [Parameter(Mandatory = $true)][string]$LocalAppDataPath,
+    [Parameter(Mandatory = $true)][int]$TimeoutMilliseconds,
+    [Parameter(Mandatory = $true)][string]$StdoutPath,
+    [Parameter(Mandatory = $true)][string]$StderrPath,
+    [Parameter(Mandatory = $true)][string]$ResultPath
+)
 ~~~
 
-Capture exact wrapper/child PID ancestry, command metadata, stdout, stderr, exit, terminal markers, and diagnostics. Bound it externally at 720 seconds with the same exact-PID containment rules and no automatic retry. Require full-suite exit 0, exactly one terminal marker matching `TEST_SUMMARY: PASS` followed by one positive suite count, zero `TEST_SUMMARY: FAIL` markers, zero `TEST_FAILURE` lines, and no parser, loader, import, script, crash, segmentation, or leak diagnostic. Re-run the complete disposable-project inventory afterward and require that no source file recorded by the pre-import manifest changed and no generated path falls outside the Step 3 classification rules.
+Its only child-launch path must use this structure:
+
+~~~powershell
+$startInfo = [System.Diagnostics.ProcessStartInfo]::new()
+$startInfo.FileName = $ExecutablePath
+$startInfo.UseShellExecute = $false
+$startInfo.CreateNoWindow = $true
+$startInfo.RedirectStandardOutput = $true
+$startInfo.RedirectStandardError = $true
+foreach ($argumentValue in $ArgumentVector) {
+    [void]$startInfo.ArgumentList.Add($argumentValue)
+}
+$startInfo.Environment['APPDATA'] = $AppDataPath
+$startInfo.Environment['LOCALAPPDATA'] = $LocalAppDataPath
+
+$nativeProcess = [System.Diagnostics.Process]::new()
+$nativeProcess.StartInfo = $startInfo
+[void]$nativeProcess.Start()
+$stdoutTask = $nativeProcess.StandardOutput.ReadToEndAsync()
+$stderrTask = $nativeProcess.StandardError.ReadToEndAsync()
+$exitTask = $nativeProcess.WaitForExitAsync()
+$timeoutTask = [System.Threading.Tasks.Task]::Delay($TimeoutMilliseconds)
+$completedTask = [System.Threading.Tasks.Task]::WhenAny($exitTask, $timeoutTask).GetAwaiter().GetResult()
+~~~
+
+If `$completedTask` is `$exitTask`, await it before reading `ExitCode`, then await both pipe tasks. If the timeout task wins, refresh the same `Process` object and require it is still alive, its `Id`, UTC `StartTime`, and normalized `MainModule.FileName` equal the values captured immediately after `Start()`, and its executable still equals `ExecutablePath`. Record the exact parent plus recursive child identity tree read-only, call `$nativeProcess.Kill($true)` exactly once, await `$exitTask`, then await both pipe tasks and prove the recorded parent and descendants are absent. Do not terminate by name, wildcard, executable path, reconstructed process object, or shell command.
+
+Write stdout and stderr only after both asynchronous reads finish, using UTF-8 without BOM. The result JSON must independently record controller start/end UTC, controller failure, executable path/hash, exact ordinal argument vector, APPDATA/LOCALAPPDATA, native process ID, native UTC start time, timed_out, pre-timeout process tree, kill attempted/succeeded, native exit available/value, stdout/stderr bytes and lowercase SHA-256, and post-termination identities. A controller exception must still preserve both pipe tasks and produce result JSON; it must not invent a native exit.
+
+Before any fixture, syntax-parse and hash the controller. AST/token inspection must fail closed if it finds: a call operator token, `Start-Process`, `Stop-Process`, any redirection AST, any assignment or access to `ProcessStartInfo.Arguments`, a constructed argument string, or any variable expression whose user path equals `pid` case-insensitively. The controller may use `Process.Id` but no variable named `pid` in any casing.
+
+Run these three synthetic fixtures in order and stop without patch stacking if any fails:
+
+1. **Normal exit:** a task-owned PowerShell child writes exactly `SYNTHETIC_STDOUT_OK` plus LF to stdout, writes exactly `ERROR: SYNTHETIC_INTENTIONAL` plus LF to stderr, and exits 23. Require native exit 23, `timed_out=false`, an empty controller failure, byte-exact stream capture, and no stderr promotion.
+2. **Pipe pressure:** a task-owned child writes deterministic ASCII payloads of at least 262,144 bytes independently to stdout and stderr through `Console.OpenStandardOutput()` and `Console.OpenStandardError()`. Require expected byte counts and SHA-256 hashes exactly, `timed_out=false`, native exit 0, and an empty controller failure. This proves both pipes are consumed concurrently beyond ordinary pipe capacity.
+3. **Timeout tree:** a task-owned parent starts exactly one identifiable task-owned child through its own separated `ArgumentList`, writes immutable parent/child identity evidence, and keeps both alive. Use a documented synthetic-only bound between 1,000 and 5,000 milliseconds. Require `timed_out=true`, exact pre-kill parent/child identities, one `Kill(true)` call on the original parent `Process`, both identities absent afterward, and a separately launched task-owned witness outside that tree still alive after containment. Terminate the witness only through its original `Process` object after recording that proof, then prove it absent.
+
+Independently re-read all scripts, logs, result JSON, expected payloads, process identities, and hashes. Require all three fixture results to match their exact contracts, every test-owned process to be absent, no unrelated process target, and zero repository/preserved-evidence write. Preserve the qualification directory; do not clean it. Only a pristine Step 4A qualification permits Step 4B.
+
+- [ ] **Step 4B: Run the unchanged full suite through the qualified controller**
+
+Only after Step 4A is pristine and a separate approval authorizes the retry, create a brand-new empty APPDATA/LOCALAPPDATA pair under the preserved task-owned verification root. Never reuse `suite-appdata` or `suite-localappdata` consumed by the failed wrapper. Invoke the qualified controller with:
+
+~~~powershell
+-ExecutablePath $godot
+-ArgumentVector @('--headless', '--path', $trackedProject, '--script', 'res://tests/test_runner.gd')
+-AppDataPath $freshSuiteAppData
+-LocalAppDataPath $freshSuiteLocalAppData
+-TimeoutMilliseconds 720000
+~~~
+
+The controller must add those five argument values separately through `ArgumentList`; it must not use a direct call operator, `Start-Process`, shell redirection, or a constructed `Arguments` string. Capture stdout/stderr strictly as data. Record generic `ERROR:` and `WARNING:` line counts separately, but never fail solely because either count is nonzero.
+
+After native exit, require exit 0, exactly one terminal marker matching `TEST_SUMMARY: PASS` followed by one positive suite count, zero `TEST_SUMMARY: FAIL` markers, and zero `TEST_FAILURE` lines. Prohibited diagnostics are only explicit parser/loader/import/script failures, engine-crash/fatal/backtrace markers, segmentation faults, and retained/leaked-object or RID markers; a generic `ERROR:` or `WARNING:` prefix is not a prohibited pattern. Re-run the complete disposable-project inventory afterward and require every pre-import source record unchanged, no deletion, and no source-adjacent addition or change outside the approved `*.gd.uid` and exact PNG-import-metadata classes. Record `.godot/**` deltas separately.
 
 The pristine six-suite checkpoint from Step 1 remains the product-specific contract proof. This fresh-from-tracked cold-import full suite is the reproducible repository-wide regression proof. If either proof fails, stop without retry or reviewer dispatch.
 
 - [ ] **Step 5: Obtain independent requirements review**
 
-Only after the cold import classification or approved preserved-evidence reclassification and the full suite are pristine, enumerate the eight first-parent commits after `implementationBase` into `$task1Commit`, `$planRestCorrectionCommit`, `$task2Commit`, `$planCatalogCorrectionCommit`, `$planCatalogTypeCorrectionCommit`, `$task3Commit`, `$planColdImportCorrectionCommit`, and `$planPngImportCorrectionCommit`. Require their exact subjects in the order specified by Step 7. Give both reviewers the three implementation hashes and identify all five correction hashes explicitly as approved documentation-only commits to ignore for product-code scope.
+Only after the cold import classification or approved preserved-evidence reclassification, Step 4A controller qualification, and the Step 4B full suite are pristine, enumerate the nine first-parent commits after `implementationBase` into `$task1Commit`, `$planRestCorrectionCommit`, `$task2Commit`, `$planCatalogCorrectionCommit`, `$planCatalogTypeCorrectionCommit`, `$task3Commit`, `$planColdImportCorrectionCommit`, `$planPngImportCorrectionCommit`, and `$planAsyncControllerCorrectionCommit`. Require their exact subjects in the order specified by Step 7. Give both reviewers the three implementation hashes and identify all six correction hashes explicitly as approved documentation-only commits to ignore for product-code scope.
 
 Invoke the requesting-code-review skill and give a fresh reviewer this exact scope:
 
@@ -1232,8 +1298,9 @@ $baselineEvidencePath) to
 docs/superpowers/specs/2026-09-01-body-specific-production-rig-mapping-amendment-design.md.
 Ignore the separately audited documentation-only commits $planRestCorrectionCommit,
 $planCatalogCorrectionCommit, $planCatalogTypeCorrectionCommit,
-$planColdImportCorrectionCommit, and $planPngImportCorrectionCommit; do not treat
-any as product implementation scope.
+$planColdImportCorrectionCommit, $planPngImportCorrectionCommit, and
+$planAsyncControllerCorrectionCommit; do not treat any as product implementation
+scope.
 Check every numeric-bind rule, legacy-validator containment, fixed-nine-decimal
 rest byte contract, both approved source/rest identities, catalog selection,
 no-active-mutation behavior, forbidden .tres absence, and original-plan
@@ -1253,8 +1320,9 @@ Review only the same three implementation commits $task1Commit, $task2Commit,
 and $task3Commit after implementationBase ($implementationBase, recorded at
 $baselineEvidencePath). Ignore the separately audited documentation-only commits
 $planRestCorrectionCommit, $planCatalogCorrectionCommit,
-$planCatalogTypeCorrectionCommit, $planColdImportCorrectionCommit, and
-$planPngImportCorrectionCommit. Review for deterministic error order,
+$planCatalogTypeCorrectionCommit, $planColdImportCorrectionCommit,
+$planPngImportCorrectionCommit, and $planAsyncControllerCorrectionCommit.
+Review for deterministic error order,
 Godot Skin/Skeleton3D API correctness, duplicate/out-of-range coverage,
 name/index precedence, finite/invertible validation, exact serialization bytes,
 type/signature consistency, stateless catalog behavior, test isolation, and
@@ -1266,7 +1334,7 @@ Any FAIL stops the checkpoint. No unplanned corrective commit is authorized by t
 
 - [ ] **Step 7: Audit exact commits and tracked scope**
 
-Require fbc3f9e8c3d9853ffbf8d3c21944f970ac41231b to remain an ancestor of implementationBase. Then require exactly eight first-parent commits after implementationBase, in this order:
+Require fbc3f9e8c3d9853ffbf8d3c21944f970ac41231b to remain an ancestor of implementationBase. Then require exactly nine first-parent commits after implementationBase, in this order:
 
 ~~~text
 feat: accept complete numeric production skin binds
@@ -1277,6 +1345,7 @@ docs: make catalog type resolution explicit
 feat: resolve body-specific humanoid rig mappings
 docs: require cold import archive qualification
 docs: classify generated PNG import metadata
+docs: require qualified asynchronous suite controller
 ~~~
 
 Require commits one, three, and six to be the only implementation commits. Their combined changed-path union must be exactly:
@@ -1292,7 +1361,7 @@ tests/unit/test_production_humanoid_rest_signature.gd
 tests/unit/test_production_humanoid_rig_mapping.gd
 ~~~
 
-Audit commits two, four, five, seven, and eight separately and require each changed-path set to equal exactly `docs/superpowers/plans/2026-09-01-body-specific-production-rig-mapping-amendment.md`. Require tracked worktree and index clean, `git diff $implementationBase..HEAD --check` exit 0, the three implementation commits' combined path union to equal the eight paths above, and the complete `git diff --name-only $implementationBase..HEAD` union to equal those eight paths plus the one corrected-plan path. Require no merge commit. Every diff and containment comparison remains rooted at `implementationBase`; the approved-design ancestor remains provenance only.
+Audit commits two, four, five, seven, eight, and nine separately and require each changed-path set to equal exactly `docs/superpowers/plans/2026-09-01-body-specific-production-rig-mapping-amendment.md`. Require tracked worktree and index clean, `git diff $implementationBase..HEAD --check` exit 0, the three implementation commits' combined path union to equal the eight paths above, and the complete `git diff --name-only $implementationBase..HEAD` union to equal those eight paths plus the one corrected-plan path. Require no merge commit. Every diff and containment comparison remains rooted at `implementationBase`; the approved-design ancestor remains provenance only.
 
 - [ ] **Step 8: Revalidate containment and immutable provenance**
 
@@ -1308,7 +1377,7 @@ Rehash all 77 preserved untracked files against the existing manifest and requir
 
 - [ ] **Step 9: Stop for Studio Lead contract-checkpoint review under Jacob's delegated routine authority**
 
-Report branch, worktree, all eight commit hashes/parents/subjects, the three implementation hashes, all five ignored plan-correction hashes, exact eight-path implementation union, all five separately audited one-path documentation corrections, the preserved impossible-direct-run and single-cache diagnostic evidence, cold-import command/exit/diagnostics/original delta classification/PNG-metadata reclassification manifest and hash, Task 2A, Task 2B, and Task 3 RED/GREEN evidence, focused and full-suite markers/exits, two independent review results, fixture provenance, immutable hashes, 77-file containment, protected-worktree drift, and absent sentinels.
+Report branch, worktree, all nine commit hashes/parents/subjects, the three implementation hashes, all six ignored plan-correction hashes, exact eight-path implementation union, all six separately audited one-path documentation corrections, the preserved impossible-direct-run, single-cache diagnostic, consumed untrustworthy wrapper, and pristine Step 4A controller-qualification evidence, cold-import command/exit/diagnostics/original delta classification/PNG-metadata reclassification manifest and hash, Task 2A, Task 2B, and Task 3 RED/GREEN evidence, focused and full-suite markers/exits, two independent review results, fixture provenance, immutable hashes, 77-file containment, protected-worktree drift, and absent sentinels.
 
 Do not create another commit. Do not merge or push. Report the verified pre-resource contract checkpoint to the Studio Lead. The Studio Lead may approve the next routine bounded resource-planning gate under Jacob's delegation; no final visual acceptance, art-direction change, integration, merge, push, or publication is implied.
 
