@@ -190,16 +190,6 @@ func _assert_numeric_bind_resolution(failures: Array[String]) -> void:
 	var mapping := _mapping()
 	var skeleton := _superset_skeleton(mapping)
 	_bind_mapping_to_skeleton(mapping, skeleton)
-	var duplicate_name_snapshot: Array[StringName] = [&"PresentationRoot", &"DuplicateName", &"DuplicateName"]
-	var has_name_list_helper := _contract.has_method(&"_matching_name_indices")
-	TestAssertions.truthy(has_name_list_helper, "mapped-production duplicate-name resolver exists", failures)
-	if has_name_list_helper:
-		TestAssertions.equal(
-			_contract.call(&"_matching_name_indices", duplicate_name_snapshot, &"DuplicateName"),
-			PackedInt32Array([1, 2]),
-			"mapped-production duplicate-name resolver returns every matching index deterministically",
-			failures
-		)
 
 	var numeric_only := _skin_for(skeleton, &"", false)
 	TestAssertions.equal(

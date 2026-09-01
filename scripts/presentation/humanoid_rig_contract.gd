@@ -235,16 +235,6 @@ static func _resolve_mapped_skin_binds(skeleton: Skeleton3D, skin: Skin, errors:
 			errors.append("mapped humanoid Skin is missing skeleton bone %s at index %d" % [skeleton.get_bone_name(bone_index), bone_index])
 	return bind_index_by_bone_index
 
-static func _matching_name_indices(
-		bone_names: Array[StringName],
-		target_name: StringName
-	) -> PackedInt32Array:
-	var matching_indices := PackedInt32Array()
-	for bone_index: int in bone_names.size():
-		if bone_names[bone_index] == target_name:
-			matching_indices.append(bone_index)
-	return matching_indices
-
 static func _bone_is_ancestor(skeleton: Skeleton3D, ancestor_index: int, child_index: int) -> bool:
 	var cursor := skeleton.get_bone_parent(child_index)
 	while cursor >= 0:
