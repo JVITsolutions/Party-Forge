@@ -62,7 +62,12 @@ function Get-Lines {
 function Get-FileRecord {
     param([string]$Root, [string]$AbsolutePath)
     $resolved = Get-ResolvedExistingPath -Path $AbsolutePath -Label 'inventory-file'
-    $relative = Normalize-RelativePath ([IO.Path]::GetRelativePath($Root, $resolved))
+    $rootPrefix = [IO.Path]::GetFullPath($Root).TrimEnd('\') + '\'
+    $resolvedFull = [IO.Path]::GetFullPath($resolved)
+    if (-not $resolvedFull.StartsWith($rootPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "CANONICAL_CAPTURE_INVENTORY_BOUNDARY root=$rootPrefix path=$resolvedFull"
+    }
+    $relative = Normalize-RelativePath $resolvedFull.Substring($rootPrefix.Length)
     return [pscustomobject][ordered]@{
         path = $relative
         sha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $resolved).Hash.ToLowerInvariant()

@@ -14,7 +14,7 @@ foreach ($required in @("'clone', '--local', '--no-hardlinks'", 'Assert-Director
         throw "ORCHESTRATOR_CONTRACT_REQUIRED_TEXT_MISSING text=$required"
     }
 }
-foreach ($forbidden in @('Remove-Item', 'git clean', 'Invoke-WebRequest', 'Start-BitsTransfer')) {
+foreach ($forbidden in @('Remove-Item', 'git clean', 'Invoke-WebRequest', 'Start-BitsTransfer', 'GetRelativePath')) {
     if ($source.Contains($forbidden)) {
         throw "ORCHESTRATOR_CONTRACT_FORBIDDEN_TEXT_PRESENT text=$forbidden"
     }
