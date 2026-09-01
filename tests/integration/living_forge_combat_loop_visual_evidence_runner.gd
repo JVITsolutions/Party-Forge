@@ -607,7 +607,7 @@ func _capture_extraction(index: int, mode: StringName) -> void:
 		var confirm := panel.get_node("Frame/Content/Actions/Confirm") as Button
 		panel.show_unused_capacity_warning(1, projection.lost_count, confirm)
 		await _frames(3)
-		var acknowledge := panel.get_node("UnusedCapacityWarning/Frame/Actions/Acknowledge") as Button
+		var acknowledge := panel.get_node("UnusedCapacityWarning/Frame/Padding/Layout/Actions/Acknowledge") as Button
 		acknowledge.grab_focus()
 		_assert((panel.get_node("UnusedCapacityWarning") as Control).visible, "%s exposes the authentic unused-capacity consequence" % CAPTURES[index])
 	else:

@@ -43,8 +43,8 @@ func _connect_controls() -> void:
 	(get_node("Frame/Content/Actions/Confirm") as Button).pressed.connect(_on_confirm)
 	(get_node("Frame/Content/Actions/Retry") as Button).pressed.connect(_on_retry)
 	(get_node("ItemTooltipDetail/Frame/Tooltip/Layout/Header/Close") as Button).pressed.connect(_close_detail)
-	(get_node("UnusedCapacityWarning/Frame/Actions/Back") as Button).pressed.connect(_close_warning)
-	(get_node("UnusedCapacityWarning/Frame/Actions/Acknowledge") as Button).pressed.connect(_on_warning_acknowledged)
+	(get_node("UnusedCapacityWarning/Frame/Padding/Layout/Actions/Back") as Button).pressed.connect(_close_warning)
+	(get_node("UnusedCapacityWarning/Frame/Padding/Layout/Actions/Acknowledge") as Button).pressed.connect(_on_warning_acknowledged)
 	for pair: Array in [
 		[get_node("Frame/Content/Summary/AutomaticList") as Button, get_node("Frame/Content/Body/Sections/SummaryLists/AutomaticItems") as Control],
 		[get_node("Frame/Content/Summary/SelectedList") as Button, get_node("Frame/Content/Body/Sections/SummaryLists/SelectedItems") as Control],
@@ -143,12 +143,12 @@ func show_unused_capacity_warning(unused_slots: int, lost_count: int, return_foc
 	_set_base_focus_enabled(false)
 	var warning := get_node("UnusedCapacityWarning") as Control
 	warning.visible = true
-	var message := get_node("UnusedCapacityWarning/Frame/Message") as Label
+	var message := get_node("UnusedCapacityWarning/Frame/Padding/Layout/Message") as Label
 	message.text = "You are leaving %d extraction slots unused. %d items will be lost." % [maxi(unused_slots, 0), maxi(lost_count, 0)]
 	message.accessibility_name = message.text
 	_disable_focus_descendants(warning)
-	var back := get_node("UnusedCapacityWarning/Frame/Actions/Back") as Button
-	var acknowledge := get_node("UnusedCapacityWarning/Frame/Actions/Acknowledge") as Button
+	var back := get_node("UnusedCapacityWarning/Frame/Padding/Layout/Actions/Back") as Button
+	var acknowledge := get_node("UnusedCapacityWarning/Frame/Padding/Layout/Actions/Acknowledge") as Button
 	_wire_closed_ring([back, acknowledge])
 	back.grab_focus()
 

@@ -43,6 +43,7 @@ func run() -> Array[String]:
 	TestAssertions.truthy(panel.get_node_or_null("ReturnToCombat") == null, "terminal panel has no combat route", failures)
 	_test_composite_availability(panel, projection, failures)
 	_test_grouped_exact_consequences(panel, failures)
+	_test_unused_capacity_warning_contract(panel, failures)
 	_test_primary_action_theme_contracts(panel, failures)
 	_test_high_contrast_semantics(panel, failures)
 	panel.free()
@@ -89,12 +90,32 @@ func _test_grouped_exact_consequences(panel: Control, failures: Array[String]) -
 	TestAssertions.truthy(lost_list.contains("Run Inventory") and lost_list.contains("slot"), "lost consequence list includes exact owner container and slot; actual=%s" % lost_list, failures)
 
 
+func _test_unused_capacity_warning_contract(panel: Control, failures: Array[String]) -> void:
+	var frame := panel.get_node("UnusedCapacityWarning/Frame") as PanelContainer
+	var padding := panel.get_node("UnusedCapacityWarning/Frame/Padding") as MarginContainer
+	var layout := panel.get_node("UnusedCapacityWarning/Frame/Padding/Layout") as VBoxContainer
+	var title := panel.get_node("UnusedCapacityWarning/Frame/Padding/Layout/Title") as Label
+	var message := panel.get_node("UnusedCapacityWarning/Frame/Padding/Layout/Message") as Label
+	var actions := panel.get_node("UnusedCapacityWarning/Frame/Padding/Layout/Actions") as HBoxContainer
+	var back := panel.get_node("UnusedCapacityWarning/Frame/Padding/Layout/Actions/Back") as Button
+	var acknowledge := panel.get_node("UnusedCapacityWarning/Frame/Padding/Layout/Actions/Acknowledge") as Button
+	TestAssertions.equal(frame.get_child_count(), 1, "unused-capacity Frame has one container layout owner", failures)
+	TestAssertions.truthy(padding != null and padding.get_parent() == frame and padding.get_child_count() == 1 and layout.get_parent() == padding, "unused-capacity Frame has one padded vertical layout chain", failures)
+	TestAssertions.truthy(layout != null and title.get_parent() == layout and message.get_parent() == layout and actions.get_parent() == layout, "warning Title, Message, and Actions share one vertical-flow owner", failures)
+	TestAssertions.equal(title.accessibility_name, "ACCEPT UNUSED CAPACITY?", "warning title exposes exact readable label", failures)
+	TestAssertions.truthy(not message.text.strip_edges().is_empty() and message.autowrap_mode != TextServer.AUTOWRAP_OFF, "warning body has readable wrapping consequence copy", failures)
+	TestAssertions.equal(back.text, "BACK", "warning safe action keeps exact visible label", failures)
+	TestAssertions.equal(acknowledge.text, "ACCEPT CONSEQUENCE", "warning primary action keeps exact visible label", failures)
+	TestAssertions.equal(back.accessibility_name, "Back", "warning safe action exposes exact accessibility label", failures)
+	TestAssertions.equal(acknowledge.accessibility_name, "Accept Consequence", "warning primary action exposes exact accessibility label", failures)
+
+
 func _test_primary_action_theme_contracts(panel: Control, failures: Array[String]) -> void:
 	var settings := PartyForgeSettings.new()
 	panel.call(&"apply_visual_settings", settings)
 	var confirm := panel.get_node("Frame/Content/Actions/Confirm") as Button
 	_assert_shared_primary_action(confirm, "Confirm Extraction", failures)
-	var acknowledge := panel.get_node("UnusedCapacityWarning/Frame/Actions/Acknowledge") as Button
+	var acknowledge := panel.get_node("UnusedCapacityWarning/Frame/Padding/Layout/Actions/Acknowledge") as Button
 	_assert_shared_primary_action(acknowledge, "Accept Consequence", failures)
 
 

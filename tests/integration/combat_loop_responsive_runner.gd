@@ -509,19 +509,29 @@ func _exercise_extraction(viewport_size: Vector2i, ui_scale: int, text_scale: in
 		panel.show_unused_capacity_warning(2, 16, confirm)
 		var warning := panel.get_node("UnusedCapacityWarning") as Control
 		var warning_frame := panel.get_node("UnusedCapacityWarning/Frame") as Control
-		var back := panel.get_node("UnusedCapacityWarning/Frame/Actions/Back") as Button
-		var acknowledge := panel.get_node("UnusedCapacityWarning/Frame/Actions/Acknowledge") as Button
+		var warning_title := panel.get_node("UnusedCapacityWarning/Frame/Padding/Layout/Title") as Label
+		var warning_message := panel.get_node("UnusedCapacityWarning/Frame/Padding/Layout/Message") as Label
+		var warning_actions := panel.get_node("UnusedCapacityWarning/Frame/Padding/Layout/Actions") as HBoxContainer
+		var back := panel.get_node("UnusedCapacityWarning/Frame/Padding/Layout/Actions/Back") as Button
+		var acknowledge := panel.get_node("UnusedCapacityWarning/Frame/Padding/Layout/Actions/Acknowledge") as Button
 		await _wait_for_visible(warning, "%s unused-capacity warning" % context_label)
 		await _wait_for_focus(back, "%s warning Back" % context_label)
-		await _wait_for_stable_layout([warning_frame, back, acknowledge], "%s unused-capacity warning" % context_label)
+		await _wait_for_stable_layout([warning_frame, warning_title, warning_message, warning_actions, back, acknowledge], "%s unused-capacity warning" % context_label)
 		_assert(warning.visible and back.has_focus(), "%s unused-capacity warning uses safe Back default" % context_label)
 		_assert_contained(warning_frame, viewport_rect, "%s unused-capacity warning" % context_label)
+		_assert_controls_contained([warning_title, warning_message, warning_actions], warning_frame.get_global_rect(), "%s warning vertical flow" % context_label)
+		_assert_sibling_non_overlap([warning_title, warning_message, warning_actions], "%s warning vertical flow" % context_label)
+		_assert_control_set_geometry([back, acknowledge], warning_actions.get_global_rect(), "%s warning actions" % context_label)
+		var tallest_warning_button := maxf(back.get_global_rect().size.y, acknowledge.get_global_rect().size.y)
+		_assert(warning_actions.get_global_rect().size.y >= 48.0 and warning_actions.get_global_rect().size.y <= tallest_warning_button + 0.5, "%s warning Actions tracks its button row instead of the modal Frame; actions=%s tallest_button=%.2f frame=%s" % [context_label, warning_actions.get_global_rect(), tallest_warning_button, warning_frame.get_global_rect()])
+		_assert(warning_title.size.x + 0.5 >= warning_title.get_combined_minimum_size().x and warning_title.size.y + 0.5 >= warning_title.get_combined_minimum_size().y, "%s warning title remains readable without clipping; size=%s minimum=%s" % [context_label, warning_title.size, warning_title.get_combined_minimum_size()])
+		_assert(warning_message.size.x + 0.5 >= warning_message.get_combined_minimum_size().x and warning_message.size.y + 0.5 >= warning_message.get_combined_minimum_size().y and warning_message.get_visible_line_count() == warning_message.get_line_count(), "%s warning body remains readable without clipping; size=%s minimum=%s visible_lines=%d lines=%d" % [context_label, warning_message.size, warning_message.get_combined_minimum_size(), warning_message.get_visible_line_count(), warning_message.get_line_count()])
 		_assert_target(back, "%s warning Back" % context_label)
 		_assert_target(acknowledge, "%s warning Acknowledge" % context_label)
 		acknowledge.grab_focus()
 		await _wait_for_focus(acknowledge, "%s Accept Consequence" % context_label)
+		_assert(viewport.gui_get_focus_owner() == acknowledge, "%s Accept Consequence remains the actual viewport focus owner when requested" % context_label)
 		_assert_focused_primary_action(acknowledge, panel.theme, &"LivingForgePrimaryButton", "%s Accept Consequence" % context_label)
-		_assert_control_set_geometry([back, acknowledge], warning_frame.get_global_rect(), "%s warning actions" % context_label)
 		back.grab_focus()
 		await _wait_for_focus(back, "%s warning Back before close" % context_label)
 		back.pressed.emit()

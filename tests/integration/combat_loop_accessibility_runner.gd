@@ -290,9 +290,15 @@ func _exercise_extraction(viewport: SubViewport, settings: PartyForgeSettings, l
 	_assert(last.has_focus(), "extraction detail restores exact item 24 focus at %s" % label)
 
 	panel.show_unused_capacity_warning(1, 22, last)
-	var back := panel.get_node("UnusedCapacityWarning/Frame/Actions/Back") as Button
-	var accept := panel.get_node("UnusedCapacityWarning/Frame/Actions/Acknowledge") as Button
+	var warning_title := panel.get_node("UnusedCapacityWarning/Frame/Padding/Layout/Title") as Label
+	var warning_message := panel.get_node("UnusedCapacityWarning/Frame/Padding/Layout/Message") as Label
+	var back := panel.get_node("UnusedCapacityWarning/Frame/Padding/Layout/Actions/Back") as Button
+	var accept := panel.get_node("UnusedCapacityWarning/Frame/Padding/Layout/Actions/Acknowledge") as Button
 	await _wait_until(func() -> bool: return back.is_visible_in_tree() and (back.has_focus() or accept.has_focus()), "extraction consequence default focus at %s" % label)
+	_assert(warning_title.accessibility_name == "ACCEPT UNUSED CAPACITY?", "extraction consequence title exposes exact accessible wording at %s" % label)
+	_assert(warning_message.accessibility_name == "You are leaving 1 extraction slots unused. 22 items will be lost.", "extraction consequence body exposes exact accessible wording at %s" % label)
+	_assert_named_action(back, "Back", "extraction consequence safe action", label)
+	_assert_named_action(accept, "Accept Consequence", "extraction consequence primary action", label)
 	_assert(back.has_focus(), "extraction consequence confirmation uses safe Back default at %s" % label)
 	_assert(not accept.has_focus(), "extraction consequence action is never default-focused at %s" % label)
 	back.pressed.emit()
