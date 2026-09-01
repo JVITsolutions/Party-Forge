@@ -36,8 +36,15 @@ function Invoke-CheckedProcess {
         [string]$Label,
         [string]$LogPath = ''
     )
-    $text = (& $Executable @Arguments 2>&1 | Out-String)
-    $exitCode = $LASTEXITCODE
+    $priorErrorAction = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = 'Continue'
+        $text = (& $Executable @Arguments 2>&1 | Out-String)
+        $exitCode = $LASTEXITCODE
+    }
+    finally {
+        $ErrorActionPreference = $priorErrorAction
+    }
     if (-not [string]::IsNullOrEmpty($LogPath)) {
         [IO.File]::WriteAllText($LogPath, $text, [Text.UTF8Encoding]::new($false))
     }
