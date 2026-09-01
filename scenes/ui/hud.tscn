@@ -70,6 +70,20 @@ layout_mode = 2
 text = "▾"
 mouse_filter = 2
 
+[node name="StateIcon" type="TextureRect" parent="Margin/CombatStatus/PartyHeader/Content"]
+visible = false
+custom_minimum_size = Vector2(24, 24)
+layout_mode = 2
+expand_mode = 3
+stretch_mode = 5
+mouse_filter = 2
+
+[node name="AllClearGlyph" type="Label" parent="Margin/CombatStatus/PartyHeader/Content"]
+visible = false
+layout_mode = 2
+text = "✓"
+mouse_filter = 2
+
 [node name="Summary" type="Label" parent="Margin/CombatStatus/PartyHeader/Content"]
 layout_mode = 2
 size_flags_horizontal = 3
@@ -283,6 +297,20 @@ mouse_filter = 2
 [node name="DisclosureGlyph" type="Label" parent="Margin/CombatStatus/AlertRegion/Header/Content"]
 layout_mode = 2
 text = "▾"
+mouse_filter = 2
+
+[node name="StateIcon" type="TextureRect" parent="Margin/CombatStatus/AlertRegion/Header/Content"]
+visible = false
+custom_minimum_size = Vector2(24, 24)
+layout_mode = 2
+expand_mode = 3
+stretch_mode = 5
+mouse_filter = 2
+
+[node name="AllClearGlyph" type="Label" parent="Margin/CombatStatus/AlertRegion/Header/Content"]
+visible = true
+layout_mode = 2
+text = "✓"
 mouse_filter = 2
 
 [node name="Summary" type="Label" parent="Margin/CombatStatus/AlertRegion/Header/Content"]

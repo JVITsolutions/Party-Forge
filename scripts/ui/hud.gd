@@ -8,6 +8,9 @@ signal collapse_preferences_changed(party_collapsed: bool, alerts_collapsed: boo
 const RICH_MEMBER_SCENE := preload("res://scenes/ui/living_forge/components/forge_party_member_card.tscn")
 const COMPACT_MEMBER_SCENE := preload("res://scenes/ui/living_forge/components/forge_party_member_marker.tscn")
 const ALERT_CARD_SCENE := preload("res://scenes/ui/living_forge/components/forge_alert_card.tscn")
+const CRITICAL_STATE_ICON: Texture2D = preload("res://assets/ui/living_forge/icons/tabler-3.46.0/alert-triangle.svg")
+const DOWNED_STATE_ICON: Texture2D = preload("res://assets/ui/living_forge/icons/party-forge/downed.svg")
+const DEAD_STATE_ICON: Texture2D = preload("res://assets/ui/living_forge/icons/party-forge/dead.svg")
 
 var game_run: Node
 var party_manager: PartyManager
@@ -110,11 +113,13 @@ func _ensure_control_connections() -> void:
 	var previous := get_node("Margin/CombatStatus/PartyRegion/CompactRoster/PagePrevious") as Button
 	var next := get_node("Margin/CombatStatus/PartyRegion/CompactRoster/PageNext") as Button
 	var overflow := get_node("Margin/CombatStatus/AlertRegion/Overflow") as Button
+	var tray_action := get_node("Margin/CombatStatus/AlertRegion/AlertsTrayAction") as Button
 	if not party_header.pressed.is_connected(_on_party_header_pressed): party_header.pressed.connect(_on_party_header_pressed)
 	if not alerts_header.pressed.is_connected(_on_alerts_header_pressed): alerts_header.pressed.connect(_on_alerts_header_pressed)
 	if not previous.pressed.is_connected(_on_previous_page): previous.pressed.connect(_on_previous_page)
 	if not next.pressed.is_connected(_on_next_page): next.pressed.connect(_on_next_page)
 	if not overflow.pressed.is_connected(_on_overflow_pressed): overflow.pressed.connect(_on_overflow_pressed)
+	if not tray_action.pressed.is_connected(_on_alerts_tray_action_pressed): tray_action.pressed.connect(_on_alerts_tray_action_pressed)
 	var tray := get_node("CombatAlertTray") as CombatAlertTray
 	if not tray.inspect_requested.is_connected(_on_inspect_route): tray.inspect_requested.connect(_on_inspect_route)
 	if not tray.ledger_requested.is_connected(_on_ledger_route): tray.ledger_requested.connect(_on_ledger_route)
@@ -221,15 +226,123 @@ func _present_region_headers() -> void:
 	var party_header := get_node("Margin/CombatStatus/PartyHeader") as Button
 	var party_glyph := get_node("Margin/CombatStatus/PartyHeader/Content/DisclosureGlyph") as Label
 	var party_summary := get_node("Margin/CombatStatus/PartyHeader/Content/Summary") as Label
+	var party_health := get_node("Margin/CombatStatus/PartyHeader/Content/LeaderHealth") as ProgressBar
+	var party_icon := get_node("Margin/CombatStatus/PartyHeader/Content/StateIcon") as TextureRect
+	var party_clear := get_node("Margin/CombatStatus/PartyHeader/Content/AllClearGlyph") as Label
 	party_glyph.text = "▸" if _party_collapsed else "▾"
-	party_summary.text = "PARTY · COLLAPSED" if _party_collapsed else "PARTY"
-	party_header.accessibility_name = "Party collapsed" if _party_collapsed else "Party expanded"
 	var alerts_header := get_node("Margin/CombatStatus/AlertRegion/Header") as Button
 	var alerts_glyph := get_node("Margin/CombatStatus/AlertRegion/Header/Content/DisclosureGlyph") as Label
 	var alerts_summary := get_node("Margin/CombatStatus/AlertRegion/Header/Content/Summary") as Label
+	var alerts_icon := get_node("Margin/CombatStatus/AlertRegion/Header/Content/StateIcon") as TextureRect
+	var alerts_clear := get_node("Margin/CombatStatus/AlertRegion/Header/Content/AllClearGlyph") as Label
+	var tray_action := get_node("Margin/CombatStatus/AlertRegion/AlertsTrayAction") as Button
 	alerts_glyph.text = "▸" if _alerts_collapsed else "▾"
-	alerts_summary.text = "ALERTS · COLLAPSED" if _alerts_collapsed else "ALERTS"
-	alerts_header.accessibility_name = "Alerts collapsed" if _alerts_collapsed else "Alerts expanded"
+	if current_projection == null:
+		party_summary.text = "PARTY · UNAVAILABLE"
+		alerts_summary.text = "ALERTS · UNAVAILABLE"
+		party_header.accessibility_name = "Party unavailable, %s" % _region_state_label(_party_collapsed)
+		alerts_header.accessibility_name = "Alerts unavailable, %s" % _region_state_label(_alerts_collapsed)
+		party_health.visible = false
+		_present_state_cue(party_icon, party_clear, CombatHudProjection.NO_ALERT_SEVERITY, false)
+		_present_state_cue(alerts_icon, alerts_clear, CombatHudProjection.NO_ALERT_SEVERITY, false)
+		_set_tray_action_eligibility(tray_action, 0)
+		return
+	var leader := current_projection.leader()
+	var highest_severity := current_projection.highest_alert_severity()
+	var dead := current_projection.alert_count_for(CombatAlertProjection.Severity.DEAD)
+	var downed := current_projection.alert_count_for(CombatAlertProjection.Severity.DOWNED)
+	var critical := current_projection.alert_count_for(CombatAlertProjection.Severity.CRITICAL)
+	if leader != null:
+		party_summary.text = "PARTY · %d MEMBERS · LEADER %s · STATE %s · DEAD %d · DOWNED %d · CRITICAL %d" % [
+			current_projection.members.size(),
+			leader.display_name.to_upper(),
+			_severity_label(highest_severity),
+			dead,
+			downed,
+			critical,
+		]
+		party_health.max_value = leader.max_health
+		party_health.value = leader.health
+		party_health.visible = _party_collapsed
+	party_header.accessibility_name = _party_accessibility_name()
+	var highest := current_projection.highest_severity_alert()
+	if highest == null:
+		alerts_summary.text = "ALERTS · ALL CLEAR"
+	else:
+		alerts_summary.text = "ALERTS %d · %s · %s" % [current_projection.all_alerts.size(), _severity_label(highest.severity), highest.summary]
+	alerts_header.accessibility_name = _alerts_accessibility_name()
+	_present_state_cue(party_icon, party_clear, highest_severity, true)
+	_present_state_cue(alerts_icon, alerts_clear, highest_severity, true)
+	_set_tray_action_eligibility(tray_action, current_projection.all_alerts.size())
+
+
+func _region_state_label(collapsed: bool) -> String:
+	return "collapsed" if collapsed else "expanded"
+
+
+func _severity_label(severity: int) -> String:
+	match severity:
+		CombatAlertProjection.Severity.DEAD: return "DEAD"
+		CombatAlertProjection.Severity.DOWNED: return "DOWNED"
+		CombatAlertProjection.Severity.CRITICAL: return "CRITICAL"
+	return "ALL CLEAR"
+
+
+func _severity_icon(severity: int) -> Texture2D:
+	match severity:
+		CombatAlertProjection.Severity.DEAD: return DEAD_STATE_ICON
+		CombatAlertProjection.Severity.DOWNED: return DOWNED_STATE_ICON
+		CombatAlertProjection.Severity.CRITICAL: return CRITICAL_STATE_ICON
+	return null
+
+
+func _present_state_cue(icon: TextureRect, all_clear_glyph: Label, severity: int, available: bool) -> void:
+	icon.texture = _severity_icon(severity) if available else null
+	icon.visible = icon.texture != null
+	all_clear_glyph.visible = available and severity == CombatHudProjection.NO_ALERT_SEVERITY
+
+
+func _party_accessibility_name() -> String:
+	if current_projection == null:
+		return "Party unavailable, %s" % _region_state_label(_party_collapsed)
+	var leader := current_projection.leader()
+	var leader_copy := "No leader"
+	if leader != null:
+		leader_copy = "Leader %s, health %d of %d" % [leader.display_name, roundi(leader.health), roundi(leader.max_health)]
+	return "Party, %d members, %s, highest severity %s, dead %d, downed %d, critical %d, %s" % [
+		current_projection.members.size(),
+		leader_copy,
+		_severity_label(current_projection.highest_alert_severity()),
+		current_projection.alert_count_for(CombatAlertProjection.Severity.DEAD),
+		current_projection.alert_count_for(CombatAlertProjection.Severity.DOWNED),
+		current_projection.alert_count_for(CombatAlertProjection.Severity.CRITICAL),
+		_region_state_label(_party_collapsed),
+	]
+
+
+func _alerts_accessibility_name() -> String:
+	if current_projection == null:
+		return "Alerts unavailable, %s" % _region_state_label(_alerts_collapsed)
+	if current_projection.all_alerts.is_empty():
+		return "Alerts, all clear, %s" % _region_state_label(_alerts_collapsed)
+	var highest := current_projection.highest_severity_alert()
+	return "Alerts, %d, highest severity %s, %s, %s" % [
+		current_projection.all_alerts.size(),
+		_severity_label(highest.severity),
+		highest.summary,
+		_region_state_label(_alerts_collapsed),
+	]
+
+
+func _set_tray_action_eligibility(action: Button, alert_count: int) -> void:
+	var eligible := alert_count > 0
+	action.visible = eligible
+	action.disabled = not eligible
+	action.focus_mode = Control.FOCUS_ALL if eligible else Control.FOCUS_NONE
+	if not eligible and action.has_focus():
+		action.release_focus()
+	action.text = "VIEW ALL ALERTS (%d)" % alert_count
+	action.accessibility_name = "View all %d combat %s" % [alert_count, "alert" if alert_count == 1 else "alerts"] if eligible else "No combat alerts"
 
 
 func set_leader(_actor: PartyActor) -> void:
@@ -271,6 +384,8 @@ func open_inspector_for_member(member_id: int, return_focus: Control) -> bool:
 func focus_descriptor_for(control: Control) -> Dictionary:
 	if control == null or not is_instance_valid(control):
 		return {}
+	if control == get_node("Margin/CombatStatus/AlertRegion/AlertsTrayAction"):
+		return {"kind": &"named", "named_control": &"alerts_tray_action"}
 	if control == get_node("Margin/CombatStatus/AlertRegion/Overflow"):
 		return {"kind": &"overflow", "named_control": &"alert_overflow"}
 	var cursor: Node = control
@@ -390,6 +505,7 @@ func _refresh_projection(force_structure: bool) -> void:
 		_present_live_member_controls()
 	_present_status()
 	_present_alerts()
+	_present_region_headers()
 	_refresh_open_tray()
 
 
@@ -691,8 +807,17 @@ func _on_ledger_route(member_id: int, return_focus: Control) -> void:
 
 
 func _on_overflow_pressed() -> void:
-	if current_projection != null:
-		(get_node("CombatAlertTray") as CombatAlertTray).open(current_projection.all_alerts, get_node("Margin/CombatStatus/AlertRegion/Overflow") as Control)
+	_open_alert_tray(get_node("Margin/CombatStatus/AlertRegion/Overflow") as Control)
+
+
+func _on_alerts_tray_action_pressed() -> void:
+	_open_alert_tray(get_node("Margin/CombatStatus/AlertRegion/AlertsTrayAction") as Control)
+
+
+func _open_alert_tray(return_focus: Control) -> void:
+	if current_projection == null or current_projection.all_alerts.is_empty():
+		return
+	(get_node("CombatAlertTray") as CombatAlertTray).open(current_projection.all_alerts, return_focus)
 
 
 func _refresh_open_tray() -> void:
@@ -850,6 +975,7 @@ func _clear_presentation() -> void:
 		(card_value as Control).free()
 	_alert_controls_by_id.clear()
 	(get_node("Margin/CombatStatus/AlertRegion/Overflow") as Control).visible = false
+	_present_region_headers()
 
 
 func _clear_member_controls() -> void:
@@ -1035,6 +1161,7 @@ func _focus_named_safe_control() -> bool:
 
 func _named_focus_control(control_name: StringName) -> Control:
 	match control_name:
+		&"alerts_tray_action": return get_node("Margin/CombatStatus/AlertRegion/AlertsTrayAction") as Control
 		&"alert_overflow": return get_node("Margin/CombatStatus/AlertRegion/Overflow") as Control
 		&"page_previous": return get_node("Margin/CombatStatus/PartyRegion/CompactRoster/PagePrevious") as Control
 		&"page_next": return get_node("Margin/CombatStatus/PartyRegion/CompactRoster/PageNext") as Control

@@ -1,5 +1,8 @@
 extends RefCounted
 
+const ERROR_CAPTURE := preload("res://tests/support/test_error_capture.gd")
+const SCRIPT_ERROR_CAPTURE := preload("res://tests/support/test_script_error_capture.gd")
+
 
 class TestRun:
 	extends Node
@@ -17,6 +20,8 @@ func run() -> Array[String]:
 	_test_party_scale_and_signal_updates(failures)
 	_test_character_hud_background_opacity(failures)
 	_test_collapse_headers_and_independent_state(failures)
+	_test_collapsed_summaries_and_dynamic_refresh(failures)
+	_test_frost_mage_recruitment_refresh(failures)
 	_test_alert_surface_and_complete_tray(failures)
 	_test_fail_closed_status_and_pluralization(failures)
 	_test_pause_safe_inspector_and_ledger_routes(failures)
@@ -70,10 +75,11 @@ func _test_collapse_headers_and_independent_state(failures: Array[String]) -> vo
 		var tray_action := hud.get_node_or_null("Margin/CombatStatus/AlertRegion/AlertsTrayAction") as Button
 		TestAssertions.truthy(party_header != null and alerts_header != null and tray_action != null, "HUD exposes both headers and persistent tray action", failures)
 		if tray_action != null:
-			TestAssertions.truthy(not tray_action.visible, "Task 3 leaves the tray action hidden for Task 5", failures)
-			TestAssertions.equal(tray_action.pressed.get_connections().size(), 0, "Task 3 leaves tray-action routing to Task 5", failures)
+			TestAssertions.truthy(not tray_action.visible and tray_action.disabled and tray_action.focus_mode == Control.FOCUS_NONE, "all-clear state keeps the tray action unavailable", failures)
+			TestAssertions.equal(tray_action.pressed.get_connections().size(), 1, "Task 5 connects exactly one shared tray-action route", failures)
 			tray_action.visible = true
 			tray_action.disabled = false
+			tray_action.focus_mode = Control.FOCUS_ALL
 			var tray_rect := tray_action.get_global_rect()
 			TestAssertions.truthy(tray_action.focus_mode == Control.FOCUS_ALL, "eligible tray action is keyboard focusable", failures)
 			TestAssertions.truthy(tray_rect.size.x >= 48.0 and tray_rect.size.y >= 48.0, "eligible tray action has a concrete at-least-48px rect", failures)
@@ -130,6 +136,108 @@ func _test_collapse_headers_and_independent_state(failures: Array[String]) -> vo
 		TestAssertions.near(refreshed_style.bg_color.a if refreshed_style != null else -1.0, 0.5, 0.001, "live visual settings preserve the default member background opacity", failures)
 		_cleanup_hud(alerts_hud)
 	_cleanup_fixture(alerts_fixture)
+
+
+func _test_collapsed_summaries_and_dynamic_refresh(failures: Array[String]) -> void:
+	var fixture := _fixture(6)
+	(fixture.settings as PartyForgeSettings).hud_party_collapsed = true
+	(fixture.settings as PartyForgeSettings).hud_alerts_collapsed = true
+	(fixture.health_by_member[2] as HealthComponent).kill()
+	(fixture.health_by_member[3] as HealthComponent).apply_damage(100.0)
+	(fixture.health_by_member[4] as HealthComponent).apply_damage(80.0)
+	var hud := _configured_hud(fixture)
+	TestAssertions.truthy(hud != null, "collapsed-summary HUD configures", failures)
+	if hud == null:
+		_cleanup_fixture(fixture)
+		return
+	var party_icon := hud.get_node_or_null("Margin/CombatStatus/PartyHeader/Content/StateIcon") as TextureRect
+	var party_clear := hud.get_node_or_null("Margin/CombatStatus/PartyHeader/Content/AllClearGlyph") as Label
+	var alerts_icon := hud.get_node_or_null("Margin/CombatStatus/AlertRegion/Header/Content/StateIcon") as TextureRect
+	var alerts_clear := hud.get_node_or_null("Margin/CombatStatus/AlertRegion/Header/Content/AllClearGlyph") as Label
+	TestAssertions.truthy(party_icon != null and party_clear != null and alerts_icon != null and alerts_clear != null, "both headers expose semantic state-icon and all-clear children", failures)
+	var party_summary := hud.get_node("Margin/CombatStatus/PartyHeader/Content/Summary") as Label
+	var leader_health := hud.get_node("Margin/CombatStatus/PartyHeader/Content/LeaderHealth") as ProgressBar
+	var alerts_summary := hud.get_node("Margin/CombatStatus/AlertRegion/Header/Content/Summary") as Label
+	TestAssertions.truthy(
+		"PARTY · 6 MEMBERS" in party_summary.text
+		and "LEADER" in party_summary.text
+		and "STATE DEAD" in party_summary.text
+		and "DEAD 1" in party_summary.text
+		and "DOWNED 1" in party_summary.text
+		and "CRITICAL 1" in party_summary.text,
+		"collapsed Party summary exposes exact six-member severity truth",
+		failures,
+	)
+	TestAssertions.truthy("ALERTS 3" in alerts_summary.text and "DEAD" in alerts_summary.text, "collapsed Alerts summary exposes the exact count and highest severity", failures)
+	TestAssertions.truthy(leader_health.visible and is_equal_approx(leader_health.value, 100.0) and is_equal_approx(leader_health.max_value, 100.0), "collapsed Party summary includes exact leader health", failures)
+	if party_icon != null and party_clear != null and alerts_icon != null and alerts_clear != null:
+		TestAssertions.truthy(party_icon.visible and party_icon.texture != null and not party_clear.visible, "Party dead state uses an icon plus visible text", failures)
+		TestAssertions.truthy(alerts_icon.visible and alerts_icon.texture != null and not alerts_clear.visible, "Alerts dead state uses an icon plus visible text", failures)
+	var party_header := hud.get_node("Margin/CombatStatus/PartyHeader") as Button
+	var alerts_header := hud.get_node("Margin/CombatStatus/AlertRegion/Header") as Button
+	TestAssertions.truthy("6 members" in party_header.accessibility_name.to_lower() and "dead 1" in party_header.accessibility_name.to_lower(), "Party header exposes complete accessible state", failures)
+	TestAssertions.truthy("alerts, 3" in alerts_header.accessibility_name.to_lower() and "dead" in alerts_header.accessibility_name.to_lower(), "Alerts header exposes complete accessible state", failures)
+	var tray_action := hud.get_node("Margin/CombatStatus/AlertRegion/AlertsTrayAction") as Button
+	TestAssertions.truthy(tray_action.visible and not tray_action.disabled and tray_action.focus_mode == Control.FOCUS_ALL and tray_action.text == "VIEW ALL ALERTS (3)", "collapsed tray action remains direct and exact", failures)
+	TestAssertions.equal(hud.focus_descriptor_for(tray_action), {"kind": &"named", "named_control": &"alerts_tray_action"}, "tray action owns a stable named focus descriptor", failures)
+	tray_action.pressed.emit()
+	var tray := hud.get_node("CombatAlertTray") as CanvasLayer
+	TestAssertions.truthy(tray.visible, "collapsed tray action opens the shared alert tray", failures)
+	TestAssertions.equal((tray.get_node("Overlay/Frame/Layout/Scroll/Alerts") as Container).get_child_count(), 3, "collapsed tray route passes the complete alert set", failures)
+	tray.call("close")
+
+	for member_id: int in range(1, 7):
+		var health := fixture.health_by_member[member_id] as HealthComponent
+		health.configure(100.0, member_id == 1, 8.0, 0.5, member_id == 1)
+		health.set_max_health(100.0, false)
+	TestAssertions.equal(alerts_summary.text, "ALERTS · ALL CLEAR", "all-clear refresh removes stale alert severity copy", failures)
+	TestAssertions.truthy(not tray_action.visible and tray_action.disabled and tray_action.focus_mode == Control.FOCUS_NONE, "all clear hides and disables the tray action", failures)
+	if alerts_icon != null and alerts_clear != null:
+		TestAssertions.truthy(not alerts_icon.visible and alerts_clear.visible, "all clear uses a glyph plus text instead of stale severity art", failures)
+
+	var deferred_before := {"kind": &"named", "named_control": &"party_header"}
+	hud.set("_deferred_focus_descriptor", deferred_before.duplicate(true))
+	(fixture.health_by_member[4] as HealthComponent).apply_damage(80.0)
+	TestAssertions.truthy("ALERTS 1" in alerts_summary.text and "CRITICAL" in alerts_summary.text, "new collapsed alert updates the summary immediately", failures)
+	TestAssertions.truthy(hud.alerts_collapsed() and not (hud.get_node("Margin/CombatStatus/AlertRegion/ExpandedAlerts") as Control).visible, "new alert never auto-expands collapsed Alerts", failures)
+	TestAssertions.equal(hud.get("_deferred_focus_descriptor"), deferred_before, "new collapsed alert does not disturb pending focus ownership", failures)
+	TestAssertions.truthy(tray_action.visible and tray_action.text == "VIEW ALL ALERTS (1)", "new collapsed alert refreshes persistent tray access", failures)
+	_cleanup_hud(hud)
+	_cleanup_fixture(fixture)
+
+
+func _test_frost_mage_recruitment_refresh(failures: Array[String]) -> void:
+	var fixture := _fixture(1, true, 2)
+	(fixture.settings as PartyForgeSettings).hud_party_collapsed = true
+	var hud := _configured_hud(fixture)
+	TestAssertions.truthy(hud != null, "Frost Mage recruitment HUD configures", failures)
+	if hud == null:
+		_cleanup_fixture(fixture)
+		return
+	var errors := ERROR_CAPTURE.new()
+	var script_errors := SCRIPT_ERROR_CAPTURE.new()
+	OS.add_logger(errors)
+	OS.add_logger(script_errors)
+	var catalog := GameCatalog.load_defaults()
+	var recruited := (fixture.party as PartyManager).recruit(catalog.class_by_id(&"frost_mage"))
+	var frost_member := (fixture.party as PartyManager).members[-1] as PartyMemberState
+	var actor := _bind_health_actor(fixture.context as PlayerRunContext, frost_member.member_id, frost_member.class_definition.max_health)
+	(fixture.actors as Array).append(actor)
+	(fixture.health_by_member as Dictionary)[frost_member.member_id] = actor.get_node("HealthComponent") as HealthComponent
+	OS.remove_logger(script_errors)
+	OS.remove_logger(errors)
+	var captured := errors.drain_after_detach()
+	var captured_scripts := script_errors.drain_after_detach()
+	TestAssertions.truthy(recruited and frost_member.class_definition.id == &"frost_mage", "real PartyManager recruitment commits Frost Mage", failures)
+	TestAssertions.truthy(captured_scripts.is_empty(), "Frost Mage recruitment produces no script error: %s" % captured_scripts, failures)
+	TestAssertions.truthy(not _contains_message(captured, "COMBAT_HUD_UNAVAILABLE"), "Frost Mage recruitment produces no transient HUD-unavailable state: %s" % captured, failures)
+	var frost_actor := (fixture.context as PlayerRunContext).actor_for(frost_member.member_id)
+	var frost_health := frost_actor.get_node_or_null("HealthComponent") as HealthComponent if frost_actor != null else null
+	TestAssertions.truthy(frost_actor != null and frost_health != null and frost_health.max_health > 0.0, "Frost Mage recruitment completes actor and health binding", failures)
+	TestAssertions.equal((hud.current_projection as CombatHudProjection).members.size() if hud.current_projection != null else 0, 2, "Frost Mage binding refreshes complete HUD projection truth", failures)
+	TestAssertions.truthy("PARTY · 2 MEMBERS" in (hud.get_node("Margin/CombatStatus/PartyHeader/Content/Summary") as Label).text, "collapsed Party summary updates after Frost Mage recruitment", failures)
+	_cleanup_hud(hud)
+	_cleanup_fixture(fixture)
 
 
 func _test_scene_contract(failures: Array[String]) -> void:
@@ -316,6 +424,16 @@ func _test_fail_closed_status_and_pluralization(failures: Array[String]) -> void
 	_cleanup_hud(missing_hud)
 	_cleanup_fixture(missing_health)
 
+	var stale_fixture := _fixture(2)
+	(stale_fixture.health_by_member[2] as HealthComponent).apply_damage(80.0)
+	var stale_hud := _configured_hud(stale_fixture)
+	var stale_summary := stale_hud.get_node("Margin/CombatStatus/AlertRegion/Header/Content/Summary") as Label
+	stale_hud.call("_disconnect_health", 1)
+	stale_hud.call("_refresh_projection", false)
+	TestAssertions.truthy("UNAVAILABLE" in stale_summary.text and "CRITICAL" not in stale_summary.text, "invalid authority clears stale projected header truth", failures)
+	_cleanup_hud(stale_hud)
+	_cleanup_fixture(stale_fixture)
+
 
 func _assert_unavailable(hud: HUD, reason_fragment: String, message: String, failures: Array[String]) -> void:
 	var unavailable := hud.get_node_or_null("Margin/CombatStatus/HudUnavailable") as Label
@@ -378,11 +496,11 @@ func _test_pause_safe_inspector_and_ledger_routes(failures: Array[String]) -> vo
 	tree.paused = false
 
 
-func _fixture(count: int, bind_actors: bool = true) -> Dictionary:
+func _fixture(count: int, bind_actors: bool = true, capacity: int = -1) -> Dictionary:
 	_fixture_sequence += 1
 	var catalog := GameCatalog.load_defaults()
 	var party := PartyManager.new()
-	party.configure_capacity(PartyCapacityPolicy.new(count))
+	party.configure_capacity(PartyCapacityPolicy.new(count if capacity < 0 else capacity))
 	party.configure_identity(_fixture_sequence, catalog.generic_name_pool)
 	party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
 	for _index: int in range(count - 1):
@@ -478,6 +596,13 @@ func _tray_card(tray: CanvasLayer, stable_id: StringName) -> Control:
 		if StringName(child.get_meta("stable_alert_id", &"")) == stable_id:
 			return child as Control
 	return null
+
+
+func _contains_message(messages: PackedStringArray, marker: String) -> bool:
+	for message: String in messages:
+		if marker in message:
+			return true
+	return false
 
 
 func _ledger_health(member_id: int, fixture: Dictionary) -> Dictionary:
