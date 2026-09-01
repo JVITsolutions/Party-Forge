@@ -359,6 +359,10 @@ func _test_action_bar_emission_contract(failures: Array[String]) -> void:
 		elif action_id == &"start":
 			TestAssertions.equal(button.theme_type_variation, &"LivingForgePrimaryButton", "start renders the Primary variation", failures)
 			TestAssertions.truthy(button.get_theme_stylebox(&"normal") != null and button.get_theme_stylebox(&"focus") != null and button.get_theme_stylebox(&"pressed") != null, "start resolves normal/focused/pressed rendered styles", failures)
+			TestAssertions.truthy(not button.has_theme_stylebox_override(&"focus"), "ForgeActionBar primary has no local focus StyleBox override", failures)
+			TestAssertions.truthy(not button.has_theme_color_override(&"font_focus_color"), "ForgeActionBar primary has no local focus font override", failures)
+			TestAssertions.equal(button.get_theme_stylebox(&"focus", &"LivingForgePrimaryButton"), bar.theme.get_stylebox(&"focus", &"LivingForgePrimaryButton"), "ForgeActionBar primary resolves the shared focus StyleBox", failures)
+			TestAssertions.equal(button.get_theme_color(&"font_focus_color", &"LivingForgePrimaryButton"), bar.theme.get_color(&"font_focus_color", &"LivingForgePrimaryButton"), "ForgeActionBar primary resolves the shared focus foreground", failures)
 		else:
 			TestAssertions.equal(button.theme_type_variation, &"LivingForgeUnavailableButton", "blocked renders the unavailable variation", failures)
 			TestAssertions.truthy(button.disabled and button.get_theme_stylebox(&"disabled") != null, "blocked resolves a visible disabled style and remains inert", failures)

@@ -61,36 +61,21 @@ static func resolve(high_contrast: bool, ui_scale_percent: int, text_scale_perce
 	if base == null:
 		return null
 	var owned := base.duplicate(true) as Theme
-	_configure_start_button(owned, high_contrast)
+	_configure_primary_action_variations(owned)
 	_apply_geometry_scale(owned, float(ui_percent) / 100.0)
 	_apply_typography_scale(owned, float(text_percent) / 100.0)
 	_cache[cache_key] = owned
 	return owned
 
 
-static func _configure_start_button(theme: Theme, high_contrast: bool) -> void:
+static func _configure_primary_action_variations(theme: Theme) -> void:
 	theme.set_type_variation(&"LivingForgeStartButton", &"Button")
-	for slot: StringName in [&"normal", &"hover", &"pressed"]:
+	for slot: StringName in [&"normal", &"hover", &"pressed", &"hover_pressed", &"focus"]:
 		var source := theme.get_stylebox(slot, &"LivingForgePrimaryButton")
 		if source != null:
 			theme.set_stylebox(slot, &"LivingForgeStartButton", source.duplicate())
-	var focus_source := theme.get_stylebox(&"normal", &"LivingForgePrimaryButton") as StyleBoxFlat
-	if focus_source != null:
-		var focus := focus_source.duplicate() as StyleBoxFlat
-		focus.draw_center = true
-		focus.bg_color = LivingForgeTokens.color(&"surface_inset", high_contrast)
-		focus.border_width_left = 4
-		focus.border_width_top = 4
-		focus.border_width_right = 4
-		focus.border_width_bottom = 4
-		focus.border_color = LivingForgeTokens.color(&"focus_outline", high_contrast)
-		focus.shadow_color = LivingForgeTokens.color(&"focus_outline", high_contrast)
-		focus.shadow_size = 3
-		focus.shadow_offset = Vector2.ZERO
-		theme.set_stylebox(&"focus", &"LivingForgeStartButton", focus)
-	theme.set_color(&"font_color", &"LivingForgeStartButton", theme.get_color(&"font_color", &"LivingForgePrimaryButton"))
-	theme.set_color(&"font_hover_pressed_color", &"LivingForgeStartButton", theme.get_color(&"font_hover_pressed_color", &"LivingForgePrimaryButton"))
-	theme.set_color(&"font_focus_color", &"LivingForgeStartButton", LivingForgeTokens.color(&"ember_primary", high_contrast))
+	for color_name: StringName in [&"font_color", &"font_hover_color", &"font_pressed_color", &"font_hover_pressed_color", &"font_focus_color"]:
+		theme.set_color(color_name, &"LivingForgeStartButton", theme.get_color(color_name, &"LivingForgePrimaryButton"))
 	var font := theme.get_font(&"font", &"LivingForgePrimaryButton")
 	if font != null:
 		theme.set_font(&"font", &"LivingForgeStartButton", font)
