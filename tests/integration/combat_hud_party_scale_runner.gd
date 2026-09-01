@@ -127,7 +127,10 @@ func _exercise_real_geometry(viewport_size: Vector2i, count: int, ui_scale: int,
 		_assert(reached_member_ids.size() == count, "scaled compact paging reaches all %d members at %s ui=%d text=%d" % [count, viewport_size, ui_scale, text_scale])
 	var shell := hud.get_node("Margin/CombatStatus") as Control
 	var party_header := hud.get_node("Margin/CombatStatus/PartyHeader") as Button
-	var party_summary := hud.get_node("Margin/CombatStatus/PartyHeader/Content/Summary") as Label
+	var party_visual := hud.get_node("Margin/CombatStatus/PartyHeader/Visual") as Control
+	var party_geometry := hud.header_visual_geometry(&"party")
+	var party_summary_local := party_geometry.get("summary_rect", Rect2()) as Rect2
+	var party_summary_rect := Rect2(party_visual.global_position + party_summary_local.position, party_summary_local.size)
 	var leader := hud.get_node("Margin/CombatStatus/LeaderCard") as Control
 	var timer := hud.get_node("Margin/CombatStatus/RunTime") as Control
 	var party_region := hud.get_node("Margin/CombatStatus/PartyRegion") as Control
@@ -145,7 +148,7 @@ func _exercise_real_geometry(viewport_size: Vector2i, count: int, ui_scale: int,
 	for control: Control in [shell, party_header, leader, timer, party_region, alerts]:
 		_assert_contained(control, Rect2(Vector2.ZERO, Vector2(viewport_size)), "%s %dx%d party=%d" % [control.name, viewport_size.x, viewport_size.y, count])
 	_assert(party_header.get_global_rect().size.x >= 48.0 and party_header.get_global_rect().size.y >= 48.0, "Party header has a real post-layout 48x48 target")
-	_assert(party_header.get_global_rect().encloses(party_summary.get_global_rect()), "Party summary remains enclosed after responsive layout header=%s summary=%s" % [party_header.get_global_rect(), party_summary.get_global_rect()])
+	_assert(party_header.get_global_rect().encloses(party_summary_rect), "Party summary remains enclosed after responsive layout header=%s summary=%s" % [party_header.get_global_rect(), party_summary_rect])
 	_assert(not party_header.get_global_rect().intersection(leader.get_global_rect()).has_area(), "Party header and leader do not overlap at %s party=%d" % [viewport_size, count])
 	_assert_leader_contents_contained(leader, viewport_size, ui_scale, text_scale)
 	_assert_leader_font_scale(leader, viewport_size, ui_scale, text_scale)

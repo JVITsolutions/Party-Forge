@@ -56,63 +56,13 @@ theme_type_variation = &"LivingForgeSecondaryButton"
 text = ""
 accessibility_name = "Party expanded"
 
-[node name="Content" type="HBoxContainer" parent="Margin/CombatStatus/PartyHeader"]
+[node name="Visual" type="Control" parent="Margin/CombatStatus/PartyHeader"]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 1
-mouse_filter = 2
-theme_override_constants/separation = 4
-
-[node name="DisclosureGlyph" type="Label" parent="Margin/CombatStatus/PartyHeader/Content"]
-layout_mode = 2
-text = "▾"
-mouse_filter = 2
-
-[node name="StateIcon" type="TextureRect" parent="Margin/CombatStatus/PartyHeader/Content"]
-visible = false
-custom_minimum_size = Vector2(24, 24)
-layout_mode = 2
-size_flags_vertical = 4
-expand_mode = 1
-stretch_mode = 5
-mouse_filter = 2
-
-[node name="AllClearGlyph" type="Label" parent="Margin/CombatStatus/PartyHeader/Content"]
-visible = false
-layout_mode = 2
-text = "✓"
-mouse_filter = 2
-
-[node name="Summary" type="Label" parent="Margin/CombatStatus/PartyHeader/Content"]
-custom_minimum_size = Vector2(0, 0)
-layout_mode = 2
-size_flags_horizontal = 3
-text = "PARTY"
-autowrap_mode = 2
-mouse_filter = 2
-
-[node name="LeaderHealthCluster" type="VBoxContainer" parent="Margin/CombatStatus/PartyHeader/Content"]
-visible = false
-custom_minimum_size = Vector2(132, 32)
-layout_mode = 2
-size_flags_vertical = 4
-mouse_filter = 2
-theme_override_constants/separation = 2
-
-[node name="Bar" type="ProgressBar" parent="Margin/CombatStatus/PartyHeader/Content/LeaderHealthCluster"]
-custom_minimum_size = Vector2(132, 12)
-layout_mode = 2
-show_percentage = false
-mouse_filter = 2
-
-[node name="Value" type="Label" parent="Margin/CombatStatus/PartyHeader/Content/LeaderHealthCluster"]
-layout_mode = 2
-theme_type_variation = &"LivingForgeCaptionLabel"
-text = "0 / 100"
-horizontal_alignment = 1
 mouse_filter = 2
 
 [node name="LeaderCard" parent="Margin/CombatStatus" instance=ExtResource("5")]
@@ -296,42 +246,13 @@ theme_type_variation = &"LivingForgeSecondaryButton"
 text = "VIEW ALL ALERTS (0)"
 accessibility_name = "View all combat alerts"
 
-[node name="Content" type="HBoxContainer" parent="Margin/CombatStatus/AlertRegion/Header"]
+[node name="Visual" type="Control" parent="Margin/CombatStatus/AlertRegion/Header"]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 1
-mouse_filter = 2
-theme_override_constants/separation = 4
-
-[node name="DisclosureGlyph" type="Label" parent="Margin/CombatStatus/AlertRegion/Header/Content"]
-layout_mode = 2
-text = "▾"
-mouse_filter = 2
-
-[node name="StateIcon" type="TextureRect" parent="Margin/CombatStatus/AlertRegion/Header/Content"]
-visible = false
-custom_minimum_size = Vector2(24, 24)
-layout_mode = 2
-size_flags_vertical = 4
-expand_mode = 1
-stretch_mode = 5
-mouse_filter = 2
-
-[node name="AllClearGlyph" type="Label" parent="Margin/CombatStatus/AlertRegion/Header/Content"]
-visible = true
-layout_mode = 2
-text = "✓"
-mouse_filter = 2
-
-[node name="Summary" type="Label" parent="Margin/CombatStatus/AlertRegion/Header/Content"]
-custom_minimum_size = Vector2(0, 0)
-layout_mode = 2
-size_flags_horizontal = 3
-text = "ALERTS · ALL CLEAR"
-autowrap_mode = 2
 mouse_filter = 2
 
 [node name="ExpandedAlerts" type="VBoxContainer" parent="Margin/CombatStatus/AlertRegion"]

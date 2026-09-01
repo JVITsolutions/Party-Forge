@@ -130,13 +130,14 @@ func _exercise_hud(viewport: SubViewport, settings: PartyForgeSettings, label: S
 
 	var party_header := hud.get_node("Margin/CombatStatus/PartyHeader") as Button
 	var alerts_header := hud.get_node("Margin/CombatStatus/AlertRegion/Header") as Button
+	_assert_header_semantic_ownership(party_header, "Party", label)
+	_assert_header_semantic_ownership(alerts_header, "Alerts", label)
 	_assert(party_header.accessibility_description == "Party region is EXPANDED. Activate to COLLAPSE party details.", "expanded Party header exposes exact state/action description at %s" % label)
 	_assert(alerts_header.accessibility_description == "Alerts region is EXPANDED. Activate to COLLAPSE alert details.", "expanded Alerts header exposes exact state/action description at %s" % label)
-	for icon_path: NodePath in [^"Content/StateIcon", ^"../AlertRegion/Header/Content/StateIcon"]:
-		var severity_icon := party_header.get_node(icon_path) as TextureRect
-		var icon_material := severity_icon.material as ShaderMaterial
-		_assert(severity_icon.visible and icon_material != null and icon_material.shader != null, "HUD severity icon uses a visible alpha-mask material at %s path=%s" % [label, icon_path])
-		_assert(icon_material != null and (icon_material.get_shader_parameter(&"icon_color") as Color).is_equal_approx(LivingForgeTokens.color(&"error", settings.high_contrast)), "HUD severity icon uses the semantic error token at %s path=%s" % [label, icon_path])
+	for region: StringName in [&"party", &"alerts"]:
+		var severity_state := hud.header_visual_state(region)
+		_assert(severity_state.get("state_icon") is Texture2D, "HUD %s severity cue draws a visible icon at %s" % [region, label])
+		_assert((severity_state.get("state_color", Color.TRANSPARENT) as Color).is_equal_approx(LivingForgeTokens.color(&"error", settings.high_contrast)), "HUD %s severity icon uses the semantic error token at %s" % [region, label])
 	var party_roots: Array[Control] = [
 		hud.get_node("Margin/CombatStatus/LeaderCard") as Control,
 		hud.get_node("Margin/CombatStatus/Experience") as Control,
@@ -171,29 +172,31 @@ func _exercise_hud(viewport: SubViewport, settings: PartyForgeSettings, label: S
 	_assert(inspect.has_focus(), "expanded Alerts restores exact accessible action focus at %s" % label)
 	var party_tween := _disclosure_tween_for(hud, &"party")
 	if settings.reduced_motion:
-		_assert(party_tween == null and is_equal_approx((party_header.get_node("Content/DisclosureGlyph/RotatingGlyph") as Label).rotation, PI / 2.0), "reduced-motion HUD disclosure has no active Tween and reaches final glyph state at %s" % label)
+		_assert(party_tween == null and is_equal_approx(hud.disclosure_rotation_for(&"party"), PI / 2.0), "reduced-motion HUD disclosure has no active Tween and reaches final glyph state at %s" % label)
 	else:
 		_assert(party_tween != null and party_tween.is_valid(), "normal-motion HUD disclosure uses a glyph-only Tween at %s" % label)
 	for member_id: int in range(2, 8):
 		(fixture.health_by_member[member_id] as HealthComponent).heal(100.0)
 	await process_frame
-	for clear_path: NodePath in [^"Content/AllClearGlyph", ^"../AlertRegion/Header/Content/AllClearGlyph"]:
-		var clear_glyph := party_header.get_node(clear_path) as Label
-		_assert(clear_glyph.visible and clear_glyph.get_theme_color(&"font_color").is_equal_approx(LivingForgeTokens.color(&"valid", settings.high_contrast)), "HUD all-clear glyph uses the semantic valid token at %s path=%s" % [label, clear_path])
+	for region: StringName in [&"party", &"alerts"]:
+		var clear_state := hud.header_visual_state(region)
+		_assert(bool(clear_state.get("all_clear_visible", false)) and (clear_state.get("state_color", Color.TRANSPARENT) as Color).is_equal_approx(LivingForgeTokens.color(&"valid", settings.high_contrast)), "HUD %s all-clear glyph uses the semantic valid token at %s" % [region, label])
 	(fixture.health_by_member[1] as HealthComponent).kill()
 	party_header.pressed.emit()
 	await process_frame
-	var zero_health_cluster := party_header.get_node("Content/LeaderHealthCluster") as Control
-	var zero_health_bar := zero_health_cluster.get_node("Bar") as ProgressBar
-	var zero_health_value := zero_health_cluster.get_node("Value") as Label
-	var zero_track := zero_health_bar.get_theme_stylebox(&"background") as StyleBoxFlat
+	var zero_visual := party_header.get_node("Visual") as Control
+	var zero_state := hud.header_visual_state(&"party")
+	var zero_geometry := hud.header_visual_geometry(&"party")
+	var zero_health_cluster := _visual_global_rect(zero_visual, zero_geometry.get("health_cluster_rect", Rect2()))
+	var zero_health_bar := _visual_global_rect(zero_visual, zero_geometry.get("health_bar_rect", Rect2()))
+	var zero_health_value := _visual_global_rect(zero_visual, zero_geometry.get("health_value_rect", Rect2()))
 	var header_style := party_header.get_theme_stylebox(&"normal") as StyleBoxFlat
 	var expected_track_width := 2 if settings.high_contrast else 1
-	_assert(is_zero_approx(zero_health_bar.value) and zero_health_value.text == "0 / 100", "collapsed zero-health HUD exposes exact text without fake fill at %s" % label)
-	_assert(zero_health_cluster.get_global_rect().encloses(zero_health_bar.get_global_rect()) and zero_health_cluster.get_global_rect().encloses(zero_health_value.get_global_rect()), "collapsed zero-health bar and text remain contained at %s" % label)
-	_assert(not zero_health_bar.get_global_rect().intersection(zero_health_value.get_global_rect()).has_area(), "collapsed zero-health text never overlaps the track at %s" % label)
-	_assert(zero_track != null and zero_track.border_width_left == expected_track_width and zero_track.border_width_top == expected_track_width and zero_track.border_width_right == expected_track_width and zero_track.border_width_bottom == expected_track_width, "collapsed zero-health track exposes the required outline width at %s" % label)
-	_assert(zero_track != null and header_style != null and _contrast_ratio(zero_track.border_color, header_style.bg_color) >= 3.0, "collapsed zero-health track remains distinguishable from its actual header surface at %s" % label)
+	_assert(is_zero_approx(float(zero_state.get("health_value", -1.0))) and String(zero_state.get("health_text", "")) == "0 / 100", "collapsed zero-health HUD exposes exact text without fake fill at %s" % label)
+	_assert(zero_health_cluster.encloses(zero_health_bar) and zero_health_cluster.encloses(zero_health_value), "collapsed zero-health bar and text remain contained at %s" % label)
+	_assert(not zero_health_bar.intersection(zero_health_value).has_area(), "collapsed zero-health text never overlaps the track at %s" % label)
+	_assert(int(zero_state.get("track_outline_width", 0)) == expected_track_width, "collapsed zero-health track exposes the required outline width at %s" % label)
+	_assert(header_style != null and _contrast_ratio(zero_state.get("track_outline_color", Color.TRANSPARENT), header_style.bg_color) >= 3.0, "collapsed zero-health track remains distinguishable from its actual header surface at %s" % label)
 
 	hud.free()
 	_cleanup_hud_fixture(fixture)
@@ -637,9 +640,28 @@ func _accessible_exposure(root_control: Control) -> Array[Control]:
 	for node: Node in root_control.find_children("*", "Control", true, false):
 		candidates.append(node as Control)
 	for control: Control in candidates:
-		if control.is_visible_in_tree() and control.focus_mode != Control.FOCUS_NONE and not control.accessibility_name.strip_edges().is_empty():
+		var semantic_primitive := control is Label or control is Range or control is TextureRect
+		var named_or_focusable := control.focus_mode != Control.FOCUS_NONE or not control.accessibility_name.strip_edges().is_empty()
+		if control.is_visible_in_tree() and (semantic_primitive or named_or_focusable):
 			exposed.append(control)
 	return exposed
+
+
+func _assert_header_semantic_ownership(header: Button, region: String, label: String) -> void:
+	_assert(header.focus_mode == Control.FOCUS_ALL and not header.accessibility_name.strip_edges().is_empty(), "%s header owns the focusable accessible region summary at %s" % [region, label])
+	var decorative_emitters: Array[String] = []
+	for node: Node in header.find_children("*", "Control", true, false):
+		var control := node as Control
+		if control != null and control.is_visible_in_tree() and (control is Label or control is Range or control is TextureRect):
+			decorative_emitters.append(String(control.get_path()))
+	_assert(decorative_emitters.is_empty(), "%s header has no visible Label, Range, or TextureRect accessibility emitters at %s; emitters=%s" % [region, label, decorative_emitters])
+	var visual := header.get_node_or_null("Visual") as Control
+	_assert(visual != null and visual.is_visible_in_tree() and not visual is Label and not visual is Range and not visual is TextureRect and visual.focus_mode == Control.FOCUS_NONE, "%s header uses one visible draw-only Control while the Button owns semantics at %s" % [region, label])
+	_assert(visual != null and visual.accessibility_name.strip_edges().is_empty() and visual.accessibility_description.strip_edges().is_empty(), "%s draw-only visual owns no competing accessible name or description at %s" % [region, label])
+
+
+func _visual_global_rect(visual: Control, local_rect: Rect2) -> Rect2:
+	return Rect2(visual.global_position + local_rect.position, local_rect.size)
 
 
 func _disclosure_tween_for(hud: HUD, region: StringName) -> Tween:

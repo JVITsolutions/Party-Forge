@@ -131,7 +131,6 @@ func _exercise_collapsed_summary_focus_contract() -> void:
 func _exercise_region_focus_traversal_and_motion() -> void:
 	var party_header := _hud.get_node("Margin/CombatStatus/PartyHeader") as Button
 	var alerts_header := _hud.get_node("Margin/CombatStatus/AlertRegion/Header") as Button
-	var party_glyph := party_header.get_node("Content/DisclosureGlyph/RotatingGlyph") as Label
 	var leader := _hud.get_node("Margin/CombatStatus/LeaderCard") as Control
 	var party_region := _hud.get_node("Margin/CombatStatus/PartyRegion") as Control
 	var alerts_content := _hud.get_node("Margin/CombatStatus/AlertRegion/ExpandedAlerts") as Control
@@ -155,14 +154,14 @@ func _exercise_region_focus_traversal_and_motion() -> void:
 	_assert(_hud.party_collapsed() and party_header.has_focus(), "mouse collapse moves hidden Party descendant focus to PartyHeader")
 	_assert(not leader.visible and not party_region.visible, "Party content visibility changes atomically on collapse")
 	_assert(leader.modulate == leader_modulate and party_region.modulate == roster_modulate, "reduced motion never animates Party content opacity on collapse")
-	_assert(_disclosure_tween_for(&"party") == null and is_equal_approx(party_glyph.rotation, 0.0), "reduced motion reaches collapsed Party glyph rotation in the same frame with no Tween")
+	_assert(_disclosure_tween_for(&"party") == null and is_equal_approx(_hud.disclosure_rotation_for(&"party"), 0.0), "reduced motion reaches collapsed Party glyph rotation in the same frame with no Tween")
 	await _click_mouse(party_header)
 	await process_frame
 	var rebuilt_member := _member_control(2)
 	var rebuilt_focus_owner := _viewport.gui_get_focus_owner() as Control
 	_assert(not _hud.party_collapsed() and rebuilt_member != null and rebuilt_focus_owner == rebuilt_member and rebuilt_focus_owner.is_in_group(&"combat_hud_member") and int(rebuilt_focus_owner.get_meta("member_id", 0)) == 2, "mouse expansion restores viewport focus to the rebuilt semantic member two")
 	_assert(leader.modulate == leader_modulate and party_region.modulate == roster_modulate, "reduced motion never animates Party content opacity on expand")
-	_assert(_disclosure_tween_for(&"party") == null and is_equal_approx(party_glyph.rotation, PI / 2.0), "reduced motion reaches expanded Party glyph rotation in the same frame with no Tween actual=%s" % party_glyph.rotation)
+	_assert(_disclosure_tween_for(&"party") == null and is_equal_approx(_hud.disclosure_rotation_for(&"party"), PI / 2.0), "reduced motion reaches expanded Party glyph rotation in the same frame with no Tween actual=%s" % _hud.disclosure_rotation_for(&"party"))
 	await _press_controller_direction(JOY_BUTTON_DPAD_UP)
 	_assert(party_header.has_focus(), "controller D-pad reaches PartyHeader from a Party descendant")
 

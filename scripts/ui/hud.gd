@@ -11,16 +11,15 @@ const ALERT_CARD_SCENE := preload("res://scenes/ui/living_forge/components/forge
 const CRITICAL_STATE_ICON: Texture2D = preload("res://assets/ui/living_forge/icons/tabler-3.46.0/alert-triangle.svg")
 const DOWNED_STATE_ICON: Texture2D = preload("res://assets/ui/living_forge/icons/party-forge/downed.svg")
 const DEAD_STATE_ICON: Texture2D = preload("res://assets/ui/living_forge/icons/party-forge/dead.svg")
-const ICON_SHADER_CODE := """
-shader_type canvas_item;
-uniform vec4 icon_color : source_color = vec4(1.0);
-void fragment() {
-	vec4 sampled = texture(TEXTURE, UV);
-	COLOR = vec4(icon_color.rgb, sampled.a * icon_color.a);
-}
-"""
 const REGION_PARTY: StringName = &"party"
 const REGION_ALERTS: StringName = &"alerts"
+const HEADER_VISUAL_PADDING := 8.0
+const HEADER_VISUAL_GAP := 4.0
+const HEADER_DISCLOSURE_SIZE := 20.0
+const HEADER_STATE_CUE_SIZE := 24.0
+const HEADER_HEALTH_WIDTH := 132.0
+const HEADER_HEALTH_MIN_WIDTH := 96.0
+const HEADER_HEALTH_BAR_HEIGHT := 12.0
 
 var game_run: Node
 var party_manager: PartyManager
@@ -61,6 +60,11 @@ var _collapsed_focus_descriptors := {REGION_PARTY: {}, REGION_ALERTS: {}}
 var _collapsed_focus_modes := {REGION_PARTY: [], REGION_ALERTS: []}
 var _disclosure_tweens: Dictionary = {}
 var _disclosure_presented_states: Dictionary = {}
+var _disclosure_rotations := {REGION_PARTY: PI / 2.0, REGION_ALERTS: PI / 2.0}
+var _header_visual_states := {
+	REGION_PARTY: {"summary": "PARTY", "available": false, "severity": CombatHudProjection.NO_ALERT_SEVERITY, "state_icon": null, "all_clear_visible": false, "state_color": Color.WHITE, "health_visible": false},
+	REGION_ALERTS: {"summary": "ALERTS · ALL CLEAR", "available": false, "severity": CombatHudProjection.NO_ALERT_SEVERITY, "state_icon": null, "all_clear_visible": false, "state_color": Color.WHITE, "health_visible": false},
+}
 
 
 func _ready() -> void:
@@ -145,6 +149,15 @@ func _ensure_control_connections() -> void:
 	var next := get_node("Margin/CombatStatus/PartyRegion/CompactRoster/PageNext") as Button
 	var overflow := get_node("Margin/CombatStatus/AlertRegion/Overflow") as Button
 	var tray_action := get_node("Margin/CombatStatus/AlertRegion/AlertsTrayAction") as Button
+	for visual_entry: Dictionary in [
+		{"region": REGION_PARTY, "visual": get_node("Margin/CombatStatus/PartyHeader/Visual") as Control},
+		{"region": REGION_ALERTS, "visual": get_node("Margin/CombatStatus/AlertRegion/Header/Visual") as Control},
+	]:
+		var visual := visual_entry["visual"] as Control
+		if not visual.has_meta(&"header_draw_connected"):
+			visual.draw.connect(_draw_region_header_visual.bind(visual_entry["region"], visual))
+			visual.resized.connect(visual.queue_redraw)
+			visual.set_meta(&"header_draw_connected", true)
 	if not party_header.pressed.is_connected(_on_party_header_pressed): party_header.pressed.connect(_on_party_header_pressed)
 	if not alerts_header.pressed.is_connected(_on_alerts_header_pressed): alerts_header.pressed.connect(_on_alerts_header_pressed)
 	if not previous.pressed.is_connected(_on_previous_page): previous.pressed.connect(_on_previous_page)
@@ -515,8 +528,7 @@ func _restore_region_focus(region: StringName) -> void:
 	_grab_valid_focus(_region_header(region))
 
 
-func _present_disclosure(region: StringName, glyph: Label, collapsed: bool) -> void:
-	var visual := _disclosure_visual(glyph)
+func _present_disclosure(region: StringName, collapsed: bool) -> void:
 	var target_rotation := 0.0 if collapsed else PI / 2.0
 	var prior := _disclosure_tweens.get(region) as Tween
 	var already_presented := _disclosure_presented_states.has(region)
@@ -525,71 +537,46 @@ func _present_disclosure(region: StringName, glyph: Label, collapsed: bool) -> v
 	if settings != null and settings.reduced_motion:
 		if prior != null and prior.is_valid():
 			prior.kill()
-		visual.rotation = target_rotation
+		_set_disclosure_rotation(target_rotation, region)
 		_disclosure_tweens.erase(region)
 		return
 	if not state_changed:
 		if prior == null or not prior.is_valid():
-			visual.rotation = target_rotation
+			_set_disclosure_rotation(target_rotation, region)
 		return
 	if prior != null and prior.is_valid():
 		prior.kill()
 	if not already_presented or settings == null:
-		visual.rotation = target_rotation
+		_set_disclosure_rotation(target_rotation, region)
 		_disclosure_tweens.erase(region)
 		return
 	var tween := create_tween()
 	_disclosure_tweens[region] = tween
-	tween.tween_property(visual, "rotation", target_rotation, float(LivingForgeTokens.motion_ms(&"focus", false)) / 1000.0)
+	tween.tween_method(_set_disclosure_rotation.bind(region), disclosure_rotation_for(region), target_rotation, float(LivingForgeTokens.motion_ms(&"focus", false)) / 1000.0)
 
 
-func _disclosure_visual(slot: Label) -> Label:
-	slot.text = ""
-	var existing := slot.get_node_or_null("RotatingGlyph") as Label
-	if existing != null:
-		existing.pivot_offset = existing.size * 0.5
-		return existing
-	var minimum := slot.get_combined_minimum_size().max(Vector2(20.0, 20.0))
-	slot.custom_minimum_size = minimum
-	var visual := Label.new()
-	visual.name = "RotatingGlyph"
-	visual.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	visual.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	visual.text = "▸"
-	visual.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	visual.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	slot.add_child(visual)
-	visual.pivot_offset = minimum * 0.5
-	return visual
+func _set_disclosure_rotation(value: float, region: StringName) -> void:
+	_disclosure_rotations[region] = value
+	_header_visual_control(region).queue_redraw()
+
+
+func disclosure_rotation_for(region: StringName) -> float:
+	return float(_disclosure_rotations.get(region, 0.0))
 
 
 func _present_region_headers() -> void:
 	var party_header := get_node("Margin/CombatStatus/PartyHeader") as Button
-	var party_glyph := get_node("Margin/CombatStatus/PartyHeader/Content/DisclosureGlyph") as Label
-	var party_summary := get_node("Margin/CombatStatus/PartyHeader/Content/Summary") as Label
-	var party_health_cluster := get_node("Margin/CombatStatus/PartyHeader/Content/LeaderHealthCluster") as Control
-	var party_health := get_node("Margin/CombatStatus/PartyHeader/Content/LeaderHealthCluster/Bar") as ProgressBar
-	var party_health_value := get_node("Margin/CombatStatus/PartyHeader/Content/LeaderHealthCluster/Value") as Label
-	var party_icon := get_node("Margin/CombatStatus/PartyHeader/Content/StateIcon") as TextureRect
-	var party_clear := get_node("Margin/CombatStatus/PartyHeader/Content/AllClearGlyph") as Label
-	_present_disclosure(REGION_PARTY, party_glyph, _party_collapsed)
 	var alerts_header := get_node("Margin/CombatStatus/AlertRegion/Header") as Button
-	var alerts_glyph := get_node("Margin/CombatStatus/AlertRegion/Header/Content/DisclosureGlyph") as Label
-	var alerts_summary := get_node("Margin/CombatStatus/AlertRegion/Header/Content/Summary") as Label
-	var alerts_icon := get_node("Margin/CombatStatus/AlertRegion/Header/Content/StateIcon") as TextureRect
-	var alerts_clear := get_node("Margin/CombatStatus/AlertRegion/Header/Content/AllClearGlyph") as Label
 	var tray_action := get_node("Margin/CombatStatus/AlertRegion/AlertsTrayAction") as Button
-	_present_disclosure(REGION_ALERTS, alerts_glyph, _alerts_collapsed)
+	_present_disclosure(REGION_PARTY, _party_collapsed)
+	_present_disclosure(REGION_ALERTS, _alerts_collapsed)
 	if current_projection == null:
-		party_summary.text = "PARTY · UNAVAILABLE"
-		alerts_summary.text = "ALERTS · UNAVAILABLE"
 		party_header.accessibility_name = "Party unavailable, %s" % _region_state_label(_party_collapsed)
 		alerts_header.accessibility_name = "Alerts unavailable, %s" % _region_state_label(_alerts_collapsed)
 		party_header.accessibility_description = _region_accessibility_description("Party", "party", _party_collapsed, false)
 		alerts_header.accessibility_description = _region_accessibility_description("Alerts", "alert", _alerts_collapsed, false)
-		party_health_cluster.visible = false
-		_present_state_cue(party_icon, party_clear, CombatHudProjection.NO_ALERT_SEVERITY, false)
-		_present_state_cue(alerts_icon, alerts_clear, CombatHudProjection.NO_ALERT_SEVERITY, false)
+		_set_header_visual_state(REGION_PARTY, _base_header_visual_state("PARTY · UNAVAILABLE", CombatHudProjection.NO_ALERT_SEVERITY, false))
+		_set_header_visual_state(REGION_ALERTS, _base_header_visual_state("ALERTS · UNAVAILABLE", CombatHudProjection.NO_ALERT_SEVERITY, false))
 		_set_tray_action_eligibility(tray_action, 0)
 		_reconcile_terminal_focus_suspension()
 		return
@@ -598,29 +585,35 @@ func _present_region_headers() -> void:
 	var dead := current_projection.alert_count_for(CombatAlertProjection.Severity.DEAD)
 	var downed := current_projection.alert_count_for(CombatAlertProjection.Severity.DOWNED)
 	var critical := current_projection.alert_count_for(CombatAlertProjection.Severity.CRITICAL)
+	var party_summary := "PARTY · %d MEMBERS" % current_projection.members.size()
+	var party_state := _base_header_visual_state(party_summary, highest_severity, true)
 	if leader != null:
 		if _party_collapsed:
-			party_summary.text = _collapsed_party_summary(current_projection.members.size(), leader.display_name, highest_severity, dead, downed, critical)
-		else:
-			party_summary.text = "PARTY · %d MEMBERS" % current_projection.members.size()
-		party_health.max_value = leader.max_health
-		party_health.value = leader.health
-		party_health_value.text = "%d / %d" % [roundi(leader.health), roundi(leader.max_health)]
-		party_health_cluster.visible = _party_collapsed
-		_present_collapsed_leader_health(leader, party_health, party_health_value)
+			party_summary = _collapsed_party_summary(current_projection.members.size(), leader.display_name, highest_severity, dead, downed, critical)
+			party_state = _base_header_visual_state(party_summary, highest_severity, true)
+		party_state["health_visible"] = _party_collapsed
+		party_state["health_value"] = leader.health
+		party_state["health_max"] = leader.max_health
+		party_state["health_text"] = "%d / %d" % [roundi(leader.health), roundi(leader.max_health)]
+		var health_critical := leader.is_dead or leader.is_downed or leader.health / maxf(leader.max_health, 1.0) <= CombatHudViewModel.CRITICAL_HEALTH_RATIO
+		party_state["health_fill_color"] = LivingForgeTokens.color(&"error" if health_critical else &"valid", _high_contrast)
+		party_state["track_color"] = LivingForgeTokens.color(&"surface_inset", _high_contrast)
+		party_state["track_outline_width"] = 2 if _high_contrast else 1
+		party_state["track_outline_color"] = LivingForgeTokens.color(&"disabled", _high_contrast)
+	_set_header_visual_state(REGION_PARTY, party_state)
 	party_header.accessibility_name = _party_accessibility_name()
 	party_header.accessibility_description = _region_accessibility_description("Party", "party", _party_collapsed, true)
 	var highest := current_projection.highest_severity_alert()
+	var alerts_summary := "ALERTS · ALL CLEAR"
 	if highest == null:
-		alerts_summary.text = "ALERTS · ALL CLEAR"
+		alerts_summary = "ALERTS · ALL CLEAR"
 	elif not _alerts_collapsed:
-		alerts_summary.text = "ALERTS · %d" % current_projection.all_alerts.size()
+		alerts_summary = "ALERTS · %d" % current_projection.all_alerts.size()
 	else:
-		alerts_summary.text = "ALERTS %d · %s · %s" % [current_projection.all_alerts.size(), _severity_label(highest.severity), highest.summary]
+		alerts_summary = "ALERTS %d · %s · %s" % [current_projection.all_alerts.size(), _severity_label(highest.severity), highest.summary]
+	_set_header_visual_state(REGION_ALERTS, _base_header_visual_state(alerts_summary, highest_severity, true))
 	alerts_header.accessibility_name = _alerts_accessibility_name()
 	alerts_header.accessibility_description = _region_accessibility_description("Alerts", "alert", _alerts_collapsed, true)
-	_present_state_cue(party_icon, party_clear, highest_severity, true)
-	_present_state_cue(alerts_icon, alerts_clear, highest_severity, true)
 	_set_tray_action_eligibility(tray_action, current_projection.all_alerts.size())
 	_configure_alert_focus_neighbors()
 	_reconcile_terminal_focus_suspension()
@@ -667,50 +660,147 @@ func _severity_icon(severity: int) -> Texture2D:
 	return null
 
 
-func _present_state_cue(icon: TextureRect, all_clear_glyph: Label, severity: int, available: bool) -> void:
-	icon.texture = _severity_icon(severity) if available else null
-	icon.visible = icon.texture != null
-	all_clear_glyph.visible = available and severity == CombatHudProjection.NO_ALERT_SEVERITY
-	if icon.visible:
-		_tint_texture(icon, LivingForgeTokens.color(&"error", _high_contrast))
-	all_clear_glyph.add_theme_color_override(&"font_color", LivingForgeTokens.color(&"valid", _high_contrast))
+func _base_header_visual_state(summary: String, severity: int, available: bool) -> Dictionary:
+	var icon := _severity_icon(severity) if available else null
+	var all_clear := available and severity == CombatHudProjection.NO_ALERT_SEVERITY
+	return {
+		"summary": summary,
+		"available": available,
+		"severity": severity,
+		"state_icon": icon,
+		"all_clear_visible": all_clear,
+		"state_color": LivingForgeTokens.color(&"valid" if all_clear else &"error", _high_contrast),
+		"health_visible": false,
+		"health_value": 0.0,
+		"health_max": 1.0,
+		"health_text": "",
+		"health_fill_color": LivingForgeTokens.color(&"valid", _high_contrast),
+		"track_color": LivingForgeTokens.color(&"surface_inset", _high_contrast),
+		"track_outline_width": 2 if _high_contrast else 1,
+		"track_outline_color": LivingForgeTokens.color(&"disabled", _high_contrast),
+	}
 
 
-func _present_collapsed_leader_health(leader: PartyMemberHudProjection, bar: ProgressBar, value_label: Label) -> void:
-	var critical := leader.is_dead or leader.is_downed or leader.health / maxf(leader.max_health, 1.0) <= CombatHudViewModel.CRITICAL_HEALTH_RATIO
-	var color_role: StringName = &"error" if critical else &"valid"
-	var track := StyleBoxFlat.new()
-	track.bg_color = LivingForgeTokens.color(&"surface_inset", _high_contrast)
-	var track_outline_width := 2 if _high_contrast else 1
-	track.border_width_left = track_outline_width
-	track.border_width_top = track_outline_width
-	track.border_width_right = track_outline_width
-	track.border_width_bottom = track_outline_width
-	track.border_color = LivingForgeTokens.color(&"disabled", _high_contrast)
-	track.corner_radius_top_left = 3
-	track.corner_radius_top_right = 3
-	track.corner_radius_bottom_left = 3
-	track.corner_radius_bottom_right = 3
-	var fill := StyleBoxFlat.new()
-	fill.bg_color = LivingForgeTokens.color(color_role, _high_contrast)
-	fill.corner_radius_top_left = 3
-	fill.corner_radius_top_right = 3
-	fill.corner_radius_bottom_left = 3
-	fill.corner_radius_bottom_right = 3
-	bar.add_theme_stylebox_override(&"background", track)
-	bar.add_theme_stylebox_override(&"fill", fill)
-	value_label.add_theme_color_override(&"font_color", LivingForgeTokens.color(&"text_primary", _high_contrast))
+func _set_header_visual_state(region: StringName, state: Dictionary) -> void:
+	_header_visual_states[region] = state
+	_header_visual_control(region).queue_redraw()
 
 
-func _tint_texture(texture_rect: TextureRect, color: Color) -> void:
-	var material := texture_rect.material as ShaderMaterial
-	if material == null:
-		var shader := Shader.new()
-		shader.code = ICON_SHADER_CODE
-		material = ShaderMaterial.new()
-		material.shader = shader
-		texture_rect.material = material
-	material.set_shader_parameter(&"icon_color", color)
+func header_visual_state(region: StringName) -> Dictionary:
+	var state := _header_visual_states.get(region, {}) as Dictionary
+	return state.duplicate(true)
+
+
+func _header_visual_control(region: StringName) -> Control:
+	return get_node("Margin/CombatStatus/PartyHeader/Visual") as Control if region == REGION_PARTY else get_node("Margin/CombatStatus/AlertRegion/Header/Visual") as Control
+
+
+func header_visual_geometry(region: StringName) -> Dictionary:
+	var visual := _header_visual_control(region)
+	return _build_header_visual_geometry(region, visual.size)
+
+
+func _build_header_visual_geometry(region: StringName, visual_size: Vector2) -> Dictionary:
+	var header := _region_header(region)
+	var state := _header_visual_states.get(region, {}) as Dictionary
+	var font := header.get_theme_font(&"font")
+	var font_size := header.get_theme_font_size(&"font_size")
+	var font_height := maxf(font.get_height(font_size), 1.0)
+	var width := maxf(visual_size.x, header.size.x)
+	var height := maxf(visual_size.y, header.size.y)
+	var disclosure_rect := Rect2(HEADER_VISUAL_PADDING, (height - HEADER_DISCLOSURE_SIZE) * 0.5, HEADER_DISCLOSURE_SIZE, HEADER_DISCLOSURE_SIZE)
+	var cue_rect := Rect2(disclosure_rect.end.x + HEADER_VISUAL_GAP, (height - HEADER_STATE_CUE_SIZE) * 0.5, HEADER_STATE_CUE_SIZE, HEADER_STATE_CUE_SIZE)
+	var summary_left := cue_rect.end.x + HEADER_VISUAL_GAP
+	var health_visible := bool(state.get("health_visible", false))
+	var health_width := minf(HEADER_HEALTH_WIDTH, maxf(HEADER_HEALTH_MIN_WIDTH, width * 0.36)) if health_visible else 0.0
+	var health_left := width - HEADER_VISUAL_PADDING - health_width
+	var summary_right := health_left - HEADER_VISUAL_GAP if health_visible else width - HEADER_VISUAL_PADDING
+	var summary_width := maxf(summary_right - summary_left, 1.0)
+	var summary_lines := _wrap_header_text(String(state.get("summary", "")), font, font_size, summary_width)
+	var summary_height := font_height * float(maxi(summary_lines.size(), 1))
+	var summary_rect := Rect2(summary_left, maxf((height - summary_height) * 0.5, HEADER_VISUAL_PADDING), summary_width, summary_height)
+	var health_value_font_size := maxi(font_size - 2, 12)
+	var health_value_height := maxf(font.get_height(health_value_font_size), 1.0)
+	var health_cluster_height := HEADER_HEALTH_BAR_HEIGHT + 2.0 + health_value_height
+	var health_cluster_rect := Rect2(health_left, maxf((height - health_cluster_height) * 0.5, HEADER_VISUAL_PADDING), health_width, health_cluster_height) if health_visible else Rect2()
+	var health_bar_rect := Rect2(health_cluster_rect.position, Vector2(health_width, HEADER_HEALTH_BAR_HEIGHT)) if health_visible else Rect2()
+	var health_value_rect := Rect2(health_cluster_rect.position + Vector2(0.0, HEADER_HEALTH_BAR_HEIGHT + 2.0), Vector2(health_width, health_value_height)) if health_visible else Rect2()
+	var required_height := maxf(summary_height, health_cluster_height if health_visible else 0.0) + HEADER_VISUAL_PADDING * 2.0
+	return {
+		"font": font,
+		"font_size": font_size,
+		"font_height": font_height,
+		"health_value_font_size": health_value_font_size,
+		"health_value_font_height": health_value_height,
+		"disclosure_rect": disclosure_rect,
+		"state_cue_rect": cue_rect,
+		"summary_lines": summary_lines,
+		"summary_rect": summary_rect,
+		"health_cluster_rect": health_cluster_rect,
+		"health_bar_rect": health_bar_rect,
+		"health_value_rect": health_value_rect,
+		"required_height": required_height,
+	}
+
+
+func _wrap_header_text(text: String, font: Font, font_size: int, available_width: float) -> Array[String]:
+	var lines: Array[String] = []
+	var current := ""
+	for word: String in text.split(" ", false):
+		var candidate := word if current.is_empty() else "%s %s" % [current, word]
+		if current.is_empty() or font.get_string_size(candidate, HORIZONTAL_ALIGNMENT_LEFT, -1.0, font_size).x <= available_width:
+			current = candidate
+		else:
+			lines.append(current)
+			current = word
+	if not current.is_empty():
+		lines.append(current)
+	if lines.is_empty():
+		lines.append("")
+	return lines
+
+
+func _draw_region_header_visual(region: StringName, visual: Control) -> void:
+	var state := _header_visual_states.get(region, {}) as Dictionary
+	var geometry := _build_header_visual_geometry(region, visual.size)
+	var font := geometry["font"] as Font
+	var font_size := int(geometry["font_size"])
+	var font_height := float(geometry["font_height"])
+	var text_color := LivingForgeTokens.color(&"text_primary", _high_contrast)
+	var disclosure_rect := geometry["disclosure_rect"] as Rect2
+	var center := disclosure_rect.get_center()
+	var half := minf(disclosure_rect.size.x, disclosure_rect.size.y) * 0.28
+	visual.draw_set_transform(center, disclosure_rotation_for(region))
+	visual.draw_colored_polygon(PackedVector2Array([Vector2(-half, -half), Vector2(half, 0.0), Vector2(-half, half)]), text_color)
+	visual.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	var cue_rect := geometry["state_cue_rect"] as Rect2
+	var state_color := state.get("state_color", Color.WHITE) as Color
+	var icon := state.get("state_icon") as Texture2D
+	if icon != null:
+		visual.draw_texture_rect(icon, cue_rect, false, state_color)
+	elif bool(state.get("all_clear_visible", false)):
+		visual.draw_string(font, Vector2(cue_rect.position.x, cue_rect.position.y + font.get_ascent(font_size)), "✓", HORIZONTAL_ALIGNMENT_CENTER, cue_rect.size.x, font_size, state_color)
+	var summary_rect := geometry["summary_rect"] as Rect2
+	var summary_lines := geometry["summary_lines"] as Array
+	for index: int in summary_lines.size():
+		var baseline := summary_rect.position + Vector2(0.0, font.get_ascent(font_size) + font_height * float(index))
+		visual.draw_string(font, baseline, String(summary_lines[index]), HORIZONTAL_ALIGNMENT_LEFT, summary_rect.size.x, font_size, text_color)
+	if not bool(state.get("health_visible", false)):
+		return
+	var health_bar_rect := geometry["health_bar_rect"] as Rect2
+	var outline_width := float(state.get("track_outline_width", 1))
+	visual.draw_rect(health_bar_rect, state.get("track_color", Color.BLACK), true)
+	visual.draw_rect(health_bar_rect, state.get("track_outline_color", Color.WHITE), false, outline_width)
+	var health_max := maxf(float(state.get("health_max", 1.0)), 1.0)
+	var health_ratio := clampf(float(state.get("health_value", 0.0)) / health_max, 0.0, 1.0)
+	if health_ratio > 0.0:
+		var fill_rect := health_bar_rect.grow(-outline_width)
+		fill_rect.size.x *= health_ratio
+		if fill_rect.size.x > 0.0 and fill_rect.size.y > 0.0:
+			visual.draw_rect(fill_rect, state.get("health_fill_color", Color.WHITE), true)
+	var health_value_rect := geometry["health_value_rect"] as Rect2
+	var health_value_font_size := int(geometry["health_value_font_size"])
+	visual.draw_string(font, Vector2(health_value_rect.position.x, health_value_rect.position.y + font.get_ascent(health_value_font_size)), String(state.get("health_text", "")), HORIZONTAL_ALIGNMENT_CENTER, health_value_rect.size.x, health_value_font_size, text_color)
 
 
 func _party_accessibility_name() -> String:
@@ -942,39 +1032,18 @@ func _reflow_leader_region(leader_height: float) -> void:
 
 func _reflow_party_header() -> float:
 	var header := get_node("Margin/CombatStatus/PartyHeader") as Button
-	var summary := get_node("Margin/CombatStatus/PartyHeader/Content/Summary") as Label
 	var scale := maxf(float(settings.ui_scale_percent), float(settings.text_scale_percent)) / 100.0
 	var maximum_height := maxf(48.0 * scale, _hud_viewport().get_visible_rect().size.y - header.position.y - 16.0)
-	var semantic_height := _measure_header_summary_height(header, summary, maximum_height)
+	var semantic_height := _measure_header_summary_height(header, REGION_PARTY, maximum_height)
 	var header_height := clampf(maxf(header.get_combined_minimum_size().y, 48.0 * scale), semantic_height, maximum_height)
 	_set_bottom_offset_if_changed(header, header.offset_top + header_height)
+	_header_visual_control(REGION_PARTY).queue_redraw()
 	return header_height
 
 
-func _measure_header_summary_height(header: Button, summary: Label, maximum_height: float) -> float:
-	var content := summary.get_parent() as HBoxContainer
-	var separation := float(content.get_theme_constant(&"separation"))
-	var visible_sibling_count := 0
-	var reserved_width := 0.0
-	for child: Node in content.get_children():
-		if not child is Control or child == summary or not (child as Control).visible:
-			continue
-		visible_sibling_count += 1
-		reserved_width += (child as Control).get_combined_minimum_size().x
-	var available_width := clampf(
-		maxf(header.size.x, header.custom_minimum_size.x) - reserved_width - separation * float(visible_sibling_count),
-		1.0,
-		maxf(header.size.x, header.custom_minimum_size.x),
-	)
-	var font := summary.get_theme_font(&"font")
-	var font_size := summary.get_theme_font_size(&"font_size")
-	var measured := font.get_multiline_string_size(summary.text, summary.horizontal_alignment, available_width, font_size)
-	var line_height := maxf(font.get_height(font_size), 1.0)
-	var measured_height := clampf(ceilf(measured.y + line_height + 8.0), line_height, maximum_height)
-	summary.custom_minimum_size = Vector2(0.0, measured_height)
-	var collapsed_health := content.get_node_or_null("LeaderHealthCluster") as Control
-	var cluster_reserve := 12.0 if collapsed_health != null and collapsed_health.visible else 0.0
-	return minf(measured_height + cluster_reserve, maximum_height)
+func _measure_header_summary_height(header: Button, region: StringName, maximum_height: float) -> float:
+	var geometry := _build_header_visual_geometry(region, Vector2(maxf(header.size.x, header.custom_minimum_size.x), maximum_height))
+	return clampf(float(geometry.get("required_height", 48.0)), 48.0, maximum_height)
 
 
 func _rebuild_member_controls() -> void:
@@ -1205,7 +1274,6 @@ func _reflow_alert_rows(reserve_overflow: bool) -> void:
 	var overflow := get_node("Margin/CombatStatus/AlertRegion/Overflow") as Button
 	var tray_action := get_node("Margin/CombatStatus/AlertRegion/AlertsTrayAction") as Button
 	var compact_gap := float(LivingForgeTokens.spacing(&"compact"))
-	var summary := get_node("Margin/CombatStatus/AlertRegion/Header/Content/Summary") as Label
 	var scale := maxf(float(settings.ui_scale_percent), float(settings.text_scale_percent)) / 100.0
 	var region_width := maxf(region.size.x, 1.0)
 	var tray_height := maxf(48.0, tray_action.get_combined_minimum_size().y)
@@ -1216,9 +1284,10 @@ func _reflow_alert_rows(reserve_overflow: bool) -> void:
 	_set_offsets_if_changed(header, 0.0, 0.0, header_right, header.offset_bottom)
 	var wrapped_tray_reservation := tray_height + compact_gap if tray_action.visible and not tray_shares_header_row else 0.0
 	var maximum_header_height := maxf(48.0 * scale, region.size.y - wrapped_tray_reservation)
-	var semantic_height := _measure_header_summary_height(header, summary, maximum_header_height)
+	var semantic_height := _measure_header_summary_height(header, REGION_ALERTS, maximum_header_height)
 	var header_height := clampf(maxf(header.get_combined_minimum_size().y, 48.0 * scale), semantic_height, maximum_header_height)
 	_set_bottom_offset_if_changed(header, header_height)
+	_header_visual_control(REGION_ALERTS).queue_redraw()
 	var tray_top := 0.0 if tray_shares_header_row else header_height + compact_gap
 	_set_offsets_if_changed(tray_action, region_width - tray_width, tray_top, region_width, tray_top + tray_height)
 	var top_rows_bottom := maxf(header_height, tray_top + tray_height if tray_action.visible else header_height)
