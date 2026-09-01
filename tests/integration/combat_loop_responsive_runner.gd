@@ -48,6 +48,7 @@ func _run() -> void:
 		if viewport_size == Vector2i(1920, 1080):
 			for party_count: int in PARTY_COUNTS:
 				await _exercise_hud(viewport_size, party_count, 0, 100, 100)
+			await _exercise_hud(viewport_size, 6, 3, 100, 100)
 		else:
 			await _exercise_hud(viewport_size, 6, 0, 100, 100)
 			await _exercise_hud(viewport_size, 24, 7, 100, 100)
@@ -149,10 +150,18 @@ func _assert_hud_collapse_geometry(hud: HUD, viewport_rect: Rect2, party_count: 
 		var tray_rect := tray_action.get_global_rect()
 		var stack_rect := alerts_stack.get_global_rect()
 		var compact_gap := float(LivingForgeTokens.spacing(&"compact"))
-		if viewport_rect.size == Vector2(1920, 1080) and ui_scale == 100 and text_scale == 100:
+		var authentic_inline_corner := alerts_collapsed \
+			and alert_count > 0 \
+			and ui_scale == 100 \
+			and text_scale == 100 \
+			and viewport_rect.size in [Vector2(1920, 1080), Vector2(3440, 1440)]
+		if authentic_inline_corner:
+			var rendered_summary := String(hud.header_visual_state(&"alerts").get("summary", ""))
+			_assert(rendered_summary.begins_with("ALERTS %d · " % alert_count) and "CRITICAL" in rendered_summary, "%s authentic collapsed projection supplies its complete alert count, severity, and summary text: %s" % [context_label, rendered_summary])
+			_assert(tray_action.text == "VIEW ALL ALERTS (%d)" % alert_count, "%s authentic tray retains its exact complete-count label" % context_label)
 			_assert(absf(header_rect.position.y - tray_rect.position.y) <= 1.0, "%s fitting Alerts header and tray share one row header=%s tray=%s" % [context_label, header_rect, tray_rect])
 			_assert(header_rect.end.x + compact_gap <= tray_rect.position.x + 1.0, "%s fitting Alerts header and tray retain their horizontal gap" % context_label)
-		if viewport_rect.size == Vector2(1280, 720) and ui_scale == 150 and text_scale == 150:
+		if alerts_collapsed and viewport_rect.size == Vector2(1280, 720) and ui_scale == 150 and text_scale == 150:
 			_assert(absf(tray_rect.position.y - (header_rect.end.y + compact_gap)) <= 1.0, "%s constrained Text150 tray wraps immediately below the Alerts header header=%s tray=%s" % [context_label, header_rect, tray_rect])
 		_assert(stack_rect.position.y + 1.0 >= maxf(header_rect.end.y, tray_rect.end.y) + compact_gap, "%s ExpandedAlerts begins after the lower header/tray edge" % context_label)
 	_assert(tray_action.visible == (alert_count > 0), "%s persistent tray availability matches exact alert truth" % context_label)

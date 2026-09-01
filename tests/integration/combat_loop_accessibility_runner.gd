@@ -53,11 +53,81 @@ func _exercise_matrix_row(row: Dictionary) -> void:
 	var settings := _settings(row)
 	var label := String(row["label"])
 	await _exercise_hud(viewport, settings, label)
+	if label in ["normal default", "high contrast"]:
+		await _exercise_header_severity_rendering(viewport, settings, label)
 	await _exercise_level_up(viewport, settings, label)
 	await _exercise_extraction(viewport, settings, label)
 	await _exercise_results(viewport, settings, label)
 	viewport.free()
 	await process_frame
+
+
+func _exercise_header_severity_rendering(viewport: SubViewport, settings: PartyForgeSettings, label: String) -> void:
+	var fixture := _hud_fixture(3)
+	for member_id: int in [2, 3]:
+		(fixture.health_by_member[member_id] as HealthComponent).heal(100.0)
+	(fixture.health_by_member[3] as HealthComponent).apply_damage(80.0)
+	var collapsed_settings := settings.copy()
+	collapsed_settings.hud_party_collapsed = true
+	collapsed_settings.hud_alerts_collapsed = true
+	var hud := HUD_SCENE.instantiate() as HUD
+	hud.custom_viewport = viewport
+	viewport.add_child(hud)
+	(hud.get_node("ClassSelection") as ClassSelectionPanel).close()
+	hud.configure(fixture.run, fixture.party, fixture.experience, fixture.context, collapsed_settings)
+	if not await _wait_until(func() -> bool: return hud.current_projection != null and hud.current_projection.highest_alert_severity() == CombatAlertProjection.Severity.CRITICAL, "critical collapsed header rendering at %s" % label):
+		hud.free()
+		_cleanup_hud_fixture(fixture)
+		return
+	await process_frame
+	await process_frame
+	_assert_header_severity_pixels(hud, viewport, CombatAlertProjection.Severity.CRITICAL, collapsed_settings.high_contrast, label)
+
+	(fixture.health_by_member[3] as HealthComponent).heal(100.0)
+	(fixture.health_by_member[2] as HealthComponent).apply_damage(1000.0)
+	if await _wait_until(func() -> bool: return hud.current_projection.highest_alert_severity() == CombatAlertProjection.Severity.DOWNED, "downed collapsed header rendering at %s" % label):
+		await process_frame
+		await process_frame
+		_assert_header_severity_pixels(hud, viewport, CombatAlertProjection.Severity.DOWNED, collapsed_settings.high_contrast, label)
+
+	(fixture.health_by_member[1] as HealthComponent).kill()
+	if await _wait_until(func() -> bool: return hud.current_projection.highest_alert_severity() == CombatAlertProjection.Severity.DEAD, "dead collapsed header rendering at %s" % label):
+		await process_frame
+		await process_frame
+		_assert_header_severity_pixels(hud, viewport, CombatAlertProjection.Severity.DEAD, collapsed_settings.high_contrast, label)
+	hud.free()
+	_cleanup_hud_fixture(fixture)
+	await process_frame
+
+
+func _assert_header_severity_pixels(hud: HUD, viewport: SubViewport, severity: int, high_contrast: bool, label: String) -> void:
+	var image := viewport.get_texture().get_image()
+	var expected := LivingForgeTokens.color(&"error", high_contrast)
+	for region: StringName in [&"party", &"alerts"]:
+		var header := hud.get_node("Margin/CombatStatus/PartyHeader") as Button if region == &"party" else hud.get_node("Margin/CombatStatus/AlertRegion/Header") as Button
+		var visual := header.get_node("Visual") as Control
+		var geometry := hud.header_visual_geometry(region)
+		var cue_rect := _visual_global_rect(visual, geometry.get("state_cue_rect", Rect2())).intersection(header.get_global_rect())
+		var header_style := header.get_theme_stylebox(&"normal") as StyleBoxFlat
+		var surface := header_style.bg_color if header_style != null else LivingForgeTokens.color(&"surface_inset", high_contrast)
+		var maximum_contrast := 1.0
+		var closest_semantic_distance := INF
+		for y: int in range(maxi(0, floori(cue_rect.position.y)), mini(image.get_height(), ceili(cue_rect.end.y))):
+			for x: int in range(maxi(0, floori(cue_rect.position.x)), mini(image.get_width(), ceili(cue_rect.end.x))):
+				var pixel := image.get_pixel(x, y)
+				maximum_contrast = maxf(maximum_contrast, _contrast_ratio(pixel, surface))
+				closest_semantic_distance = minf(closest_semantic_distance, Vector3(pixel.r, pixel.g, pixel.b).distance_to(Vector3(expected.r, expected.g, expected.b)))
+		var context := "%s %s %s" % [label, region, _severity_label(severity)]
+		_assert(maximum_contrast >= 3.0, "%s rendered severity icon contrasts with the actual header surface at >=3:1 (actual %.3f)" % [context, maximum_contrast])
+		_assert(closest_semantic_distance <= 0.12, "%s rendered severity icon contains the semantic error tint rather than black (distance %.3f)" % [context, closest_semantic_distance])
+
+
+func _severity_label(severity: int) -> String:
+	match severity:
+		CombatAlertProjection.Severity.CRITICAL: return "CRITICAL"
+		CombatAlertProjection.Severity.DOWNED: return "DOWNED"
+		CombatAlertProjection.Severity.DEAD: return "DEAD"
+	return "ALL CLEAR"
 
 
 func _exercise_hud(viewport: SubViewport, settings: PartyForgeSettings, label: String) -> void:

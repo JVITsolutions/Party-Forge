@@ -20,6 +20,7 @@ const HEADER_STATE_CUE_SIZE := 24.0
 const HEADER_HEALTH_WIDTH := 132.0
 const HEADER_HEALTH_MIN_WIDTH := 96.0
 const HEADER_HEALTH_BAR_HEIGHT := 12.0
+const ALERT_REGION_BASE_WIDTH := 472.0
 
 var game_run: Node
 var party_manager: PartyManager
@@ -65,6 +66,7 @@ var _header_visual_states := {
 	REGION_PARTY: {"summary": "PARTY", "available": false, "severity": CombatHudProjection.NO_ALERT_SEVERITY, "state_icon": null, "all_clear_visible": false, "state_color": Color.WHITE, "health_visible": false},
 	REGION_ALERTS: {"summary": "ALERTS · ALL CLEAR", "available": false, "severity": CombatHudProjection.NO_ALERT_SEVERITY, "state_icon": null, "all_clear_visible": false, "state_color": Color.WHITE, "health_visible": false},
 }
+var _semantic_header_icon_cache: Dictionary = {}
 
 
 func _ready() -> void:
@@ -777,7 +779,7 @@ func _draw_region_header_visual(region: StringName, visual: Control) -> void:
 	var state_color := state.get("state_color", Color.WHITE) as Color
 	var icon := state.get("state_icon") as Texture2D
 	if icon != null:
-		visual.draw_texture_rect(icon, cue_rect, false, state_color)
+		visual.draw_texture_rect(_semantic_header_icon(icon), cue_rect, false, state_color)
 	elif bool(state.get("all_clear_visible", false)):
 		visual.draw_string(font, Vector2(cue_rect.position.x, cue_rect.position.y + font.get_ascent(font_size)), "✓", HORIZONTAL_ALIGNMENT_CENTER, cue_rect.size.x, font_size, state_color)
 	var summary_rect := geometry["summary_rect"] as Rect2
@@ -801,6 +803,23 @@ func _draw_region_header_visual(region: StringName, visual: Control) -> void:
 	var health_value_rect := geometry["health_value_rect"] as Rect2
 	var health_value_font_size := int(geometry["health_value_font_size"])
 	visual.draw_string(font, Vector2(health_value_rect.position.x, health_value_rect.position.y + font.get_ascent(health_value_font_size)), String(state.get("health_text", "")), HORIZONTAL_ALIGNMENT_CENTER, health_value_rect.size.x, health_value_font_size, text_color)
+
+
+func _semantic_header_icon(source: Texture2D) -> Texture2D:
+	var cache_key := source.resource_path
+	if _semantic_header_icon_cache.has(cache_key):
+		return _semantic_header_icon_cache[cache_key] as Texture2D
+	var image := source.get_image()
+	if image == null or image.is_empty():
+		return source
+	image.convert(Image.FORMAT_RGBA8)
+	for y: int in image.get_height():
+		for x: int in image.get_width():
+			var alpha := image.get_pixel(x, y).a
+			image.set_pixel(x, y, Color(1.0, 1.0, 1.0, alpha))
+	var semantic_icon := ImageTexture.create_from_image(image)
+	_semantic_header_icon_cache[cache_key] = semantic_icon
+	return semantic_icon
 
 
 func _party_accessibility_name() -> String:
@@ -1275,11 +1294,23 @@ func _reflow_alert_rows(reserve_overflow: bool) -> void:
 	var tray_action := get_node("Margin/CombatStatus/AlertRegion/AlertsTrayAction") as Button
 	var compact_gap := float(LivingForgeTokens.spacing(&"compact"))
 	var scale := maxf(float(settings.ui_scale_percent), float(settings.text_scale_percent)) / 100.0
-	var region_width := maxf(region.size.x, 1.0)
 	var tray_height := maxf(48.0, tray_action.get_combined_minimum_size().y)
-	var tray_width := minf(maxf(192.0, tray_action.get_combined_minimum_size().x), region_width)
+	var viewport_width := maxf(_hud_viewport().get_visible_rect().size.x, 1.0)
+	var boss_banner := get_node("BossBanner") as Control
+	var loot_status := get_node("LootStatus") as Control
+	var center_status_right := maxf(boss_banner.get_global_rect().end.x, loot_status.get_global_rect().end.x)
+	var region_right := viewport_width + region.offset_right
+	var maximum_region_width := maxf(region_right - center_status_right - compact_gap, 1.0)
+	var tray_natural_width := maxf(192.0, tray_action.get_combined_minimum_size().x)
+	var preferred_header_width := _preferred_header_width(header, REGION_ALERTS)
+	var preferred_inline_width := preferred_header_width + compact_gap + tray_natural_width
+	var preferred_region_width := maxf(ALERT_REGION_BASE_WIDTH, preferred_inline_width)
+	var desired_region_width := preferred_region_width if tray_action.visible and preferred_region_width <= maximum_region_width else minf(ALERT_REGION_BASE_WIDTH, maximum_region_width)
+	_set_left_offset_if_changed(region, region.offset_right - desired_region_width)
+	var region_width := desired_region_width
+	var tray_width := minf(tray_natural_width, region_width)
 	var minimum_header_width := maxf(header.custom_minimum_size.x, header.get_combined_minimum_size().x)
-	var tray_shares_header_row := tray_action.visible and minimum_header_width + compact_gap + tray_width <= region_width
+	var tray_shares_header_row := tray_action.visible and preferred_header_width + compact_gap + tray_width <= region_width
 	var header_right := region_width - tray_width - compact_gap if tray_shares_header_row else region_width
 	_set_offsets_if_changed(header, 0.0, 0.0, header_right, header.offset_bottom)
 	var wrapped_tray_reservation := tray_height + compact_gap if tray_action.visible and not tray_shares_header_row else 0.0
@@ -1301,6 +1332,20 @@ func _reflow_alert_rows(reserve_overflow: bool) -> void:
 	if region.size.y > 0.0 and stack_top > region.size.y + stack_bottom:
 		stack_bottom = stack_top - region.size.y
 	_set_vertical_offsets_if_changed(stack, stack_top, stack_bottom)
+
+
+func _preferred_header_width(header: Button, region: StringName) -> float:
+	var state := _header_visual_states.get(region, {}) as Dictionary
+	var font := header.get_theme_font(&"font")
+	var font_size := header.get_theme_font_size(&"font_size")
+	var summary_width := font.get_string_size(String(state.get("summary", "")), HORIZONTAL_ALIGNMENT_LEFT, -1.0, font_size).x
+	var semantic_width := HEADER_VISUAL_PADDING * 2.0 + HEADER_DISCLOSURE_SIZE + HEADER_STATE_CUE_SIZE + HEADER_VISUAL_GAP * 2.0 + summary_width
+	return maxf(maxf(header.custom_minimum_size.x, header.get_combined_minimum_size().x), semantic_width)
+
+
+func _set_left_offset_if_changed(control: Control, value: float) -> void:
+	if not is_equal_approx(control.offset_left, value):
+		control.offset_left = value
 
 
 func _set_bottom_offset_if_changed(control: Control, value: float) -> void:
