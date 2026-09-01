@@ -229,6 +229,7 @@ func _test_collapsed_summaries_and_dynamic_refresh(failures: Array[String]) -> v
 	var leader_health_cluster := hud.get_node_or_null("Margin/CombatStatus/PartyHeader/Content/LeaderHealthCluster") as Control
 	var leader_health := leader_health_cluster.get_node_or_null("Bar") as ProgressBar if leader_health_cluster != null else null
 	var leader_health_value := leader_health_cluster.get_node_or_null("Value") as Label if leader_health_cluster != null else null
+	var party_header := hud.get_node("Margin/CombatStatus/PartyHeader") as Button
 	TestAssertions.truthy(leader_health_cluster != null and leader_health != null and leader_health_value != null, "collapsed Party exposes a dedicated leader-health cluster with bar and exact-value label", failures)
 	var alerts_summary := hud.get_node("Margin/CombatStatus/AlertRegion/Header/Content/Summary") as Label
 	TestAssertions.truthy(
@@ -247,6 +248,10 @@ func _test_collapsed_summaries_and_dynamic_refresh(failures: Array[String]) -> v
 		var track := leader_health.get_theme_stylebox(&"background") as StyleBoxFlat
 		var fill := leader_health.get_theme_stylebox(&"fill") as StyleBoxFlat
 		TestAssertions.equal(track.bg_color if track != null else Color.TRANSPARENT, LivingForgeTokens.color(&"surface_inset"), "collapsed leader health reuses the inset track token", failures)
+		TestAssertions.truthy(track != null and track.border_width_left == 1 and track.border_width_top == 1 and track.border_width_right == 1 and track.border_width_bottom == 1, "collapsed leader health uses an exact one-pixel normal-mode track outline", failures)
+		TestAssertions.equal(track.border_color if track != null else Color.TRANSPARENT, LivingForgeTokens.color(&"disabled"), "collapsed leader health uses the non-focus muted semantic outline token", failures)
+		var header_style := party_header.get_theme_stylebox(&"normal") as StyleBoxFlat
+		TestAssertions.truthy(track != null and header_style != null and _contrast_ratio(track.border_color, header_style.bg_color) >= 3.0, "collapsed leader health outline separates from the normal header at at least 3:1", failures)
 		TestAssertions.equal(fill.bg_color if fill != null else Color.TRANSPARENT, LivingForgeTokens.color(&"valid"), "healthy collapsed leader health uses the semantic valid fill token", failures)
 	if party_icon != null and party_clear != null and alerts_icon != null and alerts_clear != null:
 		TestAssertions.truthy(party_icon.visible and party_icon.texture != null and not party_clear.visible, "Party dead state uses an icon plus visible text", failures)
@@ -255,7 +260,6 @@ func _test_collapsed_summaries_and_dynamic_refresh(failures: Array[String]) -> v
 			var material := icon.material as ShaderMaterial
 			TestAssertions.truthy(material != null and material.shader != null, "%s severity icon uses the shared alpha-mask tint material" % icon.name, failures)
 			TestAssertions.equal(material.get_shader_parameter(&"icon_color") if material != null else Color.TRANSPARENT, LivingForgeTokens.color(&"error"), "%s severity icon uses the normal semantic error token" % icon.name, failures)
-	var party_header := hud.get_node("Margin/CombatStatus/PartyHeader") as Button
 	var alerts_header := hud.get_node("Margin/CombatStatus/AlertRegion/Header") as Button
 	var projection := hud.current_projection as CombatHudProjection
 	var leader := projection.leader()
@@ -277,11 +281,22 @@ func _test_collapsed_summaries_and_dynamic_refresh(failures: Array[String]) -> v
 	(fixture.health_by_member[1] as HealthComponent).kill()
 	TestAssertions.equal(leader_health_value.text if leader_health_value != null else "", "0 / 100", "collapsed zero-health leader remains exact and readable", failures)
 	if leader_health != null:
+		TestAssertions.truthy(is_zero_approx(leader_health.value), "collapsed zero-health leader keeps the true zero bar value", failures)
+		var zero_track := leader_health.get_theme_stylebox(&"background") as StyleBoxFlat
 		var zero_fill := leader_health.get_theme_stylebox(&"fill") as StyleBoxFlat
+		TestAssertions.truthy(zero_track != null and zero_track.border_width_left == 1 and zero_track.border_width_top == 1 and zero_track.border_width_right == 1 and zero_track.border_width_bottom == 1, "zero-health track remains outlined without inventing fill", failures)
 		TestAssertions.equal(zero_fill.bg_color if zero_fill != null else Color.TRANSPARENT, LivingForgeTokens.color(&"error"), "zero-health collapsed leader retains the semantic error fill token", failures)
 	var high_contrast_settings := (fixture.settings as PartyForgeSettings).copy()
 	high_contrast_settings.high_contrast = true
 	hud.apply_visual_settings(high_contrast_settings)
+	if leader_health != null:
+		var high_contrast_track := leader_health.get_theme_stylebox(&"background") as StyleBoxFlat
+		var high_contrast_fill := leader_health.get_theme_stylebox(&"fill") as StyleBoxFlat
+		var high_contrast_header_style := party_header.get_theme_stylebox(&"normal") as StyleBoxFlat
+		TestAssertions.truthy(high_contrast_track != null and high_contrast_track.border_width_left == 2 and high_contrast_track.border_width_top == 2 and high_contrast_track.border_width_right == 2 and high_contrast_track.border_width_bottom == 2, "high-contrast zero-health track strengthens its outline to two pixels", failures)
+		TestAssertions.equal(high_contrast_track.border_color if high_contrast_track != null else Color.TRANSPARENT, LivingForgeTokens.color(&"disabled", true), "high-contrast zero-health track uses the high-contrast muted semantic token", failures)
+		TestAssertions.truthy(high_contrast_track != null and high_contrast_header_style != null and _contrast_ratio(high_contrast_track.border_color, high_contrast_header_style.bg_color) >= 3.0, "high-contrast zero-health outline separates from the header at at least 3:1", failures)
+		TestAssertions.equal(high_contrast_fill.bg_color if high_contrast_fill != null else Color.TRANSPARENT, LivingForgeTokens.color(&"error", true), "high-contrast zero-health state preserves the semantic error fill token", failures)
 	for icon: TextureRect in [party_icon, alerts_icon]:
 		var high_contrast_material := icon.material as ShaderMaterial if icon != null else null
 		TestAssertions.equal(high_contrast_material.get_shader_parameter(&"icon_color") if high_contrast_material != null else Color.TRANSPARENT, LivingForgeTokens.color(&"error", true), "%s severity icon uses the high-contrast semantic error token" % icon.name if icon != null else "missing severity icon", failures)
@@ -738,6 +753,20 @@ func _contains_message(messages: PackedStringArray, marker: String) -> bool:
 		if marker in message:
 			return true
 	return false
+
+
+func _contrast_ratio(first: Color, second: Color) -> float:
+	var first_luminance := _relative_luminance(first)
+	var second_luminance := _relative_luminance(second)
+	return (maxf(first_luminance, second_luminance) + 0.05) / (minf(first_luminance, second_luminance) + 0.05)
+
+
+func _relative_luminance(value: Color) -> float:
+	return 0.2126 * _linear_channel(value.r) + 0.7152 * _linear_channel(value.g) + 0.0722 * _linear_channel(value.b)
+
+
+func _linear_channel(value: float) -> float:
+	return value / 12.92 if value <= 0.04045 else pow((value + 0.055) / 1.055, 2.4)
 
 
 func _ledger_health(member_id: int, fixture: Dictionary) -> Dictionary:

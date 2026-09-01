@@ -64,6 +64,8 @@ func _run() -> void:
 		await _exercise_result(Vector2i(1280, 720), scale_corner.x, scale_corner.y)
 		if _long_detail_corner(Vector2i(1280, 720), scale_corner.x, scale_corner.y):
 			await _exercise_result(Vector2i(1280, 720), scale_corner.x, scale_corner.y, true)
+	await _exercise_zero_health_collapsed_track(false)
+	await _exercise_zero_health_collapsed_track(true)
 	_finish()
 
 
@@ -314,9 +316,49 @@ func _exercise_hud(viewport_size: Vector2i, party_count: int, alert_count: int, 
 	var visible_hud_actions := _visible_buttons(hud.get_node("Margin/CombatStatus") as Control)
 	_assert_controls_within_owning_surface(visible_hud_actions, viewport_rect, "%s visible actions" % context_label)
 	hud.free()
+	_cleanup_hud_fixture(fixture)
 	viewport.free()
 	_active_viewport = null
+
+
+func _exercise_zero_health_collapsed_track(high_contrast: bool) -> void:
+	var viewport_size := Vector2i(1280, 720)
+	var viewport := _new_viewport(viewport_size)
+	var fixture := _hud_fixture(24, 7, 100, 150)
+	(fixture.settings as PartyForgeSettings).high_contrast = high_contrast
+	(fixture.health_by_member[1] as HealthComponent).kill()
+	var context_label := "HUD_ZERO_HEALTH_720P_TEXT150 high_contrast=%s" % high_contrast
+	var hud := (load("res://scenes/ui/hud.tscn") as PackedScene).instantiate() as HUD
+	hud.custom_viewport = viewport
+	viewport.add_child(hud)
+	hud.configure(fixture.run, fixture.party, fixture.experience, fixture.context, fixture.settings)
+	await _wait_until(func() -> bool:
+		return hud.current_projection != null and hud.current_projection.leader() != null and is_zero_approx(hud.current_projection.leader().health)
+	, "%s authoritative zero-health projection" % context_label)
+	hud.apply_collapse_preferences(true, true)
+	var party_header := hud.get_node("Margin/CombatStatus/PartyHeader") as Button
+	var cluster := hud.get_node("Margin/CombatStatus/PartyHeader/Content/LeaderHealthCluster") as Control
+	var bar := cluster.get_node("Bar") as ProgressBar
+	var value := cluster.get_node("Value") as Label
+	await _wait_for_stable_layout([party_header, cluster, bar, value], context_label)
+	var header_rect := party_header.get_global_rect()
+	var cluster_rect := cluster.get_global_rect()
+	var bar_rect := bar.get_global_rect()
+	var value_rect := value.get_global_rect()
+	_assert(header_rect.encloses(cluster_rect) and cluster_rect.encloses(bar_rect), "%s actual Bar remains fully enclosed header=%s cluster=%s bar=%s" % [context_label, header_rect, cluster_rect, bar_rect])
+	_assert(bar_rect.size.x >= 96.0 and bar_rect.size.y >= 12.0, "%s actual Bar keeps at least 96x12 geometry: %s" % [context_label, bar_rect])
+	_assert(is_zero_approx(bar.value) and value.text == "0 / 100", "%s preserves true zero and exact 0 / 100 text" % context_label)
+	_assert(cluster_rect.encloses(value_rect) and not bar_rect.intersection(value_rect).has_area(), "%s exact value remains visible, enclosed, and nonoverlapping bar=%s value=%s" % [context_label, bar_rect, value_rect])
+	var track := bar.get_theme_stylebox(&"background") as StyleBoxFlat
+	var header_style := party_header.get_theme_stylebox(&"normal") as StyleBoxFlat
+	var expected_width := 2 if high_contrast else 1
+	_assert(track != null and track.border_width_left == expected_width and track.border_width_top == expected_width and track.border_width_right == expected_width and track.border_width_bottom == expected_width, "%s track uses the required semantic outline width=%d" % [context_label, expected_width])
+	_assert(track != null and track.border_color == LivingForgeTokens.color(&"disabled", high_contrast), "%s track uses the muted non-focus outline token" % context_label)
+	_assert(track != null and header_style != null and _contrast_ratio(track.border_color, header_style.bg_color) >= 3.0, "%s track outline separates measurably from the actual header surface" % context_label)
+	hud.free()
 	_cleanup_hud_fixture(fixture)
+	viewport.free()
+	_active_viewport = null
 
 
 func _exercise_level_up(viewport_size: Vector2i, ui_scale: int, text_scale: int) -> void:
@@ -716,6 +758,20 @@ func _settings(ui_scale: int, text_scale: int) -> PartyForgeSettings:
 	result.ui_scale_percent = ui_scale
 	result.text_scale_percent = text_scale
 	return result
+
+
+func _contrast_ratio(first: Color, second: Color) -> float:
+	var first_luminance := _relative_luminance(first)
+	var second_luminance := _relative_luminance(second)
+	return (maxf(first_luminance, second_luminance) + 0.05) / (minf(first_luminance, second_luminance) + 0.05)
+
+
+func _relative_luminance(value: Color) -> float:
+	return 0.2126 * _linear_channel(value.r) + 0.7152 * _linear_channel(value.g) + 0.0722 * _linear_channel(value.b)
+
+
+func _linear_channel(value: float) -> float:
+	return value / 12.92 if value <= 0.04045 else pow((value + 0.055) / 1.055, 2.4)
 
 
 func _durable_safety(snapshot: RunTerminalSnapshot) -> RunTerminalRecoverySafetyResult:

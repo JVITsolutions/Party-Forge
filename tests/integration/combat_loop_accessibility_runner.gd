@@ -180,6 +180,20 @@ func _exercise_hud(viewport: SubViewport, settings: PartyForgeSettings, label: S
 	for clear_path: NodePath in [^"Content/AllClearGlyph", ^"../AlertRegion/Header/Content/AllClearGlyph"]:
 		var clear_glyph := party_header.get_node(clear_path) as Label
 		_assert(clear_glyph.visible and clear_glyph.get_theme_color(&"font_color").is_equal_approx(LivingForgeTokens.color(&"valid", settings.high_contrast)), "HUD all-clear glyph uses the semantic valid token at %s path=%s" % [label, clear_path])
+	(fixture.health_by_member[1] as HealthComponent).kill()
+	party_header.pressed.emit()
+	await process_frame
+	var zero_health_cluster := party_header.get_node("Content/LeaderHealthCluster") as Control
+	var zero_health_bar := zero_health_cluster.get_node("Bar") as ProgressBar
+	var zero_health_value := zero_health_cluster.get_node("Value") as Label
+	var zero_track := zero_health_bar.get_theme_stylebox(&"background") as StyleBoxFlat
+	var header_style := party_header.get_theme_stylebox(&"normal") as StyleBoxFlat
+	var expected_track_width := 2 if settings.high_contrast else 1
+	_assert(is_zero_approx(zero_health_bar.value) and zero_health_value.text == "0 / 100", "collapsed zero-health HUD exposes exact text without fake fill at %s" % label)
+	_assert(zero_health_cluster.get_global_rect().encloses(zero_health_bar.get_global_rect()) and zero_health_cluster.get_global_rect().encloses(zero_health_value.get_global_rect()), "collapsed zero-health bar and text remain contained at %s" % label)
+	_assert(not zero_health_bar.get_global_rect().intersection(zero_health_value.get_global_rect()).has_area(), "collapsed zero-health text never overlaps the track at %s" % label)
+	_assert(zero_track != null and zero_track.border_width_left == expected_track_width and zero_track.border_width_top == expected_track_width and zero_track.border_width_right == expected_track_width and zero_track.border_width_bottom == expected_track_width, "collapsed zero-health track exposes the required outline width at %s" % label)
+	_assert(zero_track != null and header_style != null and _contrast_ratio(zero_track.border_color, header_style.bg_color) >= 3.0, "collapsed zero-health track remains distinguishable from its actual header surface at %s" % label)
 
 	hud.free()
 	_cleanup_hud_fixture(fixture)
@@ -453,6 +467,20 @@ func _cleanup_hud_fixture(fixture: Dictionary) -> void:
 	for actor: Node3D in fixture.actors as Array:
 		actor.free()
 	(fixture.run as Node).free()
+
+
+func _contrast_ratio(first: Color, second: Color) -> float:
+	var first_luminance := _relative_luminance(first)
+	var second_luminance := _relative_luminance(second)
+	return (maxf(first_luminance, second_luminance) + 0.05) / (minf(first_luminance, second_luminance) + 0.05)
+
+
+func _relative_luminance(value: Color) -> float:
+	return 0.2126 * _linear_channel(value.r) + 0.7152 * _linear_channel(value.g) + 0.0722 * _linear_channel(value.b)
+
+
+func _linear_channel(value: float) -> float:
+	return value / 12.92 if value <= 0.04045 else pow((value + 0.055) / 1.055, 2.4)
 
 
 func _hud_member(hud: HUD, member_id: int) -> ForgePartyMemberCard:

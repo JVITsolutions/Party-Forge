@@ -681,6 +681,12 @@ func _present_collapsed_leader_health(leader: PartyMemberHudProjection, bar: Pro
 	var color_role: StringName = &"error" if critical else &"valid"
 	var track := StyleBoxFlat.new()
 	track.bg_color = LivingForgeTokens.color(&"surface_inset", _high_contrast)
+	var track_outline_width := 2 if _high_contrast else 1
+	track.border_width_left = track_outline_width
+	track.border_width_top = track_outline_width
+	track.border_width_right = track_outline_width
+	track.border_width_bottom = track_outline_width
+	track.border_color = LivingForgeTokens.color(&"disabled", _high_contrast)
 	track.corner_radius_top_left = 3
 	track.corner_radius_top_right = 3
 	track.corner_radius_bottom_left = 3
