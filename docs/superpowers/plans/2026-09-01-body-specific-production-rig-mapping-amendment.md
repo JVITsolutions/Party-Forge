@@ -11,7 +11,8 @@
 ## Global Constraints
 
 - Authoritative worktree: F:\Projects(root)\Game dev\Projects\party-forge\.worktrees\class-preview-character-model-replacement.
-- Required starting branch: feat/class-preview-character-model-replacement at fbc3f9e8c3d9853ffbf8d3c21944f970ac41231b.
+- Required branch: feat/class-preview-character-model-replacement. The immutable approved-design ancestor is fbc3f9e8c3d9853ffbf8d3c21944f970ac41231b and must remain an ancestor of the execution baseline.
+- Immediately before Task 1, capture the then-current clean HEAD dynamically as implementationBase. Do not hard-code or predict the plan-correction commit hash.
 - Preserve the masculine and feminine candidates' distinct native rest and bind poses.
 - Preserve canonical_rig_id = &"pf_humanoid_v1"; do not change gameplay character, class, profile, item, ability, progression, or save-data IDs.
 - Preserve validate_rig() as the exact legacy 19-bone validator.
@@ -105,6 +106,86 @@ Both later resources use this table. Tests may use synthetic names for generic c
 | lower_leg_right | mixamorig_RightLeg |
 | foot_right | mixamorig_RightFoot |
 | toe_right | mixamorig_RightToeBase |
+
+---
+
+## Mandatory Execution-Baseline Capture
+
+Perform this gate immediately before Task 1 and preserve its output through Task 4. It establishes the only valid implementation diff base while retaining fbc3f9e8c3d9853ffbf8d3c21944f970ac41231b as immutable design provenance.
+
+- [ ] **Step 1: Require a clean, approved baseline tree**
+
+Run:
+
+~~~powershell
+$approvedDesignAncestor = 'fbc3f9e8c3d9853ffbf8d3c21944f970ac41231b'
+git merge-base --is-ancestor $approvedDesignAncestor HEAD
+if ($LASTEXITCODE -ne 0) { throw 'approved design commit is not an ancestor of the execution baseline' }
+if (@(git status --porcelain=v1 | Where-Object { $_ -notmatch '^\?\?' }).Count -ne 0) {
+    throw 'tracked worktree or index is not clean at implementation baseline capture'
+}
+$implementationBase = (git rev-parse HEAD).Trim()
+~~~
+
+Require branch feat/class-preview-character-model-replacement, 77 preserved untracked files, and no staged or tracked changes. `implementationBase` is intentionally derived from HEAD instead of being self-referential in this plan.
+
+- [ ] **Step 2: Require the exact baseline contents**
+
+Run:
+
+~~~powershell
+$requiredBaselinePaths = @(
+    'docs/superpowers/specs/2026-09-01-body-specific-production-rig-mapping-amendment-design.md',
+    'docs/superpowers/plans/2026-09-01-body-specific-production-rig-mapping-amendment.md'
+)
+foreach ($path in $requiredBaselinePaths) {
+    git cat-file -e "${implementationBase}:$path"
+    if ($LASTEXITCODE -ne 0) { throw "baseline is missing $path" }
+}
+$baselineDelta = @(git diff --name-only $approvedDesignAncestor $implementationBase)
+if ($baselineDelta.Count -ne 1 -or $baselineDelta[0] -ne 'docs/superpowers/plans/2026-09-01-body-specific-production-rig-mapping-amendment.md') {
+    throw "baseline contains unauthorized post-design paths: $($baselineDelta -join ', ')"
+}
+$forbiddenBaselinePaths = @(
+    'scripts/presentation/humanoid_rig_mapping_catalog.gd',
+    'tests/fixtures/presentation/production_rig_inspection_rest_fixtures.json',
+    'tests/unit/test_production_humanoid_rest_signature.gd',
+    'tests/unit/test_humanoid_rig_mapping_catalog.gd',
+    'data/presentation/humanoid_rigs/pf_humanoid_v1_mixamo52.tres',
+    'data/presentation/humanoid_rigs/pf_humanoid_v1_mixamo52_masculine.tres',
+    'data/presentation/humanoid_rigs/pf_humanoid_v1_mixamo52_feminine.tres',
+    'data/presentation/manifests/pf_character_equipment_v2.json',
+    'docs/qa/character-model-replacement/body-pair-qualification.md'
+)
+foreach ($path in $forbiddenBaselinePaths) {
+    git cat-file -e "${implementationBase}:$path" 2>$null
+    if ($LASTEXITCODE -eq 0) { throw "baseline already contains forbidden implementation/resource/Task 4 path $path" }
+}
+~~~
+
+This proves that the baseline tree contains the approved amendment and corrected plan, but no implementation, mapping resource, manifest-v2, body-qualification, or original Task 4 deliverable.
+
+- [ ] **Step 3: Record implementationBase outside the repository**
+
+Run once:
+
+~~~powershell
+$stamp = (Get-Date).ToUniversalTime().ToString('yyyyMMddTHHmmssZ')
+$suffix = [guid]::NewGuid().ToString('N').Substring(0, 8)
+$baselineEvidenceRoot = "C:\Users\Jacob\AppData\Local\Temp\pf-body-rig-implementation-base-$stamp-$suffix"
+New-Item -ItemType Directory -Path $baselineEvidenceRoot -Force | Out-Null
+$baselineEvidencePath = Join-Path $baselineEvidenceRoot 'implementation-base.json'
+[ordered]@{
+    schema_version = 1
+    branch = (git branch --show-current).Trim()
+    approved_design_ancestor = $approvedDesignAncestor
+    implementation_base = $implementationBase
+    captured_utc = (Get-Date).ToUniversalTime().ToString('o')
+    baseline_delta = @($baselineDelta)
+} | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $baselineEvidencePath -Encoding utf8NoBOM
+~~~
+
+Read the JSON back and require its implementation_base to equal `git rev-parse HEAD`, its approved_design_ancestor to equal fbc3f9e8c3d9853ffbf8d3c21944f970ac41231b, and its baseline_delta to contain only the corrected plan path. Report `$baselineEvidencePath` at the final checkpoint. All later review, commit-count, diff, diff-check, and scope commands consume this recorded implementationBase.
 
 ---
 
@@ -1041,7 +1122,8 @@ Require full-suite exit 0 and exactly one terminal marker matching TEST_SUMMARY:
 Invoke the requesting-code-review skill and give a fresh reviewer this exact scope:
 
 ~~~text
-Compare commits after fbc3f9e8c3d9853ffbf8d3c21944f970ac41231b to
+Compare commits after implementationBase ($implementationBase, recorded at
+$baselineEvidencePath) to
 docs/superpowers/specs/2026-09-01-body-specific-production-rig-mapping-amendment-design.md.
 Check every numeric-bind rule, legacy-validator containment, fixed-nine-decimal
 rest byte contract, both approved source/rest identities, catalog selection,
@@ -1058,7 +1140,8 @@ If the reviewer returns FAIL or cannot provide file/line evidence, stop and repo
 Use a different fresh reviewer with this exact scope:
 
 ~~~text
-Review the same post-fbc3f9e8 implementation for deterministic error order,
+Review the same post-implementationBase implementation ($implementationBase,
+recorded at $baselineEvidencePath) for deterministic error order,
 Godot Skin/Skeleton3D API correctness, duplicate/out-of-range coverage,
 name/index precedence, finite/invertible validation, exact serialization bytes,
 type/signature consistency, stateless catalog behavior, test isolation, and
@@ -1070,7 +1153,7 @@ Any FAIL stops the checkpoint. No unplanned corrective commit is authorized by t
 
 - [ ] **Step 6: Audit exact commits and tracked scope**
 
-Require exactly three first-parent commits after fbc3f9e8c3d9853ffbf8d3c21944f970ac41231b, in this order:
+Require fbc3f9e8c3d9853ffbf8d3c21944f970ac41231b to remain an ancestor of implementationBase. Then require exactly three first-parent commits after implementationBase, in this order:
 
 ~~~text
 feat: accept complete numeric production skin binds
@@ -1091,7 +1174,7 @@ tests/unit/test_production_humanoid_rest_signature.gd
 tests/unit/test_production_humanoid_rig_mapping.gd
 ~~~
 
-Require tracked worktree and index clean, git diff fbc3f9e8c3d9853ffbf8d3c21944f970ac41231b..HEAD --check exit 0, and no merge commit.
+Require tracked worktree and index clean, `git diff $implementationBase..HEAD --check` exit 0, the changed-path union from `git diff --name-only $implementationBase..HEAD` to equal the eight paths above, and no merge commit. The approved-design ancestor remains provenance only and is not used as the implementation scope base.
 
 - [ ] **Step 7: Revalidate containment and immutable provenance**
 
