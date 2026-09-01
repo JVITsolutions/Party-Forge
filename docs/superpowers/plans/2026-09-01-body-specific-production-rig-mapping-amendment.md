@@ -76,6 +76,12 @@ static func _resolve_mapped_skin_binds(
 		errors: PackedStringArray
 	) -> Dictionary
 
+# Private mapped-production-only pure helper. Legacy validators do not use it.
+static func _matching_name_indices(
+		bone_names: Array[StringName],
+		target_name: StringName
+	) -> PackedInt32Array
+
 # scripts/presentation/humanoid_rig_mapping_catalog.gd
 func _init(mapping_by_body_preset: Dictionary = {}) -> void
 func resolve(body_preset_id: StringName) -> HumanoidRigMapping
@@ -197,8 +203,9 @@ Read the JSON back and require its implementation_base to equal `git rev-parse H
 - Modify: tests/unit/test_humanoid_rig_contract.gd
 
 **Interfaces:**
-- Consumes: existing HumanoidRigMapping.role_to_bone, REQUIRED_ROLES, REQUIRED_PARENT_BY_ROLE, _bone_indices_named(), _bone_is_ancestor(), and _validate_transform().
+- Consumes: existing HumanoidRigMapping.role_to_bone, REQUIRED_ROLES, REQUIRED_PARENT_BY_ROLE, _bone_is_ancestor(), and _validate_transform().
 - Produces: _resolve_mapped_skin_binds(skeleton, skin, errors) -> Dictionary where each key is a resolved skeleton bone index and each value is the unique Skin bind slot; validate_mapped_rig() consumes that dictionary.
+- Produces: mapped-production-only pure _matching_name_indices(bone_names, target_name) -> PackedInt32Array. It accepts a name snapshot rather than Skeleton3D so duplicate-name ambiguity can be tested without constructing an invalid Skeleton3D. Legacy validate_rig(), validate_skin(), and _bone_indices_named() remain unchanged and do not call this helper.
 
 - [ ] **Step 1: Change the production Skin fixture to create explicit numeric indices**
 
@@ -229,6 +236,16 @@ Call _assert_numeric_bind_resolution(failures) from run() immediately after _ass
 func _assert_numeric_bind_resolution(failures: Array[String]) -> void:
 	var mapping := _mapping()
 	var skeleton := _superset_skeleton(mapping)
+	var duplicate_name_snapshot: Array[StringName] = [&"PresentationRoot", &"DuplicateName", &"DuplicateName"]
+	var has_name_list_helper := _contract.has_method(&"_matching_name_indices")
+	TestAssertions.truthy(has_name_list_helper, "mapped-production duplicate-name resolver exists", failures)
+	if has_name_list_helper:
+		TestAssertions.equal(
+			_contract.call(&"_matching_name_indices", duplicate_name_snapshot, &"DuplicateName"),
+			PackedInt32Array([1, 2]),
+			"mapped-production duplicate-name resolver returns every matching index deterministically",
+			failures
+		)
 
 	var numeric_only := _skin_for(skeleton, &"", false)
 	TestAssertions.equal(
@@ -276,15 +293,6 @@ func _assert_numeric_bind_resolution(failures: Array[String]) -> void:
 		failures
 	)
 
-	var ambiguous_name := _skin_for(skeleton)
-	skeleton.set_bone_name(1, skeleton.get_bone_name(0))
-	TestAssertions.truthy(
-		_contains(_contract.call(&"validate_mapped_rig", _definition, mapping, skeleton, ambiguous_name), "bind 0 name PresentationRoot must resolve exactly once"),
-		"present ambiguous bind name rejects",
-		failures
-	)
-	skeleton.set_bone_name(1, _bone_for(mapping, &"hips"))
-
 	var missing_name := _skin_for(skeleton)
 	missing_name.set_bind_name(0, &"MissingProductionBone")
 	TestAssertions.truthy(
@@ -327,12 +335,12 @@ Append these cases to _assert_rest_and_skin_failures(). They supplement the exis
 
 ~~~gdscript
 	skeleton = _superset_skeleton(mapping)
+	skin = _skin_for(skeleton, &"", false)
 	var singular_rest_index := skeleton.find_bone(_bone_for(mapping, &"head"))
 	skeleton.set_bone_rest(
 		singular_rest_index,
 		Transform3D(Basis(Vector3.ZERO, Vector3.ZERO, Vector3.ZERO), Vector3.ZERO)
 	)
-	skin = _skin_for(skeleton, &"", false)
 	TestAssertions.truthy(
 		_contains(_contract.call(&"validate_mapped_rig", _definition, mapping, skeleton, skin), "mapped humanoid bone %s rest must be invertible" % _bone_for(mapping, &"head")),
 		"singular mapped rest rejects",
@@ -418,7 +426,7 @@ $project = 'F:\Projects(root)\Game dev\Projects\party-forge\.worktrees\class-pre
 & $godot --headless --path $project --quit-after 180 --script res://tests/focused_test_runner.gd -- tests/unit/test_production_humanoid_rig_mapping.gd tests/unit/test_humanoid_rig_contract.gd
 ~~~
 
-Expected: nonzero process exit and exactly one terminal TEST_SUMMARY: FAIL marker. The failures must include complete unique numeric-only Skin binds validate, negative numeric bind rejects, out-of-range numeric bind rejects, duplicate numeric coverage rejects, incomplete full-skeleton coverage rejects, present bind name with no skeleton match rejects, present name/index conflict rejects, and singular numeric bind pose rejects. There must be no parser, loader, fixture, import, or script error.
+Expected: nonzero process exit and exactly one terminal TEST_SUMMARY: FAIL marker. The missing-production-behavior failures must name mapped-production duplicate-name resolver exists, complete unique numeric-only Skin binds validate, negative numeric bind rejects, out-of-range numeric bind rejects, duplicate numeric coverage rejects, duplicate coverage also reports the uncovered bone, incomplete full-skeleton coverage rejects, present bind name with no skeleton match rejects, present name/index conflict rejects, singular numeric bind pose rejects, bind-pose errors lead slot-local resolution errors, numeric range error follows pose error deterministically, non-finite named Skin bind rejects, and singular mapped rest rejects. The synthetic duplicate-name assertion must not mutate, construct, or serialize a duplicate-name Skeleton3D. There must be no engine, fixture, parser, loader, import, script, crash, segmentation, or leak diagnostic.
 
 - [ ] **Step 6: Implement the mapped-production bind resolver**
 
@@ -444,6 +452,9 @@ static func _resolve_mapped_skin_binds(
 		errors: PackedStringArray
 	) -> Dictionary:
 	var bind_index_by_bone_index: Dictionary = {}
+	var bone_names: Array[StringName] = []
+	for bone_index: int in skeleton.get_bone_count():
+		bone_names.append(skeleton.get_bone_name(bone_index))
 	for bind_index: int in skin.get_bind_count():
 		_validate_transform(
 			skin.get_bind_pose(bind_index),
@@ -461,7 +472,7 @@ static func _resolve_mapped_skin_binds(
 		var bind_name := skin.get_bind_name(bind_index)
 		if bind_name.is_empty():
 			continue
-		var matching_bones := _bone_indices_named(skeleton, bind_name)
+		var matching_bones := _matching_name_indices(bone_names, bind_name)
 		if matching_bones.size() != 1:
 			errors.append("mapped humanoid Skin bind %d name %s must resolve exactly once" % [bind_index, bind_name])
 		elif matching_bones[0] != bone_index:
@@ -476,9 +487,19 @@ static func _resolve_mapped_skin_binds(
 				% [skeleton.get_bone_name(bone_index), bone_index]
 			)
 	return bind_index_by_bone_index
+
+static func _matching_name_indices(
+		bone_names: Array[StringName],
+		target_name: StringName
+	) -> PackedInt32Array:
+	var matching_indices := PackedInt32Array()
+	for bone_index: int in bone_names.size():
+		if bone_names[bone_index] == target_name:
+			matching_indices.append(bone_index)
+	return matching_indices
 ~~~
 
-Do not alter validate_rig(), validate_skin(), serialize_skin_binds(), or their helpers.
+Do not alter validate_rig(), validate_skin(), serialize_skin_binds(), _bone_indices_named(), or any other legacy helper. The pure name-list helper is private to mapped-production validation.
 
 - [ ] **Step 7: Run Task 1 GREEN and regression suites**
 
@@ -681,7 +702,7 @@ func _bind_mapping_to_skeleton(mapping: Resource, skeleton: Skeleton3D) -> void:
 | _assert_mapped_bone_and_hierarchy_failures, wrong ancestor | mapping | after `set_bone_parent(child_index, wrong_parent_index)` |
 | _assert_rest_and_skin_failures, non-finite rest | mapping | after `set_bone_rest(head_index, invalid_rest)` |
 | _assert_rest_and_skin_failures, missing bind | mapping | immediately after the replacement `_superset_skeleton(mapping)` |
-| _assert_rest_and_skin_failures, singular rest | mapping | after the singular `set_bone_rest()` |
+| _assert_rest_and_skin_failures, singular rest | mapping | construct Skin first while all rests are invertible, then set the head rest singular, then bind the mapping to that mutated skeleton before validation |
 | _assert_rest_and_skin_failures, missing semantic bind | mapping | immediately after the replacement `_superset_skeleton(mapping)` |
 
 The Skin-pose mutations do not change skeleton rest identity and require no second binding call. These exact insertions prevent a rest-identity error from masking each test's intended failure.
