@@ -11,6 +11,14 @@ const ALERT_CARD_SCENE := preload("res://scenes/ui/living_forge/components/forge
 const CRITICAL_STATE_ICON: Texture2D = preload("res://assets/ui/living_forge/icons/tabler-3.46.0/alert-triangle.svg")
 const DOWNED_STATE_ICON: Texture2D = preload("res://assets/ui/living_forge/icons/party-forge/downed.svg")
 const DEAD_STATE_ICON: Texture2D = preload("res://assets/ui/living_forge/icons/party-forge/dead.svg")
+const ICON_SHADER_CODE := """
+shader_type canvas_item;
+uniform vec4 icon_color : source_color = vec4(1.0);
+void fragment() {
+	vec4 sampled = texture(TEXTURE, UV);
+	COLOR = vec4(icon_color.rgb, sampled.a * icon_color.a);
+}
+"""
 const REGION_PARTY: StringName = &"party"
 const REGION_ALERTS: StringName = &"alerts"
 
@@ -559,7 +567,9 @@ func _present_region_headers() -> void:
 	var party_header := get_node("Margin/CombatStatus/PartyHeader") as Button
 	var party_glyph := get_node("Margin/CombatStatus/PartyHeader/Content/DisclosureGlyph") as Label
 	var party_summary := get_node("Margin/CombatStatus/PartyHeader/Content/Summary") as Label
-	var party_health := get_node("Margin/CombatStatus/PartyHeader/Content/LeaderHealth") as ProgressBar
+	var party_health_cluster := get_node("Margin/CombatStatus/PartyHeader/Content/LeaderHealthCluster") as Control
+	var party_health := get_node("Margin/CombatStatus/PartyHeader/Content/LeaderHealthCluster/Bar") as ProgressBar
+	var party_health_value := get_node("Margin/CombatStatus/PartyHeader/Content/LeaderHealthCluster/Value") as Label
 	var party_icon := get_node("Margin/CombatStatus/PartyHeader/Content/StateIcon") as TextureRect
 	var party_clear := get_node("Margin/CombatStatus/PartyHeader/Content/AllClearGlyph") as Label
 	_present_disclosure(REGION_PARTY, party_glyph, _party_collapsed)
@@ -575,7 +585,9 @@ func _present_region_headers() -> void:
 		alerts_summary.text = "ALERTS · UNAVAILABLE"
 		party_header.accessibility_name = "Party unavailable, %s" % _region_state_label(_party_collapsed)
 		alerts_header.accessibility_name = "Alerts unavailable, %s" % _region_state_label(_alerts_collapsed)
-		party_health.visible = false
+		party_header.accessibility_description = _region_accessibility_description("Party", "party", _party_collapsed, false)
+		alerts_header.accessibility_description = _region_accessibility_description("Alerts", "alert", _alerts_collapsed, false)
+		party_health_cluster.visible = false
 		_present_state_cue(party_icon, party_clear, CombatHudProjection.NO_ALERT_SEVERITY, false)
 		_present_state_cue(alerts_icon, alerts_clear, CombatHudProjection.NO_ALERT_SEVERITY, false)
 		_set_tray_action_eligibility(tray_action, 0)
@@ -588,20 +600,16 @@ func _present_region_headers() -> void:
 	var critical := current_projection.alert_count_for(CombatAlertProjection.Severity.CRITICAL)
 	if leader != null:
 		if _party_collapsed:
-			party_summary.text = "PARTY · %d MEMBERS · LEADER %s · STATE %s · DEAD %d · DOWNED %d · CRITICAL %d" % [
-				current_projection.members.size(),
-				leader.display_name.to_upper(),
-				_severity_label(highest_severity),
-				dead,
-				downed,
-				critical,
-			]
+			party_summary.text = _collapsed_party_summary(current_projection.members.size(), leader.display_name, highest_severity, dead, downed, critical)
 		else:
 			party_summary.text = "PARTY · %d MEMBERS" % current_projection.members.size()
 		party_health.max_value = leader.max_health
 		party_health.value = leader.health
-		party_health.visible = _party_collapsed
+		party_health_value.text = "%d / %d" % [roundi(leader.health), roundi(leader.max_health)]
+		party_health_cluster.visible = _party_collapsed
+		_present_collapsed_leader_health(leader, party_health, party_health_value)
 	party_header.accessibility_name = _party_accessibility_name()
+	party_header.accessibility_description = _region_accessibility_description("Party", "party", _party_collapsed, true)
 	var highest := current_projection.highest_severity_alert()
 	if highest == null:
 		alerts_summary.text = "ALERTS · ALL CLEAR"
@@ -610,6 +618,7 @@ func _present_region_headers() -> void:
 	else:
 		alerts_summary.text = "ALERTS %d · %s · %s" % [current_projection.all_alerts.size(), _severity_label(highest.severity), highest.summary]
 	alerts_header.accessibility_name = _alerts_accessibility_name()
+	alerts_header.accessibility_description = _region_accessibility_description("Alerts", "alert", _alerts_collapsed, true)
 	_present_state_cue(party_icon, party_clear, highest_severity, true)
 	_present_state_cue(alerts_icon, alerts_clear, highest_severity, true)
 	_set_tray_action_eligibility(tray_action, current_projection.all_alerts.size())
@@ -619,6 +628,27 @@ func _present_region_headers() -> void:
 
 func _region_state_label(collapsed: bool) -> String:
 	return "collapsed" if collapsed else "expanded"
+
+
+func _region_accessibility_description(region_label: String, detail_label: String, collapsed: bool, available: bool) -> String:
+	var state := "COLLAPSED" if collapsed else "EXPANDED"
+	var action := "EXPAND" if collapsed else "COLLAPSE"
+	var availability := "UNAVAILABLE and " if not available else ""
+	return "%s region is %s%s. Activate to %s %s details." % [region_label, availability, state, action, detail_label]
+
+
+func _collapsed_party_summary(member_count: int, leader_name: String, highest_severity: int, dead: int, downed: int, critical: int) -> String:
+	var hierarchy := ""
+	match highest_severity:
+		CombatAlertProjection.Severity.DEAD:
+			hierarchy = "HIGHEST: DEAD (%d) · DOWNED %d · CRITICAL %d" % [dead, downed, critical]
+		CombatAlertProjection.Severity.DOWNED:
+			hierarchy = "HIGHEST: DOWNED (%d) · DEAD %d · CRITICAL %d" % [downed, dead, critical]
+		CombatAlertProjection.Severity.CRITICAL:
+			hierarchy = "HIGHEST: CRITICAL (%d) · DEAD %d · DOWNED %d" % [critical, dead, downed]
+		_:
+			hierarchy = "HIGHEST: ALL CLEAR (0) · DEAD %d · DOWNED %d · CRITICAL %d" % [dead, downed, critical]
+	return "PARTY · %d MEMBERS · LEADER %s · %s" % [member_count, leader_name.to_upper(), hierarchy]
 
 
 func _severity_label(severity: int) -> String:
@@ -641,6 +671,40 @@ func _present_state_cue(icon: TextureRect, all_clear_glyph: Label, severity: int
 	icon.texture = _severity_icon(severity) if available else null
 	icon.visible = icon.texture != null
 	all_clear_glyph.visible = available and severity == CombatHudProjection.NO_ALERT_SEVERITY
+	if icon.visible:
+		_tint_texture(icon, LivingForgeTokens.color(&"error", _high_contrast))
+	all_clear_glyph.add_theme_color_override(&"font_color", LivingForgeTokens.color(&"valid", _high_contrast))
+
+
+func _present_collapsed_leader_health(leader: PartyMemberHudProjection, bar: ProgressBar, value_label: Label) -> void:
+	var critical := leader.is_dead or leader.is_downed or leader.health / maxf(leader.max_health, 1.0) <= CombatHudViewModel.CRITICAL_HEALTH_RATIO
+	var color_role: StringName = &"error" if critical else &"valid"
+	var track := StyleBoxFlat.new()
+	track.bg_color = LivingForgeTokens.color(&"surface_inset", _high_contrast)
+	track.corner_radius_top_left = 3
+	track.corner_radius_top_right = 3
+	track.corner_radius_bottom_left = 3
+	track.corner_radius_bottom_right = 3
+	var fill := StyleBoxFlat.new()
+	fill.bg_color = LivingForgeTokens.color(color_role, _high_contrast)
+	fill.corner_radius_top_left = 3
+	fill.corner_radius_top_right = 3
+	fill.corner_radius_bottom_left = 3
+	fill.corner_radius_bottom_right = 3
+	bar.add_theme_stylebox_override(&"background", track)
+	bar.add_theme_stylebox_override(&"fill", fill)
+	value_label.add_theme_color_override(&"font_color", LivingForgeTokens.color(&"text_primary", _high_contrast))
+
+
+func _tint_texture(texture_rect: TextureRect, color: Color) -> void:
+	var material := texture_rect.material as ShaderMaterial
+	if material == null:
+		var shader := Shader.new()
+		shader.code = ICON_SHADER_CODE
+		material = ShaderMaterial.new()
+		material.shader = shader
+		texture_rect.material = material
+	material.set_shader_parameter(&"icon_color", color)
 
 
 func _party_accessibility_name() -> String:
@@ -902,7 +966,9 @@ func _measure_header_summary_height(header: Button, summary: Label, maximum_heig
 	var line_height := maxf(font.get_height(font_size), 1.0)
 	var measured_height := clampf(ceilf(measured.y + line_height + 8.0), line_height, maximum_height)
 	summary.custom_minimum_size = Vector2(0.0, measured_height)
-	return measured_height
+	var collapsed_health := content.get_node_or_null("LeaderHealthCluster") as Control
+	var cluster_reserve := 12.0 if collapsed_health != null and collapsed_health.visible else 0.0
+	return minf(measured_height + cluster_reserve, maximum_height)
 
 
 func _rebuild_member_controls() -> void:
@@ -994,9 +1060,13 @@ func _present_live_member_controls() -> void:
 	for member: PartyMemberHudProjection in current_projection.members:
 		if member.is_leader:
 			leader_card.present(member)
+			if _party_collapsed:
+				_set_presentation_focus_mode(leader_card, leader_card.focus_mode)
 		var control := _member_controls_by_id.get(member.member_id) as ForgePartyMemberCard
 		if control != null:
 			control.present(member)
+			if _party_collapsed:
+				_set_presentation_focus_mode(control, control.focus_mode)
 
 
 func _present_status() -> void:

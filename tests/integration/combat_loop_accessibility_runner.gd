@@ -130,6 +130,13 @@ func _exercise_hud(viewport: SubViewport, settings: PartyForgeSettings, label: S
 
 	var party_header := hud.get_node("Margin/CombatStatus/PartyHeader") as Button
 	var alerts_header := hud.get_node("Margin/CombatStatus/AlertRegion/Header") as Button
+	_assert(party_header.accessibility_description == "Party region is EXPANDED. Activate to COLLAPSE party details.", "expanded Party header exposes exact state/action description at %s" % label)
+	_assert(alerts_header.accessibility_description == "Alerts region is EXPANDED. Activate to COLLAPSE alert details.", "expanded Alerts header exposes exact state/action description at %s" % label)
+	for icon_path: NodePath in [^"Content/StateIcon", ^"../AlertRegion/Header/Content/StateIcon"]:
+		var severity_icon := party_header.get_node(icon_path) as TextureRect
+		var icon_material := severity_icon.material as ShaderMaterial
+		_assert(severity_icon.visible and icon_material != null and icon_material.shader != null, "HUD severity icon uses a visible alpha-mask material at %s path=%s" % [label, icon_path])
+		_assert(icon_material != null and (icon_material.get_shader_parameter(&"icon_color") as Color).is_equal_approx(LivingForgeTokens.color(&"error", settings.high_contrast)), "HUD severity icon uses the semantic error token at %s path=%s" % [label, icon_path])
 	var party_roots: Array[Control] = [
 		hud.get_node("Margin/CombatStatus/LeaderCard") as Control,
 		hud.get_node("Margin/CombatStatus/Experience") as Control,
@@ -141,6 +148,7 @@ func _exercise_hud(viewport: SubViewport, settings: PartyForgeSettings, label: S
 	party_header.pressed.emit()
 	await process_frame
 	_assert(party_header.has_focus(), "collapsed Party moves hidden descendant focus to its accessible header at %s" % label)
+	_assert(party_header.accessibility_description == "Party region is COLLAPSED. Activate to EXPAND party details.", "collapsed Party header exposes exact state/action description at %s" % label)
 	for party_root: Control in party_roots:
 		_assert(_focus_modes_none(party_root), "collapsed Party descendants are unreachable at %s root=%s" % [label, party_root.name])
 		_assert(_accessible_exposure(party_root).is_empty(), "collapsed Party descendants are absent from the accessibility exposure helper at %s root=%s" % [label, party_root.name])
@@ -155,6 +163,7 @@ func _exercise_hud(viewport: SubViewport, settings: PartyForgeSettings, label: S
 	alerts_header.pressed.emit()
 	await process_frame
 	_assert(alerts_header.has_focus(), "collapsed Alerts moves hidden descendant focus to its accessible header at %s" % label)
+	_assert(alerts_header.accessibility_description == "Alerts region is COLLAPSED. Activate to EXPAND alert details.", "collapsed Alerts header exposes exact state/action description at %s" % label)
 	_assert(_focus_modes_none(hud.get_node("Margin/CombatStatus/AlertRegion/ExpandedAlerts") as Control), "collapsed Alerts descendants are unreachable at %s" % label)
 	_assert(_accessible_exposure(hud.get_node("Margin/CombatStatus/AlertRegion/ExpandedAlerts") as Control).is_empty(), "collapsed Alerts descendants are absent from the accessibility exposure helper at %s" % label)
 	alerts_header.pressed.emit()
@@ -165,6 +174,12 @@ func _exercise_hud(viewport: SubViewport, settings: PartyForgeSettings, label: S
 		_assert(party_tween == null and is_equal_approx((party_header.get_node("Content/DisclosureGlyph/RotatingGlyph") as Label).rotation, PI / 2.0), "reduced-motion HUD disclosure has no active Tween and reaches final glyph state at %s" % label)
 	else:
 		_assert(party_tween != null and party_tween.is_valid(), "normal-motion HUD disclosure uses a glyph-only Tween at %s" % label)
+	for member_id: int in range(2, 8):
+		(fixture.health_by_member[member_id] as HealthComponent).heal(100.0)
+	await process_frame
+	for clear_path: NodePath in [^"Content/AllClearGlyph", ^"../AlertRegion/Header/Content/AllClearGlyph"]:
+		var clear_glyph := party_header.get_node(clear_path) as Label
+		_assert(clear_glyph.visible and clear_glyph.get_theme_color(&"font_color").is_equal_approx(LivingForgeTokens.color(&"valid", settings.high_contrast)), "HUD all-clear glyph uses the semantic valid token at %s path=%s" % [label, clear_path])
 
 	hud.free()
 	_cleanup_hud_fixture(fixture)

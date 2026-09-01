@@ -70,7 +70,9 @@ func _run() -> void:
 func _assert_hud_collapse_geometry(hud: HUD, viewport_rect: Rect2, party_count: int, alert_count: int, party_collapsed: bool, alerts_collapsed: bool, text_scale: int, context_label: String) -> void:
 	var party_header := hud.get_node("Margin/CombatStatus/PartyHeader") as Button
 	var party_summary := hud.get_node("Margin/CombatStatus/PartyHeader/Content/Summary") as Label
-	var party_health := hud.get_node("Margin/CombatStatus/PartyHeader/Content/LeaderHealth") as ProgressBar
+	var party_health_cluster := hud.get_node_or_null("Margin/CombatStatus/PartyHeader/Content/LeaderHealthCluster") as Control
+	var party_health := party_health_cluster.get_node_or_null("Bar") as ProgressBar if party_health_cluster != null else null
+	var party_health_value := party_health_cluster.get_node_or_null("Value") as Label if party_health_cluster != null else null
 	var leader := hud.get_node("Margin/CombatStatus/LeaderCard") as Control
 	var experience := hud.get_node("Margin/CombatStatus/Experience") as Control
 	var party_region := hud.get_node("Margin/CombatStatus/PartyRegion") as Control
@@ -86,9 +88,25 @@ func _assert_hud_collapse_geometry(hud: HUD, viewport_rect: Rect2, party_count: 
 		_assert(header.get_global_rect().size.x >= 48.0 and header.get_global_rect().size.y >= 48.0, "%s %s keeps a real 48x48 target" % [context_label, header.name])
 	_assert(party_header.get_global_rect().encloses(party_summary.get_global_rect()), "%s Party summary remains inside its header header=%s summary=%s" % [context_label, party_header.get_global_rect(), party_summary.get_global_rect()])
 	_assert(alerts_header.get_global_rect().encloses(alerts_summary.get_global_rect()), "%s Alerts summary remains inside its header header=%s summary=%s" % [context_label, alerts_header.get_global_rect(), alerts_summary.get_global_rect()])
-	_assert(party_health.visible == party_collapsed, "%s compact leader health visibility follows Party collapse" % context_label)
-	if party_health.visible:
-		_assert(party_header.get_global_rect().encloses(party_health.get_global_rect()), "%s compact leader health remains inside Party header header=%s health=%s" % [context_label, party_header.get_global_rect(), party_health.get_global_rect()])
+	_assert(party_health_cluster != null and party_health != null and party_health_value != null, "%s compact leader health uses the dedicated bar-and-value cluster" % context_label)
+	if party_health_cluster != null:
+		_assert(party_health_cluster.visible == party_collapsed, "%s compact leader health visibility follows Party collapse" % context_label)
+		if party_health_cluster.visible:
+			var header_rect := party_header.get_global_rect()
+			var cluster_rect := party_health_cluster.get_global_rect()
+			_assert(header_rect.encloses(cluster_rect), "%s compact leader health cluster remains inside Party header header=%s cluster=%s" % [context_label, header_rect, cluster_rect])
+			if party_health != null and party_health_value != null:
+				var projected_leader := hud.current_projection.leader() if hud.current_projection != null else null
+				var expected_health_text := "%d / %d" % [roundi(projected_leader.health), roundi(projected_leader.max_health)] if projected_leader != null else ""
+				var bar_rect := party_health.get_global_rect()
+				var value_rect := party_health_value.get_global_rect()
+				_assert(cluster_rect.encloses(bar_rect) and cluster_rect.encloses(value_rect), "%s collapsed health bar and exact value remain enclosed by the cluster" % context_label)
+				_assert(not bar_rect.intersection(value_rect).has_area(), "%s collapsed health bar and exact value never overlap" % context_label)
+				_assert(party_health_value.text == expected_health_text, "%s collapsed leader health exposes exact readable current and maximum expected=%s actual=%s" % [context_label, expected_health_text, party_health_value.text])
+				if text_scale == 150:
+					_assert(absf(cluster_rect.get_center().y - header_rect.get_center().y) <= 1.0, "%s Text150 health cluster remains vertically centered header=%s cluster=%s" % [context_label, header_rect, cluster_rect])
+					_assert(cluster_rect.position.y - header_rect.position.y >= 4.0 and header_rect.end.y - cluster_rect.end.y >= 4.0, "%s Text150 health cluster remains away from the header border" % context_label)
+					_assert(party_health_value.get_visible_line_count() == party_health_value.get_line_count(), "%s Text150 exact health value is fully readable" % context_label)
 	if text_scale == 150:
 		for summary: Label in [party_summary, alerts_summary]:
 			_assert(summary.autowrap_mode != TextServer.AUTOWRAP_OFF, "%s %s uses wrapping at Text150" % [context_label, summary.name])

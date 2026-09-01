@@ -152,6 +152,8 @@ func _test_collapse_headers_and_independent_state(failures: Array[String]) -> vo
 			TestAssertions.truthy(tray_action.focus_mode == Control.FOCUS_ALL, "eligible tray action is keyboard focusable", failures)
 			TestAssertions.truthy(tray_rect.size.x >= 48.0 and tray_rect.size.y >= 48.0, "eligible tray action has a concrete at-least-48px rect", failures)
 		TestAssertions.truthy(party_header != null and party_header.focus_mode == Control.FOCUS_ALL and alerts_header != null and alerts_header.focus_mode == Control.FOCUS_ALL, "both headers are focusable", failures)
+		TestAssertions.equal(party_header.accessibility_description if party_header != null else "", "Party region is EXPANDED. Activate to COLLAPSE party details.", "expanded Party header describes its state and next action", failures)
+		TestAssertions.equal(alerts_header.accessibility_description if alerts_header != null else "", "Alerts region is EXPANDED. Activate to COLLAPSE alert details.", "expanded Alerts header describes its state and next action", failures)
 		TestAssertions.truthy(hud.has_signal(&"collapse_preferences_changed"), "HUD exposes collapse preference intent signal", failures)
 		var collapse_api := hud.has_method(&"apply_collapse_preferences") and hud.has_method(&"party_collapsed") and hud.has_method(&"alerts_collapsed")
 		TestAssertions.truthy(collapse_api, "HUD exposes independent collapse state API", failures)
@@ -224,23 +226,35 @@ func _test_collapsed_summaries_and_dynamic_refresh(failures: Array[String]) -> v
 	var alerts_clear := hud.get_node_or_null("Margin/CombatStatus/AlertRegion/Header/Content/AllClearGlyph") as Label
 	TestAssertions.truthy(party_icon != null and party_clear != null and alerts_icon != null and alerts_clear != null, "both headers expose semantic state-icon and all-clear children", failures)
 	var party_summary := hud.get_node("Margin/CombatStatus/PartyHeader/Content/Summary") as Label
-	var leader_health := hud.get_node("Margin/CombatStatus/PartyHeader/Content/LeaderHealth") as ProgressBar
+	var leader_health_cluster := hud.get_node_or_null("Margin/CombatStatus/PartyHeader/Content/LeaderHealthCluster") as Control
+	var leader_health := leader_health_cluster.get_node_or_null("Bar") as ProgressBar if leader_health_cluster != null else null
+	var leader_health_value := leader_health_cluster.get_node_or_null("Value") as Label if leader_health_cluster != null else null
+	TestAssertions.truthy(leader_health_cluster != null and leader_health != null and leader_health_value != null, "collapsed Party exposes a dedicated leader-health cluster with bar and exact-value label", failures)
 	var alerts_summary := hud.get_node("Margin/CombatStatus/AlertRegion/Header/Content/Summary") as Label
 	TestAssertions.truthy(
 		"PARTY · 6 MEMBERS" in party_summary.text
 		and "LEADER" in party_summary.text
-		and "STATE DEAD" in party_summary.text
-		and "DEAD 1" in party_summary.text
+		and "HIGHEST: DEAD (1)" in party_summary.text
 		and "DOWNED 1" in party_summary.text
 		and "CRITICAL 1" in party_summary.text,
 		"collapsed Party summary exposes exact six-member severity truth",
 		failures,
 	)
 	TestAssertions.truthy("ALERTS 3" in alerts_summary.text and "DEAD" in alerts_summary.text, "collapsed Alerts summary exposes the exact count and highest severity", failures)
-	TestAssertions.truthy(leader_health.visible and is_equal_approx(leader_health.value, 100.0) and is_equal_approx(leader_health.max_value, 100.0), "collapsed Party summary includes exact leader health", failures)
+	TestAssertions.truthy(leader_health_cluster != null and leader_health_cluster.visible and leader_health != null and is_equal_approx(leader_health.value, 100.0) and is_equal_approx(leader_health.max_value, 100.0), "collapsed Party summary includes exact leader health", failures)
+	TestAssertions.equal(leader_health_value.text if leader_health_value != null else "", "100 / 100", "collapsed healthy leader exposes exact current and maximum health text", failures)
+	if leader_health != null:
+		var track := leader_health.get_theme_stylebox(&"background") as StyleBoxFlat
+		var fill := leader_health.get_theme_stylebox(&"fill") as StyleBoxFlat
+		TestAssertions.equal(track.bg_color if track != null else Color.TRANSPARENT, LivingForgeTokens.color(&"surface_inset"), "collapsed leader health reuses the inset track token", failures)
+		TestAssertions.equal(fill.bg_color if fill != null else Color.TRANSPARENT, LivingForgeTokens.color(&"valid"), "healthy collapsed leader health uses the semantic valid fill token", failures)
 	if party_icon != null and party_clear != null and alerts_icon != null and alerts_clear != null:
 		TestAssertions.truthy(party_icon.visible and party_icon.texture != null and not party_clear.visible, "Party dead state uses an icon plus visible text", failures)
 		TestAssertions.truthy(alerts_icon.visible and alerts_icon.texture != null and not alerts_clear.visible, "Alerts dead state uses an icon plus visible text", failures)
+		for icon: TextureRect in [party_icon, alerts_icon]:
+			var material := icon.material as ShaderMaterial
+			TestAssertions.truthy(material != null and material.shader != null, "%s severity icon uses the shared alpha-mask tint material" % icon.name, failures)
+			TestAssertions.equal(material.get_shader_parameter(&"icon_color") if material != null else Color.TRANSPARENT, LivingForgeTokens.color(&"error"), "%s severity icon uses the normal semantic error token" % icon.name, failures)
 	var party_header := hud.get_node("Margin/CombatStatus/PartyHeader") as Button
 	var alerts_header := hud.get_node("Margin/CombatStatus/AlertRegion/Header") as Button
 	var projection := hud.current_projection as CombatHudProjection
@@ -250,6 +264,8 @@ func _test_collapsed_summaries_and_dynamic_refresh(failures: Array[String]) -> v
 	var expected_alerts_accessibility := "Alerts, 3, highest severity DEAD, %s, collapsed" % highest.summary
 	TestAssertions.equal(party_header.accessibility_name, expected_party_accessibility, "Party accessibility includes identity, exact health, severity counts, and collapse state", failures)
 	TestAssertions.equal(alerts_header.accessibility_name, expected_alerts_accessibility, "Alerts accessibility includes exact count, highest summary, and collapse state", failures)
+	TestAssertions.equal(party_header.accessibility_description, "Party region is COLLAPSED. Activate to EXPAND party details.", "collapsed Party header describes its state and next action", failures)
+	TestAssertions.equal(alerts_header.accessibility_description, "Alerts region is COLLAPSED. Activate to EXPAND alert details.", "collapsed Alerts header describes its state and next action", failures)
 	var tray_action := hud.get_node("Margin/CombatStatus/AlertRegion/AlertsTrayAction") as Button
 	TestAssertions.truthy(tray_action.visible and not tray_action.disabled and tray_action.focus_mode == Control.FOCUS_ALL and tray_action.text == "VIEW ALL ALERTS (3)", "collapsed tray action remains direct and exact", failures)
 	TestAssertions.equal(hud.focus_descriptor_for(tray_action), {"kind": &"named", "named_control": &"alerts_tray_action"}, "tray action owns a stable named focus descriptor", failures)
@@ -258,6 +274,17 @@ func _test_collapsed_summaries_and_dynamic_refresh(failures: Array[String]) -> v
 	TestAssertions.truthy(tray.visible, "collapsed tray action opens the shared alert tray", failures)
 	TestAssertions.equal((tray.get_node("Overlay/Frame/Layout/Scroll/Alerts") as Container).get_child_count(), 3, "collapsed tray route passes the complete alert set", failures)
 	tray.call("close")
+	(fixture.health_by_member[1] as HealthComponent).kill()
+	TestAssertions.equal(leader_health_value.text if leader_health_value != null else "", "0 / 100", "collapsed zero-health leader remains exact and readable", failures)
+	if leader_health != null:
+		var zero_fill := leader_health.get_theme_stylebox(&"fill") as StyleBoxFlat
+		TestAssertions.equal(zero_fill.bg_color if zero_fill != null else Color.TRANSPARENT, LivingForgeTokens.color(&"error"), "zero-health collapsed leader retains the semantic error fill token", failures)
+	var high_contrast_settings := (fixture.settings as PartyForgeSettings).copy()
+	high_contrast_settings.high_contrast = true
+	hud.apply_visual_settings(high_contrast_settings)
+	for icon: TextureRect in [party_icon, alerts_icon]:
+		var high_contrast_material := icon.material as ShaderMaterial if icon != null else null
+		TestAssertions.equal(high_contrast_material.get_shader_parameter(&"icon_color") if high_contrast_material != null else Color.TRANSPARENT, LivingForgeTokens.color(&"error", true), "%s severity icon uses the high-contrast semantic error token" % icon.name if icon != null else "missing severity icon", failures)
 
 	for member_id: int in range(1, 7):
 		var health := fixture.health_by_member[member_id] as HealthComponent
@@ -266,11 +293,10 @@ func _test_collapsed_summaries_and_dynamic_refresh(failures: Array[String]) -> v
 	projection = hud.current_projection as CombatHudProjection
 	leader = projection.leader()
 	TestAssertions.truthy(
-		"STATE ALL CLEAR" in party_summary.text
-		and "DEAD 0" in party_summary.text
+		"HIGHEST: ALL CLEAR (0)" in party_summary.text
 		and "DOWNED 0" in party_summary.text
 		and "CRITICAL 0" in party_summary.text
-		and "STATE DEAD" not in party_summary.text,
+		and "HIGHEST: DEAD" not in party_summary.text,
 		"all-clear refresh clears stale Party severity copy and counts",
 		failures,
 	)
@@ -286,6 +312,8 @@ func _test_collapsed_summaries_and_dynamic_refresh(failures: Array[String]) -> v
 	if party_icon != null and party_clear != null and alerts_icon != null and alerts_clear != null:
 		TestAssertions.truthy(not party_icon.visible and party_icon.texture == null and party_clear.visible, "all-clear Party cue removes stale icon and shows the clear glyph", failures)
 		TestAssertions.truthy(not alerts_icon.visible and alerts_icon.texture == null and alerts_clear.visible, "all-clear Alerts cue removes stale icon and shows the clear glyph", failures)
+		TestAssertions.equal(party_clear.get_theme_color(&"font_color"), LivingForgeTokens.color(&"valid", true), "all-clear Party glyph uses the high-contrast valid token", failures)
+		TestAssertions.equal(alerts_clear.get_theme_color(&"font_color"), LivingForgeTokens.color(&"valid", true), "all-clear Alerts glyph uses the high-contrast valid token", failures)
 	hud.apply_collapse_preferences(false, false)
 	TestAssertions.equal(
 		party_header.accessibility_name,
@@ -294,12 +322,17 @@ func _test_collapsed_summaries_and_dynamic_refresh(failures: Array[String]) -> v
 		failures,
 	)
 	TestAssertions.equal(alerts_header.accessibility_name, "Alerts, all clear, expanded", "expanded Alerts accessibility reports the exact expanded state", failures)
+	TestAssertions.equal(party_header.accessibility_description, "Party region is EXPANDED. Activate to COLLAPSE party details.", "re-expanded Party description reports exact state and action", failures)
+	TestAssertions.equal(alerts_header.accessibility_description, "Alerts region is EXPANDED. Activate to COLLAPSE alert details.", "re-expanded Alerts description reports exact state and action", failures)
 	hud.apply_collapse_preferences(true, true)
 
 	(fixture.health_by_member[4] as HealthComponent).apply_damage(80.0)
 	TestAssertions.truthy("ALERTS 1" in alerts_summary.text and "CRITICAL" in alerts_summary.text, "new collapsed alert updates the summary immediately", failures)
+	TestAssertions.truthy("HIGHEST: CRITICAL (1)" in party_summary.text and "DEAD 0" in party_summary.text and "DOWNED 0" in party_summary.text and "CRITICAL 1" not in party_summary.text, "critical-only collapsed hierarchy names the highest count once and retains the other exact counts", failures)
 	TestAssertions.truthy(hud.alerts_collapsed() and not (hud.get_node("Margin/CombatStatus/AlertRegion/ExpandedAlerts") as Control).visible, "new alert never auto-expands collapsed Alerts", failures)
 	TestAssertions.truthy(tray_action.visible and tray_action.text == "VIEW ALL ALERTS (1)", "new collapsed alert refreshes persistent tray access", failures)
+	(fixture.health_by_member[4] as HealthComponent).apply_damage(20.0)
+	TestAssertions.truthy("HIGHEST: DOWNED (1)" in party_summary.text and "DEAD 0" in party_summary.text and "CRITICAL 0" in party_summary.text and "DOWNED 1" not in party_summary.text, "downed-only collapsed hierarchy names the highest count once and retains the other exact counts", failures)
 	_cleanup_hud(hud)
 	_cleanup_fixture(fixture)
 
@@ -538,6 +571,10 @@ func _assert_unavailable(hud: HUD, reason_fragment: String, message: String, fai
 	TestAssertions.truthy(unavailable != null and unavailable.visible, message, failures)
 	if unavailable != null:
 		TestAssertions.truthy(unavailable.text.begins_with("HUD unavailable:") and reason_fragment in unavailable.text.to_lower(), "%s has a concise reason" % message, failures)
+	var party_header := hud.get_node("Margin/CombatStatus/PartyHeader") as Button
+	var alerts_header := hud.get_node("Margin/CombatStatus/AlertRegion/Header") as Button
+	TestAssertions.equal(party_header.accessibility_description, "Party region is UNAVAILABLE and EXPANDED. Activate to COLLAPSE party details.", "%s gives Party an exact unavailable state/action description" % message, failures)
+	TestAssertions.equal(alerts_header.accessibility_description, "Alerts region is UNAVAILABLE and EXPANDED. Activate to COLLAPSE alert details.", "%s gives Alerts an exact unavailable state/action description" % message, failures)
 
 
 func _test_pause_safe_inspector_and_ledger_routes(failures: Array[String]) -> void:

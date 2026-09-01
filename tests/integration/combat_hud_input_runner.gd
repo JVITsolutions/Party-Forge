@@ -78,6 +78,12 @@ func _run() -> void:
 
 
 func _exercise_collapsed_summary_focus_contract() -> void:
+	_hud.apply_collapse_preferences(true, true)
+	await process_frame
+	var party_region := _hud.get_node("Margin/CombatStatus/PartyRegion") as Control
+	(_fixture.health_by_member[1] as HealthComponent).apply_damage(10.0)
+	await process_frame
+	_assert(_region_focus_modes_are_none(party_region), "collapsed Party live-value refresh immediately reapplies suspension without restoring hidden focus")
 	_hud.apply_collapse_preferences(false, true)
 	await process_frame
 	var party_header := _hud.get_node("Margin/CombatStatus/PartyHeader") as Button
