@@ -23,19 +23,30 @@ const _CATEGORY_ORDER := {
 }
 static var _factory_token := RefCounted.new()
 
-var _requested_body_preset: StringName
-var _selected_resource_path: String
-var _mapping: RigMapping
-var _failure_categories: Array[StringName]
-var _error_messages: PackedStringArray
+var _requested_body_preset := StringName()
+var _selected_resource_path := ""
+var _mapping: RigMapping = null
+var _failure_categories: Array[StringName] = []
+var _error_messages := PackedStringArray()
+var _construction_valid := false
 
-func _init(factory_token: RefCounted, requested_body_preset: StringName, selected_resource_path: String, mapping: RigMapping, failure_categories: Array[StringName], error_messages: PackedStringArray) -> void:
-	assert(factory_token == _factory_token, "humanoid rig mapping resolution constructor is factory-only")
+func _init(
+		factory_token: RefCounted,
+		requested_body_preset: StringName,
+		selected_resource_path: String,
+		mapping: RigMapping,
+		failure_categories: Array[StringName],
+		error_messages: PackedStringArray
+	) -> void:
+	if factory_token != _factory_token:
+		push_error("humanoid rig mapping resolution constructor contract failed: invalid factory token")
+		return
 	_requested_body_preset = requested_body_preset
 	_selected_resource_path = selected_resource_path
 	_mapping = mapping
 	_failure_categories.assign(failure_categories)
 	_error_messages = error_messages.duplicate()
+	_construction_valid = true
 
 static func succeeded(requested_body_preset: StringName, selected_resource_path: String, mapping: RigMapping) -> RefCounted:
 	var defects := PackedStringArray()
@@ -87,7 +98,7 @@ func get_error_messages() -> PackedStringArray:
 	return _error_messages.duplicate()
 
 func is_success() -> bool:
-	return _requested_body_preset in _RESOURCE_PATH_BY_BODY_PRESET and _selected_resource_path == _RESOURCE_PATH_BY_BODY_PRESET[_requested_body_preset] and _mapping != null and _failure_categories.is_empty() and _error_messages.is_empty()
+	return _construction_valid and _requested_body_preset in _RESOURCE_PATH_BY_BODY_PRESET and _selected_resource_path == _RESOURCE_PATH_BY_BODY_PRESET[_requested_body_preset] and _mapping != null and _failure_categories.is_empty() and _error_messages.is_empty()
 
 func rejected_by_mapped_rig(validation_errors: PackedStringArray) -> RefCounted:
 	if not is_success() or validation_errors.is_empty():

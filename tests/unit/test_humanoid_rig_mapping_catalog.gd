@@ -88,17 +88,62 @@ func run() -> Array[String]:
 		var logger := error_capture_script.new() as Logger
 		OS.add_logger(logger)
 		var invalid_result: Variant
+		var supplied_mapping: Resource
+		var supplied_categories: Array[StringName] = []
+		var supplied_messages := PackedStringArray()
 		if factory_probe == "invalid_success":
 			invalid_result = _resolution_script.call(&"succeeded", &"unknown", "", null)
 		elif factory_probe == "invalid_failure":
-			var no_failure_categories: Array[StringName] = []
-			invalid_result = _resolution_script.call(&"failed", &"masculine", MASCULINE_PATH, no_failure_categories, PackedStringArray())
+			invalid_result = _resolution_script.call(&"failed", &"masculine", MASCULINE_PATH, supplied_categories, supplied_messages)
+		elif factory_probe == "invalid_direct_constructor":
+			supplied_mapping = _mapping(MASCULINE_ID, MASCULINE_SHA, MASCULINE_REST)
+			supplied_categories = [&"missing_resource"]
+			supplied_messages = PackedStringArray(["caller-supplied constructor message"])
+			invalid_result = _resolution_script.new(
+				RefCounted.new(),
+				&"masculine",
+				MASCULINE_PATH,
+				supplied_mapping,
+				supplied_categories,
+				supplied_messages
+			)
 		else:
 			OS.remove_logger(logger)
 			TestAssertions.truthy(false, "factory contract probe value is recognized", failures)
 			return failures
 		OS.remove_logger(logger)
 		var captured: PackedStringArray = logger.call(&"drain_after_detach")
+		if factory_probe == "invalid_direct_constructor":
+			TestAssertions.truthy(invalid_result is RefCounted, "invalid_direct_constructor returns allocated RefCounted", failures)
+			if not invalid_result is RefCounted:
+				return failures
+			var inert := invalid_result as RefCounted
+			TestAssertions.equal(inert.get_script(), _resolution_script, "invalid_direct_constructor keeps exact runtime script", failures)
+			TestAssertions.truthy(not bool(inert.call(&"is_success")), "invalid_direct_constructor is not successful", failures)
+			TestAssertions.equal(inert.call(&"get_requested_body_preset"), StringName(), "invalid_direct_constructor stores no preset", failures)
+			TestAssertions.equal(inert.call(&"get_selected_resource_path"), "", "invalid_direct_constructor stores no path", failures)
+			TestAssertions.equal(inert.call(&"get_mapping"), null, "invalid_direct_constructor stores no mapping", failures)
+			TestAssertions.equal(inert.call(&"get_failure_categories"), [] as Array[StringName], "invalid_direct_constructor stores no categories", failures)
+			TestAssertions.equal(inert.call(&"get_error_messages"), PackedStringArray(), "invalid_direct_constructor stores no messages", failures)
+			TestAssertions.equal(inert.call(&"rejected_by_mapped_rig", PackedStringArray(["ignored"])), inert, "invalid_direct_constructor rejection remains inert", failures)
+			var returned_categories: Array = inert.call(&"get_failure_categories")
+			var returned_messages: PackedStringArray = inert.call(&"get_error_messages")
+			returned_categories.append(&"wrong_resource_type")
+			returned_messages.append("returned-copy mutation")
+			supplied_mapping.set(&"mapping_id", &"caller_mutation")
+			supplied_categories.append(&"wrong_resource_type")
+			supplied_messages.append("caller mutation")
+			TestAssertions.equal(inert.call(&"get_mapping"), null, "invalid_direct_constructor resists mapping mutation", failures)
+			TestAssertions.equal(inert.call(&"get_failure_categories"), [] as Array[StringName], "invalid_direct_constructor categories remain inert", failures)
+			TestAssertions.equal(inert.call(&"get_error_messages"), PackedStringArray(), "invalid_direct_constructor messages remain inert", failures)
+			TestAssertions.equal(captured.size(), 1, "invalid_direct_constructor emits one programmer-contract error", failures)
+			if captured.size() == 1:
+				TestAssertions.truthy(
+					captured[0].contains("humanoid rig mapping resolution constructor contract failed: invalid factory token"),
+					"invalid_direct_constructor emits exact constructor-contract error",
+					failures
+				)
+			return failures
 		TestAssertions.equal(invalid_result, null, "%s returns no observable result" % factory_probe, failures)
 		TestAssertions.equal(captured.size(), 1, "%s emits exactly one programmer-contract error" % factory_probe, failures)
 		if captured.size() == 1:
