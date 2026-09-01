@@ -18,6 +18,7 @@
 - The captured `correctionImplementationBase` remains `5fa67d8065496fd206178f214a5653949b4d1a2e`. The four approved implementation commits follow it unchanged. This post-Task-C plan-only correction is a fifth first-parent commit after that base and does not redefine the base or alter the seven-path implementation union.
 - Task 0 and the A1 missing-file RED are already complete and pristine. The first A1 behavior RED is consumed and untrustworthy; it must never be rerun or presented as behavior evidence. Resume only from the exact stopped paths and evidence recorded below.
 - The stopped Task D preflight is preserved at `C:\Users\Jacob\AppData\Local\Temp\pf-rig-review-corrections-20260901T113142Z-0f3fefdf\stop-condition.json`, SHA-256 `17d78adca5f9615df0e26d41b08933fdb252351131386e6b2e76037681b7f0fc`. It proves that the focused, archive, import, full-suite, and reviewer gates remained unconsumed; no later run may cite the stopped preflight as Task D execution evidence.
+- The consumed Task D evidence root `C:\Users\Jacob\AppData\Local\Temp\pf-rig-review-corrections-20260901T114311Z-c8c04eee` and `task-d-stop.json` SHA-256 `c2cd26883d6ddb60944b99cb23618667f8995871edcb846c2cbb339e3e127257` are immutable. The focused gate, archive, cold import, and full suite are consumed; requirements and code-quality reviews are unconsumed. No focused, archive, import, or full-suite operation may be rerun for this checkpoint, and the original failed comparison remains preserved evidence rather than a suite failure or family waiver.
 - The approved seven-path product scope is exact. No eighth product path is allowed.
 - `tests/fixtures/presentation/production_rig_inspection_rest_fixtures.json` remains byte-identical at SHA-256 `a0ca9b54b9ea158c4c970cbd36121bfc89fd06d7ed2cff054c032f8e8c21f811`.
 - Preserve all 77 protected untracked records from `C:\Users\Jacob\AppData\Local\Temp\pf-character-task2-reconcile-gate-0001\premerge-untracked-manifest.json`, whose manifest SHA-256 is `9f7d8b800e27f94d2bc1f7798a88c9bda73c65d0429c3c072bbe00daeafbe2bd`.
@@ -1268,7 +1269,7 @@ git -C $project commit -m 'test: qualify inspected production rig candidates'
 - Evidence: new task-owned directories under `C:\Users\Jacob\AppData\Local\Temp` only.
 
 **Interfaces:**
-- Consumes: four implementation commits plus this post-implementation plan-only provenance correction after `correctionImplementationBase`.
+- Consumes: four implementation commits plus two post-implementation plan-only provenance corrections after `correctionImplementationBase`.
 - Produces: focused evidence, fresh-from-new-tracked-archive cold-import/full-suite evidence, two independent review verdicts, and exact containment audit.
 
 - [ ] **Step 1: Run the complete focused correction gate**
@@ -1285,7 +1286,7 @@ Require exit `0`, exactly one terminal `TEST_SUMMARY: PASS (0 failures)`, zero f
 
 - [ ] **Step 2: Audit commit and seven-path scope before archive creation**
 
-Require exactly five first-parent commits after `correctionImplementationBase`, in order:
+Require exactly six first-parent commits after `correctionImplementationBase`, in order:
 
 ```text
 feat: add read-only rig mapping results
@@ -1293,9 +1294,10 @@ feat: resolve rig mappings by exact path
 feat: validate mapped bind identities
 test: qualify inspected production rig candidates
 docs: correct Step 4B marker analysis hash
+docs: define volatile diagnostic normalization
 ```
 
-Require the first four commits' union to equal the seven File Responsibility Map paths. Require the fifth commit to modify only `docs/superpowers/plans/2026-09-01-production-rig-review-corrections.md`, with parent equal to the Task C commit and the exact subject above. Require the complete five-commit changed-path union to equal the seven product paths plus that one plan path, no merge commits, `git diff correctionImplementationBase..HEAD --check` exit `0`, clean tracked/index state, fixture byte identity, and absent sentinels.
+Require the first four commits' union to equal the seven File Responsibility Map paths. Require the fifth and sixth commits to modify only `docs/superpowers/plans/2026-09-01-production-rig-review-corrections.md`, with the fifth parent equal to the Task C commit, the sixth parent equal to the fifth commit, and both exact subjects above. Require the complete six-commit changed-path union to equal the seven product paths plus that one plan path, no merge commits, `git diff correctionImplementationBase..HEAD --check` exit `0`, clean tracked/index state, fixture byte identity, and absent sentinels.
 
 - [ ] **Step 3: Create a new immutable tracked archive after implementation**
 
@@ -1381,13 +1383,63 @@ Normalize the reference and current suite stderr with the same deterministic alg
 
 Preserve the reference/current normalized manifests, hashes, family diff, raw aggregate counts, and exact unmatched records. Reinventory the disposable project and reprove authoritative non-mutation.
 
+The execution through this point is consumed evidence. The full suite exited `0` with `TEST_SUMMARY: PASS (265 suites)`, but the first normalization attempt failed closed because its unquoted absolute-path expression stopped at the embedded space in `Party Forge` and because exact generated tokens shaped `profile-<32 lowercase hex>` were not normalized. Preserve the original comparison and do not rerun Steps 1 through 7.
+
+- [ ] **Step 7A: Qualify the corrected normalizer synthetically without Godot**
+
+This step requires a separate execution authorization after the current documentation commit. Create a fresh task-owned qualification directory outside every repository, worktree, and preserved evidence root. Copy neither stderr input into a mutable location and do not modify the original `normalize-diagnostics.ps1`; create a new versioned normalizer and a separate independent verifier in the qualification directory.
+
+The corrected header-normalization order is exact:
+
+1. Replace the body of a double-quoted drive-rooted Windows absolute path matching `"(?<path>[A-Za-z]:[\\/][^"\r\n]*)"` with `[absolute-path]` while retaining the two double quotes.
+2. Replace the body of a single-quoted drive-rooted Windows absolute path matching `'(?<path>[A-Za-z]:[\\/][^'\r\n]*)'` with `[absolute-path]` while retaining the two single quotes.
+3. Normalize any remaining unquoted drive-rooted Windows absolute path with `[A-Za-z]:[\\/][^\s"']+` to `[absolute-path]`; its explicit boundary is whitespace or a quote.
+4. Normalize only tokens matching `(?<![0-9A-Za-z_-])profile-[0-9a-f]{32}(?![0-9A-Za-z_-])` to `profile-[dynamic-id]`.
+5. Apply the existing lowercase 64-character hash, hyphenated GUID, `res://` line suffix, and standalone numeric rules afterward in their documented order.
+
+Do not normalize stable semantic identifiers such as `profile-main-durable-recovery`, a bare 32-character hexadecimal token without the exact `profile-` prefix, message or reason text, severity, backtrace presence, or the first frame.
+
+The qualification harness and independent verifier must assert all of these exact cases before either immutable stderr is read:
+
+```text
+"C:\Users\Jacob\Party Forge\tests\profile_manager_68984_299372852\blocker\nested" -> "[absolute-path]"
+"C:\Users\Jacob\Party Forge\tests\profile_manager_65032_303451672\blocker\nested" -> "[absolute-path]"
+profile-a77eca5b53ded5e5a3ad3b538e82717b -> profile-[dynamic-id]
+profile-f6db9957cddd7c0dd9b87c2f1789160b -> profile-[dynamic-id]
+profile-main-durable-recovery -> profile-main-durable-recovery
+a77eca5b53ded5e5a3ad3b538e82717b -> a77eca5b53ded5e5a3ad3b538e82717b
+user://tests/profile_store_65032_5678798/file.json -> user://[dynamic]
+0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef -> [sha256]
+01234567-89ab-4cde-8fab-0123456789ab -> [guid]
+res://scripts/example.gd:123 -> res://scripts/example.gd:[line]
+code=20 -> code=[number]
+```
+
+Require zero parse errors. AST/static checks must prove the exact ordered rules, the quoted-path replacements preserve their matching quote, the profile rule has both token boundaries, and no broad 32-hex replacement exists. Run the synthetic qualification exactly once, then have the independent verifier re-read its script, fixtures, results, hashes, and output without importing the normalizer implementation. Both must pass before Step 7B. Stop without patch stacking on any failure.
+
+- [ ] **Step 7B: Reclassify only the two preserved stderr inputs once**
+
+This one-shot reclassification requires a separate authorization after Step 7A passes. Create a different fresh task-owned reclassification evidence directory. Read only:
+
+```text
+C:\Users\Jacob\AppData\Local\Temp\pf-body-rig-step4b-20260901T073118Z-5f5655f4\evidence\full-suite.stderr.txt
+SHA-256 201609952ff70f2b6e9cd5b249f895e52e1da01ff1af4d414a933ad2b312b7a9
+
+C:\Users\Jacob\AppData\Local\Temp\pf-rig-review-corrections-20260901T114311Z-c8c04eee\suite.stderr.txt
+SHA-256 5bcd9f6ca6a86225b0d3bc0994d77daba854afa78f36c9726752c40393cc48fa
+```
+
+Do not modify either source or either original evidence root. Preserve the failed comparison at `diagnostic-family-comparison.json` SHA-256 `91201bfbb0ef4b8f0b67b995bcb7711632f982f5d62e58414099a36013c7f5e3` as superseded evidence; never overwrite it. Run the Step 7A-qualified corrected normalizer exactly once against both inputs. Require each input to produce exactly 112 `ERROR:` headers, 18 `WARNING:` headers, 130 consumed backtraces, zero orphan backtraces, and compact ordinal family manifests that are byte-identical with `unmatched_count=0`. Reject every new, removed, or count-different family. `INTENTIONAL_NEW_FAMILY_BY_LABEL` remains the empty map; no family waiver, count-only acceptance, diagnostic suppression, product/test change, or runtime absorption is permitted.
+
+Only after pristine reclassification may Step 8 dispatch the requirements reviewer. Do not run Godot, recreate the archive, repeat import, repeat the full suite, or dispatch either reviewer before that result.
+
 - [ ] **Step 8: Obtain a fresh read-only requirements review**
 
-After recording the four implementation commit hashes into `$a1Hash`, `$a2Hash`, `$bHash`, and `$cHash`, record the fifth first-parent plan-only correction hash into `$step4bPlanCorrectionHash`. Require that correction's parent to equal `$cHash`, its subject to equal `docs: correct Step 4B marker analysis hash`, and its scope to equal the one current plan path. Construct the exact brief through PowerShell interpolation and dispatch it to a fresh read-only reviewer:
+After recording the four implementation commit hashes into `$a1Hash`, `$a2Hash`, `$bHash`, and `$cHash`, record the fifth and sixth first-parent plan-only correction hashes into `$step4bPlanCorrectionHash` and `$normalizationPlanCorrectionHash`. Require the fifth parent to equal `$cHash`, the sixth parent to equal `$step4bPlanCorrectionHash`, their subjects to equal `docs: correct Step 4B marker analysis hash` and `docs: define volatile diagnostic normalization`, and each scope to equal the one current plan path. Construct the exact brief through PowerShell interpolation and dispatch it to a fresh read-only reviewer:
 
 ```powershell
 $requirementsBrief = @"
-Review Party Forge production-rig review corrections for requirements compliance only. Do not edit any file. Baseline is correctionImplementationBase=$correctionImplementationBase. Review exactly these four implementation commits in order: $a1Hash, $a2Hash, $bHash, $cHash. Audit post-implementation plan-only correction $step4bPlanCorrectionHash as provenance only: require parent $cHash, subject `docs: correct Step 4B marker analysis hash`, and exact one-plan-file scope, but ignore it for product/code scope. Approved design is docs/superpowers/specs/2026-09-01-production-rig-review-correction-design.md at approved SHA-256 8e05e6cea5978a4ae6fbaa9f130aeee3b58cf7b1fc3d9af0298997483f6d3dcb. Execution plan is docs/superpowers/plans/2026-09-01-production-rig-review-corrections.md. Evidence root is $evidenceRoot. Product scope is exactly the seven paths listed by the plan. Inspect the base-to-tip diff and evidence. Return PASS or FAIL, mapping every requirement to exact file:line evidence: RefCounted result/catalog interfaces; exact SCRIPT_PATH and single-loaded result_script allocation; non-null success/failure/rejected outputs with exact runtime Script identity; read-only result invariants and no setters; defensive collection copies; invalid factory null/no-result contract; accepted `invalid_success` and one-shot `invalid_failure` evidence each showing native exit 0, one PASS marker, zero TEST_FAILURE, and one exact test-locally captured ordered contract error; mandatory code-reviewed missing-self-script branch without fault-injection seam; mapping Resource mutability caveat; exact MappingLoader preload typing; exact path-table equality and exact existence/load calls; stable category/message ordering and cardinality; stateless per-call catalog with no active/error history or fallback; pure duplicate-name bind boundary without invalid Skeleton3D construction; public null mapping/skeleton/skin and empty target coverage; both 52-bone fixture candidates with 52 unnamed numeric binds passing validate_mapped_rig; the same candidates failing strict legacy validate_rig and validate_skin; fixture bytes preserved; forbidden resources/sentinels absent; and presentation transaction/rollback still deferred. Report any missing or contradictory evidence as FAIL. Do not review art direction, do not propose implementation, and do not modify the worktree.
+Review Party Forge production-rig review corrections for requirements compliance only. Do not edit any file. Baseline is correctionImplementationBase=$correctionImplementationBase. Review exactly these four implementation commits in order: $a1Hash, $a2Hash, $bHash, $cHash. Audit post-implementation plan-only corrections $step4bPlanCorrectionHash and $normalizationPlanCorrectionHash as provenance only: require their exact parent chain, exact subjects, and exact one-plan-file scopes, but ignore both for product/code scope. Approved design is docs/superpowers/specs/2026-09-01-production-rig-review-correction-design.md at approved SHA-256 8e05e6cea5978a4ae6fbaa9f130aeee3b58cf7b1fc3d9af0298997483f6d3dcb. Execution plan is docs/superpowers/plans/2026-09-01-production-rig-review-corrections.md. Evidence root is $evidenceRoot. Product scope is exactly the seven paths listed by the plan. Inspect the base-to-tip diff and evidence. Return PASS or FAIL, mapping every requirement to exact file:line evidence: RefCounted result/catalog interfaces; exact SCRIPT_PATH and single-loaded result_script allocation; non-null success/failure/rejected outputs with exact runtime Script identity; read-only result invariants and no setters; defensive collection copies; invalid factory null/no-result contract; accepted `invalid_success` and one-shot `invalid_failure` evidence each showing native exit 0, one PASS marker, zero TEST_FAILURE, and one exact test-locally captured ordered contract error; mandatory code-reviewed missing-self-script branch without fault-injection seam; mapping Resource mutability caveat; exact MappingLoader preload typing; exact path-table equality and exact existence/load calls; stable category/message ordering and cardinality; stateless per-call catalog with no active/error history or fallback; pure duplicate-name bind boundary without invalid Skeleton3D construction; public null mapping/skeleton/skin and empty target coverage; both 52-bone fixture candidates with 52 unnamed numeric binds passing validate_mapped_rig; the same candidates failing strict legacy validate_rig and validate_skin; fixture bytes preserved; forbidden resources/sentinels absent; and presentation transaction/rollback still deferred. Also require the consumed Task D chain, synthetic normalizer qualification, and preserved-evidence reclassification to satisfy the exact no-rerun/no-waiver plan gates. Report any missing or contradictory evidence as FAIL. Do not review art direction, do not propose implementation, and do not modify the worktree.
 "@
 ```
 
@@ -1399,7 +1451,7 @@ Dispatch a different fresh read-only reviewer with this exact interpolated brief
 
 ```powershell
 $qualityBrief = @"
-Review Party Forge production-rig review corrections for code quality only. Do not edit any file and do not repeat the requirements checklist review. Baseline is correctionImplementationBase=$correctionImplementationBase. Review exactly these four implementation commits in order: $a1Hash, $a2Hash, $bHash, $cHash. Ignore the seventeen pre-implementation documentation/history commits except as provenance. Audit post-implementation plan-only correction $step4bPlanCorrectionHash as provenance only: require parent $cHash, subject `docs: correct Step 4B marker analysis hash`, and exact one-plan-file scope, but ignore it for product/code scope. Execution plan is docs/superpowers/plans/2026-09-01-production-rig-review-corrections.md and evidence root is $evidenceRoot. Inspect only the exact seven-path product diff plus test and verification evidence. Return PASS or FAIL with exact file:line evidence for: cold-load-safe GDScript typing through explicit RigMapping, MappingResolution, and MappingLoader preloads; RefCounted result-return boundaries; one validated result_script load per factory and no repeated-load or time-of-check/time-of-use gap; mandatory deterministic null branch reviewed without source mutation, modified-copy test, or production self-loader injection; underscore-private state and absence of writable public result state; defensive-copy correctness; factory validation ordering and no partially observable invalid result; exact-path callable loader seam without catalog-held state; existence/load call counts; deterministic category and validator error ordering; intentional factory probes whose test-local all-error logger proves the exact null/message contract while the focused runner correctly retains exit 0 and PASS with zero TEST_FAILURE; loaded Resource reference semantics; Skin and Skeleton3D API correctness; pure duplicate-name handling; byte-identical legacy validate_rig and validate_skin behavior; test isolation without mock-behavior assertions or test-only production APIs; fixture immutability; and commit-based rollback risk. Treat any parser dependence, same-file/global-class annotation, global-name downcast, nested result replacement, mutable last-error channel, silent fallback, diagnostic suppression, incomplete negative control, or broader path scope as FAIL. Do not propose edits and do not modify the worktree.
+Review Party Forge production-rig review corrections for code quality only. Do not edit any file and do not repeat the requirements checklist review. Baseline is correctionImplementationBase=$correctionImplementationBase. Review exactly these four implementation commits in order: $a1Hash, $a2Hash, $bHash, $cHash. Ignore the seventeen pre-implementation documentation/history commits except as provenance. Audit post-implementation plan-only corrections $step4bPlanCorrectionHash and $normalizationPlanCorrectionHash as provenance only: require their exact parent chain, exact subjects, and exact one-plan-file scopes, but ignore both for product/code scope. Execution plan is docs/superpowers/plans/2026-09-01-production-rig-review-corrections.md and evidence root is $evidenceRoot. Inspect only the exact seven-path product diff plus test and verification evidence. Return PASS or FAIL with exact file:line evidence for: cold-load-safe GDScript typing through explicit RigMapping, MappingResolution, and MappingLoader preloads; RefCounted result-return boundaries; one validated result_script load per factory and no repeated-load or time-of-check/time-of-use gap; mandatory deterministic null branch reviewed without source mutation, modified-copy test, or production self-loader injection; underscore-private state and absence of writable public result state; defensive-copy correctness; factory validation ordering and no partially observable invalid result; exact-path callable loader seam without catalog-held state; existence/load call counts; deterministic category and validator error ordering; intentional factory probes whose test-local all-error logger proves the exact null/message contract while the focused runner correctly retains exit 0 and PASS with zero TEST_FAILURE; loaded Resource reference semantics; Skin and Skeleton3D API correctness; pure duplicate-name handling; byte-identical legacy validate_rig and validate_skin behavior; test isolation without mock-behavior assertions or test-only production APIs; fixture immutability; and commit-based rollback risk. Also inspect the corrected normalizer qualification and preserved-evidence reclassification for narrow matching, quote preservation, stable-ID preservation, zero waiver, and independent verification. Treat any parser dependence, same-file/global-class annotation, global-name downcast, nested result replacement, mutable last-error channel, silent fallback, diagnostic suppression, incomplete negative control, normalization broader than the exact approved token shapes, or broader product path scope as FAIL. Do not propose edits and do not modify the worktree.
 "@
 ```
 
@@ -1424,9 +1476,10 @@ Rehash all 77 protected records, both GLBs, fixture JSON, approved specs/plans, 
 
 Report:
 
-- branch, worktree, unchanged `correctionImplementationBase`, four implementation hashes/parents/subjects, the post-implementation plan-only correction hash/parent/subject, the exact seven-path implementation union, and the complete eight-path changed union;
+- branch, worktree, unchanged `correctionImplementationBase`, four implementation hashes/parents/subjects, both post-implementation plan-only correction hashes/parents/subjects, the exact seven-path implementation union, and the complete eight-path changed union;
 - all seventeen pre-implementation historical commits after the original base without rewriting them;
 - the stopped Task D preflight path/hash as provenance only, explicit confirmation that it consumed no focused/archive/import/full-suite/reviewer gate, and a prohibition on citing it as Task D execution evidence;
+- the consumed Task D evidence root and second stop-record hash, focused/archive/import/full-suite consumption, reviewer non-consumption, original failed comparison, corrected synthetic qualification, and one-shot preserved-evidence reclassification chain without a Godot rerun;
 - A1/A2/B RED and GREEN markers, accepted `invalid_success` and one-shot `invalid_failure` factory-contract probe evidence, Task C characterization evidence, focused gate, archive hash, import classification, full-suite exit/marker, and two reviewer verdicts;
 - fixture, protected, GLB, spec/plan, Dawn Bulwark, Combat HUD, and sentinel containment;
 - rollback boundaries and remaining risks.
@@ -1475,5 +1528,5 @@ Do not create masculine, feminine, or shared mapping `.tres` files. Do not begin
 - No catalog active state, mutable last-error state, shared fallback, presentation transaction, or mapping resource is introduced.
 - Legacy `validate_rig()` and `validate_skin()` remain byte-identical.
 - Fresh full-suite evidence is generated from a new post-implementation tracked archive and cold import; earlier Step 4B is used only as the immutable normalized known-pass diagnostic-family reference, never as proof that future code passes.
-- History accounting preserves the original thirteen commits through `83585052...`, spec-only commits fourteen and fifteen (`e8760f19...`, `de6d92fc...`), plan-only commit sixteen (`f128cf8e...`), and the probe-expectation plan correction as commit seventeen and the unchanged `correctionImplementationBase` `5fa67d8065496fd206178f214a5653949b4d1a2e`. Task D requires exactly five first-parent commits after that base: the same four implementation commits in order, followed by this exact one-plan-file Step 4B hash correction. The implementation union remains exactly seven product paths; the complete changed-path union adds only the current plan path.
+- History accounting preserves the original thirteen commits through `83585052...`, spec-only commits fourteen and fifteen (`e8760f19...`, `de6d92fc...`), plan-only commit sixteen (`f128cf8e...`), and the probe-expectation plan correction as commit seventeen and the unchanged `correctionImplementationBase` `5fa67d8065496fd206178f214a5653949b4d1a2e`. Task D requires exactly six first-parent commits after that base: the same four implementation commits in order, the one-plan-file Step 4B hash correction, and this one-plan-file volatile-normalization correction. The implementation union remains exactly seven product paths; the complete changed-path union adds only the current plan path.
 - No placeholder terms, vague cross-task references, undefined helper, mismatched type, or unbalanced code fence remains.
