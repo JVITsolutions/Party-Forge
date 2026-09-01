@@ -46,6 +46,14 @@ func run() -> Array[String]:
 	if contract_script == null:
 		return failures
 	_contract = contract_script.new() as RefCounted
+	var has_bind_identity_validator := _contract.has_method(&"validate_mapped_bind_identity")
+	TestAssertions.truthy(has_bind_identity_validator, "public mapped bind identity validator exists", failures)
+	if not has_bind_identity_validator:
+		return failures
+	var bind_identity_argument_count := _method_argument_count(contract_script, &"validate_mapped_bind_identity")
+	TestAssertions.equal(bind_identity_argument_count, 4, "public mapped bind identity validator signature is exact", failures)
+	if bind_identity_argument_count != 4:
+		return failures
 	TestAssertions.truthy(_contract.has_method(&"validate_mapped_rig"), "humanoid rig contract exposes mapped validation", failures)
 	if not FileAccess.file_exists(MAPPING_SCRIPT_PATH) or not _contract.has_method(&"validate_mapped_rig"):
 		return failures
@@ -55,6 +63,7 @@ func run() -> Array[String]:
 	if _mapping_script == null or _definition == null:
 		return failures
 	_assert_mapping_resource_contract(failures)
+	_assert_public_bind_identity_and_null_boundaries(failures)
 	_assert_superset_validation(failures)
 	_assert_numeric_bind_resolution(failures)
 	_assert_mapped_bone_and_hierarchy_failures(failures)
@@ -85,6 +94,76 @@ func _assert_mapping_resource_contract(failures: Array[String]) -> void:
 	var missing_rest_signature := _mapping()
 	missing_rest_signature.set(&"source_rest_signature", "")
 	TestAssertions.truthy(_contains(missing_rest_signature.call(&"validate", _definition), "source rest signature"), "missing source rest signature rejects", failures)
+
+func _assert_public_bind_identity_and_null_boundaries(failures: Array[String]) -> void:
+	TestAssertions.equal(
+		_contract.call(&"validate_mapped_bind_identity", [&"Root", &"Dup", &"Dup"] as Array[StringName], &"Dup", 1, 7),
+		PackedStringArray(["mapped humanoid Skin bind 7 name Dup must resolve exactly once; found 2"]),
+		"duplicate synthetic name array rejects deterministically",
+		failures
+	)
+	TestAssertions.equal(
+		_contract.call(&"validate_mapped_bind_identity", [&"Root"] as Array[StringName], &"", 0, 0),
+		PackedStringArray(),
+		"empty name accepts valid numeric identity",
+		failures
+	)
+	TestAssertions.equal(
+		_contract.call(&"validate_mapped_bind_identity", [&"Root"] as Array[StringName], &"Missing", 0, 0),
+		PackedStringArray(["mapped humanoid Skin bind 0 name Missing must resolve exactly once; found 0"]),
+		"zero name match rejects deterministically",
+		failures
+	)
+	TestAssertions.equal(
+		_contract.call(&"validate_mapped_bind_identity", [&"Root"] as Array[StringName], &"Root", -1, 3),
+		PackedStringArray(["mapped humanoid Skin bind 3 bone index -1 is out of range"]),
+		"pure mapped bind range rejects deterministically",
+		failures
+	)
+	TestAssertions.equal(
+		_contract.call(&"validate_mapped_bind_identity", [&"Root", &"Child"] as Array[StringName], &"Child", 1, 4),
+		PackedStringArray(),
+		"exact name and numeric identity agree",
+		failures
+	)
+	TestAssertions.equal(
+		_contract.call(&"validate_mapped_bind_identity", [&"Root", &"Child"] as Array[StringName], &"Child", 0, 5),
+		PackedStringArray(["mapped humanoid Skin bind 5 name Child resolves to bone 1 but numeric index is 0"]),
+		"pure mapped bind name index conflict rejects deterministically",
+		failures
+	)
+
+	TestAssertions.equal(
+		_contract.call(&"validate_mapped_rig", _definition, null, null, null),
+		PackedStringArray(["humanoid rig mapping is missing"]),
+		"null mapping rejects at public boundary",
+		failures
+	)
+	var valid_mapping := _mapping()
+	TestAssertions.equal(
+		_contract.call(&"validate_mapped_rig", _definition, valid_mapping, null, null),
+		PackedStringArray(["mapped humanoid Skeleton3D is missing"]),
+		"null skeleton rejects after valid mapping",
+		failures
+	)
+	var valid_skeleton := _superset_skeleton(valid_mapping)
+	_bind_mapping_to_skeleton(valid_mapping, valid_skeleton)
+	TestAssertions.equal(
+		_contract.call(&"validate_mapped_rig", _definition, valid_mapping, valid_skeleton, null),
+		PackedStringArray(["mapped humanoid Skin is missing"]),
+		"null skin rejects after valid mapping and skeleton",
+		failures
+	)
+	var empty_target_mapping := _mapping()
+	var empty_target_roles: Dictionary = empty_target_mapping.get(&"role_to_bone").duplicate(true)
+	empty_target_roles[&"head"] = &""
+	empty_target_mapping.set(&"role_to_bone", empty_target_roles)
+	TestAssertions.truthy(
+		_contains(_contract.call(&"validate_mapped_rig", _definition, empty_target_mapping, valid_skeleton, _skin_for(valid_skeleton)), "humanoid rig mapping role head has empty or duplicate bone"),
+		"empty mapped target rejects through public validator",
+		failures
+	)
+	valid_skeleton.free()
 
 func _assert_superset_validation(failures: Array[String]) -> void:
 	var mapping := _mapping()
@@ -392,3 +471,10 @@ func _contains(errors: Variant, fragment: String) -> bool:
 		if error.contains(fragment):
 			return true
 	return false
+
+func _method_argument_count(script: Script, method_name: StringName) -> int:
+	for method_value: Variant in script.get_script_method_list():
+		var method := method_value as Dictionary
+		if StringName(method.get("name", "")) == method_name:
+			return (method.get("args", []) as Array).size()
+	return -1
