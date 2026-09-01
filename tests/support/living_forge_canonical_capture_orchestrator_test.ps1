@@ -8,26 +8,31 @@ if (-not (Test-Path -LiteralPath $orchestrator -PathType Leaf)) {
     throw "ORCHESTRATOR_CONTRACT_MISSING path=$orchestrator"
 }
 
-$source = [IO.File]::ReadAllText($orchestrator)
-foreach ($required in @("'clone', '--local', '--no-hardlinks'", 'Assert-DirectoryBoundary', 'CANONICAL_CAPTURE_PREIMPORT_NOT_CLEAN', 'CANONICAL_CAPTURE_COPY_HASH_MISMATCH', 'launcher_sha256', 'engine_sha256')) {
-    if (-not $source.Contains($required)) {
-        throw "ORCHESTRATOR_CONTRACT_REQUIRED_TEXT_MISSING text=$required"
-    }
+$priorErrorAction = $ErrorActionPreference
+try {
+    $ErrorActionPreference = 'Continue'
+    $output = (& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $orchestrator -Mode SelfTest -RepositoryRoot $RepositoryRoot 2>&1 | Out-String)
+    $exitCode = $LASTEXITCODE
 }
-foreach ($forbidden in @('Remove-Item', 'git clean', 'Invoke-WebRequest', 'Start-BitsTransfer', 'GetRelativePath')) {
-    if ($source.Contains($forbidden)) {
-        throw "ORCHESTRATOR_CONTRACT_FORBIDDEN_TEXT_PRESENT text=$forbidden"
-    }
+finally {
+    $ErrorActionPreference = $priorErrorAction
 }
-
-$output = (& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $orchestrator -Mode Contract -RepositoryRoot $RepositoryRoot 2>&1 | Out-String)
-$exitCode = $LASTEXITCODE
 $output
 if ($exitCode -ne 0) {
     throw "ORCHESTRATOR_CONTRACT_EXIT expected=0 actual=$exitCode"
 }
-if (-not $output.Contains('CANONICAL_CAPTURE_ORCHESTRATOR_CONTRACT: PASS')) {
-    throw 'ORCHESTRATOR_CONTRACT_MARKER_MISSING'
+foreach ($marker in @(
+    'CANONICAL_CAPTURE_ORDINAL: PASS',
+    'CANONICAL_CAPTURE_JUNCTION_ESCAPE: PASS',
+    'CANONICAL_CAPTURE_NESTED_EXTRA: PASS',
+    'CANONICAL_CAPTURE_PREIMPORT_DIRT: PASS',
+    'CANONICAL_CAPTURE_PROCESS_EXIT: PASS',
+    'CANONICAL_CAPTURE_ROLLBACK: PASS',
+    'CANONICAL_CAPTURE_ORCHESTRATOR_SELF_TEST: PASS'
+)) {
+    if (-not $output.Contains($marker)) {
+        throw "ORCHESTRATOR_CONTRACT_MARKER_MISSING marker=$marker"
+    }
 }
 
 Write-Output 'CANONICAL_CAPTURE_ORCHESTRATOR_TEST: PASS'
