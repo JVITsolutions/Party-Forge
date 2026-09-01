@@ -2,6 +2,7 @@ class_name HumanoidRigContract
 extends RefCounted
 
 const RigDefinition := preload("res://scripts/presentation/humanoid_rig_definition.gd")
+const RigMapping := preload("res://scripts/presentation/humanoid_rig_mapping.gd")
 const CANONICAL_RIG_ID: StringName = &"pf_humanoid_v1"
 const QUANTIZATION := 0.000001
 const MIN_INVERTIBLE_DETERMINANT := 0.000000000001
@@ -157,6 +158,125 @@ func validate_rig(definition: RigDefinition, skeleton: Skeleton3D, pivot_root: N
 			errors.append("humanoid rig role %s pivot %s must exist exactly once as Node3D" % [role, definition.pivot_paths[mapping_index]])
 	return errors
 
+static func validate_mapped_rig(definition: RigDefinition, mapping: RigMapping, skeleton: Skeleton3D, skin: Skin) -> PackedStringArray:
+	var errors := PackedStringArray()
+	if mapping == null:
+		errors.append("humanoid rig mapping is missing")
+		return errors
+	errors.append_array(mapping.validate(definition))
+	if skeleton == null:
+		errors.append("mapped humanoid Skeleton3D is missing")
+		return errors
+	if skin == null:
+		errors.append("mapped humanoid Skin is missing")
+		return errors
+	var actual_rest_signature := production_rest_signature(skeleton)
+	if mapping.source_rest_signature != actual_rest_signature:
+		errors.append(
+			"mapped humanoid source rest signature mismatch; expected %s, got %s"
+			% [mapping.source_rest_signature, actual_rest_signature]
+		)
+	var bind_index_by_bone_index := _resolve_mapped_skin_binds(skeleton, skin, errors)
+	for role: StringName in REQUIRED_ROLES:
+		if not mapping.role_to_bone.has(role):
+			continue
+		var bone_name := StringName(mapping.role_to_bone[role])
+		var matches := _bone_indices_named(skeleton, bone_name)
+		if matches.size() != 1:
+			errors.append("mapped humanoid role %s bone %s must exist exactly once" % [role, bone_name])
+			continue
+		var bone_index: int = matches[0]
+		_validate_transform(skeleton.get_bone_rest(bone_index), "mapped humanoid bone %s rest" % bone_name, errors)
+		if not bind_index_by_bone_index.has(bone_index):
+			errors.append("mapped humanoid Skin is missing bone %s" % bone_name)
+		var parent_role := StringName(REQUIRED_PARENT_BY_ROLE[role])
+		if parent_role.is_empty() or not mapping.role_to_bone.has(parent_role):
+			continue
+		var parent_matches := _bone_indices_named(skeleton, StringName(mapping.role_to_bone[parent_role]))
+		if parent_matches.size() == 1 and not _bone_is_ancestor(skeleton, parent_matches[0], bone_index):
+			errors.append("mapped humanoid role %s does not descend from parent role %s" % [role, parent_role])
+	return errors
+
+static func validate_mapped_bind_identity(bone_names: Array[StringName], bind_name: StringName, numeric_bone_index: int, bind_slot: int) -> PackedStringArray:
+	var errors := PackedStringArray()
+	if numeric_bone_index < 0 or numeric_bone_index >= bone_names.size():
+		errors.append("mapped humanoid Skin bind %d bone index %d is out of range" % [bind_slot, numeric_bone_index])
+		return errors
+	if bind_name.is_empty():
+		return errors
+	var matching_indices := PackedInt32Array()
+	for bone_index: int in bone_names.size():
+		if bone_names[bone_index] == bind_name:
+			matching_indices.append(bone_index)
+	if matching_indices.size() != 1:
+		errors.append("mapped humanoid Skin bind %d name %s must resolve exactly once; found %d" % [bind_slot, bind_name, matching_indices.size()])
+	elif matching_indices[0] != numeric_bone_index:
+		errors.append("mapped humanoid Skin bind %d name %s resolves to bone %d but numeric index is %d" % [bind_slot, bind_name, matching_indices[0], numeric_bone_index])
+	return errors
+
+static func _resolve_mapped_skin_binds(skeleton: Skeleton3D, skin: Skin, errors: PackedStringArray) -> Dictionary:
+	var bind_index_by_bone_index: Dictionary = {}
+	var bone_names: Array[StringName] = []
+	for bone_index: int in skeleton.get_bone_count():
+		bone_names.append(skeleton.get_bone_name(bone_index))
+	for bind_index: int in skin.get_bind_count():
+		_validate_transform(skin.get_bind_pose(bind_index), "mapped humanoid Skin bind %d pose" % bind_index, errors)
+		var bone_index := skin.get_bind_bone(bind_index)
+		var identity_errors := validate_mapped_bind_identity(bone_names, skin.get_bind_name(bind_index), bone_index, bind_index)
+		errors.append_array(identity_errors)
+		if bone_index < 0 or bone_index >= bone_names.size():
+			continue
+		if bind_index_by_bone_index.has(bone_index):
+			errors.append("mapped humanoid Skin bind %d duplicates skeleton bone %d" % [bind_index, bone_index])
+		else:
+			bind_index_by_bone_index[bone_index] = bind_index
+	for bone_index: int in skeleton.get_bone_count():
+		if not bind_index_by_bone_index.has(bone_index):
+			errors.append("mapped humanoid Skin is missing skeleton bone %s at index %d" % [skeleton.get_bone_name(bone_index), bone_index])
+	return bind_index_by_bone_index
+
+static func _bone_is_ancestor(skeleton: Skeleton3D, ancestor_index: int, child_index: int) -> bool:
+	var cursor := skeleton.get_bone_parent(child_index)
+	while cursor >= 0:
+		if cursor == ancestor_index:
+			return true
+		cursor = skeleton.get_bone_parent(cursor)
+	return false
+
+static func production_rest_signature(skeleton: Skeleton3D) -> String:
+	if skeleton == null:
+		return ""
+	return serialize_production_rest(skeleton).sha256_text()
+
+static func serialize_production_rest(skeleton: Skeleton3D) -> String:
+	if skeleton == null:
+		return ""
+	var lines := PackedStringArray()
+	for bone_index: int in skeleton.get_bone_count():
+		lines.append("%d|%s|%d|%s" % [
+			bone_index,
+			skeleton.get_bone_name(bone_index),
+			skeleton.get_bone_parent(bone_index),
+			_serialize_production_transform(skeleton.get_bone_rest(bone_index)),
+		])
+	return "\n".join(lines)
+
+static func _serialize_production_transform(transform: Transform3D) -> String:
+	return ",".join([
+		"%.9f" % transform.basis.x.x,
+		"%.9f" % transform.basis.x.y,
+		"%.9f" % transform.basis.x.z,
+		"%.9f" % transform.basis.y.x,
+		"%.9f" % transform.basis.y.y,
+		"%.9f" % transform.basis.y.z,
+		"%.9f" % transform.basis.z.x,
+		"%.9f" % transform.basis.z.y,
+		"%.9f" % transform.basis.z.z,
+		"%.9f" % transform.origin.x,
+		"%.9f" % transform.origin.y,
+		"%.9f" % transform.origin.z,
+	])
+
 func validate_skin(definition: RigDefinition, skin: Skin) -> PackedStringArray:
 	var errors := PackedStringArray()
 	if definition == null:
@@ -253,21 +373,21 @@ func _validate_mapping_sizes(definition: RigDefinition, errors: PackedStringArra
 func _safe_mapping_count(definition: RigDefinition) -> int:
 	return mini(definition.roles.size(), mini(definition.bone_names.size(), mini(definition.parent_roles.size(), mini(definition.pivot_paths.size(), definition.canonical_rests.size()))))
 
-func _bone_indices_named(skeleton: Skeleton3D, bone_name: StringName) -> Array[int]:
+static func _bone_indices_named(skeleton: Skeleton3D, bone_name: StringName) -> Array[int]:
 	var matches: Array[int] = []
 	for bone_index: int in skeleton.get_bone_count():
 		if skeleton.get_bone_name(bone_index) == bone_name:
 			matches.append(bone_index)
 	return matches
 
-func _validate_transform(transform: Transform3D, label: String, errors: PackedStringArray) -> void:
+static func _validate_transform(transform: Transform3D, label: String, errors: PackedStringArray) -> void:
 	if not _transform_is_finite(transform):
 		errors.append("%s must be finite" % label)
 		return
 	if absf(transform.basis.determinant()) <= MIN_INVERTIBLE_DETERMINANT:
 		errors.append("%s must be invertible" % label)
 
-func _transform_is_finite(transform: Transform3D) -> bool:
+static func _transform_is_finite(transform: Transform3D) -> bool:
 	return (
 		_vector_is_finite(transform.basis.x)
 		and _vector_is_finite(transform.basis.y)
@@ -275,7 +395,7 @@ func _transform_is_finite(transform: Transform3D) -> bool:
 		and _vector_is_finite(transform.origin)
 	)
 
-func _vector_is_finite(vector: Vector3) -> bool:
+static func _vector_is_finite(vector: Vector3) -> bool:
 	return is_finite(vector.x) and is_finite(vector.y) and is_finite(vector.z)
 
 func _serialize_transform(transform: Transform3D) -> String:

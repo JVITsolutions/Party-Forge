@@ -69,6 +69,8 @@ func run() -> Array[String]:
 	_assert_invalid_role_bone_and_pivot_contracts(failures)
 	_assert_named_skin_bind_contract(failures)
 	_assert_canonical_resource_matches_current_pivots(failures)
+	_assert_legacy_validator_rejects_superset_skeleton(failures)
+	_assert_legacy_bind_and_bone_count_errors(failures)
 	return failures
 
 func _assert_definition_and_fixture_validation(failures: Array[String]) -> void:
@@ -239,6 +241,61 @@ func _assert_canonical_resource_matches_current_pivots(failures: Array[String]) 
 	TestAssertions.equal(_contract.call(&"validate_rig", definition, skeleton, scene), PackedStringArray(), "canonical resource maps every bone to the current pivot hierarchy", failures)
 	skeleton.free()
 	scene.free()
+
+func _assert_legacy_validator_rejects_superset_skeleton(failures: Array[String]) -> void:
+	var definition := _fixture_definition()
+	var skeleton := _skeleton_for(definition)
+	for extra_bone: StringName in [&"PresentationRoot", &"ShoulderDriver", &"WeaponSocketDriver"]:
+		skeleton.add_bone(extra_bone)
+		skeleton.set_bone_rest(skeleton.get_bone_count() - 1, Transform3D.IDENTITY)
+	var pivots := _pivot_fixture()
+	var errors: PackedStringArray = _contract.call(&"validate_rig", definition, skeleton, pivots)
+	TestAssertions.truthy(
+		_contains(errors, "bone count must be 19, got 22"),
+		"legacy exact validator continues rejecting superset skeletons",
+		failures
+	)
+	skeleton.free()
+	pivots.free()
+
+func _assert_legacy_bind_and_bone_count_errors(failures: Array[String]) -> void:
+	var definition := _fixture_definition()
+	var numeric_only := Skin.new()
+	numeric_only.add_bind(0, Transform3D.IDENTITY)
+	var skin_errors: PackedStringArray = _contract.call(&"validate_skin", definition, numeric_only)
+	TestAssertions.equal(
+		skin_errors[0],
+		"humanoid rig Skin bind 0 must be named; numeric-only and unnamed binds are invalid",
+		"legacy validate_skin keeps its exact named-only error",
+		failures
+	)
+	TestAssertions.equal(
+		skin_errors.size(),
+		ROLES.size() + 1,
+		"legacy validate_skin still reports one unnamed bind plus all nineteen missing canonical bones",
+		failures
+	)
+
+	var named := _named_skin_for(definition)
+	TestAssertions.equal(
+		_contract.call(&"validate_skin", definition, named),
+		PackedStringArray(),
+		"legacy validate_skin still accepts its existing ordered named fixture",
+		failures
+	)
+
+	var skeleton := _skeleton_for(definition)
+	skeleton.add_bone(&"ProductionExtra")
+	skeleton.set_bone_rest(skeleton.get_bone_count() - 1, Transform3D.IDENTITY)
+	var pivots := _pivot_fixture()
+	var rig_errors: PackedStringArray = _contract.call(&"validate_rig", definition, skeleton, pivots)
+	TestAssertions.truthy(
+		_contains(rig_errors, "humanoid rig bone count must be 19, got 20"),
+		"legacy validate_rig keeps exact nineteen-bone rejection",
+		failures
+	)
+	skeleton.free()
+	pivots.free()
 
 func _fixture_definition() -> Resource:
 	var definition := _definition_script.new() as Resource
