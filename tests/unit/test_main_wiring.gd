@@ -1572,8 +1572,17 @@ func _test_hud_collapse_preference_persistence(failures: Array[String]) -> void:
     main.saved_settings = persisted.copy()
     main.call("_wire_static_ui")
     var hud := main.get_node("HUD") as HUD
+    hud.apply_visual_settings(persisted.copy())
+    var initial_collapse_capture := TEST_ERROR_CAPTURE.new()
+    OS.add_logger(initial_collapse_capture)
     hud.apply_collapse_preferences(true, false)
     hud.collapse_preferences_changed.emit(true, false)
+    OS.remove_logger(initial_collapse_capture)
+    var initial_collapse_errors := initial_collapse_capture.drain_after_detach()
+    var initial_collapse_script_error := false
+    for message: String in initial_collapse_errors:
+        initial_collapse_script_error = initial_collapse_script_error or "SCRIPT ERROR" in message
+    TestAssertions.truthy(not initial_collapse_script_error, "initialized HUD persists the first collapse pair without a script diagnostic", failures)
 
     var loaded := fixture_store.load_settings(settings_path)
     TestAssertions.equal([loaded.hud_party_collapsed, loaded.hud_alerts_collapsed], [true, false], "Main persists the exact HUD collapse pair", failures)
@@ -1592,17 +1601,20 @@ func _test_hud_collapse_preference_persistence(failures: Array[String]) -> void:
     _cleanup_main(restored_main)
 
     main.settings_store = PartyForgeSettingsStore.new(func(_temporary: String, _target: String) -> Error: return ERR_CANT_CREATE)
-    hud.apply_collapse_preferences(false, true)
     var error_capture := TEST_ERROR_CAPTURE.new()
     OS.add_logger(error_capture)
+    hud.apply_collapse_preferences(false, true)
     hud.collapse_preferences_changed.emit(false, true)
     OS.remove_logger(error_capture)
     var captured_errors := error_capture.drain_after_detach()
     var expected_error := "PARTY_FORGE_SETTINGS_SAVE_ERROR path=%s code=%d stage=promote" % [settings_path, ERR_CANT_CREATE]
     var captured_expected_error := false
+    var captured_script_error := false
     for message: String in captured_errors:
         captured_expected_error = captured_expected_error or expected_error in message
+        captured_script_error = captured_script_error or "SCRIPT ERROR" in message
     TestAssertions.truthy(captured_expected_error, "failed HUD preference save publishes the exact captured diagnostic", failures)
+    TestAssertions.truthy(not captured_script_error, "initialized HUD preserves the failed-save session pair without a script diagnostic", failures)
 
     loaded = fixture_store.load_settings(settings_path)
     TestAssertions.equal([loaded.hud_party_collapsed, loaded.hud_alerts_collapsed], [true, false], "failed HUD preference save preserves the prior disk pair", failures)
