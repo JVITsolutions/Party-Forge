@@ -215,44 +215,27 @@ const CAPTURE_METADATA: Array[Dictionary] = [
 	{"surface":"result","width":1920,"height":1080,"ui":100,"text":100,"contrast":false,"motion":false,"input":"keyboard"},
 ]
 
-const SOURCE_INPUT_PATHS: Array[String] = [
-	RUNNER_PATH,
-	"scripts/game/main.gd", "scripts/settings/party_forge_settings.gd", "scripts/settings/party_forge_settings_store.gd",
-	"scenes/ui/hud.tscn", "scripts/ui/hud.gd", "scripts/ui/hud/combat_hud_projection.gd", "scripts/ui/hud/combat_hud_view_model.gd", "scripts/ui/hud/combat_hud_responsive_layout.gd",
-	"assets/ui/living_forge/icons/tabler-3.46.0/alert-triangle.svg", "assets/ui/living_forge/icons/party-forge/downed.svg", "assets/ui/living_forge/icons/party-forge/dead.svg",
-	"scripts/ui/hud/combat_alert_tray.gd", "scripts/ui/hud/combat_member_inspect_panel.gd",
-	"scenes/ui/hud/combat_alert_tray.tscn", "scenes/ui/hud/combat_member_inspect_panel.tscn",
-	"scenes/ui/living_forge/components/forge_party_member_card.tscn", "scripts/ui/living_forge/components/forge_party_member_card.gd",
-	"scenes/ui/living_forge/components/forge_party_member_marker.tscn", "scripts/ui/living_forge/components/forge_party_member_marker.gd",
-	"scenes/ui/living_forge/components/forge_alert_card.tscn", "scripts/ui/living_forge/components/forge_alert_card.gd",
-	"scenes/ui/level_up_panel.tscn", "scripts/ui/level_up_panel.gd", "scenes/ui/upgrade_card.tscn", "scripts/ui/upgrade_card.gd",
-	"scenes/ui/upgrade_recipient_picker.tscn", "scripts/ui/upgrade_recipient_picker.gd", "scenes/ui/upgrade_tooltip_panel.tscn", "scripts/ui/upgrade_tooltip_panel.gd",
-	"scenes/ui/run_result/terminal_extraction_panel.tscn", "scripts/ui/run_result/terminal_extraction_panel.gd", "scripts/ui/run_result/terminal_extraction_projection.gd",
-	"scenes/ui/living_forge/components/forge_extraction_item_card.tscn", "scripts/ui/living_forge/components/forge_extraction_item_card.gd", "scenes/ui/storage/item_tooltip_panel.tscn", "scripts/ui/storage/item_tooltip_panel.gd",
-	"scenes/ui/run_result_panel.tscn", "scripts/ui/run_result_panel.gd", "scripts/ui/run_result/run_result_view_model.gd", "scripts/ui/run_result/run_result_projection.gd",
-	"scripts/ui/run_result/run_recap_entry_projection.gd", "scripts/ui/run_result/run_recap_section_projection.gd", "scripts/ui/run_result/run_result_party_member_projection.gd",
-	"scenes/ui/run_pause_menu.tscn", "scripts/ui/run_pause_menu.gd",
-	"scenes/ui/run_setup/run_setup_lobby_panel.tscn", "scripts/ui/class_selection_panel.gd", "scripts/ui/run_setup/run_setup_lobby_view_model.gd", "scripts/ui/run_setup/run_setup_restart_intent.gd",
-	"scripts/equipment/loadout_compatibility_service.gd", "scripts/equipment/loadout_compatibility_projection.gd", "data/equipment/core_equipment_catalog.tres", "data/items/core_item_foundation_catalog.tres",
-	"scenes/arena/arena.tscn",
-	"scripts/ui/living_forge/living_forge_theme_catalog.gd", "scripts/ui/living_forge/living_forge_tokens.gd",
-	"data/ui/living_forge/living_forge_theme.tres", "data/ui/living_forge/living_forge_high_contrast_theme.tres",
-	"assets/ui/living_forge/fonts/cinzel-2.000/Cinzel[wght].ttf", "assets/ui/living_forge/fonts/source-sans-3.052/SourceSans3VF-Upright.ttf",
-	"assets/ui/living_forge/fonts/noto-sans-2.014/NotoSans[wdth,wght].ttf", "assets/ui/living_forge/fonts/noto-sans-symbols-2.008/NotoSansSymbols2-Regular.ttf",
-]
-
-const REQUIRED_BATCH_SOURCE_INPUT_PATHS: Array[String] = [
-	"scripts/game/main.gd",
-	"scripts/settings/party_forge_settings.gd",
-	"scripts/settings/party_forge_settings_store.gd",
-	"scripts/ui/hud/combat_hud_projection.gd",
-	"assets/ui/living_forge/icons/tabler-3.46.0/alert-triangle.svg",
-	"assets/ui/living_forge/icons/party-forge/downed.svg",
-	"assets/ui/living_forge/icons/party-forge/dead.svg",
-	"assets/ui/living_forge/fonts/cinzel-2.000/Cinzel[wght].ttf",
-	"assets/ui/living_forge/fonts/source-sans-3.052/SourceSans3VF-Upright.ttf",
-	"assets/ui/living_forge/fonts/noto-sans-2.014/NotoSans[wdth,wght].ttf",
-	"assets/ui/living_forge/fonts/noto-sans-symbols-2.008/NotoSansSymbols2-Regular.ttf",
+const SOURCE_INPUT_ROOTS: Array[String] = ["addons/", "assets/", "data/", "scenes/", "scripts/"]
+const SOURCE_INPUT_EXACT_PATHS: Array[String] = ["project.godot", "icon.svg", "icon.svg.import", RUNNER_PATH]
+const REQUIRED_SOURCE_SENTINELS: Array[String] = [
+	"project.godot",
+	"icon.svg",
+	"scripts/ui/level_up_reveal_controller.gd",
+	"scenes/ui/ledger/character_ledger.tscn",
+	"scripts/ui/ledger/character_ledger.gd",
+	"scenes/ui/ledger/character_equipment_preview.tscn",
+	"scripts/ui/ledger/character_equipment_preview.gd",
+	"scenes/ui/living_forge/components/forge_action_bar.tscn",
+	"scripts/ui/living_forge/components/forge_action_bar.gd",
+	"scenes/ui/living_forge/components/forge_input_prompt.tscn",
+	"scripts/ui/living_forge/components/forge_input_prompt.gd",
+	"scenes/ui/living_forge/components/forge_class_card.tscn",
+	"scripts/ui/living_forge/components/forge_class_card.gd",
+	"scenes/ui/living_forge/components/forge_seat_card.tscn",
+	"scripts/ui/living_forge/components/forge_seat_card.gd",
+	"assets/ui/living_forge/icons/party-forge/leader-crown.svg",
+	"assets/ui/pin_filled.svg",
+	"assets/ui/pin_outline.svg",
 ]
 
 class EvidenceRun:
@@ -293,9 +276,32 @@ func _run() -> void:
 	_assert(CAPTURE_METADATA.size() == CAPTURES.size(), "every capture has exact viewport/settings metadata")
 	_assert(CAPTURE_STATES.size() == CAPTURES.size() and CAPTURE_FOCUS_TARGETS.size() == CAPTURES.size(), "every capture has exact state and focus metadata")
 	_assert(_unique_strings(CAPTURES).size() == CAPTURES.size(), "capture names are globally unique")
-	_assert(_unique_strings(SOURCE_INPUT_PATHS).size() == SOURCE_INPUT_PATHS.size(), "source input contract paths are globally unique")
-	for required_path: String in REQUIRED_BATCH_SOURCE_INPUT_PATHS:
-		_assert(required_path in SOURCE_INPUT_PATHS, "source input contract includes required batch dependency: %s" % required_path)
+	var source_input_paths := _source_input_paths()
+	var head_source_blobs := _head_source_blob_hashes()
+	_assert(has_method(&"_untracked_runtime_source_paths"), "source input universe checks untracked files only within runtime roots")
+	var untracked_runtime_paths := _untracked_runtime_source_paths()
+	_assert(_unique_strings(source_input_paths).size() == source_input_paths.size(), "source input universe paths are globally unique")
+	_assert(_unique_strings(untracked_runtime_paths).size() == untracked_runtime_paths.size(), "untracked runtime source paths are globally unique")
+	for untracked_path: String in untracked_runtime_paths:
+		_assert(not untracked_path.ends_with(".uid"), "untracked runtime source check excludes UID sidecars: %s" % untracked_path)
+		_assert(not untracked_path.begins_with("docs/") and not untracked_path.begins_with(".superpowers/"), "untracked runtime source check excludes evidence and reports: %s" % untracked_path)
+	_assert(head_source_blobs.size() == source_input_paths.size(), "source input universe contains every exact-HEAD tracked runtime blob once")
+	var source_inputs_sorted := true
+	for index: int in range(1, source_input_paths.size()):
+		if source_input_paths[index - 1] >= source_input_paths[index]:
+			source_inputs_sorted = false
+	_assert(source_inputs_sorted, "source input universe is deterministically strict-sorted")
+	for required_path: String in REQUIRED_SOURCE_SENTINELS:
+		_assert(required_path in source_input_paths, "source input universe includes formerly omitted rendered dependency: %s" % required_path)
+	for relative_path: String in source_input_paths:
+		_assert(head_source_blobs.has(relative_path), "source input universe path is tracked at exact HEAD: %s" % relative_path)
+		_assert(FileAccess.file_exists(ProjectSettings.globalize_path("res://").path_join(relative_path)), "source input universe path exists: %s" % relative_path)
+		var in_runtime_root := relative_path in SOURCE_INPUT_EXACT_PATHS
+		for root_path: String in SOURCE_INPUT_ROOTS:
+			in_runtime_root = in_runtime_root or relative_path.begins_with(root_path)
+		_assert(in_runtime_root, "source input universe stays within approved runtime roots: %s" % relative_path)
+		_assert(not relative_path.ends_with(".uid"), "source input universe excludes UID sidecars: %s" % relative_path)
+		_assert(not relative_path.begins_with("docs/") and not relative_path.begins_with(".superpowers/"), "source input universe excludes evidence and reports: %s" % relative_path)
 	if "--validate-only" in OS.get_cmdline_user_args():
 		_assert(has_method(&"_validate_only_source_inputs_match_exact_head"), "validate-only source-input exact-head cleanliness check exists")
 		if not _failures.is_empty():
@@ -1193,7 +1199,7 @@ func _source_head() -> String:
 func _source_fingerprint() -> Dictionary:
 	var records: Array[Dictionary] = []
 	var root_path := ProjectSettings.globalize_path("res://")
-	for relative_path: String in SOURCE_INPUT_PATHS:
+	for relative_path: String in _source_input_paths():
 		var absolute_path := root_path.path_join(relative_path)
 		_assert(FileAccess.file_exists(absolute_path), "declared fingerprint input exists: %s" % relative_path)
 		if FileAccess.file_exists(absolute_path): records.append({"path":relative_path,"sha256":_sha256(FileAccess.get_file_as_bytes(absolute_path))})
@@ -1204,7 +1210,7 @@ func _source_fingerprint() -> Dictionary:
 		var path := String(record.path)
 		var hash := String(record.sha256)
 		_assert(context.update(("%d:%s%d:%s\n" % [path.length(),path,hash.length(),hash]).to_utf8_buffer()) == OK, "source fingerprint hashes %s" % path)
-	return {"algorithm":"sha256","method":"Sorted explicit Task 14 source paths; SHA-256 a length-prefixed path/file-SHA record stream.","path_count":records.size(),"sha256":context.finish().hex_encode(),"inputs":records}
+	return {"algorithm":"sha256","method":"Sorted exact-HEAD tracked runtime universe; SHA-256 a length-prefixed path/file-SHA record stream.","path_count":records.size(),"sha256":context.finish().hex_encode(),"inputs":records}
 
 
 func _renderer_metadata() -> Dictionary:
@@ -1234,29 +1240,112 @@ func _fixture_kind_for(metadata: Dictionary) -> String:
 
 func _validate_only_source_inputs_match_exact_head() -> bool:
 	var repository_root := ProjectSettings.globalize_path("res://")
+	var head_blobs := _head_source_blob_hashes()
+	var source_input_paths := _sorted_string_keys(head_blobs)
+	var object_format := _git_object_format(repository_root)
 	var exact := true
-	for relative_path: String in SOURCE_INPUT_PATHS:
+	if object_format not in ["sha1", "sha256"]:
+		_assert(false, "validate-only source input Git object format resolves")
+		return false
+	for untracked_path: String in _untracked_runtime_source_paths():
+		_assert(false, "validate-only source input is untracked at exact HEAD: %s" % untracked_path)
+		exact = false
+	for relative_path: String in source_input_paths:
 		var absolute_path := repository_root.path_join(relative_path)
 		if not FileAccess.file_exists(absolute_path):
 			_assert(false, "validate-only source input is missing: %s" % relative_path)
 			exact = false
 			continue
-		var head_output: Array = []
-		var head_code := OS.execute("git", PackedStringArray(["-C",repository_root,"rev-parse","--verify","HEAD:%s" % relative_path]), head_output, true)
-		if head_code != 0 or head_output.is_empty():
-			_assert(false, "validate-only source input is not tracked at exact HEAD: %s" % relative_path)
-			exact = false
-			continue
-		var current_output: Array = []
-		var current_code := OS.execute("git", PackedStringArray(["-C",repository_root,"hash-object","--no-filters",absolute_path]), current_output, true)
-		var head_hash := String("".join(head_output)).strip_edges()
-		var current_hash := String("".join(current_output)).strip_edges()
-		if current_code != 0 or current_output.is_empty() or current_hash != head_hash:
+		var current_hash := _git_blob_hash(FileAccess.get_file_as_bytes(absolute_path), object_format)
+		if current_hash != String(head_blobs.get(relative_path, "")):
 			_assert(false, "validate-only source input differs from exact HEAD: %s" % relative_path)
 			exact = false
 	if exact:
-		print("LIVING_FORGE_COMBAT_LOOP_VISUAL_SOURCE_INPUTS: PASS count=%d" % SOURCE_INPUT_PATHS.size())
+		print("LIVING_FORGE_COMBAT_LOOP_VISUAL_SOURCE_INPUTS: PASS count=%d" % source_input_paths.size())
 	return exact
+
+
+func _source_input_paths() -> Array[String]:
+	return _sorted_string_keys(_head_source_blob_hashes())
+
+
+func _head_source_blob_hashes() -> Dictionary:
+	var repository_root := ProjectSettings.globalize_path("res://")
+	var arguments := PackedStringArray(["-C", repository_root, "ls-tree", "-r", "--full-tree", "HEAD", "--"])
+	for exact_path: String in SOURCE_INPUT_EXACT_PATHS:
+		arguments.append(exact_path)
+	for root_path: String in SOURCE_INPUT_ROOTS:
+		arguments.append(root_path.trim_suffix("/"))
+	var output: Array = []
+	var code := OS.execute("git", arguments, output, true)
+	_assert(code == 0, "exact-HEAD tracked runtime source tree resolves")
+	var blobs: Dictionary = {}
+	if code != 0:
+		return blobs
+	for line: String in String("".join(output)).split("\n", false):
+		var tab_index := line.find("\t")
+		if tab_index < 0:
+			_assert(false, "exact-HEAD tracked runtime tree entry parses")
+			continue
+		var fields := line.substr(0, tab_index).split(" ", false)
+		var relative_path := line.substr(tab_index + 1)
+		if relative_path.ends_with(".uid"):
+			continue
+		if fields.size() != 3 or fields[1] != "blob":
+			_assert(false, "exact-HEAD tracked runtime tree entry is a blob: %s" % relative_path)
+			continue
+		_assert(not blobs.has(relative_path), "exact-HEAD tracked runtime path is unique: %s" % relative_path)
+		blobs[relative_path] = fields[2]
+	return blobs
+
+
+func _untracked_runtime_source_paths() -> Array[String]:
+	var repository_root := ProjectSettings.globalize_path("res://")
+	var arguments := PackedStringArray(["-C", repository_root, "ls-files", "--others", "--exclude-standard", "--"])
+	for exact_path: String in SOURCE_INPUT_EXACT_PATHS:
+		arguments.append(exact_path)
+	for root_path: String in SOURCE_INPUT_ROOTS:
+		arguments.append(root_path.trim_suffix("/"))
+	var output: Array = []
+	var code := OS.execute("git", arguments, output, true)
+	_assert(code == 0, "untracked runtime source query resolves")
+	var paths: Dictionary = {}
+	if code != 0:
+		return []
+	for relative_path: String in String("".join(output)).split("\n", false):
+		var normalized := relative_path.strip_edges().replace("\\", "/")
+		if normalized.is_empty() or normalized.ends_with(".uid"):
+			continue
+		paths[normalized] = true
+	return _sorted_string_keys(paths)
+
+
+func _sorted_string_keys(values: Dictionary) -> Array[String]:
+	var result: Array[String] = []
+	for value: Variant in values.keys():
+		result.append(String(value))
+	result.sort()
+	return result
+
+
+func _git_object_format(repository_root: String) -> String:
+	var output: Array = []
+	var code := OS.execute("git", PackedStringArray(["-C", repository_root, "rev-parse", "--show-object-format"]), output, true)
+	_assert(code == 0 and not output.is_empty(), "Git object format resolves for exact source bytes")
+	return String("".join(output)).strip_edges() if code == 0 and not output.is_empty() else ""
+
+
+func _git_blob_hash(bytes: PackedByteArray, object_format: String) -> String:
+	var context := HashingContext.new()
+	var start_error := context.start(HashingContext.HASH_SHA1) if object_format == "sha1" else context.start(HashingContext.HASH_SHA256)
+	_assert(start_error == OK, "Git blob hash initializes")
+	if start_error != OK:
+		return ""
+	var header := ("blob %d" % bytes.size()).to_utf8_buffer()
+	header.append(0)
+	_assert(context.update(header) == OK, "Git blob hash accepts header")
+	_assert(context.update(bytes) == OK, "Git blob hash accepts source bytes")
+	return context.finish().hex_encode()
 
 
 func _battlefield_backdrop() -> Node3D:
