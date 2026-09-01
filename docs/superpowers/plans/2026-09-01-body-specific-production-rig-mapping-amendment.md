@@ -993,6 +993,7 @@ Create scripts/presentation/humanoid_rig_mapping_catalog.gd with exactly:
 class_name HumanoidRigMappingCatalog
 extends RefCounted
 
+const RigMapping := preload("res://scripts/presentation/humanoid_rig_mapping.gd")
 const BODY_PRESETS: Array[StringName] = [&"masculine", &"feminine"]
 const MAPPING_ID_BY_BODY_PRESET := {
 	&"masculine": &"pf_humanoid_v1_mixamo52_masculine",
@@ -1016,18 +1017,18 @@ var _mapping_by_body_preset: Dictionary
 func _init(mapping_by_body_preset: Dictionary = {}) -> void:
 	_mapping_by_body_preset = mapping_by_body_preset.duplicate()
 
-func resolve(body_preset_id: StringName) -> HumanoidRigMapping:
+func resolve(body_preset_id: StringName) -> RigMapping:
 	var value: Variant = _mapping_by_body_preset.get(body_preset_id)
-	if not value is HumanoidRigMapping:
+	if not value is RigMapping:
 		return null
-	var mapping := value as HumanoidRigMapping
+	var mapping := value as RigMapping
 	if not _identity_errors(body_preset_id, mapping).is_empty():
 		return null
 	return mapping
 
 func _identity_errors(
 		body_preset_id: StringName,
-		mapping: HumanoidRigMapping
+		mapping: RigMapping
 	) -> PackedStringArray:
 	var errors := PackedStringArray()
 	if body_preset_id not in BODY_PRESETS:
@@ -1102,7 +1103,7 @@ This plan's Task 4 is verification-only and is unrelated to the original product
 - Read-only audit scope: all eight tracked paths listed in the File Responsibility Map.
 
 **Interfaces:**
-- Consumes: the three independently committed Task 1-3 implementation deliverables plus the two separately audited Task 2 and Task 3 RED sequencing-plan corrections.
+- Consumes: the three independently committed Task 1-3 implementation deliverables plus the three separately audited Task 2 sequencing, Task 3 RED, and Task 3 cold type-resolution plan corrections.
 - Produces: verification evidence and a stop-gate report only; it does not create a repository artifact, mapping resource, asset, import, or integration commit.
 
 - [ ] **Step 1: Re-run the complete focused checkpoint gate**
@@ -1164,7 +1165,7 @@ Require full-suite exit 0 and exactly one terminal marker matching TEST_SUMMARY:
 
 - [ ] **Step 4: Obtain independent requirements review**
 
-Before either review, enumerate the five first-parent commits after `implementationBase` into `$task1Commit`, `$planRestCorrectionCommit`, `$task2Commit`, `$planCatalogCorrectionCommit`, and `$task3Commit`. Require their exact subjects in the order specified by Step 6. Give both reviewers the three implementation hashes and identify both correction hashes explicitly as approved documentation-only commits to ignore for product-code scope.
+Before either review, enumerate the six first-parent commits after `implementationBase` into `$task1Commit`, `$planRestCorrectionCommit`, `$task2Commit`, `$planCatalogCorrectionCommit`, `$planCatalogTypeCorrectionCommit`, and `$task3Commit`. Require their exact subjects in the order specified by Step 6. Give both reviewers the three implementation hashes and identify all three correction hashes explicitly as approved documentation-only commits to ignore for product-code scope.
 
 Invoke the requesting-code-review skill and give a fresh reviewer this exact scope:
 
@@ -1173,8 +1174,8 @@ Compare only the three implementation commits $task1Commit, $task2Commit, and
 $task3Commit after implementationBase ($implementationBase, recorded at
 $baselineEvidencePath) to
 docs/superpowers/specs/2026-09-01-body-specific-production-rig-mapping-amendment-design.md.
-Ignore the separately audited documentation-only commits $planRestCorrectionCommit
-and $planCatalogCorrectionCommit; do not treat either as product implementation scope.
+Ignore the separately audited documentation-only commits $planRestCorrectionCommit,
+$planCatalogCorrectionCommit, and $planCatalogTypeCorrectionCommit; do not treat any as product implementation scope.
 Check every numeric-bind rule, legacy-validator containment, fixed-nine-decimal
 rest byte contract, both approved source/rest identities, catalog selection,
 no-active-mutation behavior, forbidden .tres absence, and original-plan
@@ -1193,7 +1194,8 @@ Use a different fresh reviewer with this exact scope:
 Review only the same three implementation commits $task1Commit, $task2Commit,
 and $task3Commit after implementationBase ($implementationBase, recorded at
 $baselineEvidencePath). Ignore the separately audited documentation-only commits
-$planRestCorrectionCommit and $planCatalogCorrectionCommit. Review for deterministic error order,
+$planRestCorrectionCommit, $planCatalogCorrectionCommit, and
+$planCatalogTypeCorrectionCommit. Review for deterministic error order,
 Godot Skin/Skeleton3D API correctness, duplicate/out-of-range coverage,
 name/index precedence, finite/invertible validation, exact serialization bytes,
 type/signature consistency, stateless catalog behavior, test isolation, and
@@ -1205,17 +1207,18 @@ Any FAIL stops the checkpoint. No unplanned corrective commit is authorized by t
 
 - [ ] **Step 6: Audit exact commits and tracked scope**
 
-Require fbc3f9e8c3d9853ffbf8d3c21944f970ac41231b to remain an ancestor of implementationBase. Then require exactly five first-parent commits after implementationBase, in this order:
+Require fbc3f9e8c3d9853ffbf8d3c21944f970ac41231b to remain an ancestor of implementationBase. Then require exactly six first-parent commits after implementationBase, in this order:
 
 ~~~text
 feat: accept complete numeric production skin binds
 docs: sequence production rest identity TDD
 feat: verify body-specific production rig identity
 docs: make catalog RED diagnostic-free
+docs: make catalog type resolution explicit
 feat: resolve body-specific humanoid rig mappings
 ~~~
 
-Require commits one, three, and five to be the only implementation commits. Their combined changed-path union must be exactly:
+Require commits one, three, and six to be the only implementation commits. Their combined changed-path union must be exactly:
 
 ~~~text
 scripts/presentation/humanoid_rig_contract.gd
@@ -1228,7 +1231,7 @@ tests/unit/test_production_humanoid_rest_signature.gd
 tests/unit/test_production_humanoid_rig_mapping.gd
 ~~~
 
-Audit commits two and four separately and require each changed-path set to equal exactly `docs/superpowers/plans/2026-09-01-body-specific-production-rig-mapping-amendment.md`. Require tracked worktree and index clean, `git diff $implementationBase..HEAD --check` exit 0, the three implementation commits' combined path union to equal the eight paths above, and the complete `git diff --name-only $implementationBase..HEAD` union to equal those eight paths plus the one corrected-plan path. Require no merge commit. Every diff and containment comparison remains rooted at `implementationBase`; the approved-design ancestor remains provenance only.
+Audit commits two, four, and five separately and require each changed-path set to equal exactly `docs/superpowers/plans/2026-09-01-body-specific-production-rig-mapping-amendment.md`. Require tracked worktree and index clean, `git diff $implementationBase..HEAD --check` exit 0, the three implementation commits' combined path union to equal the eight paths above, and the complete `git diff --name-only $implementationBase..HEAD` union to equal those eight paths plus the one corrected-plan path. Require no merge commit. Every diff and containment comparison remains rooted at `implementationBase`; the approved-design ancestor remains provenance only.
 
 - [ ] **Step 7: Revalidate containment and immutable provenance**
 
@@ -1244,7 +1247,7 @@ Rehash all 77 preserved untracked files against the existing manifest and requir
 
 - [ ] **Step 8: Stop for Jacob's contract-checkpoint approval**
 
-Report branch, worktree, all five commit hashes/parents/subjects, the three implementation hashes, both ignored plan-correction hashes, exact eight-path implementation union, both separately audited one-path documentation corrections, Task 2A, Task 2B, and Task 3 RED/GREEN evidence, focused and full-suite markers/exits, two independent review results, fixture provenance, immutable hashes, 77-file containment, protected-worktree drift, and absent sentinels.
+Report branch, worktree, all six commit hashes/parents/subjects, the three implementation hashes, all three ignored plan-correction hashes, exact eight-path implementation union, all three separately audited one-path documentation corrections, Task 2A, Task 2B, and Task 3 RED/GREEN evidence, focused and full-suite markers/exits, two independent review results, fixture provenance, immutable hashes, 77-file containment, protected-worktree drift, and absent sentinels.
 
 Do not create another commit. Do not merge or push. Ask Jacob to approve or reject the verified pre-resource contract checkpoint.
 
