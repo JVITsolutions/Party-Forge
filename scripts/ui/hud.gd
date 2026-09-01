@@ -310,8 +310,13 @@ func _suspend_region_focus(region: StringName) -> void:
 			if node is Control:
 				controls.append(node as Control)
 		for control: Control in controls:
-			if control.focus_mode != Control.FOCUS_NONE:
-				entries.append({"control": control, "focus_mode": control.focus_mode})
+			var focus_mode := control.focus_mode
+			if _terminal_control_is_presentationally_available(control):
+				var terminal_focus_mode := _claim_terminal_presentation_focus_mode(control)
+				if terminal_focus_mode != Control.FOCUS_NONE:
+					focus_mode = terminal_focus_mode
+			if focus_mode != Control.FOCUS_NONE:
+				entries.append({"control": control, "focus_mode": focus_mode})
 				control.focus_mode = Control.FOCUS_NONE
 	_collapsed_focus_modes[region] = entries
 
@@ -350,6 +355,8 @@ func _reconcile_terminal_focus_suspension() -> void:
 			presentation_mode = control.focus_mode
 		if not _terminal_control_is_presentationally_available(control):
 			presentation_mode = Control.FOCUS_NONE
+		if _set_region_suspended_focus_mode(control, presentation_mode):
+			continue
 		reconciled.append({
 			"control": control,
 			"focus_mode": original_mode,
@@ -364,6 +371,8 @@ func _reconcile_terminal_focus_suspension() -> void:
 			or control.focus_mode == Control.FOCUS_NONE
 			or not _terminal_control_is_presentationally_available(control)
 		):
+			continue
+		if _set_region_suspended_focus_mode(control, control.focus_mode):
 			continue
 		var instance_id := control.get_instance_id()
 		if not seen.has(instance_id):
@@ -389,7 +398,55 @@ func _set_presentation_focus_mode(control: Control, focus_mode: Control.FocusMod
 			entry["presentation_focus_mode"] = focus_mode
 			control.focus_mode = Control.FOCUS_NONE
 			return
+	if _set_region_suspended_focus_mode(control, focus_mode):
+		return
+	if _terminal_focus_suspension_active():
+		if focus_mode != Control.FOCUS_NONE and _terminal_control_is_presentationally_available(control):
+			_terminal_suspended_focus_modes.append({
+				"control": control,
+				"focus_mode": focus_mode,
+				"presentation_focus_mode": focus_mode,
+			})
+		control.focus_mode = Control.FOCUS_NONE
+		return
 	control.focus_mode = focus_mode
+
+
+func _set_region_suspended_focus_mode(control: Control, focus_mode: int) -> bool:
+	for region: StringName in [REGION_PARTY, REGION_ALERTS]:
+		var entries := _collapsed_focus_modes.get(region, []) as Array
+		for index: int in range(entries.size() - 1, -1, -1):
+			var entry := entries[index] as Dictionary
+			var raw_control: Variant = entry.get("control")
+			if not is_instance_valid(raw_control):
+				entries.remove_at(index)
+				continue
+			var suspended_control := raw_control as Control
+			if suspended_control != control:
+				continue
+			entry["focus_mode"] = focus_mode
+			control.focus_mode = Control.FOCUS_NONE
+			_collapsed_focus_modes[region] = entries
+			return true
+		_collapsed_focus_modes[region] = entries
+	return false
+
+
+func _claim_terminal_presentation_focus_mode(control: Control) -> int:
+	for index: int in range(_terminal_suspended_focus_modes.size() - 1, -1, -1):
+		var entry := _terminal_suspended_focus_modes[index]
+		var raw_control: Variant = entry.get("control")
+		if not is_instance_valid(raw_control):
+			_terminal_suspended_focus_modes.remove_at(index)
+			continue
+		var suspended_control := raw_control as Control
+		if suspended_control != control:
+			continue
+		var presentation_mode := int(entry.get("presentation_focus_mode", entry.get("focus_mode", Control.FOCUS_NONE)))
+		if presentation_mode != Control.FOCUS_NONE:
+			_terminal_suspended_focus_modes.remove_at(index)
+		return presentation_mode
+	return Control.FOCUS_NONE
 
 
 func _terminal_control_is_presentationally_available(control: Control) -> bool:
@@ -400,6 +457,11 @@ func _terminal_control_is_presentationally_available(control: Control) -> bool:
 
 func _terminal_control_is_focus_eligible(control: Control, presentation_mode: int) -> bool:
 	return presentation_mode != Control.FOCUS_NONE and _terminal_control_is_presentationally_available(control)
+
+
+func _terminal_focus_suspension_active() -> bool:
+	var panel := get_node_or_null("TerminalExtraction") as TerminalExtractionPanel
+	return (panel != null and panel.visible) or not _terminal_suspended_focus_modes.is_empty()
 
 
 func _prepare_region_collapse(region: StringName, user_initiated: bool) -> void:
@@ -414,14 +476,14 @@ func _prepare_region_collapse(region: StringName, user_initiated: bool) -> void:
 
 
 func _finish_region_expand(region: StringName, user_initiated: bool) -> void:
-	if _terminal_suspended_focus_modes.is_empty():
+	if not _terminal_focus_suspension_active():
 		_restore_region_focus_modes(region)
 	if user_initiated:
 		call_deferred("_restore_region_focus", region)
 
 
 func _restore_region_focus(region: StringName) -> void:
-	if _child_modal_owns_focus() or not _terminal_suspended_focus_modes.is_empty():
+	if _child_modal_owns_focus() or _terminal_focus_suspension_active():
 		return
 	var descriptor := _collapsed_focus_descriptors.get(region, {}) as Dictionary
 	if not descriptor.is_empty() and restore_focus_descriptor(descriptor, false):

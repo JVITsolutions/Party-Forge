@@ -72,6 +72,7 @@ func _run() -> void:
 	await _exercise_terminal_presentation_ineligibility()
 	await _exercise_freed_collapsed_rebuild_restoration()
 	await _exercise_region_focus_traversal_and_motion()
+	await _exercise_terminal_region_suspension_handoff()
 	_cleanup()
 	_finish()
 
@@ -314,6 +315,80 @@ func _exercise_freed_collapsed_rebuild_restoration() -> void:
 	_assert(restored != null and restored.is_in_group(&"combat_hud_member") and int(restored.get_meta("member_id", 0)) == member_id, "collapsed expansion restores the stable descriptor to the rebuilt member")
 
 
+func _exercise_terminal_region_suspension_handoff() -> void:
+	_hud.apply_collapse_preferences(false, false)
+	var reduced_motion := PartyForgeSettings.new()
+	reduced_motion.reduced_motion = true
+	_hud.apply_visual_settings(reduced_motion)
+	var party_header := _hud.get_node("Margin/CombatStatus/PartyHeader") as Button
+	party_header.grab_focus()
+	await process_frame
+	var alerts_header := _hud.get_node("Margin/CombatStatus/AlertRegion/Header") as Button
+	var party_region := _hud.get_node("Margin/CombatStatus/PartyRegion") as Control
+	var alerts_content := _hud.get_node("Margin/CombatStatus/AlertRegion/ExpandedAlerts") as Control
+	var member := _member_control(4)
+	var alert_card := alerts_content.get_child(0) as Control
+	var alert_stable_id := StringName(alert_card.get_meta(&"stable_alert_id", &""))
+	var alert_inspect := alert_card.get_node("Surface/Content/Actions/Inspect") as Button
+	_assert(member != null and member.focus_mode == Control.FOCUS_ALL, "terminal region handoff fixture starts with an eligible Party descendant")
+	_assert(alert_inspect.visible and not alert_inspect.disabled and alert_inspect.focus_mode == Control.FOCUS_ALL, "terminal region handoff fixture starts with an eligible Alerts descendant")
+	member.grab_focus()
+	await process_frame
+	alert_inspect.grab_focus()
+	await process_frame
+	member.grab_focus()
+	await process_frame
+	member = null
+	alert_inspect = null
+	alert_card = null
+	_hud.show_terminal_extraction(_terminal_projection())
+	await process_frame
+	await process_frame
+	var terminal := _hud.get_node("TerminalExtraction") as TerminalExtractionPanel
+	_hud.apply_collapse_preferences(true, true)
+	await process_frame
+	_assert(_focus_within(terminal), "programmatic Party and Alerts collapse preserves real terminal focus")
+	_assert(_hud.party_collapsed() and _hud.alerts_collapsed(), "both regions collapse behind Terminal Extraction")
+	_hud.hide_terminal_extraction()
+	await process_frame
+	await process_frame
+	_assert(_region_focus_modes_are_none(party_region) and _region_focus_modes_are_none(alerts_content), "terminal close leaves both still-collapsed regions unreachable")
+	party_header.pressed.emit()
+	await process_frame
+	await process_frame
+	var expanded_member := _member_control(4)
+	_assert(expanded_member != null and expanded_member.focus_mode == Control.FOCUS_ALL, "Party expansion recovers the surviving member's original eligible focus mode after terminal handoff")
+	_assert(_viewport.gui_get_focus_owner() == expanded_member, "Party expansion restores the exact saved local member descriptor after terminal handoff")
+	alerts_header.pressed.emit()
+	await process_frame
+	await process_frame
+	var expanded_inspect := _hud.call("_alert_action_control", alert_stable_id, &"inspect") as Button
+	_assert(expanded_inspect != null and expanded_inspect.focus_mode == Control.FOCUS_ALL, "Alerts expansion recovers the surviving Inspect action's original eligible focus mode after terminal handoff")
+	_assert(_viewport.gui_get_focus_owner() == expanded_inspect, "Alerts expansion restores the exact saved local alert descriptor after terminal handoff")
+	var second_member := _member_control(5)
+	second_member.grab_focus()
+	await process_frame
+	_hud.show_terminal_extraction(_terminal_projection())
+	await process_frame
+	await process_frame
+	_hud.apply_collapse_preferences(true, true)
+	_hud.apply_collapse_preferences(false, false)
+	await process_frame
+	_assert(_focus_within(terminal), "collapse and expansion before terminal close preserve real terminal focus")
+	_assert(second_member.focus_mode == Control.FOCUS_NONE and expanded_inspect.focus_mode == Control.FOCUS_NONE, "regions expanded behind the terminal remain suspended until terminal close")
+	_assert(_focus_suspension_ownership_is_unique(), "expanded-behind-terminal controls have exactly one suspension owner")
+	_hud.hide_terminal_extraction()
+	await process_frame
+	await process_frame
+	var restored_second_member := _member_control(5)
+	var restored_second_inspect := _hud.call("_alert_action_control", alert_stable_id, &"inspect") as Button
+	_assert(restored_second_member != null and restored_second_member.focus_mode == Control.FOCUS_ALL, "terminal close after Party expansion restores the surviving member mode")
+	_assert(restored_second_inspect != null and restored_second_inspect.focus_mode == Control.FOCUS_ALL, "terminal close after Alerts expansion restores the surviving Inspect mode")
+	_assert(_viewport.gui_get_focus_owner() == restored_second_member, "terminal close after region expansion restores the exact terminal-prior member")
+	party_header.grab_focus()
+	await process_frame
+
+
 func _exercise_terminal_presentation_ineligibility() -> void:
 	_hud.apply_collapse_preferences(false, false)
 	for health_value: Variant in (_fixture.health_by_member as Dictionary).values():
@@ -384,6 +459,28 @@ func _terminal_suspension_entries_are_live_unique() -> bool:
 		if control == null or seen.has(control.get_instance_id()):
 			return false
 		seen[control.get_instance_id()] = true
+	return true
+
+
+func _focus_suspension_ownership_is_unique() -> bool:
+	var seen: Dictionary = {}
+	for entries_value: Variant in [
+		_hud.get("_terminal_suspended_focus_modes"),
+		(_hud.get("_collapsed_focus_modes") as Dictionary).get(&"party", []),
+		(_hud.get("_collapsed_focus_modes") as Dictionary).get(&"alerts", []),
+	]:
+		if not entries_value is Array:
+			return false
+		for entry_value: Variant in entries_value as Array:
+			if not entry_value is Dictionary:
+				return false
+			var raw_control: Variant = (entry_value as Dictionary).get("control")
+			if not is_instance_valid(raw_control):
+				continue
+			var control := raw_control as Control
+			if control == null or seen.has(control.get_instance_id()):
+				return false
+			seen[control.get_instance_id()] = true
 	return true
 
 
