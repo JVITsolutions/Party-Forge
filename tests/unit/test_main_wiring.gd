@@ -2,6 +2,7 @@ extends RefCounted
 
 const COMBAT_RESOLUTION_SERVICE := preload("res://scripts/combat/combat_resolution_service.gd")
 const WAREHOUSE_LOCKED_DIALOG := preload("res://scripts/ui/warehouse/warehouse_locked_dialog.gd")
+const TEST_ERROR_CAPTURE := preload("res://tests/support/test_error_capture.gd")
 
 class WarehouseRefreshFailureManager extends ProfileManager:
     var failure_reason := "injected Warehouse refresh failure"
@@ -146,6 +147,7 @@ func run() -> Array[String]:
     _test_passive_tree_route_composition(failures)
     _test_settings_and_next_run_snapshot_wiring(failures)
     _test_integrated_overlay_input_and_front_end_seam(failures)
+    _test_hud_collapse_preference_persistence(failures)
     _test_hud_contract(failures)
     _test_class_selection_starts_run_and_applies_choices(failures)
     _test_live_member_health_provider_uses_party_membership(failures)
@@ -1554,6 +1556,50 @@ func _test_integrated_overlay_input_and_front_end_seam(failures: Array[String]) 
     TestAssertions.truthy(menu != null and menu.route_requested.is_connected(Callable(main, "_on_main_menu_route_requested")), "main-menu Quit intent remains routed through PartyForgeMain", failures)
     tree.paused = false
     main.free()
+
+func _test_hud_collapse_preference_persistence(failures: Array[String]) -> void:
+    var settings_path := "user://tests/main-wiring-hud-collapse-settings_%d_%d.cfg" % [OS.get_process_id(), Time.get_ticks_usec()]
+    _cleanup_settings_artifacts(settings_path)
+    var persisted := PartyForgeSettings.new()
+    persisted.hud_party_collapsed = false
+    persisted.hud_alerts_collapsed = false
+    var fixture_store := PartyForgeSettingsStore.new()
+    TestAssertions.equal(fixture_store.save_settings(persisted, settings_path), "", "HUD collapse fixture saves expanded preferences", failures)
+
+    var main := (load("res://scenes/game/main.tscn") as PackedScene).instantiate()
+    _prepare_main(main, settings_path)
+    main.saved_settings = persisted.copy()
+    main.call("_wire_static_ui")
+    var hud := main.get_node("HUD") as HUD
+    hud.apply_collapse_preferences(true, false)
+    hud.collapse_preferences_changed.emit(true, false)
+
+    var loaded := fixture_store.load_settings(settings_path)
+    TestAssertions.equal([loaded.hud_party_collapsed, loaded.hud_alerts_collapsed], [true, false], "Main persists the exact HUD collapse pair", failures)
+    TestAssertions.equal([main.saved_settings.hud_party_collapsed, main.saved_settings.hud_alerts_collapsed], [true, false], "Main replaces authoritative settings after a successful HUD preference save", failures)
+    var committed_bytes := FileAccess.get_file_as_bytes(settings_path)
+
+    main.settings_store = PartyForgeSettingsStore.new(func(_temporary: String, _target: String) -> Error: return ERR_CANT_CREATE)
+    hud.apply_collapse_preferences(false, true)
+    var error_capture := TEST_ERROR_CAPTURE.new()
+    OS.add_logger(error_capture)
+    hud.collapse_preferences_changed.emit(false, true)
+    OS.remove_logger(error_capture)
+    var captured_errors := error_capture.drain_after_detach()
+    var expected_error := "PARTY_FORGE_SETTINGS_SAVE_ERROR path=%s code=%d stage=promote" % [settings_path, ERR_CANT_CREATE]
+    var captured_expected_error := false
+    for message: String in captured_errors:
+        captured_expected_error = captured_expected_error or expected_error in message
+    TestAssertions.truthy(captured_expected_error, "failed HUD preference save publishes the exact captured diagnostic", failures)
+
+    loaded = fixture_store.load_settings(settings_path)
+    TestAssertions.equal([loaded.hud_party_collapsed, loaded.hud_alerts_collapsed], [true, false], "failed HUD preference save preserves the prior disk pair", failures)
+    TestAssertions.equal(FileAccess.get_file_as_bytes(settings_path), committed_bytes, "failed HUD preference save preserves the committed settings bytes", failures)
+    TestAssertions.equal([main.saved_settings.hud_party_collapsed, main.saved_settings.hud_alerts_collapsed], [true, false], "failed HUD preference save preserves Main's authoritative settings", failures)
+    TestAssertions.equal([hud.party_collapsed(), hud.alerts_collapsed()], [false, true], "failed HUD preference save preserves the toggled session presentation", failures)
+
+    main.free()
+    _cleanup_settings_artifacts(settings_path)
 
 func _test_hud_contract(failures: Array[String]) -> void:
     var hud := (load("res://scenes/ui/hud.tscn") as PackedScene).instantiate() as CanvasLayer
