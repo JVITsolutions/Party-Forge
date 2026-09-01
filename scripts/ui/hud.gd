@@ -97,11 +97,14 @@ func _suspend_non_terminal_focus(panel: TerminalExtractionPanel) -> void:
 
 func _restore_non_terminal_focus() -> void:
 	for entry: Dictionary in _terminal_suspended_focus_modes:
-		var control := entry.get("control") as Control
-		if control != null and is_instance_valid(control):
+		var raw_control: Variant = entry.get("control")
+		if is_instance_valid(raw_control):
+			var control := raw_control as Control
+			if control == null:
+				continue
 			control.focus_mode = int(entry.get("focus_mode", Control.FOCUS_NONE))
 	_terminal_suspended_focus_modes.clear()
-	var direct := _terminal_prior_focus
+	var direct_value: Variant = _terminal_prior_focus
 	var descriptor := _terminal_prior_focus_descriptor.duplicate(true)
 	_terminal_prior_focus = null
 	_terminal_prior_focus_descriptor.clear()
@@ -111,8 +114,12 @@ func _restore_non_terminal_focus() -> void:
 			_suspend_region_focus(region)
 		else:
 			_restore_region_focus_modes(region)
-	var direct_disabled := direct is BaseButton and (direct as BaseButton).disabled
-	if direct != null and is_instance_valid(direct) and direct.is_visible_in_tree() and direct.focus_mode != Control.FOCUS_NONE and not direct_disabled:
+	var direct: Control
+	if is_instance_valid(direct_value):
+		direct = direct_value as Control
+	var direct_valid := direct != null and is_instance_valid(direct)
+	var direct_disabled := direct_valid and direct is BaseButton and (direct as BaseButton).disabled
+	if direct_valid and direct.is_visible_in_tree() and direct.focus_mode != Control.FOCUS_NONE and not direct_disabled:
 		direct.grab_focus()
 		return
 	if not descriptor.is_empty():
@@ -306,10 +313,43 @@ func _suspend_region_focus(region: StringName) -> void:
 
 func _restore_region_focus_modes(region: StringName) -> void:
 	for entry: Dictionary in _collapsed_focus_modes.get(region, []) as Array:
-		var control := entry.get("control") as Control
-		if control != null and is_instance_valid(control):
+		var raw_control: Variant = entry.get("control")
+		if is_instance_valid(raw_control):
+			var control := raw_control as Control
+			if control == null:
+				continue
 			control.focus_mode = int(entry.get("focus_mode", Control.FOCUS_NONE))
 	_collapsed_focus_modes[region] = []
+
+
+func _reconcile_terminal_focus_suspension() -> void:
+	var panel := get_node("TerminalExtraction") as TerminalExtractionPanel
+	if not panel.visible and _terminal_suspended_focus_modes.is_empty():
+		return
+	var reconciled: Array[Dictionary] = []
+	var seen: Dictionary = {}
+	for entry: Dictionary in _terminal_suspended_focus_modes:
+		var raw_control: Variant = entry.get("control")
+		if not is_instance_valid(raw_control):
+			continue
+		var control := raw_control as Control
+		if control == null or control == panel or panel.is_ancestor_of(control):
+			continue
+		var instance_id := control.get_instance_id()
+		if seen.has(instance_id):
+			continue
+		seen[instance_id] = true
+		reconciled.append({"control": control, "focus_mode": int(entry.get("focus_mode", Control.FOCUS_NONE))})
+	for node: Node in find_children("*", "Control", true, false):
+		var control := node as Control
+		if control == null or control == panel or panel.is_ancestor_of(control) or control.focus_mode == Control.FOCUS_NONE:
+			continue
+		var instance_id := control.get_instance_id()
+		if not seen.has(instance_id):
+			seen[instance_id] = true
+			reconciled.append({"control": control, "focus_mode": control.focus_mode})
+		control.focus_mode = Control.FOCUS_NONE
+	_terminal_suspended_focus_modes = reconciled
 
 
 func _prepare_region_collapse(region: StringName, user_initiated: bool) -> void:
@@ -424,6 +464,7 @@ func _present_region_headers() -> void:
 		_present_state_cue(party_icon, party_clear, CombatHudProjection.NO_ALERT_SEVERITY, false)
 		_present_state_cue(alerts_icon, alerts_clear, CombatHudProjection.NO_ALERT_SEVERITY, false)
 		_set_tray_action_eligibility(tray_action, 0)
+		_reconcile_terminal_focus_suspension()
 		return
 	var leader := current_projection.leader()
 	var highest_severity := current_projection.highest_alert_severity()
@@ -453,6 +494,7 @@ func _present_region_headers() -> void:
 	_present_state_cue(alerts_icon, alerts_clear, highest_severity, true)
 	_set_tray_action_eligibility(tray_action, current_projection.all_alerts.size())
 	_configure_alert_focus_neighbors()
+	_reconcile_terminal_focus_suspension()
 
 
 func _region_state_label(collapsed: bool) -> String:
@@ -710,6 +752,7 @@ func _rebuild_member_controls() -> void:
 	_clear_member_controls()
 	var members := current_projection.members
 	if members.is_empty():
+		_reconcile_terminal_focus_suspension()
 		return
 	var leader := _leader_projection(members)
 	var leader_card := get_node("Margin/CombatStatus/LeaderCard") as ForgePartyMemberCard
@@ -741,6 +784,7 @@ func _rebuild_member_controls() -> void:
 	_configure_member_focus_neighbors()
 	if _party_collapsed:
 		_suspend_region_focus(REGION_PARTY)
+	_reconcile_terminal_focus_suspension()
 
 
 func _rebuild_rich_followers(members: Array[PartyMemberHudProjection]) -> void:
@@ -824,12 +868,18 @@ func _present_alerts() -> void:
 		var stable_id := StringName(stable_value)
 		if wanted.has(stable_id):
 			continue
-		var stale := _alert_controls_by_id[stable_id] as Control
+		var stale_value: Variant = _alert_controls_by_id[stable_id]
 		_alert_controls_by_id.erase(stable_id)
-		stale.free()
+		if is_instance_valid(stale_value):
+			var stale := stale_value as Control
+			if stale != null:
+				stale.free()
 	for index: int in candidates.size():
 		var alert := candidates[index]
-		var card := _alert_controls_by_id.get(alert.stable_id) as ForgeAlertCard
+		var card: ForgeAlertCard
+		var card_value: Variant = _alert_controls_by_id.get(alert.stable_id)
+		if is_instance_valid(card_value):
+			card = card_value as ForgeAlertCard
 		if card == null:
 			card = ALERT_CARD_SCENE.instantiate() as ForgeAlertCard
 			card.custom_minimum_size = Vector2(472.0, 172.0)
@@ -848,6 +898,7 @@ func _present_alerts() -> void:
 	_queue_alert_budget_reflow()
 	if _alerts_collapsed:
 		_suspend_region_focus(REGION_ALERTS)
+	_reconcile_terminal_focus_suspension()
 
 
 func _queue_alert_budget_reflow() -> void:
@@ -861,6 +912,7 @@ func _apply_deferred_alert_budget() -> void:
 	_alert_budget_reflow_queued = false
 	if current_projection != null:
 		_apply_alert_budget()
+	_reconcile_terminal_focus_suspension()
 
 
 func _apply_alert_budget() -> void:
@@ -1161,7 +1213,10 @@ func _clear_presentation() -> void:
 	leader.set_meta(&"member_id", 0)
 	(get_node("Margin/CombatStatus/BossRegion") as Control).visible = false
 	for card_value: Variant in _alert_controls_by_id.values():
-		(card_value as Control).free()
+		if is_instance_valid(card_value):
+			var card := card_value as Control
+			if card != null:
+				card.free()
 	_alert_controls_by_id.clear()
 	(get_node("Margin/CombatStatus/AlertRegion/Overflow") as Control).visible = false
 	_present_region_headers()
@@ -1169,9 +1224,10 @@ func _clear_presentation() -> void:
 
 func _clear_member_controls() -> void:
 	for control_value: Variant in _member_controls_by_id.values():
-		var control := control_value as Control
-		if control != null and is_instance_valid(control):
-			control.free()
+		if is_instance_valid(control_value):
+			var control := control_value as Control
+			if control != null:
+				control.free()
 	_member_controls_by_id.clear()
 
 
@@ -1228,7 +1284,10 @@ func _configure_member_focus_neighbors() -> void:
 func _configure_alert_focus_neighbors() -> void:
 	var actions: Array[Control] = []
 	for alert: CombatAlertProjection in current_projection.visible_alerts:
-		var card := _alert_controls_by_id.get(alert.stable_id) as Control
+		var card: Control
+		var card_value: Variant = _alert_controls_by_id.get(alert.stable_id)
+		if is_instance_valid(card_value):
+			card = card_value as Control
 		if card == null or not card.visible:
 			continue
 		for action_name: StringName in [&"inspect", &"ledger"]:
@@ -1325,7 +1384,9 @@ func _alert_action_control(stable_id: StringName, preferred_action: StringName) 
 				card = child as Control
 				break
 	if card == null:
-		card = _alert_controls_by_id.get(stable_id) as Control
+		var card_value: Variant = _alert_controls_by_id.get(stable_id)
+		if is_instance_valid(card_value):
+			card = card_value as Control
 	if card == null or not card.is_visible_in_tree():
 		return null
 	for action: StringName in [preferred_action, &"inspect", &"ledger"]:
@@ -1344,13 +1405,20 @@ func _focus_member(member_id: int, preferred_surface: StringName = &"") -> bool:
 	var leader := get_node("Margin/CombatStatus/LeaderCard") as Control
 	if preferred_surface == &"leader_anchor" and int(leader.get_meta(&"member_id", 0)) == member_id:
 		return _grab_valid_focus(leader)
-	var control := _member_controls_by_id.get(member_id) as Control
+	var control: Control
+	var control_value: Variant = _member_controls_by_id.get(member_id)
+	if is_instance_valid(control_value):
+		control = control_value as Control
 	if _grab_valid_focus(control):
 		return true
 	if _metrics != null and _metrics.mode == CombatHudResponsiveLayout.Mode.COMPACT:
 		var index := _party_index_for_member(member_id)
 		_set_page(floori(float(index) / float(maxi(_metrics.visible_member_count, 1))))
-		return _grab_valid_focus(_member_controls_by_id.get(member_id) as Control)
+		control_value = _member_controls_by_id.get(member_id)
+		control = null
+		if is_instance_valid(control_value):
+			control = control_value as Control
+		return _grab_valid_focus(control)
 	if int(leader.get_meta(&"member_id", 0)) == member_id:
 		return _grab_valid_focus(leader)
 	return false

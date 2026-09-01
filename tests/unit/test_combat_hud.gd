@@ -63,6 +63,39 @@ func _test_programmatic_collapse_hydration_preserves_focus(failures: Array[Strin
 	_cleanup_fixture(fixture)
 
 
+func run_scene_tree_focus_hydration_contract(hud: HUD, viewport: SubViewport) -> Array[String]:
+	var failures: Array[String] = []
+	var external := Button.new()
+	external.name = "SceneTreeExternalFocusOwner"
+	external.text = "External"
+	external.focus_mode = Control.FOCUS_ALL
+	external.position = Vector2(720.0, 16.0)
+	external.size = Vector2(160.0, 48.0)
+	viewport.add_child(external)
+	external.grab_focus()
+	TestAssertions.equal(viewport.gui_get_focus_owner(), external, "scene-tree external control owns real viewport focus before hydration", failures)
+	hud.apply_collapse_preferences(true, true)
+	TestAssertions.equal(viewport.gui_get_focus_owner(), external, "programmatic collapse preserves the real external viewport focus owner", failures)
+	hud.apply_collapse_preferences(false, false)
+	TestAssertions.equal(viewport.gui_get_focus_owner(), external, "programmatic expansion preserves the real external viewport focus owner", failures)
+	var member := _member_control(hud, 2)
+	TestAssertions.truthy(member != null, "scene-tree modal hydration fixture exposes member two", failures)
+	if member != null:
+		member.grab_focus()
+		TestAssertions.truthy(hud.open_inspector_for_member(2, member), "scene-tree modal hydration fixture opens the real inspector", failures)
+		var inspector := hud.get_node("CombatMemberInspectPanel") as CombatMemberInspectPanel
+		var close := inspector.get_node("Overlay/Frame/Layout/Close") as Button
+		TestAssertions.equal(viewport.gui_get_focus_owner(), close, "real inspector close owns viewport focus before hydration", failures)
+		hud.apply_collapse_preferences(true, true)
+		TestAssertions.equal(viewport.gui_get_focus_owner(), close, "programmatic collapse preserves the real modal viewport focus owner", failures)
+		hud.apply_collapse_preferences(false, false)
+		TestAssertions.equal(viewport.gui_get_focus_owner(), close, "programmatic expansion preserves the real modal viewport focus owner", failures)
+		inspector.close()
+	external.free()
+	hud.apply_collapse_preferences(false, false)
+	return failures
+
+
 func _test_character_hud_background_opacity(failures: Array[String]) -> void:
 	var fixture := _fixture(6)
 	(fixture.settings as PartyForgeSettings).set("character_hud_background_opacity_percent", 35)

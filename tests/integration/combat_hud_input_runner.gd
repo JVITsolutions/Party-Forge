@@ -1,5 +1,8 @@
 extends SceneTree
 
+const COMBAT_HUD_UNIT_SUITE := preload("res://tests/unit/test_combat_hud.gd")
+const SCRIPT_ERROR_CAPTURE := preload("res://tests/support/test_script_error_capture.gd")
+
 
 class TestRun:
 	extends Node
@@ -55,12 +58,18 @@ func _run() -> void:
 	_hud.connect("ledger_requested", _on_ledger_requested)
 	await process_frame
 	await process_frame
+	var unit_suite := COMBAT_HUD_UNIT_SUITE.new()
+	for failure: String in unit_suite.run_scene_tree_focus_hydration_contract(_hud, _viewport):
+		_failures.append("scene-tree unit contract: %s" % failure)
+	await process_frame
 	await _exercise_collapsed_summary_focus_contract()
 	await _exercise_no_focus_theft_and_page_navigation()
 	await _exercise_keyboard_mouse_controller_routes()
 	await _exercise_complete_tray_focus_and_cancel()
 	await _exercise_nested_pause_and_resolved_fallback()
 	await _exercise_child_modal_refresh_ownership()
+	await _exercise_terminal_rebuild_focus_suspension()
+	await _exercise_freed_collapsed_rebuild_restoration()
 	await _exercise_region_focus_traversal_and_motion()
 	_cleanup()
 	_finish()
@@ -124,6 +133,8 @@ func _exercise_region_focus_traversal_and_motion() -> void:
 	motion_settings.reduced_motion = true
 	_hud.apply_visual_settings(motion_settings)
 	await process_frame
+
+
 	var exact_member := _member_control(2)
 	_assert(exact_member != null, "Party focus fixture exposes member two")
 	if exact_member == null:
@@ -230,6 +241,126 @@ func _exercise_region_focus_traversal_and_motion() -> void:
 	await process_frame
 	_hud.apply_collapse_preferences(false, false)
 	await process_frame
+
+
+func _exercise_terminal_rebuild_focus_suspension() -> void:
+	var prior_member_id := 3
+	var prior_member := _member_control(prior_member_id)
+	_assert(prior_member != null, "terminal rebuild fixture exposes a prior member focus owner")
+	if prior_member == null:
+		return
+	prior_member.grab_focus()
+	await process_frame
+	var prior_weak: WeakRef = weakref(prior_member)
+	prior_member = null
+	var script_errors := SCRIPT_ERROR_CAPTURE.new()
+	OS.add_logger(script_errors)
+	_hud.show_terminal_extraction(_terminal_projection())
+	await process_frame
+	await process_frame
+	var terminal := _hud.get_node("TerminalExtraction") as TerminalExtractionPanel
+	_assert(terminal.visible and _focus_within(terminal), "Terminal Extraction owns real viewport focus before HUD rebuild")
+	_viewport.size = Vector2i(1280, 720)
+	_hud.call("_refresh_projection", true)
+	(_fixture.health_by_member[9] as HealthComponent).apply_damage(80.0)
+	await process_frame
+	await process_frame
+	await process_frame
+	_assert(prior_weak.get_ref() == null, "terminal viewport change performs a structural member-control rebuild")
+	var escaped := _terminal_focusable_hud_descendants(terminal)
+	_assert(escaped.is_empty(), "new HUD descendants remain unreachable behind Terminal Extraction controls=%s" % [str(escaped)])
+	_assert(_terminal_suspension_entries_are_live_unique(), "terminal suspension tracks every live rebuilt control once and discards invalid entries")
+	_assert(_focus_within(terminal), "terminal keeps real viewport focus after member and alert rebuilds")
+	_hud.hide_terminal_extraction()
+	await process_frame
+	await process_frame
+	OS.remove_logger(script_errors)
+	var captured := script_errors.drain_after_detach()
+	var restored := _viewport.gui_get_focus_owner() as Control
+	_assert(captured.is_empty(), "terminal rebuild and close produce no stale-reference script errors: %s" % [captured])
+	_assert(restored != null and restored.is_in_group(&"combat_hud_member") and int(restored.get_meta("member_id", 0)) == prior_member_id, "terminal close restores the valid rebuilt member descriptor")
+	_assert(restored != null and restored.focus_mode == Control.FOCUS_ALL, "terminal close restores only the valid rebuilt member focus mode")
+	_viewport.size = Vector2i(1920, 1080)
+	await process_frame
+	await process_frame
+
+
+func _exercise_freed_collapsed_rebuild_restoration() -> void:
+	var header := _hud.get_node("Margin/CombatStatus/PartyHeader") as Button
+	var member_id := 4
+	var member := _member_control(member_id)
+	_assert(member != null, "freed collapsed rebuild fixture exposes member four")
+	if member == null:
+		return
+	member.grab_focus()
+	await process_frame
+	header.pressed.emit()
+	await process_frame
+	var member_weak: WeakRef = weakref(member)
+	member = null
+	var script_errors := SCRIPT_ERROR_CAPTURE.new()
+	OS.add_logger(script_errors)
+	_hud.call("_clear_member_controls")
+	_assert(member_weak.get_ref() == null, "collapsed presentation clear frees the descriptor's original control")
+	_hud.call("_rebuild_member_controls")
+	header.pressed.emit()
+	await process_frame
+	await process_frame
+	OS.remove_logger(script_errors)
+	var captured := script_errors.drain_after_detach()
+	var restored := _viewport.gui_get_focus_owner() as Control
+	_assert(captured.is_empty(), "collapsed clear/rebuild/expand performs no freed-instance cast or access: %s" % [captured])
+	_assert(restored != null and restored.is_in_group(&"combat_hud_member") and int(restored.get_meta("member_id", 0)) == member_id, "collapsed expansion restores the stable descriptor to the rebuilt member")
+
+
+func _terminal_focusable_hud_descendants(terminal: Control) -> Array[String]:
+	var escaped: Array[String] = []
+	for node: Node in _hud.find_children("*", "Control", true, false):
+		var control := node as Control
+		if control == terminal or terminal.is_ancestor_of(control):
+			continue
+		if control.focus_mode != Control.FOCUS_NONE:
+			escaped.append(String(control.get_path()))
+	return escaped
+
+
+func _terminal_suspension_entries_are_live_unique() -> bool:
+	var entries: Variant = _hud.get("_terminal_suspended_focus_modes")
+	if not entries is Array:
+		return false
+	var seen: Dictionary = {}
+	for entry_value: Variant in entries as Array:
+		if not entry_value is Dictionary:
+			return false
+		var raw: Variant = (entry_value as Dictionary).get("control")
+		if not is_instance_valid(raw):
+			return false
+		var control := raw as Control
+		if control == null or seen.has(control.get_instance_id()):
+			return false
+		seen[control.get_instance_id()] = true
+	return true
+
+
+func _terminal_projection() -> TerminalExtractionProjection:
+	var item := TerminalExtractionItemProjection.create_with_source(
+		"task6-terminal-item",
+		"Twin Band",
+		"Common",
+		&"common",
+		"Fighter · Member 3",
+		"Fighter Equipment",
+		false,
+		false,
+		true,
+		{"name": "Twin Band", "instance_id": "task6-terminal-item"},
+		[],
+		3,
+		"Fighter",
+		&"run-equipment-003",
+		0,
+	)
+	return TerminalExtractionProjection.create([], [item], 1, [], [item.item_id], [], "", true)
 
 
 func _region_focus_modes_are_none(root_control: Control) -> bool:
