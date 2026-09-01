@@ -128,13 +128,15 @@ The production implementation is exact:
 `HumanoidRigMappingCatalog.resolve()` accepts a loader per call:
 
 ```gdscript
+const MappingLoader := preload("res://scripts/presentation/humanoid_rig_mapping_loader.gd")
+
 func resolve(
 		body_preset_id: StringName,
-		loader: HumanoidRigMappingLoader = null
+		loader: MappingLoader = null
 	) -> RefCounted
 ```
 
-`RefCounted` is the narrow cold-safe result boundary for `resolve()` and every private catalog helper that returns a resolution, including `_single_failure()`. The catalog's explicit `MappingResolution := preload("res://scripts/presentation/humanoid_rig_mapping_resolution.gd")` alias is used only to call static factories and inspect constants. It is never used as a self-dependent return annotation. A catalog result must still implement the exact resolution getter and `is_success()` contract below; `RefCounted` does not permit an arbitrary object type, `Variant` return, downcast through the global class name, or loss of exact runtime script identity.
+`RefCounted` is the narrow cold-safe result boundary for `resolve()` and every private catalog helper that returns a resolution, including `_single_failure()`. The catalog's explicit `MappingResolution := preload("res://scripts/presentation/humanoid_rig_mapping_resolution.gd")` alias is used only to call static factories and inspect constants, while the exact `MappingLoader` preload alias is the only permitted loader annotation in cold-loaded catalog code. Neither alias is used as a self-dependent return annotation. The catalog must not use the uncached `HumanoidRigMappingLoader` global class identifier. A catalog result must still implement the exact resolution getter and `is_success()` contract below; `RefCounted` does not permit an arbitrary object type, `Variant` return, downcast through the global class name, or loss of exact runtime script identity.
 
 When `loader` is `null`, the method constructs the production loader locally for that call. The catalog stores no loader, injected mapping dictionary, active mapping, selected preset, result, or last error. Tests inject a deterministic fake loader that records every `exists_exact()` and `load_exact()` path and returns in-memory resources keyed by exact resource URI. The fake may have recording state; the production catalog may not.
 
@@ -215,16 +217,18 @@ var result_script := load(SCRIPT_PATH) as Script
 if result_script == null:
 	push_error("humanoid rig mapping resolution factory contract failed: result script could not be loaded from %s" % SCRIPT_PATH)
 	return null
-return (load(SCRIPT_PATH) as Script).new(_factory_token, requested_body_preset, selected_resource_path, mapping, categories, messages)
+return result_script.new(_factory_token, requested_body_preset, selected_resource_path, mapping, categories, messages)
 ```
 
-The success factory supplies empty `categories` and `messages`; the failure factory supplies its validated defensive snapshots. The first load is the required non-null gate; allocation uses the exact `(load(SCRIPT_PATH) as Script).new(_factory_token, ...)` expression and therefore cannot substitute another script or class. No same-file `HumanoidRigMappingResolution` type annotation, `HumanoidRigMappingResolution.new()` constructor reference, self-preload, global class-cache dependency, editor-import prerequisite, nested replacement class, or `Variant` return is permitted. The neighboring `RigMapping` script remains an explicit preload and `get_mapping()` remains typed as `RigMapping`.
+The success factory supplies empty `categories` and `messages`; the failure factory supplies its validated defensive snapshots. The single `load(SCRIPT_PATH) as Script` result is both the required non-null gate and the sole allocator. Allocation uses exactly `result_script.new(_factory_token, ...)`; it does not repeat the load, perform another lookup, or introduce a time-of-check/time-of-use gap. No same-file `HumanoidRigMappingResolution` type annotation, `HumanoidRigMappingResolution.new()` constructor reference, self-preload, global class-cache dependency, editor-import prerequisite, nested replacement class, or `Variant` return is permitted. The neighboring `RigMapping` script remains an explicit preload and `get_mapping()` remains typed as `RigMapping`.
 
 The self script must be non-null before allocation. A missing or unloadable `SCRIPT_PATH` is a programmer-contract failure: the factory emits exactly one deterministic error beginning `humanoid rig mapping resolution factory contract failed:`, returns `null`, and exposes no partially initialized result. This failure is not converted into a catalog runtime category.
 
 Invalid factory input is also a programmer-contract failure, not a normal catalog-resolution failure. The factory emits exactly one `push_error()` beginning `humanoid rig mapping resolution factory contract failed:` followed by ordered validation details, returns `null`, and allocates no result. It never returns a partially initialized or contradictory wrapper and never converts programmer misuse into one of the runtime resolution categories. Prospective tests capture the intentional factory error through the existing test error-capture boundary and require the exact null result and deterministic message without leaving an unexplained engine diagnostic.
 
-Every successful, failed, and mapped-rig-rejected factory output is a non-null `RefCounted` whose `get_script()` is the exact `Script` returned by `load(SCRIPT_PATH)`. Prospective tests assert that concrete identity for all three paths. Consumers hold `RefCounted` and use only the exact getters, `is_success()`, and `rejected_by_mapped_rig()` contract. They must not downcast through the new global class name. The wrapper's narrow return annotation does not freeze the returned mapping Resource or weaken its later mapped-rig validation requirement.
+Every successful, failed, and mapped-rig-rejected factory output is a non-null `RefCounted` whose `get_script()` is the exact non-null `Script` loaded from `SCRIPT_PATH`. Authoritative-worktree tests assert that `SCRIPT_PATH` is exact, load it once into a test-local `Script`, require that load to be non-null, and require all three result paths to use that same concrete runtime script identity. Consumers hold `RefCounted` and use only the exact getters, `is_success()`, and `rejected_by_mapped_rig()` contract. They must not downcast through the new global class name. The wrapper's narrow return annotation does not freeze the returned mapping Resource or weaken its later mapped-rig validation requirement.
+
+The defensive null branch for an unloadable own script remains mandatory production code and an independent code-review requirement. This phase does not require a runtime test of that environmental branch because the exact script cannot be both executing and unavailable without source mutation, a modified project copy, or a test-only loader seam. Those workarounds are explicitly forbidden, and no production injection seam may be introduced solely to make this unreachable environmental state testable.
 
 Factory validation order is exact:
 
@@ -397,9 +401,9 @@ The fixture JSON does not change. The approved spec, current implementation plan
 A future TDD plan must define trustworthy RED before each production change. It must preserve the existing fixed-nine-decimal serializer tests and all prior numeric-bind/legacy regressions. New tests must prove:
 
 - the result success/failure invariants and one-to-one category/message arrays;
-- every successful, failed, and mapped-rig-rejected result is a non-null `RefCounted` whose `get_script()` equals `load(RESOLUTION_PATH) as Script`, where the test-local `RESOLUTION_PATH` is exactly `res://scripts/presentation/humanoid_rig_mapping_resolution.gd`;
+- `RESOLUTION_PATH` is exactly `res://scripts/presentation/humanoid_rig_mapping_resolution.gd`, one test-local `load(RESOLUTION_PATH) as Script` returns non-null, and every successful, failed, and mapped-rig-rejected result is a non-null `RefCounted` whose `get_script()` is exactly that same loaded `Script`;
 - result and catalog consumers use the exact `RefCounted` getter/`is_success()` contract without a global-class downcast;
-- both factories load `SCRIPT_PATH` successfully before allocation and a missing/unloadable own script follows the deterministic programmer-contract no-result boundary;
+- both factories use the single validated `result_script` as the sole allocator; independent code review confirms the defensive missing/unloadable-script branch and tests do not mutate sources, use a modified copy, or add a production injection seam to force that unreachable environmental branch;
 - the result's private preset/path table remains byte-for-byte equal to the catalog's public `RESOURCE_PATH_BY_BODY_PRESET` table;
 - invalid success/failure factory inputs produce the exact programmer-contract error and `null` without allocating an observable result;
 - the result exposes only read accessors, collection accessors return defensive duplicates, and caller mutation cannot change stored categories, messages, cardinality, or `is_success()`;
@@ -425,7 +429,7 @@ Catalog identity error order is mapping ID, canonical rig ID, source hash, then 
 The approved correction sequence is:
 
 1. Commit this cold-direct-load amendment only and stop for renewed written-spec review while preserving the consumed untrustworthy behavior-RED evidence and all three uncommitted A1 paths byte-for-byte.
-2. After explicit written-spec approval, correct the existing corrective implementation plan in a separate plan-only commit. The plan correction must replace every same-file self annotation/constructor reference with the exact `SCRIPT_PATH`/`RefCounted`/dynamic-self-load contract and define a separately authorized behavior-RED retry.
+2. After explicit written-spec approval, correct the existing corrective implementation plan in a separate plan-only commit. The plan correction must replace every same-file self annotation/constructor reference with the exact `SCRIPT_PATH`/`RefCounted`/single-loaded-`result_script` contract, require the cold-safe `MappingLoader` preload annotation, preserve the honest code-review-only null branch, and define a separately authorized behavior-RED retry.
 3. Do not retry the A1 behavior RED until that plan-only correction is committed and separately approved.
 4. Resume result and exact-path catalog tests through trustworthy RED/GREEN only after the renewed retry gate.
 5. Implement the pure bind-identity boundary and missing public-validator tests through trustworthy RED/GREEN.
