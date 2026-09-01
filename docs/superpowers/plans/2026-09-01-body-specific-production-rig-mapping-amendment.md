@@ -604,12 +604,18 @@ func run() -> Array[String]:
 	_contract = contract_script.new() as RefCounted
 	TestAssertions.truthy(_contract.has_method(&"serialize_production_rest"), "production rest serializer exists", failures)
 	TestAssertions.truthy(_contract.has_method(&"production_rest_signature"), "production rest signature exists", failures)
-	if not _contract.has_method(&"serialize_production_rest") or not _contract.has_method(&"production_rest_signature"):
-		return failures
 	var fixture := _fixture()
 	TestAssertions.equal(int(fixture.get("schema_version", 0)), 1, "rest fixture schema is exact", failures)
 	var candidates: Array = fixture.get("candidates", [])
 	TestAssertions.equal(candidates.size(), 2, "rest fixture contains both body presets", failures)
+	for candidate_value: Variant in candidates:
+		var candidate := candidate_value as Dictionary
+		var body_preset_id := StringName(candidate.get("body_preset_id", ""))
+		var skeleton := _skeleton_for(candidate)
+		TestAssertions.equal(skeleton.get_bone_count(), 52, "%s fixture reconstructs 52 bones" % body_preset_id, failures)
+		skeleton.free()
+	if not _contract.has_method(&"serialize_production_rest") or not _contract.has_method(&"production_rest_signature"):
+		return failures
 	for candidate_value: Variant in candidates:
 		var candidate := candidate_value as Dictionary
 		var body_preset_id := StringName(candidate.get("body_preset_id", ""))
@@ -679,12 +685,68 @@ func _expected_serialization(candidate: Dictionary) -> String:
 	return "\n".join(lines)
 ~~~
 
-- [ ] **Step 3: Add body-rest identity RED assertions to mapped validation**
+- [ ] **Step 3: Run the isolated Task 2A serializer/signature RED**
+
+Run only the new serializer/signature suite:
+
+~~~powershell
+& $godot --headless --path $project --quit-after 180 --script res://tests/focused_test_runner.gd -- tests/unit/test_production_humanoid_rest_signature.gd
+~~~
+
+The suite must first assert `has_method()` for both `serialize_production_rest` and `production_rest_signature`, parse the fixture and reconstruct both 52-bone Skeleton3D instances without calling either missing method, then return before either missing method is called. Trustworthy RED requires a nonzero exit, exactly one `TEST_SUMMARY: FAIL` marker, failures only for `production rest serializer exists` and `production rest signature exists`, successful fixture schema/candidate checks, and successful 52-bone reconstruction for both presets. Parser, loader, import, script, engine, crash, segmentation, and leak diagnostics invalidate RED.
+
+- [ ] **Step 4: Implement fixed-nine-decimal production rest serialization**
+
+Add these exact static functions to scripts/presentation/humanoid_rig_contract.gd without modifying the legacy six-decimal _serialize_transform() used by canonical and named-Skin signatures:
+
+~~~gdscript
+static func production_rest_signature(skeleton: Skeleton3D) -> String:
+	if skeleton == null:
+		return ""
+	return serialize_production_rest(skeleton).sha256_text()
+
+static func serialize_production_rest(skeleton: Skeleton3D) -> String:
+	if skeleton == null:
+		return ""
+	var lines := PackedStringArray()
+	for bone_index: int in skeleton.get_bone_count():
+		lines.append("%d|%s|%d|%s" % [
+			bone_index,
+			skeleton.get_bone_name(bone_index),
+			skeleton.get_bone_parent(bone_index),
+			_serialize_production_transform(skeleton.get_bone_rest(bone_index)),
+		])
+	return "\n".join(lines)
+
+static func _serialize_production_transform(transform: Transform3D) -> String:
+	return ",".join([
+		"%.9f" % transform.basis.x.x,
+		"%.9f" % transform.basis.x.y,
+		"%.9f" % transform.basis.x.z,
+		"%.9f" % transform.basis.y.x,
+		"%.9f" % transform.basis.y.y,
+		"%.9f" % transform.basis.y.z,
+		"%.9f" % transform.basis.z.x,
+		"%.9f" % transform.basis.z.y,
+		"%.9f" % transform.basis.z.z,
+		"%.9f" % transform.origin.x,
+		"%.9f" % transform.origin.y,
+		"%.9f" % transform.origin.z,
+	])
+~~~
+
+Do not add a version header, field-length prefix, snappedf(), negative-zero normalization, or trailing newline; any of those changes the approved bytes. Do not add mapping SHA/rest validation in Task 2A.
+
+- [ ] **Step 5: Run the isolated Task 2A serializer/signature GREEN**
+
+Re-run the Step 3 command. Require exit 0, exactly one terminal `TEST_SUMMARY: PASS (0 failures)` marker, exact fixture reconstruction for both 52-bone candidates, exact serialized bytes, both approved signatures, and zero prohibited diagnostics. Task 2B may not begin until this gate is green.
+
+- [ ] **Step 6: Add body-rest identity RED assertions to mapped validation**
 
 In tests/unit/test_production_humanoid_rig_mapping.gd:
 
 1. Change SHA_A to remain the synthetic source hash.
-2. Change _mapping() to set source_rest_signature to SHA_A so HumanoidRigMapping.validate() has a syntactically valid placeholder.
+2. Change _mapping() to set source_rest_signature to SHA_A as a temporary test-only SHA-shaped value so HumanoidRigMapping.validate() remains syntactically valid before the live skeleton rest is bound.
 3. Add this helper:
 
 ~~~gdscript
@@ -732,7 +794,7 @@ func _assert_source_rest_identity(failures: Array[String]) -> void:
 
 Call _assert_source_rest_identity(failures) from run().
 
-- [ ] **Step 4: Run the Task 2 RED suites**
+- [ ] **Step 7: Run the Task 2B mapped source/rest enforcement RED**
 
 Run:
 
@@ -740,51 +802,9 @@ Run:
 & $godot --headless --path $project --quit-after 180 --script res://tests/focused_test_runner.gd -- tests/unit/test_production_humanoid_rest_signature.gd tests/unit/test_production_humanoid_rig_mapping.gd
 ~~~
 
-Expected: nonzero exit and exactly one TEST_SUMMARY: FAIL marker. Failures must identify missing production rest serializer/signature and wrong body-specific rest identity rejection. Fixture loading and 52-bone reconstruction must succeed; parser/loader/script errors invalidate RED.
+Trustworthy Task 2B RED requires a nonzero exit and exactly one `TEST_SUMMARY: FAIL` marker. The serializer/signature assertions must remain green, and the only failing behavior must be `wrong body-specific rest identity rejects`, proving that source/rest mismatch enforcement is absent. Any missing-method failure or parser, loader, import, script, engine, crash, segmentation, or leak diagnostic invalidates RED.
 
-- [ ] **Step 5: Implement fixed-nine-decimal production rest serialization**
-
-Add these exact static functions to scripts/presentation/humanoid_rig_contract.gd without modifying the legacy six-decimal _serialize_transform() used by canonical and named-Skin signatures:
-
-~~~gdscript
-static func production_rest_signature(skeleton: Skeleton3D) -> String:
-	if skeleton == null:
-		return ""
-	return serialize_production_rest(skeleton).sha256_text()
-
-static func serialize_production_rest(skeleton: Skeleton3D) -> String:
-	if skeleton == null:
-		return ""
-	var lines := PackedStringArray()
-	for bone_index: int in skeleton.get_bone_count():
-		lines.append("%d|%s|%d|%s" % [
-			bone_index,
-			skeleton.get_bone_name(bone_index),
-			skeleton.get_bone_parent(bone_index),
-			_serialize_production_transform(skeleton.get_bone_rest(bone_index)),
-		])
-	return "\n".join(lines)
-
-static func _serialize_production_transform(transform: Transform3D) -> String:
-	return ",".join([
-		"%.9f" % transform.basis.x.x,
-		"%.9f" % transform.basis.x.y,
-		"%.9f" % transform.basis.x.z,
-		"%.9f" % transform.basis.y.x,
-		"%.9f" % transform.basis.y.y,
-		"%.9f" % transform.basis.y.z,
-		"%.9f" % transform.basis.z.x,
-		"%.9f" % transform.basis.z.y,
-		"%.9f" % transform.basis.z.z,
-		"%.9f" % transform.origin.x,
-		"%.9f" % transform.origin.y,
-		"%.9f" % transform.origin.z,
-	])
-~~~
-
-Do not add a version header, field-length prefix, snappedf(), negative-zero normalization, or trailing newline; any of those changes the approved bytes.
-
-- [ ] **Step 6: Enforce live rest identity and SHA-shaped mapping metadata**
+- [ ] **Step 8: Enforce live rest identity and SHA-shaped mapping metadata**
 
 In scripts/presentation/humanoid_rig_mapping.gd, replace:
 
@@ -813,9 +833,9 @@ In validate_mapped_rig(), after the non-null skeleton and skin gates and before 
 
 The source_skeleton_sha256 remains provenance metadata because a live Skeleton3D cannot reproduce the complete GLB byte hash.
 
-- [ ] **Step 7: Run Task 2 GREEN and all rig regressions**
+- [ ] **Step 9: Run Task 2B GREEN and all rig regressions**
 
-Run the Step 4 command. Expected: exit 0 and exactly one TEST_SUMMARY: PASS (0 failures).
+Re-run the Step 7 combined command. Expected: exit 0 and exactly one TEST_SUMMARY: PASS (0 failures).
 
 Then run:
 
@@ -825,9 +845,9 @@ Then run:
 
 Expected: exit 0, exactly one terminal TEST_SUMMARY: PASS (0 failures), and no prohibited diagnostics.
 
-- [ ] **Step 8: Audit Task 2 diff and commit**
+- [ ] **Step 10: Audit Task 2 diff and commit**
 
-Run git diff --check. Require only these five paths relative to Task 1 HEAD:
+Capture the clean plan-correction HEAD as `$task2Base` before Task 2A writes. Run git diff --check. Require only these five paths relative to `$task2Base`:
 
 ~~~text
 scripts/presentation/humanoid_rig_contract.gd
@@ -1078,7 +1098,7 @@ This plan's Task 4 is verification-only and is unrelated to the original product
 - Read-only audit scope: all eight tracked paths listed in the File Responsibility Map.
 
 **Interfaces:**
-- Consumes: the three independently committed Task 1-3 deliverables.
+- Consumes: the three independently committed Task 1-3 implementation deliverables plus the separately audited Task 2 sequencing-plan correction.
 - Produces: verification evidence and a stop-gate report only; it does not create a repository artifact, mapping resource, asset, import, or integration commit.
 
 - [ ] **Step 1: Re-run the complete focused checkpoint gate**
@@ -1140,12 +1160,17 @@ Require full-suite exit 0 and exactly one terminal marker matching TEST_SUMMARY:
 
 - [ ] **Step 4: Obtain independent requirements review**
 
+Before either review, enumerate the four first-parent commits after `implementationBase` into `$task1Commit`, `$planCorrectionCommit`, `$task2Commit`, and `$task3Commit`. Require their exact subjects in the order specified by Step 6. Give both reviewers the three implementation hashes and identify `$planCorrectionCommit` explicitly as the approved documentation-only commit to ignore for product-code scope.
+
 Invoke the requesting-code-review skill and give a fresh reviewer this exact scope:
 
 ~~~text
-Compare commits after implementationBase ($implementationBase, recorded at
+Compare only the three implementation commits $task1Commit, $task2Commit, and
+$task3Commit after implementationBase ($implementationBase, recorded at
 $baselineEvidencePath) to
 docs/superpowers/specs/2026-09-01-body-specific-production-rig-mapping-amendment-design.md.
+Ignore the separately audited documentation-only commit $planCorrectionCommit;
+do not treat it as product implementation scope.
 Check every numeric-bind rule, legacy-validator containment, fixed-nine-decimal
 rest byte contract, both approved source/rest identities, catalog selection,
 no-active-mutation behavior, forbidden .tres absence, and original-plan
@@ -1161,8 +1186,10 @@ If the reviewer returns FAIL or cannot provide file/line evidence, stop and repo
 Use a different fresh reviewer with this exact scope:
 
 ~~~text
-Review the same post-implementationBase implementation ($implementationBase,
-recorded at $baselineEvidencePath) for deterministic error order,
+Review only the same three implementation commits $task1Commit, $task2Commit,
+and $task3Commit after implementationBase ($implementationBase, recorded at
+$baselineEvidencePath). Ignore the separately audited documentation-only commit
+$planCorrectionCommit. Review for deterministic error order,
 Godot Skin/Skeleton3D API correctness, duplicate/out-of-range coverage,
 name/index precedence, finite/invertible validation, exact serialization bytes,
 type/signature consistency, stateless catalog behavior, test isolation, and
@@ -1174,15 +1201,16 @@ Any FAIL stops the checkpoint. No unplanned corrective commit is authorized by t
 
 - [ ] **Step 6: Audit exact commits and tracked scope**
 
-Require fbc3f9e8c3d9853ffbf8d3c21944f970ac41231b to remain an ancestor of implementationBase. Then require exactly three first-parent commits after implementationBase, in this order:
+Require fbc3f9e8c3d9853ffbf8d3c21944f970ac41231b to remain an ancestor of implementationBase. Then require exactly four first-parent commits after implementationBase, in this order:
 
 ~~~text
 feat: accept complete numeric production skin binds
+docs: sequence production rest identity TDD
 feat: verify body-specific production rig identity
 feat: resolve body-specific humanoid rig mappings
 ~~~
 
-Require the union of changed paths to be exactly:
+Require commits one, three, and four to be the only implementation commits. Their combined changed-path union must be exactly:
 
 ~~~text
 scripts/presentation/humanoid_rig_contract.gd
@@ -1195,7 +1223,7 @@ tests/unit/test_production_humanoid_rest_signature.gd
 tests/unit/test_production_humanoid_rig_mapping.gd
 ~~~
 
-Require tracked worktree and index clean, `git diff $implementationBase..HEAD --check` exit 0, the changed-path union from `git diff --name-only $implementationBase..HEAD` to equal the eight paths above, and no merge commit. The approved-design ancestor remains provenance only and is not used as the implementation scope base.
+Audit commit two separately and require its changed-path set to equal exactly `docs/superpowers/plans/2026-09-01-body-specific-production-rig-mapping-amendment.md`. Require tracked worktree and index clean, `git diff $implementationBase..HEAD --check` exit 0, the three implementation commits' combined path union to equal the eight paths above, and the complete `git diff --name-only $implementationBase..HEAD` union to equal those eight paths plus the one corrected-plan path. Require no merge commit. Every diff and containment comparison remains rooted at `implementationBase`; the approved-design ancestor remains provenance only.
 
 - [ ] **Step 7: Revalidate containment and immutable provenance**
 
@@ -1211,7 +1239,7 @@ Rehash all 77 preserved untracked files against the existing manifest and requir
 
 - [ ] **Step 8: Stop for Jacob's contract-checkpoint approval**
 
-Report branch, worktree, three commit hashes/parents/subjects, exact eight-path union, RED/GREEN evidence, focused and full-suite markers/exits, two independent review results, fixture provenance, immutable hashes, 77-file containment, protected-worktree drift, and absent sentinels.
+Report branch, worktree, all four commit hashes/parents/subjects, the three implementation hashes, the ignored plan-correction hash, exact eight-path implementation union, separately audited one-path documentation correction, Task 2A and Task 2B RED/GREEN evidence, focused and full-suite markers/exits, two independent review results, fixture provenance, immutable hashes, 77-file containment, protected-worktree drift, and absent sentinels.
 
 Do not create another commit. Do not merge or push. Ask Jacob to approve or reject the verified pre-resource contract checkpoint.
 
