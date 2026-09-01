@@ -108,6 +108,7 @@ const CITY_TREE_ID := "party-forge-city-v1"
 const CITY_UNAVAILABLE_STATUS := "City services are temporarily unavailable."
 const CITY_LOCKED_STATUS := "Complete the prologue to unlock the City passive tree."
 const CITY_DEVELOPER_REQUIRED_STATUS := "Save Developer Mode before opening the Developer City Preview."
+const QUEUED_LEVELS_DETERMINISTIC_SEED := 14
 
 func run() -> Array[String]:
     var failures: Array[String] = []
@@ -1990,7 +1991,7 @@ func _test_fresh_new_run_seed_reaches_committed_runtime(failures: Array[String])
     _cleanup_main(main)
 
 func _test_queued_levels_show_fresh_production_offers(failures: Array[String]) -> void:
-    var main := _started_main()
+    var main := _started_main_with_seed(QUEUED_LEVELS_DETERMINISTIC_SEED)
     var game_run: Node = main.get_node("GameRun")
     var experience := main.get_node("ExperienceSystem") as ExperienceSystem
     var panel := main.get_node("HUD/LevelUpPanel") as LevelUpPanel
@@ -2024,7 +2025,7 @@ func _test_queued_levels_show_fresh_production_offers(failures: Array[String]) -
     TestAssertions.equal(first_keys, first_offer_keys.slice(0, cards.size()), "first visible cards bind stable keys in production order", failures)
 
     var first_card := cards[0] as UpgradeCard
-    _submit_bound_offer(panel, first_card, party)
+    _submit_bound_offer(panel, first_card, party, failures)
     TestAssertions.equal(experience.pending_levels, 1, "first production confirmation consumes pending 2 to 1 exactly", failures)
     TestAssertions.equal(experience.pending_level_numbers, [3], "first production confirmation leaves only earned level 3 queued", failures)
     TestAssertions.equal(experience.experience, remainder, "first production confirmation loses no excess experience", failures)
@@ -2044,7 +2045,7 @@ func _test_queued_levels_show_fresh_production_offers(failures: Array[String]) -
     TestAssertions.truthy(second_instance_ids.all(func(id: int) -> bool: return id not in first_instance_ids), "second production offer binds freshly generated choice objects", failures)
 
     var second_card := cards[0] as UpgradeCard
-    _submit_bound_offer(panel, second_card, party)
+    _submit_bound_offer(panel, second_card, party, failures)
     TestAssertions.equal(experience.pending_levels, 0, "second production confirmation consumes pending 1 to 0 exactly", failures)
     TestAssertions.equal(experience.pending_level_numbers, [], "second production confirmation empties the earned-level queue", failures)
     TestAssertions.equal(experience.experience, remainder, "both production confirmations lose no excess experience", failures)
@@ -2207,6 +2208,14 @@ func _started_main() -> Node:
     main.call("select_leader_class", &"fighter")
     return main
 
+func _started_main_with_seed(run_seed: int) -> Node:
+    var main := (load("res://scenes/game/main.tscn") as PackedScene).instantiate()
+    _prepare_main(main)
+    var seed_source := RunSeedSource.new(func() -> int: return run_seed)
+    main.call(&"configure_new_run_seed_source", seed_source)
+    main.call("select_leader_class", &"fighter")
+    return main
+
 func _started_main_with_settings(settings: PartyForgeSettings) -> Node:
     var main := (load("res://scenes/game/main.tscn") as PackedScene).instantiate()
     _prepare_main(main)
@@ -2276,7 +2285,7 @@ func _bound_production_keys(cards: Array[Node]) -> Array[String]:
         result.append(String(card.call("bound_choice_key")))
     return result
 
-func _submit_bound_offer(panel: LevelUpPanel, card: UpgradeCard, party: PartyManager) -> void:
+func _submit_bound_offer(panel: LevelUpPanel, card: UpgradeCard, party: PartyManager, failures: Array[String] = []) -> void:
     var key: StringName = card.bound_choice_key()
     var choices_by_key := panel.get("_choices_by_key") as Dictionary
     var choice := choices_by_key.get(String(key)) as UpgradeChoice
@@ -2284,7 +2293,11 @@ func _submit_bound_offer(panel: LevelUpPanel, card: UpgradeCard, party: PartyMan
     if choice == null:
         return
     if choice.application_route() == UpgradeChoice.ApplicationRoute.RECIPIENT_CONFIRMATION:
-        panel.call("_on_recipient_selected", key, party.members[0].member_id)
+        var eligible_member_ids := UpgradeApplicationService.eligible_member_ids(choice.definition, party)
+        TestAssertions.truthy(not eligible_member_ids.is_empty(), "recipient offer has an eligible production member", failures)
+        if eligible_member_ids.is_empty():
+            return
+        panel.call("_on_recipient_selected", key, eligible_member_ids[0])
         (panel.get_node("Frame/Content/Confirmation/Actions/Confirm") as Button).pressed.emit()
     elif choice.application_route() == UpgradeChoice.ApplicationRoute.CONTEXT_CONFIRMATION:
         (panel.get_node("Frame/Content/Confirmation/Actions/Confirm") as Button).pressed.emit()
