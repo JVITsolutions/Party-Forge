@@ -175,8 +175,13 @@ func _test_collapsed_summaries_and_dynamic_refresh(failures: Array[String]) -> v
 		TestAssertions.truthy(alerts_icon.visible and alerts_icon.texture != null and not alerts_clear.visible, "Alerts dead state uses an icon plus visible text", failures)
 	var party_header := hud.get_node("Margin/CombatStatus/PartyHeader") as Button
 	var alerts_header := hud.get_node("Margin/CombatStatus/AlertRegion/Header") as Button
-	TestAssertions.truthy("6 members" in party_header.accessibility_name.to_lower() and "dead 1" in party_header.accessibility_name.to_lower(), "Party header exposes complete accessible state", failures)
-	TestAssertions.truthy("alerts, 3" in alerts_header.accessibility_name.to_lower() and "dead" in alerts_header.accessibility_name.to_lower(), "Alerts header exposes complete accessible state", failures)
+	var projection := hud.current_projection as CombatHudProjection
+	var leader := projection.leader()
+	var highest := projection.highest_severity_alert()
+	var expected_party_accessibility := "Party, 6 members, Leader %s, health 100 of 100, highest severity DEAD, dead 1, downed 1, critical 1, collapsed" % leader.display_name
+	var expected_alerts_accessibility := "Alerts, 3, highest severity DEAD, %s, collapsed" % highest.summary
+	TestAssertions.equal(party_header.accessibility_name, expected_party_accessibility, "Party accessibility includes identity, exact health, severity counts, and collapse state", failures)
+	TestAssertions.equal(alerts_header.accessibility_name, expected_alerts_accessibility, "Alerts accessibility includes exact count, highest summary, and collapse state", failures)
 	var tray_action := hud.get_node("Margin/CombatStatus/AlertRegion/AlertsTrayAction") as Button
 	TestAssertions.truthy(tray_action.visible and not tray_action.disabled and tray_action.focus_mode == Control.FOCUS_ALL and tray_action.text == "VIEW ALL ALERTS (3)", "collapsed tray action remains direct and exact", failures)
 	TestAssertions.equal(hud.focus_descriptor_for(tray_action), {"kind": &"named", "named_control": &"alerts_tray_action"}, "tray action owns a stable named focus descriptor", failures)
@@ -190,17 +195,42 @@ func _test_collapsed_summaries_and_dynamic_refresh(failures: Array[String]) -> v
 		var health := fixture.health_by_member[member_id] as HealthComponent
 		health.configure(100.0, member_id == 1, 8.0, 0.5, member_id == 1)
 		health.set_max_health(100.0, false)
-	TestAssertions.equal(alerts_summary.text, "ALERTS · ALL CLEAR", "all-clear refresh removes stale alert severity copy", failures)
+	projection = hud.current_projection as CombatHudProjection
+	leader = projection.leader()
+	TestAssertions.truthy(
+		"STATE ALL CLEAR" in party_summary.text
+		and "DEAD 0" in party_summary.text
+		and "DOWNED 0" in party_summary.text
+		and "CRITICAL 0" in party_summary.text
+		and "STATE DEAD" not in party_summary.text,
+		"all-clear refresh clears stale Party severity copy and counts",
+		failures,
+	)
+	TestAssertions.equal(alerts_summary.text, "ALERTS · ALL CLEAR", "all-clear refresh removes stale Alerts severity and highest-summary copy", failures)
+	TestAssertions.equal(
+		party_header.accessibility_name,
+		"Party, 6 members, Leader %s, health 100 of 100, highest severity ALL CLEAR, dead 0, downed 0, critical 0, collapsed" % leader.display_name,
+		"all-clear Party accessibility removes stale semantic severity",
+		failures,
+	)
+	TestAssertions.equal(alerts_header.accessibility_name, "Alerts, all clear, collapsed", "all-clear Alerts accessibility removes stale count and highest summary", failures)
 	TestAssertions.truthy(not tray_action.visible and tray_action.disabled and tray_action.focus_mode == Control.FOCUS_NONE, "all clear hides and disables the tray action", failures)
-	if alerts_icon != null and alerts_clear != null:
-		TestAssertions.truthy(not alerts_icon.visible and alerts_clear.visible, "all clear uses a glyph plus text instead of stale severity art", failures)
+	if party_icon != null and party_clear != null and alerts_icon != null and alerts_clear != null:
+		TestAssertions.truthy(not party_icon.visible and party_icon.texture == null and party_clear.visible, "all-clear Party cue removes stale icon and shows the clear glyph", failures)
+		TestAssertions.truthy(not alerts_icon.visible and alerts_icon.texture == null and alerts_clear.visible, "all-clear Alerts cue removes stale icon and shows the clear glyph", failures)
+	hud.apply_collapse_preferences(false, false)
+	TestAssertions.equal(
+		party_header.accessibility_name,
+		"Party, 6 members, Leader %s, health 100 of 100, highest severity ALL CLEAR, dead 0, downed 0, critical 0, expanded" % leader.display_name,
+		"expanded Party accessibility reports the exact expanded state",
+		failures,
+	)
+	TestAssertions.equal(alerts_header.accessibility_name, "Alerts, all clear, expanded", "expanded Alerts accessibility reports the exact expanded state", failures)
+	hud.apply_collapse_preferences(true, true)
 
-	var deferred_before := {"kind": &"named", "named_control": &"party_header"}
-	hud.set("_deferred_focus_descriptor", deferred_before.duplicate(true))
 	(fixture.health_by_member[4] as HealthComponent).apply_damage(80.0)
 	TestAssertions.truthy("ALERTS 1" in alerts_summary.text and "CRITICAL" in alerts_summary.text, "new collapsed alert updates the summary immediately", failures)
 	TestAssertions.truthy(hud.alerts_collapsed() and not (hud.get_node("Margin/CombatStatus/AlertRegion/ExpandedAlerts") as Control).visible, "new alert never auto-expands collapsed Alerts", failures)
-	TestAssertions.equal(hud.get("_deferred_focus_descriptor"), deferred_before, "new collapsed alert does not disturb pending focus ownership", failures)
 	TestAssertions.truthy(tray_action.visible and tray_action.text == "VIEW ALL ALERTS (1)", "new collapsed alert refreshes persistent tray access", failures)
 	_cleanup_hud(hud)
 	_cleanup_fixture(fixture)

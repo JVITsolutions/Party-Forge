@@ -55,6 +55,7 @@ func _run() -> void:
 	_hud.connect("ledger_requested", _on_ledger_requested)
 	await process_frame
 	await process_frame
+	await _exercise_collapsed_summary_focus_contract()
 	await _exercise_no_focus_theft_and_page_navigation()
 	await _exercise_keyboard_mouse_controller_routes()
 	await _exercise_complete_tray_focus_and_cancel()
@@ -62,6 +63,51 @@ func _run() -> void:
 	await _exercise_child_modal_refresh_ownership()
 	_cleanup()
 	_finish()
+
+
+func _exercise_collapsed_summary_focus_contract() -> void:
+	_hud.apply_collapse_preferences(false, true)
+	await process_frame
+	var party_header := _hud.get_node("Margin/CombatStatus/PartyHeader") as Button
+	var alerts_content := _hud.get_node("Margin/CombatStatus/AlertRegion/ExpandedAlerts") as Control
+	var tray_action := _hud.get_node("Margin/CombatStatus/AlertRegion/AlertsTrayAction") as Button
+	party_header.grab_focus()
+	await process_frame
+	_assert(_viewport.gui_get_focus_owner() == party_header, "collapsed-summary fixture establishes a real Party-header focus owner")
+	(_fixture.health_by_member[12] as HealthComponent).apply_damage(80.0)
+	await process_frame
+	_assert(
+		_hud.alerts_collapsed()
+		and not alerts_content.visible
+		and _viewport.gui_get_focus_owner() == party_header,
+		"a newly appearing collapsed alert updates without expanding or stealing real viewport focus",
+	)
+	_assert(tray_action.visible and not tray_action.disabled and tray_action.focus_mode == Control.FOCUS_ALL, "new collapsed alert exposes an eligible tray action")
+	tray_action.grab_focus()
+	await process_frame
+	var descriptor := _hud.focus_descriptor_for(tray_action)
+	party_header.grab_focus()
+	await process_frame
+	var restored := _hud.restore_focus_descriptor(descriptor)
+	await process_frame
+	_assert(
+		restored
+		and descriptor == {"kind": &"named", "named_control": &"alerts_tray_action"}
+		and _viewport.gui_get_focus_owner() == tray_action,
+		"alerts_tray_action named descriptor round-trips the exact real focus owner",
+	)
+	(_fixture.health_by_member[12] as HealthComponent).heal(100.0)
+	await process_frame
+	_assert(
+		not tray_action.visible
+		and tray_action.disabled
+		and tray_action.focus_mode == Control.FOCUS_NONE
+		and not tray_action.has_focus()
+		and _viewport.gui_get_focus_owner() != tray_action,
+		"all-clear transition releases real tray-action focus before removing eligibility",
+	)
+	_hud.apply_collapse_preferences(false, false)
+	await process_frame
 
 
 func _exercise_no_focus_theft_and_page_navigation() -> void:
