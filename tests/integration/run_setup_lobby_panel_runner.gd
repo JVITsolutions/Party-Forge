@@ -300,6 +300,7 @@ func _test_real_input_focus_graph(viewport: Window, panel: ClassSelectionPanel) 
 	await _expect_focus(viewport, fighter, "desktop reverse Tab follows exact order")
 	var start := panel.action_focus(&"start")
 	await _give_focus(viewport, start, "desktop action boundary fixture focuses Start")
+	_assert_focused_primary_action(viewport, start, panel.theme, &"LivingForgeStartButton", "Start Run")
 	await _send_ui_action(viewport, &"ui_down")
 	await _expect_focus(viewport, start, "action bottom boundary remains inside the lobby")
 	await _send_ui_action(viewport, &"ui_left")
@@ -446,6 +447,16 @@ func _give_focus(viewport: Window, target: Control, label: String) -> void:
 	target.grab_focus()
 	await _expect_focus(viewport, target, label)
 	await process_frame
+
+
+func _assert_focused_primary_action(viewport: Viewport, button: Button, theme: Theme, variation: StringName, label: String) -> void:
+	_assert(viewport.gui_get_focus_owner() == button, "%s owns actual viewport focus before focus-style inspection" % label)
+	_assert(button.is_visible_in_tree() and not button.disabled and button.focus_mode != Control.FOCUS_NONE, "%s is visible and eligible while focused" % label)
+	_assert(button.theme_type_variation == variation, "%s uses the shared %s variation" % [label, variation])
+	_assert(not button.has_theme_stylebox_override(&"focus"), "%s has no local focus StyleBox override" % label)
+	_assert(not button.has_theme_color_override(&"font_focus_color"), "%s has no local focus font override" % label)
+	_assert(button.get_theme_stylebox(&"focus", variation) == theme.get_stylebox(&"focus", variation), "%s resolves the shared focus StyleBox" % label)
+	_assert(button.get_theme_color(&"font_focus_color", variation) == theme.get_color(&"font_focus_color", variation), "%s resolves the shared focus foreground" % label)
 
 
 func _send_ui_action(viewport: Window, action: StringName) -> void:

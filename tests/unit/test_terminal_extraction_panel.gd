@@ -93,17 +93,15 @@ func _test_primary_action_theme_contracts(panel: Control, failures: Array[String
 	var settings := PartyForgeSettings.new()
 	panel.call(&"apply_visual_settings", settings)
 	var confirm := panel.get_node("Frame/Content/Actions/Confirm") as Button
-	_assert_shared_primary_action(confirm, panel.theme, "Confirm Extraction", failures)
+	_assert_shared_primary_action(confirm, "Confirm Extraction", failures)
 	var acknowledge := panel.get_node("UnusedCapacityWarning/Frame/Actions/Acknowledge") as Button
-	_assert_shared_primary_action(acknowledge, panel.theme, "Accept Consequence", failures)
+	_assert_shared_primary_action(acknowledge, "Accept Consequence", failures)
 
 
-func _assert_shared_primary_action(button: Button, theme: Theme, label: String, failures: Array[String]) -> void:
+func _assert_shared_primary_action(button: Button, label: String, failures: Array[String]) -> void:
 	TestAssertions.equal(button.theme_type_variation, &"LivingForgePrimaryButton", "%s uses the shared Primary variation" % label, failures)
 	TestAssertions.truthy(not button.has_theme_stylebox_override(&"focus"), "%s has no local focus StyleBox override" % label, failures)
 	TestAssertions.truthy(not button.has_theme_color_override(&"font_focus_color"), "%s has no local focus font override" % label, failures)
-	TestAssertions.equal(button.get_theme_stylebox(&"focus", &"LivingForgePrimaryButton"), theme.get_stylebox(&"focus", &"LivingForgePrimaryButton"), "%s resolves the shared focus StyleBox" % label, failures)
-	TestAssertions.equal(button.get_theme_color(&"font_focus_color", &"LivingForgePrimaryButton"), theme.get_color(&"font_focus_color", &"LivingForgePrimaryButton"), "%s resolves the shared focus foreground" % label, failures)
 
 func _test_high_contrast_semantics(panel: Control, failures: Array[String]) -> void:
 	var settings := PartyForgeSettings.new()

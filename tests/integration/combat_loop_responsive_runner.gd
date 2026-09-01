@@ -43,6 +43,7 @@ func _initialize() -> void:
 
 
 func _run() -> void:
+	await _exercise_primary_action_bar()
 	for viewport_size: Vector2i in VIEWPORT_SIZES:
 		if viewport_size == Vector2i(1920, 1080):
 			for party_count: int in PARTY_COUNTS:
@@ -372,9 +373,18 @@ func _exercise_level_up(viewport_size: Vector2i, ui_scale: int, text_scale: int)
 	_assert_contained(confirmation_body, confirmation.get_global_rect(), "%s confirmation body" % context_label)
 	_assert(not confirmation_body.is_ancestor_of(confirmation_actions), "%s confirmation actions stay pinned outside prose" % context_label)
 	_assert_target(confirm, "%s confirmation action" % context_label)
+	confirm.grab_focus()
+	await _wait_for_focus(confirm, "%s Level-up Confirm" % context_label)
+	_assert_focused_primary_action(confirm, panel.theme, &"LivingForgePrimaryButton", "%s Level-up Confirm" % context_label)
 	var confirmation_buttons := _direct_visible_controls(confirmation_actions, "Button")
 	_assert_control_set_geometry(confirmation_buttons, confirmation.get_global_rect(), "%s confirmation actions" % context_label)
 	_assert_controls_in_parent(_visible_buttons(panel), "%s all visible level-up actions" % context_label)
+	panel.show_choices([], party, {&"__empty__": "No eligible upgrades remain."})
+	var retry_offers := panel.get_node("Frame/Content/Offer/RetryOffers") as Button
+	await _wait_for_visible(retry_offers, "%s Retry Offers" % context_label)
+	retry_offers.grab_focus()
+	await _wait_for_focus(retry_offers, "%s Retry Offers" % context_label)
+	_assert_focused_primary_action(retry_offers, panel.theme, &"LivingForgePrimaryButton", "%s Retry Offers" % context_label)
 	panel.free()
 	viewport.free()
 	_active_viewport = null
@@ -398,6 +408,9 @@ func _exercise_extraction(viewport_size: Vector2i, ui_scale: int, text_scale: in
 	var confirm := panel.get_node("Frame/Content/Actions/Confirm") as Button
 	await _wait_until(func() -> bool: return _extraction_cards(panel).size() == 24, "%s 24 eligible extraction cards" % context_label)
 	await _wait_for_stable_layout([frame, body, actions, confirm], context_label)
+	confirm.grab_focus()
+	await _wait_for_focus(confirm, "%s Confirm Extraction" % context_label)
+	_assert_focused_primary_action(confirm, panel.theme, &"LivingForgePrimaryButton", "%s Confirm Extraction" % context_label)
 	_assert_contained(frame, viewport_rect, "%s frame" % context_label)
 	_assert_contained(body, frame.get_global_rect(), "%s body" % context_label)
 	_assert(not body.is_ancestor_of(actions), "%s actions remain pinned outside item scrolling" % context_label)
@@ -487,7 +500,12 @@ func _exercise_extraction(viewport_size: Vector2i, ui_scale: int, text_scale: in
 		_assert_contained(warning_frame, viewport_rect, "%s unused-capacity warning" % context_label)
 		_assert_target(back, "%s warning Back" % context_label)
 		_assert_target(acknowledge, "%s warning Acknowledge" % context_label)
+		acknowledge.grab_focus()
+		await _wait_for_focus(acknowledge, "%s Accept Consequence" % context_label)
+		_assert_focused_primary_action(acknowledge, panel.theme, &"LivingForgePrimaryButton", "%s Accept Consequence" % context_label)
 		_assert_control_set_geometry([back, acknowledge], warning_frame.get_global_rect(), "%s warning actions" % context_label)
+		back.grab_focus()
+		await _wait_for_focus(back, "%s warning Back before close" % context_label)
 		back.pressed.emit()
 		await _wait_for_hidden(warning, "%s unused-capacity warning" % context_label)
 		await _wait_for_focus(confirm, "%s warning return Confirm" % context_label)
@@ -591,6 +609,31 @@ func _exercise_result(viewport_size: Vector2i, ui_scale: int, text_scale: int, h
 		_assert(final_row.has_focus(), "%s focus bridge returns to the final recap row" % context_label)
 		if _long_detail_corner(viewport_size, ui_scale, text_scale):
 			await _exercise_long_recap_detail(final_row, body, footer, frame, panel.theme, context_label)
+	var view_model := RunResultViewModel.new()
+	var retry_build := view_model.resolution_interrupted(fixture.snapshot, "Resolution was interrupted.", null)
+	_assert(retry_build.ok(), "%s retry focus fixture builds" % context_label)
+	if retry_build.ok():
+		panel.present(retry_build.projection.with_visual_settings(result_settings))
+		var retry := panel.get_node("Frame/Content/Footer/Actions/RetryResolution") as Button
+		await _wait_for_visible(retry, "%s Result Retry" % context_label)
+		retry.grab_focus()
+		await _wait_for_focus(retry, "%s Result Retry" % context_label)
+		_assert_focused_primary_action(retry, panel.theme, &"LivingForgePrimaryButton", "%s Result Retry" % context_label)
+	var automatic_evaluation := RunResolutionEvaluation.create(fixture.resolution.accepted_extraction, 2, 0, 0, "automatic-only blocked", RunResolutionEvaluation.FailureCategory.STASH_AUTOMATIC_ONLY, "Automatic retained items need more destination space.")
+	var preflight := RunResolutionPreflightResult.from_evaluation(automatic_evaluation)
+	var guarded_build := view_model.resolution_interrupted(fixture.snapshot, preflight.player_reason, _durable_safety(fixture.snapshot), preflight)
+	_assert(guarded_build.ok(), "%s Result Confirm focus fixture builds" % context_label)
+	if guarded_build.ok():
+		panel.present(guarded_build.projection.with_visual_settings(result_settings))
+		var protect := panel.get_node("Frame/Content/Footer/Actions/ProtectDisplacedGear") as Button
+		await _wait_for_visible(protect, "%s Protect Displaced Gear" % context_label)
+		protect.pressed.emit()
+		var result_confirmation := panel.get_node("Frame/Content/Confirmation") as Control
+		var result_confirm := panel.get_node("Frame/Content/Confirmation/Content/Actions/Confirm") as Button
+		await _wait_for_visible(result_confirmation, "%s Result Confirm modal" % context_label)
+		result_confirm.grab_focus()
+		await _wait_for_focus(result_confirm, "%s Result Confirm" % context_label)
+		_assert_focused_primary_action(result_confirm, panel.theme, &"LivingForgePrimaryButton", "%s Result Confirm" % context_label)
 	panel.free()
 	viewport.free()
 	_active_viewport = null
@@ -645,6 +688,39 @@ func _settings(ui_scale: int, text_scale: int) -> PartyForgeSettings:
 	result.ui_scale_percent = ui_scale
 	result.text_scale_percent = text_scale
 	return result
+
+
+func _durable_safety(snapshot: RunTerminalSnapshot) -> RunTerminalRecoverySafetyResult:
+	var empty: Array[String] = []
+	var displaced: Array[String] = []
+	var record_result := RunTerminalRecoveryRecord.create(RunTerminalRecoveryRecord.Stage.CHOOSING_EXTRACTION, snapshot, empty, "", displaced, "", null, "")
+	return RunTerminalRecoverySafetyResult.success(record_result.record) if record_result.ok() else RunTerminalRecoverySafetyResult.failure(record_result.error)
+
+
+func _exercise_primary_action_bar() -> void:
+	var viewport := _new_viewport(Vector2i(1280, 720))
+	var bar := (load("res://scenes/ui/living_forge/components/forge_action_bar.tscn") as PackedScene).instantiate() as ForgeActionBar
+	viewport.add_child(bar)
+	bar.theme = LivingForgeThemeCatalog.resolve(false, 100, 100)
+	bar.present([{"id": &"start", "label": "Start Run", "enabled": true, "kind": &"primary", "accessibility_description": "Start the selected run."}])
+	var primary := bar.button_for(&"start") as Button
+	await _wait_for_stable_layout([bar, primary], "ForgeActionBar primary")
+	primary.grab_focus()
+	await _wait_for_focus(primary, "ForgeActionBar primary")
+	_assert_focused_primary_action(primary, bar.theme, &"LivingForgePrimaryButton", "ForgeActionBar primary")
+	bar.free()
+	viewport.free()
+	_active_viewport = null
+
+
+func _assert_focused_primary_action(button: Button, theme: Theme, variation: StringName, label: String) -> void:
+	_assert(_active_viewport != null and _active_viewport.gui_get_focus_owner() == button, "%s owns actual viewport focus before focus-style inspection" % label)
+	_assert(button.is_visible_in_tree() and not button.disabled and button.focus_mode != Control.FOCUS_NONE, "%s is visible and eligible while focused" % label)
+	_assert(button.theme_type_variation == variation, "%s uses the shared %s variation" % [label, variation])
+	_assert(not button.has_theme_stylebox_override(&"focus"), "%s has no local focus StyleBox override" % label)
+	_assert(not button.has_theme_color_override(&"font_focus_color"), "%s has no local focus font override" % label)
+	_assert(button.get_theme_stylebox(&"focus", variation) == theme.get_stylebox(&"focus", variation), "%s resolves the shared focus StyleBox" % label)
+	_assert(button.get_theme_color(&"font_focus_color", variation) == theme.get_color(&"font_focus_color", variation), "%s resolves the shared focus foreground" % label)
 
 
 func _extraction_projection(count: int, capacity: int, automatic_count: int) -> TerminalExtractionProjection:

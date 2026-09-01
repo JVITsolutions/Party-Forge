@@ -211,8 +211,8 @@ func _test_action_signals_pending_and_focus(panel: Control, view_model: Variant,
 	var cancel := _confirmation(panel).get_node("Content/Actions/Cancel") as Button
 	var confirm := _confirmation(panel).get_node("Content/Actions/Confirm") as Button
 	TestAssertions.equal(confirm.theme_type_variation, &"LivingForgePrimaryButton", "protection confirmation uses a primary warning treatment rather than destructive styling", failures)
-	_assert_shared_primary_action(confirm, panel.theme, "Result Confirm", failures)
-	_assert_shared_primary_action(_button(panel, "RetryResolution"), panel.theme, "Result Retry", failures)
+	_assert_shared_primary_action(confirm, "Result Confirm", failures)
+	_assert_shared_primary_action(_button(panel, "RetryResolution"), "Result Retry", failures)
 	for footer_action: Button in _visible_actions(panel):
 		TestAssertions.truthy(footer_action.disabled and footer_action.focus_mode == Control.FOCUS_NONE, "protection confirmation isolates footer action %s" % footer_action.name, failures)
 	TestAssertions.truthy(synthetic_recap_row.disabled and synthetic_recap_row.focus_mode == Control.FOCUS_NONE and synthetic_recap_row.mouse_filter == Control.MOUSE_FILTER_IGNORE, "protection confirmation isolates recap/background controls", failures)
@@ -242,12 +242,10 @@ func _button(panel: Control, name_value: String) -> Button:
 	return panel.get_node_or_null("Frame/Content/Footer/Actions/%s" % name_value) as Button
 
 
-func _assert_shared_primary_action(button: Button, theme: Theme, label: String, failures: Array[String]) -> void:
+func _assert_shared_primary_action(button: Button, label: String, failures: Array[String]) -> void:
 	TestAssertions.equal(button.theme_type_variation, &"LivingForgePrimaryButton", "%s uses the shared Primary variation" % label, failures)
 	TestAssertions.truthy(not button.has_theme_stylebox_override(&"focus"), "%s has no local focus StyleBox override" % label, failures)
 	TestAssertions.truthy(not button.has_theme_color_override(&"font_focus_color"), "%s has no local focus font override" % label, failures)
-	TestAssertions.equal(button.get_theme_stylebox(&"focus", &"LivingForgePrimaryButton"), theme.get_stylebox(&"focus", &"LivingForgePrimaryButton"), "%s resolves the shared focus StyleBox" % label, failures)
-	TestAssertions.equal(button.get_theme_color(&"font_focus_color", &"LivingForgePrimaryButton"), theme.get_color(&"font_focus_color", &"LivingForgePrimaryButton"), "%s resolves the shared focus foreground" % label, failures)
 
 func _visible_actions(panel: Control) -> Array[Button]:
 	var result: Array[Button] = []
