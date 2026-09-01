@@ -59,6 +59,19 @@ const CAPTURES: Array[String] = [
 	"extraction-detail-720p-ui-150-text-150.png",
 	"result-expanded-detail-ui-150-text-150.png",
 	"result-expanded-detail-ui-80-text-150.png",
+	"hud-party-collapsed-6-clear.png",
+	"hud-party-collapsed-24-severity.png",
+	"hud-alerts-collapsed-dead-focus.png",
+	"hud-alerts-collapsed-all-clear.png",
+	"hud-both-collapsed-720p-text-150.png",
+	"hud-both-collapsed-high-contrast.png",
+	"hud-alerts-collapsed-controller-tray-focus.png",
+	"hud-both-collapsed-reduced-motion.png",
+	"lobby-start-run-primary-focus.png",
+	"extraction-confirm-primary-focus.png",
+	"extraction-consequence-primary-focus.png",
+	"level-up-confirm-primary-focus.png",
+	"result-primary-retry-focus.png",
 ]
 
 const CAPTURE_STATES: Array[String] = [
@@ -107,6 +120,19 @@ const CAPTURE_STATES: Array[String] = [
 	"720p extraction detail at UI 150 and text 150",
 	"720p expanded result detail at UI 150 and text 150",
 	"720p expanded result detail at UI 80 and text 150",
+	"Party collapsed with six healthy members",
+	"Party collapsed with twenty-four members and dead, downed, and critical counts",
+	"Alerts collapsed with DEAD highest summary",
+	"Alerts collapsed with ALL CLEAR",
+	"Party and Alerts collapsed at 720p and text scale 150",
+	"Party and Alerts collapsed in high contrast",
+	"Alerts collapsed with direct controller tray action focused",
+	"Party and Alerts collapsed settled with reduced motion",
+	"Start Run shared primary focus style",
+	"Confirm Extraction shared primary focus style",
+	"Accept Consequence shared primary focus style",
+	"Level-up Confirm shared primary focus style",
+	"Result Retry Resolution shared primary focus style",
 ]
 
 const CAPTURE_FOCUS_TARGETS: Array[String] = [
@@ -122,6 +148,9 @@ const CAPTURE_FOCUS_TARGETS: Array[String] = [
 	"pause:retry_return_to_forge", "lobby:mage", "lobby:first_class",
 	"hud:alert_inspect", "confirmation:cancel", "extraction:show_auto",
 	"extraction_detail:close", "result:expanded_row", "result:expanded_row",
+	"hud:party_header", "hud:party_header", "hud:alerts_header", "hud:alerts_header",
+	"hud:party_header", "hud:alerts_header", "hud:alerts_tray_action", "hud:party_header",
+	"lobby:start", "extraction:confirm", "extraction:acknowledge", "level_up:confirm", "result:retry_resolution",
 ]
 
 # Metadata is index-aligned with CAPTURES so each filename is declared exactly once.
@@ -171,6 +200,19 @@ const CAPTURE_METADATA: Array[Dictionary] = [
 	{"surface":"extraction-detail","width":1280,"height":720,"ui":150,"text":150,"contrast":false,"motion":true,"input":"keyboard"},
 	{"surface":"result-detail","width":1280,"height":720,"ui":150,"text":150,"contrast":false,"motion":false,"input":"keyboard"},
 	{"surface":"result-detail","width":1280,"height":720,"ui":80,"text":150,"contrast":false,"motion":false,"input":"keyboard"},
+	{"surface":"hud","width":1920,"height":1080,"ui":100,"text":100,"contrast":false,"motion":false,"input":"keyboard"},
+	{"surface":"hud","width":1920,"height":1080,"ui":100,"text":100,"contrast":false,"motion":false,"input":"keyboard"},
+	{"surface":"hud","width":1920,"height":1080,"ui":100,"text":100,"contrast":false,"motion":false,"input":"keyboard"},
+	{"surface":"hud","width":1920,"height":1080,"ui":100,"text":100,"contrast":false,"motion":false,"input":"keyboard"},
+	{"surface":"hud","width":1280,"height":720,"ui":100,"text":150,"contrast":false,"motion":false,"input":"keyboard"},
+	{"surface":"hud","width":1920,"height":1080,"ui":100,"text":100,"contrast":true,"motion":false,"input":"keyboard"},
+	{"surface":"hud","width":1920,"height":1080,"ui":100,"text":100,"contrast":false,"motion":false,"input":"simulated_controller"},
+	{"surface":"hud","width":1920,"height":1080,"ui":100,"text":100,"contrast":false,"motion":true,"input":"keyboard"},
+	{"surface":"restart-lobby","width":1920,"height":1080,"ui":100,"text":100,"contrast":false,"motion":false,"input":"keyboard"},
+	{"surface":"extraction","width":1920,"height":1080,"ui":100,"text":100,"contrast":false,"motion":true,"input":"keyboard"},
+	{"surface":"extraction","width":1920,"height":1080,"ui":100,"text":100,"contrast":false,"motion":true,"input":"keyboard"},
+	{"surface":"level-up-confirmation","width":1920,"height":1080,"ui":100,"text":100,"contrast":false,"motion":true,"input":"keyboard"},
+	{"surface":"result","width":1920,"height":1080,"ui":100,"text":100,"contrast":false,"motion":false,"input":"keyboard"},
 ]
 
 const SOURCE_INPUT_PATHS: Array[String] = [
@@ -229,7 +271,7 @@ func _initialize() -> void:
 
 func _run() -> void:
 	_started_unix = int(Time.get_unix_time_from_system())
-	_assert(CAPTURES.size() == 45, "capture contract declares exactly 45 files")
+	_assert(CAPTURES.size() == 58, "capture contract declares exactly 58 files")
 	_assert(CAPTURE_METADATA.size() == CAPTURES.size(), "every capture has exact viewport/settings metadata")
 	_assert(CAPTURE_STATES.size() == CAPTURES.size() and CAPTURE_FOCUS_TARGETS.size() == CAPTURES.size(), "every capture has exact state and focus metadata")
 	_assert(_unique_strings(CAPTURES).size() == CAPTURES.size(), "capture names are globally unique")
@@ -299,6 +341,19 @@ func _capture_all() -> void:
 	await _capture_extraction(42, &"detail")
 	await _capture_result_state(43, &"expanded")
 	await _capture_result_state(44, &"expanded")
+	await _capture_collapsed_hud(45, 6, 0, true, false, false, &"party_header")
+	await _capture_collapsed_hud(46, 24, 3, true, false, true, &"party_header")
+	await _capture_collapsed_hud(47, 6, 3, false, true, true, &"alerts_header")
+	await _capture_collapsed_hud(48, 6, 0, false, true, false, &"alerts_header")
+	await _capture_collapsed_hud(49, 24, 3, true, true, true, &"party_header")
+	await _capture_collapsed_hud(50, 24, 3, true, true, true, &"alerts_header")
+	await _capture_collapsed_hud(51, 6, 3, false, true, true, &"controller_tray")
+	await _capture_collapsed_hud(52, 24, 3, true, true, true, &"party_header")
+	await _capture_restart_lobby(53, true, true)
+	await _capture_extraction(54, &"primary_confirm")
+	await _capture_extraction(55, &"primary_consequence")
+	await _capture_level_up(56, &"primary_confirmation")
+	await _capture_result_state(57, &"resolution")
 
 
 func _capture_hud(index: int, count: int, alert_count: int, mode: StringName = &"") -> void:
@@ -343,6 +398,60 @@ func _capture_hud(index: int, count: int, alert_count: int, mode: StringName = &
 		if not controls.is_empty(): await _mouse_motion(controls[-1].get_global_rect().get_center())
 	elif mode == &"member_focus":
 		if not controls.is_empty(): controls[mini(1, controls.size() - 1)].grab_focus()
+	await _capture(index)
+	hud.free()
+	backdrop.free()
+	await _frames(2)
+	_cleanup_hud_fixture(fixture)
+
+
+func _capture_collapsed_hud(
+	index: int,
+	count: int,
+	alert_count: int,
+	party_is_collapsed: bool,
+	alerts_are_collapsed: bool,
+	mixed_severity: bool,
+	focus_mode: StringName,
+) -> void:
+	paused = false
+	var metadata := CAPTURE_METADATA[index]
+	_apply_window(metadata)
+	var settings := _settings_for(metadata)
+	settings.hud_party_collapsed = party_is_collapsed
+	settings.hud_alerts_collapsed = alerts_are_collapsed
+	var backdrop := _battlefield_backdrop()
+	var fixture := _hud_fixture(count, alert_count, settings)
+	if mixed_severity:
+		_assert(count >= 3 and alert_count >= 3, "%s has enough members for dead, downed, and critical truth" % CAPTURES[index])
+		(fixture.health_by_member[1] as HealthComponent).apply_damage(1000.0)
+		(fixture.health_by_member[2] as HealthComponent).apply_damage(1000.0)
+	var hud := HUD_SCENE.instantiate() as HUD
+	root.add_child(hud)
+	_configure_active_run_hud(hud, fixture)
+	await _frames(6)
+	_assert(hud.party_collapsed() == party_is_collapsed and hud.alerts_collapsed() == alerts_are_collapsed, "%s applies the exact independent collapse state" % CAPTURES[index])
+	_assert((hud.get_node("Margin/CombatStatus/LeaderCard") as Control).visible == not party_is_collapsed, "%s collapses the leader with Party" % CAPTURES[index])
+	_assert((hud.get_node("Margin/CombatStatus/Experience") as Control).visible == not party_is_collapsed, "%s collapses XP with Party" % CAPTURES[index])
+	_assert((hud.get_node("Margin/CombatStatus/PartyRegion") as Control).visible == not party_is_collapsed, "%s collapses the roster with Party" % CAPTURES[index])
+	_assert((hud.get_node("Margin/CombatStatus/AlertRegion/ExpandedAlerts") as Control).visible == not alerts_are_collapsed, "%s collapses alert cards with Alerts" % CAPTURES[index])
+	if mixed_severity:
+		_assert(hud.current_projection.alert_count_for(CombatAlertProjection.Severity.DEAD) == 1, "%s exposes one DEAD member" % CAPTURES[index])
+		_assert(hud.current_projection.alert_count_for(CombatAlertProjection.Severity.DOWNED) == 1, "%s exposes one DOWNED member" % CAPTURES[index])
+		_assert(hud.current_projection.alert_count_for(CombatAlertProjection.Severity.CRITICAL) == 1, "%s exposes one CRITICAL member" % CAPTURES[index])
+		_assert(hud.current_projection.highest_alert_severity() == CombatAlertProjection.Severity.DEAD, "%s exposes DEAD as the highest severity" % CAPTURES[index])
+	elif alert_count == 0:
+		_assert(hud.current_projection.all_alerts.is_empty(), "%s exposes exact ALL CLEAR alert truth" % CAPTURES[index])
+	match focus_mode:
+		&"party_header":
+			(hud.get_node("Margin/CombatStatus/PartyHeader") as Button).grab_focus()
+		&"alerts_header":
+			(hud.get_node("Margin/CombatStatus/AlertRegion/Header") as Button).grab_focus()
+		&"controller_tray":
+			var alerts_header := hud.get_node("Margin/CombatStatus/AlertRegion/Header") as Button
+			alerts_header.grab_focus()
+			await _joy_button(JOY_BUTTON_DPAD_DOWN)
+			_assert((hud.get_node("Margin/CombatStatus/AlertRegion/AlertsTrayAction") as Button).has_focus(), "%s reaches persistent tray access through real controller traversal" % CAPTURES[index])
 	await _capture(index)
 	hud.free()
 	backdrop.free()
@@ -438,11 +547,13 @@ func _capture_level_up(index: int, mode: StringName) -> void:
 		(panel.get_node("Frame/Content/Recipient/Content/RecipientsScroll") as ScrollContainer).ensure_control_visible(member_24)
 		await _frames(3)
 		_assert((panel.get_node("Frame/Content/Recipient") as Control).visible and member_24.has_focus(), "%s renders and reaches recipient 24" % CAPTURES[index])
-		if mode == &"confirmation":
+		if mode in [&"confirmation", &"primary_confirmation"]:
 			member_24.pressed.emit()
 			await _frames(3)
 			var cancel := panel.get_node("Frame/Content/Confirmation/Actions/Cancel") as Button
 			_assert(cancel.has_focus(), "%s defaults confirmation to safe Cancel" % CAPTURES[index])
+			if mode == &"primary_confirmation":
+				(panel.get_node("Frame/Content/Confirmation/Actions/Confirm") as Button).grab_focus()
 	await _capture(index)
 	panel.free()
 	party.free()
@@ -488,6 +599,17 @@ func _capture_extraction(index: int, mode: StringName) -> void:
 			await _frames(3)
 			(panel.get_node("ItemTooltipDetail/Frame/Tooltip/Layout/Header/Close") as Button).grab_focus()
 			_assert((panel.get_node("ItemTooltipDetail") as Control).visible, "%s renders the real extraction detail surface" % CAPTURES[index])
+	elif mode == &"primary_confirm":
+		var confirm := panel.get_node("Frame/Content/Actions/Confirm") as Button
+		_assert(not confirm.disabled, "%s exposes an enabled Confirm Extraction action" % CAPTURES[index])
+		confirm.grab_focus()
+	elif mode == &"primary_consequence":
+		var confirm := panel.get_node("Frame/Content/Actions/Confirm") as Button
+		panel.show_unused_capacity_warning(1, projection.lost_count, confirm)
+		await _frames(3)
+		var acknowledge := panel.get_node("UnusedCapacityWarning/Frame/Actions/Acknowledge") as Button
+		acknowledge.grab_focus()
+		_assert((panel.get_node("UnusedCapacityWarning") as Control).visible, "%s exposes the authentic unused-capacity consequence" % CAPTURES[index])
 	else:
 		var focus_owner := root.gui_get_focus_owner() as Control
 		if focus_owner != null:
@@ -610,7 +732,7 @@ func _capture_pause_abandon(index: int) -> void:
 	_cleanup_hud_fixture(fixture)
 
 
-func _capture_restart_lobby(index: int, valid_intent: bool) -> void:
+func _capture_restart_lobby(index: int, valid_intent: bool, focus_start := false) -> void:
 	paused = false
 	var metadata := CAPTURE_METADATA[index]
 	_apply_window(metadata)
@@ -635,6 +757,8 @@ func _capture_restart_lobby(index: int, valid_intent: bool) -> void:
 		var mage := panel.selection_focus(&"mage") as Button
 		var start := panel.action_focus(&"start") as Button
 		_assert(projection.state == RunSetupLobbyProjection.State.READY and mage != null and mage.has_focus() and start != null and not start.disabled, "%s presents stable READY Mage preselection with Start enabled" % CAPTURES[index])
+		if focus_start and start != null:
+			start.grab_focus()
 	await _capture(index)
 	panel.free()
 	await _frames(2)
@@ -872,7 +996,9 @@ func _assert_declared_focus(index: int) -> void:
 		"extraction_detail:close": _assert(owner.name == &"Close" and "ItemTooltipDetail" in String(owner.get_path()), "%s focuses extraction detail Close" % CAPTURES[index])
 		"result:return_to_forge": _assert(owner.name == &"ReturnToForge", "%s focuses safe Return to Forge" % CAPTURES[index])
 		"result:lost_row": _assert(owner.get_meta(&"recap_section_id", &"") == &"loot" and String(owner.get_meta(&"recap_entry_label", "")) == "Lost", "%s focuses truthful Lost recap row" % CAPTURES[index])
-		"result:retry_resolution": _assert(owner.name == &"RetryResolution", "%s focuses Retry Resolution" % CAPTURES[index])
+		"result:retry_resolution":
+			_assert(owner.name == &"RetryResolution", "%s focuses Retry Resolution" % CAPTURES[index])
+			_assert_shared_primary_focus(owner as Button, &"LivingForgePrimaryButton", CAPTURES[index])
 		"result:retry_terminal_save": _assert(owner.name == &"RetryTerminalSave", "%s focuses Retry Terminal Save" % CAPTURES[index])
 		"result:retry_projection": _assert(owner.name == &"RetryProjection", "%s focuses Retry Results" % CAPTURES[index])
 		"result:retry_terminal_refresh": _assert(owner.name == &"RetryTerminalRefresh", "%s focuses Retry Terminal Recovery" % CAPTURES[index])
@@ -881,7 +1007,58 @@ func _assert_declared_focus(index: int) -> void:
 		"lobby:mage": _assert(owner.name == &"Class_mage", "%s focuses preselected Mage" % CAPTURES[index])
 		"lobby:first_class": _assert(String(owner.name).begins_with("Class_"), "%s focuses a real explicit class choice" % CAPTURES[index])
 		"result:expanded_row": _assert(owner.has_meta(&"recap_section_id") and (owner.get_node_or_null("Detail") as Control).visible, "%s focuses a real expanded recap row" % CAPTURES[index])
+		"hud:party_header": _assert(owner.name == &"PartyHeader", "%s focuses the exact Party header" % CAPTURES[index])
+		"hud:alerts_header": _assert(owner.name == &"Header" and "AlertRegion" in String(owner.get_path()), "%s focuses the exact Alerts header" % CAPTURES[index])
+		"hud:alerts_tray_action": _assert(owner.name == &"AlertsTrayAction", "%s focuses the persistent Alerts tray action" % CAPTURES[index])
+		"lobby:start":
+			_assert(StringName(owner.get_meta(&"action_id", &"")) == &"start", "%s focuses exact Start Run" % CAPTURES[index])
+			_assert_shared_primary_focus(owner as Button, &"LivingForgeStartButton", CAPTURES[index])
+		"extraction:confirm":
+			_assert(owner.name == &"Confirm" and "Frame/Content/Actions/Confirm" in String(owner.get_path()), "%s focuses exact Confirm Extraction" % CAPTURES[index])
+			_assert_shared_primary_focus(owner as Button, &"LivingForgePrimaryButton", CAPTURES[index])
+		"extraction:acknowledge":
+			_assert(owner.name == &"Acknowledge", "%s focuses exact Accept Consequence" % CAPTURES[index])
+			_assert_shared_primary_focus(owner as Button, &"LivingForgePrimaryButton", CAPTURES[index])
+		"level_up:confirm":
+			_assert(owner.name == &"Confirm" and "Confirmation" in String(owner.get_path()), "%s focuses exact level-up Confirm" % CAPTURES[index])
+			_assert_shared_primary_focus(owner as Button, &"LivingForgePrimaryButton", CAPTURES[index])
 		_: _assert(false, "%s has an unhandled focus target %s" % [CAPTURES[index], target])
+
+
+func _assert_shared_primary_focus(button: Button, expected_variation: StringName, label: String) -> void:
+	_assert(button != null and button.has_focus(), "%s resolves a live focused primary action" % label)
+	if button == null:
+		return
+	_assert(button.theme_type_variation == expected_variation, "%s uses the exact shared primary theme variation" % label)
+	_assert(not button.has_theme_stylebox_override(&"focus") and not button.has_theme_color_override(&"font_focus_color"), "%s has no local focus-style or foreground patch" % label)
+	var focus := button.get_theme_stylebox(&"focus") as StyleBoxFlat
+	var shared := button.get_theme_stylebox(&"focus", &"LivingForgePrimaryButton") as StyleBoxFlat
+	_assert(focus != null and focus.is_draw_center_enabled() and focus.bg_color.a > 0.0, "%s resolves a genuinely filled focus style" % label)
+	_assert(shared != null and focus != null and _focus_style_signature(focus) == _focus_style_signature(shared), "%s resolves the shared LivingForgePrimaryButton focus style" % label)
+	if focus != null:
+		var foreground := button.get_theme_color(&"font_focus_color")
+		_assert(_contrast_ratio(foreground, focus.bg_color) >= 4.5, "%s focused text contrast is at least 4.5:1" % label)
+
+
+func _focus_style_signature(style: StyleBoxFlat) -> Array:
+	return [
+		style.draw_center, style.bg_color, style.border_color,
+		style.border_width_left, style.border_width_top, style.border_width_right, style.border_width_bottom,
+		style.corner_radius_top_left, style.corner_radius_top_right, style.corner_radius_bottom_right, style.corner_radius_bottom_left,
+	]
+
+
+func _contrast_ratio(first: Color, second: Color) -> float:
+	var brighter := maxf(_relative_luminance(first), _relative_luminance(second))
+	var darker := minf(_relative_luminance(first), _relative_luminance(second))
+	return (brighter + 0.05) / (darker + 0.05)
+
+
+func _relative_luminance(value: Color) -> float:
+	var red := value.r / 12.92 if value.r <= 0.04045 else pow((value.r + 0.055) / 1.055, 2.4)
+	var green := value.g / 12.92 if value.g <= 0.04045 else pow((value.g + 0.055) / 1.055, 2.4)
+	var blue := value.b / 12.92 if value.b <= 0.04045 else pow((value.b + 0.055) / 1.055, 2.4)
+	return 0.2126 * red + 0.7152 * green + 0.0722 * blue
 
 
 func _write_manifest() -> void:
@@ -891,12 +1068,12 @@ func _write_manifest() -> void:
 	var unique_hashes: Dictionary = {}
 	for name: Variant in _captured.keys(): actual.append(String(name))
 	actual.sort()
-	_assert(actual == expected and _entries.size() == CAPTURES.size(), "current run captured the exact 45-member contract before manifest write")
+	_assert(actual == expected and _entries.size() == CAPTURES.size(), "current run captured the exact 58-member contract before manifest write")
 	for index: int in _entries.size():
 		var entry := _entries[index]
 		_assert(String(entry.get("file", "")) == CAPTURES[index], "current-run entry order is exact at index %d" % index)
 		unique_hashes[String(entry.get("sha256", ""))] = true
-	_assert(unique_hashes.size() == CAPTURES.size(), "current run has 45 unique capture hashes before manifest write")
+	_assert(unique_hashes.size() == CAPTURES.size(), "current run has 58 unique capture hashes before manifest write")
 	if not _failures.is_empty(): return
 	var manifest := {"schema_version":MANIFEST_SCHEMA_VERSION,"run_id":"%d-%d" % [OS.get_process_id(),_started_unix],"captured_at_utc":Time.get_datetime_string_from_system(true,true),"source_head":_source_head(),"source_tree_fingerprint":_source_fingerprint(),"capture_contract_sha256":_capture_contract_sha256(),"renderer":_renderer_metadata(),"window_mode":"windowed","capture_environment":{"hud_backdrop":"res://scenes/arena/arena.tscn","camera":"deterministic evidence camera"},"entries":_entries}
 	var path := ProjectSettings.globalize_path(SCREENSHOT_ROOT.path_join(MANIFEST_NAME))
@@ -926,12 +1103,12 @@ func _validate_existing_evidence(require_fresh := false) -> void:
 		and JSON.stringify(manifest_fingerprint.get("inputs", [])) == JSON.stringify(current_fingerprint.get("inputs", [])),
 		"manifest source fingerprint matches declared current source inputs",
 	)
-	_assert(String(manifest.get("capture_contract_sha256", "")) == _capture_contract_sha256(), "manifest capture contract hash matches all 45 exact specifications")
+	_assert(String(manifest.get("capture_contract_sha256", "")) == _capture_contract_sha256(), "manifest capture contract hash matches all 58 exact specifications")
 	_assert(JSON.stringify(manifest.get("renderer", {})) == JSON.stringify(_renderer_metadata()), "manifest renderer metadata matches current renderer")
 	_assert(String(manifest.get("window_mode", "")) == "windowed", "manifest declares windowed capture")
 	_assert(manifest.get("capture_environment", {}) == {"hud_backdrop":"res://scenes/arena/arena.tscn","camera":"deterministic evidence camera"}, "manifest declares the production Arena HUD contrast field")
 	var entries := manifest.get("entries", []) as Array
-	_assert(entries.size() == CAPTURES.size(), "manifest has exactly 45 entries")
+	_assert(entries.size() == CAPTURES.size(), "manifest has exactly 58 entries")
 	var hashes: Dictionary = {}
 	for index: int in CAPTURES.size():
 		if index >= entries.size(): break
@@ -956,7 +1133,7 @@ func _validate_existing_evidence(require_fresh := false) -> void:
 		_assert(not hashes.has(hash), "%s has a globally unique hash" % name)
 		hashes[hash] = true
 		if require_fresh: _assert(int(FileAccess.get_modified_time(path)) >= _started_unix, "%s is from the current capture run" % name)
-	_assert(hashes.size() == CAPTURES.size(), "all 45 captures have globally unique nonempty hashes")
+	_assert(hashes.size() == CAPTURES.size(), "all 58 captures have globally unique nonempty hashes")
 
 
 func _assert_no_extra_pngs(require_complete: bool) -> void:
@@ -964,7 +1141,9 @@ func _assert_no_extra_pngs(require_complete: bool) -> void:
 	_assert(directory != null, "evidence directory exists")
 	if directory == null: return
 	var actual: Array[String] = []
-	for file_name: String in directory.get_files(): actual.append(file_name)
+	for file_name: String in directory.get_files():
+		if file_name == MANIFEST_NAME or file_name.get_extension().to_lower() == "png":
+			actual.append(file_name)
 	actual.sort()
 	var expected: Array[String] = CAPTURES.duplicate()
 	expected.append(MANIFEST_NAME)
@@ -1040,6 +1219,7 @@ func _capture_source_is_clean() -> bool:
 		var path := raw_line.substr(3).strip_edges().replace("\\", "/")
 		if " -> " in path: path = path.get_slice(" -> ", 1)
 		if path.begins_with("docs/validation/screenshots/living-forge-combat-loop/"): continue
+		if raw_line.begins_with("?? ") and path.ends_with(".gd.uid"): continue
 		return false
 	return true
 
