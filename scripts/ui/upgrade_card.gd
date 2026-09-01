@@ -52,7 +52,7 @@ func present(projection: UpgradeOfferProjection) -> void:
 		if not previous_key.is_empty():
 			detail_dismissed.emit(previous_key)
 		_detail_visible = false
-		_update_detail_state()
+	_reconcile_detail_state()
 
 
 func present_preview(projection: UpgradeOfferProjection) -> void:
@@ -189,6 +189,18 @@ func _on_focus_entered() -> void:
 func _on_focus_exited() -> void:
 	_focus_inside = false
 	_update_detail_state()
+
+
+func _reconcile_detail_state() -> void:
+	if is_inside_tree():
+		call_deferred(&"_update_detail_state_if_bound_to", _bound_choice_key)
+		return
+	_update_detail_state()
+
+
+func _update_detail_state_if_bound_to(expected_choice_key: StringName) -> void:
+	if _bound_choice_key == expected_choice_key:
+		_update_detail_state()
 
 
 func _update_detail_state() -> void:

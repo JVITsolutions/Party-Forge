@@ -15,6 +15,7 @@ func run() -> Array[String]:
 	_test_typed_preview_never_replaces_activation_identity(failures)
 	_test_timed_reveal_binds_only_final_typed_projection(failures)
 	_test_skip_and_reduced_motion_resolve_immediately(failures)
+	_test_active_detail_reconciles_across_reveal_resolution(failures)
 	return failures
 
 
@@ -101,6 +102,48 @@ func _test_skip_and_reduced_motion_resolve_immediately(failures: Array[String]) 
 	TestAssertions.truthy(not controller.call(&"is_revealing"), "reduced motion resolves during play", failures)
 	TestAssertions.equal(resolved_count[0], 2, "reduced motion emits one additional resolved", failures)
 	_assert_final_cards(cards, fixture.projections, failures, "reduced motion")
+	_free_cards(cards)
+	controller.free()
+
+
+func _test_active_detail_reconciles_across_reveal_resolution(failures: Array[String]) -> void:
+	_assert_reveal_detail_transition(&"timed", false, false, failures)
+	_assert_reveal_detail_transition(&"skip", false, true, failures)
+	_assert_reveal_detail_transition(&"reduced_motion", true, false, failures)
+
+
+func _assert_reveal_detail_transition(
+	mode: StringName,
+	reduced_motion: bool,
+	skip_reveal: bool,
+	failures: Array[String],
+) -> void:
+	var fixture := _fixture(failures)
+	if fixture.is_empty():
+		return
+	var controller: Object = fixture.controller
+	var cards: Array[UpgradeCard] = fixture.cards
+	var hovered := cards[0]
+	var focused := cards[2]
+	var hovered_requests: Array[StringName] = []
+	var focused_requests: Array[StringName] = []
+	hovered.detail_requested.connect(func(choice_key: StringName, _anchor: Control) -> void: hovered_requests.append(choice_key))
+	focused.detail_requested.connect(func(choice_key: StringName, _anchor: Control) -> void: focused_requests.append(choice_key))
+	hovered.disabled = true
+	focused.disabled = true
+	hovered.mouse_entered.emit()
+	focused.focus_entered.emit()
+	controller.call(&"play", cards, fixture.projections, fixture.previews, reduced_motion)
+	if skip_reveal:
+		controller.call(&"skip")
+	elif not reduced_motion:
+		controller.call(&"advance", 1.11)
+	TestAssertions.equal(hovered_requests, [StringName(fixture.projections[0].choice_key)], "%s reveal restores the already-hovered final detail exactly once" % mode, failures)
+	TestAssertions.equal(focused_requests, [StringName(fixture.projections[2].choice_key)], "%s reveal restores the already-focused final detail exactly once" % mode, failures)
+	hovered.present(fixture.projections[0].copy())
+	focused.present(fixture.projections[2].copy())
+	TestAssertions.equal(hovered_requests.size(), 1, "%s unchanged hover refresh does not duplicate detail" % mode, failures)
+	TestAssertions.equal(focused_requests.size(), 1, "%s unchanged focus refresh does not duplicate detail" % mode, failures)
 	_free_cards(cards)
 	controller.free()
 
