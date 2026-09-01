@@ -5,6 +5,9 @@ const MANIFEST_NAME := "manifest.json"
 const MANIFEST_SCHEMA_VERSION := 2
 const VERIFICATION_PATH := "docs/verification/2026-08-29-living-forge-hud-level-up-results.md"
 const RUNNER_PATH := "tests/integration/living_forge_combat_loop_visual_evidence_runner.gd"
+const CAPTURE_ORCHESTRATOR_PATH := "tools/validation/capture_living_forge_combat_loop.ps1"
+const CAPTURE_PROVENANCE_SCHEMA_VERSION := 1
+const EXPECTED_GODOT_VERSION := "4.7.1.stable.mono.official.a13da4feb"
 const HUD_SCENE := preload("res://scenes/ui/hud.tscn")
 const LEVEL_UP_SCENE := preload("res://scenes/ui/level_up_panel.tscn")
 const EXTRACTION_SCENE := preload("res://scenes/ui/run_result/terminal_extraction_panel.tscn")
@@ -216,7 +219,7 @@ const CAPTURE_METADATA: Array[Dictionary] = [
 ]
 
 const SOURCE_INPUT_ROOTS: Array[String] = ["addons/", "assets/", "data/", "scenes/", "scripts/"]
-const SOURCE_INPUT_EXACT_PATHS: Array[String] = ["project.godot", "icon.svg", "icon.svg.import", RUNNER_PATH]
+const SOURCE_INPUT_EXACT_PATHS: Array[String] = ["project.godot", "icon.svg", "icon.svg.import", RUNNER_PATH, CAPTURE_ORCHESTRATOR_PATH]
 const REQUIRED_SOURCE_SENTINELS: Array[String] = [
 	"project.godot",
 	"icon.svg",
@@ -236,6 +239,9 @@ const REQUIRED_SOURCE_SENTINELS: Array[String] = [
 	"assets/ui/living_forge/icons/party-forge/leader-crown.svg",
 	"assets/ui/pin_filled.svg",
 	"assets/ui/pin_outline.svg",
+	"scripts/ui/level_up_reveal_controller.gd.uid",
+	"scripts/ui/ledger/character_equipment_preview.gd.uid",
+	"scripts/ui/living_forge/components/forge_class_card.gd.uid",
 ]
 
 class EvidenceRun:
@@ -264,6 +270,7 @@ var _entries: Array[Dictionary] = []
 var _captured: Dictionary = {}
 var _started_unix := 0
 var _sequence := 44000
+var _capture_provenance_envelope: Dictionary = {}
 
 
 func _initialize() -> void:
@@ -300,8 +307,8 @@ func _run() -> void:
 		for root_path: String in SOURCE_INPUT_ROOTS:
 			in_runtime_root = in_runtime_root or relative_path.begins_with(root_path)
 		_assert(in_runtime_root, "source input universe stays within approved runtime roots: %s" % relative_path)
-		_assert(not relative_path.ends_with(".uid"), "source input universe excludes UID sidecars: %s" % relative_path)
 		_assert(not relative_path.begins_with("docs/") and not relative_path.begins_with(".superpowers/"), "source input universe excludes evidence and reports: %s" % relative_path)
+	_assert(CAPTURE_ORCHESTRATOR_PATH in source_input_paths, "source input universe includes canonical capture orchestrator")
 	if "--validate-only" in OS.get_cmdline_user_args():
 		_assert(has_method(&"_validate_only_source_inputs_match_exact_head"), "validate-only source-input exact-head cleanliness check exists")
 		if not _failures.is_empty():
@@ -311,6 +318,17 @@ func _run() -> void:
 			_finish()
 			return
 		_validate_existing_evidence()
+		_finish()
+		return
+	_assert(has_method(&"_load_capture_provenance_envelope"), "canonical capture provenance loader exists")
+	if not _failures.is_empty():
+		_finish()
+		return
+	_capture_provenance_envelope = _load_capture_provenance_envelope()
+	_assert(not _capture_provenance_envelope.is_empty(), "non-validate capture requires sealed canonical provenance")
+	if not _capture_provenance_envelope.is_empty():
+		_validate_capture_provenance(_capture_provenance_envelope)
+	if not _failures.is_empty():
 		_finish()
 		return
 	root.mode = Window.MODE_WINDOWED
@@ -1109,7 +1127,7 @@ func _write_manifest() -> void:
 		unique_hashes[String(entry.get("sha256", ""))] = true
 	_assert(unique_hashes.size() == CAPTURES.size(), "current run has 58 unique capture hashes before manifest write")
 	if not _failures.is_empty(): return
-	var manifest := {"schema_version":MANIFEST_SCHEMA_VERSION,"run_id":"%d-%d" % [OS.get_process_id(),_started_unix],"captured_at_utc":Time.get_datetime_string_from_system(true,true),"source_head":_source_head(),"source_tree_fingerprint":_source_fingerprint(),"capture_contract_sha256":_capture_contract_sha256(),"renderer":_renderer_metadata(),"window_mode":"windowed","capture_environment":{"hud_backdrop":"res://scenes/arena/arena.tscn","camera":"deterministic evidence camera"},"entries":_entries}
+	var manifest := {"schema_version":MANIFEST_SCHEMA_VERSION,"run_id":"%d-%d" % [OS.get_process_id(),_started_unix],"captured_at_utc":Time.get_datetime_string_from_system(true,true),"source_head":_source_head(),"source_tree_fingerprint":_source_fingerprint(),"capture_contract_sha256":_capture_contract_sha256(),"capture_provenance":_capture_provenance_envelope.duplicate(true),"renderer":_renderer_metadata(),"window_mode":"windowed","capture_environment":{"hud_backdrop":"res://scenes/arena/arena.tscn","camera":"deterministic evidence camera"},"entries":_entries}
 	var path := ProjectSettings.globalize_path(SCREENSHOT_ROOT.path_join(MANIFEST_NAME))
 	var file := FileAccess.open(path, FileAccess.WRITE)
 	_assert(file != null, "schema-2 manifest opens for writing")
@@ -1126,6 +1144,7 @@ func _validate_existing_evidence(require_fresh := false) -> void:
 	var value: Variant = JSON.parse_string(FileAccess.get_file_as_string(manifest_path))
 	var manifest := value as Dictionary if value is Dictionary else {}
 	_assert(int(manifest.get("schema_version", 0)) == MANIFEST_SCHEMA_VERSION, "manifest schema version is exactly 2")
+	_validate_capture_provenance(manifest.get("capture_provenance", {}) as Dictionary)
 	_assert(String(manifest.get("source_head", "")) == _source_head(), "manifest source head matches exact candidate Git head")
 	var manifest_fingerprint := manifest.get("source_tree_fingerprint", {}) as Dictionary
 	var current_fingerprint := _source_fingerprint()
@@ -1238,6 +1257,152 @@ func _fixture_kind_for(metadata: Dictionary) -> String:
 	return "production_arena" if String(metadata.surface).begins_with("hud") or String(metadata.surface) == "pause" else "production_scene"
 
 
+func _load_capture_provenance_envelope() -> Dictionary:
+	var provenance_path := ""
+	for argument: String in OS.get_cmdline_user_args():
+		if not argument.begins_with("--capture-provenance="):
+			continue
+		_assert(provenance_path.is_empty(), "canonical capture supplies exactly one provenance envelope")
+		provenance_path = argument.trim_prefix("--capture-provenance=")
+	_assert(not provenance_path.is_empty(), "canonical capture provenance argument is present")
+	if provenance_path.is_empty():
+		return {}
+	_assert(FileAccess.file_exists(provenance_path), "canonical capture provenance file exists")
+	if not FileAccess.file_exists(provenance_path):
+		return {}
+	var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(provenance_path))
+	_assert(parsed is Dictionary, "canonical capture provenance envelope parses")
+	return parsed as Dictionary if parsed is Dictionary else {}
+
+
+func _validate_capture_provenance(envelope: Dictionary) -> void:
+	_assert(not envelope.is_empty(), "capture provenance is present")
+	if envelope.is_empty():
+		return
+	_assert(int(envelope.get("schema_version", 0)) == CAPTURE_PROVENANCE_SCHEMA_VERSION, "capture provenance envelope schema is exactly 1")
+	var payload_base64 := String(envelope.get("payload_base64", ""))
+	var payload_hash := String(envelope.get("payload_sha256", ""))
+	var payload_bytes := Marshalls.base64_to_raw(payload_base64)
+	_assert(not payload_bytes.is_empty(), "capture provenance sealed payload decodes")
+	_assert(payload_hash.length() == 64 and _sha256(payload_bytes) == payload_hash, "capture provenance sealed payload hash matches")
+	if payload_bytes.is_empty() or _sha256(payload_bytes) != payload_hash:
+		return
+	var parsed_payload: Variant = JSON.parse_string(payload_bytes.get_string_from_utf8())
+	_assert(parsed_payload is Dictionary, "capture provenance sealed payload parses")
+	if not parsed_payload is Dictionary:
+		return
+	var payload := parsed_payload as Dictionary
+	_assert(int(payload.get("schema_version", 0)) == CAPTURE_PROVENANCE_SCHEMA_VERSION, "capture provenance payload schema is exactly 1")
+	_assert(String(payload.get("source_head", "")) == _source_head(), "capture provenance source head matches exact candidate")
+
+	var orchestrator := payload.get("orchestrator", {}) as Dictionary
+	_assert(String(orchestrator.get("path", "")) == CAPTURE_ORCHESTRATOR_PATH, "capture provenance names canonical orchestrator")
+	var orchestrator_path := ProjectSettings.globalize_path("res://").path_join(CAPTURE_ORCHESTRATOR_PATH)
+	_assert(String(orchestrator.get("sha256", "")) == _sha256_file(orchestrator_path), "capture provenance orchestrator hash matches current bytes")
+
+	var godot := payload.get("godot", {}) as Dictionary
+	_assert(String(godot.get("version", "")) == EXPECTED_GODOT_VERSION, "capture provenance Godot version is exact 4.7.1 mono")
+	var engine_version := Engine.get_version_info()
+	_assert(int(engine_version.get("major", 0)) == 4 and int(engine_version.get("minor", 0)) == 7 and int(engine_version.get("patch", 0)) == 1, "capture runtime Godot semantic version is exact")
+	_assert(String(engine_version.get("status", "")) == "stable" and String(engine_version.get("hash", "")).begins_with("a13da4feb"), "capture runtime Godot build identity is exact")
+	_assert(String(godot.get("binary_sha256", "")) == _sha256_file(OS.get_executable_path()), "capture provenance Godot binary hash matches running executable")
+
+	var pre_import := payload.get("pre_import", {}) as Dictionary
+	_assert(bool(pre_import.get("verified", false)), "capture provenance proves pre-import cleanliness")
+	_assert((pre_import.get("tracked_changes", []) as Array).is_empty(), "capture provenance pre-import tracked state is empty")
+	_assert((pre_import.get("untracked", []) as Array).is_empty(), "capture provenance pre-import untracked state is empty")
+	_assert((pre_import.get("ignored", []) as Array).is_empty(), "capture provenance pre-import ignored state is empty")
+
+	_validate_inventory_document(payload.get("generated_uids", {}) as Dictionary, _generated_uid_inventory(), "generated UID")
+	var png_import_inventory := _runtime_png_import_inventory()
+	_validate_inventory_document(payload.get("runtime_png_imports", {}) as Dictionary, png_import_inventory, "runtime PNG import")
+	_validate_inventory_document(payload.get("referenced_ctex", {}) as Dictionary, _referenced_ctex_inventory(png_import_inventory), "referenced CTEX")
+
+
+func _validate_inventory_document(expected: Dictionary, actual: Dictionary, label: String) -> void:
+	var expected_records := expected.get("records", []) as Array
+	var actual_records := actual.get("records", []) as Array
+	_assert(int(expected.get("count", -1)) == expected_records.size(), "%s provenance count matches its records" % label)
+	_assert(String(expected.get("aggregate_sha256", "")) == _inventory_aggregate(expected_records), "%s provenance aggregate matches its records" % label)
+	_assert(int(actual.get("count", -1)) == actual_records.size(), "%s live count matches its records" % label)
+	_assert(String(actual.get("aggregate_sha256", "")) == _inventory_aggregate(actual_records), "%s live aggregate matches its records" % label)
+	_assert(expected_records.size() == actual_records.size(), "%s live path count matches sealed provenance" % label)
+	var comparison_count := mini(expected_records.size(), actual_records.size())
+	for index: int in comparison_count:
+		var expected_record := expected_records[index] as Dictionary
+		var actual_record := actual_records[index] as Dictionary
+		_assert(String(expected_record.get("path", "")) == String(actual_record.get("path", "")), "%s live path matches sealed provenance at index %d" % [label, index])
+		_assert(String(expected_record.get("sha256", "")) == String(actual_record.get("sha256", "")), "%s live hash matches sealed provenance: %s" % [label, actual_record.get("path", "index-%d" % index)])
+
+
+func _generated_uid_inventory() -> Dictionary:
+	var repository_root := ProjectSettings.globalize_path("res://")
+	var output: Array = []
+	var code := OS.execute("git", PackedStringArray(["-C", repository_root, "ls-files", "--others", "--exclude-standard", "--"]), output, true)
+	_assert(code == 0, "generated UID inventory query resolves")
+	var paths: Dictionary = {}
+	if code == 0:
+		for relative_path: String in String("".join(output)).split("\n", false):
+			var normalized := relative_path.strip_edges().replace("\\", "/")
+			if normalized.ends_with(".uid"):
+				paths[normalized] = true
+	return _inventory_for_paths(_sorted_string_keys(paths))
+
+
+func _runtime_png_import_inventory() -> Dictionary:
+	var paths: Array[String] = []
+	_collect_files_with_suffix("res://assets", ".png.import", paths)
+	paths.sort()
+	return _inventory_for_paths(paths)
+
+
+func _referenced_ctex_inventory(png_import_inventory: Dictionary) -> Dictionary:
+	var paths: Dictionary = {}
+	for record: Variant in png_import_inventory.get("records", []) as Array:
+		var import_path := String((record as Dictionary).get("path", ""))
+		var content := FileAccess.get_file_as_string("res://" + import_path)
+		for line: String in content.split("\n", false):
+			var marker_index := line.find("res://.godot/imported/")
+			var suffix_index := line.find(".ctex", marker_index)
+			if marker_index >= 0 and suffix_index >= marker_index:
+				var start := marker_index + "res://".length()
+				var relative_path := line.substr(start, suffix_index + ".ctex".length() - start)
+				paths[relative_path] = true
+	return _inventory_for_paths(_sorted_string_keys(paths))
+
+
+func _inventory_for_paths(paths: Array[String]) -> Dictionary:
+	var records: Array[Dictionary] = []
+	for relative_path: String in paths:
+		var absolute_path := ProjectSettings.globalize_path("res://").path_join(relative_path)
+		_assert(FileAccess.file_exists(absolute_path), "provenance inventory file exists: %s" % relative_path)
+		if FileAccess.file_exists(absolute_path):
+			records.append({"path":relative_path,"sha256":_sha256_file(absolute_path)})
+	return {"count":records.size(),"aggregate_sha256":_inventory_aggregate(records),"records":records}
+
+
+func _inventory_aggregate(records: Array) -> String:
+	var canonical := ""
+	for record: Variant in records:
+		var row := record as Dictionary
+		var path := String(row.get("path", ""))
+		var hash := String(row.get("sha256", ""))
+		canonical += "%d:%s%d:%s\n" % [path.length(), path, hash.length(), hash]
+	return _sha256(canonical.to_utf8_buffer())
+
+
+func _collect_files_with_suffix(directory_path: String, suffix: String, result: Array[String]) -> void:
+	var directory := DirAccess.open(directory_path)
+	_assert(directory != null, "provenance inventory directory opens: %s" % directory_path)
+	if directory == null:
+		return
+	for file_name: String in directory.get_files():
+		if file_name.ends_with(suffix):
+			result.append((directory_path.path_join(file_name)).trim_prefix("res://"))
+	for child_name: String in directory.get_directories():
+		_collect_files_with_suffix(directory_path.path_join(child_name), suffix, result)
+
+
 func _validate_only_source_inputs_match_exact_head() -> bool:
 	var repository_root := ProjectSettings.globalize_path("res://")
 	var head_blobs := _head_source_blob_hashes()
@@ -1289,8 +1454,6 @@ func _head_source_blob_hashes() -> Dictionary:
 			continue
 		var fields := line.substr(0, tab_index).split(" ", false)
 		var relative_path := line.substr(tab_index + 1)
-		if relative_path.ends_with(".uid"):
-			continue
 		if fields.size() != 3 or fields[1] != "blob":
 			_assert(false, "exact-HEAD tracked runtime tree entry is a blob: %s" % relative_path)
 			continue
@@ -1441,6 +1604,23 @@ func _image_is_nonblank(image: Image) -> bool:
 func _sha256(bytes: PackedByteArray) -> String:
 	var context := HashingContext.new()
 	if context.start(HashingContext.HASH_SHA256) != OK or context.update(bytes) != OK: return ""
+	return context.finish().hex_encode()
+
+
+func _sha256_file(path: String) -> String:
+	var file := FileAccess.open(path, FileAccess.READ)
+	if file == null:
+		return ""
+	var context := HashingContext.new()
+	if context.start(HashingContext.HASH_SHA256) != OK:
+		file.close()
+		return ""
+	while file.get_position() < file.get_length():
+		var remaining := file.get_length() - file.get_position()
+		if context.update(file.get_buffer(mini(1024 * 1024, remaining))) != OK:
+			file.close()
+			return ""
+	file.close()
 	return context.finish().hex_encode()
 
 
