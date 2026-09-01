@@ -94,6 +94,48 @@ Fresh verification commands and evidence:
 - Characterization: exit 0; `FROST_RECRUITMENT_CHARACTERIZATION_SUMMARY: PASS (0 failures)`; log SHA-256 `eca7e33d5a72cc4f86060acf7115a04c4404216e35cb4d94ef3ff1138e5737c5`.
 - Existing owning runner: exit 0; `LEVEL_UP_COMMIT_FLOW_SUMMARY: PASS (0 failures)`; log SHA-256 `2d11bbee8f2a11831f530810e14cbaeb19be2e0b3122d0934fe26f04c8220ae4`.
 
+## Review disposition and fail-closed TDD correction
+
+Fresh sequential review of candidate `b717a582504c02c6c67765a2735ec9680cf91bc5` first produced a requirements PASS with no findings, then a distinct code-quality FAIL with one Important finding. The quality reviewer verified that the runner recorded the exact-class failure safely at the original line 60, but the original line 62 still indexed `party.members[1]` after logger detachment. A short-party regression could therefore emit an uncaptured script error and skip the fixture cleanup at the end of `_exercise_recruitment()`.
+
+The original candidate remains immutable in Git. Its two blob and worktree identities before the correction were:
+
+| Path | Git blob | SHA-256 |
+|---|---|---|
+| `tests/integration/frost_recruitment_characterization_runner.gd` | `fbb8b7f2d51c7e7e9ce0c5e1eff83b6fef3041d4` | `63cbf9d332e01c2cbb0758d6bd5df40ed2bc217650311fe1ab6ea8aaaa3decda` |
+| `docs/verification/2026-09-01-frost-mage-recruitment-characterization.md` | `44f6cf9118afae13155091c1591a343609ab1139` | `e9fc6d45d1766693d0c98c0734679142ebb013d522c923fabbb4ad5c8e9fe7b6` |
+
+Studio Lead accepted the finding and authorized the smallest same-scope test-only correction. The runner retains a dormant process-environment probe named `PF_FROST_CHARACTERIZATION_FORCE_SHORT_PARTY`. When its value is exactly `1`, only the Frost fixture truncates the party immediately before the exact-class assertion. Normal runs do not enter the probe. The correction resolves member 1 only when the party contains at least two members, retains the exact size-and-class assertion, performs the dependent actor/health assertions whenever that member exists, and reaches the existing single cleanup block on the short-party path.
+
+Every correction run used only `F:\Projects(root)\Game dev\godot\Godot_v4.7.1-stable_mono_win64\Godot_v4.7.1-stable_mono_win64_console.exe`, isolated per-process `APPDATA`, `LOCALAPPDATA`, and `USERPROFILE` roots, and a process-only probe variable. Durable evidence is under `C:\Users\Jacob\.codex\visualizations\2026\09\01\01a05e97-79c8-7c53-ab4c-c21da9425be5\frost-publication-evidence`.
+
+| Gate | Native result and exact markers | Diagnostics and cleanup | stdout / stderr SHA-256 |
+|---|---|---|---|
+| Pre-guard probe RED | exit 1; one `FROST_RECRUITMENT_CHARACTERIZATION_PROBE: SHORT_PARTY`; one `FROST_RECRUITMENT_CHARACTERIZATION_SUMMARY: FAIL (1 failures)`; one intended exact-class failure | one exact `SCRIPT ERROR: Out of bounds get index '1'`; one residual Frost fixture leaf; process exited; parent probe variable absent before and after | `4de87c17761e23f107cc3a3b4942f6398a0ed672a86011c43b21f91db2892414` / `b9c576bcd7c3462a11fc8f679f622cab1494d9bef83894bea3350d77b8d76a87` |
+| Guarded probe GREEN | controlled exit 1; the same one probe marker, one FAIL summary, and one intended exact-class failure | zero script/parser/loader/crash diagnostics; zero residual fixture leaves; process exited; parent probe variable absent before and after | `4de87c17761e23f107cc3a3b4942f6398a0ed672a86011c43b21f91db2892414` / `16e6fec01146b54b6450d285ed8ff9223cbb347d92ca5efbe899832f5619a5b8` |
+| Normal characterization GREEN | exit 0; exactly one `FROST_RECRUITMENT_CHARACTERIZATION_SUMMARY: PASS (0 failures)`; zero probe/failure markers | zero script/parser/loader/crash diagnostics; zero residual fixture leaves; process exited; parent probe variable absent before and after | `a7d5d14d825c33486e8d2edd482eecc2c283b0b69366e71991b0f352d5bbee2f` / `d99bd6b8dfd6d7f02f68943a1852a25494e6adc0e39af8e51df6a344c6901f11` |
+
+The RED refined one part of the review risk without invalidating the finding: Godot returned control to the awaiting caller and printed the terminal FAIL summary, so the observed defect was the uncaptured out-of-bounds script error plus skipped Frost fixture cleanup, not a missing terminal summary.
+
+## Post-correction verification
+
+The owning and affected gates then ran in the Frost worktree with the probe absent:
+
+| Gate | Result | stdout / stderr SHA-256 |
+|---|---|---|
+| Level-up commit flow | exit 0; exactly one `LEVEL_UP_COMMIT_FLOW_SUMMARY: PASS (0 failures)`; zero failure/script/parser/loader/crash diagnostics | `e0fa05666842da5e9f666f9b5f818991d2ef1b3f3de943b9dbafe217a1ac370a` / `d99bd6b8dfd6d7f02f68943a1852a25494e6adc0e39af8e51df6a344c6901f11` |
+| Twelve-suite recruitment/actor/HUD/main-wiring/catalog/class/presentation/recovery gate | exit 0; exactly one `TEST_SUMMARY: PASS (0 failures)`; zero test/script/parser/loader/crash failures | `824b251ac45c166add348f28a9e51b8e6065c0779b57ad5926e2d9dbf0490a4b` / `4b1d76c80cc9276caded8c8e8bf2ee3a58a0328c6762fd270f6895fcd9b5176c` |
+| Git whitespace and scope gate | `git diff --check` exit 0 with zero output; exactly the runner and this document modified; 68 UID sidecars retained with manifest SHA-256 `3aa73e30b352432e214374c85cec6627c2e298b52aecc551d85a7c8884e7ee76` | metadata SHA-256 `26848dc7e3217db9513b6e144fa433678b8d9c8df4743d14c21ded134edb4df1` |
+
+The first complete-suite attempt was rejected as environment-invalid rather than accepted or hidden. The sandbox Windows identity could not read the root certificate store. `test_focused_runner_shutdown_lifecycle.gd` correctly rejected that nested-child `ERROR:` line, producing exit 1, `TEST_SUMMARY: FAIL (2 failures)`, and two `TEST_FAILURE` records. The rejected stdout/stderr hashes are `d6fb5f8425c5d680ca6b912e32c355320fbdddd938b8ff3ed772cfe81ac4c0de` / `5021f9eedebbf0bb3e2497e97c05e511f1b3ae89b6effbf985a53067569c85e5`.
+
+Read-only root-cause isolation then used the same mandated Godot executable under the normal Windows user, without administrator elevation and with isolated `APPDATA`/`LOCALAPPDATA`:
+
+- the exact focused shutdown-lifecycle suite exited 0 in 2.274 seconds with one `TEST_SUMMARY: PASS (0 failures)` and zero error/warning/script/parser/loader/crash lines; stdout/stderr SHA-256 `4883b85b7c2d0b42019ce056282334aae28f0b2e8dc5522afea6476d714296e1` / `7eb70257593da06f682a3ddda54a9d260d4fc514f645237f5ca74b08f8da61a6`;
+- the clean 262-suite rerun exited 0 in 371.730 seconds with exactly one `TEST_SUMMARY: PASS (262 suites)`, zero `TEST_FAILURE`, zero script/parser/loader/crash/root-certificate diagnostics, and no process or probe-environment residue; stdout/stderr SHA-256 `89fd9501f77adffaefd4fce6bb5fc6e5736dc7e964e86a6105235c33c9fd19a0` / `abdcacb691c6d6ccea6fe50cc7545e750da2d1726eab632ba1b337f63040d6b1`.
+
+The complete-suite raw diagnostics contain the suite's assertion-owned negative-path emissions and established shutdown notices; none produced a test failure or an unexpected script/parser/loader/crash diagnostic in the accepted run.
+
 ## Verdict and remaining work
 
 - Exact main does not reproduce a Frost Mage recruitment crash.
