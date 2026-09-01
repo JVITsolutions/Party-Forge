@@ -20,12 +20,47 @@ func run() -> Array[String]:
 	_test_party_scale_and_signal_updates(failures)
 	_test_character_hud_background_opacity(failures)
 	_test_collapse_headers_and_independent_state(failures)
+	_test_programmatic_collapse_hydration_preserves_focus(failures)
 	_test_collapsed_summaries_and_dynamic_refresh(failures)
 	_test_frost_mage_recruitment_refresh(failures)
 	_test_alert_surface_and_complete_tray(failures)
 	_test_fail_closed_status_and_pluralization(failures)
 	_test_pause_safe_inspector_and_ledger_routes(failures)
 	return failures
+
+
+func _test_programmatic_collapse_hydration_preserves_focus(failures: Array[String]) -> void:
+	var fixture := _fixture(3)
+	var hud := _configured_hud(fixture)
+	TestAssertions.truthy(hud != null, "collapse hydration focus fixture configures", failures)
+	if hud == null:
+		_cleanup_fixture(fixture)
+		return
+	var external := Button.new()
+	external.name = "ExternalFocusOwner"
+	external.focus_mode = Control.FOCUS_ALL
+	var descriptor_property_exists := false
+	for property: Dictionary in hud.get_property_list():
+		if StringName(property.get("name", &"")) == &"_collapsed_focus_descriptors":
+			descriptor_property_exists = true
+			break
+	TestAssertions.truthy(descriptor_property_exists, "HUD owns region-local focus descriptors", failures)
+	hud.apply_collapse_preferences(true, true)
+	TestAssertions.equal(external.focus_mode, Control.FOCUS_ALL, "programmatic collapse hydration never mutates external focus eligibility", failures)
+	hud.apply_collapse_preferences(false, false)
+	TestAssertions.equal(external.focus_mode, Control.FOCUS_ALL, "programmatic expansion hydration never mutates external focus eligibility", failures)
+	var member := _member_control(hud, 2)
+	if member != null:
+		TestAssertions.truthy(hud.open_inspector_for_member(2, member), "modal focus fixture opens inspector", failures)
+		var inspector := hud.get_node("CombatMemberInspectPanel") as CombatMemberInspectPanel
+		var close := inspector.get_node("Overlay/Frame/Layout/Close") as Button
+		var modal_focus_mode := close.focus_mode
+		hud.apply_collapse_preferences(true, true)
+		TestAssertions.equal(close.focus_mode, modal_focus_mode, "programmatic collapse hydration never suspends active modal focus eligibility", failures)
+		inspector.close()
+	external.free()
+	_cleanup_hud(hud)
+	_cleanup_fixture(fixture)
 
 
 func _test_character_hud_background_opacity(failures: Array[String]) -> void:

@@ -11,6 +11,8 @@ const ALERT_CARD_SCENE := preload("res://scenes/ui/living_forge/components/forge
 const CRITICAL_STATE_ICON: Texture2D = preload("res://assets/ui/living_forge/icons/tabler-3.46.0/alert-triangle.svg")
 const DOWNED_STATE_ICON: Texture2D = preload("res://assets/ui/living_forge/icons/party-forge/downed.svg")
 const DEAD_STATE_ICON: Texture2D = preload("res://assets/ui/living_forge/icons/party-forge/dead.svg")
+const REGION_PARTY: StringName = &"party"
+const REGION_ALERTS: StringName = &"alerts"
 
 var game_run: Node
 var party_manager: PartyManager
@@ -48,6 +50,10 @@ var _terminal_prior_focus_descriptor: Dictionary = {}
 var _alert_budget_reflow_queued := false
 var _party_collapsed := false
 var _alerts_collapsed := false
+var _collapsed_focus_descriptors := {REGION_PARTY: {}, REGION_ALERTS: {}}
+var _collapsed_focus_modes := {REGION_PARTY: [], REGION_ALERTS: []}
+var _disclosure_tweens: Dictionary = {}
+var _disclosure_presented_states: Dictionary = {}
 
 
 func _ready() -> void:
@@ -99,6 +105,12 @@ func _restore_non_terminal_focus() -> void:
 	var descriptor := _terminal_prior_focus_descriptor.duplicate(true)
 	_terminal_prior_focus = null
 	_terminal_prior_focus_descriptor.clear()
+	for region: StringName in [REGION_PARTY, REGION_ALERTS]:
+		if _region_collapsed(region):
+			_restore_region_focus_modes(region)
+			_suspend_region_focus(region)
+		else:
+			_restore_region_focus_modes(region)
 	var direct_disabled := direct is BaseButton and (direct as BaseButton).disabled
 	if direct != null and is_instance_valid(direct) and direct.is_visible_in_tree() and direct.focus_mode != Control.FOCUS_NONE and not direct_disabled:
 		direct.grab_focus()
@@ -127,6 +139,8 @@ func _ensure_control_connections() -> void:
 	if not tray.closed.is_connected(_on_modal_closed): tray.closed.connect(_on_modal_closed)
 	var inspector := get_node("CombatMemberInspectPanel") as CombatMemberInspectPanel
 	if not inspector.closed.is_connected(_on_modal_closed): inspector.closed.connect(_on_modal_closed)
+	var viewport := _hud_viewport()
+	if not viewport.gui_focus_changed.is_connected(_on_hud_focus_changed): viewport.gui_focus_changed.connect(_on_hud_focus_changed)
 
 
 func configure(run: Node, party: PartyManager, experience: ExperienceSystem, context: PlayerRunContext, saved_settings: PartyForgeSettings) -> void:
@@ -196,9 +210,13 @@ func apply_collapse_preferences(party_value: bool, alerts_value: bool) -> void:
 func _set_party_collapsed(value: bool, user_initiated: bool) -> void:
 	if _party_collapsed == value:
 		return
+	if value:
+		_prepare_region_collapse(REGION_PARTY, user_initiated)
 	_party_collapsed = value
 	for path: NodePath in [^"Margin/CombatStatus/LeaderCard", ^"Margin/CombatStatus/Experience", ^"Margin/CombatStatus/PartyRegion"]:
 		(get_node(path) as Control).visible = not value
+	if not value:
+		_finish_region_expand(REGION_PARTY, user_initiated)
 	_present_region_headers()
 	if user_initiated:
 		collapse_preferences_changed.emit(_party_collapsed, _alerts_collapsed)
@@ -207,6 +225,8 @@ func _set_party_collapsed(value: bool, user_initiated: bool) -> void:
 func _set_alerts_collapsed(value: bool, user_initiated: bool) -> void:
 	if _alerts_collapsed == value:
 		return
+	if value:
+		_prepare_region_collapse(REGION_ALERTS, user_initiated)
 	_alerts_collapsed = value
 	var expanded := get_node("Margin/CombatStatus/AlertRegion/ExpandedAlerts") as Control
 	var overflow := get_node("Margin/CombatStatus/AlertRegion/Overflow") as BaseButton
@@ -217,9 +237,167 @@ func _set_alerts_collapsed(value: bool, user_initiated: bool) -> void:
 		overflow.focus_mode = Control.FOCUS_NONE
 	elif current_projection != null:
 		_apply_alert_budget()
+	if not value:
+		_finish_region_expand(REGION_ALERTS, user_initiated)
 	_present_region_headers()
 	if user_initiated:
 		collapse_preferences_changed.emit(_party_collapsed, _alerts_collapsed)
+
+
+func _region_content_roots(region: StringName) -> Array[Control]:
+	if region == REGION_PARTY:
+		return [
+			get_node("Margin/CombatStatus/LeaderCard") as Control,
+			get_node("Margin/CombatStatus/Experience") as Control,
+			get_node("Margin/CombatStatus/PartyRegion") as Control,
+		]
+	return [
+		get_node("Margin/CombatStatus/AlertRegion/ExpandedAlerts") as Control,
+		get_node("Margin/CombatStatus/AlertRegion/Overflow") as Control,
+	]
+
+
+func _region_header(region: StringName) -> Button:
+	if region == REGION_PARTY:
+		return get_node("Margin/CombatStatus/PartyHeader") as Button
+	return get_node("Margin/CombatStatus/AlertRegion/Header") as Button
+
+
+func _region_collapsed(region: StringName) -> bool:
+	return _party_collapsed if region == REGION_PARTY else _alerts_collapsed
+
+
+func _region_contains_control(region: StringName, control: Control) -> bool:
+	if control == null or not is_instance_valid(control):
+		return false
+	for root: Control in _region_content_roots(region):
+		if control == root or root.is_ancestor_of(control):
+			return true
+	return false
+
+
+func _on_hud_focus_changed(control: Control) -> void:
+	if control == null or not is_instance_valid(control):
+		return
+	for region: StringName in [REGION_PARTY, REGION_ALERTS]:
+		if _region_collapsed(region) or not _region_contains_control(region, control):
+			continue
+		var descriptor := focus_descriptor_for(control)
+		if not descriptor.is_empty():
+			_collapsed_focus_descriptors[region] = descriptor.duplicate(true)
+
+
+func _suspend_region_focus(region: StringName) -> void:
+	var existing := _collapsed_focus_modes.get(region, []) as Array
+	if not existing.is_empty():
+		return
+	var entries: Array = []
+	for root: Control in _region_content_roots(region):
+		var controls: Array[Control] = [root]
+		for node: Node in root.find_children("*", "Control", true, false):
+			if node is Control:
+				controls.append(node as Control)
+		for control: Control in controls:
+			if control.focus_mode != Control.FOCUS_NONE:
+				entries.append({"control": control, "focus_mode": control.focus_mode})
+				control.focus_mode = Control.FOCUS_NONE
+	_collapsed_focus_modes[region] = entries
+
+
+func _restore_region_focus_modes(region: StringName) -> void:
+	for entry: Dictionary in _collapsed_focus_modes.get(region, []) as Array:
+		var control := entry.get("control") as Control
+		if control != null and is_instance_valid(control):
+			control.focus_mode = int(entry.get("focus_mode", Control.FOCUS_NONE))
+	_collapsed_focus_modes[region] = []
+
+
+func _prepare_region_collapse(region: StringName, user_initiated: bool) -> void:
+	if user_initiated and not _child_modal_owns_focus():
+		var owner := _hud_viewport().gui_get_focus_owner() as Control
+		if _region_contains_control(region, owner):
+			_collapsed_focus_descriptors[region] = focus_descriptor_for(owner)
+		var header := _region_header(region)
+		if header.is_inside_tree():
+			header.grab_focus()
+	_suspend_region_focus(region)
+
+
+func _finish_region_expand(region: StringName, user_initiated: bool) -> void:
+	if _terminal_suspended_focus_modes.is_empty():
+		_restore_region_focus_modes(region)
+	if user_initiated:
+		call_deferred("_restore_region_focus", region)
+
+
+func _restore_region_focus(region: StringName) -> void:
+	if _child_modal_owns_focus() or not _terminal_suspended_focus_modes.is_empty():
+		return
+	var descriptor := _collapsed_focus_descriptors.get(region, {}) as Dictionary
+	if not descriptor.is_empty() and restore_focus_descriptor(descriptor, false):
+		return
+	if region == REGION_PARTY and current_projection != null:
+		var leader := current_projection.leader()
+		if leader != null and _focus_member(leader.member_id, &"leader_anchor"):
+			return
+		for member: PartyMemberHudProjection in current_projection.members:
+			if _focus_member(member.member_id, &"roster_member"):
+				return
+	elif region == REGION_ALERTS and current_projection != null:
+		for alert: CombatAlertProjection in current_projection.visible_alerts:
+			if _grab_valid_focus(_alert_action_control(alert.stable_id, &"inspect")):
+				return
+		if _grab_valid_focus(get_node("Margin/CombatStatus/AlertRegion/Overflow") as Control):
+			return
+	_grab_valid_focus(_region_header(region))
+
+
+func _present_disclosure(region: StringName, glyph: Label, collapsed: bool) -> void:
+	var visual := _disclosure_visual(glyph)
+	var target_rotation := 0.0 if collapsed else PI / 2.0
+	var prior := _disclosure_tweens.get(region) as Tween
+	var already_presented := _disclosure_presented_states.has(region)
+	var state_changed := not already_presented or bool(_disclosure_presented_states.get(region, collapsed)) != collapsed
+	_disclosure_presented_states[region] = collapsed
+	if settings != null and settings.reduced_motion:
+		if prior != null and prior.is_valid():
+			prior.kill()
+		visual.rotation = target_rotation
+		_disclosure_tweens.erase(region)
+		return
+	if not state_changed:
+		if prior == null or not prior.is_valid():
+			visual.rotation = target_rotation
+		return
+	if prior != null and prior.is_valid():
+		prior.kill()
+	if not already_presented or settings == null:
+		visual.rotation = target_rotation
+		_disclosure_tweens.erase(region)
+		return
+	var tween := create_tween()
+	_disclosure_tweens[region] = tween
+	tween.tween_property(visual, "rotation", target_rotation, float(LivingForgeTokens.motion_ms(&"focus", false)) / 1000.0)
+
+
+func _disclosure_visual(slot: Label) -> Label:
+	slot.text = ""
+	var existing := slot.get_node_or_null("RotatingGlyph") as Label
+	if existing != null:
+		existing.pivot_offset = existing.size * 0.5
+		return existing
+	var minimum := slot.get_combined_minimum_size().max(Vector2(20.0, 20.0))
+	slot.custom_minimum_size = minimum
+	var visual := Label.new()
+	visual.name = "RotatingGlyph"
+	visual.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	visual.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	visual.text = "▸"
+	visual.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	visual.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	slot.add_child(visual)
+	visual.pivot_offset = minimum * 0.5
+	return visual
 
 
 func _present_region_headers() -> void:
@@ -229,14 +407,14 @@ func _present_region_headers() -> void:
 	var party_health := get_node("Margin/CombatStatus/PartyHeader/Content/LeaderHealth") as ProgressBar
 	var party_icon := get_node("Margin/CombatStatus/PartyHeader/Content/StateIcon") as TextureRect
 	var party_clear := get_node("Margin/CombatStatus/PartyHeader/Content/AllClearGlyph") as Label
-	party_glyph.text = "▸" if _party_collapsed else "▾"
+	_present_disclosure(REGION_PARTY, party_glyph, _party_collapsed)
 	var alerts_header := get_node("Margin/CombatStatus/AlertRegion/Header") as Button
 	var alerts_glyph := get_node("Margin/CombatStatus/AlertRegion/Header/Content/DisclosureGlyph") as Label
 	var alerts_summary := get_node("Margin/CombatStatus/AlertRegion/Header/Content/Summary") as Label
 	var alerts_icon := get_node("Margin/CombatStatus/AlertRegion/Header/Content/StateIcon") as TextureRect
 	var alerts_clear := get_node("Margin/CombatStatus/AlertRegion/Header/Content/AllClearGlyph") as Label
 	var tray_action := get_node("Margin/CombatStatus/AlertRegion/AlertsTrayAction") as Button
-	alerts_glyph.text = "▸" if _alerts_collapsed else "▾"
+	_present_disclosure(REGION_ALERTS, alerts_glyph, _alerts_collapsed)
 	if current_projection == null:
 		party_summary.text = "PARTY · UNAVAILABLE"
 		alerts_summary.text = "ALERTS · UNAVAILABLE"
@@ -274,6 +452,7 @@ func _present_region_headers() -> void:
 	_present_state_cue(party_icon, party_clear, highest_severity, true)
 	_present_state_cue(alerts_icon, alerts_clear, highest_severity, true)
 	_set_tray_action_eligibility(tray_action, current_projection.all_alerts.size())
+	_configure_alert_focus_neighbors()
 
 
 func _region_state_label(collapsed: bool) -> String:
@@ -414,10 +593,10 @@ func focus_descriptor_for(control: Control) -> Dictionary:
 	return {}
 
 
-func restore_focus_descriptor(descriptor: Dictionary) -> bool:
+func restore_focus_descriptor(descriptor: Dictionary, allow_global_fallback := true) -> bool:
 	_deferred_focus_descriptor.clear()
 	if descriptor.is_empty():
-		return _focus_named_safe_control()
+		return _focus_named_safe_control() if allow_global_fallback else false
 	var kind := StringName(descriptor.get("kind", &""))
 	if kind == &"alert_action":
 		var exact := _alert_action_control(StringName(descriptor.get("stable_alert_id", &"")), StringName(descriptor.get("action", &"inspect")))
@@ -432,6 +611,8 @@ func restore_focus_descriptor(descriptor: Dictionary) -> bool:
 	elif kind == &"named":
 		if _grab_valid_focus(_named_focus_control(StringName(descriptor.get("named_control", &"")))):
 			return true
+	if not allow_global_fallback:
+		return false
 	if kind == &"alert_action":
 		if current_projection != null and not current_projection.all_alerts.is_empty():
 			var index := clampi(int(descriptor.get("order_index", 0)), 0, current_projection.all_alerts.size() - 1)
@@ -524,6 +705,8 @@ func _reflow_leader_region(leader_height: float) -> void:
 
 
 func _rebuild_member_controls() -> void:
+	if _party_collapsed:
+		_restore_region_focus_modes(REGION_PARTY)
 	_clear_member_controls()
 	var members := current_projection.members
 	if members.is_empty():
@@ -556,6 +739,8 @@ func _rebuild_member_controls() -> void:
 	else:
 		_rebuild_compact_page(members)
 	_configure_member_focus_neighbors()
+	if _party_collapsed:
+		_suspend_region_focus(REGION_PARTY)
 
 
 func _rebuild_rich_followers(members: Array[PartyMemberHudProjection]) -> void:
@@ -628,6 +813,8 @@ func _present_status() -> void:
 
 
 func _present_alerts() -> void:
+	if _alerts_collapsed:
+		_restore_region_focus_modes(REGION_ALERTS)
 	var stack := get_node("Margin/CombatStatus/AlertRegion/ExpandedAlerts") as VBoxContainer
 	var candidates := current_projection.visible_alerts
 	var wanted: Dictionary = {}
@@ -659,6 +846,8 @@ func _present_alerts() -> void:
 		stack.move_child(card, index)
 	_apply_alert_budget()
 	_queue_alert_budget_reflow()
+	if _alerts_collapsed:
+		_suspend_region_focus(REGION_ALERTS)
 
 
 func _queue_alert_budget_reflow() -> void:
@@ -1016,35 +1205,56 @@ func _configure_member_focus_neighbors() -> void:
 	if controls.is_empty():
 		return
 	var columns := 2
+	var party_header := get_node("Margin/CombatStatus/PartyHeader") as Button
+	var alerts_header := get_node("Margin/CombatStatus/AlertRegion/Header") as Button
+	party_header.focus_neighbor_right = party_header.get_path_to(alerts_header)
+	alerts_header.focus_neighbor_left = alerts_header.get_path_to(party_header)
 	for index: int in controls.size():
 		var control := controls[index]
 		control.focus_neighbor_left = control.get_path_to(controls[index - 1] if index > 0 else controls[-1])
 		control.focus_neighbor_right = control.get_path_to(controls[index + 1] if index + 1 < controls.size() else controls[0])
-		control.focus_neighbor_top = control.get_path_to(controls[index - columns] if index >= columns else controls[0])
+		control.focus_neighbor_top = control.get_path_to(controls[index - columns] if index >= columns else party_header)
 		control.focus_neighbor_bottom = control.get_path_to(controls[index + columns] if index + columns < controls.size() else controls[-1])
+	party_header.focus_neighbor_bottom = party_header.get_path_to(get_node("Margin/CombatStatus/LeaderCard") as Control)
 	if _metrics.mode == CombatHudResponsiveLayout.Mode.COMPACT:
 		var previous := get_node("Margin/CombatStatus/PartyRegion/CompactRoster/PagePrevious") as Button
 		var next := get_node("Margin/CombatStatus/PartyRegion/CompactRoster/PageNext") as Button
+		previous.focus_neighbor_top = previous.get_path_to(party_header)
+		next.focus_neighbor_top = next.get_path_to(party_header)
 		previous.focus_neighbor_bottom = previous.get_path_to(controls[0])
 		next.focus_neighbor_bottom = next.get_path_to(controls[mini(1, controls.size() - 1)])
 
 
 func _configure_alert_focus_neighbors() -> void:
-	var controls: Array[Control] = []
+	var actions: Array[Control] = []
 	for alert: CombatAlertProjection in current_projection.visible_alerts:
-		var control := _alert_controls_by_id.get(alert.stable_id) as Control
-		if control != null and control.visible:
-			controls.append(control)
+		var card := _alert_controls_by_id.get(alert.stable_id) as Control
+		if card == null or not card.visible:
+			continue
+		for action_name: StringName in [&"inspect", &"ledger"]:
+			var action := _alert_action_control(alert.stable_id, action_name)
+			if action != null and action.is_visible_in_tree() and action.focus_mode != Control.FOCUS_NONE and (not action is BaseButton or not (action as BaseButton).disabled):
+				actions.append(action)
 	var overflow := get_node("Margin/CombatStatus/AlertRegion/Overflow") as Button
-	for index: int in controls.size():
-		var card := controls[index]
-		var top: Control = controls[index - 1] if index > 0 else (overflow if overflow.visible else controls[-1])
-		var bottom: Control = controls[index + 1] if index + 1 < controls.size() else (overflow if overflow.visible else controls[0])
-		card.focus_neighbor_top = card.get_path_to(top)
-		card.focus_neighbor_bottom = card.get_path_to(bottom)
-	if overflow.visible and not controls.is_empty():
-		overflow.focus_neighbor_top = overflow.get_path_to(controls[-1])
-		overflow.focus_neighbor_bottom = overflow.get_path_to(controls[0])
+	var tray_action := get_node("Margin/CombatStatus/AlertRegion/AlertsTrayAction") as Button
+	var alerts_header := get_node("Margin/CombatStatus/AlertRegion/Header") as Button
+	var party_header := get_node("Margin/CombatStatus/PartyHeader") as Button
+	alerts_header.focus_neighbor_left = alerts_header.get_path_to(party_header)
+	party_header.focus_neighbor_right = party_header.get_path_to(alerts_header)
+	var terminal: Control = overflow if overflow.visible else (tray_action if tray_action.visible else alerts_header)
+	alerts_header.focus_neighbor_bottom = alerts_header.get_path_to(actions[0] if not actions.is_empty() else terminal)
+	for index: int in actions.size():
+		var action := actions[index]
+		var top: Control = alerts_header if index == 0 else actions[index - 1]
+		var bottom: Control = actions[index + 1] if index + 1 < actions.size() else terminal
+		action.focus_neighbor_top = action.get_path_to(top)
+		action.focus_neighbor_bottom = action.get_path_to(bottom)
+	if overflow.visible:
+		overflow.focus_neighbor_top = overflow.get_path_to(actions[-1] if not actions.is_empty() else alerts_header)
+		overflow.focus_neighbor_bottom = overflow.get_path_to(tray_action if tray_action.visible else alerts_header)
+	if tray_action.visible:
+		tray_action.focus_neighbor_top = tray_action.get_path_to(overflow if overflow.visible else (actions[-1] if not actions.is_empty() else alerts_header))
+		tray_action.focus_neighbor_left = tray_action.get_path_to(party_header)
 
 
 func _required_authority_error() -> String:

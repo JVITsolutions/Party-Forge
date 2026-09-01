@@ -128,6 +128,40 @@ func _exercise_hud(viewport: SubViewport, settings: PartyForgeSettings, label: S
 	_assert_semantic_parity("hud-member", _member_semantic_signature(final_member), label)
 	_assert_semantic_parity("hud-alert", _alert_semantic_signature(visible_alert), label)
 
+	var party_header := hud.get_node("Margin/CombatStatus/PartyHeader") as Button
+	var alerts_header := hud.get_node("Margin/CombatStatus/AlertRegion/Header") as Button
+	var party_roots: Array[Control] = [
+		hud.get_node("Margin/CombatStatus/LeaderCard") as Control,
+		hud.get_node("Margin/CombatStatus/Experience") as Control,
+		hud.get_node("Margin/CombatStatus/PartyRegion") as Control,
+	]
+	final_member.grab_focus()
+	party_header.pressed.emit()
+	await process_frame
+	_assert(party_header.has_focus(), "collapsed Party moves hidden descendant focus to its accessible header at %s" % label)
+	for party_root: Control in party_roots:
+		_assert(_focus_modes_none(party_root), "collapsed Party descendants are unreachable at %s root=%s" % [label, party_root.name])
+		_assert(_accessible_exposure(party_root).is_empty(), "collapsed Party descendants are absent from the accessibility exposure helper at %s root=%s" % [label, party_root.name])
+	party_header.pressed.emit()
+	await process_frame
+	_assert(final_member.has_focus(), "expanded Party restores exact accessible descendant focus at %s" % label)
+
+	var inspect := visible_alert.get_node("Surface/Content/Actions/Inspect") as Button
+	inspect.grab_focus()
+	alerts_header.pressed.emit()
+	await process_frame
+	_assert(alerts_header.has_focus(), "collapsed Alerts moves hidden descendant focus to its accessible header at %s" % label)
+	_assert(_focus_modes_none(hud.get_node("Margin/CombatStatus/AlertRegion/ExpandedAlerts") as Control), "collapsed Alerts descendants are unreachable at %s" % label)
+	_assert(_accessible_exposure(hud.get_node("Margin/CombatStatus/AlertRegion/ExpandedAlerts") as Control).is_empty(), "collapsed Alerts descendants are absent from the accessibility exposure helper at %s" % label)
+	alerts_header.pressed.emit()
+	await process_frame
+	_assert(inspect.has_focus(), "expanded Alerts restores exact accessible action focus at %s" % label)
+	var party_tween := _disclosure_tween_for(hud, &"party")
+	if settings.reduced_motion:
+		_assert(party_tween == null and is_equal_approx((party_header.get_node("Content/DisclosureGlyph/RotatingGlyph") as Label).rotation, PI / 2.0), "reduced-motion HUD disclosure has no active Tween and reaches final glyph state at %s" % label)
+	else:
+		_assert(party_tween != null and party_tween.is_valid(), "normal-motion HUD disclosure uses a glyph-only Tween at %s" % label)
+
 	hud.free()
 	_cleanup_hud_fixture(fixture)
 	await process_frame
@@ -533,6 +567,33 @@ func _assert_hidden_or_disabled_excluded(scope: Node, surface: String, label: St
 			if identity not in violations:
 				violations.append(identity)
 	_assert(violations.is_empty(), "%s hidden/disabled controls use exact FOCUS_NONE and own no focus at %s; controls=%s" % [surface, label, _bounded_names(violations)])
+
+
+func _focus_modes_none(root_control: Control) -> bool:
+	if root_control.focus_mode != Control.FOCUS_NONE:
+		return false
+	for node: Node in root_control.find_children("*", "Control", true, false):
+		if (node as Control).focus_mode != Control.FOCUS_NONE:
+			return false
+	return true
+
+
+func _accessible_exposure(root_control: Control) -> Array[Control]:
+	var exposed: Array[Control] = []
+	var candidates: Array[Control] = [root_control]
+	for node: Node in root_control.find_children("*", "Control", true, false):
+		candidates.append(node as Control)
+	for control: Control in candidates:
+		if control.is_visible_in_tree() and control.focus_mode != Control.FOCUS_NONE and not control.accessibility_name.strip_edges().is_empty():
+			exposed.append(control)
+	return exposed
+
+
+func _disclosure_tween_for(hud: HUD, region: StringName) -> Tween:
+	var value: Variant = hud.get("_disclosure_tweens")
+	if not value is Dictionary:
+		return null
+	return (value as Dictionary).get(region) as Tween
 
 
 func _bounded_names(names: Array[String], limit := 8) -> String:

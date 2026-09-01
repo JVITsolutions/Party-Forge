@@ -61,6 +61,7 @@ func _run() -> void:
 	await _exercise_complete_tray_focus_and_cancel()
 	await _exercise_nested_pause_and_resolved_fallback()
 	await _exercise_child_modal_refresh_ownership()
+	await _exercise_region_focus_traversal_and_motion()
 	_cleanup()
 	_finish()
 
@@ -108,6 +109,153 @@ func _exercise_collapsed_summary_focus_contract() -> void:
 	)
 	_hud.apply_collapse_preferences(false, false)
 	await process_frame
+
+
+func _exercise_region_focus_traversal_and_motion() -> void:
+	var party_header := _hud.get_node("Margin/CombatStatus/PartyHeader") as Button
+	var alerts_header := _hud.get_node("Margin/CombatStatus/AlertRegion/Header") as Button
+	var party_glyph := party_header.get_node("Content/DisclosureGlyph/RotatingGlyph") as Label
+	var leader := _hud.get_node("Margin/CombatStatus/LeaderCard") as Control
+	var party_region := _hud.get_node("Margin/CombatStatus/PartyRegion") as Control
+	var alerts_content := _hud.get_node("Margin/CombatStatus/AlertRegion/ExpandedAlerts") as Control
+	var overflow := _hud.get_node("Margin/CombatStatus/AlertRegion/Overflow") as Button
+	var tray_action := _hud.get_node("Margin/CombatStatus/AlertRegion/AlertsTrayAction") as Button
+	var motion_settings := PartyForgeSettings.new()
+	motion_settings.reduced_motion = true
+	_hud.apply_visual_settings(motion_settings)
+	await process_frame
+	var exact_member := _member_control(2)
+	_assert(exact_member != null, "Party focus fixture exposes member two")
+	if exact_member == null:
+		return
+	exact_member.grab_focus()
+	await process_frame
+	var leader_position := leader.position
+	var roster_position := party_region.position
+	var leader_modulate := leader.modulate
+	var roster_modulate := party_region.modulate
+	await _click_mouse(party_header)
+	_assert(_hud.party_collapsed() and party_header.has_focus(), "mouse collapse moves hidden Party descendant focus to PartyHeader")
+	_assert(not leader.visible and not party_region.visible, "Party content visibility changes atomically on collapse")
+	_assert(leader.position == leader_position and party_region.position == roster_position and leader.modulate == leader_modulate and party_region.modulate == roster_modulate, "Party collapse never animates content position or opacity")
+	_assert(_disclosure_tween_for(&"party") == null and is_equal_approx(party_glyph.rotation, 0.0), "reduced motion reaches collapsed Party glyph rotation in the same frame with no Tween")
+	await _click_mouse(party_header)
+	await process_frame
+	_assert(not _hud.party_collapsed() and exact_member.has_focus(), "mouse expansion restores the exact surviving Party member")
+	_assert(is_equal_approx(party_glyph.rotation, PI / 2.0), "reduced motion reaches expanded Party glyph rotation in the same frame actual=%s" % party_glyph.rotation)
+	await _press_controller_direction(JOY_BUTTON_DPAD_UP)
+	_assert(party_header.has_focus(), "controller D-pad reaches PartyHeader from a Party descendant")
+
+	for member_id: int in range(2, 8):
+		(_fixture.health_by_member[member_id] as HealthComponent).apply_damage(80.0)
+	await process_frame
+	var first_alert := alerts_content.get_child(0) as Control
+	var exact_inspect := first_alert.get_node("Surface/Content/Actions/Inspect") as Button
+	exact_inspect.grab_focus()
+	await process_frame
+	await _press_keyboard(KEY_ENTER, alerts_header)
+	_assert(_hud.alerts_collapsed() and alerts_header.has_focus(), "keyboard Alerts collapse moves hidden Inspect focus to Alerts Header")
+	_assert(not alerts_content.visible and not overflow.visible, "Alerts cards and overflow hide atomically")
+	_assert(_region_focus_modes_are_none(alerts_content) and overflow.focus_mode == Control.FOCUS_NONE, "collapsed Alerts descendants are unreachable with exact FOCUS_NONE")
+	await _press_keyboard(KEY_ENTER)
+	await process_frame
+	_assert(not _hud.alerts_collapsed() and exact_inspect.has_focus(), "keyboard Alerts expansion restores the exact surviving Inspect action")
+
+	exact_inspect.grab_focus()
+	await process_frame
+	await _press_keyboard(KEY_ENTER, alerts_header)
+	var removed_member_id := int(first_alert.get_meta("member_id", 0))
+	exact_inspect = null
+	first_alert = null
+	_replace_with_healthy_actor(removed_member_id)
+	await process_frame
+	await _press_keyboard(KEY_ENTER)
+	await process_frame
+	var fallback := _viewport.gui_get_focus_owner() as Control
+	_assert(not _hud.alerts_collapsed() and fallback != null and (alerts_content.is_ancestor_of(fallback) or fallback == overflow or fallback == alerts_header), "resolved collapsed alert expands to the first surviving action, Overflow, or Header")
+
+	party_header.grab_focus()
+	await process_frame
+	await _press_controller_direction(JOY_BUTTON_DPAD_RIGHT)
+	_assert(alerts_header.has_focus(), "controller D-pad reaches Alerts Header from PartyHeader")
+	await _press_controller_accept()
+	_assert(_hud.alerts_collapsed(), "controller accept toggles Alerts collapse")
+	await _press_controller_direction(JOY_BUTTON_DPAD_DOWN)
+	_assert(tray_action.has_focus(), "controller D-pad reaches AlertsTrayAction from collapsed Alerts Header")
+	await _press_controller_accept()
+	var tray := _hud.get_node("CombatAlertTray") as CombatAlertTray
+	_assert(tray.visible and _focus_within(tray), "controller reaches AlertsTrayAction and accept opens the tray")
+	await _press_controller_cancel()
+	_assert(not tray.visible and tray_action.has_focus(), "controller Cancel closes the tray to AlertsTrayAction")
+
+	var modal_close := tray.get_node("Overlay/Frame/Layout/Close") as Button
+	tray_action.pressed.emit()
+	await process_frame
+	modal_close.grab_focus()
+	await process_frame
+	_hud.apply_collapse_preferences(true, true)
+	(_fixture.health_by_member[8] as HealthComponent).apply_damage(80.0)
+	await process_frame
+	_assert(tray.visible and _focus_within(tray), "collapsed summary refresh and hydration preserve topmost tray modal focus")
+	await _press_controller_cancel()
+	var external := Button.new()
+	external.name = "ExternalFocusOwner"
+	external.focus_mode = Control.FOCUS_ALL
+	_viewport.add_child(external)
+	external.grab_focus()
+	await process_frame
+	_hud.apply_collapse_preferences(false, false)
+	await process_frame
+	_assert(external.has_focus(), "programmatic expansion hydration never steals external viewport focus")
+	_hud.apply_collapse_preferences(true, true)
+	await process_frame
+	_assert(external.has_focus(), "programmatic collapse hydration never steals external viewport focus")
+	external.free()
+
+	exact_member = null
+	motion_settings.reduced_motion = false
+	motion_settings.hud_party_collapsed = true
+	motion_settings.hud_alerts_collapsed = true
+	_hud.apply_visual_settings(motion_settings)
+	await process_frame
+	_assert(_region_focus_modes_are_none(party_region), "collapsed Party dynamic rebuild keeps every live descendant suspended exactly once violations=%s" % [str(_region_focus_mode_violations(party_region))])
+	var content_position := alerts_content.position
+	var content_modulate := alerts_content.modulate
+	alerts_header.pressed.emit()
+	var normal_tween := _disclosure_tween_for(&"alerts")
+	_assert(normal_tween != null and normal_tween.is_valid(), "normal motion creates an active glyph-only disclosure Tween")
+	_assert(alerts_content.position == content_position and alerts_content.modulate == content_modulate, "normal disclosure motion never animates alert content position or opacity")
+	await process_frame
+	alerts_header.pressed.emit()
+	await process_frame
+	_hud.apply_collapse_preferences(false, false)
+	await process_frame
+
+
+func _region_focus_modes_are_none(root_control: Control) -> bool:
+	return _region_focus_mode_violations(root_control).is_empty()
+
+
+func _region_focus_mode_violations(root_control: Control) -> Array[String]:
+	var violations: Array[String] = []
+	if root_control.focus_mode != Control.FOCUS_NONE:
+		violations.append(String(root_control.get_path()))
+	for node: Node in root_control.find_children("*", "Control", true, false):
+		if (node as Control).focus_mode != Control.FOCUS_NONE:
+			violations.append(String(node.get_path()))
+	return violations
+
+
+func _focus_within(scope: Node) -> bool:
+	var owner := _viewport.gui_get_focus_owner()
+	return owner != null and (owner == scope or scope.is_ancestor_of(owner))
+
+
+func _disclosure_tween_for(region: StringName) -> Tween:
+	var value: Variant = _hud.get("_disclosure_tweens")
+	if not value is Dictionary:
+		return null
+	return (value as Dictionary).get(region) as Tween
 
 
 func _exercise_no_focus_theft_and_page_navigation() -> void:
@@ -425,12 +573,27 @@ func _member_control(member_id: int) -> Control:
 	return null
 
 
-func _press_keyboard(keycode: Key) -> void:
+func _press_keyboard(keycode: Key, focus_before: Control = null) -> void:
+	if focus_before != null:
+		focus_before.grab_focus()
+		await process_frame
 	var event := InputEventKey.new()
 	event.keycode = keycode
 	event.pressed = true
 	_viewport.push_input(event)
 	var released := event.duplicate() as InputEventKey
+	released.pressed = false
+	_viewport.push_input(released)
+	await process_frame
+
+
+func _press_controller_direction(button_index: JoyButton) -> void:
+	var event := InputEventJoypadButton.new()
+	event.device = 0
+	event.button_index = button_index
+	event.pressed = true
+	_viewport.push_input(event)
+	var released := event.duplicate() as InputEventJoypadButton
 	released.pressed = false
 	_viewport.push_input(released)
 	await process_frame
