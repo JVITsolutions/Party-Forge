@@ -144,13 +144,23 @@ func show_unused_capacity_warning(unused_slots: int, lost_count: int, return_foc
 	var warning := get_node("UnusedCapacityWarning") as Control
 	warning.visible = true
 	var message := get_node("UnusedCapacityWarning/Frame/Padding/Layout/Message") as Label
-	message.text = "You are leaving %d extraction slots unused. %d items will be lost." % [maxi(unused_slots, 0), maxi(lost_count, 0)]
+	message.text = _unused_capacity_warning_text(unused_slots, lost_count)
 	message.accessibility_name = message.text
 	_disable_focus_descendants(warning)
 	var back := get_node("UnusedCapacityWarning/Frame/Padding/Layout/Actions/Back") as Button
 	var acknowledge := get_node("UnusedCapacityWarning/Frame/Padding/Layout/Actions/Acknowledge") as Button
 	_wire_closed_ring([back, acknowledge])
 	back.grab_focus()
+
+func _unused_capacity_warning_text(unused_slots: int, lost_count: int) -> String:
+	var safe_unused_slots := maxi(unused_slots, 0)
+	var safe_lost_count := maxi(lost_count, 0)
+	return "You are leaving %d extraction %s unused. %d %s will be lost." % [
+		safe_unused_slots,
+		"slot" if safe_unused_slots == 1 else "slots",
+		safe_lost_count,
+		"item" if safe_lost_count == 1 else "items",
+	]
 
 func hide_panel() -> void:
 	_force_close_children(false)

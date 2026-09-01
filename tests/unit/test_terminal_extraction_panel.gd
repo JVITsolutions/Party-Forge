@@ -108,6 +108,16 @@ func _test_unused_capacity_warning_contract(panel: Control, failures: Array[Stri
 	TestAssertions.equal(acknowledge.text, "ACCEPT CONSEQUENCE", "warning primary action keeps exact visible label", failures)
 	TestAssertions.equal(back.accessibility_name, "Back", "warning safe action exposes exact accessibility label", failures)
 	TestAssertions.equal(acknowledge.accessibility_name, "Accept Consequence", "warning primary action exposes exact accessibility label", failures)
+	var grammar_cases: Array[Dictionary] = [
+		{"slots": 1, "lost": 1, "expected": "You are leaving 1 extraction slot unused. 1 item will be lost."},
+		{"slots": 2, "lost": 1, "expected": "You are leaving 2 extraction slots unused. 1 item will be lost."},
+		{"slots": 1, "lost": 2, "expected": "You are leaving 1 extraction slot unused. 2 items will be lost."},
+		{"slots": 2, "lost": 2, "expected": "You are leaving 2 extraction slots unused. 2 items will be lost."},
+	]
+	for grammar_case: Dictionary in grammar_cases:
+		var expected := String(grammar_case["expected"])
+		var actual := String(panel.call(&"_unused_capacity_warning_text", int(grammar_case["slots"]), int(grammar_case["lost"])))
+		TestAssertions.equal(actual, expected, "warning body pluralizes slot and item nouns independently", failures)
 
 
 func _test_primary_action_theme_contracts(panel: Control, failures: Array[String]) -> void:

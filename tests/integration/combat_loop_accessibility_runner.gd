@@ -310,7 +310,7 @@ func _exercise_extraction(viewport: SubViewport, settings: PartyForgeSettings, l
 	var accept := panel.get_node("UnusedCapacityWarning/Frame/Padding/Layout/Actions/Acknowledge") as Button
 	await _wait_until(func() -> bool: return back.is_visible_in_tree() and (back.has_focus() or accept.has_focus()), "extraction consequence default focus at %s" % label)
 	_assert(warning_title.accessibility_name == "ACCEPT UNUSED CAPACITY?", "extraction consequence title exposes exact accessible wording at %s" % label)
-	_assert(warning_message.accessibility_name == "You are leaving 1 extraction slots unused. 22 items will be lost.", "extraction consequence body exposes exact accessible wording at %s" % label)
+	_assert(warning_message.accessibility_name == "You are leaving 1 extraction slot unused. 22 items will be lost.", "extraction consequence body exposes exact accessible wording at %s" % label)
 	_assert_named_action(back, "Back", "extraction consequence safe action", label)
 	_assert_named_action(accept, "Accept Consequence", "extraction consequence primary action", label)
 	_assert(back.has_focus(), "extraction consequence confirmation uses safe Back default at %s" % label)
