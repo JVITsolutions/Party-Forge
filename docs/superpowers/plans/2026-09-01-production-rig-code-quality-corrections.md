@@ -127,15 +127,30 @@ This detects the existing linked worktree; do not create another worktree or ins
 
 - [ ] **Step 2: Capture the dynamic execution baseline**
 
-Immediately before Task A, require the current clean `HEAD` to contain the approved design plus this plan, then capture it:
+Immediately before Task A, require the current clean `HEAD` to be this final plan-correction commit, then prove the complete corrected-plan, original-plan, and approved-design ancestry before capturing it:
 
 ```powershell
+$helperAuditCorrectionCommit = 'f21fed4f234256b1808a86e331fa0a99fee51d53'
+$originalPlanCommit = '16bddc127eda3f536a13e301c812ec90d1ed2c04'
+$executionPlanSubject = 'docs: correct rig quality execution baseline'
 $codeQualityCorrectionBase = git -C $project rev-parse HEAD
 $baseParent = git -C $project rev-parse "$codeQualityCorrectionBase^"
-if ($baseParent -cne $designCommit) { throw 'plan commit is not the direct child of the approved design' }
+if ($baseParent -cne $helperAuditCorrectionCommit) { throw 'execution baseline parent is not the approved helper-audit correction' }
 $basePaths = @(git -C $project diff-tree --no-commit-id --name-only -r $codeQualityCorrectionBase)
-if ($basePaths.Count -ne 1 -or $basePaths[0] -cne $planPath) { throw 'execution base is not the one-plan-file commit' }
-if ((git -C $project log -1 --format=%s $codeQualityCorrectionBase) -cne 'docs: plan production rig code-quality corrections') { throw 'plan commit subject drift' }
+if ($basePaths.Count -ne 1 -or $basePaths[0] -cne $planPath) { throw 'execution baseline is not the final one-plan-file correction' }
+if ((git -C $project log -1 --format=%s $codeQualityCorrectionBase) -cne $executionPlanSubject) { throw 'execution baseline subject drift' }
+
+$helperAuditParent = git -C $project rev-parse "$helperAuditCorrectionCommit^"
+$helperAuditPaths = @(git -C $project diff-tree --no-commit-id --name-only -r $helperAuditCorrectionCommit)
+if ($helperAuditParent -cne $originalPlanCommit) { throw 'helper-audit correction parent drift' }
+if ($helperAuditPaths.Count -ne 1 -or $helperAuditPaths[0] -cne $planPath) { throw 'helper-audit correction path drift' }
+if ((git -C $project log -1 --format=%s $helperAuditCorrectionCommit) -cne 'docs: scope rig helper audit to GDScript') { throw 'helper-audit correction subject drift' }
+
+$originalPlanParent = git -C $project rev-parse "$originalPlanCommit^"
+$originalPlanPaths = @(git -C $project diff-tree --no-commit-id --name-only -r $originalPlanCommit)
+if ($originalPlanParent -cne $designCommit) { throw 'original plan parent is not the approved design' }
+if ($originalPlanPaths.Count -ne 1 -or $originalPlanPaths[0] -cne $planPath) { throw 'original plan path drift' }
+if ((git -C $project log -1 --format=%s $originalPlanCommit) -cne 'docs: plan production rig code-quality corrections') { throw 'original plan subject drift' }
 ```
 
 Create a fresh evidence root and record the baseline without a trailing newline:
@@ -150,6 +165,9 @@ $baselineRecord = [ordered]@{
     design_commit = $designCommit
     design_sha256 = '804c658ac18a598b9770414e01c4c5b1e98594b5da978c0c8dbb1567e0226a02'
     code_quality_correction_base = $codeQualityCorrectionBase
+    execution_plan_subject = $executionPlanSubject
+    helper_audit_correction_commit = $helperAuditCorrectionCommit
+    original_plan_commit = $originalPlanCommit
     plan_path = $planPath
     captured_utc = [DateTime]::UtcNow.ToString('o')
 }
@@ -806,7 +824,7 @@ Only after Steps 1-8 pass, dispatch one fresh read-only reviewer with this exact
 
 ```powershell
 $requirementsBrief = @"
-Review Party Forge production-rig code-quality corrections for requirements compliance only. Do not edit any file. Execution baseline is $codeQualityCorrectionBase. Approved design is docs/superpowers/specs/2026-09-01-production-rig-code-quality-corrections-design.md at commit 71cd334df31986e102fd38c375c07cd965bf762a and SHA-256 804c658ac18a598b9770414e01c4c5b1e98594b5da978c0c8dbb1567e0226a02. Review exactly two implementation commits in order: $constructionCommit and $helperRemovalCommit. Product/test scope is exactly the four paths in the plan. Evidence root is $evidenceRoot. Return PASS or FAIL with exact file:line and evidence-path support for every requirement: build-independent invalid-token guard before caller-state assignment; exact constructor error; inert non-null wrapper; no caller-state exposure; private validity bit set last; validity-aware is_success; unchanged cold-safe RefCounted factories, single result_script load, runtime identity, accessors, defensive copies, and no public setter/state; focused invalid_direct_constructor RED and GREEN with exact environment clearance and no waiver; source/AST dominance audit; unchanged invalid factory functions without rerunning their consumed probes; removal only of _matching_name_indices and its direct helper test block; retained public duplicate/zero/empty/range/agreement/conflict validation and mapped-rig integration; exact two-commit/four-path union; fresh focused/archive/import/full-suite/diagnostic-family evidence; fixture/GLB/protected/sentinel/worktree containment; and mandatory pre-resource stop. Treat missing, contradictory, or inadequately supported evidence as FAIL. Do not review art direction, propose edits, or modify the worktree.
+Review Party Forge production-rig code-quality corrections for requirements compliance only. Do not edit any file. Execution baseline is $codeQualityCorrectionBase, whose exact provenance must be final plan correction -> f21fed4f234256b1808a86e331fa0a99fee51d53 -> 16bddc127eda3f536a13e301c812ec90d1ed2c04 -> approved design 71cd334df31986e102fd38c375c07cd965bf762a. Approved design is docs/superpowers/specs/2026-09-01-production-rig-code-quality-corrections-design.md at SHA-256 804c658ac18a598b9770414e01c4c5b1e98594b5da978c0c8dbb1567e0226a02. Review exactly two implementation commits after the execution baseline, in order: $constructionCommit and $helperRemovalCommit. Product/test scope is exactly the four paths in the plan. Evidence root is $evidenceRoot. Return PASS or FAIL with exact file:line and evidence-path support for every requirement: build-independent invalid-token guard before caller-state assignment; exact constructor error; inert non-null wrapper; no caller-state exposure; private validity bit set last; validity-aware is_success; unchanged cold-safe RefCounted factories, single result_script load, runtime identity, accessors, defensive copies, and no public setter/state; focused invalid_direct_constructor RED and GREEN with exact environment clearance and no waiver; source/AST dominance audit; unchanged invalid factory functions without rerunning their consumed probes; removal only of _matching_name_indices and its direct helper test block; retained public duplicate/zero/empty/range/agreement/conflict validation and mapped-rig integration; exact two-commit/four-path union; fresh focused/archive/import/full-suite/diagnostic-family evidence; fixture/GLB/protected/sentinel/worktree containment; and mandatory pre-resource stop. Treat missing, contradictory, or inadequately supported evidence as FAIL. Do not review art direction, propose edits, or modify the worktree.
 "@
 ```
 
@@ -818,7 +836,7 @@ Only after requirements PASS, dispatch a different fresh read-only reviewer with
 
 ```powershell
 $qualityBrief = @"
-Review Party Forge production-rig code-quality corrections for code quality only. Do not edit any file and do not repeat the requirements checklist. Baseline is $codeQualityCorrectionBase; implementation commits are $constructionCommit then $helperRemovalCommit; evidence root is $evidenceRoot. Inspect exactly the four-path diff. Return PASS or FAIL with exact file:line and evidence support for: runtime guard dominance in debug and release; exact one-error inert behavior; zero assert-only authorization; no partial valid state; construction-validity assignment last; is_success validity gating; unchanged factory single-load allocation and cold-safe RefCounted API; no global-class downcast, nested replacement, test-only production seam, mutable error channel, or writable public state; defensive-copy correctness and Resource-reference semantics; direct-constructor probe quality and isolation; no reuse of consumed invalid_success/invalid_failure probes as post-change proof; zero _matching_name_indices references in `.gd` source/test files while documentation provenance remains legitimate; public bind validator remains the sole production name scan; no mock-behavior test or impossible duplicate Skeleton3D fixture; exact deletion-only helper commit; commit-based rollback; new tracked-archive cold import/full suite and byte-identical diagnostic-family evidence; and containment. Treat any release-only bypass, caller-state exposure, diagnostic waiver, dead duplicate logic, broader scope, or inadequate proof as FAIL. Do not propose edits or modify the worktree.
+Review Party Forge production-rig code-quality corrections for code quality only. Do not edit any file and do not repeat the requirements checklist. Baseline is $codeQualityCorrectionBase with exact final-correction -> f21fed4f234256b1808a86e331fa0a99fee51d53 -> 16bddc127eda3f536a13e301c812ec90d1ed2c04 -> 71cd334df31986e102fd38c375c07cd965bf762a provenance; implementation commits after that baseline are $constructionCommit then $helperRemovalCommit; evidence root is $evidenceRoot. Inspect exactly the four-path diff. Return PASS or FAIL with exact file:line and evidence support for: runtime guard dominance in debug and release; exact one-error inert behavior; zero assert-only authorization; no partial valid state; construction-validity assignment last; is_success validity gating; unchanged factory single-load allocation and cold-safe RefCounted API; no global-class downcast, nested replacement, test-only production seam, mutable error channel, or writable public state; defensive-copy correctness and Resource-reference semantics; direct-constructor probe quality and isolation; no reuse of consumed invalid_success/invalid_failure probes as post-change proof; zero _matching_name_indices references in `.gd` source/test files while documentation provenance remains legitimate; public bind validator remains the sole production name scan; no mock-behavior test or impossible duplicate Skeleton3D fixture; exact deletion-only helper commit; commit-based rollback; new tracked-archive cold import/full suite and byte-identical diagnostic-family evidence; and containment. Treat any release-only bypass, caller-state exposure, diagnostic waiver, dead duplicate logic, broader scope, or inadequate proof as FAIL. Do not propose edits or modify the worktree.
 "@
 ```
 
@@ -843,7 +861,7 @@ Rehash all 77 protected records, both GLBs, fixture, approved design, this plan,
 
 Report:
 
-- worktree, branch, `$codeQualityCorrectionBase`, both implementation hashes/parents/subjects, and exact four-path union;
+- worktree, branch, `$codeQualityCorrectionBase`, its exact helper-audit-correction/original-plan/approved-design provenance chain, both implementation hashes/parents/subjects, and exact four-path union;
 - approved design and plan hashes;
 - trustworthy constructor RED, constructor GREEN, normal focused GREEN, source-structure dominance result, helper characterization before/after, combined focused gate, archive hash, import classification, full-suite marker/exit, diagnostic-family equality, and two reviewer verdicts;
 - confirmation that `invalid_success`, `invalid_failure`, and unrelated consumed gates were not rerun or cited as post-change proof;
