@@ -39,6 +39,11 @@ func _test_runtime_truth_orders_complete_alert_set_without_truncating_members(fa
 	TestAssertions.truthy(projection.members[1].level > 1, "follower runtime level is not synthesized as level one", failures)
 	TestAssertions.equal(projection.experience, experience.experience, "ExperienceSystem remains leader experience authority", failures)
 	TestAssertions.equal(projection.all_alerts.map(func(alert: CombatAlertProjection) -> StringName: return alert.stable_id), [&"downed:002", &"dead:003", &"critical:001", &"critical:004", &"critical:005"], "alerts use severity then party order then stable ID", failures)
+	if not projection.has_method(&"highest_alert_severity"):
+		TestAssertions.truthy(false, "view model projection exposes highest_alert_severity", failures)
+		experience.free()
+		party.free()
+		return
 	TestAssertions.equal(projection.highest_alert_severity(), CombatAlertProjection.Severity.DEAD, "summary derives highest severity from the complete ordered alert set", failures)
 	TestAssertions.equal(projection.highest_severity_alert().stable_id, &"dead:003", "summary selects the highest alert without changing alert order", failures)
 	TestAssertions.truthy(projection.all_alerts.all(func(alert: CombatAlertProjection) -> bool: return alert.severity in [CombatAlertProjection.Severity.CRITICAL, CombatAlertProjection.Severity.DOWNED, CombatAlertProjection.Severity.DEAD]), "only production-backed alert severities are emitted", failures)
