@@ -1,6 +1,6 @@
 # Production Rig Review Correction Amendment
 
-**Status:** Approved corrective direction; written-spec review pending
+**Status:** Approved corrective direction; cold-direct-load amendment pending renewed written-spec review
 
 **Date:** 2026-09-01
 
@@ -21,9 +21,10 @@ The existing approved spec remains authoritative for body-specific source hashes
 1. the responsibility boundary between stateless mapping resolution and later presentation transactions;
 2. the catalog's exact-path loader seam and public structured result;
 3. the missing inspected 52-bone end-to-end proof and public-validator null/empty-target coverage; and
-4. duplicate-name validation at the pure bind-identity boundary required by Godot's `Skeleton3D` naming invariant.
+4. duplicate-name validation at the pure bind-identity boundary required by Godot's `Skeleton3D` naming invariant; and
+5. cold-direct-load-safe result construction and return typing without a generated global class cache.
 
-No implementation is authorized by this document. The existing implementation plan must remain byte-identical during this gate and requires a separately approved corrective plan amendment before any code or test work.
+No implementation is authorized by this document. The existing implementation plan must remain byte-identical during this gate and requires a separately approved plan-only correction before any further code/test modification or behavior-RED retry.
 
 ## Verified Checkpoint and Provenance
 
@@ -44,6 +45,21 @@ Preservation references at authoring:
 - protected manifest SHA-256: `9f7d8b800e27f94d2bc1f7798a88c9bda73c65d0429c3c072bbe00daeafbe2bd`
 - pristine Step 4B evidence: `C:\Users\Jacob\AppData\Local\Temp\pf-body-rig-step4b-20260901T073118Z-5f5655f4`
 - Step 4B result: native exit `0`, exactly one terminal `TEST_SUMMARY: PASS (265 suites)`, zero fail markers, zero unexplained diagnostics
+
+The cold-direct-load amendment was triggered at correction execution base `83585052d08aff57a67694acd861cc27d260eb83`. The diagnostic-free missing-file RED passed exactly, after which the exact plan-provided neutral shell failed cold compilation before behavior evaluation with `Identifier not found: HumanoidRigMappingResolution` at `humanoid_rig_mapping_resolution.gd:25`. The consumed behavior run returned native exit `1`, one terminal `TEST_SUMMARY: FAIL (2 failures)`, zero of the eleven expected behavior failures, and explicit script/loader diagnostics. It is preserved as untrustworthy evidence under:
+
+`C:\Users\Jacob\AppData\Local\Temp\pf-rig-review-corrections-exec-20260901T093049Z-da4339d3`
+
+- `a1-behavior-red-untrustworthy.txt` SHA-256 `d0699420594760ac65ac0f169c2bb40b50ab7e2edab8eb5fa28223e6772678dc`
+- `a1-behavior-red-untrustworthy.json` SHA-256 `a0d6bdbb5a65021e9ebcb69e8c8dd761384e11300fd5b42a95988cab6a63dee3`
+
+This documentation gate preserves the stopped A1 paths byte-for-byte:
+
+- `scripts/presentation/humanoid_rig_mapping_loader.gd` SHA-256 `10b1f6c27e03fc042407b4d824ff941f43a6476d09ccd684e5c7ab4d40207a7d`
+- `scripts/presentation/humanoid_rig_mapping_resolution.gd` SHA-256 `12e5a06b993622cd1d92e60ff06f3045e8a312eba23335a3a24f070501ae4664`
+- `tests/unit/test_humanoid_rig_mapping_catalog.gd` SHA-256 `260f2ff65ccc7c84e5d3d0bf543de650aa5ac49435af3a8b0f06e76e888fc5de`
+
+The failed behavior RED is consumed. No retry is permitted until the specification and implementation plan are separately corrected and approved.
 
 The immutable rig inputs remain:
 
@@ -115,8 +131,10 @@ The production implementation is exact:
 func resolve(
 		body_preset_id: StringName,
 		loader: HumanoidRigMappingLoader = null
-	) -> HumanoidRigMappingResolution
+	) -> RefCounted
 ```
+
+`RefCounted` is the narrow cold-safe result boundary for `resolve()` and every private catalog helper that returns a resolution, including `_single_failure()`. The catalog's explicit `MappingResolution := preload("res://scripts/presentation/humanoid_rig_mapping_resolution.gd")` alias is used only to call static factories and inspect constants. It is never used as a self-dependent return annotation. A catalog result must still implement the exact resolution getter and `is_success()` contract below; `RefCounted` does not permit an arbitrary object type, `Variant` return, downcast through the global class name, or loss of exact runtime script identity.
 
 When `loader` is `null`, the method constructs the production loader locally for that call. The catalog stores no loader, injected mapping dictionary, active mapping, selected preset, result, or last error. Tests inject a deterministic fake loader that records every `exists_exact()` and `load_exact()` path and returns in-memory resources keyed by exact resource URI. The fake may have recording state; the production catalog may not.
 
@@ -137,6 +155,8 @@ Prospective interface:
 class_name HumanoidRigMappingResolution
 extends RefCounted
 
+const SCRIPT_PATH := "res://scripts/presentation/humanoid_rig_mapping_resolution.gd"
+const RigMapping := preload("res://scripts/presentation/humanoid_rig_mapping.gd")
 const _RESOURCE_PATH_BY_BODY_PRESET := {
 	&"masculine": "res://data/presentation/humanoid_rigs/pf_humanoid_v1_mixamo52_masculine.tres",
 	&"feminine": "res://data/presentation/humanoid_rigs/pf_humanoid_v1_mixamo52_feminine.tres",
@@ -145,7 +165,7 @@ static var _factory_token := RefCounted.new()
 
 var _requested_body_preset: StringName
 var _selected_resource_path: String
-var _mapping: HumanoidRigMapping
+var _mapping: RigMapping
 var _failure_categories: Array[StringName]
 var _error_messages: PackedStringArray
 
@@ -153,7 +173,7 @@ func _init(
 		factory_token: RefCounted,
 		requested_body_preset: StringName,
 		selected_resource_path: String,
-		mapping: HumanoidRigMapping,
+		mapping: RigMapping,
 		failure_categories: Array[StringName],
 		error_messages: PackedStringArray
 	) -> void
@@ -161,23 +181,23 @@ func _init(
 static func succeeded(
 		requested_body_preset: StringName,
 		selected_resource_path: String,
-		mapping: HumanoidRigMapping
-	) -> HumanoidRigMappingResolution
+		mapping: RigMapping
+	) -> RefCounted
 static func failed(
 		requested_body_preset: StringName,
 		selected_resource_path: String,
 		failure_categories: Array[StringName],
 		error_messages: PackedStringArray
-	) -> HumanoidRigMappingResolution
+	) -> RefCounted
 func get_requested_body_preset() -> StringName
 func get_selected_resource_path() -> String
-func get_mapping() -> HumanoidRigMapping
+func get_mapping() -> RigMapping
 func get_failure_categories() -> Array[StringName]
 func get_error_messages() -> PackedStringArray
 func is_success() -> bool
 func rejected_by_mapped_rig(
 		validation_errors: PackedStringArray
-	) -> HumanoidRigMappingResolution
+	) -> RefCounted
 ```
 
 The five underscore-prefixed fields are private implementation state. No public property, setter, mutable collection reference, active-result field, or last-error field is exposed. Callers inspect results only through the five `get_*()` methods, `is_success()`, and `rejected_by_mapped_rig()`.
@@ -186,9 +206,25 @@ The five underscore-prefixed fields are private implementation state. No public 
 
 Instances are created atomically through `succeeded()` or `failed()`. Each factory first copies every collection input into a local snapshot, validates the complete snapshot against the applicable invariant in deterministic field order, and allocates the result only after validation succeeds. The result's private path table contains the same two exact values as the catalog; prospective tests require the two tables to be equal so the success factory can enforce preset/path consistency without calling the catalog or creating a circular dependency.
 
-The internal constructor requires the private `_factory_token` plus the complete validated state, assigns all five backing fields during initialization, and does not publish `self` during construction. Both factories invoke it only as `HumanoidRigMappingResolution.new(_factory_token, ...)` after validation. Direct `.new()` is not a supported public construction path; a missing or incorrect factory token triggers `assert(false, "humanoid rig mapping resolution constructor is factory-only")` before state assignment. No public API returns the token.
+The internal constructor requires the private `_factory_token` plus the complete validated state, assigns all five backing fields during initialization, and does not publish `self` during construction. Direct `.new()` is not a supported public construction path; a missing or incorrect factory token triggers `assert(false, "humanoid rig mapping resolution constructor is factory-only")` before state assignment. No public API returns the token.
+
+Both factories load and allocate their exact own script only through this cold-direct-load-safe sequence after state validation:
+
+```gdscript
+var result_script := load(SCRIPT_PATH) as Script
+if result_script == null:
+	push_error("humanoid rig mapping resolution factory contract failed: result script could not be loaded from %s" % SCRIPT_PATH)
+	return null
+return (load(SCRIPT_PATH) as Script).new(_factory_token, requested_body_preset, selected_resource_path, mapping, categories, messages)
+```
+
+The success factory supplies empty `categories` and `messages`; the failure factory supplies its validated defensive snapshots. The first load is the required non-null gate; allocation uses the exact `(load(SCRIPT_PATH) as Script).new(_factory_token, ...)` expression and therefore cannot substitute another script or class. No same-file `HumanoidRigMappingResolution` type annotation, `HumanoidRigMappingResolution.new()` constructor reference, self-preload, global class-cache dependency, editor-import prerequisite, nested replacement class, or `Variant` return is permitted. The neighboring `RigMapping` script remains an explicit preload and `get_mapping()` remains typed as `RigMapping`.
+
+The self script must be non-null before allocation. A missing or unloadable `SCRIPT_PATH` is a programmer-contract failure: the factory emits exactly one deterministic error beginning `humanoid rig mapping resolution factory contract failed:`, returns `null`, and exposes no partially initialized result. This failure is not converted into a catalog runtime category.
 
 Invalid factory input is also a programmer-contract failure, not a normal catalog-resolution failure. The factory emits exactly one `push_error()` beginning `humanoid rig mapping resolution factory contract failed:` followed by ordered validation details, returns `null`, and allocates no result. It never returns a partially initialized or contradictory wrapper and never converts programmer misuse into one of the runtime resolution categories. Prospective tests capture the intentional factory error through the existing test error-capture boundary and require the exact null result and deterministic message without leaving an unexplained engine diagnostic.
+
+Every successful, failed, and mapped-rig-rejected factory output is a non-null `RefCounted` whose `get_script()` is the exact `Script` returned by `load(SCRIPT_PATH)`. Prospective tests assert that concrete identity for all three paths. Consumers hold `RefCounted` and use only the exact getters, `is_success()`, and `rejected_by_mapped_rig()` contract. They must not downcast through the new global class name. The wrapper's narrow return annotation does not freeze the returned mapping Resource or weaken its later mapped-rig validation requirement.
 
 Factory validation order is exact:
 
@@ -361,6 +397,9 @@ The fixture JSON does not change. The approved spec, current implementation plan
 A future TDD plan must define trustworthy RED before each production change. It must preserve the existing fixed-nine-decimal serializer tests and all prior numeric-bind/legacy regressions. New tests must prove:
 
 - the result success/failure invariants and one-to-one category/message arrays;
+- every successful, failed, and mapped-rig-rejected result is a non-null `RefCounted` whose `get_script()` equals `load(RESOLUTION_PATH) as Script`, where the test-local `RESOLUTION_PATH` is exactly `res://scripts/presentation/humanoid_rig_mapping_resolution.gd`;
+- result and catalog consumers use the exact `RefCounted` getter/`is_success()` contract without a global-class downcast;
+- both factories load `SCRIPT_PATH` successfully before allocation and a missing/unloadable own script follows the deterministic programmer-contract no-result boundary;
 - the result's private preset/path table remains byte-for-byte equal to the catalog's public `RESOURCE_PATH_BY_BODY_PRESET` table;
 - invalid success/failure factory inputs produce the exact programmer-contract error and `null` without allocating an observable result;
 - the result exposes only read accessors, collection accessors return defensive duplicates, and caller mutation cannot change stored categories, messages, cardinality, or `is_success()`;
@@ -385,20 +424,21 @@ Catalog identity error order is mapping ID, canonical rig ID, source hash, then 
 
 The approved correction sequence is:
 
-1. Commit this amendment only and stop for written-spec review.
-2. After explicit written-spec approval, write a corrective implementation-plan amendment. That plan must account for this new documentation commit without rewriting the existing nine commits.
-3. Implement result and exact-path catalog tests through trustworthy RED/GREEN.
-4. Implement the pure bind-identity boundary and missing public-validator tests through trustworthy RED/GREEN.
-5. Add both inspected 52-bone end-to-end tests through trustworthy RED/GREEN.
-6. Run focused regression, fresh full-suite, independent requirements review, and independent code-quality review.
-7. Stop at a new pre-resource contract checkpoint.
-8. Only a later separate gate may authorize the two exact `.tres` writes.
-9. Only a later presentation-integration plan may implement prepared-body commit and prior-active-visual preservation.
+1. Commit this cold-direct-load amendment only and stop for renewed written-spec review while preserving the consumed untrustworthy behavior-RED evidence and all three uncommitted A1 paths byte-for-byte.
+2. After explicit written-spec approval, correct the existing corrective implementation plan in a separate plan-only commit. The plan correction must replace every same-file self annotation/constructor reference with the exact `SCRIPT_PATH`/`RefCounted`/dynamic-self-load contract and define a separately authorized behavior-RED retry.
+3. Do not retry the A1 behavior RED until that plan-only correction is committed and separately approved.
+4. Resume result and exact-path catalog tests through trustworthy RED/GREEN only after the renewed retry gate.
+5. Implement the pure bind-identity boundary and missing public-validator tests through trustworthy RED/GREEN.
+6. Add both inspected 52-bone end-to-end tests through trustworthy RED/GREEN.
+7. Run focused regression, fresh full-suite, independent requirements review, and independent code-quality review.
+8. Stop at a new pre-resource contract checkpoint.
+9. Only a later separate gate may authorize the two exact `.tres` writes.
+10. Only a later presentation-integration plan may implement prepared-body commit and prior-active-visual preservation.
 
 Rollback is commit-based and never mutates accepted history:
 
 - reverting the future corrective implementation commit restores the current catalog and validator behavior;
-- reverting this documentation commit removes only this amendment;
+- reverting the cold-direct-load documentation commit removes only this cold-direct-load amendment;
 - the three existing implementation commits and six existing plan-correction commits remain intact;
 - no rollback touches the two immutable GLBs, protected untracked files, Step 4B evidence, Dawn Bulwark worktree, Combat HUD worktree, or absent production resources.
 
@@ -406,10 +446,10 @@ Rollback is commit-based and never mutates accepted history:
 
 This amendment does not authorize:
 
-- code, test, fixture, existing spec, plan, resource, manifest, scene, import, cache, or asset changes;
+- code, test, fixture, any other spec, plan, resource, manifest, scene, import, cache, or asset changes;
 - either body-specific mapping `.tres` or a shared mapping `.tres`;
 - body qualification, heads, armor, Dawn Bulwark production, equipment, Blender, 3D Gen Studio, geometry, rigging, weights, UVs, materials, or textures;
 - presentation transactions, active-body mutation, Godot integration, previews, or runtime asset promotion;
 - suite execution, reviewer dispatch, merge, rebase, push, cleanup, deletion, publication, or Task 5 work.
 
-This gate ends after this one-file design correction is committed separately from `78893389adc084bc376fb82eb1ba267e11e35c79` and its exact scope, API/type consistency, factory invariants, defensive-copy behavior, absence of mutable last-error state, preservation hashes, protected-worktree snapshots, and absent sentinels are verified. The next gate is renewed written-spec review. Writing-plans and implementation do not start automatically.
+This gate ends after this one-file design correction is committed separately from `78893389adc084bc376fb82eb1ba267e11e35c79` and `295ec988877bf2017ef7fb7b77fda13099d1c23a`, and its exact scope, API/type consistency, factory invariants, defensive-copy behavior, absence of mutable last-error state, preservation hashes, protected-worktree snapshots, and absent sentinels are verified. The next gate is renewed written-spec review. Plan correction and implementation do not start automatically.
