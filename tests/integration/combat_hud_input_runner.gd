@@ -69,6 +69,7 @@ func _run() -> void:
 	await _exercise_nested_pause_and_resolved_fallback()
 	await _exercise_child_modal_refresh_ownership()
 	await _exercise_terminal_rebuild_focus_suspension()
+	await _exercise_terminal_presentation_ineligibility()
 	await _exercise_freed_collapsed_rebuild_restoration()
 	await _exercise_region_focus_traversal_and_motion()
 	_cleanup()
@@ -313,11 +314,55 @@ func _exercise_freed_collapsed_rebuild_restoration() -> void:
 	_assert(restored != null and restored.is_in_group(&"combat_hud_member") and int(restored.get_meta("member_id", 0)) == member_id, "collapsed expansion restores the stable descriptor to the rebuilt member")
 
 
+func _exercise_terminal_presentation_ineligibility() -> void:
+	_hud.apply_collapse_preferences(false, false)
+	for health_value: Variant in (_fixture.health_by_member as Dictionary).values():
+		(health_value as HealthComponent).heal(1000.0)
+	for member_id: int in range(2, 13):
+		(_fixture.health_by_member[member_id] as HealthComponent).apply_damage(80.0)
+	await process_frame
+	await process_frame
+	var tray_action := _hud.get_node("Margin/CombatStatus/AlertRegion/AlertsTrayAction") as Button
+	var overflow := _hud.get_node("Margin/CombatStatus/AlertRegion/Overflow") as Button
+	var alerts_content := _hud.get_node("Margin/CombatStatus/AlertRegion/ExpandedAlerts") as Control
+	var first_alert := alerts_content.get_child(0) as Control
+	var first_inspect := first_alert.get_node("Surface/Content/Actions/Inspect") as Button
+	_assert(tray_action.visible and not tray_action.disabled and tray_action.focus_mode == Control.FOCUS_ALL, "terminal inverse fixture starts with an eligible AlertsTrayAction")
+	_assert(overflow.visible and not overflow.disabled and overflow.focus_mode == Control.FOCUS_ALL, "terminal inverse fixture starts with an eligible alert overflow action")
+	_assert(first_inspect.visible and not first_inspect.disabled and first_inspect.focus_mode == Control.FOCUS_ALL, "terminal inverse fixture starts with an eligible alert descendant")
+	tray_action.grab_focus()
+	await process_frame
+	var inspect_weak: WeakRef = weakref(first_inspect)
+	first_inspect = null
+	first_alert = null
+	_hud.show_terminal_extraction(_terminal_projection())
+	await process_frame
+	await process_frame
+	var terminal := _hud.get_node("TerminalExtraction") as TerminalExtractionPanel
+	for health_value: Variant in (_fixture.health_by_member as Dictionary).values():
+		(health_value as HealthComponent).heal(1000.0)
+	await process_frame
+	await process_frame
+	await process_frame
+	_assert(_focus_within(terminal), "Terminal Extraction keeps viewport focus while alerts become ineligible")
+	_assert(not tray_action.visible and tray_action.disabled and tray_action.focus_mode == Control.FOCUS_NONE, "live presentation makes AlertsTrayAction ineligible behind the terminal")
+	_assert(not overflow.visible and overflow.disabled and overflow.focus_mode == Control.FOCUS_NONE, "live presentation makes overflow ineligible behind the terminal")
+	_assert(inspect_weak.get_ref() == null, "resolved alert descendant is freed behind the terminal")
+	_hud.hide_terminal_extraction()
+	await process_frame
+	await process_frame
+	_assert(not tray_action.visible and tray_action.disabled and tray_action.focus_mode == Control.FOCUS_NONE and not tray_action.has_focus(), "terminal close never resurrects stale AlertsTrayAction focus eligibility")
+	_assert(not overflow.visible and overflow.disabled and overflow.focus_mode == Control.FOCUS_NONE and not overflow.has_focus(), "terminal close never resurrects stale overflow focus eligibility")
+	_assert(_region_focus_modes_are_none(alerts_content), "terminal close leaves resolved alert descendants unreachable")
+
+
 func _terminal_focusable_hud_descendants(terminal: Control) -> Array[String]:
 	var escaped: Array[String] = []
 	for node: Node in _hud.find_children("*", "Control", true, false):
 		var control := node as Control
 		if control == terminal or terminal.is_ancestor_of(control):
+			continue
+		if not control.is_visible_in_tree() or (control is BaseButton and (control as BaseButton).disabled):
 			continue
 		if control.focus_mode != Control.FOCUS_NONE:
 			escaped.append(String(control.get_path()))

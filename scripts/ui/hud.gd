@@ -89,9 +89,13 @@ func _suspend_non_terminal_focus(panel: TerminalExtractionPanel) -> void:
 		var control := node as Control
 		if control == null or control == panel or panel.is_ancestor_of(control):
 			continue
-		if control.focus_mode == Control.FOCUS_NONE:
+		if control.focus_mode == Control.FOCUS_NONE or not _terminal_control_is_presentationally_available(control):
 			continue
-		_terminal_suspended_focus_modes.append({"control": control, "focus_mode": control.focus_mode})
+		_terminal_suspended_focus_modes.append({
+			"control": control,
+			"focus_mode": control.focus_mode,
+			"presentation_focus_mode": control.focus_mode,
+		})
 		control.focus_mode = Control.FOCUS_NONE
 
 
@@ -102,7 +106,8 @@ func _restore_non_terminal_focus() -> void:
 			var control := raw_control as Control
 			if control == null:
 				continue
-			control.focus_mode = int(entry.get("focus_mode", Control.FOCUS_NONE))
+			var presentation_mode := int(entry.get("presentation_focus_mode", entry.get("focus_mode", Control.FOCUS_NONE)))
+			control.focus_mode = presentation_mode if _terminal_control_is_focus_eligible(control, presentation_mode) else Control.FOCUS_NONE
 	_terminal_suspended_focus_modes.clear()
 	var direct_value: Variant = _terminal_prior_focus
 	var descriptor := _terminal_prior_focus_descriptor.duplicate(true)
@@ -241,7 +246,7 @@ func _set_alerts_collapsed(value: bool, user_initiated: bool) -> void:
 	if value:
 		overflow.visible = false
 		overflow.disabled = true
-		overflow.focus_mode = Control.FOCUS_NONE
+		_set_presentation_focus_mode(overflow, Control.FOCUS_NONE)
 	elif current_projection != null:
 		_apply_alert_budget()
 	if not value:
@@ -339,17 +344,62 @@ func _reconcile_terminal_focus_suspension() -> void:
 		if seen.has(instance_id):
 			continue
 		seen[instance_id] = true
-		reconciled.append({"control": control, "focus_mode": int(entry.get("focus_mode", Control.FOCUS_NONE))})
+		var original_mode := int(entry.get("focus_mode", Control.FOCUS_NONE))
+		var presentation_mode := int(entry.get("presentation_focus_mode", original_mode))
+		if control.focus_mode != Control.FOCUS_NONE:
+			presentation_mode = control.focus_mode
+		if not _terminal_control_is_presentationally_available(control):
+			presentation_mode = Control.FOCUS_NONE
+		reconciled.append({
+			"control": control,
+			"focus_mode": original_mode,
+			"presentation_focus_mode": presentation_mode,
+		})
 	for node: Node in find_children("*", "Control", true, false):
 		var control := node as Control
-		if control == null or control == panel or panel.is_ancestor_of(control) or control.focus_mode == Control.FOCUS_NONE:
+		if (
+			control == null
+			or control == panel
+			or panel.is_ancestor_of(control)
+			or control.focus_mode == Control.FOCUS_NONE
+			or not _terminal_control_is_presentationally_available(control)
+		):
 			continue
 		var instance_id := control.get_instance_id()
 		if not seen.has(instance_id):
 			seen[instance_id] = true
-			reconciled.append({"control": control, "focus_mode": control.focus_mode})
+			reconciled.append({
+				"control": control,
+				"focus_mode": control.focus_mode,
+				"presentation_focus_mode": control.focus_mode,
+			})
 		control.focus_mode = Control.FOCUS_NONE
 	_terminal_suspended_focus_modes = reconciled
+
+
+func _set_presentation_focus_mode(control: Control, focus_mode: Control.FocusMode) -> void:
+	if control == null or not is_instance_valid(control):
+		return
+	for entry: Dictionary in _terminal_suspended_focus_modes:
+		var raw_control: Variant = entry.get("control")
+		if not is_instance_valid(raw_control):
+			continue
+		var suspended_control := raw_control as Control
+		if suspended_control == control:
+			entry["presentation_focus_mode"] = focus_mode
+			control.focus_mode = Control.FOCUS_NONE
+			return
+	control.focus_mode = focus_mode
+
+
+func _terminal_control_is_presentationally_available(control: Control) -> bool:
+	if control == null or not is_instance_valid(control) or not control.is_inside_tree() or not control.is_visible_in_tree():
+		return false
+	return not (control is BaseButton and (control as BaseButton).disabled)
+
+
+func _terminal_control_is_focus_eligible(control: Control, presentation_mode: int) -> bool:
+	return presentation_mode != Control.FOCUS_NONE and _terminal_control_is_presentationally_available(control)
 
 
 func _prepare_region_collapse(region: StringName, user_initiated: bool) -> void:
@@ -559,7 +609,7 @@ func _set_tray_action_eligibility(action: Button, alert_count: int) -> void:
 	var eligible := alert_count > 0
 	action.visible = eligible
 	action.disabled = not eligible
-	action.focus_mode = Control.FOCUS_ALL if eligible else Control.FOCUS_NONE
+	_set_presentation_focus_mode(action, Control.FOCUS_ALL if eligible else Control.FOCUS_NONE)
 	if not eligible and action.has_focus():
 		action.release_focus()
 	action.text = "VIEW ALL ALERTS (%d)" % alert_count
@@ -774,10 +824,10 @@ func _rebuild_member_controls() -> void:
 		var next := get_node("Margin/CombatStatus/PartyRegion/CompactRoster/PageNext") as Button
 		previous.visible = false
 		previous.disabled = true
-		previous.focus_mode = Control.FOCUS_NONE
+		_set_presentation_focus_mode(previous, Control.FOCUS_NONE)
 		next.visible = false
 		next.disabled = true
-		next.focus_mode = Control.FOCUS_NONE
+		_set_presentation_focus_mode(next, Control.FOCUS_NONE)
 		_rebuild_rich_followers(members)
 	else:
 		_rebuild_compact_page(members)
@@ -922,7 +972,7 @@ func _apply_alert_budget() -> void:
 		stack.visible = false
 		overflow.visible = false
 		overflow.disabled = true
-		overflow.focus_mode = Control.FOCUS_NONE
+		_set_presentation_focus_mode(overflow, Control.FOCUS_NONE)
 		if overflow.has_focus():
 			overflow.release_focus()
 		return
@@ -951,7 +1001,7 @@ func _apply_alert_budget() -> void:
 	var overflow_count := maxi(0, current_projection.all_alerts.size() - rendered_count)
 	overflow.visible = overflow_count > 0
 	overflow.disabled = not overflow.visible
-	overflow.focus_mode = Control.FOCUS_ALL if overflow.visible else Control.FOCUS_NONE
+	_set_presentation_focus_mode(overflow, Control.FOCUS_ALL if overflow.visible else Control.FOCUS_NONE)
 	if not overflow.visible and overflow.has_focus():
 		overflow.release_focus()
 	overflow.text = "+%d %s" % [overflow_count, "alert" if overflow_count == 1 else "alerts"]
@@ -985,7 +1035,7 @@ func _present_page_status() -> void:
 
 func _sync_page_action_focus(action: Button) -> void:
 	var eligible := action.visible and not action.disabled
-	action.focus_mode = Control.FOCUS_ALL if eligible else Control.FOCUS_NONE
+	_set_presentation_focus_mode(action, Control.FOCUS_ALL if eligible else Control.FOCUS_NONE)
 	if not eligible and action.has_focus():
 		action.release_focus()
 
