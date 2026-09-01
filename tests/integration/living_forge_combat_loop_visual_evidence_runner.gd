@@ -1333,12 +1333,27 @@ func _validate_inventory_document(expected: Dictionary, actual: Dictionary, labe
 	_assert(int(actual.get("count", -1)) == actual_records.size(), "%s live count matches its records" % label)
 	_assert(String(actual.get("aggregate_sha256", "")) == _inventory_aggregate(actual_records), "%s live aggregate matches its records" % label)
 	_assert(expected_records.size() == actual_records.size(), "%s live path count matches sealed provenance" % label)
-	var comparison_count := mini(expected_records.size(), actual_records.size())
-	for index: int in comparison_count:
-		var expected_record := expected_records[index] as Dictionary
-		var actual_record := actual_records[index] as Dictionary
-		_assert(String(expected_record.get("path", "")) == String(actual_record.get("path", "")), "%s live path matches sealed provenance at index %d" % [label, index])
-		_assert(String(expected_record.get("sha256", "")) == String(actual_record.get("sha256", "")), "%s live hash matches sealed provenance: %s" % [label, actual_record.get("path", "index-%d" % index)])
+	var expected_by_path: Dictionary = {}
+	for record: Dictionary in expected_records:
+		expected_by_path[String(record.get("path", ""))] = String(record.get("sha256", ""))
+	var actual_by_path: Dictionary = {}
+	for record: Dictionary in actual_records:
+		actual_by_path[String(record.get("path", ""))] = String(record.get("sha256", ""))
+	_assert(expected_by_path.size() == expected_records.size(), "%s sealed paths are unique" % label)
+	_assert(actual_by_path.size() == actual_records.size(), "%s live paths are unique" % label)
+	var path_sets_match := expected_by_path.size() == actual_by_path.size()
+	for path: String in expected_by_path:
+		var present := actual_by_path.has(path)
+		_assert(present, "%s live inventory is missing sealed path: %s" % [label, path])
+		path_sets_match = path_sets_match and present
+	for path: String in actual_by_path:
+		var expected_path := expected_by_path.has(path)
+		_assert(expected_path, "%s live inventory has unexpected path: %s" % [label, path])
+		path_sets_match = path_sets_match and expected_path
+	if not path_sets_match:
+		return
+	for path: String in expected_by_path:
+		_assert(String(expected_by_path[path]) == String(actual_by_path[path]), "%s live hash matches sealed provenance: %s" % [label, path])
 
 
 func _generated_uid_inventory() -> Dictionary:
