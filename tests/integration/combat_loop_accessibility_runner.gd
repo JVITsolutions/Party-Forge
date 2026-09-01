@@ -135,7 +135,9 @@ func _exercise_hud(viewport: SubViewport, settings: PartyForgeSettings, label: S
 		hud.get_node("Margin/CombatStatus/Experience") as Control,
 		hud.get_node("Margin/CombatStatus/PartyRegion") as Control,
 	]
+	var focused_party_member_id := int(final_member.get_meta(&"member_id", 0))
 	final_member.grab_focus()
+	final_member = null
 	party_header.pressed.emit()
 	await process_frame
 	_assert(party_header.has_focus(), "collapsed Party moves hidden descendant focus to its accessible header at %s" % label)
@@ -144,7 +146,9 @@ func _exercise_hud(viewport: SubViewport, settings: PartyForgeSettings, label: S
 		_assert(_accessible_exposure(party_root).is_empty(), "collapsed Party descendants are absent from the accessibility exposure helper at %s root=%s" % [label, party_root.name])
 	party_header.pressed.emit()
 	await process_frame
-	_assert(final_member.has_focus(), "expanded Party restores exact accessible descendant focus at %s" % label)
+	var rebuilt_final_member := _hud_member(hud, focused_party_member_id)
+	var rebuilt_focus_owner := viewport.gui_get_focus_owner() as Control
+	_assert(rebuilt_final_member != null and rebuilt_focus_owner == rebuilt_final_member and rebuilt_focus_owner.is_in_group(&"combat_hud_member") and int(rebuilt_focus_owner.get_meta(&"member_id", 0)) == focused_party_member_id, "expanded Party restores viewport focus to the rebuilt accessible member at %s" % label)
 
 	var inspect := visible_alert.get_node("Surface/Content/Actions/Inspect") as Button
 	inspect.grab_focus()
