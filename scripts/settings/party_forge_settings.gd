@@ -3,8 +3,8 @@ extends RefCounted
 
 enum Mode { PLAYER_SIMULATION, DEVELOPER_MODE }
 
-const SCHEMA_VERSION := 2
-const LEGACY_SCHEMA_VERSION := 1
+const SCHEMA_VERSION := 3
+const SUPPORTED_SCHEMA_VERSIONS: Array[int] = [1, 2, 3]
 const MIN_PARTY_CAPACITY := 1
 const MAX_PARTY_CAPACITY := 24
 const MIN_ENEMY_DENSITY := 0
@@ -36,6 +36,8 @@ var high_contrast := false
 var ui_scale_percent := 100
 var text_scale_percent := 100
 var character_hud_background_opacity_percent := DEFAULT_CHARACTER_HUD_BACKGROUND_OPACITY_PERCENT
+var hud_party_collapsed := false
+var hud_alerts_collapsed := false
 var personal_drop_multiplier_percent := 100
 var force_personal_drops := false
 var personal_drop_source_category_override: StringName = &""
@@ -79,6 +81,8 @@ func copy() -> PartyForgeSettings:
 	result.personal_drop_item_level_override = personal_drop_item_level_override
 	result.show_ground_chest_diagnostics = show_ground_chest_diagnostics
 	result.use_city_access_snapshot = use_city_access_snapshot
+	result.hud_party_collapsed = hud_party_collapsed
+	result.hud_alerts_collapsed = hud_alerts_collapsed
 	return result
 
 

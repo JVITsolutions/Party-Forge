@@ -19,7 +19,7 @@ func load_settings(path: String = DEFAULT_PATH) -> PartyForgeSettings:
 		return result
 	var version_value: Variant = config.get_value(SECTION, "schema_version", PartyForgeSettings.SCHEMA_VERSION)
 	var loaded_version := int(version_value) if typeof(version_value) == TYPE_INT else -1
-	if loaded_version not in [PartyForgeSettings.LEGACY_SCHEMA_VERSION, PartyForgeSettings.SCHEMA_VERSION]:
+	if loaded_version not in PartyForgeSettings.SUPPORTED_SCHEMA_VERSIONS:
 		push_error("PARTY_FORGE_SETTINGS_VERSION_ERROR path=%s version=%d supported=%d" % [path, loaded_version, PartyForgeSettings.SCHEMA_VERSION])
 		return result
 	result.schema_version = PartyForgeSettings.SCHEMA_VERSION
@@ -48,6 +48,11 @@ func load_settings(path: String = DEFAULT_PATH) -> PartyForgeSettings:
 	if loaded_version >= 2:
 		var hud_opacity_value: Variant = config.get_value(SECTION, "character_hud_background_opacity_percent", PartyForgeSettings.DEFAULT_CHARACTER_HUD_BACKGROUND_OPACITY_PERCENT)
 		result.character_hud_background_opacity_percent = int(hud_opacity_value) if typeof(hud_opacity_value) == TYPE_INT else PartyForgeSettings.DEFAULT_CHARACTER_HUD_BACKGROUND_OPACITY_PERCENT
+	if loaded_version >= 3:
+		var party_collapsed_value: Variant = config.get_value(SECTION, "hud_party_collapsed", false)
+		var alerts_collapsed_value: Variant = config.get_value(SECTION, "hud_alerts_collapsed", false)
+		result.hud_party_collapsed = bool(party_collapsed_value) if typeof(party_collapsed_value) == TYPE_BOOL else false
+		result.hud_alerts_collapsed = bool(alerts_collapsed_value) if typeof(alerts_collapsed_value) == TYPE_BOOL else false
 	var drop_multiplier_value: Variant = config.get_value(SECTION, "personal_drop_multiplier_percent", 100)
 	result.personal_drop_multiplier_percent = int(drop_multiplier_value) if typeof(drop_multiplier_value) == TYPE_INT else 100
 	var force_drops_value: Variant = config.get_value(SECTION, "force_personal_drops", false)
@@ -82,6 +87,8 @@ func save_settings(settings: PartyForgeSettings, path: String = DEFAULT_PATH) ->
 	config.set_value(SECTION, "ui_scale_percent", normalized.ui_scale_percent)
 	config.set_value(SECTION, "text_scale_percent", normalized.text_scale_percent)
 	config.set_value(SECTION, "character_hud_background_opacity_percent", normalized.character_hud_background_opacity_percent)
+	config.set_value(SECTION, "hud_party_collapsed", normalized.hud_party_collapsed)
+	config.set_value(SECTION, "hud_alerts_collapsed", normalized.hud_alerts_collapsed)
 	config.set_value(SECTION, "personal_drop_multiplier_percent", normalized.personal_drop_multiplier_percent)
 	config.set_value(SECTION, "force_personal_drops", normalized.force_personal_drops)
 	config.set_value(SECTION, "personal_drop_source_category_override", normalized.personal_drop_source_category_override)
