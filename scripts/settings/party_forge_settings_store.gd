@@ -17,7 +17,8 @@ func load_settings(path: String = DEFAULT_PATH) -> PartyForgeSettings:
 	if load_error != OK:
 		push_error("PARTY_FORGE_SETTINGS_LOAD_ERROR path=%s code=%d" % [path, load_error])
 		return result
-	var version_value: Variant = config.get_value(SECTION, "schema_version", PartyForgeSettings.SCHEMA_VERSION)
+	var has_explicit_schema_version := config.has_section_key(SECTION, "schema_version")
+	var version_value: Variant = config.get_value(SECTION, "schema_version", 1)
 	var loaded_version := int(version_value) if typeof(version_value) == TYPE_INT else -1
 	if loaded_version not in PartyForgeSettings.SUPPORTED_SCHEMA_VERSIONS:
 		push_error("PARTY_FORGE_SETTINGS_VERSION_ERROR path=%s version=%d supported=%d" % [path, loaded_version, PartyForgeSettings.SCHEMA_VERSION])
@@ -48,7 +49,7 @@ func load_settings(path: String = DEFAULT_PATH) -> PartyForgeSettings:
 	if loaded_version >= 2:
 		var hud_opacity_value: Variant = config.get_value(SECTION, "character_hud_background_opacity_percent", PartyForgeSettings.DEFAULT_CHARACTER_HUD_BACKGROUND_OPACITY_PERCENT)
 		result.character_hud_background_opacity_percent = int(hud_opacity_value) if typeof(hud_opacity_value) == TYPE_INT else PartyForgeSettings.DEFAULT_CHARACTER_HUD_BACKGROUND_OPACITY_PERCENT
-	if loaded_version >= 3:
+	if has_explicit_schema_version and loaded_version == 3:
 		var party_collapsed_value: Variant = config.get_value(SECTION, "hud_party_collapsed", false)
 		var alerts_collapsed_value: Variant = config.get_value(SECTION, "hud_alerts_collapsed", false)
 		result.hud_party_collapsed = bool(party_collapsed_value) if typeof(party_collapsed_value) == TYPE_BOOL else false

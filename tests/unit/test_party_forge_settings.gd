@@ -108,6 +108,18 @@ func _test_hud_collapse_preferences(failures: Array[String]) -> void:
 	TestAssertions.equal([loaded.hud_party_collapsed, loaded.hud_alerts_collapsed], [true, false], "schema-three missing alerts collapse preference defaults expanded", failures)
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
 
+	path = "user://party_forge_settings_hud_collapse_unversioned.cfg"
+	var unversioned := ConfigFile.new()
+	unversioned.set_value("settings", "mode", PartyForgeSettings.Mode.DEVELOPER_MODE)
+	unversioned.set_value("settings", "party_capacity_override", 9)
+	unversioned.set_value("settings", "hud_party_collapsed", true)
+	unversioned.set_value("settings", "hud_alerts_collapsed", true)
+	unversioned.save(path)
+	loaded = store.load_settings(path)
+	TestAssertions.equal([loaded.hud_party_collapsed, loaded.hud_alerts_collapsed], [false, false], "unversioned files cannot opt into schema-three HUD collapse preferences", failures)
+	TestAssertions.equal([loaded.mode, loaded.party_capacity_override], [PartyForgeSettings.Mode.DEVELOPER_MODE, 9], "unversioned files retain legitimate legacy settings migration", failures)
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+
 	for version: int in [1, 2]:
 		path = "user://party_forge_settings_hud_collapse_v%d.cfg" % version
 		var legacy := ConfigFile.new()

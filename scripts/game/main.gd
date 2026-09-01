@@ -1129,11 +1129,12 @@ func _on_hud_collapse_preferences_changed(party_collapsed: bool, alerts_collapse
 	var candidate := saved_settings.copy() if saved_settings != null else PartyForgeSettings.new()
 	candidate.hud_party_collapsed = party_collapsed
 	candidate.hud_alerts_collapsed = alerts_collapsed
+	candidate.normalize()
 	var save_error := settings_store.save_settings(candidate, settings_path)
 	if not save_error.is_empty():
 		push_error(save_error)
 		return
-	saved_settings = settings_store.load_settings(settings_path).copy()
+	saved_settings = candidate.copy()
 
 func _open_settings() -> void:
 	var return_focus := _run_setup_lobby().action_focus(&"settings")
