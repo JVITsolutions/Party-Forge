@@ -59,6 +59,7 @@ func run() -> Array[String]:
 	_assert_numeric_bind_resolution(failures)
 	_assert_mapped_bone_and_hierarchy_failures(failures)
 	_assert_rest_and_skin_failures(failures)
+	_assert_source_rest_identity(failures)
 	return failures
 
 func _assert_mapping_resource_contract(failures: Array[String]) -> void:
@@ -88,6 +89,7 @@ func _assert_mapping_resource_contract(failures: Array[String]) -> void:
 func _assert_superset_validation(failures: Array[String]) -> void:
 	var mapping := _mapping()
 	var skeleton := _superset_skeleton(mapping)
+	_bind_mapping_to_skeleton(mapping, skeleton)
 	var skin := _skin_for(skeleton)
 	TestAssertions.equal(skeleton.get_bone_count(), 22, "synthetic production fixture has nineteen mapped and three presentation bones", failures)
 	TestAssertions.equal(
@@ -108,6 +110,7 @@ func _assert_superset_validation(failures: Array[String]) -> void:
 func _assert_numeric_bind_resolution(failures: Array[String]) -> void:
 	var mapping := _mapping()
 	var skeleton := _superset_skeleton(mapping)
+	_bind_mapping_to_skeleton(mapping, skeleton)
 	var duplicate_name_snapshot: Array[StringName] = [&"PresentationRoot", &"DuplicateName", &"DuplicateName"]
 	var has_name_list_helper := _contract.has_method(&"_matching_name_indices")
 	TestAssertions.truthy(has_name_list_helper, "mapped-production duplicate-name resolver exists", failures)
@@ -206,6 +209,7 @@ func _assert_mapped_bone_and_hierarchy_failures(failures: Array[String]) -> void
 	roles[&"head"] = &"SyntheticMissingHead"
 	missing_bone_mapping.set(&"role_to_bone", roles)
 	var skeleton := _superset_skeleton(_mapping())
+	_bind_mapping_to_skeleton(missing_bone_mapping, skeleton)
 	var skin := _skin_for(skeleton)
 	TestAssertions.truthy(
 		_contains(_contract.call(&"validate_mapped_rig", _definition, missing_bone_mapping, skeleton, skin), "must exist exactly once"),
@@ -219,6 +223,7 @@ func _assert_mapped_bone_and_hierarchy_failures(failures: Array[String]) -> void
 	var child_index := skeleton.find_bone(_bone_for(mapping, &"upper_arm_left"))
 	var wrong_parent_index := skeleton.find_bone(_bone_for(mapping, &"upper_leg_left"))
 	skeleton.set_bone_parent(child_index, wrong_parent_index)
+	_bind_mapping_to_skeleton(mapping, skeleton)
 	skin = _skin_for(skeleton)
 	TestAssertions.truthy(
 		_contains(_contract.call(&"validate_mapped_rig", _definition, mapping, skeleton, skin), "does not descend from parent role chest"),
@@ -234,6 +239,7 @@ func _assert_rest_and_skin_failures(failures: Array[String]) -> void:
 	var invalid_rest := skeleton.get_bone_rest(head_index)
 	invalid_rest.origin.x = INF
 	skeleton.set_bone_rest(head_index, invalid_rest)
+	_bind_mapping_to_skeleton(mapping, skeleton)
 	var skin := _skin_for(skeleton)
 	TestAssertions.truthy(
 		_contains(_contract.call(&"validate_mapped_rig", _definition, mapping, skeleton, skin), "rest must be finite"),
@@ -243,6 +249,7 @@ func _assert_rest_and_skin_failures(failures: Array[String]) -> void:
 	skeleton.free()
 
 	skeleton = _superset_skeleton(mapping)
+	_bind_mapping_to_skeleton(mapping, skeleton)
 	skin = _skin_for(skeleton, _bone_for(mapping, &"hand_right"))
 	TestAssertions.truthy(
 		_contains(_contract.call(&"validate_mapped_rig", _definition, mapping, skeleton, skin), "missing bone %s" % _bone_for(mapping, &"hand_right")),
@@ -272,6 +279,7 @@ func _assert_rest_and_skin_failures(failures: Array[String]) -> void:
 		singular_rest_index,
 		Transform3D(Basis(Vector3.ZERO, Vector3.ZERO, Vector3.ZERO), Vector3.ZERO)
 	)
+	_bind_mapping_to_skeleton(mapping, skeleton)
 	TestAssertions.truthy(
 		_contains(_contract.call(&"validate_mapped_rig", _definition, mapping, skeleton, skin), "mapped humanoid bone %s rest must be invertible" % _bone_for(mapping, &"head")),
 		"singular mapped rest rejects",
@@ -280,10 +288,30 @@ func _assert_rest_and_skin_failures(failures: Array[String]) -> void:
 	skeleton.free()
 
 	skeleton = _superset_skeleton(mapping)
+	_bind_mapping_to_skeleton(mapping, skeleton)
 	skin = _skin_for(skeleton, _bone_for(mapping, &"hand_right"), false)
 	TestAssertions.truthy(
 		_contains(_contract.call(&"validate_mapped_rig", _definition, mapping, skeleton, skin), "mapped humanoid Skin is missing bone %s" % _bone_for(mapping, &"hand_right")),
 		"complete skeleton coverage includes every semantic mapped bone",
+		failures
+	)
+	skeleton.free()
+
+func _assert_source_rest_identity(failures: Array[String]) -> void:
+	var mapping := _mapping()
+	var skeleton := _superset_skeleton(mapping)
+	_bind_mapping_to_skeleton(mapping, skeleton)
+	var skin := _skin_for(skeleton, &"", false)
+	TestAssertions.equal(
+		_contract.call(&"validate_mapped_rig", _definition, mapping, skeleton, skin),
+		PackedStringArray(),
+		"matching mapped source rest signature validates",
+		failures
+	)
+	mapping.set(&"source_rest_signature", SHA_A)
+	TestAssertions.truthy(
+		_contains(_contract.call(&"validate_mapped_rig", _definition, mapping, skeleton, skin), "source rest signature mismatch"),
+		"wrong body-specific rest identity rejects",
 		failures
 	)
 	skeleton.free()
@@ -297,8 +325,11 @@ func _mapping() -> Resource:
 		role_to_bone[role] = StringName("SyntheticBone__%s" % role)
 	mapping.set(&"role_to_bone", role_to_bone)
 	mapping.set(&"source_skeleton_sha256", SHA_A)
-	mapping.set(&"source_rest_signature", "synthetic-rest-signature-v1")
+	mapping.set(&"source_rest_signature", SHA_A)
 	return mapping
+
+func _bind_mapping_to_skeleton(mapping: Resource, skeleton: Skeleton3D) -> void:
+	mapping.set(&"source_rest_signature", String(_contract.call(&"production_rest_signature", skeleton)))
 
 func _superset_skeleton(mapping: Resource) -> Skeleton3D:
 	var skeleton := Skeleton3D.new()

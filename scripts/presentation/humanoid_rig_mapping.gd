@@ -27,8 +27,8 @@ func validate(definition: HumanoidRigDefinition) -> PackedStringArray:
 		seen_bones[bone_name] = true
 	if not _is_sha256(source_skeleton_sha256):
 		errors.append("humanoid rig mapping source skeleton hash is invalid")
-	if source_rest_signature.is_empty():
-		errors.append("humanoid rig mapping source rest signature is empty")
+	if not _is_sha256(source_rest_signature):
+		errors.append("humanoid rig mapping source rest signature is invalid")
 	return errors
 
 func _is_sha256(value: String) -> bool:

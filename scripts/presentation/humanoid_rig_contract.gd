@@ -170,6 +170,12 @@ static func validate_mapped_rig(definition: RigDefinition, mapping: RigMapping, 
 	if skin == null:
 		errors.append("mapped humanoid Skin is missing")
 		return errors
+	var actual_rest_signature := production_rest_signature(skeleton)
+	if mapping.source_rest_signature != actual_rest_signature:
+		errors.append(
+			"mapped humanoid source rest signature mismatch; expected %s, got %s"
+			% [mapping.source_rest_signature, actual_rest_signature]
+		)
 	var bind_index_by_bone_index := _resolve_mapped_skin_binds(skeleton, skin, errors)
 	for role: StringName in REQUIRED_ROLES:
 		if not mapping.role_to_bone.has(role):
@@ -250,6 +256,40 @@ static func _bone_is_ancestor(skeleton: Skeleton3D, ancestor_index: int, child_i
 			return true
 		cursor = skeleton.get_bone_parent(cursor)
 	return false
+
+static func production_rest_signature(skeleton: Skeleton3D) -> String:
+	if skeleton == null:
+		return ""
+	return serialize_production_rest(skeleton).sha256_text()
+
+static func serialize_production_rest(skeleton: Skeleton3D) -> String:
+	if skeleton == null:
+		return ""
+	var lines := PackedStringArray()
+	for bone_index: int in skeleton.get_bone_count():
+		lines.append("%d|%s|%d|%s" % [
+			bone_index,
+			skeleton.get_bone_name(bone_index),
+			skeleton.get_bone_parent(bone_index),
+			_serialize_production_transform(skeleton.get_bone_rest(bone_index)),
+		])
+	return "\n".join(lines)
+
+static func _serialize_production_transform(transform: Transform3D) -> String:
+	return ",".join([
+		"%.9f" % transform.basis.x.x,
+		"%.9f" % transform.basis.x.y,
+		"%.9f" % transform.basis.x.z,
+		"%.9f" % transform.basis.y.x,
+		"%.9f" % transform.basis.y.y,
+		"%.9f" % transform.basis.y.z,
+		"%.9f" % transform.basis.z.x,
+		"%.9f" % transform.basis.z.y,
+		"%.9f" % transform.basis.z.z,
+		"%.9f" % transform.origin.x,
+		"%.9f" % transform.origin.y,
+		"%.9f" % transform.origin.z,
+	])
 
 func validate_skin(definition: RigDefinition, skin: Skin) -> PackedStringArray:
 	var errors := PackedStringArray()
