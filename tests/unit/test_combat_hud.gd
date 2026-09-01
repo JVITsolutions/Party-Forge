@@ -69,6 +69,14 @@ func _test_collapse_headers_and_independent_state(failures: Array[String]) -> vo
 		var alerts_header := hud.get_node_or_null("Margin/CombatStatus/AlertRegion/Header") as Button
 		var tray_action := hud.get_node_or_null("Margin/CombatStatus/AlertRegion/AlertsTrayAction") as Button
 		TestAssertions.truthy(party_header != null and alerts_header != null and tray_action != null, "HUD exposes both headers and persistent tray action", failures)
+		if tray_action != null:
+			TestAssertions.truthy(not tray_action.visible, "Task 3 leaves the tray action hidden for Task 5", failures)
+			TestAssertions.equal(tray_action.pressed.get_connections().size(), 0, "Task 3 leaves tray-action routing to Task 5", failures)
+			tray_action.visible = true
+			tray_action.disabled = false
+			var tray_rect := tray_action.get_global_rect()
+			TestAssertions.truthy(tray_action.focus_mode == Control.FOCUS_ALL, "eligible tray action is keyboard focusable", failures)
+			TestAssertions.truthy(tray_rect.size.x >= 48.0 and tray_rect.size.y >= 48.0, "eligible tray action has a concrete at-least-48px rect", failures)
 		TestAssertions.truthy(party_header != null and party_header.focus_mode == Control.FOCUS_ALL and alerts_header != null and alerts_header.focus_mode == Control.FOCUS_ALL, "both headers are focusable", failures)
 		TestAssertions.truthy(hud.has_signal(&"collapse_preferences_changed"), "HUD exposes collapse preference intent signal", failures)
 		var collapse_api := hud.has_method(&"apply_collapse_preferences") and hud.has_method(&"party_collapsed") and hud.has_method(&"alerts_collapsed")
