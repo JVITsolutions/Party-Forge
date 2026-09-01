@@ -69,7 +69,7 @@ func _run() -> void:
 	_finish()
 
 
-func _assert_hud_collapse_geometry(hud: HUD, viewport_rect: Rect2, party_count: int, alert_count: int, party_collapsed: bool, alerts_collapsed: bool, text_scale: int, context_label: String) -> void:
+func _assert_hud_collapse_geometry(hud: HUD, viewport_rect: Rect2, party_count: int, alert_count: int, party_collapsed: bool, alerts_collapsed: bool, ui_scale: int, text_scale: int, context_label: String) -> void:
 	var party_header := hud.get_node("Margin/CombatStatus/PartyHeader") as Button
 	var party_summary := hud.get_node("Margin/CombatStatus/PartyHeader/Content/Summary") as Label
 	var party_health_cluster := hud.get_node_or_null("Margin/CombatStatus/PartyHeader/Content/LeaderHealthCluster") as Control
@@ -144,6 +144,16 @@ func _assert_hud_collapse_geometry(hud: HUD, viewport_rect: Rect2, party_count: 
 		alert_rects.append(control.get_global_rect())
 	if tray_action.visible:
 		_assert(tray_action.get_global_rect().size.x >= 48.0 and tray_action.get_global_rect().size.y >= 48.0, "%s tray action keeps a real 48x48 target" % context_label)
+		var header_rect := alerts_header.get_global_rect()
+		var tray_rect := tray_action.get_global_rect()
+		var stack_rect := alerts_stack.get_global_rect()
+		var compact_gap := float(LivingForgeTokens.spacing(&"compact"))
+		if viewport_rect.size == Vector2(1920, 1080) and ui_scale == 100 and text_scale == 100:
+			_assert(absf(header_rect.position.y - tray_rect.position.y) <= 1.0, "%s fitting Alerts header and tray share one row header=%s tray=%s" % [context_label, header_rect, tray_rect])
+			_assert(header_rect.end.x + compact_gap <= tray_rect.position.x + 1.0, "%s fitting Alerts header and tray retain their horizontal gap" % context_label)
+		if viewport_rect.size == Vector2(1280, 720) and ui_scale == 150 and text_scale == 150:
+			_assert(absf(tray_rect.position.y - (header_rect.end.y + compact_gap)) <= 1.0, "%s constrained Text150 tray wraps immediately below the Alerts header header=%s tray=%s" % [context_label, header_rect, tray_rect])
+		_assert(stack_rect.position.y + 1.0 >= maxf(header_rect.end.y, tray_rect.end.y) + compact_gap, "%s ExpandedAlerts begins after the lower header/tray edge" % context_label)
 	_assert(tray_action.visible == (alert_count > 0), "%s persistent tray availability matches exact alert truth" % context_label)
 	_assert(rendered_count == 0 if alerts_collapsed else rendered_count <= mini(alert_count, CombatHudProjection.MAX_VISIBLE_ALERTS), "%s expanded card count respects collapsed state and projection cap" % context_label)
 	var hidden_count := alert_count - rendered_count
@@ -151,6 +161,10 @@ func _assert_hud_collapse_geometry(hud: HUD, viewport_rect: Rect2, party_count: 
 	if overflow.visible:
 		_assert(overflow.get_global_rect().size.x >= 48.0 and overflow.get_global_rect().size.y >= 48.0, "%s overflow keeps a real 48x48 target" % context_label)
 		_assert(overflow.text == "+%d %s" % [hidden_count, "alert" if hidden_count == 1 else "alerts"], "%s overflow names the exact hidden alert count" % context_label)
+		_assert(absf(overflow.get_global_rect().end.y - alert_region.get_global_rect().end.y) <= 1.0, "%s overflow remains reserved against the bottom edge" % context_label)
+		for child: Node in alerts_stack.get_children():
+			if child is Control and (child as Control).is_visible_in_tree():
+				_assert((child as Control).get_global_rect().end.y + float(LivingForgeTokens.spacing(&"compact")) <= overflow.get_global_rect().position.y + 1.0, "%s rendered alert cards end before the reserved overflow row" % context_label)
 	var metrics := hud.get("_metrics") as CombatHudResponsiveLayout.Metrics
 	_assert(metrics != null and metrics.visible_member_count >= 1, "%s paging keeps at least one visible member" % context_label)
 	if metrics != null:
@@ -193,7 +207,7 @@ func _exercise_hud(viewport_size: Vector2i, party_count: int, alert_count: int, 
 			text_scale,
 			"party=%d alerts=%d party_collapsed=%s alerts_collapsed=%s" % [party_count, alert_count, state.x == 1, state.y == 1],
 		)
-		_assert_hud_collapse_geometry(hud, viewport_rect, party_count, alert_count, state.x == 1, state.y == 1, text_scale, collapse_context)
+		_assert_hud_collapse_geometry(hud, viewport_rect, party_count, alert_count, state.x == 1, state.y == 1, ui_scale, text_scale, collapse_context)
 	var measured_party_header := (hud.get_node("Margin/CombatStatus/PartyHeader") as Button).size.y
 	expected_metrics = CombatHudResponsiveLayout.resolve(viewport_size, ui_scale, text_scale, party_count, measured_party_header)
 	rich_expected = expected_metrics.mode == CombatHudResponsiveLayout.Mode.RICH

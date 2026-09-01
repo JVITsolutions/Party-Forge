@@ -1207,21 +1207,27 @@ func _reflow_alert_rows(reserve_overflow: bool) -> void:
 	var compact_gap := float(LivingForgeTokens.spacing(&"compact"))
 	var summary := get_node("Margin/CombatStatus/AlertRegion/Header/Content/Summary") as Label
 	var scale := maxf(float(settings.ui_scale_percent), float(settings.text_scale_percent)) / 100.0
+	var region_width := maxf(region.size.x, 1.0)
 	var tray_height := maxf(48.0, tray_action.get_combined_minimum_size().y)
-	var maximum_header_height := maxf(48.0 * scale, region.size.y - (tray_height + compact_gap if tray_action.visible else 0.0))
+	var tray_width := minf(maxf(192.0, tray_action.get_combined_minimum_size().x), region_width)
+	var minimum_header_width := maxf(header.custom_minimum_size.x, header.get_combined_minimum_size().x)
+	var tray_shares_header_row := tray_action.visible and minimum_header_width + compact_gap + tray_width <= region_width
+	var header_right := region_width - tray_width - compact_gap if tray_shares_header_row else region_width
+	_set_offsets_if_changed(header, 0.0, 0.0, header_right, header.offset_bottom)
+	var wrapped_tray_reservation := tray_height + compact_gap if tray_action.visible and not tray_shares_header_row else 0.0
+	var maximum_header_height := maxf(48.0 * scale, region.size.y - wrapped_tray_reservation)
 	var semantic_height := _measure_header_summary_height(header, summary, maximum_header_height)
 	var header_height := clampf(maxf(header.get_combined_minimum_size().y, 48.0 * scale), semantic_height, maximum_header_height)
-	_set_bottom_offset_if_changed(header, header.offset_top + header_height)
-	var tray_width := maxf(192.0, tray_action.get_combined_minimum_size().x)
-	_set_offsets_if_changed(tray_action, -tray_width, -tray_height, tray_action.offset_right, 0.0)
+	_set_bottom_offset_if_changed(header, header_height)
+	var tray_top := 0.0 if tray_shares_header_row else header_height + compact_gap
+	_set_offsets_if_changed(tray_action, region_width - tray_width, tray_top, region_width, tray_top + tray_height)
+	var top_rows_bottom := maxf(header_height, tray_top + tray_height if tray_action.visible else header_height)
 	var reserved_bottom := 0.0
-	if tray_action.visible:
-		reserved_bottom = tray_height + compact_gap
 	var overflow_height := maxf(48.0, overflow.get_combined_minimum_size().y)
 	if reserve_overflow:
-		_set_vertical_offsets_if_changed(overflow, -(reserved_bottom + overflow_height), -reserved_bottom)
+		_set_vertical_offsets_if_changed(overflow, -overflow_height, 0.0)
 		reserved_bottom += overflow_height + compact_gap
-	var stack_top := header.offset_bottom + compact_gap
+	var stack_top := top_rows_bottom + compact_gap
 	var stack_bottom := -reserved_bottom
 	if region.size.y > 0.0 and stack_top > region.size.y + stack_bottom:
 		stack_bottom = stack_top - region.size.y
