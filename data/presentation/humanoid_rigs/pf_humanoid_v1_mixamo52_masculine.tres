@@ -1,0 +1,31 @@
+[gd_resource type="Resource" script_class="HumanoidRigMapping" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/presentation/humanoid_rig_mapping.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+mapping_id = &"pf_humanoid_v1_mixamo52_masculine"
+canonical_rig_id = &"pf_humanoid_v1"
+role_to_bone = {
+&"hips": &"mixamorig_Hips",
+&"spine": &"mixamorig_Spine",
+&"chest": &"mixamorig_Spine2",
+&"neck": &"mixamorig_Neck",
+&"head": &"mixamorig_Head",
+&"upper_arm_left": &"mixamorig_LeftArm",
+&"lower_arm_left": &"mixamorig_LeftForeArm",
+&"hand_left": &"mixamorig_LeftHand",
+&"upper_arm_right": &"mixamorig_RightArm",
+&"lower_arm_right": &"mixamorig_RightForeArm",
+&"hand_right": &"mixamorig_RightHand",
+&"upper_leg_left": &"mixamorig_LeftUpLeg",
+&"lower_leg_left": &"mixamorig_LeftLeg",
+&"foot_left": &"mixamorig_LeftFoot",
+&"toe_left": &"mixamorig_LeftToeBase",
+&"upper_leg_right": &"mixamorig_RightUpLeg",
+&"lower_leg_right": &"mixamorig_RightLeg",
+&"foot_right": &"mixamorig_RightFoot",
+&"toe_right": &"mixamorig_RightToeBase"
+}
+source_skeleton_sha256 = "8f589e35f16f02fe4aa0f45b5f2c85377a41f9ecc188670bf59159518e6cdbe4"
+source_rest_signature = "1ea73d190881c437d8ca6fc10dd7c4f446d2d14523416bcd0731264dad689eda"

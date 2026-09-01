@@ -59,6 +59,12 @@ func run() -> Array[String]:
 	TestAssertions.truthy(_mapping_script != null, "mapping resource script loads", failures)
 	if _catalog_script == null or _mapping_script == null:
 		return failures
+	var masculine_resource_exists := ResourceLoader.exists(MASCULINE_PATH)
+	var feminine_resource_exists := ResourceLoader.exists(FEMININE_PATH)
+	TestAssertions.truthy(masculine_resource_exists, "masculine production mapping resource exists", failures)
+	TestAssertions.truthy(feminine_resource_exists, "feminine production mapping resource exists", failures)
+	if not masculine_resource_exists or not feminine_resource_exists:
+		return failures
 	var interface_shape_is_exact := (
 		_method_argument_count(_resolution_script, &"succeeded") == 3
 		and _method_argument_count(_resolution_script, &"failed") == 4
@@ -278,17 +284,24 @@ func run() -> Array[String]:
 		&"load_calls": PackedStringArray(),
 	}, "missing resource outcome is exact", failures)
 
-	var default_missing_result: RefCounted = catalog.call(&"resolve", &"masculine")
-	TestAssertions.equal(_resolution_snapshot(default_missing_result), {
-		&"preset": &"masculine",
-		&"path": MASCULINE_PATH,
-		&"mapping": null,
-		&"categories": [&"missing_resource"],
-		&"messages": PackedStringArray(["humanoid rig mapping catalog body preset masculine resource %s does not exist" % MASCULINE_PATH]),
-		&"success": false,
-		&"existence_calls": PackedStringArray(),
-		&"load_calls": PackedStringArray(),
-	}, "default production loader reports exact missing resource", failures)
+	_assert_default_resource_resolution(
+		catalog,
+		&"masculine",
+		MASCULINE_PATH,
+		MASCULINE_ID,
+		MASCULINE_SHA,
+		MASCULINE_REST,
+		failures
+	)
+	_assert_default_resource_resolution(
+		catalog,
+		&"feminine",
+		FEMININE_PATH,
+		FEMININE_ID,
+		FEMININE_SHA,
+		FEMININE_REST,
+		failures
+	)
 
 	var failed_load_recorder := LoaderRecorder.new()
 	failed_load_recorder.existing_paths[MASCULINE_PATH] = true
@@ -460,6 +473,33 @@ func run() -> Array[String]:
 	var resolution_resource_paths := _resolution_script.get_script_constant_map().get("_RESOURCE_PATH_BY_BODY_PRESET", {}) as Dictionary
 	TestAssertions.equal(resolution_resource_paths, resource_paths, "catalog and resolution path tables are identical", failures)
 	return failures
+
+func _assert_default_resource_resolution(
+	catalog: RefCounted,
+	preset: StringName,
+	expected_path: String,
+	expected_mapping_id: StringName,
+	expected_source_sha: String,
+	expected_rest_signature: String,
+	failures: Array[String]
+) -> void:
+	var result := catalog.call(&"resolve", preset) as RefCounted
+	TestAssertions.truthy(result != null, "%s default resource returns a result" % preset, failures)
+	if result == null:
+		return
+	TestAssertions.truthy(bool(result.call(&"is_success")), "%s default resource resolves successfully" % preset, failures)
+	TestAssertions.equal(result.call(&"get_requested_body_preset"), preset, "%s default result keeps preset" % preset, failures)
+	TestAssertions.equal(result.call(&"get_selected_resource_path"), expected_path, "%s default result keeps exact path" % preset, failures)
+	TestAssertions.equal(result.call(&"get_failure_categories"), [] as Array[StringName], "%s default result has no failure categories" % preset, failures)
+	TestAssertions.equal(result.call(&"get_error_messages"), PackedStringArray(), "%s default result has no error messages" % preset, failures)
+	var mapping := result.call(&"get_mapping") as Resource
+	TestAssertions.truthy(mapping != null, "%s default result returns mapping" % preset, failures)
+	if mapping == null:
+		return
+	TestAssertions.equal(mapping.get(&"mapping_id"), expected_mapping_id, "%s default mapping id is exact" % preset, failures)
+	TestAssertions.equal(mapping.get(&"canonical_rig_id"), &"pf_humanoid_v1", "%s default canonical id is exact" % preset, failures)
+	TestAssertions.equal(mapping.get(&"source_skeleton_sha256"), expected_source_sha, "%s default source hash is exact" % preset, failures)
+	TestAssertions.equal(mapping.get(&"source_rest_signature"), expected_rest_signature, "%s default rest signature is exact" % preset, failures)
 
 func _mapping(mapping_id: StringName, source_sha: String, rest_signature: String) -> Resource:
 	var mapping := _mapping_script.new() as Resource

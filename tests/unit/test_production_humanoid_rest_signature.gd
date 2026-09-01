@@ -3,7 +3,10 @@ extends RefCounted
 const CONTRACT_PATH := "res://scripts/presentation/humanoid_rig_contract.gd"
 const FIXTURE_PATH := "res://tests/fixtures/presentation/production_rig_inspection_rest_fixtures.json"
 const DEFINITION_PATH := "res://data/presentation/humanoid_rigs/pf_humanoid_v1.tres"
-const MAPPING_PATH := "res://scripts/presentation/humanoid_rig_mapping.gd"
+const RESOURCE_PATH_BY_PRESET := {
+	&"masculine": "res://data/presentation/humanoid_rigs/pf_humanoid_v1_mixamo52_masculine.tres",
+	&"feminine": "res://data/presentation/humanoid_rigs/pf_humanoid_v1_mixamo52_feminine.tres",
+}
 const EXPECTED := {
 	&"masculine": "1ea73d190881c437d8ca6fc10dd7c4f446d2d14523416bcd0731264dad689eda",
 	&"feminine": "fad7e1860ef45781179d156654734b6160a7d97df96be43d3eb8c0bc51ea5c85",
@@ -39,7 +42,6 @@ const ROLE_TO_BONE := {
 }
 
 var _contract: RefCounted
-var _mapping_script: Script
 var _definition: Resource
 
 func run() -> Array[String]:
@@ -51,17 +53,18 @@ func run() -> Array[String]:
 	_contract = contract_script.new() as RefCounted
 	TestAssertions.truthy(_contract.has_method(&"serialize_production_rest"), "production rest serializer exists", failures)
 	TestAssertions.truthy(_contract.has_method(&"production_rest_signature"), "production rest signature exists", failures)
-	var mapping_exists := FileAccess.file_exists(MAPPING_PATH)
 	var definition_exists := ResourceLoader.exists(DEFINITION_PATH)
-	TestAssertions.truthy(mapping_exists, "production mapping script exists for public qualification", failures)
 	TestAssertions.truthy(definition_exists, "canonical definition exists for public qualification", failures)
-	if not mapping_exists or not definition_exists:
+	var all_mapping_resources_exist := true
+	for preset: StringName in RESOURCE_PATH_BY_PRESET:
+		var exists := ResourceLoader.exists(String(RESOURCE_PATH_BY_PRESET[preset]))
+		TestAssertions.truthy(exists, "%s mapping resource exists for public qualification" % preset, failures)
+		all_mapping_resources_exist = all_mapping_resources_exist and exists
+	if not definition_exists or not all_mapping_resources_exist:
 		return failures
-	_mapping_script = load(MAPPING_PATH) as Script
 	_definition = load(DEFINITION_PATH) as Resource
-	TestAssertions.truthy(_mapping_script != null, "production mapping script loads for public qualification", failures)
 	TestAssertions.truthy(_definition != null, "canonical definition loads for public qualification", failures)
-	if _mapping_script == null or _definition == null:
+	if _definition == null:
 		return failures
 	var fixture := _fixture()
 	TestAssertions.equal(int(fixture.get("schema_version", 0)), 1, "rest fixture schema is exact", failures)
@@ -102,12 +105,19 @@ func _assert_public_candidate_validation(candidate: Dictionary, failures: Array[
 	var skin := Skin.new()
 	for bone_index: int in skeleton.get_bone_count():
 		skin.add_bind(bone_index, skeleton.get_bone_global_rest(bone_index).affine_inverse())
-	var mapping := _mapping_script.new() as Resource
-	mapping.set(&"mapping_id", MAPPING_ID_BY_PRESET[preset])
-	mapping.set(&"canonical_rig_id", &"pf_humanoid_v1")
-	mapping.set(&"role_to_bone", ROLE_TO_BONE.duplicate(true))
-	mapping.set(&"source_skeleton_sha256", SOURCE_SHA_BY_PRESET[preset])
-	mapping.set(&"source_rest_signature", EXPECTED[preset])
+	var mapping_path := String(RESOURCE_PATH_BY_PRESET[preset])
+	var mapping := load(mapping_path) as Resource
+	TestAssertions.truthy(mapping != null, "%s body-specific mapping resource loads" % preset, failures)
+	if mapping == null:
+		skeleton.free()
+		return
+	TestAssertions.equal(mapping.get(&"mapping_id"), MAPPING_ID_BY_PRESET[preset], "%s mapping id matches approved identity" % preset, failures)
+	TestAssertions.equal(mapping.get(&"canonical_rig_id"), &"pf_humanoid_v1", "%s canonical mapping id is exact" % preset, failures)
+	TestAssertions.equal(mapping.get(&"role_to_bone"), ROLE_TO_BONE, "%s resource carries the exact 19-role mapping" % preset, failures)
+	TestAssertions.equal((mapping.get(&"role_to_bone") as Dictionary).size(), 19, "%s resource mapping has exactly 19 roles" % preset, failures)
+	TestAssertions.equal(mapping.get(&"source_skeleton_sha256"), SOURCE_SHA_BY_PRESET[preset], "%s resource source hash is exact" % preset, failures)
+	TestAssertions.equal(mapping.get(&"source_rest_signature"), EXPECTED[preset], "%s resource rest identity is exact" % preset, failures)
+	TestAssertions.equal(mapping.call(&"validate", _definition), PackedStringArray(), "%s resource validates against the canonical definition" % preset, failures)
 	TestAssertions.equal(skeleton.get_bone_count(), 52, "%s public fixture retains 52 bones" % preset, failures)
 	TestAssertions.equal(skin.get_bind_count(), 52, "%s public fixture creates 52 binds" % preset, failures)
 	for bind_index: int in skin.get_bind_count():
